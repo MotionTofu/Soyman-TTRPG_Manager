@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api } from "../api/client";
+import { useAction, write } from "../data/hooks";
 import type { LocationContentItem } from "../types";
 
 // Наполнение «что внутри» (план «Зоны локаций», этап 6): секрет, лут,
@@ -25,43 +25,40 @@ const KIND_LABEL: Record<ContentKind, string> = {
 export function LocationContent({
   locationId,
   items,
-  onChange,
   readOnly = false,
 }: {
   locationId: number;
   items: LocationContentItem[];
-  onChange: () => void;
   /** Режим чтения: список без формы добавления и кнопок удаления. */
   readOnly?: boolean;
 }) {
   const [kind, setKind] = useState<ContentKind>("secret");
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const run = useAction();
+  // Наполнение точки видно на её карточке и в «Плане» родителя — задеты
+  // локации целиком, перечитываются из них только открытые.
+  const affects = [{ kind: "location" as const }];
 
   async function add() {
     const clean = text.trim();
     if (!clean || saving) return;
     setSaving(true);
-    setError(null);
     try {
-      await api.post(`/setting-locations/${locationId}/content`, { kind, text: clean });
-      setText("");
-      onChange();
-    } catch (e) {
-      setError(String(e instanceof Error ? e.message : e));
+      // Без «Повторить»: повтор после потерянного ответа завёл бы строку дважды.
+      // Набранное остаётся в поле.
+      const done = await run(
+        () => write.post(`/setting-locations/${locationId}/content`, { kind, text: clean }).then(() => true),
+        { affects, retry: false }
+      );
+      if (done) setText("");
     } finally {
       setSaving(false);
     }
   }
 
   async function remove(id: number) {
-    try {
-      await api.del(`/setting-locations/content/${id}`);
-      onChange();
-    } catch (e) {
-      setError(String(e instanceof Error ? e.message : e));
-    }
+    await run(() => write.del(`/setting-locations/content/${id}`), { affects });
   }
 
   return (
@@ -87,7 +84,6 @@ export function LocationContent({
           </div>
         );
       })}
-      {error && <span style={{ color: "var(--status-cancelled)" }}>{error}</span>}
       {!readOnly && (
         <div className="row" style={{ gap: 8 }}>
           <select value={kind} onChange={(e) => setKind(e.target.value as ContentKind)} disabled={saving} title="Тип">

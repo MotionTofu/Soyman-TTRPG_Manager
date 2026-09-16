@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { api } from "../../api/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { dataKeys, type Affect } from "../../data/entities";
+import { errorText, useAfterWrite, useResource, write } from "../../data/hooks";
+import { showSaveError } from "../../data/notices";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../../imageUpload";
 import { useConfirm } from "../../hooks/useConfirm";
 import { EmptyState } from "../EmptyState";
@@ -26,12 +29,10 @@ type EditorData = PresentationData & { scene_id?: number; content_scene_id?: num
 
 export function PresentationEditor({ owner }: { owner: PresentationOwner }) {
   const [confirmDialog, confirm] = useConfirm();
-  const [data, setData] = useState<EditorData | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [fields, setFields] = useState({ transition: "cut", transition_ms: 600, title: "", title_secs: 3, fade_ms: 600 });
   const [fieldsDirty, setFieldsDirty] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [dragId, setDragId] = useState<number | null>(null);
   const [renaming, setRenaming] = useState<{ id: number; name: string } | null>(null);
 
@@ -44,37 +45,45 @@ export function PresentationEditor({ owner }: { owner: PresentationOwner }) {
     owner.kind === "scene" && owner.campaignId != null ? { ...b, campaign_id: owner.campaignId } : b;
   const deleteSuffix = owner.kind === "scene" && owner.campaignId != null ? `?campaign_id=${owner.campaignId}` : "";
   const defaultTitle = owner.kind === "scene" ? owner.sceneName : owner.campaignName;
-  const ownerKey = owner.kind === "scene" ? `s${owner.sceneId}c${owner.campaignId}` : `c${owner.campaignId}`;
 
-  function refresh() {
-    api
-      .get<EditorData>(readUrl)
-      .then((p) => {
-        setData(p);
-        // Титр по умолчанию — название сцены/кампании, но только пока
-        // представление свежее: стёртый титр не должен воскресать.
-        const fresh = !p.background_url && p.layers.length === 0 && !p.title;
-        setFields({
-          transition: p.transition,
-          transition_ms: p.transition_ms,
-          title: p.title || (fresh ? defaultTitle : ""),
-          title_secs: p.title_secs,
-          fade_ms: p.fade_ms,
-        });
-        setFieldsDirty(false);
-        setError(null);
-      })
-      .catch((e: Error) => setError(e.message));
+  // Представление читается из кэша слоя (docs/adr/0001): пульт и окно показа
+  // игрокам берут его оттуда же. Правка кладёт ответ сервера прямо в кэш —
+  // слои на холсте не мигают перечитыванием, — а остальным говорит, что задето.
+  const client = useQueryClient();
+  const afterWrite = useAfterWrite();
+  const presentation = useResource<EditorData>(readUrl);
+  const data = presentation.data ?? null;
+  const setData = (next: EditorData) => client.setQueryData(dataKeys.resource(readUrl), next);
+  // Сцена из кампании при первой правке становится копией, а представление
+  // видно на пульте. Заглавное кампании — там же, в показе игрокам.
+  const affects: Affect[] =
+    owner.kind === "scene" ? [{ path: base }, { kind: "scene" }, { path: "/sessions" }] : [{ path: base }];
+  function failed(what: string, e: unknown) {
+    showSaveError(`${what}: ${errorText(e)}`);
   }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(refresh, [ownerKey]);
+
+  // Поля входа заполняются из представления, пока Мастер их не трогал
+  // (docs/adr/0001, п. 5). Титр по умолчанию — название сцены/кампании, но
+  // только пока представление свежее: стёртый титр не должен воскресать.
+  useEffect(() => {
+    if (!data || fieldsDirty) return;
+    const fresh = !data.background_url && data.layers.length === 0 && !data.title;
+    setFields({
+      transition: data.transition,
+      transition_ms: data.transition_ms,
+      title: data.title || (fresh ? defaultTitle : ""),
+      title_secs: data.title_secs,
+      fade_ms: data.fade_ms,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- только приход данных
+  }, [data]);
 
   async function ensureWritable(current: EditorData): Promise<{ data: EditorData; map: Map<number, number> }> {
     const map = new Map<number, number>();
     for (const l of current.layers) map.set(l.id, l.id);
     if (owner.kind === "scene" && owner.campaignId != null && current.scene_id === owner.sceneId) {
       // Первая правка из кампании: пустой PUT клонирует сцену вместе со слоями.
-      const fresh = await api.put<EditorData>(base, { campaign_id: owner.campaignId });
+      const fresh = await write.put<EditorData>(base, { campaign_id: owner.campaignId });
       setData(fresh);
       map.clear();
       const byKey = new Map(fresh.layers.map((l) => [`${l.position}:${l.name}`, l.id]));
@@ -89,12 +98,13 @@ export function PresentationEditor({ owner }: { owner: PresentationOwner }) {
 
   async function saveFields() {
     try {
-      const updated = await api.put<EditorData>(base, withCtx({ ...fields }));
-      setData(updated);
+      const updated = await write.put<EditorData>(base, withCtx({ ...fields }));
       setFieldsDirty(false);
-      setError(null);
+      setData(updated);
+      afterWrite(affects);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Не удалось сохранить");
+      // Поля остаются с набранным.
+      failed("Представление не сохранилось", e);
     }
   }
 
@@ -109,11 +119,11 @@ export function PresentationEditor({ owner }: { owner: PresentationOwner }) {
       const form = new FormData();
       form.append("file", file);
       campaignField(form);
-      const updated = await api.post<EditorData>(`${base}/background`, form);
+      const updated = await write.post<EditorData>(`${base}/background`, form, { timeoutMs: 120_000 });
       setData(updated);
-      setError(null);
+      afterWrite(affects);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Не удалось загрузить фон");
+      failed("Фон не загрузился", e);
     } finally {
       setUploading(false);
     }
@@ -128,13 +138,13 @@ export function PresentationEditor({ owner }: { owner: PresentationOwner }) {
         form.append("file", file);
         form.append("name", file.name.replace(/\.[^.]+$/, "").slice(0, 200) || "Слой");
         campaignField(form);
-        const updated = await api.post<EditorData>(`${base}/layers`, form);
+        const updated = await write.post<EditorData>(`${base}/layers`, form, { timeoutMs: 120_000 });
         setData(updated);
       }
-      setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Не удалось загрузить слой");
+      failed("Слой не загрузился", e);
     } finally {
+      afterWrite(affects);
       setUploading(false);
     }
   }
@@ -152,14 +162,13 @@ export function PresentationEditor({ owner }: { owner: PresentationOwner }) {
     try {
       const { data: writable, map } = await ensureWritable(data);
       const lid = map.get(id) ?? id;
-      const updated = await api.put<PresentationLayer>(`${base}/layers/${lid}`, withCtx({ ...geom }));
+      const updated = await write.put<PresentationLayer>(`${base}/layers/${lid}`, withCtx({ ...geom }));
       const merged = writable.layers.map((l) => (l.id === lid ? { ...updated, image_url: l.image_url } : l));
       setData({ ...writable, layers: merged });
-      setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Не удалось подвинуть слой");
-      refresh();
+      failed("Слой не сдвинулся, вернулся на место", e);
     }
+    afterWrite(affects);
   }
 
   function onGeometry(id: number, geom: LayerGeom, commit: boolean) {
@@ -174,12 +183,12 @@ export function PresentationEditor({ owner }: { owner: PresentationOwner }) {
     try {
       const { data: writable, map } = await ensureWritable(data);
       const lid = map.get(id) ?? id;
-      await api.put(`${base}/layers/${lid}`, withCtx({ ...patch }));
-      setError(null);
+      await write.put(`${base}/layers/${lid}`, withCtx({ ...patch }));
       void writable;
+      afterWrite(affects);
     } catch (e) {
       setData({ ...data, layers: prev });
-      setError(e instanceof Error ? e.message : "Не удалось сохранить слой");
+      failed("Слой не сохранился", e);
     }
   }
 
@@ -191,21 +200,18 @@ export function PresentationEditor({ owner }: { owner: PresentationOwner }) {
     const name = renaming.name.trim();
     const id = renaming.id;
     setRenaming(null);
-    if (!name) {
-      refresh();
-      return;
-    }
+    if (!name) return;
     const prev = data.layers;
     patchLayer(id, { name });
     try {
       const { data: writable, map } = await ensureWritable(data);
       const lid = map.get(id) ?? id;
-      await api.put(`${base}/layers/${lid}`, withCtx({ name }));
-      setError(null);
+      await write.put(`${base}/layers/${lid}`, withCtx({ name }));
       void writable;
+      afterWrite(affects);
     } catch (e) {
       setData({ ...data, layers: prev });
-      setError(e instanceof Error ? e.message : "Не удалось переименовать");
+      failed("Слой не переименовался", e);
     }
   }
 
@@ -222,15 +228,15 @@ export function PresentationEditor({ owner }: { owner: PresentationOwner }) {
     try {
       const { data: writable, map } = await ensureWritable(data);
       const freshOrder = ids.map((id) => map.get(id) ?? id);
-      const layers = await api.put<PresentationLayer[]>(
+      const layers = await write.put<PresentationLayer[]>(
         `${base}/layers/reorder`,
         withCtx({ order: freshOrder })
       );
       setData({ ...writable, layers });
-      setError(null);
+      afterWrite(affects);
     } catch (e) {
       setData({ ...data, layers: prev });
-      setError(e instanceof Error ? e.message : "Не удалось изменить порядок");
+      failed("Порядок слоёв не сохранился", e);
     }
   }
 
@@ -247,12 +253,12 @@ export function PresentationEditor({ owner }: { owner: PresentationOwner }) {
     try {
       const { data: writable, map } = await ensureWritable(data);
       const lid = map.get(id) ?? id;
-      await api.del(`${base}/layers/${lid}${deleteSuffix}`);
+      await write.del(`${base}/layers/${lid}${deleteSuffix}`);
       setData({ ...writable, layers: writable.layers.filter((l) => l.id !== lid) });
       if (selectedId === id) setSelectedId(null);
-      setError(null);
+      afterWrite(affects);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Не удалось убрать слой");
+      failed("Слой не убрался", e);
     }
   }
 
@@ -269,7 +275,17 @@ export function PresentationEditor({ owner }: { owner: PresentationOwner }) {
     []
   );
 
-  if (!data) return <p className="muted">Загрузка…</p>;
+  if (!data) {
+    if (presentation.error) {
+      return (
+        <div className="card row">
+          <span className="muted">Не удалось загрузить представление: {presentation.error}</span>
+          <button onClick={presentation.reload}>Повторить</button>
+        </div>
+      );
+    }
+    return <p className="muted">Загрузка…</p>;
+  }
 
   const isEmpty = !data.background_url && data.layers.length === 0;
   const entryVisible = data.layers.filter((l) => l.has_button === 0 || l.visible_on_enter === 1).map((l) => l.id);
@@ -331,10 +347,10 @@ export function PresentationEditor({ owner }: { owner: PresentationOwner }) {
     <div className="stack">
       {confirmDialog}
       {isOverride && <span className="badge tag">правка кампании</span>}
-      {error && (
+      {presentation.error && (
         <div className="card" style={{ borderColor: "var(--danger, #c00)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <span style={{ color: "var(--danger, #c00)", fontSize: "var(--fs-meta)" }}>{error}</span>
-          <button onClick={() => refresh()}>Повторить</button>
+          <span style={{ color: "var(--danger, #c00)", fontSize: "var(--fs-meta)" }}>Не удалось обновить: {presentation.error}</span>
+          <button onClick={presentation.reload}>Повторить</button>
         </div>
       )}
 

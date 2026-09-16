@@ -1,21 +1,23 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
+import { useResource } from "../data/hooks";
 import type { MentioningSession } from "../types";
 import { sessionLabel } from "../sessionLabel";
 
 // "Упоминания" tab for Being/Location/Community/Artifact pages: lists every
 // session whose Задумка/Основные события text @-mentions this entity.
 export function MentionsTab({ entityType, entityId }: { entityType: string; entityId: number }) {
-  const [sessions, setSessions] = useState<MentioningSession[] | null>(null);
+  const state = useResource<MentioningSession[]>(`/links/mentioning-sessions?type=${entityType}&id=${entityId}`);
+  const sessions = state.data;
 
-  useEffect(() => {
-    api
-      .get<MentioningSession[]>(`/links/mentioning-sessions?type=${entityType}&id=${entityId}`)
-      .then(setSessions);
-  }, [entityType, entityId]);
-
-  if (sessions === null) return <div className="card muted">Загрузка…</div>;
+  if (state.error && !sessions) {
+    return (
+      <div className="card row">
+        <span className="muted">Не удалось загрузить упоминания: {state.error}</span>
+        <button onClick={state.reload}>Повторить</button>
+      </div>
+    );
+  }
+  if (!sessions) return <div className="card muted">Загрузка…</div>;
 
   return (
     <div className="card stack">

@@ -1,5 +1,6 @@
 import { useMemo, useState, type MouseEvent, type ReactNode } from "react";
-import { api } from "../api/client";
+import { useAction, write } from "../data/hooks";
+import { entityKindByEndpoint, type Affect } from "../data/entities";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { MentionTextarea } from "./mentions/MentionTextarea";
@@ -7,6 +8,15 @@ import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import { NavIcon } from "./NavIcons";
 import { useConfirm } from "../hooks/useConfirm";
+
+/**
+ * Главы лежат внутри карточки владельца (`GET ${apiBase}/${ownerId}` отдаёт их
+ * вместе с остальным), поэтому правка главы задевает эту карточку.
+ */
+function chapterAffects(apiBase: string, ownerId: number): Affect[] {
+  const kind = entityKindByEndpoint(apiBase);
+  return kind ? [{ kind, id: ownerId }] : [{ path: `${apiBase}/${ownerId}` }];
+}
 
 interface ChapterLike {
   id: number;
@@ -27,7 +37,6 @@ interface Props<T extends ChapterLike> {
   apiBase: string; // e.g. "/characters" or "/setting-locations"
   section?: string; // sent when creating a chapter, for owners that distinguish sections
   chapters: T[];
-  onChange: () => void;
   allowImage?: boolean;
   titlePrefix?: string; // default new-chapter title, e.g. "Глава" or "Статья"
   addLabel?: string; // label on the add button, e.g. "главу" or "статью"
@@ -58,7 +67,6 @@ export function ChapterList<T extends ChapterLike>({
   apiBase,
   section,
   chapters,
-  onChange,
   allowImage,
   titlePrefix = "Глава",
   addLabel,
@@ -69,6 +77,8 @@ export function ChapterList<T extends ChapterLike>({
   listTitle,
 }: Props<T>) {
   const [confirmDialog, confirm] = useConfirm();
+  const run = useAction();
+  const affects = chapterAffects(apiBase, ownerId);
   const label = addLabel ?? (allowImage ? "предмет" : "главу");
   const [sortCampaignId, setSortCampaignId] = useState<number | "">("");
 
@@ -84,19 +94,20 @@ export function ChapterList<T extends ChapterLike>({
   }, [chapters, campaigns, sortCampaignId]);
 
   async function addChapter() {
-    await api.post(`${apiBase}/${ownerId}/chapters`, {
+    const body = {
       ...(section ? { section } : {}),
       title: `${titlePrefix} ${chapters.length + 1}`,
       content: "",
-    });
-    onChange();
+    };
+    // Без «Повторить»: ответ мог потеряться после записи, и повтор завёл бы
+    // вторую пустую главу.
+    await run(() => write.post(`${apiBase}/${ownerId}/chapters`, body), { affects, retry: false });
   }
 
   async function removeChapter(id: number) {
     if (!(await confirm({ message: "Удалить главу вместе с её текстом?", confirmLabel: "Удалить", danger: true })))
       return;
-    await api.del(`${apiBase}/chapters/${id}`);
-    onChange();
+    await run(() => write.del(`${apiBase}/chapters/${id}`), { affects });
   }
 
   return (
@@ -135,7 +146,6 @@ export function ChapterList<T extends ChapterLike>({
           ownerType={ownerType}
           ownerId={ownerId}
           apiBase={apiBase}
-          onChange={onChange}
           onRemove={removeChapter}
           allowImage={allowImage}
           defaultSettingId={defaultSettingId}
@@ -156,7 +166,6 @@ function ChapterCard<T extends ChapterLike>({
   ownerType,
   ownerId,
   apiBase,
-  onChange,
   onRemove,
   allowImage,
   defaultSettingId,
@@ -167,7 +176,6 @@ function ChapterCard<T extends ChapterLike>({
   ownerType: string;
   ownerId: number;
   apiBase: string;
-  onChange: () => void;
   onRemove: (id: number) => void;
   allowImage?: boolean;
   defaultSettingId?: number;
@@ -180,22 +188,27 @@ function ChapterCard<T extends ChapterLike>({
   const [campaignId, setCampaignId] = useState<number | "">(chapter.campaign_id ?? "");
   const [important, setImportant] = useState(!!chapter.important);
   const [uploading, setUploading] = useState(false);
+  const run = useAction();
+  const affects = chapterAffects(apiBase, ownerId);
 
   async function toggleVisibleToPlayers(e: MouseEvent) {
     e.preventDefault();
-    await api.put(`${apiBase}/chapters/${chapter.id}`, { visible_to_players: !chapter.visible_to_players });
-    onChange();
+    const visible = !chapter.visible_to_players;
+    await run(() => write.put(`${apiBase}/chapters/${chapter.id}`, { visible_to_players: visible }), { affects });
   }
 
   async function save() {
-    await api.put(`${apiBase}/chapters/${chapter.id}`, {
+    const before = chapter.content;
+    const body = {
       title,
       content,
       ...(campaigns ? { campaign_id: campaignId || null, important } : {}),
-    });
-    syncMentionLinks(ownerType, ownerId, chapter.content, content);
+    };
+    // Не сохранилось — глава остаётся открытой с набранным текстом.
+    const ok = await run(() => write.put(`${apiBase}/chapters/${chapter.id}`, body).then(() => true), { affects });
+    if (!ok) return;
+    syncMentionLinks(ownerType, ownerId, before, content);
     setEditMode(false);
-    onChange();
   }
 
   async function handleImageChange(file: File | null) {
@@ -203,9 +216,11 @@ function ChapterCard<T extends ChapterLike>({
     setUploading(true);
     const form = new FormData();
     form.append("file", file);
-    await api.post(`${apiBase}/chapters/${chapter.id}/image`, form);
-    setUploading(false);
-    onChange();
+    try {
+      await run(() => write.post(`${apiBase}/chapters/${chapter.id}/image`, form, { timeoutMs: 120_000 }), { affects });
+    } finally {
+      setUploading(false);
+    }
   }
   const imageCrop = useImageCrop("square", handleImageChange);
 

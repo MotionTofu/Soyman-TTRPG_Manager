@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { api } from "../api/client";
+import { LoadErrorCard } from "../components/Loadable";
+import { useEntity, useResource } from "../data/hooks";
 import { MonsterDetailPage } from "./MonsterDetailPage";
 import { VehicleDetailPage } from "./VehicleDetailPage";
 import type { CompendiumEntry, System } from "../types";
@@ -20,23 +21,21 @@ const OWN_PAGE_KINDS = new Set(["monster", "vehicle", "vehicle_post"]);
 export function CompendiumEntryRedirectPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [entry, setEntry] = useState<CompendiumEntry | null>(null);
-  const [system, setSystem] = useState<System | null>(null);
+  const entryState = useEntity<CompendiumEntry>("compendium_entry", id ? Number(id) : null);
+  const loaded = entryState.data;
+  const ownPage = !!loaded && OWN_PAGE_KINDS.has(loaded.kind);
+  const system = useResource<System>(loaded && ownPage ? `/systems/${loaded.system_id}` : null).data ?? null;
 
-  function load() {
-    api.get<CompendiumEntry>(`/systems/entries/${id}`).then((e) => {
-      if (!OWN_PAGE_KINDS.has(e.kind)) {
-        navigate(`/systems/${e.system_id}?section=${e.section_id}&entry=${e.id}`, { replace: true });
-        return;
-      }
-      setEntry(e);
-      api.get<System>(`/systems/${e.system_id}`).then(setSystem);
-    });
+  useEffect(() => {
+    if (!loaded || ownPage) return;
+    navigate(`/systems/${loaded.system_id}?section=${loaded.section_id}&entry=${loaded.id}`, { replace: true });
+  }, [loaded, ownPage, navigate]);
+
+  if (entryState.error && !loaded) {
+    return <LoadErrorCard message={<>Не удалось загрузить запись: {entryState.error}</>} onRetry={entryState.reload} />;
   }
-
-  useEffect(load, [id, navigate]);
-
-  if (!entry) return <p className="muted">Загрузка…</p>;
-  if (entry.kind === "monster") return <MonsterDetailPage entry={entry} system={system} onChange={load} />;
-  return <VehicleDetailPage entry={entry} system={system} onChange={load} />;
+  if (!loaded || !ownPage) return <p className="muted">Загрузка…</p>;
+  const entry = loaded;
+  if (entry.kind === "monster") return <MonsterDetailPage entry={entry} system={system} />;
+  return <VehicleDetailPage entry={entry} system={system} />;
 }

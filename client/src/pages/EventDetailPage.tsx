@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { api } from "../api/client";
+import { useAction, useEntity, useSaveEntity, write } from "../data/hooks";
+import type { Affect } from "../data/entities";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { EntityFieldsCard } from "../components/EntityFieldsCard";
 import { EntityPage } from "../components/EntityPage";
@@ -19,34 +19,29 @@ export function EventDetailPage() {
   const eventId = Number(id);
   const navigate = useNavigate();
 
-  const [event, setEvent] = useState<SettingCalendarEvent | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const eventState = useEntity<SettingCalendarEvent>("setting_event", eventId);
+  const event = eventState.data ?? null;
   const calendar = useSettingCalendar(event?.setting_id);
-
-  function refresh() {
-    setLoadError(null);
-    api
-      .get<SettingCalendarEvent>(`/settings/calendar-events/${eventId}`)
-      .then(setEvent)
-      .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : String(e)));
-  }
-  useEffect(refresh, [eventId]);
+  // Событие живёт внутри хроники сеттинга: его строка там и отметка в календаре.
+  const eventAffects: Affect[] = event ? [{ path: `/settings/${event.setting_id}` }, { path: "/calendar" }] : [];
+  const { save: saveEntity } = useSaveEntity<SettingCalendarEvent>("setting_event", eventId, { affects: eventAffects });
+  const run = useAction();
 
   const chronicleUrl = event
     ? `/settings/${event.setting_id}?tab=${encodeURIComponent("Хроника мира")}`
     : "/settings";
 
-  async function save(values: Record<string, unknown>) {
-    await api.put(`/settings/calendar-events/${eventId}`, values);
-    refresh();
+  // Карточки полей держат правку открытой, пока сохранение не удалось.
+  async function save(values: Partial<SettingCalendarEvent>) {
+    if (!(await saveEntity(values))) throw new Error("Не сохранилось");
   }
 
   async function deleteEvent() {
     if (!event) return;
     if (!(await confirm({ message: "Удалить событие из хроники?", confirmLabel: "Удалить", danger: true })))
       return;
-    await api.del(`/settings/calendar-events/${eventId}`);
-    navigate(chronicleUrl);
+    const done = await run(() => write.del(`/settings/calendar-events/${eventId}`).then(() => true), { affects: eventAffects });
+    if (done) navigate(chronicleUrl);
   }
 
   const months = calendar?.months ?? [];
@@ -74,8 +69,8 @@ export function EventDetailPage() {
       // главным не бывает: в шапке пусто, «Удалить» под «…».
       actions={[{ label: "Удалить", danger: true, onClick: deleteEvent }]}
       loading={!event}
-      error={loadError}
-      onRetry={refresh}
+      error={eventState.error}
+      onRetry={eventState.reload}
       overlays={confirmDialog}
     >
       {event && (
@@ -107,12 +102,14 @@ export function EventDetailPage() {
             }
           />
 
+          {/* Флаги сервер принимает логическими (`important === true`), а
+              отдаёт числами — отсюда приведение типа. */}
           <div className="card row">
             <label className="row">
               <input
                 type="checkbox"
                 checked={!!event.important}
-                onChange={() => save({ important: !event.important })}
+                onChange={() => void saveEntity({ important: !event.important } as unknown as Partial<SettingCalendarEvent>)}
               />
               Важное
             </label>
@@ -120,7 +117,7 @@ export function EventDetailPage() {
               <input
                 type="checkbox"
                 checked={!!event.visible_to_players}
-                onChange={() => save({ visible_to_players: !event.visible_to_players })}
+                onChange={() => void saveEntity({ visible_to_players: !event.visible_to_players } as unknown as Partial<SettingCalendarEvent>)}
               />
               Видно игрокам
             </label>

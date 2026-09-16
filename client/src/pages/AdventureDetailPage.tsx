@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
+import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
+import type { Affect } from "../data/entities";
+import { LoadErrorCard } from "../components/Loadable";
 import { EntityPage } from "../components/EntityPage";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { MentionText } from "../components/mentions/MentionText";
@@ -23,6 +26,11 @@ import { useUndoDelete } from "../hooks/useUndoDelete";
 // остались в базе нетронутыми — вернуть их будет чем.
 const TABS = ["Обзор", "Главы и сцены", "Вехи", "Тайны и зацепки"] as const;
 
+// Правка приключения видна не только здесь: главы, сцены, вехи и тайны
+// читают полотно, дерево сцен и тайны кампании на пульте. Всё это лежит под
+// `/story`, `/sessions` и `/canvas`; перечитываются из них только открытые.
+const STORY_AFFECTS: Affect[] = [{ path: "/story" }, { path: "/sessions" }, { path: "/canvas" }];
+
 const SECRET_KINDS = [
   { key: "secret", label: "Тайна" },
   { key: "clue", label: "Улика" },
@@ -42,45 +50,38 @@ export function AdventureDetailPage() {
   const [params] = useSearchParams();
   const campaignId = params.get("campaign") ? Number(params.get("campaign")) : null;
 
-  const [arc, setArc] = useState<StoryArcDetail | null>(null);
-  const [setting, setSetting] = useState<Setting | null>(null);
-  const [arcCampaigns, setArcCampaigns] = useState<{ id: number; name: string }[]>([]);
+  const arcState = useResource<StoryArcDetail>(`/story/arcs/${arcId}${campaignId ? `?campaign_id=${campaignId}` : ""}`);
+  const arc = arcState.data ?? null;
+  const setting = useResource<Setting>(arc ? `/settings/${arc.setting_id}` : null).data ?? null;
+  const arcCampaigns = useResource<{ id: number; name: string }[]>(`/story/arcs/${arcId}/campaigns`).data ?? [];
+  const run = useAction();
   const [tab, selectTab] = useTabState(TABS, "Обзор");
   const [exportBusy, setExportBusy] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
 
-  function refresh() {
-    const q = campaignId ? `?campaign_id=${campaignId}` : "";
-    api.get<StoryArcDetail>(`/story/arcs/${arcId}${q}`).then(setArc);
+  if (arcState.error && !arc) {
+    return <LoadErrorCard message={<>Не удалось загрузить приключение: {arcState.error}</>} onRetry={arcState.reload} />;
   }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(refresh, [arcId, campaignId]);
-
-  useEffect(() => {
-    if (arc) api.get<Setting>(`/settings/${arc.setting_id}`).then(setSetting);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [arc?.setting_id]);
-
-  useEffect(() => {
-    api
-      .get<{ id: number; name: string }[]>(`/story/arcs/${arcId}/campaigns`)
-      .then(setArcCampaigns)
-      .catch(() => setArcCampaigns([]));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [arcId]);
-
   if (!arc) return <p className="muted">Загрузка…</p>;
 
+  // Текстовые карточки держат правку открытой, пока сохранение не удалось:
+  // для этого им нужна ошибка, а плашку показывает слой.
   async function save(patch: Record<string, unknown>) {
-    await api.put(`/story/arcs/${arcId}`, patch);
-    refresh();
+    const done = await run(() => write.put(`/story/arcs/${arcId}`, patch).then(() => true), { affects: STORY_AFFECTS });
+    if (!done) throw new Error("Не сохранилось");
+  }
+
+  function saveQuietly(patch: Record<string, unknown>) {
+    save(patch).catch(() => {
+      // Плашку уже показал слой.
+    });
   }
 
   async function archive() {
     if (!(await confirm({ message: "Отправить приключение в архив вместе с главами и сценами?", confirmLabel: "Архивировать", danger: true })))
       return;
-    await api.del(`/story/arcs/${arcId}`);
-    navigate(`/settings/${arc?.setting_id}?tab=${encodeURIComponent("Приключения")}`);
+    const done = await run(() => write.del(`/story/arcs/${arcId}`).then(() => true), { affects: STORY_AFFECTS });
+    if (done) navigate(`/settings/${arc?.setting_id}?tab=${encodeURIComponent("Приключения")}`);
   }
 
   async function exportArc() {
@@ -158,7 +159,7 @@ export function AdventureDetailPage() {
                     message: "Название приключения",
                     defaultValue: arc.name,
                   });
-                  if (name?.trim()) save({ name: name.trim() });
+                  if (name?.trim()) saveQuietly({ name: name.trim() });
                 },
               },
               { label: "Архивировать", danger: true, onClick: archive },
@@ -179,11 +180,11 @@ export function AdventureDetailPage() {
       {tab === "Обзор" && (
         <div className="stack">
           <div className="card stack">
-            <FieldRow label="Уровень персонажей" value={arc.recommended_level} onSave={(v) => save({ recommended_level: v })} />
-            <FieldRow label="Число игроков" value={arc.player_count} onSave={(v) => save({ player_count: v })} />
-            <FieldRow label="Длительность" value={arc.duration} onSave={(v) => save({ duration: v })} />
-            <FieldRow label="Источник" value={arc.source} onSave={(v) => save({ source: v })} />
-            <FieldRow label="Теги" value={arc.tags} onSave={(v) => save({ tags: v })} />
+            <FieldRow label="Уровень персонажей" value={arc.recommended_level} onSave={(v) => saveQuietly({ recommended_level: v })} />
+            <FieldRow label="Число игроков" value={arc.player_count} onSave={(v) => saveQuietly({ player_count: v })} />
+            <FieldRow label="Длительность" value={arc.duration} onSave={(v) => saveQuietly({ duration: v })} />
+            <FieldRow label="Источник" value={arc.source} onSave={(v) => saveQuietly({ source: v })} />
+            <FieldRow label="Теги" value={arc.tags} onSave={(v) => saveQuietly({ tags: v })} />
           </div>
           <EditableTextCard
             title="Логлайн"
@@ -220,14 +221,14 @@ export function AdventureDetailPage() {
               help="Ищет в тексте сцен имена сущностей сеттинга и записей компендиума — и делает их кликабельными. Шаг за шагом, по одному типу цели. Ничего не пишет, пока вы не подтвердите."
             />
           )}
-          <ChaptersAndScenes arc={arc} campaignId={campaignId} onChange={refresh} />
+          <ChaptersAndScenes arc={arc} campaignId={campaignId} />
         </>
       )}
 
-      {tab === "Вехи" && <Milestones arc={arc} campaignId={campaignId} onChange={refresh} />}
+      {tab === "Вехи" && <Milestones arc={arc} campaignId={campaignId} />}
 
       {tab === "Тайны и зацепки" && (
-        <Secrets arc={arc} campaignId={campaignId} onChange={refresh} />
+        <Secrets arc={arc} campaignId={campaignId} />
       )}
     </EntityPage>
   );
@@ -272,15 +273,9 @@ function FieldRow({
   );
 }
 
-function ChaptersAndScenes({
-  arc,
-  campaignId,
-  onChange,
-}: {
-  arc: StoryArcDetail;
-  campaignId: number | null;
-  onChange: () => void;
-}) {
+function ChaptersAndScenes({ arc, campaignId }: { arc: StoryArcDetail; campaignId: number | null }) {
+  const run = useAction();
+  const afterWrite = useAfterWrite();
   const [confirmDialog, confirm] = useConfirm();
   const [promptDialog, promptText] = usePrompt();
   const { deleteWithUndo } = useUndoDelete();
@@ -320,28 +315,20 @@ function ChaptersAndScenes({
 
   async function createChapter() {
     if (!chapterName.trim()) return;
-    await api.post("/story/arcs", {
-      setting_id: arc.setting_id,
-      parent_id: arc.id,
-      kind: "chapter",
-      name: chapterName,
-    });
-    setChapterName("");
-    onChange();
+    const body = { setting_id: arc.setting_id, parent_id: arc.id, kind: "chapter", name: chapterName };
+    // Без «Повторить»: повтор после потерянного ответа завёл бы главу дважды.
+    // Набранное остаётся в поле.
+    const done = await run(() => write.post("/story/arcs", body).then(() => true), { affects: STORY_AFFECTS, retry: false });
+    if (done) setChapterName("");
   }
 
   async function createScene(targetArcId: number) {
     const key = String(targetArcId);
     const name = drafts[key];
     if (!name?.trim()) return;
-    await api.post("/story/scenes", {
-      setting_id: arc.setting_id,
-      arc_id: targetArcId,
-      campaign_id: campaignId,
-      name: name.trim(),
-    });
-    setDrafts((d) => ({ ...d, [key]: "" }));
-    onChange();
+    const body = { setting_id: arc.setting_id, arc_id: targetArcId, campaign_id: campaignId, name: name.trim() };
+    const done = await run(() => write.post("/story/scenes", body).then(() => true), { affects: STORY_AFFECTS, retry: false });
+    if (done) setDrafts((d) => ({ ...d, [key]: "" }));
   }
 
   // Reorder is scoped to one group: the ids sent are exactly the scenes of
@@ -353,8 +340,7 @@ function ChaptersAndScenes({
     const to = ids.indexOf(targetId);
     if (from === -1 || to === -1) return;
     ids.splice(to, 0, ...ids.splice(from, 1));
-    await api.put("/story/scenes/reorder", { order: ids });
-    onChange();
+    await run(() => write.put("/story/scenes/reorder", { order: ids }), { affects: STORY_AFFECTS });
   }
 
   async function moveChapter(chapterId: number, delta: number) {
@@ -363,14 +349,12 @@ function ChaptersAndScenes({
     const j = i + delta;
     if (i === -1 || j < 0 || j >= ids.length) return;
     [ids[i], ids[j]] = [ids[j], ids[i]];
-    await api.put("/story/arcs/reorder", { order: ids });
-    onChange();
+    await run(() => write.put("/story/arcs/reorder", { order: ids }), { affects: STORY_AFFECTS });
   }
 
   async function setStatus(scene: StoryScene, status: string) {
     if (!campaignId) return;
-    await api.put(`/story/scenes/${scene.id}/state`, { campaign_id: campaignId, status });
-    onChange();
+    await run(() => write.put(`/story/scenes/${scene.id}/state`, { campaign_id: campaignId, status }), { affects: STORY_AFFECTS });
   }
 
   // Renaming a scene from inside a campaign goes through the same
@@ -378,18 +362,28 @@ function ChaptersAndScenes({
   async function renameScene(scene: StoryScene) {
     const name = await promptText({ title: "Переименовать сцену", message: "Название сцены", defaultValue: scene.name });
     if (!name?.trim() || name.trim() === scene.name) return;
-    await api.put(`/story/scenes/${scene.id}`, { name: name.trim(), campaign_id: campaignId });
-    onChange();
+    const body = { name: name.trim(), campaign_id: campaignId };
+    await run(() => write.put(`/story/scenes/${scene.id}`, body), { affects: STORY_AFFECTS });
   }
 
   async function archiveScene(scene: StoryScene) {
     if (!(await confirm({ message: `Отправить сцену «${scene.name}» в архив?`, confirmLabel: "Архивировать", danger: true })))
       return;
-    await deleteWithUndo({
-      entityName: scene.name,
-      deleteFn: async () => { await api.del(`/story/scenes/${scene.id}`); onChange(); },
-      restoreFn: async () => { await api.put(`/story/scenes/${scene.id}/restore`, {}); onChange(); },
-    });
+    await run(
+      () =>
+        deleteWithUndo({
+          entityName: scene.name,
+          deleteFn: async () => {
+            await write.del(`/story/scenes/${scene.id}`);
+          },
+          // Ошибку возврата показывает сам тост отмены — здесь её не глотать.
+          restoreFn: async () => {
+            await write.put(`/story/scenes/${scene.id}/restore`, {});
+            afterWrite(STORY_AFFECTS);
+          },
+        }),
+      { affects: STORY_AFFECTS, retry: false }
+    );
   }
 
   const openMenu = useCallback((scene: StoryScene, at: { clientX: number; clientY: number }) => {
@@ -522,8 +516,7 @@ function ChaptersAndScenes({
                   onClick={async () => {
                     const name = await promptText({ title: "Переименовать главу", message: "Название главы", defaultValue: c.name });
                     if (name?.trim()) {
-                      await api.put(`/story/arcs/${c.id}`, { name: name.trim() });
-                      onChange();
+                      await run(() => write.put(`/story/arcs/${c.id}`, { name: name.trim() }), { affects: STORY_AFFECTS });
                     }
                   }}
                 >
@@ -534,8 +527,7 @@ function ChaptersAndScenes({
                   onClick={async () => {
                     if (!(await confirm({ message: `Отправить главу «${c.name}» в архив вместе со сценами?`, confirmLabel: "Архивировать", danger: true })))
                       return;
-                    await api.del(`/story/arcs/${c.id}`);
-                    onChange();
+                    await run(() => write.del(`/story/arcs/${c.id}`), { affects: STORY_AFFECTS });
                   }}
                 >
                   <NavIcon name="archive" /> Архивировать
@@ -561,39 +553,31 @@ function ChaptersAndScenes({
   );
 }
 
-function Milestones({
-  arc,
-  campaignId,
-  onChange,
-}: {
-  arc: StoryArcDetail;
-  campaignId: number | null;
-  onChange: () => void;
-}) {
+function Milestones({ arc, campaignId }: { arc: StoryArcDetail; campaignId: number | null }) {
+  const run = useAction();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [sceneId, setSceneId] = useState("");
 
   async function add() {
     if (!title.trim()) return;
-    await api.post(`/story/arcs/${arc.id}/milestones`, {
-      title,
-      description,
-      scene_id: sceneId ? Number(sceneId) : null,
+    const body = { title, description, scene_id: sceneId ? Number(sceneId) : null };
+    // Без «Повторить»: повтор после потерянного ответа завёл бы веху дважды.
+    const done = await run(() => write.post(`/story/arcs/${arc.id}/milestones`, body).then(() => true), {
+      affects: STORY_AFFECTS,
+      retry: false,
     });
+    if (!done) return;
     setTitle("");
     setDescription("");
     setSceneId("");
-    onChange();
   }
 
   async function toggle(milestoneId: number, achieved: boolean) {
     if (!campaignId) return;
-    await api.put(`/story/milestones/${milestoneId}/state`, {
-      campaign_id: campaignId,
-      achieved,
+    await run(() => write.put(`/story/milestones/${milestoneId}/state`, { campaign_id: campaignId, achieved }), {
+      affects: STORY_AFFECTS,
     });
-    onChange();
   }
 
   async function move(milestoneId: number, delta: number) {
@@ -602,8 +586,7 @@ function Milestones({
     const j = i + delta;
     if (i === -1 || j < 0 || j >= ids.length) return;
     [ids[i], ids[j]] = [ids[j], ids[i]];
-    await api.put("/story/milestones/reorder", { order: ids });
-    onChange();
+    await run(() => write.put("/story/milestones/reorder", { order: ids }), { affects: STORY_AFFECTS });
   }
 
   return (
@@ -638,10 +621,7 @@ function Milestones({
             {!campaignId && (
               <button
                 className="danger"
-                onClick={async () => {
-                  await api.del(`/story/milestones/${m.id}`);
-                  onChange();
-                }}
+                onClick={() => void run(() => write.del(`/story/milestones/${m.id}`), { affects: STORY_AFFECTS })}
               >
                 ✕
               </button>
@@ -690,31 +670,29 @@ function Milestones({
   );
 }
 
-function Secrets({
-  arc,
-  campaignId,
-  onChange,
-}: {
-  arc: StoryArcDetail;
-  campaignId: number | null;
-  onChange: () => void;
-}) {
+function Secrets({ arc, campaignId }: { arc: StoryArcDetail; campaignId: number | null }) {
+  const run = useAction();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [kind, setKind] = useState("secret");
 
   async function add() {
     if (!title.trim()) return;
-    await api.post(`/story/arcs/${arc.id}/secrets`, { title, content, kind });
+    const body = { title, content, kind };
+    const done = await run(() => write.post(`/story/arcs/${arc.id}/secrets`, body).then(() => true), {
+      affects: STORY_AFFECTS,
+      retry: false,
+    });
+    if (!done) return;
     setTitle("");
     setContent("");
-    onChange();
   }
 
   async function toggle(secretId: number, revealed: boolean) {
     if (!campaignId) return;
-    await api.put(`/story/secrets/${secretId}/state`, { campaign_id: campaignId, revealed });
-    onChange();
+    await run(() => write.put(`/story/secrets/${secretId}/state`, { campaign_id: campaignId, revealed }), {
+      affects: STORY_AFFECTS,
+    });
   }
 
   return (
@@ -744,10 +722,7 @@ function Secrets({
           {!campaignId && (
             <button
               className="danger"
-              onClick={async () => {
-                await api.del(`/story/secrets/${s.id}`);
-                onChange();
-              }}
+              onClick={() => void run(() => write.del(`/story/secrets/${s.id}`), { affects: STORY_AFFECTS })}
             >
               ✕
             </button>

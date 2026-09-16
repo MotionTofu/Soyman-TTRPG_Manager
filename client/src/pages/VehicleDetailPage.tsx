@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { StatblockList } from "../components/StatblockList";
 import { EntryImagesTab } from "../components/EntryImagesTab";
@@ -7,7 +6,8 @@ import { EditableTextCard } from "../components/EditableTextCard";
 import { EntityFieldsCard, type EntityField } from "../components/EntityFieldsCard";
 import { EntityPage } from "../components/EntityPage";
 import { useTabState } from "../hooks/useTabState";
-import { api } from "../api/client";
+import { useAction, useResource, useSaveEntity, write } from "../data/hooks";
+import { compendiumAffects, compendiumPaths } from "../data/compendiumEntries";
 import { KIND_DEFS, extractEnglishName } from "../compendium";
 import type { CompendiumEntry, System, SystemSection } from "../types";
 import { useConfirm } from "../hooks/useConfirm";
@@ -20,38 +20,26 @@ const TABS = ["Досье", "Статблоки", "Изображения", "У�
 // компендиума обычно раскрываются прямо в разделе, но у транспорта, как и у
 // существа, есть статблок (у поста экипажа — своя прочность и действия) и
 // дети: посты одного судна. В строку раздела это не помещается.
-export function VehicleDetailPage({
-  entry,
-  system,
-  onChange,
-}: {
-  entry: CompendiumEntry;
-  system: System | null;
-  onChange: () => void;
-}) {
+export function VehicleDetailPage({ entry, system }: { entry: CompendiumEntry; system: System | null }) {
   const [confirmDialog, confirm] = useConfirm();
   const entryId = entry.id;
   const navigate = useNavigate();
   const [tab, selectTab] = useTabState(TABS, "Досье", { Статблок: "Статблоки" });
-  const [posts, setPosts] = useState<CompendiumEntry[]>([]);
-  const [sectionName, setSectionName] = useState("");
   const isPost = entry.kind === "vehicle_post";
+  const sectionEntries = useResource<CompendiumEntry[]>(
+    isPost ? null : compendiumPaths.sectionEntries(entry.system_id, entry.section_id)
+  ).data;
+  const posts = (sectionEntries ?? []).filter((e) => e.parent_id === entryId).sort((a, b) => a.position - b.position);
+  // Раздел в крошках: «Системы / D&D 5.5 / Транспорт / Галеон».
+  const sections = useResource<SystemSection[]>(system ? compendiumPaths.sections(system.id) : null).data;
+  const sectionName = sections?.find((s) => s.id === entry.section_id)?.name ?? "";
+  const { save } = useSaveEntity<CompendiumEntry>("compendium_entry", entryId, { affects: compendiumAffects(entry) });
+  const run = useAction();
 
-  useEffect(() => {
-    if (isPost) return;
-    api
-      .get<CompendiumEntry[]>(`/systems/${entry.system_id}/entries?section_id=${entry.section_id}`)
-      .then((all) => setPosts(all.filter((e) => e.parent_id === entryId).sort((a, b) => a.position - b.position)));
-  }, [entryId, entry.section_id, entry.system_id, isPost]);
-
-  useEffect(() => {
-    if (!system) return;
-    // Раздел в крошках: «Системы / D&D 5.5 / Транспорт / Галеон».
-    api
-      .get<SystemSection[]>(`/systems/${system.id}/sections`)
-      .then((ss) => setSectionName(ss.find((s) => s.id === entry.section_id)?.name ?? ""))
-      .catch(() => setSectionName(""));
-  }, [system?.id, entry.section_id]);
+  // Карточки полей держат правку открытой, пока сохранение не удалось.
+  async function saveOrThrow(patch: Partial<CompendiumEntry>) {
+    if (!(await save(patch))) throw new Error("Не сохранилось");
+  }
 
   const def = KIND_DEFS[entry.kind];
 
@@ -77,29 +65,33 @@ export function VehicleDetailPage({
     }
     // «[English]» в конце имени переносится в name_original (см. extractEnglishName):
     const { name, en } = extractEnglishName(values.name.trim());
-    await api.put(`/systems/entries/${entryId}`, {
+    await saveOrThrow({
       name,
       name_original: values.name_original.trim() || en,
       data,
     });
-    onChange();
   }
 
   async function saveDescription(value: string) {
-    await api.put(`/systems/entries/${entryId}`, { description: value });
-    onChange();
+    await saveOrThrow({ description: value });
   }
 
   async function addPost() {
-    const created = await api.post<CompendiumEntry>(`/systems/${entry.system_id}/entries`, {
-      section_id: entry.section_id,
-      parent_id: entryId,
-      kind: "vehicle_post",
-      name: "",
-      level: null,
-      data: {},
-      description: "",
-    });
+    const created = await run(
+      () =>
+        write.post<CompendiumEntry>(`/systems/${entry.system_id}/entries`, {
+          section_id: entry.section_id,
+          parent_id: entryId,
+          kind: "vehicle_post",
+          name: "",
+          level: null,
+          data: {},
+          description: "",
+        }),
+      // Без «Повторить»: ответ мог потеряться после записи — повтор завёл бы второй пост.
+      { affects: compendiumAffects(entry), retry: false }
+    );
+    if (!created) return;
     // Пустой пост открывается сразу на своей странице — имя задаётся в «Сводке».
     navigate(`/compendium/${created.id}`);
   }
@@ -107,8 +99,7 @@ export function VehicleDetailPage({
   async function deletePost(post: CompendiumEntry) {
     if (!(await confirm({ message: `Удалить пост экипажа «${post.name}»?`, confirmLabel: "Удалить", danger: true })))
       return;
-    await api.del(`/systems/entries/${post.id}`);
-    setPosts((prev) => prev.filter((e) => e.id !== post.id));
+    await run(() => write.del(`/systems/entries/${post.id}`), { affects: compendiumAffects(post) });
   }
 
   async function deleteShip() {
@@ -119,8 +110,8 @@ export function VehicleDetailPage({
         : `Удалить судно «${entry.name}»?`;
     if (!(await confirm({ message: msg, confirmLabel: "Удалить", danger: true })))
       return;
-    await api.del(`/systems/entries/${entryId}`);
-    navigate(`/systems/${entry.system_id}`);
+    const done = await run(() => write.del(`/systems/entries/${entryId}`).then(() => true), { affects: compendiumAffects(entry) });
+    if (done) navigate(`/systems/${entry.system_id}`);
   }
 
   return (
@@ -203,7 +194,6 @@ export function VehicleDetailPage({
           entryName={entry.name}
           entryKind={entry.kind}
           avatarUrl={entry.avatar_image_url ?? null}
-          onChange={onChange}
         />
       )}
 

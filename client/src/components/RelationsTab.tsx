@@ -1,6 +1,8 @@
-import { useEffect, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
+import { useAction, useResource, write } from "../data/hooks";
+import { relationAffects, settingPaths } from "../data/settingEntities";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
@@ -95,7 +97,8 @@ export interface RelationStats {
 // whatever others have declared about it (incoming), since those can
 // legitimately disagree.
 export function RelationsTab({ entityType, entityId, entityName, defaultSettingId, section, tone, onStats }: Props) {
-  const [data, setData] = useState<EntityRelationsResponse | null>(null);
+  const data = useResource<EntityRelationsResponse>(settingPaths.relations(entityType, entityId)).data ?? null;
+  const run = useAction();
   const [sortMode, setSortMode] = useState<SortMode>("tone");
   const [relationFilter, setRelationFilter] = useState("");
   const [dragOver, setDragOver] = useState(false);
@@ -111,20 +114,12 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
   const [draftDescription, setDraftDescription] = useState("");
   const [resultNote, setResultNote] = useState("");
   const [listOpen, setListOpen] = useState(false);
-  const [settingOptions, setSettingOptions] = useState<SearchResult[] | null>(null);
   const [listQuery, setListQuery] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editTone, setEditTone] = useState<RelationTone>("neutral");
   const [editLabel, setEditLabel] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [confirmDialog, confirm] = useConfirm();
-
-  function load() {
-    api
-      .get<EntityRelationsResponse>(`/entity-relations?entity_type=${entityType}&entity_id=${entityId}`)
-      .then(setData);
-  }
-  useEffect(load, [entityType, entityId]);
 
   // Счётчики для левой навигации Master–Detail (итоги + разбивка по тонам).
   useEffect(() => {
@@ -167,51 +162,34 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
     };
   }, [query, entityType, entityId]);
 
-  // Список сущностей сеттинга для выбора галочками — грузится сразу, если сеттинг
-  // маленький (<80 сущностей) — открываем автоматически (U-P1-1), иначе лениво
-  // по открытию details, чтобы не тянуть 400 записей на каждый просмотр.
+  // Список сущностей сеттинга для выбора галочками. Те же списки читают
+  // «Население», соседи в шапке Существа и поля выбора общин и мест — из кэша
+  // слоя они приходят без второго запроса.
+  const beingsList = useResource<{ id: number; name: string }[]>(defaultSettingId ? settingPaths.inSetting("being", defaultSettingId) : null);
+  const communitiesList = useResource<{ id: number; name: string }[]>(defaultSettingId ? settingPaths.inSetting("community", defaultSettingId) : null);
+  const locationsList = useResource<{ id: number; name: string }[]>(defaultSettingId ? settingPaths.inSetting("location", defaultSettingId) : null);
+  const artifactsList = useResource<{ id: number; name: string }[]>(defaultSettingId ? settingPaths.inSetting("artifact", defaultSettingId) : null);
+  const listsFailed = !!(beingsList.error || communitiesList.error || locationsList.error || artifactsList.error);
+  const settingOptions = useMemo<SearchResult[] | null>(() => {
+    if (listsFailed) return [];
+    if (!beingsList.data || !communitiesList.data || !locationsList.data || !artifactsList.data) return null;
+    return [
+      ...beingsList.data.map((b) => ({ type: "being", id: b.id, title: b.name } as SearchResult)),
+      ...communitiesList.data.map((c) => ({ type: "community", id: c.id, title: c.name } as SearchResult)),
+      ...locationsList.data.map((l) => ({ type: "location", id: l.id, title: l.name } as SearchResult)),
+      ...artifactsList.data.map((a) => ({ type: "artifact", id: a.id, title: a.name } as SearchResult)),
+    ];
+  }, [listsFailed, beingsList.data, communitiesList.data, locationsList.data, artifactsList.data]);
+
+  // Маленький сеттинг (<80 сущностей) — список раскрывается сам (U-P1-1), и
+  // только один раз: свернул Мастер — перечитывание после правки его обратно
+  // не раскроет.
+  const [autoOpened, setAutoOpened] = useState(false);
   useEffect(() => {
-    if (settingOptions || !defaultSettingId) return;
-    // ленивая загрузка: если список закрыт, не грузим до открытия, кроме случая автозапуска
-    // автозагрузка — сразу, чтобы решить открывать ли details
-    const shouldAutoLoad = !listOpen;
-    if (shouldAutoLoad) {
-      // пробуем тихо подгрузить для авто-открытия
-      Promise.all([
-        api.get<{ id: number; name: string; category: string }[]>(`/setting-beings?setting_id=${defaultSettingId}`),
-        api.get<{ id: number; name: string }[]>(`/setting-communities?setting_id=${defaultSettingId}`),
-        api.get<{ id: number; name: string }[]>(`/setting-locations?setting_id=${defaultSettingId}`),
-        api.get<{ id: number; name: string }[]>(`/artifacts?setting_id=${defaultSettingId}`),
-      ])
-        .then(([beings, communities, locations, artifacts]) => {
-          const opts = [
-            ...beings.map((b) => ({ type: "being", id: b.id, title: b.name } as SearchResult)),
-            ...communities.map((c) => ({ type: "community", id: c.id, title: c.name } as SearchResult)),
-            ...locations.map((l) => ({ type: "location", id: l.id, title: l.name } as SearchResult)),
-            ...artifacts.map((a) => ({ type: "artifact", id: a.id, title: a.name } as SearchResult)),
-          ];
-          setSettingOptions(opts);
-          if (opts.length > 0 && opts.length < 80) setListOpen(true);
-        })
-        .catch(() => setSettingOptions([]));
-      return;
-    }
-    Promise.all([
-      api.get<{ id: number; name: string; category: string }[]>(`/setting-beings?setting_id=${defaultSettingId}`),
-      api.get<{ id: number; name: string }[]>(`/setting-communities?setting_id=${defaultSettingId}`),
-      api.get<{ id: number; name: string }[]>(`/setting-locations?setting_id=${defaultSettingId}`),
-      api.get<{ id: number; name: string }[]>(`/artifacts?setting_id=${defaultSettingId}`),
-    ])
-      .then(([beings, communities, locations, artifacts]) =>
-        setSettingOptions([
-          ...beings.map((b) => ({ type: "being", id: b.id, title: b.name } as SearchResult)),
-          ...communities.map((c) => ({ type: "community", id: c.id, title: c.name } as SearchResult)),
-          ...locations.map((l) => ({ type: "location", id: l.id, title: l.name } as SearchResult)),
-          ...artifacts.map((a) => ({ type: "artifact", id: a.id, title: a.name } as SearchResult)),
-        ])
-      )
-      .catch(() => setSettingOptions([]));
-  }, [listOpen, settingOptions, defaultSettingId]);
+    if (autoOpened || !settingOptions) return;
+    setAutoOpened(true);
+    if (settingOptions.length > 0 && settingOptions.length < 80) setListOpen(true);
+  }, [autoOpened, settingOptions]);
 
   function isSelf(result: SearchResult) {
     return result.type === entityType && result.id === entityId;
@@ -254,25 +232,32 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
 
   async function confirmAdd() {
     if (targets.length === 0) return;
-    const created = await api.post<{ created: number; skipped: number }>("/entity-relations/batch", {
-      entity_type: entityType,
-      entity_id: entityId,
-      targets: targets.map((t) => ({ type: t.type, id: t.id })),
-      direction,
-      tone: draftTone,
-      label: draftLabel,
-      // Лор уходит только когда связь одна: копировать один текст в десять
-      // связей хуже, чем оставить их пустыми и дописать где нужно.
-      description: targets.length === 1 ? draftDescription : "",
-      mirror,
-    });
+    const created = await run(
+      () =>
+        write.post<{ created: number; skipped: number }>("/entity-relations/batch", {
+          entity_type: entityType,
+          entity_id: entityId,
+          targets: targets.map((t) => ({ type: t.type, id: t.id })),
+          direction,
+          tone: draftTone,
+          label: draftLabel,
+          // Лор уходит только когда связь одна: копировать один текст в десять
+          // связей хуже, чем оставить их пустыми и дописать где нужно.
+          description: targets.length === 1 ? draftDescription : "",
+          mirror,
+        }),
+      // «Повторить» не предлагается: ответ мог потеряться уже после записи.
+      // Черновик остаётся на месте — нажать «Добавить» ещё раз можно самому, а
+      // уже существующие связи сервер пропустит.
+      { affects: relationAffects(), retry: false }
+    );
+    if (!created) return;
     setResultNote(
       created.skipped > 0
         ? `Создано связей: ${created.created}. Пропущено как уже существующие: ${created.skipped}.`
         : `Создано связей: ${created.created}.`
     );
     resetDraft();
-    load();
   }
 
   // Зеркало уже существующей связи: та же пара в обратную сторону, тот же тон
@@ -282,15 +267,18 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
     const other = { type: r.other_type, id: r.other_id };
     const author = side === "out" ? other : self;
     const recipient = side === "out" ? self : other;
-    await api.post("/entity-relations", {
-      from_type: author.type,
-      from_id: author.id,
-      to_type: recipient.type,
-      to_id: recipient.id,
-      tone: r.tone,
-      label: r.label,
-    });
-    load();
+    await run(
+      () =>
+        write.post("/entity-relations", {
+          from_type: author.type,
+          from_id: author.id,
+          to_type: recipient.type,
+          to_id: recipient.id,
+          tone: r.tone,
+          label: r.label,
+        }),
+      { affects: relationAffects(), retry: false }
+    );
   }
 
   // Обратная связь уже есть? Сверяем по паре и названию: «друзья» в обе
@@ -311,9 +299,10 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
   }
 
   async function saveEdit(id: number) {
-    await api.put(`/entity-relations/${id}`, { tone: editTone, label: editLabel, description: editDescription });
-    setEditingId(null);
-    load();
+    const body = { tone: editTone, label: editLabel, description: editDescription };
+    // Не сохранилось — форма остаётся открытой с набранным, плашка сбоку.
+    const ok = await run(() => write.put(`/entity-relations/${id}`, body).then(() => true), { affects: relationAffects() });
+    if (ok) setEditingId(null);
   }
 
   async function removeRelation(id: number, otherName: string | null) {
@@ -324,8 +313,7 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
       danger: true,
     });
     if (!ok) return;
-    await api.del(`/entity-relations/${id}`);
-    load();
+    await run(() => write.del(`/entity-relations/${id}`), { affects: relationAffects() });
   }
 
   function renderRelation(r: EntityRelation, side: "out" | "in") {

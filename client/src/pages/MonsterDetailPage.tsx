@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { StatblockList } from "../components/StatblockList";
 import { MentionsTab } from "../components/MentionsTab";
 import { ChapterList } from "../components/ChapterList";
@@ -8,7 +8,8 @@ import { EntityPage } from "../components/EntityPage";
 import { CreatureCardEditor } from "../components/CreatureCardEditor";
 import { EntryImagesTab } from "../components/EntryImagesTab";
 import { useTabState } from "../hooks/useTabState";
-import { api } from "../api/client";
+import { useResource, useSaveEntity } from "../data/hooks";
+import { compendiumAffects, compendiumPaths } from "../data/compendiumEntries";
 import {
   CREATURE_SIZES,
   MECHANICS_ALIGNMENT_GROUP,
@@ -31,15 +32,7 @@ interface MechanicsOption {
 // откуда их берёт редактор компендиума. Тип подставляется выбором (по нему
 // работает фильтр раздела и он хранится ссылкой), мировоззрение — только
 // подсказками к свободному тексту: книга пишет там условия, а не пункты.
-async function loadCreatureLists(
-  systemId: number
-): Promise<{ types: MechanicsOption[]; alignments: string[] }> {
-  const sections = await api.get<SystemSection[]>(`/systems/${systemId}/sections`);
-  const mechSection = sections.find((s) => s.kind === "mechanics");
-  if (!mechSection) return { types: [], alignments: [] };
-  const entries = await api.get<CompendiumEntry[]>(
-    `/systems/${systemId}/entries?section_id=${mechSection.id}`
-  );
+function creatureLists(entries: CompendiumEntry[]): { types: MechanicsOption[]; alignments: string[] } {
   const groupsByName = new Map(entries.filter((e) => e.parent_id === null).map((e) => [e.name, e]));
   const childrenOf = (groupName: string) => {
     const group = groupsByName.get(groupName);
@@ -63,39 +56,30 @@ async function loadCreatureLists(
 // template it was created from. «Отношения» тоже нет: у шаблона системы
 // связей с сущностями сеттинга не бывает, а если такое существо нужно с
 // кем-то связать — связывают его версию в сеттинге.
-export function MonsterDetailPage({
-  entry,
-  system,
-  onChange,
-}: {
-  entry: CompendiumEntry;
-  system: System | null;
-  onChange: () => void;
-}) {
+export function MonsterDetailPage({ entry, system }: { entry: CompendiumEntry; system: System | null }) {
   const entryId = entry.id;
   // Сохранённая ссылка на «Статблок» должна открывать «Статблоки», а не
   // молча падать на вкладку по умолчанию — здесь это одна и та же вкладка.
   const [tab, selectTab] = useTabState(TABS, "Статблоки", { Статблок: "Статблоки" });
-  const [lists, setLists] = useState<{ types: MechanicsOption[]; alignments: string[] }>({
-    types: [],
-    alignments: [],
-  });
-  const [sectionName, setSectionName] = useState("");
+  const sections = useResource<SystemSection[]>(system ? compendiumPaths.sections(system.id) : null).data;
+  const mechSection = sections?.find((s) => s.kind === "mechanics");
+  const mechanics = useResource<CompendiumEntry[]>(
+    system && mechSection ? compendiumPaths.sectionEntries(system.id, mechSection.id) : null
+  ).data;
+  const lists = useMemo(() => creatureLists(mechanics ?? []), [mechanics]);
+  // Раздел в крошках: «Системы / D&D 5.5 / Бестиарий / Гоблин».
+  const sectionName = sections?.find((s) => s.id === entry.section_id)?.name ?? "";
   const [aliasDraft, setAliasDraft] = useState("");
+  const { save } = useSaveEntity<CompendiumEntry>("compendium_entry", entryId, { affects: compendiumAffects(entry) });
 
-  useEffect(() => {
-    if (!system) return;
-    loadCreatureLists(system.id).then(setLists);
-    // Раздел в крошках: «Системы / D&D 5.5 / Бестиарий / Гоблин».
-    api
-      .get<SystemSection[]>(`/systems/${system.id}/sections`)
-      .then((ss) => setSectionName(ss.find((s) => s.id === entry.section_id)?.name ?? ""))
-      .catch(() => setSectionName(""));
-  }, [system?.id, entry.section_id]);
+  // Карточки полей держат правку открытой, пока сохранение не удалось: для
+  // этого им нужна ошибка, а плашку показывает слой.
+  async function saveOrThrow(patch: Partial<CompendiumEntry>) {
+    if (!(await save(patch))) throw new Error("Не сохранилось");
+  }
 
   async function saveDescription(value: string) {
-    await api.put(`/systems/entries/${entryId}`, { description: value });
-    onChange();
+    await saveOrThrow({ description: value });
   }
 
   const creatureType = entry.data?.creature_type as MechanicsOption | undefined;
@@ -177,14 +161,13 @@ export function MonsterDetailPage({
     // «[English]» в конце имени переносится в name_original (см. extractEnglishName):
     // оригинал не нужно заносить дважды, а имя перестаёт носить скобки на виду.
     const { name, en } = extractEnglishName(values.name.trim());
-    await api.put(`/systems/entries/${entryId}`, {
+    await saveOrThrow({
       name,
       name_original: values.name_original.trim() || en,
       short_name: values.short_name.trim(),
       aliases: nextAliases,
       data,
     });
-    onChange();
   }
 
   const chapters = entry.chapters ?? [];
@@ -268,7 +251,6 @@ export function MonsterDetailPage({
               apiBase="/systems/entries"
               section="history"
               chapters={chapters.filter((c) => c.section === "history")}
-              onChange={onChange}
             />
           </details>
           <details className="card">
@@ -281,14 +263,13 @@ export function MonsterDetailPage({
               apiBase="/systems/entries"
               section="behavior"
               chapters={chapters.filter((c) => c.section === "behavior")}
-              onChange={onChange}
             />
           </details>
         </div>
       )}
 
       {tab === "Карточка существа" && (
-        <CreatureCardEditor type="compendium_entry" id={entryId} onChange={onChange} />
+        <CreatureCardEditor type="compendium_entry" id={entryId} />
       )}
 
       {tab === "Изображения" && (
@@ -297,7 +278,6 @@ export function MonsterDetailPage({
           entryName={entry.name}
           entryKind={entry.kind}
           avatarUrl={entry.avatar_image_url ?? null}
-          onChange={onChange}
         />
       )}
 

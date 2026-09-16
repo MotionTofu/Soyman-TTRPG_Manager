@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { api } from "./api/client";
+import { afterWriteAnywhere } from "./data/imperative";
+import { write } from "./data/hooks";
 
 // Ссылки внутри текста: единственное место, где на клиенте описана их
 // грамматика, и карта, по которой они резолвятся.
@@ -312,17 +314,19 @@ export async function syncMentionLinks(
 
   const toAdd = newMentions.filter((m) => !oldKeys.has(keyOf(m)));
   const toRemove = oldMentions.filter((m) => !newKeys.has(keyOf(m)));
+  let changed = false;
 
   for (const m of toAdd) {
     const id = resolveMention(m.type, m.uid);
     if (id == null) continue;
-    await api.post("/links", {
+    await write.post("/links", {
       from_type: entityType,
       from_id: entityId,
       to_type: m.type,
       to_id: id,
       section: "mention",
     });
+    changed = true;
   }
 
   if (toRemove.length > 0) {
@@ -337,7 +341,13 @@ export async function syncMentionLinks(
         (l) =>
           (l.to_type === m.type && l.to_id === id) || (l.from_type === m.type && l.from_id === id)
       );
-      if (match) await api.del(`/links/${match.id}`);
+      if (match) {
+        await write.del(`/links/${match.id}`);
+        changed = true;
+      }
     }
   }
+
+  // Упоминания видны в связях обеих сторон и во вкладке «Упоминания».
+  if (changed) afterWriteAnywhere([{ path: "/links" }]);
 }

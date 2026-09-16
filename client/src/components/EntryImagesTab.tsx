@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { useState } from "react";
+import type { Affect } from "../data/entities";
+import { useAction, useResource, write } from "../data/hooks";
+import { statblockAffects, statblockListPath } from "../data/statblocks";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { useConfirm } from "../hooks/useConfirm";
@@ -23,27 +25,18 @@ export function EntryImagesTab({
   entryName,
   entryKind,
   avatarUrl,
-  onChange,
 }: {
   entryId: number;
   entryName: string;
   entryKind: string;
   avatarUrl: string | null;
-  onChange: () => void;
 }) {
   // Карточка существа есть только у бестиария — у поста экипажа обещать её в
   // подсказке нельзя, иначе Мастер пойдёт искать вкладку, которой нет.
   const hasCreatureCard = entryKind === "monster";
-  const [statblocks, setStatblocks] = useState<StatblockSummary[]>([]);
-
-  function loadStatblocks() {
-    api
-      .get<StatblockSummary[]>(`/statblocks?owner_type=compendium_entry&owner_id=${entryId}`)
-      .then(setStatblocks)
-      .catch(() => setStatblocks([]));
-  }
-
-  useEffect(loadStatblocks, [entryId]);
+  // Тот же ключ кэша, что у списка статблоков записи: портрет, заменённый
+  // здесь, виден в статблоке без второго запроса.
+  const statblocks = useResource<StatblockSummary[]>(statblockListPath("compendium_entry", entryId)).data ?? [];
 
   return (
     <div className="stack">
@@ -61,7 +54,7 @@ export function EntryImagesTab({
             url={avatarUrl}
             uploadUrl={`/systems/entries/${entryId}/avatar`}
             deleteUrl={`/systems/entries/${entryId}/avatar`}
-            onDone={onChange}
+            affects={[{ kind: "compendium_entry", id: entryId }]}
           />
         </div>
       </div>
@@ -87,7 +80,7 @@ export function EntryImagesTab({
                   url={sb.avatar_image_url}
                   uploadUrl={`/statblocks/${sb.id}/avatar`}
                   deleteUrl={`/statblocks/${sb.id}/avatar`}
-                  onDone={loadStatblocks}
+                  affects={statblockAffects("compendium_entry", entryId)}
                 />
               ))}
             </div>
@@ -107,25 +100,26 @@ function EntryImageSlot({
   url,
   uploadUrl,
   deleteUrl,
-  onDone,
+  affects,
 }: {
   title: string;
   hint: string;
   url: string | null;
   uploadUrl: string;
   deleteUrl: string;
-  onDone: () => void;
+  /** Что задевает замена картинки: карточку записи или список её статблоков. */
+  affects: Affect[];
 }) {
   const [confirmDialog, confirm] = useConfirm();
   const [busy, setBusy] = useState(false);
+  const run = useAction();
 
   async function upload(file: File) {
     setBusy(true);
     try {
       const form = new FormData();
       form.append("file", file);
-      await api.post(uploadUrl, form);
-      onDone();
+      await run(() => write.post(uploadUrl, form, { timeoutMs: 120_000 }), { affects });
     } finally {
       setBusy(false);
     }
@@ -138,8 +132,7 @@ function EntryImageSlot({
       return;
     setBusy(true);
     try {
-      await api.del(deleteUrl);
-      onDone();
+      await run(() => write.del(deleteUrl), { affects });
     } finally {
       setBusy(false);
     }

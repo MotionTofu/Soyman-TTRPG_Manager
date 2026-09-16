@@ -9,7 +9,7 @@
 // зависит от сущности и таба, механика навигации — общая.
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
+import { write } from "../data/hooks";
 import { syncMentionLinks } from "../mentions";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
@@ -98,7 +98,7 @@ export function LocationInfoTab({
   spot,
 }: {
   location: SettingLocationDetail;
-  /** Перезагрузить карточку после сохранения (refresh страницы). */
+  /** После записи: страница говорит слою, что карточка задета. */
   onChanged: () => void;
   onSaveMain: (values: {
     name: string;
@@ -169,7 +169,7 @@ export function LocationInfoTab({
     const existing = new Set(chapters.map((c) => c.id));
     setNavError(null);
     try {
-      const created = await api.post<{ id?: number }>(`/setting-locations/${location.id}/chapters`, {
+      const created = await write.post<{ id?: number }>(`/setting-locations/${location.id}/chapters`, {
         title: `Статья ${chapters.length + 1}`,
         content: "",
       });
@@ -277,7 +277,6 @@ export function LocationInfoTab({
           key={`content-${location.id}`}
           locationId={location.id}
           spot={spot}
-          onChanged={onChanged}
         />
       )}
     </EntityTabWorkspace>
@@ -342,11 +341,9 @@ function ImageWorkspace({ title, slot }: { title: string; slot: InfoImageSlot })
 function ContentWorkspace({
   locationId,
   spot,
-  onChanged,
 }: {
   locationId: number;
   spot: { content: SettingLocationDetail["content"]; promoted: { id: number; name: string }[]; promoting: boolean; onPromote: () => void };
-  onChanged: () => void;
 }) {
   const [editMode, setEditMode] = useState(false);
 
@@ -359,7 +356,6 @@ function ContentWorkspace({
       <LocationContent
         locationId={locationId}
         items={spot.content ?? []}
-        onChange={onChanged}
         readOnly={!editMode}
       />
       {spot.promoted.length > 0 ? (
@@ -604,7 +600,7 @@ function ArticleEditor({
     setSaving(true);
     setError(null);
     try {
-      await api.put(`/setting-locations/chapters/${chapter.id}`, { title, content });
+      await write.put(`/setting-locations/chapters/${chapter.id}`, { title, content });
       syncMentionLinks("location", locationId, chapter.content, content);
       setEditMode(false);
       onChanged();
@@ -618,7 +614,7 @@ function ArticleEditor({
   async function toggleVisible() {
     setError(null);
     try {
-      await api.put(`/setting-locations/chapters/${chapter.id}`, {
+      await write.put(`/setting-locations/chapters/${chapter.id}`, {
         visible_to_players: !chapter.visible_to_players,
       });
       onChanged();
@@ -636,7 +632,7 @@ function ArticleEditor({
     if (!ok) return;
     setError(null);
     try {
-      await api.del(`/setting-locations/chapters/${chapter.id}`);
+      await write.del(`/setting-locations/chapters/${chapter.id}`);
       onDeleted();
     } catch (e) {
       setError(String(e instanceof Error ? e.message : e));

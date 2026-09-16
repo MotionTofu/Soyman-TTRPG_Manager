@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api } from "../api/client";
+import { useAfterWrite, write } from "../data/hooks";
 import { CREATABLE_BEING_CATEGORIES } from "../beingCategories";
 import { LocationCascadePicker } from "./LocationCascadePicker";
 import { Modal } from "./Modal";
@@ -18,7 +18,6 @@ export function BeingQuickCreate({
   fixedCommunityIds = [],
   showLocationPicker = false,
   showCommunityPicker = false,
-  onCreated,
 }: {
   settingId: number;
   locations?: SettingLocation[];
@@ -27,8 +26,8 @@ export function BeingQuickCreate({
   fixedCommunityIds?: number[];
   showLocationPicker?: boolean;
   showCommunityPicker?: boolean;
-  onCreated: () => void;
 }) {
+  const afterWrite = useAfterWrite();
   const [name, setName] = useState("");
   const [category, setCategory] = useState<BeingCategory>("key_figure");
   const [locationId, setLocationId] = useState<number | null>(null);
@@ -57,7 +56,7 @@ export function BeingQuickCreate({
     setError(null);
     try {
       const dedupIds = Array.from(new Set([...fixedCommunityIds, ...(showCommunityPicker ? [...communityIds] : [])]));
-      await api.post("/setting-beings", {
+      await write.post("/setting-beings", {
         setting_id: settingId,
         name: name.trim(),
         category,
@@ -72,7 +71,9 @@ export function BeingQuickCreate({
       setToast(`Личность «${name.trim()}» создана`);
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
       toastTimerRef.current = setTimeout(() => setToast(null), 2000);
-      onCreated();
+      // Новая личность видна в «Населении», в «Обитателях» локации и в
+      // «Представителях» сообщества.
+      afterWrite([{ kind: "being" }, { kind: "location" }, { kind: "community" }]);
     } catch (e) {
       setError(String(e instanceof Error ? e.message : e));
     } finally {

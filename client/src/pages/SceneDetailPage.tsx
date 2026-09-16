@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { api } from "../api/client";
+import { useAction, useResource, write } from "../data/hooks";
+import type { Affect } from "../data/entities";
 import { MentionText } from "../components/mentions/MentionText";
 import { EntityPage } from "../components/EntityPage";
 import { EditableTextCard } from "../components/EditableTextCard";
@@ -9,6 +10,7 @@ import { LazyDetails } from "../components/LazyDetails";
 import { SCENE_KINDS, SCENE_STATUSES } from "../sceneKinds";
 import type { Setting, StoryScene, StorySceneDetail } from "../types";
 import { NavIcon } from "../components/NavIcons";
+import { LoadErrorCard } from "../components/Loadable";
 import { PresentationEditor } from "../components/presentation/PresentationEditor";
 import { useTabState } from "../hooks/useTabState";
 import "../session.css";
@@ -35,54 +37,49 @@ export function SceneDetailPage() {
   const [params] = useSearchParams();
   const campaignId = params.get("campaign") ? Number(params.get("campaign")) : null;
 
-  const [scene, setScene] = useState<StorySceneDetail | null>(null);
-  const [setting, setSetting] = useState<Setting | null>(null);
+  const sceneState = useResource<StorySceneDetail>(`/story/scenes/${sceneId}${campaignId ? `?campaign_id=${campaignId}` : ""}`);
+  const scene = sceneState.data ?? null;
+  const setting = useResource<Setting>(scene ? `/settings/${scene.setting_id}` : null).data ?? null;
   // Нужна только ради имени в «хлебных крошках», когда сцену открыли из кампании.
-  const [campaignName, setCampaignName] = useState("");
+  const campaignName = useResource<{ name: string }>(campaignId ? `/campaigns/${campaignId}` : null).data?.name ?? "";
+  const siblingsQuery = scene
+    ? new URLSearchParams({ setting_id: String(scene.setting_id), ...(campaignId ? { campaign_id: String(campaignId) } : {}) }).toString()
+    : null;
+  const siblings = useResource<StoryScene[]>(siblingsQuery ? `/story/scenes?${siblingsQuery}` : null).data ?? [];
+  const run = useAction();
 
   const [check, setCheck] = useState({ what: "", difficulty: "", on_success: "", on_failure: "" });
   const [reward, setReward] = useState({ what: "", where_found: "", notes: "" });
   const [transitionTarget, setTransitionTarget] = useState("");
   const [transitionLabel, setTransitionLabel] = useState("");
-  const [siblings, setSiblings] = useState<StoryScene[]>([]);
   const [tab, selectTab] = useTabState(SCENE_TABS, "Досье");
 
-  function refresh() {
-    const q = campaignId ? `?campaign_id=${campaignId}` : "";
-    api.get<StorySceneDetail>(`/story/scenes/${sceneId}${q}`).then(setScene);
+  if (sceneState.error && !scene) {
+    return <LoadErrorCard message={<>Не удалось загрузить сцену: {sceneState.error}</>} onRetry={sceneState.reload} />;
   }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(refresh, [sceneId, campaignId]);
-
-  useEffect(() => {
-    if (!campaignId) return;
-    api.get<{ name: string }>(`/campaigns/${campaignId}`).then((c) => setCampaignName(c.name));
-  }, [campaignId]);
-
-  useEffect(() => {
-    if (!scene) return;
-    api.get<Setting>(`/settings/${scene.setting_id}`).then(setSetting);
-    const q = new URLSearchParams({ setting_id: String(scene.setting_id) });
-    if (campaignId) q.set("campaign_id", String(campaignId));
-    api.get<StoryScene[]>(`/story/scenes?${q.toString()}`).then(setSiblings);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scene?.setting_id, campaignId]);
-
   if (!scene) return <p className="muted">Загрузка…</p>;
+
+  // Сцена видна в своём приключении, на полотне, в дереве сцен и на пульте
+  // сессии. Копия кампании появляется при первой правке — поэтому задеты
+  // сцены целиком, а не одна эта.
+  const affects: Affect[] = [{ kind: "scene" }, { kind: "adventure" }, { path: "/sessions" }, { path: "/canvas" }];
 
   // Every write carries campaign_id so the server can decide whether it lands
   // on the original or on this campaign's copy. The response may be a
   // different row than the one we opened — hence the navigate() below.
+  // Карточки полей держат правку открытой, пока сохранение не удалось: для
+  // этого им нужна ошибка, а плашку показывает слой.
   async function save(patch: Record<string, unknown>) {
-    const updated = await api.put<StoryScene>(`/story/scenes/${sceneId}`, {
-      ...patch,
-      campaign_id: campaignId,
+    const body = { ...patch, campaign_id: campaignId };
+    const updated = await run(() => write.put<StoryScene>(`/story/scenes/${sceneId}`, body), { affects });
+    if (!updated) throw new Error("Не сохранилось");
+    if (updated.id !== sceneId) navigate(`/scenes/${updated.id}?campaign=${campaignId}`, { replace: true });
+  }
+
+  function saveQuietly(patch: Record<string, unknown>) {
+    save(patch).catch(() => {
+      // Плашку уже показал слой.
     });
-    if (updated.id !== sceneId) {
-      navigate(`/scenes/${updated.id}?campaign=${campaignId}`, { replace: true });
-      return;
-    }
-    refresh();
   }
 
   async function saveNameKind(name: string, kind: string) {
@@ -91,34 +88,37 @@ export function SceneDetailPage() {
 
   async function addCheck() {
     if (!check.what.trim()) return;
-    await api.post(`/story/scenes/${sceneId}/checks`, { ...check, campaign_id: campaignId });
-    setCheck({ what: "", difficulty: "", on_success: "", on_failure: "" });
-    refresh();
+    // Без «Повторить»: повтор после потерянного ответа завёл бы проверку дважды.
+    // Набранное остаётся в полях.
+    const body = { ...check, campaign_id: campaignId };
+    const done = await run(() => write.post(`/story/scenes/${sceneId}/checks`, body).then(() => true), { affects, retry: false });
+    if (done) setCheck({ what: "", difficulty: "", on_success: "", on_failure: "" });
   }
 
   async function addReward() {
     if (!reward.what.trim()) return;
-    await api.post(`/story/scenes/${sceneId}/rewards`, { ...reward, campaign_id: campaignId });
-    setReward({ what: "", where_found: "", notes: "" });
-    refresh();
+    const body = { ...reward, campaign_id: campaignId };
+    const done = await run(() => write.post(`/story/scenes/${sceneId}/rewards`, body).then(() => true), { affects, retry: false });
+    if (done) setReward({ what: "", where_found: "", notes: "" });
   }
 
   async function addTransition() {
     if (!transitionTarget) return;
-    await api.post(`/story/scenes/${sceneId}/transitions`, {
-      to_scene_id: Number(transitionTarget),
-      label: transitionLabel,
-      campaign_id: campaignId,
+    const body = { to_scene_id: Number(transitionTarget), label: transitionLabel, campaign_id: campaignId };
+    const done = await run(() => write.post(`/story/scenes/${sceneId}/transitions`, body).then(() => true), {
+      affects,
+      retry: false,
     });
+    if (!done) return;
     setTransitionTarget("");
     setTransitionLabel("");
-    refresh();
   }
 
   async function revert() {
     if (!(await confirm({ message: "Вернуть сцену к оригиналу из сеттинга? Правки этой кампании пропадут.", confirmLabel: "Вернуть", danger: true })))
       return;
-    await api.post(`/story/scenes/${sceneId}/revert`, { campaign_id: campaignId });
+    const done = await run(() => write.post(`/story/scenes/${sceneId}/revert`, { campaign_id: campaignId }).then(() => true), { affects });
+    if (!done) return;
     navigate(`/scenes/${scene?.source_scene_id ?? sceneId}?campaign=${campaignId}`, {
       replace: true,
     });
@@ -126,14 +126,14 @@ export function SceneDetailPage() {
 
   async function setStatus(status: string) {
     if (!campaignId) return;
-    await api.put(`/story/scenes/${sceneId}/state`, { campaign_id: campaignId, status });
-    refresh();
+    await run(() => write.put(`/story/scenes/${sceneId}/state`, { campaign_id: campaignId, status }), { affects });
   }
 
   async function archiveScene() {
     if (!(await confirm({ message: "Отправить сцену в архив?", confirmLabel: "Архивировать", danger: true })))
       return;
-    await api.del(`/story/scenes/${sceneId}`);
+    const done = await run(() => write.del(`/story/scenes/${sceneId}`).then(() => true), { affects });
+    if (!done) return;
     if (campaignId) navigate(`/campaigns/${campaignId}?tab=${encodeURIComponent("Главы и сцены")}`);
     else navigate(`/settings/${scene?.setting_id}?tab=${encodeURIComponent("Приключения")}`);
   }
@@ -198,7 +198,7 @@ export function SceneDetailPage() {
             <input
               type="checkbox"
               checked={scene.hidden_from_players === 1}
-              onChange={(e) => save({ hidden_from_players: e.target.checked })}
+              onChange={(e) => saveQuietly({ hidden_from_players: e.target.checked })}
             />
             <span>Скрыта от игроков</span>
           </label>
@@ -344,10 +344,7 @@ export function SceneDetailPage() {
               </span>
               <button
                 className="danger comp-mini"
-                onClick={async () => {
-                  await api.del(`/story/checks/${c.id}`);
-                  refresh();
-                }}
+                onClick={() => void run(() => write.del(`/story/checks/${c.id}`), { affects })}
                 aria-label="Удалить"
               >
                 ✕
@@ -415,10 +412,7 @@ export function SceneDetailPage() {
               </span>
               <button
                 className="danger comp-mini"
-                onClick={async () => {
-                  await api.del(`/story/rewards/${r.id}`);
-                  refresh();
-                }}
+                onClick={() => void run(() => write.del(`/story/rewards/${r.id}`), { affects })}
                 aria-label="Удалить"
               >
                 ✕
@@ -509,10 +503,7 @@ export function SceneDetailPage() {
               </span>
               <button
                 className="danger comp-mini"
-                onClick={async () => {
-                  await api.del(`/story/transitions/${t.id}`);
-                  refresh();
-                }}
+                onClick={() => void run(() => write.del(`/story/transitions/${t.id}`), { affects })}
                 aria-label="Удалить"
               >
                 ✕
@@ -553,16 +544,15 @@ export function SceneDetailPage() {
   );
 }
 
-function SceneAudioCard({ sceneId }: { sceneId: number }) {  const [sets, setSets] = useState<{ id: number; name: string }[]>([]);
-  const [current, setCurrent] = useState<{ id: number; name: string } | null>(null);
-  useEffect(() => {
-    api.get<{ id: number; name: string }[]>("/sound-sets").then(setSets).catch(() => setSets([]));
-    api.get<{ id: number; name: string } | null>(`/story/scenes/${sceneId}/sound-set`).then(setCurrent).catch(() => setCurrent(null));
-  }, [sceneId]);
+function SceneAudioCard({ sceneId }: { sceneId: number }) {
+  const sets = useResource<{ id: number; name: string }[]>("/sound-sets").data ?? [];
+  const current = useResource<{ id: number; name: string } | null>(`/story/scenes/${sceneId}/sound-set`).data ?? null;
+  const run = useAction();
   async function setSound(id: number | null) {
-    await api.put(`/story/scenes/${sceneId}/sound-set`, { sound_set_id: id });
-    const updated = await api.get<{ id: number; name: string } | null>(`/story/scenes/${sceneId}/sound-set`).catch(() => null);
-    setCurrent(updated);
+    // Набор звука сцены слышен на пульте и виден на полотне.
+    await run(() => write.put(`/story/scenes/${sceneId}/sound-set`, { sound_set_id: id }), {
+      affects: [{ path: `/story/scenes/${sceneId}/sound-set` }, { path: "/sessions" }, { path: "/canvas" }],
+    });
   }
   return (
     <details className="card" open>
@@ -586,19 +576,11 @@ function SceneAudioCard({ sceneId }: { sceneId: number }) {  const [sets, setSet
 // Откуда сюда можно прийти: явные переходы других сцен + исходы проверок,
 // ведущие в эту. Зеркало «Переходов» (те — «куда дальше»).
 function SceneIncomingCard({ sceneId, campaignId }: { sceneId: number; campaignId: number | null }) {
-  const [data, setData] = useState<{
+  const incoming = useResource<{
     transitions: { id: number; from_scene_id: number; label: string; from_scene_name: string }[];
     outcomes: { check_id: number; label: string; consequence: string; check_what: string; from_scene_id: number; from_scene_name: string }[];
-  } | null>(null);
-  useEffect(() => {
-    api
-      .get<{
-        transitions: { id: number; from_scene_id: number; label: string; from_scene_name: string }[];
-        outcomes: { check_id: number; label: string; consequence: string; check_what: string; from_scene_id: number; from_scene_name: string }[];
-      }>(`/story/scenes/${sceneId}/incoming`)
-      .then(setData)
-      .catch(() => setData({ transitions: [], outcomes: [] }));
-  }, [sceneId]);
+  }>(`/story/scenes/${sceneId}/incoming`);
+  const data = incoming.data ?? (incoming.error ? { transitions: [], outcomes: [] } : null);
 
   const link = (id: number) => `/scenes/${id}${campaignId ? `?campaign=${campaignId}` : ""}`;
   const total = (data?.transitions.length ?? 0) + (data?.outcomes.length ?? 0);

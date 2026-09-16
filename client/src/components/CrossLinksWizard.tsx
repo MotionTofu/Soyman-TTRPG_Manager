@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
+import { errorText, useAfterWrite, write } from "../data/hooks";
+import { showSaveError } from "../data/notices";
 import { useConfirm } from "../hooks/useConfirm";
 
 // Расстановка ссылок в текстах — шагами, по одному типу цели за раз.
@@ -68,6 +70,7 @@ export function CrossLinksWizard({
   help: string;
 }) {
   const [confirmDialog, confirm] = useConfirm();
+  const afterWrite = useAfterWrite();
   const [steps, setSteps] = useState<Step[]>([]);
   const [sources, setSources] = useState<Source[]>([]);
   const [stepKey, setStepKey] = useState("");
@@ -126,7 +129,7 @@ export function CrossLinksWizard({
     if (!proposals) return;
     setBusy("apply");
     try {
-      const r = await api.post<{ written: number }>(
+      const r = await write.post<{ written: number }>(
         `/cross-links/apply?ownerKind=${ownerKind}&ownerId=${ownerId}&targetType=${stepKey}&sources=${encodeURIComponent(sourceParam)}`,
         { chosen: proposals.filter((p) => chosen[proposalId(p)]) },
         { timeoutMs: 30000 }
@@ -135,6 +138,12 @@ export function CrossLinksWizard({
       setVisited((v) => ({ ...v, [stepKey]: (v[stepKey] ?? 0) + r.written }));
       setProposals(null);
       setChosen({});
+      // Ссылки расставлены в текстах всего, чем владеет владелец: задето всё
+      // открытое, перечитывается только видимое.
+      afterWrite([]);
+    } catch (e) {
+      // Выбор остаётся — применить можно ещё раз.
+      showSaveError(`Ссылки не расставились: ${errorText(e)}`);
     } finally {
       setBusy("");
     }
@@ -145,11 +154,14 @@ export function CrossLinksWizard({
       return;
     setBusy("strip");
     try {
-      const r = await api.del<{ removed: number }>(
+      const r = await write.del<{ removed: number }>(
         `/cross-links?ownerKind=${ownerKind}&ownerId=${ownerId}`
       );
       setDone(`Снято ссылок: ${r.removed}.`);
       setProposals(null);
+      afterWrite([]);
+    } catch (e) {
+      showSaveError(`Ссылки не снялись: ${errorText(e)}`);
     } finally {
       setBusy("");
     }

@@ -1,19 +1,22 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api } from "../api/client";
+import { useAction, useAfterWrite, useEntity, useResource, useSaveEntity, write } from "../data/hooks";
+import { showSaveError } from "../data/notices";
+import { settingPaths } from "../data/settingEntities";
+import type { Affect } from "../data/entities";
 import { AliasesCard } from "../components/AliasesCard";
 import { ArtifactCardEditor } from "../components/ArtifactCardEditor";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { EntityFieldsCard } from "../components/EntityFieldsCard";
 import { EntityPage } from "../components/EntityPage";
-import { ListSkeleton } from "../components/Loadable";
+import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
 import { MentionText } from "../components/mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import { MentionsTab } from "../components/MentionsTab";
 import { GalleryTab } from "../components/GalleryTab";
 import { ChapterList } from "../components/ChapterList";
 import { useTabState } from "../hooks/useTabState";
-import { useAlert, useConfirm } from "../hooks/useConfirm";
+import { useConfirm } from "../hooks/useConfirm";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { useImageCrop } from "../hooks/useImageCrop";
@@ -34,11 +37,18 @@ export function ArtifactDetailPage() {
   const navigate = useNavigate();
   const [confirmDialog, confirm] = useConfirm();
   const { deleteWithUndo } = useUndoDelete();
-  const [alertDialog, showAlert] = useAlert();
+  const artifactState = useEntity<Artifact>("artifact", artifactId);
+  const artifact = artifactState.data ?? null;
+  const settingId = artifact?.setting_id ?? null;
+  const { save } = useSaveEntity<Artifact>("artifact", artifactId);
+  const run = useAction();
+  const afterWrite = useAfterWrite();
+  const mine: Affect[] = [{ kind: "artifact", id: artifactId }];
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [beings, setBeings] = useState<SettingBeing[]>([]);
-  const [communities, setCommunities] = useState<SettingCommunity[]>([]);
+  const allCampaigns = useResource<Campaign[]>(settingPaths.campaigns()).data;
+  const campaigns = useMemo(() => (allCampaigns ?? []).filter((c) => c.setting_id === settingId), [allCampaigns, settingId]);
+  const beings = useResource<SettingBeing[]>(settingId ? settingPaths.inSetting("being", settingId) : null).data ?? [];
+  const communities = useResource<SettingCommunity[]>(settingId ? settingPaths.inSetting("community", settingId) : null).data ?? [];
   const [dateTitle, setDateTitle] = useState("");
   const [dateRecurrence, setDateRecurrence] = useState<DateRecurrence>("once");
   const [dateYear, setDateYear] = useState("");
@@ -51,78 +61,78 @@ export function ArtifactDetailPage() {
     setUploadingAvatar(true);
     const formData = new FormData();
     formData.append("file", file);
-    await api.post(`/artifacts/${artifactId}/avatar`, formData);
-    setUploadingAvatar(false);
-    refresh();
+    try {
+      await run(() => write.post(`/artifacts/${artifactId}/avatar`, formData, { timeoutMs: 60_000 }), { affects: mine });
+    } finally {
+      setUploadingAvatar(false);
+    }
   }
 
   const avatarCrop = useImageCrop("square", handleAvatarChange);
 
-  async function saveTags(tags: string[]) {
-    await api.put(`/artifacts/${artifactId}`, { tags });
-    refresh();
+  // Карточки полей держат правку открытой, пока сохранение не удалось: для
+  // этого им нужна ошибка, а плашку показывает слой.
+  async function saveOrThrow(patch: Partial<Artifact>) {
+    if (!(await save(patch))) throw new Error("Не сохранилось");
   }
+
+  // Текстовое поле с упоминаниями: ссылки на упомянутых пересобираются только
+  // после того, как текст действительно сохранился.
+  async function saveText(field: "description" | "power" | "history" | "secret" | "notes", before: string, value: string) {
+    await saveOrThrow({ [field]: value });
+    syncMentionLinks("artifact", artifactId, before, value);
+  }
+
+  function saveTags(tags: string[]) {
+    void save({ tags });
+  }
+
+  // Владелец видит предмет у себя в карточке.
+  const ownerAffects: Affect[] = [...mine, { kind: "being" }, { kind: "community" }];
+
+  function setOwner(owner_type: string | null, owner_id: number | null) {
+    void run(() => write.put(`/artifacts/${artifactId}`, { owner_type, owner_id }), { affects: ownerAffects });
+  }
+
+  // Важные даты попадают в календарь сеттинга и кампаний.
+  const dateAffects: Affect[] = [...mine, { path: "/calendar" }];
 
   async function addImportantDate() {
     if (!dateTitle.trim() || !dateDay) return;
-    await api.post(`/artifacts/${artifactId}/important-dates`, {
+    const body = {
       title: dateTitle,
       recurrence: dateRecurrence,
       year: dateRecurrence === "once" ? Number(dateYear) || null : null,
       month: dateRecurrence !== "monthly" ? Number(dateMonth) || null : null,
       day: Number(dateDay),
-    });
+    };
+    // Без «Повторить»: повтор после потерянного ответа завёл бы дату дважды.
+    const done = await run(
+      () => write.post(`/artifacts/${artifactId}/important-dates`, body).then(() => true),
+      { affects: dateAffects, retry: false }
+    );
+    if (!done) return;
     setDateTitle("");
     setDateYear("");
     setDateMonth("");
     setDateDay("");
-    refresh();
   }
 
   async function removeImportantDate(dateId: number) {
     const ok = await confirm({ message: "Удалить важную дату?", confirmLabel: "Удалить", danger: true });
     if (!ok) return;
-    await api.del(`/artifacts/important-dates/${dateId}`);
-    refresh();
+    await run(() => write.del(`/artifacts/important-dates/${dateId}`), { affects: dateAffects });
   }
-
-  const [artifact, setArtifact] = useState<Artifact | null>(null);
-
-  const refresh = useCallback(() => {
-    const controller = new AbortController();
-    api.get<Artifact>(`/artifacts/${artifactId}`, { signal: controller.signal })
-      .then((a) => {
-        setArtifact(a);
-      })
-      .catch((err) => {
-        if (err.name !== "AbortError") throw err;
-      });
-    return () => controller.abort();
-  }, [artifactId]);
-
-  useEffect(() => {
-    const cleanup = refresh();
-    return cleanup;
-  }, [refresh]);
-
-  useEffect(() => {
-    if (!artifact) return;
-    api
-      .get<Campaign[]>("/campaigns")
-      .then((all) => setCampaigns(all.filter((c) => c.setting_id === artifact.setting_id)));
-    api
-      .get<SettingBeing[]>(`/setting-beings?setting_id=${artifact.setting_id}`)
-      .then(setBeings);
-    api
-      .get<SettingCommunity[]>(`/setting-communities?setting_id=${artifact.setting_id}`)
-      .then(setCommunities);
-  }, [artifact?.setting_id]);
 
   const typeOptions = useMemo(() => {
     const list = itemTypeOptions(artifact?.item_class ?? "");
     const currentType = artifact?.item_type ?? "";
     return currentType && !list.includes(currentType) ? [currentType, ...list] : list;
   }, [artifact?.item_class, artifact?.item_type]);
+
+  if (artifactState.error && !artifact) {
+    return <LoadErrorCard message={<>Не удалось загрузить артефакт: {artifactState.error}</>} onRetry={artifactState.reload} />;
+  }
 
   if (!artifact) {
     return <ListSkeleton variant="paragraph" label="Загрузка артефакта" />;
@@ -135,12 +145,18 @@ export function ArtifactDetailPage() {
     try {
       await deleteWithUndo({
         entityName: artifact.name,
-        deleteFn: () => api.del(`/artifacts/${artifactId}`),
-        restoreFn: () => api.put(`/artifacts/${artifactId}/restore`),
+        deleteFn: async () => {
+          await write.del(`/artifacts/${artifactId}`);
+          afterWrite([{ kind: "artifact" }]);
+        },
+        restoreFn: async () => {
+          await write.put(`/artifacts/${artifactId}/restore`);
+          afterWrite([{ kind: "artifact" }]);
+        },
       });
       navigate(`/settings/${artifact.setting_id}`);
     } catch (e) {
-      showAlert(String(e instanceof Error ? e.message : e));
+      showSaveError(`Не удалось архивировать «${artifact.name}»: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
@@ -185,7 +201,6 @@ export function ArtifactDetailPage() {
       overlays={
         <>
           {confirmDialog}
-          {alertDialog}
           {avatarCrop.modal}
         </>
       }
@@ -204,10 +219,7 @@ export function ArtifactDetailPage() {
                 title: "Показывается вместо полного имени в подписи пина на карте локации",
               },
             ]}
-            onSave={async (v) => {
-              await api.put(`/artifacts/${artifactId}`, { name: v.name, short_name: v.short_name });
-              refresh();
-            }}
+            onSave={(v) => saveOrThrow({ name: v.name, short_name: v.short_name })}
           />
           <div className="card stack">
             <h3>Владелец</h3>
@@ -220,10 +232,7 @@ export function ArtifactDetailPage() {
                   {artifact.owner_entity.type === "being" ? "Существо" : "Сообщество"}
                 </span>
                 <button
-                  onClick={async () => {
-                    await api.put(`/artifacts/${artifactId}`, { owner_type: null, owner_id: null });
-                    refresh();
-                  }}
+                  onClick={() => setOwner(null, null)}
                 >
                   ✕
                 </button>
@@ -232,12 +241,11 @@ export function ArtifactDetailPage() {
               <div className="row" style={{ gap: 8 }}>
                 <select
                   value=""
-                  onChange={async (e) => {
+                  onChange={(e) => {
                     const [type, idStr] = e.target.value.split(":");
                     const id = Number(idStr);
                     if (!type || !id) return;
-                    await api.put(`/artifacts/${artifactId}`, { owner_type: type, owner_id: id });
-                    refresh();
+                    setOwner(type, id);
                   }}
                 >
                   <option value="">Выбрать…</option>
@@ -258,11 +266,7 @@ export function ArtifactDetailPage() {
           <EditableTextCard
             title="Короткое описание"
             value={artifact.description}
-            onSave={async (v) => {
-              await api.put(`/artifacts/${artifactId}`, { description: v });
-              syncMentionLinks("artifact", artifactId, artifact.description, v);
-              refresh();
-            }}
+            onSave={(v) => saveText("description", artifact.description, v)}
             rows={2}
             entityType="artifact"
             entityId={artifactId}
@@ -293,23 +297,18 @@ export function ArtifactDetailPage() {
                   ]
                 : []),
             ]}
-            onSaveFields={async (v) => {
-              await api.put(`/artifacts/${artifactId}`, {
+            onSaveFields={(v) =>
+              saveOrThrow({
                 item_class: v.item_class || null,
                 item_type: v.item_type || null,
                 rarity: v.rarity || null,
-              });
-              refresh();
-            }}
+              })
+            }
           />
           <EditableTextCard
             title="Сила / свойства"
             value={artifact.power}
-            onSave={async (v) => {
-              await api.put(`/artifacts/${artifactId}`, { power: v });
-              syncMentionLinks("artifact", artifactId, artifact.power, v);
-              refresh();
-            }}
+            onSave={(v) => saveText("power", artifact.power, v)}
             rows={4}
             entityType="artifact"
             entityId={artifactId}
@@ -319,11 +318,7 @@ export function ArtifactDetailPage() {
           <EditableTextCard
             title="История"
             value={artifact.history}
-            onSave={async (v) => {
-              await api.put(`/artifacts/${artifactId}`, { history: v });
-              syncMentionLinks("artifact", artifactId, artifact.history, v);
-              refresh();
-            }}
+            onSave={(v) => saveText("history", artifact.history, v)}
             rows={4}
             entityType="artifact"
             entityId={artifactId}
@@ -333,11 +328,7 @@ export function ArtifactDetailPage() {
           <EditableTextCard
             title="Секрет"
             value={artifact.secret}
-            onSave={async (v) => {
-              await api.put(`/artifacts/${artifactId}`, { secret: v });
-              syncMentionLinks("artifact", artifactId, artifact.secret, v);
-              refresh();
-            }}
+            onSave={(v) => saveText("secret", artifact.secret, v)}
             rows={3}
             entityType="artifact"
             entityId={artifactId}
@@ -347,11 +338,7 @@ export function ArtifactDetailPage() {
           <EditableTextCard
             title="Заметки"
             value={artifact.notes}
-            onSave={async (v) => {
-              await api.put(`/artifacts/${artifactId}`, { notes: v });
-              syncMentionLinks("artifact", artifactId, artifact.notes, v);
-              refresh();
-            }}
+            onSave={(v) => saveText("notes", artifact.notes, v)}
             rows={3}
             entityType="artifact"
             entityId={artifactId}
@@ -363,7 +350,6 @@ export function ArtifactDetailPage() {
               ownerType="artifact"
               apiBase="/artifacts"
               chapters={artifact.chapters}
-              onChange={refresh}
               titlePrefix="Статья"
               addLabel="статью"
               defaultSettingId={artifact.setting_id}
@@ -382,10 +368,7 @@ export function ArtifactDetailPage() {
         <AliasesCard
           aliases={artifact.aliases ?? []}
           nameOriginal={artifact.name_original ?? ""}
-          onSave={async (aliases, name_original) => {
-            await api.put(`/artifacts/${artifactId}`, { aliases, name_original });
-            refresh();
-          }}
+          onSave={(aliases, name_original) => saveOrThrow({ aliases, name_original })}
         />
       )}
 
@@ -393,7 +376,6 @@ export function ArtifactDetailPage() {
         <CompendiumLinksCard
           artifactId={artifactId}
           links={artifact.compendium_links ?? []}
-          onChange={refresh}
         />
       )}
 
@@ -469,7 +451,7 @@ export function ArtifactDetailPage() {
       )}
 
       {tab === "Карточка предмета" && (
-        <ArtifactCardEditor id={artifactId} onChange={refresh} />
+        <ArtifactCardEditor id={artifactId} />
       )}
     </EntityPage>
   );
@@ -479,24 +461,17 @@ export function ArtifactDetailPage() {
 // Предмет приключения и запись справочника — одна вещь с двух сторон: в книге
 // у «Кольца защиты разума» своя история и владелец, в компендиуме — правила.
 // Связей может быть несколько: сеттинг водится сразу под две системы.
-function CompendiumLinksCard({
-  artifactId,
-  links,
-  onChange,
-}: {
-  artifactId: number;
-  links: CompendiumLink[];
-  onChange: () => void;
-}) {
+function CompendiumLinksCard({ artifactId, links }: { artifactId: number; links: CompendiumLink[] }) {
+  const run = useAction();
+  const affects: Affect[] = [{ kind: "artifact", id: artifactId }];
+
   async function add(entry: SearchResult | null) {
     if (!entry) return;
-    await api.post(`/artifacts/${artifactId}/compendium-links`, { compendium_entry_id: entry.id });
-    onChange();
+    await run(() => write.post(`/artifacts/${artifactId}/compendium-links`, { compendium_entry_id: entry.id }), { affects });
   }
 
   async function remove(entryId: number) {
-    await api.del(`/artifacts/${artifactId}/compendium-links/${entryId}`);
-    onChange();
+    await run(() => write.del(`/artifacts/${artifactId}/compendium-links/${entryId}`), { affects });
   }
 
   return (

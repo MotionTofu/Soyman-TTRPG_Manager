@@ -1,13 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
-import {
-  COMBAT_ROLES,
-  CreatureCard,
-  MAX_COMBAT_ROLES,
-  fetchCreatureCard,
-  type CreatureCardPayload,
-} from "./CreatureCard";
+import { useAction, useResource, write } from "../data/hooks";
+import type { Affect } from "../data/entities";
+import { COMBAT_ROLES, CreatureCard, MAX_COMBAT_ROLES, type CreatureCardPayload } from "./CreatureCard";
 
 // Вкладка «Карточка существа» — единственное место, где карточка правится.
 // Правка по месту (в ноде полотна, в докстанции пульта) отклонена: это органы
@@ -48,16 +43,12 @@ function suggestRoles(data: CreatureCardPayload): string[] {
   return out.slice(0, MAX_COMBAT_ROLES);
 }
 
-export function CreatureCardEditor({
-  type,
-  id,
-  onChange,
-}: {
-  type: "being" | "compendium_entry";
-  id: number;
-  onChange?: () => void;
-}) {
-  const [data, setData] = useState<CreatureCardPayload | null | undefined>(undefined);
+export function CreatureCardEditor({ type, id }: { type: "being" | "compendium_entry"; id: number }) {
+  // Редактор — только у Мастера, поэтому читает мастерский маршрут напрямую,
+  // без игроцкого запасного пути fetchCreatureCard.
+  const card = useResource<CreatureCardPayload>(`/creature-card/${type}/${id}`);
+  const data: CreatureCardPayload | null | undefined = card.data ?? (card.error ? null : undefined);
+  const run = useAction();
   const [roles, setRoles] = useState<string[]>([]);
   const [description, setDescription] = useState("");
   const [tactics, setTactics] = useState("");
@@ -65,18 +56,25 @@ export function CreatureCardEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const load = () => {
-    fetchCreatureCard(type, id)
-      .then((d) => {
-        setData(d);
-        setRoles(d.combat_roles);
-        setDescription(d.description);
-        setTactics(d.tactics.join("\n"));
-        setSecret(d.secret);
-      })
-      .catch(() => setData(null));
-  };
-  useEffect(load, [type, id]);
+  // Поля заполняются из карточки, пока Мастер их не тронул. Пришедшее извне
+  // (правка описания в «Досье», другое окно) не затирает набранное
+  // (docs/adr/0001, п. 5): черновик сравнивается с тем, из чего был собран.
+  const [seed, setSeed] = useState<CreatureCardPayload | null>(null);
+  useEffect(() => {
+    if (!card.data || card.data === seed) return;
+    const untouched =
+      !seed ||
+      (description === seed.description &&
+        tactics === seed.tactics.join("\n") &&
+        secret === seed.secret &&
+        roles.join("|") === seed.combat_roles.join("|"));
+    setSeed(card.data);
+    if (!untouched) return;
+    setRoles(card.data.combat_roles);
+    setDescription(card.data.description);
+    setTactics(card.data.tactics.join("\n"));
+    setSecret(card.data.secret);
+  }, [card.data, seed, description, tactics, secret, roles]);
 
   function toggleRole(role: string) {
     setError("");
@@ -94,18 +92,21 @@ export function CreatureCardEditor({
   async function save() {
     if (!data) return;
     setSaving(true);
+    const body = {
+      description,
+      combat_roles: roles,
+      tactics: tactics
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean),
+      secret,
+    };
+    const affects: Affect[] = [
+      type === "being" ? { kind: "being", id } : { kind: "compendium_entry", id },
+      { path: `/creature-card/${type}/${id}` },
+    ];
     try {
-      await api.put(SAVE_PATH[type](id), {
-        description,
-        combat_roles: roles,
-        tactics: tactics
-          .split("\n")
-          .map((l) => l.trim())
-          .filter(Boolean),
-        secret,
-      });
-      load();
-      onChange?.();
+      await run(() => write.put(SAVE_PATH[type](id), body), { affects });
     } finally {
       setSaving(false);
     }

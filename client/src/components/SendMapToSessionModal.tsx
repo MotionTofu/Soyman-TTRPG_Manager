@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import { useAfterWrite, write } from "../data/hooks";
 import { Modal } from "./Modal";
 import type { Campaign, SessionSummary } from "../types";
 
@@ -26,6 +27,7 @@ export function SendMapToSessionModal({ locationId, settingId, onClose }: Props)
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [showPast, setShowPast] = useState(false);
   const [sending, setSending] = useState(false);
+  const afterWrite = useAfterWrite();
   const [doneLabel, setDoneLabel] = useState<string | null>(null);
 
   useEffect(() => {
@@ -58,7 +60,9 @@ export function SendMapToSessionModal({ locationId, settingId, onClose }: Props)
   async function send(session: SessionSummary) {
     setSending(true);
     try {
-      await api.post("/resources/from-location-map", { location_id: locationId, session_id: session.id });
+      await write.post("/resources/from-location-map", { location_id: locationId, session_id: session.id });
+      // Карта уходит в ресурсы сессии — её видно в профиле сессии и на пульте.
+      afterWrite([{ kind: "resource" }, { kind: "session", id: session.id }]);
       setDoneLabel(`${session.campaign_name ?? campaign?.name ?? ""} — ${session.date}${session.title ? ` (${session.title})` : ""}`);
     } catch {
       // Error already handled by modal closure

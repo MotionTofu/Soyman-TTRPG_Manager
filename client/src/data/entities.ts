@@ -38,6 +38,18 @@ export function isEntityKind(value: string): value is EntityKind {
   return Object.prototype.hasOwnProperty.call(ENTITY_ENDPOINTS, value);
 }
 
+/**
+ * Вид по базовому маршруту (`/setting-beings` → `being`). Нужен общим
+ * компонентам, которым страница передаёт маршрут, а не вид: правка задевает
+ * карточку по виду, иначе карточка, прочитанная `useEntity`, её не увидит.
+ */
+export function entityKindByEndpoint(base: string): EntityKind | null {
+  for (const [kind, endpoint] of Object.entries(ENTITY_ENDPOINTS)) {
+    if (endpoint === base) return kind as EntityKind;
+  }
+  return null;
+}
+
 export function entityPath(kind: EntityKind, id: number): string {
   return `${ENTITY_ENDPOINTS[kind]}/${id}`;
 }

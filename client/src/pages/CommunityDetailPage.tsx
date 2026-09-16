@@ -1,6 +1,10 @@
-import { useState, useEffect, type DragEvent } from "react";
+import { useState, type DragEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api } from "../api/client";
+import { useAction, useAfterWrite, useEntity, useResource, useSaveEntity, write } from "../data/hooks";
+import { showSaveError } from "../data/notices";
+import { settingPaths } from "../data/settingEntities";
+import type { Affect } from "../data/entities";
+import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
 import { useUnloadTarget } from "../unloadTargets";
 import { AliasesCard } from "../components/AliasesCard";
 import { ChapterList } from "../components/ChapterList";
@@ -23,7 +27,7 @@ import { loadThumbnailStyles } from "../thumbnailStyles";
 import type { DateRecurrence, SearchResult, SettingCommunityDetail, SettingLocation } from "../types";
 import { NavIcon } from "../components/NavIcons";
 import { useUndoDelete } from "../hooks/useUndoDelete";
-import { useAlert, useConfirm } from "../hooks/useConfirm";
+import { useConfirm } from "../hooks/useConfirm";
 
 const TABS = [
   "Досье",
@@ -38,14 +42,19 @@ const TABS = [
 
 export function CommunityDetailPage() {
   const [confirmDialog, confirm] = useConfirm();
-  const [alertDialog, showAlert] = useAlert();
   const { id } = useParams();
   const communityId = Number(id);
   const navigate = useNavigate();
   const { deleteWithUndo } = useUndoDelete();
 
-  const [community, setCommunity] = useState<SettingCommunityDetail | null>(null);
-  const [locations, setLocations] = useState<SettingLocation[]>([]);
+  const communityState = useEntity<SettingCommunityDetail>("community", communityId);
+  const community = communityState.data ?? null;
+  const locations =
+    useResource<SettingLocation[]>(community ? settingPaths.inSetting("location", community.setting_id) : null).data ?? [];
+  const { save } = useSaveEntity<SettingCommunityDetail>("community", communityId);
+  const run = useAction();
+  const afterWrite = useAfterWrite();
+  const mine: Affect[] = [{ kind: "community", id: communityId }];
   const [tab, selectTab] = useTabState(TABS, "Досье");
   const [membersDragOver, setMembersDragOver] = useState(false);
   const [childName, setChildName] = useState("");
@@ -59,14 +68,6 @@ export function CommunityDetailPage() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const calendar = useSettingCalendar(community?.setting_id);
   const thumbnailStyles = loadThumbnailStyles();
-
-  function refresh() {
-    api.get<SettingCommunityDetail>(`/setting-communities/${communityId}`).then((c) => {
-      setCommunity(c);
-      api.get<SettingLocation[]>(`/setting-locations?setting_id=${c.setting_id}`).then(setLocations);
-    });
-  }
-  useEffect(refresh, [communityId]);
 
   useUnloadTarget({
     label: "Представители",
@@ -84,9 +85,11 @@ export function CommunityDetailPage() {
     setUploadingThumbnail(true);
     const form = new FormData();
     form.append("file", file);
-    await api.post(`/setting-communities/${communityId}/thumbnail`, form);
-    setUploadingThumbnail(false);
-    refresh();
+    try {
+      await run(() => write.post(`/setting-communities/${communityId}/thumbnail`, form, { timeoutMs: 60_000 }), { affects: mine });
+    } finally {
+      setUploadingThumbnail(false);
+    }
   }
   const thumbnailCrop = useImageCrop("thumbnail", handleThumbnailChange);
 
@@ -95,22 +98,31 @@ export function CommunityDetailPage() {
     setUploadingAvatar(true);
     const form = new FormData();
     form.append("file", file);
-    await api.post(`/setting-communities/${communityId}/avatar`, form);
-    setUploadingAvatar(false);
-    refresh();
+    try {
+      await run(() => write.post(`/setting-communities/${communityId}/avatar`, form, { timeoutMs: 60_000 }), { affects: mine });
+    } finally {
+      setUploadingAvatar(false);
+    }
   }
   const avatarCrop = useImageCrop("square", handleAvatarChange);
 
-  if (!community) return <p className="muted">Загрузка…</p>;
+  if (communityState.error && !community) {
+    return <LoadErrorCard message={<>Не удалось загрузить сообщество: {communityState.error}</>} onRetry={communityState.reload} />;
+  }
+  if (!community) return <ListSkeleton variant="paragraph" label="Загрузка сообщества" />;
 
-  async function saveName(name: string) {
-    await api.put(`/setting-communities/${communityId}`, { name });
-    refresh();
+  // Карточки полей держат правку открытой, пока сохранение не удалось: для
+  // этого им нужна ошибка, а плашку показывает слой.
+  async function saveOrThrow(patch: Partial<SettingCommunityDetail>) {
+    if (!(await save(patch))) throw new Error("Не сохранилось");
   }
 
-  async function saveTags(tags: string[]) {
-    await api.put(`/setting-communities/${communityId}`, { tags });
-    refresh();
+  async function saveName(name: string) {
+    await saveOrThrow({ name });
+  }
+
+  function saveTags(tags: string[]) {
+    void save({ tags });
   }
 
   async function archiveCommunity() {
@@ -121,11 +133,17 @@ export function CommunityDetailPage() {
     try {
       await deleteWithUndo({
         entityName: community.name,
-        deleteFn: () => api.del(`/setting-communities/${communityId}`),
-        restoreFn: () => api.put(`/setting-communities/${communityId}/restore`),
+        deleteFn: async () => {
+          await write.del(`/setting-communities/${communityId}`);
+          afterWrite([{ kind: "community" }]);
+        },
+        restoreFn: async () => {
+          await write.put(`/setting-communities/${communityId}/restore`);
+          afterWrite([{ kind: "community" }]);
+        },
       });
     } catch (e) {
-      showAlert(`Не удалось архивировать «${community.name}»: ${e instanceof Error ? e.message : String(e)}`);
+      showSaveError(`Не удалось архивировать «${community.name}»: ${e instanceof Error ? e.message : String(e)}`);
       return;
     }
     navigate(
@@ -135,15 +153,16 @@ export function CommunityDetailPage() {
     );
   }
 
+  // Представитель виден с обеих сторон: здесь и в карточке существа.
+  const memberAffects: Affect[] = [...mine, { kind: "being" }];
+
   async function removeMember(beingId: number) {
-    await api.del(`/setting-communities/${communityId}/members/${beingId}`);
-    refresh();
+    await run(() => write.del(`/setting-communities/${communityId}/members/${beingId}`), { affects: memberAffects });
   }
 
   async function addMember(result: SearchResult) {
     if (result.type !== "being") return;
-    await api.post(`/setting-communities/${communityId}/members`, { being_id: result.id });
-    refresh();
+    await run(() => write.post(`/setting-communities/${communityId}/members`, { being_id: result.id }), { affects: memberAffects });
   }
 
   function handleMemberDrop(e: DragEvent<HTMLDivElement>) {
@@ -156,19 +175,21 @@ export function CommunityDetailPage() {
 
   async function addChild() {
     if (!childName.trim()) return;
-    await api.post("/setting-communities", {
-      setting_id: community!.setting_id,
-      parent_id: communityId,
-      name: childName,
+    const body = { setting_id: community!.setting_id, parent_id: communityId, name: childName };
+    // Без «Повторить»: повтор после потерянного ответа завёл бы второе сообщество.
+    const done = await run(() => write.post("/setting-communities", body).then(() => true), {
+      affects: [{ kind: "community" }],
+      retry: false,
     });
-    setChildName("");
-    refresh();
+    if (done) setChildName("");
   }
+
+  // Место обитания видно с обеих сторон: здесь и у локации.
+  const habitatAffects: Affect[] = [...mine, { kind: "location" }];
 
   async function addLocation(result: SearchResult) {
     if (result.type !== "location") return;
-    await api.post(`/setting-communities/${communityId}/locations`, { location_id: result.id });
-    refresh();
+    await run(() => write.post(`/setting-communities/${communityId}/locations`, { location_id: result.id }), { affects: habitatAffects });
   }
 
   function handleLocationDrop(e: DragEvent<HTMLDivElement>) {
@@ -180,31 +201,37 @@ export function CommunityDetailPage() {
   }
 
   async function removeLocation(locationId: number) {
-    await api.del(`/setting-communities/${communityId}/locations/${locationId}`);
-    refresh();
+    await run(() => write.del(`/setting-communities/${communityId}/locations/${locationId}`), { affects: habitatAffects });
   }
+
+  // Важные даты попадают в календарь сеттинга и кампаний.
+  const dateAffects: Affect[] = [...mine, { path: "/calendar" }];
 
   async function addImportantDate() {
     if (!dateTitle.trim() || !dateDay) return;
-    await api.post(`/setting-communities/${communityId}/important-dates`, {
+    const body = {
       title: dateTitle,
       recurrence: dateRecurrence,
       year: dateRecurrence === "once" ? Number(dateYear) || null : null,
       month: dateRecurrence !== "monthly" ? Number(dateMonth) || null : null,
       day: Number(dateDay),
-    });
+    };
+    // Без «Повторить»: повтор после потерянного ответа завёл бы дату дважды.
+    const done = await run(
+      () => write.post(`/setting-communities/${communityId}/important-dates`, body).then(() => true),
+      { affects: dateAffects, retry: false }
+    );
+    if (!done) return;
     setDateTitle("");
     setDateYear("");
     setDateMonth("");
     setDateDay("");
-    refresh();
   }
 
   async function removeImportantDate(dateId: number) {
     if (!(await confirm({ message: "Удалить эту важную дату?", confirmLabel: "Удалить", danger: true })))
       return;
-    await api.del(`/setting-communities/important-dates/${dateId}`);
-    refresh();
+    await run(() => write.del(`/setting-communities/important-dates/${dateId}`), { affects: dateAffects });
   }
 
   return (
@@ -245,7 +272,6 @@ export function CommunityDetailPage() {
       overlays={
         <>
           {confirmDialog}
-          {alertDialog}
           {avatarCrop.modal}
         </>
       }
@@ -263,10 +289,7 @@ export function CommunityDetailPage() {
           <AliasesCard
             aliases={community.aliases ?? []}
             nameOriginal={community.name_original ?? ""}
-            onSave={async (aliases, name_original) => {
-              await api.put(`/setting-communities/${communityId}`, { aliases, name_original });
-              refresh();
-            }}
+            onSave={(aliases, name_original) => saveOrThrow({ aliases, name_original })}
           />
           <details className="card">
             <summary className="sb-section" style={{ margin: 0 }}>
@@ -279,7 +302,6 @@ export function CommunityDetailPage() {
                 apiBase="/setting-communities"
                 section="history"
                 chapters={community.chapters.filter((c) => c.section === "history")}
-                onChange={refresh}
                 titlePrefix="Статья"
                 addLabel="статью"
                 defaultSettingId={community.setting_id}
@@ -364,7 +386,6 @@ export function CommunityDetailPage() {
               apiBase="/setting-communities"
               section="current_situation"
               chapters={community.chapters.filter((c) => c.section === "current_situation")}
-              onChange={refresh}
               titlePrefix="Статья"
               addLabel="статью"
               defaultSettingId={community.setting_id}
@@ -380,7 +401,6 @@ export function CommunityDetailPage() {
               apiBase="/setting-communities"
               section="goals"
               chapters={community.chapters.filter((c) => c.section === "goals")}
-              onChange={refresh}
               titlePrefix="Статья"
               addLabel="статью"
               defaultSettingId={community.setting_id}
@@ -396,7 +416,6 @@ export function CommunityDetailPage() {
               apiBase="/setting-communities"
               section="features"
               chapters={community.chapters.filter((c) => c.section === "features")}
-              onChange={refresh}
               titlePrefix="Статья"
               addLabel="статью"
               defaultSettingId={community.setting_id}
@@ -412,7 +431,6 @@ export function CommunityDetailPage() {
             locations={locations}
             fixedCommunityIds={[communityId]}
             showLocationPicker
-            onCreated={refresh}
           />
           <div
             className={`drop-zone${membersDragOver ? " drag-over" : ""}`}

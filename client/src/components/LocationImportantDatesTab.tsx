@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
+import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
+import { useSettingCalendar } from "../hooks/useSettingCalendar";
+import type { Affect } from "../data/entities";
 import { useConfirm } from "../hooks/useConfirm";
 import { Modal } from "./Modal";
 import { LoadErrorCard } from "./Loadable";
 import { EmptyState } from "./EmptyState";
 import { formatImportantDate, formatCustomRule } from "../inworldCalendar";
 import { DATE_GROUP_LABELS, DATE_GROUP_ORDER } from "../locationDateGroups";
-import type { CalendarMonth, CalendarWeekday, CustomRule, ImportantDate, SettingCalendar } from "../types";
+import type { CalendarMonth, CalendarWeekday, CustomRule, ImportantDate } from "../types";
 
 interface Props {
   locationId: number;
@@ -16,7 +18,6 @@ interface Props {
   dates: ImportantDate[];
   calendarMonths?: CalendarMonth[];
   calendarWeekdays?: CalendarWeekday[];
-  onChange: () => void;
   onShowOnMap?: () => void;
   // Master–Detail: показать только одну группу периодичности.
   // Не задано или "all" — все группы, как раньше.
@@ -75,40 +76,28 @@ function ordinalPreview(n: number, unit1: string, unit2: string): string {
   return `${n}-й ${unit1} ${unit2Gen}`;
 }
 
-export function LocationImportantDatesTab({ locationId, locationName, settingId, dates, calendarMonths = [], calendarWeekdays = [], onChange, onShowOnMap, groupFilter }: Props) {
+export function LocationImportantDatesTab({ locationId, locationName, settingId, dates, calendarMonths = [], calendarWeekdays = [], onShowOnMap, groupFilter }: Props) {
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [weekdays, setWeekdays] = useState<CalendarWeekday[]>(calendarWeekdays);
-  const [fetchedMonths, setFetchedMonths] = useState<CalendarMonth[]>([]);
-  const [fetchedWeekdays, setFetchedWeekdays] = useState<CalendarWeekday[]>([]);
-  const [dateTypes, setDateTypes] = useState<{ date_type: string; color: string }[]>([]);
   const [confirmDialog, confirm] = useConfirm();
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (calendarWeekdays.length > 0) setWeekdays(calendarWeekdays);
-    else if (fetchedWeekdays.length === 0) {
-      api.get<SettingCalendar>(`/settings/${settingId}/calendar`).then((c) => {
-        setFetchedWeekdays(c.weekdays ?? []);
-        setWeekdays(c.weekdays ?? []);
-      }).catch(() => {});
-    }
-  }, [settingId, calendarWeekdays, fetchedWeekdays.length]);
-
-  useEffect(() => {
-    if (calendarMonths.length === 0 && fetchedMonths.length === 0) {
-      api.get<SettingCalendar>(`/settings/${settingId}/calendar`).then((c) => setFetchedMonths(c.months ?? [])).catch(() => {});
-    }
-  }, [settingId, calendarMonths, fetchedMonths.length]);
-
-  useEffect(() => {
-    api.get<{ date_type: string; color: string }[]>(`/settings/${settingId}/date-types`).then(setDateTypes).catch(() => {});
-  }, [settingId]);
+  const run = useAction();
+  const afterWrite = useAfterWrite();
+  // Календарь сеттинга — из кэша слоя: карточка локации уже держит его, и
+  // пустые месяцы/дни недели пропсом значат лишь, что их там не завели.
+  const calendar = useSettingCalendar(settingId);
+  const weekdays: CalendarWeekday[] = calendarWeekdays.length > 0 ? calendarWeekdays : calendar?.weekdays ?? [];
+  const fetchedMonths: CalendarMonth[] = calendar?.months ?? [];
+  const dateTypesData = useResource<{ date_type: string; color: string }[]>(`/settings/${settingId}/date-types`).data;
+  const dateTypes = useMemo(() => dateTypesData ?? [], [dateTypesData]);
+  // Дата видна на карточке, в календаре сеттинга и кампаний, а дата с
+  // событием Хроники — ещё и в хронике сеттинга.
+  const affects: Affect[] = [{ kind: "location", id: locationId }, { path: "/calendar" }, { path: `/settings/${settingId}` }];
 
   const effectiveMonths = calendarMonths.length > 0 ? calendarMonths : fetchedMonths;
-  const effectiveWeekdays = weekdays.length > 0 ? weekdays : fetchedWeekdays;
+  const effectiveWeekdays = weekdays;
   const weekdaysList = useMemo(() => effectiveWeekdays.map((w) => w.name), [effectiveWeekdays]);
 
   const grouped = useMemo(() => {
@@ -190,14 +179,16 @@ export function LocationImportantDatesTab({ locationId, locationName, settingId,
         payload.createChronicleEvent = true;
       }
       if (editingId) {
-        await api.put(`/setting-locations/important-dates/${editingId}`, payload);
+        await write.put(`/setting-locations/important-dates/${editingId}`, payload);
       } else {
-        await api.post(`/setting-locations/${locationId}/important-dates`, payload);
+        await write.post(`/setting-locations/${locationId}/important-dates`, payload);
       }
       setShowModal(false);
-      onChange();
-      api.get<{ date_type: string; color: string }[]>(`/settings/${settingId}/date-types`).then(setDateTypes).catch(() => {});
+      // Новый тип даты пополняет подсказки — `/settings/:id` его задевает.
+      afterWrite(affects);
     } catch (e) {
+      // Ошибка остаётся в окне формы, рядом с набранным: закрывать его, чтобы
+      // показать плашку, значило бы потерять введённое.
       const msg = String(e instanceof Error ? e.message : e);
       setErrors({ form: msg });
     } finally {
@@ -219,8 +210,7 @@ export function LocationImportantDatesTab({ locationId, locationName, settingId,
       : `«${title}» будет удалена.`;
     const ok = await confirm({ title: "Удалить важную дату?", message: msg, confirmLabel: "Удалить", danger: true });
     if (!ok) return;
-    await api.del(`/setting-locations/important-dates/${id}`);
-    onChange();
+    await run(() => write.del(`/setting-locations/important-dates/${id}`), { affects });
   }
 
   function selectTypeSuggestion(s: { date_type: string; color: string }) {

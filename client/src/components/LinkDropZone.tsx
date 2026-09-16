@@ -1,5 +1,6 @@
 import { useEffect, useState, type DragEvent } from "react";
-import { api } from "../api/client";
+import { useAction, useResource, write } from "../data/hooks";
+import { relationAffects, settingPaths } from "../data/settingEntities";
 import { useUnloadTarget } from "../unloadTargets";
 import { resolveEntityLabel } from "../api/resolveEntity";
 import { ENTITY_TYPE_SINGULAR } from "../entityTypes";
@@ -36,33 +37,38 @@ export function LinkDropZone({ entityType, entityId, title = "Связанное
   const [items, setItems] = useState<LinkedItem[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [confirmDialog, confirm] = useConfirm();
+  const run = useAction();
+  const sectionParam = section ? `&section=${encodeURIComponent(section)}` : "";
+  const relations = useResource<{ outgoing: UnifiedRelation[]; incoming: UnifiedRelation[] }>(
+    `${settingPaths.relations(entityType, entityId)}${sectionParam}`
+  ).data;
 
-  async function load() {
-    const sectionParam = section ? `&section=${encodeURIComponent(section)}` : "";
-    const data = await api.get<{ outgoing: UnifiedRelation[]; incoming: UnifiedRelation[] }>(
-      `/entity-relations?entity_type=${entityType}&entity_id=${entityId}${sectionParam}`
-    );
-    // Merge outgoing + incoming, deduplicate by relationId
-    const seen = new Set<number>();
-    const all: LinkedItem[] = [];
-    for (const r of [...data.outgoing, ...data.incoming]) {
-      if (seen.has(r.id)) continue;
-      seen.add(r.id);
-      const otherType = r.from_type === entityType ? r.to_type : r.from_type;
-      const otherId = r.from_type === entityType ? r.to_id : r.from_id;
-      const label = await resolveEntityLabel(otherType, otherId);
-      all.push({ relationId: r.id, type: otherType, id: otherId, label });
-    }
-    setItems(all);
-  }
-
+  // Подписи другой стороны разрешаются по одной (resolveEntityLabel держит свой
+  // кэш), поэтому список собирается отдельно от чтения связей. Устаревший
+  // проход — связи успели перечитаться — свой результат не кладёт.
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entityType, entityId, section]);
+    if (!relations) return;
+    let cancelled = false;
+    void (async () => {
+      const seen = new Set<number>();
+      const all: LinkedItem[] = [];
+      for (const r of [...relations.outgoing, ...relations.incoming]) {
+        if (seen.has(r.id)) continue;
+        seen.add(r.id);
+        const otherType = r.from_type === entityType ? r.to_type : r.from_type;
+        const otherId = r.from_type === entityType ? r.to_id : r.from_id;
+        const label = await resolveEntityLabel(otherType, otherId);
+        all.push({ relationId: r.id, type: otherType, id: otherId, label });
+      }
+      if (!cancelled) setItems(all);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [relations, entityType]);
 
   async function link(result: SearchResult) {
-    await api.post("/entity-relations", {
+    const body = {
       from_type: entityType,
       from_id: entityId,
       to_type: result.type,
@@ -72,8 +78,9 @@ export function LinkDropZone({ entityType, entityId, title = "Связанное
       description: "",
       section: section ?? null,
       origin: "planned",
-    });
-    load();
+    };
+    // Без «Повторить»: повтор после потерянного ответа завёл бы связь дважды.
+    await run(() => write.post("/entity-relations", body), { affects: relationAffects(), retry: false });
   }
 
   useUnloadTarget({ label: title, accepts: () => true, drop: link });
@@ -89,8 +96,7 @@ export function LinkDropZone({ entityType, entityId, title = "Связанное
   async function removeLink(relationId: number) {
     const ok = await confirm({ message: "Удалить связь?", confirmLabel: "Удалить", danger: true });
     if (!ok) return;
-    await api.del(`/entity-relations/${relationId}`);
-    load();
+    await run(() => write.del(`/entity-relations/${relationId}`), { affects: relationAffects() });
   }
 
   return (

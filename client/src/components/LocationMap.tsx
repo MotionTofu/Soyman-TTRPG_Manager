@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { api, deleteFileWithChoice } from "../api/client";
+import { deleteFileWithChoice } from "../api/client";
+import { useAfterWrite, write } from "../data/hooks";
+import { showSaveError } from "../data/notices";
 import { resolveEntityMapLabels, type ResolvedLabelResult } from "../api/resolveEntity";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { SearchPanel } from "../layout/SearchPanel";
@@ -31,7 +33,6 @@ interface Props {
   // Every other location in the same setting — feeds the "Перенести карту"
   // target picker. Omitted (or empty) simply hides that button.
   otherLocations?: SettingLocation[];
-  onChange: () => void;
 }
 
 interface ResolvedPin extends LocationPin {
@@ -172,7 +173,6 @@ export function LocationMap({
   mapGotoZoom,
   mapLabelsAlways,
   otherLocations,
-  onChange,
 }: Props) {
   const maxZoom = mapMaxZoom ?? DEFAULT_MAX_ZOOM;
   const startZoom = Math.min(maxZoom, Math.max(MIN_ZOOM, mapStartZoom ?? DEFAULT_START_ZOOM));
@@ -216,6 +216,20 @@ export function LocationMap({
   const navigate = useNavigate();
   const [confirmDialog, confirm] = useConfirm();
   const [alertDialog, alertFn] = useAlert();
+  const afterWrite = useAfterWrite();
+  // Карта и пины лежат в карточке локации. Перенос карты задевает и вторую
+  // локацию, поэтому у него своё правило.
+  function changed() {
+    afterWrite([{ kind: "location", id: locationId }]);
+  }
+  // Цвет и размер пина правятся ползунком и палитрой, а они шлют событие на
+  // каждое движение. На экране пин уже перекрашен, поэтому карточка
+  // перечитывается один раз, когда Мастер отпустил ползунок, а не на каждый шаг.
+  const styleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function changedSoon() {
+    if (styleTimer.current) clearTimeout(styleTimer.current);
+    styleTimer.current = setTimeout(changed, 600);
+  }
 
   function showToast(msg: string, onUndo?: () => void) {
     setToast({ msg, onUndo });
@@ -404,11 +418,11 @@ export function LocationMap({
     try {
       const form = new FormData();
       form.append("file", file);
-      await api.post(`/setting-locations/${locationId}/map`, form);
+      await write.post(`/setting-locations/${locationId}/map`, form, { timeoutMs: 120_000 });
       showToast("Карта загружена");
-      onChange();
-    } catch {
-      alertFn("Не удалось загрузить карту — проверьте соединение с сервером.");
+      changed();
+    } catch (e) {
+      showSaveError(`Карта не загрузилась: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setUploading(false);
     }
@@ -426,11 +440,14 @@ export function LocationMap({
       const deleted = await deleteFileWithChoice(`/setting-locations/${locationId}/map`);
       if (!deleted) return;
       showToast("Карта удалена", () => {
-        void api.post(`/setting-locations/${locationId}/map/restore`).then(onChange);
+        void write
+          .post(`/setting-locations/${locationId}/map/restore`)
+          .then(changed)
+          .catch((e) => showSaveError(`Карта не вернулась: ${e instanceof Error ? e.message : String(e)}`));
       });
-      onChange();
-    } catch {
-      alertFn("Не удалось удалить карту — проверьте соединение с сервером.");
+      changed();
+    } catch (e) {
+      showSaveError(`Карта не удалилась: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
@@ -442,14 +459,14 @@ export function LocationMap({
     if (transferTarget == null) return;
     setTransferring(true);
     try {
-      await api.post(`/setting-locations/${locationId}/map/transfer`, {
+      await write.post(`/setting-locations/${locationId}/map/transfer`, {
         targetLocationId: transferTarget,
         keepCopy: transferKeepCopy,
       });
       setTransferOpen(false);
       setTransferTarget(null);
       setTransferKeepCopy(false);
-      onChange();
+      afterWrite([{ kind: "location" }]);
     } catch {
       showToast("Не удалось перенести карту — возможно, у выбранной локации уже есть своя карта.");
     } finally {
@@ -481,7 +498,7 @@ export function LocationMap({
 
   async function saveSettings() {
     try {
-      await api.put(`/setting-locations/${locationId}/map-settings`, {
+      await write.put(`/setting-locations/${locationId}/map-settings`, {
         max_zoom: parseSettingNumber(settingsDraft.maxZoom, DEFAULT_MAX_ZOOM),
         start_zoom: parseSettingNumber(settingsDraft.startZoom, DEFAULT_START_ZOOM),
         goto_zoom: parseSettingNumber(settingsDraft.gotoZoom, DEFAULT_GOTO_ZOOM),
@@ -489,9 +506,10 @@ export function LocationMap({
       });
       setShowSettings(false);
       showToast("Настройки карты сохранены");
-      onChange();
-    } catch {
-      alertFn("Не удалось сохранить настройки карты.");
+      changed();
+    } catch (e) {
+      // Окно настроек остаётся открытым с набранным.
+      showSaveError(`Настройки карты не сохранились: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
@@ -518,15 +536,15 @@ export function LocationMap({
     try {
       const result: SearchResult = JSON.parse(raw);
       const { x, y } = toContentPercent(e.clientX, e.clientY);
-      api
+      write
         .post(`/setting-locations/${locationId}/pins`, {
           target_type: result.type,
           target_id: result.id,
           x,
           y,
         })
-        .then(onChange)
-        .catch(() => alertFn("Не удалось добавить пин — проверьте соединение с сервером и попробуйте ещё раз."));
+        .then(changed)
+        .catch((e) => showSaveError(`Пин не добавился: ${e instanceof Error ? e.message : String(e)}`));
     } catch {
       // Silently ignore invalid drag data
     }
@@ -541,18 +559,18 @@ export function LocationMap({
     const ok = await confirm({ title: "Удалить пин?", message: "Удалить этот пин с карты?", confirmLabel: "Удалить", danger: true });
     if (!ok) return;
     try {
-      await api.del(`/setting-locations/pins/${pinId}`);
+      await write.del(`/setting-locations/pins/${pinId}`);
       if (selectedPinId === pinId) deselect();
-      onChange();
-    } catch {
-      alertFn("Не удалось удалить пин — проверьте соединение с сервером и попробуйте ещё раз.");
+      changed();
+    } catch (e) {
+      showSaveError(`Пин не удалился: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
   async function duplicatePin(pin: ResolvedPin) {
     if (resolved.length >= MAX_PINS) { alertFn(`Максимум ${MAX_PINS} пинов на одной карте.`); return; }
     try {
-      const created = await api.post<LocationPin>(`/setting-locations/${locationId}/pins`, {
+      const created = await write.post<LocationPin>(`/setting-locations/${locationId}/pins`, {
         target_type: pin.target_type,
         target_id: pin.target_id,
         x: Math.min(100, pin.x + 4),
@@ -563,9 +581,9 @@ export function LocationMap({
       });
       setSelectedPinId(created.id);
       showToast("Пин скопирован");
-      onChange();
-    } catch {
-      alertFn("Не удалось скопировать пин — проверьте соединение с сервером и попробуйте ещё раз.");
+      changed();
+    } catch (e) {
+      showSaveError(`Пин не скопировался: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
@@ -580,30 +598,30 @@ export function LocationMap({
   // actually persisted (that drift is what makes pins look like they "reset").
   function revertPinEditOnFailure(err: unknown) {
     console.error(err);
-    alertFn("Не удалось сохранить изменение пина — проверьте соединение с сервером. Восстанавливаю последнее сохранённое состояние.");
-    onChange();
+    showSaveError(`Пин не сохранился, вернулось сохранённое: ${err instanceof Error ? err.message : String(err)}`);
+    changed();
   }
 
   function setPinColor(pin: ResolvedPin, color: string | null) {
     setResolved((prev) => prev.map((p) => (p.id === pin.id ? { ...p, color } : p)));
-    api
+    write
       .put(`/setting-locations/pins/${pin.id}`, color === null ? { clear_color: true } : { color })
-      .catch(revertPinEditOnFailure);
+      .then(changedSoon, revertPinEditOnFailure);
   }
 
   function setPinBorderColor(pin: ResolvedPin, borderColor: string | null) {
     setResolved((prev) => prev.map((p) => (p.id === pin.id ? { ...p, border_color: borderColor } : p)));
-    api
+    write
       .put(
         `/setting-locations/pins/${pin.id}`,
         borderColor === null ? { clear_border_color: true } : { border_color: borderColor }
       )
-      .catch(revertPinEditOnFailure);
+      .then(changedSoon, revertPinEditOnFailure);
   }
 
   function setPinSize(pin: ResolvedPin, size: number) {
     setResolved((prev) => prev.map((p) => (p.id === pin.id ? { ...p, size } : p)));
-    api.put(`/setting-locations/pins/${pin.id}`, { size }).catch(revertPinEditOnFailure);
+    write.put(`/setting-locations/pins/${pin.id}`, { size }).then(changedSoon, revertPinEditOnFailure);
   }
 
   function handlePinPointerDown(e: PointerEvent<HTMLSpanElement>, pin: ResolvedPin) {
@@ -631,15 +649,16 @@ export function LocationMap({
   async function putPinPositionWithRetry(pinId: number, x: number, y: number, attempts = 3) {
     for (let i = 0; i < attempts; i++) {
       try {
-        await api.put(`/setting-locations/pins/${pinId}`, { x, y });
+        await write.put(`/setting-locations/pins/${pinId}`, { x, y });
+        changed();
         return;
       } catch (err) {
         if (i === attempts - 1) {
           console.error(err);
-          alertFn(
-            "Не удалось сохранить новое положение пина — проверьте соединение с сервером. Пин вернётся на последнюю сохранённую позицию."
+          showSaveError(
+            `Положение пина не сохранилось, он вернулся на прежнее место: ${err instanceof Error ? err.message : String(err)}`
           );
-          onChange();
+          changed();
         } else {
           await new Promise((r) => setTimeout(r, 300 * (i + 1)));
         }

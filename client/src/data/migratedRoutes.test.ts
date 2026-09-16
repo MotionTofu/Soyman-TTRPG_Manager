@@ -16,10 +16,18 @@ describe("переведённые страницы", () => {
     expect(isMigratedRoute("/sessions")).toBe(false);
   });
 
+  it("карточки сущностей сеттинга — переведены, сам сеттинг — ещё нет", () => {
+    for (const base of ["locations", "beings", "artifacts", "communities", "events", "compendium", "scenes", "adventures"]) {
+      expect(isMigratedRoute(`/${base}/12`)).toBe(true);
+    }
+    expect(isMigratedRoute("/settings/1")).toBe(false);
+  });
+
   it("соседние адреса не цепляются префиксом", () => {
     expect(isMigratedRoute("/characters")).toBe(false);
     expect(isMigratedRoute("/characters/7/sheet/extra")).toBe(false);
-    expect(isMigratedRoute("/beings/7")).toBe(false);
+    expect(isMigratedRoute("/beings")).toBe(false);
+    expect(isMigratedRoute("/beings/7/extra")).toBe(false);
     expect(isMigratedRoute("/campaigns/3")).toBe(false);
   });
 });

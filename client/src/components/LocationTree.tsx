@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import type { DragEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
+import { useAfterWrite, write } from "../data/hooks";
+import { showSaveError } from "../data/notices";
 import { loadThumbnailStyles } from "../thumbnailStyles";
 import { NavIcon } from "./NavIcons";
 import { EntityWizard } from "./entityWizard/EntityWizard";
@@ -778,7 +780,7 @@ export function LocationNode({
   location: SettingLocation;
   byParent: Map<number | null, SettingLocation[]>;
   byParentAll?: Map<number | null, SettingLocation[]>;
-  onChange: () => void;
+  onChange?: () => void;
   onWizardParent?: (id: number) => void;
   draggedId?: number | null;
   setDraggedId?: (id: number | null) => void;
@@ -847,7 +849,7 @@ export function LocationNode({
   async function addChild() {
     if (!childName.trim()) return;
     try {
-      await api.post("/setting-locations", {
+      await write.post("/setting-locations", {
         setting_id: location.setting_id,
         parent_id: location.id,
         name: childName.trim(),
@@ -856,14 +858,21 @@ export function LocationNode({
       setChildName("");
       setChildKind("");
       setAddingChild(false);
-      onChange();
+      changed();
     } catch (e) {
-      showAlert(String(e instanceof Error ? e.message : e));
+      showSaveError(`Не создалась: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
   const [confirmDialogNode, confirmNode] = useConfirm();
   const [alertDialogNode, showAlert] = useAlert();
+  const afterWrite = useAfterWrite();
+  // Правка узла задевает локации целиком: дерево, родителя и саму карточку.
+  // Страницы, которые держат дерево своим состоянием, ещё зовут `onChange`.
+  function changed() {
+    afterWrite([{ kind: "location" }]);
+    onChange?.();
+  }
   const [promptDialog, promptText] = usePrompt();
   const { deleteWithUndo } = useUndoDelete();
   const [menu, setMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
@@ -878,15 +887,15 @@ export function LocationNode({
 
   async function duplicate() {
     try {
-      await api.post("/setting-locations", {
+      await write.post("/setting-locations", {
         setting_id: location.setting_id,
         parent_id: location.parent_id,
         name: `${location.name}_`,
         kind: location.kind,
       });
-      onChange();
+      changed();
     } catch (err) {
-      showAlert(String(err instanceof Error ? err.message : err));
+      showSaveError(`Не продублировалась: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -911,11 +920,12 @@ export function LocationNode({
       return;
     }
     try {
-      await api.put(`/setting-locations/${location.id}`, { name, kind: editKind.trim() });
+      await write.put(`/setting-locations/${location.id}`, { name, kind: editKind.trim() });
       setEditing(false);
-      onChange();
+      changed();
     } catch (err) {
-      showAlert(String(err instanceof Error ? err.message : err));
+      // Правка остаётся открытой с набранным.
+      showSaveError(`Не сохранилось: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -930,17 +940,17 @@ export function LocationNode({
     try {
       await deleteWithUndo({
         entityName: location.name,
-        deleteFn: () => api.del(`/setting-locations/${location.id}`),
+        deleteFn: () => write.del(`/setting-locations/${location.id}`),
         restoreFn: async () => {
-          await api.put(`/setting-locations/${location.id}/restore`);
-          onChange();
+          await write.put(`/setting-locations/${location.id}/restore`);
+          changed();
         },
       });
     } catch (e) {
-      showAlert(String(e instanceof Error ? e.message : e));
+      showSaveError(`Не удалось архивировать «${location.name}»: ${e instanceof Error ? e.message : String(e)}`);
       return;
     }
-    onChange();
+    changed();
   }
 
   function handleDragStart(e: DragEvent<HTMLElement>) {
@@ -976,10 +986,10 @@ export function LocationNode({
       return;
     }
     try {
-      await api.put(`/setting-locations/${dragged}/parent`, { parent_id: location.id });
-      onChange();
+      await write.put(`/setting-locations/${dragged}/parent`, { parent_id: location.id });
+      changed();
     } catch (err) {
-      showAlert(String(err instanceof Error ? err.message : err));
+      showSaveError(`Не перенеслась: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setDraggedId?.(null);
     }

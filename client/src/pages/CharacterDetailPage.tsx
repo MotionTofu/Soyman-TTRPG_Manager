@@ -391,7 +391,6 @@ export function CharacterDetailPage() {
                   apiBase="/characters"
                   section={s.key}
                   chapters={(character.chapters ?? []).filter((c) => c.section === s.key)}
-                  onChange={refresh}
                 />
               </details>
             ))}
@@ -409,7 +408,7 @@ export function CharacterDetailPage() {
         )}
 
         {tab === "inventory" && (
-          <CharacterInventoryTab characterId={characterId} character={character} onRefresh={refresh} />
+          <CharacterInventoryTab characterId={characterId} character={character} />
         )}
 
         {tab === "future_thoughts" && (
@@ -420,7 +419,6 @@ export function CharacterDetailPage() {
               apiBase="/characters"
               section="future_thoughts"
               chapters={(character.chapters ?? []).filter((c) => c.section === "future_thoughts")}
-              onChange={refresh}
             />
 
             <details className="card">
@@ -565,11 +563,9 @@ function CharacterRelationsPreview({ characterId, characterName }: { characterId
 function CharacterInventoryTab({
   characterId,
   character,
-  onRefresh,
 }: {
   characterId: number;
   character: Character;
-  onRefresh: () => void;
 }) {
   // Тот же ключ кэша, что у листа на вкладке «Чарник»: переключение вкладок не
   // перезапрашивает чарник, а правка листа видна здесь сразу.
@@ -679,14 +675,14 @@ function CharacterInventoryTab({
                 </span>
               </div>
               <p className="muted" style={{ fontSize: "var(--fs-meta)" }}>Каждая строка станет предметом в выбранную секцию. После импорта удалите прозу вручную.</p>
-              <ChapterList ownerId={characterId} ownerType="character" apiBase="/characters" section="inventory" chapters={invChapters} onChange={onRefresh} allowImage />
+              <ChapterList ownerId={characterId} ownerType="character" apiBase="/characters" section="inventory" chapters={invChapters} allowImage />
             </div>
           )}
         </>
       ) : invChapters.length > 0 ? (
         <>
           <p className="muted">Чарника D&D ещё нет — заведите его на вкладке «Чарник». Пока инвентарь как проза:</p>
-          <ChapterList ownerId={characterId} ownerType="character" apiBase="/characters" section="inventory" chapters={invChapters} onChange={onRefresh} allowImage />
+          <ChapterList ownerId={characterId} ownerType="character" apiBase="/characters" section="inventory" chapters={invChapters} allowImage />
         </>
       ) : (
         <EmptyState title="Имущества пока нет" hint="Заведите чарник D&D и заполните «Инвентарь» или добавьте первую запись прозы." />

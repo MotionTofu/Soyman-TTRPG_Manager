@@ -52,9 +52,14 @@ export async function resolveEntityMapLabels(
 ): Promise<ResolvedLabelResult[]> {
   if (pins.length === 0) return [];
   try {
+    // Это чтение, хоть и POST (список пинов не влезает в адрес). Без
+    // `broadcast: false` транспорт счёл бы его правкой: пометил бы кэш слоя
+    // устаревшим, карточка локации перечиталась бы с новым массивом пинов — и
+    // карта снова спросила бы подписи. Цикл.
     const { labels } = await api.post<{ labels: ResolvedLabelResult[] }>(
       "/setting-locations/resolve-labels",
-      { pins }
+      { pins },
+      { broadcast: false }
     );
     return labels ?? [];
   } catch {

@@ -1,6 +1,9 @@
-import { useEffect, useState, type DragEvent } from "react";
+import { useMemo, useState, type DragEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api } from "../api/client";
+import { useAction, useAfterWrite, useEntity, useResource, useSaveEntity, write } from "../data/hooks";
+import { showSaveError } from "../data/notices";
+import { beingAffects, settingPaths } from "../data/settingEntities";
+import type { Affect } from "../data/entities";
 import { useUnloadTarget } from "../unloadTargets";
 import { AliasesCard } from "../components/AliasesCard";
 import { StatblockList } from "../components/StatblockList";
@@ -28,7 +31,7 @@ import { MonsterTemplatePicker } from "../components/MonsterTemplatePicker";
 import { loadThumbnailStyles } from "../thumbnailStyles";
 import { NavIcon } from "../components/NavIcons";
 import { EmptyState } from "../components/EmptyState";
-import { useAlert, useConfirm } from "../hooks/useConfirm";
+import { useConfirm } from "../hooks/useConfirm";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import type {
   CompendiumLink,
@@ -69,19 +72,25 @@ export function BeingDetailPage() {
   const beingId = Number(id);
   const navigate = useNavigate();
 
-  const [being, setBeing] = useState<SettingBeingDetail | null>(null);
+  const beingState = useEntity<SettingBeingDetail>("being", beingId);
+  const being = beingState.data ?? null;
+  const settingId = being?.setting_id ?? null;
   const [tab, selectTab] = useTabState(TABS, "Досье");
-  const [communities, setCommunities] = useState<SettingCommunity[]>([]);
+  const communities = useResource<SettingCommunity[]>(settingId ? settingPaths.inSetting("community", settingId) : null).data ?? [];
   const [communityDraft, setCommunityDraft] = useState<number[]>([]);
   // «На основе» правится вместе с остальным в карточке «Основное»; в черновике
   // лежит выбор пикера, а у него формат результата поиска.
   const [baseDraft, setBaseDraft] = useState<SearchResult | null>(null);
   const [showAllCommunities, setShowAllCommunities] = useState(true);
 
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const allCampaigns = useResource<Campaign[]>(settingPaths.campaigns()).data;
+  const campaigns = useMemo(
+    () => (allCampaigns ?? []).filter((c) => c.setting_id === settingId),
+    [allCampaigns, settingId]
+  );
 
   const [locationsDragOver, setLocationsDragOver] = useState(false);
-  const [settingLocations, setSettingLocations] = useState<SettingLocation[]>([]);
+  const settingLocations = useResource<SettingLocation[]>(settingId ? settingPaths.inSetting("location", settingId) : null).data ?? [];
   const [addLocationId, setAddLocationId] = useState<number | null>(null);
   const [dateTitle, setDateTitle] = useState("");
   const [dateRecurrence, setDateRecurrence] = useState<DateRecurrence>("once");
@@ -95,43 +104,26 @@ export function BeingDetailPage() {
   const thumbnailStyles = loadThumbnailStyles();
   const avatarCrop = useImageCrop("square", handleAvatarChange);
   const thumbnailCrop = useImageCrop("thumbnail", handleThumbnailChange);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
   const [confirmDialog, confirm] = useConfirm();
   const { deleteWithUndo } = useUndoDelete();
-  const [alertDialog, showAlert] = useAlert();
+  const { save, saving } = useSaveEntity<SettingBeingDetail>("being", beingId);
+  const run = useAction();
+  const afterWrite = useAfterWrite();
   const [dossierQuery, setDossierQuery] = useState("");
-  const [neighbourIds, setNeighbourIds] = useState<{ prev: number | null; next: number | null }>({ prev: null, next: null });
   const [cardPreviewOpen, setCardPreviewOpen] = useState(false);
 
-  async function loadBeing(signal?: AbortSignal) {
-    setLoading(true);
-    setLoadError(null);
-    const opts = signal ? { signal } : undefined;
-    try {
-      const b = await api.get<SettingBeingDetail>(`/setting-beings/${beingId}`, opts as any);
-      if (signal?.aborted) return;
-      setBeing(b);
-      setCommunityDraft(b.communities.map((c) => c.id));
-    } catch (e) {
-      if ((e as Error).name === "AbortError") return;
-      if (signal?.aborted) return;
-      setLoadError(String(e instanceof Error ? e.message : e));
-    } finally {
-      if (!signal?.aborted) setLoading(false);
-    }
-  }
-
-  function refresh() {
-    void loadBeing();
-  }
-  useEffect(() => {
-    const controller = new AbortController();
-    void loadBeing(controller.signal);
-    return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [beingId]);
+  // Соседи по сеттингу — для prev/next навигации (U-P0-1). Тот же список
+  // существ сеттинга, что у «Связей» и «Населения», — из кэша слоя.
+  const settingBeings = useResource<{ id: number }[]>(settingId ? settingPaths.inSetting("being", settingId) : null).data;
+  const neighbourIds = useMemo(() => {
+    if (!settingBeings) return { prev: null, next: null };
+    const ids = settingBeings.map((r) => r.id).sort((a, b) => a - b);
+    const idx = ids.indexOf(beingId);
+    return {
+      prev: idx > 0 ? ids[idx - 1] : null,
+      next: idx >= 0 && idx < ids.length - 1 ? ids[idx + 1] : null,
+    };
+  }, [settingBeings, beingId]);
 
   // Мешок выгружает сюда локации — то же, что перетаскивание в «Места
   // обитания» (см. unloadTargets.tsx).
@@ -141,142 +133,79 @@ export function BeingDetailPage() {
     drop: addLocation,
   });
 
-  useEffect(() => {
-    if (!being) return;
-    const controller = new AbortController();
-    const opts = { signal: controller.signal } as any;
-    api
-      .get<Campaign[]>("/campaigns", opts)
-      .then((all) => {
-        if (controller.signal.aborted) return;
-        setCampaigns(all.filter((c) => c.setting_id === being.setting_id));
-      })
-      .catch((e: unknown) => {
-        if ((e as Error).name === "AbortError") return;
-      });
-    api
-      .get<SettingCommunity[]>(`/setting-communities?setting_id=${being.setting_id}`, opts)
-      .then((data) => {
-        if (controller.signal.aborted) return;
-        setCommunities(data);
-      })
-      .catch((e: unknown) => {
-        if ((e as Error).name === "AbortError") return;
-      });
-    api
-      .get<SettingLocation[]>(`/setting-locations?setting_id=${being.setting_id}`, opts)
-      .then((data) => {
-        if (controller.signal.aborted) return;
-        setSettingLocations(data);
-      })
-      .catch((e: unknown) => {
-        if ((e as Error).name === "AbortError") return;
-      });
-    return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [being?.setting_id]);
-
-  // Соседи по сеттингу — для prev/next навигации (U-P0-1)
-  useEffect(() => {
-    if (!being) return;
-    const controller = new AbortController();
-    api
-      .get<{ id: number }[]>(`/setting-beings?setting_id=${being.setting_id}`, { signal: controller.signal } as any)
-      .then((all) => {
-        if (controller.signal.aborted) return;
-        const ids = all.map((r) => r.id).sort((a, b) => a - b);
-        const idx = ids.indexOf(being.id);
-        setNeighbourIds({
-          prev: idx > 0 ? ids[idx - 1] : null,
-          next: idx >= 0 && idx < ids.length - 1 ? ids[idx + 1] : null,
-        });
-      })
-      .catch(() => {});
-    return () => controller.abort();
-  }, [being?.id, being?.setting_id]);
+  const mine: Affect[] = beingAffects(beingId);
 
   async function duplicateBeing() {
     if (!being) return;
-    try {
-      const created = await api.post<{ id: number }>("/setting-beings", {
-        setting_id: being.setting_id,
-        name: `Копия — ${being.name}`,
-        category: being.category,
-        tags: being.tags,
-      });
-      navigate(`/beings/${created.id}`);
-    } catch (e) {
-      showAlert(String(e instanceof Error ? e.message : e));
-    }
+    const created = await run(
+      () =>
+        write.post<{ id: number }>("/setting-beings", {
+          setting_id: being.setting_id,
+          name: `Копия — ${being.name}`,
+          category: being.category,
+          tags: being.tags,
+        }),
+      // Без «Повторить»: ответ мог потеряться после записи — повтор завёл бы вторую копию.
+      { affects: [{ kind: "being" }], retry: false }
+    );
+    if (created) navigate(`/beings/${created.id}`);
   }
 
-  if (loadError && !being) {
+  if (beingState.error && !being) {
     return (
       <div className="stack" style={{ position: "relative", paddingBottom: 50 }}>
         {confirmDialog}
-        {alertDialog}
         <LoadErrorCard
-          message={<>Не удалось загрузить существо: {loadError}</>}
-          onRetry={() => refresh()}
+          message={<>Не удалось загрузить существо: {beingState.error}</>}
+          onRetry={beingState.reload}
         />
       </div>
     );
   }
 
-  if (loading && !being) {
+  if (!being) {
     return (
       <div className="stack">
         {confirmDialog}
-        {alertDialog}
         <ListSkeleton variant="paragraph" label="Загрузка существа" />
       </div>
     );
   }
 
-  if (!being) return <p className="muted">Загрузка…</p>;
+  // Карточки полей держат правку открытой, пока сохранение не удалось: для
+  // этого им нужна ошибка, а плашку показывает слой.
+  async function saveOrThrow(patch: Partial<SettingBeingDetail>) {
+    if (!(await save(patch))) throw new Error("Не сохранилось");
+  }
 
-  async function saveTags(tags: string[]) {
-    setSaving(true);
-    try {
-      await api.put(`/setting-beings/${beingId}`, { tags });
-      refresh();
-    } catch (e) {
-      showAlert(String(e instanceof Error ? e.message : e));
-    } finally {
-      setSaving(false);
-    }
+  function saveTags(tags: string[]) {
+    void save({ tags });
   }
 
   async function saveDescription(value: string) {
-    setSaving(true);
-    try {
-      await api.put(`/setting-beings/${beingId}`, { description: value });
-      refresh();
-    } catch (e) {
-      showAlert(String(e instanceof Error ? e.message : e));
-    } finally {
-      setSaving(false);
-    }
+    await saveOrThrow({ description: value });
   }
 
   async function saveName(values: { name: string; category: string; short_name: string }) {
-    setSaving(true);
-    try {
-      await api.put(`/setting-beings/${beingId}`, {
-        name: values.name,
-        category: values.category,
-        short_name: values.short_name.trim(),
-        // Смена основы догружает её статблок и описание, ничего не затирая, —
-        // поэтому и уходит только когда её действительно поменяли.
-        ...(baseDraft?.id !== being?.base_monster_id ? { base_monster_id: baseDraft?.id ?? null } : {}),
-      });
-      await api.put(`/setting-beings/${beingId}/communities`, { community_ids: communityDraft });
-      refresh();
-    } catch (e) {
-      showAlert(String(e instanceof Error ? e.message : e));
-    } finally {
-      setSaving(false);
-    }
+    const body = {
+      name: values.name,
+      category: values.category,
+      short_name: values.short_name.trim(),
+      // Смена основы догружает её статблок и описание, ничего не затирая, —
+      // поэтому и уходит только когда её действительно поменяли.
+      ...(baseDraft?.id !== being?.base_monster_id ? { base_monster_id: baseDraft?.id ?? null } : {}),
+    };
+    const communityIds = communityDraft;
+    const done = await run(
+      async () => {
+        await write.put(`/setting-beings/${beingId}`, body);
+        await write.put(`/setting-beings/${beingId}/communities`, { community_ids: communityIds });
+        return true;
+      },
+      // Сообщества видят своих представителей: их карточки тоже задеты.
+      { affects: [...mine, { kind: "community" }] }
+    );
+    if (!done) throw new Error("Не сохранилось");
   }
 
   function toggleCommunity(id: number) {
@@ -307,23 +236,28 @@ export function BeingDetailPage() {
     try {
       await deleteWithUndo({
         entityName: being.name,
-        deleteFn: () => api.del(`/setting-beings/${beingId}`),
-        restoreFn: () => api.put(`/setting-beings/${beingId}/restore`),
+        deleteFn: async () => {
+          await write.del(`/setting-beings/${beingId}`);
+          afterWrite([{ kind: "being" }]);
+        },
+        restoreFn: async () => {
+          await write.put(`/setting-beings/${beingId}/restore`);
+          afterWrite([{ kind: "being" }]);
+        },
       });
-      navigate(`/settings/${being.setting_id}`);
     } catch (e) {
-      showAlert(String(e instanceof Error ? e.message : e));
+      showSaveError(`Не удалось архивировать «${being.name}»: ${e instanceof Error ? e.message : String(e)}`);
+      return;
     }
+    navigate(`/settings/${being.setting_id}`);
   }
+
+  // Место обитания видно с обеих сторон: у существа и в «Обитателях» локации.
+  const habitatAffects: Affect[] = [...mine, { kind: "location" }];
 
   async function addLocation(result: SearchResult) {
     if (result.type !== "location") return;
-    try {
-      await api.post(`/setting-beings/${beingId}/locations`, { location_id: result.id });
-      refresh();
-    } catch (e) {
-      showAlert(String(e instanceof Error ? e.message : e));
-    }
+    await run(() => write.post(`/setting-beings/${beingId}/locations`, { location_id: result.id }), { affects: habitatAffects });
   }
 
   function handleLocationDrop(e: DragEvent<HTMLDivElement>) {
@@ -335,43 +269,42 @@ export function BeingDetailPage() {
   }
 
   async function removeLocation(locationId: number) {
-    try {
-      await api.del(`/setting-beings/${beingId}/locations/${locationId}`);
-      refresh();
-    } catch (e) {
-      showAlert(String(e instanceof Error ? e.message : e));
-    }
+    await run(() => write.del(`/setting-beings/${beingId}/locations/${locationId}`), { affects: habitatAffects });
   }
 
   async function addLocationViaCascade() {
     if (!addLocationId) return;
-    try {
-      await api.post(`/setting-beings/${beingId}/locations`, { location_id: addLocationId });
-      setAddLocationId(null);
-      refresh();
-    } catch (e) {
-      showAlert(String(e instanceof Error ? e.message : e));
-    }
+    const locationId = addLocationId;
+    const done = await run(
+      () => write.post(`/setting-beings/${beingId}/locations`, { location_id: locationId }).then(() => true),
+      { affects: habitatAffects }
+    );
+    if (done) setAddLocationId(null);
   }
+
+  // Важные даты попадают в календарь сеттинга и кампаний.
+  const dateAffects: Affect[] = [...mine, { path: "/calendar" }];
 
   async function addImportantDate() {
     if (!dateTitle.trim() || !dateDay) return;
-    try {
-      await api.post(`/setting-beings/${beingId}/important-dates`, {
-        title: dateTitle,
-        recurrence: dateRecurrence,
-        year: dateRecurrence === "once" ? Number(dateYear) || null : null,
-        month: dateRecurrence !== "monthly" ? Number(dateMonth) || null : null,
-        day: Number(dateDay),
-      });
-        setDateTitle("");
-      setDateYear("");
-      setDateMonth("");
-      setDateDay("");
-      refresh();
-    } catch (e) {
-      showAlert(String(e instanceof Error ? e.message : e));
-    }
+    const body = {
+      title: dateTitle,
+      recurrence: dateRecurrence,
+      year: dateRecurrence === "once" ? Number(dateYear) || null : null,
+      month: dateRecurrence !== "monthly" ? Number(dateMonth) || null : null,
+      day: Number(dateDay),
+    };
+    // Без «Повторить»: повтор после потерянного ответа завёл бы дату дважды.
+    // Набранное остаётся в полях — добавить ещё раз можно самому.
+    const done = await run(
+      () => write.post(`/setting-beings/${beingId}/important-dates`, body).then(() => true),
+      { affects: dateAffects, retry: false }
+    );
+    if (!done) return;
+    setDateTitle("");
+    setDateYear("");
+    setDateMonth("");
+    setDateDay("");
   }
 
   async function removeImportantDate(dateId: number) {
@@ -382,12 +315,7 @@ export function BeingDetailPage() {
       danger: true,
     });
     if (!ok) return;
-    try {
-      await api.del(`/setting-beings/important-dates/${dateId}`);
-      refresh();
-    } catch (e) {
-      showAlert(String(e instanceof Error ? e.message : e));
-    }
+    await run(() => write.del(`/setting-beings/important-dates/${dateId}`), { affects: dateAffects });
   }
 
   async function handleAvatarChange(file: File | null) {
@@ -396,10 +324,7 @@ export function BeingDetailPage() {
     try {
       const form = new FormData();
       form.append("file", file);
-      await api.post(`/setting-beings/${beingId}/avatar`, form);
-      refresh();
-    } catch (e) {
-      showAlert(String(e instanceof Error ? e.message : e));
+      await run(() => write.post(`/setting-beings/${beingId}/avatar`, form, { timeoutMs: 60_000 }), { affects: mine });
     } finally {
       setUploadingAvatar(false);
     }
@@ -411,10 +336,7 @@ export function BeingDetailPage() {
     try {
       const form = new FormData();
       form.append("file", file);
-      await api.post(`/setting-beings/${beingId}/thumbnail`, form);
-      refresh();
-    } catch (e) {
-      showAlert(String(e instanceof Error ? e.message : e));
+      await run(() => write.post(`/setting-beings/${beingId}/thumbnail`, form, { timeoutMs: 60_000 }), { affects: mine });
     } finally {
       setUploadingThumbnail(false);
     }
@@ -536,16 +458,15 @@ export function BeingDetailPage() {
       overlays={
         <>
           {confirmDialog}
-          {alertDialog}
           {avatarCrop.modal}
         </>
       }
     >
       {/* Обновление не удалось, прежние данные на экране. */}
-      {loadError && (
+      {beingState.error && (
         <div className="card entity-page__error">
-          <span>Ошибка загрузки: {loadError}</span>
-          <button className="primary" onClick={() => refresh()}>
+          <span>Ошибка загрузки: {beingState.error}</span>
+          <button className="primary" onClick={beingState.reload}>
             Повторить
           </button>
         </div>
@@ -659,15 +580,11 @@ export function BeingDetailPage() {
             title="Известен также как"
             aliases={being.aliases ?? []}
             nameOriginal={being.name_original ?? ""}
-            onSave={async (aliases, name_original) => {
-              await api.put(`/setting-beings/${beingId}`, { aliases, name_original });
-              refresh();
-            }}
+            onSave={(aliases, name_original) => saveOrThrow({ aliases, name_original })}
           />
           <CompendiumLinksCard
             beingId={beingId}
             links={being.compendium_links}
-            onChange={refresh}
           />
           <StatblockList ownerType="being" ownerId={beingId} ownerName={being.name} settingId={being.setting_id} soleOnPage />
           <EditableTextCard
@@ -695,7 +612,6 @@ export function BeingDetailPage() {
               apiBase="/setting-beings"
               section="history"
               chapters={being.chapters.filter((c) => c.section === "history" && (!dossierQuery.trim() || c.title.toLowerCase().includes(dossierQuery.toLowerCase()) || c.content.toLowerCase().includes(dossierQuery.toLowerCase())))}
-              onChange={refresh}
               defaultSettingId={being.setting_id}
               visibilityToggle
             />
@@ -713,7 +629,6 @@ export function BeingDetailPage() {
               apiBase="/setting-beings"
               section="behavior"
               chapters={being.chapters.filter((c) => c.section === "behavior" && (!dossierQuery.trim() || c.title.toLowerCase().includes(dossierQuery.toLowerCase()) || c.content.toLowerCase().includes(dossierQuery.toLowerCase())))}
-              onChange={refresh}
               defaultSettingId={being.setting_id}
               visibilityToggle
             />
@@ -731,7 +646,6 @@ export function BeingDetailPage() {
               apiBase="/setting-beings"
               section="current_situation"
               chapters={being.chapters.filter((c) => c.section === "current_situation" && (!dossierQuery.trim() || c.title.toLowerCase().includes(dossierQuery.toLowerCase()) || c.content.toLowerCase().includes(dossierQuery.toLowerCase())))}
-              onChange={refresh}
               defaultSettingId={being.setting_id}
               campaigns={campaigns}
               visibilityToggle
@@ -787,7 +701,7 @@ export function BeingDetailPage() {
       )}
 
       {tab === "Карточка существа" && (
-        <CreatureCardEditor type="being" id={beingId} onChange={refresh} />
+        <CreatureCardEditor type="being" id={beingId} />
       )}
 
       {tab === "Упоминания" && <MentionsTab entityType="being" entityId={beingId} />}
@@ -950,24 +864,18 @@ export function BeingDetailPage() {
 // statted for D&D and for another system), but available to named
 // personalities too. Distinct from the single "На основе" template shown in
 // the header, which records a one-time clone at creation.
-function CompendiumLinksCard({
-  beingId,
-  links,
-  onChange,
-}: {
-  beingId: number;
-  links: CompendiumLink[];
-  onChange: () => void;
-}) {
+function CompendiumLinksCard({ beingId, links }: { beingId: number; links: CompendiumLink[] }) {
+  const run = useAction();
+
   async function add(entry: SearchResult | null) {
     if (!entry) return;
-    await api.post(`/setting-beings/${beingId}/compendium-links`, { compendium_entry_id: entry.id });
-    onChange();
+    await run(() => write.post(`/setting-beings/${beingId}/compendium-links`, { compendium_entry_id: entry.id }), {
+      affects: beingAffects(beingId),
+    });
   }
 
   async function remove(entryId: number) {
-    await api.del(`/setting-beings/${beingId}/compendium-links/${entryId}`);
-    onChange();
+    await run(() => write.del(`/setting-beings/${beingId}/compendium-links/${entryId}`), { affects: beingAffects(beingId) });
   }
 
   return (

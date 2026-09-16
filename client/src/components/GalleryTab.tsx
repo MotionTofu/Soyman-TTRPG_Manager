@@ -1,6 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { api } from "../api/client";
+import { useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { getAuthToken } from "../api/client";
+import { dataKeys } from "../data/entities";
+import { errorText, useAfterWrite, useResource, write } from "../data/hooks";
+import { showSaveError } from "../data/notices";
+import { galleryAffects, settingPaths } from "../data/settingEntities";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import type { GalleryImage } from "../types";
 import { ImageLightbox } from "./ImageLightbox";
@@ -35,52 +39,44 @@ interface Props {
 
 export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }: Props) {
   const { offerUndo } = useUndoDelete();
-  const [images, setImages] = useState<GalleryImage[]>([]);
+  const galleryPath = settingPaths.gallery(ownerType, ownerId);
+  const gallery = useResource<GalleryImage[]>(galleryPath);
+  const images = gallery.data ?? [];
+  const client = useQueryClient();
+  const afterWrite = useAfterWrite();
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [dragId, setDragId] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const loading = gallery.loading;
+  // Ошибка чтения — карточкой на месте галереи с «Повторить»: без неё галерее
+  // нечего показать. Ошибки записи — плашкой сбоку (docs/adr/0001, п. 3).
+  const error = gallery.error;
   const [confirmDialog, confirm] = useConfirm();
   const [menu, setMenu] = useState<{ x: number; y: number; id: number } | null>(null);
   const [gridDragOver, setGridDragOver] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
 
-  function load() {
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setLoading(true);
-    setError(null);
-    api
-      .get<GalleryImage[]>(`/gallery?owner_type=${ownerType}&owner_id=${ownerId}`, { signal: controller.signal } as any)
-      .then((data) => {
-        if (controller.signal.aborted) return;
-        setImages(data);
-        setLoading(false);
-      })
-      .catch((e: any) => {
-        if (e?.name === "AbortError") return;
-        if (controller.signal.aborted) return;
-        setError(e?.message ?? "Ошибка загрузки галереи");
-        setLoading(false);
-      });
+  // Порядок меняется на экране сразу; сервер отказал — прежний порядок
+  // возвращается, и появляется плашка.
+  async function saveOrder(ids: number[], failure: string) {
+    const key = dataKeys.resource(galleryPath);
+    const previous = client.getQueryData<GalleryImage[]>(key);
+    const order = new Map(ids.map((id, i) => [id, i]));
+    if (previous) client.setQueryData<GalleryImage[]>(key, [...previous].sort((x, y) => order.get(x.id)! - order.get(y.id)!));
+    try {
+      await write.put("/gallery/reorder", { order: ids });
+    } catch (e) {
+      if (previous) client.setQueryData(key, previous);
+      showSaveError(`${failure}: ${errorText(e)}`, () => write.put("/gallery/reorder", { order: ids }).then(() => afterWrite(galleryAffects(ownerType, ownerId))));
+      return;
+    }
+    afterWrite(galleryAffects(ownerType, ownerId));
   }
-  function refresh() {
-    load();
-  }
-  useEffect(() => {
-    load();
-    return () => abortRef.current?.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ownerType, ownerId]);
 
   async function uploadFiles(files: FileList | null, resetTarget?: HTMLInputElement | null) {
     if (!files || files.length === 0) return;
     setUploading(true);
     setUploadProgress({ done: 0, total: files.length });
-    setError(null);
     try {
       const list = Array.from(files);
       const CONCURRENCY = 3;
@@ -93,7 +89,7 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }
             form.append("file", file);
             form.append("owner_type", ownerType);
             form.append("owner_id", String(ownerId));
-            return api.post("/gallery", form);
+            return write.post("/gallery", form, { timeoutMs: 120_000 });
           })
         );
         results.push(...chunkResults);
@@ -103,15 +99,14 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }
       if (failed.length) {
         const firstMsg = failed[0].reason?.message ?? "";
         const suffix = failed.length > 1 ? ` (ещё ${failed.length - 1} не загружено)` : "";
-        setError(firstMsg ? `${firstMsg}${suffix}` : `Не загружено ${failed.length} файлов${suffix}`);
+        // Без «Повторить»: файлы уже не в поле выбора, выбрать их можно заново.
+        showSaveError(firstMsg ? `Не загрузилось: ${firstMsg}${suffix}` : `Не загружено ${failed.length} файлов${suffix}`);
       }
-    } catch (e: any) {
-      setError(e?.message ?? "Ошибка загрузки");
     } finally {
       setUploading(false);
       setUploadProgress(null);
       if (resetTarget) resetTarget.value = "";
-      refresh();
+      afterWrite(galleryAffects(ownerType, ownerId));
     }
   }
 
@@ -174,30 +169,34 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }
     try {
       outcome = await deleteWithChoice(`/gallery/${id}`);
       if (!outcome) return;
-    } catch (e: any) {
-      setError(e?.message ?? "Ошибка удаления");
+    } catch (e) {
+      showSaveError(`Не удалилось: ${errorText(e)}`);
       return;
     }
     setLightboxIndex(null);
-    refresh();
+    afterWrite(galleryAffects(ownerType, ownerId));
     const undoId = outcome.undoId;
     if (undoId == null) return;
     offerUndo({
       entityName: image?.caption?.trim() || "Изображение",
       restoreFn: async () => {
-        await api.put(`/gallery/undo/${undoId}`, {});
-        refresh();
+        await write.put(`/gallery/undo/${undoId}`, {});
+        afterWrite(galleryAffects(ownerType, ownerId));
       },
     });
   }
 
   async function saveCaption(id: number, caption: string) {
     const trimmed = caption.trim().slice(0, 500);
+    const key = dataKeys.resource(galleryPath);
+    const previous = client.getQueryData<GalleryImage[]>(key);
+    if (previous) client.setQueryData<GalleryImage[]>(key, previous.map((img) => (img.id === id ? { ...img, caption: trimmed } : img)));
+    const save = () => write.put(`/gallery/${id}`, { caption: trimmed }).then(() => afterWrite(galleryAffects(ownerType, ownerId)));
     try {
-      await api.put(`/gallery/${id}`, { caption: trimmed });
-      setImages((prev) => prev.map((img) => (img.id === id ? { ...img, caption: trimmed } : img)));
-    } catch (e: any) {
-      setError(e?.message ?? "Не удалось сохранить подпись");
+      await save();
+    } catch (e) {
+      if (previous) client.setQueryData(key, previous);
+      showSaveError(`Подпись не сохранилась: ${errorText(e)}`, save);
     }
   }
 
@@ -208,15 +207,7 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }
     const to = ids.indexOf(targetId);
     if (from === -1 || to === -1) return;
     ids.splice(to, 0, ...ids.splice(from, 1));
-    const order = new Map(ids.map((id, i) => [id, i]));
-    const prev = [...images];
-    setImages((p) => [...p].sort((a, b) => order.get(a.id)! - order.get(b.id)!));
-    try {
-      await api.put("/gallery/reorder", { order: ids });
-    } catch (e: any) {
-      setImages(prev);
-      setError(e?.message ?? "Не удалось изменить порядок");
-    }
+    await saveOrder(ids, "Порядок не сохранился");
   }
 
   // Sorts by caption (falling back to the filename for uncaptioned images,
@@ -232,15 +223,7 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }
     const ok = await confirm({ title: "Отсортировать по алфавиту?", message: "Текущий порядок будет перезаписан сортировкой по подписи (или имени файла). Отменить нельзя, но можно перетащить заново.", confirmLabel: "Сортировать", danger: false });
     if (!ok) return;
     const ids = [...images].sort((a, b) => labelFor(a).localeCompare(labelFor(b), "ru")).map((i) => i.id);
-    const order = new Map(ids.map((id, i) => [id, i]));
-    const prev = [...images];
-    setImages((p) => [...p].sort((a, b) => order.get(a.id)! - order.get(b.id)!));
-    try {
-      await api.put("/gallery/reorder", { order: ids });
-    } catch (e: any) {
-      setImages(prev);
-      setError(e?.message ?? "Не удалось отсортировать");
-    }
+    await saveOrder(ids, "Не отсортировалось");
   }
 
   function safeImageUrl(url: string): string {
@@ -307,7 +290,7 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }
       {error && (
         <div className="card" style={{ borderColor: "var(--danger, #c00)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
           <span style={{ color: "var(--danger, #c00)", fontSize: "var(--fs-meta)" }}>{error}</span>
-          <button onClick={() => load()}>Повторить</button>
+          <button onClick={gallery.reload}>Повторить</button>
         </div>
       )}
       {!loading && images.length === 0 && !error && (

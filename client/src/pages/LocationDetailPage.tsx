@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { api } from "../api/client";
+import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
+import { showSaveError } from "../data/notices";
+import { locationPaths, settingPaths } from "../data/settingEntities";
+import type { Affect } from "../data/entities";
 import { EmptyState } from "../components/EmptyState";
 import { useUnloadTarget } from "../unloadTargets";
 import { syncMentionLinks } from "../mentions";
@@ -75,9 +78,21 @@ export function LocationDetailPage() {
   const locationId = Number(id);
   const navigate = useNavigate();
 
-  const [location, setLocation] = useState<SettingLocationDetail | null>(null);
-  const [communities, setCommunities] = useState<SettingCommunity[]>([]);
-  const [allLocations, setAllLocations] = useState<SettingLocation[]>([]);
+  // Вложенные обитатели (включая точки) — всегда: секция «В зонах» видна,
+  // когда непуста, без тумблера (план «Зоны локаций», этап 2).
+  const locationState = useResource<SettingLocationDetail>(locationPaths.detail(locationId));
+  const location = locationState.data ?? null;
+  const settingId = location?.setting_id ?? null;
+  const communities = useResource<SettingCommunity[]>(settingId ? settingPaths.inSetting("community", settingId) : null).data ?? [];
+  // Все локации сеттинга вместе с архивом: дерево, выбор родителя, архив детей.
+  const allLocationsData = useResource<SettingLocation[]>(settingId ? locationPaths.allInSetting(settingId) : null).data;
+  const allLocations = useMemo(() => allLocationsData ?? [], [allLocationsData]);
+  const run = useAction();
+  const afterWrite = useAfterWrite();
+  const mine: Affect[] = [{ kind: "location", id: locationId }];
+  // Правка, которая меняет дерево (родитель, вес, дети, архив): задеты все
+  // локации — и карточки, и списки.
+  const allLocationsAffect: Affect[] = [{ kind: "location" }];
   const [tab, selectTab] = useTabState(TABS, "Информация о локации");
   // Навигация внутри таба «Вложенность» (Master–Detail): родитель,
   // дерево, план точками, добавление. Верхний таб-бар не трогаем.
@@ -109,10 +124,12 @@ export function LocationDetailPage() {
     if (promoting) return;
     setPromoting(true);
     try {
-      const created = await api.post<{ id: number }>(`/setting-locations/${locationId}/make-location`, {});
-      navigate(`/locations/${created.id}`);
-    } catch (e) {
-      setLoadError(String(e instanceof Error ? e.message : e));
+      // Без «Повторить»: повтор после потерянного ответа завёл бы вторую локацию.
+      const created = await run(() => write.post<{ id: number }>(`/setting-locations/${locationId}/make-location`, {}), {
+        affects: allLocationsAffect,
+        retry: false,
+      });
+      if (created) navigate(`/locations/${created.id}`);
     } finally {
       setPromoting(false);
     }
@@ -130,7 +147,8 @@ export function LocationDetailPage() {
     beings_count: number;
     communities_count: number;
   };
-  const [planSpots, setPlanSpots] = useState<PlanSpot[] | null>(null);
+  const [planOpen, setPlanOpen] = useState(false);
+  const planSpots = useResource<{ spots: PlanSpot[] }>(planOpen ? locationPaths.plan(locationId) : null).data?.spots ?? null;
   const [planExpanded, setPlanExpanded] = useState<number | null>(null);
   // Подсветка строки точки при переходе из поиска (?spot=, план «Зоны»,
   // этап 7): раскрываем строку, прокручиваем, вспышка гаснет сама.
@@ -157,26 +175,15 @@ export function LocationDetailPage() {
     return () => clearTimeout(t);
   }, [spotFlash, planSpots]);
 
-  async function refreshPlan() {
-    try {
-      const r = await api.get<{ spots: PlanSpot[] }>(`/setting-locations/${locationId}/plan`);
-      setPlanSpots(r.spots);
-    } catch {
-      setPlanSpots([]);
-    }
-  }
-
   useEffect(() => {
     if (tab === "Вложенность") {
       setPlanExpanded(null);
-      refreshPlan();
+      setPlanOpen(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- только вход на таб
   }, [tab, locationId]);
   const [inhabitantsDragOver, setInhabitantsDragOver] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [inhabitantsSaving, setInhabitantsSaving] = useState(false);
   const [addingChild, setAddingChild] = useState(false);
   const [rawQuery, setRawQuery] = useState("");
@@ -185,7 +192,6 @@ export function LocationDetailPage() {
   const [sortMode, setSortMode] = useState<"name" | "category">("name");
   const [communityName, setCommunityName] = useState("");
   const [communitySaving, setCommunitySaving] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [confirmDialog, confirm] = useConfirm();
   const { deleteWithUndo } = useUndoDelete();
@@ -207,10 +213,7 @@ export function LocationDetailPage() {
     try {
       const form = new FormData();
       form.append("file", file);
-      await api.post(`/setting-locations/${locationId}/avatar`, form);
-      refresh();
-    } catch (e) {
-      setLoadError(String(e instanceof Error ? e.message : e));
+      await run(() => write.post(`/setting-locations/${locationId}/avatar`, form, { timeoutMs: 60_000 }), { affects: mine });
     } finally {
       setUploadingAvatar(false);
     }
@@ -222,10 +225,7 @@ export function LocationDetailPage() {
     try {
       const form = new FormData();
       form.append("file", file);
-      await api.post(`/setting-locations/${locationId}/thumbnail`, form);
-      refresh();
-    } catch (e) {
-      setLoadError(String(e instanceof Error ? e.message : e));
+      await run(() => write.post(`/setting-locations/${locationId}/thumbnail`, form, { timeoutMs: 60_000 }), { affects: mine });
     } finally {
       setUploadingThumbnail(false);
     }
@@ -238,47 +238,28 @@ export function LocationDetailPage() {
     if (!ok) return;
     const url = `/setting-locations/${locationId}/${kind}`;
     try {
-      await api.del(url);
-    } catch (e: any) {
-      const msg = String(e?.message ?? e);
-      if (msg.includes("409") || msg.includes("needsChoice") || String(e).includes("409")) {
-        const toArchive = await confirm({ title: "Последняя копия файла", message: "Это последняя копия файла в хранилище. Отправить в архив?", confirmLabel: "В архив", danger: false });
-        if (toArchive) await api.del(`${url}?mode=archive`);
-        else {
-          const forever = await confirm({ title: "Удалить навсегда?", message: "Без возможности восстановления.", confirmLabel: "Удалить навсегда", danger: true });
-          if (!forever) return;
-          await api.del(`${url}?mode=forever`);
-        }
-      } else throw e;
+      try {
+        await write.del(url);
+      } catch (e: any) {
+        const msg = String(e?.message ?? e);
+        if (msg.includes("409") || msg.includes("needsChoice") || String(e).includes("409")) {
+          const toArchive = await confirm({ title: "Последняя копия файла", message: "Это последняя копия файла в хранилище. Отправить в архив?", confirmLabel: "В архив", danger: false });
+          if (toArchive) await write.del(`${url}?mode=archive`);
+          else {
+            const forever = await confirm({ title: "Удалить навсегда?", message: "Без возможности восстановления.", confirmLabel: "Удалить навсегда", danger: true });
+            if (!forever) return;
+            await write.del(`${url}?mode=forever`);
+          }
+        } else throw e;
+      }
+    } catch (e) {
+      showSaveError(`Изображение не удалилось: ${e instanceof Error ? e.message : String(e)}`);
+      return;
     }
-    refresh();
+    afterWrite(mine);
   }
   async function handleAvatarDelete() { await deleteLocationImage("avatar"); }
   async function handleThumbnailDelete() { await deleteLocationImage("thumbnail"); }
-
-  const refresh = useCallback(() => {
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    // Вложенные обитатели (включая точки) — всегда: секция «В зонах» видна,
-    // когда непуста, без тумблера (план «Зоны локаций», этап 2).
-    const query = "?nested=1";
-    setLoadError(null);
-    api
-      .get<SettingLocationDetail>(`/setting-locations/${locationId}${query}`, { signal: controller.signal })
-      .then((l) => {
-        if (controller.signal.aborted) return;
-        setLocation(l);
-      })
-      .catch((e: unknown) => {
-        if ((e as Error).name === "AbortError") return;
-        setLoadError(String(e instanceof Error ? e.message : e));
-      });
-  }, [locationId]);
-  useEffect(() => {
-    refresh();
-    return () => abortRef.current?.abort();
-  }, [refresh]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(rawQuery), 150);
@@ -287,23 +268,6 @@ export function LocationDetailPage() {
 
   // Cleanup toast timer on unmount
   useEffect(() => () => { if (toastTimerRef.current) clearTimeout(toastTimerRef.current); }, []);
-
-  // Communities and all-locations list (including archived) only depend on setting_id.
-  useEffect(() => {
-    if (!location) return;
-    const controller = new AbortController();
-    Promise.allSettled([
-      api.get<SettingCommunity[]>(`/setting-communities?setting_id=${location.setting_id}`, { signal: controller.signal }),
-      api.get<SettingLocation[]>(`/setting-locations?setting_id=${location.setting_id}&archived=include`, { signal: controller.signal }),
-    ]).then(([c, l]) => {
-      if (!controller.signal.aborted) {
-        if (c.status === "fulfilled") setCommunities(c.value);
-        if (l.status === "fulfilled") setAllLocations(l.value);
-      }
-    });
-    return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only setting_id matters, not the full location object
-  }, [location?.setting_id]);
 
   // Мешок выгружает сюда существ и сообщества — то же, что перетаскивание в
   // «Обитатели», только без перетаскивания (см. unloadTargets.tsx).
@@ -415,14 +379,14 @@ export function LocationDetailPage() {
   // ведёт через сеттинг, а он приезжает вместе с самой локацией.
   const rootCrumbs = [{ label: "Сеттинги", to: "/settings" }];
 
-  if (loadError && !location) {
+  if (locationState.error && !location) {
     return (
       <EntityPage
         crumbs={rootCrumbs}
         entityType="location"
         title=""
-        error={loadError}
-        onRetry={() => refresh()}
+        error={locationState.error}
+        onRetry={locationState.reload}
         overlays={confirmDialog}
       >
         {null}
@@ -450,31 +414,29 @@ export function LocationDetailPage() {
   }) {
     if (!location) return;
     const prevDesc = location.description ?? "";
-    try {
-      await api.put(`/setting-locations/${locationId}`, {
-        name: values.name,
-        role: values.role,
-        kind: values.kind,
-        short_name: values.short_name.trim(),
-        description: values.description,
-        aliases: values.aliases,
-        name_original: values.name_original.trim(),
-      });
-      syncMentionLinks("location", locationId, prevDesc, values.description);
-      refresh();
-    } catch (e) {
-      setLoadError(String(e instanceof Error ? e.message : e));
-    }
+    const body = {
+      name: values.name,
+      role: values.role,
+      kind: values.kind,
+      short_name: values.short_name.trim(),
+      description: values.description,
+      aliases: values.aliases,
+      name_original: values.name_original.trim(),
+    };
+    // Имя и вес видны в дереве и списках локаций сеттинга.
+    const done = await run(() => write.put(`/setting-locations/${locationId}`, body).then(() => true), { affects: allLocationsAffect });
+    // Карточка «Основное» держит правку открытой, пока сохранение не удалось.
+    if (!done) throw new Error("Не сохранилось");
+    syncMentionLinks("location", locationId, prevDesc, values.description);
   }
 
   async function saveParent() {
-    try {
-      await api.put(`/setting-locations/${locationId}/parent`, { parent_id: parentDraft });
-      setEditingParent(false);
-      refresh();
-    } catch (e) {
-      setLoadError(String(e instanceof Error ? e.message : e));
-    }
+    const parentId = parentDraft;
+    const done = await run(
+      () => write.put(`/setting-locations/${locationId}/parent`, { parent_id: parentId }).then(() => true),
+      { affects: allLocationsAffect }
+    );
+    if (done) setEditingParent(false);
   }
 
   async function archiveLocation() {
@@ -489,42 +451,48 @@ export function LocationDetailPage() {
     try {
       await deleteWithUndo({
         entityName: location.name,
-        deleteFn: () => api.del(`/setting-locations/${locationId}`),
-        restoreFn: () => api.put(`/setting-locations/${locationId}/restore`),
+        deleteFn: async () => {
+          await write.del(`/setting-locations/${locationId}`);
+          afterWrite(allLocationsAffect);
+        },
+        restoreFn: async () => {
+          await write.put(`/setting-locations/${locationId}/restore`);
+          afterWrite(allLocationsAffect);
+        },
       });
       navigate(
         location.parent_id ? `/locations/${location.parent_id}` : `/settings/${location.setting_id}`
       );
     } catch (e) {
-      setLoadError(String(e instanceof Error ? e.message : e));
+      showSaveError(`Не удалось архивировать «${location.name}»: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
   async function restoreChild(id: number) {
-    try {
-      await api.put(`/setting-locations/${id}/restore`);
-      refresh();
-    } catch (e) {
-      setLoadError(String(e instanceof Error ? e.message : e));
-    }
+    await run(() => write.put(`/setting-locations/${id}/restore`), { affects: allLocationsAffect });
   }
 
   async function addChild(role: "location" | "sector" = "location") {
     if (!childName.trim() || addingChild) return;
     setAddingChild(true);
+    const body = {
+      setting_id: location!.setting_id,
+      parent_id: locationId,
+      name: childName.trim(),
+      kind: childKind.trim() || null,
+      role,
+    };
     try {
-      await api.post("/setting-locations", {
-        setting_id: location!.setting_id,
-        parent_id: locationId,
-        name: childName.trim(),
-        kind: childKind.trim() || null,
-        role,
+      // Без «Повторить»: повтор после потерянного ответа завёл бы вторую
+      // вложенную. Набранное остаётся в полях.
+      const done = await run(() => write.post("/setting-locations", body).then(() => true), {
+        affects: allLocationsAffect,
+        retry: false,
       });
-      setChildName("");
-      setChildKind("");
-      refresh();
-    } catch (e) {
-      setLoadError(String(e instanceof Error ? e.message : e));
+      if (done) {
+        setChildName("");
+        setChildKind("");
+      }
     } finally {
       setAddingChild(false);
     }
@@ -558,9 +526,10 @@ export function LocationDetailPage() {
   async function addPlan() {
     if (planFresh.length === 0 || planAdding) return;
     setPlanAdding(true);
+    let created = 0;
     try {
       for (const p of planFresh) {
-        await api.post("/setting-locations", {
+        await write.post("/setting-locations", {
           setting_id: location!.setting_id,
           parent_id: locationId,
           name: p.name,
@@ -568,13 +537,16 @@ export function LocationDetailPage() {
           role: "spot",
           description: p.note || null,
         });
+        created++;
       }
       setPlanText("");
-      refresh();
       showSuccess(`Точек добавлено: ${planFresh.length}`);
     } catch (e) {
-      setLoadError(String(e instanceof Error ? e.message : e));
+      // Уже созданные остаются, и повторная вставка их пропустит по имени —
+      // поэтому текст плана не стирается, а «Повторить» не нужен.
+      showSaveError(`Добавлено точек: ${created} из ${planFresh.length}. Остальные: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
+      afterWrite(allLocationsAffect);
       setPlanAdding(false);
     }
   }
@@ -606,34 +578,34 @@ export function LocationDetailPage() {
           skippedKids++;
           continue;
         }
-        await api.put(`/setting-locations/${id}`, { role });
+        await write.put(`/setting-locations/${id}`, { role });
         done++;
       }
       setConvertSel(new Set());
-      refresh();
       showSuccess(
         `Вес сменён: ${done}` +
           (skippedKids > 0 ? ` · пропущено (есть вложенные): ${skippedKids}` : "")
       );
     } catch (e) {
-      setLoadError(String(e instanceof Error ? e.message : e));
+      // Выбор не сбрасывается: повторная смена веса уже сменённым безвредна.
+      showSaveError(`Вес сменён у ${done} из ${ids.length}. Остальные: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
+      afterWrite(allLocationsAffect);
       setConverting(false);
     }
   }
+
+  // Обитатель виден с обеих сторон: здесь и в «Местах обитания» существа или
+  // сообщества; у родителя — в секции «В зонах».
+  const inhabitantAffects: Affect[] = [{ kind: "location" }, { kind: "being" }, { kind: "community" }];
 
   async function addInhabitant(result: SearchResult) {
     if (result.type !== "being" && result.type !== "community") return;
     if (inhabitantsSaving) return;
     setInhabitantsSaving(true);
+    const body = { type: result.type, id: result.id };
     try {
-      await api.post(`/setting-locations/${locationId}/inhabitants`, {
-        type: result.type,
-        id: result.id,
-      });
-      refresh();
-    } catch (e) {
-      setLoadError(String(e instanceof Error ? e.message : e));
+      await run(() => write.post(`/setting-locations/${locationId}/inhabitants`, body), { affects: inhabitantAffects });
     } finally {
       setInhabitantsSaving(false);
     }
@@ -664,10 +636,7 @@ export function LocationDetailPage() {
     if (inhabitantsSaving) return;
     setInhabitantsSaving(true);
     try {
-      await api.del(`/setting-locations/${locationId}/inhabitants/${type}/${targetId}`);
-      refresh();
-    } catch (e) {
-      setLoadError(String(e instanceof Error ? e.message : e));
+      await run(() => write.del(`/setting-locations/${locationId}/inhabitants/${type}/${targetId}`), { affects: inhabitantAffects });
     } finally {
       setInhabitantsSaving(false);
     }
@@ -676,20 +645,20 @@ export function LocationDetailPage() {
   async function createCommunity() {
     if (!communityName.trim() || communitySaving) return;
     setCommunitySaving(true);
+    const name = communityName.trim();
     try {
-      const created = await api.post<{ id: number }>("/setting-communities", {
-        setting_id: location!.setting_id,
-        name: communityName.trim(),
-      });
-      await api.post(`/setting-locations/${locationId}/inhabitants`, {
-        type: "community",
-        id: created.id,
-      });
+      // Без «Повторить»: повтор после потерянного ответа завёл бы вторую общину.
+      const done = await run(
+        async () => {
+          const created = await write.post<{ id: number }>("/setting-communities", { setting_id: location!.setting_id, name });
+          await write.post(`/setting-locations/${locationId}/inhabitants`, { type: "community", id: created.id });
+          return true;
+        },
+        { affects: inhabitantAffects, retry: false }
+      );
+      if (!done) return;
       setCommunityName("");
-      refresh();
-      showSuccess(`Община «${communityName.trim()}» создана`);
-    } catch (e) {
-      setLoadError(String(e instanceof Error ? e.message : e));
+      showSuccess(`Община «${name}» создана`);
     } finally {
       setCommunitySaving(false);
     }
@@ -875,7 +844,7 @@ export function LocationDetailPage() {
         <LocationInfoTab
           key={location.id}
           location={location}
-          onChanged={refresh}
+          onChanged={() => afterWrite(mine)}
           onSaveMain={saveMain}
           thumbnail={{
             title: "Тамбнейл — 16×10",
@@ -920,7 +889,6 @@ export function LocationDetailPage() {
           mapGotoZoom={location.map_goto_zoom}
           mapLabelsAlways={location.map_labels_always}
           otherLocations={allLocations}
-          onChange={refresh}
         />
       )}
 
@@ -1207,7 +1175,6 @@ export function LocationDetailPage() {
                               text: c.text,
                               created_at: "",
                             }))}
-                            onChange={refreshPlan}
                           />
                         </div>
                       )}
@@ -1224,7 +1191,7 @@ export function LocationDetailPage() {
           {nestSel.section === "tree" && (
           <div className="card stack">
             {childByParent.get(locationId)?.map((c) => (
-              <LocationNode key={c.id} location={c} byParent={childByParent} onChange={refresh} />
+              <LocationNode key={c.id} location={c} byParent={childByParent} />
             ))}
             {(childByParent.get(locationId)?.length ?? 0) === 0 && archivedChildren.length === 0 && (
               <EmptyState
@@ -1292,7 +1259,6 @@ export function LocationDetailPage() {
             communities={communities}
             fixedLocationId={locationId}
             showCommunityPicker
-            onCreated={refresh}
           />
           <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
             <input
@@ -1346,10 +1312,10 @@ export function LocationDetailPage() {
               <button onClick={() => { setRawQuery(""); setCategoryFilter(""); setSortMode("name"); }}>Сбросить</button>
             )}
           </div>
-          {loadError && (
+          {locationState.error && (
             <LoadErrorCard
-              message={<>Не удалось обновить обитателей: {loadError}</>}
-              onRetry={() => refresh()}
+              message={<>Не удалось обновить обитателей: {locationState.error}</>}
+              onRetry={locationState.reload}
             />
           )}
           {(allInhabitants.length > 0 || location.inhabitant_communities.length > 0) && (
@@ -1415,7 +1381,6 @@ export function LocationDetailPage() {
             dates={location.important_dates}
             calendarMonths={calendar?.months}
             calendarWeekdays={calendar?.weekdays}
-            onChange={refresh}
             onShowOnMap={() => selectTab("Карта")}
             groupFilter={dateSel.section}
           />
