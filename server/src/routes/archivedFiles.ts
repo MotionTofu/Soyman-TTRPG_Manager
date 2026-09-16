@@ -1,8 +1,7 @@
-import path from "path";
 import { Router } from "express";
 import fs from "fs";
 import { db } from "../db/db";
-import { ensureSubfolder, openInFileExplorer, VAULT_ROOT, vaultAbs } from "../services/filesystem";
+import { ensureSubfolder, openInFileExplorer, VAULT_ROOT, vaultAbs, isVaultPath } from "../services/filesystem";
 
 // Files moved here by vaultDedup.ts's removeOrArchive() when a user chose
 // "отправить в архив" over "удалить навсегда" for the last remaining link to
@@ -29,10 +28,7 @@ archivedFilesRouter.delete("/:id", (req, res) => {
   // путь обязан лежать строго внутри VAULT_ROOT, иначе битая БД могла бы
   // удалить файл вне хранилища. Отказ — тихий, строку БД всё равно чистим.
   const abs = vaultAbs(row.archive_path);
-  const resolved = path.resolve(abs);
-  const root = path.resolve(VAULT_ROOT);
-  const insideVault = resolved === root || resolved.startsWith(root + path.sep);
-  if (insideVault) {
+  if (isVaultPath(abs)) {
     try {
       fs.unlinkSync(abs);
     } catch {

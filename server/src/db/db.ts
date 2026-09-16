@@ -4,7 +4,7 @@ import { randomUUID } from "crypto";
 import fs from "fs";
 import { MENTIONABLE_TABLE } from "./entityKinds";
 import path from "path";
-import { entryImageFolder, systemFolder, vaultAbs } from "../services/filesystem";
+import { entryImageFolder, systemFolder, vaultAbs, isVaultPath } from "../services/filesystem";
 import { backfillDefaultMechanicsSections, backfillDefaultVehicleSections, migrateBastionsToOwnSection } from "./defaultSections";
 import { migrateDndSkillNames } from "./dndSkillNames";
 import { migrateDndGrantedSpells } from "./dndGrantedSpells";
@@ -462,20 +462,27 @@ function execSchema(database: Database.Database, schema: string): string[] {
 export function openDatabase(dbDir: string, opts: { migrate?: boolean } = {}): Database.Database {
   fs.mkdirSync(dbDir, { recursive: true });
   const database = new Database(path.join(dbDir, "app.db"));
-  database.pragma("journal_mode = WAL");
-  database.pragma("foreign_keys = ON");
-  // Ревизии и сверки открывают чужие (часто старые) снимки, чтобы в них
-  // ЗАГЛЯНУТЬ. Прогон миграций такой снимок переписывает необратимо, поэтому
-  // «посмотреть» и «обновить» — разные намерения, а не одно по умолчанию.
-  if (opts.migrate === false) return database;
-  // 3.3 — integrity_check не блокирует старт: уходим в фон через 2с после открытия
+  try {
+    database.pragma("journal_mode = WAL");
+    database.pragma("foreign_keys = ON");
+    // Ревизии и сверки открывают чужие (часто старые) снимки, чтобы в них
+    // ЗАГЛЯНУТЬ. Прогон миграций такой снимок переписывает необратимо, поэтому
+    // «посмотреть» и «обновить» — разные намерения, а не одно по умолчанию.
+    if (opts.migrate === false) return database;
+    migrateDatabase(database, dbDir);
+  } catch (error) {
+    database.close();
+    throw error;
+  }
+  // Schedule only after a successful migration; short-lived inspection opens
+  // and storage switches may close this connection before the timer fires.
   setTimeout(() => {
+    if (!database.open) return;
     try {
       const row = database.prepare("PRAGMA integrity_check").get() as { integrity_check: string } | undefined;
       if (row && row.integrity_check !== "ok") console.error(`[db] integrity_check: ${row.integrity_check}`);
     } catch {}
   }, 2000);
-  migrateDatabase(database, dbDir);
   return database;
 }
 
@@ -566,38 +573,50 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     database.exec("ALTER TABLE characters ADD COLUMN system_id INTEGER REFERENCES systems(id) ON DELETE SET NULL");
   }
   if (columnIsNotNull(database, "characters", "campaign_id")) {
+    // A fresh, consistent snapshot per attempt; never overwrite an earlier one.
+    const snapshot = path.join(dbDir, `app-before-characters-${randomUUID()}.db`);
+    database.prepare("VACUUM INTO ?").run(snapshot);
+    const dependents = database.prepare(
+      "SELECT sql FROM sqlite_master WHERE tbl_name = 'characters' AND type IN ('index', 'trigger') AND sql IS NOT NULL"
+    ).all() as { sql: string }[];
     database.exec("PRAGMA foreign_keys = OFF");
-    database.exec("DROP TABLE IF EXISTS characters_new");
-    database.exec(`CREATE TABLE characters_new (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-      campaign_id INTEGER REFERENCES campaigns(id) ON DELETE CASCADE,
-      system_id INTEGER REFERENCES systems(id) ON DELETE SET NULL,
-      character_name TEXT NOT NULL,
-      backstory TEXT DEFAULT '',
-      statblock TEXT DEFAULT '',
-      current_situation TEXT DEFAULT '',
-      personal_arc TEXT DEFAULT '',
-      future_thoughts TEXT DEFAULT '',
-      connections_notes TEXT DEFAULT '',
-      avatar_image_path TEXT,
-      thumbnail_image_path TEXT,
-      folder_path TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      archived_at TEXT
-    )`);
-    database.exec(`INSERT INTO characters_new (
-      id, player_id, campaign_id, system_id, character_name, backstory, statblock,
-      current_situation, personal_arc, future_thoughts, connections_notes,
-      avatar_image_path, thumbnail_image_path, folder_path, created_at, archived_at
-    ) SELECT
-      id, player_id, campaign_id, system_id, character_name, backstory, statblock,
-      current_situation, personal_arc, future_thoughts, connections_notes,
-      avatar_image_path, thumbnail_image_path, folder_path, COALESCE(created_at, datetime('now')), archived_at
-    FROM characters`);
-    database.exec("DROP TABLE characters");
-    database.exec("ALTER TABLE characters_new RENAME TO characters");
-    database.exec("PRAGMA foreign_keys = ON");
+    try {
+      database.transaction(() => {
+        database.exec("DROP TABLE IF EXISTS characters_new");
+        database.exec(`CREATE TABLE characters_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+          campaign_id INTEGER REFERENCES campaigns(id) ON DELETE CASCADE,
+          system_id INTEGER REFERENCES systems(id) ON DELETE SET NULL,
+          character_name TEXT NOT NULL,
+          backstory TEXT DEFAULT '',
+          statblock TEXT DEFAULT '',
+          current_situation TEXT DEFAULT '',
+          personal_arc TEXT DEFAULT '',
+          future_thoughts TEXT DEFAULT '',
+          connections_notes TEXT DEFAULT '',
+          avatar_image_path TEXT,
+          thumbnail_image_path TEXT,
+          folder_path TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          archived_at TEXT
+        )`);
+        database.exec(`INSERT INTO characters_new (
+          id, player_id, campaign_id, system_id, character_name, backstory, statblock,
+          current_situation, personal_arc, future_thoughts, connections_notes,
+          avatar_image_path, thumbnail_image_path, folder_path, created_at, archived_at
+        ) SELECT
+          id, player_id, campaign_id, system_id, character_name, backstory, statblock,
+          current_situation, personal_arc, future_thoughts, connections_notes,
+          avatar_image_path, thumbnail_image_path, folder_path, COALESCE(created_at, datetime('now')), archived_at
+        FROM characters`);
+        database.exec("DROP TABLE characters");
+        database.exec("ALTER TABLE characters_new RENAME TO characters");
+        for (const { sql } of dependents) database.exec(sql);
+      })();
+    } finally {
+      database.exec("PRAGMA foreign_keys = ON");
+    }
   }
 
   // Payment model migration: campaign-level payment_type, session payment_override/title,
@@ -5417,6 +5436,7 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
   // Остатки legacy от systemApply/crossLinks до фикса — добиваем фоном, не блокируем старт (3.3).
   if (appSettingFlag(database, tokensKey)) {
     setTimeout(() => {
+      if (!database.open) return;
       try { fixResidualLegacyMentions(database); } catch (e) { console.error("Добивка legacy-меншенов фоном не удалась:", e); }
     }, 2500);
   }
@@ -5552,7 +5572,7 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     for (const row of rows) {
       if (!row.source_path || !row.system_folder_path) continue;
       const absSource = vaultAbs(row.source_path);
-      if (!fs.existsSync(absSource)) continue;
+      if (!isVaultPath(absSource) || !fs.existsSync(absSource)) continue;
       try {
         const folder = entryImageFolder(row.system_folder_path, row.kind);
         const ext = path.extname(absSource) || ".jpg";

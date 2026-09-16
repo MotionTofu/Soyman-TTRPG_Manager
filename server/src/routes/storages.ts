@@ -16,6 +16,14 @@ import {
 } from "../services/storages";
 
 export const storagesRouter = Router();
+
+// Migration helpers may create/copy vault files. A candidate database must
+// never run those steps against the currently active storage's vault.
+function inStorageVault<T>(root: string, action: () => T): T {
+  const previous = VAULT_ROOT;
+  try { setVaultRoot(root); return action(); }
+  finally { setVaultRoot(previous); }
+}
 // 500 МБ — с запасом под 230 МБ модули с музыкой (согласовано с владельцем).
 const MAX_BACKUP_BYTES = 500 * 1024 * 1024;
 const upload = multer({
@@ -45,11 +53,16 @@ function isSafeFolderPath(p: string): boolean {
   if (p.split(/[\\/]/).includes("..")) return false;
   return true;
 }
-function hasZipSlipEntry(entryName: string): boolean {
+export function hasZipSlipEntry(entryName: string): boolean {
   if (!entryName) return true;
   if (entryName.includes("\0")) return true;
   let decoded = entryName;
   try { decoded = decodeURIComponent(entryName); } catch {}
+  // Windows ADS and device names must not enter a portable backup, even when
+  // imported on another OS. Check decoded names as well as raw archive bytes.
+  if (/[\0<>:"|?*]/.test(decoded)) return true;
+  if (decoded.replace(/\\/g, "/").split("/").some(segment =>
+    /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(segment) || /[ .]$/.test(segment))) return true;
   // U+202E etc
   if (/[\u202A-\u202E\u200B-\u200F\uFEFF]/.test(decoded)) return true;
   const normalized = path.posix.normalize(decoded.replace(/\\/g, "/"));
@@ -79,7 +92,7 @@ storagesRouter.post("/", (req, res) => {
   const dbDir = path.join(folderPath, "data");
   const vaultRoot = path.join(folderPath, "RPG-Vault");
   try {
-    openDatabase(dbDir).close();
+    inStorageVault(vaultRoot, () => openDatabase(dbDir).close());
     initVaultAt(vaultRoot);
   } catch (err) {
     console.error("[POST /storages]", err);
@@ -115,7 +128,7 @@ storagesRouter.post("/:id/activate", (req, res) => {
   if (!target) return res.status(404).json({ error: "storage not found" });
 
   try {
-    switchToDatabase(target.dbDir);
+    inStorageVault(target.vaultRoot, () => switchToDatabase(target.dbDir));
     setVaultRoot(target.vaultRoot);
     setActiveStorageId(target.id);
     res.json({ ok: true, active: target });
@@ -134,15 +147,25 @@ storagesRouter.get("/active", (_req, res) => {
 storagesRouter.post("/import-backup", upload.single("file"), (req, res) => {
   const { name, folderPath } = req.body as { name?: string; folderPath?: string };
   if (!req.file) return res.status(400).json({ error: "file is required" });
+  const uploadedPath = req.file.path;
+  const rejectUpload = (status: number, error: string) => {
+    if (uploadedPath) try { fs.unlinkSync(uploadedPath); } catch {}
+    return res.status(status).json({ error });
+  };
   if (!name || !folderPath)
-    return res.status(400).json({ error: "name and folderPath are required" });
+    return rejectUpload(400, "name and folderPath are required");
   if (!isSafeFolderPath(folderPath)) {
-    if (req.file.path) try { fs.unlinkSync(req.file.path); } catch {}
-    return res.status(400).json({ error: "Недопустимый путь к папке" });
+    return rejectUpload(400, "Недопустимый путь к папке");
+  }
+  try {
+    if (fs.existsSync(folderPath) && (!fs.statSync(folderPath).isDirectory() || fs.readdirSync(folderPath).length > 0)) {
+      return rejectUpload(409, "Для импорта нужна новая или пустая папка — существующие данные не заменяются");
+    }
+  } catch {
+    return rejectUpload(400, "Не удалось проверить папку импорта");
   }
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "rpg-import-"));
-  const uploadedPath = (req.file as Express.Multer.File & { path?: string }).path ?? null;
   try {
     const MAX_ENTRIES = 10000;
     const MAX_TOTAL_UNCOMPRESSED = 1024 * 1024 * 1024; // 1GB
@@ -163,7 +186,7 @@ storagesRouter.post("/import-backup", upload.single("file"), (req, res) => {
       }
       // Симлинки в zip имеют спец атрибут; AdmZip их распакует как файл-линк
       // Проверим после распаковки lstat'ом, но и здесь отсечём по externalFileAttributes
-      const isSymlink = (entry.header.attr >>> 16) === 0o120000;
+      const isSymlink = ((entry.header.attr >>> 16) & 0o170000) === 0o120000;
       if (isSymlink) {
         return res.status(400).json({ error: `Симлинк в архиве запрещён: ${entry.entryName}` });
       }
@@ -198,17 +221,19 @@ storagesRouter.post("/import-backup", upload.single("file"), (req, res) => {
 
     const dbDir = path.join(folderPath, "data");
     const vaultRoot = path.join(folderPath, "RPG-Vault");
-    fs.mkdirSync(dbDir, { recursive: true });
-    fs.copyFileSync(extractedDb, path.join(dbDir, "app.db"));
+    // Validate/migrate before touching the destination. In particular, a bad
+    // database must not replace another storage's working app.db.
+    inStorageVault(extractedVault, () => openDatabase(tmpDir).close());
+    fs.mkdirSync(folderPath, { recursive: true });
+    fs.mkdirSync(dbDir);
+    fs.mkdirSync(vaultRoot);
+    fs.copyFileSync(extractedDb, path.join(dbDir, "app.db"), fs.constants.COPYFILE_EXCL);
 
     if (fs.existsSync(extractedVault)) {
-      fs.cpSync(extractedVault, vaultRoot, { recursive: true });
+      fs.cpSync(extractedVault, vaultRoot, { recursive: true, force: false, errorOnExist: true });
     } else {
       initVaultAt(vaultRoot);
     }
-
-    // Make sure the imported DB is already on the current schema version.
-    openDatabase(dbDir).close();
 
     const profile = addStorage(name, dbDir, vaultRoot);
     res.status(201).json(profile);

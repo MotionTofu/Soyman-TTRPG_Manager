@@ -1,8 +1,9 @@
 import fs from "fs";
 import path from "path";
-import { execFile } from "child_process";
+import childProcess from "node:child_process";
 import { resizeImageBuffer, type ImageSizePreset } from "./imageResize";
 import { storeDeduped } from "./vaultDedup";
+import { assertPathInside } from "./pathSafety";
 
 export let VAULT_ROOT = process.env.VAULT_ROOT || "E:\\RPG-Vault";
 
@@ -15,6 +16,14 @@ export let VAULT_ROOT = process.env.VAULT_ROOT || "E:\\RPG-Vault";
 // is not copied into the vault) pass through unchanged.
 export function vaultAbs(p: string): string {
   return path.isAbsolute(p) ? p : path.join(VAULT_ROOT, p);
+}
+
+export function assertVaultPath(p: string, allowRoot = false): string {
+  return assertPathInside(VAULT_ROOT, vaultAbs(p), allowRoot);
+}
+
+export function isVaultPath(p: string, allowRoot = false): boolean {
+  try { assertVaultPath(p, allowRoot); return true; } catch { return false; }
 }
 
 export function vaultRel(p: string): string {
@@ -62,7 +71,7 @@ function freshDir(base: string, name: string): string {
   for (let n = 2; fs.existsSync(candidate); n++) {
     candidate = path.join(absBase, `${safe}-${n}`);
   }
-  return ensureDir(candidate);
+  return ensureDir(assertVaultPath(candidate));
 }
 
 // Factored out of initVault() so a new/imported storage's folder structure
@@ -167,7 +176,7 @@ export function knowledgeFolder(systemName: string): string {
 }
 
 export function ensureSubfolder(basePath: string, sub: string): string {
-  return vaultRel(ensureDir(path.join(vaultAbs(basePath), sub)));
+  return vaultRel(ensureDir(assertVaultPath(path.join(vaultAbs(basePath), sub))));
 }
 
 // Куда ложится собственное изображение записи компендиума — по разделу, к
@@ -222,11 +231,7 @@ export function readFileAsBase64(
 // files. Returns the resulting relative path (goes straight into the DB).
 export async function writeBase64File(folder: string, filename: string, base64: string): Promise<string> {
   const target = path.join(vaultAbs(folder), sanitizeName(filename));
-  const root = path.resolve(VAULT_ROOT);
-  const resolved = path.resolve(target);
-  if (resolved === root || !resolved.startsWith(root + path.sep)) {
-    throw new Error(`Refusing to write outside vault: ${folder}/${filename}`);
-  }
+  assertVaultPath(target);
   await storeDeduped(Buffer.from(base64, "base64"), target);
   return vaultRel(target);
 }
@@ -245,23 +250,18 @@ export async function writeReplacingOldFile(
   oldPath: string | null | undefined,
   resize?: ImageSizePreset
 ): Promise<void> {
-  const absNew = vaultAbs(newPath);
-  // C-P1-6: путь обязан лежать внутри VAULT_ROOT, иначе — испорченная запись БД (../../Windows)
-  const root = path.resolve(VAULT_ROOT);
-  const resolvedNew = path.resolve(absNew);
-  if (resolvedNew === root || !resolvedNew.startsWith(root + path.sep)) {
-    throw new Error(`Refusing to write outside vault: ${newPath}`);
-  }
+  const absNew = assertVaultPath(newPath);
+  const finalBuffer = resize ? await resizeImageBuffer(buffer, resize) : buffer;
+  await storeDeduped(finalBuffer, absNew);
   const absOld = oldPath ? vaultAbs(oldPath) : null;
-  if (absOld && absOld !== absNew && fs.existsSync(absOld)) {
+  if (absOld && isVaultPath(absOld) && fs.existsSync(absOld) &&
+      path.relative(fs.realpathSync(absOld), fs.realpathSync(absNew)) !== "") {
     try {
       fs.unlinkSync(absOld);
     } catch (err) {
       console.error(`Failed to remove old file ${absOld}:`, err);
     }
   }
-  const finalBuffer = resize ? await resizeImageBuffer(buffer, resize) : buffer;
-  await storeDeduped(finalBuffer, absNew);
 }
 
 // Reveals `target` in the OS file explorer — either the file itself
@@ -269,16 +269,19 @@ export async function writeReplacingOldFile(
 // folder itself. Runs on the same machine as the vault, so shelling out
 // locally is safe here — this is a desktop tool, not a public server.
 // Accepts a stored (relative) path; resolves inside.
-export function openInFileExplorer(target: string, selectFile: boolean): void {
-  const abs = vaultAbs(target);
+export function openInFileExplorer(target: string, selectFile: boolean, allowExternalResource = false): void {
+  // External audio/folder resources are an explicit read-only exception.
+  const abs = allowExternalResource && path.isAbsolute(target)
+    ? path.resolve(target) : assertVaultPath(target, true);
+  if (!selectFile && !fs.statSync(abs).isDirectory()) throw new Error("Expected a directory to reveal");
   if (process.platform === "win32") {
-    execFile("explorer.exe", [selectFile ? `/select,${abs}` : abs], () => {
+    childProcess.execFile("explorer.exe", [selectFile ? `/select,${abs}` : abs], () => {
       // explorer.exe returns a non-zero exit code even on success — ignore.
     });
   } else if (process.platform === "darwin") {
-    execFile("open", selectFile ? ["-R", abs] : [abs], () => {});
+    childProcess.execFile("open", selectFile ? ["-R", abs] : [abs], () => {});
   } else {
-    execFile("xdg-open", [selectFile ? path.dirname(abs) : abs], () => {});
+    childProcess.execFile("xdg-open", [selectFile ? path.dirname(abs) : abs], () => {});
   }
 }
 
@@ -311,9 +314,8 @@ export function toFileUrl(storedPath: string): string {
 // Accepts a stored (relative) path.
 export function deleteVaultFolder(folderPath: string | null | undefined): void {
   if (!folderPath) return;
-  const resolved = path.resolve(vaultAbs(folderPath));
-  const root = path.resolve(VAULT_ROOT);
-  if (resolved === root || !resolved.startsWith(root + path.sep)) return;
+  if (!isVaultPath(folderPath)) return;
+  const resolved = assertVaultPath(folderPath);
   try {
     fs.rmSync(resolved, { recursive: true, force: true });
   } catch (err) {

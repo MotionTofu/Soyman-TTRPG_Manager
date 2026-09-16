@@ -1,16 +1,5 @@
 import crypto from "crypto";
-import fs from "fs";
-import path from "path";
-
-function getSecret(): string {
-  if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
-  try {
-    const configDir = process.env.CONFIG_DIR || path.join(__dirname, "..", "..", "config");
-    const p = path.join(configDir, "jwt-secret");
-    if (fs.existsSync(p)) return fs.readFileSync(p, "utf-8").trim();
-  } catch {}
-  return "fallback-signed-url-secret";
-}
+import { getSigningSecret } from "./signingSecret";
 
 function normalizeBase(p: string): string {
   // Каноническая форма для HMAC — декодированная (файловая) форма.
@@ -41,7 +30,7 @@ export function signPath(filePath: string, ttlSec = 60): string {
   const normalized = normalizeBase(base);
   const exp = Math.floor(Date.now() / 1000) + ttlSec;
   const data = `${normalized}|${exp}`;
-  const sig = crypto.createHmac("sha256", getSecret()).update(data).digest("hex");
+  const sig = crypto.createHmac("sha256", getSigningSecret()).update(data).digest("hex");
   const encodedBase = encodeBase(normalized);
   if (existingQs) return `${encodedBase}?${existingQs}&sig=${sig}&exp=${exp}`;
   return `${encodedBase}?sig=${sig}&exp=${exp}`;
@@ -53,7 +42,7 @@ export function verifySignedUrl(filePath: string, sig: string, exp: string): boo
   const expNum = Number(exp);
   if (!Number.isFinite(expNum) || expNum < Math.floor(Date.now() / 1000)) return false;
   const data = `${base}|${expNum}`;
-  const expected = crypto.createHmac("sha256", getSecret()).update(data).digest("hex");
+  const expected = crypto.createHmac("sha256", getSigningSecret()).update(data).digest("hex");
   try {
     return crypto.timingSafeEqual(Buffer.from(sig, "hex"), Buffer.from(expected, "hex"));
   } catch {

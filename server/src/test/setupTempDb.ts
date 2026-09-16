@@ -29,6 +29,8 @@ const vaultRoot = path.join(tmpRoot, "vault");
 // проверить наличие файла на диске.
 process.env.DB_DIR = dbDir;
 process.env.VAULT_ROOT = vaultRoot;
+// Auth и реестр хранилищ тоже не должны писать в рабочую конфигурацию.
+process.env.CONFIG_DIR = path.join(tmpRoot, "config");
 
 setVaultRoot(vaultRoot);
 initDatabase(dbDir);

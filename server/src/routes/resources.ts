@@ -346,7 +346,7 @@ resourcesRouter.post("/:id/reveal", (req, res) => {
     row.file_path || (row.category === "folder" && row.link_url && LOCAL_PATH.test(row.link_url) ? row.link_url : null);
   if (!target) return res.status(400).json({ error: "no local path to reveal" });
 
-  openInFileExplorer(target, !!row.file_path);
+  openInFileExplorer(target, !!row.file_path, true);
   res.json({ ok: true });
 });
 

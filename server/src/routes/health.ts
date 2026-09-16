@@ -11,7 +11,7 @@ import {
   restoreLastOrphanBackup,
   countOrphans as countOrphansFromRegistry,
 } from "../services/orphans";
-import { openInFileExplorer } from "../services/filesystem";
+import { openInFileExplorer, isVaultPath } from "../services/filesystem";
 import rateLimit from "express-rate-limit";
 import { MENTIONABLE, mentionTextColumns, scanMentions, exists, rewriteAllMentions, idOfUid, normUid, rewriteMentions, prefixOf, sourceCodeOf, formatRef, type Mention, type RefMention, type LegacyMention } from "../services/mentions";
 
@@ -1064,8 +1064,7 @@ healthRouter.post("/relink", (req, res) => {
   const abs = path.isAbsolute(new_path) ? path.resolve(new_path) : vaultAbs(new_path);
   const resolved = path.resolve(abs);
   if (!path.isAbsolute(new_path)) {
-    const root = path.resolve(VAULT_ROOT);
-    if (resolved !== root && !resolved.startsWith(root + path.sep)) return res.status(400).json({ error: "path outside vault" });
+    if (!isVaultPath(resolved)) return res.status(400).json({ error: "path outside vault" });
   }
   if (!fs.existsSync(resolved)) return res.status(400).json({ error: "файл не найден: " + new_path });
   relinkResource(resource_id, new_path);
@@ -1093,15 +1092,11 @@ healthRouter.post("/path/clear", (req, res) => {
 // POST /api/health/open-folder — открыть папку в проводнике (C-P0-4: только в Electron, case-insensitive на Windows)
 healthRouter.post("/open-folder", (req, res) => {
   const { path: relPath } = req.body as { path?: string };
-  if (!relPath) return res.status(400).json({ error: "path required" });
+  if (typeof relPath !== "string" || !relPath) return res.status(400).json({ error: "path required" });
   // Защита: только внутри vault (case-insensitive на Windows)
   const abs = vaultAbs(relPath);
   const resolved = path.resolve(abs);
-  const root = path.resolve(VAULT_ROOT);
-  const isWin = process.platform === "win32";
-  const normResolved = isWin ? resolved.toLowerCase() : resolved;
-  const normRoot = isWin ? root.toLowerCase() : root;
-  if (normResolved !== normRoot && !normResolved.startsWith(normRoot + path.sep.toLowerCase())) {
+  if (!isVaultPath(resolved, true)) {
     return res.status(400).json({ error: "path outside vault" });
   }
   try {
@@ -1121,6 +1116,7 @@ healthRouter.post("/orphan/archive", (req, res) => {
   if (paths.length > 100) return res.status(400).json({ error: "too many paths (max 100)" });
   const day = new Date().toISOString().slice(0, 10);
   const archiveBase = path.join(VAULT_ROOT, "_Archive", "orphans", day);
+  if (!isVaultPath(archiveBase)) return res.status(400).json({ error: "archive outside vault" });
   try { fs.mkdirSync(archiveBase, { recursive: true }); } catch {}
   let moved = 0;
   const errors: string[] = [];
@@ -1128,8 +1124,7 @@ healthRouter.post("/orphan/archive", (req, res) => {
     if (typeof rel !== "string" || !rel || rel.includes("\0") || rel.includes("..")) { errors.push(rel); continue; }
     const abs = vaultAbs(rel);
     const resolved = path.resolve(abs);
-    const root = path.resolve(VAULT_ROOT);
-    if (resolved === root || !resolved.startsWith(root + path.sep)) { errors.push(rel); continue; }
+    if (!isVaultPath(resolved)) { errors.push(rel); continue; }
     if (resolved.toLowerCase().includes(path.join("_archive").toLowerCase())) { errors.push(rel); continue; }
     if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) { errors.push(rel); continue; }
     const base = sanitizeName(path.basename(resolved));
@@ -1155,8 +1150,7 @@ healthRouter.post("/orphan/create-resources", (req, res) => {
     if (typeof rel !== "string" || !rel || rel.includes("\0") || rel.includes("..")) continue;
     const abs = vaultAbs(rel);
     const resolved = path.resolve(abs);
-    const root = path.resolve(VAULT_ROOT);
-    if (resolved === root || !resolved.startsWith(root + path.sep)) continue;
+    if (!isVaultPath(resolved)) continue;
     if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) continue;
     const base = path.basename(rel);
     const name = base.replace(/\.[^.]+$/, "") || base;
@@ -1182,8 +1176,7 @@ healthRouter.post("/orphan/attach", (req, res) => {
   if (typeof orphanPath !== "string" || orphanPath.includes("\0") || orphanPath.includes("..")) return res.status(400).json({ error: "invalid orphanPath" });
   const abs = vaultAbs(orphanPath);
   const resolved = path.resolve(abs);
-  const root = path.resolve(VAULT_ROOT);
-  if (resolved === root || !resolved.startsWith(root + path.sep)) return res.status(400).json({ error: "orphanPath outside vault" });
+  if (!isVaultPath(resolved)) return res.status(400).json({ error: "orphanPath outside vault" });
   if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) return res.status(404).json({ error: "orphan file not found" });
   const tableExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table);
   if (!tableExists) return res.status(404).json({ error: "table not found" });
@@ -1219,8 +1212,7 @@ healthRouter.post("/orphan/attach-batch", (req, res) => {
     if (typeof orphanPath !== "string" || orphanPath.includes("\0") || orphanPath.includes("..")) { errors.push({ orphanPath, error: "invalid orphanPath" }); continue; }
     const abs = vaultAbs(orphanPath);
     const resolved = path.resolve(abs);
-    const root = path.resolve(VAULT_ROOT);
-    if (resolved === root || !resolved.startsWith(root + path.sep)) { errors.push({ orphanPath, error: "outside vault" }); continue; }
+    if (!isVaultPath(resolved)) { errors.push({ orphanPath, error: "outside vault" }); continue; }
     if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) { errors.push({ orphanPath, error: "not found" }); continue; }
     const tableExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table);
     if (!tableExists) { errors.push({ orphanPath, error: "table not found" }); continue; }

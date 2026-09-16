@@ -107,7 +107,7 @@ bootstrapGmAccount();
   }
 }
 
-const app = express();
+export const app = express();
 // Local desktop usage (Electron serving its own built client, or the dev
 // server proxying /api and /files) is always same-origin or has no Origin
 // header at all — always allowed below. A hosted deployment additionally
@@ -447,7 +447,7 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 });
 
 const PORT = process.env.PORT || 3001;
-const httpServer = createServer(app);
+export const httpServer = createServer(app);
 initRealtime(httpServer);
 
 // Electron (electron/main.js) грузит этот файл через require и ждёт именно

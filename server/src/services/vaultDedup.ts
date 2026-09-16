@@ -2,7 +2,7 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { db } from "../db/db";
-import { ensureSubfolder, VAULT_ROOT, vaultAbs, vaultRel } from "./filesystem";
+import { ensureSubfolder, VAULT_ROOT, vaultAbs, vaultRel, assertVaultPath, isVaultPath } from "./filesystem";
 
 // Writes `buffer` to `targetPath`, but if identical bytes were already
 // uploaded somewhere else in the vault, hard-links `targetPath` to that
@@ -16,49 +16,34 @@ export async function storeDeduped(buffer: Buffer, targetPath: string): Promise<
   const hash = crypto.createHash("sha256").update(buffer).digest("hex");
   // БД хранит относительные пути; на диске работаем в абсолютном пространстве.
   const relTarget = vaultRel(targetPath);
-  const absTarget = vaultAbs(targetPath);
+  const absTarget = assertVaultPath(targetPath);
   const existing = db.prepare("SELECT path FROM vault_files WHERE hash = ?").get(hash) as
     | { path: string }
     | undefined;
 
-  // Замена картинки по уже занятому пути начинается с УДАЛЕНИЯ файла, а не с
-  // записи поверх. Дедупликация ниже кладёт по этому пути жёсткую ссылку на
-  // чужие байты (те же байты у портрета статблока и у аватара записи —
-  // обычное дело, их и переносила миграция compendium_entries.avatar_image_path),
-  // а `writeFileSync` пишет В ТОТ ЖЕ inode: у соседней ссылки молча меняется
-  // картинка. Именно так портрет статблока подменялся картинкой плитки.
-  // Удаление рвёт связь: новый файл получает свой inode, соседи целы.
-  // `linkSync` к тому же не умеет писать поверх существующего пути (EEXIST).
-  if (fs.existsSync(absTarget)) {
-    try {
-      fs.unlinkSync(absTarget);
-    } catch (err) {
-      console.error(`Failed to unlink ${absTarget} before write:`, err);
-    }
-    // Запись дедупликации, указывавшая сюда, стала ложной: по этому пути
-    // теперь будут другие байты. Оставить её — значит однажды прилинковать
-    // к чужой картинке по чужому хешу.
-    db.prepare("DELETE FROM vault_files WHERE path = ?").run(relTarget);
-  }
-
   const existingAbs = existing?.path ? vaultAbs(existing.path) : null;
-  const reusable = existing && existing.path !== relTarget && existingAbs && fs.existsSync(existingAbs);
-  if (reusable) {
-    try {
-      fs.linkSync(existingAbs!, absTarget);
-      return;
-    } catch {
-      // Cross-volume, or a filesystem that doesn't support hard links —
-      // fall through to a plain write below.
+  const reusable = existing && existing.path !== relTarget && existingAbs && isVaultPath(existingAbs) && fs.existsSync(existingAbs);
+  // Stage a different inode, then replace the directory entry atomically.
+  // A failed write/rename keeps the original and never changes hard-link peers.
+  const staged = assertVaultPath(path.join(path.dirname(absTarget), `.upload-${crypto.randomUUID()}.tmp`));
+  try {
+    let linked = false;
+    if (reusable) {
+      try { fs.linkSync(existingAbs, staged); linked = true; } catch { /* write a fresh inode below */ }
     }
-  }
-
-  fs.writeFileSync(absTarget, buffer);
-  if (!reusable) {
-    db.prepare(
-      `INSERT INTO vault_files (hash, path, size) VALUES (?, ?, ?)
-       ON CONFLICT(hash) DO UPDATE SET path = excluded.path, size = excluded.size`
-    ).run(hash, relTarget, buffer.length);
+    if (!linked) fs.writeFileSync(staged, buffer, { flag: "wx" });
+    fs.renameSync(staged, absTarget);
+    db.transaction(() => {
+      db.prepare("DELETE FROM vault_files WHERE path = ?").run(relTarget);
+      if (!reusable) {
+        db.prepare(
+          `INSERT INTO vault_files (hash, path, size) VALUES (?, ?, ?)
+           ON CONFLICT(hash) DO UPDATE SET path = excluded.path, size = excluded.size`
+        ).run(hash, relTarget, buffer.length);
+      }
+    })();
+  } finally {
+    if (fs.existsSync(staged)) fs.unlinkSync(staged);
   }
 }
 
@@ -92,9 +77,7 @@ export function removeOrArchive(
   // (находка 10.12). Отказ тихий: вызывающий роут продолжится, а сиротский
   // файл уйдёт в sweepOrphans — это безопаснее, чем трогать чужой путь.
   const abs = vaultAbs(filePath);
-  const resolved = path.resolve(abs);
-  const root = path.resolve(VAULT_ROOT);
-  if (!resolved.startsWith(root + path.sep)) {
+  if (!isVaultPath(abs)) {
     console.error(`removeOrArchive: refused to touch path outside vault: ${filePath}`);
     return { done: true };
   }
@@ -113,6 +96,7 @@ export function removeOrArchive(
 }
 
 export function archiveFile(filePath: string, ownerType: string, ownerId: number, displayName: string): number {
+  filePath = assertVaultPath(filePath);
   const archiveDirAbs = vaultAbs(ensureSubfolder(VAULT_ROOT, "_Archive"));
   const ext = path.extname(filePath);
   const base = path.basename(filePath, ext);
@@ -121,6 +105,7 @@ export function archiveFile(filePath: string, ownerType: string, ownerId: number
     target = path.join(archiveDirAbs, `${base}-${n}${ext}`);
   }
   const size = fs.statSync(filePath).size;
+  assertVaultPath(target);
   fs.renameSync(filePath, target);
   const info = db
     .prepare(

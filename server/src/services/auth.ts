@@ -1,8 +1,6 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import crypto from "crypto";
-import fs from "fs";
-import path from "path";
+import { getSigningSecret } from "./signingSecret";
 import type { NextFunction, Request, Response } from "express";
 import { db } from "../db/db";
 
@@ -14,24 +12,7 @@ import { db } from "../db/db";
 // Same default as storages.ts's CONFIG_DIR — the secret must survive both
 // restarts and storage switches, or every restart would log everyone out.
 // JWT_SECRET env still wins (hosted deployments set it explicitly).
-function loadOrCreateJwtSecret(): string {
-  if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
-  const configDir = process.env.CONFIG_DIR || path.join(__dirname, "..", "..", "config");
-  const secretPath = path.join(configDir, "jwt-secret");
-  try {
-    const existing = fs.readFileSync(secretPath, "utf-8").trim();
-    if (existing) return existing;
-  } catch {
-    /* first run — generate below */
-  }
-  const secret = crypto.randomBytes(32).toString("hex");
-  fs.mkdirSync(configDir, { recursive: true });
-  fs.writeFileSync(secretPath, secret, { mode: 0o600 });
-  try { fs.chmodSync(secretPath, 0o600); } catch {}
-  return secret;
-}
-
-const JWT_SECRET = loadOrCreateJwtSecret();
+const JWT_SECRET = getSigningSecret();
 
 export interface AuthUser {
   id: number;
@@ -142,4 +123,3 @@ export async function bootstrapGmAccount(): Promise<void> {
   ).run(username, passwordHash);
   console.log(`[auth] Bootstrapped gm account "${username}".`);
 }
-
