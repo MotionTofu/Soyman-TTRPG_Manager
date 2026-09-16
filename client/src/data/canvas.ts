@@ -52,6 +52,30 @@ export function canvasStoryAffects(): Affect[] {
   ];
 }
 
+/**
+ * Правка на экране выбора досок (часть 3): свободная доска создана,
+ * переименована, переехала к другому владельцу, ушла в архив. Задет список
+ * досок экрана выбора и список свободных досок мастера «Открыть»; архив — на
+ * своей странице.
+ */
+export function boardIndexAffects(): Affect[] {
+  return [{ path: canvasPaths.index() }, { path: "/canvas/free-boards" }, { path: "/archive" }];
+}
+
+/**
+ * Действие с подписью для плашки: плашка сама начинается с «Не сохранилось:»,
+ * а без подписи Мастер увидел бы только «502 Bad Gateway» и не понял бы, что
+ * именно не вышло. Экран выбора пишет через общий `useAction`, у которого
+ * своей подписи нет.
+ */
+export function labelled<R>(label: string, action: () => Promise<R>): () => Promise<R> {
+  return () =>
+    action().catch((error: unknown) => {
+      const reason = error instanceof Error ? error.message : String(error ?? "");
+      throw new Error(reason ? `${label} — ${reason}` : label);
+    });
+}
+
 // ─── Раскладка ───────────────────────────────────────────────────────────────
 
 /** Одна запись раскладки: путь и тело PUT. */

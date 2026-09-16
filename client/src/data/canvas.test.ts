@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import { dataKeys, matchesAffect } from "./entities";
 import {
   boardLayoutAffects,
+  boardIndexAffects,
   boardObjectAffects,
   canvasStoryAffects,
   createLayoutWriter,
+  labelled,
   mergeLayoutWrite,
   subtractLayoutWrite,
   type LayoutWrite,
@@ -35,6 +37,21 @@ describe("холст: что задевает правка", () => {
     expect(hits(board("/story/checks/97/outcomes"))).toBe(true);
     expect(hits(board("/story/library?setting_id=1"))).toBe(true);
     expect(hits(board("/settings"))).toBe(false);
+  });
+
+  it("правка на экране выбора задевает список досок и «Открыть», но не открытую доску", () => {
+    const affects = boardIndexAffects();
+    const hits = (key: readonly unknown[]) => affects.some((x) => matchesAffect(key, x));
+    expect(hits(board("/canvas/index"))).toBe(true);
+    expect(hits(board("/canvas/free-boards"))).toBe(true);
+    expect(hits(board("/canvas/board?free_id=4"))).toBe(false);
+  });
+
+  it("подпись действия встаёт перед причиной отказа", async () => {
+    await expect(labelled("Новая доска", () => Promise.reject(new Error("502 Bad Gateway")))()).rejects.toThrow(
+      "Новая доска — 502 Bad Gateway"
+    );
+    await expect(labelled("Новая доска", () => Promise.resolve(7))()).resolves.toBe(7);
   });
 
   it("правка сцены или существа на своей странице задевает открытые доски", () => {

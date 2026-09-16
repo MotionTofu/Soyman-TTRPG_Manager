@@ -24,11 +24,11 @@ import { api } from "../api/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { notifyDataChanged } from "../dataSync";
 import { dataKeys, type Affect } from "../data/entities";
-import { useResource, write, afterWrite } from "../data/hooks";
+import { useAction, useResource, write, afterWrite } from "../data/hooks";
 import { readResource } from "../data/imperative";
 import { useFieldDraft } from "../data/fieldDraft";
 import { dismissNotice, showSaveError } from "../data/notices";
-import { boardLayoutAffects, boardObjectAffects, canvasPaths, canvasStoryAffects, createLayoutWriter, type LayoutWrite } from "../data/canvas";
+import { boardIndexAffects, boardLayoutAffects, boardObjectAffects, canvasPaths, canvasStoryAffects, createLayoutWriter, labelled, type LayoutWrite } from "../data/canvas";
 import { SectionHeading } from "../components/SectionHeading";
 import { SectionBackground } from "../components/SectionBackground";
 import { EditableTextCard } from "../components/EditableTextCard";
@@ -1730,16 +1730,10 @@ function AddSettingArcButton({ campaignId, onAdded }: { campaignId: number; onAd
   // Место меню берётся у кнопки: `ContextMenu` позиционируется fixed, и без
   // якоря он лёг бы в угол экрана, а не под кнопкой.
   const [open, setOpen] = useState<{ x: number; y: number } | null>(null);
-  const [items, setItems] = useState<{ id: number; name: string; scene_count: number }[] | null>(null);
-
-  useEffect(() => {
-    api
-      .get<{ id: number; name: string; scene_count: number }[]>(
-        `/story/campaign-adventures/available?campaign_id=${campaignId}`
-      )
-      .then(setItems)
-      .catch(() => setItems([]));
-  }, [campaignId]);
+  const run = useAction();
+  const items = useResource<{ id: number; name: string; scene_count: number }[]>(
+    `/story/campaign-adventures/available?campaign_id=${campaignId}`
+  ).data;
 
   if (!items || items.length === 0) return null;
   return (
@@ -1760,9 +1754,16 @@ function AddSettingArcButton({ campaignId, onAdded }: { campaignId: number; onAd
           items={items.map((it) => ({
             label: `${it.name} · ${it.scene_count} ${plural(it.scene_count, "сцена", "сцены", "сцен")}`,
             onClick: async () => {
-              await api.post("/story/campaign-adventures", { campaign_id: campaignId, arc_id: it.id });
-              setItems((cur) => (cur ?? []).filter((x) => x.id !== it.id));
-              onAdded();
+              // Приключение ушло из «доступных», легло на карту кампании и в её
+              // карточку — всё это задето; карта перечитывается сама.
+              const done = await run(
+                labelled("Приключение в кампанию", () => write.post("/story/campaign-adventures", { campaign_id: campaignId, arc_id: it.id })),
+                {
+                  affects: [{ path: "/story/campaign-adventures" }, { kind: "campaign", id: campaignId }, { path: "/canvas" }],
+                  retry: false,
+                }
+              );
+              if (done !== undefined) onAdded();
             },
           }))}
           onClose={() => setOpen(null)}
@@ -1790,23 +1791,23 @@ function BoardTile({
   settings,
   campaigns,
   onOpen,
-  onChanged,
 }: {
   board: FreeBoard;
   settings: { id: number; name: string }[];
   campaigns: { id: number; name: string }[];
   onOpen: () => void;
-  onChanged: () => void;
 }) {
   const [confirmDialog, confirm] = useConfirm();
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
+  const run = useAction();
   const title = board.name || "Без имени";
   const count = `${board.nodes} ${plural(board.nodes, "объект", "объекта", "объектов")}`;
 
   async function move(owner_type: string | null, owner_id: number | null) {
-    await api.put(`/canvas/free-boards/${board.scope_id}/owner`, { owner_type, owner_id });
-    onChanged();
+    await run(labelled("Перенос доски", () => write.put(`/canvas/free-boards/${board.scope_id}/owner`, { owner_type, owner_id })), {
+      affects: boardIndexAffects(),
+    });
   }
 
   async function archive() {
@@ -1814,8 +1815,7 @@ function BoardTile({
     // «Удалить» здесь означает «в архив», откуда доска возвращается целиком.
     if (!(await confirm({ message: `Убрать доску «${title}» в архив? На ней ${count}. Вернуть можно в разделе «Архив».`, confirmLabel: "Архивировать", danger: true })))
       return;
-    await api.del(`/canvas/free-boards/${board.scope_id}`);
-    onChanged();
+    await run(labelled("Доска в архив", () => write.del(`/canvas/free-boards/${board.scope_id}`)), { affects: boardIndexAffects() });
   }
 
   const items: ContextMenuItem[] = [
@@ -1876,9 +1876,13 @@ function BoardTile({
             e.preventDefault();
             const name = renaming.trim();
             if (!name) return;
-            await api.put(`/canvas/free-boards/${board.scope_id}`, { name });
-            setRenaming(null);
-            onChanged();
+            // Форма закрывается только после записи: при отказе набранное
+            // остаётся на месте, а рядом встаёт плашка.
+            const done = await run(
+              labelled("Имя доски", () => write.put(`/canvas/free-boards/${board.scope_id}`, { name }).then(() => true)),
+              { affects: boardIndexAffects() }
+            );
+            if (done) setRenaming(null);
           }}
         >
           <input
@@ -1936,6 +1940,7 @@ function GroupAdd({
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const run = useAction();
   const label = ownerType === "campaign" ? "Приключение кампании" : "Приключение";
 
   function open(kind: "arc" | "board") {
@@ -1953,11 +1958,15 @@ function GroupAdd({
     if (!value || busy) return;
     setBusy(true);
     try {
-      const created = await api.post<{ scope_id: number }>("/canvas/free-boards", {
-        name: value,
-        owner_type: ownerType,
-        owner_id: ownerId,
-      });
+      // Создание повтора не предлагает: ответ мог потеряться после записи, и
+      // повтор завёл бы вторую доску. Форма при отказе остаётся с набранным.
+      const created = await run(
+        labelled("Новая доска", () =>
+          write.post<{ scope_id: number }>("/canvas/free-boards", { name: value, owner_type: ownerType, owner_id: ownerId })
+        ),
+        { affects: boardIndexAffects(), retry: false }
+      );
+      if (!created) return;
       setForm(null);
       onCreatedBoard(created.scope_id);
     } finally {
@@ -5161,7 +5170,13 @@ export function CanvasPage() {
     if (!name || creatingBoard) return;
     setCreatingBoard(true);
     try {
-      const created = await api.post<{ id: number; scope_id: number; name: string }>("/canvas/free-boards", { name });
+      // Раньше отказ здесь не показывался вовсе: форма оставалась открытой, и
+      // только по тому, что доска не открылась, можно было догадаться.
+      const created = await boardAction(
+        () => write.post<{ id: number; scope_id: number; name: string }>("/canvas/free-boards", { name }),
+        { retry: false, failure: "Новая доска", affects: boardIndexAffects() }
+      );
+      if (!created) return;
       setNewBoardName(null);
       setSearchParams({ free_id: String(created.scope_id) });
     } finally {
@@ -5768,7 +5783,6 @@ export function CanvasPage() {
                         settings={index?.all_settings ?? []}
                         campaigns={index?.campaigns ?? []}
                         onOpen={() => setSearchParams({ free_id: String(b.scope_id) })}
-                        onChanged={reloadIndex}
                       />
                     ))}
                   </div>
@@ -5808,7 +5822,6 @@ export function CanvasPage() {
                         settings={index?.all_settings ?? []}
                         campaigns={index?.campaigns ?? []}
                         onOpen={() => setSearchParams({ free_id: String(b.scope_id) })}
-                        onChanged={reloadIndex}
                       />
                     ))}
                     {st.adventures.map((a) => (
@@ -5871,7 +5884,6 @@ export function CanvasPage() {
                     settings={index?.all_settings ?? []}
                     campaigns={index?.campaigns ?? []}
                     onOpen={() => setSearchParams({ free_id: String(b.scope_id) })}
-                    onChanged={reloadIndex}
                   />
                 ))}
                 {index && ownerlessBoards.length === 0 && <p className="muted">Ничьих досок нет — «+ Доска» заведёт пустое полотно без сеттинга (сохраняется само).</p>}
@@ -5939,19 +5951,11 @@ function CanvasWizard({ settings, arcs, onClose, onCreated }: { settings: Settin
   const [parentArc, setParentArc] = useState<number | "">("");
   const [parentChapter, setParentChapter] = useState<number | "">("");
   const [name, setName] = useState("");
-  const [wizardArcs, setWizardArcs] = useState<StoryArc[]>(arcs);
-  useEffect(() => {
-    if (settingId === "free") {
-      setWizardArcs([]);
-      return;
-    }
-    const same = arcs.length > 0 && arcs[0] ? arcs[0].setting_id === settingId : false;
-    if (same) {
-      setWizardArcs(arcs);
-      return;
-    }
-    api.get<StoryArc[]>(`/story/arcs?setting_id=${settingId as number}`).then(setWizardArcs);
-  }, [settingId, arcs]);
+  const [busy, setBusy] = useState(false);
+  const run = useAction();
+  // Приключения выбранного сеттинга — слоем, под тем же ключом, что у страницы:
+  // тот же сеттинг второй раз не спрашивается.
+  const wizardArcs = useResource<StoryArc[]>(settingId === "free" ? null : `/story/arcs?setting_id=${settingId}`).data ?? arcs.filter((a) => a.setting_id === settingId);
   const canNext = step === 1 ? !!entityKind : step === 2 ? (entityKind === "free" || settingId !== "free") : !!name.trim();
   return (
     <div className="modal-overlay" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 20 }} onClick={onClose}>
@@ -5990,6 +5994,7 @@ function CanvasWizard({ settings, arcs, onClose, onCreated }: { settings: Settin
             <button
               className="primary"
               disabled={
+                busy ||
                 !name.trim() ||
                 (entityKind !== "free" && !settingId) ||
                 (entityKind !== "free" && settingId === "free") ||
@@ -6008,24 +6013,34 @@ function CanvasWizard({ settings, arcs, onClose, onCreated }: { settings: Settin
                   : undefined
               }
               onClick={async () => {
-                if (entityKind === "free") {
-                  const created = await api.post<{ scope_id: number }>("/canvas/free-boards", { name: name.trim() });
-                  onCreated({ free_id: created.scope_id });
-                } else if (entityKind === "adventure") {
-                  const sid = Number(settingId);
-                  if (!sid) return;
-                  const created = await api.post<{ id: number }>("/story/arcs", { setting_id: sid, name: name.trim(), kind: "adventure" });
-                  onCreated({ setting_id: sid, arc_id: created.id });
-                } else if (entityKind === "chapter") {
-                  const pid = Number(parentArc);
-                  if (!pid) return;
-                  const created = await api.post<{ id: number }>("/story/arcs", { setting_id: Number(settingId), parent_id: pid, name: name.trim(), kind: "chapter" });
-                  onCreated({ setting_id: Number(settingId), arc_id: pid, chapter_id: created.id });
-                } else {
-                  const arc = Number(parentChapter || parentArc);
-                  if (!arc) return;
-                  await api.post<{ id: number }>("/story/scenes", { setting_id: Number(settingId), arc_id: arc, name: name.trim() });
-                  onCreated({ setting_id: Number(settingId), arc_id: arc });
+                // Мастер при отказе не закрывается: набранное остаётся, рядом
+                // плашка. Повтора нет — это создание.
+                if (busy) return;
+                setBusy(true);
+                const create = <R,>(what: string, action: () => Promise<R>, affects: Affect[]) =>
+                  run(labelled(what, action), { affects, retry: false });
+                try {
+                  if (entityKind === "free") {
+                    const created = await create("Новая доска", () => write.post<{ scope_id: number }>("/canvas/free-boards", { name: name.trim() }), boardIndexAffects());
+                    if (created) onCreated({ free_id: created.scope_id });
+                  } else if (entityKind === "adventure") {
+                    const sid = Number(settingId);
+                    if (!sid) return;
+                    const created = await create("Новое приключение", () => write.post<{ id: number }>("/story/arcs", { setting_id: sid, name: name.trim(), kind: "adventure" }), canvasStoryAffects());
+                    if (created) onCreated({ setting_id: sid, arc_id: created.id });
+                  } else if (entityKind === "chapter") {
+                    const pid = Number(parentArc);
+                    if (!pid) return;
+                    const created = await create("Новая глава", () => write.post<{ id: number }>("/story/arcs", { setting_id: Number(settingId), parent_id: pid, name: name.trim(), kind: "chapter" }), canvasStoryAffects());
+                    if (created) onCreated({ setting_id: Number(settingId), arc_id: pid, chapter_id: created.id });
+                  } else {
+                    const arc = Number(parentChapter || parentArc);
+                    if (!arc) return;
+                    const created = await create("Новая сцена", () => write.post<{ id: number }>("/story/scenes", { setting_id: Number(settingId), arc_id: arc, name: name.trim() }), canvasStoryAffects());
+                    if (created) onCreated({ setting_id: Number(settingId), arc_id: arc });
+                  }
+                } finally {
+                  setBusy(false);
                 }
               }}
             >
@@ -6042,21 +6057,11 @@ function OpenWizard({ settings, arcs, onClose, onOpen }: { settings: Setting[]; 
   const [settingId, setSettingId] = useState<number | "free" | "">("");
   const [arcId, setArcId] = useState<number | "">("");
   const [chapterId, setChapterId] = useState<number | "">("");
-  const [wizardArcs, setWizardArcs] = useState<StoryArc[]>(arcs);
-  // arcs с родителя — только для его setting; в визарде выбор другой → грузим свежие
-  useEffect(() => {
-    if (settingId === "free" || settingId === "") {
-      setWizardArcs([]);
-      return;
-    }
-    // если совпадает с уже загруженными (страница на том же сеттинге) — не дергаем сеть
-    const sameSetting = arcs.length > 0 && arcs[0] ? arcs[0].setting_id === settingId : false;
-    if (sameSetting) {
-      setWizardArcs(arcs);
-      return;
-    }
-    api.get<StoryArc[]>(`/story/arcs?setting_id=${settingId}`).then(setWizardArcs);
-  }, [settingId, arcs]);
+  // Приключения выбранного сеттинга — слоем: страница на том же сеттинге уже
+  // держит их под этим ключом, и сеть второй раз не спрашивается.
+  const wizardArcs =
+    useResource<StoryArc[]>(settingId === "free" || settingId === "" ? null : `/story/arcs?setting_id=${settingId}`).data ??
+    arcs.filter((a) => a.setting_id === settingId);
   const chapters = wizardArcs.filter((a) => a.parent_id === Number(arcId));
   return (
     <div className="modal-overlay" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 20 }} onClick={onClose}>
@@ -6065,7 +6070,7 @@ function OpenWizard({ settings, arcs, onClose, onOpen }: { settings: Setting[]; 
         <div className="stack">
           <label>Сеттинг <select value={String(settingId)} onChange={(e) => { const v = e.target.value; setSettingId(v === "free" ? "free" : v ? Number(v) : ""); setArcId(""); setChapterId(""); }}><option value="">— выбери —</option><option value="free">Общие (фриформ)</option>{settings.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}</select></label>
           {settingId === "free" ? (
-            <button className="primary" onClick={async () => { const boards = await api.get<{ scope_id: number; name: string }[]>("/canvas/free-boards"); const first = boards[0]; if (first) onOpen({ free_id: first.scope_id }); else onClose(); }}>Открыть первую фриформ</button>
+            <button className="primary" onClick={async () => { const boards = await readResource<{ scope_id: number; name: string }[]>("/canvas/free-boards", { fresh: true }); const first = boards[0]; if (first) onOpen({ free_id: first.scope_id }); else onClose(); }}>Открыть первую фриформ</button>
           ) : (
             <>
               <label>Приключение <select value={arcId} onChange={(e) => { setArcId(e.target.value ? Number(e.target.value) : ""); setChapterId(""); }} disabled={!settingId}><option value="">— приключение —</option>{wizardArcs.filter((a) => !a.parent_id).map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}</select></label>
