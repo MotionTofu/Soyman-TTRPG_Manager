@@ -3,6 +3,7 @@ import { dataKeys, matchesAffect } from "./entities";
 import {
   boardLayoutAffects,
   boardObjectAffects,
+  canvasStoryAffects,
   createLayoutWriter,
   mergeLayoutWrite,
   subtractLayoutWrite,
@@ -23,6 +24,17 @@ describe("холст: что задевает правка", () => {
   it("объект доски задевает и экран выбора", () => {
     const affects = boardObjectAffects("/canvas/board?free_id=4");
     expect(affects.some((a) => matchesAffect(board("/canvas/index"), a))).toBe(true);
+  });
+
+  it("правка сюжета с холста задевает доску, пульт, панель проверки и полку", () => {
+    const affects = canvasStoryAffects();
+    const hits = (key: readonly unknown[]) => affects.some((a) => matchesAffect(key, a));
+    expect(hits(board("/canvas/board?arc_id=27"))).toBe(true);
+    expect(hits(board("/sessions/104/stage"))).toBe(true);
+    expect(hits(board("/story/scenes/114/cast"))).toBe(true);
+    expect(hits(board("/story/checks/97/outcomes"))).toBe(true);
+    expect(hits(board("/story/library?setting_id=1"))).toBe(true);
+    expect(hits(board("/settings"))).toBe(false);
   });
 
   it("правка сцены или существа на своей странице задевает открытые доски", () => {

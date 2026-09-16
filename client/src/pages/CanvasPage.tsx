@@ -28,7 +28,7 @@ import { useResource, write, afterWrite } from "../data/hooks";
 import { readResource } from "../data/imperative";
 import { useFieldDraft } from "../data/fieldDraft";
 import { dismissNotice, showSaveError } from "../data/notices";
-import { boardLayoutAffects, boardObjectAffects, canvasPaths, createLayoutWriter, type LayoutWrite } from "../data/canvas";
+import { boardLayoutAffects, boardObjectAffects, canvasPaths, canvasStoryAffects, createLayoutWriter, type LayoutWrite } from "../data/canvas";
 import { SectionHeading } from "../components/SectionHeading";
 import { SectionBackground } from "../components/SectionBackground";
 import { EditableTextCard } from "../components/EditableTextCard";
@@ -2157,7 +2157,6 @@ export function CanvasPage() {
   // Полка перечитывается по этому счётчику. Без него галочка «на полку» в
   // свойствах меняла базу, а открытая рядом палитра продолжала показывать
   // старый список — и выглядело это как «галочка не сработала».
-  const [shelfVersion, setShelfVersion] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   // Имя новой доски правится на месте, а не в системном prompt(). null — форма
@@ -2295,17 +2294,24 @@ export function CanvasPage() {
    * объект. Возвращает результат или undefined, если не вышло.
    */
   const boardAction = useCallback(
-    async <R,>(
-      action: () => Promise<R>,
-      options?: { retry?: boolean; failure?: string; affects?: readonly Affect[] }
-    ): Promise<R | undefined> => {
+    async <R,>(action: () => Promise<R>, options?: BoardActionOptions): Promise<R | undefined> => {
       const url = boardUrlRef.current;
       const affects: Affect[] = [...(url ? boardObjectAffects(url) : [{ path: "/canvas/board" }]), ...(options?.affects ?? [])];
+      // Правка видна на доске сразу, до ответа сервера (разбор группы «холст»,
+      // Q7): подпись исхода, имя сцены. Отказ возвращает доску как была.
+      const boardKey = url ? dataKeys.resource(url) : null;
+      const before = boardKey && options?.optimistic ? queryClient.getQueryData<CanvasBoard>(boardKey) : undefined;
+      if (boardKey && before && options?.optimistic) {
+        await queryClient.cancelQueries({ queryKey: boardKey });
+        queryClient.setQueryData<CanvasBoard>(boardKey, options.optimistic(before));
+      }
       try {
         const result = await action();
         afterWrite(queryClient, affects);
         return result;
       } catch (error) {
+        if (boardKey && before) queryClient.setQueryData(boardKey, before);
+        options?.onError?.();
         const reason = error instanceof Error ? error.message : String(error ?? "");
         // Плашка сама начинается с «Не сохранилось:» — здесь только что и почему.
         const message = `${options?.failure ?? "Правка на холсте"}${reason ? ` — ${reason}` : ""}`;
@@ -2946,12 +2952,6 @@ export function CanvasPage() {
     };
   }, []);
 
-  // Перерисовать всё, что могло измениться от правки в панели свойств: и
-  // холст, и полку.
-  const refreshAll = useCallback(() => {
-    loadBoard();
-    setShelfVersion((v) => v + 1);
-  }, [loadBoard]);
 
   // Новая рамка выбирается и открывает поле имени сразу (см. createGroup),
   // пин — тем же жестом (П2.8): свежий пин попадает в панель свойств с
@@ -3041,10 +3041,10 @@ export function CanvasPage() {
           if (here) {
             if (want === here.scene.arc_id) continue;
             here.scene.arc_id = want;
-            api.put(`/story/scenes/${sceneId}`, { arc_id: want });
+            void boardAction(() => write.put(`/story/scenes/${sceneId}`, { arc_id: want }), { failure: "Возврат сцены в главу", affects: canvasStoryAffects() });
             moved = true;
           } else if (want != null) {
-            api.put(`/story/scenes/${sceneId}`, { arc_id: want });
+            void boardAction(() => write.put(`/story/scenes/${sceneId}`, { arc_id: want }), { failure: "Возврат сцены в главу", affects: canvasStoryAffects() });
             returned = true;
           }
         }
@@ -3079,7 +3079,7 @@ export function CanvasPage() {
       else setNodes(snap.nodes);
       scheduleSave(snap.nodes);
     },
-    [commitPositions, scheduleSave, setNodes, loadBoard, setBoard, writeLayout]
+    [commitPositions, scheduleSave, setNodes, loadBoard, setBoard, writeLayout, boardAction]
   );
   const pushHistory = useCallback(() => {
     historyRef.current.push(snapshot());
@@ -3113,36 +3113,54 @@ export function CanvasPage() {
       // находим arc_id сцены (из board.nodes или из selectedSceneId)
       const sc = board?.nodes.find((n) => n.node_type === "scene" && n.node_id === selectedSceneId) as { scene?: { arc_id: number | null } } | undefined;
       const targetArc = sc?.scene?.arc_id ?? arcId;
-      const created = await api.post<{ id: number }>("/story/scenes", { setting_id: settingId, arc_id: targetArc, name: name.trim() });
       // ставим рядом: берём позицию выделенной +20,20 и сохраняем
       const sel = nodes.find((n) => n.id === `scene:${selectedSceneId}`);
-      if (sel && board?.board_id) {
-        await api.put("/canvas/board/nodes", { board_id: board.board_id, nodes: [{ node_type: "scene", node_id: created.id, x: Math.round(sel.position.x + 20), y: Math.round(sel.position.y + 20) }] });
-      }
-      loadBoard();
+      const boardId = board?.board_id;
+      const created = await boardAction(
+        async () => {
+          const scene = await write.post<{ id: number }>("/story/scenes", { setting_id: settingId, arc_id: targetArc, name: name.trim() });
+          if (sel && boardId) {
+            await write.put("/canvas/board/nodes", { board_id: boardId, nodes: [{ node_type: "scene", node_id: scene.id, x: Math.round(sel.position.x + 20), y: Math.round(sel.position.y + 20) }] });
+          }
+          return scene;
+        },
+        { retry: false, failure: "Быстрая сцена", affects: canvasStoryAffects() }
+      );
+      if (!created) return;
       setSearchParams({ setting: String(settingId), arc: String(arcId), focus: `scene:${created.id}` });
       return;
     }
     if (arcId) {
       const name = await promptText({ title: "Быстрая сцена", message: "Название сцены", defaultValue: "Новая сцена", confirmLabel: "Создать" });
       if (!name?.trim()) return;
-      const created = await api.post<{ id: number }>("/story/scenes", { setting_id: settingId, arc_id: arcId, name: name.trim() });
-      loadBoard();
+      const created = await boardAction(
+        () => write.post<{ id: number }>("/story/scenes", { setting_id: settingId, arc_id: arcId, name: name.trim() }),
+        { retry: false, failure: "Быстрая сцена", affects: canvasStoryAffects() }
+      );
+      if (!created) return;
       setSearchParams({ setting: String(settingId), arc: String(arcId), focus: `scene:${created.id}` });
       return;
     }
     if (settingId) {
       const name = await promptText({ title: "Быстрое приключение", message: "Название приключения", defaultValue: "Новое приключение", confirmLabel: "Создать" });
       if (!name?.trim()) return;
-      const created = await api.post<{ id: number }>("/story/arcs", { setting_id: settingId, name: name.trim(), kind: "adventure" });
+      const created = await boardAction(
+        () => write.post<{ id: number }>("/story/arcs", { setting_id: settingId, name: name.trim(), kind: "adventure" }),
+        { retry: false, failure: "Быстрое приключение", affects: canvasStoryAffects() }
+      );
+      if (!created) return;
       setSearchParams({ setting: String(settingId), arc: String(created.id) });
       return;
     }
     const name = await promptText({ title: "Быстрая доска", message: "Название доски", defaultValue: `Быстрый ${new Date().toLocaleDateString()}`, confirmLabel: "Создать" });
     if (!name?.trim()) return;
-    const created = await api.post<{ id: number; scope_id: number; name: string }>("/canvas/free-boards", { name: name.trim() });
+    const created = await boardAction(
+      () => write.post<{ id: number; scope_id: number; name: string }>("/canvas/free-boards", { name: name.trim() }),
+      { retry: false, failure: "Быстрая доска" }
+    );
+    if (!created) return;
     setSearchParams({ free_id: String(created.scope_id) });
-  }, [settingId, arcId, selectedSceneId, nodes, board, loadBoard, setSearchParams, promptText]);
+  }, [settingId, arcId, selectedSceneId, nodes, board, boardAction, setSearchParams, promptText]);
 
   /**
    * Кого рамка может забрать себе в дети.
@@ -3587,12 +3605,12 @@ export function CanvasPage() {
           window.clearTimeout(saveTimer.current);
           saveTimer.current = null;
         }
-        void api
-          .put(`/story/scenes/${sceneId}`, { arc_id: target })
-          .then(() => loadBoard())
-          .finally(() => {
-            savePaused.current = false;
-          });
+        void boardAction(() => write.put(`/story/scenes/${sceneId}`, { arc_id: target }), {
+          failure: "Перенос сцены в главу",
+          affects: canvasStoryAffects(),
+        }).finally(() => {
+          savePaused.current = false;
+        });
       } else if (board && node.type !== "check") {
         // Свободная нода запоминает рамку, в которую её бросили (Q11).
         // У сцены и проверки родитель выводится из данных, у остальных выводить
@@ -3634,7 +3652,7 @@ export function CanvasPage() {
         if (parentKey) recomputeFrame(Number(parentKey.split(":")[1]), { include: [node.id], moved: { id: node.id, position: node.position } });
       }
     },
-    [board, commitPositions, recomputeFrame, loadBoard, setBoard, writeLayout]
+    [board, commitPositions, recomputeFrame, setBoard, writeLayout, boardAction]
   );
 
   const onNodesChange = useCallback(
@@ -3673,6 +3691,18 @@ export function CanvasPage() {
       });
     },
     [scheduleSave, board, writeLayout]
+  );
+
+  /**
+   * Запись протянутой связи. Раньше большая часть их при отказе молчала, а две
+   * открывали модальное окно; теперь плашка. Повтора нет: связь — это создание,
+   * и второй раз она легла бы дублем.
+   */
+  const connectAction = useCallback(
+    async (action: () => Promise<unknown>, failure: string) => {
+      await boardAction(action, { retry: false, failure, affects: canvasStoryAffects() });
+    },
+    [boardAction]
   );
 
   // Что означает протянутая стрелка, решает РАЗЪЁМ, в который её воткнули, а
@@ -3719,17 +3749,15 @@ export function CanvasPage() {
           const kin = srcData?.kind ?? "transition";
           const rol = srcData?.role ?? "";
           const childRouteId = isIn ? routeId : inheritedId;
-          try {
-            await api.put(`/canvas/routes/${childRouteId}`, {
-              from_key: `route:${isIn ? inheritedId : routeId}`,
-              kind: kin,
-              role: rol,
-            });
-          } catch (e) {
-            showAlert(`Не удалось связать маршруты: ${e instanceof Error ? e.message : String(e)}`);
-            return;
-          }
-          loadBoard();
+          await connectAction(
+            () =>
+              write.put(`/canvas/routes/${childRouteId}`, {
+                from_key: `route:${isIn ? inheritedId : routeId}`,
+                kind: kin,
+                role: rol,
+              }),
+            "Связь маршрутов"
+          );
           return;
         }
 
@@ -3769,19 +3797,13 @@ export function CanvasPage() {
           // Выход — тот же носитель уходит в сцену, роль сохраняем каст-типа.
           role = prevRole;
         }
-        try {
-          if (isIn) {
-            await api.put(`/canvas/routes/${routeId}`, { from_key: peerKey, kind, role });
-          } else {
-            await api.post(`/canvas/routes/${routeId}/outputs`, { to_key: peerKey, role });
-          }
-          console.log("[reroute] " + (isIn ? "PUT ok" : "POST output ok"), { routeId, peerKey, kind, role });
-        } catch (e) {
-          console.error("[reroute] " + (isIn ? "PUT failed" : "POST output failed"), { routeId, peerKey, kind, role, error: e });
-          showAlert(`Не удалось подвести маршрут: ${e instanceof Error ? e.message : String(e)}`);
-          return;
-        }
-        loadBoard();
+        await connectAction(
+          () =>
+            isIn
+              ? write.put(`/canvas/routes/${routeId}`, { from_key: peerKey, kind, role })
+              : write.post(`/canvas/routes/${routeId}/outputs`, { to_key: peerKey, role }),
+          "Подводка маршрута"
+        );
         return;
       }
 
@@ -3790,61 +3812,67 @@ export function CanvasPage() {
         const m = sourceHandle.match(/^outcome:(\d+)$/);
         const outcomeId = m ? Number(m[1]) : null;
         if (outcomeId) {
-          await api.put(`/story/outcomes/${outcomeId}`, { target_type: "scene", target_id: targetId });
-          loadBoard();
+          await connectAction(
+            () => write.put(`/story/outcomes/${outcomeId}`, { target_type: "scene", target_id: targetId }),
+            "Исход проверки"
+          );
           return;
         }
       }
 
       // Последствие тянут ОТ сцены К событию — единственная связь сцены с
       // таким направлением.
-      if (sourceType === "scene" && (targetType === "setting_event" || targetType === "campaign_event")) {
-        await api.post(`/story/scenes/${sourceId}/cast`, {
-          to_type: targetType,
-          to_id: targetId,
-          role: "consequences",
-        });
-      } else if (targetType === "bundle") {
-        await api.post(`/canvas/bundles/${targetId}/members`, {
-          to_type: sourceType,
-          to_id: sourceId,
-        });
-      } else if (sourceType === "sound_set" && targetType === "scene" && handle === "audio") {
-        await api.put(`/story/scenes/${targetId}/sound-set`, { sound_set_id: sourceId });
-      } else if (sourceType === "playlist" && targetType === "scene" && handle === "battle") {
-        await api.post(`/story/scenes/${targetId}/cast`, { to_type: "playlist", to_id: sourceId, role: "battle" });
-      } else if (sourceType === "scene" && targetType === "check" && handle === "story") {
-        await api.put(`/story/checks/${targetId}`, { scene_id: sourceId });
-        const sceneNode = nodes.find((n) => n.id === `scene:${sourceId}`);
-        if (sceneNode && board?.board_id) {
-          await api.put("/canvas/board/nodes", {
-            board_id: board.board_id,
-            nodes: [{ node_type: "check", node_id: targetId, x: Math.round(sceneNode.position.x + 240), y: Math.round(sceneNode.position.y) }],
+      // Все остальные связи — одна запись, одна перечитка доски и одна плашка
+      // при отказе. Связь, которую рисовать некуда, ничего не пишет.
+      await connectAction(async () => {
+        if (sourceType === "scene" && (targetType === "setting_event" || targetType === "campaign_event")) {
+          await write.post(`/story/scenes/${sourceId}/cast`, {
+            to_type: targetType,
+            to_id: targetId,
+            role: "consequences",
+          });
+        } else if (targetType === "bundle") {
+          await write.post(`/canvas/bundles/${targetId}/members`, {
+            to_type: sourceType,
+            to_id: sourceId,
+          });
+        } else if (sourceType === "sound_set" && targetType === "scene" && handle === "audio") {
+          await write.put(`/story/scenes/${targetId}/sound-set`, { sound_set_id: sourceId });
+        } else if (sourceType === "playlist" && targetType === "scene" && handle === "battle") {
+          await write.post(`/story/scenes/${targetId}/cast`, { to_type: "playlist", to_id: sourceId, role: "battle" });
+        } else if (sourceType === "scene" && targetType === "check" && handle === "story") {
+          await write.put(`/story/checks/${targetId}`, { scene_id: sourceId });
+          const sceneNode = nodes.find((n) => n.id === `scene:${sourceId}`);
+          if (sceneNode && board?.board_id) {
+            await write.put("/canvas/board/nodes", {
+              board_id: board.board_id,
+              nodes: [{ node_type: "check", node_id: targetId, x: Math.round(sceneNode.position.x + 240), y: Math.round(sceneNode.position.y) }],
+            });
+          }
+        } else if (sourceType === "adventure" && targetType === "adventure") {
+          // «Что за чем идёт» на схеме сеттинга (блок D3). Связь приключения с
+          // самим собой смысла не имеет и молча отбрасывается.
+          if (sourceId === targetId) return false;
+          // На карте кампании связь уходит в кампанию: первая же правка снимает
+          // с сеттинга копию всего набора (блок D4), и заготовка остаётся целой.
+          await write.post(`/story/arcs/${sourceId}/transitions`, {
+            to_arc_id: targetId,
+            ...(campaignMapId ? { campaign_id: campaignMapId } : {}),
+          });
+        } else if (handle === "story") {
+          if (sourceType !== "scene" || targetType !== "scene") return false;
+          await write.post(`/story/scenes/${sourceId}/transitions`, { to_scene_id: targetId });
+        } else {
+          await write.post(`/story/scenes/${targetId}/cast`, {
+            to_type: sourceType,
+            to_id: sourceId,
+            role: handle,
           });
         }
-      } else if (sourceType === "adventure" && targetType === "adventure") {
-        // «Что за чем идёт» на схеме сеттинга (блок D3). Связь приключения с
-        // самим собой смысла не имеет и молча отбрасывается.
-        if (sourceId === targetId) return;
-        // На карте кампании связь уходит в кампанию: первая же правка снимает
-        // с сеттинга копию всего набора (блок D4), и заготовка остаётся целой.
-        await api.post(`/story/arcs/${sourceId}/transitions`, {
-          to_arc_id: targetId,
-          ...(campaignMapId ? { campaign_id: campaignMapId } : {}),
-        });
-      } else if (handle === "story") {
-        if (sourceType !== "scene" || targetType !== "scene") return;
-        await api.post(`/story/scenes/${sourceId}/transitions`, { to_scene_id: targetId });
-      } else {
-        await api.post(`/story/scenes/${targetId}/cast`, {
-          to_type: sourceType,
-          to_id: sourceId,
-          role: handle,
-        });
-      }
-      loadBoard();
+        return true;
+      }, "Связь на холсте");
     },
-    [loadBoard, nodes, board, campaignMapId]
+    [nodes, board, campaignMapId, connectAction]
   );
 
   // Удаление ребра значит разное для двух видов. Переход исчезает совсем.
@@ -3853,7 +3881,9 @@ export function CanvasPage() {
   // в яму» не то же самое, что «провала больше нет».
   const onEdgesDelete = useCallback(
     async (removed: Edge[]) => {
-      await Promise.all(
+      await boardAction(
+        () =>
+          Promise.all(
         removed.map((e) => {
           // Сегмент выхода рераута-хаба: ребро `route:<id> → сцена`. Удаление
           // снимает именно этот выход (`DELETE /routes/:id/outputs`) и сам
@@ -3861,32 +3891,34 @@ export function CanvasPage() {
           // (source route → route) не трогаем: они разбираются удалением нод.
           if (e.source.startsWith("route:") && !e.target.startsWith("route:")) {
             const [, rid] = e.source.split(":");
-            return api.del(`/canvas/routes/${rid}/outputs?to_key=${encodeURIComponent(e.target)}`);
+            return write.del(`/canvas/routes/${rid}/outputs?to_key=${encodeURIComponent(e.target)}`);
           }
           const [kind, rawId] = e.id.split(":");
           if (kind === "outcome") {
-            return api.put(`/story/outcomes/${rawId}`, { target_type: null, target_id: null });
+            return write.put(`/story/outcomes/${rawId}`, { target_type: null, target_id: null });
           }
           // Состав и членство в наборе — обычные связи; снимается связь, а
           // нода остаётся на холсте. Обратное («убрал квадратик — выпал из
           // сцены») молча потрошило бы сцены при расчистке схемы.
-          if (kind === "cast") return api.del(`/story/cast/${rawId}`);
-          if (kind === "member") return api.del(`/links/${rawId}`);
-          if (kind === "scene_check") return api.del(`/story/checks/${rawId}`);
-          if (kind === "thread") return api.del(`/canvas/threads/${rawId}`);
+          if (kind === "cast") return write.del(`/story/cast/${rawId}`);
+          if (kind === "member") return write.del(`/links/${rawId}`);
+          if (kind === "scene_check") return write.del(`/story/checks/${rawId}`);
+          if (kind === "thread") return write.del(`/canvas/threads/${rawId}`);
           // Связь между приключениями на схеме сеттинга (блок D3). На карте
           // кампании стирается КАМПАНИЙНАЯ строка, а связь сеттинга остаётся:
           // сервер снимает копию набора, если её ещё не было (блок D4).
           if (kind === "arc-transition")
-            return api.del(
+            return write.del(
               `/story/arc-transitions/${rawId}${campaignMapId ? `?campaign_id=${campaignMapId}` : ""}`
             );
-          return api.del(`/story/transitions/${rawId}`);
+          return write.del(`/story/transitions/${rawId}`);
         })
+          ),
+        // Часть рёбер могла сняться до отказа — повтор упёрся бы в снятое.
+        { retry: false, failure: "Удаление связи", affects: canvasStoryAffects() }
       );
-      loadBoard();
     },
-    [loadBoard, campaignMapId]
+    [boardAction, campaignMapId]
   );
 
   // Позиция ноды берётся из текущего состояния холста, а не из базы: у
@@ -3895,15 +3927,18 @@ export function CanvasPage() {
   const pullCast = useCallback(
     async (sceneId: number) => {
       const node = nodes.find((n) => n.id === `scene:${sceneId}`);
-      await api.post("/canvas/board/pull-cast", {
-        arc_id: arcId,
-        scene_id: sceneId,
-        x: Math.round(node?.position.x ?? 0),
-        y: Math.round(node?.position.y ?? 0),
-      });
-      loadBoard();
+      await boardAction(
+        () =>
+          write.post("/canvas/board/pull-cast", {
+            arc_id: arcId,
+            scene_id: sceneId,
+            x: Math.round(node?.position.x ?? 0),
+            y: Math.round(node?.position.y ?? 0),
+          }),
+        { failure: "Состав сцены на холст" }
+      );
     },
-    [arcId, nodes, loadBoard]
+    [arcId, nodes, boardAction]
   );
   useEffect(() => {
     pullCastRef.current = pullCast;
@@ -3911,10 +3946,12 @@ export function CanvasPage() {
 
   const addCheck = useCallback(
     async (sceneId: number) => {
-      await api.post(`/story/scenes/${sceneId}/checks`, { what: "Проверка", difficulty: "", on_success: "", on_failure: "" });
-      loadBoard();
+      await boardAction(
+        () => write.post(`/story/scenes/${sceneId}/checks`, { what: "Проверка", difficulty: "", on_success: "", on_failure: "" }),
+        { retry: false, failure: "Новая проверка", affects: canvasStoryAffects() }
+      );
     },
-    [loadBoard]
+    [boardAction]
   );
   useEffect(() => {
     addCheckRef.current = addCheck;
@@ -4373,17 +4410,18 @@ export function CanvasPage() {
           ? [
               {
                 label: "Отцепить от входа",
-                onClick: async () => {
-                  await api.put(`/story/outcomes/${rawId}`, { target_type: null, target_id: null });
-                  loadBoard();
-                },
+                onClick: () =>
+                  void boardAction(() => write.put(`/story/outcomes/${rawId}`, { target_type: null, target_id: null }), {
+                    failure: "Отцепить исход",
+                    affects: canvasStoryAffects(),
+                  }),
               } as ContextMenuItem,
             ]
           : []),
       ];
       setContextMenu({ x: event.clientX, y: event.clientY, items });
     },
-    [onEdgesDelete, loadBoard]
+    [onEdgesDelete, boardAction]
   );
 
   const handleNodeDoubleClick = useCallback(
@@ -4677,11 +4715,14 @@ export function CanvasPage() {
           items.push({
             label: "Удалить с ребром",
             danger: true,
-            onClick: async () => {
-              await api.del(`/story/transitions/${row.transition_id}`);
-              await api.del(`/canvas/routes/${id}`);
-              loadBoard();
-            },
+            onClick: () =>
+              void boardAction(
+                async () => {
+                  await write.del(`/story/transitions/${row.transition_id}`);
+                  await write.del(`/canvas/routes/${id}`);
+                },
+                { retry: false, failure: "Удаление маршрута с переходом", affects: canvasStoryAffects() }
+              ),
           });
         }
       }
@@ -5355,12 +5396,9 @@ export function CanvasPage() {
             boardId={board.board_id ?? null}
             boardTarget={boardTarget}
             campaignId={freeId ? null : board.campaign_id ?? null}
-            shelfVersion={shelfVersion}
             onAdded={(sceneId) => {
               // Новая сцена сразу выделяется: её положили под разложенным, и
-              // без выделения Мастер ищет глазами, что именно приехало. Полка
-              // тоже перечитывается — у заготовки меняется счётчик вставок.
-              refreshAll();
+              // без выделения Мастер ищет глазами, что именно приехало.
               if (sceneId != null) setSelectedSceneId(sceneId);
             }}
             onPinCreated={(pinId) => openPinNameEditor(pinId)}
@@ -5394,7 +5432,7 @@ export function CanvasPage() {
             arcId={selectedAdventureId}
             board={board}
             nodes={nodes}
-            onChanged={refreshAll}
+            act={boardAction}
           />
         ) : selectedFrameId != null ? (
           <FrameProperties
@@ -5415,9 +5453,9 @@ export function CanvasPage() {
         ) : selectedStickerId != null ? (
           <StickerProperties stickerId={selectedStickerId} act={boardAction} board={board} />
         ) : selectedCheckId != null ? (
-          <CheckProperties checkId={selectedCheckId} onSaved={refreshAll} board={board} />
+          <CheckProperties checkId={selectedCheckId} act={boardAction} board={board} />
         ) : selectedSceneId != null ? (
-          <SceneProperties sceneId={selectedSceneId} onSaved={refreshAll} board={board} />
+          <SceneProperties sceneId={selectedSceneId} act={boardAction} board={board} />
         ) : null)}
     </div>
   );
@@ -6170,12 +6208,12 @@ function AdventureProperties({
   arcId,
   board,
   nodes,
-  onChanged,
+  act,
 }: {
   arcId: number;
   board: CanvasBoard | null;
   nodes: Node<CanvasNodeData>[];
-  onChanged: () => void;
+  act: BoardAction;
 }) {
   const [confirmDialog, confirm] = useConfirm();
   const node = nodes.find((n) => n.id === `adventure:${arcId}`);
@@ -6210,8 +6248,10 @@ function AdventureProperties({
               onClick={async () => {
                 if (!(await confirm({ message: `Вернуть версию сеттинга для «${data.name}»? Правки, сделанные в кампании, пропадут.`, confirmLabel: "Вернуть", danger: true })))
                   return;
-                await api.del(`/story/arcs/${arcId}/campaign-override?campaign_id=${map.id}`);
-                onChanged();
+                await act(() => write.del(`/story/arcs/${arcId}/campaign-override?campaign_id=${map.id}`), {
+                  failure: "Возврат версии сеттинга",
+                  affects: canvasStoryAffects(),
+                });
               }}
             >
               Вернуть версию сеттинга
@@ -6230,8 +6270,10 @@ function AdventureProperties({
                 onClick={async () => {
                   if (!(await confirm({ message: "Вернуть связи сеттинга? Связи, заведённые в кампании, пропадут.", confirmLabel: "Вернуть", danger: true })))
                     return;
-                  await api.del(`/story/campaigns/${map.id}/arc-transitions`);
-                  onChanged();
+                  await act(() => write.del(`/story/campaigns/${map.id}/arc-transitions`), {
+                    failure: "Возврат связей сеттинга",
+                    affects: canvasStoryAffects(),
+                  });
                 }}
               >
                 Вернуть связи сеттинга
@@ -6250,8 +6292,10 @@ function AdventureProperties({
               onClick={async () => {
                 if (!(await confirm({ message: `Убрать «${data.name}» из кампании? Приключение и весь прогресс по нему останутся — уйдёт только его участие в этой кампании.`, confirmLabel: "Убрать", danger: true })))
                   return;
-                await api.del(`/story/campaign-adventures?campaign_id=${map.id}&arc_id=${arcId}`);
-                onChanged();
+                await act(() => write.del(`/story/campaign-adventures?campaign_id=${map.id}&arc_id=${arcId}`), {
+                  failure: "Приключение из кампании",
+                  affects: [...canvasStoryAffects(), { kind: "campaign", id: map.id }],
+                });
               }}
             >
               Убрать из кампании
@@ -6576,68 +6620,140 @@ function PropsChips({
   );
 }
 
-function CheckProperties({
-  checkId,
-  onSaved,
-  board,
+interface CheckOutcomeRow {
+  id: number;
+  label: string;
+  consequence: string;
+  target_type: string | null;
+  target_id: number | null;
+}
+
+/**
+ * Один исход проверки: подпись, последствие, куда ведёт. Общий для панели
+ * проверки и карточки проверки в панели сцены — раньше это были две копии, и
+ * обе при отказе сервера молчали, а пришедшее значение стирало набранное
+ * (поле пересоздавалось по ключу со значением).
+ */
+function OutcomeEditor({
+  outcome,
+  scenes,
+  excludeSceneId,
+  act,
 }: {
-  checkId: number;
-  onSaved: () => void;
-  board: CanvasBoard | null;
+  outcome: CheckOutcomeRow;
+  scenes: { id: number; name: string }[];
+  excludeSceneId: number;
+  act: BoardAction;
 }) {
-  const [check, setCheck] = useState<{ id: number; what: string; difficulty: string; scene_id: number } | null>(null);
-  const [outcomes, setOutcomes] = useState<{ id: number; label: string; consequence: string; target_type: string | null; target_id: number | null }[]>([]);
+  const label = useFieldDraft(outcome.label);
+  const consequence = useFieldDraft(outcome.consequence);
+  const patch = (body: Record<string, unknown>) =>
+    act(() => write.put(`/story/outcomes/${outcome.id}`, body), {
+      failure: "Исход проверки",
+      affects: canvasStoryAffects(),
+      optimistic: (b) => patchBoardOutcome(b, outcome.id, body),
+    });
+  return (
+    <div className="canvas-outcome">
+      <div className="row" style={{ gap: 6 }}>
+        <input
+          className="canvas-outcome__label"
+          value={label.draft}
+          placeholder="Исход"
+          onChange={(e) => label.setDraft(e.target.value)}
+          onFocus={label.hold}
+          onBlur={() => {
+            label.release();
+            if (label.draft !== outcome.label) void patch({ label: label.draft });
+          }}
+        />
+        <button
+          className="comp-mini"
+          title="Убрать исход"
+          onClick={() =>
+            void act(() => write.del(`/story/outcomes/${outcome.id}`), {
+              retry: false,
+              failure: "Удаление исхода",
+              affects: canvasStoryAffects(),
+            })
+          }
+        >
+          ×
+        </button>
+      </div>
+      <input
+        value={consequence.draft}
+        placeholder="Что при этом происходит"
+        onChange={(e) => consequence.setDraft(e.target.value)}
+        onFocus={consequence.hold}
+        onBlur={() => {
+          consequence.release();
+          if (consequence.draft !== outcome.consequence) void patch({ consequence: consequence.draft });
+        }}
+      />
+      <label className="row" style={{ gap: 6, alignItems: "center" }}>
+        <span className="canvas-props__label">Ведёт в</span>
+        <select
+          value={outcome.target_type === "scene" && outcome.target_id ? String(outcome.target_id) : ""}
+          onChange={(e) =>
+            void patch(
+              e.target.value
+                ? { target_type: "scene", target_id: Number(e.target.value) }
+                : { target_type: null, target_id: null }
+            )
+          }
+        >
+          <option value="">— никуда —</option>
+          {scenes
+            .filter((sc) => sc.id !== excludeSceneId)
+            .map((sc) => (
+              <option key={sc.id} value={sc.id}>
+                {sc.name}
+              </option>
+            ))}
+        </select>
+      </label>
+    </div>
+  );
+}
+
+function CheckProperties({ checkId, act, board }: { checkId: number; act: BoardAction; board: CanvasBoard | null }) {
+  // Проверка и её исходы читаются слоем: исход, поправленный в карточке
+  // проверки на панели сцены или на странице сцены, приходит и сюда.
+  const check = useResource<{ id: number; what: string; difficulty: string; scene_id: number }>(`/story/checks/${checkId}`).data ?? null;
+  const outcomes = useResource<CheckOutcomeRow[]>(`/story/checks/${checkId}/outcomes`).data ?? [];
+  const what = useFieldDraft(check?.what ?? "");
+  const difficulty = useFieldDraft(check?.difficulty ?? "");
   // бортовые сцены для селекта "Ведёт в"
   const scenes = board?.nodes.flatMap((n) => (n.node_type === "scene" ? [n.scene] : [])) ?? [];
-  const refresh = useCallback(async () => {
-    const c = await api.get<{ id: number; what: string; difficulty: string; scene_id: number }>(`/story/checks/${checkId}`);
-    setCheck(c);
-    const o = await api.get<{ id: number; label: string; consequence: string; target_type: string | null; target_id: number | null }[]>(`/story/checks/${checkId}/outcomes`);
-    setOutcomes(o);
-  }, [checkId]);
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-  async function save(patch: Record<string, unknown>) {
-    await api.put(`/story/checks/${checkId}`, patch);
-    await refresh();
-    onSaved();
-  }
+  const save = (patch: Record<string, unknown>) =>
+    act(() => write.put(`/story/checks/${checkId}`, patch), {
+      failure: "Проверка",
+      affects: canvasStoryAffects(),
+      optimistic: (b) => patchBoardCheck(b, checkId, (c) => ({ ...c, ...patch })),
+    });
   if (!check) {
     return <PropsPlaceholder label="Проверка">Загрузка…</PropsPlaceholder>;
   }
   return (
     <PropsPanel
       label="Проверка"
-      aside={<PropsDelete onDelete={async () => { await api.del(`/story/checks/${checkId}`); onSaved(); }} />}
+      aside={<PropsDelete onDelete={async () => { await act(() => write.del(`/story/checks/${checkId}`), { retry: false, failure: "Удаление проверки", affects: canvasStoryAffects() }); }} />}
     >
       <div className="canvas-props__fields">
         <label className="canvas-props__field">
           <span className="canvas-props__label">Что проверяем</span>
-          <input id={`check-what-${check.id}`} name={`check-what-${check.id}`} autoComplete="off" defaultValue={check.what} key={`what-${check.id}-${check.what}`} onBlur={(e) => e.target.value !== check.what && save({ what: e.target.value })} />
+          <input id={`check-what-${check.id}`} name={`check-what-${check.id}`} autoComplete="off" value={what.draft} onChange={(e) => what.setDraft(e.target.value)} onFocus={what.hold} onBlur={() => { what.release(); if (what.draft !== check.what) void save({ what: what.draft }); }} />
         </label>
         <label className="canvas-props__field">
           <span className="canvas-props__label">Сложность</span>
-          <input id={`check-diff-${check.id}`} name={`check-diff-${check.id}`} autoComplete="off" defaultValue={check.difficulty} key={`diff-${check.id}-${check.difficulty}`} onBlur={(e) => e.target.value !== check.difficulty && save({ difficulty: e.target.value })} />
+          <input id={`check-diff-${check.id}`} name={`check-diff-${check.id}`} autoComplete="off" value={difficulty.draft} onChange={(e) => difficulty.setDraft(e.target.value)} onFocus={difficulty.hold} onBlur={() => { difficulty.release(); if (difficulty.draft !== check.difficulty) void save({ difficulty: difficulty.draft }); }} />
         </label>
         <div className="canvas-outcomes">
           {outcomes.map((o) => (
-            <div className="canvas-outcome" key={o.id}>
-              <div className="row" style={{ gap: 6 }}>
-                <input className="canvas-outcome__label" defaultValue={o.label} key={`label-${o.id}-${o.label}`} placeholder="Исход" onBlur={(e) => e.target.value !== o.label && api.put(`/story/outcomes/${o.id}`, { label: e.target.value }).then(() => { refresh(); onSaved(); })} />
-                <button className="comp-mini" title="Убрать исход" onClick={async () => { await api.del(`/story/outcomes/${o.id}`); refresh(); onSaved(); }}>×</button>
-              </div>
-              <input defaultValue={o.consequence} key={`cons-${o.id}-${o.consequence}`} placeholder="Что при этом происходит" onBlur={(e) => e.target.value !== o.consequence && api.put(`/story/outcomes/${o.id}`, { consequence: e.target.value }).then(() => { refresh(); onSaved(); })} />
-              <label className="row" style={{ gap: 6, alignItems: "center" }}>
-                <span className="canvas-props__label">Ведёт в</span>
-                <select value={o.target_type === "scene" && o.target_id ? String(o.target_id) : ""} onChange={(e) => api.put(`/story/outcomes/${o.id}`, e.target.value ? { target_type: "scene", target_id: Number(e.target.value) } : { target_type: null, target_id: null }).then(() => { refresh(); onSaved(); })}>
-                  <option value="">— никуда —</option>
-                  {scenes.filter((s) => s.id !== check.scene_id).map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
-                </select>
-              </label>
-            </div>
+            <OutcomeEditor key={o.id} outcome={o} scenes={scenes} excludeSceneId={check.scene_id} act={act} />
           ))}
-          <button onClick={async () => { await api.post(`/story/checks/${check.id}/outcomes`, { label: "Ещё исход" }); refresh(); onSaved(); }}>+ Исход</button>
+          <button onClick={() => void act(() => write.post(`/story/checks/${check.id}/outcomes`, { label: "Ещё исход" }), { retry: false, failure: "Новый исход", affects: canvasStoryAffects() })}>+ Исход</button>
         </div>
       </div>
     </PropsPanel>
@@ -6648,10 +6764,47 @@ function CheckProperties({
  * Правка объекта доски из панели свойств: страница передаёт своё действие
  * (`boardAction`) — перечитка доски, сигнал другим окнам и плашка при отказе.
  */
-type BoardAction = <R>(
-  action: () => Promise<R>,
-  options?: { retry?: boolean; failure?: string; affects?: readonly Affect[] }
-) => Promise<R | undefined>;
+interface BoardActionOptions {
+  /** Предлагать «Повторить». Созданию — нет: ответ мог потеряться после записи. */
+  retry?: boolean;
+  /** Что не сохранилось — плашка сама начинается с «Не сохранилось:». */
+  failure?: string;
+  /** Что задето сверх самой доски и экрана выбора. */
+  affects?: readonly Affect[];
+  /** Показать правку на доске до ответа сервера; отказ вернёт как было. */
+  optimistic?: (board: CanvasBoard) => CanvasBoard;
+  /** Отказ: вернуть своё, чего доска не знает (кэш панели). */
+  onError?: () => void;
+}
+
+type BoardAction = <R>(action: () => Promise<R>, options?: BoardActionOptions) => Promise<R | undefined>;
+
+/** Правка проверки или исхода на доске — для показа до ответа сервера. */
+function patchBoardCheck(
+  board: CanvasBoard,
+  checkId: number | null,
+  patch: (check: Extract<CanvasBoardNode, { node_type: "check" }>["check"]) => Extract<CanvasBoardNode, { node_type: "check" }>["check"]
+): CanvasBoard {
+  return {
+    ...board,
+    nodes: board.nodes.map((n) => (n.node_type === "check" && (checkId == null || n.node_id === checkId) ? { ...n, check: patch(n.check) } : n)),
+  };
+}
+
+function patchBoardOutcome(board: CanvasBoard, outcomeId: number, body: Record<string, unknown>): CanvasBoard {
+  return patchBoardCheck(board, null, (check) =>
+    check.outcomes.some((o) => o.id === outcomeId)
+      ? { ...check, outcomes: check.outcomes.map((o) => (o.id === outcomeId ? { ...o, ...body } : o)) }
+      : check
+  );
+}
+
+function patchBoardScene(board: CanvasBoard, sceneId: number, patch: Record<string, unknown>): CanvasBoard {
+  return {
+    ...board,
+    nodes: board.nodes.map((n) => (n.node_type === "scene" && n.node_id === sceneId ? { ...n, scene: { ...n.scene, ...patch } } : n)),
+  };
+}
 
 interface StickerRow {
   id: number;
@@ -7071,13 +7224,16 @@ const ENTITY_LIST_URL: Record<string, string> = {
   artifact: "/artifacts",
 };
 
+const EMPTY_SHELF: LibraryScene[] = [];
+// фриформ: полка сцен не нужна, но наборы — глобальные
+const EMPTY_BUNDLES: LibraryBundle[] = [];
+
 function CanvasPalette({
   arcId,
   settingId,
   boardId,
   boardTarget,
   campaignId,
-  shelfVersion,
   onAdded,
   onPinCreated,
   act,
@@ -7092,8 +7248,6 @@ function CanvasPalette({
   boardTarget: Record<string, number | undefined>;
   /** Кампания, в которой открыт холст: у неё свои события. */
   campaignId: number | null;
-  /** Меняется, когда сцену положили на полку или сняли с неё. */
-  shelfVersion: number;
   onAdded: (sceneId: number | null) => void;
   /** Свежесозданный пин (П2.8): страница выделяет его и открывает имя. */
   onPinCreated: (pinId: number) => void;
@@ -7102,28 +7256,18 @@ function CanvasPalette({
   flowRef?: React.RefObject<ReactFlowInstance<Node<CanvasNodeData>, Edge> | null>;
 }) {
   const [tab, setTab] = useState<PaletteTab>("scenes");
-  const [shelf, setShelf] = useState<LibraryScene[]>([]);
-  const [bundles, setBundles] = useState<LibraryBundle[]>([]);
+  // Полка и наборы — слоем: сцена, положенная на полку галочкой в свойствах,
+  // появляется здесь сама. Раньше это держал счётчик версий полки.
+  const shelf = useResource<LibraryScene[]>(settingId ? `/story/library?setting_id=${settingId}` : null).data ?? EMPTY_SHELF;
+  const bundles =
+    useResource<LibraryBundle[]>(settingId ? `/canvas/bundles?setting_id=${settingId}` : boardId ? "/canvas/bundles" : null).data ??
+    EMPTY_BUNDLES;
   const [entities, setEntities] = useState<PaletteItem[]>([]);
   const [events, setEvents] = useState<PaletteItem[]>([]);
   const [adventures, setAdventures] = useState<PaletteItem[]>([]);
   const [characters, setCharacters] = useState<PaletteItem[]>([]);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (settingId) {
-      api.get<LibraryScene[]>(`/story/library?setting_id=${settingId}`).then(setShelf);
-      api.get<LibraryBundle[]>(`/canvas/bundles?setting_id=${settingId}`).then(setBundles);
-    } else if (boardId) {
-      // фриформ: полка сцен не нужна, но наборы — глобальные
-      setShelf([]);
-      api.get<LibraryBundle[]>(`/canvas/bundles`).then(setBundles);
-    } else {
-      setShelf([]);
-      setBundles([]);
-    }
-  }, [settingId, boardId, shelfVersion]);
 
   // Приключения для вкладки-ярлыков (Q20, Q22) — из того же ответа, что кормит
   // экран выбора: список короткий и один на всю базу.
@@ -7262,15 +7406,19 @@ function CanvasPalette({
     if (busy) return;
     setBusy(true);
     try {
-      const created = await api.post<StoryScene>("/story/scenes", {
-        setting_id: settingId,
-        arc_id: arcId,
-        name: "Новая сцена",
-      });
       const pos = freshSpotAtCenter(flowRef?.current ?? null);
-      if (boardId) await api.put("/canvas/board/nodes", { board_id: boardId, nodes: [{ node_type: "scene", node_id: created.id, x: pos.x, y: pos.y }] });
-      else await api.put("/canvas/board/nodes", { arc_id: arcId, nodes: [{ node_type: "scene", node_id: created.id, x: pos.x, y: pos.y }] });
-      onAdded(created.id);
+      const created = await act(
+        async () => {
+          const scene = await write.post<StoryScene>("/story/scenes", { setting_id: settingId, arc_id: arcId, name: "Новая сцена" });
+          await write.put("/canvas/board/nodes", {
+            ...(boardId ? { board_id: boardId } : { arc_id: arcId }),
+            nodes: [{ node_type: "scene", node_id: scene.id, x: pos.x, y: pos.y }],
+          });
+          return scene;
+        },
+        { retry: false, failure: "Новая сцена", affects: canvasStoryAffects() }
+      );
+      if (created) onAdded(created.id);
     } finally {
       setBusy(false);
     }
@@ -7280,13 +7428,20 @@ function CanvasPalette({
     if (busy) return;
     setBusy(true);
     try {
-      const created = await api.post<StoryScene>(`/story/library/${blank.id}/insert`, {
-        arc_id: arcId,
-      });
       const pos = freshSpotAtCenter(flowRef?.current ?? null);
-      if (boardId) await api.put("/canvas/board/nodes", { board_id: boardId, nodes: [{ node_type: "scene", node_id: created.id, x: pos.x, y: pos.y }] });
-      else await api.put("/canvas/board/nodes", { arc_id: arcId, nodes: [{ node_type: "scene", node_id: created.id, x: pos.x, y: pos.y }] });
-      onAdded(created.id);
+      // Счётчик вставок у заготовки на полке меняется — полка в задетом.
+      const created = await act(
+        async () => {
+          const scene = await write.post<StoryScene>(`/story/library/${blank.id}/insert`, { arc_id: arcId });
+          await write.put("/canvas/board/nodes", {
+            ...(boardId ? { board_id: boardId } : { arc_id: arcId }),
+            nodes: [{ node_type: "scene", node_id: scene.id, x: pos.x, y: pos.y }],
+          });
+          return scene;
+        },
+        { retry: false, failure: "Сцена с полки", affects: canvasStoryAffects() }
+      );
+      if (created) onAdded(created.id);
     } finally {
       setBusy(false);
     }
@@ -7320,8 +7475,7 @@ function CanvasPalette({
       const payload: Record<string, unknown> = boardId
         ? { board_id: boardId, name: "Набор", setting_id: settingId || null, ...pos }
         : { arc_id: arcId, name: "Набор", setting_id: settingId, ...pos };
-      await api.post("/canvas/bundles", payload);
-      onAdded(null);
+      await act(() => write.post("/canvas/bundles", payload), { retry: false, failure: "Новый набор", affects: canvasStoryAffects() });
     } finally {
       setBusy(false);
     }
@@ -7333,8 +7487,7 @@ function CanvasPalette({
     try {
       const pos = freshSpotAtCenter(flowRef?.current ?? null);
       const payload = boardId ? { board_id: boardId, ...pos } : { arc_id: arcId, ...pos };
-      await api.post(`/canvas/bundles/${bundle.id}/insert`, payload);
-      onAdded(null);
+      await act(() => write.post(`/canvas/bundles/${bundle.id}/insert`, payload), { retry: false, failure: "Вставка набора", affects: canvasStoryAffects() });
     } finally {
       setBusy(false);
     }
@@ -7708,41 +7861,44 @@ function freshSpotAtCenter(flow: ReactFlowInstance<Node<CanvasNodeData>, Edge> |
 // здесь (docs/node-editor.md, «Вложенность»).
 function SceneProperties({
   sceneId,
-  onSaved,
+  act,
   board,
 }: {
   sceneId: number | null;
-  onSaved: () => void;
+  act: BoardAction;
   board: CanvasBoard | null;
 }) {
-  const [scene, setScene] = useState<StorySceneDetail | null>(null);
+  // Сцена читается слоем под тем же ключом, что и на странице сцены: правка
+  // там приходит сюда, правка здесь — туда и на пульт.
+  const queryClient = useQueryClient();
+  const scenePath = sceneId ? `/story/scenes/${sceneId}` : null;
+  const scene = useResource<StorySceneDetail>(scenePath).data ?? null;
   // Главы берём из доски, а не отдельным запросом: они уже приехали с ней —
   // теперь узлами, а не рамками (блок G6.2). На холсте самой главы соседних
   // глав нет, и список тогда пуст: перенос между главами делается с холста
   // приключения, где они все рядом.
   const chapters = boardNodesOfType(board, "chapter").map((n) => ({ arc_id: n.chapter.id, name: n.chapter.name }));
 
-  const refresh = useCallback(async () => {
-    if (!sceneId) return;
-    setScene(await api.get<StorySceneDetail>(`/story/scenes/${sceneId}`));
-  }, [sceneId]);
-
-  useEffect(() => {
-    if (!sceneId) {
-      setScene(null);
-      return;
-    }
-    api.get<StorySceneDetail>(`/story/scenes/${sceneId}`).then(setScene);
-  }, [sceneId]);
-
-  // Та же правка, что и на странице сцены: PUT патчем и перечитывание. Холст
-  // тоже перерисовывается — иначе подпись ноды осталась бы старой.
+  // Та же правка, что и на странице сцены. Имя и вид видны на ноде и в панели
+  // сразу; отказ возвращает оба. Поля, которые не поменялись, не пишутся:
+  // карточка текста с полями сохраняет и поля, и текст одним нажатием, и
+  // раньше одно переименование уходило двумя одинаковыми записями.
   async function save(patch: Record<string, unknown>) {
-    if (!scene) return;
-    await api.put(`/story/scenes/${scene.id}`, patch);
-    const fresh = await api.get<StorySceneDetail>(`/story/scenes/${scene.id}`);
-    setScene(fresh);
-    onSaved();
+    if (!scene || !scenePath) return;
+    const current = scene as unknown as Record<string, unknown>;
+    const changed = Object.fromEntries(Object.entries(patch).filter(([k, v]) => current[k] !== v));
+    if (Object.keys(changed).length === 0) return;
+    const key = dataKeys.resource(scenePath);
+    const previous = queryClient.getQueryData<StorySceneDetail>(key);
+    if (previous) queryClient.setQueryData<StorySceneDetail>(key, { ...previous, ...changed });
+    await act(() => write.put(scenePath, changed), {
+      failure: "Сцена",
+      affects: canvasStoryAffects(),
+      optimistic: (b) => patchBoardScene(b, scene.id, changed),
+      onError: () => {
+        if (previous) queryClient.setQueryData(key, previous);
+      },
+    });
   }
 
   /**
@@ -7758,44 +7914,50 @@ function SceneProperties({
     if (!scene || next === (scene.arc_id ?? null)) return;
     const from = board?.groups?.find((g) => g.arc_id === scene.arc_id);
     const to = next == null ? undefined : board?.groups?.find((g) => g.arc_id === next);
-    if (board?.board_id && from && to) {
-      const dx = Math.round(to.x - from.x);
-      const dy = Math.round(to.y - from.y);
-      if (dx || dy) {
-        const moving = board.nodes.filter(
-          (n) =>
-            (n.node_type === "scene" && n.node_id === scene.id) ||
-            (n.node_type === "check" && n.check.scene_id === scene.id)
-        );
-        await api.put("/canvas/board/nodes", {
-          board_id: board.board_id,
-          nodes: moving.map((n) => ({
-            node_type: n.node_type,
-            node_id: n.node_id,
-            x: Math.round(n.x) + dx,
-            y: Math.round(n.y) + dy,
-          })),
-        });
-      }
-    }
-    await save({ arc_id: next });
+    const boardId = board?.board_id;
+    const moving =
+      boardId && from && to
+        ? board.nodes.filter(
+            (n) =>
+              (n.node_type === "scene" && n.node_id === scene.id) ||
+              (n.node_type === "check" && n.check.scene_id === scene.id)
+          )
+        : [];
+    const dx = from && to ? Math.round(to.x - from.x) : 0;
+    const dy = from && to ? Math.round(to.y - from.y) : 0;
+    await act(
+      async () => {
+        if (boardId && moving.length && (dx || dy)) {
+          await write.put("/canvas/board/nodes", {
+            board_id: boardId,
+            nodes: moving.map((n) => ({
+              node_type: n.node_type,
+              node_id: n.node_id,
+              x: Math.round(n.x) + dx,
+              y: Math.round(n.y) + dy,
+            })),
+          });
+        }
+        await write.put(`/story/scenes/${scene.id}`, { arc_id: next });
+      },
+      { failure: "Перенос сцены в главу", affects: canvasStoryAffects() }
+    );
   }
 
   // Отвязка кнопкой — отдельно от автоматики: «эта засада дальше пойдёт своим
   // путём» решают ДО правки, а не в момент.
   async function detach() {
     if (!scene) return;
-    await api.post(`/story/scenes/${scene.id}/detach`, {});
-    await refresh();
-    onSaved();
+    await act(() => write.post(`/story/scenes/${scene.id}/detach`, {}), { failure: "Отвязка от заготовки", affects: canvasStoryAffects() });
   }
 
   async function toggleLibrary(next: boolean) {
     if (!scene) return;
-    if (next) await api.post(`/story/scenes/${scene.id}/library`, {});
-    else await api.del(`/story/scenes/${scene.id}/library`);
-    await refresh();
-    onSaved();
+    await act(
+      () => (next ? write.post(`/story/scenes/${scene.id}/library`, {}) : write.del(`/story/scenes/${scene.id}/library`)),
+      // Копия сцены кампании на полку — это создание: повтор завёл бы вторую.
+      { retry: !(next && scene.campaign_id != null), failure: "Полка заготовок", affects: canvasStoryAffects() }
+    );
   }
 
   if (!scene) {
@@ -7956,14 +8118,7 @@ function SceneProperties({
           collapsible
         />
 
-        <SceneCastCard
-          key={`cast-${scene.id}`}
-          sceneId={scene.id}
-          onChanged={async () => {
-            await refresh();
-            onSaved();
-          }}
-        />
+        <SceneCastCard key={`cast-${scene.id}`} sceneId={scene.id} act={act} />
 
         {scene.checks.map((c) => (
           <CheckCard
@@ -7974,21 +8129,11 @@ function SceneProperties({
               board?.nodes.flatMap((n) => (n.node_type === "scene" ? [n.scene] : [])) ?? []
             }
             currentSceneId={scene.id}
-            onChanged={async () => {
-              await refresh();
-              onSaved();
-            }}
+            act={act}
           />
         ))}
 
-        <ForeignLinksCard
-          key={`foreign-${scene.id}`}
-          sceneId={scene.id}
-          onChanged={async () => {
-            await refresh();
-            onSaved();
-          }}
-        />
+        <ForeignLinksCard key={`foreign-${scene.id}`} sceneId={scene.id} act={act} />
 
         <Link to={`/scenes/${scene.id}`} style={{ fontSize: "var(--fs-meta)" }}>
           Открыть страницу сцены →
@@ -8011,32 +8156,8 @@ const CAST_ROLE_LABEL: Record<string, string> = {
   loot: "Потенциальный лут",
 };
 
-function SceneCastCard({
-  sceneId,
-  onChanged,
-}: {
-  sceneId: number;
-  onChanged: () => void | Promise<void>;
-}) {
-  const [rows, setRows] = useState<SceneCastRow[]>([]);
-  const [drafts, setDrafts] = useState<Record<number, string>>({});
-
-  const reload = useCallback(() => {
-    api.get<SceneCastRow[]>(`/story/scenes/${sceneId}/cast`).then((r) => {
-      setRows(r);
-      setDrafts(Object.fromEntries(r.map((row) => [row.link_id, row.qty])));
-    });
-  }, [sceneId]);
-
-  useEffect(reload, [reload]);
-
-  async function saveQty(linkId: number) {
-    const value = drafts[linkId] ?? "";
-    if (value === rows.find((r) => r.link_id === linkId)?.qty) return;
-    await api.put(`/story/cast/${linkId}`, { qty: value });
-    reload();
-    await onChanged();
-  }
+function SceneCastCard({ sceneId, act }: { sceneId: number; act: BoardAction }) {
+  const rows = useResource<SceneCastRow[]>(`/story/scenes/${sceneId}/cast`).data ?? EMPTY_CAST;
 
   if (rows.length === 0) return null;
 
@@ -8054,22 +8175,39 @@ function SceneCastCard({
                 <span style={{ flex: 1, minWidth: 0 }}>{row.name}</span>
                 {/* Количество только там, где оно осмысленно: у места сцены
                     «1к6» ничего не значит. */}
-                {role !== "location" && (
-                  <input
-                    style={{ width: 76 }}
-                    placeholder="1"
-                    title="Сколько: 4, 1к6, 2к4+1"
-                    value={drafts[row.link_id] ?? ""}
-                    onChange={(e) => setDrafts({ ...drafts, [row.link_id]: e.target.value })}
-                    onBlur={() => saveQty(row.link_id)}
-                  />
-                )}
+                {role !== "location" && <CastQtyInput row={row} act={act} />}
               </div>
             ))}
           </div>
         );
       })}
     </div>
+  );
+}
+
+const EMPTY_CAST: SceneCastRow[] = [];
+
+/** Количество в составе: черновик не стирается пришедшим обновлением. */
+function CastQtyInput({ row, act }: { row: SceneCastRow; act: BoardAction }) {
+  const qty = useFieldDraft(row.qty);
+  return (
+    <input
+      style={{ width: 76 }}
+      placeholder="1"
+      title="Сколько: 4, 1к6, 2к4+1"
+      value={qty.draft}
+      onChange={(e) => qty.setDraft(e.target.value)}
+      onFocus={qty.hold}
+      onBlur={() => {
+        qty.release();
+        if (qty.draft !== row.qty) {
+          void act(() => write.put(`/story/cast/${row.link_id}`, { qty: qty.draft }), {
+            failure: "Количество в составе",
+            affects: canvasStoryAffects(),
+          });
+        }
+      }}
+    />
   );
 }
 
@@ -8086,33 +8224,23 @@ const TIER_LABEL: Record<string, string> = {
   doubtful: "сомнительно",
 };
 
-function ForeignLinksCard({
-  sceneId,
-  onChanged,
-}: {
-  sceneId: number;
-  onChanged: () => void | Promise<void>;
-}) {
-  const [items, setItems] = useState<ForeignLink[]>([]);
+function ForeignLinksCard({ sceneId, act }: { sceneId: number; act: BoardAction }) {
+  const items = useResource<ForeignLink[]>(`/story/scenes/${sceneId}/foreign-links`).data ?? EMPTY_FOREIGN;
   const [busy, setBusy] = useState(false);
-
-  const reload = useCallback(() => {
-    api.get<ForeignLink[]>(`/story/scenes/${sceneId}/foreign-links`).then(setItems);
-  }, [sceneId]);
-
-  useEffect(reload, [reload]);
 
   async function repoint(item: ForeignLink, toId: number) {
     if (busy) return;
     setBusy(true);
     try {
-      await api.post(`/story/scenes/${sceneId}/foreign-links/repoint`, {
-        to_type: item.to_type,
-        from_id: item.to_id,
-        to_id: toId,
-      });
-      reload();
-      await onChanged();
+      await act(
+        () =>
+          write.post(`/story/scenes/${sceneId}/foreign-links/repoint`, {
+            to_type: item.to_type,
+            from_id: item.to_id,
+            to_id: toId,
+          }),
+        { failure: "Перепривязка ссылки", affects: canvasStoryAffects() }
+      );
     } finally {
       setBusy(false);
     }
@@ -8161,6 +8289,8 @@ function ForeignLinksCard({
   );
 }
 
+const EMPTY_FOREIGN: ForeignLink[] = [];
+
 // Проверка сцены вместе с её исходами. Ради этого блока схема ветвления и
 // становится видимой: раньше «провалил — попадает в яму» лежало текстом
 // внутри строки, и ни нарисовать это, ни пережить переименование ямы было
@@ -8173,18 +8303,13 @@ function CheckCard({
   check,
   scenes,
   currentSceneId,
-  onChanged,
+  act,
 }: {
   check: SceneCheck;
   scenes: { id: number; name: string }[];
   currentSceneId: number;
-  onChanged: () => void | Promise<void>;
+  act: BoardAction;
 }) {
-  async function patch(outcomeId: number, body: Record<string, unknown>) {
-    await api.put(`/story/outcomes/${outcomeId}`, body);
-    await onChanged();
-  }
-
   return (
     <details className="card stack" open>
       <summary>
@@ -8194,67 +8319,17 @@ function CheckCard({
 
       <div className="canvas-outcomes">
         {check.outcomes.map((o) => (
-          <div className="canvas-outcome" key={o.id}>
-            <div className="row" style={{ gap: 6 }}>
-              <input
-                className="canvas-outcome__label"
-                defaultValue={o.label}
-                key={`label-${o.id}-${o.label}`}
-                placeholder="Исход"
-                onBlur={(e) => e.target.value !== o.label && patch(o.id, { label: e.target.value })}
-              />
-              <button
-                className="comp-mini"
-                title="Убрать исход"
-                onClick={async () => {
-                  await api.del(`/story/outcomes/${o.id}`);
-                  await onChanged();
-                }}
-              >
-                ×
-              </button>
-            </div>
-
-            <input
-              defaultValue={o.consequence}
-              key={`cons-${o.id}-${o.consequence}`}
-              placeholder="Что при этом происходит"
-              onBlur={(e) =>
-                e.target.value !== o.consequence && patch(o.id, { consequence: e.target.value })
-              }
-            />
-
-            <label className="row" style={{ gap: 6, alignItems: "center" }}>
-              <span className="canvas-props__label">Ведёт в</span>
-              <select
-                value={o.target_type === "scene" && o.target_id ? String(o.target_id) : ""}
-                onChange={(e) =>
-                  patch(
-                    o.id,
-                    e.target.value
-                      ? { target_type: "scene", target_id: Number(e.target.value) }
-                      : { target_type: null, target_id: null }
-                  )
-                }
-              >
-                <option value="">— никуда —</option>
-                {scenes
-                  .filter((s) => s.id !== currentSceneId)
-                  .map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-              </select>
-            </label>
-          </div>
+          <OutcomeEditor key={o.id} outcome={o} scenes={scenes} excludeSceneId={currentSceneId} act={act} />
         ))}
 
         <button
-          onClick={async () => {
-            await api.post(`/story/checks/${check.id}/outcomes`, { label: "Ещё исход" });
-            await onChanged();
-          }}
+          onClick={() =>
+            void act(() => write.post(`/story/checks/${check.id}/outcomes`, { label: "Ещё исход" }), {
+              retry: false,
+              failure: "Новый исход",
+              affects: canvasStoryAffects(),
+            })
+          }
         >
           + Исход
         </button>
