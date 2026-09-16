@@ -1,5 +1,7 @@
-import { memo, useEffect, useState, type ChangeEvent, type DragEvent } from "react";
+import { memo, useEffect, useMemo, useState, type ChangeEvent, type DragEvent } from "react";
 import { api } from "../api/client";
+import type { Affect } from "../data/entities";
+import { useAction, useResource, write } from "../data/hooks";
 import { Modal } from "./Modal";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
@@ -33,7 +35,6 @@ interface Props {
   scope: Scope;
   entityId: number;
   resources: Resource[];
-  onChange: () => void;
   // Only meaningful for scope==="session" — the campaign's setting, if any.
   // Enables "attach an existing setting resource" (drag from search) and
   // "В сеттинг" (promote an owned resource up to that setting) so the
@@ -55,15 +56,17 @@ export interface ResourceStats {
 // additionally supports attaching an existing setting-scoped resource
 // (without duplicating the file) and promoting an owned resource up to the
 // setting for reuse across sessions.
-// Memoized — see ObstacleDropZone's comment. `resources` and `onChange` are
-// a fresh array/closure on every parent render unless the caller stabilizes
-// them (useMemo/useCallback); otherwise this still re-renders every time,
-// same as before.
+// Memoized — see ObstacleDropZone's comment. `resources` is a fresh array on
+// every parent render unless the caller stabilizes it (useMemo); otherwise
+// this still re-renders every time, same as before.
+//
+// Списки ресурсов читает слой данных (docs/adr/0001): правка здесь задевает
+// ресурсы и — у сессии — её карточку, где лежат ресурсы сессии. Перечитывать
+// себя родителю не нужно.
 export const ResourcesSection = memo(function ResourcesSection({
   scope,
   entityId,
   resources,
-  onChange,
   settingId,
   visibleCategories,
   onStats,
@@ -77,6 +80,12 @@ export const ResourcesSection = memo(function ResourcesSection({
   const [busy, setBusy] = useState(false);
   const [attached, setAttached] = useState<AttachedEntry[]>([]);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const run = useAction();
+  const affects = useMemo<Affect[]>(
+    () => [{ kind: "resource" }, ...(scope === "session" ? [{ kind: "session", id: entityId } as Affect] : [])],
+    [scope, entityId]
+  );
+  const linkAffects = useMemo<Affect[]>(() => [{ path: "/links" }], []);
 
   async function loadAttached() {
     const links = await api.get<GenericLink[]>(
@@ -126,9 +135,9 @@ export const ResourcesSection = memo(function ResourcesSection({
     form.append("category", draftCategory);
     if (draftFile) form.append("file", draftFile);
     else if (draftLinkUrl.trim()) form.append("link_url", draftLinkUrl.trim());
-    await api.post("/resources", form);
-    setModalOpen(false);
-    onChange();
+    // Окно закрывается, только если записалось; повтор создал бы второй ресурс.
+    const done = await run(() => write.post("/resources", form).then(() => true), { affects, retry: false });
+    if (done) setModalOpen(false);
   }
 
   async function createFromFile(file: File) {
@@ -139,7 +148,7 @@ export const ResourcesSection = memo(function ResourcesSection({
     form.append(scope === "session" ? "session_id" : "setting_id", String(entityId));
     form.append("category", guessResourceCategory(file.name));
     form.append("file", file);
-    await api.post("/resources", form);
+    await write.post("/resources", form);
   }
 
   // Приложенный по ссылке ресурс — членство в списке, а не мнение: читает и
@@ -147,14 +156,20 @@ export const ResourcesSection = memo(function ResourcesSection({
   // «Два графа», п. 1). Запись в `/entity-relations` ложилась в таблицу
   // мнений, и приложенный ресурс в списке не появлялся вовсе.
   async function attachResource(resourceId: number) {
-    await api.post("/links", {
-      from_type: scope,
-      from_id: entityId,
-      to_type: "resource",
-      to_id: resourceId,
-      section: "attached_resource",
-    });
-    loadAttached();
+    await run(
+      () =>
+        write
+          .post("/links", {
+            from_type: scope,
+            from_id: entityId,
+            to_type: "resource",
+            to_id: resourceId,
+            section: "attached_resource",
+          })
+          .then(() => true),
+      { affects: linkAffects, retry: false }
+    );
+    void loadAttached();
   }
 
   // A bag item can carry a location's map (type "location_map", id =
@@ -162,19 +177,24 @@ export const ResourcesSection = memo(function ResourcesSection({
   // "В мешок" button. The from-location-map endpoint copies the map image
   // into the session's own resources, same as its "→ В сессию" flow.
   async function attachLocationMap(locationId: number) {
-    await api.post("/resources/from-location-map", { location_id: locationId, session_id: entityId });
-    onChange();
+    await run(
+      () => write.post("/resources/from-location-map", { location_id: locationId, session_id: entityId }).then(() => true),
+      { affects, retry: false }
+    );
   }
 
   async function detachResource(linkId: number) {
-    await api.del(`/links/${linkId}`);
-    loadAttached();
+    await run(() => write.del(`/links/${linkId}`).then(() => true), { affects: linkAffects });
+    void loadAttached();
   }
 
   async function promoteResource(resourceId: number) {
     if (!settingId) return;
-    await api.post(`/resources/${resourceId}/promote`, { setting_id: settingId });
-    onChange();
+    const done = await run(
+      () => write.post(`/resources/${resourceId}/promote`, { setting_id: settingId }).then(() => true),
+      { affects, retry: false }
+    );
+    if (!done) throw new Error("Не отправилось");
   }
 
   async function handleDrop(e: DragEvent<HTMLDivElement>) {
@@ -196,17 +216,13 @@ export const ResourcesSection = memo(function ResourcesSection({
     // Several files at once: skip the modal per-file and just create rows
     // named after each file, categorized by extension.
     setBusy(true);
-    try {
-      await Promise.all(files.map(createFromFile));
-      onChange();
-    } finally {
-      setBusy(false);
-    }
+    // Часть файлов может лечь, а часть нет — задетое обновляется в любом случае.
+    await run(() => Promise.all(files.map(createFromFile)).then(() => true), { affects, retry: false });
+    setBusy(false);
   }
 
   async function archiveResource(id: number) {
-    await api.del(`/resources/${id}`);
-    onChange();
+    await run(() => write.del(`/resources/${id}`).then(() => true), { affects });
   }
 
   function handleFilePick(e: ChangeEvent<HTMLInputElement>) {
@@ -226,12 +242,9 @@ export const ResourcesSection = memo(function ResourcesSection({
     e.target.value = "";
     if (files.length === 0) return;
     setBusy(true);
-    try {
-      await Promise.all(files.map(createFromFile));
-      onChange();
-    } finally {
-      setBusy(false);
-    }
+    // Часть файлов может лечь, а часть нет — задетое обновляется в любом случае.
+    await run(() => Promise.all(files.map(createFromFile)).then(() => true), { affects, retry: false });
+    setBusy(false);
   }
 
   async function pickFolderForDraft() {
@@ -243,7 +256,8 @@ export const ResourcesSection = memo(function ResourcesSection({
 
   async function revealStorage() {
     const base = scope === "session" ? "sessions" : "settings";
-    await api.post(`/${base}/${entityId}/reveal-resources`, {});
+    // Открыть папку — не правка данных: мимо широковещания.
+    await api.post(`/${base}/${entityId}/reveal-resources`, {}, { broadcast: false });
   }
 
   const attachedResourceIds = new Set(attached.map((a) => a.resource.id));
@@ -313,7 +327,7 @@ export const ResourcesSection = memo(function ResourcesSection({
             {g.key === "audio" ? (
               <AudioGroup
                 items={g.items}
-                onChange={onChange}
+                affects={affects}
                 onArchive={archiveResource}
                 attachedResourceIds={attachedResourceIds}
                 onDetach={(id) => {
@@ -326,7 +340,7 @@ export const ResourcesSection = memo(function ResourcesSection({
             ) : (
               <SortableResourceGroup
                 items={g.items}
-                onChange={onChange}
+                affects={affects}
                 onArchive={archiveResource}
                 attachedResourceIds={attachedResourceIds}
                 onDetach={(id) => {
@@ -521,7 +535,7 @@ function LibraryPickerModal({
 // промежуточный список, который потом ещё надо в набор положить.
 function AudioGroup({
   items,
-  onChange,
+  affects,
   onArchive,
   attachedResourceIds,
   onDetach,
@@ -529,7 +543,7 @@ function AudioGroup({
   onPromote,
 }: {
   items: Resource[];
-  onChange: () => void;
+  affects: Affect[];
   onArchive: (id: number) => void;
   attachedResourceIds: Set<number>;
   onDetach: (resourceId: number) => void;
@@ -537,12 +551,9 @@ function AudioGroup({
   onPromote: (resourceId: number) => Promise<void>;
 }) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [sets, setSets] = useState<SoundSetSummary[]>([]);
+  const sets = useResource<SoundSetSummary[]>("/sound-sets").data ?? [];
   const [busySet, setBusySet] = useState(false);
-
-  useEffect(() => {
-    api.get<SoundSetSummary[]>("/sound-sets").then(setSets).catch(() => setSets([]));
-  }, []);
+  const run = useAction();
 
   function toggle(id: number) {
     setSelected((prev) => {
@@ -559,31 +570,35 @@ function AudioGroup({
   // пульта и молча пропадёт из набора.
   async function addToSet(setId: number) {
     setBusySet(true);
-    try {
-      const detail = await api.get<SoundSetDetail>(`/sound-sets/${setId}`);
-      const ids = detail.tracks.map((t) => t.resource_id);
-      for (const id of selected) {
-        if (!ids.includes(id)) {
-          await api.put(`/sounds/${id}`, { audio_role: "background" });
-          ids.push(id);
+    const done = await run(
+      async () => {
+        // Состав читается свежим: набор мог поменяться в другом окне.
+        const detail = await api.get<SoundSetDetail>(`/sound-sets/${setId}`);
+        const ids = detail.tracks.map((t) => t.resource_id);
+        for (const id of selected) {
+          if (!ids.includes(id)) {
+            await write.put(`/sounds/${id}`, { audio_role: "background" });
+            ids.push(id);
+          }
         }
-      }
-      await api.put(`/sound-sets/${setId}/items`, {
-        tracks: ids,
-        ambient: detail.ambient.map((b) => b.resource_id),
-        weather: detail.weather.map((b) => b.resource_id),
-        stingers: detail.stingers.map((b) => b.resource_id),
-        start_ambient_id: detail.ambient.find((b) => b.is_start)?.resource_id ?? null,
-      });
-      setSelected(new Set());
-    } finally {
-      setBusySet(false);
-    }
+        await write.put(`/sound-sets/${setId}/items`, {
+          tracks: ids,
+          ambient: detail.ambient.map((b) => b.resource_id),
+          weather: detail.weather.map((b) => b.resource_id),
+          stingers: detail.stingers.map((b) => b.resource_id),
+          start_ambient_id: detail.ambient.find((b) => b.is_start)?.resource_id ?? null,
+        });
+        return true;
+      },
+      { affects: [...affects, { path: "/sound-sets" }, { path: "/sounds" }] }
+    );
+    if (done) setSelected(new Set());
+    setBusySet(false);
   }
 
   function sortAlphabetically() {
     const ids = [...items].sort((a, b) => a.name.localeCompare(b.name, "ru")).map((r) => r.id);
-    api.put("/resources/reorder", { order: ids }).then(onChange);
+    void run(() => write.put("/resources/reorder", { order: ids }).then(() => true), { affects });
   }
 
   return (
@@ -598,10 +613,8 @@ function AudioGroup({
           <span className="muted">Выбрано: {selected.size}</span>
           <BulkRenameBar
             ids={Array.from(selected)}
-            onDone={() => {
-              setSelected(new Set());
-              onChange();
-            }}
+            affects={affects}
+            onDone={() => setSelected(new Set())}
           />
           {sets.length > 0 ? (
             <select
@@ -646,7 +659,7 @@ function AudioGroup({
           <div style={{ flex: 1, minWidth: 0 }}>
             <ResourceRow
               resource={r}
-              onChange={onChange}
+              affects={affects}
               onArchive={onArchive}
               isAttached={attachedResourceIds.has(r.id)}
               onDetach={() => onDetach(r.id)}
@@ -662,22 +675,21 @@ function AudioGroup({
 
 // Shared bulk-action bar: prefix/suffix rename for the checked resources.
 // Used by both SortableResourceGroup and AudioGroup's selection toolbar.
-function BulkRenameBar({ ids, onDone }: { ids: number[]; onDone: () => void }) {
+function BulkRenameBar({ ids, affects, onDone }: { ids: number[]; affects: Affect[]; onDone: () => void }) {
   const [prefix, setPrefix] = useState("");
   const [suffix, setSuffix] = useState("");
   const [busy, setBusy] = useState(false);
+  const run = useAction();
 
   async function apply() {
     if (!prefix.trim() && !suffix.trim()) return;
     setBusy(true);
-    try {
-      await api.post("/resources/bulk-rename", { ids, prefix, suffix });
-      setPrefix("");
-      setSuffix("");
-      onDone();
-    } finally {
-      setBusy(false);
-    }
+    const done = await run(() => write.post("/resources/bulk-rename", { ids, prefix, suffix }).then(() => true), { affects });
+    setBusy(false);
+    if (!done) return;
+    setPrefix("");
+    setSuffix("");
+    onDone();
   }
 
   return (
@@ -711,7 +723,7 @@ function BulkRenameBar({ ids, onDone }: { ids: number[]; onDone: () => void }) {
 // checkbox multi-select feeding the prefix/suffix bulk-rename bar.
 function SortableResourceGroup({
   items,
-  onChange,
+  affects,
   onArchive,
   attachedResourceIds,
   onDetach,
@@ -719,7 +731,7 @@ function SortableResourceGroup({
   onPromote,
 }: {
   items: Resource[];
-  onChange: () => void;
+  affects: Affect[];
   onArchive: (id: number) => void;
   attachedResourceIds: Set<number>;
   onDetach: (resourceId: number) => void;
@@ -728,6 +740,7 @@ function SortableResourceGroup({
 }) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [dragId, setDragId] = useState<number | null>(null);
+  const run = useAction();
 
   function toggle(id: number) {
     setSelected((prev) => {
@@ -740,7 +753,7 @@ function SortableResourceGroup({
 
   function sortAlphabetically() {
     const ids = [...items].sort((a, b) => a.name.localeCompare(b.name, "ru")).map((r) => r.id);
-    api.put("/resources/reorder", { order: ids }).then(onChange);
+    void run(() => write.put("/resources/reorder", { order: ids }).then(() => true), { affects });
   }
 
   function handleDrop(targetId: number) {
@@ -750,7 +763,7 @@ function SortableResourceGroup({
     const to = ids.indexOf(targetId);
     if (from === -1 || to === -1) return;
     ids.splice(to, 0, ...ids.splice(from, 1));
-    api.put("/resources/reorder", { order: ids }).then(onChange);
+    void run(() => write.put("/resources/reorder", { order: ids }).then(() => true), { affects });
     setDragId(null);
   }
 
@@ -765,10 +778,8 @@ function SortableResourceGroup({
             <span className="muted">Выбрано: {selected.size}</span>
             <BulkRenameBar
               ids={Array.from(selected)}
-              onDone={() => {
-                setSelected(new Set());
-                onChange();
-              }}
+              affects={affects}
+              onDone={() => setSelected(new Set())}
             />
           </>
         )}
@@ -792,7 +803,7 @@ function SortableResourceGroup({
           <div style={{ flex: 1, minWidth: 0 }}>
             <ResourceRow
               resource={r}
-              onChange={onChange}
+              affects={affects}
               onArchive={onArchive}
               isAttached={attachedResourceIds.has(r.id)}
               onDetach={() => onDetach(r.id)}
@@ -808,7 +819,7 @@ function SortableResourceGroup({
 
 function ResourceRow({
   resource,
-  onChange,
+  affects,
   onArchive,
   isAttached,
   onDetach,
@@ -816,7 +827,7 @@ function ResourceRow({
   onPromote,
 }: {
   resource: Resource;
-  onChange: () => void;
+  affects: Affect[];
   onArchive: (id: number) => void;
   isAttached: boolean;
   onDetach: () => void;
@@ -829,6 +840,7 @@ function ResourceRow({
   const [notes, setNotes] = useState(resource.notes);
   const [promoted, setPromoted] = useState(false);
   const [promoting, setPromoting] = useState(false);
+  const run = useAction();
 
   useEffect(() => {
     if (!canPromote) {
@@ -858,16 +870,24 @@ function ResourceRow({
     try {
       await onPromote();
       setPromoted(true);
+    } catch {
+      // Отказ уже показан плашкой; кнопка остаётся доступной.
     } finally {
       setPromoting(false);
     }
   }
 
   async function save() {
-    await api.put(`/resources/${resource.id}`, { name, link_url: linkUrl, notes });
-    syncMentionLinks("resource", resource.id, resource.notes, notes);
-    setEditMode(false);
-    onChange();
+    // Правка остаётся открытой, если не записалось.
+    const done = await run(
+      async () => {
+        await write.put(`/resources/${resource.id}`, { name, link_url: linkUrl, notes });
+        await syncMentionLinks("resource", resource.id, resource.notes, notes);
+        return true;
+      },
+      { affects }
+    );
+    if (done) setEditMode(false);
   }
 
   const isImage = resource.file_url && IMAGE_EXT.test(resource.file_url);
@@ -880,7 +900,7 @@ function ResourceRow({
   const canReveal = !!resource.file_path || resource.category === "folder";
 
   async function reveal() {
-    await api.post(`/resources/${resource.id}/reveal`, {});
+    await api.post(`/resources/${resource.id}/reveal`, {}, { broadcast: false });
   }
 
   if (editMode) {

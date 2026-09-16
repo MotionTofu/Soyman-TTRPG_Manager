@@ -13,7 +13,8 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { api } from "../api/client";
+import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
+import { settingPaths } from "../data/settingEntities";
 import { useAlert, useConfirm } from "../hooks/useConfirm";
 import { EmptyState } from "./EmptyState";
 import { LoadErrorCard, SkeletonBlock } from "./Loadable";
@@ -39,6 +40,8 @@ import {
   type RootDirection,
 } from "../geographyRootLayout";
 import type { SettingLocation } from "../types";
+
+const NO_LOCATIONS: SettingLocation[] = [];
 
 const nodeTypes = { locRoot: LocationRootNode, groupBox: LocationGroupBox };
 const edgeTypes = { collector: CollectorEdge };
@@ -97,9 +100,12 @@ interface LastMove {
 }
 
 export function LocationRootGraph({ settingId }: Props) {
-  const [locations, setLocations] = useState<SettingLocation[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // Список мест — тот же ключ кэша, что у карточек и соседних видов
+  // географии (docs/adr/0001): правка в одном виде видна в остальных.
+  const locationsState = useResource<SettingLocation[]>(settingPaths.inSetting("location", settingId));
+  const locations = locationsState.data ?? NO_LOCATIONS;
+  const loading = locationsState.loading;
+  const loadError = locationsState.data ? null : locationsState.error;
   const [direction, setDirection] = useState<RootDirection>(() => {
     const v = localStorage.getItem(`geography-rootdir-${settingId}`);
     return v === "bottom-up" || v === "left-right" ? v : "top-down";
@@ -170,31 +176,18 @@ export function LocationRootGraph({ settingId }: Props) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const undoTimerRef = useRef<number | null>(null);
 
-  const refresh = useCallback(() => {
-    setLoading(true);
-    setLoadError(null);
-    const controller = new AbortController();
-    api
-      .get<SettingLocation[]>(`/setting-locations?setting_id=${settingId}`, { signal: controller.signal })
-      .then((rows) => {
-        setLocations(rows);
-        setLoading(false);
-        if (firstLoadRef.current) {
-          firstLoadRef.current = false;
-          setFitToken((t) => (t === 0 ? 1 : t));
-        }
-      })
-      .catch((e: unknown) => {
-        if ((e as Error).name === "AbortError") return;
-        setLoadError(String(e instanceof Error ? e.message : e));
-        setLoading(false);
-      });
-    return () => controller.abort();
-  }, [settingId]);
+  // Первая загрузка вписывает древо в экран.
   useEffect(() => {
-    const cleanup = refresh();
-    return cleanup;
-  }, [refresh]);
+    if (locationsState.data && firstLoadRef.current) {
+      firstLoadRef.current = false;
+      setFitToken((t) => (t === 0 ? 1 : t));
+    }
+  }, [locationsState.data]);
+  const afterWrite = useAfterWrite();
+  const run = useAction();
+  // Вернуть ноды на места по данным: отменённый перенос оставил бы ноду там,
+  // где её бросили. Данные при этом не перечитываются — они не менялись.
+  const resync = useCallback(() => setRev((r) => r + 1), []);
 
   useEffect(() => {
     try {
@@ -248,13 +241,11 @@ export function LocationRootGraph({ settingId }: Props) {
 
   async function undoLastMove() {
     if (!lastMove) return;
-    try {
-      await api.put(`/setting-locations/${lastMove.id}/parent`, { parent_id: lastMove.prevParent });
-      setLastMove(null);
-      refresh();
-    } catch (err) {
-      showAlert(String(err instanceof Error ? err.message : err));
-    }
+    const done = await run(
+      () => write.put(`/setting-locations/${lastMove.id}/parent`, { parent_id: lastMove.prevParent }).then(() => true),
+      { affects: [{ kind: "location" }] }
+    );
+    if (done) setLastMove(null);
   }
 
   const byIdAll = useMemo(() => new Map(locations.map((l) => [l.id, l])), [locations]);
@@ -634,7 +625,7 @@ export function LocationRootGraph({ settingId }: Props) {
         if (newParentId !== draggedId && moved && newParent && moved.parent_id !== newParentId) {
           if (isDescendantOf(draggedId, newParentId, byIdAll)) {
             showAlert("Нельзя переместить локацию в её же потомка — получится цикл.");
-            refresh();
+            resync();
             return;
           }
           const ok = await confirm({
@@ -643,12 +634,12 @@ export function LocationRootGraph({ settingId }: Props) {
             confirmLabel: "Переместить",
           });
           if (!ok) {
-            refresh();
+            resync();
             return;
           }
           const prevParent = moved.parent_id ?? null;
           try {
-            await api.put(`/setting-locations/${draggedId}/parent`, { parent_id: newParentId });
+            await write.put(`/setting-locations/${draggedId}/parent`, { parent_id: newParentId });
             // Переехавшая ветка — в автораскладку: старые координаты у старого родителя врут.
             const byParentAll = new Map<number | null, SettingLocation[]>();
             for (const l of locations) {
@@ -661,15 +652,17 @@ export function LocationRootGraph({ settingId }: Props) {
             saveRootPositions(settingId, fresh);
             setLastMove({ id: draggedId, name: moved.name, prevParent, newParentName: newParent.name });
             armUndoTimer();
-            refresh();
+            afterWrite([{ kind: "location" }]);
           } catch (err) {
+            // Перенос — отказ сервера (цикл, архив) — ответ рядом с жестом,
+            // а нода возвращается на место.
             showAlert(String(err instanceof Error ? err.message : err));
-            refresh();
+            resync();
           }
           return;
         }
         // Бросок на текущего родителя или на себя — просто вернуть камеру данных.
-        refresh();
+        resync();
         return;
       }
 
@@ -699,7 +692,7 @@ export function LocationRootGraph({ settingId }: Props) {
       dragStartRef.current = {};
       setRev((r) => r + 1); // рамки групп — вслед за ручной раскладкой
     },
-    [nodes, locations, byIdAll, settingId, setNodes, showAlert, confirm, refresh]
+    [nodes, locations, byIdAll, settingId, setNodes, showAlert, confirm, resync, afterWrite]
   );
 
   if (loading && locations.length === 0 && !loadError) {
@@ -873,7 +866,7 @@ export function LocationRootGraph({ settingId }: Props) {
             resetRootPositions(settingId);
             resetRootDepths(settingId);
             setDepth({});
-            refresh();
+            resync();
           }}
         >
           Сбросить раскладку
@@ -928,7 +921,7 @@ export function LocationRootGraph({ settingId }: Props) {
       {loadError && (
         <LoadErrorCard
           message={<>Не удалось загрузить географию: {loadError}</>}
-          onRetry={() => refresh()}
+          onRetry={locationsState.reload}
         />
       )}
       {creating && (
@@ -936,7 +929,6 @@ export function LocationRootGraph({ settingId }: Props) {
           initialType="location"
           ctx={{ settingId }}
           onClose={() => setCreating(false)}
-          onCreated={() => refresh()}
         />
       )}
       {wizardParentId !== null && (
@@ -944,10 +936,7 @@ export function LocationRootGraph({ settingId }: Props) {
           initialType="location"
           ctx={{ settingId, defaults: { parentLocationId: wizardParentId } } as unknown as { settingId: number }}
           onClose={() => setWizardParentId(null)}
-          onCreated={() => {
-            setWizardParentId(null);
-            refresh();
-          }}
+          onCreated={() => setWizardParentId(null)}
         />
       )}
       {nodes.length === 0 && !loadError ? (

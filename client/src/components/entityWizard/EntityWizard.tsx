@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Modal } from "../Modal";
+import { useAfterWrite } from "../../data/hooks";
+import { wizardAffects } from "../../data/settingPage";
 import { WIZARD_SPECS, WIZARD_TYPE_ORDER, draftForType } from "./specs";
 import type { WizardContext, WizardDraft, WizardEntityType } from "./types";
 
@@ -21,10 +23,12 @@ export function EntityWizard({
   ctx: WizardContext;
   onClose: () => void;
   // Вызывается после создания, когда визард закрывается на месте (кнопка
-  // «Создать и вернуться») — списку на странице нужно перечитать себя.
+  // «Создать и вернуться»). Списки перечитывать не нужно — задетое обновляет
+  // слой данных; колбэк для того, чтобы выбрать созданное.
   onCreated?: (id: number, type: WizardEntityType) => void;
 }) {
   const navigate = useNavigate();
+  const afterWrite = useAfterWrite();
   const [type, setType] = useState<WizardEntityType>(initialType);
   const [draft, setDraft] = useState<WizardDraft>(() => draftForType(initialType, ctx));
   const [stepIndex, setStepIndex] = useState(0);
@@ -69,8 +73,12 @@ export function EntityWizard({
         }
       }
     } catch (e) {
+      // Ошибка рядом с набранным: мастер не закрывается, черновик цел.
       setError(e instanceof Error ? e.message : String(e));
     } finally {
+      // И после отказа: сущность могла создаться, а упасть — один из
+      // следующих шагов (аватар, связь). Её надо показать в списках.
+      afterWrite(wizardAffects(ctx.settingId));
       setSaving(false);
     }
   }

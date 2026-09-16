@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import type { Affect } from "../data/entities";
+import { useAction, useResource, write } from "../data/hooks";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
@@ -17,17 +18,15 @@ interface Props {
 
 // Таб «Заметки» как Master–Detail: список записей слева, выбранная —
 // справа сразу в чтении (правка по кнопке). Верхний таб-бар не трогаем.
+const NO_ENTRIES: SettingEntry[] = [];
+const ENTRY_AFFECTS: Affect[] = [{ path: "/setting-entries" }];
+
 export function SettingEntryList({ settingId, category, addLabel, emptyLabel }: Props) {
   const [confirmDialog, confirm] = useConfirm();
-  const [entries, setEntries] = useState<SettingEntry[]>([]);
+  const entriesPath = `/setting-entries?setting_id=${settingId}&category=${category}`;
+  const entries = useResource<SettingEntry[]>(entriesPath).data ?? NO_ENTRIES;
   const [selId, setSelId] = useState<number | null>(null);
-
-  function refresh() {
-    api
-      .get<SettingEntry[]>(`/setting-entries?setting_id=${settingId}&category=${category}`)
-      .then(setEntries);
-  }
-  useEffect(refresh, [settingId, category]);
+  const run = useAction();
 
   // Выбор пережил удаление/перезагрузку: нет выбранной — берём первую.
   useEffect(() => {
@@ -39,13 +38,17 @@ export function SettingEntryList({ settingId, category, addLabel, emptyLabel }: 
   }, [entries]);
 
   async function addEntry() {
-    const created = await api.post<SettingEntry>("/setting-entries", {
-      setting_id: settingId,
-      category,
-      title: `Запись ${entries.length + 1}`,
-      content: "",
-    });
-    refresh();
+    // Повтор создал бы вторую запись.
+    const created = await run(
+      () =>
+        write.post<SettingEntry>("/setting-entries", {
+          setting_id: settingId,
+          category,
+          title: `Запись ${entries.length + 1}`,
+          content: "",
+        }),
+      { affects: ENTRY_AFFECTS, retry: false }
+    );
     // Сервер отдаёт созданную запись — выбираем её сразу в правке.
     if (created?.id) setSelId(created.id);
   }
@@ -53,8 +56,7 @@ export function SettingEntryList({ settingId, category, addLabel, emptyLabel }: 
   async function removeEntry(id: number) {
     if (!(await confirm({ message: "Удалить запись?", confirmLabel: "Удалить", danger: true })))
       return;
-    await api.del(`/setting-entries/${id}`);
-    refresh();
+    await run(() => write.del(`/setting-entries/${id}`).then(() => true), { affects: ENTRY_AFFECTS });
   }
 
   const selected = entries.find((e) => e.id === selId);
@@ -85,7 +87,6 @@ export function SettingEntryList({ settingId, category, addLabel, emptyLabel }: 
           entry={selected}
           settingId={settingId}
           forceOpen
-          onChange={refresh}
           onRemove={removeEntry}
         />
       ) : (
@@ -109,13 +110,11 @@ export function SettingEntryList({ settingId, category, addLabel, emptyLabel }: 
 function EntryCard({
   entry,
   settingId,
-  onChange,
   onRemove,
   forceOpen = false,
 }: {
   entry: SettingEntry;
   settingId: number;
-  onChange: () => void;
   onRemove: (id: number) => void;
   /** Внутри Master–Detail карточка всегда раскрыта, сворачивать нечего. */
   forceOpen?: boolean;
@@ -125,12 +124,19 @@ function EntryCard({
   const [title, setTitle] = useState(entry.title);
   const [content, setContent] = useState(entry.content);
   const open = editMode || expanded || forceOpen;
+  const run = useAction();
 
+  // Правка остаётся открытой, если не записалось.
   async function save() {
-    await api.put(`/setting-entries/${entry.id}`, { title, content });
-    syncMentionLinks("setting", settingId, entry.content, content);
-    setEditMode(false);
-    onChange();
+    const done = await run(
+      async () => {
+        await write.put(`/setting-entries/${entry.id}`, { title, content });
+        await syncMentionLinks("setting", settingId, entry.content, content);
+        return true;
+      },
+      { affects: ENTRY_AFFECTS }
+    );
+    if (done) setEditMode(false);
   }
 
   return (

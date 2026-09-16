@@ -1,4 +1,4 @@
-import { api } from "../../api/client";
+import { write } from "../../data/hooks";
 import type { DraftRelation } from "./fields";
 import type { WizardDraft } from "./types";
 
@@ -36,7 +36,7 @@ export async function uploadAvatar(path: string, avatar: File | null): Promise<v
   if (!avatar) return;
   const form = new FormData();
   form.append("file", avatar);
-  await api.post(path, form);
+  await write.post(path, form);
 }
 
 // Связь сущности с событиями хроники: отдельной таблицы у неё нет, всё лежит
@@ -47,7 +47,7 @@ export async function linkEvents(
   eventIds: number[]
 ): Promise<void> {
   for (const eventId of eventIds) {
-    await api.post("/links", {
+    await write.post("/links", {
       from_type: fromType,
       from_id: fromId,
       to_type: "setting_event",
@@ -65,7 +65,7 @@ export async function linkEventParticipants(
   participantIds: number[]
 ): Promise<void> {
   for (const id of participantIds) {
-    await api.post("/links", {
+    await write.post("/links", {
       from_type: participantType,
       from_id: id,
       to_type: "setting_event",
@@ -80,7 +80,7 @@ export async function createRelations(
   list: DraftRelation[]
 ): Promise<void> {
   for (const r of list) {
-    await api.post("/entity-relations", {
+    await write.post("/entity-relations", {
       from_type: fromType,
       from_id: fromId,
       to_type: r.to_type,

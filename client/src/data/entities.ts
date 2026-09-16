@@ -110,10 +110,19 @@ export function matchesAffect(queryKey: QueryKey, affect: Affect): boolean {
   return false;
 }
 
-/** Помечает задетое устаревшим; видимое на экране перечитывается сразу. Пусто — всё. */
-export function invalidateAffects(client: QueryClient, affects: readonly Affect[]): Promise<void> {
-  if (affects.length === 0) return client.invalidateQueries();
+/**
+ * Помечает задетое устаревшим; видимое на экране перечитывается сразу. Пусто — всё.
+ * `refetch: false` — только пометить: перечитается при следующем обращении.
+ */
+export function invalidateAffects(
+  client: QueryClient,
+  affects: readonly Affect[],
+  options?: { refetch?: boolean }
+): Promise<void> {
+  const refetchType = options?.refetch === false ? "none" : "active";
+  if (affects.length === 0) return client.invalidateQueries({ refetchType });
   return client.invalidateQueries({
     predicate: (query) => affects.some((affect) => matchesAffect(query.queryKey, affect)),
+    refetchType,
   });
 }

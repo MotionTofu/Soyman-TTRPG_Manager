@@ -1,10 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
-import { api } from "../api/client";
-import { invalidateAffects } from "../data/entities";
-import { useResource } from "../data/hooks";
+import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
+import { settingPaths } from "../data/settingEntities";
 import { EmptyState } from "./EmptyState";
 import { LoadErrorCard, SkeletonBlock } from "./Loadable";
 import { NavIcon } from "./NavIcons";
@@ -19,6 +17,8 @@ import { useAlert, useConfirm, usePrompt } from "../hooks/useConfirm";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import { isSafeImageUrl } from "../utils/safeUrl";
 import type { SettingLocation } from "../types";
+
+const NO_LOCATIONS: SettingLocation[] = [];
 
 function pathKey(settingId: number): string {
   return `geography-millerpath-${settingId}`;
@@ -85,9 +85,12 @@ type MenuState =
  * колонки Миллера — от детей выбранного корня, справа — карточка места.
  * Аккордеон: места мало — дальние от активной колонки схлопываются первыми. */
 export function LocationMiller({ settingId }: { settingId: number }) {
-  const [locations, setLocations] = useState<SettingLocation[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // Список мест — тот же ключ кэша, что у карточек и соседних видов
+  // географии (docs/adr/0001): правка в одном виде видна в остальных.
+  const locationsState = useResource<SettingLocation[]>(settingPaths.inSetting("location", settingId));
+  const locations = locationsState.data ?? NO_LOCATIONS;
+  const loading = locationsState.loading;
+  const loadError = locationsState.data ? null : locationsState.error;
   const [path, setPath] = useState<number[]>(() => loadPath(settingId));
   const [activeCol, setActiveCol] = useState(0);
   const [workW, setWorkW] = useState(0);
@@ -103,8 +106,9 @@ export function LocationMiller({ settingId }: { settingId: number }) {
   const [alertDialog, showAlert] = useAlert();
   const [promptDialog, promptText] = usePrompt();
   const { deleteWithUndo } = useUndoDelete();
+  const run = useAction();
+  const afterWrite = useAfterWrite();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const workRef = useRef<HTMLDivElement>(null);
   // Флажки «Партия здесь»: путь до места партии каждой кампании сеттинга
   // (решения 2026-09-11, §3, п. 5).
@@ -134,31 +138,6 @@ export function LocationMiller({ settingId }: { settingId: number }) {
     setWorkW(el.clientWidth);
     return () => ro.disconnect();
   });
-
-  const refresh = useCallback(() => {
-    setLoading(true);
-    setLoadError(null);
-    const controller = new AbortController();
-    api
-      .get<SettingLocation[]>(`/setting-locations?setting_id=${settingId}`, { signal: controller.signal })
-      .then((rows) => {
-        setLocations(rows);
-        setLoading(false);
-      })
-      .catch((e: unknown) => {
-        if ((e as Error).name === "AbortError") return;
-        setLoadError(String(e instanceof Error ? e.message : e));
-        setLoading(false);
-      });
-    // Карточка места читает деталь через слой данных: переименование,
-    // перенос и новое вложенное задевают и её.
-    void invalidateAffects(queryClient, [{ kind: "location" }]);
-    return () => controller.abort();
-  }, [settingId, queryClient]);
-  useEffect(() => {
-    const cleanup = refresh();
-    return cleanup;
-  }, [refresh]);
 
   useEffect(() => {
     try {
@@ -346,12 +325,9 @@ export function LocationMiller({ settingId }: { settingId: number }) {
       showAlert("Имя не может быть пустым");
       return;
     }
-    try {
-      await api.put(`/setting-locations/${id}`, { name: name.trim() });
-      refresh();
-    } catch (err) {
-      showAlert(String(err instanceof Error ? err.message : err));
-    }
+    await run(() => write.put(`/setting-locations/${id}`, { name: name.trim() }).then(() => true), {
+      affects: [{ kind: "location", id }],
+    });
   }
 
   async function archive(id: number) {
@@ -365,20 +341,20 @@ export function LocationMiller({ settingId }: { settingId: number }) {
       danger: true,
     });
     if (!ok) return;
-    try {
-      await deleteWithUndo({
-        entityName: loc.name,
-        deleteFn: () => api.del(`/setting-locations/${id}`),
-        restoreFn: async () => {
-          await api.put(`/setting-locations/${id}/restore`);
-          refresh();
-        },
-      });
-    } catch (e) {
-      showAlert(String(e instanceof Error ? e.message : e));
-      return;
-    }
-    refresh();
+    await run(
+      () =>
+        deleteWithUndo({
+          entityName: loc.name,
+          deleteFn: async () => {
+            await write.del(`/setting-locations/${id}`);
+          },
+          restoreFn: async () => {
+            await write.put(`/setting-locations/${id}/restore`);
+            afterWrite([{ kind: "location" }]);
+          },
+        }).then(() => true),
+      { affects: [{ kind: "location" }] }
+    );
   }
 
   async function moveTo(dragged: number, targetParent: number | null) {
@@ -396,18 +372,15 @@ export function LocationMiller({ settingId }: { settingId: number }) {
         return;
       }
     }
-    try {
-      await api.put(`/setting-locations/${dragged}/parent`, { parent_id: targetParent });
-      // Едем следом за переехавшей.
-      setPath(chainFor(dragged));
-      refresh();
-    } catch (err) {
-      showAlert(String(err instanceof Error ? err.message : err));
-    } finally {
-      setDraggedId(null);
-      setDragOverId(null);
-      setDragOverRoots(false);
-    }
+    setDraggedId(null);
+    setDragOverId(null);
+    setDragOverRoots(false);
+    const done = await run(
+      () => write.put(`/setting-locations/${dragged}/parent`, { parent_id: targetParent }).then(() => true),
+      { affects: [{ kind: "location" }] }
+    );
+    // Едем следом за переехавшей.
+    if (done) setPath(chainFor(dragged));
   }
 
   function openMove(id: number) {
@@ -680,7 +653,7 @@ export function LocationMiller({ settingId }: { settingId: number }) {
       {loadError && (
         <LoadErrorCard
           message={<>Не удалось загрузить географию: {loadError}</>}
-          onRetry={() => refresh()}
+          onRetry={locationsState.reload}
         />
       )}
       {creating && (
@@ -688,7 +661,6 @@ export function LocationMiller({ settingId }: { settingId: number }) {
           initialType="location"
           ctx={{ settingId }}
           onClose={() => setCreating(false)}
-          onCreated={() => refresh()}
         />
       )}
       {wizardParentId !== null && (
@@ -696,10 +668,7 @@ export function LocationMiller({ settingId }: { settingId: number }) {
           initialType="location"
           ctx={{ settingId, defaults: { parentLocationId: wizardParentId } } as unknown as { settingId: number }}
           onClose={() => setWizardParentId(null)}
-          onCreated={() => {
-            setWizardParentId(null);
-            refresh();
-          }}
+          onCreated={() => setWizardParentId(null)}
         />
       )}
       {confirmDialog}

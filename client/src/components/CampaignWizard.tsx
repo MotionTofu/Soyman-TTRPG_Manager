@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { useAfterWrite, write } from "../data/hooks";
 import { Modal } from "./Modal";
 import {
   PAYMENT_TYPE_OPTIONS,
@@ -45,6 +45,7 @@ export function CampaignWizard({ systems, settings, defaultSettingId, onClose, o
   const navigate = useNavigate();
   const [stepIndex, setStepIndex] = useState(0);
   const [saving, setSaving] = useState(false);
+  const afterWrite = useAfterWrite();
   const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState("");
@@ -99,7 +100,7 @@ export function CampaignWizard({ systems, settings, defaultSettingId, onClose, o
     setSaving(true);
     setError(null);
     try {
-      const created = await api.post<Campaign>("/campaigns", {
+      const created = await write.post<Campaign>("/campaigns", {
         name: trimmed,
         role,
         type,
@@ -111,6 +112,7 @@ export function CampaignWizard({ systems, settings, defaultSettingId, onClose, o
         session_rate: role === "gm" && paymentType === "paid" ? Math.max(0, Math.min(999999, Math.trunc(rateNum))) : 0,
         currency: currency.trim() || "RUB",
       });
+      afterWrite([{ kind: "campaign" }]);
       onCreated?.(created);
       if (then === "campaign") navigate(`/campaigns/${created.id}`);
       onClose();

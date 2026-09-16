@@ -1290,7 +1290,6 @@ export function SessionDetailPage() {
           scope="session"
           entityId={sessionId}
           resources={linkResources}
-          onChange={sessionState.reload}
           settingId={campaign?.setting_id ?? null}
         />
       )}

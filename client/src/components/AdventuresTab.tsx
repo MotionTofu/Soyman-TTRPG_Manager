@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { api, getAuthToken } from "../api/client";
+import { dataKeys, listPath, type Affect } from "../data/entities";
+import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
 import { chapterWord, sceneWord } from "../sceneKinds";
 import { AdventureWizard } from "./AdventureWizard";
 import { AdventurePreview } from "./AdventurePreview";
@@ -25,6 +28,10 @@ import { useConfirm, usePrompt } from "../hooks/useConfirm";
 import { useLongPress } from "../hooks/useLongPress";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 
+const NO_ARCS: StoryArc[] = [];
+// Архивация и загрузка из файла задевают приключения и их сцены.
+const ARC_AFFECTS: Affect[] = [{ kind: "adventure" }, { kind: "scene" }];
+
 // "Приключения" — the index of a setting's prepared story blocks. Two
 // columns: the list on the left, a read-only preview of the selected
 // adventure on the right. Everything inside one (chapters, scenes,
@@ -42,8 +49,13 @@ export function AdventuresTab({
   const [promptDialog, promptText] = usePrompt();
   const { deleteWithUndo } = useUndoDelete();
   const navigate = useNavigate();
-  const [arcs, setArcs] = useState<StoryArc[]>([]);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const arcsPath = listPath("adventure", { setting_id: settingId });
+  const arcsState = useResource<StoryArc[]>(arcsPath);
+  const arcs = arcsState.data ?? NO_ARCS;
+  const loadError = arcsState.data ? null : arcsState.error;
+  const queryClient = useQueryClient();
+  const run = useAction();
+  const afterWrite = useAfterWrite();
   const [wizardOpen, setWizardOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; arc: StoryArc } | null>(null);
@@ -57,43 +69,41 @@ export function AdventuresTab({
   const [exportingArc, setExportingArc] = useState<StoryArc | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
 
-  function refresh() {
-    setLoadError(null);
-    api
-      .get<StoryArc[]>(`/story/arcs?setting_id=${settingId}`)
-      .then(setArcs)
-      .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : String(e)));
-  }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(refresh, [settingId]);
 
   async function archive(arc: StoryArc) {
     if (!(await confirm({ message: `Отправить «${arc.name}» в архив вместе с главами и сценами?`, confirmLabel: "Архивировать", danger: true })))
       return;
     // Отмена возвращает одну строку приключения: главы и сцены своей отметки
     // не получали, они просто перестают находиться вместе с ним.
-    await deleteWithUndo({
-      entityName: arc.name,
-      deleteFn: async () => { await api.del(`/story/arcs/${arc.id}`); refresh(); },
-      restoreFn: async () => { await api.put(`/story/arcs/${arc.id}/restore`, {}); refresh(); },
-    });
+    await run(
+      () =>
+        deleteWithUndo({
+          entityName: arc.name,
+          deleteFn: async () => { await write.del(`/story/arcs/${arc.id}`); },
+          restoreFn: async () => { await write.put(`/story/arcs/${arc.id}/restore`, {}); afterWrite(ARC_AFFECTS); },
+        }).then(() => true),
+      { affects: ARC_AFFECTS }
+    );
   }
 
   async function rename(arc: StoryArc) {
     const name = await promptText({ title: "Переименовать приключение", message: "Название приключения", defaultValue: arc.name });
     if (!name?.trim() || name.trim() === arc.name) return;
-    await api.put(`/story/arcs/${arc.id}`, { name: name.trim() });
-    refresh();
+    await run(() => write.put(`/story/arcs/${arc.id}`, { name: name.trim() }).then(() => true), {
+      affects: [{ kind: "adventure", id: arc.id }],
+    });
   }
 
   async function toggleFavorite(arc: StoryArc) {
+    // Звёздочка видна сразу; отказ возвращает прежнее.
     const favorite = arc.is_favorite === 1 ? 0 : 1;
-    setArcs((prev) => prev.map((a) => (a.id === arc.id ? { ...a, is_favorite: favorite } : a)));
-    try {
-      await api.put(`/story/arcs/${arc.id}/favorite`, { favorite });
-    } catch {
-      refresh();
-    }
+    const key = dataKeys.resource(arcsPath);
+    const previous = queryClient.getQueryData<StoryArc[]>(key);
+    if (previous) queryClient.setQueryData(key, previous.map((a) => (a.id === arc.id ? { ...a, is_favorite: favorite } : a)));
+    const done = await run(() => write.put(`/story/arcs/${arc.id}/favorite`, { favorite }).then(() => true), {
+      affects: [{ kind: "adventure", id: arc.id }],
+    });
+    if (!done && previous) queryClient.setQueryData(key, previous);
   }
 
   async function exportArc(arc: StoryArc) {
@@ -142,7 +152,7 @@ export function AdventuresTab({
         setClash({ name: r.name, data });
         return;
       }
-      refresh();
+      afterWrite(ARC_AFFECTS);
     } catch (e) {
       await confirm({
         title: "Не удалось загрузить",
@@ -162,7 +172,7 @@ export function AdventuresTab({
     setBusy("Загружаю…");
     try {
       const r = await send(data, mode);
-      refresh();
+      afterWrite(ARC_AFFECTS);
       if (mode === "merge" && !r.conflict) {
         await confirm({
           title: "Слияние завершено",
@@ -270,7 +280,7 @@ export function AdventuresTab({
       {loadError && (
         <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
           <span>Не удалось загрузить приключения: {loadError}</span>
-          <button className="primary" onClick={refresh}>
+          <button className="primary" onClick={arcsState.reload}>
             Повторить
           </button>
         </div>
@@ -395,7 +405,6 @@ export function AdventuresTab({
           settingId={settingId}
           campaignId={campaignId}
           onClose={() => setWizardOpen(false)}
-          onCreated={() => refresh()}
         />
       )}
     </div>

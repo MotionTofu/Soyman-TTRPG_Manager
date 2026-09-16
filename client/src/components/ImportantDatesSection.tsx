@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { api } from "../api/client";
+import { useMemo, useState } from "react";
+import type { Affect } from "../data/entities";
+import { useAction, useResource, write } from "../data/hooks";
+import { chroniclePaths } from "../data/settingPage";
 import { useConfirm } from "../hooks/useConfirm";
 import { Modal } from "./Modal";
 import { formatImportantDate, formatCustomRule } from "../inworldCalendar";
@@ -51,6 +53,12 @@ const OWNER_LABELS: Record<string, string> = {
   location: "Локация",
 };
 
+function ownerAffects(ownerType: string, ownerId: number | null): Affect[] {
+  if (ownerId == null) return [];
+  if (ownerType === "being" || ownerType === "community" || ownerType === "location") return [{ kind: ownerType, id: ownerId }];
+  return [];
+}
+
 function sortChronological(a: ImportantDate, b: ImportantDate): number {
   const ma = a.month ?? 0, mb = b.month ?? 0;
   if (ma !== mb) return ma - mb;
@@ -72,46 +80,30 @@ function ordinalPreview(n: number, unit1: string, unit2: string): string {
   return `${n}-й ${unit1} ${unit2Gen}`;
 }
 
+const NO_DATES: ImportantDate[] = [];
+const NO_OWNERS = { beings: [] as OwnerOption[], communities: [] as OwnerOption[], locations: [] as OwnerOption[] };
+const NO_TYPES: DateTypeSuggestion[] = [];
+
+// Даты, владельцы и типы — из кэша слоя данных, теми же путями, что у оси
+// хроники и предпросмотра календаря: новая дата видна там сразу.
 export function ImportantDatesSection({ settingId, months = [], weekdays: weekdaysProp }: { settingId: number; months?: CalendarMonth[]; weekdays?: CalendarWeekday[] }) {
-  const [dates, setDates] = useState<ImportantDate[]>([]);
-  const [owners, setOwners] = useState<{ beings: OwnerOption[]; communities: OwnerOption[]; locations: OwnerOption[] }>({ beings: [], communities: [], locations: [] });
-  const [dateTypes, setDateTypes] = useState<DateTypeSuggestion[]>([]);
-  const [weekdays, setWeekdays] = useState<CalendarWeekday[]>(weekdaysProp ?? []);
+  const datesPath = chroniclePaths.importantDates(settingId);
+  const dates = useResource<ImportantDate[]>(datesPath).data ?? NO_DATES;
+  const owners = useResource<typeof NO_OWNERS>(chroniclePaths.owners(settingId)).data ?? NO_OWNERS;
+  const dateTypes = useResource<DateTypeSuggestion[]>(chroniclePaths.dateTypes(settingId)).data ?? NO_TYPES;
+  // Месяцы и дни недели страница обычно передаёт; без них — из календаря.
+  const needCalendar = months.length === 0 || !weekdaysProp || weekdaysProp.length === 0;
+  const fetchedCalendar = useResource<SettingCalendar>(needCalendar ? chroniclePaths.calendar(settingId) : null).data;
+  const weekdays = weekdaysProp && weekdaysProp.length > 0 ? weekdaysProp : fetchedCalendar?.weekdays;
+  const run = useAction();
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [confirmDialog, confirm] = useConfirm();
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [fetchedMonths, setFetchedMonths] = useState<CalendarMonth[]>([]);
 
-  const refresh = useCallback(() => {
-    const ac = new AbortController();
-    api.get<ImportantDate[]>(`/settings/${settingId}/important-dates`, { signal: ac.signal })
-      .then(setDates).catch(() => {});
-    return () => ac.abort();
-  }, [settingId]);
-
-  useEffect(() => { const cleanup = refresh(); return cleanup; }, [refresh]);
-
-  useEffect(() => {
-    api.get<{ beings: OwnerOption[]; communities: OwnerOption[]; locations: OwnerOption[] }>(`/settings/${settingId}/entities`)
-      .then(setOwners).catch(() => {});
-    api.get<DateTypeSuggestion[]>(`/settings/${settingId}/date-types`)
-      .then(setDateTypes).catch(() => {});
-    if (!weekdaysProp || weekdaysProp.length === 0) {
-      api.get<SettingCalendar>(`/settings/${settingId}/calendar`)
-        .then((c) => setWeekdays(c.weekdays ?? [])).catch(() => {});
-    } else {
-      setWeekdays(weekdaysProp);
-    }
-    if (months.length === 0) {
-      api.get<SettingCalendar>(`/settings/${settingId}/calendar`)
-        .then((c) => setFetchedMonths(c.months ?? [])).catch(() => {});
-    }
-  }, [settingId, weekdaysProp, months]);
-
-  const effectiveMonths = months.length > 0 ? months : fetchedMonths;
-  const weekdaysList = useMemo(() => weekdays.map((w) => w.name), [weekdays]);
+  const effectiveMonths = months.length > 0 ? months : (fetchedCalendar?.months ?? []);
+  const weekdaysList = useMemo(() => (weekdays ?? []).map((w) => w.name), [weekdays]);
 
   const typeSuggestions = useMemo(() => {
     const q = draft.date_type.trim().toLowerCase();
@@ -186,14 +178,15 @@ export function ImportantDatesSection({ settingId, months = [], weekdays: weekda
       // она попадала в календарь каждого мира сразу.
       owner_id: (draft.owner_type || "setting") === "setting" ? settingId : draft.owner_id,
     };
-    if (editingId) {
-      await api.put(`/settings/important-dates/${editingId}`, payload);
-    } else {
-      await api.post(`/settings/${settingId}/important-dates`, payload);
-    }
-    setShowModal(false);
-    refresh();
-    api.get<DateTypeSuggestion[]>(`/settings/${settingId}/date-types`).then(setDateTypes).catch(() => {});
+    // Дату видят и сеттинг, и её владелец на своей вкладке дат; новый тип
+    // попадает в подсказки.
+    const affects: Affect[] = [{ path: datesPath }, { path: chroniclePaths.dateTypes(settingId) }, ...ownerAffects(payload.owner_type, payload.owner_id)];
+    const id = editingId;
+    // Окно закрывается, только если записалось; повтор создания дал бы вторую дату.
+    const done = id
+      ? await run(() => write.put(`/settings/important-dates/${id}`, payload).then(() => true), { affects })
+      : await run(() => write.post(datesPath, payload).then(() => true), { affects, retry: false });
+    if (done) setShowModal(false);
   }
 
   async function handleClose() {
@@ -207,8 +200,10 @@ export function ImportantDatesSection({ settingId, months = [], weekdays: weekda
   async function handleDelete(id: number, title: string) {
     const ok = await confirm({ title: "Удалить важную дату?", message: `«${title}» будет удалена.`, confirmLabel: "Удалить", danger: true });
     if (!ok) return;
-    await api.del(`/settings/important-dates/${id}`);
-    refresh();
+    const date = dates.find((d) => d.id === id);
+    await run(() => write.del(`/settings/important-dates/${id}`).then(() => true), {
+      affects: [{ path: datesPath }, ...ownerAffects(date?.owner_type ?? "", date?.owner_id ?? null)],
+    });
   }
 
   function selectTypeSuggestion(s: DateTypeSuggestion) {
@@ -314,7 +309,7 @@ export function ImportantDatesSection({ settingId, months = [], weekdays: weekda
 
                 {draft.recurrence === "weekly" && (
                   <select value={draft.day} onChange={(e) => setDraft((d) => ({ ...d, day: e.target.value }))}>
-                    {weekdays.map((w) => <option key={w.position} value={String(w.position)}>{w.name}</option>)}
+                    {(weekdays ?? []).map((w) => <option key={w.position} value={String(w.position)}>{w.name}</option>)}
                   </select>
                 )}
 

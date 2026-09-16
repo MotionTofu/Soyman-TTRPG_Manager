@@ -1,4 +1,4 @@
-import { api } from "../../api/client";
+import { write } from "../../data/hooks";
 import {
   createRelations,
   file,
@@ -32,7 +32,7 @@ const location: WizardTypeSpec = {
   }),
   steps: () => locationSteps(),
   create: async (draft, ctx) => {
-    const created = await api.post<{ id: number }>("/setting-locations", {
+    const created = await write.post<{ id: number }>("/setting-locations", {
       setting_id: ctx.settingId,
       name: draft.name,
       kind: str(draft, "kind"),
@@ -41,7 +41,7 @@ const location: WizardTypeSpec = {
     const id = created.id;
     // Остальное создание не принимает — дописывается правкой, как это делает
     // профиль локации.
-    await api.put(`/setting-locations/${id}`, {
+    await write.put(`/setting-locations/${id}`, {
       aliases: strings(draft, "aliases"),
       name_original: str(draft, "name_original"),
       short_name: str(draft, "short_name"),
@@ -49,13 +49,13 @@ const location: WizardTypeSpec = {
     });
     await uploadAvatar(`/setting-locations/${id}/avatar`, file(draft, "avatar"));
     for (const childId of ids(draft, "child_ids")) {
-      await api.put(`/setting-locations/${childId}/parent`, { parent_id: id });
+      await write.put(`/setting-locations/${childId}/parent`, { parent_id: id });
     }
     for (const beingId of ids(draft, "inhabitant_being_ids")) {
-      await api.post(`/setting-locations/${id}/inhabitants`, { type: "being", id: beingId });
+      await write.post(`/setting-locations/${id}/inhabitants`, { type: "being", id: beingId });
     }
     for (const communityId of ids(draft, "inhabitant_community_ids")) {
-      await api.post(`/setting-locations/${id}/inhabitants`, { type: "community", id: communityId });
+      await write.post(`/setting-locations/${id}/inhabitants`, { type: "community", id: communityId });
     }
     await linkEvents("location", id, ids(draft, "event_ids"));
     return id;
@@ -67,7 +67,7 @@ const location: WizardTypeSpec = {
 // шаги и сохранение у них общие.
 async function createBeing(draft: WizardDraft, ctx: WizardContext, category: string) {
   const base = draft.base_monster as SearchResult | null;
-  const created = await api.post<{ id: number }>("/setting-beings", {
+  const created = await write.post<{ id: number }>("/setting-beings", {
     setting_id: ctx.settingId,
     name: draft.name,
     category,
@@ -75,7 +75,7 @@ async function createBeing(draft: WizardDraft, ctx: WizardContext, category: str
     community_ids: ids(draft, "community_ids"),
   });
   const id = created.id;
-  await api.put(`/setting-beings/${id}`, {
+  await write.put(`/setting-beings/${id}`, {
     aliases: strings(draft, "aliases"),
     name_original: str(draft, "name_original"),
     short_name: str(draft, "short_name"),
@@ -83,7 +83,7 @@ async function createBeing(draft: WizardDraft, ctx: WizardContext, category: str
   });
   await uploadAvatar(`/setting-beings/${id}/avatar`, file(draft, "avatar"));
   for (const locationId of ids(draft, "location_ids")) {
-    await api.post(`/setting-beings/${id}/locations`, { location_id: locationId });
+    await write.post(`/setting-beings/${id}/locations`, { location_id: locationId });
   }
   await createRelations("being", id, relations(draft, "relations"));
   await linkEvents("being", id, ids(draft, "event_ids"));
@@ -138,26 +138,26 @@ const community: WizardTypeSpec = {
     location_ids: ctx.defaults?.locationIds ?? [],
   }),
   create: async (draft, ctx) => {
-    const created = await api.post<{ id: number }>("/setting-communities", {
+    const created = await write.post<{ id: number }>("/setting-communities", {
       setting_id: ctx.settingId,
       name: draft.name,
     });
     const id = created.id;
-    await api.put(`/setting-communities/${id}`, {
+    await write.put(`/setting-communities/${id}`, {
       aliases: strings(draft, "aliases"),
       name_original: str(draft, "name_original"),
       description: str(draft, "description"),
     });
     await uploadAvatar(`/setting-communities/${id}/avatar`, file(draft, "avatar"));
     for (const locationId of ids(draft, "location_ids")) {
-      await api.post(`/setting-communities/${id}/locations`, { location_id: locationId });
+      await write.post(`/setting-communities/${id}/locations`, { location_id: locationId });
     }
     // Вложенные — это перевешивание существующих сообществ под новое.
     for (const childId of ids(draft, "child_ids")) {
-      await api.put(`/setting-communities/${childId}`, { parent_id: id });
+      await write.put(`/setting-communities/${childId}`, { parent_id: id });
     }
     for (const beingId of ids(draft, "member_ids")) {
-      await api.post(`/setting-communities/${id}/members`, { being_id: beingId });
+      await write.post(`/setting-communities/${id}/members`, { being_id: beingId });
     }
     await createRelations("community", id, relations(draft, "relations"));
     await linkEvents("community", id, ids(draft, "event_ids"));
@@ -176,7 +176,7 @@ const artifact: WizardTypeSpec = {
   create: async (draft, ctx) => {
     // Предмет, в отличие от остальных, принимает почти всё сразу — своих
     // связующих таблиц у его полей нет, кроме компендиума и событий.
-    const created = await api.post<{ id: number }>("/artifacts", {
+    const created = await write.post<{ id: number }>("/artifacts", {
       setting_id: ctx.settingId,
       name: draft.name,
       short_name: str(draft, "short_name"),
@@ -196,7 +196,7 @@ const artifact: WizardTypeSpec = {
     await uploadAvatar(`/artifacts/${id}/avatar`, file(draft, "avatar"));
     const entry = draft.compendium_entry as SearchResult | null;
     if (entry) {
-      await api.post(`/artifacts/${id}/compendium-links`, { compendium_entry_id: entry.id });
+      await write.post(`/artifacts/${id}/compendium-links`, { compendium_entry_id: entry.id });
     }
     await linkEvents("artifact", id, ids(draft, "event_ids"));
     return id;
@@ -215,7 +215,7 @@ const event: WizardTypeSpec = {
   // число первого месяца нулевого года.
   initialDraft: () => ({ name: "", inworld_year: 0, inworld_month: 1, inworld_day: 1 }),
   create: async (draft, ctx) => {
-    const created = await api.post<{ id: number }>(`/settings/${ctx.settingId}/calendar-events`, {
+    const created = await write.post<{ id: number }>(`/settings/${ctx.settingId}/calendar-events`, {
       title: draft.name,
       description: str(draft, "description"),
       full_description: str(draft, "full_description"),

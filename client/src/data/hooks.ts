@@ -217,7 +217,11 @@ export function useAction(): <R>(action: () => Promise<R>, options: ActionOption
         afterWrite(client, options.affects);
         return result;
       } catch (error) {
-        afterWrite(client, options.affects);
+        // Действие могло записаться частью (первый запрос прошёл, второй нет),
+        // поэтому задетое устарело. Но перечитывать его сейчас — при лежащем
+        // сервере это второе сообщение «Ошибка загрузки» рядом с плашкой, а
+        // будить другие окна нечем: удавшийся повтор разбудит их сам.
+        void invalidateAffects(client, options.affects, { refetch: false });
         showSaveError(
           errorText(error),
           options.retry === false

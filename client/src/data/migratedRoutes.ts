@@ -19,7 +19,7 @@ const MIGRATED_ROUTES: readonly RegExp[] = [
   /^\/sessions\/\d+\/?$/,
   /^\/sessions\/\d+\/live\/?$/,
   /^\/sessions\/\d+\/live\/panel\/[A-Za-z]+\/?$/,
-  // Группа «сущности сеттинга», часть 1: девять карточек. Сеттинг — часть 2.
+  // Группа «сущности сеттинга», часть 1: девять карточек.
   /^\/locations\/\d+\/?$/,
   /^\/beings\/\d+\/?$/,
   /^\/artifacts\/\d+\/?$/,
@@ -28,6 +28,8 @@ const MIGRATED_ROUTES: readonly RegExp[] = [
   /^\/compendium\/\d+\/?$/,
   /^\/scenes\/\d+\/?$/,
   /^\/adventures\/\d+\/?$/,
+  // Часть 2: страница Сеттинга со всеми вкладками.
+  /^\/settings\/\d+\/?$/,
 ];
 
 export function isMigratedRoute(pathname: string): boolean {

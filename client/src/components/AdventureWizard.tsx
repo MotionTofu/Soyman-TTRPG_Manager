@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { useAfterWrite, write } from "../data/hooks";
 import { Modal } from "./Modal";
 import type { StoryArc } from "../types";
 
@@ -46,13 +46,14 @@ export function AdventureWizard({ settingId, campaignId, onClose, onCreated, onC
   const totalSteps = STEPS.length;
   const current = STEPS[stepIndex];
   const canCreate = name.trim().length > 0 && !saving;
+  const afterWrite = useAfterWrite();
 
   async function create(then: "close" | "adventure" | "canvas") {
     if (!canCreate) return;
     setSaving(true);
     setError(null);
     try {
-      const created = await api.post<StoryArc>("/story/arcs", {
+      const created = await write.post<StoryArc>("/story/arcs", {
         setting_id: settingId,
         name: name.trim(),
         description,
@@ -64,6 +65,7 @@ export function AdventureWizard({ settingId, campaignId, onClose, onCreated, onC
         tags,
         ...(campaignId ? { campaign_id: campaignId } : {}),
       });
+      afterWrite([{ kind: "adventure" }]);
       onCreated?.(created);
       if (then === "adventure") navigate(`/adventures/${created.id}`);
       else if (then === "canvas") onCreatedAndOpenCanvas?.(created);

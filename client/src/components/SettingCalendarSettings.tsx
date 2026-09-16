@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { useState } from "react";
+import { useAction, useResource, write } from "../data/hooks";
+import { chroniclePaths, timelineAffects } from "../data/settingPage";
 import { useConfirm } from "../hooks/useConfirm";
 import type { SettingCalendar, SettingCalendarEra, SettingCalendarTimeline } from "../types";
 
@@ -8,31 +9,19 @@ interface Props {
 }
 
 export function SettingCalendarSettings({ settingId }: Props) {
-  const [calendar, setCalendar] = useState<SettingCalendar | null>(null);
+  const calendar = useResource<SettingCalendar>(chroniclePaths.calendar(settingId)).data;
+  const run = useAction();
   const [editing, setEditing] = useState(false);
   const [months, setMonths] = useState<{ name: string; days: number }[]>([]);
   const [weekdays, setWeekdays] = useState<{ name: string }[]>([]);
   const [era, setEra] = useState("");
   const [confirmDialog, confirm] = useConfirm();
 
-  const [eras, setEras] = useState<SettingCalendarEra[]>([]);
-  const [timelines, setTimelines] = useState<SettingCalendarTimeline[]>([]);
+  const eras = useResource<SettingCalendarEra[]>(chroniclePaths.eras(settingId)).data ?? [];
+  const timelines = useResource<SettingCalendarTimeline[]>(chroniclePaths.timelines(settingId)).data ?? [];
   const [eraName, setEraName] = useState("");
   const [eraStartYear, setEraStartYear] = useState("");
   const [eraTimelineId, setEraTimelineId] = useState<number | null>(null);
-
-  function refresh() {
-    api.get<SettingCalendar>(`/settings/${settingId}/calendar`).then((c) => {
-      setCalendar(c);
-      setMonths(c.months.map((m) => ({ name: m.name, days: m.days })));
-      setWeekdays(c.weekdays.map((w) => ({ name: w.name })));
-      setEra(c.era);
-    });
-    api.get<SettingCalendarEra[]>(`/settings/${settingId}/calendar-eras`).then(setEras);
-    api.get<SettingCalendarTimeline[]>(`/settings/${settingId}/calendar-timelines`).then(setTimelines);
-  }
-
-  useEffect(refresh, [settingId]);
 
   if (!calendar) return <p className="muted">Загрузка…</p>;
 
@@ -43,29 +32,40 @@ export function SettingCalendarSettings({ settingId }: Props) {
     setEditing(true);
   }
 
+  // Черновик месяцев набирается при «Редактировать» и держится до записи:
+  // при отказе правка остаётся открытой.
   async function save() {
-    await api.put(`/settings/${settingId}/calendar`, { months, weekdays, era });
-    setEditing(false);
-    refresh();
+    const done = await run(
+      () => write.put(chroniclePaths.calendar(settingId), { months, weekdays, era }).then(() => true),
+      { affects: [{ path: chroniclePaths.calendar(settingId) }] }
+    );
+    if (done) setEditing(false);
   }
 
   async function createEra() {
     if (!eraName.trim()) return;
-    await api.post(`/settings/${settingId}/calendar-eras`, {
-      name: eraName.trim(),
-      start_year: Number(eraStartYear) || 1,
-      timeline_id: eraTimelineId,
-    });
+    const done = await run(
+      () =>
+        write
+          .post(chroniclePaths.eras(settingId), {
+            name: eraName.trim(),
+            start_year: Number(eraStartYear) || 1,
+            timeline_id: eraTimelineId,
+          })
+          .then(() => true),
+      { affects: timelineAffects(settingId), retry: false }
+    );
+    if (!done) return;
     setEraName("");
     setEraStartYear("");
     setEraTimelineId(null);
-    refresh();
   }
 
   async function deleteEra(id: number) {
     if (!await confirm("Удалить эпоху?")) return;
-    await api.del(`/settings/${settingId}/calendar-eras/${id}`);
-    refresh();
+    await run(() => write.del(`${chroniclePaths.eras(settingId)}/${id}`).then(() => true), {
+      affects: timelineAffects(settingId),
+    });
   }
 
   return (

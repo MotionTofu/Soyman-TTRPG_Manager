@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
-import { api } from "../api/client";
+import { useState } from "react";
+import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
+import { chroniclePaths } from "../data/settingPage";
 import { useConfirm } from "../hooks/useConfirm";
 import type { SettingCycle } from "../types";
 
@@ -14,28 +15,34 @@ import type { SettingCycle } from "../types";
 // Живёт рядом с календарём, а не своей вкладкой: цикл — устройство мира,
 // ровно как длина месяца, его заводят один раз и потом не трогают.
 
+// Циклы читаются тем же путём, что берёт ось хроники: добавленный здесь цикл
+// появляется на оси сразу, без перезагрузки страницы.
 export function SettingCycles({ settingId }: { settingId: number }) {
-  const [cycles, setCycles] = useState<SettingCycle[]>([]);
+  const cyclesPath = chroniclePaths.cycles(settingId);
+  const cycles = useResource<SettingCycle[]>(cyclesPath).data ?? [];
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState({ name: "", period_days: "28", year: "1", month: "1", day: "1" });
-
-  const refresh = useCallback(() => {
-    api.get<SettingCycle[]>(`/settings/${settingId}/cycles`).then(setCycles);
-  }, [settingId]);
-  useEffect(refresh, [refresh]);
+  const run = useAction();
 
   async function create() {
     if (!draft.name.trim() || !Number(draft.period_days)) return;
-    await api.post(`/settings/${settingId}/cycles`, {
-      name: draft.name.trim(),
-      period_days: Number(draft.period_days),
-      anchor_year: Number(draft.year) || 1,
-      anchor_month: Number(draft.month) || 1,
-      anchor_day: Number(draft.day) || 1,
-    });
+    // Повтор создал бы второй цикл; при отказе набранное остаётся.
+    const done = await run(
+      () =>
+        write
+          .post(cyclesPath, {
+            name: draft.name.trim(),
+            period_days: Number(draft.period_days),
+            anchor_year: Number(draft.year) || 1,
+            anchor_month: Number(draft.month) || 1,
+            anchor_day: Number(draft.day) || 1,
+          })
+          .then(() => true),
+      { affects: [{ path: cyclesPath }], retry: false }
+    );
+    if (!done) return;
     setDraft({ name: "", period_days: "28", year: "1", month: "1", day: "1" });
     setAdding(false);
-    refresh();
   }
 
   return (
@@ -94,30 +101,33 @@ export function SettingCycles({ settingId }: { settingId: number }) {
       )}
 
       {cycles.map((cycle) => (
-        <CycleRow key={cycle.id} cycle={cycle} onChanged={refresh} />
+        <CycleRow key={cycle.id} cycle={cycle} cyclesPath={cyclesPath} />
       ))}
       {cycles.length === 0 && <span className="muted">Циклов пока нет.</span>}
     </div>
   );
 }
 
-function CycleRow({ cycle, onChanged }: { cycle: SettingCycle; onChanged: () => void }) {
+function CycleRow({ cycle, cyclesPath }: { cycle: SettingCycle; cyclesPath: string }) {
   const [pointName, setPointName] = useState("");
   const [pointDay, setPointDay] = useState("");
   const [error, setError] = useState("");
   const [confirmDialog, confirm] = useConfirm();
+  const run = useAction();
+  const afterWrite = useAfterWrite();
+  const affects = [{ path: cyclesPath }];
 
   async function addPoint() {
     if (!pointName.trim() || pointDay === "") return;
     try {
       setError("");
-      await api.post(`/settings/cycles/${cycle.id}/points`, {
+      await write.post(`/settings/cycles/${cycle.id}/points`, {
         name: pointName.trim(),
         day_offset: Number(pointDay),
       });
+      afterWrite(affects);
       setPointName("");
       setPointDay("");
-      onChanged();
     } catch (e) {
       // День за пределами оборота сервер не принимает: свернуть его по модулю
       // значило бы поставить точку не туда, где Мастер её ждёт.
@@ -139,8 +149,7 @@ function CycleRow({ cycle, onChanged }: { cycle: SettingCycle; onChanged: () => 
           className="danger"
           onClick={async () => {
             if (!await confirm(`Удалить цикл «${cycle.name}»?`)) return;
-            await api.del(`/settings/cycles/${cycle.id}`);
-            onChanged();
+            await run(() => write.del(`/settings/cycles/${cycle.id}`).then(() => true), { affects });
           }}
         >
           ✕
@@ -155,8 +164,7 @@ function CycleRow({ cycle, onChanged }: { cycle: SettingCycle; onChanged: () => 
           <button
             className="comp-mini danger"
             onClick={async () => {
-              await api.del(`/settings/cycle-points/${p.id}`);
-              onChanged();
+              await run(() => write.del(`/settings/cycle-points/${p.id}`).then(() => true), { affects });
             }}
           >
             ✕

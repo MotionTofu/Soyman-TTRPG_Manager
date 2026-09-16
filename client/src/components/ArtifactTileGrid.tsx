@@ -1,11 +1,13 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
+import { settingPaths } from "../data/settingEntities";
+import type { Affect } from "../data/entities";
 import { Modal } from "./Modal";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { EntityPreviewContent } from "./EntityPreviewModal";
 import { NavIcon } from "./NavIcons";
-import { useAlert, useConfirm } from "../hooks/useConfirm";
+import { useConfirm } from "../hooks/useConfirm";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import { ITEM_CLASSES, MAGIC_ITEM_RARITIES, itemTypeOptions } from "../compendium";
 import { artifactClassLabels, groupArtifacts, monogramLetter, type ArtifactGrouping } from "../artifactGroups";
@@ -29,6 +31,12 @@ function metaLine(a: Artifact): string {
 
 /* ─── Edit Modal ─── */
 
+// Правка предмета: его карточка и списки предметов; владелец и локация видят
+// его у себя — их карточки тоже задеты.
+function artifactAffects(artifactId: number): Affect[] {
+  return [{ kind: "artifact", id: artifactId }, { kind: "location" }, { kind: "being" }, { kind: "community" }];
+}
+
 export function ArtifactEditModal({
   artifact,
   onClose,
@@ -36,7 +44,8 @@ export function ArtifactEditModal({
 }: {
   artifact: Artifact;
   onClose: () => void;
-  onSaved: () => void;
+  /** Записалось — например, перерисовать превью, которое читает мимо слоя. */
+  onSaved?: () => void;
 }) {
   const [name, setName] = useState(artifact.name);
   const [shortName, setShortName] = useState(artifact.short_name ?? "");
@@ -46,26 +55,32 @@ export function ArtifactEditModal({
   const [rarity, setRarity] = useState(artifact.rarity ?? "");
   const [requiresAttunement, setRequiresAttunement] = useState(!!artifact.requires_attunement);
   const [saving, setSaving] = useState(false);
+  const run = useAction();
 
   const typeOptions = itemClass ? itemTypeOptions(itemClass) : [];
 
+  // Окно закрывается, только если записалось: при отказе набранное остаётся.
   async function save() {
     setSaving(true);
-    try {
-      await api.put(`/artifacts/${artifact.id}`, {
-        name,
-        short_name: shortName || null,
-        owner: owner || null,
-        item_class: itemClass || null,
-        item_type: itemType || null,
-        rarity: rarity || null,
-        requires_attunement: requiresAttunement ? 1 : 0,
-      });
-      onSaved();
-      onClose();
-    } finally {
-      setSaving(false);
-    }
+    const done = await run(
+      () =>
+        write
+          .put(`/artifacts/${artifact.id}`, {
+            name,
+            short_name: shortName || null,
+            owner: owner || null,
+            item_class: itemClass || null,
+            item_type: itemType || null,
+            rarity: rarity || null,
+            requires_attunement: requiresAttunement ? 1 : 0,
+          })
+          .then(() => true),
+      { affects: [{ kind: "artifact", id: artifact.id }] }
+    );
+    setSaving(false);
+    if (!done) return;
+    onSaved?.();
+    onClose();
   }
 
   return (
@@ -138,43 +153,35 @@ export function ArtifactAssignModal({
   artifact: Artifact;
   settingId: number;
   onClose: () => void;
-  onSaved: () => void;
+  /** Записалось — например, перерисовать превью, которое читает мимо слоя. */
+  onSaved?: () => void;
 }) {
-  const [locations, setLocations] = useState<SettingLocation[]>([]);
-  const [beings, setBeings] = useState<SettingBeing[]>([]);
-  const [communities, setCommunities] = useState<SettingCommunity[]>([]);
+  const locations = useResource<SettingLocation[]>(settingPaths.inSetting("location", settingId)).data ?? [];
+  const beings = useResource<SettingBeing[]>(settingPaths.inSetting("being", settingId)).data ?? [];
+  const communities = useResource<SettingCommunity[]>(settingPaths.inSetting("community", settingId)).data ?? [];
+  const run = useAction();
   const [locationId, setLocationId] = useState<number | null>(artifact.location?.id ?? null);
   const [ownerType, setOwnerType] = useState<string>(artifact.owner_entity?.type ?? "");
   const [ownerId, setOwnerId] = useState<number | null>(artifact.owner_entity?.id ?? null);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    const c = new AbortController();
-    Promise.all([
-      api.get<SettingLocation[]>(`/setting-locations?setting_id=${settingId}`, { signal: c.signal }),
-      api.get<SettingBeing[]>(`/setting-beings?setting_id=${settingId}`, { signal: c.signal }),
-      api.get<SettingCommunity[]>(`/setting-communities?setting_id=${settingId}`, { signal: c.signal }),
-    ]).then(([locs, bgs, comms]) => {
-      setLocations(locs);
-      setBeings(bgs);
-      setCommunities(comms);
-    }).catch(() => {});
-    return () => c.abort();
-  }, [settingId]);
-
   async function save() {
     setSaving(true);
-    try {
-      await api.put(`/artifacts/${artifact.id}`, {
-        location_id: locationId,
-        owner_type: ownerType || null,
-        owner_id: ownerId,
-      });
-      onSaved();
-      onClose();
-    } finally {
-      setSaving(false);
-    }
+    const done = await run(
+      () =>
+        write
+          .put(`/artifacts/${artifact.id}`, {
+            location_id: locationId,
+            owner_type: ownerType || null,
+            owner_id: ownerId,
+          })
+          .then(() => true),
+      { affects: artifactAffects(artifact.id) }
+    );
+    setSaving(false);
+    if (!done) return;
+    onSaved?.();
+    onClose();
   }
 
   return (
@@ -338,7 +345,6 @@ export function ArtifactTileGrid({
   dir = "asc",
   settingId,
   onCreate,
-  onRefresh,
 }: {
   artifacts: Artifact[];
   grouping: ArtifactGrouping;
@@ -346,7 +352,6 @@ export function ArtifactTileGrid({
   dir?: "asc" | "desc";
   settingId: number;
   onCreate?: () => void;
-  onRefresh?: () => void;
 }) {
   const [cardId, setCardId] = useState<number | null>(null);
   const [editing, setEditing] = useState<Artifact | null>(null);
@@ -354,7 +359,8 @@ export function ArtifactTileGrid({
   const [ctx, setCtx] = useState<{ x: number; y: number; artifact: Artifact } | null>(null);
   const navigate = useNavigate();
   const [confirmDialog, confirm] = useConfirm();
-  const [alertDialog, showAlert] = useAlert();
+  const run = useAction();
+  const afterWrite = useAfterWrite();
   const { deleteWithUndo } = useUndoDelete();
 
   const groups = useMemo(
@@ -371,21 +377,23 @@ export function ArtifactTileGrid({
   async function handleDelete(artifact: Artifact) {
     const ok = await confirm({ message: `Отправить «${artifact.name}» в архив?`, confirmLabel: "Архивировать", danger: true });
     if (!ok) return;
-    // Без catch упавшее удаление роняло промис в никуда: ни тоста, ни
-    // ошибки, плитка на месте — выглядит как «не нажалось».
-    try {
-      await deleteWithUndo({
-        entityName: artifact.name,
-        deleteFn: () => api.del(`/artifacts/${artifact.id}`),
-        restoreFn: async () => {
-          await api.put(`/artifacts/${artifact.id}/restore`);
-          onRefresh?.();
-        },
-      });
-    } catch (e) {
-      showAlert(`Не удалось архивировать «${artifact.name}»: ${e instanceof Error ? e.message : String(e)}`);
-    }
-    onRefresh?.();
+    // Упавшее удаление — плашкой: плитка на месте не должна выглядеть как
+    // «не нажалось».
+    const affects = artifactAffects(artifact.id);
+    await run(
+      () =>
+        deleteWithUndo({
+          entityName: artifact.name,
+          deleteFn: async () => {
+            await write.del(`/artifacts/${artifact.id}`);
+          },
+          restoreFn: async () => {
+            await write.put(`/artifacts/${artifact.id}/restore`);
+            afterWrite(affects);
+          },
+        }).then(() => true),
+      { affects }
+    );
   }
 
   const menuItems: ContextMenuItem[] = ctx ? [
@@ -399,7 +407,6 @@ export function ArtifactTileGrid({
   return (
     <div className="stack" style={{ gap: 10 }}>
       {confirmDialog}
-      {alertDialog}
       {groups.map(([label, list]) => (
         <ArtifactGroup
           key={label}
@@ -448,7 +455,7 @@ export function ArtifactTileGrid({
         <ArtifactEditModal
           artifact={editing}
           onClose={() => setEditing(null)}
-          onSaved={() => { onRefresh?.(); setEditing(null); }}
+          onSaved={() => setEditing(null)}
         />
       )}
       {assigning && (
@@ -456,7 +463,7 @@ export function ArtifactTileGrid({
           artifact={assigning}
           settingId={settingId}
           onClose={() => setAssigning(null)}
-          onSaved={() => { onRefresh?.(); setAssigning(null); }}
+          onSaved={() => setAssigning(null)}
         />
       )}
     </div>

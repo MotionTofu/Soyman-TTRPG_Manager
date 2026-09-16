@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api/client";
+import { useAction, write } from "../../data/hooks";
 import { Modal } from "../Modal";
 import { LocationCascadePicker } from "../LocationCascadePicker";
 import { ENTITY_TYPES, ENTITY_TYPE_SINGULAR } from "../../entityTypes";
@@ -61,6 +62,7 @@ export function MentionPickerModal({
   const [createType, setCreateType] = useState<(typeof CREATE_TYPES)[number]["key"]>("location");
   const [createName, setCreateName] = useState("");
   const [createBusy, setCreateBusy] = useState(false);
+  const run = useAction();
 
   // Only fetched when relevant (location parent picker / being habitat &
   // faction pickers), scoped to whichever setting is currently selected.
@@ -128,38 +130,43 @@ export function MentionPickerModal({
   async function createEntity() {
     if (!createSettingId || !createName.trim()) return;
     setCreateBusy(true);
-    try {
-      let created: { id: number; name: string };
-      if (createType === "artifact") {
-        const form = new FormData();
-        form.append("setting_id", String(createSettingId));
-        form.append("name", createName.trim());
-        created = await api.post<{ id: number; name: string }>("/artifacts", form);
-      } else if (createType === "location") {
-        created = await api.post<{ id: number; name: string }>("/setting-locations", {
-          setting_id: createSettingId,
-          name: createName.trim(),
-          parent_id: createParentLocationId || null,
-        });
-      } else if (createType === "being") {
-        created = await api.post<{ id: number; name: string }>("/setting-beings", {
-          setting_id: createSettingId,
-          name: createName.trim(),
-          category: createBeingCategory,
-          location_id: createBeingLocationId || null,
-          community_ids: createBeingCommunityIds,
-        });
-      } else {
-        created = await api.post<{ id: number; name: string }>("/setting-communities", {
-          setting_id: createSettingId,
-          name: createName.trim(),
-        });
-      }
-      choose({ type: createType, id: created.id, title: created.name });
-      setCreating(false);
-    } finally {
-      setCreateBusy(false);
+    // Окно создания остаётся открытым, если не записалось; повтор создал бы
+    // вторую сущность — поэтому без «Повторить».
+    const created = await run(() => postEntity(), { affects: [{ kind: createType }], retry: false });
+    setCreateBusy(false);
+    if (!created) return;
+    choose({ type: createType, id: created.id, title: created.name });
+    setCreating(false);
+  }
+
+  async function postEntity(): Promise<{ id: number; name: string }> {
+    let created: { id: number; name: string };
+    if (createType === "artifact") {
+      const form = new FormData();
+      form.append("setting_id", String(createSettingId));
+      form.append("name", createName.trim());
+      created = await write.post<{ id: number; name: string }>("/artifacts", form);
+    } else if (createType === "location") {
+      created = await write.post<{ id: number; name: string }>("/setting-locations", {
+        setting_id: createSettingId,
+        name: createName.trim(),
+        parent_id: createParentLocationId || null,
+      });
+    } else if (createType === "being") {
+      created = await write.post<{ id: number; name: string }>("/setting-beings", {
+        setting_id: createSettingId,
+        name: createName.trim(),
+        category: createBeingCategory,
+        location_id: createBeingLocationId || null,
+        community_ids: createBeingCommunityIds,
+      });
+    } else {
+      created = await write.post<{ id: number; name: string }>("/setting-communities", {
+        setting_id: createSettingId,
+        name: createName.trim(),
+      });
     }
+    return created;
   }
 
   return (

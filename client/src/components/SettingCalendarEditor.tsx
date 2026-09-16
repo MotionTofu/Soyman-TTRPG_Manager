@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { useResource } from "../data/hooks";
+import { chroniclePaths } from "../data/settingPage";
 import { InworldCalendar, type InworldDatedItem } from "./InworldCalendar";
 import type { ImportantDate, SettingCalendar } from "../types";
 
@@ -12,6 +12,8 @@ interface Props {
   onItemContextMenu?: (item: InworldDatedItem, x: number, y: number) => void;
 }
 
+const NO_DATES: ImportantDate[] = [];
+
 export function SettingCalendarEditor({
   settingId,
   items,
@@ -20,13 +22,10 @@ export function SettingCalendarEditor({
   onDayContextMenu,
   onItemContextMenu,
 }: Props) {
-  const [calendar, setCalendar] = useState<SettingCalendar | null>(null);
-  const [importantDates, setImportantDates] = useState<ImportantDate[]>([]);
-
-  useEffect(() => {
-    api.get<SettingCalendar>(`/settings/${settingId}/calendar`).then(setCalendar);
-    api.get<ImportantDate[]>(`/settings/${settingId}/important-dates`).then(setImportantDates);
-  }, [settingId]);
+  // Те же пути, что у оси и вкладок хроники: правка месяцев или дат видна
+  // в предпросмотре сразу.
+  const calendar = useResource<SettingCalendar>(chroniclePaths.calendar(settingId)).data;
+  const importantDates = useResource<ImportantDate[]>(chroniclePaths.importantDates(settingId)).data ?? NO_DATES;
 
   if (!calendar) return <p className="muted">Загрузка…</p>;
 

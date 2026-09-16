@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Modal } from "../Modal";
 import { api } from "../../api/client";
+import { useAction, write } from "../../data/hooks";
 import { ENTITY_TYPE_SINGULAR } from "../../entityTypes";
 import { knownSourceName } from "../../mentions";
 
@@ -32,6 +33,7 @@ export function DeadMention({ type, uid, source, label }: Props) {
   const [open, setOpen] = useState(false);
   const [count, setCount] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const run = useAction();
   const [done, setDone] = useState<number | null>(null);
   const [sourceName, setSourceName] = useState<string | null>(null);
 
@@ -59,12 +61,11 @@ export function DeadMention({ type, uid, source, label }: Props) {
 
   async function strip() {
     setBusy(true);
-    try {
-      const r = await api.post<{ removed: number }>("/links/dangling/strip", { type, uid });
-      setDone(r.removed);
-    } finally {
-      setBusy(false);
-    }
+    // Ссылка вычищается из текстов любых сущностей, где она стояла: какие
+    // именно — знает только сервер, поэтому задето всё.
+    const r = await run(() => write.post<{ removed: number }>("/links/dangling/strip", { type, uid }), { affects: [] });
+    if (r) setDone(r.removed);
+    setBusy(false);
   }
 
   const kind = ENTITY_TYPE_SINGULAR[type] ?? "запись";

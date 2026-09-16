@@ -1,7 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
+import { dataKeys, type Affect } from "../data/entities";
+import { useAction, useAfterWrite, useEntity, useResource, useSaveEntity, write } from "../data/hooks";
+import { readResource } from "../data/imperative";
+import { settingPaths } from "../data/settingEntities";
+import {
+  chronicleEventAffects,
+  chroniclePaths,
+  populationPaths,
+  settingGroupAffects,
+  settingPagePaths,
+  timelineAffects,
+} from "../data/settingPage";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { SettingChronicleEventRow } from "../components/SettingChronicleEventRow";
 import { ResourcesSection, type ResourceStats } from "../components/ResourcesSection";
@@ -150,14 +163,35 @@ const TABS = [
   "Ресурсы",
 ] as const;
 
+// Пустые списки — одни на все отрисовки: `?? []` давал бы новый массив
+// каждый раз и сбивал бы useMemo ниже.
+const NO_EVENTS: SettingCalendarEvent[] = [];
+const NO_CYCLES: SettingCycle[] = [];
+const NO_DATES: ImportantDate[] = [];
+const NO_ERAS: SettingCalendarEra[] = [];
+const NO_TIMELINES: SettingCalendarTimeline[] = [];
+const NO_CAMPAIGNS: Campaign[] = [];
+const NO_CHARACTERS: Character[] = [];
+const NO_RESOURCES: Resource[] = [];
+const NO_GROUPS: SettingGroup[] = [];
+const NO_BEINGS: SettingBeing[] = [];
+const NO_COMMUNITIES: SettingCommunity[] = [];
+const NO_LOCATIONS: SettingLocation[] = [];
+const NO_ARTIFACTS: Artifact[] = [];
+
 export function SettingDetailPage() {
   const { id } = useParams();
   const settingId = Number(id);
   const navigate = useNavigate();
-  const [setting, setSetting] = useState<Setting | null>(null);
-  const [resources, setResources] = useState<Resource[]>([]);
-  const [characters, setCharacters] = useState<Character[]>([]);
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const run = useAction();
+  const queryClient = useQueryClient();
+  const settingState = useEntity<Setting>("setting", settingId);
+  const setting = settingState.data ?? null;
+  const { save, saving: savingFields } = useSaveEntity<Setting>("setting", settingId);
+  const settingAffects: Affect[] = [{ kind: "setting", id: settingId }];
+  // Кампании нужны сразу: по ним решается, какие вкладки показать.
+  const campaignsState = useResource<Campaign[]>(settingPagePaths.campaigns(settingId));
+  const campaigns = campaignsState.data ?? NO_CAMPAIGNS;
   // Фон и тамбнейл живут в карточке «Изображения сеттинга» внизу «Обзора» и
   // заливаются сразу по выбору файла — не откладываются до «Сохранить» рядом с
   // именем, как было раньше.
@@ -175,14 +209,29 @@ export function SettingDetailPage() {
   const [resStats, setResStats] = useState<ResourceStats | null>(null);
   const [showExport, setShowExport] = useState(false);
   const [creatingEvent, setCreatingEvent] = useState(false);
+  const [savingName, setSavingName] = useState(false);
+
+  // Каждый раздел читает своё, только пока открыт: «Обзор» не тянет хронику,
+  // а хроника — персонажей кампаний.
+  const onChronicle = tab === "Хроника мира";
+  const resources = useResource<Resource[]>(tab === "Ресурсы" ? settingPagePaths.resources(settingId) : null).data ?? NO_RESOURCES;
+  const characters =
+    useResource<Character[]>(tab === "Обзор" && ovSel.section === "campaigns" ? settingPagePaths.characters(settingId) : null).data ??
+    NO_CHARACTERS;
+  const onTags = tab === "Обзор" && ovSel.section === "tags";
+  const allGroups = useResource<SettingGroup[]>(onTags ? settingPagePaths.groups() : null).data ?? NO_GROUPS;
+  const settingGroups = useResource<SettingGroup[]>(onTags ? settingPagePaths.groupsOf(settingId) : null).data ?? NO_GROUPS;
+  const settingGroupIds = settingGroups.map((g) => g.id);
 
   const calendar = useSettingCalendar(settingId);
-  const [calendarEvents, setCalendarEvents] = useState<SettingCalendarEvent[]>([]);
+  const calendarEvents = useResource<SettingCalendarEvent[]>(onChronicle ? chroniclePaths.events(settingId) : null).data ?? NO_EVENTS;
+  const cycles = useResource<SettingCycle[]>(onChronicle ? chroniclePaths.cycles(settingId) : null).data ?? NO_CYCLES;
+  const importantDates = useResource<ImportantDate[]>(onChronicle ? chroniclePaths.importantDates(settingId) : null).data ?? NO_DATES;
+  const eras = useResource<SettingCalendarEra[]>(onChronicle ? chroniclePaths.eras(settingId) : null).data ?? NO_ERAS;
+  const timelines = useResource<SettingCalendarTimeline[]>(onChronicle ? chroniclePaths.timelines(settingId) : null).data ?? NO_TIMELINES;
   const [chronicleTab, setChronicleTab] = useState<"Хронология" | "Повторяющиеся" | "Циклы" | "Календарь">("Хронология");
   const [chronicleFilter, setChronicleFilter] = useState<"all" | "important" | "upcoming" | "cancelled" | "visible">("all");
   const [chronicleSort, setChronicleSort] = useState<"chronological" | "important-first">("chronological");
-  const [cycles, setCycles] = useState<SettingCycle[]>([]);
-  const [importantDates, setImportantDates] = useState<ImportantDate[]>([]);
   const [expandedEvents, setExpandedEvents] = useState<Set<number>>(new Set());
   const [calendarMenu, setCalendarMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(
     null
@@ -203,13 +252,7 @@ export function SettingDetailPage() {
     cancel_note: string;
   } | null>(null);
   const [genrePickerOpen, setGenrePickerOpen] = useState(false);
-  const [allGroups, setAllGroups] = useState<SettingGroup[]>([]);
-  const [settingGroupIds, setSettingGroupIds] = useState<number[]>([]);
 
-  // Фаза 0: надёжность загрузки — AbortController + loading/error как в SettingsListPage
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
   const [confirmDialog, confirm] = useConfirm();
   const [alertDialog, showAlert] = useAlert();
   const [campaignWizardOpen, setCampaignWizardOpen] = useState(false);
@@ -219,8 +262,8 @@ export function SettingDetailPage() {
   async function openCampaignWizard() {
     try {
       const [sys, sets] = await Promise.all([
-        api.get<System[]>("/systems"),
-        api.get<Setting[]>("/settings"),
+        readResource<System[]>("/systems"),
+        readResource<Setting[]>("/settings"),
       ]);
       setWizardSystems(sys);
       setWizardSettings(sets);
@@ -231,8 +274,6 @@ export function SettingDetailPage() {
     setCampaignWizardOpen(true);
   }
 
-  const [eras, setEras] = useState<SettingCalendarEra[]>([]);
-  const [timelines, setTimelines] = useState<SettingCalendarTimeline[]>([]);
   const [selectedTimelineId, setSelectedTimelineId] = useState<number | null>(null);
   const [addingTimeline, setAddingTimeline] = useState(false);
   const [timelineName, setTimelineName] = useState("");
@@ -269,67 +310,16 @@ export function SettingDetailPage() {
   const [timelineFocus, setTimelineFocus] = useState<{ year: number; month: number; day: number } | null>(null);
   const [calendarFocus, setCalendarFocus] = useState<{ year: number; month: number } | null>(null);
 
-  function refreshCalendarEvents() {
-    const controller = new AbortController();
-    const opts = { signal: controller.signal };
-    api
-      .get<SettingCalendarEvent[]>(`/settings/${settingId}/calendar-events`, opts)
-      .then(setCalendarEvents)
-      .catch((e: unknown) => {
-        if ((e as Error).name === "AbortError") return;
-        console.error(e);
-      });
-    api
-      .get<SettingCycle[]>(`/settings/${settingId}/cycles`, opts)
-      .then(setCycles)
-      .catch((e: unknown) => {
-        if ((e as Error).name === "AbortError") return;
-        console.error(e);
-      });
-    api
-      .get<ImportantDate[]>(`/settings/${settingId}/important-dates`, opts)
-      .then(setImportantDates)
-      .catch((e: unknown) => {
-        if ((e as Error).name === "AbortError") return;
-        console.error(e);
-      });
-    return () => controller.abort();
-  }
-  useEffect(refreshCalendarEvents, [settingId]);
-
-  function refreshEras() {
-    const controller = new AbortController();
-    api
-      .get<SettingCalendarEra[]>(`/settings/${settingId}/calendar-eras`, { signal: controller.signal })
-      .then(setEras)
-      .catch((e: unknown) => {
-        if ((e as Error).name === "AbortError") return;
-        console.error(e);
-      });
-    return () => controller.abort();
-  }
-  useEffect(refreshEras, [settingId]);
-
-  function refreshTimelines() {
-    const controller = new AbortController();
-    api
-      .get<SettingCalendarTimeline[]>(`/settings/${settingId}/calendar-timelines`, { signal: controller.signal })
-      .then(setTimelines)
-      .catch((e: unknown) => {
-        if ((e as Error).name === "AbortError") return;
-        console.error(e);
-      });
-    return () => controller.abort();
-  }
-  useEffect(refreshTimelines, [settingId]);
-
   async function createTimeline() {
-    if (!timelineName.trim()) return;
-    await api.post(`/settings/${settingId}/calendar-timelines`, { name: timelineName.trim() });
+    const name = timelineName.trim();
+    if (!name) return;
+    const done = await run(() => write.post(chroniclePaths.timelines(settingId), { name }).then(() => true), {
+      affects: timelineAffects(settingId),
+      retry: false,
+    });
+    if (!done) return;
     setTimelineName("");
     setAddingTimeline(false);
-    const ctrl = new AbortController();
-    api.get<SettingCalendarTimeline[]>(`/settings/${settingId}/calendar-timelines`, { signal: ctrl.signal }).then(setTimelines).catch(() => {});
   }
 
   async function deleteTimeline(timelineId: number) {
@@ -340,70 +330,32 @@ export function SettingDetailPage() {
       danger: true,
     });
     if (!ok) return;
-    await api.del(`/settings/calendar-timelines/${timelineId}`);
-    if (selectedTimelineId === timelineId) setSelectedTimelineId(null);
-    const ctrl = new AbortController();
-    api.get<SettingCalendarTimeline[]>(`/settings/${settingId}/calendar-timelines`, { signal: ctrl.signal }).then(setTimelines).catch(() => {});
+    const done = await run(() => write.del(`/settings/calendar-timelines/${timelineId}`).then(() => true), {
+      affects: timelineAffects(settingId),
+    });
+    if (done && selectedTimelineId === timelineId) setSelectedTimelineId(null);
   }
-
-  async function loadOverview(signal?: AbortSignal) {
-    setLoading(true);
-    setLoadError(null);
-    const opts = signal ? { signal } : undefined;
-    try {
-      const [s, res, chars, camps, groups, bySetting] = await Promise.all([
-        api.get<Setting>(`/settings/${settingId}`, opts),
-        api.get<Resource[]>(`/resources?scope=setting&setting_id=${settingId}`, opts),
-        api.get<Character[]>(`/characters?setting_id=${settingId}`, opts),
-        api.get<Campaign[]>(`/campaigns?setting_id=${settingId}`, opts),
-        api.get<SettingGroup[]>("/setting-groups", opts),
-        api.get<SettingGroup[]>(`/setting-groups/by-setting/${settingId}`, opts),
-      ]);
-      setSetting(s);
-      setResources(res);
-      setCharacters(chars);
-      setCampaigns(camps);
-      setAllGroups(groups);
-      setSettingGroupIds(bySetting.map((g) => g.id));
-    } catch (e) {
-      if ((e as Error).name === "AbortError") return;
-      setLoadError(String(e instanceof Error ? e.message : e));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function refresh() {
-    void loadOverview();
-  }
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void loadOverview(controller.signal);
-    return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settingId]);
 
   // Крошки до прихода данных знают только первую ступень.
   const rootCrumbs = [{ label: "Сеттинги", to: "/settings" }];
 
-  if (loadError && !setting) {
+  if (settingState.error && !setting) {
     return (
       <EntityPage
         crumbs={rootCrumbs}
         entityType="setting"
         title=""
-        error={loadError}
-        onRetry={() => refresh()}
+        error={settingState.error}
+        onRetry={settingState.reload}
       >
         {null}
       </EntityPage>
     );
   }
 
-  // loading — и флаг первоначальной загрузки (пока setting===null), и
-  // индикатор обновления уже загруженных данных.
-  if (loading && !setting) {
+  // Пока кампаний нет, набор вкладок не решён: без них страница мигнула бы
+  // четырьмя вкладками вместо девяти.
+  if (!setting || (campaignsState.loading && !campaignsState.error)) {
     return (
       <EntityPage crumbs={rootCrumbs} entityType="setting" title="" loading>
         {null}
@@ -411,51 +363,32 @@ export function SettingDetailPage() {
     );
   }
 
-  if (!setting) {
-    return (
-      <EntityPage crumbs={rootCrumbs} entityType="setting" title="" loading>
-        {null}
-      </EntityPage>
-    );
-  }
-
+  // Карточки полей держат правку открытой, пока сохранение не удалось: для
+  // этого им нужна ошибка, а плашку показывает слой.
   async function saveDescription(value: string) {
-    setSaving(true);
-    try {
-      await api.put(`/settings/${settingId}`, { description: value });
-      await loadOverview();
-    } finally {
-      setSaving(false);
-    }
+    if (!(await save({ description: value }))) throw new Error("Не сохранилось");
   }
 
   async function saveName(name: string, code: string) {
     // Двойник кода не запрещается, а называется: код — подсказка человеку в
     // окне неработающей ссылки, а не ключ, по которому что-то ищется.
-    setSaving(true);
+    setSavingName(true);
     try {
-      const saved = await api.put<{ code_taken_by: string | null }>(`/settings/${settingId}`, {
-        name,
-        code,
-      });
+      const saved = await run(
+        () => write.put<{ code_taken_by: string | null }>(`/settings/${settingId}`, { name, code }),
+        { affects: settingAffects }
+      );
+      if (!saved) throw new Error("Не сохранилось");
       if (saved.code_taken_by) {
         showAlert(`Код «${code}» уже носит «${saved.code_taken_by}». Это разрешено, но в ссылках оба будут выглядеть одинаково.`);
       }
-      await loadOverview();
     } finally {
-      setSaving(false);
+      setSavingName(false);
     }
   }
 
   async function saveGenres(genres: SettingGenre[]) {
-    setSaving(true);
-    try {
-      await api.put(`/settings/${settingId}`, { genres });
-      setGenrePickerOpen(false);
-      await loadOverview();
-    } finally {
-      setSaving(false);
-    }
+    if (await save({ genres })) setGenrePickerOpen(false);
   }
 
   async function uploadImage(kind: "background" | "thumbnail", file: File) {
@@ -464,10 +397,7 @@ export function SettingDetailPage() {
     try {
       const form = new FormData();
       form.append("file", file);
-      await api.post(`/settings/${settingId}/${kind}`, form);
-      await loadOverview();
-    } catch (e) {
-      showAlert(String(e instanceof Error ? e.message : e));
+      await run(() => write.post(`/settings/${settingId}/${kind}`, form).then(() => true), { affects: settingAffects });
     } finally {
       setUploading(false);
     }
@@ -484,10 +414,7 @@ export function SettingDetailPage() {
     const setUploading = kind === "background" ? setUploadingBg : setUploadingThumb;
     setUploading(true);
     try {
-      await api.del(`/settings/${settingId}/${kind}`);
-      await loadOverview();
-    } catch (e) {
-      showAlert(String(e instanceof Error ? e.message : e));
+      await run(() => write.del(`/settings/${settingId}/${kind}`).then(() => true), { affects: settingAffects });
     } finally {
       setUploading(false);
     }
@@ -501,8 +428,8 @@ export function SettingDetailPage() {
       danger: true,
     });
     if (!ok) return;
-    await api.del(`/settings/${settingId}`);
-    navigate("/settings");
+    const done = await run(() => write.del(`/settings/${settingId}`).then(() => true), { affects: [{ kind: "setting" }] });
+    if (done) navigate("/settings");
   }
 
   async function importSetting(file: File) {
@@ -521,11 +448,12 @@ export function SettingDetailPage() {
       });
       withImages = ok;
     }
-    const created = await api.post<Setting>(
-      `/settings/import${withImages ? "" : "?images=0"}`,
-      data
-    );
-    navigate(`/settings/${created.id}`);
+    // Повтор импорта поставил бы второй сеттинг — поэтому без «Повторить».
+    const created = await run(() => write.post<Setting>(`/settings/import${withImages ? "" : "?images=0"}`, data), {
+      affects: [{ kind: "setting" }],
+      retry: false,
+    });
+    if (created) navigate(`/settings/${created.id}`);
   }
 
   // Перетаскивание события по оси: сдвиг и уточнение — один жест. Точность
@@ -535,21 +463,62 @@ export function SettingDetailPage() {
     id: number,
     date: { year: number; month: number; day: number; precision: string }
   ) {
-    await api.put(`/settings/calendar-events/${id}`, {
-      inworld_year: date.year,
-      inworld_month: date.month,
-      inworld_day: date.day,
-      date_precision: date.precision,
-    });
-    refreshCalendarEvents();
+    await run(
+      () =>
+        write
+          .put(`/settings/calendar-events/${id}`, {
+            inworld_year: date.year,
+            inworld_month: date.month,
+            inworld_day: date.day,
+            date_precision: date.precision,
+          })
+          .then(() => true),
+      { affects: chronicleEventAffects(settingId, id) }
+    );
   }
 
   async function pinSettingCalendar(pinned: { year: number; month: number } | null) {
-    await api.put(`/settings/${settingId}/pinned-calendar`, {
-      year: pinned?.year ?? null,
-      month: pinned?.month ?? null,
+    await run(
+      () =>
+        write
+          .put(`/settings/${settingId}/pinned-calendar`, {
+            year: pinned?.year ?? null,
+            month: pinned?.month ?? null,
+          })
+          .then(() => true),
+      { affects: settingAffects }
+    );
+  }
+
+  // Отметка события («важное», «видно игрокам») видна сразу, до ответа
+  // сервера; отказ возвращает прежнее — перечитка при отказе не идёт.
+  // В кэше флаги лежат числами, как их отдаёт сервер, а принимает он булевы.
+  async function patchEvent(ev: SettingCalendarEvent, body: Record<string, boolean>, cached: Partial<SettingCalendarEvent>) {
+    const key = dataKeys.resource(chroniclePaths.events(settingId));
+    const previous = queryClient.getQueryData<SettingCalendarEvent[]>(key);
+    if (previous) queryClient.setQueryData(key, previous.map((e) => (e.id === ev.id ? { ...e, ...cached } : e)));
+    const done = await run(() => write.put(`/settings/calendar-events/${ev.id}`, body).then(() => true), {
+      affects: chronicleEventAffects(settingId, ev.id),
     });
-    refresh();
+    if (!done && previous) queryClient.setQueryData(key, previous);
+  }
+
+  // Отметка группы видна сразу; отказ возвращает прежний набор.
+  async function toggleGroup(group: SettingGroup, isIn: boolean) {
+    const key = dataKeys.resource(settingPagePaths.groupsOf(settingId));
+    const previous = queryClient.getQueryData<SettingGroup[]>(key);
+    if (previous) {
+      queryClient.setQueryData(key, isIn ? previous.filter((g) => g.id !== group.id) : [...previous, group]);
+    }
+    const done = await run(
+      () =>
+        (isIn
+          ? write.del(`/setting-groups/${group.id}/members?settingIds=${settingId}`)
+          : write.post(`/setting-groups/${group.id}/members`, { settingIds: [settingId] })
+        ).then(() => true),
+      { affects: settingGroupAffects() }
+    );
+    if (!done && previous) queryClient.setQueryData(key, previous);
   }
 
   const calendarItems: InworldDatedItem[] = calendarEvents.map((e) => ({
@@ -594,19 +563,18 @@ export function SettingDetailPage() {
       danger: true,
     });
     if (!ok) return;
-    await api.del(`/settings/calendar-events/${eventId}`);
     setCalendarMenu(null);
-    refreshCalendarEvents();
+    await run(() => write.del(`/settings/calendar-events/${eventId}`).then(() => true), {
+      affects: chronicleEventAffects(settingId, eventId),
+    });
   }
 
-  async function toggleEventImportant(ev: SettingCalendarEvent) {
-    await api.put(`/settings/calendar-events/${ev.id}`, { important: !ev.important });
-    refreshCalendarEvents();
+  function toggleEventImportant(ev: SettingCalendarEvent) {
+    void patchEvent(ev, { important: !ev.important }, { important: ev.important ? 0 : 1 } as Partial<SettingCalendarEvent>);
   }
 
-  async function toggleEventVisible(ev: SettingCalendarEvent) {
-    await api.put(`/settings/calendar-events/${ev.id}`, { visible_to_players: !ev.visible_to_players });
-    refreshCalendarEvents();
+  function toggleEventVisible(ev: SettingCalendarEvent) {
+    void patchEvent(ev, { visible_to_players: !ev.visible_to_players }, { visible_to_players: ev.visible_to_players ? 0 : 1 } as Partial<SettingCalendarEvent>);
   }
 
   async function saveEventModal() {
@@ -640,16 +608,28 @@ export function SettingDetailPage() {
       inworld_day_end: hasPeriod && eventModal.day_end.trim() !== "" ? Number(eventModal.day_end) : hasPeriod ? eventModal.day : null,
     };
     if (!hasPeriod) { payload.inworld_year_end = null; payload.inworld_month_end = null; payload.inworld_day_end = null; }
-    if (eventModal.id) {
-      const original = calendarEvents.find((e) => e.id === eventModal.id);
-      await api.put(`/settings/calendar-events/${eventModal.id}`, payload);
-      await syncMentionLinks("setting_event", eventModal.id, original?.description ?? "", eventModal.description);
-    } else {
-      const created = await api.post<SettingCalendarEvent>(`/settings/${settingId}/calendar-events`, payload);
-      await syncMentionLinks("setting_event", created.id, "", eventModal.description);
-    }
-    setEventModal(null);
-    refreshCalendarEvents();
+    const modal = eventModal;
+    // Окно закрывается, только если записалось: набранное при отказе не теряется.
+    const done = modal.id
+      ? await run(
+          async () => {
+            const original = calendarEvents.find((e) => e.id === modal.id);
+            await write.put(`/settings/calendar-events/${modal.id}`, payload);
+            await syncMentionLinks("setting_event", modal.id!, original?.description ?? "", modal.description);
+            return true;
+          },
+          { affects: chronicleEventAffects(settingId, modal.id) }
+        )
+      : await run(
+          async () => {
+            const created = await write.post<SettingCalendarEvent>(chroniclePaths.events(settingId), payload);
+            await syncMentionLinks("setting_event", created.id, "", modal.description);
+            return true;
+          },
+          // Повтор создал бы второе событие.
+          { affects: chronicleEventAffects(settingId), retry: false }
+        );
+    if (done) setEventModal(null);
   }
 
   function handleCalendarDayContextMenu(year: number, month: number, day: number, x: number, y: number) {
@@ -702,7 +682,7 @@ export function SettingDetailPage() {
       entityType="setting"
       title={setting.name}
       badges={(setting as any).archived_at && <span className="badge cancelled">Архивировано</span>}
-      meta={saving && <span aria-live="polite">Сохранение…</span>}
+      meta={(savingFields || savingName) && <span aria-live="polite">Сохранение…</span>}
       backdrop={safeBg}
       // Имя правится в карточке «Описание» на «Обзоре» — вместе с самим
       // описанием, одной кнопкой «Сохранить». Экспорт, импорт и архивация
@@ -749,16 +729,15 @@ export function SettingDetailPage() {
           initialType="event"
           ctx={{ settingId }}
           onClose={() => setCreatingEvent(false)}
-          onCreated={refreshCalendarEvents}
         />
       )}
 
       {/* Обновление не удалось, но прежние данные на экране: баннер рядом с
           содержимым, а не вместо него. */}
-      {loadError && (
+      {settingState.error && (
         <div className="card entity-page__error">
-          <span>Ошибка загрузки: {loadError}</span>
-          <button className="primary" onClick={() => refresh()}>
+          <span>Ошибка загрузки: {settingState.error}</span>
+          <button className="primary" onClick={settingState.reload}>
             Повторить
           </button>
         </div>
@@ -915,26 +894,7 @@ export function SettingDetailPage() {
                           <input
                             type="checkbox"
                             checked={isIn}
-                            onChange={async () => {
-                              const prev = settingGroupIds;
-                              if (isIn) {
-                                setSettingGroupIds(prev.filter((id) => id !== g.id));
-                              } else {
-                                setSettingGroupIds([...prev, g.id]);
-                              }
-                              try {
-                                if (isIn) {
-                                  await api.del(`/setting-groups/${g.id}/members?settingIds=${settingId}`);
-                                } else {
-                                  await api.post(`/setting-groups/${g.id}/members`, { settingIds: [settingId] });
-                                }
-                                const groups = await api.get<SettingGroup[]>(`/setting-groups/by-setting/${settingId}`);
-                                setSettingGroupIds(groups.map((gr) => gr.id));
-                              } catch (e) {
-                                setSettingGroupIds(prev);
-                                showAlert(String(e instanceof Error ? e.message : e));
-                              }
-                            }}
+                            onChange={() => void toggleGroup(g, isIn)}
                           />
                           {g.name}
                         </label>
@@ -1037,10 +997,7 @@ export function SettingDetailPage() {
               settings={wizardSettings}
               defaultSettingId={settingId}
               onClose={() => setCampaignWizardOpen(false)}
-              onCreated={() => {
-                setCampaignWizardOpen(false);
-                refresh();
-              }}
+              onCreated={() => setCampaignWizardOpen(false)}
             />
           )}
         </div>
@@ -1230,7 +1187,6 @@ export function SettingDetailPage() {
               scope="setting"
               entityId={settingId}
               resources={resources}
-              onChange={refresh}
               visibleCategories={resSel.section === "all" ? null : [resSel.section]}
               onStats={(s) => setResStats((prev) => (JSON.stringify(prev) === JSON.stringify(s) ? prev : s))}
             />
@@ -1367,8 +1323,6 @@ export function SettingDetailPage() {
 // существа и фракции сеттинга"; locations were added afterwards since
 // mention-links can connect to them too).
 function SettingGraphTab({ settingId }: { settingId: number }) {
-  const [data, setData] = useState<GraphData | null>(null);
-  const [error, setError] = useState<string | null>(null);
   // Раньше вкладка звала три захардкоженных типа: артефакты, сцены и
   // приключения сеттинга в его же граф не попадали, и переключить это было
   // нечем. Теперь тот же отбор, что и на общей странице, но из типов, у
@@ -1377,32 +1331,23 @@ function SettingGraphTab({ settingId }: { settingId: number }) {
     () => new Set(SETTING_SCOPED_TYPES)
   );
 
-  useEffect(() => {
-    const controller = new AbortController();
-    const params = new URLSearchParams({
-      types: Array.from(activeTypes).join(","),
-      setting_id: String(settingId),
-      view: "world",
-    });
-    api.get<GraphData>(`/links/graph?${params.toString()}`, { signal: controller.signal })
-      .then((d) => { setData(d); setError(null); })
-      .catch((e: unknown) => {
-        if (e instanceof DOMException && e.name === "AbortError") return;
-        setError(e instanceof Error ? e.message : "Ошибка загрузки графа");
-      });
-    return () => controller.abort();
-  }, [settingId, activeTypes]);
+  const params = new URLSearchParams({
+    types: Array.from(activeTypes).join(","),
+    setting_id: String(settingId),
+    view: "world",
+  });
+  const graph = useResource<GraphData>(settingPagePaths.graph(params.toString()));
 
   return (
     <div className="card stack">
-      {error && (
+      {graph.error && (
         <div className="error-banner">
-          {error}
-          <button type="button" onClick={() => setError(null)}>Повторить</button>
+          {graph.error}
+          <button type="button" onClick={graph.reload}>Повторить</button>
         </div>
       )}
       <RelationGraph
-        data={data}
+        data={graph.data ?? null}
         layoutKey={`setting:${settingId}`}
         emptyMessage={
           activeTypes.size === 0
@@ -1527,27 +1472,19 @@ function PopulationTab({ settingId }: { settingId: number }) {
     const p = new URLSearchParams(window.location.search).get("population");
     return (POPULATION_SECTIONS as readonly string[]).includes(p ?? "") ? (p as typeof POPULATION_SECTIONS[number]) : "Личности";
   });
-  const [counts, setCounts] = useState<{ beings: number | null; bestiary: number | null; communities: number | null }>({ beings: null, bestiary: null, communities: null });
+  // Счётчики — те же списки, что читают разделы без фильтров: открытый раздел
+  // берёт их из кэша, а правка в разделе обновляет и число на вкладке.
+  const counts = {
+    beings: useResource<SettingBeing[]>(populationPaths.beings(settingId)).data?.length ?? null,
+    bestiary: useResource<SettingBeing[]>(populationPaths.bestiary(settingId)).data?.length ?? null,
+    communities: useResource<SettingCommunity[]>(populationPaths.communities(settingId)).data?.length ?? null,
+  };
   useEffect(() => {
     const url = new URL(window.location.href);
     url.searchParams.set("population", section);
     window.history.replaceState(null, "", url.toString());
   }, [section]);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    const opts = { signal: controller.signal } as const;
-    // Батч счётчиков — лёгкие COUNT-запросы, без общей транзакции
-    Promise.all([
-      api.get<SettingBeing[]>(`/setting-beings?setting_id=${settingId}&exclude_category=bestiary`, opts).then(r => r.length).catch(() => null),
-      api.get<SettingBeing[]>(`/setting-beings?setting_id=${settingId}&category=bestiary`, opts).then(r => r.length).catch(() => null),
-      api.get<SettingCommunity[]>(`/setting-communities?setting_id=${settingId}&parent_id=null`, opts).then(r => r.length).catch(() => null),
-    ]).then(([b, best, c]) => {
-      if (controller.signal.aborted) return;
-      setCounts({ beings: b, bestiary: best, communities: c });
-    });
-    return () => controller.abort();
-  }, [settingId]);
 
   const label = (s: typeof POPULATION_SECTIONS[number]) => {
     if (s === "Личности" && counts.beings != null) return `Личности · ${counts.beings}`;
@@ -1574,6 +1511,8 @@ function PopulationTab({ settingId }: { settingId: number }) {
 }
 
 function BeingsSection({ settingId }: { settingId: number }) {
+  const run = useAction();
+  const afterWrite = useAfterWrite();
   const [promptDialog, promptText] = usePrompt();
   const { deleteWithUndo } = useUndoDelete();
   const [category, setCategory] = useState<BeingCategory | "all">("all");
@@ -1589,11 +1528,6 @@ function BeingsSection({ settingId }: { settingId: number }) {
   const [debouncedQuery, setDebouncedQuery] = useState(query);
   const [sort, setSort] = useState<"name" | "recent" | "category" | "community">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [beings, setBeings] = useState<SettingBeing[]>([]);
-  const [locations, setLocations] = useState<SettingLocation[]>([]);
-  const [allCommunities, setAllCommunities] = useState<SettingCommunity[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [confirmDialog, confirm] = useConfirm();
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkFaction, setBulkFaction] = useState("");
@@ -1626,58 +1560,21 @@ function BeingsSection({ settingId }: { settingId: number }) {
     else { setSort(next); setSortDir("asc"); }
   }
 
-  function refresh(signal?: AbortSignal) {
-    setLoading(true);
-    setLoadError(null);
-    const params = new URLSearchParams({ setting_id: String(settingId) });
-    if (category !== "all") params.set("category", category);
-    else params.set("exclude_category", "bestiary");
-    if (locationFilter) params.set("location_id", locationFilter);
-    if (communityFilter) params.set("community_id", communityFilter);
-    if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim());
-    if (sort !== "name" && sort !== "community") params.set("sort", sort);
-    if (sortDir === "desc") params.set("dir", "desc");
-    const opts = signal ? { signal } : undefined;
-    api
-      .get<SettingBeing[]>(`/setting-beings?${params.toString()}`, opts)
-      .then((rows) => {
-        setBeings(rows);
-        setLoading(false);
-      })
-      .catch((e: unknown) => {
-        if ((e as Error).name === "AbortError") return;
-        setLoadError(String(e instanceof Error ? e.message : e));
-        setLoading(false);
-      });
-  }
-  useEffect(() => {
-    const controller = new AbortController();
-    refresh(controller.signal);
-    return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settingId, category, locationFilter, communityFilter, debouncedQuery, sort, sortDir]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .get<SettingLocation[]>(`/setting-locations?setting_id=${settingId}`, { signal: controller.signal })
-      .then(setLocations)
-      .catch((e: unknown) => {
-        if ((e as Error).name === "AbortError") return;
-      });
-    return () => controller.abort();
-  }, [settingId]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .get<SettingCommunity[]>(`/setting-communities?setting_id=${settingId}`, { signal: controller.signal })
-      .then(setAllCommunities)
-      .catch((e: unknown) => {
-        if ((e as Error).name === "AbortError") return;
-      });
-    return () => controller.abort();
-  }, [settingId]);
+  // Смена фильтра не мигает пустым списком: пока грузится новый, виден прежний.
+  const listState = useResource<SettingBeing[]>(
+    populationPaths.beings(settingId, {
+      category,
+      locationId: locationFilter,
+      communityId: communityFilter,
+      query: debouncedQuery,
+      sort,
+      dir: sortDir,
+    }),
+    { keepPrevious: true }
+  );
+  const beings = listState.data ?? NO_BEINGS;
+  const locations = useResource<SettingLocation[]>(settingPaths.inSetting("location", settingId)).data ?? NO_LOCATIONS;
+  const allCommunities = useResource<SettingCommunity[]>(settingPaths.inSetting("community", settingId)).data ?? NO_COMMUNITIES;
 
   function toggleSelect(id: number) {
     setSelectedIds((prev) => {
@@ -1690,21 +1587,21 @@ function BeingsSection({ settingId }: { settingId: number }) {
   async function bulkAddToFaction() {
     if (!bulkFaction || selectedIds.size === 0) return;
     setBulkSaving(true);
-    try {
-      const ids = Array.from(selectedIds);
-      await Promise.all(ids.map((id) => api.post(`/setting-communities/${bulkFaction}/members`, { being_id: id })));
-      setSelectedIds(new Set());
-      refresh();
-    } catch (e) {
-      setLoadError(String(e instanceof Error ? e.message : e));
-    } finally {
-      setBulkSaving(false);
-    }
+    const ids = Array.from(selectedIds);
+    const done = await run(
+      () => Promise.all(ids.map((id) => write.post(`/setting-communities/${bulkFaction}/members`, { being_id: id }))).then(() => true),
+      // Состав виден и у сообщества, и во «Фракциях» каждого существа.
+      { affects: [{ kind: "being" }, { kind: "community", id: Number(bulkFaction) }] }
+    );
+    if (done) setSelectedIds(new Set());
+    setBulkSaving(false);
   }
 
   async function duplicateBeing(being: SettingBeing) {
-    try {
-      await api.post("/setting-beings", {
+    // Повтор создал бы вторую копию.
+    await run(
+      () =>
+        write.post("/setting-beings", {
         setting_id: settingId,
         name: `Копия — ${being.name}`,
         category: being.category,
@@ -1716,11 +1613,9 @@ function BeingsSection({ settingId }: { settingId: number }) {
         description: being.description,
         tags: being.tags,
         // Копируем связи через отдельный шаг? Пока базовые поля — остальное дотянет профиль
-      });
-      refresh();
-    } catch (e) {
-      setLoadError(String(e instanceof Error ? e.message : e));
-    }
+        }),
+      { affects: [{ kind: "being" }], retry: false }
+    );
   }
 
   async function deleteBeing(beingId: number) {
@@ -1732,18 +1627,23 @@ function BeingsSection({ settingId }: { settingId: number }) {
     });
     if (!ok) return;
     const name = beings.find((b) => b.id === beingId)?.name ?? "Личность";
-    await deleteWithUndo({
-      entityName: name,
-      deleteFn: async () => { await api.del(`/setting-beings/${beingId}`); refresh(); },
-      restoreFn: async () => { await api.put(`/setting-beings/${beingId}/restore`); refresh(); },
-    });
+    await run(
+      () =>
+        deleteWithUndo({
+          entityName: name,
+          deleteFn: async () => { await write.del(`/setting-beings/${beingId}`); },
+          restoreFn: async () => { await write.put(`/setting-beings/${beingId}/restore`); afterWrite([{ kind: "being" }]); },
+        }).then(() => true),
+      { affects: [{ kind: "being" }] }
+    );
   }
 
   async function renameBeing(being: SettingBeing) {
     const name = await promptText({ title: "Переименовать личность", message: "Имя", defaultValue: being.name });
     if (!name?.trim() || name.trim() === being.name) return;
-    await api.put(`/setting-beings/${being.id}`, { name: name.trim() });
-    refresh();
+    await run(() => write.put(`/setting-beings/${being.id}`, { name: name.trim() }).then(() => true), {
+      affects: [{ kind: "being", id: being.id }],
+    });
   }
 
   const beingNavCats = NAMED_BEING_CATEGORIES.filter((c) => c.key !== "all");
@@ -1816,7 +1716,6 @@ function BeingsSection({ settingId }: { settingId: number }) {
           initialType="being"
           ctx={{ settingId }}
           onClose={() => setCreating(false)}
-          onCreated={() => refresh()}
         />
       )}
       {filtersOpen && (
@@ -1866,10 +1765,10 @@ function BeingsSection({ settingId }: { settingId: number }) {
         </div>
       )}
       <Loadable
-        loading={loading && beings.length === 0}
-        error={loadError}
+        loading={listState.loading}
+        error={listState.data ? null : listState.error}
         errorTitle="Не удалось загрузить личностей"
-        onRetry={() => refresh()}
+        onRetry={listState.reload}
         skeleton={<ListSkeleton variant="rows" label="Загрузка личностей" />}
         empty={beings.length === 0 ? (
           <EmptyState
@@ -1916,23 +1815,10 @@ function BeingsSection({ settingId }: { settingId: number }) {
 // Карточка сообщества справа: лицо (аватар/монограмма + имя), сводка
 // (описание, теги, локации, вложенность) и состав — кто состоит.
 function CommunityDetailPane({ communityId, onBack }: { communityId: number; onBack: () => void }) {
-  const [detail, setDetail] = useState<SettingCommunityDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .get<SettingCommunityDetail>(`/setting-communities/${communityId}`, { signal: controller.signal })
-      .then((d) => {
-        if (controller.signal.aborted) return;
-        setDetail(d);
-      })
-      .catch((e: unknown) => {
-        if ((e as Error).name === "AbortError") return;
-        setError(String(e instanceof Error ? e.message : e));
-      });
-    return () => controller.abort();
-  }, [communityId]);
+  // Та же карточка, что у профиля сообщества: правка там видна здесь сразу.
+  const detailState = useEntity<SettingCommunityDetail>("community", communityId);
+  const detail = detailState.data;
+  const error = detail ? null : detailState.error;
 
   if (error) {
     return (
@@ -2059,23 +1945,10 @@ function CommunityDetailPane({ communityId, onBack }: { communityId: number; onB
 // Большая карточка личности справа: обычная карточка + статблок двумя
 // столбцами, под карточкой — где обитает и в каких фракциях состоит.
 function BeingDetailPane({ beingId, settingId, onBack }: { beingId: number; settingId: number; onBack: () => void }) {
-  const [detail, setDetail] = useState<SettingBeingDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .get<SettingBeingDetail>(`/setting-beings/${beingId}`, { signal: controller.signal })
-      .then((d) => {
-        if (controller.signal.aborted) return;
-        setDetail(d);
-      })
-      .catch((e: unknown) => {
-        if ((e as Error).name === "AbortError") return;
-        setError(String(e instanceof Error ? e.message : e));
-      });
-    return () => controller.abort();
-  }, [beingId]);
+  // Та же карточка, что у профиля существа: правка там видна здесь сразу.
+  const detailState = useEntity<SettingBeingDetail>("being", beingId);
+  const detail = detailState.data;
+  const error = detail ? null : detailState.error;
 
   if (error) {
     return (
@@ -2154,18 +2027,16 @@ function BeingDetailPane({ beingId, settingId, onBack }: { beingId: number; sett
 // CompendiumLinks card on the being's own page); the entry itself lives in
 // the setting and works fine with no system attached at all.
 function BestiarySection({ settingId }: { settingId: number }) {
+  const run = useAction();
+  const afterWrite = useAfterWrite();
   const [promptDialog, promptText] = usePrompt();
   const { deleteWithUndo } = useUndoDelete();
-  const [beings, setBeings] = useState<SettingBeing[]>([]);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState(query);
   const [creating, setCreating] = useState(false);
   const [locationFilter, setLocationFilter] = useState("");
   const [sort, setSort] = useState<"name" | "recent" | "creature_type">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [locations, setLocations] = useState<SettingLocation[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [confirmDialog, confirm] = useConfirm();
   // Master–Detail: список записей слева, выбранная — справа большой
   // карточкой (та же BeingDetailPane, что у личностей).
@@ -2181,60 +2052,30 @@ function BestiarySection({ settingId }: { settingId: number }) {
     else { setSort(next); setSortDir("asc"); }
   }
 
-  function refresh(signal?: AbortSignal) {
-    setLoading(true);
-    setLoadError(null);
-    const params = new URLSearchParams({ setting_id: String(settingId), category: "bestiary" });
-    if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim());
-    if (locationFilter) params.set("location_id", locationFilter);
-    // Сервер умеет только name/recent/category — тип существа сортируем
-    // клиентски (creature_meta догружается отдельным запросом сервера).
-    if (sort !== "name" && sort !== "creature_type") params.set("sort", sort);
-    if (sortDir === "desc") params.set("dir", "desc");
-    const opts = signal ? { signal } : undefined;
+  const listState = useResource<SettingBeing[]>(
+    populationPaths.bestiary(settingId, { query: debouncedQuery, locationId: locationFilter, sort, dir: sortDir }),
+    { keepPrevious: true }
+  );
+  // Сервер умеет только name/recent/category — тип существа сортируем
+  // клиентски (creature_meta догружается отдельным запросом сервера).
+  const beings = useMemo(() => {
+    const rows = listState.data ?? NO_BEINGS;
+    if (sort !== "creature_type") return rows;
     const dirMul = sortDir === "desc" ? -1 : 1;
-    api
-      .get<SettingBeing[]>(`/setting-beings?${params.toString()}`, opts)
-      .then((rows) => {
-        const list =
-          sort === "creature_type"
-            ? [...rows].sort(
-                (a, b) =>
-                  dirMul *
-                  ((a.creature_meta?.creatureType ?? "").localeCompare(b.creature_meta?.creatureType ?? "", "ru") ||
-                    a.name.localeCompare(b.name, "ru", { numeric: true }))
-              )
-            : rows;
-        setBeings(list);
-        setLoading(false);
-      })
-      .catch((e: unknown) => {
-        if ((e as Error).name === "AbortError") return;
-        setLoadError(String(e instanceof Error ? e.message : e));
-        setLoading(false);
-      });
-  }
-  useEffect(() => {
-    const controller = new AbortController();
-    refresh(controller.signal);
-    return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settingId, debouncedQuery, locationFilter, sort, sortDir]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .get<SettingLocation[]>(`/setting-locations?setting_id=${settingId}`, { signal: controller.signal })
-      .then(setLocations)
-      .catch((e: unknown) => {
-        if ((e as Error).name === "AbortError") return;
-      });
-    return () => controller.abort();
-  }, [settingId]);
+    return [...rows].sort(
+      (a, b) =>
+        dirMul *
+        ((a.creature_meta?.creatureType ?? "").localeCompare(b.creature_meta?.creatureType ?? "", "ru") ||
+          a.name.localeCompare(b.name, "ru", { numeric: true }))
+    );
+  }, [listState.data, sort, sortDir]);
+  const locations = useResource<SettingLocation[]>(settingPaths.inSetting("location", settingId)).data ?? NO_LOCATIONS;
 
   async function duplicateBeing(being: SettingBeing) {
-    try {
-      await api.post("/setting-beings", {
+    // Повтор создал бы вторую копию.
+    await run(
+      () =>
+        write.post("/setting-beings", {
         setting_id: settingId,
         name: `Копия — ${being.name}`,
         category: "bestiary",
@@ -2244,11 +2085,9 @@ function BestiarySection({ settingId }: { settingId: number }) {
         behavior: being.behavior,
         description: being.description,
         tags: being.tags,
-      });
-      refresh();
-    } catch (e) {
-      setLoadError(String(e instanceof Error ? e.message : e));
-    }
+        }),
+      { affects: [{ kind: "being" }], retry: false }
+    );
   }
 
   async function deleteBeing(beingId: number) {
@@ -2260,18 +2099,23 @@ function BestiarySection({ settingId }: { settingId: number }) {
     });
     if (!ok) return;
     const name = beings.find((b) => b.id === beingId)?.name ?? "Запись";
-    await deleteWithUndo({
-      entityName: name,
-      deleteFn: async () => { await api.del(`/setting-beings/${beingId}`); refresh(); },
-      restoreFn: async () => { await api.put(`/setting-beings/${beingId}/restore`); refresh(); },
-    });
+    await run(
+      () =>
+        deleteWithUndo({
+          entityName: name,
+          deleteFn: async () => { await write.del(`/setting-beings/${beingId}`); },
+          restoreFn: async () => { await write.put(`/setting-beings/${beingId}/restore`); afterWrite([{ kind: "being" }]); },
+        }).then(() => true),
+      { affects: [{ kind: "being" }] }
+    );
   }
 
   async function renameBeing(being: SettingBeing) {
     const name = await promptText({ title: "Переименовать запись", message: "Название", defaultValue: being.name });
     if (!name?.trim() || name.trim() === being.name) return;
-    await api.put(`/setting-beings/${being.id}`, { name: name.trim() });
-    refresh();
+    await run(() => write.put(`/setting-beings/${being.id}`, { name: name.trim() }).then(() => true), {
+      affects: [{ kind: "being", id: being.id }],
+    });
   }
 
   const {
@@ -2289,7 +2133,6 @@ function BestiarySection({ settingId }: { settingId: number }) {
           initialType="bestiary"
           ctx={{ settingId }}
           onClose={() => setCreating(false)}
-          onCreated={() => refresh()}
         />
       )}
       <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -2311,10 +2154,10 @@ function BestiarySection({ settingId }: { settingId: number }) {
         </button>
       </div>
       <Loadable
-        loading={loading && beings.length === 0}
-        error={loadError}
+        loading={listState.loading}
+        error={listState.data ? null : listState.error}
         errorTitle="Не удалось загрузить бестиарий"
-        onRetry={() => refresh()}
+        onRetry={listState.reload}
         skeleton={<ListSkeleton variant="rows" count={1} label="Загрузка бестиария" />}
         empty={beings.length === 0 ? (
           <EmptyState
@@ -2368,17 +2211,14 @@ function BestiarySection({ settingId }: { settingId: number }) {
 function CommunitiesSection({ settingId }: { settingId: number }) {
   const [promptDialog, promptText] = usePrompt();
   const { deleteWithUndo } = useUndoDelete();
-  const navigate = useNavigate();
-  const [communities, setCommunities] = useState<SettingCommunity[]>([]);
+  const run = useAction();
+  const afterWrite = useAfterWrite();
   const [creating, setCreating] = useState(false);
   const [locationFilter, setLocationFilter] = useState("");
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState(query);
   const [sort, setSort] = useState<"name" | "recent">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [locations, setLocations] = useState<SettingLocation[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [confirmDialog, confirm] = useConfirm();
   // Master–Detail: список слева, выбранное — справа карточкой
   // сообщества + состав (CommunityDetailPane ниже).
@@ -2394,48 +2234,12 @@ function CommunitiesSection({ settingId }: { settingId: number }) {
     else { setSort(next); setSortDir("asc"); }
   }
 
-  function refresh(signal?: AbortSignal) {
-    setLoading(true);
-    setLoadError(null);
-    const params = new URLSearchParams({ setting_id: String(settingId) });
-    // Без фильтра список остаётся витриной верхнего уровня (вложенные живут на
-    // странице родителя). С фильтром это бессмысленно: вложенное сообщество
-    // без локации иначе просто не покажется — поэтому ищем по всем уровням.
-    if (locationFilter) params.set("location_id", locationFilter);
-    else if (!debouncedQuery.trim()) params.set("parent_id", "null");
-    if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim());
-    if (sort !== "name") params.set("sort", sort);
-    if (sortDir === "desc") params.set("dir", "desc");
-    const opts = signal ? { signal } : undefined;
-    api
-      .get<SettingCommunity[]>(`/setting-communities?${params.toString()}`, opts)
-      .then((rows) => {
-        setCommunities(rows);
-        setLoading(false);
-      })
-      .catch((e: unknown) => {
-        if ((e as Error).name === "AbortError") return;
-        setLoadError(String(e instanceof Error ? e.message : e));
-        setLoading(false);
-      });
-  }
-  useEffect(() => {
-    const controller = new AbortController();
-    refresh(controller.signal);
-    return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settingId, locationFilter, debouncedQuery, sort, sortDir]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .get<SettingLocation[]>(`/setting-locations?setting_id=${settingId}`, { signal: controller.signal })
-      .then(setLocations)
-      .catch((e: unknown) => {
-        if ((e as Error).name === "AbortError") return;
-      });
-    return () => controller.abort();
-  }, [settingId]);
+  const listState = useResource<SettingCommunity[]>(
+    populationPaths.communities(settingId, { locationId: locationFilter, query: debouncedQuery, sort, dir: sortDir }),
+    { keepPrevious: true }
+  );
+  const communities = listState.data ?? NO_COMMUNITIES;
+  const locations = useResource<SettingLocation[]>(settingPaths.inSetting("location", settingId)).data ?? NO_LOCATIONS;
 
   async function deleteCommunity(id: number) {
     const ok = await confirm({
@@ -2446,18 +2250,23 @@ function CommunitiesSection({ settingId }: { settingId: number }) {
     });
     if (!ok) return;
     const name = communities.find((c) => c.id === id)?.name ?? "Сообщество";
-    await deleteWithUndo({
-      entityName: name,
-      deleteFn: async () => { await api.del(`/setting-communities/${id}`); refresh(); },
-      restoreFn: async () => { await api.put(`/setting-communities/${id}/restore`); refresh(); },
-    });
+    await run(
+      () =>
+        deleteWithUndo({
+          entityName: name,
+          deleteFn: async () => { await write.del(`/setting-communities/${id}`); },
+          restoreFn: async () => { await write.put(`/setting-communities/${id}/restore`); afterWrite([{ kind: "community" }]); },
+        }).then(() => true),
+      { affects: [{ kind: "community" }] }
+    );
   }
 
   async function renameCommunity(community: SettingCommunity) {
     const name = await promptText({ title: "Переименовать сообщество", message: "Название", defaultValue: community.name });
     if (!name?.trim() || name.trim() === community.name) return;
-    await api.put(`/setting-communities/${community.id}`, { name: name.trim() });
-    refresh();
+    await run(() => write.put(`/setting-communities/${community.id}`, { name: name.trim() }).then(() => true), {
+      affects: [{ kind: "community", id: community.id }],
+    });
   }
 
   const {
@@ -2475,7 +2284,6 @@ function CommunitiesSection({ settingId }: { settingId: number }) {
           initialType="community"
           ctx={{ settingId }}
           onClose={() => setCreating(false)}
-          onCreated={() => refresh()}
         />
       )}
       <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -2502,10 +2310,10 @@ function CommunitiesSection({ settingId }: { settingId: number }) {
       )}
       {debouncedQuery.trim() && <span className="muted">Поиск по имени — {communities.length} найдено</span>}
       <Loadable
-        loading={loading && communities.length === 0}
-        error={loadError}
+        loading={listState.loading}
+        error={listState.data ? null : listState.error}
         errorTitle="Не удалось загрузить сообщества"
-        onRetry={() => refresh()}
+        onRetry={listState.reload}
         skeleton={<ListSkeleton variant="rows" count={1} label="Загрузка сообществ" />}
         empty={communities.length === 0 ? (
           <EmptyState
@@ -2556,10 +2364,13 @@ function CommunitiesSection({ settingId }: { settingId: number }) {
 }
 
 function ArtifactsTab({ settingId }: { settingId: number }) {
-  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
+  const run = useAction();
+  const afterWrite = useAfterWrite();
+  const listState = useResource<Artifact[]>(settingPaths.inSetting("artifact", settingId));
+  const artifacts = listState.data ?? NO_ARTIFACTS;
+  const loading = listState.loading;
+  const loadError = listState.data ? null : listState.error;
   const [creating, setCreating] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState(query);
   const [grouping, setGrouping] = useState<"alpha" | "item_class" | "rarity">("item_class");
@@ -2580,29 +2391,6 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
     const t = setTimeout(() => setDebouncedQuery(query), 250);
     return () => clearTimeout(t);
   }, [query]);
-
-  function refresh(signal?: AbortSignal) {
-    setLoading(true);
-    setLoadError(null);
-    const opts = signal ? { signal } : undefined;
-    api
-      .get<Artifact[]>(`/artifacts?setting_id=${settingId}`, opts)
-      .then((rows) => {
-        setArtifacts(rows);
-        setLoading(false);
-      })
-      .catch((e: unknown) => {
-        if ((e as Error).name === "AbortError") return;
-        setLoadError(String(e instanceof Error ? e.message : e));
-        setLoading(false);
-      });
-  }
-  useEffect(() => {
-    const controller = new AbortController();
-    refresh(controller.signal);
-    return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settingId]);
 
   const typeOptions = filterClass ? itemTypeOptions(filterClass) : [];
 
@@ -2638,17 +2426,21 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
   async function removeArtifact(a: Artifact) {
     const ok = await confirm({ message: `Отправить «${a.name}» в архив?`, confirmLabel: "Архивировать", danger: true });
     if (!ok) return;
-    try {
-      await deleteWithUndo({
-        entityName: a.name,
-        deleteFn: () => api.del(`/artifacts/${a.id}`),
-        restoreFn: () => api.put(`/artifacts/${a.id}/restore`),
-      });
-    } catch {
-      /* тост отмены уже показал deleteWithUndo */
-    }
-    setArtSel({ section: artSel.section });
-    refresh();
+    const done = await run(
+      () =>
+        deleteWithUndo({
+          entityName: a.name,
+          deleteFn: async () => {
+            await write.del(`/artifacts/${a.id}`);
+          },
+          restoreFn: async () => {
+            await write.put(`/artifacts/${a.id}/restore`);
+            afterWrite([{ kind: "artifact" }]);
+          },
+        }).then(() => true),
+      { affects: [{ kind: "artifact" }] }
+    );
+    if (done) setArtSel({ section: artSel.section });
   }
 
   function gridScope(): { artifacts: Artifact[]; grouping: ArtifactGrouping } {
@@ -2729,7 +2521,6 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
           onClose={() => setCreating(false)}
           // Визард отдаёт (id, type): созданный предмет выбираем сразу.
           onCreated={(id) => {
-            refresh();
             if (typeof id === "number") setArtSel({ section: "all", item: String(id) });
           }}
         />
@@ -2739,7 +2530,7 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
         <EmptyState kind="error"
           title="Ошибка загрузки"
           hint={loadError}
-          action={<button onClick={() => refresh()}>Повторить</button>}
+          action={<button onClick={listState.reload}>Повторить</button>}
         />
       )}
       {!loading && !loadError && filtered.length === 0 && artifacts.length === 0 && (
@@ -2791,7 +2582,6 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
                 searchActive={!!debouncedQuery.trim()}
                 dir={sortDir}
                 settingId={settingId}
-                onRefresh={refresh}
               />
             </div>
           )}
@@ -2801,7 +2591,7 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
         <ArtifactEditModal
           artifact={editing}
           onClose={() => setEditing(null)}
-          onSaved={() => { refresh(); setRev((r) => r + 1); setEditing(null); }}
+          onSaved={() => { setRev((r) => r + 1); setEditing(null); }}
         />
       )}
       {assigning && (
@@ -2809,7 +2599,7 @@ function ArtifactsTab({ settingId }: { settingId: number }) {
           artifact={assigning}
           settingId={settingId}
           onClose={() => setAssigning(null)}
-          onSaved={() => { refresh(); setRev((r) => r + 1); setAssigning(null); }}
+          onSaved={() => { setRev((r) => r + 1); setAssigning(null); }}
         />
       )}
     </div>

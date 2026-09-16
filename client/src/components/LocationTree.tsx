@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import type { DragEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
-import { useAfterWrite, write } from "../data/hooks";
+import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
+import { settingPaths } from "../data/settingEntities";
 import { showSaveError } from "../data/notices";
 import { loadThumbnailStyles } from "../thumbnailStyles";
 import { NavIcon } from "./NavIcons";
@@ -17,6 +18,8 @@ import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { buildMentionToken } from "../mentions";
 import type { SettingLocation } from "../types";
 
+const NO_LOCATIONS: SettingLocation[] = [];
+
 interface Props {
   settingId: number;
   // Подраздел «Список» географии как Master–Detail: всегда плоский список
@@ -29,13 +32,16 @@ interface Props {
 const KIND_SUGGESTIONS = ["континент", "страна", "область", "город", "деревня", "район", "улица", "здание", "таверна", "храм", "замок", "башня", "подземелье", "лес", "гора", "река"] as const;
 
 export function LocationTree({ settingId, flat = false, selectOnClick = false }: Props) {
-  const [locations, setLocations] = useState<SettingLocation[]>([]);
+  // Список мест — тот же ключ кэша, что у карточек и соседних видов
+  // географии (docs/adr/0001): правка в одном виде видна в остальных.
+  const locationsState = useResource<SettingLocation[]>(settingPaths.inSetting("location", settingId));
+  const locations = locationsState.data ?? NO_LOCATIONS;
+  const loading = locationsState.loading;
+  const loadError = locationsState.data ? null : locationsState.error;
   const [creating, setCreating] = useState(false);
   const [wizardParentId, setWizardParentId] = useState<number | null>(null);
   const [rawQuery, setRawQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [kindFilter, setKindFilter] = useState<string>("");
   const [sortMode, setSortMode] = useState<"name" | "kind">("name");
   const [draggedId, setDraggedId] = useState<number | null>(null);
@@ -43,8 +49,8 @@ export function LocationTree({ settingId, flat = false, selectOnClick = false }:
   const [mapFilter, setMapFilter] = useState<"" | "with" | "without">("");
   const [descFilter, setDescFilter] = useState<"" | "with" | "without">("");
   const [confirmDialog, confirm] = useConfirm();
-  const [alertDialog, showAlert] = useAlert();
   const { deleteWithUndo } = useUndoDelete();
+  const run = useAction();
   const treeRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -84,29 +90,6 @@ export function LocationTree({ settingId, flat = false, selectOnClick = false }:
     const t = setTimeout(() => setDebouncedQuery(rawQuery), 150);
     return () => clearTimeout(t);
   }, [rawQuery]);
-
-  function refresh() {
-    setLoading(true);
-    setLoadError(null);
-    const controller = new AbortController();
-    api
-      .get<SettingLocation[]>(`/setting-locations?setting_id=${settingId}`, { signal: controller.signal })
-      .then((rows) => {
-        setLocations(rows);
-        setLoading(false);
-      })
-      .catch((e: unknown) => {
-        if ((e as Error).name === "AbortError") return;
-        setLoadError(String(e instanceof Error ? e.message : e));
-        setLoading(false);
-      });
-    return () => controller.abort();
-  }
-  useEffect(() => {
-    const cleanup = refresh();
-    return cleanup;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settingId]);
 
   const uniqueKinds = Array.from(
     new Set(locations.map((l) => (l.kind ?? "").trim().toLowerCase()).filter(Boolean) as string[])
@@ -204,14 +187,11 @@ export function LocationTree({ settingId, flat = false, selectOnClick = false }:
   async function handleDropRoot(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
     if (draggedId == null) return;
-    try {
-      await api.put(`/setting-locations/${draggedId}/parent`, { parent_id: null });
-      refresh();
-    } catch (err) {
-      showAlert(String(err instanceof Error ? err.message : err));
-    } finally {
-      setDraggedId(null);
-    }
+    const id = draggedId;
+    setDraggedId(null);
+    await run(() => write.put(`/setting-locations/${id}/parent`, { parent_id: null }).then(() => true), {
+      affects: [{ kind: "location" }],
+    });
   }
 
   function handleTreeKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
@@ -352,7 +332,6 @@ export function LocationTree({ settingId, flat = false, selectOnClick = false }:
   return (
     <div className="stack">
       {confirmDialog}
-      {alertDialog}
       <p className="muted">
         Верхний уровень — континенты, миры, крупнейшие регионы. Разворачивайте узлы, чтобы
         добавлять вложенные локации (страны, города, районы, конкретные места).
@@ -393,7 +372,7 @@ export function LocationTree({ settingId, flat = false, selectOnClick = false }:
       {loadError && (
         <LoadErrorCard
           message={<>Не удалось загрузить географию: {loadError}</>}
-          onRetry={() => refresh()}
+          onRetry={locationsState.reload}
         />
       )}
       {creating && (
@@ -401,7 +380,6 @@ export function LocationTree({ settingId, flat = false, selectOnClick = false }:
           initialType="location"
           ctx={{ settingId }}
           onClose={() => setCreating(false)}
-          onCreated={() => refresh()}
         />
       )}
       {wizardParentId !== null && (
@@ -409,10 +387,7 @@ export function LocationTree({ settingId, flat = false, selectOnClick = false }:
           initialType="location"
           ctx={{ settingId, defaults: { parentLocationId: wizardParentId } } as unknown as { settingId: number }}
           onClose={() => setWizardParentId(null)}
-          onCreated={() => {
-            setWizardParentId(null);
-            refresh();
-          }}
+          onCreated={() => setWizardParentId(null)}
         />
       )}
       <div className="row" style={{ alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
@@ -583,7 +558,6 @@ export function LocationTree({ settingId, flat = false, selectOnClick = false }:
               location={l}
               byParent={byParent}
               byParentAll={byParentAll}
-              onChange={() => refresh()}
               onWizardParent={setWizardParentId}
               draggedId={draggedId}
               setDraggedId={setDraggedId}
@@ -768,7 +742,6 @@ export function LocationNode({
   location,
   byParent,
   byParentAll,
-  onChange,
   onWizardParent,
   draggedId,
   setDraggedId,
@@ -780,7 +753,6 @@ export function LocationNode({
   location: SettingLocation;
   byParent: Map<number | null, SettingLocation[]>;
   byParentAll?: Map<number | null, SettingLocation[]>;
-  onChange?: () => void;
   onWizardParent?: (id: number) => void;
   draggedId?: number | null;
   setDraggedId?: (id: number | null) => void;
@@ -868,10 +840,8 @@ export function LocationNode({
   const [alertDialogNode, showAlert] = useAlert();
   const afterWrite = useAfterWrite();
   // Правка узла задевает локации целиком: дерево, родителя и саму карточку.
-  // Страницы, которые держат дерево своим состоянием, ещё зовут `onChange`.
   function changed() {
     afterWrite([{ kind: "location" }]);
-    onChange?.();
   }
   const [promptDialog, promptText] = usePrompt();
   const { deleteWithUndo } = useUndoDelete();
@@ -1211,7 +1181,6 @@ export function LocationNode({
               location={c}
               byParent={byParent}
               byParentAll={byParentAll}
-              onChange={onChange}
               onWizardParent={onWizardParent}
               draggedId={draggedId}
               setDraggedId={setDraggedId}

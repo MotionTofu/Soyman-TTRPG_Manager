@@ -16,11 +16,12 @@ describe("переведённые страницы", () => {
     expect(isMigratedRoute("/sessions")).toBe(false);
   });
 
-  it("карточки сущностей сеттинга — переведены, сам сеттинг — ещё нет", () => {
+  it("карточки сущностей сеттинга и сам сеттинг — переведены, список сеттингов — нет", () => {
     for (const base of ["locations", "beings", "artifacts", "communities", "events", "compendium", "scenes", "adventures"]) {
       expect(isMigratedRoute(`/${base}/12`)).toBe(true);
     }
-    expect(isMigratedRoute("/settings/1")).toBe(false);
+    expect(isMigratedRoute("/settings/1")).toBe(true);
+    expect(isMigratedRoute("/settings")).toBe(false);
   });
 
   it("соседние адреса не цепляются префиксом", () => {

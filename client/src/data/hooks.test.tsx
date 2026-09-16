@@ -131,6 +131,26 @@ describe("слой данных", () => {
     expect(result.current.being.error).toBeNull();
   });
 
+  it("отказ действия не перечитывает задетое сразу и не будит другие окна, но помечает его устаревшим", async () => {
+    const { result } = renderHook(() => ({ being: useEntity<{ name: string }>("being", 408), run: useAction() }), { wrapper });
+    await waitFor(() => expect(result.current.being.data).toBeDefined());
+    const getsBefore = server.gets.length;
+
+    await act(async () => {
+      await result.current.run(async () => {
+        throw new Error("502 Bad Gateway");
+      }, { affects: [{ kind: "being", id: 408 }] });
+    });
+    // Как и у сохранения полей: перечитка при лежащем сервере упала бы вторым
+    // сообщением рядом с плашкой. Но действие могло записаться частично —
+    // поэтому задетое устарело и перечитается при следующем обращении.
+    await new Promise((r) => setTimeout(r, 20));
+    expect(server.gets.length).toBe(getsBefore);
+    expect(broadcasts).toEqual([]);
+    expect(result.current.being.error).toBeNull();
+    expect(client.getQueryState(["entity", "being", 408])?.isInvalidated).toBe(true);
+  });
+
   it("прочее действие обновляет задетое, а при ошибке без повтора плашка без кнопки", async () => {
     const { result } = renderHook(() => ({ being: useEntity<{ name: string }>("being", 408), run: useAction() }), { wrapper });
     await waitFor(() => expect(result.current.being.data).toBeDefined());
