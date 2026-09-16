@@ -30,6 +30,8 @@ const MIGRATED_ROUTES: readonly RegExp[] = [
   /^\/adventures\/\d+\/?$/,
   // Часть 2: страница Сеттинга со всеми вкладками.
   /^\/settings\/\d+\/?$/,
+  // Группа «холст», часть 1: доска и экран выбора досок — у них один адрес.
+  /^\/canvas\/?$/,
 ];
 
 export function isMigratedRoute(pathname: string): boolean {

@@ -94,10 +94,36 @@ export function pathHasPrefix(path: string, prefix: string): boolean {
   return next === "" || next === "/" || next === "?" || next === "&";
 }
 
+/**
+ * Ресурсы, которые показывают сущности чужих видов и потому задеваются их
+ * правкой, хотя путь у них свой.
+ *
+ * Доска холста несёт на нодах имена сцен, приключений, существ и прочего: сцену
+ * переименовали на её странице — открытый в соседнем окне холст должен
+ * перечитаться, а не показывать старое (разбор группы «холст», Q9). Экран
+ * выбора досок показывает приключения и сеттинги с числом сцен.
+ *
+ * Перечитывается только открытая доска: закрытая лишь помечается устаревшей.
+ */
+const RESOURCE_DEPENDENCIES: readonly { prefix: string; kinds: readonly EntityKind[] }[] = [
+  {
+    prefix: "/canvas/board",
+    kinds: ["scene", "adventure", "being", "location", "artifact", "community", "setting_event", "character", "setting", "campaign"],
+  },
+  { prefix: "/canvas/index", kinds: ["scene", "adventure", "setting", "campaign"] },
+];
+
 export function matchesAffect(queryKey: QueryKey, affect: Affect): boolean {
   const [scope, a, b] = queryKey as readonly unknown[];
   if ("path" in affect) {
     return scope === "resource" && typeof a === "string" && pathHasPrefix(a, affect.path);
+  }
+  if (
+    scope === "resource" &&
+    typeof a === "string" &&
+    RESOURCE_DEPENDENCIES.some((dep) => dep.kinds.includes(affect.kind) && pathHasPrefix(a, dep.prefix))
+  ) {
+    return true;
   }
   const base = ENTITY_ENDPOINTS[affect.kind];
   if (scope === "entity") return a === affect.kind && (affect.id == null || b === affect.id);

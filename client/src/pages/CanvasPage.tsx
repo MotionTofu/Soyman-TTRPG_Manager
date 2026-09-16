@@ -21,6 +21,14 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { api } from "../api/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { notifyDataChanged } from "../dataSync";
+import { dataKeys, type Affect } from "../data/entities";
+import { useResource, write, afterWrite } from "../data/hooks";
+import { readResource } from "../data/imperative";
+import { useFieldDraft } from "../data/fieldDraft";
+import { dismissNotice, showSaveError } from "../data/notices";
+import { boardLayoutAffects, boardObjectAffects, canvasPaths, createLayoutWriter, type LayoutWrite } from "../data/canvas";
 import { SectionHeading } from "../components/SectionHeading";
 import { SectionBackground } from "../components/SectionBackground";
 import { EditableTextCard } from "../components/EditableTextCard";
@@ -2001,6 +2009,12 @@ function GroupAdd({
   );
 }
 
+const EMPTY_SETTINGS: Setting[] = [];
+/** Загрузка картинки на доску: файл большой, обычных 10 секунд мало. */
+const UPLOAD_TIMEOUT_MS = 120_000;
+const EMPTY_ARCS: StoryArc[] = [];
+const EMPTY_PRESETS: { key: string; label: string }[] = [];
+
 export function CanvasPage() {
   // Что открыто — в адресе, как окрестность у Графа связей: на холст ведут
   // ссылки со страниц приключений, и такую ссылку можно сохранить.
@@ -2022,9 +2036,46 @@ export function CanvasPage() {
 
   const initialFitDone = useRef(false);
 
-  const [settings, setSettings] = useState<Setting[]>([]);
-  const [arcs, setArcs] = useState<StoryArc[]>([]);
-  const [board, setBoard] = useState<CanvasBoard | null>(null);
+  // Адрес доски — он же ключ её кэша в слое данных (docs/adr/0001).
+  const boardUrl = useMemo(() => {
+    if (freeId) return `/canvas/board?free_id=${freeId}`;
+    if (arcId) return `/canvas/board?arc_id=${arcId}${campaignIdParam ? `&campaign_id=${campaignIdParam}` : ""}`;
+    if (campaignMapId) return `/canvas/board?campaign_id=${campaignMapId}`;
+    if (settingMapId) return `/canvas/board?setting_id=${settingMapId}`;
+    return null;
+  }, [freeId, arcId, campaignIdParam, settingMapId, campaignMapId]);
+
+  const queryClient = useQueryClient();
+  // Сеттинги и приключения сеттинга — для мастеров «Создать» и «Открыть».
+  // Через слой: заведённое в соседнем окне приключение появится в списке.
+  const settings = useResource<Setting[]>("/settings").data ?? EMPTY_SETTINGS;
+  const arcs = useResource<StoryArc[]>(settingId ? `/story/arcs?setting_id=${settingId}` : null).data ?? EMPTY_ARCS;
+
+  /**
+   * Доска — ресурс слоя данных. Ноды React Flow строятся из неё ниже, как и
+   * раньше; `keepPrevious` держит прежнюю доску, пока грузится следующая, — так
+   * было и до слоя, и холст не мигает пустым экраном при входе в главу.
+   */
+  const boardQuery = useResource<CanvasBoard>(boardUrl, { keepPrevious: true });
+  const board = boardUrl ? boardQuery.data ?? null : null;
+  const boardUrlRef = useRef(boardUrl);
+  boardUrlRef.current = boardUrl;
+  /**
+   * Правка доски в кэше без запроса: свёртка рамки, привязка к группе,
+   * `board_id` новорождённой доски. Раньше это было `useState`; теперь
+   * правится тот же кэш, откуда доску читают и соседние компоненты.
+   */
+  const setBoard = useCallback(
+    (next: CanvasBoard | null | ((prev: CanvasBoard | null) => CanvasBoard | null)) => {
+      const url = boardUrlRef.current;
+      if (!url) return;
+      queryClient.setQueryData<CanvasBoard>(dataKeys.resource(url), (prev) => {
+        const value = typeof next === "function" ? next(prev ?? null) : next;
+        return value ?? undefined;
+      });
+    },
+    [queryClient]
+  );
   const [alertDialog, showAlert] = useAlert();
   const [promptDialog, promptText] = usePrompt();
 
@@ -2076,7 +2127,8 @@ export function CanvasPage() {
   // кампании (блок D4).
   const [selectedAdventureId, setSelectedAdventureId] = useState<number | null>(null);
   const [selectedRouteId, setSelectedRouteId] = useState<number | null>(null);
-  const [index, setIndex] = useState<CanvasIndex | null>(null);
+  // Экран выбора — только когда доска не открыта (как и раньше).
+  const index = useResource<CanvasIndex>(!arcId && !freeId ? canvasPaths.index() : null).data ?? null;
   const [canvasTab, setCanvasTab] = useState<"campaigns" | "settings" | "boards">("campaigns");
   const [panelCollapsed, setPanelCollapsed] = useState(() => localStorage.getItem("canvasPropsCollapsed") === "1");
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
@@ -2120,7 +2172,6 @@ export function CanvasPage() {
   // Стартовые наборы пустой доски (блок G5). Список приходит с сервера — там
   // же, где содержимое набора; какой набор сейчас ставится, помним отдельно,
   // чтобы «Ставлю…» встало на нажатую кнопку, а не на все три.
-  const [presets, setPresets] = useState<{ key: string; label: string }[]>([]);
   const [startingPreset, setStartingPreset] = useState<string | null>(null);
   // Холсту тесно: палитра и поиск не помещаются рядом (CANVAS_OVERLAYS_MIN_PX).
   const flowElRef = useRef<HTMLDivElement | null>(null);
@@ -2148,24 +2199,15 @@ export function CanvasPage() {
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
 
-  useEffect(() => {
-    api.get<Setting[]>("/settings").then(setSettings);
-  }, []);
-
-  useEffect(() => {
-    if (!settingId) {
-      setArcs([]);
-      return;
-    }
-    api.get<StoryArc[]>(`/story/arcs?setting_id=${settingId}`).then(setArcs);
-  }, [settingId]);
-
   // Экран выбора берёт всё одним запросом: свои доски и приключения по
   // сеттингам. Девять запросов «дай приключения этого сеттинга» — это девять
   // кругов за экран, который открывают первым.
+  //
+  // Записи экрана выбора (часть 3 перевода) пока идут мимо слоя и перечитывают
+  // всё сами; `reloadIndex` остаётся для них пометкой кэша.
   const reloadIndex = useCallback(() => {
-    api.get<CanvasIndex>("/canvas/index").then(setIndex);
-  }, []);
+    void queryClient.invalidateQueries({ queryKey: dataKeys.resource(canvasPaths.index()) });
+  }, [queryClient]);
 
   // Раскладка досок по владельцам для экрана выбора (блок D2).
   //
@@ -2199,10 +2241,6 @@ export function CanvasPage() {
         (b.owner_type === "campaign" && !campaignIds.has(b.owner_id ?? 0))
     );
   }, [index]);
-  useEffect(() => {
-    if (!arcId && !freeId) reloadIndex();
-  }, [arcId, freeId, reloadIndex]);
-
   useEffect(() => {
     localStorage.setItem("canvasPropsCollapsed", panelCollapsed ? "1" : "0");
   }, [panelCollapsed]);
@@ -2240,39 +2278,108 @@ export function CanvasPage() {
   // Схема отличается от списка одним параметром адреса, а не своим маршрутом:
   // «Список / Схема» — это два взгляда на один сеттинг, и ссылка на схему
   // должна отличаться от ссылки на список ровно этим.
-  const boardUrl = useMemo(() => {
-    if (freeId) return `/canvas/board?free_id=${freeId}`;
-    if (arcId) return `/canvas/board?arc_id=${arcId}${campaignIdParam ? `&campaign_id=${campaignIdParam}` : ""}`;
-    if (campaignMapId) return `/canvas/board?campaign_id=${campaignMapId}`;
-    if (settingMapId) return `/canvas/board?setting_id=${settingMapId}`;
-    return null;
-  }, [freeId, arcId, campaignIdParam, settingMapId, campaignMapId]);
 
+  /**
+   * Перечитать доску. Доска живёт в кэше слоя, поэтому это пометка её ключа:
+   * открытая доска перечитается одним запросом, сколько бы путей её ни звали.
+   */
   const loadBoard = useCallback(() => {
-    if (!boardUrl) {
-      setBoard(null);
-      setNodes([]);
-      return;
-    }
-    api.get<CanvasBoard>(boardUrl).then((b) => {
-      setBoard(b);
-      setThreads(b.threads ?? []);
-      // Нода, на которую пришли по ссылке и которую ещё не двигали, крепится
-      // сразу: у scheduleSave задержка в 500 мс, и после перезагрузки фокус
-      // уехал бы на другое место. Только на загрузке — клик по такой же ноде
-      // писать в базу не должен.
-      const focus = focusRef.current;
-      if (focus && arcId) {
-        const focused = b.nodes.find((n) => n.key === focus);
-        if (focused && !focused.placed) {
-          api.put("/canvas/board/nodes", {
-            arc_id: arcId,
-            nodes: [{ node_type: focused.node_type, node_id: focused.node_id, x: Math.round(focused.x), y: Math.round(focused.y) }],
-          });
-        }
+    if (!boardUrl) return;
+    void queryClient.invalidateQueries({ queryKey: dataKeys.resource(boardUrl) });
+  }, [boardUrl, queryClient]);
+
+  /**
+   * Правка объекта доски через слой: при успехе задетое перечитывается здесь и
+   * объявляется другим окнам, при отказе — плашка. Создание повтора не
+   * предлагает: ответ мог потеряться уже после записи, и повтор завёл бы второй
+   * объект. Возвращает результат или undefined, если не вышло.
+   */
+  const boardAction = useCallback(
+    async <R,>(
+      action: () => Promise<R>,
+      options?: { retry?: boolean; failure?: string; affects?: readonly Affect[] }
+    ): Promise<R | undefined> => {
+      const url = boardUrlRef.current;
+      const affects: Affect[] = [...(url ? boardObjectAffects(url) : [{ path: "/canvas/board" }]), ...(options?.affects ?? [])];
+      try {
+        const result = await action();
+        afterWrite(queryClient, affects);
+        return result;
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error ?? "");
+        // Плашка сама начинается с «Не сохранилось:» — здесь только что и почему.
+        const message = `${options?.failure ?? "Правка на холсте"}${reason ? ` — ${reason}` : ""}`;
+        showSaveError(
+          message,
+          options?.retry === false
+            ? undefined
+            : async () => {
+                await action();
+                afterWrite(queryClient, affects);
+              }
+        );
+        return undefined;
       }
-    });
-  }, [boardUrl, arcId]);
+    },
+    [queryClient]
+  );
+
+  // Раскладка — одним писателем на всю страницу (data/canvas.ts): отказы
+  // копятся, плашка одна, «Повторить» досылает последнее состояние.
+  const layoutInFlight = useRef(0);
+  const layoutNotifyTimer = useRef<number | null>(null);
+  const layoutWriter = useMemo(
+    () =>
+      createLayoutWriter({
+        send: async (w: LayoutWrite) => {
+          layoutInFlight.current += 1;
+          try {
+            return await write.put(w.path, w.body);
+          } finally {
+            layoutInFlight.current -= 1;
+          }
+        },
+        // Другим окнам — одним сигналом на жест: сдвиг рамки пишет и рамку, и
+        // её содержимое, и перечитывать доску соседу дважды незачем. Своя доска
+        // уже стоит так, как её поставили, — её не перечитываем.
+        notify: () => {
+          const url = boardUrlRef.current;
+          if (!url) return;
+          if (layoutNotifyTimer.current) window.clearTimeout(layoutNotifyTimer.current);
+          layoutNotifyTimer.current = window.setTimeout(() => {
+            layoutNotifyTimer.current = null;
+            notifyDataChanged(boardLayoutAffects(url));
+          }, 300);
+        },
+        showError: (message, retry) => showSaveError(message, retry),
+        dismiss: dismissNotice,
+      }),
+    []
+  );
+  const writeLayout = useCallback(
+    <R,>(path: string, body: Record<string, unknown>) => layoutWriter.put<R>({ path, body }),
+    [layoutWriter]
+  );
+
+  // Нода, на которую пришли по ссылке и которую ещё не двигали, крепится
+  // сразу: у scheduleSave задержка в 500 мс, и после перезагрузки фокус
+  // уехал бы на другое место. Один раз на доску и фокус — клик по такой же
+  // ноде писать в базу не должен.
+  const pinnedFocusRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!board || !boardUrl || !arcId) return;
+    const focus = focusRef.current;
+    const mark = `${boardUrl}|${focus}`;
+    if (!focus || pinnedFocusRef.current === mark) return;
+    pinnedFocusRef.current = mark;
+    const focused = board.nodes.find((n) => n.key === focus);
+    if (focused && !focused.placed) {
+      void writeLayout("/canvas/board/nodes", {
+        arc_id: arcId,
+        nodes: [{ node_type: focused.node_type, node_id: focused.node_id, x: Math.round(focused.x), y: Math.round(focused.y) }],
+      });
+    }
+  }, [board, boardUrl, arcId, writeLayout]);
 
   /**
    * Полный пересчёт подсказок. Дёргается ТОЛЬКО при открытии доски и по
@@ -2364,7 +2471,6 @@ export function CanvasPage() {
   useEffect(() => {
     initialFitDone.current = false;
   }, [freeId, arcId, campaignIdParam]);
-  useEffect(loadBoard, [loadBoard]);
 
   // Ноды выводятся из доски, а не собираются заново в каждой ветке загрузки.
   // Календарь приезжает отдельным запросом и позже холста — раньше ради него
@@ -2426,12 +2532,23 @@ export function CanvasPage() {
       const key = `scene:${rehearsingId}`;
       out = out.map((n) => (n.id === key ? { ...n, data: { ...n.data, isRehearsing: true } } : n));
     }
+    // Поле под рукой не перезаписывается (ADR 0001, п. 5): доска могла
+    // перечитаться, пока ноду тащат или пока её новое место ещё не записано, —
+    // тогда такая нода остаётся там, где её держит Мастер.
+    const holdAll = saveTimer.current != null || layoutInFlight.current > 0 || layoutWriter.hasPending();
+    const current = new Map(nodesRef.current.map((n) => [n.id, n]));
+    out = out.map((n) => {
+      const cur = current.get(n.id);
+      if (!cur || cur.parentId !== n.parentId || !(holdAll || cur.dragging)) return n;
+      if (cur.position.x === n.position.x && cur.position.y === n.position.y) return n;
+      return { ...n, position: cur.position };
+    });
     setNodes(out);
     if (!initialFitDone.current && nextNodes.length) {
       initialFitDone.current = true;
       fitWhenMeasured(flowRef);
     }
-  }, [board, calendar, hintsByScene, chapterHints, fresh, rehearsal]);
+  }, [board, calendar, hintsByScene, chapterHints, fresh, rehearsal, layoutWriter]);
 
   // focus из адреса — что выделить. Клик по ноде выделяет сам и попутно
   // пишет focus в адрес; этот эффект нужен для второго случая — когда адрес
@@ -2475,6 +2592,11 @@ export function CanvasPage() {
   // отрисовка).
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [threads, setThreads] = useState<CanvasThread[]>([]);
+  // Нити приезжают с доской — и с каждой её перечиткой.
+  const boardThreads = board?.threads;
+  useEffect(() => {
+    setThreads(boardThreads ?? []);
+  }, [boardThreads]);
 
   /**
    * Доска пуста — на ней нет ни узла, ни нити (блок G5).
@@ -2487,10 +2609,7 @@ export function CanvasPage() {
   const boardEmpty = (board?.nodes.length ?? 0) === 0 && threads.length === 0;
 
   // Список наборов нужен только пустой свободной доске — там его и просим.
-  useEffect(() => {
-    if (!freeId || !boardEmpty || presets.length) return;
-    api.get<{ key: string; label: string }[]>("/canvas/presets").then(setPresets);
-  }, [freeId, boardEmpty, presets.length]);
+  const presets = useResource<{ key: string; label: string }[]>(freeId && boardEmpty ? canvasPaths.presets() : null, { staleMs: Infinity }).data ?? EMPTY_PRESETS;
 
   useEffect(() => {
     // Конец ребра, спрятанный в свёрнутой главе, переезжает на её карточку.
@@ -2710,9 +2829,8 @@ export function CanvasPage() {
    * рамки записи за именем нет, правится сама рамка.
    */
   const renameFrame = useCallback(async (frameId: number, name: string) => {
-    await api.put(`/canvas/frames/${frameId}`, { name });
-    loadBoard();
-  }, [loadBoard]);
+    await boardAction(() => write.put(`/canvas/frames/${frameId}`, { name }), { failure: "Имя группы" });
+  }, [boardAction]);
 
   /**
    * Свернуть или развернуть рамку (блок G6.3).
@@ -2739,14 +2857,19 @@ export function CanvasPage() {
           }
         : prev
     );
-    api.put(`/canvas/frames/${frameId}`, { collapsed });
-  }, []);
+    void writeLayout(`/canvas/frames/${frameId}`, { collapsed });
+  }, [setBoard, writeLayout]);
   toggleFrameRef.current = toggleFrame;
   const renameChapter = useCallback(async (arcId: number, name: string) => {
     if (!board?.board_id) return;
-    await api.put(`/canvas/groups/${arcId}`, { board_id: board.board_id, name });
-    loadBoard();
-  }, [board, loadBoard]);
+    const boardId = board.board_id;
+    // Имя главы — это имя приключения (`story_arcs.name`): его видят и страница
+    // приключения, и экран выбора.
+    await boardAction(() => write.put(`/canvas/groups/${arcId}`, { board_id: boardId, name }), {
+      failure: "Имя главы",
+      affects: [{ kind: "adventure", id: arcId }],
+    });
+  }, [board, boardAction]);
   renameFrameRef.current = renameFrame;
   renameChapterRef.current = renameChapter;
   /**
@@ -2780,13 +2903,16 @@ export function CanvasPage() {
       if (saveTimer.current) window.clearTimeout(saveTimer.current);
       const gen = saveGen.current;
       saveTimer.current = window.setTimeout(() => {
+        // Таймер отработал: дальше запись либо летит (её держит писатель), либо
+        // отменена — ноды под рукой больше не удерживаются по таймеру.
+        saveTimer.current = null;
         // Раскладка, задуманная до переноса сцены на другой холст, устарела.
         if (gen !== saveGen.current) return;
         // В базу уходят АБСОЛЮТНЫЕ координаты (Q15). У ноды внутри главы
         // position отсчитывается от рамки — здесь это разворачивается назад.
         const byId = new Map(next.map((n) => [n.id, n]));
         commitPositions(next);
-        void api.put<{ board_id: number }>("/canvas/board/nodes", {
+        void writeLayout<{ board_id: number }>("/canvas/board/nodes", {
           ...(b.board_id
             ? { board_id: b.board_id }
             : b.setting
@@ -2810,12 +2936,13 @@ export function CanvasPage() {
         });
       }, 500);
     },
-    [commitPositions]
+    [commitPositions, writeLayout, setBoard]
   );
 
   useEffect(() => {
     return () => {
       if (saveTimer.current) window.clearTimeout(saveTimer.current);
+      if (layoutNotifyTimer.current) window.clearTimeout(layoutNotifyTimer.current);
     };
   }, []);
 
@@ -2837,7 +2964,6 @@ export function CanvasPage() {
     setSelectedCheckId(null);
     setSelectedStickerId(null);
     setSelectedFrameId(null);
-    loadBoard();
     setTimeout(() => setFresh({ key: `pin:${id}`, edit: true }), 400);
   }
 
@@ -2889,8 +3015,7 @@ export function CanvasPage() {
         const y = Math.round(was.y);
         // Отмена, ничего не менявшая для этой ноды, и запросов не делает.
         if (Math.round(is.x) === x && Math.round(is.y) === y) continue;
-        if (t === "frame") api.put(`/canvas/frames/${id}`, { x, y });
-        else api.put(`/canvas/pins/${id}`, { x, y });
+        void writeLayout(t === "frame" ? `/canvas/frames/${id}` : `/canvas/pins/${id}`, { x, y });
       }
       commitPositions(snap.nodes);
       /**
@@ -2942,7 +3067,7 @@ export function CanvasPage() {
           const [t, idRaw] = splitKey(key);
           writes.push({ node_type: t, node_id: Number(idRaw), x: Math.round(abs.x), y: Math.round(abs.y), parent_key: want ?? null });
         }
-        if (writes.length && b.board_id) api.put("/canvas/board/nodes", { board_id: b.board_id, nodes: writes });
+        if (writes.length && b.board_id) void writeLayout("/canvas/board/nodes", { board_id: b.board_id, nodes: writes });
       }
       if (returned) {
         loadBoard();
@@ -2954,7 +3079,7 @@ export function CanvasPage() {
       else setNodes(snap.nodes);
       scheduleSave(snap.nodes);
     },
-    [commitPositions, scheduleSave, setNodes, loadBoard]
+    [commitPositions, scheduleSave, setNodes, loadBoard, setBoard, writeLayout]
   );
   const pushHistory = useCallback(() => {
     historyRef.current.push(snapshot());
@@ -3049,73 +3174,75 @@ export function CanvasPage() {
    */
   const createGroup = useCallback(async (at?: { x: number; y: number }) => {
     if (!board?.board_id) return;
+    const boardId = board.board_id;
     const all = nodesRef.current;
     const selected = all.filter((n) => n.selected);
     const byId = new Map(all.map((n) => [n.id, n]));
-    let newId: number | null = null;
-    let members: Node<CanvasNodeData>[] = [];
-    if (!selected.length) {
-      const res = await api.post<{ id: number }>("/canvas/frames", {
-        board_id: board.board_id,
-        name: "Группа",
-        x: Math.round(at?.x ?? 0),
-        y: Math.round(at?.y ?? 0),
-        w: 360,
-        h: 240,
-      });
-      newId = res.id;
-    } else {
-      // Охват считается по АБСОЛЮТНЫМ координатам: выделенная нода может уже
-      // лежать в другой рамке, и её `position` тогда отсчитывается от той.
-      const box = selected.map((n) => ({ p: toAbsolute(n, byId), s: getNodeSize(n) }));
-      const minX = Math.min(...box.map((b) => b.p.x)) - 16;
-      const minY = Math.min(...box.map((b) => b.p.y)) - 34;
-      const maxX = Math.max(...box.map((b) => b.p.x + b.s.w));
-      const maxY = Math.max(...box.map((b) => b.p.y + b.s.h));
-      // На сетку рамка садится НАРУЖУ (блок G6.1): начало прижимается вниз по
-      // сетке, дальний край — вверх. Округление к ближайшему подрезало бы
-      // рамку по содержимому, ради которого её и рисуют.
-      const fx = Math.floor(minX / GRID) * GRID;
-      const fy = Math.floor(minY / GRID) * GRID;
-      const res = await api.post<{ id: number }>("/canvas/frames", {
-        board_id: board.board_id,
-        name: "Группа",
-        x: fx,
-        y: fy,
-        w: Math.ceil((maxX + 16 - fx) / GRID) * GRID,
-        h: Math.ceil((maxY + 16 - fy) / GRID) * GRID,
-      });
-      newId = res.id;
-      members = selected.filter((n) => canJoinFrame(n.id));
-    }
-    if (newId && members.length) {
-      await api.put("/canvas/board/nodes", {
-        board_id: board.board_id,
-        nodes: members.map((n) => {
-          const [nodeType, nodeId] = splitKey(n.id);
-          const abs = toAbsolute(n, byId);
-          return {
-            node_type: nodeType,
-            node_id: nodeId,
-            x: Math.round(abs.x),
-            y: Math.round(abs.y),
-            parent_key: `frame:${newId}`,
-          };
-        }),
-      });
-    }
+    // Рамка и состав — одно действие: плашка одна, перечитка доски одна.
+    const newId = await boardAction(async () => {
+      let createdId: number | null = null;
+      let members: Node<CanvasNodeData>[] = [];
+      if (!selected.length) {
+        const res = await write.post<{ id: number }>("/canvas/frames", {
+          board_id: boardId,
+          name: "Группа",
+          x: Math.round(at?.x ?? 0),
+          y: Math.round(at?.y ?? 0),
+          w: 360,
+          h: 240,
+        });
+        createdId = res.id;
+      } else {
+        // Охват считается по АБСОЛЮТНЫМ координатам: выделенная нода может уже
+        // лежать в другой рамке, и её `position` тогда отсчитывается от той.
+        const box = selected.map((n) => ({ p: toAbsolute(n, byId), s: getNodeSize(n) }));
+        const minX = Math.min(...box.map((b) => b.p.x)) - 16;
+        const minY = Math.min(...box.map((b) => b.p.y)) - 34;
+        const maxX = Math.max(...box.map((b) => b.p.x + b.s.w));
+        const maxY = Math.max(...box.map((b) => b.p.y + b.s.h));
+        // На сетку рамка садится НАРУЖУ (блок G6.1): начало прижимается вниз по
+        // сетке, дальний край — вверх. Округление к ближайшему подрезало бы
+        // рамку по содержимому, ради которого её и рисуют.
+        const fx = Math.floor(minX / GRID) * GRID;
+        const fy = Math.floor(minY / GRID) * GRID;
+        const res = await write.post<{ id: number }>("/canvas/frames", {
+          board_id: boardId,
+          name: "Группа",
+          x: fx,
+          y: fy,
+          w: Math.ceil((maxX + 16 - fx) / GRID) * GRID,
+          h: Math.ceil((maxY + 16 - fy) / GRID) * GRID,
+        });
+        createdId = res.id;
+        members = selected.filter((n) => canJoinFrame(n.id));
+      }
+      if (createdId && members.length) {
+        await write.put("/canvas/board/nodes", {
+          board_id: boardId,
+          nodes: members.map((n) => {
+            const [nodeType, nodeId] = splitKey(n.id);
+            const abs = toAbsolute(n, byId);
+            return {
+              node_type: nodeType,
+              node_id: nodeId,
+              x: Math.round(abs.x),
+              y: Math.round(abs.y),
+              parent_key: `frame:${createdId}`,
+            };
+          }),
+        });
+      }
+      return createdId;
+    }, { retry: false, failure: "Новая группа" });
     if (newId) {
       setSelectedFrameId(newId);
       setSelectedChapterId(null);
       setSelectedSceneId(null);
       setSelectedCheckId(null);
       setSelectedStickerId(null);
-      loadBoard();
       setTimeout(() => setFresh({ key: `frame:${newId}`, edit: true }), 400);
-    } else {
-      loadBoard();
     }
-  }, [board, loadBoard]);
+  }, [board, boardAction]);
 
   // Ширина холста — через ResizeObserver, а не медиазапрос по окну: слева
   // навигация, справа рельс и панель свойств, и при окне в 1440 холсту
@@ -3293,7 +3420,7 @@ export function CanvasPage() {
       }
       const w = Math.max(Math.ceil((maxX - fx) / GRID) * GRID, 160);
       const h = Math.max(Math.ceil((maxY - fy) / GRID) * GRID, 100);
-      api.put(`/canvas/frames/${frameId}`, { w: Math.round(w), h: Math.round(h) });
+      void writeLayout(`/canvas/frames/${frameId}`, { w: Math.round(w), h: Math.round(h) });
       // Доска — источник собираемых заново нод (`setNodes` в эффекте по board):
       // без правки её `frame.w/h` пересборка вернёт рамке прежний размер, и
       // рост до перезагрузки не доживёт. Пишем в тот же объект, чтобы и
@@ -3317,7 +3444,7 @@ export function CanvasPage() {
         )
       );
     },
-    [setNodes, setBoard]
+    [setNodes, setBoard, writeLayout]
   );
 
   // «Убрать из группы» (гибридная модель): единственный способ вывести члена —
@@ -3334,7 +3461,7 @@ export function CanvasPage() {
       const [nodeType, nodeId] = splitKey(node.id);
       const byId = new Map(nodesRef.current.map((n) => [n.id, n]));
       const abs = toAbsolute(node, byId);
-      await api.put("/canvas/board/nodes", {
+      await writeLayout("/canvas/board/nodes", {
         board_id: boardState.board_id,
         nodes: [
           {
@@ -3357,7 +3484,7 @@ export function CanvasPage() {
       recomputeFrame(frameId, { exclude: [node.id] });
       loadBoard();
     },
-    [loadBoard, recomputeFrame]
+    [loadBoard, recomputeFrame, setBoard, writeLayout]
   );
 
   const onNodeDragStop = useCallback(
@@ -3374,7 +3501,7 @@ export function CanvasPage() {
         const [, id] = splitKey(node.id);
         const newX = Math.round(node.position.x);
         const newY = Math.round(node.position.y);
-        api.put(`/canvas/frames/${id}`, {
+        void writeLayout(`/canvas/frames/${id}`, {
           x: newX,
           y: newY,
           w: Math.round(node.width ?? dataSize(node.data).w ?? 320),
@@ -3401,7 +3528,7 @@ export function CanvasPage() {
                   y: Math.round(n.y) + dy,
                   parent_key: `frame:${id}`,
                 }));
-                api.put("/canvas/board/nodes", { board_id: board.board_id, nodes: moved });
+                void writeLayout("/canvas/board/nodes", { board_id: board.board_id, nodes: moved });
               }
             }
           }
@@ -3425,7 +3552,7 @@ export function CanvasPage() {
               const pk = frameAtPoint(board, abs.x + w / 2, abs.y + h / 2);
               return pk === node.id ? null : pk;
             })();
-        api.put(`/canvas/pins/${id}`, {
+        void writeLayout(`/canvas/pins/${id}`, {
           x: Math.round(abs.x),
           y: Math.round(abs.y),
           parent_key: parentKey,
@@ -3485,7 +3612,7 @@ export function CanvasPage() {
               return pk === node.id ? null : pk;
             })();
         const [nodeType, nodeId] = splitKey(node.id);
-        api.put("/canvas/board/nodes", {
+        void writeLayout("/canvas/board/nodes", {
           board_id: board.board_id,
           nodes: [
             {
@@ -3507,7 +3634,7 @@ export function CanvasPage() {
         if (parentKey) recomputeFrame(Number(parentKey.split(":")[1]), { include: [node.id], moved: { id: node.id, position: node.position } });
       }
     },
-    [board, commitPositions, recomputeFrame, loadBoard]
+    [board, commitPositions, recomputeFrame, loadBoard, setBoard, writeLayout]
   );
 
   const onNodesChange = useCallback(
@@ -3537,7 +3664,7 @@ export function CanvasPage() {
           // Только свободная рамка: у узла главы ручек растягивания нет —
           // размер ему задаёт содержимое карточки (блок G6.2).
           const [, fid] = splitKey(dim.id);
-          api.put(`/canvas/frames/${fid}`, {
+          void writeLayout(`/canvas/frames/${fid}`, {
             w: Math.round(dim.dimensions?.width ?? 0),
             h: Math.round(dim.dimensions?.height ?? 0),
           });
@@ -3545,7 +3672,7 @@ export function CanvasPage() {
         return next;
       });
     },
-    [scheduleSave, board]
+    [scheduleSave, board, writeLayout]
   );
 
   // Что означает протянутая стрелка, решает РАЗЪЁМ, в который её воткнули, а
@@ -3836,6 +3963,26 @@ export function CanvasPage() {
   }, []);
 
   /**
+   * Заглушка подсказки. Подсказки — не данные слоя: чип гаснет на месте, а
+   * доску ради заглушки перечитывать незачем (раньше транспорт перечитывал всё
+   * открытое и перезагружал соседние окна). При отказе — плашка с повтором:
+   * заглушка на сервере идемпотентна.
+   */
+  const hintWrite = useCallback((action: () => Promise<unknown>) => {
+    const attempt = async () => {
+      try {
+        await action();
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error ?? "");
+        showSaveError(`Заглушка подсказки${reason ? ` — ${reason}` : ""}`, async () => {
+          await action();
+        });
+      }
+    };
+    void attempt();
+  }, []);
+
+  /**
    * Меню чипа подсказок. Открывается тем же `ContextMenu`, что и меню ноды:
    * заводить ради одного пункта свой всплывающий список незачем.
    *
@@ -3853,12 +4000,14 @@ export function CanvasPage() {
                 {
                   label: "Это не оно",
                   onClick: () => {
-                    api.post("/canvas/hints/dismiss", {
-                      scene_id: sceneId,
-                      scope: "scene",
-                      entity_type: h.entity_type,
-                      entity_id: h.entity_id,
-                    });
+                    hintWrite(() =>
+                      write.post("/canvas/hints/dismiss", {
+                        scene_id: sceneId,
+                        scope: "scene",
+                        entity_type: h.entity_type,
+                        entity_id: h.entity_id,
+                      })
+                    );
                     extinguishHint(sceneId, (x2) => x2.entity_type === h.entity_type && x2.entity_id === h.entity_id);
                     setDismissed((d) => ({
                       ...d,
@@ -3884,12 +4033,14 @@ export function CanvasPage() {
                       {
                         label: `Не подсказывать про «${h.text.split(" — ")[0]}» в сеттинге`,
                         onClick: () => {
-                          api.post("/canvas/hints/dismiss", {
-                            setting_id: settingId,
-                            scope: "setting",
-                            entity_type: h.entity_type,
-                            entity_id: h.entity_id,
-                          });
+                          hintWrite(() =>
+                            write.post("/canvas/hints/dismiss", {
+                              setting_id: settingId,
+                              scope: "setting",
+                              entity_type: h.entity_type,
+                              entity_id: h.entity_id,
+                            })
+                          );
                           extinguishEverywhere(h.entity_type as string, h.entity_id as number);
                           setDismissed((d) => ({
                             ...d,
@@ -3912,7 +4063,7 @@ export function CanvasPage() {
       );
       if (items.length) setContextMenu({ x, y, items });
     },
-    [hintsByScene, extinguishHint, extinguishEverywhere, settingId, sceneNameById]
+    [hintsByScene, extinguishHint, extinguishEverywhere, settingId, sceneNameById, hintWrite]
   );
   useEffect(() => {
     openHintsRef.current = openHints;
@@ -4168,8 +4319,8 @@ export function CanvasPage() {
             {
               label: "Вернуть подсказку",
               onClick: () => {
-                api.del(
-                  `/canvas/hints/dismiss?scope=setting&setting_id=${settingId}&entity_type=${d.entity_type}&entity_id=${d.entity_id}`
+                hintWrite(() =>
+                  write.del(`/canvas/hints/dismiss?scope=setting&setting_id=${settingId}&entity_type=${d.entity_type}&entity_id=${d.entity_id}`)
                 );
                 setDismissed((prev) => ({
                   ...prev,
@@ -4188,8 +4339,8 @@ export function CanvasPage() {
             {
               label: "Вернуть подсказку",
               onClick: () => {
-                api.del(
-                  `/canvas/hints/dismiss?scope=scene&scene_id=${d.scene_id}&entity_type=${d.entity_type}&entity_id=${d.entity_id}`
+                hintWrite(() =>
+                  write.del(`/canvas/hints/dismiss?scope=scene&scene_id=${d.scene_id}&entity_type=${d.entity_type}&entity_id=${d.entity_id}`)
                 );
                 setDismissed((prev) => ({
                   ...prev,
@@ -4205,7 +4356,7 @@ export function CanvasPage() {
       ];
       if (items.length) setContextMenu({ x, y, items });
     },
-    [dismissed, settingId, reloadHints]
+    [dismissed, settingId, reloadHints, hintWrite]
   );
 
   const handleEdgeContextMenu = useCallback(
@@ -4246,38 +4397,40 @@ export function CanvasPage() {
         items.push({
           label: "Создать связь",
           onClick: async () => {
-            if (targetPins.length === 1) {
-              const src = targetPins[0];
-              const pos = { x: src.position.x + 40, y: src.position.y + 40 };
-              const created = await api.post<{ id: number }>("/canvas/pins", { board_id: board?.board_id, name: "Пин", x: pos.x, y: pos.y, size: "M", color: DEFAULT_FRAME_COLOR, shape: "circle" });
-              const fromId = Number(src.id.split(":")[1]);
-              const toId = created.id;
-              const a = Math.min(fromId, toId);
-              const b = Math.max(fromId, toId);
-              await api.post("/canvas/threads", { board_id: board?.board_id, from_pin_id: a, to_pin_id: b, width: 2, color: DEFAULT_FRAME_COLOR });
-              loadBoard();
-            } else if (targetPins.length === 2) {
-              const a = Math.min(Number(targetPins[0].id.split(":")[1]), Number(targetPins[1].id.split(":")[1]));
-              const b = Math.max(Number(targetPins[0].id.split(":")[1]), Number(targetPins[1].id.split(":")[1]));
-              await api.post("/canvas/threads", { board_id: board?.board_id, from_pin_id: a, to_pin_id: b, width: 2, color: DEFAULT_FRAME_COLOR });
-              loadBoard();
-            } else if (targetPins.length === 3) {
-              const ids = targetPins.map((n) => Number(n.id.split(":")[1])).sort((a,b)=>a-b);
-              const pairs = [[ids[0],ids[1]],[ids[1],ids[2]],[ids[0],ids[2]]];
-              for (const [a,b] of pairs) {
-                try { await api.post("/canvas/threads", { board_id: board?.board_id, from_pin_id: a, to_pin_id: b, width: 2, color: DEFAULT_FRAME_COLOR }); } catch {}
-              }
-              loadBoard();
-            } else {
+            if (targetPins.length > 3) {
               showAlert("Слишком много пинов (" + targetPins.length + ") — напишите Тофу, что такой функционал и правда нужен.");
+              return;
             }
+            await boardAction(async () => {
+              if (targetPins.length === 1) {
+                const src = targetPins[0];
+                const pos = { x: src.position.x + 40, y: src.position.y + 40 };
+                const created = await write.post<{ id: number }>("/canvas/pins", { board_id: board?.board_id, name: "Пин", x: pos.x, y: pos.y, size: "M", color: DEFAULT_FRAME_COLOR, shape: "circle" });
+                const fromId = Number(src.id.split(":")[1]);
+                const toId = created.id;
+                const a = Math.min(fromId, toId);
+                const b = Math.max(fromId, toId);
+                await write.post("/canvas/threads", { board_id: board?.board_id, from_pin_id: a, to_pin_id: b, width: 2, color: DEFAULT_FRAME_COLOR });
+              } else if (targetPins.length === 2) {
+                const a = Math.min(Number(targetPins[0].id.split(":")[1]), Number(targetPins[1].id.split(":")[1]));
+                const b = Math.max(Number(targetPins[0].id.split(":")[1]), Number(targetPins[1].id.split(":")[1]));
+                await write.post("/canvas/threads", { board_id: board?.board_id, from_pin_id: a, to_pin_id: b, width: 2, color: DEFAULT_FRAME_COLOR });
+              } else if (targetPins.length === 3) {
+                const ids = targetPins.map((n) => Number(n.id.split(":")[1])).sort((a,b)=>a-b);
+                const pairs = [[ids[0],ids[1]],[ids[1],ids[2]],[ids[0],ids[2]]];
+                // Нить, которая уже есть, сервер не заводит второй раз — это не отказ.
+                for (const [a,b] of pairs) {
+                  try { await write.post("/canvas/threads", { board_id: board?.board_id, from_pin_id: a, to_pin_id: b, width: 2, color: DEFAULT_FRAME_COLOR }); } catch {}
+                }
+              }
+            }, { retry: false, failure: "Связь между пинами" });
           },
         });
         items.push({
           label: "Изменить цвет",
           children: FRAME_SWATCHES.map((sw) => ({
             label: sw.label,
-            onClick: async () => { await api.put(`/canvas/pins/${id}`, { color: sw.value }); loadBoard(); },
+            onClick: () => void boardAction(() => write.put(`/canvas/pins/${id}`, { color: sw.value }), { failure: "Цвет пина" }),
           })),
         });
         if (node.parentId?.startsWith("frame:")) {
@@ -4289,7 +4442,7 @@ export function CanvasPage() {
         items.push({
           label: "Удалить",
           danger: true,
-          onClick: async () => { await api.del(`/canvas/pins/${id}`); loadBoard(); },
+          onClick: () => void boardAction(() => write.del(`/canvas/pins/${id}`), { failure: "Удаление пина" }),
         });
         setContextMenu({ x: event.clientX, y: event.clientY, items });
         return;
@@ -4314,7 +4467,7 @@ export function CanvasPage() {
         setSearchParams(next);
       }
     },
-    [settingId, arcId, freeId, campaignIdParam, setSearchParams]
+    [settingId, arcId, freeId, campaignIdParam, setSearchParams, boardAction]
   );
 
   // Контекст-меню: правая кнопка (Q4) — нода Delete/Дублировать/Переименовать, артборд Create
@@ -4344,38 +4497,40 @@ export function CanvasPage() {
         items.push({
           label: "Создать связь",
           onClick: async () => {
-            if (targetPins.length === 1) {
-              const src = targetPins[0];
-              const pos = { x: src.position.x + 40, y: src.position.y + 40 };
-              const created = await api.post<{ id: number }>("/canvas/pins", { board_id: board?.board_id, name: "Пин", x: pos.x, y: pos.y, size: "M", color: DEFAULT_FRAME_COLOR, shape: "circle" });
-              const fromId = Number(src.id.split(":")[1]);
-              const toId = created.id;
-              const a = Math.min(fromId, toId);
-              const b = Math.max(fromId, toId);
-              await api.post("/canvas/threads", { board_id: board?.board_id, from_pin_id: a, to_pin_id: b, width: 2, color: DEFAULT_FRAME_COLOR });
-              loadBoard();
-            } else if (targetPins.length === 2) {
-              const a = Math.min(Number(targetPins[0].id.split(":")[1]), Number(targetPins[1].id.split(":")[1]));
-              const b = Math.max(Number(targetPins[0].id.split(":")[1]), Number(targetPins[1].id.split(":")[1]));
-              await api.post("/canvas/threads", { board_id: board?.board_id, from_pin_id: a, to_pin_id: b, width: 2, color: DEFAULT_FRAME_COLOR });
-              loadBoard();
-            } else if (targetPins.length === 3) {
-              const ids = targetPins.map((n) => Number(n.id.split(":")[1])).sort((a,b)=>a-b);
-              const pairs = [[ids[0],ids[1]],[ids[1],ids[2]],[ids[0],ids[2]]];
-              for (const [a,b] of pairs) {
-                try { await api.post("/canvas/threads", { board_id: board?.board_id, from_pin_id: a, to_pin_id: b, width: 2, color: DEFAULT_FRAME_COLOR }); } catch {}
-              }
-              loadBoard();
-            } else {
+            if (targetPins.length > 3) {
               showAlert("Слишком много пинов (" + targetPins.length + ") — напишите Тофу, что такой функционал и правда нужен.");
+              return;
             }
+            await boardAction(async () => {
+              if (targetPins.length === 1) {
+                const src = targetPins[0];
+                const pos = { x: src.position.x + 40, y: src.position.y + 40 };
+                const created = await write.post<{ id: number }>("/canvas/pins", { board_id: board?.board_id, name: "Пин", x: pos.x, y: pos.y, size: "M", color: DEFAULT_FRAME_COLOR, shape: "circle" });
+                const fromId = Number(src.id.split(":")[1]);
+                const toId = created.id;
+                const a = Math.min(fromId, toId);
+                const b = Math.max(fromId, toId);
+                await write.post("/canvas/threads", { board_id: board?.board_id, from_pin_id: a, to_pin_id: b, width: 2, color: DEFAULT_FRAME_COLOR });
+              } else if (targetPins.length === 2) {
+                const a = Math.min(Number(targetPins[0].id.split(":")[1]), Number(targetPins[1].id.split(":")[1]));
+                const b = Math.max(Number(targetPins[0].id.split(":")[1]), Number(targetPins[1].id.split(":")[1]));
+                await write.post("/canvas/threads", { board_id: board?.board_id, from_pin_id: a, to_pin_id: b, width: 2, color: DEFAULT_FRAME_COLOR });
+              } else if (targetPins.length === 3) {
+                const ids = targetPins.map((n) => Number(n.id.split(":")[1])).sort((a,b)=>a-b);
+                const pairs = [[ids[0],ids[1]],[ids[1],ids[2]],[ids[0],ids[2]]];
+                // Нить, которая уже есть, сервер не заводит второй раз — это не отказ.
+                for (const [a,b] of pairs) {
+                  try { await write.post("/canvas/threads", { board_id: board?.board_id, from_pin_id: a, to_pin_id: b, width: 2, color: DEFAULT_FRAME_COLOR }); } catch {}
+                }
+              }
+            }, { retry: false, failure: "Связь между пинами" });
           },
         });
         items.push({
           label: "Изменить цвет",
           children: FRAME_SWATCHES.map((sw) => ({
             label: sw.label,
-            onClick: async () => { await api.put(`/canvas/pins/${id}`, { color: sw.value }); loadBoard(); },
+            onClick: () => void boardAction(() => write.put(`/canvas/pins/${id}`, { color: sw.value }), { failure: "Цвет пина" }),
           })),
         });
         if (node.parentId?.startsWith("frame:")) {
@@ -4387,7 +4542,7 @@ export function CanvasPage() {
         items.push({
           label: "Удалить",
           danger: true,
-          onClick: async () => { await api.del(`/canvas/pins/${id}`); loadBoard(); },
+          onClick: () => void boardAction(() => write.del(`/canvas/pins/${id}`), { failure: "Удаление пина" }),
         });
         setContextMenu({ x: event.clientX, y: event.clientY, items });
         return;
@@ -4436,11 +4591,19 @@ export function CanvasPage() {
             const cur = nodeTitle(node.data) ?? "";
             const name = await promptText({ title: "Переименовать", message: "Новое имя", defaultValue: String(cur) });
             if (!name?.trim()) return;
-            if (type === "sticker") await api.put(`/canvas/stickers/${id}`, { text: name.trim(), name: name.trim() });
-            else if (type === "adventure") await api.put(`/story/arcs/${id}`, { name: name.trim() });
-            else if (type === "check") await api.put(`/story/checks/${id}`, { what: name.trim() });
-            else if (type === "bundle") await api.put(`/canvas/bundles/${id}`, { name: name.trim() });
-            loadBoard();
+            const value = name.trim();
+            await boardAction(
+              async () => {
+                if (type === "sticker") await write.put(`/canvas/stickers/${id}`, { text: value, name: value });
+                else if (type === "adventure") await write.put(`/story/arcs/${id}`, { name: value });
+                else if (type === "check") await write.put(`/story/checks/${id}`, { what: value });
+                else if (type === "bundle") await write.put(`/canvas/bundles/${id}`, { name: value });
+              },
+              {
+                failure: "Новое имя",
+                affects: type === "adventure" ? [{ kind: "adventure", id }] : type === "bundle" ? [{ path: "/canvas/bundles" }] : type === "sticker" ? [{ path: `/canvas/stickers/${id}` }] : [],
+              }
+            );
           },
         });
         if (type === "sticker") {
@@ -4448,7 +4611,7 @@ export function CanvasPage() {
             label: "Сменить цвет",
             children: STICKER_SWATCHES.map((sw) => ({
               label: sw.label,
-              onClick: async () => { await api.put(`/canvas/stickers/${id}`, { color: sw.key }); loadBoard(); },
+              onClick: () => void boardAction(() => write.put(`/canvas/stickers/${id}`, { color: sw.key }), { failure: "Цвет стикера", affects: [{ path: `/canvas/stickers/${id}` }] }),
             })),
           });
         }
@@ -4456,11 +4619,12 @@ export function CanvasPage() {
           label: "Дублировать",
           onClick: async () => {
             const pos = { x: node.position.x + 20, y: node.position.y + 20 };
-            if (type === "sticker") {
-              const d = node.data as StickerNodeData;
-              await api.post("/canvas/stickers", { board_id: board?.board_id, text: d.text, color: d.color, x: pos.x, y: pos.y });
-            }
-            loadBoard();
+            if (type !== "sticker") return;
+            const d = node.data as StickerNodeData;
+            await boardAction(
+              () => write.post("/canvas/stickers", { board_id: board?.board_id, text: d.text, color: d.color, x: pos.x, y: pos.y }),
+              { retry: false, failure: "Копия стикера" }
+            );
           },
         });
         items.push({
@@ -4525,26 +4689,29 @@ export function CanvasPage() {
           label: "Удалить",
           danger: true,
           onClick: async () => {
-            if (type === "check") await api.del(`/story/checks/${id}`);
-          else if (type === "sticker" || type === "image") {
-            await api.del(`/canvas/board/node?board_id=${board?.board_id}&node_type=${type}&node_id=${id}`);
-          } else if (type === "route") {
-            // «Маршрут»: удаляем только разрыв — реальное ребро остаётся.
-            await api.del(`/canvas/routes/${id}`);
-          } else if (type === "scene") {
-            if (confirm(`Архивировать сцену "${(node.data as Record<string, unknown>).name ?? ""}"?`)) await api.del(`/story/scenes/${id}`);
-          } else if (type === "chapter" || type === "adventure") {
-            const label = type === "chapter" ? "главу" : "приключение";
-            if (confirm(`Архивировать ${label} "${(node.data as Record<string, unknown>).name ?? ""}"?`)) await api.del(`/story/arcs/${id}`);
-          } else if (!node.id.startsWith("scene:") && !node.id.startsWith("chapter:")) {
-            await api.del(`/canvas/board/node?board_id=${board?.board_id}&node_type=${type}&node_id=${id}`);
-          }
-          loadBoard();
+          // Архивация сцены и главы — это правка самой записи: её видят и
+          // страница сцены, и приключение. Спрашиваем до записи, а не внутри неё.
+          if (type === "scene" && !confirm(`Архивировать сцену "${(node.data as Record<string, unknown>).name ?? ""}"?`)) return;
+          if ((type === "chapter" || type === "adventure") && !confirm(`Архивировать ${type === "chapter" ? "главу" : "приключение"} "${(node.data as Record<string, unknown>).name ?? ""}"?`)) return;
+          const affects: Affect[] =
+            type === "scene" ? [{ kind: "scene", id }] : type === "chapter" || type === "adventure" ? [{ kind: "adventure", id }] : [];
+          await boardAction(
+            async () => {
+              if (type === "check") await write.del(`/story/checks/${id}`);
+              else if (type === "route") {
+                // «Маршрут»: удаляем только разрыв — реальное ребро остаётся.
+                await write.del(`/canvas/routes/${id}`);
+              } else if (type === "scene") await write.del(`/story/scenes/${id}`);
+              else if (type === "chapter" || type === "adventure") await write.del(`/story/arcs/${id}`);
+              else await write.del(`/canvas/board/node?board_id=${board?.board_id}&node_type=${type}&node_id=${id}`);
+            },
+            { retry: false, failure: "Удаление с холста", affects }
+          );
         },
       });
       setContextMenu({ x: event.clientX, y: event.clientY, items });
     },
-    [board, loadBoard, settingId, arcId, freeId, campaignIdParam, setSearchParams, navigate, nodes, createGroup, removeFromGroup]
+    [board, loadBoard, settingId, arcId, freeId, campaignIdParam, setSearchParams, navigate, nodes, createGroup, removeFromGroup, boardAction]
   );
 
   // Убрать ноду сущности/набора/проверки — значит убрать её С ХОЛСТА или удалить сущность.
@@ -4555,30 +4722,39 @@ export function CanvasPage() {
       const scenes = removed.filter((n) => n.id.startsWith("scene:"));
       const chapters = removed.filter((n) => n.id.startsWith("chapter:"));
       const others = removed.filter((n) => !n.id.startsWith("scene:") && !n.id.startsWith("chapter:"));
-      await Promise.all([
-        ...scenes.map((n) => {
-          const [, id] = splitKey(n.id);
-          return api.del(`/story/scenes/${id}`);
-        }),
-        ...chapters.map((n) => {
-          const [, id] = splitKey(n.id);
-          return api.del(`/story/arcs/${id}`);
-        }),
-        ...others.map((n) => {
-          const [nodeType, nodeId] = splitKey(n.id);
-          if (nodeType === "bundle") return api.del(`/canvas/bundles/${nodeId}`);
-          if (nodeType === "check") return api.del(`/story/checks/${nodeId}`);
-          if (nodeType === "pin") return api.del(`/canvas/pins/${nodeId}`);
-          // Рераут — только разрыв: реальное ребро остаётся, снимаем память
-          // прохода, а не саму связь. Удаление «нода+связь» — отдельный жест.
-          if (nodeType === "route") return api.del(`/canvas/routes/${nodeId}`);
-          const boardParam = board?.board_id ? `board_id=${board.board_id}` : `arc_id=${arcId}`;
-          return api.del(`/canvas/board/node?${boardParam}&node_type=${nodeType}&node_id=${nodeId}`);
-        }),
-      ]);
-      loadBoard();
+      const affects: Affect[] = [
+        ...scenes.map((n): Affect => ({ kind: "scene", id: splitKey(n.id)[1] })),
+        ...chapters.map((n): Affect => ({ kind: "adventure", id: splitKey(n.id)[1] })),
+        ...(others.some((n) => n.id.startsWith("bundle:")) ? [{ path: "/canvas/bundles" }] : []),
+      ];
+      await boardAction(
+        () =>
+          Promise.all([
+            ...scenes.map((n) => {
+              const [, id] = splitKey(n.id);
+              return write.del(`/story/scenes/${id}`);
+            }),
+            ...chapters.map((n) => {
+              const [, id] = splitKey(n.id);
+              return write.del(`/story/arcs/${id}`);
+            }),
+            ...others.map((n) => {
+              const [nodeType, nodeId] = splitKey(n.id);
+              if (nodeType === "bundle") return write.del(`/canvas/bundles/${nodeId}`);
+              if (nodeType === "check") return write.del(`/story/checks/${nodeId}`);
+              if (nodeType === "pin") return write.del(`/canvas/pins/${nodeId}`);
+              // Рераут — только разрыв: реальное ребро остаётся, снимаем память
+              // прохода, а не саму связь. Удаление «нода+связь» — отдельный жест.
+              if (nodeType === "route") return write.del(`/canvas/routes/${nodeId}`);
+              const boardParam = board?.board_id ? `board_id=${board.board_id}` : `arc_id=${arcId}`;
+              return write.del(`/canvas/board/node?${boardParam}&node_type=${nodeType}&node_id=${nodeId}`);
+            }),
+          ]),
+        // Часть могла удалиться до отказа — повтор упёрся бы в уже удалённое.
+        { retry: false, failure: "Удаление выбранного (часть могла удалиться)", affects }
+      );
     },
-    [arcId, board, loadBoard]
+    [arcId, board, boardAction]
   );
 
   const handleSelectionContextMenu = useCallback(
@@ -4622,8 +4798,10 @@ export function CanvasPage() {
           onClick: async () => {
             const text = await promptText({ title: "Стикер", message: "Текст стикера", defaultValue: "Заметка", confirmLabel: "Создать" });
             if (text == null) return;
-            await api.post("/canvas/stickers", { board_id: board?.board_id, text: text || "Заметка", color: "yellow", x: Math.round(flowPos.x), y: Math.round(flowPos.y) });
-            loadBoard();
+            await boardAction(
+              () => write.post("/canvas/stickers", { board_id: board?.board_id, text: text || "Заметка", color: "yellow", x: Math.round(flowPos.x), y: Math.round(flowPos.y) }),
+              { retry: false, failure: "Новый стикер" }
+            );
           },
         },
         {
@@ -4640,8 +4818,10 @@ export function CanvasPage() {
               form.append("board_id", String(board.board_id));
               form.append("x", String(Math.round(flowPos.x)));
               form.append("y", String(Math.round(flowPos.y)));
-              await api.post("/canvas/images/upload", form);
-              loadBoard();
+              await boardAction(() => write.post("/canvas/images/upload", form, { timeoutMs: UPLOAD_TIMEOUT_MS }), {
+                retry: false,
+                failure: "Картинка на холсте",
+              });
             };
             input.click();
           },
@@ -4656,7 +4836,7 @@ export function CanvasPage() {
       ];
       setContextMenu({ x: event.clientX, y: event.clientY, items });
     },
-    [board, loadBoard, nodes, onNodesDelete, createGroup]
+    [board, boardAction, nodes, onNodesDelete, createGroup, promptText]
   );
 
   const handleDrop = useCallback(
@@ -4675,15 +4855,18 @@ export function CanvasPage() {
             // Бросок поверх рамки сразу делает ноду членом группы (В5):
             // сервер принимает `parent_key` в `POST /board/node`.
             const parent = frameAtPoint(board, x, y);
-            await api.post("/canvas/board/node", {
-              ...boardTarget,
-              node_type: item.type,
-              node_id: item.id,
-              x,
-              y,
-              ...(parent ? { parent_key: parent } : {}),
-            });
-            loadBoard();
+            await boardAction(
+              () =>
+                write.post("/canvas/board/node", {
+                  ...boardTarget,
+                  node_type: item.type,
+                  node_id: item.id,
+                  x,
+                  y,
+                  ...(parent ? { parent_key: parent } : {}),
+                }),
+              { failure: "Узел на холсте" }
+            );
             return;
           }
           // Ниже — те, кому нужна настоящая строка доски: у пина, набора и
@@ -4692,8 +4875,12 @@ export function CanvasPage() {
           if (!board.board_id) return;
           if (data.kind === "pin" && data.pin) {
             const pinData = data.pin;
-            const created = await api.post<{ id: number }>("/canvas/pins", { board_id: board.board_id, name: pinData.name, x, y, size: pinData.size, color: pinData.color, shape: pinData.shape });
-            openPinNameEditor(created.id);
+            const boardId = board.board_id;
+            const created = await boardAction(
+              () => write.post<{ id: number }>("/canvas/pins", { board_id: boardId, name: pinData.name, x, y, size: pinData.size, color: pinData.color, shape: pinData.shape }),
+              { retry: false, failure: "Новый пин" }
+            );
+            if (created) openPinNameEditor(created.id);
             return;
           }
           if (data.kind === "route") {
@@ -4717,34 +4904,41 @@ export function CanvasPage() {
               to_key = bestEdge.target;
               kind = "transition";
             }
-            if (from_key && to_key) {
-              await api.post("/canvas/routes", { board_id: board.board_id, x, y, from_key, to_key, kind });
-            } else {
-              await api.post("/canvas/routes", { board_id: board.board_id, x, y });
-            }
-            loadBoard();
+            const boardId = board.board_id;
+            await boardAction(
+              () =>
+                from_key && to_key
+                  ? write.post("/canvas/routes", { board_id: boardId, x, y, from_key, to_key, kind })
+                  : write.post("/canvas/routes", { board_id: boardId, x, y }),
+              { retry: false, failure: "Новый маршрут" }
+            );
             return;
           }
           if (data.kind === "bundle" && data.bundleId) {
-            await api.post(`/canvas/bundles/${data.bundleId}/insert`, {
-              board_id: board.board_id,
-              x,
-              y,
+            const boardId = board.board_id;
+            const bundleId = data.bundleId;
+            await boardAction(() => write.post(`/canvas/bundles/${bundleId}/insert`, { board_id: boardId, x, y }), {
+              retry: false,
+              failure: "Вставка набора",
             });
-            loadBoard();
             return;
           }
           if (data.kind === "shelf" && data.blankId) {
             if (!arcId) return;
-            const created = await api.post<{ id: number }>(`/story/library/${data.blankId}/insert`, {
-              arc_id: arcId,
-            });
-            await api.put("/canvas/board/nodes", {
-              board_id: board.board_id,
-              nodes: [{ node_type: "scene", node_id: created.id, x, y }],
-            });
-            loadBoard();
-            setSelectedSceneId(created.id);
+            const boardId = board.board_id;
+            const blankId = data.blankId;
+            const created = await boardAction(
+              async () => {
+                const scene = await write.post<{ id: number }>(`/story/library/${blankId}/insert`, { arc_id: arcId });
+                await write.put("/canvas/board/nodes", {
+                  board_id: boardId,
+                  nodes: [{ node_type: "scene", node_id: scene.id, x, y }],
+                });
+                return scene;
+              },
+              { retry: false, failure: "Сцена с полки", affects: [{ kind: "scene" }, { kind: "adventure", id: arcId }] }
+            );
+            if (created) setSelectedSceneId(created.id);
             return;
           }
         } catch {
@@ -4754,18 +4948,23 @@ export function CanvasPage() {
       const files = Array.from(event.dataTransfer.files).filter((f) => f.type.startsWith("image/"));
       if (!files.length || !board?.board_id) return;
       const flowPos = flowRef.current?.screenToFlowPosition({ x: event.clientX, y: event.clientY }) ?? { x: 0, y: 0 };
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const form = new FormData();
-        form.append("file", file);
-        form.append("board_id", String(board.board_id));
-        form.append("x", String(Math.round(flowPos.x + i * 20)));
-        form.append("y", String(Math.round(flowPos.y + i * 20)));
-        await api.post("/canvas/images/upload", form);
-      }
-      loadBoard();
+      const boardId = board.board_id;
+      await boardAction(
+        async () => {
+          for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const form = new FormData();
+            form.append("file", file);
+            form.append("board_id", String(boardId));
+            form.append("x", String(Math.round(flowPos.x + i * 20)));
+            form.append("y", String(Math.round(flowPos.y + i * 20)));
+            await write.post("/canvas/images/upload", form, { timeoutMs: UPLOAD_TIMEOUT_MS });
+          }
+        },
+        { retry: false, failure: "Картинка на холсте" }
+      );
     },
-    [board, loadBoard, arcId, boardTarget, nodes, edges]
+    [board, boardAction, arcId, boardTarget, nodes, edges]
   );
 
   // Delete клавишей — для фриформ стикеров/картинок (после onNodesDelete, иначе TDZ)
@@ -4902,8 +5101,11 @@ export function CanvasPage() {
     if (!freeId || startingPreset) return;
     setStartingPreset(preset);
     try {
-      await api.post(`/canvas/free-boards/${freeId}/preset`, { preset });
-      loadBoard();
+      const done = await boardAction(() => write.post(`/canvas/free-boards/${freeId}/preset`, { preset }), {
+        retry: false,
+        failure: "Стартовый набор доски",
+      });
+      if (done === undefined) return;
       // С задержкой: ноды приезжают загрузкой доски, и fitView, вызванный
       // сейчас, мерил бы ещё пустой холст.
       setTimeout(() => flowRef.current?.fitView({ padding: 0.3, duration: 300 }), 260);
@@ -5162,6 +5364,7 @@ export function CanvasPage() {
               if (sceneId != null) setSelectedSceneId(sceneId);
             }}
             onPinCreated={(pinId) => openPinNameEditor(pinId)}
+            act={boardAction}
           />
         )}
       </div>
@@ -5197,20 +5400,20 @@ export function CanvasPage() {
           <FrameProperties
             frameId={selectedFrameId}
             board={board}
-            onSaved={refreshAll}
+            act={boardAction}
             onRemoveMember={(key) => {
               const n = nodesRef.current.find((x) => x.id === key);
               if (n) void removeFromGroup(n);
             }}
           />
         ) : selectedChapterId != null ? (
-          <ChapterProperties chapterId={selectedChapterId} board={board} onSaved={refreshAll} onEnter={enterChapter} />
+          <ChapterProperties chapterId={selectedChapterId} board={board} act={boardAction} onEnter={enterChapter} />
         ) : selectedPinId != null ? (
-          <PinProperties pinId={selectedPinId} board={board} onSaved={refreshAll} autoEdit={fresh?.edit === true && fresh.key === `pin:${selectedPinId}`} />
+          <PinProperties pinId={selectedPinId} board={board} act={boardAction} autoEdit={fresh?.edit === true && fresh.key === `pin:${selectedPinId}`} />
         ) : selectedRouteId != null ? (
-          <RouteProperties routeId={selectedRouteId} board={board} onSaved={refreshAll} />
+          <RouteProperties routeId={selectedRouteId} board={board} act={boardAction} />
         ) : selectedStickerId != null ? (
-          <StickerProperties stickerId={selectedStickerId} onSaved={refreshAll} board={board} />
+          <StickerProperties stickerId={selectedStickerId} act={boardAction} board={board} />
         ) : selectedCheckId != null ? (
           <CheckProperties checkId={selectedCheckId} onSaved={refreshAll} board={board} />
         ) : selectedSceneId != null ? (
@@ -6441,54 +6644,73 @@ function CheckProperties({
   );
 }
 
-function StickerProperties({ stickerId, onSaved, board }: { stickerId: number; onSaved: () => void; board?: CanvasBoard | null }) {
-  const [sticker, setSticker] = useState<{ id: number; name: string; note: string; text: string; color: string } | null>(null);
-  const refresh = useCallback(async () => {
-    try {
-      const single = await api.get<{ id: number; text: string; name: string; note: string; color: string }>(`/canvas/stickers/${stickerId}`);
-      setSticker(single);
-    } catch {
-      setSticker({ id: stickerId, name: "", note: "", text: "", color: "paper" });
-    }
-  }, [stickerId]);
+/**
+ * Правка объекта доски из панели свойств: страница передаёт своё действие
+ * (`boardAction`) — перечитка доски, сигнал другим окнам и плашка при отказе.
+ */
+type BoardAction = <R>(
+  action: () => Promise<R>,
+  options?: { retry?: boolean; failure?: string; affects?: readonly Affect[] }
+) => Promise<R | undefined>;
+
+interface StickerRow {
+  id: number;
+  text: string;
+  name: string;
+  note: string;
+  color: string;
+}
+
+function StickerProperties({ stickerId, act, board }: { stickerId: number; act: BoardAction; board?: CanvasBoard | null }) {
+  // Стикер читается слоем: его правка из соседнего окна приходит и сюда.
+  const stickerPath = `/canvas/stickers/${stickerId}`;
+  const { data, error } = useResource<StickerRow>(stickerPath);
+  const sticker = data ?? (error ? { id: stickerId, name: "", note: "", text: "", color: "paper" } : null);
+  const nameField = useFieldDraft(sticker ? sticker.name || sticker.text : "");
+  // Заметка сохраняется кнопкой, а не уходом из поля, поэтому черновик держится
+  // проще: пришедшая заметка подставляется, только пока набранное не трогали.
   const [noteDraft, setNoteDraft] = useState("");
-  useEffect(() => { refresh(); }, [refresh]);
-  useEffect(() => { if (sticker) setNoteDraft(sticker.note); }, [sticker?.note]);
-  async function save(patch: Record<string, unknown>) {
-    await api.put(`/canvas/stickers/${stickerId}`, patch);
-    await refresh();
-    onSaved();
-  }
+  const noteDraftRef = useRef(noteDraft);
+  noteDraftRef.current = noteDraft;
+  const noteBase = useRef<string | null>(null);
+  const incomingNote = sticker?.note;
+  useEffect(() => {
+    if (incomingNote === undefined) return;
+    if (noteBase.current === null || noteDraftRef.current === noteBase.current) setNoteDraft(incomingNote);
+    noteBase.current = incomingNote;
+  }, [incomingNote]);
+  const save = (patch: Record<string, unknown>) =>
+    act(() => write.put(stickerPath, patch), { failure: "Стикер", affects: [{ path: stickerPath }] });
   if (!sticker) return <PropsPlaceholder label="Стикер">Загрузка…</PropsPlaceholder>;
   return (
     <PropsPanel
       label="Стикер"
-      aside={<PropsDelete onDelete={async () => { const bid = board?.board_id ?? 0; await api.del(`/canvas/board/node?board_id=${bid}&node_type=sticker&node_id=${stickerId}`); onSaved(); }} />}
+      aside={<PropsDelete onDelete={async () => { const bid = board?.board_id ?? 0; await act(() => write.del(`/canvas/board/node?board_id=${bid}&node_type=sticker&node_id=${stickerId}`), { retry: false, failure: "Удаление стикера" }); }} />}
     >
       <div className="canvas-props__fields">
-        <label className="canvas-props__field"><span className="canvas-props__label">Имя</span><input id={`sticker-name-${sticker.id}`} name={`sticker-name-${sticker.id}`} autoComplete="off" defaultValue={sticker.name || sticker.text} key={`name-${sticker.id}-${sticker.name}`} onBlur={(e) => e.target.value !== (sticker.name || sticker.text) && save({ name: e.target.value })} /></label>
-        <div className="canvas-props__field"><span className="canvas-props__label">Заметка</span><MentionTextarea value={noteDraft} onChange={setNoteDraft} rows={4} placeholder="Заметка с @упоминаниями" defaultSettingId={board?.arc?.setting_id ?? undefined} /><button onClick={async () => { if (noteDraft !== sticker.note) { await save({ note: noteDraft }); await syncMentionLinks("sticker", sticker.id, sticker.note, noteDraft); } }}>Сохранить заметку</button></div>
+        <label className="canvas-props__field"><span className="canvas-props__label">Имя</span><input id={`sticker-name-${sticker.id}`} name={`sticker-name-${sticker.id}`} autoComplete="off" value={nameField.draft} onChange={(e) => nameField.setDraft(e.target.value)} onFocus={nameField.hold} onBlur={() => { nameField.release(); if (nameField.draft !== (sticker.name || sticker.text)) void save({ name: nameField.draft }); }} /></label>
+        <div className="canvas-props__field"><span className="canvas-props__label">Заметка</span><MentionTextarea value={noteDraft} onChange={setNoteDraft} rows={4} placeholder="Заметка с @упоминаниями" defaultSettingId={board?.arc?.setting_id ?? undefined} /><button onClick={async () => { if (noteDraft !== sticker.note) { const was = sticker.note; if ((await save({ note: noteDraft })) !== undefined) await syncMentionLinks("sticker", sticker.id, was, noteDraft); } }}>Сохранить заметку</button></div>
         {/* Стикер хранит ключ цвета, а не значение. */}
-        <ColorSwatches swatches={STICKER_SWATCHES} selected={sticker.color} by="key" onPick={(sw) => save({ color: sw.key })} />
+        <ColorSwatches swatches={STICKER_SWATCHES} selected={sticker.color} by="key" onPick={(sw) => void save({ color: sw.key })} />
       </div>
     </PropsPanel>
   );
 }
 
-function FrameProperties({ frameId, board, onSaved, onRemoveMember }: { frameId: number; board: CanvasBoard | null; onSaved: () => void; onRemoveMember: (key: string) => void }) {
+function FrameProperties({ frameId, board, act, onRemoveMember }: { frameId: number; board: CanvasBoard | null; act: BoardAction; onRemoveMember: (key: string) => void }) {
   const frame = boardNodesOfType(board, "frame").find((n) => n.node_id === frameId)?.frame;
-  const [name, setName] = useState(frame?.name ?? "");
-  useEffect(() => { setName(frame?.name ?? ""); }, [frame?.name]);
+  // Пришедшее имя (перечитка доски, соседнее окно) не затирает набранное.
+  const nameField = useFieldDraft(frame?.name ?? "");
   const color = frame?.color ?? DEFAULT_FRAME_COLOR;
   async function saveName() {
+    nameField.release();
     if (!frame) return;
+    const name = nameField.draft;
     if (name.trim() === frame.name) return;
-    await api.put(`/canvas/frames/${frameId}`, { name: name.trim() || "Группа" });
-    onSaved();
+    await act(() => write.put(`/canvas/frames/${frameId}`, { name: name.trim() || "Группа" }), { failure: "Имя группы" });
   }
   async function saveColor(c: string) {
-    await api.put(`/canvas/frames/${frameId}`, { color: c });
-    onSaved();
+    await act(() => write.put(`/canvas/frames/${frameId}`, { color: c }), { failure: "Цвет группы" });
   }
   /**
    * Состав группы — те, кто ей принадлежит (`parent_key`), а не те, кто
@@ -6510,10 +6732,10 @@ function FrameProperties({ frameId, board, onSaved, onRemoveMember }: { frameId:
   return (
     <PropsPanel
       label="Группа"
-      aside={<PropsDelete onDelete={async () => { await api.del(`/canvas/board/node?board_id=${board?.board_id}&node_type=frame&node_id=${frameId}`); onSaved(); }} />}
+      aside={<PropsDelete onDelete={async () => { await act(() => write.del(`/canvas/board/node?board_id=${board?.board_id}&node_type=frame&node_id=${frameId}`), { retry: false, failure: "Удаление группы" }); }} />}
     >
       <div className="canvas-props__fields">
-        <label className="canvas-props__field"><span className="canvas-props__label">Имя</span><input value={name} onChange={(e) => setName(e.target.value)} onBlur={saveName} placeholder="Группа" /></label>
+        <label className="canvas-props__field"><span className="canvas-props__label">Имя</span><input value={nameField.draft} onChange={(e) => nameField.setDraft(e.target.value)} onFocus={nameField.hold} onBlur={saveName} placeholder="Группа" /></label>
         <ColorSwatches swatches={FRAME_SWATCHES} selected={color} by="value" onPick={(sw) => saveColor(sw.value)} />
         <PropsChips
           label="В группе"
@@ -6533,22 +6755,25 @@ function FrameProperties({ frameId, board, onSaved, onRemoveMember }: { frameId:
  * список из тридцати имён, ведущий в никуда, — это отчёт, а не свойство. Их
  * место занял вход — та же дверь, что двойной щелчок по узлу.
  */
-function ChapterProperties({ chapterId, board, onSaved, onEnter }: { chapterId: number; board: CanvasBoard | null; onSaved: () => void; onEnter: (arcId: number) => void }) {
+function ChapterProperties({ chapterId, board, act, onEnter }: { chapterId: number; board: CanvasBoard | null; act: BoardAction; onEnter: (arcId: number) => void }) {
   const node = boardNodesOfType(board, "chapter").find((n) => n.chapter.id === chapterId)?.chapter;
-  const [name, setName] = useState(node?.name ?? "");
-  useEffect(() => { setName(node?.name ?? ""); }, [node?.name]);
+  const nameField = useFieldDraft(node?.name ?? "");
   async function saveName() {
+    nameField.release();
     if (!node) return;
+    const name = nameField.draft;
     if (name.trim() === node.name) return;
     // Правится `story_arcs.name` — сама запись главы, а не подпись на холсте.
-    await api.put(`/canvas/groups/${chapterId}`, { board_id: board?.board_id, name: name.trim() || "Глава" });
-    onSaved();
+    await act(() => write.put(`/canvas/groups/${chapterId}`, { board_id: board?.board_id, name: name.trim() || "Глава" }), {
+      failure: "Имя главы",
+      affects: [{ kind: "adventure", id: chapterId }],
+    });
   }
   if (!node) return <PropsPlaceholder label="Глава">Загрузка…</PropsPlaceholder>;
   return (
     <PropsPanel label="Глава">
       <div className="canvas-props__fields">
-        <label className="canvas-props__field"><span className="canvas-props__label">Имя</span><input value={name} onChange={(e) => setName(e.target.value)} onBlur={saveName} placeholder="Глава" /></label>
+        <label className="canvas-props__field"><span className="canvas-props__label">Имя</span><input value={nameField.draft} onChange={(e) => nameField.setDraft(e.target.value)} onFocus={nameField.hold} onBlur={saveName} placeholder="Глава" /></label>
         <div className="canvas-props__field">
           <span className="canvas-props__label">Сцен</span>
           <span>{node.scene_count}</span>
@@ -6561,14 +6786,14 @@ function ChapterProperties({ chapterId, board, onSaved, onEnter }: { chapterId: 
   );
 }
 
-function PinProperties({ pinId, board, onSaved, autoEdit = false }: { pinId: number; board: CanvasBoard | null; onSaved: () => void; autoEdit?: boolean }) {
+function PinProperties({ pinId, board, act, autoEdit = false }: { pinId: number; board: CanvasBoard | null; act: BoardAction; autoEdit?: boolean }) {
   const pin = boardNodesOfType(board, "pin").find((n) => n.pin.id === pinId)?.pin;
-  const [name, setName] = useState(pin?.name ?? "");
+  const nameField = useFieldDraft(pin?.name ?? "");
   const [size, setSize] = useState(pin?.size ?? "M");
   const [color, setColor] = useState(pin?.color ?? DEFAULT_FRAME_COLOR);
   const [shape, setShape] = useState(pin?.shape ?? "circle");
   const nameRef = useRef<HTMLInputElement>(null);
-  useEffect(() => { setName(pin?.name ?? ""); setSize(pin?.size ?? "M"); setColor(pin?.color ?? DEFAULT_FRAME_COLOR); setShape(pin?.shape ?? "circle"); }, [pin?.name, pin?.size, pin?.color, pin?.shape]);
+  useEffect(() => { setSize(pin?.size ?? "M"); setColor(pin?.color ?? DEFAULT_FRAME_COLOR); setShape(pin?.shape ?? "circle"); }, [pin?.size, pin?.color, pin?.shape]);
   // П2.8: свежесозданный пин открывает панель сразу в поле имени. Эффект
   // пережидает и поставку `pin` (панель рендерится раньше данных доски), и
   // 400 мс отложенного `fresh` — фокус приходит к готовому инпуту.
@@ -6580,30 +6805,30 @@ function PinProperties({ pinId, board, onSaved, autoEdit = false }: { pinId: num
   }, [autoEdit, pin]);
   const threads = board?.threads ?? [];
   const myThreads = threads.filter((th) => th.from_pin_id === pinId || th.to_pin_id === pinId);
-  async function save(part: Record<string, unknown>) {
-    await api.put(`/canvas/pins/${pinId}`, part);
-    onSaved();
-  }
+  const save = (part: Record<string, unknown>) =>
+    act(() => write.put(`/canvas/pins/${pinId}`, part), { failure: "Пин" });
+  const saveThread = (threadId: number, part: Record<string, unknown>) =>
+    void act(() => write.put(`/canvas/threads/${threadId}`, part), { failure: "Нить" });
   if (!pin) return <PropsPlaceholder label="Пин">Загрузка…</PropsPlaceholder>;
   return (
     <PropsPanel
       label="Пин"
-      aside={<PropsDelete onDelete={async () => { await api.del(`/canvas/pins/${pinId}`); onSaved(); }} />}
+      aside={<PropsDelete onDelete={async () => { await act(() => write.del(`/canvas/pins/${pinId}`), { retry: false, failure: "Удаление пина" }); }} />}
     >
       <div className="canvas-props__fields">
-        <label className="canvas-props__field"><span className="canvas-props__label">Имя</span><input ref={nameRef} value={name} onChange={(e) => setName(e.target.value)} onBlur={() => name.trim() !== pin.name && save({ name: name.trim() || "Пин" })} placeholder="Пин" /></label>
-        <div className="canvas-props__field"><span className="canvas-props__label">Размер</span><div className="row" style={{ gap: 6 }}>{(["S","M","L"] as const).map((s) => (<button key={s} className={size===s ? "primary" : ""} onClick={() => { setSize(s); save({ size: s }); }}>{s} {s==="S"?"16":s==="M"?"24":"32"}</button>))}</div></div>
-        <ColorSwatches swatches={FRAME_SWATCHES} selected={color} by="value" onPick={(sw) => { setColor(sw.value); save({ color: sw.value }); }} />
-        <div className="canvas-props__field"><span className="canvas-props__label">Форма</span><div className="row" style={{ gap: 6, flexWrap: "wrap" }}>{(PIN_SHAPES as readonly string[]).map((sh) => (<button key={sh} className={shape===sh ? "primary" : ""} onClick={() => { setShape(sh); save({ shape: sh }); }}>{PIN_SHAPE_LABEL[sh] ?? sh}</button>))}</div></div>
+        <label className="canvas-props__field"><span className="canvas-props__label">Имя</span><input ref={nameRef} value={nameField.draft} onChange={(e) => nameField.setDraft(e.target.value)} onFocus={nameField.hold} onBlur={() => { nameField.release(); if (nameField.draft.trim() !== pin.name) void save({ name: nameField.draft.trim() || "Пин" }); }} placeholder="Пин" /></label>
+        <div className="canvas-props__field"><span className="canvas-props__label">Размер</span><div className="row" style={{ gap: 6 }}>{(["S","M","L"] as const).map((s) => (<button key={s} className={size===s ? "primary" : ""} onClick={() => { setSize(s); void save({ size: s }); }}>{s} {s==="S"?"16":s==="M"?"24":"32"}</button>))}</div></div>
+        <ColorSwatches swatches={FRAME_SWATCHES} selected={color} by="value" onPick={(sw) => { setColor(sw.value); void save({ color: sw.value }); }} />
+        <div className="canvas-props__field"><span className="canvas-props__label">Форма</span><div className="row" style={{ gap: 6, flexWrap: "wrap" }}>{(PIN_SHAPES as readonly string[]).map((sh) => (<button key={sh} className={shape===sh ? "primary" : ""} onClick={() => { setShape(sh); void save({ shape: sh }); }}>{PIN_SHAPE_LABEL[sh] ?? sh}</button>))}</div></div>
         <div className="canvas-props__field"><span className="canvas-props__label">Нити ({myThreads.length})</span>{myThreads.length===0 ? <p className="muted" style={{ fontSize: "var(--fs-meta)", margin: 0 }}>Нет нитей — ПКМ → Создать связь</p> : <div className="stack" style={{ gap: 6 }}>{myThreads.map((th) => {
           const otherId = th.from_pin_id === pinId ? th.to_pin_id : th.from_pin_id;
           const other = boardNodesOfType(board, "pin").find((n) => n.pin.id === otherId)?.pin.name || `Пин ${otherId}`;
           return (
             <div key={th.id} className="row" style={{ gap: 6, alignItems: "center", border: "1.5px solid var(--line)", padding: "4px 6px" }}>
               <span style={{ flex: 1, fontSize: "var(--fs-meta)" }}>— {other}</span>
-              <input type="number" min={1} max={8} value={th.width} onChange={(e) => { const w = Number(e.target.value) || 2; api.put(`/canvas/threads/${th.id}`, { width: w }).then(onSaved); }} style={{ width: 48 }} aria-label="Ширина нити" title="Ширина" />
-              <input type="color" value={th.color} onChange={(e) => api.put(`/canvas/threads/${th.id}`, { color: e.target.value }).then(onSaved)} style={{ width: 32, height: 24, padding: 0, border: "1.5px solid var(--line)" }} aria-label="Цвет нити" title="Цвет нити" />
-              <button className="danger" onClick={async () => { await api.del(`/canvas/threads/${th.id}`); onSaved(); }} aria-label={`Удалить нить к «${other}»`} title="Удалить нить">×</button>
+              <input type="number" min={1} max={8} value={th.width} onChange={(e) => saveThread(th.id, { width: Number(e.target.value) || 2 })} style={{ width: 48 }} aria-label="Ширина нити" title="Ширина" />
+              <input type="color" value={th.color} onChange={(e) => saveThread(th.id, { color: e.target.value })} style={{ width: 32, height: 24, padding: 0, border: "1.5px solid var(--line)" }} aria-label="Цвет нити" title="Цвет нити" />
+              <button className="danger" onClick={() => void act(() => write.del(`/canvas/threads/${th.id}`), { retry: false, failure: "Удаление нити" })} aria-label={`Удалить нить к «${other}»`} title="Удалить нить">×</button>
             </div>
           );
         })}</div>}</div>
@@ -6622,10 +6847,12 @@ function PinProperties({ pinId, board, onSaved, autoEdit = false }: { pinId: num
  * (`story_scene_transitions.label`), которая раньше жила подписью на середине
  * ребра.
  */
-function RouteProperties({ routeId, board, onSaved }: { routeId: number; board: CanvasBoard | null; onSaved: () => void }) {
+function RouteProperties({ routeId, board, act }: { routeId: number; board: CanvasBoard | null; act: BoardAction }) {
   const route = boardNodesOfType(board, "route").find((n) => n.route.id === routeId)?.route;
-  const [condition, setCondition] = useState(route?.transition_label ?? "");
-  useEffect(() => { setCondition(route?.transition_label ?? ""); }, [route?.transition_label]);
+  const conditionField = useFieldDraft(route?.transition_label ?? "");
+  // Маршрут кладёт носителя в состав сцен-выходов, а переход — это строка
+  // сцены: снятое здесь видно и на странице сцены.
+  const sceneAffects: Affect[] = [{ kind: "scene" }];
   if (!route) return <PropsPlaceholder label="Маршрут">Загрузка…</PropsPlaceholder>;
   const kindLabel = ROUTE_KIND_LABEL[route.kind] ?? route.kind;
   const roleLabel = route.role ? ROUTE_ROLE_LABEL[route.role] ?? route.role : "";
@@ -6633,7 +6860,7 @@ function RouteProperties({ routeId, board, onSaved }: { routeId: number; board: 
   return (
     <PropsPanel
       label="Маршрут"
-      aside={<PropsDelete onDelete={async () => { await api.del(`/canvas/routes/${routeId}`); onSaved(); }} />}
+      aside={<PropsDelete onDelete={async () => { await act(() => write.del(`/canvas/routes/${routeId}`), { retry: false, failure: "Удаление маршрута", affects: sceneAffects }); }} />}
     >
       <div className="canvas-props__fields">
         <div className="canvas-props__field">
@@ -6656,7 +6883,7 @@ function RouteProperties({ routeId, board, onSaved }: { routeId: number; board: 
               {route.outputs!.map((o) => (
                 <div key={o.to_key} className="row" style={{ gap: 6, alignItems: "center", border: "1.5px solid var(--line)", padding: "4px 6px" }}>
                   <span style={{ flex: 1, fontSize: "var(--fs-meta)" }}>{o.to_name ?? o.to_key}</span>
-                  <button className="danger" onClick={async () => { await api.del(`/canvas/routes/${routeId}/outputs?to_key=${encodeURIComponent(o.to_key)}`); onSaved(); }} title="Снять выход">×</button>
+                  <button className="danger" onClick={() => void act(() => write.del(`/canvas/routes/${routeId}/outputs?to_key=${encodeURIComponent(o.to_key)}`), { retry: false, failure: "Снятие выхода маршрута", affects: sceneAffects })} title="Снять выход">×</button>
                 </div>
               ))}
             </div>
@@ -6666,10 +6893,15 @@ function RouteProperties({ routeId, board, onSaved }: { routeId: number; board: 
           <label className="canvas-props__field">
             <span className="canvas-props__label">Условие перехода</span>
             <input
-              value={condition}
+              value={conditionField.draft}
               placeholder="Условие"
-              onChange={(e) => setCondition(e.target.value)}
-              onBlur={() => { const v = condition.trim(); if (v !== (route.transition_label ?? "")) { void api.put(`/story/transitions/${route.transition_id}`, { label: v }); onSaved(); } }}
+              onChange={(e) => conditionField.setDraft(e.target.value)}
+              onFocus={conditionField.hold}
+              onBlur={() => {
+                conditionField.release();
+                const v = conditionField.draft.trim();
+                if (v !== (route.transition_label ?? "")) void act(() => write.put(`/story/transitions/${route.transition_id}`, { label: v }), { failure: "Условие перехода", affects: sceneAffects });
+              }}
             />
           </label>
         )}
@@ -6677,11 +6909,16 @@ function RouteProperties({ routeId, board, onSaved }: { routeId: number; board: 
           <div className="canvas-props__field">
             <button
               className="button button--danger"
-              onClick={async () => {
+              onClick={() => {
                 // Снять не только разрыв, но и сам переход (блок #6).
-                await api.del(`/story/transitions/${route.transition_id}`);
-                await api.del(`/canvas/routes/${routeId}`);
-                onSaved();
+                const transitionId = route.transition_id;
+                void act(
+                  async () => {
+                    await write.del(`/story/transitions/${transitionId}`);
+                    await write.del(`/canvas/routes/${routeId}`);
+                  },
+                  { retry: false, failure: "Удаление маршрута с переходом", affects: sceneAffects }
+                );
               }}
             >
               Удалить с ребром
@@ -6843,6 +7080,7 @@ function CanvasPalette({
   shelfVersion,
   onAdded,
   onPinCreated,
+  act,
   flowRef,
 }: {
   arcId: number;
@@ -6859,6 +7097,8 @@ function CanvasPalette({
   onAdded: (sceneId: number | null) => void;
   /** Свежесозданный пин (П2.8): страница выделяет его и открывает имя. */
   onPinCreated: (pinId: number) => void;
+  /** Правка доски через слой (перечитка, сигнал другим окнам, плашка). */
+  act: BoardAction;
   flowRef?: React.RefObject<ReactFlowInstance<Node<CanvasNodeData>, Edge> | null>;
 }) {
   const [tab, setTab] = useState<PaletteTab>("scenes");
@@ -6889,7 +7129,7 @@ function CanvasPalette({
   // экран выбора: список короткий и один на всю базу.
   useEffect(() => {
     if (tab !== "adventures") return;
-    api.get<CanvasIndex>("/canvas/index").then((ix) =>
+    void readResource<CanvasIndex>(canvasPaths.index()).then((ix) =>
       setAdventures(
         ix.settings.flatMap((st) =>
           st.adventures.map((a) => ({
@@ -7057,13 +7297,16 @@ function CanvasPalette({
     setBusy(true);
     try {
       const pos = freshSpotAtCenter(flowRef?.current ?? null);
-      await api.post("/canvas/board/node", {
-        ...boardTarget,
-        node_type: item.type,
-        node_id: item.id,
-        ...pos,
-      });
-      onAdded(null);
+      await act(
+        () =>
+          write.post("/canvas/board/node", {
+            ...boardTarget,
+            node_type: item.type,
+            node_id: item.id,
+            ...pos,
+          }),
+        { failure: "Узел на холсте" }
+      );
     } finally {
       setBusy(false);
     }
@@ -7340,9 +7583,11 @@ function CanvasPalette({
               }}
               onClick={async () => {
                 const pos = freshSpotAtCenter(flowRef?.current ?? null);
-                const created = await api.post<{ id: number }>("/canvas/pins", { board_id: boardId, name: "Пин", x: pos.x, y: pos.y, size: "M", color: DEFAULT_FRAME_COLOR, shape: "circle" });
-                onPinCreated(created.id);
-                onAdded(null);
+                const created = await act(
+                  () => write.post<{ id: number }>("/canvas/pins", { board_id: boardId, name: "Пин", x: pos.x, y: pos.y, size: "M", color: DEFAULT_FRAME_COLOR, shape: "circle" }),
+                  { retry: false, failure: "Новый пин" }
+                );
+                if (created) onPinCreated(created.id);
               }}
             >
               <span className="canvas-palette__item-name">📌 Пин</span>
@@ -7357,8 +7602,10 @@ function CanvasPalette({
               }}
               onClick={async () => {
                 const pos = freshSpotAtCenter(flowRef?.current ?? null);
-                await api.post("/canvas/routes", { board_id: boardId, x: Math.round(pos.x), y: Math.round(pos.y) });
-                onAdded(null);
+                await act(() => write.post("/canvas/routes", { board_id: boardId, x: Math.round(pos.x), y: Math.round(pos.y) }), {
+                  retry: false,
+                  failure: "Новый маршрут",
+                });
               }}
             >
               <span className="canvas-palette__item-name">⇆ Маршрут</span>

@@ -22,6 +22,8 @@ describe("переведённые страницы", () => {
     }
     expect(isMigratedRoute("/settings/1")).toBe(true);
     expect(isMigratedRoute("/settings")).toBe(false);
+    expect(isMigratedRoute("/canvas")).toBe(true);
+    expect(isMigratedRoute("/canvas/board")).toBe(false);
   });
 
   it("соседние адреса не цепляются префиксом", () => {
