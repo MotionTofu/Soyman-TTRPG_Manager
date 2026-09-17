@@ -12,8 +12,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
+import { afterWriteAnywhere } from "../data/imperative";
 import { SectionHeading } from "../components/SectionHeading";
-import { clearDndSystemIdCache } from "../components/dnd/dndCompendium";
 import type { System } from "../types";
 
 interface Problem {
@@ -271,7 +271,9 @@ export function ImportSystemPage() {
           .map(([key]) => key),
         bind,
       });
-      clearDndSystemIdCache();
+      // Импорт мог создать систему и переписать её записи: список систем и
+      // всё под ней (разделы, записи, пикеры листа) — устаревшие.
+      afterWriteAnywhere([{ path: "/systems" }]);
       setResult(response);
       setSystemId(response.system_id);
       loadBatches();
@@ -288,7 +290,7 @@ export function ImportSystemPage() {
     )
       return;
     await api.del(`/system-import/batches/${batchId}`);
-    clearDndSystemIdCache();
+    afterWriteAnywhere([{ path: "/systems" }]);
     if (result?.batch_id === batchId) setResult(null);
     loadBatches();
     loadKeys();

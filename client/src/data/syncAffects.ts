@@ -7,7 +7,7 @@ import type { Affect } from "./entities";
  * перезапускает весь модуль.
  */
 export function affectsForWindowEvent(type: string, detail: unknown): Affect[] | null {
-  const d = (detail ?? {}) as { characterId?: number; sessionId?: number; scope?: string; campaignId?: number };
+  const d = (detail ?? {}) as { characterId?: number; sessionId?: number; scope?: string; campaignId?: number; systemId?: number };
   switch (type) {
     case "character-updated": {
       if (d.characterId == null) return [{ kind: "character" }, { path: "/statblocks" }];
@@ -39,6 +39,11 @@ export function affectsForWindowEvent(type: string, detail: unknown): Affect[] |
         { path: `/campaign-entries?campaign_id=${d.campaignId}` },
       ];
     }
+    case "system-data-changed":
+      // Компендиум системы: записи под своими ключами (живые данные листа —
+      // перечитываются только те, что лист держит, одной пачкой) и разделы
+      // системы, из которых собираются пикеры.
+      return [{ kind: "compendium_entry" }, d.systemId != null ? { path: `/systems/${d.systemId}` } : { path: "/systems" }];
     case "realtime-reconnected":
       // Пустой список — перечитать всё открытое: пропущенного не восстановить.
       return [];

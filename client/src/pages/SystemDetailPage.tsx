@@ -1,9 +1,9 @@
 import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
-import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
+import { useAction, useResource, write } from "../data/hooks";
 import { labelled } from "../data/notices";
-import { systemFieldsAffects, systemGroupAffects, systemNameAffects, systemPaths, wholeSystemAffects } from "../data/systems";
+import { systemFieldsAffects, systemGroupAffects, systemNameAffects, systemPaths } from "../data/systems";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { Modal } from "../components/Modal";
 import { CompendiumSection } from "../components/CompendiumSection";
@@ -20,7 +20,6 @@ import { EntityPage } from "../components/EntityPage";
 import { SectionBackground } from "../components/SectionBackground";
 import { EntityImageSlot } from "../components/EntityImageSlot";
 import { useAlert, useConfirm } from "../hooks/useConfirm";
-import { clearDndSystemIdCache } from "../components/dnd/dndCompendium";
 
 export function SystemDetailPage() {
   const { id } = useParams();
@@ -28,7 +27,6 @@ export function SystemDetailPage() {
   const navigate = useNavigate();
 
   const run = useAction();
-  const afterWrite = useAfterWrite();
   const system = useResource<System>(systemPaths.detail(systemId)).data ?? null;
   const sections = useResource<SystemSection[]>(systemPaths.sections(systemId)).data ?? NO_SECTIONS;
   const campaigns = useResource<Campaign[]>(systemPaths.campaigns(systemId)).data ?? NO_CAMPAIGNS;
@@ -113,7 +111,6 @@ export function SystemDetailPage() {
       { affects: systemNameAffects(systemId) }
     );
     if (!saved) throw new Error("Не сохранилось");
-    clearDndSystemIdCache();
     if (saved.code_taken_by) {
       showAlert(`Код «${code}» уже носит «${saved.code_taken_by}». Это разрешено, но в ссылках оба будут выглядеть одинаково.`);
     }
@@ -180,7 +177,6 @@ export function SystemDetailPage() {
       { affects: [{ path: systemPaths.list() }], retry: false }
     );
     if (!created) return;
-    clearDndSystemIdCache();
     navigate(`/systems/${created.id}`);
   }
 
@@ -375,8 +371,8 @@ export function SystemDetailPage() {
           systemId={systemId}
           onClose={() => {
             setTidying(false);
-            // Уборка правит записи всей системы разом (разбор, Q4).
-            afterWrite(wholeSystemAffects(systemId));
+            // Всю систему перечитывает сам диалог после уборки; ключ нужен
+            // разделам, ещё не переведённым на слой (бестиарий, транспорт).
             setTidyRun((n) => n + 1);
           }}
         />

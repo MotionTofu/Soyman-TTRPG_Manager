@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
+import { dataKeys, type Affect } from "../data/entities";
+import { errorText, useAction, useResource, write } from "../data/hooks";
+import { readResource } from "../data/imperative";
+import { labelled, showSaveError } from "../data/notices";
+import { compendiumAffects, compendiumMembershipAffects, compendiumPaths } from "../data/compendiumEntries";
+import { systemPaths } from "../data/systems";
+import { notifyDataChanged } from "../dataSync";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { LitmThemeBookBody, LitmTreasureBody, LitmMagicWayBody, LitmThemeKitBody } from "./litm/LitmCompendiumBodies";
 import { MentionText } from "./mentions/MentionText";
@@ -52,6 +60,7 @@ import { DndSkillNamesPanel } from "./dnd/DndSkillNamesPanel";
 import type { CompendiumEntry, SearchResult, SystemSection } from "../types";
 import { useAlert, useConfirm } from "../hooks/useConfirm";
 import { EmptyState } from "./EmptyState";
+import { LoadErrorCard } from "./Loadable";
 import { useCurrentUser } from "../api/currentUser";
 
 interface Props {
@@ -316,12 +325,10 @@ interface ClassGroupOption {
 // (requirement 8: classes listed alphabetically, subclasses collapsed under
 // an expand toggle instead of always-visible in one long flat list).
 async function loadClassOptions(systemId: number): Promise<ClassGroupOption[]> {
-  const sections = await api.get<SystemSection[]>(`/systems/${systemId}/sections`);
+  const sections = await readResource<SystemSection[]>(compendiumPaths.sections(systemId));
   const classSection = sections.find((s) => s.kind === "class");
   if (!classSection) return [];
-  const entries = await api.get<CompendiumEntry[]>(
-    `/systems/${systemId}/entries?section_id=${classSection.id}`
-  );
+  const entries = await readResource<CompendiumEntry[]>(compendiumPaths.sectionEntries(systemId, classSection.id));
   const classes = entries
     .filter((e) => e.kind === "class" && e.parent_id === null)
     .sort((a, b) => a.name.localeCompare(b.name, "ru"));
@@ -338,13 +345,11 @@ async function loadClassOptions(systemId: number): Promise<ClassGroupOption[]> {
 // Loads feat entries (from anywhere in the system) tagged with the "Черта
 // происхождения" category — the pickable pool for a background's origin feat.
 async function loadOriginFeatOptions(systemId: number): Promise<MechanicsOption[]> {
-  const sections = await api.get<SystemSection[]>(`/systems/${systemId}/sections`);
+  const sections = await readResource<SystemSection[]>(compendiumPaths.sections(systemId));
   const featSections = sections.filter((s) => s.kind === "feat");
   const results: MechanicsOption[] = [];
   for (const section of featSections) {
-    const entries = await api.get<CompendiumEntry[]>(
-      `/systems/${systemId}/entries?section_id=${section.id}`
-    );
+    const entries = await readResource<CompendiumEntry[]>(compendiumPaths.sectionEntries(systemId, section.id));
     for (const e of entries) {
       if (e.kind === "feat" && e.data.category === "Черта происхождения") {
         results.push({ id: e.id, name: e.name });
@@ -363,12 +368,10 @@ const EMPTY_CLASS_HIERARCHY: ClassHierarchy = { classes: [], subclassesByClass: 
 // Same source data as loadClassOptions, but kept as a class -> subclasses tree
 // instead of a flattened list, for the cascading class/subclass filter.
 async function loadClassHierarchy(systemId: number): Promise<ClassHierarchy> {
-  const sections = await api.get<SystemSection[]>(`/systems/${systemId}/sections`);
+  const sections = await readResource<SystemSection[]>(compendiumPaths.sections(systemId));
   const classSection = sections.find((s) => s.kind === "class");
   if (!classSection) return EMPTY_CLASS_HIERARCHY;
-  const entries = await api.get<CompendiumEntry[]>(
-    `/systems/${systemId}/entries?section_id=${classSection.id}`
-  );
+  const entries = await readResource<CompendiumEntry[]>(compendiumPaths.sectionEntries(systemId, classSection.id));
   const classes = entries
     .filter((e) => e.kind === "class" && e.parent_id === null)
     .sort((a, b) => a.position - b.position)
@@ -443,7 +446,21 @@ function groupByCategory(
 }
 
 export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
-  const [entries, setEntries] = useState<CompendiumEntry[]>([]);
+  // Записи раздела — ресурс слоя данных (группа «системы», часть 2): правка
+  // записи здесь, в соседнем окне или уборка справочника помечают его, и
+  // раздел перечитывается сам. Под тем же ключом записи раздела читают пикеры
+  // листа и опции механик.
+  const client = useQueryClient();
+  const run = useAction();
+  const entriesPath = compendiumPaths.sectionEntries(systemId, section.id);
+  const entriesState = useResource<CompendiumEntry[]>(entriesPath);
+  const entries = entriesState.data ?? NO_ENTRIES;
+  // Оптимистичная правка списка на экране: порядок и звёздочка меняются сразу.
+  const setEntries = useCallback(
+    (update: (prev: CompendiumEntry[]) => CompendiumEntry[]) =>
+      client.setQueryData<CompendiumEntry[]>(dataKeys.resource(entriesPath), (prev) => update(prev ?? [])),
+    [client, entriesPath]
+  );
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [editing, setEditing] = useState<EditDraft | null>(null);
   const [mechanicsOptions, setMechanicsOptions] = useState<MechanicsOptions>(EMPTY_MECHANICS_OPTIONS);
@@ -484,7 +501,6 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     return dir === "desc" ? "desc" : "asc";
   });
   const [dragId, setDragId] = useState<number | null>(null);
-  const [systemCode, setSystemCode] = useState<string | null>(null);
   const [viewMode, setViewMode] = useCompendiumViewMode(section.id, "grid");
   // Совместимость: старый ключ снаряжения уже мигрирован хуком, оставляем алиас
   const equipmentViewMode = viewMode;
@@ -599,15 +615,14 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     if (ids.length === 0) { showAlert("Выберите записи для показа."); return; }
     // Если выбран один — показываем его карточкой, если несколько — пачкой
     try {
-      await api.post(`/systems/${systemId}/show-entries`, { entry_ids: ids });
+      // Показ — не правка данных: другим окнам сообщать нечего.
+      await api.post(`/systems/${systemId}/show-entries`, { entry_ids: ids }, { broadcast: false });
       showAlert(ids.length === 1 ? "Показано игрокам." : `Показано игрокам: ${ids.length} записей.`);
     } catch (e) {
       showAlert(String(e instanceof Error ? e.message : e));
     }
   }
-  useEffect(() => {
-    api.get<{ code: string | null }>(`/systems/${systemId}`).then((s) => setSystemCode(s.code)).catch(() => setSystemCode(null));
-  }, [systemId]);
+  const systemCode = useResource<{ code: string | null }>(systemPaths.detail(systemId)).data?.code ?? null;
 
   const isSpellSection = section.kind === "spell";
   const isMagicItemSection = section.kind === "magic_item";
@@ -661,21 +676,24 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     const to = ids.indexOf(targetId);
     if (from === -1 || to === -1) return;
     ids.splice(to, 0, ...ids.splice(from, 1));
-    setEntries((prev) => {
-      const order = new Map(ids.map((id, i) => [id, i]));
-      return prev.map((e) => (order.has(e.id) ? { ...e, position: order.get(e.id)! } : e));
-    });
-    await api.put(`/systems/${systemId}/entries/reorder`, { order: ids });
+    const before = new Map(group.map((e) => [e.id, e.position]));
+    const order = new Map(ids.map((id, i) => [id, i]));
+    setEntries((prev) => prev.map((e) => (order.has(e.id) ? { ...e, position: order.get(e.id)! } : e)));
+    try {
+      await write.put(`/systems/${systemId}/entries/reorder`, { order: ids });
+      // Свой список уже в нужном порядке — перечитывать его незачем;
+      // соседним окнам и пикерам листа говорим, что порядок сменился.
+      notifyDataChanged(compendiumSectionAffects(systemId));
+    } catch (error) {
+      // Раньше отказ оставлял на экране порядок, которого нет на сервере.
+      setEntries((prev) => prev.map((e) => (before.has(e.id) ? { ...e, position: before.get(e.id)! } : e)));
+      showSaveError(`Порядок записей — ${errorText(error)}`);
+    }
   }
 
-  function refresh() {
-    api
-      .get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${section.id}`)
-      .then(setEntries)
-      .catch(() => showAlert("Не удалось загрузить записи раздела."));
-  }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(refresh, [systemId, section.id]);
+  // Раньше отказ загрузки приходил окном с «ОК»; теперь — карточкой над
+  // списком с «Повторить» (ниже, у заголовка раздела).
+  const loadError = entriesState.error;
 
   // Favourite (звёздочка) для mechanic_item/mechanic_group — как в бестиарии, один запрос на запись, без перезагрузки 13 групп
   const favouriteChains = useRef(new Map<number, Promise<void>>());
@@ -684,17 +702,18 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     const next = prev.then(async () => {
       setEntries((cur) => cur.map((e) => (e.id === entry.id ? { ...e, favourite } : e)));
       try {
-        await api.put(`/systems/entries/${entry.id}/favourite`, { favourite });
-      } catch {
+        await write.put(`/systems/entries/${entry.id}/favourite`, { favourite });
+        notifyDataChanged(compendiumSectionAffects(systemId));
+      } catch (error) {
         setEntries((cur) => cur.map((e) => (e.id === entry.id && e.favourite === favourite ? { ...e, favourite: !favourite } : e)));
+        showSaveError(`Избранное — ${errorText(error)}`);
       }
     });
     favouriteChains.current.set(entry.id, next);
     try { await next; } finally { if (favouriteChains.current.get(entry.id) === next) favouriteChains.current.delete(entry.id); }
-  }, []);
+  }, [setEntries, systemId]);
 
   useEffect(() => {
-    const ac = new AbortController();
     let cancelled = false;
     if (isSpellSection || isMagicItemSection) {
       loadClassOptions(systemId).then((v) => { if (!cancelled) setClassOptions(v); }).catch(() => { if (!cancelled) showAlert("Не удалось загрузить классы."); });
@@ -704,12 +723,11 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
       // Needed for the school/creature-type filter dropdowns above the list
       // and for the pickers inside each entry's edit form (weapon
       // properties/mastery for equipment and magic-item weapons/armor).
-      loadMechanicsOptions(systemId, { signal: ac.signal }).then((v) => { if (!cancelled) setMechanicsOptions(v); }).catch((e) => {
-        if ((e as Error)?.name === "AbortError") return;
+      loadMechanicsOptions(systemId).then((v) => { if (!cancelled) setMechanicsOptions(v); }).catch(() => {
         if (!cancelled) showAlert("Не удалось загрузить справочник (механики).");
       });
     }
-    return () => { cancelled = true; ac.abort(); };
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [systemId, isSpellSection, isMagicItemSection, isEquipmentSection]);
 
@@ -807,17 +825,22 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
   }
 
   async function addEntry(parentId: number | null, kind: string, levelOverride?: number) {
-    const created = await api.post<CompendiumEntry>(`/systems/${systemId}/entries`, {
-      section_id: section.id,
-      parent_id: parentId,
-      kind,
-      name: "",
-      level: levelOverride ?? (KIND_DEFS[kind]?.hasLevel ? 1 : null),
-      data: {},
-      description: "",
-    });
+    const created = await run(
+      labelled("Новая запись", () =>
+        write.post<CompendiumEntry>(`/systems/${systemId}/entries`, {
+          section_id: section.id,
+          parent_id: parentId,
+          kind,
+          name: "",
+          level: levelOverride ?? (KIND_DEFS[kind]?.hasLevel ? 1 : null),
+          data: {},
+          description: "",
+        })
+      ),
+      { affects: compendiumMembershipAffects(systemId), retry: false }
+    );
+    if (!created) return;
     if (parentId != null) setExpanded((prev) => new Set(prev).add(parentId));
-    refresh();
     startEdit(created);
   }
 
@@ -1077,33 +1100,26 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
       data.progression_table = editing.progressionTable;
       data.progression = editing.progression;
     }
-    await api.put(`/systems/entries/${editing.id}`, {
-      name: editing.name || "Без названия",
-      level: editing.level ? Number(editing.level) : null,
-      data,
-      description: editing.description,
-    });
-    // Инвалидация кешей — пикера классов/видов и КЗ-снапшоты должны увидеть новый пункт без перезагрузки
-    try {
-      const { invalidateMechanicsCache } = await import("../compendiumMechanics");
-      invalidateMechanicsCache(systemId);
-    } catch {}
-    try {
-      const { clearEquipmentMetaCache } = await import("./dnd/dndEquipment");
-      if (original?.kind === "equipment" || original?.kind === "magic_item" || original?.kind === "mechanic_item") {
-        if (original) clearEquipmentMetaCache(original.id);
-        else clearEquipmentMetaCache();
-      }
-    } catch {}
-    // Лист персонажа держит живые данные заклинаний и умений в общем кэше
-    // (entryCache): он ради того и заведён, чтобы правка в компендиуме была
-    // видна открытому рядом листу без перезагрузки. Сбрасывать его,
-    // однако, до сих пор было некому — invalidateEntry не вызывался нигде,
-    // и лист показывал доперестроечное описание до перезагрузки страницы.
-    try {
-      const { invalidateEntry } = await import("./dnd/entryCache");
-      invalidateEntry(editing.id);
-    } catch {}
+    const entryId = editing.id;
+    // Правка задевает карточку записи — под её ключом лежат живые данные листа
+    // (entryCache), снимки снаряжения и страница записи, — и записи системы, из
+    // которых собираются пикеры и опции механик. Всё это теперь обновляется
+    // и в соседнем окне, и у игроков, а не только в этом окне.
+    // При отказе форма остаётся открытой с набранным, а плашка говорит, что не так.
+    const saved = await run(
+      labelled(`«${editing.name || "Без названия"}»`, () =>
+        write
+          .put(`/systems/entries/${entryId}`, {
+            name: editing.name || "Без названия",
+            level: editing.level ? Number(editing.level) : null,
+            data,
+            description: editing.description,
+          })
+          .then(() => true)
+      ),
+      { affects: compendiumAffects({ id: entryId, system_id: systemId }) }
+    );
+    if (!saved) return;
     await syncMentionLinks(
       "compendium_entry",
       editing.id,
@@ -1111,7 +1127,6 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
       editing.description
     );
     setEditing(null);
-    refresh();
   }
 
   function countUsages(entry: CompendiumEntry): number {
@@ -1143,8 +1158,12 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     if (kids.length > 0) msg = `Удалить «${entry.name}» и все вложенные записи (${kids.length})?`;
     if (usages > 0) msg += `\n\nВнимание: на эту запись ссылаются ещё ${usages} записей (пикеры сломаются).`;
     if (!(await confirm({ message: msg, confirmLabel: "Удалить", danger: true }))) return;
-    await api.del(`/systems/entries/${entry.id}`);
-    refresh();
+    // С вложенными уходит поддерево — его карточки тоже устарели (разбор, Q4).
+    const affects: Affect[] =
+      kids.length > 0
+        ? [...compendiumMembershipAffects(systemId), { kind: "compendium_entry" }]
+        : compendiumMembershipAffects(systemId, entry.id);
+    await run(labelled(`Удаление «${entry.name}»`, () => write.del(`/systems/entries/${entry.id}`)), { affects });
   }
 
   const topLevel = effectiveChildrenOf(null);
@@ -1466,6 +1485,9 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
 
   return (
     <div className="card stack">
+      {loadError && (
+        <LoadErrorCard message={<>Не удалось загрузить записи раздела: {loadError}</>} onRetry={() => void entriesState.reload()} />
+      )}
       {section.kind === "mechanics" && <div className="card-header--inverted"><span className="card-header--inverted-label">Общее</span><span className="card-header--inverted-count">{topLevel.length}</span></div>}
       <div className="row sort-toggle" style={{ gap: 4, justifyContent: "space-between", flexWrap: "wrap" }}>
         <span className="row" style={{ gap: 4, alignItems: "center" }}>
@@ -3819,4 +3841,11 @@ function ChildGroups(props: NodeProps) {
       {othersBlock}
     </div>
   );
+}
+
+const NO_ENTRIES: CompendiumEntry[] = [];
+
+/** Порядок и избранное: записи разделов системы — пикеры листа читают их же. */
+function compendiumSectionAffects(systemId: number): Affect[] {
+  return [{ path: `/systems/${systemId}/entries` }];
 }

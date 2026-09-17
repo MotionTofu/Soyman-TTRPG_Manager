@@ -22,6 +22,7 @@ const DATA_EVENTS = [
   "initiative-updated",
   "hunter-mark",
   "campaign-data-changed",
+  "system-data-changed",
   "realtime-reconnected",
 ] as const;
 

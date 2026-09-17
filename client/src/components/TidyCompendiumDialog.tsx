@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { Modal } from "./Modal";
 import { api } from "../api/client";
+import { write } from "../data/hooks";
+import { afterWriteAnywhere } from "../data/imperative";
+import { wholeSystemAffects } from "../data/systems";
 
 // «Привести справочник в порядок»: три шага в одном окне.
 //
@@ -113,9 +116,12 @@ export function TidyCompendiumDialog({ systemId, onClose }: { systemId: number; 
     setRunning(true);
     setError(null);
     try {
-      const result = await api.post<TidyReport>(`/systems/${systemId}/tidy`, {
+      const result = await write.post<TidyReport>(`/systems/${systemId}/tidy`, {
         move_ids: [...checked],
       });
+      // Уборка правит записи всей системы разом (разбор группы «системы», Q4):
+      // перечитывается вся система здесь и в соседних окнах.
+      afterWriteAnywhere(wholeSystemAffects(systemId));
       setReport(result);
       setStep("report");
     } catch (e) {

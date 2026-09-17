@@ -16,7 +16,6 @@ import { ListPage } from "../components/ListPage";
 import { SystemGroupMembersModal } from "../components/SystemGroupMembersModal";
 import { NavIcon } from "../components/NavIcons";
 import { SectionBackground } from "../components/SectionBackground";
-import { clearDndSystemIdCache } from "../components/dnd/dndCompendium";
 
 import type { System, SystemGroup } from "../types";
 
@@ -109,7 +108,6 @@ export function SystemsListPage() {
     refreshGroups();
   }
 
-
   const filteredSystems = useMemo(() => {
     const qq = q.trim().toLowerCase();
     const byTab = (() => {
@@ -138,7 +136,6 @@ export function SystemsListPage() {
       retry: false,
     });
     if (!created) return;
-    clearDndSystemIdCache();
     setCreating(false);
     setName("");
     setDescription("");

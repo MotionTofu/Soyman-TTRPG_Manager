@@ -41,6 +41,10 @@ export function RealtimeListener() {
     socket.on("campaign-data-changed", (payload: unknown) => {
       window.dispatchEvent(new CustomEvent("campaign-data-changed", { detail: payload }));
     });
+    // Мастер поправил компендиум системы: лист перечитывает свои записи.
+    socket.on("system-data-changed", (payload: unknown) => {
+      window.dispatchEvent(new CustomEvent("system-data-changed", { detail: payload }));
+    });
     // Связь вернулась после обрыва (телефон заснул, пропал Wi-Fi): сигналы за
     // это время потеряны и сервер их не копит — открытое перечитывается целиком.
     // Первое подключение не в счёт: данные только что прочитаны.

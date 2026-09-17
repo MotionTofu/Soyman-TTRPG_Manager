@@ -109,6 +109,18 @@ describe("события сокета", () => {
   });
 });
 
+describe("сигнал «компендиум системы изменился»", () => {
+  it("задевает записи компендиума и всё под своей системой, но не чужую систему", () => {
+    const affects = affectsForWindowEvent("system-data-changed", { systemId: 6 }) ?? [];
+    const hit = (key: readonly unknown[]) => affects.some((a) => matchesAffect(key, a));
+    expect(hit(dataKeys.entity("compendium_entry", 900))).toBe(true);
+    expect(hit(dataKeys.resource("/systems/6/sections"))).toBe(true);
+    expect(hit(dataKeys.resource("/systems/6/entries?section_id=3"))).toBe(true);
+    expect(hit(dataKeys.resource("/systems/60/sections"))).toBe(false);
+    expect(hit(dataKeys.resource("/player/campaigns/2/visible"))).toBe(false);
+  });
+});
+
 describe("сигнал «кампания изменилась»", () => {
   const hit = (type: string, detail: unknown, path: string) =>
     (affectsForWindowEvent(type, detail) ?? []).some((a) => matchesAffect(dataKeys.resource(path), a));

@@ -1,4 +1,6 @@
 import { api } from "../../api/client";
+import { dataKeys, entityPath } from "../../data/entities";
+import { queryClient } from "../../data/queryClient";
 import type { CompendiumEntry, DndEquipmentItem } from "../../types";
 import { equipmentMetaFromEntry } from "@shared/dnd/equipment";
 
@@ -38,20 +40,19 @@ export function startingSetsFrom(entry: CompendiumEntry | undefined, ownerLabel:
 // add time — computeArmorClass() then reads these cached fields without a
 // live lookup. Заклинания от снапшота отказались (см. resolveSpell), но у
 // снаряжения он пока остаётся: КЗ считается вне рендера, где кэша нет.
-const equipmentMetaCache = new Map<number, Partial<DndEquipmentItem>>();
-export function clearEquipmentMetaCache(entryId?: number): void {
-  if (entryId != null) equipmentMetaCache.delete(entryId);
-  else equipmentMetaCache.clear();
-}
+//
+// Запись берётся из слоя данных — под тем же ключом, что и живые записи листа
+// (entryCache.ts): свой кэш снимков сбрасывала только правка в разделе
+// компендиума этого окна, а правка из соседнего окна оставляла старый снимок.
 export async function fetchEquipmentMeta(entryId: number): Promise<Partial<DndEquipmentItem>> {
-  if (equipmentMetaCache.has(entryId)) return equipmentMetaCache.get(entryId)!;
   try {
-    const entry = await api.get<CompendiumEntry>(`/systems/entries/${entryId}`);
+    const entry = await queryClient.fetchQuery({
+      queryKey: dataKeys.entity("compendium_entry", entryId),
+      queryFn: ({ signal }) => api.get<CompendiumEntry>(entityPath("compendium_entry", entryId), { signal }),
+    });
     // Какие поля снимаются — решает общий пакет: тем же снимком импорт из
     // Long Story Short связывает инвентарь на сервере.
-    const meta = equipmentMetaFromEntry(entryId, entry);
-    equipmentMetaCache.set(entryId, meta);
-    return meta;
+    return equipmentMetaFromEntry(entryId, entry);
   } catch {
     return { entryId };
   }

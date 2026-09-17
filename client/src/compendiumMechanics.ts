@@ -1,4 +1,5 @@
-import { api } from "./api/client";
+import { compendiumPaths } from "./data/compendiumEntries";
+import { readResource } from "./data/imperative";
 import {
   MECHANICS_ALIGNMENT_GROUP,
   MECHANICS_ARMOR_GROUP,
@@ -49,34 +50,21 @@ export const EMPTY_MECHANICS_OPTIONS: MechanicsOptions = {
   alignments: [],
 };
 
-const mechanicsCache = new Map<number, { at: number; value: MechanicsOptions }>();
-const MECHANICS_TTL_MS = 30_000;
-
-function isCacheFresh(entry: { at: number } | undefined): boolean {
-  return !!entry && Date.now() - entry.at < MECHANICS_TTL_MS;
-}
-
-export function invalidateMechanicsCache(systemId: number): void {
-  mechanicsCache.delete(systemId);
-}
-
 /**
  * Списки опций разделов «механики»: находит раздел механик системы и отдаёт
  * прямых детей фиксированных групп по имени — как выпадающие опции фильтров
  * и пикеров (типы существ, школы заклинаний, оружие/броня и т.п.).
+ *
+ * Читает разделы и записи раздела механик ключами слоя данных — теми же, что
+ * сам раздел в профиле системы. Раньше здесь был свой кэш на 30 секунд со
+ * сбросом только из правки в этом окне; теперь любая правка механик (здесь,
+ * в соседнем окне) помечает эти ключи, и следующий вызов берёт свежее.
  */
-export async function loadMechanicsOptions(systemId: number, opts?: { force?: boolean; signal?: AbortSignal }): Promise<MechanicsOptions> {
-  if (!opts?.force) {
-    const cached = mechanicsCache.get(systemId);
-    if (cached && isCacheFresh(cached)) return cached.value;
-  }
-  const sections = await api.get<SystemSection[]>(`/systems/${systemId}/sections`, opts?.signal ? { signal: opts.signal } as RequestInit : undefined);
+export async function loadMechanicsOptions(systemId: number): Promise<MechanicsOptions> {
+  const sections = await readResource<SystemSection[]>(compendiumPaths.sections(systemId));
   const mechSection = sections.find((s) => s.kind === "mechanics");
   if (!mechSection) return EMPTY_MECHANICS_OPTIONS;
-  const entries = await api.get<CompendiumEntry[]>(
-    `/systems/${systemId}/entries?section_id=${mechSection.id}`,
-    opts?.signal ? { signal: opts.signal } as RequestInit : undefined
-  );
+  const entries = await readResource<CompendiumEntry[]>(compendiumPaths.sectionEntries(systemId, mechSection.id));
   const groupsByName = new Map(entries.filter((e) => e.parent_id === null).map((e) => [e.name, e]));
   const groupsByKey = new Map<string, CompendiumEntry>();
   for (const e of entries.filter((en) => en.parent_id === null)) {
@@ -109,6 +97,5 @@ export async function loadMechanicsOptions(systemId: number, opts?: { force?: bo
     conditions: optionsFor("Состояния"),
     alignments: optionsFor(MECHANICS_ALIGNMENT_GROUP),
   };
-  mechanicsCache.set(systemId, { at: Date.now(), value });
   return value;
 }

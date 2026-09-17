@@ -1,4 +1,4 @@
-import { api } from "../../api/client";
+import { readResource } from "../../data/imperative";
 import type { CompendiumEntry, System, SystemSection } from "../../types";
 
 // Загрузчики принимают signal, чтобы эффект, снятый при размонтировании
@@ -9,7 +9,15 @@ export interface LoadOpts {
   signal?: AbortSignal;
 }
 
-const get = <T>(path: string, opts?: LoadOpts) => api.get<T>(path, opts?.signal ? { signal: opts.signal } : undefined);
+// Чтения — ключами слоя данных (группа «системы», часть 2): разделы и записи
+// раздела лежат там же, где их читает профиль системы, и правка компендиума
+// помечает их устаревшими. Сам запрос общий и не отменяется, но снятому
+// эффекту ответ не отдаётся — как было с отменой.
+async function get<T>(path: string, opts?: LoadOpts): Promise<T> {
+  const result = await readResource<T>(path);
+  if (opts?.signal?.aborted) throw new DOMException("Загрузка отменена", "AbortError");
+  return result;
+}
 
 // Отменённый запрос — не ошибка: так эффект убирает за собой при
 // размонтировании и при смене системы. Сообщать о нём мастеру нечего.
@@ -27,17 +35,13 @@ export function errorMessage(e: unknown): string {
 // the vault instead of trusting campaign.system_id. Also sidesteps a real
 // bug: fetching /campaigns/:id 403s for a player token (GM-only route), so
 // the old campaign-lookup path silently left the pickers empty for players.
-let dndSystemIdCache: number | null | undefined;
-export function clearDndSystemIdCache(): void {
-  dndSystemIdCache = undefined;
-}
 export async function findDndSystemId(): Promise<number | null> {
-  if (dndSystemIdCache !== undefined) return dndSystemIdCache;
-  const systems = await api.get<System[]>("/systems");
+  // Список систем — ресурс слоя: создание, импорт и смена кода системы его
+  // помечают, отдельный кэш с ручным сбросом больше не нужен.
+  const systems = await readResource<System[]>("/systems");
   const byCode = systems.find((s) => s.code === "phb" || s.code === "dnd55");
   const byName = systems.find((s) => s.name === "D&D 5.5");
-  dndSystemIdCache = (byCode ?? byName)?.id ?? null;
-  return dndSystemIdCache;
+  return (byCode ?? byName)?.id ?? null;
 }
 
 // Loaders that pull class/species/background lists out of a system's

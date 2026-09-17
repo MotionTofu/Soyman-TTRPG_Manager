@@ -78,6 +78,7 @@ import { sweepOrphans } from "./services/orphans";
 import { backfillCompendiumSummaries } from "./services/monsterSummary";
 import { attachUser, requireAuth, bootstrapGmAccount, verifyToken, type AuthedRequest } from "./services/auth";
 import { campaignSignalMiddleware } from "./services/campaignSignals";
+import { systemSignalMiddleware } from "./services/systemSignals";
 import { signPath, verifySignedUrl } from "./services/signedUrl";
 import { apiRoleGate } from "./services/playerAccess";
 
@@ -218,6 +219,8 @@ app.use(attachUser);
 // на записи игроков): services/campaignSignals.ts. До роутеров, чтобы правило
 // нашло кампанию удаляемой строки, пока она ещё есть.
 app.use("/api", campaignSignalMiddleware((room, payload) => emitToRoom(room, "campaign-data-changed", payload)));
+// Правка компендиума — игрокам, чьи листы его читают: services/systemSignals.ts.
+app.use("/api", systemSignalMiddleware((room, payload) => emitToRoom(room, "system-data-changed", payload)));
 
 // Rate-limit auth — brute-force on /setup and /login must not be free.
 //
