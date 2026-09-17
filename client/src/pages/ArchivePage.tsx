@@ -4,6 +4,7 @@ import { useAfterWrite, useResource, write } from "../data/hooks";
 import { readOnce } from "../data/imperative";
 import { refreshMentionIndex } from "../mentions";
 import { NavIcon } from "../components/NavIcons";
+import { useAuthenticatedFileUrl } from "../utils/fileUrl";
 import { EmptyState } from "../components/EmptyState";
 import { ListPage } from "../components/ListPage";
 import { Modal } from "../components/Modal";
@@ -154,13 +155,31 @@ function isImageName(name: string): boolean {
   return /\.(jpe?g|png|gif|webp)$/i.test(name.split("?")[0]);
 }
 
-function archivedFileUrl(file: ArchivedFile): string {
-  const rel = file.archive_path.replace(/\\/g, "/");
-  const base = `/files/${rel.replace(/^\/+/, "")}`;
+// Файл грузится с заголовком авторизации, а не по адресу с токеном: токен
+// входа живёт неделю и из адреса попадал бы в журналы и историю браузера.
+// Подпись сервера (?sig=) тут не годится — она живёт минуту, а страница
+// открыта дольше.
+function archivedFilePath(file: ArchivedFile): string {
+  return file.file_url.split("?")[0];
+}
+
+function ArchiveThumb({ file }: { file: ArchivedFile }) {
+  const url = useAuthenticatedFileUrl(archivedFilePath(file));
+  return url ? <img src={url} alt="" className="archive-row__thumb-img" /> : null;
+}
+
+async function downloadArchivedFile(file: ArchivedFile): Promise<void> {
   const token = getAuthToken();
-  if (!token) return base;
-  const sep = base.includes("?") ? "&" : "?";
-  return `${base}${sep}token=${encodeURIComponent(token)}`;
+  const res = await fetch(archivedFilePath(file), { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
+  if (!res.ok) throw new Error(`Не удалось скачать файл (${res.status})`);
+  const url = URL.createObjectURL(await res.blob());
+  // Имя в архиве — подпись из галереи, часто без расширения: берём его у файла.
+  const ext = file.archive_path.match(/\.[a-z0-9]+$/i)?.[0] ?? "";
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = ext && !file.original_name.toLowerCase().endsWith(ext.toLowerCase()) ? file.original_name + ext : file.original_name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 type SortKey = "date" | "name" | "type";
@@ -672,13 +691,13 @@ export function ArchivePage() {
                   {visibleFilesList.map((file) => {
                     const key = fileKey(file);
                     const checked = selected.has(key);
-                    const img = isImageName(file.original_name);
+                    const img = isImageName(file.archive_path);
                     return (
                       <div key={file.id} className={`archive-row2 ${checked ? "is-selected" : ""}`}>
                         <input type="checkbox" className="archive-row__check" checked={checked} onChange={() => toggle(key)} aria-label={`Выбрать ${file.original_name}`} />
                         <span className="archive-row__thumb">
                           {img ? (
-                            <img src={archivedFileUrl(file)} alt="" className="archive-row__thumb-img" loading="lazy" />
+                            <ArchiveThumb file={file} />
                           ) : (
                             <NavIcon name={file.original_name.endsWith(".pdf") ? "document" : "image"} />
                           )}
@@ -690,9 +709,9 @@ export function ArchivePage() {
                           {formatArchivedAt(file.archived_at)}
                         </span>
                         <div className="archive-row__actions">
-                          <a className="archive-row__act" href={archivedFileUrl(file)} target="_blank" rel="noreferrer" download={file.original_name}>
+                          <button className="archive-row__act" onClick={() => { downloadArchivedFile(file).catch((e) => setErrorMsg(e instanceof Error ? e.message : String(e))); }}>
                             Скачать
-                          </a>
+                          </button>
                           <button onClick={() => { navigator.clipboard?.writeText(file.archive_path).catch(() => {}); }} title={file.archive_path}>
                             Копировать путь
                           </button>

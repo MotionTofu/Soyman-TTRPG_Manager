@@ -1362,6 +1362,8 @@ export interface ArchivedFile {
   original_owner_id: number;
   original_name: string;
   archive_path: string;
+  /** Адрес для /files, собранный сервером (archive_path приходит абсолютным). */
+  file_url: string;
   size: number;
   archived_at: string;
 }

@@ -82,6 +82,15 @@ describe("real server administrative boundaries", () => {
     const aid = Number(db.prepare(`INSERT INTO archived_files
       (original_owner_type, original_owner_id, original_name, archive_path, size) VALUES ('resource', 1, 'test', ?, 4)`)
       .run(path.join(junction, "keep.txt")).lastInsertRowid);
+    // Адрес файла — относительный /files/…, без токена входа (archive_path уходит абсолютным).
+    const rel = db.prepare(`INSERT INTO archived_files
+      (original_owner_type, original_owner_id, original_name, archive_path, size) VALUES ('resource', 1, 'карта', ?, 4)`)
+      .run(path.join("_Archive", "map.jpg")).lastInsertRowid;
+    const listed = (await request(server.app).get("/api/archived-files").auth(gm, { type: "bearer" })).body as { id: number; file_url: string }[];
+    const url = listed.find((r) => r.id === Number(rel))!.file_url;
+    expect(url.split("?")[0]).toBe("/files/_Archive/map.jpg");
+    expect(url).not.toContain("token=");
+    db.prepare("DELETE FROM archived_files WHERE id = ?").run(rel);
     expect((await request(server.app).delete(`/api/archived-files/${aid}`).auth(gm, { type: "bearer" })).status).toBe(200);
     expect(fs.readFileSync(file, "utf8")).toBe("keep");
     expect((await request(server.app).post("/api/health/path/clear").auth(gm, { type: "bearer" })

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import fs from "fs";
 import { db } from "../db/db";
-import { ensureSubfolder, openInFileExplorer, VAULT_ROOT, vaultAbs, isVaultPath } from "../services/filesystem";
+import { ensureSubfolder, openInFileExplorer, VAULT_ROOT, vaultAbs, vaultRel, isVaultPath } from "../services/filesystem";
 
 // Files moved here by vaultDedup.ts's removeOrArchive() when a user chose
 // "отправить в архив" over "удалить навсегда" for the last remaining link to
@@ -9,8 +9,11 @@ import { ensureSubfolder, openInFileExplorer, VAULT_ROOT, vaultAbs, isVaultPath 
 export const archivedFilesRouter = Router();
 
 archivedFilesRouter.get("/", (_req, res) => {
-  const rows = db.prepare("SELECT * FROM archived_files ORDER BY archived_at DESC").all();
-  res.json(rows);
+  const rows = db.prepare("SELECT * FROM archived_files ORDER BY archived_at DESC").all() as { archive_path: string }[];
+  // Адрес файла собирается здесь: archive_path уходит клиенту абсолютным
+  // (общий ответ сервера делает так со всеми *_path), и из него /files/… не
+  // получить. Клиент грузит файл по этому адресу с заголовком авторизации.
+  res.json(rows.map((r) => ({ ...r, file_url: `/files/${vaultRel(r.archive_path).split("\\").join("/").replace(/^\/+/, "")}` })));
 });
 
 archivedFilesRouter.get("/open-folder", (_req, res) => {
