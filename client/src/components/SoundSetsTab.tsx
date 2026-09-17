@@ -126,9 +126,6 @@ export function SoundSetsTab() {
       void client.invalidateQueries({ queryKey: key });
       return;
     }
-    // Пульт держит состав набора в памяти, и без этого он бы играл прежним
-    // составом до следующего переключения.
-    if (engine && engine.state.setId === next.id) engine.reload();
   }
 
   function setMembers(role: MemberRole, ids: number[]) {
@@ -171,10 +168,9 @@ export function SoundSetsTab() {
   async function patchSet(body: Record<string, unknown>) {
     if (!current) return;
     const id = current.id;
-    const done = await run(labelled("Набор не сохранён", () => write.put(`/sound-sets/${id}`, body)), {
+    await run(labelled("Набор не сохранён", () => write.put(`/sound-sets/${id}`, body)), {
       affects: SOUND_SET_AFFECTS,
     });
-    if (done !== undefined && engine && engine.state.setId === id) engine.reload();
   }
 
   async function removeSet(id: number) {

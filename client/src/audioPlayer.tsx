@@ -8,7 +8,8 @@ import {
   type SyntheticEvent,
 } from "react";
 import { Link } from "react-router-dom";
-import { api } from "./api/client";
+import { getAuthToken } from "./api/client";
+import { useResource } from "./data/hooks";
 import { NavIcon } from "./components/NavIcons";
 
 
@@ -170,11 +171,13 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   const fadeMsRef = useRef(0);
   const fadeTimerRef = useRef<number | null>(null);
   const isFadingRef = useRef(false);
+  // Плеер живёт и до входа — тогда читать настройки не у кого. Смена входа
+  // перезагружает окно, так что проверки токена при монтировании достаточно.
+  const fadeSetting = useResource<{ fade_duration_ms: number }>(getAuthToken() ? "/app-settings" : null).data
+    ?.fade_duration_ms;
   useEffect(() => {
-    api.get<{ fade_duration_ms: number }>("/app-settings").then((s) => {
-      fadeMsRef.current = s.fade_duration_ms || 0;
-    });
-  }, []);
+    fadeMsRef.current = fadeSetting || 0;
+  }, [fadeSetting]);
 
   // Синхронизация громкости с audio-элементами при изменении volume.
   // Реальная громкость = volume * bgGain (множитель от sound engine).

@@ -8,7 +8,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { api } from "../api/client";
+import { useResource } from "../data/hooks";
+import { readResource } from "../data/imperative";
 import { useAudioPlayer, type AudioTrack } from "../audioPlayer";
 import { onCommand, publishState, type SoundCommand } from "./bus";
 import type { PlaylistDetail } from "../types";
@@ -25,6 +26,10 @@ import type { ChannelKey, ConsolePayload, SoundState } from "./types";
 // любом случае, так что владение в пульте ничего не экономит.
 
 const VOLUME_KEY = "soundConsoleVolumes";
+
+function consolePath(setId: number | null): string {
+  return setId ? `/sounds/console?set_id=${setId}` : "/sounds/console";
+}
 const KEYS_KEY = "soundConsoleKeys";
 
 // Уход в тишину — три секунды: столько нужно, чтобы звук «отпустил» комнату,
@@ -176,12 +181,12 @@ export function SoundEngineProvider({ children }: { children: ReactNode }) {
   // мягкий обрыв в скачок вверх.
   const stingerCutting = useRef(false);
 
+  // Затухание — из слоя данных: правка в настройках (в любом окне) доходит
+  // сюда без перезагрузки окна.
+  const fadeSetting = useResource<{ fade_duration_ms: number }>("/app-settings").data?.fade_duration_ms;
   useEffect(() => {
-    api
-      .get<{ fade_duration_ms: number }>("/app-settings")
-      .then((s) => (fadeMsRef.current = s.fade_duration_ms || 0))
-      .catch(() => (fadeMsRef.current = 0));
-  }, []);
+    fadeMsRef.current = fadeSetting || 0;
+  }, [fadeSetting]);
 
   // --- громкость ---
 
@@ -327,8 +332,7 @@ export function SoundEngineProvider({ children }: { children: ReactNode }) {
 
   const loadConsole = useCallback(
     (nextSetId: number | null, startPlayback: boolean) => {
-      const query = nextSetId ? `?set_id=${nextSetId}` : "";
-      return api.get<ConsolePayload>(`/sounds/console${query}`).then((payload) => {
+      return readResource<ConsolePayload>(consolePath(nextSetId), { fresh: true }).then((payload) => {
         setData(payload);
         if (!startPlayback) return payload;
 
@@ -370,6 +374,19 @@ export function SoundEngineProvider({ children }: { children: ReactNode }) {
     // постоянные стингеры.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Состав играющего набора — под наблюдением слоя данных: правка набора или
+  // звука в любом окне перечитывает его, и пульт сразу показывает новый состав.
+  // Звучащее при этом не перезапускается — как и раньше при `reload`.
+  const liveConsole = useResource<ConsolePayload>(consolePath(setId)).data;
+  useEffect(() => {
+    if (!liveConsole) return;
+    setData(liveConsole);
+    // Набор удалили: снимаем его с пульта, а звучащее доигрывает — обрывать
+    // музыку посреди сцены из-за правки в библиотеке хуже.
+    if (liveConsole.set == null && setId != null) setSetIdState(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveConsole]);
 
   // --- действия ---
 
@@ -502,7 +519,7 @@ export function SoundEngineProvider({ children }: { children: ReactNode }) {
 
   const playPlaylistById = useCallback(
     async (playlistId: number) => {
-      const detail = await api.get<PlaylistDetail>(`/playlists/${playlistId}`);
+      const detail = await readResource<PlaylistDetail>(`/playlists/${playlistId}`, { fresh: true });
       const tracks = detail.items
         .filter((it) => it.src)
         .map((it) => ({ id: it.resource_id, name: it.name, src: it.src as string }));
