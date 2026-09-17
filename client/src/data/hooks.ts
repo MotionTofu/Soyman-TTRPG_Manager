@@ -51,10 +51,13 @@ function useStableReload(refetch: () => Promise<unknown>): () => void {
  * `keepPrevious` — пока грузится новый путь, показывать данные прежнего:
  * предпросмотр сцены на пульте при переборе стрелками не мигает пустой
  * карточкой между сценами.
+ *
+ * `pollMs` — перечитывать ещё и по таймеру: страховка окна показа на втором
+ * мониторе, где пропущенный сигнал значил бы застывший кадр перед игроками.
  */
 export function useResource<T>(
   path: string | null,
-  options?: { staleMs?: number; keepPrevious?: boolean }
+  options?: { staleMs?: number; keepPrevious?: boolean; pollMs?: number }
 ): DataState<T> {
   const query = useQuery<T, Error, T, ReturnType<typeof dataKeys.resource>>({
     queryKey: dataKeys.resource(path ?? ""),
@@ -62,6 +65,11 @@ export function useResource<T>(
     enabled: path != null,
     staleTime: options?.staleMs,
     placeholderData: options?.keepPrevious ? (previous) => previous : undefined,
+    refetchInterval: options?.pollMs,
+    // Опрос не засыпает в скрытой вкладке: окно показа за другим окном или на
+    // втором мониторе браузер считает скрытым, а кадр перед игроками должен
+    // идти за пультом.
+    refetchIntervalInBackground: options?.pollMs != null,
   });
   const reload = useStableReload(query.refetch);
   return {

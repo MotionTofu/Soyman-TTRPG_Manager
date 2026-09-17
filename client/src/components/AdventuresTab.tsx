@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { api, getAuthToken } from "../api/client";
+import { getAuthToken } from "../api/client";
+import { readOnce } from "../data/imperative";
 import { dataKeys, listPath, type Affect } from "../data/entities";
 import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
 import { chapterWord, sceneWord } from "../sceneKinds";
@@ -113,7 +114,7 @@ export function AdventuresTab({
     setExportError(null);
     setExportingArc(arc);
     try {
-      const data = await api.get(`/story/arcs/${arc.id}/export`, { timeoutMs: 120000 });
+      const data = await readOnce(`/story/arcs/${arc.id}/export`, { timeoutMs: 120000 });
       downloadJson(data, `adventure-${arc.name}.json`);
       setExportingArc(null);
     } catch (e) {

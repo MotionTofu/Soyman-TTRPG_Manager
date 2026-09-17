@@ -63,8 +63,8 @@ export function OnboardingHero({ systems, settings, campaigns, players = [], ses
   const [sessionCreating, setSessionCreating] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
 
+  // Счётчики меню обновляются сами: созданное задевает списки в слое данных.
   function notifyRefresh() {
-    window.dispatchEvent(new Event("nav-refresh"));
     onRefresh();
   }
 

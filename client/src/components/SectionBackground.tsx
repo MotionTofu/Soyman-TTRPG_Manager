@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { useResource } from "../data/hooks";
 import { safeBackgroundImage } from "../utils/safeUrl";
 import { useAuthenticatedFileUrl } from "../utils/fileUrl";
 import type { AppSettings } from "../types";
@@ -11,10 +10,9 @@ function bgStyle(url: string | null, blob: string | null): string | undefined {
 }
 
 export function SectionBackground() {
-  const [url, setUrl] = useState<string | null>(null);
-  useEffect(() => {
-    api.get<AppSettings>("/app-settings").then((s) => setUrl(s.home_background_url)).catch(() => {});
-  }, []);
+  // Фон — из настроек приложения под ключом слоя: смена фона в настройках
+  // доходит до открытых разделов без перезагрузки.
+  const url = useResource<AppSettings>("/app-settings").data?.home_background_url ?? null;
   const blob = useAuthenticatedFileUrl(url);
   const style = bgStyle(url, blob);
   if (!style) return null;

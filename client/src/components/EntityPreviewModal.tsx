@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
+import { readResource } from "../data/imperative";
 import { fetchEntityDetail } from "../api/resolveEntity";
 import { useCurrentUser } from "../api/currentUser";
 import { DETAIL_ROUTES } from "../entityTypes";
@@ -200,8 +200,7 @@ function OtherEntityPreview({
       if (!cancelled) setDetail(d);
     });
     if (type === "character") {
-      api
-        .get<Statblock[]>(`/statblocks?owner_type=${type}&owner_id=${id}`)
+      readResource<Statblock[]>(`/statblocks?owner_type=${type}&owner_id=${id}`)
         .then((rows) => {
           if (cancelled) return;
           const dnd = rows.find((s) => s.format === "dnd_character" || s.format === "dnd_creature");

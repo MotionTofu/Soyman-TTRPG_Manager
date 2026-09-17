@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
-import { api } from "../../api/client";
+import { useAction, write } from "../../data/hooks";
+import { readResource } from "../../data/imperative";
+import { labelled } from "../../data/notices";
+import { statblockAffects, statblockListPath } from "../../data/statblocks";
 import type { DndCreatureData, SearchResult, Statblock } from "../../types";
 import { MonsterTemplatePicker } from "../MonsterTemplatePicker";
 import {
@@ -63,6 +66,7 @@ export function DndCreatureWizard({
 }: Props) {
   const [step, setStep] = useState<Step>("База");
   const [saving, setSaving] = useState(false);
+  const run = useAction();
   const [mode, setMode] = useState<"new" | "clone" | null>(null);
   const [clonePick, setClonePick] = useState<SearchResult | null>(null);
   const [cloneLoading, setCloneLoading] = useState(false);
@@ -116,7 +120,7 @@ export function DndCreatureWizard({
     if (!entry) return;
     setCloneLoading(true);
     try {
-      const rows = await api.get<Statblock[]>(`/statblocks?owner_type=compendium_entry&owner_id=${entry.id}`);
+      const rows = await readResource<Statblock[]>(statblockListPath("compendium_entry", entry.id));
       const sb = rows.find((s) => s.format === "dnd_creature");
       if (sb) {
         const parsed = normalizeDndCreature(JSON.parse(sb.content || "{}"));
@@ -141,15 +145,21 @@ export function DndCreatureWizard({
 
   async function finish() {
     setSaving(true);
-    await api.post("/statblocks", {
-      owner_type: ownerType,
-      owner_id: ownerId,
-      format: "dnd_creature",
-      kind: "full",
-      content: JSON.stringify(draft),
-    });
+    const created = await run(
+      labelled("Статблок существа не создан", () =>
+        write.post("/statblocks", {
+          owner_type: ownerType,
+          owner_id: ownerId,
+          format: "dnd_creature",
+          kind: "full",
+          content: JSON.stringify(draft),
+        })
+      ),
+      { affects: statblockAffects(ownerType, ownerId), retry: false }
+    );
     setSaving(false);
-    onDone();
+    // Не создалось — визард остаётся открытым с набранным.
+    if (created !== undefined) onDone();
   }
 
   const stepIndex = STEPS.indexOf(step);

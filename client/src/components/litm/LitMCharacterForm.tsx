@@ -6,7 +6,7 @@ import { TagList } from "./TagList";
 import { SEARCH_DRAG_MIME } from "../LinkDropZone";
 import { MentionTextarea } from "../mentions/MentionTextarea";
 import { MentionText } from "../mentions/MentionText";
-import { api } from "../../api/client";
+import { applyGroupThemeToCampaign } from "../../data/campaignActions";
 import { NavIcon } from "../NavIcons";
 import {
   findLitmSystemId,
@@ -24,7 +24,7 @@ async function applyGroupTheme(campaignId: number | undefined, theme: LitMThemeC
   ) {
     return;
   }
-  await api.post(`/campaigns/${campaignId}/group-theme/apply`, { theme });
+  await applyGroupThemeToCampaign(campaignId, theme);
 }
 
 export function emptyCharacter(): LitMCharacterData {

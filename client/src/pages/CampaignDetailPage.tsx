@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { useAction, useEntity, useResource, write } from "../data/hooks";
 import { afterWriteAnywhere } from "../data/imperative";
+import { applyGroupThemeToCampaign } from "../data/campaignActions";
 import {
   campaignEventAffects,
   campaignFieldsAffects,
@@ -15,7 +16,7 @@ import { dataKeys, entityPath } from "../data/entities";
 import { statblockListPath } from "../data/statblocks";
 import { chroniclePaths } from "../data/settingPage";
 import { sessionMoneyAffects } from "../data/sessions";
-import { labelled } from "../data/notices";
+import { attemptWithNotice, labelled } from "../data/notices";
 import { deriveSheet } from "@shared/dnd/derive";
 import { normalizeDndCharacter } from "@shared/dnd/normalize";
 import { toLocalDateKey, formatDateKeyRu, parseDateKey } from "../utils/date";
@@ -1382,15 +1383,23 @@ export function GroupThemeSection({ campaignId, initial }: { campaignId: number;
     setEditing(true);
   }
 
+  function writeTheme(v: LitMThemeCard): Promise<boolean> {
+    return attemptWithNotice("Тема группы не сохранилась", async () => {
+      await write.put(`/campaigns/${campaignId}`, { group_theme_litm: JSON.stringify(v) });
+      afterWriteAnywhere([{ kind: "campaign", id: campaignId, card: true }]);
+    });
+  }
+
   async function save() {
-    await api.put(`/campaigns/${campaignId}`, { group_theme_litm: JSON.stringify(draft) });
+    if (!(await writeTheme(draft))) return;
     setSaved(draft);
     setEditing(false);
   }
 
   async function quickUpdate(v: LitMThemeCard) {
+    const previous = saved;
     setSaved(v);
-    await api.put(`/campaigns/${campaignId}`, { group_theme_litm: JSON.stringify(v) });
+    if (!(await writeTheme(v))) setSaved(previous);
   }
 
   async function applyToAll(theme: LitMThemeCard) {
@@ -1401,7 +1410,7 @@ export function GroupThemeSection({ campaignId, initial }: { campaignId: number;
     ) {
       return;
     }
-    await api.post(`/campaigns/${campaignId}/group-theme/apply`, { theme });
+    if (!(await applyGroupThemeToCampaign(campaignId, theme))) return;
     setSaved(theme);
     setEditing(false);
   }
@@ -1456,7 +1465,11 @@ export function CampaignResourcesTab({
     form.append("type", category);
     if (file) form.append("file", file);
     if (linkUrl) form.append("link_url", linkUrl);
-    await api.post("/resources", form);
+    const added = await attemptWithNotice(`Ресурс «${name}» не добавился`, async () => {
+      await write.post("/resources", form, { timeoutMs: UPLOAD_TIMEOUT_MS });
+      afterWriteAnywhere([{ kind: "resource" }]);
+    }, { retry: false });
+    if (!added) return;
     setName("");
     setFile(null);
     setLinkUrl("");
@@ -1464,8 +1477,11 @@ export function CampaignResourcesTab({
   }
 
   async function archiveResource(id: number) {
-    await api.del(`/resources/${id}`);
-    onChange();
+    const archived = await attemptWithNotice("Ресурс не убран в архив", async () => {
+      await write.del(`/resources/${id}`);
+      afterWriteAnywhere([{ kind: "resource", id }]);
+    });
+    if (archived) onChange();
   }
 
   function renderGroup(label: string, type: CampaignResourceCategory) {

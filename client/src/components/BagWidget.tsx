@@ -7,9 +7,12 @@ import { Verstak } from "./Verstak/Verstak";
 import { onBagToast, useBag, addToBag, removeFromBag, removeItemsFromBag } from "../bag";
 import { detectCurrentEntity, resolveCurrentEntityDetails } from "../currentEntity";
 import { useUnloadTargets, type UnloadTarget } from "../unloadTargets";
-import { api } from "../api/client";
+import { useResource, write } from "../data/hooks";
+import { attemptWithNotice } from "../data/notices";
 import { stripMentions } from "../mentions";
 import type { CompendiumEntry, SearchResult } from "../types";
+
+const NO_ENTRIES: CompendiumEntry[] = [];
 
 export function BagWidget() {
   const location = useLocation();
@@ -256,45 +259,28 @@ function BagVerstakModal({
   onClose: () => void;
   onRemove: (index: number) => void;
 }) {
-  const [entries, setEntries] = useState<CompendiumEntry[]>([]);
+  const ids = items.filter((i) => i.type === "compendium_entry").map((i) => i.id);
+  // Записи мешка — пачкой под ключом слоя: правка записи в компендиуме
+  // (`{ kind: "compendium_entry" }`) задевает и её.
+  const batch = useResource<CompendiumEntry[]>(ids.length ? `/systems/entries/batch?ids=${ids.join(",")}` : null, {
+    keepPrevious: true,
+  });
+  const entries = ids.length ? (batch.data ?? NO_ENTRIES) : NO_ENTRIES;
+  const loading = batch.loading;
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [loading, setLoading] = useState(true);
 
+  // Пришла новая пачка — выбрано всё, что в ней есть, как при открытии.
   useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      const compendiumItems = items.filter((i) => i.type === "compendium_entry");
-      if (compendiumItems.length === 0) {
-        if (!cancelled) { setEntries([]); setLoading(false); }
-        return;
-      }
-      try {
-        const ids = compendiumItems.map((i) => i.id);
-        const fetched = await api.get<CompendiumEntry[]>(`/systems/entries/batch?ids=${ids.join(",")}`);
-        if (!cancelled) {
-          setEntries(fetched);
-          setSelectedIds(new Set(fetched.map((e) => e.id)));
-        }
-      } catch {
-        if (!cancelled) { setEntries([]); setSelectedIds(new Set()); }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
-    return () => { cancelled = true; };
-  }, [items]);
+    setSelectedIds(new Set((batch.data ?? []).map((e) => e.id)));
+  }, [batch.data]);
 
   async function handleShowToPlayers() {
     const ids = [...selectedIds];
     if (ids.length === 0) return;
     const systemId = entries[0]?.system_id;
     if (!systemId) return;
-    try {
-      await api.post(`/systems/${systemId}/show-entries`, { entry_ids: ids });
-    } catch (e) {
-      console.error("Не удалось показать игрокам:", e);
-    }
+    // Показ — не правка данных: перечитывать и будить другие окна нечего.
+    await attemptWithNotice("Не показано игрокам", () => write.post(`/systems/${systemId}/show-entries`, { entry_ids: ids }));
   }
 
   if (loading) {

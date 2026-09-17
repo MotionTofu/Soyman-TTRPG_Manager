@@ -1,6 +1,6 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
+import { useResource } from "../data/hooks";
 import { Modal } from "./Modal";
 import { MentionText } from "./mentions/MentionText";
 import type { ArtifactCardPayload } from "../types";
@@ -217,23 +217,10 @@ export function ArtifactCardLoader({
   collapsed?: boolean;
   onToggleCollapse?: () => void;
 }) {
-  const [data, setData] = useState<ArtifactCardPayload | null | undefined>(undefined);
-
-  useEffect(() => {
-    let cancelled = false;
-    setData(undefined);
-    api
-      .get<ArtifactCardPayload>(`/artifacts/${id}/card`)
-      .then((d) => {
-        if (!cancelled) setData(d);
-      })
-      .catch(() => {
-        if (!cancelled) setData(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
+  // Под ключом слоя: правка артефакта (`{ kind: "artifact", id }`) задевает
+  // и его карточку.
+  const card = useResource<ArtifactCardPayload>(`/artifacts/${id}/card`);
+  const data = card.loading ? undefined : (card.data ?? null);
 
   if (data === undefined) return <span className="muted">Загрузка…</span>;
   if (data === null) return <span className="muted">Не найдено.</span>;

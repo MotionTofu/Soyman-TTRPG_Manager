@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState, type ReactElement } from "react";
+import { useMemo, useState, type ReactElement } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { api } from "../api/client";
+import { useSearch } from "../data/search";
 import { SectionDropZone } from "../components/SectionDropZone";
 import { ObstacleDropZone } from "../components/ObstacleDropZone";
 import { LazyDetails } from "../components/LazyDetails";
@@ -18,7 +18,6 @@ import type {
   CampaignDetail,
   CampaignGrouped,
   Character,
-  SearchResult,
   SessionDetail,
   SessionUnionRow,
   StorySecret,
@@ -405,24 +404,15 @@ function RemindersContent({ campaign, sessionId }: PanelProps) {
 
 function CompendiumContent({ campaign }: PanelProps) {
   const [q, setQ] = useState("");
-  const [items, setItems] = useState<SearchResult[]>([]);
-  const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState<{ type: string; id: number } | null>(null);
-
-  // Поиск по мере набора — не данные страницы, а подсказка: кэшировать и
-  // перечитывать по сигналам тут нечего, поэтому запрос идёт мимо слоя.
-  useEffect(() => {
-    if (!campaign.system_id) return;
-    if (q.trim().length < 2) { setItems([]); return; }
-    setLoading(true);
-    const t = setTimeout(() => {
-      api.get<SearchResult[]>(`/search?q=${encodeURIComponent(q.trim())}&types=compendium_entry&system_id=${campaign.system_id}`)
-        .then((rows) => setItems(rows.slice(0, 12)))
-        .catch(() => setItems([]))
-        .finally(() => setLoading(false));
-    }, 250);
-    return () => clearTimeout(t);
-  }, [q, campaign.system_id]);
+  const search = useSearch(
+    campaign.system_id && q.trim().length >= 2
+      ? `/search?q=${encodeURIComponent(q.trim())}&types=compendium_entry&system_id=${campaign.system_id}`
+      : null,
+    250
+  );
+  const items = search.results.slice(0, 12);
+  const loading = search.searching;
 
   if (!campaign.system_id) return <span className="muted">Система не выбрана.</span>;
 

@@ -82,6 +82,29 @@ export async function retryNotice(id: number): Promise<void> {
   }
 }
 
+/**
+ * Действие вне `useAction`: плашка с подписью и «Повторить» при отказе.
+ * Годится для действия, которое данных не меняет (показ игрокам —
+ * `useAction` с пустым `affects` перечитал бы всё), и для записи вне
+ * компонента, которая объявляет задетое сама (`afterWriteAnywhere` внутри).
+ * `retry: false` — для создания: повтор после потерянного ответа создал бы
+ * вторую запись. Возвращает, удалось ли.
+ */
+export async function attemptWithNotice(
+  label: string,
+  action: () => Promise<unknown>,
+  options?: { retry?: boolean }
+): Promise<boolean> {
+  const labelledAction = labelled(label, action);
+  try {
+    await labelledAction();
+    return true;
+  } catch (e) {
+    showSaveError(e instanceof Error ? e.message : String(e), options?.retry === false ? undefined : labelledAction);
+    return false;
+  }
+}
+
 export function useSaveNotices(): SaveNotice[] {
   return useSyncExternalStore(subscribe, snapshot, snapshot);
 }

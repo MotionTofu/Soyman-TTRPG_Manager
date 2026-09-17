@@ -53,7 +53,7 @@ import { SEARCH_DRAG_MIME } from "../LinkDropZone";
 import { useBag } from "../../bag";
 import { averageDiceFormula, rollDiceFormula } from "./diceRoll";
 import { PipTrack } from "../litm/PipTrack";
-import { api } from "../../api/client";
+import { readEntity } from "../../data/imperative";
 import { NavIcon } from "../NavIcons";
 import { CHALLENGE_RATINGS, CREATURE_SIZES as COMPENDIUM_CREATURE_SIZES, normaliseCr } from "../../compendium";
 import { formatDistance, type DndDistanceUnit } from "../../dndPrefs";
@@ -569,7 +569,7 @@ async function fetchCreatureSpellMeta(
   abilities: DndAbilityScores
 ): Promise<Partial<DndCreatureSpell>> {
   try {
-    const entry = await api.get<CompendiumEntry>(`/systems/entries/${entryId}`);
+    const entry = await readEntity<CompendiumEntry>("compendium_entry", entryId);
     // Заклинания перешли на структурные броски и эффекты; старые
     // attack_save/damage/healing читаются только у записей, которые ещё не
     // мигрировали (их не осталось после migrateSpellEffects, но чужой

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api } from "../api/client";
+import { readOnce } from "../data/imperative";
 import { errorText, useAfterWrite, write } from "../data/hooks";
 import { showSaveError } from "../data/notices";
 import { useConfirm } from "../hooks/useConfirm";
@@ -82,8 +82,7 @@ export function CrossLinksWizard({
   const [visited, setVisited] = useState<Record<string, number>>({});
 
   useEffect(() => {
-    api
-      .get<{ steps: Step[]; sources: Source[] }>(
+    readOnce<{ steps: Step[]; sources: Source[] }>(
         `/cross-links/scope?ownerKind=${ownerKind}&ownerId=${ownerId}`
       )
       .then((r) => {
@@ -111,7 +110,7 @@ export function CrossLinksWizard({
     setBusy("search");
     setDone("");
     try {
-      const found = await api.get<CrossLinkProposal[]>(
+      const found = await readOnce<CrossLinkProposal[]>(
         `/cross-links/plan?ownerKind=${ownerKind}&ownerId=${ownerId}&targetType=${stepKey}&sources=${encodeURIComponent(sourceParam)}`,
         { timeoutMs: 30000 }
       );

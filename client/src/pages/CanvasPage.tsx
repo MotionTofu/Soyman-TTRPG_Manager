@@ -20,7 +20,6 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { api } from "../api/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { notifyDataChanged } from "../dataSync";
 import { dataKeys, type Affect } from "../data/entities";
@@ -2412,10 +2411,10 @@ export function CanvasPage() {
       setChapterHints(new Map());
       return;
     }
-    api
-      .get<SceneHintsResponse>(
-        `/canvas/hints?ids=${ids.join(",")}${chaptersOf ? `&chapters_of=${chaptersOf}` : ""}`
-      )
+    readResource<SceneHintsResponse>(
+      `/canvas/hints?ids=${ids.join(",")}${chaptersOf ? `&chapters_of=${chaptersOf}` : ""}`,
+      { fresh: true }
+    )
       .then((r) => {
         setHintsByScene(new Map(r.scenes.map((s) => [s.scene_id, s.hints])));
         setChapterHints(new Map((r.chapters ?? []).map((c) => [c.arc_id, c.count])));
@@ -2426,8 +2425,9 @@ export function CanvasPage() {
       });
     if (ids.length === 0) return;
     const setting = b?.arc?.setting_id ?? b?.setting?.id ?? null;
-    api
-      .get<DismissedHints>(`/canvas/hints/dismissed?ids=${ids.join(",")}${setting ? `&setting_id=${setting}` : ""}`)
+    readResource<DismissedHints>(`/canvas/hints/dismissed?ids=${ids.join(",")}${setting ? `&setting_id=${setting}` : ""}`, {
+      fresh: true,
+    })
       .then(setDismissed)
       .catch(() => setDismissed({ setting: [], scenes: [] }));
   }, []);
@@ -4242,7 +4242,7 @@ export function CanvasPage() {
         if (sceneId != null) q.set("scene_id", String(sceneId));
         else q.set("arc_id", String(arcId));
         if (campaignIdParam) q.set("campaign_id", String(campaignIdParam));
-        const step = await api.get<RehearsalStep | null>(`/canvas/rehearsal?${q.toString()}`);
+        const step = await readResource<RehearsalStep | null>(`/canvas/rehearsal?${q.toString()}`, { fresh: true });
         setRehearsal(step);
         if (!step) return;
         /**
@@ -7307,16 +7307,14 @@ function CanvasPalette({
     if (!settingId) {
       if (boardId) {
         // фриформ: существа/локации/предметы из всех сеттингов — через /search (пустой запрос = все)
-        api
-          .get<{ id: number; title: string }[]>(`/search?q=&types=${entityType}`)
+        readResource<{ id: number; title: string }[]>(`/search?q=&types=${entityType}`)
           .then((rows) => setEntities(rows.slice(0, 40).map((r) => ({ type: entityType, id: r.id, name: r.title }))));
       } else {
         setEntities([]);
       }
       return;
     }
-    api
-      .get<{ id: number; name: string }[]>(`${ENTITY_LIST_URL[entityType]}?setting_id=${settingId}`)
+    readResource<{ id: number; name: string }[]>(`${ENTITY_LIST_URL[entityType]}?setting_id=${settingId}`)
       .then((rows) => setEntities(rows.map((r) => ({ type: entityType, id: r.id, name: r.name }))));
   }, [entityType, settingId, boardId]);
 
@@ -7332,8 +7330,7 @@ function CanvasPalette({
     const calls: Promise<PaletteItem[]>[] = [];
     if (settingId) {
       calls.push(
-        api
-          .get<{ id: number; title: string }[]>(`/settings/${settingId}/calendar-events`)
+        readResource<{ id: number; title: string }[]>(`/settings/${settingId}/calendar-events`)
           .then((rows) =>
             rows.map((r) => ({ type: "setting_event", id: r.id, name: r.title, note: "хроника мира" }))
           )
@@ -7341,8 +7338,7 @@ function CanvasPalette({
     }
     if (campaignId) {
       calls.push(
-        api
-          .get<{ id: number; title: string }[]>(`/campaigns/${campaignId}/calendar-events`)
+        readResource<{ id: number; title: string }[]>(`/campaigns/${campaignId}/calendar-events`)
           .then((rows) =>
             rows.map((r) => ({ type: "campaign_event", id: r.id, name: r.title, note: "кампания" }))
           )
@@ -7360,10 +7356,7 @@ function CanvasPalette({
       setCharacters([]);
       return;
     }
-    api
-      .get<{ id: number; character_name: string; player_name: string }[]>(
-        `/characters?campaign_id=${campaignId}`
-      )
+    readResource<{ id: number; character_name: string; player_name: string }[]>(`/characters?campaign_id=${campaignId}`)
       .then((rows) =>
         setCharacters(
           rows.map((r) => ({ type: "character", id: r.id, name: r.character_name, note: r.player_name }))
@@ -7375,8 +7368,8 @@ function CanvasPalette({
   const [battlePlaylists, setBattlePlaylists] = useState<PaletteItem[]>([]);
   useEffect(() => {
     if (tab !== "audio") return;
-    api.get<{ id: number; name: string; battle_playlist_id: number | null }[]>("/sound-sets").then((rows) => setAudioSets(rows.map((r) => ({ type: "sound_set", id: r.id, name: r.name, note: r.battle_playlist_id ? "с боем" : "" }))));
-    api.get<{ id: number; name: string }[]>("/playlists").then((rows) => setBattlePlaylists(rows.map((r) => ({ type: "playlist", id: r.id, name: r.name }))));
+    void readResource<{ id: number; name: string; battle_playlist_id: number | null }[]>("/sound-sets").then((rows) => setAudioSets(rows.map((r) => ({ type: "sound_set", id: r.id, name: r.name, note: r.battle_playlist_id ? "с боем" : "" }))));
+    void readResource<{ id: number; name: string }[]>("/playlists").then((rows) => setBattlePlaylists(rows.map((r) => ({ type: "playlist", id: r.id, name: r.name }))));
   }, [tab]);
 
   const [found, setFound] = useState<PaletteItem[]>([]);
@@ -7387,10 +7380,10 @@ function CanvasPalette({
       return;
     }
     let cancelled = false;
-    api
-      .get<{ id: number; title: string; owner_label?: string }[]>(
-        `/search?q=${encodeURIComponent(needle)}&types=compendium_entry&kind=${compendiumKinds}`
-      )
+    readResource<{ id: number; title: string; owner_label?: string }[]>(
+      `/search?q=${encodeURIComponent(needle)}&types=compendium_entry&kind=${compendiumKinds}`,
+      { fresh: true }
+    )
       .then((rows) => {
         if (cancelled) return;
         setFound(

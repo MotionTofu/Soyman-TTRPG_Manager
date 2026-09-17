@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Modal } from "../Modal";
-import { api } from "../../api/client";
+import { readResource } from "../../data/imperative";
 import { useAction, write } from "../../data/hooks";
 import { ENTITY_TYPE_SINGULAR } from "../../entityTypes";
 import { knownSourceName } from "../../mentions";
@@ -40,8 +40,7 @@ export function DeadMention({ type, uid, source, label }: Props) {
   useEffect(() => {
     if (!open) return;
     setCount(null);
-    api
-      .get<{ count: number }>(`/links/dangling?type=${encodeURIComponent(type)}&uid=${uid}`)
+    readResource<{ count: number }>(`/links/dangling?type=${encodeURIComponent(type)}&uid=${uid}`, { fresh: true })
       .then((r) => setCount(r.count))
       .catch(() => setCount(null));
   }, [open, type, uid]);
@@ -53,8 +52,7 @@ export function DeadMention({ type, uid, source, label }: Props) {
       setSourceName(local);
       return;
     }
-    api
-      .get<{ name: string | null }>(`/modules/source-name?code=${encodeURIComponent(source)}`)
+    readResource<{ name: string | null }>(`/modules/source-name?code=${encodeURIComponent(source)}`)
       .then((r) => setSourceName(r.name))
       .catch(() => setSourceName(null));
   }, [open, source]);

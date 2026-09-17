@@ -1,7 +1,13 @@
 import { memo, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { useQueries } from "@tanstack/react-query";
 import { api } from "../api/client";
-import { resolveEntityLabel } from "../api/resolveEntity";
+import { entityLabel } from "../api/resolveEntity";
+import { dataKeys, entityPath, isEntityKind, type EntityKind } from "../data/entities";
+import { useAction, useResource, write } from "../data/hooks";
+import { readResource } from "../data/imperative";
+import { labelled } from "../data/notices";
+import { linksPath, sessionPaths } from "../data/sessions";
 import { abilityModifier, parseBonus } from "./dnd/AbilityScores";
 import { SKILL_CATALOG } from "./dnd/skillCatalog";
 import { deriveSheet } from "@shared/dnd/derive";
@@ -50,42 +56,63 @@ interface Props {
   unrevealedSecrets: StorySecret[];
 }
 
-async function loadLinkedLabels(sessionId: number, section: string): Promise<LinkedEntry[]> {
-  const links = await api.get<GenericLink[]>(
-    `/links?type=session&id=${sessionId}&section=${section}`
-  );
-  return Promise.all(
-    links.map(async (l) => {
-      const other =
-        l.from_type === "session" && l.from_id === sessionId
-          ? { type: l.to_type, id: l.to_id }
-          : { type: l.from_type, id: l.from_id };
-      const label = await resolveEntityLabel(other.type, other.id);
-      return { id: other.id, type: other.type, label };
-    })
-  );
+function otherEnd(l: GenericLink, sessionId: number): { type: string; id: number } {
+  return l.from_type === "session" && l.from_id === sessionId
+    ? { type: l.to_type, id: l.to_id }
+    : { type: l.from_type, id: l.from_id };
 }
 
-async function loadEnemies(sessionId: number): Promise<SettingBeing[]> {
-  const links = await api.get<GenericLink[]>(
-    `/links?type=session&id=${sessionId}&section=enemies`
-  );
-  const beingLinks = links.filter(
-    (l) =>
-      (l.from_type === "session" && l.to_type === "being") ||
-      (l.to_type === "session" && l.from_type === "being")
-  );
-  const resolved = await Promise.all(
-    beingLinks.map(async (l) => {
-      const beingId = l.from_type === "being" ? l.from_id : l.to_id;
-      try {
-        return await api.get<SettingBeing>(`/setting-beings/${beingId}`);
-      } catch {
-        return null;
-      }
-    })
-  );
-  return resolved.filter((b): b is SettingBeing => b !== null);
+const SECTIONS = ["plot_characters", "locations", "loot", "enemies"] as const;
+const NO_LINKS: GenericLink[] = [];
+
+/**
+ * Связи заготовки и карточки их сущностей — под ключами слоя: те же связи
+ * читают панели сессии и пульта, те же карточки — открытые страницы. Связь,
+ * добавленная на пульте, и переименование неписи доходят до шпаргалки сами.
+ */
+function useCheatsheetSources(sessionId: number) {
+  const plot = useResource<GenericLink[]>(linksPath("session", sessionId, SECTIONS[0])).data ?? NO_LINKS;
+  const places = useResource<GenericLink[]>(linksPath("session", sessionId, SECTIONS[1])).data ?? NO_LINKS;
+  const lootLinks = useResource<GenericLink[]>(linksPath("session", sessionId, SECTIONS[2])).data ?? NO_LINKS;
+  const enemyLinks = useResource<GenericLink[]>(linksPath("session", sessionId, SECTIONS[3])).data ?? NO_LINKS;
+
+  const beingIds = enemyLinks
+    .filter((l) => (l.from_type === "session" && l.to_type === "being") || (l.to_type === "session" && l.from_type === "being"))
+    .map((l) => (l.from_type === "being" ? l.from_id : l.to_id));
+  const ends = [...plot, ...places, ...lootLinks]
+    .map((l) => otherEnd(l, sessionId))
+    .concat(beingIds.map((id) => ({ type: "being", id })));
+  const unique = [...new Map(ends.filter((e) => isEntityKind(e.type)).map((e) => [`${e.type}:${e.id}`, e])).values()];
+
+  const cards = useQueries({
+    queries: unique.map((e) => ({
+      queryKey: dataKeys.entity(e.type as EntityKind, e.id),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        api.get<Record<string, unknown>>(entityPath(e.type as EntityKind, e.id), { signal }),
+    })),
+  });
+  const byKey = new Map(unique.map((e, i) => [`${e.type}:${e.id}`, cards[i]]));
+
+  function entries(links: GenericLink[]): LinkedEntry[] {
+    return links.map((l) => {
+      const other = otherEnd(l, sessionId);
+      const card = byKey.get(`${other.type}:${other.id}`);
+      const label = !isEntityKind(other.type)
+        ? `${other.type} #${other.id}`
+        : card?.data
+          ? entityLabel(other.type, other.id, card.data)
+          : card?.isError
+            ? `${other.type} #${other.id} (не найдено)`
+            : "…";
+      return { id: other.id, type: other.type, label };
+    });
+  }
+
+  const enemies = beingIds
+    .map((id) => byKey.get(`being:${id}`)?.data as SettingBeing | undefined)
+    .filter((b): b is SettingBeing => b != null);
+
+  return { npcs: entries(plot), locations: entries(places), loot: entries(lootLinks), enemies };
 }
 
 function mergeLines(existing: CheatsheetLine[], fresh: LinkedEntry[]): CheatsheetLine[] {
@@ -121,13 +148,11 @@ interface CharacterCardData {
 }
 
 async function loadCharacterCards(campaignId: number): Promise<CharacterCardData[]> {
-  const characters = await api.get<Character[]>(`/characters?campaign_id=${campaignId}`);
+  const characters = await readResource<Character[]>(sessionPaths.campaignCharacters(campaignId));
   const cards = await Promise.all(
     characters.map(async (c) => {
       try {
-        const statblocks = await api.get<Statblock[]>(
-          `/statblocks?owner_type=character&owner_id=${c.id}`
-        );
+        const statblocks = await readResource<Statblock[]>(`/statblocks?owner_type=character&owner_id=${c.id}`);
         const row = statblocks.find((s) => s.format === "dnd_character");
         if (!row) return null;
         let data: DndCharacterData;
@@ -182,10 +207,8 @@ export const CheatSheetsSection = memo(function CheatSheetsSection({
   cheatsheetData,
   unrevealedSecrets,
 }: Props) {
-  const [locations, setLocations] = useState<LinkedEntry[]>([]);
-  const [npcs, setNpcs] = useState<LinkedEntry[]>([]);
-  const [loot, setLoot] = useState<LinkedEntry[]>([]);
-  const [enemies, setEnemies] = useState<SettingBeing[]>([]);
+  const { locations, npcs, loot, enemies } = useCheatsheetSources(sessionId);
+  const run = useAction();
   const [combatFormat, setCombatFormat] = useState<SheetFormat>("a4");
   const [printJob, setPrintJob] = useState<{ kind: SheetKind; pageSize: string } | null>(null);
 
@@ -194,13 +217,6 @@ export const CheatSheetsSection = memo(function CheatSheetsSection({
   );
   const [characterCards, setCharacterCards] = useState<CharacterCardData[] | null>(null);
   const [loadingCards, setLoadingCards] = useState(false);
-
-  useEffect(() => {
-    loadLinkedLabels(sessionId, "plot_characters").then(setNpcs);
-    loadLinkedLabels(sessionId, "locations").then(setLocations);
-    loadLinkedLabels(sessionId, "loot").then(setLoot);
-    loadEnemies(sessionId).then(setEnemies);
-  }, [sessionId]);
 
   // Printing a specific template means hiding everything else on the page
   // for the duration of the browser print dialog — the CSS in index.css
@@ -235,7 +251,10 @@ export const CheatSheetsSection = memo(function CheatSheetsSection({
   }, [printJob]);
 
   async function persistSheet(data: SessionCheatsheetData) {
-    await api.put(`/sessions/${sessionId}`, { cheatsheet_data: JSON.stringify(data) });
+    await run(
+      labelled("Шпаргалка сессии", () => write.put(`/sessions/${sessionId}`, { cheatsheet_data: JSON.stringify(data) })),
+      { affects: [{ kind: "session", id: sessionId, card: true }] }
+    );
   }
 
   async function generateSheet() {
@@ -259,7 +278,7 @@ export const CheatSheetsSection = memo(function CheatSheetsSection({
   }
 
   function blurSave() {
-    if (sheet) persistSheet(sheet);
+    if (sheet) void persistSheet(sheet);
   }
 
   async function loadCharacters() {

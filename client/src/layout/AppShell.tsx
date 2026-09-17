@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { api, getAuthToken, setAuthToken } from "../api/client";
+import { getAuthToken, setAuthToken } from "../api/client";
+import { useResource, write } from "../data/hooks";
+import { readResource } from "../data/imperative";
 import { useCurrentUser } from "../api/currentUser";
 import { Modal } from "../components/Modal";
 import { SearchPanel } from "./SearchPanel";
@@ -154,7 +156,7 @@ function BackupButton() {
     setConfirmOpen(true);
     if (defaultDir === null) {
       try {
-        const res = await api.get<{ defaultDir: string }>("/backup/info");
+        const res = await readResource<{ defaultDir: string }>("/backup/info");
         setDefaultDir(res.defaultDir);
       } catch {
         // leave defaultDir null — fallback placeholder will be used
@@ -204,10 +206,8 @@ function BackupButton() {
         if (trimmed.toLowerCase().endsWith(".zip")) body = { filePath: trimmed };
         else body = { dir: trimmed };
       }
-      const res = await api.post<{ path: string; size: number }>(
-        "/backup",
-        body ?? {}
-      );
+      // Архив — файл на диске, данные базы не меняются: сигнал другим окнам не нужен.
+      const res = await write.post<{ path: string; size: number }>("/backup", body ?? {});
       setInfo(`${res.path} (${(res.size / 1024 / 1024).toFixed(1)} МБ)`);
       setState("done");
     } catch (e) {
@@ -407,34 +407,24 @@ export function AppShell() {
   const isPlayer = user?.role === "player";
   const navItems = isPlayer ? PLAYER_NAV_ITEMS : GM_NAV_ITEMS;
   const updateAvailable = useUpdateAvailable();
-  const [activeStorageName, setActiveStorageName] = useState<string | null>(null);
-  // 2.1 — серые пункты на пустой БД (badge 0 + muted + disabled tooltip) — не display:none
-  const [navCounts, setNavCounts] = useState<Record<string, number | null>>({});
-
-  const refreshNavCounts = () => {
-    api.get<{ activeId: string; storages: { id: string; name: string }[] }>("/storages").then((r) => {
-      const active = r.storages.find((s) => s.id === r.activeId);
-      if (active) setActiveStorageName(active.name);
-    }).catch(() => {});
-    api.get<unknown[]>("/campaigns").then((a) => setNavCounts((m) => ({ ...m, campaigns: a.length }))).catch(() => {});
-    api.get<unknown[]>("/settings").then((a) => setNavCounts((m) => ({ ...m, settings: a.length }))).catch(() => {});
-    api.get<unknown[]>("/players").then((a) => setNavCounts((m) => ({ ...m, players: a.length }))).catch(() => {});
-    api.get<unknown[]>("/resources").then((a) => setNavCounts((m) => ({ ...m, resources: a.length }))).catch(() => {});
-    api.get<unknown[]>("/mastering").then((a) => setNavCounts((m) => ({ ...m, mastering: Array.isArray(a) ? (a as unknown[]).length : 0 }))).catch(() => {});
+  // 2.1 — серые пункты на пустой БД (badge 0 + muted + disabled tooltip) — не display:none.
+  // Списки — под ключами слоя, теми же, что у страниц разделов: созданное или
+  // удалённое в разделе задевает список и сразу меняет счётчик в меню.
+  const gm = !isPlayer && !userLoading;
+  const storages = useResource<{ activeId: string; storages: { id: string; name: string }[] }>(gm ? "/storages" : null).data;
+  const activeStorageName = storages?.storages.find((s) => s.id === storages.activeId)?.name ?? null;
+  const campaignsList = useResource<unknown[]>(gm ? "/campaigns" : null).data;
+  const settingsList = useResource<unknown[]>(gm ? "/settings" : null).data;
+  const playersList = useResource<unknown[]>(gm ? "/players" : null).data;
+  const resourcesList = useResource<unknown[]>(gm ? "/resources" : null).data;
+  const masteringList = useResource<unknown>(gm ? "/mastering" : null).data;
+  const navCounts: Record<string, number | null | undefined> = {
+    campaigns: campaignsList?.length,
+    settings: settingsList?.length,
+    players: playersList?.length,
+    resources: resourcesList?.length,
+    mastering: masteringList === undefined ? undefined : Array.isArray(masteringList) ? masteringList.length : 0,
   };
-
-  useEffect(() => {
-    if (isPlayer || userLoading) return;
-    refreshNavCounts();
-  }, [isPlayer, userLoading]);
-
-  // Обновляем счётчики навигации при событии "nav-refresh" (создание/удаление данных)
-  useEffect(() => {
-    if (isPlayer || userLoading) return;
-    const handler = () => refreshNavCounts();
-    window.addEventListener("nav-refresh", handler);
-    return () => window.removeEventListener("nav-refresh", handler);
-  }, [isPlayer, userLoading]);
 
   // Нижний список разделов: свои пункты роли плюс Boosty. Пункт уходит за
   // «О программе» и ведёт не в раздел, а в модалку подтверждения — внешняя

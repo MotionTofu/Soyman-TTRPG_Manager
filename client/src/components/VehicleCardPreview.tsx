@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
+import { useEntity, useResource } from "../data/hooks";
+import { statblockListPath } from "../data/statblocks";
 import { MentionText } from "./mentions/MentionText";
 import { DndCreatureView, normalizeDndCreature } from "./dnd/DndCreatureForm";
 import type { CompendiumEntry, Statblock } from "../types";
@@ -25,35 +26,14 @@ export function VehicleCardPreview({
   statblockInline?: boolean;
   autoShowStatblock?: boolean;
 }) {
-  const [entry, setEntry] = useState<CompendiumEntry | null | undefined>(undefined);
-  const [statblock, setStatblock] = useState<Statblock | null>(null);
+  // Запись и её статблоки — под ключами слоя: правка судна в справочнике
+  // доходит до открытой карточки без перезагрузки.
+  const entryState = useEntity<CompendiumEntry>("compendium_entry", id);
+  const entry = entryState.loading ? undefined : (entryState.data ?? null);
+  const statblocks = useResource<Statblock[]>(statblockListPath("compendium_entry", id)).data;
+  const statblock = statblocks?.find((s) => s.format === "dnd_creature") ?? null;
   const [showStatblock, setShowStatblock] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    setEntry(undefined);
-    setStatblock(null);
-    setShowStatblock(false);
-    api
-      .get<CompendiumEntry>(`/systems/entries/${id}`)
-      .then((e) => {
-        if (!cancelled) setEntry(e);
-      })
-      .catch(() => {
-        if (!cancelled) setEntry(null);
-      });
-    api
-      .get<Statblock[]>(`/statblocks?owner_type=compendium_entry&owner_id=${id}`)
-      .then((rows) => {
-        if (cancelled) return;
-        const dnd = rows.find((s) => s.format === "dnd_creature");
-        if (dnd) setStatblock(dnd);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
+  useEffect(() => setShowStatblock(false), [id]);
 
   // Кнопка «Статблок» плитки открывает статблок отдельной кнопкой, минуя
   // карточку. Судно без статблока при этом остаётся на карточке (она и

@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState, type DragEvent } from "react";
-import { api } from "../api/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { dataKeys } from "../data/entities";
+import { useAction, useEntity, useResource, write } from "../data/hooks";
+import { readResource } from "../data/imperative";
+import { labelled } from "../data/notices";
 import { useSoundEngineOptional } from "../sound/engine";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { useUnloadTarget } from "../unloadTargets";
@@ -95,11 +99,20 @@ interface Props {
   sessionId: number;
 }
 
+const NO_ENTRIES: InitiativeEntry[] = [];
+
+/** Очередь хода сессии — тот же путь, что задевает сигнал `initiative-updated`. */
+function initiativePath(sessionId: number): string {
+  return `/initiative-entries?session_id=${sessionId}`;
+}
+
+function patchRow(id: number, fields: Partial<InitiativeEntry>) {
+  return (rows: InitiativeEntry[]) => rows.map((e) => (e.id === id ? { ...e, ...fields } : e));
+}
+
 export function InitiativeTracker({ sessionId }: Props) {
   const [confirmDialog, confirm] = useConfirm();
   const [resettingRolls, setResettingRolls] = useState(false);
-  const [entries, setEntries] = useState<InitiativeEntry[]>([]);
-  const [session, setSession] = useState<SessionDetail | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [addingCustom, setAddingCustom] = useState(false);
   const [customName, setCustomName] = useState("");
@@ -116,31 +129,40 @@ export function InitiativeTracker({ sessionId }: Props) {
   const [roleMap, setRoleMap] = useState<Map<number, { roles: string[]; tactics: string[] }>>(new Map());
   const sound = useSoundEngineOptional();
 
-  function load() {
-    api.get<InitiativeEntry[]>(`/initiative-entries?session_id=${sessionId}`).then(setEntries);
-  }
-  function loadSession() {
-    api.get<SessionDetail>(`/sessions/${sessionId}`).then(setSession);
-  }
-  useEffect(load, [sessionId]);
-  useEffect(loadSession, [sessionId]);
-  // Игрок назвал или сбросил свою инициативу — очередь перечитывается.
-  //
-  // Подписка внутри компонента, а не снаружи пропсом: трекер смонтирован
-  // дважды (карточка в колонке пульта и панель поиска, находка №4 аудита
-  // пульта), состояние у экземпляров независимое. Событие окна получают оба,
-  // и разойтись им нечем — независимо от того, починят ли двойное
-  // монтирование.
-  useEffect(() => {
-    function onUpdated(e: Event) {
-      const detail = (e as CustomEvent<{ sessionId?: number }>).detail;
-      if (detail?.sessionId != null && detail.sessionId !== sessionId) return;
-      load();
+  const client = useQueryClient();
+  const run = useAction();
+  const entriesPath = initiativePath(sessionId);
+  // Очередь и сессия — под ключами слоя. Игрок назвал свою инициативу —
+  // сигнал `initiative-updated` задевает этот путь (data/syncAffects.ts), и
+  // оба экземпляра трекера (колонка пульта и панель поиска) видят одно и то же.
+  const entries = useResource<InitiativeEntry[]>(entriesPath).data ?? NO_ENTRIES;
+  const session = useEntity<SessionDetail>("session", sessionId).data ?? null;
+
+  /**
+   * Правка очереди: строки меняются на экране сразу, при отказе возвращаются
+   * прежние и появляется плашка. Без `patch` — ждать ответа (создание: id
+   * строки знает только сервер).
+   */
+  async function change(
+    label: string,
+    send: () => Promise<unknown>,
+    options?: { patch?: (rows: InitiativeEntry[]) => InitiativeEntry[]; retry?: boolean }
+  ): Promise<boolean> {
+    const key = dataKeys.resource(entriesPath);
+    let previous: InitiativeEntry[] | undefined;
+    if (options?.patch) {
+      await client.cancelQueries({ queryKey: key });
+      previous = client.getQueryData<InitiativeEntry[]>(key);
+      if (previous) client.setQueryData(key, options.patch(previous));
     }
-    window.addEventListener("initiative-updated", onUpdated);
-    return () => window.removeEventListener("initiative-updated", onUpdated);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
+    const done = await run(labelled(label, () => send().then(() => true)), {
+      affects: [{ path: entriesPath }],
+      retry: options?.retry,
+    });
+    if (!done && previous) client.setQueryData(key, previous);
+    return done === true;
+  }
+
   useEffect(() => {
     findDndSystemId().then((systemId) => {
       if (!systemId) return;
@@ -204,7 +226,7 @@ export function InitiativeTracker({ sessionId }: Props) {
     const empty = { initiativeModifier: 0, maxHp: null, currentHp: null };
     if (type !== "being" && type !== "character" && type !== "compendium_entry") return empty;
     try {
-      const rows = await api.get<Statblock[]>(`/statblocks?owner_type=${type}&owner_id=${id}`);
+      const rows = await readResource<Statblock[]>(`/statblocks?owner_type=${type}&owner_id=${id}`);
       const dnd = rows.find((s) => s.format === "dnd_character" || s.format === "dnd_creature");
       if (!dnd) return empty;
       const parsed = parseDndStatblock(dnd);
@@ -252,7 +274,7 @@ export function InitiativeTracker({ sessionId }: Props) {
       resolveStatblockInfo(result.type, result.id),
       Promise.resolve(pickName(result.title)),
     ]);
-    await api.post("/initiative-entries", {
+    const body = {
       session_id: sessionId,
       entity_type: result.type,
       entity_id: result.id,
@@ -263,8 +285,8 @@ export function InitiativeTracker({ sessionId }: Props) {
       dex_modifier: info.initiativeModifier,
       max_hp: info.maxHp,
       current_hp: info.currentHp,
-    });
-    load();
+    };
+    await change(`«${name}» не добавлен в очередь хода`, () => write.post("/initiative-entries", body), { retry: false });
   }
 
   // Мешок выгружает бойцов сюда же, без перетаскивания (unloadTargets.tsx).
@@ -283,15 +305,17 @@ export function InitiativeTracker({ sessionId }: Props) {
   }
 
   async function updateInitiative(id: number, initiative: number | null) {
-    await api.put(`/initiative-entries/${id}`, { initiative });
-    load();
+    await change("Инициатива", () => write.put(`/initiative-entries/${id}`, { initiative }), {
+      patch: patchRow(id, { initiative }),
+    });
   }
 
   async function remove(id: number) {
     if (!(await confirm({ message: "Убрать участника из очереди хода?", confirmLabel: "Убрать", danger: true })))
       return;
-    await api.del(`/initiative-entries/${id}`);
-    load();
+    await change("Участник не убран из очереди", () => write.del(`/initiative-entries/${id}`), {
+      patch: (rows) => rows.filter((e) => e.id !== id),
+    });
   }
 
   // Очистка спрашивает, в отличие от снятия галочки у логова: за строками
@@ -308,11 +332,12 @@ export function InitiativeTracker({ sessionId }: Props) {
     )
       return;
     if (session?.combat_active) {
-      await setCombat(false, null);
+      if (!(await setCombat(false, null))) return;
       sound?.exitCombat();
     }
-    await api.del(`/initiative-entries?session_id=${sessionId}`);
-    load();
+    await change("Очередь хода не очистилась", () => write.del(`/initiative-entries?session_id=${sessionId}`), {
+      patch: () => [],
+    });
   }
 
   /**
@@ -340,8 +365,11 @@ export function InitiativeTracker({ sessionId }: Props) {
       return;
     setResettingRolls(true);
     try {
-      await api.post(`/initiative-entries/reset-rolls?session_id=${sessionId}`, {});
-      load();
+      await change(
+        "Числа инициативы не сбросились",
+        () => write.post(`/initiative-entries/reset-rolls?session_id=${sessionId}`, {}),
+        { patch: (rows) => rows.map((e) => ({ ...e, initiative: null })) }
+      );
     } finally {
       setResettingRolls(false);
     }
@@ -354,30 +382,43 @@ export function InitiativeTracker({ sessionId }: Props) {
    */
   async function toggleSpecial(spec: (typeof SPECIAL_ROWS)[number]) {
     const existing = entries.find((e) => e.kind === spec.kind);
-    if (existing) await api.del(`/initiative-entries/${existing.id}`);
-    else
-      await api.post("/initiative-entries", {
-        session_id: sessionId,
-        name: spec.name,
-        kind: spec.kind,
-        initiative: spec.initiative,
+    if (existing) {
+      await change(`«${spec.name}» не убрано`, () => write.del(`/initiative-entries/${existing.id}`), {
+        patch: (rows) => rows.filter((e) => e.id !== existing.id),
       });
-    load();
+      return;
+    }
+    await change(
+      `«${spec.name}» не добавлено`,
+      () =>
+        write.post("/initiative-entries", {
+          session_id: sessionId,
+          name: spec.name,
+          kind: spec.kind,
+          initiative: spec.initiative,
+        }),
+      { retry: false }
+    );
   }
 
   async function addCustom() {
     const name = customName.trim();
     if (!name) return;
-    await api.post("/initiative-entries", {
-      session_id: sessionId,
-      name,
-      kind: "custom",
-      initiative: customInit === "" ? null : Number(customInit),
-    });
+    const added = await change(
+      `«${name}» не добавлено`,
+      () =>
+        write.post("/initiative-entries", {
+          session_id: sessionId,
+          name,
+          kind: "custom",
+          initiative: customInit === "" ? null : Number(customInit),
+        }),
+      { retry: false }
+    );
+    if (!added) return;
     setCustomName("");
     setCustomInit("");
     setAddingCustom(false);
-    load();
   }
 
   /**
@@ -397,13 +438,20 @@ export function InitiativeTracker({ sessionId }: Props) {
     if (rollable.length === 0 || rollingInitiative) return;
     setRollingInitiative(true);
     try {
+      const rolls = new Map<number, number>();
       for (const e of rollable) {
         const mod = e.dex_modifier ?? 0; // модификатор инициативы, см. resolveStatblockInfo
         const value = rollDiceFormula(`1к20${mod >= 0 ? "+" : ""}${mod}`);
-        if (value == null) continue;
-        await api.put(`/initiative-entries/${e.id}`, { initiative: value });
+        if (value != null) rolls.set(e.id, value);
       }
-      load();
+      // Кости брошены один раз: «Повторить» на плашке дошлёт те же числа.
+      await change(
+        "Инициатива НПС",
+        async () => {
+          for (const [id, initiative] of rolls) await write.put(`/initiative-entries/${id}`, { initiative });
+        },
+        { patch: (rows) => rows.map((e) => (rolls.has(e.id) ? { ...e, initiative: rolls.get(e.id)! } : e)) }
+      );
     } finally {
       setRollingInitiative(false);
     }
@@ -419,23 +467,28 @@ export function InitiativeTracker({ sessionId }: Props) {
         setHpErrorId(entry.id);
         return;
       }
-      await api.put(`/initiative-entries/${entry.id}`, { max_hp: info.maxHp, current_hp: info.maxHp });
-      load();
+      const fields = { max_hp: info.maxHp, current_hp: info.maxHp };
+      await change(`Хиты ${entry.name}`, () => write.put(`/initiative-entries/${entry.id}`, fields), {
+        patch: patchRow(entry.id, fields),
+      });
     } finally {
       setRollingId(null);
     }
   }
 
   async function toggleDead(entry: InitiativeEntry) {
-    await api.put(`/initiative-entries/${entry.id}`, { dead: !isDead(entry) });
-    load();
+    const dead = !isDead(entry);
+    await change(`Отметка «мёртв» у ${entry.name}`, () => write.put(`/initiative-entries/${entry.id}`, { dead }), {
+      patch: patchRow(entry.id, { dead }),
+    });
   }
 
   async function toggleCondition(entry: InitiativeEntry, name: string) {
     const current = parseConditions(entry.conditions);
     const next = current.includes(name) ? current.filter((c) => c !== name) : [...current, name];
-    await api.put(`/initiative-entries/${entry.id}`, { conditions: next });
-    load();
+    await change(`Состояния ${entry.name}`, () => write.put(`/initiative-entries/${entry.id}`, { conditions: next }), {
+      patch: patchRow(entry.id, { conditions: JSON.stringify(next) }),
+    });
   }
 
   function closeHpEditor() {
@@ -452,12 +505,11 @@ export function InitiativeTracker({ sessionId }: Props) {
     const fromTemp = Math.min(temp, amount);
     const remaining = amount - fromTemp;
     const current = entry.current_hp ?? entry.max_hp ?? 0;
-    await api.put(`/initiative-entries/${entry.id}`, {
-      temp_hp: temp - fromTemp,
-      current_hp: Math.max(0, current - remaining),
-    });
+    const fields = { temp_hp: temp - fromTemp, current_hp: Math.max(0, current - remaining) };
     closeHpEditor();
-    load();
+    await change(`Урон ${entry.name}`, () => write.put(`/initiative-entries/${entry.id}`, fields), {
+      patch: patchRow(entry.id, fields),
+    });
   }
 
   async function applyHeal(entry: InitiativeEntry) {
@@ -465,17 +517,20 @@ export function InitiativeTracker({ sessionId }: Props) {
     if (!amount || amount < 0) return;
     const current = entry.current_hp ?? 0;
     const capped = entry.max_hp != null ? Math.min(entry.max_hp, current + amount) : current + amount;
-    await api.put(`/initiative-entries/${entry.id}`, { current_hp: capped });
     closeHpEditor();
-    load();
+    await change(`Лечение ${entry.name}`, () => write.put(`/initiative-entries/${entry.id}`, { current_hp: capped }), {
+      patch: patchRow(entry.id, { current_hp: capped }),
+    });
   }
 
   async function applyTempHp(entry: InitiativeEntry) {
     const amount = Number(hpAmount);
     if (!amount || amount < 0) return;
-    await api.put(`/initiative-entries/${entry.id}`, { temp_hp: (entry.temp_hp ?? 0) + amount });
+    const temp_hp = (entry.temp_hp ?? 0) + amount;
     closeHpEditor();
-    load();
+    await change(`Временные хиты ${entry.name}`, () => write.put(`/initiative-entries/${entry.id}`, { temp_hp }), {
+      patch: patchRow(entry.id, { temp_hp }),
+    });
   }
 
   const sorted = useMemo(() => {
@@ -491,14 +546,33 @@ export function InitiativeTracker({ sessionId }: Props) {
   // когда бойца убили в его же ход.
   const turnOrder = useMemo(() => [...entries].sort(byInitiative), [entries]);
 
-  async function setCombat(active: boolean, turnEntryId: number | null, round?: number) {
-    await api.put(`/sessions/${sessionId}/combat`, { active, turn_entry_id: turnEntryId, round });
-    loadSession();
+  /** Бой и чей ход: кнопки откликаются сразу, отказ возвращает прежнее. */
+  async function setCombat(active: boolean, turnEntryId: number | null, round?: number): Promise<boolean> {
+    const key = dataKeys.entity("session", sessionId);
+    await client.cancelQueries({ queryKey: key });
+    const previous = client.getQueryData<SessionDetail>(key);
+    if (previous) {
+      client.setQueryData<SessionDetail>(key, {
+        ...previous,
+        // Как пишет сервер: без раунда — первый, вне боя — ноль.
+        combat_active: active ? 1 : 0,
+        combat_turn_entry_id: turnEntryId,
+        combat_round: active ? Math.max(1, Math.floor(round ?? 1)) : 0,
+      });
+    }
+    const done = await run(
+      labelled(active ? "Ход в бою" : "Бой не завершился", () =>
+        write.put(`/sessions/${sessionId}/combat`, { active, turn_entry_id: turnEntryId, round }).then(() => true)
+      ),
+      { affects: [{ kind: "session", id: sessionId, card: true }] }
+    );
+    if (!done && previous) client.setQueryData(key, previous);
+    return done === true;
   }
 
   async function startCombat() {
     if (aliveSorted.length === 0) return;
-    await setCombat(true, aliveSorted[0].id, 1);
+    if (!(await setCombat(true, aliveSorted[0].id, 1))) return;
     // Переключение идёт через движок пульта, а не напрямую в плеер: он
     // запоминает, что играло до боя, и показывает в пульте, что Бэкграунд
     // сменил трекер инициативы, а не Мастер.

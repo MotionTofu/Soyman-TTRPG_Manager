@@ -1,6 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { api } from "./api/client";
-import { afterWriteAnywhere } from "./data/imperative";
+import { afterWriteAnywhere, readResource } from "./data/imperative";
 import { write } from "./data/hooks";
 
 // Ссылки внутри текста: единственное место, где на клиенте описана их
@@ -128,8 +127,7 @@ function build(payload: IndexPayload): Loaded {
 /** Загрузка карты. Зовётся один раз при старте приложения. */
 export function loadMentionIndex(): Promise<void> {
   if (inFlight) return inFlight;
-  inFlight = api
-    .get<IndexPayload>("/mentions/index")
+  inFlight = readResource<IndexPayload>("/mentions/index", { fresh: true })
     .then((payload) => {
       loaded = build(payload);
       missed.clear();
@@ -268,7 +266,7 @@ export async function buildMentionToken(
   const prefix = mentionPrefix(type, id);
   if (prefix) return formatMentionToken(type, prefix, mentionSource(type, id), label);
   try {
-    const r = await api.get<{ prefix: string | null; source: string }>(
+    const r = await readResource<{ prefix: string | null; source: string }>(
       `/mentions/token?type=${encodeURIComponent(type)}&id=${id}`
     );
     if (!r.prefix) return null;
@@ -334,9 +332,9 @@ export async function syncMentionLinks(
       const id = resolveMention(m.type, m.uid);
       if (id == null) continue;
       // Re-read before each delete to avoid race condition with concurrent calls
-      const existing = await api.get<GenericLink[]>(
-        `/links?type=${entityType}&id=${entityId}&section=mention`
-      );
+      const existing = await readResource<GenericLink[]>(`/links?type=${entityType}&id=${entityId}&section=mention`, {
+        fresh: true,
+      });
       const match = existing.find(
         (l) =>
           (l.to_type === m.type && l.to_id === id) || (l.from_type === m.type && l.from_id === id)

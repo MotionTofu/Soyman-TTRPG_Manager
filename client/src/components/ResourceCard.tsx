@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from "react";
-import { api } from "../api/client";
+import { write } from "../data/hooks";
+import { afterWriteAnywhere } from "../data/imperative";
+import { attemptWithNotice } from "../data/notices";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
@@ -30,13 +32,12 @@ export function ResourceCard({ resource, onChange, onArchive, extraActions }: Pr
   const [notes, setNotes] = useState(resource.notes);
 
   async function save() {
-    await api.put(`/resources/${resource.id}`, {
-      name,
-      link_url: linkUrl,
-      tags,
-      notes,
+    const saved = await attemptWithNotice(`Ресурс «${name}» не сохранился`, async () => {
+      await write.put(`/resources/${resource.id}`, { name, link_url: linkUrl, tags, notes });
+      afterWriteAnywhere([{ kind: "resource", id: resource.id }]);
     });
-    syncMentionLinks("resource", resource.id, resource.notes, notes);
+    if (!saved) return;
+    void syncMentionLinks("resource", resource.id, resource.notes, notes);
     setEditMode(false);
     onChange();
   }

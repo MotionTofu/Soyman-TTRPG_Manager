@@ -4,6 +4,7 @@ import {
   dismissNotice,
   getSaveNotices,
   resetNoticesForTests,
+  attemptWithNotice,
   retryNotice,
   showSaveError,
 } from "./notices";
@@ -80,5 +81,24 @@ describe("плашки ошибок сохранения", () => {
     const id = showSaveError("без повтора");
     await retryNotice(id);
     expect(messages()).toEqual(["без повтора"]);
+  });
+
+  it("действие вне useAction: удалось — плашки нет, отказ — плашка с подписью и повтором", async () => {
+    let fail = true;
+    const action = async () => {
+      if (fail) throw new Error("502");
+    };
+    expect(await attemptWithNotice("Не показано игрокам", action)).toBe(false);
+    expect(messages()).toEqual(["Не показано игрокам — 502"]);
+    fail = false;
+    await retryNotice(getSaveNotices()[0].id);
+    expect(getSaveNotices()).toEqual([]);
+    expect(await attemptWithNotice("Не показано игрокам", action)).toBe(true);
+    expect(getSaveNotices()).toEqual([]);
+  });
+
+  it("создание без повтора: потерянный ответ не должен дать вторую запись", async () => {
+    await attemptWithNotice("Ресурс не добавился", () => Promise.reject(new Error("таймаут")), { retry: false });
+    expect(getSaveNotices()[0].retry).toBeUndefined();
   });
 });

@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import type { DragEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api } from "../api/client";
 import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
-import { settingPaths } from "../data/settingEntities";
+import { locationPaths, settingPaths } from "../data/settingEntities";
 import { showSaveError } from "../data/notices";
 import { loadThumbnailStyles } from "../thumbnailStyles";
 import { NavIcon } from "./NavIcons";
@@ -619,31 +618,14 @@ function LocationSideCard({
   byParentAll: Map<number | null, SettingLocation[]>;
   onOpenWizard: (id: number) => void;
 }) {
-  const [detail, setDetail] = useState<LocationDetailLite | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (locationId == null) return;
-    const controller = new AbortController();
-    setLoading(true);
-    api
-      .get<LocationDetailLite>(`/setting-locations/${locationId}?nested=1`, {
-        signal: controller.signal,
-      })
-      .then((d) => {
-        if (controller.signal.aborted) return;
-        setDetail(d);
-        setLoadError(null);
-        setLoading(false);
-      })
-      .catch((e: unknown) => {
-        if ((e as Error).name === "AbortError") return;
-        setLoadError(String(e instanceof Error ? e.message : e));
-        setLoading(false);
-      });
-    return () => controller.abort();
-  }, [locationId]);
+  // Тот же ключ, что у профиля локации: карточка сбоку и открытая страница
+  // читают одно, и правка на странице сразу видна в списке.
+  const detailState = useResource<LocationDetailLite>(locationId == null ? null : locationPaths.detail(locationId), {
+    keepPrevious: true,
+  });
+  const detail = detailState.data ?? null;
+  const loading = detailState.loading;
+  const loadError = detailState.error;
 
   const descCount = useMemo(() => {
     if (locationId == null) return 0;

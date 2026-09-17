@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { useState } from "react";
+import { useSearch } from "../data/search";
 import { useCurrentUser } from "../api/currentUser";
 import type { SearchResult } from "../types";
 
@@ -28,7 +28,6 @@ export function CompendiumEntryPicker({
   dropUp?: boolean;
 }) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SearchResult[]>([]);
   const [open, setOpen] = useState(false);
   // Мастерский /search игроку закрыт — у него свой /player/search (тот же
   // приём, что в SearchPanel). Игроцкий роут ищет по системам кампаний игрока
@@ -37,26 +36,16 @@ export function CompendiumEntryPicker({
   const { user } = useCurrentUser();
   const isPlayer = user?.role === "player";
 
-  useEffect(() => {
-    if (!query.trim()) {
-      setResults([]);
-      return;
-    }
-    const timer = setTimeout(() => {
-      const url = isPlayer
+  const search = useSearch(
+    !query.trim()
+      ? null
+      : isPlayer
         ? `/player/search?q=${encodeURIComponent(query.trim())}`
-        : `/search?q=${encodeURIComponent(query.trim())}&types=compendium_entry&kind=${kind}`;
-      api
-        .get<SearchResult[]>(url)
-        .then((rows) =>
-          setResults(
-            isPlayer ? rows.filter((r) => r.type === "compendium_entry" && (r.kind ?? r.subtitle) === kind) : rows
-          )
-        )
-        .catch(() => setResults([]));
-    }, 200);
-    return () => clearTimeout(timer);
-  }, [query, kind, isPlayer]);
+        : `/search?q=${encodeURIComponent(query.trim())}&types=compendium_entry&kind=${kind}`
+  );
+  const results = isPlayer
+    ? search.results.filter((r) => r.type === "compendium_entry" && (r.kind ?? r.subtitle) === kind)
+    : search.results;
 
   if (value) {
     return (

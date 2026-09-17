@@ -152,3 +152,11 @@ export function rosterAffects(campaignId: number): Affect[] {
   return [...campaignFieldsAffects(campaignId), { path: campaignPaths.characters(campaignId) }];
 }
 
+
+/**
+ * Тема Содружества применена ко всей кампании: сервер пишет её в кампанию и в
+ * статблок каждого LitM-персонажа кампании.
+ */
+export function groupThemeAffects(campaignId: number): Affect[] {
+  return [{ kind: "campaign", id: campaignId, card: true }, { path: "/statblocks" }, { kind: "character" }];
+}

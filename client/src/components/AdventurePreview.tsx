@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
+import { useResource } from "../data/hooks";
 import { chapterWord, sceneWord } from "../sceneKinds";
 import { MentionText } from "./mentions/MentionText";
 import { BEING_CATEGORIES } from "../beingCategories";
@@ -10,6 +9,8 @@ import type { StoryArc, StoryArcDetail } from "../types";
 // «Обзор» плюс то, что отвечает на вопросы планирования — в каких кампаниях
 // участвует, сколько глав/сцен/вех/тайн, ключевые НПЦ и магические предметы.
 // Только чтение: правится всё в самом приключении.
+const NO_CAMPAIGNS: { id: number; name: string }[] = [];
+
 export function AdventurePreview({
   arc,
   editable,
@@ -25,25 +26,17 @@ export function AdventurePreview({
   onArchive: () => void;
   onExport: () => void;
 }) {
-  const [detail, setDetail] = useState<StoryArcDetail | null>(null);
-  const [campaigns, setCampaigns] = useState<{ id: number; name: string }[]>([]);
-  const [loadError, setLoadError] = useState<string | null>(null);
-
+  // Превью — под ключами слоя: правка приключения (`{ kind: "adventure", id }`)
+  // задевает и карточку, и список его кампаний.
+  const detailState = useResource<StoryArcDetail>(`/story/arcs/${arc.id}`);
+  const campaignsState = useResource<{ id: number; name: string }[]>(`/story/arcs/${arc.id}/campaigns`);
+  const detail = detailState.data ?? null;
+  const campaigns = campaignsState.data ?? NO_CAMPAIGNS;
+  const loadError = detailState.error ?? campaignsState.error;
   function load() {
-    setLoadError(null);
-    setDetail(null);
-    Promise.all([
-      api.get<StoryArcDetail>(`/story/arcs/${arc.id}`),
-      api.get<{ id: number; name: string }[]>(`/story/arcs/${arc.id}/campaigns`),
-    ])
-      .then(([d, c]) => {
-        setDetail(d);
-        setCampaigns(c);
-      })
-      .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : String(e)));
+    if (detailState.error) detailState.reload();
+    if (campaignsState.error) campaignsState.reload();
   }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(load, [arc.id]);
 
   if (loadError) {
     return (

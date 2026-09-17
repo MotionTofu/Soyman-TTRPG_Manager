@@ -1,6 +1,5 @@
-import { api } from "./api/client";
 import { write } from "./data/hooks";
-import { afterWriteAnywhere } from "./data/imperative";
+import { afterWriteAnywhere, readEntity, readResource } from "./data/imperative";
 import { linkAffects } from "./data/sessions";
 
 interface GenericLink {
@@ -23,11 +22,11 @@ const PREP_SECTIONS = ["plot_characters", "locations", "loot", "enemies"];
 // freshly created one, for GMs re-running the same oneshot with a new group.
 // Пишет через слой и сам объявляет задетое: задумку и связи новой сессии.
 export async function copySessionPrep(sourceSessionId: number, targetSessionId: number): Promise<void> {
-  const source = await api.get<{ idea_notes: string | null }>(`/sessions/${sourceSessionId}`);
+  const source = await readEntity<{ idea_notes: string | null }>("session", sourceSessionId);
   if (source.idea_notes) {
     await write.put(`/sessions/${targetSessionId}`, { idea_notes: source.idea_notes });
   }
-  const links = await api.get<GenericLink[]>(`/links?type=session&id=${sourceSessionId}`);
+  const links = await readResource<GenericLink[]>(`/links?type=session&id=${sourceSessionId}`, { fresh: true });
   const relevant = links.filter((l) => l.section && PREP_SECTIONS.includes(l.section));
   for (const l of relevant) {
     const other =

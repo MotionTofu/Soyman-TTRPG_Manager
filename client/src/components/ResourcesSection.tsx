@@ -1,7 +1,10 @@
 import { memo, useEffect, useMemo, useState, type ChangeEvent, type DragEvent } from "react";
+import { useQueries } from "@tanstack/react-query";
 import { api } from "../api/client";
-import type { Affect } from "../data/entities";
-import { useAction, useResource, write } from "../data/hooks";
+import { dataKeys, entityPath, type Affect } from "../data/entities";
+import { useAction, useEntity, useResource, write } from "../data/hooks";
+import { readResource } from "../data/imperative";
+import { attemptWithNotice } from "../data/notices";
 import { Modal } from "./Modal";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
@@ -78,7 +81,6 @@ export const ResourcesSection = memo(function ResourcesSection({
   const [draftLinkUrl, setDraftLinkUrl] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [attached, setAttached] = useState<AttachedEntry[]>([]);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const run = useAction();
   const affects = useMemo<Affect[]>(
@@ -87,28 +89,29 @@ export const ResourcesSection = memo(function ResourcesSection({
   );
   const linkAffects = useMemo<Affect[]>(() => [{ path: "/links" }], []);
 
-  async function loadAttached() {
-    const links = await api.get<GenericLink[]>(
-      `/links?type=${scope}&id=${entityId}&section=attached_resource`
-    );
-    const resolved = await Promise.all(
-      links.map(async (l) => {
-        const resourceId = l.from_type === "resource" ? l.from_id : l.to_id;
-        try {
-          const resource = await api.get<Resource>(`/resources/${resourceId}`);
-          return { linkId: l.id, resource };
-        } catch {
-          return null;
-        }
-      })
-    );
-    setAttached(resolved.filter((e): e is AttachedEntry => e !== null));
-  }
-
-  useEffect(() => {
-    loadAttached();
+  // Прикреплённые ресурсы: связи и карточки ресурсов под ключами слоя.
+  // Прикрепили или открепили — задетые связи перечитываются сами.
+  const attachedLinks = useResource<GenericLink[]>(`/links?type=${scope}&id=${entityId}&section=attached_resource`).data;
+  const attachedIds = (attachedLinks ?? []).map((l) => ({ linkId: l.id, resourceId: l.from_type === "resource" ? l.from_id : l.to_id }));
+  const attachedCards = useQueries({
+    queries: attachedIds.map((a) => ({
+      queryKey: dataKeys.entity("resource", a.resourceId),
+      queryFn: ({ signal }: { signal: AbortSignal }) => api.get<Resource>(entityPath("resource", a.resourceId), { signal }),
+    })),
+  });
+  // Список стабилен между отрисовками, пока не пришли новые данные: от него
+  // зависит эффект счётчиков раздела (onStats), и новый массив на каждой
+  // отрисовке зациклил бы его.
+  const attachedSignature = attachedCards.map((c) => c.dataUpdatedAt).join(",");
+  const attached = useMemo<AttachedEntry[]>(
+    () =>
+      attachedIds.flatMap((a, i) => {
+        const resource = attachedCards[i]?.data;
+        return resource ? [{ linkId: a.linkId, resource }] : [];
+      }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope, entityId]);
+    [attachedLinks, attachedSignature]
+  );
 
   function openModal(file?: File) {
     if (file) {
@@ -169,7 +172,6 @@ export const ResourcesSection = memo(function ResourcesSection({
           .then(() => true),
       { affects: linkAffects, retry: false }
     );
-    void loadAttached();
   }
 
   // A bag item can carry a location's map (type "location_map", id =
@@ -185,7 +187,6 @@ export const ResourcesSection = memo(function ResourcesSection({
 
   async function detachResource(linkId: number) {
     await run(() => write.del(`/links/${linkId}`).then(() => true), { affects: linkAffects });
-    void loadAttached();
   }
 
   async function promoteResource(resourceId: number) {
@@ -256,8 +257,8 @@ export const ResourcesSection = memo(function ResourcesSection({
 
   async function revealStorage() {
     const base = scope === "session" ? "sessions" : "settings";
-    // Открыть папку — не правка данных: мимо широковещания.
-    await api.post(`/${base}/${entityId}/reveal-resources`, {}, { broadcast: false });
+    // Открыть папку — не правка данных: задетого нет.
+    await attemptWithNotice("Папка не открылась", () => write.post(`/${base}/${entityId}/reveal-resources`, {}));
   }
 
   const attachedResourceIds = new Set(attached.map((a) => a.resource.id));
@@ -573,7 +574,7 @@ function AudioGroup({
     const done = await run(
       async () => {
         // Состав читается свежим: набор мог поменяться в другом окне.
-        const detail = await api.get<SoundSetDetail>(`/sound-sets/${setId}`);
+        const detail = await readResource<SoundSetDetail>(`/sound-sets/${setId}`, { fresh: true });
         const ids = detail.tracks.map((t) => t.resource_id);
         for (const id of selected) {
           if (!ids.includes(id)) {
@@ -838,38 +839,26 @@ function ResourceRow({
   const [name, setName] = useState(resource.name);
   const [linkUrl, setLinkUrl] = useState(resource.link_url ?? "");
   const [notes, setNotes] = useState(resource.notes);
-  const [promoted, setPromoted] = useState(false);
+  // Только что повышен здесь — не ждать, пока перечитаются связи.
+  const [justPromoted, setJustPromoted] = useState(false);
   const [promoting, setPromoting] = useState(false);
   const run = useAction();
 
-  useEffect(() => {
-    if (!canPromote) {
-      setPromoted(false);
-      return;
-    }
-    let cancelled = false;
-    api
-      .get<GenericLink[]>(`/links?type=resource&id=${resource.id}&section=promoted_to_setting`)
-      .then(async (links) => {
-        if (links.length === 0) return;
-        const targetId = links[0].from_id === resource.id ? links[0].to_id : links[0].from_id;
-        try {
-          const target = await api.get<Resource>(`/resources/${targetId}`);
-          if (!cancelled) setPromoted(!target.archived_at);
-        } catch {
-          // Promoted copy is gone — leave promoted=false so it can be re-promoted.
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [resource.id, canPromote]);
+  // Повышен ли ресурс в сеттинг: связь «promoted_to_setting» и живая копия.
+  // Копию убрали в архив — ресурс снова можно повысить.
+  const promotedLinks = useResource<GenericLink[]>(
+    canPromote ? `/links?type=resource&id=${resource.id}&section=promoted_to_setting` : null
+  ).data;
+  const promotedLink = promotedLinks?.[0];
+  const promotedTargetId = promotedLink ? (promotedLink.from_id === resource.id ? promotedLink.to_id : promotedLink.from_id) : null;
+  const promotedTarget = useEntity<Resource>("resource", canPromote ? promotedTargetId : null).data;
+  const promoted = canPromote && (justPromoted || (!!promotedTarget && !promotedTarget.archived_at));
 
   async function handlePromote() {
     setPromoting(true);
     try {
       await onPromote();
-      setPromoted(true);
+      setJustPromoted(true);
     } catch {
       // Отказ уже показан плашкой; кнопка остаётся доступной.
     } finally {
@@ -900,7 +889,7 @@ function ResourceRow({
   const canReveal = !!resource.file_path || resource.category === "folder";
 
   async function reveal() {
-    await api.post(`/resources/${resource.id}/reveal`, {}, { broadcast: false });
+    await attemptWithNotice("Файл не открылся", () => write.post(`/resources/${resource.id}/reveal`, {}));
   }
 
   if (editMode) {

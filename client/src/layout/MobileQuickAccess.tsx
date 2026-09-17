@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { useResource } from "../data/hooks";
 import { NavIcon, type NavIconName } from "../components/NavIcons";
 import { usePinnedPages, buildPageLabel, MAX_PINS } from "../pinnedPages";
 
@@ -41,25 +40,11 @@ export function MobileQuickAccess({
   const { pins, pin, unpin } = usePinnedPages();
   const location = useLocation();
   const navigate = useNavigate();
-  const [characters, setCharacters] = useState<MyCharacter[] | null>(null);
-
-  const [charError, setCharError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open || !showCharacters) return;
-    const controller = new AbortController();
-    setCharacters(null);
-    setCharError(null);
-    api
-      .get<{ characters: MyCharacter[] }>("/player/me", { signal: controller.signal } as RequestInit)
-      .then((res) => setCharacters(res.characters))
-      .catch((e) => {
-        if ((e as Error).name === "AbortError") return;
-        setCharError(String(e));
-        setCharacters([]);
-      });
-    return () => controller.abort();
-  }, [open, showCharacters]);
+  // Персонажи игрока — под ключом слоя: сигнал кампании и правка листа
+  // обновляют их без переоткрытия листа.
+  const me = useResource<{ characters: MyCharacter[] }>(open && showCharacters ? "/player/me" : null);
+  const charError = me.error;
+  const characters = me.data?.characters ?? (charError ? [] : null);
 
   if (!open) return null;
 

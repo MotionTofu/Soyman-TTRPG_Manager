@@ -1,5 +1,5 @@
 import { memo, useEffect, useState, type DragEvent } from "react";
-import { api } from "../api/client";
+import { useSearch } from "../data/search";
 import { resolveEntityLabel } from "../api/resolveEntity";
 import { useAction, useResource, write } from "../data/hooks";
 import { linkAffects, linksPath } from "../data/sessions";
@@ -363,29 +363,18 @@ function DropZonePicker({
   onClose: () => void;
 }) {
   const [q, setQ] = useState("");
-  const [items, setItems] = useState<SearchResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  // Поиск по мере набора — подсказка, а не данные страницы: кэшировать и
-  // перечитывать по сигналам тут нечего, запрос идёт мимо слоя.
-  useEffect(() => {
-    if (q.trim().length < 2) { setItems([]); return; }
-    setLoading(true);
-    const handle = setTimeout(() => {
-      const types = acceptTypes.join(",");
-      api.get<SearchResult[]>(`/search?q=${encodeURIComponent(q.trim())}&types=${types}`)
-        .then((rows) => {
-          const filtered = rows.filter((r) => {
-            if (!acceptTypes.includes(r.type)) return false;
-            if (r.type === "compendium_entry" && acceptCompendiumKinds && !acceptCompendiumKinds.includes(r.kind ?? "")) return false;
-            return true;
-          });
-          setItems(filtered.slice(0, 20));
-        })
-        .catch(() => setItems([]))
-        .finally(() => setLoading(false));
-    }, 250);
-    return () => clearTimeout(handle);
-  }, [q, acceptTypes, acceptCompendiumKinds]);
+  const search = useSearch(
+    q.trim().length >= 2 ? `/search?q=${encodeURIComponent(q.trim())}&types=${acceptTypes.join(",")}` : null,
+    250
+  );
+  const items = search.results
+    .filter((r) => {
+      if (!acceptTypes.includes(r.type)) return false;
+      if (r.type === "compendium_entry" && acceptCompendiumKinds && !acceptCompendiumKinds.includes(r.kind ?? "")) return false;
+      return true;
+    })
+    .slice(0, 20);
+  const loading = search.searching;
   return (
     <Modal onClose={onClose}>
       <div className="stack">

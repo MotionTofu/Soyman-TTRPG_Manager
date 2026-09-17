@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
+import { useSearch } from "../data/search";
 import { useAction, useResource, write } from "../data/hooks";
 import { relationAffects, settingPaths } from "../data/settingEntities";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
@@ -103,7 +103,6 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
   const [relationFilter, setRelationFilter] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [query, setQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   // Адресатов может быть сразу несколько: тон и название у них общие, а лор —
   // свой у каждой связи, поэтому он спрашивается только когда адресат один.
   const [targets, setTargets] = useState<SearchResult[]>([]);
@@ -137,30 +136,11 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
     });
   }, [data, onStats]);
 
-  useEffect(() => {
-    if (!query.trim()) {
-      setSearchResults([]);
-      return;
-    }
-    const controller = new AbortController();
-    const handle = setTimeout(async () => {
-      try {
-        const res = await api.get<SearchResult[]>(
-          `/search?q=${encodeURIComponent(query)}&types=${PICK_TYPES.join(",")}`,
-          { signal: controller.signal }
-        );
-        if (controller.signal.aborted) return;
-        setSearchResults(res.filter((r) => !(r.type === entityType && r.id === entityId)));
-      } catch (e) {
-        if ((e as Error).name === "AbortError") return;
-        // сеть упала — оставляем прежние результаты, не шумим
-      }
-    }, 200);
-    return () => {
-      clearTimeout(handle);
-      controller.abort();
-    };
-  }, [query, entityType, entityId]);
+  const search = useSearch(query.trim() ? `/search?q=${encodeURIComponent(query)}&types=${PICK_TYPES.join(",")}` : null);
+  const searchResults = useMemo(
+    () => search.results.filter((r) => !(r.type === entityType && r.id === entityId)),
+    [search.results, entityType, entityId]
+  );
 
   // Список сущностей сеттинга для выбора галочками. Те же списки читают
   // «Население», соседи в шапке Существа и поля выбора общин и мест — из кэша
@@ -208,7 +188,6 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
   function pickResult(found: SearchResult) {
     toggleTarget(found);
     setQuery("");
-    setSearchResults([]);
   }
 
   function resetDraft() {

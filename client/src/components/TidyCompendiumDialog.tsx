@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { Modal } from "./Modal";
-import { api } from "../api/client";
 import { write } from "../data/hooks";
-import { afterWriteAnywhere } from "../data/imperative";
+import { afterWriteAnywhere, readOnce } from "../data/imperative";
 import { wholeSystemAffects } from "../data/systems";
 
 // «Привести справочник в порядок»: три шага в одном окне.
@@ -103,8 +102,8 @@ export function TidyCompendiumDialog({ systemId, onClose }: { systemId: number; 
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api
-      .get<TidyPlan>(`/systems/${systemId}/tidy`)
+    // План уборки считается на лету и нужен один раз — мимо кэша.
+    readOnce<TidyPlan>(`/systems/${systemId}/tidy`)
       .then((p) => {
         setPlan(p);
         setChecked(new Set(p.candidates.filter((c) => c.suggested).map((c) => c.id)));

@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useState, type DragEvent } from "react";
-import { api } from "../api/client";
+import { useSearch } from "../data/search";
 import { resolveEntityLabel } from "../api/resolveEntity";
 import { useAction, useResource, write } from "../data/hooks";
 import { readResource } from "../data/imperative";
@@ -290,28 +290,14 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
 
 function ObstaclePicker({ onPick, onClose }: { onPick: (r: SearchResult) => void; onClose: () => void }) {
   const [q, setQ] = useState("");
-  const [items, setItems] = useState<SearchResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  // Поиск по мере набора идёт мимо слоя данных: это подсказка, а не данные страницы.
-  useEffect(() => {
-    if (q.trim().length < 2) { setItems([]); return; }
-    setLoading(true);
-    const handle = setTimeout(() => {
-      const types = ACCEPT_TYPES.join(",");
-      api.get<SearchResult[]>(`/search?q=${encodeURIComponent(q.trim())}&types=${types}`)
-        .then((rows) => {
-          const filtered = rows.filter((r) => {
-            if (!ACCEPT_TYPES.includes(r.type)) return false;
-            if (r.type === "compendium_entry" && r.kind !== "monster") return false;
-            return true;
-          });
-          setItems(filtered.slice(0, 20));
-        })
-        .catch(() => setItems([]))
-        .finally(() => setLoading(false));
-    }, 250);
-    return () => clearTimeout(handle);
-  }, [q]);
+  const search = useSearch(
+    q.trim().length >= 2 ? `/search?q=${encodeURIComponent(q.trim())}&types=${ACCEPT_TYPES.join(",")}` : null,
+    250
+  );
+  const items = search.results
+    .filter((r) => ACCEPT_TYPES.includes(r.type) && !(r.type === "compendium_entry" && r.kind !== "monster"))
+    .slice(0, 20);
+  const loading = search.searching;
   return (
     <Modal onClose={onClose}>
       <div className="stack">

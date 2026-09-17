@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { api } from "../api/client";
 import { dataKeys, type Affect } from "../data/entities";
 import { errorText, useAction, useResource, write } from "../data/hooks";
 import { readResource } from "../data/imperative";
-import { labelled, showSaveError } from "../data/notices";
+import { attemptWithNotice, labelled, showSaveError } from "../data/notices";
 import { compendiumAffects, compendiumMembershipAffects, compendiumPaths } from "../data/compendiumEntries";
 import { systemPaths } from "../data/systems";
 import { notifyDataChanged } from "../dataSync";
@@ -614,13 +613,11 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     const ids = [...selectedIds];
     if (ids.length === 0) { showAlert("Выберите записи для показа."); return; }
     // Если выбран один — показываем его карточкой, если несколько — пачкой
-    try {
-      // Показ — не правка данных: другим окнам сообщать нечего.
-      await api.post(`/systems/${systemId}/show-entries`, { entry_ids: ids }, { broadcast: false });
-      showAlert(ids.length === 1 ? "Показано игрокам." : `Показано игрокам: ${ids.length} записей.`);
-    } catch (e) {
-      showAlert(String(e instanceof Error ? e.message : e));
-    }
+    // Показ — не правка данных: другим окнам сообщать нечего.
+    const shown = await attemptWithNotice("Не показано игрокам", () =>
+      write.post(`/systems/${systemId}/show-entries`, { entry_ids: ids })
+    );
+    if (shown) showAlert(ids.length === 1 ? "Показано игрокам." : `Показано игрокам: ${ids.length} записей.`);
   }
   const systemCode = useResource<{ code: string | null }>(systemPaths.detail(systemId)).data?.code ?? null;
 

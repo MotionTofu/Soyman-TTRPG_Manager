@@ -1,8 +1,8 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
 import { useAction, useResource, write } from "../data/hooks";
 import { labelled } from "../data/notices";
+import { readResource } from "../data/imperative";
 import type { EntityKind } from "../data/entities";
 import { PlayerVisibilityPicker } from "./PlayerVisibilityPicker";
 import { FloatingActionBar } from "./FloatingActionBar";
@@ -286,8 +286,10 @@ export function CampaignIssuanceTab({ campaignId, settingId, roster }: Props) {
     setPreviewLoading(true);
     setPreviewError(null);
     try {
-      const data = await api.get<PlayerPreview>(
-        `/visibility-grants/preview?campaign_id=${campaignId}&player_id=${previewPlayerId}`
+      // Свежее: превью открывают, чтобы сверить только что выданное.
+      const data = await readResource<PlayerPreview>(
+        `/visibility-grants/preview?campaign_id=${campaignId}&player_id=${previewPlayerId}`,
+        { fresh: true }
       );
       setPreview(data);
     } catch (e: unknown) {

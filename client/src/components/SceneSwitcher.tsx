@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
+import { readResource } from "../data/imperative";
 import { errorText, useAfterWrite, useResource, write } from "../data/hooks";
 import { showSaveError } from "../data/notices";
 import { launchAffects, sessionPaths } from "../data/sessions";
@@ -353,7 +353,8 @@ function PlannedList({
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<SceneSearchRow[]>([]);
 
-  // Поиск по мере набора — подсказка, а не данные пульта: мимо слоя данных.
+  // Поиск по мере набора — свежим запросом через слой: сцены пульта меняются
+  // по ходу вечера, и найденное должно быть сегодняшним.
   useEffect(() => {
     if (!searching || query.trim().length < 2) {
       setFound([]);
@@ -361,8 +362,7 @@ function PlannedList({
     }
     let cancelled = false;
     const timer = setTimeout(() => {
-      api
-        .get<SceneSearchRow[]>(`/sessions/${sessionId}/scene-search?q=${encodeURIComponent(query)}`)
+      readResource<SceneSearchRow[]>(`/sessions/${sessionId}/scene-search?q=${encodeURIComponent(query)}`, { fresh: true })
         .then((rows) => !cancelled && setFound(rows))
         .catch(() => !cancelled && setFound([]));
     }, 200);

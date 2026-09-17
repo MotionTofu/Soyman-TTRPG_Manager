@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { api } from "../api/client";
+import { useResource } from "../data/hooks";
+import { useSearch } from "../data/search";
 import { useCurrentUser } from "../api/currentUser";
 import type { SearchResult } from "../types";
 import { SEARCH_DRAG_MIME } from "../components/LinkDropZone";
@@ -53,26 +54,18 @@ export function SearchPanel({ horizontal, onNavigate }: Props = {}) {
   const [activeTypes, setActiveTypes] = useState<Set<string>>(
     () => new Set(TYPES.map((t) => t.key))
   );
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   // Narrows compendium_entry results to the "D&D 5.5" system — handy when
   // dragging a feat/spell into a DnD statblock and other systems' entries of
   // the same name would otherwise clutter the results.
   const [dndOnly, setDndOnly] = useState(false);
-  const [dndSystemId, setDndSystemId] = useState<number | null>(null);
   // Открытая карточка. Ради неё всё и затевалось: подглядеть правило, не уходя
   // со страницы, — за столом это чаще всего «что делает Опутанный».
   const [card, setCard] = useState<{ type: string; id: number } | null>(null);
   const { pins, pin, unpin } = usePinnedPages();
 
-  useEffect(() => {
-    api
-      .get<{ id: number; name: string }[]>("/systems")
-      .then((systems) => setDndSystemId(systems.find((s) => s.name === "D&D 5.5")?.id ?? null))
-      .catch(() => {});
-  }, []);
+  const systems = useResource<{ id: number; name: string }[]>(isPlayer ? null : "/systems").data;
+  const dndSystemId = systems?.find((s) => s.name === "D&D 5.5")?.id ?? null;
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -94,42 +87,16 @@ export function SearchPanel({ horizontal, onNavigate }: Props = {}) {
     pin(path, buildPageLabel(location.pathname, location.search));
   }
 
-  useEffect(() => {
-    if (!query.trim()) {
-      setResults([]);
-      setIsSearching(false);
-      setSearchError(null);
-      return;
+  let searchPath: string | null = null;
+  if (query.trim()) {
+    if (isPlayer) {
+      searchPath = `/player/search?q=${encodeURIComponent(query)}`;
+    } else {
+      searchPath = `/search?q=${encodeURIComponent(query)}&types=${Array.from(activeTypes).join(",")}`;
+      if (dndOnly && dndSystemId != null) searchPath += `&system_id=${dndSystemId}`;
     }
-    setIsSearching(true);
-    setSearchError(null);
-    const controller = new AbortController();
-    const handle = setTimeout(async () => {
-      let url: string;
-      if (isPlayer) {
-        url = `/player/search?q=${encodeURIComponent(query)}`;
-      } else {
-        const types = Array.from(activeTypes).join(",");
-        url = `/search?q=${encodeURIComponent(query)}&types=${types}`;
-        if (dndOnly && dndSystemId != null) url += `&system_id=${dndSystemId}`;
-      }
-      try {
-        const res = await api.get<SearchResult[]>(url, { signal: controller.signal } as RequestInit);
-        setResults(res);
-        setSearchError(null);
-      } catch (e) {
-        if ((e as Error).name === "AbortError") return;
-        setResults([]);
-        setSearchError(String(e));
-      } finally {
-        setIsSearching(false);
-      }
-    }, 200);
-    return () => {
-      clearTimeout(handle);
-      controller.abort();
-    };
-  }, [query, activeTypes, dndOnly, dndSystemId, isPlayer]);
+  }
+  const { results, searching: isSearching, error: searchError } = useSearch(searchPath);
 
   function toggleType(key: string) {
     setActiveTypes((prev) => {

@@ -1,12 +1,11 @@
-import { useEffect, useState } from "react";
-import { api } from "./api/client";
+import { useEffect, useMemo, useState } from "react";
+import { useResource } from "./data/hooks";
 import type { SessionSummary } from "./types";
 import { parseDateKey, toLocalDateKey } from "./utils/date";
 
 const REFRESH_MS = 60_000;
 
-function pickNearestId(sessions: SessionSummary[]): number | null {
-  const now = new Date();
+function pickNearestId(sessions: SessionSummary[], now: Date): number | null {
   const todayStr = toLocalDateKey(now);
   const planned = sessions
     .filter((s) => s.status === "planned")
@@ -36,22 +35,15 @@ function pickNearestId(sessions: SessionSummary[]): number | null {
 // the soonest upcoming one — see nearestSessionCockpit.ts's pickNearestId
 // for the exact tie-break rules requested by the user.
 export function useNearestSessionCockpitId(): number | null {
-  const [id, setId] = useState<number | null>(null);
-
+  // Календарь — под ключом слоя и с опросом раз в минуту, как было. Правилом
+  // «сессия задевает календарь» его не обновить: тогда каждый шаг хода в бою
+  // (правка сессии) тянул бы календарь всех кампаний. Часы пересчитывают
+  // «ближайшую» между опросами — сменилось время, а не данные.
+  const sessions = useResource<SessionSummary[]>("/calendar", { pollMs: REFRESH_MS }).data;
+  const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    let cancelled = false;
-    function refresh() {
-      api.get<SessionSummary[]>("/calendar").then((sessions) => {
-        if (!cancelled) setId(pickNearestId(sessions));
-      });
-    }
-    refresh();
-    const interval = setInterval(refresh, REFRESH_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
+    const interval = setInterval(() => setNow(new Date()), REFRESH_MS);
+    return () => clearInterval(interval);
   }, []);
-
-  return id;
+  return useMemo(() => (sessions ? pickNearestId(sessions, now) : null), [sessions, now]);
 }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { api } from "../../api/client";
+import { useResource } from "../../data/hooks";
+import { settingPaths } from "../../data/settingEntities";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../../imageUpload";
 import { useImageCrop } from "../../hooks/useImageCrop";
 import type { CropShape } from "../ImageCropModal";
@@ -201,63 +202,36 @@ export function MultiPickField({
   );
 }
 
+const NO_LOCATIONS: SettingLocation[] = [];
+
 // Те же данные сеттинга нужны почти каждому шагу, поэтому загрузка живёт
 // здесь, а не в каждом шаге отдельно.
 export function useSettingOptions(settingId: number) {
-  const [locations, setLocations] = useState<PickOption[]>([]);
-  // Каскадному выбору родителя нужны сами локации с parent_id, а не пара
-  // «id + название», поэтому список хранится и в исходном виде.
-  const [rawLocations, setRawLocations] = useState<SettingLocation[]>([]);
-  const [beings, setBeings] = useState<PickOption[]>([]);
-  const [communities, setCommunities] = useState<PickOption[]>([]);
-  const [events, setEvents] = useState<PickOption[]>([]);
-  const [artifacts, setArtifacts] = useState<PickOption[]>([]);
+  // Списки — под ключами слоя, теми же, что у страницы сеттинга: созданное
+  // в соседнем шаге или окне появляется в выборе без перезагрузки визарда.
+  const rawLocations = useResource<SettingLocation[]>(settingPaths.inSetting("location", settingId)).data ?? NO_LOCATIONS;
+  const beingRows = useResource<{ id: number; name: string; category: string }[]>(settingPaths.inSetting("being", settingId)).data;
+  const communityRows = useResource<{ id: number; name: string }[]>(settingPaths.inSetting("community", settingId)).data;
+  const eventRows = useResource<{ id: number; title: string; inworld_year: number }[]>(`/settings/${settingId}/calendar-events`).data;
+  const artifactRows = useResource<{ id: number; name: string; item_type: string | null }[]>(settingPaths.inSetting("artifact", settingId)).data;
 
-  useEffect(() => {
-    let alive = true;
-    const ok = <T,>(fn: (v: T) => void) => (v: T) => {
-      if (alive) fn(v);
-    };
-    api.get<SettingLocation[]>(`/setting-locations?setting_id=${settingId}`).then(
-      ok((rows) => {
-        setRawLocations(rows);
-        setLocations(rows.map((l) => ({ id: l.id, name: l.name, hint: l.kind || undefined })));
-      })
-    );
-    api
-      .get<{ id: number; name: string; category: string }[]>(`/setting-beings?setting_id=${settingId}`)
-      .then(
-        ok((rows) =>
-          setBeings(
-            rows.map((b) => ({
-              id: b.id,
-              name: b.name,
-              hint: b.category === "bestiary" ? "бестиарий" : undefined,
-            }))
-          )
-        )
-      );
-    api
-      .get<{ id: number; name: string }[]>(`/setting-communities?setting_id=${settingId}`)
-      .then(ok((rows) => setCommunities(rows.map((c) => ({ id: c.id, name: c.name })))));
-    api
-      .get<{ id: number; title: string; inworld_year: number }[]>(`/settings/${settingId}/calendar-events`)
-      .then(
-        ok((rows) =>
-          setEvents(rows.map((e) => ({ id: e.id, name: e.title, hint: `${e.inworld_year} г.` })))
-        )
-      );
-    api
-      .get<{ id: number; name: string; item_type: string | null }[]>(`/artifacts?setting_id=${settingId}`)
-      .then(
-        ok((rows) =>
-          setArtifacts(rows.map((a) => ({ id: a.id, name: a.name, hint: a.item_type || undefined })))
-        )
-      );
-    return () => {
-      alive = false;
-    };
-  }, [settingId]);
+  const locations = useMemo<PickOption[]>(
+    () => rawLocations.map((l) => ({ id: l.id, name: l.name, hint: l.kind || undefined })),
+    [rawLocations]
+  );
+  const beings = useMemo<PickOption[]>(
+    () => (beingRows ?? []).map((b) => ({ id: b.id, name: b.name, hint: b.category === "bestiary" ? "бестиарий" : undefined })),
+    [beingRows]
+  );
+  const communities = useMemo<PickOption[]>(() => (communityRows ?? []).map((c) => ({ id: c.id, name: c.name })), [communityRows]);
+  const events = useMemo<PickOption[]>(
+    () => (eventRows ?? []).map((e) => ({ id: e.id, name: e.title, hint: `${e.inworld_year} г.` })),
+    [eventRows]
+  );
+  const artifacts = useMemo<PickOption[]>(
+    () => (artifactRows ?? []).map((a) => ({ id: a.id, name: a.name, hint: a.item_type || undefined })),
+    [artifactRows]
+  );
 
   return { locations, rawLocations, beings, communities, events, artifacts };
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { api } from "../api/client";
+import { readResource } from "../data/imperative";
 
 interface LabelSuggestion {
   label: string;
@@ -40,8 +40,7 @@ export function RelationLabelInput({
       return;
     }
     const timer = setTimeout(() => {
-      api
-        .get<LabelSuggestion[]>(`/entity-relations/labels?q=${encodeURIComponent(query)}`)
+      readResource<LabelSuggestion[]>(`/entity-relations/labels?q=${encodeURIComponent(query)}`, { fresh: true })
         .then((rows) => {
           // Ровно то, что уже набрано, подсказывать не о чем.
           const useful = rows.filter((r) => r.label.toLocaleLowerCase() !== query.toLocaleLowerCase());

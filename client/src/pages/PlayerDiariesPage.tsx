@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
+import { useResource } from "../data/hooks";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { LoadErrorCard } from "../components/Loadable";
 
@@ -17,20 +16,11 @@ interface DiaryCampaign {
 // GET /player/campaigns). Заменяет PlayerCampaignsListPage, который выводил
 // только кампании с персонажами.
 export function PlayerDiariesPage() {
-  const [campaigns, setCampaigns] = useState<DiaryCampaign[] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    api
-      .get<DiaryCampaign[]>("/player/campaigns", { signal: controller.signal } as RequestInit)
-      .then(setCampaigns)
-      .catch((e: unknown) => {
-        if ((e as Error).name === "AbortError") return;
-        setLoadError(String(e instanceof Error ? e.message : e));
-      });
-    return () => controller.abort();
-  }, []);
+  // Тот же ключ, что у кабинета игрока: сигнал кампании (добавили в состав)
+  // обновляет список без перезагрузки.
+  const list = useResource<DiaryCampaign[]>("/player/campaigns");
+  const campaigns = list.data ?? null;
+  const loadError = list.error;
 
   return (
     <div className="stack">
@@ -40,7 +30,7 @@ export function PlayerDiariesPage() {
       {loadError && (
         <LoadErrorCard
           message={<>Не удалось загрузить дневники: {loadError}</>}
-          onRetry={() => window.location.reload()}
+          onRetry={list.reload}
         />
       )}
       {!loadError && campaigns === null && <p className="muted">Загрузка…</p>}

@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
-import { api } from "../api/client";
-import { useAfterWrite, write } from "../data/hooks";
+import { useState } from "react";
+import { useAfterWrite, useResource, write } from "../data/hooks";
 import { Modal } from "./Modal";
 import type { Campaign, SessionSummary } from "../types";
 
@@ -21,29 +20,18 @@ function sessionDateTime(s: SessionSummary): Date {
 // toggle to browse past (held) sessions instead. Mirrors the drill-down shape
 // of AddTracksModal (list → detail-with-back-button) but for campaign→session
 // instead of setting→resource.
+const NO_CAMPAIGNS: Campaign[] = [];
+const NO_SESSIONS: SessionSummary[] = [];
+
 export function SendMapToSessionModal({ locationId, settingId, onClose }: Props) {
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [campaign, setCampaign] = useState<Campaign | null>(null);
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [showPast, setShowPast] = useState(false);
   const [sending, setSending] = useState(false);
   const afterWrite = useAfterWrite();
   const [doneLabel, setDoneLabel] = useState<string | null>(null);
 
-  useEffect(() => {
-    const c = new AbortController();
-    api.get<Campaign[]>("/campaigns", { signal: c.signal }).then(setCampaigns).catch(() => {});
-    return () => c.abort();
-  }, []);
-
-  useEffect(() => {
-    if (!campaign) { setSessions([]); return; }
-    const c = new AbortController();
-    api.get<SessionSummary[]>(`/campaigns/${campaign.id}/sessions`, { signal: c.signal })
-      .then(setSessions)
-      .catch(() => {});
-    return () => c.abort();
-  }, [campaign]);
+  const campaigns = useResource<Campaign[]>("/campaigns").data ?? NO_CAMPAIGNS;
+  const sessions = useResource<SessionSummary[]>(campaign ? `/campaigns/${campaign.id}/sessions` : null).data ?? NO_SESSIONS;
 
   const ownSetting = campaigns.filter((c) => settingId != null && c.setting_id === settingId);
   const otherCampaigns = campaigns.filter((c) => !(settingId != null && c.setting_id === settingId));

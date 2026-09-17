@@ -1,4 +1,4 @@
-import { api } from "./api/client";
+import { readResource } from "./data/imperative";
 import { DETAIL_ROUTES } from "./entityTypes";
 
 // Determines "what entity is the current page about", purely from the
@@ -36,7 +36,7 @@ interface EntityDetails {
 export async function resolveCurrentEntityDetails(type: string, id: number): Promise<EntityDetails | null> {
   if (type === "compendium_entry") {
     try {
-      const entry = await api.get<{ name: string; kind: string; system_id: number; section_id: number }>(
+      const entry = await readResource<{ name: string; kind: string; system_id: number; section_id: number }>(
         `/systems/entries/${id}`
       );
       if (!entry.name) return null;

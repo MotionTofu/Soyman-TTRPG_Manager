@@ -2,7 +2,7 @@ import { memo, useState, useEffect } from "react";
 import type { LitMPower, LitMThemeCard } from "../../types";
 import { TagList } from "./TagList";
 import { TrackGroup } from "./TrackGroup";
-import { api } from "../../api/client";
+import { readResource } from "../../data/imperative";
 import type { CompendiumEntry } from "../../types";
 import { TreasurePickerModal } from "./TreasurePickerModal";
 import { MagicWayPickerModal } from "./MagicWayPickerModal";
@@ -66,13 +66,13 @@ function ThemeKitPicker({
     if (!isOpen) return;
     async function load() {
       try {
-        const systems = await api.get<{ id: number; name: string }[]>("/systems");
+        const systems = await readResource<{ id: number; name: string }[]>("/systems");
         const litm = systems.find(s => s.name === "Legend in the Mist");
         if (!litm) return;
-        const sections = await api.get<{ id: number; name: string; kind: string }[]>(`/systems/${litm.id}/sections`);
+        const sections = await readResource<{ id: number; name: string; kind: string }[]>(`/systems/${litm.id}/sections`);
         const sec = sections.find(s => s.name === "Могущество и Темы");
         if (!sec) return;
-        const entries = await api.get<CompendiumEntry[]>(`/systems/${litm.id}/entries?section_id=${sec.id}`);
+        const entries = await readResource<CompendiumEntry[]>(`/systems/${litm.id}/entries?section_id=${sec.id}`);
         const filtered = entries
           .filter(e => e.kind === "theme_kit")
           .filter(e => !themeTypeFilter || e.parent_id === getThemebookId(entries, themeTypeFilter));
