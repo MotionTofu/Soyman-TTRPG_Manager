@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { useResource } from "../data/hooks";
 import { MonthCalendar, type CalendarEvent } from "../components/MonthCalendar";
 import { SectionHeading } from "../components/SectionHeading";
 import { loadHideFinance } from "../financePrivacy";
@@ -45,17 +44,12 @@ interface Dashboard {
 // page there. This reads /player/dashboard instead, same endpoint
 // player-app's Главная uses.
 export function PlayerHomePage() {
-  const [dashboard, setDashboard] = useState<Dashboard | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const state = useResource<Dashboard>("/player/dashboard");
+  const dashboard = state.data;
+  const error = state.error;
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const controller = new AbortController();
-    api.get<Dashboard>("/player/dashboard", { signal: controller.signal } as RequestInit).then(setDashboard).catch((e) => { if ((e as Error).name !== "AbortError") setError(String(e)); });
-    return () => controller.abort();
-  }, []);
-
-  if (error) return <div className="card">Не загрузилось: {error} <button onClick={() => location.reload()}>Повторить</button></div>;
+  if (error && !dashboard) return <div className="card">Не загрузилось: {error} <button onClick={state.reload}>Повторить</button></div>;
   if (!dashboard) return <p className="muted">Загрузка…</p>;
 
   const { unpaidSessions, reminders, sessions } = dashboard;

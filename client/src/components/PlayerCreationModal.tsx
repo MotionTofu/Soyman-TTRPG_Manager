@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api } from "../api/client";
+import { useAfterWrite, write } from "../data/hooks";
 import { Modal } from "./Modal";
 import type { Player } from "../types";
 
@@ -25,6 +25,7 @@ export function PlayerCreationModal({ onClose, onCreated }: Props) {
   ]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const afterWrite = useAfterWrite();
 
   function addDraft() {
     if (drafts.length >= MAX_PLAYERS) return;
@@ -49,13 +50,15 @@ export function PlayerCreationModal({ onClose, onCreated }: Props) {
     try {
       await Promise.all(
         validDrafts.map((d) =>
-          api.post<Player>("/players", { name: d.name.trim(), notes: d.notes.trim() })
+          write.post<Player>("/players", { name: d.name.trim(), notes: d.notes.trim() })
         )
       );
       onCreated();
     } catch (e: any) {
       setError(e?.message || "Ошибка создания");
     } finally {
+      // Часть игроков могла создаться и при ошибке — списки перечитываются всегда.
+      afterWrite([{ kind: "player" }]);
       setSaving(false);
     }
   }

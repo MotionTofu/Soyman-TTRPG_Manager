@@ -45,6 +45,10 @@ export function RealtimeListener() {
     socket.on("system-data-changed", (payload: unknown) => {
       window.dispatchEvent(new CustomEvent("system-data-changed", { detail: payload }));
     });
+    // Мастер переименовал игрока или оставил ему напоминание: кабинет и партия.
+    socket.on("player-data-changed", (payload: unknown) => {
+      window.dispatchEvent(new CustomEvent("player-data-changed", { detail: payload }));
+    });
     // Связь вернулась после обрыва (телефон заснул, пропал Wi-Fi): сигналы за
     // это время потеряны и сервер их не копит — открытое перечитывается целиком.
     // Первое подключение не в счёт: данные только что прочитаны.

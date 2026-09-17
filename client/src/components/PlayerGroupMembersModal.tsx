@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { useAfterWrite, useResource, write } from "../data/hooks";
 import type { Player } from "../types";
 import { useAlert } from "../hooks/useConfirm";
 
@@ -11,32 +11,19 @@ interface PlayerGroupMembersModalProps {
 }
 
 export function PlayerGroupMembersModal({ groupId, groupName, onClose, onUpdated }: PlayerGroupMembersModalProps) {
-  const [allPlayers, setAllPlayers] = useState<Player[]>([]);
+  const all = useResource<Player[]>("/players");
+  const members = useResource<Player[]>(`/player-groups/${groupId}/members`);
+  const allPlayers = all.data ?? [];
+  const loading = all.loading || members.loading;
+  // Отметки держатся здесь, чтобы галочка менялась сразу, а не после ответа.
   const [memberIds, setMemberIds] = useState<Set<number>>(new Set());
-  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (members.data) setMemberIds(new Set(members.data.map((m) => m.id)));
+  }, [members.data]);
   const [saving, setSaving] = useState(false);
+  const afterWrite = useAfterWrite();
 
   const [alertDialog, showAlert] = useAlert();
-
-  useEffect(() => {
-    const controller = new AbortController();
-    async function load() {
-      try {
-        const [all, members] = await Promise.all([
-          api.get<Player[]>("/players", { signal: controller.signal }),
-          api.get<Player[]>(`/player-groups/${groupId}/members`, { signal: controller.signal }),
-        ]);
-        setAllPlayers(all);
-        setMemberIds(new Set(members.map((m) => m.id)));
-      } catch {
-        // silent
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-    return () => controller.abort();
-  }, [groupId]);
 
   async function toggle(playerId: number) {
     const next = new Set(memberIds);
@@ -51,10 +38,11 @@ export function PlayerGroupMembersModal({ groupId, groupName, onClose, onUpdated
     setSaving(true);
     try {
       if (wasIn) {
-        await api.del(`/player-groups/${groupId}/members?playerIds=${playerId}`);
+        await write.del(`/player-groups/${groupId}/members?playerIds=${playerId}`);
       } else {
-        await api.post(`/player-groups/${groupId}/members`, { playerIds: [playerId] });
+        await write.post(`/player-groups/${groupId}/members`, { playerIds: [playerId] });
       }
+      afterWrite([{ path: "/player-groups" }]);
       onUpdated();
     } catch (e) {
       // revert on error

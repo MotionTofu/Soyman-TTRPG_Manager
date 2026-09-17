@@ -79,6 +79,7 @@ import { backfillCompendiumSummaries } from "./services/monsterSummary";
 import { attachUser, requireAuth, bootstrapGmAccount, verifyToken, type AuthedRequest } from "./services/auth";
 import { campaignSignalMiddleware } from "./services/campaignSignals";
 import { systemSignalMiddleware } from "./services/systemSignals";
+import { playerSignalMiddleware } from "./services/playerSignals";
 import { signPath, verifySignedUrl } from "./services/signedUrl";
 import { apiRoleGate } from "./services/playerAccess";
 
@@ -221,6 +222,8 @@ app.use(attachUser);
 app.use("/api", campaignSignalMiddleware((room, payload) => emitToRoom(room, "campaign-data-changed", payload)));
 // Правка компендиума — игрокам, чьи листы его читают: services/systemSignals.ts.
 app.use("/api", systemSignalMiddleware((room, payload) => emitToRoom(room, "system-data-changed", payload)));
+// Правка записи игрока (имя, архив, напоминание) — его кабинету и партии: services/playerSignals.ts.
+app.use("/api", playerSignalMiddleware((room, payload) => emitToRoom(room, "player-data-changed", payload)));
 
 // Rate-limit auth — brute-force on /setup and /login must not be free.
 //

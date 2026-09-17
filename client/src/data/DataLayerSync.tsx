@@ -23,6 +23,7 @@ const DATA_EVENTS = [
   "hunter-mark",
   "campaign-data-changed",
   "system-data-changed",
+  "player-data-changed",
   "realtime-reconnected",
 ] as const;
 

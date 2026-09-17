@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { useAfterWrite, useResource, write } from "../data/hooks";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 
 interface SheetSummary {
@@ -48,27 +48,19 @@ interface NameOnly {
 // а Мастер потом привяжет». После создания — сразу в визард (?newSheet=1).
 export function PlayerSheetsPage() {
   const navigate = useNavigate();
-  const [characters, setCharacters] = useState<MyCharacter[] | null>(null);
-  const [listError, setListError] = useState("");
+  const me = useResource<{ characters: MyCharacter[] }>("/player/me");
+  const characters = me.data?.characters ?? null;
+  const listError = me.error ?? "";
   const [creating, setCreating] = useState(false);
-  const [campaigns, setCampaigns] = useState<MyCampaign[] | null>(null);
-  const [systems, setSystems] = useState<NameOnly[] | null>(null);
+  // Списки для формы — только когда она открыта.
+  const campaigns = useResource<MyCampaign[]>(creating ? "/player/campaigns" : null).data ?? null;
+  const systems = useResource<NameOnly[]>(creating ? "/player/systems" : null).data ?? null;
   const [campaignId, setCampaignId] = useState("");
   const [systemId, setSystemId] = useState("");
   const [name, setName] = useState("");
   const [createError, setCreateError] = useState("");
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    const ac = new AbortController();
-    api
-      .get<{ characters: MyCharacter[] }>("/player/me", { signal: ac.signal } as RequestInit)
-      .then((me) => setCharacters(me.characters))
-      .catch((e) => {
-        if ((e as Error).name !== "AbortError") setListError(String(e));
-      });
-    return () => ac.abort();
-  }, []);
+  const afterWrite = useAfterWrite();
 
   function startCreate() {
     setCreating(true);
@@ -76,18 +68,6 @@ export function PlayerSheetsPage() {
     setCampaignId("");
     setSystemId("");
     setName("");
-    if (campaigns === null) {
-      api
-        .get<MyCampaign[]>("/player/campaigns")
-        .then(setCampaigns)
-        .catch(() => setCampaigns([]));
-    }
-    if (systems === null) {
-      api
-        .get<NameOnly[]>("/player/systems")
-        .then(setSystems)
-        .catch(() => setSystems([]));
-    }
   }
 
   // Система кампании — умолчание: менять нужно редко, а выбирать каждый раз
@@ -110,11 +90,12 @@ export function PlayerSheetsPage() {
     setSaving(true);
     setCreateError("");
     try {
-      const created = await api.post<{ id: number }>("/player/characters", {
+      const created = await write.post<{ id: number }>("/player/characters", {
         character_name: name.trim(),
         campaign_id: campaignId ? Number(campaignId) : null,
         system_id: systemId ? Number(systemId) : null,
       });
+      afterWrite([{ path: "/player/me" }, { path: "/player/campaigns" }, { kind: "character" }]);
       // Выбор лучше навязывания: кому профиль (досье, заметки), кому сразу
       // чарник. Визард откроется и там, и там (?newSheet=1).
       navigate(goSheet ? `/characters/${created.id}/sheet?newSheet=1` : `/characters/${created.id}?tab=statblock&newSheet=1`);

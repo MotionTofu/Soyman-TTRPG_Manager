@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
-import { api } from "../api/client";
+import { useResource } from "../data/hooks";
+import { readResource } from "../data/imperative";
 import { SectionHeading } from "../components/SectionHeading";
 import { SectionBackground } from "../components/SectionBackground";
 import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
@@ -10,6 +11,8 @@ import { NavIcon } from "../components/NavIcons";
 import { Modal } from "../components/Modal";
 
 type NetEntry = { address: string; name: string };
+
+const ADDRESSES_PATH = "/app-settings/network-addresses";
 
 function isValidIPv4(addr: string): boolean {
   return /^(\d{1,3}\.){3}\d{1,3}$/.test(addr) && addr.split(".").every((p) => Number(p) <= 255);
@@ -31,43 +34,36 @@ function badgeFor(addr: string, name: string): { label: string; kind: "ok" | "wa
 // yet. Instead this just surfaces every LAN address this server is
 // reachable on, so the GM can copy-paste one to a player.
 export function InvitationsPage() {
-  const [entries, setEntries] = useState<NetEntry[]>([]);
-  const [port, setPort] = useState<number | null>(null);
+  const addresses = useResource<{ addresses: string[]; entries?: NetEntry[]; port: number }>(ADDRESSES_PATH);
+  const loading = addresses.loading;
+  const loadError = addresses.error;
+  const port = addresses.data?.port ?? null;
+  // Prefer typed entries (with name), fallback to legacy string[].
+  const entries = useMemo(() => {
+    const r = addresses.data;
+    if (!r) return [];
+    const rawEntries: NetEntry[] = r.entries?.length
+      ? r.entries
+      : (r.addresses ?? []).map((a) => ({ address: a, name: "" }));
+    return rawEntries.filter((e) => isValidIPv4(e.address));
+  }, [addresses.data]);
+  const [refreshing, setRefreshing] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [qrModal, setQrModal] = useState<string | null>(null);
   const timerRef = useRef<number | null>(null);
 
-  async function load(signal?: AbortSignal) {
-    setLoading(true);
-    setLoadError(null);
+  // «Обновить» — всегда свежим чтением: адреса меняются от сети, а не от правок.
+  async function load() {
+    setRefreshing(true);
     try {
-      const r = await api.get<{ addresses: string[]; entries?: NetEntry[]; port: number }>(
-        "/app-settings/network-addresses",
-        signal ? { signal } : undefined,
-      );
-      // Prefer typed entries (with name), fallback to legacy string[].
-      const rawEntries: NetEntry[] = r.entries?.length
-        ? r.entries
-        : (r.addresses ?? []).map((a) => ({ address: a, name: "" }));
-      const filtered = rawEntries.filter((e) => isValidIPv4(e.address));
-      setEntries(filtered);
-      setPort(r.port);
-    } catch (e) {
-      if ((e as Error).name === "AbortError") return;
-      setLoadError(String(e instanceof Error ? e.message : e));
+      await readResource(ADDRESSES_PATH, { fresh: true });
+    } catch {
+      // ошибку покажет карточка загрузки
     } finally {
-      setLoading(false);
+      setRefreshing(false);
     }
   }
-
-  useEffect(() => {
-    const c = new AbortController();
-    void load(c.signal);
-    return () => c.abort();
-  }, []);
 
   useEffect(() => {
     return () => {
@@ -149,8 +145,8 @@ export function InvitationsPage() {
       <SectionBackground />
       <div className="page-header-row row">
         <SectionHeading section="invite" compact>Приглашения</SectionHeading>
-        <button onClick={() => load()} disabled={loading}>
-          {loading ? "Обновление…" : "Обновить"}
+        <button onClick={() => load()} disabled={loading || refreshing}>
+          {loading || refreshing ? "Обновление…" : "Обновить"}
         </button>
       </div>
 

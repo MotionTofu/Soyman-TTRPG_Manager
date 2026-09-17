@@ -121,6 +121,18 @@ describe("сигнал «компендиум системы изменился�
   });
 });
 
+describe("сигнал «запись игрока изменилась»", () => {
+  it("задевает кабинет и партию игрока, но не листы и не данные Мастера", () => {
+    const affects = affectsForWindowEvent("player-data-changed", { playerId: 4 }) ?? [];
+    const hit = (path: string) => affects.some((a) => matchesAffect(dataKeys.resource(path), a));
+    expect(hit("/player/me")).toBe(true);
+    expect(hit("/player/dashboard")).toBe(true);
+    expect(hit("/player/campaigns/2/party")).toBe(true);
+    expect(hit("/player/characters/7")).toBe(false);
+    expect(hit("/players/4")).toBe(false);
+  });
+});
+
 describe("сигнал «кампания изменилась»", () => {
   const hit = (type: string, detail: unknown, path: string) =>
     (affectsForWindowEvent(type, detail) ?? []).some((a) => matchesAffect(dataKeys.resource(path), a));

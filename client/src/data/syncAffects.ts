@@ -44,6 +44,10 @@ export function affectsForWindowEvent(type: string, detail: unknown): Affect[] |
       // перечитываются только те, что лист держит, одной пачкой) и разделы
       // системы, из которых собираются пикеры.
       return [{ kind: "compendium_entry" }, d.systemId != null ? { path: `/systems/${d.systemId}` } : { path: "/systems" }];
+    case "player-data-changed":
+      // Запись игрока у Мастера: своё имя и напоминания в кабинете, имена в
+      // партии кампаний. Правка редкая — перечитываются кампании игрока целиком.
+      return [{ path: "/player/me" }, { path: "/player/dashboard" }, { path: "/player/campaigns" }];
     case "realtime-reconnected":
       // Пустой список — перечитать всё открытое: пропущенного не восстановить.
       return [];

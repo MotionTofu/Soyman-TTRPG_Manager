@@ -1,6 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
+import { useAction, useResource, write } from "../data/hooks";
+import { dataKeys, invalidateAffects } from "../data/entities";
+import { labelled } from "../data/notices";
 import { Modal } from "../components/Modal";
 import { MentionTextarea } from "../components/mentions/MentionTextarea";
 import { MentionText } from "../components/mentions/MentionText";
@@ -56,70 +60,51 @@ function PlayerCoverTile({ player: p, active }: { player: Player; active: boolea
   );
 }
 
+const NO_PLAYERS: Player[] = [];
+const NO_GROUPS: PlayerGroup[] = [];
+/** Группы игроков: список, составы и отметки в профиле — всё под одним префиксом. */
+const GROUP_AFFECTS = [{ path: "/player-groups" }];
+
 export function PlayersWorkspace({ selectedId }: { selectedId?: number }) {
   const navigate = useNavigate();
-  const [players, setPlayers] = useState<Player[]>([]);
+  const client = useQueryClient();
+  const run = useAction();
+  const playersState = useResource<Player[]>("/players");
+  const players = playersState.data ?? NO_PLAYERS;
+  const loading = playersState.loading;
+  const loadError = playersState.error;
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [notes, setNotes] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string | null>(null);
-  const [groups, setGroups] = useState<PlayerGroup[]>([]);
-  const [groupMemberships, setGroupMemberships] = useState<Record<number, number[]>>({});
+  const groups = useResource<PlayerGroup[]>("/player-groups").data ?? NO_GROUPS;
+  // Составы всех групп — параллельно и под тем же ключом, что у окна «добавить
+  // в группу» (раньше — по очереди, по запросу на группу).
+  const memberQueries = useQueries({
+    queries: groups.map((g) => ({
+      queryKey: dataKeys.resource(`/player-groups/${g.id}/members`),
+      queryFn: ({ signal }: { signal: AbortSignal }) => api.get<Player[]>(`/player-groups/${g.id}/members`, { signal }),
+    })),
+  });
+  const groupMemberships: Record<number, number[]> = {};
+  groups.forEach((g, i) => {
+    for (const m of memberQueries[i]?.data ?? []) {
+      if (!groupMemberships[m.id]) groupMemberships[m.id] = [];
+      groupMemberships[m.id].push(g.id);
+    }
+  });
   const [groupMembersModal, setGroupMembersModal] = useState<{ groupId: number; groupName: string } | null>(null);
   const [q, setQ] = useState("");
 
-  async function loadPlayers(signal?: AbortSignal) {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const data = await api.get<Player[]>("/players", signal ? { signal } : undefined);
-      setPlayers(data);
-    } catch (e) {
-      if ((e as Error).name === "AbortError") return;
-      setLoadError(String(e instanceof Error ? e.message : e));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function loadGroupMemberships(signal?: AbortSignal) {
-    try {
-      const fetchedGroups = await api.get<PlayerGroup[]>("/player-groups", signal ? { signal } : undefined);
-      setGroups(fetchedGroups);
-      const memberships: Record<number, number[]> = {};
-      for (const g of fetchedGroups) {
-        const members = await api.get<Player[]>(
-          `/player-groups/${g.id}/members`,
-          signal ? { signal } : undefined
-        );
-        for (const m of members) {
-          if (!memberships[m.id]) memberships[m.id] = [];
-          memberships[m.id].push(g.id);
-        }
-      }
-      setGroupMemberships(memberships);
-    } catch {
-      // silent
-    }
-  }
-
-  useEffect(() => {
-    const controller = new AbortController();
-    loadPlayers(controller.signal);
-    loadGroupMemberships(controller.signal);
-    return () => controller.abort();
-  }, []);
-
-  function refresh() {
-    void loadPlayers();
-    void loadGroupMemberships();
+  // Группы правит каркас списка (ListPage) — после его правки перечитываются
+  // группы и их составы.
+  function refreshGroups() {
+    void invalidateAffects(client, GROUP_AFFECTS);
   }
 
   useEffect(() => () => { if (creating) setCreating(false); }, [creating]);
 
-  const filteredPlayers = useMemo(() => {
+  const filteredPlayers = (() => {
     const qq = q.trim().toLowerCase();
     const byTab = (() => {
       if (activeTab === null) return players;
@@ -135,7 +120,7 @@ export function PlayersWorkspace({ selectedId }: { selectedId?: number }) {
         p.name.toLowerCase().includes(qq) ||
         (p.notes ?? "").toLowerCase().includes(qq)
     );
-  }, [players, activeTab, groupMemberships, q]);
+  })();
 
   const effectiveSelectedId = selectedId ?? null;
 
@@ -147,16 +132,16 @@ export function PlayersWorkspace({ selectedId }: { selectedId?: number }) {
 
   async function create() {
     if (!name.trim()) return;
-    try {
-      const created = await api.post<Player>("/players", { name, notes });
-      syncMentionLinks("player", created.id, "", notes);
-      setCreating(false);
-      setName("");
-      setNotes("");
-      refresh();
-    } catch {
-      // Modal stays open — user can retry
-    }
+    // Модалка остаётся открытой при отказе — набранное не теряется.
+    const created = await run(labelled("Новый игрок", () => write.post<Player>("/players", { name, notes })), {
+      affects: [{ kind: "player" }],
+      retry: false,
+    });
+    if (!created) return;
+    syncMentionLinks("player", created.id, "", notes);
+    setCreating(false);
+    setName("");
+    setNotes("");
   }
 
   const selectedPlayer = effectiveSelectedId != null
@@ -172,7 +157,7 @@ export function PlayersWorkspace({ selectedId }: { selectedId?: number }) {
         groups={groups.map((g) => ({ id: String(g.id), label: g.name }))}
         groupsEndpoint="/player-groups"
         groupsDeleteNote="Игроки не будут удалены — они останутся в разделе «Все игроки»."
-        onGroupsChanged={refresh}
+        onGroupsChanged={refreshGroups}
         createLabel="+ Новый игрок"
         onCreate={() => setCreating(true)}
         actions={
@@ -228,7 +213,7 @@ export function PlayersWorkspace({ selectedId }: { selectedId?: number }) {
         {loadError && (
           <LoadErrorCard
             message={<>Не удалось загрузить игроков: {loadError}</>}
-            onRetry={refresh}
+            onRetry={playersState.reload}
           />
         )}
 
@@ -313,7 +298,7 @@ export function PlayersWorkspace({ selectedId }: { selectedId?: number }) {
           groupId={groupMembersModal.groupId}
           groupName={groupMembersModal.groupName}
           onClose={() => setGroupMembersModal(null)}
-          onUpdated={refresh}
+          onUpdated={refreshGroups}
         />
       )}
     </div>

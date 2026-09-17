@@ -49,7 +49,7 @@
 // каркаса, свой `SectionHeading` уровня страницы вне каркаса,
 // `*ListPage.tsx` без каркаса, свои состояния по всему `src`.
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { api } from "../api/client";
+import { useAfterWrite, write } from "../data/hooks";
 import { ContextMenu } from "./ContextMenu";
 import { EntityTabWorkspace, type WorkspaceSection } from "./EntityTabWorkspace";
 import { SectionHeading } from "./SectionHeading";
@@ -169,6 +169,7 @@ export function ListPage({
   const [groupMenu, setGroupMenu] = useState<GroupMenu>(null);
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const createInputRef = useRef<HTMLInputElement>(null);
+  const afterWrite = useAfterWrite();
   const renameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -184,7 +185,8 @@ export function ListPage({
     const name = newGroupName.trim();
     if (!name) return;
     try {
-      await api.post(groupsEndpoint, { name });
+      await write.post(groupsEndpoint, { name });
+      afterWrite([{ path: groupsEndpoint }]);
       setNewGroupName("");
       setCreatingGroup(false);
       onGroupsChanged?.();
@@ -198,7 +200,8 @@ export function ListPage({
     const name = renaming.name.trim();
     if (!name) return;
     try {
-      await api.put(`${groupsEndpoint}/${renaming.id}`, { name });
+      await write.put(`${groupsEndpoint}/${renaming.id}`, { name });
+      afterWrite([{ path: groupsEndpoint }]);
       setRenaming(null);
       onGroupsChanged?.();
     } catch (e) {
@@ -216,7 +219,8 @@ export function ListPage({
     });
     if (!ok) return;
     try {
-      await api.del(`${groupsEndpoint}/${groupId}`);
+      await write.del(`${groupsEndpoint}/${groupId}`);
+      afterWrite([{ path: groupsEndpoint }]);
       if (activeGroup === groupId) onGroupChange(null);
       onGroupsChanged?.();
     } catch (e) {

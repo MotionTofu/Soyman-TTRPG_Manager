@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api } from "../../api/client";
+import { labelled } from "../../data/notices";
+import { useAction, useAfterWrite, useEntity, useResource, write } from "../../data/hooks";
+import type { Affect } from "../../data/entities";
+import { LoadErrorCard } from "../Loadable";
 import { MentionTextarea } from "../mentions/MentionTextarea";
 import { MentionText } from "../mentions/MentionText";
 import { syncMentionLinks } from "../../mentions";
@@ -13,6 +16,29 @@ import { loadHideFinance } from "../../financePrivacy";
 import { useConfirm } from "../../hooks/useConfirm";
 import { PlayerCharacterCards } from "./PlayerCharacterCards";
 
+const NO_UNPAID: UnpaidSession[] = [];
+const NO_CAMPAIGNS: Campaign[] = [];
+const NO_GROUPS: PlayerGroup[] = [];
+
+interface PlayerAccount {
+  id: number;
+  username: string;
+  role: "gm" | "player";
+  player_id: number;
+}
+
+/** Правка полей игрока: его карточка и списки, составы кампаний и списки персонажей (там его имя). */
+function playerFieldsAffects(playerId: number): Affect[] {
+  return [{ kind: "player", id: playerId, card: true }, { kind: "campaign", card: true }, { kind: "character", card: true }];
+}
+
+/** Персонаж добавлен или убран из профиля: персонажи игрока и списки персонажей кампаний. */
+function playerCharacterAffects(playerId: number): Affect[] {
+  return [{ kind: "player", id: playerId, card: true }, { kind: "character" }];
+}
+
+const ACCOUNTS_PATH = "/auth/players";
+
 /**
  * Профиль игрока для правой колонки раздела «Игроки» (и для прямого маршрута
  * /players/:id — тот рендерит тот же workspace). Первым блоком идут персонажи
@@ -21,55 +47,58 @@ import { PlayerCharacterCards } from "./PlayerCharacterCards";
 export function PlayerProfilePanel({ playerId }: { playerId: number }) {
   const [confirmDialog, confirm] = useConfirm();
   const navigate = useNavigate();
+  const run = useAction();
+  const afterWrite = useAfterWrite();
   const { user: currentUser } = useCurrentUser();
-  const [player, setPlayer] = useState<PlayerDetail | null>(null);
-  const [unpaid, setUnpaid] = useState<UnpaidSession[]>([]);
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const playerState = useEntity<PlayerDetail>("player", playerId);
+  const player = playerState.data ?? null;
+  // Долги не грузятся — блок просто не показывается, как и раньше.
+  const unpaid = useResource<UnpaidSession[]>(`/players/${playerId}/unpaid`).data ?? NO_UNPAID;
+  const campaigns = useResource<Campaign[]>("/campaigns").data ?? NO_CAMPAIGNS;
+  const accounts = useResource<PlayerAccount[]>(ACCOUNTS_PATH);
+  const mine = accounts.data?.find((r) => r.player_id === playerId);
+  const account = mine ? { id: mine.id, username: mine.username, role: mine.role } : null;
+  const accountLoaded = !accounts.loading;
+  const allGroups = useResource<PlayerGroup[]>("/player-groups").data ?? NO_GROUPS;
+  const groupsOf = useResource<PlayerGroup[]>(`/player-groups/by-player/${playerId}`).data;
+  // Отметки групп держатся здесь, чтобы галочка менялась сразу, а не после ответа.
+  const [playerGroupIds, setPlayerGroupIds] = useState<number[]>([]);
+  useEffect(() => {
+    if (groupsOf) setPlayerGroupIds(groupsOf.map((g) => g.id));
+  }, [groupsOf]);
   const [campaignId, setCampaignId] = useState("");
   const [characterName, setCharacterName] = useState("");
   const [editing, setEditing] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [notesDraft, setNotesDraft] = useState("");
-  const [account, setAccount] = useState<{ id: number; username: string; role: "gm" | "player" } | null>(null);
-  const [accountLoaded, setAccountLoaded] = useState(false);
   const [loginDraft, setLoginDraft] = useState("");
   const [passwordDraft, setPasswordDraft] = useState("");
   const [accountEditing, setAccountEditing] = useState(false);
   const [accountError, setAccountError] = useState("");
-  const [allGroups, setAllGroups] = useState<PlayerGroup[]>([]);
-  const [playerGroupIds, setPlayerGroupIds] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
   const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [showRoleModal, setShowRoleModal] = useState(false);
-
-  function refreshAccount() {
-    api
-      .get<{ id: number; username: string; role: "gm" | "player"; player_id: number }[]>("/auth/players")
-      .then((rows) => {
-        const mine = rows.find((r) => r.player_id === playerId);
-        setAccount(mine ? { id: mine.id, username: mine.username, role: mine.role } : null);
-        setAccountLoaded(true);
-      })
-      .catch(() => setAccountLoaded(true));
-  }
 
   async function toggleAccountRole() {
     if (!account) return;
     setShowRoleModal(false);
     const nextRole = account.role === "gm" ? "player" : "gm";
-    await api.put(`/auth/players/${playerId}/role`, { role: nextRole });
-    refreshAccount();
+    await run(labelled("Метка «Мастер»", () => write.put(`/auth/players/${playerId}/role`, { role: nextRole })), {
+      affects: [{ path: ACCOUNTS_PATH }],
+    });
   }
 
+  // Логин и пароль: ошибка — в форме рядом с набранным, без «Повторить»
+  // (повтор держал бы пароль в плашке).
   async function createAccount() {
     setAccountError("");
     if (!loginDraft.trim() || !passwordDraft) return;
     try {
-      await api.post("/auth/players", { username: loginDraft.trim(), password: passwordDraft, player_id: playerId });
+      await write.post(ACCOUNTS_PATH, { username: loginDraft.trim(), password: passwordDraft, player_id: playerId });
+      afterWrite([{ path: ACCOUNTS_PATH }]);
       setLoginDraft("");
       setPasswordDraft("");
       setAccountEditing(false);
-      refreshAccount();
     } catch (err) {
       setAccountError(err instanceof Error ? err.message : String(err));
     }
@@ -78,66 +107,65 @@ export function PlayerProfilePanel({ playerId }: { playerId: number }) {
   async function saveAccountEdit() {
     setAccountError("");
     try {
-      await api.put(`/auth/players/${playerId}/password`, {
+      await write.put(`/auth/players/${playerId}/password`, {
         username: loginDraft.trim() || undefined,
         password: passwordDraft || undefined,
       });
+      afterWrite([{ path: ACCOUNTS_PATH }]);
       setLoginDraft("");
       setPasswordDraft("");
       setAccountEditing(false);
-      refreshAccount();
     } catch (err) {
       setAccountError(err instanceof Error ? err.message : String(err));
     }
   }
 
-  function refresh() {
-    api.get<PlayerDetail>(`/players/${playerId}`).then((p) => {
-      setPlayer(p);
-      setNameDraft(p.name);
-      setNotesDraft(p.notes);
-    });
-    api.get<UnpaidSession[]>(`/players/${playerId}/unpaid`).then(setUnpaid).catch(() => setUnpaid([]));
+  if (playerState.error && !player) {
+    return <LoadErrorCard message={<>Не удалось загрузить игрока: {playerState.error}</>} onRetry={playerState.reload} />;
   }
-  useEffect(() => {
-    refresh();
-    refreshAccount();
-    api.get<Campaign[]>("/campaigns").then(setCampaigns);
-    api.get<PlayerGroup[]>("/player-groups").then(setAllGroups);
-    api.get<PlayerGroup[]>(`/player-groups/by-player/${playerId}`).then((groups) => {
-      setPlayerGroupIds(groups.map((g) => g.id));
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playerId]);
-
   if (!player) return <p className="muted">Загрузка…</p>;
+
+  function startEdit() {
+    if (!player) return;
+    setNameDraft(player.name);
+    setNotesDraft(player.notes);
+    setEditing(true);
+  }
 
   async function addCharacter() {
     if (!campaignId || !characterName.trim()) return;
-    await api.post("/characters", {
-      player_id: playerId,
-      campaign_id: Number(campaignId),
-      character_name: characterName,
-    });
-    setCharacterName("");
-    refresh();
+    const created = await run(
+      labelled("Новый персонаж", () =>
+        write
+          .post("/characters", { player_id: playerId, campaign_id: Number(campaignId), character_name: characterName })
+          .then(() => true)
+      ),
+      { affects: playerCharacterAffects(playerId), retry: false }
+    );
+    if (created) setCharacterName("");
   }
 
   async function removeCharacter(characterId: number) {
     if (!(await confirm({ message: "Отправить персонажа в архив?", confirmLabel: "Архивировать", danger: true })))
       return;
-    await api.del(`/characters/${characterId}`);
-    refresh();
+    await run(labelled("Персонаж не архивирован", () => write.del(`/characters/${characterId}`)), {
+      affects: [...playerCharacterAffects(playerId), { path: "/archive" }],
+    });
   }
 
   async function saveEdit() {
     if (!nameDraft.trim() || !player) return;
+    const before = player.notes;
+    const notes = notesDraft;
     setSaving(true);
     try {
-      await api.put(`/players/${playerId}`, { name: nameDraft, notes: notesDraft });
-      syncMentionLinks("player", playerId, player.notes, notesDraft);
+      const saved = await run(
+        labelled("Игрок", () => write.put(`/players/${playerId}`, { name: nameDraft, notes }).then(() => true)),
+        { affects: playerFieldsAffects(playerId) }
+      );
+      if (!saved) return;
+      syncMentionLinks("player", playerId, before, notes);
       setEditing(false);
-      refresh();
     } finally {
       setSaving(false);
     }
@@ -145,8 +173,24 @@ export function PlayerProfilePanel({ playerId }: { playerId: number }) {
 
   async function archivePlayer() {
     setShowArchiveModal(false);
-    await api.del(`/players/${playerId}`);
-    navigate("/players");
+    const done = await run(labelled("Игрок не архивирован", () => write.del(`/players/${playerId}`).then(() => true)), {
+      affects: [{ kind: "player" }, { kind: "campaign", card: true }, { kind: "character", card: true }, { path: "/archive" }],
+    });
+    if (done) navigate("/players");
+  }
+
+  async function toggleGroup(groupId: number, isIn: boolean) {
+    setPlayerGroupIds((prev) => (isIn ? prev.filter((gid) => gid !== groupId) : [...prev, groupId]));
+    const done = await run(
+      labelled(isIn ? "Игрок не убран из группы" : "Игрок не добавлен в группу", () =>
+        (isIn
+          ? write.del(`/player-groups/${groupId}/members?playerIds=${playerId}`)
+          : write.post(`/player-groups/${groupId}/members`, { playerIds: [playerId] })
+        ).then(() => true)
+      ),
+      { affects: [{ path: "/player-groups" }] }
+    );
+    if (!done) setPlayerGroupIds((prev) => (isIn ? [...prev, groupId] : prev.filter((gid) => gid !== groupId)));
   }
 
   return (
@@ -162,7 +206,7 @@ export function PlayerProfilePanel({ playerId }: { playerId: number }) {
           )}
         </div>
         <div className="entity-header-actions">
-          <button onClick={() => setEditing(true)}>Редактировать</button>
+          <button onClick={startEdit}>Редактировать</button>
           <button className="danger" onClick={() => setShowArchiveModal(true)}>
             <NavIcon name="archive" /> Архивировать
           </button>
@@ -292,20 +336,7 @@ export function PlayerProfilePanel({ playerId }: { playerId: number }) {
                   <input
                     type="checkbox"
                     checked={isIn}
-                    onChange={() => {
-                      setPlayerGroupIds((prev) =>
-                        isIn ? prev.filter((gid) => gid !== g.id) : [...prev, g.id]
-                      );
-                      if (isIn) {
-                        api.del(`/player-groups/${g.id}/members?playerIds=${playerId}`).catch(() => {
-                          setPlayerGroupIds((prev) => isIn ? [...prev, g.id] : prev.filter((gid) => gid !== g.id));
-                        });
-                      } else {
-                        api.post(`/player-groups/${g.id}/members`, { playerIds: [playerId] }).catch(() => {
-                          setPlayerGroupIds((prev) => isIn ? [...prev, g.id] : prev.filter((gid) => gid !== g.id));
-                        });
-                      }
-                    }}
+                    onChange={() => void toggleGroup(g.id, isIn)}
                   />
                   {g.name}
                 </label>
