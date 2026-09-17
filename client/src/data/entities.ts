@@ -25,6 +25,10 @@ export const ENTITY_ENDPOINTS = {
   artifact: "/artifacts",
   community: "/setting-communities",
   compendium_entry: "/systems/entries",
+  // Сама система. Её подресурсы (`/systems/:id/sections`, записи раздела)
+  // задевает `{ kind: "system", id }`; без id вид задел бы и все записи
+  // компендиума (`/systems/entries/...`), поэтому целиком его не трогают.
+  system: "/systems",
   scene: "/story/scenes",
   adventure: "/story/arcs",
   // У события своей коллекции нет — оно живёт внутри сеттинга, но одиночный
@@ -81,6 +85,7 @@ export const dataKeys = {
  *   ресурсы, которые её показывают, без её подресурсов. Смена валюты кампании
  *   не должна перечитывать её сессии, хронику мира и препродакшен;
  * - `{ kind }` — весь вид;
+ * - `{ kind, card: true }` — поля всех сущностей вида: карточки и списки, без подресурсов;
  * - `{ path }` — произвольный ресурс: все запросы, чей путь начинается так
  *   (с границей сегмента или параметра).
  */
@@ -140,7 +145,13 @@ export function matchesAffect(queryKey: QueryKey, affect: Affect): boolean {
   if (scope === "entity") return a === affect.kind && (affect.id == null || b === affect.id);
   if (scope === "list") return a === affect.kind;
   if (scope === "resource" && typeof a === "string") {
-    if (affect.id == null) return pathHasPrefix(a, base);
+    if (affect.id == null) {
+      if (!affect.card) return pathHasPrefix(a, base);
+      // Все карточки вида и его списки, без подресурсов: переименование
+      // системы меняет подпись в каждой кампании, но не их сессии и хронику.
+      const rest = a.slice(base.length);
+      return a.startsWith(base) && /^(\/\d+)?(\?.*)?$/.test(rest);
+    }
     // Своя карточка и подресурсы — да; списки вида — да; чужие карточки — нет.
     const own = affect.card ? a === `${base}/${affect.id}` : pathHasPrefix(a, `${base}/${affect.id}`);
     return own || a === base || a.startsWith(`${base}?`);

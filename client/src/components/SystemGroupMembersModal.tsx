@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { useAfterWrite, useResource, write } from "../data/hooks";
+import { systemGroupAffects, systemPaths } from "../data/systems";
 import type { System } from "../types";
 import { useAlert } from "../hooks/useConfirm";
 
@@ -11,32 +12,19 @@ interface SystemGroupMembersModalProps {
 }
 
 export function SystemGroupMembersModal({ groupId, groupName, onClose, onUpdated }: SystemGroupMembersModalProps) {
-  const [allSystems, setAllSystems] = useState<System[]>([]);
+  const all = useResource<System[]>(systemPaths.list());
+  const members = useResource<System[]>(systemPaths.groupMembers(groupId));
+  const allSystems = all.data ?? [];
+  const loading = all.loading || members.loading;
+  // Отметки держатся здесь, чтобы галочка менялась сразу, а не после ответа.
   const [memberIds, setMemberIds] = useState<Set<number>>(new Set());
-  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (members.data) setMemberIds(new Set(members.data.map((m) => m.id)));
+  }, [members.data]);
   const [saving, setSaving] = useState(false);
+  const afterWrite = useAfterWrite();
 
   const [alertDialog, showAlert] = useAlert();
-
-  useEffect(() => {
-    const controller = new AbortController();
-    async function load() {
-      try {
-        const [all, members] = await Promise.all([
-          api.get<System[]>("/systems", { signal: controller.signal }),
-          api.get<System[]>(`/system-groups/${groupId}/members`, { signal: controller.signal }),
-        ]);
-        setAllSystems(all);
-        setMemberIds(new Set(members.map((m) => m.id)));
-      } catch {
-        // silent
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-    return () => controller.abort();
-  }, [groupId]);
 
   async function toggle(systemId: number) {
     const next = new Set(memberIds);
@@ -51,10 +39,11 @@ export function SystemGroupMembersModal({ groupId, groupName, onClose, onUpdated
     setSaving(true);
     try {
       if (wasIn) {
-        await api.del(`/system-groups/${groupId}/members?systemIds=${systemId}`);
+        await write.del(`/system-groups/${groupId}/members?systemIds=${systemId}`);
       } else {
-        await api.post(`/system-groups/${groupId}/members`, { systemIds: [systemId] });
+        await write.post(`/system-groups/${groupId}/members`, { systemIds: [systemId] });
       }
+      afterWrite(systemGroupAffects());
       onUpdated();
     } catch (e) {
       // revert on error

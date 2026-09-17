@@ -37,6 +37,9 @@ const MIGRATED_ROUTES: readonly RegExp[] = [
   /^\/campaigns\/?$/,
   /^\/campaigns\/\d+\/?$/,
   /^\/cabinet\/?$/,
+  // Группа «системы», часть 1: список систем. Профиль системы — после части 3,
+  // когда переведены все его разделы.
+  /^\/systems\/?$/,
 ];
 
 export function isMigratedRoute(pathname: string): boolean {

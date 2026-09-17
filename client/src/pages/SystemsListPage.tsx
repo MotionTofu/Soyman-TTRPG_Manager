@@ -1,6 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
+import { useAction, useResource, write } from "../data/hooks";
+import { labelled } from "../data/notices";
+import { dataKeys, invalidateAffects } from "../data/entities";
+import { systemGroupAffects, systemPaths } from "../data/systems";
 import { Modal } from "../components/Modal";
 import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
 import { EmptyState } from "../components/EmptyState";
@@ -52,77 +57,58 @@ function SystemCoverTile({ system: s }: { system: System }) {
 }
 
 export function SystemsListPage() {
-  const [systems, setSystems] = useState<System[]>([]);
+  const client = useQueryClient();
+  const run = useAction();
+  const systemsState = useResource<System[]>(systemPaths.list());
+  const systems = systemsState.data ?? NO_SYSTEMS;
+  const loading = systemsState.loading;
+  const loadError = systemsState.error;
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<string | null>(null);
-  const [groups, setGroups] = useState<SystemGroup[]>([]);
-  const [groupMembers, setGroupMembers] = useState<Map<number, Set<number>>>(new Map());
+  const groups = useResource<SystemGroup[]>(systemPaths.groups()).data ?? NO_GROUPS;
+  // Составы всех групп — по ключу на группу: окно состава и профиль системы
+  // правят их через слой, и вкладки списка перечитывают только задетое.
+  const memberQueries = useQueries({
+    queries: groups.map((g) => ({
+      queryKey: dataKeys.resource(systemPaths.groupMembers(g.id)),
+      queryFn: ({ signal }: { signal: AbortSignal }) => api.get<System[]>(systemPaths.groupMembers(g.id), { signal }),
+    })),
+  });
+  // Ключ по составу, а не по ссылкам: массив запросов пересобирается на
+  // каждый рендер, и фильтр ниже пересчитывался бы вхолостую.
+  const membersKey = groups
+    .map((g, i) => `${g.id}:${memberQueries[i]?.data?.map((m) => m.id).join(",") ?? "-"}`)
+    .join("|");
+  const groupMembers = useMemo(() => {
+    const map = new Map<number, Set<number>>();
+    for (const part of membersKey ? membersKey.split("|") : []) {
+      const [id, ids] = part.split(":");
+      if (ids !== "-") map.set(Number(id), new Set(ids ? ids.split(",").map(Number) : []));
+    }
+    return map;
+  }, [membersKey]);
+  const ungroupedIds = useMemo(() => {
+    const inGroups = new Set<number>();
+    for (const ids of groupMembers.values()) for (const id of ids) inGroups.add(id);
+    return new Set(systems.filter((s) => !inGroups.has(s.id)).map((s) => s.id));
+  }, [groupMembers, systems]);
   const [groupModalGroupId, setGroupModalGroupId] = useState<number | null>(null);
-  const [ungroupedIds, setUngroupedIds] = useState<Set<number>>(new Set());
   const [q, setQ] = useState("");
 
-  async function loadGroups() {
-    try {
-      const data = await api.get<SystemGroup[]>("/system-groups");
-      setGroups(data);
-    } catch { /* silent */ }
+  // Группы правит каркас списка (ListPage) мимо слоя — после его правки
+  // перечитываются группы и их составы.
+  function refreshGroups() {
+    void invalidateAffects(client, systemGroupAffects());
   }
-
-  async function loadGroupMembers() {
-    try {
-      const memberMap = new Map<number, Set<number>>();
-      for (const g of groups) {
-        const members = await api.get<System[]>(`/system-groups/${g.id}/members`);
-        memberMap.set(g.id, new Set(members.map(m => m.id)));
-      }
-      setGroupMembers(memberMap);
-
-      const allMemberIds = new Set<number>();
-      for (const ids of memberMap.values()) {
-        for (const id of ids) allMemberIds.add(id);
-      }
-      setUngroupedIds(new Set(systems.filter(s => !allMemberIds.has(s.id)).map(s => s.id)));
-    } catch { /* silent */ }
-  }
-
-  async function loadSystems(signal?: AbortSignal) {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const data = await api.get<System[]>("/systems", signal ? { signal } : undefined);
-      setSystems(data);
-    } catch (e) {
-      if ((e as Error).name === "AbortError") return;
-      setLoadError(String(e instanceof Error ? e.message : e));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    const controller = new AbortController();
-    loadSystems(controller.signal);
-    loadGroups();
-    return () => controller.abort();
-  }, []);
-
-  useEffect(() => {
-    if (systems.length > 0 && groups.length >= 0) {
-      loadGroupMembers();
-    }
-  }, [systems, groups]);
 
   function refresh() {
-    void loadSystems();
-    void loadGroups();
+    void systemsState.reload();
+    refreshGroups();
   }
 
-  useEffect(() => () => { if (creating) setCreating(false); }, [creating]);
 
   const filteredSystems = useMemo(() => {
     const qq = q.trim().toLowerCase();
@@ -145,16 +131,17 @@ export function SystemsListPage() {
 
   async function create() {
     if (!name.trim()) return;
-    try {
-      await api.post("/systems", { name, description });
-      clearDndSystemIdCache();
-      setCreating(false);
-      setName("");
-      setDescription("");
-      refresh();
-    } catch {
-      // Modal stays open — user can retry
-    }
+    // При отказе окно остаётся открытым с набранным, а плашка говорит, что
+    // не так; раньше отказ был молчаливым.
+    const created = await run(labelled("Новая система", () => write.post<System>("/systems", { name, description })), {
+      affects: [{ path: systemPaths.list() }],
+      retry: false,
+    });
+    if (!created) return;
+    clearDndSystemIdCache();
+    setCreating(false);
+    setName("");
+    setDescription("");
   }
 
   return (
@@ -166,7 +153,7 @@ export function SystemsListPage() {
         groups={groups.map((g) => ({ id: String(g.id), label: g.name }))}
         groupsEndpoint="/system-groups"
         groupsDeleteNote="Системы не будут удалены — они останутся в разделе «Все системы»."
-        onGroupsChanged={refresh}
+        onGroupsChanged={refreshGroups}
         createLabel="+ Новая система"
         onCreate={() => setCreating(true)}
         activeGroup={activeTab}
@@ -268,9 +255,12 @@ export function SystemsListPage() {
           groupId={groupModalGroupId}
           groupName={groups.find(g => g.id === groupModalGroupId)?.name ?? ""}
           onClose={() => setGroupModalGroupId(null)}
-          onUpdated={loadGroupMembers}
+          onUpdated={() => undefined}
         />
       )}
     </div>
   );
 }
+
+const NO_SYSTEMS: System[] = [];
+const NO_GROUPS: SystemGroup[] = [];

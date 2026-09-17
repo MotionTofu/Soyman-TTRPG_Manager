@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
+import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
+import { labelled } from "../data/notices";
+import { systemFieldsAffects, systemGroupAffects, systemNameAffects, systemPaths, wholeSystemAffects } from "../data/systems";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { Modal } from "../components/Modal";
 import { CompendiumSection } from "../components/CompendiumSection";
@@ -24,11 +27,14 @@ export function SystemDetailPage() {
   const systemId = Number(id);
   const navigate = useNavigate();
 
-  const [system, setSystem] = useState<System | null>(null);
-  const [sections, setSections] = useState<SystemSection[]>([]);
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [allGroups, setAllGroups] = useState<SystemGroup[]>([]);
-  const [systemGroupIds, setSystemGroupIds] = useState<Set<number>>(new Set());
+  const run = useAction();
+  const afterWrite = useAfterWrite();
+  const system = useResource<System>(systemPaths.detail(systemId)).data ?? null;
+  const sections = useResource<SystemSection[]>(systemPaths.sections(systemId)).data ?? NO_SECTIONS;
+  const campaigns = useResource<Campaign[]>(systemPaths.campaigns(systemId)).data ?? NO_CAMPAIGNS;
+  const allGroups = useResource<SystemGroup[]>(systemPaths.groups()).data ?? NO_GROUPS;
+  const ofSystem = useResource<SystemGroup[]>(systemPaths.groupsOf(systemId)).data;
+  const systemGroupIds = useMemo(() => new Set((ofSystem ?? []).map((g) => g.id)), [ofSystem]);
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportBusy, setExportBusy] = useState(false);
@@ -49,44 +55,14 @@ export function SystemDetailPage() {
   const focusEntryId = searchParams.get("entry") ? Number(searchParams.get("entry")) : undefined;
   // Сколько записей в каждом разделе — строка «Классы: 13» в хиро-карточке
   // «Обзора». Считает сервер одним запросом, без вытягивания самих записей.
-  const [sectionCounts, setSectionCounts] = useState<Record<number, number>>({});
-
-  function refreshSystem() {
-    api.get<System>(`/systems/${systemId}`).then(setSystem);
-  }
-  function refreshSections() {
-    api.get<SystemSection[]>(`/systems/${systemId}/sections`).then(setSections);
-  }
-  async function refreshGroups() {
-    const [all, mine] = await Promise.all([
-      api.get<SystemGroup[]>("/system-groups"),
-      api.get<SystemGroup[]>(`/system-groups/by-system/${systemId}`),
-    ]);
-    setAllGroups(all);
-    setSystemGroupIds(new Set(mine.map((g) => g.id)));
-  }
-  useEffect(() => {
-    refreshSystem();
-    refreshSections();
-    refreshGroups();
-    api.get<Campaign[]>(`/campaigns?system_id=${systemId}`).then(setCampaigns);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [systemId]);
-
-  useEffect(() => {
-    if (activeTab !== "overview" || sections.length === 0) return;
-    let cancelled = false;
-    api
-      .get<{ section_id: number; count: number }[]>(`/systems/${systemId}/entry-counts`)
-      .then((rows) => {
-        if (cancelled) return;
-        setSectionCounts(Object.fromEntries(rows.map((r) => [r.section_id, r.count])));
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [systemId, activeTab, sections, tidyRun]);
+  const countRows = useResource<{ section_id: number; count: number }[]>(
+    activeTab === "overview" && sections.length > 0 ? systemPaths.entryCounts(systemId) : null
+  ).data;
+  const sectionCounts = useMemo<Record<number, number>>(
+    () => Object.fromEntries((countRows ?? []).map((r) => [r.section_id, r.count])),
+    [countRows]
+  );
+  const fieldsAffects = systemFieldsAffects(systemId);
 
   async function handleThumbnailChange(file: File | null) {
     if (!file) return;
@@ -94,12 +70,9 @@ export function SystemDetailPage() {
     try {
       const form = new FormData();
       form.append("file", file);
-      await api.post(`/systems/${systemId}/thumbnail`, form);
-      // Форс-обновление без кэша — иначе F5 нужен, т.к. ?v= может совпасть в пределах секунды
-      const updated = await api.get<System>(`/systems/${systemId}?t=${Date.now()}`);
-      setSystem(updated);
-    } catch (e) {
-      showAlert(String(e instanceof Error ? e.message : e));
+      await run(labelled("Тамбнейл системы", () => write.post(`/systems/${systemId}/thumbnail`, form, { timeoutMs: UPLOAD_TIMEOUT_MS })), {
+        affects: fieldsAffects,
+      });
     } finally {
       setUploadingThumbnail(false);
     }
@@ -116,11 +89,7 @@ export function SystemDetailPage() {
     if (!ok) return;
     setUploadingThumbnail(true);
     try {
-      await api.del(`/systems/${systemId}/thumbnail`);
-      const updated = await api.get<System>(`/systems/${systemId}?t=${Date.now()}`);
-      setSystem(updated);
-    } catch (e) {
-      showAlert(String(e instanceof Error ? e.message : e));
+      await run(labelled("Удаление тамбнейла", () => write.del(`/systems/${systemId}/thumbnail`)), { affects: fieldsAffects });
     } finally {
       setUploadingThumbnail(false);
     }
@@ -134,20 +103,39 @@ export function SystemDetailPage() {
 
   async function saveName(name: string, code: string) {
     // Двойник кода называется, но не запрещается — см. SettingDetailPage.
-    const saved = await api.put<{ code_taken_by: string | null }>(`/systems/${systemId}`, {
-      name,
-      code,
-    });
+    // Карточка сохраняет название вместе с описанием на каждое «Сохранить»;
+    // неизменное название не пишется — иначе правка описания перечитывала бы
+    // ещё и кампании.
+    if (system && name === system.name && code === (system.code ?? "")) return;
+    // Отказ бросается дальше: карточка тогда остаётся в правке с набранным.
+    const saved = await run(
+      labelled("Название системы", () => write.put<{ code_taken_by: string | null }>(`/systems/${systemId}`, { name, code })),
+      { affects: systemNameAffects(systemId) }
+    );
+    if (!saved) throw new Error("Не сохранилось");
     clearDndSystemIdCache();
     if (saved.code_taken_by) {
       showAlert(`Код «${code}» уже носит «${saved.code_taken_by}». Это разрешено, но в ссылках оба будут выглядеть одинаково.`);
     }
-    refreshSystem();
   }
 
   async function saveDescription(value: string) {
-    await api.put(`/systems/${systemId}`, { description: value });
-    refreshSystem();
+    const saved = await run(
+      labelled("Описание системы", () => write.put(`/systems/${systemId}`, { description: value }).then(() => true)),
+      { affects: fieldsAffects }
+    );
+    if (!saved) throw new Error("Не сохранилось");
+  }
+
+  async function toggleGroup(groupId: number, isIn: boolean) {
+    await run(
+      labelled("Группа систем", () =>
+        isIn
+          ? write.del(`/system-groups/${groupId}/members?systemIds=${systemId}`)
+          : write.post(`/system-groups/${groupId}/members`, { systemIds: [systemId] })
+      ),
+      { affects: systemGroupAffects() }
+    );
   }
 
   async function archiveSystem() {
@@ -158,12 +146,10 @@ export function SystemDetailPage() {
       danger: true,
     });
     if (!ok) return;
-    try {
-      await api.del(`/systems/${systemId}`);
-      navigate("/systems");
-    } catch (e) {
-      showAlert(`Не удалось архивировать: ${e instanceof Error ? e.message : String(e)}`);
-    }
+    const done = await run(labelled("Архивация системы", () => write.del(`/systems/${systemId}`).then(() => true)), {
+      affects: [...fieldsAffects, { path: "/archive" }],
+    });
+    if (done) navigate("/systems");
   }
 
   async function exportSystem(withImages: boolean) {
@@ -189,7 +175,11 @@ export function SystemDetailPage() {
     // См. SystemOnboardingModal: большой экспорт едет файлом, не JSON-строкой.
     const form = new FormData();
     form.append("file", file, file.name);
-    const created = await api.post<System>("/systems/import-file", form, { timeoutMs: 600000 });
+    const created = await run(
+      labelled("Импорт системы", () => write.post<System>("/systems/import-file", form, { timeoutMs: 600000 })),
+      { affects: [{ path: systemPaths.list() }], retry: false }
+    );
+    if (!created) return;
     clearDndSystemIdCache();
     navigate(`/systems/${created.id}`);
   }
@@ -307,14 +297,7 @@ export function SystemDetailPage() {
                             <input
                               type="checkbox"
                               checked={isIn}
-                              onChange={async () => {
-                                if (isIn) {
-                                  await api.del(`/system-groups/${g.id}/members?systemIds=${systemId}`);
-                                } else {
-                                  await api.post(`/system-groups/${g.id}/members`, { systemIds: [systemId] });
-                                }
-                                refreshGroups();
-                              }}
+                              onChange={() => void toggleGroup(g.id, isIn)}
                             />
                             {g.name}
                           </label>
@@ -392,7 +375,8 @@ export function SystemDetailPage() {
           systemId={systemId}
           onClose={() => {
             setTidying(false);
-            refreshSections();
+            // Уборка правит записи всей системы разом (разбор, Q4).
+            afterWrite(wholeSystemAffects(systemId));
             setTidyRun((n) => n + 1);
           }}
         />
@@ -418,3 +402,8 @@ export function SystemDetailPage() {
     </EntityPage>
   );
 }
+
+const UPLOAD_TIMEOUT_MS = 120_000;
+const NO_SECTIONS: SystemSection[] = [];
+const NO_CAMPAIGNS: Campaign[] = [];
+const NO_GROUPS: SystemGroup[] = [];
