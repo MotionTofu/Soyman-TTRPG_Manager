@@ -35,10 +35,9 @@ function pickNearestId(sessions: SessionSummary[], now: Date): number | null {
 // the soonest upcoming one — see nearestSessionCockpit.ts's pickNearestId
 // for the exact tie-break rules requested by the user.
 export function useNearestSessionCockpitId(): number | null {
-  // Календарь — под ключом слоя и с опросом раз в минуту, как было. Правилом
-  // «сессия задевает календарь» его не обновить: тогда каждый шаг хода в бою
-  // (правка сессии) тянул бы календарь всех кампаний. Часы пересчитывают
-  // «ближайшую» между опросами — сменилось время, а не данные.
+  // Календарь — под ключом слоя и с опросом раз в минуту. Правка сессии задевает
+  // его сама (data/entities.ts), карточная — шаг хода в бою — нет. Часы
+  // пересчитывают «ближайшую» между опросами — сменилось время, а не данные.
   const sessions = useResource<SessionSummary[]>("/calendar", { pollMs: REFRESH_MS }).data;
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {

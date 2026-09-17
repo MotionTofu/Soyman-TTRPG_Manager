@@ -116,7 +116,7 @@ export function pathHasPrefix(path: string, prefix: string): boolean {
  *
  * Перечитывается только открытая доска: закрытая лишь помечается устаревшей.
  */
-const RESOURCE_DEPENDENCIES: readonly { prefix: string | RegExp; kinds: readonly EntityKind[] }[] = [
+const RESOURCE_DEPENDENCIES: readonly { prefix: string | RegExp; kinds: readonly EntityKind[]; skipCard?: boolean }[] = [
   {
     prefix: "/canvas/board",
     kinds: ["scene", "adventure", "being", "location", "artifact", "community", "setting_event", "character", "setting", "campaign"],
@@ -126,6 +126,13 @@ const RESOURCE_DEPENDENCIES: readonly { prefix: string | RegExp; kinds: readonly
   // сцен: отметка «сыграна» в профиле кампании должна дойти до открытого пульта,
   // не перечитывая остальные его 13 панелей (группа «кампании», часть 1).
   { prefix: /^\/sessions\/\d+\/(story-tree|planned|preview)(\/|\?|$)/, kinds: ["scene", "adventure"] },
+  // Календарь всех кампаний, сводка денег и списки кампаний и игроков считают на
+  // сервере данные сессий: дату, статус, оплату, число игр, ближайшую игру.
+  // Правка карточки (`card`) — шаг хода в бою, шпаргалка — их не задевает:
+  // иначе каждый ход тянул бы календарь (группа «остальное», часть 1).
+  { prefix: "/calendar", kinds: ["session"], skipCard: true },
+  { prefix: "/finance", kinds: ["session"], skipCard: true },
+  { prefix: /^\/(campaigns|players)(\?|$)/, kinds: ["session"], skipCard: true },
 ];
 
 function dependsOn(path: string, prefix: string | RegExp): boolean {
@@ -140,7 +147,9 @@ export function matchesAffect(queryKey: QueryKey, affect: Affect): boolean {
   if (
     scope === "resource" &&
     typeof a === "string" &&
-    RESOURCE_DEPENDENCIES.some((dep) => dep.kinds.includes(affect.kind) && dependsOn(a, dep.prefix))
+    RESOURCE_DEPENDENCIES.some(
+      (dep) => dep.kinds.includes(affect.kind) && !(dep.skipCard && affect.card) && dependsOn(a, dep.prefix)
+    )
   ) {
     return true;
   }

@@ -15,6 +15,18 @@ describe("граница пути", () => {
 });
 
 describe("что задевает правка", () => {
+  it("правка сессии задевает календарь, деньги и списки кампаний и игроков, а карточная — нет", () => {
+    const field = { kind: "session", id: 153 } as const;
+    const step = { kind: "session", id: 153, card: true } as const;
+    for (const path of ["/calendar", "/finance/summary", "/campaigns", "/players"]) {
+      expect(matchesAffect(dataKeys.resource(path), field)).toBe(true);
+      expect(matchesAffect(dataKeys.resource(path), step)).toBe(false);
+    }
+    expect(matchesAffect(dataKeys.resource("/campaigns/4/calendar-events"), field)).toBe(false);
+    expect(matchesAffect(dataKeys.resource("/players/3"), field)).toBe(false);
+    expect(matchesAffect(dataKeys.resource("/calendar"), { kind: "session" })).toBe(true);
+  });
+
   const being408 = { kind: "being", id: 408 } as const;
 
   it("сущность задевает свою карточку, свои подресурсы и списки вида — и не трогает соседей", () => {

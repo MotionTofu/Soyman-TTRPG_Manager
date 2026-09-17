@@ -63,7 +63,9 @@ export function useResource<T>(
     queryKey: dataKeys.resource(path ?? ""),
     queryFn: ({ signal }) => api.get<T>(path as string, { signal }),
     enabled: path != null,
-    staleTime: options?.staleMs,
+    // Только заданные: явный `undefined` затирает свежесть клиента (30 с) —
+    // опции сливаются разворотом, и данные считались устаревшими сразу.
+    ...(options?.staleMs !== undefined ? { staleTime: options.staleMs } : {}),
     placeholderData: options?.keepPrevious ? (previous) => previous : undefined,
     refetchInterval: options?.pollMs,
     // Опрос не засыпает в скрытой вкладке: окно показа за другим окном или на
@@ -89,8 +91,8 @@ export function resourceQuery<T>(path: string, options?: { staleMs?: number; gcM
   return {
     queryKey: dataKeys.resource(path),
     queryFn: ({ signal }: { signal: AbortSignal }) => api.get<T>(path, { signal }),
-    staleTime: options?.staleMs,
-    gcTime: options?.gcMs,
+    ...(options?.staleMs !== undefined ? { staleTime: options.staleMs } : {}),
+    ...(options?.gcMs !== undefined ? { gcTime: options.gcMs } : {}),
   };
 }
 

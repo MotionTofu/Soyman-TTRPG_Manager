@@ -43,7 +43,7 @@ vi.mock("../dataSync", () => ({
   onDataChangedElsewhere: () => () => {},
 }));
 
-import { useEntity, useSaveEntity, useAction } from "./hooks";
+import { resourceQuery, useEntity, useResource, useSaveEntity, useAction } from "./hooks";
 import { getSaveNotices, resetNoticesForTests, retryNotice } from "./notices";
 
 let client: QueryClient;
@@ -67,6 +67,17 @@ function useBeing() {
 }
 
 describe("слой данных", () => {
+  it("ресурс без своей свежести держит свежесть клиента, а не устаревает сразу", async () => {
+    client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } });
+    const { result, unmount } = renderHook(() => useResource<{ name: string }>("/setting-beings/408"), { wrapper });
+    await waitFor(() => expect(result.current.data?.name).toBe("Адейо"));
+    unmount();
+    const again = renderHook(() => useResource<{ name: string }>("/setting-beings/408"), { wrapper });
+    expect(again.result.current.data?.name).toBe("Адейо");
+    expect(server.gets).toEqual(["/setting-beings/408"]);
+    expect(client.defaultQueryOptions(resourceQuery("/x")).staleTime).toBe(30_000);
+  });
+
   it("загружает сущность и отдаёт стабильный reload", async () => {
     const { result, rerender } = renderHook(useBeing, { wrapper });
     expect(result.current.being.loading).toBe(true);
