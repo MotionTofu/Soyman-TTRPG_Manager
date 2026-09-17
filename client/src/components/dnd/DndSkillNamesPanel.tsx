@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api } from "../../api/client";
+import { useAfterWrite, write } from "../../data/hooks";
+import { readResource } from "../../data/imperative";
+import { compendiumAffects, compendiumMembershipAffects, compendiumPaths } from "../../data/compendiumEntries";
 import type { Character, CompendiumEntry, Statblock, SystemSection } from "../../types";
 import { useConfirm } from "../../hooks/useConfirm";
 import { NavIcon } from "../NavIcons";
@@ -44,13 +46,15 @@ export function DndSkillNamesPanel({ systemId }: { systemId: number }) {
   const [error, setError] = useState<string | null>(null);
   const [busyName, setBusyName] = useState<string | null>(null);
   const [confirmDialog, confirm] = useConfirm();
+  // Ошибку записи экран показывает сам, строкой над списком, — плашка не нужна.
+  const afterWrite = useAfterWrite();
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
       const opts = { signal };
       const [entries, sections] = await Promise.all([
         loadDndSkillEntries(systemId, opts),
-        api.get<SystemSection[]>(`/systems/${systemId}/sections`, { signal }),
+        readResource<SystemSection[]>(compendiumPaths.sections(systemId)),
       ]);
       setSkills(entries);
       // Разделов «Справочник» может быть несколько (базовый плюс приехавший
@@ -60,10 +64,8 @@ export function DndSkillNamesPanel({ systemId }: { systemId: number }) {
       setGroupId(null);
       setSectionId(null);
       for (const mech of mechSections) {
-        const all = await api.get<CompendiumEntry[]>(
-          `/systems/${systemId}/entries?section_id=${mech.id}`,
-          { signal }
-        );
+        const all = await readResource<CompendiumEntry[]>(compendiumPaths.sectionEntries(systemId, mech.id));
+        if (signal?.aborted) return;
         const group = all.find((e) => e.parent_id === null && e.name === "Навыки");
         if (group) {
           setGroupId(group.id);
@@ -76,9 +78,10 @@ export function DndSkillNamesPanel({ systemId }: { systemId: number }) {
       const kinds = sections.filter((s) => s.kind === "class" || s.kind === "background");
       const lists = await Promise.all(
         kinds.map((s) =>
-          api.get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${s.id}`, { signal })
+          readResource<CompendiumEntry[]>(compendiumPaths.sectionEntries(systemId, s.id))
         )
       );
+      if (signal?.aborted) return;
       setSourceEntries(lists.flat());
     },
     [systemId]
@@ -152,12 +155,10 @@ export function DndSkillNamesPanel({ systemId }: { systemId: number }) {
     setScanningSheets(true);
     setError(null);
     try {
-      const characters = await api.get<Character[]>("/characters");
+      const characters = await readResource<Character[]>("/characters");
       const found = new Map<string, string[]>();
       for (const c of characters) {
-        const statblocks = await api.get<Statblock[]>(
-          `/statblocks?owner_type=character&owner_id=${c.id}`
-        );
+        const statblocks = await readResource<Statblock[]>(`/statblocks?owner_type=character&owner_id=${c.id}`);
         for (const sb of statblocks) {
           if (sb.format !== "dnd_character") continue;
           let data: Record<string, unknown>;
@@ -195,9 +196,10 @@ export function DndSkillNamesPanel({ systemId }: { systemId: number }) {
     setBusyName(item.name);
     setError(null);
     try {
-      await api.put(`/systems/entries/${target.id}`, {
+      await write.put(`/systems/entries/${target.id}`, {
         aliases: [...new Set([...target.aliases, item.name])],
       });
+      afterWrite(compendiumAffects({ id: target.id, system_id: systemId }));
       await load();
     } catch (e) {
       setError(errorMessage(e));
@@ -226,12 +228,14 @@ export function DndSkillNamesPanel({ systemId }: { systemId: number }) {
     setError(null);
     try {
       for (const src of item.sources) {
-        const entry = await api.get<CompendiumEntry>(`/systems/entries/${src.entryId}`);
+        // Свежая запись, а не из кэша: поверх неё сразу пишут.
+        const entry = await readResource<CompendiumEntry>(`/systems/entries/${src.entryId}`, { fresh: true });
         const list = Array.isArray(entry.data[src.field]) ? (entry.data[src.field] as string[]) : [];
         const next = list.map((s) => (s.trim() === item.name ? target.name : s));
-        await api.put(`/systems/entries/${src.entryId}`, {
+        await write.put(`/systems/entries/${src.entryId}`, {
           data: { ...entry.data, [src.field]: next },
         });
+        afterWrite(compendiumAffects({ id: src.entryId, system_id: systemId }));
       }
       await load();
     } catch (e) {
@@ -249,7 +253,7 @@ export function DndSkillNamesPanel({ systemId }: { systemId: number }) {
     setBusyName(item.name);
     setError(null);
     try {
-      await api.post(`/systems/${systemId}/entries`, {
+      await write.post(`/systems/${systemId}/entries`, {
         section_id: sectionId,
         parent_id: groupId,
         kind: "mechanic_item",
@@ -258,6 +262,7 @@ export function DndSkillNamesPanel({ systemId }: { systemId: number }) {
         // только от бонуса мастерства и соврал числом (гриллинг 2026-09-04).
         data: { ability },
       });
+      afterWrite(compendiumMembershipAffects(systemId));
       await load();
     } catch (e) {
       setError(errorMessage(e));

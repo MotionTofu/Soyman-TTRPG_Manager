@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { dataKeys } from "../data/entities";
+import { errorText, useAction, useResource, write } from "../data/hooks";
+import { labelled, showSaveError } from "../data/notices";
+import { compendiumMembershipAffects, compendiumPaths } from "../data/compendiumEntries";
+import { notifyDataChanged } from "../dataSync";
 import { CREATURE_SIZES, kindLabel, searchableText, VEHICLE_CATEGORIES } from "../compendium";
 import { VehicleTileGrid, saveFavourite, type VehicleGrouping } from "./VehicleTileGrid";
 import { NavIcon } from "./NavIcons";
@@ -28,7 +33,19 @@ export function VehicleSection({ systemId, section }: Props) {
   const { user } = useCurrentUser();
   const sortKey = `compendium-sort-${user?.id ?? "anon"}-${section.id}`;
   const [viewMode, setViewMode] = useCompendiumViewMode(section.id, "grid");
-  const [entries, setEntries] = useState<CompendiumEntry[]>([]);
+  // Записи раздела — ресурс слоя данных (группа «системы», часть 3): правка
+  // существа на его странице, в соседнем окне или уборка справочника
+  // перечитывают раздел сами.
+  const client = useQueryClient();
+  const run = useAction();
+  const entriesPath = compendiumPaths.sectionEntries(systemId, section.id);
+  const entriesState = useResource<CompendiumEntry[]>(entriesPath);
+  const entries = entriesState.data ?? NO_ENTRIES;
+  const setEntries = useCallback(
+    (update: (prev: CompendiumEntry[]) => CompendiumEntry[]) =>
+      client.setQueryData<CompendiumEntry[]>(dataKeys.resource(entriesPath), (prev) => update(prev ?? [])),
+    [client, entriesPath]
+  );
   const [filterCategory, setFilterCategory] = useState("");
   const [filterSize, setFilterSize] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -75,13 +92,6 @@ export function VehicleSection({ systemId, section }: Props) {
     }
   }
 
-  function refresh() {
-    api
-      .get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${section.id}`)
-      .then(setEntries);
-  }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(refresh, [systemId, section.id]);
 
   const vehicleFiltersActive =
     filterCategory !== "" || filterSize !== "" || searchQuery.trim() !== "" || showFavOnly;
@@ -105,7 +115,9 @@ export function VehicleSection({ systemId, section }: Props) {
       setEntries((cur) => cur.map((e) => (e.id === entry.id ? { ...e, favourite } : e)));
       try {
         await saveFavourite(entry.id, favourite);
-      } catch {
+        notifyDataChanged([{ path: `/systems/${systemId}/entries` }]);
+      } catch (error) {
+        showSaveError(`Избранное — ${errorText(error)}`);
         // Откат только если пользователь не успел переключить снова.
         setEntries((cur) =>
           cur.map((e) =>
@@ -120,7 +132,7 @@ export function VehicleSection({ systemId, section }: Props) {
     } finally {
       if (favouriteChains.current.get(entry.id) === next) favouriteChains.current.delete(entry.id);
     }
-  }, []);
+  }, [setEntries, systemId]);
 
   const topLevel = useMemo(() => entries.filter((e) => e.parent_id == null), [entries]);
 
@@ -141,15 +153,21 @@ export function VehicleSection({ systemId, section }: Props) {
   // Плитки не редактируются в линии (правка на странице судна) — после
   // создания сразу ведём в профиль, иначе в сетке остаётся сирота «Без названия».
   async function addVehicle() {
-    const created = await api.post<CompendiumEntry>(`/systems/${systemId}/entries`, {
-      section_id: section.id,
-      parent_id: null,
-      kind: "vehicle",
-      name: "",
-      level: null,
-      data: {},
-      description: "",
-    });
+    const created = await run(
+      labelled("Новый транспорт", () =>
+        write.post<CompendiumEntry>(`/systems/${systemId}/entries`, {
+          section_id: section.id,
+          parent_id: null,
+          kind: "vehicle",
+          name: "",
+          level: null,
+          data: {},
+          description: "",
+        })
+      ),
+      { affects: compendiumMembershipAffects(systemId), retry: false }
+    );
+    if (!created) return;
     navigate(`/compendium/${created.id}`);
   }
 
@@ -289,3 +307,5 @@ function VehicleListRow({ entry, onToggleFavourite }: { entry: CompendiumEntry; 
     </div>
   );
 }
+
+const NO_ENTRIES: CompendiumEntry[] = [];

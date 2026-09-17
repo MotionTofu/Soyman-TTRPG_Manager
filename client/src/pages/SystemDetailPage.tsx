@@ -40,11 +40,6 @@ export function SystemDetailPage() {
   const [tidying, setTidying] = useState(false);
   const [confirmDialog, confirm] = useConfirm();
   const [alertDialog, showAlert] = useAlert();
-  // Уборка справочника правит записи мимо экрана: раздел читает их один раз
-  // при монтировании и о правке не узнаёт, поэтому после неё показывал старое
-  // — пустые поля и фильтр, которому не по чему фильтровать. Ключ раздела
-  // меняется, раздел перечитывает записи.
-  const [tidyRun, setTidyRun] = useState(0);
   const [exportImages, setExportImages] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
 
@@ -337,26 +332,26 @@ export function SystemDetailPage() {
         (currentSection ? (
           currentSection.kind === "monster" ? (
             <MonsterSection
-              key={`${currentSection.id}-${tidyRun}`}
+              key={currentSection.id}
               systemId={systemId}
               section={currentSection}
             />
           ) : currentSection.kind === "vehicle" ? (
             <VehicleSection
-              key={`${currentSection.id}-${tidyRun}`}
+              key={currentSection.id}
               systemId={systemId}
               section={currentSection}
             />
           ) : currentSection.kind === "mechanics" ? (
             <MechanicsSection
-              key={`${currentSection.id}-${tidyRun}`}
+              key={currentSection.id}
               systemId={systemId}
               section={currentSection}
               focusEntryId={focusEntryId}
             />
           ) : (
             <CompendiumSection
-              key={`${currentSection.id}-${tidyRun}`}
+              key={currentSection.id}
               systemId={systemId}
               section={currentSection}
               focusEntryId={focusEntryId}
@@ -370,10 +365,8 @@ export function SystemDetailPage() {
         <TidyCompendiumDialog
           systemId={systemId}
           onClose={() => {
+            // Всю систему перечитывает сам диалог сразу после уборки.
             setTidying(false);
-            // Всю систему перечитывает сам диалог после уборки; ключ нужен
-            // разделам, ещё не переведённым на слой (бестиарий, транспорт).
-            setTidyRun((n) => n + 1);
           }}
         />
       )}

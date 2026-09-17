@@ -1,6 +1,5 @@
 import { memo, useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
 import { addToBag } from "../bag";
 import { Modal } from "./Modal";
 import { NavIcon } from "./NavIcons";
@@ -200,6 +199,3 @@ const SpellTile = memo(function SpellTile({
   );
 });
 
-export async function saveFavourite(entryId: number, favourite: boolean): Promise<void> {
-  await api.put(`/systems/entries/${entryId}/favourite`, { favourite });
-}

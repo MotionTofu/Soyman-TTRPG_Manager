@@ -33,7 +33,8 @@ describe("переведённые страницы", () => {
     expect(isMigratedRoute("/campaigns/3/extra")).toBe(false);
     expect(isMigratedRoute("/cabinet")).toBe(true);
     expect(isMigratedRoute("/systems")).toBe(true);
-    expect(isMigratedRoute("/systems/5")).toBe(false);
+    expect(isMigratedRoute("/systems/5")).toBe(true);
+    expect(isMigratedRoute("/import-system")).toBe(false);
   });
 
   it("соседние адреса не цепляются префиксом", () => {

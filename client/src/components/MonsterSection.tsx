@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { dataKeys } from "../data/entities";
+import { errorText, useAction, useResource, write } from "../data/hooks";
+import { labelled, showSaveError } from "../data/notices";
+import { compendiumMembershipAffects, compendiumPaths } from "../data/compendiumEntries";
+import { notifyDataChanged } from "../dataSync";
+import { systemPaths } from "../data/systems";
 import { addToBag } from "../bag";
 import { CHALLENGE_RATINGS, CREATURE_SIZES, kindLabel, normaliseCr, searchableText } from "../compendium";
 import { loadMechanicsOptions, type MechanicsOption } from "../compendiumMechanics";
@@ -29,12 +35,21 @@ export function MonsterSection({ systemId, section }: Props) {
   const { user } = useCurrentUser();
   const sortKey = `compendium-sort-${user?.id ?? "anon"}-${section.id}`;
   const [viewMode, setViewMode] = useCompendiumViewMode(section.id, "grid");
-  const [entries, setEntries] = useState<CompendiumEntry[]>([]);
+  // Записи раздела — ресурс слоя данных (группа «системы», часть 3): правка
+  // существа на его странице, в соседнем окне или уборка справочника
+  // перечитывают раздел сами.
+  const client = useQueryClient();
+  const run = useAction();
+  const entriesPath = compendiumPaths.sectionEntries(systemId, section.id);
+  const entriesState = useResource<CompendiumEntry[]>(entriesPath);
+  const entries = entriesState.data ?? NO_ENTRIES;
+  const setEntries = useCallback(
+    (update: (prev: CompendiumEntry[]) => CompendiumEntry[]) =>
+      client.setQueryData<CompendiumEntry[]>(dataKeys.resource(entriesPath), (prev) => update(prev ?? [])),
+    [client, entriesPath]
+  );
   const [creatureTypes, setCreatureTypes] = useState<MechanicsOption[]>([]);
-  const [systemCode, setSystemCode] = useState<string | null>(null);
-  useEffect(() => {
-    api.get<{ code: string | null }>(`/systems/${systemId}`).then((s) => setSystemCode(s.code)).catch(() => setSystemCode(null));
-  }, [systemId]);
+  const systemCode = useResource<{ code: string | null }>(systemPaths.detail(systemId)).data?.code ?? null;
   const isPhb = systemCode === "phb";
   const [filterCreatureType, setFilterCreatureType] = useState("");
   const [filterCR, setFilterCR] = useState("");
@@ -104,13 +119,6 @@ export function MonsterSection({ systemId, section }: Props) {
     }
   }
 
-  function refresh() {
-    api
-      .get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${section.id}`)
-      .then(setEntries);
-  }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(refresh, [systemId, section.id]);
 
   useEffect(() => {
     loadMechanicsOptions(systemId).then((opts) => setCreatureTypes(opts.creatureTypes));
@@ -147,7 +155,9 @@ export function MonsterSection({ systemId, section }: Props) {
       setEntries((cur) => cur.map((e) => (e.id === entry.id ? { ...e, favourite } : e)));
       try {
         await saveFavourite(entry.id, favourite);
-      } catch {
+        notifyDataChanged([{ path: `/systems/${systemId}/entries` }]);
+      } catch (error) {
+        showSaveError(`Избранное — ${errorText(error)}`);
         // Откат только если пользователь не успел переключить снова: сверка с
         // текущим состоянием вместо безусловного флипа не затирает новое.
         setEntries((cur) =>
@@ -163,7 +173,7 @@ export function MonsterSection({ systemId, section }: Props) {
     } finally {
       if (favouriteChains.current.get(entry.id) === next) favouriteChains.current.delete(entry.id);
     }
-  }, []);
+  }, [setEntries, systemId]);
 
   // Имя типа, выбранного в фильтре. Сверка идёт и по id, и по имени: снапшот,
   // снятый до переименования записи справочника, держит старый id (или вовсе
@@ -237,15 +247,21 @@ export function MonsterSection({ systemId, section }: Props) {
   // Плитки не редактируются в линии (правка на странице профиля) — после
   // создания сразу ведём в профиль, иначе в сетке остаётся сирота «Без названия».
   async function addMonster() {
-    const created = await api.post<CompendiumEntry>(`/systems/${systemId}/entries`, {
-      section_id: section.id,
-      parent_id: null,
-      kind: "monster",
-      name: "",
-      level: null,
-      data: {},
-      description: "",
-    });
+    const created = await run(
+      labelled("Новое существо", () =>
+        write.post<CompendiumEntry>(`/systems/${systemId}/entries`, {
+          section_id: section.id,
+          parent_id: null,
+          kind: "monster",
+          name: "",
+          level: null,
+          data: {},
+          description: "",
+        })
+      ),
+      { affects: compendiumMembershipAffects(systemId), retry: false }
+    );
+    if (!created) return;
     navigate(`/compendium/${created.id}`);
   }
 
@@ -503,3 +519,5 @@ function MonsterListRow({ entry, onToggleFavourite }: { entry: CompendiumEntry; 
     </div>
   );
 }
+
+const NO_ENTRIES: CompendiumEntry[] = [];

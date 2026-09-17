@@ -1,6 +1,6 @@
 import { memo, useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
+import { write } from "../data/hooks";
 import { addToBag } from "../bag";
 import { Modal } from "./Modal";
 import { NavIcon } from "./NavIcons";
@@ -310,6 +310,7 @@ const VehicleTile = memo(function VehicleTile({
 });
 
 /** Звезда пишется сразу — список раздела не перезагружается ради одной отметки. */
+// Запись слоя: своё — на экране сразу, соседним окнам раздел говорит сам.
 export async function saveFavourite(entryId: number, favourite: boolean): Promise<void> {
-  await api.put(`/systems/entries/${entryId}/favourite`, { favourite });
+  await write.put(`/systems/entries/${entryId}/favourite`, { favourite });
 }

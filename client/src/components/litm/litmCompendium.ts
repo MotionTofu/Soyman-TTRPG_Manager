@@ -1,24 +1,22 @@
-import { api } from "../../api/client";
+import { readResource } from "../../data/imperative";
 import type { CompendiumEntry } from "../../types";
 
-let litmSystemIdCache: number | null | undefined;
+// Чтения — ключами слоя данных (группа «системы», часть 3): те же разделы и
+// записи, что показывает профиль системы, и правка компендиума их помечает.
+// Свой кэш id системы убран: список систем — ресурс слоя.
 export async function findLitmSystemId(): Promise<number | null> {
-  if (litmSystemIdCache !== undefined) return litmSystemIdCache;
-  const systems = await api.get<{ id: number; name: string }[]>("/systems");
-  litmSystemIdCache = systems.find((s) => s.name === "Legend in the Mist")?.id ?? null;
-  return litmSystemIdCache;
+  const systems = await readResource<{ id: number; name: string }[]>("/systems");
+  return systems.find((s) => s.name === "Legend in the Mist")?.id ?? null;
 }
 
 // "Могущество и Темы" is its own compendium section; all might steps, theme
 // types, themebooks and theme kits live under it as a single tree. Loaders
 // below resolve that section by name instead of assuming a fixed section kind.
 async function loadMightSectionEntries(systemId: number): Promise<CompendiumEntry[]> {
-  const sections = await api.get<{ id: number; name: string; kind: string }[]>(
-    `/systems/${systemId}/sections`
-  );
+  const sections = await readResource<{ id: number; name: string; kind: string }[]>(`/systems/${systemId}/sections`);
   const sec = sections.find((s) => s.name === "Могущество и Темы");
   if (!sec) return [];
-  return api.get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${sec.id}`);
+  return readResource<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${sec.id}`);
 }
 
 // --- Справочник (mechanics) ---
@@ -107,10 +105,10 @@ export interface LitmTrope {
 }
 
 export async function loadLitmTropes(systemId: number): Promise<LitmTrope[]> {
-  const sections = await api.get<{ id: number; kind: string }[]>(`/systems/${systemId}/sections`);
+  const sections = await readResource<{ id: number; kind: string }[]>(`/systems/${systemId}/sections`);
   const sec = sections.find((s) => s.kind === "trope");
   if (!sec) return [];
-  const entries = await api.get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${sec.id}`);
+  const entries = await readResource<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${sec.id}`);
   return entries
     .filter((e) => e.kind === "trope")
     .map((e) => ({
@@ -196,10 +194,10 @@ export interface LitmMagicWay {
 }
 
 export async function loadLitmMagicWays(systemId: number): Promise<LitmMagicWay[]> {
-  const sections = await api.get<{ id: number; kind: string }[]>(`/systems/${systemId}/sections`);
+  const sections = await readResource<{ id: number; kind: string }[]>(`/systems/${systemId}/sections`);
   const sec = sections.find((s) => s.kind === "magic_way");
   if (!sec) return [];
-  const entries = await api.get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${sec.id}`);
+  const entries = await readResource<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${sec.id}`);
   return entries
     .filter((e) => e.kind === "magic_way")
     .map((e) => ({
@@ -218,10 +216,10 @@ export interface LitmTreasure {
 }
 
 export async function loadLitmTreasures(systemId: number): Promise<LitmTreasure[]> {
-  const sections = await api.get<{ id: number; kind: string }[]>(`/systems/${systemId}/sections`);
+  const sections = await readResource<{ id: number; kind: string }[]>(`/systems/${systemId}/sections`);
   const sec = sections.find((s) => s.kind === "treasure");
   if (!sec) return [];
-  const entries = await api.get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${sec.id}`);
+  const entries = await readResource<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${sec.id}`);
   return entries
     .filter((e) => e.kind === "treasure")
     .map((e) => ({
