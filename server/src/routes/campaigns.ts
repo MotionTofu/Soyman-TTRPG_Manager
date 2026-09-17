@@ -21,7 +21,7 @@ import {
   validatePresentationPatch,
 } from "../story/presentation";
 import { renameEntityFolder } from "../services/vaultPaths";
-import { FOLDER_MISSING_ERROR, folderMissing, repairCampaignFolder } from "../services/campaignFolder";
+import { FOLDER_MISSING_ERROR, folderMissing, repairCampaignFolder } from "../services/folderRepair";
 import { campaignEarnings } from "../services/finance";
 import { requireAuth } from "../services/auth";
 import { broadcastCharacterUpdate, broadcastToCampaign } from "../services/realtime";

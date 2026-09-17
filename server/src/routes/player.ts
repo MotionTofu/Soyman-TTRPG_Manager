@@ -11,6 +11,7 @@ import {
 import { unpaidSessionsForPlayer } from "../services/finance";
 import { getPlayerSectionsFor, getSettingPlayerContent, getSettingPlayerContentUnion } from "../services/playerContent";
 import { broadcastCharacterUpdate, broadcastToGm } from "../services/realtime";
+import { ensurePlayerFolder } from "../services/folderRepair";
 import { mergeContentPatch } from "../db/statblockContent";
 import { normalizeDndCharacter, deriveSheet } from "@soyman/shared";
 import { setCharacterRoll, mirrorSheetRollToQueue } from "../services/initiativeSync";
@@ -242,11 +243,13 @@ playerRouter.post("/characters", (req: AuthedRequest, res) => {
     }
     campaignId = Number(campaign_id);
   }
-  const player = db.prepare("SELECT folder_path FROM players WHERE id = ?").get(playerId) as
-    | { folder_path: string }
+  const player = db.prepare("SELECT name, folder_path FROM players WHERE id = ?").get(playerId) as
+    | { name: string; folder_path: string | null }
     | undefined;
   if (!player) return res.status(404).json({ error: "not found" });
-  const folder = standaloneCharacterFolder(player.folder_path, character_name);
+  // Папку игрока могли удалить в проводнике или очистить на «Здоровье» —
+  // заводим заново, а не падаем 500 у игрока посреди создания персонажа.
+  const folder = standaloneCharacterFolder(ensurePlayerFolder(playerId, player.name, player.folder_path), character_name);
   const info = db
     .prepare(
       "INSERT INTO characters (player_id, campaign_id, system_id, character_name, folder_path) VALUES (?, ?, ?, ?, ?)"
