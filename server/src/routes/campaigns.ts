@@ -24,7 +24,7 @@ import { renameEntityFolder } from "../services/vaultPaths";
 import { FOLDER_MISSING_ERROR, folderMissing, repairCampaignFolder } from "../services/campaignFolder";
 import { campaignEarnings } from "../services/finance";
 import { requireAuth } from "../services/auth";
-import { broadcastToCampaign } from "../services/realtime";
+import { broadcastCharacterUpdate, broadcastToCampaign } from "../services/realtime";
 
 export const campaignsRouter = Router();
 const ALLOWED_IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
@@ -346,11 +346,11 @@ campaignsRouter.post("/:id/group-theme/apply", (req, res) => {
 
   const rows = db
     .prepare(
-      `SELECT s.id, s.content FROM statblocks s
+      `SELECT s.id, s.content, s.owner_id FROM statblocks s
        JOIN characters c ON c.id = s.owner_id
        WHERE s.owner_type = 'character' AND s.format = 'litm_character' AND c.campaign_id = ?`
     )
-    .all(req.params.id) as { id: number; content: string }[];
+    .all(req.params.id) as { id: number; content: string; owner_id: number }[];
 
   const update = db.prepare("UPDATE statblocks SET content = ? WHERE id = ?");
   for (const row of rows) {
@@ -363,6 +363,10 @@ campaignsRouter.post("/:id/group-theme/apply", (req, res) => {
     data.fellowshipTheme = theme;
     update.run(JSON.stringify(data), row.id);
   }
+
+  // Листы переписаны из-под открытых окон: без события персонажа игрок видел
+  // бы прежнюю тему до перезагрузки — сигнал кампании лист не задевает.
+  for (const id of new Set(rows.map((r) => r.owner_id))) broadcastCharacterUpdate(id, "sheet");
 
   res.json({ ok: true, updatedCharacters: rows.length });
 });
