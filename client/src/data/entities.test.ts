@@ -27,6 +27,13 @@ describe("что задевает правка", () => {
     expect(matchesAffect(dataKeys.resource("/calendar"), { kind: "session" })).toBe(true);
   });
 
+  it("архивная сущность задевает список архива, шаг карточки — нет", () => {
+    expect(matchesAffect(dataKeys.resource("/archive"), { kind: "being", id: 12 })).toBe(true);
+    expect(matchesAffect(dataKeys.resource("/archive"), { kind: "campaign" })).toBe(true);
+    expect(matchesAffect(dataKeys.resource("/archive"), { kind: "session", id: 3, card: true })).toBe(false);
+    expect(matchesAffect(dataKeys.resource("/archived-files"), { kind: "being", id: 12 })).toBe(false);
+  });
+
   const being408 = { kind: "being", id: 408 } as const;
 
   it("сущность задевает свою карточку, свои подресурсы и списки вида — и не трогает соседей", () => {

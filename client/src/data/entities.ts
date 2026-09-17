@@ -133,6 +133,14 @@ const RESOURCE_DEPENDENCIES: readonly { prefix: string | RegExp; kinds: readonly
   { prefix: "/calendar", kinds: ["session"], skipCard: true },
   { prefix: "/finance", kinds: ["session"], skipCard: true },
   { prefix: /^\/(campaigns|players)(\?|$)/, kinds: ["session"], skipCard: true },
+  // Список «Архива» собран из архивных сущностей всех видов. Отправка в архив
+  // адресована самой сущности — без этого правила открытый в другом окне архив
+  // её не видел до следующего захода. Шаг хода в бою (`card`) его не задевает.
+  {
+    prefix: /^\/archive(\?|$)/,
+    kinds: ["campaign", "system", "setting", "player", "character", "session", "resource", "mastering", "location", "being", "artifact", "community"],
+    skipCard: true,
+  },
 ];
 
 function dependsOn(path: string, prefix: string | RegExp): boolean {

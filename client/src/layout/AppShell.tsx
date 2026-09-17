@@ -207,7 +207,9 @@ function BackupButton() {
         else body = { dir: trimmed };
       }
       // Архив — файл на диске, данные базы не меняются: сигнал другим окнам не нужен.
-      const res = await write.post<{ path: string; size: number }>("/backup", body ?? {});
+      // Архив базы с медиатекой собирается минутами: с общими 10 секундами
+      // кнопка показывала ошибку, пока сервер продолжал архивировать.
+      const res = await write.post<{ path: string; size: number }>("/backup", body ?? {}, { timeoutMs: 30 * 60_000 });
       setInfo(`${res.path} (${(res.size / 1024 / 1024).toFixed(1)} МБ)`);
       setState("done");
     } catch (e) {
