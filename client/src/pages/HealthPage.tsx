@@ -388,6 +388,34 @@ export function HealthPage() {
     }
   }
 
+  // Кампания, которой ищем папку: список свободных папок `Campaigns` читается
+  // в момент открытия — папку могли вернуть в проводнике минуту назад.
+  const [bindFor, setBindFor] = useState<{ id: number; path: string } | null>(null);
+  const [bindFolders, setBindFolders] = useState<string[] | null>(null);
+
+  async function openBind(id: number, path: string) {
+    setBindFor({ id, path });
+    setBindFolders(null);
+    try {
+      const r = await readOnce<{ folders: string[] }>(`/health/campaign-folders?id=${id}`);
+      setBindFolders(r.folders);
+    } catch (e) {
+      setBindFolders([]);
+      setMsg(String(e instanceof Error ? e.message : e));
+    }
+  }
+
+  async function bindFolder(id: number, folder: string) {
+    try {
+      await write.post("/health/path/bind", { table: "campaigns", column: "folder_path", id, path: folder });
+      setBindFor(null);
+      setMsg(`Кампании #${id} привязана папка ${folder}`);
+      afterRepair();
+    } catch (e) {
+      setMsg(String(e instanceof Error ? e.message : e));
+    }
+  }
+
   const filteredPaths = useMemo(() => {
     if (!scan) return [];
     const needle = pathFilter.trim().toLowerCase();
@@ -536,6 +564,9 @@ export function HealthPage() {
                   {filteredPaths.map((b, i) => (
                     <div key={`${b.table}:${b.column}:${b.id}:${i}`} className="muted health-row">
                       <span title={b.path} className="health-path" style={{ flex: "1 1 200px", minWidth: 0 }}>{b.table}.{b.column} #{b.id}: {b.path}</span>
+                      {b.table === "campaigns" && b.column === "folder_path" && (
+                        <button onClick={() => void openBind(b.id, b.path)} style={{ flex: "0 0 auto", fontSize: "var(--fs-meta)", padding: "2px 8px" }}>Указать папку</button>
+                      )}
                       <button onClick={() => clearPath(b.table, b.column, b.id)} style={{ flex: "0 0 auto", fontSize: "var(--fs-meta)", padding: "2px 8px" }}>Очистить</button>
                     </div>
                   ))}
@@ -743,6 +774,20 @@ export function HealthPage() {
       </div>
 
       {confirmDialog}
+      {bindFor && (
+        <Modal onClose={() => setBindFor(null)}>
+          <div className="stack" style={{ padding: 16, minWidth: 320 }}>
+            <SectionHeading>Указать папку кампании</SectionHeading>
+            <p className="muted">Папка из базы: {bindFor.path || "не задана"}. Показаны папки в «Campaigns», не привязанные к другим кампаниям.</p>
+            {bindFolders === null && <span className="muted">Читаю хранилище…</span>}
+            {bindFolders?.length === 0 && <span className="muted">Свободных папок нет. Заведите папку в проводнике или создайте её заново в профиле кампании.</span>}
+            {bindFolders?.map((f) => (
+              <button key={f} onClick={() => void bindFolder(bindFor.id, f)} style={{ textAlign: "left" }}>{f}</button>
+            ))}
+            <button onClick={() => setBindFor(null)}>Отмена</button>
+          </div>
+        </Modal>
+      )}
       {deadOpen && deadGroups && (() => {
         const needle = deadFilter.trim().toLowerCase();
         const filtered = !needle ? deadGroups : deadGroups.filter((g) => `${g.type} ${g.label} ${g.code} ${g.uid}`.toLowerCase().includes(needle));

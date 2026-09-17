@@ -14,7 +14,7 @@ import { normalizeDndCharacter, DndCharacterView } from "./dnd/DndCharacterForm"
 import type { DndCharacterData, DndCreatureData, Statblock } from "../types";
 
 // Same pattern used everywhere else a file/resource preview needs to know
-// if a URL is a directly-embeddable image (ResourceCard.tsx, ResourcesSection.tsx).
+// if a URL is a directly-embeddable image (ResourcesSection.tsx).
 // 5b: учтён хвост ?token / ?v=… (#583 в design_revision)
 const IMAGE_EXT = /\.(jpe?g|png|gif|webp)(\?|$)/i;
 

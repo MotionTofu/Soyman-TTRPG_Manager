@@ -55,6 +55,10 @@ export function CampaignCoverTile({
   onSelect?: (campaign: Campaign) => void;
 }) {
   const cover = <CampaignCover campaign={c} />;
+  // Пропавшая папка видна прямо в списке: внутрь такой кампании не загрузить
+  // файл и не переименовать её, и узнать об этом лучше до, а не после попытки.
+  const cls = `card campaign-tile${c.folder_missing ? " campaign-tile--no-folder" : ""}`;
+  const noFolder = c.folder_missing ? "Папки кампании нет в хранилище" : undefined;
   const meta = (
     <div className="campaign-tile-meta">
       <div className="campaign-tile-system">{c.system_name ?? "система не выбрана"}</div>
@@ -75,7 +79,8 @@ export function CampaignCoverTile({
         role="button"
         tabIndex={0}
         aria-label={`Предпросмотр: ${c.name}`}
-        className="card campaign-tile"
+        className={cls}
+        title={noFolder}
         onClick={() => onSelect(c)}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
@@ -91,7 +96,7 @@ export function CampaignCoverTile({
   }
 
   return (
-    <Link to={`/campaigns/${c.id}`} className="card campaign-tile">
+    <Link to={`/campaigns/${c.id}`} className={cls} title={noFolder}>
       {cover}
       {meta}
     </Link>

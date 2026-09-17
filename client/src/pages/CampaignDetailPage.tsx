@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { entityQuery, resourceQuery, useAction, useEntity, useResource, write } from "../data/hooks";
 import { afterWriteAnywhere } from "../data/imperative";
-import { applyGroupThemeToCampaign } from "../data/campaignActions";
 import {
   campaignEventAffects,
   campaignFieldsAffects,
@@ -14,7 +13,7 @@ import { useQueries } from "@tanstack/react-query";
 import { statblockListPath } from "../data/statblocks";
 import { chroniclePaths } from "../data/settingPage";
 import { sessionMoneyAffects } from "../data/sessions";
-import { attemptWithNotice, labelled } from "../data/notices";
+import { labelled } from "../data/notices";
 import { deriveSheet } from "@shared/dnd/derive";
 import { normalizeDndCharacter } from "@shared/dnd/normalize";
 import { toLocalDateKey, formatDateKeyRu, parseDateKey } from "../utils/date";
@@ -33,7 +32,6 @@ import { CampaignChaptersScenes, type ChaptersNavStats } from "../components/Cam
 import { CampaignAdventuresCard } from "../components/CampaignAdventuresCard";
 import { CrossLinksWizard } from "../components/CrossLinksWizard";
 import { EmptyState } from "../components/EmptyState";
-import { ResourceCard } from "../components/ResourceCard";
 import { RemindersWidget } from "../components/RemindersWidget";
 import { NavIcon } from "../components/NavIcons";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
@@ -48,8 +46,6 @@ import {
   RATE_SPLIT_OPTIONS,
   RATE_SPLIT_LABELS,
 } from "../paymentTypes";
-import { ThemeCardEdit, ThemeCardView, emptyTheme } from "../components/litm/ThemeCard";
-import { normalizeTheme } from "../components/litm/LitMCharacterForm";
 import { MentionTextarea } from "../components/mentions/MentionTextarea";
 import { MentionText } from "../components/mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
@@ -75,13 +71,11 @@ import type {
   CampaignType,
   Character,
   ImportantDate,
-  LitMThemeCard,
   PaymentFrequency,
   PaymentType,
   Player,
   Preproduction,
   RateSplit,
-  Resource,
   RosterPlayer,
   SessionStatus,
   SessionSummary,
@@ -96,10 +90,6 @@ import { Timeline } from "../components/Timeline";
 import { PresentationEditor } from "../components/presentation/PresentationEditor";
 import { EntityTabWorkspace } from "../components/EntityTabWorkspace";
 import { sessionLabel } from "../sessionLabel";
-
-// Три вида одних и тех же событий: сетка показывает месяц, список — порядок,
-// ось — расстояния.
-type WorldView = "calendar" | "list" | "axis";
 
 const GM_TABS = [
   "Обзор",
@@ -129,6 +119,48 @@ const NO_SYSTEMS: System[] = [];
 const NO_SETTINGS: Setting[] = [];
 const NO_EVENTS: CampaignCalendarEvent[] = [];
 const NO_DATES: ImportantDate[] = [];
+
+/**
+ * Папки кампании нет в хранилище. Полоса стоит в профиле, а не только на
+ * «Здоровье»: сюда Мастер приходит работать, и упереться в отказ при попытке
+ * загрузить картинку хуже, чем прочитать причину заранее.
+ */
+function CampaignFolderNotice({ campaign }: { campaign: CampaignDetail }) {
+  const run = useAction();
+  const [alertDialog, alert] = useAlert();
+  async function repair() {
+    const done = await run(
+      labelled("Не удалось вернуть папку", () =>
+        write.post<{ folder_path: string; bound: boolean }>(`/campaigns/${campaign.id}/folder/repair`, {})
+      ),
+      { affects: campaignFieldsAffects(campaign.id) }
+    );
+    if (!done) return;
+    // Полоса исчезает сразу, как только сервер отдаст кампанию с папкой,
+    // поэтому итог показываем отдельным окном, а не строкой внутри неё.
+    alert(
+      done.bound
+        ? `Нашлась папка «${done.folder_path}» — привязал её. Файлы кампании вернулись вместе с ней.`
+        : "Папка создана заново. Файлы из прежней в неё не вернутся: если папка просто переехала, укажите её на странице «Здоровье»."
+    );
+  }
+  return (
+    <>
+      {alertDialog}
+      {campaign.folder_missing && (
+        <div className="card campaign-folder-missing">
+          <p>
+            {campaign.folder_path
+              ? "Папки кампании нет в хранилище — её удалили или перенесли."
+              : "У кампании нет папки в хранилище."}{" "}
+            Файлы загружать и переименовывать кампанию нельзя.
+          </p>
+          <button onClick={() => void repair()}>Создать папку заново</button>
+        </div>
+      )}
+    </>
+  );
+}
 
 export function CampaignDetailPage() {
   const { id } = useParams();
@@ -162,18 +194,6 @@ export function CampaignDetailPage() {
   const [secSel, setSecSel] = useState<{ section: string; item?: string }>({ section: "all" });
   const [secStats, setSecStats] = useState<SecretsNavStats | null>(null);
   const { deleteWithUndo } = useUndoDelete();
-  // Третий вид рядом с сеткой и списком: сетка показывает месяц, список —
-  // порядок, ось — расстояния и «сколько у них осталось».
-  const [worldView, setWorldView] = useState<WorldView>(() => {
-    try {
-      const v = localStorage.getItem("campaignWorldView");
-      return (v as WorldView) || "calendar";
-    } catch { return "calendar"; }
-  });
-  function changeWorldView(v: WorldView) {
-    setWorldView(v);
-    try { localStorage.setItem("campaignWorldView", v); } catch { /* private browsing */ }
-  }
   const cycles = useResource<SettingCycle[]>(campaign?.setting_id ? chroniclePaths.cycles(campaign.setting_id) : null).data ?? NO_CYCLES;
 
   const [creatingDate, setCreatingDate] = useState<string | null>(null);
@@ -263,9 +283,7 @@ export function CampaignDetailPage() {
   }, [calendar, timelineNow]);
   const [chronicleFilter, setChronicleFilter] = useState("");
   const [showCancelled, setShowCancelled] = useState(false);
-  const [chronicleSort, setChronicleSort] = useState<"asc" | "desc">("desc");
-  const [newStartTime, setNewStartTime] = useState("");
-  const [dragToast, setDragToast] = useState<string | null>(null);
+  const [chronicleSort] = useState<"asc" | "desc">("desc");
   const chronicleFiltered = useMemo(() => {
     let list = sessions.filter((s) => showCancelled || s.status !== "cancelled");
     if (chronicleFilter.trim()) {
@@ -457,16 +475,6 @@ export function CampaignDetailPage() {
     setCalendarMenu({ x, y, items });
   }
 
-  function handleMonthDayContextMenu(date: string, x: number, y: number) {
-    const daySessions = sessions.filter((s) => s.date === date);
-    const items: import("../components/ContextMenu").ContextMenuItem[] = [];
-    for (const s of daySessions) {
-      items.push({ label: `Сессия: ${sessionLabel(s)}`, onClick: () => navigate(`/sessions/${s.id}`) });
-    }
-    items.push({ label: "Создать сессию", onClick: () => setCreatingDate(date) });
-    setCalendarMenu({ x, y, items });
-  }
-
   function handleCalendarItemContextMenu(item: InworldDatedItem, x: number, y: number) {
     if (item.kind !== "event") return;
     const ev = calendarEvents.find((e) => `event-${e.id}` === item.id);
@@ -642,6 +650,7 @@ export function CampaignDetailPage() {
       tab={tab}
       onTab={(t) => selectTab(t as (typeof tabs)[number])}
     >
+      <CampaignFolderNotice campaign={campaign} />
 
       {tab === "Обзор" && campaign.role === "player" && (
         <PlayerOverviewTab campaign={campaign} systems={systems} settingsList={settingsList} />
@@ -1365,182 +1374,6 @@ export function CampaignDetailPage() {
     </EntityPage>
   );
 }
-
-// Not currently rendered — the "Ресурсы" tab was removed (Phase 3), but this
-// stays wired and exported in case the tab comes back.
-export function GroupThemeSection({ campaignId, initial }: { campaignId: number; initial: string | null }) {
-  const [saved, setSaved] = useState<LitMThemeCard>(() => {
-    if (!initial) return emptyTheme();
-    try { return normalizeTheme(JSON.parse(initial)); } catch { return emptyTheme(); }
-  });
-  const [draft, setDraft] = useState<LitMThemeCard>(saved);
-  const [editing, setEditing] = useState(false);
-
-  function startEdit() {
-    setDraft(saved);
-    setEditing(true);
-  }
-
-  function writeTheme(v: LitMThemeCard): Promise<boolean> {
-    return attemptWithNotice("Тема группы не сохранилась", async () => {
-      await write.put(`/campaigns/${campaignId}`, { group_theme_litm: JSON.stringify(v) });
-      afterWriteAnywhere([{ kind: "campaign", id: campaignId, card: true }]);
-    });
-  }
-
-  async function save() {
-    if (!(await writeTheme(draft))) return;
-    setSaved(draft);
-    setEditing(false);
-  }
-
-  async function quickUpdate(v: LitMThemeCard) {
-    const previous = saved;
-    setSaved(v);
-    if (!(await writeTheme(v))) setSaved(previous);
-  }
-
-  async function applyToAll(theme: LitMThemeCard) {
-    if (
-      !confirm(
-        "Применить эту тему как общую командную тему для всех персонажей кампании? Она заменит текущую командную тему у каждого персонажа."
-      )
-    ) {
-      return;
-    }
-    if (!(await applyGroupThemeToCampaign(campaignId, theme))) return;
-    setSaved(theme);
-    setEditing(false);
-  }
-
-  return (
-    <div className="card stack">
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <h3>Тема группы (Legend in the Mist)</h3>
-        {!editing && <button onClick={startEdit}>Редактировать</button>}
-      </div>
-      <p className="muted">
-        Автоматически добавляется каждому новому персонажу кампании при создании статблока.
-      </p>
-      {editing ? (
-        <>
-          <ThemeCardEdit value={draft} onChange={setDraft} onMakeGroupTheme={() => applyToAll(draft)} />
-          <div className="row">
-            <button className="primary" onClick={save}>
-              Сохранить
-            </button>
-            <button onClick={() => setEditing(false)}>Отмена</button>
-          </div>
-        </>
-      ) : (
-        <ThemeCardView value={saved} onQuickUpdate={quickUpdate} onMakeGroupTheme={() => applyToAll(saved)} />
-      )}
-    </div>
-  );
-}
-
-// Same as GroupThemeSection above — kept for if the "Ресурсы" tab returns.
-export function CampaignResourcesTab({
-  campaignId,
-  resources,
-  onChange,
-}: {
-  campaignId: number;
-  resources: Resource[];
-  onChange: () => void;
-}) {
-  const [name, setName] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const [linkUrl, setLinkUrl] = useState("");
-  const [category, setCategory] = useState<CampaignResourceCategory>("misc");
-
-  async function addResource() {
-    if (!name.trim()) return;
-    const form = new FormData();
-    form.append("name", name);
-    form.append("scope", "campaign");
-    form.append("campaign_id", String(campaignId));
-    form.append("type", category);
-    if (file) form.append("file", file);
-    if (linkUrl) form.append("link_url", linkUrl);
-    const added = await attemptWithNotice(`Ресурс «${name}» не добавился`, async () => {
-      await write.post("/resources", form, { timeoutMs: UPLOAD_TIMEOUT_MS });
-      afterWriteAnywhere([{ kind: "resource" }]);
-    }, { retry: false });
-    if (!added) return;
-    setName("");
-    setFile(null);
-    setLinkUrl("");
-    onChange();
-  }
-
-  async function archiveResource(id: number) {
-    const archived = await attemptWithNotice("Ресурс не убран в архив", async () => {
-      await write.del(`/resources/${id}`);
-      afterWriteAnywhere([{ kind: "resource", id }]);
-    });
-    if (archived) onChange();
-  }
-
-  function renderGroup(label: string, type: CampaignResourceCategory) {
-    const knownTypes: string[] = CAMPAIGN_RESOURCE_CATEGORIES.map((c) => c.value);
-    const group = resources.filter((r) =>
-      type === "misc" ? !knownTypes.includes(r.type) || r.type === "misc" : r.type === type
-    );
-    return (
-      <div>
-        <strong>{label}</strong>
-        <div className="grid-cards">
-          {group.map((r) => (
-            <ResourceCard key={r.id} resource={r} onChange={onChange} onArchive={archiveResource} />
-          ))}
-          {group.length === 0 && <span className="muted">нет</span>}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="stack">
-      <div className="row">
-        <input
-          placeholder="Название ресурса"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <select
-          value={category}
-          onChange={(e) => setCategory(e.target.value as CampaignResourceCategory)}
-        >
-          {CAMPAIGN_RESOURCE_CATEGORIES.map((c) => (
-            <option key={c.value} value={c.value}>
-              {c.label}
-            </option>
-          ))}
-        </select>
-        <input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-        <input
-          placeholder="…или ссылка (вместо файла)"
-          value={linkUrl}
-          onChange={(e) => setLinkUrl(e.target.value)}
-        />
-        <button className="primary" onClick={addResource}>
-          Добавить
-        </button>
-      </div>
-      {CAMPAIGN_RESOURCE_CATEGORIES.map((c) => (
-        <div key={c.value}>{renderGroup(c.label, c.value)}</div>
-      ))}
-    </div>
-  );
-}
-
-type CampaignResourceCategory = "reference" | "photo" | "misc";
-const CAMPAIGN_RESOURCE_CATEGORIES: { value: CampaignResourceCategory; label: string }[] = [
-  { value: "reference", label: "Референсы" },
-  { value: "photo", label: "Фотохроника" },
-  { value: "misc", label: "Разное" },
-];
 
 function PlayersAndCharactersTab({
   campaignId,
