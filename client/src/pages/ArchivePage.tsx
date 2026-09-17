@@ -46,6 +46,13 @@ const TYPE_LABELS: Record<string, string> = {
   canvas_board: "доска",
   // Файл-сирота, отправленный в архив со страницы «Здоровье».
   orphan: "без владельца",
+  // Владельцы архивных файлов (server/src/services/vaultDedup.ts): в столбце
+  // типа стояли сырые `gallery_image` и `location_map`.
+  gallery_image: "галерея",
+  location_map: "карта локации",
+  location_avatar: "аватар локации",
+  location_thumbnail: "миниатюра локации",
+  compendium_entry: "запись компендиума",
 };
 
 // Что необратимо оборвётся вместе с сущностью (server/src/routes/archive.ts).
