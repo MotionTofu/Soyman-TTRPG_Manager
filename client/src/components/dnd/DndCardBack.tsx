@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { inboxSourceLabel, type CharacterInboxMessage } from "./characterInbox";
 import { textOnClassColor } from "./dndClassColors";
 import type { ReactNode } from "react";
+import { useDndRuntime } from './DndRuntime';
 
 // Оборот первой карты — входящие игрока (этап 4). Чистый показ: состояние
 // и запросы живут в DndCharacterView, здесь только разметка рубашки.
@@ -55,6 +56,7 @@ export function DndCardBack({
   flipKey?: number;
 }) {
   const unread = messages.filter((m) => !m.read_at).length;
+  const { campaignConnected } = useDndRuntime();
   const [oracle, setOracle] = useState<string | null>(null);
   useEffect(() => {
     const pool = (oracleQuotes ?? [])
@@ -71,7 +73,7 @@ export function DndCardBack({
       role="region"
       aria-label="Оборот карты: входящие, передачи, постер"
     >
-      <div className="dnd-card-back-head">
+      {campaignConnected && <><div className="dnd-card-back-head">
         <span className="dnd-card-back-title">Входящие</span>
         <span className="dnd-card-back-sub">
           {characterName}
@@ -132,7 +134,7 @@ export function DndCardBack({
           })}
         </div>
       )}
-      {notice && <p className="dnd-card-back-notice" role="status">{notice}</p>}
+      {notice && <p className="dnd-card-back-notice" role="status">{notice}</p>}</>}
       {children}
       {oracle && (
         <figure className="dnd-oracle-slip" style={{ borderLeftColor: color }}>

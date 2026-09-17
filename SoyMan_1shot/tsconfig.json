@@ -1,0 +1,15 @@
+{
+  "extends": "../client/tsconfig.app.json",
+  "compilerOptions": {
+    "types": [],
+    "paths": {
+      "@shared/*": ["../shared/src/*"],
+      "react": ["../client/node_modules/@types/react"],
+      "react/*": ["../client/node_modules/@types/react/*"],
+      "react-dom/*": ["../client/node_modules/@types/react-dom/*"],
+      "react-router-dom": ["../client/node_modules/react-router-dom"],
+      "@tanstack/react-query": ["../client/node_modules/@tanstack/react-query"]
+    }
+  },
+  "include": ["app", "../client/src/vite-env.d.ts"]
+}

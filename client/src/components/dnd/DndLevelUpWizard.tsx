@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useDndRuntime } from './DndRuntime';
 import { api } from "../../api/client";
 import type { CompendiumEntry, DndAbilityScores, DndCharacterData } from "../../types";
 import { Modal } from "../Modal";
@@ -66,6 +67,7 @@ interface Props {
 type HpMode = "roll" | "average" | "manual";
 
 export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
+  const { allowDiceRolls } = useDndRuntime();
   const [clsIdx, setClsIdx] = useState(0);
   const cls = value.classes[Math.min(clsIdx, Math.max(0, value.classes.length - 1))] ?? null;
   const oldLevel = cls?.level ?? 1;
@@ -625,7 +627,7 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
                   </label>
                   <label className="row">
                     <input type="radio" name="lvl-hp-mode" checked={hpMode === "roll"} onChange={() => setHpMode("roll")} />
-                    Бросить кость
+                    {allowDiceRolls ? 'Бросить кость' : 'Результат своей кости'}
                   </label>
                   <label className="row">
                     <input type="radio" name="lvl-hp-mode" checked={hpMode === "manual"} onChange={() => setHpMode("manual")} />
@@ -634,9 +636,9 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
                 </fieldset>
                 {hpMode === "roll" && (
                   <div className="row">
-                    <button type="button" onClick={rollDie} disabled={die == null}>
+                    {allowDiceRolls ? <button type="button" onClick={rollDie} disabled={die == null}>
                       Бросить к{die}
-                    </button>
+                    </button> : <label>Результат физического броска<input type="number" min={1} max={die ?? 100} value={rolled ?? ''} onChange={e => { const n = Number(e.target.value); setRolled(Number.isInteger(n) && n >= 1 && n <= (die ?? 100) ? n : null); }} /></label>}
                     {rolled != null && <span className="muted">Выпало: {rolled}</span>}
                   </div>
                 )}

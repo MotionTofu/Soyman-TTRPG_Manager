@@ -5103,6 +5103,29 @@ th, td {
 .crop-viewport:active {
   cursor: grabbing;
 }
+.crop-with-portrait-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: var(--sp-5);
+}
+.crop-portrait-preview {
+  width: 420px;
+  max-width: 100%;
+  display: grid;
+  gap: var(--sp-3);
+}
+.crop-portrait-preview .crop-portrait-surface {
+  position: relative;
+  height: 300px;
+}
+.crop-portrait-surface canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  filter: var(--portrait-tone);
+}
 .crop-viewport img {
   position: absolute;
   left: 50%;

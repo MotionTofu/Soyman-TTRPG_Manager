@@ -102,6 +102,7 @@ import {
   type CompanionBlueprint,
 } from "./companionFormula";
 import { rollDiceFormula } from "./diceRoll";
+import { useDndRuntime } from './DndRuntime';
 import { DndCardBack } from "./DndCardBack";
 import { DndLevelUpWizard } from "./DndLevelUpWizard";
 import { PosterButtons } from "./PosterButtons";
@@ -719,6 +720,7 @@ function DndProficienciesView({
   onChange?: (v: DndProficiencyEntry[]) => void;
 }) {
   const [adding, setAdding] = useState(false);
+  const { detached } = useDndRuntime();
   const [draft, setDraft] = useState("");
   const [tools, setTools] = useState<CompendiumEntry[] | null>(null);
   function commitAdd() {
@@ -735,7 +737,7 @@ function DndProficienciesView({
   function openAdd() {
     setAdding(true);
     setDraft("");
-    if (tools !== null || !systemId) return;
+    if (tools !== null || !systemId || detached) return;
     loadDndEquipmentEntries(systemId)
       .then((rows) =>
         setTools(
@@ -1286,7 +1288,7 @@ function sheetEntryIds(value: DndCharacterData): (number | null | undefined)[] {
   // `getEntry` всегда пуст — жетон навсегда оставался черепом-заглушкой.
   // Что это было упущение, а не решение, видно по `deadLinkNames`: спутников
   // она уже считает (найдено 09.09 при подключении знаков типов).
-  const companions = (value.companions ?? []).map((c) => c.entryId);
+  const companions = (value.companions ?? []).flatMap((c) => [c.entryId, c.featureEntryId, c.spellEntryId, c.classId]);
   return [...spells, ...features, ...classes, ...subclasses, ...companions, value.backgroundId];
 }
 
@@ -1428,12 +1430,13 @@ function DndSpellLevelSection({
   const [adding, setAdding] = useState(false);
   const [query, setQuery] = useState("");
   const [options, setOptions] = useState<DndSpellOption[]>([]);
+  const { detached } = useDndRuntime();
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [details, setDetails] = useState<Record<number, SpellDetail>>({});
   const [confirmDialog, confirm] = useConfirm();
 
   useEffect(() => {
-    if (!adding || !systemId) return;
+    if (!adding || !systemId || detached) return;
     loadDndSpellsByLevel(systemId, level).then(setOptions);
   }, [adding, systemId, level]);
 
@@ -2971,6 +2974,7 @@ function DndEquipmentQuickView({
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
 }) {
   const [editing, setEditing] = useState<{ si: number; ii: number } | null>(null);
+  const { detached } = useDndRuntime();
   const [addingSection, setAddingSection] = useState<number | null>(null);
   const [addMode, setAddMode] = useState<"bag" | null>(null);
   const [draft, setDraft] = useState<DndEquipmentItem>(EMPTY_EQUIPMENT_ITEM);
@@ -3741,12 +3745,12 @@ function DndEquipmentQuickView({
               <button type="button" className="dnd-chip" onClick={() => startAdd(si, null)}>
                 + Свой
               </button>
-              <button type="button" className="dnd-chip" onClick={() => setPickingSection(si)}>
+              {!detached && <button type="button" className="dnd-chip" onClick={() => setPickingSection(si)}>
                 + Из компендиума
-              </button>
-              <button type="button" className="dnd-chip" onClick={() => startAdd(si, "bag")}>
+              </button>}
+              {!detached && <button type="button" className="dnd-chip" onClick={() => startAdd(si, "bag")}>
                 + Из мешка
-              </button>
+              </button>}
             </div>
           )}
         </div>
@@ -5068,13 +5072,14 @@ function CompanionBody({
 }) {
   const [hurt, setHurt] = useState("");
   const [lastMend, setLastMend] = useState<number | null>(null);
+  const { allowDiceRolls, detached } = useDndRuntime();
   const [previewOpen, setPreviewOpen] = useState(false);
   const used = Math.min(companion.hpUsed ?? 0, maxHp);
   const left = maxHp - used;
   // Знак типа и у тел по чертежу: тип берётся из самого чертежа
   // (`companion.type` записи компендиума). Не проставлен — знака нет.
   const typeBadge = <CreatureTypeBadge type={blueprint.type} size={17} />;
-  const nameNode = previewEntryId ? (
+  const nameNode = previewEntryId && !detached ? (
     <>
       {typeBadge}
       <button type="button" className="dnd-spell-name-link" onClick={() => setPreviewOpen(true)}>
@@ -5137,7 +5142,7 @@ function CompanionBody({
     setHurt("");
   };
   const mend = () => {
-    if (!blueprint.mending) return;
+    if (!blueprint.mending || !allowDiceRolls) return;
     const rolled = rollDiceFormula(blueprint.mending) ?? 0;
     onPatch({ hpUsed: Math.max(0, used - rolled) });
     setLastMend(rolled);
@@ -5202,7 +5207,7 @@ function CompanionBody({
         <button type="button" className="comp-mini" onClick={applyHeal}>
           Вылечить
         </button>
-        {blueprint.mending && (
+        {blueprint.mending && allowDiceRolls && (
           <button type="button" className="comp-mini" title={`Починка: ${blueprint.mending}`} onClick={mend}>
             Починка {blueprint.mending}
             {lastMend != null ? ` (${lastMend})` : ""}
@@ -7706,14 +7711,15 @@ function InitiativeQuickBox({
   characterId?: number | null;
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
 }) {
+  const { campaignConnected } = useDndRuntime();
   const [open, setOpen] = useState(false);
   return (
     <div>
       <div className="sb-label">Инициатива</div>
       <SbQuickValue
         className="dnd-die-quick"
-        title={onQuickUpdate ? "Нажмите, чтобы бросить инициативу" : undefined}
-        ariaLabel="Инициатива — бросить и отправить Мастеру"
+        title={onQuickUpdate ? (campaignConnected ? "Нажмите, чтобы бросить инициативу" : "Вписать результат инициативы") : undefined}
+        ariaLabel={campaignConnected ? "Инициатива — бросить и отправить Мастеру" : "Инициатива — вписать результат"}
         onClick={onQuickUpdate ? () => setOpen(true) : undefined}
       >
         <DndDie size="lg" textured>
@@ -7747,6 +7753,7 @@ function InitiativeRollModal({
   onClose: () => void;
 }) {
   const [die, setDie] = useState("");
+  const { campaignConnected } = useDndRuntime();
   const [miscDraft, setMiscDraft] = useState(misc);
   const [sending, setSending] = useState(false);
   const initiativePath = characterId != null ? `/characters/${characterId}/initiative` : null;
@@ -7769,7 +7776,9 @@ function InitiativeRollModal({
   const rows = derived.parts.filter((p) => p.label !== "Прочее" && p.value !== 0);
 
   async function send() {
-    if (!dieValid || characterId == null || sending) return;
+    if (!dieValid || sending) return;
+    if (!campaignConnected) { onQuickUpdate?.({ initiative: total, initiativeMisc: miscDraft }); onClose(); return; }
+    if (characterId == null) return;
     setSending(true);
     try {
       const sent = await run(
@@ -7811,7 +7820,7 @@ function InitiativeRollModal({
       <div className="stack dnd-init-modal" style={{ gap: 10 }}>
         <strong>Бросок инициативы</strong>
         <div className="muted">
-          Напиши сюда значение на д20, а мы прибавим бонус инициативы и отправим Мастеру в очередь боя.
+          {campaignConnected ? 'Напиши сюда значение на д20, а мы прибавим бонус инициативы и отправим Мастеру в очередь боя.' : 'Впишите результат физического броска д20. Бонус будет добавлен, а итог сохранён в листе.'}
         </div>
         <div className="row" style={{ gap: 8, alignItems: "center" }}>
           <input
@@ -7869,7 +7878,7 @@ function InitiativeRollModal({
             </button>
           )}
           <button type="button" className="comp-mini" onClick={send} disabled={!dieValid || sending}>
-            {sending ? "…" : "Отправить Мастеру"}
+            {sending ? "…" : campaignConnected ? "Отправить Мастеру" : "Сохранить результат"}
           </button>
         </div>
       </div>
@@ -9546,6 +9555,7 @@ export function DndCharacterView({
   // Визард левелапа с оборота карты (игрок своего, мастер любого): модалка
   // живёт здесь же, применение — тем же мгновенным сохранением, что значения.
   const [showLevelUp, setShowLevelUp] = useState(false);
+  const { detached } = useDndRuntime();
   const [inbox, setInbox] = useState<CharacterInboxMessage[] | null>(null);
   const [inboxLoading, setInboxLoading] = useState(false);
   const [inboxError, setInboxError] = useState<string | null>(null);
@@ -10926,6 +10936,8 @@ export function DndCharacterView({
                             className="dnd-card-level"
                             style={{ background: cardColor, color: textOnClassColor(cardColor) }}
                             aria-label={`Уровень ${totalLevel} — повысить`}
+                            disabled={detached}
+                            title={detached ? "Повышение уровня доступно в подключённом чарнике" : undefined}
                             onClick={() => setShowLevelUp(true)}
                           >
                             {totalLevel}
@@ -11332,7 +11344,7 @@ export function DndCharacterView({
                 {/* Поле поиска не стоит на карте постоянно: спутника заводят
                     раз в кампанию, а орган управления виден каждый ход.
                     Пока он не нужен — на его месте «+». */}
-                {onQuickUpdate &&
+                {onQuickUpdate && !detached &&
                   (addingCompanion ? (
                     <CompendiumEntryPicker
                       value={null}

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { useDndRuntime } from './DndRuntime';
+import { selectedStartingSet } from './startingSetChoice';
 import { write } from "../../data/hooks";
 import { afterWriteAnywhere, readResource } from "../../data/imperative";
 import { Modal } from "../Modal";
@@ -201,6 +203,7 @@ interface Props {
 // Leveling up / editing an existing character stays in the regular
 // DndCharacterEdit form; this wizard is a one-time onboarding path only.
 export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerName, onDone, onCancel, initialSystemId, ownerPortraitUrl }: Props) {
+  const { allowDiceRolls } = useDndRuntime();
   const draftKey = wizardDraftKey(ownerType, ownerId);
   // Читается один раз при монтировании — поэтому сбросы протухших выборов
   // в обработчиках ниже не видят «смену» при восстановлении черновика.
@@ -297,7 +300,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       return null;
     });
   }
-  const portraitCrop = useImageCrop("square", takePortrait);
+  const portraitCrop = useImageCrop("square", takePortrait, "dnd-portrait");
   // Портрет владельца как основа (Хвосты 2.3): тот же кроп, что у файла.
   // Подписанный URL протухает за минуту — провал честно показывается,
   // лечится обновлением страницы (там же onPortraitRefresh).
@@ -375,8 +378,8 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   const [awardPrimary, setAwardPrimary] = useState<string | null>(() => strOrNull(savedDraft?.awardPrimary));
   const [awardSecondary, setAwardSecondary] = useState<string | null>(() => strOrNull(savedDraft?.awardSecondary));
 
-  // Наборы берутся по умолчанию: персонаж без снаряжения — это почти всегда
-  // забытый шаг, а не решение. Отказаться можно галочкой.
+  // Сохраняем прежний формат черновика; ниже выбираем ровно одну
+  // альтернативу из каждого источника, в том числе в старых черновиках.
   const [takenSets, setTakenSets] = useState<Record<string, boolean>>(() => {
     const d = savedDraft?.takenSets;
     if (d && typeof d === "object") {
@@ -390,7 +393,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   });
 
   const [method, setMethod] = useState<AbilityMethod>(() =>
-    savedDraft?.method === "pointbuy" || savedDraft?.method === "roll" || savedDraft?.method === "manual"
+    savedDraft?.method === "pointbuy" || (allowDiceRolls && savedDraft?.method === "roll") || savedDraft?.method === "manual"
       ? savedDraft.method
       : "standard"
   );
@@ -730,6 +733,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   }
 
   function applyMethod(next: AbilityMethod) {
+    if (next === 'roll' && !allowDiceRolls) return;
     setMethod(next);
     if (next === "standard") {
       setRolledPool(STANDARD_ARRAY);
@@ -751,6 +755,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   }
 
   function reroll() {
+    if (!allowDiceRolls) return;
     const pool = Array.from({ length: 6 }, rollAbilityScore).sort((a, b) => b - a);
     setRolledPool(pool);
     const keys = Object.keys(abilities) as (keyof DndAbilityScores)[];
@@ -798,11 +803,17 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   const resolveSkill = skills.resolve;
   // Наборы класса и предыстории. Набор «B» — только золото, и это верно по
   // правилам: он и есть «возьми деньгами».
-  const startingSets: StartingSet[] = [
-    ...startingSetsFrom(classEntry ?? undefined, classOption?.name ?? "Класс"),
-    ...startingSetsFrom(backgroundEntry ?? undefined, backgroundEntry?.name ?? "Предыстория"),
+  const equipmentGroups = [
+    startingSetsFrom(classEntry ?? undefined, classOption?.name ?? "Класс"),
+    startingSetsFrom(backgroundEntry ?? undefined, backgroundEntry?.name ?? "Предыстория"),
   ];
-  const setTaken = (label: string) => takenSets[label] ?? label.endsWith("набор A");
+  const startingSets: StartingSet[] = equipmentGroups.flat();
+  const setTaken = (label: string) => equipmentGroups.some(group => selectedStartingSet(group, takenSets)?.label === label);
+  function chooseStartingSet(label: string) {
+    const group = equipmentGroups.find(group => group.some(set => set.label === label));
+    if (!group) return;
+    setTakenSets(previous => ({ ...previous, ...Object.fromEntries(group.map(set => [set.label, set.label === label])) }));
+  }
   // Класс или предыстория выбраны, а их запись ещё не приехала — набора
   // просто ещё нет, и это не то же самое, что «набора нет в справочнике».
   const setsStillLoading = (!!classId && !classEntry) || (!!backgroundId && !backgroundEntry);
@@ -2596,10 +2607,10 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
               <input type="radio" name="dnd-ability-method" checked={method === "pointbuy"} onChange={() => applyMethod("pointbuy")} />
               Point-buy
             </label>
-            <label className="row">
+            {allowDiceRolls && <label className="row">
               <input type="radio" name="dnd-ability-method" checked={method === "roll"} onChange={() => applyMethod("roll")} />
               Бросок костей
-            </label>
+            </label>}
             <label className="row">
               <input type="radio" name="dnd-ability-method" checked={method === "manual"} onChange={() => applyMethod("manual")} />
               Вручную
@@ -2608,7 +2619,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
           <span className="muted">Не знаете что выбрать — берите стандартный массив.</span>
 
           {method === "pointbuy" && <div className="muted">Осталось очков: <span className="wizard-data">{pointBuyRemaining}</span> из <span className="wizard-data">{POINT_BUY_BUDGET}</span></div>}
-          {method === "roll" && (
+          {allowDiceRolls && method === "roll" && (
             <div className="row">
               <span className="muted">Пул: {rolledPool.join(", ")}</span>
               <button type="button" onClick={reroll}>
@@ -3001,9 +3012,10 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
             startingSets.map((set) => (
               <label key={set.label} className="row" style={{ alignItems: "flex-start", gap: "var(--sp-4)" }}>
                 <input
-                  type="checkbox"
+                  type="radio"
+                  name={`starting-equipment-${equipmentGroups.findIndex(group => group.includes(set))}`}
                   checked={setTaken(set.label)}
-                  onChange={(e) => setTakenSets({ ...takenSets, [set.label]: e.target.checked })}
+                  onChange={() => chooseStartingSet(set.label)}
                 />
                 <span className="stack" style={{ gap: "var(--sp-2)" }}>
                   <strong>
@@ -3034,8 +3046,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
             </span>
           )}
           <span className="muted">
-            Наборы «A» и «B» — это «взять снаряжением» или «взять деньгами»; брать оба правила не
-            предполагают, но приложение не мешает — Мастер вправе разрешить.
+            Выберите один вариант от класса и один от предыстории. Наборы «A» и «B» — альтернативы.
           </span>
         </div>
       )}

@@ -14,15 +14,17 @@ const BOX: Record<CropShape, { w: number; h: number; outW: number; outH: number;
 interface Props {
   file: File;
   shape: CropShape;
+  preview?: "dnd-portrait";
   onCancel: () => void;
   onSkip: (file: File) => void;
   onConfirm: (file: File) => void;
 }
 
-export function ImageCropModal({ file, shape, onCancel, onSkip, onConfirm }: Props) {
+export function ImageCropModal({ file, shape, preview, onCancel, onSkip, onConfirm }: Props) {
   const box = BOX[shape];
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const previewRef = useRef<HTMLCanvasElement>(null);
   const [url, setUrl] = useState<string | null>(null);
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -52,8 +54,9 @@ export function ImageCropModal({ file, shape, onCancel, onSkip, onConfirm }: Pro
   }
   function handlePointerMove(e: React.PointerEvent) {
     if (!dragRef.current) return;
-    const dx = e.clientX - dragRef.current.startX;
-    const dy = e.clientY - dragRef.current.startY;
+    const ratio = box.w / (containerRef.current?.getBoundingClientRect().width || box.w);
+    const dx = (e.clientX - dragRef.current.startX) * ratio;
+    const dy = (e.clientY - dragRef.current.startY) * ratio;
     setOffset(
       clamp(
         { x: dragRef.current.startOffset.x + dx, y: dragRef.current.startOffset.y + dy },
@@ -79,20 +82,29 @@ export function ImageCropModal({ file, shape, onCancel, onSkip, onConfirm }: Pro
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoom, natural]);
 
-  function handleConfirm() {
+  function drawCrop(canvas: HTMLCanvasElement) {
     const img = imgRef.current;
-    if (!img || !natural) return;
+    if (!img || !natural) return false;
     const srcLeft = (dispW / 2 - box.w / 2 - offset.x) / dispScale;
     const srcTop = (dispH / 2 - box.h / 2 - offset.y) / dispScale;
     const srcW = box.w / dispScale;
     const srcH = box.h / dispScale;
-    const canvas = document.createElement("canvas");
     canvas.width = box.outW;
     canvas.height = box.outH;
     const ctx = canvas.getContext("2d")!;
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, box.outW, box.outH);
     ctx.drawImage(img, srcLeft, srcTop, srcW, srcH, 0, 0, box.outW, box.outH);
+    return true;
+  }
+
+  useEffect(() => {
+    if (previewRef.current) drawCrop(previewRef.current);
+  }, [natural, zoom, offset, preview]);
+
+  function handleConfirm() {
+    const canvas = document.createElement("canvas");
+    if (!drawCrop(canvas)) return;
     canvas.toBlob(
       (blob) => {
         if (blob) onConfirm(new File([blob], "cropped.jpg", { type: "image/jpeg" }));
@@ -106,13 +118,15 @@ export function ImageCropModal({ file, shape, onCancel, onSkip, onConfirm }: Pro
     <Modal onClose={onCancel}>
       <h3>Обрезка изображения</h3>
       <p className="muted">Формат: {box.label}. Перетащите картинку, чтобы выбрать область, колесо мыши — зум.</p>
+      <div className={preview ? "crop-with-portrait-preview" : undefined}>
       <div
         ref={containerRef}
         className="crop-viewport"
-        style={{ width: box.w, height: box.h }}
+        style={{ width: box.w, maxWidth: "100%", aspectRatio: `${box.w} / ${box.h}` }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
         onWheel={handleWheel}
       >
         {url && (
@@ -125,12 +139,24 @@ export function ImageCropModal({ file, shape, onCancel, onSkip, onConfirm }: Pro
               setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })
             }
             style={{
-              width: dispW || undefined,
-              height: dispH || undefined,
-              transform: `translate(calc(-50% + ${offset.x}px), calc(-50% + ${offset.y}px))`,
+              width: natural ? `${dispW / box.w * 100}%` : undefined,
+              height: natural ? `${dispH / box.h * 100}%` : undefined,
+              left: `${50 + offset.x / box.w * 100}%`,
+              top: `${50 + offset.y / box.h * 100}%`,
+              transform: "translate(-50%, -50%)",
             }}
           />
         )}
+      </div>
+      {preview === "dnd-portrait" && <section className="crop-portrait-preview" aria-label="Превью портрета на чарнике">
+        <strong>На чарнике</strong>
+        <div className="crop-portrait-surface dnd-card-portrait">
+          <canvas ref={previewRef} aria-label="Кадрированный портрет с градиентом" />
+          <div className="dnd-card-portrait-grain" />
+          <div className="dnd-card-portrait-fade" />
+        </div>
+        <p className="muted">Превью обновляется при перемещении и увеличении. Градиент накладывается на чарнике и не записывается в картинку.</p>
+      </section>}
       </div>
       <label className="row" style={{ alignItems: "center", gap: 8 }}>
         Зум

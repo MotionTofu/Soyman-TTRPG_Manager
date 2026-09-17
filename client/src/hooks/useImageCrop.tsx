@@ -5,7 +5,7 @@ import { ImageCropModal, type CropShape } from "../components/ImageCropModal";
 // wire `onSelect` into the <input type="file"> onChange and render `modal`
 // nearby. Picking a file opens a crop dialog (skippable) before the
 // resulting File reaches `onDone`.
-export function useImageCrop(shape: CropShape, onDone: (file: File) => void) {
+export function useImageCrop(shape: CropShape, onDone: (file: File) => void, preview?: "dnd-portrait") {
   const [pending, setPending] = useState<File | null>(null);
 
   function onSelect(file: File | null) {
@@ -16,6 +16,7 @@ export function useImageCrop(shape: CropShape, onDone: (file: File) => void) {
     <ImageCropModal
       file={pending}
       shape={shape}
+      preview={preview}
       onCancel={() => setPending(null)}
       onSkip={(file) => {
         setPending(null);
