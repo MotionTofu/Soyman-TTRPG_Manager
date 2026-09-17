@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
+import { useAfterWrite, write } from "../data/hooks";
+import { readOnce } from "../data/imperative";
 import { Modal } from "../components/Modal";
 import { SectionHeading } from "../components/SectionHeading";
 import { EmptyState } from "../components/EmptyState";
@@ -96,6 +97,7 @@ const TAB_HINTS: Record<TabId, string> = {
 export function HealthPage() {
   const { user, loading: userLoading } = useCurrentUser();
   const isPlayer = user?.role === "player";
+  const afterWrite = useAfterWrite();
   const [scan, setScan] = useState<ScanResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
@@ -120,6 +122,13 @@ export function HealthPage() {
     return () => { scanAbortRef.current?.abort(); };
   }, []);
 
+  // Починка переписывает тексты, ссылки и пути в сущностях любого вида —
+  // адресовать нечем, задето всё. Проверка затем повторяется.
+  function afterRepair() {
+    afterWrite([]);
+    void runScan();
+  }
+
   async function runScan() {
     scanAbortRef.current?.abort();
     const ac = new AbortController();
@@ -128,7 +137,8 @@ export function HealthPage() {
     setMsg("");
     setScanError("");
     try {
-      const r = await api.get<ScanResult>("/health/scan", { signal: ac.signal, timeoutMs: 30000 });
+      // Проверка — снимок по кнопке, а не данные страницы: держать её в кэше незачем.
+      const r = await readOnce<ScanResult>("/health/scan", { signal: ac.signal, timeoutMs: 30000 });
       if (!ac.signal.aborted) setScan(r);
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
@@ -145,20 +155,20 @@ export function HealthPage() {
     const ok = await confirm({ title: "Убрать сироты", message: "Убрать все сироты (статблоки, ссылки, доски). Можно отменить в течение сессии.", confirmLabel: "Убрать", danger: true });
     if (!ok) return;
     try {
-      const r = await api.post<{ removed: number; canUndo?: boolean }>("/health/orphans/clean");
+      const r = await write.post<{ removed: number; canUndo?: boolean }>("/health/orphans/clean");
       setMsg(`Убрано сирот: ${r.removed}`);
       setOrphanUndo(!!r.canUndo);
-      runScan();
+      afterRepair();
     } catch (e) {
       setMsg(String(e instanceof Error ? e.message : e));
     }
   }
   async function undoOrphans() {
     try {
-      const r = await api.post<{ restored: number }>("/health/orphans/undo");
+      const r = await write.post<{ restored: number }>("/health/orphans/undo");
       setMsg(`Восстановлено сирот: ${r.restored}`);
       setOrphanUndo(false);
-      runScan();
+      afterRepair();
     } catch (e) {
       setMsg(String(e instanceof Error ? e.message : e));
     }
@@ -168,9 +178,9 @@ export function HealthPage() {
     const ok = await confirm({ title: "Сбросить счётчик", message: `Сбросить счётчик ${table} до max(id)?`, confirmLabel: "Сбросить" });
     if (!ok) return;
     try {
-      const r = await api.post<{ table: string; maxId: number | null; seq: number }>("/health/seq/reset", { table });
+      const r = await write.post<{ table: string; maxId: number | null; seq: number }>("/health/seq/reset", { table });
       setMsg(`Счётчик ${r.table} → ${r.seq} (max ${r.maxId})`);
-      runScan();
+      afterRepair();
     } catch (e) {
       setMsg(String(e instanceof Error ? e.message : e));
     }
@@ -183,11 +193,11 @@ export function HealthPage() {
     if (!ok) return;
     try {
       for (const table of tables) {
-        await api.post<{ table: string; maxId: number | null; seq: number }>("/health/seq/reset", { table });
+        await write.post<{ table: string; maxId: number | null; seq: number }>("/health/seq/reset", { table });
       }
       setMsg(`Сброшено ${tables.length} счётчик(ов)`);
       setSelectedSeqTables(new Set());
-      runScan();
+      afterRepair();
     } catch (e) {
       setMsg(String(e instanceof Error ? e.message : e));
     }
@@ -197,9 +207,9 @@ export function HealthPage() {
     const ok = await confirm({ title: "Убрать битые ссылки", message: "Убрать битые ссылки? Подписи останутся обычным текстом.", confirmLabel: "Убрать" });
     if (!ok) return;
     try {
-      const r = await api.post<{ removed: number }>("/health/links/strip");
+      const r = await write.post<{ removed: number }>("/health/links/strip");
       setMsg(`Убрано битых ссылок: ${r.removed}`);
-      runScan();
+      afterRepair();
     } catch (e) {
       setMsg(String(e instanceof Error ? e.message : e));
     }
@@ -209,9 +219,9 @@ export function HealthPage() {
     const ok = await confirm({ title: "Починить мёртвые UID", message: "Починить мёртвые UID-ссылки? Ссылки будут заменены на актуальные, если цель найдена по имени. Неизвестные схлопнутся в текст.", confirmLabel: "Починить" });
     if (!ok) return;
     try {
-      const r = await api.post<{ fixed: number; unresolved: number }>("/health/uid-links/fix");
+      const r = await write.post<{ fixed: number; unresolved: number }>("/health/uid-links/fix");
       setMsg(`Починено: ${r.fixed}, неизвестных (схлопнуто в текст): ${r.unresolved}`);
-      runScan();
+      afterRepair();
     } catch (e) {
       setMsg(String(e instanceof Error ? e.message : e));
     }
@@ -222,9 +232,9 @@ export function HealthPage() {
     const ok = await confirm({ title: "Перевести наследие", message: `Перевести ${scan.legacyResolvable} legacy-ссылок на uid и схлопнуть ${scan.legacyBroken} битых?`, confirmLabel: "Перевести", danger: scan.legacyBroken > 0 });
     if (!ok) return;
     try {
-      const r = await api.post<{ fixed: number; stripped: number; changed: number }>("/health/legacy-fix");
+      const r = await write.post<{ fixed: number; stripped: number; changed: number }>("/health/legacy-fix");
       setMsg(`Legacy: переведено ${r.fixed}, снято ${r.stripped} в ${r.changed} полях`);
-      runScan();
+      afterRepair();
     } catch (e) {
       setMsg(String(e instanceof Error ? e.message : e));
     }
@@ -235,7 +245,7 @@ export function HealthPage() {
   async function openDeadModal() {
     setDeadBusy(true);
     try {
-      const r = await api.get<{ groups: DeadGroup[] }>("/health/dead-uid-details");
+      const r = await readOnce<{ groups: DeadGroup[] }>("/health/dead-uid-details");
       setDeadGroups(r.groups);
       const init: Record<string, number | null | undefined> = {};
       for (const g of r.groups) {
@@ -271,7 +281,7 @@ export function HealthPage() {
     if (qq.length < 2) { setManualResults((p) => ({ ...p, [groupKey]: [] })); return; }
     setManualBusy((p) => ({ ...p, [groupKey]: true }));
     try {
-      const r = await api.get<{ results: DeadCandidate[] }>(`/health/dead-uid-search?type=${encodeURIComponent(type)}&q=${encodeURIComponent(qq)}&limit=20`);
+      const r = await readOnce<{ results: DeadCandidate[] }>(`/health/dead-uid-search?type=${encodeURIComponent(type)}&q=${encodeURIComponent(qq)}&limit=20`);
       setManualResults((p) => ({ ...p, [groupKey]: r.results }));
       setDeadGroups((prev) => prev ? prev.map((g) => {
         const k = `${g.type}:${g.uid}`;
@@ -340,10 +350,10 @@ export function HealthPage() {
     }
     setDeadBusy(true);
     try {
-      const r = await api.post<{ fixed: number; stripped: number; changedFields: number }>("/health/dead-uid-fix", { fixes });
+      const r = await write.post<{ fixed: number; stripped: number; changedFields: number }>("/health/dead-uid-fix", { fixes });
       setMsg(`Мёртвые uid: починено ${r.fixed}, снято ${r.stripped} в ${r.changedFields} полях`);
       setDeadOpen(false);
-      runScan();
+      afterRepair();
     } catch (e) {
       setMsg(String(e instanceof Error ? e.message : e));
     } finally {
@@ -353,9 +363,9 @@ export function HealthPage() {
 
   async function relink(c: { resource_id: number; new_path: string }) {
     try {
-      await api.post("/health/relink", { resource_id: c.resource_id, new_path: c.new_path });
+      await write.post("/health/relink", { resource_id: c.resource_id, new_path: c.new_path });
       setMsg(`Перепривязан ${c.resource_id} → ${c.new_path}`);
-      runScan();
+      afterRepair();
     } catch (e) {
       setMsg(String(e instanceof Error ? e.message : e));
     }
@@ -365,9 +375,9 @@ export function HealthPage() {
     const ok = await confirm({ title: "Убрать путь", message: `Очистить ${table}.${column} #${id}? Поле станет пустым (NULL).`, confirmLabel: "Очистить" });
     if (!ok) return;
     try {
-      await api.post("/health/path/clear", { table, column, id });
+      await write.post("/health/path/clear", { table, column, id });
       setMsg(`Очищено ${table}.${column} #${id}`);
-      runScan();
+      afterRepair();
     } catch (e) {
       setMsg(String(e instanceof Error ? e.message : e));
     }
@@ -881,7 +891,7 @@ export function HealthPage() {
         </Modal>
         );
       })()}
-      {orphanOpen && scan && <OrphanBrowserModal files={scan.orphanFiles} onClose={() => setOrphanOpen(false)} onDone={runScan} />}
+      {orphanOpen && scan && <OrphanBrowserModal files={scan.orphanFiles} onClose={() => setOrphanOpen(false)} onDone={afterRepair} />}
     </div>
   );
 }

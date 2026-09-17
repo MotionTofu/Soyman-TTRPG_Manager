@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
-import { api } from "../api/client";
-import { useAction, useResource, write } from "../data/hooks";
+import { resourceQuery, useAction, useResource, write } from "../data/hooks";
 import { dataKeys } from "../data/entities";
 import { campaignPaths, playerArticleAffects, playerSectionAffects } from "../data/campaigns";
 import { settingPaths } from "../data/settingEntities";
@@ -123,13 +122,7 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
   // под тем же ключом, что читает сама галерея подраздела.
   const galleries = useMemo(() => sections.filter((s) => s.kind === "gallery"), [sections]);
   const galleryQueries = useQueries({
-    queries: galleries.map((g) => {
-      const path = settingPaths.gallery("campaign_player_section", g.id);
-      return {
-        queryKey: dataKeys.resource(path),
-        queryFn: ({ signal }: { signal: AbortSignal }) => api.get<unknown[]>(path, { signal }),
-      };
-    }),
+    queries: galleries.map((g) => resourceQuery<unknown[]>(settingPaths.gallery("campaign_player_section", g.id))),
   });
   const galCounts: Record<number, number> = {};
   galleries.forEach((g, i) => {

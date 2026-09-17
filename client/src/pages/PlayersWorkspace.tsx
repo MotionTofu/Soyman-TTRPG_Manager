@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
-import { api } from "../api/client";
-import { useAction, useResource, write } from "../data/hooks";
-import { dataKeys, invalidateAffects } from "../data/entities";
+import { resourceQuery, useAction, useResource, write } from "../data/hooks";
+import { invalidateAffects } from "../data/entities";
 import { labelled } from "../data/notices";
 import { Modal } from "../components/Modal";
 import { MentionTextarea } from "../components/mentions/MentionTextarea";
@@ -81,10 +80,7 @@ export function PlayersWorkspace({ selectedId }: { selectedId?: number }) {
   // Составы всех групп — параллельно и под тем же ключом, что у окна «добавить
   // в группу» (раньше — по очереди, по запросу на группу).
   const memberQueries = useQueries({
-    queries: groups.map((g) => ({
-      queryKey: dataKeys.resource(`/player-groups/${g.id}/members`),
-      queryFn: ({ signal }: { signal: AbortSignal }) => api.get<Player[]>(`/player-groups/${g.id}/members`, { signal }),
-    })),
+    queries: groups.map((g) => resourceQuery<Player[]>(`/player-groups/${g.id}/members`)),
   });
   const groupMemberships: Record<number, number[]> = {};
   groups.forEach((g, i) => {

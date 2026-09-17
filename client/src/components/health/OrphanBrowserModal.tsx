@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { api } from "../../api/client";
+import { isEntityKind } from "../../data/entities";
+import { useEntity, useResource, write } from "../../data/hooks";
+import { useSearch } from "../../data/search";
 import { Modal } from "../Modal";
 import { useAuthenticatedFileUrl } from "../../utils/fileUrl";
 
@@ -63,108 +65,71 @@ function autoColumnFor(orphanPath: string, type: string): string {
 
 interface SearchResult { type: string; id: number; title: string; subtitle?: string; context?: string; }
 
+type EntryStatblock = { id: number; kind: string; note: string | null };
+const NO_SYSTEMS: { id: number; name: string }[] = [];
+const NO_STATBLOCKS: EntryStatblock[] = [];
+
 function OrphanAttachWizard({ orphanPath, index, total, onClose, onDone, onSkip }: { orphanPath: string; index?: number; total?: number; onClose: () => void; onDone: () => void; onSkip?: () => void }) {
   const [q, setQ] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("compendium_entry");
   const [systemId, setSystemId] = useState<string>("");
-  const [systems, setSystems] = useState<{ id: number; name: string }[]>([]);
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const [busy, setBusy] = useState(false);
+  const systems = useResource<{ id: number; name: string }[]>(typeFilter === "compendium_entry" ? "/systems" : null).data ?? NO_SYSTEMS;
   const [selected, setSelected] = useState<SearchResult | null>(null);
   const [column, setColumn] = useState<string>(() => autoColumnFor(orphanPath, "compendium_entry"));
   const [msg, setMsg] = useState("");
   const [attaching, setAttaching] = useState(false);
-  const [entryStatblocks, setEntryStatblocks] = useState<{ id: number; kind: string; note: string | null }[]>([]);
+  const statblocksPath =
+    selected?.type === "compendium_entry" && selected.id ? `/statblocks?owner_type=compendium_entry&owner_id=${selected.id}` : null;
+  const entryStatblocks = useResource<EntryStatblock[]>(statblocksPath).data ?? NO_STATBLOCKS;
   const [selectedStatblockId, setSelectedStatblockId] = useState<string>("");
-  const [occupiedColumns, setOccupiedColumns] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    if (typeFilter === "compendium_entry" && systems.length === 0) {
-      api.get<{ id: number; name: string }[]>("/systems").then((r) => setSystems(Array.isArray(r) ? r : [])).catch(() => {});
-    }
-  }, [typeFilter, systems.length]);
 
   useEffect(() => {
     setColumn(autoColumnFor(orphanPath, typeFilter));
     setSelected(null);
-    setResults([]);
     setQ("");
-    setEntryStatblocks([]);
     setSelectedStatblockId("");
     if (typeFilter !== "compendium_entry") setSystemId("");
   }, [orphanPath, typeFilter]);
 
+  // Единственный статблок записи выбирается сам; новая запись — выбор сначала.
   useEffect(() => {
-    if (selected?.type === "compendium_entry" && selected.id) {
-      api.get<{ id: number; kind: string; note: string | null }[]>(`/statblocks?owner_type=compendium_entry&owner_id=${selected.id}`)
-        .then((r) => {
-          const list = Array.isArray(r) ? r : [];
-          setEntryStatblocks(list);
-          if (list.length === 1) setSelectedStatblockId(String(list[0].id));
-          else setSelectedStatblockId("");
-        })
-        .catch(() => setEntryStatblocks([]));
-    } else {
-      setEntryStatblocks([]);
-      setSelectedStatblockId("");
-    }
-  }, [selected?.type, selected?.id]);
+    setSelectedStatblockId(entryStatblocks.length === 1 ? String(entryStatblocks[0].id) : "");
+  }, [entryStatblocks]);
 
   useEffect(() => {
     if (column !== "statblock_avatar") setSelectedStatblockId("");
     else if (entryStatblocks.length === 1 && !selectedStatblockId) setSelectedStatblockId(String(entryStatblocks[0].id));
   }, [column, entryStatblocks]);
 
-  // Fetch entity data to detect occupied fields
-  useEffect(() => {
-    if (!selected) { setOccupiedColumns(new Set()); return; }
-    const endpointMap: Record<string, string> = {
-      being: "beings", location: "locations", community: "communities",
-      artifact: "artifacts", compendium_entry: "compendium-entries",
-      character: "characters", setting: "settings", campaign: "campaigns",
-      system: "systems", player: "players",
-    };
-    const ep = endpointMap[selected.type];
-    if (!ep) { setOccupiedColumns(new Set()); return; }
-    const ac = new AbortController();
-    api.get<Record<string, unknown>>(`/${ep}/${selected.id}`, { signal: ac.signal })
-      .then((data) => {
-        if (ac.signal.aborted) return;
-        const cols = ATTACH_COLUMNS[selected.type]?.columns.map((c) => c.value) ?? [];
-        const occupied = new Set<string>();
-        for (const col of cols) {
-          const val = data[col];
-          if (typeof val === "string" && val.trim()) occupied.add(col);
-        }
-        // For compendium_entry + statblock_avatar: mark occupied if any statblock has an avatar
-        if (selected.type === "compendium_entry" && entryStatblocks.length > 0) {
-          const hasAvatar = entryStatblocks.some((sb) => {
-            // We don't have statblock data here directly, but the statblocks endpoint was already called
-            // We'll rely on the user seeing the statblock list; mark it occupied if there's only 1 statblock
-            // (simplification: if statblocks exist, the field is potentially occupied)
-            return false; // can't know without extra fetch — leave unoccupied, user decides
-          });
-          if (hasAvatar) occupied.add("statblock_avatar");
-        }
-        setOccupiedColumns(occupied);
-      })
-      .catch(() => { if (!ac.signal.aborted) setOccupiedColumns(new Set()); });
-    return () => ac.abort();
-  }, [selected?.type, selected?.id, entryStatblocks]);
+  // Занятые поля выбранной сущности — чтобы не пришить поверх уже заполненного.
+  // Карточка — из реестра слоя: свой список адресов вёл существ, локации,
+  // сообщества и записи бестиария на несуществующие пути (404), и занятое поле
+  // у них не отмечалось никогда.
+  const ownerKind = selected && isEntityKind(selected.type) ? selected.type : null;
+  const owner = useEntity<Record<string, unknown>>(ownerKind ?? "campaign", ownerKind ? selected!.id : null).data;
+  const occupiedColumns = useMemo(() => {
+    const occupied = new Set<string>();
+    if (!selected || !owner) return occupied;
+    for (const col of ATTACH_COLUMNS[selected.type]?.columns.map((c) => c.value) ?? []) {
+      const val = owner[col];
+      if (typeof val === "string" && val.trim()) occupied.add(col);
+    }
+    return occupied;
+  }, [selected, owner]);
 
+  // Новый запрос — прежний выбор к нему не относится.
   useEffect(() => {
     setSelected(null);
-    if (q.trim().length < 2) { setResults([]); return; }
-    const ac = new AbortController();
-    setBusy(true);
-    let url = `/search?q=${encodeURIComponent(q.trim())}&types=${typeFilter}`;
-    if (typeFilter === "compendium_entry" && systemId) url += `&system_id=${systemId}`;
-    api.get<SearchResult[]>(url, { signal: ac.signal })
-      .then((r) => { if (!ac.signal.aborted) setResults(Array.isArray(r) ? r.slice(0, 20) : []); })
-      .catch(() => {})
-      .finally(() => { if (!ac.signal.aborted) setBusy(false); });
-    return () => ac.abort();
   }, [q, typeFilter, systemId]);
+  const searchPath =
+    q.trim().length < 2
+      ? null
+      : `/search?q=${encodeURIComponent(q.trim())}&types=${typeFilter}` +
+        (typeFilter === "compendium_entry" && systemId ? `&system_id=${systemId}` : "");
+  const search = useSearch<SearchResult>(searchPath);
+  const results = search.results.slice(0, 20);
+  const busy = searchPath != null && search.searching;
 
   async function doAttach() {
     if (!selected) return;
@@ -173,7 +138,7 @@ function OrphanAttachWizard({ orphanPath, index, total, onClose, onDone, onSkip 
       setAttaching(true);
       setMsg("");
       try {
-        await api.post("/health/orphan/attach", { orphanPath, table: "statblocks", column: "avatar_image_path", id: Number(selectedStatblockId) });
+        await write.post("/health/orphan/attach", { orphanPath, table: "statblocks", column: "avatar_image_path", id: Number(selectedStatblockId) });
         setMsg("Пришито к статблоку");
         onDone();
       } catch (e) {
@@ -188,7 +153,7 @@ function OrphanAttachWizard({ orphanPath, index, total, onClose, onDone, onSkip 
     setAttaching(true);
     setMsg("");
     try {
-      await api.post("/health/orphan/attach", { orphanPath, table, column, id: selected.id });
+      await write.post("/health/orphan/attach", { orphanPath, table, column, id: selected.id });
       setMsg("Пришито");
       onDone();
     } catch (e) {
@@ -257,7 +222,7 @@ function OrphanAttachWizard({ orphanPath, index, total, onClose, onDone, onSkip 
                   {results.map((r) => (
                     <button
                       key={`${r.type}:${r.id}`}
-                      onClick={() => { setSelected(r); setResults([]); }}
+                      onClick={() => setSelected(r)}
                       style={{
                         textAlign: "left",
                         padding: "6px 8px",
@@ -276,7 +241,7 @@ function OrphanAttachWizard({ orphanPath, index, total, onClose, onDone, onSkip 
             ) : (
               <div className="row" style={{ alignItems: "center", gap: 8, padding: "6px 8px", border: "1px solid var(--ink)", background: "var(--paper-2)" }}>
                 <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", flex: "1 1 auto" }}>Выбрано: {selected.title} ({selected.type} #{selected.id})</span>
-                <button onClick={() => { setSelected(null); setQ(""); setResults([]); }} style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", padding: "4px 8px", border: "1px solid var(--line)", background: "var(--paper)" }}>Сменить</button>
+                <button onClick={() => { setSelected(null); setQ(""); }} style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", padding: "4px 8px", border: "1px solid var(--line)", background: "var(--paper)" }}>Сменить</button>
               </div>
             )}
           </label>
@@ -384,7 +349,7 @@ export function OrphanBrowserModal({ files, onClose, onDone }: { files: OrphanFi
     setBusy("archive");
     setMsg("");
     try {
-      const r = await api.post<{ moved: number }>("/health/orphan/archive", { paths });
+      const r = await write.post<{ moved: number }>("/health/orphan/archive", { paths });
       setMsg(`В архив: ${r.moved}`);
       setSelected(new Set());
       onDone();
@@ -400,7 +365,7 @@ export function OrphanBrowserModal({ files, onClose, onDone }: { files: OrphanFi
     setBusy("resources");
     setMsg("");
     try {
-      const r = await api.post<{ created: number }>("/health/orphan/create-resources", { paths });
+      const r = await write.post<{ created: number }>("/health/orphan/create-resources", { paths });
       setMsg(`Создано ресурсов: ${r.created}`);
       setSelected(new Set());
       onDone();

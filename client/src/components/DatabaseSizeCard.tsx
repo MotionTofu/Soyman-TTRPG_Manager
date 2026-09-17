@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { dataKeys } from "../data/entities";
+import { useResource, write } from "../data/hooks";
 
 // Размер файла базы и доля пустоты в нём.
 //
@@ -19,34 +21,22 @@ interface Fill {
   bytes: number;
 }
 
+const DB_SIZE_PATH = "/storages/db-size";
 const mb = (bytes: number) => (bytes / 1024 / 1024).toFixed(1);
 
 export function DatabaseSizeCard() {
-  const [fill, setFill] = useState<Fill | null>(null);
+  const fill = useResource<Fill>(DB_SIZE_PATH, { staleMs: 0 }).data ?? null;
+  const client = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState("");
-
-  function refresh(signal?: AbortSignal) {
-    api
-      .get<Fill>("/storages/db-size", signal ? { signal } : undefined)
-      .then(setFill)
-      .catch((e) => {
-        if ((e as Error).name === "AbortError") return;
-        setFill(null);
-      });
-  }
-  useEffect(() => {
-    const ac = new AbortController();
-    refresh(ac.signal);
-    return () => ac.abort();
-  }, []);
 
   async function compact() {
     setBusy(true);
     setDone("");
     try {
-      const r = await api.post<{ before: Fill; after: Fill }>("/storages/compact", {});
-      setFill(r.after);
+      // Перестройка большой базы идёт дольше обычных 10 секунд.
+      const r = await write.post<{ before: Fill; after: Fill }>("/storages/compact", {}, { timeoutMs: 300_000 });
+      client.setQueryData(dataKeys.resource(DB_SIZE_PATH), r.after);
       const saved = r.before.bytes - r.after.bytes;
       setDone(
         saved > 0

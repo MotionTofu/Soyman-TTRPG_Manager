@@ -1,8 +1,7 @@
 import { memo, useEffect, useMemo, useState, type ChangeEvent, type DragEvent } from "react";
 import { useQueries } from "@tanstack/react-query";
-import { api } from "../api/client";
-import { dataKeys, entityPath, type Affect } from "../data/entities";
-import { useAction, useEntity, useResource, write } from "../data/hooks";
+import { type Affect } from "../data/entities";
+import { entityQuery, useAction, useEntity, useResource, write } from "../data/hooks";
 import { readResource } from "../data/imperative";
 import { attemptWithNotice } from "../data/notices";
 import { Modal } from "./Modal";
@@ -95,10 +94,7 @@ export const ResourcesSection = memo(function ResourcesSection({
   const attachedLinks = useResource<GenericLink[]>(`/links?type=${scope}&id=${entityId}&section=attached_resource`).data;
   const attachedIds = (attachedLinks ?? []).map((l) => ({ linkId: l.id, resourceId: l.from_type === "resource" ? l.from_id : l.to_id }));
   const attachedCards = useQueries({
-    queries: attachedIds.map((a) => ({
-      queryKey: dataKeys.entity("resource", a.resourceId),
-      queryFn: ({ signal }: { signal: AbortSignal }) => api.get<Resource>(entityPath("resource", a.resourceId), { signal }),
-    })),
+    queries: attachedIds.map((a) => entityQuery<Resource>("resource", a.resourceId)),
   });
   // Список стабилен между отрисовками, пока не пришли новые данные: от него
   // зависит эффект счётчиков раздела (onStats), и новый массив на каждой

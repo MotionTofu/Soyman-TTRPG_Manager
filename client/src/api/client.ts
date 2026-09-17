@@ -126,7 +126,7 @@ async function request<T>(path: string, options?: RequestOptions): Promise<T> {
     if ((e as Error).name === "AbortError") {
       if (timedOut) {
         report(null, `таймаут ${timeoutMs} мс`);
-        throw new Error("Сервер не отвечает (таймаут 10с) — попробуйте ещё раз");
+        throw new Error(`Сервер не отвечает (таймаут ${Math.round(timeoutMs / 1000)} с) — попробуйте ещё раз`);
       }
       report(null, "отменён", true);
       throw e;
@@ -181,6 +181,9 @@ export const api = {
 // server/src/services/vaultDedup.ts) — everywhere else, deletion just
 // proceeds normally. Returns false if the user backs out entirely (nothing
 // was deleted); throws on a real server error.
+//
+// Задетое объявляет вызывающий — через слой данных (`afterWrite`): отсюда
+// раньше уходил безадресный сигнал, и другие окна перечитывали всё.
 export async function deleteFileWithChoice(path: string): Promise<boolean> {
   const doDelete = (mode?: "forever" | "archive") =>
     fetch(`${BASE}${path}${mode ? `?mode=${mode}` : ""}`, {
@@ -202,6 +205,5 @@ export async function deleteFileWithChoice(path: string): Promise<boolean> {
     }
   }
   if (!res.ok) throw new Error(await res.text());
-  announceUnaddressedWrite();
   return true;
 }

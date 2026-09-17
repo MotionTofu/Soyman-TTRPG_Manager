@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
-import { useResource } from "../data/hooks";
-import { dataKeys, invalidateAffects } from "../data/entities";
+import { resourceQuery, useResource } from "../data/hooks";
+import { invalidateAffects } from "../data/entities";
 import { MentionText } from "../components/mentions/MentionText";
 import { SettingWizard } from "../components/SettingWizard";
 import { GroupMembersModal } from "../components/GroupMembersModal";
@@ -83,10 +82,7 @@ export function SettingsListPage() {
   const groups = useResource<SettingGroup[]>("/setting-groups").data ?? NO_GROUPS;
   // Составы групп — параллельно, под ключом окна «добавить в группу».
   const memberQueries = useQueries({
-    queries: groups.map((g) => ({
-      queryKey: dataKeys.resource(`/setting-groups/${g.id}/members`),
-      queryFn: ({ signal }: { signal: AbortSignal }) => api.get<Setting[]>(`/setting-groups/${g.id}/members`, { signal }),
-    })),
+    queries: groups.map((g) => resourceQuery<Setting[]>(`/setting-groups/${g.id}/members`)),
   });
   const groupMemberships: Record<number, number[]> = {};
   groups.forEach((g, i) => {

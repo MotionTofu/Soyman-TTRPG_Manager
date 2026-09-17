@@ -94,6 +94,14 @@ export function resourceQuery<T>(path: string, options?: { staleMs?: number; gcM
   };
 }
 
+/** Запрос карточки сущности для `useQueries` — под ключом и чтением `useEntity`. */
+export function entityQuery<T>(kind: EntityKind, id: number) {
+  return {
+    queryKey: dataKeys.entity(kind, id),
+    queryFn: ({ signal }: { signal: AbortSignal }) => api.get<T>(entityPath(kind, id), { signal }),
+  };
+}
+
 /** Карточка сущности по виду и id. */
 export function useEntity<T>(kind: EntityKind, id: number | null | undefined): DataState<T> {
   const query = useQuery({

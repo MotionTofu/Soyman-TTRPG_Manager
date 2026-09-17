@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { useAfterWrite, useResource, write } from "../data/hooks";
+import { readOnce } from "../data/imperative";
 import { useConfirm } from "../hooks/useConfirm";
 import { EmptyState } from "../components/EmptyState";
 import { refreshMentionIndex } from "../mentions";
@@ -10,8 +11,13 @@ import type { Module, ModuleCatalogEntry } from "../types";
 // auto-wrapped server-side so everything shows in one list; enabling an
 // imported module materializes it (creates the actual system/setting),
 // disabling archives it — the underlying data is never deleted by a toggle.
+const NO_MODULES: Module[] = [];
+/** Модуль — целая система или сеттинг: запись идёт дольше обычных 10 секунд. */
+const LONG_MS = 600_000;
+
 export function ModulesTab() {
-  const [modules, setModules] = useState<Module[]>([]);
+  const modules = useResource<Module[]>("/modules").data ?? NO_MODULES;
+  const afterWrite = useAfterWrite();
   const [importing, setImporting] = useState(false);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [error, setError] = useState("");
@@ -32,25 +38,21 @@ export function ModulesTab() {
   const [catalogError, setCatalogError] = useState("");
   const [catalogBusyId, setCatalogBusyId] = useState<string | null>(null);
 
-  function refresh(signal?: AbortSignal) {
-    api.get<Module[]>("/modules", signal ? { signal } : undefined).then(setModules).catch(() => {});
-    // Установка, включение, обновление и удаление модуля меняют состав
-    // сущностей пачкой — а по карте глобальных ключей ссылки в текстах решают,
-    // куда ведут. Без перечитывания только что поставленный модуль оживил бы
-    // ссылки на себя лишь после перезапуска приложения.
+  function refresh() {
+    // Модуль ставит, включает, обновляет и архивирует системы и сеттинги
+    // пачкой — задето всё. А по карте глобальных ключей ссылки в текстах
+    // решают, куда ведут: без перечитывания только что поставленный модуль
+    // оживил бы ссылки на себя лишь после перезапуска приложения.
+    afterWrite([]);
     void refreshMentionIndex();
   }
-  useEffect(() => {
-    const ac = new AbortController();
-    refresh(ac.signal);
-    return () => ac.abort();
-  }, []);
 
   async function refreshCatalog() {
     setCatalogLoading(true);
     setCatalogError("");
     try {
-      setCatalog(await api.get<ModuleCatalogEntry[]>("/modules/catalog"));
+      // Каталог — с GitHub по кнопке, каждый раз заново.
+      setCatalog(await readOnce<ModuleCatalogEntry[]>("/modules/catalog", { timeoutMs: 60_000 }));
     } catch (e) {
       setCatalogError(String(e));
     } finally {
@@ -62,7 +64,7 @@ export function ModulesTab() {
     setCatalogBusyId(entry.remoteId);
     setCatalogError("");
     try {
-      await api.post(`/modules/catalog/${entry.remoteId}/install`);
+      await write.post(`/modules/catalog/${entry.remoteId}/install`, undefined, { timeoutMs: LONG_MS });
       refresh();
       await refreshCatalog();
     } catch (e) {
@@ -76,8 +78,10 @@ export function ModulesTab() {
     setCatalogBusyId(entry.remoteId);
     setCatalogError("");
     try {
-      const result = await api.post<{ backup: { name: unknown }; summary: Record<string, number> }>(
-        `/modules/catalog/${entry.remoteId}/update`
+      const result = await write.post<{ backup: { name: unknown }; summary: Record<string, number> }>(
+        `/modules/catalog/${entry.remoteId}/update`,
+        undefined,
+        { timeoutMs: LONG_MS }
       );
       const parts = Object.entries(result.summary)
         .filter(([, v]) => v > 0)
@@ -96,7 +100,7 @@ export function ModulesTab() {
   async function toggle(mod: Module) {
     setError("");
     try {
-      await api.put(`/modules/${mod.id}/${mod.enabled ? "disable" : "enable"}`);
+      await write.put(`/modules/${mod.id}/${mod.enabled ? "disable" : "enable"}`, undefined, { timeoutMs: LONG_MS });
       refresh();
     } catch (e) {
       setError(String(e));
@@ -112,7 +116,14 @@ export function ModulesTab() {
     // модуль удалялся, что бы Мастер ни ответил, а диалог висел уже поверх
     // свершившегося факта.
     if (!(await confirm({ title: materialized ? "Отправить в Архив?" : "Убрать модуль?", message, confirmLabel: materialized ? "Отправить" : "Убрать", cancelLabel: "Отмена", danger: materialized }))) return;
-    await api.del(`/modules/${mod.id}`);
+    setError("");
+    try {
+      await write.del(`/modules/${mod.id}`);
+    } catch (e) {
+      // Раньше отказ был молчаливым unhandled rejection.
+      setError(String(e));
+      return;
+    }
     refresh();
   }
 
@@ -130,7 +141,7 @@ export function ModulesTab() {
       const data = JSON.parse(text);
       const type = data.sections && data.entries ? "system" : data.locations && data.communities ? "setting" : null;
       if (!type) throw new Error("Файл не похож на экспорт системы или сеттинга.");
-      await api.post("/modules/import", { type, data });
+      await write.post("/modules/import", { type, data }, { timeoutMs: LONG_MS });
       refresh();
     } catch (e: any) {
       const msg = e?.response?.data?.error || String(e);
@@ -159,10 +170,10 @@ export function ModulesTab() {
       if (text.includes("__proto__") || text.includes("\"constructor\"")) throw new Error("Недопустимое содержимое");
       const data = JSON.parse(text);
       const endpoint = mod.type === "system" ? `/systems/${mod.system_id}/update` : `/settings/${mod.setting_id}/update`;
-      const result = await api.post<{
+      const result = await write.post<{
         backup: { name: string };
         summary: Record<string, number>;
-      }>(endpoint, data);
+      }>(endpoint, data, { timeoutMs: LONG_MS });
       const parts = Object.entries(result.summary)
         .filter(([, v]) => v > 0)
         .map(([k, v]) => `${k}: ${v}`);

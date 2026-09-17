@@ -1,6 +1,4 @@
-import { api } from "../../api/client";
-import { dataKeys, entityPath } from "../../data/entities";
-import { queryClient } from "../../data/queryClient";
+import { readEntity } from "../../data/imperative";
 import type { CompendiumEntry, DndEquipmentItem } from "../../types";
 import { equipmentMetaFromEntry } from "@shared/dnd/equipment";
 
@@ -46,10 +44,7 @@ export function startingSetsFrom(entry: CompendiumEntry | undefined, ownerLabel:
 // компендиума этого окна, а правка из соседнего окна оставляла старый снимок.
 export async function fetchEquipmentMeta(entryId: number): Promise<Partial<DndEquipmentItem>> {
   try {
-    const entry = await queryClient.fetchQuery({
-      queryKey: dataKeys.entity("compendium_entry", entryId),
-      queryFn: ({ signal }) => api.get<CompendiumEntry>(entityPath("compendium_entry", entryId), { signal }),
-    });
+    const entry = await readEntity<CompendiumEntry>("compendium_entry", entryId);
     // Какие поля снимаются — решает общий пакет: тем же снимком импорт из
     // Long Story Short связывает инвентарь на сервере.
     return equipmentMetaFromEntry(entryId, entry);

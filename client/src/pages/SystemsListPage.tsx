@@ -1,10 +1,9 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
-import { api } from "../api/client";
-import { useAction, useResource, write } from "../data/hooks";
+import { resourceQuery, useAction, useResource, write } from "../data/hooks";
 import { labelled } from "../data/notices";
-import { dataKeys, invalidateAffects } from "../data/entities";
+import { invalidateAffects } from "../data/entities";
 import { systemGroupAffects, systemPaths } from "../data/systems";
 import { Modal } from "../components/Modal";
 import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
@@ -71,10 +70,7 @@ export function SystemsListPage() {
   // Составы всех групп — по ключу на группу: окно состава и профиль системы
   // правят их через слой, и вкладки списка перечитывают только задетое.
   const memberQueries = useQueries({
-    queries: groups.map((g) => ({
-      queryKey: dataKeys.resource(systemPaths.groupMembers(g.id)),
-      queryFn: ({ signal }: { signal: AbortSignal }) => api.get<System[]>(systemPaths.groupMembers(g.id), { signal }),
-    })),
+    queries: groups.map((g) => resourceQuery<System[]>(systemPaths.groupMembers(g.id))),
   });
   // Ключ по составу, а не по ссылкам: массив запросов пересобирается на
   // каждый рендер, и фильтр ниже пересчитывался бы вхолостую.

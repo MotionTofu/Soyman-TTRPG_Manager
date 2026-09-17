@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api } from "../api/client";
-import { useAction, useEntity, useResource, write } from "../data/hooks";
+import { entityQuery, resourceQuery, useAction, useEntity, useResource, write } from "../data/hooks";
 import { afterWriteAnywhere } from "../data/imperative";
 import { applyGroupThemeToCampaign } from "../data/campaignActions";
 import {
@@ -12,7 +11,6 @@ import {
   rosterAffects,
 } from "../data/campaigns";
 import { useQueries } from "@tanstack/react-query";
-import { dataKeys, entityPath } from "../data/entities";
 import { statblockListPath } from "../data/statblocks";
 import { chroniclePaths } from "../data/settingPage";
 import { sessionMoneyAffects } from "../data/sessions";
@@ -1759,13 +1757,9 @@ function CampaignSquadSummary({ characters }: { characters: Character[] }) {
   // Статблоки — под тем же ключом, что у листа: правка листа в соседнем окне
   // меняет сводку без перечитывания всего отряда.
   const statblocks = useQueries({
-    queries: characters.map((c) => {
-      const path = statblockListPath("character", c.id);
-      return {
-        queryKey: dataKeys.resource(path),
-        queryFn: ({ signal }: { signal: AbortSignal }) => api.get<{ content: string; format: string }[]>(path, { signal }),
-      };
-    }),
+    queries: characters.map((c) =>
+      resourceQuery<{ content: string; format: string }[]>(statblockListPath("character", c.id))
+    ),
   });
   if (statblocks.some((q) => q.isPending)) return null;
   const rows = characters.map((c, i) => {
@@ -1809,11 +1803,7 @@ function CampaignSquadSummary({ characters }: { characters: Character[] }) {
 function CampaignSquadDates({ characters }: { characters: Character[] }) {
   // Карточки персонажей — тот же ключ, что у профиля персонажа.
   const cards = useQueries({
-    queries: characters.map((c) => ({
-      queryKey: dataKeys.entity("character", c.id),
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        api.get<Character & { important_dates?: ImportantDate[] }>(entityPath("character", c.id), { signal }),
-    })),
+    queries: characters.map((c) => entityQuery<Character & { important_dates?: ImportantDate[] }>("character", c.id)),
   });
   const dates = characters.flatMap((c, i) =>
     (cards[i]?.data?.important_dates ?? []).map((d) => ({ charId: c.id, charName: c.character_name, date: d }))

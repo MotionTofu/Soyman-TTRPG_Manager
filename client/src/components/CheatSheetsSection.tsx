@@ -1,10 +1,9 @@
 import { memo, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQueries } from "@tanstack/react-query";
-import { api } from "../api/client";
 import { entityLabel } from "../api/resolveEntity";
-import { dataKeys, entityPath, isEntityKind, type EntityKind } from "../data/entities";
-import { useAction, useResource, write } from "../data/hooks";
+import { isEntityKind, type EntityKind } from "../data/entities";
+import { entityQuery, useAction, useResource, write } from "../data/hooks";
 import { readResource } from "../data/imperative";
 import { labelled } from "../data/notices";
 import { linksPath, sessionPaths } from "../data/sessions";
@@ -85,11 +84,7 @@ function useCheatsheetSources(sessionId: number) {
   const unique = [...new Map(ends.filter((e) => isEntityKind(e.type)).map((e) => [`${e.type}:${e.id}`, e])).values()];
 
   const cards = useQueries({
-    queries: unique.map((e) => ({
-      queryKey: dataKeys.entity(e.type as EntityKind, e.id),
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        api.get<Record<string, unknown>>(entityPath(e.type as EntityKind, e.id), { signal }),
-    })),
+    queries: unique.map((e) => entityQuery<Record<string, unknown>>(e.type as EntityKind, e.id)),
   });
   const byKey = new Map(unique.map((e, i) => [`${e.type}:${e.id}`, cards[i]]));
 

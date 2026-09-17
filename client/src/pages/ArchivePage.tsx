@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, getAuthToken } from "../api/client";
+import { getAuthToken } from "../api/client";
+import { useAfterWrite, useResource, write } from "../data/hooks";
+import { readOnce } from "../data/imperative";
 import { refreshMentionIndex } from "../mentions";
 import { NavIcon } from "../components/NavIcons";
 import { EmptyState } from "../components/EmptyState";
@@ -170,10 +172,18 @@ function fileKey(f: ArchivedFile): string {
   return `file-${f.id}`;
 }
 
+const NO_ITEMS: ArchiveItem[] = [];
+const NO_FILES: ArchivedFile[] = [];
+
 export function ArchivePage() {
   const [activeGroup, setActiveGroup] = useState<string | null>("entities");
-  const [items, setItems] = useState<ArchiveItem[]>([]);
-  const [files, setFiles] = useState<ArchivedFile[]>([]);
+  // Архив читается заново на каждый заход (staleMs 0): архивирование заметки
+  // или сущности задевает её саму, а не список архива.
+  const itemsState = useResource<ArchiveItem[]>("/archive", { staleMs: 0 });
+  const filesState = useResource<ArchivedFile[]>("/archived-files", { staleMs: 0 });
+  const items = itemsState.data ?? NO_ITEMS;
+  const files = filesState.data ?? NO_FILES;
+  const afterWrite = useAfterWrite();
   const [q, setQ] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<SortKey>("date");
@@ -187,8 +197,8 @@ export function ArchivePage() {
   const [bulkConfirm, setBulkConfirm] = useState<null | { kind: "restore" | "purge-entities" | "purge-files" }>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [previewItem, setPreviewItem] = useState<ArchiveItem | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const loading = itemsState.loading || filesState.loading;
+  const loadError = itemsState.error ?? filesState.error;
   const [toast, setToast] = useState<{ msg: string; onUndo?: () => void } | null>(null);
   const [visible, setVisible] = useState(50);
   const [visibleFiles, setVisibleFiles] = useState(50);
@@ -206,15 +216,15 @@ export function ArchivePage() {
     window.setTimeout(() => setToast((t) => (t?.msg === msg ? null : t)), 5000);
   }
 
-  function refresh() {
-    setLoading(true);
-    setLoadError(null);
-    Promise.all([api.get<ArchiveItem[]>("/archive"), api.get<ArchivedFile[]>("/archived-files")])
-      .then(([a, f]) => { setItems(a); setFiles(f); })
-      .catch((e) => setLoadError(String(e instanceof Error ? e.message : e)))
-      .finally(() => setLoading(false));
+  function reload() {
+    itemsState.reload();
+    filesState.reload();
   }
-  useEffect(refresh, []);
+  // Восстановление и удаление навсегда задевают сущность любого вида, её связи,
+  // упоминания и счётчики — адресовать нечем, перечитывается всё.
+  function refresh() {
+    afterWrite([]);
+  }
 
   const filtered = useMemo(() => {
     let out = [...items];
@@ -303,7 +313,7 @@ export function ArchivePage() {
     const base = RESTORE_ENDPOINTS[item.type];
     if (!base) return;
     try {
-      await api.del(`${base}/${item.id}`);
+      await write.del(`${base}/${item.id}`);
     } catch (e) {
       setErrorMsg(`Не удалось вернуть в архив: ${e instanceof Error ? e.message : String(e)}`);
       return;
@@ -315,7 +325,7 @@ export function ArchivePage() {
     const base = RESTORE_ENDPOINTS[item.type];
     if (!base) { setErrorMsg(`Нет маршрута восстановления для ${item.type}`); return; }
     try {
-      await api.put(`${base}/${item.id}/restore`);
+      await write.put(`${base}/${item.id}/restore`);
     } catch (e) {
       setErrorMsg(`Не удалось восстановить: ${e instanceof Error ? e.message : String(e)}`);
       return;
@@ -328,7 +338,7 @@ export function ArchivePage() {
   function openPurge(item: ArchiveItem) {
     setPurgeTarget({ item, impact: null });
     setPurgeImpactLoading(true);
-    api.get<PurgeImpact>(`/archive/${item.type}/${item.id}/impact`)
+    readOnce<PurgeImpact>(`/archive/${item.type}/${item.id}/impact`)
       .then((imp) => setPurgeTarget((prev) => (prev && prev.item === item ? { item, impact: imp } : prev)))
       .catch(() => setPurgeTarget({ item, impact: null }))
       .finally(() => setPurgeImpactLoading(false));
@@ -338,7 +348,7 @@ export function ArchivePage() {
     if (!purgeTarget) return;
     setBusy(true);
     try {
-      await api.del(`/archive/${purgeTarget.item.type}/${purgeTarget.item.id}`);
+      await write.del(`/archive/${purgeTarget.item.type}/${purgeTarget.item.id}`);
     } catch (e) {
       setErrorMsg(`Не удалось удалить: ${e instanceof Error ? e.message : String(e)}`);
       setBusy(false);
@@ -360,7 +370,7 @@ export function ArchivePage() {
     if (!filePurgeTarget) return;
     setBusy(true);
     try {
-      await api.del(`/archived-files/${filePurgeTarget.id}`);
+      await write.del(`/archived-files/${filePurgeTarget.id}`);
     } catch (e) {
       setErrorMsg(`Не удалось удалить: ${e instanceof Error ? e.message : String(e)}`);
       setBusy(false);
@@ -380,7 +390,7 @@ export function ArchivePage() {
     const results = await Promise.allSettled(snapshot.map((it) => {
       const base = RESTORE_ENDPOINTS[it.type];
       if (!base) return Promise.reject(new Error(`нет маршрута для ${it.type}`));
-      return api.put(`${base}/${it.id}/restore`);
+      return write.put(`${base}/${it.id}/restore`);
     }));
     const fails = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
     setBusy(false);
@@ -389,7 +399,7 @@ export function ArchivePage() {
       void Promise.allSettled(snapshot.map((it) => {
         const base = RESTORE_ENDPOINTS[it.type];
         if (!base) return Promise.resolve();
-        return api.del(`${base}/${it.id}`).catch(() => {});
+        return write.del(`${base}/${it.id}`).catch(() => {});
       })).then(() => refresh());
     });
     setBulkConfirm(null);
@@ -401,7 +411,7 @@ export function ArchivePage() {
   async function bulkPurge() {
     if (selectedFilteredItems.length === 0) return;
     setBusy(true);
-    const results = await Promise.allSettled(selectedFilteredItems.map((it) => api.del(`/archive/${it.type}/${it.id}`)));
+    const results = await Promise.allSettled(selectedFilteredItems.map((it) => write.del(`/archive/${it.type}/${it.id}`)));
     const fails = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
     setBusy(false);
     if (fails.length > 0) setErrorMsg(`Не удалось удалить ${fails.length} из ${results.length}: ${String(fails[0].reason)}`);
@@ -416,7 +426,7 @@ export function ArchivePage() {
   async function bulkPurgeFiles() {
     if (selectedFilteredFiles.length === 0) return;
     setBusy(true);
-    const results = await Promise.allSettled(selectedFilteredFiles.map((f) => api.del(`/archived-files/${f.id}`)));
+    const results = await Promise.allSettled(selectedFilteredFiles.map((f) => write.del(`/archived-files/${f.id}`)));
     const fails = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
     setBusy(false);
     if (fails.length > 0) setErrorMsg(`Не удалось удалить ${fails.length}: ${String(fails[0].reason)}`);
@@ -432,7 +442,7 @@ export function ArchivePage() {
       const targets = filtered.length > 0 ? filtered : items;
       if (targets.length === 0) { setClearOpen(null); return; }
       setBusy(true);
-      await Promise.allSettled(targets.map((it) => api.del(`/archive/${it.type}/${it.id}`)));
+      await Promise.allSettled(targets.map((it) => write.del(`/archive/${it.type}/${it.id}`)));
       setBusy(false);
       showToast(`Очищено ${targets.length} записей`);
       focusFirstRow();
@@ -444,7 +454,7 @@ export function ArchivePage() {
       const targets = filteredFiles.length > 0 ? filteredFiles : files;
       if (targets.length === 0) { setClearOpen(null); return; }
       setBusy(true);
-      await Promise.allSettled(targets.map((f) => api.del(`/archived-files/${f.id}`)));
+      await Promise.allSettled(targets.map((f) => write.del(`/archived-files/${f.id}`)));
       setBusy(false);
       showToast(`Очищено ${targets.length} файлов`);
       focusFirstRow();
@@ -455,7 +465,12 @@ export function ArchivePage() {
   }
 
   async function openArchiveFolder() {
-    await api.get("/archived-files/open-folder");
+    try {
+      await readOnce("/archived-files/open-folder");
+    } catch (e) {
+      // Раньше отказ был молчаливым unhandled rejection.
+      setErrorMsg(`Не удалось открыть папку: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   const groups = [
@@ -529,7 +544,7 @@ export function ArchivePage() {
       {loadError && (
         <div className="card" style={{ borderLeft: "3px solid var(--danger-bg)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
           <span>Не удалось загрузить архив: {loadError}</span>
-          <button className="primary" onClick={refresh}>Повторить</button>
+          <button className="primary" onClick={reload}>Повторить</button>
         </div>
       )}
       {errorMsg && (

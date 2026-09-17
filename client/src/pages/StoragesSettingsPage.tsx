@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { api } from "../api/client";
+import { useAfterWrite, useResource, write } from "../data/hooks";
 import { useConfirm } from "../hooks/useConfirm";
 import { safeGetItem, safeSetItem } from "../utils/safeStorage";
 import { ModulesTab } from "../components/ModulesTab";
@@ -39,12 +39,16 @@ function saveSectionOpen(key: string, open: boolean) {
   safeSetItem(`storagesSectionOpen_${key}`, open ? "1" : "0");
 }
 
+const NO_STORAGES: StorageProfile[] = [];
+
 export function StoragesSettingsPage() {
   const location = useLocation() as { state?: { fromAppearance?: boolean } };
   const fromAppearance = location.state?.fromAppearance === true;
   const [confirmDialog, confirm] = useConfirm();
-  const [activeId, setActiveId] = useState("");
-  const [storages, setStorages] = useState<StorageProfile[]>([]);
+  const afterWrite = useAfterWrite();
+  const storagesData = useResource<{ activeId: string; storages: StorageProfile[] }>("/storages").data;
+  const activeId = storagesData?.activeId ?? "";
+  const storages = storagesData?.storages ?? NO_STORAGES;
   const [error, setError] = useState("");
   const [q, setQ] = useState("");
   const [toast, setToast] = useState("");
@@ -53,7 +57,7 @@ export function StoragesSettingsPage() {
   const [prefs, setPrefs] = useState(loadThemePrefs());
   const [radius, setRadius] = useState(() => loadRadiusOverride() ?? 0);
   const [imageTreatment, setImageTreatment] = useState(loadImageTreatment);
-  const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
+  const appSettings = useResource<AppSettings>("/app-settings").data ?? null;
   const [uploadingHomeBg, setUploadingHomeBg] = useState(false);
   const [hideFinance, setHideFinance] = useState(loadHideFinance);
   const [bagSize, setBagSize] = useState(loadBagSize);
@@ -84,19 +88,16 @@ export function StoragesSettingsPage() {
   const [themeMenu, setThemeMenu] = useState<{ x: number; y: number; theme: Theme } | null>(null);
   const [themeEditor, setThemeEditor] = useState<Theme | null>(null);
 
-  function refreshAppSettings(signal?: AbortSignal) {
-    api.get<AppSettings>("/app-settings", signal ? { signal } : undefined)
-      .then((s) => {
-        setFadeDraft(String(Math.round(s.fade_duration_ms / 1000)));
-        setAppSettings(s);
-      })
-      .catch((e) => { if ((e as Error).name === "AbortError") return; });
-  }
+  // Поле затухания берёт значение с сервера при загрузке и после сохранения.
+  const fadeMs = appSettings?.fade_duration_ms;
   useEffect(() => {
-    const ac = new AbortController();
-    refreshAppSettings(ac.signal);
-    return () => ac.abort();
-  }, []);
+    if (fadeMs != null) setFadeDraft(String(Math.round(fadeMs / 1000)));
+  }, [fadeMs]);
+  // Фон главной, затухание — общие настройки приложения: их читают главная,
+  // фон разделов и звук.
+  function refreshAppSettings() {
+    afterWrite([{ path: "/app-settings" }]);
+  }
   useEffect(() => {
     applyTheme(findTheme(prefs.themeId, prefs.customThemes));
   }, [prefs.themeId, prefs.customThemes]);
@@ -149,7 +150,7 @@ export function StoragesSettingsPage() {
     try {
       const form = new FormData();
       form.append("file", file);
-      await api.post("/app-settings/home-background", form);
+      await write.post("/app-settings/home-background", form, { timeoutMs: 120_000 });
       refreshAppSettings();
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
@@ -161,10 +162,12 @@ export function StoragesSettingsPage() {
   const homeBgCrop = useImageCrop("background", uploadHomeBackground);
   async function removeHomeBackground() {
     try {
-      await api.del("/app-settings/home-background");
+      await write.del("/app-settings/home-background");
       refreshAppSettings();
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
+      // Раньше отказ пропадал молча.
+      showError(e instanceof Error ? e.message.slice(0, 200) : "Не удалось убрать фон");
     }
   }
 
@@ -184,7 +187,7 @@ export function StoragesSettingsPage() {
     if (fadeSaveRef.current) window.clearTimeout(fadeSaveRef.current);
     fadeSaveRef.current = window.setTimeout(async () => {
       try {
-        await api.put("/app-settings/fade-duration", { fade_duration_ms: seconds * 1000 });
+        await write.put("/app-settings/fade-duration", { fade_duration_ms: seconds * 1000 });
         refreshAppSettings();
       } catch (e) {
         if ((e as Error).name !== "AbortError") {
@@ -196,7 +199,13 @@ export function StoragesSettingsPage() {
   async function saveFadeDurationNow(val: string) {
     const seconds = Math.max(0, Number(val) || 0);
     if (fadeSaveRef.current) window.clearTimeout(fadeSaveRef.current);
-    await api.put("/app-settings/fade-duration", { fade_duration_ms: seconds * 1000 });
+    try {
+      await write.put("/app-settings/fade-duration", { fade_duration_ms: seconds * 1000 });
+    } catch {
+      // Раньше отказ был молчаливым unhandled rejection.
+      showError("Не удалось сохранить затухание");
+      return;
+    }
     showToast("Сохранено");
     refreshAppSettings();
   }
@@ -216,20 +225,10 @@ export function StoragesSettingsPage() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
 
-  function refresh(signal?: AbortSignal) {
-    api
-      .get<{ activeId: string; storages: StorageProfile[] }>("/storages", signal ? { signal } : undefined)
-      .then((r) => {
-        setActiveId(r.activeId);
-        setStorages(r.storages);
-      })
-      .catch((e) => { if ((e as Error).name === "AbortError") return; });
+  // Список хранилищ и размер файла базы (он под тем же путём).
+  function refresh() {
+    afterWrite([{ path: "/storages" }]);
   }
-  useEffect(() => {
-    const ac = new AbortController();
-    refresh(ac.signal);
-    return () => ac.abort();
-  }, []);
 
   async function pickNewFolder() {
     if (!hasElectronAPI()) return;
@@ -251,7 +250,7 @@ export function StoragesSettingsPage() {
     setCreating(true);
     setError("");
     try {
-      await api.post("/storages", { name: newName, folderPath: newFolder });
+      await write.post("/storages", { name: newName, folderPath: newFolder });
       setNewName("");
       setNewFolder("");
       refresh();
@@ -280,7 +279,7 @@ export function StoragesSettingsPage() {
     setActivatingId(id);
     setError("");
     try {
-      await api.post(`/storages/${id}/activate`);
+      await write.post(`/storages/${id}/activate`);
       window.location.reload();
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
@@ -297,7 +296,7 @@ export function StoragesSettingsPage() {
     setRemovingId(id);
     setError("");
     try {
-      await api.del(`/storages/${id}`);
+      await write.del(`/storages/${id}`);
       refresh();
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
@@ -315,7 +314,7 @@ export function StoragesSettingsPage() {
     }
     setRenamingSaving(true);
     try {
-      await api.put(`/storages/${renamingId}`, { name: renameDraft.trim() });
+      await write.put(`/storages/${renamingId}`, { name: renameDraft.trim() });
       setRenamingId(null);
       setError("");
       refresh();
@@ -343,7 +342,7 @@ export function StoragesSettingsPage() {
       form.append("file", importFile);
       form.append("name", importName);
       form.append("folderPath", importFolder);
-      await api.post("/storages/import-backup", form);
+      await write.post("/storages/import-backup", form, { timeoutMs: 600_000 });
       setImportName("");
       setImportFolder("");
       setImportFile(null);

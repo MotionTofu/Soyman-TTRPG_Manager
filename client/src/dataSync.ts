@@ -1,14 +1,14 @@
-import { useEffect, useState } from "react";
 import type { Affect } from "./data/entities";
-import { isMigratedRoute } from "./data/migratedRoutes";
 
 // Окна приложения смотрят в один сервер и одну базу, но каждое держит свою
 // копию уже загруженных данных: добавил жителя в локацию в одном окне — второе
 // окно с той же локацией об этом не знает. Поэтому каждая правка объявляется
-// остальным окнам, а те обновляют страницу, когда в них возвращаются.
+// остальным окнам, а те перечитывают задетое (data/DataLayerSync.tsx).
+// Перезагрузки окна по сигналу больше нет: все страницы на слое данных
+// (docs/adr/0001, п. 8).
 //
 // BroadcastChannel не доставляет сообщение отправителю — окно, сделавшее
-// правку, свой же пинг не увидит и лишний раз не перезагрузится. Там, где его
+// правку, свой же пинг не увидит и лишний раз не перечитает. Там, где его
 // нет, роль канала играет запись в localStorage: событие storage приходит
 // ровно в остальные окна того же адреса.
 //
@@ -85,9 +85,8 @@ if (typeof document !== "undefined") {
   document.addEventListener("input", () => (lastInputAt = Date.now()), true);
 }
 
-// Exported so client.ts can reuse the same "не перезагружать под руками"
-// guard when another window's login/logout invalidates this window's token —
-// a forced reload mid-edit would drop the very work П0.6 tries to protect.
+// Нужен транспорту (api/client.ts): вход или выход в другом окне меняет токен
+// этого окна, и перезагрузка посреди правки потеряла бы набранное.
 export function isBusyEditing(): boolean {
   if (Date.now() - lastInputAt < RECENT_INPUT_MS) return true;
   const el = document.activeElement as HTMLElement | null;
@@ -95,43 +94,4 @@ export function isBusyEditing(): boolean {
     return true;
   }
   return !!document.querySelector(".modal-backdrop");
-}
-
-export function useCrossWindowDataSync(): { stale: boolean; refresh: () => void } {
-  const [stale, setStale] = useState(false);
-
-  // Страница, переведённая на слой данных, обновляет задетое сама
-  // (data/DataLayerSync.tsx) — перезагружать её незачем. Перезагрузка остаётся
-  // для непереведённых: иначе они не увидели бы правку из другого окна
-  // (data/migratedRoutes.ts, решение 2026-09-11).
-  useEffect(
-    () =>
-      onDataChangedElsewhere(() => {
-        if (!isMigratedRoute(window.location.pathname)) setStale(true);
-      }),
-    []
-  );
-
-  useEffect(() => {
-    if (!stale) return;
-    const reloadIfIdle = () => {
-      // Сигнал пришёл на непереведённой странице, а вернулись уже на
-      // переведённую: слой её данные уже пометил, перезагрузка не нужна.
-      if (isMigratedRoute(window.location.pathname)) {
-        setStale(false);
-        return;
-      }
-      if (!isBusyEditing()) window.location.reload();
-    };
-    if (document.hasFocus() || document.visibilityState === "visible") reloadIfIdle();
-    window.addEventListener("focus", reloadIfIdle);
-    const onVis = () => { if (document.visibilityState === "visible") reloadIfIdle(); };
-    document.addEventListener("visibilitychange", onVis);
-    return () => {
-      window.removeEventListener("focus", reloadIfIdle);
-      document.removeEventListener("visibilitychange", onVis);
-    };
-  }, [stale]);
-
-  return { stale, refresh: () => window.location.reload() };
 }

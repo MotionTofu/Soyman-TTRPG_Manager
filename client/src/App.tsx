@@ -4,7 +4,6 @@ import { AppShell } from "./layout/AppShell";
 import { LoginGate } from "./components/LoginGate";
 import { RealtimeListener } from "./RealtimeListener";
 import { ShowEntriesListener } from "./components/ShowEntriesListener";
-import { CrossWindowSyncBanner } from "./components/CrossWindowSyncBanner";
 import { SaveNotices } from "./components/SaveNotices";
 import { DataLayerSync } from "./data/DataLayerSync";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -154,7 +153,6 @@ function App() {
       <LoginGate>
         <RealtimeListener />
         <ShowEntriesListener />
-        <CrossWindowSyncBanner />
         <SaveNotices />
         <DataLayerSync />
         <MentionPreviewRoot />

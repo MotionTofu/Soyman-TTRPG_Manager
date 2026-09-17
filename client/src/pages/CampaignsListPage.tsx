@@ -1,10 +1,9 @@
 import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
-import { api } from "../api/client";
-import { useResource, write } from "../data/hooks";
+import { resourceQuery, useResource, write } from "../data/hooks";
 import { afterWriteAnywhere } from "../data/imperative";
-import { dataKeys, invalidateAffects } from "../data/entities";
+import { invalidateAffects } from "../data/entities";
 import { campaignGroupAffects, campaignPaths } from "../data/campaigns";
 import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
 import { ListPage } from "../components/ListPage";
@@ -136,10 +135,7 @@ export function CampaignsListPage() {
   // Счётчики групп в левой панели и состав открытой группы — одни и те же
   // запросы составов, под одним ключом с окном «добавить в группу».
   const memberQueries = useQueries({
-    queries: groups.map((g) => ({
-      queryKey: dataKeys.resource(campaignPaths.groupMembers(g.id)),
-      queryFn: ({ signal }: { signal: AbortSignal }) => api.get<Campaign[]>(campaignPaths.groupMembers(g.id), { signal }),
-    })),
+    queries: groups.map((g) => resourceQuery<Campaign[]>(campaignPaths.groupMembers(g.id))),
   });
   const groupCounts: Record<number, number> = {};
   groups.forEach((g, i) => {
