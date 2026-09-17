@@ -125,6 +125,17 @@ describe("события сокета", () => {
     expect(affects.some((a) => matchesAffect(dataKeys.resource("/player/characters/20"), a))).toBe(true);
   });
 
+  it("персонаж игрока задевает профиль своего игрока у Мастера, но не чужой", () => {
+    const affects = affectsForWindowEvent("character-updated", { characterId: 20, playerId: 7 }) ?? [];
+    expect(affects.some((a) => matchesAffect(dataKeys.entity("player", 7), a))).toBe(true);
+    expect(affects.some((a) => matchesAffect(dataKeys.entity("player", 8), a))).toBe(false);
+  });
+
+  it("правка листа профиль игрока не задевает — иначе каждая правка хитов тянула бы запрос", () => {
+    const affects = affectsForWindowEvent("character-updated", { characterId: 20, playerId: 7, scope: "sheet" }) ?? [];
+    expect(affects.some((a) => matchesAffect(dataKeys.entity("player", 7), a))).toBe(false);
+  });
+
   it("инициатива задевает очередь только своей сессии", () => {
     const affects = affectsForWindowEvent("initiative-updated", { sessionId: 151 }) ?? [];
     expect(affects.some((a) => matchesAffect(dataKeys.resource("/initiative-entries?session_id=151"), a))).toBe(true);

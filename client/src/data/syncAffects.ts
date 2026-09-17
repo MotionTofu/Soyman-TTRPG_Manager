@@ -7,7 +7,14 @@ import type { Affect } from "./entities";
  * перезапускает весь модуль.
  */
 export function affectsForWindowEvent(type: string, detail: unknown): Affect[] | null {
-  const d = (detail ?? {}) as { characterId?: number; sessionId?: number; scope?: string; campaignId?: number; systemId?: number };
+  const d = (detail ?? {}) as {
+    characterId?: number;
+    sessionId?: number;
+    scope?: string;
+    campaignId?: number;
+    systemId?: number;
+    playerId?: number;
+  };
   switch (type) {
     case "character-updated": {
       if (d.characterId == null) return [{ kind: "character" }, { path: "/statblocks" }];
@@ -15,10 +22,16 @@ export function affectsForWindowEvent(type: string, detail: unknown): Affect[] |
         { path: `/statblocks?owner_type=character&owner_id=${d.characterId}` },
         { path: `/player/characters/${d.characterId}` },
       ];
+      // Профиль игрока у Мастера держит список его персонажей: новый персонаж
+      // и переименование должны доходить до открытой страницы. Только при
+      // `card`: правка листа состава персонажей не меняет, а быстрые правки
+      // хитов тянули бы лишний запрос. Старый сервер поля не шлёт — тогда
+      // ничего лишнего не перечитываем.
+      const owner: Affect[] = d.playerId != null ? [{ kind: "player", id: d.playerId }] : [];
       // Сохранён только лист (server/src/services/realtime.ts): карточку
       // персонажа не перечитываем — иначе каждая быстрая правка хитов тянула бы
       // лишний запрос. Старый сервер поля не шлёт — тогда задето всё.
-      return d.scope === "sheet" ? sheet : [{ kind: "character", id: d.characterId }, ...sheet];
+      return d.scope === "sheet" ? sheet : [{ kind: "character", id: d.characterId }, ...sheet, ...owner];
     }
     case "initiative-updated":
       return [{ path: d.sessionId != null ? `/initiative-entries?session_id=${d.sessionId}` : "/initiative-entries" }];

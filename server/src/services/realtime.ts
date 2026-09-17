@@ -78,17 +78,29 @@ export function broadcastToGm(event: string, payload: unknown): void {
 // инициатива). Слой данных клиента перечитывает по нему ровно задетое: без
 // различения каждая правка хитов тянула бы ещё и карточку персонажа
 // (client/src/data/syncAffects.ts). Клиент, не знающий поля, читает всё.
-export function broadcastCharacterUpdate(characterId: number, scope: "card" | "sheet" = "card"): void {
-  if (!io) return;
+// Содержимое события — отдельно от отправки, чтобы его можно было проверить
+// тестом без живого сокета. `playerId`/`campaignId` нужны Мастеру: по ним
+// перечитывается открытый профиль игрока, иначе заведённый игроком персонаж
+// не доходил до него до следующего захода (client/src/data/syncAffects.ts).
+export function characterUpdatePayload(
+  characterId: number,
+  scope: "card" | "sheet" = "card"
+): { characterId: number; scope: "card" | "sheet"; playerId: number; campaignId: number | null } | null {
   const row = db
     .prepare("SELECT campaign_id, player_id FROM characters WHERE id = ?")
     .get(characterId) as { campaign_id: number | null; player_id: number } | undefined;
-  if (!row) return;
-  const payload = { characterId, scope };
-  if (row.campaign_id != null) {
-    io.to(`campaign:${row.campaign_id}`).emit("character-updated", payload);
+  if (!row) return null;
+  return { characterId, scope, playerId: row.player_id, campaignId: row.campaign_id };
+}
+
+export function broadcastCharacterUpdate(characterId: number, scope: "card" | "sheet" = "card"): void {
+  if (!io) return;
+  const payload = characterUpdatePayload(characterId, scope);
+  if (!payload) return;
+  if (payload.campaignId != null) {
+    io.to(`campaign:${payload.campaignId}`).emit("character-updated", payload);
   } else {
-    io.to(`player:${row.player_id}`).emit("character-updated", payload);
+    io.to(`player:${payload.playerId}`).emit("character-updated", payload);
   }
   io.to("gm").emit("character-updated", payload);
 }

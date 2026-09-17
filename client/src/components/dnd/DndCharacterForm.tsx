@@ -1879,6 +1879,10 @@ function DndSpellsView({
   );
 }
 
+function blankClassRow(): DndClassEntry {
+  return { classId: null, className: "", subclassId: null, subclassName: "", level: 1, skillChoiceOptions: [], skillChoiceCount: 0, spellcastingAbility: "" };
+}
+
 // Memoized for the same reason as the other heavy sub-sections — needs all
 // callback props to be stable-identity (see the ref-backed useMemo block in
 // DndCharacterEdit) or the memo is defeated.
@@ -1929,7 +1933,7 @@ const DndClassesEdit = memo(function DndClassesEdit({
 
   function update(i: number, patch: Partial<DndClassEntry>) {
     const next = classes.slice();
-    next[i] = { ...next[i], ...patch };
+    next[i] = { ...(next[i] ?? blankClassRow()), ...patch };
     onChange(next);
   }
   function commitLevel(i: number, raw: string) {
@@ -1952,18 +1956,22 @@ const DndClassesEdit = memo(function DndClassesEdit({
     onLevelChange(i, n);
   }
   function add() {
-    onChange([
-      ...classes,
-      { classId: null, className: "", subclassId: null, subclassName: "", level: 1, skillChoiceOptions: [], skillChoiceCount: 0, spellcastingAbility: "" },
-    ]);
+    onChange([...classes, blankClassRow()]);
   }
+
+  // Пустой лист показывает строку класса сразу, как вид и предысторию: раньше
+  // тут была одна кнопка «+ Добавить класс», и блок читался как «здесь ничего
+  // нет» — персонаж без класса уезжал в игру. Строка-заготовка живёт только на
+  // экране; в лист она попадает выбранным классом (pickClass достраивает её).
+  const rows = classes.length ? classes : [blankClassRow()];
+  const blank = classes.length === 0;
 
   return (
     <div className="stack dnd-classes-block">
       <div className="sb-section" style={{ margin: 0 }}>
         Класс и уровень
       </div>
-      {classes.map((c, i) => {
+      {rows.map((c, i) => {
         const subclasses = c.classId != null ? hierarchy.subclassesByClass[c.classId] ?? [] : [];
         const subclassLevelFor = (row: DndClassEntry) =>
           hierarchy.classes.find((cl) => cl.id === row.classId)?.subclassLevel ?? 0;
@@ -1997,7 +2005,8 @@ const DndClassesEdit = memo(function DndClassesEdit({
                 onChange={(e) => update(i, { className: e.target.value })}
               />
             )}
-            {c.classId != null &&
+            {!blank &&
+              c.classId != null &&
               subclasses.length > 0 &&
               // Подкласс доступен не с первого уровня. Раньше выпадающий
               // список стоял всегда, и ничто не мешало выбрать подкласс
@@ -2021,6 +2030,7 @@ const DndClassesEdit = memo(function DndClassesEdit({
                   ))}
                 </select>
               ))}
+            {!blank && (
             <span className="dnd-class-level-stepper">
               <button
                 type="button"
@@ -2055,6 +2065,8 @@ const DndClassesEdit = memo(function DndClassesEdit({
                 <NavIcon name="navUp" />
               </button>
             </span>
+            )}
+            {!blank && (
             <button
               type="button"
               className="comp-mini"
@@ -2074,6 +2086,7 @@ const DndClassesEdit = memo(function DndClassesEdit({
             >
               <NavIcon name="close" />
             </button>
+            )}
             {prereq && (
               <span className="muted" style={{ fontSize: "var(--fs-meta)" }} title="Требования мультикласса (PHB 2024): домашние правила могут отменять">
                 нужно: {prereq}
@@ -2082,9 +2095,11 @@ const DndClassesEdit = memo(function DndClassesEdit({
           </div>
         );
       })}
-      <button type="button" onClick={add} style={{ alignSelf: "flex-start" }}>
-        + Добавить класс
-      </button>
+      {!blank && (
+        <button type="button" onClick={add} style={{ alignSelf: "flex-start" }}>
+          + Добавить класс
+        </button>
+      )}
       {confirmDialog}
     </div>
   );
@@ -3960,8 +3975,10 @@ function useDndOrigin(
       let proficiencies = cleared.proficiencies;
       const opt = hierarchy.classes.find((cl) => cl.id === classId);
       const nextClasses = value.classes.slice();
+      // Строка-заготовка на пустом листе в модели ещё не существует — первый
+      // выбранный класс её и создаёт (см. DndClassesEdit).
       nextClasses[i] = {
-        ...nextClasses[i],
+        ...(nextClasses[i] ?? blankClassRow()),
         classId,
         className: opt?.name ?? "",
         subclassId: null,

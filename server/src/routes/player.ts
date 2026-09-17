@@ -252,6 +252,9 @@ playerRouter.post("/characters", (req: AuthedRequest, res) => {
       "INSERT INTO characters (player_id, campaign_id, system_id, character_name, folder_path) VALUES (?, ?, ?, ?, ?)"
     )
     .run(playerId, campaignId, system_id ?? null, character_name, folder);
+  // Новый персонаж — такое же событие персонажа, как и правка: у Мастера
+  // открытый профиль игрока должен его увидеть, не дожидаясь перезахода.
+  broadcastCharacterUpdate(Number(info.lastInsertRowid));
   res.status(201).json(db.prepare("SELECT * FROM characters WHERE id = ?").get(info.lastInsertRowid));
 });
 
