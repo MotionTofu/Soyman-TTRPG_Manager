@@ -2,8 +2,9 @@ import { Router } from "express";
 import fs from "fs";
 import path from "path";
 import { db } from "../db/db";
-import { ensureSubfolder, sanitizeName, vaultAbs, VAULT_ROOT, vaultRel } from "../services/filesystem";
+import { vaultAbs, VAULT_ROOT, vaultRel } from "../services/filesystem";
 import { findMissingFiles, relinkResource } from "../services/fileHealth";
+import { archiveFile } from "../services/vaultDedup";
 import { kindOf } from "../db/entityKinds";
 import {
   sweepOrphans,
@@ -63,6 +64,9 @@ const PATH_TABLES: { table: string; column: string; idCol?: string }[] = [
   { table: "artifacts", column: "file_path" },
   { table: "resources", column: "file_path" },
   { table: "statblocks", column: "avatar_image_path" },
+  // Запись архива, файл которой пропал: вернуть или скачать такой файл нельзя.
+  // «Очистить» для неё удаляет запись (поле обязательное), см. /path/clear.
+  { table: "archived_files", column: "archive_path" },
   { table: "gallery_images", column: "image_path" },
   { table: "compendium_entries", column: "avatar_image_path" },
   { table: "archived_files", column: "archive_path" },
@@ -1084,6 +1088,14 @@ healthRouter.post("/path/clear", (req, res) => {
   // Проверка существования строки и что колонка действительно содержит путь
   const row = db.prepare(`SELECT ${column} as v FROM ${table} WHERE id=?`).get(id) as { v: string | null } | undefined;
   if (!row) return res.status(404).json({ error: "row not found" });
+  if (table === "archived_files") {
+    // Путь архива обязателен: без файла запись бесполезна и удаляется целиком.
+    // Живой файл так не теряем — его запись убирается со страницы «Архив».
+    if (row.v && fs.existsSync(vaultAbs(row.v))) return res.status(409).json({ error: "файл архива на месте" });
+    db.prepare("DELETE FROM archived_files WHERE id=?").run(id);
+    auditLog(req as never, "path/clear", { table, column, id, removedRow: true });
+    return res.json({ ok: true, cleared: `${table}.${column}#${id}` });
+  }
   db.prepare(`UPDATE ${table} SET ${column}=NULL WHERE id=?`).run(id);
   auditLog(req as never, "path/clear", { table, column, id });
   res.json({ ok: true, cleared: `${table}.${column}#${id}` });
@@ -1109,15 +1121,14 @@ healthRouter.post("/open-folder", (req, res) => {
   res.json({ ok: true });
 });
 
-// POST /api/health/orphan/archive — перенести сироты в _Archive/orphans/YYYY-MM-DD
+// POST /api/health/orphan/archive — сироты в архив, как любой другой файл:
+// в `_Archive` с записью в archived_files, чтобы страница «Архив» их показывала
+// (скачать, удалить навсегда). Раньше уходили в отдельную `_Archive/orphans/<дата>`,
+// которую приложение не видело.
 healthRouter.post("/orphan/archive", (req, res) => {
   const { paths } = req.body as { paths?: string[] };
   if (!Array.isArray(paths) || paths.length === 0) return res.status(400).json({ error: "paths required" });
   if (paths.length > 100) return res.status(400).json({ error: "too many paths (max 100)" });
-  const day = new Date().toISOString().slice(0, 10);
-  const archiveBase = path.join(VAULT_ROOT, "_Archive", "orphans", day);
-  if (!isVaultPath(archiveBase)) return res.status(400).json({ error: "archive outside vault" });
-  try { fs.mkdirSync(archiveBase, { recursive: true }); } catch {}
   let moved = 0;
   const errors: string[] = [];
   for (const rel of paths) {
@@ -1127,12 +1138,8 @@ healthRouter.post("/orphan/archive", (req, res) => {
     if (!isVaultPath(resolved)) { errors.push(rel); continue; }
     if (resolved.toLowerCase().includes(path.join("_archive").toLowerCase())) { errors.push(rel); continue; }
     if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) { errors.push(rel); continue; }
-    const base = sanitizeName(path.basename(resolved));
-    let target = path.join(archiveBase, base);
-    const ext = path.extname(base);
-    const nameNoExt = path.basename(base, ext);
-    for (let n = 2; fs.existsSync(target); n++) target = path.join(archiveBase, `${nameNoExt}-${n}${ext}`);
-    try { fs.renameSync(resolved, target); moved++; } catch { errors.push(rel); }
+    // У сироты нет владельца: тип «orphan», id 0.
+    try { archiveFile(resolved, "orphan", 0, path.basename(resolved)); moved++; } catch { errors.push(rel); }
   }
   auditLog(req as never, "orphan/archive", { moved, requested: paths.length, errors: errors.length });
   res.json({ moved, errors });

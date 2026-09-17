@@ -44,6 +44,8 @@ const TYPE_LABELS: Record<string, string> = {
   artifact: "артефакт",
   community: "сообщество",
   canvas_board: "доска",
+  // Файл-сирота, отправленный в архив со страницы «Здоровье».
+  orphan: "без владельца",
 };
 
 // Что необратимо оборвётся вместе с сущностью (server/src/routes/archive.ts).

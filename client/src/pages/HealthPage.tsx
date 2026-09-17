@@ -373,7 +373,11 @@ export function HealthPage() {
   }
 
   async function clearPath(table: string, column: string, id: number) {
-    const ok = await confirm({ title: "Убрать путь", message: `Очистить ${table}.${column} #${id}? Поле станет пустым (NULL).`, confirmLabel: "Очистить" });
+    const ok = await confirm(
+      table === "archived_files"
+        ? { title: "Убрать запись архива", message: `Файла записи архива #${id} нет на диске. Убрать запись со страницы «Архив»?`, confirmLabel: "Убрать" }
+        : { title: "Убрать путь", message: `Очистить ${table}.${column} #${id}? Поле станет пустым (NULL).`, confirmLabel: "Очистить" }
+    );
     if (!ok) return;
     try {
       await write.post("/health/path/clear", { table, column, id });
