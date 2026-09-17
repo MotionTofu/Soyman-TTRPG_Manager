@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useAction, useResource, write } from "../data/hooks";
+import { useConfirm } from "../hooks/useConfirm";
 import { labelled } from "../data/notices";
 import { ResourceRow } from "../components/ResourceRow";
 import { TemplatesTab } from "../components/TemplatesTab";
@@ -40,6 +41,7 @@ export function ResourcesListPage() {
   const [section, setSection] = useState<"all" | "sound" | "sets" | "templates">("all");
   const [query, setQuery] = useState("");
   const run = useAction();
+  const [confirmDialog, confirm] = useConfirm();
   const allResources = useResource<Resource[]>(query ? `/resources?q=${encodeURIComponent(query)}` : "/resources", {
     keepPrevious: true,
   }).data;
@@ -80,6 +82,13 @@ export function ResourcesListPage() {
   }
 
   async function archiveResource(id: number) {
+    const target = resources.find((r) => r.id === id);
+    const ok = await confirm({
+      message: target ? `Отправить ресурс «${target.name}» в архив?` : "Отправить ресурс в архив?",
+      confirmLabel: "В архив",
+      danger: true,
+    });
+    if (!ok) return;
     await run(labelled("Ресурс не архивирован", () => write.del(`/resources/${id}`)), {
       affects: [{ kind: "resource" }, { path: "/archive" }],
     });
@@ -155,6 +164,7 @@ export function ResourcesListPage() {
 
   return (
     <div className="stack" style={{ position: "relative" }}>
+      {confirmDialog}
       <SectionBackground />
       <ListPage
         headingSection="resources"

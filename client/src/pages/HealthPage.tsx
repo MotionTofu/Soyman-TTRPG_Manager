@@ -126,15 +126,16 @@ export function HealthPage() {
   // адресовать нечем, задето всё. Проверка затем повторяется.
   function afterRepair() {
     afterWrite([]);
-    void runScan();
+    // Сообщение о починке остаётся: иначе перепроверка стирала его сразу.
+    void runScan({ keepMessage: true });
   }
 
-  async function runScan() {
+  async function runScan(options?: { keepMessage?: boolean }) {
     scanAbortRef.current?.abort();
     const ac = new AbortController();
     scanAbortRef.current = ac;
     setLoading(true);
-    setMsg("");
+    if (!options?.keepMessage) setMsg("");
     setScanError("");
     try {
       // Проверка — снимок по кнопке, а не данные страницы: держать её в кэше незачем.
@@ -404,7 +405,7 @@ export function HealthPage() {
       <div className="row" style={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
         <SectionHeading section="health" compact>Здоровье</SectionHeading>
         <div className="row" style={{ flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-          <button className={scan && !scanError ? "" : "primary"} onClick={runScan} disabled={loading}>
+          <button className={scan && !scanError ? "" : "primary"} onClick={() => void runScan()} disabled={loading}>
             {loading ? "Проверяю…" : "Проверить здоровье"}
           </button>
           <Link to="/storages" style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", color: "var(--muted)", textDecoration: "underline" }}>Бэкап</Link>
@@ -431,7 +432,7 @@ export function HealthPage() {
           <strong style={{ color: "var(--danger-bg)" }}>Ошибка проверки</strong>
           <p className="muted" style={{ margin: "6px 0 0 0", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{scanError}</p>
           <div className="row" style={{ marginTop: 10 }}>
-            <button className="primary" onClick={runScan}>Повторить</button>
+            <button className="primary" onClick={() => void runScan()}>Повторить</button>
           </div>
         </div>
       )}

@@ -4,6 +4,7 @@ import { dataKeys } from "../data/entities";
 import { useAction, useResource, write } from "../data/hooks";
 import { readResource } from "../data/imperative";
 import { labelled } from "../data/notices";
+import { useConfirm } from "../hooks/useConfirm";
 import { BATTLE_AFFECTS, SOUND_SET_AFFECTS } from "../sound/soundAffects";
 import { Modal } from "./Modal";
 import { SoundIcon } from "../sound/SoundIcon";
@@ -63,6 +64,7 @@ const NO_CAMPAIGNS: Campaign[] = [];
 export function SoundSetsTab() {
   const client = useQueryClient();
   const run = useAction();
+  const [confirmDialog, confirm] = useConfirm();
   const sets = useResource<SoundSetSummary[]>("/sound-sets").data ?? NO_SETS;
   const battles = useResource<Playlist[]>("/playlists").data ?? NO_BATTLES;
   const sounds = useResource<SoundButton[]>("/sounds").data ?? NO_SOUNDS;
@@ -176,6 +178,14 @@ export function SoundSetsTab() {
   }
 
   async function removeSet(id: number) {
+    // Набор удаляется насовсем, архива у него нет.
+    const name = sets.find((s) => s.id === id)?.name;
+    const ok = await confirm({
+      message: `Удалить набор${name ? ` «${name}»` : ""}? Это не отменить; сами звуки останутся в библиотеке.`,
+      confirmLabel: "Удалить",
+      danger: true,
+    });
+    if (!ok) return;
     const done = await run(labelled("Набор не удалён", () => write.del(`/sound-sets/${id}`)), {
       affects: SOUND_SET_AFFECTS,
     });
@@ -240,6 +250,13 @@ export function SoundSetsTab() {
   }
 
   async function removeBattle(id: number) {
+    const name = battles.find((b) => b.id === id)?.name;
+    const ok = await confirm({
+      message: `Удалить боевую тему${name ? ` «${name}»` : ""}? Это не отменить; сами треки останутся в библиотеке.`,
+      confirmLabel: "Удалить",
+      danger: true,
+    });
+    if (!ok) return;
     const done = await run(labelled("Боевая тема не удалена", () => write.del(`/playlists/${id}`)), {
       affects: BATTLE_AFFECTS,
     });
@@ -267,6 +284,7 @@ export function SoundSetsTab() {
 
   return (
     <div className="stack ss-wrap">
+      {confirmDialog}
       <div className="ss-layout">
         <div className="ss-list">
           <div className="ss-list-head">

@@ -522,6 +522,7 @@ function MasteringSectionBlock({
 }) {
   void onAddNote;
   const run = useAction();
+  const [confirmDialog, confirm] = useConfirm();
   const [editMode, setEditMode] = useState(false);
   const [name, setName] = useState(section?.name ?? "");
   const [systemId, setSystemId] = useState(section?.system_id ? String(section.system_id) : "");
@@ -558,7 +559,13 @@ function MasteringSectionBlock({
     setEditMode(false);
   }
   async function deleteSection() {
-    if (!section || !confirm(`Удалить раздел «${section.name}»? Заметки уйдут в «Без раздела».`)) return;
+    if (!section) return;
+    const ok = await confirm({
+      message: `Удалить раздел «${section.name}»? Заметки уйдут в «Без раздела».`,
+      confirmLabel: "Удалить",
+      danger: true,
+    });
+    if (!ok) return;
     await run(labelled("Раздел не удалён", () => write.del(`/mastering/sections/${section.id}`)), {
       affects: MASTERING_AFFECTS,
     });
@@ -799,6 +806,7 @@ function MasteringSectionBlock({
           ))
         )}
       </div>
+      {confirmDialog}
     </details>
   );
 }
