@@ -92,6 +92,34 @@ describe("кампания с пропавшей папкой", () => {
     expect(fs.existsSync(absOf(repair.body.folder_path))).toBe(true);
   });
 
+  it("персонаж заводится, даже когда папки игрока нет — она создаётся заново", async () => {
+    const playerId = Number(db.prepare("INSERT INTO players (name) VALUES ('Игрок без папки')").run().lastInsertRowid);
+    const userId = Number(
+      db.prepare("INSERT INTO users (username, password_hash, role, player_id) VALUES ('folder-player', 'test-only', 'player', ?)").run(playerId).lastInsertRowid
+    );
+    const token = signToken({ id: userId, username: "folder-player", role: "player", playerId, isAdmin: false, tokenVersion: 0 });
+
+    // Раньше здесь падало 500: standaloneCharacterFolder на folder_path = NULL.
+    const r = await request(server.app).post("/api/player/characters").auth(token, { type: "bearer" }).send({ character_name: "Первый" });
+    expect(r.status).toBe(201);
+    const folder = (db.prepare("SELECT folder_path AS p FROM players WHERE id = ?").get(playerId) as { p: string }).p;
+    expect(folder).toBeTruthy();
+    expect(fs.existsSync(absOf(folder))).toBe(true);
+  });
+
+  it("Мастер заводит персонажа в кампании с пропавшей папкой — папка возвращается", async () => {
+    const c = await createCampaign("ПерсонажБезПапки");
+    fs.rmSync(absOf(c.folder), { recursive: true, force: true });
+    const playerId = Number(db.prepare("INSERT INTO players (name) VALUES ('Игрок кампании')").run().lastInsertRowid);
+
+    const r = await request(server.app).post("/api/characters").auth(gm, { type: "bearer" })
+      .send({ player_id: playerId, campaign_id: c.id, character_name: "Новичок" });
+    expect(r.status).toBe(201);
+    const folder = (db.prepare("SELECT folder_path AS p FROM campaigns WHERE id = ?").get(c.id) as { p: string }).p;
+    expect(fs.existsSync(absOf(folder))).toBe(true);
+    expect(fs.existsSync(absOf(r.body.folder_path))).toBe(true);
+  });
+
   it("«Указать папку» на «Здоровье» предлагает только свободные папки и привязывает выбранную", async () => {
     const c = await createCampaign("ВыборПапки");
     const lost = path.join("Campaigns", "ВыборПапки-Потеряшка");

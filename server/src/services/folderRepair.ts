@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { db } from "../db/db";
-import { VAULT_ROOT, campaignFolder, sanitizeName, vaultAbs, vaultRel } from "./filesystem";
+import { VAULT_ROOT, campaignFolder, playerFolder, sanitizeName, vaultAbs, vaultRel } from "./filesystem";
 import { rewriteVaultPaths } from "./vaultPaths";
 
 // Папка кампании живёт в хранилище, а в базе лежит её путь. Стоит удалить или
@@ -79,4 +79,30 @@ export function repairCampaignFolder(
   }
   bindCampaignFolder(id, oldPath, folder);
   return { folder, bound };
+}
+
+/** Пути папок, занятых игроками (кроме того, которому чиним). */
+function usedPlayerFolders(exceptId: number): Set<string> {
+  const rows = db
+    .prepare("SELECT id, folder_path FROM players WHERE folder_path IS NOT NULL AND folder_path != ''")
+    .all() as { id: number; folder_path: string }[];
+  const out = new Set<string>();
+  for (const r of rows) if (r.id !== exceptId) out.add(r.folder_path.toLowerCase());
+  return out;
+}
+
+/**
+ * Папка игрока, гарантированно существующая. Игрок без папки бывает у старых
+ * баз и после «Очистить» на «Здоровье»; раньше первый же заведённый им
+ * персонаж падал 500 на построении пути. Правило то же, что у кампании:
+ * свободную папку с его именем привязываем (файлы целы), иначе заводим новую.
+ */
+export function ensurePlayerFolder(id: number, name: string, current: string | null): string {
+  if (!folderMissing(current)) return current as string;
+  const candidate = vaultRel(path.join(VAULT_ROOT, "Players", sanitizeName(name)));
+  const free = !usedPlayerFolders(id).has(candidate.toLowerCase());
+  const folder = free && fs.existsSync(vaultAbs(candidate)) ? candidate : playerFolder(name);
+  if (current && current !== folder) rewriteVaultPaths(current, folder);
+  db.prepare("UPDATE players SET folder_path = ? WHERE id = ?").run(folder, id);
+  return folder;
 }

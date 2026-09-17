@@ -5,6 +5,7 @@ import fs from "fs";
 import { db } from "../db/db";
 import { characterFolder, ensureSubfolder, toFileUrl, vaultAbs, vaultRel, writeReplacingOldFile } from "../services/filesystem";
 import { broadcastCharacterUpdate } from "../services/realtime";
+import { folderMissing, repairCampaignFolder } from "../services/folderRepair";
 import { queueStanding, setCharacterRoll } from "../services/initiativeSync";
 
 export const charactersRouter = Router();
@@ -283,10 +284,16 @@ charactersRouter.post("/", (req, res) => {
       .json({ error: "player_id, campaign_id and character_name are required" });
 
   const campaign = db
-    .prepare("SELECT folder_path FROM campaigns WHERE id = ?")
-    .get(campaign_id) as { folder_path: string } | undefined;
+    .prepare("SELECT name, folder_path FROM campaigns WHERE id = ?")
+    .get(campaign_id) as { name: string; folder_path: string | null } | undefined;
   if (!campaign) return res.status(404).json({ error: "campaign not found" });
-  const folder = characterFolder(campaign.folder_path, character_name);
+  // Папки кампании может не быть (удалили или перенесли руками): персонаж —
+  // не то место, где об этом сообщать, поэтому папку возвращаем на месте.
+  // Найденную свободную папку с именем кампании привяжет repairCampaignFolder.
+  const campaignFolderPath = folderMissing(campaign.folder_path)
+    ? repairCampaignFolder(Number(campaign_id), campaign.name, campaign.folder_path).folder
+    : (campaign.folder_path as string);
+  const folder = characterFolder(campaignFolderPath, character_name);
 
   const info = db
     .prepare(

@@ -5,7 +5,7 @@ import { db } from "../db/db";
 import { vaultAbs, VAULT_ROOT, vaultRel } from "../services/filesystem";
 import { findMissingFiles, relinkResource } from "../services/fileHealth";
 import { archiveFile } from "../services/vaultDedup";
-import { bindCampaignFolder, folderMissing, freeCampaignFolders } from "../services/campaignFolder";
+import { bindCampaignFolder, folderMissing, freeCampaignFolders } from "../services/folderRepair";
 import { kindOf } from "../db/entityKinds";
 import {
   sweepOrphans,
