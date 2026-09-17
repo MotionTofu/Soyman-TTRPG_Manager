@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api } from "../api/client";
+import { write } from "../data/hooks";
 import { Modal } from "./Modal";
 import type { MissingFile, RelinkCandidate } from "../sound/types";
 
@@ -32,7 +32,7 @@ export function RelinkModal({
     setBusy(true);
     setError(null);
     try {
-      const result = await api.post<{ ok: boolean; candidates: RelinkCandidate[] }>("/files/relink", {
+      const result = await write.post<{ ok: boolean; candidates: RelinkCandidate[] }>("/files/relink", {
         resource_id: target.resource_id,
         new_path: newPath.trim(),
       });
@@ -58,14 +58,18 @@ export function RelinkModal({
   async function applyBatch() {
     if (!candidates) return;
     setBusy(true);
+    setError(null);
     try {
-      await api.post("/files/relink-batch", {
+      await write.post("/files/relink-batch", {
         items: candidates
           .filter((c) => checked.has(c.resource_id))
           .map((c) => ({ resource_id: c.resource_id, new_path: c.new_path })),
       });
       onDone();
       onClose();
+    } catch (e) {
+      // Раньше отказ пропадал молча, а окно оставалось как было.
+      setError(e instanceof Error ? e.message : "не удалось привязать файлы");
     } finally {
       setBusy(false);
     }

@@ -1,5 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
-import { api } from "../api/client";
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { dataKeys } from "../data/entities";
+import { useAction, useResource, write } from "../data/hooks";
+import { readResource } from "../data/imperative";
+import { labelled } from "../data/notices";
+import { BATTLE_AFFECTS, SOUND_SET_AFFECTS } from "../sound/soundAffects";
 import { Modal } from "./Modal";
 import { SoundIcon } from "../sound/SoundIcon";
 import { useSoundEngineOptional } from "../sound/engine";
@@ -49,14 +54,26 @@ function moved<T>(list: T[], from: number, to: number): T[] {
   return next;
 }
 
+const NO_SETS: SoundSetSummary[] = [];
+const NO_BATTLES: Playlist[] = [];
+const NO_SOUNDS: SoundButton[] = [];
+const NO_SETTINGS: Setting[] = [];
+const NO_CAMPAIGNS: Campaign[] = [];
+
 export function SoundSetsTab() {
-  const [sets, setSets] = useState<SoundSetSummary[]>([]);
-  const [current, setCurrent] = useState<SoundSetDetail | null>(null);
-  const [battles, setBattles] = useState<Playlist[]>([]);
-  const [battle, setBattle] = useState<PlaylistDetail | null>(null);
-  const [sounds, setSounds] = useState<SoundButton[]>([]);
-  const [settings, setSettings] = useState<Setting[]>([]);
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const client = useQueryClient();
+  const run = useAction();
+  const sets = useResource<SoundSetSummary[]>("/sound-sets").data ?? NO_SETS;
+  const battles = useResource<Playlist[]>("/playlists").data ?? NO_BATTLES;
+  const sounds = useResource<SoundButton[]>("/sounds").data ?? NO_SOUNDS;
+  const settings = useResource<Setting[]>("/settings").data ?? NO_SETTINGS;
+  const campaigns = useResource<Campaign[]>("/campaigns").data ?? NO_CAMPAIGNS;
+  // Открыт один: набор или боевая тема.
+  const [opened, setOpened] = useState<{ kind: "set" | "battle"; id: number } | null>(null);
+  const currentPath = opened?.kind === "set" ? `/sound-sets/${opened.id}` : null;
+  const battlePath = opened?.kind === "battle" ? `/playlists/${opened.id}` : null;
+  const current = useResource<SoundSetDetail>(currentPath).data ?? null;
+  const battle = useResource<PlaylistDetail>(battlePath).data ?? null;
   const [naming, setNaming] = useState<
     "create" | "rename" | "battle-create" | "battle-rename" | null
   >(null);
@@ -67,54 +84,46 @@ export function SoundSetsTab() {
   // Движка нет в вынесенных окнах — там «Включить» просто не показывается.
   const engine = useSoundEngineOptional();
 
-  const refreshSets = useCallback(() => {
-    api.get<SoundSetSummary[]>("/sound-sets").then(setSets).catch(() => setSets([]));
-  }, []);
-  const refreshBattles = useCallback(() => {
-    api.get<Playlist[]>("/playlists").then(setBattles).catch(() => setBattles([]));
-  }, []);
-
-  useEffect(() => {
-    refreshSets();
-    refreshBattles();
-    api.get<SoundButton[]>("/sounds").then(setSounds).catch(() => setSounds([]));
-    api.get<Setting[]>("/settings").then(setSettings).catch(() => setSettings([]));
-    api.get<Campaign[]>("/campaigns").then(setCampaigns).catch(() => setCampaigns([]));
-  }, [refreshSets, refreshBattles]);
-
-  const open = useCallback((id: number) => {
-    setBattle(null);
-    api.get<SoundSetDetail>(`/sound-sets/${id}`).then(setCurrent);
-  }, []);
-
-  const openBattle = useCallback((id: number) => {
-    setCurrent(null);
-    api.get<PlaylistDetail>(`/playlists/${id}`).then(setBattle);
-  }, []);
+  const open = (id: number) => setOpened({ kind: "set", id });
+  const openBattle = (id: number) => setOpened({ kind: "battle", id });
 
   async function create(name: string) {
-    const created = await api.post<SoundSetSummary>("/sound-sets", { name });
-    refreshSets();
-    open(created.id);
+    const created = await run(labelled("Набор не создан", () => write.post<SoundSetSummary>("/sound-sets", { name })), {
+      affects: SOUND_SET_AFFECTS,
+      retry: false,
+    });
+    if (created) open(created.id);
   }
 
   async function rename(name: string) {
     if (!current) return;
-    await api.put(`/sound-sets/${current.id}`, { name });
-    refreshSets();
-    open(current.id);
+    const id = current.id;
+    await run(labelled("Набор не переименован", () => write.put(`/sound-sets/${id}`, { name })), {
+      affects: SOUND_SET_AFFECTS,
+    });
   }
 
   async function saveItems(next: SoundSetDetail) {
-    await api.put(`/sound-sets/${next.id}/items`, {
-      tracks: next.tracks.map((b) => b.resource_id),
-      ambient: next.ambient.map((b) => b.resource_id),
-      weather: next.weather.map((b) => b.resource_id),
-      stingers: next.stingers.map((b) => b.resource_id),
-      start_ambient_id: next.ambient.find((b) => b.is_start)?.resource_id ?? null,
-    });
-    open(next.id);
-    refreshSets();
+    // Состав меняется на экране сразу: перетаскивание трека не должно ждать
+    // ответа сервера. При отказе набор перечитывается.
+    const key = dataKeys.resource(`/sound-sets/${next.id}`);
+    client.setQueryData<SoundSetDetail>(key, next);
+    const done = await run(
+      labelled("Состав набора не сохранён", () =>
+        write.put(`/sound-sets/${next.id}/items`, {
+          tracks: next.tracks.map((b) => b.resource_id),
+          ambient: next.ambient.map((b) => b.resource_id),
+          weather: next.weather.map((b) => b.resource_id),
+          stingers: next.stingers.map((b) => b.resource_id),
+          start_ambient_id: next.ambient.find((b) => b.is_start)?.resource_id ?? null,
+        })
+      ),
+      { affects: SOUND_SET_AFFECTS }
+    );
+    if (done === undefined) {
+      void client.invalidateQueries({ queryKey: key });
+      return;
+    }
     // Пульт держит состав набора в памяти, и без этого он бы играл прежним
     // составом до следующего переключения.
     if (engine && engine.state.setId === next.id) engine.reload();
@@ -159,48 +168,82 @@ export function SoundSetsTab() {
 
   async function patchSet(body: Record<string, unknown>) {
     if (!current) return;
-    await api.put(`/sound-sets/${current.id}`, body);
-    refreshSets();
-    open(current.id);
-    if (engine && engine.state.setId === current.id) engine.reload();
+    const id = current.id;
+    const done = await run(labelled("Набор не сохранён", () => write.put(`/sound-sets/${id}`, body)), {
+      affects: SOUND_SET_AFFECTS,
+    });
+    if (done !== undefined && engine && engine.state.setId === id) engine.reload();
+  }
+
+  async function removeSet(id: number) {
+    const done = await run(labelled("Набор не удалён", () => write.del(`/sound-sets/${id}`)), {
+      affects: SOUND_SET_AFFECTS,
+    });
+    if (done !== undefined) setOpened(null);
   }
 
   // --- боевые темы ---
 
   async function createBattle(name: string) {
-    const created = await api.post<Playlist>("/playlists", { name, scope: "battle" });
-    refreshBattles();
-    openBattle(created.id);
+    const created = await run(
+      labelled("Боевая тема не создана", () => write.post<Playlist>("/playlists", { name, scope: "battle" })),
+      { affects: BATTLE_AFFECTS, retry: false }
+    );
+    if (created) openBattle(created.id);
   }
 
   async function renameBattle(name: string) {
     if (!battle) return;
-    await api.put(`/playlists/${battle.id}`, { name });
-    refreshBattles();
-    openBattle(battle.id);
+    const id = battle.id;
+    await run(labelled("Боевая тема не переименована", () => write.put(`/playlists/${id}`, { name })), {
+      affects: BATTLE_AFFECTS,
+    });
   }
 
   async function setBattleTracks(ids: number[]) {
     if (!battle) return;
-    for (const item of battle.items) {
-      if (!ids.includes(item.resource_id)) {
-        await api.del(`/playlists/${battle.id}/items/${item.id}`);
-      }
-    }
-    for (const id of ids) {
-      if (!battle.items.some((it) => it.resource_id === id)) {
-        await api.post(`/playlists/${battle.id}/items`, { resource_id: id });
-      }
-    }
-    refreshBattles();
-    openBattle(battle.id);
+    const theme = battle;
+    // Удаления и добавления — по одному запросу; повтор после частичного отказа
+    // безопасен: удалённое второй раз не удаляется, добавленное — не дублируется,
+    // потому что сверка идёт с составом на момент повтора.
+    await run(
+      labelled("Состав боевой темы не сохранён", async () => {
+        const fresh = await readResource<PlaylistDetail>(`/playlists/${theme.id}`, { fresh: true });
+        for (const item of fresh.items) {
+          if (!ids.includes(item.resource_id)) {
+            await write.del(`/playlists/${theme.id}/items/${item.id}`);
+          }
+        }
+        for (const id of ids) {
+          if (!fresh.items.some((it) => it.resource_id === id)) {
+            await write.post(`/playlists/${theme.id}/items`, { resource_id: id });
+          }
+        }
+      }),
+      { affects: BATTLE_AFFECTS }
+    );
   }
 
   async function reorderBattle(from: number, to: number) {
     if (!battle) return;
     const next = moved(battle.items, from, to);
-    setBattle({ ...battle, items: next });
-    await api.put(`/playlists/${battle.id}/items/reorder`, { order: next.map((it) => it.id) });
+    const key = dataKeys.resource(`/playlists/${battle.id}`);
+    client.setQueryData<PlaylistDetail>(key, { ...battle, items: next });
+    const id = battle.id;
+    const done = await run(
+      labelled("Порядок треков не сохранён", () =>
+        write.put(`/playlists/${id}/items/reorder`, { order: next.map((it) => it.id) })
+      ),
+      { affects: BATTLE_AFFECTS }
+    );
+    if (done === undefined) void client.invalidateQueries({ queryKey: key });
+  }
+
+  async function removeBattle(id: number) {
+    const done = await run(labelled("Боевая тема не удалена", () => write.del(`/playlists/${id}`)), {
+      affects: BATTLE_AFFECTS,
+    });
+    if (done !== undefined) setOpened(null);
   }
 
   const pinnedStingers = sounds.filter((s) => s.role === "stinger" && s.pinned).length;
@@ -298,11 +341,7 @@ export function SoundSetsTab() {
               </button>
               <button
                 className="sl-add"
-                onClick={async () => {
-                  await api.del(`/sound-sets/${current.id}`);
-                  setCurrent(null);
-                  refreshSets();
-                }}
+                onClick={() => void removeSet(current.id)}
               >
                 Удалить
               </button>
@@ -510,12 +549,7 @@ export function SoundSetsTab() {
               </button>
               <button
                 className="sl-add"
-                onClick={async () => {
-                  await api.del(`/playlists/${battle.id}`);
-                  setBattle(null);
-                  refreshBattles();
-                  refreshSets();
-                }}
+                onClick={() => void removeBattle(battle.id)}
               >
                 Удалить
               </button>

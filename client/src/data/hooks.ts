@@ -80,6 +80,20 @@ export function useResource<T>(
   };
 }
 
+/**
+ * Запрос ресурса для `useQueries` — под тем же ключом и тем же чтением, что у
+ * `useResource`: составы групп, миниатюры, карточки ресурсов сессии. Страница
+ * передаёт путь, а не свой `queryFn` с прямым вызовом мимо слоя.
+ */
+export function resourceQuery<T>(path: string, options?: { staleMs?: number; gcMs?: number }) {
+  return {
+    queryKey: dataKeys.resource(path),
+    queryFn: ({ signal }: { signal: AbortSignal }) => api.get<T>(path, { signal }),
+    staleTime: options?.staleMs,
+    gcTime: options?.gcMs,
+  };
+}
+
 /** Карточка сущности по виду и id. */
 export function useEntity<T>(kind: EntityKind, id: number | null | undefined): DataState<T> {
   const query = useQuery({

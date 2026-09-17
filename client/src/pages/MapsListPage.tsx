@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQueries } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { resourceQuery, useAction, useAfterWrite, useResource, write } from "../data/hooks";
+import { labelled } from "../data/notices";
 import { useCurrentUser } from "../api/currentUser";
 import { Modal } from "../components/Modal";
 import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
@@ -28,24 +30,15 @@ function formatUpdated(value: string): string {
   return d.toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" });
 }
 
-const thumbCache = new Map<string, string | null>();
-const THUMB_CONCURRENCY = 4;
-const THUMB_CACHE_CAP = 200;
-
-function thumbCacheGet(map: MapSummary): string | null | undefined {
-  return thumbCache.get(`${map.id}:${map.updated_at}`);
+const NO_MAPS: MapSummary[] = [];
+/** Миниатюра карты не меняется, пока не сменилась дата правки — она в пути. */
+function thumbPath(map: MapSummary): string {
+  return `/maps/${map.id}/thumbnail?v=${encodeURIComponent(map.updated_at)}`;
 }
 
-function thumbCacheSet(map: MapSummary, thumb: string | null) {
-  if (thumbCache.size >= THUMB_CACHE_CAP) {
-    const oldest = thumbCache.keys().next();
-    if (!oldest.done) thumbCache.delete(oldest.value);
-  }
-  thumbCache.set(`${map.id}:${map.updated_at}`, thumb);
-}
-
-function MapTile({ map, canEdit, onDeleted }: { map: MapSummary; canEdit: boolean; onDeleted: () => void }) {
+function MapTile({ map, canEdit }: { map: MapSummary; canEdit: boolean }) {
   const [dialog, confirm] = useConfirm();
+  const run = useAction();
 
   const thumb =
     map.thumbnail && map.thumbnail.startsWith("data:image/png;base64,") ? map.thumbnail : null;
@@ -59,12 +52,11 @@ function MapTile({ map, canEdit, onDeleted }: { map: MapSummary; canEdit: boolea
       danger: true,
     });
     if (!ok) return;
-    try {
-      await api.del(`/maps/${map.id}`);
-      onDeleted();
-    } catch {
-      // Остаёмся на месте — карта никуда не делась, можно повторить
-    }
+    // При отказе карта остаётся на месте, плашка предлагает повторить.
+    await run(labelled("Карта не удалена", () => write.del(`/maps/${map.id}`)), {
+      // Только список: миниатюру удалённой карты перечитывать незачем (404).
+      affects: [{ kind: "map", id: map.id, card: true }],
+    });
   }
 
   return (
@@ -127,9 +119,11 @@ export function MapsListPage() {
   const canEdit = user?.role !== "player";
   const navigate = useNavigate();
 
-  const [maps, setMaps] = useState<MapSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const afterWrite = useAfterWrite();
+  const mapsState = useResource<MapSummary[]>("/maps");
+  const listed = mapsState.data ?? NO_MAPS;
+  const loading = mapsState.loading;
+  const loadError = mapsState.error ? translateMapError(new Error(mapsState.error)) : null;
   const [q, setQ] = useState("");
   const [scaleFilter, setScaleFilter] = useState<"all" | MapScale>("all");
   const [gridFilter, setGridFilter] = useState<"all" | MapGrid>("all");
@@ -144,57 +138,18 @@ export function MapsListPage() {
   const [height, setHeight] = useState<number>(MAP_SCALE_PRESETS.continent.height);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  async function load(signal?: AbortSignal) {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const data = await api.get<MapSummary[]>("/maps", signal ? { signal } : undefined);
-      setMaps(data);
-      if (signal?.aborted) return;
-      const byId = new Map<number, string | null>();
-      const pending = data.filter((m) => {
-        const hit = thumbCacheGet(m);
-        if (hit !== undefined) byId.set(m.id, hit);
-        return hit === undefined;
-      });
-      let cursor = 0;
-      const workers = Array.from(
-        { length: Math.min(THUMB_CONCURRENCY, pending.length) },
-        async () => {
-          while (cursor < pending.length) {
-            if (signal?.aborted) return;
-            const m = pending[cursor++];
-            try {
-              const r = await api.get<{ thumbnail: string | null }>(
-                `/maps/${m.id}/thumbnail`,
-                signal ? { signal } : undefined
-              );
-              const t = r.thumbnail ?? null;
-              thumbCacheSet(m, t);
-              byId.set(m.id, t);
-            } catch {
-              byId.set(m.id, null);
-            }
-          }
-        }
-      );
-      await Promise.all(workers);
-      if (signal?.aborted) return;
-      setMaps((prev) => prev.map((m) => (byId.has(m.id) ? { ...m, thumbnail: byId.get(m.id) ?? null } : m)));
-    } catch (e) {
-      if ((e as Error).name === "AbortError") return;
-      setLoadError(translateMapError(e));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    const controller = new AbortController();
-    load(controller.signal);
-    return () => controller.abort();
+  // Миниатюры — отдельными запросами (в списке их нет: тяжёлые), под путём с
+  // датой правки: не изменившаяся карта берёт миниатюру из кэша.
+  const thumbs = useQueries({
+    queries: listed.map((m) =>
+      resourceQuery<{ thumbnail: string | null }>(thumbPath(m), { staleMs: Infinity, gcMs: 30 * 60_000 })
+    ),
+  });
+  const maps = useMemo(
+    () => listed.map((m, i) => ({ ...m, thumbnail: thumbs[i]?.data?.thumbnail ?? null })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    [listed, ...thumbs.map((t) => t.data)]
+  );
 
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
@@ -228,13 +183,15 @@ export function MapsListPage() {
     setCreateError(null);
     try {
       const preset = MAP_SCALE_PRESETS.continent;
-      const created = await api.post<{ id: number }>("/maps", {
+      const created = await write.post<{ id: number }>("/maps", {
         name: `Карта ${maps.length + 1}`,
         grid: "hex",
         scale: "continent",
         width: preset.width,
         height: preset.height,
       });
+      // Новая карта — только список: миниатюры остальных не задеты.
+      afterWrite([{ kind: "map", card: true }]);
       navigate(`/maps/${created.id}`);
     } catch (e) {
       setCreateError(translateMapError(e));
@@ -254,13 +211,15 @@ export function MapsListPage() {
     }
     setCreateError(null);
     try {
-      const created = await api.post<{ id: number }>("/maps", {
+      const created = await write.post<{ id: number }>("/maps", {
         name: name.trim(),
         grid,
         scale,
         width: w,
         height: h,
       });
+      // Новая карта — только список: миниатюры остальных не задеты.
+      afterWrite([{ kind: "map", card: true }]);
       setCreating(false);
       navigate(`/maps/${created.id}`);
     } catch (e) {
@@ -360,7 +319,7 @@ export function MapsListPage() {
         {loadError && (
           <LoadErrorCard
             message={<>Не удалось загрузить карты: {loadError}</>}
-            onRetry={() => void load()}
+            onRetry={mapsState.reload}
           />
         )}
 
@@ -369,7 +328,7 @@ export function MapsListPage() {
         ) : (
           <div className="grid-cards">
             {filtered.map((m) => (
-              <MapTile key={m.id} map={m} canEdit={canEdit} onDeleted={() => load()} />
+              <MapTile key={m.id} map={m} canEdit={canEdit} />
             ))}
           </div>
         )}

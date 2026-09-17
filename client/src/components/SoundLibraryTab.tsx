@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
-import { api } from "../api/client";
+import { useCallback, useMemo, useState, type ChangeEvent } from "react";
+import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
+import { labelled } from "../data/notices";
+import { SOUND_LIBRARY_AFFECTS } from "../sound/soundAffects";
 import { NavIcon } from "./NavIcons";
 import { RelinkModal } from "./RelinkModal";
 import { SoundEditModal } from "./SoundEditModal";
@@ -27,19 +29,20 @@ const SECTIONS: { role: AudioRole; title: string; into: string; hint: string; ic
   { role: "stinger", title: "Стингеры", into: "стингеры", hint: "постоянный состав пульта отмечен ★", icon: "bolt" },
 ];
 
+const NO_SOUNDS: SoundButton[] = [];
+const NO_MISSING: MissingFile[] = [];
+
 export function SoundLibraryTab() {
-  const [sounds, setSounds] = useState<SoundButton[]>([]);
-  const [missing, setMissing] = useState<MissingFile[]>([]);
+  const run = useAction();
+  const afterWrite = useAfterWrite();
+  const sounds = useResource<SoundButton[]>("/sounds").data ?? NO_SOUNDS;
+  // Битые файлы проверяются при открытии, а не в момент нажатия.
+  const missing = useResource<MissingFile[]>("/files/missing").data ?? NO_MISSING;
   const [relink, setRelink] = useState<MissingFile | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [uploading, setUploading] = useState<AudioRole | null>(null);
 
-  const refresh = useCallback(() => {
-    api.get<SoundButton[]>("/sounds").then(setSounds).catch(() => setSounds([]));
-    api.get<MissingFile[]>("/files/missing").then(setMissing).catch(() => setMissing([]));
-  }, []);
-
-  useEffect(refresh, [refresh]);
+  const refresh = useCallback(() => afterWrite(SOUND_LIBRARY_AFFECTS), [afterWrite]);
 
   const tracks = useMemo(
     () => sounds.filter((s) => s.role === "background").map((s) => ({ id: s.resource_id, src: s.src })),
@@ -53,25 +56,32 @@ export function SoundLibraryTab() {
     if (!files.length) return;
     setUploading(role);
     try {
-      for (const file of files) {
-        const form = new FormData();
-        form.append("name", file.name.replace(/\.[^.]+$/, ""));
-        form.append("type", "link");
-        form.append("scope", "global");
-        form.append("category", "audio");
-        form.append("file", file);
-        const created = await api.post<{ id: number }>("/resources", form);
-        await api.put(`/sounds/${created.id}`, { audio_role: role });
-      }
-      refresh();
+      // Повтора нет: загруженная часть файлов уже в библиотеке, повтор
+      // положил бы их второй раз.
+      await run(
+        labelled("Звук не загружен", async () => {
+          for (const file of files) {
+            const form = new FormData();
+            form.append("name", file.name.replace(/\.[^.]+$/, ""));
+            form.append("type", "link");
+            form.append("scope", "global");
+            form.append("category", "audio");
+            form.append("file", file);
+            const created = await write.post<{ id: number }>("/resources", form, { timeoutMs: 120_000 });
+            await write.put(`/sounds/${created.id}`, { audio_role: role });
+          }
+        }),
+        { affects: SOUND_LIBRARY_AFFECTS, retry: false }
+      );
     } finally {
       setUploading(null);
     }
   }
 
   async function patch(id: number, body: Record<string, unknown>) {
-    await api.put(`/sounds/${id}`, body);
-    refresh();
+    await run(labelled("Звук не сохранён", () => write.put(`/sounds/${id}`, body)), {
+      affects: SOUND_LIBRARY_AFFECTS,
+    });
   }
 
   const missingAudio = missing.filter((m) => m.audio_role);

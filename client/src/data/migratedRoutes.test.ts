@@ -37,12 +37,14 @@ describe("переведённые страницы", () => {
     expect(isMigratedRoute("/import-system")).toBe(true);
   });
 
-  it("игроки, главная и инструменты Мастера переведены, ресурсы и карты — ещё нет", () => {
+  it("игроки, главная, инструменты Мастера, карты и звук переведены, служебные страницы — ещё нет", () => {
     for (const path of ["/", "/players", "/players/4", "/invitations", "/sheets", "/library", "/mastering", "/graph/world", "/import"]) {
       expect(isMigratedRoute(path)).toBe(true);
     }
-    expect(isMigratedRoute("/resources")).toBe(false);
-    expect(isMigratedRoute("/maps")).toBe(false);
+    for (const path of ["/resources", "/maps", "/maps/12", "/sound-console", "/now-playing"]) {
+      expect(isMigratedRoute(path)).toBe(true);
+    }
+    expect(isMigratedRoute("/maps/12/extra")).toBe(false);
     expect(isMigratedRoute("/health")).toBe(false);
   });
 

@@ -30,6 +30,14 @@ describe("что задевает правка", () => {
     expect(matchesAffect(dataKeys.resource("/setting-locations/408"), being408)).toBe(false);
   });
 
+  it("сохранение карты задевает список карт, но не её привязки", () => {
+    const saved = { kind: "map", id: 5, card: true } as const;
+    expect(matchesAffect(dataKeys.resource("/maps"), saved)).toBe(true);
+    expect(matchesAffect(dataKeys.resource("/maps/5"), saved)).toBe(true);
+    expect(matchesAffect(dataKeys.resource("/maps/5/bindings"), saved)).toBe(false);
+    expect(matchesAffect(dataKeys.resource("/maps/5/bindings"), { kind: "map", id: 5 })).toBe(true);
+  });
+
   it("правка полей задевает карточку и списки, но не подресурсы", () => {
     const card = { kind: "campaign", id: 2, card: true } as const;
     expect(matchesAffect(dataKeys.resource("/campaigns/2"), card)).toBe(true);

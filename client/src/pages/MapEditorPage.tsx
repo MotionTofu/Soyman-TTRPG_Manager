@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api } from "../api/client";
+import { useAfterWrite, useResource, write } from "../data/hooks";
+import { readOnce } from "../data/imperative";
 import { useCurrentUser } from "../api/currentUser";
 import { Modal } from "../components/Modal";
 import { SectionHeading } from "../components/SectionHeading";
@@ -239,6 +240,7 @@ function loadFlag(key: string, dflt: boolean): boolean {
 export function MapEditorPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const afterWrite = useAfterWrite();
   const { user } = useCurrentUser();
   const canEdit = user?.role !== "player";
 
@@ -326,8 +328,9 @@ export function MapEditorPage() {
     setLoading(true);
     setLoadError(null);
     setBlobCorrupt(false);
-    api
-      .get<MapFull>(`/maps/${id}`)
+    // Клетки редактируются здесь, поэтому карта читается мимо кэша слоя:
+    // перечитывание по чужой правке легло бы поверх несохранённых мазков.
+    readOnce<MapFull>(`/maps/${id}`)
       .then((data) => {
         if (!alive) return;
         setMap(data);
@@ -343,9 +346,7 @@ export function MapEditorPage() {
         setCanUndo(false);
         setCanRedo(false);
         setSaveState({ kind: "saved", at: "" });
-        setBindings([]);
         setShared(false);
-        loadBindings(data.id);
         if (cellsBlobStatus(data.cells) === "corrupt") setBlobCorrupt(true);
       })
       .catch((e) => {
@@ -419,9 +420,12 @@ export function MapEditorPage() {
     const seq = ++saveSeqRef.current;
     pendingSeqRef.current = seq;
     setSaveState((s) => ({ ...s, kind: "saving" }));
-    api
-      .put(`/maps/${map.id}`, { cells: payload.cellsStr, thumbnail: payload.thumb, ...payload.params })
+    const mapId = map.id;
+    write
+      .put(`/maps/${mapId}`, { cells: payload.cellsStr, thumbnail: payload.thumb, ...payload.params })
       .then(() => {
+        // Список карт (дата, миниатюра) — и в других окнах; привязки не задеты.
+        afterWrite([{ kind: "map", id: mapId, card: true }]);
         if (pendingSeqRef.current !== seq) return;
         lastSavedRef.current = payload.cellsStr + "|" + payload.paramsStr;
         setSaveState({ kind: "saved", at: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) });
@@ -696,41 +700,27 @@ export function MapEditorPage() {
     location: "Локация",
   };
   const [bindOpen, setBindOpen] = useState(false);
-  const [bindings, setBindings] = useState<MapBinding[]>([]);
-  const [bindSettings, setBindSettings] = useState<{ id: number; name: string }[]>([]);
   const [bindType, setBindType] = useState<MapBinding["target_type"]>("setting");
-  const [bindOptions, setBindOptions] = useState<{ id: number; name: string }[]>([]);
   const [bindSetting, setBindSetting] = useState<number>(0);
   const [bindTarget, setBindTarget] = useState<number>(0);
   const [bindError, setBindError] = useState<string | null>(null);
-
-  async function loadBindings(mapId: number) {
-    try {
-      const rows = await api.get<MapBinding[]>(`/maps/${mapId}/bindings`);
-      setBindings(rows);
-    } catch (e) {
-      setBindError(translateMapError(e));
-    }
-  }
-
-  async function loadBindOptions(type: MapBinding["target_type"], settingId: number) {
-    setBindOptions([]);
-    setBindTarget(0);
-    try {
-      if (type === "location") {
-        if (!settingId) return;
-        const rows = await api.get<{ id: number; name: string }[]>(
-          `/setting-locations?setting_id=${settingId}`
-        );
-        setBindOptions(rows.map((r) => ({ id: r.id, name: r.name })));
-      } else {
-        const rows = await api.get<{ id: number; name: string }[]>(type === "setting" ? "/settings" : "/campaigns");
-        setBindOptions(rows.map((r) => ({ id: r.id, name: r.name })));
-      }
-    } catch (e) {
-      setBindError(translateMapError(e));
-    }
-  }
+  const bindingsPath = map ? `/maps/${map.id}/bindings` : null;
+  const bindingsState = useResource<MapBinding[]>(bindingsPath);
+  const bindings = bindingsState.data ?? [];
+  // Селекты привязок — лениво, только при раскрытой панели.
+  const bindSettings = useResource<{ id: number; name: string }[]>(bindOpen ? "/settings" : null).data ?? [];
+  const bindOptionsPath = !bindOpen
+    ? null
+    : bindType === "location"
+      ? bindSetting
+        ? `/setting-locations?setting_id=${bindSetting}`
+        : null
+      : bindType === "setting"
+        ? "/settings"
+        : "/campaigns";
+  const bindOptionsState = useResource<{ id: number; name: string }[]>(bindOptionsPath);
+  const bindOptions = bindOptionsState.data ?? [];
+  const bindLoadError = bindingsState.error ?? bindOptionsState.error;
 
   async function addBinding() {
     if (!map || !bindTarget) {
@@ -739,9 +729,9 @@ export function MapEditorPage() {
     }
     setBindError(null);
     try {
-      await api.post(`/maps/${map.id}/bindings`, { target_type: bindType, target_id: bindTarget });
+      await write.post(`/maps/${map.id}/bindings`, { target_type: bindType, target_id: bindTarget });
+      afterWrite([{ path: `/maps/${map.id}/bindings` }]);
       setBindTarget(0);
-      await loadBindings(map.id);
     } catch (e) {
       setBindError(translateMapError(e));
     }
@@ -751,8 +741,8 @@ export function MapEditorPage() {
     if (!map) return;
     setBindError(null);
     try {
-      await api.del(`/maps/${map.id}/bindings/${bindingId}`);
-      await loadBindings(map.id);
+      await write.del(`/maps/${map.id}/bindings/${bindingId}`);
+      afterWrite([{ path: `/maps/${map.id}/bindings` }]);
     } catch (e) {
       setBindError(translateMapError(e));
     }
@@ -767,7 +757,8 @@ export function MapEditorPage() {
     setActionError(null);
     try {
       if (map.player_visible !== 1) {
-        await api.put(`/maps/${map.id}`, { player_visible: 1 });
+        await write.put(`/maps/${map.id}`, { player_visible: 1 });
+        afterWrite([{ kind: "map", id: map.id, card: true }]);
         setMap((m) => (m ? { ...m, player_visible: 1 } : m));
       }
       try {
@@ -781,25 +772,10 @@ export function MapEditorPage() {
     }
   }
 
-  // Селекты привязок — лениво при раскрытии; список привязок — при загрузке
-  // карты и при раскрытии (могли поменять в другом окне).
+  // Новый тип или сеттинг — прежний выбор цели к ним не относится.
   useEffect(() => {
-    if (!bindOpen || !map) return;
-    setBindError(null);
-    loadBindings(map.id);
-    api
-      .get<{ id: number; name: string }[]>("/settings")
-      .then((rows) => setBindSettings(rows.map((r) => ({ id: r.id, name: r.name }))))
-      .catch((e: unknown) => setBindError(translateMapError(e)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bindOpen, map?.id]);
-
-  useEffect(() => {
-    if (!bindOpen) return;
-    if (bindType === "location") loadBindOptions("location", bindSetting);
-    else loadBindOptions(bindType, 0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bindOpen, bindType, bindSetting]);
+    setBindTarget(0);
+  }, [bindType, bindSetting]);
 
   function openPng() {
     setPngName(map ? `map-${map.name}` : "map");
@@ -1436,7 +1412,7 @@ export function MapEditorPage() {
     }
     setSettingsError(null);
     try {
-      const updated = await api.put<MapFull>(`/maps/${map.id}`, {
+      const updated = await write.put<MapFull>(`/maps/${map.id}`, {
         name,
         scale: sScale,
         cell_lore: sLore,
@@ -1449,6 +1425,7 @@ export function MapEditorPage() {
         setCells(cropped);
         pushHistory(before);
       }
+      afterWrite([{ kind: "map", id: map.id, card: true }]);
       setMap(updated);
       setSettingsOpen(false);
       setActionError(null);
@@ -1463,7 +1440,7 @@ export function MapEditorPage() {
     setActionError(null);
     try {
       const thumb = renderThumbnail(map.grid, map.width, map.height, cellsRef.current, readChrome());
-      const created = await api.post<{ id: number }>("/maps", {
+      const created = await write.post<{ id: number }>("/maps", {
         name: `${map.name} (копия)`.slice(0, 200),
         grid: map.grid,
         scale: map.scale,
@@ -1477,6 +1454,7 @@ export function MapEditorPage() {
         cells: serializeCells(cellsRef.current),
         thumbnail: thumb,
       });
+      afterWrite([{ kind: "map", card: true }]);
       navigate(`/maps/${created.id}`);
     } catch (e) {
       setActionError(translateMapError(e));
@@ -1494,7 +1472,8 @@ export function MapEditorPage() {
     });
     if (!ok) return;
     try {
-      await api.del(`/maps/${map.id}`);
+      await write.del(`/maps/${map.id}`);
+      afterWrite([{ kind: "map", id: map.id, card: true }]);
       navigate("/maps");
     } catch (e) {
       setActionError(translateMapError(e));
@@ -2783,10 +2762,15 @@ export function MapEditorPage() {
                   onChange={(e) => {
                     const player_visible = e.target.checked ? 1 : 0;
                     setMap((m) => (m ? { ...m, player_visible } : m));
-                    api.put(`/maps/${map.id}`, { player_visible }).catch(() => {
-                      // Откат при ошибке: тумблер не должен врать
-                      setMap((m) => (m ? { ...m, player_visible: player_visible === 1 ? 0 : 1 } : m));
-                    });
+                    const mapId = map.id;
+                    write
+                      .put(`/maps/${mapId}`, { player_visible })
+                      .then(() => afterWrite([{ kind: "map", id: mapId, card: true }]))
+                      .catch((err: unknown) => {
+                        // Откат при ошибке: тумблер не должен врать
+                        setMap((m) => (m ? { ...m, player_visible: player_visible === 1 ? 0 : 1 } : m));
+                        setActionError(translateMapError(err));
+                      });
                   }}
                 />
                 Видят игроки
@@ -3533,7 +3517,7 @@ export function MapEditorPage() {
                       Привязать
                     </button>
                   </div>
-                  {bindError && <p className="muted">{bindError}</p>}
+                  {(bindError || bindLoadError) && <p className="muted">{bindError ?? translateMapError(new Error(bindLoadError ?? ""))}</p>}
                 </div>
               )}
               {settingsOpen && map && (

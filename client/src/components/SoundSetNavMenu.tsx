@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { useResource } from "../data/hooks";
 import { useSoundEngineOptional } from "../sound/engine";
 import { NavIcon } from "./NavIcons";
 import type { SoundSetSummary } from "../sound/types";
@@ -15,15 +14,9 @@ interface Props {
 // глобальный), а способ не искать «Таверну» среди сорока чужих строчек.
 export function SoundSetNavMenu({ onClose }: Props) {
   const engine = useSoundEngineOptional();
-  const [sets, setSets] = useState<SoundSetSummary[]>([]);
-  const [settings, setSettings] = useState<Setting[]>([]);
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-
-  useEffect(() => {
-    api.get<SoundSetSummary[]>("/sound-sets").then(setSets).catch(() => setSets([]));
-    api.get<Setting[]>("/settings").then(setSettings).catch(() => setSettings([]));
-    api.get<Campaign[]>("/campaigns").then(setCampaigns).catch(() => setCampaigns([]));
-  }, []);
+  const sets = useResource<SoundSetSummary[]>("/sound-sets").data ?? [];
+  const settings = useResource<Setting[]>("/settings").data ?? [];
+  const campaigns = useResource<Campaign[]>("/campaigns").data ?? [];
 
   function groupOf(s: SoundSetSummary): string {
     if (s.campaign_id) {

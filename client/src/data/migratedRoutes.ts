@@ -54,6 +54,14 @@ const MIGRATED_ROUTES: readonly RegExp[] = [
   /^\/graph\/[a-z]+\/?$/,
   /^\/import\/?$/,
   /^\/import-system\/?$/,
+  // Часть 4: «Ресурсы» со вкладками звука, карты с редактором, пульт звука и
+  // «Сейчас играет». Редактор карты не перечитывает клетки по сигналу — они
+  // правятся в нём самом.
+  /^\/resources\/?$/,
+  /^\/maps\/?$/,
+  /^\/maps\/\d+\/?$/,
+  /^\/sound-console\/?$/,
+  /^\/now-playing\/?$/,
 ];
 
 export function isMigratedRoute(pathname: string): boolean {

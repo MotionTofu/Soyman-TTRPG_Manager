@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "../api/client";
+import { useEffect, useRef, useState } from "react";
+import { useAction, useResource, write } from "../data/hooks";
+import { labelled } from "../data/notices";
+import { SOUND_SET_AFFECTS } from "../sound/soundAffects";
 import { NavIcon } from "../components/NavIcons";
 import { Knob } from "../sound/Knob";
 import { SoundIcon } from "../sound/SoundIcon";
@@ -57,6 +59,9 @@ function Pad({
 // Пульт звука — отдельное окно на втором мониторе. Рендерится вне <AppShell>
 // (см. App.tsx): сайдбару, поиску и нижней панели здесь места нет, а
 // кнопки должны стоять на постоянных местах во всю ширину.
+const NO_SETS: SoundSetSummary[] = [];
+const NO_MISSING: MissingFile[] = [];
+
 export function SoundConsolePage() {
   const remote = useSoundRemote();
   const { state } = remote;
@@ -74,21 +79,13 @@ export function SoundConsolePage() {
     return () => cancelAnimationFrame(frame);
   }, [activeTrackName]);
 
-  const [sets, setSets] = useState<SoundSetSummary[]>([]);
-  const [missing, setMissing] = useState<MissingFile[]>([]);
+  const run = useAction();
+  const sets = useResource<SoundSetSummary[]>("/sound-sets").data ?? NO_SETS;
+  // Битые файлы проверяются при открытии, а не в момент нажатия: узнавать о
+  // пропаже, когда звук уже нужен, — худший из возможных моментов.
+  const missing = useResource<MissingFile[]>("/files/missing").data ?? NO_MISSING;
   const [saving, setSaving] = useState(false);
   const [newName, setNewName] = useState("");
-
-  const refreshSets = useCallback(() => {
-    api.get<SoundSetSummary[]>("/sound-sets").then(setSets).catch(() => setSets([]));
-  }, []);
-
-  useEffect(() => {
-    refreshSets();
-    // Битые файлы проверяются при открытии, а не в момент нажатия: узнавать о
-    // пропаже, когда звук уже нужен, — худший из возможных моментов.
-    api.get<MissingFile[]>("/files/missing").then(setMissing).catch(() => setMissing([]));
-  }, [refreshSets]);
 
   const stingers = state?.data?.stingers ?? [];
 
@@ -138,11 +135,13 @@ export function SoundConsolePage() {
     if (!newName.trim()) return;
     setSaving(true);
     try {
-      const created = await api.post<SoundSetSummary>("/sound-sets", {
+      const saved = await run(
+        labelled("Набор не сохранён", async () => {
+      const created = await write.post<SoundSetSummary>("/sound-sets", {
         name: newName.trim(),
         battle_playlist_id: data?.battle?.id ?? null,
       });
-      await api.put(`/sound-sets/${created.id}/items`, {
+      await write.put(`/sound-sets/${created.id}/items`, {
         // Бэкграунд набора — это список треков, поэтому запоминается то, что
         // сейчас в очереди, а не то, откуда её когда-то взяли.
         tracks: bg.tracks.map((t) => t.id),
@@ -151,8 +150,12 @@ export function SoundConsolePage() {
         stingers: stingers.filter((b) => b.from_set).map((b) => b.resource_id),
         start_ambient_id: state?.ambientId ?? null,
       });
-      setNewName("");
-      refreshSets();
+          return created;
+        }),
+        // Повтора нет: набор мог уже создаться, повтор завёл бы второй.
+        { affects: SOUND_SET_AFFECTS, retry: false }
+      );
+      if (saved) setNewName("");
     } finally {
       setSaving(false);
     }

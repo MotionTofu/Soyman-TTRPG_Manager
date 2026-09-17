@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, deleteFileWithChoice } from "../api/client";
+import { deleteFileWithChoice } from "../api/client";
+import { useResource } from "../data/hooks";
 import { Modal } from "./Modal";
 import { SoundIcon, SOUND_ICON_NAMES } from "../sound/SoundIcon";
 import type { AudioRole, SoundButton } from "../sound/types";
@@ -30,19 +31,12 @@ export function SoundEditModal({
   onClose: () => void;
 }) {
   const [name, setName] = useState(sound.name);
-  const [usage, setUsage] = useState<Usage | null>(null);
-
-  useEffect(() => setName(sound.name), [sound.name]);
-
   // Использование подтягивается сразу, а не по нажатию «Удалить»: Мастер
   // должен видеть, что звук стоит в трёх наборах, ДО того как решит его
   // убрать, а не в тексте подтверждения, которое читают через раз.
-  useEffect(() => {
-    api
-      .get<Usage>(`/sounds/${sound.resource_id}/usage`)
-      .then(setUsage)
-      .catch(() => setUsage(null));
-  }, [sound.resource_id]);
+  const usage = useResource<Usage>(`/sounds/${sound.resource_id}/usage`).data ?? null;
+
+  useEffect(() => setName(sound.name), [sound.name]);
 
   const used = (usage?.sets.length ?? 0) + (usage?.playlists.length ?? 0);
 

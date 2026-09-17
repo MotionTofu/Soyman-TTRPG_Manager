@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { readEntity, readResource } from "../data/imperative";
 import { useAudioPlayer } from "../audioPlayer";
 import { NavIcon } from "../components/NavIcons";
 import type { PlaylistDetail, Resource, Setting } from "../types";
@@ -69,8 +69,8 @@ export function NowPlayingPage() {
     async function resolveSetting(): Promise<Setting | null> {
       // Primary: the playing resource's own home setting.
       try {
-        const resource = await api.get<Resource>(`/resources/${current!.id}`);
-        if (resource.setting_id) return await api.get<Setting>(`/settings/${resource.setting_id}`);
+        const resource = await readEntity<Resource>("resource", current!.id);
+        if (resource.setting_id) return await readEntity<Setting>("setting", resource.setting_id);
       } catch {
         // fall through to the playlist-based lookup below
       }
@@ -82,8 +82,7 @@ export function NowPlayingPage() {
 
     async function resolve() {
       if (activePlaylistId) {
-        api
-          .get<PlaylistDetail>(`/playlists/${activePlaylistId}`)
+        readResource<PlaylistDetail>(`/playlists/${activePlaylistId}`)
           .then((p) => !cancelled && setSubtitle(p.name))
           .catch(() => {});
       }

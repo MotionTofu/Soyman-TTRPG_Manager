@@ -34,6 +34,9 @@ export const ENTITY_ENDPOINTS = {
   // У события своей коллекции нет — оно живёт внутри сеттинга, но одиночный
   // маршрут у него такой же, и связи с ним разрешаются в название.
   setting_event: "/settings/calendar-events",
+  // Карта. Её привязки (`/maps/:id/bindings`) — подресурс: автосохранение клеток
+  // задевает карту как `card`, чтобы мазок не перечитывал привязки.
+  map: "/maps",
 } as const;
 
 export type EntityKind = keyof typeof ENTITY_ENDPOINTS;
