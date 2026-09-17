@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
+import { useAction, useResource, write } from "../data/hooks";
+import { campaignAdventureAffects, campaignArcAffects, campaignPaths } from "../data/campaigns";
+import { labelled } from "../data/notices";
 import { MentionText } from "./mentions/MentionText";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { syncMentionLinks } from "../mentions";
@@ -43,38 +45,27 @@ export function CampaignAdventuresCard({
   onCount?: (n: number) => void;
 }) {
   const [confirmDialog, confirm] = useConfirm();
-  const [adventures, setAdventures] = useState<StoryArc[]>([]);
-  const [available, setAvailable] = useState<StoryArc[]>([]);
+  const run = useAction();
+  const rows = useResource<StoryArc[]>(campaignPaths.adventures(campaignId)).data;
   const [adding, setAdding] = useState(false);
+  // Доступные к привязке читаются, только пока открыт выбор.
+  const available = useResource<StoryArc[]>(adding ? campaignPaths.availableAdventures(campaignId) : null).data ?? [];
+  // «Сцены вне приключений» — служебная корзина сеттинга без синопсиса и
+  // завязки; она нужна в разделе «Главы и сцены», а здесь была бы пустым
+  // подблоком.
+  const adventures = useMemo(() => (rows ?? []).filter((a) => a.is_default !== 1), [rows]);
+  useEffect(() => { if (rows) onCount?.(adventures.length); }, [rows, adventures.length, onCount]);
 
-  function refresh() {
-    api
-      .get<StoryArc[]>(`/story/campaign-adventures?campaign_id=${campaignId}`)
-      // «Сцены вне приключений» — служебная корзина сеттинга без синопсиса и
-      // завязки; она нужна в разделе «Главы и сцены», а здесь была бы пустым
-      // подблоком.
-      .then((rows) => {
-        const filtered = rows.filter((a) => a.is_default !== 1);
-        setAdventures(filtered);
-        onCount?.(filtered.length);
-      });
-  }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(refresh, [campaignId]);
-  useEffect(() => { onCount?.(adventures.length); }, [adventures.length, onCount]);
-
-  async function openAdd() {
-    const rows = await api.get<StoryArc[]>(
-      `/story/campaign-adventures/available?campaign_id=${campaignId}`
-    );
-    setAvailable(rows);
+  function openAdd() {
     setAdding(true);
   }
 
   async function attach(arcId: number) {
-    await api.post("/story/campaign-adventures", { campaign_id: campaignId, arc_id: arcId });
-    setAdding(false);
-    refresh();
+    const done = await run(
+      labelled("Приключение в кампанию", () => write.post("/story/campaign-adventures", { campaign_id: campaignId, arc_id: arcId }).then(() => true)),
+      { affects: campaignAdventureAffects(campaignId), retry: false }
+    );
+    if (done) setAdding(false);
   }
 
   async function detach(arc: StoryArc) {
@@ -83,8 +74,9 @@ export function CampaignAdventuresCard({
       : "";
     if (!(await confirm({ message: `Убрать «${arc.name}» из кампании?${warning}`, confirmLabel: "Убрать", danger: true })))
       return;
-    await api.del(`/story/campaign-adventures?campaign_id=${campaignId}&arc_id=${arc.id}`);
-    refresh();
+    await run(labelled("Приключение из кампании", () => write.del(`/story/campaign-adventures?campaign_id=${campaignId}&arc_id=${arc.id}`)), {
+      affects: campaignAdventureAffects(campaignId),
+    });
   }
 
   if (settingId == null) {
@@ -104,7 +96,7 @@ export function CampaignAdventuresCard({
       </p>
 
       {adventures.map((arc) => (
-        <AdventureBlock key={arc.id} arc={arc} campaignId={campaignId} onChange={refresh} onDetach={detach} />
+        <AdventureBlock key={arc.id} arc={arc} campaignId={campaignId} onDetach={detach} />
       ))}
       {adventures.length === 0 && !adding && (
         <EmptyState
@@ -155,15 +147,14 @@ export function CampaignAdventuresCard({
 function AdventureBlock({
   arc,
   campaignId,
-  onChange,
   onDetach,
 }: {
   arc: StoryArc;
   campaignId: number;
-  onChange: () => void;
   onDetach: (arc: StoryArc) => void;
 }) {
   const [confirmDialog, confirm] = useConfirm();
+  const run = useAction();
   const [editMode, setEditMode] = useState(false);
   const [draft, setDraft] = useState<Draft>({});
 
@@ -177,23 +168,29 @@ function AdventureBlock({
   }
 
   async function save() {
-    await api.put(`/story/arcs/${arc.id}`, { ...draft, campaign_id: campaignId });
+    // Форма закрывается только после записи: при отказе набранное остаётся.
+    const saved = await run(
+      labelled("Тексты приключения", () => write.put(`/story/arcs/${arc.id}`, { ...draft, campaign_id: campaignId }).then(() => true)),
+      { affects: campaignArcAffects(campaignId, arc.id) }
+    );
+    if (!saved) return;
     // Меншены в синопсисе и завязке ведут в общий граф связей и висят на
     // оригинале приключения, а не на копии кампании.
     for (const f of TEXT_FIELDS) {
       const before = (arc as unknown as Record<string, string>)[f.key] ?? "";
-      if (before !== draft[f.key]) syncMentionLinks("adventure", arc.id, before, draft[f.key] ?? "");
+      if (before !== draft[f.key]) void syncMentionLinks("adventure", arc.id, before, draft[f.key] ?? "");
     }
     setEditMode(false);
-    onChange();
   }
 
   async function revert() {
     if (!(await confirm({ message: "Вернуть тексты приключения такими, какие они в сеттинге?", confirmLabel: "Вернуть", danger: true })))
       return;
-    await api.post(`/story/arcs/${arc.id}/revert`, { campaign_id: campaignId });
-    setEditMode(false);
-    onChange();
+    const reverted = await run(
+      labelled("Возврат приключения", () => write.post(`/story/arcs/${arc.id}/revert`, { campaign_id: campaignId }).then(() => true)),
+      { affects: campaignArcAffects(campaignId, arc.id) }
+    );
+    if (reverted) setEditMode(false);
   }
 
   const filledSummary = SUMMARY_FIELDS.filter(

@@ -1,5 +1,9 @@
 import { memo, useCallback, useEffect, useState } from "react";
-import { api } from "../api/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { useAction, useResource, write } from "../data/hooks";
+import { dataKeys } from "../data/entities";
+import { campaignPaths, milestoneAffects } from "../data/campaigns";
+import { labelled } from "../data/notices";
 import { MentionText } from "./mentions/MentionText";
 import type { CampaignGrouped, StoryMilestone } from "../types";
 import { useConfirm } from "../hooks/useConfirm";
@@ -12,6 +16,8 @@ export interface MilestonesNavStats {
   own: { total: number; done: number };
   groups: { id: number; name: string; total: number; done: number }[];
 }
+
+const EMPTY: CampaignGrouped<StoryMilestone> = { groups: [], own: [] };
 
 export function CampaignMilestones({
   campaignId,
@@ -26,17 +32,9 @@ export function CampaignMilestones({
   groupId?: string | null;
   onStats?: (s: MilestonesNavStats) => void;
 }) {
-  const [data, setData] = useState<CampaignGrouped<StoryMilestone>>({ groups: [], own: [] });
-
-  // Ссылка должна быть стабильной — см. тот же комментарий в CampaignSecrets.
-  const refresh = useCallback(() => {
-    api
-      .get<CampaignGrouped<StoryMilestone>>(`/story/campaign-milestones?campaign_id=${campaignId}`)
-      .then(setData);
-  }, [campaignId]);
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  const path = campaignPaths.milestones(campaignId);
+  const data = useResource<CampaignGrouped<StoryMilestone>>(path).data ?? EMPTY;
+  const client = useQueryClient();
 
   // Отметка «достигнута» меняет ровно одну строку — перечитывать из-за неё
   // весь раздел (и перерисовывать все группы) незачем. Нетронутые вехи
@@ -51,14 +49,16 @@ export function CampaignMilestones({
       next[i] = { ...list[i], state: { achieved: achieved ? 1 : 0, note: list[i].state?.note ?? "" } };
       return next;
     };
-    setData((prev) => ({
-      own: patchList(prev.own),
-      groups: prev.groups.map((g) => {
-        const items = patchList(g.items);
-        return items === g.items ? g : { ...g, items };
-      }),
-    }));
-  }, []);
+    client.setQueryData<CampaignGrouped<StoryMilestone>>(dataKeys.resource(path), (prev) =>
+      prev && {
+        own: patchList(prev.own),
+        groups: prev.groups.map((g) => {
+          const items = patchList(g.items);
+          return items === g.items ? g : { ...g, items };
+        }),
+      }
+    );
+  }, [client, path]);
 
   // Счётчики для левой навигации Master–Detail. Выше ранних return:
   // хуки обязаны вызываться в одном порядке каждый рендер.
@@ -101,7 +101,6 @@ export function CampaignMilestones({
           items={data.own}
           arcId={null}
           campaignId={campaignId}
-          onChange={refresh}
           onAchieved={applyAchieved}
         />
       )}
@@ -112,7 +111,6 @@ export function CampaignMilestones({
           items={g.items}
           arcId={g.arc.id}
           campaignId={campaignId}
-          onChange={refresh}
           onAchieved={applyAchieved}
         />
       ))}
@@ -126,33 +124,36 @@ const MilestoneGroup = memo(function MilestoneGroup({
   items,
   arcId,
   campaignId,
-  onChange,
   onAchieved,
 }: {
   title: string;
   items: StoryMilestone[];
   arcId: number | null;
   campaignId: number;
-  onChange: () => void;
   onAchieved: (id: number, achieved: boolean) => void;
 }) {
   const [confirmDialog, confirm] = useConfirm();
+  const run = useAction();
+  // Как у тайн: галочка меняется сразу, при отказе возвращается с плашкой.
   const toggle = useCallback(
-    (m: StoryMilestone, achieved: boolean) => {
+    async (m: StoryMilestone, achieved: boolean) => {
       onAchieved(m.id, achieved);
-      void api.put(`/story/milestones/${m.id}/state`, { campaign_id: campaignId, achieved });
+      const saved = await run(
+        labelled("Отметка вехи", () => write.put(`/story/milestones/${m.id}/state`, { campaign_id: campaignId, achieved }).then(() => true)),
+        { affects: milestoneAffects(campaignId) }
+      );
+      if (!saved) onAchieved(m.id, !achieved);
     },
-    [campaignId, onAchieved]
+    [campaignId, onAchieved, run]
   );
 
   const remove = useCallback(
     async (m: StoryMilestone) => {
       if (!(await confirm({ message: `Удалить веху «${m.title}»?`, confirmLabel: "Удалить", danger: true })))
         return;
-      await api.del(`/story/milestones/${m.id}`);
-      onChange();
+      await run(labelled("Удаление вехи", () => write.del(`/story/milestones/${m.id}`)), { affects: milestoneAffects(campaignId) });
     },
-    [onChange]
+    [campaignId, confirm, run]
   );
 
   const achieved = items.filter((m) => m.state?.achieved === 1).length;
@@ -172,7 +173,7 @@ const MilestoneGroup = memo(function MilestoneGroup({
             не строка «пока пусто». Приглашение здесь уже есть — форма ниже с
             кнопкой «+ Своя веха»; отдельный EmptyState был бы вторым зовом
             рядом с первым, а приглушённая строка не звала вовсе. */}
-        <AddMilestoneForm arcId={arcId} campaignId={campaignId} onChange={onChange} />
+        <AddMilestoneForm arcId={arcId} campaignId={campaignId} />
       </div>
     </details>
   );
@@ -221,26 +222,24 @@ const MilestoneRow = memo(function MilestoneRow({
 const AddMilestoneForm = memo(function AddMilestoneForm({
   arcId,
   campaignId,
-  onChange,
 }: {
   arcId: number | null;
   campaignId: number;
-  onChange: () => void;
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const run = useAction();
 
   async function add() {
     if (!title.trim()) return;
-    await api.post("/story/milestones", {
-      campaign_id: campaignId,
-      arc_id: arcId,
-      title,
-      description,
-    });
+    // Поля очищаются только после записи: при отказе набранное остаётся.
+    const created = await run(
+      labelled("Новая веха", () => write.post("/story/milestones", { campaign_id: campaignId, arc_id: arcId, title, description }).then(() => true)),
+      { affects: milestoneAffects(campaignId), retry: false }
+    );
+    if (!created) return;
     setTitle("");
     setDescription("");
-    onChange();
   }
 
   return (

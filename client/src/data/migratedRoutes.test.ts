@@ -26,6 +26,12 @@ describe("переведённые страницы", () => {
     expect(isMigratedRoute("/canvas/board")).toBe(false);
   });
 
+  it("список кампаний переведён, профиль кампании — ещё нет (часть 2)", () => {
+    expect(isMigratedRoute("/campaigns")).toBe(true);
+    expect(isMigratedRoute("/campaigns/")).toBe(true);
+    expect(isMigratedRoute("/campaigns/3")).toBe(false);
+  });
+
   it("соседние адреса не цепляются префиксом", () => {
     expect(isMigratedRoute("/characters")).toBe(false);
     expect(isMigratedRoute("/characters/7/sheet/extra")).toBe(false);

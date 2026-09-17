@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { useMemo, useState } from "react";
+import { useAction, useResource, write } from "../data/hooks";
+import { campaignEntryAffects, campaignPaths } from "../data/campaigns";
+import { labelled } from "../data/notices";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
@@ -20,30 +22,28 @@ function sortTasks(tasks: CampaignEntry[]) {
 
 export function TaskTracker({ campaignId, defaultSettingId }: Props) {
   const [confirmDialog, confirm] = useConfirm();
-  const [tasks, setTasks] = useState<CampaignEntry[]>([]);
-
-  function refresh() {
-    api
-      .get<CampaignEntry[]>(`/campaign-entries?campaign_id=${campaignId}&category=tasks`)
-      .then((rows) => setTasks(sortTasks(rows)));
-  }
-  useEffect(refresh, [campaignId]);
+  const run = useAction();
+  const rows = useResource<CampaignEntry[]>(campaignPaths.entries(campaignId, "tasks")).data;
+  const tasks = useMemo(() => sortTasks(rows ?? []), [rows]);
 
   async function addTask() {
-    await api.post("/campaign-entries", {
-      campaign_id: campaignId,
-      category: "tasks",
-      title: `Задача ${tasks.length + 1}`,
-      content: "",
-    });
-    refresh();
+    await run(
+      labelled("Новая задача", () =>
+        write.post("/campaign-entries", {
+          campaign_id: campaignId,
+          category: "tasks",
+          title: `Задача ${tasks.length + 1}`,
+          content: "",
+        })
+      ),
+      { affects: campaignEntryAffects(campaignId), retry: false }
+    );
   }
 
   async function removeTask(id: number) {
     if (!(await confirm({ message: "Удалить задачу?", confirmLabel: "Удалить", danger: true })))
       return;
-    await api.del(`/campaign-entries/${id}`);
-    refresh();
+    await run(labelled("Удаление задачи", () => write.del(`/campaign-entries/${id}`)), { affects: campaignEntryAffects(campaignId) });
   }
 
   return (
@@ -55,7 +55,6 @@ export function TaskTracker({ campaignId, defaultSettingId }: Props) {
           task={t}
           campaignId={campaignId}
           defaultSettingId={defaultSettingId}
-          onChange={refresh}
           onRemove={removeTask}
         />
       ))}
@@ -71,13 +70,11 @@ function TaskCard({
   task,
   campaignId,
   defaultSettingId,
-  onChange,
   onRemove,
 }: {
   task: CampaignEntry;
   campaignId: number;
   defaultSettingId?: number;
-  onChange: () => void;
   onRemove: (id: number) => void;
 }) {
   const [editMode, setEditMode] = useState(() => !task.content);
@@ -85,38 +82,28 @@ function TaskCard({
   const [title, setTitle] = useState(task.title);
   const [content, setContent] = useState(task.content);
   const open = editMode || expanded;
+  const run = useAction();
+
+  function put(body: Pick<CampaignEntry, "title" | "content" | "status" | "priority">) {
+    return run(labelled("Задача", () => write.put(`/campaign-entries/${task.id}`, body).then(() => true)), {
+      affects: campaignEntryAffects(campaignId),
+    });
+  }
 
   async function save() {
-    await api.put(`/campaign-entries/${task.id}`, {
-      title,
-      content,
-      status: task.status,
-      priority: task.priority,
-    });
-    syncMentionLinks("campaign", campaignId, task.content, content);
+    // Форма закрывается только после записи: при отказе набранное остаётся.
+    if (!(await put({ title, content, status: task.status, priority: task.priority }))) return;
+    void syncMentionLinks("campaign", campaignId, task.content, content);
     setEditMode(false);
-    onChange();
   }
 
   async function toggleStatus(status: "done" | "failed") {
     const next = task.status === status ? "none" : status;
-    await api.put(`/campaign-entries/${task.id}`, {
-      title: task.title,
-      content: task.content,
-      status: next,
-      priority: task.priority,
-    });
-    onChange();
+    await put({ title: task.title, content: task.content, status: next, priority: task.priority });
   }
 
   async function togglePriority() {
-    await api.put(`/campaign-entries/${task.id}`, {
-      title: task.title,
-      content: task.content,
-      status: task.status,
-      priority: task.priority ? 0 : 1,
-    });
-    onChange();
+    await put({ title: task.title, content: task.content, status: task.status, priority: task.priority ? 0 : 1 });
   }
 
   return (

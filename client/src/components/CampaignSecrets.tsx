@@ -1,5 +1,9 @@
-import { memo, useCallback, useEffect, useState } from "react";
-import { api } from "../api/client";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useAction, useResource, write } from "../data/hooks";
+import { dataKeys } from "../data/entities";
+import { campaignPaths, secretAffects } from "../data/campaigns";
+import { labelled } from "../data/notices";
 import { MentionText } from "./mentions/MentionText";
 import type { CampaignGrouped, StorySecret } from "../types";
 import { useConfirm } from "../hooks/useConfirm";
@@ -23,6 +27,8 @@ export interface SecretsNavStats {
   groups: { id: number; name: string; total: number; done: number }[];
 }
 
+const EMPTY: CampaignGrouped<StorySecret> = { groups: [], own: [] };
+
 export function CampaignSecrets({
   campaignId,
   settingId,
@@ -36,19 +42,9 @@ export function CampaignSecrets({
   groupId?: string | null;
   onStats?: (s: SecretsNavStats) => void;
 }) {
-  const [data, setData] = useState<CampaignGrouped<StorySecret>>({ groups: [], own: [] });
-
-  // Стабильная ссылка обязательна: refresh уезжает в строки через onRemove, и
-  // новая функция на каждый рендер сводила бы memo на строке к нулю — именно
-  // из-за этого отметка одной тайны перерисовывала все.
-  const refresh = useCallback(() => {
-    api
-      .get<CampaignGrouped<StorySecret>>(`/story/campaign-secrets?campaign_id=${campaignId}`)
-      .then(setData);
-  }, [campaignId]);
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  const path = campaignPaths.secrets(campaignId);
+  const data = useResource<CampaignGrouped<StorySecret>>(path).data ?? EMPTY;
+  const client = useQueryClient();
 
   // Как и у вех: отметка «раскрыто» правит одну строку на месте, а не
   // перечитывает весь раздел. Записи, которых правка не касается, сохраняют
@@ -65,19 +61,24 @@ export function CampaignSecrets({
       next[i] = { ...list[i], state: { revealed: revealed ? 1 : 0, note: list[i].state?.note ?? "" } };
       return next;
     };
-    setData((prev) => ({
-      own: patchList(prev.own),
-      groups: prev.groups.map((g) => {
-        const items = patchList(g.items);
-        return items === g.items ? g : { ...g, items };
-      }),
-    }));
-  }, []);
+    client.setQueryData<CampaignGrouped<StorySecret>>(dataKeys.resource(path), (prev) =>
+      prev && {
+        own: patchList(prev.own),
+        groups: prev.groups.map((g) => {
+          const items = patchList(g.items);
+          return items === g.items ? g : { ...g, items };
+        }),
+      }
+    );
+  }, [client, path]);
 
   const total = data.own.length + data.groups.reduce((n, g) => n + g.items.length, 0);
   // Пустая корзина «Сцены вне приключений» в этом разделе — чистый шум:
   // вехи и тайны в неё не кладут.
-  const visibleGroups = data.groups.filter((g) => g.arc.is_default !== 1 || g.items.length > 0);
+  const visibleGroups = useMemo(
+    () => data.groups.filter((g) => g.arc.is_default !== 1 || g.items.length > 0),
+    [data.groups]
+  );
 
   // Счётчики для левой навигации Master–Detail.
   useEffect(() => {
@@ -105,7 +106,6 @@ export function CampaignSecrets({
           items={data.own}
           arcId={null}
           campaignId={campaignId}
-          onChange={refresh}
           onRevealed={applyRevealed}
         />
       )}
@@ -117,7 +117,6 @@ export function CampaignSecrets({
             items={g.items}
             arcId={g.arc.id}
             campaignId={campaignId}
-            onChange={refresh}
             onRevealed={applyRevealed}
           />
         ))}
@@ -131,33 +130,37 @@ const SecretGroup = memo(function SecretGroup({
   items,
   arcId,
   campaignId,
-  onChange,
   onRevealed,
 }: {
   title: string;
   items: StorySecret[];
   arcId: number | null;
   campaignId: number;
-  onChange: () => void;
   onRevealed: (id: number, revealed: boolean) => void;
 }) {
   const [confirmDialog, confirm] = useConfirm();
+  const run = useAction();
+  // Галочка меняется сразу; при отказе возвращается и появляется плашка.
+  // Раньше отказ проходил молча, и галочка показывала несохранённое.
   const toggle = useCallback(
-    (s: StorySecret, revealed: boolean) => {
+    async (s: StorySecret, revealed: boolean) => {
       onRevealed(s.id, revealed);
-      void api.put(`/story/secrets/${s.id}/state`, { campaign_id: campaignId, revealed });
+      const saved = await run(
+        labelled("Отметка тайны", () => write.put(`/story/secrets/${s.id}/state`, { campaign_id: campaignId, revealed }).then(() => true)),
+        { affects: secretAffects(campaignId) }
+      );
+      if (!saved) onRevealed(s.id, !revealed);
     },
-    [campaignId, onRevealed]
+    [campaignId, onRevealed, run]
   );
 
   const remove = useCallback(
     async (s: StorySecret) => {
       if (!(await confirm({ message: `Удалить «${s.title}»?`, confirmLabel: "Удалить", danger: true })))
         return;
-      await api.del(`/story/secrets/${s.id}`);
-      onChange();
+      await run(labelled("Удаление тайны", () => write.del(`/story/secrets/${s.id}`)), { affects: secretAffects(campaignId) });
     },
-    [onChange]
+    [campaignId, confirm, run]
   );
 
   const revealed = items.filter((s) => s.state?.revealed === 1).length;
@@ -174,7 +177,7 @@ const SecretGroup = memo(function SecretGroup({
           <SecretRow key={s.id} secret={s} onToggle={toggle} onRemove={remove} />
         ))}
         {/* §1.11a — как и у вех: приглашение здесь уже есть, это форма ниже. */}
-        <AddSecretForm arcId={arcId} campaignId={campaignId} onChange={onChange} />
+        <AddSecretForm arcId={arcId} campaignId={campaignId} />
       </div>
     </details>
   );
@@ -224,28 +227,25 @@ const SecretRow = memo(function SecretRow({
 const AddSecretForm = memo(function AddSecretForm({
   arcId,
   campaignId,
-  onChange,
 }: {
   arcId: number | null;
   campaignId: number;
-  onChange: () => void;
 }) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [kind, setKind] = useState<string>("secret");
+  const run = useAction();
 
   async function add() {
     if (!title.trim()) return;
-    await api.post("/story/secrets", {
-      campaign_id: campaignId,
-      arc_id: arcId,
-      kind,
-      title,
-      content,
-    });
+    // Поля очищаются только после записи: при отказе набранное остаётся.
+    const created = await run(
+      labelled("Новая тайна", () => write.post("/story/secrets", { campaign_id: campaignId, arc_id: arcId, kind, title, content }).then(() => true)),
+      { affects: secretAffects(campaignId), retry: false }
+    );
+    if (!created) return;
     setTitle("");
     setContent("");
-    onChange();
   }
 
   return (

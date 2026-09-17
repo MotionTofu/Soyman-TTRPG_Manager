@@ -92,3 +92,17 @@ export function resetNoticesForTests(): void {
   nextId = 1;
   emit();
 }
+
+/**
+ * Действие с подписью для плашки: плашка сама начинается с «Не сохранилось:»,
+ * а без подписи Мастер увидел бы только «502 Bad Gateway» и не понял бы, что
+ * именно не вышло. Общий `useAction` своей подписи не знает — её даёт тот,
+ * кто пишет (экран выбора досок, профиль кампании).
+ */
+export function labelled<R>(label: string, action: () => Promise<R>): () => Promise<R> {
+  return () =>
+    action().catch((error: unknown) => {
+      const reason = error instanceof Error ? error.message : String(error ?? "");
+      throw new Error(reason ? `${label} — ${reason}` : label);
+    });
+}

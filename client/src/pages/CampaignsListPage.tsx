@@ -1,6 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
+import { useResource, write } from "../data/hooks";
+import { afterWriteAnywhere } from "../data/imperative";
+import { dataKeys, invalidateAffects } from "../data/entities";
+import { campaignGroupAffects, campaignPaths } from "../data/campaigns";
 import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
 import { ListPage } from "../components/ListPage";
 import { CampaignCover, CampaignCoverTile } from "../components/CampaignCoverTile";
@@ -110,19 +115,41 @@ function CampaignPreview({
   );
 }
 
+const NO_CAMPAIGNS: Campaign[] = [];
+const NO_SYSTEMS: System[] = [];
+const NO_SETTINGS: Setting[] = [];
+const NO_GROUPS: CampaignGroup[] = [];
+// Архивирование и возврат: списки кампаний везде (и счётчики групп) и страница архива.
+const ARCHIVE_AFFECTS = [{ kind: "campaign" as const }, { path: "/campaign-groups" }, { path: "/archive" }];
+
 export function CampaignsListPage() {
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [systems, setSystems] = useState<System[]>([]);
-  const [settings, setSettings] = useState<Setting[]>([]);
+  const client = useQueryClient();
+  const campaignsState = useResource<Campaign[]>(campaignPaths.list());
+  const campaigns = campaignsState.data ?? NO_CAMPAIGNS;
+  const loading = campaignsState.loading;
+  const loadError = campaignsState.error;
+  const systems = useResource<System[]>(campaignPaths.systems()).data ?? NO_SYSTEMS;
+  const settings = useResource<Setting[]>(campaignPaths.settings()).data ?? NO_SETTINGS;
   const [creating, setCreating] = useState(false);
   const [activeTab, setActiveTab] = useState<string | null>(null);
-  const [groups, setGroups] = useState<CampaignGroup[]>([]);
-  const [groupMemberIds, setGroupMemberIds] = useState<Set<number>>(new Set());
+  const groups = useResource<CampaignGroup[]>(campaignPaths.groups()).data ?? NO_GROUPS;
+  // Счётчики групп в левой панели и состав открытой группы — одни и те же
+  // запросы составов, под одним ключом с окном «добавить в группу».
+  const memberQueries = useQueries({
+    queries: groups.map((g) => ({
+      queryKey: dataKeys.resource(campaignPaths.groupMembers(g.id)),
+      queryFn: ({ signal }: { signal: AbortSignal }) => api.get<Campaign[]>(campaignPaths.groupMembers(g.id), { signal }),
+    })),
+  });
+  const groupCounts: Record<number, number> = {};
+  groups.forEach((g, i) => {
+    const members = memberQueries[i]?.data;
+    if (members) groupCounts[g.id] = members.length;
+  });
+  const activeMembers = memberQueries[groups.findIndex((g) => String(g.id) === activeTab)]?.data;
+  const groupMemberIds = useMemo(() => new Set((activeMembers ?? []).map((m) => m.id)), [activeMembers]);
   const [groupMembersModal, setGroupMembersModal] = useState<{ groupId: number; groupName: string } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [q, setQ] = useState("");
-  const [groupCounts, setGroupCounts] = useState<Record<number, number>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [confirmDialog, confirm] = useConfirm();
   const [alertDialog, showAlert] = useAlert();
@@ -132,75 +159,10 @@ export function CampaignsListPage() {
     setCreating(true);
   }
 
-  async function loadCampaigns(signal?: AbortSignal) {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const data = await api.get<Campaign[]>("/campaigns", signal ? { signal } : undefined);
-      setCampaigns(data);
-    } catch (e) {
-      if ((e as Error).name === "AbortError") return;
-      setLoadError(String(e instanceof Error ? e.message : e));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function loadGroupMembers() {
-    if (!activeTab || activeTab === "ungrouped") {
-      setGroupMemberIds(new Set());
-      return;
-    }
-    try {
-      const members = await api.get<Campaign[]>(`/campaign-groups/${activeTab}/members`);
-      setGroupMemberIds(new Set(members.map((m) => m.id)));
-    } catch {
-      setGroupMemberIds(new Set());
-    }
-  }
-
-  // Группы со счётчиками для левой панели: состав нужен и странице
-  // (кнопка «добавить в группу»), поэтому список живёт здесь, а не в
-  // каркасе. Каркас делает только операции и их состояние.
-  async function loadGroups() {
-    try {
-      const data = await api.get<CampaignGroup[]>("/campaign-groups");
-      setGroups(data);
-      const counts = await Promise.all(
-        data.map(async (g) => {
-          try {
-            const members = await api.get<Campaign[]>(`/campaign-groups/${g.id}/members`);
-            return [g.id, members.length] as const;
-          } catch {
-            return [g.id, undefined] as const;
-          }
-        })
-      );
-      setGroupCounts(
-        Object.fromEntries(counts.filter(([, c]) => c !== undefined) as [number, number][])
-      );
-    } catch {
-      // silent — как было у полосы групп
-    }
-  }
-
-  useEffect(() => {
-    const controller = new AbortController();
-    loadCampaigns(controller.signal);
-    api.get<System[]>("/systems", { signal: controller.signal }).then(setSystems).catch(() => {});
-    api.get<Setting[]>("/settings", { signal: controller.signal }).then(setSettings).catch(() => {});
-    void loadGroups();
-    return () => controller.abort();
-  }, []);
-
-  useEffect(() => {
-    loadGroupMembers();
-  }, [activeTab]);
-
-  function refresh() {
-    void loadCampaigns();
-    void loadGroups();
-    void loadGroupMembers();
+  // Группы правит каркас списка (ListPage) мимо слоя — после его правки
+  // перечитываются группы и их составы.
+  function refreshGroups() {
+    void invalidateAffects(client, campaignGroupAffects());
   }
 
   async function archiveCampaign(id: number, name: string) {
@@ -214,15 +176,20 @@ export function CampaignsListPage() {
     try {
       await deleteWithUndo({
         entityName: name,
-        deleteFn: () => api.del(`/campaigns/${id}`),
-        restoreFn: () => api.put(`/campaigns/${id}/restore`),
+        deleteFn: async () => {
+          await write.del(`/campaigns/${id}`);
+          afterWriteAnywhere(ARCHIVE_AFFECTS);
+        },
+        restoreFn: async () => {
+          await write.put(`/campaigns/${id}/restore`);
+          afterWriteAnywhere(ARCHIVE_AFFECTS);
+        },
       });
     } catch (e) {
       showAlert(`Не удалось архивировать «${name}»: ${e instanceof Error ? e.message : String(e)}`);
       return;
     }
     setSelectedId(null);
-    refresh();
   }
 
   const filtered = useMemo(() => {
@@ -255,7 +222,7 @@ export function CampaignsListPage() {
         groups={groups.map((g) => ({ id: String(g.id), label: g.name, count: groupCounts[g.id] }))}
         groupsEndpoint="/campaign-groups"
         groupsDeleteNote="Кампании не будут удалены — они останутся в разделе «Все кампании»."
-        onGroupsChanged={refresh}
+        onGroupsChanged={refreshGroups}
         createLabel="+ Новая кампания"
         onCreate={openCreate}
         activeGroup={activeTab}
@@ -278,7 +245,7 @@ export function CampaignsListPage() {
         {loadError && (
           <LoadErrorCard
             message={<>Не удалось загрузить кампании: {loadError}</>}
-            onRetry={refresh}
+            onRetry={campaignsState.reload}
           />
         )}
 
@@ -344,7 +311,6 @@ export function CampaignsListPage() {
           settings={settings}
           onClose={() => setCreating(false)}
           onCreated={(created) => {
-            refresh();
             // Q47: новое становится выбранным — открывается его предпросмотр.
             // Визард не знает групп, поэтому смотрим «Все», иначе новое
             // может оказаться за фильтром и выбрать будет нечего.
@@ -359,7 +325,7 @@ export function CampaignsListPage() {
           groupId={groupMembersModal.groupId}
           groupName={groupMembersModal.groupName}
           onClose={() => setGroupMembersModal(null)}
-          onUpdated={refresh}
+          onUpdated={() => {}}
         />
       )}
       {confirmDialog}

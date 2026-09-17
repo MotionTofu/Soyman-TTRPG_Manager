@@ -1,4 +1,7 @@
 import { api } from "./api/client";
+import { write } from "./data/hooks";
+import { afterWriteAnywhere } from "./data/imperative";
+import { linkAffects } from "./data/sessions";
 
 interface GenericLink {
   id: number;
@@ -18,10 +21,11 @@ const PREP_SECTIONS = ["plot_characters", "locations", "loot", "enemies"];
 // Copies a oneshot's prep (Задумка text + Сюжетные персонажи/Локации/
 // Потенциальный лут/Препятствия links) from an existing session into a
 // freshly created one, for GMs re-running the same oneshot with a new group.
+// Пишет через слой и сам объявляет задетое: задумку и связи новой сессии.
 export async function copySessionPrep(sourceSessionId: number, targetSessionId: number): Promise<void> {
   const source = await api.get<{ idea_notes: string | null }>(`/sessions/${sourceSessionId}`);
   if (source.idea_notes) {
-    await api.put(`/sessions/${targetSessionId}`, { idea_notes: source.idea_notes });
+    await write.put(`/sessions/${targetSessionId}`, { idea_notes: source.idea_notes });
   }
   const links = await api.get<GenericLink[]>(`/links?type=session&id=${sourceSessionId}`);
   const relevant = links.filter((l) => l.section && PREP_SECTIONS.includes(l.section));
@@ -30,7 +34,7 @@ export async function copySessionPrep(sourceSessionId: number, targetSessionId: 
       l.from_type === "session" && l.from_id === sourceSessionId
         ? { type: l.to_type, id: l.to_id }
         : { type: l.from_type, id: l.from_id };
-    await api.post("/links", {
+    await write.post("/links", {
       from_type: "session",
       from_id: targetSessionId,
       to_type: other.type,
@@ -38,4 +42,5 @@ export async function copySessionPrep(sourceSessionId: number, targetSessionId: 
       section: l.section,
     });
   }
+  afterWriteAnywhere([{ kind: "session", id: targetSessionId }, ...linkAffects("session", targetSessionId)]);
 }

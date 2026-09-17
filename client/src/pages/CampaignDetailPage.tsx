@@ -1,6 +1,17 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
+import { useAction, useResource, write } from "../data/hooks";
+import { afterWriteAnywhere } from "../data/imperative";
+import {
+  campaignEventAffects,
+  campaignFieldsAffects,
+  campaignGroupAffects,
+  campaignPaths,
+} from "../data/campaigns";
+import { chroniclePaths } from "../data/settingPage";
+import { sessionMoneyAffects } from "../data/sessions";
+import { labelled } from "../data/notices";
 import { deriveSheet } from "@shared/dnd/derive";
 import { normalizeDndCharacter } from "@shared/dnd/normalize";
 import { toLocalDateKey, formatDateKeyRu, parseDateKey } from "../utils/date";
@@ -105,19 +116,30 @@ const GM_TABS = [
 const GM_TAB_ALIASES = { "Заметки по ведению": "Заметки", "Для игроков": "Выдача" } as const;
 const PLAYER_TABS = ["Заметки", "Клёвые цитаты", "Трекер задач", "Хроника игр", "Исследование Мира"] as const;
 
+// Пустые значения до загрузки — одними ссылками, чтобы useMemo над ними не
+// пересчитывался на каждую отрисовку.
+const NO_SESSIONS: SessionSummary[] = [];
+const NO_PLAYERS: Player[] = [];
+const NO_DEBTS: CampaignDebt[] = [];
+const NO_CYCLES: SettingCycle[] = [];
+const NO_SYSTEMS: System[] = [];
+const NO_SETTINGS: Setting[] = [];
+const NO_EVENTS: CampaignCalendarEvent[] = [];
+const NO_DATES: ImportantDate[] = [];
+
 export function CampaignDetailPage() {
   const { id } = useParams();
   const campaignId = Number(id);
   const invalidCampaignId = !Number.isFinite(campaignId);
   const navigate = useNavigate();
 
-  const [campaign, setCampaign] = useState<CampaignDetail | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const run = useAction();
+  const campaignState = useResource<CampaignDetail>(invalidCampaignId ? null : campaignPaths.detail(campaignId));
+  const campaign = campaignState.data ?? null;
   const calendar = useSettingCalendar(campaign?.setting_id);
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [allPlayers, setAllPlayers] = useState<Player[]>([]);
-  const [debts, setDebts] = useState<CampaignDebt[]>([]);
+  const sessions = useResource<SessionSummary[]>(invalidCampaignId ? null : campaignPaths.sessions(campaignId)).data ?? NO_SESSIONS;
+  const allPlayers = useResource<Player[]>(campaignPaths.players()).data ?? NO_PLAYERS;
+  const debts = useResource<CampaignDebt[]>(invalidCampaignId ? null : campaignPaths.debts(campaignId)).data ?? NO_DEBTS;
   const tabs = campaign?.role === "player" ? PLAYER_TABS : GM_TABS;
   const [tab, selectTab] = useTabState(
     tabs,
@@ -149,13 +171,7 @@ export function CampaignDetailPage() {
     setWorldView(v);
     try { localStorage.setItem("campaignWorldView", v); } catch { /* private browsing */ }
   }
-  const [cycles, setCycles] = useState<SettingCycle[]>([]);
-  useEffect(() => {
-    if (!campaign?.setting_id) return;
-    const ac = new AbortController();
-    api.get<SettingCycle[]>(`/settings/${campaign.setting_id}/cycles`, { signal: ac.signal }).then(setCycles).catch((e) => { if ((e as Error).name !== "AbortError") {/* silent */} });
-    return () => ac.abort();
-  }, [campaign?.setting_id]);
+  const cycles = useResource<SettingCycle[]>(campaign?.setting_id ? chroniclePaths.cycles(campaign.setting_id) : null).data ?? NO_CYCLES;
 
   const [creatingDate, setCreatingDate] = useState<string | null>(null);
   const [creatingSession, setCreatingSession] = useState(false);
@@ -166,16 +182,18 @@ export function CampaignDetailPage() {
   const [repeatCount, setRepeatCount] = useState("4");
   const [newCopyFromSessionId, setNewCopyFromSessionId] = useState("");
 
-  const [systems, setSystems] = useState<System[]>([]);
-  const [settingsList, setSettingsList] = useState<Setting[]>([]);
+  const systems = useResource<System[]>(campaignPaths.systems()).data ?? NO_SYSTEMS;
+  const settingsList = useResource<Setting[]>(campaignPaths.settings()).data ?? NO_SETTINGS;
 
   const [menu, setMenu] = useState<{ x: number; y: number; event: CalendarEvent } | null>(
     null
   );
 
-  const [calendarEvents, setCalendarEvents] = useState<CampaignCalendarEvent[]>([]);
+  const calendarEvents =
+    useResource<CampaignCalendarEvent[]>(invalidCampaignId ? null : campaignPaths.calendarEvents(campaignId)).data ?? NO_EVENTS;
   const [expandedEvents, setExpandedEvents] = useState<Set<number>>(new Set());
-  const [settingImportantDates, setSettingImportantDates] = useState<ImportantDate[]>([]);
+  const settingImportantDates =
+    useResource<ImportantDate[]>(campaign?.setting_id ? chroniclePaths.importantDates(campaign.setting_id) : null).data ?? NO_DATES;
   const [calendarMenu, setCalendarMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(
     null
   );
@@ -258,56 +276,9 @@ export function CampaignDetailPage() {
   const [timelineFocus, setTimelineFocus] = useState<{ year: number; month: number; day: number } | null>(null);
   const [calendarFocus, setCalendarFocus] = useState<{ year: number; month: number } | null>(null);
 
-  function refreshCalendarEvents(signal?: AbortSignal) {
-    api.get<CampaignCalendarEvent[]>(`/campaigns/${campaignId}/calendar-events`, signal ? { signal } : undefined).then(setCalendarEvents).catch((e) => { if ((e as Error).name !== "AbortError") {/* silent */} });
-  }
-  useEffect(() => {
-    if (invalidCampaignId) return;
-    const ac = new AbortController();
-    refreshCalendarEvents(ac.signal);
-    return () => ac.abort();
-  }, [campaignId, invalidCampaignId]);
-
-  useEffect(() => {
-    if (!campaign?.setting_id) {
-      setSettingImportantDates([]);
-      return;
-    }
-    const ac = new AbortController();
-    api.get<ImportantDate[]>(`/settings/${campaign.setting_id}/important-dates`, { signal: ac.signal }).then(setSettingImportantDates).catch((e) => { if ((e as Error).name !== "AbortError") {/* silent */} });
-    return () => ac.abort();
-  }, [campaign?.setting_id]);
-
-  function refreshCampaign(signal?: AbortSignal) {
-    api
-      .get<CampaignDebt[]>(`/campaigns/${campaignId}/debts`, signal ? { signal } : undefined)
-      .then(setDebts)
-      .catch(() => {});
-    return api.get<CampaignDetail>(`/campaigns/${campaignId}`, signal ? { signal } : undefined).then(setCampaign);
-  }
-  function refreshSessions(signal?: AbortSignal) {
-    return api
-      .get<SessionSummary[]>(`/campaigns/${campaignId}/sessions`, signal ? { signal } : undefined)
-      .then(setSessions);
-  }
-  useEffect(() => {
-    if (invalidCampaignId) { setLoading(false); setLoadError("Кампания не найдена"); return; }
-    const ac = new AbortController();
-    setLoading(true); setLoadError(null);
-    Promise.all([
-      refreshCampaign(ac.signal).catch((e) => { if ((e as Error).name !== "AbortError") setLoadError((e as Error).message); }),
-      refreshSessions(ac.signal).catch((e) => { if ((e as Error).name !== "AbortError") {/* silent */} }),
-      api.get<Player[]>("/players", { signal: ac.signal }).then(setAllPlayers).catch((e) => { if ((e as Error).name !== "AbortError") {/* silent */} }),
-      api.get<System[]>("/systems", { signal: ac.signal }).then(setSystems).catch((e) => { if ((e as Error).name !== "AbortError") {/* silent */} }),
-      api.get<Setting[]>("/settings", { signal: ac.signal }).then(setSettingsList).catch((e) => { if ((e as Error).name !== "AbortError") {/* silent */} }),
-    ]).finally(() => setLoading(false));
-    return () => ac.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaignId, invalidCampaignId]);
-
   if (invalidCampaignId) return <div className="stack" style={{ padding: 24 }}><p>Кампания не найдена</p><Link to="/campaigns">К списку кампаний →</Link></div>;
-  if (loadError && !campaign) return <div className="stack" style={{ padding: 24 }}><p className="muted">{loadError}</p><button onClick={() => { setLoadError(null); setLoading(true); const ac = new AbortController(); Promise.all([refreshCampaign(ac.signal), refreshSessions(ac.signal)]).finally(()=>setLoading(false)); }}>Повторить</button></div>;
-  if (!campaign) return <p className="muted">{loading ? "Загрузка…" : "Загрузка…"}</p>;
+  if (campaignState.error && !campaign) return <div className="stack" style={{ padding: 24 }}><p className="muted">{campaignState.error}</p><button onClick={campaignState.reload}>Повторить</button></div>;
+  if (!campaign) return <p className="muted">Загрузка…</p>;
 
   const events: CalendarEvent[] = sessions.map((s) => ({
     id: s.id,
@@ -367,14 +338,16 @@ export function CampaignDetailPage() {
   async function deleteCalendarEvent(eventId: number) {
     const ok = await confirm({ message: "Удалить событие?", confirmLabel: "Удалить", danger: true });
     if (!ok) return;
-    await api.del(`/campaigns/calendar-events/${eventId}`);
     setCalendarMenu(null);
-    refreshCalendarEvents();
+    await run(labelled("Событие хроники", () => write.del(`/campaigns/calendar-events/${eventId}`)), {
+      affects: campaignEventAffects(campaignId, eventId),
+    });
   }
 
   async function toggleEventImportant(ev: CampaignCalendarEvent) {
-    await api.put(`/campaigns/calendar-events/${ev.id}`, { important: !ev.important });
-    refreshCalendarEvents();
+    await run(labelled("Событие хроники", () => write.put(`/campaigns/calendar-events/${ev.id}`, { important: !ev.important })), {
+      affects: campaignEventAffects(campaignId, ev.id),
+    });
   }
 
   // Сдвиг события по оси: точность приходит от масштаба, на котором бросили.
@@ -386,21 +359,29 @@ export function CampaignDetailPage() {
     // проведённой игре, и менять её мимо страницы сессии значило бы править
     // историю жестом, который задумывался как «переставить план».
     if (id < 0) return;
-    await api.put(`/campaigns/calendar-events/${id}`, {
-      inworld_year: date.year,
-      inworld_month: date.month,
-      inworld_day: date.day,
-      date_precision: date.precision,
-    });
-    refreshCalendarEvents();
+    await run(
+      labelled("Событие хроники", () =>
+        write.put(`/campaigns/calendar-events/${id}`, {
+          inworld_year: date.year,
+          inworld_month: date.month,
+          inworld_day: date.day,
+          date_precision: date.precision,
+        })
+      ),
+      { affects: campaignEventAffects(campaignId, id) }
+    );
   }
 
   async function pinCampaignCalendar(pinned: { year: number; month: number } | null) {
-    await api.put(`/campaigns/${campaignId}/pinned-calendar`, {
-      year: pinned?.year ?? null,
-      month: pinned?.month ?? null,
-    });
-    refreshCampaign();
+    await run(
+      labelled("Месяц календаря", () =>
+        write.put(`/campaigns/${campaignId}/pinned-calendar`, {
+          year: pinned?.year ?? null,
+          month: pinned?.month ?? null,
+        })
+      ),
+      { affects: campaignFieldsAffects(campaignId) }
+    );
   }
 
   async function saveEventModal() {
@@ -434,16 +415,25 @@ export function CampaignDetailPage() {
       inworld_day_end: hasPeriod && eventModal.day_end.trim() !== "" ? Number(eventModal.day_end) : hasPeriod ? eventModal.day : null,
     };
     if (!hasPeriod) { payload.inworld_year_end = null; payload.inworld_month_end = null; payload.inworld_day_end = null; }
+    // Окно закрывается только после записи: при отказе набранное остаётся.
     if (eventModal.id) {
-      const original = calendarEvents.find((e) => e.id === eventModal.id);
-      await api.put(`/campaigns/calendar-events/${eventModal.id}`, payload);
-      await syncMentionLinks("campaign_event", eventModal.id, original?.description ?? "", eventModal.description);
+      const eventId = eventModal.id;
+      const original = calendarEvents.find((e) => e.id === eventId);
+      const saved = await run(
+        labelled("Событие хроники", () => write.put(`/campaigns/calendar-events/${eventId}`, payload).then(() => true)),
+        { affects: campaignEventAffects(campaignId, eventId) }
+      );
+      if (!saved) return;
+      await syncMentionLinks("campaign_event", eventId, original?.description ?? "", eventModal.description);
     } else {
-      const created = await api.post<CampaignCalendarEvent>(`/campaigns/${campaignId}/calendar-events`, payload);
+      const created = await run(
+        labelled("Новое событие", () => write.post<CampaignCalendarEvent>(`/campaigns/${campaignId}/calendar-events`, payload)),
+        { affects: campaignEventAffects(campaignId), retry: false }
+      );
+      if (!created) return;
       await syncMentionLinks("campaign_event", created.id, "", eventModal.description);
     }
     setEventModal(null);
-    refreshCalendarEvents();
   }
 
   function handleCalendarDayContextMenu(year: number, month: number, day: number, x: number, y: number) {
@@ -514,15 +504,26 @@ export function CampaignDetailPage() {
         const d = new Date(base);
         d.setDate(d.getDate() + i * step);
         const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-        const created = await api.post<{ id: number }>("/sessions", {
-          campaign_id: campaignId,
-          date: dateStr,
-          status: newStatus,
-          payment_override: newPaymentOverride || null,
-          stake_override: newStake ? Number(newStake) : undefined,
-        });
+        const created = await run(
+          labelled("Новая сессия", () =>
+            write.post<{ id: number }>("/sessions", {
+              campaign_id: campaignId,
+              date: dateStr,
+              status: newStatus,
+              payment_override: newPaymentOverride || null,
+              stake_override: newStake ? Number(newStake) : undefined,
+            })
+          ),
+          // Без «Повторить»: ответ мог потеряться после записи, повтор задвоил бы сессию.
+          { affects: [{ kind: "session" }, { kind: "campaign", id: campaignId }], retry: false }
+        );
+        // Серия останавливается на первом отказе; окно остаётся открытым.
+        if (!created) return;
         if (newCopyFromSessionId) {
-          await copySessionPrep(Number(newCopyFromSessionId), created.id);
+          await run(labelled("Подготовка из прогона", () => copySessionPrep(Number(newCopyFromSessionId), created.id)), {
+            affects: [{ kind: "session", id: created.id }],
+            retry: false,
+          });
         }
       }
       setCreatingDate(null);
@@ -532,8 +533,6 @@ export function CampaignDetailPage() {
       setRepeatInterval("none");
       setRepeatCount("4");
       setNewCopyFromSessionId("");
-      refreshSessions();
-      refreshCampaign();
     } finally {
       setCreatingSession(false);
     }
@@ -548,8 +547,14 @@ export function CampaignDetailPage() {
     try {
       await deleteWithUndo({
         entityName: name,
-        deleteFn: () => api.del(`/campaigns/${campaignId}`),
-        restoreFn: () => api.put(`/campaigns/${campaignId}/restore`),
+        deleteFn: async () => {
+          await write.del(`/campaigns/${campaignId}`);
+          afterWriteAnywhere([{ kind: "campaign" }, { path: "/archive" }]);
+        },
+        restoreFn: async () => {
+          await write.put(`/campaigns/${campaignId}/restore`);
+          afterWriteAnywhere([{ kind: "campaign" }, { path: "/archive" }]);
+        },
       });
     } catch (e) {
       showAlert(`Не удалось архивировать «${name}»: ${e instanceof Error ? e.message : String(e)}`);
@@ -567,38 +572,35 @@ export function CampaignDetailPage() {
       .filter((o) => o.value !== (session?.payment_override ?? ""))
       .map((o) => ({
         label: o.label,
-        onClick: async () => {
-          await api.put(`/sessions/${event.id}`, { payment_override: o.value || null });
-          refreshSessions();
-          refreshCampaign();
-        },
+        onClick: () =>
+          void run(labelled("Оплата сессии", () => write.put(`/sessions/${event.id}`, { payment_override: o.value || null })), {
+            affects: sessionMoneyAffects(event.id, campaignId),
+          }),
       }));
 
     return [
       {
         label: "Статус: Запланировано",
-        onClick: async () => {
-          await api.put(`/sessions/${event.id}`, { status: "planned" });
-          refreshSessions();
-        },
+        onClick: () =>
+          void run(labelled("Статус сессии", () => write.put(`/sessions/${event.id}`, { status: "planned" })), {
+            affects: sessionMoneyAffects(event.id, campaignId),
+          }),
       },
       {
         label: "Статус: Состоялась",
-        onClick: async () => {
-          await api.put(`/sessions/${event.id}`, { status: "held" });
-          refreshSessions();
-          refreshCampaign();
-        },
+        onClick: () =>
+          void run(labelled("Статус сессии", () => write.put(`/sessions/${event.id}`, { status: "held" })), {
+            affects: sessionMoneyAffects(event.id, campaignId),
+          }),
       },
       ...paymentItems,
       {
         label: "Удалить (в архив)",
         danger: true,
-        onClick: async () => {
-          await api.del(`/sessions/${event.id}`);
-          refreshSessions();
-          refreshCampaign();
-        },
+        onClick: () =>
+          void run(labelled("Сессия в архив", () => write.del(`/sessions/${event.id}`)), {
+            affects: [...sessionMoneyAffects(event.id, campaignId), { path: "/archive" }],
+          }),
       },
     ];
   }
@@ -606,9 +608,9 @@ export function CampaignDetailPage() {
   async function archiveSession(sessionId: number) {
     const ok = await confirm({ message: "Отправить сессию в архив?", confirmLabel: "Архивировать", danger: true });
     if (!ok) return;
-    await api.del(`/sessions/${sessionId}`);
-    refreshSessions();
-    refreshCampaign();
+    await run(labelled("Сессия в архив", () => write.del(`/sessions/${sessionId}`)), {
+      affects: [...sessionMoneyAffects(sessionId, campaignId), { path: "/archive" }],
+    });
   }
 
   const safeBgLayer = safeBackgroundImage(campaign.background_image_url && isSafeImageUrl(campaign.background_image_url) ? campaign.background_image_url : null);
@@ -639,7 +641,7 @@ export function CampaignDetailPage() {
     >
 
       {tab === "Обзор" && campaign.role === "player" && (
-        <PlayerOverviewTab campaign={campaign} systems={systems} settingsList={settingsList} onRefresh={refreshCampaign} />
+        <PlayerOverviewTab campaign={campaign} systems={systems} settingsList={settingsList} />
       )}
 
       {tab === "Заметки" && campaign.role === "player" && (
@@ -764,7 +766,7 @@ export function CampaignDetailPage() {
 
         {tab === "Обзор" && campaign.role !== "player" && (
            <>
-             <OverviewTab campaign={campaign} systems={systems} settingsList={settingsList} sessions={sessions} onRefresh={refreshCampaign} onSchedule={() => setCreatingDate(toLocalDateKey(new Date()))} />
+             <OverviewTab campaign={campaign} systems={systems} settingsList={settingsList} sessions={sessions} onSchedule={() => setCreatingDate(toLocalDateKey(new Date()))} />
              <CrossLinksWizard
                ownerKind="campaign"
                ownerId={campaignId}
@@ -802,7 +804,7 @@ export function CampaignDetailPage() {
               campaignId={campaignId}
               roster={campaign.roster}
               allPlayers={allPlayers}
-              onRosterChange={refreshCampaign}
+              onRosterChange={campaignState.reload}
             />
             {/* Долг стоит рядом с составом, потому что перед игрой смотрят
                 именно сюда. Считается сервером, нигде не хранится; действия над
@@ -2043,18 +2045,15 @@ function PlayerOverviewTab({
   campaign,
   systems,
   settingsList,
-  onRefresh,
 }: {
   campaign: CampaignDetail;
   systems: System[];
   settingsList: Setting[];
-  onRefresh: () => void;
 }) {
   const campaignId = campaign.id;
   const [editingMain, setEditingMain] = useState(false);
-  const [allGroups, setAllGroups] = useState<CampaignGroup[]>([]);
-  const [campaignGroupIds, setCampaignGroupIds] = useState<number[]>([]);
-  const [saving, setSaving] = useState(false);
+  const { allGroups, campaignGroupIds, toggleGroup } = useCampaignGroups(campaignId);
+  const { save, saving } = useCampaignFieldsSave(campaignId);
   const [form, setForm] = useState({
     name: campaign.name,
     type: campaign.type,
@@ -2068,18 +2067,6 @@ function PlayerOverviewTab({
     setting_id: campaign.setting_id ? String(campaign.setting_id) : "",
   });
 
-  async function save(partial: Record<string, unknown>) {
-    if (saving) return;
-    setSaving(true);
-    try { await api.put(`/campaigns/${campaignId}`, partial); await onRefresh(); } finally { setSaving(false); }
-  }
-
-  useEffect(() => {
-    api.get<CampaignGroup[]>("/campaign-groups").then(setAllGroups).catch(() => {});
-    api.get<CampaignGroup[]>(`/campaign-groups/by-campaign/${campaignId}`).then((groups) => {
-      setCampaignGroupIds(groups.map((g) => g.id));
-    }).catch(() => {});
-  }, [campaignId]);
 
   function startEdit() {
     setForm({
@@ -2199,7 +2186,8 @@ function PlayerOverviewTab({
               <div className="campaign-actions">
                 <button onClick={() => setEditingMain(false)} disabled={saving}>Отмена</button>
                 <button className="primary" disabled={saving} onClick={async () => {
-                  await save({
+                  // Форма закрывается только после записи: при отказе набранное остаётся.
+                  const saved = await save({
                     name: form.name,
                     type: form.type,
                     payment_type: form.payment_type,
@@ -2211,7 +2199,7 @@ function PlayerOverviewTab({
                     system_id: form.system_id ? Number(form.system_id) : null,
                     setting_id: form.setting_id ? Number(form.setting_id) : null,
                   });
-                  setEditingMain(false);
+                  if (saved) setEditingMain(false);
                 }}>{saving ? "Сохранение…" : "Сохранить"}</button>
               </div>
             </div>
@@ -2232,15 +2220,7 @@ function PlayerOverviewTab({
                       <input
                         type="checkbox"
                         checked={isIn}
-                        onChange={async () => {
-                          if (isIn) {
-                            await api.del(`/campaign-groups/${g.id}/members?campaignIds=${campaignId}`);
-                          } else {
-                            await api.post(`/campaign-groups/${g.id}/members`, { campaignIds: [campaignId] });
-                          }
-                          const groups = await api.get<CampaignGroup[]>(`/campaign-groups/by-campaign/${campaignId}`);
-                          setCampaignGroupIds(groups.map((gr) => gr.id));
-                        }}
+                        onChange={() => void toggleGroup(g.id, isIn)}
                       />
                       {g.name}
                     </label>
@@ -2275,23 +2255,21 @@ function OverviewTab({
   systems,
   settingsList,
   sessions,
-  onRefresh,
   onSchedule,
 }: {
   campaign: CampaignDetail;
   systems: System[];
   settingsList: Setting[];
   sessions: SessionSummary[];
-  onRefresh: () => void;
   onSchedule?: () => void;
 }) {
   const campaignId = campaign.id;
   const [editingMain, setEditingMain] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const { save, saving } = useCampaignFieldsSave(campaignId);
+  const run = useAction();
   // Навигация внутри «Обзора» (Master–Detail): 7 секций слева.
   const [ovSel, setOvSel] = useState<{ section: string; item?: string }>({ section: "main" });
-  const [allGroups, setAllGroups] = useState<CampaignGroup[]>([]);
-  const [campaignGroupIds, setCampaignGroupIds] = useState<number[]>([]);
+  const { allGroups, campaignGroupIds, toggleGroup } = useCampaignGroups(campaignId);
   const [adventuresCount, setAdventuresCount] = useState<number | null>(null);
   const [form, setForm] = useState({
     name: campaign.name,
@@ -2305,44 +2283,32 @@ function OverviewTab({
     system_id: campaign.system_id ? String(campaign.system_id) : "",
     setting_id: campaign.setting_id ? String(campaign.setting_id) : "",
   });
-  const bgCrop = useImageCrop("background", async (file) => {
+  // Загрузка изображения: окно обрезки закрывается сразу, поэтому отказ виден
+  // только плашкой. Раньше он уходил в никуда, и фон просто не менялся.
+  function upload(kind: "background" | "thumbnail", label: string, file: File) {
     const fd = new FormData();
     fd.append("file", file);
-    await api.post(`/campaigns/${campaignId}/background`, fd);
-    onRefresh();
-  });
-  const thumbCrop = useImageCrop("thumbnail", async (file) => {
-    const fd = new FormData();
-    fd.append("file", file);
-    await api.post(`/campaigns/${campaignId}/thumbnail`, fd);
-    onRefresh();
-  });
+    void run(labelled(label, () => write.post(`/campaigns/${campaignId}/${kind}`, fd, { timeoutMs: UPLOAD_TIMEOUT_MS })), {
+      affects: campaignFieldsAffects(campaignId),
+    });
+  }
+  const bgCrop = useImageCrop("background", (file) => upload("background", "Фон кампании", file));
+  const thumbCrop = useImageCrop("thumbnail", (file) => upload("thumbnail", "Тамбнейл кампании", file));
   const [ovConfirmDialog, ovConfirm] = useConfirm();
   async function deleteBg() {
     const ok = await ovConfirm({ message: "Удалить фон кампании?", confirmLabel: "Удалить", danger: true });
     if (!ok) return;
-    await api.del(`/campaigns/${campaignId}/background`);
-    onRefresh();
+    await run(labelled("Фон кампании", () => write.del(`/campaigns/${campaignId}/background`)), {
+      affects: campaignFieldsAffects(campaignId),
+    });
   }
   async function deleteThumb() {
     const ok = await ovConfirm({ message: "Удалить тамбнейл?", confirmLabel: "Удалить", danger: true });
     if (!ok) return;
-    await api.del(`/campaigns/${campaignId}/thumbnail`);
-    onRefresh();
+    await run(labelled("Тамбнейл кампании", () => write.del(`/campaigns/${campaignId}/thumbnail`)), {
+      affects: campaignFieldsAffects(campaignId),
+    });
   }
-
-  async function save(partial: Record<string, unknown>) {
-    if (saving) return;
-    setSaving(true);
-    try { await api.put(`/campaigns/${campaignId}`, partial); await onRefresh(); } finally { setSaving(false); }
-  }
-
-  useEffect(() => {
-    api.get<CampaignGroup[]>("/campaign-groups").then(setAllGroups).catch(() => {});
-    api.get<CampaignGroup[]>(`/campaign-groups/by-campaign/${campaignId}`).then((groups) => {
-      setCampaignGroupIds(groups.map((g) => g.id));
-    }).catch(() => {});
-  }, [campaignId]);
 
   function startEdit() {
     setForm({
@@ -2489,7 +2455,8 @@ function OverviewTab({
               <div className="campaign-actions">
                 <button onClick={() => setEditingMain(false)} disabled={saving}>Отмена</button>
                 <button className="primary" disabled={saving} onClick={async () => {
-                  await save({
+                  // Форма закрывается только после записи: при отказе набранное остаётся.
+                  const saved = await save({
                     name: form.name,
                     type: form.type,
                     payment_type: form.payment_type,
@@ -2501,7 +2468,7 @@ function OverviewTab({
                     system_id: form.system_id ? Number(form.system_id) : null,
                     setting_id: form.setting_id ? Number(form.setting_id) : null,
                   });
-                  setEditingMain(false);
+                  if (saved) setEditingMain(false);
                 }}>{saving ? "Сохранение…" : "Сохранить"}</button>
               </div>
             </div>
@@ -2522,15 +2489,7 @@ function OverviewTab({
                       <input
                         type="checkbox"
                         checked={isIn}
-                        onChange={async () => {
-                          if (isIn) {
-                            await api.del(`/campaign-groups/${g.id}/members?campaignIds=${campaignId}`);
-                          } else {
-                            await api.post(`/campaign-groups/${g.id}/members`, { campaignIds: [campaignId] });
-                          }
-                          const groups = await api.get<CampaignGroup[]>(`/campaign-groups/by-campaign/${campaignId}`);
-                          setCampaignGroupIds(groups.map((gr) => gr.id));
-                        }}
+                        onChange={() => void toggleGroup(g.id, isIn)}
                       />
                       {g.name}
                     </label>
@@ -2666,16 +2625,10 @@ function OverviewTab({
 // visit three different tabs to piece together. Deliberately lighter than
 // Хроника игр (the full session index) — this is a summary, not a duplicate.
 function ProductionDashboard({ campaign, sessions, onSchedule }: { campaign: CampaignDetail; sessions: SessionSummary[]; onSchedule?: () => void }) {
-  const [secretsCount, setSecretsCount] = useState<number | null>(null);
-
-  useEffect(() => {
-    api
-      .get<CampaignGrouped<StorySecret>>(`/story/campaign-secrets?campaign_id=${campaign.id}`)
-      .then((data) => {
-        const all = [...data.own, ...data.groups.flatMap((g) => g.items)];
-        setSecretsCount(all.filter((s) => s.state?.revealed !== 1).length);
-      });
-  }, [campaign.id]);
+  const secrets = useResource<CampaignGrouped<StorySecret>>(campaignPaths.secrets(campaign.id)).data;
+  const secretsCount = secrets
+    ? [...secrets.own, ...secrets.groups.flatMap((g) => g.items)].filter((s) => s.state?.revealed !== 1).length
+    : null;
 
   const today = toLocalDateKey();
   const nextSession = useMemo(() => sessions
@@ -2737,10 +2690,8 @@ function ProductionDashboard({ campaign, sessions, onSchedule }: { campaign: Cam
 }
 
 function PostProductionSection({ campaign, sessions }: { campaign: CampaignDetail; sessions: SessionSummary[] }) {
-  const [postCount, setPostCount] = useState<number | null>(null);
-  useEffect(() => {
-    api.get<CampaignEntry[]>(`/campaign-entries?campaign_id=${campaign.id}&category=post_production`).then((rows) => setPostCount(rows.length)).catch(() => setPostCount(0));
-  }, [campaign.id]);
+  const post = useResource<CampaignEntry[]>(campaignPaths.entries(campaign.id, "post_production"));
+  const postCount = post.data ? post.data.length : post.error ? 0 : null;
   const hasHeld = sessions.some((s) => s.status === "held");
   if (postCount === null) {
     return (
@@ -2785,37 +2736,45 @@ function PreproductionTab({
   settingsList: Setting[];
 }) {
   const campaignId = campaign.id;
-  const [pre, setPre] = useState<Preproduction | null>(null);
-  const [originalPre, setOriginalPre] = useState<Preproduction | null>(null);
+  const run = useAction();
+  const originalPre = useResource<Preproduction>(campaignPaths.preproduction(campaignId)).data ?? null;
+  // Черновик живёт только в правке; в чтении показывается прочитанное слоем,
+  // поэтому правка из соседнего окна видна без перезагрузки.
+  const [draft, setDraft] = useState<Preproduction | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  const pre = editMode ? (draft ?? originalPre) : originalPre;
+  const setPre = setDraft;
 
-  function refresh() {
-    api.get<Preproduction>(`/campaigns/${campaignId}/preproduction`).then((p) => {
-      setPre(p);
-      setOriginalPre(p);
-    });
-  }
   useEffect(() => {
     setInitialized(false);
-    refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaignId]);
 
   useEffect(() => {
-    if (pre && !initialized) {
+    if (originalPre && !initialized) {
       const empty =
-        PREPRODUCTION_FIELDS.every((f) => !pre[f.key]) && !pre.adventure_stakes_hooks;
+        PREPRODUCTION_FIELDS.every((f) => !originalPre[f.key]) && !originalPre.adventure_stakes_hooks;
+      setDraft(originalPre);
       setEditMode(empty);
       setInitialized(true);
     }
-  }, [pre, initialized]);
+  }, [originalPre, initialized]);
 
   if (!pre) return <p className="muted">Загрузка…</p>;
 
+  function startEdit() {
+    setDraft(originalPre);
+    setEditMode(true);
+  }
+
   async function save() {
     if (!pre) return;
-    await api.put(`/campaigns/${campaignId}/preproduction`, pre);
+    const saved = await run(
+      labelled("Препродакшен", () => write.put(`/campaigns/${campaignId}/preproduction`, pre).then(() => true)),
+      { affects: [{ path: campaignPaths.preproduction(campaignId) }] }
+    );
+    // Правка остаётся открытой с набранным, если запись не прошла.
+    if (!saved) return;
     if (originalPre) {
       for (const f of PREPRODUCTION_FIELDS) {
         syncMentionLinks(
@@ -2832,7 +2791,6 @@ function PreproductionTab({
         pre.adventure_stakes_hooks ?? ""
       );
     }
-    refresh();
     setEditMode(false);
   }
 
@@ -2874,7 +2832,7 @@ function PreproductionTab({
             </div>
           )}
           <LinkDropZone entityType="preproduction" entityId={campaignId} title="Крючки (персонажи)" />
-          <button className="primary" onClick={() => setEditMode(true)} style={{ alignSelf: "flex-start" }}>
+          <button className="primary" onClick={startEdit} style={{ alignSelf: "flex-start" }}>
             Редактировать
           </button>
         </div>
@@ -2915,3 +2873,51 @@ function PreproductionTab({
     </div>
   );
 }
+
+// Загрузка обложки дольше обычной записи: файл до 15 МБ.
+const UPLOAD_TIMEOUT_MS = 120_000;
+
+/**
+ * «Основное» кампании: сохранение полей через слой. Возвращает true, если
+ * записалось; при отказе — плашка «Не сохранилось», форма остаётся с набранным.
+ * Раньше отказ (например, переименование упёрлось в папку хранилища) проходил
+ * молча.
+ */
+function useCampaignFieldsSave(campaignId: number) {
+  const run = useAction();
+  const [saving, setSaving] = useState(false);
+  async function save(partial: Record<string, unknown>): Promise<boolean> {
+    if (saving) return false;
+    setSaving(true);
+    try {
+      const saved = await run(labelled("Кампания", () => write.put(`/campaigns/${campaignId}`, partial).then(() => true)), {
+        affects: campaignFieldsAffects(campaignId),
+      });
+      return saved === true;
+    } finally {
+      setSaving(false);
+    }
+  }
+  return { save, saving };
+}
+
+/** Группы кампаний на «Обзоре»: все группы, отметки этой кампании и переключатель. */
+function useCampaignGroups(campaignId: number) {
+  const run = useAction();
+  const allGroups = useResource<CampaignGroup[]>(campaignPaths.groups()).data ?? NO_GROUPS;
+  const ofCampaign = useResource<CampaignGroup[]>(campaignPaths.groupsOf(campaignId)).data;
+  const campaignGroupIds = useMemo(() => (ofCampaign ?? []).map((g) => g.id), [ofCampaign]);
+  async function toggleGroup(groupId: number, isIn: boolean) {
+    await run(
+      labelled("Группа кампаний", () =>
+        isIn
+          ? write.del(`/campaign-groups/${groupId}/members?campaignIds=${campaignId}`)
+          : write.post(`/campaign-groups/${groupId}/members`, { campaignIds: [campaignId] })
+      ),
+      { affects: campaignGroupAffects() }
+    );
+  }
+  return { allGroups, campaignGroupIds, toggleGroup };
+}
+
+const NO_GROUPS: CampaignGroup[] = [];

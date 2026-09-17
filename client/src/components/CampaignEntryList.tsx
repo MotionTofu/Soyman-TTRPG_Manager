@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { useAction, useResource, write } from "../data/hooks";
+import { campaignEntryAffects, campaignPaths } from "../data/campaigns";
+import { labelled } from "../data/notices";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
@@ -20,17 +22,13 @@ interface Props {
   layout?: "list" | "master-detail";
 }
 
+const EMPTY: CampaignEntry[] = [];
+
 export function CampaignEntryList({ campaignId, category, addLabel, emptyLabel, defaultSettingId, layout = "list" }: Props) {
   const [confirmDialog, confirm] = useConfirm();
-  const [entries, setEntries] = useState<CampaignEntry[]>([]);
+  const run = useAction();
+  const entries = useResource<CampaignEntry[]>(campaignPaths.entries(campaignId, category)).data ?? EMPTY;
   const [selId, setSelId] = useState<number | null>(null);
-
-  function refresh() {
-    api
-      .get<CampaignEntry[]>(`/campaign-entries?campaign_id=${campaignId}&category=${category}`)
-      .then(setEntries);
-  }
-  useEffect(refresh, [campaignId, category]);
 
   // Выбор пережил удаление/перезагрузку: нет выбранной — берём первую.
   useEffect(() => {
@@ -43,13 +41,18 @@ export function CampaignEntryList({ campaignId, category, addLabel, emptyLabel, 
   }, [entries, layout]);
 
   async function addEntry() {
-    const created = await api.post<CampaignEntry>("/campaign-entries", {
-      campaign_id: campaignId,
-      category,
-      title: `Запись ${entries.length + 1}`,
-      content: "",
-    });
-    refresh();
+    // Без «Повторить»: ответ мог потеряться после записи, и повтор создал бы вторую.
+    const created = await run(
+      labelled("Новая запись", () =>
+        write.post<CampaignEntry>("/campaign-entries", {
+          campaign_id: campaignId,
+          category,
+          title: `Запись ${entries.length + 1}`,
+          content: "",
+        })
+      ),
+      { affects: campaignEntryAffects(campaignId), retry: false }
+    );
     // Сервер отдаёт созданную запись — выбираем её сразу в правке.
     if (layout === "master-detail" && created?.id) setSelId(created.id);
   }
@@ -57,8 +60,7 @@ export function CampaignEntryList({ campaignId, category, addLabel, emptyLabel, 
   async function removeEntry(id: number) {
     if (!(await confirm({ message: "Удалить запись?", confirmLabel: "Удалить", danger: true })))
       return;
-    await api.del(`/campaign-entries/${id}`);
-    refresh();
+    await run(labelled("Удаление записи", () => write.del(`/campaign-entries/${id}`)), { affects: campaignEntryAffects(campaignId) });
   }
 
   const isPostProduction = category === "post_production";
@@ -92,7 +94,6 @@ export function CampaignEntryList({ campaignId, category, addLabel, emptyLabel, 
             campaignId={campaignId}
             defaultSettingId={defaultSettingId}
             forceOpen
-            onChange={refresh}
             onRemove={removeEntry}
           />
         ) : (
@@ -116,7 +117,6 @@ export function CampaignEntryList({ campaignId, category, addLabel, emptyLabel, 
           entry={e}
           campaignId={campaignId}
           defaultSettingId={defaultSettingId}
-          onChange={refresh}
           onRemove={removeEntry}
         />
       ))}
@@ -144,14 +144,12 @@ function EntryCard({
   entry,
   campaignId,
   defaultSettingId,
-  onChange,
   onRemove,
   forceOpen = false,
 }: {
   entry: CampaignEntry;
   campaignId: number;
   defaultSettingId?: number;
-  onChange: () => void;
   onRemove: (id: number) => void;
   /** Внутри Master–Detail карточка всегда раскрыта, сворачивать нечего. */
   forceOpen?: boolean;
@@ -161,12 +159,16 @@ function EntryCard({
   const [title, setTitle] = useState(entry.title);
   const [content, setContent] = useState(entry.content);
   const open = editMode || expanded || forceOpen;
+  const run = useAction();
 
   async function save() {
-    await api.put(`/campaign-entries/${entry.id}`, { title, content });
-    syncMentionLinks("campaign", campaignId, entry.content, content);
+    // Форма закрывается только после записи: при отказе набранное остаётся.
+    const saved = await run(labelled("Запись кампании", () => write.put(`/campaign-entries/${entry.id}`, { title, content }).then(() => true)), {
+      affects: campaignEntryAffects(campaignId),
+    });
+    if (saved === undefined) return;
+    void syncMentionLinks("campaign", campaignId, entry.content, content);
     setEditMode(false);
-    onChange();
   }
 
   return (

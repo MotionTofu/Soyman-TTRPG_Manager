@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { useAfterWrite, useResource, write } from "../data/hooks";
+import { campaignGroupAffects, campaignPaths } from "../data/campaigns";
 import type { Campaign } from "../types";
 import { useAlert } from "../hooks/useConfirm";
 
@@ -11,32 +12,19 @@ interface CampaignGroupMembersModalProps {
 }
 
 export function CampaignGroupMembersModal({ groupId, groupName, onClose, onUpdated }: CampaignGroupMembersModalProps) {
-  const [allCampaigns, setAllCampaigns] = useState<Campaign[]>([]);
+  const all = useResource<Campaign[]>(campaignPaths.list());
+  const members = useResource<Campaign[]>(campaignPaths.groupMembers(groupId));
+  const allCampaigns = all.data ?? [];
+  const loading = all.loading || members.loading;
+  // Отметки держатся здесь, чтобы галочка менялась сразу, а не после ответа.
   const [memberIds, setMemberIds] = useState<Set<number>>(new Set());
-  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (members.data) setMemberIds(new Set(members.data.map((m) => m.id)));
+  }, [members.data]);
   const [saving, setSaving] = useState(false);
+  const afterWrite = useAfterWrite();
 
   const [alertDialog, showAlert] = useAlert();
-
-  useEffect(() => {
-    const controller = new AbortController();
-    async function load() {
-      try {
-        const [all, members] = await Promise.all([
-          api.get<Campaign[]>("/campaigns", { signal: controller.signal }),
-          api.get<Campaign[]>(`/campaign-groups/${groupId}/members`, { signal: controller.signal }),
-        ]);
-        setAllCampaigns(all);
-        setMemberIds(new Set(members.map((m) => m.id)));
-      } catch {
-        // silent
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-    return () => controller.abort();
-  }, [groupId]);
 
   async function toggle(campaignId: number) {
     const next = new Set(memberIds);
@@ -51,10 +39,11 @@ export function CampaignGroupMembersModal({ groupId, groupName, onClose, onUpdat
     setSaving(true);
     try {
       if (wasIn) {
-        await api.del(`/campaign-groups/${groupId}/members?campaignIds=${campaignId}`);
+        await write.del(`/campaign-groups/${groupId}/members?campaignIds=${campaignId}`);
       } else {
-        await api.post(`/campaign-groups/${groupId}/members`, { campaignIds: [campaignId] });
+        await write.post(`/campaign-groups/${groupId}/members`, { campaignIds: [campaignId] });
       }
+      afterWrite(campaignGroupAffects());
       onUpdated();
     } catch (e) {
       // revert on error

@@ -77,11 +77,14 @@ export const dataKeys = {
 /**
  * Что задела правка.
  * - `{ kind, id }` — сущность: её карточка, её подресурсы и все списки вида;
+ * - `{ kind, id, card: true }` — только поля сущности: карточка, списки вида и
+ *   ресурсы, которые её показывают, без её подресурсов. Смена валюты кампании
+ *   не должна перечитывать её сессии, хронику мира и препродакшен;
  * - `{ kind }` — весь вид;
  * - `{ path }` — произвольный ресурс: все запросы, чей путь начинается так
  *   (с границей сегмента или параметра).
  */
-export type Affect = { kind: EntityKind; id?: number } | { path: string };
+export type Affect = { kind: EntityKind; id?: number; card?: boolean } | { path: string };
 
 /**
  * Начинается ли путь с префикса по границе: сразу за префиксом конец строки,
@@ -105,13 +108,21 @@ export function pathHasPrefix(path: string, prefix: string): boolean {
  *
  * Перечитывается только открытая доска: закрытая лишь помечается устаревшей.
  */
-const RESOURCE_DEPENDENCIES: readonly { prefix: string; kinds: readonly EntityKind[] }[] = [
+const RESOURCE_DEPENDENCIES: readonly { prefix: string | RegExp; kinds: readonly EntityKind[] }[] = [
   {
     prefix: "/canvas/board",
     kinds: ["scene", "adventure", "being", "location", "artifact", "community", "setting_event", "character", "setting", "campaign"],
   },
   { prefix: "/canvas/index", kinds: ["scene", "adventure", "setting", "campaign"] },
+  // Дерево сцен, план вечера и предпросмотр на пульте показывают статусы и тексты
+  // сцен: отметка «сыграна» в профиле кампании должна дойти до открытого пульта,
+  // не перечитывая остальные его 13 панелей (группа «кампании», часть 1).
+  { prefix: /^\/sessions\/\d+\/(story-tree|planned|preview)(\/|\?|$)/, kinds: ["scene", "adventure"] },
 ];
+
+function dependsOn(path: string, prefix: string | RegExp): boolean {
+  return typeof prefix === "string" ? pathHasPrefix(path, prefix) : prefix.test(path);
+}
 
 export function matchesAffect(queryKey: QueryKey, affect: Affect): boolean {
   const [scope, a, b] = queryKey as readonly unknown[];
@@ -121,7 +132,7 @@ export function matchesAffect(queryKey: QueryKey, affect: Affect): boolean {
   if (
     scope === "resource" &&
     typeof a === "string" &&
-    RESOURCE_DEPENDENCIES.some((dep) => dep.kinds.includes(affect.kind) && pathHasPrefix(a, dep.prefix))
+    RESOURCE_DEPENDENCIES.some((dep) => dep.kinds.includes(affect.kind) && dependsOn(a, dep.prefix))
   ) {
     return true;
   }
@@ -131,7 +142,8 @@ export function matchesAffect(queryKey: QueryKey, affect: Affect): boolean {
   if (scope === "resource" && typeof a === "string") {
     if (affect.id == null) return pathHasPrefix(a, base);
     // Своя карточка и подресурсы — да; списки вида — да; чужие карточки — нет.
-    return pathHasPrefix(a, `${base}/${affect.id}`) || a === base || a.startsWith(`${base}?`);
+    const own = affect.card ? a === `${base}/${affect.id}` : pathHasPrefix(a, `${base}/${affect.id}`);
+    return own || a === base || a.startsWith(`${base}?`);
   }
   return false;
 }

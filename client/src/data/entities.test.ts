@@ -30,6 +30,27 @@ describe("что задевает правка", () => {
     expect(matchesAffect(dataKeys.resource("/setting-locations/408"), being408)).toBe(false);
   });
 
+  it("правка полей задевает карточку и списки, но не подресурсы", () => {
+    const card = { kind: "campaign", id: 2, card: true } as const;
+    expect(matchesAffect(dataKeys.resource("/campaigns/2"), card)).toBe(true);
+    expect(matchesAffect(dataKeys.resource("/campaigns"), card)).toBe(true);
+    expect(matchesAffect(dataKeys.resource("/campaigns?setting_id=1"), card)).toBe(true);
+    expect(matchesAffect(dataKeys.entity("campaign", 2), card)).toBe(true);
+    expect(matchesAffect(dataKeys.resource("/campaigns/2/sessions"), card)).toBe(false);
+    expect(matchesAffect(dataKeys.resource("/campaigns/20"), card)).toBe(false);
+    expect(matchesAffect(dataKeys.resource("/canvas/index"), card)).toBe(true);
+  });
+
+  it("отметка сцены доходит до дерева и плана пульта, но не до остальных его панелей", () => {
+    const scene = { kind: "scene", id: 114 } as const;
+    expect(matchesAffect(dataKeys.resource("/sessions/142/story-tree"), scene)).toBe(true);
+    expect(matchesAffect(dataKeys.resource("/sessions/142/story-tree?scope=setting"), scene)).toBe(true);
+    expect(matchesAffect(dataKeys.resource("/sessions/142/planned"), scene)).toBe(true);
+    expect(matchesAffect(dataKeys.resource("/sessions/142/preview/114"), scene)).toBe(true);
+    expect(matchesAffect(dataKeys.resource("/sessions/142/stage"), scene)).toBe(false);
+    expect(matchesAffect(dataKeys.resource("/sessions/142/planned-extra"), scene)).toBe(false);
+  });
+
   it("вид целиком задевает все свои карточки и ресурсы", () => {
     expect(matchesAffect(dataKeys.entity("session", 1), { kind: "session" })).toBe(true);
     expect(matchesAffect(dataKeys.resource("/sessions/151/summary"), { kind: "session" })).toBe(true);

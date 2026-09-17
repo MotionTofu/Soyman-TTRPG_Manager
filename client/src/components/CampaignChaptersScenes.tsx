@@ -1,6 +1,10 @@
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { useAction, useResource, write } from "../data/hooks";
+import { dataKeys } from "../data/entities";
+import { campaignPaths, sceneStatusAffects } from "../data/campaigns";
+import { labelled } from "../data/notices";
 import { MentionText } from "./mentions/MentionText";
 import { EmptyState } from "./EmptyState";
 import { SCENE_KIND_LABELS, SCENE_STATUSES, chapterWord, sceneWord } from "../sceneKinds";
@@ -25,6 +29,8 @@ export interface ChaptersNavStats {
   }[];
 }
 
+const EMPTY: CampaignAdventureTree[] = [];
+
 export function CampaignChaptersScenes({
   campaignId,
   settingId,
@@ -40,14 +46,9 @@ export function CampaignChaptersScenes({
   chapterId?: number | null;
   onStats?: (s: ChaptersNavStats) => void;
 }) {
-  const [tree, setTree] = useState<CampaignAdventureTree[]>([]);
-
-  const refresh = useCallback(() => {
-    api.get<CampaignAdventureTree[]>(`/story/campaign-tree?campaign_id=${campaignId}`).then(setTree);
-  }, [campaignId]);
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  const path = campaignPaths.tree(campaignId);
+  const tree = useResource<CampaignAdventureTree[]>(path).data ?? EMPTY;
+  const client = useQueryClient();
 
   // Счётчики для левой навигации Master–Detail.
   useEffect(() => {
@@ -81,8 +82,8 @@ export function CampaignChaptersScenes({
       next[i] = { ...list[i], state: { status: status as SceneStatus, note: list[i].state?.note ?? "" } };
       return next;
     };
-    setTree((prev) =>
-      prev.map((adv) => {
+    client.setQueryData<CampaignAdventureTree[]>(dataKeys.resource(path), (prev) =>
+      prev?.map((adv) => {
         const scenes = patchList(adv.scenes);
         const chapters = adv.chapters.map((c) => {
           const chScenes = patchList(c.scenes);
@@ -93,7 +94,7 @@ export function CampaignChaptersScenes({
         return { ...adv, scenes, chapters };
       })
     );
-  }, []);
+  }, [client, path]);
 
   if (settingId == null) {
     return (
@@ -211,12 +212,19 @@ const SceneList = memo(function SceneList({
 }) {
   // Смена статуса сцены правит одну строку: перечитывать всё дерево
   // приключений (у книжной кампании это сотни строк) из-за неё нельзя.
+  // Статус меняется сразу; при отказе возвращается прежний и появляется плашка.
+  const run = useAction();
   const setStatus = useCallback(
-    (scene: StoryScene, status: string) => {
+    async (scene: StoryScene, status: string) => {
+      const previous = scene.state?.status ?? "pending";
       onStatus(scene.id, status);
-      void api.put(`/story/scenes/${scene.id}/state`, { campaign_id: campaignId, status });
+      const saved = await run(
+        labelled("Статус сцены", () => write.put(`/story/scenes/${scene.id}/state`, { campaign_id: campaignId, status }).then(() => true)),
+        { affects: sceneStatusAffects(campaignId, scene.id) }
+      );
+      if (!saved) onStatus(scene.id, previous);
     },
-    [campaignId, onStatus]
+    [campaignId, onStatus, run]
   );
 
   return (
