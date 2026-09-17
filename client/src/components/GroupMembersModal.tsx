@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { useAfterWrite, useResource, write } from "../data/hooks";
 import type { Setting } from "../types";
 import { useAlert } from "../hooks/useConfirm";
 
@@ -11,32 +11,19 @@ interface GroupMembersModalProps {
 }
 
 export function GroupMembersModal({ groupId, groupName, onClose, onUpdated }: GroupMembersModalProps) {
-  const [allSettings, setAllSettings] = useState<Setting[]>([]);
+  const all = useResource<Setting[]>("/settings");
+  const members = useResource<Setting[]>(`/setting-groups/${groupId}/members`);
+  const allSettings = all.data ?? [];
+  const loading = all.loading || members.loading;
+  // Отметки держатся здесь, чтобы галочка менялась сразу, а не после ответа.
   const [memberIds, setMemberIds] = useState<Set<number>>(new Set());
-  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (members.data) setMemberIds(new Set(members.data.map((m) => m.id)));
+  }, [members.data]);
   const [saving, setSaving] = useState(false);
+  const afterWrite = useAfterWrite();
 
   const [alertDialog, showAlert] = useAlert();
-
-  useEffect(() => {
-    const controller = new AbortController();
-    async function load() {
-      try {
-        const [all, members] = await Promise.all([
-          api.get<Setting[]>("/settings", { signal: controller.signal }),
-          api.get<Setting[]>(`/setting-groups/${groupId}/members`, { signal: controller.signal }),
-        ]);
-        setAllSettings(all);
-        setMemberIds(new Set(members.map((m) => m.id)));
-      } catch {
-        // silent
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-    return () => controller.abort();
-  }, [groupId]);
 
   async function toggle(settingId: number) {
     const next = new Set(memberIds);
@@ -51,10 +38,11 @@ export function GroupMembersModal({ groupId, groupName, onClose, onUpdated }: Gr
     setSaving(true);
     try {
       if (wasIn) {
-        await api.del(`/setting-groups/${groupId}/members?settingIds=${settingId}`);
+        await write.del(`/setting-groups/${groupId}/members?settingIds=${settingId}`);
       } else {
-        await api.post(`/setting-groups/${groupId}/members`, { settingIds: [settingId] });
+        await write.post(`/setting-groups/${groupId}/members`, { settingIds: [settingId] });
       }
+      afterWrite([{ path: "/setting-groups" }]);
       onUpdated();
     } catch (e) {
       // revert on error

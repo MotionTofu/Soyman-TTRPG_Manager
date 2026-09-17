@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { api } from "../api/client";
 import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
 import type { Affect } from "../data/entities";
 import { LoadErrorCard } from "../components/Loadable";
@@ -19,6 +18,7 @@ import { downloadJson } from "../downloadJson";
 import { ExportProgress } from "../components/ExportProgress";
 import { useLongPress } from "../hooks/useLongPress";
 import { useUndoDelete } from "../hooks/useUndoDelete";
+import { readOnce } from "../data/imperative";
 
 // «Действующие лица» и «Награды» убраны с профиля: список действующих лиц
 // собирался из связей сцен и информационной пользы не нёс, а награды книги без
@@ -91,7 +91,7 @@ export function AdventureDetailPage() {
     setExportBusy(true);
     setExportError(null);
     try {
-      const data = await api.get(`/story/arcs/${arcId}/export`, { timeoutMs: 120000 });
+      const data = await readOnce(`/story/arcs/${arcId}/export`, { timeoutMs: 120000 });
       downloadJson(data, `adventure-${arc.name}.json`);
     } catch (e) {
       setExportError(e instanceof Error ? e.message : String(e));

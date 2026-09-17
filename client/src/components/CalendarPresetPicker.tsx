@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { useResource } from "../data/hooks";
 
 // Заготовка календаря при создании сеттинга.
 //
@@ -37,6 +36,8 @@ interface PresetInfo {
   era: string | null;
 }
 
+const NO_PRESETS: PresetInfo[] = [];
+
 export function CalendarPresetPicker({
   value,
   onChange,
@@ -44,13 +45,8 @@ export function CalendarPresetPicker({
   value: CalendarChoice;
   onChange: (v: CalendarChoice) => void;
 }) {
-  const [presets, setPresets] = useState<PresetInfo[]>([]);
-  useEffect(() => {
-    api
-      .get<PresetInfo[]>("/settings/calendar-presets")
-      .then(setPresets)
-      .catch(() => setPresets([]));
-  }, []);
+  // Пресеты — справочник сервера, за сессию не меняются.
+  const presets = useResource<PresetInfo[]>("/settings/calendar-presets", { staleMs: Infinity }).data ?? NO_PRESETS;
 
   const chosen = presets.find((p) => p.key === value.preset);
   const set = (patch: Partial<CalendarChoice>) => onChange({ ...value, ...patch });

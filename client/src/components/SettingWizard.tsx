@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { useAfterWrite, write } from "../data/hooks";
 import { Modal } from "./Modal";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { syncMentionLinks } from "../mentions";
@@ -61,6 +61,7 @@ const newKey = () => nextKey++;
 
 export function SettingWizard({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
+  const afterWrite = useAfterWrite();
   const [stepIndex, setStepIndex] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -136,7 +137,7 @@ export function SettingWizard({ onClose }: { onClose: () => void }) {
           community_keys: b.communityKeys.filter((k) => liveCommunityKeys.has(k)),
         }));
 
-      const created = await api.post<Setting>("/settings/wizard", {
+      const created = await write.post<Setting>("/settings/wizard", {
         name: name.trim(),
         description,
         calendar,
@@ -153,10 +154,11 @@ export function SettingWizard({ onClose }: { onClose: () => void }) {
         for (const kind of ["background", "thumbnail"] as const) {
           const form = new FormData();
           form.append("file", cover);
-          await api.post(`/settings/${created.id}/${kind}`, form).catch(() => undefined);
+          await write.post(`/settings/${created.id}/${kind}`, form, { timeoutMs: 120_000 }).catch(() => undefined);
         }
       }
 
+      afterWrite([{ kind: "setting" }]);
       if (then === "setting") navigate(`/settings/${created.id}`);
       onClose();
     } catch (e) {

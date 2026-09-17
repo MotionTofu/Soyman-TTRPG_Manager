@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { useAction, useResource, write } from "../data/hooks";
+import { dataKeys } from "../data/entities";
+import { labelled } from "../data/notices";
 import { MentionTextarea } from "../components/mentions/MentionTextarea";
 import { MentionText } from "../components/mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
@@ -9,6 +12,12 @@ import { SectionBackground } from "../components/SectionBackground";
 import type { MasteringNote, MasteringSection, System } from "../types";
 import { NavIcon } from "../components/NavIcons";
 import { useConfirm } from "../hooks/useConfirm";
+
+const NO_NOTES: MasteringNote[] = [];
+const NO_SECTIONS: MasteringSection[] = [];
+const NO_SYSTEMS: System[] = [];
+/** Любая правка заметки или раздела: списки и разделы всех категорий, счётчик меню. */
+const MASTERING_AFFECTS = [{ kind: "mastering" as const }];
 
 const CATEGORIES: { key: MasteringNote["category"]; label: string }[] = [
   { key: "prep", label: "Подготовка" },
@@ -67,11 +76,19 @@ type SortMode = "date" | "az";
 export function MasteringPage() {
   const [confirmDialog, confirm] = useConfirm();
   const [category, setCategory] = useState<MasteringNote["category"]>("prep");
-  const [notes, setNotes] = useState<MasteringNote[]>([]);
-  const [sections, setSections] = useState<MasteringSection[]>([]);
-  const [systems, setSystems] = useState<System[]>([]);
   const [query, setQuery] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("date");
+  const client = useQueryClient();
+  const run = useAction();
+  const notesParams = new URLSearchParams();
+  notesParams.set("category", category);
+  if (query.trim()) notesParams.set("q", query.trim());
+  if (sortMode) notesParams.set("sort", sortMode);
+  const notesPath = `/mastering?${notesParams.toString()}`;
+  // Прежний список держится, пока набирается поиск или меняется сортировка.
+  const notes = useResource<MasteringNote[]>(notesPath, { keepPrevious: true }).data ?? NO_NOTES;
+  const sections = useResource<MasteringSection[]>(`/mastering/sections?category=${category}`).data ?? NO_SECTIONS;
+  const systems = useResource<System[]>("/systems").data ?? NO_SYSTEMS;
   const [systemFilters, setSystemFilters] = useState<Set<number | null>>(new Set());
 
   function toggleSystemFilter(id: number | null) {
@@ -104,60 +121,52 @@ export function MasteringPage() {
     });
   }
 
-  function refreshSections() {
-    api.get<MasteringSection[]>(`/mastering/sections?category=${category}`).then(setSections);
-  }
-  function refreshNotes() {
-    const params = new URLSearchParams();
-    params.set("category", category);
-    if (query.trim()) params.set("q", query.trim());
-    if (sortMode) params.set("sort", sortMode);
-    api.get<MasteringNote[]>(`/mastering?${params.toString()}`).then(setNotes);
-  }
-  function refresh() {
-    refreshSections();
-    refreshNotes();
-  }
-  useEffect(refresh, [category, query, sortMode]);
-  useEffect(() => {
-    api.get<System[]>("/systems").then(setSystems);
-  }, []);
-
   async function create() {
     if (!title.trim()) return;
-    await api.post("/mastering", {
-      category,
-      title: title.trim(),
-      content,
-      system_id: systemId ? Number(systemId) : null,
-      section_id: sectionId ? Number(sectionId) : null,
-    });
+    const created = await run(
+      labelled("Новая заметка", () =>
+        write.post<{ id: number }>("/mastering", {
+          category,
+          title: title.trim(),
+          content,
+          system_id: systemId ? Number(systemId) : null,
+          section_id: sectionId ? Number(sectionId) : null,
+        })
+      ),
+      { affects: MASTERING_AFFECTS, retry: false }
+    );
+    if (!created) return;
     setTitle("");
     setContent("");
     setSystemId("");
     setSectionId("");
     setAddOpen(false);
-    refreshNotes();
   }
 
   async function createSection() {
     if (!sectionName.trim()) return;
-    await api.post("/mastering/sections", {
-      category,
-      name: sectionName.trim(),
-      system_id: sectionSystemId ? Number(sectionSystemId) : null,
-    });
+    const created = await run(
+      labelled("Новый раздел", () =>
+        write.post<{ id: number }>("/mastering/sections", {
+          category,
+          name: sectionName.trim(),
+          system_id: sectionSystemId ? Number(sectionSystemId) : null,
+        })
+      ),
+      { affects: MASTERING_AFFECTS, retry: false }
+    );
+    if (!created) return;
     setSectionName("");
     setSectionSystemId("");
     setAddSectionOpen(false);
-    refreshSections();
   }
 
   async function archiveNote(id: number) {
     if (!(await confirm({ message: "Отправить заметку в архив?", confirmLabel: "Архивировать", danger: true })))
       return;
-    await api.del(`/mastering/${id}`);
-    refreshNotes();
+    await run(labelled("Заметка не архивирована", () => write.del(`/mastering/${id}`)), {
+      affects: [...MASTERING_AFFECTS, { path: "/archive" }],
+    });
   }
 
   const activeFilters = systemFilters.size + (query.trim() ? 1 : 0);
@@ -197,11 +206,18 @@ export function MasteringPage() {
       return;
     }
     const did = draggedId;
-    setNotes((prev) => prev.map((n) => (n.id === did ? { ...n, section_id: targetSectionId } : n)));
+    // Заметка переезжает сразу; при отказе слой перечитает список — она вернётся.
+    const key = dataKeys.resource(notesPath);
+    await client.cancelQueries({ queryKey: key });
+    client.setQueryData<MasteringNote[]>(key, (prev) =>
+      prev?.map((n) => (n.id === did ? { ...n, section_id: targetSectionId } : n))
+    );
     setDraggedId(null);
     setDragOverSection(null);
-    await api.put(`/mastering/${did}`, { section_id: targetSectionId });
-    refreshNotes();
+    const moved = await run(labelled("Заметка не перенесена", () => write.put(`/mastering/${did}`, { section_id: targetSectionId })), {
+      affects: MASTERING_AFFECTS,
+    });
+    if (moved === undefined) void client.invalidateQueries({ queryKey: key });
   }
 
 
@@ -440,7 +456,6 @@ export function MasteringPage() {
                 onDragOverSection={setDragOverSection}
                 onDropToSection={handleDropToSection}
                 query={query}
-                onChange={refresh}
                 onArchive={archiveNote}
               />
             );
@@ -462,7 +477,6 @@ export function MasteringPage() {
               onDragOverSection={setDragOverSection}
               onDropToSection={handleDropToSection}
               query={query}
-              onChange={refresh}
               onArchive={archiveNote}
             />
           )}
@@ -488,7 +502,6 @@ function MasteringSectionBlock({
   onDragOverSection,
   onDropToSection,
   query,
-  onChange,
   onArchive,
 }: {
   section: MasteringSection | null;
@@ -505,10 +518,10 @@ function MasteringSectionBlock({
   onDragOverSection: (v: number | "unsectioned" | null) => void;
   onDropToSection: (sectionId: number | null) => void;
   query: string;
-  onChange: () => void;
   onArchive: (id: number) => void;
 }) {
   void onAddNote;
+  const run = useAction();
   const [editMode, setEditMode] = useState(false);
   const [name, setName] = useState(section?.name ?? "");
   const [systemId, setSystemId] = useState(section?.system_id ? String(section.system_id) : "");
@@ -535,33 +548,41 @@ function MasteringSectionBlock({
 
   async function saveSection() {
     if (!section || !name.trim()) return;
-    await api.put(`/mastering/sections/${section.id}`, {
-      name: name.trim(),
-      system_id: systemId ? Number(systemId) : null,
-    });
+    const saved = await run(
+      labelled("Раздел", () =>
+        write.put(`/mastering/sections/${section.id}`, { name: name.trim(), system_id: systemId ? Number(systemId) : null })
+      ),
+      { affects: MASTERING_AFFECTS }
+    );
+    if (saved === undefined) return;
     setEditMode(false);
-    onChange();
   }
   async function deleteSection() {
     if (!section || !confirm(`Удалить раздел «${section.name}»? Заметки уйдут в «Без раздела».`)) return;
-    await api.del(`/mastering/sections/${section.id}`);
-    onChange();
+    await run(labelled("Раздел не удалён", () => write.del(`/mastering/sections/${section.id}`)), {
+      affects: MASTERING_AFFECTS,
+    });
   }
 
   async function inlineCreate() {
     if (!inlineTitle.trim()) return;
-    await api.post("/mastering", {
-      category,
-      title: inlineTitle.trim(),
-      content: inlineContent,
-      system_id: inlineSystemId ? Number(inlineSystemId) : null,
-      section_id: section ? section.id : null,
-    });
+    const created = await run(
+      labelled("Новая заметка", () =>
+        write.post<{ id: number }>("/mastering", {
+          category,
+          title: inlineTitle.trim(),
+          content: inlineContent,
+          system_id: inlineSystemId ? Number(inlineSystemId) : null,
+          section_id: section ? section.id : null,
+        })
+      ),
+      { affects: MASTERING_AFFECTS, retry: false }
+    );
+    if (!created) return;
     setInlineTitle("");
     setInlineContent("");
     setInlineSystemId("");
     setInlineOpen(false);
-    onChange();
   }
 
   const isUnsectioned = section == null;
@@ -612,7 +633,6 @@ function MasteringSectionBlock({
                 draggedId={draggedId}
                 onDragStart={onDragStart}
                 query={query}
-                onChange={onChange}
                 onArchive={onArchive}
               />
             ))
@@ -774,7 +794,6 @@ function MasteringSectionBlock({
               draggedId={draggedId}
               onDragStart={onDragStart}
               query={query}
-              onChange={onChange}
               onArchive={onArchive}
             />
           ))
@@ -793,7 +812,6 @@ export function NoteCard({
   draggedId,
   onDragStart,
   query,
-  onChange,
   onArchive,
 }: {
   note: MasteringNote;
@@ -804,9 +822,9 @@ export function NoteCard({
   draggedId: number | null;
   onDragStart: (id: number | null) => void;
   query: string;
-  onChange: () => void;
   onArchive: (id: number) => void;
 }) {
+  const run = useAction();
   const [editMode, setEditMode] = useState(false);
   const expanded = isExpanded;
   const [title, setTitle] = useState(note.title);
@@ -816,16 +834,21 @@ export function NoteCard({
 
   async function save() {
     if (!title.trim()) return;
-    await api.put(`/mastering/${note.id}`, {
-      title: title.trim(),
-      content,
-      system_id: systemId ? Number(systemId) : null,
-      section_id: sectionId ? Number(sectionId) : null,
-    });
+    const saved = await run(
+      labelled("Заметка", () =>
+        write.put(`/mastering/${note.id}`, {
+          title: title.trim(),
+          content,
+          system_id: systemId ? Number(systemId) : null,
+          section_id: sectionId ? Number(sectionId) : null,
+        })
+      ),
+      { affects: MASTERING_AFFECTS }
+    );
+    if (saved === undefined) return;
     syncMentionLinks("mastering", note.id, note.content, content);
     setEditMode(false);
     if (expanded) onToggle(note.id);
-    onChange();
   }
 
   const showSystem = note.system_name;

@@ -1,6 +1,5 @@
 import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { api } from "../api/client";
 import { useAction, useResource, write } from "../data/hooks";
 import { labelled } from "../data/notices";
 import { systemFieldsAffects, systemGroupAffects, systemNameAffects, systemPaths } from "../data/systems";
@@ -20,6 +19,7 @@ import { EntityPage } from "../components/EntityPage";
 import { SectionBackground } from "../components/SectionBackground";
 import { EntityImageSlot } from "../components/EntityImageSlot";
 import { useAlert, useConfirm } from "../hooks/useConfirm";
+import { readOnce } from "../data/imperative";
 
 export function SystemDetailPage() {
   const { id } = useParams();
@@ -151,7 +151,7 @@ export function SystemDetailPage() {
     setExportBusy(true);
     setExportError(null);
     try {
-      const data = await api.get(`/systems/${systemId}/export${withImages ? "?images=1" : ""}`, {
+      const data = await readOnce(`/systems/${systemId}/export${withImages ? "?images=1" : ""}`, {
         timeoutMs: 120000,
       });
       downloadJson(data, `system-${system!.name}.json`);

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { useAfterWrite, write } from "../data/hooks";
 import { Modal } from "./Modal";
 import type { System } from "../types";
 
@@ -10,6 +10,7 @@ interface Props {
 }
 
 export function SystemOnboardingModal({ onClose, onCreated }: Props) {
+  const afterWrite = useAfterWrite();
   const navigate = useNavigate();
   const [mode, setMode] = useState<"choose" | "import" | "create" | "success">("choose");
   const [name, setName] = useState("");
@@ -32,7 +33,8 @@ export function SystemOnboardingModal({ onClose, onCreated }: Props) {
       // Импорт пишет сотни записей + backfill сводок — длинный таймаут.
       const form = new FormData();
       form.append("file", file, file.name);
-      const created = await api.post<System>("/systems/import-file", form, { timeoutMs: 600000 });
+      const created = await write.post<System>("/systems/import-file", form, { timeoutMs: 600000 });
+      afterWrite([{ kind: "system" }]);
       setSuccessId(created.id);
       setMode("success");
       onCreated();
@@ -51,11 +53,12 @@ export function SystemOnboardingModal({ onClose, onCreated }: Props) {
     setCreating(true);
     setError(null);
     try {
-      const created = await api.post<System>("/systems", {
+      const created = await write.post<System>("/systems", {
         name: name.trim(),
         description,
         template: dnd ? "dnd" : undefined,
       });
+      afterWrite([{ kind: "system" }]);
       setSuccessId(created.id);
       setMode("success");
       onCreated();

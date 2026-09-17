@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { api } from "../api/client";
+import { useAction, write } from "../data/hooks";
+import { labelled } from "../data/notices";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { syncMentionLinks } from "../mentions";
 import { NavIcon } from "./NavIcons";
@@ -16,7 +17,6 @@ const IMAGE_EXT = /\.(jpe?g|png|gif|webp)$/i;
 // flex-строка с flex-wrap, и колонка кнопок ехала за длиной имени.
 interface Props {
   resource: Resource;
-  onChange: () => void;
   onArchive: (id: number) => void;
   allSettings: Setting[];
 }
@@ -39,7 +39,8 @@ function formatDate(iso: string | null | undefined): string {
 // строку и переделали. Остальные считаются в «+N».
 const TAGS_SHOWN = 3;
 
-export function ResourceRow({ resource, onChange, onArchive, allSettings }: Props) {
+export function ResourceRow({ resource, onArchive, allSettings }: Props) {
+  const run = useAction();
   const [editMode, setEditMode] = useState(false);
   const [name, setName] = useState(resource.name);
   const [linkUrl, setLinkUrl] = useState(resource.link_url ?? "");
@@ -47,10 +48,13 @@ export function ResourceRow({ resource, onChange, onArchive, allSettings }: Prop
   const [notes, setNotes] = useState(resource.notes);
 
   async function save() {
-    await api.put(`/resources/${resource.id}`, { name, link_url: linkUrl, tags, notes });
+    const saved = await run(
+      labelled("Ресурс", () => write.put(`/resources/${resource.id}`, { name, link_url: linkUrl, tags, notes })),
+      { affects: [{ kind: "resource", id: resource.id }] }
+    );
+    if (saved === undefined) return;
     syncMentionLinks("resource", resource.id, resource.notes, notes);
     setEditMode(false);
-    onChange();
   }
 
   const href = resource.link_url || resource.file_url || null;
@@ -121,7 +125,6 @@ export function ResourceRow({ resource, onChange, onArchive, allSettings }: Prop
             homeSettingId={resource.setting_id}
             linkedSettingIds={resource.also_in_settings ?? []}
             allSettings={allSettings}
-            onChange={onChange}
           />
           <button
             type="button"

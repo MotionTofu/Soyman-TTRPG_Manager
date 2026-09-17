@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { afterWriteAnywhere } from "../data/imperative";
+import { write } from "../data/hooks";
 import { Modal } from "./Modal";
 import { SettingWizard } from "./SettingWizard";
 import type { Setting } from "../types";
@@ -26,7 +27,8 @@ export function SettingOnboardingModal({ onClose, onRefresh }: Props) {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      const created = await api.post<Setting>("/settings/import", data);
+      const created = await write.post<Setting>("/settings/import", data, { timeoutMs: 120_000 });
+      afterWriteAnywhere([{ kind: "setting" }]);
       setSuccessId(created.id);
       setMode("success");
       onRefresh();

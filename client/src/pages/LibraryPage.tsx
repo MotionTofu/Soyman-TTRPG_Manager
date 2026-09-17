@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { useResource } from "../data/hooks";
 import { SectionHeading } from "../components/SectionHeading";
 import { EmptyState } from "../components/EmptyState";
 import { cardThumbnailProps, loadThumbnailStyles } from "../thumbnailStyles";
@@ -32,18 +31,17 @@ function ListAvatar({ url }: { url: string | null | undefined }) {
   );
 }
 
+const NO_CAMPAIGNS: Campaign[] = [];
+const NO_SETTINGS: Setting[] = [];
+const NO_SYSTEMS: System[] = [];
+
 export function LibraryPage() {
   const navigate = useNavigate();
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [settings, setSettings] = useState<Setting[]>([]);
-  const [systems, setSystems] = useState<System[]>([]);
+  const campaigns = useResource<Campaign[]>("/campaigns").data ?? NO_CAMPAIGNS;
+  const settings = useResource<Setting[]>("/settings").data ?? NO_SETTINGS;
+  const systems = useResource<System[]>("/systems").data ?? NO_SYSTEMS;
   const thumbnailStyles = loadThumbnailStyles();
 
-  useEffect(() => {
-    api.get<Campaign[]>("/campaigns").then(setCampaigns);
-    api.get<Setting[]>("/settings").then(setSettings);
-    api.get<System[]>("/systems").then(setSystems);
-  }, []);
 
   // Server already sorts campaigns by next_planned_date (see campaigns.ts).
   const upcoming = campaigns.filter((c) => c.next_planned_date);

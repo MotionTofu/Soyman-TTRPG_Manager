@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { useResource } from "../data/hooks";
 import { NavIcon } from "./NavIcons";
 import { CampaignWizard } from "./CampaignWizard";
 import type { Setting, System } from "../types";
@@ -8,26 +8,15 @@ import type { Setting, System } from "../types";
 // Плитка «Новая кампания» — занимает четвёртый слот в ряду кампаний на главной.
 // Ведёт себя как обычный CampaignCoverTile, но при клике проверяет наличие
 // систем и сеттингов и открывает соответствующий визард.
+const NO_SYSTEMS: System[] = [];
+const NO_SETTINGS: Setting[] = [];
+
 export function CreateCampaignTile() {
   const navigate = useNavigate();
-  const [systems, setSystems] = useState<System[]>([]);
-  const [settings, setSettings] = useState<Setting[]>([]);
-  const [_loaded, setLoaded] = useState(false);
+  const systems = useResource<System[]>("/systems").data ?? NO_SYSTEMS;
+  const settings = useResource<Setting[]>("/settings").data ?? NO_SETTINGS;
   const [showWizard, setShowWizard] = useState(false);
   const [showMissing, setShowMissing] = useState<"systems" | "settings" | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    Promise.allSettled([
-      api.get<System[]>("/systems", { signal: controller.signal } as RequestInit),
-      api.get<Setting[]>("/settings", { signal: controller.signal } as RequestInit),
-    ]).then(([sysRes, setRes]) => {
-      if (sysRes.status === "fulfilled") setSystems(sysRes.value);
-      if (setRes.status === "fulfilled") setSettings(setRes.value);
-      setLoaded(true);
-    });
-    return () => controller.abort();
-  }, []);
 
   function handleClick() {
     if (systems.length === 0) {

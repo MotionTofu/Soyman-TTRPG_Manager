@@ -21,7 +21,7 @@ describe("переведённые страницы", () => {
       expect(isMigratedRoute(`/${base}/12`)).toBe(true);
     }
     expect(isMigratedRoute("/settings/1")).toBe(true);
-    expect(isMigratedRoute("/settings")).toBe(false);
+    expect(isMigratedRoute("/settings")).toBe(true);
     expect(isMigratedRoute("/canvas")).toBe(true);
     expect(isMigratedRoute("/canvas/board")).toBe(false);
   });
@@ -34,7 +34,16 @@ describe("переведённые страницы", () => {
     expect(isMigratedRoute("/cabinet")).toBe(true);
     expect(isMigratedRoute("/systems")).toBe(true);
     expect(isMigratedRoute("/systems/5")).toBe(true);
-    expect(isMigratedRoute("/import-system")).toBe(false);
+    expect(isMigratedRoute("/import-system")).toBe(true);
+  });
+
+  it("игроки, главная и инструменты Мастера переведены, ресурсы и карты — ещё нет", () => {
+    for (const path of ["/", "/players", "/players/4", "/invitations", "/sheets", "/library", "/mastering", "/graph/world", "/import"]) {
+      expect(isMigratedRoute(path)).toBe(true);
+    }
+    expect(isMigratedRoute("/resources")).toBe(false);
+    expect(isMigratedRoute("/maps")).toBe(false);
+    expect(isMigratedRoute("/health")).toBe(false);
   });
 
   it("соседние адреса не цепляются префиксом", () => {

@@ -9,10 +9,10 @@
 // импортами человек правил компендиум руками, и он должен видеть, чего это
 // коснётся, до того как нажмёт.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { api } from "../api/client";
-import { afterWriteAnywhere } from "../data/imperative";
+import { useAction, useResource, write } from "../data/hooks";
+import { labelled } from "../data/notices";
 import { SectionHeading } from "../components/SectionHeading";
 import type { System } from "../types";
 
@@ -107,6 +107,10 @@ function countsLine(counts: Record<string, number>): string {
     .join(", ");
 }
 
+const NO_SYSTEMS: System[] = [];
+const NO_BATCHES: Batch[] = [];
+const NO_KEYS: KeyEntry[] = [];
+
 export function ImportSystemPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -114,7 +118,8 @@ export function ImportSystemPage() {
   const [systemId, setSystemId] = useState<number | null>(
     systemParam ? Number(systemParam) : null
   );
-  const [systems, setSystems] = useState<System[]>([]);
+  const run = useAction();
+  const systems = useResource<System[]>("/systems").data ?? NO_SYSTEMS;
 
   const [fileName, setFileName] = useState("");
   const [raw, setRaw] = useState<unknown>(null);
@@ -125,27 +130,11 @@ export function ImportSystemPage() {
   // ключ файла → id записи компендиума, с которой человек его связал
   const [bind, setBind] = useState<Record<string, number>>({});
   const [result, setResult] = useState<ApplyResponse | null>(null);
-  const [batches, setBatches] = useState<Batch[]>([]);
-  const [keys, setKeys] = useState<KeyEntry[]>([]);
+  const batches = useResource<Batch[]>(`/system-import/batches${systemId ? `?system_id=${systemId}` : ""}`).data ?? NO_BATCHES;
+  const keys = useResource<KeyEntry[]>(systemId ? `/system-import/keys?system_id=${systemId}` : null).data ?? NO_KEYS;
   const [keysOpen, setKeysOpen] = useState(false);
   const [copyState, setCopyState] = useState<"idle" | "done" | "failed">("idle");
   const keysRef = useRef<HTMLPreElement>(null);
-
-  useEffect(() => {
-    api.get<System[]>("/systems").then(setSystems);
-  }, []);
-
-  const loadBatches = useCallback(() => {
-    const query = systemId ? `?system_id=${systemId}` : "";
-    api.get<Batch[]>(`/system-import/batches${query}`).then(setBatches);
-  }, [systemId]);
-  useEffect(loadBatches, [loadBatches]);
-
-  const loadKeys = useCallback(() => {
-    if (!systemId) return setKeys([]);
-    api.get<KeyEntry[]>(`/system-import/keys?system_id=${systemId}`).then(setKeys);
-  }, [systemId]);
-  useEffect(loadKeys, [loadKeys, result]);
 
   const keysText = useMemo(
     () => keys.map((k) => `${k.key} — ${k.name} (${KIND_LABELS[k.kind] ?? k.kind})`).join("\n"),
@@ -180,10 +169,12 @@ export function ImportSystemPage() {
   const requestPlan = useCallback(async (data: unknown, target: number | null) => {
     setBusy(true);
     try {
-      const response = await api.post<ValidateResponse>("/system-import/validate", {
-        data,
-        system_id: target,
-      });
+      // Сверка — чтение, хоть и POST: без сигнала, иначе она сносила бы кэш слоя.
+      const response = await write.post<ValidateResponse>(
+        "/system-import/validate",
+        { data, system_id: target },
+        { timeoutMs: 120_000 }
+      );
       setPlan(response);
       setSkip({});
       // Уверенная догадка (совпал английский оригинал в скобках) проставляется
@@ -262,7 +253,8 @@ export function ImportSystemPage() {
     if (!raw || !plan?.ok) return;
     setBusy(true);
     try {
-      const response = await api.post<ApplyResponse>("/system-import/apply", {
+      // Импорт мог создать систему и переписать её записи и листы — задето всё.
+      const response = await run(labelled("Импорт книги правил", () => write.post<ApplyResponse>("/system-import/apply", {
         data: raw,
         system_id: systemId,
         file_name: fileName,
@@ -270,13 +262,10 @@ export function ImportSystemPage() {
           .filter(([, on]) => on)
           .map(([key]) => key),
         bind,
-      });
-      // Импорт мог создать систему и переписать её записи: список систем и
-      // всё под ней (разделы, записи, пикеры листа) — устаревшие.
-      afterWriteAnywhere([{ path: "/systems" }]);
+      }, { timeoutMs: 600_000 })), { affects: [], retry: false });
+      if (!response) return;
       setResult(response);
       setSystemId(response.system_id);
-      loadBatches();
     } finally {
       setBusy(false);
     }
@@ -289,11 +278,12 @@ export function ImportSystemPage() {
       )
     )
       return;
-    await api.del(`/system-import/batches/${batchId}`);
-    afterWriteAnywhere([{ path: "/systems" }]);
+    const done = await run(
+      labelled("Импорт не откачен", () => write.del(`/system-import/batches/${batchId}`, { timeoutMs: 120_000 })),
+      { affects: [] }
+    );
+    if (done === undefined) return;
     if (result?.batch_id === batchId) setResult(null);
-    loadBatches();
-    loadKeys();
   }
 
   const system = systems.find((s) => s.id === systemId) ?? null;

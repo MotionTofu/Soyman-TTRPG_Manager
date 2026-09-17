@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { useMemo, useState } from "react";
+import { useAction, useResource, write } from "../data/hooks";
+import { labelled } from "../data/notices";
 import { emptyChallenge, LitMChallengeEdit, LitMChallengeView } from "./litm/LitMChallengeForm";
 import { emptyCreature, normalizeDndCreature, DndCreatureView } from "./dnd/DndCreatureForm";
 import { MentionText } from "./mentions/MentionText";
@@ -29,7 +30,11 @@ interface Props {
 // just scoped to a different system_id filter.
 export function TemplatesTab({ systemId }: Props) {
   const [confirmDialog, confirm] = useConfirm();
-  const [resources, setResources] = useState<Resource[]>([]);
+  const run = useAction();
+  const templateParams = new URLSearchParams({ scope: "global", type: TEMPLATE_TYPE });
+  if (systemId) templateParams.set("system_id", String(systemId));
+  const all = useResource<Resource[]>(`/resources?${templateParams.toString()}`).data;
+  const resources = useMemo(() => (all ? (systemId ? all : all.filter((r) => !r.system_id)) : []), [all, systemId]);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [templateName, setTemplateName] = useState("");
   const [templateKind, setTemplateKind] = useState<"short" | "full">("full");
@@ -37,16 +42,6 @@ export function TemplatesTab({ systemId }: Props) {
   const [templateFormat, setTemplateFormat] = useState<StatblockFormat>("text");
   const [challengeDraft, setChallengeDraft] = useState<LitMChallengeData>(emptyChallenge());
   const [creatureDraft, setCreatureDraft] = useState<DndCreatureData>(emptyCreature());
-
-  function refresh() {
-    const params = new URLSearchParams({ scope: "global", type: TEMPLATE_TYPE });
-    if (systemId) params.set("system_id", String(systemId));
-    api.get<Resource[]>(`/resources?${params.toString()}`).then((all) =>
-      setResources(systemId ? all : all.filter((r) => !r.system_id))
-    );
-  }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(refresh, [systemId]);
 
   function resetForm() {
     setEditingId(null);
@@ -82,12 +77,19 @@ export function TemplatesTab({ systemId }: Props) {
           : templateFormat === "dnd_creature"
           ? JSON.stringify(creatureDraft)
           : templateContent;
-      await api.put(`/resources/${editingId}`, {
-        name: templateName,
-        template_format: templateFormat,
-        template_kind: templateFormat === "text" ? templateKind : "full",
-        notes,
-      });
+      const id = editingId;
+      const saved = await run(
+        labelled("Шаблон", () =>
+          write.put(`/resources/${id}`, {
+            name: templateName,
+            template_format: templateFormat,
+            template_kind: templateFormat === "text" ? templateKind : "full",
+            notes,
+          })
+        ),
+        { affects: [{ kind: "resource", id }] }
+      );
+      if (saved === undefined) return;
     } else {
       const form = new FormData();
       form.append("name", templateName);
@@ -105,18 +107,22 @@ export function TemplatesTab({ systemId }: Props) {
         form.append("notes", templateContent);
       }
       if (systemId) form.append("system_id", String(systemId));
-      await api.post("/resources", form);
+      const created = await run(labelled("Новый шаблон", () => write.post("/resources", form)), {
+        affects: [{ kind: "resource" }],
+        retry: false,
+      });
+      if (created === undefined) return;
     }
     resetForm();
-    refresh();
   }
 
   async function archiveResource(id: number) {
     if (!(await confirm({ message: "Удалить шаблон?", confirmLabel: "Удалить", danger: true })))
       return;
-    await api.del(`/resources/${id}`);
-    if (editingId === id) resetForm();
-    refresh();
+    const done = await run(labelled("Шаблон не удалён", () => write.del(`/resources/${id}`)), {
+      affects: [{ kind: "resource" }, { path: "/archive" }],
+    });
+    if (done !== undefined && editingId === id) resetForm();
   }
 
   return (

@@ -1,6 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
+import { useResource } from "../data/hooks";
+import { dataKeys, invalidateAffects } from "../data/entities";
 import { MentionText } from "../components/mentions/MentionText";
 import { SettingWizard } from "../components/SettingWizard";
 import { GroupMembersModal } from "../components/GroupMembersModal";
@@ -64,73 +67,47 @@ function SettingCoverTile({ setting: s }: { setting: Setting }) {
   );
 }
 
+const NO_SETTINGS: Setting[] = [];
+const NO_GROUPS: SettingGroup[] = [];
+/** Группы сеттингов: список групп и их составы — под одним префиксом. */
+const GROUP_AFFECTS = [{ path: "/setting-groups" }];
+
 export function SettingsListPage() {
-  const [settings, setSettings] = useState<Setting[]>([]);
+  const client = useQueryClient();
+  const settingsState = useResource<Setting[]>("/settings");
+  const settings = settingsState.data ?? NO_SETTINGS;
+  const loading = settingsState.loading;
+  const loadError = settingsState.error;
   const [creating, setCreating] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string | null>(null);
-  const [groups, setGroups] = useState<SettingGroup[]>([]);
-  const [groupMemberships, setGroupMemberships] = useState<Record<number, number[]>>({});
+  const groups = useResource<SettingGroup[]>("/setting-groups").data ?? NO_GROUPS;
+  // Составы групп — параллельно, под ключом окна «добавить в группу».
+  const memberQueries = useQueries({
+    queries: groups.map((g) => ({
+      queryKey: dataKeys.resource(`/setting-groups/${g.id}/members`),
+      queryFn: ({ signal }: { signal: AbortSignal }) => api.get<Setting[]>(`/setting-groups/${g.id}/members`, { signal }),
+    })),
+  });
+  const groupMemberships: Record<number, number[]> = {};
+  groups.forEach((g, i) => {
+    for (const m of memberQueries[i]?.data ?? []) {
+      if (!groupMemberships[m.id]) groupMemberships[m.id] = [];
+      groupMemberships[m.id].push(g.id);
+    }
+  });
   const [groupMembersModal, setGroupMembersModal] = useState<{ groupId: number; groupName: string } | null>(null);
   const [q, setQ] = useState("");
   const [genreFilter, setGenreFilter] = useState<string | null>(null);
 
-  async function loadSettings(signal?: AbortSignal) {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const data = await api.get<Setting[]>("/settings", signal ? { signal } : undefined);
-      setSettings(data);
-    } catch (e) {
-      if ((e as Error).name === "AbortError") return;
-      setLoadError(String(e instanceof Error ? e.message : e));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function loadGroupMemberships(signal?: AbortSignal) {
-    try {
-      const fetchedGroups = await api.get<SettingGroup[]>("/setting-groups", signal ? { signal } : undefined);
-      setGroups(fetchedGroups);
-      if (fetchedGroups.length === 0) {
-        setGroupMemberships({});
-        return;
-      }
-      const opts = signal ? { signal } : undefined;
-      const allMembers = await Promise.all(
-        fetchedGroups.map((g) => api.get<Setting[]>(`/setting-groups/${g.id}/members`, opts).catch(() => [] as Setting[]))
-      );
-      const memberships: Record<number, number[]> = {};
-      fetchedGroups.forEach((g, idx) => {
-        for (const m of allMembers[idx]) {
-          if (!memberships[m.id]) memberships[m.id] = [];
-          memberships[m.id].push(g.id);
-        }
-      });
-      if (signal?.aborted) return;
-      setGroupMemberships(memberships);
-    } catch {
-      // silent
-    }
-  }
-
-  useEffect(() => {
-    const controller = new AbortController();
-    loadSettings(controller.signal);
-    loadGroupMemberships(controller.signal);
-    return () => controller.abort();
-  }, []);
-
-  function refresh() {
-    void loadSettings();
-    void loadGroupMemberships();
+  // Группы правит каркас списка (ListPage) — после его правки перечитываются
+  // группы и их составы.
+  function refreshGroups() {
+    void invalidateAffects(client, GROUP_AFFECTS);
   }
 
   useEffect(() => () => { if (creating) setCreating(false); }, [creating]);
 
-  const filteredSettings = useMemo(() => {
+  const filteredSettings = (() => {
     const qq = q.trim().toLowerCase();
     const byTab = (() => {
       if (activeTab === null) return settings;
@@ -150,7 +127,7 @@ export function SettingsListPage() {
         (s.description ?? "").toLowerCase().includes(qq) ||
         (s.code ?? "").toLowerCase().includes(qq)
     );
-  }, [settings, activeTab, groupMemberships, q, genreFilter]);
+  })();
 
   const genreToolbar = (
     <div className="genre-chips">
@@ -177,7 +154,7 @@ export function SettingsListPage() {
         groups={groups.map((g) => ({ id: String(g.id), label: g.name }))}
         groupsEndpoint="/setting-groups"
         groupsDeleteNote="Сеттинги не будут удалены — они останутся в разделе «Все сеттинги»."
-        onGroupsChanged={refresh}
+        onGroupsChanged={refreshGroups}
         createLabel="+ Новый сеттинг"
         onCreate={() => setCreating(true)}
         activeGroup={activeTab}
@@ -194,7 +171,7 @@ export function SettingsListPage() {
         {loadError && (
           <LoadErrorCard
             message={<>Не удалось загрузить сеттинги: {loadError}</>}
-            onRetry={refresh}
+            onRetry={settingsState.reload}
           />
         )}
 
@@ -264,14 +241,14 @@ export function SettingsListPage() {
         )}
       </ListPage>
 
-      {creating && <SettingWizard onClose={() => { setCreating(false); refresh(); }} />}
+      {creating && <SettingWizard onClose={() => setCreating(false)} />}
 
       {groupMembersModal && (
         <GroupMembersModal
           groupId={groupMembersModal.groupId}
           groupName={groupMembersModal.groupName}
           onClose={() => setGroupMembersModal(null)}
-          onUpdated={refresh}
+          onUpdated={refreshGroups}
         />
       )}
     </div>

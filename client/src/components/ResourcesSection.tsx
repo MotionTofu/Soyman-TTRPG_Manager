@@ -15,6 +15,7 @@ import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { NavIcon } from "./NavIcons";
 import type { SoundSetDetail, SoundSetSummary } from "../sound/types";
 import type { Resource, SearchResult } from "../types";
+import { useSearch } from "../data/search";
 
 const IMAGE_EXT = /\.(jpe?g|png|gif|webp)$/i;
 const AUDIO_EXT = /\.(mp3|wav|ogg|m4a|flac|aac)$/i;
@@ -457,20 +458,11 @@ function LibraryPickerModal({
   onClose: () => void;
 }) {
   const [q, setQ] = useState("");
-  const [items, setItems] = useState<Resource[]>([]);
-  const [loading, setLoading] = useState(false);
+  const search = useSearch<Resource>(`/resources${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ""}`, 250);
+  const items = search.results;
+  const loading = search.searching;
   const [attachedIds, setAttachedIds] = useState<Set<number>>(new Set());
 
-  useEffect(() => {
-    setLoading(true);
-    const handle = setTimeout(() => {
-      api
-        .get<Resource[]>(`/resources${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ""}`)
-        .then(setItems)
-        .finally(() => setLoading(false));
-    }, 250);
-    return () => clearTimeout(handle);
-  }, [q]);
 
   async function attach(id: number) {
     await onAttach(id);

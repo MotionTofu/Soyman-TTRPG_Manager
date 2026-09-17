@@ -6,14 +6,17 @@
 // галочкой, а совпавшие по имени — с выбором «создать новую или использовать
 // существующую».
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { api } from "../api/client";
+import { useAction, useResource, write } from "../data/hooks";
+import { labelled } from "../data/notices";
 import { SectionHeading } from "../components/SectionHeading";
 import { CREATABLE_BEING_CATEGORIES } from "../beingCategories";
 import { entryWord } from "../sceneKinds";
 import type { Setting } from "../types";
 import { useConfirm } from "../hooks/useConfirm";
+
+const NO_SETTINGS: Setting[] = [];
 
 interface Problem {
   path: string;
@@ -95,6 +98,9 @@ function countsLine(counts: Record<string, number>): string {
     .join(", ");
 }
 
+const NO_BATCHES: Batch[] = [];
+const NO_KEYS: KeyEntry[] = [];
+
 export function ImportAdventurePage() {
   const [confirmDialog, confirm] = useConfirm();
   const [params] = useSearchParams();
@@ -105,7 +111,8 @@ export function ImportAdventurePage() {
   const [settingId, setSettingId] = useState<number | null>(
     settingParam ? Number(settingParam) : null
   );
-  const [settings, setSettings] = useState<Setting[]>([]);
+  const run = useAction();
+  const settings = useResource<Setting[]>("/settings").data ?? NO_SETTINGS;
 
   const [fileName, setFileName] = useState("");
   const [raw, setRaw] = useState<unknown>(null);
@@ -129,27 +136,11 @@ export function ImportAdventurePage() {
   const [detach, setDetach] = useState<Record<string, boolean>>({});
 
   const [result, setResult] = useState<ApplyResponse | null>(null);
-  const [batches, setBatches] = useState<Batch[]>([]);
-  const [keys, setKeys] = useState<KeyEntry[]>([]);
+  const batches = useResource<Batch[]>(`/import/batches${settingId ? `?setting_id=${settingId}` : ""}`).data ?? NO_BATCHES;
+  const keys = useResource<KeyEntry[]>(settingId ? `/import/keys?setting_id=${settingId}` : null).data ?? NO_KEYS;
   const [keysOpen, setKeysOpen] = useState(false);
   const [copyState, setCopyState] = useState<"idle" | "done" | "failed">("idle");
   const keysRef = useRef<HTMLPreElement>(null);
-
-  useEffect(() => {
-    api.get<Setting[]>("/settings").then(setSettings);
-  }, []);
-
-  const loadBatches = useCallback(() => {
-    const query = settingId ? `?setting_id=${settingId}` : "";
-    api.get<Batch[]>(`/import/batches${query}`).then(setBatches);
-  }, [settingId]);
-  useEffect(loadBatches, [loadBatches]);
-
-  const loadKeys = useCallback(() => {
-    if (!settingId) return setKeys([]);
-    api.get<KeyEntry[]>(`/import/keys?setting_id=${settingId}`).then(setKeys);
-  }, [settingId]);
-  useEffect(loadKeys, [loadKeys, result]);
 
   // Готовый к вставке в промпт список: ключ — имя, по строке на сущность.
   const keysText = useMemo(
@@ -189,10 +180,12 @@ export function ImportAdventurePage() {
     async (data: unknown, target: number | null) => {
       setBusy(true);
       try {
-        const response = await api.post<PlanResponse>("/import/plan", {
-          data,
-          setting_id: target,
-        });
+        // Сверка — чтение, хоть и POST: без сигнала, иначе она сносила бы кэш слоя.
+        const response = await write.post<PlanResponse>(
+          "/import/plan",
+          { data, setting_id: target },
+          { timeoutMs: 120_000 }
+        );
         setPlan(response);
         // Совпавшее по имени по умолчанию не склеивается: молча слить две разные
         // таверны «Красный кабан» хуже, чем оставить дубль на виду.
@@ -258,7 +251,8 @@ export function ImportAdventurePage() {
     if (!raw || !plan?.ok) return;
     setBusy(true);
     try {
-      const response = await api.post<ApplyResponse>("/import/apply", {
+      // Импорт пишет сущности сеттинга, сцены, компендиум и связи — задето всё.
+      const response = await run(labelled("Импорт приключения", () => write.post<ApplyResponse>("/import/apply", {
         data: raw,
         setting_id: settingId,
         campaign_id: campaignParam ? Number(campaignParam) : null,
@@ -282,10 +276,10 @@ export function ImportAdventurePage() {
         detach: Object.entries(detach)
           .filter(([, on]) => on)
           .map(([key]) => key),
-      });
+      }, { timeoutMs: 600_000 })), { affects: [], retry: false });
+      if (!response) return;
       setResult(response);
       setSettingId(response.setting_id);
-      loadBatches();
     } finally {
       setBusy(false);
     }
@@ -294,12 +288,13 @@ export function ImportAdventurePage() {
   async function rollback(batchId: number) {
     if (!(await confirm({ message: "Откатить импорт? Всё, что он создал, будет удалено.", confirmLabel: "Откатить", danger: true })))
       return;
-    await api.del(`/import/batches/${batchId}`);
+    // Откат удаляет сущности, а с ними и их ключи: задето всё, и список ключей
+    // для промпта следующей части худеет вместе с базой.
+    const done = await run(labelled("Импорт не откачен", () => write.del(`/import/batches/${batchId}`, { timeoutMs: 120_000 })), {
+      affects: [],
+    });
+    if (done === undefined) return;
     if (result?.batch_id === batchId) setResult(null);
-    loadBatches();
-    // Откат удаляет сущности, а с ними и их ключи: список для промпта следующей
-    // части обязан похудеть вместе с базой, иначе туда уедут ключи в никуда.
-    loadKeys();
   }
 
   return (

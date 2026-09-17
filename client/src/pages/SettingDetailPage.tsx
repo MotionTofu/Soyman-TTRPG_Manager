@@ -2,10 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { api } from "../api/client";
 import { dataKeys, type Affect } from "../data/entities";
 import { useAction, useAfterWrite, useEntity, useResource, useSaveEntity, write } from "../data/hooks";
-import { readResource } from "../data/imperative";
+import { readResource, readOnce } from "../data/imperative";
 import { settingPaths } from "../data/settingEntities";
 import {
   chronicleEventAffects,
@@ -2632,7 +2631,7 @@ function SettingExportModal({
       const include = [includeCalendar && "calendar", includeResources && "resources", includeImages && "images", includeAdventures && "adventures"]
         .filter(Boolean)
         .join(",");
-      const data = await api.get(`/settings/${settingId}/export?include=${include}`, {
+      const data = await readOnce(`/settings/${settingId}/export?include=${include}`, {
         timeoutMs: 120000,
       });
       downloadJson(data, `setting-${settingName}.json`);

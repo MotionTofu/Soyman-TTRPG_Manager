@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { useMemo, useState } from "react";
+import { useAction, useResource, write } from "../data/hooks";
+import { labelled } from "../data/notices";
 import { ResourceRow } from "../components/ResourceRow";
 import { TemplatesTab } from "../components/TemplatesTab";
 import { SoundLibraryTab } from "../components/SoundLibraryTab";
@@ -12,6 +13,8 @@ import { ListPage } from "../components/ListPage";
 import type { Campaign, Resource, Setting } from "../types";
 
 const TEMPLATE_TYPE = "statblock_template";
+const NO_CAMPAIGNS: Campaign[] = [];
+const NO_SETTINGS: Setting[] = [];
 type SortMode = "az" | "size" | "date";
 
 function categoryOf(r: Resource): ResourceCategory {
@@ -35,10 +38,14 @@ const RESOURCE_TABS = [
 
 export function ResourcesListPage() {
   const [section, setSection] = useState<"all" | "sound" | "sets" | "templates">("all");
-  const [resources, setResources] = useState<Resource[]>([]);
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [settings, setSettings] = useState<Setting[]>([]);
   const [query, setQuery] = useState("");
+  const run = useAction();
+  const allResources = useResource<Resource[]>(query ? `/resources?q=${encodeURIComponent(query)}` : "/resources", {
+    keepPrevious: true,
+  }).data;
+  const resources = useMemo(() => (allResources ?? []).filter((r) => r.type !== TEMPLATE_TYPE), [allResources]);
+  const campaigns = useResource<Campaign[]>("/campaigns").data ?? NO_CAMPAIGNS;
+  const settings = useResource<Setting[]>("/settings").data ?? NO_SETTINGS;
   const [sortMode, setSortMode] = useState<SortMode>("az");
   const [campaignFilter, setCampaignFilter] = useState<number | null>(null);
   const [settingFilter, setSettingFilter] = useState<number | null>(null);
@@ -51,21 +58,6 @@ export function ResourcesListPage() {
   const [file, setFile] = useState<File | null>(null);
   const [linkUrl, setLinkUrl] = useState("");
 
-  function refresh() {
-    const params = new URLSearchParams();
-    if (query) params.set("q", query);
-    api.get<Resource[]>(`/resources?${params.toString()}`).then((all) =>
-      setResources(all.filter((r) => r.type !== TEMPLATE_TYPE))
-    );
-  }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(refresh, [query]);
-
-  useEffect(() => {
-    api.get<Campaign[]>("/campaigns").then(setCampaigns);
-    api.get<Setting[]>("/settings").then(setSettings);
-  }, []);
-
   async function create() {
     if (!name.trim()) return;
     const form = new FormData();
@@ -75,18 +67,22 @@ export function ResourcesListPage() {
     form.append("tags", tags);
     if (file) form.append("file", file);
     if (linkUrl) form.append("link_url", linkUrl);
-    await api.post("/resources", form);
+    const created = await run(labelled("Новый ресурс", () => write.post("/resources", form, { timeoutMs: 120000 })), {
+      affects: [{ kind: "resource" }],
+      retry: false,
+    });
+    if (created === undefined) return;
     setAddOpen(false);
     setName("");
     setTags("");
     setFile(null);
     setLinkUrl("");
-    refresh();
   }
 
   async function archiveResource(id: number) {
-    await api.del(`/resources/${id}`);
-    refresh();
+    await run(labelled("Ресурс не архивирован", () => write.del(`/resources/${id}`)), {
+      affects: [{ kind: "resource" }, { path: "/archive" }],
+    });
   }
 
   const filteredResources = resources.filter((r) => {
@@ -243,7 +239,6 @@ export function ResourcesListPage() {
                     <ResourceRow
                       key={r.id}
                       resource={r}
-                      onChange={refresh}
                       onArchive={archiveResource}
                       allSettings={settings}
                     />

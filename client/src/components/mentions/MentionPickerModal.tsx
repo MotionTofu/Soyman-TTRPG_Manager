@@ -1,11 +1,15 @@
-import { useEffect, useState } from "react";
-import { api } from "../../api/client";
-import { useAction, write } from "../../data/hooks";
+import { useState } from "react";
+import { useAction, useResource, write } from "../../data/hooks";
+import { useSearch } from "../../data/search";
 import { Modal } from "../Modal";
 import { LocationCascadePicker } from "../LocationCascadePicker";
 import { ENTITY_TYPES, ENTITY_TYPE_SINGULAR } from "../../entityTypes";
 import { CREATABLE_BEING_CATEGORIES } from "../../beingCategories";
 import type { BeingCategory, Setting, SettingCommunity, SettingLocation } from "../../types";
+
+const NO_SETTINGS: Setting[] = [];
+const NO_LOCATIONS: SettingLocation[] = [];
+const NO_COMMUNITIES: SettingCommunity[] = [];
 
 interface PickResult {
   type: string;
@@ -52,12 +56,12 @@ export function MentionPickerModal({
   const [query, setQuery] = useState(initialQuery);
   const [activeTypes, setActiveTypes] = useState<Set<string>>(() => new Set(ENTITY_TYPES.map((t) => t.key)));
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [results, setResults] = useState<SearchHit[]>([]);
+  const types = Array.from(activeTypes).join(",");
+  const results = useSearch<SearchHit>(query.trim() ? `/search?q=${encodeURIComponent(query)}&types=${types}` : null).results;
   const [selected, setSelected] = useState<PickResult | null>(null);
   const [label, setLabel] = useState("");
 
   const [creating, setCreating] = useState(false);
-  const [settings, setSettings] = useState<Setting[]>([]);
   const [createSettingId, setCreateSettingId] = useState<number | "">("");
   const [createType, setCreateType] = useState<(typeof CREATE_TYPES)[number]["key"]>("location");
   const [createName, setCreateName] = useState("");
@@ -66,35 +70,21 @@ export function MentionPickerModal({
 
   // Only fetched when relevant (location parent picker / being habitat &
   // faction pickers), scoped to whichever setting is currently selected.
-  const [createLocations, setCreateLocations] = useState<SettingLocation[]>([]);
-  const [createCommunities, setCreateCommunities] = useState<SettingCommunity[]>([]);
+  const settings = useResource<Setting[]>(creating ? "/settings" : null).data ?? NO_SETTINGS;
+  const createLocations =
+    useResource<SettingLocation[]>(
+      creating && createSettingId && (createType === "location" || createType === "being")
+        ? `/setting-locations?setting_id=${createSettingId}`
+        : null
+    ).data ?? NO_LOCATIONS;
+  const createCommunities =
+    useResource<SettingCommunity[]>(
+      creating && createSettingId && createType === "being" ? `/setting-communities?setting_id=${createSettingId}` : null
+    ).data ?? NO_COMMUNITIES;
   const [createParentLocationId, setCreateParentLocationId] = useState<number | null>(null);
   const [createBeingLocationId, setCreateBeingLocationId] = useState<number | null>(null);
   const [createBeingCommunityIds, setCreateBeingCommunityIds] = useState<number[]>([]);
   const [createBeingCategory, setCreateBeingCategory] = useState<BeingCategory>("key_figure");
-
-  useEffect(() => {
-    if (!query.trim()) {
-      setResults([]);
-      return;
-    }
-    const handle = setTimeout(async () => {
-      const types = Array.from(activeTypes).join(",");
-      const res = await api.get<SearchHit[]>(`/search?q=${encodeURIComponent(query)}&types=${types}`);
-      setResults(res);
-    }, 200);
-    return () => clearTimeout(handle);
-  }, [query, activeTypes]);
-
-  useEffect(() => {
-    if (!creating || !createSettingId) return;
-    if (createType === "location" || createType === "being") {
-      api.get<SettingLocation[]>(`/setting-locations?setting_id=${createSettingId}`).then(setCreateLocations);
-    }
-    if (createType === "being") {
-      api.get<SettingCommunity[]>(`/setting-communities?setting_id=${createSettingId}`).then(setCreateCommunities);
-    }
-  }, [creating, createSettingId, createType]);
 
   function toggleType(key: string) {
     setActiveTypes((prev) => {
@@ -117,7 +107,6 @@ export function MentionPickerModal({
   }
 
   function openCreate() {
-    if (settings.length === 0) api.get<Setting[]>("/settings").then(setSettings);
     setCreateSettingId(defaultSettingId ?? "");
     setCreateName(query);
     setCreateParentLocationId(null);

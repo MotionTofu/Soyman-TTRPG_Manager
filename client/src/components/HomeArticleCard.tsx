@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api } from "../api/client";
+import { readOnce } from "../data/imperative";
 import { EntityPreviewModal } from "./EntityPreviewModal";
 import { LoadErrorCard } from "./Loadable";
 import { MentionText } from "./mentions/MentionText";
@@ -30,14 +30,15 @@ export function HomeArticleCard() {
     let last: string | null = null;
     try { last = sessionStorage.getItem(LAST_SHOWN_KEY); } catch {}
     setError(null);
-    api
-      .get<RandomArticle | null>(`/random-article${last ? `?exclude=${encodeURIComponent(last)}` : ""}`, { signal: controller.signal } as RequestInit)
+    // Каждый заход — новая статья: чтение без кэша слоя.
+    readOnce<RandomArticle | null>(`/random-article${last ? `?exclude=${encodeURIComponent(last)}` : ""}`)
       .then((next) => {
+        if (controller.signal.aborted) return;
         setArticle(next);
         if (next) try { sessionStorage.setItem(LAST_SHOWN_KEY, String(next.id)); } catch {}
       })
       .catch((e) => {
-        if ((e as Error).name === "AbortError") return;
+        if (controller.signal.aborted || (e as Error).name === "AbortError") return;
         setError(String(e));
         setArticle(null);
       });

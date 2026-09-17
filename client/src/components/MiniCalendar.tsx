@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { useResource } from "../data/hooks";
 import { useCurrentUser } from "../api/currentUser";
 import { formatDateKeyRu } from "../utils/date";
 import type { SessionStatus, SessionSummary } from "../types";
@@ -71,7 +71,6 @@ export function MiniCalendar({ events: propEvents, onEventContextMenu, onDayCont
   const { user } = useCurrentUser();
   const isPlayer = user?.role === "player";
   const navigate = useNavigate();
-  const [internalEvents, setInternalEvents] = useState<MiniEvent[]>([]);
   const [popover, setPopover] = useState<{ key: string; events: MiniEvent[]; x: number; y: number } | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const [cursor, setCursor] = useState(() => {
@@ -89,33 +88,26 @@ export function MiniCalendar({ events: propEvents, onEventContextMenu, onDayCont
 
   // Если родитель передал events — используем их напрямую (единственный источник).
   // Иначе — fallback: календарь тянет сам (для изоляции/сторибука).
-  const events = propEvents ?? internalEvents;
-
-  useEffect(() => {
-    if (propEvents !== undefined) return;
+  // Сам читает, только если события не переданы; `refreshKey` больше не нужен —
+  // правки задевают календарь в слое данных.
+  void refreshKey;
+  const own = propEvents === undefined;
+  const playerDashboard = useResource<{ sessions: PlayerDashboardSession[] }>(own && isPlayer ? "/player/dashboard" : null).data;
+  const gmCalendar = useResource<SessionSummary[]>(own && !isPlayer ? "/calendar" : null).data;
+  const internalEvents = useMemo<MiniEvent[]>(() => {
     if (isPlayer) {
-      api
-        .get<{ sessions: PlayerDashboardSession[] }>("/player/dashboard")
-        .then((d) =>
-          setInternalEvents(d.sessions.map((s) => ({ id: s.id, date: s.date, status: s.status, campaignId: s.campaign_id })))
-        );
-    } else {
-      api
-        .get<SessionSummary[]>("/calendar")
-        .then((rows) =>
-          setInternalEvents(
-            rows.map((s) => ({
-              id: s.id,
-              date: s.date,
-              status: s.status,
-              campaignId: s.campaign_id,
-              campaignName: s.campaign_name,
-              startTime: s.start_time,
-            }))
-          )
-        );
+      return (playerDashboard?.sessions ?? []).map((s) => ({ id: s.id, date: s.date, status: s.status, campaignId: s.campaign_id }));
     }
-  }, [isPlayer, refreshKey, propEvents]);
+    return (gmCalendar ?? []).map((s) => ({
+      id: s.id,
+      date: s.date,
+      status: s.status,
+      campaignId: s.campaign_id,
+      campaignName: s.campaign_name,
+      startTime: s.start_time,
+    }));
+  }, [isPlayer, playerDashboard, gmCalendar]);
+  const events = propEvents ?? internalEvents;
 
   // Отменённые в сетке не показываем (история — в Архиве). Фильтр здесь,
   // а не у родителя, чтобы и fallback-режим MiniCalendar вёл себя так же.

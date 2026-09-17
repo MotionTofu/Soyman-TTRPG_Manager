@@ -1,6 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api } from "../api/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { useAction, useAfterWrite, useEntity, useResource, write } from "../data/hooks";
+import { invalidateAffects, type Affect } from "../data/entities";
+import { labelled } from "../data/notices";
+import { sessionMoneyAffects } from "../data/sessions";
 import { MiniCalendar, type MiniEvent } from "../components/MiniCalendar";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { Modal } from "../components/Modal";
@@ -29,15 +33,43 @@ interface FinanceSummary {
   campaigns: number;
 }
 
+const NO_SESSIONS: SessionSummary[] = [];
+const NO_CAMPAIGNS: Campaign[] = [];
+const NO_SYSTEMS: System[] = [];
+const NO_SETTINGS: Setting[] = [];
+const NO_PLAYERS: Player[] = [];
+
+/**
+ * Сессия изменилась с главной: сверх самой сессии и её кампании — календарь
+ * всех кампаний и сводка денег. Общего правила «сессия задевает календарь» нет
+ * намеренно: шаг хода в бою тянул бы календарь (группа «остальное», часть 1).
+ */
+function homeSessionAffects(sessionId: number, campaignId: number): Affect[] {
+  return [...sessionMoneyAffects(sessionId, campaignId), { path: "/calendar" }, { path: "/finance" }];
+}
+
 export function HomeCalendarPage() {
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [systems, setSystems] = useState<System[]>([]);
-  const [settings, setSettings] = useState<Setting[]>([]);
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [finance, setFinance] = useState<FinanceSummary | null>(null);
-  const [bgUrl, setBgUrl] = useState<string | null>(null);
-  const [homeBgUrl, setHomeBgUrl] = useState<string | null>(null);
+  const client = useQueryClient();
+  const run = useAction();
+  const afterWrite = useAfterWrite();
+  const calendar = useResource<SessionSummary[]>("/calendar");
+  const sessions = calendar.data ?? NO_SESSIONS;
+  const campaignsState = useResource<Campaign[]>("/campaigns");
+  const campaigns = campaignsState.data ?? NO_CAMPAIGNS;
+  const systemsState = useResource<System[]>("/systems");
+  const systems = systemsState.data ?? NO_SYSTEMS;
+  const settingsState = useResource<Setting[]>("/settings");
+  const settings = settingsState.data ?? NO_SETTINGS;
+  const playersState = useResource<Player[]>("/players");
+  const players = playersState.data ?? NO_PLAYERS;
+  // 3.2 — Сводка и фон лениво, после того как герой уже отрисован.
+  const [lazyReady, setLazyReady] = useState(false);
+  useEffect(() => {
+    const id = window.setTimeout(() => setLazyReady(true), 400);
+    return () => window.clearTimeout(id);
+  }, []);
+  const finance = useResource<FinanceSummary>(lazyReady ? "/finance/summary" : null).data ?? null;
+  const homeBgUrl = useResource<AppSettings>(lazyReady ? "/app-settings" : null).data?.home_background_url ?? null;
   const [menu, setMenu] = useState<{
     x: number;
     y: number;
@@ -51,15 +83,11 @@ export function HomeCalendarPage() {
     copyFromSessionId: string;
   } | null>(null);
   const [financeSessionId, setFinanceSessionId] = useState<number | null>(null);
-  const [oneshotSessions, setOneshotSessions] = useState<SessionSummary[]>([]);
-  const [initialLoad, setInitialLoad] = useState(false);
+  // Герой и онбординг решают по всем пяти спискам — до их прихода скелет.
+  const initialLoad = ![calendar, campaignsState, systemsState, settingsState, playersState].some((q) => q.loading);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const navigate = useNavigate();
-
-  function refreshSessions() {
-    api.get<SessionSummary[]>("/calendar").then((data) => { setCalendarError(null); setSessions(data); }).catch((e) => { if ((e as Error).name !== "AbortError") setCalendarError(String(e)); });
-  }
 
   const miniEvents: MiniEvent[] = sessions.map((s) => ({
     id: s.id,
@@ -71,41 +99,15 @@ export function HomeCalendarPage() {
     campaignRole: s.campaign_role,
   }));
 
-  const [calendarError, setCalendarError] = useState<string | null>(null);
-  const [campaignsError, setCampaignsError] = useState<string | null>(null);
-  const loadIdRef = useRef(0);
+  const calendarError = calendar.error;
+  const campaignsError = campaignsState.error;
 
-  function loadInitial() {
-    const cur = ++loadIdRef.current;
-    setCalendarError(null);
-    setCampaignsError(null);
-    setInitialLoad(false);
-    const guarded = <T,>(fn: (v: T) => void) => (v: T) => { if (loadIdRef.current === cur) fn(v); };
-    // 3.2 — критичные 5 запросов сразу (герой + онбординг), остальное лениво после первого кадра
-    Promise.allSettled([
-      api.get<SessionSummary[]>("/calendar").then(guarded(setSessions)).catch((e) => { if ((e as Error).name !== "AbortError" && loadIdRef.current === cur) setCalendarError(String(e)); throw e; }),
-      api.get<Campaign[]>("/campaigns").then(guarded(setCampaigns)).catch((e) => { if ((e as Error).name !== "AbortError" && loadIdRef.current === cur) setCampaignsError(String(e)); throw e; }),
-      api.get<System[]>("/systems").then(guarded(setSystems)).catch(() => {}),
-      api.get<Setting[]>("/settings").then(guarded(setSettings)).catch(() => {}),
-      api.get<Player[]>("/players").then(guarded(setPlayers)).catch(() => {}),
-    ]).finally(() => {
-      if (loadIdRef.current === cur) setInitialLoad(true);
-      // 3.2 лениво: Сводка и фон — после того как герой уже отрисован
-      setTimeout(() => {
-        if (loadIdRef.current !== cur) return;
-        api.get<FinanceSummary>("/finance/summary").then(guarded(setFinance)).catch(() => {});
-        api.get<AppSettings>("/app-settings").then((s) => { if (loadIdRef.current === cur) setHomeBgUrl(s.home_background_url); }).catch(() => {});
-      }, 400);
-    });
+  function retryLoad() {
+    calendar.reload();
+    campaignsState.reload();
   }
 
-  useEffect(() => {
-    loadInitial();
-    return () => { loadIdRef.current++; };
-  }, []);
-
   const authHomeBgBlob = useAuthenticatedFileUrl(homeBgUrl);
-  const authBgBlob = useAuthenticatedFileUrl(bgUrl);
 
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -178,20 +180,12 @@ export function HomeCalendarPage() {
     return safeBackgroundImage(url);
   }
 
-  useEffect(() => {
-    if (!nearestSession) {
-      setBgUrl(null);
-      return;
-    }
-    const campaign = campaigns.find((c) => c.id === nearestSession.campaign_id);
-    if (campaign) {
-      setBgUrl(campaign.background_image_url ?? null);
-      return;
-    }
-    const controller = new AbortController();
-    api.get<Campaign>(`/campaigns/${nearestSession.campaign_id}`, { signal: controller.signal } as RequestInit).then((c) => setBgUrl(c.background_image_url ?? null)).catch(() => { if (!controller.signal.aborted) setBgUrl(null); });
-    return () => controller.abort();
-  }, [nearestSession, campaigns]);
+  // Обложка кампании ближайшей игры: из списка, а если кампании в нём нет
+  // (игра в чужой кампании) — её карточкой.
+  const nearestInList = nearestSession ? campaigns.find((c) => c.id === nearestSession.campaign_id) : undefined;
+  const nearestCard = useEntity<Campaign>("campaign", nearestSession && !nearestInList ? nearestSession.campaign_id : null).data;
+  const bgUrl = nearestSession ? ((nearestInList ?? nearestCard)?.background_image_url ?? null) : null;
+  const authBgBlob = useAuthenticatedFileUrl(bgUrl);
 
   function openCreateModal(date: string) {
     setCreateError(null);
@@ -208,16 +202,16 @@ export function HomeCalendarPage() {
     ? campaigns.find((c) => c.id === Number(createModal.campaignId))
     : undefined;
 
-  useEffect(() => {
-    if (!createModal?.campaignId || selectedCampaign?.type !== "oneshot") {
-      setOneshotSessions([]);
-      return;
-    }
-    const controller = new AbortController();
-    api.get<SessionSummary[]>(`/campaigns/${createModal.campaignId}/sessions`, { signal: controller.signal } as RequestInit).then(setOneshotSessions).catch(() => { if (!controller.signal.aborted) setOneshotSessions([]); });
-    return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [createModal?.campaignId, selectedCampaign?.type]);
+  const oneshotSessions =
+    useResource<SessionSummary[]>(
+      createModal?.campaignId && selectedCampaign?.type === "oneshot" ? `/campaigns/${createModal.campaignId}/sessions` : null
+    ).data ?? NO_SESSIONS;
+
+  function setStatus(event: MiniEvent, status: SessionSummary["status"]) {
+    return run(labelled("Статус сессии", () => write.put(`/sessions/${event.id}`, { status })), {
+      affects: homeSessionAffects(event.id, event.campaignId),
+    });
+  }
 
   function eventMenuItems(event: MiniEvent): ContextMenuItem[] {
     return [
@@ -231,15 +225,13 @@ export function HomeCalendarPage() {
               {
                 label: "Запланировано",
                 onClick: async () => {
-                  await api.put(`/sessions/${event.id}`, { status: "planned" });
-                  refreshSessions();
+                  await setStatus(event, "planned");
                 },
               },
               {
                 label: "Состоялась",
                 onClick: async () => {
-                  await api.put(`/sessions/${event.id}`, { status: "held" });
-                  refreshSessions();
+                  await setStatus(event, "held");
                 },
               },
               // Отменить существующую игру было нечем: статус cancelled в схеме
@@ -249,8 +241,7 @@ export function HomeCalendarPage() {
               {
                 label: "Отменена",
                 onClick: async () => {
-                  await api.put(`/sessions/${event.id}`, { status: "cancelled" });
-                  refreshSessions();
+                  await setStatus(event, "cancelled");
                 },
               },
             ],
@@ -263,8 +254,9 @@ export function HomeCalendarPage() {
         label: "Удалить (в архив)",
         danger: true,
         onClick: async () => {
-          await api.del(`/sessions/${event.id}`);
-          refreshSessions();
+          await run(labelled("Сессия не удалена", () => write.del(`/sessions/${event.id}`)), {
+            affects: [...homeSessionAffects(event.id, event.campaignId), { path: "/archive" }],
+          });
         },
       },
       {
@@ -293,7 +285,8 @@ export function HomeCalendarPage() {
     setCreating(true);
     setCreateError(null);
     try {
-      const created = await api.post<{ id: number }>("/sessions", {
+      const campaignId = Number(createModal.campaignId);
+      const created = await write.post<{ id: number }>("/sessions", {
         campaign_id: Number(createModal.campaignId),
         date: createModal.date,
         start_time: createModal.startTime || null,
@@ -303,12 +296,12 @@ export function HomeCalendarPage() {
           await copySessionPrep(Number(createModal.copyFromSessionId), created.id);
         } catch (e) {
           setCreateError(`Сессия создана, но копирование подготовки не удалось: ${String(e)}`);
-          refreshSessions();
+          afterWrite(homeSessionAffects(created.id, campaignId));
           return;
         }
       }
       setCreateModal(null);
-      refreshSessions();
+      afterWrite(homeSessionAffects(created.id, campaignId));
     } catch (e) {
       setCreateError(String(e));
     } finally {
@@ -334,7 +327,7 @@ export function HomeCalendarPage() {
       {(calendarError || campaignsError) && (
         <LoadErrorCard
           message={<>Не удалось загрузить: {[calendarError, campaignsError].filter(Boolean).join(" · ")}</>}
-          onRetry={loadInitial}
+          onRetry={retryLoad}
         />
       )}
 
@@ -413,7 +406,15 @@ export function HomeCalendarPage() {
               campaigns={campaigns}
               players={players}
               sessionsCount={sessions.length}
-              onRefresh={loadInitial}
+              onRefresh={() =>
+                void invalidateAffects(client, [
+                  { path: "/calendar" },
+                  { kind: "campaign", card: true },
+                  { kind: "system", card: true },
+                  { kind: "setting", card: true },
+                  { kind: "player" },
+                ])
+              }
             />
           )}
 
@@ -611,7 +612,7 @@ export function HomeCalendarPage() {
         <SessionOutcomeModal
           sessionId={financeSessionId}
           onClose={() => setFinanceSessionId(null)}
-          onSaved={refreshSessions}
+          onSaved={() => afterWrite([{ path: "/calendar" }, { path: "/finance" }])}
         />
       )}
     </div>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api } from "../api/client";
+import { write } from "../data/hooks";
 import { NavIcon } from "./NavIcons";
 import { SoyManResponsive } from "./SoyMan";
 import { CampaignWizard } from "./CampaignWizard";
@@ -125,7 +125,7 @@ export function OnboardingHero({ systems, settings, campaigns, players = [], ses
     setSessionCreating(true);
     setSessionError(null);
     try {
-      await api.post("/sessions", {
+      await write.post("/sessions", {
         campaign_id: campaigns[0].id,
         date: sessionDate,
         start_time: sessionTime || null,
