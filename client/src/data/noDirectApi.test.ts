@@ -20,8 +20,6 @@ const ALLOWED: Record<string, string> = {
   // Кэш записей компендиума листа: пачкой читает записи и сам кладёт их под
   // ключи слоя (`["entity", "compendium_entry", id]`).
   "../components/dnd/entryCache.ts": "пачка записей под ключами слоя",
-  // В файле незакоммиченные правки владельца; переводится после них.
-  "../components/dnd/DndLevelUpWizard.tsx": "ждёт правок владельца",
 };
 
 const IMPORTS_API = /import\s*\{[^}]*\bapi\b[^}]*\}\s*from\s*["'](\.\.\/)+api\/client["']/;

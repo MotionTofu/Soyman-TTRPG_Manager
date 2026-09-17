@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useDndRuntime } from './DndRuntime';
-import { api } from "../../api/client";
+import { useResource } from "../../data/hooks";
 import type { CompendiumEntry, DndAbilityScores, DndCharacterData } from "../../types";
 import { Modal } from "../Modal";
 import { EntryBlurb } from "./DndCharacterWizard";
@@ -78,11 +78,9 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
   const [systemId, setSystemId] = useState<number | null>(value.systemId);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [hierarchy, setHierarchy] = useState<DndClassHierarchy>({ classes: [], subclassesByClass: {} });
-  const [classEntry, setClassEntry] = useState<CompendiumEntry | null>(null);
   const [classFeatureEntries, setClassFeatureEntries] = useState<CompendiumEntry[]>([]);
   const [subFeatureEntries, setSubFeatureEntries] = useState<CompendiumEntry[]>([]);
   const [featPool, setFeatPool] = useState<DndFeatOption[]>([]);
-  const [featEntry, setFeatEntry] = useState<CompendiumEntry | null>(null);
 
   const [step, setStep] = useState("Хиты");
   const [saving, setSaving] = useState(false);
@@ -102,6 +100,17 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
   const [asiPrimary, setAsiPrimary] = useState<string | null>(null);
   const [asiSecondary, setAsiSecondary] = useState<string | null>(null);
 
+  // Записи справочника читаются слоем данных: правка класса или черты в
+  // «Системах» доходит до открытого визарда, и один и тот же класс, открытый
+  // дважды, второй раз берётся из кэша.
+  const classEntryState = useResource<CompendiumEntry>(
+    systemId && cls?.classId ? `/systems/entries/${cls.classId}` : null
+  );
+  const classEntry = classEntryState.data ?? null;
+  const featEntryState = useResource<CompendiumEntry>(featId ? `/systems/entries/${featId}` : null);
+  const featEntry = featEntryState.data ?? null;
+
+
   useEffect(() => {
     if (value.systemId != null) return;
     let alive = true;
@@ -116,7 +125,6 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
   useEffect(() => {
     if (!systemId || !cls?.classId) {
       setHierarchy({ classes: [], subclassesByClass: {} });
-      setClassEntry(null);
       setClassFeatureEntries([]);
       return;
     }
@@ -124,12 +132,6 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
     const opts = { signal: ac.signal };
     loadDndClassHierarchy(systemId, opts)
       .then(setHierarchy)
-      .catch((e) => {
-        if (!isAbortError(e)) setLoadError(errorMessage(e));
-      });
-    api
-      .get<CompendiumEntry>(`/systems/entries/${cls.classId}`, { signal: ac.signal })
-      .then(setClassEntry)
       .catch((e) => {
         if (!isAbortError(e)) setLoadError(errorMessage(e));
       });
@@ -141,6 +143,7 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
     return () => ac.abort();
   }, [systemId, cls?.classId]);
 
+  const entryError = classEntryState.error ?? featEntryState.error ?? null;
   const classOption = hierarchy.classes.find((c) => c.id === cls?.classId);
   const die =
     parseDie(classEntry?.data.hit_die) ?? parseDie(classEntry?.data.hitDie) ?? parseDie(classOption?.hitDie);
@@ -178,21 +181,6 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
       });
     return () => ac.abort();
   }, [systemId, isFeatLevel, newLevel]);
-
-  useEffect(() => {
-    if (!featId) {
-      setFeatEntry(null);
-      return;
-    }
-    const ac = new AbortController();
-    api
-      .get<CompendiumEntry>(`/systems/entries/${featId}`, { signal: ac.signal })
-      .then(setFeatEntry)
-      .catch((e) => {
-        if (!isAbortError(e)) setLoadError(errorMessage(e));
-      });
-    return () => ac.abort();
-  }, [featId]);
 
   useEffect(() => {
     const sid = subclassId ?? cls?.subclassId;
@@ -883,9 +871,9 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
           </>
         )}
 
-        {loadError && (
+        {(loadError || entryError) && (
           <div className="sb-save-status is-error" role="alert">
-            Справочник не загрузился: {loadError}. Умения и черты выбираются вслепую — можно применить уровень, а
+            Справочник не загрузился: {loadError ?? entryError}. Умения и черты выбираются вслепую — можно применить уровень, а
             выдачи добрать на листе.
           </div>
         )}
