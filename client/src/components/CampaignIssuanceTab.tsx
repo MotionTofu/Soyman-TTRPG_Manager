@@ -1,6 +1,9 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
+import { useAction, useResource, write } from "../data/hooks";
+import { labelled } from "../data/notices";
+import type { EntityKind } from "../data/entities";
 import { PlayerVisibilityPicker } from "./PlayerVisibilityPicker";
 import { FloatingActionBar } from "./FloatingActionBar";
 import { EmptyState } from "./EmptyState";
@@ -10,7 +13,6 @@ import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { useCampaignGrants, type GrantKey } from "../hooks/useCampaignGrants";
 import { useCampaignSettingEntities } from "../hooks/useCampaignSettingEntities";
 import { formatEventDate } from "../inworldCalendar";
-import { useAlert } from "../hooks/useConfirm";
 import { buildSettingReaderGroups } from "./player/settingReaderEntries";
 import { CampaignPlayerSectionsTab } from "./CampaignPlayerSectionsTab";
 import type {
@@ -54,13 +56,32 @@ interface TreeNode extends EntityItem {
   children: TreeNode[];
 }
 
+const NO_LOCATIONS: SettingLocation[] = [];
+const NO_BEINGS: SettingBeing[] = [];
+const NO_COMMUNITIES: SettingCommunity[] = [];
+const NO_EVENTS: SettingCalendarEvent[] = [];
+
+// Куда пишется «Текст игрокам» и чью карточку это задевает.
+const PLAYER_TEXT_TARGETS: Record<"setting_location" | "setting_being" | "setting_community" | "setting_calendar_event", { base: string; kind: EntityKind }> = {
+  setting_location: { base: "/setting-locations", kind: "location" },
+  setting_being: { base: "/setting-beings", kind: "being" },
+  setting_community: { base: "/setting-communities", kind: "community" },
+  setting_calendar_event: { base: "/settings/calendar-events", kind: "setting_event" },
+};
+
 export function CampaignIssuanceTab({ campaignId, settingId, roster }: Props) {
-  const [locations, setLocations] = useState<SettingLocation[]>([]);
-  const [beings, setBeings] = useState<SettingBeing[]>([]);
-  const [communities, setCommunities] = useState<SettingCommunity[]>([]);
-  const [chronicleEvents, setChronicleEvents] = useState<SettingCalendarEvent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const run = useAction();
+  const locationsState = useResource<SettingLocation[]>(settingId ? `/setting-locations?setting_id=${settingId}` : null);
+  const beingsState = useResource<SettingBeing[]>(settingId ? `/setting-beings?setting_id=${settingId}` : null);
+  const communitiesState = useResource<SettingCommunity[]>(settingId ? `/setting-communities?setting_id=${settingId}` : null);
+  const eventsState = useResource<SettingCalendarEvent[]>(settingId ? `/settings/${settingId}/calendar-events` : null);
+  const locations = locationsState.data ?? NO_LOCATIONS;
+  const beings = beingsState.data ?? NO_BEINGS;
+  const communities = communitiesState.data ?? NO_COMMUNITIES;
+  const chronicleEvents = eventsState.data ?? NO_EVENTS;
+  const worldStates = [locationsState, beingsState, communitiesState, eventsState];
+  const loading = worldStates.some((w) => w.loading);
+  const loadError = worldStates.find((w) => w.error)?.error ?? null;
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("name");
   const [filter, setFilter] = useState<FilterKey>("all");
@@ -69,7 +90,6 @@ export function CampaignIssuanceTab({ campaignId, settingId, roster }: Props) {
   const calendar = useSettingCalendar(settingId);
   const grants = useCampaignGrants(campaignId);
   const entities = useCampaignSettingEntities(campaignId);
-  const [alertDialog, showAlert] = useAlert();
 
   // «Глазами игрока»: выбранный игрок и его превью с сервера.
   const [previewPlayerId, setPreviewPlayerId] = useState<number | "">("");
@@ -80,40 +100,6 @@ export function CampaignIssuanceTab({ campaignId, settingId, roster }: Props) {
   useEffect(() => {
     setSelected(new Set());
   }, [campaignId]);
-
-  useEffect(() => {
-    if (!settingId) {
-      setLocations([]);
-      setBeings([]);
-      setCommunities([]);
-      setChronicleEvents([]);
-      setLoading(false);
-      return;
-    }
-    const controller = new AbortController();
-    setLoading(true);
-    setLoadError(null);
-    const opts = { signal: controller.signal };
-    Promise.all([
-      api.get<SettingLocation[]>(`/setting-locations?setting_id=${settingId}`, opts),
-      api.get<SettingBeing[]>(`/setting-beings?setting_id=${settingId}`, opts),
-      api.get<SettingCommunity[]>(`/setting-communities?setting_id=${settingId}`, opts),
-      api.get<SettingCalendarEvent[]>(`/settings/${settingId}/calendar-events`, opts),
-    ])
-      .then(([locs, b, comm, events]) => {
-        setLocations(locs);
-        setBeings(b);
-        setCommunities(comm);
-        setChronicleEvents(events);
-        setLoading(false);
-      })
-      .catch((e: unknown) => {
-        if ((e as Error).name === "AbortError") return;
-        setLoadError(String(e instanceof Error ? e.message : e));
-        setLoading(false);
-      });
-    return () => controller.abort();
-  }, [settingId]);
 
   const personalities = useMemo(() => beings.filter((b) => b.category !== "bestiary"), [beings]);
   const bestiary = useMemo(() => beings.filter((b) => b.category === "bestiary"), [beings]);
@@ -148,24 +134,15 @@ export function CampaignIssuanceTab({ campaignId, settingId, roster }: Props) {
   // НАСКОЛЬКО полно показано, текст — ЧТО именно показано вместо правды.
   const savePlayerText = useCallback(
     async (targetType: VisibilityTargetType, targetId: number, text: string): Promise<boolean> => {
-      try {
-        if (targetType === "setting_location") await api.put(`/setting-locations/${targetId}`, { player_text: text });
-        else if (targetType === "setting_being") await api.put(`/setting-beings/${targetId}`, { player_text: text });
-        else if (targetType === "setting_community") await api.put(`/setting-communities/${targetId}`, { player_text: text });
-        else await api.put(`/settings/calendar-events/${targetId}`, { player_text: text });
-        const apply = (list: { id: number; player_text: string }[], set: (v: any) => void) =>
-          set(list.map((e) => (e.id === targetId ? { ...e, player_text: text } : e)));
-        if (targetType === "setting_location") apply(locations, setLocations);
-        else if (targetType === "setting_being") apply(beings, setBeings);
-        else if (targetType === "setting_community") apply(communities, setCommunities);
-        else apply(chronicleEvents, setChronicleEvents);
-        return true;
-      } catch {
-        void showAlert("Не удалось сохранить игроцкий текст. Попробуйте ещё раз.");
-        return false;
-      }
+      const target = PLAYER_TEXT_TARGETS[targetType as keyof typeof PLAYER_TEXT_TARGETS] ?? PLAYER_TEXT_TARGETS.setting_calendar_event;
+      // Черновик в редакторе остаётся, пока запись не прошла; отказ — плашкой.
+      const saved = await run(
+        labelled("Текст игрокам", () => write.put(`${target.base}/${targetId}`, { player_text: text }).then(() => true)),
+        { affects: [{ kind: target.kind, id: targetId }, { path: "/visibility-grants/preview" }, { path: "/player" }] }
+      );
+      return saved === true;
     },
-    [locations, beings, communities, chronicleEvents, showAlert]
+    [run]
   );
 
   const toItems = useCallback(
@@ -269,11 +246,9 @@ export function CampaignIssuanceTab({ campaignId, settingId, roster }: Props) {
         const [target_type, target_id] = key.split(":");
         return { target_type: target_type as VisibilityTargetType, target_id: Number(target_id) };
       });
-      const ok = await grants.batchUpdate([playerId], targets, "grant");
-      if (ok) setSelected(new Set());
-      else void showAlert("Не удалось показать игрокам. Попробуйте ещё раз.");
+      if (await grants.batchUpdate([playerId], targets, "grant")) setSelected(new Set());
     },
-    [selected, grants, showAlert]
+    [selected, grants]
   );
 
   const handleBatchRevoke = useCallback(
@@ -282,11 +257,9 @@ export function CampaignIssuanceTab({ campaignId, settingId, roster }: Props) {
         const [target_type, target_id] = key.split(":");
         return { target_type: target_type as VisibilityTargetType, target_id: Number(target_id) };
       });
-      const ok = await grants.batchUpdate([playerId], targets, "revoke");
-      if (ok) setSelected(new Set());
-      else void showAlert("Не удалось скрыть у игроков. Попробуйте ещё раз.");
+      if (await grants.batchUpdate([playerId], targets, "revoke")) setSelected(new Set());
     },
-    [selected, grants, showAlert]
+    [selected, grants]
   );
 
   const handleBatchInclude = useCallback(async () => {
@@ -294,20 +267,16 @@ export function CampaignIssuanceTab({ campaignId, settingId, roster }: Props) {
       const [entity_type, entity_id] = key.split(":");
       return { entity_type: entity_type as VisibilityTargetType, entity_id: Number(entity_id) };
     });
-    const ok = await entities.batchUpdate(targets, "add");
-    if (ok) setSelected(new Set());
-    else void showAlert("Не удалось добавить в панель игроков.");
-  }, [selected, entities, showAlert]);
+    if (await entities.batchUpdate(targets, "add")) setSelected(new Set());
+  }, [selected, entities]);
 
   const handleBatchExclude = useCallback(async () => {
     const targets = Array.from(selected).map((key) => {
       const [entity_type, entity_id] = key.split(":");
       return { entity_type: entity_type as VisibilityTargetType, entity_id: Number(entity_id) };
     });
-    const ok = await entities.batchUpdate(targets, "remove");
-    if (ok) setSelected(new Set());
-    else void showAlert("Не удалось убрать из панели игроков.");
-  }, [selected, entities, showAlert]);
+    if (await entities.batchUpdate(targets, "remove")) setSelected(new Set());
+  }, [selected, entities]);
 
   // «Глазами игрока»: превью считается ТЕМ ЖЕ кодом, что выдача игроку
   // (GET /visibility-grants/preview → services/playerContent.ts), а не своим
@@ -332,7 +301,7 @@ export function CampaignIssuanceTab({ campaignId, settingId, roster }: Props) {
   const previewPlayer = roster.find((p) => p.id === previewPlayerId);
   const previewGroups = useMemo(() => (preview ? buildSettingReaderGroups(preview.setting) : []), [preview]);
 
-  const rowShared = { campaignId, roster, grants, entities, selected, onSelect: toggleSelect, mode, onGrantsChanged: () => grants.refresh() };
+  const rowShared = { campaignId, roster, grants, entities, selected, onSelect: toggleSelect, mode };
 
   return (
     <div className="stack">
@@ -364,7 +333,7 @@ export function CampaignIssuanceTab({ campaignId, settingId, roster }: Props) {
           {loadError && (
             <LoadErrorCard
               message={<>Не удалось загрузить контент: {loadError}</>}
-              onRetry={() => window.location.reload()}
+              onRetry={() => worldStates.forEach((w) => w.error && w.reload())}
             />
           )}
           {!loading && !loadError && (
@@ -467,7 +436,6 @@ export function CampaignIssuanceTab({ campaignId, settingId, roster }: Props) {
           </div>
         </Modal>
       )}
-      {alertDialog}
     </div>
   );
 }
@@ -546,7 +514,6 @@ interface RowShared {
   selected: Set<GrantKey>;
   onSelect: (key: GrantKey) => void;
   mode: ModeKey;
-  onGrantsChanged: () => void;
 }
 
 function LevelSummary({ item, grants }: { item: EntityItem; grants: ReturnType<typeof useCampaignGrants> }) {
@@ -563,7 +530,7 @@ function LevelSummary({ item, grants }: { item: EntityItem; grants: ReturnType<t
 }
 
 function RowControls({ item, shared }: { item: EntityItem; shared: RowShared }) {
-  const { grants, entities, mode, campaignId, roster, onGrantsChanged } = shared;
+  const { grants, entities, mode, campaignId, roster } = shared;
   const key: GrantKey = `${item.targetType}:${item.id}`;
   const isChecked = shared.selected.has(key);
   const isIncl = entities.isIncluded(item.targetType, item.id);
@@ -593,7 +560,7 @@ function RowControls({ item, shared }: { item: EntityItem; shared: RowShared }) 
           {isIncl ? "В панели" : "+ Добавить"}
         </button>
       ) : (
-        <PlayerVisibilityPicker campaignId={campaignId} targetType={item.targetType} targetId={item.id} roster={roster} onChanged={onGrantsChanged} />
+        <PlayerVisibilityPicker campaignId={campaignId} targetType={item.targetType} targetId={item.id} roster={roster} />
       )}
     </>
   );

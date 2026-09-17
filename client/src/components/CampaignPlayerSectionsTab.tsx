@@ -1,5 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
+import { useAction, useResource, write } from "../data/hooks";
+import { dataKeys } from "../data/entities";
+import { campaignPaths, playerArticleAffects, playerSectionAffects } from "../data/campaigns";
+import { settingPaths } from "../data/settingEntities";
+import { labelled } from "../data/notices";
 import { GalleryTab } from "./GalleryTab";
 import { PlayerVisibilityPicker } from "./PlayerVisibilityPicker";
 import { MentionTextarea } from "./mentions/MentionTextarea";
@@ -12,6 +18,8 @@ import { EntityTabWorkspace } from "./EntityTabWorkspace";
 import type { CampaignPlayerArticle, CampaignPlayerSection, CampaignPlayerSectionKind, RosterPlayer } from "../types";
 
 const SECTION_NAME_MAX = 80;
+const NO_SECTIONS: CampaignPlayerSection[] = [];
+const NO_ARTICLES: CampaignPlayerArticle[] = [];
 
 interface Props {
   campaignId: number;
@@ -20,11 +28,17 @@ interface Props {
 }
 
 export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId }: Props) {
-  const [sections, setSections] = useState<CampaignPlayerSection[]>([]);
+  const client = useQueryClient();
+  const run = useAction();
+  const sectionsPath = campaignPaths.playerSections(campaignId);
+  const sectionsState = useResource<CampaignPlayerSection[]>(sectionsPath);
+  const sections = sectionsState.data ?? NO_SECTIONS;
+  const loading = sectionsState.loading;
   const [newName, setNewName] = useState("");
   const [newKind, setNewKind] = useState<CampaignPlayerSectionKind>("articles");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Ошибка здесь — только чтения или проверки названия; отказ записи — плашкой.
+  const [validationError, setError] = useState<string | null>(null);
+  const error = validationError ?? sectionsState.error;
   const [saving, setSaving] = useState(false);
   const [confirmDialog, confirm] = useConfirm();
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -33,32 +47,10 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
   // в навигации — из кэша, который докладывает ArticlesList при загрузке.
   const [sel, setSel] = useState<{ sectionId: number | null; articleId?: number }>({ sectionId: null });
   const [artCache, setArtCache] = useState<Record<number, CampaignPlayerArticle[]>>({});
-  const [galCounts, setGalCounts] = useState<Record<number, number>>({});
 
-  function load(signal?: AbortSignal) {
-    setLoading(true);
+  function load() {
     setError(null);
-    api
-      .get<CampaignPlayerSection[]>(`/campaign-player-sections?campaign_id=${campaignId}`, { signal } as any)
-      .then((data) => {
-        setSections(data);
-        setLoading(false);
-      })
-      .catch((e: any) => {
-        if (e?.name === "AbortError") return;
-        setError(e?.message ?? "Ошибка загрузки");
-        setLoading(false);
-      });
-  }
-
-  useEffect(() => {
-    const c = new AbortController();
-    load(c.signal);
-    return () => c.abort();
-  }, [campaignId]);
-
-  function refresh() {
-    load();
+    sectionsState.reload();
   }
 
   async function addSection() {
@@ -69,12 +61,16 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
       return;
     }
     setSaving(true);
+    setError(null);
     try {
-      await api.post("/campaign-player-sections", { campaign_id: campaignId, name: trimmed, kind: newKind });
-      setNewName("");
-      refresh();
-    } catch (e: any) {
-      setError(e?.message ?? "Не удалось создать подраздел");
+      // Без «Повторить»: ответ мог потеряться после записи, повтор создал бы второй.
+      const created = await run(
+        labelled("Новый подраздел", () =>
+          write.post("/campaign-player-sections", { campaign_id: campaignId, name: trimmed, kind: newKind }).then(() => true)
+        ),
+        { affects: playerSectionAffects(campaignId), retry: false }
+      );
+      if (created) setNewName("");
     } finally {
       setSaving(false);
     }
@@ -88,12 +84,10 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
       danger: true,
     });
     if (!ok) return;
-    try {
-      await api.del(`/campaign-player-sections/${id}`);
-      refresh();
-    } catch (e: any) {
-      setError(e?.message ?? "Не удалось удалить подраздел");
-    }
+    // Статьи удалённого подраздела не перечитываются: их карточка уже уходит с экрана.
+    await run(labelled("Удаление подраздела", () => write.del(`/campaign-player-sections/${id}`)), {
+      affects: playerSectionAffects(campaignId),
+    });
   }
 
   async function reorderSections(draggedId: number, targetId: number) {
@@ -104,13 +98,13 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
     if (from === -1 || to === -1) return;
     ids.splice(to, 0, ...ids.splice(from, 1));
     const order = new Map(ids.map((id, i) => [id, i]));
-    setSections((prev) => [...prev].sort((a, b) => order.get(a.id)! - order.get(b.id)!));
-    try {
-      await api.put("/campaign-player-sections/reorder", { order: ids });
-    } catch (e: any) {
-      setError(e?.message ?? "Не удалось переместить");
-      load();
-    }
+    const key = dataKeys.resource(sectionsPath);
+    const previous = client.getQueryData<CampaignPlayerSection[]>(key);
+    if (previous) client.setQueryData(key, [...previous].sort((a, b) => order.get(a.id)! - order.get(b.id)!));
+    const moved = await run(labelled("Порядок подразделов", () => write.put("/campaign-player-sections/reorder", { order: ids })), {
+      affects: playerSectionAffects(campaignId),
+    });
+    if (moved === undefined && previous) client.setQueryData(key, previous);
   }
 
   const filtered = filter.trim() ? sections.filter((s) => s.name.toLowerCase().includes(filter.trim().toLowerCase())) : sections;
@@ -125,36 +119,23 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered, sel.sectionId]);
 
-  // Счётчики галерей для навигации (статьи докладывает ArticlesList сам).
-  useEffect(() => {
-    const galleries = sections.filter((s) => s.kind === "gallery");
-    if (galleries.length === 0) return;
-    let cancelled = false;
-    Promise.all(
-      galleries.map((s) =>
-        api
-          .get<CampaignPlayerArticle[]>(`/gallery?owner_type=campaign_player_section&owner_id=${s.id}`)
-          .then((rows) => [s.id, rows.length] as const)
-          .catch(() => [s.id, -1] as const)
-      )
-    ).then((pairs) => {
-      if (cancelled) return;
-      setGalCounts((prev) => {
-        const next = { ...prev };
-        let changed = false;
-        for (const [id, n] of pairs) {
-          if (n >= 0 && next[id] !== n) {
-            next[id] = n;
-            changed = true;
-          }
-        }
-        return changed ? next : prev;
-      });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [sections]);
+  // Счётчики галерей для навигации (статьи докладывает ArticlesList сам) —
+  // под тем же ключом, что читает сама галерея подраздела.
+  const galleries = useMemo(() => sections.filter((s) => s.kind === "gallery"), [sections]);
+  const galleryQueries = useQueries({
+    queries: galleries.map((g) => {
+      const path = settingPaths.gallery("campaign_player_section", g.id);
+      return {
+        queryKey: dataKeys.resource(path),
+        queryFn: ({ signal }: { signal: AbortSignal }) => api.get<unknown[]>(path, { signal }),
+      };
+    }),
+  });
+  const galCounts: Record<number, number> = {};
+  galleries.forEach((g, i) => {
+    const rows = galleryQueries[i]?.data;
+    if (rows) galCounts[g.id] = rows.length;
+  });
 
   const reportArticles = useCallback((sectionId: number, arts: CampaignPlayerArticle[]) => {
     setArtCache((prev) => {
@@ -288,7 +269,6 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
                 onMoveUp={idx > 0 ? () => moveSection(selectedSection.id, -1) : undefined}
                 onMoveDown={idx >= 0 && idx < sections.length - 1 ? () => moveSection(selectedSection.id, 1) : undefined}
                 onRemove={() => removeSection(selectedSection.id)}
-                onRenamed={refresh}
                 onArticlesStats={(arts) => reportArticles(selectedSection.id, arts)}
               />
             );
@@ -307,7 +287,6 @@ function SectionCard({
   roster,
   defaultSettingId,
   onRemove,
-  onRenamed,
   forceExpanded = false,
   onMoveUp,
   onMoveDown,
@@ -318,7 +297,6 @@ function SectionCard({
   roster: RosterPlayer[];
   defaultSettingId?: number;
   onRemove: () => void;
-  onRenamed: () => void;
   /** Внутри Master–Detail карточка всегда раскрыта, сворачивать нечего. */
   forceExpanded?: boolean;
   /** Порядок разделов — стрелками вместо drag (в навигации drag нет). */
@@ -330,29 +308,26 @@ function SectionCard({
   const [renaming, setRenaming] = useState(false);
   const [nameDraft, setNameDraft] = useState(section.name);
   const [savingName, setSavingName] = useState(false);
-  const [countLabel, setCountLabel] = useState<string | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    if (section.kind === "gallery") {
-      api.get<any[]>(`/gallery?owner_type=campaign_player_section&owner_id=${section.id}`).then((rows) => {
-        if (!cancelled) setCountLabel(`${rows.length} изо`);
-      }).catch(() => {});
-    } else {
-      api.get<any[]>(`/campaign-player-sections/${section.id}/articles`).then((rows) => {
-        if (!cancelled) setCountLabel(`${rows.length} ст`);
-      }).catch(() => {});
-    }
-    return () => { cancelled = true; };
-  }, [section.id, section.kind]);
+  const run = useAction();
+  // Число изображений или статей — те же ключи, что у галереи и списка статей.
+  const isGallery = section.kind === "gallery";
+  const galleryRows = useResource<unknown[]>(isGallery ? settingPaths.gallery("campaign_player_section", section.id) : null).data;
+  const articleRows = useResource<unknown[]>(isGallery ? null : campaignPaths.sectionArticles(section.id)).data;
+  const countLabel = isGallery
+    ? galleryRows ? `${galleryRows.length} изо` : null
+    : articleRows ? `${articleRows.length} ст` : null;
 
   async function saveName() {
     const trimmed = nameDraft.trim();
     if (!trimmed || trimmed.length > SECTION_NAME_MAX) return;
     setSavingName(true);
     try {
-      await api.put(`/campaign-player-sections/${section.id}`, { name: trimmed });
-      setRenaming(false);
-      onRenamed();
+      // Поле закрывается только после записи: при отказе набранное остаётся.
+      const saved = await run(
+        labelled("Название подраздела", () => write.put(`/campaign-player-sections/${section.id}`, { name: trimmed }).then(() => true)),
+        { affects: playerSectionAffects(campaignId, section.id) }
+      );
+      if (saved) setRenaming(false);
     } finally {
       setSavingName(false);
     }
@@ -441,34 +416,20 @@ function ArticlesList({
   /** Статьи для пунктов навигации (id + заголовки). */
   onStats?: (articles: CampaignPlayerArticle[]) => void;
 }) {
-  const [articles, setArticles] = useState<CampaignPlayerArticle[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const client = useQueryClient();
+  const run = useAction();
+  const articlesPath = campaignPaths.sectionArticles(sectionId);
+  const articlesState = useResource<CampaignPlayerArticle[]>(articlesPath);
+  const articles = articlesState.data ?? NO_ARTICLES;
+  const loading = articlesState.loading;
+  const error = articlesState.error;
   const [saving, setSaving] = useState(false);
   const [confirmDialog, confirm] = useConfirm();
   const [dragId, setDragId] = useState<number | null>(null);
 
-  function load(signal?: AbortSignal) {
-    setLoading(true);
-    setError(null);
-    api
-      .get<CampaignPlayerArticle[]>(`/campaign-player-sections/${sectionId}/articles`, { signal } as any)
-      .then((data) => {
-        setArticles(data);
-        setLoading(false);
-      })
-      .catch((e: any) => {
-        if (e?.name === "AbortError") return;
-        setError(e?.message ?? "Ошибка загрузки статей");
-        setLoading(false);
-      });
+  function load() {
+    articlesState.reload();
   }
-
-  useEffect(() => {
-    const c = new AbortController();
-    load(c.signal);
-    return () => c.abort();
-  }, [sectionId]);
 
   // Статьи для пунктов навигации Master–Detail.
   useEffect(() => {
@@ -476,21 +437,16 @@ function ArticlesList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [articles]);
 
-  function refresh() {
-    load();
-  }
-
   async function addArticle() {
     if (saving) return;
     setSaving(true);
     try {
-      await api.post(`/campaign-player-sections/${sectionId}/articles`, {
-        title: `Статья ${articles.length + 1}`,
-        content: "",
-      });
-      refresh();
-    } catch (e: any) {
-      setError(e?.message ?? "Не удалось создать статью");
+      await run(
+        labelled("Новая статья", () =>
+          write.post(`/campaign-player-sections/${sectionId}/articles`, { title: `Статья ${articles.length + 1}`, content: "" })
+        ),
+        { affects: playerArticleAffects(sectionId), retry: false }
+      );
     } finally {
       setSaving(false);
     }
@@ -504,12 +460,9 @@ function ArticlesList({
       danger: true,
     });
     if (!ok) return;
-    try {
-      await api.del(`/campaign-player-sections/articles/${id}`);
-      refresh();
-    } catch (e: any) {
-      setError(e?.message ?? "Не удалось удалить статью");
-    }
+    await run(labelled("Удаление статьи", () => write.del(`/campaign-player-sections/articles/${id}`)), {
+      affects: playerArticleAffects(sectionId),
+    });
   }
 
   async function reorderArticles(draggedId: number, targetId: number) {
@@ -520,13 +473,13 @@ function ArticlesList({
     if (from === -1 || to === -1) return;
     ids.splice(to, 0, ...ids.splice(from, 1));
     const order = new Map(ids.map((id, i) => [id, i]));
-    setArticles((prev) => [...prev].sort((a, b) => order.get(a.id)! - order.get(b.id)!));
-    try {
-      await api.put("/campaign-player-sections/articles/reorder", { order: ids });
-    } catch (e: any) {
-      setError(e?.message ?? "Не удалось переместить статью");
-      load();
-    }
+    const key = dataKeys.resource(articlesPath);
+    const previous = client.getQueryData<CampaignPlayerArticle[]>(key);
+    if (previous) client.setQueryData(key, [...previous].sort((a, b) => order.get(a.id)! - order.get(b.id)!));
+    const moved = await run(labelled("Порядок статей", () => write.put("/campaign-player-sections/articles/reorder", { order: ids })), {
+      affects: playerArticleAffects(sectionId),
+    });
+    if (moved === undefined && previous) client.setQueryData(key, previous);
   }
 
   const visible = focusedId != null ? articles.filter((a) => a.id === focusedId) : articles;
@@ -568,11 +521,11 @@ function ArticlesList({
         >
           <ArticleCard
             campaignId={campaignId}
+            sectionId={sectionId}
             article={a}
             roster={roster}
             defaultSettingId={defaultSettingId}
             forceOpen={focusedId != null}
-            onChange={refresh}
             onRemove={() => removeArticle(a.id)}
           />
         </div>
@@ -589,18 +542,18 @@ function ArticlesList({
 
 function ArticleCard({
   campaignId,
+  sectionId,
   article,
   roster,
   defaultSettingId,
-  onChange,
   onRemove,
   forceOpen = false,
 }: {
   campaignId: number;
+  sectionId: number;
   article: CampaignPlayerArticle;
   roster: RosterPlayer[];
   defaultSettingId?: number;
-  onChange: () => void;
   onRemove: () => void;
   /** Внутри Master–Detail карточка всегда раскрыта, сворачивать нечего. */
   forceOpen?: boolean;
@@ -615,14 +568,19 @@ function ArticleCard({
   const open = editMode || expanded || forceOpen;
   const isDirty = title !== article.title || content !== article.content;
 
+  const run = useAction();
   async function save() {
     if (saving) return;
     setSaving(true);
     try {
-      await api.put(`/campaign-player-sections/articles/${article.id}`, { title, content });
-      syncMentionLinks("campaign_player_article", article.id, article.content, content);
+      // Правка закрывается только после записи: при отказе набранное остаётся.
+      const saved = await run(
+        labelled("Статья", () => write.put(`/campaign-player-sections/articles/${article.id}`, { title, content }).then(() => true)),
+        { affects: playerArticleAffects(sectionId) }
+      );
+      if (!saved) return;
+      void syncMentionLinks("campaign_player_article", article.id, article.content, content);
       setEditMode(false);
-      onChange();
     } finally {
       setSaving(false);
     }

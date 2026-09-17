@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { useMemo, useState } from "react";
+import { write } from "../data/hooks";
+import { grantRow, useCampaignGrantList, useGrantWriter } from "../hooks/useCampaignGrants";
 import { NavIcon } from "./NavIcons";
 import type { AccessLevel, PlayerVisibilityGrant, RosterPlayer, VisibilityTargetType } from "../types";
 
@@ -29,87 +30,69 @@ const SETTING_TARGETS: ReadonlySet<string> = new Set([
 
 export function PlayerVisibilityPicker({ campaignId, targetType, targetId, roster, onChanged }: Props) {
   const [open, setOpen] = useState(false);
-  const [grants, setGrants] = useState<PlayerVisibilityGrant[] | null>(null);
+  // Доступы цели — выборка из общего списка кампании (один запрос на все глаза).
+  const all = useCampaignGrantList(campaignId).data;
+  const grants = useMemo(
+    () => (all ? all.filter((g) => g.target_type === targetType && g.target_id === targetId) : null),
+    [all, targetType, targetId]
+  );
+  const writeGrants = useGrantWriter(campaignId);
   const withLevel = SETTING_TARGETS.has(targetType);
-
-  function refresh(signal?: AbortSignal) {
-    api
-      .get<PlayerVisibilityGrant[]>(
-        `/visibility-grants?campaign_id=${campaignId}&target_type=${targetType}&target_id=${targetId}`,
-        { signal } as any
-      )
-      .then(setGrants)
-      .catch((e: any) => {
-        if (e?.name === "AbortError") return;
-        // keep previous grants on error — silent retry on next open
-      });
-  }
-  useEffect(() => {
-    if (!open || grants !== null) return;
-    const c = new AbortController();
-    refresh(c.signal);
-    return () => c.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  const ofTarget = (g: PlayerVisibilityGrant) => g.target_type === targetType && g.target_id === targetId;
 
   async function toggle(playerId: number, granted: boolean) {
-    const prev = grants ? [...grants] : [];
-    const optimistic = granted
-      ? prev.filter((g) => g.player_id !== playerId)
-      : [...prev, { campaign_id: campaignId, player_id: playerId, target_type: targetType, target_id: targetId, access_level: "open" } as PlayerVisibilityGrant];
-    setGrants(optimistic as PlayerVisibilityGrant[]);
-    try {
-      if (granted) {
-        await api.del(`/visibility-grants?campaign_id=${campaignId}&player_id=${playerId}&target_type=${targetType}&target_id=${targetId}`);
-      } else {
-        await api.post("/visibility-grants", { campaign_id: campaignId, player_id: playerId, target_type: targetType, target_id: targetId });
-      }
-      onChanged?.();
-    } catch {
-      setGrants(prev);
-    }
+    const done = await writeGrants(
+      granted ? "Скрыть у игрока" : "Показать игроку",
+      (rows) =>
+        granted
+          ? rows.filter((g) => !(ofTarget(g) && g.player_id === playerId))
+          : [...rows, grantRow(campaignId, playerId, targetType, targetId)],
+      () =>
+        granted
+          ? write.del(`/visibility-grants?campaign_id=${campaignId}&player_id=${playerId}&target_type=${targetType}&target_id=${targetId}`)
+          : write.post("/visibility-grants", { campaign_id: campaignId, player_id: playerId, target_type: targetType, target_id: targetId })
+    );
+    if (done) onChanged?.();
   }
 
   async function changeLevel(playerId: number, level: AccessLevel) {
-    const prev = grants ? [...grants] : [];
-    setGrants(prev.map((g) => (g.player_id === playerId ? { ...g, access_level: level } : g)));
-    try {
-      await api.put("/visibility-grants", {
-        campaign_id: campaignId,
-        player_id: playerId,
-        target_type: targetType,
-        target_id: targetId,
-        access_level: level,
-      });
-      onChanged?.();
-    } catch {
-      setGrants(prev);
-    }
+    const done = await writeGrants(
+      "Ступень выдачи",
+      (rows) => rows.map((g) => (ofTarget(g) && g.player_id === playerId ? { ...g, access_level: level } : g)),
+      () =>
+        write.put("/visibility-grants", {
+          campaign_id: campaignId,
+          player_id: playerId,
+          target_type: targetType,
+          target_id: targetId,
+          access_level: level,
+        })
+    );
+    if (done) onChanged?.();
   }
 
   async function batchToggle(playerIds: number[], grant: boolean) {
     if (!playerIds.length) return;
-    const prev = grants ? [...grants] : [];
-    const optimistic = grant
-      ? [
-          ...prev,
-          ...playerIds
-            .filter((pid) => !prev.some((g) => g.player_id === pid))
-            .map((pid) => ({ campaign_id: campaignId, player_id: pid, target_type: targetType, target_id: targetId, access_level: "open" } as PlayerVisibilityGrant)),
-        ]
-      : prev.filter((g) => !playerIds.includes(g.player_id));
-    setGrants(optimistic as PlayerVisibilityGrant[]);
-    try {
-      await api.post("/visibility-grants/batch", {
-        campaign_id: campaignId,
-        player_ids: playerIds,
-        targets: [{ target_type: targetType, target_id: targetId }],
-        action: grant ? "grant" : "revoke",
-      });
-      onChanged?.();
-    } catch {
-      setGrants(prev);
-    }
+    const done = await writeGrants(
+      grant ? "Показать игрокам" : "Скрыть у игроков",
+      (rows) =>
+        grant
+          ? [
+              ...rows,
+              ...playerIds
+                .filter((pid) => !rows.some((g) => ofTarget(g) && g.player_id === pid))
+                .map((pid) => grantRow(campaignId, pid, targetType, targetId)),
+            ]
+          : rows.filter((g) => !(ofTarget(g) && playerIds.includes(g.player_id))),
+      () =>
+        write.post("/visibility-grants/batch", {
+          campaign_id: campaignId,
+          player_ids: playerIds,
+          targets: [{ target_type: targetType, target_id: targetId }],
+          action: grant ? "grant" : "revoke",
+        })
+    );
+    if (done) onChanged?.();
   }
 
   const grantedCount = grants?.length ?? 0;

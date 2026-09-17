@@ -31,6 +31,13 @@ export const campaignPaths = {
   groupsOf: (campaignId: number) => `/campaign-groups/by-campaign/${campaignId}`,
   groupMembers: (groupId: number) => `/campaign-groups/${groupId}/members`,
   players: () => "/players",
+  selfPlayer: () => "/players/self",
+  characters: sessionPaths.campaignCharacters,
+  playerJournals: (campaignId: number) => `/campaigns/${campaignId}/player-journals`,
+  grants: (campaignId: number) => `/visibility-grants?campaign_id=${campaignId}`,
+  settingEntities: (campaignId: number) => `/campaign-setting-entities/${campaignId}`,
+  playerSections: (campaignId: number) => `/campaign-player-sections?campaign_id=${campaignId}`,
+  sectionArticles: (sectionId: number) => `/campaign-player-sections/${sectionId}/articles`,
   systems: () => "/systems",
   settings: () => "/settings",
 };
@@ -103,3 +110,45 @@ export function campaignArcAffects(campaignId: number, arcId: number): Affect[] 
 export function campaignGroupAffects(): Affect[] {
   return [{ path: campaignPaths.groups() }];
 }
+
+/**
+ * Что отдаётся игрокам: превью «Глазами игрока» и страницы игрока — их
+ * перечитывает любая правка выдачи.
+ */
+function playerViewAffects(): Affect[] {
+  return [{ path: "/visibility-grants/preview" }, { path: "/player" }];
+}
+
+/**
+ * Видимость (глаз «Кому видно», пакетная выдача): все доступы кампании — под
+ * этим префиксом и общий список, и доступы одной цели.
+ */
+export function grantAffects(campaignId: number): Affect[] {
+  return [{ path: campaignPaths.grants(campaignId) }, ...playerViewAffects()];
+}
+
+/** Включение сущности сеттинга в панель игроков; исключение снимает и её доступы. */
+export function settingEntityAffects(campaignId: number): Affect[] {
+  return [{ path: campaignPaths.settingEntities(campaignId) }, { path: campaignPaths.grants(campaignId) }, ...playerViewAffects()];
+}
+
+/** Подразделы «От мастера» и их статьи. */
+export function playerSectionAffects(campaignId: number, sectionId?: number): Affect[] {
+  const affects: Affect[] = [{ path: campaignPaths.playerSections(campaignId) }, ...playerViewAffects()];
+  if (sectionId != null) affects.push({ path: campaignPaths.sectionArticles(sectionId) });
+  return affects;
+}
+
+/** Статья «От мастера»: список статей её подраздела. */
+export function playerArticleAffects(sectionId: number): Affect[] {
+  return [{ path: campaignPaths.sectionArticles(sectionId) }, { path: "/campaign-player-sections/articles" }, ...playerViewAffects()];
+}
+
+/**
+ * Состав кампании (добавить, убрать, «покинул»): карточка кампании, где лежит
+ * состав, её долги и персонажи — их читает и пульт.
+ */
+export function rosterAffects(campaignId: number): Affect[] {
+  return [...campaignFieldsAffects(campaignId), { path: campaignPaths.characters(campaignId) }];
+}
+

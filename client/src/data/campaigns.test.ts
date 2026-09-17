@@ -6,7 +6,12 @@ import {
   campaignEventAffects,
   campaignFieldsAffects,
   campaignPaths,
+  grantAffects,
   milestoneAffects,
+  playerArticleAffects,
+  playerSectionAffects,
+  rosterAffects,
+  settingEntityAffects,
   sceneStatusAffects,
   secretAffects,
 } from "./campaigns";
@@ -74,5 +79,39 @@ describe("кампания в слое данных", () => {
       expect(hits(affects, path)).toBe(true);
     }
     expect(hits(affects, campaignPaths.sessions(2))).toBe(false);
+  });
+
+  it("выдача задевает доступы своей кампании, превью и страницы игрока — не профиль", () => {
+    const affects = grantAffects(2);
+    expect(hits(affects, campaignPaths.grants(2))).toBe(true);
+    expect(hits(affects, `${campaignPaths.grants(2)}&target_type=setting_location&target_id=25`)).toBe(true);
+    expect(hits(affects, campaignPaths.grants(20))).toBe(false);
+    expect(hits(affects, "/visibility-grants/preview?campaign_id=2&player_id=11")).toBe(true);
+    expect(hits(affects, "/player/sections")).toBe(true);
+    expect(hits(affects, campaignPaths.detail(2))).toBe(false);
+    expect(hits(affects, campaignPaths.sessions(2))).toBe(false);
+  });
+
+  it("исключение из панели снимает и доступы", () => {
+    const affects = settingEntityAffects(2);
+    expect(hits(affects, campaignPaths.settingEntities(2))).toBe(true);
+    expect(hits(affects, campaignPaths.grants(2))).toBe(true);
+    expect(hits(affects, campaignPaths.settingEntities(20))).toBe(false);
+  });
+
+  it("подразделы и статьи «От мастера» задевают только свои списки", () => {
+    expect(hits(playerSectionAffects(2), campaignPaths.playerSections(2))).toBe(true);
+    expect(hits(playerSectionAffects(2), campaignPaths.playerSections(20))).toBe(false);
+    expect(hits(playerSectionAffects(2, 8), campaignPaths.sectionArticles(8))).toBe(true);
+    expect(hits(playerArticleAffects(8), campaignPaths.sectionArticles(8))).toBe(true);
+    expect(hits(playerArticleAffects(8), campaignPaths.sectionArticles(80))).toBe(false);
+  });
+
+  it("состав задевает карточку кампании и персонажей пульта, но не сессии", () => {
+    const affects = rosterAffects(2);
+    expect(hits(affects, campaignPaths.detail(2))).toBe(true);
+    expect(hits(affects, sessionPaths.campaignCharacters(2))).toBe(true);
+    expect(hits(affects, campaignPaths.sessions(2))).toBe(false);
+    expect(hits(affects, sessionPaths.campaignCharacters(20))).toBe(false);
   });
 });

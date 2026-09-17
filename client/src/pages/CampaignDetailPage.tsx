@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
-import { useAction, useResource, write } from "../data/hooks";
+import { useAction, useEntity, useResource, write } from "../data/hooks";
 import { afterWriteAnywhere } from "../data/imperative";
 import {
   campaignEventAffects,
   campaignFieldsAffects,
   campaignGroupAffects,
   campaignPaths,
+  rosterAffects,
 } from "../data/campaigns";
+import { useQueries } from "@tanstack/react-query";
+import { dataKeys, entityPath } from "../data/entities";
+import { statblockListPath } from "../data/statblocks";
 import { chroniclePaths } from "../data/settingPage";
 import { sessionMoneyAffects } from "../data/sessions";
 import { labelled } from "../data/notices";
@@ -804,7 +808,6 @@ export function CampaignDetailPage() {
               campaignId={campaignId}
               roster={campaign.roster}
               allPlayers={allPlayers}
-              onRosterChange={campaignState.reload}
             />
             {/* Долг стоит рядом с составом, потому что перед игрой смотрят
                 именно сюда. Считается сервером, нигде не хранится; действия над
@@ -1529,14 +1532,14 @@ function PlayersAndCharactersTab({
   campaignId,
   roster,
   allPlayers,
-  onRosterChange,
 }: {
   campaignId: number;
   roster: RosterPlayer[];
   allPlayers: Player[];
-  onRosterChange: () => void;
 }) {
-  const [characters, setCharacters] = useState<Character[]>([]);
+  const run = useAction();
+  // Персонажи кампании — тот же ключ, что у пульта.
+  const characters = useResource<Character[]>(campaignPaths.characters(campaignId)).data ?? NO_CHARACTERS;
   const [addingFor, setAddingFor] = useState<number | null>(null);
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   const [peekCharId, setPeekCharId] = useState<number | null>(null);
@@ -1544,28 +1547,27 @@ function PlayersAndCharactersTab({
   const [pcConfirmDialog, pcConfirm] = useConfirm();
   const [pcAlertDialog, showPcAlert] = useAlert();
 
-  function refresh() {
-    api.get<Character[]>(`/characters?campaign_id=${campaignId}`).then(setCharacters);
-  }
-  useEffect(refresh, [campaignId]);
-
   async function addToRoster(playerId: string, e: React.ChangeEvent<HTMLSelectElement>) {
     if (!playerId) return;
-    await api.post(`/campaigns/${campaignId}/roster/${playerId}`);
     e.target.value = "";
-    onRosterChange();
+    await run(labelled("Игрок в состав", () => write.post(`/campaigns/${campaignId}/roster/${playerId}`)), {
+      affects: rosterAffects(campaignId),
+    });
   }
   async function removeFromRoster(playerId: number) {
     const ok = await pcConfirm({ message: `Убрать игрока из состава кампании? Персонажи сохранятся.`, confirmLabel: "Убрать", danger: true });
     if (!ok) return;
-    await api.del(`/campaigns/${campaignId}/roster/${playerId}`);
-    onRosterChange();
+    await run(labelled("Игрок из состава", () => write.del(`/campaigns/${campaignId}/roster/${playerId}`)), {
+      affects: rosterAffects(campaignId),
+    });
   }
   async function toggleLeft(playerId: number, currentStatus: string) {
-    await api.put(`/campaigns/${campaignId}/roster/${playerId}`, {
-      status: currentStatus === "left" ? "active" : "left",
-    });
-    onRosterChange();
+    await run(
+      labelled("Состав кампании", () =>
+        write.put(`/campaigns/${campaignId}/roster/${playerId}`, { status: currentStatus === "left" ? "active" : "left" })
+      ),
+      { affects: rosterAffects(campaignId) }
+    );
   }
 
   async function addCharacter(playerId: number) {
@@ -1575,14 +1577,16 @@ function PlayersAndCharactersTab({
       showPcAlert("Персонаж с таким именем уже есть у этого игрока.");
       return;
     }
-    await api.post("/characters", {
-      player_id: playerId,
-      campaign_id: campaignId,
-      character_name: name,
-    });
+    // Поле закрывается только после записи: при отказе имя остаётся набранным.
+    const created = await run(
+      labelled("Новый персонаж", () =>
+        write.post("/characters", { player_id: playerId, campaign_id: campaignId, character_name: name }).then(() => true)
+      ),
+      { affects: [{ kind: "character" }], retry: false }
+    );
+    if (!created) return;
     setDrafts((d) => ({ ...d, [playerId]: "" }));
     setAddingFor(null);
-    refresh();
   }
 
   const available = allPlayers.filter((p) => !roster.some((r) => r.id === p.id));
@@ -1625,7 +1629,7 @@ function PlayersAndCharactersTab({
                 onAddCharacter={() => addCharacter(p.id)}
                 onToggleLeft={() => toggleLeft(p.id, p.roster_status)}
                 onRemove={() => removeFromRoster(p.id)}
-                onThumbnailChanged={onRosterChange}
+                campaignId={campaignId}
               >
                 {playerCharacters.map((c) => (
                   <span key={c.id} className="row" style={{ gap: 4, flexWrap: "nowrap" }}>
@@ -1656,21 +1660,12 @@ function PlayersAndCharactersTab({
 // остаётся инструментом игрока, мастер по нему готовится, а не пишет в него.
 function PlayerJournalsSection({ campaignId }: { campaignId: number }) {
   type JournalRow = WorldExplorationEntry & { player_name?: string | null; character_name?: string | null };
-  const [rows, setRows] = useState<JournalRow[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const journals = useResource<JournalRow[]>(campaignPaths.playerJournals(campaignId));
+  const error = journals.error;
+  const rows = useMemo(() => journals.data ?? (error ? [] : null), [journals.data, error]);
+  const load = journals.reload;
   const [query, setQuery] = useState("");
   const [author, setAuthor] = useState("all");
-  function load() {
-    setError(null);
-    api
-      .get<JournalRow[]>(`/campaigns/${campaignId}/player-journals`)
-      .then((r) => setRows(r))
-      .catch((e) => {
-        setError(String(e instanceof Error ? e.message : e));
-        setRows([]);
-      });
-  }
-  useEffect(load, [campaignId]);
   const authors = useMemo(() => {
     const map = new Map<string, string>();
     for (const r of rows ?? []) {
@@ -1745,36 +1740,40 @@ function PlayerJournalsSection({ campaignId }: { campaignId: number }) {
 }
 
 function CampaignSquadSummary({ characters }: { characters: Character[] }) {
-  const [rows, setRows] = useState<{ id: number; name: string; level: string; ac: string; hp: string; speed: string }[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const out: typeof rows = [];
-      for (const c of characters) {
-        try {
-          const sbs = await api.get<{ content: string; format: string }[]>(`/statblocks?owner_type=character&owner_id=${c.id}`);
-          const dnd = sbs.find((s) => s.format === "dnd_character");
-          if (!dnd) { out.push({ id: c.id, name: c.character_name, level: "—", ac: "—", hp: "—", speed: "—" }); continue; }
-          // «Сводка отряда» читала сохранённые поля листа как есть — а они
-          // свободный текст, который пишет импорт и который устаревает при
-          // любой правке класса или снаряжения. Теперь числа те же, что на
-          // самом чарнике: один модуль на оба экрана.
-          const sheet = deriveSheet(normalizeDndCharacter(JSON.parse(dnd.content || "{}")));
-          const lvl = sheet.level.value || "—";
-          out.push({
-            id: c.id,
-            name: c.character_name,
-            level: String(lvl),
-            ac: String(sheet.armorClass.value),
-            hp: sheet.maxHitPoints.value ? String(sheet.maxHitPoints.value) : "—",
-            speed: sheet.walkSpeed.value ? String(sheet.walkSpeed.value) : "—",
-          });
-        } catch { out.push({ id: c.id, name: c.character_name, level: "—", ac: "—", hp: "—", speed: "—" }); }
-      }
-      if (!cancelled) setRows(out);
-    })();
-    return () => { cancelled = true; };
-  }, [characters]);
+  // Статблоки — под тем же ключом, что у листа: правка листа в соседнем окне
+  // меняет сводку без перечитывания всего отряда.
+  const statblocks = useQueries({
+    queries: characters.map((c) => {
+      const path = statblockListPath("character", c.id);
+      return {
+        queryKey: dataKeys.resource(path),
+        queryFn: ({ signal }: { signal: AbortSignal }) => api.get<{ content: string; format: string }[]>(path, { signal }),
+      };
+    }),
+  });
+  if (statblocks.some((q) => q.isPending)) return null;
+  const rows = characters.map((c, i) => {
+    const empty = { id: c.id, name: c.character_name, level: "—", ac: "—", hp: "—", speed: "—" };
+    const dnd = statblocks[i]?.data?.find((s) => s.format === "dnd_character");
+    if (!dnd) return empty;
+    try {
+      // «Сводка отряда» читала сохранённые поля листа как есть — а они
+      // свободный текст, который пишет импорт и который устаревает при
+      // любой правке класса или снаряжения. Теперь числа те же, что на
+      // самом чарнике: один модуль на оба экрана.
+      const sheet = deriveSheet(normalizeDndCharacter(JSON.parse(dnd.content || "{}")));
+      return {
+        id: c.id,
+        name: c.character_name,
+        level: String(sheet.level.value || "—"),
+        ac: String(sheet.armorClass.value),
+        hp: sheet.maxHitPoints.value ? String(sheet.maxHitPoints.value) : "—",
+        speed: sheet.walkSpeed.value ? String(sheet.walkSpeed.value) : "—",
+      };
+    } catch {
+      return empty;
+    }
+  });
   if (rows.length === 0) return null;
   const hasAny = rows.some((r) => r.ac !== "—" || r.hp !== "—");
   if (!hasAny) return null;
@@ -1792,21 +1791,17 @@ function CampaignSquadSummary({ characters }: { characters: Character[] }) {
 }
 
 function CampaignSquadDates({ characters }: { characters: Character[] }) {
-  const [dates, setDates] = useState<{ charId: number; charName: string; date: ImportantDate }[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const all: typeof dates = [];
-      for (const c of characters) {
-        try {
-          const full = await api.get<Character & { important_dates?: ImportantDate[] }>(`/characters/${c.id}`);
-          for (const d of full.important_dates ?? []) all.push({ charId: c.id, charName: c.character_name, date: d });
-        } catch {}
-      }
-      if (!cancelled) setDates(all);
-    })();
-    return () => { cancelled = true; };
-  }, [characters]);
+  // Карточки персонажей — тот же ключ, что у профиля персонажа.
+  const cards = useQueries({
+    queries: characters.map((c) => ({
+      queryKey: dataKeys.entity("character", c.id),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        api.get<Character & { important_dates?: ImportantDate[] }>(entityPath("character", c.id), { signal }),
+    })),
+  });
+  const dates = characters.flatMap((c, i) =>
+    (cards[i]?.data?.important_dates ?? []).map((d) => ({ charId: c.id, charName: c.character_name, date: d }))
+  );
   if (dates.length === 0) return null;
   return (
     <div className="card stack" style={{ marginTop: 8 }}>
@@ -1825,12 +1820,7 @@ function CampaignSquadDates({ characters }: { characters: Character[] }) {
 }
 
 function CharacterPeekModal({ characterId, onClose }: { characterId: number; onClose: () => void }) {
-  const [char, setChar] = useState<Character | null>(null);
-  useEffect(() => {
-    const ctrl = new AbortController();
-    api.get<Character>(`/characters/${characterId}`, { signal: ctrl.signal }).then(setChar).catch(() => {});
-    return () => ctrl.abort();
-  }, [characterId]);
+  const char = useEntity<Character>("character", characterId).data ?? null;
   return (
     <Modal onClose={onClose}>
       <div className="stack" style={{ minWidth: 320, maxWidth: 520 }}>
@@ -1855,7 +1845,7 @@ function RosterCard({
   onAddCharacter,
   onToggleLeft,
   onRemove,
-  onThumbnailChanged,
+  campaignId,
   children,
 }: {
   player: RosterPlayer;
@@ -1869,15 +1859,18 @@ function RosterCard({
   onAddCharacter: () => void;
   onToggleLeft: () => void;
   onRemove: () => void;
-  onThumbnailChanged: () => void;
+  campaignId: number;
   children: ReactNode;
 }) {
+  const run = useAction();
+  // Окно обрезки закрывается сразу — отказ загрузки виден только плашкой.
   async function handleThumbnailChange(file: File | null) {
     if (!file) return;
     const form = new FormData();
     form.append("file", file);
-    await api.post(`/players/${player.id}/thumbnail`, form);
-    onThumbnailChanged();
+    await run(labelled("Тамбнейл игрока", () => write.post(`/players/${player.id}/thumbnail`, form, { timeoutMs: UPLOAD_TIMEOUT_MS })), {
+      affects: [{ kind: "player", id: player.id }, ...rosterAffects(campaignId)],
+    });
   }
   const thumbnailCrop = useImageCrop("thumbnail", handleThumbnailChange);
 
@@ -1952,28 +1945,21 @@ function RosterCard({
 }
 
 function PlayerCharacterTab({ campaignId }: { campaignId: number }) {
-  const [character, setCharacter] = useState<Character | null | undefined>(undefined);
+  const run = useAction();
+  const self = useResource<Player>(campaignPaths.selfPlayer()).data;
+  const chars = useResource<Character[]>(campaignPaths.characters(campaignId)).data;
+  const character = self && chars ? (chars.find((c) => c.player_id === self.id) ?? null) : undefined;
   const [nameDraft, setNameDraft] = useState("");
 
-  function refresh() {
-    api.get<Player>("/players/self").then((self) => {
-      api.get<Character[]>(`/characters?campaign_id=${campaignId}`).then((chars) => {
-        setCharacter(chars.find((c) => c.player_id === self.id) ?? null);
-      });
-    });
-  }
-  useEffect(refresh, [campaignId]);
-
   async function createCharacter() {
-    if (!nameDraft.trim()) return;
-    const self = await api.get<Player>("/players/self");
-    await api.post("/characters", {
-      player_id: self.id,
-      campaign_id: campaignId,
-      character_name: nameDraft,
-    });
-    setNameDraft("");
-    refresh();
+    if (!nameDraft.trim() || !self) return;
+    const created = await run(
+      labelled("Новый персонаж", () =>
+        write.post("/characters", { player_id: self.id, campaign_id: campaignId, character_name: nameDraft }).then(() => true)
+      ),
+      { affects: [{ kind: "character" }], retry: false }
+    );
+    if (created) setNameDraft("");
   }
 
   if (character === undefined) return <p className="muted">Загрузка…</p>;
@@ -2921,3 +2907,4 @@ function useCampaignGroups(campaignId: number) {
 }
 
 const NO_GROUPS: CampaignGroup[] = [];
+const NO_CHARACTERS: Character[] = [];
