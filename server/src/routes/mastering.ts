@@ -109,11 +109,11 @@ masteringRouter.get("/", (req, res) => {
     }
   }
   if (q && q.trim()) {
-    clauses.push("(lower(m.title) LIKE @q OR lower(m.content) LIKE @q)");
+    clauses.push("(lower_u(m.title) LIKE @q OR lower_u(m.content) LIKE @q)");
     params.q = `%${q.trim().toLowerCase()}%`;
   }
   const order =
-    sort === "az" ? "lower(m.title) ASC, m.created_at DESC" : "m.created_at DESC";
+    sort === "az" ? "lower_u(m.title) ASC, m.created_at DESC" : "m.created_at DESC";
   const lim = Math.min(200, Math.max(0, Number(limit) || 0));
   const off = Math.max(0, Number(offset) || 0);
   const pageClause = lim > 0 ? ` LIMIT ${lim} OFFSET ${off}` : "";

@@ -120,7 +120,7 @@ export function scenesUnder(arcId: number): number[] {
  * именно там, и тянутся за ним ровно тогда, когда партия ушла не туда.
  */
 export function searchScenes(settingId: number, query: string, limit = 12) {
-  const like = `%${query.trim()}%`;
+  const like = `%${query.trim().toLowerCase()}%`;
   return db
     .prepare(
       `SELECT s.id, s.name, s.in_library,
@@ -129,7 +129,7 @@ export function searchScenes(settingId: number, query: string, limit = 12) {
        FROM story_scenes s
        LEFT JOIN story_arcs arc ON arc.id = s.arc_id
        LEFT JOIN story_arcs par ON par.id = arc.parent_id
-       WHERE s.archived_at IS NULL AND s.campaign_id IS NULL AND s.name LIKE ?
+       WHERE s.archived_at IS NULL AND s.campaign_id IS NULL AND lower_u(s.name) LIKE ?
          AND (s.setting_id = ? OR s.in_library = 1)
        ORDER BY s.in_library DESC, s.name
        LIMIT ?`

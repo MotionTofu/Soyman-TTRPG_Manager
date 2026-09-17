@@ -415,10 +415,10 @@ function resolveScope(
   let scopeSystemId: number | undefined = hostScope.system_id;
   let scopeSettingId: number | undefined = hostScope.setting_id;
   if (type === "compendium_entry" && code && code !== "unknown") {
-    const sys = db.prepare(`SELECT id FROM systems WHERE lower(code)=lower(?) OR lower(name)=lower(?)`).get(code, code) as { id: number } | undefined;
+    const sys = db.prepare(`SELECT id FROM systems WHERE lower_u(code)=lower_u(?) OR lower_u(name)=lower_u(?)`).get(code, code) as { id: number } | undefined;
     if (sys) scopeSystemId = sys.id;
   } else if (["being", "location", "community", "artifact", "setting", "adventure", "scene"].includes(type) && code && code !== "unknown") {
-    const st = db.prepare(`SELECT id FROM settings WHERE lower(code)=lower(?) OR lower(name)=lower(?)`).get(code, code) as { id: number } | undefined;
+    const st = db.prepare(`SELECT id FROM settings WHERE lower_u(code)=lower_u(?) OR lower_u(name)=lower_u(?)`).get(code, code) as { id: number } | undefined;
     if (st) scopeSettingId = st.id;
   }
   return { scopeSystemId, scopeSettingId };

@@ -90,7 +90,7 @@ entityRelationsRouter.get("/labels", (req, res) => {
   if (!prefix) {
     const rows = db
       .prepare(
-        `SELECT label as label, COUNT(*) as uses FROM entity_relations WHERE TRIM(label) <> '' GROUP BY lower(label) ORDER BY uses DESC, label ASC LIMIT 12`
+        `SELECT label as label, COUNT(*) as uses FROM entity_relations WHERE TRIM(label) <> '' GROUP BY lower_u(label) ORDER BY uses DESC, label ASC LIMIT 12`
       )
       .all() as { label: string; uses: number }[];
     // keep first-cased variant
@@ -104,7 +104,7 @@ entityRelationsRouter.get("/labels", (req, res) => {
   }
   const rows = db
     .prepare(
-      `SELECT label as label, COUNT(*) as uses FROM entity_relations WHERE TRIM(label) <> '' AND lower(label) LIKE lower(?) || '%' GROUP BY lower(label) ORDER BY uses DESC, label ASC LIMIT 12`
+      `SELECT label as label, COUNT(*) as uses FROM entity_relations WHERE TRIM(label) <> '' AND lower_u(label) LIKE lower_u(?) || '%' GROUP BY lower_u(label) ORDER BY uses DESC, label ASC LIMIT 12`
     )
     .all(prefix) as { label: string; uses: number }[];
   const seen = new Map<string, { label: string; uses: number }>();
