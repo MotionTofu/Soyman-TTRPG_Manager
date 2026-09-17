@@ -17,7 +17,13 @@ import { affectsForWindowEvent } from "./syncAffects";
  * работать: здесь события только читаются. Монтируется один раз в корне.
  */
 
-const DATA_EVENTS = ["character-updated", "initiative-updated", "hunter-mark"] as const;
+const DATA_EVENTS = [
+  "character-updated",
+  "initiative-updated",
+  "hunter-mark",
+  "campaign-data-changed",
+  "realtime-reconnected",
+] as const;
 
 export function DataLayerSync() {
   const client = useQueryClient();

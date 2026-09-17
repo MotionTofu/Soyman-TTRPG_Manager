@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, useParams } from "react-router-dom";
-import { api } from "../api/client";
+import { useAfterWrite, useResource, write } from "../data/hooks";
+import { journalAffects, playerCampaignPaths } from "../data/playerCampaign";
 import { MentionText } from "../components/mentions/MentionText";
 import { EntityPage } from "../components/EntityPage";
 import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
@@ -46,15 +48,23 @@ export function PlayerCampaignPage() {
   const { id } = useParams();
   const campaignId = Number(id);
   const invalidCampaignId = !Number.isFinite(campaignId);
-  const [content, setContent] = useState<VisibleCampaignContent | null>(null);
-  const [sections, setSections] = useState<PlayerSection[]>([]);
-  const [setting, setSetting] = useState<SettingPlayerContent | null>(null);
-  const [party, setParty] = useState<PartyMember[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  // Счётчик, а не общий стейт записей: странице нужно только сказать вкладке
-  // «перечитайся», когда со статьи лора ушла новая заметка.
-  const [journalRefresh, setJournalRefresh] = useState(0);
+  // Всё выданное — ресурсами слоя: сигнал сервера «кампания изменилась»
+  // перечитывает их на открытом экране сам (data/syncAffects.ts), игроку не
+  // нужно перезагружать страницу, чтобы увидеть выданное Мастером.
+  const id4 = invalidCampaignId ? null : campaignId;
+  const contentState = useResource<VisibleCampaignContent>(id4 == null ? null : playerCampaignPaths.visible(id4));
+  const sectionsState = useResource<PlayerSection[]>(id4 == null ? null : playerCampaignPaths.sections(id4));
+  const settingState = useResource<SettingPlayerContent>(id4 == null ? null : playerCampaignPaths.setting(id4));
+  const partyState = useResource<PartyMember[]>(id4 == null ? null : playerCampaignPaths.party(id4));
+  const content = contentState.data ?? null;
+  const sections = sectionsState.data ?? NO_SECTIONS;
+  const setting = settingState.data ?? null;
+  const party = partyState.data ?? NO_PARTY;
+  const all = [contentState, sectionsState, settingState, partyState];
+  // «Загрузка» — только первая: фоновое перечитывание по сигналу экран не гасит.
+  const loading = all.some((q) => q.loading);
+  const loadError = all.find((q) => q.error)?.error ?? null;
+  const afterWrite = useAfterWrite();
   const [loreToast, setLoreToast] = useState<string | null>(null);
   // Чьим именем пишется новое и куда падает «+ В журнал» со статей лора.
   const [writingCharacterId, setWritingCharacterId] = useState<number | null>(null);
@@ -69,31 +79,6 @@ export function PlayerCampaignPage() {
   const handleFoldersKnown = useCallback((next: string[]) => {
     setFolders((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
   }, []);
-
-  useEffect(() => {
-    if (invalidCampaignId) {
-      setLoading(false);
-      return;
-    }
-    const ac = new AbortController();
-    setLoading(true);
-    setLoadError(null);
-
-    Promise.all([
-      api.get<VisibleCampaignContent>(`/player/campaigns/${campaignId}/visible`, { signal: ac.signal } as RequestInit).then(setContent),
-      api.get<PlayerSection[]>(`/player/campaigns/${campaignId}/player-sections`, { signal: ac.signal } as RequestInit).then(setSections),
-      api.get<SettingPlayerContent>(`/player/campaigns/${campaignId}/setting-player-content`, { signal: ac.signal } as RequestInit).then(setSetting),
-      api.get<PartyMember[]>(`/player/campaigns/${campaignId}/party`, { signal: ac.signal } as RequestInit).then(setParty),
-    ])
-      .then(() => setLoading(false))
-      .catch((e) => {
-        if ((e as Error).name === "AbortError") return;
-        setLoadError(String(e instanceof Error ? e.message : e));
-        setLoading(false);
-      });
-
-    return () => ac.abort();
-  }, [campaignId, invalidCampaignId]);
 
   // Всё производное считается здесь, ВЫШЕ ранних return ниже по файлу.
   // Порядок хуков в React обязан совпадать от рендера к рендеру: пока эти
@@ -316,20 +301,22 @@ export function PlayerCampaignPage() {
       if (section.includes("локац")) kind = "location";
       else if (section.includes("нпц") || section.includes("личност")) kind = "being";
       else if (section.includes("сесс") || section.includes("хроник") || section.includes("истор") || section.includes("тайн")) kind = "event";
+      // Итог — тостом, не плашкой: игрок читает, и сообщение должно быть
+      // рядом с тем, что он нажал.
       try {
-        await api.post(`/player/campaigns/${campaignId}/world-entries`, {
+        await write.post(`/player/campaigns/${campaignId}/world-entries`, {
           character_id: writingCharacterId,
           kind,
           name: entry.title.slice(0, 80),
           description: "",
         });
-        setJournalRefresh((n) => n + 1);
+        afterWrite(journalAffects(campaignId));
         setLoreToast(`«${entry.title}» — в путевых заметках`);
       } catch {
         setLoreToast("Не удалось записать — попробуйте ещё раз");
       }
     },
-    [campaignId, writingCharacterId]
+    [campaignId, writingCharacterId, afterWrite]
   );
 
   // Тост живёт четыре секунды: он сообщает об уже случившемся и ничего не
@@ -371,7 +358,7 @@ export function PlayerCampaignPage() {
         <Breadcrumbs items={[{ label: "Главная", to: "/" }, { label: content?.campaign.name ?? "Кампания" }]} />
         <LoadErrorCard
           message={<>Не удалось загрузить кампанию: {loadError}</>}
-          onRetry={() => window.location.reload()}
+          onRetry={() => all.forEach((q) => q.error && q.reload())}
         />
       </div>
     );
@@ -406,7 +393,6 @@ export function PlayerCampaignPage() {
         <CampaignJournal
           campaignId={campaignId}
           schedule={content.schedule}
-          refreshKey={journalRefresh}
           activeFolder={activeFolder}
           folders={folders}
           onFoldersKnown={handleFoldersKnown}
@@ -543,7 +529,10 @@ function LoreGroups({
 }) {
   const [query, setQuery] = useState("");
   const [openGroup, setOpenGroup] = useState<string | null>(null);
-  const [readerIndex, setReaderIndex] = useState<number | null>(null);
+  // Читалка держится за ключ записи, а не за номер в списке: список может
+  // перечитаться по сигналу, пока игрок читает, и номер тогда указал бы на
+  // чужую запись.
+  const [readerKey, setReaderKey] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -569,21 +558,24 @@ function LoreGroups({
 
   const flatEntries = useMemo(() => groups.flatMap((g) => g.entries), [groups]);
   const readerEntries = query.trim() ? filtered.flatMap((g) => g.entries) : flatEntries;
+  const readerIndex = readerKey == null ? null : readerEntries.findIndex((e) => e.key === readerKey);
+  const setReaderIndex = useCallback(
+    (index: number | null) => setReaderKey(index == null ? null : (readerEntries[index]?.key ?? null)),
+    [readerEntries]
+  );
 
   // Открыть запись по ключу (виджет «Последнее от мастера» и сводка прошлой
   // сессии): ищет в полном списке, при активном поиске снимает фильтр, иначе
   // индекс полного списка попал бы в отфильтрованный.
   const openByKey = useCallback(
     (key: string) => {
-      const inReader = readerEntries.findIndex((fe) => fe.key === key);
-      if (inReader !== -1) {
-        setReaderIndex(inReader);
+      if (readerEntries.some((fe) => fe.key === key)) {
+        setReaderKey(key);
         return;
       }
-      const idx = flatEntries.findIndex((fe) => fe.key === key);
-      if (idx === -1) return;
+      if (!flatEntries.some((fe) => fe.key === key)) return;
       setQuery("");
-      setReaderIndex(idx);
+      setReaderKey(key);
     },
     [readerEntries, flatEntries]
   );
@@ -675,14 +667,49 @@ function LoreGroups({
         </div>
       ))}
 
-      {readerIndex != null && (
+      {readerIndex != null && readerIndex !== -1 && (
         <PlayerContentReader
           entries={readerEntries}
           index={readerIndex}
           onNavigate={setReaderIndex}
-          onClose={() => setReaderIndex(null)}
+          onClose={() => setReaderKey(null)}
         />
       )}
+      {readerIndex === -1 && <HiddenEntryNotice onBack={() => setReaderKey(null)} />}
     </div>
   );
 }
+
+// Запись пропала из выданного, пока игрок её читал: Мастер снял доступ. Текст
+// не остаётся на экране (скрытое должно скрываться), но и страница не
+// пропадает молча — игрок видит, что случилось, и возвращается к списку.
+function HiddenEntryNotice({ onBack }: { onBack: () => void }) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onBack();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onBack]);
+  return createPortal(
+    <div className="player-reader-overlay" role="dialog" aria-modal="true" aria-label="Мастер скрыл это">
+      <div className="player-reader-topbar">
+        <span className="player-reader-section muted">&nbsp;</span>
+        <button type="button" className="player-reader-close" onClick={onBack} aria-label="Закрыть">
+          ×
+        </button>
+      </div>
+      <div className="player-reader-body stack" style={{ gap: 16 }}>
+        <h2 className="player-reader-title">Мастер скрыл это</h2>
+        <p className="muted" style={{ margin: 0 }}>Эта запись больше не открыта вам.</p>
+        <button type="button" className="primary" onClick={onBack} style={{ alignSelf: "flex-start" }}>
+          ← К списку
+        </button>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+const NO_SECTIONS: PlayerSection[] = [];
+const NO_PARTY: PartyMember[] = [];

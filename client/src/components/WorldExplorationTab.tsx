@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { useState } from "react";
+import { useAction, useResource, write } from "../data/hooks";
+import { labelled } from "../data/notices";
+import type { Affect } from "../data/entities";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import type { LegacyWorldExplorationEntry, Player, WorldExplorationKind } from "../types";
@@ -25,39 +27,34 @@ interface Props {
 export function WorldExplorationTab({ campaignId }: Props) {
   const [confirmDialog, confirm] = useConfirm();
   const [kind, setKind] = useState<WorldExplorationKind>("being");
-  const [entries, setEntries] = useState<LegacyWorldExplorationEntry[]>([]);
-  const [selfPlayerId, setSelfPlayerId] = useState<number | null>(null);
+  const run = useAction();
+  const entries =
+    useResource<LegacyWorldExplorationEntry[]>(`/world-exploration-entries?campaign_id=${campaignId}&kind=${kind}`).data ?? NO_ENTRIES;
+  const selfPlayerId = useResource<Player>("/players/self").data?.id ?? null;
   const [expandedId, setExpandedId] = useState<number | null>(null);
-
-  useEffect(() => {
-    api.get<Player>("/players/self").then((p) => setSelfPlayerId(p.id));
-  }, []);
-
-  function refresh() {
-    api
-      .get<LegacyWorldExplorationEntry[]>(`/world-exploration-entries?campaign_id=${campaignId}&kind=${kind}`)
-      .then(setEntries);
-  }
-  useEffect(refresh, [campaignId, kind]);
+  const affects = explorationAffects(campaignId);
 
   async function addEntry() {
     if (!selfPlayerId) return;
-    const created = await api.post<LegacyWorldExplorationEntry>("/world-exploration-entries", {
-      campaign_id: campaignId,
-      player_id: selfPlayerId,
-      kind,
-      name: "",
-    });
-    setEntries((prev) => [...prev, created]);
-    setExpandedId(created.id);
+    const created = await run(
+      labelled("Новая запись", () =>
+        write.post<LegacyWorldExplorationEntry>("/world-exploration-entries", {
+          campaign_id: campaignId,
+          player_id: selfPlayerId,
+          kind,
+          name: "",
+        })
+      ),
+      { affects, retry: false }
+    );
+    if (created) setExpandedId(created.id);
   }
 
   async function removeEntry(id: number) {
     if (!(await confirm({ message: "Удалить запись?", confirmLabel: "Удалить", danger: true })))
       return;
-    await api.del(`/world-exploration-entries/${id}`);
-    setEntries((prev) => prev.filter((e) => e.id !== id));
-    if (expandedId === id) setExpandedId(null);
+    const done = await run(labelled("Удаление записи", () => write.del(`/world-exploration-entries/${id}`).then(() => true)), { affects });
+    if (done && expandedId === id) setExpandedId(null);
   }
 
   const activeTab = KIND_TABS.find((t) => t.kind === kind)!;
@@ -81,7 +78,7 @@ export function WorldExplorationTab({ campaignId }: Props) {
             extraLabel={activeTab.extraLabel}
             expanded={expandedId === entry.id}
             onToggle={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
-            onChange={(patch) => setEntries((prev) => prev.map((e) => (e.id === entry.id ? { ...e, ...patch } : e)))}
+            campaignId={campaignId}
             onRemove={() => removeEntry(entry.id)}
           />
         ))}
@@ -100,28 +97,32 @@ function EntryCard({
   extraLabel,
   expanded,
   onToggle,
-  onChange,
+  campaignId,
   onRemove,
 }: {
   entry: LegacyWorldExplorationEntry;
   extraLabel: string | null;
   expanded: boolean;
   onToggle: () => void;
-  onChange: (patch: Partial<LegacyWorldExplorationEntry>) => void;
+  campaignId: number;
   onRemove: () => void;
 }) {
+  const run = useAction();
   const [name, setName] = useState(entry.name);
   const [description, setDescription] = useState(entry.description);
   const [extraField, setExtraField] = useState(entry.extra_field);
   const [uploading, setUploading] = useState(false);
 
+  // Сохраняется по уходу с поля; при отказе набранное остаётся в поле и
+  // появляется плашка — раньше отказ уходил в никуда.
   async function save() {
-    const saved = await api.put<LegacyWorldExplorationEntry>(`/world-exploration-entries/${entry.id}`, {
-      name,
-      description,
-      extra_field: extraField,
-    });
-    onChange(saved);
+    if (name === entry.name && description === entry.description && extraField === entry.extra_field) return;
+    await run(
+      labelled("Запись картотеки", () =>
+        write.put(`/world-exploration-entries/${entry.id}`, { name, description, extra_field: extraField })
+      ),
+      { affects: explorationAffects(campaignId) }
+    );
   }
 
   async function handleAvatarChange(file: File | null) {
@@ -129,9 +130,14 @@ function EntryCard({
     setUploading(true);
     const form = new FormData();
     form.append("file", file);
-    const saved = await api.post<LegacyWorldExplorationEntry>(`/world-exploration-entries/${entry.id}/avatar`, form);
-    onChange(saved);
-    setUploading(false);
+    try {
+      await run(
+        labelled("Фото записи", () => write.post(`/world-exploration-entries/${entry.id}/avatar`, form, { timeoutMs: 120_000 })),
+        { affects: explorationAffects(campaignId) }
+      );
+    } finally {
+      setUploading(false);
+    }
   }
   const avatarCrop = useImageCrop("square", handleAvatarChange);
 
@@ -189,4 +195,11 @@ function EntryCard({
       )}
     </div>
   );
+}
+
+const NO_ENTRIES: LegacyWorldExplorationEntry[] = [];
+
+/** Картотека кампании — все четыре подвкладки. */
+function explorationAffects(campaignId: number): Affect[] {
+  return [{ path: `/world-exploration-entries?campaign_id=${campaignId}` }];
 }

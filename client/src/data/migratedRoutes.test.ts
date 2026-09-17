@@ -31,6 +31,7 @@ describe("переведённые страницы", () => {
     expect(isMigratedRoute("/campaigns/")).toBe(true);
     expect(isMigratedRoute("/campaigns/3")).toBe(true);
     expect(isMigratedRoute("/campaigns/3/extra")).toBe(false);
+    expect(isMigratedRoute("/cabinet")).toBe(true);
   });
 
   it("соседние адреса не цепляются префиксом", () => {

@@ -108,3 +108,25 @@ describe("события сокета", () => {
     expect(affectsForWindowEvent("show-image", {})).toBeNull();
   });
 });
+
+describe("сигнал «кампания изменилась»", () => {
+  const hit = (type: string, detail: unknown, path: string) =>
+    (affectsForWindowEvent(type, detail) ?? []).some((a) => matchesAffect(dataKeys.resource(path), a));
+
+  it("у игрока задевает всё выданное своей кампании, но не чужой", () => {
+    expect(hit("campaign-data-changed", { campaignId: 2 }, "/player/campaigns/2/visible")).toBe(true);
+    expect(hit("campaign-data-changed", { campaignId: 2 }, "/player/campaigns/2/world-entries")).toBe(true);
+    expect(hit("campaign-data-changed", { campaignId: 2 }, "/player/characters/5")).toBe(false);
+  });
+
+  it("у Мастера задевает записи игроков, но не остальной профиль", () => {
+    expect(hit("campaign-data-changed", { campaignId: 2 }, "/campaigns/2/player-journals")).toBe(true);
+    expect(hit("campaign-data-changed", { campaignId: 2 }, "/campaign-entries?campaign_id=2&category=quotes")).toBe(true);
+    expect(hit("campaign-data-changed", { campaignId: 2 }, "/campaign-entries?campaign_id=20&category=quotes")).toBe(false);
+    expect(hit("campaign-data-changed", { campaignId: 2 }, "/campaigns/2/sessions")).toBe(false);
+  });
+
+  it("после обрыва связи перечитывается всё открытое", () => {
+    expect(affectsForWindowEvent("realtime-reconnected", undefined)).toEqual([]);
+  });
+});

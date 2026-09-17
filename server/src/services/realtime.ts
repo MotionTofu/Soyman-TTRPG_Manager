@@ -52,6 +52,12 @@ export function broadcastToCampaign(campaignId: number, event: string, payload: 
   io?.to(`campaign:${campaignId}`).emit(event, payload);
 }
 
+// Любая комната по имени (`player:<id>`, `gm`): сигналы слоя данных, которые
+// адресуются игрокам кампании по одному (services/campaignSignals.ts).
+export function emitToRoom(room: string, event: string, payload: unknown): void {
+  io?.to(room).emit(event, payload);
+}
+
 // Player-to-GM signals (hunter's mark, hex): the GM desktop app sits in the
 // "gm" room with no campaign scope, so table signals go there and the pult
 // filters by campaignId itself.

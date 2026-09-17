@@ -7,7 +7,7 @@ import type { Affect } from "./entities";
  * перезапускает весь модуль.
  */
 export function affectsForWindowEvent(type: string, detail: unknown): Affect[] | null {
-  const d = (detail ?? {}) as { characterId?: number; sessionId?: number; scope?: string };
+  const d = (detail ?? {}) as { characterId?: number; sessionId?: number; scope?: string; campaignId?: number };
   switch (type) {
     case "character-updated": {
       if (d.characterId == null) return [{ kind: "character" }, { path: "/statblocks" }];
@@ -25,6 +25,23 @@ export function affectsForWindowEvent(type: string, detail: unknown): Affect[] |
     case "hunter-mark":
       // Метка охотника кладёт напоминалку кампании и отмечает цель в очереди.
       return [{ path: "/campaigns" }, { path: "/players" }, { path: "/initiative-entries" }];
+    case "campaign-data-changed": {
+      // Сигнал без содержимого: у игрока задета вся его кампания, у Мастера —
+      // то, что пишут игроки (дневники, записи кампании). Чужие ключи в кэше
+      // другой роли просто не встречаются.
+      if (d.campaignId == null) return [{ path: "/player" }];
+      return [
+        { path: `/player/campaigns/${d.campaignId}` },
+        { path: "/player/world-entries" },
+        { path: "/player/campaigns" },
+        { path: "/player/dashboard" },
+        { path: `/campaigns/${d.campaignId}/player-journals` },
+        { path: `/campaign-entries?campaign_id=${d.campaignId}` },
+      ];
+    }
+    case "realtime-reconnected":
+      // Пустой список — перечитать всё открытое: пропущенного не восстановить.
+      return [];
     default:
       return null;
   }

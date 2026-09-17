@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
+import { useAction, useResource, write } from "../data/hooks";
+import { labelled } from "../data/notices";
 import { useCurrentUser } from "../api/currentUser";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
@@ -29,25 +30,18 @@ interface PlayerMe {
 // bottom-nav slot) — sourced from the same player-scoped /player/me endpoint.
 export function PlayerCabinetPage() {
   const { user } = useCurrentUser();
-  const [player, setPlayer] = useState<Player | null>(null);
+  const run = useAction();
+  const playerPath = user?.playerId ? `/players/${user.playerId}` : null;
+  const player = useResource<Player>(playerPath).data ?? null;
   const [nameDraft, setNameDraft] = useState("");
   const [editingName, setEditingName] = useState(false);
   const [nameSaving, setNameSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const [me, setMe] = useState<PlayerMe | null>(null);
-  const [charactersError, setCharactersError] = useState("");
-
-  useEffect(() => {
-    const ac = new AbortController();
-    api
-      .get<PlayerMe>("/player/me", { signal: ac.signal })
-      .then(setMe)
-      .catch((e) => {
-        if (e instanceof DOMException && e.name === "AbortError") return;
-        setCharactersError(String(e));
-      });
-    return () => ac.abort();
-  }, []);
+  const meState = useResource<PlayerMe>("/player/me");
+  const me = meState.data ?? null;
+  const charactersError = meState.error ?? "";
+  // Имя, аватар — карточка игрока, список «Персонажи» и шапка приложения.
+  const playerAffects = user?.playerId ? [{ kind: "player" as const, id: user.playerId }, { path: "/player" }] : [];
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -56,33 +50,32 @@ export function PlayerCabinetPage() {
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordDone, setPasswordDone] = useState(false);
 
-  function refresh() {
-    if (!user?.playerId) return;
-    api.get<Player>(`/players/${user.playerId}`).then((p) => {
-      setPlayer(p);
-      setNameDraft(p.name);
-    });
-  }
-  useEffect(refresh, [user?.playerId]);
-
   async function handleAvatarChange(file: File | null) {
     if (!file || !user?.playerId) return;
+    const playerId = user.playerId;
     setUploadingAvatar(true);
     const form = new FormData();
     form.append("file", file);
-    await api.post(`/players/${user.playerId}/avatar`, form);
-    setUploadingAvatar(false);
-    refresh();
+    // Раньше отказ загрузки оставлял «Загрузка…» навсегда: флаг не снимался.
+    try {
+      await run(labelled("Аватар", () => write.post(`/players/${playerId}/avatar`, form, { timeoutMs: 120_000 })), {
+        affects: playerAffects,
+      });
+    } finally {
+      setUploadingAvatar(false);
+    }
   }
   const avatarCrop = useImageCrop("square", handleAvatarChange);
 
   async function saveName() {
     if (!nameDraft.trim() || !user?.playerId) return;
+    const playerId = user.playerId;
     setNameSaving(true);
     try {
-      await api.put(`/players/${user.playerId}`, { name: nameDraft });
-      setEditingName(false);
-      refresh();
+      const saved = await run(labelled("Имя", () => write.put(`/players/${playerId}`, { name: nameDraft }).then(() => true)), {
+        affects: playerAffects,
+      });
+      if (saved) setEditingName(false);
     } finally {
       setNameSaving(false);
     }
@@ -109,7 +102,7 @@ export function PlayerCabinetPage() {
     }
     setPasswordSaving(true);
     try {
-      await api.put("/auth/me", { currentPassword, password: newPassword });
+      await write.put("/auth/me", { currentPassword, password: newPassword });
       setCurrentPassword("");
       setNewPassword("");
       setNewPasswordConfirm("");
@@ -166,7 +159,7 @@ export function PlayerCabinetPage() {
           ) : (
             <div className="row">
               <h2 style={{ margin: 0 }}>{player.name}</h2>
-              <button onClick={() => setEditingName(true)}>Редактировать</button>
+              <button onClick={() => { setNameDraft(player.name); setEditingName(true); }}>Редактировать</button>
             </div>
           )}
         </div>

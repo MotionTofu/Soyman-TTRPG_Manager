@@ -36,6 +36,19 @@ export function RealtimeListener() {
     socket.on("initiative-updated", (payload: unknown) => {
       window.dispatchEvent(new CustomEvent("initiative-updated", { detail: payload }));
     });
+    // Данные кампании изменились (выдача Мастера, запись игрока в дневник):
+    // открытый экран перечитывает задетое сам — data/syncAffects.ts.
+    socket.on("campaign-data-changed", (payload: unknown) => {
+      window.dispatchEvent(new CustomEvent("campaign-data-changed", { detail: payload }));
+    });
+    // Связь вернулась после обрыва (телефон заснул, пропал Wi-Fi): сигналы за
+    // это время потеряны и сервер их не копит — открытое перечитывается целиком.
+    // Первое подключение не в счёт: данные только что прочитаны.
+    let connectedOnce = false;
+    socket.on("connect", () => {
+      if (connectedOnce) window.dispatchEvent(new CustomEvent("realtime-reconnected"));
+      connectedOnce = true;
+    });
 
     return () => {
       socket.disconnect();

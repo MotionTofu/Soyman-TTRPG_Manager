@@ -1,5 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api } from "../../api/client";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useAction, useAfterWrite, useResource, write } from "../../data/hooks";
+import { dataKeys } from "../../data/entities";
+import { journalAffects, playerCampaignPaths } from "../../data/playerCampaign";
+import { labelled } from "../../data/notices";
 import { EmptyState } from "../EmptyState";
 import { LoadErrorCard } from "../Loadable";
 import { useConfirm, usePrompt } from "../../hooks/useConfirm";
@@ -24,6 +28,9 @@ const TAGS: { value: WorldExplorationTag; label: string }[] = [
   { value: "item", label: "Предметы" },
   { value: "event", label: "События" },
 ];
+
+const NO_CHARACTERS: PlayerCampaignCharacter[] = [];
+const NO_ENTRIES: WorldExplorationEntry[] = [];
 
 const TAG_LABEL: Record<string, string> = Object.fromEntries(TAGS.map((t) => [t.value, t.label]));
 
@@ -59,7 +66,6 @@ function sessionDividerFor(
 export function CampaignJournal({
   campaignId,
   schedule,
-  refreshKey,
   activeFolder,
   folders,
   onFoldersKnown,
@@ -69,7 +75,6 @@ export function CampaignJournal({
 }: {
   campaignId: number;
   schedule: SessionScheduleEntry[];
-  refreshKey: number;
   /** NULL — Лента, строка — именная вкладка. */
   activeFolder: string | null;
   folders: string[];
@@ -79,9 +84,17 @@ export function CampaignJournal({
   writingCharacterId: number | null;
   onWritingCharacterChange: (id: number | null) => void;
 }) {
-  const [characters, setCharacters] = useState<PlayerCampaignCharacter[]>([]);
-  const [entries, setEntries] = useState<WorldExplorationEntry[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const client = useQueryClient();
+  const run = useAction();
+  const charactersState = useResource<PlayerCampaignCharacter[]>(playerCampaignPaths.myCharacters(campaignId));
+  const entriesPath = playerCampaignPaths.worldEntries(campaignId);
+  const entriesState = useResource<WorldExplorationEntry[]>(entriesPath);
+  const characters = charactersState.data ?? NO_CHARACTERS;
+  const entries = entriesState.data ?? NO_ENTRIES;
+  const error = charactersState.error ?? entriesState.error;
+  // Отказ записи показывает плашка; здесь — только подсказка про запретное имя
+  // вкладки. Раньше и то и другое шло в «Заметки не загрузились: …».
+  const [hint, setHint] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [tagFilter, setTagFilter] = useState<WorldExplorationTag | "all">("all");
   const [charFilter, setCharFilter] = useState<number | "all" | "none">("all");
@@ -92,34 +105,13 @@ export function CampaignJournal({
   const [confirmDialog, confirm] = useConfirm();
   const [promptDialog, prompt] = usePrompt();
   const { deleteWithUndo } = useUndoDelete();
-  const acRef = useRef<AbortController | null>(null);
 
-  const load = useCallback(async () => {
-    acRef.current?.abort();
-    const ac = new AbortController();
-    acRef.current = ac;
-    setError(null);
-    try {
-      const [chars, rows] = await Promise.all([
-        api.get<PlayerCampaignCharacter[]>(`/player/campaigns/${campaignId}/my-characters`, {
-          signal: ac.signal,
-        } as RequestInit),
-        api.get<WorldExplorationEntry[]>(`/player/campaigns/${campaignId}/world-entries`, {
-          signal: ac.signal,
-        } as RequestInit),
-      ]);
-      setCharacters(chars);
-      setEntries(rows);
-    } catch (e) {
-      if ((e as Error).name === "AbortError") return;
-      setError(String(e instanceof Error ? e.message : e));
-    }
-  }, [campaignId]);
-
-  useEffect(() => {
-    void load();
-    return () => acRef.current?.abort();
-  }, [load, refreshKey]);
+  const reloadCharacters = charactersState.reload;
+  const reloadEntries = entriesState.reload;
+  const load = useCallback(() => {
+    reloadCharacters();
+    reloadEntries();
+  }, [reloadCharacters, reloadEntries]);
 
   const charById = useMemo(() => new Map(characters.map((c) => [c.id, c])), [characters]);
   const aliveChars = useMemo(() => characters.filter((c) => !c.archived), [characters]);
@@ -184,22 +176,29 @@ export function CampaignJournal({
     if (!text || saving) return;
     setSaving(true);
     try {
-      await api.post(`/player/campaigns/${campaignId}/world-entries`, {
-        character_id: writingCharacterId,
-        kind: draftTag,
-        name: draftTitle.trim(),
-        description: text,
-        folder_path: activeFolder,
-      });
-      setDraft("");
-      setDraftTitle("");
-      await load();
-    } catch (e) {
-      setError(String(e instanceof Error ? e.message : e));
+      // Черновик очищается только после записи: при отказе текст остаётся в поле.
+      const created = await run(
+        labelled("Запись в дневник", () =>
+          write
+            .post(`/player/campaigns/${campaignId}/world-entries`, {
+              character_id: writingCharacterId,
+              kind: draftTag,
+              name: draftTitle.trim(),
+              description: text,
+              folder_path: activeFolder,
+            })
+            .then(() => true)
+        ),
+        { affects: journalAffects(campaignId), retry: false }
+      );
+      if (created) {
+        setDraft("");
+        setDraftTitle("");
+      }
     } finally {
       setSaving(false);
     }
-  }, [draft, draftTitle, draftTag, writingCharacterId, activeFolder, campaignId, load, saving]);
+  }, [draft, draftTitle, draftTag, writingCharacterId, activeFolder, campaignId, run, saving]);
 
   // Черновик заметки — единственное, что здесь можно потерять безвозвратно.
   useEffect(() => {
@@ -214,12 +213,9 @@ export function CampaignJournal({
   }, [draft]);
 
   async function moveEntry(entryId: number, folder: string | null) {
-    try {
-      await api.put(`/player/world-entries/${entryId}`, { folder_path: folder });
-      await load();
-    } catch (e) {
-      setError(String(e instanceof Error ? e.message : e));
-    }
+    await run(labelled("Запись во вкладку", () => write.put(`/player/world-entries/${entryId}`, { folder_path: folder })), {
+      affects: journalAffects(campaignId),
+    });
   }
 
   async function moveToNewFolder(entryId: number) {
@@ -228,9 +224,10 @@ export function CampaignJournal({
     const trimmed = name.trim().slice(0, 80);
     if (!trimmed) return;
     if (isReservedFolder(trimmed)) {
-      setError(`«${trimmed}» — постоянная вкладка дневника, так назвать нельзя.`);
+      setHint(`«${trimmed}» — постоянная вкладка дневника, так назвать нельзя.`);
       return;
     }
+    setHint(null);
     await moveEntry(entryId, trimmed);
     onOpenFolder(trimmed);
   }
@@ -246,24 +243,26 @@ export function CampaignJournal({
     if (from === -1 || to < 0 || to >= ids.length) return;
     const next = [...ids];
     next.splice(to, 0, ...next.splice(from, 1));
-    setEntries((prev) => {
+    const key = dataKeys.resource(entriesPath);
+    const previous = client.getQueryData<WorldExplorationEntry[]>(key);
+    if (previous) {
       const order = new Map(next.map((id, i) => [id, i]));
-      return [...prev].sort((a, b) => {
-        const ao = order.get(a.id);
-        const bo = order.get(b.id);
-        if (ao !== undefined && bo !== undefined) return ao - bo;
-        if (ao !== undefined) return -1;
-        if (bo !== undefined) return 1;
-        return 0;
-      });
-    });
-    try {
-      await api.put("/player/world-entries/reorder", { ids: next });
-      await load();
-    } catch (e) {
-      setError(String(e instanceof Error ? e.message : e));
-      await load();
+      client.setQueryData(
+        key,
+        [...previous].sort((a, b) => {
+          const ao = order.get(a.id);
+          const bo = order.get(b.id);
+          if (ao !== undefined && bo !== undefined) return ao - bo;
+          if (ao !== undefined) return -1;
+          if (bo !== undefined) return 1;
+          return 0;
+        })
+      );
     }
+    const moved = await run(labelled("Порядок записей", () => write.put("/player/world-entries/reorder", { ids: next })), {
+      affects: journalAffects(campaignId),
+    });
+    if (moved === undefined && previous) client.setQueryData(key, previous);
   }
 
   async function renameFolder() {
@@ -273,23 +272,23 @@ export function CampaignJournal({
     const trimmed = name.trim().slice(0, 80);
     if (!trimmed || trimmed === activeFolder) return;
     if (isReservedFolder(trimmed)) {
-      setError(`«${trimmed}» — постоянная вкладка дневника, так назвать нельзя.`);
+      setHint(`«${trimmed}» — постоянная вкладка дневника, так назвать нельзя.`);
       return;
     }
+    setHint(null);
     if (folders.includes(trimmed)) {
       const ok = await confirm({ title: "Слить вкладки?", message: `Записи переедут во вкладку «${trimmed}».`, confirmLabel: "Слить", danger: false });
       if (!ok) return;
     }
-    try {
-      for (const e of entries.filter((e) => e.folder_path === activeFolder)) {
-        await api.put(`/player/world-entries/${e.id}`, { folder_path: trimmed });
-      }
-      await load();
-      onOpenFolder(trimmed);
-    } catch (e) {
-      setError(String(e instanceof Error ? e.message : e));
-      await load();
-    }
+    const inFolder = entries.filter((e) => e.folder_path === activeFolder);
+    const done = await run(
+      labelled("Переименование вкладки", async () => {
+        for (const e of inFolder) await write.put(`/player/world-entries/${e.id}`, { folder_path: trimmed });
+        return true;
+      }),
+      { affects: journalAffects(campaignId) }
+    );
+    if (done) onOpenFolder(trimmed);
   }
 
   async function deleteFolder() {
@@ -302,16 +301,15 @@ export function CampaignJournal({
       danger: true,
     });
     if (!ok) return;
-    try {
-      for (const e of entries.filter((e) => e.folder_path === activeFolder)) {
-        await api.put(`/player/world-entries/${e.id}`, { folder_path: null });
-      }
-      await load();
-      onOpenFolder(null);
-    } catch (e) {
-      setError(String(e instanceof Error ? e.message : e));
-      await load();
-    }
+    const inFolder = entries.filter((e) => e.folder_path === activeFolder);
+    const done = await run(
+      labelled("Вкладка дневника", async () => {
+        for (const e of inFolder) await write.put(`/player/world-entries/${e.id}`, { folder_path: null });
+        return true;
+      }),
+      { affects: journalAffects(campaignId) }
+    );
+    if (done) onOpenFolder(null);
   }
 
   const writingChar = writingCharacterId != null ? charById.get(writingCharacterId) ?? null : null;
@@ -322,9 +320,10 @@ export function CampaignJournal({
       {error && (
         <LoadErrorCard
           message={<>Заметки не загрузились: {error}</>}
-          onRetry={() => void load()}
+          onRetry={load}
         />
       )}
+      {hint && <p className="muted" style={{ margin: 0, color: "var(--status-cancelled)" }}>{hint}</p>}
 
       {activeFolder != null && (
         <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -470,7 +469,7 @@ export function CampaignJournal({
                 onMoveUp={canReorder && pos > 0 ? () => moveEntryBy(entry.id, -1) : undefined}
                 onMoveDown={canReorder && pos < folderOrder.length - 1 ? () => moveEntryBy(entry.id, 1) : undefined}
                 characters={characters}
-                onChanged={load}
+                campaignId={campaignId}
                 confirm={confirm}
                 deleteWithUndo={deleteWithUndo}
               />
@@ -495,7 +494,7 @@ function JournalNote({
   onMoveUp,
   onMoveDown,
   characters,
-  onChanged,
+  campaignId,
   confirm,
   deleteWithUndo,
 }: {
@@ -508,7 +507,7 @@ function JournalNote({
   onMoveUp?: () => void;
   onMoveDown?: () => void;
   characters: PlayerCampaignCharacter[];
-  onChanged: () => Promise<void> | void;
+  campaignId: number;
   confirm: ReturnType<typeof useConfirm>[1];
   deleteWithUndo: ReturnType<typeof useUndoDelete>["deleteWithUndo"];
 }) {
@@ -519,6 +518,8 @@ function JournalNote({
   const [charId, setCharId] = useState<number | null>(entry.character_id);
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Ошибку правки заметка показывает сама, рядом с текстом, — не плашкой.
+  const afterWrite = useAfterWrite();
   // Заметка выбывшего персонажа — чтение: его знание после смерти не растёт.
   const readOnly = character?.archived ?? false;
 
@@ -535,14 +536,14 @@ function JournalNote({
     setBusy(true);
     setSaveError(null);
     try {
-      await api.put(`/player/world-entries/${entry.id}`, {
+      await write.put(`/player/world-entries/${entry.id}`, {
         name: title.trim(),
         description: text.trim(),
         kind: tag,
         character_id: charId,
       });
       setEditing(false);
-      await onChanged();
+      afterWrite(journalAffects(campaignId));
     } catch (e) {
       // Молчаливое падение сохранения — худшее, что может случиться с
       // дневником: человек уверен, что записал.
@@ -566,12 +567,12 @@ function JournalNote({
       await deleteWithUndo({
         entityName: title.trim() || text.trim().slice(0, 40) || "Заметка",
         deleteFn: async () => {
-          await api.del(`/player/world-entries/${entry.id}`);
-          await onChanged();
+          await write.del(`/player/world-entries/${entry.id}`);
+          afterWrite(journalAffects(campaignId));
         },
         restoreFn: async () => {
-          await api.post(`/player/world-entries/${entry.id}/restore`);
-          await onChanged();
+          await write.post(`/player/world-entries/${entry.id}/restore`);
+          afterWrite(journalAffects(campaignId));
         },
       });
     } finally {
