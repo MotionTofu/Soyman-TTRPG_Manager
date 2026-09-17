@@ -3376,6 +3376,23 @@ button.place-card__row-name {
   display: flex;
   flex-direction: column;
 }
+/* Кампания без папки в хранилище: красная обводка в списке. Цвет тут — знак
+   поломки, а не украшение, поэтому тот же, что у опасных действий. */
+.campaign-tile--no-folder {
+  outline: 2px solid var(--danger-bg);
+  outline-offset: -2px;
+}
+.campaign-folder-missing {
+  border-color: var(--danger-bg);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3, 8px);
+}
+.campaign-folder-missing p {
+  margin: 0;
+  flex: 1 1 320px;
+}
 .campaign-tile-cover {
   position: relative;
   width: 100%;

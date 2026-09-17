@@ -21,6 +21,7 @@ import {
   validatePresentationPatch,
 } from "../story/presentation";
 import { renameEntityFolder } from "../services/vaultPaths";
+import { FOLDER_MISSING_ERROR, folderMissing, repairCampaignFolder } from "../services/campaignFolder";
 import { campaignEarnings } from "../services/finance";
 import { requireAuth } from "../services/auth";
 import { broadcastToCampaign } from "../services/realtime";
@@ -60,6 +61,13 @@ function withBgUrl<T extends { background_image_path?: string | null; thumbnail_
   };
 }
 
+// Пропавшая папка видна там, где Мастер работает, а не только на «Здоровье»:
+// один statSync на кампанию — дешевле любого запроса к базе на той же странице,
+// а кэшировать признак нельзя, он нужен свежим ровно в момент починки.
+function withFolderState<T extends { folder_path?: string | null }>(row: T) {
+  return { ...row, folder_missing: folderMissing(row.folder_path) };
+}
+
 campaignsRouter.get("/", (req, res) => {
   const { setting_id, system_id } = req.query as { setting_id?: string; system_id?: string };
   const clauses = ["c.archived_at IS NULL"];
@@ -89,8 +97,8 @@ campaignsRouter.get("/", (req, res) => {
        WHERE ${clauses.join(" AND ")}
        ORDER BY (next_planned_date IS NULL), next_planned_date, c.created_at DESC`
     )
-    .all(params) as { background_image_path: string | null }[];
-  res.json(rows.map(withBgUrl));
+    .all(params) as { background_image_path: string | null; folder_path: string | null }[];
+  res.json(rows.map((r) => withFolderState(withBgUrl(r))));
 });
 
 campaignsRouter.get("/:id", (req, res) => {
@@ -102,7 +110,7 @@ campaignsRouter.get("/:id", (req, res) => {
        LEFT JOIN settings st ON st.id = c.setting_id
        WHERE c.id = ?`
     )
-    .get(req.params.id) as { background_image_path: string | null } | undefined;
+    .get(req.params.id) as { background_image_path: string | null; folder_path: string | null } | undefined;
   if (!row) return res.status(404).json({ error: "not found" });
   const roster = db
     .prepare(
@@ -113,7 +121,7 @@ campaignsRouter.get("/:id", (req, res) => {
     )
     .all(req.params.id) as { thumbnail_image_path: string | null }[];
   const finance = campaignEarnings(Number(req.params.id));
-  res.json({ ...withBgUrl(row), roster: roster.map(withBgUrl), finance });
+  res.json({ ...withFolderState(withBgUrl(row)), roster: roster.map(withBgUrl), finance });
 });
 
 campaignsRouter.post("/:id/background", upload.single("file"), async (req, res) => {
@@ -121,6 +129,7 @@ campaignsRouter.post("/:id/background", upload.single("file"), async (req, res) 
     .prepare("SELECT folder_path, background_image_path FROM campaigns WHERE id = ?")
     .get(req.params.id) as { folder_path: string; background_image_path: string | null } | undefined;
   if (!campaign) return res.status(404).json({ error: "not found" });
+  if (folderMissing(campaign.folder_path)) { cleanupFile(req.file); return res.status(409).json({ error: FOLDER_MISSING_ERROR }); }
   if (!req.file) return res.status(400).json({ error: "file is required" });
 
   const rawExt = path.extname(req.file.originalname).toLowerCase() || ".jpg";
@@ -143,6 +152,7 @@ campaignsRouter.post("/:id/thumbnail", upload.single("file"), async (req, res) =
     .prepare("SELECT folder_path, thumbnail_image_path FROM campaigns WHERE id = ?")
     .get(req.params.id) as { folder_path: string; thumbnail_image_path: string | null } | undefined;
   if (!campaign) return res.status(404).json({ error: "not found" });
+  if (folderMissing(campaign.folder_path)) { cleanupFile(req.file); return res.status(409).json({ error: FOLDER_MISSING_ERROR }); }
   if (!req.file) return res.status(400).json({ error: "file is required" });
 
   const rawExt = path.extname(req.file.originalname).toLowerCase() || ".jpg";
@@ -267,6 +277,9 @@ campaignsRouter.put("/:id", (req, res) => {
   };
   let folderPath = existing.folder_path;
   if (name && name !== existing.name) {
+    // Папка пропала: молча завести новую нельзя — если её просто перенесли,
+    // старая с файлами осталась бы сиротой. Чиним осознанно, кнопкой в профиле.
+    if (folderMissing(existing.folder_path)) return res.status(409).json({ error: FOLDER_MISSING_ERROR });
     folderPath = renameEntityFolder(existing.folder_path, name);
   }
   // C-P0-5: COALESCE(NULL, col)=col — нельзя отвязать system_id/setting_id. Собираем SET только по ключам, присутствующим в body (явный null = отвязать).
@@ -297,6 +310,17 @@ campaignsRouter.put("/:id", (req, res) => {
     db.prepare(`UPDATE campaigns SET folder_path = ? WHERE id = ?`).run(folderPath, req.params.id);
   }
   res.json(db.prepare("SELECT * FROM campaigns WHERE id = ?").get(req.params.id));
+});
+
+// POST /api/campaigns/:id/folder/repair — вернуть кампании папку в хранилище.
+campaignsRouter.post("/:id/folder/repair", (req, res) => {
+  const campaign = db
+    .prepare("SELECT id, name, folder_path FROM campaigns WHERE id = ?")
+    .get(req.params.id) as { id: number; name: string; folder_path: string | null } | undefined;
+  if (!campaign) return res.status(404).json({ error: "not found" });
+  if (!folderMissing(campaign.folder_path)) return res.status(409).json({ error: "папка кампании на месте" });
+  const { folder, bound } = repairCampaignFolder(campaign.id, campaign.name, campaign.folder_path);
+  res.json({ folder_path: folder, bound });
 });
 
 campaignsRouter.put("/:id/pinned-calendar", (req, res) => {

@@ -130,6 +130,48 @@ const NO_SETTINGS: Setting[] = [];
 const NO_EVENTS: CampaignCalendarEvent[] = [];
 const NO_DATES: ImportantDate[] = [];
 
+/**
+ * Папки кампании нет в хранилище. Полоса стоит в профиле, а не только на
+ * «Здоровье»: сюда Мастер приходит работать, и упереться в отказ при попытке
+ * загрузить картинку хуже, чем прочитать причину заранее.
+ */
+function CampaignFolderNotice({ campaign }: { campaign: CampaignDetail }) {
+  const run = useAction();
+  const [alertDialog, alert] = useAlert();
+  async function repair() {
+    const done = await run(
+      labelled("Не удалось вернуть папку", () =>
+        write.post<{ folder_path: string; bound: boolean }>(`/campaigns/${campaign.id}/folder/repair`, {})
+      ),
+      { affects: campaignFieldsAffects(campaign.id) }
+    );
+    if (!done) return;
+    // Полоса исчезает сразу, как только сервер отдаст кампанию с папкой,
+    // поэтому итог показываем отдельным окном, а не строкой внутри неё.
+    alert(
+      done.bound
+        ? `Нашлась папка «${done.folder_path}» — привязал её. Файлы кампании вернулись вместе с ней.`
+        : "Папка создана заново. Файлы из прежней в неё не вернутся: если папка просто переехала, укажите её на странице «Здоровье»."
+    );
+  }
+  return (
+    <>
+      {alertDialog}
+      {campaign.folder_missing && (
+        <div className="card campaign-folder-missing">
+          <p>
+            {campaign.folder_path
+              ? "Папки кампании нет в хранилище — её удалили или перенесли."
+              : "У кампании нет папки в хранилище."}{" "}
+            Файлы загружать и переименовывать кампанию нельзя.
+          </p>
+          <button onClick={() => void repair()}>Создать папку заново</button>
+        </div>
+      )}
+    </>
+  );
+}
+
 export function CampaignDetailPage() {
   const { id } = useParams();
   const campaignId = Number(id);
@@ -642,6 +684,7 @@ export function CampaignDetailPage() {
       tab={tab}
       onTab={(t) => selectTab(t as (typeof tabs)[number])}
     >
+      <CampaignFolderNotice campaign={campaign} />
 
       {tab === "Обзор" && campaign.role === "player" && (
         <PlayerOverviewTab campaign={campaign} systems={systems} settingsList={settingsList} />

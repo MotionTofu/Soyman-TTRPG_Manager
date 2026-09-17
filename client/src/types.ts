@@ -315,6 +315,8 @@ export interface Campaign {
   held_sessions_count?: number;
   next_planned_date?: string | null;
   folder_path: string | null;
+  /** Папки кампании нет в хранилище (удалили или перенесли) — считает сервер. */
+  folder_missing?: boolean;
   created_at: string;
   archived_at: string | null;
 }

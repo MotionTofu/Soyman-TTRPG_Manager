@@ -5,6 +5,7 @@ import { db } from "../db/db";
 import { vaultAbs, VAULT_ROOT, vaultRel } from "../services/filesystem";
 import { findMissingFiles, relinkResource } from "../services/fileHealth";
 import { archiveFile } from "../services/vaultDedup";
+import { bindCampaignFolder, folderMissing, freeCampaignFolders } from "../services/campaignFolder";
 import { kindOf } from "../db/entityKinds";
 import {
   sweepOrphans,
@@ -1099,6 +1100,31 @@ healthRouter.post("/path/clear", (req, res) => {
   db.prepare(`UPDATE ${table} SET ${column}=NULL WHERE id=?`).run(id);
   auditLog(req as never, "path/clear", { table, column, id });
   res.json({ ok: true, cleared: `${table}.${column}#${id}` });
+});
+
+// GET /api/health/campaign-folders?id= — свободные папки в `Campaigns`, из
+// которых Мастер выбирает потерянную. Занятые не показываем: одна папка на две
+// кампании — это два профиля, пишущих в одни файлы.
+healthRouter.get("/campaign-folders", (req, res) => {
+  const id = Number(req.query.id);
+  res.json({ folders: freeCampaignFolders(Number.isFinite(id) ? id : undefined) });
+});
+
+// POST /api/health/path/bind — привязать кампании существующую папку. Спасает
+// переезд: файлы целы, потерялась только ссылка на них в базе.
+healthRouter.post("/path/bind", (req, res) => {
+  const { table, column, id, path: rel } = req.body as { table?: string; column?: string; id?: number; path?: string };
+  if (!table || !column || !id || !rel) return res.status(400).json({ error: "table, column, id, path required" });
+  if (table !== "campaigns" || column !== "folder_path") return res.status(400).json({ error: "column not allowed" });
+  const row = db.prepare("SELECT id, folder_path FROM campaigns WHERE id=?").get(id) as
+    | { id: number; folder_path: string | null }
+    | undefined;
+  if (!row) return res.status(404).json({ error: "row not found" });
+  if (!folderMissing(row.folder_path)) return res.status(409).json({ error: "папка кампании на месте" });
+  if (!freeCampaignFolders(row.id).includes(rel)) return res.status(400).json({ error: "папка занята или её нет" });
+  bindCampaignFolder(row.id, row.folder_path, rel);
+  auditLog(req as never, "path/bind", { table, column, id, path: rel });
+  res.json({ ok: true, folder_path: rel });
 });
 
 // POST /api/health/open-folder — открыть папку в проводнике (C-P0-4: только в Electron, case-insensitive на Windows)
