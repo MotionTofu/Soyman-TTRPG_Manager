@@ -11,7 +11,7 @@
 
 import { db } from "../db/db";
 import { toFileUrl } from "./filesystem";
-import { normalizeAccessLevel, type AccessLevel } from "./accessLevel";
+import { normalizeAccessLevel } from "./accessLevel";
 
 export type AccessGrantRow = { target_type: string; target_id: number; access_level: string | null };
 
@@ -24,30 +24,6 @@ function splitGrantIds(grants: AccessGrantRow[], type: string): { mentioned: num
     else open.push(g.target_id);
   }
   return { mentioned, open };
-}
-
-// Сводка ступеней по нескольким кампаниям (GET /player/settings/:id
-// объединяет выданное во всех кампаниях игрока на одном сеттинге): 'open'
-// хотя бы в одной побеждает 'mentioned' — иначе честно открытое в одном
-// месте пряталось бы из-за упоминания в другом.
-function unionGrantLevels(grants: AccessGrantRow[]): Map<string, AccessLevel> {
-  const out = new Map<string, AccessLevel>();
-  for (const g of grants) {
-    const level = normalizeAccessLevel(g.access_level);
-    const key = `${g.target_type}:${g.target_id}`;
-    if (level === "open" || !out.has(key)) out.set(key, level);
-  }
-  return out;
-}
-
-function idsAtLevel(levels: Map<string, AccessLevel>, type: string, want: AccessLevel): number[] {
-  const out: number[] = [];
-  for (const [key, level] of levels) {
-    if (level !== want) continue;
-    const [t, id] = key.split(":");
-    if (t === type) out.push(Number(id));
-  }
-  return out;
 }
 
 function withImageUrls<T extends { avatar_image_path?: string | null; thumbnail_image_path?: string | null }>(row: T) {
@@ -126,63 +102,6 @@ export function getSettingPlayerContent(campaignId: number, playerId: number): S
     ...(db
       .prepare(`SELECT id, title, inworld_year, inworld_month, inworld_day FROM setting_calendar_events WHERE setting_id = ? AND id IN (${inClause(ev.mentioned)})`)
       .all(settingId, ...ev.mentioned) as Record<string, unknown>[]).map((r) => ({ ...r, access_level: "mentioned" as const })),
-  ];
-
-  return { locations, beings, communities, chronicleEvents };
-}
-
-// Тот же Мир, но сведённый по всем кампаниям игрока на одном сеттинге
-// (GET /player/settings/:id). 'open' хотя бы в одной побеждает.
-export function getSettingPlayerContentUnion(settingId: number, campaignIds: number[], playerId: number): SettingPlayerContentPayload {
-  const grantRows = campaignIds.length
-    ? (db
-        .prepare(
-          `SELECT target_type, target_id, access_level FROM player_visibility_grants WHERE campaign_id IN (${inClause(campaignIds)}) AND player_id = ?`
-        )
-        .all(...campaignIds, playerId) as AccessGrantRow[])
-    : [];
-  const levels = unionGrantLevels(grantRows);
-
-  const locOpen = idsAtLevel(levels, "setting_location", "open");
-  const locMentioned = idsAtLevel(levels, "setting_location", "mentioned");
-  const beiOpen = idsAtLevel(levels, "setting_being", "open");
-  const beiMentioned = idsAtLevel(levels, "setting_being", "mentioned");
-  const comOpen = idsAtLevel(levels, "setting_community", "open");
-  const comMentioned = idsAtLevel(levels, "setting_community", "mentioned");
-  const evOpen = idsAtLevel(levels, "setting_calendar_event", "open");
-  const evMentioned = idsAtLevel(levels, "setting_calendar_event", "mentioned");
-
-  const locations = [
-    ...(db
-      .prepare(`SELECT id, parent_id, name, kind, description, player_text, avatar_image_path, thumbnail_image_path FROM setting_locations WHERE setting_id = ? AND id IN (${inClause(locOpen)})`)
-      .all(settingId, ...locOpen) as Record<string, unknown>[]).map((r) => ({ ...withImageUrls(r as { avatar_image_path: string | null; thumbnail_image_path: string | null }), access_level: "open" as const })),
-    ...(db
-      .prepare(`SELECT id, parent_id, name, kind, avatar_image_path, thumbnail_image_path FROM setting_locations WHERE setting_id = ? AND id IN (${inClause(locMentioned)})`)
-      .all(settingId, ...locMentioned) as Record<string, unknown>[]).map((r) => ({ ...withImageUrls(r as { avatar_image_path: string | null; thumbnail_image_path: string | null }), access_level: "mentioned" as const })),
-  ];
-  const beings = [
-    ...(db
-      .prepare(`SELECT id, name, category, history, player_text, avatar_image_path, thumbnail_image_path FROM setting_beings WHERE setting_id = ? AND id IN (${inClause(beiOpen)})`)
-      .all(settingId, ...beiOpen) as Record<string, unknown>[]).map((r) => ({ ...withImageUrls(r as { avatar_image_path: string | null; thumbnail_image_path: string | null }), access_level: "open" as const })),
-    ...(db
-      .prepare(`SELECT id, name, category, avatar_image_path, thumbnail_image_path FROM setting_beings WHERE setting_id = ? AND id IN (${inClause(beiMentioned)})`)
-      .all(settingId, ...beiMentioned) as Record<string, unknown>[]).map((r) => ({ ...withImageUrls(r as { avatar_image_path: string | null; thumbnail_image_path: string | null }), access_level: "mentioned" as const })),
-  ];
-  const communities = [
-    ...(db
-      .prepare(`SELECT id, name, description, player_text, avatar_image_path, thumbnail_image_path FROM setting_communities WHERE setting_id = ? AND id IN (${inClause(comOpen)})`)
-      .all(settingId, ...comOpen) as Record<string, unknown>[]).map((r) => ({ ...withImageUrls(r as { avatar_image_path: string | null; thumbnail_image_path: string | null }), access_level: "open" as const })),
-    ...(db
-      .prepare(`SELECT id, name, avatar_image_path, thumbnail_image_path FROM setting_communities WHERE setting_id = ? AND id IN (${inClause(comMentioned)})`)
-      .all(settingId, ...comMentioned) as Record<string, unknown>[]).map((r) => ({ ...withImageUrls(r as { avatar_image_path: string | null; thumbnail_image_path: string | null }), access_level: "mentioned" as const })),
-  ];
-  const chronicleEvents = [
-    ...(db
-      .prepare(`SELECT id, title, description, player_text, inworld_year, inworld_month, inworld_day FROM setting_calendar_events WHERE setting_id = ? AND id IN (${inClause(evOpen)})`)
-      .all(settingId, ...evOpen) as Record<string, unknown>[]).map((r) => ({ ...r, access_level: "open" as const })),
-    ...(db
-      .prepare(`SELECT id, title, inworld_year, inworld_month, inworld_day FROM setting_calendar_events WHERE setting_id = ? AND id IN (${inClause(evMentioned)})`)
-      .all(settingId, ...evMentioned) as Record<string, unknown>[]).map((r) => ({ ...r, access_level: "mentioned" as const })),
   ];
 
   return { locations, beings, communities, chronicleEvents };

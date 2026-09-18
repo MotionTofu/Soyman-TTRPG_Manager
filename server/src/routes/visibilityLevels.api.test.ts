@@ -170,15 +170,20 @@ describe("ступень выдачи: ответ /player/*", () => {
     expect("player_text" in (event ?? {})).toBe(false);
   });
 
-  it("settings/:id: 'open' в одной кампании побеждает 'mentioned' в другой", async () => {
-    // Упомянули то же существо во второй кампании — там оно только упомянуто.
+  it("один сеттинг в двух кампаниях — два разных Мира (решение 5, F-47)", async () => {
+    // Во второй кампании то же сообщество только упомянуто.
     await request(app).post("/api/visibility-grants").send({ campaign_id: campaign2Id, player_id: playerId, target_type: "setting_community", target_id: communityOpen, access_level: "mentioned" });
-    const res = await request(app).get(`/api/player/settings/${settingId}`);
-    expect(res.status).toBe(200);
-    const community = (res.body.communities as Record<string, unknown>[]).find((c) => c["id"] === communityOpen);
-    // В первой кампании открыто — сводка показывает открытое.
-    expect(community).toMatchObject({ access_level: "open" });
-    expect(community?.["description"]).toBe("ОПИСАНИЕ-АРФЫ");
+    const first = await request(app).get(`/api/player/campaigns/${campaignId}/setting-player-content`);
+    const second = await request(app).get(`/api/player/campaigns/${campaign2Id}/setting-player-content`);
+    const inFirst = (first.body.communities as Record<string, unknown>[]).find((c) => c["id"] === communityOpen);
+    const inSecond = (second.body.communities as Record<string, unknown>[]).find((c) => c["id"] === communityOpen);
+    expect(inFirst).toMatchObject({ access_level: "open" });
+    // Открытое в первой кампании не просачивается во вторую.
+    expect(inSecond).toMatchObject({ access_level: "mentioned" });
+    expect("description" in (inSecond ?? {})).toBe(false);
+    // И сводной ручки «Мир по сеттингу» нет.
+    expect((await request(app).get(`/api/player/settings/${settingId}`)).status).toBe(404);
+    expect((await request(app).get("/api/player/settings")).status).toBe(404);
   });
 });
 

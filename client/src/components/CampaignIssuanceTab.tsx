@@ -46,7 +46,6 @@ interface EntityItem {
   name: string;
   targetType: VisibilityTargetType;
   to?: string;
-  folder?: string | null;
   sub?: string;
   getPlayerText: () => string;
   savePlayerText: (text: string) => Promise<boolean>;
@@ -152,7 +151,6 @@ export function CampaignIssuanceTab({ campaignId, settingId, roster }: Props) {
         name: e.name,
         targetType,
         to: `${toPrefix}/${e.id}`,
-        folder: (e as SettingLocation).folder_path ?? (e as SettingBeing).folder_path ?? null,
         getPlayerText: () => (e as SettingLocation).player_text ?? "",
         savePlayerText: (text: string) => savePlayerText(targetType, e.id, text),
       })),
@@ -544,7 +542,6 @@ function RowControls({ item, shared }: { item: EntityItem; shared: RowShared }) 
       </label>
       {item.to ? <Link to={item.to}>{item.name}</Link> : <span>{item.name}</span>}
       {item.sub && <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>{item.sub}</span>}
-      {item.folder && <span className="muted" style={{ fontSize: "var(--fs-meta)" }} title="Папка">{item.folder}</span>}
       {mode === "visibility" && <LevelSummary item={item} grants={grants} />}
       {mode === "visibility" && roster.length > 0 && (
         <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)", whiteSpace: "nowrap" }} title={`${grantedCount} из ${roster.length} игроков видят`}>

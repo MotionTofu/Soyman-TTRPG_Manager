@@ -9,7 +9,7 @@ import {
   writeReplacingOldFile,
 } from "../services/filesystem";
 import { unpaidSessionsForPlayer } from "../services/finance";
-import { getFlaggedSettingContent, getPlayerSectionsFor, getSettingPlayerContent, getSettingPlayerContentUnion } from "../services/playerContent";
+import { getFlaggedSettingContent, getPlayerSectionsFor, getSettingPlayerContent } from "../services/playerContent";
 import { broadcastCharacterUpdate, broadcastToGm } from "../services/realtime";
 import { ensurePlayerFolder } from "../services/folderRepair";
 import { mergeContentPatch } from "../db/statblockContent";
@@ -639,56 +639,11 @@ playerRouter.get("/campaigns/:id/setting-player-content", (req: AuthedRequest, r
   res.json(getSettingPlayerContent(campaignId, playerId));
 });
 
-// Settings used by any of the player's campaigns — a setting can be shared
-// across several campaigns (and grants are per campaign+player, see above),
-// so this lists distinct settings and the detail route below unions what's
-// been revealed to this player across every campaign of theirs using it.
-playerRouter.get("/settings", (req: AuthedRequest, res) => {
-  const campaignIds = myCampaignIds(req.user!.playerId!);
-  if (!campaignIds.length) return res.json([]);
-  const rows = db
-    .prepare(
-      `SELECT DISTINCT s.id, s.name, s.description,
-              s.thumbnail_image_path, s.background_image_path
-       FROM settings s
-       JOIN campaigns c ON c.setting_id = s.id
-       WHERE c.id IN (${campaignIds.map(() => "?").join(",")})
-       ORDER BY s.name COLLATE NOCASE`
-    )
-    .all(...campaignIds) as { id: number; name: string; description: string | null; thumbnail_image_path: string | null; background_image_path: string | null }[];
-  res.json(rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    description: r.description,
-    thumbnail_image_url: r.thumbnail_image_path ? toFileUrl(r.thumbnail_image_path) : null,
-    background_image_url: r.background_image_path ? toFileUrl(r.background_image_path) : null,
-  })));
-});
-
-playerRouter.get("/settings/:id", (req: AuthedRequest, res) => {
-  const settingId = Number(req.params.id);
-  if (!Number.isFinite(settingId)) return res.status(400).json({ error: "invalid setting id" });
-  const playerId = req.user!.playerId!;
-  const campaignIds = myCampaignIds(playerId);
-  const myCampaignsWithSetting = campaignIds.length
-    ? (db
-        .prepare(
-          `SELECT id FROM campaigns WHERE setting_id = ? AND id IN (${campaignIds.map(() => "?").join(",")})`
-        )
-        .all(settingId, ...campaignIds) as { id: number }[])
-    : [];
-  if (!myCampaignsWithSetting.length) return res.status(404).json({ error: "not found" });
-
-  const setting = db.prepare("SELECT id, name FROM settings WHERE id = ?").get(settingId) as
-    | { id: number; name: string }
-    | undefined;
-  if (!setting) return res.status(404).json({ error: "not found" });
-
-  // Расчёт — в services/playerContent.ts: тот же код кормит превью
-  // «Глазами игрока», иначе превью врало бы при раздаче доступов.
-  const campaignIdList = myCampaignsWithSetting.map((c) => c.id);
-  res.json({ setting, ...getSettingPlayerContentUnion(settingId, campaignIdList, playerId) });
-});
+// Мира игрока «по сеттингу», сведённого по всем его кампаниям, нет
+// намеренно: решение 5 кабинета (2026-09-12) — один сеттинг в двух
+// кампаниях это два разных Мира, у каждого своя выдача. Ручки
+// GET /player/settings и /player/settings/:id с таким сведением сняты
+// 2026-09-18 (F-47) вместе со страницами, которые их звали.
 
 // Read-only rules reference — not secret content, so no per-campaign
 // filtering beyond "this system belongs to one of my campaigns".
