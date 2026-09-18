@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useResource } from "../data/hooks";
 import { MonthCalendar, type CalendarEvent } from "../components/MonthCalendar";
-import { SectionHeading } from "../components/SectionHeading";
+import { PageFrame } from "../components/PageFrame";
 import { loadHideFinance } from "../financePrivacy";
 
 interface DashboardSession {
@@ -63,8 +63,7 @@ export function PlayerHomePage() {
   }));
 
   return (
-    <div className="stack">
-      <SectionHeading section="home">Главная</SectionHeading>
+    <PageFrame section="home" title="Главная">
 
       {reminders.length > 0 && (
         <div className="stack">
@@ -109,6 +108,6 @@ export function PlayerHomePage() {
           ))}
         </div>
       )}
-    </div>
+    </PageFrame>
   );
 }

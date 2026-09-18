@@ -13,7 +13,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAction, useResource, write } from "../data/hooks";
 import { labelled } from "../data/notices";
-import { SectionHeading } from "../components/SectionHeading";
+import { PageFrame } from "../components/PageFrame";
 import type { System } from "../types";
 
 interface Problem {
@@ -289,11 +289,11 @@ export function ImportSystemPage() {
   const system = systems.find((s) => s.id === systemId) ?? null;
 
   return (
-    <div className="stack">
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <SectionHeading section="systems">Импорт книги правил</SectionHeading>
-        {system && <Link to={`/systems/${system.id}`}>← {system.name}</Link>}
-      </div>
+    <PageFrame
+      section="systems"
+      title="Импорт книги правил"
+      actions={system && <Link to={`/systems/${system.id}`}>← {system.name}</Link>}
+    >
 
       {/* --- шаг 1: файл ---------------------------------------------------- */}
       <div className="card stack">
@@ -617,6 +617,6 @@ export function ImportSystemPage() {
           ))}
         </div>
       )}
-    </div>
+    </PageFrame>
   );
 }

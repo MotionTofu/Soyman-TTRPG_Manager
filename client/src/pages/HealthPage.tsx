@@ -777,6 +777,7 @@ export function HealthPage() {
       {bindFor && (
         <Modal onClose={() => setBindFor(null)}>
           <div className="stack" style={{ padding: 16, minWidth: 320 }}>
+            {/* шапка мимо каркаса намеренно — заголовок диалога, а не страницы */}
             <SectionHeading>Указать папку кампании</SectionHeading>
             <p className="muted">Папка из базы: {bindFor.path || "не задана"}. Показаны папки в «Campaigns», не привязанные к другим кампаниям.</p>
             {bindFolders === null && <span className="muted">Читаю хранилище…</span>}

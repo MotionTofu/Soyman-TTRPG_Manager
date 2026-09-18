@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { openExternalLink, openTelegramLink } from "../electronApi";
 import { ExternalLinkConfirmModal, BOOSTY_URL } from "../components/ExternalLinkConfirmModal";
-import { SectionHeading } from "../components/SectionHeading";
+import { PageFrame } from "../components/PageFrame";
 import { UpdateChecker } from "../components/UpdateChecker";
 import { NavIcon } from "../components/NavIcons";
 
@@ -47,10 +47,8 @@ export function AboutPage() {
   const [external, setExternal] = useState<"boosty" | "telegram" | "email" | null>(null);
 
   return (
-    <div className="stack">
-      <SectionHeading section="about" compact>Справка</SectionHeading>
-
-      {/* каркас в обход намеренно — страница не карточка сущности: свой вид, каркас для него ещё не построен */}
+    <PageFrame section="about" title="Справка">
+      {/* каркас в обход намеренно — вкладки разделов справки, а не карточки сущности; у лёгкого каркаса вкладок нет (П3.6) */}
       <div className="tabs">
         {TABS.map((t) => (
           <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>
@@ -450,6 +448,6 @@ export function AboutPage() {
           }}
         />
       )}
-    </div>
+    </PageFrame>
   );
 }

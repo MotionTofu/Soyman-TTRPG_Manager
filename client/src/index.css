@@ -6957,6 +6957,19 @@ details.card[open] summary {
   flex-wrap: wrap;
   gap: var(--sp-4);
 }
+/* Отступы тела у страниц на каркасе — бывшие инлайновые стили корня. */
+.storages-page {
+  padding-bottom: var(--sp-10);
+}
+.mastering-page {
+  position: relative;
+  gap: var(--sp-4);
+}
+.invitations-page {
+  position: relative;
+  gap: var(--sp-7);
+  padding-bottom: calc(var(--player-bar-height, 52px) + var(--sp-6));
+}
 .list-page__tab-count {
   margin-left: var(--sp-1);
   opacity: 0.6;

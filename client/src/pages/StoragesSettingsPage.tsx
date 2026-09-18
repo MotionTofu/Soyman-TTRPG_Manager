@@ -11,6 +11,7 @@ import { ThemeEditorModal } from "../components/ThemeEditorModal";
 import { hasElectronAPI, isPathSafeForExplorer } from "../electronApi";
 import { NavIcon } from "../components/NavIcons";
 import { SectionHeading } from "../components/SectionHeading";
+import { PageFrame } from "../components/PageFrame";
 import { EmptyState } from "../components/EmptyState";
 import type { AppSettings, StorageProfile } from "../types";
 import {
@@ -440,11 +441,8 @@ export function StoragesSettingsPage() {
   }, [newName, newFolder, renameDraft, importName, importFolder, renamingId]);
 
   return (
-    <div className="stack" style={{ paddingBottom: 60 }}>
+    <PageFrame section="storages" title="Настройки" className="storages-page">
       {confirmDialog}
-      <SectionHeading section="storages" compact>
-        Настройки
-      </SectionHeading>
       {fromAppearance && (
         <div className="card" role="status" style={{ borderLeft: "1px solid var(--accent)", background: "var(--paper-2)" }}>
           <span style={{ fontWeight: 600 }}>Внешний вид переехал в Настройки → Интерфейс</span>
@@ -897,6 +895,6 @@ export function StoragesSettingsPage() {
           <UpdateChecker />
         </div>
       )}
-    </div>
+    </PageFrame>
   );
 }

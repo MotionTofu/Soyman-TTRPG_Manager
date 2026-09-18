@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAfterWrite, useResource, write } from "../data/hooks";
+import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
+import { PageFrame } from "../components/PageFrame";
 
 interface SheetSummary {
   format: string;
@@ -106,11 +108,20 @@ export function PlayerSheetsPage() {
   }
 
   return (
-    <div className="stack">
-      {/* каркас в обход намеренно — страница не карточка сущности: свой вид, каркас для него ещё не построен */}
-      <h1>Персонажи</h1>
-      {listError && <p className="error">Не загрузилось: {listError}</p>}
-      {characters === null && !listError && <p className="muted">Загрузка…</p>}
+    // Список и форма создания — не под `state` каркаса: ошибка списка не
+    // должна прятать начатый чарник.
+    <PageFrame
+      title="Персонажи"
+      actions={
+        !creating && (
+          <button type="button" className="primary" onClick={startCreate}>
+            + Новый чарник
+          </button>
+        )
+      }
+    >
+      {listError && <LoadErrorCard message={<>Не удалось загрузить персонажей: {listError}</>} onRetry={me.reload} />}
+      {characters === null && !listError && <ListSkeleton variant="rows" label="Загрузка персонажей" />}
       {characters !== null && characters.length === 0 && !creating && (
         <p className="muted">Чарников пока нет — заведите первого.</p>
       )}
@@ -124,11 +135,7 @@ export function PlayerSheetsPage() {
           ))}
         </div>
       )}
-      {!creating ? (
-        <button type="button" className="primary" onClick={startCreate} style={{ alignSelf: "flex-start" }}>
-          + Новый чарник
-        </button>
-      ) : (
+      {creating && (
         <div className="card stack">
           <strong>Новый чарник</strong>
           <label>
@@ -187,6 +194,6 @@ export function PlayerSheetsPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageFrame>
   );
 }

@@ -6,6 +6,7 @@ import { useCurrentUser } from "../api/currentUser";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import type { Player } from "../types";
+import { PageFrame } from "../components/PageFrame";
 
 interface MyCharacter {
   id: number;
@@ -116,9 +117,7 @@ export function PlayerCabinetPage() {
   if (!player) return <p className="muted">Загрузка…</p>;
 
   return (
-    <div className="stack">
-      {/* каркас в обход намеренно — страница не карточка сущности: свой вид, каркас для него ещё не построен */}
-      <h1>Кабинет</h1>
+    <PageFrame title="Кабинет">
 
       <div className="card row" style={{ alignItems: "flex-start", gap: 16 }}>
         <label className="avatar-upload-label" title={IMAGE_HINT}>
@@ -210,6 +209,6 @@ export function PlayerCabinetPage() {
           </div>
         )}
       </div>
-    </div>
+    </PageFrame>
   );
 }

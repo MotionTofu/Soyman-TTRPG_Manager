@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useResource } from "../data/hooks";
-import { SectionHeading } from "../components/SectionHeading";
+import { PageFrame } from "../components/PageFrame";
 import { EmptyState } from "../components/EmptyState";
 import { cardThumbnailProps, loadThumbnailStyles } from "../thumbnailStyles";
 import { formatNearestDate } from "../nearestDate";
@@ -47,8 +47,7 @@ export function LibraryPage() {
   const upcoming = campaigns.filter((c) => c.next_planned_date);
 
   return (
-    <div className="stack">
-      <SectionHeading>Библиотека</SectionHeading>
+    <PageFrame title="Библиотека">
 
       {upcoming.length > 0 && (
         <div className="stack" style={{ gap: 4 }}>
@@ -149,6 +148,6 @@ export function LibraryPage() {
           )}
         </div>
       </div>
-    </div>
+    </PageFrame>
   );
 }

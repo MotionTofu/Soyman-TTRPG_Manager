@@ -6,7 +6,7 @@ import { labelled } from "../data/notices";
 import { MentionTextarea } from "../components/mentions/MentionTextarea";
 import { MentionText } from "../components/mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
-import { SectionHeading } from "../components/SectionHeading";
+import { PageFrame } from "../components/PageFrame";
 import { EmptyState } from "../components/EmptyState";
 import { SectionBackground } from "../components/SectionBackground";
 import type { MasteringNote, MasteringSection, System } from "../types";
@@ -232,13 +232,10 @@ export function MasteringPage() {
   const unsectioned = bySection.get(null) ?? [];
 
   return (
-    <div className="stack" style={{ gap: 10, position: "relative" }}>
+    <PageFrame section="mastering" title="Мастерение" className="mastering-page">
       {confirmDialog}
       <SectionBackground />
-      <SectionHeading section="mastering" compact>
-        Мастерение
-      </SectionHeading>
-      {/* каркас в обход намеренно — страница не карточка сущности: свой вид, каркас для него ещё не построен */}
+      {/* каркас в обход намеренно — вкладки категорий заготовок, а не карточки сущности; у лёгкого каркаса вкладок нет (П3.6) */}
       <div className="tabs">
         {CATEGORIES.map((c) => (
           <button
@@ -483,7 +480,7 @@ export function MasteringPage() {
           {/* Если все секции пусты, но есть хвост — уже показан. Если всё пусто по фильтру — EmptyState выше */}
         </div>
       )}
-    </div>
+    </PageFrame>
   );
 }
 

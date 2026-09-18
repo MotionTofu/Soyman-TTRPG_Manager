@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { useResource } from "../data/hooks";
 import { readResource } from "../data/imperative";
-import { SectionHeading } from "../components/SectionHeading";
+import { PageFrame } from "../components/PageFrame";
 import { SectionBackground } from "../components/SectionBackground";
 import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
 import { EmptyState } from "../components/EmptyState";
@@ -141,14 +141,17 @@ export function InvitationsPage() {
   };
 
   return (
-    <div className="stack" style={{ position: "relative", gap: "var(--sp-7)", paddingBottom: "calc(var(--player-bar-height, 52px) + 16px)" }}>
-      <SectionBackground />
-      <div className="page-header-row row">
-        <SectionHeading section="invite" compact>Приглашения</SectionHeading>
+    <PageFrame
+      section="invite"
+      title="Приглашения"
+      className="invitations-page"
+      actions={
         <button onClick={() => load()} disabled={loading || refreshing}>
           {loading || refreshing ? "Обновление…" : "Обновить"}
         </button>
-      </div>
+      }
+    >
+      <SectionBackground />
 
       {loadError && (
         <LoadErrorCard
@@ -338,6 +341,6 @@ export function InvitationsPage() {
           </div>
         </Modal>
       )}
-    </div>
+    </PageFrame>
   );
 }

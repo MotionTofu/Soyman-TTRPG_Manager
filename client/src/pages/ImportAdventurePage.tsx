@@ -10,7 +10,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAction, useResource, write } from "../data/hooks";
 import { labelled } from "../data/notices";
-import { SectionHeading } from "../components/SectionHeading";
+import { PageFrame } from "../components/PageFrame";
 import { CREATABLE_BEING_CATEGORIES } from "../beingCategories";
 import { entryWord } from "../sceneKinds";
 import type { Setting } from "../types";
@@ -298,12 +298,12 @@ export function ImportAdventurePage() {
   }
 
   return (
-    <div className="stack">
+    <PageFrame
+      section="settings"
+      title="Импорт приключения"
+      actions={setting && <Link to={`/settings/${setting.id}`}>← {setting.name}</Link>}
+    >
       {confirmDialog}
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <SectionHeading section="settings">Импорт приключения</SectionHeading>
-        {setting && <Link to={`/settings/${setting.id}`}>← {setting.name}</Link>}
-      </div>
 
       {/* --- шаг 1: файл ---------------------------------------------------- */}
       <div className="card stack">
@@ -689,6 +689,6 @@ export function ImportAdventurePage() {
           ))}
         </div>
       )}
-    </div>
+    </PageFrame>
   );
 }
