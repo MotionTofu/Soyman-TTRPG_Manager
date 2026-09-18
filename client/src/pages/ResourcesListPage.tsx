@@ -46,6 +46,15 @@ export function ResourcesListPage() {
     keepPrevious: true,
   }).data;
   const resources = useMemo(() => (allResources ?? []).filter((r) => r.type !== TEMPLATE_TYPE), [allResources]);
+  // «M» в счётчике — всё, что вкладка «Все» могла бы показать без поиска и
+  // фильтров. Поиск идёт на сервере, поэтому ответ с `?q=` для этого не
+  // годится; полный список — тот же ключ, что без поиска, из кэша слоя.
+  // Звук и шаблоны не в счёт: у них свои вкладки, здесь их не показывают.
+  const everyResource = useResource<Resource[]>("/resources").data;
+  const shelfTotal = useMemo(
+    () => (everyResource ?? []).filter((r) => r.type !== TEMPLATE_TYPE && categoryOf(r) !== "audio").length,
+    [everyResource]
+  );
   const campaigns = useResource<Campaign[]>("/campaigns").data ?? NO_CAMPAIGNS;
   const settings = useResource<Setting[]>("/settings").data ?? NO_SETTINGS;
   const [sortMode, setSortMode] = useState<SortMode>("az");
@@ -170,7 +179,6 @@ export function ResourcesListPage() {
         headingSection="resources"
         title="Ресурсы"
         groups={[]}
-        allLabel={null}
         ungroupedLabel={null}
         activeGroup={section === "all" ? null : section}
         onGroupChange={(g) => setSection(g === null ? "all" : g as typeof section)}
@@ -179,11 +187,14 @@ export function ResourcesListPage() {
         onSearch={setQuery}
         searchPlaceholder="Поиск по названию…"
         searchLabel="Поиск по ресурсам"
-        filteredCount={section === "all" ? filteredResources.length : 0}
-        totalCount={resources.length}
+        filteredCount={groups.reduce((n, g) => n + g.items.length, 0)}
+        totalCount={shelfTotal}
         onResetSearch={() => { setQuery(""); setCampaignFilter(null); setSettingFilter(null); }}
         showReset={query.trim() !== "" || campaignFilter !== null || settingFilter !== null}
-        toolbarExtra={section === "all" ? sortToolbar : undefined}
+        toolbarExtra={sortToolbar}
+        // Тулбар — инструмент вкладки «Все»: у Звука, наборов и шаблонов
+        // поиск свой, а общий показывал там «0 / N».
+        hideToolbar={section !== "all"}
       >
         {section === "all" ? (
           <>

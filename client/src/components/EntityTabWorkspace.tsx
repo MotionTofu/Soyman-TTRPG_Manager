@@ -45,8 +45,6 @@ export function EntityTabWorkspace({
   children,
   navFooter,
   workspaceKey,
-  renderSectionLabel,
-  onSectionContextMenu,
 }: {
   sections: WorkspaceSection[];
   selection: WorkspaceSelection;
@@ -57,12 +55,6 @@ export function EntityTabWorkspace({
   navFooter?: ReactNode;
   /** Ключ для сброса скролла/состояния при смене сущности. */
   workspaceKey?: string | number;
-  /** Своя подпись раздела в навигации (инлайн-переименование группы в
-   *  каркасе списка). Нет — обычная подпись. */
-  renderSectionLabel?: (section: WorkspaceSection) => ReactNode;
-  /** Правый щелчок по разделу (контекстное меню группы в каркасе списка).
-   *  Нет — меню нет. */
-  onSectionContextMenu?: (sectionId: string, x: number, y: number) => void;
 }) {
   // Раскрытые категории. По умолчанию раскрыта та, где лежит выбор, —
   // остальное свернуто, чтобы панель оставалась компактной при десятках
@@ -99,25 +91,13 @@ export function EntityTabWorkspace({
                     s.items ? (toggle(s.id), selection.section !== s.id && pick(s.id)) : pick(s.id)
                   }
                   aria-expanded={s.items ? isOpen : undefined}
-                  onContextMenu={
-                    onSectionContextMenu
-                      ? (e) => {
-                          e.preventDefault();
-                          onSectionContextMenu(s.id, e.clientX, e.clientY);
-                        }
-                      : undefined
-                  }
                 >
                   {s.items && (
                     <span className="etw-nav-chevron" aria-hidden="true">
                       {isOpen ? "▾" : "▸"}
                     </span>
                   )}
-                  {renderSectionLabel ? (
-                    renderSectionLabel(s)
-                  ) : (
-                    <span className="etw-nav-label">{s.label}</span>
-                  )}
+                  <span className="etw-nav-label">{s.label}</span>
                   {s.count != null && s.count > 0 && (
                     <span className="etw-nav-count" aria-label={`Всего: ${s.count}`}>
                       {s.count}

@@ -1,21 +1,16 @@
-import { useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useMemo, useState } from "react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
-import { resourceQuery, useResource, write } from "../data/hooks";
-import { afterWriteAnywhere } from "../data/imperative";
+import { resourceQuery, useResource } from "../data/hooks";
 import { invalidateAffects } from "../data/entities";
 import { campaignGroupAffects, campaignPaths } from "../data/campaigns";
 import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
 import { ListPage } from "../components/ListPage";
-import { CampaignCover, CampaignCoverTile } from "../components/CampaignCoverTile";
-import { ContextMenu } from "../components/ContextMenu";
+import { CampaignCoverTile } from "../components/CampaignCoverTile";
 import { EmptyState } from "../components/EmptyState";
 import { CampaignWizard } from "../components/CampaignWizard";
 import { CampaignGroupMembersModal } from "../components/CampaignGroupMembersModal";
 import { NavIcon } from "../components/NavIcons";
 import { SectionBackground } from "../components/SectionBackground";
-import { useAlert, useConfirm } from "../hooks/useConfirm";
-import { useUndoDelete } from "../hooks/useUndoDelete";
 import type { Campaign, CampaignGroup, Setting, System } from "../types";
 
 // Две вкладки, которых нет у других списков: не группы, а взгляд на список по
@@ -27,99 +22,10 @@ const CAMPAIGN_ROLE_TABS = [
   { id: "role:player", label: "Я игрок" },
 ] as const;
 
-// Предпросмотр кампании (Q48): лицо, сводка, связи, действия. Действий
-// два, а не три: первое — «Открыть», под «…» — «Архивировать» с карточки.
-// Третье появится вместе с карточкой, а не выдумывается здесь.
-function CampaignPreview({
-  campaign: c,
-  onArchived,
-}: {
-  campaign: Campaign;
-  onArchived: (id: number, name: string) => void;
-}) {
-  const navigate = useNavigate();
-  const moreRef = useRef<HTMLButtonElement>(null);
-  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
-
-  function openMenu() {
-    const r = moreRef.current?.getBoundingClientRect();
-    if (r) setMenuAt({ x: r.right, y: r.bottom });
-  }
-
-  return (
-    <div className="stack">
-      <div className="card campaign-tile">
-        <CampaignCover campaign={c} />
-      </div>
-      <div className="card stack">
-        <div className="entity-field-row">
-          <span className="muted">Роль</span>
-          <span>{c.role === "player" ? "Я игрок" : "Я мастер"}</span>
-        </div>
-        <div className="entity-field-row">
-          <span className="muted">Ближайшая</span>
-          <span>{c.next_planned_date ?? "нет запланированных"}</span>
-        </div>
-        <div className="entity-field-row">
-          <span className="muted">Состав</span>
-          <span>
-            Игроков: {c.player_count ?? "—"} · Сессий: {c.held_sessions_count ?? "—"}
-          </span>
-        </div>
-      </div>
-      <div className="card stack">
-        <span className="muted">Связи</span>
-        {c.setting_id != null && (
-          <Link to={`/settings/${c.setting_id}`}>Сеттинг: {c.setting_name ?? "—"}</Link>
-        )}
-        {c.system_id != null && (
-          <Link to={`/systems/${c.system_id}`}>Система: {c.system_name ?? "—"}</Link>
-        )}
-        {c.setting_id == null && c.system_id == null && (
-          <span className="muted">Ни с чем не связана.</span>
-        )}
-      </div>
-      <div className="row" style={{ gap: 8 }}>
-        <button className="primary" onClick={() => navigate(`/campaigns/${c.id}`)}>
-          Открыть
-        </button>
-        <button
-          ref={moreRef}
-          type="button"
-          aria-label="Ещё действия"
-          aria-haspopup="menu"
-          onClick={openMenu}
-        >
-          …
-        </button>
-      </div>
-      {menuAt && (
-        <ContextMenu
-          x={menuAt.x}
-          y={menuAt.y}
-          items={[
-            {
-              label: "Архивировать",
-              danger: true,
-              onClick: () => {
-                setMenuAt(null);
-                onArchived(c.id, c.name);
-              },
-            },
-          ]}
-          onClose={() => setMenuAt(null)}
-        />
-      )}
-    </div>
-  );
-}
-
 const NO_CAMPAIGNS: Campaign[] = [];
 const NO_SYSTEMS: System[] = [];
 const NO_SETTINGS: Setting[] = [];
 const NO_GROUPS: CampaignGroup[] = [];
-// Архивирование и возврат: списки кампаний везде (и счётчики групп) и страница архива.
-const ARCHIVE_AFFECTS = [{ kind: "campaign" as const }, { path: "/campaign-groups" }, { path: "/archive" }];
 
 export function CampaignsListPage() {
   const client = useQueryClient();
@@ -132,24 +38,19 @@ export function CampaignsListPage() {
   const [creating, setCreating] = useState(false);
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const groups = useResource<CampaignGroup[]>(campaignPaths.groups()).data ?? NO_GROUPS;
-  // Счётчики групп в левой панели и состав открытой группы — одни и те же
+  // Состав открытой группы и «Вне групп» — одни и те же
   // запросы составов, под одним ключом с окном «добавить в группу».
   const memberQueries = useQueries({
     queries: groups.map((g) => resourceQuery<Campaign[]>(campaignPaths.groupMembers(g.id))),
   });
-  const groupCounts: Record<number, number> = {};
-  groups.forEach((g, i) => {
-    const members = memberQueries[i]?.data;
-    if (members) groupCounts[g.id] = members.length;
-  });
   const activeMembers = memberQueries[groups.findIndex((g) => String(g.id) === activeTab)]?.data;
   const groupMemberIds = useMemo(() => new Set((activeMembers ?? []).map((m) => m.id)), [activeMembers]);
+  // «Вне групп» — всё, чего нет ни в одной группе (F-43: раньше состав
+  // здесь был пуст, и вкладка показывала всё подряд). Пока хоть один состав
+  // не пришёл, вычитать не из чего — ждём, а не показываем лишнее.
+  const allMembersKnown = memberQueries.every((mq) => mq.data != null);
   const [groupMembersModal, setGroupMembersModal] = useState<{ groupId: number; groupName: string } | null>(null);
   const [q, setQ] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [confirmDialog, confirm] = useConfirm();
-  const [alertDialog, showAlert] = useAlert();
-  const { deleteWithUndo } = useUndoDelete();
 
   function openCreate() {
     setCreating(true);
@@ -161,40 +62,18 @@ export function CampaignsListPage() {
     void invalidateAffects(client, campaignGroupAffects());
   }
 
-  async function archiveCampaign(id: number, name: string) {
-    const ok = await confirm({
-      title: "Архивировать кампанию?",
-      message: "Отправить кампанию в архив? Она пропадёт из основных разделов.",
-      confirmLabel: "Архивировать",
-      danger: true,
-    });
-    if (!ok) return;
-    try {
-      await deleteWithUndo({
-        entityName: name,
-        deleteFn: async () => {
-          await write.del(`/campaigns/${id}`);
-          afterWriteAnywhere(ARCHIVE_AFFECTS);
-        },
-        restoreFn: async () => {
-          await write.put(`/campaigns/${id}/restore`);
-          afterWriteAnywhere(ARCHIVE_AFFECTS);
-        },
-      });
-    } catch (e) {
-      showAlert(`Не удалось архивировать «${name}»: ${e instanceof Error ? e.message : String(e)}`);
-      return;
-    }
-    setSelectedId(null);
-  }
-
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
     const byTab = (() => {
       if (!activeTab) return campaigns;
       if (activeTab === "role:gm") return campaigns.filter((c) => c.role === "gm");
       if (activeTab === "role:player") return campaigns.filter((c) => c.role === "player");
-      if (activeTab === "ungrouped") return campaigns.filter((c) => !groupMemberIds.has(c.id));
+      if (activeTab === "ungrouped") {
+        if (!allMembersKnown) return [];
+        const grouped = new Set<number>();
+        for (const mq of memberQueries) for (const m of mq.data ?? []) grouped.add(m.id);
+        return campaigns.filter((c) => !grouped.has(c.id));
+      }
       return campaigns.filter((c) => groupMemberIds.has(c.id));
     })();
     if (!qq) return byTab;
@@ -204,9 +83,8 @@ export function CampaignsListPage() {
         (c.system_name ?? "").toLowerCase().includes(qq) ||
         (c.setting_name ?? "").toLowerCase().includes(qq)
     );
-  }, [campaigns, activeTab, groupMemberIds, q]);
+  }, [campaigns, activeTab, groupMemberIds, memberQueries, allMembersKnown, q]);
 
-  const selected = campaigns.find((c) => String(c.id) === selectedId) ?? null;
 
   return (
     <div className="stack" style={{ position: "relative" }}>
@@ -215,7 +93,7 @@ export function CampaignsListPage() {
         headingSection="campaigns"
         title="Кампании"
         extraTabs={CAMPAIGN_ROLE_TABS}
-        groups={groups.map((g) => ({ id: String(g.id), label: g.name, count: groupCounts[g.id] }))}
+        groups={groups.map((g) => ({ id: String(g.id), label: g.name }))}
         groupsEndpoint="/campaign-groups"
         groupsDeleteNote="Кампании не будут удалены — они останутся в разделе «Все кампании»."
         onGroupsChanged={refreshGroups}
@@ -230,13 +108,6 @@ export function CampaignsListPage() {
         filteredCount={filtered.length}
         totalCount={campaigns.length}
         onResetSearch={() => setQ("")}
-        selectedId={selected ? selectedId : null}
-        onSelect={setSelectedId}
-        preview={
-          selected && (
-            <CampaignPreview campaign={selected} onArchived={(id, name) => void archiveCampaign(id, name)} />
-          )
-        }
       >
         {loadError && (
           <LoadErrorCard
@@ -250,7 +121,7 @@ export function CampaignsListPage() {
         ) : (
           <div className="grid-cards">
             {filtered.map((c) => (
-              <CampaignCoverTile key={c.id} campaign={c} onSelect={(cc) => setSelectedId(String(cc.id))} />
+              <CampaignCoverTile key={c.id} campaign={c} />
             ))}
           {activeTab !== null && activeTab !== "ungrouped" && activeTab !== "role:gm" && activeTab !== "role:player" && (
             <button
@@ -306,13 +177,6 @@ export function CampaignsListPage() {
           systems={systems}
           settings={settings}
           onClose={() => setCreating(false)}
-          onCreated={(created) => {
-            // Q47: новое становится выбранным — открывается его предпросмотр.
-            // Визард не знает групп, поэтому смотрим «Все», иначе новое
-            // может оказаться за фильтром и выбрать будет нечего.
-            setActiveTab(null);
-            if (created) setSelectedId(String(created.id));
-          }}
         />
       )}
 
@@ -324,8 +188,6 @@ export function CampaignsListPage() {
           onUpdated={() => {}}
         />
       )}
-      {confirmDialog}
-      {alertDialog}
     </div>
   );
 }

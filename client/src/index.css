@@ -6944,36 +6944,18 @@ details.card[open] summary {
   }
 }
 
-/* Каркас списка/каталога (компонент `ListPage.tsx`, мастер-детейл Q41–Q50).
-   Шапка — заголовок и действия врозь; левая панель — тот же
-   `EntityTabWorkspace`, правая — тулбар и тело. Предпросмотр заменяет
-   содержимое, а не встаёт третьей колонкой (Q46). */
+/* Каркас списка/каталога (компонент `ListPage.tsx`): шапка — заголовок
+   и действия врозь, под ней полоса вкладок, тулбар и тело. Мастер-детейл
+   был и снят 2026-09-18 (Q52–Q59, реестр отступлений О-4). */
 .list-page__head {
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
 }
-.list-page.is-preview .list-page__content {
-  display: none;
-}
-/* Узкий экран — два экрана, а не две панели (Q43). Предпросмотр —
-   фиксированный оверлей со своим скроллом: список под ним не
-   размонтируется, и «назад» возвращает на то же место само. Ниже меню
-   (100), модалок и планки плеера; фон — бумага страницы. */
-@media (max-width: 900px) {
-  .list-page.is-preview .entity-tab-workspace__nav {
-    display: none;
-  }
-  .list-page.is-preview .list-page__preview {
-    position: fixed;
-    inset: 0;
-    z-index: 80;
-    overflow-y: auto;
-    background: var(--paper);
-    background-image: var(--page-texture);
-    padding: var(--sp-4);
-    padding-bottom: calc(var(--player-bar-height, 52px) + var(--sp-4));
-  }
+.list-page__tab-count {
+  margin-left: var(--sp-1);
+  opacity: 0.6;
+  font-family: var(--font-mono);
 }
 .community-avatar {
   width: 176px;

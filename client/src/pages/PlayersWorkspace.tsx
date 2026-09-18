@@ -118,7 +118,10 @@ export function PlayersWorkspace({ selectedId }: { selectedId?: number }) {
     );
   })();
 
-  const effectiveSelectedId = selectedId ?? null;
+  // Выбор — в адресе (`/players/:id`): «назад» и перезагрузка возвращают
+  // того же игрока. Без выбора справа первый из показанных — рабочий экран
+  // не пустует (Q59: как до 14 сентября).
+  const effectiveSelectedId = selectedId ?? filteredPlayers[0]?.id ?? null;
 
   useEffect(() => {
     if (selectedId == null) return;
@@ -140,12 +143,8 @@ export function PlayersWorkspace({ selectedId }: { selectedId?: number }) {
     setNotes("");
   }
 
-  const selectedPlayer = effectiveSelectedId != null
-    ? players.find((p) => p.id === effectiveSelectedId) ?? null
-    : null;
-
   return (
-    <div className="stack" style={{ position: "relative" }}>
+    <div className="stack" style={{ position: "relative", paddingBottom: "calc(var(--player-bar-height, 52px) + 16px)" }}>
       <SectionBackground />
       <ListPage
         headingSection="players"
@@ -187,24 +186,6 @@ export function PlayersWorkspace({ selectedId }: { selectedId?: number }) {
         filteredCount={filteredPlayers.length}
         totalCount={players.length}
         onResetSearch={() => setQ("")}
-        selectedId={effectiveSelectedId != null ? String(effectiveSelectedId) : null}
-        onSelect={(id) => {
-          if (id) {
-            navigate(`/players/${id}`);
-            if (window.matchMedia("(max-width: 900px)").matches) {
-              requestAnimationFrame(() => {
-                document.getElementById("player-detail")?.scrollIntoView({ block: "start" });
-              });
-            }
-          } else {
-            navigate("/players");
-          }
-        }}
-        preview={
-          selectedPlayer ? (
-            <PlayerProfilePanel key={selectedPlayer.id} playerId={selectedPlayer.id} />
-          ) : undefined
-        }
       >
         {loadError && (
           <LoadErrorCard
@@ -216,42 +197,54 @@ export function PlayersWorkspace({ selectedId }: { selectedId?: number }) {
         {loading ? (
           <ListSkeleton variant="tiles" tilesClassName="players-tiles" label="Загрузка игроков" />
         ) : (
-          <div className="players-tiles">
-            {filteredPlayers.map((p) => (
-              <PlayerCoverTile key={p.id} player={p} active={p.id === effectiveSelectedId} />
-            ))}
-            {activeTab !== null && activeTab !== "ungrouped" && (
-              <button
-                className="card campaign-tile setting-group-empty-add"
-                onClick={() => {
-                  const g = groups.find((gr) => gr.id === Number(activeTab));
-                  if (g) setGroupMembersModal({ groupId: g.id, groupName: g.name });
-                }}
-              >
-                <div className="campaign-tile-cover cover-halftone">
-                  <div className="cover-art cover-art-fallback zine-grain" aria-hidden="true" />
-                  <div className="campaign-tile-scrim" />
-                  <h3 className="campaign-tile-name">+</h3>
-                </div>
-                <div className="campaign-tile-meta">
-                  <div className="campaign-tile-system muted">нажми, чтобы добавить игрока в группу</div>
-                </div>
-              </button>
+          // Мастер-детейл, но с правой панелью-местом работы: карточка
+          // игрока правится тут же, не уходя из списка (Q59). Это не
+          // предпросмотр каталога, снятый решениями Q52–Q53.
+          <div className="players-workspace">
+            <div className="players-workspace__list">
+              <div className="players-tiles">
+                {filteredPlayers.map((p) => (
+                  <PlayerCoverTile key={p.id} player={p} active={p.id === effectiveSelectedId} />
+                ))}
+                {activeTab !== null && activeTab !== "ungrouped" && (
+                  <button
+                    className="card campaign-tile setting-group-empty-add"
+                    onClick={() => {
+                      const g = groups.find((gr) => gr.id === Number(activeTab));
+                      if (g) setGroupMembersModal({ groupId: g.id, groupName: g.name });
+                    }}
+                  >
+                    <div className="campaign-tile-cover cover-halftone">
+                      <div className="cover-art cover-art-fallback zine-grain" aria-hidden="true" />
+                      <div className="campaign-tile-scrim" />
+                      <h3 className="campaign-tile-name">+</h3>
+                    </div>
+                    <div className="campaign-tile-meta">
+                      <div className="campaign-tile-system muted">нажми, чтобы добавить игрока в группу</div>
+                    </div>
+                  </button>
+                )}
+              </div>
+            </div>
+            {players.length > 0 && (
+              <div className="players-workspace__detail" id="player-detail">
+                {effectiveSelectedId != null ? (
+                  <PlayerProfilePanel key={effectiveSelectedId} playerId={effectiveSelectedId} />
+                ) : (
+                  <EmptyState kind="search"
+                    title="Ничего не найдено"
+                    hint={q.trim() ? `По «${q.trim()}» ничего нет.` : "Нет игроков в этой группе."}
+                    action={
+                      <div className="row" style={{ gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+                        {q.trim() && <button onClick={() => setQ("")}>Сбросить поиск</button>}
+                        {activeTab !== null && <button onClick={() => setActiveTab(null)}>Показать всех</button>}
+                      </div>
+                    }
+                  />
+                )}
+              </div>
             )}
           </div>
-        )}
-
-        {!loading && !loadError && filteredPlayers.length === 0 && players.length > 0 && (
-          <EmptyState kind="search"
-            title="Ничего не найдено"
-            hint={q.trim() ? `По «${q.trim()}» ничего нет.` : "Нет игроков в этой группе."}
-            action={
-              <div className="row" style={{ gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
-                {q.trim() && <button onClick={() => setQ("")}>Сбросить поиск</button>}
-                {activeTab !== null && <button onClick={() => setActiveTab(null)}>Показать всех</button>}
-              </div>
-            }
-          />
         )}
 
         {!loading && !loadError && players.length === 0 && (

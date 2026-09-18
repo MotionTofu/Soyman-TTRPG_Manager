@@ -45,7 +45,9 @@ import { join, relative, basename } from "node:path";
 const ROOT = new URL("../src/pages", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 
 /** Метка отступления: «намеренно — <причина>», причина обязательна. */
-const EXCUSE = /каркас в обход намеренно\s*[—-]\s*(\S[^\r\n*}]*)/;
+// Пробелы вокруг тире — только внутри строки: `\s` съедал перевод строки,
+// и пустая метка брала причиной следующую строку кода (найдено 2026-09-18).
+const EXCUSE = /каркас в обход намеренно[ \t]*[—-][ \t]*(\S[^\r\n*}]*)/;
 
 function reasonBefore(text, index) {
   const chunk = text.slice(Math.max(0, index - 400), index);

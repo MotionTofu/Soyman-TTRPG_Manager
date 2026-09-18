@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/check-type-scale.mjs && node scripts/check-spacing.mjs && node scripts/check-raster-assets.mjs && node scripts/check-entity-page.mjs && tsc -b && vite build",
-    "lint": "oxlint && node scripts/check-type-scale.mjs && node scripts/check-spacing.mjs && node scripts/check-raster-assets.mjs && node scripts/check-entity-page.mjs",
+    "build": "node scripts/check-type-scale.mjs && node scripts/check-spacing.mjs && node scripts/check-raster-assets.mjs && node scripts/check-entity-page.mjs && node scripts/check-list.mjs && tsc -b && vite build",
+    "lint": "oxlint && node scripts/check-type-scale.mjs && node scripts/check-spacing.mjs && node scripts/check-raster-assets.mjs && node scripts/check-entity-page.mjs && node scripts/check-list.mjs",
     "preview": "vite preview",
     "check:scale": "node scripts/check-type-scale.mjs",
     "check:spacing": "node scripts/check-spacing.mjs",
     "check:frame": "node scripts/check-entity-page.mjs",
+    "check:list": "node scripts/check-list.mjs",
     "check:raster": "node scripts/check-raster-assets.mjs",
     "test": "vitest run",
     "test:watch": "vitest"

@@ -16,9 +16,7 @@ import { useAuthenticatedFileUrl } from "../utils/fileUrl";
 // Правило, по которому выбрано, что осталось: сводка отвечает «которая это и
 // когда следующая», а не описывает объект. Сеттинг, счётчики и оплата никуда
 // не делись — они внутри кампании, куда плитка и ведёт.
-/** Лицо кампании: обложка с именем. Отдельно от плитки — нужно и
- *  предпросмотру в каркасе списка. */
-export function CampaignCover({ campaign: c }: { campaign: Campaign }) {
+function CampaignCover({ campaign: c }: { campaign: Campaign }) {
   const rawUrl = c.thumbnail_image_url ?? c.background_image_url ?? null;
   const imageUrl = rawUrl && isSafeImageUrl(rawUrl) ? rawUrl : null;
   const authBlob = useAuthenticatedFileUrl(imageUrl);
@@ -45,15 +43,7 @@ export function CampaignCover({ campaign: c }: { campaign: Campaign }) {
   );
 }
 
-export function CampaignCoverTile({
-  campaign: c,
-  onSelect,
-}: {
-  campaign: Campaign;
-  /** Выбор вместо перехода: плитка становится кнопкой предпросмотра в
-   *  каркасе списка. Нет — обычная ссылка на карточку, как раньше. */
-  onSelect?: (campaign: Campaign) => void;
-}) {
+export function CampaignCoverTile({ campaign: c }: { campaign: Campaign }) {
   const cover = <CampaignCover campaign={c} />;
   // Пропавшая папка видна прямо в списке: внутрь такой кампании не загрузить
   // файл и не переименовать её, и узнать об этом лучше до, а не после попытки.
@@ -72,28 +62,6 @@ export function CampaignCoverTile({
       </div>
     </div>
   );
-
-  if (onSelect) {
-    return (
-      <div
-        role="button"
-        tabIndex={0}
-        aria-label={`Предпросмотр: ${c.name}`}
-        className={cls}
-        title={noFolder}
-        onClick={() => onSelect(c)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onSelect(c);
-          }
-        }}
-      >
-        {cover}
-        {meta}
-      </div>
-    );
-  }
 
   return (
     <Link to={`/campaigns/${c.id}`} className={cls} title={noFolder}>
