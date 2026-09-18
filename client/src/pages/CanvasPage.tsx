@@ -4518,6 +4518,52 @@ export function CanvasPage() {
     [settingId, arcId, freeId, campaignIdParam, setSearchParams, boardAction]
   );
 
+  // Цвет пачке (ToDo/08 Р4): у стикеров своя светлая палитра, у групп и пинов —
+  // тёмная; узлы сущностей окрашены типом и цвета не меняют, их пачка
+  // пропускает. Смешанная пачка получает оба пункта.
+  const groupColorItems = useCallback(
+    (selected: Node<CanvasNodeData>[]): ContextMenuItem[] => {
+      const ofType = (t: string) => selected.filter((n) => n.id.startsWith(`${t}:`)).map((n) => splitKey(n.id)[1]);
+      const stickers = ofType("sticker");
+      const frames = ofType("frame");
+      const pins = ofType("pin");
+      const items: ContextMenuItem[] = [];
+      if (stickers.length) {
+        items.push({
+          label: frames.length || pins.length ? "Цвет стикеров" : "Изменить цвет",
+          children: STICKER_SWATCHES.map((sw) => ({
+            label: sw.label,
+            onClick: () =>
+              void boardAction(() => Promise.all(stickers.map((id) => write.put(`/canvas/stickers/${id}`, { color: sw.key }))), {
+                retry: false,
+                failure: "Цвет стикеров",
+                affects: stickers.map((id) => ({ path: `/canvas/stickers/${id}` })),
+              }),
+          })),
+        });
+      }
+      if (frames.length || pins.length) {
+        items.push({
+          label: stickers.length ? "Цвет групп и пинов" : "Изменить цвет",
+          children: FRAME_SWATCHES.map((sw) => ({
+            label: sw.label,
+            onClick: () =>
+              void boardAction(
+                () =>
+                  Promise.all([
+                    ...frames.map((id) => write.put(`/canvas/frames/${id}`, { color: sw.value })),
+                    ...pins.map((id) => write.put(`/canvas/pins/${id}`, { color: sw.value })),
+                  ]),
+                { retry: false, failure: "Цвет групп и пинов" }
+              ),
+          })),
+        });
+      }
+      return items;
+    },
+    [boardAction]
+  );
+
   // Контекст-меню: правая кнопка (Q4) — нода Delete/Дублировать/Переименовать, артборд Create
   const handleNodeContextMenu = useCallback(
     (event: MouseEvent | React.MouseEvent, node: Node<CanvasNodeData>) => {
@@ -4531,6 +4577,7 @@ export function CanvasPage() {
             label: "Создать группу",
             onClick: () => { void createGroup(); },
           },
+          ...groupColorItems(selected),
           { label: "Удалить выбранные", danger: true, onClick: () => onNodesDelete(selected) },
         ];
         setContextMenu({ x: event.clientX, y: event.clientY, items });
@@ -4766,7 +4813,7 @@ export function CanvasPage() {
       });
       setContextMenu({ x: event.clientX, y: event.clientY, items });
     },
-    [board, loadBoard, settingId, arcId, freeId, campaignIdParam, setSearchParams, navigate, nodes, createGroup, removeFromGroup, boardAction, confirm]
+    [board, loadBoard, settingId, arcId, freeId, campaignIdParam, setSearchParams, navigate, nodes, createGroup, removeFromGroup, boardAction, confirm, groupColorItems]
   );
 
   // Убрать ноду сущности/набора/проверки — значит убрать её С ХОЛСТА или удалить сущность.
@@ -4776,6 +4823,20 @@ export function CanvasPage() {
     async (removed: Node<CanvasNodeData>[]) => {
       const scenes = removed.filter((n) => n.id.startsWith("scene:"));
       const chapters = removed.filter((n) => n.id.startsWith("chapter:"));
+      // Пачка — одним подтверждением со счётчиком (ToDo/08 Р4): «Удалить
+      // выбранные» и Delete при мультивыделении уводили сцены и главы в архив
+      // без единого вопроса. Одиночный узел спрашивает своё в своём меню.
+      if (removed.length > 1) {
+        const archived = scenes.length + chapters.length;
+        const ok = await confirm({
+          message:
+            `Убрать выбранное с холста (${removed.length})?` +
+            (archived ? ` Сцены и главы (${archived}) уйдут в архив — вернуть можно оттуда.` : ""),
+          confirmLabel: "Убрать",
+          danger: true,
+        });
+        if (!ok) return;
+      }
       const others = removed.filter((n) => !n.id.startsWith("scene:") && !n.id.startsWith("chapter:"));
       const affects: Affect[] = [
         ...scenes.map((n): Affect => ({ kind: "scene", id: splitKey(n.id)[1] })),
@@ -4809,7 +4870,7 @@ export function CanvasPage() {
         { retry: false, failure: "Удаление выбранного (часть могла удалиться)", affects }
       );
     },
-    [arcId, board, boardAction]
+    [arcId, board, boardAction, confirm]
   );
 
   const handleSelectionContextMenu = useCallback(
@@ -4823,11 +4884,12 @@ export function CanvasPage() {
           label: "Создать группу",
           onClick: () => { void createGroup(); },
         },
+        ...groupColorItems(selected),
         { label: "Удалить выбранные", danger: true, onClick: () => onNodesDelete(selected) },
       ];
       setContextMenu({ x: event.clientX, y: event.clientY, items });
     },
-    [board, loadBoard, nodes, onNodesDelete, createGroup]
+    [board, loadBoard, nodes, onNodesDelete, createGroup, groupColorItems]
   );
 
   const handlePaneContextMenu = useCallback(
@@ -4841,6 +4903,7 @@ export function CanvasPage() {
             label: "Создать группу",
             onClick: () => { void createGroup(); },
           },
+          ...groupColorItems(selected),
           { label: "Удалить выбранные", danger: true, onClick: () => onNodesDelete(selected) },
         ];
         setContextMenu({ x: event.clientX, y: event.clientY, items });
@@ -4891,7 +4954,7 @@ export function CanvasPage() {
       ];
       setContextMenu({ x: event.clientX, y: event.clientY, items });
     },
-    [board, boardAction, nodes, onNodesDelete, createGroup, promptText]
+    [board, boardAction, nodes, onNodesDelete, createGroup, promptText, groupColorItems]
   );
 
   const handleDrop = useCallback(
