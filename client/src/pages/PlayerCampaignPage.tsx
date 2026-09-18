@@ -6,7 +6,6 @@ import { journalAffects, playerCampaignPaths } from "../data/playerCampaign";
 import { MentionText } from "../components/mentions/MentionText";
 import { EntityPage } from "../components/EntityPage";
 import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
-import { Breadcrumbs } from "../components/Breadcrumbs";
 import { EmptyState } from "../components/EmptyState";
 import { PlayerContentReader, type ReaderEntry } from "../components/PlayerContentReader";
 import { toLocalDateKey } from "../utils/date";
@@ -330,7 +329,6 @@ export function PlayerCampaignPage() {
   if (invalidCampaignId) {
     return (
       <div className="stack">
-        <Breadcrumbs items={[{ label: "Главная", to: "/" }, { label: "Кампания" }]} />
         <LoadErrorCard
           message="Кампания не найдена — проверьте ссылку."
           action={
@@ -346,7 +344,6 @@ export function PlayerCampaignPage() {
   if (loading) {
     return (
       <div className="stack">
-        <Breadcrumbs items={[{ label: "Главная", to: "/" }, { label: "Загрузка…" }]} />
         <ListSkeleton variant="paragraph" label="Загрузка кампании" />
       </div>
     );
@@ -355,7 +352,6 @@ export function PlayerCampaignPage() {
   if (loadError) {
     return (
       <div className="stack">
-        <Breadcrumbs items={[{ label: "Главная", to: "/" }, { label: content?.campaign.name ?? "Кампания" }]} />
         <LoadErrorCard
           message={<>Не удалось загрузить кампанию: {loadError}</>}
           onRetry={() => all.forEach((q) => q.error && q.reload())}
@@ -367,7 +363,6 @@ export function PlayerCampaignPage() {
   if (!content) {
     return (
       <div className="stack">
-        <Breadcrumbs items={[{ label: "Главная", to: "/" }, { label: "Кампания" }]} />
         <LoadErrorCard
           message="Кампания не найдена."
           action={

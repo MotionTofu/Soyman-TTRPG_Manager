@@ -1,7 +1,6 @@
 import { Link } from "react-router-dom";
 import { useResource } from "../data/hooks";
-import { Breadcrumbs } from "../components/Breadcrumbs";
-import { LoadErrorCard } from "../components/Loadable";
+import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
 
 interface DiaryCampaign {
   id: number;
@@ -23,8 +22,9 @@ export function PlayerDiariesPage() {
   const loadError = list.error;
 
   return (
+    // Крошки рисует оболочка (AppShell) для любого адреса — своя строка
+    // здесь дублировала её слово в слово.
     <div className="stack">
-      <Breadcrumbs items={[{ label: "Главная", to: "/" }, { label: "Дневники" }]} />
       {/* каркас в обход намеренно — страница не карточка сущности: свой вид, каркас для него ещё не построен */}
       <h1>Дневники</h1>
       {loadError && (
@@ -33,7 +33,7 @@ export function PlayerDiariesPage() {
           onRetry={list.reload}
         />
       )}
-      {!loadError && campaigns === null && <p className="muted">Загрузка…</p>}
+      {!loadError && campaigns === null && <ListSkeleton variant="paragraph" label="Загрузка дневников" />}
       {!loadError && campaigns !== null && campaigns.length === 0 && (
         <p className="muted">Вы пока не состоите ни в одной кампании — дневник появится, когда мастер добавит вас в состав.</p>
       )}

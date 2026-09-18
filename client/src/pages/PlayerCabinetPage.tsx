@@ -5,7 +5,6 @@ import { labelled } from "../data/notices";
 import { useCurrentUser } from "../api/currentUser";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
-import { Breadcrumbs } from "../components/Breadcrumbs";
 import type { Player } from "../types";
 
 interface MyCharacter {
@@ -118,7 +117,6 @@ export function PlayerCabinetPage() {
 
   return (
     <div className="stack">
-      <Breadcrumbs items={[{ label: "Главная", to: "/" }, { label: "Кабинет" }]} />
       {/* каркас в обход намеренно — страница не карточка сущности: свой вид, каркас для него ещё не построен */}
       <h1>Кабинет</h1>
 

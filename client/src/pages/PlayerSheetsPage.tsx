@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAfterWrite, useResource, write } from "../data/hooks";
-import { Breadcrumbs } from "../components/Breadcrumbs";
 
 interface SheetSummary {
   format: string;
@@ -108,7 +107,6 @@ export function PlayerSheetsPage() {
 
   return (
     <div className="stack">
-      <Breadcrumbs items={[{ label: "Главная", to: "/" }, { label: "Персонажи" }]} />
       {/* каркас в обход намеренно — страница не карточка сущности: свой вид, каркас для него ещё не построен */}
       <h1>Персонажи</h1>
       {listError && <p className="error">Не загрузилось: {listError}</p>}
