@@ -188,6 +188,46 @@ export function getSettingPlayerContentUnion(settingId: number, campaignIds: num
   return { locations, beings, communities, chronicleEvents };
 }
 
+// Открытое старой галочкой «Видно игрокам» — главы локаций и существ и
+// события хроники сеттинга. Галочка стоит на самой записи сеттинга, поэтому
+// видна всем игрокам всех кампаний на нём, без грантов. У игрока это лежит во
+// вкладке «Мир» рядом с выданным (F-52, 2026-09-18), и превью «Глазами
+// игрока» обязано показывать то же — отсюда одна функция на оба входа.
+export interface FlaggedSettingContent {
+  locationArticles: Record<string, unknown>[];
+  beingArticles: Record<string, unknown>[];
+  chronicleEvents: Record<string, unknown>[];
+}
+
+export function getFlaggedSettingContent(settingId: number | null): FlaggedSettingContent {
+  if (!settingId) return { locationArticles: [], beingArticles: [], chronicleEvents: [] };
+  const locationArticles = db
+    .prepare(
+      `SELECT lc.id, lc.title, lc.content, lc.created_at, sl.name as location_name
+       FROM location_chapters lc JOIN setting_locations sl ON sl.id = lc.location_id
+       WHERE sl.setting_id = ? AND lc.visible_to_players = 1
+       ORDER BY lc.created_at DESC`
+    )
+    .all(settingId) as Record<string, unknown>[];
+  const beingArticles = db
+    .prepare(
+      `SELECT bc.id, bc.title, bc.content, bc.created_at, sb.name as being_name
+       FROM being_chapters bc JOIN setting_beings sb ON sb.id = bc.being_id
+       WHERE sb.setting_id = ? AND bc.visible_to_players = 1
+       ORDER BY bc.created_at DESC`
+    )
+    .all(settingId) as Record<string, unknown>[];
+  const chronicleEvents = db
+    .prepare(
+      `SELECT id, title, description, inworld_year, inworld_month, inworld_day
+       FROM setting_calendar_events
+       WHERE setting_id = ? AND visible_to_players = 1
+       ORDER BY inworld_year DESC, inworld_month DESC, inworld_day DESC`
+    )
+    .all(settingId) as Record<string, unknown>[];
+  return { locationArticles, beingArticles, chronicleEvents };
+}
+
 // «От мастера» для игрока: разделы и статьи кампании по грантам. Раздел
 // входит целиком, если открыт сам, — иначе только открыто выданные статьи;
 // галерея — только целиком.

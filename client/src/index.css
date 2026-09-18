@@ -10494,6 +10494,16 @@ details[open] > .res-group__band .chevron-icon {
    только его вид.
    ============================================================ */
 
+/* Одна строка крошек (F-50, 2026-09-18): на карточке крошки — её, с
+   именем; строка оболочки «Главная / Кампании» уходит. Значок
+   хранилища Мастера остаётся, без него строка пропадает целиком. */
+.app-content:has(.entity-page) .shell-crumbs__trail {
+  display: none;
+}
+.app-content:has(.entity-page) .shell-crumbs:not(:has(.shell-crumbs__storage)) {
+  display: none;
+}
+
 .entity-page__head {
   display: flex;
   align-items: flex-start;

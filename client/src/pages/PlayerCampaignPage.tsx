@@ -20,10 +20,6 @@ import type {
   WorldExplorationTag,
 } from "../types";
 
-function formatDate(y: number, m: number, d: number): string {
-  return `${d}.${m}.${y}`;
-}
-
 // Даты сессий приходят как `YYYY-MM-DD`; на экране рядом с ними живут внутримировые
 // даты в виде `д.м.год`, и два разных формата в одной карточке читаются как ошибка.
 function formatIsoDate(iso: string): string {
@@ -109,8 +105,11 @@ export function PlayerCampaignPage() {
     [content, today]
   );
 
-  // «От мастера»: сессии, хроника, статьи лора, тайны и разделы. Мир сюда не
-  // входит — у него своя постоянная вкладка.
+  // «От мастера» — то, что Мастер написал по ходу кампании: сессии, тайны и
+  // разделы. Всё из сеттинга — события хроники и главы локаций и существ,
+  // даже открытые старой галочкой «Видно игрокам», — во вкладке «Мир»
+  // (F-52, решение 2026-09-18). Раньше хроника стояла здесь «Хроникой мира»,
+  // а в «Мире» те же события звались «Историей».
   const contentGroups = useMemo(() => {
     const groups: { key: string; label: string; entries: ReaderEntry[] }[] = [];
     if (content) {
@@ -125,59 +124,6 @@ export function PlayerCampaignPage() {
             body: (
               <div className="muted" style={{ whiteSpace: "pre-wrap" }}>
                 <MentionText text={s.main_events} />
-              </div>
-            ),
-          })),
-        });
-      }
-      if (content.chronicleEvents.length > 0) {
-        groups.push({
-          key: "chronicle",
-          label: "Хроника мира",
-          entries: content.chronicleEvents.map((e) => ({
-            key: `chronicle-${e.id}`,
-            section: "Хроника мира",
-            title: e.title,
-            body: (
-              <div className="stack" style={{ gap: 10 }}>
-                <span className="muted">{formatDate(e.inworld_year, e.inworld_month, e.inworld_day)}</span>
-                {e.description && (
-                  <div className="muted" style={{ whiteSpace: "pre-wrap" }}>
-                    <MentionText text={e.description} />
-                  </div>
-                )}
-              </div>
-            ),
-          })),
-        });
-      }
-      if (content.locationArticles.length > 0) {
-        groups.push({
-          key: "locations",
-          label: "Локации",
-          entries: content.locationArticles.map((a) => ({
-            key: `loc-${a.id}`,
-            section: "Локации",
-            title: a.title ? `${a.location_name} — ${a.title}` : a.location_name ?? "Локация",
-            body: (
-              <div className="muted" style={{ whiteSpace: "pre-wrap" }}>
-                <MentionText text={a.content} />
-              </div>
-            ),
-          })),
-        });
-      }
-      if (content.beingArticles.length > 0) {
-        groups.push({
-          key: "beings",
-          label: "НПЦ",
-          entries: content.beingArticles.map((a) => ({
-            key: `being-${a.id}`,
-            section: "НПЦ",
-            title: a.title ? `${a.being_name} — ${a.title}` : a.being_name ?? "НПЦ",
-            body: (
-              <div className="muted" style={{ whiteSpace: "pre-wrap" }}>
-                <MentionText text={a.content} />
               </div>
             ),
           })),
@@ -238,7 +184,7 @@ export function PlayerCampaignPage() {
 
   // Мир — общим строителем с превью «Глазами игрока»: превью обязано
   // показывать то же, что видит игрок, а не свой разбор тех же данных.
-  const settingGroups = useMemo(() => buildSettingReaderGroups(setting), [setting]);
+  const settingGroups = useMemo(() => buildSettingReaderGroups(setting, content), [setting, content]);
 
   // Phase 3.1 — последние 3 раскрытия от мастера для виджета «вспомнить за минуту»
   const recentMaster = useMemo(() => {
@@ -267,23 +213,6 @@ export function PlayerCampaignPage() {
             <MentionText text={sec.content} />
           </div>
         ) : null,
-      });
-    }
-    for (const ev of content.chronicleEvents.slice(0, 2)) {
-      out.push({
-        key: `recent-chronicle-${ev.id}`,
-        section: "Хроника мира",
-        title: ev.title,
-        body: (
-          <div className="stack" style={{ gap: 10 }}>
-            <span className="muted">{formatDate(ev.inworld_year, ev.inworld_month, ev.inworld_day)}</span>
-            {ev.description && (
-              <div className="muted" style={{ whiteSpace: "pre-wrap" }}>
-                <MentionText text={ev.description} />
-              </div>
-            )}
-          </div>
-        ),
       });
     }
     return out.slice(0, 3);

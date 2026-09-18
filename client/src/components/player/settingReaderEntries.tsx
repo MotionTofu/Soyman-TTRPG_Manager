@@ -1,6 +1,6 @@
 import { MentionText } from "../mentions/MentionText";
 import type { ReaderEntry } from "../PlayerContentReader";
-import type { SettingPlayerContent } from "../../types";
+import type { SettingPlayerContent, VisibleCampaignContent } from "../../types";
 
 function formatDate(y: number, m: number, d: number): string {
   return `${d}.${m}.${y}`;
@@ -16,31 +16,64 @@ export interface SettingReaderGroups {
   entries: ReaderEntry[];
 }
 
-export function buildSettingReaderGroups(setting: SettingPlayerContent | null): SettingReaderGroups[] {
-  if (!setting) return [];
+/** Открытое старой галочкой «Видно игрокам» — главы локаций и существ и
+ *  события хроники. Это тоже сеттинг, и по границе вкладок (F-52, решение
+ *  2026-09-18: сеттинг — в «Мир», написанное Мастером по ходу кампании — в
+ *  «От мастера») оно живёт здесь, рядом с выданным, а не отдельной
+ *  «Хроникой мира» во второй вкладке. */
+export type FlaggedSettingContent = Pick<VisibleCampaignContent, "locationArticles" | "beingArticles" | "chronicleEvents">;
+
+export function buildSettingReaderGroups(
+  setting: SettingPlayerContent | null,
+  flagged?: FlaggedSettingContent | null
+): SettingReaderGroups[] {
+  const locations = setting?.locations ?? [];
+  const beings = setting?.beings ?? [];
+  const communities = setting?.communities ?? [];
+  const locationArticles = flagged?.locationArticles ?? [];
+  const beingArticles = flagged?.beingArticles ?? [];
+  // Одно событие бывает открыто и выдачей, и галочкой — показывается раз.
+  const granted = setting?.chronicleEvents ?? [];
+  const grantedIds = new Set(granted.map((e) => e.id));
+  // Сначала новое, как в хронике Мастера: выдача приходит без порядка.
+  const events = [...granted, ...(flagged?.chronicleEvents ?? []).filter((e) => !grantedIds.has(e.id))].sort(
+    (a, b) => b.inworld_year - a.inworld_year || b.inworld_month - a.inworld_month || b.inworld_day - a.inworld_day
+  );
   const groups: SettingReaderGroups[] = [];
-  if (setting.locations.length > 0) {
+  if (locations.length > 0 || locationArticles.length > 0) {
     groups.push({
       key: "setting-locations",
       label: "Локации сеттинга",
-      entries: setting.locations.map((l) => ({
-        key: `setting-loc-${l.id}`,
-        section: "Локации сеттинга",
-        title: l.name,
-        body: l.description ? (
-          <div className="muted" style={{ whiteSpace: "pre-wrap" }}>
-            <MentionText text={l.description} />
-          </div>
-        ) : null,
-      })),
+      entries: [
+        ...locations.map((l) => ({
+          key: `setting-loc-${l.id}`,
+          section: "Локации сеттинга",
+          title: l.name,
+          body: l.description ? (
+            <div className="muted" style={{ whiteSpace: "pre-wrap" }}>
+              <MentionText text={l.description} />
+            </div>
+          ) : null,
+        })),
+        ...locationArticles.map((a) => ({
+          key: `loc-${a.id}`,
+          section: "Локации сеттинга",
+          title: a.title ? `${a.location_name} — ${a.title}` : a.location_name ?? "Локация",
+          body: (
+            <div className="muted" style={{ whiteSpace: "pre-wrap" }}>
+              <MentionText text={a.content} />
+            </div>
+          ),
+        })),
+      ],
     });
   }
-  if (setting.beings.length > 0 || setting.communities.length > 0) {
+  if (beings.length > 0 || communities.length > 0 || beingArticles.length > 0) {
     groups.push({
       key: "setting-factions",
       label: "Личности и фракции",
       entries: [
-        ...setting.beings.map((b) => ({
+        ...beings.map((b) => ({
           key: `setting-being-${b.id}`,
           section: "Личности и фракции",
           title: b.name,
@@ -50,7 +83,7 @@ export function buildSettingReaderGroups(setting: SettingPlayerContent | null): 
             </div>
           ) : null,
         })),
-        ...setting.communities.map((c) => ({
+        ...communities.map((c) => ({
           key: `setting-community-${c.id}`,
           section: "Личности и фракции",
           title: c.name,
@@ -60,14 +93,24 @@ export function buildSettingReaderGroups(setting: SettingPlayerContent | null): 
             </div>
           ) : null,
         })),
+        ...beingArticles.map((a) => ({
+          key: `being-${a.id}`,
+          section: "Личности и фракции",
+          title: a.title ? `${a.being_name} — ${a.title}` : a.being_name ?? "НПЦ",
+          body: (
+            <div className="muted" style={{ whiteSpace: "pre-wrap" }}>
+              <MentionText text={a.content} />
+            </div>
+          ),
+        })),
       ],
     });
   }
-  if (setting.chronicleEvents.length > 0) {
+  if (events.length > 0) {
     groups.push({
       key: "setting-history",
       label: "История",
-      entries: setting.chronicleEvents.map((e) => ({
+      entries: events.map((e) => ({
         key: `setting-event-${e.id}`,
         section: "История",
         title: e.title,

@@ -9,7 +9,7 @@ import {
   writeReplacingOldFile,
 } from "../services/filesystem";
 import { unpaidSessionsForPlayer } from "../services/finance";
-import { getPlayerSectionsFor, getSettingPlayerContent, getSettingPlayerContentUnion } from "../services/playerContent";
+import { getFlaggedSettingContent, getPlayerSectionsFor, getSettingPlayerContent, getSettingPlayerContentUnion } from "../services/playerContent";
 import { broadcastCharacterUpdate, broadcastToGm } from "../services/realtime";
 import { ensurePlayerFolder } from "../services/folderRepair";
 import { mergeContentPatch } from "../db/statblockContent";
@@ -581,35 +581,7 @@ playerRouter.get("/campaigns/:id/visible", (req: AuthedRequest, res) => {
     )
     .all({ campaign: campaignId });
 
-  let locationArticles: unknown[] = [];
-  let beingArticles: unknown[] = [];
-  let chronicleEvents: unknown[] = [];
-  if (campaign.setting_id) {
-    locationArticles = db
-      .prepare(
-        `SELECT lc.id, lc.title, lc.content, lc.created_at, sl.name as location_name
-         FROM location_chapters lc JOIN setting_locations sl ON sl.id = lc.location_id
-         WHERE sl.setting_id = ? AND lc.visible_to_players = 1
-         ORDER BY lc.created_at DESC`
-      )
-      .all(campaign.setting_id);
-    beingArticles = db
-      .prepare(
-        `SELECT bc.id, bc.title, bc.content, bc.created_at, sb.name as being_name
-         FROM being_chapters bc JOIN setting_beings sb ON sb.id = bc.being_id
-         WHERE sb.setting_id = ? AND bc.visible_to_players = 1
-         ORDER BY bc.created_at DESC`
-      )
-      .all(campaign.setting_id);
-    chronicleEvents = db
-      .prepare(
-        `SELECT id, title, description, inworld_year, inworld_month, inworld_day
-         FROM setting_calendar_events
-         WHERE setting_id = ? AND visible_to_players = 1
-         ORDER BY inworld_year DESC, inworld_month DESC, inworld_day DESC`
-      )
-      .all(campaign.setting_id);
-  }
+  const { locationArticles, beingArticles, chronicleEvents } = getFlaggedSettingContent(campaign.setting_id);
 
   res.json({ campaign, sessions, schedule, secrets, locationArticles, beingArticles, chronicleEvents });
 });

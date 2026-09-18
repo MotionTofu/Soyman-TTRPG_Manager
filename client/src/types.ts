@@ -1656,6 +1656,8 @@ export interface SettingPlayerChronicleEvent {
 export interface PlayerPreview {
   setting: SettingPlayerContent;
   sections: PlayerSection[];
+  /** Открытое старой галочкой «Видно игрокам» — у игрока это тоже «Мир». */
+  flagged: Pick<VisibleCampaignContent, "locationArticles" | "beingArticles" | "chronicleEvents">;
 }
 
 export interface SettingPlayerContent {

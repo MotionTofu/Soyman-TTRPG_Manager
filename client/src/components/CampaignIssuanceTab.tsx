@@ -301,7 +301,7 @@ export function CampaignIssuanceTab({ campaignId, settingId, roster }: Props) {
   }, [campaignId, previewPlayerId]);
 
   const previewPlayer = roster.find((p) => p.id === previewPlayerId);
-  const previewGroups = useMemo(() => (preview ? buildSettingReaderGroups(preview.setting) : []), [preview]);
+  const previewGroups = useMemo(() => (preview ? buildSettingReaderGroups(preview.setting, preview.flagged) : []), [preview]);
 
   const rowShared = { campaignId, roster, grants, entities, selected, onSelect: toggleSelect, mode };
 

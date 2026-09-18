@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/db";
 import { isAccessLevel } from "../services/accessLevel";
-import { getPlayerSectionsFor, getSettingPlayerContent } from "../services/playerContent";
+import { getFlaggedSettingContent, getPlayerSectionsFor, getSettingPlayerContent } from "../services/playerContent";
 
 // Per-player, per-campaign reveal grants backing the "Для игроков" tabs on
 // campaign and setting profiles (see schema.sql comment on
@@ -66,8 +66,8 @@ visibilityGrantsRouter.get("/preview", (req, res) => {
   if (!Number.isFinite(campaignId) || !Number.isFinite(playerId)) {
     return res.status(400).json({ error: "campaign_id and player_id are required" });
   }
-  const campaign = db.prepare("SELECT id FROM campaigns WHERE id = ?").get(campaignId) as
-    | { id: number }
+  const campaign = db.prepare("SELECT id, setting_id FROM campaigns WHERE id = ?").get(campaignId) as
+    | { id: number; setting_id: number | null }
     | undefined;
   if (!campaign) return res.status(404).json({ error: "not found" });
   const member = db
@@ -77,6 +77,7 @@ visibilityGrantsRouter.get("/preview", (req, res) => {
   res.json({
     setting: getSettingPlayerContent(campaignId, playerId),
     sections: getPlayerSectionsFor(campaignId, playerId),
+    flagged: getFlaggedSettingContent(campaign.setting_id),
   });
 });
 

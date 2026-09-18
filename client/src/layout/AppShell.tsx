@@ -709,10 +709,15 @@ export function AppShell() {
         {!userLoading &&
           !/^\/sessions\/\d+\/live\/panel\/\w+/.test(pathname) &&
           !/^\/characters\/\d+\/sheet$/.test(pathname) && (
-          <div style={{ marginBottom: pathname === "/" ? 8 : 16, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
-            <Breadcrumbs items={buildCrumbs(pathname, !!isPlayer)} />
+          // На карточке сущности (EntityPage) крошки рисует сама карточка — с
+          // именем, а не номером. Строка оболочки там прячется в CSS
+          // (`.shell-crumbs`), иначе крошек две (F-50, решение 2026-09-18).
+          <div className="shell-crumbs" style={{ marginBottom: pathname === "/" ? 8 : 16, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
+            <div className="shell-crumbs__trail">
+              <Breadcrumbs items={buildCrumbs(pathname, !!isPlayer)} />
+            </div>
             {!isPlayer && activeStorageName && (
-              <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)", border: "1px solid var(--line)", padding: "2px 6px", background: "var(--paper-2)" }} title="Активное хранилище">
+              <span className="muted shell-crumbs__storage" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)", border: "1px solid var(--line)", padding: "2px 6px", background: "var(--paper-2)" }} title="Активное хранилище">
                 {activeStorageName}
               </span>
             )}

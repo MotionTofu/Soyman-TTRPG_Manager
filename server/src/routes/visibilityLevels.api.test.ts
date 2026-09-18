@@ -211,6 +211,28 @@ describe("«Глазами игрока»: превью идёт тем же р�
     expect(preview.body.sections).toEqual(playerRes.body);
   });
 
+  it("превью знает и открытое старой галочкой — как /visible у игрока", async () => {
+    const { setting_id: settingId } = db.prepare("SELECT setting_id FROM campaigns WHERE id = ?").get(campaignId) as {
+      setting_id: number;
+    };
+    expect(settingId).toBeTruthy();
+    db.prepare(
+      "INSERT INTO setting_calendar_events (setting_id, title, description, inworld_year, inworld_month, inworld_day, visible_to_players) VALUES (?, 'Затмение', 'текст', 1200, 1, 1, 1)"
+    ).run(settingId);
+    const playerRes = await request(app).get(`/api/player/campaigns/${campaignId}/visible`);
+    expect(playerRes.status).toBe(200);
+    const preview = await request(app).get(
+      `/api/visibility-grants/preview?campaign_id=${campaignId}&player_id=${playerId}`
+    );
+    expect(preview.status).toBe(200);
+    expect(preview.body.flagged.chronicleEvents.map((e: { title: string }) => e.title)).toContain("Затмение");
+    expect(preview.body.flagged).toEqual({
+      locationArticles: playerRes.body.locationArticles,
+      beingArticles: playerRes.body.beingArticles,
+      chronicleEvents: playerRes.body.chronicleEvents,
+    });
+  });
+
   it("чужой игрок и чужая кампания — 404, а не чужие данные", async () => {
     const outsiderId = Number(db.prepare("INSERT INTO players (name) VALUES ('Чужой')").run().lastInsertRowid);
     expect((await request(app).get(`/api/visibility-grants/preview?campaign_id=${campaignId}&player_id=${outsiderId}`)).status).toBe(404);
