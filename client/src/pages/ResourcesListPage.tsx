@@ -46,7 +46,7 @@ export function ResourcesListPage() {
     keepPrevious: true,
   }).data;
   const resources = useMemo(() => (allResources ?? []).filter((r) => r.type !== TEMPLATE_TYPE), [allResources]);
-  // «M» в счётчике — всё, что вкладка «Все» могла бы показать без поиска и
+  // «M» в счётчике — всё, что вкладка «Разное» могла бы показать без поиска и
   // фильтров. Поиск идёт на сервере, поэтому ответ с `?q=` для этого не
   // годится; полный список — тот же ключ, что без поиска, из кэша слоя.
   // Звук и шаблоны не в счёт: у них свои вкладки, здесь их не показывают.
@@ -179,6 +179,9 @@ export function ResourcesListPage() {
         headingSection="resources"
         title="Ресурсы"
         groups={[]}
+        // Не «Все»: звук и шаблоны живут своими вкладками, здесь — остальное
+        // (PDF, изображения, заметки, ссылки). Имя дал владелец 2026-09-18.
+        allLabel="Разное"
         ungroupedLabel={null}
         activeGroup={section === "all" ? null : section}
         onGroupChange={(g) => setSection(g === null ? "all" : g as typeof section)}
@@ -192,7 +195,7 @@ export function ResourcesListPage() {
         onResetSearch={() => { setQuery(""); setCampaignFilter(null); setSettingFilter(null); }}
         showReset={query.trim() !== "" || campaignFilter !== null || settingFilter !== null}
         toolbarExtra={sortToolbar}
-        // Тулбар — инструмент вкладки «Все»: у Звука, наборов и шаблонов
+        // Тулбар — инструмент вкладки «Разное»: у Звука, наборов и шаблонов
         // поиск свой, а общий показывал там «0 / N».
         hideToolbar={section !== "all"}
       >
