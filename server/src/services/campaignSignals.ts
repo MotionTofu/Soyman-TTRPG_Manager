@@ -141,6 +141,7 @@ const RULES: Rule[] = [
   { pattern: /^\/settings\/(\d+)\/calendar-events\/?$/, resolve: (_r, m) => campaignsOfSetting("SELECT ?", m[1]) },
   // Игрок: дневник кампании.
   { pattern: /^\/player\/campaigns\/(\d+)\/world-entries\/?$/, resolve: (_r, m) => ids(m[1]) },
+  { pattern: /^\/player\/campaigns\/(\d+)\/journal-folders(\/|$)/, resolve: (_r, m) => ids(m[1]) },
   {
     pattern: /^\/player\/world-entries\/reorder\/?$/,
     resolve: (r) => {

@@ -13,6 +13,7 @@ export const playerCampaignPaths = {
   party: (campaignId: number) => `/player/campaigns/${campaignId}/party`,
   myCharacters: (campaignId: number) => `/player/campaigns/${campaignId}/my-characters`,
   worldEntries: (campaignId: number) => `/player/campaigns/${campaignId}/world-entries`,
+  journalFolders: (campaignId: number) => `/player/campaigns/${campaignId}/journal-folders`,
 };
 
 /**
@@ -20,5 +21,10 @@ export const playerCampaignPaths = {
  * (в соседнем окне этой машины; до другой машины их доносит сигнал сервера).
  */
 export function journalAffects(campaignId: number): Affect[] {
-  return [{ path: playerCampaignPaths.worldEntries(campaignId) }, { path: `/campaigns/${campaignId}/player-journals` }];
+  // Вкладки — тоже: запись, переложенная в новую вкладку, заводит её строку.
+  return [
+    { path: playerCampaignPaths.worldEntries(campaignId) },
+    { path: playerCampaignPaths.journalFolders(campaignId) },
+    { path: `/campaigns/${campaignId}/player-journals` },
+  ];
 }

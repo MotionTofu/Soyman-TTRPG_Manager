@@ -1577,6 +1577,12 @@ export interface SessionScheduleEntry {
   status: string;
 }
 
+/** Вкладка дневника игрока (F-51): своя строка, бывает пустой. */
+export interface JournalFolder {
+  id: number;
+  name: string;
+}
+
 export interface VisibleCampaignContent {
   campaign: { id: number; name: string; setting_id: number | null; system_id: number | null };
   sessions: VisibleSession[];

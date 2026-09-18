@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useParams } from "react-router-dom";
-import { useAfterWrite, useResource, write } from "../data/hooks";
+import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
+import { labelled } from "../data/notices";
+import { usePrompt } from "../hooks/useConfirm";
 import { journalAffects, playerCampaignPaths } from "../data/playerCampaign";
 import { MentionText } from "../components/mentions/MentionText";
 import { EntityPage } from "../components/EntityPage";
@@ -13,6 +15,7 @@ import { useTabState } from "../hooks/useTabState";
 import { CampaignJournal } from "../components/player/CampaignJournal";
 import { buildSettingReaderGroups } from "../components/player/settingReaderEntries";
 import type {
+  JournalFolder,
   PartyMember,
   PlayerSection,
   SettingPlayerContent,
@@ -63,17 +66,33 @@ export function PlayerCampaignPage() {
   const [loreToast, setLoreToast] = useState<string | null>(null);
   // Чьим именем пишется новое и куда падает «+ В журнал» со статей лора.
   const [writingCharacterId, setWritingCharacterId] = useState<number | null>(null);
-  // Вкладки-папки дневника — из записей (CampaignJournal докладывает).
-  const [folders, setFolders] = useState<string[]>([]);
+  // Вкладки дневника — своими строками (F-51): бывают пустыми, порядок — по
+  // заведению. Раньше вкладка была только именем у записей и пропадала с
+  // последней из них.
+  const foldersState = useResource<JournalFolder[]>(id4 == null ? null : playerCampaignPaths.journalFolders(id4));
+  const folderRows = foldersState.data ?? NO_FOLDERS;
+  const folders = useMemo(() => folderRows.map((f) => f.name), [folderRows]);
+  const run = useAction();
+  const [promptDialog, prompt] = usePrompt();
 
   const tabs = useMemo(() => ["Лента", ...folders, "Мир", "От мастера", "Группа"], [folders]);
   const [tab, setTab] = useTabState(tabs, "Лента", TAB_ALIASES);
   // Папка вкладки: именная — сама, остальное — Лента (null).
   const activeFolder = folders.includes(tab) ? tab : null;
 
-  const handleFoldersKnown = useCallback((next: string[]) => {
-    setFolders((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
-  }, []);
+  // «+» в полосе: пустая вкладка. Занятое имя открывает ту вкладку, а
+  // постоянные имена сервер не примет — отказ покажет плашка.
+  async function addFolder() {
+    if (id4 == null) return;
+    const name = await prompt({ title: "Новая вкладка", message: "Название вкладки", confirmLabel: "Создать" });
+    const trimmed = name?.trim().slice(0, 80);
+    if (!trimmed) return;
+    const created = await run(
+      labelled("Новая вкладка", () => write.post<JournalFolder>(playerCampaignPaths.journalFolders(id4), { name: trimmed })),
+      { affects: journalAffects(id4), retry: false }
+    );
+    if (created) setTab(created.name);
+  }
 
   // Всё производное считается здесь, ВЫШЕ ранних return ниже по файлу.
   // Порядок хуков в React обязан совпадать от рендера к рендеру: пока эти
@@ -311,6 +330,9 @@ export function PlayerCampaignPage() {
       tabs={tabs}
       tab={tab}
       onTab={(t) => setTab(t)}
+      onAddTab={() => void addFolder()}
+      addTabLabel="Новая вкладка дневника"
+      overlays={promptDialog}
     >
 
       {(tab === "Лента" || activeFolder != null) && (
@@ -319,7 +341,7 @@ export function PlayerCampaignPage() {
           schedule={content.schedule}
           activeFolder={activeFolder}
           folders={folders}
-          onFoldersKnown={handleFoldersKnown}
+          folderRows={folderRows}
           onOpenFolder={(f) => setTab(f ?? "Лента")}
           writingCharacterId={writingCharacterId}
           onWritingCharacterChange={setWritingCharacterId}
@@ -636,4 +658,5 @@ function HiddenEntryNotice({ onBack }: { onBack: () => void }) {
 }
 
 const NO_SECTIONS: PlayerSection[] = [];
+const NO_FOLDERS: JournalFolder[] = [];
 const NO_PARTY: PartyMember[] = [];

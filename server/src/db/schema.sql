@@ -1390,6 +1390,20 @@ CREATE TABLE IF NOT EXISTS world_exploration_entries (
   archived_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_world_exploration_entries_campaign ON world_exploration_entries(campaign_id, kind);
+
+-- Вкладки дневника игрока (F-51, разбор Q60–Q64 2026-09-18). Раньше вкладка
+-- была только именем в folder_path записей и пропадала вместе с последней
+-- записью, а завести пустую было нельзя. Теперь список вкладок — эти строки;
+-- записи по-прежнему ссылаются на вкладку по имени. Порядок — по id, то есть
+-- по времени заведения.
+CREATE TABLE IF NOT EXISTS player_journal_folders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (campaign_id, player_id, name)
+);
 -- Индекс по character_id создаётся не здесь, а миграцией в db.ts: CREATE TABLE
 -- IF NOT EXISTS не добавляет колонку в уже существующую таблицу, и на базе,
 -- заведённой до 2026-09-02, этот CREATE INDEX падал бы "no such column:

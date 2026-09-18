@@ -793,8 +793,17 @@ playerRouter.get("/creature-card/compendium_entry/:id", (req: AuthedRequest, res
 // character_id = NULL — законное состояние: игрок пишет до того, как завёл
 // персонажа, или у него их несколько и он ещё не сказал, чей это дневник.
 // Такие записи показываются автору отдельной группой с предложением выбрать.
+// Старый мастерский «Исследование Мира» (routes/worldExplorationEntries.ts)
+// пишет в folder_path путь на диске — папку записи под аватар. Дневник занял
+// ту же колонку под имена вкладок, и такие записи показывались вкладками с
+// именем «Campaigns\Эстария\WorldExploration\…» (F-54, 2026-09-18). Путь —
+// не вкладка: для дневника такая запись лежит в Ленте. Сама строка не
+// меняется — путь нужен старой ручке аватара.
+const LEGACY_DISK_FOLDER =
+  "(folder_path LIKE '%\\WorldExploration\\%' OR folder_path LIKE '%/WorldExploration/%')";
 const WORLD_ENTRY_COLUMNS =
-  "id, campaign_id, player_id, character_id, kind, name, description, folder_path, position, created_at";
+  `id, campaign_id, player_id, character_id, kind, name, description,
+   CASE WHEN ${LEGACY_DISK_FOLDER} THEN NULL ELSE folder_path END AS folder_path, position, created_at`;
 
 // Вкладки дневника — это папки записей (Кабинет игрока, 2026-09-12, шаг 4).
 // Пусто/NULL — Лента, непустое — именная вкладка. Порядок везде один:
@@ -817,6 +826,22 @@ function topPosition(campaignId: number, playerId: number, folder: string | null
     .get(campaignId, playerId, folder) as { m: number };
   return row.m - 1;
 }
+
+// Строка вкладки для имени из записи: вкладка, куда положили запись, обязана
+// быть в списке вкладок (F-51) — иначе запись ушла бы в папку, которой нет в
+// полосе.
+function ensureFolder(campaignId: number, playerId: number, folder: string | null): void {
+  if (!folder) return;
+  db.prepare("INSERT OR IGNORE INTO player_journal_folders (campaign_id, player_id, name) VALUES (?, ?, ?)").run(
+    campaignId,
+    playerId,
+    folder
+  );
+}
+
+// Имена постоянных вкладок дневника: папку так не назвать, иначе вкладка и
+// папка склеятся в одну. Тот же список — у клиента (CampaignJournal.tsx).
+const RESERVED_FOLDERS = new Set(["лента", "мир", "от мастера", "группа"]);
 
 // Метка типа теперь необязательна: пустая строка — «без метки». Белый список
 // нужен, чтобы в базу не попадали значения, которых нет ни на одной вкладке —
@@ -913,6 +938,8 @@ playerRouter.post("/campaigns/:id/world-entries", (req: AuthedRequest, res) => {
   const cleanDescription = clampField(description, 5000);
   if (!cleanName && !cleanDescription) return res.status(400).json({ error: "empty entry" });
   const folder = clampFolder(folder_path);
+  if (folder && RESERVED_FOLDERS.has(folder.toLowerCase())) return res.status(400).json({ error: `«${folder}» — постоянная вкладка дневника` });
+  ensureFolder(campaignId, playerId, folder);
   const info = db
     .prepare(
       `INSERT INTO world_exploration_entries (campaign_id, player_id, character_id, kind, name, description, folder_path, position)
@@ -998,11 +1025,15 @@ playerRouter.put("/world-entries/:id", (req: AuthedRequest, res) => {
     return res.status(400).json({ error: "invalid position" });
   }
   const full = db
-    .prepare("SELECT folder_path FROM world_exploration_entries WHERE id = ?")
+    .prepare(`SELECT ${WORLD_ENTRY_COLUMNS} FROM world_exploration_entries WHERE id = ?`)
     .get(entry.id) as { folder_path: string | null };
   const newFolder = folder_path === undefined ? full.folder_path : clampFolder(folder_path);
+  if (newFolder && RESERVED_FOLDERS.has(newFolder.toLowerCase())) {
+    return res.status(400).json({ error: `«${newFolder}» — постоянная вкладка дневника` });
+  }
   const folderChanged =
     (full.folder_path ?? null) !== (newFolder ?? null);
+  if (folderChanged) ensureFolder(entry.campaign_id, playerId, newFolder);
   // Переезд во вкладку без явной позиции — наверх: запись должна встречать
   // читателя, а не прятаться в конце.
   const newPosition =
@@ -1044,6 +1075,127 @@ playerRouter.post("/world-entries/:id/restore", (req: AuthedRequest, res) => {
   const entry = requireMyWritableEntry(req.user!.playerId!, req.params.id);
   if (!entry) return res.status(404).json({ error: "not found" });
   db.prepare("UPDATE world_exploration_entries SET archived_at = NULL WHERE id = ?").run(entry.id);
+  // Вкладку, пока запись лежала в удалённых, могли убрать: вернуть её.
+  const { folder_path } = db.prepare(`SELECT ${WORLD_ENTRY_COLUMNS} FROM world_exploration_entries WHERE id = ?`).get(entry.id) as {
+    folder_path: string | null;
+  };
+  ensureFolder(entry.campaign_id, req.user!.playerId!, folder_path);
+  res.json({ ok: true });
+});
+
+// --- Вкладки дневника (F-51, разбор Q60–Q64 2026-09-18) ---
+//
+// Список вкладок — строки player_journal_folders, по времени заведения.
+// Переименование и удаление — одной транзакцией на сервере: раньше клиент
+// переписывал записи по одной, и обрыв посередине оставлял половину записей
+// в старой вкладке.
+
+type FolderRow = { id: number; campaign_id: number; player_id: number; name: string };
+
+function myFolder(playerId: number, campaignId: number, folderId: unknown): FolderRow | null {
+  return (
+    (db
+      .prepare("SELECT id, campaign_id, player_id, name FROM player_journal_folders WHERE id = ? AND campaign_id = ? AND player_id = ?")
+      .get(folderId, campaignId, playerId) as FolderRow | undefined) ?? null
+  );
+}
+
+function folderNameError(name: string | null): string | null {
+  if (!name) return "Пустое название вкладки";
+  if (RESERVED_FOLDERS.has(name.toLowerCase())) return `«${name}» — постоянная вкладка дневника`;
+  return null;
+}
+
+// Записи вкладки уходят наверх другой (или Ленты), в своём прежнем порядке.
+function moveFolderEntries(campaignId: number, playerId: number, from: string, to: string | null): void {
+  const rows = db
+    .prepare(
+      `SELECT id FROM world_exploration_entries
+       WHERE campaign_id = ? AND player_id = ? AND folder_path = ? AND archived_at IS NULL
+       ORDER BY position ASC, created_at DESC, id DESC`
+    )
+    .all(campaignId, playerId, from) as { id: number }[];
+  const top = topPosition(campaignId, playerId, to);
+  const set = db.prepare("UPDATE world_exploration_entries SET folder_path = ?, position = ? WHERE id = ?");
+  rows.forEach((r, i) => set.run(to, top - (rows.length - 1) + i, r.id));
+  // Удалённые записи идут за вкладкой: иначе возврат из «Отменить»
+  // воскресил бы убранную вкладку.
+  db.prepare(
+    "UPDATE world_exploration_entries SET folder_path = ? WHERE campaign_id = ? AND player_id = ? AND folder_path = ? AND archived_at IS NOT NULL"
+  ).run(to, campaignId, playerId, from);
+}
+
+playerRouter.get("/campaigns/:id/journal-folders", (req: AuthedRequest, res) => {
+  const campaignId = Number(req.params.id);
+  const playerId = req.user!.playerId!;
+  if (!myCampaignIds(playerId).includes(campaignId)) return res.status(404).json({ error: "not found" });
+  res.json(
+    db
+      .prepare("SELECT id, name FROM player_journal_folders WHERE campaign_id = ? AND player_id = ? ORDER BY id")
+      .all(campaignId, playerId)
+  );
+});
+
+// Новая вкладка. Такая уже есть — отдаётся она же: «+» с занятым именем
+// значит «открой её», а не ошибку.
+playerRouter.post("/campaigns/:id/journal-folders", (req: AuthedRequest, res) => {
+  const campaignId = Number(req.params.id);
+  const playerId = req.user!.playerId!;
+  if (!myCampaignIds(playerId).includes(campaignId)) return res.status(404).json({ error: "not found" });
+  if (!canWriteInCampaign(playerId, campaignId)) return res.status(403).json({ error: "read only in this campaign" });
+  const name = clampFolder((req.body as { name?: unknown }).name);
+  const bad = folderNameError(name);
+  if (bad) return res.status(400).json({ error: bad });
+  ensureFolder(campaignId, playerId, name);
+  res
+    .status(201)
+    .json(
+      db
+        .prepare("SELECT id, name FROM player_journal_folders WHERE campaign_id = ? AND player_id = ? AND name = ?")
+        .get(campaignId, playerId, name)
+    );
+});
+
+// Переименование. Имя другой вкладки — слияние: записи переезжают, строка
+// переименованной уходит.
+playerRouter.put("/campaigns/:id/journal-folders/:folderId", (req: AuthedRequest, res) => {
+  const campaignId = Number(req.params.id);
+  const playerId = req.user!.playerId!;
+  const folder = myFolder(playerId, campaignId, req.params.folderId);
+  if (!folder) return res.status(404).json({ error: "not found" });
+  if (!canWriteInCampaign(playerId, campaignId)) return res.status(403).json({ error: "read only in this campaign" });
+  const name = clampFolder((req.body as { name?: unknown }).name);
+  const bad = folderNameError(name);
+  if (bad || !name) return res.status(400).json({ error: bad });
+  if (name === folder.name) return res.json({ id: folder.id, name, merged: false });
+  const other = db
+    .prepare("SELECT id FROM player_journal_folders WHERE campaign_id = ? AND player_id = ? AND name = ?")
+    .get(campaignId, playerId, name) as { id: number } | undefined;
+  db.transaction(() => {
+    if (other) {
+      moveFolderEntries(campaignId, playerId, folder.name, name);
+      db.prepare("DELETE FROM player_journal_folders WHERE id = ?").run(folder.id);
+    } else {
+      db.prepare(
+        "UPDATE world_exploration_entries SET folder_path = ? WHERE campaign_id = ? AND player_id = ? AND folder_path = ?"
+      ).run(name, campaignId, playerId, folder.name);
+      db.prepare("UPDATE player_journal_folders SET name = ? WHERE id = ?").run(name, folder.id);
+    }
+  })();
+  res.json({ id: other?.id ?? folder.id, name, merged: !!other });
+});
+
+// Удаление вкладки: записи возвращаются в Ленту, ничего не удаляется (Q63).
+playerRouter.delete("/campaigns/:id/journal-folders/:folderId", (req: AuthedRequest, res) => {
+  const campaignId = Number(req.params.id);
+  const playerId = req.user!.playerId!;
+  const folder = myFolder(playerId, campaignId, req.params.folderId);
+  if (!folder) return res.status(404).json({ error: "not found" });
+  if (!canWriteInCampaign(playerId, campaignId)) return res.status(403).json({ error: "read only in this campaign" });
+  db.transaction(() => {
+    moveFolderEntries(campaignId, playerId, folder.name, null);
+    db.prepare("DELETE FROM player_journal_folders WHERE id = ?").run(folder.id);
+  })();
   res.json({ ok: true });
 });
 

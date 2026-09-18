@@ -6309,6 +6309,31 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     }
   }
 
+  // --- Вкладки дневника игрока (F-51, 2026-09-18) ---
+  //
+  // Таблицу заводит schema.sql; здесь у каждой вкладки, которая уже есть у
+  // записей, появляется своя строка — в прежнем порядке (по первой записи).
+  // Шаг идемпотентен и идёт на каждом открытии: вкладка, чьё имя пришло в
+  // запись мимо ручек вкладок, тоже получит строку. Архивные записи не в
+  // счёт — их вкладки игрок не видит, и воскрешать их нечего.
+  //
+  // Путь на диске — не вкладка: старый мастерский «Исследование Мира» писал
+  // в folder_path папку записи под аватар (F-54). Первая версия шага такие
+  // пути в вкладки превратила — на базе владельца три строки у одного игрока;
+  // они убираются здесь же.
+  if (tableExists(database, "player_journal_folders") && tableExists(database, "world_exploration_entries")) {
+    const diskPath = (col: string) => `(${col} LIKE '%\\WorldExploration\\%' OR ${col} LIKE '%/WorldExploration/%')`;
+    database.exec(`DELETE FROM player_journal_folders WHERE ${diskPath("name")}`);
+    database.exec(`
+      INSERT OR IGNORE INTO player_journal_folders (campaign_id, player_id, name)
+      SELECT campaign_id, player_id, folder_path FROM world_exploration_entries
+       WHERE archived_at IS NULL AND folder_path IS NOT NULL AND TRIM(folder_path) <> ''
+         AND NOT ${diskPath("folder_path")}
+       GROUP BY campaign_id, player_id, folder_path
+       ORDER BY MIN(id)
+    `);
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);

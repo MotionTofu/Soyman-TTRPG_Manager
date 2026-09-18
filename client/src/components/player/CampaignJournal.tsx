@@ -9,6 +9,7 @@ import { LoadErrorCard } from "../Loadable";
 import { useConfirm, usePrompt } from "../../hooks/useConfirm";
 import { useUndoDelete } from "../../hooks/useUndoDelete";
 import type {
+  JournalFolder,
   PlayerCampaignCharacter,
   SessionScheduleEntry,
   WorldExplorationEntry,
@@ -18,7 +19,8 @@ import type {
 // Дневник кампании (Кабинет игрока, 2026-09-12, шаг 4): один на кампанию, а
 // не на персонажа. Персонаж внутри — метка: погибший персонаж не уносит
 // половину истории в архив, записи идут подряд. Вкладки — это папки записей
-// (folder_path): NULL — Лента, непустое — именная вкладка. Разделители
+// (folder_path): NULL — Лента, непустое — именная вкладка. Список вкладок —
+// свои строки на сервере (F-51), он приходит сверху. Разделители
 // «после сессии …» считаются из расписания и внутри папок сохраняются.
 
 const TAGS: { value: WorldExplorationTag; label: string }[] = [
@@ -68,7 +70,7 @@ export function CampaignJournal({
   schedule,
   activeFolder,
   folders,
-  onFoldersKnown,
+  folderRows,
   onOpenFolder,
   writingCharacterId,
   onWritingCharacterChange,
@@ -78,7 +80,8 @@ export function CampaignJournal({
   /** NULL — Лента, строка — именная вкладка. */
   activeFolder: string | null;
   folders: string[];
-  onFoldersKnown: (folders: string[]) => void;
+  /** Те же вкладки с id — для переименования и удаления. */
+  folderRows: JournalFolder[];
   onOpenFolder: (folder: string | null) => void;
   /** Чьим именем пишется новое и куда падает «+ В журнал» со статей. */
   writingCharacterId: number | null;
@@ -115,18 +118,6 @@ export function CampaignJournal({
 
   const charById = useMemo(() => new Map(characters.map((c) => [c.id, c])), [characters]);
   const aliveChars = useMemo(() => characters.filter((c) => !c.archived), [characters]);
-
-  // Папки — в порядке заведения (первые записи раньше): вкладки не прыгают
-  // при переименовании, в отличие от алфавита.
-  useEffect(() => {
-    const firstSeen = new Map<string, number>();
-    for (const e of entries) {
-      if (e.folder_path && !firstSeen.has(e.folder_path)) firstSeen.set(e.folder_path, e.id);
-    }
-    const next = [...firstSeen.entries()].sort((a, b) => a[1] - b[1]).map(([name]) => name);
-    onFoldersKnown(next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries]);
 
   // Пишущий персонаж по умолчанию — первый живой; выбор человека не
   // перебивается перезагрузкой списка.
@@ -280,13 +271,14 @@ export function CampaignJournal({
       const ok = await confirm({ title: "Слить вкладки?", message: `Записи переедут во вкладку «${trimmed}».`, confirmLabel: "Слить", danger: false });
       if (!ok) return;
     }
-    const inFolder = entries.filter((e) => e.folder_path === activeFolder);
+    const row = folderRows.find((f) => f.name === activeFolder);
+    if (!row) return;
+    // Одной операцией на сервере: записи и вкладка переезжают вместе.
     const done = await run(
-      labelled("Переименование вкладки", async () => {
-        for (const e of inFolder) await write.put(`/player/world-entries/${e.id}`, { folder_path: trimmed });
-        return true;
-      }),
-      { affects: journalAffects(campaignId) }
+      labelled("Переименование вкладки", () =>
+        write.put(`${playerCampaignPaths.journalFolders(campaignId)}/${row.id}`, { name: trimmed })
+      ),
+      { affects: journalAffects(campaignId), retry: false }
     );
     if (done) onOpenFolder(trimmed);
   }
@@ -301,13 +293,11 @@ export function CampaignJournal({
       danger: true,
     });
     if (!ok) return;
-    const inFolder = entries.filter((e) => e.folder_path === activeFolder);
+    const row = folderRows.find((f) => f.name === activeFolder);
+    if (!row) return;
     const done = await run(
-      labelled("Вкладка дневника", async () => {
-        for (const e of inFolder) await write.put(`/player/world-entries/${e.id}`, { folder_path: null });
-        return true;
-      }),
-      { affects: journalAffects(campaignId) }
+      labelled("Вкладка дневника", () => write.del(`${playerCampaignPaths.journalFolders(campaignId)}/${row.id}`)),
+      { affects: journalAffects(campaignId), retry: false }
     );
     if (done) onOpenFolder(null);
   }
