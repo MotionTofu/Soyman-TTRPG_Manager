@@ -16,11 +16,22 @@
  * «заготовку, которая не разошлась». Замер был неверен: он используется
  * 19 раз в 7 файлах. Довод убран, а не подправлен.)
  *
- * ЧТО ЛОВИТСЯ. Три грубые и однозначные вещи в `src/pages`:
+ * ЧТО ЛОВИТСЯ. Грубые и однозначные вещи в `src/pages`:
  *
  *   1. свой `<div className="tabs">` вместо полосы каркаса;
  *   2. свой заголовок страницы — `<h1>` вне каркаса;
- *   3. у карточки сущности (`*DetailPage.tsx`) — отсутствие каркаса вовсе.
+ *   3. у карточки сущности (`*DetailPage.tsx`) — отсутствие каркаса вовсе;
+ *
+ * и словарь вкладок (решение 6 каркаса, довезено до кода 2026-09-18, П3.4) —
+ * у страниц на каркасе:
+ *
+ *   4. вкладка по умолчанию — не «Обзор» (вместилище) и не «Досье»
+ *      (сущность). Порядок и есть предсказуемость: то же слово на том же
+ *      месте. У Монстра и Персонажа первым стоит статблок — это названное
+ *      отступление, а не молчаливое расхождение;
+ *   5. в списке вкладок — имя, которое словарь заменил: «Изображения»
+ *      (стало «Галерея»), «Информация о …» (стало «Досье»). Ключ
+ *      псевдонима для старых ссылок — не вкладка и не ловится.
  *
  * ОТСТУПЛЕНИЕ С ПРИЧИНОЙ. Барьер не запрещает, а требует объяснения:
  *
@@ -58,6 +69,34 @@ function reasonBefore(text, index) {
 const offenders = [];
 const excused = [];
 
+/** Первая вкладка по словарю: вместилище — «Обзор», сущность — «Досье».
+ *  Ключи — для страниц, где вкладка задана ключом, а подпись отдельно. */
+const DEFAULT_TABS = new Set(["Обзор", "Досье", "overview", "about"]);
+
+/** Имена, которые словарь заменил, и чем. */
+const RETIRED_TABS = [
+  [/"Изображения"/g, "Галерея"],
+  [/"Информация о [^"]*"/g, "Досье"],
+];
+
+/** Списки вкладок страницы: `const …TABS… = [ … ]` и `tabs={[ … ]}`. */
+function tabLists(text) {
+  const out = [];
+  const open = /(?:const\s+\w*TABS\w*(?:\s*:\s*[^=]+)?\s*=\s*\[|tabs=\{\[)/g;
+  let m;
+  while ((m = open.exec(text))) {
+    const start = m.index + m[0].length;
+    let depth = 1;
+    let i = start;
+    for (; i < text.length && depth > 0; i++) {
+      if (text[i] === "[") depth++;
+      else if (text[i] === "]") depth--;
+    }
+    out.push({ start, body: text.slice(start, i - 1) });
+  }
+  return out;
+}
+
 function lineOf(text, index) {
   return text.slice(0, index).split("\n").length;
 }
@@ -85,6 +124,33 @@ function check(path) {
     const why = reasonBefore(text, m.index);
     if (why) excused.push(`${where}\n      причина: ${why}`);
     else offenders.push(where);
+  }
+
+  // 4–5. Словарь вкладок — только у страниц на каркасе.
+  if (usesFrame) {
+    const def = /useTabState(?:<[^>]*>)?\(\s*[^,]+,\s*"([^"]+)"/g;
+    while ((m = def.exec(text))) {
+      if (DEFAULT_TABS.has(m[1])) continue;
+      const where = `${rel}:${lineOf(text, m.index)}  первая вкладка «${m[1]}» — словарь ждёт «Обзор» или «Досье»`;
+      const why = reasonBefore(text, m.index);
+      if (why) excused.push(`${where}\n      причина: ${why}`);
+      else offenders.push(where);
+    }
+    for (const block of tabLists(text)) {
+      for (const [re, instead] of RETIRED_TABS) {
+        re.lastIndex = 0;
+        let r;
+        while ((r = re.exec(block.body))) {
+          // Ключ псевдонима («"Изображения": "Галерея"») — не вкладка.
+          if (/^\s*:/.test(block.body.slice(r.index + r[0].length))) continue;
+          const at = block.start + r.index;
+          const where = `${rel}:${lineOf(text, at)}  вкладка ${r[0]} — по словарю «${instead}»`;
+          const why = reasonBefore(text, at);
+          if (why) excused.push(`${where}\n      причина: ${why}`);
+          else offenders.push(where);
+        }
+      }
+    }
   }
 
   // 3. Карточка сущности вообще без каркаса.

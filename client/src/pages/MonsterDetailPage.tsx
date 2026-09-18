@@ -19,9 +19,10 @@ import {
 import type { CompendiumEntry, System, SystemSection } from "../types";
 
 // «Упоминания» замыкают ряд вкладок на всех страницах приложения — это
-// служебные обратные ссылки, а не содержимое записи; «Изображения» встают
-// перед ними, последними среди содержательных.
-const TABS = ["Статблоки", "Досье", "Карточка существа", "Изображения", "Упоминания"] as const;
+// служебные обратные ссылки, а не содержимое записи; «Галерея» встаёт
+// перед ними, последней среди содержательных. До 2026-09-18 она звалась
+// «Изображения» (словарь вкладок, П3.4) — старые ссылки ведут сюда же.
+const TABS = ["Статблоки", "Досье", "Карточка существа", "Галерея", "Упоминания"] as const;
 
 interface MechanicsOption {
   id: number;
@@ -60,7 +61,8 @@ export function MonsterDetailPage({ entry, system }: { entry: CompendiumEntry; s
   const entryId = entry.id;
   // Сохранённая ссылка на «Статблок» должна открывать «Статблоки», а не
   // молча падать на вкладку по умолчанию — здесь это одна и та же вкладка.
-  const [tab, selectTab] = useTabState(TABS, "Статблоки", { Статблок: "Статблоки" });
+  // каркас в обход намеренно — первым стоит статблок: монстра открывают, чтобы им играть (решение 6)
+  const [tab, selectTab] = useTabState(TABS, "Статблоки", { Статблок: "Статблоки", Изображения: "Галерея" });
   const sections = useResource<SystemSection[]>(system ? compendiumPaths.sections(system.id) : null).data;
   const mechSection = sections?.find((s) => s.kind === "mechanics");
   const mechanics = useResource<CompendiumEntry[]>(
@@ -272,7 +274,7 @@ export function MonsterDetailPage({ entry, system }: { entry: CompendiumEntry; s
         <CreatureCardEditor type="compendium_entry" id={entryId} />
       )}
 
-      {tab === "Изображения" && (
+      {tab === "Галерея" && (
         <EntryImagesTab
           entryId={entryId}
           entryName={entry.name}

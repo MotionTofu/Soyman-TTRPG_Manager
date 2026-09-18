@@ -57,6 +57,7 @@ export function CharacterDetailPage() {
   const loadError = readError != null && !notFound ? readError : null;
   const refresh = characterState.reload;
   const afterWrite = useAfterWrite();
+  // каркас в обход намеренно — первым стоит чарник: за столом персонажа открывают ради листа (решение 6)
   const [tab, selectTab] = useTabState(TAB_KEYS, "statblock");
   const { user } = useCurrentUser();
   const [editingName, setEditingName] = useState(false);

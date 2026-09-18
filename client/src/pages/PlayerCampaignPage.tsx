@@ -76,6 +76,7 @@ export function PlayerCampaignPage() {
   const [promptDialog, prompt] = usePrompt();
 
   const tabs = useMemo(() => ["Лента", ...folders, "Мир", "От мастера", "Группа"], [folders]);
+  // каркас в обход намеренно — это дневник игрока, а не карточка сущности: первым идёт его Лента
   const [tab, setTab] = useTabState(tabs, "Лента", TAB_ALIASES);
   // Папка вкладки: именная — сама, остальное — Лента (null).
   const activeFolder = folders.includes(tab) ? tab : null;

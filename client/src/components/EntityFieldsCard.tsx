@@ -107,7 +107,7 @@ export function EntityFieldsCard({
   // честнее не показывать.
   hideEmptyInView?: boolean;
   // Без инверсии: обычный <h3> вместо тёмной плашки (профиль локации,
-  // вкладка «Информация о локации» — карточка «Основное»).
+  // вкладка «Досье» — карточка «Основное»).
   inverted?: boolean;
 }) {
   const [editMode, setEditMode] = useState(false);

@@ -62,8 +62,13 @@ function descendantIds(id: number, all: SettingLocation[]): Set<number> {
   return result;
 }
 
+// Словарь вкладок (решение 6 каркаса карточки): у сущности первая — «Досье».
+// Вкладка звалась «Информация о локации» до 2026-09-18 (П3.4); сохранённые
+// ссылки на старое имя открывают её же.
+const TAB_ALIASES = { "Информация о локации": "Досье" } as const;
+
 const TABS = [
-  "Информация о локации",
+  "Досье",
   "Карта",
   "Вложенность",
   "Обитатели",
@@ -93,7 +98,7 @@ export function LocationDetailPage() {
   // Правка, которая меняет дерево (родитель, вес, дети, архив): задеты все
   // локации — и карточки, и списки.
   const allLocationsAffect: Affect[] = [{ kind: "location" }];
-  const [tab, selectTab] = useTabState(TABS, "Информация о локации");
+  const [tab, selectTab] = useTabState(TABS, "Досье", TAB_ALIASES);
   // Навигация внутри таба «Вложенность» (Master–Detail): родитель,
   // дерево, план точками, добавление. Верхний таб-бар не трогаем.
   const [nestSel, setNestSel] = useState<{ section: string; item?: string }>({ section: "parent" });
@@ -818,7 +823,7 @@ export function LocationDetailPage() {
         </>
       }
       // Имя, тип и короткое имя правятся карточкой «Основное» во вкладке
-      // «Информация о локации», поэтому «Редактировать» в шапке нет.
+      // «Досье», поэтому «Редактировать» в шапке нет.
       // Главное действие одно — завести вложенную; архивация разрушительна
       // и потому живёт под «…».
       primaryAction={
@@ -840,7 +845,7 @@ export function LocationDetailPage() {
       overlays={confirmDialog}
     >
 
-      {tab === "Информация о локации" && (
+      {tab === "Досье" && (
         <LocationInfoTab
           key={location.id}
           location={location}

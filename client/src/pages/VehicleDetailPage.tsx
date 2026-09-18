@@ -12,9 +12,9 @@ import { KIND_DEFS, extractEnglishName } from "../compendium";
 import type { CompendiumEntry, System, SystemSection } from "../types";
 import { useConfirm } from "../hooks/useConfirm";
 
-// «Изображения» — перед «Упоминаниями», как на странице существа: служебные
-// обратные ссылки везде замыкают ряд.
-const TABS = ["Досье", "Статблоки", "Изображения", "Упоминания"] as const;
+// «Галерея» — перед «Упоминаниями», как на странице существа: служебные
+// обратные ссылки везде замыкают ряд. Звалась «Изображения» до 2026-09-18.
+const TABS = ["Досье", "Статблоки", "Галерея", "Упоминания"] as const;
 
 // Страница записи транспорта — судна, повозки или поста экипажа. Записи
 // компендиума обычно раскрываются прямо в разделе, но у транспорта, как и у
@@ -24,7 +24,7 @@ export function VehicleDetailPage({ entry, system }: { entry: CompendiumEntry; s
   const [confirmDialog, confirm] = useConfirm();
   const entryId = entry.id;
   const navigate = useNavigate();
-  const [tab, selectTab] = useTabState(TABS, "Досье", { Статблок: "Статблоки" });
+  const [tab, selectTab] = useTabState(TABS, "Досье", { Статблок: "Статблоки", Изображения: "Галерея" });
   const isPost = entry.kind === "vehicle_post";
   const sectionEntries = useResource<CompendiumEntry[]>(
     isPost ? null : compendiumPaths.sectionEntries(entry.system_id, entry.section_id)
@@ -188,7 +188,7 @@ export function VehicleDetailPage({ entry, system }: { entry: CompendiumEntry; s
         />
       )}
 
-      {tab === "Изображения" && (
+      {tab === "Галерея" && (
         <EntryImagesTab
           entryId={entryId}
           entryName={entry.name}
