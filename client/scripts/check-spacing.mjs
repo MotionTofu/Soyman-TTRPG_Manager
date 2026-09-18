@@ -36,8 +36,10 @@ import { join, relative } from "node:path";
 
 const ROOT = new URL("../src", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 const ALLOW_SELECTOR = /cheatsheet|\.combat-(row|field)|\.fill-box/i;
-const EXCUSE_SP = /шаг мимо шкалы намеренно\s*[—-]\s*(\S[^\r\n*]*)/;
-const EXCUSE_BW = /обводка мимо шкалы намеренно\s*[—-]\s*(\S[^\r\n*]*)/;
+// Пробелы вокруг тире — только внутри строки: `\s` съедал перевод строки,
+// и пустая метка брала причиной следующую строку (F-49, найдено 2026-09-18).
+const EXCUSE_SP = /шаг мимо шкалы намеренно[ \t]*[—-][ \t]*(\S[^\r\n*]*)/;
+const EXCUSE_BW = /обводка мимо шкалы намеренно[ \t]*[—-][ \t]*(\S[^\r\n*]*)/;
 
 const SPACING = /\b(padding|margin|gap|row-gap|column-gap)(-top|-right|-bottom|-left)?:\s*([^;{}]+);/g;
 // Только контур целиком. `border-left: 3px` и подобное — не обводка, а
