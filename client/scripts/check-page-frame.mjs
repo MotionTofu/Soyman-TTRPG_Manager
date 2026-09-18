@@ -45,7 +45,7 @@ const NO_FRAME = {
   "CompendiumEntryRedirectPage.tsx": "не страница — перенаправление в систему или карточку",
   "PlayerDetailPage.tsx": "не страница — обёртка PlayersWorkspace",
   "PlayersListPage.tsx": "не страница — обёртка PlayersWorkspace",
-  "HomeCalendarPage.tsx": "главная Мастера: шапки нет по устройству, начинается с ближайшей игры (решение владельца открыто, П3.6)",
+  "HomeCalendarPage.tsx": "главная Мастера — приборная доска: шапки нет, начинается с ближайшей игры; «Главная» уже в крошках (Q72)",
 };
 
 const FRAME = /<(PageFrame|ListPage|EntityPage)\b/;
