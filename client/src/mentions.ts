@@ -277,6 +277,20 @@ export async function buildMentionToken(
   }
 }
 
+/**
+ * Упоминание — в буфер обмена. Если буфер недоступен, возвращает текст: его
+ * показывают, чтобы выделили руками; `null` — скопировано.
+ */
+export async function copyMentionToClipboard(type: string, id: number, label: string): Promise<string | null> {
+  const text = (await buildMentionToken(type, id, label)) ?? label;
+  try {
+    await navigator.clipboard.writeText(text);
+    return null;
+  } catch {
+    return text;
+  }
+}
+
 // ─── Граф связей ─────────────────────────────────────────────────────────────
 
 interface GenericLink {

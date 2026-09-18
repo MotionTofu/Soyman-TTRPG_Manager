@@ -14,7 +14,7 @@ import { useConfirm, useAlert, usePrompt } from "../hooks/useConfirm";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import { addToBag } from "../bag";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
-import { buildMentionToken } from "../mentions";
+import { copyMentionToClipboard } from "../mentions";
 import type { SettingLocation } from "../types";
 
 const NO_LOCATIONS: SettingLocation[] = [];
@@ -852,17 +852,9 @@ export function LocationNode({
   }
 
   async function copyMention() {
-    let text: string | null = null;
-    try {
-      text = await buildMentionToken("location", location.id, location.name);
-    } catch {}
-    if (!text) text = location.name;
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      // Буфер обмена недоступен — показываем текст, чтобы его выделили руками.
-      await promptText({ title: "Упоминание", message: "Скопируйте упоминание:", defaultValue: text, readOnly: true });
-    }
+    const manual = await copyMentionToClipboard("location", location.id, location.name);
+    // Буфер обмена недоступен — показываем текст, чтобы его выделили руками.
+    if (manual) await promptText({ title: "Упоминание", message: "Скопируйте упоминание:", defaultValue: manual, readOnly: true });
   }
 
   async function saveEdit() {

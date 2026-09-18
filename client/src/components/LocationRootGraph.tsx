@@ -15,7 +15,11 @@ import {
 import "@xyflow/react/dist/style.css";
 import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
 import { settingPaths } from "../data/settingEntities";
-import { useAlert, useConfirm } from "../hooks/useConfirm";
+import { useAlert, useConfirm, usePrompt } from "../hooks/useConfirm";
+import { useNavigate } from "react-router-dom";
+import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
+import { addToBag } from "../bag";
+import { copyMentionToClipboard } from "../mentions";
 import { EmptyState } from "./EmptyState";
 import { LoadErrorCard, SkeletonBlock } from "./Loadable";
 import { NavIcon } from "./NavIcons";
@@ -249,6 +253,34 @@ export function LocationRootGraph({ settingId }: Props) {
   }
 
   const byIdAll = useMemo(() => new Map(locations.map((l) => [l.id, l])), [locations]);
+
+  // Меню узла (ToDo/08 Р16): те же действия, что у строки дерева, плюс
+  // переход к карте — жест за столом «открыть карту этого места».
+  const navigate = useNavigate();
+  const [promptDialog, promptText] = usePrompt();
+  const [menu, setMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
+  const handleNodeContextMenu = useCallback(
+    (e: React.MouseEvent, node: Node) => {
+      const loc = byIdAll.get(Number(node.id));
+      if (!loc) return;
+      e.preventDefault();
+      const items: ContextMenuItem[] = [
+        {
+          label: "Копировать упоминание",
+          onClick: async () => {
+            const manual = await copyMentionToClipboard("location", loc.id, loc.name);
+            if (manual) await promptText({ title: "Упоминание", message: "Скопируйте упоминание:", defaultValue: manual, readOnly: true });
+          },
+        },
+        { label: "В мешок", onClick: () => addToBag({ type: "location", id: loc.id, title: loc.name }) },
+      ];
+      if (loc.map_image_url) {
+        items.push({ label: "Открыть карту", onClick: () => navigate(`/locations/${loc.id}?tab=${encodeURIComponent("Карта")}`) });
+      }
+      setMenu({ x: e.clientX, y: e.clientY, items });
+    },
+    [byIdAll, navigate, promptText]
+  );
   const uniqueKinds = useMemo(
     () =>
       Array.from(
@@ -709,6 +741,8 @@ export function LocationRootGraph({ settingId }: Props) {
     <div className="stack geography-root">
       {confirmDialog}
       {alertDialog}
+      {promptDialog}
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
       <div className="row geography-root__toolbar">
         <button className="primary" onClick={() => setCreating(true)}>
           <NavIcon name="plus" /> Создать
@@ -969,6 +1003,7 @@ export function LocationRootGraph({ settingId }: Props) {
             }}
             onNodeDragStart={handleNodeDragStart}
             onNodeDragStop={handleNodeDragStop}
+            onNodeContextMenu={handleNodeContextMenu}
             onMove={(_, vp) => {
               // Матрёшка стартует с одних кубов: предел на единицу строже.
               const base =
