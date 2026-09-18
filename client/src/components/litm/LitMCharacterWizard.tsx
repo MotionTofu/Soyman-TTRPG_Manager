@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   findLitmSystemId,
+  mightLabel,
   loadLitmTropes,
   loadLitmThemeBooks,
   loadLitmThemeKits,
@@ -12,12 +13,6 @@ import type { LitMCharacterData, LitMThemeCard, LitMPower } from "../../types";
 
 type WizardPath = "manual" | "trope" | "themebook";
 
-const MIGHT_RU: Record<string, string> = {
-  origin: "Происхождение",
-  adventure: "Приключение",
-  greatness: "Величие",
-  variable: "Переменное",
-};
 
 function emptyTheme(): LitMThemeCard {
   return { power: "", themeType: "", name: "", powerTags: [], weaknessTags: [], quest: "", improve: 0, abandon: 0, milestone: 0, specialImprovements: [] };
@@ -55,7 +50,7 @@ function ThemeChip({ kit, themebookEn, kits, books }: {
         {typeRu}
       </span>
       <span style={{ fontSize: "var(--fs-micro)", letterSpacing: ".08em", textTransform: "uppercase", opacity: .7, lineHeight: 1.3 }}>
-        {MIGHT_RU[might] ?? ""}
+        {mightLabel(might)}
       </span>
     </span>
   );
@@ -356,7 +351,7 @@ export function LitMCharacterWizard({
                   <span className={`litm-power-${b.data.might}`} style={{ padding: "2px 8px", display: "inline-block" }}>
                     {b.ruName}
                   </span>
-                  <span className="muted" style={{ fontSize: "var(--fs-meta)", marginLeft: 4 }}>{MIGHT_RU[b.data.might] ?? ""}</span>
+                  <span className="muted" style={{ fontSize: "var(--fs-meta)", marginLeft: 4 }}>{mightLabel(b.data.might)}</span>
                 </button>
               ))}
             </div>

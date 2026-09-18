@@ -1,12 +1,7 @@
 import { memo } from "react";
 import type { CompendiumEntry } from "../../types";
+import { mightLabel } from "./litmCompendium";
 
-const MIGHT_RU: Record<string, string> = {
-  origin: "Происхождение",
-  adventure: "Приключение",
-  greatness: "Величие",
-  variable: "Переменная",
-};
 
 /** Тело записи kind='theme_kit': набор тегов (9 силовых + 4 слабостей) и квест. */
 export const LitmThemeKitBody = memo(function LitmThemeKitBody({
@@ -22,7 +17,7 @@ export const LitmThemeKitBody = memo(function LitmThemeKitBody({
   return (
     <div className="stack" style={{ gap: 10 }}>
       {might && (
-        <span className="comp-badge litm-power-chip">{MIGHT_RU[might] ?? might}</span>
+        <span className="comp-badge litm-power-chip">{mightLabel(might) || might}</span>
       )}
 
       {powerTags.length > 0 && (
@@ -73,7 +68,7 @@ export const LitmThemeBookBody = memo(function LitmThemeBookBody({
   return (
     <div className="stack" style={{ gap: 12 }}>
       {might && (
-        <span className="comp-badge litm-power-chip">{MIGHT_RU[might] ?? might}</span>
+        <span className="comp-badge litm-power-chip">{mightLabel(might) || might}</span>
       )}
 
       {pq.length > 0 && (

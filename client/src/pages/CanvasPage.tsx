@@ -2086,6 +2086,7 @@ export function CanvasPage() {
   );
   const [alertDialog, showAlert] = useAlert();
   const [promptDialog, promptText] = usePrompt();
+  const [confirmDialog, confirm] = useConfirm();
 
   // Календарь нужен ради дат на нодах событий: месяцы и эра живут в
   // сеттинге, и без них «1492-06-15» осталось бы машинной строкой.
@@ -4741,8 +4742,12 @@ export function CanvasPage() {
           onClick: async () => {
           // Архивация сцены и главы — это правка самой записи: её видят и
           // страница сцены, и приключение. Спрашиваем до записи, а не внутри неё.
-          if (type === "scene" && !confirm(`Архивировать сцену "${(node.data as Record<string, unknown>).name ?? ""}"?`)) return;
-          if ((type === "chapter" || type === "adventure") && !confirm(`Архивировать ${type === "chapter" ? "главу" : "приключение"} "${(node.data as Record<string, unknown>).name ?? ""}"?`)) return;
+          if (type === "scene" || type === "chapter" || type === "adventure") {
+            const what = type === "scene" ? "сцену" : type === "chapter" ? "главу" : "приключение";
+            const name = String((node.data as Record<string, unknown>).name ?? "");
+            if (!(await confirm({ message: `Убрать ${what} «${name}» в архив? Вернуть можно в разделе «Архив».`, confirmLabel: "Архивировать", danger: true })))
+              return;
+          }
           const affects: Affect[] =
             type === "scene" ? [{ kind: "scene", id }] : type === "chapter" || type === "adventure" ? [{ kind: "adventure", id }] : [];
           await boardAction(
@@ -4761,7 +4766,7 @@ export function CanvasPage() {
       });
       setContextMenu({ x: event.clientX, y: event.clientY, items });
     },
-    [board, loadBoard, settingId, arcId, freeId, campaignIdParam, setSearchParams, navigate, nodes, createGroup, removeFromGroup, boardAction]
+    [board, loadBoard, settingId, arcId, freeId, campaignIdParam, setSearchParams, navigate, nodes, createGroup, removeFromGroup, boardAction, confirm]
   );
 
   // Убрать ноду сущности/набора/проверки — значит убрать её С ХОЛСТА или удалить сущность.
@@ -5940,6 +5945,7 @@ export function CanvasPage() {
       {contextMenu && <ContextMenu x={contextMenu.x} y={contextMenu.y} items={contextMenu.items} onClose={() => setContextMenu(null)} />}
       {alertDialog}
       {promptDialog}
+      {confirmDialog}
     </div>
   );
 }

@@ -10,13 +10,14 @@ export function UpdateChecker() {
 
   useEffect(() => {
     if (!hasElectronAPI()) return;
-    window.electronAPI!.getAppVersion().then(setAppVersion);
+    // Без catch отказ IPC оставлял «…» навсегда и сыпал unhandled rejection.
+    window.electronAPI!.getAppVersion().then(setAppVersion, () => setAppVersion("неизвестна"));
     return window.electronAPI!.onUpdateStatus(setUpdate);
   }, []);
 
   async function checkForUpdates() {
     setUpdate({ status: "checking" });
-    const result = await window.electronAPI!.checkForUpdates();
+    const result = await window.electronAPI!.checkForUpdates().catch(() => ({ ok: false }));
     if (!result.ok) setUpdate({ status: "error", message: "Проверка обновлений недоступна в этом режиме запуска" });
   }
 

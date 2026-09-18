@@ -518,7 +518,7 @@ export const KIND_DEFS: Record<string, KindDef> = {
     fields: [
       { key: "description_ru", label: "Описание", type: "textarea" },
       { key: "might", label: "Могущество", type: "select", options: ["origin", "adventure", "greatness", "variable"] },
-      { key: "themebook_ids", label: "ID тембуков", type: "text" },
+      { key: "themebook_ids", label: "ID темников", type: "text" },
       { key: "example_power_tags", label: "Пример ключей силы", type: "textarea" },
       { key: "example_weakness_tags", label: "Пример ключей слабости", type: "textarea" },
       { key: "special_improvements", label: "Особые улучшения", type: "textarea" },

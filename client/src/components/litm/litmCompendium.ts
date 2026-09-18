@@ -1,5 +1,19 @@
 import { readResource } from "../../data/imperative";
-import type { CompendiumEntry } from "../../types";
+import type { CompendiumEntry, LitMPower } from "../../types";
+
+// Ступени Могущества по-русски — одни на карточку темы, визард и компендиум.
+// Раньше было три словаря: карточка писала по-английски, визард «Переменное»,
+// компендиум «Переменная». Род средний — по слову «могущество».
+const MIGHT_LABELS: Record<Exclude<LitMPower, "">, string> = {
+  origin: "Происхождение",
+  adventure: "Приключение",
+  greatness: "Величие",
+  variable: "Переменное",
+};
+
+export function mightLabel(might: string): string {
+  return (MIGHT_LABELS as Record<string, string>)[might] ?? "";
+}
 
 // Чтения — ключами слоя данных (группа «системы», часть 3): те же разделы и
 // записи, что показывает профиль системы, и правка компендиума их помечает.

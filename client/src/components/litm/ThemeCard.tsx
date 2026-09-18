@@ -7,18 +7,8 @@ import type { CompendiumEntry } from "../../types";
 import { TreasurePickerModal } from "./TreasurePickerModal";
 import { MagicWayPickerModal } from "./MagicWayPickerModal";
 import { useConfirm } from "../../hooks/useConfirm";
+import { mightLabel } from "./litmCompendium";
 
-const POWER_LABELS: Record<LitMPower, string> = {
-  "": "",
-  origin: "Origin",
-  adventure: "Adventure",
-  greatness: "Greatness",
-  // Ступень «Могущества» у темы Магического пути: её выбирает не игрок, а сама
-  // тема (см. handleMagicWayPick). Ключ был во всём остальном коде — в типе
-  // LitMPower, в POWER_CLASS, в .litm-power-variable, — и только здесь его не
-  // было: подпись у такой темы выходила пустой.
-  variable: "Variable",
-};
 const POWER_CLASS: Record<LitMPower, string> = {
   "": "",
   origin: "litm-power-origin",
@@ -290,20 +280,20 @@ export const ThemeCardEdit = memo(function ThemeCardEdit({
           )}
         </div>
         <div className="litm-theme-subtitle">
-          {POWER_LABELS[value.power] || "—"}
+          {mightLabel(value.power) || "—"}
           {value.themeType ? ` · ${value.themeType}` : ""}
         </div>
       </div>
       <label>
-        Мощь
+        Могущество
         <select
           value={value.power}
           onChange={(e) => onChange({ ...value, power: e.target.value as LitMPower })}
         >
           <option value="">—</option>
-          <option value="origin">Origin</option>
-          <option value="adventure">Adventure</option>
-          <option value="greatness">Greatness</option>
+          {(["origin", "adventure", "greatness"] as const).map((p) => (
+            <option key={p} value={p}>{mightLabel(p)}</option>
+          ))}
         </select>
       </label>
       <div className="row" style={{ gap: 8, alignItems: "flex-end" }}>
@@ -375,9 +365,9 @@ export const ThemeCardEdit = memo(function ThemeCardEdit({
       </label>
       <TrackGroup
         tracks={[
-          { label: "Improve", value: value.improve, onChange: (n) => onChange({ ...value, improve: n }) },
-          { label: "Abandon", value: value.abandon, onChange: (n) => onChange({ ...value, abandon: n }) },
-          { label: "Milestone", value: value.milestone, onChange: (n) => onChange({ ...value, milestone: n }) },
+          { label: "Рост", value: value.improve, onChange: (n) => onChange({ ...value, improve: n }) },
+          { label: "Отречение", value: value.abandon, onChange: (n) => onChange({ ...value, abandon: n }) },
+          { label: "Веха", value: value.milestone, onChange: (n) => onChange({ ...value, milestone: n }) },
         ]}
       />
       <ImprovementsEdit
@@ -412,7 +402,7 @@ export const ThemeCardView = memo(function ThemeCardView({
         </div>
         {value.power && (
           <div className="litm-theme-subtitle">
-            {POWER_LABELS[value.power]}
+            {mightLabel(value.power)}
             {value.themeType ? ` · ${value.themeType}` : ""}
           </div>
         )}
@@ -437,9 +427,9 @@ export const ThemeCardView = memo(function ThemeCardView({
       {value.quest && <div className="muted">Квест: {value.quest}</div>}
       <TrackGroup
         tracks={[
-          { label: "Improve", value: value.improve, onChange: (n) => onQuickUpdate({ ...value, improve: n }) },
-          { label: "Abandon", value: value.abandon, onChange: (n) => onQuickUpdate({ ...value, abandon: n }) },
-          { label: "Milestone", value: value.milestone, onChange: (n) => onQuickUpdate({ ...value, milestone: n }) },
+          { label: "Рост", value: value.improve, onChange: (n) => onQuickUpdate({ ...value, improve: n }) },
+          { label: "Отречение", value: value.abandon, onChange: (n) => onQuickUpdate({ ...value, abandon: n }) },
+          { label: "Веха", value: value.milestone, onChange: (n) => onQuickUpdate({ ...value, milestone: n }) },
         ]}
       />
       {value.specialImprovements.some((imp) => imp.active) && (

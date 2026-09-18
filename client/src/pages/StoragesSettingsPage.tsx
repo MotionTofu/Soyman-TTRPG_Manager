@@ -494,6 +494,7 @@ export function StoragesSettingsPage() {
               делать дальше — спросить про оплату сразу или отложить до Главной,
               где неразобранные игры собираются в отдельную плашку.
             </span>
+            <div role="radiogroup" aria-label="После завершения игры" className="stack">
             <label className="row" style={{ gap: 8, alignItems: "center" }}>
               <input
                 type="radio"
@@ -512,6 +513,7 @@ export function StoragesSettingsPage() {
               />
               <span>Спросить сразу — открыть разбор игры</span>
             </label>
+            </div>
           </div>
         </div>
       )}
@@ -786,7 +788,8 @@ export function StoragesSettingsPage() {
             </summary>
             <div className="res-group__body" style={{ padding: 12, gap: 8, display: "flex", flexDirection: "column" }}>
 
-              <div className="muted" style={{ marginBottom: 4, fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Главное число на кости</div>
+              <fieldset className="wizard-fieldset">
+              <legend className="muted" style={{ marginBottom: 4, fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Главное число на кости</legend>
               <div className="row" style={{ flexWrap: "wrap", gap: 10 }}>
                 {DND_ABILITY_PRIMARY_OPTIONS.map((opt) => (
                   <label key={opt.key} className="row" style={{ gap: 6 }}>
@@ -795,7 +798,9 @@ export function StoragesSettingsPage() {
                   </label>
                 ))}
               </div>
-              <div className="muted" style={{ marginBottom: 4, marginTop: 8, fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Сортировка навыков</div>
+              </fieldset>
+              <fieldset className="wizard-fieldset">
+              <legend className="muted" style={{ marginBottom: 4, marginTop: 8, fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Сортировка навыков</legend>
               <div className="row" style={{ flexWrap: "wrap", gap: 10 }}>
                 {DND_SKILL_SORT_OPTIONS.map((opt) => (
                   <label key={opt.key} className="row" style={{ gap: 6 }}>
@@ -804,7 +809,9 @@ export function StoragesSettingsPage() {
                   </label>
                 ))}
               </div>
-              <div className="muted" style={{ marginBottom: 4, marginTop: 8, fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Расстояния</div>
+              </fieldset>
+              <fieldset className="wizard-fieldset">
+              <legend className="muted" style={{ marginBottom: 4, marginTop: 8, fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Расстояния</legend>
               <div className="row" style={{ flexWrap: "wrap", gap: 10 }}>
                 {DND_DISTANCE_UNIT_OPTIONS.map((opt) => (
                   <label key={opt.key} className="row" style={{ gap: 6 }}>
@@ -813,8 +820,10 @@ export function StoragesSettingsPage() {
                   </label>
                 ))}
               </div>
+              </fieldset>
               <span className="muted" style={{ maxWidth: "62ch" }}>Только показ: в листах скорость хранится в футах, как в книге.</span>
-              <div className="muted" style={{ marginBottom: 4, marginTop: 8, fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Вес снаряжения</div>
+              <fieldset className="wizard-fieldset">
+              <legend className="muted" style={{ marginBottom: 4, marginTop: 8, fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Вес снаряжения</legend>
               <div className="row" style={{ flexWrap: "wrap", gap: 10 }}>
                 {DND_WEIGHT_UNIT_OPTIONS.map((opt) => (
                   <label key={opt.key} className="row" style={{ gap: 6 }}>
@@ -823,6 +832,7 @@ export function StoragesSettingsPage() {
                   </label>
                 ))}
               </div>
+              </fieldset>
               <span className="muted" style={{ maxWidth: "62ch" }}>Только показ: вес в листах хранится в фунтах, грузоподъёмность считается СИЛ × 15 фунтов.</span>
             </div>
           </details>

@@ -100,14 +100,16 @@ const GM_TABS = [
   "Вехи",
   "Тайны и зацепки",
   "Заметки",
-  "Хроника игр",
+  "Сессии",
   "Хроника мира",
   "Выдача",
 ] as const;
 
 // Сохранённые ссылки на прежнее имя вкладки не должны падать на «Обзор».
-const GM_TAB_ALIASES = { "Заметки по ведению": "Заметки", "Для игроков": "Выдача" } as const;
-const PLAYER_TABS = ["Заметки", "Клёвые цитаты", "Трекер задач", "Хроника игр", "Исследование Мира"] as const;
+// «Хроника игр» стала «Сессиями» (2026-09-18): «хроника» путалась с «Хроникой мира».
+const GM_TAB_ALIASES = { "Заметки по ведению": "Заметки", "Для игроков": "Выдача", "Хроника игр": "Сессии" } as const;
+const PLAYER_TABS = ["Заметки", "Клёвые цитаты", "Трекер задач", "Сессии", "Исследование Мира"] as const;
+const PLAYER_TAB_ALIASES = { "Хроника игр": "Сессии" } as const;
 
 // Пустые значения до загрузки — одними ссылками, чтобы useMemo над ними не
 // пересчитывался на каждую отрисовку.
@@ -179,7 +181,7 @@ export function CampaignDetailPage() {
   const [tab, selectTab] = useTabState(
     tabs,
     "Обзор",
-    campaign?.role === "player" ? undefined : GM_TAB_ALIASES
+    campaign?.role === "player" ? PLAYER_TAB_ALIASES : GM_TAB_ALIASES
   );
   const [confirmDialog, confirm] = useConfirm();
   const [alertDialog, showAlert] = useAlert();
@@ -856,7 +858,7 @@ export function CampaignDetailPage() {
         </EntityTabWorkspace>
       )}
 
-      {tab === "Хроника игр" && (
+      {tab === "Сессии" && (
         <div className="chronicle-split">
           <div className="chronicle-left">
             {(() => {
@@ -865,7 +867,7 @@ export function CampaignDetailPage() {
               return (
                 <details className="card res-group" open style={{ margin: 0 }}>
                   <summary className="res-group__band">
-                    <span className="res-group__title">Хроника</span>
+                    <span className="res-group__title">Все сессии</span>
                     <span className="res-group__count">
                       {filtered.length} из {sessions.length}
                     </span>
@@ -888,7 +890,7 @@ export function CampaignDetailPage() {
 
                     {sessions.length === 0 ? (
                       <EmptyState
-                        title="Хроника пока пуста"
+                        title="Сессий пока нет"
                         hint="Запланируйте первую игру — здесь появится лента сыгранных сессий."
                         action={
                           <button className="primary" onClick={() => setCreatingDate(toLocalDateKey(new Date()))}>
@@ -2448,7 +2450,7 @@ function OverviewTab({
 // planned session, the last couple of chronicle entries, and how many
 // secrets are still unrevealed — everything a GM might otherwise have to
 // visit three different tabs to piece together. Deliberately lighter than
-// Хроника игр (the full session index) — this is a summary, not a duplicate.
+// Сессии (the full session index) — this is a summary, not a duplicate.
 function ProductionDashboard({ campaign, sessions, onSchedule }: { campaign: CampaignDetail; sessions: SessionSummary[]; onSchedule?: () => void }) {
   const secrets = useResource<CampaignGrouped<StorySecret>>(campaignPaths.secrets(campaign.id)).data;
   const secretsCount = secrets
