@@ -1464,9 +1464,9 @@ export function MapEditorPage() {
   async function deleteMap() {
     if (!map) return;
     const ok = await confirm({
-      title: "Удалить карту?",
-      message: `«${map.name}» исчезнет навсегда вместе со всеми клетками. Это нельзя отменить.`,
-      confirmLabel: "Удалить",
+      title: "Убрать карту в архив?",
+      message: `«${map.name}» уйдёт в раздел «Архив» вместе со всеми клетками. Вернуть можно оттуда же.`,
+      confirmLabel: "В архив",
       cancelLabel: "Оставить",
       danger: true,
     });
@@ -2721,7 +2721,7 @@ export function MapEditorPage() {
               <button type="button" title="Создать копию карты со всей росписью" onClick={duplicateMap}>
                 Дублировать
               </button>
-              <button type="button" title="Удалить карту навсегда" onClick={deleteMap}>
+              <button type="button" title="Убрать карту в архив" onClick={deleteMap}>
                 Удалить
               </button>
             </>
@@ -3040,7 +3040,7 @@ export function MapEditorPage() {
               )}
               {tool === "shape" && (
                 <div className="res-toolbar" role="toolbar" aria-label="Шейп">
-                  <span className="muted" style={{ fontSize: "var(--fs-micro)" }} title="Пока только прямоугольник; эллипс — следующим шагом">
+                  <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>
                     Прямоугольник
                   </span>
                   <select

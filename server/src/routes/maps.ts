@@ -34,7 +34,7 @@ const LIST_COLUMNS =
   "id, name, grid, scale, width, height, cell_lore, seed, sea, mountains, forest, player_visible, parent_map_id, created_at, updated_at";
 
 mapsRouter.get("/", (req: AuthedRequest, res) => {
-  const where = isPlayer(req) ? "WHERE player_visible = 1" : "";
+  const where = isPlayer(req) ? "WHERE archived_at IS NULL AND player_visible = 1" : "WHERE archived_at IS NULL";
   const rows = db
     .prepare(`SELECT ${LIST_COLUMNS} FROM maps ${where} ORDER BY updated_at DESC, id DESC`)
     .all();
@@ -75,7 +75,7 @@ mapsRouter.post("/", (req: AuthedRequest, res) => {
 
 mapsRouter.get("/:id", (req: AuthedRequest, res) => {
   const row = db
-    .prepare(`SELECT ${META_COLUMNS}, cells FROM maps WHERE id = ?`)
+    .prepare(`SELECT ${META_COLUMNS}, cells FROM maps WHERE id = ? AND archived_at IS NULL`)
     .get(req.params.id) as { player_visible: number; cells: string } | undefined;
   if (!row) return res.status(404).json({ error: "not found" });
   if (isPlayer(req) && !row.player_visible) return res.status(404).json({ error: "not found" });
@@ -84,8 +84,14 @@ mapsRouter.get("/:id", (req: AuthedRequest, res) => {
 });
 
 // Чистка секретного слоя для игроков (пакет A §6): секретные двери — вон,
-// trapped — обычной дверью, ловушки — все вон. Чистим на отдаче, а не на
-// клиенте: скрытое не должно покидать сервер вообще.
+// trapped — обычной дверью, ловушки — все вон, тип комнаты (он же тинт) —
+// «пусто»: жёлтая сокровищница выдала бы добычу; имена комнат остаются
+// (ToDo/08 Р32). Чистим на отдаче, а не на клиенте: скрытое не должно
+// покидать сервер вообще.
+//
+// По наличию полей, а не по номеру версии: проверка `v !== 3` отдавала
+// игрокам сырым любой blob v4 — а клиент пишет v4, едва на карте появится
+// маркер или река (аудит карт P0-1).
 function stripCellsForPlayer(cellsStr: string): string {
   let blob: Record<string, unknown>;
   try {
@@ -93,13 +99,18 @@ function stripCellsForPlayer(cellsStr: string): string {
   } catch {
     return cellsStr;
   }
-  if (typeof blob !== "object" || blob === null || blob.v !== 3) return cellsStr;
-  const doors = Array.isArray(blob.doors) ? blob.doors : [];
-  const kept = (doors as Record<string, unknown>[]).filter(
-    (d) => d.kind !== "secret" && d.secret !== true
-  );
-  const shown = kept.map((d) => (d.kind === "trapped" ? { ...d, kind: "door" } : d));
-  return JSON.stringify({ ...blob, doors: shown, traps: [] });
+  if (typeof blob !== "object" || blob === null) return cellsStr;
+  const out: Record<string, unknown> = { ...blob };
+  if (Array.isArray(blob.doors)) {
+    out.doors = (blob.doors as Record<string, unknown>[])
+      .filter((d) => d.kind !== "secret" && d.secret !== true)
+      .map((d) => (d.kind === "trapped" ? { ...d, kind: "door" } : d));
+  }
+  if (Array.isArray(blob.traps)) out.traps = [];
+  if (Array.isArray(blob.rooms)) {
+    out.rooms = (blob.rooms as Record<string, unknown>[]).map((r) => ({ ...r, type: "empty" }));
+  }
+  return JSON.stringify(out);
 }
 
 // Трим blob под новые размеры (P1-6): ресайз без `cells` иначе оставлял клетки
@@ -258,9 +269,21 @@ mapsRouter.put("/:id", (req: AuthedRequest, res) => {
 });
 
 mapsRouter.delete("/:id", (req: AuthedRequest, res) => {
-  // Жёсткое удаление: карта — черновик мира, а не лор-сущность; связи
-  // чистятся каскадом. Отмена — тостом UndoDelete на клиенте (тикет 02+).
-  db.prepare("DELETE FROM maps WHERE id = ?").run(req.params.id);
+  // В архив, как всё в приложении (ToDo/08 Р32): жёсткое удаление сносило
+  // часы росписи одним confirm, а обещанного тоста отмены не было.
+  // Окончательно карта удаляется из раздела «Архив» (`routes/archive.ts`).
+  const info = db
+    .prepare("UPDATE maps SET archived_at = datetime('now') WHERE id = ? AND archived_at IS NULL")
+    .run(req.params.id);
+  if (info.changes === 0) return res.status(404).json({ error: "not found" });
+  res.json({ ok: true });
+});
+
+mapsRouter.put("/:id/restore", (req: AuthedRequest, res) => {
+  const info = db
+    .prepare("UPDATE maps SET archived_at = NULL WHERE id = ? AND archived_at IS NOT NULL")
+    .run(req.params.id);
+  if (info.changes === 0) return res.status(404).json({ error: "not found" });
   res.json({ ok: true });
 });
 

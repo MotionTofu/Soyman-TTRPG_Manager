@@ -6334,6 +6334,13 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     `);
   }
 
+  // Карта уходит в архив, а не стирается (ToDo/08 Р32, 2026-09-18): прежде
+  // DELETE сносил её вместе с часами росписи одним confirm, а обещанного
+  // тоста «Вернуть» не было.
+  if (tableExists(database, "maps") && !columnExists(database, "maps", "archived_at")) {
+    database.exec("ALTER TABLE maps ADD COLUMN archived_at TEXT");
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);

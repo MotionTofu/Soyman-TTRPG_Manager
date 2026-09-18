@@ -45,15 +45,15 @@ function MapTile({ map, canEdit }: { map: MapSummary; canEdit: boolean }) {
 
   async function remove() {
     const ok = await confirm({
-      title: "Удалить карту?",
-      message: `«${map.name}» исчезнет навсегда вместе со всеми клетками. Это нельзя отменить.`,
-      confirmLabel: "Удалить",
+      title: "Убрать карту в архив?",
+      message: `«${map.name}» уйдёт в раздел «Архив» вместе со всеми клетками. Вернуть можно оттуда же.`,
+      confirmLabel: "В архив",
       cancelLabel: "Оставить",
       danger: true,
     });
     if (!ok) return;
     // При отказе карта остаётся на месте, плашка предлагает повторить.
-    await run(labelled("Карта не удалена", () => write.del(`/maps/${map.id}`)), {
+    await run(labelled("Карта не убрана в архив", () => write.del(`/maps/${map.id}`)), {
       // Только список: миниатюру удалённой карты перечитывать незачем (404).
       affects: [{ kind: "map", id: map.id, card: true }],
     });
@@ -100,8 +100,8 @@ function MapTile({ map, canEdit }: { map: MapSummary; canEdit: boolean }) {
             <button
               type="button"
               onClick={remove}
-              title="Удалить карту"
-              aria-label={`Удалить карту ${map.name}`}
+              title="В архив"
+              aria-label={`Убрать карту ${map.name} в архив`}
               style={{ padding: "2px 6px", height: 26 }}
             >
               <NavIcon name="delete" />

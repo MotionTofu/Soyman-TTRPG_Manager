@@ -24,6 +24,7 @@ const RESTORE_ENDPOINTS: Record<string, string> = {
   artifact: "/artifacts",
   community: "/setting-communities",
   canvas_board: "/canvas/free-boards",
+  map: "/maps",
 };
 
 // Тип в строке архива подписан по-русски. До этого печатался идентификатор
@@ -44,6 +45,7 @@ const TYPE_LABELS: Record<string, string> = {
   artifact: "артефакт",
   community: "сообщество",
   canvas_board: "доска",
+  map: "карта",
   // Файл-сирота, отправленный в архив со страницы «Здоровье».
   orphan: "без владельца",
   // Владельцы архивных файлов (server/src/services/vaultDedup.ts): в столбце

@@ -256,6 +256,13 @@ archiveRouter.get("/", (_req, res) => {
     }))
   );
 
+  const maps = db
+    .prepare("SELECT id, name, archived_at FROM maps WHERE archived_at IS NOT NULL")
+    .all() as { id: number; name: string; archived_at: string }[];
+  items.push(
+    ...maps.map((r) => ({ type: "map", id: r.id, title: r.name || "Без имени", archived_at: r.archived_at }))
+  );
+
   items.sort((a, b) => (a.archived_at < b.archived_at ? 1 : -1));
   res.json(items);
 });

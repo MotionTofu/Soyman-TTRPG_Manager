@@ -370,6 +370,12 @@ const RAW_KINDS: EntityKindBase[] = [
     mentionable: false, transferable: false, searchable: false,
     linkEndpoint: false, relationEndpoint: false, owns: [], detailPrefix: null,
   }),
+  K({
+    kind: "map", table: "maps", nameCol: "name", belongsTo: "app",
+    hasArchivedAt: true, archivable: true, archiveKey: "id",
+    mentionable: false, transferable: false, searchable: false,
+    linkEndpoint: false, relationEndpoint: false, owns: [], detailPrefix: null,
+  }),
 ];
 
 export const ENTITY_KINDS: readonly EntityKind[] = RAW_KINDS.map((k) => ({

@@ -16,6 +16,7 @@ beforeAll(async () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "maps-api-test-"));
   process.env.DB_DIR = tmpDir;
   const { mapsRouter } = await import("./maps");
+  const { archiveRouter } = await import("./archive");
   const { apiRoleGate } = await import("../services/playerAccess");
 
   app = express();
@@ -28,6 +29,7 @@ beforeAll(async () => {
   });
   app.use("/api", apiRoleGate as unknown as express.RequestHandler);
   app.use("/api/maps", mapsRouter);
+  app.use("/api/archive", archiveRouter);
 }, 120000);
 
 const gm = { "x-test-role": "gm" };
@@ -115,9 +117,22 @@ describe("maps API", () => {
     expect((await request(app).get("/api/maps/999999/thumbnail").set(gm)).status).toBe(404);
   });
 
-  it("удаление: мастер удаляет, карта пропадает", async () => {
+  it("удаление уводит карту в архив, откуда она возвращается (ToDo/08 Р32)", async () => {
     expect((await request(app).delete(`/api/maps/${hiddenId}`).set(gm)).status).toBe(200);
     expect((await request(app).get(`/api/maps/${hiddenId}`).set(gm)).status).toBe(404);
+    const list = await request(app).get("/api/maps").set(gm);
+    expect(list.body.map((m: { id: number }) => m.id)).not.toContain(hiddenId);
+    const arch = await request(app).get("/api/archive").set(gm);
+    expect(arch.body).toContainEqual(expect.objectContaining({ type: "map", id: hiddenId }));
+
+    expect((await request(app).put(`/api/maps/${hiddenId}/restore`).set(gm)).status).toBe(200);
+    expect((await request(app).get(`/api/maps/${hiddenId}`).set(gm)).status).toBe(200);
+
+    // Повторная архивация и окончательное удаление — уже из архива.
+    expect((await request(app).delete(`/api/maps/${hiddenId}`).set(gm)).status).toBe(200);
+    expect((await request(app).delete(`/api/archive/map/${hiddenId}`).set(gm)).status).toBe(200);
+    expect((await request(app).put(`/api/maps/${hiddenId}/restore`).set(gm)).status).toBe(404);
+    expect((await request(app).delete("/api/maps/999999").set(gm)).status).toBe(404);
   });
 
   it("привязки: мастер вяжет/читает/отвязывает, игрокам запись запрещена", async () => {
@@ -228,5 +243,43 @@ describe("maps API", () => {
     const thumb = await request(app).get(`/api/maps/${visibleId}/thumbnail`).set(player);
     expect(thumb.status).toBe(200);
     expect(thumb.body.thumbnail).toBe(null);
+  });
+
+  it("чистка секретного слоя не зависит от версии blob — v4 тоже (аудит P0-1)", async () => {
+    const cells = JSON.stringify({
+      v: 4,
+      cells: {},
+      roads: [],
+      rivers: ["1,1"],
+      labels: [],
+      rooms: [
+        { x: 0, y: 0, w: 2, h: 2, type: "treasury", name: "Казна" },
+        { x: 3, y: 0, w: 2, h: 2, type: "prison", name: "" },
+      ],
+      doors: [
+        { x: 1, y: 1, edge: "n", kind: "secret", secret: false, pair: null },
+        { x: 2, y: 1, edge: "n", kind: "trapped", secret: false, pair: null },
+        { x: 3, y: 1, edge: "n", kind: "door", secret: true, pair: null },
+      ],
+      traps: [{ x: 5, y: 5, kind: "pit" }],
+      markers: [{ x: 6, y: 6, kind: "city" }],
+      start: null,
+      finish: null,
+    });
+    expect((await request(app).put(`/api/maps/${visibleId}`).set(gm).send({ cells })).status).toBe(200);
+
+    const got = JSON.parse((await request(app).get(`/api/maps/${visibleId}`).set(player)).body.cells);
+    expect(got.doors.map((d: { kind: string }) => d.kind)).toEqual(["door"]);
+    expect(got.traps).toEqual([]);
+    // Имена комнат игрокам видны, тинт (тип) — нет: жёлтая «сокровищница»
+    // выдала бы, где лежит добыча.
+    expect(got.rooms.map((r: { type: string; name: string }) => [r.type, r.name])).toEqual([
+      ["empty", "Казна"],
+      ["empty", ""],
+    ]);
+    expect(got.markers).toHaveLength(1);
+
+    const gmRooms = JSON.parse((await request(app).get(`/api/maps/${visibleId}`).set(gm)).body.cells).rooms;
+    expect(gmRooms.map((r: { type: string }) => r.type)).toEqual(["treasury", "prison"]);
   });
 });
