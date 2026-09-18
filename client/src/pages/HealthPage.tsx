@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAfterWrite, write } from "../data/hooks";
 import { readOnce } from "../data/imperative";
 import { Modal } from "../components/Modal";
 import { SectionHeading } from "../components/SectionHeading";
+import { PageFrame } from "../components/PageFrame";
+import { LoadErrorCard } from "../components/Loadable";
 import { EmptyState } from "../components/EmptyState";
 import { useCurrentUser } from "../api/currentUser";
 import { useConfirm } from "../hooks/useConfirm";
@@ -98,6 +100,7 @@ export function HealthPage() {
   const { user, loading: userLoading } = useCurrentUser();
   const isPlayer = user?.role === "player";
   const afterWrite = useAfterWrite();
+  const navigate = useNavigate();
   const [scan, setScan] = useState<ScanResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
@@ -425,22 +428,23 @@ export function HealthPage() {
 
   if (!userLoading && isPlayer) {
     return (
-      <div className="stack health-page">
-        <SectionHeading section="health">Здоровье</SectionHeading>
+      <PageFrame section="health" title="Здоровье" className="health-page">
         <EmptyState kind="search" title="Только для мастера" hint="Этот раздел меняет базу и файлы — доступен только мастеру. Игрок видит его только как гость." />
-      </div>
+      </PageFrame>
     );
   }
 
   return (
-    <div className="stack health-page">
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-        <SectionHeading section="health" compact>Здоровье</SectionHeading>
-        <div className="row" style={{ flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+    <PageFrame
+      section="health"
+      title="Здоровье"
+      className="health-page"
+      actions={
+        <>
           <button className={scan && !scanError ? "" : "primary"} onClick={() => void runScan()} disabled={loading}>
             {loading ? "Проверяю…" : "Проверить здоровье"}
           </button>
-          <Link to="/storages" style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", color: "var(--muted)", textDecoration: "underline" }}>Бэкап</Link>
+          <button onClick={() => navigate("/storages")} title="Бэкап — в «Хранилищах»">Бэкап</button>
           {scan && (
             <button
               onClick={async () => {
@@ -456,21 +460,17 @@ export function HealthPage() {
             </button>
           )}
           {msg && <span className="muted health-value" role="status" aria-live="polite">{msg}</span>}
-        </div>
-      </div>
-
+        </>
+      }
+    >
+      {/* Ошибка проверки — баннер, а не `state` каркаса: журнал от скана не
+          зависит и должен оставаться доступным. */}
       {scanError && !loading && (
-        <div className="card" style={{ borderColor: "var(--danger-bg)", background: "var(--paper)" }}>
-          <strong style={{ color: "var(--danger-bg)" }}>Ошибка проверки</strong>
-          <p className="muted" style={{ margin: "6px 0 0 0", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{scanError}</p>
-          <div className="row" style={{ marginTop: 10 }}>
-            <button className="primary" onClick={() => void runScan()}>Повторить</button>
-          </div>
-        </div>
+        <LoadErrorCard message={<>Не удалось проверить здоровье: {scanError}</>} onRetry={() => void runScan()} />
       )}
 
       {/* Таббар */}
-      {/* каркас в обход намеренно — страница не карточка сущности: свой вид, каркас для него ещё не построен */}
+      {/* каркас в обход намеренно — вкладки разделов проверки, а не карточки сущности; у лёгкого каркаса вкладок нет (П3.6) */}
       <div className="tabs" role="tablist" aria-label="Разделы здоровья">
         {TABS.map((t) => (
           <button
@@ -942,6 +942,6 @@ export function HealthPage() {
         );
       })()}
       {orphanOpen && scan && <OrphanBrowserModal files={scan.orphanFiles} onClose={() => setOrphanOpen(false)} onDone={afterRepair} />}
-    </div>
+    </PageFrame>
   );
 }

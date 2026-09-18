@@ -6947,10 +6947,15 @@ details.card[open] summary {
 /* Каркас списка/каталога (компонент `ListPage.tsx`): шапка — заголовок
    и действия врозь, под ней полоса вкладок, тулбар и тело. Мастер-детейл
    был и снят 2026-09-18 (Q52–Q59, реестр отступлений О-4). */
-.list-page__head {
+/* Шапка страницы — общая у каталогов и лёгкого каркаса (PageFrame.tsx, П3.6). */
+.page-head {
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
+}
+.page-head__actions {
+  flex-wrap: wrap;
+  gap: var(--sp-4);
 }
 .list-page__tab-count {
   margin-left: var(--sp-1);

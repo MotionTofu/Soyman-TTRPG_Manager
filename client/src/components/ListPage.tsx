@@ -36,7 +36,7 @@
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { useAfterWrite, write } from "../data/hooks";
 import { ContextMenu } from "./ContextMenu";
-import { SectionHeading } from "./SectionHeading";
+import { PageHead } from "./PageFrame";
 import { useAlert, useConfirm } from "../hooks/useConfirm";
 import type { NavIconName } from "./NavIcons";
 
@@ -226,21 +226,22 @@ export function ListPage({
 
   return (
     <div className="stack list-page">
-      <div className="row list-page__head">
-        <SectionHeading section={headingSection} compact>
-          {title}
-        </SectionHeading>
-        {(actions || onCreate) && (
-          <div className="row" style={{ gap: 8 }}>
-            {actions}
-            {onCreate && (
-              <button className="primary" onClick={onCreate}>
-                {createLabel ?? "Создать"}
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+      <PageHead
+        section={headingSection}
+        title={title}
+        actions={
+          (actions || onCreate) && (
+            <>
+              {actions}
+              {onCreate && (
+                <button className="primary" onClick={onCreate}>
+                  {createLabel ?? "Создать"}
+                </button>
+              )}
+            </>
+          )
+        }
+      />
 
       {tabs.length > 0 && (
         <div className="tabs" role="tablist" aria-label={typeof title === "string" ? title : undefined}>
