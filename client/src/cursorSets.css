@@ -1,0 +1,233 @@
+/* Наборы курсоров (мировоззрения). PNG: Chromium молча отбрасывает
+   webp в cursor: url(), по спеке гарантирован только PNG.
+   Хотспоты измерены по альфе 32px-спрайтов.
+   Правила теггера и контролов — с !important: иначе проигрывают
+   инлайн style={{cursor}} (их десятки) и :hover-правилам. */
+
+/* ---------- lawfull-good ---------- */
+body[data-cursor-set="lawfull-good"] { cursor: url("/cursors/lawfull-good-01-arrow.png") 6 2, default; }
+body[data-cursor-set="lawfull-good"] [data-cc="hand"] { cursor: url("/cursors/lawfull-good-02-hand.png") 14 1, pointer !important; }
+body[data-cursor-set="lawfull-good"] [data-cc="wait"] { cursor: url("/cursors/lawfull-good-03-hourglass.png") 14 16, wait !important; }
+body[data-cursor-set="lawfull-good"] .home-hero { cursor: url("/cursors/lawfull-good-04-weapon.png") 13 16, pointer; }
+body[data-cursor-set="lawfull-good"] [data-cc="help"] { cursor: url("/cursors/lawfull-good-08-help.png") 14 16, help !important; }
+body[data-cursor-set="lawfull-good"] [data-cc="move"] { cursor: url("/cursors/lawfull-good-09-move.png") 16 16, move !important; }
+body[data-cursor-set="lawfull-good"] [data-cc="text"] { cursor: url("/cursors/lawfull-good-10-text.png") 12 16, text !important; }
+body[data-cursor-set="lawfull-good"] [data-cc="ew"] { cursor: url("/cursors/lawfull-good-11-ew.png") 16 9, ew-resize !important; }
+body[data-cursor-set="lawfull-good"] [data-cc="ns"] { cursor: url("/cursors/lawfull-good-12-ns.png") 9 16, ns-resize !important; }
+body[data-cursor-set="lawfull-good"] [data-cc="nesw"] { cursor: url("/cursors/lawfull-good-13-nesw.png") 15 16, nesw-resize !important; }
+body[data-cursor-set="lawfull-good"] [data-cc="nwse"] { cursor: url("/cursors/lawfull-good-14-nwse.png") 14 16, nwse-resize !important; }
+body[data-cursor-set="lawfull-good"] [data-cc="d1"] { cursor: url("/cursors/lawfull-good-06-d1.png") 16 16, not-allowed !important; }
+body[data-cursor-set="lawfull-good"] input[type="checkbox"], body[data-cursor-set="lawfull-good"] input[type="radio"], body[data-cursor-set="lawfull-good"] select, body[data-cursor-set="lawfull-good"] summary, body[data-cursor-set="lawfull-good"] input[type="range"], body[data-cursor-set="lawfull-good"] input[type="color"] { cursor: url("/cursors/lawfull-good-02-hand.png") 14 1, pointer !important; }
+body[data-cursor-set="lawfull-good"] button:disabled, body[data-cursor-set="lawfull-good"] input:disabled, body[data-cursor-set="lawfull-good"] select:disabled, body[data-cursor-set="lawfull-good"] textarea:disabled { cursor: url("/cursors/lawfull-good-06-d1.png") 16 16, not-allowed !important; }
+body[data-cursor-set="lawfull-good"] [style*="cursor: default"], body[data-cursor-set="lawfull-good"] [style*="cursor:default"] { cursor: url("/cursors/lawfull-good-01-arrow.png") 6 2, default !important; }
+body[data-cursor-set="lawfull-good"] [data-cc="se"] { cursor: url("/cursors/lawfull-good-14-nwse.png") 14 16, se-resize; }
+
+/* ---------- neutral-good ---------- */
+body[data-cursor-set="neutral-good"] { cursor: url("/cursors/neutral-good-01-arrow.png") 6 2, default; }
+body[data-cursor-set="neutral-good"] [data-cc="hand"] { cursor: url("/cursors/neutral-good-02-hand.png") 14 2, pointer !important; }
+body[data-cursor-set="neutral-good"] [data-cc="wait"] { cursor: url("/cursors/neutral-good-03-hourglass.png") 14 16, wait !important; }
+body[data-cursor-set="neutral-good"] .home-hero { cursor: url("/cursors/neutral-good-04-weapon.png") 12 16, pointer; }
+body[data-cursor-set="neutral-good"] [data-cc="help"] { cursor: url("/cursors/neutral-good-08-help.png") 13 16, help !important; }
+body[data-cursor-set="neutral-good"] [data-cc="move"] { cursor: url("/cursors/neutral-good-09-move.png") 16 16, move !important; }
+body[data-cursor-set="neutral-good"] [data-cc="text"] { cursor: url("/cursors/neutral-good-10-text.png") 9 16, text !important; }
+body[data-cursor-set="neutral-good"] [data-cc="ew"] { cursor: url("/cursors/neutral-good-11-ew.png") 16 9, ew-resize !important; }
+body[data-cursor-set="neutral-good"] [data-cc="ns"] { cursor: url("/cursors/neutral-good-12-ns.png") 8 16, ns-resize !important; }
+body[data-cursor-set="neutral-good"] [data-cc="nesw"] { cursor: url("/cursors/neutral-good-13-nesw.png") 15 16, nesw-resize !important; }
+body[data-cursor-set="neutral-good"] [data-cc="nwse"] { cursor: url("/cursors/neutral-good-14-nwse.png") 14 16, nwse-resize !important; }
+body[data-cursor-set="neutral-good"] [data-cc="d1"] { cursor: url("/cursors/neutral-good-06-d1.png") 15 16, not-allowed !important; }
+body[data-cursor-set="neutral-good"] input[type="checkbox"], body[data-cursor-set="neutral-good"] input[type="radio"], body[data-cursor-set="neutral-good"] select, body[data-cursor-set="neutral-good"] summary, body[data-cursor-set="neutral-good"] input[type="range"], body[data-cursor-set="neutral-good"] input[type="color"] { cursor: url("/cursors/neutral-good-02-hand.png") 14 2, pointer !important; }
+body[data-cursor-set="neutral-good"] button:disabled, body[data-cursor-set="neutral-good"] input:disabled, body[data-cursor-set="neutral-good"] select:disabled, body[data-cursor-set="neutral-good"] textarea:disabled { cursor: url("/cursors/neutral-good-06-d1.png") 15 16, not-allowed !important; }
+body[data-cursor-set="neutral-good"] [style*="cursor: default"], body[data-cursor-set="neutral-good"] [style*="cursor:default"] { cursor: url("/cursors/neutral-good-01-arrow.png") 6 2, default !important; }
+body[data-cursor-set="neutral-good"] [data-cc="se"] { cursor: url("/cursors/neutral-good-14-nwse.png") 14 16, se-resize; }
+
+/* ---------- chaotic-good ---------- */
+body[data-cursor-set="chaotic-good"] { cursor: url("/cursors/chaotic-good-01-arrow.png") 6 2, default; }
+body[data-cursor-set="chaotic-good"] [data-cc="hand"] { cursor: url("/cursors/chaotic-good-02-hand.png") 14 1, pointer !important; }
+body[data-cursor-set="chaotic-good"] [data-cc="wait"] { cursor: url("/cursors/chaotic-good-03-hourglass.png") 14 16, wait !important; }
+body[data-cursor-set="chaotic-good"] .home-hero { cursor: url("/cursors/chaotic-good-04-weapon.png") 13 16, pointer; }
+body[data-cursor-set="chaotic-good"] [data-cc="help"] { cursor: url("/cursors/chaotic-good-08-help.png") 14 16, help !important; }
+body[data-cursor-set="chaotic-good"] [data-cc="move"] { cursor: url("/cursors/chaotic-good-09-move.png") 15 16, move !important; }
+body[data-cursor-set="chaotic-good"] [data-cc="text"] { cursor: url("/cursors/chaotic-good-10-text.png") 10 16, text !important; }
+body[data-cursor-set="chaotic-good"] [data-cc="ew"] { cursor: url("/cursors/chaotic-good-11-ew.png") 16 8, ew-resize !important; }
+body[data-cursor-set="chaotic-good"] [data-cc="ns"] { cursor: url("/cursors/chaotic-good-12-ns.png") 10 16, ns-resize !important; }
+body[data-cursor-set="chaotic-good"] [data-cc="nesw"] { cursor: url("/cursors/chaotic-good-13-nesw.png") 15 16, nesw-resize !important; }
+body[data-cursor-set="chaotic-good"] [data-cc="nwse"] { cursor: url("/cursors/chaotic-good-14-nwse.png") 16 16, nwse-resize !important; }
+body[data-cursor-set="chaotic-good"] [data-cc="d1"] { cursor: url("/cursors/chaotic-good-06-d1.png") 16 16, not-allowed !important; }
+body[data-cursor-set="chaotic-good"] input[type="checkbox"], body[data-cursor-set="chaotic-good"] input[type="radio"], body[data-cursor-set="chaotic-good"] select, body[data-cursor-set="chaotic-good"] summary, body[data-cursor-set="chaotic-good"] input[type="range"], body[data-cursor-set="chaotic-good"] input[type="color"] { cursor: url("/cursors/chaotic-good-02-hand.png") 14 1, pointer !important; }
+body[data-cursor-set="chaotic-good"] button:disabled, body[data-cursor-set="chaotic-good"] input:disabled, body[data-cursor-set="chaotic-good"] select:disabled, body[data-cursor-set="chaotic-good"] textarea:disabled { cursor: url("/cursors/chaotic-good-06-d1.png") 16 16, not-allowed !important; }
+body[data-cursor-set="chaotic-good"] [style*="cursor: default"], body[data-cursor-set="chaotic-good"] [style*="cursor:default"] { cursor: url("/cursors/chaotic-good-01-arrow.png") 6 2, default !important; }
+body[data-cursor-set="chaotic-good"] [data-cc="se"] { cursor: url("/cursors/chaotic-good-14-nwse.png") 16 16, se-resize; }
+
+/* ---------- lawfull-neutral ---------- */
+body[data-cursor-set="lawfull-neutral"] { cursor: url("/cursors/lawfull-neutral-01-arrow.png") 5 2, default; }
+body[data-cursor-set="lawfull-neutral"] [data-cc="hand"] { cursor: url("/cursors/lawfull-neutral-02-hand.png") 14 1, pointer !important; }
+body[data-cursor-set="lawfull-neutral"] [data-cc="wait"] { cursor: url("/cursors/lawfull-neutral-03-hourglass.png") 13 16, wait !important; }
+body[data-cursor-set="lawfull-neutral"] .home-hero { cursor: url("/cursors/lawfull-neutral-04-weapon.png") 13 16, pointer; }
+body[data-cursor-set="lawfull-neutral"] [data-cc="help"] { cursor: url("/cursors/lawfull-neutral-08-help.png") 14 16, help !important; }
+body[data-cursor-set="lawfull-neutral"] [data-cc="move"] { cursor: url("/cursors/lawfull-neutral-09-move.png") 16 16, move !important; }
+body[data-cursor-set="lawfull-neutral"] [data-cc="text"] { cursor: url("/cursors/lawfull-neutral-10-text.png") 9 16, text !important; }
+body[data-cursor-set="lawfull-neutral"] [data-cc="ew"] { cursor: url("/cursors/lawfull-neutral-11-ew.png") 16 9, ew-resize !important; }
+body[data-cursor-set="lawfull-neutral"] [data-cc="ns"] { cursor: url("/cursors/lawfull-neutral-12-ns.png") 8 16, ns-resize !important; }
+body[data-cursor-set="lawfull-neutral"] [data-cc="nesw"] { cursor: url("/cursors/lawfull-neutral-13-nesw.png") 15 16, nesw-resize !important; }
+body[data-cursor-set="lawfull-neutral"] [data-cc="nwse"] { cursor: url("/cursors/lawfull-neutral-14-nwse.png") 15 16, nwse-resize !important; }
+body[data-cursor-set="lawfull-neutral"] [data-cc="d1"] { cursor: url("/cursors/lawfull-neutral-06-d1.png") 14 16, not-allowed !important; }
+body[data-cursor-set="lawfull-neutral"] input[type="checkbox"], body[data-cursor-set="lawfull-neutral"] input[type="radio"], body[data-cursor-set="lawfull-neutral"] select, body[data-cursor-set="lawfull-neutral"] summary, body[data-cursor-set="lawfull-neutral"] input[type="range"], body[data-cursor-set="lawfull-neutral"] input[type="color"] { cursor: url("/cursors/lawfull-neutral-02-hand.png") 14 1, pointer !important; }
+body[data-cursor-set="lawfull-neutral"] button:disabled, body[data-cursor-set="lawfull-neutral"] input:disabled, body[data-cursor-set="lawfull-neutral"] select:disabled, body[data-cursor-set="lawfull-neutral"] textarea:disabled { cursor: url("/cursors/lawfull-neutral-06-d1.png") 14 16, not-allowed !important; }
+body[data-cursor-set="lawfull-neutral"] [style*="cursor: default"], body[data-cursor-set="lawfull-neutral"] [style*="cursor:default"] { cursor: url("/cursors/lawfull-neutral-01-arrow.png") 5 2, default !important; }
+body[data-cursor-set="lawfull-neutral"] [data-cc="se"] { cursor: url("/cursors/lawfull-neutral-14-nwse.png") 15 16, se-resize; }
+
+/* ---------- true-neutral ---------- */
+body[data-cursor-set="true-neutral"] { cursor: url("/cursors/true-neutral-01-arrow.png") 6 2, default; }
+body[data-cursor-set="true-neutral"] [data-cc="hand"] { cursor: url("/cursors/true-neutral-02-hand.png") 13 2, pointer !important; }
+body[data-cursor-set="true-neutral"] [data-cc="wait"] { cursor: url("/cursors/true-neutral-03-hourglass.png") 13 16, wait !important; }
+body[data-cursor-set="true-neutral"] .home-hero { cursor: url("/cursors/true-neutral-04-weapon.png") 12 16, pointer; }
+body[data-cursor-set="true-neutral"] [data-cc="help"] { cursor: url("/cursors/true-neutral-08-help.png") 12 16, help !important; }
+body[data-cursor-set="true-neutral"] [data-cc="move"] { cursor: url("/cursors/true-neutral-09-move.png") 16 15, move !important; }
+body[data-cursor-set="true-neutral"] [data-cc="text"] { cursor: url("/cursors/true-neutral-10-text.png") 10 16, text !important; }
+body[data-cursor-set="true-neutral"] [data-cc="ew"] { cursor: url("/cursors/true-neutral-11-ew.png") 16 10, ew-resize !important; }
+body[data-cursor-set="true-neutral"] [data-cc="ns"] { cursor: url("/cursors/true-neutral-12-ns.png") 9 16, ns-resize !important; }
+body[data-cursor-set="true-neutral"] [data-cc="nesw"] { cursor: url("/cursors/true-neutral-13-nesw.png") 14 16, nesw-resize !important; }
+body[data-cursor-set="true-neutral"] [data-cc="nwse"] { cursor: url("/cursors/true-neutral-14-nwse.png") 13 16, nwse-resize !important; }
+body[data-cursor-set="true-neutral"] [data-cc="d1"] { cursor: url("/cursors/true-neutral-06-d1.png") 14 16, not-allowed !important; }
+body[data-cursor-set="true-neutral"] input[type="checkbox"], body[data-cursor-set="true-neutral"] input[type="radio"], body[data-cursor-set="true-neutral"] select, body[data-cursor-set="true-neutral"] summary, body[data-cursor-set="true-neutral"] input[type="range"], body[data-cursor-set="true-neutral"] input[type="color"] { cursor: url("/cursors/true-neutral-02-hand.png") 13 2, pointer !important; }
+body[data-cursor-set="true-neutral"] button:disabled, body[data-cursor-set="true-neutral"] input:disabled, body[data-cursor-set="true-neutral"] select:disabled, body[data-cursor-set="true-neutral"] textarea:disabled { cursor: url("/cursors/true-neutral-06-d1.png") 14 16, not-allowed !important; }
+body[data-cursor-set="true-neutral"] [style*="cursor: default"], body[data-cursor-set="true-neutral"] [style*="cursor:default"] { cursor: url("/cursors/true-neutral-01-arrow.png") 6 2, default !important; }
+body[data-cursor-set="true-neutral"] [data-cc="se"] { cursor: url("/cursors/true-neutral-14-nwse.png") 13 16, se-resize; }
+
+/* ---------- chaotic-neutral ---------- */
+body[data-cursor-set="chaotic-neutral"] { cursor: url("/cursors/chaotic-neutral-01-arrow.png") 6 2, default; }
+body[data-cursor-set="chaotic-neutral"] [data-cc="hand"] { cursor: url("/cursors/chaotic-neutral-02-hand.png") 14 1, pointer !important; }
+body[data-cursor-set="chaotic-neutral"] [data-cc="wait"] { cursor: url("/cursors/chaotic-neutral-03-hourglass.png") 14 16, wait !important; }
+body[data-cursor-set="chaotic-neutral"] .home-hero { cursor: url("/cursors/chaotic-neutral-04-weapon.png") 15 16, pointer; }
+body[data-cursor-set="chaotic-neutral"] [data-cc="help"] { cursor: url("/cursors/chaotic-neutral-08-help.png") 14 16, help !important; }
+body[data-cursor-set="chaotic-neutral"] [data-cc="move"] { cursor: url("/cursors/chaotic-neutral-09-move.png") 15 16, move !important; }
+body[data-cursor-set="chaotic-neutral"] [data-cc="text"] { cursor: url("/cursors/chaotic-neutral-10-text.png") 12 16, text !important; }
+body[data-cursor-set="chaotic-neutral"] [data-cc="ew"] { cursor: url("/cursors/chaotic-neutral-11-ew.png") 16 9, ew-resize !important; }
+body[data-cursor-set="chaotic-neutral"] [data-cc="ns"] { cursor: url("/cursors/chaotic-neutral-12-ns.png") 9 16, ns-resize !important; }
+body[data-cursor-set="chaotic-neutral"] [data-cc="nesw"] { cursor: url("/cursors/chaotic-neutral-13-nesw.png") 15 16, nesw-resize !important; }
+body[data-cursor-set="chaotic-neutral"] [data-cc="nwse"] { cursor: url("/cursors/chaotic-neutral-14-nwse.png") 14 16, nwse-resize !important; }
+body[data-cursor-set="chaotic-neutral"] [data-cc="d1"] { cursor: url("/cursors/chaotic-neutral-06-d1.png") 16 16, not-allowed !important; }
+body[data-cursor-set="chaotic-neutral"] input[type="checkbox"], body[data-cursor-set="chaotic-neutral"] input[type="radio"], body[data-cursor-set="chaotic-neutral"] select, body[data-cursor-set="chaotic-neutral"] summary, body[data-cursor-set="chaotic-neutral"] input[type="range"], body[data-cursor-set="chaotic-neutral"] input[type="color"] { cursor: url("/cursors/chaotic-neutral-02-hand.png") 14 1, pointer !important; }
+body[data-cursor-set="chaotic-neutral"] button:disabled, body[data-cursor-set="chaotic-neutral"] input:disabled, body[data-cursor-set="chaotic-neutral"] select:disabled, body[data-cursor-set="chaotic-neutral"] textarea:disabled { cursor: url("/cursors/chaotic-neutral-06-d1.png") 16 16, not-allowed !important; }
+body[data-cursor-set="chaotic-neutral"] [style*="cursor: default"], body[data-cursor-set="chaotic-neutral"] [style*="cursor:default"] { cursor: url("/cursors/chaotic-neutral-01-arrow.png") 6 2, default !important; }
+body[data-cursor-set="chaotic-neutral"] [data-cc="se"] { cursor: url("/cursors/chaotic-neutral-14-nwse.png") 14 16, se-resize; }
+
+/* ---------- lawfull-evil ---------- */
+body[data-cursor-set="lawfull-evil"] { cursor: url("/cursors/lawfull-evil-01-arrow.png") 5 2, default; }
+body[data-cursor-set="lawfull-evil"] [data-cc="hand"] { cursor: url("/cursors/lawfull-evil-02-hand.png") 12 1, pointer !important; }
+body[data-cursor-set="lawfull-evil"] [data-cc="wait"] { cursor: url("/cursors/lawfull-evil-03-hourglass.png") 14 16, wait !important; }
+body[data-cursor-set="lawfull-evil"] .home-hero { cursor: url("/cursors/lawfull-evil-04-weapon.png") 14 16, pointer; }
+body[data-cursor-set="lawfull-evil"] [data-cc="help"] { cursor: url("/cursors/lawfull-evil-08-help.png") 13 16, help !important; }
+body[data-cursor-set="lawfull-evil"] [data-cc="move"] { cursor: url("/cursors/lawfull-evil-09-move.png") 16 15, move !important; }
+body[data-cursor-set="lawfull-evil"] [data-cc="text"] { cursor: url("/cursors/lawfull-evil-10-text.png") 12 16, text !important; }
+body[data-cursor-set="lawfull-evil"] [data-cc="ew"] { cursor: url("/cursors/lawfull-evil-11-ew.png") 16 9, ew-resize !important; }
+body[data-cursor-set="lawfull-evil"] [data-cc="ns"] { cursor: url("/cursors/lawfull-evil-12-ns.png") 8 16, ns-resize !important; }
+body[data-cursor-set="lawfull-evil"] [data-cc="nesw"] { cursor: url("/cursors/lawfull-evil-13-nesw.png") 16 16, nesw-resize !important; }
+body[data-cursor-set="lawfull-evil"] [data-cc="nwse"] { cursor: url("/cursors/lawfull-evil-14-nwse.png") 16 16, nwse-resize !important; }
+body[data-cursor-set="lawfull-evil"] [data-cc="d1"] { cursor: url("/cursors/lawfull-evil-06-d1.png") 15 16, not-allowed !important; }
+body[data-cursor-set="lawfull-evil"] input[type="checkbox"], body[data-cursor-set="lawfull-evil"] input[type="radio"], body[data-cursor-set="lawfull-evil"] select, body[data-cursor-set="lawfull-evil"] summary, body[data-cursor-set="lawfull-evil"] input[type="range"], body[data-cursor-set="lawfull-evil"] input[type="color"] { cursor: url("/cursors/lawfull-evil-02-hand.png") 12 1, pointer !important; }
+body[data-cursor-set="lawfull-evil"] button:disabled, body[data-cursor-set="lawfull-evil"] input:disabled, body[data-cursor-set="lawfull-evil"] select:disabled, body[data-cursor-set="lawfull-evil"] textarea:disabled { cursor: url("/cursors/lawfull-evil-06-d1.png") 15 16, not-allowed !important; }
+body[data-cursor-set="lawfull-evil"] [style*="cursor: default"], body[data-cursor-set="lawfull-evil"] [style*="cursor:default"] { cursor: url("/cursors/lawfull-evil-01-arrow.png") 5 2, default !important; }
+body[data-cursor-set="lawfull-evil"] [data-cc="se"] { cursor: url("/cursors/lawfull-evil-14-nwse.png") 16 16, se-resize; }
+
+/* ---------- neutral-evil ---------- */
+body[data-cursor-set="neutral-evil"] { cursor: url("/cursors/neutral-evil-01-arrow.png") 6 2, default; }
+body[data-cursor-set="neutral-evil"] [data-cc="hand"] { cursor: url("/cursors/neutral-evil-02-hand.png") 12 1, pointer !important; }
+body[data-cursor-set="neutral-evil"] [data-cc="wait"] { cursor: url("/cursors/neutral-evil-03-hourglass.png") 13 16, wait !important; }
+body[data-cursor-set="neutral-evil"] .home-hero { cursor: url("/cursors/neutral-evil-04-weapon.png") 12 16, pointer; }
+body[data-cursor-set="neutral-evil"] [data-cc="help"] { cursor: url("/cursors/neutral-evil-08-help.png") 11 16, help !important; }
+body[data-cursor-set="neutral-evil"] [data-cc="move"] { cursor: url("/cursors/neutral-evil-09-move.png") 16 15, move !important; }
+body[data-cursor-set="neutral-evil"] [data-cc="text"] { cursor: url("/cursors/neutral-evil-10-text.png") 9 16, text !important; }
+body[data-cursor-set="neutral-evil"] [data-cc="ew"] { cursor: url("/cursors/neutral-evil-11-ew.png") 16 9, ew-resize !important; }
+body[data-cursor-set="neutral-evil"] [data-cc="ns"] { cursor: url("/cursors/neutral-evil-12-ns.png") 8 16, ns-resize !important; }
+body[data-cursor-set="neutral-evil"] [data-cc="nesw"] { cursor: url("/cursors/neutral-evil-13-nesw.png") 15 16, nesw-resize !important; }
+body[data-cursor-set="neutral-evil"] [data-cc="nwse"] { cursor: url("/cursors/neutral-evil-14-nwse.png") 14 16, nwse-resize !important; }
+body[data-cursor-set="neutral-evil"] [data-cc="d1"] { cursor: url("/cursors/neutral-evil-06-d1.png") 14 16, not-allowed !important; }
+body[data-cursor-set="neutral-evil"] input[type="checkbox"], body[data-cursor-set="neutral-evil"] input[type="radio"], body[data-cursor-set="neutral-evil"] select, body[data-cursor-set="neutral-evil"] summary, body[data-cursor-set="neutral-evil"] input[type="range"], body[data-cursor-set="neutral-evil"] input[type="color"] { cursor: url("/cursors/neutral-evil-02-hand.png") 12 1, pointer !important; }
+body[data-cursor-set="neutral-evil"] button:disabled, body[data-cursor-set="neutral-evil"] input:disabled, body[data-cursor-set="neutral-evil"] select:disabled, body[data-cursor-set="neutral-evil"] textarea:disabled { cursor: url("/cursors/neutral-evil-06-d1.png") 14 16, not-allowed !important; }
+body[data-cursor-set="neutral-evil"] [style*="cursor: default"], body[data-cursor-set="neutral-evil"] [style*="cursor:default"] { cursor: url("/cursors/neutral-evil-01-arrow.png") 6 2, default !important; }
+body[data-cursor-set="neutral-evil"] [data-cc="se"] { cursor: url("/cursors/neutral-evil-14-nwse.png") 14 16, se-resize; }
+
+/* ---------- chaotic-evil ---------- */
+body[data-cursor-set="chaotic-evil"] { cursor: url("/cursors/chaotic-evil-01-arrow.png") 5 2, default; }
+body[data-cursor-set="chaotic-evil"] [data-cc="hand"] { cursor: url("/cursors/chaotic-evil-02-hand.png") 14 1, pointer !important; }
+body[data-cursor-set="chaotic-evil"] [data-cc="wait"] { cursor: url("/cursors/chaotic-evil-03-hourglass.png") 14 16, wait !important; }
+body[data-cursor-set="chaotic-evil"] .home-hero { cursor: url("/cursors/chaotic-evil-04-weapon.png") 13 16, pointer; }
+body[data-cursor-set="chaotic-evil"] [data-cc="help"] { cursor: url("/cursors/chaotic-evil-08-help.png") 13 16, help !important; }
+body[data-cursor-set="chaotic-evil"] [data-cc="move"] { cursor: url("/cursors/chaotic-evil-09-move.png") 16 15, move !important; }
+body[data-cursor-set="chaotic-evil"] [data-cc="text"] { cursor: url("/cursors/chaotic-evil-10-text.png") 12 16, text !important; }
+body[data-cursor-set="chaotic-evil"] [data-cc="ew"] { cursor: url("/cursors/chaotic-evil-11-ew.png") 16 10, ew-resize !important; }
+body[data-cursor-set="chaotic-evil"] [data-cc="ns"] { cursor: url("/cursors/chaotic-evil-12-ns.png") 9 16, ns-resize !important; }
+body[data-cursor-set="chaotic-evil"] [data-cc="nesw"] { cursor: url("/cursors/chaotic-evil-13-nesw.png") 16 16, nesw-resize !important; }
+body[data-cursor-set="chaotic-evil"] [data-cc="nwse"] { cursor: url("/cursors/chaotic-evil-14-nwse.png") 15 16, nwse-resize !important; }
+body[data-cursor-set="chaotic-evil"] [data-cc="d1"] { cursor: url("/cursors/chaotic-evil-06-d1.png") 15 16, not-allowed !important; }
+body[data-cursor-set="chaotic-evil"] input[type="checkbox"], body[data-cursor-set="chaotic-evil"] input[type="radio"], body[data-cursor-set="chaotic-evil"] select, body[data-cursor-set="chaotic-evil"] summary, body[data-cursor-set="chaotic-evil"] input[type="range"], body[data-cursor-set="chaotic-evil"] input[type="color"] { cursor: url("/cursors/chaotic-evil-02-hand.png") 14 1, pointer !important; }
+body[data-cursor-set="chaotic-evil"] button:disabled, body[data-cursor-set="chaotic-evil"] input:disabled, body[data-cursor-set="chaotic-evil"] select:disabled, body[data-cursor-set="chaotic-evil"] textarea:disabled { cursor: url("/cursors/chaotic-evil-06-d1.png") 15 16, not-allowed !important; }
+body[data-cursor-set="chaotic-evil"] [style*="cursor: default"], body[data-cursor-set="chaotic-evil"] [style*="cursor:default"] { cursor: url("/cursors/chaotic-evil-01-arrow.png") 5 2, default !important; }
+body[data-cursor-set="chaotic-evil"] [data-cc="se"] { cursor: url("/cursors/chaotic-evil-14-nwse.png") 15 16, se-resize; }
+/* ---------- Блок выбора в Настройках → Интерфейс ---------- */
+.cursor-set-body {
+  padding: var(--sp-5);
+  gap: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+}
+.cursor-set-note {
+  margin: 0;
+  max-width: 62ch;
+}
+.cursor-set-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--sp-4);
+}
+/* Девять мировоззрений — строгая плитка 3×3. */
+.cursor-set-grid--alignments {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+/* Стандартный набор — отдельно выше плитки. */
+.cursor-set-system {
+  margin-bottom: var(--sp-4);
+}
+.cursor-set-system .cursor-set-btn {
+  width: 100%;
+}
+.cursor-set-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+.cursor-set-btn:hover {
+  border-color: var(--accent);
+}
+.cursor-set-btn.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.cursor-set-btn img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  flex: none;
+}
+.cursor-set-system-mark {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  font-size: var(--fs-h3);
+  line-height: 1;
+  cursor: default;
+}

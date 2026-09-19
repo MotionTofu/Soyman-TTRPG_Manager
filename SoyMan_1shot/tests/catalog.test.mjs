@@ -24,3 +24,13 @@ test('catalog rejects duplicated ids and broken parent references before import'
   const missing = fixture(); missing.entries[0].parent_id = 999; assert.throws(() => parseCatalog(missing));
   assert.throws(() => parseCatalog({ system: { name: 'Other' }, sections: [], entries: [] }));
 });
+test('catalog keeps a preview when a large embedded card is omitted later', () => {
+  const source = fixture();
+  source.entries[0].avatar_preview_data = { mime: 'image/webp', base64: 'cHJldmlldw==' };
+  source.entries[0].avatar_data = { mime: 'image/webp', base64: 'bGFyZ2U=' };
+  const result = parseCatalog(source);
+  assert.match(result.entries[0].avatar_preview_url, /^data:image\/webp;base64,/);
+  assert.match(result.entries[0].avatar_large_url, /^data:image\/webp;base64,/);
+  delete result.entries[0].avatar_large_url;
+  assert.match(result.entries[0].avatar_preview_url, /^data:image\/webp;base64,/);
+});

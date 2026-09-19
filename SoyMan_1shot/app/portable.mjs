@@ -1,6 +1,11 @@
 import { auditExport } from './export-audit.mjs';
 export function portablePayload(character, catalog) {
-  const audit = auditExport(character, catalog);
+  // Common rules also need parent closure and media validation. Adding them
+  // after auditing silently admitted broken links and external images.
+  const groups = new Set(['Состояния', 'Типы урона', 'Особое восприятие', 'Навыки', 'Свойства оружия', 'Мастерство оружия', 'Оружейные приёмы']);
+  const commonParents = new Set((catalog?.entries || []).filter(e => groups.has(e.name)).map(e => e.id));
+  const commonRules = (catalog?.entries || []).filter(e => commonParents.has(e.id) || commonParents.has(e.parent_id));
+  const audit = auditExport({ ...character, content: { character: character.content, commonRules: commonRules.map(e => ({ entryId: e.id })) } }, catalog);
   if (audit.problems.length) throw Error(audit.problems.join('\n'));
   if (audit.externalAssets.length) throw Error('Для экспорта сначала загрузите изображения в персонажа: найдены внешние изображения.');
   for (const companion of character.content.companions || []) {
@@ -14,16 +19,20 @@ export function portablePayload(character, catalog) {
     }
   }
   const entries = new Map(audit.candidate.entries.map(e => [e.id, e]));
-  // Rules used by the sheet for conditions, damage, skills and weapon properties.
-  const groups = new Set(['Состояния', 'Типы урона', 'Особое восприятие', 'Навыки', 'Свойства оружия', 'Мастерство оружия', 'Оружейные приёмы']);
-  for (const parent of catalog?.entries || []) if (groups.has(parent.name)) {
-    entries.set(parent.id, parent);
-    for (const e of catalog.entries) if (e.parent_id === parent.id) entries.set(e.id, e);
-  }
   const sectionIds = new Set([...entries.values()].map(e => e.section_id));
   const content = structuredClone(character.content);
   for (const section of content.equipmentSections || []) for (const item of section.items) { delete item.transferIn; delete item.transferOut; }
-  return { format: 'soyman-1shot-portable', version: 1, exportedAt: new Date().toISOString(), character: { name: content.characterName, content, portrait: character.portrait || null }, catalog: { system: catalog?.system || null, sections: (catalog?.sections || []).filter(s => sectionIds.has(s.id)), entries: structuredClone([...entries.values()]) } };
+  const portableEntries = structuredClone([...entries.values()]);
+  // Однофайловый лист хранит только правила, нужные персонажу. Карты классов
+  // и видов намеренно не раздувают HTML ни превью, ни большими лицами.
+  for (const entry of portableEntries) {
+    delete entry.avatar_preview_url;
+    delete entry.avatar_large_url;
+    delete entry.avatar_image_url;
+    delete entry.avatar_preview_data;
+    delete entry.avatar_data;
+  }
+  return { format: 'soyman-1shot-portable', version: 1, exportedAt: new Date().toISOString(), character: { name: content.characterName, content, portrait: character.portrait || null }, catalog: { system: catalog?.system || null, sections: (catalog?.sections || []).filter(s => sectionIds.has(s.id)), entries: portableEntries } };
 }
 export function renderPortable(template, payload) {
   if (!template.includes('__ONESHOT_PAYLOAD__')) throw Error('Повреждён шаблон автономного чарника.');

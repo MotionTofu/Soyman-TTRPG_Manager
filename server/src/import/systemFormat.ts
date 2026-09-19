@@ -226,6 +226,11 @@ export const spellSchema = z.object({
     .default([]),
   description: text,
   ...activatable,
+  // Без значения по умолчанию, как у круга: глава со списками классов шлёт
+  // только ключ, имя и классы, и пустые броски/эффекты затёрли бы разметку
+  // заклинания (так «Убежище» теряло бросок, 2026-09-18).
+  checks: z.array(checkSchema).optional(),
+  effects: z.array(effectSchema).optional(),
 });
 
 const featureSchema = z.object({

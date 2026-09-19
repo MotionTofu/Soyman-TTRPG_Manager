@@ -179,6 +179,11 @@ export function ensureSubfolder(basePath: string, sub: string): string {
   return vaultRel(ensureDir(assertVaultPath(path.join(vaultAbs(basePath), sub))));
 }
 
+// Записи, у которых изображение — карта 2:3 (вид, класс, подкласс).
+export function isCardKind(entryKind: string): boolean {
+  return entryKind === "class" || entryKind === "subclass" || entryKind === "species";
+}
+
 // Куда ложится собственное изображение записи компендиума — по разделу, к
 // которому запись относится: смешивать портреты бестиария с портретами судов
 // в одной папке значит получить список файлов `entry-317-avatar.jpg`, по
@@ -186,7 +191,9 @@ export function ensureSubfolder(basePath: string, sub: string): string {
 // хранилища (Gallery, Inventory, Resources); папка портретов статблоков —
 // `Statblocks` (было `Статблоки`, переименована в П2.5, 2026-08-29).
 export function entryImageFolder(systemFolderPath: string, entryKind: string): string {
-  const sub = entryKind === "vehicle" || entryKind === "vehicle_post" ? "Vehicles" : "Bestiary";
+  const sub = isCardKind(entryKind)
+    ? "Cards"
+    : entryKind === "vehicle" || entryKind === "vehicle_post" ? "Vehicles" : "Bestiary";
   return ensureSubfolder(systemFolderPath, sub);
 }
 

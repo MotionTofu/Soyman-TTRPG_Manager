@@ -6341,6 +6341,28 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     database.exec("ALTER TABLE maps ADD COLUMN archived_at TEXT");
   }
 
+  // Запись справочника, у которой текст разобран в `data` по буквам
+  // ({"0":"Д","1":"е",…}). Так легли «Магические боеприпасы» Чародейного
+  // стрелка: 2026-09-07 промежуточная версия шага стрелка передала текст
+  // умения на место механики, featData разложил строку спредом, а исправленный
+  // шаг уже созданное умение пропускал. Оттуда запись уехала сидом в сборку.
+  // Буквы собираются обратно в текст (если описание пусто), прочие ключи
+  // остаются механикой.
+  for (const row of database
+    .prepare(`SELECT id, data, description FROM compendium_entries WHERE data LIKE '{"0":%'`)
+    .all() as { id: number; data: string; description: string | null }[]) {
+    const spread = JSON.parse(row.data) as Record<string, unknown>;
+    const text: string[] = [];
+    const rest: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(spread)) {
+      if (/^\d+$/.test(k)) text[Number(k)] = String(v);
+      else rest[k] = v;
+    }
+    database
+      .prepare("UPDATE compendium_entries SET data = ?, description = ? WHERE id = ?")
+      .run(JSON.stringify(rest), row.description?.trim() ? row.description : text.join(""), row.id);
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);

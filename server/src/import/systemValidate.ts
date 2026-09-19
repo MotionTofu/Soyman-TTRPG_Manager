@@ -83,7 +83,7 @@ function collectRefs(file: SystemImportFile): { ref: string; path: string; expec
     s.classes.forEach((c, j) =>
       add(c.ref, `spells[${i}].classes[${j}]`, ["class", "subclass", "species"])
     );
-    s.effects.forEach((e, j) => {
+    (s.effects ?? []).forEach((e, j) => {
       add(e.damage_type, `spells[${i}].effects[${j}].damage_type`, ["mechanic_item"]);
       add(e.condition, `spells[${i}].effects[${j}].condition`, ["mechanic_item"]);
     });
@@ -230,7 +230,7 @@ export function validateSystemImport(
   }
 
   // 3. Броски и эффекты у всего, что можно применить.
-  file.spells.forEach((s, i) => checkActivatable(s, `spells[${i}]`, errors, warnings));
+  file.spells.forEach((s, i) => checkActivatable({ checks: s.checks ?? [], effects: s.effects ?? [] }, `spells[${i}]`, errors, warnings));
   file.feats.forEach((f, i) => checkActivatable(f, `feats[${i}]`, errors, warnings));
   file.magic_items.forEach((m, i) => checkActivatable(m, `magic_items[${i}]`, errors, warnings));
   file.classes.forEach((c, i) => {

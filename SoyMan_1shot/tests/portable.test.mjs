@@ -5,16 +5,34 @@ import { JSDOM, VirtualConsole } from '../../client/node_modules/jsdom/lib/api.j
 import { portablePayload, renderPortable } from '../app/portable.mjs';
 test('portable payload excludes unrelated entries and rejects unsupported dependencies', () => {
   const c = { content: { classes: [], equipmentSections: [{ items: [{ entryId: 1, transferIn: { fromCharacterId: 77 } }] }] } };
-  const catalog = { system: {}, sections: [{ id: 1 }], entries: [1, 2].map(id => ({ id, section_id: 1, parent_id: null, kind: 'equipment', name: `Item ${id}`, data: {} })) };
+  const catalog = { system: {}, sections: [{ id: 1 }], entries: [1, 2].map(id => ({ id, section_id: 1, parent_id: null, kind: 'equipment', name: `Item ${id}`, data: {}, avatar_preview_url: 'data:image/webp;base64,cHJldmlldw==', avatar_large_url: 'data:image/webp;base64,bGFyZ2U=' })) };
   const payload = portablePayload(c, catalog);
   assert.deepEqual(payload.catalog.entries.map(e => e.id), [1]);
   assert.equal(payload.character.content.equipmentSections[0].items[0].transferIn, undefined);
+  assert.equal(payload.catalog.entries[0].avatar_preview_url, undefined);
+  assert.equal(payload.catalog.entries[0].avatar_large_url, undefined);
   assert.equal(c.content.equipmentSections[0].items[0].transferIn.fromCharacterId, 77);
   assert.throws(() => portablePayload({ ...c, portrait: 'https://example.test/a.png' }, catalog));
   assert.throws(() => portablePayload({ content: { companions: [{ entryId: 1, name: 'Волк' }] } }, catalog), /статблок бестиария/);
   assert.throws(() => portablePayload({ content: { companions: [{ entryId: null, featureEntryId: 1, name: 'Защитник' }] } }, catalog), /Не найден чертёж/);
   assert.throws(() => portablePayload({ content: { companions: [{ entryId: null, statblockId: 42, name: 'Спутник' }] } }, catalog), /статблок/);
 });
+test('common rules include ancestors and reject broken or external dependencies', () => {
+  const character = { content: { classes: [] } };
+  const catalog = { system: {}, sections: [{ id: 1 }], entries: [
+    { id: 1, section_id: 1, name: 'Правила', kind: 'rule', data: {} },
+    { id: 2, section_id: 1, parent_id: 1, name: 'Состояния', kind: 'rule', data: {} },
+    { id: 3, section_id: 1, parent_id: 2, name: 'Ослеплённый', kind: 'rule', data: {} },
+    { id: 4, section_id: 1, name: 'Неиспользуемое', kind: 'rule', data: {} },
+  ] };
+  assert.deepEqual(portablePayload(character, catalog).catalog.entries.map(e => e.id), [1, 2, 3]);
+  catalog.entries[2].description = '<img src="https://example.test/missing.png">';
+  assert.throws(() => portablePayload(character, catalog), /внешние изображения/);
+  delete catalog.entries[2].description;
+  catalog.entries[1].parent_id = 999;
+  assert.throws(() => portablePayload(character, catalog), /Не найдена запись/);
+});
+
 test('full React HTML boots without network and reexports changed state safely', async t => {
   const template = await readFile(new URL('../generated/standalone-template.html', import.meta.url), 'utf8');
   const catalog = { system: { id: 1, name: 'D&D 5.5' }, sections: [{ id: 1, kind: 'spell', name: 'Заклинания' }], entries: [{ id: 7, section_id: 1, kind: 'spell', level: 2, name: 'Призыв', data: { summon: { name: 'Тестовый спутник', hp: '5+5*spell', ac: '14', dismissable: true, actions: [{ name: 'Удар', note: 'Тестовое действие спутника' }] } } }] };

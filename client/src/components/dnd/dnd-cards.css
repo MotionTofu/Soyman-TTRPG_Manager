@@ -1,0 +1,496 @@
+/* Карты классов, подклассов и видов (DndCards.tsx, гриллинг 2026-09-18). */
+
+/* ——— плитка ——— */
+.dc-img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 6px;
+}
+/* Нет карты — рубашка с набранным именем. */
+.dc-img--blank {
+  position: relative;
+  background: center / cover no-repeat;
+}
+.dc-blank-name {
+  position: absolute;
+  inset: 38% 12% auto;
+  padding: 0.4em 0.5em;
+  text-align: center;
+  font-family: var(--font-display, serif);
+  font-size: clamp(11px, 1.2vw, 16px);
+  line-height: 1.2;
+  color: #f4ead8;
+  background: rgba(20, 14, 10, 0.72);
+  border-radius: 4px;
+}
+
+.dc-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--sp-3, 12px);
+}
+@media (max-width: 700px) {
+  .dc-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.dc-strip {
+  display: flex;
+  gap: var(--sp-2, 8px);
+  overflow-x: auto;
+  padding: var(--sp-2) var(--sp-1) var(--sp-4);
+  scrollbar-width: thin;
+}
+
+.dc-tile {
+  position: relative;
+  display: block;
+  padding: 0;
+  border: var(--card-border-width-strong) solid transparent;
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+.dc-tile:hover {
+  transform: translateY(-2px);
+}
+.dc-tile:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.dc-tile.is-selected {
+  border-color: var(--accent);
+}
+.dc-tile.is-dim .dc-img {
+  filter: grayscale(0.7) brightness(0.8);
+}
+.dc-tile--small {
+  flex: none;
+  width: 78px;
+}
+.dc-tile-name {
+  display: block;
+  margin-top: var(--sp-2);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta, 12px);
+  line-height: 1.2;
+  text-align: center;
+  color: var(--ink);
+}
+.dc-tile--small .dc-tile-name {
+  font-size: var(--fs-micro, 11px);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* Лента на рубашке — чернила по бумаге свитка, а не цвет темы.
+   `inherit` здесь нельзя: ближайший родитель — button, и в тёмных темах
+   (например, «Соевый покой») он приносит светлый --ink. */
+.dc-scroll .dc-tile-name {
+  color: #2a2018;
+}
+.dc-tile-note {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 6px;
+  padding: var(--sp-1) var(--sp-2);
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro, 11px);
+  text-align: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 3px;
+}
+.dc-tile--small .dc-tile-note {
+  display: none;
+}
+
+/* ПКМ по любой малой карточке открывает стандартное меню приложения;
+   отдельная модалка показывает исходник без серверного ?w= превью. */
+.modal-backdrop:has(.dc-card-image-modal) {
+  z-index: 105;
+  background: rgba(0, 0, 0, 0.82);
+}
+.modal.dc-card-image-modal {
+  position: relative;
+  width: min(90vw, calc((90vh - var(--sp-9)) * 2 / 3));
+  max-width: 90vw;
+  max-height: 90vh;
+  padding: 0;
+  overflow: hidden;
+  background: transparent;
+  border: 0;
+}
+.dc-card-image-modal .dc-img {
+  width: 100%;
+  max-height: calc(90vh - var(--sp-9));
+  object-fit: contain;
+}
+.dc-card-image-close {
+  position: absolute;
+  top: var(--sp-2);
+  right: var(--sp-2);
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: var(--sp-8);
+  height: var(--sp-8);
+  padding: 0;
+  font-size: var(--fs-h2);
+  color: var(--ink);
+  background: var(--paper);
+  border: var(--card-border-width-strong) solid var(--ink);
+  border-radius: 50%;
+}
+.dc-card-image-nav {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  background: var(--paper);
+  border-top: var(--card-border-width) solid var(--line);
+}
+.dc-card-image-nav button {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: center;
+  min-width: 0;
+  padding: var(--sp-3) var(--sp-4);
+}
+.dc-card-image-nav button:last-child {
+  justify-content: flex-end;
+  text-align: right;
+}
+.dc-card-image-nav button span:not([aria-hidden]) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ——— лицо + рубашка ——— */
+.dc-spread {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: var(--sp-4, 16px);
+  align-items: start;
+}
+.dc-spread.is-mobile {
+  display: block;
+}
+.dc-face {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2, 8px);
+}
+.dc-spread.is-mobile .dc-face {
+  position: static;
+  max-width: 360px;
+  margin: 0 auto;
+}
+.dc-face-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: default;
+}
+.dc-spread.is-mobile .dc-face-btn {
+  cursor: pointer;
+}
+.dc-face-btn .dc-img {
+  border-radius: 10px;
+}
+.dc-flip-hint {
+  text-align: center;
+  font-size: var(--fs-meta, 12px);
+}
+.dc-face-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2, 8px);
+  justify-content: center;
+  align-items: center;
+  margin-top: var(--sp-2, 8px);
+}
+
+/* Входы в карту из листа: текст в картуше остаётся строкой листа, а
+   миниатюры у групп особенностей не раздувают заголовок секции. */
+.dnd-card-text-link {
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: none;
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+}
+.dnd-feature-card-link {
+  width: 64px;
+  margin: 0 0 var(--sp-3);
+}
+.dnd-feature-card-link .dc-tile--small {
+  width: 64px;
+}
+.dnd-feature-card-strip {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: flex-start;
+  overflow-x: auto;
+}
+.dnd-rules-card-head {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.dnd-rules-card-switches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+.dnd-rules-card-modal {
+  width: min(1100px, calc(100vw - 24px));
+  max-width: 1100px;
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+}
+.dnd-card-profile {
+  gap: var(--sp-6);
+}
+.app-content:has(.dnd-card-profile) .shell-crumbs__trail {
+  display: none;
+}
+.app-content:has(.dnd-card-profile) .shell-crumbs:not(:has(.shell-crumbs__storage)) {
+  display: none;
+}
+.dnd-card-profile-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-6);
+  min-width: 0;
+}
+.dnd-card-profile-nav a {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: center;
+  max-width: 46%;
+  min-width: 0;
+}
+.dnd-card-profile-nav a:last-child {
+  justify-content: flex-end;
+  margin-left: auto;
+  text-align: right;
+}
+.dnd-card-profile-nav a span:not([aria-hidden]) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dc-mobile-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  gap: var(--sp-2, 8px);
+  align-items: center;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+.dc-mobile-bar strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ——— свиток ———
+   Рамка — картинка рубашки через border-image с повтором средней части
+   (решение 2026-09-18: растяжение отвергнуто). Все размеры — в долях
+   ширины свитка (cqi от 1024 px исходника), чтобы рамка масштабировалась
+   вместе с колонкой. Текст идёт поверх верха и низа рамки. */
+.dc-scroll {
+  position: relative;
+  container-type: inline-size;
+  isolation: isolate;
+  color: #2a2018;
+}
+.dc-scroll-frame {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-style: solid;
+  border-image-repeat: round;
+}
+.dc-scroll--good .dc-scroll-frame {
+  border-image-source: url("../../assets/cards/back-good.webp");
+  border-image-slice: 330 140 330 140 fill;
+  border-width: 32.227cqi 13.672cqi;
+}
+/* У злой повторяется только чистая полоса с луной: выступы верха не
+   размножаются и на текст не лезут. */
+.dc-scroll--evil .dc-scroll-frame {
+  border-image-source: url("../../assets/cards/back-evil.webp");
+  border-image-slice: 830 130 476 130 fill;
+  border-width: 81.055cqi 12.695cqi 46.484cqi;
+}
+.dc-scroll-body {
+  box-sizing: border-box;
+  min-height: 150cqi;
+  font-family: var(--font-body, Georgia, serif);
+  font-size: clamp(13px, 3.6cqi, 16px);
+  line-height: 1.5;
+}
+.dc-scroll--good .dc-scroll-body {
+  padding: 35.156cqi 17.5cqi 29.297cqi;
+}
+.dc-scroll--evil .dc-scroll-body {
+  padding: 37.109cqi 18.5cqi 29.297cqi;
+}
+.dc-scroll a,
+.dc-scroll .muted {
+  color: inherit;
+}
+.dc-title {
+  margin: 0 0 0.2em;
+  text-align: center;
+  font-family: var(--font-display, serif);
+  font-size: 1.5em;
+}
+.dc-stats {
+  margin: 0 0 0.8em;
+  text-align: center;
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+.dc-summary {
+  margin-bottom: 1em;
+}
+.dc-prog-wrap {
+  overflow-x: auto;
+  margin: 0 0 1.2em;
+}
+.dc-prog {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78em;
+  line-height: 1.3;
+}
+.dc-prog th,
+.dc-prog td {
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: 1px solid rgba(42, 32, 24, 0.25);
+  text-align: left;
+  vertical-align: top;
+}
+.dc-prog th {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.dc-prog tr.is-current td {
+  background: rgba(160, 110, 40, 0.22);
+  font-weight: 600;
+}
+.dc-prog tr.is-ahead td,
+.dc-level.is-ahead {
+  opacity: 0.55;
+}
+.dc-lvl {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline dotted;
+  cursor: pointer;
+}
+.dc-level {
+  scroll-margin-top: var(--sp-9);
+}
+.dc-level-head {
+  margin: 1.1em 0 0.3em;
+  font-family: var(--font-ui);
+  font-size: 0.8em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(42, 32, 24, 0.35);
+}
+.dc-feature h5 {
+  margin: 0.7em 0 0.2em;
+  font-size: 1em;
+}
+
+/* Имя умения — кнопка окошка. */
+.dc-ability {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.dc-ability[aria-expanded="true"] {
+  text-decoration-style: solid;
+}
+
+/* Окошко умения — поверх модалок (фон модалки — 50). */
+.dc-pop {
+  position: fixed;
+  z-index: 70;
+  width: min(340px, calc(100vw - 16px));
+  max-height: min(50vh, 420px);
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+  color: var(--ink);
+  /* Без тени (§1.2): глубина — двойной рамкой. */
+  border: 1px solid var(--ink);
+  outline: 3px solid var(--paper);
+  border-radius: 4px;
+}
+.dc-pop-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding: var(--sp-4) var(--sp-5) var(--sp-3);
+  border-bottom: 1px solid var(--line);
+}
+.dc-pop-head strong {
+  flex: 0 1 auto;
+}
+.dc-pop-full {
+  margin-left: auto;
+  padding: 0 var(--sp-4);
+  font-size: 1.1em;
+}
+.dc-pop-body {
+  overflow-y: auto;
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
+}
+
+/* Лента подклассов наверху рубашки класса. */
+.dc-substrip {
+  margin: 0 0 1em;
+}
+.dc-substrip-label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.75em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+}
+.dc-substrip .dc-strip {
+  justify-content: safe center;
+}

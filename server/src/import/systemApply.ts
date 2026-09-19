@@ -108,7 +108,7 @@ const CHOSEN_DAMAGE_TYPE: Ref = { id: -1, name: "Выбирается при н�
 
 type Resolve = (key: string | null | undefined) => Ref | null;
 
-function convertChecks(checks: ImportSpell["checks"]): unknown[] {
+function convertChecks(checks: NonNullable<ImportSpell["checks"]>): unknown[] {
   return checks.map((c) => ({
     id: c.id,
     type: c.type,
@@ -119,7 +119,7 @@ function convertChecks(checks: ImportSpell["checks"]): unknown[] {
   }));
 }
 
-function convertEffects(effects: ImportSpell["effects"], resolve: Resolve): unknown[] {
+function convertEffects(effects: NonNullable<ImportSpell["effects"]>, resolve: Resolve): unknown[] {
   return effects.map((e, i) => {
     const damageType =
       e.damage_type === "choice" ? CHOSEN_DAMAGE_TYPE : resolve(e.damage_type);
@@ -161,9 +161,10 @@ function activatableData(
   if (source.casting_timing) data.casting_timing = source.casting_timing;
   if (source.casting_timing_other) data.casting_timing_other = source.casting_timing_other;
   // Пустые списки пишутся тоже: «в этой записи бросков нет» — такой же факт,
-  // как их наличие, и он должен затирать прошлый разбор.
-  data.checks = convertChecks(source.checks);
-  data.effects = convertEffects(source.effects, resolve);
+  // как их наличие, и он должен затирать прошлый разбор. Нет поля вовсе
+  // (только у заклинания, см. spellSchema) — прежний разбор не трогается.
+  if (source.checks) data.checks = convertChecks(source.checks);
+  if (source.effects) data.effects = convertEffects(source.effects, resolve);
   if (source.cost) {
     data.cost = {
       kind: source.cost.kind,

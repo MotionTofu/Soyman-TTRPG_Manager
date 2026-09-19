@@ -44,6 +44,7 @@ const SettingsListPage = lazy(() => import("./pages/SettingsListPage").then((m) 
 const SettingDetailPage = lazy(() => import("./pages/SettingDetailPage").then((m) => ({ default: m.SettingDetailPage })));
 const SystemsListPage = lazy(() => import("./pages/SystemsListPage").then((m) => ({ default: m.SystemsListPage })));
 const SystemDetailPage = lazy(() => import("./pages/SystemDetailPage").then((m) => ({ default: m.SystemDetailPage })));
+const DndCardProfilePage = lazy(() => import("./pages/DndCardProfilePage").then((m) => ({ default: m.DndCardProfilePage })));
 const ResourcesListPage = lazy(() => import("./pages/ResourcesListPage").then((m) => ({ default: m.ResourcesListPage })));
 const MasteringPage = lazy(() => import("./pages/MasteringPage").then((m) => ({ default: m.MasteringPage })));
 const CharacterDetailPage = lazy(() => import("./pages/CharacterDetailPage").then((m) => ({ default: m.CharacterDetailPage })));
@@ -195,6 +196,7 @@ function App() {
               <Route path="/import-system" element={<ImportSystemRoute />} />
               <Route path="/systems" element={<SystemsListPage />} />
               <Route path="/systems/:id" element={<SystemDetailPage />} />
+              <Route path="/systems/:id/entries/:entryId" element={<DndCardProfilePage />} />
               <Route path="/resources" element={<ResourcesListPage />} />
               <Route path="/mastering" element={<MasteringPage />} />
               <Route path="/characters/:id" element={<CharacterDetailPage />} />

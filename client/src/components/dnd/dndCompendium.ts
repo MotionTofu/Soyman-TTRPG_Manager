@@ -60,10 +60,13 @@ export interface DndClassOption {
   // Требования мультикласса (data.multiclass_prereq, напр. «Ловкость 13»).
   // Пусто — в данных нет, подсказку не показываем.
   multiclassPrereq: string;
+  /** Карта класса (avatar_image_url записи); null — рисуется рубашка с именем. */
+  card: string | null;
 }
 export interface DndSubclassOption {
   id: number;
   name: string;
+  card: string | null;
 }
 // Порядок в выпадающих списках — по алфавиту, а не по `position` (решение
 // W1, гриллинг 2026-09-04). В визарде и в форме класс ищут глазами по букве;
@@ -91,13 +94,14 @@ export async function loadDndClassHierarchy(systemId: number, opts?: LoadOpts): 
       hitDie: String(e.data.hit_die ?? ""),
       subclassLevel: Number(e.data.subclass_level) || 0,
       multiclassPrereq: typeof e.data.multiclass_prereq === "string" ? e.data.multiclass_prereq : "",
+      card: e.avatar_image_url ?? null,
     }))
     .sort(byNameRu);
   const subclassesByClass: Record<number, DndSubclassOption[]> = {};
   for (const c of classes) {
     subclassesByClass[c.id] = entries
       .filter((e) => e.kind === "subclass" && e.parent_id === c.id)
-      .map((e) => ({ id: e.id, name: e.name }))
+      .map((e) => ({ id: e.id, name: e.name, card: e.avatar_image_url ?? null }))
       .sort(byNameRu);
   }
   return { classes, subclassesByClass };
@@ -132,6 +136,7 @@ export interface DndSpeciesOption {
   name: string;
   creatureTypeName: string;
   walkSpeed: string; // e.g. "30" — distance value of the "Ходьба" speed pick, if any
+  card: string | null;
 }
 
 export async function loadDndSpeciesOptions(systemId: number, opts?: LoadOpts): Promise<DndSpeciesOption[]> {
@@ -150,6 +155,7 @@ export async function loadDndSpeciesOptions(systemId: number, opts?: LoadOpts): 
         name: e.name,
         creatureTypeName: creatureType?.name ?? "",
         walkSpeed: walk?.distance ?? "",
+        card: e.avatar_image_url ?? null,
       });
     }
   }

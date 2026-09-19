@@ -27,10 +27,11 @@ import { loadBagSize, saveBagSize, MIN_BAG_SIZE, MAX_BAG_SIZE } from "../bag";
 import { loadUseEpithets, saveUseEpithets } from "../initiativeTrackerPrefs";
 import { loadPultFinishAction, savePultFinishAction, type PultFinishAction } from "../pultPrefs";
 import {
-  DND_ABILITY_PRIMARY_OPTIONS, DND_DISTANCE_UNIT_OPTIONS, DND_SKILL_SORT_OPTIONS, DND_WEIGHT_UNIT_OPTIONS,
+  DND_ABILITY_PRIMARY_OPTIONS, DND_CARD_BACK_OPTIONS, DND_DISTANCE_UNIT_OPTIONS, DND_SKILL_SORT_OPTIONS, DND_WEIGHT_UNIT_OPTIONS,
   loadDndPrefs, saveDndPrefs,
-  type DndAbilityPrimary, type DndDistanceUnit, type DndSkillSortMode, type DndWeightUnit,
+  type DndAbilityPrimary, type DndCardBack, type DndDistanceUnit, type DndSkillSortMode, type DndWeightUnit,
 } from "../dndPrefs";
+import { CURSOR_SETS, applyCursorSet, loadCursorSet, type CursorSetId, type CursorSetInfo } from "../cursorSets";
 
 function loadSectionOpen(key: string, fallback: boolean): boolean {
   const v = safeGetItem(`storagesSectionOpen_${key}`);
@@ -64,6 +65,7 @@ export function StoragesSettingsPage() {
   const [bagSize, setBagSize] = useState(loadBagSize);
   const [useEpithets, setUseEpithets] = useState(loadUseEpithets);
   const [dndPrefs, setDndPrefs] = useState(loadDndPrefs());
+  const [cursorSet, setCursorSet] = useState<CursorSetId>(loadCursorSet);
 
   const [fadeDraft, setFadeDraft] = useState("0");
   const fadeSaveRef = useRef<number | null>(null);
@@ -78,6 +80,7 @@ export function StoragesSettingsPage() {
   // persist open for res-groups
   const [bgOpen, setBgOpen] = useState(() => loadSectionOpen("bg", true));
   const [themesOpen, setThemesOpen] = useState(() => loadSectionOpen("themes", true));
+  const [cursorsOpen, setCursorsOpen] = useState(() => loadSectionOpen("cursors", true));
   const [privacyOpen, setPrivacyOpen] = useState(() => loadSectionOpen("privacy", false));
   const [bagOpen, setBagOpen] = useState(() => loadSectionOpen("bag", false));
   const [dndOpen, setDndOpen] = useState(() => loadSectionOpen("dnd", true));
@@ -144,6 +147,35 @@ export function StoragesSettingsPage() {
     const next = { ...dndPrefs, weightUnit: unit };
     setDndPrefs(next);
     saveDndPrefs(next);
+  }
+  function changeDndCardBack(back: DndCardBack) {
+    const next = { ...dndPrefs, cardBack: back };
+    setDndPrefs(next);
+    saveDndPrefs(next);
+  }
+  function changeCursorSet(id: CursorSetId) {
+    setCursorSet(id);
+    applyCursorSet(id);
+  }
+  function renderCursorSetButton(s: CursorSetInfo) {
+    const selected = s.id === cursorSet;
+    return (
+      <button
+        key={s.id}
+        type="button"
+        role="radio"
+        aria-checked={selected}
+        className={`cursor-set-btn${selected ? " is-selected" : ""}`}
+        onClick={() => changeCursorSet(s.id)}
+      >
+        {s.preview ? (
+          <img src={s.preview} alt="" aria-hidden="true" draggable={false} />
+        ) : (
+          <span className="cursor-set-system-mark" aria-hidden="true">➤</span>
+        )}
+        <span>{s.label}{selected ? " · выбран" : ""}</span>
+      </button>
+    );
   }
   async function uploadHomeBackground(file: File | null) {
     if (!file) return;
@@ -752,6 +784,24 @@ export function StoragesSettingsPage() {
             </div>
           </details>
 
+          <details className="card res-group" open={cursorsOpen} onToggle={(e) => { const o = (e.currentTarget as HTMLDetailsElement).open; setCursorsOpen(o); saveSectionOpen("cursors", o); }}>
+            <summary className="res-group__band">
+              <span className="res-group__title">Наборы курсоров</span>
+              <span className="res-group__count">{CURSOR_SETS.length}</span>
+            </summary>
+            <div className="res-group__body cursor-set-body">
+              <p className="muted cursor-set-note">Набор применяется мгновенно и запоминается в этом браузере. Перетаскивание, ввод текста и ручки ресайза остаются системными осознанно.</p>
+              <div role="radiogroup" aria-label="Набор курсоров">
+                <div className="cursor-set-system">
+                  {CURSOR_SETS.filter((s) => s.id === "system").map(renderCursorSetButton)}
+                </div>
+                <div className="cursor-set-grid cursor-set-grid--alignments">
+                  {CURSOR_SETS.filter((s) => s.id !== "system").map(renderCursorSetButton)}
+                </div>
+              </div>
+            </div>
+          </details>
+
           <details className="card res-group" open={privacyOpen} onToggle={(e) => { const o = (e.currentTarget as HTMLDetailsElement).open; setPrivacyOpen(o); saveSectionOpen("privacy", o); }}>
             <summary className="res-group__band">
               <span className="res-group__title">Приватность</span>
@@ -834,6 +884,18 @@ export function StoragesSettingsPage() {
               </div>
               </fieldset>
               <span className="muted" style={{ maxWidth: "62ch" }}>Только показ: вес в листах хранится в фунтах, грузоподъёмность считается СИЛ × 15 фунтов.</span>
+              <fieldset className="wizard-fieldset">
+              <legend className="muted settings-dnd-card-legend">Рубашка карт классов и видов</legend>
+              <div className="row settings-dnd-card-options">
+                {DND_CARD_BACK_OPTIONS.map((opt) => (
+                  <label key={opt.key} className="row settings-dnd-card-option">
+                    <input type="radio" name="dnd-card-back" checked={dndPrefs.cardBack === opt.key} onChange={() => changeDndCardBack(opt.key)} />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
+              </fieldset>
+              <span className="muted settings-dnd-card-note">Только в этом браузере: у каждого игрока своя.</span>
             </div>
           </details>
 

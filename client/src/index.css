@@ -6260,14 +6260,71 @@ details.card[open] summary {
   padding: 0;
   margin: 0;
 }
-.wizard-blurb {
-  white-space: pre-wrap;
+.settings-dnd-card-legend {
+  margin-block: var(--sp-4) var(--sp-2);
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.settings-dnd-card-options {
+  flex-wrap: wrap;
+  gap: var(--sp-5);
+}
+.settings-dnd-card-option {
+  gap: var(--sp-3);
+}
+.settings-dnd-card-note {
+  max-width: 62ch;
+}
+/* Досье визарда: четыре поля парами, заметки — во всю ширину; подпись над
+   полем, поля одной высоты (владелец, 2026-09-18). */
+.wizard-dossier-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-3) var(--sp-4);
+}
+.wizard-dossier-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.wizard-dossier-grid textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+}
+.wizard-dossier-wide {
+  grid-column: 1 / -1;
+}
+@media (max-width: 700px) {
+  .wizard-dossier-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* Выборы класса в визарде (воззвания, приёмы, стиль) — сворачиваемые:
+   на Колдуне их список длиннее самой карты (владелец, 2026-09-18). */
+.wizard-choice > summary {
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: var(--sp-1) 0;
+  border-bottom: 1px solid var(--line);
+}
+.wizard-choice[open] > summary {
+  margin-bottom: var(--sp-2);
 }
 .wizard-blurb summary {
   cursor: pointer;
 }
+/* Сырой текст в раскрывашке списка (воззвания, приёмы); выбранная запись
+   идёт через MentionText и переносы строк разбирает сама. */
 .wizard-blurb-more {
   margin-top: var(--sp-2);
+  white-space: pre-wrap;
 }
 .wizard-level-input {
   width: 60px;

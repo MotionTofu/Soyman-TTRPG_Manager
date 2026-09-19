@@ -20,7 +20,8 @@ import { db, initDatabase } from "./db/db";
 // импортов, и переезд на ESM его не сломает.
 applyActiveStorageEnv();
 initDatabase();
-import { initVault, VAULT_ROOT, vaultAbs } from "./services/filesystem";
+import { initVault, isVaultPath, VAULT_ROOT, vaultAbs } from "./services/filesystem";
+import { thumbnailOf, THUMB_WIDTHS } from "./services/imageResize";
 import { storagesRouter } from "./routes/storages";
 import { clientJournalRouter } from "./routes/clientJournal";
 import { appSettingsRouter } from "./routes/appSettings";
@@ -365,6 +366,17 @@ app.use("/files", (req: AuthedRequest, res, next) => {
 app.use("/files", (req: AuthedRequest, res, next) => {
   if ((req as unknown as { signedUrlValid?: boolean }).signedUrlValid) return next();
   return (requireAuth() as unknown as (req: AuthedRequest, res: unknown, next: () => void) => void)(req, res, next);
+}, async (req, res, next) => {
+  const w = Number(req.query.w);
+  if (!THUMB_WIDTHS.has(w)) return next();
+  try {
+    const abs = path.join(VAULT_ROOT, decodeURIComponent(req.path));
+    if (!isVaultPath(abs) || !/\.(png|jpe?g|webp)$/i.test(abs)) return next();
+    const buf = await thumbnailOf(abs, fs.statSync(abs).mtimeMs, w);
+    res.type("image/webp").send(buf);
+  } catch {
+    next();
+  }
 }, (req, res, next) => {
   express.static(VAULT_ROOT)(req, res, next);
 });

@@ -28,6 +28,10 @@ export function CompendiumEntryRedirectPage() {
 
   useEffect(() => {
     if (!loaded || ownPage) return;
+    if (["class", "subclass", "species"].includes(loaded.kind)) {
+      navigate(`/systems/${loaded.system_id}/entries/${loaded.id}`, { replace: true });
+      return;
+    }
     navigate(`/systems/${loaded.system_id}?section=${loaded.section_id}&entry=${loaded.id}`, { replace: true });
   }, [loaded, ownPage, navigate]);
 

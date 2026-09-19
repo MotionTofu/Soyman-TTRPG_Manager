@@ -1738,15 +1738,13 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
             onToggleFavourite={toggleFavourite}
           />
         ) : isSpeciesSection && viewMode === "grid" ? (
-          <SimpleKindTileGrid
+          <ClassTileGrid
             entries={filteredTopLevel}
             grouping={sortMode === "alpha" ? "alpha" : "category"}
             sortDir={sortDir}
             sectionId={section.id}
             searchActive={searchQuery.trim() !== ""}
             onToggleFavourite={toggleFavourite}
-            categoryField="size"
-            kindLabel="Вид"
           />
         ) : isFeatSection && viewMode === "grid" ? (
           <SimpleKindTileGrid

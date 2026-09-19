@@ -68,6 +68,15 @@ export function formatWeight(pounds: number, unit: DndWeightUnit): string {
   return `${String(rounded).replace(".", ",")} фнт.`;
 }
 
+/** Рубашка карт классов и видов — личный вкус, а не свойство персонажа
+ *  (гриллинг карт 2026-09-18). Картинки встроены в программу. */
+export type DndCardBack = "good" | "evil";
+
+export const DND_CARD_BACK_OPTIONS: { key: DndCardBack; label: string }[] = [
+  { key: "good", label: "Добрая" },
+  { key: "evil", label: "Злая" },
+];
+
 interface DndPrefs {
   skillSortMode: DndSkillSortMode;
   abilityPrimary: DndAbilityPrimary;
@@ -79,6 +88,7 @@ interface DndPrefs {
   spellsPreparedOnly: boolean;
   distanceUnit: DndDistanceUnit;
   weightUnit: DndWeightUnit;
+  cardBack: DndCardBack;
 }
 
 const DEFAULTS: DndPrefs = {
@@ -93,6 +103,7 @@ const DEFAULTS: DndPrefs = {
   distanceUnit: "feet",
   // По умолчанию фунты: так написаны веса в книге.
   weightUnit: "lb",
+  cardBack: "good",
 };
 
 const STORAGE_KEY = "rpgManagerDndPrefs";
@@ -110,6 +121,7 @@ export function loadDndPrefs(): DndPrefs {
       if (typeof parsed.spellsPreparedOnly === "boolean") out.spellsPreparedOnly = parsed.spellsPreparedOnly;
       if (parsed.distanceUnit === "feet" || parsed.distanceUnit === "cells") out.distanceUnit = parsed.distanceUnit;
       if (parsed.weightUnit === "lb" || parsed.weightUnit === "kg") out.weightUnit = parsed.weightUnit;
+      if (parsed.cardBack === "good" || parsed.cardBack === "evil") out.cardBack = parsed.cardBack;
       return out;
     }
   } catch {

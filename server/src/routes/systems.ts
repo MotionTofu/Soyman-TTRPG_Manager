@@ -9,6 +9,7 @@ import { ensureDefaultMechanicsSection, ensureDefaultVehicleSection } from "../d
 import { broadcastToCampaign } from "../services/realtime";
 import {
   entryImageFolder,
+  isCardKind,
   ensureSubfolder,
   readFileAsBase64,
   systemFolder,
@@ -638,9 +639,10 @@ systemsRouter.post("/entries/:entryId/avatar", upload.single("file"), async (req
   if (!req.file) return res.status(400).json({ error: "file is required" });
 
   const folder = entryImageFolder(entry.system_folder_path, entry.kind);
-  const ext = path.extname(req.file.originalname) || ".jpg";
+  const card = isCardKind(entry.kind);
+  const ext = card ? ".webp" : path.extname(req.file.originalname) || ".jpg";
   const target = path.join(folder, `entry-${entry.id}-avatar${ext}`);
-  await writeReplacingOldFile(target, req.file.buffer, entry.avatar_image_path, "avatar");
+  await writeReplacingOldFile(target, req.file.buffer, entry.avatar_image_path, card ? "card" : "avatar");
 
   db.prepare("UPDATE compendium_entries SET avatar_image_path = ? WHERE id = ?").run(target, entry.id);
   res.json({ avatar_image_url: toFileUrl(target) });

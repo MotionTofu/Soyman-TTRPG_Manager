@@ -10,6 +10,7 @@ import './rich-text.css'
 import './archive.css'
 import './statblock.css'
 import './zine.css'
+import './cursorSets.css'
 import App from './App.tsx'
 import { applyTheme, findTheme, loadThemePrefs } from './themes'
 import { applyCanvasPaletteVars } from './canvasPalette'
@@ -19,6 +20,7 @@ import { AudioPlayerProvider } from './audioPlayer'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClient } from './data/queryClient'
 import { installNativeDialogFocusFix } from './electronApi'
+import { applyCursorSet, loadCursorSet } from './cursorSets'
 
 // Apply the saved theme before the first render so there's no flash of the
 // default theme — a single CSS-variable write beats waiting for an effect.
@@ -29,6 +31,8 @@ applyCanvasPaletteVars()
 // мигнут исходным цветом перед обработкой.
 applyImageTreatment()
 migrateThumbnailStyles()
+// Набор курсоров — до первой отрисовки, чтобы стрелка не мигала системной.
+applyCursorSet(loadCursorSet())
 
 // Внутри Electron: вернуть окну фокус после нативного диалога. В браузере
 // ничего не делает.

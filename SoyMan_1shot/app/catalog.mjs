@@ -19,7 +19,11 @@ export function parseCatalog(input) {
   const entries = input.entries.map(e => {
     if (!Number.isSafeInteger(e.id) || ids.has(e.id) || !sections.has(e.section_id) || typeof e.name !== 'string' || typeof e.kind !== 'string' || !e.data || typeof e.data !== 'object' || Array.isArray(e.data)) throw Error('Некорректные записи справочника');
     ids.add(e.id);
-    return { id: e.id, system_id: 1, section_id: e.section_id, parent_id: e.parent_id ?? null, name: e.name, name_original: e.name_original || '', aliases: Array.isArray(e.aliases) ? e.aliases.filter(a => typeof a === 'string') : [], kind: e.kind, level: e.level ?? null, position: e.position || 0, data: structuredClone(e.data), description: typeof e.description === 'string' ? e.description : '' };
+    const embedded = value => value && typeof value === 'object' && typeof value.mime === 'string' && typeof value.base64 === 'string'
+      ? `data:${value.mime};base64,${value.base64}` : null;
+    const large = typeof e.avatar_large_url === 'string' ? e.avatar_large_url : embedded(e.avatar_data);
+    const preview = typeof e.avatar_preview_url === 'string' ? e.avatar_preview_url : embedded(e.avatar_preview_data) || large;
+    return { id: e.id, system_id: 1, section_id: e.section_id, parent_id: e.parent_id ?? null, name: e.name, name_original: e.name_original || '', aliases: Array.isArray(e.aliases) ? e.aliases.filter(a => typeof a === 'string') : [], kind: e.kind, level: e.level ?? null, position: e.position || 0, data: structuredClone(e.data), description: typeof e.description === 'string' ? e.description : '', avatar_preview_url: preview, avatar_large_url: large };
   });
   if (entries.some(e => e.parent_id != null && !ids.has(e.parent_id))) throw Error('В справочнике отсутствует родитель записи');
   return { system: { id: 1, name: input.system.name, code: 'dnd55', description: input.system.description || '' }, sections: cleanSections, entries };

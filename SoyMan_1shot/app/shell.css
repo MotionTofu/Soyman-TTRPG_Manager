@@ -1,6 +1,8 @@
 .oneshot-header{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--paper)}
 .oneshot-header>a{font-family:var(--font-display);font-size:var(--fs-h3);color:var(--ink);text-decoration:none}
 .oneshot-header [role=status]{margin-left:auto;font-size:var(--fs-meta);color:var(--muted)}
+.oneshot-card-back,.oneshot-large-cards{display:flex;align-items:center;gap:6px;font-size:var(--fs-meta)}
+.oneshot-card-back select{min-width:110px}
 .oneshot-home{max-width:850px;margin:40px auto;padding:0 24px 60px}
 .oneshot-home h1{font-size:var(--fs-h1);line-height:1.1}
 .oneshot-home section{border-top:1px solid var(--line);padding:24px 0;margin-top:24px}

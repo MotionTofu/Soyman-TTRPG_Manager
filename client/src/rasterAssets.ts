@@ -36,7 +36,7 @@
  * перевода в webp лежат в `Archive/2026-09-12/raster-png/`.
  */
 
-export type RasterCategory = "conditions" | "schools" | "coins" | "inventory" | "tokens" | "textures";
+export type RasterCategory = "conditions" | "schools" | "coins" | "inventory" | "tokens" | "textures" | "mascot";
 
 /** Что реально лежит в раздаче. Ключ — имя файла без расширения. */
 export const RASTER_ASSETS: Record<RasterCategory, readonly string[]> = {
@@ -72,6 +72,47 @@ export const RASTER_ASSETS: Record<RasterCategory, readonly string[]> = {
   tokens: ["familiar", "inspiration", "rest"],
   // Контурный ассет: пара light/dark по п.3.
   textures: ["dice-d20", "dice-d20-dark"],
+  mascot: [
+    "agent-error",
+    "agent-idle",
+    "agent-waiting",
+    "agent-working",
+    "detective-error",
+    "detective-idle",
+    "detective-waiting",
+    "detective-working",
+    "hero-error",
+    "hero-idle",
+    "hero-waiting",
+    "hero-working",
+    "mage-error",
+    "mage-idle",
+    "mage-waiting",
+    "mage-working",
+    "pirate-error",
+    "pirate-idle",
+    "pirate-waiting",
+    "pirate-working",
+    "runner-error",
+    "runner-idle",
+    "runner-waiting",
+    "runner-working",
+    "taoist-error",
+    "taoist-idle",
+    "taoist-waiting",
+    "taoist-working",
+    "vampire-error",
+    "vampire-idle",
+    "vampire-waiting",
+    "vampire-working",
+    "walker-error",
+    "walker-idle",
+    "walker-waiting",
+    "walker-working",
+  ],
+  // Курсор-паки (public/cursors/*.png) здесь НЕ числятся осознанно:
+  // check-raster-assets требует webp, а Chromium молча отбрасывает webp
+  // в cursor: url() — по спеке гарантирован только PNG.
 };
 
 const EXT = ".webp";

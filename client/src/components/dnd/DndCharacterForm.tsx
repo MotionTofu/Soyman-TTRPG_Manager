@@ -158,6 +158,8 @@ import {
   type ReplicateScheme,
 } from "./dndResources";
 import { Modal } from "../Modal";
+import { CardSpread, CardTile } from "./DndCards";
+import { openMentionPreview } from "../mentions/mentionPreviewStore";
 import { EntityPreviewModal } from "../EntityPreviewModal";
 import { useConfirm } from "../../hooks/useConfirm";
 import { useIsMobile } from "../../hooks/useIsMobile";
@@ -1289,7 +1291,7 @@ function sheetEntryIds(value: DndCharacterData): (number | null | undefined)[] {
   // Что это было упущение, а не решение, видно по `deadLinkNames`: спутников
   // она уже считает (найдено 09.09 при подключении знаков типов).
   const companions = (value.companions ?? []).flatMap((c) => [c.entryId, c.featureEntryId, c.spellEntryId, c.classId]);
-  return [...spells, ...features, ...classes, ...subclasses, ...companions, value.backgroundId];
+  return [...spells, ...features, ...classes, ...subclasses, ...companions, value.raceId, value.backgroundId];
 }
 
 // Full field set shown when a spell name is clicked (requirement 2).
@@ -6259,13 +6261,16 @@ function DndSheetSearch({
   hits,
   onGo,
   getEntry,
+  openCard,
+  setOpenCard,
 }: {
   hits: SheetSearchHit[];
   onGo: (hit: SheetSearchHit) => void;
   getEntry: (id: number | null | undefined) => CompendiumEntry | undefined;
+  openCard: SheetSearchHit | null;
+  setOpenCard: (hit: SheetSearchHit | null) => void;
 }) {
   const [query, setQuery] = useState("");
-  const [openCard, setOpenCard] = useState<SheetSearchHit | null>(null);
   const q = query.trim().toLowerCase();
   const found = q ? hits.filter((h) => h.name.toLowerCase().includes(q)).slice(0, 12) : [];
 
@@ -9513,6 +9518,11 @@ export function DndCharacterView({
   const [deadOpen, setDeadOpen] = useState(false);
   // Раскрывашка правки в десктопной правой колонке (под оборотом).
   const [rightEditOpen, setRightEditOpen] = useState(false);
+  // Карты правил листа и карточка конкретного умения живут на уровне всего
+  // листа: стрелка из CardSpread открывает ровно ту же DndCardModal, что и
+  // поиск внизу, а не второе похожее окно.
+  const [openRulesEntryId, setOpenRulesEntryId] = useState<number | null>(null);
+  const [openSheetCard, setOpenSheetCard] = useState<SheetSearchHit | null>(null);
   // Смена аватара из той же раскрывашки: файл уходит на роут персонажа, а
   // свежий URL приезжает через onPortraitRefresh (перезагрузка персонажа).
   // Кадрирование тут не нужно — оно уже есть на лицевой (?edit=1 тянет
@@ -10354,6 +10364,40 @@ export function DndCharacterView({
   // Индекс поиска. Порядок групп особенностей здесь и в liveFeatureGroups
   // должен совпадать — подписи результата берутся по индексу группы.
   const searchHits = collectSheetHits(value, liveCantrips, liveSpellsByLevel, liveFeatureGroups);
+  const rulesCards = [
+    ...value.classes.flatMap((c, index) =>
+      c.classId == null
+        ? []
+        : [{ id: c.classId, name: c.className || `Класс ${index + 1}`, level: c.level, classIndex: index, kind: "class" as const }]
+    ),
+    ...(value.raceId == null ? [] : [{ id: value.raceId, name: value.raceName || "Вид", kind: "species" as const }]),
+  ];
+  const activeRulesCard =
+    rulesCards.find((c) => c.id === openRulesEntryId) ??
+    value.classes.flatMap((c, classIndex) =>
+      c.subclassId == null
+        ? []
+        : [{ id: c.subclassId, name: c.subclassName || "Подкласс", classIndex, kind: "subclass" as const }]
+    ).find((c) => c.id === openRulesEntryId) ??
+    null;
+  function openFeatureFromRules(feature: CompendiumEntry) {
+    const own = searchHits.find((hit) => hit.card?.kind === "feature" && hit.card.feature.entryId === feature.id);
+    if (own) setOpenSheetCard(own);
+    else openMentionPreview("compendium_entry", feature.id);
+  }
+  function rulesCardTile(entryId: number | null, fallbackName: string, onOpen: () => void) {
+    if (entryId == null) return null;
+    const entry = getEntry(entryId);
+    return (
+      <div className="dnd-feature-card-link">
+        <CardTile
+          option={{ id: entryId, name: entry?.name || fallbackName, card: entry?.avatar_image_url ?? null }}
+          small
+          onClick={onOpen}
+        />
+      </div>
+    );
+  }
   const spellAbilityKey = characterSpellcastingAbility(value.classes) ?? subclassSpellcastingAbility();
   function subclassSpellcastingAbility(): DndAbilityKey | null {
     // Заклинатель через подкласс (Мистический рыцарь — Интеллект): у строки
@@ -10540,6 +10584,55 @@ export function DndCharacterView({
   return (
     <div className="sb-scope" onClickCapture={() => highlight && setHighlight(null)}>
       <div className="sb-card">
+        {activeRulesCard && (
+          <Modal wide className="dnd-rules-card-modal" ariaLabel={`Карта: ${activeRulesCard.name}`} onClose={() => setOpenRulesEntryId(null)}>
+            <div className="stack">
+              <div className="row dnd-rules-card-head">
+                <div className="dnd-rules-card-switches" role="tablist" aria-label="Карты персонажа">
+                  {rulesCards.map((card) => (
+                    <button
+                      key={`${card.kind}-${card.id}`}
+                      type="button"
+                      className={card.id === activeRulesCard.id ? "primary" : ""}
+                      aria-selected={card.id === activeRulesCard.id}
+                      onClick={() => setOpenRulesEntryId(card.id)}
+                    >
+                      {card.name}
+                    </button>
+                  ))}
+                </div>
+                <button type="button" className="comp-mini" aria-label="Закрыть" onClick={() => setOpenRulesEntryId(null)}>
+                  <NavIcon name="close" />
+                </button>
+              </div>
+              <CardSpread
+                systemId={value.systemId}
+                entryId={activeRulesCard.id}
+                currentLevel={activeRulesCard.kind === "class" ? activeRulesCard.level : undefined}
+                onOpenFull={openFeatureFromRules}
+                strip={
+                  activeRulesCard.kind === "class" && activeRulesCard.classIndex != null
+                    ? (() => {
+                        const cls = value.classes[activeRulesCard.classIndex];
+                        return cls?.subclassId != null
+                          ? <div className="dc-substrip">{rulesCardTile(cls.subclassId, cls.subclassName || "Подкласс", () => setOpenRulesEntryId(cls.subclassId!))}</div>
+                          : undefined;
+                      })()
+                    : undefined
+                }
+              />
+            </div>
+          </Modal>
+        )}
+        {openSheetCard?.card && (
+          <DndCardModal
+            title={openSheetCard.name}
+            spell={openSheetCard.card.kind === "spell" ? openSheetCard.card.spell : null}
+            feature={openSheetCard.card.kind === "feature" ? openSheetCard.card.feature : null}
+            getEntry={getEntry}
+            onClose={() => setOpenSheetCard(null)}
+          />
+        )}
         {/* Шапки над картами нет нигде: на лицевой имя стоит в картуше, отдых —
             жетоном в углу карты, а правка уехала на плашку чарника в профиле
             (решение владельца 2026-09-06). Верх страницы — поиск, потом
@@ -10964,9 +11057,29 @@ export function DndCharacterView({
                             {totalLevel}
                           </span>
                         ))}
-                      <span className="dnd-card-cartouche-classline">{classLine}</span>
+                      <span className="dnd-card-cartouche-classline">
+                        {value.classes.filter((c) => c.classId != null && c.className).map((c, i) => (
+                          <span key={`${c.classId}-${i}`}>
+                            {i > 0 && " / "}
+                            <button type="button" className="dnd-card-text-link" onClick={() => setOpenRulesEntryId(c.classId)}>
+                              {[stripLatin(c.className), stripLatin(c.subclassName)].filter(Boolean).join(" · ")}
+                            </button>
+                          </span>
+                        ))}
+                        {value.classes.every((c) => c.classId == null) && classLine}
+                      </span>
                     </div>
-                    {originLine && <div className="dnd-card-cartouche-origin">{originLine}</div>}
+                    {originLine && (
+                      <div className="dnd-card-cartouche-origin">
+                        {value.raceId != null ? (
+                          <button type="button" className="dnd-card-text-link" onClick={() => setOpenRulesEntryId(value.raceId)}>
+                            {stripLatin(value.raceName) || "Вид"}
+                          </button>
+                        ) : stripLatin(value.raceName)}
+                        {value.backgroundName && <> · {stripLatin(value.backgroundName)}</>}
+                        {value.proficiencyBonus && <> · БМ {value.proficiencyBonus}</>}
+                      </div>
+                    )}
                   </div>
               </div>
               {/* ВДОХНОВЕНИЕ — жетон-звезда в углу карты, а не плашка в ряду
@@ -12134,11 +12247,17 @@ export function DndCharacterView({
               )}
               {draftFeatures ? (
                 <>
+                  {rulesCardTile(value.raceId, value.raceName || "Вид", () => setOpenRulesEntryId(value.raceId))}
                   <AutoFeatureListEdit
                     title="Видовые особенности"
                     values={draftFeatures.speciesFeatures}
                     onChange={(v) => setDraftFeatures({ ...draftFeatures, speciesFeatures: v })}
                   />
+                  <div className="dnd-feature-card-strip">
+                    {value.classes.map((c, i) => (
+                      <div key={`${c.classId}-${i}`}>{rulesCardTile(c.classId, c.className || "Класс", () => setOpenRulesEntryId(c.classId))}</div>
+                    ))}
+                  </div>
                   <AutoFeatureListEdit
                     title="Классовые особенности"
                     values={draftFeatures.classFeatures}
@@ -12184,7 +12303,13 @@ export function DndCharacterView({
                 </>
               ) : (
                 <>
+                  {rulesCardTile(value.raceId, value.raceName || "Вид", () => setOpenRulesEntryId(value.raceId))}
                   <SbFeatureGroup title="Видовые особенности" values={value.speciesFeatures} />
+                  <div className="dnd-feature-card-strip">
+                    {value.classes.map((c, i) => (
+                      <div key={`${c.classId}-${i}`}>{rulesCardTile(c.classId, c.className || "Класс", () => setOpenRulesEntryId(c.classId))}</div>
+                    ))}
+                  </div>
                   <SbFeatureGroup title="Классовые особенности" values={value.classFeatures} />
                   <SbFeatureGroup title="Черты" values={value.feats} />
                   <SbFeatureGroup title="Особые умения" values={value.specialAbilities} />
@@ -12268,6 +12393,8 @@ export function DndCharacterView({
               <DndSheetSearch
                 hits={searchHits}
                 getEntry={getEntry}
+                openCard={openSheetCard}
+                setOpenCard={setOpenSheetCard}
                 onGo={(hit) => {
                   setTab(hit.tab);
                   setHighlight(hit.highlight ?? null);

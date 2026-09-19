@@ -12,9 +12,9 @@ import { MentionText } from "../components/mentions/MentionText";
 import { openPreviewDockCard } from "../previewDockStore";
 import { dataKeys } from "../data/entities";
 import { useAction, useResource, write } from "../data/hooks";
-import { attendanceBody, secretStateAffects, sessionMoneyAffects, sessionPaths } from "../data/sessions";
+import { secretStateAffects, sessionPaths } from "../data/sessions";
+import { ToInitiativeButton } from "../components/ToInitiativeButton";
 import type {
-  AttendanceRow,
   CampaignDetail,
   CampaignGrouped,
   Character,
@@ -171,46 +171,12 @@ function LootContent({ sessionId, union }: PanelProps) {
   );
 }
 
-function RosterContent({ campaign, characters, session, sessionId }: PanelProps) {
-  const client = useQueryClient();
-  const run = useAction();
-
-  async function updateAttendance(playerId: number, field: "attended" | "amount_paid", value: number) {
-    const base: AttendanceRow[] =
-      session.attendance.length > 0
-        ? session.attendance
-        : campaign.roster.map((p) => ({ player_id: p.id, name: p.name, attended: 0, amount_paid: 0, amount_forgiven: 0 }));
-    const next = base.map((a) => (a.player_id === playerId ? { ...a, [field]: value } : a));
-    // если игрока ещё нет в attendance (новый в ростере) — добавляем
-    if (!next.find((a) => a.player_id === playerId)) {
-      next.push({
-        player_id: playerId,
-        name: campaign.roster.find((p) => p.id === playerId)?.name ?? "",
-        attended: field === "attended" ? value : 0,
-        amount_paid: field === "amount_paid" ? value : 0,
-        amount_forgiven: 0,
-      });
-    }
-    // Галочка встаёт сразу: строка сессии в кэше правится до ответа сервера, а
-    // отказ сервера её перечитывает обратно.
-    client.setQueryData<SessionDetail>(dataKeys.entity("session", sessionId), (prev) =>
-      prev ? { ...prev, attendance: next } : prev
-    );
-    await run(
-      async () => {
-        await write.put(`/sessions/${sessionId}/attendance`, { attendance: attendanceBody(next) });
-        return true;
-      },
-      { affects: sessionMoneyAffects(sessionId, campaign.id) }
-    );
-  }
-
+function RosterContent({ campaign, characters }: PanelProps) {
   if (campaign.roster.length === 0) return <span className="muted">Состав кампании пуст.</span>;
   return (
     <div className="stack" style={{ gap: 0 }}>
       {campaign.roster.map((p) => {
         const playerCharacters = characters.filter((c) => c.player_id === p.id);
-        const att = session.attendance.find((a) => a.player_id === p.id);
         const avatar = p.thumbnail_image_url ?? p.avatar_image_url;
         return (
           <div key={p.id} className="row" style={{ alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
@@ -220,28 +186,24 @@ function RosterContent({ campaign, characters, session, sessionId }: PanelProps)
               ) : (
                 <span style={{ width: 28, height: 28, borderRadius: "50%", background: "var(--paper-2)", flexShrink: 0 }} />
               )}
-              <div style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>
-                <span style={{ fontFamily: "var(--font-body)", fontSize: "var(--fs-meta)", fontWeight: 700, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {playerCharacters.length ? playerCharacters.map((c, idx) => (
-                    <span key={c.id}>
-                      {idx > 0 && ", "}
+              <div style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1, gap: 2 }}>
+                {playerCharacters.length ? playerCharacters.map((c) => (
+                  <span key={c.id} className="row" style={{ gap: 6, alignItems: "center", minWidth: 0 }}>
+                    <span style={{ fontFamily: "var(--font-body)", fontSize: "var(--fs-meta)", fontWeight: 700, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       <Link to={`/characters/${c.id}`} style={{ color: "var(--ink)", textDecoration: "none" }}>{c.character_name}</Link>
                     </span>
-                  )) : "—"}
-                </span>
+                    <ToInitiativeButton item={{ type: "character", id: c.id, title: c.character_name }} />
+                  </span>
+                )) : (
+                  <span style={{ fontFamily: "var(--font-body)", fontSize: "var(--fs-meta)", fontWeight: 700, lineHeight: 1.1 }}>—</span>
+                )}
                 <span className="muted" style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.08em", lineHeight: 1 }}>{p.name}</span>
               </div>
               <span className="muted" style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.08em" }}>{playerCharacters.length === 0 ? <Link to={`/players/${p.id}`} className="muted">профиль</Link> : null}</span>
             </div>
-            <label className="row" style={{ gap: 6, alignItems: "center", cursor: "pointer" }}>
-              <input type="checkbox" checked={!!att?.attended} onChange={(e) => updateAttendance(p.id, "attended", e.target.checked ? 1 : 0)} />
-              <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Пришёл</span>
-            </label>
-            <input type="number" placeholder="0" value={att?.amount_paid || ""} onChange={(e) => updateAttendance(p.id, "amount_paid", Number(e.target.value) || 0)} style={{ width: 72, fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", textAlign: "right" }} />
           </div>
         );
       })}
-      <span className="muted" style={{ fontSize: "var(--fs-micro)", marginTop: 6 }}>Отметки уйдут в «Резюме» сессии.</span>
     </div>
   );
 }
