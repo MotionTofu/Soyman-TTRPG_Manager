@@ -15,7 +15,7 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ["@xyflow/react", "react", "react-dom", "react-router-dom"],
+    include: ["@xyflow/react", "gridstack", "react", "react-dom", "react-router-dom"],
   },
   build: {
     rollupOptions: {

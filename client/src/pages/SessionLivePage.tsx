@@ -6,16 +6,7 @@ import { SceneSwitcher } from "../components/SceneSwitcher";
 import { PresentationPanel } from "../components/presentation/PresentationPanel";
 import { SessionTimeStrip } from "../components/SessionTimeStrip";
 import { SceneJournal } from "../components/SceneJournal";
-import {
-  LocationsPanel,
-  PlotCharactersPanel,
-  ObstaclesPanel,
-  LootPanel,
-  RosterPanel,
-  SecretsPanel,
-  RemindersPanel,
-  CompendiumPanel,
-} from "./sessionLivePanels";
+import { PultGrid } from "./PultGrid";
 import type { CampaignDetail, Character, SessionDetail, SessionUnionRow } from "../types";
 // session.css нужен пульту не меньше cockpit.css: цвета панелей
 // (sp-card--plot/location/enemies/loot) и вид их шапок живут там, рядом с
@@ -136,84 +127,68 @@ export function SessionLivePage() {
 
       <PresentationPanel sessionId={sessionId} campaignId={campaign.id} />
 
-      <div className="session-live-idea-events">
-        <EditableTextCard
-          key={`idea-${session.id}`}
-          title="Задумка на сессию"
-          draftKey={`session-idea-${sessionId}`}
-          value={session.idea_notes}
-          onSave={(value) => saveText({ idea_notes: value })}
-          entityType="session"
-          entityId={sessionId}
-          collapsible
-          defaultOpen
-        />
-        <EditableTextCard
-          key={`events-${session.id}`}
-          title="Основные события сессии"
-          draftKey={`session-main-events-${sessionId}`}
-          value={session.main_events}
-          onSave={(value) => saveText({ main_events: value })}
-          entityType="session"
-          entityId={sessionId}
-          collapsible
-          defaultOpen={!!session.main_events}
-          extraAction={
-            session.status === "held"
-              ? undefined
-              : { label: "Сохранить и завершить сессию", onAct: finishSession }
-          }
-          inlineFooter={
-            <label className="row muted" style={{ gap: 6, alignItems: "center" }}>
-              <input
-                type="checkbox"
-                checked={!!session.main_events_visible}
-                onChange={() => void save({ main_events_visible: session.main_events_visible ? 0 : 1 })}
-              />
-              {session.main_events_visible ? (
-                <>
-                  <NavIcon name="eye" /> Видно игрокам
-                </>
-              ) : (
-                "Видно игрокам"
-              )}
-            </label>
-          }
-        >
-          <SceneJournal
-            sessionId={sessionId}
-            onInsert={(text) =>
-              void save({ main_events: session.main_events ? `${session.main_events}\n${text}` : text })
-            }
+      {/* Блоки контента — на сетке GridStack (таскаются за шапку, раскладка
+          запоминается): задумка/события + 8 панелей. Время, сцены и показ
+          выше — вне сетки, статично. */}
+      <PultGrid
+        panelProps={panelProps}
+        ideaCard={
+          <EditableTextCard
+            key={`idea-${session.id}`}
+            title="Задумка на сессию"
+            draftKey={`session-idea-${sessionId}`}
+            value={session.idea_notes}
+            onSave={(value) => saveText({ idea_notes: value })}
+            entityType="session"
+            entityId={sessionId}
+            collapsible
+            defaultOpen
+            summaryClassName="pult-drag-handle"
           />
-        </EditableTextCard>
-      </div>
-
-      {/* Трекер инициативы живёт в правой панели (SearchPanel) и только там.
-          Здесь стояла его вторая копия: на широком экране она пряталась через
-          display:none, а на узком показывалась — и обе висели в DOM
-          одновременно, с независимым состоянием. Правка хитов в одной во
-          второй не появлялась, подсветка текущего хода расходилась. На узком
-          экране панель открывается кнопкой поиска в шапке (или «]»). */}
-
-      <div className="stack" style={{ gap: 12 }}>
-        <div className="row" style={{ gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
-          <div style={{ flex: 1, minWidth: 260 }}><PlotCharactersPanel {...panelProps} /></div>
-          <div style={{ flex: 1, minWidth: 260 }}><LocationsPanel {...panelProps} /></div>
-        </div>
-        <div className="row" style={{ gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
-          <div style={{ flex: 1, minWidth: 260 }}><ObstaclesPanel {...panelProps} /></div>
-          <div style={{ flex: 1, minWidth: 260 }}><LootPanel {...panelProps} /></div>
-        </div>
-        <div className="row" style={{ gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
-          <div style={{ flex: 1, minWidth: 260 }}><RemindersPanel {...panelProps} /></div>
-          <div style={{ flex: 1, minWidth: 260 }}><CompendiumPanel {...panelProps} /></div>
-        </div>
-        <div className="row" style={{ gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
-          <div style={{ flex: 1, minWidth: 260 }}><RosterPanel {...panelProps} /></div>
-          <div style={{ flex: 1, minWidth: 260 }}><SecretsPanel {...panelProps} /></div>
-        </div>
-      </div>
+        }
+        eventsCard={
+          <EditableTextCard
+            key={`events-${session.id}`}
+            title="Основные события сессии"
+            draftKey={`session-main-events-${sessionId}`}
+            value={session.main_events}
+            onSave={(value) => saveText({ main_events: value })}
+            entityType="session"
+            entityId={sessionId}
+            collapsible
+            defaultOpen={!!session.main_events}
+            summaryClassName="pult-drag-handle"
+            extraAction={
+              session.status === "held"
+                ? undefined
+                : { label: "Сохранить и завершить сессию", onAct: finishSession }
+            }
+            inlineFooter={
+              <label className="row muted" style={{ gap: 6, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={!!session.main_events_visible}
+                  onChange={() => void save({ main_events_visible: session.main_events_visible ? 0 : 1 })}
+                />
+                {session.main_events_visible ? (
+                  <>
+                    <NavIcon name="eye" /> Видно игрокам
+                  </>
+                ) : (
+                  "Видно игрокам"
+                )}
+              </label>
+            }
+          >
+            <SceneJournal
+              sessionId={sessionId}
+              onInsert={(text) =>
+                void save({ main_events: session.main_events ? `${session.main_events}\n${text}` : text })
+              }
+            />
+          </EditableTextCard>
+        }
+      />
       {outcomeOpen && <SessionOutcomeModal sessionId={sessionId} onClose={() => setOutcomeOpen(false)} />}
     </div>
   );

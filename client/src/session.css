@@ -1053,7 +1053,7 @@
 .scene-detail details.sp-card--location .entry-title,
 .scene-detail details.sp-card--enemies .entry-title,
 .scene-detail details.sp-card--loot .entry-title { color: inherit; }
-/* Внутренний отступ тела карточки после хака — иначе drop-zone прилипает к рамке */
+/* Внутренний отступ тела карточки после хака — иначе drop-zone прилипает к рамке. Сверху ноль: стык с шапкой задаёт только зазор details (sp-3). */
 .session-profile details.sp-card--plot > .drop-zone,
 .session-profile details.sp-card--location > .drop-zone,
 .session-profile details.sp-card--enemies > .drop-zone,
@@ -1062,7 +1062,7 @@ details.sp-card--plot > .drop-zone,
 details.sp-card--location > .drop-zone,
 details.sp-card--enemies > .drop-zone,
 details.sp-card--loot > .drop-zone {
-  margin: var(--sp-5);
+  margin: 0 var(--sp-3) var(--sp-3);
 }
 .session-profile details.sp-card--plot > .drop-zone:empty,
 .session-profile details.sp-card--location > .drop-zone:empty,
@@ -1072,7 +1072,7 @@ details.sp-card--plot > .drop-zone:empty,
 details.sp-card--location > .drop-zone:empty,
 details.sp-card--enemies > .drop-zone:empty,
 details.sp-card--loot > .drop-zone:empty {
-  margin: var(--sp-5);
+  margin: 0 var(--sp-3) var(--sp-3);
 }
 
 /* Вёрстка пульта (.session-live*, body.live-hide-*) переехала целиком в
@@ -1088,6 +1088,13 @@ details.sp-card--enemies,
 details.sp-card--loot {
   padding: 0;
   overflow: hidden;
+}
+/* Стык шапка↔зона у четвёрки — 3px; шаг мимо шкалы намеренно — глаз просит между 2 и 4: 2 слипается с плашкой, 4 читается как щель */
+details.sp-card--plot.lazy-details,
+details.sp-card--location.lazy-details,
+details.sp-card--enemies.lazy-details,
+details.sp-card--loot.lazy-details {
+  gap: 3px;
 }
 details.sp-card--plot > summary,
 details.sp-card--location > summary,
@@ -1151,12 +1158,52 @@ details.sp-card--loot .entry-title {
 }
 .session-live details.card:not(.sp-card--plot):not(.sp-card--location):not(.sp-card--enemies):not(.sp-card--loot) > summary::-webkit-details-marker { display: none; }
 .session-live details.card:not(.sp-card--plot):not(.sp-card--location):not(.sp-card--enemies):not(.sp-card--loot) > summary::marker { content: ""; }
-/* Внутренний отступ у нейтральных панелей пульта — чтобы компендиум/тайны не липли к левому краю */
+/* Внутренний отступ у нейтральных панелей пульта — чтобы компендиум/тайны не липли к краям. Сверху ноль: стык с шапкой задаёт только зазор details (sp-3). */
 .session-live details.card:not(.sp-card--plot):not(.sp-card--location):not(.sp-card--enemies):not(.sp-card--loot) > .stack {
-  padding: var(--sp-5);
+  padding: 0 var(--sp-5) var(--sp-5);
+}
+/* Первый ряд вплотную к шапке: стык — только зазор details, ритм между рядами не трогаем. Только пульт: попауты и профили как были. */
+.session-live .resource-row:first-child {
+  padding-top: 0;
+}
+.session-live .roster-rows > :first-child {
+  padding-top: 0;
 }
 .session-live details.card:not(.sp-card--plot):not(.sp-card--location):not(.sp-card--enemies):not(.sp-card--loot) > div > .stack {
   padding: 0;
+}
+/* Строка поиска по компендиуму — таблица из трёх ячеек: название / раздел /
+   чип вида. Систему не пишем — она уже в шапке панели. */
+.sp-comp-hit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: var(--sp-3);
+  align-items: baseline;
+}
+.sp-comp-hit__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+.sp-comp-hit__section {
+  white-space: nowrap;
+  font-size: var(--fs-micro);
+}
+/* Чип вида — как чипсы существ: рамка чернилами, капс микро. */
+.sp-comp-hit__chip {
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: var(--fs-micro);
+  line-height: 1.6;
+  padding: var(--sp-0) var(--sp-2);
+  border: var(--card-border-width) solid var(--ink);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  white-space: nowrap;
 }
 
 /* sp-revealed — плотный список, а не stack с gap10. Иконка — коорд. отметка */

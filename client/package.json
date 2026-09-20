@@ -21,6 +21,7 @@
   "dependencies": {
     "@tanstack/react-query": "^5.102.8",
     "@xyflow/react": "^12.11.3",
+    "gridstack": "^13.3.0",
     "html-to-image": "^1.11.13",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.7",

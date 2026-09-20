@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { NavIcon } from "./NavIcons";
 import "./FloatWindow.css";
 
 interface Size {
@@ -213,11 +214,12 @@ export function FloatWindow({ title, storageKey, defaultSize, onDock, onToDockSt
         <span className="float-title__label">{title}</span>
         <button
           type="button"
-          className="comp-mini"
+          className="comp-mini float-title__icon-btn"
           onClick={onToDockStation}
           title="Убрать окно плашкой в док-станцию"
+          aria-label="Убрать окно плашкой в док-станцию"
         >
-          В док-станцию
+          <NavIcon name="dockLeft" />
         </button>
         <button
           type="button"

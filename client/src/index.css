@@ -2983,6 +2983,12 @@ button.place-card__row-name {
   gap: var(--sp-5);
 }
 
+/* Раскрывайка: зазор шапка ↔ тело — sp-1, почти впритык. Шапка здесь ручка
+   (таскают за неё), и воздух отрывал бы её от своего тела. */
+.lazy-details {
+  gap: var(--sp-1);
+}
+
 .grid-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -3670,28 +3676,57 @@ body.live-hide-search.live-hide-dock .app-content {
 .preview-dock-list {
   gap: var(--sp-5);
 }
-/* Плашка вынесенных сцен внизу докстанции: клик разворачивает окно.
-   margin-top прижимает к низу, пока карточек мало; при длинном доке едет
-   следом за списком. */
-.preview-dock-scenes {
+/* Плашки вынесенных блоков внизу докстанции: прижимает к низу обёртка,
+   сами идут с шагом nav. У каждой два выхода: разворот в окно и возврат
+   в сетку пульта. */
+.preview-dock-floats {
   margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.preview-dock-scenes {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-top: var(--card-border-width, 1px) solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+}
+.preview-dock-scenes__open {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: var(--sp-2);
-  padding: var(--sp-4) var(--sp-3);
-  border-top: var(--card-border-width, 1px) solid var(--line);
-  background: var(--paper);
-  color: var(--ink);
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
   font-family: var(--font-ui);
   text-align: left;
   cursor: pointer;
 }
-.preview-dock-scenes:hover {
-  background: var(--paper-2);
+.preview-dock-scenes__grid {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.preview-dock-scenes__grid:hover {
+  color: var(--ink);
 }
 .preview-dock-scenes__name {
   font-weight: 600;
+  font-size: var(--fs-micro);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

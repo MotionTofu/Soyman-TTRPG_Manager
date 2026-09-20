@@ -23,6 +23,7 @@ import { brandLogo } from "../brandLogo";
 import { ExternalLinkConfirmModal, BOOSTY_URL } from "../components/ExternalLinkConfirmModal";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { useConfirm } from "../hooks/useConfirm";
+import { requestPultGridReset } from "../pultGridReset";
 import { sessionLabel } from "../sessionLabel";
 import type { CampaignDetail, SessionDetail } from "../types";
 
@@ -768,6 +769,19 @@ export function AppShell() {
               <span className="muted shell-crumbs__storage" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)", border: "1px solid var(--line)", padding: "2px 6px", background: "var(--paper-2)" }} title="Активное хранилище">
                 {activeStorageName}
               </span>
+            )}
+            {/* Сброс раскладки блоков пульта: живёт тут, а не над сеткой, —
+                рука тянется к шапке, а не вглубь. Сетка слушает событие
+                (см. pultGridReset) и только пока смонтирована. */}
+            {!isPlayer && isLivePult && (
+              <button
+                type="button"
+                className="comp-mini"
+                onClick={() => requestPultGridReset()}
+                title="Вернуть блоки как было"
+              >
+                Сбросить раскладку
+              </button>
             )}
           </div>
         )}

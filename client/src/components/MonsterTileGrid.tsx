@@ -2,6 +2,7 @@ import { memo, useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { write } from "../data/hooks";
 import { addToBag } from "../bag";
+import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { Modal } from "./Modal";
 import { NavIcon } from "./NavIcons";
 import { CreatureCardPreview } from "./EntityPreviewModal";
@@ -293,7 +294,15 @@ const MonsterTile = memo(function MonsterTile({
     <article
       className="monster-tile"
       onClick={() => onOpenModal({ id: entry.id, view: "card" })}
-      title="Открыть карточку существа"
+      title="Открыть карточку существа · тащить — в трекер инициативы или в препятствия"
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData(
+          SEARCH_DRAG_MIME,
+          JSON.stringify({ type: "compendium_entry", id: entry.id, title: entry.name, kind: entry.kind })
+        );
+        e.dataTransfer.effectAllowed = "link";
+      }}
     >
       <header className="monster-tile__band">
         <button
@@ -331,7 +340,9 @@ const MonsterTile = memo(function MonsterTile({
       <div className="monster-tile__body">
         {entry.avatar_image_url ? (
           // Портрет — изображение-СОДЕРЖИМОЕ, дуотон на него не ложится (§1.13).
-          <img className="monster-tile__portrait" src={entry.avatar_image_url} alt="" />
+          // Нативный драг картинки выключен: тянут плитку целиком в трекер
+          // или препятствия, а не файл портрета.
+          <img className="monster-tile__portrait" src={entry.avatar_image_url} alt="" draggable={false} />
         ) : (
           <span className="monster-tile__monogram" aria-hidden="true">
             {monogramLetter(ru)}

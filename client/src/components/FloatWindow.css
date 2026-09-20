@@ -53,6 +53,14 @@
   color: var(--muted);
 }
 
+/* Кнопка-иконка на плашке: квадрат под 18px значок. */
+.float-title__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-1);
+}
+
 .float-body {
   flex: 1;
   min-height: 0;

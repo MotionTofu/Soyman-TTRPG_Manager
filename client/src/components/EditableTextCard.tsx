@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { usePultGridForceOpen } from "../pultForceOpen";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
@@ -48,6 +49,9 @@ interface Props {
   // (поля пульта), а не во всём приложении: иначе в хранилище копился бы
   // мусор по каждой сущности сеттинга.
   draftKey?: string;
+  // Класс-маркер на заголовок (summary/h3) — ручка драга для сетки пульта.
+  // Остальным не нужен: таскают только там.
+  summaryClassName?: string;
 }
 
 export function EditableTextCard({
@@ -67,7 +71,9 @@ export function EditableTextCard({
   extraAction,
   inlineFooter,
   draftKey,
+  summaryClassName,
 }: Props) {
+  const forceOpen = usePultGridForceOpen();
   // Черновик, оставшийся с прошлого захода: он и открывает карточку в правке,
   // иначе набранный текст лежал бы невидимым под кнопкой «Редактировать».
   const [restored] = useState<string | null>(() => {
@@ -226,9 +232,14 @@ export function EditableTextCard({
 
   if (collapsible) {
     return (
-      <details className="card" open={defaultOpen || draftRestored}>
-        <summary className="campaign-overview-header">{title}</summary>
-        <div className="stack" style={{ marginTop: 8 }}>
+      <details className="card" open={defaultOpen || draftRestored || forceOpen}>
+        <summary
+          className={`campaign-overview-header${summaryClassName ? ` ${summaryClassName}` : ""}`}
+          onClick={forceOpen ? (e) => e.preventDefault() : undefined}
+        >
+          {title}
+        </summary>
+        <div className="stack" style={{ marginTop: "var(--sp-3)" }}>
           {body}
         </div>
       </details>
@@ -237,7 +248,7 @@ export function EditableTextCard({
 
   return (
     <div className="card stack">
-      <h3>{title}</h3>
+      <h3 className={summaryClassName}>{title}</h3>
       {body}
     </div>
   );

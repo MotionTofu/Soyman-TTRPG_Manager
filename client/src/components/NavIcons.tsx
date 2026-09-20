@@ -69,6 +69,7 @@ export type NavIconName =
   | "bag"
   | "swap"
   | "fullscreen"
+  | "dockLeft"
   | "center"
   | "card"
   | "moon"
@@ -549,6 +550,15 @@ const PATHS: Record<NavIconName, ReactNode> = {
     <>
       <circle cx="12" cy="12" r="6.5" />
       <path d="M12 2.5v3.3M12 18.2v3.3M2.5 12h3.3M18.2 12h3.3" />
+    </>
+  ),
+  // Докстанция: квадрат на три столбца, левый залит — окно уезжает плашкой
+  // в левый док.
+  dockLeft: (
+    <>
+      <rect x="4" y="4" width="5.3" height="16" fill="currentColor" stroke="none" />
+      <rect x="4" y="4" width="16" height="16" />
+      <path d="M9.3 4v16M14.7 4v16" />
     </>
   ),
   // "Отдых" (rest) — crescent moon.

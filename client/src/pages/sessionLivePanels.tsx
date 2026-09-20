@@ -14,6 +14,7 @@ import { dataKeys } from "../data/entities";
 import { useAction, useResource, write } from "../data/hooks";
 import { secretStateAffects, sessionPaths } from "../data/sessions";
 import { ToInitiativeButton } from "../components/ToInitiativeButton";
+import { kindLabel } from "../compendium";
 import type {
   CampaignDetail,
   CampaignGrouped,
@@ -62,9 +63,9 @@ export type SessionPanelKey =
 
 export const SESSION_PANEL_TITLES: Record<SessionPanelKey, string> = {
   locations: "Локации",
-  plotCharacters: "Сюжетные персонажи",
+  plotCharacters: "НПЦ",
   obstacles: "Препятствия",
-  loot: "Потенциальный лут",
+  loot: "Лут",
   roster: "Персонажи игроков",
   secrets: "Тайны и зацепки",
   reminders: "Напоминания",
@@ -89,30 +90,6 @@ interface PanelProps {
 function forPanel(union: SessionUnionRow[] | undefined, panel: string): SessionUnionRow[] {
   return (union ?? []).filter((u) => u.panel === panel);
 }
-
-// Popped-out panel windows are opened by name, so re-clicking the same
-// button focuses the existing window instead of spawning duplicates.
-function PopoutButton({ sessionId, panelKey }: { sessionId: number; panelKey: SessionPanelKey }) {
-  return (
-    <button
-      type="button"
-      className="comp-mini"
-      title="Открыть в отдельном окне"
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        window.open(
-          `/sessions/${sessionId}/live/panel/${panelKey}`,
-          `panel-${panelKey}-${sessionId}`,
-          "width=420,height=640"
-        );
-      }}
-    >
-      ⇱
-    </button>
-  );
-}
-
 // Панели не знают про запуск сцены: он задевает связи и состав сессии
 // (data/sessions.ts), и зоны перечитываются сами. Строки объединения — через
 // useMemo, иначе новый массив на каждой отрисовке сбивал бы memo зоны.
@@ -174,7 +151,7 @@ function LootContent({ sessionId, union }: PanelProps) {
 function RosterContent({ campaign, characters }: PanelProps) {
   if (campaign.roster.length === 0) return <span className="muted">Состав кампании пуст.</span>;
   return (
-    <div className="stack" style={{ gap: 0 }}>
+    <div className="stack roster-rows" style={{ gap: 0 }}>
       {campaign.roster.map((p) => {
         const playerCharacters = characters.filter((c) => c.player_id === p.id);
         const avatar = p.thumbnail_image_url ?? p.avatar_image_url;
@@ -189,7 +166,7 @@ function RosterContent({ campaign, characters }: PanelProps) {
               <div style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1, gap: 2 }}>
                 {playerCharacters.length ? playerCharacters.map((c) => (
                   <span key={c.id} className="row" style={{ gap: 6, alignItems: "center", minWidth: 0 }}>
-                    <span style={{ fontFamily: "var(--font-body)", fontSize: "var(--fs-meta)", fontWeight: 700, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    <span style={{ fontFamily: "var(--font-body)", fontSize: "var(--fs-meta)", fontWeight: 700, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1, minWidth: 0 }}>
                       <Link to={`/characters/${c.id}`} style={{ color: "var(--ink)", textDecoration: "none" }}>{c.character_name}</Link>
                     </span>
                     <ToInitiativeButton item={{ type: "character", id: c.id, title: c.character_name }} />
@@ -364,8 +341,16 @@ function RemindersContent({ campaign, sessionId }: PanelProps) {
   );
 }
 
-function CompendiumContent({ campaign }: PanelProps) {
-  const [q, setQ] = useState("");
+// Раздел из контекста поиска («Система: D&D 5.5 — Ловушки» → «Ловушки»).
+// Систему не показываем: она уже названа в шапке панели. Без « — »
+// (нет родителя) — раздела нет, только вид.
+function sectionOf(context: string | null | undefined): string | null {
+  if (!context) return null;
+  const i = context.indexOf(" — ");
+  return i < 0 ? null : context.slice(i + 3).trim() || null;
+}
+
+function CompendiumContent({ campaign }: PanelProps) {  const [q, setQ] = useState("");
   const [preview, setPreview] = useState<{ type: string; id: number } | null>(null);
   const search = useSearch(
     campaign.system_id && q.trim().length >= 2
@@ -386,12 +371,21 @@ function CompendiumContent({ campaign }: PanelProps) {
       {!loading && q.trim().length >= 2 && items.length === 0 && <span className="muted">Ничего не найдено.</span>}
       {items.length > 0 && (
         <div className="stack" style={{ gap: 4 }}>
-          {items.map((r) => (
-            <button key={`${r.type}:${r.id}`} type="button" className="row" style={{ justifyContent: "space-between", textAlign: "left", border: "1px solid var(--line)", padding: "6px 8px", background: "var(--paper)", cursor: "pointer" }} onClick={() => setPreview({ type: r.type, id: r.id })}>
-              <span><strong>{r.title}</strong>{r.context && <span className="muted"> — {r.context}</span>}</span>
-              <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>{r.kind ?? r.type}</span>
-            </button>
-          ))}
+          {items.map((r) => {
+            const section = sectionOf(r.context);
+            return (
+              <button key={`${r.type}:${r.id}`} type="button" className="sp-comp-hit" style={{ textAlign: "left", border: "1px solid var(--line)", padding: "6px 8px", background: "var(--paper)", cursor: "pointer" }} onClick={() => setPreview({ type: r.type, id: r.id })}>
+                <span className="sp-comp-hit__title"><strong>{r.title}</strong></span>
+                {section ? (
+                  <span className="muted sp-comp-hit__section">{section}</span>
+                ) : (
+                  // Пустая ячейка держит колонки: без неё чип уедет в середину.
+                  <span aria-hidden="true" />
+                )}
+                <span className="sp-comp-hit__chip">{r.kind === "mechanic_item" ? "механ" : kindLabel(r.kind ?? r.type)}</span>
+              </button>
+            );
+          })}
         </div>
       )}
       {preview && <EntityPreviewModal type={preview.type} id={preview.id} onClose={() => setPreview(null)} />}
@@ -418,7 +412,7 @@ export const SESSION_PANEL_CONTENT: Record<SessionPanelKey, (props: PanelProps) 
 
 export function LocationsPanel(props: PanelProps) {
   return (
-    <LazyDetails title={SESSION_PANEL_TITLES.locations} className="card stack sp-card--location" defaultOpen actions={<PopoutButton sessionId={props.sessionId} panelKey="locations" />}>
+    <LazyDetails title={SESSION_PANEL_TITLES.locations} summaryClassName="pult-drag-handle" className="card stack sp-card--location" defaultOpen>
       <LocationsContent {...props} />
     </LazyDetails>
   );
@@ -427,10 +421,9 @@ export function LocationsPanel(props: PanelProps) {
 export function PlotCharactersPanel(props: PanelProps) {
   return (
     <LazyDetails
-      title={SESSION_PANEL_TITLES.plotCharacters}
+      title={SESSION_PANEL_TITLES.plotCharacters} summaryClassName="pult-drag-handle"
       className="card stack sp-card--plot"
       defaultOpen
-      actions={<PopoutButton sessionId={props.sessionId} panelKey="plotCharacters" />}
     >
       <PlotCharactersContent {...props} />
     </LazyDetails>
@@ -439,7 +432,7 @@ export function PlotCharactersPanel(props: PanelProps) {
 
 export function ObstaclesPanel(props: PanelProps) {
   return (
-    <LazyDetails title={SESSION_PANEL_TITLES.obstacles} className="card stack sp-card--enemies" actions={<PopoutButton sessionId={props.sessionId} panelKey="obstacles" />}>
+    <LazyDetails title={SESSION_PANEL_TITLES.obstacles} summaryClassName="pult-drag-handle" className="card stack sp-card--enemies">
       <ObstaclesContent {...props} />
     </LazyDetails>
   );
@@ -447,7 +440,7 @@ export function ObstaclesPanel(props: PanelProps) {
 
 export function LootPanel(props: PanelProps) {
   return (
-    <LazyDetails title={SESSION_PANEL_TITLES.loot} className="card stack sp-card--loot" actions={<PopoutButton sessionId={props.sessionId} panelKey="loot" />}>
+    <LazyDetails title={SESSION_PANEL_TITLES.loot} summaryClassName="pult-drag-handle" className="card stack sp-card--loot">
       <LootContent {...props} />
     </LazyDetails>
   );
@@ -455,7 +448,7 @@ export function LootPanel(props: PanelProps) {
 
 export function RosterPanel(props: PanelProps) {
   return (
-    <LazyDetails title={SESSION_PANEL_TITLES.roster} actions={<PopoutButton sessionId={props.sessionId} panelKey="roster" />}>
+    <LazyDetails title={SESSION_PANEL_TITLES.roster} summaryClassName="pult-drag-handle">
       <RosterContent {...props} />
     </LazyDetails>
   );
@@ -463,7 +456,7 @@ export function RosterPanel(props: PanelProps) {
 
 export function SecretsPanel(props: PanelProps) {
   return (
-    <LazyDetails title={SESSION_PANEL_TITLES.secrets} defaultOpen actions={<PopoutButton sessionId={props.sessionId} panelKey="secrets" />}>
+    <LazyDetails title={SESSION_PANEL_TITLES.secrets} summaryClassName="pult-drag-handle" defaultOpen>
       <SecretsContent {...props} />
     </LazyDetails>
   );
@@ -471,7 +464,7 @@ export function SecretsPanel(props: PanelProps) {
 
 export function RemindersPanel(props: PanelProps) {
   return (
-    <LazyDetails title={SESSION_PANEL_TITLES.reminders} actions={<PopoutButton sessionId={props.sessionId} panelKey="reminders" />}>
+    <LazyDetails title={SESSION_PANEL_TITLES.reminders} summaryClassName="pult-drag-handle">
       <RemindersContent {...props} />
     </LazyDetails>
   );
@@ -479,7 +472,7 @@ export function RemindersPanel(props: PanelProps) {
 
 export function CompendiumPanel(props: PanelProps) {
   return (
-    <LazyDetails title={SESSION_PANEL_TITLES.compendium} actions={<PopoutButton sessionId={props.sessionId} panelKey="compendium" />}>
+    <LazyDetails title={SESSION_PANEL_TITLES.compendium} summaryClassName="pult-drag-handle">
       <CompendiumContent {...props} />
     </LazyDetails>
   );

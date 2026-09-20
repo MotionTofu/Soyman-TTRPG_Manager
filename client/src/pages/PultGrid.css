@@ -1,0 +1,81 @@
+/* Сетка блоков пульта (см. PultGrid.tsx). Поверх gridstack.css: убираем
+   чужой вид (скругления, фоны, серые ручки), оставляем механику. Никаких
+   новых цветов — --paper/--ink/--line/--muted, как везде. */
+
+.pult-grid-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+/* Мобильная стопка вместо сетки — тот же шаг, что был у рядов панелей. */
+.pult-stack {
+  gap: var(--sp-4);
+}
+
+/* Виджет в сетке — относительный контекст для оверлея открепления. */
+.pult-widget {
+  position: relative;
+}
+
+/* Кнопки-оверлей в правом верхнем углу виджета: в окно и в док. Как
+   .sw-popout у сцен: поверх карточки, малые, молчаливые. */
+.pult-widget-actions {
+  position: absolute;
+  top: var(--sp-2);
+  right: var(--sp-2);
+  z-index: 2;
+  display: flex;
+  gap: var(--sp-1);
+}
+.pult-widget-popout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-1);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  cursor: pointer;
+}
+.pult-widget-popout:hover {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+.pult-grid.grid-stack {
+  background: none;
+}
+
+/* Виджет — прозрачная рама: рамку и фон даёт сама карточка внутри.
+   Отступы виджетов задаёт опция margin сетки, их не трогаем. */
+.pult-grid .grid-stack-item-content {
+  background: none;
+}
+
+/* Призрак места под перетаскиваемым — пунктиром чернилами, а не серой
+   заливкой из поставки. */
+.pult-grid .grid-stack-placeholder > .placeholder-content {
+  background: none;
+  border: 1px dashed var(--ink);
+}
+
+/* Шапка карточки — ручка драга: видно по курсору, целиком не подсвечиваем,
+   чтобы не спорить с названием. */
+.pult-drag-handle {
+  cursor: grab;
+  touch-action: none;
+}
+.pult-drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Уголок ресайза — чернильный квадрат вместо серой SVG-стрелки поставки. */
+.pult-grid .grid-stack-item > .ui-resizable-se {
+  background-image: none;
+  width: var(--sp-4);
+  height: var(--sp-4);
+  right: var(--sp-1);
+  bottom: var(--sp-1);
+  background: var(--ink);
+}

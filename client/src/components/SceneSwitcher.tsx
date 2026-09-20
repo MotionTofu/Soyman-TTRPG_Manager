@@ -7,7 +7,7 @@ import { launchAffects, sessionPaths } from "../data/sessions";
 import { useSoundEngineOptional } from "../sound/engine";
 import { FloatWindow } from "./FloatWindow";
 import { NavIcon } from "./NavIcons";
-import { setSceneBlockMode, useSceneBlockMode } from "../sceneFloatStore";
+import { setWidgetFloatMode, useWidgetFloatMode } from "../widgetFloatStore";
 import type {
   LaunchResult,
   PlannedScene,
@@ -54,9 +54,9 @@ export function SceneSwitcher({ sessionId }: { sessionId: number }) {
   const [picked, setPicked] = useState<StageScene | null>(null);
   const [busy, setBusy] = useState(false);
   // Где живёт блок: сетка, окно или док-станция. Общее с PreviewDock
-  // (плашка «Сцены» там) — через стор sceneFloatStore, переживает
+  // (плашка «Сцены» там) — через стор widgetFloatStore, переживает
   // перезагрузку.
-  const mode = useSceneBlockMode();
+  const mode = useWidgetFloatMode("scenes");
   const detached = mode !== "grid";
   const sound = useSoundEngineOptional();
   const afterWrite = useAfterWrite();
@@ -225,8 +225,8 @@ export function SceneSwitcher({ sessionId }: { sessionId: number }) {
         title="Сцены"
         storageKey="rpgManagerFloatScenes"
         defaultSize={{ w: 760, h: 540 }}
-        onDock={() => setSceneBlockMode("grid")}
-        onToDockStation={() => setSceneBlockMode("dock")}
+          onDock={() => setWidgetFloatMode("scenes", "grid")}
+          onToDockStation={() => setWidgetFloatMode("scenes", "dock")}
       >
         {body}
       </FloatWindow>
@@ -239,15 +239,26 @@ export function SceneSwitcher({ sessionId }: { sessionId: number }) {
     // не видит — он схлопнул бы колонки поздно, а название сцены к тому
     // моменту уже рассыпалось бы по букве в строку.
     <div className="sw-wrap">
-      <button
-        type="button"
-        className="sw-popout"
-        title="Открыть сцены в отдельном окне"
-        aria-label="Открыть сцены в отдельном окне"
-        onClick={() => setSceneBlockMode("float")}
-      >
-        <NavIcon name="fullscreen" />
-      </button>
+      <div className="sw-popout-actions">
+        <button
+          type="button"
+          className="sw-popout"
+          title="Убрать сцены плашкой в док-станцию"
+          aria-label="Убрать сцены плашкой в док-станцию"
+          onClick={() => setWidgetFloatMode("scenes", "dock")}
+        >
+          <NavIcon name="dockLeft" />
+        </button>
+        <button
+          type="button"
+          className="sw-popout"
+          title="Открыть сцены в отдельном окне"
+          aria-label="Открыть сцены в отдельном окне"
+          onClick={() => setWidgetFloatMode("scenes", "float")}
+        >
+          <NavIcon name="fullscreen" />
+        </button>
+      </div>
       {body}
     </div>
   );
@@ -255,9 +266,9 @@ export function SceneSwitcher({ sessionId }: { sessionId: number }) {
 
 const CAST_ROLE_LABEL: Record<string, string> = {
   location: "Локации",
-  plot_characters: "Сюжетные персонажи",
+  plot_characters: "НПЦ",
   obstacles: "Препятствия",
-  loot: "Потенциальный лут",
+  loot: "Лут",
 };
 
 function PreviewBody({ preview }: { preview: ScenePreview }) {

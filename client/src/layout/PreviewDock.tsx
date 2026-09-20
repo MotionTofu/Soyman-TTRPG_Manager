@@ -10,7 +10,9 @@ import {
   removePreviewDockCard,
   usePreviewDockCards,
 } from "../previewDockStore";
-import { setSceneBlockMode, useSceneBlockMode } from "../sceneFloatStore";
+import { NavIcon } from "../components/NavIcons";
+import { setWidgetFloatMode, useWidgetFloatModes, type PultWidgetId } from "../widgetFloatStore";
+import { SESSION_PANEL_TITLES } from "../pages/sessionLivePanels";
 import { useResource } from "../data/hooks";
 import { sessionPaths } from "../data/sessions";
 import type { SearchResult, SessionStage } from "../types";
@@ -47,10 +49,27 @@ export function PreviewDock({ open }: { open?: boolean }) {
   const { pathname } = useLocation();
   const liveMatch = pathname.match(LIVE_SESSION_PATH);
   const sessionId = liveMatch ? Number(liveMatch[1]) : null;
-  // Блок сцен, убранный в док-станцию: внизу висит плашка «Сцены» с текущей,
-  // клик разворачивает окно. Имя — из того же кэша сцены, что у пульта.
-  const scenesMode = useSceneBlockMode();
+  // Блоки пульта, убранные в док-станцию: внизу висят плашки, клик
+  // разворачивает окно. Сцены — с текущей, остальные — одним названием.
+  // Имена — из тех же источников, что у пульта (заголовки панелей полю
+  // SESSION_PANEL_TITLES, сцена — из кэша стейджа).
+  const floatModes = useWidgetFloatModes();
   const stage = useResource<SessionStage>(sessionId != null ? sessionPaths.stage(sessionId) : null).data ?? null;
+  const dockedPanels: { id: PultWidgetId; title: string; subtitle?: string }[] = [
+    ...(floatModes.scenes === "dock"
+      ? [{ id: "scenes" as PultWidgetId, title: "Сцены", subtitle: stage?.current?.name ?? "—" }]
+      : []),
+    { id: "idea", title: "Задумка" },
+    { id: "events", title: "События" },
+    { id: "plot", title: SESSION_PANEL_TITLES.plotCharacters },
+    { id: "locations", title: SESSION_PANEL_TITLES.locations },
+    { id: "obstacles", title: SESSION_PANEL_TITLES.obstacles },
+    { id: "loot", title: SESSION_PANEL_TITLES.loot },
+    { id: "reminders", title: SESSION_PANEL_TITLES.reminders },
+    { id: "compendium", title: SESSION_PANEL_TITLES.compendium },
+    { id: "roster", title: SESSION_PANEL_TITLES.roster },
+    { id: "secrets", title: SESSION_PANEL_TITLES.secrets },
+  ].filter((w) => w.id === "scenes" || floatModes[w.id] === "dock");
 
   // «Открыть в доке» с пульта разворачивает карточку, даже свёрнутую раньше.
   useEffect(() => {
@@ -142,16 +161,33 @@ export function PreviewDock({ open }: { open?: boolean }) {
           </div>
         ))}
       </div>
-      {sessionId != null && scenesMode === "dock" && (
-        <button
-          type="button"
-          className="preview-dock-scenes"
-          onClick={() => setSceneBlockMode("float")}
-          title="Развернуть сцены в отдельное окно"
-        >
-          <span className="sw-label">Сцены</span>
-          <span className="preview-dock-scenes__name">{stage?.current?.name ?? "—"}</span>
-        </button>
+      {sessionId != null && dockedPanels.length > 0 && (
+        <div className="preview-dock-floats">
+          {dockedPanels.map((w) => (
+            <div key={w.id} className="preview-dock-scenes">
+              <button
+                type="button"
+                className="preview-dock-scenes__open"
+                onClick={() => setWidgetFloatMode(w.id, "float")}
+                title="Развернуть в отдельное окно"
+              >
+                <span className="sw-label">{w.title}</span>
+                {w.subtitle != null && (
+                  <span className="preview-dock-scenes__name">{w.subtitle}</span>
+                )}
+              </button>
+              <button
+                type="button"
+                className="preview-dock-scenes__grid"
+                onClick={() => setWidgetFloatMode(w.id, "grid")}
+                title="Вернуть блок в сетку пульта"
+                aria-label={`Вернуть «${w.title}» в сетку пульта`}
+              >
+                <NavIcon name="arrowRight" />
+              </button>
+            </div>
+          ))}
+        </div>
       )}
     </nav>
   );

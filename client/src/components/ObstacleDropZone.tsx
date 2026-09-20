@@ -242,7 +242,7 @@ export const ObstacleDropZone = memo(function ObstacleDropZone({
               {entry.qty && <span className="muted qty-chip">{entry.qty}</span>}
               {entry.inScene && <span className="in-scene-chip">в сцене</span>}
               {entry.fromScenes && !entry.inScene && (
-                <span className="muted" title={entry.fromScenes.join(", ")}>
+                <span className="muted" style={{ opacity: 0.5, fontSize: "var(--fs-micro)" }} title={entry.fromScenes.join(", ")}>
                   {entry.fromScenes.length === 1 ? entry.fromScenes[0] : `сцен: ${entry.fromScenes.length}`}
                 </span>
               )}

@@ -309,10 +309,12 @@ export const SectionDropZone = memo(function SectionDropZone({
                   {entry.fromScenes.length === 1 ? entry.fromScenes[0] : `сцен: ${entry.fromScenes.length}`}
                 </span>
               )}
-              {toInitiative && (
-                <ToInitiativeButton item={{ type: entry.type, id: entry.id, title: entry.label } as SearchResult} />
-              )}
             </div>
+            {/* Кнопка трекера — справа у края строки, а не вперемешку
+                с именем и плашками: за столом её жмут не глядя. */}
+            {toInitiative && (
+              <ToInitiativeButton item={{ type: entry.type, id: entry.id, title: entry.label } as SearchResult} />
+            )}
             {entry.linkId !== null && (
               <button className="comp-mini" onClick={() => setPendingDelete(entry.linkId!)}>
                 ✕

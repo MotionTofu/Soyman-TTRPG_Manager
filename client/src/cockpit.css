@@ -17,14 +17,17 @@
   position: relative;
 }
 
-/* Кнопка-оверлей в правом верхнем углу блока: уносит сцены в отдельное
-   окно. Сидит поверх карточки — шапке справа оставлен зазор, чтобы не
-   накрывать кнопку запуска. */
-.sw-popout {
+/* Кнопки-оверлей в правом верхнем углу блока: в окно и в док. Сидят поверх
+   карточки — шапке справа оставлен зазор, чтобы не накрывать кнопку запуска. */
+.sw-popout-actions {
   position: absolute;
   top: var(--sp-2);
   right: var(--sp-2);
   z-index: 2;
+  display: flex;
+  gap: var(--sp-1);
+}
+.sw-popout {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -253,10 +256,10 @@
   padding-bottom: var(--sp-4);
   border-bottom: var(--card-border-width) solid var(--line);
 }
-/* Зазор под оверлей-кнопку — только в сетке, где кнопка есть. В отдельном
-   окне шапка без неё. */
+/* Зазор под оверлей-кнопки — только в сетке, где кнопки есть. В отдельном
+   окне шапка без них. */
 .sw-wrap .sw-preview-head {
-  padding-right: var(--sp-8);
+  padding-right: calc(var(--sp-8) + var(--sp-7));
 }
 
 /* В широком окне блок — ровно в высоту тела окна: строка грида

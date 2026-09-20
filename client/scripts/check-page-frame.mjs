@@ -36,6 +36,7 @@ const NO_FRAME = {
   "GraphPage.tsx": "полноэкранный инструмент: граф во всю ширину",
   "SessionLivePage.tsx": "стол игры: живая сессия со своей раскладкой панелей",
   "sessionLivePanels.tsx": "не страница — панели живой сессии",
+  "PultGrid.tsx": "не страница — сетка панелей живой сессии",
   "SessionPanelPopoutPage.tsx": "отдельное окно одной панели",
   "PresentationShowPage.tsx": "проектор: показ игрокам, без интерфейса",
   "PresentationPreviewPage.tsx": "предпросмотр проектора: тот же экран, что у игроков",
