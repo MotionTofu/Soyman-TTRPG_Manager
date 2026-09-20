@@ -8,12 +8,14 @@ import { useSoundEngineOptional } from "../sound/engine";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { useUnloadTarget } from "../unloadTargets";
 import { NavIcon } from "./NavIcons";
+import { Modal } from "./Modal";
 import { parseDndStatblock } from "./EntityPreviewModal";
 import { abilityModifier, formatModifier } from "./dnd/AbilityScores";
 import { rollDiceFormula } from "./dnd/diceRoll";
 import { findDndSystemId, loadDndMechanicsGroup } from "./dnd/dndCompendium";
 import { fetchCreatureCard } from "./CreatureCard";
 import { loadUseEpithets, INITIATIVE_EPITHETS } from "../initiativeTrackerPrefs";
+import { sessionPaths } from "../data/sessions";
 import { deriveSheet, creatureInitiativeModifier } from "@shared/dnd/derive";
 import { useConfirm } from "../hooks/useConfirm";
 import type {
@@ -22,6 +24,7 @@ import type {
   DndCreatureData,
   DndCreatureHitPoints,
   InitiativeEntry,
+  Playlist,
   SearchResult,
   SessionDetail,
   Statblock,
@@ -117,6 +120,7 @@ export function InitiativeTracker({ sessionId }: Props) {
   const [addingCustom, setAddingCustom] = useState(false);
   const [customName, setCustomName] = useState("");
   const [customInit, setCustomInit] = useState("");
+  const [themeOpen, setThemeOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [rollingId, setRollingId] = useState<number | null>(null);
   const [rollingInitiative, setRollingInitiative] = useState(false);
@@ -416,9 +420,35 @@ export function InitiativeTracker({ sessionId }: Props) {
       { retry: false }
     );
     if (!added) return;
+    closeCustom();
+  }
+
+  function closeCustom() {
     setCustomName("");
     setCustomInit("");
     setAddingCustom(false);
+  }
+
+  // Боевая тема сессии — кнопкой рядом со своим событием, выбором в модалку:
+  // селект в теле пульта занимал целую карточку ради редкого выбора.
+  // Список общий (sessionPaths.playlists), как был на пульте.
+  const battles = useResource<Playlist[]>(sessionPaths.playlists()).data ?? null;
+  const currentTheme = battles?.find((p) => p.id === session?.battle_playlist_id) ?? null;
+
+  /** Выбор темы: на экране сразу, при отказе возвращается прежняя. */
+  async function pickTheme(id: number | null) {
+    const key = dataKeys.entity("session", sessionId);
+    await client.cancelQueries({ queryKey: key });
+    const previous = client.getQueryData<SessionDetail>(key);
+    if (previous) client.setQueryData<SessionDetail>(key, { ...previous, battle_playlist_id: id });
+    const done = await run(
+      labelled("Боевая тема", () =>
+        write.put(`/sessions/${sessionId}`, { battle_playlist_id: id }).then(() => true)
+      ),
+      { affects: [{ kind: "session", id: sessionId, card: true }] }
+    );
+    if (!done && previous) client.setQueryData(key, previous);
+    else if (done) setThemeOpen(false);
   }
 
   /**
@@ -702,8 +732,9 @@ export function InitiativeTracker({ sessionId }: Props) {
         )}
       </div>
       {/* Логово и окружение — галочками, потому что решение про них бинарно:
-          они в этом бою или их нет. Своё событие — плюсиком: у него надо
-          спросить имя и число. */}
+          они в этом бою или их нет. Своё событие и боевая тема — кнопками в
+          один ряд, выбором в модалку: у обоих надо спросить, а инлайн-формы
+          растягивали очередь. */}
       <div className="initiative-specials stack" style={{ gap: 2 }}>
         {SPECIAL_ROWS.map((spec) => (
           <label key={spec.kind} className="row muted" style={{ gap: 6, alignItems: "center" }}>
@@ -716,41 +747,95 @@ export function InitiativeTracker({ sessionId }: Props) {
             <span style={{ fontSize: "0.8em" }}>({spec.initiative})</span>
           </label>
         ))}
-        {addingCustom ? (
-          <div className="row" style={{ gap: 4 }}>
-            <input
-              autoFocus
-              placeholder="Событие"
-              value={customName}
-              onChange={(e) => setCustomName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") addCustom();
-                if (e.key === "Escape") setAddingCustom(false);
-              }}
-            />
-            <input
-              type="number"
-              placeholder="Иниц."
-              style={{ width: 64 }}
-              value={customInit}
-              onChange={(e) => setCustomInit(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") addCustom();
-              }}
-            />
-            <button type="button" className="comp-mini" onClick={addCustom}>
-              Добавить
-            </button>
-            <button type="button" className="comp-mini" onClick={() => setAddingCustom(false)}>
-              <NavIcon name="close" />
-            </button>
-          </div>
-        ) : (
+        <div className="row" style={{ gap: 4 }}>
           <button type="button" className="comp-mini" onClick={() => setAddingCustom(true)}>
             + Своё событие
           </button>
-        )}
+          <button
+            type="button"
+            className="comp-mini"
+            title="Какая музыка играет, когда трекер начинает бой"
+            onClick={() => setThemeOpen(true)}
+          >
+            Боевая тема: {currentTheme ? currentTheme.name : "из набора"}
+          </button>
+        </div>
       </div>
+      {addingCustom && (
+        <Modal onClose={closeCustom} ariaLabel="Своё событие">
+          <h3 style={{ marginTop: 0 }}>Своё событие</h3>
+          <div className="stack">
+            <label className="stack">
+              <span className="muted">Название</span>
+              <input
+                placeholder="Событие"
+                value={customName}
+                onChange={(e) => setCustomName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") addCustom();
+                }}
+              />
+            </label>
+            <label className="stack">
+              <span className="muted">Инициатива</span>
+              <input
+                type="number"
+                placeholder="Пусто — без числа"
+                value={customInit}
+                onChange={(e) => setCustomInit(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") addCustom();
+                }}
+              />
+            </label>
+            <div className="row">
+              <button type="button" className="primary" onClick={addCustom} disabled={!customName.trim()}>
+                Добавить
+              </button>
+              <button type="button" onClick={closeCustom}>
+                Отмена
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {themeOpen && (
+        <Modal onClose={() => setThemeOpen(false)} ariaLabel="Боевая тема">
+          <h3 style={{ marginTop: 0 }}>Боевая тема</h3>
+          <div className="stack">
+            <span className="muted">Её включает трекер, когда начинается бой.</span>
+            {battles == null && <span className="muted">Загружаем темы…</span>}
+            {battles != null && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => pickTheme(null)}
+                  disabled={session?.battle_playlist_id == null}
+                  style={{ textAlign: "left" }}
+                >
+                  — из набора —{session?.battle_playlist_id == null ? " ✓" : ""}
+                </button>
+                {battles.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => pickTheme(p.id)}
+                    disabled={session?.battle_playlist_id === p.id}
+                    style={{ textAlign: "left" }}
+                  >
+                    {p.name}{session?.battle_playlist_id === p.id ? " ✓" : ""}
+                  </button>
+                ))}
+              </>
+            )}
+            <div className="row">
+              <button type="button" onClick={() => setThemeOpen(false)}>
+                Отмена
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {entries.length === 0 && (
         <span className="muted">Перетащите сюда существо или персонажа</span>

@@ -16,7 +16,7 @@ import {
   RemindersPanel,
   CompendiumPanel,
 } from "./sessionLivePanels";
-import type { CampaignDetail, Character, Playlist, SessionDetail, SessionUnionRow } from "../types";
+import type { CampaignDetail, Character, SessionDetail, SessionUnionRow } from "../types";
 // session.css нужен пульту не меньше cockpit.css: цвета панелей
 // (sp-card--plot/location/enemies/loot) и вид их шапок живут там, рядом с
 // профилем сессии. Обе страницы — ленивые чанки, поэтому без этой строки
@@ -25,17 +25,14 @@ import type { CampaignDetail, Character, Playlist, SessionDetail, SessionUnionRo
 // этого заходил на страницу сессии.
 import "../session.css";
 import "../cockpit.css";
-import { sessionLabel } from "../sessionLabel";
 import { loadPultFinishAction } from "../pultPrefs";
 import { SessionOutcomeModal } from "../components/SessionOutcomeModal";
-import { PartyHereStrip } from "../components/PartyHereStrip";
 import { useAction, useEntity, useResource, useSaveEntity, write } from "../data/hooks";
 import { sessionMoneyAffects, sessionPaths } from "../data/sessions";
 
 // Пустые списки — постоянными ссылками: панели мемоизированы, и новый `[]` на
 // каждой отрисовке перерисовывал бы их зря.
 const NO_CHARACTERS: Character[] = [];
-const NO_PLAYLISTS: Playlist[] = [];
 const NO_UNION: SessionUnionRow[] = [];
 
 export function SessionLivePage() {
@@ -53,9 +50,6 @@ export function SessionLivePage() {
   const characters =
     useResource<Character[]>(session ? sessionPaths.campaignCharacters(session.campaign_id) : null).data ??
     NO_CHARACTERS;
-  // Боевые темы теперь общие: плейлистов сессии и сеттинга больше нет, и
-  // выбирать тему приходится из одного списка, а не из двух.
-  const battles = useResource<Playlist[]>(sessionPaths.playlists()).data ?? NO_PLAYLISTS;
   // Объединение зависит и от отметок приключений, и от того, какая сцена идёт
   // (пометка «в сцене»): запуск задевает сессию, и оно перечитывается само.
   const union = useResource<SessionUnionRow[]>(sessionPaths.castUnion(sessionId)).data ?? NO_UNION;
@@ -129,52 +123,18 @@ export function SessionLivePage() {
 
   return (
     <div className="stack session-live">
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <div>
-          {/* каркас в обход намеренно — страница не карточка сущности: свой вид, каркас для него ещё не построен */}
-          <h1>
-            <Link to={`/campaigns/${campaign.id}`}>{campaign.name}</Link> —{" "}
-            {sessionLabel(session)}
-          </h1>
-          <span className={`badge ${session.status}`}>{session.status}</span>
-        </div>
-        <div className="row" style={{ gap: 6, alignItems: "center" }}>
-          <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>[ / Х — док · ] / Ъ — поиск · Ctrl+\ — оба</span>
-          <Link to={`/sessions/${sessionId}`}>← К странице сессии</Link>
-        </div>
-      </div>
-
-      {/* Где партия (решения 2026-09-11, §3): между шапкой и переключателем
-          сцен — на вопрос «где мы» Мастер отвечает, не отводя глаз от пульта. */}
-      <PartyHereStrip sessionId={sessionId} />
-
       {/* Порядок вечера сверху вниз: где мы во времени → что запускаем → что
           на экране у игроков → с чем сели играть → чем пользуемся.
           Переключатель сцен стоит первым потому, что это главный орган пульта:
           ради него сюда и смотрят, и искать его прокруткой посреди игры
-          некогда. Задумка, боевая тема и «Основные события» — под ним: их
-          читают редко, а пишут в них под конец. */}
+          некогда. Задумка и «Основные события» — под ним: их
+          читают редко, а пишут в них под конец. Боевая тема — кнопкой
+          в трекере инициативы, рядом со своим событием. */}
       <SessionTimeStrip session={session} settingId={campaign.setting_id} campaignId={campaign.id} />
 
       <SceneSwitcher sessionId={sessionId} />
 
       <PresentationPanel sessionId={sessionId} campaignId={campaign.id} />
-
-      <div className="card row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-        <span className="sp-idea-battle__label">Боевая тема</span>
-        <select
-          value={session.battle_playlist_id ?? ""}
-          onChange={(e) => void save({ battle_playlist_id: e.target.value ? Number(e.target.value) : null })}
-          style={{ flex: 1, minWidth: 160, fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}
-        >
-          <option value="">— из набора —</option>
-          {battles.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-      </div>
 
       <div className="session-live-idea-events">
         <EditableTextCard

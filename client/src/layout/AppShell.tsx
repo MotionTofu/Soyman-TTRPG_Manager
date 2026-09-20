@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { getAuthToken, setAuthToken } from "../api/client";
-import { useResource, write } from "../data/hooks";
+import { useEntity, useResource, write } from "../data/hooks";
 import { readResource } from "../data/imperative";
 import { useCurrentUser } from "../api/currentUser";
 import { Modal } from "../components/Modal";
@@ -23,6 +23,8 @@ import { brandLogo } from "../brandLogo";
 import { ExternalLinkConfirmModal, BOOSTY_URL } from "../components/ExternalLinkConfirmModal";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { useConfirm } from "../hooks/useConfirm";
+import { sessionLabel } from "../sessionLabel";
+import type { CampaignDetail, SessionDetail } from "../types";
 
 interface NavItem {
   to?: string;
@@ -377,10 +379,33 @@ const CRUMB_LABEL: Record<string, string> = {
   communities: "Сообщества",
   events: "События",
   compendium: "Компендиум",
+  live: "Пульт сессии",
 };
 
-function buildCrumbs(pathname: string, isPlayer: boolean) {
+interface LiveCrumbNames {
+  campaignId: number | null;
+  campaignName: string | null;
+  sessionId: number;
+  sessionName: string | null;
+}
+
+function buildCrumbs(pathname: string, isPlayer: boolean, live?: LiveCrumbNames | null) {
   if (pathname === "/" || pathname === "") return [{ label: "Главная" }];
+  // Пульт сессии: Главная / [имя кампании] / Сессии / [название сессии] / Пульт сессии.
+  // Имена подтягивает AppShell (сессия + кампания из кэша слоя данных); пока
+  // грузятся — «…» без ссылок, чтобы полоса не прыгала в «live» и номер.
+  if (live && /^\/sessions\/\d+\/live$/.test(pathname)) {
+    const campaignTo = live.campaignId != null ? `/campaigns/${live.campaignId}` : undefined;
+    return [
+      { label: "Главная", to: "/" },
+      live.campaignName ? { label: live.campaignName, to: campaignTo } : { label: "…" },
+      { label: "Сессии", to: campaignTo ? `${campaignTo}?tab=${encodeURIComponent("Сессии")}` : undefined },
+      live.sessionName
+        ? { label: live.sessionName, to: `/sessions/${live.sessionId}` }
+        : { label: "…" },
+      { label: "Пульт сессии" },
+    ];
+  }
   const parts = pathname.split("/").filter(Boolean);
   const crumbs: { label: string; to?: string }[] = [{ label: "Главная", to: "/" }];
   let acc = "";
@@ -448,6 +473,29 @@ export function AppShell() {
   // nav they're not using mid-session.
   const { pathname } = useLocation();
   const isLivePult = /^\/sessions\/\d+\/live$/.test(pathname);
+
+  // Имена для крошек пульта: сессия из кэша слоя (её же читает сам пульт),
+  // кампания — по campaign_id сессии. Хуки безусловны: вне пульта id null и
+  // запросы просто не идут.
+  const liveSessionId = (() => {
+    const m = pathname.match(/^\/sessions\/(\d+)\/live$/);
+    return m ? Number(m[1]) : null;
+  })();
+  const liveSession = useEntity<SessionDetail>("session", liveSessionId).data ?? null;
+  const liveCampaign = useEntity<CampaignDetail>(
+    "campaign",
+    liveSession ? liveSession.campaign_id : null
+  ).data ?? null;
+  const liveCrumbs: LiveCrumbNames | null =
+    liveSessionId == null
+      ? null
+      : {
+          campaignId: liveSession?.campaign_id ?? liveCampaign?.id ?? null,
+          campaignName:
+            liveCampaign?.name ?? liveSession?.campaign_name ?? null,
+          sessionId: liveSessionId,
+          sessionName: liveSession ? sessionLabel(liveSession) : null,
+        };
 
   // Below the .app-shell CSS breakpoint the nav and search panel become
   // off-canvas drawers (see index.css) instead of permanent grid columns —
@@ -714,9 +762,9 @@ export function AppShell() {
           // (`.shell-crumbs`), иначе крошек две (F-50, решение 2026-09-18).
           <div className="shell-crumbs" style={{ marginBottom: pathname === "/" ? 8 : 16, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
             <div className="shell-crumbs__trail">
-              <Breadcrumbs items={buildCrumbs(pathname, !!isPlayer)} />
+              <Breadcrumbs items={buildCrumbs(pathname, !!isPlayer, liveCrumbs)} />
             </div>
-            {!isPlayer && activeStorageName && (
+            {!isPlayer && activeStorageName && !isLivePult && (
               <span className="muted shell-crumbs__storage" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)", border: "1px solid var(--line)", padding: "2px 6px", background: "var(--paper-2)" }} title="Активное хранилище">
                 {activeStorageName}
               </span>
