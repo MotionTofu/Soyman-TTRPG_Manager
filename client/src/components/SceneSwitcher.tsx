@@ -5,6 +5,9 @@ import { errorText, useAfterWrite, useResource, write } from "../data/hooks";
 import { showSaveError } from "../data/notices";
 import { launchAffects, sessionPaths } from "../data/sessions";
 import { useSoundEngineOptional } from "../sound/engine";
+import { FloatWindow } from "./FloatWindow";
+import { NavIcon } from "./NavIcons";
+import { setSceneBlockMode, useSceneBlockMode } from "../sceneFloatStore";
 import type {
   LaunchResult,
   PlannedScene,
@@ -18,10 +21,16 @@ import type {
 // прокрутки. За столом у Мастера заняты голова и руки: то, ради чего он сюда
 // смотрит, не должно требовать ни поиска, ни переключения вкладки.
 //
-// Две колонки. Слева три яруса, сверху вниз по частоте использования:
-//   «Сейчас»    — запущенная сцена;
-//   «Дальше»    — переходы и исходы проверок, то есть 90% случаев;
-//   «На вечер»  — заготовленные сцены, собранные в подготовке.
+// Две колонки одной высоты: слева три яруса, сверху вниз по частоте
+// использования:
+//   «Дальше»  — переходы и исходы проверок, то есть 90% случаев;
+//   «Назад»   — одна сцена: последняя, откуда пришли;
+//   «На игру» — заготовленные сцены, собранные в подготовке.
+// Яруса «Сейчас» слева нет намеренно: где мы — написано справа, в заголовке
+// («Идёт сейчас» / «Предпросмотр»), повтор слева это лишний текст.
+// Справа — предпросмотр выбранной сцены и кнопка запуска. Длинные списки
+// скроллятся внутри ярусов, а не растягивают пульт: высота колонки задаётся
+// превью справа.
 // Справа — предпросмотр выбранной сцены и кнопка запуска.
 //
 // Выбирать сцены здесь больше нельзя: набор вечера собирают в профиле сессии,
@@ -44,6 +53,11 @@ export function SceneSwitcher({ sessionId }: { sessionId: number }) {
   // музыку, и делать это перебором вариантов «куда дальше» нельзя.
   const [picked, setPicked] = useState<StageScene | null>(null);
   const [busy, setBusy] = useState(false);
+  // Где живёт блок: сетка, окно или док-станция. Общее с PreviewDock
+  // (плашка «Сцены» там) — через стор sceneFloatStore, переживает
+  // перезагрузку.
+  const mode = useSceneBlockMode();
+  const detached = mode !== "grid";
   const sound = useSoundEngineOptional();
   const afterWrite = useAfterWrite();
 
@@ -88,7 +102,7 @@ export function SceneSwitcher({ sessionId }: { sessionId: number }) {
     }
   }
 
-  // Клавиатура за столом: ↑↓ — перебор Дальше+На вечер, Enter — запуск, Esc — отмена. Без мыши.
+  // Клавиатура за столом: ↑↓ — перебор Дальше+Назад+На игру, Enter — запуск, Esc — отмена. Без мыши.
   useEffect(() => {
     if (!stage) return;
     const onKey = (e: KeyboardEvent) => {
@@ -123,31 +137,38 @@ export function SceneSwitcher({ sessionId }: { sessionId: number }) {
   if (!stage) return null;
   const isPreview = picked != null && picked.id !== stage.current?.id;
 
-  return (
-    // Обёртка объявляет контейнер: ширину пульта задаёт не окно, а колонка
-    // между доками, и на экране 1280 она бывает уже 400px. Медиа-запрос этого
-    // не видит — он схлопнул бы колонки поздно, а название сцены к тому
-    // моменту уже рассыпалось бы по букве в строку.
-    <div className="sw-wrap">
+  // «Назад» — одна сцена: последняя, откуда пришли. Это последний запуск
+  // журнала, отличный от текущего (возврат A → B → A даёт B, а не A).
+  // Имя и приключение — из плана вечера; сцену могли убрать из подготовки
+  // после запуска — тогда только имя из журнала, запустить всё равно можно.
+  const prevEntry = stage.current
+    ? [...stage.journal].reverse().find((j) => j.scene_id !== stage.current!.id) ?? null
+    : null;
+  const prevScene: StageScene | null = !prevEntry
+    ? null
+    : (stage.planned.find((s) => s.id === prevEntry.scene_id) ?? {
+      id: prevEntry.scene_id,
+      name: prevEntry.name,
+      kind: null,
+      arc_id: null,
+      arc_name: null,
+    });
+
+  // Тело одно на оба места: в сетке и в окне живёт тот же JSX, поэтому
+  // предпросмотр, выбор и запуск ведут себя одинаково.
+  const body = (
       <div className="card sw">
       <div className="sw-left">
-        <div className="sw-now">
-          <span className="sw-label">Сейчас</span>
-          {stage.current ? (
-            <>
-              <Link to={`/scenes/${stage.current.id}`} className="sw-scene-name">
-                {stage.current.name}
-              </Link>
-              {stage.current.arc_name && <div className="muted sw-arc-name">{stage.current.arc_name}</div>}
-            </>
-          ) : (
-            <span className="muted">Сцена не запущена — выберите первую из списка ниже.</span>
-          )}
-          <SceneSound />
-        </div>
+        {/* Звук сюда же, наверх колонки: раньше строка жила в ярусе «Сейчас»,
+            которого больше нет (где мы — написано справа). */}
+        <SceneSound />
 
         {/* Пока ничего не запущено, ярус «Дальше» не рисуется вовсе: «переходы
-            не размечены» было бы неправдой — уходить пока не откуда. */}
+            не размечены» было бы неправдой — уходить пока не откуда. Вместо
+            него — приглашение выбрать первую из списка ниже. */}
+        {!stage.current && (
+          <span className="muted">Сцена не запущена — выберите первую из списка ниже.</span>
+        )}
         {stage.current && (
           <ExitList
             exits={stage.exits}
@@ -157,9 +178,16 @@ export function SceneSwitcher({ sessionId }: { sessionId: number }) {
           />
         )}
 
+        <BackList
+          prev={prevScene}
+          pickedId={picked?.id ?? null}
+          onPick={setPicked}
+        />
+
         <PlannedList
           planned={stage.planned}
           currentId={stage.current?.id ?? null}
+          prevId={prevScene?.id ?? null}
           sessionId={sessionId}
           pickedId={picked?.id ?? null}
           onPick={setPicked}
@@ -184,6 +212,43 @@ export function SceneSwitcher({ sessionId }: { sessionId: number }) {
         {preview ? <PreviewBody preview={preview} /> : <span className="muted">Сцена не выбрана.</span>}
         </div>
       </div>
+  );
+
+  // Вне сетки — ничего: блок целиком живёт в окне или в док-станции,
+  // возврат — кнопками окна («В пульт») и плашкой дока. Полоску-заглушку
+  // в сетке не оставляем: она занимала место ради новости, которую Мастер
+  // и так видит.
+  if (detached) {
+    if (mode !== "float") return null;
+    return (
+      <FloatWindow
+        title="Сцены"
+        storageKey="rpgManagerFloatScenes"
+        defaultSize={{ w: 760, h: 540 }}
+        onDock={() => setSceneBlockMode("grid")}
+        onToDockStation={() => setSceneBlockMode("dock")}
+      >
+        {body}
+      </FloatWindow>
+    );
+  }
+
+  return (
+    // Обёртка объявляет контейнер: ширину пульта задаёт не окно, а колонка
+    // между доками, и на экране 1280 она бывает уже 400px. Медиа-запрос этого
+    // не видит — он схлопнул бы колонки поздно, а название сцены к тому
+    // моменту уже рассыпалось бы по букве в строку.
+    <div className="sw-wrap">
+      <button
+        type="button"
+        className="sw-popout"
+        title="Открыть сцены в отдельном окне"
+        aria-label="Открыть сцены в отдельном окне"
+        onClick={() => setSceneBlockMode("float")}
+      >
+        <NavIcon name="fullscreen" />
+      </button>
+      {body}
     </div>
   );
 }
@@ -301,7 +366,7 @@ function ExitList({
   onPick: (scene: StageScene) => void;
 }) {
   return (
-    <div className="stack" style={{ gap: 6 }}>
+    <div className="stack sw-tier" style={{ gap: 6 }}>
       <span className="sw-label">Дальше</span>
       {exits.length === 0 && (
         <span className="muted">
@@ -331,12 +396,44 @@ function ExitList({
 }
 
 /**
- * «На вечер» — то, что собрано в подготовке. Плюс экстренный поиск на случай,
+ * «Назад» — одна сцена: последняя, откуда пришли. Кнопка как «Дальше», но
+ * чуть мельче: это возврат, а не основной путь. Нет такой — яруса нет
+ * вовсе: подпись без кнопки — лишний орган.
+ */
+function BackList({
+  prev,
+  pickedId,
+  onPick,
+}: {
+  prev: StageScene | null;
+  pickedId: number | null;
+  onPick: (scene: StageScene) => void;
+}) {
+  if (!prev) return null;
+  return (
+    <div className="stack sw-tier" style={{ gap: 6 }}>
+      <span className="sw-label">Назад</span>
+      <div className="sw-exits">
+        <button
+          className={`sw-exit is-back${pickedId === prev.id ? " is-picked" : ""}`}
+          onClick={() => onPick(prev)}
+        >
+          <span className="sw-exit-name">{prev.name}</span>
+          {prev.arc_name && <span className="sw-exit-label">{prev.arc_name}</span>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * «На игру» — то, что собрано в подготовке. Плюс экстренный поиск на случай,
  * когда партия ушла туда, куда её не готовили.
  */
 function PlannedList({
   planned,
   currentId,
+  prevId,
   sessionId,
   pickedId,
   onPick,
@@ -344,6 +441,7 @@ function PlannedList({
 }: {
   planned: PlannedScene[];
   currentId: number | null;
+  prevId: number | null;
   sessionId: number;
   pickedId: number | null;
   onPick: (scene: StageScene) => void;
@@ -385,10 +483,14 @@ function PlannedList({
     onPick({ id: row.id, name: row.name, kind: null, arc_id: null, arc_name: row.arc_name || null });
   }
 
+  // Предыдущая сцена живёт в ярусе «Назад» выше — здесь весь план без неё:
+  // и предстоящее, и сыгранное (в него возвращаются, партия ходит кругами).
+  const todo = planned.filter((s) => s.id !== prevId);
+
   return (
-    <div className="stack" style={{ gap: 6 }}>
+    <div className="stack sw-tier sw-tier--grow" style={{ gap: 6 }}>
       <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
-        <span className="sw-label">На вечер</span>
+        <span className="sw-label">На игру</span>
         <button className="comp-mini" onClick={() => setSearching((v) => !v)}>
           {searching ? "Закрыть" : "Найти сцену"}
         </button>
@@ -421,18 +523,18 @@ function PlannedList({
 
       {/* Приглашение, а не пустой экран: сессия без заготовки — это пульт,
           которому нечего показать в момент, когда игра уже началась. */}
-      {planned.length === 0 && !searching && (
+      {todo.length === 0 && !searching && (
         <span className="muted">
-          Сцены на вечер не отмечены — их набирают в{" "}
+          Сцены на игру не отмечены — их набирают в{" "}
           <Link to={`/sessions/${sessionId}`}>подготовке сессии</Link>.
         </span>
       )}
 
       <div className="sw-exits">
-        {planned.map((scene) => (
+        {todo.map((scene) => (
           <button
             key={scene.id}
-            className={`sw-exit sw-planned${pickedId === scene.id ? " is-picked" : ""}${
+            className={`sw-exit is-plan sw-planned${pickedId === scene.id ? " is-picked" : ""}${
               scene.played && scene.id !== currentId ? " is-played" : ""
             }`}
             onClick={() => onPick(scene)}

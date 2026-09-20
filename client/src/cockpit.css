@@ -14,6 +14,29 @@
    строк, растягивать его незачем; всё лишнее место достаётся зачитке. */
 .sw-wrap {
   container-type: inline-size;
+  position: relative;
+}
+
+/* Кнопка-оверлей в правом верхнем углу блока: уносит сцены в отдельное
+   окно. Сидит поверх карточки — шапке справа оставлен зазор, чтобы не
+   накрывать кнопку запуска. */
+.sw-popout {
+  position: absolute;
+  top: var(--sp-2);
+  right: var(--sp-2);
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-1);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  cursor: pointer;
+}
+.sw-popout:hover {
+  color: var(--ink);
+  border-color: var(--ink);
 }
 
 .sw {
@@ -29,6 +52,10 @@
   gap: var(--sp-6);
   padding: var(--sp-5);
   border-right: var(--card-border-width) solid var(--line);
+  /* Высота колонки задаётся превью справа (грид тянет обе одинаково):
+     min-height: 0 пропускает сжатие внутрь, иначе длинный список
+     распирал бы пульт вместо прокрутки. */
+  min-height: 0;
 }
 .sw-right {
   display: flex;
@@ -85,6 +112,23 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
+  /* Список скроллится внутри своей высоты, а не растягивает колонку:
+     блок списка занимает высоту превью справа. */
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Ярус списка («Дальше» / «Назад» / «На игру»): короткие не сжимаются вовсе
+   (иначе длинный сосед выдавливает их в ноль со скроллом-щелкой), усадку
+   и скролл отдаём только растущему — «На игру». max-height страхует редкий
+   случай, когда и короткий ярус выше колонки: тогда скроллится он сам. */
+.sw-tier {
+  flex: 0 0 auto;
+  min-height: 0;
+  max-height: 100%;
+}
+.sw-tier--grow {
+  flex: 1 1 auto;
 }
 
 /* Кнопка перехода: рамка вдвое толще обычной — это то, ради чего пульт
@@ -143,6 +187,29 @@
   color: var(--on-surface);
 }
 
+/* «Назад» — как «Дальше», но чуть мельче: возврат, а не основной путь.
+   Та же толстая рамка и капс, меньше кегль и отступы. */
+.sw-exit.is-back {
+  padding: var(--sp-3) var(--sp-4);
+}
+.sw-exit.is-back .sw-exit-name {
+  font-size: var(--fs-micro);
+}
+
+/* «На игру» — мельче всех: план вечера это перечень, а не кнопки действий.
+   Тонкая рамка, прямой набор без капса. */
+.sw-exit.is-plan {
+  border-width: 1px;
+  padding: var(--sp-1) var(--sp-3);
+}
+.sw-exit.is-plan .sw-exit-name {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  font-family: var(--font-body);
+  font-size: var(--fs-micro);
+}
+
 .sw-arc > summary {
   cursor: pointer;
   font-family: var(--font-ui);
@@ -185,6 +252,30 @@
   flex-wrap: wrap;
   padding-bottom: var(--sp-4);
   border-bottom: var(--card-border-width) solid var(--line);
+}
+/* Зазор под оверлей-кнопку — только в сетке, где кнопка есть. В отдельном
+   окне шапка без неё. */
+.sw-wrap .sw-preview-head {
+  padding-right: var(--sp-8);
+}
+
+/* В широком окне блок — ровно в высоту тела окна: строка грида
+   minmax(0, 1fr) не даёт ей распереть окно, левая колонка крутит свои списки
+   внутри ярусов, а правая стоит на месте — заголовок, зачитка и содержимое
+   перед глазами, пока скроллится список. Не влезла сама правая — крутит
+   себя своим скроллом. Замеров и sticky здесь нет намеренно: та связка
+   дважды ломалась о растянутые колонки и скролл-контейнеры, а высота строкой
+   грида задаётся жёстко и молча не разъезжается. В узком окне
+   (и в сетке) правило не действует — там обычная стопка со скроллом тела. */
+@container (min-width: 761px) {
+  .float-body .sw {
+    height: 100%;
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .float-body .sw-right {
+    min-height: 0;
+    overflow-y: auto;
+  }
 }
 /* Имя занимает не меньше 200px: иначе кнопка запуска отжимает его в полоску,
    а длинное название вроде «Оранжерея» рвать негде — оно вылезает и наезжает

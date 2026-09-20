@@ -10,7 +10,10 @@ import {
   removePreviewDockCard,
   usePreviewDockCards,
 } from "../previewDockStore";
-import type { SearchResult } from "../types";
+import { setSceneBlockMode, useSceneBlockMode } from "../sceneFloatStore";
+import { useResource } from "../data/hooks";
+import { sessionPaths } from "../data/sessions";
+import type { SearchResult, SessionStage } from "../types";
 
 const LIVE_SESSION_PATH = /^\/sessions\/(\d+)\/live$/;
 
@@ -44,6 +47,10 @@ export function PreviewDock({ open }: { open?: boolean }) {
   const { pathname } = useLocation();
   const liveMatch = pathname.match(LIVE_SESSION_PATH);
   const sessionId = liveMatch ? Number(liveMatch[1]) : null;
+  // Блок сцен, убранный в док-станцию: внизу висит плашка «Сцены» с текущей,
+  // клик разворачивает окно. Имя — из того же кэша сцены, что у пульта.
+  const scenesMode = useSceneBlockMode();
+  const stage = useResource<SessionStage>(sessionId != null ? sessionPaths.stage(sessionId) : null).data ?? null;
 
   // «Открыть в доке» с пульта разворачивает карточку, даже свёрнутую раньше.
   useEffect(() => {
@@ -135,6 +142,17 @@ export function PreviewDock({ open }: { open?: boolean }) {
           </div>
         ))}
       </div>
+      {sessionId != null && scenesMode === "dock" && (
+        <button
+          type="button"
+          className="preview-dock-scenes"
+          onClick={() => setSceneBlockMode("float")}
+          title="Развернуть сцены в отдельное окно"
+        >
+          <span className="sw-label">Сцены</span>
+          <span className="preview-dock-scenes__name">{stage?.current?.name ?? "—"}</span>
+        </button>
+      )}
     </nav>
   );
 }

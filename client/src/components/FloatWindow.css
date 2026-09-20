@@ -1,0 +1,100 @@
+/* Плавающее окно поверх приложения (см. FloatWindow.tsx).
+   Никаких новых цветов — --paper/--ink/--line, как везде. Тени нет
+   (зин, §10.4): вес даёт толстая рамка. Ниже модалок (50): диалог
+   поверх окна остаётся диалогом. */
+
+.float-window {
+  position: fixed;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  min-width: 340px;
+  min-height: 240px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  background: var(--paper);
+  /* Своя глубина — своя пара, как у canvas/statblock: окно висит над
+     приложением, и вес ему даёт толстая рамка, а не тень (зин, §10.4). */
+  --card-border-width: 1px;
+  --card-border-width-strong: 2px;
+  border: var(--card-border-width-strong) solid var(--ink);
+  /* Размер — нативной ручкой: работает в Chrome/Electron без математики
+     угловых ручек. overflow обязан быть не visible, иначе ручки нет. */
+  resize: both;
+  overflow: hidden;
+}
+
+/* Верхняя плашка: драг за неё, даблклик сворачивает в неё же. */
+.float-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
+  border-bottom: var(--card-border-width, 1px) solid var(--line);
+  background: var(--paper-2);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  flex: none;
+}
+.float-title:active {
+  cursor: grabbing;
+}
+.float-title__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+
+.float-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--sp-4);
+  /* Нижний зазор под нативную ручку размера: без него уголок resize ложится
+     на стрелку скроллбара, и драг тянет размер вместе со скроллом. Именно
+     margin, а не padding: скроллбар идёт по краю бокса, и только отступ
+     снаружи укорачивает его, уводя стрелку выше ручки. */
+  margin-bottom: var(--sp-6);
+  /* Контейнер для @container-потомков: в сетке им служит .sw-wrap, которого
+     в окне нет, — без этого двухколоночные блоки не схлопывались бы в узком
+     окне, а смотрели бы на ширину viewport. */
+  container-type: inline-size;
+}
+
+/* Свёрнуто в плашку (даблклик): тело прячется через display, а не
+   размонтированием — состояние содержимого живёт. height из инлайна
+   перебивается important, иначе окно осталось бы пустым во весь рост;
+   ручка размера в свёрнутом ни к чему. */
+.float-window.is-min {
+  height: auto !important;
+  /* Свёрнутое — в обтяжку плашки: название + зазор + две кнопки. min-границы
+     сбрасываем, иначе 340×240 держат пустую ширь и высь. Разворот возвращает
+     инлайн из el.style — он всё время лежал там нетронутым. */
+  width: auto !important;
+  min-width: 0;
+  min-height: 0;
+  resize: none;
+}
+.float-window.is-min .float-body {
+  display: none;
+}
+
+/* В свёрнутом виде между названием и кнопками — воздух, а не базовый зазор. */
+.float-window.is-min .float-title {
+  gap: var(--sp-6);
+}
+
+/* В тёмной теме толстая рамка чернилами выходит почти белой и горит на
+   тёмном фоне — там окно держится рамкой цвета line, как остальные
+   карточки. Новых цветов нет: оба берутся из темы. */
+[data-theme-mode="dark"] .float-window {
+  border-color: var(--line);
+}

@@ -592,7 +592,7 @@ function SceneIncomingCard({ sceneId, campaignId }: { sceneId: number; campaignI
         {!data && <p className="muted">Загрузка…</p>}
         {data && total === 0 && (
           <div className="card" style={{ borderStyle: "dashed" }}>
-            <p className="muted" style={{ maxWidth: "62ch" }}>Сюда ничего не ведёт — ни переходов, ни исходов проверок. Вход только из списка «На вечер» в пульте.</p>
+            <p className="muted" style={{ maxWidth: "62ch" }}>Сюда ничего не ведёт — ни переходов, ни исходов проверок. Вход только из списка «На игру» в пульте.</p>
           </div>
         )}
         {(data?.transitions ?? []).map((t) => (
