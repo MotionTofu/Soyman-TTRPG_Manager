@@ -106,14 +106,19 @@ export function FloatWindow({ title, storageKey, defaultSize, onDock, onToDockSt
   function persist() {
     const rect = winRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const prev = loadGeom(storageKey);
-    saveGeom(storageKey, {
-      ...posRef.current,
-      // Свёрнутое окно высотой в плашку: запоминаем позицию, а размер —
-      // прежний, иначе разворот откроет щель.
-      w: Math.round(rect.width),
-      h: minimizedRef.current ? (prev?.h ?? rect.height) : Math.round(rect.height),
-    });
+    // Свёрнутое окно живёт компактной геометрией плашки: запоминаем только
+    // позицию, а размер — прежний целиком, иначе перезаход откроет щель
+    // в ширину плашки.
+    if (minimizedRef.current) {
+      const prev = loadGeom(storageKey);
+      saveGeom(storageKey, {
+        ...posRef.current,
+        w: prev?.w ?? Math.round(rect.width),
+        h: prev?.h ?? Math.round(rect.height),
+      });
+      return;
+    }
+    saveGeom(storageKey, { ...posRef.current, w: Math.round(rect.width), h: Math.round(rect.height) });
   }
 
   // Ручка CSS не даёт событий: размер запоминаем по ResizeObserver с
