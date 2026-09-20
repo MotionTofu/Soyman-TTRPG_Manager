@@ -1,0 +1,568 @@
+import { useEffect, useRef, useState } from "react";
+import { cellKey, pixelToCell } from "../../grid";
+import type { Camera } from "./useMapCamera";
+import type { ObjSel } from "./useMapSelection";
+import type { MapFull } from "../../mapTypes";
+import type { MapCells } from "../../render";
+import type { PaintTool } from "../editorTypes";
+import type { MapInputCell, MapInputTools } from "../tools/types";
+
+// Оркестрация ввода редактора карт (Фаза 1, Этап Input): pointer/touch
+// state machine, раньше жившая инлайном в MapEditorPage. Приоритет —
+// semantics 1:1, не «упрощение UX».
+//
+// Хук НЕ владеет доменной логикой инструментов (как рисуется forest,
+// paired door, flood fill — всё это остаётся странице и приходит колбэками
+// в tools). Хук решает: какое действие сейчас происходит и кому передать
+// событие.
+//
+// Состояния (плоско, ref'ами — как было, без reducer'а ради reducer'а):
+//   Idle            — ничего активного (все ref'ы пусты)
+//   Panning         — dragRef set (middle mouse / Space+ЛКМ)
+//   Painting        — history stroke открыт (мышь или один палец тача)
+//   DraggingObject  — objDragRef set (moved — после порога 6px)
+//   DraggingRect    — rectRef set (isRect — после порога 6px)
+//   Shaping         — shapeDragRef set (мышь)
+//   TouchPaint      — strokeTouchRef set (один палец красит)
+//   Pinching        — pinchRef set (два пальца: пан/зум, stroke закрыт)
+//
+// Факт о таче (важно, расходится с интуицией «один палец — пан»):
+// один палец с кистью РИСУЕТ тем же мазком, что мышь, с остальными
+// инструментами — тапает; пан/зум — только двумя пальцами. Сохранено как есть.
+
+export interface MapInputCamera {
+  setCam: (updater: (c: Camera) => Camera) => void;
+  camRef: { current: Camera };
+  toWorld: (e: { clientX: number; clientY: number }) => {
+    wx: number;
+    wy: number;
+    rx: number;
+    ry: number;
+  };
+  touchToWorld: (clientX: number, clientY: number) => { wx: number; wy: number };
+}
+
+export interface MapInputHistory {
+  beginStroke: () => void;
+  markStrokeChanged: () => void;
+  commitStroke: () => void;
+  isPainting: () => boolean;
+  push: (before: MapCells) => void;
+}
+
+export interface MapInputSelection {
+  hitAt: (map: MapFull | null, wx: number, wy: number) => { sel: ObjSel } | null;
+  select: (sel: NonNullable<ObjSel>) => void;
+  moveSelectedTo: (
+    session: { sel: NonNullable<ObjSel>; ox: number; oy: number; before: MapCells },
+    map: MapFull | null,
+    wx: number,
+    wy: number
+  ) => void;
+}
+
+interface UseMapInputArgs {
+  canvasRef: { current: HTMLCanvasElement | null };
+  cellsRef: { current: MapCells };
+  camera: MapInputCamera;
+  history: MapInputHistory;
+  selection: MapInputSelection;
+  map: MapFull | null;
+  tool: PaintTool;
+  canEdit: boolean;
+  clone: (c: MapCells) => MapCells;
+  // Состояние стен/линейки для маршрутизации (зеркало через argsRef,
+  // значения — из страницы, второго постоянного зеркала не заводим).
+  wallMode: boolean;
+  wallDraft: { x: number; y: number }[] | null;
+  ruler: { locked: boolean } | null;
+  setHover: (h: string | null) => void;
+  setRectPreview: (r: { x: number; y: number; w: number; h: number } | null) => void;
+  tools: MapInputTools;
+}
+
+export interface ObjDragState {
+  sel: NonNullable<ObjSel>;
+  sx: number;
+  sy: number;
+  ox: number;
+  oy: number;
+  before: MapCells;
+  moved: boolean;
+}
+
+const DRAG_THRESHOLD_PX = 6;
+
+export function useMapInput(args: UseMapInputArgs) {
+  const argsRef = useRef(args);
+  argsRef.current = args;
+
+  const dragRef = useRef<{ button: number; sx: number; sy: number; ox: number; oy: number } | null>(
+    null
+  );
+  const pinchRef = useRef<{ dist: number; scale: number; mx: number; my: number } | null>(null);
+  const touches = useRef(new globalThis.Map<number, { x: number; y: number }>());
+  const strokeTouchRef = useRef<number | null>(null);
+  const objDragRef = useRef<ObjDragState | null>(null);
+  const rectRef = useRef<{ sx: number; sy: number; wx: number; wy: number; isRect: boolean } | null>(
+    null
+  );
+  const shapeDragRef = useRef<{ sx: number; sy: number } | null>(null);
+  // C3: pointermove шлёт события чаще кадров — копим последнюю точку и красим
+  // один раз за кадр, иначе каждый move клонирует весь Map клеток.
+  const paintRafRef = useRef(0);
+  const pendingPaintRef = useRef<{ wx: number; wy: number } | null>(null);
+  // Правая кнопка — временный ластик (P1-10): инструмент не переключает.
+  // Живёт здесь (ставит/снимает routing), читает paintAt страницы.
+  const eraseOverrideRef = useRef(false);
+  // Прямоугольник комнаты делят pointerup и панели модалок — наружу.
+  const roomRectRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [spaceDown, setSpaceDown] = useState(false);
+
+  function flushPaint() {
+    const a = argsRef.current;
+    paintRafRef.current = 0;
+    const p = pendingPaintRef.current;
+    pendingPaintRef.current = null;
+    if (!p) return;
+    if (a.tools.paint.paintAt(p.wx, p.wy, { eraseOverride: eraseOverrideRef.current }))
+      a.history.markStrokeChanged();
+  }
+
+  function cancelPendingPaint() {
+    if (paintRafRef.current) cancelAnimationFrame(paintRafRef.current);
+    paintRafRef.current = 0;
+    flushPaint();
+  }
+
+  // Пробел — временная панорама левой кнопкой.
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.code === "Space" && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
+        e.preventDefault();
+        setSpaceDown(true);
+      }
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.code === "Space") setSpaceDown(false);
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, []);
+
+  function capture(e: { target: unknown; pointerId: number }) {
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onPointerDown(e: React.PointerEvent) {
+    const a = argsRef.current;
+    if (e.pointerType === "touch") return; // тач — ниже, по указателям
+    if (e.button === 1 || (e.button === 0 && spaceDown)) {
+      e.preventDefault();
+      capture(e);
+      dragRef.current = {
+        button: e.button,
+        sx: e.clientX,
+        sy: e.clientY,
+        ox: a.camera.camRef.current.ox,
+        oy: a.camera.camRef.current.oy,
+      };
+      return;
+    }
+    if (e.button !== 0 || spaceDown || !a.canEdit || !a.map) {
+      // Правая кнопка — стереть, не переключая инструмент (P1-10). Средняя и
+      // пробел — панорама (выше). Контекстное меню браузера прибито на canvas.
+      if (e.button === 2 && !spaceDown && a.canEdit && a.map) {
+        capture(e);
+        a.history.beginStroke();
+        eraseOverrideRef.current = true;
+        const { wx, wy } = a.camera.toWorld(e);
+        if (a.tools.paint.paintAt(wx, wy, { eraseOverride: eraseOverrideRef.current }))
+          a.history.markStrokeChanged();
+      }
+      return;
+    }
+    const map = a.map;
+    const { wx, wy } = a.camera.toWorld(e);
+    // Выбор (пакет A + P1-3): клик по объекту — потянуть или панель; по пустому —
+    // тянуть прямоугольник комнаты или панель создания. Двери на рёбрах —
+    // только квадраты (на гексах создание дверей заблокировано в модалке).
+    if (a.tool === "select") {
+      const hit = a.selection.hitAt(map, wx, wy);
+      if (hit) {
+        const cs = a.cellsRef.current;
+        let ox = 0;
+        let oy = 0;
+        const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+        if (hit.sel.kind === "room" && cs.rooms[hit.sel.index] && cell) {
+          ox = cell.x - cs.rooms[hit.sel.index].x;
+          oy = cell.y - cs.rooms[hit.sel.index].y;
+        }
+        capture(e);
+        objDragRef.current = {
+          sel: hit.sel,
+          sx: e.clientX,
+          sy: e.clientY,
+          ox,
+          oy,
+          before: a.clone(cs),
+          moved: false,
+        };
+        a.selection.select(hit.sel);
+      } else {
+        const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+        if (cell) {
+          capture(e);
+          rectRef.current = { sx: e.clientX, sy: e.clientY, wx, wy, isRect: false };
+        }
+      }
+      return;
+    }
+    // Линейка (P2-1): первый клик — начало, второй — конец (замер остаётся,
+    // пока выбран инструмент); клик по готовому — новый замер.
+    if (a.tool === "ruler") {
+      const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+      if (cell) a.tools.ruler.tap(cell);
+      return;
+    }
+    // Подпись (P2-2): клик — модалка новой/правки. Мазков нет, undo — шагом.
+    if (a.tool === "label") {
+      const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+      if (cell) a.tools.label.open(cell.x, cell.y);
+      return;
+    }
+    // Стены линией (Этап E): клик — вершина; финиш — дабл-клик/Enter (см. ниже).
+    if (a.tool === "wall" && a.wallMode) {
+      if (!pixelToCell(map.grid, wx, wy, map.width, map.height)) return;
+      a.tools.wall.tapVertex(wx, wy);
+      return;
+    }
+    // Шейп (Этап E): drag от угла к углу; тач — два тапа (см. onTouchStart).
+    if (a.tool === "shape") {
+      const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+      if (cell) {
+        capture(e);
+        shapeDragRef.current = { sx: cell.x, sy: cell.y };
+        a.tools.shape.startDrag(cell);
+      }
+      return;
+    }
+    // Инструменты-установщики (Этап F): клик — объект на карту, каждый — undo-шаг.
+    const placeTool = a.tool;
+    if (
+      placeTool === "door" ||
+      placeTool === "trap" ||
+      placeTool === "chest" ||
+      placeTool === "altar" ||
+      placeTool === "marker" ||
+      placeTool === "start" ||
+      placeTool === "finish"
+    ) {
+      a.tools.paint.placeObject(placeTool, wx, wy);
+      return;
+    }
+    if (e.altKey) {
+      // Пипетка поверх любого инструмента (P1-9 + Этап C).
+      a.tools.paint.altPick(wx, wy);
+      return;
+    }
+    if (a.tool === "fill" || a.tool === "picker") {
+      a.tools.paint.singleAction(wx, wy);
+      return;
+    }
+    capture(e);
+    a.history.beginStroke();
+    const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+    if (cell && a.tools.paint.paintAt(wx, wy, { eraseOverride: eraseOverrideRef.current }))
+      a.history.markStrokeChanged();
+  }
+
+  function onPointerMove(e: React.PointerEvent) {
+    const a = argsRef.current;
+    if (e.pointerType === "touch") return;
+    const d = dragRef.current;
+    if (d) {
+      a.camera.setCam((c) => ({ ...c, ox: d.ox + (e.clientX - d.sx), oy: d.oy + (e.clientY - d.sy) }));
+      return;
+    }
+    if (!a.map) return;
+    const map = a.map;
+    const { wx, wy } = a.camera.toWorld(e);
+    if (a.history.isPainting() && (e.buttons & 3) !== 0) {
+      pendingPaintRef.current = { wx, wy };
+      if (!paintRafRef.current)
+        paintRafRef.current = requestAnimationFrame(() => flushPaint());
+    }
+    // Drag объекта / прямоугольник комнаты (выбор): живьём из снапшота.
+    // Комнаты/ловушки/старт — на любой сетке; двери таскаются только на квадратах.
+    const od = objDragRef.current;
+    if (od && a.tool === "select" && (od.sel.kind !== "door" || map.grid === "square")) {
+      if (!od.moved && Math.hypot(e.clientX - od.sx, e.clientY - od.sy) > DRAG_THRESHOLD_PX)
+        od.moved = true;
+      if (od.moved) a.selection.moveSelectedTo(od, map, wx, wy);
+      return;
+    }
+    const rc = rectRef.current;
+    if (rc && a.tool === "select") {
+      if (!rc.isRect && Math.hypot(e.clientX - rc.sx, e.clientY - rc.sy) > DRAG_THRESHOLD_PX)
+        rc.isRect = true;
+      if (rc.isRect) {
+        const ra = pixelToCell(map.grid, rc.wx, rc.wy, map.width, map.height);
+        const b = pixelToCell(map.grid, wx, wy, map.width, map.height);
+        if (ra && b) {
+          a.setRectPreview({
+            x: Math.min(ra.x, b.x),
+            y: Math.min(ra.y, b.y),
+            w: Math.abs(ra.x - b.x) + 1,
+            h: Math.abs(ra.y - b.y) + 1,
+          });
+        }
+      }
+      return;
+    }
+    // Живой конец полилинии стен следует за курсором (только если уже есть вершины).
+    if (a.tool === "wall" && a.wallMode && a.wallDraft && a.wallDraft.length > 0) {
+      const { wx: wwx, wy: wwy } = a.camera.toWorld(e);
+      a.tools.wall.hoverLive(wwx, wwy);
+    }
+    // Шейп-drag: прямоугольник от стартового угла.
+    const sd = shapeDragRef.current;
+    if (sd && a.tool === "shape") {
+      const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+      if (cell) a.tools.shape.moveDrag({ x: sd.sx, y: sd.sy }, cell);
+      return;
+    }
+    // Живой конец замера следует за курсором, пока второй клик не зафиксировал.
+    if (a.tool === "ruler" && a.ruler && !a.ruler.locked && a.canEdit) {
+      const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+      a.tools.ruler.hover(cell);
+    }
+    const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+    a.setHover(cell ? cellKey(cell.x, cell.y) : null);
+  }
+
+  function onPointerUp(e: React.PointerEvent) {
+    const a = argsRef.current;
+    // Отпускание объекта (выбор): двинули — шаг в историю, клик — панель.
+    const od = objDragRef.current;
+    if (od) {
+      objDragRef.current = null;
+      eraseOverrideRef.current = false;
+      if (od.moved) {
+        a.history.push(od.before);
+        a.selection.select(od.sel);
+      } else {
+        a.selection.select(od.sel);
+        a.tools.objects.openPanel(od.sel);
+      }
+      return;
+    }
+    // Отпускание прямоугольника (выбор): тянули — комната, клик — создание.
+    const rc = rectRef.current;
+    if (rc) {
+      rectRef.current = null;
+      a.setRectPreview(null);
+      if (rc.isRect && a.map && a.canEdit) {
+        const map = a.map;
+        const ra = pixelToCell(map.grid, rc.wx, rc.wy, map.width, map.height);
+        const { wx, wy } = a.camera.toWorld(e);
+        const b = pixelToCell(map.grid, wx, wy, map.width, map.height);
+        if (ra && b) {
+          const rect = {
+            x: Math.min(ra.x, b.x),
+            y: Math.min(ra.y, b.y),
+            w: Math.abs(ra.x - b.x) + 1,
+            h: Math.abs(ra.y - b.y) + 1,
+          };
+          roomRectRef.current = rect;
+          a.tools.objects.roomRect(rect);
+        }
+      } else if (!rc.isRect && a.map && a.canEdit) {
+        const map = a.map;
+        const { wx, wy } = a.camera.toWorld(e);
+        const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+        if (cell) a.tools.objects.create(cell, wx, wy);
+      }
+      return;
+    }
+    // Отпускание шейпа: применить прямоугольник содержимым.
+    const shd = shapeDragRef.current;
+    if (shd) {
+      shapeDragRef.current = null;
+      a.setRectPreview(null);
+      if (a.map && a.canEdit) {
+        const { wx, wy } = a.camera.toWorld(e);
+        const cell = pixelToCell(a.map.grid, wx, wy, a.map.width, a.map.height);
+        if (cell) a.tools.shape.apply({ x: shd.sx, y: shd.sy }, cell);
+      }
+      return;
+    }
+    if (dragRef.current && e.pointerId !== undefined) dragRef.current = null;
+    eraseOverrideRef.current = false;
+    // Докрасить последний накопленный move до закрытия мазка, иначе штрих
+    // оборвётся на кадр раньше отпускания.
+    cancelPendingPaint();
+    if (a.history.isPainting()) a.history.commitStroke();
+  }
+
+  function onPointerCancel() {
+    const a = argsRef.current;
+    // Отмена drag — откат к снапшоту, без истории.
+    const od = objDragRef.current;
+    if (od) {
+      objDragRef.current = null;
+      a.tools.objects.cancelDrag(od.before);
+    }
+    rectRef.current = null;
+    a.setRectPreview(null);
+    dragRef.current = null;
+    eraseOverrideRef.current = false;
+    cancelPendingPaint();
+    if (a.history.isPainting()) a.history.commitStroke();
+  }
+
+  // Тач: один палец рисует (тем же мазком, что мышь), два — пан/зум.
+  // Второй палец посреди мазка закрывает мазок и начинает пан/зум.
+  function onTouchStart(e: React.TouchEvent) {
+    const a = argsRef.current;
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const t = e.changedTouches[i];
+      touches.current.set(t.identifier, { x: t.clientX, y: t.clientY });
+    }
+    if (touches.current.size === 1 && a.canEdit && a.map && strokeTouchRef.current === null) {
+      const map = a.map;
+      const t = e.changedTouches[0];
+      if (a.tool === "fill" || a.tool === "picker") {
+        const { wx, wy } = a.camera.touchToWorld(t.clientX, t.clientY);
+        a.tools.paint.singleAction(wx, wy);
+      } else if (a.tool === "ruler") {
+        // Тач-замер тапами (без живого конца): тап — начало, тап — конец.
+        const { wx, wy } = a.camera.touchToWorld(t.clientX, t.clientY);
+        const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+        if (cell) a.tools.ruler.tap(cell);
+      } else if (a.tool === "label") {
+        const { wx, wy } = a.camera.touchToWorld(t.clientX, t.clientY);
+        const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+        if (cell) a.tools.label.open(cell.x, cell.y);
+      } else if (a.tool === "select") {
+        // Тач: только тап-панели (drag объектов — мышь; на таче нет ховера).
+        // Двери — только квадраты, остальное — везде.
+        const { wx, wy } = a.camera.touchToWorld(t.clientX, t.clientY);
+        const hit = a.selection.hitAt(map, wx, wy);
+        if (hit) {
+          a.selection.select(hit.sel);
+          a.tools.objects.openPanel(hit.sel);
+        } else {
+          const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+          if (cell) a.tools.objects.create(cell, wx, wy);
+        }
+      } else if (a.tool === "shape") {
+        // Тач-шейп: тап — первый угол, тап — второй (прямоугольник готов).
+        const { wx, wy } = a.camera.touchToWorld(t.clientX, t.clientY);
+        const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+        if (cell) a.tools.shape.tap(cell);
+      } else if (
+        a.tool === "door" ||
+        a.tool === "trap" ||
+        a.tool === "chest" ||
+        a.tool === "altar" ||
+        a.tool === "marker" ||
+        a.tool === "start" ||
+        a.tool === "finish"
+      ) {
+        // Тач-установка: тап — объект (иначе тач красил бы террейном).
+        const { wx, wy } = a.camera.touchToWorld(t.clientX, t.clientY);
+        a.tools.paint.placeObject(a.tool, wx, wy);
+      } else {
+        strokeTouchRef.current = t.identifier;
+        a.history.beginStroke();
+        const { wx, wy } = a.camera.touchToWorld(t.clientX, t.clientY);
+        if (a.tools.paint.paintAt(wx, wy, { eraseOverride: eraseOverrideRef.current }))
+          a.history.markStrokeChanged();
+      }
+      return;
+    }
+    if (touches.current.size === 2) {
+      // preventDefault не нужен: CSS touch-action:none уже гасит
+      // нативные пан/зум, а в React-синтетике он только ругается.
+      if (strokeTouchRef.current !== null) {
+        strokeTouchRef.current = null;
+        a.history.commitStroke();
+      }
+      const [ta, tb] = [...touches.current.values()];
+      const canvas = a.canvasRef.current!;
+      const rect = canvas.getBoundingClientRect();
+      pinchRef.current = {
+        dist: Math.hypot(ta.x - tb.x, ta.y - tb.y),
+        scale: a.camera.camRef.current.scale,
+        mx: (ta.x + tb.x) / 2 - rect.left,
+        my: (ta.y + tb.y) / 2 - rect.top,
+      };
+    }
+  }
+
+  function onTouchMove(e: React.TouchEvent) {
+    const a = argsRef.current;
+    if (strokeTouchRef.current !== null) {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        if (t.identifier !== strokeTouchRef.current) continue;
+        touches.current.set(t.identifier, { x: t.clientX, y: t.clientY });
+        const { wx, wy } = a.camera.touchToWorld(t.clientX, t.clientY);
+        if (a.tools.paint.paintAt(wx, wy, { eraseOverride: eraseOverrideRef.current }))
+          a.history.markStrokeChanged();
+      }
+      return;
+    }
+    if (touches.current.size !== 2 || !pinchRef.current) return;
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const t = e.changedTouches[i];
+      touches.current.set(t.identifier, { x: t.clientX, y: t.clientY });
+    }
+    const [ta, tb] = [...touches.current.values()];
+    const p = pinchRef.current;
+    const dist = Math.hypot(ta.x - tb.x, ta.y - tb.y);
+    if (dist < 1) return;
+    const canvas = a.canvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    const mx = (ta.x + tb.x) / 2 - rect.left;
+    const my = (ta.y + tb.y) / 2 - rect.top;
+    const scale = Math.min(240, Math.max(4, (p.scale * dist) / p.dist));
+    const k = scale / a.camera.camRef.current.scale;
+    a.camera.setCam((c) => ({
+      scale,
+      ox: mx - (p.mx - c.ox) * k - (mx - p.mx),
+      oy: my - (p.my - c.oy) * k - (my - p.my),
+    }));
+  }
+
+  function onTouchEnd(e: React.TouchEvent) {
+    const a = argsRef.current;
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === strokeTouchRef.current) {
+        strokeTouchRef.current = null;
+        a.history.commitStroke();
+      }
+      touches.current.delete(e.changedTouches[i].identifier);
+    }
+    if (touches.current.size < 2) pinchRef.current = null;
+  }
+
+  return {
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
+    onPointerCancel,
+    onTouchStart,
+    onTouchMove,
+    onTouchEnd,
+    spaceDown,
+    roomRectRef,
+    rectRef,
+    shapeDragRef,
+  };
+}

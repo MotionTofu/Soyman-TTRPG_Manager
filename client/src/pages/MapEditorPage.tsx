@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAfterWrite, useResource, write } from "../data/hooks";
 import { readOnce } from "../data/imperative";
@@ -7,7 +7,7 @@ import { Modal } from "../components/Modal";
 import { SectionHeading } from "../components/SectionHeading";
 import { SectionBackground } from "../components/SectionBackground";
 import { useConfirm } from "../hooks/useConfirm";
-import { brushCells, cellCenter, cellDistance, cellKey, coordLabel, neighbors, parseKey, pixelToCell, worldBounds } from "../maps/grid";
+import { coordLabel, parseKey, worldBounds } from "../maps/grid";
 import { buildAndDownloadPng } from "../maps/mapExport";
 import { buildMapExport, sanitizeDownloadName, validateMapImport } from "../maps/mapExchange";
 import { generateCells, type GeneratorParams } from "../maps/generate";
@@ -37,7 +37,6 @@ import {
   doorForView,
   parseCellsBlob,
   readChrome,
-  renderMap,
   renderThumbnail,
   serializeCells,
   type MapCells,
@@ -53,36 +52,21 @@ import {
   MAP_SCALE_ORDER,
   MAP_MIN_SIDE,
   MAP_MAX_SIDE,
-  formatMeters,
-  parseCellLore,
   translateMapError,
   type MapFull,
   type MapScale,
 } from "../maps/mapTypes";
-
-type PaintTool =
-  | "brush"
-  | "fill"
-  | "eraser"
-  | "picker"
-  | "road"
-  | "river"
-  | "wall"
-  | "shape"
-  | "ruler"
-  | "label"
-  | "select"
-  | "door"
-  | "trap"
-  | "chest"
-  | "altar"
-  | "marker"
-  | "start"
-  | "finish";
-type BrushSize = 1 | 2 | 3;
+import { useMapCamera } from "../maps/editor/hooks/useMapCamera";
+import { useMapHistory } from "../maps/editor/hooks/useMapHistory";
+import { useMapHotkeys } from "../maps/editor/hooks/useMapHotkeys";
+import { useMapAutosave } from "../maps/editor/hooks/useMapAutosave";
+import { useMapInput } from "../maps/editor/hooks/useMapInput";
+import { useMapSelection, type ObjSel, selectedKeyOf } from "../maps/editor/hooks/useMapSelection";
+import { useMapTools } from "../maps/editor/hooks/useMapTools";
+import { MapViewport } from "../maps/editor/components/MapViewport";
+import type { BrushSize, PaintTool } from "../maps/editor/editorTypes";
 
 const UNDO_DEPTH = 50;
-const AUTOSAVE_MS = 800;
 
 function cloneCells(c: MapCells): MapCells {
   return {
@@ -98,135 +82,7 @@ function cloneCells(c: MapCells): MapCells {
     finish: c.finish ? { ...c.finish } : null,
   };
 }
-
-// Мазок кистью/оверлеем/ластиком по клеткам вокруг центра. Возвращает,
-// изменилось ли хоть что-то (неменявший мазок в историю не идёт).
-function paintStroke(
-  draft: MapCells,
-  grid: MapFull["grid"],
-  width: number,
-  height: number,
-  cx: number,
-  cy: number,
-  size: BrushSize,
-  tool: PaintTool,
-  terrain: string
-): boolean {
-  let changed = false;
-  for (const cell of brushCells(grid, cx, cy, size, width, height)) {
-    const key = cellKey(cell.x, cell.y);
-    if (tool === "road" || tool === "river") {
-      // Оверлеи ложатся поверх любого террейна (река — и поверх дороги: мост дорисуется сам).
-      const set = tool === "road" ? draft.roads : draft.rivers;
-      if (!set.has(key)) {
-        set.add(key);
-        changed = true;
-      }
-    } else if (tool === "eraser") {
-      if ((draft.terrain.get(key) ?? "plain") !== "plain") {
-        draft.terrain.delete(key);
-        changed = true;
-      }
-      if (draft.roads.has(key)) {
-        draft.roads.delete(key);
-        changed = true;
-      }
-      if (draft.rivers.has(key)) {
-        draft.rivers.delete(key);
-        changed = true;
-      }
-    } else {
-      if ((draft.terrain.get(key) ?? "plain") !== terrain) {
-        if (terrain === "plain") draft.terrain.delete(key);
-        else draft.terrain.set(key, terrain);
-        changed = true;
-      }
-    }
-  }
-  return changed;
-}
-
-// Заливка связной области одного террейна (4-связность на квадратах,
-// 6 — на гексах). Край поля — естественная граница.
-function floodFill(
-  draft: MapCells,
-  grid: MapFull["grid"],
-  width: number,
-  height: number,
-  sx: number,
-  sy: number,
-  terrain: string
-): boolean {
-  const start = cellKey(sx, sy);
-  const from = draft.terrain.get(start) ?? "plain";
-  if (from === terrain) return false;
-  const seen = new Set<string>([start]);
-  const stack = [{ x: sx, y: sy }];
-  while (stack.length > 0) {
-    const cur = stack.pop()!;
-    for (const n of neighbors(grid, cur.x, cur.y)) {
-      if (n.x < 0 || n.y < 0 || n.x >= width || n.y >= height) continue;
-      const key = cellKey(n.x, n.y);
-      if (seen.has(key)) continue;
-      if ((draft.terrain.get(key) ?? "plain") !== from) continue;
-      seen.add(key);
-      stack.push(n);
-    }
-  }
-  for (const key of seen) {
-    if (terrain === "plain") draft.terrain.delete(key);
-    else draft.terrain.set(key, terrain);
-  }
-  return seen.size > 0;
-}
-
-// Замер линейки (P1-2): на квадратах — евклид по прямой (Чебышев врал по диагонали:
-// 5 клеток по диагонали — не 5, а ~7.1), на гексах — шаги cellDistance.
-function rulerMeasure(
-  grid: MapFull["grid"],
-  ax: number,
-  ay: number,
-  bx: number,
-  by: number
-): { cells: string; dist: number } {
-  if (grid === "square") {
-    const d = Math.hypot(bx - ax, by - ay);
-    return { cells: (Math.round(d * 10) / 10).toString().replace(".", ","), dist: d };
-  }
-  const steps = cellDistance(grid, ax, ay, bx, by);
-  return { cells: String(steps), dist: steps };
-}
-
-// Растеризация отрезка в клетки (стены линией, Этап E): суперкавер сэмплированием —
-// шаг в пол-клетки не оставляет дыр ни на прямой, ни на диагонали.
-export function traceLineCells(
-  grid: MapFull["grid"],
-  width: number,
-  height: number,
-  a: { x: number; y: number },
-  b: { x: number; y: number }
-): { x: number; y: number }[] {
-  const out: { x: number; y: number }[] = [];
-  const seen = new Set<string>();
-  const steps = Math.max(1, Math.ceil(Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y)) * 2));
-  for (let i = 0; i <= steps; i++) {
-    const wx = a.x + ((b.x - a.x) * i) / steps;
-    const wy = a.y + ((b.y - a.y) * i) / steps;
-    const cell = pixelToCell(grid, wx, wy, width, height);
-    if (!cell) continue;
-    const k = cellKey(cell.x, cell.y);
-    if (seen.has(k)) continue;
-    seen.add(k);
-    out.push(cell);
-  }
-  return out;
-}
-
-interface Camera {
-  scale: number;
-  ox: number;
-  oy: number;
-}
+// Чистые операции инструментов живут в tools/* рядом с группами.
 
 function loadFlag(key: string, dflt: boolean): boolean {
   try {
@@ -259,27 +115,24 @@ export function MapEditorPage() {
   }));
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  // Битый blob (P1-7): показываем пустую карту, автосейв поверх — только после
-  // явного разрешения (иначе первая правка молча хоронила бы исходные данные).
-  const [blobCorrupt, setBlobCorrupt] = useState(false);
-
-  const [cam, setCam] = useState<Camera>({ scale: 24, ox: 0, oy: 0 });
   const [hover, setHover] = useState<string | null>(null);
   const [showGrid, setShowGrid] = useState(() => loadFlag("maps.showGrid", true));
   const [showCoords, setShowCoords] = useState(() => loadFlag("maps.showCoords", false));
-  const [spaceDown, setSpaceDown] = useState(false);
 
   // Инструменты (тикет 04). Пипетка и заливка — одноразовые действия,
   // кисть/дорога/ластик — мазки от нажатия до отпускания.
   const [tool, setTool] = useState<PaintTool>("brush");
   const [terrain, setTerrain] = useState<string>("forest");
   const [brushSize, setBrushSize] = useState<BrushSize>(1);
-  const [saveState, setSaveState] = useState<{ kind: "saved" | "dirty" | "saving" | "error"; at: string }>({
-    kind: "saved",
-    at: "",
+  // История (Этап 2): snapshot-стек, UNDO_DEPTH=50, stroke=один шаг — в хуке.
+  // Эфемерная (не переживает перезагрузку): прошлое/будущее — снимки клеток.
+  const history = useMapHistory<MapCells>({
+    value: cells,
+    onChange: setCells,
+    clone: cloneCells,
+    depth: UNDO_DEPTH,
   });
-  const [canUndo, setCanUndo] = useState(false);
-  const [canRedo, setCanRedo] = useState(false);
+  const { canUndo, canRedo } = history;
   const [dialog, confirm] = useConfirm();
 
   // Генератор (тикет 05): параметры живут отдельно, уходят в то же
@@ -288,46 +141,23 @@ export function MapEditorPage() {
   const [genOpen, setGenOpen] = useState(false);
   const [genParams, setGenParams] = useState<GeneratorParams>({ seed: 0, sea: 55, mountains: 12, forest: 30 });
 
-  // История эфемерная (не переживает перезагрузку): прошлое/будущее —
-  // снимки клеток, мазок целиком — один шаг.
-  const pastRef = useRef<MapCells[]>([]);
-  const futureRef = useRef<MapCells[]>([]);
-  const strokeRef = useRef<{ before: MapCells; changed: boolean } | null>(null);
-  const paintingRef = useRef(false);
-  // C3: pointermove шлёт события чаще кадров — копим последнюю точку и красим
-  // один раз за кадр, иначе каждый move клонирует весь Map клеток.
-  const paintRafRef = useRef(0);
-  const pendingPaintRef = useRef<{ wx: number; wy: number } | null>(null);
-
-  function flushPaint() {
-    paintRafRef.current = 0;
-    const p = pendingPaintRef.current;
-    pendingPaintRef.current = null;
-    if (!p) return;
-    if (paintAt(p.wx, p.wy) && strokeRef.current) strokeRef.current.changed = true;
-  }
-
-  function cancelPendingPaint() {
-    if (paintRafRef.current) cancelAnimationFrame(paintRafRef.current);
-    paintRafRef.current = 0;
-    flushPaint();
-  }
-  const lastSavedRef = useRef<string>("");
   const cellsRef = useRef(cells);
   cellsRef.current = cells;
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const camRef = useRef(cam);
-  camRef.current = cam;
-  const dragRef = useRef<{ button: number; sx: number; sy: number; ox: number; oy: number } | null>(null);
-  const pinchRef = useRef<{ dist: number; scale: number; mx: number; my: number } | null>(null);
+  // Камера (Этап 1): state, fit/zoom, wheel, persist — в хуке, математика та же.
+  const { cam, setCam, camRef, fitCamera, zoomBy, toWorld, touchToWorld } = useMapCamera({
+    map,
+    wrapRef,
+    canvasRef,
+  });
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
     setLoadError(null);
-    setBlobCorrupt(false);
+    autosave.beginLoad();
     // Клетки редактируются здесь, поэтому карта читается мимо кэша слоя:
     // перечитывание по чужой правке легло бы поверх несохранённых мазков.
     readOnce<MapFull>(`/maps/${id}`)
@@ -339,15 +169,11 @@ export function MapEditorPage() {
         // Эталон — в нормализованной форме (порядок ключей/пробелы сырого
         // blob'а иначе давали бы ложное «изменено» и сохранение при открытии).
         const params = { seed: data.seed, sea: data.sea, mountains: data.mountains, forest: data.forest };
-        lastSavedRef.current = serializeCells(parsed) + "|" + JSON.stringify(params);
+        const paramsStr = JSON.stringify(params);
         setGenParams(params);
-        pastRef.current = [];
-        futureRef.current = [];
-        setCanUndo(false);
-        setCanRedo(false);
-        setSaveState({ kind: "saved", at: "" });
+        history.clear();
+        autosave.markLoaded(serializeCells(parsed), paramsStr, cellsBlobStatus(data.cells) === "corrupt");
         setShared(false);
-        if (cellsBlobStatus(data.cells) === "corrupt") setBlobCorrupt(true);
       })
       .catch((e) => {
         if (!alive) return;
@@ -361,122 +187,18 @@ export function MapEditorPage() {
     };
   }, [id]);
 
-  // --- Undo/redo ---
-
-  function pushHistory(before: MapCells) {
-    pastRef.current.push(before);
-    if (pastRef.current.length > UNDO_DEPTH) pastRef.current.shift();
-    futureRef.current = [];
-    setCanUndo(true);
-    setCanRedo(false);
-  }
-
-  function undo() {
-    const prev = pastRef.current.pop();
-    if (!prev) return;
-    futureRef.current.push(cloneCells(cellsRef.current));
-    cellsRef.current = prev;
-    setCells(prev);
-    setCanUndo(pastRef.current.length > 0);
-    setCanRedo(true);
-  }
-
-  function redo() {
-    const next = futureRef.current.pop();
-    if (!next) return;
-    pastRef.current.push(cloneCells(cellsRef.current));
-    cellsRef.current = next;
-    setCells(next);
-    setCanUndo(true);
-    setCanRedo(futureRef.current.length > 0);
-  }
-
-  // --- Автосохранение (debounce; пропуск, если клетки равны последним
-  // сохранённым — так загрузка и undo-в-ту-же-точку ничего не шлют) ---
-  // Версии против гонки (P1-6): два overlapping PUT — побеждает поздний
-  // мазок, а не поздний ответ; устаревший ответ игнорируется по seq.
-  const saveSeqRef = useRef(0);
-  const pendingSeqRef = useRef(0);
-  // Кэш миниатюры (P1-5): печь canvas+toDataURL на каждый мазок дорого.
-  // Клетки те же — шлём готовое; строчим быстрее 2.5с — шлём null (сервер
-  // COALESCE оставляет старое превью); на паузе — печём свежее.
-  const thumbCacheRef = useRef<{ cells: string; thumb: string | null; at: number }>({
-    cells: "",
-    thumb: null,
-    at: 0,
+  // Автосохранение (Этап Autosave): debounce/seq/thumb/dirty/retry/unload/corrupt — в хуке.
+  // Битый blob (P1-7): показываем пустую карту, автосейв поверх — только после
+  // явного разрешения (иначе первая правка молча хоронила бы исходные данные).
+  const autosave = useMapAutosave({
+    map,
+    cells,
+    params: genParams,
+    serializeCells,
+    save: (mapId, body) => write.put(`/maps/${mapId}`, body),
+    buildThumbnail: (m, live) => renderThumbnail(m.grid, m.width, m.height, live, readChrome()),
+    onSaved: (savedId) => afterWrite([{ kind: "map", id: savedId, card: true }]),
   });
-
-  function pickThumbnail(m: MapFull, cellsStr: string, live: MapCells): string | null {
-    const cached = thumbCacheRef.current;
-    if (cellsStr === cached.cells) return cached.thumb;
-    if (Date.now() - cached.at < 2500) return null;
-    const thumb = renderThumbnail(m.grid, m.width, m.height, live, readChrome());
-    thumbCacheRef.current = { cells: cellsStr, thumb, at: Date.now() };
-    return thumb;
-  }
-
-  function sendSave(payload: { cellsStr: string; paramsStr: string; thumb: string | null; params: GeneratorParams }) {
-    if (!map) return;
-    const seq = ++saveSeqRef.current;
-    pendingSeqRef.current = seq;
-    setSaveState((s) => ({ ...s, kind: "saving" }));
-    const mapId = map.id;
-    write
-      .put(`/maps/${mapId}`, { cells: payload.cellsStr, thumbnail: payload.thumb, ...payload.params })
-      .then(() => {
-        // Список карт (дата, миниатюра) — и в других окнах; привязки не задеты.
-        afterWrite([{ kind: "map", id: mapId, card: true }]);
-        if (pendingSeqRef.current !== seq) return;
-        lastSavedRef.current = payload.cellsStr + "|" + payload.paramsStr;
-        setSaveState({ kind: "saved", at: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) });
-      })
-      .catch(() => {
-        if (pendingSeqRef.current !== seq) return;
-        setSaveState((s) => ({ ...s, kind: "error" }));
-      });
-  }
-
-  useEffect(() => {
-    if (!map) return;
-    if (blobCorrupt) return; // P1-7: поверх битого — только с явного разрешения
-    const cellsStr = serializeCells(cells);
-    const paramsStr = JSON.stringify(genParams);
-    if (cellsStr + "|" + paramsStr === lastSavedRef.current) return;
-    setSaveState((s) => (s.kind === "saving" ? s : { kind: "dirty", at: s.at }));
-    const snapshot = { live: cells, params: genParams };
-    const timer = setTimeout(() => {
-      if (!map) return;
-      sendSave({ cellsStr, paramsStr, thumb: pickThumbnail(map, cellsStr, snapshot.live), params: snapshot.params });
-    }, AUTOSAVE_MS);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cells, genParams, map, blobCorrupt]);
-
-  // Повтор сохранения вручную (P0-1): при kind === "error" следующий мазок
-  // и так повторит, но закрытие вкладки до него теряло данные — поэтому
-  // рядом со статусом есть кнопка «Повторить», а уход с несохранённым
-  // тормозит beforeunload.
-  function retrySave() {
-    if (!map) return;
-    const live = cellsRef.current;
-    const cellsStr = serializeCells(live);
-    const paramsStr = JSON.stringify(genParams);
-    if (cellsStr + "|" + paramsStr === lastSavedRef.current) {
-      setSaveState({ kind: "saved", at: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) });
-      return;
-    }
-    sendSave({ cellsStr, paramsStr, thumb: pickThumbnail(map, cellsStr, live), params: genParams });
-  }
-
-  useEffect(() => {
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      // P0-D: ошибка сохранения — тоже несохранённые данные (кнопка «Повторить»
-      // есть, но уход до неё молча терял бы работу).
-      if (saveState.kind === "dirty" || saveState.kind === "saving" || saveState.kind === "error") e.preventDefault();
-    };
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [saveState.kind]);
 
   // Д-14: индикатор несохранённого в title вкладки — тулбар не виден с другой
   // вкладки, а beforeunload без контекста («у вас правки на карте XYZ»).
@@ -485,11 +207,11 @@ export function MapEditorPage() {
     if (!map) return;
     const base = `Карта «${map.name}» — SoyMan`;
     document.title =
-      saveState.kind === "saved" ? base : `● ${base} (не сохранено)`;
+      autosave.status.kind === "saved" ? base : `● ${base} (не сохранено)`;
     return () => {
       document.title = baseTitleRef.current;
     };
-  }, [map?.name, saveState.kind]);
+  }, [map?.name, autosave.status.kind]);
 
   // --- Генератор ---
 
@@ -556,7 +278,7 @@ export function MapEditorPage() {
     const next = generateCells(map.grid, map.width, map.height, genParams);
     cellsRef.current = next;
     setCells(next);
-    pushHistory(before);
+    history.push(before);
   }
 
   async function generateDungeonRun(override?: {
@@ -593,7 +315,7 @@ export function MapEditorPage() {
     });
     cellsRef.current = next;
     setCells(next);
-    pushHistory(before);
+    history.push(before);
     setActionError(null);
   }
 
@@ -627,7 +349,7 @@ export function MapEditorPage() {
     for (const k of res.cleared) draft.terrain.delete(k);
     cellsRef.current = draft;
     setCells(draft);
-    pushHistory(before);
+    history.push(before);
     setActionError(null);
   }
 
@@ -792,8 +514,6 @@ export function MapEditorPage() {
   } | null>(null);
   // Взгляд игрока (пакет A §6): мастер смотрит карту без секретного.
   const [previewAsPlayer, setPreviewAsPlayer] = useState(false);
-  const rulerRef = useRef(ruler);
-  rulerRef.current = ruler;
 
   useEffect(() => {
     if (tool !== "ruler") setRuler(null);
@@ -805,12 +525,6 @@ export function MapEditorPage() {
   const [wallSnap, setWallSnap] = useState(true);
   const [wallDraft, setWallDraft] = useState<{ x: number; y: number }[] | null>(null);
   const [wallLive, setWallLive] = useState<{ x: number; y: number } | null>(null);
-  const wallDraftRef = useRef(wallDraft);
-  wallDraftRef.current = wallDraft;
-  const wallLiveRef = useRef(wallLive);
-  wallLiveRef.current = wallLive;
-  const wallLineModeRef = useRef(wallLineMode);
-  wallLineModeRef.current = wallLineMode;
 
   useEffect(() => {
     if (tool !== "wall") {
@@ -822,14 +536,11 @@ export function MapEditorPage() {
   // Шейпы (Этап E): прямоугольник + содержимое. Мышь — drag, тач — два тапа по углам.
   const [shapeContent, setShapeContent] = useState<"room" | "terrain" | "road" | "river" | "wall" | "eraser">("room");
   const [shapeAnchor, setShapeAnchor] = useState<{ x: number; y: number } | null>(null);
-  const shapeAnchorRef = useRef(shapeAnchor);
-  shapeAnchorRef.current = shapeAnchor;
-  const shapeDragRef = useRef<{ sx: number; sy: number } | null>(null);
 
   useEffect(() => {
     if (tool !== "shape") {
       setShapeAnchor(null);
-      shapeDragRef.current = null;
+      input.shapeDragRef.current = null;
       setRectPreview(null);
     }
   }, [tool]);
@@ -865,7 +576,7 @@ export function MapEditorPage() {
     const next: MapCells = { ...before, labels: [...rest, { x: d.x, y: d.y, text }] };
     cellsRef.current = next;
     setCells(next);
-    pushHistory(before);
+    history.push(before);
     setLabelDraft(null);
   }
 
@@ -879,63 +590,23 @@ export function MapEditorPage() {
     };
     cellsRef.current = next;
     setCells(next);
-    pushHistory(before);
+    history.push(before);
     setLabelDraft(null);
   }
 
   // Слой объектов: выбор (пакет A). Индекс — в массивы cells; любая замена
   // клеток выбор сбрасывает (панели и drag живут на рефах, им не мешает).
-  type ObjSel =
-    | { kind: "door"; index: number }
-    | { kind: "trap"; index: number }
-    | { kind: "marker"; index: number }
-    | { kind: "room"; index: number }
-    | { kind: "start"; index: -1 }
-    | { kind: "finish"; index: -1 };
-  const [selected, setSelected] = useState<ObjSel | null>(null);
-  useEffect(() => {
-    setSelected(null);
-  }, [cells]);
+  const selection = useMapSelection({
+    cells,
+    cellsRef,
+    setCells,
+    commitChange: mutateObjects,
+    clone: cloneCells,
+  });
+  const { selected } = selection;
 
-  function selectedKeyOf(s: ObjSel | null): string | null {
-    if (!s) return null;
-    return s.kind === "start" || s.kind === "finish" ? s.kind : `${s.kind}:${s.index}`;
-  }
-
-  // Хит-тест (P1-3): комнаты/ловушки/старт/финиш — на любой сетке (позиция
-  // клеточная); двери на рёбрах n/s/e/w — только квадраты, на гексах рёбер
-  // такой модели нет, и создание дверей там заблокировано.
-  function hitObject(map: MapFull, wx: number, wy: number): { sel: ObjSel } | null {
-    const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
-    if (!cell) return null;
-    const cs = cellsRef.current;
-    if (map.grid === "square") {
-      const fx = wx - cell.x;
-      const fy = wy - cell.y;
-      const dl = fx;
-      const dr = 1 - fx;
-      const dt = fy;
-      const db = 1 - fy;
-      const m = Math.min(dl, dr, dt, db);
-      const edge = m === dl ? "w" : m === dr ? "e" : m === dt ? "n" : "s";
-      const di = cs.doors.findIndex((d) => d.x === cell.x && d.y === cell.y && d.edge === edge);
-      if (di !== -1) return { sel: { kind: "door", index: di } };
-    }
-    const ti = cs.traps.findIndex((t) => t.x === cell.x && t.y === cell.y);
-    if (ti !== -1) return { sel: { kind: "trap", index: ti } };
-    const mi = cs.markers.findIndex((m) => m.x === cell.x && m.y === cell.y);
-    if (mi !== -1) return { sel: { kind: "marker", index: mi } };
-    if (cs.start && cs.start.x === cell.x && cs.start.y === cell.y)
-      return { sel: { kind: "start", index: -1 } };
-    if (cs.finish && cs.finish.x === cell.x && cs.finish.y === cell.y)
-      return { sel: { kind: "finish", index: -1 } };
-    for (let i = cs.rooms.length - 1; i >= 0; i--) {
-      const r = cs.rooms[i];
-      if (cell.x >= r.x && cell.x < r.x + r.w && cell.y >= r.y && cell.y < r.y + r.h)
-        return { sel: { kind: "room", index: i } };
-    }
-    return null;
-  }
+  // Хит-тест и перемещение/удаление — в useMapSelection (та же геометрия
+  // и приоритеты: door → trap → marker → start/finish → room).
 
   // Панели объектов (клик-панель, не ПКМ).
   const [doorDraft, setDoorDraft] = useState<{ index: number; kind: MapDoorKind; secret: boolean } | null>(null);
@@ -950,19 +621,8 @@ export function MapEditorPage() {
   } | null>(null);
   const [sfDraft, setSfDraft] = useState<{ kind: "start" | "finish" } | null>(null);
   const [objError, setObjError] = useState<string | null>(null);
-  // Drag объекта и создание комнаты прямоугольником (выбор).
-  const objDragRef = useRef<{
-    sel: NonNullable<ObjSel>;
-    sx: number;
-    sy: number;
-    ox: number;
-    oy: number;
-    before: MapCells;
-    moved: boolean;
-  } | null>(null);
-  const rectRef = useRef<{ sx: number; sy: number; wx: number; wy: number; isRect: boolean } | null>(null);
+  // Drag объекта и создание комнаты прямоугольником (выбор) — живут в useMapInput.
   const [rectPreview, setRectPreview] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  const roomRectRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
 
   function openObjPanel(sel: NonNullable<ObjSel>) {
     const cs = cellsRef.current;
@@ -985,7 +645,7 @@ export function MapEditorPage() {
   function mutateObjects(next: MapCells, before: MapCells) {
     cellsRef.current = next;
     setCells(next);
-    pushHistory(before);
+    history.push(before);
   }
 
   function saveDoorDraft() {
@@ -1002,7 +662,7 @@ export function MapEditorPage() {
     }
     mutateObjects({ ...before, doors }, before);
     setDoorDraft(null);
-    setSelected(null);
+    selection.clearSelection();
   }
 
   function deleteDoor() {
@@ -1017,7 +677,7 @@ export function MapEditorPage() {
         : before.doors.filter((_, i) => i !== d.index);
     mutateObjects({ ...before, doors }, before);
     setDoorDraft(null);
-    setSelected(null);
+    selection.clearSelection();
   }
 
   function saveTrapDraft() {
@@ -1028,7 +688,7 @@ export function MapEditorPage() {
     const traps = before.traps.map((x, i) => (i === t.index ? { ...x, kind: t.kind } : x));
     mutateObjects({ ...before, traps }, before);
     setTrapDraft(null);
-    setSelected(null);
+    selection.clearSelection();
   }
 
   function deleteTrap() {
@@ -1037,7 +697,7 @@ export function MapEditorPage() {
     const before = cloneCells(cellsRef.current);
     mutateObjects({ ...before, traps: before.traps.filter((_, i) => i !== t.index) }, before);
     setTrapDraft(null);
-    setSelected(null);
+    selection.clearSelection();
   }
 
   function saveMarkerDraft() {
@@ -1048,7 +708,7 @@ export function MapEditorPage() {
     const markers = before.markers.map((x, i) => (i === m.index ? { ...x, kind: m.kind } : x));
     mutateObjects({ ...before, markers }, before);
     setMarkerDraft(null);
-    setSelected(null);
+    selection.clearSelection();
   }
 
   function deleteMarker() {
@@ -1057,7 +717,7 @@ export function MapEditorPage() {
     const before = cloneCells(cellsRef.current);
     mutateObjects({ ...before, markers: before.markers.filter((_, i) => i !== m.index) }, before);
     setMarkerDraft(null);
-    setSelected(null);
+    selection.clearSelection();
   }
 
   function saveRoomDraft() {
@@ -1065,7 +725,7 @@ export function MapEditorPage() {
     if (!r || !map) return;
     const before = cloneCells(cellsRef.current);
     if (r.index === -1) {
-      const rect = roomRectRef.current;
+      const rect = input.roomRectRef.current;
       if (!rect) return;
       if (before.rooms.length >= 100) {
         setObjError("Комнат слишком много (максимум 100).");
@@ -1081,9 +741,9 @@ export function MapEditorPage() {
       mutateObjects({ ...before, rooms }, before);
     }
     setRoomDraft(null);
-    roomRectRef.current = null;
+    input.roomRectRef.current = null;
     setRectPreview(null);
-    setSelected(null);
+    selection.clearSelection();
   }
 
   function deleteRoom() {
@@ -1092,7 +752,7 @@ export function MapEditorPage() {
     const before = cloneCells(cellsRef.current);
     mutateObjects({ ...before, rooms: before.rooms.filter((_, i) => i !== r.index) }, before);
     setRoomDraft(null);
-    setSelected(null);
+    selection.clearSelection();
   }
 
   function saveCreateDraft() {
@@ -1128,7 +788,7 @@ export function MapEditorPage() {
       mutateObjects({ ...before, finish: { x: c.x, y: c.y } }, before);
     }
     setCreateDraft(null);
-    setSelected(null);
+    selection.clearSelection();
   }
 
   function deleteSf() {
@@ -1140,99 +800,10 @@ export function MapEditorPage() {
     else next.finish = null;
     mutateObjects(next, before);
     setSfDraft(null);
-    setSelected(null);
+    selection.clearSelection();
   }
 
-  function deleteSelected() {
-    const s = selectedRef.current;
-    if (!s) return;
-    const before = cloneCells(cellsRef.current);
-    if (s.kind === "door" && before.doors[s.index]) {
-      const target = before.doors[s.index];
-      const doors =
-        target.pair != null
-          ? before.doors.filter((x) => x.pair !== target.pair)
-          : before.doors.filter((_, i) => i !== s.index);
-      mutateObjects({ ...before, doors }, before);
-    } else if (s.kind === "trap" && before.traps[s.index]) {
-      mutateObjects({ ...before, traps: before.traps.filter((_, i) => i !== s.index) }, before);
-    } else if (s.kind === "marker" && before.markers[s.index]) {
-      mutateObjects({ ...before, markers: before.markers.filter((_, i) => i !== s.index) }, before);
-    } else if (s.kind === "room" && before.rooms[s.index]) {
-      mutateObjects({ ...before, rooms: before.rooms.filter((_, i) => i !== s.index) }, before);
-    } else if (s.kind === "start") {
-      mutateObjects({ ...before, start: null }, before);
-    } else if (s.kind === "finish") {
-      mutateObjects({ ...before, finish: null }, before);
-    } else {
-      return;
-    }
-    setSelected(null);
-  }
-
-  // Жёсткое перемещение объекта из снапшота начала drag (без накопления):
-  // пара дверей едет жёстко тем же дельта-сдвигом, dragged — на новое ребро.
-  function moveObjTo(
-    od: { sel: NonNullable<ObjSel>; ox: number; oy: number; before: MapCells },
-    wx: number,
-    wy: number
-  ) {
-    if (!map) return;
-    const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
-    if (!cell) return;
-    const src = od.before;
-    const draft = cloneCells(src);
-    const s = od.sel;
-    if (s.kind === "door") {
-      // Рёбра n/s/e/w — квадратная модель; на гексах дверей нет (создание заблокировано).
-      if (map.grid !== "square") return;
-      const d = src.doors[s.index];
-      if (!d) return;
-      const fx = wx - cell.x;
-      const fy = wy - cell.y;
-      const m = Math.min(fx, 1 - fx, fy, 1 - fy);
-      const edge: MapDoorEdge = m === fx ? "w" : m === 1 - fx ? "e" : m === fy ? "n" : "s";
-      const dx = cell.x - d.x;
-      const dy = cell.y - d.y;
-      const members =
-        d.pair != null
-          ? src.doors.map((_, i) => i).filter((i) => src.doors[i].pair === d.pair)
-          : [s.index];
-      for (const i of members) {
-        const nx = src.doors[i].x + dx;
-        const ny = src.doors[i].y + dy;
-        if (nx < 0 || ny < 0 || nx >= map.width || ny >= map.height) return;
-      }
-      for (const i of members) {
-        draft.doors[i] = {
-          ...draft.doors[i],
-          x: src.doors[i].x + dx,
-          y: src.doors[i].y + dy,
-          edge: i === s.index ? edge : draft.doors[i].edge,
-        };
-      }
-    } else if (s.kind === "trap") {
-      if (!src.traps[s.index]) return;
-      draft.traps[s.index] = { ...draft.traps[s.index], x: cell.x, y: cell.y };
-    } else if (s.kind === "marker") {
-      if (!src.markers[s.index]) return;
-      draft.markers[s.index] = { ...draft.markers[s.index], x: cell.x, y: cell.y };
-    } else if (s.kind === "start") {
-      draft.start = { x: cell.x, y: cell.y };
-    } else if (s.kind === "finish") {
-      draft.finish = { x: cell.x, y: cell.y };
-    } else if (s.kind === "room") {
-      const r = src.rooms[s.index];
-      if (!r) return;
-      draft.rooms[s.index] = {
-        ...r,
-        x: Math.max(0, Math.min(map.width - r.w, cell.x - od.ox)),
-        y: Math.max(0, Math.min(map.height - r.h, cell.y - od.oy)),
-      };
-    }
-    cellsRef.current = draft;
-    setCells(draft);
-  }
+  // Удаление и перемещение — в useMapSelection (та же геометрия и pair-правила).
 
   // Уход с выбора закрывает панели объектов (черновики привязаны к индексам,
   // после чужих правок врали бы) и гасит прямоугольник.
@@ -1244,9 +815,9 @@ export function MapEditorPage() {
     setCreateDraft(null);
     setSfDraft(null);
     setObjError(null);
-    setSelected(null);
-    rectRef.current = null;
-    roomRectRef.current = null;
+    selection.clearSelection();
+    input.rectRef.current = null;
+    input.roomRectRef.current = null;
     setRectPreview(null);
   }
 
@@ -1327,7 +898,7 @@ export function MapEditorPage() {
       cellsRef.current = res.cells;
       setCells(res.cells);
       setGenParams(res.gen);
-      pushHistory(before);
+      history.push(before);
       setXferMsg("Загружено: клетки, объекты и параметры генератора заменены (имя и размер — прежние). Шаг — в историю.");
     };
     reader.readAsText(file);
@@ -1423,7 +994,7 @@ export function MapEditorPage() {
       if (cropped) {
         cellsRef.current = cropped;
         setCells(cropped);
-        pushHistory(before);
+        history.push(before);
       }
       afterWrite([{ kind: "map", id: map.id, card: true }]);
       setMap(updated);
@@ -1515,1072 +1086,139 @@ export function MapEditorPage() {
 
   // --- Мазки ---
 
-  // Стены линией: вершина со снепом — центр клетки, без снепа — сырая точка.
-  function quantizeVertex(wx: number, wy: number): { x: number; y: number } {
-    if (!map || !wallSnap) return { x: wx, y: wy };
-    const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
-    if (!cell) return { x: wx, y: wy };
-    const c = cellCenter(map.grid, cell.x, cell.y);
-    return { x: c.cx, y: c.cy };
-  }
+  // Шейп-прямоугольник и мазки — в tools/* (применение — там же).
 
-  // Финиш полилинии стен: растеризация всех звеньев в wall одним undo-шагом.
-  function finishWallLine(includeLive: boolean) {
-    if (!map) {
-      setWallDraft(null);
-      setWallLive(null);
-      return;
-    }
-    const d = wallDraftRef.current ?? [];
-    const verts = includeLive && wallLiveRef.current ? [...d, wallLiveRef.current] : d;
-    setWallDraft(null);
-    setWallLive(null);
-    if (verts.length < 2) return;
-    const before = cloneCells(cellsRef.current);
-    const draft = cloneCells(before);
-    let changed = false;
-    const seen = new Set<string>();
-    for (let i = 0; i + 1 < verts.length; i++) {
-      for (const cell of traceLineCells(map.grid, map.width, map.height, verts[i], verts[i + 1])) {
-        const k = cellKey(cell.x, cell.y);
-        if (seen.has(k)) continue;
-        seen.add(k);
-        if ((draft.terrain.get(k) ?? "plain") !== "wall") {
-          draft.terrain.set(k, "wall");
-          changed = true;
-        }
-      }
-    }
-    if (!changed) return;
-    cellsRef.current = draft;
-    setCells(draft);
-    pushHistory(before);
-  }
-
-  // Шейп-прямоугольник: комната — в модалку с ректом, остальное — применением на
-  // клетки ректа одним шагом (террейн — текущий, оверлеи — поверх, ластик — чистка).
-  function applyShapeRect(a: { x: number; y: number }, b: { x: number; y: number }) {
-    if (!map) return;
-    const x0 = Math.min(a.x, b.x);
-    const y0 = Math.min(a.y, b.y);
-    const x1 = Math.max(a.x, b.x);
-    const y1 = Math.max(a.y, b.y);
-    const content = shapeContent;
-    if (content === "room") {
-      roomRectRef.current = { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
-      setRoomDraft({ index: -1, type: "empty", name: "" });
-      setObjError(null);
-      return;
-    }
-    const before = cloneCells(cellsRef.current);
-    const draft = cloneCells(before);
-    let changed = false;
-    for (let y = y0; y <= y1; y++) {
-      for (let x = x0; x <= x1; x++) {
-        const k = cellKey(x, y);
-        if (content === "road" || content === "river") {
-          const set = content === "road" ? draft.roads : draft.rivers;
-          if (!set.has(k)) {
-            set.add(k);
-            changed = true;
-          }
-        } else if (content === "eraser") {
-          if ((draft.terrain.get(k) ?? "plain") !== "plain") {
-            draft.terrain.delete(k);
-            changed = true;
-          }
-          if (draft.roads.has(k)) {
-            draft.roads.delete(k);
-            changed = true;
-          }
-          if (draft.rivers.has(k)) {
-            draft.rivers.delete(k);
-            changed = true;
-          }
-        } else {
-          const t = content === "wall" ? "wall" : terrainRef.current;
-          if ((draft.terrain.get(k) ?? "plain") !== t) {
-            if (t === "plain") draft.terrain.delete(k);
-            else draft.terrain.set(k, t);
-            changed = true;
-          }
-        }
-      }
-    }
-    if (!changed) return;
-    cellsRef.current = draft;
-    setCells(draft);
-    pushHistory(before);
-  }
-
-  // Синхронный подсчёт: changed считается ДО setCells (иначе апдейтер
-  // выполняется позже рендера и одиночный клик возвращал false — мазок
-  // терялся для истории, P0-1). Реф обновляется оптимистично сразу, чтобы
-  // быстрые pointermove до перерендера не затирали друг друга.
-  function paintAt(wx: number, wy: number): boolean {
-    if (!map) return false;
-    const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
-    if (!cell) return false;
-    const draft = cloneCells(cellsRef.current);
-    const effTool = eraseOverrideRef.current ? "eraser" : toolRef.current;
-    // Стена дабом — та же кисть террейна, только краска зафиксирована (линия — отдельно).
-    const effTerrain = effTool === "wall" ? "wall" : terrainRef.current;
-    const changed = paintStroke(draft, map.grid, map.width, map.height, cell.x, cell.y, brushSizeRef.current, effTool, effTerrain);
-    if (!changed) return false;
-    cellsRef.current = draft;
-    setCells(draft);
-    return true;
-  }
-
-  function beginStroke() {
-    strokeRef.current = { before: cloneCells(cellsRef.current), changed: false };
-    paintingRef.current = true;
-  }
-
-  function endStroke() {
-    const s = strokeRef.current;
-    strokeRef.current = null;
-    paintingRef.current = false;
-    if (s && s.changed) pushHistory(s.before);
-  }
-
-  function singleAction(wx: number, wy: number) {
-    if (!map) return;
-    const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
-    if (!cell) return;
-    if (toolRef.current === "picker") {
-      const t = cellsRef.current.terrain.get(cellKey(cell.x, cell.y)) ?? "plain";
-      setTerrain(t);
-      selectTool("brush");
-      return;
-    }
-    // fill
-    const before = cloneCells(cellsRef.current);
-    const draft = cloneCells(before);
-    if (floodFill(draft, map.grid, map.width, map.height, cell.x, cell.y, terrainRef.current)) {
-      cellsRef.current = draft;
-      setCells(draft);
-      pushHistory(before);
-    }
-  }
+  // Красящие инструменты и установка объектов — в tools/*.
 
   // Последний вид ловушки для инструмента (в панели вид меняется; Этап F).
   const [lastTrapKind, setLastTrapKind] = useState<MapTrapKind>("pit");
   // Вид маркера для инструмента «Маркер» (города/POI; сундук/алтарь — свои кнопки).
   const [markerKind, setMarkerKind] = useState<Exclude<MapMarkerKind, "chest" | "altar">>("city");
 
-  // Клик-установка объектов (Этап F): дверь — обычная (вид правится выбором),
-  // ловушка — последнего вида, старт/финиш — заменой. Каждый клик — undo-шаг.
-  function placeObject(kind: PaintTool, wx: number, wy: number) {
+  // Живая ссылка на инструмент для selectTool/double-click —
+  // иначе читали бы то, что было выбрано при монтировании.
+  const toolRef = useRef(tool);
+  toolRef.current = tool;
+
+  // Кадр — в MapViewport (DPR/canvas/renderMap/оверлеи там же, deps те же).
+
+  // Пробел — временная панорама левой кнопкой — в useMapInput (spaceDown оттуда же).
+
+  // Хоткеи (Этап Hotkeys): keyboard router — в хуке, mapping и гарды те же.
+  // Space-пан — отдельным эффектом выше (input/camera), не часть роутера.
+  useMapHotkeys({
+    canEdit,
+    onSelectTool: selectTool,
+    onUndo: history.undo,
+    onRedo: history.redo,
+    onZoomIn: () => zoomBy(1.25),
+    onZoomOut: () => zoomBy(1 / 1.25),
+    onFit: () => fitCamera(true),
+    hasSelection: selected !== null,
+    onDeleteSelected: selection.deleteSelected,
+    onCancel: () => {
+      setRuler(null);
+      setWallDraft(null);
+      setWallLive(null);
+      setShapeAnchor(null);
+    },
+    canFinishWall: (wallDraft?.length ?? 0) > 0,
+    onFinishWall: () => tools.wall.finishWallLine(true),
+    isGenOpen: genOpen,
+    onGenerate: generate,
+    onToggleGen: toggleGen,
+    onTogglePng: togglePng,
+  });
+
+
+  // Создание по пустой клетке (мышь и тач делят логику): на гексах дверей
+  // на рёбрах нет — сразу предлагаем ловушку (дверь в модалке скрыта).
+  function openCreateForCell(cell: { x: number; y: number }, wx: number, wy: number) {
     if (!map) return;
-    const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
-    if (!cell) return;
-    const before = cloneCells(cellsRef.current);
-    if (kind === "door") {
-      if (map.grid !== "square") {
-        setActionError("Двери — только на квадратах: на гексах рёберной модели нет.");
-        return;
-      }
-      if (before.doors.length >= 400) {
-        setActionError("Дверей слишком много (максимум 400).");
-        return;
-      }
+    if (map.grid !== "square") {
+      setCreateDraft({ x: cell.x, y: cell.y, edge: "n", choice: "trap" });
+    } else {
       const fx = wx - cell.x;
       const fy = wy - cell.y;
       const m = Math.min(fx, 1 - fx, fy, 1 - fy);
       const edge: MapDoorEdge = m === fx ? "w" : m === 1 - fx ? "e" : m === fy ? "n" : "s";
-      if (before.doors.some((d) => d.x === cell.x && d.y === cell.y && d.edge === edge)) {
-        setActionError("Здесь уже есть дверь.");
-        return;
-      }
-      mutateObjects(
-        { ...before, doors: [...before.doors, { x: cell.x, y: cell.y, edge, kind: "door", secret: false, pair: null }] },
-        before
-      );
-    } else if (kind === "trap") {
-      if (before.traps.length >= 300) {
-        setActionError("Ловушек слишком много (максимум 300).");
-        return;
-      }
-      mutateObjects({ ...before, traps: [...before.traps, { x: cell.x, y: cell.y, kind: lastTrapKind }] }, before);
-    } else if (kind === "chest" || kind === "altar") {
-      if (before.markers.length >= 300) {
-        setActionError("Маркеров слишком много (максимум 300).");
-        return;
-      }
-      mutateObjects({ ...before, markers: [...before.markers, { x: cell.x, y: cell.y, kind }] }, before);
-    } else if (kind === "marker") {
-      if (before.markers.length >= 300) {
-        setActionError("Маркеров слишком много (максимум 300).");
-        return;
-      }
-      mutateObjects({ ...before, markers: [...before.markers, { x: cell.x, y: cell.y, kind: markerKind }] }, before);
-    } else if (kind === "start") {
-      mutateObjects({ ...before, start: { x: cell.x, y: cell.y } }, before);
-    } else if (kind === "finish") {
-      mutateObjects({ ...before, finish: { x: cell.x, y: cell.y } }, before);
-    } else {
-      return;
+      setCreateDraft({ x: cell.x, y: cell.y, edge, choice: "door" });
     }
-    setActionError(null);
+    setObjError(null);
   }
 
-  // Живые ссылки на инструмент/террейн/размер для обработчиков canvas —
-  // иначе мазки рисовали бы тем, что было выбрано при монтировании.
-  const toolRef = useRef(tool);
-  toolRef.current = tool;
-  // Правая кнопка — временный ластик (P1-10): инструмент не переключает.
-  const eraseOverrideRef = useRef(false);
-  const terrainRef = useRef(terrain);
-  terrainRef.current = terrain;
-  const brushSizeRef = useRef(brushSize);
-  brushSizeRef.current = brushSize;
+  // Инструменты (Этап Tool Controller): доменная логика — в tools/*,
+  // композиция — в useMapTools. Страница хранит editor/UI state и связывает
+  // колбэки; как именно кисть меняет MapCells, она больше не знает.
+  const tools = useMapTools({
+    map,
+    tool,
+    terrain,
+    brushSize,
+    wallSnap,
+    wallDraft,
+    wallLive,
+    shapeContent,
+    shapeAnchor,
+    ruler,
+    lastTrapKind,
+    markerKind,
+    cellsRef,
+    setCells,
+    clone: cloneCells,
+    push: history.push,
+    commitChange: mutateObjects,
+    selectTool,
+    setTerrain,
+    setRuler,
+    setWallDraft,
+    setWallLive,
+    setShapeAnchor,
+    setRectPreview,
+    setActionError,
+    onRequestRoomCreate: (rect) => {
+      input.roomRectRef.current = rect;
+      setRoomDraft({ index: -1, type: "empty", name: "" });
+      setObjError(null);
+    },
+    onRequestLabelEdit: (x, y) => {
+      openLabelEditor(x, y);
+    },
+    openObjectPanel: (sel) => {
+      openObjPanel(sel);
+    },
+    openCreate: (cell, wx, wy) => {
+      openCreateForCell(cell, wx, wy);
+    },
+    openRoomDraft: () => {
+      setRoomDraft({ index: -1, type: "empty", name: "" });
+      setObjError(null);
+    },
+    cancelObjectDrag: (before) => {
+      cellsRef.current = before;
+      setCells(before);
+    },
+  });
 
-  // Автомасштаб под окно при открытии карты. Д-16: позиция камеры — по карте
-  // (localStorage `maps.cam.<id>`): за столом зумнул на B12 — после перезахода
-  // вернёшься туда же; «Вписать» (force) сбрасывает в общий вид и стирает память.
-  const fitCamera = useCallback(
-    (force = false) => {
-      const wrap = wrapRef.current;
-      if (!wrap || !map) return;
-      if (!force) {
-        try {
-          const raw = localStorage.getItem(`maps.cam.${map.id}`);
-          if (raw) {
-            const c = JSON.parse(raw) as { scale?: unknown; ox?: unknown; oy?: unknown };
-            if (
-              typeof c.scale === "number" && Number.isFinite(c.scale) && c.scale >= 4 && c.scale <= 240 &&
-              typeof c.ox === "number" && Number.isFinite(c.ox) &&
-              typeof c.oy === "number" && Number.isFinite(c.oy)
-            ) {
-              setCam({ scale: c.scale, ox: c.ox, oy: c.oy });
-              return;
-            }
-          }
-        } catch {
-          // нет памяти — вписываем как раньше
-        }
-      } else {
-        try {
-          localStorage.removeItem(`maps.cam.${map.id}`);
-        } catch {
-          // приватный режим — не страшно
-        }
-      }
-      const rect = wrap.getBoundingClientRect();
-    if (rect.width < 10 || rect.height < 10) return;
-    const b = worldBounds(map.grid, map.width, map.height);
-    const pad = 24;
-    const scale = Math.max(
-      4,
-      Math.min((rect.width - pad * 2) / (b.maxX - b.minX), (rect.height - pad * 2) / (b.maxY - b.minY))
-    );
-    setCam({
-      scale,
-      ox: pad + (rect.width - pad * 2 - (b.maxX - b.minX) * scale) / 2 - b.minX * scale,
-      oy: pad + (rect.height - pad * 2 - (b.maxY - b.minY) * scale) / 2 - b.minY * scale,
-    });
-  }, [map]);
-
-  useEffect(() => {
-    fitCamera();
-  }, [fitCamera]);
-
-  useEffect(() => {
-    const onResize = () => fitCamera();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [fitCamera]);
-
-  // Д-16: запоминаем камеру (debounce — не пишем на каждый пиксель панорамы).
-  useEffect(() => {
-    if (!map) return;
-    const key = `maps.cam.${map.id}`;
-    const timer = setTimeout(() => {
-      try {
-        localStorage.setItem(key, JSON.stringify(cam));
-      } catch {
-        // приватный режим — просто не запоминаем
-      }
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [cam, map?.id]);
-
-  // Зум кнопками/хоткеями (P0-4): к центру видимого поля, те же пределы,
-  // что у зума колесом (4..240). fitCamera уже есть выше — кнопки ниже.
-  function zoomBy(factor: number) {
-    const el = canvasRef.current ?? wrapRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const cx = rect.width / 2;
-    const cy = rect.height / 2;
-    setCam((c) => {
-      const scale = Math.min(240, Math.max(4, c.scale * factor));
-      const k = scale / c.scale;
-      return { scale, ox: cx - (cx - c.ox) * k, oy: cy - (cy - c.oy) * k };
-    });
-  }
-
-  // Кадр.
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const wrap = wrapRef.current;
-    if (!canvas || !wrap || !map) return;
-    const rect = wrap.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.max(1, Math.round(rect.width * dpr));
-    canvas.height = Math.max(1, Math.round(rect.height * dpr));
-    canvas.style.width = `${rect.width}px`;
-    canvas.style.height = `${rect.height}px`;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const chrome = readChrome();
-    renderMap(ctx, rect.width, rect.height, {
-      grid: map.grid,
-      width: map.width,
-      height: map.height,
-      cells,
-      scale: cam.scale,
-      ox: cam.ox,
-      oy: cam.oy,
-      showGrid,
-      showCoords,
-      hover,
-      // Этап G: футпринт кистей 2/3 (и реки/дороги/ластика/стены-даба) — целиком,
-      // а не одна клетка; остальным инструментам — одиночка через hover.
-      hoverCells: (() => {
-        if (!hover) return null;
-        const paints =
-          tool === "brush" || tool === "road" || tool === "river" || tool === "eraser" || (tool === "wall" && !wallLineMode);
-        if (!paints) return null;
-        const [hx, hy] = hover.split(",").map(Number);
-        if (!Number.isInteger(hx) || !Number.isInteger(hy)) return null;
-        return brushCells(map.grid, hx, hy, brushSize, map.width, map.height).map((c) => cellKey(c.x, c.y));
-      })(),
-      chrome,
-      // Игрок всегда видит карту глазами игрока; у мастера — тумблер превью (§6).
-      playerView: !canEdit || previewAsPlayer,
-      selectedKey: selectedKeyOf(selected),
-    });
-    // Линейка поверх поля (P2-1): экранные координаты, читаема при любом зуме.
-    if (ruler) {
-      const end = ruler.b ?? ruler.a;
-      const pa = cellCenter(map.grid, ruler.a.x, ruler.a.y);
-      const pb = cellCenter(map.grid, end.x, end.y);
-      const ax = cam.ox + pa.cx * cam.scale;
-      const ay = cam.oy + pa.cy * cam.scale;
-      const bx = cam.ox + pb.cx * cam.scale;
-      const by = cam.oy + pb.cy * cam.scale;
-      ctx.save();
-      ctx.strokeStyle = chrome.ink;
-      ctx.lineWidth = 2;
-      ctx.setLineDash([7, 5]);
-      ctx.beginPath();
-      ctx.moveTo(ax, ay);
-      ctx.lineTo(bx, by);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      for (const [px, py] of [[ax, ay], [bx, by]] as const) {
-        ctx.beginPath();
-        ctx.arc(px, py, 4, 0, Math.PI * 2);
-        ctx.fillStyle = chrome.paper;
-        ctx.fill();
-        ctx.strokeStyle = chrome.ink;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      }
-      const m = rulerMeasure(map.grid, ruler.a.x, ruler.a.y, end.x, end.y);
-      const per = parseCellLore(map.cell_lore);
-      const label =
-        `${coordLabel(ruler.a.x, ruler.a.y)}→${coordLabel(end.x, end.y)} · ${m.cells} кл` +
-        (per !== null ? ` · ${formatMeters(m.dist * per)}` : "");
-      ctx.font = "12px Oswald, sans-serif";
-      const tw = ctx.measureText(label).width;
-      const mx = (ax + bx) / 2;
-      const my = (ay + by) / 2 - 12;
-      ctx.fillStyle = chrome.paper;
-      ctx.strokeStyle = chrome.ink;
-      ctx.lineWidth = 1;
-      ctx.fillRect(mx - tw / 2 - 6, my - 11, tw + 12, 20);
-      ctx.strokeRect(mx - tw / 2 - 6, my - 11, tw + 12, 20);
-      ctx.fillStyle = chrome.ink;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(label, mx, my);
-      ctx.restore();
-    }
-    // Полилиния стен (Этап E): пунктир по вершинам + живой конец + точки вершин.
-    if (wallDraft && wallDraft.length > 0) {
-      const pts = wallLive ? [...wallDraft, wallLive] : wallDraft;
-      ctx.save();
-      ctx.strokeStyle = chrome.ink;
-      ctx.lineWidth = 2;
-      ctx.setLineDash([7, 5]);
-      ctx.beginPath();
-      ctx.moveTo(cam.ox + pts[0].x * cam.scale, cam.oy + pts[0].y * cam.scale);
-      for (let i = 1; i < pts.length; i++) {
-        ctx.lineTo(cam.ox + pts[i].x * cam.scale, cam.oy + pts[i].y * cam.scale);
-      }
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = chrome.paper;
-      for (const p of wallDraft) {
-        ctx.beginPath();
-        ctx.arc(cam.ox + p.x * cam.scale, cam.oy + p.y * cam.scale, 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-      }
-      ctx.restore();
-    }
-    // Прямоугольник создаваемой комнаты (выбор): пунктир чернилами.
-    if (rectPreview) {
-      ctx.save();
-      ctx.strokeStyle = chrome.ink;
-      ctx.lineWidth = 2;
-      ctx.setLineDash([7, 5]);
-      ctx.strokeRect(
-        cam.ox + rectPreview.x * cam.scale,
-        cam.oy + rectPreview.y * cam.scale,
-        rectPreview.w * cam.scale,
-        rectPreview.h * cam.scale
-      );
-      ctx.restore();
-    }
-  }, [map, cells, cam, showGrid, showCoords, hover, ruler, selected, rectPreview, previewAsPlayer, wallDraft, wallLive, tool, brushSize, wallLineMode]);
-
-  // Пробел — временная панорама левой кнопкой.
-  useEffect(() => {
-    const down = (e: KeyboardEvent) => {
-      if (e.code === "Space" && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
-        e.preventDefault();
-        setSpaceDown(true);
-      }
-    };
-    const up = (e: KeyboardEvent) => {
-      if (e.code === "Space") setSpaceDown(false);
-    };
-    window.addEventListener("keydown", down);
-    window.addEventListener("keyup", up);
-    return () => {
-      window.removeEventListener("keydown", down);
-      window.removeEventListener("keyup", up);
-    };
-  }, []);
-
-  function toWorld(e: React.MouseEvent | React.PointerEvent): { wx: number; wy: number; rx: number; ry: number } {
-    const canvas = canvasRef.current!;
-    const rect = canvas.getBoundingClientRect();
-    const rx = (e as React.MouseEvent).clientX - rect.left;
-    const ry = (e as React.MouseEvent).clientY - rect.top;
-    const c = camRef.current;
-    return { wx: (rx - c.ox) / c.scale, wy: (ry - c.oy) / c.scale, rx, ry };
-  }
-
-  // Нативный слушатель: React вешает wheel пассивным, и preventDefault там
-  // только ругается в консоль — страница уезжала бы из-под зума.
-  // Зависимость от map: canvas появляется только после загрузки карты,
-  // вешать один раз при монтировании — мимо (баг «зум не работает»).
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const onWheelNative = (e: WheelEvent) => {
-      e.preventDefault();
-      const rect = canvas.getBoundingClientRect();
-      const rx = e.clientX - rect.left;
-      const ry = e.clientY - rect.top;
-      setCam((c) => {
-        const scale = Math.min(240, Math.max(4, c.scale * Math.pow(1.0015, -e.deltaY)));
-        const k = scale / c.scale;
-        return { scale, ox: rx - (rx - c.ox) * k, oy: ry - (ry - c.oy) * k };
-      });
-    };
-    canvas.addEventListener("wheel", onWheelNative, { passive: false });
-    return () => canvas.removeEventListener("wheel", onWheelNative);
-  }, [map]);
-
-  // Хоткеи: Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y — история, B/G/E/I/R/M/T/V — инструмент,
-  // +/−/0 — зум/вписать, Esc — сбросить замер (P0-4, P2-1; камера и Esc общие).
-  // Независимы от раскладки (code), в полях ввода молчат.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const tag = (document.activeElement as HTMLElement | null)?.tagName;
-      const ae = document.activeElement as HTMLElement | null;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || ae?.isContentEditable) return;
-      if (e.ctrlKey || e.metaKey || e.altKey) {
-        if ((e.ctrlKey || e.metaKey) && !e.altKey) {
-          // code, а не key: физическая клавиша,Z — та же и на русской раскладке.
-          if (!canEdit) return;
-          if (e.code === "KeyZ" && !e.shiftKey) {
-            e.preventDefault();
-            undoRef.current();
-          } else if ((e.code === "KeyZ" && e.shiftKey) || e.code === "KeyY") {
-            e.preventDefault();
-            redoRef.current();
-          } else if (e.code === "Enter" && genOpenRef.current) {
-            // Ctrl+Enter — сгенерировать, когда панель генератора открыта (U7).
-            e.preventDefault();
-            generateRef.current();
-          }
-        } else if (e.altKey && !e.ctrlKey && !e.metaKey) {
-          // U7: Alt+G/P — панели (одиночные G/E заняты инструментами,
-          // а Ctrl+G — «найти далее» в браузере, его не трогаем).
-          if (!canEdit) return;
-          if (e.code === "KeyG") {
-            e.preventDefault();
-            toggleGenRef.current();
-          } else if (e.code === "KeyP") {
-            e.preventDefault();
-            togglePngRef.current();
-          }
-        }
-        return;
-      }
-      if (e.code === "Equal" || e.code === "NumpadAdd") {
-        e.preventDefault();
-        zoomByRef.current(1.25);
-        return;
-      }
-      if (e.code === "Minus" || e.code === "NumpadSubtract") {
-        e.preventDefault();
-        zoomByRef.current(1 / 1.25);
-        return;
-      }
-      if (e.code === "Digit0" || e.code === "Numpad0") {
-        e.preventDefault();
-        fitCameraRef.current(true);
-        return;
-      }
-      if (e.code === "Escape") {
-        setRuler(null);
-        setWallDraft(null);
-        setWallLive(null);
-        setShapeAnchor(null);
-        return;
-      }
-      // Enter без модификаторов — финиш полилинии стен с живым концом (Этап E).
-      if (e.code === "Enter" && wallDraftRef.current && wallDraftRef.current.length > 0) {
-        e.preventDefault();
-        finishWallLineRef.current(true);
-        return;
-      }
-      if (!canEdit) return;
-      const map_code: Record<string, PaintTool> = {
-        KeyV: "select",
-        KeyB: "brush",
-        KeyG: "fill",
-        KeyE: "eraser",
-        KeyI: "picker",
-        KeyR: "road",
-        KeyN: "river",
-        KeyW: "wall",
-        KeyU: "shape",
-        KeyD: "door",
-        KeyL: "trap",
-        KeyC: "chest",
-        KeyA: "altar",
-        KeyK: "marker",
-        KeyS: "start",
-        KeyF: "finish",
-        KeyM: "ruler",
-        KeyT: "label",
-      };
-      const t = map_code[e.code];
-      if (t) {
-        // Уход с выбора закрывает панели объектов (черновики бы врали).
-        selectTool(t);
-        return;
-      }
-      // Delete — удалить выбранный объект (пару дверей — целиком).
-      if (e.code === "Delete" && selectedRef.current) {
-        e.preventDefault();
-        deleteSelectedRef.current();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canEdit]);
-
-  const undoRef = useRef(undo);
-  undoRef.current = undo;
-  const redoRef = useRef(redo);
-  redoRef.current = redo;
-  const generateRef = useRef(generate);
-  generateRef.current = generate;
-  const finishWallLineRef = useRef(finishWallLine);
-  finishWallLineRef.current = finishWallLine;
-  const toggleGenRef = useRef(toggleGen);
-  toggleGenRef.current = toggleGen;
-  const togglePngRef = useRef(togglePng);
-  togglePngRef.current = togglePng;
-  const genOpenRef = useRef(genOpen);
-  genOpenRef.current = genOpen;
-  const selectedRef = useRef(selected);
-  selectedRef.current = selected;
-  const deleteSelectedRef = useRef(deleteSelected);
-  deleteSelectedRef.current = deleteSelected;
-  const fitCameraRef = useRef(fitCamera);
-  fitCameraRef.current = fitCamera;
-  const zoomByRef = useRef(zoomBy);
-  zoomByRef.current = zoomBy;
-
-  function onPointerDown(e: React.PointerEvent) {
-    if (e.pointerType === "touch") return; // тач — ниже, по указателям
-    if (e.button === 1 || (e.button === 0 && spaceDown)) {
-      e.preventDefault();
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
-      dragRef.current = { button: e.button, sx: e.clientX, sy: e.clientY, ox: camRef.current.ox, oy: camRef.current.oy };
-      return;
-    }
-    if (e.button !== 0 || spaceDown || !canEdit || !map) {
-      // Правая кнопка — стереть, не переключая инструмент (P1-10). Средняя и
-      // пробел — панорама (выше). Контекстное меню браузера прибито на canvas.
-      if (e.button === 2 && !spaceDown && canEdit && map) {
-        (e.target as HTMLElement).setPointerCapture(e.pointerId);
-        beginStroke();
-        eraseOverrideRef.current = true;
-        const { wx, wy } = toWorld(e);
-        if (paintAt(wx, wy) && strokeRef.current) strokeRef.current.changed = true;
-      }
-      return;
-    }
-    const { wx, wy } = toWorld(e);
-    // Выбор (пакет A + P1-3): клик по объекту — потянуть или панель; по пустому —
-    // тянуть прямоугольник комнаты или панель создания. Двери на рёбрах —
-    // только квадраты (на гексах создание дверей заблокировано в модалке).
-    if (toolRef.current === "select") {
-      const hit = hitObject(map, wx, wy);
-      if (hit) {
-        const cs = cellsRef.current;
-        let ox = 0;
-        let oy = 0;
-        const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
-        if (hit.sel.kind === "room" && cs.rooms[hit.sel.index] && cell) {
-          ox = cell.x - cs.rooms[hit.sel.index].x;
-          oy = cell.y - cs.rooms[hit.sel.index].y;
-        }
-        (e.target as HTMLElement).setPointerCapture(e.pointerId);
-        objDragRef.current = {
-          sel: hit.sel,
-          sx: e.clientX,
-          sy: e.clientY,
-          ox,
-          oy,
-          before: cloneCells(cs),
-          moved: false,
-        };
-        setSelected(hit.sel);
-      } else {
-        const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
-        if (cell) {
-          (e.target as HTMLElement).setPointerCapture(e.pointerId);
-          rectRef.current = { sx: e.clientX, sy: e.clientY, wx, wy, isRect: false };
-        }
-      }
-      return;
-    }
-    // Линейка (P2-1): первый клик — начало, второй — конец (замер остаётся,
-    // пока выбран инструмент); клик по готовому — новый замер.
-    if (toolRef.current === "ruler") {
-      const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
-      if (cell) {
-        setRuler((r) =>
-          !r || r.locked ? { a: cell, b: null, locked: false } : { a: r.a, b: r.b ?? r.a, locked: true }
-        );
-      }
-      return;
-    }
-    // Подпись (P2-2): клик — модалка новой/правки. Мазков нет, undo — шагом.
-    if (toolRef.current === "label") {
-      const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
-      if (cell) openLabelEditor(cell.x, cell.y);
-      return;
-    }
-    // Стены линией (Этап E): клик — вершина; финиш — дабл-клик/Enter (см. ниже).
-    if (toolRef.current === "wall" && wallLineModeRef.current) {
-      if (!pixelToCell(map.grid, wx, wy, map.width, map.height)) return;
-      const v = quantizeVertex(wx, wy);
-      setWallDraft((d) => [...(d ?? []), v]);
-      setWallLive(null);
-      return;
-    }
-    // Шейп (Этап E): drag от угла к углу; тач — два тапа (см. onTouchStart).
-    if (toolRef.current === "shape") {
-      const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
-      if (cell) {
-        (e.target as HTMLElement).setPointerCapture(e.pointerId);
-        shapeDragRef.current = { sx: cell.x, sy: cell.y };
-        setRectPreview({ x: cell.x, y: cell.y, w: 1, h: 1 });
-      }
-      return;
-    }
-    // Инструменты-установщики (Этап F): клик — объект на карту, каждый — undo-шаг.
-    const placeTool = toolRef.current;
-    if (
-      placeTool === "door" ||
-      placeTool === "trap" ||
-      placeTool === "chest" ||
-      placeTool === "altar" ||
-      placeTool === "marker" ||
-      placeTool === "start" ||
-      placeTool === "finish"
-    ) {
-      placeObject(placeTool, wx, wy);
-      return;
-    }
-    if (e.altKey) {
-      // Пипетка поверх любого инструмента (P1-9 + Этап C): берёт террейн, а клетка
-      // с оверлеем включает его инструмент (дорога — верхняя, потом река).
-      // С активным оверлеем Alt+клик наоборот точечно снимает его, террейн не трогая.
-      const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
-      if (cell) {
-        const key = cellKey(cell.x, cell.y);
-        const active = toolRef.current;
-        if (active === "road" || active === "river") {
-          const set = active === "road" ? cellsRef.current.roads : cellsRef.current.rivers;
-          if (set.has(key)) {
-            const before = cloneCells(cellsRef.current);
-            const draft = cloneCells(before);
-            (active === "road" ? draft.roads : draft.rivers).delete(key);
-            cellsRef.current = draft;
-            setCells(draft);
-            pushHistory(before);
-          }
-        } else {
-          setTerrain(cellsRef.current.terrain.get(key) ?? "plain");
-          selectTool(
-            cellsRef.current.roads.has(key) ? "road" : cellsRef.current.rivers.has(key) ? "river" : "brush"
-          );
-        }
-      }
-      return;
-    }
-    if (toolRef.current === "fill" || toolRef.current === "picker") {
-      singleAction(wx, wy);
-      return;
-    }
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    beginStroke();
-    const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
-    if (cell && paintAt(wx, wy) && strokeRef.current) strokeRef.current.changed = true;
-  }
-
-  function onPointerMove(e: React.PointerEvent) {
-    if (e.pointerType === "touch") return;
-    const d = dragRef.current;
-    if (d) {
-      setCam((c) => ({ ...c, ox: d.ox + (e.clientX - d.sx), oy: d.oy + (e.clientY - d.sy) }));
-      return;
-    }
-    if (!map) return;
-    const { wx, wy } = toWorld(e);
-    if (paintingRef.current && (e.buttons & 3) !== 0) {
-      pendingPaintRef.current = { wx, wy };
-      if (!paintRafRef.current) paintRafRef.current = requestAnimationFrame(flushPaint);
-    }
-    // Drag объекта / прямоугольник комнаты (выбор): живьём из снапшота.
-    // Комнаты/ловушки/старт — на любой сетке; двери таскаются только на квадратах.
-    const od = objDragRef.current;
-    if (od && toolRef.current === "select" && (od.sel.kind !== "door" || map.grid === "square")) {
-      if (!od.moved && Math.hypot(e.clientX - od.sx, e.clientY - od.sy) > 6) od.moved = true;
-      if (od.moved) moveObjTo(od, wx, wy);
-      return;
-    }
-    const rc = rectRef.current;
-    if (rc && toolRef.current === "select") {
-      if (!rc.isRect && Math.hypot(e.clientX - rc.sx, e.clientY - rc.sy) > 6) rc.isRect = true;
-      if (rc.isRect) {
-        const a = pixelToCell(map.grid, rc.wx, rc.wy, map.width, map.height);
-        const b = pixelToCell(map.grid, wx, wy, map.width, map.height);
-        if (a && b) {
-          setRectPreview({
-            x: Math.min(a.x, b.x),
-            y: Math.min(a.y, b.y),
-            w: Math.abs(a.x - b.x) + 1,
-            h: Math.abs(a.y - b.y) + 1,
-          });
-        }
-      }
-      return;
-    }
-    // Живой конец полилинии стен следует за курсором (только если уже есть вершины).
-    if (toolRef.current === "wall" && wallLineModeRef.current && wallDraftRef.current && wallDraftRef.current.length > 0) {
-      const { wx: wwx, wy: wwy } = toWorld(e);
-      setWallLive(quantizeVertex(wwx, wwy));
-    }
-    // Шейп-drag: прямоугольник от стартового угла.
-    const sd = shapeDragRef.current;
-    if (sd && toolRef.current === "shape") {
-      const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
-      if (cell) {
-        setRectPreview({
-          x: Math.min(sd.sx, cell.x),
-          y: Math.min(sd.sy, cell.y),
-          w: Math.abs(cell.x - sd.sx) + 1,
-          h: Math.abs(cell.y - sd.sy) + 1,
-        });
-      }
-      return;
-    }
-    // Живой конец замера следует за курсором, пока второй клик не зафиксировал.
-    if (toolRef.current === "ruler" && rulerRef.current && !rulerRef.current.locked && canEdit) {
-      const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
-      const cur = rulerRef.current;
-      const nb = cell ?? null;
-      if ((nb?.x ?? -1) !== (cur.b?.x ?? -1) || (nb?.y ?? -1) !== (cur.b?.y ?? -1)) {
-        setRuler({ a: cur.a, b: nb, locked: false });
-      }
-    }
-    const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
-    setHover(cell ? cellKey(cell.x, cell.y) : null);
-  }
-
-  function onPointerUp(e: React.PointerEvent) {
-    // Отпускание объекта (выбор): двинули — шаг в историю, клик — панель.
-    const od = objDragRef.current;
-    if (od) {
-      objDragRef.current = null;
-      eraseOverrideRef.current = false;
-      if (od.moved) {
-        pushHistory(od.before);
-        setSelected(od.sel);
-      } else {
-        setSelected(od.sel);
-        openObjPanel(od.sel);
-      }
-      return;
-    }
-    // Отпускание прямоугольника (выбор): тянули — комната, клик — создание.
-    const rc = rectRef.current;
-    if (rc) {
-      rectRef.current = null;
-      setRectPreview(null);
-      if (rc.isRect && map && canEdit) {
-        const a = pixelToCell(map.grid, rc.wx, rc.wy, map.width, map.height);
-        const { wx, wy } = toWorld(e);
-        const b = pixelToCell(map.grid, wx, wy, map.width, map.height);
-        if (a && b) {
-          roomRectRef.current = {
-            x: Math.min(a.x, b.x),
-            y: Math.min(a.y, b.y),
-            w: Math.abs(a.x - b.x) + 1,
-            h: Math.abs(a.y - b.y) + 1,
-          };
-          setRoomDraft({ index: -1, type: "empty", name: "" });
-          setObjError(null);
-        }
-      } else if (!rc.isRect && map && canEdit) {
-        const { wx, wy } = toWorld(e);
-        const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
-        if (cell) {
-          // На гексах дверей на рёбрах нет — сразу предлагаем ловушку
-          // (дверь в модалке скрыта, см. ниже).
-          if (map.grid !== "square") {
-            setCreateDraft({ x: cell.x, y: cell.y, edge: "n", choice: "trap" });
-          } else {
-            const fx = wx - cell.x;
-            const fy = wy - cell.y;
-            const m = Math.min(fx, 1 - fx, fy, 1 - fy);
-            const edge: MapDoorEdge = m === fx ? "w" : m === 1 - fx ? "e" : m === fy ? "n" : "s";
-            setCreateDraft({ x: cell.x, y: cell.y, edge, choice: "door" });
-          }
-          setObjError(null);
-        }
-      }
-      return;
-    }
-    // Отпускание шейпа: применить прямоугольник содержимым.
-    const shd = shapeDragRef.current;
-    if (shd) {
-      shapeDragRef.current = null;
-      setRectPreview(null);
-      if (map && canEdit) {
-        const { wx, wy } = toWorld(e);
-        const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
-        if (cell) applyShapeRect({ x: shd.sx, y: shd.sy }, cell);
-      }
-      return;
-    }
-    if (dragRef.current && e.pointerId !== undefined) dragRef.current = null;
-    eraseOverrideRef.current = false;
-    // Докрасить последний накопленный move до закрытия мазка, иначе штрих
-    // оборвётся на кадр раньше отпускания.
-    cancelPendingPaint();
-    if (paintingRef.current) endStroke();
-  }
-
-  function onPointerCancel() {
-    // Отмена drag — откат к снапшоту, без истории.
-    const od = objDragRef.current;
-    if (od) {
-      objDragRef.current = null;
-      cellsRef.current = od.before;
-      setCells(od.before);
-    }
-    rectRef.current = null;
-    setRectPreview(null);
-    dragRef.current = null;
-    eraseOverrideRef.current = false;
-    cancelPendingPaint();
-    if (paintingRef.current) endStroke();
-  }
-
-  // Тач: один палец рисует (тем же мазком, что мышь), два — пан/зум.
-  // Второй палец посреди мазка закрывает мазок и начинает пан/зум.
-  const touches = useRef(new globalThis.Map<number, { x: number; y: number }>());
-  const strokeTouchRef = useRef<number | null>(null);
-
-  function touchToWorld(clientX: number, clientY: number): { wx: number; wy: number } {
-    const canvas = canvasRef.current!;
-    const rect = canvas.getBoundingClientRect();
-    const c = camRef.current;
-    return { wx: (clientX - rect.left - c.ox) / c.scale, wy: (clientY - rect.top - c.oy) / c.scale };
-  }
-
-  function onTouchStart(e: React.TouchEvent) {
-    for (let i = 0; i < e.changedTouches.length; i++) {
-      const t = e.changedTouches[i];
-      touches.current.set(t.identifier, { x: t.clientX, y: t.clientY });
-    }
-    if (touches.current.size === 1 && canEdit && map && strokeTouchRef.current === null) {
-      const t = e.changedTouches[0];
-      if (toolRef.current === "fill" || toolRef.current === "picker") {
-        const { wx, wy } = touchToWorld(t.clientX, t.clientY);
-        singleAction(wx, wy);
-      } else if (toolRef.current === "ruler") {
-        // Тач-замер тапами (без живого конца): тап — начало, тап — конец.
-        const { wx, wy } = touchToWorld(t.clientX, t.clientY);
-        const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
-        if (cell) {
-          setRuler((r) =>
-            !r || r.locked ? { a: cell, b: null, locked: false } : { a: r.a, b: r.b ?? r.a, locked: true }
-          );
-        }
-      } else if (toolRef.current === "label") {
-        const { wx, wy } = touchToWorld(t.clientX, t.clientY);
-        const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
-        if (cell) openLabelEditor(cell.x, cell.y);
-      } else if (toolRef.current === "select") {
-        // Тач: только тап-панели (drag объектов — мышь; на таче нет ховера).
-        // Двери — только квадраты, остальное — везде.
-        const { wx, wy } = touchToWorld(t.clientX, t.clientY);
-        const hit = hitObject(map, wx, wy);
-        if (hit) {
-          setSelected(hit.sel);
-          openObjPanel(hit.sel);
-          } else {
-            const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
-            if (cell) {
-              if (map.grid !== "square") {
-                setCreateDraft({ x: cell.x, y: cell.y, edge: "n", choice: "trap" });
-              } else {
-                const fx = wx - cell.x;
-                const fy = wy - cell.y;
-                const m = Math.min(fx, 1 - fx, fy, 1 - fy);
-                const edge: MapDoorEdge = m === fx ? "w" : m === 1 - fx ? "e" : m === fy ? "n" : "s";
-                setCreateDraft({ x: cell.x, y: cell.y, edge, choice: "door" });
-              }
-              setObjError(null);
-            }
-          }
-      } else if (toolRef.current === "shape") {
-        // Тач-шейп: тап — первый угол, тап — второй (прямоугольник готов).
-        const { wx, wy } = touchToWorld(t.clientX, t.clientY);
-        const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
-        if (cell) {
-          const anchor = shapeAnchorRef.current;
-          if (!anchor) {
-            setShapeAnchor(cell);
-            setRectPreview({ x: cell.x, y: cell.y, w: 1, h: 1 });
-          } else {
-            setShapeAnchor(null);
-            setRectPreview(null);
-            applyShapeRect(anchor, cell);
-          }
-        }
-      } else if (
-        toolRef.current === "door" ||
-        toolRef.current === "trap" ||
-        toolRef.current === "chest" ||
-        toolRef.current === "altar" ||
-        toolRef.current === "marker" ||
-        toolRef.current === "start" ||
-        toolRef.current === "finish"
-      ) {
-        // Тач-установка: тап — объект (иначе тач красил бы террейном).
-        const { wx, wy } = touchToWorld(t.clientX, t.clientY);
-        placeObject(toolRef.current, wx, wy);
-      } else {
-        strokeTouchRef.current = t.identifier;
-        beginStroke();
-        const { wx, wy } = touchToWorld(t.clientX, t.clientY);
-        if (paintAt(wx, wy) && strokeRef.current) strokeRef.current.changed = true;
-      }
-      return;
-    }
-    if (touches.current.size === 2) {
-      // preventDefault не нужен: CSS touch-action:none уже гасит
-      // нативные пан/зум, а в React-синтетике он только ругается.
-      if (strokeTouchRef.current !== null) {
-        strokeTouchRef.current = null;
-        endStroke();
-      }
-      const [a, b] = [...touches.current.values()];
-      const canvas = canvasRef.current!;
-      const rect = canvas.getBoundingClientRect();
-      pinchRef.current = {
-        dist: Math.hypot(a.x - b.x, a.y - b.y),
-        scale: camRef.current.scale,
-        mx: (a.x + b.x) / 2 - rect.left,
-        my: (a.y + b.y) / 2 - rect.top,
-      };
-    }
-  }
-
-  function onTouchMove(e: React.TouchEvent) {
-    if (strokeTouchRef.current !== null) {
-      for (let i = 0; i < e.changedTouches.length; i++) {
-        const t = e.changedTouches[i];
-        if (t.identifier !== strokeTouchRef.current) continue;
-        touches.current.set(t.identifier, { x: t.clientX, y: t.clientY });
-        const { wx, wy } = touchToWorld(t.clientX, t.clientY);
-        if (paintAt(wx, wy) && strokeRef.current) strokeRef.current.changed = true;
-      }
-      return;
-    }
-    if (touches.current.size !== 2 || !pinchRef.current) return;
-    for (let i = 0; i < e.changedTouches.length; i++) {
-      const t = e.changedTouches[i];
-      touches.current.set(t.identifier, { x: t.clientX, y: t.clientY });
-    }
-    const [a, b] = [...touches.current.values()];
-    const p = pinchRef.current;
-    const dist = Math.hypot(a.x - b.x, a.y - b.y);
-    if (dist < 1) return;
-    const canvas = canvasRef.current!;
-    const rect = canvas.getBoundingClientRect();
-    const mx = (a.x + b.x) / 2 - rect.left;
-    const my = (a.y + b.y) / 2 - rect.top;
-    const scale = Math.min(240, Math.max(4, (p.scale * dist) / p.dist));
-    const k = scale / camRef.current.scale;
-    setCam((c) => ({
-      scale,
-      ox: mx - (p.mx - c.ox) * k - (mx - p.mx),
-      oy: my - (p.my - c.oy) * k - (my - p.my),
-    }));
-  }
-
-  function onTouchEnd(e: React.TouchEvent) {
-    for (let i = 0; i < e.changedTouches.length; i++) {
-      if (e.changedTouches[i].identifier === strokeTouchRef.current) {
-        strokeTouchRef.current = null;
-        endStroke();
-      }
-      touches.current.delete(e.changedTouches[i].identifier);
-    }
-    if (touches.current.size < 2) pinchRef.current = null;
-  }
+  // Ввод (Этап Input): pointer/touch state machine — в хуке; tools приходят
+  // фасадом выше, маршрутизация Input не менялась.
+  const input = useMapInput({
+    canvasRef,
+    cellsRef,
+    camera: { setCam, camRef, toWorld, touchToWorld },
+    history,
+    selection,
+    map,
+    tool,
+    canEdit,
+    clone: cloneCells,
+    wallMode: wallLineMode,
+    wallDraft,
+    ruler,
+    setHover,
+    setRectPreview,
+    tools,
+  });
 
   function toggleGrid() {
     setShowGrid((v) => {
@@ -2618,7 +1256,7 @@ export function MapEditorPage() {
     const cleared: MapCells = { terrain: new Map(), roads: new Set(), rivers: new Set(), labels: [], rooms: [], doors: [], traps: [], markers: [], start: null, finish: null };
     cellsRef.current = cleared;
     setCells(cleared);
-    pushHistory(before);
+    history.push(before);
   }
 
   // Главный ряд (Этап F): модификаторы + размер + история + аккордеоны.
@@ -2690,11 +1328,11 @@ export function MapEditorPage() {
   }
 
   function saveLabel(): string {
-    if (blobCorrupt) return "Сохранение остановлено — данные повреждены";
-    if (saveState.kind === "saving") return "Сохранение…";
-    if (saveState.kind === "error") return "Не сохранилось — нажмите «Повторить»";
-    if (saveState.kind === "dirty") return "Есть несохранённое…";
-    return saveState.at ? `Сохранено ${saveState.at}` : "Сохранено";
+    if (autosave.blocked) return "Сохранение остановлено — данные повреждены";
+    if (autosave.status.kind === "saving") return "Сохранение…";
+    if (autosave.status.kind === "error") return "Не сохранилось — нажмите «Повторить»";
+    if (autosave.status.kind === "dirty") return "Есть несохранённое…";
+    return autosave.status.at ? `Сохранено ${autosave.status.at}` : "Сохранено";
   }
 
   return (
@@ -2829,14 +1467,14 @@ export function MapEditorPage() {
                     {n}
                   </button>
                 ))}
-                <button type="button" disabled={!canUndo} title="Отменить (Ctrl+Z)" onClick={undo}>
+                <button type="button" disabled={!canUndo} title="Отменить (Ctrl+Z)" onClick={history.undo}>
                   ←
                 </button>
                 <button
                   type="button"
                   disabled={!canRedo}
                   title="Вернуть (Ctrl+Shift+Z / Ctrl+Y)"
-                  onClick={redo}
+                  onClick={history.redo}
                 >
                   →
                 </button>
@@ -2885,8 +1523,8 @@ export function MapEditorPage() {
                 >
                   {saveLabel()}
                 </span>
-                {saveState.kind === "error" && (
-                  <button type="button" title="Повторить сохранение сейчас" onClick={retrySave}>
+                {autosave.status.kind === "error" && (
+                  <button type="button" title="Повторить сохранение сейчас" onClick={autosave.retry}>
                     Повторить
                   </button>
                 )}
@@ -3721,7 +2359,7 @@ export function MapEditorPage() {
                 </Modal>
               )}
               {roomDraft && (
-                <Modal onClose={() => { setRoomDraft(null); roomRectRef.current = null; setRectPreview(null); }}>
+                <Modal onClose={() => { setRoomDraft(null); input.roomRectRef.current = null; setRectPreview(null); }}>
                   <h2>{roomDraft.index === -1 ? "Новая комната" : "Комната"}</h2>
                   <div className="stack">
                     <label>
@@ -3754,7 +2392,7 @@ export function MapEditorPage() {
                         </button>
                       )}
                       <span style={{ flex: 1 }} />
-                      <button onClick={() => { setRoomDraft(null); roomRectRef.current = null; setRectPreview(null); }}>
+                      <button onClick={() => { setRoomDraft(null); input.roomRectRef.current = null; setRectPreview(null); }}>
                         Отмена
                       </button>
                       <button className="primary" onClick={saveRoomDraft}>
@@ -3844,13 +2482,13 @@ export function MapEditorPage() {
               </button>
             </div>
           )}
-          {blobCorrupt && (
+          {autosave.blocked && (
             <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
               <span>
                 Данные клеток повреждены — показана пустая карта. Автосохранение остановлено, чтобы первая правка
                 их не затёрла.
               </span>
-              <button type="button" onClick={() => setBlobCorrupt(false)}>
+              <button type="button" onClick={autosave.allowOverwrite}>
                 Понял, разрешаю перезапись
               </button>
             </div>
@@ -3895,37 +2533,44 @@ export function MapEditorPage() {
             className="card"
             style={{ height: "clamp(420px, 68vh, 780px)", padding: 0, overflow: "hidden", touchAction: "none", position: "relative" }}
           >
-            <canvas
-              ref={canvasRef}
-              role="img"
-              aria-label={
-                map
-                  ? `Карта «${map.name}», поле ${map.width} на ${map.height}, ${MAP_GRID_LABELS[map.grid].toLowerCase()}`
-                  : "Карта"
-              }
-              onPointerDown={onPointerDown}
-              onPointerMove={onPointerMove}
-              onPointerUp={onPointerUp}
-              onPointerCancel={onPointerCancel}
-              onDoubleClick={() => {
-                // Дабл-клик — финиш полилинии стен по готовым вершинам (Этап E).
-                if (toolRef.current === "wall" && wallLineModeRef.current && canEdit) finishWallLine(false);
+            <MapViewport
+              wrapRef={wrapRef}
+              canvasRef={canvasRef}
+              map={map}
+              cells={cells}
+              cam={cam}
+              view={{
+                showGrid,
+                showCoords,
+                previewAsPlayer,
+                canEdit,
               }}
-              onTouchStart={onTouchStart}
-              onTouchMove={onTouchMove}
-              onTouchEnd={onTouchEnd}
-              onContextMenu={(e) => e.preventDefault()}
-              style={{
-                display: "block",
-                cursor: !canEdit
-                  ? "default"
-                  : spaceDown
-                    ? "grab"
-                    : tool === "picker"
-                      ? "copy"
-                      : tool === "select"
-                        ? "default"
-                        : "crosshair",
+              tool={{
+                tool,
+                brushSize,
+                wallLineMode,
+              }}
+              overlays={{
+                hover,
+                selectedKey: selectedKeyOf(selected),
+                ruler,
+                wallDraft,
+                wallLive,
+                rectPreview,
+              }}
+              input={{
+                onPointerDown: input.onPointerDown,
+                onPointerMove: input.onPointerMove,
+                onPointerUp: input.onPointerUp,
+                onPointerCancel: input.onPointerCancel,
+                onTouchStart: input.onTouchStart,
+                onTouchMove: input.onTouchMove,
+                onTouchEnd: input.onTouchEnd,
+                onDoubleClick: () => {
+                  // Дабл-клик — финиш полилинии стен по готовым вершинам (Этап E).
+                  if (tool === "wall" && wallLineMode && canEdit) tools.wall.finishWallLine(false);
+                },
+                spaceDown: input.spaceDown,
               }}
             />
             {map && miniThumb && (
