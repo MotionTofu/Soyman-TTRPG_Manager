@@ -65,6 +65,9 @@ import { useMapSelection, type ObjSel, selectedKeyOf } from "../maps/editor/hook
 import { useMapTools } from "../maps/editor/hooks/useMapTools";
 import { MapViewport } from "../maps/editor/components/MapViewport";
 import type { BrushSize, PaintTool } from "../maps/editor/editorTypes";
+// Фаза 2C: shadow audit V5 при загрузке — derived snapshot, только диагностика.
+// Не editor state, не влияет на load/render/autosave/history.
+import { auditLoadedMapShadow } from "../maps/core/shadowAudit";
 
 const UNDO_DEPTH = 50;
 
@@ -174,6 +177,16 @@ export function MapEditorPage() {
         history.clear();
         autosave.markLoaded(serializeCells(parsed), paramsStr, cellsBlobStatus(data.cells) === "corrupt");
         setShared(false);
+        // Shadow-ветка 2C: аудит derived V5-снапшота. Side branch после всех
+        // state-эффектов: не читает и не меняет cells/map/history/autosave.
+        auditLoadedMapShadow({
+          mapId: data.id,
+          grid: data.grid,
+          width: data.width,
+          height: data.height,
+          cells: parsed,
+          corrupt: cellsBlobStatus(data.cells) === "corrupt",
+        });
       })
       .catch((e) => {
         if (!alive) return;
