@@ -7,29 +7,17 @@ import { cellCenter, cellCorners, coordLabel, neighbors, worldBounds } from "./g
 import { createLegacyRenderModel } from "./renderModel";
 import type { MapRenderModel } from "./renderModel";
 import type { MapGrid, MapScale } from "./mapTypes";
+import { MAP_TERRAIN_CODES } from "@shared/maps/core/literals";
+import {
+  MAP_DOOR_KINDS,
+  MAP_MARKER_KINDS,
+  MAP_ROOM_TYPES,
+  MAP_TRAP_KINDS,
+} from "@shared/maps/core/literals";
 
-// Порядок — как кисти в тулбаре; индекс используется в миниатюрах? Нет,
-// коды террейна хранятся строками, порядок здесь только для документации.
-export const MAP_TERRAIN_ORDER = [
-  "deep_water",
-  "shallow_water",
-  "plain",
-  "forest",
-  "hills",
-  "mountains",
-  "desert",
-  "ice",
-  "swamp",
-  "lava",
-  "acid",
-  "poison",
-  "wall",
-  "stone",
-  "wood",
-  "earth",
-  "darkness",
-  "necro",
-] as const;
+// Порядок — как кисти в тулбаре (канонический список — shared literals,
+// single source of truth с server-валидацией; здесь — совместимое имя).
+export const MAP_TERRAIN_ORDER = MAP_TERRAIN_CODES;
 
 export const MAP_TERRAIN_FILL: Record<string, string> = {
   deep_water: "#5E8CA3",
@@ -295,7 +283,7 @@ export const MAP_FLOOR_TERRAINS: (typeof MAP_TERRAIN_ORDER)[number][] = ["stone"
 // рёбрах, ловушки, старт/финиш. Рёбра пока только квадраты (n/s/e/w),
 // гексы — следующим шагом слоя.
 
-export const MAP_ROOM_TYPES = ["empty", "barracks", "temple", "treasury", "prison", "lab"] as const;
+export { MAP_DOOR_KINDS, MAP_MARKER_KINDS, MAP_ROOM_TYPES, MAP_TRAP_KINDS };
 export type MapRoomType = (typeof MAP_ROOM_TYPES)[number];
 
 export const MAP_ROOM_LABELS: Record<MapRoomType, string> = {
@@ -318,7 +306,6 @@ export const MAP_ROOM_TINT: Record<MapRoomType, string | null> = {
   lab: "#d8f0d8",
 };
 
-export const MAP_DOOR_KINDS = ["arch", "door", "locked", "trapped", "secret", "portc"] as const;
 export type MapDoorKind = (typeof MAP_DOOR_KINDS)[number];
 export type MapDoorEdge = "n" | "s" | "e" | "w";
 
@@ -350,7 +337,6 @@ export const MAP_DOOR_FILL: Record<MapDoorKind, string> = {
   portc: "#b3a4cc",
 };
 
-export const MAP_TRAP_KINDS = ["pit", "arrow", "gas", "glyph"] as const;
 export type MapTrapKind = (typeof MAP_TRAP_KINDS)[number];
 export const MAP_TRAP_LABELS: Record<MapTrapKind, string> = {
   pit: "Яма",
@@ -397,7 +383,6 @@ export interface MapTrap {
 // Маркеры-точки, blob v4 (сундуки, алтари; задел под NPC из M5).
 // Поселения и POI (Этап A+): город/деревня/лагерь/метрополия/битва/обелиск.
 // В отличие от ловушек — видимы игрокам (как комнаты).
-export const MAP_MARKER_KINDS = ["chest", "altar", "city", "village", "camp", "metro", "battle", "obelisk"] as const;
 export type MapMarkerKind = (typeof MAP_MARKER_KINDS)[number];
 
 export interface MapMarker {

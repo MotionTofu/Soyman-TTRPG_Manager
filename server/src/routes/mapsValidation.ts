@@ -1,6 +1,19 @@
 // Чистая валидация карт: без импорта db (у него побочный эффект — открытие
 // базы), поэтому живёт отдельно от routes/maps.ts и тестируется напрямую
 // (см. maps.test.ts — тот же приём, что storages.test.ts).
+// Канонические списки кодов — shared kernel (single source of truth
+// с client-рендером и V5-валидатором); локальное — только legacy API domain.
+import {
+  MAP_DOOR_KINDS,
+  MAP_MARKER_KINDS,
+  MAP_ROOM_TYPES,
+  MAP_TERRAIN_CODES,
+  MAP_TRAP_KINDS,
+  parseMapDocument,
+  serializeMapDocument,
+  type MapDocumentV5,
+  type ValidationIssue,
+} from "@soyman/shared";
 
 export const MAP_GRIDS = ["square", "hex"] as const;
 export type MapGrid = (typeof MAP_GRIDS)[number];
@@ -15,26 +28,7 @@ export const MAP_SCALES = [
 ] as const;
 export type MapScale = (typeof MAP_SCALES)[number];
 
-export const MAP_TERRAINS = [
-  "deep_water",
-  "shallow_water",
-  "plain",
-  "forest",
-  "hills",
-  "mountains",
-  "desert",
-  "ice",
-  "swamp",
-  "lava",
-  "acid",
-  "poison",
-  "wall",
-  "stone",
-  "wood",
-  "earth",
-  "darkness",
-  "necro",
-] as const;
+export const MAP_TERRAINS = MAP_TERRAIN_CODES;
 export type MapTerrain = (typeof MAP_TERRAINS)[number];
 
 // Дефолты пресетов масштаба: размер поля + подпись «1 клетка =».
@@ -59,11 +53,8 @@ export const MAP_MAX_TRAPS = 300;
 export const MAP_MAX_MARKERS = 300;
 export const MAP_MAX_ROOM_NAME = 64;
 
-export const MAP_ROOM_TYPES = ["empty", "barracks", "temple", "treasury", "prison", "lab"] as const;
-export const MAP_DOOR_KINDS = ["arch", "door", "locked", "trapped", "secret", "portc"] as const;
+export { MAP_DOOR_KINDS, MAP_MARKER_KINDS, MAP_ROOM_TYPES, MAP_TRAP_KINDS };
 export const MAP_DOOR_EDGES = ["n", "s", "e", "w"] as const;
-export const MAP_TRAP_KINDS = ["pit", "arrow", "gas", "glyph"] as const;
-export const MAP_MARKER_KINDS = ["chest", "altar", "city", "village", "camp", "metro", "battle", "obelisk"] as const;
 
 // Миниатюры пишет только наш рендер (canvas.toDataURL("image/png")).
 // Произвольные строки запрещены (P0-6): клиент вставляет thumbnail в
@@ -346,6 +337,140 @@ export function validateMapCreate(
       mountains,
       forest,
       cells: cells as string,
+      thumbnail,
+      player_visible: body.player_visible ? 1 : 0,
+      parent_map_id: parentMapId,
+    },
+  };
+}
+
+// --- V5 persistence validation (Фаза 2F) ---
+//
+// Запрос содержит либо legacy `cells`, либо V5 `document` (объект или JSON
+// строка) — никогда оба (§19 ТЗ). V5 проверяется shared kernel: parse +
+// validate + canonical serialize. В колонку `cells` ложится canonical JSON
+// (§16 ТЗ), схема БД не меняется (§12 ТЗ).
+// Ограничения persistence честно зафиксированы: gridless-документы откло-
+// няются (колонка grid NOT NULL CHECK square/hex), размеры — как у legacy
+// (8..100), cell_lore по умолчанию "" (вне документа, §27 ТЗ).
+
+export interface V5DocumentBodyResult {
+  document: MapDocumentV5;
+  /** Canonical serialization для хранения. */
+  cells: string;
+  grid: MapGrid;
+  width: number;
+  height: number;
+}
+
+function v5Fail(message: string, issues?: ValidationIssue[]): { error: string; issues?: ValidationIssue[] } {
+  return issues ? { error: message, issues } : { error: message };
+}
+
+/** Разобрать+проверить V5 body: объект или JSON-строка → canonical. */
+export function validateV5DocumentBody(
+  raw: unknown
+): { error: string; issues?: ValidationIssue[] } | { value: V5DocumentBodyResult } {
+  const parsed = parseMapDocument(typeof raw === "string" ? raw : (raw as unknown));
+  if (!parsed.ok) {
+    const first = parsed.errors
+      .slice(0, 3)
+      .map((e) => `${e.code} ${e.path}: ${e.message}`)
+      .join("; ");
+    return v5Fail(`document invalid: ${first}`, parsed.errors);
+  }
+  const document = parsed.value;
+  if (document.grid === null) {
+    return v5Fail("V5 persistence requires a grid (gridless documents unsupported)");
+  }
+  const { columns, rows } = document.grid;
+  if (columns < MAP_MIN_SIDE || columns > MAP_MAX_SIDE || rows < MAP_MIN_SIDE || rows > MAP_MAX_SIDE) {
+    return v5Fail(`V5 grid must be ${MAP_MIN_SIDE}..${MAP_MAX_SIDE} (got ${columns}x${rows})`);
+  }
+  if (document.grid.type !== "square" && document.grid.type !== "hex") {
+    return v5Fail("V5 grid.type must be square or hex");
+  }
+  return {
+    value: {
+      document,
+      cells: serializeMapDocument(document),
+      grid: document.grid.type,
+      width: columns,
+      height: rows,
+    },
+  };
+}
+
+export interface V5CreateInput {
+  name?: unknown;
+  scale?: unknown;
+  cell_lore?: unknown;
+  seed?: unknown;
+  sea?: unknown;
+  mountains?: unknown;
+  forest?: unknown;
+  thumbnail?: unknown;
+  player_visible?: unknown;
+  parent_map_id?: unknown;
+  document?: unknown;
+}
+
+/** POST с V5 document: те же meta-правила, размеры — из документа. */
+export function validateV5Create(
+  body: V5CreateInput,
+  parentExists: (id: number) => boolean
+): { error: string; issues?: ValidationIssue[] } | { value: ValidMapCreate } {
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  if (!name) return v5Fail("name is required");
+  if (name.length > 200) return v5Fail("name too long (max 200)");
+  if (!(MAP_SCALES as readonly string[]).includes(body.scale as string))
+    return v5Fail("scale must be one of: " + MAP_SCALES.join(", "));
+  const scale = body.scale as MapScale;
+
+  const cellLore = body.cell_lore === undefined ? "" : body.cell_lore;
+  if (typeof cellLore !== "string" || cellLore.length > 64)
+    return v5Fail("cell_lore must be a string (max 64)");
+
+  const numOr = (v: unknown, dflt: number) => (v === undefined ? dflt : v);
+  const seed = numOr(body.seed, 0);
+  const sea = numOr(body.sea, 55);
+  const mountains = numOr(body.mountains, 12);
+  const forest = numOr(body.forest, 30);
+  if (!isInt(seed)) return v5Fail("seed must be an integer");
+  if (!isInt(sea) || sea < 20 || sea > 80) return v5Fail("sea must be an integer 20..80");
+  if (!isInt(mountains) || mountains < 0 || mountains > 40)
+    return v5Fail("mountains must be an integer 0..40");
+  if (!isInt(forest) || forest < 0 || forest > 60) return v5Fail("forest must be an integer 0..60");
+
+  const docResult = validateV5DocumentBody(body.document);
+  if ("error" in docResult) return docResult;
+
+  let thumbnail: string | null = null;
+  if (body.thumbnail !== undefined && body.thumbnail !== null) {
+    if (!isThumbnail(body.thumbnail)) return v5Fail("thumbnail must be a PNG data URL");
+    thumbnail = body.thumbnail;
+  }
+
+  let parentMapId: number | null = null;
+  if (body.parent_map_id !== undefined && body.parent_map_id !== null) {
+    if (!isInt(body.parent_map_id)) return v5Fail("parent_map_id must be an integer");
+    if (!parentExists(body.parent_map_id)) return v5Fail("parent map not found");
+    parentMapId = body.parent_map_id;
+  }
+
+  return {
+    value: {
+      name,
+      grid: docResult.value.grid,
+      scale,
+      width: docResult.value.width,
+      height: docResult.value.height,
+      cell_lore: cellLore,
+      seed,
+      sea,
+      mountains,
+      forest,
+      cells: docResult.value.cells,
       thumbnail,
       player_visible: body.player_visible ? 1 : 0,
       parent_map_id: parentMapId,

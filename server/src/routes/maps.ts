@@ -1,4 +1,11 @@
 import { Router } from "express";
+import {
+  parseMapDocument,
+  parseStoredMapDocument,
+  projectMapDocumentForPlayer,
+  serializeMapDocument,
+  validateMapDocument,
+} from "@soyman/shared";
 import { db } from "../db/db";
 import type { AuthedRequest } from "../services/auth";
 import {
@@ -6,6 +13,8 @@ import {
   isThumbnail,
   validateCellsBlob,
   validateMapCreate,
+  validateV5Create,
+  validateV5DocumentBody,
   MAP_MIN_SIDE,
   MAP_MAX_SIDE,
   MAP_SCALES,
@@ -56,6 +65,30 @@ mapsRouter.get("/:id/thumbnail", (req: AuthedRequest, res) => {
 });
 
 mapsRouter.post("/", (req: AuthedRequest, res) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  // V5 create (§18 ТЗ 2F): `document` вместо `cells`, никогда оба (§19 ТЗ).
+  // Production editor этот путь не вызывает.
+  if (body.document !== undefined) {
+    if (body.cells !== undefined || body.grid !== undefined || body.width !== undefined || body.height !== undefined) {
+      return res.status(400).json({ error: "V5 create takes document only (no cells/grid/width/height)" });
+    }
+    const result = validateV5Create(body, parentExists);
+    if ("error" in result) return res.status(400).json(result);
+    const v = result.value;
+    const info = db
+      .prepare(
+        `INSERT INTO maps (name, grid, scale, width, height, cell_lore, seed, sea, mountains, forest, cells, thumbnail, player_visible, parent_map_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        v.name, v.grid, v.scale, v.width, v.height, v.cell_lore, v.seed, v.sea,
+        v.mountains, v.forest, v.cells, v.thumbnail, v.player_visible, v.parent_map_id
+      );
+    res
+      .status(201)
+      .json(db.prepare(`SELECT ${META_COLUMNS}, cells FROM maps WHERE id = ?`).get(info.lastInsertRowid));
+    return;
+  }
   const result = validateMapCreate(req.body ?? {}, parentExists);
   if ("error" in result) return res.status(400).json({ error: result.error });
   const v = result.value;
@@ -79,6 +112,23 @@ mapsRouter.get("/:id", (req: AuthedRequest, res) => {
     .get(req.params.id) as { player_visible: number; cells: string } | undefined;
   if (!row) return res.status(404).json({ error: "not found" });
   if (isPlayer(req) && !row.player_visible) return res.status(404).json({ error: "not found" });
+  // V5 rows (§21–23 ТЗ 2F): GM — полный документ, player — server projection.
+  // Legacy-ветка ниже — побайтово как раньше (§25 ТЗ).
+  const stored = parseStoredMapDocument(row.cells);
+  if (stored.format === "v5") {
+    // Хранимое уже canonical (пишем только canonical), но доверять строке
+    // из БД нельзя: parse + validate заново, иначе 500 integrity error.
+    const parsed = parseMapDocument(stored.raw);
+    if (!parsed.ok) return res.status(500).json({ error: "stored V5 document invalid" });
+    if (isPlayer(req)) {
+      const projected = projectMapDocumentForPlayer(parsed.value);
+      if (validateMapDocument(projected).length > 0) {
+        return res.status(500).json({ error: "V5 player projection invalid" });
+      }
+      return res.json({ ...row, cells: serializeMapDocument(projected) });
+    }
+    return res.json(row);
+  }
   if (isPlayer(req)) return res.json({ ...row, cells: stripCellsForPlayer(row.cells) });
   res.json(row);
 });
@@ -185,6 +235,26 @@ mapsRouter.put("/:id", (req: AuthedRequest, res) => {
   let width = current.width;
   let height = current.height;
   let cells = body.cells as string | undefined;
+
+  // V5 save (§18 ТЗ 2F): `document` вместо `cells`, никогда оба (§19 ТЗ).
+  // Production editor этот путь не вызывает. Размеры/сетка — из документа.
+  // V5 canonical уже проверен shared kernel — legacy validateCellsBlob ниже
+  // его не касается (v:5 там был бы отвергнут).
+  let v5save = false;
+  if (body.document !== undefined) {
+    for (const k of ["cells", "grid", "width", "height", "clearCells"] as const) {
+      if (body[k] !== undefined) {
+        return res.status(400).json({ error: "V5 save takes document only (no cells/grid/width/height/clearCells)" });
+      }
+    }
+    const docResult = validateV5DocumentBody(body.document);
+    if ("error" in docResult) return res.status(400).json(docResult);
+    grid = docResult.value.grid;
+    width = docResult.value.width;
+    height = docResult.value.height;
+    cells = docResult.value.cells;
+    v5save = true;
+  }
   if (body.grid !== undefined && body.grid !== current.grid) {
     if (body.grid !== "square" && body.grid !== "hex")
       return res.status(400).json({ error: "grid must be 'square' or 'hex'" });
@@ -205,11 +275,15 @@ mapsRouter.put("/:id", (req: AuthedRequest, res) => {
   }
   // Ресайз без клеток: триммим хранимое под новый размер, иначе в базе остаётся
   // out-of-bounds, и следующий сейв падает (P1-6). Явные `cells` в запросе —
-  // как есть, их режет строгая валидация ниже.
+  // как есть, их режет строгая валидация ниже. V5-строку триммить нельзя
+  // (legacy-семантика к ней неприменима) — ресайз V5 только через document.
   if (cells === undefined && (width !== current.width || height !== current.height)) {
+    if (parseStoredMapDocument(current.cells).format === "v5") {
+      return res.status(400).json({ error: "resizing a V5 map requires document" });
+    }
     cells = trimCellsTo(current.cells, width, height);
   }
-  if (cells !== undefined) {
+  if (cells !== undefined && !v5save) {
     const err = validateCellsBlob(cells, width, height);
     if (err) return res.status(400).json({ error: err });
   }

@@ -2,7 +2,6 @@
 
 export type {
   AssetPackRef,
-  AssetRef,
   EntityId,
   GameplayDoor,
   GameplayEntity,
@@ -12,7 +11,6 @@ export type {
   GameplayRoom,
   GameplayStart,
   GameplayTrap,
-  JsonObject,
   LabelLayer,
   LayerId,
   MapDocumentV5,
@@ -26,17 +24,14 @@ export type {
   MapRecordV5,
   MapScale,
   MapWorld,
-  MaterialRef,
   ObjectLayer,
   PathGeometry,
   PathLayer,
   ScatterArea,
   ScatterLayer,
-  ScatterProfileRef,
   ShapeGeometry,
   SoyMapV2Envelope,
   SplineNode,
-  StyleRef,
   TerrainCellEntry,
   TerrainCellLayer,
   TerrainLayer,
@@ -44,8 +39,15 @@ export type {
   TerrainMaskChunk,
   TerrainMaskLayer,
   Vec2,
-  VisualRef,
 } from "./types";
+
+export type {
+  AssetRef,
+  MaterialRef,
+  ScatterProfileRef,
+  StyleRef,
+  VisualRef,
+} from "./refs";
 
 export {
   BUILTIN_PLAIN_MATERIAL,
@@ -78,7 +80,7 @@ export {
 export type { LegacyLayerSkeleton } from "./ids";
 
 export { isJsonValue } from "./json";
-export type { JsonArray, JsonPrimitive, JsonValue } from "./json";
+export type { JsonArray, JsonObject, JsonPrimitive, JsonValue } from "./json";
 
 export {
   isValidMapDocument,
@@ -124,3 +126,48 @@ export {
   type ShadowAuditStatus,
   type ShadowAuditTiming,
 } from "./shadowAudit";
+
+export {
+  applyTerrainCellEdits,
+  floodTerrainFill,
+  readTerrainMaterialAt,
+  type TerrainCellEdit,
+  type TerrainReadResult,
+} from "./mutations/terrain";
+
+export {
+  addPathCells,
+  createCellNetworkPath,
+  removePathCells,
+  replacePathCells,
+  type CellNetworkPathSpec,
+} from "./mutations/paths";
+
+export {
+  createGameplayEntity,
+  deleteGameplayEntity,
+  moveGameplayEntity,
+  pairDoors,
+  setFinish,
+  setStart,
+  unpairDoor,
+  updateGameplayEntity,
+} from "./mutations/gameplay";
+
+export {
+  createLabel,
+  deleteLabel,
+  moveLabel,
+  updateLabelText,
+  type LabelSpec,
+} from "./mutations/labels";
+
+export { translateShape } from "./mutations/geometry";
+
+export {
+  hitTestGameplay,
+  type V5SelectableKind,
+  type V5Selection,
+} from "./selection/hitTest";
+
+export type { MutationIssue, MutationResult } from "./mutations/types";
