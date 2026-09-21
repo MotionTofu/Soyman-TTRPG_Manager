@@ -23,6 +23,7 @@ import {
   type MapCells,
   type MapMarkerKind,
 } from "./render";
+import { createLegacyRenderModel } from "./renderModel";
 import { MAP_SCALE_LABELS, type MapGrid, type MapScale } from "./mapTypes";
 
 export interface PngSnapshot {
@@ -69,7 +70,7 @@ export function buildAndDownloadPng(snap: PngSnapshot, PX: number) {
     grid: snap.grid,
     width: snap.width,
     height: snap.height,
-    cells: snap.cells,
+    model: createLegacyRenderModel(snap.grid, snap.width, snap.height, snap.cells),
     scale: PX,
     ox: pad - b.minX * PX,
     oy: pad - b.minY * PX,

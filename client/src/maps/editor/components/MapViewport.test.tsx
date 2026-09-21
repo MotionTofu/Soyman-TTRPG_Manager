@@ -275,4 +275,18 @@ describe("MapViewport", () => {
       if (dpr) Object.defineProperty(window, "devicePixelRatio", dpr);
     }
   });
+
+  it("13 (2D). viewport передаёт renderMap read-модель, а не cells", () => {
+    setup();
+    const opts = lastOpts();
+    expect("model" in opts).toBe(true);
+    expect("cells" in opts).toBe(false);
+    expect(opts).toMatchObject({
+      model: expect.objectContaining({
+        terrain: expect.objectContaining({ defaultCode: "plain" }),
+        roads: expect.any(Set),
+        rivers: expect.any(Set),
+      }),
+    });
+  });
 });

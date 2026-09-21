@@ -3,6 +3,7 @@ import { brushCells, cellCenter, cellKey, coordLabel } from "../../grid";
 import { MAP_GRID_LABELS, formatMeters, parseCellLore } from "../../mapTypes";
 import type { MapFull } from "../../mapTypes";
 import { readChrome, renderMap } from "../../render";
+import { createLegacyRenderModel } from "../../renderModel";
 import type { MapCells } from "../../render";
 import type { BrushSize, PaintTool } from "../editorTypes";
 import type { Camera } from "../hooks/useMapCamera";
@@ -75,11 +76,14 @@ export function MapViewport({ wrapRef, canvasRef, map, cells, cam, view, tool, o
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const chrome = readChrome();
+    // Фаза 2D: renderer читает read-only view (адаптер создаётся здесь же,
+    // в effect — новой render-частоты identity не даёт; cells-prop неизменён).
+    const model = createLegacyRenderModel(map.grid, map.width, map.height, cells);
     renderMap(ctx, rect.width, rect.height, {
       grid: map.grid,
       width: map.width,
       height: map.height,
-      cells,
+      model,
       scale: cam.scale,
       ox: cam.ox,
       oy: cam.oy,
