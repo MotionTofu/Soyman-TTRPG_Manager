@@ -20,10 +20,10 @@ import {
   renderMap,
   readChrome,
   terrainMotifInk,
-  type MapCells,
   type MapMarkerKind,
 } from "./render";
-import { createLegacyRenderModel } from "./renderModel";
+import { createV5RenderModel, type MapRenderModel } from "./renderModel";
+import type { MapDocumentV5 } from "./core/types";
 import { MAP_SCALE_LABELS, type MapGrid, type MapScale } from "./mapTypes";
 
 export interface PngSnapshot {
@@ -33,7 +33,8 @@ export interface PngSnapshot {
   name: string;
   scale: MapScale;
   cell_lore: string;
-  cells: MapCells;
+  /** V5 document (Фаза 2G: без MapCells, §50 ТЗ). */
+  document: MapDocumentV5;
   /** true — вид игрока (секретное вырезано, легенда без спойлеров) */
   pv: boolean;
   withLegend: boolean;
@@ -66,11 +67,12 @@ export function buildAndDownloadPng(snap: PngSnapshot, PX: number) {
   const mctx = mapCanvas.getContext("2d");
   if (!mctx) return;
   const chrome = readChrome();
+  const model = createV5RenderModel(snap.document).model;
   renderMap(mctx, mapW, mapH, {
     grid: snap.grid,
     width: snap.width,
     height: snap.height,
-    model: createLegacyRenderModel(snap.grid, snap.width, snap.height, snap.cells),
+    model,
     scale: PX,
     ox: pad - b.minX * PX,
     oy: pad - b.minY * PX,
@@ -80,7 +82,7 @@ export function buildAndDownloadPng(snap: PngSnapshot, PX: number) {
     chrome,
     // Экспорт: мастер — полный или глазами игрока (чекбокс); игрок — всегда свой.
     playerView: snap.pv,
-    selectedKey: null,
+    selectedId: null,
   });
   if (!snap.withLegend) {
     downloadCanvas(mapCanvas, snap.fileName);
@@ -94,7 +96,7 @@ export function buildAndDownloadPng(snap: PngSnapshot, PX: number) {
   const rowH = 24;
   const footH = 64;
   const pv = snap.pv;
-  const live = snap.cells;
+  const live = model;
   type LegRow =
     | { kind: "terrain"; code: string }
     | { kind: "swatch"; color: string; label: string }
@@ -104,10 +106,11 @@ export function buildAndDownloadPng(snap: PngSnapshot, PX: number) {
     | { kind: "marker"; mkind: MapMarkerKind }
     | { kind: "sf"; which: "start" | "finish" };
   // Д-12: в виде игрока — только реально присутствующие террейны (иначе легенда
-  // спойлерит биомы, которых на карте нет); равнина — фон, она видна всегда.
-  const present = new Set(live.terrain.values());
+  // спойлерит биомы, которых на карте нет); default — фон, он виден всегда.
+  const present = new Set(live.terrain.entries.values());
+  present.add(live.terrain.defaultCode);
   const terrainCodes = pv
-    ? MAP_TERRAIN_ORDER.filter((code) => code === "plain" || present.has(code))
+    ? MAP_TERRAIN_ORDER.filter((code) => code === live.terrain.defaultCode || present.has(code))
     : [...MAP_TERRAIN_ORDER];
   const legRows: LegRow[] = terrainCodes.map((code) => ({ kind: "terrain", code }) as LegRow);
   for (const d of live.doors) {

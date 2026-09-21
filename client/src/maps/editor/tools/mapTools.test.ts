@@ -2,68 +2,101 @@
 import { describe, expect, it, vi } from "vitest";
 import { createLabelTools } from "./labelTools";
 import { createObjectTools } from "./objectTools";
-import { createPaintTools, floodFill, paintStroke } from "./paintTools";
+import { createPaintTools } from "./paintTools";
 import { createRulerTools } from "./rulerTools";
 import { createShapeTools } from "./shapeTools";
 import { createWallTools } from "./wallTools";
-import type { MapFull } from "../../mapTypes";
-import type { MapCells } from "../../render";
+import { migrateLegacyMap } from "../../core/migrateLegacy";
+import type { MapDocumentV5 } from "../../core/types";
+import { createDeterministicIdFactory } from "../idFactory";
+import type { MapGeometry } from "../hooks/useMapSelection";
 
-const clone = (c: MapCells): MapCells => structuredClone(c);
-
-function baseCells(): MapCells {
-  return {
-    terrain: new Map([["2,2", "forest"]]),
-    roads: new Set(["3,3"]),
-    rivers: new Set(),
-    labels: [],
-    rooms: [],
-    doors: [],
-    traps: [],
-    markers: [],
-    start: null,
-    finish: null,
-  } as unknown as MapCells;
+function baseDoc(): MapDocumentV5 {
+  return migrateLegacyMap({
+    grid: "square",
+    width: 20,
+    height: 20,
+    cells: {
+      terrain: new Map([["2,2", "forest"]]),
+      roads: new Set(["3,3"]),
+      rivers: new Set(),
+      labels: [],
+      rooms: [],
+      doors: [],
+      traps: [],
+      markers: [],
+      start: null,
+      finish: null,
+    },
+  }).document;
 }
 
-const MAP = { id: 1, grid: "square", width: 20, height: 20 } as unknown as MapFull;
+const GEOM: MapGeometry = { grid: "square", width: 20, height: 20 };
+
+function terrainEntries(doc: MapDocumentV5): Map<string, string> {
+  const l = doc.layers.find((x) => x.id === "lyr-terrain");
+  if (!l || l.kind !== "terrain" || l.representation !== "cells") throw new Error("no terrain");
+  return new Map(l.cells.map((c) => [`${c.x},${c.y}`, c.material.type === "builtin" ? c.material.key : ""]));
+}
+
+function roadSet(doc: MapDocumentV5): Set<string> {
+  const out = new Set<string>();
+  for (const l of doc.layers) {
+    if (l.kind !== "path") continue;
+    for (const p of l.paths) {
+      if (p.geometry.type === "cell-network" && (p.kind === "road" || p.kind === "river")) {
+        for (const c of p.geometry.cells) out.add(`${p.kind}:${c.x},${c.y}`);
+      }
+    }
+  }
+  return out;
+}
+
+function gameplay(doc: MapDocumentV5) {
+  const l = doc.layers.find((x) => x.id === "lyr-gameplay");
+  if (!l || l.kind !== "gameplay") throw new Error("no gameplay");
+  return l.items;
+}
 
 function paintDeps(overrides: Record<string, unknown> = {}) {
-  const cellsRef = { current: baseCells() };
-  const setCells = vi.fn((c: MapCells) => {
-    cellsRef.current = c;
+  const documentRef = { current: baseDoc() as MapDocumentV5 | null };
+  const setDocument = vi.fn((d: MapDocumentV5) => {
+    documentRef.current = d;
   });
   const push = vi.fn();
   const selectTool = vi.fn();
   const setTerrain = vi.fn();
+  const setActionError = vi.fn();
   return {
     deps: {
-      map: MAP,
+      geom: GEOM,
       tool: "brush",
       terrain: "forest",
       brushSize: 1 as const,
-      cellsRef,
-      setCells,
+      documentRef,
+      setDocument,
       push,
-      clone,
+      newId: createDeterministicIdFactory(),
       selectTool,
       setTerrain,
+      setActionError,
       ...overrides,
     },
-    cellsRef,
-    setCells,
+    documentRef,
+    setDocument,
     push,
     selectTool,
     setTerrain,
+    setActionError,
   };
 }
 
-describe("paintTools", () => {
+describe("paintTools (V5)", () => {
   it("brush красит и возвращает changed; повтор — no-op", () => {
     const h = paintDeps();
     const paint = createPaintTools(h.deps as never);
     expect(paint.paintAt(5.5, 5.5)).toBe(true);
-    expect(h.cellsRef.current.terrain.get("5,5")).toBe("forest");
+    expect(terrainEntries(h.documentRef.current!).get("5,5")).toBe("terrain/forest");
     expect(paint.paintAt(5.5, 5.5)).toBe(false);
     expect(h.push).not.toHaveBeenCalled();
   });
@@ -72,42 +105,73 @@ describe("paintTools", () => {
     const h = paintDeps({ tool: "eraser" });
     const paint = createPaintTools(h.deps as never);
     expect(paint.paintAt(2.5, 2.5)).toBe(true);
-    expect(h.cellsRef.current.terrain.has("2,2")).toBe(false);
+    expect(terrainEntries(h.documentRef.current!).has("2,2")).toBe(false);
     expect(paint.paintAt(3.5, 3.5)).toBe(true);
-    expect(h.cellsRef.current.roads.has("3,3")).toBe(false);
+    expect(roadSet(h.documentRef.current!).has("road:3,3")).toBe(false);
   });
 
-  it("road/river — биты поверх террейна", () => {
+  it("road/river — в editable path поверх террейна", () => {
     const h = paintDeps({ tool: "road" });
     const paint = createPaintTools(h.deps as never);
+    // У baseDoc нет road path (roads set пуст в миграции? нет — roads ["3,3"]
+    // → legacy-path-road существует): добавляем рядом.
     expect(paint.paintAt(2.5, 2.5)).toBe(true);
-    expect(h.cellsRef.current.roads.has("2,2")).toBe(true);
-    expect(h.cellsRef.current.terrain.get("2,2")).toBe("forest");
+    expect(roadSet(h.documentRef.current!).has("road:2,2")).toBe(true);
+    expect(terrainEntries(h.documentRef.current!).get("2,2")).toBe("terrain/forest");
+  });
+
+  it("road создаёт path при отсутствии (новый ID, не legacy)", () => {
+    const h = paintDeps({ tool: "road" });
+    // Убираем мигрированный path: документ без дорог.
+    const empty = migrateLegacyMap({
+      grid: "square",
+      width: 20,
+      height: 20,
+      cells: {
+        terrain: new Map(),
+        roads: new Set(),
+        rivers: new Set(),
+        labels: [],
+        rooms: [],
+        doors: [],
+        traps: [],
+        markers: [],
+        start: null,
+        finish: null,
+      },
+    }).document;
+    h.documentRef.current = empty;
+    const paint = createPaintTools(h.deps as never);
+    expect(paint.paintAt(2.5, 2.5)).toBe(true);
+    const road = h.documentRef.current!.layers
+      .flatMap((l) => (l.kind === "path" ? l.paths : []))
+      .find((p) => p.kind === "road");
+    expect(road?.id).toBe("e-1");
+    expect(road?.id.startsWith("legacy-")).toBe(false);
   });
 
   it("wall дабом — фиксированная краска wall", () => {
     const h = paintDeps({ tool: "wall" });
     const paint = createPaintTools(h.deps as never);
     expect(paint.paintAt(6.5, 6.5)).toBe(true);
-    expect(h.cellsRef.current.terrain.get("6,6")).toBe("wall");
+    expect(terrainEntries(h.documentRef.current!).get("6,6")).toBe("terrain/wall");
   });
 
   it("RMB override: brush + eraseOverride → erase, инструмент не меняется", () => {
     const h = paintDeps({ tool: "brush" });
     const paint = createPaintTools(h.deps as never);
     expect(paint.paintAt(2.5, 2.5, { eraseOverride: true })).toBe(true);
-    expect(h.cellsRef.current.terrain.has("2,2")).toBe(false);
-    // Инструмент остался brush: следующий мазок без override снова красит.
+    expect(terrainEntries(h.documentRef.current!).has("2,2")).toBe(false);
     expect(paint.paintAt(2.5, 2.5)).toBe(true);
-    expect(h.cellsRef.current.terrain.get("2,2")).toBe("forest");
+    expect(terrainEntries(h.documentRef.current!).get("2,2")).toBe("terrain/forest");
   });
 
   it("fill заливает связную область одним шагом; тот же террейн — no-op", () => {
-    const h = paintDeps({ tool: "fill", terrain: "mountain" });
+    const h = paintDeps({ tool: "fill", terrain: "mountains" });
     const paint = createPaintTools(h.deps as never);
     paint.singleAction(10.5, 10.5);
     expect(h.push).toHaveBeenCalledTimes(1);
-    expect(h.cellsRef.current.terrain.get("10,10")).toBe("mountain");
+    expect(terrainEntries(h.documentRef.current!).get("10,10")).toBe("terrain/mountains");
     const h2 = paintDeps({ tool: "fill", terrain: "forest" });
     const paint2 = createPaintTools(h2.deps as never);
     paint2.singleAction(2.5, 2.5);
@@ -127,7 +191,7 @@ describe("paintTools", () => {
     const h = paintDeps({ tool: "road" });
     const paint = createPaintTools(h.deps as never);
     paint.altPick(3.5, 3.5);
-    expect(h.cellsRef.current.roads.has("3,3")).toBe(false);
+    expect(roadSet(h.documentRef.current!).has("road:3,3")).toBe(false);
     expect(h.push).toHaveBeenCalledTimes(1);
     const h2 = paintDeps({ tool: "brush" });
     const paint2 = createPaintTools(h2.deps as never);
@@ -137,22 +201,77 @@ describe("paintTools", () => {
     expect(h2.push).not.toHaveBeenCalled();
   });
 
-  it("paintStroke/floodFill чистые: hex-ветки работают", () => {
-    const cells = baseCells();
-    expect(paintStroke(cells, "hex", 20, 20, 5, 5, 1, "brush", "forest")).toBe(true);
-    expect(floodFill(cells, "hex", 20, 20, 6, 6, "plain")).toBe(false);
+  it("несколько road paths: кисть даёт structured error, а не первый попавшийся", () => {
+    const h = paintDeps({ tool: "road" });
+    // Второй road path поверх мигрированного.
+    const doc = h.documentRef.current!;
+    const road = doc.layers.find((l) => l.id === "lyr-road");
+    if (!road || road.kind !== "path" || road.paths[0].geometry.type !== "cell-network") {
+      throw new Error("bad fixture");
+    }
+    const twoRoads: MapDocumentV5 = {
+      ...doc,
+      layers: doc.layers.map((l) =>
+        l.id === "lyr-road" && l.kind === "path"
+          ? {
+              ...l,
+              paths: [
+                ...l.paths,
+                {
+                  id: "road-second",
+                  kind: "road",
+                  geometry: { type: "cell-network", cells: [{ x: 9, y: 9 }] },
+                  width: 1,
+                  styleRef: { type: "builtin", key: "road" } as const,
+                },
+              ],
+            }
+          : l,
+      ),
+    };
+    h.documentRef.current = twoRoads;
+    const paint = createPaintTools(h.deps as never);
+    expect(paint.paintAt(2.5, 2.5)).toBe(false);
+    expect(h.deps.setActionError).toHaveBeenCalledWith(
+      expect.stringContaining("несколько road paths"),
+    );
+    expect(h.push).not.toHaveBeenCalled();
+  });
+
+  it("hex-ветки работают", () => {
+    const hexDoc = migrateLegacyMap({
+      grid: "hex",
+      width: 20,
+      height: 20,
+      cells: {
+        terrain: new Map([["2,2", "forest"]]),
+        roads: new Set(),
+        rivers: new Set(),
+        labels: [],
+        rooms: [],
+        doors: [],
+        traps: [],
+        markers: [],
+        start: null,
+        finish: null,
+      },
+    }).document;
+    const h = paintDeps({ geom: { grid: "hex", width: 20, height: 20 } });
+    h.documentRef.current = hexDoc;
+    const paint = createPaintTools(h.deps as never);
+    expect(paint.paintAt(5.5, 5.5)).toBe(true);
   });
 });
 
-describe("wallTools", () => {
+describe("wallTools (V5)", () => {
   function wallDeps(overrides: Record<string, unknown> = {}) {
-    const cellsRef = { current: baseCells() };
-    const setCells = vi.fn((c: MapCells) => {
-      cellsRef.current = c;
+    const documentRef = { current: baseDoc() as MapDocumentV5 | null };
+    const setDocument = vi.fn((d: MapDocumentV5) => {
+      documentRef.current = d;
     });
     return {
       deps: {
-        map: MAP,
+        geom: GEOM,
         wallSnap: true,
         wallDraft: [
           { x: 1.5, y: 1.5 },
@@ -161,14 +280,14 @@ describe("wallTools", () => {
         wallLive: null,
         setWallDraft: vi.fn(),
         setWallLive: vi.fn(),
-        cellsRef,
-        setCells,
+        documentRef,
+        setDocument,
         push: vi.fn(),
-        clone,
+        setActionError: vi.fn(),
         ...overrides,
       },
-      cellsRef,
-      setCells,
+      documentRef,
+      setDocument,
     };
   }
 
@@ -190,8 +309,9 @@ describe("wallTools", () => {
     const wall = createWallTools(h.deps as never);
     wall.finishWallLine(false);
     expect(h.deps.push).toHaveBeenCalledTimes(1);
+    const entries = terrainEntries(h.documentRef.current!);
     for (const x of [1, 2, 3, 4]) {
-      expect(h.cellsRef.current.terrain.get(`${x},1`)).toBe("wall");
+      expect(entries.get(`${x},1`)).toBe("terrain/wall");
     }
   });
 
@@ -204,50 +324,52 @@ describe("wallTools", () => {
   });
 });
 
-describe("shapeTools", () => {
+describe("shapeTools (V5)", () => {
   function shapeDeps(overrides: Record<string, unknown> = {}) {
-    const cellsRef = { current: baseCells() };
-    const setCells = vi.fn((c: MapCells) => {
-      cellsRef.current = c;
+    const documentRef = { current: baseDoc() as MapDocumentV5 | null };
+    const setDocument = vi.fn((d: MapDocumentV5) => {
+      documentRef.current = d;
     });
     return {
       deps: {
-        map: MAP,
+        geom: GEOM,
         shapeContent: "terrain",
-        terrain: "mountain",
+        terrain: "mountains",
         shapeAnchor: null,
         setShapeAnchor: vi.fn(),
         setRectPreview: vi.fn(),
-        cellsRef,
-        setCells,
+        documentRef,
+        setDocument,
         push: vi.fn(),
-        clone,
+        newId: createDeterministicIdFactory(),
+        setActionError: vi.fn(),
         onRequestRoomCreate: vi.fn(),
         ...overrides,
       },
-      cellsRef,
-      setCells,
+      documentRef,
+      setDocument,
     };
   }
 
   it("terrain/road/river/wall/eraser rect — применением одним шагом", () => {
-    for (const [content, check] of [
-      ["terrain", (c: MapCells) => c.terrain.get("6,6") === "mountain"],
-      ["road", (c: MapCells) => c.roads.has("6,6")],
-      ["river", (c: MapCells) => c.rivers.has("6,6")],
-      ["wall", (c: MapCells) => c.terrain.get("6,6") === "wall"],
-    ] as const) {
+    const checks = {
+      terrain: (d: MapDocumentV5) => terrainEntries(d).get("6,6") === "terrain/mountains",
+      road: (d: MapDocumentV5) => roadSet(d).has("road:6,6"),
+      river: (d: MapDocumentV5) => roadSet(d).has("river:6,6"),
+      wall: (d: MapDocumentV5) => terrainEntries(d).get("6,6") === "terrain/wall",
+    } as const;
+    for (const [content, check] of Object.entries(checks)) {
       const h = shapeDeps({ shapeContent: content });
       const shape = createShapeTools(h.deps as never);
       shape.apply({ x: 6, y: 6 }, { x: 7, y: 7 });
-      expect(check(h.cellsRef.current)).toBe(true);
+      expect(check(h.documentRef.current!), content).toBe(true);
       expect(h.deps.push).toHaveBeenCalledTimes(1);
     }
     const h = shapeDeps({ shapeContent: "eraser" });
     const shape = createShapeTools(h.deps as never);
     shape.apply({ x: 2, y: 2 }, { x: 3, y: 3 });
-    expect(h.cellsRef.current.terrain.has("2,2")).toBe(false);
-    expect(h.cellsRef.current.roads.has("3,3")).toBe(false);
+    expect(terrainEntries(h.documentRef.current!).has("2,2")).toBe(false);
+    expect(roadSet(h.documentRef.current!).has("road:3,3")).toBe(false);
     expect(h.deps.push).toHaveBeenCalledTimes(1);
   });
 
@@ -256,7 +378,7 @@ describe("shapeTools", () => {
     const shape = createShapeTools(h.deps as never);
     shape.apply({ x: 6, y: 6 }, { x: 7, y: 7 });
     expect(h.deps.onRequestRoomCreate).toHaveBeenCalledWith({ x: 6, y: 6, w: 2, h: 2 });
-    expect(h.cellsRef.current.rooms).toHaveLength(0);
+    expect(gameplay(h.documentRef.current!).filter((e) => e.kind === "room")).toHaveLength(0);
     expect(h.deps.push).not.toHaveBeenCalled();
   });
 
@@ -293,29 +415,29 @@ describe("rulerTools + labelTools", () => {
   });
 });
 
-describe("objectTools", () => {
+describe("objectTools (V5)", () => {
   function objectDeps(overrides: Record<string, unknown> = {}) {
-    const cellsRef = { current: baseCells() };
-    const commitChange = vi.fn((next: MapCells) => {
-      cellsRef.current = next;
+    const documentRef = { current: baseDoc() as MapDocumentV5 | null };
+    const commitDocument = vi.fn((next: MapDocumentV5) => {
+      documentRef.current = next;
     });
     return {
       deps: {
-        map: MAP,
+        geom: GEOM,
         lastTrapKind: "pit",
         markerKind: "city",
         setActionError: vi.fn(),
-        cellsRef,
-        commitChange,
-        clone,
+        documentRef,
+        commitDocument,
+        newId: createDeterministicIdFactory(),
         ...overrides,
       },
-      cellsRef,
-      commitChange,
+      documentRef,
+      commitDocument,
     };
   }
 
-  it("placement основных типов — по одному шагу", () => {
+  it("placement основных типов — по одному шагу, IDs не legacy", () => {
     const h = objectDeps();
     const objects = createObjectTools(h.deps as never);
     objects.placeObject("trap", 6.5, 6.5);
@@ -323,27 +445,34 @@ describe("objectTools", () => {
     objects.placeObject("marker", 8.5, 8.5);
     objects.placeObject("start", 9.5, 9.5);
     objects.placeObject("finish", 10.5, 10.5);
-    expect(h.cellsRef.current.traps).toHaveLength(1);
-    expect(h.cellsRef.current.markers).toHaveLength(2);
-    expect(h.cellsRef.current.start).toEqual({ x: 9, y: 9 });
-    expect(h.cellsRef.current.finish).toEqual({ x: 10, y: 10 });
-    expect(h.commitChange).toHaveBeenCalledTimes(5);
+    const items = gameplay(h.documentRef.current!);
+    expect(items.filter((e) => e.kind === "trap")).toHaveLength(1);
+    expect(items.filter((e) => e.kind === "marker")).toHaveLength(2);
+    const start = items.find((e) => e.kind === "start");
+    const finish = items.find((e) => e.kind === "finish");
+    expect(start && start.kind === "start" && start.position).toEqual({ x: 9.5, y: 9.5 });
+    expect(finish && finish.kind === "finish" && finish.position).toEqual({ x: 10.5, y: 10.5 });
+    // Stable IDs нового формата — не legacy-префиксы.
+    for (const e of items) {
+      expect(e.id.startsWith("legacy-")).toBe(false);
+    }
+    expect(h.commitDocument).toHaveBeenCalledTimes(5);
   });
 
   it("door: hex — ошибка, дубликат ребра — ошибка, лимиты — ошибки", () => {
     const h = objectDeps();
     const objects = createObjectTools(h.deps as never);
     objects.placeObject("door", 6.1, 6.5);
-    expect(h.cellsRef.current.doors).toHaveLength(1);
+    expect(gameplay(h.documentRef.current!).filter((e) => e.kind === "door")).toHaveLength(1);
     objects.placeObject("door", 6.1, 6.5);
     expect(h.deps.setActionError).toHaveBeenCalledWith("Здесь уже есть дверь.");
-    expect(h.cellsRef.current.doors).toHaveLength(1);
-    const hex = objectDeps({ map: { ...MAP, grid: "hex" } });
+    expect(gameplay(h.documentRef.current!).filter((e) => e.kind === "door")).toHaveLength(1);
+    const hex = objectDeps({ geom: { grid: "hex", width: 20, height: 20 } });
     const hexObjects = createObjectTools(hex.deps as never);
     hexObjects.placeObject("door", 6.5, 6.5);
     expect(hex.deps.setActionError).toHaveBeenCalledWith(
       "Двери — только на квадратах: на гексах рёберной модели нет."
     );
-    expect(hex.cellsRef.current.doors).toHaveLength(0);
+    expect(gameplay(hex.documentRef.current!).filter((e) => e.kind === "door")).toHaveLength(0);
   });
 });

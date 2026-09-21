@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { cellKey, pixelToCell } from "../../grid";
+import type { MapDocumentV5 } from "../../core/types";
 import type { Camera } from "./useMapCamera";
-import type { ObjSel } from "./useMapSelection";
-import type { MapFull } from "../../mapTypes";
-import type { MapCells } from "../../render";
+import type { MapGeometry, V5Selection } from "./useMapSelection";
 import type { PaintTool } from "../editorTypes";
-import type { MapInputCell, MapInputTools } from "../tools/types";
+import type { MapInputTools } from "../tools/types";
 
 // Оркестрация ввода редактора карт (Фаза 1, Этап Input): pointer/touch
 // state machine, раньше жившая инлайном в MapEditorPage. Приоритет —
@@ -47,15 +46,15 @@ export interface MapInputHistory {
   markStrokeChanged: () => void;
   commitStroke: () => void;
   isPainting: () => boolean;
-  push: (before: MapCells) => void;
+  push: (before: MapDocumentV5) => void;
 }
 
 export interface MapInputSelection {
-  hitAt: (map: MapFull | null, wx: number, wy: number) => { sel: ObjSel } | null;
-  select: (sel: NonNullable<ObjSel>) => void;
+  hitAt: (wx: number, wy: number) => { sel: V5Selection } | null;
+  select: (sel: NonNullable<V5Selection>) => void;
   moveSelectedTo: (
-    session: { sel: NonNullable<ObjSel>; ox: number; oy: number; before: MapCells },
-    map: MapFull | null,
+    session: { sel: NonNullable<V5Selection>; ox: number; oy: number; before: MapDocumentV5 },
+    geom: MapGeometry,
     wx: number,
     wy: number
   ) => void;
@@ -63,14 +62,13 @@ export interface MapInputSelection {
 
 interface UseMapInputArgs {
   canvasRef: { current: HTMLCanvasElement | null };
-  cellsRef: { current: MapCells };
+  documentRef: { current: MapDocumentV5 | null };
   camera: MapInputCamera;
   history: MapInputHistory;
   selection: MapInputSelection;
-  map: MapFull | null;
+  geom: MapGeometry | null;
   tool: PaintTool;
   canEdit: boolean;
-  clone: (c: MapCells) => MapCells;
   // Состояние стен/линейки для маршрутизации (зеркало через argsRef,
   // значения — из страницы, второго постоянного зеркала не заводим).
   wallMode: boolean;
@@ -82,16 +80,30 @@ interface UseMapInputArgs {
 }
 
 export interface ObjDragState {
-  sel: NonNullable<ObjSel>;
+  sel: NonNullable<V5Selection>;
   sx: number;
   sy: number;
   ox: number;
   oy: number;
-  before: MapCells;
+  before: MapDocumentV5;
   moved: boolean;
 }
 
 const DRAG_THRESHOLD_PX = 6;
+
+// Якорь drag комнаты: origo rect в клеточных координатах (для migrated-карт
+// совпадает с legacy; overlay берёт его для абсолютного позиционирования).
+function findRoomRect(
+  doc: MapDocumentV5,
+  id: string
+): { x: number; y: number; w: number; h: number } | null {
+  for (const layer of doc.layers) {
+    if (layer.kind !== "gameplay") continue;
+    const e = layer.items.find((x) => x.id === id);
+    if (e && e.kind === "room" && e.geometry.type === "rect") return e.geometry;
+  }
+  return null;
+}
 
 export function useMapInput(args: UseMapInputArgs) {
   const argsRef = useRef(args);
@@ -173,10 +185,10 @@ export function useMapInput(args: UseMapInputArgs) {
       };
       return;
     }
-    if (e.button !== 0 || spaceDown || !a.canEdit || !a.map) {
+    if (e.button !== 0 || spaceDown || !a.canEdit || !a.geom) {
       // Правая кнопка — стереть, не переключая инструмент (P1-10). Средняя и
       // пробел — панорама (выше). Контекстное меню браузера прибито на canvas.
-      if (e.button === 2 && !spaceDown && a.canEdit && a.map) {
+      if (e.button === 2 && !spaceDown && a.canEdit && a.geom) {
         capture(e);
         a.history.beginStroke();
         eraseOverrideRef.current = true;
@@ -186,21 +198,25 @@ export function useMapInput(args: UseMapInputArgs) {
       }
       return;
     }
-    const map = a.map;
+    const geom = a.geom;
     const { wx, wy } = a.camera.toWorld(e);
     // Выбор (пакет A + P1-3): клик по объекту — потянуть или панель; по пустому —
     // тянуть прямоугольник комнаты или панель создания. Двери на рёбрах —
     // только квадраты (на гексах создание дверей заблокировано в модалке).
     if (a.tool === "select") {
-      const hit = a.selection.hitAt(map, wx, wy);
+        const hit = a.selection.hitAt(wx, wy);
       if (hit) {
-        const cs = a.cellsRef.current;
+        const doc = a.documentRef.current;
+        if (!doc) return;
         let ox = 0;
         let oy = 0;
-        const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
-        if (hit.sel.kind === "room" && cs.rooms[hit.sel.index] && cell) {
-          ox = cell.x - cs.rooms[hit.sel.index].x;
-          oy = cell.y - cs.rooms[hit.sel.index].y;
+        const cell = pixelToCell(geom.grid, wx, wy, geom.width, geom.height);
+        if (hit.sel.kind === "room" && cell) {
+          const rect = findRoomRect(doc, hit.sel.entityId);
+          if (rect) {
+            ox = cell.x - rect.x;
+            oy = cell.y - rect.y;
+          }
         }
         capture(e);
         objDragRef.current = {
@@ -209,12 +225,12 @@ export function useMapInput(args: UseMapInputArgs) {
           sy: e.clientY,
           ox,
           oy,
-          before: a.clone(cs),
+          before: doc,
           moved: false,
         };
         a.selection.select(hit.sel);
       } else {
-        const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+        const cell = pixelToCell(geom.grid, wx, wy, geom.width, geom.height);
         if (cell) {
           capture(e);
           rectRef.current = { sx: e.clientX, sy: e.clientY, wx, wy, isRect: false };
@@ -225,25 +241,25 @@ export function useMapInput(args: UseMapInputArgs) {
     // Линейка (P2-1): первый клик — начало, второй — конец (замер остаётся,
     // пока выбран инструмент); клик по готовому — новый замер.
     if (a.tool === "ruler") {
-      const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+      const cell = pixelToCell(geom.grid, wx, wy, geom.width, geom.height);
       if (cell) a.tools.ruler.tap(cell);
       return;
     }
     // Подпись (P2-2): клик — модалка новой/правки. Мазков нет, undo — шагом.
     if (a.tool === "label") {
-      const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+      const cell = pixelToCell(geom.grid, wx, wy, geom.width, geom.height);
       if (cell) a.tools.label.open(cell.x, cell.y);
       return;
     }
     // Стены линией (Этап E): клик — вершина; финиш — дабл-клик/Enter (см. ниже).
     if (a.tool === "wall" && a.wallMode) {
-      if (!pixelToCell(map.grid, wx, wy, map.width, map.height)) return;
+      if (!pixelToCell(geom.grid, wx, wy, geom.width, geom.height)) return;
       a.tools.wall.tapVertex(wx, wy);
       return;
     }
     // Шейп (Этап E): drag от угла к углу; тач — два тапа (см. onTouchStart).
     if (a.tool === "shape") {
-      const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+      const cell = pixelToCell(geom.grid, wx, wy, geom.width, geom.height);
       if (cell) {
         capture(e);
         shapeDragRef.current = { sx: cell.x, sy: cell.y };
@@ -276,7 +292,7 @@ export function useMapInput(args: UseMapInputArgs) {
     }
     capture(e);
     a.history.beginStroke();
-    const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+    const cell = pixelToCell(geom.grid, wx, wy, geom.width, geom.height);
     if (cell && a.tools.paint.paintAt(wx, wy, { eraseOverride: eraseOverrideRef.current }))
       a.history.markStrokeChanged();
   }
@@ -289,8 +305,8 @@ export function useMapInput(args: UseMapInputArgs) {
       a.camera.setCam((c) => ({ ...c, ox: d.ox + (e.clientX - d.sx), oy: d.oy + (e.clientY - d.sy) }));
       return;
     }
-    if (!a.map) return;
-    const map = a.map;
+    if (!a.geom) return;
+    const geom = a.geom;
     const { wx, wy } = a.camera.toWorld(e);
     if (a.history.isPainting() && (e.buttons & 3) !== 0) {
       pendingPaintRef.current = { wx, wy };
@@ -300,10 +316,10 @@ export function useMapInput(args: UseMapInputArgs) {
     // Drag объекта / прямоугольник комнаты (выбор): живьём из снапшота.
     // Комнаты/ловушки/старт — на любой сетке; двери таскаются только на квадратах.
     const od = objDragRef.current;
-    if (od && a.tool === "select" && (od.sel.kind !== "door" || map.grid === "square")) {
+    if (od && a.tool === "select" && (od.sel.kind !== "door" || geom.grid === "square")) {
       if (!od.moved && Math.hypot(e.clientX - od.sx, e.clientY - od.sy) > DRAG_THRESHOLD_PX)
         od.moved = true;
-      if (od.moved) a.selection.moveSelectedTo(od, map, wx, wy);
+      if (od.moved) a.selection.moveSelectedTo(od, geom, wx, wy);
       return;
     }
     const rc = rectRef.current;
@@ -311,8 +327,8 @@ export function useMapInput(args: UseMapInputArgs) {
       if (!rc.isRect && Math.hypot(e.clientX - rc.sx, e.clientY - rc.sy) > DRAG_THRESHOLD_PX)
         rc.isRect = true;
       if (rc.isRect) {
-        const ra = pixelToCell(map.grid, rc.wx, rc.wy, map.width, map.height);
-        const b = pixelToCell(map.grid, wx, wy, map.width, map.height);
+        const ra = pixelToCell(geom.grid, rc.wx, rc.wy, geom.width, geom.height);
+        const b = pixelToCell(geom.grid, wx, wy, geom.width, geom.height);
         if (ra && b) {
           a.setRectPreview({
             x: Math.min(ra.x, b.x),
@@ -332,16 +348,16 @@ export function useMapInput(args: UseMapInputArgs) {
     // Шейп-drag: прямоугольник от стартового угла.
     const sd = shapeDragRef.current;
     if (sd && a.tool === "shape") {
-      const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+      const cell = pixelToCell(geom.grid, wx, wy, geom.width, geom.height);
       if (cell) a.tools.shape.moveDrag({ x: sd.sx, y: sd.sy }, cell);
       return;
     }
     // Живой конец замера следует за курсором, пока второй клик не зафиксировал.
     if (a.tool === "ruler" && a.ruler && !a.ruler.locked && a.canEdit) {
-      const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+      const cell = pixelToCell(geom.grid, wx, wy, geom.width, geom.height);
       a.tools.ruler.hover(cell);
     }
-    const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+    const cell = pixelToCell(geom.grid, wx, wy, geom.width, geom.height);
     a.setHover(cell ? cellKey(cell.x, cell.y) : null);
   }
 
@@ -366,11 +382,11 @@ export function useMapInput(args: UseMapInputArgs) {
     if (rc) {
       rectRef.current = null;
       a.setRectPreview(null);
-      if (rc.isRect && a.map && a.canEdit) {
-        const map = a.map;
-        const ra = pixelToCell(map.grid, rc.wx, rc.wy, map.width, map.height);
+      if (rc.isRect && a.geom && a.canEdit) {
+        const geom = a.geom;
+        const ra = pixelToCell(geom.grid, rc.wx, rc.wy, geom.width, geom.height);
         const { wx, wy } = a.camera.toWorld(e);
-        const b = pixelToCell(map.grid, wx, wy, map.width, map.height);
+        const b = pixelToCell(geom.grid, wx, wy, geom.width, geom.height);
         if (ra && b) {
           const rect = {
             x: Math.min(ra.x, b.x),
@@ -381,10 +397,10 @@ export function useMapInput(args: UseMapInputArgs) {
           roomRectRef.current = rect;
           a.tools.objects.roomRect(rect);
         }
-      } else if (!rc.isRect && a.map && a.canEdit) {
-        const map = a.map;
+      } else if (!rc.isRect && a.geom && a.canEdit) {
+        const geom = a.geom;
         const { wx, wy } = a.camera.toWorld(e);
-        const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+        const cell = pixelToCell(geom.grid, wx, wy, geom.width, geom.height);
         if (cell) a.tools.objects.create(cell, wx, wy);
       }
       return;
@@ -394,9 +410,9 @@ export function useMapInput(args: UseMapInputArgs) {
     if (shd) {
       shapeDragRef.current = null;
       a.setRectPreview(null);
-      if (a.map && a.canEdit) {
+      if (a.geom && a.canEdit) {
         const { wx, wy } = a.camera.toWorld(e);
-        const cell = pixelToCell(a.map.grid, wx, wy, a.map.width, a.map.height);
+        const cell = pixelToCell(a.geom.grid, wx, wy, a.geom.width, a.geom.height);
         if (cell) a.tools.shape.apply({ x: shd.sx, y: shd.sy }, cell);
       }
       return;
@@ -433,8 +449,8 @@ export function useMapInput(args: UseMapInputArgs) {
       const t = e.changedTouches[i];
       touches.current.set(t.identifier, { x: t.clientX, y: t.clientY });
     }
-    if (touches.current.size === 1 && a.canEdit && a.map && strokeTouchRef.current === null) {
-      const map = a.map;
+    if (touches.current.size === 1 && a.canEdit && a.geom && strokeTouchRef.current === null) {
+      const geom = a.geom;
       const t = e.changedTouches[0];
       if (a.tool === "fill" || a.tool === "picker") {
         const { wx, wy } = a.camera.touchToWorld(t.clientX, t.clientY);
@@ -442,28 +458,28 @@ export function useMapInput(args: UseMapInputArgs) {
       } else if (a.tool === "ruler") {
         // Тач-замер тапами (без живого конца): тап — начало, тап — конец.
         const { wx, wy } = a.camera.touchToWorld(t.clientX, t.clientY);
-        const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+        const cell = pixelToCell(geom.grid, wx, wy, geom.width, geom.height);
         if (cell) a.tools.ruler.tap(cell);
       } else if (a.tool === "label") {
         const { wx, wy } = a.camera.touchToWorld(t.clientX, t.clientY);
-        const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+        const cell = pixelToCell(geom.grid, wx, wy, geom.width, geom.height);
         if (cell) a.tools.label.open(cell.x, cell.y);
       } else if (a.tool === "select") {
         // Тач: только тап-панели (drag объектов — мышь; на таче нет ховера).
         // Двери — только квадраты, остальное — везде.
         const { wx, wy } = a.camera.touchToWorld(t.clientX, t.clientY);
-        const hit = a.selection.hitAt(map, wx, wy);
+      const hit = a.selection.hitAt(wx, wy);
         if (hit) {
           a.selection.select(hit.sel);
           a.tools.objects.openPanel(hit.sel);
         } else {
-          const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+          const cell = pixelToCell(geom.grid, wx, wy, geom.width, geom.height);
           if (cell) a.tools.objects.create(cell, wx, wy);
         }
       } else if (a.tool === "shape") {
         // Тач-шейп: тап — первый угол, тап — второй (прямоугольник готов).
         const { wx, wy } = a.camera.touchToWorld(t.clientX, t.clientY);
-        const cell = pixelToCell(map.grid, wx, wy, map.width, map.height);
+        const cell = pixelToCell(geom.grid, wx, wy, geom.width, geom.height);
         if (cell) a.tools.shape.tap(cell);
       } else if (
         a.tool === "door" ||

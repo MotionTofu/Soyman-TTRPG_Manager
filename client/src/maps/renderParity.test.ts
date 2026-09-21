@@ -89,7 +89,7 @@ function baseOpts(
     hover: null,
     chrome: CHROME,
     playerView: false,
-    selectedKey: null,
+    selectedId: null,
     ...patch,
   };
 }
@@ -111,7 +111,8 @@ function renderCalls(opts: RenderOptions): string[] {
  * фазы рек/дорог (lineWidth-барьеры), порядок сущностей. Пропуски, лишние
  * сущности, неверные координаты/стили/тексты и перестановки фаз ловятся.
  */
-function normalize(calls: string[]): string[] {  const isFillStyle = (c: string) => c.startsWith("set:fillStyle=");
+function normalize(calls: string[]): string[] {
+  const isFillStyle = (c: string) => c.startsWith("set:fillStyle=");
   const isStrokeStyle = (c: string) => c.startsWith("set:strokeStyle=");
   const isPath = (c: string) =>
     c === "beginPath()" ||
@@ -170,6 +171,9 @@ function normalize(calls: string[]): string[] {  const isFillStyle = (c: string)
   return [...ordered, "##STYLES", ...styles, "##GROUPS", ...groups];
 }
 
+/** Экспорт канонизации для временного smoke реальных карт. */
+export { normalize as normalizeRenderCallsForSmoke };
+
 describe("visual parity: legacy model vs migrated V5 model", () => {
   function parity(
     grid: "square" | "hex",
@@ -195,10 +199,10 @@ describe("visual parity: legacy model vs migrated V5 model", () => {
     parity("square", FULL, { playerView: true });
   });
 
-  it("square с selectedKey door/trap", () => {
-    parity("square", FULL, { selectedKey: "door:0" });
-    parity("square", FULL, { selectedKey: "trap:0" });
-    parity("square", FULL, { selectedKey: "start" });
+  it("square с selectedId door/trap (stable IDs обеих моделей)", () => {
+    parity("square", FULL, { selectedId: "legacy-door-0" });
+    parity("square", FULL, { selectedId: "legacy-trap-0" });
+    parity("square", FULL, { selectedId: "legacy-start" });
   });
 
   it("square крупный zoom (мотивы террейна, глифы)", () => {

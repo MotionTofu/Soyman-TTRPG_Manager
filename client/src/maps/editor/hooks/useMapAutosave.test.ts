@@ -42,9 +42,9 @@ function setup() {
   vi.spyOn(Date, "now").mockImplementation(() => now);
   const baseProps = {
     map: null as unknown as MapFull | null,
-    cells: { v: 0 } as C,
+    value: { v: 0 } as C,
     params: P0,
-    serializeCells: serialize as (c: C) => string,
+    serialize: serialize as (c: C) => string,
     save,
     buildThumbnail: buildThumbnail as (m: MapFull, live: C) => string | null,
     onSaved,
@@ -55,7 +55,7 @@ function setup() {
     { initialProps: baseProps }
   );
   const show = (cellsV: number) =>
-    utils.rerender({ ...baseProps, map: MAP, cells: { v: cellsV } });
+    utils.rerender({ ...baseProps, map: MAP, value: { v: cellsV } });
   return {
     ...utils,
     save,
@@ -118,7 +118,7 @@ describe("useMapAutosave (Этап Autosave)", () => {
     edit(h, 2);
     fire();
     expect(h.save).toHaveBeenCalledTimes(1);
-    expect(h.save.mock.calls[0][1]).toMatchObject({ cells: "c2" });
+    expect(h.save.mock.calls[0][1]).toMatchObject({ document: "c2" });
   });
 
   it("2. возврат к эталону → PUT нет (статус-quirks сохранён: остаётся dirty)", () => {
@@ -195,7 +195,7 @@ describe("useMapAutosave (Этап Autosave)", () => {
       h.result.current.retry();
     });
     expect(h.save).toHaveBeenCalledTimes(2);
-    expect(h.save.mock.calls[1][1]).toMatchObject({ cells: "c2" });
+    expect(h.save.mock.calls[1][1]).toMatchObject({ document: "c2" });
   });
 
   it("6-7. corrupt блокирует autosave; allowOverwrite возобновляет", () => {
@@ -211,7 +211,7 @@ describe("useMapAutosave (Этап Autosave)", () => {
     edit(h, 2);
     fire();
     expect(h.save).toHaveBeenCalledTimes(1);
-    expect(h.save.mock.calls[0][1]).toMatchObject({ cells: "c2" });
+    expect(h.save.mock.calls[0][1]).toMatchObject({ document: "c2" });
   });
 
   it("8. thumbnail throttle 2.5s: повтор — null, пауза — свежий", () => {
@@ -263,5 +263,25 @@ describe("useMapAutosave (Этап Autosave)", () => {
     fire();
     expect(h.save).not.toHaveBeenCalled();
     expect(unloadPrevented()).toBe(false);
+  });
+
+  it("11 (2G). disabled (unsupported V5) блокирует autosave; save шлёт document", () => {
+    const h = setup();
+    loadAs(h);
+    act(() => {
+      h.rerender({
+        map: MAP,
+        value: { v: 1 },
+        params: P0,
+        serialize,
+        save: h.save,
+        buildThumbnail: h.buildThumbnail,
+        onSaved: () => {},
+        disabled: true,
+      } as never);
+    });
+    fire();
+    expect(h.save).not.toHaveBeenCalled();
+    expect(h.result.current.status.kind).toBe("saved");
   });
 });

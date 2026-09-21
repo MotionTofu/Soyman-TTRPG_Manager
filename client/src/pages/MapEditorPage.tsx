@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAfterWrite, useResource, write } from "../data/hooks";
 import { readOnce } from "../data/imperative";
@@ -7,11 +7,11 @@ import { Modal } from "../components/Modal";
 import { SectionHeading } from "../components/SectionHeading";
 import { SectionBackground } from "../components/SectionBackground";
 import { useConfirm } from "../hooks/useConfirm";
-import { coordLabel, parseKey, worldBounds } from "../maps/grid";
+import { coordLabel, pixelToCell, cellCenter, worldBounds } from "../maps/grid";
 import { buildAndDownloadPng } from "../maps/mapExport";
-import { buildMapExport, sanitizeDownloadName, validateMapImport } from "../maps/mapExchange";
+import { sanitizeDownloadName, validateMapImport } from "../maps/mapExchange";
 import { generateCells, type GeneratorParams } from "../maps/generate";
-import { fixMapConnectivity, generateDungeon } from "../maps/dungeon";
+import { generateDungeon } from "../maps/dungeon";
 import {
   MAP_BIOME_TERRAINS,
   MAP_FLOOR_TERRAINS,
@@ -33,13 +33,9 @@ import {
   MAP_ROOM_LABELS,
   MAP_ROOM_TINT,
   MAP_ROOM_TYPES,
-  cellsBlobStatus,
   doorForView,
-  parseCellsBlob,
   readChrome,
   renderThumbnail,
-  serializeCells,
-  type MapCells,
   type MapDoorEdge,
   type MapDoorKind,
   type MapMarkerKind,
@@ -56,35 +52,42 @@ import {
   type MapFull,
   type MapScale,
 } from "../maps/mapTypes";
+// Фаза 2G: canonical editor state — MapDocumentV5 (иммутабельный).
+import { serializeMapDocument } from "../maps/core/serialize";
+import { createV5RenderModel } from "../maps/renderModel";
+import type { MapDocumentV5 } from "../maps/core/types";
+import { loadStoredEditorDocument, type LoadedEditorDocument } from "../maps/editor/loadDocument";
+import { compareLegacySemantics } from "../maps/core/semanticEquivalence";
+import { parseCellsBlob } from "../maps/render";
+import { parseSoyMapV2, buildSoyMapV2 } from "../maps/core/exchangeV2";
+import { assessCurrentEditorCompatibility } from "../maps/core/compatibility";
+import { migrateLegacyMap, legacyDoorWorldPosition, legacyEdgeOrientation } from "../maps/core/migrateLegacy";
+import { validateMapDocument } from "../maps/core/validate";
+import { createUuidIdFactory } from "../maps/editor/idFactory";
+import { fixConnectivityV5 } from "../maps/editor/fixConnectivityV5";
+import {
+  createGameplayEntity,
+  deleteGameplayEntity,
+  setFinish,
+  setStart,
+  updateGameplayEntity,
+} from "../maps/core/mutations/gameplay";
+import { applyTerrainCellEdits } from "../maps/core/mutations/terrain";
+import { createLabel, deleteLabel, moveLabel, updateLabelText } from "../maps/core/mutations/labels";
+import { clearEditableContent, resizeGridDocument } from "../maps/core/mutations/document";
+import type { GameplayEntity } from "../maps/core/types";
 import { useMapCamera } from "../maps/editor/hooks/useMapCamera";
 import { useMapHistory } from "../maps/editor/hooks/useMapHistory";
 import { useMapHotkeys } from "../maps/editor/hooks/useMapHotkeys";
 import { useMapAutosave } from "../maps/editor/hooks/useMapAutosave";
 import { useMapInput } from "../maps/editor/hooks/useMapInput";
-import { useMapSelection, type ObjSel, selectedKeyOf } from "../maps/editor/hooks/useMapSelection";
+import { useMapSelection, type MapGeometry, type V5Selection } from "../maps/editor/hooks/useMapSelection";
 import { useMapTools } from "../maps/editor/hooks/useMapTools";
 import { MapViewport } from "../maps/editor/components/MapViewport";
 import type { BrushSize, PaintTool } from "../maps/editor/editorTypes";
-// Фаза 2C: shadow audit V5 при загрузке — derived snapshot, только диагностика.
-// Не editor state, не влияет на load/render/autosave/history.
-import { auditLoadedMapShadow } from "../maps/core/shadowAudit";
 
 const UNDO_DEPTH = 50;
 
-function cloneCells(c: MapCells): MapCells {
-  return {
-    terrain: new Map(c.terrain),
-    roads: new Set(c.roads),
-    rivers: new Set(c.rivers),
-    labels: c.labels.map((l) => ({ ...l })),
-    rooms: c.rooms.map((r) => ({ ...r })),
-    doors: c.doors.map((d) => ({ ...d })),
-    traps: c.traps.map((t) => ({ ...t })),
-    markers: c.markers.map((m) => ({ ...m })),
-    start: c.start ? { ...c.start } : null,
-    finish: c.finish ? { ...c.finish } : null,
-  };
-}
 // Чистые операции инструментов живут в tools/* рядом с группами.
 
 function loadFlag(key: string, dflt: boolean): boolean {
@@ -96,6 +99,44 @@ function loadFlag(key: string, dflt: boolean): boolean {
   }
 }
 
+// Подпись, чья containing-cell совпадает (legacy lookup 1:1 на migrated).
+function findLabelAtCell(doc: MapDocumentV5, geom: MapGeometry, x: number, y: number) {
+  for (const layer of doc.layers) {
+    if (layer.kind !== "label") continue;
+    for (const l of layer.items) {
+      const c = pixelToCell(geom.grid, l.position.x, l.position.y, geom.width, geom.height);
+      if (c && c.x === x && c.y === y) return l;
+    }
+  }
+  return undefined;
+}
+
+// Gameplay-сущность по stable ID (панели/черновики).
+function findGameplayEntity(doc: MapDocumentV5, id: string): GameplayEntity | undefined {
+  for (const layer of doc.layers) {
+    if (layer.kind !== "gameplay") continue;
+    const e = layer.items.find((x) => x.id === id);
+    if (e) return e;
+  }
+  return undefined;
+}
+
+// Gameplay-слой документа (инструменты/создание) — первый подходящий.
+function gameplayLayerId(doc: MapDocumentV5): string | null {
+  const l = doc.layers.find((x) => x.kind === "gameplay");
+  return l ? l.id : null;
+}
+
+// Текст баннера unsupported-карты (§8 ТЗ 2G): без потери данных.
+function describeUnsupported(loaded: LoadedEditorDocument): string {
+  const first = loaded.compatibility.reasons[0];
+  return (
+    "Карта использует функции, которые эта версия редактора не поддерживает. " +
+    "Редактирование отключено, чтобы не потерять данные." +
+    (first ? ` (${first.code}: ${first.message})` : "")
+  );
+}
+
 export function MapEditorPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -104,18 +145,11 @@ export function MapEditorPage() {
   const canEdit = user?.role !== "player";
 
   const [map, setMap] = useState<MapFull | null>(null);
-  const [cells, setCells] = useState<MapCells>(() => ({
-    terrain: new Map(),
-    roads: new Set(),
-    rivers: new Set(),
-    labels: [],
-    rooms: [],
-    doors: [],
-    traps: [],
-    markers: [],
-    start: null,
-    finish: null,
-  }));
+  // Фаза 2G: единственный mutable editor state — MapDocumentV5 (иммутабельный;
+  // мутации только через Mutation Core, целые замены — load/undo/import/generator).
+  const [document, setDocument] = useState<MapDocumentV5 | null>(null);
+  // Совместимость загруженного документа с текущим редактором (§4–8 ТЗ 2G).
+  const [unsupported, setUnsupported] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
@@ -127,12 +161,13 @@ export function MapEditorPage() {
   const [tool, setTool] = useState<PaintTool>("brush");
   const [terrain, setTerrain] = useState<string>("forest");
   const [brushSize, setBrushSize] = useState<BrushSize>(1);
-  // История (Этап 2): snapshot-стек, UNDO_DEPTH=50, stroke=один шаг — в хуке.
-  // Эфемерная (не переживает перезагрузку): прошлое/будущее — снимки клеток.
-  const history = useMapHistory<MapCells>({
-    value: cells,
-    onChange: setCells,
-    clone: cloneCells,
+  // История (V5 snapshots; Mutation Core иммутабелен — храним references,
+  // identity clone безопасен и зафиксирован тестом, §22 ТЗ 2G).
+  // Эфемерная (не переживает перезагрузку).
+  const history = useMapHistory<MapDocumentV5 | null>({
+    value: document,
+    onChange: setDocument,
+    clone: (d) => d,
     depth: UNDO_DEPTH,
   });
   const { canUndo, canRedo } = history;
@@ -144,14 +179,36 @@ export function MapEditorPage() {
   const [genOpen, setGenOpen] = useState(false);
   const [genParams, setGenParams] = useState<GeneratorParams>({ seed: 0, sea: 55, mountains: 12, forest: 30 });
 
-  const cellsRef = useRef(cells);
-  cellsRef.current = cells;
+  const documentRef = useRef<MapDocumentV5 | null>(null);
+  documentRef.current = document;
+
+  // Editor geometry — производная от document.grid/world (§19–20 ТЗ 2G),
+  // не отдельный mutable state. Server columns — persistence mirror.
+  const geom: MapGeometry | null = useMemo(() => {
+    if (!document?.grid) return null;
+    return { grid: document.grid.type, width: document.grid.columns, height: document.grid.rows };
+  }, [document]);
+
+  // Render model из документа (§47 ТЗ 2G). Неожиданные diagnostics в DEV —
+  // ошибка разработки: Tool создал feature вне renderer-подмножества (§48).
+  const model = useMemo(() => {
+    if (!document) return null;
+    const r = createV5RenderModel(document);
+    if (import.meta.env.DEV && r.diagnostics.length > 0) {
+      console.error("[Map V5] unexpected render diagnostics", r.diagnostics);
+    }
+    return r.model;
+  }, [document]);
+
+  const newId = useMemo(() => createUuidIdFactory(), []);
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // Камера (Этап 1): state, fit/zoom, wheel, persist — в хуке, математика та же.
+  // Геометрия — из документа, не из server meta (§19, §21 ТЗ 2G).
   const { cam, setCam, camRef, fitCamera, zoomBy, toWorld, touchToWorld } = useMapCamera({
-    map,
+    mapId: map?.id ?? null,
+    geom,
     wrapRef,
     canvasRef,
   });
@@ -161,32 +218,49 @@ export function MapEditorPage() {
     setLoading(true);
     setLoadError(null);
     autosave.beginLoad();
-    // Клетки редактируются здесь, поэтому карта читается мимо кэша слоя:
-    // перечитывание по чужой правке легло бы поверх несохранённых мазков.
+    // Карта читается мимо кэша слоя: перечитывание по чужой правке легло бы
+    // поверх несохранённых правок.
     readOnce<MapFull>(`/maps/${id}`)
       .then((data) => {
         if (!alive) return;
         setMap(data);
-        const parsed = parseCellsBlob(data.cells);
-        setCells(parsed);
-        // Эталон — в нормализованной форме (порядок ключей/пробелы сырого
-        // blob'а иначе давали бы ложное «изменено» и сохранение при открытии).
+        // Load normalization (§10–12 ТЗ 2G): legacy → migrate, V5 → напрямую.
+        const loaded = loadStoredEditorDocument({
+          cells: data.cells,
+          grid: data.grid,
+          width: data.width,
+          height: data.height,
+        });
+        documentRef.current = loaded.document;
+        setDocument(loaded.document);
+        setUnsupported(loaded.compatibility.compatible ? null : describeUnsupported(loaded));
+        // Эталон — canonical serialization migrated-документа (§14 ТЗ 2G):
+        // иначе in-memory V5 сразу казался бы dirty. Write-on-load нет (§13).
         const params = { seed: data.seed, sea: data.sea, mountains: data.mountains, forest: data.forest };
         const paramsStr = JSON.stringify(params);
         setGenParams(params);
         history.clear();
-        autosave.markLoaded(serializeCells(parsed), paramsStr, cellsBlobStatus(data.cells) === "corrupt");
+        autosave.markLoaded(serializeMapDocument(loaded.document), paramsStr, loaded.corrupt);
         setShared(false);
-        // Shadow-ветка 2C: аудит derived V5-снапшота. Side branch после всех
-        // state-эффектов: не читает и не меняет cells/map/history/autosave.
-        auditLoadedMapShadow({
-          mapId: data.id,
-          grid: data.grid,
-          width: data.width,
-          height: data.height,
-          cells: parsed,
-          corrupt: cellsBlobStatus(data.cells) === "corrupt",
-        });
+        if (import.meta.env.DEV) {
+          for (const w of loaded.migrationWarnings) {
+            console.warn("[Map V5] migration warning", w);
+          }
+          // §74 ТЗ 2G: equivalence без повторной миграции (cells transient).
+          if (loaded.sourceFormat === "legacy" && !loaded.corrupt) {
+            const legacy = parseCellsBlob(data.cells);
+            const issues = compareLegacySemantics(
+              { grid: data.grid, width: data.width, height: data.height, cells: legacy },
+              loaded.document,
+            );
+            if (issues.length > 0) {
+              console.error("[Map V5] DEV equivalence mismatch", issues);
+            }
+          }
+          if (!loaded.compatibility.compatible) {
+            console.error("[Map V5] unsupported document", loaded.compatibility.reasons);
+          }
+        }
       })
       .catch((e) => {
         if (!alive) return;
@@ -200,29 +274,31 @@ export function MapEditorPage() {
     };
   }, [id]);
 
-  // Автосохранение (Этап Autosave): debounce/seq/thumb/dirty/retry/unload/corrupt — в хуке.
-  // Битый blob (P1-7): показываем пустую карту, автосейв поверх — только после
-  // явного разрешения (иначе первая правка молча хоронила бы исходные данные).
+  // Автосохранение (V5): debounce/seq/thumb/dirty/retry/unload/corrupt — в хуке.
+  // Битый blob / unsupported V5 (P1-7, §56–57 ТЗ 2G): показываем fallback,
+  // автосейв поверх — только после явного разрешения (corrupt) или никогда
+  // (unsupported — иначе первая правка молча хоронила бы исходные данные).
   const autosave = useMapAutosave({
     map,
-    cells,
+    value: document,
     params: genParams,
-    serializeCells,
+    serialize: serializeMapDocument,
     save: (mapId, body) => write.put(`/maps/${mapId}`, body),
-    buildThumbnail: (m, live) => renderThumbnail(m.grid, m.width, m.height, live, readChrome()),
+    buildThumbnail: (m, live) => (geom ? renderThumbnail(geom.grid, geom.width, geom.height, live, readChrome()) : null),
     onSaved: (savedId) => afterWrite([{ kind: "map", id: savedId, card: true }]),
+    disabled: unsupported !== null,
   });
 
   // Д-14: индикатор несохранённого в title вкладки — тулбар не виден с другой
   // вкладки, а beforeunload без контекста («у вас правки на карте XYZ»).
-  const baseTitleRef = useRef(document.title);
+  const baseTitleRef = useRef(globalThis.document.title);
   useEffect(() => {
     if (!map) return;
     const base = `Карта «${map.name}» — SoyMan`;
-    document.title =
+    globalThis.document.title =
       autosave.status.kind === "saved" ? base : `● ${base} (не сохранено)`;
     return () => {
-      document.title = baseTitleRef.current;
+      globalThis.document.title = baseTitleRef.current;
     };
   }, [map?.name, autosave.status.kind]);
 
@@ -252,31 +328,31 @@ export function MapEditorPage() {
   const [dunTraps, setDunTraps] = useState<"none" | "some" | "many">("some");
 
   function mapNonEmpty(): boolean {
-    const cur = cellsRef.current;
-    return (
-      cur.terrain.size > 0 ||
-      cur.roads.size > 0 ||
-      cur.rivers.size > 0 ||
-      cur.labels.length > 0 ||
-      cur.rooms.length > 0 ||
-      cur.doors.length > 0 ||
-      cur.traps.length > 0 ||
-      cur.markers.length > 0 ||
-      cur.start !== null ||
-      cur.finish !== null
-    );
+    const doc = documentRef.current;
+    if (!doc) return false;
+    return doc.layers.some((l) => {
+      if (l.kind === "terrain") return l.representation === "cells" && l.cells.length > 0;
+      if (l.kind === "path") return l.paths.length > 0;
+      if (l.kind === "object") return l.items.length > 0;
+      if (l.kind === "scatter") return l.areas.length > 0;
+      if (l.kind === "label" || l.kind === "gameplay") return l.items.length > 0;
+      return false;
+    });
   }
 
   // Генерация затирает клетки целиком (P0-5): по непустой карте — только
   // через подтверждение. Отмена генерации шагом истории живёт лишь до
   // перезагрузки, диалог — единственная защита часов ручной росписи.
   async function generate() {
-    if (!map) return;
+    if (!map || !geom) return;
+    if (unsupported !== null) {
+      setActionError("На этой карте генератор недоступен: редактор не поддерживает её функции.");
+      return;
+    }
     if (genTab === "dungeon") {
       await generateDungeonRun();
       return;
     }
-    const cur = cellsRef.current;
     if (mapNonEmpty()) {
       const ok = await confirm({
         title: "Сгенерировать заново?",
@@ -287,10 +363,18 @@ export function MapEditorPage() {
       });
       if (!ok) return;
     }
-    const before = cloneCells(cellsRef.current);
-    const next = generateCells(map.grid, map.width, map.height, genParams);
-    cellsRef.current = next;
-    setCells(next);
+    const before = documentRef.current;
+    if (!before) return;
+    // Legacy-алгоритм в transient MapCells → migrate → validate → setDocument.
+    // MapCells не становится state/ref (§58 ТЗ 2G).
+    const legacyCells = generateCells(geom.grid, geom.width, geom.height, genParams);
+    const migrated = migrateLegacyMap({ grid: geom.grid, width: geom.width, height: geom.height, cells: legacyCells });
+    if (validateMapDocument(migrated.document).length > 0) {
+      setActionError("Генератор дал невалидный документ — карта не изменена.");
+      return;
+    }
+    documentRef.current = migrated.document;
+    setDocument(migrated.document);
     history.push(before);
   }
 
@@ -301,8 +385,8 @@ export function MapEditorPage() {
     secrets: boolean;
     traps: "none" | "some" | "many";
   }) {
-    if (!map) return;
-    if (map.grid !== "square") {
+    if (!map || !geom) return;
+    if (geom.grid !== "square") {
       setActionError("Подземелье — только на квадратах: данж на гексах следующим шагом.");
       return;
     }
@@ -317,8 +401,9 @@ export function MapEditorPage() {
       });
       if (!ok) return;
     }
-    const before = cloneCells(cellsRef.current);
-    const next = generateDungeon(map.width, map.height, {
+    const before = documentRef.current;
+    if (!before) return;
+    const legacyCells = generateDungeon(geom.width, geom.height, {
       seed: genParams.seed,
       rooms,
       corrWidth: override?.corr ?? dunCorr,
@@ -326,8 +411,13 @@ export function MapEditorPage() {
       secrets: override?.secrets ?? dunSecrets,
       traps: override?.traps ?? dunTraps,
     });
-    cellsRef.current = next;
-    setCells(next);
+    const migrated = migrateLegacyMap({ grid: geom.grid, width: geom.width, height: geom.height, cells: legacyCells });
+    if (validateMapDocument(migrated.document).length > 0) {
+      setActionError("Генератор дал невалидный документ — карта не изменена.");
+      return;
+    }
+    documentRef.current = migrated.document;
+    setDocument(migrated.document);
     history.push(before);
     setActionError(null);
   }
@@ -347,8 +437,13 @@ export function MapEditorPage() {
   // Ручная починка связности (пакет C): коридоры к изолированным комнатам,
   // двери не трогаем (в отличие от генерации, где топология финальная).
   function fixConnectivity() {
-    if (!map) return;
-    const res = fixMapConnectivity(cellsRef.current, map.width, map.height);
+    const doc = documentRef.current;
+    if (!map || !doc) return;
+    if (unsupported !== null) {
+      setActionError("На этой карте починка недоступна: редактор не поддерживает её функции.");
+      return;
+    }
+    const res = fixConnectivityV5(doc);
     if (!res) {
       setActionError("Починить нечего: на карте нет комнат.");
       return;
@@ -357,12 +452,23 @@ export function MapEditorPage() {
       setActionError("Всё связно — чинить нечего.");
       return;
     }
-    const before = cloneCells(cellsRef.current);
-    const draft = cloneCells(before);
-    for (const k of res.cleared) draft.terrain.delete(k);
-    cellsRef.current = draft;
-    setCells(draft);
-    history.push(before);
+    const layer = doc.layers.find((l) => l.kind === "terrain");
+    if (!layer || layer.kind !== "terrain" || layer.representation !== "cells") {
+      setActionError("Починка нужна клеточному террейну.");
+      return;
+    }
+    const r = applyTerrainCellEdits(
+      doc,
+      layer.id,
+      res.cleared.map((c) => ({ x: c.x, y: c.y, material: layer.defaultMaterial })),
+    );
+    if (!r.ok || !r.changed) {
+      setActionError("Починить не удалось.");
+      return;
+    }
+    documentRef.current = r.document;
+    setDocument(r.document);
+    history.push(doc);
     setActionError(null);
   }
 
@@ -389,20 +495,22 @@ export function MapEditorPage() {
   const [miniThumb, setMiniThumb] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!map) return;
+    if (!map || !geom) return;
     const timer = setTimeout(() => {
-      setMiniThumb(renderThumbnail(map.grid, map.width, map.height, cellsRef.current, readChrome()));
+      const doc = documentRef.current;
+      if (!doc) return;
+      setMiniThumb(renderThumbnail(geom.grid, geom.width, geom.height, doc, readChrome()));
     }, 800);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cells, map]);
+  }, [document, map]);
 
   function jumpToMini(e: React.MouseEvent) {
     const wrap = wrapRef.current;
-    if (!wrap || !map) return;
+    if (!wrap || !geom) return;
     const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const wrect = wrap.getBoundingClientRect();
-    const b = worldBounds(map.grid, map.width, map.height);
+    const b = worldBounds(geom.grid, geom.width, geom.height);
     const fx = (e.clientX - box.left) / box.width;
     const fy = (e.clientY - box.top) / box.height;
     const wx = b.minX + fx * (b.maxX - b.minX);
@@ -559,18 +667,22 @@ export function MapEditorPage() {
   }, [tool]);
 
   // Подписи (P2-2): черновик модалки — клетка + текст (+ была ли подпись).
+  // Identity — stable EntityId; привязка к клетке — через containing-cell
+  // (для migrated-карт 1:1 с legacy lookup).
   const [labelDraft, setLabelDraft] = useState<{ x: number; y: number; text: string; existed: boolean } | null>(null);
   const [labelError, setLabelError] = useState<string | null>(null);
 
   function openLabelEditor(x: number, y: number) {
-    const found = cellsRef.current.labels.find((l) => l.x === x && l.y === y);
+    const doc = documentRef.current;
+    const found = doc && geom ? findLabelAtCell(doc, geom, x, y) : undefined;
     setLabelDraft({ x, y, text: found?.text ?? "", existed: !!found });
     setLabelError(null);
   }
 
   function saveLabelDraft() {
     const d = labelDraft;
-    if (!d) return;
+    const doc = documentRef.current;
+    if (!d || !doc || !geom) return;
     const text = d.text.trim();
     if (!text) {
       setLabelError("Текст подписи обязателен — или удалите её.");
@@ -580,52 +692,89 @@ export function MapEditorPage() {
       setLabelError("Подпись — до 64 символов.");
       return;
     }
-    const before = cloneCells(cellsRef.current);
-    const rest = before.labels.filter((l) => !(l.x === d.x && l.y === d.y));
-    if (rest.length >= 200 && !before.labels.some((l) => l.x === d.x && l.y === d.y)) {
+    const layer = doc.layers.find((l) => l.kind === "label");
+    if (!layer || layer.kind !== "label") {
+      setLabelError("В документе нет label-слоя.");
+      return;
+    }
+    if (layer.items.length >= 200 && !findLabelAtCell(doc, geom, d.x, d.y)) {
       setLabelError("Подписей слишком много (максимум 200).");
       return;
     }
-    const next: MapCells = { ...before, labels: [...rest, { x: d.x, y: d.y, text }] };
-    cellsRef.current = next;
-    setCells(next);
-    history.push(before);
+    // Центр клетки — та же позиция, что давала миграция legacy-подписей.
+    const c = cellCenter(geom.grid, d.x, d.y);
+    const existing = findLabelAtCell(doc, geom, d.x, d.y);
+    let next = doc;
+    if (existing) {
+      const r1 = updateLabelText(next, existing.id, text);
+      if (!r1.ok) {
+        setLabelError(r1.issues[0]?.message ?? "Не удалось сохранить подпись.");
+        return;
+      }
+      next = r1.document;
+      if (existing.position.x !== c.cx || existing.position.y !== c.cy) {
+        const r2 = moveLabel(next, existing.id, { x: c.cx - existing.position.x, y: c.cy - existing.position.y });
+        if (!r2.ok) {
+          setLabelError(r2.issues[0]?.message ?? "Не удалось сохранить подпись.");
+          return;
+        }
+        next = r2.document;
+      }
+    } else {
+      const r = createLabel(next, layer.id, { id: newId(), position: { x: c.cx, y: c.cy }, text });
+      if (!r.ok) {
+        setLabelError(r.issues[0]?.message ?? "Не удалось сохранить подпись.");
+        return;
+      }
+      next = r.document;
+    }
+    if (next !== doc) {
+      documentRef.current = next;
+      setDocument(next);
+      history.push(doc);
+    }
     setLabelDraft(null);
   }
 
-  function deleteLabel() {
+  function deleteLabelDraft() {
     const d = labelDraft;
-    if (!d) return;
-    const before = cloneCells(cellsRef.current);
-    const next: MapCells = {
-      ...before,
-      labels: before.labels.filter((l) => !(l.x === d.x && l.y === d.y)),
-    };
-    cellsRef.current = next;
-    setCells(next);
-    history.push(before);
+    const doc = documentRef.current;
+    if (!d || !doc || !geom) return;
+    const existing = findLabelAtCell(doc, geom, d.x, d.y);
+    if (!existing) {
+      setLabelDraft(null);
+      return;
+    }
+    const r = deleteLabel(doc, existing.id);
+    if (!r.ok || !r.changed) {
+      setLabelDraft(null);
+      return;
+    }
+    documentRef.current = r.document;
+    setDocument(r.document);
+    history.push(doc);
     setLabelDraft(null);
   }
 
-  // Слой объектов: выбор (пакет A). Индекс — в массивы cells; любая замена
-  // клеток выбор сбрасывает (панели и drag живут на рефах, им не мешает).
+  // Слой объектов: выбор (V5 stable EntityId). Индекс нигде не хранится;
+  // любая замена документа выбор сбрасывает (панели и drag живут на рефах).
   const selection = useMapSelection({
-    cells,
-    cellsRef,
-    setCells,
-    commitChange: mutateObjects,
-    clone: cloneCells,
+    document,
+    documentRef,
+    setDocument,
+    commitDocument,
   });
   const { selected } = selection;
 
   // Хит-тест и перемещение/удаление — в useMapSelection (та же геометрия
   // и приоритеты: door → trap → marker → start/finish → room).
 
-  // Панели объектов (клик-панель, не ПКМ).
-  const [doorDraft, setDoorDraft] = useState<{ index: number; kind: MapDoorKind; secret: boolean } | null>(null);
-  const [trapDraft, setTrapDraft] = useState<{ index: number; kind: MapTrapKind } | null>(null);
-  const [markerDraft, setMarkerDraft] = useState<{ index: number; kind: MapMarkerKind } | null>(null);
-  const [roomDraft, setRoomDraft] = useState<{ index: number; type: MapRoomType; name: string } | null>(null);
+  // Панели объектов (клик-панель, не ПКМ). Identity — EntityId (§39 ТЗ 2G);
+  // roomDraft.id null = создание (rect из roomRectRef), иначе правка.
+  const [doorDraft, setDoorDraft] = useState<{ id: string; kind: MapDoorKind; secret: boolean } | null>(null);
+  const [trapDraft, setTrapDraft] = useState<{ id: string; kind: MapTrapKind } | null>(null);
+  const [markerDraft, setMarkerDraft] = useState<{ id: string; kind: MapMarkerKind } | null>(null);
+  const [roomDraft, setRoomDraft] = useState<{ id: string | null; type: MapRoomType; name: string } | null>(null);
   const [createDraft, setCreateDraft] = useState<{
     x: number;
     y: number;
@@ -637,121 +786,179 @@ export function MapEditorPage() {
   // Drag объекта и создание комнаты прямоугольником (выбор) — живут в useMapInput.
   const [rectPreview, setRectPreview] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
 
-  function openObjPanel(sel: NonNullable<ObjSel>) {
-    const cs = cellsRef.current;
+  function openObjPanel(sel: NonNullable<V5Selection>) {
+    const doc = documentRef.current;
     setObjError(null);
-    if (sel.kind === "door" && cs.doors[sel.index]) {
-      const d = cs.doors[sel.index];
-      setDoorDraft({ index: sel.index, kind: d.kind, secret: d.secret });
-    } else if (sel.kind === "trap" && cs.traps[sel.index]) {
-      setTrapDraft({ index: sel.index, kind: cs.traps[sel.index].kind });
-    } else if (sel.kind === "marker" && cs.markers[sel.index]) {
-      setMarkerDraft({ index: sel.index, kind: cs.markers[sel.index].kind });
-    } else if (sel.kind === "room" && cs.rooms[sel.index]) {
-      const r = cs.rooms[sel.index];
-      setRoomDraft({ index: sel.index, type: r.type, name: r.name });
-    } else if (sel.kind === "start" || sel.kind === "finish") {
-      setSfDraft({ kind: sel.kind });
+    if (!doc) return;
+    const e = findGameplayEntity(doc, sel.entityId);
+    if (!e || e.kind !== sel.kind) return;
+    if (e.kind === "door") {
+      setDoorDraft({ id: e.id, kind: e.doorKind, secret: e.secret });
+    } else if (e.kind === "trap") {
+      setTrapDraft({ id: e.id, kind: e.trapKind });
+    } else if (e.kind === "marker") {
+      setMarkerDraft({ id: e.id, kind: e.markerKind });
+    } else if (e.kind === "room") {
+      setRoomDraft({ id: e.id, type: e.roomType, name: e.name });
+    } else if (e.kind === "start" || e.kind === "finish") {
+      setSfDraft({ kind: e.kind });
     }
   }
 
-  function mutateObjects(next: MapCells, before: MapCells) {
-    cellsRef.current = next;
-    setCells(next);
+  function commitDocument(next: MapDocumentV5, before: MapDocumentV5) {
+    documentRef.current = next;
+    setDocument(next);
     history.push(before);
+  }
+
+  function actionFailed(message: string): void {
+    setObjError(message);
   }
 
   function saveDoorDraft() {
     const d = doorDraft;
-    if (!d) return;
-    const before = cloneCells(cellsRef.current);
-    const doors = before.doors.map((x) => ({ ...x }));
-    if (!doors[d.index]) return;
-    doors[d.index] = { ...doors[d.index], kind: d.kind, secret: d.secret };
-    // Пара меняет вид целиком (как в прототипе).
-    const pair = doors[d.index].pair;
-    if (pair) {
-      for (let i = 0; i < doors.length; i++) if (doors[i].pair === pair) doors[i] = { ...doors[i], kind: d.kind, secret: d.secret };
+    const doc = documentRef.current;
+    if (!d || !doc) return;
+    const target = findGameplayEntity(doc, d.id);
+    if (!target || target.kind !== "door") return;
+    // Вид правится у двери и её пары (legacy правил вид всей pair-группе;
+    // V5-пары бинарны — exotic-группы уже warnings миграции).
+    const ids = [d.id];
+    if (target.pairedDoorId) ids.push(target.pairedDoorId);
+    let next = doc;
+    for (const id of ids) {
+      const r = updateGameplayEntity(next, id, (e) => {
+        if (e.kind !== "door") return e;
+        return { ...e, doorKind: d.kind, secret: d.secret };
+      });
+      if (!r.ok) {
+        actionFailed(r.issues[0]?.message ?? "Не удалось сохранить дверь.");
+        return;
+      }
+      next = r.document;
     }
-    mutateObjects({ ...before, doors }, before);
+    if (next !== doc) commitDocument(next, doc);
     setDoorDraft(null);
     selection.clearSelection();
   }
 
   function deleteDoor() {
     const d = doorDraft;
-    if (!d) return;
-    const before = cloneCells(cellsRef.current);
-    const target = before.doors[d.index];
-    if (!target) return;
-    const doors =
-      target.pair != null
-        ? before.doors.filter((x) => x.pair !== target.pair)
-        : before.doors.filter((_, i) => i !== d.index);
-    mutateObjects({ ...before, doors }, before);
+    const doc = documentRef.current;
+    if (!d || !doc) return;
+    // Удаление двери чистит пару внутри Mutation Core (§45 ТЗ 2G).
+    const r = deleteGameplayEntity(doc, d.id);
+    if (!r.ok) {
+      actionFailed(r.issues[0]?.message ?? "Не удалось удалить дверь.");
+      return;
+    }
+    if (r.changed) commitDocument(r.document, doc);
     setDoorDraft(null);
     selection.clearSelection();
   }
 
   function saveTrapDraft() {
     const t = trapDraft;
-    if (!t) return;
-    const before = cloneCells(cellsRef.current);
-    if (!before.traps[t.index]) return;
-    const traps = before.traps.map((x, i) => (i === t.index ? { ...x, kind: t.kind } : x));
-    mutateObjects({ ...before, traps }, before);
+    const doc = documentRef.current;
+    if (!t || !doc) return;
+    const r = updateGameplayEntity(doc, t.id, (e) => {
+      if (e.kind !== "trap") return e;
+      return { ...e, trapKind: t.kind };
+    });
+    if (!r.ok) {
+      actionFailed(r.issues[0]?.message ?? "Не удалось сохранить ловушку.");
+      return;
+    }
+    if (r.changed) commitDocument(r.document, doc);
     setTrapDraft(null);
     selection.clearSelection();
   }
 
   function deleteTrap() {
     const t = trapDraft;
-    if (!t) return;
-    const before = cloneCells(cellsRef.current);
-    mutateObjects({ ...before, traps: before.traps.filter((_, i) => i !== t.index) }, before);
+    const doc = documentRef.current;
+    if (!t || !doc) return;
+    const r = deleteGameplayEntity(doc, t.id);
+    if (!r.ok) {
+      actionFailed(r.issues[0]?.message ?? "Не удалось удалить ловушку.");
+      return;
+    }
+    if (r.changed) commitDocument(r.document, doc);
     setTrapDraft(null);
     selection.clearSelection();
   }
 
   function saveMarkerDraft() {
     const m = markerDraft;
-    if (!m) return;
-    const before = cloneCells(cellsRef.current);
-    if (!before.markers[m.index]) return;
-    const markers = before.markers.map((x, i) => (i === m.index ? { ...x, kind: m.kind } : x));
-    mutateObjects({ ...before, markers }, before);
+    const doc = documentRef.current;
+    if (!m || !doc) return;
+    const r = updateGameplayEntity(doc, m.id, (e) => {
+      if (e.kind !== "marker") return e;
+      return { ...e, markerKind: m.kind };
+    });
+    if (!r.ok) {
+      actionFailed(r.issues[0]?.message ?? "Не удалось сохранить маркер.");
+      return;
+    }
+    if (r.changed) commitDocument(r.document, doc);
     setMarkerDraft(null);
     selection.clearSelection();
   }
 
   function deleteMarker() {
     const m = markerDraft;
-    if (!m) return;
-    const before = cloneCells(cellsRef.current);
-    mutateObjects({ ...before, markers: before.markers.filter((_, i) => i !== m.index) }, before);
+    const doc = documentRef.current;
+    if (!m || !doc) return;
+    const r = deleteGameplayEntity(doc, m.id);
+    if (!r.ok) {
+      actionFailed(r.issues[0]?.message ?? "Не удалось удалить маркер.");
+      return;
+    }
+    if (r.changed) commitDocument(r.document, doc);
     setMarkerDraft(null);
     selection.clearSelection();
   }
 
   function saveRoomDraft() {
     const r = roomDraft;
-    if (!r || !map) return;
-    const before = cloneCells(cellsRef.current);
-    if (r.index === -1) {
+    const doc = documentRef.current;
+    if (!r || !doc) return;
+    const layerId = gameplayLayerId(doc);
+    if (!layerId) {
+      setObjError("В документе нет gameplay-слоя.");
+      return;
+    }
+    const gameplay = doc.layers.find((l) => l.id === layerId);
+    const rooms = gameplay && gameplay.kind === "gameplay" ? gameplay.items.filter((e) => e.kind === "room") : [];
+    if (r.id === null) {
       const rect = input.roomRectRef.current;
       if (!rect) return;
-      if (before.rooms.length >= 100) {
+      if (rooms.length >= 100) {
         setObjError("Комнат слишком много (максимум 100).");
         return;
       }
-      const rooms = [...before.rooms, { x: rect.x, y: rect.y, w: rect.w, h: rect.h, type: r.type, name: r.name.trim().slice(0, 64) }];
-      mutateObjects({ ...before, rooms }, before);
+      const res = createGameplayEntity(doc, layerId, {
+        id: newId(),
+        kind: "room",
+        geometry: { type: "rect", x: rect.x, y: rect.y, w: rect.w, h: rect.h },
+        roomType: r.type,
+        name: r.name.trim().slice(0, 64),
+      });
+      if (!res.ok) {
+        setObjError(res.issues[0]?.message ?? "Не удалось создать комнату.");
+        return;
+      }
+      commitDocument(res.document, doc);
     } else {
-      if (!before.rooms[r.index]) return;
-      const rooms = before.rooms.map((x, i) =>
-        i === r.index ? { ...x, type: r.type, name: r.name.trim().slice(0, 64) } : x
-      );
-      mutateObjects({ ...before, rooms }, before);
+      const res = updateGameplayEntity(doc, r.id, (e) => {
+        if (e.kind !== "room") return e;
+        return { ...e, roomType: r.type, name: r.name.trim().slice(0, 64) };
+      });
+      if (!res.ok) {
+        setObjError(res.issues[0]?.message ?? "Не удалось сохранить комнату.");
+        return;
+      }
+      if (res.changed) commitDocument(res.document, doc);
     }
     setRoomDraft(null);
     input.roomRectRef.current = null;
@@ -761,44 +968,92 @@ export function MapEditorPage() {
 
   function deleteRoom() {
     const r = roomDraft;
-    if (!r || r.index === -1) return;
-    const before = cloneCells(cellsRef.current);
-    mutateObjects({ ...before, rooms: before.rooms.filter((_, i) => i !== r.index) }, before);
+    const doc = documentRef.current;
+    if (!r || r.id === null || !doc) return;
+    const res = deleteGameplayEntity(doc, r.id);
+    if (!res.ok) {
+      setObjError(res.issues[0]?.message ?? "Не удалось удалить комнату.");
+      return;
+    }
+    if (res.changed) commitDocument(res.document, doc);
     setRoomDraft(null);
     selection.clearSelection();
   }
 
   function saveCreateDraft() {
     const c = createDraft;
-    if (!c || !map) return;
-    if (c.choice === "door" && map.grid !== "square") {
+    const doc = documentRef.current;
+    if (!c || !doc || !geom) return;
+    if (c.choice === "door" && geom.grid !== "square") {
       setObjError("Двери — только на квадратах: на гексах рёберной модели нет.");
       return;
     }
-    const before = cloneCells(cellsRef.current);
+    const layerId = gameplayLayerId(doc);
+    if (!layerId) {
+      setObjError("В документе нет gameplay-слоя.");
+      return;
+    }
+    const gameplay = doc.layers.find((l) => l.id === layerId);
+    const items = gameplay && gameplay.kind === "gameplay" ? gameplay.items : [];
+    const center = cellCenter(geom.grid, c.x, c.y);
     if (c.choice === "door") {
-      if (before.doors.length >= 400) {
+      if (items.filter((e) => e.kind === "door").length >= 400) {
         setObjError("Дверей слишком много (максимум 400).");
         return;
       }
-      if (before.doors.some((d) => d.x === c.x && d.y === c.y && d.edge === c.edge)) {
+      const pos = legacyDoorWorldPosition(geom.grid, c.x, c.y, c.edge);
+      if (
+        items.some(
+          (e) => e.kind === "door" && e.position.x === pos.x && e.position.y === pos.y,
+        )
+      ) {
         setObjError("Здесь уже есть дверь.");
         return;
       }
-      mutateObjects(
-        { ...before, doors: [...before.doors, { x: c.x, y: c.y, edge: c.edge, kind: "door", secret: false, pair: null }] },
-        before
-      );
+      const res = createGameplayEntity(doc, layerId, {
+        id: newId(),
+        kind: "door",
+        position: pos,
+        orientation: legacyEdgeOrientation(c.edge),
+        doorKind: "door",
+        secret: false,
+        pairedDoorId: null,
+      });
+      if (!res.ok) {
+        setObjError(res.issues[0]?.message ?? "Не удалось поставить дверь.");
+        return;
+      }
+      commitDocument(res.document, doc);
     } else if (c.choice === "trap") {
-      if (before.traps.length >= 300) {
+      if (items.filter((e) => e.kind === "trap").length >= 300) {
         setObjError("Ловушек слишком много (максимум 300).");
         return;
       }
-      mutateObjects({ ...before, traps: [...before.traps, { x: c.x, y: c.y, kind: "pit" }] }, before);
+      const res = createGameplayEntity(doc, layerId, {
+        id: newId(),
+        kind: "trap",
+        position: { x: center.cx, y: center.cy },
+        trapKind: "pit",
+      });
+      if (!res.ok) {
+        setObjError(res.issues[0]?.message ?? "Не удалось поставить ловушку.");
+        return;
+      }
+      commitDocument(res.document, doc);
     } else if (c.choice === "start") {
-      mutateObjects({ ...before, start: { x: c.x, y: c.y } }, before);
+      const res = setStart(doc, layerId, { id: newId(), position: { x: center.cx, y: center.cy } });
+      if (!res.ok) {
+        setObjError(res.issues[0]?.message ?? "Не удалось поставить старт.");
+        return;
+      }
+      if (res.changed) commitDocument(res.document, doc);
     } else {
-      mutateObjects({ ...before, finish: { x: c.x, y: c.y } }, before);
+      const res = setFinish(doc, layerId, { id: newId(), position: { x: center.cx, y: center.cy } });
+      if (!res.ok) {
+        setObjError(res.issues[0]?.message ?? "Не удалось поставить финиш.");
+        return;
+      }
+      if (res.changed) commitDocument(res.document, doc);
     }
     setCreateDraft(null);
     selection.clearSelection();
@@ -806,20 +1061,29 @@ export function MapEditorPage() {
 
   function deleteSf() {
     const s = sfDraft;
-    if (!s) return;
-    const before = cloneCells(cellsRef.current);
-    const next: MapCells = { ...before, start: before.start, finish: before.finish };
-    if (s.kind === "start") next.start = null;
-    else next.finish = null;
-    mutateObjects(next, before);
+    const doc = documentRef.current;
+    if (!s || !doc) return;
+    const target = doc.layers.flatMap((l) =>
+      l.kind === "gameplay" ? l.items.filter((e) => e.kind === s.kind) : [],
+    )[0];
+    if (!target) {
+      setSfDraft(null);
+      return;
+    }
+    const r = deleteGameplayEntity(doc, target.id);
+    if (!r.ok) {
+      setObjError(r.issues[0]?.message ?? "Не удалось удалить.");
+      return;
+    }
+    if (r.changed) commitDocument(r.document, doc);
     setSfDraft(null);
     selection.clearSelection();
   }
 
   // Удаление и перемещение — в useMapSelection (та же геометрия и pair-правила).
 
-  // Уход с выбора закрывает панели объектов (черновики привязаны к индексам,
-  // после чужих правок врали бы) и гасит прямоугольник.
+  // Уход с выбора закрывает панели объектов (черновики привязаны к EntityId,
+  // после чужих правок сущность может исчезнуть — openObjPanel это проверяет).
   function closeObjPanels() {
     setDoorDraft(null);
     setTrapDraft(null);
@@ -870,18 +1134,19 @@ export function MapEditorPage() {
     setXferOpen(!xferOpen);
   }
 
-  // Обмен JSON (пакет D): тонкая обвязка над maps/mapExchange — FileReader,
-  // состояние и шаг истории здесь, вся проверка — в чистом модуле.
+  // Обмен JSON: выгрузка — soyman-map/2 (§69 ТЗ 2G), загрузка — V1 (миграция)
+  // или V2 (parse + compatibility). FileReader, состояние и шаг истории здесь.
   function exportJson() {
-    if (!map) return;
-    const data = buildMapExport(
-      { name: map.name, grid: map.grid, scale: map.scale, cell_lore: map.cell_lore, width: map.width, height: map.height },
-      genParams,
-      cellsRef.current
+    if (!map || !geom) return;
+    const doc = documentRef.current;
+    if (!doc) return;
+    const data = buildSoyMapV2(
+      { name: map.name, scale: map.scale, cellLore: map.cell_lore },
+      doc,
     );
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
+    const a = globalThis.document.createElement("a");
     a.href = url;
     a.download = `map-${sanitizeDownloadName(map.name)}.json`;
     a.click();
@@ -889,27 +1154,53 @@ export function MapEditorPage() {
   }
 
   function importJson(file: File) {
-    if (!map) return;
+    if (!map || !geom) return;
+    const before = documentRef.current;
+    if (!before) return;
     setXferMsg(null);
-    const target = { grid: map.grid, width: map.width, height: map.height };
-    const fallbackGen = genParams;
     const reader = new FileReader();
     reader.onload = () => {
       let parsed: unknown;
       try {
         parsed = JSON.parse(String(reader.result));
       } catch {
-        setXferMsg("Не похоже на выгрузку карты (ждём soyman-map/1).");
+        setXferMsg("Не похоже на выгрузку карты (ждём soyman-map/1 или soyman-map/2).");
         return;
       }
+      const format = (parsed as { format?: unknown }).format;
+      if (format === "soyman-map/2") {
+        const res = parseSoyMapV2(parsed);
+        if (!res.ok) {
+          setXferMsg(`V2 не принят: ${res.errors[0]?.message ?? "invalid document"}`);
+          return;
+        }
+        const compat = assessCurrentEditorCompatibility(res.value.document);
+        if (!compat.compatible) {
+          setXferMsg(`V2 использует функции вне текущего редактора (${compat.reasons[0]?.code ?? "unknown"}) — импорт отклонён без изменений.`);
+          return;
+        }
+        documentRef.current = res.value.document;
+        setDocument(res.value.document);
+        setGenParams((p) => ({ ...p }));
+        history.push(before);
+        setXferMsg("Загружено из soyman-map/2. Шаг — в историю.");
+        return;
+      }
+      // V1: существующая проверка размера/сетки + миграция в V5.
+      const target = { grid: geom.grid, width: geom.width, height: geom.height };
+      const fallbackGen = genParams;
       const res = validateMapImport(parsed, target, fallbackGen);
       if (!res.ok) {
         setXferMsg(res.error);
         return;
       }
-      const before = cloneCells(cellsRef.current);
-      cellsRef.current = res.cells;
-      setCells(res.cells);
+      const migrated = migrateLegacyMap({ grid: geom.grid, width: geom.width, height: geom.height, cells: res.cells });
+      if (validateMapDocument(migrated.document).length > 0) {
+        setXferMsg("Импорт дал невалидный документ — карта не изменена.");
+        return;
+      }
+      documentRef.current = migrated.document;
+      setDocument(migrated.document);
       setGenParams(res.gen);
       history.push(before);
       setXferMsg("Загружено: клетки, объекты и параметры генератора заменены (имя и размер — прежние). Шаг — в историю.");
@@ -924,8 +1215,8 @@ export function MapEditorPage() {
     setSName(map.name);
     setSScale(map.scale);
     setSLore(map.cell_lore);
-    setSWidth(map.width);
-    setSHeight(map.height);
+    setSWidth(geom?.width ?? map.width);
+    setSHeight(geom?.height ?? map.height);
     setSettingsError(null);
     setActionError(null);
     setSettingsOpen(true);
@@ -933,6 +1224,8 @@ export function MapEditorPage() {
 
   async function saveSettings() {
     if (!map) return;
+    const doc = documentRef.current;
+    if (!doc) return;
     const name = sName.trim();
     if (!name) {
       setSettingsError("Название обязательно.");
@@ -952,47 +1245,24 @@ export function MapEditorPage() {
       setSettingsError("Подпись клетки — до 64 символов.");
       return;
     }
-    // Ужимка поля режет всё снаружи — кропаем blob здесь же, шаг в историю (P0-C:
-    // раньше кроп затрагивал только краску и дороги, подписи и объекты молча терялись).
-    const shrinking = w < map.width || h < map.height;
-    const before = cloneCells(cellsRef.current);
-    let cropped: MapCells | null = null;
-    if (shrinking) {
-      const inB = (x: number, y: number) => x >= 0 && y >= 0 && x < w && y < h;
-      const draft: MapCells = {
-        terrain: new Map(),
-        roads: new Set(),
-        rivers: new Set(),
-        labels: [],
-        rooms: [],
-        doors: [],
-        traps: [],
-        markers: [],
-        start: null,
-        finish: null,
-      };
-      for (const [k, t] of before.terrain) {
-        const p = parseKey(k);
-        if (p && inB(p.x, p.y)) draft.terrain.set(k, t);
+    // Ужимка поля режет всё снаружи pure resizeGridDocument (те же правила,
+    // что legacy-кроп P0-C: комната торчит — целиком). Шаг в историю.
+    // Unsupported: ресайз запрещён (нельзя перезаписать такой документ),
+    // мета-настройки — можно.
+    const grid = doc.grid;
+    const resizing = grid && (w !== grid.columns || h !== grid.rows);
+    if (unsupported !== null && resizing) {
+      setSettingsError("Размер этой карты менять нельзя: редактор не поддерживает её функции.");
+      return;
+    }
+    let next = doc;
+    if (resizing) {
+      const r = resizeGridDocument(doc, w, h);
+      if (!r.ok) {
+        setSettingsError(r.issues[0]?.message ?? "Не удалось изменить размер.");
+        return;
       }
-      for (const k of before.roads) {
-        const p = parseKey(k);
-        if (p && inB(p.x, p.y)) draft.roads.add(k);
-      }
-      for (const k of before.rivers) {
-        const p = parseKey(k);
-        if (p && inB(p.x, p.y)) draft.rivers.add(k);
-      }
-      draft.labels = before.labels.filter((l) => inB(l.x, l.y));
-      // Комната, торчащая за новый край хоть частично, уходит целиком — резать
-      // регион по живому значит перекраивать данж; честно предупреждаем в модалке.
-      draft.rooms = before.rooms.filter((r) => r.x >= 0 && r.y >= 0 && r.x + r.w <= w && r.y + r.h <= h);
-      draft.doors = before.doors.filter((d) => inB(d.x, d.y));
-      draft.traps = before.traps.filter((t) => inB(t.x, t.y));
-      draft.markers = before.markers.filter((m) => inB(m.x, m.y));
-      draft.start = before.start && inB(before.start.x, before.start.y) ? { ...before.start } : null;
-      draft.finish = before.finish && inB(before.finish.x, before.finish.y) ? { ...before.finish } : null;
-      cropped = draft;
+      next = r.document;
     }
     setSettingsError(null);
     try {
@@ -1002,18 +1272,19 @@ export function MapEditorPage() {
         cell_lore: sLore,
         width: w,
         height: h,
-        ...(cropped ? { cells: serializeCells(cropped) } : {}),
+        // После switch контент всегда едет документом (§54 ТЗ 2G).
+        ...(resizing ? { document: JSON.parse(serializeMapDocument(next)) } : {}),
       });
-      if (cropped) {
-        cellsRef.current = cropped;
-        setCells(cropped);
-        history.push(before);
+      if (resizing && next !== doc) {
+        documentRef.current = next;
+        setDocument(next);
+        history.push(doc);
       }
       afterWrite([{ kind: "map", id: map.id, card: true }]);
       setMap(updated);
       setSettingsOpen(false);
       setActionError(null);
-      if (w !== map.width || h !== map.height) fitCamera(true);
+      if (geom && (w !== geom.width || h !== geom.height)) fitCamera(true);
     } catch (e) {
       setSettingsError(translateMapError(e));
     }
@@ -1021,21 +1292,21 @@ export function MapEditorPage() {
 
   async function duplicateMap() {
     if (!map) return;
+    const doc = documentRef.current;
+    if (!doc) return;
     setActionError(null);
     try {
-      const thumb = renderThumbnail(map.grid, map.width, map.height, cellsRef.current, readChrome());
+      const thumb = geom ? renderThumbnail(geom.grid, geom.width, geom.height, doc, readChrome()) : null;
+      // V5 create: размеры/сетка выводятся из документа (§18 ТЗ 2F).
       const created = await write.post<{ id: number }>("/maps", {
         name: `${map.name} (копия)`.slice(0, 200),
-        grid: map.grid,
         scale: map.scale,
-        width: map.width,
-        height: map.height,
         cell_lore: map.cell_lore,
         seed: map.seed,
         sea: map.sea,
         mountains: map.mountains,
         forest: map.forest,
-        cells: serializeCells(cellsRef.current),
+        document: JSON.parse(serializeMapDocument(doc)),
         thumbnail: thumb,
       });
       afterWrite([{ kind: "map", card: true }]);
@@ -1070,16 +1341,18 @@ export function MapEditorPage() {
   const [pngBusy, setPngBusy] = useState(false);
 
   function exportPng() {
-    if (!map || pngBusy) return;
+    if (!map || pngBusy || !geom) return;
+    const doc = documentRef.current;
+    if (!doc) return;
     setPngBusy(true);
     const snapshot = {
-      grid: map.grid,
-      width: map.width,
-      height: map.height,
+      grid: geom.grid,
+      width: geom.width,
+      height: geom.height,
       name: map.name,
       scale: map.scale,
       cell_lore: map.cell_lore,
-      cells: cellsRef.current,
+      document: doc,
       pv: !canEdit || pngPlayerView,
       withLegend: pngLegend,
       withGrid: pngGrid,
@@ -1120,7 +1393,7 @@ export function MapEditorPage() {
   // Хоткеи (Этап Hotkeys): keyboard router — в хуке, mapping и гарды те же.
   // Space-пан — отдельным эффектом выше (input/camera), не часть роутера.
   useMapHotkeys({
-    canEdit,
+    canEdit: canEdit && unsupported === null,
     onSelectTool: selectTool,
     onUndo: history.undo,
     onRedo: history.redo,
@@ -1147,8 +1420,8 @@ export function MapEditorPage() {
   // Создание по пустой клетке (мышь и тач делят логику): на гексах дверей
   // на рёбрах нет — сразу предлагаем ловушку (дверь в модалке скрыта).
   function openCreateForCell(cell: { x: number; y: number }, wx: number, wy: number) {
-    if (!map) return;
-    if (map.grid !== "square") {
+    if (!map || !geom) return;
+    if (geom.grid !== "square") {
       setCreateDraft({ x: cell.x, y: cell.y, edge: "n", choice: "trap" });
     } else {
       const fx = wx - cell.x;
@@ -1160,11 +1433,10 @@ export function MapEditorPage() {
     setObjError(null);
   }
 
-  // Инструменты (Этап Tool Controller): доменная логика — в tools/*,
-  // композиция — в useMapTools. Страница хранит editor/UI state и связывает
-  // колбэки; как именно кисть меняет MapCells, она больше не знает.
+  // Инструменты (V5 Mutation Core через Tool Controller): доменная логика —
+  // в tools/*, композиция — в useMapTools.
   const tools = useMapTools({
-    map,
+    geom,
     tool,
     terrain,
     brushSize,
@@ -1176,11 +1448,11 @@ export function MapEditorPage() {
     ruler,
     lastTrapKind,
     markerKind,
-    cellsRef,
-    setCells,
-    clone: cloneCells,
+    documentRef,
+    setDocument,
     push: history.push,
-    commitChange: mutateObjects,
+    commitDocument,
+    newId,
     selectTool,
     setTerrain,
     setRuler,
@@ -1191,7 +1463,7 @@ export function MapEditorPage() {
     setActionError,
     onRequestRoomCreate: (rect) => {
       input.roomRectRef.current = rect;
-      setRoomDraft({ index: -1, type: "empty", name: "" });
+      setRoomDraft({ id: null, type: "empty", name: "" });
       setObjError(null);
     },
     onRequestLabelEdit: (x, y) => {
@@ -1204,27 +1476,25 @@ export function MapEditorPage() {
       openCreateForCell(cell, wx, wy);
     },
     openRoomDraft: () => {
-      setRoomDraft({ index: -1, type: "empty", name: "" });
+      setRoomDraft({ id: null, type: "empty", name: "" });
       setObjError(null);
     },
     cancelObjectDrag: (before) => {
-      cellsRef.current = before;
-      setCells(before);
+      documentRef.current = before;
+      setDocument(before);
     },
   });
 
-  // Ввод (Этап Input): pointer/touch state machine — в хуке; tools приходят
-  // фасадом выше, маршрутизация Input не менялась.
+  // Ввод (pointer/touch state machine — в хуке; tools приходят фасадом выше.
   const input = useMapInput({
     canvasRef,
-    cellsRef,
+    documentRef,
     camera: { setCam, camRef, toWorld, touchToWorld },
     history,
     selection,
-    map,
+    geom,
     tool,
-    canEdit,
-    clone: cloneCells,
+    canEdit: canEdit && unsupported === null,
     wallMode: wallLineMode,
     wallDraft,
     ruler,
@@ -1257,6 +1527,12 @@ export function MapEditorPage() {
 
   async function clearAll() {
     if (!map) return;
+    const doc = documentRef.current;
+    if (!doc) return;
+    if (unsupported !== null) {
+      setActionError("На этой карте очистка недоступна: редактор не поддерживает её функции.");
+      return;
+    }
     const ok = await confirm({
       title: "Очистить карту?",
       message: "Все клетки станут равниной, дороги, реки, подписи, маркеры и объекты исчезнут. Шаг попадёт в историю — его можно отменить.",
@@ -1265,11 +1541,15 @@ export function MapEditorPage() {
       danger: true,
     });
     if (!ok) return;
-    const before = cloneCells(cellsRef.current);
-    const cleared: MapCells = { terrain: new Map(), roads: new Set(), rivers: new Set(), labels: [], rooms: [], doors: [], traps: [], markers: [], start: null, finish: null };
-    cellsRef.current = cleared;
-    setCells(cleared);
-    history.push(before);
+    const r = clearEditableContent(doc);
+    if (!r.ok) {
+      setActionError(r.issues[0]?.message ?? "Не удалось очистить карту.");
+      return;
+    }
+    if (!r.changed) return;
+    documentRef.current = r.document;
+    setDocument(r.document);
+    history.push(doc);
   }
 
   // Главный ряд (Этап F): модификаторы + размер + история + аккордеоны.
@@ -1536,7 +1816,7 @@ export function MapEditorPage() {
                 >
                   {saveLabel()}
                 </span>
-                {autosave.status.kind === "error" && (
+                {autosave.status.kind === "error" && unsupported === null && (
                   <button type="button" title="Повторить сохранение сейчас" onClick={autosave.retry}>
                     Повторить
                   </button>
@@ -1737,9 +2017,9 @@ export function MapEditorPage() {
                       />
                       <span style={{ fontSize: "var(--fs-micro)" }}>Дорога</span>
                     </span>
-                    {cells.doors.length > 0 &&
+                    {model && model.doors.length > 0 &&
                       MAP_DOOR_KINDS.filter((k) =>
-                        cells.doors.some((d) => !doorForView(d, !canEdit || previewAsPlayer).hidden && doorForView(d, !canEdit || previewAsPlayer).kind === k)
+                        model.doors.some((d) => !doorForView(d, !canEdit || previewAsPlayer).hidden && doorForView(d, !canEdit || previewAsPlayer).kind === k)
                       ).map((k) => (
                         <span key={k} className="row" style={{ gap: 6 }} title={MAP_DOOR_LABELS[k]}>
                           <span
@@ -1756,7 +2036,7 @@ export function MapEditorPage() {
                         </span>
                       ))}
                     {(canEdit && !previewAsPlayer ? MAP_TRAP_KINDS : []).filter((k) =>
-                      cells.traps.some((t) => t.kind === k)
+                      model?.traps.some((t) => t.kind === k) ?? false
                     ).map((k) => (
                       <span key={k} className="row" style={{ gap: 6 }} title={`${MAP_TRAP_LABELS[k]} (скрыта от игроков)`}>
                         <span
@@ -1777,7 +2057,7 @@ export function MapEditorPage() {
                         <span style={{ fontSize: "var(--fs-micro)" }}>{MAP_TRAP_LABELS[k]}</span>
                       </span>
                     ))}
-                    {MAP_ROOM_TYPES.filter((t) => cells.rooms.some((r) => r.type === t)).map((t) => (
+                    {MAP_ROOM_TYPES.filter((t) => model?.rooms.some((r) => r.type === t) ?? false).map((t) => (
                       <span key={t} className="row" style={{ gap: 6 }} title={MAP_ROOM_LABELS[t]}>
                         <span
                           aria-hidden="true"
@@ -1792,7 +2072,7 @@ export function MapEditorPage() {
                         <span style={{ fontSize: "var(--fs-micro)" }}>{MAP_ROOM_LABELS[t]}</span>
                       </span>
                     ))}
-                    {cells.start && (
+                    {model?.start && (
                       <span className="row" style={{ gap: 6 }} title="Старт">
                         <span
                           aria-hidden="true"
@@ -1809,7 +2089,7 @@ export function MapEditorPage() {
                         <span style={{ fontSize: "var(--fs-micro)" }}>Старт</span>
                       </span>
                     )}
-                    {cells.rivers.size > 0 && (
+                    {(model?.rivers.size ?? 0) > 0 && (
                       <span className="row" style={{ gap: 6 }} title="Река — поверх террейна, под дорогами">
                         <span
                           aria-hidden="true"
@@ -1818,7 +2098,7 @@ export function MapEditorPage() {
                         <span style={{ fontSize: "var(--fs-micro)" }}>{MAP_RIVER_LABEL}</span>
                       </span>
                     )}
-                    {MAP_MARKER_KINDS.filter((k) => cells.markers.some((m) => m.kind === k)).map((k) => (
+                    {MAP_MARKER_KINDS.filter((k) => model?.markers.some((m) => m.kind === k) ?? false).map((k) => (
                       <span key={k} className="row" style={{ gap: 6 }} title={MAP_MARKER_LABELS[k]}>
                         <span
                           aria-hidden="true"
@@ -1836,7 +2116,7 @@ export function MapEditorPage() {
                         <span style={{ fontSize: "var(--fs-micro)" }}>{MAP_MARKER_LABELS[k]}</span>
                       </span>
                     ))}
-                    {cells.finish && (
+                    {model?.finish && (
                       <span className="row" style={{ gap: 6 }} title="Финиш">
                         <span
                           aria-hidden="true"
@@ -2055,9 +2335,9 @@ export function MapEditorPage() {
                     Легенда и масштаб вшиваются справа — карту можно читать с бумаги. Сетка и координаты
                     в файл — по чекбоксам здесь, экранные тумблеры не влияют.
                   </p>
-                  {map && (() => {
+                  {map && geom && (() => {
                     // D5: честный размер файла и бумаги до скачивания (А4 — 21×29,7 см).
-                    const bb = worldBounds(map.grid, map.width, map.height);
+                    const bb = worldBounds(geom.grid, geom.width, geom.height);
                     const wpx = Math.round((bb.maxX - bb.minX) * pngDensity);
                     const hpx = Math.round((bb.maxY - bb.minY) * pngDensity);
                     const cm = (px: number) => (Math.round(((px / 96) * 2.54) * 10) / 10).toString().replace(".", ",");
@@ -2221,7 +2501,7 @@ export function MapEditorPage() {
                     </div>
                     <p className="muted" style={{ fontSize: "var(--fs-micro)", margin: 0 }}>
                       Сетка — навсегда и здесь не меняется.{" "}
-                      {(sWidth < map.width || sHeight < map.height)
+                      {geom && (sWidth < geom.width || sHeight < geom.height)
                         ? "Поле ужмётся: клетки, подписи и объекты снаружи пропадут (комната, торчащая за край, — целиком), шаг — в историю."
                         : "Размер растёт без потерь: новое — равнина."}
                     </p>
@@ -2253,7 +2533,7 @@ export function MapEditorPage() {
                     {labelError && <p className="muted">{labelError}</p>}
                     <div className="modal-footer row">
                       {labelDraft.existed && (
-                        <button type="button" onClick={deleteLabel}>
+                        <button type="button" onClick={deleteLabelDraft}>
                           Удалить
                         </button>
                       )}
@@ -2373,7 +2653,7 @@ export function MapEditorPage() {
               )}
               {roomDraft && (
                 <Modal onClose={() => { setRoomDraft(null); input.roomRectRef.current = null; setRectPreview(null); }}>
-                  <h2>{roomDraft.index === -1 ? "Новая комната" : "Комната"}</h2>
+                  <h2>{roomDraft.id === null ? "Новая комната" : "Комната"}</h2>
                   <div className="stack">
                     <label>
                       Тип
@@ -2399,7 +2679,7 @@ export function MapEditorPage() {
                     </label>
                     {objError && <p className="muted">{objError}</p>}
                     <div className="modal-footer row">
-                      {roomDraft.index !== -1 && (
+                      {roomDraft.id !== null && (
                         <button type="button" onClick={deleteRoom}>
                           Удалить
                         </button>
@@ -2498,12 +2778,17 @@ export function MapEditorPage() {
           {autosave.blocked && (
             <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
               <span>
-                Данные клеток повреждены — показана пустая карта. Автосохранение остановлено, чтобы первая правка
+                Данные карты повреждены — показана пустая карта. Автосохранение остановлено, чтобы первая правка
                 их не затёрла.
               </span>
               <button type="button" onClick={autosave.allowOverwrite}>
                 Понял, разрешаю перезапись
               </button>
+            </div>
+          )}
+          {unsupported !== null && (
+            <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+              <span>{unsupported}</span>
             </div>
           )}
           <div className="res-toolbar" role="toolbar" aria-label="Камера">
@@ -2550,7 +2835,7 @@ export function MapEditorPage() {
               wrapRef={wrapRef}
               canvasRef={canvasRef}
               map={map}
-              cells={cells}
+              model={model}
               cam={cam}
               view={{
                 showGrid,
@@ -2565,7 +2850,7 @@ export function MapEditorPage() {
               }}
               overlays={{
                 hover,
-                selectedKey: selectedKeyOf(selected),
+                selectedId: selected?.entityId ?? null,
                 ruler,
                 wallDraft,
                 wallLive,
@@ -2612,7 +2897,8 @@ export function MapEditorPage() {
               >
                 <img src={miniThumb} alt="" style={{ display: "block", width: "100%" }} draggable={false} />
                 {(() => {
-                  const b = worldBounds(map.grid, map.width, map.height);
+                  if (!geom) return null;
+                  const b = worldBounds(geom.grid, geom.width, geom.height);
                   const wrect = wrapRef.current?.getBoundingClientRect();
                   if (!wrect || wrect.width < 10) return null;
                   const clamp01 = (v: number) => Math.max(0, Math.min(1, v));

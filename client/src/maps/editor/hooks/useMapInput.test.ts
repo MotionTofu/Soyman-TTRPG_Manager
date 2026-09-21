@@ -2,7 +2,6 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMapInput } from "./useMapInput";
-import type { MapFull } from "../../mapTypes";
 
 // Vitest без globals: авто-cleanup RTL не срабатывает — размонтируем явно,
 // иначе слушатели Space текли бы между тестами.
@@ -10,7 +9,8 @@ afterEach(() => {
   cleanup();
 });
 
-const MAP = { id: 1, grid: "square", width: 20, height: 20 } as unknown as MapFull;
+// Фаза 2G: input работает с geometry + documentRef (без MapCells/clone).
+const GEOM = { grid: "square", width: 20, height: 20 } as const;
 
 interface FakeCam {
   scale: number;
@@ -44,7 +44,9 @@ function setup(overrides: Record<string, unknown> = {}) {
     push: vi.fn(),
   };
   const selection = {
-    hitAt: vi.fn((_m: unknown, _x: number, _y: number) => null),
+    hitAt: vi.fn(
+      (_x: number, _y: number): { sel: { kind: "trap"; entityId: string } } | null => null
+    ),
     select: vi.fn(),
     moveSelectedTo: vi.fn(),
   };
@@ -56,7 +58,7 @@ function setup(overrides: Record<string, unknown> = {}) {
       placeObject: vi.fn(),
     },
     ruler: { tap: vi.fn(), hover: vi.fn() },
-    wall: { tapVertex: vi.fn(), hoverLive: vi.fn() },
+    wall: { tapVertex: vi.fn(), hoverLive: vi.fn(), finishWallLine: vi.fn() },
     shape: { startDrag: vi.fn(), moveDrag: vi.fn(), apply: vi.fn(), tap: vi.fn() },
     label: { open: vi.fn() },
     objects: {
@@ -70,14 +72,15 @@ function setup(overrides: Record<string, unknown> = {}) {
     canvasRef: {
       current: { getBoundingClientRect: () => ({ left: 0, top: 0 }) },
     },
-    cellsRef: { current: {} },
+    // Production-инвариант: hit возможен только при загруженном документе
+    // (selection.hitAt без документа возвращает null).
+    documentRef: { current: { layers: [] } },
     camera: { setCam, camRef, toWorld, touchToWorld },
     history,
     selection,
-    map: MAP as MapFull | null,
+    geom: { ...GEOM },
     tool: "brush",
     canEdit: true,
-    clone: (c: unknown) => c,
     wallMode: false,
     wallDraft: null,
     ruler: null,
@@ -239,7 +242,7 @@ describe("useMapInput: mouse", () => {
 });
 
 describe("useMapInput: selection drag", () => {
-  const SEL = { kind: "trap", index: 0 } as const;
+  const SEL = { kind: "trap", entityId: "t-1" } as const;
 
   it("9. click без 6px → панель, без history", () => {
     const h = setup();

@@ -3,19 +3,15 @@ import { brushCells, cellCenter, cellKey, coordLabel } from "../../grid";
 import { MAP_GRID_LABELS, formatMeters, parseCellLore } from "../../mapTypes";
 import type { MapFull } from "../../mapTypes";
 import { readChrome, renderMap } from "../../render";
-import { createLegacyRenderModel } from "../../renderModel";
-import type { MapCells } from "../../render";
+import type { MapRenderModel } from "../../renderModel";
 import type { BrushSize, PaintTool } from "../editorTypes";
 import type { Camera } from "../hooks/useMapCamera";
 import { rulerMeasure } from "../tools/rulerTools";
 import type { RulerState } from "../tools/rulerTools";
 
-// Viewport карты (Фаза 1, Этап MapViewport): canvas, DPR/setup, render effect,
-// вызов renderMap, привязки input-хендлеров, курсор. Не знает brush/MapCells-
-// мутации/History/autosave/генераторы/модалки: получает готовые значения.
-//
-// Вариант A владения refs: wrapRef/canvasRef создаются страницей и раздаются
-// и сюда, и в Camera/Input (минимальный diff, без forwardRef).
+// Viewport карты (Фаза 2G): canvas, DPR/setup, render effect, привязки
+// input-хендлеров, курсор. Получает готовую read-only MapRenderModel —
+// storage format не знает (§47 ТЗ).
 
 export interface MapViewportInput {
   onPointerDown: (e: React.PointerEvent) => void;
@@ -33,7 +29,7 @@ interface MapViewportProps {
   wrapRef: { current: HTMLDivElement | null };
   canvasRef: { current: HTMLCanvasElement | null };
   map: MapFull | null;
-  cells: MapCells;
+  model: MapRenderModel | null;
   cam: Camera;
   view: {
     showGrid: boolean;
@@ -48,7 +44,7 @@ interface MapViewportProps {
   };
   overlays: {
     hover: string | null;
-    selectedKey: string | null;
+    selectedId: string | null;
     ruler: RulerState | null;
     wallDraft: { x: number; y: number }[] | null;
     wallLive: { x: number; y: number } | null;
@@ -57,15 +53,14 @@ interface MapViewportProps {
   input: MapViewportInput;
 }
 
-export function MapViewport({ wrapRef, canvasRef, map, cells, cam, view, tool, overlays, input }: MapViewportProps) {
-  // Кадр. Зависимости — те же 15, что были у эффекта в странице
-  // (selectedWrapper: selectedKey — чистая производная от selected,
-  // canEdit в deps не было и нет — quirk сохранён, см. отчёт этапа).
+export function MapViewport({ wrapRef, canvasRef, map, model, cam, view, tool, overlays, input }: MapViewportProps) {
+  // Кадр. Зависимости — те же, что были (selectedId — чистая производная
+  // от selected, canEdit в deps не было и нет — quirk сохранён).
   // canvasRef/wrapRef стабильны весь маунт — в deps не добавляем, как было.
   useEffect(() => {
     const canvas = canvasRef.current;
     const wrap = wrapRef.current;
-    if (!canvas || !wrap || !map) return;
+    if (!canvas || !wrap || !map || !model) return;
     const rect = wrap.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
     canvas.width = Math.max(1, Math.round(rect.width * dpr));
@@ -76,9 +71,6 @@ export function MapViewport({ wrapRef, canvasRef, map, cells, cam, view, tool, o
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const chrome = readChrome();
-    // Фаза 2D: renderer читает read-only view (адаптер создаётся здесь же,
-    // в effect — новой render-частоты identity не даёт; cells-prop неизменён).
-    const model = createLegacyRenderModel(map.grid, map.width, map.height, cells);
     renderMap(ctx, rect.width, rect.height, {
       grid: map.grid,
       width: map.width,
@@ -110,7 +102,7 @@ export function MapViewport({ wrapRef, canvasRef, map, cells, cam, view, tool, o
       chrome,
       // Игрок всегда видит карту глазами игрока; у мастера — тумблер превью (§6).
       playerView: !view.canEdit || view.previewAsPlayer,
-      selectedKey: overlays.selectedKey,
+      selectedId: overlays.selectedId,
     });
     // Линейка поверх поля (P2-1): экранные координаты, читаема при любом зуме.
     if (overlays.ruler) {
@@ -202,13 +194,13 @@ export function MapViewport({ wrapRef, canvasRef, map, cells, cam, view, tool, o
   // eslint-disable-next-line react-hooks/exhaustive-deps — deps 1:1 со старым эффектом.
   }, [
     map,
-    cells,
+    model,
     cam,
     view.showGrid,
     view.showCoords,
     overlays.hover,
     overlays.ruler,
-    overlays.selectedKey,
+    overlays.selectedId,
     overlays.rectPreview,
     view.previewAsPlayer,
     overlays.wallDraft,

@@ -1,8 +1,8 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { MapInputTools } from "../tools/types";
-import type { ObjSel } from "./useMapSelection";
-import type { MapFull } from "../../mapTypes";
-import type { MapCells, MapMarkerKind, MapTrapKind } from "../../render";
+import type { MapGeometry, V5Selection } from "./useMapSelection";
+import type { MapDocumentV5 } from "../../core/types";
+import type { MapMarkerKind, MapTrapKind } from "../../render";
 import type { BrushSize, PaintTool } from "../editorTypes";
 import { createLabelTools } from "../tools/labelTools";
 import { createObjectTools } from "../tools/objectTools";
@@ -11,14 +11,12 @@ import { createRulerTools, type RulerState } from "../tools/rulerTools";
 import { createShapeTools, type ShapeContent } from "../tools/shapeTools";
 import { createWallTools } from "../tools/wallTools";
 
-// Фасад инструментов (Фаза 1, Tool Controller): собирает тематические группы
-// и отдаёт наружу практически тот же объект tools, который получает useMapInput.
-// НЕ один огромный класс, знающий всё: paint/wall/shape/ruler/label/objects
-// живут в tools/*, здесь только композиция. Возврат типизирован контрактом
-// MapInputTools — маршрутизация Input при выносе не меняется по построению.
+// Фасад инструментов (Фаза 2G): композиция тематических групп поверх V5.
+// Страница хранит editor/UI state и связывает колбэки; доменные мутации —
+// через V5 Mutation Core в tools/*.
 
 interface UseMapToolsArgs {
-  map: MapFull | null;
+  geom: MapGeometry | null;
   tool: PaintTool;
   terrain: string;
   brushSize: BrushSize;
@@ -30,11 +28,11 @@ interface UseMapToolsArgs {
   ruler: RulerState | null;
   lastTrapKind: MapTrapKind;
   markerKind: MapMarkerKind;
-  cellsRef: { current: MapCells };
-  setCells: (c: MapCells) => void;
-  clone: (c: MapCells) => MapCells;
-  push: (before: MapCells) => void;
-  commitChange: (next: MapCells, before: MapCells) => void;
+  documentRef: { current: MapDocumentV5 | null };
+  setDocument: (d: MapDocumentV5) => void;
+  push: (before: MapDocumentV5) => void;
+  commitDocument: (next: MapDocumentV5, before: MapDocumentV5) => void;
+  newId: () => string;
   selectTool: (t: PaintTool) => void;
   setTerrain: (t: string) => void;
   setRuler: (updater: (r: RulerState | null) => RulerState | null) => void;
@@ -47,60 +45,62 @@ interface UseMapToolsArgs {
   onRequestLabelEdit: (x: number, y: number) => void;
   // UI-потоки создания (панели/модалки остаются у страницы): фасад только
   // пробрасывает их в контракт tools без изменений.
-  openObjectPanel: (sel: NonNullable<ObjSel>) => void;
+  openObjectPanel: (sel: NonNullable<V5Selection>) => void;
   openCreate: (cell: { x: number; y: number }, wx: number, wy: number) => void;
   openRoomDraft: () => void;
-  cancelObjectDrag: (before: MapCells) => void;
+  cancelObjectDrag: (before: MapDocumentV5) => void;
 }
 
 export function useMapTools(a: UseMapToolsArgs): MapInputTools {
   const paint = createPaintTools({
-    map: a.map,
+    geom: a.geom,
     tool: a.tool,
     terrain: a.terrain,
     brushSize: a.brushSize,
-    cellsRef: a.cellsRef,
-    setCells: a.setCells,
+    documentRef: a.documentRef,
+    setDocument: a.setDocument,
     push: a.push,
-    clone: a.clone,
+    newId: a.newId,
     selectTool: a.selectTool,
     setTerrain: a.setTerrain,
+    setActionError: a.setActionError,
   });
   const ruler = createRulerTools({ ruler: a.ruler, setRuler: a.setRuler });
   const wall = createWallTools({
-    map: a.map,
+    geom: a.geom,
     wallSnap: a.wallSnap,
     wallDraft: a.wallDraft,
     wallLive: a.wallLive,
     setWallDraft: a.setWallDraft,
     setWallLive: a.setWallLive,
-    cellsRef: a.cellsRef,
-    setCells: a.setCells,
+    documentRef: a.documentRef,
+    setDocument: a.setDocument,
     push: a.push,
-    clone: a.clone,
+    setActionError: a.setActionError,
   });
   const shape = createShapeTools({
-    map: a.map,
+    geom: a.geom,
     shapeContent: a.shapeContent,
     terrain: a.terrain,
     shapeAnchor: a.shapeAnchor,
     setShapeAnchor: a.setShapeAnchor,
     setRectPreview: a.setRectPreview,
-    cellsRef: a.cellsRef,
-    setCells: a.setCells,
+    documentRef: a.documentRef,
+    setDocument: a.setDocument,
     push: a.push,
-    clone: a.clone,
+    newId: a.newId,
+    setActionError: a.setActionError,
     onRequestRoomCreate: a.onRequestRoomCreate,
   });
   const label = createLabelTools({ onRequestLabelEdit: a.onRequestLabelEdit });
   const objects = createObjectTools({
-    map: a.map,
+    geom: a.geom,
     lastTrapKind: a.lastTrapKind,
     markerKind: a.markerKind,
     setActionError: a.setActionError,
-    cellsRef: a.cellsRef,
-    commitChange: a.commitChange,
-    clone: a.clone,
+    documentRef: a.documentRef,
+    commitDocument: a.commitDocument,
+    newId: a.newId,
   });
 
   return {
@@ -117,6 +117,9 @@ export function useMapTools(a: UseMapToolsArgs): MapInputTools {
     wall: {
       tapVertex: wall.tapVertex,
       hoverLive: wall.hoverLive,
+      // finishWallLine чинил предсуществующий обрыв фасада (page/hotkeys
+      // вызывают, контракт не отдавал): поведение не меняем, только чиним тип.
+      finishWallLine: wall.finishWallLine,
     },
     shape: {
       startDrag: shape.startDrag,

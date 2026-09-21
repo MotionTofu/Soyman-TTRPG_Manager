@@ -1,91 +1,28 @@
-import { brushCells, cellKey, neighbors, pixelToCell } from "../../grid";
-import type { MapFull } from "../../mapTypes";
-import type { MapCells } from "../../render";
+import { brushCells, pixelToCell } from "../../grid";
+import { applyTerrainCellEdits, floodTerrainFill, readTerrainMaterialAt } from "../../core/mutations/terrain";
+import type { MaterialRef } from "../../core/refs";
+import type { MapDocumentV5 } from "../../core/types";
+import type { MapGeometry } from "../hooks/useMapSelection";
 import type { BrushSize, PaintTool } from "../editorTypes";
+import { addCellsToEditablePath, removeCellsFromEditablePath } from "./v5paths";
 
-// Красящие инструменты (Фаза 1, Tool Controller): paintAt/singleAction/altPick
-// и чистые операции paintStroke/floodFill. Историю не владеют: мазок закрывает
-// Input (без push здесь), точечные действия пушат через push.
+// Красящие инструменты (Фаза 2G): paintAt/singleAction/altPick через V5
+// Mutation Core. Историю не владеют: мазок закрывает Input (без push здесь),
+// точечные действия пушат через push. documentRef зеркалится синхронно
+// (P0-1: changed считается ДО setDocument, реф — оптимистично сразу).
 
-// Мазок кистью/оверлеем/ластиком по клеткам вокруг центра. Возвращает,
-// изменилось ли хоть что-то (неменявший мазок в историю не идёт).
-export function paintStroke(
-  draft: MapCells,
-  grid: MapFull["grid"],
-  width: number,
-  height: number,
-  cx: number,
-  cy: number,
-  size: BrushSize,
-  tool: PaintTool,
-  terrain: string
-): boolean {
-  let changed = false;
-  for (const cell of brushCells(grid, cx, cy, size, width, height)) {
-    const key = cellKey(cell.x, cell.y);
-    if (tool === "road" || tool === "river") {
-      // Оверлеи ложатся поверх любого террейна (река — и поверх дороги: мост дорисуется сам).
-      const set = tool === "road" ? draft.roads : draft.rivers;
-      if (!set.has(key)) {
-        set.add(key);
-        changed = true;
-      }
-    } else if (tool === "eraser") {
-      if ((draft.terrain.get(key) ?? "plain") !== "plain") {
-        draft.terrain.delete(key);
-        changed = true;
-      }
-      if (draft.roads.has(key)) {
-        draft.roads.delete(key);
-        changed = true;
-      }
-      if (draft.rivers.has(key)) {
-        draft.rivers.delete(key);
-        changed = true;
-      }
-    } else {
-      if ((draft.terrain.get(key) ?? "plain") !== terrain) {
-        if (terrain === "plain") draft.terrain.delete(key);
-        else draft.terrain.set(key, terrain);
-        changed = true;
-      }
-    }
-  }
-  return changed;
+function materialForCode(code: string): MaterialRef {
+  return { type: "builtin", key: `terrain/${code}` };
 }
 
-// Заливка связной области одного террейна (4-связность на квадратах,
-// 6 — на гексах). Край поля — естественная граница.
-export function floodFill(
-  draft: MapCells,
-  grid: MapFull["grid"],
-  width: number,
-  height: number,
-  sx: number,
-  sy: number,
-  terrain: string
-): boolean {
-  const start = cellKey(sx, sy);
-  const from = draft.terrain.get(start) ?? "plain";
-  if (from === terrain) return false;
-  const seen = new Set<string>([start]);
-  const stack = [{ x: sx, y: sy }];
-  while (stack.length > 0) {
-    const cur = stack.pop()!;
-    for (const n of neighbors(grid, cur.x, cur.y)) {
-      if (n.x < 0 || n.y < 0 || n.x >= width || n.y >= height) continue;
-      const key = cellKey(n.x, n.y);
-      if (seen.has(key)) continue;
-      if ((draft.terrain.get(key) ?? "plain") !== from) continue;
-      seen.add(key);
-      stack.push(n);
-    }
-  }
-  for (const key of seen) {
-    if (terrain === "plain") draft.terrain.delete(key);
-    else draft.terrain.set(key, terrain);
-  }
-  return seen.size > 0;
+function codeOfMaterial(m: MaterialRef): string | null {
+  if (m.type === "builtin" && m.key.startsWith("terrain/")) return m.key.slice("terrain/".length);
+  return null;
+}
+
+function terrainLayerId(doc: MapDocumentV5): string | null {
+  const l = doc.layers.find((x) => x.kind === "terrain");
+  return l ? l.id : null;
 }
 
 export interface PaintAtOptions {
@@ -94,102 +31,227 @@ export interface PaintAtOptions {
   eraseOverride?: boolean;
 }
 
-interface CreatePaintToolsArgs {
-  map: MapFull | null;
+interface Ctx {
+  geom: MapGeometry | null;
   tool: PaintTool;
   terrain: string;
   brushSize: BrushSize;
-  cellsRef: { current: MapCells };
-  setCells: (c: MapCells) => void;
-  push: (before: MapCells) => void;
-  clone: (c: MapCells) => MapCells;
+  documentRef: { current: MapDocumentV5 | null };
+  setDocument: (d: MapDocumentV5) => void;
+  push: (before: MapDocumentV5) => void;
+  newId: () => string;
   selectTool: (t: PaintTool) => void;
   setTerrain: (t: string) => void;
+  setActionError: (e: string | null) => void;
+}
+
+interface CreatePaintToolsArgs {
+  geom: MapGeometry | null;
+  tool: PaintTool;
+  terrain: string;
+  brushSize: BrushSize;
+  documentRef: { current: MapDocumentV5 | null };
+  setDocument: (d: MapDocumentV5) => void;
+  push: (before: MapDocumentV5) => void;
+  newId: () => string;
+  selectTool: (t: PaintTool) => void;
+  setTerrain: (t: string) => void;
+  setActionError: (e: string | null) => void;
+}
+
+function commit(ctx: Ctx, before: MapDocumentV5, next: MapDocumentV5, push: boolean): boolean {
+  ctx.documentRef.current = next;
+  ctx.setDocument(next);
+  if (push) ctx.push(before);
+  return true;
+}
+
+// Мазок кистью/оверлеем/ластиком по клеткам вокруг центра.
+function paintStrokeCells(
+  ctx: Ctx,
+  g: MapGeometry,
+  doc: MapDocumentV5,
+  cx: number,
+  cy: number,
+  tool: PaintTool,
+  terrainCode: string,
+): boolean {
+  const brush = brushCells(g.grid, cx, cy, ctx.brushSize, g.width, g.height);
+  if (tool === "road" || tool === "river") {
+    // Оверлеи ложатся поверх любого террейна (река — и поверх дороги).
+    const r = addCellsToEditablePath(
+      doc,
+      tool,
+      brush.map((c) => ({ x: c.x, y: c.y })),
+      ctx.newId,
+    );
+    if (!r.ok) {
+      ctx.setActionError(r.issues[0]?.message ?? "Не удалось положить путь.");
+      return false;
+    }
+    if (!r.changed) return false;
+    return commit(ctx, doc, r.document, false);
+  }
+  const layerId = terrainLayerId(doc);
+  if (!layerId) {
+    ctx.setActionError("В документе нет terrain-слоя.");
+    return false;
+  }
+  if (tool === "eraser") {
+    // Ластик: террейн → default (Core удаляет override), дороги/реки — снять.
+    const def = doc.layers.find((l) => l.id === layerId);
+    const defaultMaterial: MaterialRef =
+      def && def.kind === "terrain" ? def.defaultMaterial : materialForCode("plain");
+    const r = applyTerrainCellEdits(
+      doc,
+      layerId,
+      brush.map((c) => ({ x: c.x, y: c.y, material: defaultMaterial })),
+    );
+    let next = doc;
+    let changed = false;
+    if (!r.ok) {
+      ctx.setActionError(r.issues[0]?.message ?? "Не удалось стереть.");
+      return false;
+    }
+    if (r.changed) {
+      next = r.document;
+      changed = true;
+    }
+    for (const kind of ["road", "river"] as const) {
+      const rr = removeCellsFromEditablePath(
+        next,
+        kind,
+        brush.map((c) => ({ x: c.x, y: c.y })),
+      );
+      if (!rr.ok) {
+        ctx.setActionError(rr.issues[0]?.message ?? "Не удалось снять путь.");
+        return false;
+      }
+      if (rr.changed) {
+        next = rr.document;
+        changed = true;
+      }
+    }
+    if (!changed) return false;
+    return commit(ctx, doc, next, false);
+  }
+  const r = applyTerrainCellEdits(
+    doc,
+    layerId,
+    brush.map((c) => ({ x: c.x, y: c.y, material: materialForCode(terrainCode) })),
+  );
+  if (!r.ok) {
+    ctx.setActionError(r.issues[0]?.message ?? "Не удалось покрасить.");
+    return false;
+  }
+  if (!r.changed) return false;
+  return commit(ctx, doc, r.document, false);
 }
 
 export function createPaintTools(a: CreatePaintToolsArgs) {
-  // Синхронный подсчёт: changed считается ДО setCells (иначе апдейтер
-  // выполняется позже рендера и одиночный клик возвращал false — мазок
-  // терялся для истории, P0-1). Реф обновляется оптимистично сразу, чтобы
-  // быстрые pointermove до перерендера не затирали друг друга.
+  const ctx: Ctx = a;
+
   function paintAt(wx: number, wy: number, opts: PaintAtOptions = {}): boolean {
-    if (!a.map) return false;
-    const cell = pixelToCell(a.map.grid, wx, wy, a.map.width, a.map.height);
+    const g = ctx.geom;
+    const doc = ctx.documentRef.current;
+    if (!g || !doc) return false;
+    const cell = pixelToCell(g.grid, wx, wy, g.width, g.height);
     if (!cell) return false;
-    const draft = a.clone(a.cellsRef.current);
-    const effTool = opts.eraseOverride ? "eraser" : a.tool;
-    // Стена дабом — та же кисть террейна, только краска зафиксирована (линия — отдельно).
-    const effTerrain = effTool === "wall" ? "wall" : a.terrain;
-    const changed = paintStroke(
-      draft,
-      a.map.grid,
-      a.map.width,
-      a.map.height,
-      cell.x,
-      cell.y,
-      a.brushSize,
-      effTool,
-      effTerrain
-    );
-    if (!changed) return false;
-    a.cellsRef.current = draft;
-    a.setCells(draft);
-    return true;
+    const effTool = opts.eraseOverride ? "eraser" : ctx.tool;
+    // Стена дабом — та же кисть террейна, только краска зафиксирована.
+    const effTerrain = effTool === "wall" ? "wall" : ctx.terrain;
+    return paintStrokeCells(ctx, g, doc, cell.x, cell.y, effTool, effTerrain);
   }
 
   function singleAction(wx: number, wy: number) {
-    if (!a.map) return;
-    const cell = pixelToCell(a.map.grid, wx, wy, a.map.width, a.map.height);
+    const g = ctx.geom;
+    const doc = ctx.documentRef.current;
+    if (!g || !doc) return;
+    const cell = pixelToCell(g.grid, wx, wy, g.width, g.height);
     if (!cell) return;
-    if (a.tool === "picker") {
-      const t = a.cellsRef.current.terrain.get(cellKey(cell.x, cell.y)) ?? "plain";
-      a.setTerrain(t);
-      a.selectTool("brush");
+    if (ctx.tool === "picker") {
+      const layerId = terrainLayerId(doc);
+      if (!layerId) return;
+      const r = readTerrainMaterialAt(doc, layerId, cell.x, cell.y);
+      if (!r.ok) {
+        ctx.setActionError(r.issues[0]?.message ?? "Не удалось взять террейн.");
+        return;
+      }
+      const code = codeOfMaterial(r.material);
+      if (code === null) {
+        ctx.setActionError("Этот материал кистью не покрасить.");
+        return;
+      }
+      ctx.setTerrain(code);
+      ctx.selectTool("brush");
       return;
     }
     // fill
-    const before = a.clone(a.cellsRef.current);
-    const draft = a.clone(before);
-    if (floodFill(draft, a.map.grid, a.map.width, a.map.height, cell.x, cell.y, a.terrain)) {
-      a.cellsRef.current = draft;
-      a.setCells(draft);
-      a.push(before);
+    const layerId = terrainLayerId(doc);
+    if (!layerId) {
+      ctx.setActionError("В документе нет terrain-слоя.");
+      return;
     }
+    const r = floodTerrainFill(doc, layerId, cell.x, cell.y, materialForCode(ctx.terrain));
+    if (!r.ok) {
+      ctx.setActionError(r.issues[0]?.message ?? "Не удалось залить.");
+      return;
+    }
+    if (!r.changed) return;
+    commit(ctx, doc, r.document, true);
   }
 
   function altPick(wx: number, wy: number) {
-    if (!a.map) return;
+    const g = ctx.geom;
+    const doc = ctx.documentRef.current;
+    if (!g || !doc) return;
     // Пипетка поверх любого инструмента (P1-9 + Этап C): берёт террейн, а клетка
     // с оверлеем включает его инструмент (дорога — верхняя, потом река).
     // С активным оверлеем Alt+клик наоборот точечно снимает его, террейн не трогая.
-    const cell = pixelToCell(a.map.grid, wx, wy, a.map.width, a.map.height);
-    if (cell) {
-      const key = cellKey(cell.x, cell.y);
-      const active = a.tool;
-      if (active === "road" || active === "river") {
-        const set = active === "road" ? a.cellsRef.current.roads : a.cellsRef.current.rivers;
-        if (set.has(key)) {
-          const before = a.clone(a.cellsRef.current);
-          const draft = a.clone(before);
-          (active === "road" ? draft.roads : draft.rivers).delete(key);
-          a.cellsRef.current = draft;
-          a.setCells(draft);
-          a.push(before);
-        }
-      } else {
-        a.setTerrain(a.cellsRef.current.terrain.get(key) ?? "plain");
-        a.selectTool(
-          a.cellsRef.current.roads.has(key)
-            ? "road"
-            : a.cellsRef.current.rivers.has(key)
-              ? "river"
-              : "brush"
-        );
+    const cell = pixelToCell(g.grid, wx, wy, g.width, g.height);
+    if (!cell) return;
+    const active = ctx.tool;
+    if (active === "road" || active === "river") {
+      const r = removeCellsFromEditablePath(doc, active, [{ x: cell.x, y: cell.y }]);
+      if (!r.ok) {
+        ctx.setActionError(r.issues[0]?.message ?? "Не удалось снять путь.");
+        return;
       }
+      if (!r.changed) return;
+      commit(ctx, doc, r.document, true);
+      return;
     }
+    const layerId = terrainLayerId(doc);
+    if (!layerId) return;
+    const read = readTerrainMaterialAt(doc, layerId, cell.x, cell.y);
+    if (!read.ok) return;
+    const code = codeOfMaterial(read.material);
+    if (code === null) {
+      ctx.setActionError("Этот материал кистью не покрасить.");
+      return;
+    }
+    ctx.setTerrain(code);
+    ctx.selectTool(pickOverlayTool(doc, cell.x, cell.y));
   }
 
   return { paintAt, singleAction, altPick };
+}
+
+// Оверлей под курсором: дорога — верхняя, потом река, иначе кисть.
+function pickOverlayTool(doc: MapDocumentV5, x: number, y: number): PaintTool {
+  let river = false;
+  for (const layer of doc.layers) {
+    if (layer.kind !== "path") continue;
+    for (const p of layer.paths) {
+      if (p.geometry.type !== "cell-network") continue;
+      if (p.kind !== "road" && p.kind !== "river") continue;
+      if (p.geometry.cells.some((c) => c.x === x && c.y === y)) {
+        if (p.kind === "road") return "road";
+        river = true;
+      }
+    }
+  }
+  return river ? "river" : "brush";
 }
 
 export type PaintTools = ReturnType<typeof createPaintTools>;

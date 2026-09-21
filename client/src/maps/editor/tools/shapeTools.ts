@@ -1,26 +1,33 @@
-import { cellKey } from "../../grid";
-import type { MapFull } from "../../mapTypes";
-import type { MapCells } from "../../render";
+import { applyTerrainCellEdits } from "../../core/mutations/terrain";
+import type { MapDocumentV5 } from "../../core/types";
+import type { MapGeometry } from "../hooks/useMapSelection";
+import { addCellsToEditablePath, removeCellsFromEditablePath } from "./v5paths";
 
-// Шейпы (Фаза 1, Tool Controller): прямоугольное применение содержимым.
+// Шейпы (Фаза 2G): прямоугольное применение содержимым.
 // Правила: terrain rect / road rect / river rect / wall rect / eraser rect —
-// применением на клетки ректа одним шагом; room rect — НЕ созданием, а
-// запросом onRequestRoomCreate (модалка и draft формы остаются у UI).
+// применением на клетки ректа одним шагом через V5 mutations; room rect —
+// НЕ созданием, а запросом onRequestRoomCreate (модалка и draft формы у UI).
 
 export type ShapeContent = "room" | "terrain" | "road" | "river" | "wall" | "eraser";
 
 interface CreateShapeToolsArgs {
-  map: MapFull | null;
+  geom: MapGeometry | null;
   shapeContent: ShapeContent;
   terrain: string;
   shapeAnchor: { x: number; y: number } | null;
   setShapeAnchor: (v: { x: number; y: number } | null) => void;
   setRectPreview: (r: { x: number; y: number; w: number; h: number } | null) => void;
-  cellsRef: { current: MapCells };
-  setCells: (c: MapCells) => void;
-  push: (before: MapCells) => void;
-  clone: (c: MapCells) => MapCells;
+  documentRef: { current: MapDocumentV5 | null };
+  setDocument: (d: MapDocumentV5) => void;
+  push: (before: MapDocumentV5) => void;
+  newId: () => string;
+  setActionError: (e: string | null) => void;
   onRequestRoomCreate: (rect: { x: number; y: number; w: number; h: number }) => void;
+}
+
+function terrainLayerId(doc: MapDocumentV5): string | null {
+  const l = doc.layers.find((x) => x.kind === "terrain");
+  return l ? l.id : null;
 }
 
 export function createShapeTools(a: CreateShapeToolsArgs) {
@@ -54,7 +61,8 @@ export function createShapeTools(a: CreateShapeToolsArgs) {
   // Шейп-прямоугольник: комната — запросом в модалку, остальное — применением
   // на клетки ректа одним шагом (террейн — текущий, оверлеи — поверх, ластик — чистка).
   function apply(pa: { x: number; y: number }, pb: { x: number; y: number }) {
-    if (!a.map) return;
+    const doc = a.documentRef.current;
+    if (!doc) return;
     const x0 = Math.min(pa.x, pb.x);
     const y0 = Math.min(pa.y, pb.y);
     const x1 = Math.max(pa.x, pb.x);
@@ -64,45 +72,79 @@ export function createShapeTools(a: CreateShapeToolsArgs) {
       a.onRequestRoomCreate({ x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 });
       return;
     }
-    const before = a.clone(a.cellsRef.current);
-    const draft = a.clone(before);
-    let changed = false;
+    const rectCells: Array<{ x: number; y: number }> = [];
     for (let y = y0; y <= y1; y++) {
       for (let x = x0; x <= x1; x++) {
-        const k = cellKey(x, y);
-        if (content === "road" || content === "river") {
-          const set = content === "road" ? draft.roads : draft.rivers;
-          if (!set.has(k)) {
-            set.add(k);
-            changed = true;
-          }
-        } else if (content === "eraser") {
-          if ((draft.terrain.get(k) ?? "plain") !== "plain") {
-            draft.terrain.delete(k);
-            changed = true;
-          }
-          if (draft.roads.has(k)) {
-            draft.roads.delete(k);
-            changed = true;
-          }
-          if (draft.rivers.has(k)) {
-            draft.rivers.delete(k);
-            changed = true;
-          }
-        } else {
-          const t = content === "wall" ? "wall" : a.terrain;
-          if ((draft.terrain.get(k) ?? "plain") !== t) {
-            if (t === "plain") draft.terrain.delete(k);
-            else draft.terrain.set(k, t);
-            changed = true;
-          }
-        }
+        rectCells.push({ x, y });
       }
     }
-    if (!changed) return;
-    a.cellsRef.current = draft;
-    a.setCells(draft);
-    a.push(before);
+    if (content === "road" || content === "river") {
+      const r = addCellsToEditablePath(doc, content, rectCells, a.newId);
+      if (!r.ok) {
+        a.setActionError(r.issues[0]?.message ?? "Не удалось положить путь.");
+        return;
+      }
+      if (!r.changed) return;
+      a.documentRef.current = r.document;
+      a.setDocument(r.document);
+      a.push(doc);
+      return;
+    }
+    const layerId = terrainLayerId(doc);
+    if (!layerId) {
+      a.setActionError("В документе нет terrain-слоя.");
+      return;
+    }
+    if (content === "eraser") {
+      const def = doc.layers.find((l) => l.id === layerId);
+      const defaultMaterial =
+        def && def.kind === "terrain" ? def.defaultMaterial : { type: "builtin" as const, key: "terrain/plain" };
+      const r = applyTerrainCellEdits(
+        doc,
+        layerId,
+        rectCells.map((c) => ({ ...c, material: defaultMaterial })),
+      );
+      let next = doc;
+      let changed = false;
+      if (!r.ok) {
+        a.setActionError(r.issues[0]?.message ?? "Не удалось стереть.");
+        return;
+      }
+      if (r.changed) {
+        next = r.document;
+        changed = true;
+      }
+      for (const kind of ["road", "river"] as const) {
+        const rr = removeCellsFromEditablePath(next, kind, rectCells);
+        if (!rr.ok) {
+          a.setActionError(rr.issues[0]?.message ?? "Не удалось снять путь.");
+          return;
+        }
+        if (rr.changed) {
+          next = rr.document;
+          changed = true;
+        }
+      }
+      if (!changed) return;
+      a.documentRef.current = next;
+      a.setDocument(next);
+      a.push(doc);
+      return;
+    }
+    const t = content === "wall" ? "wall" : a.terrain;
+    const r = applyTerrainCellEdits(
+      doc,
+      layerId,
+      rectCells.map((c) => ({ ...c, material: { type: "builtin" as const, key: `terrain/${t}` } })),
+    );
+    if (!r.ok) {
+      a.setActionError(r.issues[0]?.message ?? "Не удалось применить шейп.");
+      return;
+    }
+    if (!r.changed) return;
+    a.documentRef.current = r.document;
+    a.setDocument(r.document);
+    a.push(doc);
   }
 
   return { tap, startDrag, moveDrag, apply };

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { worldBounds } from "../../grid";
-import type { MapFull } from "../../mapTypes";
+import type { MapGrid } from "../../mapTypes";
 
 // Камера карты (Фаза 1, Этап 1): тот же state и та же математика, что раньше
 // жили инлайном в MapEditorPage. Пределы scale 4..240 — контракт, не менять.
@@ -15,13 +15,20 @@ export const MAP_CAM_MAX_SCALE = 240;
 const MAP_CAM_WHEEL_BASE = 1.0015;
 const MAP_CAM_PERSIST_DEBOUNCE_MS = 500;
 
+export interface CameraMapGeometry {
+  grid: MapGrid;
+  width: number;
+  height: number;
+}
+
 interface UseMapCameraArgs {
-  map: MapFull | null;
+  mapId: number | null;
+  geom: CameraMapGeometry | null;
   wrapRef: { current: HTMLDivElement | null };
   canvasRef: { current: HTMLCanvasElement | null };
 }
 
-export function useMapCamera({ map, wrapRef, canvasRef }: UseMapCameraArgs) {
+export function useMapCamera({ mapId, geom, wrapRef, canvasRef }: UseMapCameraArgs) {
   const [cam, setCam] = useState<Camera>({ scale: 24, ox: 0, oy: 0 });
   const camRef = useRef(cam);
   camRef.current = cam;
@@ -32,10 +39,10 @@ export function useMapCamera({ map, wrapRef, canvasRef }: UseMapCameraArgs) {
   const fitCamera = useCallback(
     (force = false) => {
       const wrap = wrapRef.current;
-      if (!wrap || !map) return;
+      if (!wrap || mapId === null || !geom) return;
       if (!force) {
         try {
-          const raw = localStorage.getItem(`maps.cam.${map.id}`);
+          const raw = localStorage.getItem(`maps.cam.${mapId}`);
           if (raw) {
             const c = JSON.parse(raw) as { scale?: unknown; ox?: unknown; oy?: unknown };
             if (
@@ -52,14 +59,14 @@ export function useMapCamera({ map, wrapRef, canvasRef }: UseMapCameraArgs) {
         }
       } else {
         try {
-          localStorage.removeItem(`maps.cam.${map.id}`);
+          localStorage.removeItem(`maps.cam.${mapId}`);
         } catch {
           // приватный режим — не страшно
         }
       }
       const rect = wrap.getBoundingClientRect();
       if (rect.width < 10 || rect.height < 10) return;
-      const b = worldBounds(map.grid, map.width, map.height);
+      const b = worldBounds(geom.grid, geom.width, geom.height);
       const pad = 24;
       const scale = Math.max(
         4,
@@ -71,7 +78,7 @@ export function useMapCamera({ map, wrapRef, canvasRef }: UseMapCameraArgs) {
         oy: pad + (rect.height - pad * 2 - (b.maxY - b.minY) * scale) / 2 - b.minY * scale,
       });
     },
-    [map]
+    [mapId, geom]
   );
 
   useEffect(() => {
@@ -86,8 +93,8 @@ export function useMapCamera({ map, wrapRef, canvasRef }: UseMapCameraArgs) {
 
   // Д-16: запоминаем камеру (debounce — не пишем на каждый пиксель панорамы).
   useEffect(() => {
-    if (!map) return;
-    const key = `maps.cam.${map.id}`;
+    if (mapId === null) return;
+    const key = `maps.cam.${mapId}`;
     const timer = setTimeout(() => {
       try {
         localStorage.setItem(key, JSON.stringify(cam));
@@ -96,7 +103,7 @@ export function useMapCamera({ map, wrapRef, canvasRef }: UseMapCameraArgs) {
       }
     }, MAP_CAM_PERSIST_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [cam, map?.id]);
+  }, [cam, mapId]);
 
   // Зум кнопками/хоткеями (P0-4): к центру видимого поля, те же пределы,
   // что у зума колесом (4..240).
@@ -174,7 +181,7 @@ export function useMapCamera({ map, wrapRef, canvasRef }: UseMapCameraArgs) {
     };
     canvas.addEventListener("wheel", onWheelNative, { passive: false });
     return () => canvas.removeEventListener("wheel", onWheelNative);
-  }, [map, zoomAt]);
+  }, [mapId, geom, zoomAt]);
 
   return { cam, setCam, camRef, fitCamera, zoomBy, zoomAt, toWorld, touchToWorld, toScreen };
 }

@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import type { GeneratorParams } from "../../generate";
 import type { MapFull } from "../../mapTypes";
-import type { MapCells } from "../../render";
+import type { MapDocumentV5 } from "../../core/types";
 
-// Автосохранение карты (Фаза 1, Этап Autosave): тот же механизм, что раньше
-// жил инлайном в MapEditorPage. Приоритет — гарантии, а не размер хука:
-// debounce 800ms, эталон нормализованного состояния, seq-защита от гонок,
-// thumbnail throttle 2.5s, dirty/error/retry, beforeunload, corrupt-блок.
-// Транспорт (PUT) и рендер миниатюры приходят колбэками — хук их не знает.
+// Автосохранение карты (Фаза 2G: value = MapDocumentV5 вместо MapCells).
+// Механизм — тот же, что раньше: debounce 800ms, эталон нормализованного
+// состояния (canonical serialization), seq-защита от гонок, thumbnail
+// throttle 2.5s, dirty/error/retry, beforeunload, corrupt-блок.
+// Транспорт (PUT с `document`) и рендер миниатюры приходят колбэками.
 
 // KNOWN QUIRKS (техдолг Фазы 1, НЕ исправлять здесь — зафиксировано
 // владельцем после Этапа Autosave; менять только отдельным решением):
@@ -26,7 +26,7 @@ export interface MapSaveStatus {
 }
 
 export interface MapSaveBody {
-  cells: string;
+  document: string;
   thumbnail: string | null;
   seed: number;
   sea: number;
@@ -36,14 +36,16 @@ export interface MapSaveBody {
 
 interface UseMapAutosaveArgs {
   map: MapFull | null;
-  cells: MapCells;
+  value: MapDocumentV5 | null;
   params: GeneratorParams;
-  serializeCells: (c: MapCells) => string;
+  serialize: (v: MapDocumentV5) => string;
   save: (mapId: number, body: MapSaveBody) => Promise<unknown>;
-  buildThumbnail: (m: MapFull, live: MapCells) => string | null;
+  buildThumbnail: (m: MapFull, live: MapDocumentV5) => string | null;
   onSaved?: (mapId: number) => void;
   debounceMs?: number;
   thumbnailThrottleMs?: number;
+  /** Unsupported V5 (§57 ТЗ): автосейв заблокирован независимо от corrupt-блока. */
+  disabled?: boolean;
 }
 
 export const MAP_AUTOSAVE_DEBOUNCE_MS = 800;
@@ -51,35 +53,37 @@ export const MAP_AUTOSAVE_THUMB_THROTTLE_MS = 2500;
 
 export function useMapAutosave({
   map,
-  cells,
+  value,
   params,
-  serializeCells,
+  serialize,
   save,
   buildThumbnail,
   onSaved,
   debounceMs = MAP_AUTOSAVE_DEBOUNCE_MS,
   thumbnailThrottleMs = MAP_AUTOSAVE_THUMB_THROTTLE_MS,
+  disabled = false,
 }: UseMapAutosaveArgs) {
   const [status, setStatus] = useState<MapSaveStatus>({ kind: "saved", at: "" });
   // P1-7: после битого blob автоматический save запрещён до явного разрешения.
+  // На 2G сюда же входит unsupported V5 (§57 ТЗ): валиден, но редактор
+  // его не умеет — сохранять нельзя.
   const [blocked, setBlocked] = useState(false);
-  // Эталон последнего сохранённого — в нормализованной форме (порядок
-  // ключей/пробелы сырого blob'а иначе давали бы ложное «изменено»).
+  // Эталон последнего сохранённого — canonical serialization (§53 ТЗ).
   const etalonRef = useRef<string>("");
   // Версии против гонки (P1-6): два overlapping PUT — побеждает поздний
   // мазок, а не поздний ответ; устаревший ответ игнорируется по seq.
   const saveSeqRef = useRef(0);
   const pendingSeqRef = useRef(0);
   // Кэш миниатюры (P1-5): печь canvas+toDataURL на каждый мазок дорого.
-  const thumbCacheRef = useRef<{ cells: string; thumb: string | null; at: number }>({
-    cells: "",
+  const thumbCacheRef = useRef<{ doc: string; thumb: string | null; at: number }>({
+    doc: "",
     thumb: null,
     at: 0,
   });
-  // Живое состояние для retry (same-tick, как раньше cellsRef): retry шлёт
+  // Живое состояние для retry (same-tick, как раньше documentRef): retry шлёт
   // актуальное, а не snapshot из debounce-замыкания.
-  const liveRef = useRef({ cells, params });
-  liveRef.current = { cells, params };
+  const liveRef = useRef({ value, params });
+  liveRef.current = { value, params };
   // Транспорт — через ref: в эффектах от него не зависим (как раньше от
   // модульных write/renderThumbnail), всегда вызываем свежий.
   const transportRef = useRef({ save, buildThumbnail, onSaved });
@@ -88,21 +92,21 @@ export function useMapAutosave({
   const stampedNow = () =>
     new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 
-  const keyOf = (cellsStr: string, paramsStr: string) => `${cellsStr}|${paramsStr}`;
+  const keyOf = (docStr: string, paramsStr: string) => `${docStr}|${paramsStr}`;
 
-  function pickThumbnail(m: MapFull, cellsStr: string, live: MapCells): string | null {
+  function pickThumbnail(m: MapFull, docStr: string, live: MapDocumentV5): string | null {
     const cached = thumbCacheRef.current;
-    // Клетки те же — шлём готовое; строчим быстрее throttle — шлём null
+    // Документ тот же — шлём готовое; строчим быстрее throttle — шлём null
     // (сервер COALESCE оставляет старое превью); на паузе — печём свежее.
-    if (cellsStr === cached.cells) return cached.thumb;
+    if (docStr === cached.doc) return cached.thumb;
     if (Date.now() - cached.at < thumbnailThrottleMs) return null;
     const thumb = transportRef.current.buildThumbnail(m, live);
-    thumbCacheRef.current = { cells: cellsStr, thumb, at: Date.now() };
+    thumbCacheRef.current = { doc: docStr, thumb, at: Date.now() };
     return thumb;
   }
 
   function sendSave(payload: {
-    cellsStr: string;
+    docStr: string;
     paramsStr: string;
     thumb: string | null;
     params: GeneratorParams;
@@ -113,12 +117,12 @@ export function useMapAutosave({
     setStatus((s) => ({ ...s, kind: "saving" }));
     const mapId = map.id;
     transportRef.current
-      .save(mapId, { cells: payload.cellsStr, thumbnail: payload.thumb, ...payload.params })
+      .save(mapId, { document: payload.docStr, thumbnail: payload.thumb, ...payload.params })
       .then(() => {
         // Список карт (дата, миниатюра) — и в других окнах; привязки не задеты.
         transportRef.current.onSaved?.(mapId);
         if (pendingSeqRef.current !== seq) return;
-        etalonRef.current = keyOf(payload.cellsStr, payload.paramsStr);
+        etalonRef.current = keyOf(payload.docStr, payload.paramsStr);
         setStatus({ kind: "saved", at: stampedNow() });
       })
       .catch(() => {
@@ -127,46 +131,46 @@ export function useMapAutosave({
       });
   }
 
-  // Debounce; пропуск, если клетки равны последним сохранённым — так загрузка
-  // и undo-в-ту-же-точку ничего не шлют.
+  // Debounce; пропуск, если документ равен последнему сохранённому — так
+  // загрузка и undo-в-ту-же-точку ничего не шлют.
   useEffect(() => {
-    if (!map) return;
-    if (blocked) return; // P1-7: поверх битого — только с явного разрешения
-    const cellsStr = serializeCells(cells);
+    if (!map || !value) return;
+    if (blocked || disabled) return; // P1-7 + §57: поверх битого/unsupported — только с явного разрешения (unsupported — никогда)
+    const docStr = serialize(value);
     const paramsStr = JSON.stringify(params);
-    if (keyOf(cellsStr, paramsStr) === etalonRef.current) return;
+    if (keyOf(docStr, paramsStr) === etalonRef.current) return;
     setStatus((s) => (s.kind === "saving" ? s : { kind: "dirty", at: s.at }));
-    const snapshot = { live: cells, params };
+    const snapshot = { live: value, params };
     const timer = setTimeout(() => {
       if (!map) return;
       sendSave({
-        cellsStr,
+        docStr,
         paramsStr,
-        thumb: pickThumbnail(map, cellsStr, snapshot.live),
+        thumb: pickThumbnail(map, docStr, snapshot.live),
         params: snapshot.params,
       });
     }, debounceMs);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cells, params, map, blocked]);
+  }, [value, params, map, blocked, disabled]);
 
   // Повтор сохранения вручную (P0-1): при kind === "error" следующий мазок
   // и так повторит, но закрытие вкладки до него теряло данные — поэтому
   // рядом со статусом есть кнопка «Повторить», а уход с несохранённым
   // тормозит beforeunload.
   function retry() {
-    if (!map) return;
-    const live = liveRef.current;
-    const cellsStr = serializeCells(live.cells);
+    if (!map || !liveRef.current.value) return;
+    const live = liveRef.current as { value: MapDocumentV5; params: GeneratorParams };
+    const docStr = serialize(live.value);
     const paramsStr = JSON.stringify(live.params);
-    if (keyOf(cellsStr, paramsStr) === etalonRef.current) {
+    if (keyOf(docStr, paramsStr) === etalonRef.current) {
       setStatus({ kind: "saved", at: stampedNow() });
       return;
     }
     sendSave({
-      cellsStr,
+      docStr,
       paramsStr,
-      thumb: pickThumbnail(map, cellsStr, live.cells),
+      thumb: pickThumbnail(map, docStr, live.value),
       params: live.params,
     });
   }
@@ -190,13 +194,14 @@ export function useMapAutosave({
   }
 
   // Данные с сервера применены: эталон + статус + corrupt-блок одним шагом.
-  function markLoaded(cellsStr: string, paramsStr: string, corrupt: boolean) {
-    etalonRef.current = keyOf(cellsStr, paramsStr);
+  function markLoaded(docStr: string, paramsStr: string, corrupt: boolean) {
+    etalonRef.current = keyOf(docStr, paramsStr);
     setStatus({ kind: "saved", at: "" });
     setBlocked(corrupt);
   }
 
   // Явное разрешение из баннера: «Понял, разрешаю перезапись».
+  // Unsupported V5 не разблокирует (его сохранять нельзя, §57 ТЗ).
   function allowOverwrite() {
     setBlocked(false);
   }

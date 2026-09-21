@@ -73,6 +73,26 @@ const DOOR_EDGE_OFFSET: Record<MapDoor["edge"], Vec2> = {
   e: { x: 0.5, y: 0 },
 };
 
+/**
+ * Legacy edge→world для инструментов (2G): середина ребра клетки.
+ * Та же математика, что миграция (§D.1 ADR); без реконструкции из V5.
+ */
+export function legacyDoorWorldPosition(
+  grid: MapGrid,
+  x: number,
+  y: number,
+  edge: MapDoor["edge"],
+): Vec2 {
+  const c = cellCenter(grid, x, y);
+  const off = DOOR_EDGE_OFFSET[edge];
+  return { x: c.cx + off.x, y: c.cy + off.y };
+}
+
+/** n=0, e=90, s=180, w=270 (clockwise от севера). */
+export function legacyEdgeOrientation(edge: MapDoor["edge"]): number {
+  return DOOR_ORIENTATION[edge];
+}
+
 function parseCellKey(key: string): { x: number; y: number } | null {
   const m = /^(\d+),(\d+)$/.exec(key);
   if (!m) return null;

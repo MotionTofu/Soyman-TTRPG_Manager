@@ -94,6 +94,8 @@ export { parseMapDocument, type ParseResult } from "./parse";
 
 export {
   migrateLegacyMap,
+  legacyDoorWorldPosition,
+  legacyEdgeOrientation,
   type LegacyMapInput,
   type LegacyMigrationResult,
   type LegacyMigrationWarning,
@@ -126,6 +128,17 @@ export {
   type ShadowAuditStatus,
   type ShadowAuditTiming,
 } from "./shadowAudit";
+
+export {
+  assessCurrentEditorCompatibility,
+  type CompatibilityIssue,
+  type EditorCompatibility,
+} from "./compatibility";
+
+export {
+  clearEditableContent,
+  resizeGridDocument,
+} from "./mutations/document";
 
 export {
   applyTerrainCellEdits,

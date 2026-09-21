@@ -1,11 +1,11 @@
-import type { ObjSel } from "../hooks/useMapSelection";
-import type { MapCells } from "../../render";
+import type { V5Selection } from "../hooks/useMapSelection";
+import type { MapDocumentV5 } from "../../core/types";
 import type { PaintTool } from "../editorTypes";
 
-// Контракт tools { paint, ruler, wall, shape, label, objects } (Фаза 1):
-// нейтральное место. useMapTools его собирает, useMapInput потребляет.
-// Доменные действия инструментов реализует Tool Controller; Input только
-// маршрутизирует. Поведение и runtime не меняются — только владелец типа.
+// Контракт tools { paint, ruler, wall, shape, label, objects } (Фаза 2G):
+// вместо MapCells — documentRef/setDocument/push/commit по V5.
+// useMapTools его собирает, useMapInput потребляет. Клеточные входы
+// (MapInputCell) сохранены: snapping остаётся grid-based.
 
 export interface MapInputCell {
   x: number;
@@ -26,6 +26,7 @@ export interface MapInputTools {
   wall: {
     tapVertex: (wx: number, wy: number) => void;
     hoverLive: (wx: number, wy: number) => void;
+    finishWallLine: (includeLive: boolean) => void;
   };
   shape: {
     startDrag: (cell: MapInputCell) => void;
@@ -37,9 +38,9 @@ export interface MapInputTools {
     open: (x: number, y: number) => void;
   };
   objects: {
-    openPanel: (sel: NonNullable<ObjSel>) => void;
+    openPanel: (sel: NonNullable<V5Selection>) => void;
     create: (cell: MapInputCell, wx: number, wy: number) => void;
     roomRect: (rect: { x: number; y: number; w: number; h: number }) => void;
-    cancelDrag: (before: MapCells) => void;
+    cancelDrag: (before: MapDocumentV5) => void;
   };
 }

@@ -3,7 +3,7 @@ import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MapViewport } from "./MapViewport";
 import { renderMap } from "../../render";
-import type { MapCells } from "../../render";
+import type { MapRenderModel } from "../../renderModel";
 import type { MapFull } from "../../mapTypes";
 
 vi.mock("../../render", () => ({
@@ -27,18 +27,18 @@ const MAP = {
   cell_lore: "1 км",
 } as unknown as MapFull;
 
-const CELLS = {
-  terrain: new Map(),
+const CELLS_MODEL: MapRenderModel = {
+  terrain: { defaultCode: "plain", entries: new Map() },
   roads: new Set(),
   rivers: new Set(),
   labels: [],
   rooms: [],
   doors: [],
-  traps: [],
+  traps: [{ id: "t-1", position: { x: 1.5, y: 1.5 }, kind: "pit" }],
   markers: [],
   start: null,
   finish: null,
-} as unknown as MapCells;
+};
 
 function makeCtx() {
   return {
@@ -66,13 +66,13 @@ function baseProps(input?: Partial<ViewportProps["input"]>): ViewportProps {
     wrapRef: { current: null },
     canvasRef: { current: null },
     map: MAP,
-    cells: CELLS,
+    model: CELLS_MODEL,
     cam: { scale: 10, ox: 0, oy: 0 },
     view: { showGrid: true, showCoords: false, previewAsPlayer: false, canEdit: true },
     tool: { tool: "brush", brushSize: 1, wallLineMode: false },
     overlays: {
       hover: null,
-      selectedKey: null,
+      selectedId: null,
       ruler: null,
       wallDraft: null,
       wallLive: null,
@@ -194,12 +194,12 @@ describe("MapViewport", () => {
     expect(h.canvas.style.cursor).toBe("default");
   });
 
-  it("5-9. изменения cells/cam/hover/selection/ruler/wall/rect вызывают render", () => {
+  it("5-9. изменения model/cam/hover/selection/ruler/wall/rect вызывают render", () => {
     const h = setup();
     const n0 = calls();
     expect(n0).toBeGreaterThan(0);
     act(() => {
-      h.show({ cells: { ...CELLS } as MapCells });
+      h.show({ model: { ...CELLS_MODEL } });
     });
     act(() => {
       h.show({ cam: { scale: 11, ox: 0, oy: 0 } });
@@ -208,7 +208,7 @@ describe("MapViewport", () => {
       h.show({ overlays: { ...h.props.overlays, hover: "1,1" } });
     });
     act(() => {
-      h.show({ overlays: { ...h.props.overlays, selectedKey: "trap:0" } });
+      h.show({ overlays: { ...h.props.overlays, selectedId: "t-1" } });
     });
     act(() => {
       h.show({
@@ -265,7 +265,7 @@ describe("MapViewport", () => {
     try {
       const h = setup();
       act(() => {
-        h.show({ cells: { ...CELLS } as MapCells });
+        h.show({ model: { ...CELLS_MODEL } });
       });
       expect(h.canvas.width).toBe(1600);
       expect(h.canvas.height).toBe(1200);
@@ -276,7 +276,7 @@ describe("MapViewport", () => {
     }
   });
 
-  it("13 (2D). viewport передаёт renderMap read-модель, а не cells", () => {
+  it("13 (2G). viewport передаёт renderMap model + selectedId", () => {
     setup();
     const opts = lastOpts();
     expect("model" in opts).toBe(true);
@@ -287,6 +287,7 @@ describe("MapViewport", () => {
         roads: expect.any(Set),
         rivers: expect.any(Set),
       }),
+      selectedId: null,
     });
   });
 });

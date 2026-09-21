@@ -4,8 +4,9 @@
 // токенов текущей темы, читаются один раз за кадр.
 
 import { cellCenter, cellCorners, coordLabel, neighbors, worldBounds } from "./grid";
-import { createLegacyRenderModel } from "./renderModel";
+import { createV5RenderModel } from "./renderModel";
 import type { MapRenderModel } from "./renderModel";
+import type { MapDocumentV5 } from "./core/types";
 import type { MapGrid, MapScale } from "./mapTypes";
 import { MAP_TERRAIN_CODES } from "@shared/maps/core/literals";
 import {
@@ -627,8 +628,8 @@ export interface RenderOptions {
   chrome: MapChrome;
   // Взгляд игрока (пакет A §6): секретное скрыто, trapped видна обычной дверью.
   playerView: boolean;
-  // Выбранный объект для подсветки (`door:3`, `trap:0`, `room:1`, `start`, `finish`).
-  selectedKey: string | null;
+  // Выбранный объект для подсветки — stable EntityId (Фаза 2G, §46).
+  selectedId: string | null;
 }
 
 // Дверь глазами смотрящего: секрет → скрыть, trapped игроку → обычная.
@@ -644,7 +645,7 @@ export function doorForView(
 }
 
 export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvasH: number, o: RenderOptions): void {
-  const { grid, width, height, model, scale, ox, oy, showGrid, showCoords, hover, chrome, playerView, selectedKey } = o;
+  const { grid, width, height, model, scale, ox, oy, showGrid, showCoords, hover, chrome, playerView, selectedId } = o;
   const fonts = readCanvasFonts();
   ctx.save();
   ctx.clearRect(0, 0, canvasW, canvasH);
@@ -921,7 +922,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     // формулы сведены к прежним поклеточным один в один (px±0.5 = x/x+1).
     // На гексах дверей нет (создание заблокировано), API-инъекцию молча
     // не рисуем, чтобы не врать геометрией.
-    for (const [di, d] of model.doors.entries()) {
+    for (const d of model.doors) {
       if (grid !== "square") break;
       const px = d.position.x;
       const py = d.position.y;
@@ -966,7 +967,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
         ctx.fillText(MAP_DOOR_GLYPHS[kind], qx + pw / 2, qy + ph / 2 + 0.5);
       }
       // Выбранная дверь — чернильной обводкой (координатная отметка, §1.8).
-      if (selectedKey === `door:${di}`) {
+      if (selectedId !== null && selectedId === d.id) {
         ctx.lineWidth = 2;
         ctx.strokeStyle = chrome.ink;
         ctx.strokeRect(qx - 2.5, qy - 2.5, pw + 5, ph + 5);
@@ -976,7 +977,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
 
     // Ловушки: плашка + символ. Игрок их не видит.
     if (!playerView) {
-      for (const [ti, t] of model.traps.entries()) {
+      for (const t of model.traps) {
         const tx = t.position.x;
         const ty = t.position.y;
         if (!Number.isFinite(tx) || !Number.isFinite(ty)) continue;
@@ -997,7 +998,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
           ctx.textBaseline = "middle";
           ctx.fillText(MAP_TRAP_GLYPHS[t.kind], sx + ss / 2, sy + ss / 2 + 0.5);
         }
-        if (selectedKey === `trap:${ti}`) {
+        if (selectedId !== null && selectedId === t.id) {
           ctx.lineWidth = 2;
           ctx.strokeStyle = chrome.ink;
           ctx.strokeRect(sx - 2.5, sy - 2.5, ss + 5, ss + 5);
@@ -1008,7 +1009,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
 
     // Маркеры (сундуки, алтари): видны всем, включая игрока. Сундук — плашка
     // с крышкой, алтарь — круг с точкой. Выбранный — чернильной обводкой.
-    for (const [mi, mk] of model.markers.entries()) {
+    for (const mk of model.markers) {
       const mx0 = mk.position.x;
       const my0 = mk.position.y;
       if (!Number.isFinite(mx0) || !Number.isFinite(my0)) continue;
@@ -1108,7 +1109,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
         ctx.fillRect(cx - ms * 0.14, my + ms * 0.05, ms * 0.28, ms * 0.9);
         ctx.strokeRect(cx - ms * 0.14, my + ms * 0.05, ms * 0.28, ms * 0.9);
       }
-      if (selectedKey === `marker:${mi}`) {
+      if (selectedId !== null && selectedId === mk.id) {
         ctx.lineWidth = 2;
         ctx.strokeStyle = chrome.ink;
         ctx.strokeRect(mx - 2.5, my - 2.5, ms + 5, ms + 5);
@@ -1154,7 +1155,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
         ctx.fillStyle = key === "start" ? "#3dd68c" : chrome.ink;
         ctx.fillText(key === "start" ? "СТАРТ" : "ФИНИШ", cxp, cyp + scale * 0.4);
       }
-      if (selectedKey === key) {
+      if (selectedId !== null && selectedId === p.id) {
         ctx.lineWidth = 2;
         ctx.strokeStyle = chrome.ink;
         ctx.strokeRect(cxp - scale / 2 - 2.5, cyp - scale / 2 - 2.5, scale + 5, scale + 5);
@@ -1306,11 +1307,12 @@ export function serializeCells(cells: MapCells): string {
 
 // Миниатюра для списка: тот же рендер, ужатый в ~320 px. Битый canvas
 // (приватный режим и т.п.) — null, список покажет заглушку.
+// Фаза 2G: V5 document → V5 RenderModel (§49 ТЗ), без LegacyRenderModel.
 export function renderThumbnail(
   grid: MapGrid,
   width: number,
   height: number,
-  cells: MapCells,
+  doc: MapDocumentV5,
   chrome: MapChrome
 ): string | null {
   try {
@@ -1329,7 +1331,7 @@ export function renderThumbnail(
       grid,
       width,
       height,
-      model: createLegacyRenderModel(grid, width, height, cells),
+      model: createV5RenderModel(doc).model,
       scale,
       ox: -wb.minX * scale,
       oy: -wb.minY * scale,
@@ -1339,7 +1341,7 @@ export function renderThumbnail(
       chrome,
       // Миниатюра — мастерская (полная): для игрока список и так фильтруется.
       playerView: false,
-      selectedKey: null,
+      selectedId: null,
     });
     return canvas.toDataURL("image/png");
   } catch {
