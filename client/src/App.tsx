@@ -82,6 +82,11 @@ const PlayerDiariesPage = lazy(() =>
   import("./pages/PlayerDiariesPage").then((m) => ({ default: m.PlayerDiariesPage }))
 );
 const PlayerCampaignPage = lazy(() => import("./pages/PlayerCampaignPage").then((m) => ({ default: m.PlayerCampaignPage })));
+// Shared read-only character (phase D2.1): capability link, no login —
+// deliberately outside LoginGate AND AppShell, like the show windows.
+const ShareCharacterPage = lazy(() =>
+  import("./pages/ShareCharacterPage").then((m) => ({ default: m.ShareCharacterPage }))
+);
 
 // GM tokens see the full CampaignsListPage/CampaignDetailPage (unfiltered
 // admin data); player tokens get the read-only "what the GM revealed"
@@ -151,19 +156,33 @@ function NotFoundPage() {
 function App() {
   return (
     <BrowserRouter>
-      <LoginGate>
-        <RealtimeListener />
-        <ShowEntriesListener />
-        <SaveNotices />
-        <DataLayerSync />
-        <MentionPreviewRoot />
-        <ErrorBoundary>
-          <Suspense fallback={<Loading full />}>
-          <Routes>
-            {/* Outside <AppShell> on purpose — a popped-out panel window
+      <Routes>
+        <Route
+          path="/share/character/:token"
+          element={
+            <ErrorBoundary>
+              <Suspense fallback={<Loading full />}>
+                <ShareCharacterPage />
+              </Suspense>
+            </ErrorBoundary>
+          }
+        />
+        <Route
+          path="*"
+          element={
+            <LoginGate>
+              <RealtimeListener />
+              <ShowEntriesListener />
+              <SaveNotices />
+              <DataLayerSync />
+              <MentionPreviewRoot />
+              <ErrorBoundary>
+                <Suspense fallback={<Loading full />}>
+                  <Routes>
+                    {/* Outside <AppShell> on purpose — a popped-out panel window
                 (see sessionLivePanels.tsx) has no room to spare for the
                 sidebar/search/audio-bar chrome that wraps every other route. */}
-            <Route path="/sessions/:id/live/panel/:panelKey" element={<SessionPanelPopoutPage />} />
+                    <Route path="/sessions/:id/live/panel/:panelKey" element={<SessionPanelPopoutPage />} />
             {/* Окно показа игрокам — второй монитор: только кадр 16:9 на
                 чёрном, без chrome оболочки (см. PresentationShowPage). */}
             <Route path="/sessions/:id/live/show" element={<PresentationShowPage />} />
@@ -221,11 +240,14 @@ function App() {
               <Route path="/invitations" element={<InvitationsPage />} />
               <Route path="/archive" element={<ArchivePage />} />
               <Route path="*" element={<NotFoundPage />} />
-            </Route>
-          </Routes>
-        </Suspense>
-        </ErrorBoundary>
-      </LoginGate>
+              </Route>
+              </Routes>
+            </Suspense>
+          </ErrorBoundary>
+          </LoginGate>
+        }
+        />
+      </Routes>
     </BrowserRouter>
   );
 }

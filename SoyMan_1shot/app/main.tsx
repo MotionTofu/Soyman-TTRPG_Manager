@@ -10,12 +10,13 @@ import { SaveNotices } from '../../client/src/components/SaveNotices';
 import { applyTheme, findTheme } from '../../client/src/themes';
 import { emptyDndCharacter } from '@shared/dnd/normalize';
 import type { DndCharacterData } from '@shared/dnd/types';
-import { listCharacters, getCharacter, createCharacter, saveCharacter, importPortableRecord, updatePortableCharacter, archiveCharacter, restoreCharacter, deleteCharacter, duplicateCharacter, currentCatalog, setCurrentCatalog, hasCatalog, installCatalogRecord, getCatalogPreviews, saveCatalogPreviews, listCatalogRecords, deleteCatalogAndPreviews, saveCatalog, getCatalog, getSyncCredential, saveSyncCredential, clearSyncCredential, getSyncMeta, listSyncMeta, saveSyncMeta, parseCharacterContent, type Character, type Catalog, type CatalogPreviewRecord, type SyncCredential, type CharacterSyncMeta } from './repository';
+import { listCharacters, getCharacter, createCharacter, saveCharacter, importPortableRecord, updatePortableCharacter, archiveCharacter, restoreCharacter, deleteCharacter, duplicateCharacter, currentCatalog, setCurrentCatalog, hasCatalog, installCatalogRecord, getCatalogPreviews, saveCatalogPreviews, listCatalogRecords, deleteCatalogAndPreviews, saveCatalog, getCatalog, getSyncCredential, saveSyncCredential, clearSyncCredential, getSyncMeta, listSyncMeta, saveSyncMeta, parseCharacterContent, subscribeCharacterCommits, getAutoSyncEnabled, setAutoSyncEnabled, getShareTokens, saveShareToken, dropShareToken, type Character, type Catalog, type CatalogPreviewRecord, type SyncCredential, type CharacterSyncMeta } from './repository';
 import { activeCharacters, archivedCharacters, canDuplicate, chainSaveOperation, displayName, wizardDraftKey } from './library.mjs';
 import { createTabSync, decideRemoteUpdate, type TabSyncEvent } from './tab-sync.mjs';
 import { parsePortableHtml, decidePortableImport, isCharacterUid, PORTABLE_MAX_HTML_BYTES } from './portable-import.mjs';
-import { normalizeApiBase, isSyncCredential, buildPairingLink, parsePairingLink, createSyncSpace, createPairing, exchangePairing, fetchSyncStatus, disconnectSyncDevice, listRemoteCharacters, fetchRemoteSnapshot, pushRemoteSnapshot, headArtifact, putArtifact, fetchArtifact } from './sync.mjs';
+import { normalizeApiBase, isSyncCredential, buildPairingLink, parsePairingLink, createSyncSpace, createPairing, exchangePairing, fetchSyncStatus, disconnectSyncDevice, listRemoteCharacters, fetchRemoteSnapshot, pushRemoteSnapshot, headArtifact, putArtifact, fetchArtifact, listShares, createShare, updateShare, revokeShare } from './sync.mjs';
 import { validateSyncSnapshot, decideCharacterSync, buildSyncV2Parts, pushCharacterV2, catalogArtifactHash, canonicalCatalogSlice, characterSlicePayload, canonicalPortrait, portraitArtifactHash, syncBundleError } from './sync-characters.mjs';
+import { createAutoSync, type AutoSync } from './auto-sync.mjs';
 import { selectCharacter, refreshSelectedCatalogMedia } from './transport';
 import { ensureCurrentCatalog, ensureCatalogPreviews, garbageCollectCatalogs, mergePreviews } from './catalog-manager.mjs';
 import { parseCatalog } from './catalog.mjs';
@@ -64,6 +65,240 @@ function clearLevelUpDraft(characterId: number) {
 function download(value: unknown, name: string) {
   const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' }));
   const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+// Character sync engine (phases D1.2–D1.4), module scope so manual runs and
+// the auto-sync orchestrator share one implementation. Pure engine: no React
+// state inside, only injected hooks (markOnline/refresh). UI decisions
+// (modal vs passive banner, loud vs quiet errors) belong to the callers:
+// interactive runs behave exactly like the D1.3 manual button, background
+// runs stay silent.
+interface SyncConflict {
+  uid: string;
+  name: string;
+  kind: 'both-changed' | 'remote-deleted-unmatched' | 'remote-deleted-local-changed' | 'local-deleted-remote-changed';
+  remoteRevision: number;
+  remoteDeleted: boolean;
+}
+interface EngineResult {
+  pushed: number;
+  pulled: number;
+  conflicts: SyncConflict[];
+  sentBytes: number;
+  errors: string[];
+}
+function conflictEntry(uid: string, name: string, kind: SyncConflict['kind'], remoteRevision: number, remoteDeleted: boolean): SyncConflict {
+  return { uid, name, kind, remoteRevision, remoteDeleted };
+}
+async function findLocalByUid(uid: string): Promise<Character | null> {
+  const all = await listCharacters();
+  const matches = all.filter((c) => c.characterUid === uid);
+  return matches.length === 1 ? matches[0] : null;
+}
+function trackSyncMeta(uid: string, remoteRevision: number, localRevision: number | null, opts: { deletedLocally?: boolean; catalogHash?: string; portraitHash?: string | null } = {}) {
+  return saveSyncMeta({
+    characterUid: uid, remoteRevision, lastSyncedLocalRevision: localRevision,
+    deletedLocally: opts.deletedLocally ?? false, syncedAt: new Date().toISOString(),
+    ...(opts.catalogHash ? { catalogHash: opts.catalogHash } : {}),
+    ...(opts.portraitHash !== undefined ? { portraitHash: opts.portraitHash } : {}),
+  });
+}
+// v2 push: ensure missing artifacts, then the character CAS. Returns sent
+// bytes for the diagnostics line. Tombstones (syncPushDelete) never upload.
+async function syncPush(cred: SyncCredential, uid: string, local: Character, base: number) {
+  const fresh = (await getCharacter(local.id)) ?? local;
+  const catalog = fresh.catalogKey ? await getCatalog(fresh.catalogKey) : null;
+  const meta = (await getSyncMeta(uid)) ?? null;
+  const parts = buildSyncV2Parts(fresh, catalog, uid);
+  const pushed = await pushCharacterV2(
+    {
+      headArtifact: (hash) => headArtifact(cred.apiBase, cred, hash),
+      putArtifact: (hash, kind, payload) => putArtifact(cred.apiBase, cred, hash, kind, payload),
+      putCharacter: (characterUid, body) => pushRemoteSnapshot(cred.apiBase, cred, characterUid, body),
+    },
+    { uid, base, parts, meta },
+  );
+  const confirmed = await getCharacter(local.id);
+  await trackSyncMeta(uid, pushed.revision, confirmed ? confirmed.revision : fresh.revision, {
+    catalogHash: pushed.catalogHash, portraitHash: pushed.portraitHash,
+  });
+  return pushed.uploadedBytes;
+}
+// Local-equivalence probes: reuse bytes we already have instead of
+// re-downloading. No extra blob cache — the pinned catalog and the stored
+// portrait are the cache.
+function localCatalogHash(local: Character | null, catalog: Catalog | null | undefined): string | null {
+  if (!local || !catalog) return null;
+  try {
+    return catalogArtifactHash(canonicalCatalogSlice(characterSlicePayload(local, catalog)));
+  } catch {
+    return null;
+  }
+}
+function localPortraitHash(local: Character | null): string | null {
+  if (!local) return null;
+  const canonical = canonicalPortrait(local.portrait ?? null);
+  return typeof canonical === 'string' ? portraitArtifactHash(canonical) : null;
+}
+async function resolveRemoteCatalog(cred: SyncCredential, uid: string, catalogHash: string, local: Character | null) {
+  if (local?.catalogKey) {
+    const localCatalog = await getCatalog(local.catalogKey);
+    if (localCatalog && localCatalogHash(local, localCatalog) === catalogHash) return localCatalog;
+  }
+  const artifact = await fetchArtifact(cred.apiBase, cred, catalogHash);
+  if (artifact.kind !== 'catalog' || catalogArtifactHash(artifact.payload) !== catalogHash) {
+    throw syncBundleError('damaged', 'Повреждённый снимок персонажа');
+  }
+  return parseCatalog(artifact.payload);
+}
+async function resolveRemotePortrait(cred: SyncCredential, portraitHash: string | null, local: Character | null) {
+  if (portraitHash === null) return null;
+  if (localPortraitHash(local) === portraitHash && local) return local.portrait ?? null;
+  const artifact = await fetchArtifact(cred.apiBase, cred, portraitHash);
+  if (artifact.kind !== 'portrait' || typeof artifact.payload !== 'string'
+    || portraitArtifactHash(artifact.payload) !== portraitHash
+    || canonicalPortrait(artifact.payload) !== artifact.payload) {
+    throw syncBundleError('damaged', 'Повреждённый снимок персонажа');
+  }
+  return artifact.payload as string;
+}
+async function syncPullApply(cred: SyncCredential, uid: string, remoteRevision: number, local: Character | null) {
+  const snapshot = await fetchRemoteSnapshot(cred.apiBase, cred, uid);
+  const parsed = validateSyncSnapshot(snapshot.payload);
+  const content = parseCharacterContent(parsed.content);
+  // v1 (D1.2 grace path): embedded bytes, applied exactly as before.
+  if (parsed.version !== 2) {
+    const catalog = parseCatalog(parsed.catalog);
+    if (!local) {
+      const created = await importPortableRecord({
+        catalog, name: parsed.name, content, portrait: parsed.portrait, characterUid: uid,
+      }, { origin: 'sync-remote' });
+      await trackSyncMeta(uid, remoteRevision, created.revision);
+    } else {
+      const updated = await updatePortableCharacter({
+        id: local.id, name: parsed.name, content, portrait: parsed.portrait, catalog,
+      }, { origin: 'sync-remote' });
+      await trackSyncMeta(uid, remoteRevision, updated.revision);
+    }
+    return;
+  }
+  // v2: fetch only the artifacts we don't already hold.
+  const catalog = await resolveRemoteCatalog(cred, uid, parsed.catalogHash!, local);
+  const portrait = await resolveRemotePortrait(cred, parsed.portraitHash, local);
+  if (!local) {
+    const created = await importPortableRecord({
+      catalog, name: parsed.name, content, portrait, characterUid: uid,
+    }, { origin: 'sync-remote' });
+    await trackSyncMeta(uid, remoteRevision, created.revision, {
+      catalogHash: parsed.catalogHash!, portraitHash: parsed.portraitHash,
+    });
+  } else {
+    const updated = await updatePortableCharacter({
+      id: local.id, name: parsed.name, content, portrait, catalog,
+    }, { origin: 'sync-remote' });
+    await trackSyncMeta(uid, remoteRevision, updated.revision, {
+      catalogHash: parsed.catalogHash!, portraitHash: parsed.portraitHash,
+    });
+  }
+}
+async function syncPullDelete(uid: string, local: Character, remoteRevision: number) {
+  await deleteCharacter(local.id, { origin: 'sync-remote' });
+  try { localStorage.removeItem(wizardDraftKey(local.id)); } catch { /* private mode */ }
+  clearLevelUpDraft(local.id);
+  await trackSyncMeta(uid, remoteRevision, null);
+}
+async function syncPushDelete(cred: SyncCredential, uid: string, base: number) {
+  const res = await pushRemoteSnapshot(cred.apiBase, cred, uid, { baseRevision: base, deleted: true });
+  await trackSyncMeta(uid, res.revision, null);
+}
+// One engine pass over the whole space: explicit manual runs only in D1.3,
+// shared with auto-sync since D1.4. Per character the pure planner decides
+// push/pull/noop/conflict/delete moves from local record + sync metadata +
+// remote index; one conflict never blocks the rest of the space. Throws on
+// fatal errors (unreachable index); per-character failures land in errors.
+async function runSyncEngine(cred: SyncCredential, hooks: { markOnline(): void; refresh(): Promise<void> }): Promise<EngineResult> {
+  let pushed = 0;
+  let pulled = 0;
+  let sentBytes = 0;
+  const conflicts: SyncConflict[] = [];
+  const errors: string[] = [];
+  const index = await listRemoteCharacters(cred.apiBase, cred);
+  hooks.markOnline();
+  const locals = await listCharacters();
+  const metas = new Map((await listSyncMeta()).map((m) => [m.characterUid, m]));
+  const byUid = new Map<string, Character[]>();
+  for (const c of locals) {
+    if (!c.characterUid) continue;
+    const group = byUid.get(c.characterUid) ?? [];
+    group.push(c);
+    byUid.set(c.characterUid, group);
+  }
+  const uids = new Set<string>([
+    ...byUid.keys(),
+    ...index.map((e) => e.characterUid),
+    ...[...metas.keys()].filter((uid) => metas.get(uid)!.deletedLocally),
+  ]);
+  for (const uid of uids) {
+    const group = byUid.get(uid) ?? [];
+    const local = group.length === 1 ? group[0] : null;
+    const meta = metas.get(uid) ?? null;
+    const remote = index.find((e) => e.characterUid === uid) ?? null;
+    const decision = decideCharacterSync({ local, sync: meta, remote, duplicateCount: group.length });
+    try {
+      switch (decision.action) {
+        case 'noop':
+          break;
+        case 'error-duplicate':
+          errors.push(`«${local ? displayName(local) : uid}»: несколько локальных записей с одной identity — синхронизация пропущена.`);
+          break;
+        case 'push':
+          if (!local) throw Error('Внутренняя ошибка синхронизации.');
+          sentBytes += await syncPush(cred, uid, local, decision.base);
+          pushed += 1;
+          break;
+        case 'pull':
+          if (!remote) throw Error('Внутренняя ошибка синхронизации.');
+          await syncPullApply(cred, uid, remote.revision, local);
+          pulled += 1;
+          break;
+        case 'push-delete':
+          await syncPushDelete(cred, uid, decision.base);
+          pushed += 1;
+          break;
+        case 'pull-delete':
+          if (!local || !remote) throw Error('Внутренняя ошибка синхронизации.');
+          await syncPullDelete(uid, local, remote.revision);
+          pulled += 1;
+          break;
+        case 'ack-tombstone':
+          if (!remote) throw Error('Внутренняя ошибка синхронизации.');
+          await trackSyncMeta(uid, remote.revision, null);
+          break;
+        case 'conflict': {
+          const name = local ? displayName(local) : uid;
+          const remoteRevision = remote ? remote.revision : 0;
+          const remoteDeleted = remote ? remote.deleted : false;
+          // A push raced by another device surfaces as 409 only inside
+          // executors; planner-level conflicts land here directly.
+          conflicts.push(conflictEntry(uid, name, decision.kind, remoteRevision, remoteDeleted));
+          break;
+        }
+      }
+    } catch (e) {
+      const code = (e as { code?: string })?.code;
+      if (code === 'sync-conflict' && local) {
+        try {
+          const latest = await fetchRemoteSnapshot(cred.apiBase, cred, uid);
+          conflicts.push(conflictEntry(uid, displayName(local), latest.deleted ? 'remote-deleted-local-changed' : 'both-changed', latest.revision, latest.deleted));
+        } catch {
+          conflicts.push(conflictEntry(uid, local ? displayName(local) : uid, 'both-changed', remote?.revision ?? 0, remote?.deleted ?? false));
+        }
+      } else {
+        errors.push(`«${local ? displayName(local) : uid}»: ${(e as Error).message}`);
+      }
+    }
+  }
+  await hooks.refresh();
+  return { pushed, pulled, conflicts, sentBytes, errors };
 }
 function App() {
   const [characters, setCharacters] = useState<Character[]>([]);
@@ -353,21 +588,29 @@ function App() {
   }, []);
   // Sync init: load the local credential, verify it quietly, and notice an
   // incoming pairing invite. Offline or failure keeps local-only mode.
+  // Auto-sync preference is restored too: connected + enabled reactivates
+  // the orchestrator with one startup sync for the baseline.
   useEffect(() => {
     (async () => {
+      let activeCred: SyncCredential | null = null;
       try {
         const stored = await getSyncCredential();
         if (stored && isSyncCredential(stored)) {
           setSyncCred(stored);
+          activeCred = stored;
           try {
             await fetchSyncStatus(stored.apiBase, stored);
             setSyncOnline(true);
           } catch (e) {
             if ((e as Error).message === 'NETWORK_UNREACHABLE') setSyncOnline(false);
-            else { await clearSyncCredential(); setSyncCred(null); }
+            else { await clearSyncCredential(); setSyncCred(null); activeCred = null; }
           }
         }
       } catch { /* local-only fallback stays */ }
+      const auto = await getAutoSyncEnabled().catch(() => false);
+      setAutoEnabled(auto);
+      getAutoSync().setEnabled(auto && activeCred !== null);
+      if (auto && activeCred) void getAutoSync().request({ immediate: true }).catch(() => {});
       const invite = parsePairingLink(location.href);
       if (invite) {
         try {
@@ -386,6 +629,23 @@ function App() {
       history.replaceState(null, '', url.pathname + (search ? `?${search}` : ''));
     } catch { /* URL stays as-is */ }
   }
+  // Auto-sync triggers (phase D1.4): durable local commits (repository
+  // notifies with origin — remote pulls and bare BC receives never trigger),
+  // browser online, and tab foreground. No polling, no background sync.
+  useEffect(() => {
+    const unsubscribe = subscribeCharacterCommits(({ origin }) => getAutoSync().notifyCommit(origin));
+    const onOnline = () => getAutoSync().notifyOnline();
+    const onForeground = () => { if (!document.hidden) getAutoSync().notifyVisible(); };
+    window.addEventListener('online', onOnline);
+    document.addEventListener('visibilitychange', onForeground);
+    window.addEventListener('focus', onForeground);
+    return () => {
+      unsubscribe();
+      window.removeEventListener('online', onOnline);
+      document.removeEventListener('visibilitychange', onForeground);
+      window.removeEventListener('focus', onForeground);
+    };
+  }, []);
   const importFile = useRef<HTMLInputElement>(null); const restoreFile = useRef<HTMLInputElement>(null);
   const portableFile = useRef<HTMLInputElement>(null);
   // Legacy /catalog.json (deprecated, phase A2.3 audit): server-shared catalog
@@ -550,6 +810,10 @@ function App() {
       };
       await saveSyncCredential(credential);
       setSyncCred(credential); setSyncOnline(true); setSyncServerInput('');
+      const autoAfterEnable = await getAutoSyncEnabled().catch(() => false);
+      setAutoEnabled(autoAfterEnable);
+      getAutoSync().setEnabled(autoAfterEnable);
+      if (autoAfterEnable) void getAutoSync().request({ immediate: true }).catch(() => {});
     } catch (e) { setSyncError(syncFailure(e)); }
     finally { setSyncBusy(false); }
   }
@@ -589,6 +853,10 @@ function App() {
       await saveSyncCredential(credential);
       setSyncCred(credential); setSyncOnline(true);
       setIncomingPair(null); cleanPairUrl();
+      const autoAfterPair = await getAutoSyncEnabled().catch(() => false);
+      setAutoEnabled(autoAfterPair);
+      getAutoSync().setEnabled(autoAfterPair);
+      if (autoAfterPair) void getAutoSync().request({ immediate: true }).catch(() => {});
     } catch (e) { setSyncError(syncFailure(e)); }
     finally { setSyncBusy(false); }
   }
@@ -601,6 +869,9 @@ function App() {
     try {
       await disconnectSyncDevice(syncCred.apiBase, syncCred);
       await clearSyncCredential();
+      // Cancel pending debounce; no more auto runs without a credential.
+      getAutoSync().setEnabled(false);
+      setAutoConflictNotice(null); setAutoStatus('');
       setSyncCred(null); setConfirmUnlink(false); setPairing(null);
     } catch (e) {
       // Offline or failed revoke: keep the credential so the user can retry
@@ -613,230 +884,70 @@ function App() {
   // character the pure planner decides push/pull/noop/conflict/delete moves
   // from local record + sync metadata + remote index; one conflict never
   // blocks the rest of the space.
-  interface SyncConflict {
-    uid: string;
-    name: string;
-    kind: 'both-changed' | 'remote-deleted-unmatched' | 'remote-deleted-local-changed' | 'local-deleted-remote-changed';
-    remoteRevision: number;
-    remoteDeleted: boolean;
-  }
+  // Character sync: the engine above runs on manual press and, when opted
+  // in, through the auto-sync orchestrator (debounce, one-in-flight,
+  // rerun). Interactive runs behave exactly like the D1.3 manual button
+  // (modal conflicts, loud errors); background runs stay passive.
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ at: string; pushed: number; pulled: number; conflicts: number; sentBytes: number; errors: string[] } | null>(null);
   const [syncConflicts, setSyncConflicts] = useState<SyncConflict[] | null>(null);
   const [resolvingUid, setResolvingUid] = useState<string | null>(null);
-  async function findLocalByUid(uid: string): Promise<Character | null> {
-    const all = await listCharacters();
-    const matches = all.filter((c) => c.characterUid === uid);
-    return matches.length === 1 ? matches[0] : null;
-  }
-  function trackSyncMeta(uid: string, remoteRevision: number, localRevision: number | null, opts: { deletedLocally?: boolean; catalogHash?: string; portraitHash?: string | null } = {}) {
-    return saveSyncMeta({
-      characterUid: uid, remoteRevision, lastSyncedLocalRevision: localRevision,
-      deletedLocally: opts.deletedLocally ?? false, syncedAt: new Date().toISOString(),
-      ...(opts.catalogHash ? { catalogHash: opts.catalogHash } : {}),
-      ...(opts.portraitHash !== undefined ? { portraitHash: opts.portraitHash } : {}),
-    });
-  }
-  // v2 push: ensure missing artifacts, then the character CAS. Returns sent
-  // bytes for the diagnostics line. Tombstones (syncPushDelete) never upload.
-  async function syncPush(cred: SyncCredential, uid: string, local: Character, base: number) {
-    const fresh = (await getCharacter(local.id)) ?? local;
-    const catalog = fresh.catalogKey ? await getCatalog(fresh.catalogKey) : null;
-    const meta = (await getSyncMeta(uid)) ?? null;
-    const parts = buildSyncV2Parts(fresh, catalog, uid);
-    const pushed = await pushCharacterV2(
-      {
-        headArtifact: (hash) => headArtifact(cred.apiBase, cred, hash),
-        putArtifact: (hash, kind, payload) => putArtifact(cred.apiBase, cred, hash, kind, payload),
-        putCharacter: (characterUid, body) => pushRemoteSnapshot(cred.apiBase, cred, characterUid, body),
-      },
-      { uid, base, parts, meta },
-    );
-    const confirmed = await getCharacter(local.id);
-    await trackSyncMeta(uid, pushed.revision, confirmed ? confirmed.revision : fresh.revision, {
-      catalogHash: pushed.catalogHash, portraitHash: pushed.portraitHash,
-    });
-    return pushed.uploadedBytes;
-  }
-  // Local-equivalence probes (§12–13): reuse bytes we already have instead
-  // of re-downloading. No extra blob cache — the pinned catalog and the
-  // stored portrait are the cache.
-  function localCatalogHash(local: Character | null, catalog: Catalog | null | undefined): string | null {
-    if (!local || !catalog) return null;
+  const [autoEnabled, setAutoEnabled] = useState(false);
+  const [autoSyncing, setAutoSyncing] = useState(false);
+  const [autoStatus, setAutoStatus] = useState('');
+  const [autoConflictNotice, setAutoConflictNotice] = useState<SyncConflict[] | null>(null);
+  const syncCredRef = useRef<SyncCredential | null>(null);
+  useEffect(() => { syncCredRef.current = syncCred; }, [syncCred]);
+  const autoSyncRef = useRef<AutoSync | null>(null);
+  // Background engine entry for the orchestrator. Never throws: fatal
+  // background errors become the passive status line (no modal, no loud
+  // error). Interactive runs rethrow for the manual wrapper.
+  async function autoRun(interactive: boolean): Promise<EngineResult> {
+    const cred = syncCredRef.current;
+    if (!cred) return { pushed: 0, pulled: 0, conflicts: [], sentBytes: 0, errors: [] };
+    if (interactive) {
+      return runSyncEngine(cred, { markOnline: () => setSyncOnline(true), refresh: refreshCharacters });
+    }
+    setAutoSyncing(true);
     try {
-      return catalogArtifactHash(canonicalCatalogSlice(characterSlicePayload(local, catalog)));
-    } catch {
-      return null;
+      const result = await runSyncEngine(cred, { markOnline: () => setSyncOnline(true), refresh: refreshCharacters });
+      setAutoStatus('Синхронизировано');
+      // A clean run clears a stale notice (the conflict is gone); a
+      // conflicted run replaces it. Never a modal mid-game.
+      setAutoConflictNotice(result.conflicts.length ? result.conflicts : null);
+      return result;
+    } catch (e) {
+      if ((e as Error).message === 'NETWORK_UNREACHABLE') setSyncOnline(false);
+      setAutoStatus('Не удалось синхронизировать. Локальные данные сохранены.');
+      return { pushed: 0, pulled: 0, conflicts: [], sentBytes: 0, errors: [(e as Error).message] };
     }
+    finally { setAutoSyncing(false); }
   }
-  function localPortraitHash(local: Character | null): string | null {
-    if (!local) return null;
-    const canonical = canonicalPortrait(local.portrait ?? null);
-    return typeof canonical === 'string' ? portraitArtifactHash(canonical) : null;
-  }
-  async function resolveRemoteCatalog(cred: SyncCredential, uid: string, catalogHash: string, local: Character | null) {
-    if (local?.catalogKey) {
-      const localCatalog = await getCatalog(local.catalogKey);
-      if (localCatalog && localCatalogHash(local, localCatalog) === catalogHash) return localCatalog;
-    }
-    const artifact = await fetchArtifact(cred.apiBase, cred, catalogHash);
-    if (artifact.kind !== 'catalog' || catalogArtifactHash(artifact.payload) !== catalogHash) {
-      throw syncBundleError('damaged', 'Повреждённый снимок персонажа');
-    }
-    return parseCatalog(artifact.payload);
-  }
-  async function resolveRemotePortrait(cred: SyncCredential, portraitHash: string | null, local: Character | null) {
-    if (portraitHash === null) return null;
-    if (localPortraitHash(local) === portraitHash && local) return local.portrait ?? null;
-    const artifact = await fetchArtifact(cred.apiBase, cred, portraitHash);
-    if (artifact.kind !== 'portrait' || typeof artifact.payload !== 'string'
-      || portraitArtifactHash(artifact.payload) !== portraitHash
-      || canonicalPortrait(artifact.payload) !== artifact.payload) {
-      throw syncBundleError('damaged', 'Повреждённый снимок персонажа');
-    }
-    return artifact.payload as string;
-  }
-  async function syncPullApply(cred: SyncCredential, uid: string, remoteRevision: number, local: Character | null) {
-    const snapshot = await fetchRemoteSnapshot(cred.apiBase, cred, uid);
-    const parsed = validateSyncSnapshot(snapshot.payload);
-    const content = parseCharacterContent(parsed.content);
-    // v1 (D1.2 grace path): embedded bytes, applied exactly as before.
-    if (parsed.version !== 2) {
-      const catalog = parseCatalog(parsed.catalog);
-      if (!local) {
-        const created = await importPortableRecord({
-          catalog, name: parsed.name, content, portrait: parsed.portrait, characterUid: uid,
-        });
-        await trackSyncMeta(uid, remoteRevision, created.revision);
-      } else {
-        const updated = await updatePortableCharacter({
-          id: local.id, name: parsed.name, content, portrait: parsed.portrait, catalog,
-        });
-        await trackSyncMeta(uid, remoteRevision, updated.revision);
-      }
-      return;
-    }
-    // v2: fetch only the artifacts we don't already hold.
-    const catalog = await resolveRemoteCatalog(cred, uid, parsed.catalogHash!, local);
-    const portrait = await resolveRemotePortrait(cred, parsed.portraitHash, local);
-    if (!local) {
-      const created = await importPortableRecord({
-        catalog, name: parsed.name, content, portrait, characterUid: uid,
-      });
-      await trackSyncMeta(uid, remoteRevision, created.revision, {
-        catalogHash: parsed.catalogHash!, portraitHash: parsed.portraitHash,
-      });
-    } else {
-      const updated = await updatePortableCharacter({
-        id: local.id, name: parsed.name, content, portrait, catalog,
-      });
-      await trackSyncMeta(uid, remoteRevision, updated.revision, {
-        catalogHash: parsed.catalogHash!, portraitHash: parsed.portraitHash,
+  function getAutoSync(): AutoSync {
+    if (!autoSyncRef.current) {
+      autoSyncRef.current = createAutoSync({
+        schedule: (fn, ms) => { const id = setTimeout(fn, ms); return { cancel: () => clearTimeout(id) }; },
+        now: () => Date.now(),
+        isOnline: () => typeof navigator === 'undefined' || navigator.onLine !== false,
+        run: (interactive) => autoRun(interactive),
       });
     }
+    return autoSyncRef.current;
   }
-  async function syncPullDelete(uid: string, local: Character, remoteRevision: number) {
-    await deleteCharacter(local.id);
-    try { localStorage.removeItem(wizardDraftKey(local.id)); } catch { /* private mode */ }
-    clearLevelUpDraft(local.id);
-    await trackSyncMeta(uid, remoteRevision, null);
-  }
-  async function syncPushDelete(cred: SyncCredential, uid: string, base: number) {
-    const res = await pushRemoteSnapshot(cred.apiBase, cred, uid, { baseRevision: base, deleted: true });
-    await trackSyncMeta(uid, res.revision, null);
-  }
-  function conflictEntry(uid: string, name: string, kind: SyncConflict['kind'], remoteRevision: number, remoteDeleted: boolean): SyncConflict {
-    return { uid, name, kind, remoteRevision, remoteDeleted };
-  }
+  // Manual button: always available (auto on or off, after errors, after
+  // offline). Rides the same orchestrator lock: while a background run is
+  // in flight the press coalesces behind it, then runs interactively.
   async function syncNow() {
-    const cred = syncCred;
-    if (!cred || syncing) return;
+    if (!syncCred || syncing) return;
     setSyncing(true); setSyncError(''); setSyncResult(null); setSyncConflicts(null);
-    let pushed = 0;
-    let pulled = 0;
-    let sentBytes = 0;
-    const conflicts: SyncConflict[] = [];
-    const errors: string[] = [];
     try {
-      const index = await listRemoteCharacters(cred.apiBase, cred);
-      setSyncOnline(true);
-      const locals = await listCharacters();
-      const metas = new Map((await listSyncMeta()).map((m) => [m.characterUid, m]));
-      const byUid = new Map<string, Character[]>();
-      for (const c of locals) {
-        if (!c.characterUid) continue;
-        const group = byUid.get(c.characterUid) ?? [];
-        group.push(c);
-        byUid.set(c.characterUid, group);
-      }
-      const uids = new Set<string>([
-        ...byUid.keys(),
-        ...index.map((e) => e.characterUid),
-        ...[...metas.keys()].filter((uid) => metas.get(uid)!.deletedLocally),
-      ]);
-      for (const uid of uids) {
-        const group = byUid.get(uid) ?? [];
-        const local = group.length === 1 ? group[0] : null;
-        const meta = metas.get(uid) ?? null;
-        const remote = index.find((e) => e.characterUid === uid) ?? null;
-        const decision = decideCharacterSync({ local, sync: meta, remote, duplicateCount: group.length });
-        try {
-          switch (decision.action) {
-            case 'noop':
-              break;
-            case 'error-duplicate':
-              errors.push(`«${local ? displayName(local) : uid}»: несколько локальных записей с одной identity — синхронизация пропущена.`);
-              break;
-            case 'push':
-              if (!local) throw Error('Внутренняя ошибка синхронизации.');
-              sentBytes += await syncPush(cred, uid, local, decision.base);
-              pushed += 1;
-              break;
-            case 'pull':
-              if (!remote) throw Error('Внутренняя ошибка синхронизации.');
-              await syncPullApply(cred, uid, remote.revision, local);
-              pulled += 1;
-              break;
-            case 'push-delete':
-              await syncPushDelete(cred, uid, decision.base);
-              pushed += 1;
-              break;
-            case 'pull-delete':
-              if (!local || !remote) throw Error('Внутренняя ошибка синхронизации.');
-              await syncPullDelete(uid, local, remote.revision);
-              pulled += 1;
-              break;
-            case 'ack-tombstone':
-              if (!remote) throw Error('Внутренняя ошибка синхронизации.');
-              await trackSyncMeta(uid, remote.revision, null);
-              break;
-            case 'conflict': {
-              const name = local ? displayName(local) : uid;
-              const remoteRevision = remote ? remote.revision : 0;
-              const remoteDeleted = remote ? remote.deleted : false;
-              // A push raced by another device surfaces as 409 only inside
-              // executors; planner-level conflicts land here directly.
-              conflicts.push(conflictEntry(uid, name, decision.kind, remoteRevision, remoteDeleted));
-              break;
-            }
-          }
-        } catch (e) {
-          const code = (e as { code?: string })?.code;
-          if (code === 'sync-conflict' && local) {
-            try {
-              const latest = await fetchRemoteSnapshot(cred.apiBase, cred, uid);
-              conflicts.push(conflictEntry(uid, displayName(local), latest.deleted ? 'remote-deleted-local-changed' : 'both-changed', latest.revision, latest.deleted));
-            } catch {
-              conflicts.push(conflictEntry(uid, local ? displayName(local) : uid, 'both-changed', remote?.revision ?? 0, remote?.deleted ?? false));
-            }
-          } else {
-            errors.push(`«${local ? displayName(local) : uid}»: ${(e as Error).message}`);
-          }
-        }
-      }
-      setSyncResult({ at: new Date().toISOString(), pushed, pulled, conflicts: conflicts.length, sentBytes, errors });
-      if (conflicts.length) setSyncConflicts(conflicts);
-      await refreshCharacters();
+      const result = await getAutoSync().request({ immediate: true, interactive: true }) as EngineResult;
+      setSyncResult({
+        at: new Date().toISOString(), pushed: result.pushed, pulled: result.pulled,
+        conflicts: result.conflicts.length, sentBytes: result.sentBytes, errors: result.errors,
+      });
+      if (result.conflicts.length) setSyncConflicts(result.conflicts);
+      else setAutoConflictNotice(null);
     } catch (e) {
       setSyncError(syncFailure(e));
     }
@@ -847,7 +958,127 @@ function App() {
       const next = (list ?? []).filter((c) => c.uid !== uid);
       return next.length ? next : null;
     });
+    setAutoConflictNotice((list) => {
+      const next = (list ?? []).filter((c) => c.uid !== uid);
+      return next.length ? next : null;
+    });
     setSyncResult((prev) => (prev ? { ...prev, conflicts: Math.max(0, prev.conflicts - 1) } : prev));
+  }
+  // Opt-in toggle (§1): explicit user act. ON saves the setting and takes
+  // one immediate background sync for the baseline; OFF only stops future
+  // triggers (the manual button keeps working).
+  async function toggleAutoSync(checked: boolean) {
+    setAutoEnabled(checked);
+    try { await setAutoSyncEnabled(checked); } catch { /* memory state stays for this session */ }
+    getAutoSync().setEnabled(checked && syncCred !== null);
+    if (checked && syncCred) void getAutoSync().request({ immediate: true }).catch(() => {});
+  }
+  // Read-only GM sharing (phase D2.1): publish an explicit snapshot, refresh
+  // it, or revoke the link. One active share per character; the raw token is
+  // shown once and kept in local settings (the server stores only its hash).
+  // The link host is the sync apiBase itself — the main SoyMan server.
+  interface ShareTarget { id: number; uid: string; name: string }
+  const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareError, setShareError] = useState('');
+  const [shareToken, setShareToken] = useState<string | null>(null);
+  const [shareServerActive, setShareServerActive] = useState(false);
+  const [shareUpdatedAt, setShareUpdatedAt] = useState<string | null>(null);
+  function shareLink(): string | null {
+    if (!syncCred || !shareToken) return null;
+    return `${syncCred.apiBase}/share/character/${shareToken}`;
+  }
+  async function openShare(c: Character) {
+    if (!c.characterUid) return;
+    setShareTarget({ id: c.id, uid: c.characterUid, name: displayName(c) });
+    setShareBusy(true); setShareError(''); setShareToken(null);
+    setShareServerActive(false); setShareUpdatedAt(null);
+    try {
+      const local = (await getShareTokens().catch(() => ({})))[c.characterUid] ?? null;
+      const remote = syncCred ? await listShares(syncCred.apiBase, syncCred) : [];
+      const entry = remote.find((e) => e.characterUid === c.characterUid) ?? null;
+      if (local && entry) {
+        setShareToken(local); setShareServerActive(true); setShareUpdatedAt(entry.updatedAt);
+      } else {
+        // Token lost (or published from a sibling device): the link itself
+        // is unrecoverable, but the space-authed record is still manageable.
+        if (local) await dropShareToken(c.characterUid).catch(() => {});
+        setShareServerActive(entry !== null);
+        setShareUpdatedAt(entry ? entry.updatedAt : null);
+      }
+    } catch (e) { setShareError(syncFailure(e)); }
+    finally { setShareBusy(false); }
+  }
+  // Ensure the referenced artifacts exist in the space (same helpers as
+  // sync push; HEAD keeps it a no-op when already uploaded). Never touches
+  // the sync_characters rows — sharing is not syncing.
+  async function ensureShareArtifacts(cred: SyncCredential, parts: { catalogHash: string; catalogPayload: unknown; portraitHash: string | null; portraitPayload: string | null }) {
+    const needed: [string, 'catalog' | 'portrait', unknown][] = [
+      [parts.catalogHash, 'catalog', parts.catalogPayload],
+    ];
+    if (parts.portraitHash && parts.portraitPayload) needed.push([parts.portraitHash, 'portrait', parts.portraitPayload]);
+    for (const [hash, kind, payload] of needed) {
+      if (await headArtifact(cred.apiBase, cred, hash)) continue;
+      await putArtifact(cred.apiBase, cred, hash, kind, payload);
+    }
+  }
+  async function publishShare() {
+    if (!syncCred || !shareTarget) return;
+    setShareBusy(true); setShareError('');
+    try {
+      const local = (await getCharacter(shareTarget.id)) ?? null;
+      if (!local?.content || !local.characterUid) throw Error('Персонаж не найден');
+      const catalog = local.catalogKey ? await getCatalog(local.catalogKey) : null;
+      const parts = buildSyncV2Parts(local, catalog, shareTarget.uid);
+      await ensureShareArtifacts(syncCred, parts);
+      const created = await createShare(syncCred.apiBase, syncCred, shareTarget.uid, parts.document);
+      if (!created.shareToken) throw Error('Не удалось создать ссылку');
+      await saveShareToken(shareTarget.uid, created.shareToken);
+      setShareToken(created.shareToken); setShareServerActive(true); setShareUpdatedAt(created.updatedAt);
+    } catch (e) {
+      const code = (e as { code?: string })?.code;
+      if (code === 'share-exists') {
+        setShareError('У персонажа уже есть активная ссылка.');
+        const entry = (await listShares(syncCred.apiBase, syncCred).catch(() => []))
+          .find((s) => s.characterUid === shareTarget.uid) ?? null;
+        setShareServerActive(entry !== null);
+        setShareUpdatedAt(entry ? entry.updatedAt : null);
+      } else setShareError(syncFailure(e));
+    }
+    finally { setShareBusy(false); }
+  }
+  async function refreshShare() {
+    if (!syncCred || !shareTarget) return;
+    setShareBusy(true); setShareError('');
+    try {
+      const local = (await getCharacter(shareTarget.id)) ?? null;
+      if (!local?.content || !local.characterUid) throw Error('Персонаж не найден');
+      const catalog = local.catalogKey ? await getCatalog(local.catalogKey) : null;
+      const parts = buildSyncV2Parts(local, catalog, shareTarget.uid);
+      await ensureShareArtifacts(syncCred, parts);
+      const updated = await updateShare(syncCred.apiBase, syncCred, shareTarget.uid, parts.document);
+      setShareUpdatedAt(updated.updatedAt); setShareServerActive(true);
+    } catch (e) { setShareError(syncFailure(e)); }
+    finally { setShareBusy(false); }
+  }
+  async function unshare() {
+    if (!syncCred || !shareTarget) return;
+    setShareBusy(true); setShareError('');
+    try {
+      await revokeShare(syncCred.apiBase, syncCred, shareTarget.uid);
+      await dropShareToken(shareTarget.uid).catch(() => {});
+      setShareToken(null); setShareServerActive(false); setShareUpdatedAt(null);
+    } catch (e) { setShareError(syncFailure(e)); }
+    finally { setShareBusy(false); }
+  }
+  async function copyShareLink() {
+    const link = shareLink();
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+    } catch {
+      setShareError('Не удалось скопировать ссылку.');
+    }
   }
   // "Оставить версию этого устройства" (и "Удалить везде" для local-delete):
   // свежий remote revision, затем сознательный overwrite.
@@ -1038,6 +1269,16 @@ function App() {
     setLibraryBusy(true); setError('');
     try {
       await deleteCharacter(target.id);
+      // Best-effort share revoke: the published snapshot must not outlive
+      // the character when the token is known here. Sync/tombstones are
+      // untouched; a sibling-device share stays to its own lifecycle.
+      if (target.characterUid && syncCred) {
+        const token = (await getShareTokens().catch(() => ({})))[target.characterUid] ?? null;
+        if (token) {
+          await revokeShare(syncCred.apiBase, syncCred, target.characterUid).catch(() => {});
+          await dropShareToken(target.characterUid).catch(() => {});
+        }
+      }
       // Only this character's own wizard draft keys — never anyone else's.
       // Creation draft (C1) plus the level-up draft (C2).
       try { localStorage.removeItem(wizardDraftKey(target.id)); } catch { /* private mode */ }
@@ -1060,6 +1301,7 @@ function App() {
           {showArchived
             ? <button role="menuitem" disabled={libraryBusy} onClick={() => void restore(c.id)}>Восстановить</button>
             : <button role="menuitem" disabled={libraryBusy} onClick={() => void archive(c.id)}>Архивировать</button>}
+          {syncCred && c.content && c.characterUid && <button role="menuitem" onClick={() => { setOpenMenu(null); void openShare(c); }}>Поделиться с мастером</button>}
           <button role="menuitem" disabled={libraryBusy} onClick={() => { setDeleteTarget(c); setOpenMenu(null); }}>Удалить</button>
         </div>}
       </div>
@@ -1134,6 +1376,38 @@ function App() {
       </section>)}
       <div className="row oneshot-actions"><button disabled={resolvingUid !== null} onClick={() => setSyncConflicts(null)}>Отмена</button></div>
     </Modal>}
+    {shareTarget && <Modal onClose={() => { if (!shareBusy) setShareTarget(null); }}>
+      <h3>Поделиться с мастером — «{shareTarget.name}»</h3>
+      {(() => {
+        const conflicted = [...(syncConflicts ?? []), ...(autoConflictNotice ?? [])].some((c) => c.uid === shareTarget.uid);
+        return (<>
+          {shareToken ? <>
+            <p className="muted">Ссылка создана{shareUpdatedAt ? ` · обновлена ${new Date(shareUpdatedAt).toLocaleString('ru-RU')}` : ''}.</p>
+            <p><a href={shareLink() ?? undefined} target="_blank" rel="noreferrer">{shareLink()}</a></p>
+            <div className="row oneshot-actions">
+              <button className="primary" disabled={shareBusy} onClick={() => void copyShareLink()}>Скопировать ссылку</button>
+              <a role="button" href={shareLink() ?? undefined} target="_blank" rel="noreferrer">Открыть</a>
+              <button disabled={shareBusy} onClick={() => void refreshShare()}>{shareBusy ? 'Обновляем…' : 'Обновить опубликованную версию'}</button>
+              <button disabled={shareBusy} onClick={() => void unshare()}>Отключить ссылку</button>
+            </div>
+          </> : shareServerActive ? <>
+            <p className="muted">Ссылка активна, но создана на другом устройстве — скопировать её отсюда нельзя.</p>
+            <div className="row oneshot-actions">
+              <button disabled={shareBusy} onClick={() => void refreshShare()}>{shareBusy ? 'Обновляем…' : 'Обновить опубликованную версию'}</button>
+              <button disabled={shareBusy} onClick={() => void unshare()}>Отключить ссылку</button>
+            </div>
+          </> : <>
+            <p className="muted">Любой, у кого есть эта ссылка, сможет просматривать опубликованную версию персонажа.</p>
+            <div className="row oneshot-actions">
+              <button className="primary" disabled={shareBusy} onClick={() => void publishShare()}>{shareBusy ? 'Публикуем…' : 'Создать ссылку'}</button>
+            </div>
+          </>}
+          {conflicted && <p className="muted">Есть нерешённый конфликт синхронизации — публикуется версия, которую вы видите сейчас.</p>}
+          {shareError !== '' && <p className="oneshot-error" role="alert">{shareError}</p>}
+          <div className="row oneshot-actions"><button disabled={shareBusy} onClick={() => setShareTarget(null)}>Закрыть</button></div>
+        </>);
+      })()}
+    </Modal>}
     {error && <div className="oneshot-error" role="alert">{error}</div>}
     {!ready ? <p className="oneshot-home">Открываем локальные данные…</p> : active?.content ? <div className="oneshot-sheet"><DndCharacterView key={active.id} value={active.content} portraitUrl={active.portrait} onQuickUpdate={update} onLevelUpApply={applyLevelUp} syncTabToUrl levelUpDraft={{ identity: { characterId: active.id, characterUid: active.characterUid ?? null, catalogKey: active.catalogKey }, initial: loadLevelUpDraft(active.id), onChange: saveLevelUpDraft, onClear: () => clearLevelUpDraft(active.id) }} onSheetBack={() => { if (status === 'Сохранено на устройстве') location.assign('/'); }} /></div> : <main className="oneshot-home">
       <p className="muted">D&D 5.5 · настоящий визард и чарник SoyMan</p><h1>Твои персонажи</h1>
@@ -1155,7 +1429,12 @@ function App() {
             <p className="muted">Синхронизация подключена. Это устройство связано с вашим пространством SoyMan.</p>
             {!syncOnline && <p className="muted">Синхронизация временно недоступна.</p>}
             <p className="muted">При синхронизации копии персонажей хранятся на выбранном сервере SoyMan.</p>
+            <p><label><input type="checkbox" checked={autoEnabled} onChange={(e) => void toggleAutoSync(e.target.checked)} /> Автоматически синхронизировать изменения</label></p>
+            <p className="muted">Изменения персонажей будут автоматически отправляться на выбранный сервер SoyMan.</p>
             <div className="row oneshot-actions"><button disabled={syncing || syncBusy} onClick={() => void syncNow()}>{syncing ? 'Синхронизируем…' : 'Синхронизировать сейчас'}</button><button disabled={syncing || syncBusy} onClick={() => void showPairing()}>{syncBusy ? 'Готовим…' : 'Подключить другое устройство'}</button><button disabled={syncing || syncBusy} onClick={() => setConfirmUnlink(true)}>Отключить это устройство</button></div>
+            {autoSyncing && <p className="muted">Синхронизация…</p>}
+            {!autoSyncing && autoStatus !== '' && <p className="muted">{autoStatus}</p>}
+            {autoConflictNotice && !syncConflicts && <p className="muted">Есть конфликт синхронизации. <button onClick={() => { setSyncConflicts(autoConflictNotice); setAutoConflictNotice(null); }}>Разрешить</button></p>}
             {syncResult && <p className="muted">Последняя синхронизация: {new Date(syncResult.at).toLocaleString('ru-RU')} · отправлено: {syncResult.pushed}, получено: {syncResult.pulled}, конфликтов: {syncResult.conflicts}{syncResult.sentBytes > 0 && ` · отправлено данных: ~${Math.max(1, Math.round(syncResult.sentBytes / 1024))} КБ`}{syncResult.errors.length > 0 && ` · ошибки: ${syncResult.errors.length}`}</p>}
             {syncResult && syncResult.errors.length > 0 && <ul>{syncResult.errors.slice(0, 3).map((message) => <li key={message} className="muted">{message}</li>)}</ul>}
           </>}

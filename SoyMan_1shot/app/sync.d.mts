@@ -79,3 +79,26 @@ export function fetchArtifact(
   credential: { deviceToken: string },
   hash: string,
 ): Promise<SyncArtifactRecord>;
+export interface ShareRecord {
+  characterUid: string;
+  updatedAt: string;
+  shareToken?: string;
+}
+export function listShares(apiBase: string, credential: { deviceToken: string }): Promise<ShareRecord[]>;
+export function createShare(
+  apiBase: string,
+  credential: { deviceToken: string },
+  characterUid: string,
+  payload: unknown,
+): Promise<ShareRecord>;
+export function updateShare(
+  apiBase: string,
+  credential: { deviceToken: string },
+  characterUid: string,
+  payload: unknown,
+): Promise<ShareRecord>;
+export function revokeShare(
+  apiBase: string,
+  credential: { deviceToken: string },
+  characterUid: string,
+): Promise<{ characterUid: string; deleted: boolean }>;

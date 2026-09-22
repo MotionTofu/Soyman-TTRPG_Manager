@@ -9444,6 +9444,7 @@ export function DndCharacterView({
   onPortraitRefresh,
   levelUpDraft,
   onLevelUpApply,
+  readOnly,
 }: {
   value: DndCharacterData;
   // Лицо первой карты. Отдельное поле под изображение заводить не пришлось —
@@ -9486,6 +9487,12 @@ export function DndCharacterView({
   // визард чистил черновик строго после durable save. Без пропса визард
   // использует onQuickUpdate как раньше.
   onLevelUpApply?: (patch: Partial<DndCharacterData>) => Promise<void>;
+  // Read-only контракт (расшаренный лист для мастера): ни одной мутации.
+  // Большинство контролов и так гейтится отсутствием onQuickUpdate, но этот
+  // флаг — явный контракт вызывающей стороны: скрывает affordances правки
+  // (панель «Редактировать», тоглы разделов), которые без колбэка остались
+  // бы висеть бездействующими иконками.
+  readOnly?: boolean;
 }) {
   // Оба хука вызываются всегда — по правилам хуков ветвиться здесь нельзя,
   // да и незачем: неиспользуемый просто держит своё состояние вхолостую.
@@ -11563,7 +11570,7 @@ export function DndCharacterView({
               {/* Правка основной информации — раскрывашкой под оборотом
                   (решение владельца): поля сохраняются мгновенно, как везде
                   на листе, «Сохранить» лишь закрывает панель. */}
-              {syncTabToUrl && onQuickUpdate && (
+              {syncTabToUrl && onQuickUpdate && !readOnly && (
                 <div className="stack dnd-face-edit">
                   <button
                     type="button"

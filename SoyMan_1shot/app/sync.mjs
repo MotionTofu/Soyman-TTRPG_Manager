@@ -185,3 +185,34 @@ export function fetchArtifact(apiBase, credential, hash) {
     token: credential.deviceToken,
   });
 }
+
+// Read-only character shares for the GM (phase D2.1). Management is
+// device-authed (same Bearer as sync); the issued shareToken authorizes
+// exactly one public snapshot. The raw token is shown once and kept in
+// local settings — the server stores only its hash.
+export function listShares(apiBase, credential) {
+  return syncFetch(apiBase, '/api/sync/shares', { token: credential.deviceToken });
+}
+
+export function createShare(apiBase, credential, characterUid, payload) {
+  return syncFetch(apiBase, '/api/sync/shares', {
+    method: 'POST',
+    token: credential.deviceToken,
+    body: { characterUid, payload },
+  });
+}
+
+export function updateShare(apiBase, credential, characterUid, payload) {
+  return syncFetch(apiBase, `/api/sync/shares/${encodeURIComponent(characterUid)}`, {
+    method: 'PUT',
+    token: credential.deviceToken,
+    body: { payload },
+  });
+}
+
+export function revokeShare(apiBase, credential, characterUid) {
+  return syncFetch(apiBase, `/api/sync/shares/${encodeURIComponent(characterUid)}`, {
+    method: 'DELETE',
+    token: credential.deviceToken,
+  });
+}

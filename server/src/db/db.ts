@@ -675,6 +675,20 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (sync_space_id, hash)
   )`);
+  // Read-only character shares for the GM (phase D2.1): one active share per
+  // (space, characterUid). The token is a capability for exactly one
+  // published snapshot — raw tokens never stored, only hashes. Revoke is a
+  // hard delete; re-sharing mints a fresh token.
+  database.exec(`CREATE TABLE IF NOT EXISTS character_shares (
+    id TEXT PRIMARY KEY,
+    token_hash TEXT NOT NULL UNIQUE,
+    owner_sync_space_id TEXT NOT NULL REFERENCES sync_spaces(id) ON DELETE CASCADE,
+    character_uid TEXT NOT NULL,
+    snapshot_json TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (owner_sync_space_id, character_uid)
+  )`);
 
   // Payment model migration: campaign-level payment_type, session payment_override/title,
   // per-player amount_paid (replacing the old boolean paid/is_paid_session flags).

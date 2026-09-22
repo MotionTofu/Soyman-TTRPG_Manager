@@ -138,6 +138,53 @@ export const saveSyncCredential = (credential: SyncCredential) =>
   operation('settings', 'readwrite', s => s.put(credential, 'sync'));
 export const clearSyncCredential = () =>
   operation('settings', 'readwrite', s => s.delete('sync'));
+// Opt-in auto-sync preference (phase D1.4). Same settings store, new key —
+// no database version change. Default false: existing users never start
+// uploading on update; enabling the toggle is the explicit act.
+export const getAutoSyncEnabled = async () =>
+  (await operation<boolean | undefined>('settings', 'readonly', s => s.get('syncAuto'))) === true;
+export const setAutoSyncEnabled = (enabled: boolean) =>
+  operation('settings', 'readwrite', s => s.put(enabled, 'syncAuto'));
+// Share tokens by characterUid (phase D2.1). The server stores only hashes,
+// so the raw capability token lives here, on the creating device only —
+// sibling devices see existence via the server list, not the link itself.
+export const getShareTokens = async (): Promise<Record<string, string>> =>
+  (await operation<Record<string, string> | undefined>('settings', 'readonly', s => s.get('shareTokens'))) ?? {};
+export const saveShareToken = async (characterUid: string, token: string) => {
+  const all = await getShareTokens();
+  all[characterUid] = token;
+  await operation('settings', 'readwrite', s => s.put(all, 'shareTokens'));
+};
+export const dropShareToken = async (characterUid: string) => {
+  const all = await getShareTokens();
+  delete all[characterUid];
+  await operation('settings', 'readwrite', s => s.put(all, 'shareTokens'));
+};
+// Durable-commit origin (phase D1.4): auto-sync triggers ONLY on user
+// commits ('local'). Sync-pull applies pass 'sync-remote' so a pulled
+// character never schedules another network sync (no pull loop); UI
+// invalidation via BroadcastChannel is untouched — only the auto trigger
+// is suppressed, never the cross-tab notice.
+export type CharacterCommitOrigin = 'local' | 'sync-remote';
+export interface CharacterCommitOptions {
+  origin?: CharacterCommitOrigin;
+}
+type CharacterCommitListener = (event: { origin: CharacterCommitOrigin }) => void;
+const characterCommitListeners = new Set<CharacterCommitListener>();
+// Local observation of durable commits (auto-sync subscribes). Fires next
+// to the tabSync publish at every character-table commit — including
+// archive/restore (they route through saveCharacter) — but never for
+// characterSync metadata writes, drafts (localStorage, not commits) or
+// failed writes (notify runs only on durable success).
+export function subscribeCharacterCommits(listener: CharacterCommitListener): () => void {
+  characterCommitListeners.add(listener);
+  return () => { characterCommitListeners.delete(listener); };
+}
+function notifyCharacterCommit(origin: CharacterCommitOrigin = 'local') {
+  for (const listener of [...characterCommitListeners]) {
+    try { listener({ origin }); } catch { /* a bad subscriber must not break commits */ }
+  }
+}
 export interface CharacterSyncMeta {
   characterUid: string;
   remoteRevision: number;
@@ -230,10 +277,11 @@ export interface PortableImportRecord {
 // orphan catalog. The settings current pointer is untouched: future creations
 // keep using the managed catalog, not this slice. Every import mints a new
 // local Character.id; no source id is ever reused as an IDB key.
-export async function importPortableRecord(record: PortableImportRecord): Promise<Character> {
+export async function importPortableRecord(record: PortableImportRecord, options: CharacterCommitOptions = {}): Promise<Character> {
   const db = await database();
   const key = crypto.randomUUID();
   const characterUid = typeof record.characterUid === 'string' && record.characterUid ? record.characterUid : crypto.randomUUID();
+  const origin = options.origin ?? 'local';
   return new Promise((resolve, reject) => {
     const tx = db.transaction(['catalogs', 'characters'], 'readwrite');
     tx.objectStore('catalogs').put(record.catalog, key);
@@ -244,6 +292,7 @@ export async function importPortableRecord(record: PortableImportRecord): Promis
     add.onsuccess = () => { id = add.result as number; };
     tx.oncomplete = () => {
       tabSync().publish(characterUpdated(id, 0));
+      notifyCharacterCommit(origin);
       resolve({
         id, name: record.name, content: record.content, portrait: record.portrait, catalogKey: key, revision: 0, characterUid,
       });
@@ -265,7 +314,7 @@ export interface PortableUpdateRecord {
 // this character's private portable slice (see shouldReuseCatalogSlice);
 // otherwise a fresh key is minted and the old record is left untouched —
 // shared, current or managed catalogs are never deleted here.
-export async function updatePortableCharacter(record: PortableUpdateRecord): Promise<Character> {
+export async function updatePortableCharacter(record: PortableUpdateRecord, options: CharacterCommitOptions = {}): Promise<Character> {
   const db = await database();
   const previous = await getCharacter(record.id);
   if (!previous?.content) throw Error('Персонаж не найден');
@@ -296,7 +345,7 @@ export async function updatePortableCharacter(record: PortableUpdateRecord): Pro
       next = buildCharacterUpdate(stored, { name: record.name, content: record.content, portrait: record.portrait, catalogKey: sliceKey });
       store.put(next);
     };
-    tx.oncomplete = () => { tabSync().publish(characterUpdated(next.id, next.revision)); resolve(next); };
+    tx.oncomplete = () => { tabSync().publish(characterUpdated(next.id, next.revision)); notifyCharacterCommit(options.origin ?? 'local'); resolve(next); };
     tx.onerror = tx.onabort = () => reject(error || tx.error || Error('Не удалось обновить персонажа'));
   });
 }
@@ -306,10 +355,13 @@ export async function createCharacter(name: string, catalogKey: string | null) {
   const id = await operation<number>('characters', 'readwrite', s => s.add({ name, content: null, portrait: null, catalogKey, revision: 0, characterUid: crypto.randomUUID() }));
   const created = (await getCharacter(id))!;
   tabSync().publish(characterUpdated(id, created.revision ?? 0));
+  // No commit notify: creation shells carry content:null and can never sync
+  // (the planner noops them). The wizard Finish goes through saveCharacter
+  // and triggers there — no wasted run on shell creation.
   return created;
 }
 // Read-check-write in one transaction prevents silent overwrites from another tab.
-export async function saveCharacter(character: Character): Promise<Character> {
+export async function saveCharacter(character: Character, options: CharacterCommitOptions = {}): Promise<Character> {
   const db = await database();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('characters', 'readwrite'); const store = tx.objectStore('characters');
@@ -319,7 +371,7 @@ export async function saveCharacter(character: Character): Promise<Character> {
       if (!request.result || request.result.revision !== character.revision) { error = Error('Персонаж изменён в другом окне. Скачайте текущую копию перед перезагрузкой.'); tx.abort(); return; }
       next = { ...character, revision: character.revision + 1 }; store.put(next);
     };
-    tx.oncomplete = () => { tabSync().publish(characterUpdated(next.id, next.revision)); resolve(next); }; tx.onerror = tx.onabort = () => reject(error || tx.error || Error('Не удалось сохранить'));
+    tx.oncomplete = () => { tabSync().publish(characterUpdated(next.id, next.revision)); notifyCharacterCommit(options.origin ?? 'local'); resolve(next); }; tx.onerror = tx.onabort = () => reject(error || tx.error || Error('Не удалось сохранить'));
   });
 }
 export function parseCharacterContent(raw: unknown) {
@@ -346,7 +398,7 @@ export async function restoreCharacter(id: number): Promise<Character> {
 // removes a managed slice exactly when it is unreferenced and non-current
 // and always keeps legacy/custom/shared records. The caller's UI also drops
 // this character's own wizard draft key (wizardDraftKey) — nothing else.
-export async function deleteCharacter(id: number): Promise<Character> {
+export async function deleteCharacter(id: number, options: CharacterCommitOptions = {}): Promise<Character> {
   const c = await getCharacter(id);
   if (!c) throw Error('Персонаж не найден');
   // A locally deleted character that ever synced keeps a deletion marker so
@@ -364,12 +416,13 @@ export async function deleteCharacter(id: number): Promise<Character> {
     tx.onerror = tx.onabort = () => reject(tx.error || Error('Не удалось удалить персонажа'));
   });
   tabSync().publish(characterDeleted(id));
+  notifyCharacterCommit(options.origin ?? 'local');
   return c;
 }
 // Independent copy: same sheet/portrait/catalog pin, new local id, fresh
 // characterUid, initial revision, never archived. Draft shells are refused —
 // the UI hides the action for them (see canDuplicate).
-export async function duplicateCharacter(id: number): Promise<Character> {
+export async function duplicateCharacter(id: number, options: CharacterCommitOptions = {}): Promise<Character> {
   const original = await getCharacter(id);
   if (!original?.content) throw Error('Черновик нельзя дублировать — завершите создание персонажа');
   const siblings = await listCharacters();
@@ -387,6 +440,7 @@ export async function duplicateCharacter(id: number): Promise<Character> {
   });
   const copy = (await getCharacter(newId))!;
   tabSync().publish(characterUpdated(newId, copy.revision ?? 0));
+  notifyCharacterCommit(options.origin ?? 'local');
   return copy;
 }
 export { wizardDraftKey };

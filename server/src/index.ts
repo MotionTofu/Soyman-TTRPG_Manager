@@ -66,6 +66,7 @@ import { filesRouter } from "./routes/files";
 import { authRouter } from "./routes/auth";
 import { playerRouter } from "./routes/player";
 import { syncRouter } from "./routes/sync";
+import { sharesRouter, sharePublicRouter } from "./routes/shares";
 import { worldExplorationEntriesRouter } from "./routes/worldExplorationEntries";
 import { campaignPlayerSectionsRouter } from "./routes/campaignPlayerSections";
 import { visibilityGrantsRouter } from "./routes/visibilityGrants";
@@ -318,6 +319,13 @@ app.get("/api/health", (_req, res) => res.json({ ok: true }));
 // auth brute-force limiter: pairing tokens are high-entropy, this only
 // stops blind enumeration.
 app.use("/api/sync", authLimiter, syncRouter);
+
+// Read-only character shares (phase D2.1). Management stays device-authed
+// under /api/sync (same limiter and 2mb body split); the public read is a
+// token capability with no login, mounted before the gm gate like the other
+// self-authorizing routers. Its own in-route limiter caps enumeration.
+app.use("/api/sync/shares", authLimiter, sharesRouter);
+app.use("/api/public", sharePublicRouter);
 
 // Player-role routes are already scoped to the caller's own player_id inside
 // playerRouter (requireAuth("player")) — mounted before the blanket gm gate

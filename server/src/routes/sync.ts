@@ -48,11 +48,14 @@ interface SyncDevice {
   sync_space_id: string;
 }
 
-interface SyncRequest extends Request {
+export interface SyncRequest extends Request {
   syncDevice?: SyncDevice;
 }
 
-function requireSyncDevice(req: SyncRequest, res: Response, next: NextFunction): void {
+// Device-Bearer auth shared with the shares router: a spaceId alone
+// authorizes nothing, every call carries its own device token scoped to
+// its space. Only hashes are stored, raw tokens never reach the database.
+export function requireSyncDevice(req: SyncRequest, res: Response, next: NextFunction): void {
   const header = req.headers.authorization;
   const token = typeof header === "string" && header.startsWith("Bearer ") ? header.slice(7).trim() : "";
   if (token) {
@@ -186,14 +189,15 @@ function syncConflict(current: SyncCharacterRow | undefined): { status: number; 
   };
 }
 
-// v2 document validation: small mutable document plus refs to immutable
-// artifacts. Deep character normalization reuses the shared DndCharacterData
-// logic (same gate as portable import); artifact bytes were validated once
-// at upload and are never re-validated here. Unknown top-level fields are
-// dropped on store: owner/campaign/server metadata can never smuggle in
-// through a snapshot. Embedded v2 portrait/catalog bytes are a protocol
-// violation — heavy bytes travel only as artifacts.
-function validateSyncPayloadV2(
+// v2 document validation, shared with the shares router: small mutable
+// document plus refs to immutable artifacts. Deep character normalization
+// reuses the shared DndCharacterData logic (same gate as portable import);
+// artifact bytes were validated once at upload and are never re-validated
+// here. Unknown top-level fields are dropped on store: owner/campaign/server
+// metadata can never smuggle in through a snapshot. Embedded v2
+// portrait/catalog bytes are a protocol violation — heavy bytes travel only
+// as artifacts.
+export function validateSyncPayloadV2(
   uid: string,
   spaceId: string,
   payload: unknown

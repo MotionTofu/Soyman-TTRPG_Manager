@@ -165,6 +165,19 @@ CREATE TABLE IF NOT EXISTS sync_artifacts (
   PRIMARY KEY (sync_space_id, hash)
 );
 
+-- Read-only character shares for the GM (phase D2.1): one active share per
+-- (space, characterUid); token capability for exactly one snapshot.
+CREATE TABLE IF NOT EXISTS character_shares (
+  id TEXT PRIMARY KEY,
+  token_hash TEXT NOT NULL UNIQUE,
+  owner_sync_space_id TEXT NOT NULL REFERENCES sync_spaces(id) ON DELETE CASCADE,
+  character_uid TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (owner_sync_space_id, character_uid)
+);
+
 CREATE TABLE IF NOT EXISTS campaign_roster (
   campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
   player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
