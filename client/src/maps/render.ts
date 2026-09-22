@@ -5,7 +5,16 @@
 
 import { cellCenter, cellCorners, coordLabel, neighbors, worldBounds } from "./grid";
 import { createV5RenderModel } from "./renderModel";
-import type { MapRenderModel } from "./renderModel";
+import type {
+  MapRenderModel,
+  RenderDoor,
+  RenderLabel,
+  RenderMarker,
+  RenderRoom,
+  RenderStartFinish,
+  RenderTerrainLayer,
+  RenderTrap,
+} from "./renderModel";
 import type { MapDocumentV5 } from "./core/types";
 import type { MapGrid, MapScale } from "./mapTypes";
 import { MAP_TERRAIN_CODES } from "@shared/maps/core/literals";
@@ -687,45 +696,74 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     ctx.closePath();
   };
 
-  // Клетки: по умолчанию default read-модели (legacy: равнина) — заливка всего
-  // поля одним проходом, поверх — только расписанные и только видимые.
-  const terrainEntries = model.terrain.entries;
-  const terrainDefault = model.terrain.defaultCode;
-  ctx.fillStyle = MAP_TERRAIN_FILL[terrainDefault] ?? MAP_TERRAIN_FILL.plain;
+  // --- 3A: layer-driven предрасчёты, которым нужен весь стек сразу.
+  // Середины рёбер дверей (разрывы обводки комнат) — все видимые gameplay-слои;
+  // скрытая дверь у игрока щели не даёт (иначе спойлер позицией).
+  const doorPoints = new Set<string>();
   if (grid === "square") {
-    ctx.fillRect(X(0), Y(0), width * scale, height * scale);
-  } else {
-    for (let y = vy0; y <= vy1; y++)
-      for (let x = vx0; x <= vx1; x++) {
+    for (const layer of model.layers) {
+      if (layer.kind !== "gameplay" || !layer.visible) continue;
+      for (const it of layer.items) {
+        if (it.kind !== "door") continue;
+        if (doorForView(it.door, playerView).hidden) continue;
+        doorPoints.add(`${it.door.position.x},${it.door.position.y}`);
+      }
+    }
+  }
+  // Композитный террейн для wallAt обводки: верхний видимый terrain-слой
+  // полностью перекрывает нижние (§12). Без terrain-слоёв — бумага.
+  const visibleTerrains = model.layers.filter(
+    (l): l is RenderTerrainLayer => l.kind === "terrain" && l.visible,
+  );
+  const topTerrain = visibleTerrains[visibleTerrains.length - 1];
+  const terrainAt = (x: number, y: number): string => {
+    if (!topTerrain) return "plain";
+    return topTerrain.terrain.entries.get(`${x},${y}`) ?? topTerrain.terrain.defaultCode;
+  };
+
+  // Один terrain-слой — полный surface (§12): default заливает всё поле одним
+  // проходом, поверх — только расписанные и только видимые клетки.
+  const fillTerrainDefault = (defaultCode: string) => {
+    ctx.fillStyle = MAP_TERRAIN_FILL[defaultCode] ?? MAP_TERRAIN_FILL.plain;
+    if (grid === "square") {
+      ctx.fillRect(X(0), Y(0), width * scale, height * scale);
+    } else {
+      for (let y = vy0; y <= vy1; y++)
+        for (let x = vx0; x <= vx1; x++) {
+          traceCell(x, y);
+          ctx.fill();
+        }
+    }
+  };
+  const fillTerrainEntries = (entries: ReadonlyMap<string, string>, defaultCode: string) => {
+    const byTerrain = new Map<string, { x: number; y: number }[]>();
+    for (const [key, t] of entries) {
+      const [x, y] = key.split(",").map(Number);
+      if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x >= width || y >= height) continue;
+      if (t === defaultCode || !inView(x, y)) continue;
+      const list = byTerrain.get(t) ?? [];
+      list.push({ x, y });
+      byTerrain.set(t, list);
+    }
+    for (const [t, list] of byTerrain) {
+      ctx.fillStyle = MAP_TERRAIN_FILL[t] ?? MAP_TERRAIN_FILL[defaultCode] ?? MAP_TERRAIN_FILL.plain;
+      for (const { x, y } of list) {
         traceCell(x, y);
         ctx.fill();
       }
-  }
-  const byTerrain = new Map<string, { x: number; y: number }[]>();
-  for (const [key, t] of terrainEntries) {
-    const [x, y] = key.split(",").map(Number);
-    if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x >= width || y >= height) continue;
-    if (t === terrainDefault || !inView(x, y)) continue;
-    const list = byTerrain.get(t) ?? [];
-    list.push({ x, y });
-    byTerrain.set(t, list);
-  }
-  for (const [t, list] of byTerrain) {
-    ctx.fillStyle = MAP_TERRAIN_FILL[t] ?? MAP_TERRAIN_FILL[terrainDefault] ?? MAP_TERRAIN_FILL.plain;
-    for (const { x, y } of list) {
-      traceCell(x, y);
-      ctx.fill();
     }
-  }
+  };
 
   // Штриховка расписанных клеток (пакет B): только видимые, только крупно.
-  if (scale >= 16) {
+  // §23: layer opacity уже применена внешним save/alpha — здесь УМНОЖЕНИЕ.
+  const drawTerrainMotifs = (entries: ReadonlyMap<string, string>, defaultCode: string) => {
+    if (scale < 16) return;
     ctx.save();
     ctx.lineWidth = Math.max(1, scale * 0.06);
     ctx.lineCap = "round";
-    ctx.globalAlpha = 0.32;
-    for (const [key, t] of terrainEntries) {
-      if (t === terrainDefault) continue;
+    ctx.globalAlpha *= 0.32;
+    for (const [key, t] of entries) {
+      if (t === defaultCode) continue;
       const [x, y] = key.split(",").map(Number);
       if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x >= width || y >= height) continue;
       if (!inView(x, y)) continue;
@@ -736,7 +774,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       drawTerrainMotif(ctx, t, X(cx), Y(cy), scale);
     }
     ctx.restore();
-  }
+  };
 
   // Реки — тем же приёмом, что дороги (линия по центрам), но шире, водой и ПОД
   // дорогами, чтобы мост читался. Бумажная подложка держит читаемость на воде.
@@ -782,45 +820,46 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       }
     }
   };
-  if (model.rivers.size > 0) {
+  const strokeRivers = (set: ReadonlySet<string>) => {
+    if (set.size === 0) return;
     ctx.lineCap = "round";
     ctx.beginPath();
-    traceOverlayLine(model.rivers);
+    traceOverlayLine(set);
     ctx.strokeStyle = chrome.paper;
     ctx.lineWidth = Math.max(2, scale * 0.34);
     ctx.stroke();
     ctx.beginPath();
-    traceOverlayLine(model.rivers);
+    traceOverlayLine(set);
     ctx.strokeStyle = RIVER_FILL;
     ctx.lineWidth = Math.max(1.5, scale * 0.22);
     ctx.stroke();
-  }
+  };
 
   // Дороги — линией по центрам соседних дорожных клеток.
-  if (model.roads.size > 0) {
+  const strokeRoads = (set: ReadonlySet<string>) => {
+    if (set.size === 0) return;
     ctx.strokeStyle = chrome.ink;
     ctx.lineWidth = Math.max(1.5, scale * 0.22);
     ctx.lineCap = "round";
     ctx.beginPath();
-    traceOverlayLine(model.roads);
+    traceOverlayLine(set);
     ctx.stroke();
-  }
+  };
 
-  // Слой объектов, пакет A (§3 спеки): тинт комнат → двери → ловушки →
-  // старт/финиш. Объекты при scale < 10 не рисуются, глифы/текст — при < 14.
-  if (scale >= 10) {
-    // Комнаты: тинт типа + номер + имя.
-    model.rooms.forEach((r, idx) => {
-      const rc = r.rect;
-      if (!Number.isInteger(rc.x) || !Number.isInteger(rc.y) || !Number.isInteger(rc.w) || !Number.isInteger(rc.h)) return;
-      if (rc.w < 1 || rc.h < 1 || rc.x < 0 || rc.y < 0 || rc.x + rc.w > width || rc.y + rc.h > height) return;
+  // Gameplay-сущности рисуются в порядке items[] слоя (§16), без сортировки
+  // по kind. Объекты при scale < 10 не рисуются, глифы/текст — при < 14.
+  // Комнаты: тинт типа + номер + имя. idx — номер среди комнат слоя.
+  const drawRoomTint = (r: RenderRoom, idx: number) => {
+    const rc = r.rect;
+    if (!Number.isInteger(rc.x) || !Number.isInteger(rc.y) || !Number.isInteger(rc.w) || !Number.isInteger(rc.h)) return;
+    if (rc.w < 1 || rc.h < 1 || rc.x < 0 || rc.y < 0 || rc.x + rc.w > width || rc.y + rc.h > height) return;
       const tint = MAP_ROOM_TINT[r.type];
       if (scale >= 14) {
         const cxp = X(rc.x) + (rc.w * scale) / 2;
         const cyp = Y(rc.y) + (rc.h * scale) / 2;
         ctx.save();
         ctx.fillStyle = chrome.muted;
-        ctx.globalAlpha = 0.8;
+        ctx.globalAlpha *= 0.8;
         ctx.font = `${Math.min(10, Math.round(scale * 0.3))}px ${fonts.mono}`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
@@ -837,101 +876,89 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
           ctx.restore();
         }
       }
-    });
+    };
 
     // Обводка комнат со стороны стен (хотелка 2): сегмент периметра рисуется,
     // только если за ним стена (террейн wall) или край карты; где проём — нет
     // линии; на рёбрах с видимой дверью — пропуск (там уже дверь).
-    // Двери известны read-модели мировыми позициями середин рёбер, поэтому
-    // покрытие сегмента проверяется по совпадению середины (без x/y/edge).
-    // На гексах — те же клеточные рёбра через общие вершины полигонов.
-    {
-      const doorPoints = new Set<string>();
-      if (grid === "square") {
-        for (const d of model.doors) {
-          // Скрытая дверь у игрока щели в обводке не даёт — иначе спойлер позицией.
-          if (doorForView(d, playerView).hidden) continue;
-          doorPoints.add(`${d.position.x},${d.position.y}`);
-        }
-      }
-      const wallAt = (x: number, y: number): boolean => {
-        if (x < 0 || y < 0 || x >= width || y >= height) return true;
-        return (terrainEntries.get(`${x},${y}`) ?? terrainDefault) === "wall";
-      };
-      const inRoom = (rc: { x: number; y: number; w: number; h: number }, x: number, y: number): boolean =>
-        x >= rc.x && x < rc.x + rc.w && y >= rc.y && y < rc.y + rc.h;
-      const DIRS_SQ: { dx: number; dy: number; edge: "n" | "s" | "e" | "w" }[] = [
-        { dx: 0, dy: -1, edge: "n" },
-        { dx: 0, dy: 1, edge: "s" },
-        { dx: -1, dy: 0, edge: "w" },
-        { dx: 1, dy: 0, edge: "e" },
-      ];
+    // wallAt — композитный террейн стека, doorPoints — все видимые слои (3A).
+    const wallAt = (x: number, y: number): boolean => {
+      if (x < 0 || y < 0 || x >= width || y >= height) return true;
+      return terrainAt(x, y) === "wall";
+    };
+    const inRoom = (rc: { x: number; y: number; w: number; h: number }, x: number, y: number): boolean =>
+      x >= rc.x && x < rc.x + rc.w && y >= rc.y && y < rc.y + rc.h;
+    const DIRS_SQ: { dx: number; dy: number; edge: "n" | "s" | "e" | "w" }[] = [
+      { dx: 0, dy: -1, edge: "n" },
+      { dx: 0, dy: 1, edge: "s" },
+      { dx: -1, dy: 0, edge: "w" },
+      { dx: 1, dy: 0, edge: "e" },
+    ];
+    const seg2 = (ax: number, ay: number, bx: number, by: number) => {
+      ctx.moveTo(X(ax), Y(ay));
+      ctx.lineTo(X(bx), Y(by));
+    };
+    const strokeRoomOutline = (r: RenderRoom) => {
+      const rc = r.rect;
+      if (!Number.isInteger(rc.x) || !Number.isInteger(rc.y) || !Number.isInteger(rc.w) || !Number.isInteger(rc.h)) return;
+      if (rc.w < 1 || rc.h < 1 || rc.x < 0 || rc.y < 0 || rc.x + rc.w > width || rc.y + rc.h > height) return;
+      // Грубый отсев заэкранных комнат (гексам запас в клетку на выступы).
+      if (X(rc.x + rc.w) < -scale || X(rc.x) > canvasW + scale || Y(rc.y + rc.h) < -scale || Y(rc.y) > canvasH + scale) return;
       ctx.save();
       ctx.strokeStyle = chrome.ink;
       ctx.lineWidth = Math.max(1.5, scale * 0.1);
       ctx.lineCap = "butt";
       ctx.beginPath();
-      const seg2 = (ax: number, ay: number, bx: number, by: number) => {
-        ctx.moveTo(X(ax), Y(ay));
-        ctx.lineTo(X(bx), Y(by));
-      };
-      for (const r of model.rooms) {
-        const rc = r.rect;
-        if (!Number.isInteger(rc.x) || !Number.isInteger(rc.y) || !Number.isInteger(rc.w) || !Number.isInteger(rc.h)) continue;
-        if (rc.w < 1 || rc.h < 1 || rc.x < 0 || rc.y < 0 || rc.x + rc.w > width || rc.y + rc.h > height) continue;
-        // Грубый отсев заэкранных комнат (гексам запас в клетку на выступы).
-        if (X(rc.x + rc.w) < -scale || X(rc.x) > canvasW + scale || Y(rc.y + rc.h) < -scale || Y(rc.y) > canvasH + scale) continue;
-        for (let y = rc.y; y < rc.y + rc.h; y++) {
-          for (let x = rc.x; x < rc.x + rc.w; x++) {
-            if (grid === "square") {
-              for (const d of DIRS_SQ) {
-                const nx = x + d.dx;
-                const ny = y + d.dy;
-                if (inRoom(rc, nx, ny)) continue;
-                if (!wallAt(nx, ny)) continue;
-                // Середина кандидатного сегмента: совпала с дверью — пропуск.
-                const mx = d.edge === "w" ? x : d.edge === "e" ? x + 1 : x + 0.5;
-                const my = d.edge === "n" ? y : d.edge === "s" ? y + 1 : y + 0.5;
-                if (doorPoints.has(`${mx},${my}`)) continue;
-                if (d.edge === "n") seg2(x, y, x + 1, y);
-                else if (d.edge === "s") seg2(x, y + 1, x + 1, y + 1);
-                else if (d.edge === "w") seg2(x, y, x, y + 1);
-                else seg2(x + 1, y, x + 1, y + 1);
-              }
-            } else {
-              const pts = cellCorners(grid, x, y);
-              for (const n of neighbors(grid, x, y)) {
-                if (inRoom(rc, n.x, n.y)) continue;
-                if (!wallAt(n.x, n.y)) continue;
-                const q = cellCorners(grid, n.x, n.y);
-                const shared = pts.filter((p) =>
-                  q.some((s) => Math.abs(s.px - p.px) < 1e-6 && Math.abs(s.py - p.py) < 1e-6)
-                );
-                if (shared.length === 2) seg2(shared[0].px, shared[0].py, shared[1].px, shared[1].py);
-              }
+      for (let y = rc.y; y < rc.y + rc.h; y++) {
+        for (let x = rc.x; x < rc.x + rc.w; x++) {
+          if (grid === "square") {
+            for (const d of DIRS_SQ) {
+              const nx = x + d.dx;
+              const ny = y + d.dy;
+              if (inRoom(rc, nx, ny)) continue;
+              if (!wallAt(nx, ny)) continue;
+              // Середина кандидатного сегмента: совпала с дверью — пропуск.
+              const mx = d.edge === "w" ? x : d.edge === "e" ? x + 1 : x + 0.5;
+              const my = d.edge === "n" ? y : d.edge === "s" ? y + 1 : y + 0.5;
+              if (doorPoints.has(`${mx},${my}`)) continue;
+              if (d.edge === "n") seg2(x, y, x + 1, y);
+              else if (d.edge === "s") seg2(x, y + 1, x + 1, y + 1);
+              else if (d.edge === "w") seg2(x, y, x, y + 1);
+              else seg2(x + 1, y, x + 1, y + 1);
+            }
+          } else {
+            const pts = cellCorners(grid, x, y);
+            for (const n of neighbors(grid, x, y)) {
+              if (inRoom(rc, n.x, n.y)) continue;
+              if (!wallAt(n.x, n.y)) continue;
+              const q = cellCorners(grid, n.x, n.y);
+              const shared = pts.filter((p) =>
+                q.some((s) => Math.abs(s.px - p.px) < 1e-6 && Math.abs(s.py - p.py) < 1e-6)
+              );
+              if (shared.length === 2) seg2(shared[0].px, shared[0].py, shared[1].px, shared[1].py);
             }
           }
         }
       }
       ctx.stroke();
       ctx.restore();
-    }
+    };
 
     // Двери: тёмная подложка поперёк ребра + цвет вида + глиф.
     // Геометрия — мировая (position = середина ребра, horizontal = ось n/s);
     // формулы сведены к прежним поклеточным один в один (px±0.5 = x/x+1).
     // На гексах дверей нет (создание заблокировано), API-инъекцию молча
     // не рисуем, чтобы не врать геометрией.
-    for (const d of model.doors) {
-      if (grid !== "square") break;
+    const drawDoor = (d: RenderDoor) => {
+      if (grid !== "square") return;
       const px = d.position.x;
       const py = d.position.y;
       // Тот же отсев, что поклеточный inView (для legacy-данных эквивалентен:
       // px = x+0.5 в [vx0, vx1+1] ⟺ целое x в [vx0, vx1]).
-      if (px < vx0 || px > vx1 + 1 || py < vy0 || py > vy1 + 1) continue;
-      if (!Number.isFinite(px) || !Number.isFinite(py)) continue;
+      if (px < vx0 || px > vx1 + 1 || py < vy0 || py > vy1 + 1) return;
+      if (!Number.isFinite(px) || !Number.isFinite(py)) return;
       const { kind, hidden } = doorForView(d, playerView);
-      if (hidden) continue;
+      if (hidden) return;
       const horizontal = d.horizontal;
       // Подложка во всю клетку поперёк ребра.
       ctx.save();
@@ -973,15 +1000,15 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
         ctx.strokeRect(qx - 2.5, qy - 2.5, pw + 5, ph + 5);
       }
       ctx.restore();
-    }
+    };
 
     // Ловушки: плашка + символ. Игрок их не видит.
-    if (!playerView) {
-      for (const t of model.traps) {
+    const drawTrap = (t: RenderTrap) => {
+      if (playerView) return;
         const tx = t.position.x;
         const ty = t.position.y;
-        if (!Number.isFinite(tx) || !Number.isFinite(ty)) continue;
-        if (!inViewWorld(tx, ty)) continue;
+        if (!Number.isFinite(tx) || !Number.isFinite(ty)) return;
+        if (!inViewWorld(tx, ty)) return;
         const ss = scale * 0.6;
         const sx = X(tx) - ss / 2;
         const sy = Y(ty) - ss / 2;
@@ -1004,16 +1031,15 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
           ctx.strokeRect(sx - 2.5, sy - 2.5, ss + 5, ss + 5);
         }
         ctx.restore();
-      }
-    }
+    };
 
     // Маркеры (сундуки, алтари): видны всем, включая игрока. Сундук — плашка
     // с крышкой, алтарь — круг с точкой. Выбранный — чернильной обводкой.
-    for (const mk of model.markers) {
+    const drawMarker = (mk: RenderMarker) => {
       const mx0 = mk.position.x;
       const my0 = mk.position.y;
-      if (!Number.isFinite(mx0) || !Number.isFinite(my0)) continue;
-      if (!inViewWorld(mx0, my0)) continue;
+      if (!Number.isFinite(mx0) || !Number.isFinite(my0)) return;
+      if (!inViewWorld(mx0, my0)) return;
       const ms = scale * 0.6;
       const mx = X(mx0) - ms / 2;
       const my = Y(my0) - ms / 2;
@@ -1115,13 +1141,12 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
         ctx.strokeRect(mx - 2.5, my - 2.5, ms + 5, ms + 5);
       }
       ctx.restore();
-    }
+    };
 
     // Старт/финиш: видны всем.
-    for (const key of ["start", "finish"] as const) {
-      const p = model[key];
-      if (!p || !Number.isFinite(p.position.x) || !Number.isFinite(p.position.y)) continue;
-      if (!inViewWorld(p.position.x, p.position.y)) continue;
+    const drawStartFinish = (key: "start" | "finish", p: RenderStartFinish) => {
+      if (!Number.isFinite(p.position.x) || !Number.isFinite(p.position.y)) return;
+      if (!inViewWorld(p.position.x, p.position.y)) return;
       const cxp = X(p.position.x);
       const cyp = Y(p.position.y);
       ctx.save();
@@ -1161,7 +1186,75 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
         ctx.strokeRect(cxp - scale / 2 - 2.5, cyp - scale / 2 - 2.5, scale + 5, scale + 5);
       }
       ctx.restore();
+    };
+
+  // Подписи рисуются в позиции своего label-слоя в стеке (3A §17), а не
+  // специальным "всегда сверху" проходом. Только на крупном зуме, иначе каша.
+  const drawLabel = (l: RenderLabel) => {
+    if (!Number.isFinite(l.position.x) || !Number.isFinite(l.position.y)) return;
+    if (!inViewWorld(l.position.x, l.position.y)) return;
+    const px = X(l.position.x);
+    const py = Y(l.position.y);
+    ctx.save();
+    ctx.font = `500 ${Math.min(13, Math.round(scale * 0.36))}px ${fonts.label}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    // Точка-маркер в центре клетки.
+    ctx.beginPath();
+    ctx.arc(px, py, Math.max(2, scale * 0.09), 0, Math.PI * 2);
+    ctx.fillStyle = chrome.ink;
+    ctx.fill();
+    // Текст с бумажной подложкой-обводкой, чтобы читался на любом террейне.
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = chrome.paper;
+    ctx.strokeText(l.text, px, py - scale * 0.12, scale * 8);
+    ctx.fillStyle = chrome.ink;
+    ctx.fillText(l.text, px, py - scale * 0.12, scale * 8);
+    ctx.restore();
+  };
+
+  // --- 3A: композиция строго по document.layers[] (§2–3, §75).
+  // Первый слой — самый нижний, последний — самый верхний. Hidden — именно
+  // skip (§21). Opacity — умножением на весь content слоя (§22–23).
+  // Locked на изображение не влияет. Grid/coords — глобальный оверлей ПОСЛЕ
+  // всех document layers (§19, intentional delta), editor overlays — после.
+  for (const layer of model.layers) {
+    if (!layer.visible) continue;
+    ctx.save();
+    ctx.globalAlpha *= layer.opacity;
+    if (layer.kind === "terrain") {
+      fillTerrainDefault(layer.terrain.defaultCode);
+      fillTerrainEntries(layer.terrain.entries, layer.terrain.defaultCode);
+      drawTerrainMotifs(layer.terrain.entries, layer.terrain.defaultCode);
+    } else if (layer.kind === "path") {
+      // paths[] order = render order (§14): реки отдельно ниже дорог НЕ
+      // фиксируются — порядок задают сами слои (migrated: river-слой ниже).
+      for (const p of layer.paths) {
+        if (p.kind === "river") strokeRivers(p.cells);
+        else strokeRoads(p.cells);
+      }
+    } else if (layer.kind === "gameplay") {
+      if (scale >= 10) {
+        let roomIdx = 0;
+        for (const it of layer.items) {
+          if (it.kind === "room") {
+            drawRoomTint(it.room, roomIdx++);
+            strokeRoomOutline(it.room);
+          } else if (it.kind === "door") drawDoor(it.door);
+          else if (it.kind === "trap") drawTrap(it.trap);
+          else if (it.kind === "marker") drawMarker(it.marker);
+          else if (it.kind === "start") drawStartFinish("start", it.start);
+          else if (it.kind === "finish") drawStartFinish("finish", it.finish);
+        }
+      }
+    } else if (layer.kind === "label") {
+      if (scale >= 12) {
+        for (const l of layer.labels) drawLabel(l);
+      }
     }
+    // object/scatter: содержимое не рисуется (compat gate держит nonempty
+    // вне редактора); слой присутствует ради порядка/флагов.
+    ctx.restore();
   }
 
   // Сетка 1 px по инварианту.
@@ -1213,32 +1306,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     }
   }
 
-  // Подписи — поверх всего, кроме ничего: текст читается всегда (P2-2).
-  // Только на крупном зуме, иначе каша.
-  if (model.labels.length > 0 && scale >= 12) {
-    ctx.save();
-    ctx.font = `500 ${Math.min(13, Math.round(scale * 0.36))}px ${fonts.label}`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "bottom";
-    for (const l of model.labels) {
-      if (!Number.isFinite(l.position.x) || !Number.isFinite(l.position.y)) continue;
-      if (!inViewWorld(l.position.x, l.position.y)) continue;
-      const px = X(l.position.x);
-      const py = Y(l.position.y);
-      // Точка-маркер в центре клетки.
-      ctx.beginPath();
-      ctx.arc(px, py, Math.max(2, scale * 0.09), 0, Math.PI * 2);
-      ctx.fillStyle = chrome.ink;
-      ctx.fill();
-      // Текст с бумажной подложкой-обводкой, чтобы читался на любом террейне.
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = chrome.paper;
-      ctx.strokeText(l.text, px, py - scale * 0.12, scale * 8);
-      ctx.fillStyle = chrome.ink;
-      ctx.fillText(l.text, px, py - scale * 0.12, scale * 8);
-    }
-    ctx.restore();
-  }
+  // (drawLabel определён выше, рядом с остальными layer-проходами.)
 
   // Подсветка под курсором: футпринт кисти, иначе одиночная клетка.
   const highlights =

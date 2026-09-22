@@ -10,6 +10,15 @@ import { migrateLegacyMap } from "../../core/migrateLegacy";
 import type { MapDocumentV5 } from "../../core/types";
 import { createDeterministicIdFactory } from "../idFactory";
 import type { MapGeometry } from "../hooks/useMapSelection";
+import {
+  createGameplayLayer,
+  createLabelLayer,
+  createPathLayer,
+  createTerrainLayer,
+} from "../../core/mutations/layers";
+import { createCellNetworkPath } from "../../core/mutations/paths";
+import { createLabel } from "../../core/mutations/labels";
+import { updateLabelText } from "../../core/mutations/labels";
 
 function baseDoc(): MapDocumentV5 {
   return migrateLegacyMap({
@@ -67,12 +76,15 @@ function paintDeps(overrides: Record<string, unknown> = {}) {
   const selectTool = vi.fn();
   const setTerrain = vi.fn();
   const setActionError = vi.fn();
+  const onActiveLayer = vi.fn();
   return {
     deps: {
       geom: GEOM,
       tool: "brush",
       terrain: "forest",
       brushSize: 1 as const,
+      activeLayerId: null,
+      onActiveLayer,
       documentRef,
       setDocument,
       push,
@@ -88,6 +100,7 @@ function paintDeps(overrides: Record<string, unknown> = {}) {
     selectTool,
     setTerrain,
     setActionError,
+    onActiveLayer,
   };
 }
 
@@ -201,7 +214,7 @@ describe("paintTools (V5)", () => {
     expect(h2.push).not.toHaveBeenCalled();
   });
 
-  it("несколько road paths: кисть даёт structured error, а не первый попавшийся", () => {
+  it("несколько road paths в одном слое: кисть даёт structured error", () => {
     const h = paintDeps({ tool: "road" });
     // Второй road path поверх мигрированного.
     const doc = h.documentRef.current!;
@@ -233,7 +246,7 @@ describe("paintTools (V5)", () => {
     const paint = createPaintTools(h.deps as never);
     expect(paint.paintAt(2.5, 2.5)).toBe(false);
     expect(h.deps.setActionError).toHaveBeenCalledWith(
-      expect.stringContaining("несколько road paths"),
+      expect.stringContaining("в слое несколько road paths"),
     );
     expect(h.push).not.toHaveBeenCalled();
   });
@@ -278,6 +291,8 @@ describe("wallTools (V5)", () => {
           { x: 4.5, y: 1.5 },
         ],
         wallLive: null,
+        activeLayerId: null,
+        onActiveLayer: vi.fn(),
         setWallDraft: vi.fn(),
         setWallLive: vi.fn(),
         documentRef,
@@ -336,6 +351,8 @@ describe("shapeTools (V5)", () => {
         shapeContent: "terrain",
         terrain: "mountains",
         shapeAnchor: null,
+        activeLayerId: null,
+        onActiveLayer: vi.fn(),
         setShapeAnchor: vi.fn(),
         setRectPreview: vi.fn(),
         documentRef,
@@ -426,6 +443,8 @@ describe("objectTools (V5)", () => {
         geom: GEOM,
         lastTrapKind: "pit",
         markerKind: "city",
+        activeLayerId: null,
+        onActiveLayer: vi.fn(),
         setActionError: vi.fn(),
         documentRef,
         commitDocument,
@@ -459,8 +478,7 @@ describe("objectTools (V5)", () => {
     expect(h.commitDocument).toHaveBeenCalledTimes(5);
   });
 
-  it("door: hex — ошибка, дубликат ребра — ошибка, лимиты — ошибки", () => {
-    const h = objectDeps();
+  it("door: hex — ошибка, дубликат ребра — ошибка, лимиты — ошибки", () => {    const h = objectDeps();
     const objects = createObjectTools(h.deps as never);
     objects.placeObject("door", 6.1, 6.5);
     expect(gameplay(h.documentRef.current!).filter((e) => e.kind === "door")).toHaveLength(1);
@@ -474,5 +492,186 @@ describe("objectTools (V5)", () => {
       "Двери — только на квадратах: на гексах рёберной модели нет."
     );
     expect(gameplay(hex.documentRef.current!).filter((e) => e.kind === "door")).toHaveLength(0);
+  });
+});
+
+describe("tool target routing (3A §122–126)", () => {
+  function objectDepsLocal(overrides: Record<string, unknown> = {}) {
+    const documentRef = { current: baseDoc() as MapDocumentV5 | null };
+    const commitDocument = vi.fn((next: MapDocumentV5) => {
+      documentRef.current = next;
+    });
+    return {
+      deps: {
+        geom: GEOM,
+        lastTrapKind: "pit",
+        markerKind: "city",
+        activeLayerId: null,
+        onActiveLayer: vi.fn(),
+        setActionError: vi.fn(),
+        documentRef,
+        commitDocument,
+        newId: createDeterministicIdFactory(),
+        ...overrides,
+      },
+      documentRef,
+      commitDocument,
+    };
+  }
+
+  function withSecondTerrain(doc: MapDocumentV5): MapDocumentV5 {
+    const r = createTerrainLayer(doc, { id: "t-upper", name: "Terrain 2" });
+    if (!r.ok || !r.changed) throw new Error("create failed");
+    return r.document;
+  }
+
+  function terrainCellsOf(doc: MapDocumentV5, layerId: string): Map<string, string> {
+    const l = doc.layers.find((x) => x.id === layerId);
+    if (!l || l.kind !== "terrain" || l.representation !== "cells") throw new Error("no terrain " + layerId);
+    return new Map(l.cells.map((c) => [`${c.x},${c.y}`, c.material.key]));
+  }
+
+  it("§122: active compatible wins; manual active retained (без onActiveLayer)", () => {
+    const doc = withSecondTerrain(baseDoc());
+    const h = paintDeps({ tool: "brush", activeLayerId: "lyr-terrain" });
+    h.documentRef.current = doc;
+    const paint = createPaintTools(h.deps as never);
+    expect(paint.paintAt(5.5, 5.5)).toBe(true);
+    // Краска ушла в НИЖНИЙ lyr-terrain (active), верхний t-upper пуст.
+    expect(terrainCellsOf(h.documentRef.current!, "lyr-terrain").get("5,5")).toBe("terrain/forest");
+    expect(terrainCellsOf(h.documentRef.current!, "t-upper").has("5,5")).toBe(false);
+    expect(h.onActiveLayer).not.toHaveBeenCalled();
+  });
+
+  it("§122: active incompatible → topmost compatible + onActiveLayer", () => {
+    const doc = withSecondTerrain(baseDoc());
+    // Active — gameplay (несовместим с brush).
+    const h = paintDeps({ tool: "brush", activeLayerId: "lyr-gameplay" });
+    h.documentRef.current = doc;
+    const paint = createPaintTools(h.deps as never);
+    expect(paint.paintAt(5.5, 5.5)).toBe(true);
+    // Верхний terrain — t-upper.
+    expect(terrainCellsOf(h.documentRef.current!, "t-upper").get("5,5")).toBe("terrain/forest");
+    expect(h.onActiveLayer).toHaveBeenCalledWith("t-upper");
+  });
+
+  it("§122: hidden/locked compatible skipped; нет слоя → error", () => {
+    const hidden: MapDocumentV5 = {
+      ...withSecondTerrain(baseDoc()),
+      layers: withSecondTerrain(baseDoc()).layers.map((l) =>
+        l.id === "t-upper" ? { ...l, visible: false } : l,
+      ),
+    };
+    const h = paintDeps({ tool: "brush", activeLayerId: null });
+    h.documentRef.current = hidden;
+    const paint = createPaintTools(h.deps as never);
+    expect(paint.paintAt(5.5, 5.5)).toBe(true);
+    expect(terrainCellsOf(h.documentRef.current!, "lyr-terrain").get("5,5")).toBe("terrain/forest");
+
+    const locked: MapDocumentV5 = {
+      ...baseDoc(),
+      layers: baseDoc().layers.map((l) => (l.kind === "terrain" ? { ...l, locked: true } : l)),
+    };
+    const h2 = paintDeps({ tool: "brush", activeLayerId: null });
+    h2.documentRef.current = locked;
+    const paint2 = createPaintTools(h2.deps as never);
+    expect(paint2.paintAt(5.5, 5.5)).toBe(false);
+    expect(h2.setActionError).toHaveBeenCalledWith("Нет доступного слоя подходящего типа.");
+  });
+
+  it("§123: multi-terrain — brush/fill/picker только в target, undo один шаг", () => {
+    const doc = withSecondTerrain(baseDoc());
+    // Brush в верхний.
+    const h = paintDeps({ tool: "brush", activeLayerId: "t-upper" });
+    h.documentRef.current = doc;
+    const paint = createPaintTools(h.deps as never);
+    expect(paint.paintAt(5.5, 5.5)).toBe(true);
+    expect(terrainCellsOf(h.documentRef.current!, "t-upper").get("5,5")).toBe("terrain/forest");
+    expect(terrainCellsOf(h.documentRef.current!, "lyr-terrain").has("5,5")).toBe(false);
+    // Flood в верхний — один push.
+    const hf = paintDeps({ tool: "fill", terrain: "mountains", activeLayerId: "t-upper" });
+    hf.documentRef.current = h.documentRef.current!;
+    const paintF = createPaintTools(hf.deps as never);
+    paintF.singleAction(10.5, 10.5);
+    expect(hf.push).toHaveBeenCalledTimes(1);
+    expect(terrainCellsOf(hf.documentRef.current!, "t-upper").get("10,10")).toBe("terrain/mountains");
+    // Picker читает target (верхний — mountains после заливки).
+    const hp = paintDeps({ tool: "picker", activeLayerId: "t-upper" });
+    hp.documentRef.current = hf.documentRef.current!;
+    const paintP = createPaintTools(hp.deps as never);
+    paintP.singleAction(10.5, 10.5);
+    expect(hp.setTerrain).toHaveBeenCalledWith("mountains");
+  });
+
+  it("§124: два PathLayers с road — кисть меняет только active", () => {
+    let doc = baseDoc();
+    const p2 = createPathLayer(doc, { id: "p-secret", name: "Secret" });
+    if (!p2.ok || !p2.changed) throw new Error("create failed");
+    doc = p2.document;
+    const c = createCellNetworkPath(doc, "p-secret", {
+      id: "road-secret",
+      kind: "road",
+      styleRef: { type: "builtin", key: "road" },
+      width: 1,
+      cells: [{ x: 9, y: 9 }],
+    });
+    if (!c.ok || !c.changed) throw new Error("path create failed");
+    doc = c.document;
+    // Active — верхний p-secret: красим туда.
+    const h = paintDeps({ tool: "road", activeLayerId: "p-secret" });
+    h.documentRef.current = doc;
+    const paint = createPaintTools(h.deps as never);
+    expect(paint.paintAt(8.5, 8.5)).toBe(true);
+    const after = h.documentRef.current!;
+    const secretCells = new Set<string>();
+    const mainCells = new Set<string>();
+    for (const l of after.layers) {
+      if (l.kind !== "path") continue;
+      for (const p of l.paths) {
+        if (p.kind !== "road" || p.geometry.type !== "cell-network") continue;
+        for (const cell of p.geometry.cells) {
+          (l.id === "p-secret" ? secretCells : mainCells).add(`${cell.x},${cell.y}`);
+        }
+      }
+    }
+    expect(secretCells.has("8,8")).toBe(true);
+    expect(mainCells.has("8,8")).toBe(false);
+    expect(h.onActiveLayer).not.toHaveBeenCalled();
+  });
+
+  it("§125: create marker в active A — B untouched", () => {
+    let doc = baseDoc();
+    const g = createGameplayLayer(doc, { id: "g-b", name: "GB" });
+    if (!g.ok || !g.changed) throw new Error("create failed");
+    doc = g.document;
+    const h = objectDepsLocal({ activeLayerId: "lyr-gameplay" });
+    h.documentRef.current = doc;
+    const objects = createObjectTools(h.deps as never);
+    objects.placeObject("trap", 6.5, 6.5);
+    const after = h.documentRef.current!;
+    const aItems = after.layers.find((l) => l.id === "lyr-gameplay");
+    const bItems = after.layers.find((l) => l.id === "g-b");
+    expect(aItems?.kind === "gameplay" && aItems.items.some((e) => e.kind === "trap")).toBe(true);
+    expect(bItems?.kind === "gameplay" && bItems.items).toEqual([]);
+  });
+
+  it("§126: одинаковая позиция на двух LabelLayers — edit scoped", () => {
+    let doc = baseDoc();
+    const l2 = createLabelLayer(doc, { id: "l-b", name: "LB" });
+    if (!l2.ok || !l2.changed) throw new Error("create failed");
+    doc = l2.document;
+    const a = createLabel(doc, "lyr-labels", { id: "lbl-a", position: { x: 1.5, y: 1.5 }, text: "A" });
+    if (!a.ok || !a.changed) throw new Error("label a failed");
+    doc = a.document;
+    const b = createLabel(doc, "l-b", { id: "lbl-b", position: { x: 1.5, y: 1.5 }, text: "B" });
+    if (!b.ok || !b.changed) throw new Error("label b failed");
+    doc = b.document;
+    // Правка в A не трогает B.
+    const u = updateLabelText(doc, "lbl-a", "A2");
+    if (!u.ok || !u.changed) throw new Error("update failed");
+    const lB = u.document.layers.find((l) => l.id === "l-b");
+    expect(lB?.kind === "label" && lB.items).toEqual([
+      { id: "lbl-b", position: { x: 1.5, y: 1.5 }, text: "B" },
+    ]);
   });
 });

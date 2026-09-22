@@ -10,7 +10,7 @@
 //
 // 400 мс — не выдуманное число: столько же ждёт splash в electron/main.js,
 // то есть порог «пора показать, что мы живы» в проекте уже выбран.
-import { SoyMan } from "./SoyMan";
+import { SoyManResponsive } from "./SoyMan";
 
 export function Loading({
   label = "Загрузка…",
@@ -25,7 +25,7 @@ export function Loading({
     <div className={full ? "soy-loading soy-loading--full" : "soy-loading"}>
       {/* decorative: подпись рядом говорит то же самое, дублировать её
           для скринридера незачем. Роль «идёт загрузка» несёт role="status". */}
-      <SoyMan state="working" size="md" decorative />
+      <SoyManResponsive state="working" size="lg" decorative />
       <p className="muted" role="status">
         {label}
       </p>

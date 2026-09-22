@@ -153,7 +153,17 @@ async function request<T>(path: string, options?: RequestOptions): Promise<T> {
       /* not JSON — keep the raw text */
     }
     report(res.status, message);
-    throw new Error(message);
+    // Structured failures (e.g. 409 decision codes with a match payload)
+    // travel on the error for callers that branch on them; message-only
+    // readers like errorText() are unaffected.
+    const failure = new Error(message) as Error & { status: number; payload: unknown };
+    failure.status = res.status;
+    try {
+      failure.payload = JSON.parse(text);
+    } catch {
+      failure.payload = null;
+    }
+    throw failure;
   }
   report(res.status);
   // Любая удачная правка — повод остальным окнам приложения обновиться: они

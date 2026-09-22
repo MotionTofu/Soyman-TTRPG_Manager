@@ -1,5 +1,7 @@
-// RenderModel tests (§49–53 ТЗ): legacy adapter reads, V5 adapter,
+// RenderModel tests (Фазы 2D/3A): legacy adapter reads, V5 adapter,
 // unsupported diagnostics, legacy↔V5 equivalence, no mutation.
+// 3A: модель layer-oriented — проверки идут через слои; legacy↔V5
+// equivalence — через flatten (порядок content, не структура стека).
 
 import { describe, expect, it } from "vitest";
 import { migrateLegacyMap } from "./core/migrateLegacy";
@@ -9,6 +11,7 @@ import type { MapCells } from "./render";
 import {
   createLegacyRenderModel,
   createV5RenderModel,
+  type MapRenderLayer,
   type MapRenderModel,
 } from "./renderModel";
 
@@ -47,51 +50,105 @@ const FULL: MapCells = {
   finish: { x: 5, y: 0 },
 };
 
+function kinds(m: MapRenderModel): string[] {
+  return m.layers.map((l) => l.kind);
+}
+
+function gameplayItems(m: MapRenderModel) {
+  return m.layers.flatMap((l) => (l.kind === "gameplay" ? l.items : []));
+}
+
+function labelItems(m: MapRenderModel) {
+  return m.layers.flatMap((l) => (l.kind === "label" ? l.labels : []));
+}
+
 describe("legacy adapter reads", () => {
   const m = createLegacyRenderModel("square", 8, 8, FULL);
 
-  it("terrain lookup + plain fallback (zero-copy refs)", () => {
-    expect(m.terrain.defaultCode).toBe("plain");
-    expect(m.terrain.entries).toBe(FULL.terrain);
-    expect(m.terrain.entries.get("1,1")).toBe("forest");
-    expect(m.terrain.entries.get("0,0")).toBeUndefined();
+  it("псевдо-стек повторяет старый draw order, флаги открыты", () => {
+    expect(kinds(m)).toEqual(["terrain", "path", "gameplay", "label"]);
+    for (const l of m.layers) {
+      expect(l.visible).toBe(true);
+      expect(l.locked).toBe(false);
+      expect(l.opacity).toBe(1);
+    }
   });
 
-  it("roads/rivers (zero-copy)", () => {
-    expect(m.roads).toBe(FULL.roads);
-    expect(m.rivers).toBe(FULL.rivers);
-    expect(m.roads.has("0,2")).toBe(true);
+  it("terrain lookup + plain fallback (zero-copy refs)", () => {
+    const t = m.layers[0];
+    expect(t.kind).toBe("terrain");
+    if (t.kind !== "terrain") return;
+    expect(t.terrain.defaultCode).toBe("plain");
+    expect(t.terrain.entries).toBe(FULL.terrain);
+    expect(t.terrain.entries.get("1,1")).toBe("forest");
+    expect(t.terrain.entries.get("0,0")).toBeUndefined();
+  });
+
+  it("paths: сначала реки, потом дороги (zero-copy)", () => {
+    const p = m.layers[1];
+    expect(p.kind).toBe("path");
+    if (p.kind !== "path") return;
+    expect(p.paths.map((x) => x.kind)).toEqual(["river", "road"]);
+    expect(p.paths[0].cells).toBe(FULL.rivers);
+    expect(p.paths[1].cells).toBe(FULL.roads);
   });
 
   it("labels: world positions + deterministic IDs", () => {
-    expect(m.labels).toEqual([{ id: "legacy-label-0", position: { x: 1.5, y: 1.5 }, text: "Лес" }]);
+    expect(labelItems(m)).toEqual([{ id: "legacy-label-0", position: { x: 1.5, y: 1.5 }, text: "Лес" }]);
   });
 
-  it("rooms: rect/type/name/ID", () => {
-    expect(m.rooms).toEqual([
-      { id: "legacy-room-0", rect: { x: 2, y: 0, w: 2, h: 2 }, type: "treasury", name: "Кладовая" },
+  it("gameplay items в kind-порядке с ID", () => {
+    const items = gameplayItems(m);
+    expect(items.map((i) => i.kind)).toEqual([
+      "room",
+      "door",
+      "door",
+      "trap",
+      "marker",
+      "start",
+      "finish",
     ]);
-  });
-
-  it("doors: edge midpoint + horizontal + kind/secret/ID", () => {
-    expect(m.doors).toEqual([
-      { id: "legacy-door-0", position: { x: 2.5, y: 0 }, horizontal: true, kind: "door", secret: false },
-      { id: "legacy-door-1", position: { x: 1, y: 0.5 }, horizontal: false, kind: "secret", secret: true },
-    ]);
-  });
-
-  it("traps/markers/start/finish", () => {
-    expect(m.traps).toEqual([{ id: "legacy-trap-0", position: { x: 3.5, y: 1.5 }, kind: "pit" }]);
-    expect(m.markers).toEqual([{ id: "legacy-marker-0", position: { x: 5.5, y: 5.5 }, kind: "chest" }]);
-    expect(m.start).toEqual({ id: "legacy-start", position: { x: 0.5, y: 5.5 } });
-    expect(m.finish).toEqual({ id: "legacy-finish", position: { x: 5.5, y: 0.5 } });
+    const room = items[0];
+    expect(room).toEqual({
+      kind: "room",
+      room: {
+        id: "legacy-room-0",
+        rect: { x: 2, y: 0, w: 2, h: 2 },
+        type: "treasury",
+        name: "Кладовая",
+      },
+    });
+    expect(items[1]).toEqual({
+      kind: "door",
+      door: { id: "legacy-door-0", position: { x: 2.5, y: 0 }, horizontal: true, kind: "door", secret: false },
+    });
+    expect(items[2]).toEqual({
+      kind: "door",
+      door: { id: "legacy-door-1", position: { x: 1, y: 0.5 }, horizontal: false, kind: "secret", secret: true },
+    });
+    expect(items[3]).toEqual({
+      kind: "trap",
+      trap: { id: "legacy-trap-0", position: { x: 3.5, y: 1.5 }, kind: "pit" },
+    });
+    expect(items[4]).toEqual({
+      kind: "marker",
+      marker: { id: "legacy-marker-0", position: { x: 5.5, y: 5.5 }, kind: "chest" },
+    });
+    expect(items[5]).toEqual({
+      kind: "start",
+      start: { id: "legacy-start", position: { x: 0.5, y: 5.5 } },
+    });
+    expect(items[6]).toEqual({
+      kind: "finish",
+      finish: { id: "legacy-finish", position: { x: 5.5, y: 0.5 } },
+    });
   });
 
   it("hex positions via cellCenter (no square assumption)", () => {
     const hx = cells({ labels: [{ x: 2, y: 2, text: "H" }], traps: [{ x: 1, y: 2, kind: "gas" }] });
     const mhex = createLegacyRenderModel("hex", 6, 6, hx);
     const c = cellCenter("hex", 2, 2);
-    expect(mhex.labels[0].position).toEqual({ x: c.cx, y: c.cy });
+    expect(labelItems(mhex)[0].position).toEqual({ x: c.cx, y: c.cy });
   });
 
   it("OOB entities отфильтрованы как у renderer", () => {
@@ -103,11 +160,8 @@ describe("legacy adapter reads", () => {
       start: { x: 99, y: 99 },
     });
     const m2 = createLegacyRenderModel("square", 8, 8, bad);
-    expect(m2.labels).toEqual([]);
-    expect(m2.traps).toEqual([]);
-    expect(m2.rooms).toEqual([]);
-    expect(m2.doors).toEqual([]);
-    expect(m2.start).toBeNull();
+    expect(labelItems(m2)).toEqual([]);
+    expect(gameplayItems(m2)).toEqual([]);
   });
 });
 
@@ -133,7 +187,19 @@ describe("V5 adapter on migrated fixtures", () => {
     }
   });
 
-  it("V5 model равна legacy model (equivalence)", () => {
+  it("структура и порядок слоёв документа сохранены, флаги перенесены", () => {
+    const doc = migratedV5(FULL);
+    const { model } = createV5RenderModel(doc);
+    expect(model.layers.map((l) => l.id)).toEqual(doc.layers.map((l) => l.id));
+    model.layers.forEach((ml, i) => {
+      expect(ml.visible).toBe(doc.layers[i].visible);
+      expect(ml.locked).toBe(doc.layers[i].locked);
+      expect(ml.opacity).toBe(doc.layers[i].opacity);
+      expect(ml.name).toBe(doc.layers[i].name);
+    });
+  });
+
+  it("V5 model равна legacy model (equivalence через flatten)", () => {
     for (const grid of ["square", "hex"] as const) {
       const w = grid === "square" ? 8 : 6;
       const legacy = createLegacyRenderModel(grid, w, w, FULL_HEX_SAFE);
@@ -149,22 +215,47 @@ const FULL_HEX_SAFE: MapCells = {
   doors: [{ x: 2, y: 0, edge: "n", kind: "door", secret: false, pair: null }],
 };
 
-/** Test-only comparator (§26 ТЗ): семантическое равенство read models. */
+/** Test-only flatten (§26 ТЗ, 3A): content модели в порядке слоёв. */
+export function flattenRenderModel(m: MapRenderModel): {
+  terrain: { defaultCode: string; entries: [string, string][] };
+  rivers: string[];
+  roads: string[];
+  labels: unknown[];
+  items: unknown[];
+} {
+  const terrains = m.layers.filter((l): l is Extract<MapRenderLayer, { kind: "terrain" }> => l.kind === "terrain");
+  const entries = new Map<string, string>();
+  let defaultCode = "plain";
+  for (const t of terrains) {
+    defaultCode = t.terrain.defaultCode;
+    for (const [k, v] of t.terrain.entries) entries.set(k, v);
+  }
+  const rivers: string[] = [];
+  const roads: string[] = [];
+  for (const l of m.layers) {
+    if (l.kind !== "path") continue;
+    for (const p of l.paths) {
+      if (p.kind === "river") rivers.push(...p.cells);
+      else roads.push(...p.cells);
+    }
+  }
+  return {
+    terrain: { defaultCode, entries: [...entries.entries()].sort(([a], [b]) => (a < b ? -1 : 1)) },
+    rivers: [...rivers].sort(),
+    roads: [...roads].sort(),
+    labels: labelItems(m),
+    items: gameplayItems(m),
+  };
+}
+
+/** Test-only comparator: семантическое равенство read models через flatten. */
 export function compareRenderModels(a: MapRenderModel, b: MapRenderModel): string[] {
   const diffs: string[] = [];
-  if (a.terrain.defaultCode !== b.terrain.defaultCode) diffs.push("terrain.defaultCode");
-  const entries = (m: ReadonlyMap<string, string>) => [...m.entries()].sort(([k1], [k2]) => (k1 < k2 ? -1 : 1));
-  if (JSON.stringify(entries(a.terrain.entries)) !== JSON.stringify(entries(b.terrain.entries))) {
-    diffs.push("terrain.entries");
+  const fa = flattenRenderModel(a);
+  const fb = flattenRenderModel(b);
+  for (const k of ["terrain", "rivers", "roads", "labels", "items"] as const) {
+    if (JSON.stringify(fa[k]) !== JSON.stringify(fb[k])) diffs.push(k);
   }
-  const set = (s: ReadonlySet<string>) => [...s].sort();
-  if (JSON.stringify(set(a.roads)) !== JSON.stringify(set(b.roads))) diffs.push("roads");
-  if (JSON.stringify(set(a.rivers)) !== JSON.stringify(set(b.rivers))) diffs.push("rivers");
-  for (const k of ["labels", "rooms", "doors", "traps", "markers"] as const) {
-    if (JSON.stringify(a[k]) !== JSON.stringify(b[k])) diffs.push(k);
-  }
-  if (JSON.stringify(a.start) !== JSON.stringify(b.start)) diffs.push("start");
-  if (JSON.stringify(a.finish) !== JSON.stringify(b.finish)) diffs.push("finish");
   return diffs;
 }
 
@@ -267,10 +358,11 @@ describe("unsupported V5 content", () => {
       "unsupported-terrain-mask",
     ]);
     // Model валидной формы: дефолтный террейн, пути/комнаты пропущены.
-    expect(model.terrain.defaultCode).toBe("plain");
-    expect(model.terrain.entries.size).toBe(0);
-    expect(model.rooms.map((r) => r.id)).not.toContain("room-poly");
-    expect(model.doors.length).toBeGreaterThan(0);
+    const flat = flattenRenderModel(model);
+    expect(flat.terrain.defaultCode).toBe("plain");
+    expect(flat.terrain.entries).toEqual([]);
+    expect(flat.items.map((i) => (i as { room?: { id: string } }).room?.id)).not.toContain("room-poly");
+    expect(flat.items.length).toBeGreaterThan(0);
   });
 
   it("не-terrain material клетки → unsupported-material, клетка как default", () => {
@@ -287,8 +379,9 @@ describe("unsupported V5 content", () => {
     });
     const { model, diagnostics } = createV5RenderModel({ ...base, layers });
     expect(diagnostics.map((d) => d.code)).toContain("unsupported-material");
-    expect(model.terrain.entries.get("0,0")).toBeUndefined();
-    expect(model.terrain.defaultCode).toBe("plain");
+    const flat = flattenRenderModel(model);
+    expect(flat.terrain.entries.find(([k]) => k === "0,0")).toBeUndefined();
+    expect(flat.terrain.defaultCode).toBe("plain");
   });
 
   it("некардинальная ориентация двери → diagnostic, дверь всё равно в модели", () => {
@@ -305,7 +398,7 @@ describe("unsupported V5 content", () => {
     const { model, diagnostics } = createV5RenderModel({ ...base, layers });
     // Обе двери фикстуры → 2 diagnostics (по одной на дверь).
     expect(diagnostics.filter((d) => d.code === "unsupported-door-orientation")).toHaveLength(2);
-    expect(model.doors).toHaveLength(2);
+    expect(gameplayItems(model).filter((i) => i.kind === "door")).toHaveLength(2);
   });
 
   it("неизвестный kind пути → unsupported-path-kind", () => {

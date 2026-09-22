@@ -9,7 +9,7 @@
 // Настоящая пользовательская картинка (аватар, обложка кампании) сюда не
 // относится — там остаётся честная заглушка загрузки.
 import type { ReactNode } from "react";
-import { SoyMan } from "./SoyMan";
+import { SoyManResponsive } from "./SoyMan";
 
 export type EmptyStateKind =
   /** Сущность ещё не создана: «Бестиарий пуст», «Команда ещё не собрана». Маскот ждёт. */
@@ -42,7 +42,7 @@ export function EmptyState({
       {kind !== "search" && (
         // decorative: заголовок и подсказка рядом говорят то же самое,
         // дублировать их для скринридера незачем.
-        <SoyMan state={kind === "error" ? "error" : "waiting"} size="md" className="empty-state-mascot" decorative />
+        <SoyManResponsive state={kind === "error" ? "error" : "waiting"} size="lg" className="empty-state-mascot" decorative />
       )}
       <h2 className="empty-state-title">{title}</h2>
       {hint && <p className="empty-state-hint muted">{hint}</p>}

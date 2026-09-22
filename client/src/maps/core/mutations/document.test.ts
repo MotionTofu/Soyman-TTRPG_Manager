@@ -7,6 +7,7 @@ import type { MapDocumentV5 } from "../types";
 import { validateMapDocument } from "../validate";
 import type { MutationResult } from "./types";
 import { clearEditableContent, resizeGridDocument } from "./document";
+import { createTerrainLayer } from "./layers";
 
 function squareDoc(): MapDocumentV5 {
   return migrateLegacyMap({
@@ -56,6 +57,36 @@ describe("clearEditableContent", () => {
     const cleared = expectOk(clearEditableContent(doc));
     const r = clearEditableContent(cleared);
     expect(r.ok && !r.changed && r.document === cleared).toBe(true);
+  });
+
+  it("3A §95–96: Clear сохраняет layers/order/names/visible/locked/opacity, чистит всё включая locked", () => {
+    let doc = squareDoc();
+    // Второй terrain + lock gameplay для проверки.
+    const t = createTerrainLayer(doc, { id: "t2", name: "T2" });
+    if (!t.ok || !t.changed) throw new Error("create failed");
+    doc = t.document;
+    const locked: MapDocumentV5 = {
+      ...doc,
+      layers: doc.layers.map((l) =>
+        l.kind === "gameplay" ? { ...l, locked: true, visible: false, opacity: 0.5, name: "G-lock" } : l,
+      ),
+    };
+    const next = expectOk(clearEditableContent(locked));
+    // Порядок/имена/флаги целы.
+    expect(next.layers.map((l) => l.id)).toEqual(locked.layers.map((l) => l.id));
+    next.layers.forEach((l, i) => {
+      expect(l.name).toBe(locked.layers[i].name);
+      expect(l.visible).toBe(locked.layers[i].visible);
+      expect(l.locked).toBe(locked.layers[i].locked);
+      expect(l.opacity).toBe(locked.layers[i].opacity);
+    });
+    // Content вычищен везде, включая locked gameplay.
+    for (const l of next.layers) {
+      if (l.kind === "terrain" && l.representation === "cells") expect(l.cells).toEqual([]);
+      if (l.kind === "path") expect(l.paths).toEqual([]);
+      if (l.kind === "gameplay") expect(l.items).toEqual([]);
+      if (l.kind === "label") expect(l.items).toEqual([]);
+    }
   });
 });
 

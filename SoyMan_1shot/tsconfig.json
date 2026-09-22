@@ -8,7 +8,8 @@
       "react/*": ["../client/node_modules/@types/react/*"],
       "react-dom/*": ["../client/node_modules/@types/react-dom/*"],
       "react-router-dom": ["../client/node_modules/react-router-dom"],
-      "@tanstack/react-query": ["../client/node_modules/@tanstack/react-query"]
+      "@tanstack/react-query": ["../client/node_modules/@tanstack/react-query"],
+      "qrcode.react": ["../client/node_modules/qrcode.react"]
     }
   },
   "include": ["app", "../client/src/vite-env.d.ts"]

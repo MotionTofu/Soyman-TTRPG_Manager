@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useDndRuntime } from './DndRuntime';
 import { useResource } from "../../data/hooks";
 import type { CompendiumEntry, DndAbilityScores, DndCharacterData } from "../../types";
@@ -30,6 +30,13 @@ import {
   spellSlotsAtLevel,
   type ClassProgression,
 } from "./progression";
+import {
+  getLevelUpBaseSignature,
+  isCompatibleLevelUpDraft,
+  sanitizeLevelUpStep,
+  type LevelUpDraft,
+  type LevelUpDraftHost,
+} from "./dndLevelUpDraft";
 
 // Визард левелапа: один уровень вверх (N→N+1) за раз, модалкой с оборота
 // заглавной карты. Скелет — правилами (хиты, чертоуровни, подкласс),
@@ -60,15 +67,33 @@ function parseFeatMinLevel(prereq: unknown): number | null {
 
 interface Props {
   value: DndCharacterData;
-  onApply: (patch: Partial<DndCharacterData>) => void;
+  onApply: (patch: Partial<DndCharacterData>) => void | Promise<unknown>;
   onClose: () => void;
+  // Resumable draft (C2): storage-agnostic — the wizard declares WHAT to
+  // persist, the host (1shot localStorage) decides WHERE. All optional:
+  // without them the wizard behaves exactly as before (main SoyMan path).
+  levelUpDraft?: LevelUpDraftHost | null;
 }
 
 type HpMode = "roll" | "average" | "manual";
 
-export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
+export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Props) {
   const { allowDiceRolls } = useDndRuntime();
-  const [clsIdx, setClsIdx] = useState(0);
+  const draftIdentity = levelUpDraft?.identity ?? null;
+  // Validity anchor: the progression base this session started from. Finish
+  // always applies to the live `value` prop, so runtime edits made outside
+  // the wizard are never clobbered by a stale snapshot.
+  const [mountBase] = useState(() => getLevelUpBaseSignature(value));
+  // Resume decision, once per mount: a compatible stored draft restores its
+  // selections; an incompatible one shows the stale panel instead of applying
+  // silently. Parent re-renders must not flip this mid-session.
+  const [resumed] = useState<LevelUpDraft | null>(() =>
+    levelUpDraft?.initial && isCompatibleLevelUpDraft(levelUpDraft.initial, getLevelUpBaseSignature(value), draftIdentity)
+      ? levelUpDraft.initial
+      : null
+  );
+  const [stale, setStale] = useState(() => !!levelUpDraft?.initial && !!draftIdentity && !resumed);
+  const [clsIdx, setClsIdx] = useState(resumed?.state.clsIdx ?? 0);
   const cls = value.classes[Math.min(clsIdx, Math.max(0, value.classes.length - 1))] ?? null;
   const oldLevel = cls?.level ?? 1;
   // Выше 20 некуда: визард показывает потолок, а не ломается.
@@ -82,23 +107,27 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
   const [subFeatureEntries, setSubFeatureEntries] = useState<CompendiumEntry[]>([]);
   const [featPool, setFeatPool] = useState<DndFeatOption[]>([]);
 
-  const [step, setStep] = useState("Хиты");
+  const [step, setStep] = useState(resumed?.state.step ?? "Хиты");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const [hpMode, setHpMode] = useState<HpMode>("average");
-  const [rolled, setRolled] = useState<number | null>(null);
-  const [manualTotal, setManualTotal] = useState("");
+  const [hpMode, setHpMode] = useState<HpMode>(resumed?.state.hpMode ?? "average");
+  const [rolled, setRolled] = useState<number | null>(resumed?.state.rolled ?? null);
+  const [manualTotal, setManualTotal] = useState(resumed?.state.manualTotal ?? "");
   // Черновиком-строкой, а не числом: `Number(...) || 0` не давал ни очистить
   // поле, ни начать набор с минуса — и «», и «-» на первом же нажатии
   // превращались в 0, который тут же возвращался в поле.
-  const [miscText, setMiscText] = useState(String(value.hpMiscPerLevel ?? 0));
+  const [miscText, setMiscText] = useState(resumed?.state.miscText ?? String(value.hpMiscPerLevel ?? 0));
   const misc = Number(miscText) || 0;
 
-  const [subclassId, setSubclassId] = useState<number | null>(null);
-  const [featId, setFeatId] = useState<number | null>(null);
-  const [asiPrimary, setAsiPrimary] = useState<string | null>(null);
-  const [asiSecondary, setAsiSecondary] = useState<string | null>(null);
+  const [subclassId, setSubclassId] = useState<number | null>(resumed?.state.subclassId ?? null);
+  const [featId, setFeatId] = useState<number | null>(resumed?.state.featId ?? null);
+  const [asiPrimary, setAsiPrimary] = useState<string | null>(resumed?.state.asiPrimary ?? null);
+  const [asiSecondary, setAsiSecondary] = useState<string | null>(resumed?.state.asiSecondary ?? null);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  // A resumed session already has a stored draft: clearing back to defaults
+  // must remove it, not leave it orphaned.
+  const persistedRef = useRef(!!resumed);
 
   // Записи справочника читаются слоем данных: правка класса или черты в
   // «Системах» доходит до открытого визарда, и один и тот же класс, открытый
@@ -344,7 +373,7 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
     "Заклинания",
     "Обзор",
   ];
-  const stepIndex = Math.max(0, STEPS.indexOf(step));
+  const stepIndex = Math.max(0, STEPS.indexOf(sanitizeLevelUpStep(step, STEPS)));
   // Набор шагов условный (Подкласс/Черта): смена класса может убрать шаг,
   // на котором стоим, — тогда откатываемся на первый, а не в пустоту.
   useEffect(() => {
@@ -366,6 +395,63 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
   function back() {
     setStep(STEPS[Math.max(0, stepIndex - 1)]);
   }
+  // Fresh start after discard or stale-reset: backtracking already keeps
+  // dependent choices valid, so only an explicit reset clears everything.
+  function resetSelections() {
+    setClsIdx(0);
+    setStep("Хиты");
+    setHpMode("average");
+    setRolled(null);
+    setManualTotal("");
+    setMiscText(String(value.hpMiscPerLevel ?? 0));
+    setSubclassId(null);
+    setFeatId(null);
+    setAsiPrimary(null);
+    setAsiSecondary(null);
+    setConfirmDiscard(false);
+  }
+  const defaultMiscText = String(value.hpMiscPerLevel ?? 0);
+  const hasProgress =
+    clsIdx !== 0 ||
+    step !== "Хиты" ||
+    hpMode !== "average" ||
+    rolled != null ||
+    manualTotal !== "" ||
+    miscText !== defaultMiscText ||
+    subclassId != null ||
+    featId != null ||
+    asiPrimary != null ||
+    asiSecondary != null;
+  // Persist after every meaningful choice (debounced): never wait for the
+  // next step. Selections the wizard itself invalidated (class change resets,
+  // die change clears the roll) persist only in their cleaned form, because
+  // the effect always sees the settled render. Clearing back to defaults
+  // removes the draft instead of storing an empty one.
+  useEffect(() => {
+    if (!draftIdentity || !levelUpDraft?.onChange || stale) return;
+    if (!hasProgress) {
+      if (persistedRef.current) {
+        persistedRef.current = false;
+        levelUpDraft.onClear?.();
+      }
+      return;
+    }
+    const t = setTimeout(() => {
+      persistedRef.current = true;
+      levelUpDraft.onChange!({
+        version: 1,
+        identity: draftIdentity,
+        base: mountBase,
+        targetLevel: newLevel,
+        updatedAt: new Date().toISOString(),
+        state: { clsIdx, step, hpMode, rolled, manualTotal, miscText, subclassId, featId, asiPrimary, asiSecondary },
+      });
+    }, 250);
+    return () => clearTimeout(t);
+    // Callbacks intentionally out of deps (same pattern as the loader
+    // effects above): the host passes fresh closures every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clsIdx, step, hpMode, rolled, manualTotal, miscText, subclassId, featId, asiPrimary, asiSecondary, stale, mountBase, newLevel]);
   const hpReady =
     die == null ? hpMode === "manual" && manualValid : hpMode === "roll" ? rolled != null : hpMode === "average" ? true : manualValid;
   const featReady = !isFeatLevel || (featId != null && (!isAsi || asiPrimary != null));
@@ -388,6 +474,13 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
     setSaving(true);
     setSaveError(null);
     try {
+      // Concurrent progression change (e.g. this character leveled in
+      // another tab while the wizard stood open): the draft no longer
+      // applies — abort instead of merging two level-ups. The draft stays,
+      // the user discards it explicitly and starts over.
+      if (JSON.stringify(getLevelUpBaseSignature(value)) !== JSON.stringify(mountBase)) {
+        throw new Error("Персонаж изменился, пока было открыто повышение — начните его заново.");
+      };
       const nextClasses = value.classes.map((c, i) =>
         i === clsIdx
           ? {
@@ -523,7 +616,10 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
         ...hpPatch,
       };
       const { cantrips, spellsByLevel, spellSlotLevels } = await recomputeGrantedSpells(nextValue);
-      onApply({ ...hpPatch, classes: nextClasses, abilities: nextAbilities, classFeatures: nextValue.classFeatures, proficiencyBonus: nextValue.proficiencyBonus, hitDice, feats: nextFeats, cantrips, spellsByLevel, spellSlotLevels });
+      // Awaited: hosts with an async commit (or a throwing one) keep the
+      // draft on failure for a retry; it is cleared only after success.
+      await onApply({ ...hpPatch, classes: nextClasses, abilities: nextAbilities, classFeatures: nextValue.classFeatures, proficiencyBonus: nextValue.proficiencyBonus, hitDice, feats: nextFeats, cantrips, spellsByLevel, spellSlotLevels });
+      levelUpDraft?.onClear?.();
       onClose();
     } catch (e) {
       setSaveError(
@@ -550,7 +646,7 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
           <select
             className="wizard-step-picker"
             aria-label="Шаг повышения уровня"
-            value={STEPS.includes(step) ? step : STEPS[0]}
+            value={sanitizeLevelUpStep(step, STEPS)}
             onChange={(e) => go(e.target.value)}
           >
             {STEPS.map((s, i) => (
@@ -603,6 +699,27 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
 
         {capped ? (
           <span className="muted">20-й уровень — потолок, дальше только эпические дары вручную на листе.</span>
+        ) : stale ? (
+          <div className="stack" role="alert">
+            <strong>Незавершённое повышение больше не соответствует текущему персонажу.</strong>
+            <span className="muted">
+              Уровень, класс, способности или уже полученные умения изменились после того, как оно было начато.
+            </span>
+            <div className="row">
+              <button
+                className="primary"
+                onClick={() => {
+                  levelUpDraft?.onClear?.();
+                  persistedRef.current = false;
+                  resetSelections();
+                  setStale(false);
+                }}
+              >
+                Начать повышение заново
+              </button>
+              <button onClick={onClose}>Отмена</button>
+            </div>
+          </div>
         ) : (
           <>
             {step === "Хиты" && (
@@ -886,9 +1003,36 @@ export function DndLevelUpWizard({ value, onApply, onClose }: Props) {
         <div className="row wizard-footer wizard-spread">
           <div className="row">
             <button onClick={onClose} disabled={saving}>Отмена</button>
-            {stepIndex > 0 && <button onClick={back} disabled={saving}>Назад</button>}
+            {stepIndex > 0 && !stale && <button onClick={back} disabled={saving}>Назад</button>}
+            {!stale && (hasProgress || resumed) && !confirmDiscard && (
+              <button
+                disabled={saving}
+                onClick={() => setConfirmDiscard(true)}
+                title="Удаляет незавершённое повышение, персонаж не меняется"
+              >
+                Отменить повышение
+              </button>
+            )}
+            {!stale && confirmDiscard && (
+              <span className="row">
+                <span className="muted">Удалить незавершённое повышение?</span>
+                <button
+                  disabled={saving}
+                  onClick={() => {
+                    levelUpDraft?.onClear?.();
+                    persistedRef.current = false;
+                    resetSelections();
+                  }}
+                >
+                  Да, удалить
+                </button>
+                <button disabled={saving} onClick={() => setConfirmDiscard(false)}>
+                  Назад
+                </button>
+              </span>
+            )}
           </div>
-          {!capped &&
+          {!capped && !stale &&
             (step === "Обзор" ? (
               <button className="primary" onClick={() => void finish()} disabled={saving || applyBlocked}>
                 {saving ? "Применяю…" : "Взять уровень"}

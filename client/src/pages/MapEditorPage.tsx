@@ -8,7 +8,7 @@ import { SectionHeading } from "../components/SectionHeading";
 import { SectionBackground } from "../components/SectionBackground";
 import { useConfirm } from "../hooks/useConfirm";
 import { coordLabel, pixelToCell, cellCenter, worldBounds } from "../maps/grid";
-import { buildAndDownloadPng } from "../maps/mapExport";
+import { buildAndDownloadPng, collectLegendContent } from "../maps/mapExport";
 import { sanitizeDownloadName, validateMapImport } from "../maps/mapExchange";
 import { generateCells, type GeneratorParams } from "../maps/generate";
 import { generateDungeon } from "../maps/dungeon";
@@ -65,6 +65,12 @@ import { migrateLegacyMap, legacyDoorWorldPosition, legacyEdgeOrientation } from
 import { validateMapDocument } from "../maps/core/validate";
 import { createUuidIdFactory } from "../maps/editor/idFactory";
 import { fixConnectivityV5 } from "../maps/editor/fixConnectivityV5";
+import { findEntityLayer } from "../maps/core/mutations/layers";
+import {
+  NO_COMPATIBLE_LAYER_ERROR,
+  resolveToolTargetLayer,
+  toolLayerKind,
+} from "../maps/editor/tools/layerTargets";
 import {
   createGameplayEntity,
   deleteGameplayEntity,
@@ -75,7 +81,7 @@ import {
 import { applyTerrainCellEdits } from "../maps/core/mutations/terrain";
 import { createLabel, deleteLabel, moveLabel, updateLabelText } from "../maps/core/mutations/labels";
 import { clearEditableContent, resizeGridDocument } from "../maps/core/mutations/document";
-import type { GameplayEntity } from "../maps/core/types";
+import type { GameplayEntity, LayerId } from "../maps/core/types";
 import { useMapCamera } from "../maps/editor/hooks/useMapCamera";
 import { useMapHistory } from "../maps/editor/hooks/useMapHistory";
 import { useMapHotkeys } from "../maps/editor/hooks/useMapHotkeys";
@@ -84,6 +90,7 @@ import { useMapInput } from "../maps/editor/hooks/useMapInput";
 import { useMapSelection, type MapGeometry, type V5Selection } from "../maps/editor/hooks/useMapSelection";
 import { useMapTools } from "../maps/editor/hooks/useMapTools";
 import { MapViewport } from "../maps/editor/components/MapViewport";
+import { LayerPanel } from "../maps/editor/components/LayerPanel";
 import type { BrushSize, PaintTool } from "../maps/editor/editorTypes";
 
 const UNDO_DEPTH = 50;
@@ -99,14 +106,20 @@ function loadFlag(key: string, dflt: boolean): boolean {
   }
 }
 
-// Подпись, чья containing-cell совпадает (legacy lookup 1:1 на migrated).
-function findLabelAtCell(doc: MapDocumentV5, geom: MapGeometry, x: number, y: number) {
-  for (const layer of doc.layers) {
-    if (layer.kind !== "label") continue;
-    for (const l of layer.items) {
-      const c = pixelToCell(geom.grid, l.position.x, l.position.y, geom.width, geom.height);
-      if (c && c.x === x && c.y === y) return l;
-    }
+// Подпись, чья containing-cell совпадает — строго внутри target label-слоя
+// (3A §42: та же позиция в другом слое — другая entity).
+function findLabelAtCell(
+  doc: MapDocumentV5,
+  geom: MapGeometry,
+  layerId: string,
+  x: number,
+  y: number,
+) {
+  const layer = doc.layers.find((l) => l.id === layerId);
+  if (!layer || layer.kind !== "label") return undefined;
+  for (const l of layer.items) {
+    const c = pixelToCell(geom.grid, l.position.x, l.position.y, geom.width, geom.height);
+    if (c && c.x === x && c.y === y) return l;
   }
   return undefined;
 }
@@ -121,10 +134,19 @@ function findGameplayEntity(doc: MapDocumentV5, id: string): GameplayEntity | un
   return undefined;
 }
 
-// Gameplay-слой документа (инструменты/создание) — первый подходящий.
-function gameplayLayerId(doc: MapDocumentV5): string | null {
-  const l = doc.layers.find((x) => x.kind === "gameplay");
-  return l ? l.id : null;
+// Owning layer сущности редактируем для модалки прямо сейчас (§91)?
+// Stale modal (слой удалён/скрыт/заблокирован после открытия) сохранять нельзя.
+function editableOwningLayer(
+  doc: MapDocumentV5,
+  entityId: string,
+): { layerId: string } | { error: string } {
+  const own = findEntityLayer(doc, entityId);
+  if (!own) return { error: "Объект уже удалён." };
+  const layer = doc.layers[own.layerIndex];
+  if (!layer || layer.id !== own.layerId) return { error: "Объект уже удалён." };
+  if (!layer.visible) return { error: "Слой скрыт — сначала покажите его." };
+  if (layer.locked) return { error: "Слой заблокирован — сначала разблокируйте его." };
+  return { layerId: layer.id };
 }
 
 // Текст баннера unsupported-карты (§8 ТЗ 2G): без потери данных.
@@ -148,6 +170,13 @@ export function MapEditorPage() {
   // Фаза 2G: единственный mutable editor state — MapDocumentV5 (иммутабельный;
   // мутации только через Mutation Core, целые замены — load/undo/import/generator).
   const [document, setDocument] = useState<MapDocumentV5 | null>(null);
+  // Фаза 3A: activeLayerId — editor-only state (§27), НЕ входит в документ.
+  // Разделён с selected entityId (§29): слой — куда пишут инструменты,
+  // entity — что выбрано hit-test'ом.
+  const [activeLayerId, setActiveLayerId] = useState<LayerId | null>(null);
+  const activeLayerRef = useRef<LayerId | null>(null);
+  activeLayerRef.current = activeLayerId;
+  const activeMapRef = useRef<string | undefined>(undefined);
   // Совместимость загруженного документа с текущим редактором (§4–8 ТЗ 2G).
   const [unsupported, setUnsupported] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -181,6 +210,8 @@ export function MapEditorPage() {
 
   const documentRef = useRef<MapDocumentV5 | null>(null);
   documentRef.current = document;
+  // Актуальное shapeContent для shapeKind() выше (state объявлен ниже).
+  const shapeContentRef = useRef<"room" | "terrain" | "road" | "river" | "wall" | "eraser">("room");
 
   // Editor geometry — производная от document.grid/world (§19–20 ТЗ 2G),
   // не отдельный mutable state. Server columns — persistence mirror.
@@ -200,7 +231,65 @@ export function MapEditorPage() {
     return r.model;
   }, [document]);
 
+  // Экранная легенда — из видимых слоёв модели (3A §109), как PNG-легенда.
+  const legend = useMemo(() => (model ? collectLegendContent(model) : null), [model]);
+
   const newId = useMemo(() => createUuidIdFactory(), []);
+
+  function setActiveLayer(id: LayerId) {
+    activeLayerRef.current = id;
+    setActiveLayerId(id);
+  }
+
+  // Shape-инструмент — контейнер: target kind задаёт содержимое (§33).
+  function shapeKind(): "terrain" | "path" | "gameplay" | null {
+    // shapeContent объявлен ниже, но к моменту выполнения эффекта инициализирован.
+    const sc = shapeContentRef.current;
+    if (sc === "room") return "gameplay";
+    if (sc === "road" || sc === "river") return "path";
+    if (sc === "terrain" || sc === "wall" || sc === "eraser") return "terrain";
+    return null;
+  }
+
+  // Active layer lifecycle (3A §28): при load — заново; manual выбор живёт,
+  // пока слой существует; смена tool / непригодность слоя → topmost
+  // compatible visible unlocked; fallback — верхний visible unlocked; иначе null.
+  // History хранит только document (§113): после undo active чинится здесь же.
+  useEffect(() => {
+    const doc = documentRef.current;
+    if (!doc) {
+      if (activeLayerRef.current !== null) setActiveLayerId(null);
+      return;
+    }
+    const newMap = activeMapRef.current !== id;
+    if (newMap) activeMapRef.current = id;
+    const cur = newMap ? null : activeLayerRef.current;
+    if (cur) {
+      const existing = doc.layers.find((l) => l.id === cur);
+      if (existing) {
+        const want = tool === "shape" ? shapeKind() : toolLayerKind(tool);
+        if (!want) return;
+        if (existing.kind === want && existing.visible && !existing.locked) return;
+        // Слой есть, но для текущего tool непригоден — перерезолв ниже (§92).
+      }
+    }
+    const want = tool === "shape" ? shapeKind() : toolLayerKind(tool);
+    let next: LayerId | null = null;
+    if (want) {
+      const r = resolveToolTargetLayer(doc, null, want);
+      if (r.ok) next = r.layerId;
+    }
+    if (!next) {
+      for (let i = doc.layers.length - 1; i >= 0; i--) {
+        const l = doc.layers[i];
+        if (l.visible && !l.locked) {
+          next = l.id;
+          break;
+        }
+      }
+    }
+    if (next !== activeLayerRef.current) setActiveLayerId(next);
+  }, [document, tool, shapeContent, id]);
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -443,7 +532,22 @@ export function MapEditorPage() {
       setActionError("На этой карте починка недоступна: редактор не поддерживает её функции.");
       return;
     }
-    const res = fixConnectivityV5(doc);
+    // 3A §102: чиним в target/active TerrainLayer; неоднозначность без
+    // подходящего слоя — structured error, не случайный выбор.
+    const tgt = resolveToolTargetLayer(doc, activeLayerRef.current, "terrain");
+    if (!tgt.ok) {
+      const hasRooms = doc.layers.some(
+        (l) =>
+          l.kind === "gameplay" &&
+          l.items.some((e) => e.kind === "room" && e.geometry.type === "rect"),
+      );
+      setActionError(
+        hasRooms ? "Выберите слой рельефа: некуда вписать коридоры." : "Починить нечего: на карте нет комнат.",
+      );
+      return;
+    }
+    if (!tgt.keptActive) setActiveLayer(tgt.layerId);
+    const res = fixConnectivityV5(doc, tgt.layerId);
     if (!res) {
       setActionError("Починить нечего: на карте нет комнат.");
       return;
@@ -452,7 +556,7 @@ export function MapEditorPage() {
       setActionError("Всё связно — чинить нечего.");
       return;
     }
-    const layer = doc.layers.find((l) => l.kind === "terrain");
+    const layer = doc.layers.find((l) => l.id === tgt.layerId);
     if (!layer || layer.kind !== "terrain" || layer.representation !== "cells") {
       setActionError("Починка нужна клеточному террейну.");
       return;
@@ -656,6 +760,7 @@ export function MapEditorPage() {
 
   // Шейпы (Этап E): прямоугольник + содержимое. Мышь — drag, тач — два тапа по углам.
   const [shapeContent, setShapeContent] = useState<"room" | "terrain" | "road" | "river" | "wall" | "eraser">("room");
+  shapeContentRef.current = shapeContent;
   const [shapeAnchor, setShapeAnchor] = useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
@@ -669,13 +774,27 @@ export function MapEditorPage() {
   // Подписи (P2-2): черновик модалки — клетка + текст (+ была ли подпись).
   // Identity — stable EntityId; привязка к клетке — через containing-cell
   // (для migrated-карт 1:1 с legacy lookup).
-  const [labelDraft, setLabelDraft] = useState<{ x: number; y: number; text: string; existed: boolean } | null>(null);
+  const [labelDraft, setLabelDraft] = useState<{
+    x: number;
+    y: number;
+    text: string;
+    existed: boolean;
+    layerId: string;
+  } | null>(null);
   const [labelError, setLabelError] = useState<string | null>(null);
 
   function openLabelEditor(x: number, y: number) {
     const doc = documentRef.current;
-    const found = doc && geom ? findLabelAtCell(doc, geom, x, y) : undefined;
-    setLabelDraft({ x, y, text: found?.text ?? "", existed: !!found });
+    if (!doc || !geom) return;
+    // Target label layer резолвится при открытии (§42); save перепроверяет (§91).
+    const tgt = resolveToolTargetLayer(doc, activeLayerRef.current, "label");
+    if (!tgt.ok) {
+      setLabelError(NO_COMPATIBLE_LAYER_ERROR);
+      return;
+    }
+    if (!tgt.keptActive) setActiveLayer(tgt.layerId);
+    const found = findLabelAtCell(doc, geom, tgt.layerId, x, y);
+    setLabelDraft({ x, y, text: found?.text ?? "", existed: !!found, layerId: tgt.layerId });
     setLabelError(null);
   }
 
@@ -692,18 +811,23 @@ export function MapEditorPage() {
       setLabelError("Подпись — до 64 символов.");
       return;
     }
-    const layer = doc.layers.find((l) => l.kind === "label");
+    const layer = doc.layers.find((l) => l.id === d.layerId);
     if (!layer || layer.kind !== "label") {
-      setLabelError("В документе нет label-слоя.");
+      setLabelError("Слой подписей недоступен.");
       return;
     }
-    if (layer.items.length >= 200 && !findLabelAtCell(doc, geom, d.x, d.y)) {
+    if (!layer.visible || layer.locked) {
+      setLabelError("Слой подписей скрыт или заблокирован.");
+      return;
+    }
+    const labelCount = doc.layers.flatMap((l) => (l.kind === "label" ? l.items : [])).length;
+    if (labelCount >= 200 && !findLabelAtCell(doc, geom, d.layerId, d.x, d.y)) {
       setLabelError("Подписей слишком много (максимум 200).");
       return;
     }
     // Центр клетки — та же позиция, что давала миграция legacy-подписей.
     const c = cellCenter(geom.grid, d.x, d.y);
-    const existing = findLabelAtCell(doc, geom, d.x, d.y);
+    const existing = findLabelAtCell(doc, geom, d.layerId, d.x, d.y);
     let next = doc;
     if (existing) {
       const r1 = updateLabelText(next, existing.id, text);
@@ -721,7 +845,7 @@ export function MapEditorPage() {
         next = r2.document;
       }
     } else {
-      const r = createLabel(next, layer.id, { id: newId(), position: { x: c.cx, y: c.cy }, text });
+      const r = createLabel(next, d.layerId, { id: newId(), position: { x: c.cx, y: c.cy }, text });
       if (!r.ok) {
         setLabelError(r.issues[0]?.message ?? "Не удалось сохранить подпись.");
         return;
@@ -740,7 +864,12 @@ export function MapEditorPage() {
     const d = labelDraft;
     const doc = documentRef.current;
     if (!d || !doc || !geom) return;
-    const existing = findLabelAtCell(doc, geom, d.x, d.y);
+    const layer = doc.layers.find((l) => l.id === d.layerId);
+    if (!layer || layer.kind !== "label" || !layer.visible || layer.locked) {
+      setLabelDraft(null);
+      return;
+    }
+    const existing = findLabelAtCell(doc, geom, d.layerId, d.x, d.y);
     if (!existing) {
       setLabelDraft(null);
       return;
@@ -763,6 +892,7 @@ export function MapEditorPage() {
     documentRef,
     setDocument,
     commitDocument,
+    onActiveLayer: setActiveLayer,
   });
   const { selected } = selection;
 
@@ -821,6 +951,21 @@ export function MapEditorPage() {
     if (!d || !doc) return;
     const target = findGameplayEntity(doc, d.id);
     if (!target || target.kind !== "door") return;
+    // §91: слой могли заблокировать/скрыть/удалить, пока модалка открыта.
+    const own = editableOwningLayer(doc, d.id);
+    if ("error" in own) {
+      actionFailed(own.error);
+      setDoorDraft(null);
+      selection.clearSelection();
+      return;
+    }
+    if (target.pairedDoorId) {
+      const pairOwn = editableOwningLayer(doc, target.pairedDoorId);
+      if ("error" in pairOwn) {
+        actionFailed("Парная дверь в недоступном слое — сначала разблокируйте его.");
+        return;
+      }
+    }
     // Вид правится у двери и её пары (legacy правил вид всей pair-группе;
     // V5-пары бинарны — exotic-группы уже warnings миграции).
     const ids = [d.id];
@@ -846,6 +991,13 @@ export function MapEditorPage() {
     const d = doorDraft;
     const doc = documentRef.current;
     if (!d || !doc) return;
+    const own = editableOwningLayer(doc, d.id);
+    if ("error" in own) {
+      actionFailed(own.error);
+      setDoorDraft(null);
+      selection.clearSelection();
+      return;
+    }
     // Удаление двери чистит пару внутри Mutation Core (§45 ТЗ 2G).
     const r = deleteGameplayEntity(doc, d.id);
     if (!r.ok) {
@@ -861,6 +1013,13 @@ export function MapEditorPage() {
     const t = trapDraft;
     const doc = documentRef.current;
     if (!t || !doc) return;
+    const own = editableOwningLayer(doc, t.id);
+    if ("error" in own) {
+      actionFailed(own.error);
+      setTrapDraft(null);
+      selection.clearSelection();
+      return;
+    }
     const r = updateGameplayEntity(doc, t.id, (e) => {
       if (e.kind !== "trap") return e;
       return { ...e, trapKind: t.kind };
@@ -878,6 +1037,13 @@ export function MapEditorPage() {
     const t = trapDraft;
     const doc = documentRef.current;
     if (!t || !doc) return;
+    const own = editableOwningLayer(doc, t.id);
+    if ("error" in own) {
+      actionFailed(own.error);
+      setTrapDraft(null);
+      selection.clearSelection();
+      return;
+    }
     const r = deleteGameplayEntity(doc, t.id);
     if (!r.ok) {
       actionFailed(r.issues[0]?.message ?? "Не удалось удалить ловушку.");
@@ -892,6 +1058,13 @@ export function MapEditorPage() {
     const m = markerDraft;
     const doc = documentRef.current;
     if (!m || !doc) return;
+    const own = editableOwningLayer(doc, m.id);
+    if ("error" in own) {
+      actionFailed(own.error);
+      setMarkerDraft(null);
+      selection.clearSelection();
+      return;
+    }
     const r = updateGameplayEntity(doc, m.id, (e) => {
       if (e.kind !== "marker") return e;
       return { ...e, markerKind: m.kind };
@@ -909,6 +1082,13 @@ export function MapEditorPage() {
     const m = markerDraft;
     const doc = documentRef.current;
     if (!m || !doc) return;
+    const own = editableOwningLayer(doc, m.id);
+    if ("error" in own) {
+      actionFailed(own.error);
+      setMarkerDraft(null);
+      selection.clearSelection();
+      return;
+    }
     const r = deleteGameplayEntity(doc, m.id);
     if (!r.ok) {
       actionFailed(r.issues[0]?.message ?? "Не удалось удалить маркер.");
@@ -923,17 +1103,21 @@ export function MapEditorPage() {
     const r = roomDraft;
     const doc = documentRef.current;
     if (!r || !doc) return;
-    const layerId = gameplayLayerId(doc);
-    if (!layerId) {
-      setObjError("В документе нет gameplay-слоя.");
+    // Создание — в target GameplayLayer (§41); правка — с guard owning layer (§91).
+    const tgt = resolveToolTargetLayer(doc, activeLayerRef.current, "gameplay");
+    if (!tgt.ok) {
+      setObjError(NO_COMPATIBLE_LAYER_ERROR);
       return;
     }
-    const gameplay = doc.layers.find((l) => l.id === layerId);
-    const rooms = gameplay && gameplay.kind === "gameplay" ? gameplay.items.filter((e) => e.kind === "room") : [];
+    if (!tgt.keptActive) setActiveLayer(tgt.layerId);
+    const layerId = tgt.layerId;
+    const roomCount = doc.layers.flatMap((l) =>
+      l.kind === "gameplay" ? l.items.filter((e) => e.kind === "room") : [],
+    ).length;
     if (r.id === null) {
       const rect = input.roomRectRef.current;
       if (!rect) return;
-      if (rooms.length >= 100) {
+      if (roomCount >= 100) {
         setObjError("Комнат слишком много (максимум 100).");
         return;
       }
@@ -950,6 +1134,13 @@ export function MapEditorPage() {
       }
       commitDocument(res.document, doc);
     } else {
+      const own = editableOwningLayer(doc, r.id);
+      if ("error" in own) {
+        setObjError(own.error);
+        setRoomDraft(null);
+        selection.clearSelection();
+        return;
+      }
       const res = updateGameplayEntity(doc, r.id, (e) => {
         if (e.kind !== "room") return e;
         return { ...e, roomType: r.type, name: r.name.trim().slice(0, 64) };
@@ -970,6 +1161,13 @@ export function MapEditorPage() {
     const r = roomDraft;
     const doc = documentRef.current;
     if (!r || r.id === null || !doc) return;
+    const own = editableOwningLayer(doc, r.id);
+    if ("error" in own) {
+      setObjError(own.error);
+      setRoomDraft(null);
+      selection.clearSelection();
+      return;
+    }
     const res = deleteGameplayEntity(doc, r.id);
     if (!res.ok) {
       setObjError(res.issues[0]?.message ?? "Не удалось удалить комнату.");
@@ -988,22 +1186,24 @@ export function MapEditorPage() {
       setObjError("Двери — только на квадратах: на гексах рёберной модели нет.");
       return;
     }
-    const layerId = gameplayLayerId(doc);
-    if (!layerId) {
-      setObjError("В документе нет gameplay-слоя.");
+    const tgt = resolveToolTargetLayer(doc, activeLayerRef.current, "gameplay");
+    if (!tgt.ok) {
+      setObjError(NO_COMPATIBLE_LAYER_ERROR);
       return;
     }
-    const gameplay = doc.layers.find((l) => l.id === layerId);
-    const items = gameplay && gameplay.kind === "gameplay" ? gameplay.items : [];
+    if (!tgt.keptActive) setActiveLayer(tgt.layerId);
+    const layerId = tgt.layerId;
+    const targetItems = doc.layers.flatMap((l) => (l.kind === "gameplay" && l.id === layerId ? l.items : []));
+    const allItems = doc.layers.flatMap((l) => (l.kind === "gameplay" ? l.items : []));
     const center = cellCenter(geom.grid, c.x, c.y);
     if (c.choice === "door") {
-      if (items.filter((e) => e.kind === "door").length >= 400) {
+      if (allItems.filter((e) => e.kind === "door").length >= 400) {
         setObjError("Дверей слишком много (максимум 400).");
         return;
       }
       const pos = legacyDoorWorldPosition(geom.grid, c.x, c.y, c.edge);
       if (
-        items.some(
+        targetItems.some(
           (e) => e.kind === "door" && e.position.x === pos.x && e.position.y === pos.y,
         )
       ) {
@@ -1025,7 +1225,7 @@ export function MapEditorPage() {
       }
       commitDocument(res.document, doc);
     } else if (c.choice === "trap") {
-      if (items.filter((e) => e.kind === "trap").length >= 300) {
+      if (allItems.filter((e) => e.kind === "trap").length >= 300) {
         setObjError("Ловушек слишком много (максимум 300).");
         return;
       }
@@ -1068,6 +1268,13 @@ export function MapEditorPage() {
     )[0];
     if (!target) {
       setSfDraft(null);
+      return;
+    }
+    const own = editableOwningLayer(doc, target.id);
+    if ("error" in own) {
+      setObjError(own.error);
+      setSfDraft(null);
+      selection.clearSelection();
       return;
     }
     const r = deleteGameplayEntity(doc, target.id);
@@ -1448,6 +1655,8 @@ export function MapEditorPage() {
     ruler,
     lastTrapKind,
     markerKind,
+    activeLayerId,
+    onActiveLayer: setActiveLayer,
     documentRef,
     setDocument,
     push: history.push,
@@ -1992,10 +2201,27 @@ export function MapEditorPage() {
                   </span>
                 </div>
               )}
+              {document && (
+                <LayerPanel
+                  document={document}
+                  activeLayerId={activeLayerId}
+                  onActiveLayer={setActiveLayer}
+                  setDocument={(d) => {
+                    documentRef.current = d;
+                    setDocument(d);
+                  }}
+                  commitDocument={commitDocument}
+                  newLayerId={newId}
+                  confirmDelete={(title, message) =>
+                    confirm({ title, message, confirmLabel: "Удалить", cancelLabel: "Отмена", danger: true })
+                  }
+                  setActionError={setActionError}
+                />
+              )}
               {legendOpen && (
                 <div className="card" style={{ padding: "10px 12px" }} aria-label="Легенда террейна">
                   <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
-                    {MAP_TERRAIN_ORDER.map((code) => (
+                    {MAP_TERRAIN_ORDER.filter((code) => legend?.terrainCodes.has(code) ?? false).map((code) => (
                       <span key={code} className="row" style={{ gap: 6 }} title={MAP_TERRAIN_LABELS[code]}>
                         <span
                           aria-hidden="true"
@@ -2017,9 +2243,9 @@ export function MapEditorPage() {
                       />
                       <span style={{ fontSize: "var(--fs-micro)" }}>Дорога</span>
                     </span>
-                    {model && model.doors.length > 0 &&
+                    {legend && legend.doors.length > 0 &&
                       MAP_DOOR_KINDS.filter((k) =>
-                        model.doors.some((d) => !doorForView(d, !canEdit || previewAsPlayer).hidden && doorForView(d, !canEdit || previewAsPlayer).kind === k)
+                        legend.doors.some((d) => !doorForView(d, !canEdit || previewAsPlayer).hidden && doorForView(d, !canEdit || previewAsPlayer).kind === k)
                       ).map((k) => (
                         <span key={k} className="row" style={{ gap: 6 }} title={MAP_DOOR_LABELS[k]}>
                           <span
@@ -2036,7 +2262,7 @@ export function MapEditorPage() {
                         </span>
                       ))}
                     {(canEdit && !previewAsPlayer ? MAP_TRAP_KINDS : []).filter((k) =>
-                      model?.traps.some((t) => t.kind === k) ?? false
+                      legend?.traps.some((t) => t.kind === k) ?? false
                     ).map((k) => (
                       <span key={k} className="row" style={{ gap: 6 }} title={`${MAP_TRAP_LABELS[k]} (скрыта от игроков)`}>
                         <span
@@ -2057,7 +2283,7 @@ export function MapEditorPage() {
                         <span style={{ fontSize: "var(--fs-micro)" }}>{MAP_TRAP_LABELS[k]}</span>
                       </span>
                     ))}
-                    {MAP_ROOM_TYPES.filter((t) => model?.rooms.some((r) => r.type === t) ?? false).map((t) => (
+                    {MAP_ROOM_TYPES.filter((t) => legend?.rooms.some((r) => r.type === t) ?? false).map((t) => (
                       <span key={t} className="row" style={{ gap: 6 }} title={MAP_ROOM_LABELS[t]}>
                         <span
                           aria-hidden="true"
@@ -2072,7 +2298,7 @@ export function MapEditorPage() {
                         <span style={{ fontSize: "var(--fs-micro)" }}>{MAP_ROOM_LABELS[t]}</span>
                       </span>
                     ))}
-                    {model?.start && (
+                    {legend?.hasStart && (
                       <span className="row" style={{ gap: 6 }} title="Старт">
                         <span
                           aria-hidden="true"
@@ -2089,7 +2315,7 @@ export function MapEditorPage() {
                         <span style={{ fontSize: "var(--fs-micro)" }}>Старт</span>
                       </span>
                     )}
-                    {(model?.rivers.size ?? 0) > 0 && (
+                    {(legend?.hasRivers ?? false) && (
                       <span className="row" style={{ gap: 6 }} title="Река — поверх террейна, под дорогами">
                         <span
                           aria-hidden="true"
@@ -2098,7 +2324,7 @@ export function MapEditorPage() {
                         <span style={{ fontSize: "var(--fs-micro)" }}>{MAP_RIVER_LABEL}</span>
                       </span>
                     )}
-                    {MAP_MARKER_KINDS.filter((k) => model?.markers.some((m) => m.kind === k) ?? false).map((k) => (
+                    {MAP_MARKER_KINDS.filter((k) => legend?.markers.some((m) => m.kind === k) ?? false).map((k) => (
                       <span key={k} className="row" style={{ gap: 6 }} title={MAP_MARKER_LABELS[k]}>
                         <span
                           aria-hidden="true"
@@ -2116,7 +2342,7 @@ export function MapEditorPage() {
                         <span style={{ fontSize: "var(--fs-micro)" }}>{MAP_MARKER_LABELS[k]}</span>
                       </span>
                     ))}
-                    {model?.finish && (
+                    {legend?.hasFinish && (
                       <span className="row" style={{ gap: 6 }} title="Финиш">
                         <span
                           aria-hidden="true"

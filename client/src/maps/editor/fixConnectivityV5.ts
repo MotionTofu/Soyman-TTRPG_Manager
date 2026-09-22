@@ -64,14 +64,19 @@ export interface ConnectivityFix {
   fixed: number;
 }
 
-/** Починить связность V5-документа. Null — чинить нечего/не на чем. */
-export function fixConnectivityV5(doc: MapDocumentV5): ConnectivityFix | null {
+/** Починить связность V5-документа. Null — чинить нечего/не на чем.
+ *  3A §101–102: terrain берётся из явно переданного слоя (active/target);
+ *  без него — первый клеточный (legacy-поведение для одиночных карт).
+ *  Комнаты/старт сканируются по всем gameplay-слоям: связность — свойство карты. */
+export function fixConnectivityV5(doc: MapDocumentV5, terrainLayerId?: string): ConnectivityFix | null {
   const grid = doc.grid;
   if (!grid) return null;
   const width = grid.columns;
   const height = grid.rows;
 
-  const terrain = doc.layers.find((l) => l.kind === "terrain");
+  const terrain = terrainLayerId
+    ? doc.layers.find((l) => l.id === terrainLayerId)
+    : doc.layers.find((l) => l.kind === "terrain");
   const entries = new Map<string, { type: string; key?: string; assetId?: string }>();
   if (terrain && terrain.kind === "terrain" && terrain.representation === "cells") {
     for (const c of terrain.cells) entries.set(`${c.x},${c.y}`, c.material);

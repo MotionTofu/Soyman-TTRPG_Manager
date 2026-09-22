@@ -1,13 +1,16 @@
-// MapRenderModel — read-only runtime view для Canvas renderer (Фаза 2D).
+// MapRenderModel — read-only runtime view для Canvas renderer (Фазы 2D/3A).
 // НЕ формат хранения и НЕ source of truth: не сериализуется, не сохраняется,
-// не мутируется, не входит в History/Autosave. Два адаптера сводят оба
-// storage-формата к одному read contract, renderer не знает источника.
+// не мутируется, не входит в History/Autosave.
+//
+// 3A: layer-oriented model. document.layers[] — canonical composition order
+// (первый = самый нижний); адаптеры сохраняют реальную структуру и порядок
+// слоёв, renderer обходит их последовательно. Никаких hardcoded render slots.
 //
 //   MapCells ──→ MapRenderModel ──┐
 //                                 ▼
 //   MapDocumentV5 ─→ MapRenderModel → renderMap
 //
-// Production 2D использует только legacy-ветку; V5-адаптер — для тестов.
+// Production использует только V5-ветку; legacy-адаптер — для тестов/parity.
 
 import {
   LEGACY_FINISH_ID,
@@ -19,7 +22,7 @@ import {
   legacyTrapId,
 } from "./core/ids";
 import type { MaterialRef } from "./core/refs";
-import type { MapDocumentV5 } from "./core/types";
+import type { LayerId, MapDocumentV5 } from "./core/types";
 import { cellCenter } from "./grid";
 import type { MapGrid } from "./mapTypes";
 import type {
@@ -76,6 +79,16 @@ export interface RenderStartFinish {
   position: RenderPoint;
 }
 
+/** Gameplay-сущность в порядке items[] слоя — render order внутри layer (§16).
+ *  По kind НЕ сортируется. */
+export type RenderGameplayItem =
+  | { kind: "room"; room: RenderRoom }
+  | { kind: "door"; door: RenderDoor }
+  | { kind: "trap"; trap: RenderTrap }
+  | { kind: "marker"; marker: RenderMarker }
+  | { kind: "start"; start: RenderStartFinish }
+  | { kind: "finish"; finish: RenderStartFinish };
+
 export interface RenderTerrainView {
   /** Код террейна по умолчанию (legacy: "plain"). */
   readonly defaultCode: string;
@@ -83,17 +96,67 @@ export interface RenderTerrainView {
   readonly entries: ReadonlyMap<string, string>;
 }
 
+export interface RenderLayerBase {
+  id: LayerId;
+  name: string;
+  /** false → renderer полностью пропускает слой (§21). */
+  visible: boolean;
+  /** На rendering не влияет; сохраняется для editor consumers. */
+  locked: boolean;
+  /** 0..1; применяется ко всему content слоя (§22). */
+  opacity: number;
+}
+
+/** Полный terrain surface со своим default/entries/opacity (§12). */
+export interface RenderTerrainLayer extends RenderLayerBase {
+  kind: "terrain";
+  terrain: RenderTerrainView;
+}
+
+/** Path-слой со своим paths[]; порядок paths[] = render order (§14). */
+/** Один рисуемый путь слоя: kind road|river, клетки cell-network. */
+export interface RenderPath {
+  kind: "road" | "river";
+  cells: ReadonlySet<string>;
+}
+
+export interface RenderPathLayer extends RenderLayerBase {
+  kind: "path";
+  /** paths[] order = render order (§14). */
+  paths: readonly RenderPath[];
+}
+
+export interface RenderGameplayLayer extends RenderLayerBase {
+  kind: "gameplay";
+  items: readonly RenderGameplayItem[];
+}
+
+export interface RenderLabelLayer extends RenderLayerBase {
+  kind: "label";
+  labels: readonly RenderLabel[];
+}
+
+/** Object/Scatter слои: содержимое renderer не рисует (compat gate держит
+ *  nonempty вне редактора); слой присутствует для порядка и флагов. */
+export interface RenderObjectLayer extends RenderLayerBase {
+  kind: "object";
+}
+
+export interface RenderScatterLayer extends RenderLayerBase {
+  kind: "scatter";
+}
+
+export type MapRenderLayer =
+  | RenderTerrainLayer
+  | RenderPathLayer
+  | RenderGameplayLayer
+  | RenderLabelLayer
+  | RenderObjectLayer
+  | RenderScatterLayer;
+
 export interface MapRenderModel {
-  readonly terrain: RenderTerrainView;
-  readonly roads: ReadonlySet<string>;
-  readonly rivers: ReadonlySet<string>;
-  readonly labels: readonly RenderLabel[];
-  readonly rooms: readonly RenderRoom[];
-  readonly doors: readonly RenderDoor[];
-  readonly traps: readonly RenderTrap[];
-  readonly markers: readonly RenderMarker[];
-  readonly start: RenderStartFinish | null;
-  readonly finish: RenderStartFinish | null;
+  /** Canonical composition order документа: первый = самый нижний (§3). */
+  readonly layers: readonly MapRenderLayer[];
 }
 
 // ADR §D.1 (независимая копия правила, см. migrateLegacy/comparator):
@@ -110,13 +173,16 @@ function toWorld(grid: MapGrid, x: number, y: number): RenderPoint {
   return { x: c.cx, y: c.cy };
 }
 
+function openLayer(id: string, name: string): RenderLayerBase {
+  return { id, name, visible: true, locked: false, opacity: 1 };
+}
+
 /**
- * Legacy adapter: MapCells → read view без семантических изменений.
- * Terrain/roads/rivers — zero-copy (те же Map/Set); entity-массивы
- * пересобираются (координаты клеток → world), порядок сохраняется.
- * Identity — deterministic-compatible `legacy-<kind>-N`.
- * Применяется та же отбраковка границ, что делал renderer (OOB-сущности
- * он пропускал): модель содержит ровно то, что было бы нарисовано.
+ * Legacy adapter: MapCells → layered read view без семантических изменений.
+ * Псевдо-стек повторяет старый draw order: terrain → path(rivers,roads) →
+ * gameplay(rooms,doors,traps,markers,start,finish) → labels.
+ * Terrain/roads/rivers — zero-copy; entity-массивы пересобираются, порядок
+ * сохраняется; та же отбраковка границ, что делал renderer.
  */
 export function createLegacyRenderModel(
   grid: MapGrid,
@@ -131,53 +197,78 @@ export function createLegacyRenderModel(
     if (!inCell(l.x, l.y)) return;
     labels.push({ id: legacyLabelId(i), position: toWorld(grid, l.x, l.y), text: l.text });
   });
-  const rooms: RenderRoom[] = [];
+  const items: RenderGameplayItem[] = [];
   cells.rooms.forEach((r, i) => {
     if (!Number.isInteger(r.x) || !Number.isInteger(r.y) || !Number.isInteger(r.w) || !Number.isInteger(r.h)) return;
     if (r.w < 1 || r.h < 1 || r.x < 0 || r.y < 0 || r.x + r.w > width || r.y + r.h > height) return;
-    rooms.push({ id: legacyRoomId(i), rect: { x: r.x, y: r.y, w: r.w, h: r.h }, type: r.type, name: r.name });
+    items.push({
+      kind: "room",
+      room: {
+        id: legacyRoomId(i),
+        rect: { x: r.x, y: r.y, w: r.w, h: r.h },
+        type: r.type,
+        name: r.name,
+      },
+    });
   });
-  const doors: RenderDoor[] = [];
   cells.doors.forEach((d, i) => {
     if (!inCell(d.x, d.y)) return;
     if (d.edge !== "n" && d.edge !== "s" && d.edge !== "e" && d.edge !== "w") return;
     const c = cellCenter(grid, d.x, d.y);
     const off = EDGE_OFFSET[d.edge];
-    doors.push({
-      id: legacyDoorId(i),
-      position: { x: c.cx + off.dx, y: c.cy + off.dy },
-      horizontal: d.edge === "n" || d.edge === "s",
-      kind: d.kind,
-      secret: d.secret,
+    items.push({
+      kind: "door",
+      door: {
+        id: legacyDoorId(i),
+        position: { x: c.cx + off.dx, y: c.cy + off.dy },
+        horizontal: d.edge === "n" || d.edge === "s",
+        kind: d.kind,
+        secret: d.secret,
+      },
     });
   });
-  const traps: RenderTrap[] = [];
   cells.traps.forEach((t, i) => {
     if (!inCell(t.x, t.y)) return;
-    traps.push({ id: legacyTrapId(i), position: toWorld(grid, t.x, t.y), kind: t.kind });
+    items.push({ kind: "trap", trap: { id: legacyTrapId(i), position: toWorld(grid, t.x, t.y), kind: t.kind } });
   });
-  const markers: RenderMarker[] = [];
   cells.markers.forEach((m, i) => {
     if (!inCell(m.x, m.y)) return;
-    markers.push({ id: legacyMarkerId(i), position: toWorld(grid, m.x, m.y), kind: m.kind });
+    items.push({
+      kind: "marker",
+      marker: { id: legacyMarkerId(i), position: toWorld(grid, m.x, m.y), kind: m.kind },
+    });
   });
+  if (cells.start && inCell(cells.start.x, cells.start.y)) {
+    items.push({
+      kind: "start",
+      start: { id: LEGACY_START_ID, position: toWorld(grid, cells.start.x, cells.start.y) },
+    });
+  }
+  if (cells.finish && inCell(cells.finish.x, cells.finish.y)) {
+    items.push({
+      kind: "finish",
+      finish: { id: LEGACY_FINISH_ID, position: toWorld(grid, cells.finish.x, cells.finish.y) },
+    });
+  }
   return {
-    terrain: { defaultCode: "plain", entries: cells.terrain },
-    roads: cells.roads,
-    rivers: cells.rivers,
-    labels,
-    rooms,
-    doors,
-    traps,
-    markers,
-    start:
-      cells.start && inCell(cells.start.x, cells.start.y)
-        ? { id: LEGACY_START_ID, position: toWorld(grid, cells.start.x, cells.start.y) }
-        : null,
-    finish:
-      cells.finish && inCell(cells.finish.x, cells.finish.y)
-        ? { id: LEGACY_FINISH_ID, position: toWorld(grid, cells.finish.x, cells.finish.y) }
-        : null,
+    layers: [
+      {
+        ...openLayer("legacy-terrain", "Terrain"),
+        kind: "terrain",
+        terrain: { defaultCode: "plain", entries: cells.terrain },
+      },
+      {
+        ...openLayer("legacy-paths", "Paths"),
+        kind: "path",
+        // Старый draw order: сначала все реки, потом все дороги.
+        paths: [
+          { kind: "river", cells: cells.rivers },
+          { kind: "road", cells: cells.roads },
+        ],
+      },
+      { ...openLayer("legacy-gameplay", "Gameplay"), kind: "gameplay", items },
+      { ...openLayer("legacy-labels", "Labels"), kind: "label", labels },
+    ],
   };
 }
 
@@ -209,38 +300,45 @@ function isCardinalOrientation(o: number): boolean {
   return o === 0 || o === 90 || o === 180 || o === 270;
 }
 
+function baseOf(layer: { id: string; name: string; visible: boolean; locked: boolean; opacity: number }): RenderLayerBase {
+  return {
+    id: layer.id,
+    name: layer.name,
+    visible: layer.visible,
+    locked: layer.locked,
+    opacity: layer.opacity,
+  };
+}
+
 /**
- * V5 adapter: valid MapDocumentV5 → read view (только legacy-compatible subset).
- * Не валидирует документ (предполагает valid V5) и не дублирует validator:
- * diagnostics — только про unsupported rendering, не про corruption.
+ * V5 adapter: valid MapDocumentV5 → layered read view (только legacy-compatible
+ * subset). Сохраняет реальную структуру и порядок document.layers (§75):
+ * никаких flatten по semantic category. Не валидирует документ (предполагает
+ * valid V5) и не дублирует validator: diagnostics — только про unsupported
+ * rendering, не про corruption.
  */
 export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
   const diagnostics: RenderModelDiagnostic[] = [];
   const diag = (code: string, message: string) => diagnostics.push({ code, message });
 
-  let defaultCode = "plain";
-  let entries: ReadonlyMap<string, string> = new Map();
-  const roads = new Set<string>();
-  const rivers = new Set<string>();
-  const labels: RenderLabel[] = [];
-  const rooms: RenderRoom[] = [];
-  const doors: RenderDoor[] = [];
-  const traps: RenderTrap[] = [];
-  const markers: RenderMarker[] = [];
-  let start: RenderStartFinish | null = null;
-  let finish: RenderStartFinish | null = null;
+  const layers: MapRenderLayer[] = [];
   let nonTerrainMaterials = 0;
 
   for (const layer of doc.layers) {
     if (layer.kind === "terrain") {
       const dm = materialCode(layer.defaultMaterial);
-      defaultCode = dm ?? "plain";
+      const defaultCode = dm ?? "plain";
       if (dm === null) {
         nonTerrainMaterials++;
         diag("unsupported-material", "terrain defaultMaterial is not a builtin terrain: rendered as plain");
       }
       if (layer.representation === "mask") {
         diag("unsupported-terrain-mask", `layer ${layer.id}: mask terrain rendered as default`);
+        layers.push({
+          ...baseOf(layer),
+          kind: "terrain",
+          terrain: { defaultCode, entries: new Map() },
+        });
         continue;
       }
       const map = new Map<string, string>();
@@ -252,66 +350,101 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
         }
         map.set(`${c.x},${c.y}`, code);
       }
-      entries = map;
+      layers.push({ ...baseOf(layer), kind: "terrain", terrain: { defaultCode, entries: map } });
     } else if (layer.kind === "path") {
+      const paths: RenderPath[] = [];
       for (const p of layer.paths) {
         if (p.geometry.type === "spline") {
           diag("unsupported-spline-path", `path ${p.id}: spline not rendered`);
           continue;
         }
-        const target = p.kind === "road" ? roads : p.kind === "river" ? rivers : null;
-        if (target === null) {
+        if (p.kind !== "road" && p.kind !== "river") {
           diag("unsupported-path-kind", `path ${p.id}: kind "${p.kind}" not rendered`);
           continue;
         }
-        for (const c of p.geometry.cells) target.add(`${c.x},${c.y}`);
+        const cells = new Set<string>();
+        for (const c of p.geometry.cells) cells.add(`${c.x},${c.y}`);
+        paths.push({ kind: p.kind, cells });
       }
+      layers.push({ ...baseOf(layer), kind: "path", paths });
     } else if (layer.kind === "label") {
+      const labels: RenderLabel[] = [];
       for (const l of layer.items) {
         labels.push({ id: l.id, position: { x: l.position.x, y: l.position.y }, text: l.text });
       }
+      layers.push({ ...baseOf(layer), kind: "label", labels });
     } else if (layer.kind === "gameplay") {
+      const items: RenderGameplayItem[] = [];
+      // items[] = render order внутри layer (§16): порядок документа, без
+      // сортировки по kind. Start/finish — первый в своём слое.
+      let startTaken = false;
+      let finishTaken = false;
       for (const e of layer.items) {
         if (e.kind === "room") {
           if (e.geometry.type !== "rect") {
             diag("unsupported-room-geometry", `room ${e.id}: ${e.geometry.type} not rendered`);
             continue;
           }
-          rooms.push({
-            id: e.id,
-            rect: { x: e.geometry.x, y: e.geometry.y, w: e.geometry.w, h: e.geometry.h },
-            type: e.roomType,
-            name: e.name,
+          items.push({
+            kind: "room",
+            room: {
+              id: e.id,
+              rect: { x: e.geometry.x, y: e.geometry.y, w: e.geometry.w, h: e.geometry.h },
+              type: e.roomType,
+              name: e.name,
+            },
           });
         } else if (e.kind === "door") {
           if (!isCardinalOrientation(e.orientation)) {
             diag("unsupported-door-orientation", `door ${e.id}: orientation ${e.orientation} rendered axis-aligned`);
           }
-          doors.push({
-            id: e.id,
-            position: { x: e.position.x, y: e.position.y },
-            horizontal: e.orientation % 180 === 0,
-            kind: e.doorKind,
-            secret: e.secret,
+          items.push({
+            kind: "door",
+            door: {
+              id: e.id,
+              position: { x: e.position.x, y: e.position.y },
+              horizontal: e.orientation % 180 === 0,
+              kind: e.doorKind,
+              secret: e.secret,
+            },
           });
         } else if (e.kind === "trap") {
-          traps.push({ id: e.id, position: { x: e.position.x, y: e.position.y }, kind: e.trapKind });
+          items.push({
+            kind: "trap",
+            trap: { id: e.id, position: { x: e.position.x, y: e.position.y }, kind: e.trapKind },
+          });
         } else if (e.kind === "marker") {
-          markers.push({ id: e.id, position: { x: e.position.x, y: e.position.y }, kind: e.markerKind });
+          items.push({
+            kind: "marker",
+            marker: { id: e.id, position: { x: e.position.x, y: e.position.y }, kind: e.markerKind },
+          });
         } else if (e.kind === "start") {
-          if (start === null) start = { id: e.id, position: { x: e.position.x, y: e.position.y } };
+          if (startTaken) continue;
+          startTaken = true;
+          items.push({
+            kind: "start",
+            start: { id: e.id, position: { x: e.position.x, y: e.position.y } },
+          });
         } else if (e.kind === "finish") {
-          if (finish === null) finish = { id: e.id, position: { x: e.position.x, y: e.position.y } };
+          if (finishTaken) continue;
+          finishTaken = true;
+          items.push({
+            kind: "finish",
+            finish: { id: e.id, position: { x: e.position.x, y: e.position.y } },
+          });
         }
       }
+      layers.push({ ...baseOf(layer), kind: "gameplay", items });
     } else if (layer.kind === "object") {
       if (layer.items.length > 0) {
         diag("unsupported-object-layer", `layer ${layer.id}: ${layer.items.length} object(s) not rendered`);
       }
+      layers.push({ ...baseOf(layer), kind: "object" });
     } else if (layer.kind === "scatter") {
       if (layer.areas.length > 0) {
         diag("unsupported-scatter-layer", `layer ${layer.id}: ${layer.areas.length} area(s) not rendered`);
       }
+      layers.push({ ...baseOf(layer), kind: "scatter" });
     }
   }
 
@@ -319,19 +452,5 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
     diag("unsupported-material", `${nonTerrainMaterials} cell(s) use non-terrain materials: rendered as default`);
   }
 
-  return {
-    model: {
-      terrain: { defaultCode, entries },
-      roads,
-      rivers,
-      labels,
-      rooms,
-      doors,
-      traps,
-      markers,
-      start,
-      finish,
-    },
-    diagnostics,
-  };
+  return { model: { layers }, diagnostics };
 }

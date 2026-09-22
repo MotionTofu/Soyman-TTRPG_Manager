@@ -1,9 +1,11 @@
-// Current editor compatibility profile (Фаза 2G, §4–6).
+// Current editor compatibility profile (Фаза 3A, §78–83).
 // Отличается от validateMapDocument: валидный V5 может быть не по зубам
-// текущему редактору (mask/spline/objects/scatter, несколько road paths,
-// неквадратные комнаты...). Такое нельзя молча открыть на редактирование:
-// renderer бы скрыл данные, а autosave — перезаписал (§7 ТЗ).
-// Использует diagnostics createV5RenderModel как часть проверки.
+// текущему редактору (mask/spline/objects/scatter, несколько road paths
+// внутри одного слоя, неквадратные комнаты...). Такое нельзя молча открыть
+// на редактирование: renderer бы скрыл данные, а autosave — перезаписал.
+// Разрешены: arbitrary layer order, 0..N TerrainCell/Path/Gameplay/Label
+// layers, visibility/lock/opacity. Hidden НЕ снимает unsupported (§77):
+// проверка идёт по всему документу независимо от visible.
 
 import { MAP_MAX_SIDE, MAP_MIN_SIDE } from "../mapTypes";
 import { createV5RenderModel } from "../renderModel";
@@ -69,24 +71,25 @@ export function assessCurrentEditorCompatibility(doc: MapDocumentV5): EditorComp
     }
   }
 
-  // Path ambiguity (§6 ТЗ): brush работает с одним набором клеток на kind.
-  // Несколько road/river cell-network paths — валидный V5, но редактор
-  // не знает, какой редактировать.
-  let roadNetworks = 0;
-  let riverNetworks = 0;
+  // Path ambiguity (3A §79): несколько road/river cell-network paths разрешены
+  // ВО ВСЁМ документе, но не более одного одного kind ВНУТРИ конкретного
+  // editable PathLayer — кисть работает внутри target слоя и обязана знать,
+  // какой path редактировать.
   for (const layer of doc.layers) {
     if (layer.kind !== "path") continue;
+    let roadNetworks = 0;
+    let riverNetworks = 0;
     for (const p of layer.paths) {
       if (p.geometry.type !== "cell-network") continue;
       if (p.kind === "road") roadNetworks++;
       if (p.kind === "river") riverNetworks++;
     }
-  }
-  if (roadNetworks > 1) {
-    issue("path-count", `editor edits a single road path, got ${roadNetworks}`);
-  }
-  if (riverNetworks > 1) {
-    issue("path-count", `editor edits a single river path, got ${riverNetworks}`);
+    if (roadNetworks > 1) {
+      issue("path-count", `layer ${layer.id}: editor edits a single road path, got ${roadNetworks}`);
+    }
+    if (riverNetworks > 1) {
+      issue("path-count", `layer ${layer.id}: editor edits a single river path, got ${riverNetworks}`);
+    }
   }
 
   return { compatible: reasons.length === 0, reasons };

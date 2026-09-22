@@ -619,6 +619,63 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     }
   }
 
+  // Portable import identity (B2.1): stable logical UID travelling through
+  // portable HTML. NULL for pre-B2.1 rows; never the primary id. Plain ADD
+  // COLUMN suffices — no rebuild involvement.
+  if (!columnExists(database, "characters", "character_uid")) {
+    database.exec("ALTER TABLE characters ADD COLUMN character_uid TEXT");
+  }
+
+  // Optional device sync for SoyMan_1shot (phase D1.1). Fresh tables only —
+  // CREATE TABLE IF NOT EXISTS is idempotent, no rebuild involvement.
+  database.exec(`CREATE TABLE IF NOT EXISTS sync_spaces (
+    id TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+  database.exec(`CREATE TABLE IF NOT EXISTS sync_devices (
+    id TEXT PRIMARY KEY,
+    sync_space_id TEXT NOT NULL REFERENCES sync_spaces(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_seen_at TEXT,
+    revoked_at TEXT
+  )`);
+  database.exec(`CREATE TABLE IF NOT EXISTS sync_pairings (
+    token_hash TEXT PRIMARY KEY,
+    sync_space_id TEXT NOT NULL REFERENCES sync_spaces(id) ON DELETE CASCADE,
+    created_by_device_id TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at TEXT NOT NULL,
+    used_at TEXT
+  )`);
+  // Character snapshots (phase D1.2): last confirmed snapshot per (space,
+  // characterUid) plus a monotonic server revision. Deletes stay as
+  // tombstones (deleted_at) with revision++ so a second device never
+  // resurrects them. Local Character.revision is a different system.
+  database.exec(`CREATE TABLE IF NOT EXISTS sync_characters (
+    sync_space_id TEXT NOT NULL REFERENCES sync_spaces(id) ON DELETE CASCADE,
+    character_uid TEXT NOT NULL,
+    revision INTEGER NOT NULL,
+    payload_json TEXT,
+    deleted_at TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_by_device_id TEXT,
+    PRIMARY KEY (sync_space_id, character_uid)
+  )`);
+  // Immutable content-addressed artifacts (phase D1.3): catalog slices and
+  // portraits referenced from v2 character documents by SHA-256. Scoped to
+  // the sync space — no cross-user dedup. No revisions: a known hash exists
+  // by definition. Orphan cleanup is future housekeeping, never rollback.
+  database.exec(`CREATE TABLE IF NOT EXISTS sync_artifacts (
+    sync_space_id TEXT NOT NULL REFERENCES sync_spaces(id) ON DELETE CASCADE,
+    hash TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    bytes INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (sync_space_id, hash)
+  )`);
+
   // Payment model migration: campaign-level payment_type, session payment_override/title,
   // per-player amount_paid (replacing the old boolean paid/is_paid_session flags).
   if (!columnExists(database, "campaigns", "payment_type")) {

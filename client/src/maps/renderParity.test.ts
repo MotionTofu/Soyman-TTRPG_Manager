@@ -18,6 +18,10 @@ const CHROME: MapChrome = { paper: "#fff", line: "#000", muted: "#666", ink: "#1
 
 function makeRecordingCtx(): { ctx: CanvasRenderingContext2D; calls: string[] } {
   const calls: string[] = [];
+  // Эмуляция globalAlpha-стека (3A: renderer умножает layer opacity через *=):
+  // Proxy без неё отдавал бы функции, и *= давал NaN.
+  let alpha = 1;
+  const stack: number[] = [];
   const fmt = (v: unknown): string => {
     if (typeof v === "number") {
       if (Object.is(v, -0)) return "0";
@@ -30,11 +34,18 @@ function makeRecordingCtx(): { ctx: CanvasRenderingContext2D; calls: string[] } 
     {
       get(_t, prop) {
         if (prop === "canvas") return null;
+        if (prop === "globalAlpha") return alpha;
         return (...args: unknown[]) => {
+          if (prop === "save") stack.push(alpha);
+          if (prop === "restore") {
+            const prev = stack.pop();
+            if (prev !== undefined) alpha = prev;
+          }
           calls.push(`${String(prop)}(${args.map(fmt).join(",")})`);
         };
       },
       set(_t, prop, value) {
+        if (prop === "globalAlpha" && typeof value === "number") alpha = value;
         calls.push(`set:${String(prop)}=${fmt(value)}`);
         return true;
       },
@@ -107,9 +118,13 @@ function renderCalls(opts: RenderOptions): string[] {
  *   запекается в ключ (а не прилипает к первой ячейке цвета).
  * - Ячейки одного цвета/стиля не пересекаются (заливки непрозрачные,
  *   мотивы confined to own cell) — перестановка групп на растр не влияет.
- * Строго позиционно: rects, текст, state (alpha/lineWidth/save/restore),
- * фазы рек/дорог (lineWidth-барьеры), порядок сущностей. Пропуски, лишние
- * сущности, неверные координаты/стили/тексты и перестановки фаз ловятся.
+ * - 3A framing: save/restore/globalAlpha=1 вокруг каждого слоя — число слоёв
+ *   у legacy-псевдостека (4) и migrated (7) различается; сами save/restore
+ *   сущностей на обеих сторонах одинаковы, поэтому framing вычищается здесь,
+ *   а layer framing отдельно доказывается в renderLayers.test.ts (§117–120).
+ * Строго позиционно: rects, текст, state (alpha/lineWidth), фазы рек/дорог
+ * (lineWidth-барьеры), порядок сущностей. Пропуски, лишние сущности, неверные
+ * координаты/стили/тексты и перестановки фаз ловятся.
  */
 function normalize(calls: string[]): string[] {
   const isFillStyle = (c: string) => c.startsWith("set:fillStyle=");
@@ -138,6 +153,10 @@ function normalize(calls: string[]): string[] {
   };
 
   for (const c of calls) {
+    // 3A framing вокруг слоёв: save/restore и globalAlpha=1 (opacity 1).
+    // Ненулевые alpha (мотивы 0.32, имена 0.8, сетка 0.35, hover 0.18) —
+    // значимы и остаются.
+    if (c === "save()" || c === "restore()" || c === "set:globalAlpha=1") continue;
     if (isFillStyle(c)) {
       runFill = val(c);
       styles.push(`f=${runFill}`);

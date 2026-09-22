@@ -28,16 +28,26 @@ const MAP = {
 } as unknown as MapFull;
 
 const CELLS_MODEL: MapRenderModel = {
-  terrain: { defaultCode: "plain", entries: new Map() },
-  roads: new Set(),
-  rivers: new Set(),
-  labels: [],
-  rooms: [],
-  doors: [],
-  traps: [{ id: "t-1", position: { x: 1.5, y: 1.5 }, kind: "pit" }],
-  markers: [],
-  start: null,
-  finish: null,
+  layers: [
+    {
+      id: "legacy-terrain",
+      name: "Terrain",
+      visible: true,
+      locked: false,
+      opacity: 1,
+      kind: "terrain",
+      terrain: { defaultCode: "plain", entries: new Map() },
+    },
+    {
+      id: "legacy-gameplay",
+      name: "Gameplay",
+      visible: true,
+      locked: false,
+      opacity: 1,
+      kind: "gameplay",
+      items: [{ kind: "trap", trap: { id: "t-1", position: { x: 1.5, y: 1.5 }, kind: "pit" } }],
+    },
+  ],
 };
 
 function makeCtx() {
@@ -276,18 +286,13 @@ describe("MapViewport", () => {
     }
   });
 
-  it("13 (2G). viewport передаёт renderMap model + selectedId", () => {
+  it("13 (2G/3A). viewport передаёт renderMap layered model + selectedId", () => {
     setup();
     const opts = lastOpts();
     expect("model" in opts).toBe(true);
     expect("cells" in opts).toBe(false);
-    expect(opts).toMatchObject({
-      model: expect.objectContaining({
-        terrain: expect.objectContaining({ defaultCode: "plain" }),
-        roads: expect.any(Set),
-        rivers: expect.any(Set),
-      }),
-      selectedId: null,
-    });
+    expect(opts).toMatchObject({ selectedId: null });
+    const layers = (opts.model as MapRenderModel).layers;
+    expect(layers.map((l) => l.kind)).toEqual(["terrain", "gameplay"]);
   });
 });

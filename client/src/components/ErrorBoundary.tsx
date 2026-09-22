@@ -1,5 +1,5 @@
 import { Component, type ReactNode } from "react";
-import { SoyMan } from "./SoyMan";
+import { SoyManResponsive } from "./SoyMan";
 
 interface Props {
   children: ReactNode;
@@ -28,7 +28,7 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div style={{ padding: 32, maxWidth: 600, margin: "0 auto" }}>
           {/* decorative: заголовок ниже говорит то же самое. */}
-          <SoyMan state="error" size="md" decorative />
+          <SoyManResponsive state="error" size="lg" decorative />
           <h2 style={{ marginBottom: 12, marginTop: 12 }}>Что-то пошло не так</h2>
           <p className="muted" style={{ marginBottom: 16 }}>
             Произошла ошибка при отрисовке. Попробуйте перезагрузить страницу.

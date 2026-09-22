@@ -105,6 +105,7 @@ import { rollDiceFormula } from "./diceRoll";
 import { useDndRuntime } from './DndRuntime';
 import { DndCardBack } from "./DndCardBack";
 import { DndLevelUpWizard } from "./DndLevelUpWizard";
+import type { LevelUpDraftHost } from "./dndLevelUpDraft";
 import { PosterButtons } from "./PosterButtons";
 import { snapshotNodeBlob } from "./cardSnapshot";
 import { DndTransferBox } from "./DndTransferBox";
@@ -9441,6 +9442,8 @@ export function DndCharacterView({
   ownerCharacterId,
   onSheetBack,
   onPortraitRefresh,
+  levelUpDraft,
+  onLevelUpApply,
 }: {
   value: DndCharacterData;
   // Лицо первой карты. Отдельное поле под изображение заводить не пришлось —
@@ -9474,6 +9477,15 @@ export function DndCharacterView({
   // Портрет протух (подпись URL живёт 60 секунд): перезагрузить персонажа,
   // чтобы приехал свежий avatar_image_url. Без пропса — просто плейсхолдер.
   onPortraitRefresh?: () => void;
+  // Resumable level-up (C2): непрозрачный хост-контракт визарда
+  // (identity/initial/onChange/onClear, см. dndLevelUpDraft). Без пропса
+  // визард работает как раньше без сохранения черновика.
+  levelUpDraft?: LevelUpDraftHost | null;
+  // Durable level-up commit: в отличие от onQuickUpdate (resolve на enqueue),
+  // резолвится только реальным коммитом и реджектится ошибкой записи, чтобы
+  // визард чистил черновик строго после durable save. Без пропса визард
+  // использует onQuickUpdate как раньше.
+  onLevelUpApply?: (patch: Partial<DndCharacterData>) => Promise<void>;
 }) {
   // Оба хука вызываются всегда — по правилам хуков ветвиться здесь нельзя,
   // да и незачем: неиспользуемый просто держит своё состояние вхолостую.
@@ -12451,8 +12463,9 @@ export function DndCharacterView({
     {showLevelUp && onQuickUpdate && (
       <DndLevelUpWizard
         value={value}
-        onApply={(p) => onQuickUpdate(p)}
+        onApply={onLevelUpApply ?? ((p) => onQuickUpdate(p))}
         onClose={() => setShowLevelUp(false)}
+        levelUpDraft={levelUpDraft}
       />
     )}
   </div>

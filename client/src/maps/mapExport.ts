@@ -20,11 +20,59 @@ import {
   renderMap,
   readChrome,
   terrainMotifInk,
+  type MapDoorKind,
   type MapMarkerKind,
+  type MapRoomType,
+  type MapTrapKind,
 } from "./render";
 import { createV5RenderModel, type MapRenderModel } from "./renderModel";
 import type { MapDocumentV5 } from "./core/types";
 import { MAP_SCALE_LABELS, type MapGrid, type MapScale } from "./mapTypes";
+
+/** Content легенды из видимых слоёв модели (3A §109): террейны со всех
+ *  visible terrain layers с dedupe; hidden content в легенду не попадает. */
+export interface LegendContent {
+  terrainCodes: Set<string>;
+  doors: { kind: MapDoorKind; secret: boolean }[];
+  traps: { kind: MapTrapKind }[];
+  rooms: { type: MapRoomType }[];
+  markers: { kind: MapMarkerKind }[];
+  hasStart: boolean;
+  hasFinish: boolean;
+  hasRivers: boolean;
+}
+
+export function collectLegendContent(model: MapRenderModel): LegendContent {
+  const terrainCodes = new Set<string>();
+  const doors: LegendContent["doors"] = [];
+  const traps: LegendContent["traps"] = [];
+  const rooms: LegendContent["rooms"] = [];
+  const markers: LegendContent["markers"] = [];
+  let hasStart = false;
+  let hasFinish = false;
+  let hasRivers = false;
+  for (const layer of model.layers) {
+    if (!layer.visible) continue;
+    if (layer.kind === "terrain") {
+      terrainCodes.add(layer.terrain.defaultCode);
+      for (const code of layer.terrain.entries.values()) terrainCodes.add(code);
+    } else if (layer.kind === "path") {
+      for (const p of layer.paths) {
+        if (p.kind === "river" && p.cells.size > 0) hasRivers = true;
+      }
+    } else if (layer.kind === "gameplay") {
+      for (const it of layer.items) {
+        if (it.kind === "door") doors.push(it.door);
+        else if (it.kind === "trap") traps.push(it.trap);
+        else if (it.kind === "room") rooms.push(it.room);
+        else if (it.kind === "marker") markers.push(it.marker);
+        else if (it.kind === "start") hasStart = true;
+        else if (it.kind === "finish") hasFinish = true;
+      }
+    }
+  }
+  return { terrainCodes, doors, traps, rooms, markers, hasStart, hasFinish, hasRivers };
+}
 
 export interface PngSnapshot {
   grid: MapGrid;
@@ -95,8 +143,9 @@ export function buildAndDownloadPng(snap: PngSnapshot, PX: number) {
   const titleH = 64;
   const rowH = 24;
   const footH = 64;
-  const pv = snap.pv;
-  const live = model;
+  // Легенда из ВИДИМЫХ слоёв (3A §109) — см. collectLegendContent.
+  const { terrainCodes, doors, traps, rooms, markers, hasStart, hasFinish, hasRivers } =
+    collectLegendContent(model);
   type LegRow =
     | { kind: "terrain"; code: string }
     | { kind: "swatch"; color: string; label: string }
@@ -106,14 +155,13 @@ export function buildAndDownloadPng(snap: PngSnapshot, PX: number) {
     | { kind: "marker"; mkind: MapMarkerKind }
     | { kind: "sf"; which: "start" | "finish" };
   // Д-12: в виде игрока — только реально присутствующие террейны (иначе легенда
-  // спойлерит биомы, которых на карте нет); default — фон, он виден всегда.
-  const present = new Set(live.terrain.entries.values());
-  present.add(live.terrain.defaultCode);
-  const terrainCodes = pv
-    ? MAP_TERRAIN_ORDER.filter((code) => code === live.terrain.defaultCode || present.has(code))
+  // спойлерит биомы, которых на карте нет).
+  const pv = snap.pv;
+  const terrainRows = pv
+    ? MAP_TERRAIN_ORDER.filter((code) => terrainCodes.has(code))
     : [...MAP_TERRAIN_ORDER];
-  const legRows: LegRow[] = terrainCodes.map((code) => ({ kind: "terrain", code }) as LegRow);
-  for (const d of live.doors) {
+  const legRows: LegRow[] = terrainRows.map((code) => ({ kind: "terrain", code }) as LegRow);
+  for (const d of doors) {
     const { kind, hidden } = doorForView(d, pv);
     if (hidden) continue;
     if (!legRows.some((r) => r.kind === "swatch" && r.label === MAP_DOOR_LABELS[kind])) {
@@ -122,29 +170,29 @@ export function buildAndDownloadPng(snap: PngSnapshot, PX: number) {
   }
   // Ловушки — только мастер (игрок их не видит и на поле).
   if (!pv) {
-    for (const t of live.traps) {
+    for (const t of traps) {
       if (!legRows.some((r) => r.kind === "glyph" && r.label === MAP_TRAP_LABELS[t.kind])) {
         legRows.push({ kind: "glyph", glyph: MAP_TRAP_GLYPHS[t.kind], label: MAP_TRAP_LABELS[t.kind] });
       }
     }
   }
-  for (const r of live.rooms) {
+  for (const r of rooms) {
     const label = MAP_ROOM_LABELS[r.type] ?? r.type;
     if (!legRows.some((x) => x.kind === "swatch" && x.label === label)) {
       legRows.push({ kind: "swatch", color: MAP_ROOM_TINT[r.type] ?? chrome.paper, label });
     }
   }
-  if (live.start) legRows.push({ kind: "sf", which: "start" });
-  if (live.finish) legRows.push({ kind: "sf", which: "finish" });
+  if (hasStart) legRows.push({ kind: "sf", which: "start" });
+  if (hasFinish) legRows.push({ kind: "sf", which: "finish" });
   // Маркеры видны и игрокам (решение: как комнаты) — в легенде всегда, если есть на карте.
-  for (const mk of live.markers) {
+  for (const mk of markers) {
     if (!legRows.some((r) => r.kind === "marker" && r.mkind === mk.kind)) {
       legRows.push({ kind: "marker", mkind: mk.kind });
     }
   }
   legRows.push({ kind: "line" });
   // Река — только если есть на карте (иначе лишний шум в легенде).
-  if (live.rivers.size > 0) legRows.push({ kind: "river" });
+  if (hasRivers) legRows.push({ kind: "river" });
   const legLabels: Record<string, string> = { line: "Дорога", river: MAP_RIVER_LABEL, start: "Старт", finish: "Финиш" };
   const legContentH = titleH + legRows.length * rowH + footH;
   const W = mapW + gap + LW + pad * 2;

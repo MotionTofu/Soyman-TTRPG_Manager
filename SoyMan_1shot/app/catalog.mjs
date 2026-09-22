@@ -1,4 +1,12 @@
 // Only the catalog is accepted here; no campaign or account records are imported.
+// Canonical artifact serialization shared by the node-only release builder
+// (catalog-release.mjs) and the browser runtime (catalog-manager.mjs): plain
+// JSON, no node:crypto, so importing this module never pulls node builtins
+// into the browser bundle (vite dev serves CJS as-is and crashes on them,
+// while the production bundler merely tree-shakes them away).
+export function serializeArtifact(value) {
+  return JSON.stringify(value);
+}
 export function repairSpellLevels(catalog, reference) {
   const known = new Map(reference.entries.map(e => [e.id, e]));
   return { ...catalog, entries: catalog.entries.map(e => {

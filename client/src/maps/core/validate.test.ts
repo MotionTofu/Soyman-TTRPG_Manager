@@ -232,10 +232,19 @@ describe("validate: negative", () => {
     expect(codes(d).some((c) => c.includes("id.duplicate"))).toBe(true);
   });
 
-  it("ноль terrain layers", () => {
-    expectBad((d) => {
-      d.layers = d.layers.filter((l) => l.kind !== "terrain");
-    }, "terrain.count");
+  it("ноль terrain layers — валидно (3A §10–11)", () => {
+    const d = base();
+    d.layers = d.layers.filter((l) => l.kind !== "terrain");
+    expect(validateMapDocument(d)).toEqual([]);
+  });
+
+  it("два terrain layers — валидно (3A §10)", () => {
+    const d = base();
+    const t = d.layers.find((l) => l.kind === "terrain");
+    if (t) {
+      d.layers = [...d.layers, { ...t, id: "lyr-terrain-2", name: "Terrain 2" }];
+    }
+    expect(validateMapDocument(d)).toEqual([]);
   });
 
   it("spline с одной node", () => {

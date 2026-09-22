@@ -1,8 +1,9 @@
 import type { SetStateAction } from "react";
 import { cellCenter, cellKey, pixelToCell } from "../../grid";
 import { applyTerrainCellEdits } from "../../core/mutations/terrain";
-import type { MapDocumentV5 } from "../../core/types";
+import type { LayerId, MapDocumentV5 } from "../../core/types";
 import type { MapGeometry } from "../hooks/useMapSelection";
+import { NO_COMPATIBLE_LAYER_ERROR, resolveToolTargetLayer } from "./layerTargets";
 
 // Стены (Фаза 2G): вершины полилинии, живой конец, финиш растеризацией
 // в wall одним history step через terrain batch. Состояния wallDraft/wallLive/
@@ -38,6 +39,8 @@ interface CreateWallToolsArgs {
   wallSnap: boolean;
   wallDraft: { x: number; y: number }[] | null;
   wallLive: { x: number; y: number } | null;
+  activeLayerId: LayerId | null;
+  onActiveLayer: (id: LayerId) => void;
   setWallDraft: (v: SetStateAction<{ x: number; y: number }[] | null>) => void;
   setWallLive: (v: { x: number; y: number } | null) => void;
   documentRef: { current: MapDocumentV5 | null };
@@ -83,11 +86,14 @@ export function createWallTools(a: CreateWallToolsArgs) {
     a.setWallDraft(null);
     a.setWallLive(null);
     if (verts.length < 2) return;
-    const layer = doc.layers.find((l) => l.kind === "terrain");
-    if (!layer || layer.kind !== "terrain" || layer.representation !== "cells") {
-      a.setActionError("В документе нет клеточного terrain-слоя.");
+    // Стены — террейн-кисть: target TerrainCellLayer через resolver.
+    const tgt = resolveToolTargetLayer(doc, a.activeLayerId, "terrain");
+    if (!tgt.ok) {
+      a.setActionError(NO_COMPATIBLE_LAYER_ERROR);
       return;
     }
+    if (!tgt.keptActive) a.onActiveLayer(tgt.layerId);
+    const layerId = tgt.layerId;
     const seen = new Set<string>();
     const edits: Array<{ x: number; y: number; material: { type: "builtin"; key: string } }> = [];
     for (let i = 0; i + 1 < verts.length; i++) {
@@ -98,7 +104,7 @@ export function createWallTools(a: CreateWallToolsArgs) {
         edits.push({ x: cell.x, y: cell.y, material: { type: "builtin", key: "terrain/wall" } });
       }
     }
-    const r = applyTerrainCellEdits(doc, layer.id, edits);
+    const r = applyTerrainCellEdits(doc, layerId, edits);
     if (!r.ok) {
       a.setActionError(r.issues[0]?.message ?? "Не удалось построить стены.");
       return;

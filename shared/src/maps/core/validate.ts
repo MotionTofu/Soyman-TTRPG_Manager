@@ -637,7 +637,6 @@ export function validateMapDocument(doc: unknown): ValidationIssue[] {
 
   const ids = new Set<string>();
   const doors = new Map<string, { pairedDoorId: unknown; path: string }>();
-  let terrainCount = 0;
 
   doc.layers.forEach((l, i) => {
     const lp = `layers[${i}]`;
@@ -649,7 +648,6 @@ export function validateMapDocument(doc: unknown): ValidationIssue[] {
     claimId(ids, l.id, `${lp}.id`, "layer", out);
     const kind = l.kind;
     if (kind === "terrain") {
-      terrainCount++;
       checkTerrainLayer(l, lp, grid, ids, out);
     } else if (kind === "path") {
       checkPathLayer(l, lp, grid, ids, out);
@@ -666,10 +664,9 @@ export function validateMapDocument(doc: unknown): ValidationIssue[] {
     }
   });
 
-  // Инвариант 16 (Фаза 2B): ровно один TerrainLayer; миграция всегда даёт cells.
-  if (terrainCount !== 1) {
-    out.push(issue("terrain.count", "layers", `expected exactly 1 terrain layer, got ${terrainCount}`));
-  }
+  // Инвариант 16 снят в Фазе 3A (§10 ТЗ): 0..N TerrainLayer валидны
+  // (multi-terrain compositing, terrain-less compositions). Был ограничением
+  // ранней реализации, не фундаментальным invariant ADR.
 
   // Door relations (§17 ТЗ): null | существующая дверь, симметрия, без self-pair.
   for (const [id, d] of doors) {

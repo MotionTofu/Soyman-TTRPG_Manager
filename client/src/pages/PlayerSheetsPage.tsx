@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAfterWrite, useResource, write } from "../data/hooks";
 import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
+import { Modal } from "../components/Modal";
 import { PageFrame } from "../components/PageFrame";
+import { PORTABLE_MAX_HTML_BYTES } from "@shared/portable/parse";
 
 interface SheetSummary {
   format: string;
@@ -62,6 +64,95 @@ export function PlayerSheetsPage() {
   const [createError, setCreateError] = useState("");
   const [saving, setSaving] = useState(false);
   const afterWrite = useAfterWrite();
+  // Portable HTML import (B2.1/B2.2): same file as SoyMan_1shot exports. The
+  // server parses and validates; the client only ships the text. The chosen
+  // file stays retained while the identity decision modal is open, then the
+  // same HTML is resent with the player's action (replace/copy).
+  const importFile = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState("");
+  interface PortableMatch {
+    id: number;
+    name: string;
+  }
+  const [decisionFile, setDecisionFile] = useState<File | null>(null);
+  const [decisionMatch, setDecisionMatch] = useState<PortableMatch | null>(null);
+  const [decisionConflict, setDecisionConflict] = useState(false);
+  const [decisionBusy, setDecisionBusy] = useState(false);
+
+  function closeDecision() {
+    setDecisionFile(null);
+    setDecisionMatch(null);
+    setDecisionConflict(false);
+  }
+
+  function portableDecision(e: unknown): { code?: string; match?: PortableMatch } | null {
+    const payload = (e as { payload?: unknown })?.payload;
+    if (payload && typeof payload === "object" && "code" in payload) {
+      return payload as { code?: string; match?: PortableMatch };
+    }
+    return null;
+  }
+
+  async function importPortable(file: File) {
+    // Content is the truth, not the browser MIME; the cap rejects giant
+    // arbitrary files before reading.
+    if (file.size > PORTABLE_MAX_HTML_BYTES) {
+      setImportError("Файл персонажа повреждён или имеет неподдерживаемую версию.");
+      return;
+    }
+    setImporting(true);
+    setImportError("");
+    try {
+      const created = await write.post<{ id: number }>("/player/characters/import/portable", {
+        html: await file.text(),
+      });
+      afterWrite([{ path: "/player/me" }, { kind: "character" }]);
+      navigate(`/characters/${created.id}/sheet`);
+    } catch (e) {
+      const decision = portableDecision(e);
+      if (decision?.code === "portable-character-exists" && decision.match) {
+        setDecisionFile(file);
+        setDecisionMatch(decision.match);
+      } else if (decision?.code === "portable-character-identity-conflict") {
+        setDecisionFile(file);
+        setDecisionConflict(true);
+      } else {
+        setImportError(e instanceof Error ? e.message : String(e));
+      }
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function resolvePortable(action: "replace" | "copy") {
+    if (!decisionFile || (!decisionMatch && !decisionConflict)) return;
+    setDecisionBusy(true);
+    setImportError("");
+    try {
+      const result = await write.post<{ id: number }>("/player/characters/import/portable", {
+        html: await decisionFile.text(),
+        action,
+        targetCharacterId: decisionMatch?.id,
+      });
+      closeDecision();
+      afterWrite([{ path: "/player/me" }, { kind: "character" }]);
+      navigate(`/characters/${result.id}/sheet`);
+    } catch (e) {
+      // A conflict surfacing at commit (or any other failure): never proceed
+      // with a stale decision — close and show the server's message.
+      const decision = portableDecision(e);
+      if (decision?.code === "portable-character-identity-conflict") {
+        setDecisionMatch(null);
+        setDecisionConflict(true);
+      } else {
+        closeDecision();
+        setImportError(e instanceof Error ? e.message : String(e));
+      }
+    } finally {
+      setDecisionBusy(false);
+    }
+  }
 
   function startCreate() {
     setCreating(true);
@@ -114,12 +205,63 @@ export function PlayerSheetsPage() {
       title="Персонажи"
       actions={
         !creating && (
-          <button type="button" className="primary" onClick={startCreate}>
-            + Новый чарник
-          </button>
+          <>
+            <button type="button" className="primary" onClick={startCreate}>
+              + Новый чарник
+            </button>
+            <button type="button" disabled={importing} onClick={() => importFile.current?.click()}>
+              {importing ? "Импортируем…" : "Импортировать персонажа"}
+            </button>
+            <input
+              ref={importFile}
+              hidden
+              type="file"
+              accept=".html,text/html"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) void importPortable(file);
+              }}
+            />
+          </>
         )
       }
     >
+      {importError && <LoadErrorCard message={<>Не удалось импортировать персонажа: {importError}</>} onRetry={() => setImportError("")} />}
+      {decisionFile && (
+        <Modal onClose={() => { if (!decisionBusy) closeDecision(); }} ariaLabel="Импорт персонажа">
+          {decisionConflict ? (
+            <>
+              <h3>Конфликт идентичности персонажа</h3>
+              <p>В SoyMan найдено несколько персонажей с такой идентичностью. Автоматически выбрать один из них нельзя.</p>
+              <div className="row" style={{ gap: 8 }}>
+                <button type="button" className="primary" disabled={decisionBusy} onClick={() => void resolvePortable("copy")}>
+                  {decisionBusy ? "Создаём…" : "Создать копию"}
+                </button>
+                <button type="button" disabled={decisionBusy} onClick={closeDecision}>
+                  Отмена
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <h3>Персонаж «{decisionMatch?.name}» уже есть в SoyMan</h3>
+              <p>Данные из файла заменят его текущее игровое состояние, включая здоровье, ресурсы, заметки и другие данные листа.</p>
+              <div className="row" style={{ gap: 8 }}>
+                <button type="button" className="primary" disabled={decisionBusy} onClick={() => void resolvePortable("replace")}>
+                  {decisionBusy ? "Обновляем…" : "Обновить"}
+                </button>
+                <button type="button" disabled={decisionBusy} onClick={() => void resolvePortable("copy")}>
+                  Создать копию
+                </button>
+                <button type="button" disabled={decisionBusy} onClick={closeDecision}>
+                  Отмена
+                </button>
+              </div>
+            </>
+          )}
+        </Modal>
+      )}
       {listError && <LoadErrorCard message={<>Не удалось загрузить персонажей: {listError}</>} onRetry={me.reload} />}
       {characters === null && !listError && <ListSkeleton variant="rows" label="Загрузка персонажей" />}
       {characters !== null && characters.length === 0 && !creating && (

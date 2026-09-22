@@ -183,3 +183,90 @@ describe("hitTest stability", () => {
     expect(doc).toEqual(before);
   });
 });
+
+describe("hitTest layers (3A §84–87, §121)", () => {
+  // Нижний слой: дверь в (2.5,0). Верхний слой: маркер в той же точке.
+  // По kind priority дверь бьёт маркер — но layer stack важнее (§87).
+  function twoLayerDoc(): MapDocumentV5 {
+    const doc = squareDoc();
+    const door = doc.layers
+      .flatMap((l) => (l.kind === "gameplay" ? l.items : []))
+      .find((e) => e.id === "legacy-door-0");
+    if (!door || door.kind !== "door") throw new Error("no door");
+    const upper: GameplayLayer = {
+      id: "g-upper",
+      name: "Upper",
+      visible: true,
+      locked: false,
+      opacity: 1,
+      kind: "gameplay",
+      items: [
+        {
+          id: "marker-top",
+          kind: "marker",
+          position: { x: door.position.x, y: door.position.y },
+          markerKind: "chest",
+        },
+      ],
+    };
+    return { ...doc, layers: [...doc.layers, upper] };
+  }
+
+  it("верхний слой бьёт kind priority нижнего", () => {
+    const doc = twoLayerDoc();
+    expect(hitTestGameplay(doc, { x: 2.5, y: 0 })).toEqual({ entityId: "marker-top", kind: "marker" });
+  });
+
+  it("hidden верхний слой пропускается — видна дверь нижнего", () => {
+    const doc = twoLayerDoc();
+    const hidden: MapDocumentV5 = {
+      ...doc,
+      layers: doc.layers.map((l) => (l.id === "g-upper" ? { ...l, visible: false } : l)),
+    };
+    expect(hitTestGameplay(hidden, { x: 2.5, y: 0 })).toEqual({
+      entityId: "legacy-door-0",
+      kind: "door",
+    });
+  });
+
+  it("locked верхний слой пропускается — видна дверь нижнего", () => {
+    const doc = twoLayerDoc();
+    const locked: MapDocumentV5 = {
+      ...doc,
+      layers: doc.layers.map((l) => (l.id === "g-upper" ? { ...l, locked: true } : l)),
+    };
+    expect(hitTestGameplay(locked, { x: 2.5, y: 0 })).toEqual({
+      entityId: "legacy-door-0",
+      kind: "door",
+    });
+  });
+
+  it("все gameplay скрыты → null", () => {
+    const doc = twoLayerDoc();
+    const none: MapDocumentV5 = {
+      ...doc,
+      layers: doc.layers.map((l) => (l.kind === "gameplay" ? { ...l, visible: false } : l)),
+    };
+    expect(hitTestGameplay(none, { x: 2.5, y: 0 })).toBeNull();
+  });
+
+  it("within-layer priority сохранён внутри верхнего слоя", () => {
+    const doc = twoLayerDoc();
+    // Верхний слой: маркер + ловушка в одной точке → trap бьёт marker.
+    const withTrap: MapDocumentV5 = {
+      ...doc,
+      layers: doc.layers.map((l) =>
+        l.id === "g-upper" && l.kind === "gameplay"
+          ? {
+              ...l,
+              items: [
+                ...l.items,
+                { id: "trap-top", kind: "trap" as const, position: { x: 2.5, y: 0 }, trapKind: "pit" as const },
+              ],
+            }
+          : l,
+      ),
+    };
+    expect(hitTestGameplay(withTrap, { x: 2.5, y: 0 })).toEqual({ entityId: "trap-top", kind: "trap" });
+  });
+});

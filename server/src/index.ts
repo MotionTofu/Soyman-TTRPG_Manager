@@ -65,6 +65,7 @@ import { soundsRouter, soundSetsRouter } from "./routes/sounds";
 import { filesRouter } from "./routes/files";
 import { authRouter } from "./routes/auth";
 import { playerRouter } from "./routes/player";
+import { syncRouter } from "./routes/sync";
 import { worldExplorationEntriesRouter } from "./routes/worldExplorationEntries";
 import { campaignPlayerSectionsRouter } from "./routes/campaignPlayerSections";
 import { visibilityGrantsRouter } from "./routes/visibilityGrants";
@@ -201,6 +202,8 @@ app.use((req, res, next) => {
   const p = req.path;
   const isImport =
     p.startsWith("/api/import") ||
+    p.startsWith("/api/player/characters/import") ||
+    p.startsWith("/api/sync") ||
     p.startsWith("/api/system-import") ||
     p.startsWith("/api/statblocks/import") ||
     p.startsWith("/api/systems") ||
@@ -208,11 +211,18 @@ app.use((req, res, next) => {
     p.startsWith("/api/story") ||
     p.startsWith("/api/modules") ||
     p.startsWith("/api/backup");
-  const limit = isImport
-    ? p.startsWith("/api/statblocks/import")
-      ? "5mb"
-      : "50mb"
-    : "1mb";
+  const limit = p.startsWith("/api/statblocks/import")
+    ? "5mb"
+    : // Sync split (D1.3): small character documents vs heavy immutable
+      // artifacts. The character endpoint no longer accepts 50mb just
+      // because portraits used to ride inside the snapshot.
+      p.startsWith("/api/sync/artifacts")
+      ? "20mb"
+      : p.startsWith("/api/sync")
+        ? "2mb"
+        : isImport
+          ? "50mb"
+          : "1mb";
   return (express.json({ limit }) as unknown as express.RequestHandler)(req, res, next);
 });
 app.use(attachUser);
@@ -301,6 +311,13 @@ app.use((_req, res, next) => {
 
 app.use("/api/auth", authLimiter, authRouter);
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
+
+// Optional device sync for SoyMan_1shot (phase D1.1): own Bearer device
+// credentials (never the main login tokens), mounted before the gm gate
+// like the other self-authenticating routers. Pairing endpoints share the
+// auth brute-force limiter: pairing tokens are high-entropy, this only
+// stops blind enumeration.
+app.use("/api/sync", authLimiter, syncRouter);
 
 // Player-role routes are already scoped to the caller's own player_id inside
 // playerRouter (requireAuth("player")) — mounted before the blanket gm gate

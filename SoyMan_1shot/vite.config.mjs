@@ -17,6 +17,15 @@ export default {
       try { const html = await readFile(path.join(root, 'generated/standalone-template.html'), 'utf8'); res.setHeader('Content-Type', 'text/html; charset=utf-8'); res.end(html); }
       catch (e) { res.statusCode = 500; res.end('Standalone build failed'); server.config.logger.error(String(e)); }
     });
+    // Development only: index.html references ./manifest.webmanifest, but the
+    // source lives in app/pwa (outside publicDir). Without this the dev
+    // server answers the manifest request with the SPA HTML fallback and the
+    // browser reports an invalid manifest. Production is untouched: build-pwa
+    // copies the manifest into app-dist.
+    server.middlewares.use('/manifest.webmanifest', async (_req, res) => {
+      try { const manifest = await readFile(path.join(root, 'app/pwa/manifest.webmanifest'), 'utf8'); res.setHeader('Content-Type', 'application/manifest+json'); res.end(manifest); }
+      catch (e) { res.statusCode = 500; res.end('Manifest read failed'); server.config.logger.error(String(e)); }
+    });
     // Development only; private catalog is never copied to app-dist.
     server.middlewares.use('/__local/catalog', async (req, res) => {
       if (req.method !== 'GET') { res.statusCode = 405; res.end(); return; }
@@ -30,6 +39,9 @@ export default {
     'react-dom': path.join(client, 'node_modules/react-dom'),
     'react-router-dom': path.join(client, 'node_modules/react-router-dom'),
     '@tanstack/react-query': path.join(client, 'node_modules/@tanstack/react-query'),
+    // QR for the sync pairing screen reuses the main client's qrcode.react;
+    // no new dependency, no external service (see run-app shared build note).
+    'qrcode.react': path.join(client, 'node_modules/qrcode.react/lib/esm/index.js'),
   }, dedupe: ['react', 'react-dom', '@tanstack/react-query'] },
   server: { host: '127.0.0.1', port: 4318, strictPort: true, fs: { allow: [path.resolve(root, '..')] } },
   build: { outDir: path.join(root, 'app-dist'), emptyOutDir: true },

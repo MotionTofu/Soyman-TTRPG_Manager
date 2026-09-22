@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { FIXTURES, parseFixture } from "../fixtures";
 import { migrateLegacyMap } from "../migrateLegacy";
 import type { MapDocumentV5 } from "../types";
-import { createV5RenderModel } from "../../renderModel";
+import { createV5RenderModel, type MapRenderLayer } from "../../renderModel";
 import { addPathCells } from "./paths";
 import { createGameplayEntity, moveGameplayEntity } from "./gameplay";
 import { deleteLabel } from "./labels";
@@ -27,6 +27,34 @@ function expectOk(r: MutationResult): MapDocumentV5 {
   return r.document;
 }
 
+function terrainEntriesOf(model: { layers: readonly MapRenderLayer[] }): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const l of model.layers) {
+    if (l.kind !== "terrain") continue;
+    for (const [k, v] of l.terrain.entries) out.set(k, v);
+  }
+  return out;
+}
+
+function roadCellsOf(model: { layers: readonly MapRenderLayer[] }): Set<string> {
+  const out = new Set<string>();
+  for (const l of model.layers) {
+    if (l.kind !== "path") continue;
+    for (const p of l.paths) {
+      if (p.kind === "road") for (const c of p.cells) out.add(c);
+    }
+  }
+  return out;
+}
+
+function gameplayItemsOf(model: { layers: readonly MapRenderLayer[] }) {
+  return model.layers.flatMap((l) => (l.kind === "gameplay" ? l.items : []));
+}
+
+function labelItemsOf(model: { layers: readonly MapRenderLayer[] }) {
+  return model.layers.flatMap((l) => (l.kind === "label" ? l.labels : []));
+}
+
 describe("mutation → render model", () => {
   it("painted terrain виден в модели без diagnostics", () => {
     const doc = squareDoc();
@@ -35,7 +63,7 @@ describe("mutation → render model", () => {
     );
     const { model, diagnostics } = createV5RenderModel(next);
     expect(diagnostics).toEqual([]);
-    expect(model.terrain.entries.get("0,0")).toBe("lava");
+    expect(terrainEntriesOf(model).get("0,0")).toBe("lava");
   });
 
   it("added road cell видна в модели", () => {
@@ -43,7 +71,7 @@ describe("mutation → render model", () => {
     const next = expectOk(addPathCells(doc, "legacy-path-road", [{ x: 3, y: 2 }]));
     const { model, diagnostics } = createV5RenderModel(next);
     expect(diagnostics).toEqual([]);
-    expect(model.roads.has("3,2")).toBe(true);
+    expect(roadCellsOf(model).has("3,2")).toBe(true);
   });
 
   it("created door/moved trap/deleted label отражены", () => {
@@ -63,8 +91,10 @@ describe("mutation → render model", () => {
     const cleaned = expectOk(deleteLabel(moved, "legacy-label-0"));
     const { model, diagnostics } = createV5RenderModel(cleaned);
     expect(diagnostics).toEqual([]);
-    expect(model.doors.some((d) => d.id === "d-smoke" && d.position.x === 4.5)).toBe(true);
-    expect(model.traps.find((t) => t.id === "legacy-trap-0")?.position).toEqual({ x: 4.5, y: 1.5 });
-    expect(model.labels).toEqual([]);
+    const items = gameplayItemsOf(model);
+    expect(items.some((i) => i.kind === "door" && i.door.id === "d-smoke" && i.door.position.x === 4.5)).toBe(true);
+    const trap = items.find((i) => i.kind === "trap" && i.trap.id === "legacy-trap-0");
+    expect(trap?.kind === "trap" ? trap.trap.position : null).toEqual({ x: 4.5, y: 1.5 });
+    expect(labelItemsOf(model)).toEqual([]);
   });
 });

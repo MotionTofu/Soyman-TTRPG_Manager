@@ -178,6 +178,22 @@ export {
 export { translateShape } from "./mutations/geometry";
 
 export {
+  createGameplayLayer,
+  createLabelLayer,
+  createPathLayer,
+  createTerrainLayer,
+  deleteLayer,
+  findEntityLayer,
+  moveLayer,
+  renameLayer,
+  setLayerLocked,
+  setLayerOpacity,
+  setLayerVisible,
+  type EntityOwnership,
+  type LayerSpec,
+} from "./mutations/layers";
+
+export {
   hitTestGameplay,
   type V5SelectableKind,
   type V5Selection,

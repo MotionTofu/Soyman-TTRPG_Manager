@@ -147,7 +147,7 @@ export function OnboardingHero({ systems, settings, campaigns, players = [], ses
       <div style={{ background: "var(--surface)", color: "var(--on-surface)", padding: "12px 16px", borderBottom: "1px solid var(--line)", display: "flex", gap: 12, alignItems: "flex-start" }}>
         {/* Маскот здоровается ровно один раз — на пустой Главной. Дальше по
             приложению его нет: за столом он мешает (CLAUDE.md). */}
-        <SoyManResponsive state="idle" size="md" decorative />
+        <SoyManResponsive state="idle" size="lg" decorative />
         <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: "1 1 auto", minWidth: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <span style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-h3)", lineHeight: 0.96, textTransform: "uppercase", letterSpacing: "-0.01em", color: "var(--on-surface)" }}>Твоя первая легенда</span>

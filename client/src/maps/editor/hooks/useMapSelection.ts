@@ -3,10 +3,11 @@ import {
   deleteGameplayEntity,
   moveGameplayEntity,
 } from "../../core/mutations/gameplay";
+import { findEntityLayer } from "../../core/mutations/layers";
 import { legacyDoorWorldPosition, legacyEdgeOrientation } from "../../core/migrateLegacy";
 import { hitTestGameplay } from "../../core/selection/hitTest";
 import type { V5Selection } from "../../core/selection/types";
-import type { GameplayEntity, MapDocumentV5 } from "../../core/types";
+import type { GameplayEntity, LayerId, MapDocumentV5 } from "../../core/types";
 import { cellCenter, pixelToCell } from "../../grid";
 import type { MapGrid } from "../../mapTypes";
 import type { MapDoorEdge } from "../../render";
@@ -179,9 +180,11 @@ interface UseMapSelectionArgs {
   setDocument: (d: MapDocumentV5) => void;
   // Мутация с историей — снаружи: хук историей не владеет.
   commitDocument: (next: MapDocumentV5, before: MapDocumentV5) => void;
+  // 3A §30: выбор entity переключает active layer на owning layer.
+  onActiveLayer: (id: LayerId) => void;
 }
 
-export function useMapSelection({ document, documentRef, setDocument, commitDocument }: UseMapSelectionArgs) {
+export function useMapSelection({ document, documentRef, setDocument, commitDocument, onActiveLayer }: UseMapSelectionArgs) {
   const [selected, setSelected] = useState<V5Selection | null>(null);
   const selectedRef = useRef<V5Selection | null>(null);
   selectedRef.current = selected;
@@ -193,6 +196,13 @@ export function useMapSelection({ document, documentRef, setDocument, commitDocu
 
   function select(sel: NonNullable<V5Selection>) {
     setSelected(sel);
+    // Owning layer становится active (§30): следующее действие инструмента
+    // идёт туда же, куда кликнул пользователь.
+    const doc = documentRef.current;
+    if (doc) {
+      const own = findEntityLayer(doc, sel.entityId);
+      if (own) onActiveLayer(own.layerId);
+    }
   }
 
   function clearSelection() {
@@ -212,6 +222,14 @@ export function useMapSelection({ document, documentRef, setDocument, commitDocu
     wx: number,
     wy: number
   ) {
+    // §90: lock — editor authorization. Даже если drag начался до lock,
+    // мутация заблокированного слоя останавливается до Core.
+    const live = documentRef.current;
+    if (!live) return;
+    const own = findEntityLayer(live, session.sel.entityId);
+    if (!own) return;
+    const layer = live.layers[own.layerIndex];
+    if (!layer || layer.kind !== "gameplay" || layer.locked || !layer.visible) return;
     const draft = moveSelectedInDocument(session.before, session.sel, session, geom, wx, wy);
     if (!draft) return;
     documentRef.current = draft;
@@ -223,6 +241,11 @@ export function useMapSelection({ document, documentRef, setDocument, commitDocu
     if (!s) return;
     const doc = documentRef.current;
     if (!doc) return;
+    // §90: удаление из locked/hidden слоя запрещено оркестрацией.
+    const own = findEntityLayer(doc, s.entityId);
+    if (!own) return;
+    const layer = doc.layers[own.layerIndex];
+    if (!layer || layer.kind !== "gameplay" || layer.locked || !layer.visible) return;
     const r = deleteSelectedFromDocument(doc, s);
     if (!r) return;
     commitDocument(r.next, r.before);

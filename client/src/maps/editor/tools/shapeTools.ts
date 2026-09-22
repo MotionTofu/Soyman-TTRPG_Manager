@@ -1,12 +1,13 @@
 import { applyTerrainCellEdits } from "../../core/mutations/terrain";
-import type { MapDocumentV5 } from "../../core/types";
+import type { LayerId, MapDocumentV5 } from "../../core/types";
 import type { MapGeometry } from "../hooks/useMapSelection";
-import { addCellsToEditablePath, removeCellsFromEditablePath } from "./v5paths";
+import { NO_COMPATIBLE_LAYER_ERROR, resolveToolTargetLayer } from "./layerTargets";
+import { addCellsToLayerPath, removeCellsFromLayerPath } from "./v5paths";
 
-// Шейпы (Фаза 2G): прямоугольное применение содержимым.
+// Шейпы (Фаза 3A): прямоугольное применение содержимым.
 // Правила: terrain rect / road rect / river rect / wall rect / eraser rect —
-// применением на клетки ректа одним шагом через V5 mutations; room rect —
-// НЕ созданием, а запросом onRequestRoomCreate (модалка и draft формы у UI).
+// применением на клетки ректа одним шагом через V5 mutations в target слоях;
+// room rect — НЕ созданием, а запросом onRequestRoomCreate (модалка у UI).
 
 export type ShapeContent = "room" | "terrain" | "road" | "river" | "wall" | "eraser";
 
@@ -15,6 +16,8 @@ interface CreateShapeToolsArgs {
   shapeContent: ShapeContent;
   terrain: string;
   shapeAnchor: { x: number; y: number } | null;
+  activeLayerId: LayerId | null;
+  onActiveLayer: (id: LayerId) => void;
   setShapeAnchor: (v: { x: number; y: number } | null) => void;
   setRectPreview: (r: { x: number; y: number; w: number; h: number } | null) => void;
   documentRef: { current: MapDocumentV5 | null };
@@ -25,9 +28,19 @@ interface CreateShapeToolsArgs {
   onRequestRoomCreate: (rect: { x: number; y: number; w: number; h: number }) => void;
 }
 
-function terrainLayerId(doc: MapDocumentV5): string | null {
-  const l = doc.layers.find((x) => x.kind === "terrain");
-  return l ? l.id : null;
+function resolveTarget(
+  a: CreateShapeToolsArgs,
+  doc: MapDocumentV5,
+  want: "terrain" | "path",
+  silent = false,
+): string | null {
+  const r = resolveToolTargetLayer(doc, a.activeLayerId, want);
+  if (!r.ok) {
+    if (!silent) a.setActionError(NO_COMPATIBLE_LAYER_ERROR);
+    return null;
+  }
+  if (!r.keptActive) a.onActiveLayer(r.layerId);
+  return r.layerId;
 }
 
 export function createShapeTools(a: CreateShapeToolsArgs) {
@@ -79,7 +92,9 @@ export function createShapeTools(a: CreateShapeToolsArgs) {
       }
     }
     if (content === "road" || content === "river") {
-      const r = addCellsToEditablePath(doc, content, rectCells, a.newId);
+      const layerId = resolveTarget(a, doc, "path");
+      if (!layerId) return;
+      const r = addCellsToLayerPath(doc, layerId, content, rectCells, a.newId);
       if (!r.ok) {
         a.setActionError(r.issues[0]?.message ?? "Не удалось положить путь.");
         return;
@@ -90,11 +105,8 @@ export function createShapeTools(a: CreateShapeToolsArgs) {
       a.push(doc);
       return;
     }
-    const layerId = terrainLayerId(doc);
-    if (!layerId) {
-      a.setActionError("В документе нет terrain-слоя.");
-      return;
-    }
+    const layerId = resolveTarget(a, doc, "terrain");
+    if (!layerId) return;
     if (content === "eraser") {
       const def = doc.layers.find((l) => l.id === layerId);
       const defaultMaterial =
@@ -115,7 +127,9 @@ export function createShapeTools(a: CreateShapeToolsArgs) {
         changed = true;
       }
       for (const kind of ["road", "river"] as const) {
-        const rr = removeCellsFromEditablePath(next, kind, rectCells);
+        const pathLayerId = resolveTarget(a, next, "path", true);
+        if (!pathLayerId) break;
+        const rr = removeCellsFromLayerPath(next, pathLayerId, kind, rectCells);
         if (!rr.ok) {
           a.setActionError(rr.issues[0]?.message ?? "Не удалось снять путь.");
           return;

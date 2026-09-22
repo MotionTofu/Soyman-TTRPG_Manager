@@ -1,11 +1,11 @@
-// V5 gameplay hit-test: world point → stable EntityId (Фаза 2E).
-// Приоритет как у legacy (door → trap → marker → start → finish → room;
-// комнаты — reverse, верхняя побеждает). Геометрия — напрямую из V5
-// (position/orientation/ShapeGeometry), без реконструкции x/y/edge.
-// Боксы соответствуют renderer-плашкам (дверь 0.72×0.34, trap/marker 0.6,
-// start r=0.38, finish 1.0) + опциональный tolerance.
+// V5 gameplay hit-test: world point → stable EntityId (Фазы 2E/3A).
+// 3A layer-aware (§84–87): слои обходятся сверху вниз, hidden/locked/
+// non-gameplay пропускаются; внутри слоя — существующий semantic priority
+// (door → trap → marker → start → finish → room reverse). Layer stack бьёт
+// kind priority: marker верхнего слоя побеждает дверь нижнего (§87).
+// Геометрия — напрямую из V5, без реконструкции x/y/edge.
 
-import type { MapDocumentV5, ShapeGeometry, Vec2 } from "../types";
+import type { GameplayEntity, MapDocumentV5, ShapeGeometry, Vec2 } from "../types";
 import type { V5SelectableKind, V5Selection } from "./types";
 
 const DOOR_HALF_U = 0.36;
@@ -79,52 +79,67 @@ export function hitTestGameplay(
   ) {
     return null;
   }
-  const items: Array<{ entityId: string; kind: V5SelectableKind; rank: number }> = [];
+  // Слои сверху вниз: первый hit побеждает (§85–87).
+  for (let li = doc.layers.length - 1; li >= 0; li--) {
+    const layer = doc.layers[li];
+    if (layer.kind !== "gameplay") continue;
+    if (!layer.visible) continue; // §25
+    if (layer.locked) continue; // §26
+    const hit = hitInItems(layer.items, point, tolerance);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/** Within-layer priority (§86): door → trap → marker → start → finish → room(reverse). */
+function hitInItems(
+  items: readonly GameplayEntity[],
+  point: Vec2,
+  tolerance: number,
+): V5Selection | null {
+  const found: Array<{ entityId: string; kind: V5SelectableKind; rank: number }> = [];
   const rooms: Array<{ entityId: string; shape: ShapeGeometry }> = [];
 
-  for (const layer of doc.layers) {
-    if (layer.kind !== "gameplay") continue;
-    for (const e of layer.items) {
-      if (e.kind === "door") {
-        if (doorHit(e.orientation, e.position, point, tolerance)) {
-          return { entityId: e.id, kind: "door" };
-        }
-      } else if (e.kind === "trap") {
-        if (
-          Math.abs(point.x - e.position.x) <= POINT_HALF + tolerance &&
-          Math.abs(point.y - e.position.y) <= POINT_HALF + tolerance
-        ) {
-          items.push({ entityId: e.id, kind: "trap", rank: 1 });
-        }
-      } else if (e.kind === "marker") {
-        if (
-          Math.abs(point.x - e.position.x) <= POINT_HALF + tolerance &&
-          Math.abs(point.y - e.position.y) <= POINT_HALF + tolerance
-        ) {
-          items.push({ entityId: e.id, kind: "marker", rank: 2 });
-        }
-      } else if (e.kind === "start") {
-        const dx = point.x - e.position.x;
-        const dy = point.y - e.position.y;
-        const r = START_RADIUS + tolerance;
-        if (dx * dx + dy * dy <= r * r) items.push({ entityId: e.id, kind: "start", rank: 3 });
-      } else if (e.kind === "finish") {
-        if (
-          Math.abs(point.x - e.position.x) <= FINISH_HALF + tolerance &&
-          Math.abs(point.y - e.position.y) <= FINISH_HALF + tolerance
-        ) {
-          items.push({ entityId: e.id, kind: "finish", rank: 4 });
-        }
-      } else if (e.kind === "room") {
-        rooms.push({ entityId: e.id, shape: e.geometry });
+  for (const e of items) {
+    if (e.kind === "door") {
+      if (doorHit(e.orientation, e.position, point, tolerance)) {
+        return { entityId: e.id, kind: "door" };
       }
+    } else if (e.kind === "trap") {
+      if (
+        Math.abs(point.x - e.position.x) <= POINT_HALF + tolerance &&
+        Math.abs(point.y - e.position.y) <= POINT_HALF + tolerance
+      ) {
+        found.push({ entityId: e.id, kind: "trap", rank: 1 });
+      }
+    } else if (e.kind === "marker") {
+      if (
+        Math.abs(point.x - e.position.x) <= POINT_HALF + tolerance &&
+        Math.abs(point.y - e.position.y) <= POINT_HALF + tolerance
+      ) {
+        found.push({ entityId: e.id, kind: "marker", rank: 2 });
+      }
+    } else if (e.kind === "start") {
+      const dx = point.x - e.position.x;
+      const dy = point.y - e.position.y;
+      const r = START_RADIUS + tolerance;
+      if (dx * dx + dy * dy <= r * r) found.push({ entityId: e.id, kind: "start", rank: 3 });
+    } else if (e.kind === "finish") {
+      if (
+        Math.abs(point.x - e.position.x) <= FINISH_HALF + tolerance &&
+        Math.abs(point.y - e.position.y) <= FINISH_HALF + tolerance
+      ) {
+        found.push({ entityId: e.id, kind: "finish", rank: 4 });
+      }
+    } else if (e.kind === "room") {
+      rooms.push({ entityId: e.id, shape: e.geometry });
     }
   }
 
   // Приоритет legacy: door (уже возвращена выше) → trap → marker → start → finish.
   // Внутри одного вида — первая в порядке items.
   let best: { entityId: string; kind: V5SelectableKind; rank: number } | null = null;
-  for (const it of items) {
+  for (const it of found) {
     if (best === null || it.rank < best.rank) best = it;
   }
   if (best !== null) return { entityId: best.entityId, kind: best.kind };

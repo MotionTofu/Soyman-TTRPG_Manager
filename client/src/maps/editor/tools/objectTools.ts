@@ -1,13 +1,14 @@
 import { cellCenter, pixelToCell } from "../../grid";
 import { createGameplayEntity, setFinish, setStart } from "../../core/mutations/gameplay";
 import { legacyDoorWorldPosition } from "../../core/migrateLegacy";
-import type { MapDocumentV5 } from "../../core/types";
+import type { GameplayEntity, LayerId, MapDocumentV5 } from "../../core/types";
 import type { MapGeometry } from "../hooks/useMapSelection";
 import type { MapDoorEdge, MapMarkerKind, MapTrapKind } from "../../render";
 import type { PaintTool } from "../editorTypes";
+import { NO_COMPATIBLE_LAYER_ERROR, resolveToolTargetLayer } from "./layerTargets";
 
-// Создание объектов (Фаза 2G): placement-routing door/trap/chest/altar/
-// marker/start/finish через V5 create-мутации со stable IDs от editor factory.
+// Создание объектов (Фаза 3A): новые gameplay entities создаются именно
+// в target GameplayLayer (§41) — не в первом, не в legacy-layer-gameplay.
 // Перемещение/удаление существующих — у Selection; здесь только создание,
 // каждый клик — undo-шаг. Формы создания (draft-модалки) остаются у UI.
 
@@ -15,15 +16,12 @@ interface CreateObjectToolsArgs {
   geom: MapGeometry | null;
   lastTrapKind: MapTrapKind;
   markerKind: MapMarkerKind;
+  activeLayerId: LayerId | null;
+  onActiveLayer: (id: LayerId) => void;
   setActionError: (e: string | null) => void;
   documentRef: { current: MapDocumentV5 | null };
   commitDocument: (next: MapDocumentV5, before: MapDocumentV5) => void;
   newId: () => string;
-}
-
-function gameplayLayerId(doc: MapDocumentV5): string | null {
-  const l = doc.layers.find((x) => x.kind === "gameplay");
-  return l ? l.id : null;
 }
 
 export function createObjectTools(a: CreateObjectToolsArgs) {
@@ -35,11 +33,14 @@ export function createObjectTools(a: CreateObjectToolsArgs) {
     if (!g || !doc) return;
     const cell = pixelToCell(g.grid, wx, wy, g.width, g.height);
     if (!cell) return;
-    const layerId = gameplayLayerId(doc);
-    if (!layerId) {
-      a.setActionError("В документе нет gameplay-слоя.");
+    // Target GameplayLayer через resolver (§41); нет — structured error.
+    const tgt = resolveToolTargetLayer(doc, a.activeLayerId, "gameplay");
+    if (!tgt.ok) {
+      a.setActionError(NO_COMPATIBLE_LAYER_ERROR);
       return;
     }
+    if (!tgt.keptActive) a.onActiveLayer(tgt.layerId);
+    const layerId = tgt.layerId;
     const c = cellCenter(g.grid, cell.x, cell.y);
     if (kind === "door") {
       if (g.grid !== "square") {
@@ -57,8 +58,9 @@ export function createObjectTools(a: CreateObjectToolsArgs) {
         a.setActionError("Дверей слишком много (максимум 400).");
         return;
       }
+      const targetItems = targetLayerItems(doc, layerId);
       if (
-        items.some(
+        targetItems.some(
           (e) =>
             e.kind === "door" && e.position.x === pos.x && e.position.y === pos.y,
         )
@@ -137,8 +139,14 @@ export function createObjectTools(a: CreateObjectToolsArgs) {
   return { placeObject };
 }
 
-function gameplayItems(doc: MapDocumentV5) {
-  const l = doc.layers.find((x) => x.kind === "gameplay");
+function gameplayItems(doc: MapDocumentV5): GameplayEntity[] {
+  // Caps — legacy UX-лимиты: считаются по ВСЕМ gameplay-слоям.
+  return doc.layers.flatMap((l) => (l.kind === "gameplay" ? l.items : []));
+}
+
+/** Сущности конкретного слоя (для positional guards внутри target). */
+function targetLayerItems(doc: MapDocumentV5, layerId: string): GameplayEntity[] {
+  const l = doc.layers.find((x) => x.id === layerId);
   return l && l.kind === "gameplay" ? l.items : [];
 }
 

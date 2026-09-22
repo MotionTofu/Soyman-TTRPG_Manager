@@ -105,7 +105,7 @@ describe("assessCurrentEditorCompatibility", () => {
     expect(codes).toContain("unsupported-scatter-layer");
   });
 
-  it("два road paths → path-count", () => {
+  it("два road paths в одном слое → path-count", () => {
     const doc = squareDoc();
     const layers = doc.layers.map((l) => {
       if (l.id !== "lyr-road" || l.kind !== "path") return l;
@@ -201,5 +201,76 @@ describe("assessCurrentEditorCompatibility", () => {
         assessCurrentEditorCompatibility(oddDefault).reasons.some((r) => r.code === "terrain-default-material"),
       ).toBe(true);
     }
+  });
+
+  it("3A §77: hidden nonempty object layer — всё ещё unsupported", () => {
+    const doc = squareDoc();
+    const layers = doc.layers.map((l) => {
+      if (l.id === "lyr-objects" && l.kind === "object") {
+        return {
+          ...l,
+          visible: false,
+          items: [
+            {
+              id: "obj-1",
+              transform: { position: { x: 1, y: 1 }, rotation: 0, scale: { x: 1, y: 1 } },
+              visual: { type: "builtin" as const, key: "chest" },
+            },
+          ],
+        };
+      }
+      return l;
+    });
+    const c = assessCurrentEditorCompatibility({ ...doc, layers });
+    expect(c.compatible).toBe(false);
+    expect(c.reasons.some((r) => r.code === "unsupported-object-layer")).toBe(true);
+  });
+
+  it("3A §78–79: multi-layer документы compatible, per-layer ambiguity — нет", () => {
+    const doc = squareDoc();
+    // Второй road path в ОТДЕЛЬНОМ path-слое — теперь supported.
+    const withSecondRoadLayer: MapDocumentV5 = {
+      ...doc,
+      layers: [
+        ...doc.layers,
+        {
+          id: "lyr-road-2",
+          name: "Roads Secret",
+          visible: true,
+          locked: false,
+          opacity: 1,
+          kind: "path" as const,
+          paths: [
+            {
+              id: "road-secret",
+              kind: "road",
+              geometry: { type: "cell-network" as const, cells: [{ x: 7, y: 7 }] },
+              width: 1,
+              styleRef: { type: "builtin" as const, key: "road" },
+            },
+          ],
+        },
+      ],
+    };
+    expect(assessCurrentEditorCompatibility(withSecondRoadLayer).compatible).toBe(true);
+
+    // + второй terrain/gameplay/label слои, hidden+locked+opacity, arbitrary order.
+    const terrain = doc.layers.find((l) => l.kind === "terrain");
+    const gameplay = doc.layers.find((l) => l.kind === "gameplay");
+    const labelLayer = doc.layers.find((l) => l.kind === "label");
+    const multi: MapDocumentV5 = {
+      ...doc,
+      layers: [
+        ...(labelLayer ? [{ ...labelLayer, id: "lbl-top", name: "L-top" }] : []),
+        ...(terrain && terrain.kind === "terrain"
+          ? [{ ...terrain, id: "t2", name: "T2", visible: false, opacity: 0.5 }]
+          : []),
+        ...(gameplay && gameplay.kind === "gameplay"
+          ? [{ ...gameplay, id: "g2", name: "G2", locked: true, items: [] }]
+          : []),
+        ...doc.layers,
+      ],
+    };
+    expect(assessCurrentEditorCompatibility(multi).compatible).toBe(true);
   });
 });

@@ -1,19 +1,29 @@
 import { Router } from "express";
+import fs from "fs";
 import multer from "multer";
+import { randomUUID } from "crypto";
 import path from "path";
 import { db } from "../db/db";
 import { requireAuth, type AuthedRequest } from "../services/auth";
 import {
+  assertVaultPath,
   standaloneCharacterFolder,
   toFileUrl,
+  vaultAbs,
   writeReplacingOldFile,
 } from "../services/filesystem";
+import { resizeImageBuffer } from "../services/imageResize";
 import { unpaidSessionsForPlayer } from "../services/finance";
 import { getFlaggedSettingContent, getPlayerSectionsFor, getSettingPlayerContent } from "../services/playerContent";
 import { broadcastCharacterUpdate, broadcastToGm } from "../services/realtime";
 import { ensurePlayerFolder } from "../services/folderRepair";
 import { mergeContentPatch } from "../db/statblockContent";
 import { normalizeDndCharacter, deriveSheet } from "@soyman/shared";
+import {
+  parsePortableHtml,
+  isCharacterUid,
+  PORTABLE_MAX_HTML_BYTES,
+} from "@soyman/shared";
 import { setCharacterRoll, mirrorSheetRollToQueue } from "../services/initiativeSync";
 
 const ALLOWED_IMAGE_MIMES = /^image\/(jpeg|png|gif|webp|avif)$/;
@@ -259,6 +269,299 @@ playerRouter.post("/characters", (req: AuthedRequest, res) => {
   // открытый профиль игрока должен его увидеть, не дожидаясь перезахода.
   broadcastCharacterUpdate(Number(info.lastInsertRowid));
   res.status(201).json(db.prepare("SELECT * FROM characters WHERE id = ?").get(info.lastInsertRowid));
+});
+
+// Portable HTML import (B2.1/B2.2): one format across SoyMan_1shot,
+// standalone play and main SoyMan. Only portable data travels: name,
+// normalized DndCharacterData, portrait, stable characterUid. Server assigns
+// its own id/timestamps/ownership; campaign is never taken from the file.
+//
+// Flow: no `action` -> parse + validate + owned-UID lookup. Zero matches (or
+// v1, which mints a fresh UID) creates immediately; one match answers 409
+// portable-character-exists; several answer 409
+// portable-character-identity-conflict. Nothing is written on 409.
+// `action=copy` creates with a fresh UID; `action=replace` + targetCharacterId
+// revalidates everything and swaps the file state over the owned target.
+const PORTABLE_AVATAR_MAX_BYTES = 15 * 1024 * 1024;
+const PORTABLE_PORTRAIT_PATTERN = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/;
+const PORTABLE_STALE_MESSAGE = "Персонаж изменился после открытия окна импорта. Попробуйте импортировать файл ещё раз.";
+
+interface PortableImportData {
+  name: string;
+  content: ReturnType<typeof normalizeDndCharacter>;
+  portrait: { ext: string; buffer: Buffer } | null;
+  characterUid: string;
+  /** Portable slice system name (informational only — never imported as a catalog). */
+  systemName: string | null;
+}
+
+function portableHttpError(status: number, error: string): { status: number; error: string } {
+  return { status, error };
+}
+
+function parsePortableImport(html: unknown): PortableImportData {
+  if (typeof html !== "string" || !html) {
+    throw portableHttpError(400, "Это не файл персонажа SoyMan.");
+  }
+  if (html.length > PORTABLE_MAX_HTML_BYTES) {
+    throw portableHttpError(413, "Файл персонажа повреждён или имеет неподдерживаемую версию.");
+  }
+  let parsed: ReturnType<typeof parsePortableHtml>;
+  try {
+    parsed = parsePortableHtml(html);
+  } catch (e) {
+    const code = (e as { code?: string })?.code;
+    if (code === "unsupported-file") throw portableHttpError(400, "Это не файл персонажа SoyMan.");
+    if (code === "invalid-character" || code === "invalid-catalog") {
+      throw portableHttpError(422, "Не удалось восстановить игровые данные персонажа.");
+    }
+    throw portableHttpError(422, "Файл персонажа повреждён или имеет неподдерживаемую версию.");
+  }
+  // Same gate as the 1shot JSON restore: classes + abilities, then the
+  // shared normalization. normalizeDndCharacter never throws (it repairs),
+  // so the structural check above is the real validator.
+  const raw = parsed.content as { classes?: unknown; abilities?: unknown } | null;
+  if (!raw || typeof raw !== "object" || !Array.isArray(raw.classes) || !raw.abilities) {
+    throw portableHttpError(422, "Не удалось восстановить игровые данные персонажа.");
+  }
+  // Portrait through the standard avatar path: dataURL -> buffer, same size
+  // cap as uploads. Decoded here so every action shares the validation.
+  let portrait: PortableImportData["portrait"] = null;
+  if (parsed.portrait) {
+    const match = PORTABLE_PORTRAIT_PATTERN.exec(parsed.portrait);
+    if (!match) throw portableHttpError(422, "Не удалось восстановить игровые данные персонажа.");
+    const buffer = Buffer.from(match[2], "base64");
+    if (buffer.length > PORTABLE_AVATAR_MAX_BYTES) {
+      throw portableHttpError(413, "Портрет в файле слишком большой.");
+    }
+    portrait = { ext: match[1] === "jpeg" ? ".jpg" : `.${match[1]}`, buffer };
+  }
+  // The portable slice is informational only and is never imported as a
+  // global catalog. Callers match the global system by name when it lines up.
+  const systemName = (parsed.catalog.system as { name?: unknown } | undefined)?.name;
+  return {
+    name: parsed.name,
+    content: normalizeDndCharacter(raw),
+    portrait,
+    // v2 UID travels on; v1 mints a fresh one (zero owned matches follow).
+    characterUid: isCharacterUid(parsed.characterUid) ? parsed.characterUid : randomUUID(),
+    systemName: typeof systemName === "string" && systemName ? systemName : null,
+  };
+}
+
+// Owned matches only: another player's same UID is invisible here — neither
+// a match, nor disclosed, nor blocking.
+function findOwnedUidMatches(playerId: number, uid: string): { id: number; name: string }[] {
+  return db
+    .prepare(
+      "SELECT id, character_name AS name FROM characters WHERE player_id = ? AND character_uid = ? AND archived_at IS NULL ORDER BY id"
+    )
+    .all(playerId, uid) as { id: number; name: string }[];
+}
+
+function matchSystemId(systemName: unknown): number | null {
+  if (typeof systemName !== "string" || !systemName) return null;
+  const system = db
+    .prepare("SELECT id FROM systems WHERE lower(name) = lower(?) AND archived_at IS NULL")
+    .get(systemName) as { id: number } | undefined;
+  return system?.id ?? null;
+}
+
+async function createPortableCharacter(playerId: number, data: PortableImportData, freshUid: boolean): Promise<number> {
+  const characterUid = freshUid ? randomUUID() : data.characterUid;
+  const player = db.prepare("SELECT name, folder_path FROM players WHERE id = ?").get(playerId) as
+    | { name: string; folder_path: string | null }
+    | undefined;
+  if (!player) throw portableHttpError(404, "not found");
+  const folder = standaloneCharacterFolder(ensurePlayerFolder(playerId, player.name, player.folder_path), data.name);
+  let avatarPath: string | null = null;
+  if (data.portrait) {
+    avatarPath = path.join(folder, `avatar${data.portrait.ext}`);
+    await writeReplacingOldFile(avatarPath, data.portrait.buffer, null, "avatar");
+  }
+  const insert = db.transaction(() => {
+    const info = db
+      .prepare(
+        "INSERT INTO characters (player_id, campaign_id, system_id, character_name, folder_path, character_uid) VALUES (?, NULL, ?, ?, ?, ?)"
+      )
+      .run(playerId, matchSystemId(data.systemName), data.name, folder, characterUid);
+    const id = Number(info.lastInsertRowid);
+    db.prepare(
+      "INSERT INTO statblocks (owner_type, owner_id, kind, format, content, note) VALUES ('character', ?, 'full', 'dnd_character', ?, '')"
+    ).run(id, JSON.stringify(data.content));
+    if (avatarPath) db.prepare("UPDATE characters SET avatar_image_path = ? WHERE id = ?").run(avatarPath, id);
+    return id;
+  });
+  return insert();
+}
+
+// Replace (B2.2): the file state supersedes the owned target wholesale —
+// never a field merge. Keeps server id, player, campaign, UID and system;
+// swaps name, sheet content and portrait. The decision the client sends is
+// never trusted: ownership, UID identity, compatibility and duplicates are
+// all revalidated here, synchronously, immediately before the commit.
+async function replacePortableCharacter(
+  playerId: number,
+  data: PortableImportData,
+  targetCharacterId: unknown
+): Promise<number> {
+  const targetId = Number(targetCharacterId);
+  if (!Number.isSafeInteger(targetId)) throw portableHttpError(400, "targetCharacterId is required");
+  const matches = findOwnedUidMatches(playerId, data.characterUid);
+  if (matches.length !== 1 || matches[0].id !== targetId) {
+    if (matches.length > 1) {
+      console.warn(`portable identity conflict: player ${playerId} has ${matches.length} characters with UID ${data.characterUid}`);
+      throw { code: "portable-character-identity-conflict", matches, status: 409 };
+    }
+    throw portableHttpError(409, PORTABLE_STALE_MESSAGE);
+  }
+  const target = requireOwnCharacter(playerId, targetId);
+  if (!target || (target as { character_uid?: string | null }).character_uid !== data.characterUid) {
+    throw portableHttpError(409, PORTABLE_STALE_MESSAGE);
+  }
+  const sheets = db
+    .prepare(
+      "SELECT id FROM statblocks WHERE owner_type = 'character' AND owner_id = ? AND format = 'dnd_character' AND archived_at IS NULL ORDER BY id"
+    )
+    .all(targetId) as { id: number }[];
+  if (sheets.length > 1) {
+    // Can't choose a sheet silently — same honesty rule as UID duplicates.
+    throw {
+      code: "portable-character-identity-conflict",
+      matches: [{ id: targetId, name: target.character_name }],
+      status: 409,
+    };
+  }
+  const sheetId = sheets[0]?.id ?? null;
+  // Portrait staging: SQL can't make the filesystem transactional, so the new
+  // bytes land in a temp file first; the DB commits the final path; only then
+  // is the temp renamed over it and the old file unlinked. A failed commit
+  // leaves the old avatar untouched (temp is deleted); post-commit FS trouble
+  // restores the old DB path as compensation and surfaces 500 — the retry
+  // then converges. portrait=null is a full snapshot: the old avatar is
+  // removed (path nulled in the commit, file unlinked best-effort after).
+  const oldAvatar = (target as { avatar_image_path?: string | null }).avatar_image_path ?? null;
+  let stagedTmp: string | null = null;
+  let finalAvatar: string | null = oldAvatar;
+  if (data.portrait) {
+    const folder = (target as { folder_path?: string | null }).folder_path;
+    if (!folder) throw portableHttpError(422, "Не удалось восстановить игровые данные персонажа.");
+    finalAvatar = path.join(folder, `avatar${data.portrait.ext}`);
+    stagedTmp = `${finalAvatar}.portable-${randomUUID()}`;
+    const resized = await resizeImageBuffer(data.portrait.buffer, "avatar");
+    fs.writeFileSync(assertVaultPath(stagedTmp), resized);
+  } else {
+    finalAvatar = null;
+  }
+  try {
+    const apply = db.transaction(() => {
+      db.prepare("UPDATE characters SET character_name = ?, avatar_image_path = ? WHERE id = ?").run(
+        data.name,
+        finalAvatar,
+        targetId
+      );
+      const content = JSON.stringify(data.content);
+      if (sheetId) {
+        db.prepare("UPDATE statblocks SET content = ?, updated_at = strftime('%Y-%m-%d %H:%M:%f', 'now') WHERE id = ?").run(
+          content,
+          sheetId
+        );
+      } else {
+        db.prepare(
+          "INSERT INTO statblocks (owner_type, owner_id, kind, format, content, note) VALUES ('character', ?, 'full', 'dnd_character', ?, '')"
+        ).run(targetId, content);
+      }
+    });
+    apply();
+  } catch (e) {
+    if (stagedTmp) {
+      try {
+        fs.unlinkSync(vaultAbs(stagedTmp));
+      } catch {
+        /* temp already gone — nothing to clean */
+      }
+    }
+    throw e;
+  }
+  if (stagedTmp && finalAvatar) {
+    try {
+      fs.renameSync(vaultAbs(stagedTmp), assertVaultPath(finalAvatar));
+    } catch (e) {
+      // Committed but the bytes didn't land: point back at the intact old
+      // file (content stays new), log, and let the retry converge.
+      console.error(`portable replace: avatar rename failed for character ${targetId}:`, e);
+      db.prepare("UPDATE characters SET avatar_image_path = ? WHERE id = ?").run(oldAvatar, targetId);
+      try {
+        fs.unlinkSync(vaultAbs(stagedTmp));
+      } catch {
+        /* best effort */
+      }
+      throw portableHttpError(500, "Не удалось обновить портрет персонажа.");
+    }
+    if (oldAvatar && oldAvatar !== finalAvatar) {
+      try {
+        fs.unlinkSync(vaultAbs(oldAvatar));
+      } catch (e) {
+        console.error(`portable replace: old avatar left behind for character ${targetId}:`, e);
+      }
+    }
+  }
+  if (!data.portrait && oldAvatar) {
+    try {
+      fs.unlinkSync(vaultAbs(oldAvatar));
+    } catch (e) {
+      console.error(`portable replace: old avatar left behind for character ${targetId}:`, e);
+    }
+  }
+  broadcastCharacterUpdate(targetId, "sheet");
+  mirrorSheetRollToQueue(targetId);
+  return targetId;
+}
+
+playerRouter.post("/characters/import/portable", async (req: AuthedRequest, res) => {
+  const playerId = req.user!.playerId!;
+  try {
+    const { html, action, targetCharacterId } = req.body as {
+      html?: unknown;
+      action?: unknown;
+      targetCharacterId?: unknown;
+    };
+    const data = parsePortableImport(html);
+    if (action === "copy") {
+      const id = await createPortableCharacter(playerId, data, true);
+      broadcastCharacterUpdate(id);
+      return res.status(201).json(db.prepare("SELECT * FROM characters WHERE id = ?").get(id));
+    }
+    if (action === "replace") {
+      const id = await replacePortableCharacter(playerId, data, targetCharacterId);
+      return res.json(db.prepare("SELECT * FROM characters WHERE id = ?").get(id));
+    }
+    if (action !== undefined && action !== null) {
+      return res.status(400).json({ error: "unknown action" });
+    }
+    const matches = findOwnedUidMatches(playerId, data.characterUid);
+    if (matches.length === 0) {
+      const id = await createPortableCharacter(playerId, data, false);
+      broadcastCharacterUpdate(id);
+      return res.status(201).json(db.prepare("SELECT * FROM characters WHERE id = ?").get(id));
+    }
+    if (matches.length === 1) {
+      return res.status(409).json({ code: "portable-character-exists", match: matches[0] });
+    }
+    console.warn(`portable identity conflict: player ${playerId} has ${matches.length} characters with UID ${data.characterUid}`);
+    return res.status(409).json({ code: "portable-character-identity-conflict", matches });
+  } catch (e) {
+    if (e && typeof e === "object" && "status" in e && "error" in e) {
+      const { status, error } = e as { status: number; error: string };
+      return res.status(status).json({ error });
+    }
+    if (e && typeof e === "object" && "code" in e && "status" in e) {
+      const { status, ...body } = e as { status: number; [k: string]: unknown };
+      return res.status(status).json(body);
+    }
+    console.error("portable import failed:", e);
+    return res.status(500).json({ error: "internal server error" });
+  }
 });
 
 // Scoped search: own characters, world-exploration entries in own campaigns,

@@ -31,6 +31,9 @@ function App() {
   const [status, setStatus] = useState('Изменения хранятся до закрытия страницы. Скачайте обновлённую копию после игры.');
   function save() {
     const html = template.cloneNode(true) as HTMLElement;
+    // Round-trip contract (phase B1.2): only the runtime content is swapped.
+    // Top-level identity (and catalog) survive every re-save untouched — the
+    // standalone never mints a new characterUid.
     html.querySelector('#oneshot-payload')!.textContent = JSON.stringify({ ...snapshot, character: { ...snapshot.character, content: value } }).replaceAll('<', '\\u003c');
     const url = URL.createObjectURL(new Blob(['<!doctype html>\n' + html.outerHTML], { type: 'text/html' }));
     const link = document.createElement('a'); link.href = url; link.download = 'OneShot-персонаж.html'; link.click();

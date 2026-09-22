@@ -1,13 +1,18 @@
 import { brushCells, pixelToCell } from "../../grid";
 import { applyTerrainCellEdits, floodTerrainFill, readTerrainMaterialAt } from "../../core/mutations/terrain";
 import type { MaterialRef } from "../../core/refs";
-import type { MapDocumentV5 } from "../../core/types";
+import type { LayerId, MapDocumentV5 } from "../../core/types";
 import type { MapGeometry } from "../hooks/useMapSelection";
 import type { BrushSize, PaintTool } from "../editorTypes";
-import { addCellsToEditablePath, removeCellsFromEditablePath } from "./v5paths";
+import {
+  NO_COMPATIBLE_LAYER_ERROR,
+  resolveToolTargetLayer,
+  type ToolLayerKind,
+} from "./layerTargets";
+import { addCellsToLayerPath, removeCellsFromLayerPath } from "./v5paths";
 
-// Красящие инструменты (Фаза 2G): paintAt/singleAction/altPick через V5
-// Mutation Core. Историю не владеют: мазок закрывает Input (без push здесь),
+// Красящие инструменты (Фаза 3A): target слой — через resolveToolTargetLayer
+// (§32–35). Историю не владеют: мазок закрывает Input (без push здесь),
 // точечные действия пушат через push. documentRef зеркалится синхронно
 // (P0-1: changed считается ДО setDocument, реф — оптимистично сразу).
 
@@ -18,11 +23,6 @@ function materialForCode(code: string): MaterialRef {
 function codeOfMaterial(m: MaterialRef): string | null {
   if (m.type === "builtin" && m.key.startsWith("terrain/")) return m.key.slice("terrain/".length);
   return null;
-}
-
-function terrainLayerId(doc: MapDocumentV5): string | null {
-  const l = doc.layers.find((x) => x.kind === "terrain");
-  return l ? l.id : null;
 }
 
 export interface PaintAtOptions {
@@ -36,6 +36,8 @@ interface Ctx {
   tool: PaintTool;
   terrain: string;
   brushSize: BrushSize;
+  activeLayerId: LayerId | null;
+  onActiveLayer: (id: LayerId) => void;
   documentRef: { current: MapDocumentV5 | null };
   setDocument: (d: MapDocumentV5) => void;
   push: (before: MapDocumentV5) => void;
@@ -50,6 +52,8 @@ interface CreatePaintToolsArgs {
   tool: PaintTool;
   terrain: string;
   brushSize: BrushSize;
+  activeLayerId: LayerId | null;
+  onActiveLayer: (id: LayerId) => void;
   documentRef: { current: MapDocumentV5 | null };
   setDocument: (d: MapDocumentV5) => void;
   push: (before: MapDocumentV5) => void;
@@ -57,6 +61,20 @@ interface CreatePaintToolsArgs {
   selectTool: (t: PaintTool) => void;
   setTerrain: (t: string) => void;
   setActionError: (e: string | null) => void;
+}
+
+/**
+ * Target слоя для kind: active-valid → он; иначе topmost + переключение
+ * active (§34–35, §93). Нет подходящего → actionError, null.
+ */
+function target(ctx: Ctx, doc: MapDocumentV5, want: ToolLayerKind, silent = false): string | null {
+  const r = resolveToolTargetLayer(doc, ctx.activeLayerId, want);
+  if (!r.ok) {
+    if (!silent) ctx.setActionError(NO_COMPATIBLE_LAYER_ERROR);
+    return null;
+  }
+  if (!r.keptActive) ctx.onActiveLayer(r.layerId);
+  return r.layerId;
 }
 
 function commit(ctx: Ctx, before: MapDocumentV5, next: MapDocumentV5, push: boolean): boolean {
@@ -79,8 +97,12 @@ function paintStrokeCells(
   const brush = brushCells(g.grid, cx, cy, ctx.brushSize, g.width, g.height);
   if (tool === "road" || tool === "river") {
     // Оверлеи ложатся поверх любого террейна (река — и поверх дороги).
-    const r = addCellsToEditablePath(
+    // Кисть работает внутри target PathLayer (§38–40).
+    const layerId = target(ctx, doc, "path");
+    if (!layerId) return false;
+    const r = addCellsToLayerPath(
       doc,
+      layerId,
       tool,
       brush.map((c) => ({ x: c.x, y: c.y })),
       ctx.newId,
@@ -92,11 +114,8 @@ function paintStrokeCells(
     if (!r.changed) return false;
     return commit(ctx, doc, r.document, false);
   }
-  const layerId = terrainLayerId(doc);
-  if (!layerId) {
-    ctx.setActionError("В документе нет terrain-слоя.");
-    return false;
-  }
+  const layerId = target(ctx, doc, "terrain");
+  if (!layerId) return false;
   if (tool === "eraser") {
     // Ластик: террейн → default (Core удаляет override), дороги/реки — снять.
     const def = doc.layers.find((l) => l.id === layerId);
@@ -117,9 +136,13 @@ function paintStrokeCells(
       next = r.document;
       changed = true;
     }
+    // Ластик чистит оверлеи в target path-слое; нет слоя — только террейн.
+    const pathLayerId = target(ctx, next, "path", true);
     for (const kind of ["road", "river"] as const) {
-      const rr = removeCellsFromEditablePath(
+      if (!pathLayerId) break;
+      const rr = removeCellsFromLayerPath(
         next,
+        pathLayerId,
         kind,
         brush.map((c) => ({ x: c.x, y: c.y })),
       );
@@ -170,7 +193,8 @@ export function createPaintTools(a: CreatePaintToolsArgs) {
     const cell = pixelToCell(g.grid, wx, wy, g.width, g.height);
     if (!cell) return;
     if (ctx.tool === "picker") {
-      const layerId = terrainLayerId(doc);
+      // Пипетка читает active/target TerrainLayer, не композит (§36).
+      const layerId = target(ctx, doc, "terrain");
       if (!layerId) return;
       const r = readTerrainMaterialAt(doc, layerId, cell.x, cell.y);
       if (!r.ok) {
@@ -186,12 +210,9 @@ export function createPaintTools(a: CreatePaintToolsArgs) {
       ctx.selectTool("brush");
       return;
     }
-    // fill
-    const layerId = terrainLayerId(doc);
-    if (!layerId) {
-      ctx.setActionError("В документе нет terrain-слоя.");
-      return;
-    }
+    // fill: flood только внутри target TerrainCellLayer (§37).
+    const layerId = target(ctx, doc, "terrain");
+    if (!layerId) return;
     const r = floodTerrainFill(doc, layerId, cell.x, cell.y, materialForCode(ctx.terrain));
     if (!r.ok) {
       ctx.setActionError(r.issues[0]?.message ?? "Не удалось залить.");
@@ -212,7 +233,10 @@ export function createPaintTools(a: CreatePaintToolsArgs) {
     if (!cell) return;
     const active = ctx.tool;
     if (active === "road" || active === "river") {
-      const r = removeCellsFromEditablePath(doc, active, [{ x: cell.x, y: cell.y }]);
+      // Точечное снятие оверлея в target слое; нет слоя — тихий no-op.
+      const pathLayerId = target(ctx, doc, "path", true);
+      if (!pathLayerId) return;
+      const r = removeCellsFromLayerPath(doc, pathLayerId, active, [{ x: cell.x, y: cell.y }]);
       if (!r.ok) {
         ctx.setActionError(r.issues[0]?.message ?? "Не удалось снять путь.");
         return;
@@ -221,7 +245,7 @@ export function createPaintTools(a: CreatePaintToolsArgs) {
       commit(ctx, doc, r.document, true);
       return;
     }
-    const layerId = terrainLayerId(doc);
+    const layerId = target(ctx, doc, "terrain", true);
     if (!layerId) return;
     const read = readTerrainMaterialAt(doc, layerId, cell.x, cell.y);
     if (!read.ok) return;

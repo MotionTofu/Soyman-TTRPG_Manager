@@ -302,17 +302,28 @@ function setSingleton(
   if (!isFiniteVec(spec.position)) {
     return mutationError("gameplay.bad-position", "spec.position", "position must be finite { x, y }");
   }
-  const existing = resolved.layer.items.filter((e) => e.kind === kind);
+  // Start/Finish — map-level singletons (3A §43): существующий ищется ВО ВСЕХ
+  // gameplay-слоях, новый создаётся в target. Старый в другом слое
+  // удаляется той же set semantics.
+  const existingEverywhere: Array<{ layerIndex: number; id: string; position: { x: number; y: number } }> = [];
+  doc.layers.forEach((l, li) => {
+    if (l.kind !== "gameplay") return;
+    for (const e of l.items) {
+      if ((e.kind === "start" || e.kind === "finish") && e.kind === kind) {
+        existingEverywhere.push({ layerIndex: li, id: e.id, position: { ...e.position } });
+      }
+    }
+  });
   if (
-    existing.length === 1 &&
-    existing[0].id === spec.id &&
-    (existing[0].kind === "start" || existing[0].kind === "finish") &&
-    existing[0].position.x === spec.position.x &&
-    existing[0].position.y === spec.position.y
+    existingEverywhere.length === 1 &&
+    existingEverywhere[0].id === spec.id &&
+    doc.layers[existingEverywhere[0].layerIndex].id === resolved.layer.id &&
+    existingEverywhere[0].position.x === spec.position.x &&
+    existingEverywhere[0].position.y === spec.position.y
   ) {
     return noChange(doc);
   }
-  const removedIds = new Set(existing.map((e) => e.id));
+  const removedIds = new Set(existingEverywhere.map((e) => e.id));
   const ids = collectIds(doc);
   for (const rid of removedIds) ids.delete(rid);
   if (ids.has(spec.id)) {
@@ -322,13 +333,27 @@ function setSingleton(
       `id "${spec.id}" already exists anywhere in document`,
     );
   }
-  const items = resolved.layer.items.filter((e) => e.kind !== kind);
+  // Чистим kind во всех gameplay-слоях, создаём в target.
+  let next = doc;
+  doc.layers.forEach((l, li) => {
+    if (l.kind !== "gameplay") return;
+    if (!l.items.some((e) => e.kind === kind)) return;
+    next = withReplacedLayer(next, li, {
+      ...l,
+      items: l.items.filter((e) => e.kind !== kind),
+    });
+  });
+  const target = findLayer(next, resolved.layer.id);
+  if (!target || target.layer.kind !== "gameplay") {
+    return mutationError("gameplay.no-layer", "layerId", "target gameplay layer vanished");
+  }
+  const items = target.layer.items.filter((e) => e.kind !== kind);
   items.push(
     kind === "start"
       ? { id: spec.id, kind: "start" as const, position: { ...spec.position } }
       : { id: spec.id, kind: "finish" as const, position: { ...spec.position } },
   );
-  return changed(withReplacedLayer(doc, resolved.index, { ...resolved.layer, items }));
+  return changed(withReplacedLayer(next, target.index, { ...target.layer, items }));
 }
 
 export type { ResolvedEntity };

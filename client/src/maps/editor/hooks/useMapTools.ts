@@ -1,7 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { MapInputTools } from "../tools/types";
 import type { MapGeometry, V5Selection } from "./useMapSelection";
-import type { MapDocumentV5 } from "../../core/types";
+import type { LayerId, MapDocumentV5 } from "../../core/types";
 import type { MapMarkerKind, MapTrapKind } from "../../render";
 import type { BrushSize, PaintTool } from "../editorTypes";
 import { createLabelTools } from "../tools/labelTools";
@@ -28,6 +28,9 @@ interface UseMapToolsArgs {
   ruler: RulerState | null;
   lastTrapKind: MapTrapKind;
   markerKind: MapMarkerKind;
+  // 3A: resolver target слоёв читает active и переключает его при auto-pick.
+  activeLayerId: LayerId | null;
+  onActiveLayer: (id: LayerId) => void;
   documentRef: { current: MapDocumentV5 | null };
   setDocument: (d: MapDocumentV5) => void;
   push: (before: MapDocumentV5) => void;
@@ -57,6 +60,8 @@ export function useMapTools(a: UseMapToolsArgs): MapInputTools {
     tool: a.tool,
     terrain: a.terrain,
     brushSize: a.brushSize,
+    activeLayerId: a.activeLayerId,
+    onActiveLayer: a.onActiveLayer,
     documentRef: a.documentRef,
     setDocument: a.setDocument,
     push: a.push,
@@ -71,6 +76,8 @@ export function useMapTools(a: UseMapToolsArgs): MapInputTools {
     wallSnap: a.wallSnap,
     wallDraft: a.wallDraft,
     wallLive: a.wallLive,
+    activeLayerId: a.activeLayerId,
+    onActiveLayer: a.onActiveLayer,
     setWallDraft: a.setWallDraft,
     setWallLive: a.setWallLive,
     documentRef: a.documentRef,
@@ -83,6 +90,8 @@ export function useMapTools(a: UseMapToolsArgs): MapInputTools {
     shapeContent: a.shapeContent,
     terrain: a.terrain,
     shapeAnchor: a.shapeAnchor,
+    activeLayerId: a.activeLayerId,
+    onActiveLayer: a.onActiveLayer,
     setShapeAnchor: a.setShapeAnchor,
     setRectPreview: a.setRectPreview,
     documentRef: a.documentRef,
@@ -97,6 +106,8 @@ export function useMapTools(a: UseMapToolsArgs): MapInputTools {
     geom: a.geom,
     lastTrapKind: a.lastTrapKind,
     markerKind: a.markerKind,
+    activeLayerId: a.activeLayerId,
+    onActiveLayer: a.onActiveLayer,
     setActionError: a.setActionError,
     documentRef: a.documentRef,
     commitDocument: a.commitDocument,

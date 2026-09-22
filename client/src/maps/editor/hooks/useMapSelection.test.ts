@@ -27,12 +27,13 @@ function setup(doc: MapDocumentV5) {
     documentRef.current = d;
   });
   const commitDocument = vi.fn();
+  const onActiveLayer = vi.fn();
   const utils = renderHook(
     (p: { document: MapDocumentV5 | null }) =>
-      useMapSelection({ document: p.document, documentRef, setDocument, commitDocument }),
+      useMapSelection({ document: p.document, documentRef, setDocument, commitDocument, onActiveLayer }),
     { initialProps: { document: doc } },
   );
-  return { ...utils, documentRef, setDocument, commitDocument };
+  return { ...utils, documentRef, setDocument, commitDocument, onActiveLayer };
 }
 
 describe("useMapSelection (V5 stable IDs)", () => {
@@ -208,5 +209,76 @@ describe("deleteSelectedFromDocument", () => {
   it("нечего удалять → null", () => {
     const doc = squareDoc();
     expect(deleteSelectedFromDocument(doc, { entityId: "nope", kind: "trap" })).toBeNull();
+  });
+});
+
+describe("selection + layers (3A §30, §90, §121)", () => {
+  it("select переключает active на owning layer", () => {
+    const h = setup(squareDoc());
+    act(() => {
+      h.result.current.select({ entityId: "legacy-trap-0", kind: "trap" });
+    });
+    expect(h.onActiveLayer).toHaveBeenCalledWith("lyr-gameplay");
+  });
+
+  it("deleteSelected из locked слоя заблокирован оркестрацией", () => {
+    const doc = squareDoc();
+    const locked: MapDocumentV5 = {
+      ...doc,
+      layers: doc.layers.map((l) => (l.id === "lyr-gameplay" ? { ...l, locked: true } : l)),
+    };
+    const h = setup(locked);
+    act(() => {
+      h.result.current.select({ entityId: "legacy-trap-0", kind: "trap" });
+    });
+    expect(h.result.current.selected?.entityId).toBe("legacy-trap-0");
+    act(() => {
+      h.result.current.deleteSelected();
+    });
+    expect(h.commitDocument).not.toHaveBeenCalled();
+    expect(h.documentRef.current!.layers.flatMap((l) => (l.kind === "gameplay" ? l.items : [])).some((e) => e.id === "legacy-trap-0")).toBe(true);
+  });
+
+  it("moveSelectedTo в locked слое — no-op", () => {
+    const doc = squareDoc();
+    const locked: MapDocumentV5 = {
+      ...doc,
+      layers: doc.layers.map((l) => (l.id === "lyr-gameplay" ? { ...l, locked: true } : l)),
+    };
+    const h = setup(locked);
+    act(() => {
+      h.result.current.moveSelectedTo(
+        { sel: { entityId: "legacy-trap-0", kind: "trap" }, ox: 0, oy: 0, before: locked },
+        GEOM,
+        5.5,
+        5.5,
+      );
+    });
+    expect(h.setDocument).not.toHaveBeenCalled();
+  });
+
+  it("hitAt сквозь hidden слой: верхний hidden — бьётся нижний", () => {
+    const doc = squareDoc();
+    const upper: MapDocumentV5 = {
+      ...doc,
+      layers: [
+        ...doc.layers,
+        {
+          id: "g-upper",
+          name: "U",
+          visible: false,
+          locked: false,
+          opacity: 1,
+          kind: "gameplay",
+          items: [
+            { id: "marker-top", kind: "marker", position: { x: 2.5, y: 0 }, markerKind: "chest" },
+          ],
+        },
+      ],
+    };
+    const h = setup(upper);
+    expect(h.result.current.hitAt(2.5, 0)).toEqual({
+      sel: { entityId: "legacy-door-0", kind: "door" },
+    });
   });
 });

@@ -10,6 +10,7 @@ import type {
   MapDocumentV5,
 } from "../types";
 import { validateMapDocument } from "../validate";
+import { createGameplayLayer } from "./layers";
 import type { MutationResult } from "./types";
 import {
   createGameplayEntity,
@@ -292,6 +293,22 @@ describe("setStart/setFinish", () => {
     expectErr(setStart(doc, LAYER, { id: "legacy-room-0", position: { x: 0, y: 0 } }), "duplicate-id");
     expectErr(setStart(doc, LAYER, { id: "x", position: { x: NaN, y: 0 } }), "bad-position");
     expectErr(setStart(doc, "lyr-road", { id: "x", position: { x: 0, y: 0 } }), "wrong-layer-kind");
+  });
+
+  it("3A §43: start в другом слое удаляется, новый — в target", () => {
+    const doc = squareDoc();
+    const g2 = createGameplayLayer(doc, { id: "g2", name: "G2" });
+    expect(g2.ok && g2.changed).toBe(true);
+    if (!(g2.ok && g2.changed)) return;
+    const next = expectOk(setStart(g2.document, "g2", { id: "start-b", position: { x: 3, y: 3 } }));
+    const allStarts = next.layers.flatMap((l) =>
+      l.kind === "gameplay" ? l.items.filter((e) => e.kind === "start") : [],
+    );
+    expect(allStarts).toHaveLength(1);
+    expect(allStarts[0].id).toBe("start-b");
+    const g2layer = next.layers.find((l) => l.id === "g2");
+    expect(g2layer?.kind === "gameplay" && g2layer.items.some((e) => e.id === "start-b")).toBe(true);
+    expect(validateMapDocument(next)).toEqual([]);
   });
 });
 

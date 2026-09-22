@@ -1,19 +1,39 @@
-import { getCharacter, saveCharacter, parseCharacterContent, getCatalog, currentCatalog, type Catalog } from './repository';
+import { getCharacter, saveCharacter, parseCharacterContent, getCatalog, getCatalogPreviews, currentCatalog, type Catalog } from './repository';
 // Vite sees this file both as the shell's direct import and as the replacement
 // for client/api/client.ts. Some builds keep those as two module instances;
 // globalThis makes the selected character/catalog one state for both.
-const transportState = ((globalThis as typeof globalThis & { __oneShotTransportState?: { activeId: number | null; catalog: Catalog | null } }).__oneShotTransportState ??= { activeId: null, catalog: null });
+// previews holds the managed media map (catalogPreviews store) for the selected
+// catalog; legacy records carry their own embedded images and ignore it.
+const transportState = ((globalThis as typeof globalThis & { __oneShotTransportState?: { activeId: number | null; catalog: Catalog | null; previews: Record<string, string> | null } }).__oneShotTransportState ??= { activeId: null, catalog: null, previews: null });
+async function loadPreviews(catalogKey: string | null, catalog: Catalog | null) {
+  transportState.previews = null;
+  if (!catalogKey || !catalog || catalog.metadata?.id !== catalogKey) return;
+  try {
+    const record = await getCatalogPreviews(catalogKey);
+    if (record && record.catalogId === catalogKey) transportState.previews = record.images;
+  } catch { /* media is enhancement; catalog works without it */ }
+}
 export async function selectCharacter(id: number) {
   const c = await getCharacter(id); if (!c) throw Error('Персонаж не найден');
   const catalogKey = c.catalogKey ?? await currentCatalog() ?? null;
-  transportState.activeId = id; transportState.catalog = catalogKey ? await getCatalog(catalogKey) : null;
+  transportState.activeId = id; transportState.catalog = catalogKey ? (await getCatalog(catalogKey)) ?? null : null;
+  await loadPreviews(catalogKey, transportState.catalog);
+}
+// Refresh the media map after a background preview install, without touching
+// the selected catalog. Called from the shell; never reloads the page.
+export async function refreshSelectedCatalogMedia() {
+  const id = transportState.activeId; if (!id) return;
+  const c = await getCharacter(id); if (!c) return;
+  const catalogKey = c.catalogKey ?? await currentCatalog() ?? null;
+  await loadPreviews(catalogKey, transportState.catalog);
 }
 export const getAuthToken = () => null;
 export const setAuthToken = (_value: unknown) => {};
 export const setUnauthorizedHandler = (_value: unknown) => {};
 export async function deleteFileWithChoice() { throw Error('Удаление файлов SoyMan недоступно в OneShot'); }
 const statblock = (c: any) => ({ id: c.id, owner_id: c.id, owner_type: 'character', format: 'dnd_character', kind: 'full', content: JSON.stringify(c.content), updated_at: String(c.revision) });
-const presentEntry = (entry: any, full = false) => entry ? { ...entry, avatar_image_url: (full ? entry.avatar_large_url : null) || entry.avatar_preview_url || null } : entry;
+const previewOf = (entry: any) => entry ? (entry.avatar_preview_url ?? transportState.previews?.[String(entry.id)] ?? null) : null;
+const presentEntry = (entry: any, full = false) => entry ? { ...entry, avatar_image_url: (full ? (entry.avatar_large_url ?? previewOf(entry)) : null) || previewOf(entry) } : entry;
 async function request<T>(path: string, method = 'GET', body?: any, options?: RequestInit): Promise<T> {
   if (options?.signal?.aborted) throw new DOMException('Отменено', 'AbortError');
   const url = new URL(path, 'https://oneshot.invalid'); const route = url.pathname;

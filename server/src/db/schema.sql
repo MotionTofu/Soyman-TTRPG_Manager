@@ -112,9 +112,57 @@ CREATE TABLE IF NOT EXISTS characters (
   connections_notes TEXT DEFAULT '',
   avatar_image_path TEXT,
   thumbnail_image_path TEXT,
+  character_uid TEXT, -- stable logical identity (portable import B2.1), NULL for pre-B2.1 rows; never the primary id
   folder_path TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   archived_at TEXT
+);
+
+-- Optional device sync for SoyMan_1shot (phase D1.1): personal sync spaces,
+-- no accounts. Servers learn spaces/devices/pairing tokens only — never
+-- character data. Clients hold the raw tokens; only hashes are stored.
+CREATE TABLE IF NOT EXISTS sync_spaces (
+  id TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS sync_devices (
+  id TEXT PRIMARY KEY,
+  sync_space_id TEXT NOT NULL REFERENCES sync_spaces(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  last_seen_at TEXT,
+  revoked_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS sync_pairings (
+  token_hash TEXT PRIMARY KEY,
+  sync_space_id TEXT NOT NULL REFERENCES sync_spaces(id) ON DELETE CASCADE,
+  created_by_device_id TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  expires_at TEXT NOT NULL,
+  used_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS sync_characters (
+  sync_space_id TEXT NOT NULL REFERENCES sync_spaces(id) ON DELETE CASCADE,
+  character_uid TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  payload_json TEXT,
+  deleted_at TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_by_device_id TEXT,
+  PRIMARY KEY (sync_space_id, character_uid)
+);
+
+CREATE TABLE IF NOT EXISTS sync_artifacts (
+  sync_space_id TEXT NOT NULL REFERENCES sync_spaces(id) ON DELETE CASCADE,
+  hash TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  bytes INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (sync_space_id, hash)
 );
 
 CREATE TABLE IF NOT EXISTS campaign_roster (
