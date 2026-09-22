@@ -1,0 +1,49 @@
+/* SoyMan_1shot semantic UI tokens (phase R1).
+ *
+ * 1shot owns these names; values map onto the client token system
+ * (client/src/index.css :root + themes.ts, noir by default). A future
+ * Fantasy Punk skin replaces THIS file's values (or adds skin.css overrides)
+ * without touching component structure. No palette literals (--color-*)
+ * may be used by components — only the --ui-* semantic roles below.
+ *
+ * Unchanged visual contract: every token resolves to the exact value the
+ * noir shell used before (verified by before/after screenshots, R1). */
+
+:root {
+  /* Surfaces */
+  --ui-bg: var(--paper);
+  --ui-surface: var(--paper);
+  --ui-surface-raised: var(--paper-2);
+
+  /* Text */
+  --ui-text: var(--ink);
+  --ui-text-muted: var(--muted);
+
+  /* Roles */
+  --ui-accent: var(--accent);
+  --ui-danger: var(--danger-bg);
+  --ui-success: var(--pay-free);
+  --ui-border: var(--line);
+
+  /* Spacing (§5 names over the client --sp-* scale) */
+  --space-1: var(--sp-1); /* 2px */
+  --space-2: var(--sp-2); /* 4px */
+  --space-3: var(--sp-3); /* 6px */
+  --space-4: var(--sp-4); /* 8px */
+  --space-5: var(--sp-5); /* 12px */
+  --space-6: var(--sp-6); /* 16px */
+  --space-7: var(--sp-7); /* 24px */
+  --space-8: var(--sp-8); /* 32px */
+
+  /* Radii (collapsed onto --card-radius today: noir has none; skin diverges) */
+  --radius-sm: var(--card-radius);
+  --radius-md: var(--card-radius);
+  --radius-lg: var(--card-radius);
+
+  /* Type: --font-ui / --font-display are already semantic role names in
+     the client system — aliased names would self-reference, so components
+     keep using the client names directly (no palette involved). */
+
+  /* Layout constants owned by the shell */
+  --content-max-width: 850px;
+}

@@ -17,6 +17,9 @@ import { parsePortableHtml, decidePortableImport, isCharacterUid, PORTABLE_MAX_H
 import { normalizeApiBase, isSyncCredential, buildPairingLink, parsePairingLink, createSyncSpace, createPairing, exchangePairing, fetchSyncStatus, disconnectSyncDevice, listRemoteCharacters, fetchRemoteSnapshot, pushRemoteSnapshot, headArtifact, putArtifact, fetchArtifact, listShares, createShare, updateShare, revokeShare } from './sync.mjs';
 import { validateSyncSnapshot, decideCharacterSync, buildSyncV2Parts, pushCharacterV2, catalogArtifactHash, canonicalCatalogSlice, characterSlicePayload, canonicalPortrait, portraitArtifactHash, syncBundleError } from './sync-characters.mjs';
 import { createAutoSync, type AutoSync } from './auto-sync.mjs';
+import { Button } from './ui/Button';
+import { ActionRow } from './ui/ActionRow';
+import { Banner } from './ui/Banner';
 import { selectCharacter, refreshSelectedCatalogMedia } from './transport';
 import { ensureCurrentCatalog, ensureCatalogPreviews, garbageCollectCatalogs, mergePreviews } from './catalog-manager.mjs';
 import { parseCatalog } from './catalog.mjs';
@@ -34,7 +37,9 @@ import '../../client/src/creature-card.css';
 import '../../client/src/rich-text.css';
 import '../../client/src/statblock.css';
 import '../../client/src/zine.css';
+import './tokens.css';
 import './shell.css';
+import './components.css';
 
 applyTheme(findTheme('noir'));
 // Resumable level-up drafts (C2): one localStorage record per character,
@@ -1337,7 +1342,7 @@ function App() {
     {deleteTarget && <Modal onClose={() => { if (!libraryBusy) setDeleteTarget(null); }}>
       <h3>Удалить «{displayName(deleteTarget)}»?</h3>
       <p>Персонаж будет удалён с этого устройства. Это действие нельзя отменить.</p>
-      <div className="row oneshot-actions"><button className="primary" disabled={libraryBusy} onClick={() => void confirmDelete()}>{libraryBusy ? 'Удаляем…' : 'Удалить'}</button><button disabled={libraryBusy} onClick={() => setDeleteTarget(null)}>Отмена</button></div>
+      <ActionRow><Button variant="primary" disabled={libraryBusy} onClick={() => void confirmDelete()}>{libraryBusy ? 'Удаляем…' : 'Удалить'}</Button><Button disabled={libraryBusy} onClick={() => setDeleteTarget(null)}>Отмена</Button></ActionRow>
     </Modal>}
     {pairing && <Modal onClose={() => { if (!syncBusy) setPairing(null); }}>
       <h3>Подключить другое устройство</h3>
@@ -1403,16 +1408,16 @@ function App() {
             </div>
           </>}
           {conflicted && <p className="muted">Есть нерешённый конфликт синхронизации — публикуется версия, которую вы видите сейчас.</p>}
-          {shareError !== '' && <p className="oneshot-error" role="alert">{shareError}</p>}
+          {shareError !== '' && <Banner as="p">{shareError}</Banner>}
           <div className="row oneshot-actions"><button disabled={shareBusy} onClick={() => setShareTarget(null)}>Закрыть</button></div>
         </>);
       })()}
     </Modal>}
-    {error && <div className="oneshot-error" role="alert">{error}</div>}
+    {error && <Banner>{error}</Banner>}
     {!ready ? <p className="oneshot-home">Открываем локальные данные…</p> : active?.content ? <div className="oneshot-sheet"><DndCharacterView key={active.id} value={active.content} portraitUrl={active.portrait} onQuickUpdate={update} onLevelUpApply={applyLevelUp} syncTabToUrl levelUpDraft={{ identity: { characterId: active.id, characterUid: active.characterUid ?? null, catalogKey: active.catalogKey }, initial: loadLevelUpDraft(active.id), onChange: saveLevelUpDraft, onClear: () => clearLevelUpDraft(active.id) }} onSheetBack={() => { if (status === 'Сохранено на устройстве') location.assign('/'); }} /></div> : <main className="oneshot-home">
       <p className="muted">D&D 5.5 · настоящий визард и чарник SoyMan</p><h1>Твои персонажи</h1>
       <p>Создайте героя в привычном визарде или заполните пустой лист вручную. Персонажи сохраняются в этом браузере.</p>
-      <section><h2>Новый персонаж</h2><label>Имя<input value={name} onChange={e => setName(e.target.value)} maxLength={100} placeholder="Как зовут героя?" /></label><div className="row oneshot-actions"><button className="primary" disabled={busy} onClick={() => void create()}>Создать через визард</button><button disabled={busy} onClick={() => void create(true)}>Открыть пустой лист</button></div>{managed === 'working' && !catalogKey && <p className="muted">Подготавливаем игровые данные…</p>}{managed === 'failed' && !catalogKey && <p className="muted">Для первого создания персонажа нужно один раз загрузить игровые данные. <button onClick={retryManaged}>Повторить</button></p>}{media === 'working' && <p className="muted">Загружаем изображения…</p>}</section>
+      <section><h2>Новый персонаж</h2><label>Имя<input value={name} onChange={e => setName(e.target.value)} maxLength={100} placeholder="Как зовут героя?" /></label><ActionRow><Button variant="primary" disabled={busy} onClick={() => void create()}>Создать через визард</Button><Button disabled={busy} onClick={() => void create(true)}>Открыть пустой лист</Button></ActionRow>{managed === 'working' && !catalogKey && <p className="muted">Подготавливаем игровые данные…</p>}{managed === 'failed' && !catalogKey && <p className="muted">Для первого создания персонажа нужно один раз загрузить игровые данные. <button onClick={retryManaged}>Повторить</button></p>}{media === 'working' && <p className="muted">Загружаем изображения…</p>}</section>
       <section><h2>Сохранённые персонажи</h2>{!visibleCharacters.length && <p className="muted">Здесь появятся ваши персонажи и незавершённые черновики.</p>}{visibleCharacters.map(c => characterRow(c, false))}<button onClick={() => restoreFile.current?.click()}>Восстановить из копии</button><button disabled={busy} onClick={() => portableFile.current?.click()}>Импортировать персонажа</button>{archivedList.length > 0 && <details className="oneshot-archive"><summary>Архив ({archivedList.length})</summary>{archivedList.map(c => characterRow(c, true))}</details>}<input ref={portableFile} hidden type="file" accept=".html,text/html" onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void importPortableFile(file); }} /><input ref={restoreFile} hidden type="file" accept=".json,application/json" onChange={async e => { const file = e.target.files?.[0]; if (!file) return; try { const data = await readFile(file); if (data.format !== 'soyman-1shot-backup' || data.version !== 1) throw Error('Нужна резервная копия OneShot'); const content = parseCharacterContent(data.character?.content); const key = data.catalog ? await saveCatalog(parseCatalog(data.catalog)) : null; const c = await createCharacter(content.characterName || 'Восстановленный персонаж', key); const portrait = typeof data.character?.portrait === 'string' && /^data:image\/(png|jpeg|webp);base64,/.test(data.character.portrait) ? data.character.portrait : null; await saveCharacter({ ...c, content, portrait, characterUid: isCharacterUid(data.character?.characterUid) ? data.character.characterUid : c.characterUid }); location.assign(`/?character=${c.id}`); } catch (err) { setError((err as Error).message); } e.target.value = ''; }} /></section>
       <details><summary>Дополнительно</summary>
         {diag && <p className="muted">Игровые данные{diag.version ? `: версия ${diag.version}` : ''} · установлено версий: {diag.count}</p>}
@@ -1438,7 +1443,7 @@ function App() {
             {syncResult && <p className="muted">Последняя синхронизация: {new Date(syncResult.at).toLocaleString('ru-RU')} · отправлено: {syncResult.pushed}, получено: {syncResult.pulled}, конфликтов: {syncResult.conflicts}{syncResult.sentBytes > 0 && ` · отправлено данных: ~${Math.max(1, Math.round(syncResult.sentBytes / 1024))} КБ`}{syncResult.errors.length > 0 && ` · ошибки: ${syncResult.errors.length}`}</p>}
             {syncResult && syncResult.errors.length > 0 && <ul>{syncResult.errors.slice(0, 3).map((message) => <li key={message} className="muted">{message}</li>)}</ul>}
           </>}
-          {syncError && <p className="oneshot-error" role="alert">{syncError}</p>}
+          {syncError && <Banner as="p">{syncError}</Banner>}
         </section>
       </details>
       <p className="muted">Можно скачать автономный HTML чарника. Изменения в нём сохраняются скачиванием обновлённой копии. Аккаунты и синхронизация ещё в работе. Резервная копия JSON содержит лист и все нужные игровые данные.</p>

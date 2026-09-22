@@ -1,0 +1,31 @@
+/* SoyMan_1shot component decoration slots (phase R1).
+ *
+ * Geometry and interaction live in shell.css + client base classes; this
+ * file reserves ONLY the decorative hooks a future Fantasy Punk skin may
+ * fill. Every rule below is intentionally effect-free today (::before/::after
+ * with no emitted content, documented techniques per hook).
+ *
+ * Allowed skin techniques per hook:
+ *   background-image / mask-image / border-image / CSS variables.
+ * Forbidden: layout dimensions derived from generated assets (margins,
+ * paddings, sizes and positions stay in shell.css, never in artwork).
+ *
+ * Text stays HTML always (§17): decorative assets carry no baked-in text. */
+
+/* Button corners / scratches / marker strokes (all variants). */
+[data-ui="button"]::before,
+[data-ui="button"]::after {
+  content: none;
+}
+
+/* Action-row dividers and group ornaments. */
+[data-ui="action-row"]::before,
+[data-ui="action-row"]::after {
+  content: none;
+}
+
+/* Banner edge accents (error/status/hint tones). */
+[data-ui="banner"]::before,
+[data-ui="banner"]::after {
+  content: none;
+}
