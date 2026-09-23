@@ -4,16 +4,22 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>OneShot — целевой вид листа</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     @font-face { font-family: Punk; src: url("../../client/public/fonts/RussianPunk.ttf") format("truetype"); font-display: swap; }
+    @font-face { font-family: Steamy; src: url("../../client/public/fonts/Steamy.otf") format("opentype"); font-display: swap; }
     :root { --ink:#171717; --paper:#f0ede4; --acid:#f3ff3a; --pink:#ff3e91; --muted:#595650; }
     * { box-sizing:border-box; }
-    body { margin:0; color:var(--ink); background:#e7e2d6 url("../assets/fantasy-punk/textures/paper-tile.webp") repeat; font:16px/1.35 Arial, sans-serif; }
+    body { position:relative; min-height:100vh; margin:0; color:var(--ink); background:#e7e2d6 url("../assets/fantasy-punk/textures/paper-tile.webp") repeat; font:16px/1.35 Arial, sans-serif; }
+    body::before { content:""; position:fixed; inset:60px auto 0 0; width:clamp(30px,6vw,100px); background:radial-gradient(circle,#171717 1.7px,transparent 2px) 0 0/11px 11px; mask-image:linear-gradient(90deg,#000,transparent 95%); opacity:.6; pointer-events:none; }
+    body::after { content:""; position:fixed; inset:60px 0 0 auto; width:clamp(50px,9vw,150px); background:radial-gradient(circle,#171717 1.4px,transparent 1.9px) 0 0/9px 9px; mask-image:linear-gradient(270deg,#000,transparent 95%); opacity:.65; pointer-events:none; }
     button { font:inherit; cursor:pointer; }
     button:focus-visible { outline:3px solid #b10058; outline-offset:3px; }
     .top { position:relative; z-index:10; min-height:62px; display:flex; align-items:center; gap:24px; padding:9px max(24px,calc((100vw - 1500px)/2)); color:var(--paper); background:var(--ink) url("../assets/fantasy-punk/textures/ink-surface.webp") repeat; border-bottom:5px solid var(--acid); }
-    .brand { font:32px Punk,Georgia,serif; white-space:nowrap; }
-    .brand em { color:var(--acid); font-style:normal; }
+    .brand { font:700 31px/1 Georgia,serif; letter-spacing:-.06em; white-space:nowrap; }
+    .brand em { display:inline-block; margin-left:6px; color:var(--acid); font:29px/1 Steamy,Punk,cursive; font-style:normal; letter-spacing:0; transform:rotate(-4deg); }
     .saved { margin-left:auto; color:var(--acid); font-size:12px; font-weight:800; text-transform:uppercase; white-space:nowrap; }
     .saved-short { display:none; }
     .utility { position:relative; flex:none; }
@@ -25,29 +31,36 @@
     .utility-menu p { margin:4px 10px 6px; color:var(--muted); font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
     .utility-menu button { display:block; width:100%; min-height:44px; padding:10px 11px; border:0; border-top:1px solid #c5bfb3; color:var(--ink); background:transparent; text-align:left; font-size:13px; font-weight:800; }
     .utility-menu button:hover,.utility-menu button:focus-visible,.small-button:hover { background:var(--acid); }
-    .sheet { max-width:1500px; margin:auto; padding:20px 24px 45px; display:grid; grid-template-columns:minmax(390px,34%) minmax(0,1fr); align-items:start; gap:20px; }
+    .sheet { position:relative; z-index:1; max-width:1500px; margin:auto; padding:26px 24px 45px; display:grid; grid-template-columns:minmax(390px,32%) minmax(0,1fr); align-items:start; gap:16px; }
     .card,.work { position:relative; min-width:0; border:4px solid var(--ink); background:var(--paper) url("../assets/fantasy-punk/textures/paper-panel.webp") repeat; box-shadow:5px 5px 0 var(--acid); }
+    .card { border-width:8px; outline:2px solid var(--acid); outline-offset:3px; }
     .card::before,.work::before { content:""; position:absolute; z-index:3; top:-12px; left:-12px; width:90px; height:90px; background:url("../assets/fantasy-punk/decorative/frames/frame-corner-top-left.webp") top left/contain no-repeat; pointer-events:none; }
     .card::after,.work::after { content:""; position:absolute; z-index:3; right:-8px; bottom:-8px; width:70px; height:70px; background:url("../assets/fantasy-punk/decorative/frames/frame-corner-bottom-right.webp") bottom right/contain no-repeat; pointer-events:none; }
-    .portrait { position:relative; height:330px; overflow:hidden; border-bottom:4px solid var(--ink); background:#180c18 url("./assets/character-portrait-v1.png") 44% 28%/cover no-repeat; }
-    .portrait::after { content:""; position:absolute; inset:55% 0 0; background:linear-gradient(transparent 0%,rgba(240,237,228,.8) 28%,var(--paper) 62%); pointer-events:none; }
+    .portrait { position:relative; height:380px; overflow:hidden; border-bottom:6px solid var(--ink); background:#180c18 url("./assets/character-portrait-duo-v2.png") center 25%/cover no-repeat; }
+    .portrait::before { content:""; position:absolute; z-index:1; inset:7px; border:2px solid rgba(240,237,228,.85); box-shadow:inset 0 0 0 3px rgba(23,23,23,.7); pointer-events:none; }
+    .portrait::after { content:""; position:absolute; inset:66% 0 0; background:linear-gradient(transparent 0%,rgba(240,237,228,.66) 34%,var(--paper) 100%); pointer-events:none; }
     .portrait-stamp { position:absolute; z-index:2; top:13px; left:14px; width:54px; height:54px; background:url("../assets/fantasy-punk/decorative/frames/card-corner-crescent.webp") center/contain no-repeat; }
+    .portrait-sun { position:absolute; z-index:2; top:15px; right:15px; display:grid; place-items:center; width:48px; height:48px; border:3px double var(--paper); border-radius:50%; color:var(--acid); background:var(--ink); font:31px/1 Georgia,serif; text-shadow:2px 1px var(--pink); }
     .identity { position:absolute; z-index:2; left:20px; right:16px; bottom:12px; }
     .identity h1 { margin:0; font:clamp(35px,3.2vw,53px)/.95 Punk,Georgia,serif; text-transform:uppercase; text-shadow:1px 1px 0 var(--paper); }
     .identity p { margin:7px 0 0; font-size:13px; font-weight:800; text-transform:uppercase; }
     .identity b { display:inline-block; margin-right:8px; padding:3px 7px; background:var(--pink); border:2px solid var(--ink); }
     .vitals { padding:14px 12px 10px; background:var(--ink) url("../assets/fantasy-punk/textures/ink-surface.webp") repeat; color:var(--paper); display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:3px; }
     .die { text-align:center; min-width:0; }
-    .die-shape { position:relative; display:grid; place-items:center; width:min(82px,100%); aspect-ratio:1; margin:auto; background:url("../assets/fantasy-punk/semantic/dice/d20-paper.webp") center/contain no-repeat; color:var(--ink); font:32px Punk,Georgia,serif; }
+    .die-shape { position:relative; display:grid; place-items:center; width:min(82px,100%); aspect-ratio:1; margin:auto; background:url("../assets/fantasy-punk/semantic/dice/d20-paper.webp") center/contain no-repeat; color:var(--ink); font:700 32px/1 Georgia,serif; }
     .die small { display:block; margin-top:2px; font-size:11px; font-weight:800; text-transform:uppercase; }
     .statuses { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); border-bottom:3px solid var(--ink); }
     .statuses span { min-width:0; min-height:42px; display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:4px; padding:5px; border-right:2px solid var(--ink); font-size:11px; font-weight:800; text-transform:uppercase; text-align:center; }
     .statuses span:last-child { border-right:0; }
     .statuses strong { font-size:14px; }
-    .abilities { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:2px; padding:15px 11px 34px; }
+    .abilities { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:2px; padding:14px 11px 12px; }
     .ability { text-align:center; min-width:0; }
     .ability .die-shape { width:min(62px,100%); font-size:23px; }
     .ability small { font-size:11px; font-weight:800; }
+    .spotlights { padding:0 13px 24px; }
+    .spotlight { min-height:52px; margin-bottom:4px; padding:5px 7px 5px 11px; border-left:3px solid var(--acid); background:rgba(23,23,23,.06); }
+    .spotlight strong { display:block; font:700 18px/1.1 Oswald,'Arial Narrow',sans-serif; }
+    .spotlight span { display:block; margin-top:3px; overflow:hidden; color:var(--muted); font:13px/1.2 Oswald,'Arial Narrow',sans-serif; white-space:nowrap; text-overflow:ellipsis; }
     .fold { display:none; position:absolute; z-index:5; bottom:0; right:0; width:48px; height:48px; border:0; background:transparent; }
     .fold::before { content:""; position:absolute; inset:0; background:var(--ink); clip-path:polygon(100% 0,100% 100%,0 100%); pointer-events:none; }
     .fold::after { content:"↶"; position:absolute; right:2px; bottom:0; color:var(--paper); font:bold 23px/1 Arial,sans-serif; transform:rotate(-35deg); pointer-events:none; }
@@ -62,25 +75,27 @@
     .card.is-flipped .card-back { display:block; }
     .card.is-flipped .fold::before { background:var(--paper); }
     .card.is-flipped .fold::after { color:var(--ink); }
-    .work { min-height:760px; padding:0 15px 24px; }
+    .work { min-height:840px; padding:0 15px 24px; }
     .work::before { display:none; }
     .tabs { display:flex; align-items:stretch; overflow-x:auto; border-bottom:3px solid var(--ink); margin:0 -15px 14px; scrollbar-width:thin; }
-    .tabs span { flex:none; min-height:47px; display:grid; place-items:center; padding:8px 13px; border-right:2px solid var(--ink); font:800 12px/1.15 Arial,sans-serif; letter-spacing:.045em; text-transform:uppercase; white-space:nowrap; }
+    .tabs span { flex:none; min-height:47px; display:grid; place-items:center; padding:8px 13px; border-right:1px solid var(--ink); font:600 15px/1.15 Oswald,'Arial Narrow',sans-serif; letter-spacing:.025em; text-transform:uppercase; white-space:nowrap; }
     .tabs .active { position:relative; background:var(--acid); }
     .tabs .active::after { content:""; position:absolute; left:12px; right:12px; bottom:-3px; height:5px; background:var(--pink); }
-    .work-head { display:flex; align-items:start; justify-content:space-between; gap:16px; margin-bottom:12px; }
-    .work-head h2 { margin:0; font:29px Punk,Georgia,serif; text-transform:uppercase; }
-    .work-head p { margin:3px 0 0; color:var(--muted); font-size:13px; }
-    .spell-meta { display:flex; justify-content:space-between; flex-wrap:wrap; gap:7px 12px; margin-bottom:12px; font-size:13px; font-weight:800; }
-    .controls { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 14px; }
-    .small-button { min-height:36px; padding:6px 10px; background:var(--paper); border:2px solid var(--ink); font-size:12px; font-weight:800; text-transform:uppercase; }
-    .section-title { position:relative; display:flex; justify-content:space-between; align-items:center; margin:10px 0 4px; padding:4px 0; border-top:2px solid var(--ink); border-bottom:1px solid var(--ink); font:24px Punk,Georgia,serif; text-transform:uppercase; }
+    .work-head { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:2px; }
+    .work-head h2 { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+    .work-head strong { font:600 20px/1.1 Oswald,'Arial Narrow',sans-serif; }
+    .edit-button { width:44px; height:38px; border:2px solid var(--ink); background:transparent; font-size:22px; }
+    .edit-button:hover { background:var(--acid); }
+    .spell-meta { display:flex; justify-content:flex-start; flex-wrap:wrap; gap:7px 24px; margin-bottom:10px; font:500 16px/1.2 Oswald,'Arial Narrow',sans-serif; }
+    .controls { display:flex; flex-wrap:wrap; gap:8px; margin:0 0 10px; }
+    .small-button { min-height:34px; padding:5px 11px; background:var(--paper); border:2px solid var(--ink); font:600 14px/1.1 Oswald,'Arial Narrow',sans-serif; text-transform:uppercase; }
+    .section-title { position:relative; display:flex; justify-content:space-between; align-items:center; margin:10px 0 4px; padding:4px 0; border-top:2px solid var(--ink); border-bottom:1px solid var(--ink); font:700 23px/1.1 Oswald,'Arial Narrow',sans-serif; text-transform:uppercase; }
     .section-title small { font:14px Arial,sans-serif; font-weight:800; }
-    .section-title::after { content:""; position:absolute; left:0; bottom:-7px; width:170px; height:12px; background:url("../assets/fantasy-punk/decorative/dividers/underline-acid-magenta.webp") left center/contain no-repeat; pointer-events:none; }
+    .section-title::after { content:""; position:absolute; left:0; bottom:-5px; width:150px; height:4px; background:linear-gradient(90deg,var(--pink) 0 92%,transparent 92%); transform:rotate(-1deg); pointer-events:none; }
     .spell { display:grid; grid-template-columns:42px minmax(0,1fr) 26px; align-items:center; gap:8px; min-height:49px; padding:4px 3px; border-bottom:1px solid #c7c0b1; }
     .spell:nth-of-type(even) { background:rgba(0,0,0,.045); }
     .school { width:38px; height:38px; object-fit:contain; background:var(--ink); }
-    .spell strong { font:18px Georgia,serif; font-weight:800; }
+    .spell strong { font:700 18px/1.1 Georgia,serif; }
     .spell .en { margin-left:8px; color:var(--muted); font-size:12px; }
     .spell p { margin:2px 0 0; color:var(--muted); font-size:12px; }
     .spell mark { padding:1px 5px; background:var(--acid); color:var(--ink); font-size:10px; font-weight:800; text-transform:uppercase; }
@@ -90,25 +105,28 @@
       .saved { font-size:10px; }
       .sheet { grid-template-columns:minmax(0,1fr); padding:18px 12px 30px; max-width:540px; }
       .fold { display:block; }
-      .portrait { height:325px; }
+      .portrait { height:350px; }
       .work { min-height:0; }
     }
     @media(max-width:430px) {
-      .brand { font-size:26px; }
+      .brand { font-size:25px; }
+      .brand em { font-size:24px; }
       .saved { font-size:11px; }
       .saved-long { display:none; }
       .saved-short { display:inline; }
       .identity h1 { font-size:39px; }
-      .portrait { height:290px; background-position:40% 28%; }
+      .portrait { height:310px; background-position:center 24%; }
       .vitals { padding-inline:5px; }
       .die-shape { font-size:25px; }
       .die small { font-size:9px; }
       .abilities { padding-inline:5px; }
       .ability .die-shape { font-size:20px; }
+      .spotlights { padding-inline:7px; }
       .statuses span { font-size:9px; }
       .work { padding-inline:10px; }
       .tabs { margin-inline:-10px; }
-      .work-head h2 { font-size:25px; }
+      .work-head strong { font-size:17px; }
+      .spell-meta { gap:5px 12px; font-size:13px; }
       .spell strong { font-size:16px; }
     }
     @media(max-width:360px) {
@@ -121,29 +139,34 @@
   <main class="sheet">
     <section class="card" id="preview-card" aria-label="Карта персонажа">
       <div class="card-front">
-        <div class="portrait"><span class="portrait-stamp" aria-hidden="true"></span><div class="identity"><h1>Кэрри</h1><p><b>3</b> Артефактор · Картограф<br>Калдатар · Мудрец · БМ +2</p></div></div>
+        <div class="portrait"><span class="portrait-stamp" aria-hidden="true"></span><span class="portrait-sun" aria-hidden="true">✴</span><div class="identity"><h1>Кэрри</h1><p><b>3</b> Артефактор · Картограф<br>Калдатар · Мудрец · БМ +2</p></div></div>
         <div class="vitals"><div class="die"><span class="die-shape">12</span><small>КЗ</small></div><div class="die"><span class="die-shape">24</span><small>Хиты</small></div><div class="die"><span class="die-shape">+2</span><small>Инициатива</small></div><div class="die"><span class="die-shape">10</span><small>Пасс. воспр.</small></div><div class="die"><span class="die-shape">30</span><small>Скорость</small></div></div>
         <div class="statuses"><span>Состояния <strong>Нет</strong></span><span>Концентрация <strong>—</strong></span><span>Истощение <strong>0</strong></span></div>
         <div class="abilities"><div class="ability"><span class="die-shape">+2</span><small>СИЛ</small></div><div class="ability"><span class="die-shape">+2</span><small>ЛОВ</small></div><div class="ability"><span class="die-shape">+2</span><small>ТЕЛ</small></div><div class="ability"><span class="die-shape">+1</span><small>ИНТ</small></div><div class="ability"><span class="die-shape">+0</span><small>МДР</small></div><div class="ability"><span class="die-shape">−1</span><small>ХАР</small></div></div>
+        <div class="spotlights"><div class="spotlight"><strong>Убежище</strong><span>СП Мдр 11 · Защита · Вы защищаете… · 30 футов</span></div><div class="spotlight"><strong>Меткий удар</strong><span>АТК +3 · 1к6 Излучение · На себя</span></div></div>
       </div>
       <div class="card-back"><h2>Входящие</h2><div class="back-sub">Кэрри · новых нет</div><section><p>Пока тихо — Мастер ещё ничего не прислал.</p></section><section><h3>Передачи</h3><p>Предметов и монет в пути нет.</p></section><section><h3>Постер персонажа</h3><span class="back-action">Скачать постер (PNG)</span><span class="back-action">Поделиться</span></section></div>
       <button class="fold" id="flip" type="button" aria-label="Перевернуть карту: входящие, передачи, постер" aria-pressed="false"></button>
     </section>
     <section class="work" aria-label="Рабочая область — Магия">
       <nav class="tabs" aria-label="Разделы листа"><span>Карта-действия</span><span class="active">Магия</span><span>Снаряжение</span><span>Навыки</span><span>Особенности</span><span>Досье</span><span>Ресурсы</span></nav>
-      <div class="work-head"><div><h2>Магия</h2><p>Заклинания и заговоры персонажа</p></div><strong>СЛ: 11 · АТК: +3</strong></div>
-      <div class="controls"><button class="small-button" type="button">✎ Редактировать</button><button class="small-button" type="button">Подготовленные / доступные</button><button class="small-button" type="button">Добавить</button></div>
+      <div class="work-head"><h2>Магия</h2><button class="edit-button" type="button" aria-label="Редактировать">✎</button><strong>СЛ: 11 · АТК: +3</strong></div>
+      <div class="controls"><button class="small-button" type="button">Подготовленные / доступные</button><button class="small-button" type="button">Добавить</button></div>
       <div class="spell-meta"><span>Заговоры 2 из 3</span><span>Подготовлено 4 из 4</span><span>Вне лимита 7</span></div>
       <div class="section-title">Заговоры <small>5</small></div>
       <div class="spell"><img class="school" src="../assets/fantasy-punk/semantic/school-icons/school-01.webp" alt=""><div><strong>Искусство друидов</strong><span class="en">Druidcraft</span><p><mark>Преобразование</mark> Действие · ВС · Особое</p></div><span class="star">★</span></div>
       <div class="spell"><img class="school" src="../assets/fantasy-punk/semantic/school-icons/school-02.webp" alt=""><div><strong>Леденящее прикосновение</strong><span class="en">Chill Touch</span><p><mark>Некромантия</mark> Действие · ВС · Атака ближняя</p></div><span class="star">★</span></div>
       <div class="spell"><img class="school" src="../assets/fantasy-punk/semantic/school-icons/school-03.webp" alt=""><div><strong>Меткий удар</strong><span class="en">True Strike</span><p><mark>Прорицание</mark> Действие · СМ · Атака ближняя</p></div><span class="star">★</span></div>
       <div class="spell"><img class="school" src="../assets/fantasy-punk/semantic/school-icons/school-04.webp" alt=""><div><strong>Починка</strong><span class="en">Mending</span><p><mark>Преобразование</mark> 1 минута · ВСМ · Особое</p></div><span class="star">★</span></div>
+      <div class="spell"><img class="school" src="../assets/fantasy-punk/semantic/school-icons/school-05.webp" alt=""><div><strong>Сопротивление</strong><span class="en">Resistance</span><p><mark>Ограждение</mark> Действие · ВС · Концентрация</p></div><span class="star">★</span></div>
       <div class="section-title">1 круг <small>8 · исп. ◼ ◼ ◼</small></div>
       <div class="spell"><img class="school" src="../assets/fantasy-punk/semantic/school-icons/school-05.webp" alt=""><div><strong>Доспехи мага</strong><span class="en">Mage Armor</span><p><mark>Ограждение</mark> Действие · ВСМ · Защита</p></div><span class="star">★</span></div>
       <div class="spell"><img class="school" src="../assets/fantasy-punk/semantic/school-icons/school-06.webp" alt=""><div><strong>Лечащее слово</strong><span class="en">Healing Word</span><p><mark>Воплощение</mark> Бонусное действие · В · Лечение</p></div><span class="star">★</span></div>
       <div class="spell"><img class="school" src="../assets/fantasy-punk/semantic/school-icons/school-07.webp" alt=""><div><strong>Направляющий снаряд</strong><span class="en">Guiding Bolt</span><p><mark>Воплощение</mark> Действие · ВС · Атака дальняя</p></div><span class="star">★</span></div>
       <div class="spell"><img class="school" src="../assets/fantasy-punk/semantic/school-icons/school-08.webp" alt=""><div><strong>Огонь фей</strong><span class="en">Faerie Fire</span><p><mark>Воплощение</mark> Действие · В · Концентрация</p></div><span class="star">★</span></div>
+      <div class="spell"><img class="school" src="../assets/fantasy-punk/semantic/school-icons/school-03.webp" alt=""><div><strong>Опознание</strong><span class="en">Identify</span><p><mark>Прорицание</mark> 1 минута или ритуал · ВСМ · Особое</p></div><span class="star">★</span></div>
+      <div class="spell"><img class="school" src="../assets/fantasy-punk/semantic/school-icons/school-01.webp" alt=""><div><strong>Падение пёрышком</strong><span class="en">Feather Fall</span><p><mark>Преобразование</mark> Реакция · ВМ · Перемещение</p></div><span class="star">★</span></div>
+      <div class="spell"><img class="school" src="../assets/fantasy-punk/semantic/school-icons/school-01.webp" alt=""><div><strong>Скороход</strong><span class="en">Longstrider</span><p><mark>Преобразование</mark> Действие · ВСМ · Перемещение</p></div><span class="star">★</span></div>
     </section>
   </main>
   <script>
