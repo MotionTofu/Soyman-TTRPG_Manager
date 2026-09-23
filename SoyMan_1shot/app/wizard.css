@@ -1,0 +1,157 @@
+/* OneShot Wizard: editorial frame around a clean, dense working area. */
+html[data-app="oneshot"] .modal:has(.wizard) {
+  width: 1080px;
+  max-width: calc(100vw - 32px);
+  max-height: 94dvh;
+  box-sizing: border-box;
+  padding: 0;
+  border: 3px solid var(--ui-border);
+  border-radius: 0;
+  background: var(--ui-surface);
+  box-shadow: 8px 8px 0 var(--ui-accent-secondary);
+}
+
+html[data-app="oneshot"] .modal .card.wizard {
+  padding: 18px 20px 20px;
+  border: 0;
+  border-radius: 0;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  box-shadow: none;
+}
+
+html[data-app="oneshot"] .card.wizard .campaign-player-header {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0;
+  padding: 10px 14px;
+  border-inline-start: 7px solid var(--ui-accent);
+  background: var(--ui-surface-ink);
+  color: var(--ui-text-inverse);
+  font-weight: 800;
+  letter-spacing: .07em;
+}
+
+html[data-app="oneshot"] .wizard-progress {
+  display: block;
+  width: 100%;
+  height: 6px;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--ui-surface-raised);
+  accent-color: var(--ui-accent-secondary);
+}
+html[data-app="oneshot"] .wizard-progress::-webkit-progress-bar {
+  background: var(--ui-surface-raised);
+}
+html[data-app="oneshot"] .wizard-progress::-webkit-progress-value {
+  background: var(--ui-accent-secondary);
+}
+
+html[data-app="oneshot"] .card.wizard .wizard-steps-tabs {
+  margin: 2px 0 18px;
+  padding: 0 4px;
+  border-bottom: 2px solid var(--ui-border);
+  background: var(--ui-surface-raised);
+  box-shadow: none;
+}
+html[data-app="oneshot"] .card.wizard .wizard-steps-tabs button {
+  min-height: 44px;
+  border: 0;
+  border-bottom: 4px solid transparent;
+  background: transparent;
+  color: var(--ui-text-muted);
+  font-weight: 750;
+}
+html[data-app="oneshot"] .card.wizard .wizard-steps-tabs button[aria-selected="true"] {
+  border-bottom-color: var(--ui-accent-secondary);
+  background: var(--ui-accent);
+  color: var(--ui-text);
+}
+html[data-app="oneshot"] .card.wizard .wizard-steps-tabs button:focus-visible,
+html[data-app="oneshot"] .card.wizard button:focus-visible,
+html[data-app="oneshot"] .card.wizard select:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+
+html[data-app="oneshot"] .card.wizard .wizard-split {
+  gap: 20px;
+}
+html[data-app="oneshot"] .card.wizard .wizard-side {
+  padding: 12px 0 12px 20px;
+  border-left: 2px solid var(--ui-border);
+}
+html[data-app="oneshot"] .card.wizard .wizard-main {
+  min-width: 0;
+}
+html[data-app="oneshot"] .card.wizard :is(input[type="checkbox"], input[type="radio"]) {
+  accent-color: var(--ui-accent-secondary);
+}
+html[data-app="oneshot"] .card.wizard .wizard-main
+  :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
+  min-height: 44px;
+  border: 2px solid var(--ui-border);
+  border-radius: 0;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+}
+html[data-app="oneshot"] .card.wizard .wizard-pick-list {
+  border: 1px solid var(--ui-border);
+  background: var(--ui-surface);
+}
+html[data-app="oneshot"] .card.wizard .wizard-footer {
+  border-top: 2px solid var(--ui-border);
+  background: var(--ui-surface);
+}
+html[data-app="oneshot"] .card.wizard .wizard-footer button {
+  min-height: 44px;
+  border: 2px solid var(--ui-border);
+  border-radius: 0;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font-weight: 750;
+}
+html[data-app="oneshot"] .card.wizard .wizard-footer button.primary {
+  background: var(--ui-accent);
+  color: var(--ui-text);
+}
+html[data-app="oneshot"] .card.wizard .wizard-footer button:disabled {
+  opacity: .55;
+}
+
+@media (max-width: 1000px) {
+  html[data-app="oneshot"] .card.wizard .wizard-flip-row button {
+    min-height: 44px;
+    border: 2px solid var(--ui-border);
+    background: var(--ui-surface-raised);
+    color: var(--ui-text);
+    font-weight: 700;
+  }
+}
+@media (max-width: 700px) {
+  html[data-app="oneshot"] .modal-backdrop:has(.wizard) { padding: 6px; }
+  html[data-app="oneshot"] .modal:has(.wizard) {
+    width: 100%;
+    max-width: calc(100vw - 12px);
+    max-height: 97dvh;
+    box-shadow: 3px 3px 0 var(--ui-accent-secondary);
+  }
+  html[data-app="oneshot"] .modal .card.wizard { padding: 12px; }
+  html[data-app="oneshot"] .card.wizard .campaign-player-header { padding: 8px 10px; }
+  html[data-app="oneshot"] .card.wizard .wizard-step-row { margin: 0; }
+  html[data-app="oneshot"] .card.wizard .wizard-step-picker {
+    width: 100%;
+    max-width: none;
+    min-height: 44px;
+    background: var(--ui-accent);
+    font-weight: 750;
+  }
+  html[data-app="oneshot"] .card.wizard .wizard-footer {
+    gap: 8px;
+    padding: 10px 12px;
+  }
+}

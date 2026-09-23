@@ -191,13 +191,15 @@ interface Props {
   // Портрет владельца (сущности/персонажа) для кнопки «Взять как у
   // владельца» (Хвосты 2.3). Необязателен: без него шага как было.
   ownerPortraitUrl?: string | null;
+  // OneShot opts into its own visual layer without changing the shared wizard.
+  visualVariant?: "oneshot";
 }
 
 // Guided step-by-step creation for a brand-new D&D 5.5 character statblock —
 // used only when adding a fresh dnd_character (see StatblockList's addStatblock).
 // Leveling up / editing an existing character stays in the regular
 // DndCharacterEdit form; this wizard is a one-time onboarding path only.
-export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerName, onDone, onCancel, initialSystemId, ownerPortraitUrl }: Props) {
+export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerName, onDone, onCancel, initialSystemId, ownerPortraitUrl, visualVariant }: Props) {
   const { allowDiceRolls } = useDndRuntime();
   const draftKey = wizardDraftKey(ownerType, ownerId);
   // Читается один раз при монтировании — поэтому сбросы протухших выборов
@@ -2196,7 +2198,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     // с вопросом. Внутренняя .card остаётся — вёрстка не едет, а класс
     // .wizard включает готовые 620px (.modal:has(.wizard)).
     <Modal onClose={cancelWizard} closeOnBackdropClick={false} ariaLabel="Создание персонажа">
-    <div className="card stack wizard">
+    <div className={`card stack wizard${visualVariant === "oneshot" ? " wizard--oneshot" : ""}`}>
       {/* Шапка-инверсия §1.4: плашка называет карточку, счётчик — справа. */}
       <div className="campaign-player-header">
         <span>Создание персонажа</span>
@@ -2204,6 +2206,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
           Шаг {stepIndex + 1} из {STEPS.length} · {step}
         </span>
       </div>
+      {visualVariant === "oneshot" && <progress className="wizard-progress" value={stepIndex + 1} max={STEPS.length} aria-label="Прогресс создания персонажа" />}
       <div className="row wizard-step-row">
         {/* Мобильный пикер вместо ленты табов: 12 язычков не влезают в 390px.
             Тот же приём, что .dnd-section-picker у листа персонажа.

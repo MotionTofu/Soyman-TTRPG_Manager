@@ -41,6 +41,7 @@ import '../../client/src/fantasy-punk-skin.css';
 import './tokens.css';
 import './shell.css';
 import './components.css';
+import './wizard.css';
 
 applyTheme(findTheme('noir'));
 // Resumable level-up drafts (C2): one localStorage record per character,
@@ -1457,7 +1458,7 @@ function App() {
       <p className="muted">Автономный HTML можно скачать из листа персонажа. Изменения в копии сохраняются повторным скачиванием. Резервная копия JSON содержит лист и игровые данные.</p></aside>
       </div>
     </main>}
-    {wizard && active && <DndCharacterWizard ownerType="character" ownerId={active.id} ownerName={active.name} initialSystemId={active.catalogKey ? 1 : null} onDone={() => location.reload()} onCancel={() => location.assign('/')} />}
+    {wizard && active && <DndCharacterWizard ownerType="character" ownerId={active.id} ownerName={active.name} initialSystemId={active.catalogKey ? 1 : null} visualVariant="oneshot" onDone={() => location.reload()} onCancel={() => location.assign('/')} />}
     <SaveNotices />
   </DndRuntimeContext.Provider>;
 }
