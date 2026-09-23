@@ -26,6 +26,7 @@ applyTheme(findTheme('noir'));
 const portraitUrl = new URLSearchParams(window.location.search).get('portrait') === 'none'
   ? undefined
   : '/mascot/hero-idle.webp';
+const arcanumCase = new URLSearchParams(window.location.search).get('case') === 'arcanum';
 const spell = (name: string, prepared: 0 | 1 | 2, school = 'Воплощение'): DndSpellEntry =>
   ({ entryId: null, name, prepared, school, castingTiming: 'action' });
 const fixture = emptyDndCharacter();
@@ -33,6 +34,7 @@ fixture.characterName = 'Лунная странница Астэрия';
 fixture.raceName = 'Эльф';
 fixture.backgroundName = 'Картограф';
 fixture.classes = [{ classId: null, className: 'Чародей', subclassId: null, subclassName: '', level: 5, skillChoiceOptions: [], skillChoiceCount: 0, spellcastingAbility: 'Харизма' }];
+if (arcanumCase) fixture.classes = [{ classId: null, className: 'Колдун', subclassId: null, subclassName: '', level: 11, skillChoiceOptions: [], skillChoiceCount: 0, spellcastingAbility: 'Харизма' }];
 fixture.abilities = { str: 8, dex: 16, con: 14, int: 12, wis: 13, cha: 18 };
 fixture.proficiencyBonus = '+3';
 fixture.armorClass = '15';

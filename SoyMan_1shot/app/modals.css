@@ -170,7 +170,31 @@ html[data-app="oneshot"] .dnd-deck-fan-title {
   text-transform: uppercase;
 }
 html[data-app="oneshot"] .dnd-spell-picker-sub {
+  font-size: 12px;
   line-height: 1.35;
+}
+html[data-app="oneshot"] .dnd-spell-picker-list > .row.sb-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 56px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--ui-border);
+}
+html[data-app="oneshot"] .dnd-spell-picker-list > .row.sb-entry > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+html[data-app="oneshot"] .dnd-spell-picker-list > .row.sb-entry > .comp-mini {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 2px solid var(--ui-border);
+  border-radius: 0;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font-weight: 800;
 }
 html[data-app="oneshot"] .dnd-spell-picker-close,
 html[data-app="oneshot"] .dnd-deck-fan-close {

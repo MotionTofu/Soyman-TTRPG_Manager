@@ -6931,6 +6931,17 @@ function DndArcanumPicker({
   const [chosen, setChosen] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);
   const dialogRef = useOneShotOverlayFocus('.dnd-spell-picker-close');
+  const previousCircle = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (document.documentElement.dataset.app !== "oneshot") return;
+    if (pickCircle != null) {
+      dialogRef.current?.querySelector<HTMLInputElement>('.dnd-spell-picker-search input')?.focus();
+    } else if (previousCircle.current != null) {
+      dialogRef.current?.querySelector<HTMLButtonElement>(`[data-arcanum-circle="${previousCircle.current}"]`)?.focus();
+    }
+    previousCircle.current = pickCircle;
+  }, [pickCircle, dialogRef]);
 
   useEffect(() => {
     if (!systemId) {
@@ -7008,6 +7019,7 @@ function DndArcanumPicker({
                   <button
                     type="button"
                     className="comp-mini"
+                    data-arcanum-circle={circle}
                     onClick={() => {
                       setChosen(cur?.entryId ?? null);
                       setQuery("");
