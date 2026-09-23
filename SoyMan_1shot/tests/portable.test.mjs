@@ -35,6 +35,9 @@ test('common rules include ancestors and reject broken or external dependencies'
 
 test('full React HTML boots without network and reexports changed state safely', async t => {
   const template = await readFile(new URL('../generated/standalone-template.html', import.meta.url), 'utf8');
+  assert.match(template, /<html lang="ru" data-app="oneshot">/);
+  assert.match(template, /data:image\/webp;base64,/);
+  assert.doesNotMatch(template, /\/ui\/fantasy-punk\//);
   const catalog = { system: { id: 1, name: 'D&D 5.5' }, sections: [{ id: 1, kind: 'spell', name: 'Заклинания' }], entries: [{ id: 7, section_id: 1, kind: 'spell', level: 2, name: 'Призыв', data: { summon: { name: 'Тестовый спутник', hp: '5+5*spell', ac: '14', dismissable: true, actions: [{ name: 'Удар', note: 'Тестовое действие спутника' }] } } }] };
   const payload = portablePayload({ content: { characterName: 'HTML test </script><script>window.injected=true</script>', classes: [], companions: [{ entryId: null, name: 'Тестовый спутник', spellEntryId: 7, spellLevel: 2, hpUsed: 3 }], abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 } } }, catalog);
   const html = renderPortable(template, payload);

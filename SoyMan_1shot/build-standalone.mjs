@@ -27,7 +27,8 @@ export async function buildStandalone() {
   }
   const html = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'"><title>OneShot SoyMan</title><style>${css.replaceAll('</style', '<\\/style')}</style></head><body><div id="root"></div><script id="oneshot-payload" type="application/json">__ONESHOT_PAYLOAD__</script><script>${script.replaceAll('</script', '<\\/script')}</script></body></html>`;
   await mkdir(path.join(root, 'generated'), { recursive: true });
-  await writeFile(path.join(root, 'generated/standalone-template.html'), html);
-  return html;
+  const scopedHtml = html.replace('<html lang="ru">', '<html lang="ru" data-app="oneshot">');
+  await writeFile(path.join(root, 'generated/standalone-template.html'), scopedHtml);
+  return scopedHtml;
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await buildStandalone();

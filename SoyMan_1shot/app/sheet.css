@@ -17,6 +17,38 @@ html[data-app="oneshot"] .oneshot-header > a {
   line-height: 1;
   white-space: nowrap;
 }
+html[data-app="oneshot"] .oneshot-standalone-header > strong {
+  color: var(--ui-text-inverse);
+  font-family: var(--font-display);
+  font-size: clamp(24px, 2.1vw, 32px);
+  line-height: 1;
+  white-space: nowrap;
+}
+html[data-app="oneshot"] .oneshot-standalone-header .oneshot-standalone-label {
+  color: var(--ui-accent);
+  font-weight: 800;
+}
+html[data-app="oneshot"] .oneshot-standalone-header [role="status"] {
+  max-width: 52ch;
+  font-size: 12px;
+  line-height: 1.3;
+}
+html[data-app="oneshot"] .oneshot-standalone-header > button {
+  padding-inline: 12px;
+}
+html[data-app="oneshot"] .oneshot-sources {
+  max-width: 1500px;
+  margin: 0 auto 40px;
+  padding: 16px 24px;
+  border-top: 2px solid var(--ui-border);
+  color: var(--ui-text-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+html[data-app="oneshot"] .oneshot-sources summary {
+  cursor: pointer;
+  font-weight: 800;
+}
 html[data-app="oneshot"] .oneshot-header > .muted {
   min-width: 0;
   max-width: 22ch;
@@ -124,6 +156,27 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-deck-strip button:focus-visible {
     padding: 10px 14px;
   }
   html[data-app="oneshot"] .oneshot-header > a { font-size: 24px; }
+  html[data-app="oneshot"] .oneshot-standalone-header > strong {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    font-size: 24px;
+  }
+  html[data-app="oneshot"] .oneshot-standalone-header .oneshot-standalone-label {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    font-size: 12px;
+  }
+  html[data-app="oneshot"] .oneshot-standalone-header [role="status"] {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    max-width: none;
+  }
+  html[data-app="oneshot"] .oneshot-standalone-header > button {
+    grid-column: 1 / -1;
+    grid-row: 4;
+    margin-top: 8px;
+    min-height: 44px;
+  }
   html[data-app="oneshot"] .oneshot-header > .muted {
     grid-column: 1;
     grid-row: 2;
