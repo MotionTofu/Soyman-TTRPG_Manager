@@ -21,10 +21,18 @@ import "./dnd-cards.css";
  * иначе три места разошлись бы в том, что на рубашке написано.
  *
  * Карта — `avatar_image_url` записи (WebP 1024×1536). Нет карты — рисуется
- * рубашка с набранным именем. Рубашка — личная настройка (dndPrefs.cardBack).
+ * рубашка с набранным именем. В основном SoyMan это личная настройка;
+ * OneShot использует только злую рубашку.
  */
 
 const BACKS: Record<DndCardBack, string> = { good: backGood, evil: backEvil };
+
+// OneShot has a single visual identity. The main SoyMan app keeps its
+// personal card-back preference; only the OneShot host pins the evil back.
+function useCardBack(): DndCardBack {
+  const { cardBack } = useDndPrefs();
+  return document.documentElement.dataset.app === "oneshot" ? "evil" : cardBack;
+}
 
 /** Превью карты: сервер ужимает файл по `?w=` (160/320), подпись ссылки
  *  остаётся в силе — параметр дописывается к ней. */
@@ -43,7 +51,7 @@ export interface CardOption {
 }
 
 function CardPicture({ id, name, card, thumb }: { id: number; name: string; card: string | null; thumb?: 160 | 320 }) {
-  const { cardBack } = useDndPrefs();
+  const cardBack = useCardBack();
   // Ссылка на файл подписана на 60 секунд, а списки карт живут дольше:
   // плитка, впервые нарисованная позже (вкладка подклассов, лента), получала
   // бы протухшую подпись. Отказ картинки — один перезапрос записи мимо кэша
@@ -400,7 +408,7 @@ export function CardScroll({
   /** Префикс якорей уровней — две рубашки на странице не должны делить id. */
   anchorPrefix: string;
 }) {
-  const { cardBack } = useDndPrefs();
+  const cardBack = useCardBack();
   const prog = readProgression(entry);
   const byName = new Map(features.map((f) => [norm(f.name), f]));
   const levels = [...new Set(features.map((f) => f.level ?? 0))].sort((a, b) => a - b);

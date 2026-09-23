@@ -1,8 +1,7 @@
 .oneshot-header{display:flex;align-items:center;gap:var(--space-6);flex-wrap:wrap;padding:14px 20px;border-bottom:1px solid var(--ui-border);background:var(--ui-bg)}
 .oneshot-header>a{font-family:var(--font-display);font-size:var(--fs-h3);color:var(--ui-text);text-decoration:none}
 .oneshot-header [role=status]{margin-left:auto;font-size:var(--fs-meta);color:var(--ui-text-muted)}
-.oneshot-card-back,.oneshot-large-cards{display:flex;align-items:center;gap:var(--space-3);font-size:var(--fs-meta)}
-.oneshot-card-back select{min-width:110px}
+.oneshot-large-cards{display:flex;align-items:center;gap:var(--space-3);font-size:var(--fs-meta)}
 .oneshot-home{max-width:var(--content-max-width);margin:40px auto;padding:0 24px 60px}
 .oneshot-home h1{font-size:var(--fs-h1);line-height:1.1}
 .oneshot-home section{border-top:1px solid var(--ui-border);padding:24px 0;margin-top:24px}

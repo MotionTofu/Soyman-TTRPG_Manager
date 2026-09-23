@@ -29,7 +29,6 @@ import { Modal } from '../../client/src/components/Modal';
 import { QRCodeSVG } from 'qrcode.react';
 import { shouldNotifyForWaiting, shouldNotifyForInstalled, createControllerChangeHandler, applyUpdateSafely } from './pwa/update.mjs';
 import { readStorageStatus, requestPersistentStorage, shouldAdviseBackup, storageProtectionText } from './pwa/storage.mjs';
-import { DND_CARD_BACK_OPTIONS, loadDndPrefs, saveDndPrefs, type DndCardBack } from '../../client/src/dndPrefs';
 import type { LevelUpDraft } from '../../client/src/components/dnd/dndLevelUpDraft';
 import '../../client/src/index.css';
 import '../../client/src/dnd-sheet.css';
@@ -339,7 +338,6 @@ function App() {
   const [wizard, setWizard] = useState(false);
   const [exportAudit, setExportAudit] = useState<ReturnType<typeof auditExport> | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [cardBack, setCardBack] = useState<DndCardBack>(() => loadDndPrefs().cardBack);
   const [includeLargeCards, setIncludeLargeCards] = useState(true);
   const [managed, setManaged] = useState<'idle' | 'working' | 'ready' | 'failed'>('idle');
   const ensureRef = useRef<Promise<{ key: string | null; managed: boolean }> | null>(null);
@@ -1325,11 +1323,12 @@ function App() {
       <a href="/" onClick={e => { if (status !== 'Сохранено на устройстве' && active?.content) { e.preventDefault(); setError('Дождитесь сохранения или скачайте резервную копию перед выходом.'); } }}>OneShot SoyMan</a>
       <span className="muted oneshot-header-name">{active?.name || 'Ваши персонажи'}</span>
       <span role="status">{status}</span>
-      <button type="button" className="oneshot-header-toggle" aria-expanded={headerMenuOpen} aria-controls="oneshot-header-options" onClick={() => setHeaderMenuOpen(v => !v)}>{headerMenuOpen ? 'Закрыть' : 'Настройки'}</button>
-      <div id="oneshot-header-options" className="oneshot-header-options" data-open={headerMenuOpen}>
-        <label className="oneshot-card-back">Рубашка<select value={cardBack} onChange={e => { const next = e.target.value as DndCardBack; setCardBack(next); saveDndPrefs({ ...loadDndPrefs(), cardBack: next }); }}>{DND_CARD_BACK_OPTIONS.map(option => <option key={option.key} value={option.key}>{option.label}</option>)}</select></label>
-        {active?.content && <><label className="oneshot-large-cards"><input type="checkbox" checked={includeLargeCards} onChange={e => setIncludeLargeCards(e.target.checked)} /> Большие карты в копии</label><button onClick={() => void backup()}>Скачать резервную копию</button></>}
-      </div>
+      {active?.content && <>
+        <button type="button" className="oneshot-header-toggle" aria-expanded={headerMenuOpen} aria-controls="oneshot-header-options" onClick={() => setHeaderMenuOpen(v => !v)}>{headerMenuOpen ? 'Закрыть' : 'Настройки'}</button>
+        <div id="oneshot-header-options" className="oneshot-header-options" data-open={headerMenuOpen}>
+          <label className="oneshot-large-cards"><input type="checkbox" checked={includeLargeCards} onChange={e => setIncludeLargeCards(e.target.checked)} /> Большие карты в копии</label><button onClick={() => void backup()}>Скачать резервную копию</button>
+        </div>
+      </>}
     </header>
     {active?.content && <div className="oneshot-export-action"><button disabled={exporting} onClick={() => void exportHtml()}>{exporting ? 'Собираем автономную копию…' : 'Скачать автономный HTML'}</button><button onClick={() => void inspectExport()}>Проверить состав</button></div>}
     {exportAudit && <Modal className="oneshot-modal" ariaLabel="Проверка автономной копии" onClose={() => setExportAudit(null)}>

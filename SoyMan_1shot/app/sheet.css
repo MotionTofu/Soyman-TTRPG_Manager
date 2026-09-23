@@ -240,7 +240,6 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-deck-strip button:focus-visible {
   html[data-app="oneshot"] .oneshot-header-options[data-open="true"] {
     display: grid;
   }
-  html[data-app="oneshot"] .oneshot-header-options .oneshot-card-back,
   html[data-app="oneshot"] .oneshot-header-options .oneshot-large-cards {
     justify-content: space-between;
   }
