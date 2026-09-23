@@ -1433,13 +1433,13 @@ function App() {
               <button className="primary" disabled={shareBusy} onClick={() => void copyShareLink()}>Скопировать ссылку</button>
               <a role="button" href={shareLink() ?? undefined} target="_blank" rel="noreferrer">Открыть</a>
               <button disabled={shareBusy} onClick={() => void refreshShare()}>{shareBusy ? 'Обновляем…' : 'Обновить опубликованную версию'}</button>
-              <button disabled={shareBusy} onClick={() => void unshare()}>Отключить ссылку</button>
+              <button className="danger" disabled={shareBusy} onClick={() => void unshare()}>Отключить ссылку</button>
             </div>
           </> : shareServerActive ? <>
             <p className="muted">Ссылка активна, но создана на другом устройстве — скопировать её отсюда нельзя.</p>
             <div className="row oneshot-actions">
               <button disabled={shareBusy} onClick={() => void refreshShare()}>{shareBusy ? 'Обновляем…' : 'Обновить опубликованную версию'}</button>
-              <button disabled={shareBusy} onClick={() => void unshare()}>Отключить ссылку</button>
+              <button className="danger" disabled={shareBusy} onClick={() => void unshare()}>Отключить ссылку</button>
             </div>
           </> : <>
             <p className="muted">Любой, у кого есть эта ссылка, сможет просматривать опубликованную версию персонажа.</p>

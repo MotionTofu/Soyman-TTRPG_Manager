@@ -6,6 +6,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '../../client/src/data/queryClient';
 import { DndCharacterView } from '../../client/src/components/dnd/DndCharacterForm';
 import { DndRuntimeContext } from '../../client/src/components/dnd/DndRuntime';
+import { Modal } from '../../client/src/components/Modal';
 import { applyTheme, findTheme } from '../../client/src/themes';
 import { emptyDndCharacter } from '@shared/dnd/normalize';
 import type { DndSpellEntry } from '@shared/dnd/types';
@@ -27,6 +28,7 @@ const portraitUrl = new URLSearchParams(window.location.search).get('portrait') 
   ? undefined
   : '/mascot/hero-idle.webp';
 const arcanumCase = new URLSearchParams(window.location.search).get('case') === 'arcanum';
+const modalCase = new URLSearchParams(window.location.search).get('case') === 'modals';
 const spell = (name: string, prepared: 0 | 1 | 2, school = 'Воплощение'): DndSpellEntry =>
   ({ entryId: null, name, prepared, school, castingTiming: 'action' });
 const fixture = emptyDndCharacter();
@@ -54,8 +56,46 @@ fixture.spellsByLevel = [
   [], [], [], [], [], [],
 ];
 
+// Static, unsaved examples of app-owned dialogs. Their actions only close the
+// preview: this page never imports, publishes, or resolves sync state.
+function ModalFixture() {
+  const [open, setOpen] = useState<'import' | 'share' | 'conflict' | null>(null);
+  return <>
+    <header className="oneshot-header"><strong>OneShot SoyMan / Modal QA</strong></header>
+    <main className="oneshot-home" style={{ padding: 16 }}>
+      <div className="row oneshot-actions">
+        <button onClick={() => setOpen('import')}>Импорт</button>
+        <button onClick={() => setOpen('share')}>Публикация</button>
+        <button onClick={() => setOpen('conflict')}>Конфликт</button>
+      </div>
+    </main>
+    {open && <Modal className="oneshot-modal" ariaLabel={{ import: 'Импорт персонажа', share: 'Публикация персонажа для мастера', conflict: 'Конфликты синхронизации' }[open]} onClose={() => setOpen(null)}>
+      {open === 'import' && <>
+        <h3>Найден существующий персонаж «Лунная странница Астэрия»</h3>
+        <p>Файл может содержать более новое игровое состояние.</p>
+        <p className="muted">Данные из файла заменят текущее состояние этого персонажа: хиты, ресурсы, заклинания, заметки и остальные данные листа.</p>
+        <div className="row oneshot-actions"><button className="primary" onClick={() => setOpen(null)}>Обновить существующего</button><button onClick={() => setOpen(null)}>Создать копию</button><button onClick={() => setOpen(null)}>Отмена</button></div>
+      </>}
+      {open === 'share' && <>
+        <h3>Поделиться с мастером — «Лунная странница Астэрия»</h3>
+        <p className="muted">Ссылка создана.</p>
+        <p><a href="#qa-link">https://example.invalid/s/long-character-share-link-for-layout-check</a></p>
+        <div className="row oneshot-actions"><button className="primary" onClick={() => setOpen(null)}>Скопировать ссылку</button><a role="button" href="#qa-link">Открыть</a><button onClick={() => setOpen(null)}>Обновить опубликованную версию</button><button className="danger" onClick={() => setOpen(null)}>Отключить ссылку</button></div>
+        <div className="row oneshot-actions"><button onClick={() => setOpen(null)}>Закрыть</button></div>
+      </>}
+      {open === 'conflict' && <>
+        <h3>Конфликты синхронизации</h3>
+        <p className="muted">Обе версии персонажа изменились после последней синхронизации.</p>
+        <section aria-label="Конфликт: Лунная странница Астэрия"><h2>Персонаж «Лунная странница Астэрия» удалён на другом устройстве, но здесь есть несинхронизированные изменения.</h2><div className="row oneshot-actions"><button className="primary" onClick={() => setOpen(null)}>Оставить версию этого устройства</button><button className="danger" onClick={() => setOpen(null)}>Удалить и здесь</button></div></section>
+        <div className="row oneshot-actions"><button onClick={() => setOpen(null)}>Отмена</button></div>
+      </>}
+    </Modal>}
+  </>;
+}
+
 function App() {
   const [value, setValue] = useState(fixture);
+  if (modalCase) return <ModalFixture />;
   return <DndRuntimeContext.Provider value={{ allowDiceRolls: false, campaignConnected: false, detached: true }}>
     <header className="oneshot-header"><strong>OneShot SoyMan / Visual QA</strong></header>
     <div className="oneshot-sheet"><div className="fp-page-backdrop" aria-hidden="true" /><DndCharacterView value={value} portraitUrl={portraitUrl} onQuickUpdate={patch => setValue(current => ({ ...current, ...patch }))} /></div>

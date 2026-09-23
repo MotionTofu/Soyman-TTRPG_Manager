@@ -43,7 +43,11 @@ html[data-app="oneshot"] .oneshot-modal section {
   padding-top: 18px;
   border-top: 2px solid var(--ui-border);
 }
-html[data-app="oneshot"] .oneshot-modal button:not([data-ui="button"]) {
+html[data-app="oneshot"] .oneshot-modal :is(button:not([data-ui="button"]), a[role="button"]) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
   min-height: 44px;
   padding: 8px 12px;
   border: 2px solid var(--ui-border);
@@ -51,6 +55,7 @@ html[data-app="oneshot"] .oneshot-modal button:not([data-ui="button"]) {
   background: var(--ui-surface);
   color: var(--ui-text);
   font-weight: 800;
+  text-decoration: none;
 }
 html[data-app="oneshot"] .oneshot-modal button.primary:not([data-ui="button"]) {
   background: var(--ui-accent);
@@ -59,7 +64,7 @@ html[data-app="oneshot"] .oneshot-modal button.danger:not([data-ui="button"]) {
   background: var(--ui-danger);
   color: var(--ui-text-inverse);
 }
-html[data-app="oneshot"] .oneshot-modal :is(button, input, select, textarea):focus-visible {
+html[data-app="oneshot"] .oneshot-modal :is(button, a, input, select, textarea):focus-visible {
   outline: 3px solid var(--ui-focus);
   outline-offset: 3px;
 }
