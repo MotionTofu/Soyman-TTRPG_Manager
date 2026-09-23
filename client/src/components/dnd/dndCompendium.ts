@@ -173,6 +173,10 @@ export interface DndFeatOption {
   prerequisite?: string;
   /** Категория черты — по ней и отбирают (см. loadDndFeatsByCategory). */
   category?: string;
+  /** Каким классам черта доступна («Воин-друид» — Следопыту). Пусто — всем. */
+  classIds?: number[];
+  /** Английское имя — для сопоставления старых строк «Имя [Original]». */
+  nameOriginal?: string;
 }
 
 /** Все черты системы одним списком. Отдельно от отбора по категории: импорту
@@ -191,8 +195,39 @@ export async function loadDndFeats(systemId: number, opts?: LoadOpts): Promise<D
       name: e.name,
       prerequisite: typeof e.data.prerequisite === "string" ? e.data.prerequisite : undefined,
       category: typeof e.data.category === "string" ? e.data.category : undefined,
+      classIds: Array.isArray(e.data.classIds) ? (e.data.classIds as number[]) : undefined,
+      nameOriginal: e.name_original || undefined,
     }))
     .sort(byNameRu);
+}
+
+/** Черта доступна классам листа: без `classIds` — всем. */
+export function featFitsClasses(feat: DndFeatOption, classIds: readonly (number | null | undefined)[]): boolean {
+  return !feat.classIds?.length || classIds.some((id) => id != null && feat.classIds!.includes(id));
+}
+
+const featKey = (s: string) =>
+  s.replace(/\[[^\]]*\]|\([^)]*\)/g, "").trim().toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ");
+
+/** Ссылки для черт без `entryId` — по имени без «[Skilled]» и «(Волшебник)».
+ *  Только однозначное совпадение: промах привязал бы чужую механику.
+ *  null — связывать нечего. */
+export function linkFeatsByName<T extends { name: string; entryId?: number | null }>(
+  feats: T[],
+  all: DndFeatOption[]
+): T[] | null {
+  let changed = false;
+  const next = feats.map((f) => {
+    if (f.entryId != null) return f;
+    let hits = all.filter((o) => featKey(o.name) === featKey(f.name));
+    // «Неистово атакующий [Savage Attacker]» — перевод другой, английское то же.
+    const original = /\[([^\]]+)\]/.exec(f.name)?.[1];
+    if (hits.length === 0 && original) hits = all.filter((o) => o.nameOriginal && featKey(o.nameOriginal) === featKey(original));
+    if (hits.length !== 1) return f;
+    changed = true;
+    return { ...f, entryId: hits[0].id };
+  });
+  return changed ? next : null;
 }
 
 /** Черты заданной категории — черта происхождения для визарда, боевые

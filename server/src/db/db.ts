@@ -10,6 +10,7 @@ import { migrateDndSkillNames } from "./dndSkillNames";
 import { migrateDndGrantedSpells } from "./dndGrantedSpells";
 import { migrateDndOriginGrants } from "./dndOriginGrants";
 import { migrateDndCombatEffects } from "./dndCombatEffects";
+import { migrateDndFindingsEffects } from "./dndFindingsEffects";
 import { migrateDndSpeedStructure } from "./dndSpeedStructure";
 import { migrateDndSheetRefs } from "./dndSheetRefs";
 import { migrateDndStartingSets } from "./dndStartingSets";
@@ -6439,6 +6440,11 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
   // «КЗ» (гриллинг 2026-09-23, см. dndCombatEffects.ts). В конце — новые шаги
   // дописываются вниз.
   migrateDndCombatEffects(database);
+
+  // Разметка по находкам ревизии OneShot: стили по классам, «Благословенный
+  // воин», основа на выбор, ситуативный КЗ (гриллинг 2026-09-24, см.
+  // dndFindingsEffects.ts).
+  migrateDndFindingsEffects(database);
 
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.

@@ -209,6 +209,7 @@ export function withLiveEffects(value: DndCharacterData, get: EntryLookup): DndC
       ...sec,
       items: sec.items.map((it) => (it.equipped ? liveEffects(it, get) : it)),
     })),
+    receivedSpells: (value.receivedSpells ?? []).map((r) => liveEffects(r, get)),
   };
 }
 
@@ -222,6 +223,7 @@ export function liveEffectEntryIds(value: DndCharacterData): (number | null | un
     ...value.cantrips,
     ...value.spellsByLevel.flat(),
     ...value.equipmentSections.flatMap((s) => s.items).filter((it) => it.equipped),
+    ...(value.receivedSpells ?? []),
   ].map((r) => r.entryId);
 }
 

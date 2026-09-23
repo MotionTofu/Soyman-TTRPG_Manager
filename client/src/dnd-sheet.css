@@ -1981,6 +1981,12 @@ body.sheet-fullscreen .app-content {
   font-size: var(--fs-meta);
   font-weight: 600;
 }
+/* Хиты питомца из бестиария — под именем, тем же счётчиком, что у тел. */
+.dnd-companion-hp {
+  display: flex;
+  justify-content: center;
+  font-size: var(--fs-meta);
+}
 /* Кнопка «добавить спутника» — прямоугольный арт кота-фамильяра
    (res/icons_2 → /tokens/familiar.png) вместо плюсика. Квадрат 38px в рост
    лиц-жетонов ряда, без скругления: арт целиком, а не в круге.
@@ -2813,7 +2819,23 @@ span.dnd-card-corner {
 .dnd-action-head {
   padding: var(--sp-6) 0 var(--sp-4);
 }
-.dnd-action-head > span {
+.dnd-action-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-3) var(--sp-5);
+}
+/* Переключатель Дуэлянта и подпись в заголовке группы — обычный текст,
+   а не второй заголовок (Q17). */
+.dnd-action-head > .dnd-action-head-extra {
+  font-size: var(--fs-meta);
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.dnd-action-head > span:not(.dnd-action-head-extra) {
   display: inline-block;
   font-family: var(--font-ui);
   font-size: var(--fs-h3);
@@ -4045,6 +4067,13 @@ span.dnd-tab-btn {
   gap: var(--sp-2);
   font-size: var(--fs-meta);
   white-space: nowrap;
+}
+
+/* Прибавка при условии под КЗ: «+2 против дальнобойных атак». */
+.dnd-ac-situational {
+  font-size: var(--fs-meta);
+  text-align: center;
+  line-height: 1.2;
 }
 
 /* Наклейки на печати гаснут — остаётся слово (правило растра п.5,

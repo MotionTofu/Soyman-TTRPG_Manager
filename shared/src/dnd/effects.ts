@@ -214,6 +214,22 @@ export interface DndEffect {
    * оружия, ни щита (1к8).
    */
   diceFreeHands?: string;
+  /**
+   * Игрок может выключить эффект на листе (Дуэлянт: «одно оружие в руках»,
+   * гриллинг 2026-09-24, Q14). По умолчанию включён; выключенные — по имени
+   * носителя в `effectsOff` листа.
+   */
+  toggleable?: boolean;
+  /**
+   * defense: прибавка только при условии («против дальнобойных атак»,
+   * «реакцией против одной атаки»). В число КЗ не входит — показывается
+   * подписью под ним и в разборе (гриллинг 2026-09-24, Q11).
+   */
+  situational?: string;
+  /** defense: КЗ не меньше этого числа («Дубовая кожа» — 17, Q12). */
+  acMin?: number;
+  /** defense: предел Ловкости у среднего доспеха («Мастер средних доспехов» — 3). */
+  mediumDexCap?: number;
   /** defense: прибавка к КЗ числом лежит в `flat`; база — здесь. */
   acBase?: DndAcBase;
   /** defense и roll_modifier: при каком надетом действует. Пусто — всегда. */
@@ -477,7 +493,7 @@ export function checkLabel(check: DndCheck): string {
 // Ловкость сокращалась здесь в «Лвк», а на кости — в «ЛОВ», и на «Карте» оба
 // написания видны разом. Регистр остаётся разным намеренно: это разные
 // голоса (§1.5) — капс-подпись на кости и проза в чипе.
-const ABILITY_KEY_ABBR: Record<string, string> = {
+export const ABILITY_KEY_ABBR: Record<string, string> = {
   str: "Сил",
   dex: "Лов",
   con: "Тел",
@@ -653,7 +669,11 @@ export function hasResolvableEffect(checks: DndCheck[], effects: DndEffect[]): b
 
 /** Эффект `defense`, который меняет КЗ числом, а не только текстом. */
 export function isNumericDefense(e: DndEffect): boolean {
-  return e.type === "defense" && (!!e.acBase || (typeof e.flat === "number" && e.flat !== 0));
+  return (
+    e.type === "defense" &&
+    !e.situational &&
+    (!!e.acBase || !!e.acMin || (typeof e.flat === "number" && e.flat !== 0))
+  );
 }
 
 // Редакторное представление levelSteps: «3:2, 5:3, 9:4, 15:5» (уровень:макс).

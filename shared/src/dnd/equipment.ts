@@ -153,6 +153,10 @@ export function equipmentMetaFromEntry(entryId: number, entry: EquipmentEntryLik
     requiresAttunement: entryRequiresAttunement(data) ? true : undefined,
     cursed: data.cursed ? true : undefined,
     itemType: typeof data.item_type === "string" && data.item_type ? data.item_type : undefined,
+    baseOptions: Array.isArray(data.base_options) && data.base_options.length ? (data.base_options as string[]) : undefined,
+    // Магическое оружие с основой («Защитник» +3): бонус ложится на основу.
+    magicBonus: typeof data.magic_bonus === "number" && data.magic_bonus ? data.magic_bonus : undefined,
+    acShiftable: data.ac_shift === true ? true : undefined,
   };
   // Снапшот зарядов магического предмета: шаблон (max/recharge) копируется
   // строкой, остаток стартует с максимума, если он — обычное число.

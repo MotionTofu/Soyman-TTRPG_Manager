@@ -225,6 +225,61 @@ describe("класс защиты", () => {
     expect(deriveSheet(character({ ...base, concentration: "Щит веры" })).armorClass.value).toBe(12);
   });
 
+  it("«Щит веры» на союзнике не меняет КЗ заклинателя", () => {
+    const sof = { entryId: 2, name: "Щит веры", prepared: 1, concentration: true, effects: [{ id: "d", type: "defense", when: "always", flat: 2 }] } as DndSpellEntry;
+    const base = { spellsByLevel: [[sof], [], [], [], [], [], [], [], []], concentration: "Щит веры" } as Partial<DndCharacterData>;
+    expect(deriveSheet(character({ ...base, concentrationOnOther: "Щит веры" })).armorClass.value).toBe(10);
+    // Устаревшая пометка от другого заклинания не мешает.
+    expect(deriveSheet(character({ ...base, concentrationOnOther: "Благословение" })).armorClass.value).toBe(12);
+  });
+
+  it("наложенное на меня другими считается, как своё", () => {
+    const got = { name: "Щит веры", entryId: 2, effects: [{ id: "d", type: "defense", when: "always", flat: 2 }] as DndEffect[] };
+    const ac = deriveSheet(character({ receivedSpells: [got] })).armorClass;
+    expect(ac.value).toBe(12);
+    expect(ac.parts.map((p) => p.label)).toContain("Щит веры");
+  });
+
+  it("«Дубовая кожа» доводит КЗ до 17, но не снижает больший", () => {
+    const bark = { name: "Дубовая кожа", entryId: 3, effects: [{ id: "d", type: "defense", when: "always", acMin: 17 }] as DndEffect[] };
+    const low = deriveSheet(character({ receivedSpells: [bark] })).armorClass;
+    expect(low.value).toBe(17);
+    partsAddUp(low);
+    const plate = item({ name: "Латы", armorType: "Тяжёлый", ac: "18", dexBonus: false });
+    expect(deriveSheet(character({ receivedSpells: [bark], equipmentSections: [{ name: "", items: [plate] }] })).armorClass.value).toBe(18);
+  });
+
+  it("«Мастер средних доспехов» поднимает предел Ловкости до 3 только у среднего", () => {
+    const mam = defense("Мастер средних доспехов", { mediumDexCap: 3 });
+    const dex16 = { str: 10, dex: 16, con: 10, int: 10, wis: 10, cha: 10 };
+    const half = item({ name: "Полулаты", armorType: "Средний", ac: "15", maxDexBonus: "2" });
+    const ac = deriveSheet(character({ abilities: dex16, feats: [mam], equipmentSections: [{ name: "", items: [half] }] })).armorClass;
+    expect(ac.value).toBe(18);
+    const light = item({ name: "Кожаный", armorType: "Лёгкий", ac: "11" });
+    expect(deriveSheet(character({ abilities: dex16, feats: [mam], equipmentSections: [{ name: "", items: [light] }] })).armorClass.value).toBe(14);
+  });
+
+  it("прибавка при условии не входит в КЗ, но видна", () => {
+    const shield = item({
+      name: "Ловящий стрелы щит",
+      armorType: "Щит",
+      ac: "2",
+      requiresAttunement: true,
+      attuned: true,
+      effects: [{ id: "d", type: "defense", when: "always", flat: 2, situational: "против дальнобойных атак" }],
+    });
+    const ac = deriveSheet(character({ equipmentSections: [{ name: "", items: [shield] }] })).armorClass;
+    expect(ac.value).toBe(12);
+    expect(ac.situational).toEqual([{ label: "Ловящий стрелы щит", text: "+2 против дальнобойных атак" }]);
+  });
+
+  it("«Защитник» переносит бонус в КЗ, не больше своего", () => {
+    const sword = (acShift: number) =>
+      item({ name: "Защитник", weaponDamage: "1к8 рубящий", weaponAttackMelee: true, magicBonus: 3, acShiftable: true, acShift });
+    expect(deriveSheet(character({ equipmentSections: [{ name: "", items: [sword(2)] }] })).armorClass.value).toBe(12);
+    expect(deriveSheet(character({ equipmentSections: [{ name: "", items: [sword(9)] }] })).armorClass.value).toBe(13);
+  });
+
   it("вещь с настройкой даёт КЗ только настроенной", () => {
     const cloak = (attuned: boolean) => item({ name: "Плащ защиты", requiresAttunement: true, attuned, effects: [{ id: "d", type: "defense", when: "always", flat: 1 }] });
     expect(deriveSheet(character({ equipmentSections: [{ name: "", items: [cloak(true)] }] })).armorClass.value).toBe(11);
@@ -758,6 +813,18 @@ describe("прибавки боевых стилей к оружию", () => {
   it("«Сражение голыми руками» — 1к6, без оружия и щита 1к8", () => {
     const c = character({ feats: [style("Сражение голыми руками", { appliesTo: "damage", weapon: "unarmed", dice: "1к6", diceFreeHands: "1к8" })] });
     expect(weaponEffects(c, { unarmed: true }, 2).dice?.value).toBe("1к6");
+    expect(weaponEffects(c, { unarmed: true }, 2).notes).toContain("1к8 с пустыми руками");
     expect(weaponEffects(c, { unarmed: true }, 2, true).dice?.value).toBe("1к8");
+  });
+
+  it("переключаемый «Дуэлянт» выключается листом и только он", () => {
+    const duel = style("Дуэлянт", { appliesTo: "damage", weapon: "melee_one_hand", flat: 2, toggleable: true });
+    const archery = style("Стрельба из лука", { appliesTo: "attack", weapon: "ranged", flat: 2 });
+    const on = character({ feats: [duel, archery] });
+    expect(weaponEffects(on, { oneHand: true }, 2).damage).toEqual([{ label: "Дуэлянт", value: 2 }]);
+    const off = character({ feats: [duel, archery], effectsOff: ["Дуэлянт", "Стрельба из лука"] });
+    expect(weaponEffects(off, { oneHand: true }, 2).damage).toEqual([]);
+    // Непереключаемое имя в списке выключенных ничего не выключает.
+    expect(weaponEffects(off, { ranged: true }, 2).attack).toEqual([{ label: "Стрельба из лука", value: 2 }]);
   });
 });

@@ -101,6 +101,13 @@ export function cardHitPoints(value: DndCreatureData): string {
   return fromFormula ? fromFormula[0] : "";
 }
 
+/** Максимум хитов существа из карточки — для счётчика питомца на листе. */
+export function cardMaxHp(card: CreatureCardPayload | null | undefined): number | null {
+  if (!card?.statblock) return null;
+  const n = Number.parseInt(cardHitPoints(normalizeDndCreature(safeParse(card.statblock.content))), 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 function allActionRows(value: DndCreatureData): DndCreatureAction[] {
   return [
     ...value.actions,

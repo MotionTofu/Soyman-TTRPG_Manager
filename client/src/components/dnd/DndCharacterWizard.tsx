@@ -7,10 +7,11 @@ import { afterWriteAnywhere, readResource } from "../../data/imperative";
 import { Modal } from "../Modal";
 import { NavIcon } from "../NavIcons";
 import { useImageCrop } from "../../hooks/useImageCrop";
-import type { CompendiumEntry, DndAbilityScores } from "../../types";
+import type { CompendiumEntry, DndAbilityKey, DndAbilityScores } from "../../types";
 import { emptyDndCharacter, recomputeGrantedSpells } from "./DndCharacterForm";
 import {
   armorProfNames,
+  isWeaponProficient,
   EMPTY_EQUIPMENT_ITEM,
   fetchEquipmentMeta,
   isArmorProficient,
@@ -45,6 +46,7 @@ import {
   findDndSystemId,
   loadDndBackgroundOptions,
   loadDndOriginFeats,
+  featFitsClasses,
   loadDndFeatsByCategory,
   loadDndClassFeatures,
   loadDndClassHierarchy,
@@ -1359,6 +1361,8 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     dailyPreparation?: boolean;
     bookAcquisition?: boolean;
     fromBook?: boolean;
+    /** Своя заклинательная характеристика выбранных (стиль Паладина — Хар). */
+    ability?: DndAbilityKey;
   }
   // Число выбора: фиксированное или из колонки прогрессии на уровне
   // (заговоры/подготовленные ЭК растут; прогрессия класса первична,
@@ -1420,6 +1424,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
           outsideLimit: c.outsideLimit,
           maxCircle: isSub && c.level == null ? topCircle : null,
           names: c.names ?? [],
+          ability: c.ability,
         });
       });
     }
@@ -1762,6 +1767,14 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         const item = addedItems.find((i) => wearable(i, shield));
         if (item) item.equipped = true;
       }
+      // Оружие, которым владеет класс, — тоже надето (гриллинг 2026-09-24,
+      // Q7): строки атак считаются только по надетому.
+      const weaponProfs = Array.isArray(classEntry?.data.weapon_profs)
+        ? (classEntry!.data.weapon_profs as { name?: string }[]).map((p) => p?.name ?? "").filter(Boolean)
+        : [];
+      for (const item of addedItems) {
+        if (item.weaponDamage && isWeaponProficient(item, weaponProfs)) item.equipped = true;
+      }
       if (addedItems.length > 0) {
         const sections = character.equipmentSections.length > 0 ? character.equipmentSections : [{ name: "Общее", items: [] }];
         character.equipmentSections = sections.map((sec, i) =>
@@ -1793,6 +1806,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
           ? (spellGroups.some(g => g.fromBook && chosenSpells.includes(`${g.key}:${entryId}`)) ? 1 as const : 0 as const)
           : group.dailyPreparation ? 1 as const : 2 as const,
         outsideLimit: group.outsideLimit,
+        ...(group.ability ? { ability: group.ability } : {}),
       };
       if (lvl <= 0) {
         character.cantrips = [...character.cantrips, rec];
@@ -2486,7 +2500,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
                       >
                         <option value="">— черта стиля —</option>
                         {styleFeats
-                          .filter((f) => !takenElsewhere.has(f.id))
+                          .filter((f) => !takenElsewhere.has(f.id) && featFitsClasses(f, [classId]))
                           .map((f) => (
                             <option key={f.id} value={f.id}>
                               {f.name}

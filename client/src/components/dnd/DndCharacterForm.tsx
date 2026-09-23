@@ -1,5 +1,8 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useAction, useResource, write } from "../../data/hooks";
+import { creatureCardQuery } from "../../data/creatureCard";
+import { cardMaxHp } from "../CreatureCard";
 import { afterWriteAnywhere, readResource } from "../../data/imperative";
 import { showSaveError } from "../../data/notices";
 import { statblockAffects, statblockListPath } from "../../data/statblocks";
@@ -73,6 +76,7 @@ import {
   type DndSpellOption,
 } from "./dndCompendium";
 import {
+  ABILITY_KEY_ABBR,
   checkLabel,
   checksLabel,
   costSummary,
@@ -170,7 +174,7 @@ import { choicesFromEntries, featuresFromEntries, inferTimingFromLegacyText, liv
 import { WeaponMasteryPicker, isMasterableWeapon } from "./StartingEquipmentPicker";
 import { extractEnglishName } from "../../compendium";
 import { ChecklistEditor, emptySpeed, formatSpeed, SensesEditor, SpeedEditor } from "./DndCreatureForm";
-import { errorMessage, findDndSystemId, isAbortError, loadDndMechanicsGroup, loadDndMechanicsGroupEntries, type DndMechanicsOption } from "./dndCompendium";
+import { errorMessage, findDndSystemId, isAbortError, linkFeatsByName, loadDndFeats, loadDndMechanicsGroup, loadDndMechanicsGroupEntries, type DndMechanicsOption } from "./dndCompendium";
 import { conditionIconSrc } from "./conditionIcons";
 import { rasterAsset } from "../../rasterAssets";
 import { schoolIconSrc } from "./schoolIcons";
@@ -1488,6 +1492,14 @@ function DndSpellLevelSection({
     next[i] = { ...next[i], outsideLimit: !next[i].outsideLimit };
     onSpellsChange(next);
   }
+  // Своя характеристика по кругу: классовая → Инт → Мдр → Хар (Q4).
+  function cycleAbility(i: number) {
+    const order: (DndAbilityKey | undefined)[] = [undefined, "int", "wis", "cha"];
+    const next = spells.slice();
+    const ability = order[(order.indexOf(next[i].ability) + 1) % order.length];
+    next[i] = { ...next[i], ability };
+    onSpellsChange(next);
+  }
   async function remove(i: number) {
     const name = spells[i]?.name?.trim();
     if (!(await confirm({
@@ -1612,6 +1624,13 @@ function DndSpellLevelSection({
           const realIndex = spells.indexOf(s);
           const { ru, en } = spellNameParts(s);
           const schoolSrc = s.school ? schoolIconSrc(s.school) : null;
+          // Вне лимита и не от класса/вида — скорее всего черта: спросить,
+          // чем колдует, пока не отмечено (Q4, 2026-09-24).
+          const abilityMark = s.ability ? (
+            <span className="dnd-outside-mark" title="Своя заклинательная характеристика">{ABILITY_KEY_ABBR[s.ability]}</span>
+          ) : s.outsideLimit && s.sourceParentId == null ? (
+            <span className="dnd-outside-mark" title="Отметьте характеристику в правке раздела">чем колдует?</span>
+          ) : null;
           return (
             <div key={realIndex}>
               <div
@@ -1649,12 +1668,14 @@ function DndSpellLevelSection({
                       <span className="comp-name dnd-spell-name">{ru}</span>
                       {en && <span className="dnd-spell-en">{en}</span>}
                       {s.outsideLimit && <span className="dnd-outside-mark" title="Не в счёт подготовленных">∞</span>}
+                      {abilityMark}
                     </button>
                   ) : (
                     <span className="dnd-spell-title">
                       <span className="comp-name dnd-spell-name">{ru}</span>
                       {en && <span className="dnd-spell-en">{en}</span>}
                       {s.outsideLimit && <span className="dnd-outside-mark" title="Не в счёт подготовленных">∞</span>}
+                      {abilityMark}
                     </span>
                   )}
                   {s.entryId ? (
@@ -1701,6 +1722,15 @@ function DndSpellLevelSection({
                       onClick={() => toggleOutsideLimit(realIndex)}
                     >
                       ∞
+                    </button>
+                    <button
+                      type="button"
+                      className="comp-mini"
+                      title="Чем колдует: по классу, Инт, Мдр, Хар"
+                      aria-label={`${s.name}: чем колдует — ${s.ability ? ABILITY_KEY_ABBR[s.ability] : "по классу"}, сменить`}
+                      onClick={() => cycleAbility(realIndex)}
+                    >
+                      {s.ability ? ABILITY_KEY_ABBR[s.ability] : "кл."}
                     </button>
                     <button
                       type="button"
@@ -2177,7 +2207,7 @@ function equipmentMarks(item: DndEquipmentItem, armorProficient: boolean | null)
   if (String(item.weight ?? "").trim() !== "" && !isValidWeight(String(item.weight ?? ""))) {
     all.push({ text: "вес?", title: "Вес — число ≥ 0 с единицей, напр. 5 кг; иначе в вес не считается" });
   }
-  if (magicPlusWithoutBase(item) != null) {
+  if (magicPlusWithoutBase(item) != null || baseChoiceWithoutBase(item)) {
     all.push({ text: "основа?", title: "Выберите в меню строки, на чём лежит прибавка, — до этого КЗ и атака её не считают" });
   }
   if (item.attuned) all.push({ text: "настроен", title: "Настроено — занимает слот настройки" });
@@ -2193,6 +2223,12 @@ function magicPlusWithoutBase(item: DndEquipmentItem): number | null {
   if (item.armorType || item.weaponDamage || item.magicBonus) return null;
   const m = /^\s*(доспех|щит|оружие)\s*\+\s*(\d)/i.exec(item.name ?? "");
   return m ? Number(m[2]) : null;
+}
+
+// «Эльфийская кольчуга» — магический доспех с выбором основы (Q8): своё имя
+// и эффекты остаются, КЗ и тип берутся у выбранной основы.
+function baseChoiceWithoutBase(item: DndEquipmentItem): string[] | null {
+  return item.baseOptions?.length && !item.armorType && !item.weaponDamage ? item.baseOptions : null;
 }
 
 /** Тихая вторая строка: цена, вес, заметка. Из имени они ушли — длинное
@@ -3403,6 +3439,7 @@ function DndEquipmentQuickView({
       {baseRow && sections[baseRow.si]?.items[baseRow.ii] && (
         <DndReplicaBasePicker
           title={sections[baseRow.si].items[baseRow.ii].name}
+          only={baseChoiceWithoutBase(sections[baseRow.si].items[baseRow.ii]) ?? undefined}
           systemId={systemId}
           onClose={() => setBaseRow(null)}
           onPick={(base) => {
@@ -3410,6 +3447,33 @@ function DndEquipmentQuickView({
             setBaseRow(null);
             const fresh = sectionsRef.current;
             const row = fresh[si]?.items[ii];
+            const replace = (merged: DndEquipmentItem) =>
+              commit?.({
+                equipmentSections: fresh.map((sec, sIdx) =>
+                  sIdx !== si ? sec : { ...sec, items: sec.items.map((it, iIdx) => (iIdx === ii ? merged : it)) }
+                ),
+              });
+            if (row && baseChoiceWithoutBase(row)) {
+              // Своя запись (эффекты, настройка, бонус) остаётся, от основы —
+              // КЗ и тип доспеха либо урон и свойства оружия.
+              const m = base.meta;
+              replace({
+                ...row,
+                armorType: m.armorType,
+                ac: m.ac,
+                maxDexBonus: m.maxDexBonus,
+                dexBonus: m.dexBonus,
+                weaponDamage: m.weaponDamage,
+                weaponAttackMelee: m.weaponAttackMelee,
+                weaponAttackRanged: m.weaponAttackRanged,
+                weaponProperties: m.weaponProperties,
+                weaponMastery: m.weaponMastery,
+                weaponCategory: m.weaponCategory,
+                name: `${row.name} (${base.name})`,
+                magical: true,
+              });
+              return;
+            }
             const bonus = row ? magicPlusWithoutBase(row) : null;
             if (!row || bonus == null) return;
             // Одна строка: базовый предмет со своими КЗ и уроном плюс прибавка
@@ -3429,11 +3493,7 @@ function DndEquipmentQuickView({
               notes: row.notes,
               rarity: row.rarity,
             };
-            commit?.({
-              equipmentSections: fresh.map((sec, sIdx) =>
-                sIdx !== si ? sec : { ...sec, items: sec.items.map((it, iIdx) => (iIdx === ii ? merged : it)) }
-              ),
-            });
+            replace(merged);
           }}
         />
       )}
@@ -3754,7 +3814,7 @@ function DndEquipmentQuickView({
                           : String(item.qty ?? "").trim() !== ""
                             ? [{ text: "Добавить одну", onPick: () => bumpQty(si, ii, 1) }]
                             : []),
-                        ...(magicPlusWithoutBase(item) != null
+                        ...(magicPlusWithoutBase(item) != null || baseChoiceWithoutBase(item)
                           ? [{ text: "Выбрать основу", onPick: () => setBaseRow({ si, ii }) }]
                           : []),
                         ...(item.requiresAttunement || item.attuned
@@ -4536,6 +4596,8 @@ interface AttackRow {
     | { kind: "spell"; spell: DndSpellEntry; level: number }
     | { kind: "feature"; feature: DndFeature };
   entryId?: number | null;
+  /** Строка оружия: в какой группе «Действий» (Q17). */
+  group?: "melee" | "mixed" | "ranged";
 }
 
 // Equipped weapons show up as attack rows automatically — no need to
@@ -4544,10 +4606,10 @@ interface AttackRow {
 // doesn't track weapon-proficiency booleans separately) and picks the
 // higher of STR/DEX for finesse weapons, DEX for ranged-only, STR otherwise.
 //
-// Руки (гриллинг 2026-09-23, Q9): «надето» у оружия значит «в руках».
-// Одной рукой — единственное надетое рукопашное оружие, не двуручное (щит
-// можно). Универсальное без щита и без второго оружия даёт две строки —
-// одной рукой и двумя. Два лёгких рукопашных дают строку доп. атаки
+// Руки: «надето» — при себе, не «в руках» (визард надевает всё оружие,
+// гриллинг 2026-09-24, Q7). Нелёгкое рукопашное не двуручное — одной рукой;
+// Дуэлянт выключается переключателем (Q14). Универсальное без щита даёт две
+// строки — одной рукой и двумя. Два лёгких рукопашных дают строку доп. атаки
 // бонусным действием без положительного модификатора (Q11). Прибавки стилей
 // приходят из `fx` — эффектов с фильтром оружия; их источник подписан в
 // строке, чтобы число не было загадкой (Q23).
@@ -4612,7 +4674,9 @@ function weaponAttackRows(
     const versatile = opts.die ? upgradeDamageDie(i.weaponDamage ?? "", opts.die) : null;
     const baseDamage = versatile ?? upgraded ?? i.weaponDamage;
     const e = effectsOf(use);
-    const magic = i.magicBonus ?? 0;
+    // «Защитник»: перенесённое в КЗ уходит из атаки и урона (Q11).
+    const shift = i.acShiftable ? Math.min(i.acShift ?? 0, i.magicBonus ?? 0) : 0;
+    const magic = (i.magicBonus ?? 0) - shift;
     const attackExtra = e.attack.reduce((n, p) => n + p.value, 0);
     const damageExtra = e.damage.reduce((n, p) => n + p.value, 0);
     // Доп. атака: модификатор в урон не идёт, если он положительный (5.5);
@@ -4625,10 +4689,13 @@ function weaponAttackRows(
     // Мастерство применимо, только если оружие освоено. Список пуст —
     // старый лист или не-воин: показываем как раньше, без пометок.
     const masteryKnown = mastered == null || (mastered.ids.size === 0 && mastered.names.size === 0);
+    // «Защитник (Длинный меч)» освоен, если освоена основа в скобках.
+    const baseName = /\(([^)]+)\)\s*$/.exec(i.name)?.[1]?.trim().toLowerCase();
     const isMastered =
       masteryKnown ||
       (i.entryId != null && mastered.ids.has(i.entryId)) ||
-      mastered.names.has(i.name.trim().toLowerCase());
+      mastered.names.has(i.name.trim().toLowerCase()) ||
+      (!!baseName && mastered.names.has(baseName));
     const masteryText =
       i.weaponMastery && isMastered
         ? `Мастерство: ${i.weaponMastery}`
@@ -4640,6 +4707,7 @@ function weaponAttackRows(
       ...e.damage.map((p) => `${p.label} ${formatModifier(p.value)} к урону`),
       ...(e.addAbility && opts.offhand ? [`${e.addAbility}: модификатор в урон`] : []),
       ...(e.dieMinimum ? [`1–2 на кости = ${e.dieMinimum.value} (${e.dieMinimum.source})`] : []),
+      ...(shift ? [`${shift} бонуса перенесено в КЗ`] : []),
       ...e.notes,
     ];
     const damage = [
@@ -4658,6 +4726,8 @@ function weaponAttackRows(
       range,
       timing: opts.timing ?? ("action" as const),
       entryId: i.entryId ?? null,
+      // Группы «Действий» (Q17): рукопашное, рукопашное и метательное, дальнобойное.
+      group: !i.weaponAttackMelee ? ("ranged" as const) : thrown ? ("mixed" as const) : ("melee" as const),
     };
   };
 
@@ -4670,7 +4740,6 @@ function weaponAttackRows(
       rows.push(build(i, { ranged: true, thrown }));
       continue;
     }
-    const alone = melee.length === 1;
     // Кость двумя руками — из скобок свойства, если справочник её пишет, иначе
     // по правилу 5.5: у всего универсального оружия она на ступень больше
     // (посох 1к6 → 1к8, длинный меч 1к8 → 1к10). В живом справочнике поле
@@ -4679,21 +4748,13 @@ function weaponAttackRows(
     const versatileDie = versatile
       ? /универсальн\S*\s*\((\d+\s*к\s*\d+)\)/.exec(props)?.[1]?.trim() ?? nextDamageDie(i.weaponDamage ?? "")
       : undefined;
+    // Что в руках, лист не угадывает: Дуэлянт решается переключателем
+    // (гриллинг 2026-09-24, Q14), а остальное оружие висит на поясе.
     if (props.includes("двуручн")) rows.push(build(i, { twoHand: true }));
-    else if (versatileDie && alone && !hasShield) {
+    else if (versatileDie && !hasShield) {
       rows.push(build(i, { oneHand: true }, { label: "одной рукой" }));
       rows.push(build(i, { twoHand: true }, { label: "двумя руками", die: versatileDie }));
-    } else {
-      const row = build(i, { oneHand: alone });
-      // Прибавка «одной рукой» есть, но второе рукопашное в руках её гасит —
-      // сказать об этом в строке, а не молча недодать (Q23).
-      const other = melee.find((m) => m !== i);
-      const lost = effectsOf({ oneHand: true }).damage;
-      if (!alone && other && lost.length) {
-        row.damage = [row.damage, ...lost.map((p) => `${p.label} — не учтено: в другой руке ${other.name}`)].join(" · ");
-      }
-      rows.push(row);
-    }
+    } else rows.push(build(i, { oneHand: true }));
     // Бросок метательного рукопашного — отдельной строкой, только когда
     // бросок считается иначе («Сражение метательным оружием»): иначе строка
     // была бы дублем.
@@ -4739,7 +4800,9 @@ function combatSpellRows(
   cantrips: DndSpellEntry[],
   spellsByLevel: DndSpellEntry[][],
   spellAttackBonus: number,
-  spellDc: number
+  spellDc: number,
+  // Числа для своей характеристики заклинания (Q4, 2026-09-24).
+  numbersFor?: (ability: DndAbilityKey) => { attack: number; dc: number }
 ): AttackRow[] {
   // Круг нужен строке: по нему окно знает, какую ячейку тратить.
   const withLevel: { spell: DndSpellEntry; level: number }[] = [
@@ -4759,11 +4822,13 @@ function combatSpellRows(
     .map((s) => {
       const timing = s.castingTiming ?? (s.castingTime ? inferTimingFromLegacyText(s.castingTime).timing : "action");
       const structured = !!(s.checks?.length || s.effects?.length);
+      const own = s.ability && numbersFor ? numbersFor(s.ability) : null;
+      const atk = own?.attack ?? spellAttackBonus;
+      const dc = own?.dc ?? spellDc;
+      const label = structured ? checksLabel(s.checks ?? [], atk, dc) : formatSpellAttackSave(s.attackSave, atk, dc);
       return {
         name: s.name,
-        bonus: structured
-          ? checksLabel(s.checks ?? [], spellAttackBonus, spellDc)
-          : formatSpellAttackSave(s.attackSave, spellAttackBonus, spellDc),
+        bonus: own && label ? `${label} · ${ABILITY_KEY_ABBR[s.ability!]}` : label,
         damage: structured ? effectsLabel(s.effects ?? [], s.checks ?? []) : s.damage || s.healing || "—",
         range: s.range || "—",
         timing,
@@ -5161,14 +5226,22 @@ function CompanionToken({
   companion,
   getEntry,
   onRemove,
+  onPatch,
 }: {
   companion: DndCompanion;
   getEntry: (id: number | null | undefined) => CompendiumEntry | undefined;
   onRemove?: () => void;
+  /** Хиты питомца из бестиария (гриллинг 2026-09-24, Q13). */
+  onPatch?: (patch: Partial<DndCompanion>) => void;
 }) {
   const entry = getEntry(companion.entryId);
   const avatar = entry?.avatar_image_url;
   const [open, setOpen] = useState(false);
+  // Максимум — из статблока существа, хранится только израсходованное, как у
+  // тел по чертежу. Нет статблока — нет и счётчика.
+  const card = useQuery({ ...creatureCardQuery("compendium_entry", companion.entryId ?? 0), enabled: companion.entryId != null });
+  const maxHp = cardMaxHp(card.data);
+  const hpLeft = maxHp != null ? maxHp - Math.min(companion.hpUsed ?? 0, maxHp) : null;
   const body = (
     <>
       {/* Знак типа существа — бейджем поверх лица (полотно «Подвал
@@ -5197,6 +5270,16 @@ function CompanionToken({
       )}
       {open && companion.entryId && (
         <EntityPreviewModal type="compendium_entry" id={companion.entryId} onClose={() => setOpen(false)} />
+      )}
+      {maxHp != null && hpLeft != null && (
+        <span className="dnd-companion-hp">
+          <PoolMeter
+            max={maxHp}
+            left={hpLeft}
+            label={`Хиты: ${companion.name}`}
+            onSetLeft={onPatch ? (next) => onPatch({ hpUsed: maxHp - next }) : undefined}
+          />
+        </span>
       )}
       {onRemove && (
         <button
@@ -5631,9 +5714,12 @@ function AttacksTable({
   onPin,
   resourceLabels,
   color,
+  headExtra,
 }: {
   title: string;
   rows: AttackRow[];
+  /** Рядом с заголовком — переключатель Дуэлянта у «Рукопашного» (Q17). */
+  headExtra?: ReactNode;
   /** Имена строк, вынесенных закладкой на первую карту. */
   pinnedNames?: string[];
   onPin?: (row: AttackRow) => void;
@@ -5653,6 +5739,7 @@ function AttacksTable({
           ширине: он отбивает раздел вместо линеек между строками. */}
       <div className="dnd-action-head">
         <span style={color ? { borderBottomColor: color } : undefined}>{title}</span>
+        {headExtra && <span className="dnd-action-head-extra">{headExtra}</span>}
       </div>
       <div className="stack dnd-action-cards" style={{ gap: 0 }}>
         {rows.map((r, i) => {
@@ -6031,8 +6118,11 @@ const MARK_SPELLS = ["Метка охотника", "Сглаз"];
 // заклинание на концентрации становится концентрацией (по правилам вторая
 // снимает первую), числовая защита без концентрации («Доспехи мага», «Щит»)
 // — действующим, чтобы КЗ посчитал её сам. Остальное лист не отслеживает.
-function spellActivationPatch(spell: DndSpellEntry, value: DndCharacterData): Partial<DndCharacterData> {
-  if (spell.concentration) return { concentration: spell.name };
+// На другого (Q6, 2026-09-24): ячейка и концентрация — у заклинателя, числа
+// его листа не меняются.
+function spellActivationPatch(spell: DndSpellEntry, value: DndCharacterData, onOther = false): Partial<DndCharacterData> {
+  if (spell.concentration) return { concentration: spell.name, concentrationOnOther: onOther ? spell.name : "" };
+  if (onOther) return {};
   if ((spell.effects ?? []).some(isNumericDefense)) {
     const active = value.activeSpells ?? [];
     return active.includes(spell.name) ? {} : { activeSpells: [...active, spell.name] };
@@ -6055,7 +6145,7 @@ function ActiveSpellToggle({
   if (!(spell.effects ?? []).some(isNumericDefense)) return null;
   const on = spell.concentration ? value.concentration === spell.name : (value.activeSpells ?? []).includes(spell.name);
   const toggle = () => {
-    if (spell.concentration) onQuickUpdate({ concentration: on ? "" : spell.name });
+    if (spell.concentration) onQuickUpdate({ concentration: on ? "" : spell.name, concentrationOnOther: "" });
     else {
       const active = value.activeSpells ?? [];
       onQuickUpdate({ activeSpells: on ? active.filter((n) => n !== spell.name) : [...active, spell.name] });
@@ -6089,10 +6179,25 @@ function SpendAction({
   onQuickUpdate: (patch: Partial<DndCharacterData>) => void;
   onDone: () => void;
 }) {
+  const [onOther, setOnOther] = useState(false);
   if (row.source?.kind === "spell") {
     const level = row.source.level;
     const castSpell = row.source.spell;
     const toggle = <ActiveSpellToggle spell={castSpell} value={value} onQuickUpdate={onQuickUpdate} />;
+    // Меняет числа и накладывается не только на себя — спросить, на кого.
+    const changesNumbers = (castSpell.effects ?? []).some(
+      (e) => isNumericDefense(e) || (e.type === "roll_modifier" && typeof e.flat === "number")
+    );
+    const targetPick = changesNumbers && !/на себя|личн/i.test(castSpell.range ?? "") && (
+      <div className="row" role="group" aria-label="На кого" style={{ gap: 6 }}>
+        <button type="button" className="comp-mini" aria-pressed={!onOther} onClick={() => setOnOther(false)}>
+          На себя
+        </button>
+        <button type="button" className="comp-mini" aria-pressed={onOther} onClick={() => setOnOther(true)}>
+          На другого
+        </button>
+      </div>
+    );
     if (level === 0)
       return (
         <div className="stack" style={{ gap: 6, alignItems: "flex-start" }}>
@@ -6145,11 +6250,11 @@ function SpendAction({
     const spend = (circle: number) => {
       const next = value.spellSlotsUsed.slice();
       next[circle] = (next[circle] ?? 0) + 1;
-      onQuickUpdate({ spellSlotsUsed: next, ...spellActivationPatch(castSpell, value) });
+      onQuickUpdate({ spellSlotsUsed: next, ...spellActivationPatch(castSpell, value, onOther) });
       onDone();
     };
     const spendPact = () => {
-      onQuickUpdate({ pactSlotsUsed: pactUsed + 1, ...spellActivationPatch(castSpell, value) });
+      onQuickUpdate({ pactSlotsUsed: pactUsed + 1, ...spellActivationPatch(castSpell, value, onOther) });
       onDone();
     };
     const spendPrimary = () => (usePact ? spendPact() : spend(use));
@@ -6206,6 +6311,7 @@ function SpendAction({
     };
     return (
       <div className="stack" style={{ gap: 6, alignItems: "flex-start" }}>
+        {targetPick}
         <button
           type="button"
           className="primary"
@@ -8185,22 +8291,39 @@ function AcQuickBox({
   derived,
   manualBonus,
   activeSpells,
+  received,
+  systemId,
+  sections,
   onQuickUpdate,
 }: {
   derived: Derived;
   manualBonus: string;
   /** Действующие заклинания без концентрации — плашками под костью. */
   activeSpells: string[];
+  /** Наложенное на меня другими (Q10) — тоже плашками. */
+  received: NonNullable<DndCharacterData["receivedSpells"]>;
+  systemId: number | null;
+  /** Инвентарь — для переноса бонуса «Защитника» в КЗ (Q11). */
+  sections: DndEquipmentSection[];
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
 }) {
   const [open, setOpen] = useState(false);
   // Плашка — только у заклинания, которое сейчас меняет КЗ: «Доспехи мага»
   // под латами не действуют, и плашка без эффекта путала бы.
-  const chips = activeSpells
-    .map((name) => ({ name, part: derived.parts.find((p) => p.label === name) }))
-    .filter((c) => c.part);
+  // Наложенное другими — плашкой всегда: «Благословение» КЗ не меняет, а
+  // снять его, кроме плашки, негде.
+  const chips = [
+    ...activeSpells
+      .map((name) => ({ name, part: derived.parts.find((p) => p.label === name) }))
+      .filter((c) => c.part),
+    ...received.map((r) => ({ name: r.name, part: derived.parts.find((p) => p.label === r.name) })),
+  ];
   const dismiss = (name: string) =>
-    onQuickUpdate?.({ activeSpells: activeSpells.filter((n) => n !== name) });
+    onQuickUpdate?.(
+      activeSpells.includes(name)
+        ? { activeSpells: activeSpells.filter((n) => n !== name) }
+        : { receivedSpells: received.filter((r) => r.name !== name) }
+    );
   return (
     <div>
       <div className="sb-label">КЗ</div>
@@ -8216,7 +8339,7 @@ function AcQuickBox({
       </SbQuickValue>
       {chips.map(({ name, part }) => (
         <div key={name} className="dnd-ac-chip">
-          <span>{derived.parts.indexOf(part!) === 0 ? name : `${formatModifier(part!.value)} ${name}`}</span>
+          <span>{!part || derived.parts.indexOf(part) === 0 ? name : `${formatModifier(part.value)} ${name}`}</span>
           {onQuickUpdate && (
             <button type="button" className="comp-mini" aria-label={`${name} — закончилось`} onClick={() => dismiss(name)}>
               ✕
@@ -8224,8 +8347,21 @@ function AcQuickBox({
           )}
         </div>
       ))}
+      {(derived.situational ?? []).map((s) => (
+        <div key={`sit-${s.label}`} className="muted dnd-ac-situational" title={s.label}>
+          {s.text}
+        </div>
+      ))}
       {open && (
-        <AcBreakdownModal derived={derived} manualBonus={manualBonus} onQuickUpdate={onQuickUpdate} onClose={() => setOpen(false)} />
+        <AcBreakdownModal
+          derived={derived}
+          manualBonus={manualBonus}
+          received={received}
+          systemId={systemId}
+          sections={sections}
+          onQuickUpdate={onQuickUpdate}
+          onClose={() => setOpen(false)}
+        />
       )}
     </div>
   );
@@ -8238,15 +8374,32 @@ function AcQuickBox({
 function AcBreakdownModal({
   derived,
   manualBonus,
+  received,
+  systemId,
+  sections,
   onQuickUpdate,
   onClose,
 }: {
   derived: Derived;
   manualBonus: string;
+  received: NonNullable<DndCharacterData["receivedSpells"]>;
+  systemId: number | null;
+  sections: DndEquipmentSection[];
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState(manualBonus);
+  const [picking, setPicking] = useState(false);
+  // Надетое оружие, чей бонус переносится в КЗ («Защитник», Q11).
+  const shiftables = sections.flatMap((sec, si) =>
+    sec.items.flatMap((it, ii) => (it.equipped && it.acShiftable && it.magicBonus ? [{ si, ii, it }] : []))
+  );
+  const setShift = (si: number, ii: number, acShift: number) =>
+    onQuickUpdate?.({
+      equipmentSections: sections.map((sec, s) =>
+        s !== si ? sec : { ...sec, items: sec.items.map((it, i) => (i === ii ? { ...it, acShift } : it)) }
+      ),
+    });
   const rows = derived.parts.filter((p) => p.label !== "Прочее");
   return (
     <Modal onClose={onClose} ariaLabel="Класс защиты">
@@ -8266,6 +8419,32 @@ function AcBreakdownModal({
               <span>не учтено: {x.reason}</span>
             </div>
           ))}
+          {(derived.situational ?? []).map((s) => (
+            <div key={`sit-${s.label}`} className="row dnd-init-row muted" style={{ justifyContent: "space-between" }}>
+              <span>{s.label}</span>
+              <span>{s.text}</span>
+            </div>
+          ))}
+          {shiftables.map(({ si, ii, it }) => (
+            <div key={`shift-${si}-${ii}`} className="row dnd-init-row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+              <span>{it.name}: бонус в КЗ</span>
+              {onQuickUpdate ? (
+                <input
+                  type="number"
+                  min={0}
+                  max={it.magicBonus}
+                  style={{ width: 56 }}
+                  aria-label={`${it.name}: сколько бонуса перенести в КЗ`}
+                  value={it.acShift ?? 0}
+                  onChange={(e) =>
+                    setShift(si, ii, Math.max(0, Math.min(it.magicBonus ?? 0, Number.parseInt(e.target.value, 10) || 0)))
+                  }
+                />
+              ) : (
+                <span>{it.acShift ?? 0}</span>
+              )}
+            </div>
+          ))}
           <div className="row dnd-init-row" style={{ justifyContent: "space-between", alignItems: "center" }}>
             <span>Дополнительный бонус</span>
             {onQuickUpdate ? (
@@ -8282,8 +8461,75 @@ function AcBreakdownModal({
             )}
           </div>
         </div>
+        {onQuickUpdate && systemId != null && (
+          picking ? (
+            <ReceivedSpellPicker
+              systemId={systemId}
+              onPick={(entry) => {
+                setPicking(false);
+                if (received.some((r) => r.entryId === entry.id)) return;
+                onQuickUpdate({ receivedSpells: [...received, { name: entry.name, entryId: entry.id }] });
+              }}
+              onCancel={() => setPicking(false)}
+            />
+          ) : (
+            <button type="button" className="comp-mini" style={{ alignSelf: "flex-start" }} onClick={() => setPicking(true)}>
+              + Наложено на меня
+            </button>
+          )
+        )}
       </div>
     </Modal>
+  );
+}
+
+// Заклинание, которое на тебя наложил другой (Q10, Q15): в списке только те,
+// что меняют числа листа, — остальное листу знать незачем.
+function ReceivedSpellPicker({
+  systemId,
+  onPick,
+  onCancel,
+}: {
+  systemId: number;
+  onPick: (entry: CompendiumEntry) => void;
+  onCancel: () => void;
+}) {
+  const [options, setOptions] = useState<CompendiumEntry[] | null>(null);
+  const [query, setQuery] = useState("");
+  useEffect(() => {
+    let alive = true;
+    loadDndSpellIndex(systemId)
+      .then((all) => {
+        if (!alive) return;
+        const numeric = (e: CompendiumEntry) =>
+          ((e.data.effects as DndEffect[] | undefined) ?? []).some(
+            (x) => isNumericDefense(x) || (x.type === "roll_modifier" && typeof x.flat === "number")
+          );
+        setOptions(all.filter(numeric).sort((a, b) => a.name.localeCompare(b.name, "ru")));
+      })
+      .catch(() => alive && setOptions([]));
+    return () => {
+      alive = false;
+    };
+  }, [systemId]);
+  const q = query.trim().toLowerCase();
+  const rows = (options ?? []).filter((e) => !q || e.name.toLowerCase().includes(q));
+  return (
+    <div className="stack" style={{ gap: 4 }}>
+      <div className="row" style={{ gap: 6 }}>
+        <input autoFocus placeholder="Заклинание" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <button type="button" className="comp-mini" onClick={onCancel} aria-label="Отмена">
+          <NavIcon name="close" />
+        </button>
+      </div>
+      {options === null && <span className="muted">Загрузка…</span>}
+      {options !== null && rows.length === 0 && <span className="muted">Ничего не нашлось.</span>}
+      {rows.map((e) => (
+        <button key={e.id} type="button" className="comp-mini" style={{ alignSelf: "flex-start" }} onClick={() => onPick(e)}>
+          {e.name}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -8909,12 +9155,15 @@ function DndReplicaSchemePicker({
 /** Какое именно оружие (доспех, щит) стало «+1» — решение R3. */
 function DndReplicaBasePicker({
   title,
+  only,
   systemId,
   onPick,
   onClose,
 }: {
   /** Название прибавки («Доспех +1»): по слову в нём отбирается база. */
   title: string;
+  /** Только эти основы по имени («Эльфийская кольчуга»: кольчуга, рубаха). */
+  only?: string[];
   systemId: number | null;
   onPick: (base: { name: string; entryId: number | null; meta: Partial<DndEquipmentItem> }) => void;
   onClose: () => void;
@@ -8940,6 +9189,7 @@ function DndReplicaBasePicker({
     // Основа — обычный предмет: «Латы дварфов» с классом доспеха в данных
     // основой для «Доспеха +1» не бывают.
     if (e.kind !== "equipment") return false;
+    if (only) return only.includes(e.name) && (!q || e.name.toLowerCase().includes(q));
     const armorType = typeof e.data.armor_type === "string" ? e.data.armor_type : "";
     const isShield = armorType.trim().toLowerCase().startsWith("щит");
     const kind = isShield ? "shield" : armorType ? "armor" : e.data.damage ? "weapon" : "";
@@ -9409,6 +9659,7 @@ function DndRestModal({
       // Действующие заклинания (8 часов «Доспехов мага», «Щит») отдых не
       // переживают — иначе КЗ назавтра считал бы вчерашнее (Q16).
       activeSpells: [],
+      receivedSpells: [],
       // 5.5: длинный отдых снимает один уровень истощения, а не всё сразу.
       exhaustion: Math.max(0, value.exhaustion - 1),
     });
@@ -9842,6 +10093,23 @@ export function DndCharacterView({
   // поэтому пересекаем с запрошенным именно этим листом.
   const deadIds = deadEntryIds().filter((id) => wantedIds.includes(id));
   const deadNames = deadIds.length > 0 ? deadLinkNames(value, new Set(deadIds)) : [];
+  // Черты старых листов без ссылки на справочник — связать по имени один
+  // раз (гриллинг 2026-09-24, Q2): без ссылки их эффекты не считаются.
+  const unlinkedFeats = value.feats.filter((f) => f.entryId == null).map((f) => f.name).join("|");
+  useEffect(() => {
+    if (!unlinkedFeats || !onQuickUpdate || readOnly || value.systemId == null) return;
+    let alive = true;
+    loadDndFeats(value.systemId)
+      .then((all) => {
+        const next = alive ? linkFeatsByName(value.feats, all) : null;
+        if (next) onQuickUpdate({ feats: next });
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- раз на набор несвязанных имён
+  }, [unlinkedFeats, value.systemId]);
   // Цвет класса — единственная краска на карте. Боковые кромки рамки,
   // подчёркивание текущей карты в полоске, заливка хитов. При мультиклассе
   // берётся класс с наибольшим уровнем (dndClassColors.ts).
@@ -10770,6 +11038,11 @@ export function DndCharacterView({
   const spellDc = derived.spellcasting
     ? derived.spellcasting.saveDc.value
     : 8 + spellAbilityMod + spellProfBonus + parseBonus(value.spellDcMisc);
+  // Своя характеристика заклинания: те же прибавки, другой модификатор.
+  const spellNumbersFor = (key: DndAbilityKey) => {
+    const delta = abilityModifier(value.abilities[key]) - spellAbilityMod;
+    return { attack: spellAttackBonus + delta, dc: spellDc + delta };
+  };
   const passivePerception = derived.passivePerception.value;
   // Картуш на портрете: то же, что в шапке листа, но своими строками и без
   // ссылок — на карте это подпись под именем, а не список источников.
@@ -10836,8 +11109,19 @@ export function DndCharacterView({
       range: "Ближний",
       timing: "action" as const,
       entryId: null,
+      group: "melee",
     });
   }
+  // Переключаемые эффекты умений и черт (Дуэлянт, Q14) — в заголовок
+  // «Рукопашного». Список — по сырым эффектам, без учёта выключенного.
+  const effectToggles = [...value.speciesFeatures, ...value.classFeatures, ...value.feats, ...value.specialAbilities]
+    .map((f) => ({ f, eff: (getEntry(f.entryId)?.data.effects as DndEffect[] | undefined)?.find((e) => e.toggleable) }))
+    .filter((x) => x.eff)
+    .map(({ f, eff }) => ({
+      name: (f.name || "Умение").trim(),
+      label: `${(f.name || "Умение").trim()}${eff!.modifier ? ` ${eff!.modifier}` : ""}`,
+      title: eff!.text || "Выключите, когда условие не выполняется",
+    }));
   const actionRows = [
     ...unarmedRows,
     ...weaponAttackRows(
@@ -10858,7 +11142,7 @@ export function DndCharacterView({
         : null,
       weaponFx
     ),
-    ...combatSpellRows(liveCantrips, liveSpellsByLevel, spellAttackBonus, spellDc),
+    ...combatSpellRows(liveCantrips, liveSpellsByLevel, spellAttackBonus, spellDc, spellNumbersFor),
     // Уровень класса-хозяина для кубов levelDice: строка класса/подкласса
     // по sourceParentId особенности. Ручные (без sourceParentId) — без скейла.
     ...featureActionRows(liveFeatureGroups, spellAttackBonus, spellDc, (pid) => {
@@ -11488,7 +11772,15 @@ export function DndCharacterView({
                 только свободное поле во вкладке «Действия», которое пять
                 листов из семи так и оставили пустым. */}
             <div className="dnd-triad">
-              <AcQuickBox derived={derived.armorClass} manualBonus={value.manualAcBonus} activeSpells={value.activeSpells ?? []} onQuickUpdate={onQuickUpdate} />
+              <AcQuickBox
+                derived={derived.armorClass}
+                manualBonus={value.manualAcBonus}
+                activeSpells={value.activeSpells ?? []}
+                received={value.receivedSpells ?? []}
+                systemId={value.systemId ?? null}
+                sections={value.equipmentSections}
+                onQuickUpdate={onQuickUpdate}
+              />
               <HpQuickBox value={value} onQuickUpdate={onQuickUpdate} accentColor={cardColor} />
               <InitiativeQuickBox
                 derived={derived.initiative}
@@ -11725,6 +12017,14 @@ export function DndCharacterView({
                       companion={c}
                       getEntry={getEntry}
                       onRemove={remove}
+                      onPatch={
+                        onQuickUpdate
+                          ? (patch) =>
+                              onQuickUpdate({
+                                companions: (value.companions ?? []).map((x, j) => (j === i ? { ...x, ...patch } : x)),
+                              })
+                          : undefined
+                      }
                     />
                   );
                 })}
@@ -12048,9 +12348,43 @@ export function DndCharacterView({
                   allResources(resourceSources, value.abilities).map((r) => [r.key, r.label])
                 );
                 const tableProps = { onOpen: setOpenAction, pinnedNames, onPin: onQuickUpdate ? togglePinned : undefined, resourceLabels: poolLabels, color: cardColor };
+                // Оружие — тремя группами (Q17), остальные действия — ниже.
+                const actions = byTiming("action");
+                const inGroup = (g: AttackRow["group"]) => actions.filter((r) => r.group === g);
+                const effectsOff = value.effectsOff ?? [];
+                const toggleEl = effectToggles.length > 0 && (
+                  <span className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                    {effectToggles.map((t) => (
+                      <label key={t.name} className="row" style={{ gap: 4 }} title={t.title}>
+                        <input
+                          type="checkbox"
+                          checked={!effectsOff.includes(t.name)}
+                          disabled={!onQuickUpdate}
+                          onChange={(e) =>
+                            onQuickUpdate?.({
+                              effectsOff: e.target.checked ? effectsOff.filter((n) => n !== t.name) : [...effectsOff, t.name],
+                            })
+                          }
+                        />
+                        {t.label}
+                      </label>
+                    ))}
+                  </span>
+                );
+                const mixed = inGroup("mixed");
                 return (
                   <>
-                    <AttacksTable title="Действия" rows={byTiming("action")} {...tableProps} />
+                    <AttacksTable title="Рукопашное" rows={inGroup("melee")} headExtra={toggleEl} {...tableProps} />
+                    <AttacksTable
+                      title="Рукопашное и метательное"
+                      rows={mixed}
+                      headExtra={
+                        toggleEl && !inGroup("melee").length ? toggleEl : toggleEl && <span className="muted">переключатель выше</span>
+                      }
+                      {...tableProps}
+                    />
+                    <AttacksTable title="Дальнобойное" rows={inGroup("ranged")} {...tableProps} />
+                    <AttacksTable title="Действия" rows={actions.filter((r) => !r.group)} {...tableProps} />
                     <AttacksTable title="Бонусные действия" rows={byTiming("bonus")} {...tableProps} />
                     <AttacksTable title="Реакции" rows={byTiming("reaction")} {...tableProps} />
                     <AttacksTable title="Особое" rows={byTiming("other")} {...tableProps} />

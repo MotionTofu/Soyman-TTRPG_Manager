@@ -67,6 +67,8 @@ export interface Derived {
    * такое, а не гадает (гриллинг 2026-09-23, Q23).
    */
   inactive?: { label: string; reason: string }[];
+  /** Прибавки при условии — в число не входят («+2 против дальнобойных», Q11). */
+  situational?: { label: string; text: string }[];
 }
 
 export interface Sheet {
@@ -282,13 +284,17 @@ export interface EffectCarrier {
  */
 export function effectCarriers(c: DndCharacterData): EffectCarrier[] {
   const out: EffectCarrier[] = [];
+  const off = new Set(c.effectsOff ?? []);
   for (const f of [
     ...(c.speciesFeatures ?? []),
     ...(c.classFeatures ?? []),
     ...(c.feats ?? []),
     ...(c.specialAbilities ?? []),
   ]) {
-    if (f.effects?.length) out.push({ name: (f.name || "Умение").trim(), effects: f.effects });
+    const name = (f.name || "Умение").trim();
+    // Выключенное игроком (Q14) — как будто его нет.
+    const effects = (f.effects ?? []).filter((e) => !(e.toggleable && off.has(name)));
+    if (effects.length) out.push({ name, effects });
   }
   for (const it of equippedItems(c.equipmentSections ?? [])) {
     if (!it.effects?.length) continue;
@@ -298,10 +304,15 @@ export function effectCarriers(c: DndCharacterData): EffectCarrier[] {
       ...(it.requiresAttunement && !it.attuned ? { off: "не настроено" } : {}),
     });
   }
-  const active = new Set([...(c.activeSpells ?? []), c.concentration ?? ""].map((n) => n.trim()).filter(Boolean));
+  const selfConcentration = c.concentration && c.concentration !== c.concentrationOnOther ? c.concentration : "";
+  const active = new Set([...(c.activeSpells ?? []), selfConcentration].map((n) => n.trim()).filter(Boolean));
   for (const sp of [...(c.cantrips ?? []), ...(c.spellsByLevel ?? []).flat()]) {
     const name = (sp.name ?? "").trim();
     if (sp.effects?.length && active.has(name)) out.push({ name, effects: sp.effects });
+  }
+  // Наложенное на меня другими (Q10) — действует, пока не снято.
+  for (const r of c.receivedSpells ?? []) {
+    if (r.effects?.length) out.push({ name: r.name.trim(), effects: r.effects });
   }
   return out;
 }
@@ -343,49 +354,72 @@ type Inactive = { label: string; reason: string };
  * Поверх — щит, прибавки вещей (`acBonus`), эффекты `defense` с `flat` и
  * ручное «Прочее».
  */
-function armorClassParts(c: DndCharacterData, mods: Record<DndAbilityKey, Derived>): { parts: Part[]; inactive: Inactive[] } {
+function armorClassParts(
+  c: DndCharacterData,
+  mods: Record<DndAbilityKey, Derived>,
+  pb: number
+): { parts: Part[]; inactive: Inactive[]; situational: { label: string; text: string }[] } {
   const sections = c.equipmentSections ?? [];
   const worn = wornArmorState(sections);
   const dex = mods.dex.value;
   const inactive: Inactive[] = [];
+  const situational: { label: string; text: string }[] = [];
   // Носитель не действует — одна строка на носитель, а не на каждый его эффект.
   const skip = (label: string, reason: string) => {
     if (!inactive.some((i) => i.label === label)) inactive.push({ label, reason });
   };
 
-  const armor = wornBodyArmor(sections);
-  const candidates: Part[][] = [
-    armor
-      ? [
-          { label: (armor.name || "Доспех").trim(), value: (parseInt(armor.ac ?? "", 10) || 0) + (armor.magicBonus ?? 0) },
-          { label: "Ловкость", value: armorDexBonus(armor, dex) },
-        ]
-      : [
-          { label: "Без доспеха", value: 10 },
-          { label: "Ловкость", value: dex },
-        ],
-  ];
   const carriers = effectCarriers(c);
   const bonuses: Part[] = [];
+  const baseCandidates: Part[][] = [];
+  let floor: { label: string; value: number } | null = null;
+  let mediumCap: { label: string; value: number } | null = null;
   for (const k of carriers) {
     for (const eff of k.effects) {
       if (eff.type !== "defense") continue;
       const hasFlat = typeof eff.flat === "number" && eff.flat !== 0;
-      if (!eff.acBase && !hasFlat) continue;
+      const fromPb = eff.proficiency === "full" ? pb : eff.proficiency === "half" ? Math.floor(pb / 2) : 0;
+      // Прибавка при условии: в число не идёт, но видна (Q11). Кубиковая
+      // (Перехват) — реакция своей строкой, здесь её нет.
+      if (eff.situational && (hasFlat || fromPb) && !eff.dice) {
+        if (!k.off) situational.push({ label: k.name, text: `+${((eff.flat as number) || 0) + fromPb} ${eff.situational}` });
+        continue;
+      }
+      if (!eff.acBase && !hasFlat && !eff.acMin && !eff.mediumDexCap) continue;
       if (k.off) { skip(k.name, k.off); continue; }
       if (!armorConditionHolds(eff.armorCondition, worn)) {
         skip(k.name, armorConditionReason(eff.armorCondition, worn));
         continue;
       }
       if (eff.acBase) {
-        candidates.push([
+        baseCandidates.push([
           { label: k.name, value: eff.acBase.base },
           ...eff.acBase.abilities.map((a) => ({ label: ABILITY_LABEL[a], value: mods[a]?.value ?? 0 })),
         ]);
       }
       if (hasFlat) bonuses.push({ label: k.name, value: eff.flat as number });
+      if (eff.acMin && (!floor || eff.acMin > floor.value)) floor = { label: k.name, value: eff.acMin };
+      if (eff.mediumDexCap && (!mediumCap || eff.mediumDexCap > mediumCap.value)) mediumCap = { label: k.name, value: eff.mediumDexCap };
     }
   }
+
+  const armor = wornBodyArmor(sections);
+  // Средний доспех с «Мастером средних доспехов» — предел Ловкости выше (Q12).
+  const medium = !!armor && /^средн/i.test((armor.armorType ?? "").trim());
+  const armorDex = armor ? armorDexBonus(armor, dex) : dex;
+  const raisedDex = medium && mediumCap && dex > armorDex ? Math.min(dex, mediumCap.value) : armorDex;
+  const candidates: Part[][] = [
+    armor
+      ? [
+          { label: (armor.name || "Доспех").trim(), value: (parseInt(armor.ac ?? "", 10) || 0) + (armor.magicBonus ?? 0) },
+          { label: raisedDex !== armorDex ? `Ловкость (${mediumCap!.label})` : "Ловкость", value: raisedDex },
+        ]
+      : [
+          { label: "Без доспеха", value: 10 },
+          { label: "Ловкость", value: dex },
+        ],
+    ...baseCandidates,
+  ];
   const total = (ps: Part[]) => ps.reduce((n, p) => n + p.value, 0);
   const base = candidates.reduce((best, cur) => (total(cur) > total(best) ? cur : best));
   const parts: Part[] = [...base];
@@ -394,15 +428,20 @@ function armorClassParts(c: DndCharacterData, mods: Record<DndAbilityKey, Derive
   if (shield) parts.push({ label: (shield.item.name || "Щит").trim(), value: shield.bonus });
 
   for (const it of equippedItems(sections)) {
-    const bonus = parseInt(it.acBonus ?? "", 10) || 0;
+    const shift = it.acShiftable ? Math.min(it.acShift ?? 0, it.magicBonus ?? 0) : 0;
+    const bonus = (parseInt(it.acBonus ?? "", 10) || 0) + shift;
     if (!bonus) continue;
     const label = (it.name || "Предмет").trim();
     if (it.requiresAttunement && !it.attuned) skip(label, "не настроено");
-    else parts.push({ label, value: bonus });
+    else parts.push({ label: shift ? `${label} (бонус в КЗ)` : label, value: bonus });
   }
   parts.push(...bonuses);
-  parts.push({ label: "Прочее", value: parseBonus(c.manualAcBonus || "") });
-  return { parts, inactive };
+  const manual = { label: "Прочее", value: parseBonus(c.manualAcBonus || "") };
+  // «Дубовая кожа»: КЗ не ниже порога — доводим разницей (Q12).
+  const sofar = total(parts) + manual.value;
+  if (floor && sofar < floor.value) parts.push({ label: `${floor.label} (не меньше ${floor.value})`, value: floor.value - sofar });
+  parts.push(manual);
+  return { parts, inactive, situational };
 }
 
 /**
@@ -472,6 +511,8 @@ export function weaponEffects(c: DndCharacterData, use: WeaponUse, pb: number, f
         }
         const die = (freeHands && eff.diceFreeHands) || eff.dice;
         if (die) out.dice = { value: die, source: k.name };
+        // Руки заняты — вторая кость подписью, выбирается при броске (Q16).
+        if (!freeHands && eff.diceFreeHands) out.notes.push(`${eff.diceFreeHands} с пустыми руками`);
       }
       if (eff.text) out.notes.push(eff.text);
     }
@@ -603,8 +644,12 @@ export function deriveSheet(c: DndCharacterData): Sheet {
   }
 
   const sections = c.equipmentSections ?? [];
-  const ac = armorClassParts(c, mods);
-  const armorClass: Derived = { ...armorClassOf(c, sections, ac.parts), ...(ac.inactive.length ? { inactive: ac.inactive } : {}) };
+  const ac = armorClassParts(c, mods, pb);
+  const armorClass: Derived = {
+    ...armorClassOf(c, sections, ac.parts),
+    ...(ac.inactive.length ? { inactive: ac.inactive } : {}),
+    ...(ac.situational.length ? { situational: ac.situational } : {}),
+  };
 
   // Пассивное восприятие: 10 + навык. Штраф истощения сюда входит, потому что
   // пассивное значение — это тот же бросок, только без кубика. В шпаргалках

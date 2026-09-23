@@ -78,6 +78,9 @@ export interface GrantedSpellChoice {
   /** Только эти заклинания (имена справочника; стабильнее id при реимпорте).
    *  Пусто — любой кандидат по остальным фильтрам. */
   names?: string[];
+  /** Чем колдуются выбранные («Благословенный воин» — Хар). Пусто —
+   *  классовой либо выбор игрока на листе. */
+  ability?: DndAbilityKey;
 }
 
 /** «Выбери N владений» — три музыкальных инструмента у «Музыканта», три
@@ -205,6 +208,7 @@ function parseSpellChoices(raw: unknown): GrantedSpellChoice[] {
       names: Array.isArray(r.names)
         ? (r.names as unknown[]).filter((x): x is string => typeof x === "string" && !!x.trim())
         : undefined,
+      ability: r.ability === "int" || r.ability === "wis" || r.ability === "cha" ? r.ability : undefined,
     });
   }
   return out;

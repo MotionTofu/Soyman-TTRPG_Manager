@@ -92,3 +92,22 @@ export function isArmorProficient(armorType: string | undefined, profNames: read
   if (!want) return true;
   return profNames.some((n) => want.test(n));
 }
+
+/** Владение оружием по строкам класса: «Простое оружие», «Воинское оружие
+ *  (лёгкое)», «…(фехтовальное или лёгкое)» или имя самого оружия. */
+export function isWeaponProficient(
+  item: Pick<DndEquipmentItem, "name" | "weaponCategory" | "weaponProperties">,
+  profNames: readonly string[]
+): boolean {
+  const cat = (item.weaponCategory ?? "").trim().toLowerCase();
+  const props = (item.weaponProperties ?? "").toLowerCase().replace(/ё/g, "е");
+  const name = item.name.trim().toLowerCase().replace(/ё/g, "е");
+  return profNames.some((raw) => {
+    const n = raw.trim().toLowerCase().replace(/ё/g, "е");
+    if (n === name) return true;
+    const m = /^(.*?оружие)\s*(?:\((.*)\))?$/.exec(n);
+    if (!m || !cat || m[1] !== cat) return false;
+    // Скобки — условие по свойствам: хватает любого из перечисленных.
+    return !m[2] || m[2].split(/\s+или\s+|,\s*/).some((w) => props.includes(w.slice(0, 5)));
+  });
+}
