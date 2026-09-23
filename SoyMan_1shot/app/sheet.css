@@ -292,6 +292,20 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-deck-strip button:focus-visible {
   html[data-app="oneshot"] .oneshot-sheet .dnd-desktop-tab :is(input:not([type="checkbox"]):not([type="radio"]), select) {
     min-height: 44px;
   }
+  html[data-app="oneshot"] .oneshot-sheet .dnd-personality-grid {
+    grid-template-columns: minmax(0, 1fr);
+    box-sizing: border-box;
+    padding: 0 10px 12px;
+  }
+  html[data-app="oneshot"] .oneshot-sheet .dnd-personality-grid > .muted {
+    grid-column: 1 / -1;
+    padding: 10px 12px;
+    border-left: 3px solid var(--ui-accent);
+    background: var(--ui-surface);
+  }
+  html[data-app="oneshot"] .oneshot-sheet .dnd-desktop-tab > p.muted {
+    margin-inline: 10px;
+  }
 }
 @media (max-width: 360px) {
   html[data-app="oneshot"] .oneshot-sheet .dnd-prepared-filter-long { display: none; }

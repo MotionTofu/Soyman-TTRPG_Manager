@@ -23,6 +23,9 @@ import './sheet.css';
 import './modals.css';
 
 applyTheme(findTheme('noir'));
+const portraitUrl = new URLSearchParams(window.location.search).get('portrait') === 'none'
+  ? undefined
+  : '/mascot/hero-idle.webp';
 const spell = (name: string, prepared: 0 | 1 | 2, school = 'Воплощение'): DndSpellEntry =>
   ({ entryId: null, name, prepared, school, castingTiming: 'action' });
 const fixture = emptyDndCharacter();
@@ -53,7 +56,7 @@ function App() {
   const [value, setValue] = useState(fixture);
   return <DndRuntimeContext.Provider value={{ allowDiceRolls: false, campaignConnected: false, detached: true }}>
     <header className="oneshot-header"><strong>OneShot SoyMan / Visual QA</strong></header>
-    <div className="oneshot-sheet"><div className="fp-page-backdrop" aria-hidden="true" /><DndCharacterView value={value} portraitUrl="/mascot/hero-idle.webp" onQuickUpdate={patch => setValue(current => ({ ...current, ...patch }))} /></div>
+    <div className="oneshot-sheet"><div className="fp-page-backdrop" aria-hidden="true" /><DndCharacterView value={value} portraitUrl={portraitUrl} onQuickUpdate={patch => setValue(current => ({ ...current, ...patch }))} /></div>
   </DndRuntimeContext.Provider>;
 }
 createRoot(document.getElementById('root')!).render(<QueryClientProvider client={queryClient}><MemoryRouter><App /></MemoryRouter></QueryClientProvider>);
