@@ -107,6 +107,14 @@ html[data-app="oneshot"] .oneshot-sheet {
   max-width: 1560px;
   padding: 20px 24px 40px;
 }
+html[data-app="oneshot"] .oneshot-sheet .dnd-desktop-tab {
+  --fs-micro: 12px;
+}
+html[data-app="oneshot"] :is(.oneshot-header, .oneshot-home, .oneshot-sheet)
+  :is(button, a, summary, [role="button"], input, select, textarea):focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
+}
 /* Without a portrait the cartouche must participate in layout. The shared
    absolute positioning otherwise pushes name and warnings above the card. */
 html[data-app="oneshot"] .oneshot-sheet .dnd-card-portrait-zone.is-empty {
