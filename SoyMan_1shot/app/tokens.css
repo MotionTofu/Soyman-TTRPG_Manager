@@ -1,29 +1,24 @@
-/* SoyMan_1shot semantic UI tokens (phase R1).
- *
- * 1shot owns these names; values map onto the client token system
- * (client/src/index.css :root + themes.ts, noir by default). A future
- * Fantasy Punk skin replaces THIS file's values (or adds skin.css overrides)
- * without touching component structure. No palette literals (--color-*)
- * may be used by components — only the --ui-* semantic roles below.
- *
- * Unchanged visual contract: every token resolves to the exact value the
- * noir shell used before (verified by before/after screenshots, R1). */
+/* OneShot-only Fantasy Punk roles. The main SoyMan theme remains untouched. */
 
-:root {
+html[data-app="oneshot"] {
   /* Surfaces */
-  --ui-bg: var(--paper);
-  --ui-surface: var(--paper);
-  --ui-surface-raised: var(--paper-2);
+  --ui-bg: #e8e4da;
+  --ui-surface: #f0ede4;
+  --ui-surface-raised: #d9d3c2;
+  --ui-surface-ink: #171717;
 
   /* Text */
-  --ui-text: var(--ink);
-  --ui-text-muted: var(--muted);
+  --ui-text: #171717;
+  --ui-text-muted: #56534f;
+  --ui-text-inverse: #f0ede4;
 
   /* Roles */
-  --ui-accent: var(--accent);
-  --ui-danger: var(--danger-bg);
-  --ui-success: var(--pay-free);
-  --ui-border: var(--line);
+  --ui-accent: #f3ff3a;
+  --ui-accent-secondary: #ff3e91;
+  --ui-danger: #ab263e;
+  --ui-success: #377c48;
+  --ui-border: #171717;
+  --ui-focus: #b10058;
 
   /* Spacing (§5 names over the client --sp-* scale) */
   --space-1: var(--sp-1); /* 2px */

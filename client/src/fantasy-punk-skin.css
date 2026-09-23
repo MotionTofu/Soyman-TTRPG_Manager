@@ -587,8 +587,5 @@ body.sheet-fullscreen {
  * acid-yellow/punk-magenta wash textures.
  * R3.3 owns dense rows. R3.4 owns chaos. R3.5 owns modals/forms/focus.
  * R3.6 owns mobile decor. Nothing from those packs is referenced above.
- * Convention: [data-active]::after (or element ::after where no hook
- * attribute exists yet) with content: none until the asset lands. */
-[data-active]::after {
-  content: none;
-}
+ * Unused global [data-active] pseudo-element hook was removed: future
+ * decorative states must be explicitly scoped to a sheet surface. */

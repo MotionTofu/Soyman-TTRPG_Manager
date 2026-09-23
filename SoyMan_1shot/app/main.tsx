@@ -1343,7 +1343,7 @@ function App() {
     {deleteTarget && <Modal onClose={() => { if (!libraryBusy) setDeleteTarget(null); }}>
       <h3>Удалить «{displayName(deleteTarget)}»?</h3>
       <p>Персонаж будет удалён с этого устройства. Это действие нельзя отменить.</p>
-      <ActionRow><Button variant="primary" disabled={libraryBusy} onClick={() => void confirmDelete()}>{libraryBusy ? 'Удаляем…' : 'Удалить'}</Button><Button disabled={libraryBusy} onClick={() => setDeleteTarget(null)}>Отмена</Button></ActionRow>
+      <ActionRow><Button variant="danger" disabled={libraryBusy} onClick={() => void confirmDelete()}>{libraryBusy ? 'Удаляем…' : 'Удалить'}</Button><Button disabled={libraryBusy} onClick={() => setDeleteTarget(null)}>Отмена</Button></ActionRow>
     </Modal>}
     {pairing && <Modal onClose={() => { if (!syncBusy) setPairing(null); }}>
       <h3>Подключить другое устройство</h3>
