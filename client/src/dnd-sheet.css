@@ -3013,6 +3013,7 @@ span.dnd-card-corner {
   border-color: var(--ink);
   color: var(--paper);
 }
+.dnd-prepared-filter-short { display: none; }
 .dnd-spell-picker-list {
   flex: 1 1 auto;
   min-height: 0;

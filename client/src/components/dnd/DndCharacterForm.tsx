@@ -11805,7 +11805,8 @@ export function DndCharacterView({
                   aria-pressed={prefs.spellsPreparedOnly}
                   onClick={() => saveDndPrefs({ ...prefs, spellsPreparedOnly: !prefs.spellsPreparedOnly })}
                 >
-                  Подготовленные/Доступные
+                  <span className="dnd-prepared-filter-long">Подготовленные/Доступные</span>
+                  <span className="dnd-prepared-filter-short">Подг. / все</span>
                 </button>
                 {onQuickUpdate && (
                   <button type="button" className="dnd-chip" onClick={() => setSpellListOpen(true)}>

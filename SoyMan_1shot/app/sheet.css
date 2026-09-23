@@ -159,6 +159,24 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-card-portrait-zone:not(.is-empty) .
   overflow-wrap: anywhere;
   text-wrap: balance;
 }
+/* Keep identity metadata readable above the rough portrait-breakup strip. */
+html[data-app="oneshot"] .oneshot-sheet .dnd-card-portrait-zone:not(.is-empty) .dnd-card-cartouche-class {
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin-top: 6px;
+  padding: 3px 5px;
+  background: color-mix(in srgb, var(--paper) 94%, transparent);
+}
+html[data-app="oneshot"] .oneshot-sheet .dnd-card-portrait-zone:not(.is-empty) .dnd-card-cartouche-origin {
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin-top: 0;
+  padding: 2px 5px;
+  background: color-mix(in srgb, var(--paper) 94%, transparent);
+}
+html[data-app="oneshot"] .oneshot-sheet .dnd-prepared-filter-short { display: none; }
 /* The desktop Magic page is a reading list. Keep mobile's larger targets. */
 @media (min-width: 701px) {
   html[data-app="oneshot"] .oneshot-sheet .dnd-spell-row.comp-row {
@@ -274,4 +292,8 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-deck-strip button:focus-visible {
   html[data-app="oneshot"] .oneshot-sheet .dnd-desktop-tab :is(input:not([type="checkbox"]):not([type="radio"]), select) {
     min-height: 44px;
   }
+}
+@media (max-width: 360px) {
+  html[data-app="oneshot"] .oneshot-sheet .dnd-prepared-filter-long { display: none; }
+  html[data-app="oneshot"] .oneshot-sheet .dnd-prepared-filter-short { display: inline; }
 }
