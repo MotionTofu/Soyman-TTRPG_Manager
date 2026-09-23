@@ -11,21 +11,25 @@
     body { margin:0; color:var(--ink); background:#e7e2d6 url("../assets/fantasy-punk/textures/paper-tile.webp") repeat; font:16px/1.35 Arial, sans-serif; }
     button { font:inherit; cursor:pointer; }
     button:focus-visible { outline:3px solid #b10058; outline-offset:3px; }
-    .top { min-height:62px; display:flex; align-items:center; gap:30px; padding:9px max(24px,calc((100vw - 1500px)/2)); color:var(--paper); background:var(--ink) url("../assets/fantasy-punk/textures/ink-surface.webp") repeat; border-bottom:5px solid var(--acid); }
+    .top { position:relative; z-index:10; min-height:62px; display:flex; align-items:center; gap:24px; padding:9px max(24px,calc((100vw - 1500px)/2)); color:var(--paper); background:var(--ink) url("../assets/fantasy-punk/textures/ink-surface.webp") repeat; border-bottom:5px solid var(--acid); }
     .brand { font:32px Punk,Georgia,serif; white-space:nowrap; }
     .brand em { color:var(--acid); font-style:normal; }
-    .top-meta { display:flex; align-items:center; gap:24px; font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; }
     .saved { margin-left:auto; color:var(--acid); font-size:12px; font-weight:800; text-transform:uppercase; white-space:nowrap; }
-    .top-button,.tool-button { min-height:40px; padding:8px 14px; border:2px solid currentColor; background:transparent; color:inherit; font-weight:800; text-transform:uppercase; }
-    .top-button { color:var(--acid); white-space:nowrap; }
-    .tools { max-width:1500px; margin:auto; padding:12px 24px; display:flex; gap:9px; flex-wrap:wrap; }
-    .tool-button { background:var(--paper); color:var(--ink); font-size:12px; }
-    .tool-button:hover,.small-button:hover { background:var(--acid); }
-    .sheet { max-width:1500px; margin:auto; padding:5px 24px 45px; display:grid; grid-template-columns:minmax(390px,34%) minmax(0,1fr); align-items:start; gap:20px; }
+    .saved-short { display:none; }
+    .utility { position:relative; flex:none; }
+    .menu-toggle { display:grid; place-items:center; width:44px; height:44px; padding:0 0 9px; border:2px solid var(--acid); color:var(--acid); background:transparent; font:32px/1 Arial,sans-serif; }
+    .menu-toggle:hover,.menu-toggle[aria-expanded="true"] { color:var(--ink); background:var(--acid); }
+    .utility-menu { position:absolute; top:calc(100% + 12px); right:0; width:min(310px,calc(100vw - 24px)); padding:6px; border:3px solid var(--ink); background:var(--paper) url("../assets/fantasy-punk/textures/paper-panel.webp") repeat; box-shadow:6px 6px 0 var(--acid); color:var(--ink); }
+    .utility-menu[hidden] { display:none; }
+    .utility-menu::before { content:""; position:absolute; top:-11px; right:13px; width:16px; height:16px; transform:rotate(45deg); border-top:3px solid var(--ink); border-left:3px solid var(--ink); background:var(--paper); }
+    .utility-menu p { margin:4px 10px 6px; color:var(--muted); font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+    .utility-menu button { display:block; width:100%; min-height:44px; padding:10px 11px; border:0; border-top:1px solid #c5bfb3; color:var(--ink); background:transparent; text-align:left; font-size:13px; font-weight:800; }
+    .utility-menu button:hover,.utility-menu button:focus-visible,.small-button:hover { background:var(--acid); }
+    .sheet { max-width:1500px; margin:auto; padding:20px 24px 45px; display:grid; grid-template-columns:minmax(390px,34%) minmax(0,1fr); align-items:start; gap:20px; }
     .card,.work { position:relative; min-width:0; border:4px solid var(--ink); background:var(--paper) url("../assets/fantasy-punk/textures/paper-panel.webp") repeat; box-shadow:5px 5px 0 var(--acid); }
     .card::before,.work::before { content:""; position:absolute; z-index:3; top:-12px; left:-12px; width:90px; height:90px; background:url("../assets/fantasy-punk/decorative/frames/frame-corner-top-left.webp") top left/contain no-repeat; pointer-events:none; }
     .card::after,.work::after { content:""; position:absolute; z-index:3; right:-8px; bottom:-8px; width:70px; height:70px; background:url("../assets/fantasy-punk/decorative/frames/frame-corner-bottom-right.webp") bottom right/contain no-repeat; pointer-events:none; }
-    .portrait { position:relative; height:330px; overflow:hidden; border-bottom:4px solid var(--ink); background:#180c18 url("../assets/fantasy-punk/Concept_001.png") 10% 18%/360% auto no-repeat; }
+    .portrait { position:relative; height:330px; overflow:hidden; border-bottom:4px solid var(--ink); background:#180c18 url("./assets/character-portrait-v1.png") 44% 28%/cover no-repeat; }
     .portrait::after { content:""; position:absolute; inset:55% 0 0; background:linear-gradient(transparent 0%,rgba(240,237,228,.8) 28%,var(--paper) 62%); pointer-events:none; }
     .portrait-stamp { position:absolute; z-index:2; top:13px; left:14px; width:54px; height:54px; background:url("../assets/fantasy-punk/decorative/frames/card-corner-crescent.webp") center/contain no-repeat; }
     .identity { position:absolute; z-index:2; left:20px; right:16px; bottom:12px; }
@@ -36,8 +40,8 @@
     .die { text-align:center; min-width:0; }
     .die-shape { position:relative; display:grid; place-items:center; width:min(82px,100%); aspect-ratio:1; margin:auto; background:url("../assets/fantasy-punk/semantic/dice/d20-paper.webp") center/contain no-repeat; color:var(--ink); font:32px Punk,Georgia,serif; }
     .die small { display:block; margin-top:2px; font-size:11px; font-weight:800; text-transform:uppercase; }
-    .statuses { display:grid; grid-template-columns:repeat(3,1fr); border-bottom:3px solid var(--ink); }
-    .statuses span { min-height:42px; display:flex; justify-content:center; align-items:center; gap:7px; padding:5px; border-right:2px solid var(--ink); font-size:11px; font-weight:800; text-transform:uppercase; text-align:center; }
+    .statuses { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); border-bottom:3px solid var(--ink); }
+    .statuses span { min-width:0; min-height:42px; display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:4px; padding:5px; border-right:2px solid var(--ink); font-size:11px; font-weight:800; text-transform:uppercase; text-align:center; }
     .statuses span:last-child { border-right:0; }
     .statuses strong { font-size:14px; }
     .abilities { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:2px; padding:15px 11px 34px; }
@@ -46,6 +50,7 @@
     .ability small { font-size:11px; font-weight:800; }
     .fold { display:none; position:absolute; z-index:5; bottom:0; right:0; width:48px; height:48px; border:0; background:transparent; }
     .fold::before { content:""; position:absolute; inset:0; background:var(--ink); clip-path:polygon(100% 0,100% 100%,0 100%); pointer-events:none; }
+    .fold::after { content:"↶"; position:absolute; right:2px; bottom:0; color:var(--paper); font:bold 23px/1 Arial,sans-serif; transform:rotate(-35deg); pointer-events:none; }
     .card-back { display:none; min-height:600px; padding:24px; color:var(--paper); background:var(--ink) url("../assets/fantasy-punk/textures/ink-surface.webp") repeat; }
     .card-back h2 { margin:0 0 5px; font:32px Punk,Georgia,serif; }
     .card-back .back-sub { color:var(--acid); font-size:12px; font-weight:800; text-transform:uppercase; }
@@ -56,10 +61,11 @@
     .card.is-flipped .card-front { display:none; }
     .card.is-flipped .card-back { display:block; }
     .card.is-flipped .fold::before { background:var(--paper); }
+    .card.is-flipped .fold::after { color:var(--ink); }
     .work { min-height:760px; padding:0 15px 24px; }
     .work::before { display:none; }
     .tabs { display:flex; align-items:stretch; overflow-x:auto; border-bottom:3px solid var(--ink); margin:0 -15px 14px; scrollbar-width:thin; }
-    .tabs span { flex:none; min-height:47px; display:grid; place-items:center; padding:8px 13px; border-right:2px solid var(--ink); font:17px Punk,Georgia,serif; text-transform:uppercase; white-space:nowrap; }
+    .tabs span { flex:none; min-height:47px; display:grid; place-items:center; padding:8px 13px; border-right:2px solid var(--ink); font:800 12px/1.15 Arial,sans-serif; letter-spacing:.045em; text-transform:uppercase; white-space:nowrap; }
     .tabs .active { position:relative; background:var(--acid); }
     .tabs .active::after { content:""; position:absolute; left:12px; right:12px; bottom:-3px; height:5px; background:var(--pink); }
     .work-head { display:flex; align-items:start; justify-content:space-between; gap:16px; margin-bottom:12px; }
@@ -80,22 +86,20 @@
     .spell mark { padding:1px 5px; background:var(--acid); color:var(--ink); font-size:10px; font-weight:800; text-transform:uppercase; }
     .star { font-size:23px; text-align:center; }
     @media(max-width:900px) {
-      .top { flex-wrap:wrap; gap:6px 20px; padding:9px 15px; }
-      .top-meta { gap:13px; }
-      .saved { order:3; width:100%; margin:0; }
-      .sheet { grid-template-columns:minmax(0,1fr); padding:5px 12px 30px; max-width:540px; }
-      .tools { max-width:540px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); padding:10px 12px; }
-      .tool-button { min-height:44px; padding:5px 8px; font-size:11px; line-height:1.15; }
+      .top { gap:10px; padding:9px 15px; }
+      .saved { font-size:10px; }
+      .sheet { grid-template-columns:minmax(0,1fr); padding:18px 12px 30px; max-width:540px; }
       .fold { display:block; }
       .portrait { height:325px; }
       .work { min-height:0; }
     }
     @media(max-width:430px) {
       .brand { font-size:26px; }
-      .top-meta { font-size:11px; }
-      .top-button { display:none; }
+      .saved { font-size:11px; }
+      .saved-long { display:none; }
+      .saved-short { display:inline; }
       .identity h1 { font-size:39px; }
-      .portrait { height:290px; background-size:390% auto; background-position:9% 18%; }
+      .portrait { height:290px; background-position:40% 28%; }
       .vitals { padding-inline:5px; }
       .die-shape { font-size:25px; }
       .die small { font-size:9px; }
@@ -107,11 +111,13 @@
       .work-head h2 { font-size:25px; }
       .spell strong { font-size:16px; }
     }
+    @media(max-width:360px) {
+      .saved { display:none; }
+    }
   </style>
 </head>
 <body>
-  <header class="top"><div class="brand">OneShot <em>SoyMan</em></div><div class="top-meta"><span>Кэрри</span><span>Рубашка: злая</span></div><div class="saved">● Сохранено на устройстве</div><button class="top-button" type="button">Скачать резервную копию</button></header>
-  <div class="tools"><button class="tool-button" type="button">Скачать автономный HTML</button><button class="tool-button" type="button">Проверить состав</button><button class="tool-button" type="button">Отправить мастеру</button></div>
+  <header class="top"><div class="brand">OneShot <em>SoyMan</em></div><div class="saved"><span class="saved-long">● Сохранено на устройстве</span><span class="saved-short">● Сохранено</span></div><div class="utility"><button class="menu-toggle" id="menu-toggle" type="button" aria-label="Действия с листом" aria-expanded="false" aria-controls="utility-menu">⋯</button><div class="utility-menu" id="utility-menu" aria-label="Действия с листом" hidden><p>Действия с листом</p><button type="button">Скачать резервную копию</button><button type="button">Скачать автономный HTML</button><button type="button">Проверить состав</button><button type="button">Отправить мастеру</button></div></div></header>
   <main class="sheet">
     <section class="card" id="preview-card" aria-label="Карта персонажа">
       <div class="card-front">
@@ -147,6 +153,22 @@
       const reversed = card.classList.toggle('is-flipped');
       flip.setAttribute('aria-pressed', String(reversed));
       flip.setAttribute('aria-label', reversed ? 'Вернуться на лицевую сторону карты' : 'Перевернуть карту: входящие, передачи, постер');
+    });
+    const menuToggle = document.getElementById('menu-toggle');
+    const utilityMenu = document.getElementById('utility-menu');
+    function setMenuOpen(open) {
+      utilityMenu.hidden = !open;
+      menuToggle.setAttribute('aria-expanded', String(open));
+    }
+    menuToggle.addEventListener('click', () => setMenuOpen(utilityMenu.hidden));
+    document.addEventListener('click', event => {
+      if (!event.target.closest('.utility')) setMenuOpen(false);
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && !utilityMenu.hidden) {
+        setMenuOpen(false);
+        menuToggle.focus();
+      }
     });
   </script>
 </body>
