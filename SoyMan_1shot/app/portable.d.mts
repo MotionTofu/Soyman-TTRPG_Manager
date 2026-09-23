@@ -6,3 +6,5 @@ export function candidateCatalog(character: unknown, catalog: unknown): {
 };
 export function portablePayload(character: Character, catalog: Catalog | null): any;
 export function renderPortable(template: string, payload: any): string;
+export function gmPayload(character: Character, catalog: Catalog | null): any;
+export function portableFileName(name: string | null | undefined): string;

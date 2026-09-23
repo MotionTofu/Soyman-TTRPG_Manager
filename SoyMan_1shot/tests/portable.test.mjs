@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { JSDOM, VirtualConsole } from '../../client/node_modules/jsdom/lib/api.js';
-import { portablePayload, renderPortable } from '../app/portable.mjs';
+import { gmPayload, portableFileName, portablePayload, renderPortable } from '../app/portable.mjs';
 test('portable payload excludes unrelated entries and rejects unsupported dependencies', () => {
   const c = { content: { classes: [], equipmentSections: [{ items: [{ entryId: 1, transferIn: { fromCharacterId: 77 } }] }] } };
   const catalog = { system: {}, sections: [{ id: 1 }], entries: [1, 2].map(id => ({ id, section_id: 1, parent_id: null, kind: 'equipment', name: `Item ${id}`, data: {}, avatar_preview_url: 'data:image/webp;base64,cHJldmlldw==', avatar_large_url: 'data:image/webp;base64,bGFyZ2U=' })) };
@@ -16,6 +16,17 @@ test('portable payload excludes unrelated entries and rejects unsupported depend
   assert.throws(() => portablePayload({ content: { companions: [{ entryId: 1, name: 'Волк' }] } }, catalog), /статблок бестиария/);
   assert.throws(() => portablePayload({ content: { companions: [{ entryId: null, featureEntryId: 1, name: 'Защитник' }] } }, catalog), /Не найден чертёж/);
   assert.throws(() => portablePayload({ content: { companions: [{ entryId: null, statblockId: 42, name: 'Спутник' }] } }, catalog), /статблок/);
+});
+test('GM copy drops only private notes and names the file after the character', () => {
+  const c = { characterUid: 'u1', content: { characterName: 'Арья', notes: 'личное', ideals: 'Свобода', classes: [] } };
+  const payload = gmPayload(c, { system: {}, sections: [], entries: [] });
+  assert.equal(payload.character.content.notes, '');
+  assert.equal(payload.character.content.ideals, 'Свобода');
+  assert.equal(c.content.notes, 'личное');
+  assert.equal(payload.identity.characterUid, 'u1');
+  assert.equal(portableFileName('Арья / "Тень"'), 'Арья Тень.html');
+  assert.equal(portableFileName('  '), 'Персонаж.html');
+  assert.equal(portableFileName('a\\b'), 'a b.html');
 });
 test('common rules include ancestors and reject broken or external dependencies', () => {
   const character = { content: { classes: [] } };

@@ -24,7 +24,7 @@ import { selectCharacter, refreshSelectedCatalogMedia } from './transport';
 import { ensureCurrentCatalog, ensureCatalogPreviews, garbageCollectCatalogs, mergePreviews } from './catalog-manager.mjs';
 import { parseCatalog } from './catalog.mjs';
 import { auditExport } from './export-audit.mjs';
-import { portablePayload, renderPortable } from './portable.mjs';
+import { gmPayload, portableFileName, portablePayload, renderPortable } from './portable.mjs';
 import { Modal } from '../../client/src/components/Modal';
 import { QRCodeSVG } from 'qrcode.react';
 import { shouldNotifyForWaiting, shouldNotifyForInstalled, createControllerChangeHandler, applyUpdateSafely } from './pwa/update.mjs';
@@ -314,6 +314,8 @@ function App() {
   const activeRef = useRef<Character | null>(null);
   const [catalogKey, setCatalogKey] = useState<string | null>(null);
   const [serverCatalog, setServerCatalog] = useState(false);
+  // server-config.json {sync:false}: static hosting without a SoyMan server hides device sync.
+  const [syncAllowed, setSyncAllowed] = useState(true);
   const [error, setError] = useState(''); const [ready, setReady] = useState(false);
   const [status, setStatus] = useState(''); const [busy, setBusy] = useState(false);
   // A2.3 update UX: soft banner for a staged (waiting) SW. No auto-reload.
@@ -338,6 +340,9 @@ function App() {
   const [wizard, setWizard] = useState(false);
   const [exportAudit, setExportAudit] = useState<ReturnType<typeof auditExport> | null>(null);
   const [exporting, setExporting] = useState(false);
+  // Built GM file waiting for a fresh tap: Safari rejects share() when the
+  // build outlived the original gesture.
+  const [gmFile, setGmFile] = useState<File | null>(null);
   const [includeLargeCards, setIncludeLargeCards] = useState(true);
   const [managed, setManaged] = useState<'idle' | 'working' | 'ready' | 'failed'>('idle');
   const ensureRef = useRef<Promise<{ key: string | null; managed: boolean }> | null>(null);
@@ -447,7 +452,24 @@ function App() {
   function launchMedia(key: string | null, managed: boolean) {
     if (key && managed) void ensureMedia(key);
   }
-  async function exportHtml() {
+  // One tap for the player (grilling 2026-09-23): the share sheet with the
+  // GM copy; plain download where the browser cannot share files.
+  async function shareGmFile(file: File) {
+    if (navigator.canShare?.({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: file.name }); setGmFile(null); setStatus('Файл для Мастера отправлен'); }
+      catch (e) {
+        if ((e as Error).name === 'AbortError') setGmFile(null);
+        else if ((e as Error).name === 'NotAllowedError') setGmFile(file);
+        else throw e;
+      }
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const link = document.createElement('a'); link.href = url; link.download = file.name; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    setGmFile(null); setStatus('Файл для Мастера скачан — отправьте его в чат');
+  }
+  async function exportHtml(forGm = false) {
     setExporting(true); setError('');
     try {
       const c = activeRef.current; if (!c?.content) return;
@@ -461,10 +483,12 @@ function App() {
         source = { ...saved, revision: saved.revision };
         activeRef.current = source; setActive(source);
       }
-      const payload = portablePayload(source, source.catalogKey ? (await getCatalog(source.catalogKey)) ?? null : null);
+      const catalog = source.catalogKey ? (await getCatalog(source.catalogKey)) ?? null : null;
+      const payload = forGm ? gmPayload(source, catalog) : portablePayload(source, catalog);
       const response = await fetch('/standalone-template.html');
       if (!response.ok) throw Error('Не удалось загрузить оболочку автономного чарника.');
       const html = renderPortable(await response.text(), payload);
+      if (forGm) { await shareGmFile(new File([html], portableFileName(displayName(source)), { type: 'text/html' })); return; }
       const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
       const link = document.createElement('a'); link.href = url; link.download = `OneShot-${source.id}.html`; link.click();
       setTimeout(() => URL.revokeObjectURL(url), 60000);
@@ -694,7 +718,9 @@ function App() {
       if (!import.meta.env.DEV) {
         try {
           const response = await fetch('/server-config.json', { cache: 'no-store' });
-          if (response.ok && (await response.json()).catalog === '/catalog.json') setServerCatalog(true);
+          const config = response.ok ? await response.json() : null;
+          if (config?.catalog === '/catalog.json') setServerCatalog(true);
+          if (config?.sync === false) setSyncAllowed(false);
         } catch { /* Local characters remain available when the server is unreachable. */ }
       }
       const id = Number(new URLSearchParams(location.search).get('character'));
@@ -1001,7 +1027,7 @@ function App() {
     setShareBusy(true); setShareError(''); setShareToken(null);
     setShareServerActive(false); setShareUpdatedAt(null);
     try {
-      const local = (await getShareTokens().catch(() => ({})))[c.characterUid] ?? null;
+      const local = (await getShareTokens().catch((): Record<string, string> => ({})))[c.characterUid] ?? null;
       const remote = syncCred ? await listShares(syncCred.apiBase, syncCred) : [];
       const entry = remote.find((e) => e.characterUid === c.characterUid) ?? null;
       if (local && entry) {
@@ -1282,7 +1308,7 @@ function App() {
       // the character when the token is known here. Sync/tombstones are
       // untouched; a sibling-device share stays to its own lifecycle.
       if (target.characterUid && syncCred) {
-        const token = (await getShareTokens().catch(() => ({})))[target.characterUid] ?? null;
+        const token = (await getShareTokens().catch((): Record<string, string> => ({})))[target.characterUid] ?? null;
         if (token) {
           await revokeShare(syncCred.apiBase, syncCred, target.characterUid).catch(() => {});
           await dropShareToken(target.characterUid).catch(() => {});
@@ -1330,7 +1356,7 @@ function App() {
         </div>
       </>}
     </header>
-    {active?.content && <div className="oneshot-export-action"><button disabled={exporting} onClick={() => void exportHtml()}>{exporting ? 'Собираем автономную копию…' : 'Скачать автономный HTML'}</button><button onClick={() => void inspectExport()}>Проверить состав</button></div>}
+    {active?.content && <div className="oneshot-export-action">{gmFile ? <button onClick={() => void shareGmFile(gmFile).catch(e => setError((e as Error).message))}>Файл готов — отправить Мастеру</button> : <button disabled={exporting} onClick={() => void exportHtml(true)}>Отправить Мастеру</button>}<button disabled={exporting} onClick={() => void exportHtml()}>{exporting ? 'Собираем автономную копию…' : 'Скачать автономный HTML'}</button><button onClick={() => void inspectExport()}>Проверить состав</button></div>}
     {exportAudit && <Modal className="oneshot-modal" ariaLabel="Проверка автономной копии" onClose={() => setExportAudit(null)}>
       <h3>Подготовка автономной копии</h3>
       <p>Найдено {exportAudit.entryCount} связанных с персонажем записей из {exportAudit.totalEntryCount} в справочнике. Остальные заклинания и предметы в этот предварительный срез не включены.</p>
@@ -1446,7 +1472,7 @@ function App() {
         {import.meta.env.DEV && <p><button onClick={async () => { try { const response = await fetch('/__local/catalog'); if (!response.ok) throw Error('Локальная копия справочника ещё не подготовлена'); await saveCatalog(parseCatalog(await response.json())); location.reload(); } catch (e) { setError((e as Error).message); } }}>Подключить локальный справочник SoyMan</button></p>}
         {serverCatalog && <section><h2>Общий справочник сайта</h2><p>Подключите готовый справочник для создания персонажей. Загрузка может занять некоторое время. Уже созданные персонажи сохранят свою версию правил.</p><button disabled={busy} onClick={() => void connectServerCatalog()}>{busy ? 'Загружаем справочник…' : 'Подключить общий справочник'}</button></section>}
         <section aria-label="Локальные данные"><h2>Локальные данные</h2><p className="muted">{storageProtectionText(storageStatus)}</p>{storageStatus.usageText && <p className="muted">{storageStatus.usageText}</p>}{storageStatus.supported && storageStatus.persisted === false && <p><button disabled={persistBusy} onClick={() => void protectData()}>{persistBusy ? 'Запрашиваем…' : 'Защитить данные'}</button></p>}{shouldAdviseBackup({ supported: storageStatus.supported, persisted: storageStatus.persisted, hasCharacters: characters.length > 0 }) && <p className="muted">Рекомендуется сохранить резервную копию персонажей.</p>}</section>
-        <section aria-label="Синхронизация"><h2>Синхронизация между устройствами</h2>
+        {syncAllowed && <section aria-label="Синхронизация"><h2>Синхронизация между устройствами</h2>
           {!syncCred ? <>
             <p className="muted">Синхронизация не включена. Пока только подключение устройств; персонажи не отправляются.</p>
             <p><label>Адрес сервера SoyMan <input value={syncServerInput} onChange={e => setSyncServerInput(e.target.value)} maxLength={200} placeholder="http://192.168.1.5:3001" inputMode="url" /></label></p>
@@ -1465,7 +1491,7 @@ function App() {
             {syncResult && syncResult.errors.length > 0 && <ul>{syncResult.errors.slice(0, 3).map((message) => <li key={message} className="muted">{message}</li>)}</ul>}
           </>}
           {syncError && <Banner as="p">{syncError}</Banner>}
-        </section>
+        </section>}
       </details>
       <p className="muted">Автономный HTML можно скачать из листа персонажа. Изменения в копии сохраняются повторным скачиванием. Резервная копия JSON содержит лист и игровые данные.</p></aside>
       </div>

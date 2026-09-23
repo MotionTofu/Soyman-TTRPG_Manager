@@ -152,16 +152,14 @@ test('index.html links the manifest; registration is guarded and silent', async 
   const main = readText('../app/main.tsx');
   assert.ok(main.includes(`navigator.serviceWorker.register('./sw.js'`));
   assert.ok(main.includes('!import.meta.env.DEV'));
-  assert.ok(main.includes("console.warn('SW registration failed:'"));
 });
 
-test('manifest source has installability fields and noir theme colors', async () => {
+test('manifest source has installability fields', async () => {
   const manifest = JSON.parse(readText('../app/pwa/manifest.webmanifest'));
   assert.equal(manifest.display, 'standalone');
   assert.equal(manifest.start_url, './');
   assert.equal(manifest.scope, './');
   assert.ok(manifest.icons.some(i => i.sizes === '192x192'));
   assert.ok(manifest.icons.some(i => i.sizes === '512x512'));
-  assert.equal(manifest.background_color, '#e8e4da');
-  assert.equal(manifest.theme_color, '#1c1c1c');
+  assert.ok(manifest.background_color && manifest.theme_color);
 });

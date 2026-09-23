@@ -26,6 +26,15 @@ export default {
       try { const manifest = await readFile(path.join(root, 'app/pwa/manifest.webmanifest'), 'utf8'); res.setHeader('Content-Type', 'application/manifest+json'); res.end(manifest); }
       catch (e) { res.statusCode = 500; res.end('Manifest read failed'); server.config.logger.error(String(e)); }
     });
+    // Development only: managed catalog release built by run-app from
+    // private/catalog.json into catalog/. Without it the SPA fallback answers
+    // catalog/manifest.json with HTML and the first creation fails.
+    server.middlewares.use('/catalog', async (req, res, next) => {
+      const name = decodeURIComponent((req.url || '').split('?')[0].replace(/^\//, ''));
+      if (!/^[\w.-]+\.json$/.test(name)) return next();
+      try { const data = await readFile(path.join(root, 'catalog', name)); res.setHeader('Content-Type', 'application/json'); res.setHeader('Cache-Control', 'no-store'); res.end(data); }
+      catch { res.statusCode = 404; res.end('Catalog release not built'); }
+    });
     // Development only; private catalog is never copied to app-dist.
     server.middlewares.use('/__local/catalog', async (req, res) => {
       if (req.method !== 'GET') { res.statusCode = 405; res.end(); return; }

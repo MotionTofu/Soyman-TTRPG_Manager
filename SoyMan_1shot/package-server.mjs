@@ -20,22 +20,33 @@ function arg(name, def = undefined) {
 const catalogPath = arg('catalog');
 const catalogVersion = arg('catalog-version');
 const language = arg('language', 'ru');
-if (process.argv.slice(2).some(a => a.startsWith('--') && !['--catalog', '--catalog-version', '--language'].includes(a))
-  || (catalogVersion && !catalogPath) || (!catalogPath && !catalogVersion && process.argv.length > 2)) {
-  throw Error('Usage: node package-server.mjs [--catalog path/to/catalog.json [--catalog-version 2026.09 [--language ru]]]');
+// --vercel: static site/ for Vercel. Managed v2 catalog only (the legacy
+// /catalog.json has no deployed clients there), no Caddy, device sync hidden
+// because Vercel hosts no SoyMan server.
+const vercel = process.argv.includes('--vercel');
+const argv = process.argv.slice(2).filter(a => a !== '--vercel');
+if (argv.some(a => a.startsWith('--') && !['--catalog', '--catalog-version', '--language'].includes(a))
+  || (catalogVersion && !catalogPath) || (!catalogPath && !catalogVersion && argv.length > 0)
+  || (vercel && !catalogVersion)) {
+  throw Error('Usage: node package-server.mjs [--vercel] [--catalog path/to/catalog.json [--catalog-version 2026.09 [--language ru]]] (--vercel requires --catalog-version)');
 }
 // Validate the explicitly selected public catalog before building; never copy private/.
 const catalog = catalogPath ? parseCatalog(JSON.parse(await readFile(path.resolve(catalogPath), 'utf8'))) : null;
 const result = spawnSync(process.execPath, ['run-app.mjs', '--build'], { cwd: root, stdio: 'inherit' });
 if (result.status !== 0) throw Error('Site build failed');
-const name = `soyman-server-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+const name = `soyman-${vercel ? 'vercel' : 'server'}-${new Date().toISOString().replace(/[:.]/g, '-')}`;
 const directory = path.join(root, 'releases', name);
 await mkdir(directory, { recursive: true });
-await cp(path.join(root, 'deploy'), directory, { recursive: true });
+if (!vercel) await cp(path.join(root, 'deploy'), directory, { recursive: true, filter: src => path.basename(src) !== 'vercel.json' });
 await cp(path.join(root, 'app-dist'), path.join(directory, 'site'), { recursive: true });
 await cp(path.join(root, 'DEPLOY.md'), path.join(directory, 'README.md'));
-await writeFile(path.join(directory, 'site/server-config.json'), JSON.stringify({ catalog: catalog ? '/catalog.json' : null }));
-if (catalog) await writeFile(path.join(directory, 'site/catalog.json'), JSON.stringify(catalog));
+if (vercel) {
+  await cp(path.join(root, 'deploy/vercel.json'), path.join(directory, 'site/vercel.json'));
+  await writeFile(path.join(directory, 'site/server-config.json'), JSON.stringify({ catalog: null, sync: false }));
+} else {
+  await writeFile(path.join(directory, 'site/server-config.json'), JSON.stringify({ catalog: catalog ? '/catalog.json' : null }));
+  if (catalog) await writeFile(path.join(directory, 'site/catalog.json'), JSON.stringify(catalog));
+}
 // Catalog Delivery v2 (phase 1): parallel new-format release next to the
 // legacy /catalog.json (deprecated since A2.3, still served for old deployed
 // clients during the grace period). The running app prefers site/catalog/ but
@@ -65,6 +76,10 @@ if (catalog && catalogVersion) {
   await writeFile(path.join(catalogDir, previewsFileName(catalogId)), previewsBytes);
   await writeFile(path.join(catalogDir, 'manifest.json'), serializeArtifact(manifest));
   console.log(`Catalog release v2: ${catalogId} (${coreBytes.length} + ${previewsBytes.length} bytes)`);
+}
+if (vercel) {
+  console.log(`Vercel site: ${path.join(directory, 'site')}`);
+  process.exit(0);
 }
 const archive = path.join(root, 'releases', `${name}.tar.gz`);
 const packed = spawnSync('tar', ['-czf', archive, '-C', directory, '.'], { stdio: 'inherit' });

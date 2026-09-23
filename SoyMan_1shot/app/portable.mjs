@@ -53,3 +53,13 @@ export function renderPortable(template, payload) {
   if (!template.includes('__ONESHOT_PAYLOAD__')) throw Error('Повреждён шаблон автономного чарника.');
   return template.replace('__ONESHOT_PAYLOAD__', () => JSON.stringify(payload).replaceAll('<', '\\u003c'));
 }
+// Copy for the GM's review (grilling 2026-09-23): the same portable HTML,
+// minus the player's private notes. Named after the character so the GM
+// tells files apart in the chat.
+export function gmPayload(character, catalog) {
+  return portablePayload({ ...character, content: { ...character.content, notes: '' } }, catalog);
+}
+export function portableFileName(name) {
+  const clean = String(name || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
+  return `${clean || 'Персонаж'}.html`;
+}
