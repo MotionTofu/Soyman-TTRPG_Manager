@@ -6589,6 +6589,45 @@ function walkDieParts(
  * учитывается наравне с классом — у Картографа 11 заклинаний сверх 80
  * артефакторских.
  */
+// Fullscreen sheet dialogs bypass the shared Modal focus handling. Keep this
+// scoped to OneShot while the sheet itself is shared with the main app.
+function useOneShotOverlayFocus(initialSelector: string) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (document.documentElement.dataset.app !== "oneshot") return;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    (dialog.querySelector<HTMLElement>(initialSelector) ?? dialog).focus();
+
+    const onTab = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const controls = Array.from(dialog.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )).filter((element) => element.getClientRects().length > 0);
+      if (controls.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const activeIndex = controls.indexOf(document.activeElement as HTMLElement);
+      if (event.shiftKey && activeIndex <= 0) {
+        event.preventDefault();
+        controls[controls.length - 1].focus();
+      } else if (!event.shiftKey && (activeIndex < 0 || activeIndex === controls.length - 1)) {
+        event.preventDefault();
+        controls[0].focus();
+      }
+    };
+    document.addEventListener("keydown", onTab);
+    return () => {
+      document.removeEventListener("keydown", onTab);
+      if (previous?.isConnected) previous.focus();
+    };
+  }, [initialSelector]);
+  return dialogRef;
+}
+
 function DndClassSpellListModal({
   systemId,
   sources,
@@ -6623,6 +6662,7 @@ function DndClassSpellListModal({
   const [circleSel, setCircleSel] = useState<number | null>(null);
   const [picked, setPicked] = useState<ReadonlySet<number>>(new Set());
   const [failed, setFailed] = useState(false);
+  const dialogRef = useOneShotOverlayFocus('.dnd-spell-picker-search input');
 
   useEffect(() => {
     if (!systemId) {
@@ -6708,7 +6748,7 @@ function DndClassSpellListModal({
       .join(" · ");
 
   return (
-    <div className="dnd-spell-picker" role="dialog" aria-modal="true" aria-label="Взять заклинания">
+    <div ref={dialogRef} className="dnd-spell-picker" role="dialog" aria-modal="true" aria-label="Взять заклинания" tabIndex={-1}>
       <div className="dnd-spell-picker-head">
         <div className="dnd-spell-picker-title-row">
           <div>
@@ -6890,6 +6930,7 @@ function DndArcanumPicker({
   const [query, setQuery] = useState("");
   const [chosen, setChosen] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);
+  const dialogRef = useOneShotOverlayFocus('.dnd-spell-picker-close');
 
   useEffect(() => {
     if (!systemId) {
@@ -6931,7 +6972,7 @@ function DndArcanumPicker({
   const chosenEntry = chosen != null ? (all ?? []).find((e) => e.id === chosen) : undefined;
 
   return (
-    <div className="dnd-spell-picker" role="dialog" aria-modal="true" aria-label="Таинственный арканум">
+    <div ref={dialogRef} className="dnd-spell-picker" role="dialog" aria-modal="true" aria-label="Таинственный арканум" tabIndex={-1}>
       <div className="dnd-spell-picker-head">
         <div className="dnd-spell-picker-title-row">
           <div>
@@ -9467,6 +9508,7 @@ function DndDeckFan({
   const openedAt = useRef(Date.now());
   const isMobile = useIsMobile();
   const navigate = useNavigate();
+  const dialogRef = useOneShotOverlayFocus('.dnd-deck-fan-close');
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -9476,10 +9518,12 @@ function DndDeckFan({
   }, [onClose]);
   return (
     <div
+      ref={dialogRef}
       className="dnd-deck-fan-overlay"
       role="dialog"
       aria-modal="true"
       aria-label="Колода карт"
+      tabIndex={-1}
       onClickCapture={(e) => {
         if (Date.now() - openedAt.current < 600) {
           e.preventDefault();
