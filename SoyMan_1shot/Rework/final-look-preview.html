@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OneShot — целевой вид листа</title>
+  <style>
+    @font-face { font-family: Punk; src: url("../../client/public/fonts/RussianPunk.ttf") format("truetype"); font-display: swap; }
+    :root { --ink:#171717; --paper:#f0ede4; --acid:#f3ff3a; --pink:#ff3e91; --muted:#595650; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:#e7e2d6 url("../assets/fantasy-punk/textures/paper-tile.webp") repeat; font:16px/1.35 Arial, sans-serif; }
+    button { font:inherit; cursor:pointer; }
+    button:focus-visible { outline:3px solid #b10058; outline-offset:3px; }
+    .top { min-height:62px; display:flex; align-items:center; gap:30px; padding:9px max(24px,calc((100vw - 1500px)/2)); color:var(--paper); background:var(--ink) url("../assets/fantasy-punk/textures/ink-surface.webp") repeat; border-bottom:5px solid var(--acid); }
+    .brand { font:32px Punk,Georgia,serif; white-space:nowrap; }
+    .brand em { color:var(--acid); font-style:normal; }
+    .top-meta { display:flex; align-items:center; gap:24px; font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; }
+    .saved { margin-left:auto; color:var(--acid); font-size:12px; font-weight:800; text-transform:uppercase; white-space:nowrap; }
+    .top-button,.tool-button { min-height:40px; padding:8px 14px; border:2px solid currentColor; background:transparent; color:inherit; font-weight:800; text-transform:uppercase; }
+    .top-button { color:var(--acid); white-space:nowrap; }
+    .tools { max-width:1500px; margin:auto; padding:12px 24px; display:flex; gap:9px; flex-wrap:wrap; }
+    .tool-button { background:var(--paper); color:var(--ink); font-size:12px; }
+    .tool-button:hover,.small-button:hover { background:var(--acid); }
+    .sheet { max-width:1500px; margin:auto; padding:5px 24px 45px; display:grid; grid-template-columns:minmax(390px,34%) minmax(0,1fr); align-items:start; gap:20px; }
+    .card,.work { position:relative; min-width:0; border:4px solid var(--ink); background:var(--paper) url("../assets/fantasy-punk/textures/paper-panel.webp") repeat; box-shadow:5px 5px 0 var(--acid); }
+    .card::before,.work::before { content:""; position:absolute; z-index:3; top:-12px; left:-12px; width:90px; height:90px; background:url("../assets/fantasy-punk/decorative/frames/frame-corner-top-left.webp") top left/contain no-repeat; pointer-events:none; }
+    .card::after,.work::after { content:""; position:absolute; z-index:3; right:-8px; bottom:-8px; width:70px; height:70px; background:url("../assets/fantasy-punk/decorative/frames/frame-corner-bottom-right.webp") bottom right/contain no-repeat; pointer-events:none; }
+    .portrait { position:relative; height:330px; overflow:hidden; border-bottom:4px solid var(--ink); background:#180c18 url("../assets/fantasy-punk/Concept_001.png") 10% 18%/360% auto no-repeat; }
+    .portrait::after { content:""; position:absolute; inset:55% 0 0; background:linear-gradient(transparent 0%,rgba(240,237,228,.8) 28%,var(--paper) 62%); pointer-events:none; }
+    .portrait-stamp { position:absolute; z-index:2; top:13px; left:14px; width:54px; height:54px; background:url("../assets/fantasy-punk/decorative/frames/card-corner-crescent.webp") center/contain no-repeat; }
+    .identity { position:absolute; z-index:2; left:20px; right:16px; bottom:12px; }
+    .identity h1 { margin:0; font:clamp(35px,3.2vw,53px)/.95 Punk,Georgia,serif; text-transform:uppercase; text-shadow:1px 1px 0 var(--paper); }
+    .identity p { margin:7px 0 0; font-size:13px; font-weight:800; text-transform:uppercase; }
+    .identity b { display:inline-block; margin-right:8px; padding:3px 7px; background:var(--pink); border:2px solid var(--ink); }
+    .vitals { padding:14px 12px 10px; background:var(--ink) url("../assets/fantasy-punk/textures/ink-surface.webp") repeat; color:var(--paper); display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:3px; }
+    .die { text-align:center; min-width:0; }
+    .die-shape { position:relative; display:grid; place-items:center; width:min(82px,100%); aspect-ratio:1; margin:auto; background:url("../assets/fantasy-punk/semantic/dice/d20-paper.webp") center/contain no-repeat; color:var(--ink); font:32px Punk,Georgia,serif; }
+    .die small { display:block; margin-top:2px; font-size:11px; font-weight:800; text-transform:uppercase; }
+    .statuses { display:grid; grid-template-columns:repeat(3,1fr); border-bottom:3px solid var(--ink); }
+    .statuses span { min-height:42px; display:flex; justify-content:center; align-items:center; gap:7px; padding:5px; border-right:2px solid var(--ink); font-size:11px; font-weight:800; text-transform:uppercase; text-align:center; }
+    .statuses span:last-child { border-right:0; }
+    .statuses strong { font-size:14px; }
+    .abilities { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:2px; padding:15px 11px 34px; }
+    .ability { text-align:center; min-width:0; }
+    .ability .die-shape { width:min(62px,100%); font-size:23px; }
+    .ability small { font-size:11px; font-weight:800; }
+    .fold { display:none; position:absolute; z-index:5; bottom:0; right:0; width:48px; height:48px; border:0; background:transparent; }
+    .fold::before { content:""; position:absolute; inset:0; background:var(--ink); clip-path:polygon(100% 0,100% 100%,0 100%); pointer-events:none; }
+    .card-back { display:none; min-height:600px; padding:24px; color:var(--paper); background:var(--ink) url("../assets/fantasy-punk/textures/ink-surface.webp") repeat; }
+    .card-back h2 { margin:0 0 5px; font:32px Punk,Georgia,serif; }
+    .card-back .back-sub { color:var(--acid); font-size:12px; font-weight:800; text-transform:uppercase; }
+    .card-back section { margin-top:24px; padding-top:14px; border-top:2px solid var(--acid); }
+    .card-back h3 { margin:0 0 9px; font:23px Punk,Georgia,serif; text-transform:uppercase; }
+    .card-back p { margin:0 0 12px; }
+    .back-action { display:inline-flex; align-items:center; min-height:44px; margin:0 8px 8px 0; padding:7px 11px; border:2px solid var(--paper); color:var(--paper); font-size:12px; font-weight:800; text-transform:uppercase; }
+    .card.is-flipped .card-front { display:none; }
+    .card.is-flipped .card-back { display:block; }
+    .card.is-flipped .fold::before { background:var(--paper); }
+    .work { min-height:760px; padding:0 15px 24px; }
+    .work::before { display:none; }
+    .tabs { display:flex; align-items:stretch; overflow-x:auto; border-bottom:3px solid var(--ink); margin:0 -15px 14px; scrollbar-width:thin; }
+    .tabs span { flex:none; min-height:47px; display:grid; place-items:center; padding:8px 13px; border-right:2px solid var(--ink); font:17px Punk,Georgia,serif; text-transform:uppercase; white-space:nowrap; }
+    .tabs .active { position:relative; background:var(--acid); }
+    .tabs .active::after { content:""; position:absolute; left:12px; right:12px; bottom:-3px; height:5px; background:var(--pink); }
+    .work-head { display:flex; align-items:start; justify-content:space-between; gap:16px; margin-bottom:12px; }
+    .work-head h2 { margin:0; font:29px Punk,Georgia,serif; text-transform:uppercase; }
+    .work-head p { margin:3px 0 0; color:var(--muted); font-size:13px; }
+    .spell-meta { display:flex; justify-content:space-between; flex-wrap:wrap; gap:7px 12px; margin-bottom:12px; font-size:13px; font-weight:800; }
+    .controls { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 14px; }
+    .small-button { min-height:36px; padding:6px 10px; background:var(--paper); border:2px solid var(--ink); font-size:12px; font-weight:800; text-transform:uppercase; }
+    .section-title { position:relative; display:flex; justify-content:space-between; align-items:center; margin:10px 0 4px; padding:4px 0; border-top:2px solid var(--ink); border-bottom:1px solid var(--ink); font:24px Punk,Georgia,serif; text-transform:uppercase; }
+    .section-title small { font:14px Arial,sans-serif; font-weight:800; }
+    .section-title::after { content:""; position:absolute; left:0; bottom:-7px; width:170px; height:12px; background:url("../assets/fantasy-punk/decorative/dividers/underline-acid-magenta.webp") left center/contain no-repeat; pointer-events:none; }
+    .spell { display:grid; grid-template-columns:42px minmax(0,1fr) 26px; align-items:center; gap:8px; min-height:49px; padding:4px 3px; border-bottom:1px solid #c7c0b1; }
+    .spell:nth-of-type(even) { background:rgba(0,0,0,.045); }
+    .school { width:38px; height:38px; object-fit:contain; background:var(--ink); }
+    .spell strong { font:18px Georgia,serif; font-weight:800; }
+    .spell .en { margin-left:8px; color:var(--muted); font-size:12px; }
+    .spell p { margin:2px 0 0; color:var(--muted); font-size:12px; }
+    .spell mark { padding:1px 5px; background:var(--acid); color:var(--ink); font-size:10px; font-weight:800; text-transform:uppercase; }
+    .star { font-size:23px; text-align:center; }
+    @media(max-width:900px) {
+      .top { flex-wrap:wrap; gap:6px 20px; padding:9px 15px; }
+      .top-meta { gap:13px; }
+      .saved { order:3; width:100%; margin:0; }
+      .sheet { grid-template-columns:minmax(0,1fr); padding:5px 12px 30px; max-width:540px; }
+      .tools { max-width:540px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); padding:10px 12px; }
+      .tool-button { min-height:44px; padding:5px 8px; font-size:11px; line-height:1.15; }
+      .fold { display:block; }
+      .portrait { height:325px; }
+      .work { min-height:0; }
+    }
+    @media(max-width:430px) {
+      .brand { font-size:26px; }
+      .top-meta { font-size:11px; }
+      .top-button { display:none; }
+      .identity h1 { font-size:39px; }
+      .portrait { height:290px; background-size:390% auto; background-position:9% 18%; }
+      .vitals { padding-inline:5px; }
+      .die-shape { font-size:25px; }
+      .die small { font-size:9px; }
+      .abilities { padding-inline:5px; }
+      .ability .die-shape { font-size:20px; }
+      .statuses span { font-size:9px; }
+      .work { padding-inline:10px; }
+      .tabs { margin-inline:-10px; }
+      .work-head h2 { font-size:25px; }
+      .spell strong { font-size:16px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="top"><div class="brand">OneShot <em>SoyMan</em></div><div class="top-meta"><span>Кэрри</span><span>Рубашка: злая</span></div><div class="saved">● Сохранено на устройстве</div><button class="top-button" type="button">Скачать резервную копию</button></header>
+  <div class="tools"><button class="tool-button" type="button">Скачать автономный HTML</button><button class="tool-button" type="button">Проверить состав</button><button class="tool-button" type="button">Отправить мастеру</button></div>
+  <main class="sheet">
+    <section class="card" id="preview-card" aria-label="Карта персонажа">
+      <div class="card-front">
+        <div class="portrait"><span class="portrait-stamp" aria-hidden="true"></span><div class="identity"><h1>Кэрри</h1><p><b>3</b> Артефактор · Картограф<br>Калдатар · Мудрец · БМ +2</p></div></div>
+        <div class="vitals"><div class="die"><span class="die-shape">12</span><small>КЗ</small></div><div class="die"><span class="die-shape">24</span><small>Хиты</small></div><div class="die"><span class="die-shape">+2</span><small>Инициатива</small></div><div class="die"><span class="die-shape">10</span><small>Пасс. воспр.</small></div><div class="die"><span class="die-shape">30</span><small>Скорость</small></div></div>
+        <div class="statuses"><span>Состояния <strong>Нет</strong></span><span>Концентрация <strong>—</strong></span><span>Истощение <strong>0</strong></span></div>
+        <div class="abilities"><div class="ability"><span class="die-shape">+2</span><small>СИЛ</small></div><div class="ability"><span class="die-shape">+2</span><small>ЛОВ</small></div><div class="ability"><span class="die-shape">+2</span><small>ТЕЛ</small></div><div class="ability"><span class="die-shape">+1</span><small>ИНТ</small></div><div class="ability"><span class="die-shape">+0</span><small>МДР</small></div><div class="ability"><span class="die-shape">−1</span><small>ХАР</small></div></div>
+      </div>
+      <div class="card-back"><h2>Входящие</h2><div class="back-sub">Кэрри · новых нет</div><section><p>Пока тихо — Мастер ещё ничего не прислал.</p></section><section><h3>Передачи</h3><p>Предметов и монет в пути нет.</p></section><section><h3>Постер персонажа</h3><span class="back-action">Скачать постер (PNG)</span><span class="back-action">Поделиться</span></section></div>
+      <button class="fold" id="flip" type="button" aria-label="Перевернуть карту: входящие, передачи, постер" aria-pressed="false"></button>
+    </section>
+    <section class="work" aria-label="Рабочая область — Магия">
+      <nav class="tabs" aria-label="Разделы листа"><span>Карта-действия</span><span class="active">Магия</span><span>Снаряжение</span><span>Навыки</span><span>Особенности</span><span>Досье</span><span>Ресурсы</span></nav>
+      <div class="work-head"><div><h2>Магия</h2><p>Заклинания и заговоры персонажа</p></div><strong>СЛ: 11 · АТК: +3</strong></div>
+      <div class="controls"><button class="small-button" type="button">✎ Редактировать</button><button class="small-button" type="button">Подготовленные / доступные</button><button class="small-button" type="button">Добавить</button></div>
+      <div class="spell-meta"><span>Заговоры 2 из 3</span><span>Подготовлено 4 из 4</span><span>Вне лимита 7</span></div>
+      <div class="section-title">Заговоры <small>5</small></div>
+      <div class="spell"><img class="school" src="../assets/fantasy-punk/semantic/school-icons/school-01.webp" alt=""><div><strong>Искусство друидов</strong><span class="en">Druidcraft</span><p><mark>Преобразование</mark> Действие · ВС · Особое</p></div><span class="star">★</span></div>
+      <div class="spell"><img class="school" src="../assets/fantasy-punk/semantic/school-icons/school-02.webp" alt=""><div><strong>Леденящее прикосновение</strong><span class="en">Chill Touch</span><p><mark>Некромантия</mark> Действие · ВС · Атака ближняя</p></div><span class="star">★</span></div>
+      <div class="spell"><img class="school" src="../assets/fantasy-punk/semantic/school-icons/school-03.webp" alt=""><div><strong>Меткий удар</strong><span class="en">True Strike</span><p><mark>Прорицание</mark> Действие · СМ · Атака ближняя</p></div><span class="star">★</span></div>
+      <div class="spell"><img class="school" src="../assets/fantasy-punk/semantic/school-icons/school-04.webp" alt=""><div><strong>Починка</strong><span class="en">Mending</span><p><mark>Преобразование</mark> 1 минута · ВСМ · Особое</p></div><span class="star">★</span></div>
+      <div class="section-title">1 круг <small>8 · исп. ◼ ◼ ◼</small></div>
+      <div class="spell"><img class="school" src="../assets/fantasy-punk/semantic/school-icons/school-05.webp" alt=""><div><strong>Доспехи мага</strong><span class="en">Mage Armor</span><p><mark>Ограждение</mark> Действие · ВСМ · Защита</p></div><span class="star">★</span></div>
+      <div class="spell"><img class="school" src="../assets/fantasy-punk/semantic/school-icons/school-06.webp" alt=""><div><strong>Лечащее слово</strong><span class="en">Healing Word</span><p><mark>Воплощение</mark> Бонусное действие · В · Лечение</p></div><span class="star">★</span></div>
+      <div class="spell"><img class="school" src="../assets/fantasy-punk/semantic/school-icons/school-07.webp" alt=""><div><strong>Направляющий снаряд</strong><span class="en">Guiding Bolt</span><p><mark>Воплощение</mark> Действие · ВС · Атака дальняя</p></div><span class="star">★</span></div>
+      <div class="spell"><img class="school" src="../assets/fantasy-punk/semantic/school-icons/school-08.webp" alt=""><div><strong>Огонь фей</strong><span class="en">Faerie Fire</span><p><mark>Воплощение</mark> Действие · В · Концентрация</p></div><span class="star">★</span></div>
+    </section>
+  </main>
+  <script>
+    const card = document.getElementById('preview-card');
+    const flip = document.getElementById('flip');
+    flip.addEventListener('click', () => {
+      const reversed = card.classList.toggle('is-flipped');
+      flip.setAttribute('aria-pressed', String(reversed));
+      flip.setAttribute('aria-label', reversed ? 'Вернуться на лицевую сторону карты' : 'Перевернуть карту: входящие, передачи, постер');
+    });
+  </script>
+</body>
+</html>
