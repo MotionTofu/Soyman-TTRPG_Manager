@@ -47,6 +47,7 @@ export function CharacterSheetPage() {
 
   return (
     <div className="sheet-page">
+      <div className="fp-page-backdrop" aria-hidden="true" />
       {loadError ? (
         <p className="error" role="alert">
           {loadError}

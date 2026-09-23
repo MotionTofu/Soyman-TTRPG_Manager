@@ -2685,6 +2685,31 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
             </>
           )}
           <EntryBlurb text={backgroundEntry?.description} />
+          {backgroundId != null && backgroundEntry && (
+            <div className="stack" style={{ gap: "var(--sp-2)" }} aria-live="polite">
+              {backgroundGrants.skills.length > 0 && (
+                <div>
+                  <strong>Навыки:</strong>{" "}
+                  {backgroundGrants.skills.map((k) => skills.nameOf(k)).join(", ")}
+                </div>
+              )}
+              {backgroundGrants.toolNames.length > 0 && (
+                <div>
+                  <strong>Владения:</strong> {backgroundGrants.toolNames.join(", ")}
+                </div>
+              )}
+              {backgroundGrants.originFeat && (
+                <div>
+                  <strong>Черта происхождения:</strong> {backgroundGrants.originFeat.name}
+                </div>
+              )}
+              {backgroundGrants.abilityOptions.length > 0 && (
+                <div>
+                  <strong>Характеристики:</strong> {backgroundGrants.abilityOptions.join(", ")} — на выбор +2/+1 или +1/+1/+1
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

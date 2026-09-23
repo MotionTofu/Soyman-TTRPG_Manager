@@ -10913,6 +10913,11 @@ export function DndCharacterView({
               прокручивается вбок, текущая карта подчёркнута цветом класса, и
               Мастеру, впервые открывшему чужой лист, видно, куда нажать —
               свайпов он не знает. */}
+          {/* Полоска названий колоды: на телефоне — сверху потоком, на
+              десктопе — шапка правой колонки (R2.1, по макету). Та же
+              навигация, только место другое: showDesktopFace синхронен
+              с CSS-брейкпоинтом 700px через useIsMobile. */}
+          {!showDesktopFace && (
           <div className="dnd-deck-strip" role="tablist" aria-label="Карты листа" ref={deckStripRef}>
             {DND_VIEW_TABS.map((t) => (
               <button
@@ -10932,6 +10937,7 @@ export function DndCharacterView({
               </button>
             ))}
           </div>
+          )}
 
           {/* Десктопный сплит (этап 7): лицевая/оборот слева в натуральную
               величину, вкладка справа. На телефоне обёртка прозрачна
@@ -11561,6 +11567,24 @@ export function DndCharacterView({
           {tab === "Карта" && cardFlipped && renderCardBack()}
 
           <div className="dnd-desktop-tab">
+          {showDesktopFace && (
+          <div className="dnd-deck-strip" role="tablist" aria-label="Карты листа">
+            {DND_VIEW_TABS.map((t) => (
+              <button
+                key={t}
+                type="button"
+                role="tab"
+                aria-selected={tab === t}
+                className={tab === t ? "active" : ""}
+                style={tab === t ? { borderBottomColor: cardColor } : undefined}
+                onClick={() => setTab(t)}
+              >
+                {t}
+                {t === "Снаряжение" && pendingItems > 0 && <span className="dnd-tab-dot" aria-label="есть непринятое" />}
+              </button>
+            ))}
+          </div>
+          )}
           {/* Десктопная правая колонка на «Карте» (этап 7): оборот + вход в
               правку основной информации. На телефоне тут пусто — оборот
               открывается переворотом, правка адресом с плашки профиля. */}

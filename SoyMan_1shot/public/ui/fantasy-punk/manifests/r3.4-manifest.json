@@ -1,0 +1,261 @@
+{
+  "burst-comic-wide": {
+    "components": [
+      1
+    ],
+    "size_px": [
+      386,
+      291
+    ],
+    "png_kb": 163.9,
+    "webp_kb": 54.4,
+    "webp_quality": 86
+  },
+  "scribble-cross-neon": {
+    "components": [
+      2
+    ],
+    "size_px": [
+      271,
+      241
+    ],
+    "png_kb": 91.1,
+    "webp_kb": 34.0,
+    "webp_quality": 86
+  },
+  "patch-halftone-rough": {
+    "components": [
+      3
+    ],
+    "size_px": [
+      336,
+      202
+    ],
+    "png_kb": 142.4,
+    "webp_kb": 38.2,
+    "webp_quality": 86
+  },
+  "glitch-stripes-wide": {
+    "components": [
+      4
+    ],
+    "size_px": [
+      388,
+      162
+    ],
+    "png_kb": 110.5,
+    "webp_kb": 35.2,
+    "webp_quality": 86
+  },
+  "tape-scribble-acid": {
+    "components": [
+      12
+    ],
+    "size_px": [
+      342,
+      177
+    ],
+    "png_kb": 109.5,
+    "webp_kb": 37.4,
+    "webp_quality": 86
+  },
+  "emblem-compass-burst": {
+    "components": [
+      5
+    ],
+    "size_px": [
+      303,
+      276
+    ],
+    "png_kb": 122.8,
+    "webp_kb": 39.1,
+    "webp_quality": 86
+  },
+  "slashes-claw-neon": {
+    "components": [
+      7,
+      9,
+      11,
+      10
+    ],
+    "size_px": [
+      280,
+      232
+    ],
+    "png_kb": 74.3,
+    "webp_kb": 29.3,
+    "webp_quality": 86
+  },
+  "flash-shard-neon": {
+    "components": [
+      8
+    ],
+    "size_px": [
+      274,
+      233
+    ],
+    "png_kb": 85.7,
+    "webp_kb": 30.5,
+    "webp_quality": 86
+  },
+  "torn-strip-vertical": {
+    "components": [
+      6
+    ],
+    "size_px": [
+      150,
+      308
+    ],
+    "png_kb": 84.0,
+    "webp_kb": 24.0,
+    "webp_quality": 86
+  },
+  "halftone-cloud-magenta": {
+    "components": [
+      15
+    ],
+    "size_px": [
+      306,
+      202
+    ],
+    "png_kb": 127.0,
+    "webp_kb": 36.1,
+    "webp_quality": 86
+  },
+  "tape-label-black": {
+    "components": [
+      16
+    ],
+    "size_px": [
+      367,
+      179
+    ],
+    "png_kb": 124.3,
+    "webp_kb": 33.2,
+    "webp_quality": 86
+  },
+  "drip-accent-vertical": {
+    "components": [
+      14
+    ],
+    "size_px": [
+      209,
+      212
+    ],
+    "png_kb": 63.4,
+    "webp_kb": 23.3,
+    "webp_quality": 86
+  },
+  "sparkles-trio": {
+    "components": [
+      13,
+      19,
+      17
+    ],
+    "size_px": [
+      244,
+      233
+    ],
+    "png_kb": 38.1,
+    "webp_kb": 17.9,
+    "webp_quality": 86
+  },
+  "chevrons-double-right": {
+    "components": [
+      18
+    ],
+    "size_px": [
+      194,
+      178
+    ],
+    "png_kb": 63.8,
+    "webp_kb": 21.8,
+    "webp_quality": 86
+  },
+  "scribble-oval-magenta": {
+    "components": [
+      23
+    ],
+    "size_px": [
+      346,
+      178
+    ],
+    "png_kb": 108.4,
+    "webp_kb": 37.0,
+    "webp_quality": 86
+  },
+  "corner-triangle-diag": {
+    "components": [
+      20
+    ],
+    "size_px": [
+      283,
+      203
+    ],
+    "png_kb": 76.1,
+    "webp_kb": 25.5,
+    "webp_quality": 86
+  },
+  "burst-crown-small": {
+    "components": [
+      21,
+      24,
+      25
+    ],
+    "size_px": [
+      303,
+      163
+    ],
+    "png_kb": 90.2,
+    "webp_kb": 32.1,
+    "webp_quality": 86
+  },
+  "smear-glitch-horizontal": {
+    "components": [
+      22
+    ],
+    "size_px": [
+      455,
+      145
+    ],
+    "png_kb": 107.5,
+    "webp_kb": 32.9,
+    "webp_quality": 86
+  },
+  "underline-neon-long": {
+    "components": [
+      28
+    ],
+    "size_px": [
+      570,
+      117
+    ],
+    "png_kb": 103.4,
+    "webp_kb": 41.2,
+    "webp_quality": 86
+  },
+  "zigzag-lightning-neon": {
+    "components": [
+      27
+    ],
+    "size_px": [
+      364,
+      150
+    ],
+    "png_kb": 75.6,
+    "webp_kb": 30.3,
+    "webp_quality": 86
+  },
+  "paper-smear-wide": {
+    "components": [
+      26
+    ],
+    "size_px": [
+      430,
+      163
+    ],
+    "png_kb": 136.5,
+    "webp_kb": 38.0,
+    "webp_quality": 86
+  }
+}

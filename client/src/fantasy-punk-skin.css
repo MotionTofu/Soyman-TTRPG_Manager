@@ -1,0 +1,595 @@
+/* SoyMan Fantasy Punk skin, phase R3.2 — signature character sheet pass.
+ * R3.2 adds the punk signature ON TOP of the R3.1 FINAL architecture without
+ * rebuilding it: portrait breakup in the photo→paper transition, two
+ * asymmetric card ornaments, a marker-style active tab, fan-button art.
+ * Reading zones (work body, lists, dice, abilities) stay clean; hierarchy
+ * still works with the signature raster switched off. See §10 for ledger.
+ * Frame Grammar (every carrying surface, varying intensity):
+ * OUTER INK EDGE → PAPER GAP → INNER INK KEYLINE → CONTENT SURFACE.
+ * Keylines and edges arrive via outline / outline-offset / inset box-shadow:
+ * none of them takes layout space, so geometry never moves.
+ *
+ * Layer rules (see docs/redesign-ui-inventory.md §6):
+ * - This file overrides VARIABLES and PRESENTATION only. No layout rules
+ *   (no display/position/size/flex changes), no business logic, no new
+ *   markup hooks. Geometry never depends on artwork.
+ * - Textures arrive ONLY as direct background layers under content — never
+ *   as z-index veils over image-bearing surfaces (a veil demonstrably
+ *   washes portraits regardless of stacking theory; see R2.1 notes).
+ *   Text always sits over a flat semantic surface (readability first).
+ * - Scoped to the sheet: page backdrop hooks (.oneshot-sheet in 1shot,
+ *   body.sheet-fullscreen added by the client sheet page) + .dnd-* sheet
+ *   classes shared by both hosts. Other client pages are untouched.
+ * - R3.1 uses ONLY source_pack === "R3.1" decorative assets (frame corners,
+ *   halftone corner, edge fragment). R3.2+ (portrait breakup, active-tab
+ *   markers, card ornaments, fan icons, dense-row decor, scribbles/glitch,
+ *   modal/form states, mobile decor) stays untouched — see §10 below.
+ * - Fixed OneShot identity: the sheet keeps warm paper / near-black ink /
+ *   acid / magenta regardless of the app theme (see §1). The global theme
+ *   engine is not modified; overrides live inside the sheet scope only.
+ *
+ * Assets: canonical bundle in ui/fantasy-punk/ (textures/, decorative/),
+ * mirrored 1:1 between SoyMan_1shot/public and client/public so both hosts
+ * serve the same URLs. Production .webp only; PNG sources stay in
+ * SoyMan_1shot/public as the untouched source archive. URL variables live
+ * ONLY in the :root block below so a later swap touches one place.
+ */
+
+/* ---- §0. Asset URLs (canonical bundle paths). ---- */
+:root {
+  /* Repeating grain tile (640px, 38KB): clean center crop of paper-bg,
+   * no halftone, no spots, no vignette — verified to repeat invisibly.
+   * Defects (halftone, spots) stay OUT of the tile; they arrive later as
+   * separate overlay assets. */
+  --skin-paper-tile: url("/ui/fantasy-punk/textures/paper-tile.webp");
+  --skin-paper-panel: url("/ui/fantasy-punk/textures/paper-panel.webp");
+  --skin-ink-surface: url("/ui/fantasy-punk/textures/ink-surface.webp");
+  /* Reserved washes (not used yet): */
+  --skin-acid-wash: url("/ui/fantasy-punk/textures/acid-yellow.webp");
+  --skin-magenta-wash: url("/ui/fantasy-punk/textures/punk-magenta.webp");
+  /* R3.1 decorative set (source_pack === "R3.1", .webp production).
+   * R3.1D status: frame corners / halftone corner / edge fragment are
+   * PARKED again (valid URLs, mirrored on both hosts, fetched by no rule).
+   * Corners: unachievable as paper ornaments on a full-bleed-photo top
+   * (variant B). Halftone/edge: read as smears next to text on every tab.
+   * They return in R3.2 only as true edge-bound construction (masks, real
+   * seams), never as overlays. */
+  --skin-frame-tl: url("/ui/fantasy-punk/decorative/frames/frame-corner-top-left.webp");
+  --skin-frame-tr: url("/ui/fantasy-punk/decorative/frames/frame-corner-top-right.webp");
+  --skin-frame-bl: url("/ui/fantasy-punk/decorative/frames/frame-corner-bottom-left.webp");
+  --skin-frame-br: url("/ui/fantasy-punk/decorative/frames/frame-corner-bottom-right.webp");
+  --skin-halftone-corner: url("/ui/fantasy-punk/decorative/frames/halftone-corner-large.webp");
+  --skin-edge-fragment: url("/ui/fantasy-punk/decorative/accents/edge-fragment-vertical.webp");
+  --skin-divider-ink: url("/ui/fantasy-punk/decorative/dividers/divider-ink-long.webp");
+  --skin-divider-rough: url("/ui/fantasy-punk/decorative/dividers/divider-rough-medium.webp");
+  /* R3.2 signature set (source_pack === "R3.2", .webp production). */
+  --skin-breakup-top: url("/ui/fantasy-punk/decorative/portrait/portrait-breakup-top.webp");
+  --skin-crescent: url("/ui/fantasy-punk/decorative/frames/card-corner-crescent.webp");
+  --skin-shard: url("/ui/fantasy-punk/decorative/frames/shard-corner-right.webp");
+  --skin-tab-marker: url("/ui/fantasy-punk/decorative/dividers/underline-acid-magenta.webp");
+  --skin-fan-paper: url("/ui/fantasy-punk/semantic/card-buttons/card-fan-paper.webp");
+  --skin-fan-acid: url("/ui/fantasy-punk/semantic/card-buttons/card-fan-acid.webp");
+
+  --skin-paper-base: #e8e4da;
+  --skin-ink: #171717;
+  --skin-ink-soft: #56534f;
+  --skin-acid: #f3ff3a;
+  --skin-magenta: #ff3e91;
+  --skin-danger: #d92d3f;
+  --skin-success: #58d66a;
+  --skin-info: #3ed6d0;
+}
+
+/* ---- §1. Fixed OneShot identity inside the sheet scope. ----
+ * The sheet must not follow the app theme: warm paper, near-black ink,
+ * acid/magenta accents are pinned here. Only presentation tokens the skin
+ * actually depends on are pinned; functional/semantic tokens (--danger,
+ * --font-*, spacing, motion) stay on the theme engine. R3.5 owns warning /
+ * confirmation / focus states — they are deliberately not pinned here.
+ * Previously --card-radius lived in :root and leaked onto every app page;
+ * it now lives here, restoring the other pages to their own token. */
+.oneshot-sheet,
+body.sheet-fullscreen {
+  --paper: #e8e4da;
+  --paper-2: #d9d3c2;
+  --ink: #171717;
+  --muted: #56534f;
+  --line: #262626;
+  --accent: #1c1c1c;
+  --accent-text: #ffffff;
+  --on-surface-muted: #a3a099;
+  /* Near-zero radius (Design Codex §7): kills the SaaS-card roundness,
+     keeps a hair against crunchy corners. */
+  --card-radius: 2px;
+}
+
+/* ---- Page backdrop: warm paper, seamless repeating grain. ----
+ * Solid base color + ONE tileable texture on endless repeat: full-viewport
+ * coverage with no islands, no masks, no scaling tricks. The tile carries
+ * grain only (see :root) — bitmap boundaries are indeterminable.
+ * The dedicated backdrop element keeps text out of every texture concern:
+ * fixed, out of flow, pointer-transparent, behind all content. Scoped to
+ * sheet hosts; 1shot home is untouched. */
+.oneshot-sheet,
+body.sheet-fullscreen {
+  background-color: var(--skin-paper-base);
+}
+.fp-page-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: var(--skin-paper-base);
+  background-image: var(--skin-paper-tile);
+  background-size: 640px auto;
+  background-repeat: repeat;
+}
+
+/* ---- §2. Outer frame of the whole sheet (client host). ----
+ * R3.1C: the page column is one physical board — quiet paper-panel surface
+ * behind card, strip, and work area (visible only in the seams between
+ * them), one ink outline, and two divider edges straddling the container's
+ * own top/bottom borders (ink-long on top, rough-medium at the bottom).
+ * Straddling (±7px of a 14px strip) plants them exactly ON the edge, never
+ * under text: outside the strip lies only page backdrop. R3.1D: outline
+ * 1px → 2px. R3.1 FINAL: plus the inner keyline, completing the grammar
+ * (2px edge / 2px gap / 1px keyline). Outline, offset, and inset shadow all
+ * draw outside flow: convincing frame at zero layout cost. (In the 1shot
+ * host the outer element is .oneshot-sheet, which also frames the home
+ * screen — so the frame there stays with the card and work-area outlines
+ * instead.) */
+.sheet-page {
+  position: relative;
+  isolation: isolate;
+  outline: 2px solid var(--skin-ink);
+  outline-offset: 2px;
+  box-shadow: inset 0 0 0 1px var(--skin-ink);
+  background-color: var(--paper);
+  background-image: var(--skin-paper-panel);
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+}
+.sheet-page::before,
+.sheet-page::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 14px;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 14px;
+}
+.sheet-page::before {
+  top: -7px;
+  background-image: var(--skin-divider-ink);
+}
+.sheet-page::after {
+  bottom: -7px;
+  background-image: var(--skin-divider-rough);
+}
+
+/* ---- Sheet switcher (client top shell, multiple sheets). ----
+ * Scoped to .sheet-page so the global .tabs language elsewhere is untouched:
+ * same paper as the tab strip below, ink lower edge, thin inner line.
+ * Background + keyline only. */
+.sheet-page .sb-switcher {
+  background-color: var(--paper);
+  background-image: var(--skin-paper-tile);
+  background-size: 640px auto;
+  background-repeat: repeat;
+  border-bottom-color: var(--skin-ink);
+  box-shadow: inset 0 0 0 1px var(--skin-ink);
+}
+
+/* ---- Character card: flat paper surface, rough ink frame, physical. ----
+ * Deliberately NO texture veil here: any overlay over the portrait zone
+ * demonstrably washes the artwork. Hard offset shadow, no blur. The
+ * existing class-color side borders stay data-driven.
+ * R3.1D decision — variant B (no corner assets). Variant A proved
+ * unachievable here: the card top is a full-bleed photo, so paper corners
+ * cannot physically exist there — top ornaments are either swallowed by the
+ * photo or stickers on it, while bottom ones sit on paper. That asymmetry
+ * ("pronounced bottom, plain top") is exactly the hovering state R3.1D bans.
+ * R3.1 FINAL: the frame language is therefore — 2px outer ink edge,
+ * 3px paper separation, 1px inner keyline, paper body, hard offset shadow —
+ * continuous on all four sides, no ornaments needed. Corners may return in
+ * R3.2 with portrait-breakup masks that give them a real edge to sit on. */
+.dnd-card-face {
+  background-color: var(--paper);
+  background-image: var(--skin-paper-tile);
+  background-size: 480px auto;
+  background-repeat: repeat;
+  outline: 2px solid var(--skin-ink);
+  outline-offset: 3px;
+  box-shadow:
+    inset 0 0 0 1px var(--skin-ink),
+    3px 3px 0 rgba(23, 23, 23, 0.9);
+}
+/* ---- R3.2 card signature: two asymmetric accents, frame-bound. ----
+ * Prominent: crescent medallion straddling the TOP-LEFT corner (overlaps
+ * frame edge + photo corner like a stamp; top-right is reserved for the
+ * inspiration token control). Quiet: shard rising from the BOTTOM-LEFT
+ * corner. Both share the left frame line instead of floating randomly.
+ * pointer-events:none, inside the card stacking context; positioned
+ * controls (token, flip corner) paint above. Nothing over name, dice,
+ * values, descriptions. The card stays whole with ornaments mentally
+ * removed. */
+.dnd-card-face::before,
+.dnd-card-face::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  background-repeat: no-repeat;
+}
+.dnd-card-face::before {
+  top: -4px;
+  left: -4px;
+  width: 104px;
+  height: 112px;
+  background-image: var(--skin-crescent);
+  background-position: top left;
+  background-size: contain;
+}
+.dnd-card-face::after {
+  bottom: -4px;
+  left: -4px;
+  width: 88px;
+  height: 84px;
+  background-image: var(--skin-shard);
+  background-position: bottom left;
+  background-size: contain;
+}
+/* Mobile: one accent only. The shard stands down (narrow card, no free
+ * corner); the crescent shrinks but stays — same construction, calmer.
+ * Existing 700px breakpoint, nothing new. */
+@media (max-width: 700px) {
+  .dnd-card-face::before {
+    width: 72px;
+    height: 78px;
+  }
+  .dnd-card-face::after {
+    content: none;
+  }
+}
+
+/* ---- Portrait transition: keep the soft fade idea, print-flavoured. ----
+ * Stops retargeted from flat #E8E4DA to the deeper paper tone. No grain
+ * overlay: the melt gradient is the design, anything over the artwork
+ * needs a masked R2.2 asset, not a veil.
+ * R3.1: no new portrait treatment (that's R3.2). One inset ink keyline
+ * ties the portrait edge to the card frame — box-shadow paints inside the
+ * box, so geometry, touch handling, and the fade are untouched. */
+.dnd-card-portrait-zone {
+  box-shadow:
+    inset 0 2px 0 var(--skin-ink),
+    inset 0 -2px 0 var(--skin-ink);
+}
+/* ---- R3.2 portrait breakup: print transition, not a veil. ----
+ * The breakup strip rides the grain overlay span (aria-hidden, no clicks,
+ * no layout): bottom-anchored, full card width, 96px tall, sunk 12px below
+ * the zone edge (clipped by the portrait's own overflow:hidden) so only its
+ * gray halftone mass and acid/magenta slashes melt the photo — the heavy
+ * black base stays out of view. Faces, eyes, and costume centers live in
+ * the top two thirds and stay clean; the existing fade gradient beneath
+ * keeps melting everything into paper. z-index lifts the strip above the
+ * fade (later sibling would veil it in paper); the cartouche is lifted one
+ * step higher so the name never sits under grunge. Death overlay keeps
+ * working (clicks pass through; it is an edge state, centered, mostly above
+ * the strip). No-vehicle rule kept: with no portrait there is no span, so
+ * nothing renders. */
+.dnd-card-portrait-grain {
+  z-index: 1;
+  background-image: var(--skin-breakup-top);
+  background-repeat: no-repeat;
+  background-position: center bottom -12px;
+  background-size: 100% 96px;
+}
+/* Image-treatment mode keeps its exact dot rendering (same image, size,
+ * blend, opacity as the base rule — later cascade position wins the tie);
+ * the breakup lays over the dots at the same faded opacity. */
+[data-image-treatment] .dnd-card-portrait-grain {
+  background-image:
+    var(--skin-breakup-top),
+    radial-gradient(color-mix(in srgb, var(--ink) 22%, transparent) 1px, transparent 1px);
+  background-repeat: no-repeat, repeat;
+  background-position:
+    center bottom -12px,
+    0 0;
+  background-size:
+    100% 96px,
+    3px 3px;
+  mix-blend-mode: multiply;
+  opacity: 0.38;
+}
+[data-image-treatment][data-theme-mode="dark"] .dnd-card-portrait-grain {
+  mix-blend-mode: screen;
+}
+.dnd-card-cartouche {
+  z-index: 2;
+}
+.dnd-card-portrait-fade {
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0) 46%,
+    rgba(216, 211, 200, 0.55) 72%,
+    rgba(232, 228, 218, 1) 100%
+  );
+}
+
+/* ---- Cartouche name: display condensed voice, ink on the fade. ---- */
+.dnd-card-cartouche-name {
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+/* ---- Resource/status strip: the vital dice row as one ink band. ----
+ * The punk signature (cf. approved mobile HP panel). Dice tiles themselves
+ * are untouched (approved pattern); only the band behind them and their
+ * captions change voice. In-flow padding only — no overflow, no
+ * sticky/fixed interplay.
+ * R3.1D: the band reads as a sunk ink plate, not a cut rectangle — inner
+ * top/bottom shading (inset shadows paint inside the box: zero layout)
+ * gives it pressed-in depth, and the sewn seams below finish the top and
+ * bottom edges. ink-surface stays as the plate's tooth.
+ * R3.1 FINAL: misregistered print edges — two whisper-thin paper-light
+ * gradients (3px top, 4px bottom: deliberately asymmetric, a few pixels of
+ * instability, no torn-paper drama) laid OVER the surface as the first
+ * background layers. Backgrounds never touch layout, grid, or interaction. */
+.dnd-triad {
+  background-color: var(--skin-ink);
+  background-image:
+    linear-gradient(to bottom, rgba(232, 228, 218, 0.1), rgba(232, 228, 218, 0)),
+    linear-gradient(to top, rgba(232, 228, 218, 0.14), rgba(232, 228, 218, 0)),
+    var(--skin-ink-surface);
+  background-repeat: no-repeat;
+  background-position:
+    top center,
+    bottom center,
+    center;
+  background-size:
+    100% 3px,
+    100% 4px,
+    cover;
+  padding: var(--sp-4);
+  box-shadow:
+    inset 0 3px 0 rgba(0, 0, 0, 0.4),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.4);
+}
+.dnd-triad .sb-label,
+.dnd-triad .muted {
+  color: var(--on-surface-muted);
+}
+
+/* ---- Tabs: inactive muted and clean, active acid marker. ----
+ * Chip via background + color (no positioning, no layout shift); the inline
+ * class-color underline stays as a second voice. The decorative active
+ * marker pass is R3.2 — the functional state below is intentionally kept.
+ * R3.1: the strip shares the work-area paper (quiet grain tile, same 640px
+ * scale as the page) so tabs read as the header of the physical sheet, with
+ * the ink separator kept. R3.1D: the strip also gains its own 1px ink
+ * outline (offset 2px) — a framed shell band tying it to the card and work
+ * area frames. Background + outline only — no padding, margin, or border
+ * changes, so strip height, scroll, and sticky behavior are untouched. */
+.dnd-deck-strip {
+  background-color: var(--paper);
+  background-image: var(--skin-paper-tile);
+  background-size: 640px auto;
+  background-repeat: repeat;
+  outline: 1px solid var(--skin-ink);
+  outline-offset: 2px;
+}
+.dnd-deck-strip button {
+  color: var(--skin-ink-soft);
+}
+/* Thin ink separators between inactive tabs — inset shadow, zero layout. */
+.dnd-deck-strip button:not(:first-child) {
+  box-shadow: inset 1px 0 0 var(--skin-ink);
+}
+.dnd-deck-strip button:hover {
+  color: var(--skin-ink);
+}
+/* R3.2: active tab is an acid marker stroke with a baked magenta
+ * registration edge (single asset, no extra layers) over a flat acid bed
+ * (404-proof: without the image the chip still reads). Hand-highlighted
+ * journal feel, ink label stays razor-readable above the paint. cover crops
+ * the stroke ends per tab width — every tab keeps the same marker system,
+ * no per-tab boxes, no new button-cards, zero layout shift (the inline
+ * class-color underline stays as a second voice). No marker-asset overload:
+ * (marker-acid, marker-magenta and label families stay parked). */
+.dnd-deck-strip button.active {
+  background-color: var(--skin-acid);
+  background-image: var(--skin-tab-marker);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: cover;
+  color: var(--skin-ink);
+  font-weight: 700;
+  box-shadow: none;
+}
+/* Pending-item dot: tiny magenta accent, nothing else magenta on the sheet. */
+.dnd-tab-dot {
+  background: var(--skin-magenta);
+}
+
+/* ---- R3.2 fan button: printed card-glyph tile, CSS-only swap. ----
+ * No TSX change: the old 8-square grid span is hidden (it is aria-hidden;
+ * meaning stays in title/aria-label), the 40px button keeps its border,
+ * target size, and behavior, and the glyph arrives as background art —
+ * paper tile by default, acid tile on hover/pressed. Paper bed under the
+ * image keeps an obvious button affordance even if the art 404s. The
+ * two-state edit pencil (edit/check NavIcon) is deliberately untouched:
+ * swapping it for static card-edit-* art would merge save/edit states and
+ * needs TSX state plumbing — out of R3.2 scope; kinship comes from the
+ * shared 40px tool size, not forced glyphs. */
+.dnd-fan-btn {
+  background-color: var(--paper);
+  background-image: var(--skin-fan-paper);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 30px 30px;
+}
+.dnd-fan-btn:hover,
+.dnd-fan-btn:active {
+  background-image: var(--skin-fan-acid);
+}
+.dnd-fan-btn-grid {
+  display: none;
+}
+
+/* ---- Live row: quiet strip, loud states. ----
+ * R3.1 FINAL: not a third decorative band — flat paper with one inset ink
+ * ring. Concentration stays inverted/dark as the active state; the strip
+ * itself carries no texture. */
+.dnd-live-row {
+  background-color: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--skin-ink);
+}
+
+/* ---- Dice bands: material strips, not cut rectangles. ----
+ * R3.1C: both bands get sewn top/bottom seams via edge-bound pseudos (4px
+ * inside the edge, 8px side insets so the stitch never touches side
+ * borders; pointer-events:none; parents only gain position:relative, which
+ * moves nothing). Dark band stitches in faded paper, light zone in faded
+ * ink — a sewn-ticket feel that breaks the "even rectangle with a picture"
+ * readout. R3.1D: the light zone additionally shares the card's own
+ * paper-tile at the same 480px repeat — one continuous paper, so the zone
+ * reads as a sewn slip OF the card rather than a texture cut-out laid on
+ * top of it. Why stitches, not divider art: the R3.1 dividers are dark-ink
+ * strokes — invisible on the near-black band — while a light strip would be
+ * exactly the floating-sticker language this pass removes. Dice, pills, and
+ * states are untouched. */
+.dnd-triad,
+.dnd-abilities-block {
+  position: relative;
+}
+.dnd-abilities-block {
+  background-color: var(--paper-2);
+  background-image: var(--skin-paper-tile);
+  background-size: 480px auto;
+  background-repeat: repeat;
+  box-shadow: inset 0 0 0 1px var(--skin-ink);
+}
+.dnd-triad::before,
+.dnd-triad::after,
+.dnd-abilities-block::before,
+.dnd-abilities-block::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 0;
+  pointer-events: none;
+}
+.dnd-triad::before,
+.dnd-triad::after {
+  border-top: 1px dashed var(--paper);
+  opacity: 0.45;
+}
+.dnd-abilities-block::before {
+  border-top: 1px dashed var(--skin-ink);
+  opacity: 0.35;
+}
+/* Single uneven edge only on top: the ink band and the paper inset must
+ * feel like different materials of one system, not twin decorations. */
+.dnd-abilities-block::after {
+  content: none;
+}
+.dnd-triad::before,
+.dnd-abilities-block::before {
+  top: 4px;
+}
+.dnd-triad::after {
+  bottom: 4px;
+}
+
+/* ---- Work area: its own calm paper sheet, apart from the page. ----
+ * Flat scannable lists stay flat (no per-row cards, ever). The area as a
+ * whole gets paper-panel; dense text is protected by the art being weak
+ * grain only — no spots, no halftone, no landmarks under lists.
+ * R3.1D: halftone-corner-large and edge-fragment-vertical are OUT — fully,
+ * desktop included. Even edge-pinned they read as smears next to text, and
+ * the "empty corner" they need does not reliably exist across tabs. Reading
+ * plane: zero decorative rasters. Character lives on the frame (outline),
+ * the tab-strip header above, and the divider-bound foot edge below.
+ * R3.1 FINAL: same grammar at lower intensity — 1px edge, 2px gap, 1px
+ * keyline, panel body, no shadow. The card stays the stronger object
+ * (2px edge + hard shadow); the leaf stays quiet. */
+.dnd-desktop-tab {
+  position: relative;
+  background-color: var(--paper);
+  background-image: var(--skin-paper-panel);
+  background-repeat: no-repeat;
+  background-position: center top;
+  background-size: cover;
+  outline: 1px solid var(--skin-ink);
+  outline-offset: 2px;
+  box-shadow: inset 0 0 0 1px var(--skin-ink);
+}
+/* Foot edge of the work-area sheet: the strip straddles the box's own
+ * bottom boundary (half in, half out over the outline/gap), exactly ON the
+ * edge — a bound foot, never a floating sticker, never over text. */
+.dnd-desktop-tab::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -6px;
+  height: 12px;
+  pointer-events: none;
+  background-image: var(--skin-divider-ink);
+  background-repeat: no-repeat;
+  background-position: center bottom;
+  background-size: 100% 12px;
+}
+
+/* ---- Section headings: condensed voice, ink, hook for the R3.2
+ * marker/divider asset (no images yet). ---- */
+.dnd-section-title {
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--skin-ink);
+}
+.dnd-section-title::after {
+  content: none;
+}
+
+/* ---- Borders: confident ink language, same widths (zero layout shift).
+ * Bitmap corners return in R3.2 as frame language on large surfaces only —
+ * never per-row.
+ * (Side/bottom border COLORS on the split face stay data-driven: they
+ * arrive inline per class and no stylesheet can override them.) ---- */
+.dnd-deck-strip {
+  border-bottom-color: var(--skin-ink);
+}
+
+/* ---- §10. Zone ledger: R3.2 signature on R3.1 architecture. ----
+ * Hierarchy still works with signature raster off. New in R3.2:
+ * - portrait-breakup-top: photo→paper transition on the grain overlay span
+ *   (bottom-anchored, full width, 96px, sunk 12px; faces clean; cartouche
+ *   lifted above; treatment mode keeps exact dots + breakup over them).
+ * - card-corner-crescent: top-left stamp. shard-corner-right: bottom-left
+ *   riser. Two accents, left edge, pointer-events none. Shard stands down
+ *   on mobile (existing 700px breakpoint); crescent shrinks.
+ * - underline-acid-magenta: active-tab marker over flat acid bed.
+ * - card-fan-paper/acid: fan button default/hover-press, CSS-only swap
+ *   (grid span hidden, 40px target + aria untouched).
+ * Parked R3.2 (seen, not used): marker-acid-long/short, marker-magenta-
+ * medium (one fused marker won), label-paper-small (no label redesign in
+ * scope), emblem-burst-round + shard-burst-fragment + fan-cards-badge
+ * (two-ornament cap), edge-accent-left/right-tall (sides stay clean for
+ * faces), card-edit-* (two-state pencil needs TSX work — deferred),
+ * portrait-breakup-mobile-wide (R3.6 pack — banned this stage).
+ * Still parked from R3.1: frame-corner-*, halftone-corner-large,
+ * edge-fragment-vertical, paper-patch-magenta, divider-rough-long,
+ * acid-yellow/punk-magenta wash textures.
+ * R3.3 owns dense rows. R3.4 owns chaos. R3.5 owns modals/forms/focus.
+ * R3.6 owns mobile decor. Nothing from those packs is referenced above.
+ * Convention: [data-active]::after (or element ::after where no hook
+ * attribute exists yet) with content: none until the asset lands. */
+[data-active]::after {
+  content: none;
+}

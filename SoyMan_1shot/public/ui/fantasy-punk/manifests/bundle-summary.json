@@ -1,0 +1,23 @@
+{
+  "bundle_name": "SoyMan Fantasy Punk UI Asset Bundle",
+  "version": "1.0",
+  "contains": {
+    "textures": 6,
+    "semantic_existing": 21,
+    "card_buttons_sliced": 8,
+    "decorative_packs": [
+      "R3.1",
+      "R3.2",
+      "R3.3",
+      "R3.4",
+      "R3.5",
+      "R3.6"
+    ]
+  },
+  "notes": [
+    "R3.2-R3.6 use corrected slices.",
+    "Card button sheet was sliced into 8 standalone transparent assets.",
+    "Semantic icons from earlier context are included under semantic/* folders.",
+    "Decorative assets are organized by usage folders rather than by original pack only."
+  ]
+}

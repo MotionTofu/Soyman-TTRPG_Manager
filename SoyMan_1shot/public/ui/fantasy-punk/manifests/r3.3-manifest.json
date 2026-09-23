@@ -1,0 +1,170 @@
+{
+  "divider-thin-paper-long": {
+    "components": [
+      1
+    ],
+    "size_px": [
+      1392,
+      106
+    ],
+    "png_kb": 208.0,
+    "webp_kb": 53.7,
+    "webp_quality": 86
+  },
+  "divider-rough-paper-long": {
+    "components": [
+      2
+    ],
+    "size_px": [
+      1334,
+      120
+    ],
+    "png_kb": 275.7,
+    "webp_kb": 82.6,
+    "webp_quality": 86
+  },
+  "marker-acid-wide": {
+    "components": [
+      3
+    ],
+    "size_px": [
+      1345,
+      107
+    ],
+    "png_kb": 218.2,
+    "webp_kb": 78.7,
+    "webp_quality": 86
+  },
+  "marker-magenta-wide": {
+    "components": [
+      4
+    ],
+    "size_px": [
+      1317,
+      99
+    ],
+    "png_kb": 200.7,
+    "webp_kb": 59.3,
+    "webp_quality": 86
+  },
+  "marker-acid-small": {
+    "components": [
+      7
+    ],
+    "size_px": [
+      443,
+      82
+    ],
+    "png_kb": 56.2,
+    "webp_kb": 23.7,
+    "webp_quality": 86
+  },
+  "marker-magenta-small": {
+    "components": [
+      5
+    ],
+    "size_px": [
+      403,
+      99
+    ],
+    "png_kb": 62.4,
+    "webp_kb": 21.5,
+    "webp_quality": 86
+  },
+  "header-scrap-right": {
+    "components": [
+      6
+    ],
+    "size_px": [
+      408,
+      115
+    ],
+    "png_kb": 77.6,
+    "webp_kb": 25.2,
+    "webp_quality": 86
+  },
+  "edge-accent-left-short": {
+    "components": [
+      8
+    ],
+    "size_px": [
+      142,
+      306
+    ],
+    "png_kb": 68.5,
+    "webp_kb": 22.9,
+    "webp_quality": 86
+  },
+  "label-paper-medium": {
+    "components": [
+      11
+    ],
+    "size_px": [
+      470,
+      198
+    ],
+    "png_kb": 190.9,
+    "webp_kb": 46.8,
+    "webp_quality": 86
+  },
+  "corner-accent-triangle": {
+    "components": [
+      10
+    ],
+    "size_px": [
+      209,
+      196
+    ],
+    "png_kb": 41.3,
+    "webp_kb": 16.3,
+    "webp_quality": 86
+  },
+  "burst-star-neon": {
+    "components": [
+      9
+    ],
+    "size_px": [
+      275,
+      252
+    ],
+    "png_kb": 92.0,
+    "webp_kb": 33.3,
+    "webp_quality": 86
+  },
+  "divider-ink-hairline": {
+    "components": [
+      14
+    ],
+    "size_px": [
+      711,
+      65
+    ],
+    "png_kb": 38.5,
+    "webp_kb": 16.2,
+    "webp_quality": 86
+  },
+  "label-acid-pill": {
+    "components": [
+      12
+    ],
+    "size_px": [
+      369,
+      135
+    ],
+    "png_kb": 85.3,
+    "webp_kb": 30.7,
+    "webp_quality": 86
+  },
+  "tag-scrap-small": {
+    "components": [
+      13
+    ],
+    "size_px": [
+      211,
+      126
+    ],
+    "png_kb": 48.0,
+    "webp_kb": 16.0,
+    "webp_quality": 86
+  }
+}

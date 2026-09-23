@@ -37,6 +37,7 @@ import '../../client/src/creature-card.css';
 import '../../client/src/rich-text.css';
 import '../../client/src/statblock.css';
 import '../../client/src/zine.css';
+import '../../client/src/fantasy-punk-skin.css';
 import './tokens.css';
 import './shell.css';
 import './components.css';
@@ -1414,7 +1415,7 @@ function App() {
       })()}
     </Modal>}
     {error && <Banner>{error}</Banner>}
-    {!ready ? <p className="oneshot-home">Открываем локальные данные…</p> : active?.content ? <div className="oneshot-sheet"><DndCharacterView key={active.id} value={active.content} portraitUrl={active.portrait} onQuickUpdate={update} onLevelUpApply={applyLevelUp} syncTabToUrl levelUpDraft={{ identity: { characterId: active.id, characterUid: active.characterUid ?? null, catalogKey: active.catalogKey }, initial: loadLevelUpDraft(active.id), onChange: saveLevelUpDraft, onClear: () => clearLevelUpDraft(active.id) }} onSheetBack={() => { if (status === 'Сохранено на устройстве') location.assign('/'); }} /></div> : <main className="oneshot-home">
+    {!ready ? <p className="oneshot-home">Открываем локальные данные…</p> : active?.content ? <div className="oneshot-sheet"><div className="fp-page-backdrop" aria-hidden="true" /><DndCharacterView key={active.id} value={active.content} portraitUrl={active.portrait} onQuickUpdate={update} onLevelUpApply={applyLevelUp} syncTabToUrl levelUpDraft={{ identity: { characterId: active.id, characterUid: active.characterUid ?? null, catalogKey: active.catalogKey }, initial: loadLevelUpDraft(active.id), onChange: saveLevelUpDraft, onClear: () => clearLevelUpDraft(active.id) }} onSheetBack={() => { if (status === 'Сохранено на устройстве') location.assign('/'); }} /></div> : <main className="oneshot-home">
       <p className="muted">D&D 5.5 · настоящий визард и чарник SoyMan</p><h1>Твои персонажи</h1>
       <p>Создайте героя в привычном визарде или заполните пустой лист вручную. Персонажи сохраняются в этом браузере.</p>
       <section><h2>Новый персонаж</h2><label>Имя<input value={name} onChange={e => setName(e.target.value)} maxLength={100} placeholder="Как зовут героя?" /></label><ActionRow><Button variant="primary" disabled={busy} onClick={() => void create()}>Создать через визард</Button><Button disabled={busy} onClick={() => void create(true)}>Открыть пустой лист</Button></ActionRow>{managed === 'working' && !catalogKey && <p className="muted">Подготавливаем игровые данные…</p>}{managed === 'failed' && !catalogKey && <p className="muted">Для первого создания персонажа нужно один раз загрузить игровые данные. <button onClick={retryManaged}>Повторить</button></p>}{media === 'working' && <p className="muted">Загружаем изображения…</p>}</section>

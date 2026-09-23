@@ -1,0 +1,211 @@
+{
+  "corner-bracket-compact": {
+    "png": "corner-bracket-compact.png",
+    "webp": "corner-bracket-compact.webp",
+    "size_px": [
+      246,
+      247
+    ],
+    "png_kb": 63.6,
+    "webp_kb": 24.4,
+    "webp_quality": 88
+  },
+  "portrait-breakup-mobile-wide": {
+    "png": "portrait-breakup-mobile-wide.png",
+    "webp": "portrait-breakup-mobile-wide.webp",
+    "size_px": [
+      944,
+      187
+    ],
+    "png_kb": 233.2,
+    "webp_kb": 72.6,
+    "webp_quality": 88
+  },
+  "corner-shard-compact": {
+    "png": "corner-shard-compact.png",
+    "webp": "corner-shard-compact.webp",
+    "size_px": [
+      321,
+      117
+    ],
+    "png_kb": 60.2,
+    "webp_kb": 21.7,
+    "webp_quality": 88
+  },
+  "underline-compact-neon": {
+    "png": "underline-compact-neon.png",
+    "webp": "underline-compact-neon.webp",
+    "size_px": [
+      354,
+      84
+    ],
+    "png_kb": 36.2,
+    "webp_kb": 15.0,
+    "webp_quality": 88
+  },
+  "divider-compact-mixed": {
+    "png": "divider-compact-mixed.png",
+    "webp": "divider-compact-mixed.webp",
+    "size_px": [
+      566,
+      77
+    ],
+    "png_kb": 82.6,
+    "webp_kb": 30.4,
+    "webp_quality": 88
+  },
+  "star-divider-compact": {
+    "png": "star-divider-compact.png",
+    "webp": "star-divider-compact.webp",
+    "size_px": [
+      409,
+      129
+    ],
+    "png_kb": 26.4,
+    "webp_kb": 13.4,
+    "webp_quality": 88
+  },
+  "divider-ink-broken-compact": {
+    "png": "divider-ink-broken-compact.png",
+    "webp": "divider-ink-broken-compact.webp",
+    "size_px": [
+      433,
+      63
+    ],
+    "png_kb": 23.0,
+    "webp_kb": 10.5,
+    "webp_quality": 88
+  },
+  "hairline-arrows-compact": {
+    "png": "hairline-arrows-compact.png",
+    "webp": "hairline-arrows-compact.webp",
+    "size_px": [
+      433,
+      45
+    ],
+    "png_kb": 11.6,
+    "webp_kb": 5.9,
+    "webp_quality": 88
+  },
+  "pill-acid-compact": {
+    "png": "pill-acid-compact.png",
+    "webp": "pill-acid-compact.webp",
+    "size_px": [
+      410,
+      84
+    ],
+    "png_kb": 62.5,
+    "webp_kb": 26.5,
+    "webp_quality": 88
+  },
+  "pill-magenta-compact": {
+    "png": "pill-magenta-compact.png",
+    "webp": "pill-magenta-compact.webp",
+    "size_px": [
+      405,
+      71
+    ],
+    "png_kb": 53.7,
+    "webp_kb": 18.1,
+    "webp_quality": 88
+  },
+  "marker-swipe-compact": {
+    "png": "marker-swipe-compact.png",
+    "webp": "marker-swipe-compact.webp",
+    "size_px": [
+      394,
+      61
+    ],
+    "png_kb": 39.5,
+    "webp_kb": 17.8,
+    "webp_quality": 88
+  },
+  "label-paper-compact": {
+    "png": "label-paper-compact.png",
+    "webp": "label-paper-compact.webp",
+    "size_px": [
+      346,
+      133
+    ],
+    "png_kb": 104.1,
+    "webp_kb": 29.7,
+    "webp_quality": 88
+  },
+  "label-acid-compact": {
+    "png": "label-acid-compact.png",
+    "webp": "label-acid-compact.webp",
+    "size_px": [
+      366,
+      97
+    ],
+    "png_kb": 65.7,
+    "webp_kb": 24.2,
+    "webp_quality": 88
+  },
+  "label-magenta-compact": {
+    "png": "label-magenta-compact.png",
+    "webp": "label-magenta-compact.webp",
+    "size_px": [
+      342,
+      91
+    ],
+    "png_kb": 61.0,
+    "webp_kb": 18.3,
+    "webp_quality": 88
+  },
+  "triangle-shard-compact": {
+    "png": "triangle-shard-compact.png",
+    "webp": "triangle-shard-compact.webp",
+    "size_px": [
+      198,
+      209
+    ],
+    "png_kb": 64.2,
+    "webp_kb": 24.7,
+    "webp_quality": 88
+  },
+  "sparkles-compact": {
+    "png": "sparkles-compact.png",
+    "webp": "sparkles-compact.webp",
+    "size_px": [
+      162,
+      174
+    ],
+    "png_kb": 24.9,
+    "webp_kb": 12.8,
+    "webp_quality": 88
+  },
+  "chevrons-mobile-double": {
+    "png": "chevrons-mobile-double.png",
+    "webp": "chevrons-mobile-double.webp",
+    "size_px": [
+      163,
+      138
+    ],
+    "png_kb": 44.2,
+    "webp_kb": 17.3,
+    "webp_quality": 88
+  },
+  "slash-accent-compact": {
+    "png": "slash-accent-compact.png",
+    "webp": "slash-accent-compact.webp",
+    "size_px": [
+      164,
+      123
+    ],
+    "png_kb": 24.9,
+    "webp_kb": 11.6,
+    "webp_quality": 88
+  },
+  "nameplate-mobile-wide": {
+    "png": "nameplate-mobile-wide.png",
+    "webp": "nameplate-mobile-wide.webp",
+    "size_px": [
+      516,
+      127
+    ],
+    "png_kb": 110.0,
+    "webp_kb": 33.1,
+    "webp_quality": 88
+  }
+}

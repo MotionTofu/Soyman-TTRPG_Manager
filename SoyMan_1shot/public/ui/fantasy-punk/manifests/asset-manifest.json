@@ -1,0 +1,1907 @@
+{
+  "assets": [
+    {
+      "path": "ui/fantasy-punk/textures/acid-yellow.webp",
+      "bytes": 159436,
+      "category": "texture",
+      "role": "accent_surface"
+    },
+    {
+      "path": "ui/fantasy-punk/textures/ink-surface.webp",
+      "bytes": 240276,
+      "category": "texture",
+      "role": "dark_surface"
+    },
+    {
+      "path": "ui/fantasy-punk/textures/paper-bg.webp",
+      "bytes": 138082,
+      "category": "texture",
+      "role": "page_background"
+    },
+    {
+      "path": "ui/fantasy-punk/textures/paper-panel.webp",
+      "bytes": 143542,
+      "category": "texture",
+      "role": "panel_surface"
+    },
+    {
+      "path": "ui/fantasy-punk/textures/paper-tile.webp",
+      "bytes": 38422,
+      "category": "texture",
+      "role": "tiled_paper"
+    },
+    {
+      "path": "ui/fantasy-punk/textures/punk-magenta.webp",
+      "bytes": 344356,
+      "category": "texture",
+      "role": "accent_surface_secondary"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/dice/d20-paper.webp",
+      "bytes": 16716,
+      "category": "semantic",
+      "group": "dice",
+      "role": "default"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/dice/d20-accent.webp",
+      "bytes": 24502,
+      "category": "semantic",
+      "group": "dice",
+      "role": "accent"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/map-buttons/button-01.webp",
+      "bytes": 5672,
+      "category": "semantic",
+      "group": "map_buttons",
+      "role": "button_01"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/map-buttons/button-02.webp",
+      "bytes": 4976,
+      "category": "semantic",
+      "group": "map_buttons",
+      "role": "button_02"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/map-buttons/button-03.webp",
+      "bytes": 5506,
+      "category": "semantic",
+      "group": "map_buttons",
+      "role": "button_03"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/school-icons/school-01.webp",
+      "bytes": 4342,
+      "category": "semantic",
+      "group": "school_icons",
+      "role": "school-01"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/school-icons/school-02.webp",
+      "bytes": 3952,
+      "category": "semantic",
+      "group": "school_icons",
+      "role": "school-02"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/school-icons/school-03.webp",
+      "bytes": 3938,
+      "category": "semantic",
+      "group": "school_icons",
+      "role": "school-03"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/school-icons/school-04.webp",
+      "bytes": 3914,
+      "category": "semantic",
+      "group": "school_icons",
+      "role": "school-04"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/school-icons/school-05.webp",
+      "bytes": 4550,
+      "category": "semantic",
+      "group": "school_icons",
+      "role": "school-05"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/school-icons/school-06.webp",
+      "bytes": 3800,
+      "category": "semantic",
+      "group": "school_icons",
+      "role": "school-06"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/school-icons/school-07.webp",
+      "bytes": 3770,
+      "category": "semantic",
+      "group": "school_icons",
+      "role": "school-07"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/school-icons/school-08.webp",
+      "bytes": 4100,
+      "category": "semantic",
+      "group": "school_icons",
+      "role": "school-08"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/inventory-icons/item-type-01.webp",
+      "bytes": 2104,
+      "category": "semantic",
+      "group": "inventory_icons",
+      "role": "item_type_01"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/inventory-icons/item-type-02.webp",
+      "bytes": 2442,
+      "category": "semantic",
+      "group": "inventory_icons",
+      "role": "item_type_02"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/inventory-icons/item-type-03.webp",
+      "bytes": 2496,
+      "category": "semantic",
+      "group": "inventory_icons",
+      "role": "item_type_03"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/inventory-icons/item-type-04.webp",
+      "bytes": 2270,
+      "category": "semantic",
+      "group": "inventory_icons",
+      "role": "item_type_04"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/inventory-icons/item-type-05.webp",
+      "bytes": 2556,
+      "category": "semantic",
+      "group": "inventory_icons",
+      "role": "item_type_05"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/inventory-icons/item-type-06.webp",
+      "bytes": 2308,
+      "category": "semantic",
+      "group": "inventory_icons",
+      "role": "item_type_06"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/inventory-icons/item-type-07.webp",
+      "bytes": 2146,
+      "category": "semantic",
+      "group": "inventory_icons",
+      "role": "item_type_07"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/inventory-icons/item-type-08.webp",
+      "bytes": 2280,
+      "category": "semantic",
+      "group": "inventory_icons",
+      "role": "item_type_08"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/card-buttons/card-edit-paper.png",
+      "bytes": 235566,
+      "category": "semantic",
+      "group": "card_buttons",
+      "role": "card-edit-paper",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/card-buttons/card-edit-paper.webp",
+      "bytes": 38444,
+      "category": "semantic",
+      "group": "card_buttons",
+      "role": "card-edit-paper",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/card-buttons/card-edit-acid.png",
+      "bytes": 228868,
+      "category": "semantic",
+      "group": "card_buttons",
+      "role": "card-edit-acid",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/card-buttons/card-edit-acid.webp",
+      "bytes": 39356,
+      "category": "semantic",
+      "group": "card_buttons",
+      "role": "card-edit-acid",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/card-buttons/card-edit-inverted.png",
+      "bytes": 208220,
+      "category": "semantic",
+      "group": "card_buttons",
+      "role": "card-edit-inverted",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/card-buttons/card-edit-inverted.webp",
+      "bytes": 32430,
+      "category": "semantic",
+      "group": "card_buttons",
+      "role": "card-edit-inverted",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/card-buttons/card-edit-neon.png",
+      "bytes": 199494,
+      "category": "semantic",
+      "group": "card_buttons",
+      "role": "card-edit-neon",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/card-buttons/card-edit-neon.webp",
+      "bytes": 35266,
+      "category": "semantic",
+      "group": "card_buttons",
+      "role": "card-edit-neon",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/card-buttons/card-fan-paper.png",
+      "bytes": 213185,
+      "category": "semantic",
+      "group": "card_buttons",
+      "role": "card-fan-paper",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/card-buttons/card-fan-paper.webp",
+      "bytes": 32242,
+      "category": "semantic",
+      "group": "card_buttons",
+      "role": "card-fan-paper",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/card-buttons/card-fan-acid.png",
+      "bytes": 211360,
+      "category": "semantic",
+      "group": "card_buttons",
+      "role": "card-fan-acid",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/card-buttons/card-fan-acid.webp",
+      "bytes": 35970,
+      "category": "semantic",
+      "group": "card_buttons",
+      "role": "card-fan-acid",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/card-buttons/card-fan-inverted.png",
+      "bytes": 224172,
+      "category": "semantic",
+      "group": "card_buttons",
+      "role": "card-fan-inverted",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/card-buttons/card-fan-inverted.webp",
+      "bytes": 33660,
+      "category": "semantic",
+      "group": "card_buttons",
+      "role": "card-fan-inverted",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/card-buttons/card-fan-neon.png",
+      "bytes": 206039,
+      "category": "semantic",
+      "group": "card_buttons",
+      "role": "card-fan-neon",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/semantic/card-buttons/card-fan-neon.webp",
+      "bytes": 33092,
+      "category": "semantic",
+      "group": "card_buttons",
+      "role": "card-fan-neon",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/proofs/card-buttons-proof.png",
+      "bytes": 765071,
+      "category": "proof",
+      "group": "card_buttons"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/dividers/divider-ink-long.png",
+      "bytes": 109063,
+      "category": "decorative",
+      "source_pack": "R3.1",
+      "role": "divider-ink-long",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/dividers/divider-ink-long.webp",
+      "bytes": 32602,
+      "category": "decorative",
+      "source_pack": "R3.1",
+      "role": "divider-ink-long",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/dividers/divider-rough-long.png",
+      "bytes": 247498,
+      "category": "decorative",
+      "source_pack": "R3.1",
+      "role": "divider-rough-long",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/dividers/divider-rough-long.webp",
+      "bytes": 91460,
+      "category": "decorative",
+      "source_pack": "R3.1",
+      "role": "divider-rough-long",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/dividers/divider-rough-medium.png",
+      "bytes": 123079,
+      "category": "decorative",
+      "source_pack": "R3.1",
+      "role": "divider-rough-medium",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/dividers/divider-rough-medium.webp",
+      "bytes": 43732,
+      "category": "decorative",
+      "source_pack": "R3.1",
+      "role": "divider-rough-medium",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/edge-fragment-vertical.png",
+      "bytes": 77177,
+      "category": "decorative",
+      "source_pack": "R3.1",
+      "role": "edge-fragment-vertical",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/edge-fragment-vertical.webp",
+      "bytes": 27924,
+      "category": "decorative",
+      "source_pack": "R3.1",
+      "role": "edge-fragment-vertical",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/frames/frame-corner-bottom-left.png",
+      "bytes": 99743,
+      "category": "decorative",
+      "source_pack": "R3.1",
+      "role": "frame-corner-bottom-left",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/frames/frame-corner-bottom-left.webp",
+      "bytes": 37952,
+      "category": "decorative",
+      "source_pack": "R3.1",
+      "role": "frame-corner-bottom-left",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/frames/frame-corner-bottom-right.png",
+      "bytes": 104612,
+      "category": "decorative",
+      "source_pack": "R3.1",
+      "role": "frame-corner-bottom-right",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/frames/frame-corner-bottom-right.webp",
+      "bytes": 40580,
+      "category": "decorative",
+      "source_pack": "R3.1",
+      "role": "frame-corner-bottom-right",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/frames/frame-corner-top-left.png",
+      "bytes": 108190,
+      "category": "decorative",
+      "source_pack": "R3.1",
+      "role": "frame-corner-top-left",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/frames/frame-corner-top-left.webp",
+      "bytes": 37430,
+      "category": "decorative",
+      "source_pack": "R3.1",
+      "role": "frame-corner-top-left",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/frames/frame-corner-top-right.png",
+      "bytes": 100090,
+      "category": "decorative",
+      "source_pack": "R3.1",
+      "role": "frame-corner-top-right",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/frames/frame-corner-top-right.webp",
+      "bytes": 33908,
+      "category": "decorative",
+      "source_pack": "R3.1",
+      "role": "frame-corner-top-right",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/frames/halftone-corner-large.png",
+      "bytes": 241800,
+      "category": "decorative",
+      "source_pack": "R3.1",
+      "role": "halftone-corner-large",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/frames/halftone-corner-large.webp",
+      "bytes": 86934,
+      "category": "decorative",
+      "source_pack": "R3.1",
+      "role": "halftone-corner-large",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/markers/paper-patch-magenta.png",
+      "bytes": 380283,
+      "category": "decorative",
+      "source_pack": "R3.1",
+      "role": "paper-patch-magenta",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/markers/paper-patch-magenta.webp",
+      "bytes": 99812,
+      "category": "decorative",
+      "source_pack": "R3.1",
+      "role": "paper-patch-magenta",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/manifests/r3.1-manifest.json",
+      "bytes": 2253,
+      "category": "manifest",
+      "source_pack": "R3.1"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/frames/card-corner-crescent.png",
+      "bytes": 81719,
+      "category": "decorative",
+      "source_pack": "R3.2",
+      "role": "card-corner-crescent",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/frames/card-corner-crescent.webp",
+      "bytes": 29724,
+      "category": "decorative",
+      "source_pack": "R3.2",
+      "role": "card-corner-crescent",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/edge-accent-left-tall.png",
+      "bytes": 170015,
+      "category": "decorative",
+      "source_pack": "R3.2",
+      "role": "edge-accent-left-tall",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/edge-accent-left-tall.webp",
+      "bytes": 59528,
+      "category": "decorative",
+      "source_pack": "R3.2",
+      "role": "edge-accent-left-tall",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/edge-accent-right-tall.png",
+      "bytes": 182140,
+      "category": "decorative",
+      "source_pack": "R3.2",
+      "role": "edge-accent-right-tall",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/edge-accent-right-tall.webp",
+      "bytes": 62056,
+      "category": "decorative",
+      "source_pack": "R3.2",
+      "role": "edge-accent-right-tall",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/emblem-burst-round.png",
+      "bytes": 100867,
+      "category": "decorative",
+      "source_pack": "R3.2",
+      "role": "emblem-burst-round",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/emblem-burst-round.webp",
+      "bytes": 33372,
+      "category": "decorative",
+      "source_pack": "R3.2",
+      "role": "emblem-burst-round",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/fan-cards-badge.png",
+      "bytes": 131075,
+      "category": "decorative",
+      "source_pack": "R3.2",
+      "role": "fan-cards-badge",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/fan-cards-badge.webp",
+      "bytes": 43890,
+      "category": "decorative",
+      "source_pack": "R3.2",
+      "role": "fan-cards-badge",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/markers/label-paper-small.png",
+      "bytes": 124061,
+      "category": "decorative",
+      "source_pack": "R3.2",
+      "role": "label-paper-small",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/markers/label-paper-small.webp",
+      "bytes": 34368,
+      "category": "decorative",
+      "source_pack": "R3.2",
+      "role": "label-paper-small",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/markers/marker-acid-long.png",
+      "bytes": 151514,
+      "category": "decorative",
+      "source_pack": "R3.2",
+      "role": "marker-acid-long",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/markers/marker-acid-long.webp",
+      "bytes": 65288,
+      "category": "decorative",
+      "source_pack": "R3.2",
+      "role": "marker-acid-long",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/markers/marker-acid-short.png",
+      "bytes": 70645,
+      "category": "decorative",
+      "source_pack": "R3.2",
+      "role": "marker-acid-short",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/markers/marker-acid-short.webp",
+      "bytes": 31862,
+      "category": "decorative",
+      "source_pack": "R3.2",
+      "role": "marker-acid-short",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/markers/marker-magenta-medium.png",
+      "bytes": 59263,
+      "category": "decorative",
+      "source_pack": "R3.2",
+      "role": "marker-magenta-medium",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/markers/marker-magenta-medium.webp",
+      "bytes": 23482,
+      "category": "decorative",
+      "source_pack": "R3.2",
+      "role": "marker-magenta-medium",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/portrait/portrait-breakup-top.png",
+      "bytes": 535052,
+      "category": "decorative",
+      "source_pack": "R3.2",
+      "role": "portrait-breakup-top",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/portrait/portrait-breakup-top.webp",
+      "bytes": 115874,
+      "category": "decorative",
+      "source_pack": "R3.2",
+      "role": "portrait-breakup-top",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/shard-burst-fragment.png",
+      "bytes": 84374,
+      "category": "decorative",
+      "source_pack": "R3.2",
+      "role": "shard-burst-fragment",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/shard-burst-fragment.webp",
+      "bytes": 32624,
+      "category": "decorative",
+      "source_pack": "R3.2",
+      "role": "shard-burst-fragment",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/frames/shard-corner-right.png",
+      "bytes": 77884,
+      "category": "decorative",
+      "source_pack": "R3.2",
+      "role": "shard-corner-right",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/frames/shard-corner-right.webp",
+      "bytes": 29636,
+      "category": "decorative",
+      "source_pack": "R3.2",
+      "role": "shard-corner-right",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/dividers/underline-acid-magenta.png",
+      "bytes": 48817,
+      "category": "decorative",
+      "source_pack": "R3.2",
+      "role": "underline-acid-magenta",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/dividers/underline-acid-magenta.webp",
+      "bytes": 21332,
+      "category": "decorative",
+      "source_pack": "R3.2",
+      "role": "underline-acid-magenta",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/manifests/r3.2-manifest.json",
+      "bytes": 2299,
+      "category": "manifest",
+      "source_pack": "R3.2"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/burst-star-neon.png",
+      "bytes": 94204,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "burst-star-neon",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/burst-star-neon.webp",
+      "bytes": 34122,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "burst-star-neon",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/frames/corner-accent-triangle.png",
+      "bytes": 42334,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "corner-accent-triangle",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/frames/corner-accent-triangle.webp",
+      "bytes": 16732,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "corner-accent-triangle",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/dividers/divider-ink-hairline.png",
+      "bytes": 39443,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "divider-ink-hairline",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/dividers/divider-ink-hairline.webp",
+      "bytes": 16542,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "divider-ink-hairline",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/dividers/divider-rough-paper-long.png",
+      "bytes": 282293,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "divider-rough-paper-long",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/dividers/divider-rough-paper-long.webp",
+      "bytes": 84580,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "divider-rough-paper-long",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/dividers/divider-thin-paper-long.png",
+      "bytes": 212964,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "divider-thin-paper-long",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/dividers/divider-thin-paper-long.webp",
+      "bytes": 54988,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "divider-thin-paper-long",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/edge-accent-left-short.png",
+      "bytes": 70161,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "edge-accent-left-short",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/edge-accent-left-short.webp",
+      "bytes": 23496,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "edge-accent-left-short",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/header-scrap-right.png",
+      "bytes": 79494,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "header-scrap-right",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/header-scrap-right.webp",
+      "bytes": 25812,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "header-scrap-right",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/markers/label-acid-pill.png",
+      "bytes": 87364,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "label-acid-pill",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/markers/label-acid-pill.webp",
+      "bytes": 31484,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "label-acid-pill",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/markers/label-paper-medium.png",
+      "bytes": 195476,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "label-paper-medium",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/markers/label-paper-medium.webp",
+      "bytes": 47954,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "label-paper-medium",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/markers/marker-acid-small.png",
+      "bytes": 57525,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "marker-acid-small",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/markers/marker-acid-small.webp",
+      "bytes": 24308,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "marker-acid-small",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/markers/marker-acid-wide.png",
+      "bytes": 223406,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "marker-acid-wide",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/markers/marker-acid-wide.webp",
+      "bytes": 80630,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "marker-acid-wide",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/markers/marker-magenta-small.png",
+      "bytes": 63870,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "marker-magenta-small",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/markers/marker-magenta-small.webp",
+      "bytes": 22032,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "marker-magenta-small",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/markers/marker-magenta-wide.png",
+      "bytes": 205497,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "marker-magenta-wide",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/markers/marker-magenta-wide.webp",
+      "bytes": 60680,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "marker-magenta-wide",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/tag-scrap-small.png",
+      "bytes": 49142,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "tag-scrap-small",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/tag-scrap-small.webp",
+      "bytes": 16428,
+      "category": "decorative",
+      "source_pack": "R3.3",
+      "role": "tag-scrap-small",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/manifests/r3.3-manifest.json",
+      "bytes": 2474,
+      "category": "manifest",
+      "source_pack": "R3.3"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/burst-comic-wide.png",
+      "bytes": 167784,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "burst-comic-wide",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/burst-comic-wide.webp",
+      "bytes": 55744,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "burst-comic-wide",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/burst-crown-small.png",
+      "bytes": 92398,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "burst-crown-small",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/burst-crown-small.webp",
+      "bytes": 32910,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "burst-crown-small",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/chevrons-double-right.png",
+      "bytes": 65287,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "chevrons-double-right",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/chevrons-double-right.webp",
+      "bytes": 22356,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "chevrons-double-right",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/frames/corner-triangle-diag.png",
+      "bytes": 77916,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "corner-triangle-diag",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/frames/corner-triangle-diag.webp",
+      "bytes": 26162,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "corner-triangle-diag",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/drip-accent-vertical.png",
+      "bytes": 64948,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "drip-accent-vertical",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/drip-accent-vertical.webp",
+      "bytes": 23870,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "drip-accent-vertical",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/emblem-compass-burst.png",
+      "bytes": 125706,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "emblem-compass-burst",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/emblem-compass-burst.webp",
+      "bytes": 40000,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "emblem-compass-burst",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/flash-shard-neon.png",
+      "bytes": 87776,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "flash-shard-neon",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/flash-shard-neon.webp",
+      "bytes": 31212,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "flash-shard-neon",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/glitch-stripes-wide.png",
+      "bytes": 113121,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "glitch-stripes-wide",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/glitch-stripes-wide.webp",
+      "bytes": 36096,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "glitch-stripes-wide",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/halftone-cloud-magenta.png",
+      "bytes": 130086,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "halftone-cloud-magenta",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/halftone-cloud-magenta.webp",
+      "bytes": 36974,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "halftone-cloud-magenta",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/paper-smear-wide.png",
+      "bytes": 139814,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "paper-smear-wide",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/paper-smear-wide.webp",
+      "bytes": 38870,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "paper-smear-wide",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/markers/patch-halftone-rough.png",
+      "bytes": 145818,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "patch-halftone-rough",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/markers/patch-halftone-rough.webp",
+      "bytes": 39114,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "patch-halftone-rough",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/scribble-cross-neon.png",
+      "bytes": 93328,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "scribble-cross-neon",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/scribble-cross-neon.webp",
+      "bytes": 34802,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "scribble-cross-neon",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/scribble-oval-magenta.png",
+      "bytes": 110977,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "scribble-oval-magenta",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/scribble-oval-magenta.webp",
+      "bytes": 37858,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "scribble-oval-magenta",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/slashes-claw-neon.png",
+      "bytes": 76076,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "slashes-claw-neon",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/slashes-claw-neon.webp",
+      "bytes": 29976,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "slashes-claw-neon",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/smear-glitch-horizontal.png",
+      "bytes": 110068,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "smear-glitch-horizontal",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/smear-glitch-horizontal.webp",
+      "bytes": 33684,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "smear-glitch-horizontal",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/sparkles-trio.png",
+      "bytes": 39047,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "sparkles-trio",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/sparkles-trio.webp",
+      "bytes": 18286,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "sparkles-trio",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/markers/tape-label-black.png",
+      "bytes": 127243,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "tape-label-black",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/markers/tape-label-black.webp",
+      "bytes": 34034,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "tape-label-black",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/tape-scribble-acid.png",
+      "bytes": 112133,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "tape-scribble-acid",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/tape-scribble-acid.webp",
+      "bytes": 38330,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "tape-scribble-acid",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/torn-strip-vertical.png",
+      "bytes": 86008,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "torn-strip-vertical",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/torn-strip-vertical.webp",
+      "bytes": 24538,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "torn-strip-vertical",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/dividers/underline-neon-long.png",
+      "bytes": 105857,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "underline-neon-long",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/dividers/underline-neon-long.webp",
+      "bytes": 42208,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "underline-neon-long",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/zigzag-lightning-neon.png",
+      "bytes": 77370,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "zigzag-lightning-neon",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/zigzag-lightning-neon.webp",
+      "bytes": 31066,
+      "category": "decorative",
+      "source_pack": "R3.4",
+      "role": "zigzag-lightning-neon",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/manifests/r3.4-manifest.json",
+      "bytes": 3785,
+      "category": "manifest",
+      "source_pack": "R3.4"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/close-badge-cross.png",
+      "bytes": 85522,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "close-badge-cross",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/close-badge-cross.webp",
+      "bytes": 31400,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "close-badge-cross",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/confirm-badge.png",
+      "bytes": 132774,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "confirm-badge",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/confirm-badge.webp",
+      "bytes": 36332,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "confirm-badge",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/confirm-burst.png",
+      "bytes": 91615,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "confirm-burst",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/confirm-burst.webp",
+      "bytes": 32756,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "confirm-burst",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/edit-badge-pencil.png",
+      "bytes": 61283,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "edit-badge-pencil",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/edit-badge-pencil.webp",
+      "bytes": 23688,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "edit-badge-pencil",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/focus-divider-stars.png",
+      "bytes": 179735,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "focus-divider-stars",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/focus-divider-stars.webp",
+      "bytes": 60672,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "focus-divider-stars",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/focus-marker-acid.png",
+      "bytes": 69457,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "focus-marker-acid",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/focus-marker-acid.webp",
+      "bytes": 30014,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "focus-marker-acid",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/focus-marker-magenta.png",
+      "bytes": 48900,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "focus-marker-magenta",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/focus-marker-magenta.webp",
+      "bytes": 17398,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "focus-marker-magenta",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/modal-corner-bl-heavy.png",
+      "bytes": 41739,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "modal-corner-bl-heavy",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/modal-corner-bl-heavy.webp",
+      "bytes": 16404,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "modal-corner-bl-heavy",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/modal-corner-br-heavy.png",
+      "bytes": 35457,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "modal-corner-br-heavy",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/modal-corner-br-heavy.webp",
+      "bytes": 14256,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "modal-corner-br-heavy",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/modal-corner-tl-heavy.png",
+      "bytes": 50924,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "modal-corner-tl-heavy",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/modal-corner-tl-heavy.webp",
+      "bytes": 17842,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "modal-corner-tl-heavy",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/modal-corner-tr-heavy.png",
+      "bytes": 44500,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "modal-corner-tr-heavy",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/modal-corner-tr-heavy.webp",
+      "bytes": 16592,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "modal-corner-tr-heavy",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/modal-divider-thin.png",
+      "bytes": 177573,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "modal-divider-thin",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/modal-divider-thin.webp",
+      "bytes": 55686,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "modal-divider-thin",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/modal-frame-bottom-heavy.png",
+      "bytes": 247447,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "modal-frame-bottom-heavy",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/modal-frame-bottom-heavy.webp",
+      "bytes": 66358,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "modal-frame-bottom-heavy",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/modal-frame-top-heavy.png",
+      "bytes": 340301,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "modal-frame-top-heavy",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/modal-frame-top-heavy.webp",
+      "bytes": 96248,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "modal-frame-top-heavy",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/sparkle-cluster.png",
+      "bytes": 54695,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "sparkle-cluster",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/sparkle-cluster.webp",
+      "bytes": 22370,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "sparkle-cluster",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/tape-paper-small.png",
+      "bytes": 79106,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "tape-paper-small",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/accents/tape-paper-small.webp",
+      "bytes": 22120,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "tape-paper-small",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/warning-badge.png",
+      "bytes": 118681,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "warning-badge",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/warning-badge.webp",
+      "bytes": 30866,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "warning-badge",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/warning-stripe-acid.png",
+      "bytes": 197770,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "warning-stripe-acid",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/states/warning-stripe-acid.webp",
+      "bytes": 70518,
+      "category": "decorative",
+      "source_pack": "R3.5",
+      "role": "warning-stripe-acid",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/manifests/r3.5-manifest.json",
+      "bytes": 3181,
+      "category": "manifest",
+      "source_pack": "R3.5"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/chevrons-mobile-double.png",
+      "bytes": 45289,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "chevrons-mobile-double",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/chevrons-mobile-double.webp",
+      "bytes": 17690,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "chevrons-mobile-double",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/corner-bracket-compact.png",
+      "bytes": 65087,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "corner-bracket-compact",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/corner-bracket-compact.webp",
+      "bytes": 25018,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "corner-bracket-compact",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/corner-shard-compact.png",
+      "bytes": 61612,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "corner-shard-compact",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/corner-shard-compact.webp",
+      "bytes": 22228,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "corner-shard-compact",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/divider-compact-mixed.png",
+      "bytes": 84600,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "divider-compact-mixed",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/divider-compact-mixed.webp",
+      "bytes": 31080,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "divider-compact-mixed",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/divider-ink-broken-compact.png",
+      "bytes": 23501,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "divider-ink-broken-compact",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/divider-ink-broken-compact.webp",
+      "bytes": 10712,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "divider-ink-broken-compact",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/hairline-arrows-compact.png",
+      "bytes": 11905,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "hairline-arrows-compact",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/hairline-arrows-compact.webp",
+      "bytes": 6012,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "hairline-arrows-compact",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/label-acid-compact.png",
+      "bytes": 67314,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "label-acid-compact",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/label-acid-compact.webp",
+      "bytes": 24796,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "label-acid-compact",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/label-magenta-compact.png",
+      "bytes": 62509,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "label-magenta-compact",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/label-magenta-compact.webp",
+      "bytes": 18706,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "label-magenta-compact",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/label-paper-compact.png",
+      "bytes": 106648,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "label-paper-compact",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/label-paper-compact.webp",
+      "bytes": 30406,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "label-paper-compact",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/marker-swipe-compact.png",
+      "bytes": 40458,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "marker-swipe-compact",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/marker-swipe-compact.webp",
+      "bytes": 18182,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "marker-swipe-compact",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/nameplate-mobile-wide.png",
+      "bytes": 112599,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "nameplate-mobile-wide",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/nameplate-mobile-wide.webp",
+      "bytes": 33900,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "nameplate-mobile-wide",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/pill-acid-compact.png",
+      "bytes": 64034,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "pill-acid-compact",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/pill-acid-compact.webp",
+      "bytes": 27166,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "pill-acid-compact",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/pill-magenta-compact.png",
+      "bytes": 54971,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "pill-magenta-compact",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/pill-magenta-compact.webp",
+      "bytes": 18508,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "pill-magenta-compact",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/portrait/portrait-breakup-mobile-wide.png",
+      "bytes": 238783,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "portrait-breakup-mobile-wide",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/portrait/portrait-breakup-mobile-wide.webp",
+      "bytes": 74344,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "portrait-breakup-mobile-wide",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/slash-accent-compact.png",
+      "bytes": 25476,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "slash-accent-compact",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/slash-accent-compact.webp",
+      "bytes": 11922,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "slash-accent-compact",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/sparkles-compact.png",
+      "bytes": 25504,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "sparkles-compact",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/sparkles-compact.webp",
+      "bytes": 13112,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "sparkles-compact",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/star-divider-compact.png",
+      "bytes": 27028,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "star-divider-compact",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/star-divider-compact.webp",
+      "bytes": 13720,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "star-divider-compact",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/triangle-shard-compact.png",
+      "bytes": 65789,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "triangle-shard-compact",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/triangle-shard-compact.webp",
+      "bytes": 25336,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "triangle-shard-compact",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/underline-compact-neon.png",
+      "bytes": 37066,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "underline-compact-neon",
+      "format": "png"
+    },
+    {
+      "path": "ui/fantasy-punk/decorative/mobile/underline-compact-neon.webp",
+      "bytes": 15396,
+      "category": "decorative",
+      "source_pack": "R3.6",
+      "role": "underline-compact-neon",
+      "format": "webp"
+    },
+    {
+      "path": "ui/fantasy-punk/manifests/r3.6-manifest.json",
+      "bytes": 4267,
+      "category": "manifest",
+      "source_pack": "R3.6"
+    },
+    {
+      "path": "ui/fantasy-punk/proofs/r3.6-proof.jpg",
+      "bytes": 297728,
+      "category": "proof",
+      "source_pack": "R3.6"
+    },
+    {
+      "path": "ui/fantasy-punk/proofs/r3.2-proof.jpg",
+      "bytes": 259535,
+      "category": "proof",
+      "source_pack": "R3.2"
+    },
+    {
+      "path": "ui/fantasy-punk/proofs/r3.3-proof.jpg",
+      "bytes": 252029,
+      "category": "proof",
+      "source_pack": "R3.3"
+    },
+    {
+      "path": "ui/fantasy-punk/proofs/r3.4-proof.jpg",
+      "bytes": 482418,
+      "category": "proof",
+      "source_pack": "R3.4"
+    },
+    {
+      "path": "ui/fantasy-punk/proofs/r3.5-proof.jpg",
+      "bytes": 342853,
+      "category": "proof",
+      "source_pack": "R3.5"
+    }
+  ]
+}

@@ -1,0 +1,112 @@
+{
+  "frame-corner-top-left": {
+    "png": "frame-corner-top-left.png",
+    "webp": "frame-corner-top-left.webp",
+    "size_px": [
+      385,
+      275
+    ],
+    "png_kb": 105.7,
+    "webp_kb": 36.6,
+    "webp_quality": 88
+  },
+  "frame-corner-top-right": {
+    "png": "frame-corner-top-right.png",
+    "webp": "frame-corner-top-right.webp",
+    "size_px": [
+      380,
+      273
+    ],
+    "png_kb": 97.7,
+    "webp_kb": 33.1,
+    "webp_quality": 88
+  },
+  "frame-corner-bottom-left": {
+    "png": "frame-corner-bottom-left.png",
+    "webp": "frame-corner-bottom-left.webp",
+    "size_px": [
+      457,
+      270
+    ],
+    "png_kb": 97.4,
+    "webp_kb": 37.1,
+    "webp_quality": 88
+  },
+  "frame-corner-bottom-right": {
+    "png": "frame-corner-bottom-right.png",
+    "webp": "frame-corner-bottom-right.webp",
+    "size_px": [
+      372,
+      270
+    ],
+    "png_kb": 102.2,
+    "webp_kb": 39.6,
+    "webp_quality": 88
+  },
+  "divider-rough-long": {
+    "png": "divider-rough-long.png",
+    "webp": "divider-rough-long.webp",
+    "size_px": [
+      1396,
+      120
+    ],
+    "png_kb": 241.7,
+    "webp_kb": 89.3,
+    "webp_quality": 88
+  },
+  "divider-rough-medium": {
+    "png": "divider-rough-medium.png",
+    "webp": "divider-rough-medium.webp",
+    "size_px": [
+      718,
+      85
+    ],
+    "png_kb": 120.2,
+    "webp_kb": 42.7,
+    "webp_quality": 88
+  },
+  "divider-ink-long": {
+    "png": "divider-ink-long.png",
+    "webp": "divider-ink-long.webp",
+    "size_px": [
+      1120,
+      58
+    ],
+    "png_kb": 106.5,
+    "webp_kb": 31.8,
+    "webp_quality": 88
+  },
+  "halftone-corner-large": {
+    "png": "halftone-corner-large.png",
+    "webp": "halftone-corner-large.webp",
+    "size_px": [
+      471,
+      295
+    ],
+    "png_kb": 236.1,
+    "webp_kb": 84.9,
+    "webp_quality": 88
+  },
+  "edge-fragment-vertical": {
+    "png": "edge-fragment-vertical.png",
+    "webp": "edge-fragment-vertical.webp",
+    "size_px": [
+      126,
+      315
+    ],
+    "png_kb": 75.4,
+    "webp_kb": 27.3,
+    "webp_quality": 88
+  },
+  "paper-patch-magenta": {
+    "png": "paper-patch-magenta.png",
+    "webp": "paper-patch-magenta.webp",
+    "size_px": [
+      644,
+      282
+    ],
+    "png_kb": 371.4,
+    "webp_kb": 97.5,
+    "webp_quality": 84
+  }
+}

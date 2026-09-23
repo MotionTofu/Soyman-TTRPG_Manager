@@ -1,0 +1,158 @@
+{
+  "edge-accent-left-tall": {
+    "components": [
+      1
+    ],
+    "size_px": [
+      180,
+      627
+    ],
+    "png_kb": 166.0,
+    "webp_kb": 58.1,
+    "webp_quality": 86
+  },
+  "edge-accent-right-tall": {
+    "components": [
+      2
+    ],
+    "size_px": [
+      204,
+      632
+    ],
+    "png_kb": 177.9,
+    "webp_kb": 60.6,
+    "webp_quality": 86
+  },
+  "portrait-breakup-top": {
+    "components": [
+      3
+    ],
+    "size_px": [
+      1041,
+      345
+    ],
+    "png_kb": 522.5,
+    "webp_kb": 113.2,
+    "webp_quality": 54
+  },
+  "marker-acid-long": {
+    "components": [
+      4
+    ],
+    "size_px": [
+      1051,
+      93
+    ],
+    "png_kb": 148.0,
+    "webp_kb": 63.8,
+    "webp_quality": 86
+  },
+  "marker-acid-short": {
+    "components": [
+      5
+    ],
+    "size_px": [
+      500,
+      87
+    ],
+    "png_kb": 69.0,
+    "webp_kb": 31.1,
+    "webp_quality": 86
+  },
+  "marker-magenta-medium": {
+    "components": [
+      6
+    ],
+    "size_px": [
+      452,
+      80
+    ],
+    "png_kb": 57.9,
+    "webp_kb": 22.9,
+    "webp_quality": 86
+  },
+  "emblem-burst-round": {
+    "components": [
+      7
+    ],
+    "size_px": [
+      246,
+      248
+    ],
+    "png_kb": 98.5,
+    "webp_kb": 32.6,
+    "webp_quality": 86
+  },
+  "shard-corner-right": {
+    "components": [
+      8
+    ],
+    "size_px": [
+      303,
+      248
+    ],
+    "png_kb": 76.1,
+    "webp_kb": 28.9,
+    "webp_quality": 86
+  },
+  "shard-burst-fragment": {
+    "components": [
+      9
+    ],
+    "size_px": [
+      266,
+      244
+    ],
+    "png_kb": 82.4,
+    "webp_kb": 31.9,
+    "webp_quality": 86
+  },
+  "card-corner-crescent": {
+    "components": [
+      10
+    ],
+    "size_px": [
+      249,
+      271
+    ],
+    "png_kb": 79.8,
+    "webp_kb": 29.0,
+    "webp_quality": 86
+  },
+  "fan-cards-badge": {
+    "components": [
+      11
+    ],
+    "size_px": [
+      417,
+      200
+    ],
+    "png_kb": 128.0,
+    "webp_kb": 42.9,
+    "webp_quality": 86
+  },
+  "label-paper-small": {
+    "components": [
+      12
+    ],
+    "size_px": [
+      332,
+      163
+    ],
+    "png_kb": 121.2,
+    "webp_kb": 33.6,
+    "webp_quality": 86
+  },
+  "underline-acid-magenta": {
+    "components": [
+      13
+    ],
+    "size_px": [
+      473,
+      75
+    ],
+    "png_kb": 47.7,
+    "webp_kb": 20.8,
+    "webp_quality": 86
+  }
+}
