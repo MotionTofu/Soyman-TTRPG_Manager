@@ -8,6 +8,25 @@ layer, grid/spacing, dice-as-numbers, mobile tab bar, component norms). Read
 that document for direction and rules. This file only covers what it doesn't:
 where each piece actually lives in this codebase.
 
+## OneShot visual scope
+
+`SoyMan_1shot/` is a separate product surface with a deliberately fixed
+Fantasy Punk identity. For its Library, Wizard, Sheet, dialogs and standalone
+HTML, use [`SoyMan_1shot/REDESIGN_RULES.md`](SoyMan_1shot/REDESIGN_RULES.md)
+as the visual decision source. The root PUNK ZINE system still supplies shared
+infrastructure and universal usability/accessibility constraints; its theme
+palette and component appearance do not override the OneShot-specific rules.
+Shared components adopt the OneShot appearance only through an explicit
+OneShot scope or opt-in variant, leaving the rest of SoyMan unchanged.
+
+Within that scope, the priority is: actual product behavior and data contracts
+first, then `REDESIGN_RULES.md`, then
+[`Design_Codex_V1.md`](SoyMan_1shot/Redesign_Concepts/Design_Codex_V1.md)
+as a stylistic reference. `Concept_001.png` is the primary desktop Sheet
+composition reference; `PC.png` and `Mobile.png` are secondary style references,
+not specifications for screen structure or available features. This precedence
+is also recorded at the top of `REDESIGN_RULES.md`.
+
 ## Where things live in code
 
 | Concern | File |
