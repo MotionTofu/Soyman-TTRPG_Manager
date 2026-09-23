@@ -22,3 +22,192 @@
 .oneshot-export-action { padding: var(--sp-3) var(--sp-4); }
 .oneshot-update{position:sticky;top:0;z-index:40;display:flex;align-items:center;gap:var(--space-5);flex-wrap:wrap;padding:10px 20px;border-bottom:1px solid var(--ui-border);background:var(--ui-surface-raised);color:var(--ui-text)}
 @media(max-width:700px){.oneshot-update{padding:10px 12px}}
+
+/* Library composition: large surfaces first, quiet controls inside them. */
+html[data-app="oneshot"] .oneshot-home {
+  max-width: 1320px;
+  margin: 24px auto 0;
+  padding: 0 24px 72px;
+}
+html[data-app="oneshot"] .oneshot-home-intro {
+  position: relative;
+  overflow: hidden;
+  padding: 34px 40px 30px;
+  border: 3px solid var(--ui-border);
+  background: var(--ui-surface-ink);
+  color: var(--ui-text-inverse);
+  box-shadow: 7px 7px 0 var(--ui-accent-secondary);
+}
+html[data-app="oneshot"] .oneshot-home-intro::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  width: 14px;
+  background: var(--ui-accent);
+}
+html[data-app="oneshot"] .oneshot-home-intro h1 {
+  margin: 10px 0 14px;
+  color: var(--ui-text-inverse);
+  line-height: 1;
+}
+html[data-app="oneshot"] .oneshot-home-intro p {
+  max-width: 62ch;
+  margin: 0;
+  line-height: 1.5;
+}
+html[data-app="oneshot"] .oneshot-home-intro .oneshot-home-kicker {
+  color: var(--ui-accent);
+  font-size: var(--fs-meta);
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+html[data-app="oneshot"] .oneshot-home-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 24px;
+  font-size: var(--fs-meta);
+  font-weight: 700;
+}
+html[data-app="oneshot"] .oneshot-home-counts span {
+  padding: 5px 8px;
+  border: 1px solid var(--ui-accent);
+}
+html[data-app="oneshot"] .oneshot-home-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 300px);
+  align-items: start;
+  gap: 30px;
+  margin-top: 42px;
+}
+html[data-app="oneshot"] .oneshot-home-main { min-width: 0; }
+html[data-app="oneshot"] .oneshot-home .oneshot-home-create {
+  margin: 0;
+  padding: 24px 28px 28px;
+  border: 2px solid var(--ui-border);
+  background: var(--ui-surface);
+  box-shadow: 5px 5px 0 var(--ui-border);
+}
+html[data-app="oneshot"] .oneshot-home .oneshot-home-library {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 38px;
+  padding: 0;
+  border-top: 0;
+}
+html[data-app="oneshot"] .oneshot-home-create h2,
+html[data-app="oneshot"] .oneshot-home-library h2 {
+  margin: 0 0 18px;
+  line-height: 1.1;
+}
+html[data-app="oneshot"] .oneshot-section-index {
+  margin: 0 0 10px;
+  color: var(--ui-text-muted);
+  font-size: var(--fs-meta);
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+html[data-app="oneshot"] .oneshot-home-library > :is(h2, p, .oneshot-archive) {
+  grid-column: 1 / -1;
+}
+html[data-app="oneshot"] .oneshot-home-library > h2 { margin-bottom: 4px; }
+html[data-app="oneshot"] .oneshot-name-field {
+  display: grid;
+  gap: 7px;
+  max-width: 480px;
+  font-weight: 700;
+}
+html[data-app="oneshot"] .oneshot-name-field input {
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+}
+html[data-app="oneshot"] .oneshot-home-create [data-ui="action-row"] {
+  margin-top: 20px;
+}
+html[data-app="oneshot"] .oneshot-home-library > .oneshot-character {
+  position: relative;
+  min-height: 125px;
+  margin: 0;
+  padding: 18px 18px 16px;
+  border: 2px solid var(--ui-border);
+  background: var(--ui-surface);
+  box-shadow: 4px 4px 0 var(--ui-border);
+}
+html[data-app="oneshot"] .oneshot-home-library > .oneshot-character > a {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-start;
+  min-width: 0;
+  padding-right: 32px;
+  text-decoration: none;
+}
+html[data-app="oneshot"] .oneshot-home-library > .oneshot-character strong {
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  overflow-wrap: anywhere;
+}
+html[data-app="oneshot"] .oneshot-home-library > .oneshot-character span {
+  color: var(--ui-text-muted);
+  font-size: var(--fs-meta);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+html[data-app="oneshot"] .oneshot-home-library > .oneshot-character .oneshot-menu {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+}
+html[data-app="oneshot"] .oneshot-home-library > .oneshot-character .oneshot-menu-list {
+  min-width: 190px;
+  background: var(--ui-surface);
+  border: 2px solid var(--ui-border);
+  box-shadow: 4px 4px 0 var(--ui-border);
+}
+html[data-app="oneshot"] .oneshot-home-library > button {
+  min-height: 44px;
+  white-space: normal;
+  border: 2px solid var(--ui-border);
+  background: transparent;
+  color: var(--ui-text);
+  font-weight: 700;
+}
+html[data-app="oneshot"] .oneshot-home-library > button:hover {
+  background: var(--ui-accent);
+}
+html[data-app="oneshot"] .oneshot-home-aside {
+  padding: 22px;
+  border: 2px solid var(--ui-border);
+  background: var(--ui-surface-raised);
+}
+html[data-app="oneshot"] .oneshot-home-aside > details > summary {
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  font-weight: 800;
+}
+html[data-app="oneshot"] .oneshot-home-aside > p {
+  margin: 20px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--ui-border);
+  font-size: var(--fs-meta);
+}
+html[data-app="oneshot"] .oneshot-home-aside section {
+  border-top: 1px solid var(--ui-border);
+}
+@media (max-width: 900px) {
+  html[data-app="oneshot"] .oneshot-home-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 700px) {
+  html[data-app="oneshot"] .oneshot-home { margin-top: 0; padding: 0 16px 50px; }
+  html[data-app="oneshot"] .oneshot-home-intro { padding: 24px 22px; box-shadow: 4px 4px 0 var(--ui-accent-secondary); }
+  html[data-app="oneshot"] .oneshot-home-grid { gap: 24px; margin-top: 24px; }
+  html[data-app="oneshot"] .oneshot-home .oneshot-home-create { padding: 20px 18px 24px; }
+  html[data-app="oneshot"] .oneshot-home .oneshot-home-library { grid-template-columns: 1fr; }
+  html[data-app="oneshot"] .oneshot-home-library > button { grid-column: 1; }
+}
