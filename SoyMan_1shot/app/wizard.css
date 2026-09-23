@@ -88,6 +88,17 @@ html[data-app="oneshot"] .card.wizard .wizard-side {
 html[data-app="oneshot"] .card.wizard .wizard-main {
   min-width: 0;
 }
+html[data-app="oneshot"] .card.wizard .wizard-main > .stack > label:not(.row) {
+  display: grid;
+  gap: 7px;
+  width: min(100%, 480px);
+  font-weight: 700;
+}
+html[data-app="oneshot"] .card.wizard .wizard-main > .stack > label:not(.row)
+  :is(input, select, textarea) {
+  width: 100%;
+  box-sizing: border-box;
+}
 html[data-app="oneshot"] .card.wizard :is(input[type="checkbox"], input[type="radio"]) {
   accent-color: var(--ui-accent-secondary);
 }
