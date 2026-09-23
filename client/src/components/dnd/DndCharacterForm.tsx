@@ -1269,6 +1269,9 @@ function resolveFeature(
   if (!entry) return f;
   return {
     ...f,
+    // Пустое описание в листе (черта, связанная по имени, ручная строка) —
+    // текстом из справочника; своё, вписанное игроком, остаётся.
+    description: f.description?.trim() ? f.description : entry.description ?? "",
     ...spellTimingFromData(entry.data),
     checks: (entry.data.checks as DndCheck[] | undefined) ?? [],
     effects: (entry.data.effects as DndEffect[] | undefined) ?? [],
@@ -13016,15 +13019,17 @@ export function DndCharacterView({
               ) : (
                 <>
                   {rulesCardTile(value.raceId, value.raceName || "Вид", () => setOpenRulesEntryId(value.raceId))}
-                  <SbFeatureGroup title="Видовые особенности" values={value.speciesFeatures} />
+                  {/* Живые строки (liveFeatureGroups: класс, вид, черты, особые):
+                      пустое описание подставляется из справочника. */}
+                  <SbFeatureGroup title="Видовые особенности" values={liveFeatureGroups[1]} />
                   <div className="dnd-feature-card-strip">
                     {value.classes.map((c, i) => (
                       <div key={`${c.classId}-${i}`}>{rulesCardTile(c.classId, c.className || "Класс", () => setOpenRulesEntryId(c.classId))}</div>
                     ))}
                   </div>
-                  <SbFeatureGroup title="Классовые особенности" values={value.classFeatures} />
-                  <SbFeatureGroup title="Черты" values={value.feats} />
-                  <SbFeatureGroup title="Особые умения" values={value.specialAbilities} />
+                  <SbFeatureGroup title="Классовые особенности" values={liveFeatureGroups[0]} />
+                  <SbFeatureGroup title="Черты" values={liveFeatureGroups[2]} />
+                  <SbFeatureGroup title="Особые умения" values={liveFeatureGroups[3]} />
                 </>
               )}
             </div>
