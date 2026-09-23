@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseCatalog, repairSpellLevels } from '../app/catalog.mjs';
+import { creatureCardPayload, parseCatalog, repairSpellLevels, searchEntries } from '../app/catalog.mjs';
 const fixture = () => ({ system: { id: 7, name: 'D&D 5.5', folder_path: 'private/path' }, sections: [{ id: 2, name: 'Классы', kind: 'class' }], entries: [{ id: 10, section_id: 2, parent_id: null, name: 'Тестовый класс', kind: 'class', data: { hit_die: 'к10' }, folder_path: 'private/entry' }] });
 test('spell circles survive export and legacy repair leaves pinned mechanics intact', () => {
   const raw = fixture();
@@ -33,4 +33,31 @@ test('catalog keeps a preview when a large embedded card is omitted later', () =
   assert.match(result.entries[0].avatar_large_url, /^data:image\/webp;base64,/);
   delete result.entries[0].avatar_large_url;
   assert.match(result.entries[0].avatar_preview_url, /^data:image\/webp;base64,/);
+});
+test('bestiary creature card survives parsing without foreign fields', () => {
+  const raw = fixture();
+  raw.sections.push({ id: 3, name: 'Бестиарий', kind: 'monster' });
+  raw.entries.push({ id: 20, section_id: 3, name: 'Волк', kind: 'monster', data: {}, creature: { tactics: ['Стая'], combat_roles: [1, 'Громила'], secret: 'только Мастеру', statblock: { id: 5, kind: 'full', format: 'dnd_creature', content: '{"name":"Волк"}', avatar_image_path: 'C:/vault/wolf.png' } } });
+  const wolf = parseCatalog(raw).entries.find(e => e.id === 20);
+  assert.deepEqual(wolf.creature, { combat_roles: ['Громила'], tactics: ['Стая'], statblock: { id: 5, kind: 'full', format: 'dnd_creature', content: '{"name":"Волк"}', theme: null, density: null } });
+  assert.equal('creature' in parseCatalog(fixture()).entries[0], false);
+  const card = creatureCardPayload(wolf, 'data:image/webp;base64,AA==');
+  assert.equal(card.secret, '');
+  assert.equal(card.statblock.content, '{"name":"Волк"}');
+  assert.equal(card.avatar_image_url, 'data:image/webp;base64,AA==');
+  assert.equal(creatureCardPayload({ id: 1, name: 'Без карточки' }, null).statblock, null);
+});
+test('search folds case and ё, filters kinds and puts prefix matches first', () => {
+  const entries = [
+    { id: 1, name: 'Скот', kind: 'monster', aliases: [], name_original: '' },
+    { id: 2, name: 'Кот', kind: 'monster', aliases: [], name_original: 'Cat' },
+    { id: 3, name: 'Котёл', kind: 'equipment', aliases: [], name_original: '' },
+    { id: 4, name: 'Ёж', kind: 'monster', aliases: ['колючка'], name_original: '' },
+  ];
+  assert.deepEqual(searchEntries(entries, 'КОТ', ['monster']).map(r => r.id), [2, 1]);
+  assert.deepEqual(searchEntries(entries, 'cat', null).map(r => r.id), [2]);
+  assert.deepEqual(searchEntries(entries, 'еж', ['monster']).map(r => r.id), [4]);
+  assert.deepEqual(searchEntries(entries, 'колюч', ['monster']).map(r => r.title), ['Ёж']);
+  assert.deepEqual(searchEntries(entries, '  ', null), []);
+  assert.equal(searchEntries(entries, 'кот', ['monster'])[0].type, 'compendium_entry');
 });

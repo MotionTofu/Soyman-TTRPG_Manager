@@ -17,13 +17,15 @@ function buildShared() {
 // Development: serve the managed catalog the same way production does.
 // Rebuilt only when private/catalog.json is newer than the release; without
 // a private catalog the dev site falls back to manual import, as before.
+// The version follows the source mtime: the catalog manager rejects the same
+// id with different content, and a new id lets its GC drop the old release.
 function buildDevCatalog() {
   const source = fileURLToPath(new URL('./private/catalog.json', import.meta.url));
   const manifest = fileURLToPath(new URL('./catalog/manifest.json', import.meta.url));
   if (!existsSync(source)) return;
   if (existsSync(manifest) && statSync(manifest).mtimeMs >= statSync(source).mtimeMs) return;
   const root = fileURLToPath(new URL('.', import.meta.url));
-  const result = spawnSync(process.execPath, ['build-catalog-release.mjs', '--catalog', 'private/catalog.json', '--catalog-version', 'dev'], { cwd: root, stdio: 'inherit' });
+  const result = spawnSync(process.execPath, ['build-catalog-release.mjs', '--catalog', 'private/catalog.json', '--catalog-version', `dev-${Math.floor(statSync(source).mtimeMs)}`], { cwd: root, stdio: 'inherit' });
   if (result.status !== 0) console.warn('Dev catalog release failed; manual catalog import still works');
 }
 if (process.argv.includes('--build')) {

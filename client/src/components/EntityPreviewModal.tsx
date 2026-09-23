@@ -351,7 +351,8 @@ export function EntityPreviewModal({ type, id, onClose }: Props) {
         onClose={onClose}
         statblockInline
         playerSafe={playerSafe}
-        hideProfileButton={playerSafe}
+        // Без пользователя (OneShot) мастерского профиля нет вовсе — ссылка вела в никуда.
+        hideProfileButton={playerSafe || !user}
       />
     </Modal>
   );

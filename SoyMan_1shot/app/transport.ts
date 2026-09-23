@@ -1,3 +1,4 @@
+import { creatureCardPayload, searchEntries } from './catalog.mjs';
 import { getCharacter, saveCharacter, parseCharacterContent, getCatalog, getCatalogPreviews, currentCatalog, type Catalog } from './repository';
 // Vite sees this file both as the shell's direct import and as the replacement
 // for client/api/client.ts. Some builds keep those as two module instances;
@@ -49,7 +50,15 @@ async function request<T>(path: string, method = 'GET', body?: any, options?: Re
       result = presentEntry(transportState.catalog?.entries.find(e => e.id === Number(route.split('/').pop())), true); if (!result) throw Error('Запись отсутствует в подключённом справочнике');
     } else if (route === '/statblocks') {
       const c = await getCharacter(transportState.activeId!); result = c?.content ? [statblock(c)] : [];
-    } else if (route === '/search') result = [];
+    } else if (route === '/search') {
+      const types = url.searchParams.get('types');
+      const kinds = (url.searchParams.get('kind') || '').split(',').map(k => k.trim()).filter(Boolean);
+      result = types && !types.split(',').includes('compendium_entry') ? [] : searchEntries(transportState.catalog?.entries ?? [], url.searchParams.get('q') || '', kinds);
+    } else if (/^\/creature-card\/compendium_entry\/\d+$/.test(route)) {
+      const entry = transportState.catalog?.entries.find(e => e.id === Number(route.split('/').pop()));
+      if (!entry) throw Error('Существо отсутствует в подключённом справочнике');
+      result = creatureCardPayload(entry, presentEntry(entry, true).avatar_image_url);
+    }
     else if (/^\/player\/characters\/\d+\/inbox$/.test(route)) result = [];
     else if (/^\/systems\/\d+$/.test(route)) result = transportState.catalog?.system;
     else throw Error(`В OneShot пока недоступно: ${route}`);

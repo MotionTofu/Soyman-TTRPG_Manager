@@ -14,7 +14,14 @@ try {
     const system = db.prepare("SELECT id, name, code, description FROM systems WHERE (code IN ('phb','dnd55') OR name = 'D&D 5.5') AND archived_at IS NULL ORDER BY id LIMIT 1").get();
     if (!system) throw Error('D&D 5.5 не найдена');
     const sections = db.prepare('SELECT id, name, kind, position FROM system_sections WHERE system_id = ?').all(system.id);
-    const entries = db.prepare('SELECT id, section_id, parent_id, name, name_original, aliases, kind, level, position, data, description, avatar_image_path FROM compendium_entries WHERE system_id = ?').all(system.id).map(e => ({ ...e, data: JSON.parse(e.data || '{}'), aliases: JSON.parse(e.aliases || '[]') }));
+    // secret is never selected: the catalog is served to players.
+    const list = raw => { try { const v = JSON.parse(raw || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } };
+    const statblock = db.prepare("SELECT id, kind, format, content, theme, density FROM statblocks WHERE owner_type = 'compendium_entry' AND owner_id = ? AND format = 'dnd_creature' ORDER BY CASE kind WHEN 'full' THEN 0 ELSE 1 END, id LIMIT 1");
+    const entries = db.prepare('SELECT id, section_id, parent_id, name, name_original, aliases, kind, level, position, data, description, avatar_image_path, combat_roles, tactics FROM compendium_entries WHERE system_id = ?').all(system.id).map(({ combat_roles, tactics, ...e }) => ({
+      ...e, data: JSON.parse(e.data || '{}'), aliases: JSON.parse(e.aliases || '[]'),
+      // Bestiary companions need the same card the player route of SoyMan serves.
+      ...(e.kind === 'monster' ? { creature: { combat_roles: list(combat_roles), tactics: list(tactics), statblock: statblock.get(e.id) ?? null } } : {}),
+    }));
     return { system, sections, entries };
   })();
   for (const entry of data.entries) {

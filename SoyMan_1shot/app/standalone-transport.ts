@@ -1,3 +1,4 @@
+import { creatureCardPayload } from './catalog.mjs';
 const payload = JSON.parse(document.getElementById('oneshot-payload')!.textContent!);
 export const snapshot = payload;
 export const getAuthToken = () => null;
@@ -21,6 +22,11 @@ async function get<T>(path: string): Promise<T> {
   } else if (/\/entries$/.test(u.pathname)) {
     result = c.entries.filter((e: any) => (!u.searchParams.has('section_id') || e.section_id === Number(u.searchParams.get('section_id'))) && (!u.searchParams.has('parent_id') || e.parent_id === Number(u.searchParams.get('parent_id')))).map((e: any) => presentEntry(e));
   } else if (/^\/systems\/\d+$/.test(u.pathname)) result = c.system;
+  else if (/^\/creature-card\/compendium_entry\/\d+$/.test(u.pathname)) {
+    const entry = c.entries.find((e: any) => e.id === Number(u.pathname.split('/').pop()));
+    if (!entry) throw Error('Это существо не включено в автономную копию.');
+    result = creatureCardPayload(entry, presentEntry(entry, true).avatar_image_url);
+  }
   else if (u.pathname === '/search' || u.pathname === '/statblocks' || u.pathname.endsWith('/inbox')) result = [];
   else return unavailable();
   return structuredClone(result) as T;

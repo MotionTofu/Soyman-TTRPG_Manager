@@ -10,8 +10,10 @@ import { useImageCrop } from "../../hooks/useImageCrop";
 import type { CompendiumEntry, DndAbilityScores } from "../../types";
 import { emptyDndCharacter, recomputeGrantedSpells } from "./DndCharacterForm";
 import {
+  armorProfNames,
   EMPTY_EQUIPMENT_ITEM,
   fetchEquipmentMeta,
+  isArmorProficient,
   makeEquipmentId,
   startingSetsFrom,
   type StartingSet,
@@ -1736,6 +1738,23 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         const gold = Number.parseInt((set.gold ?? "").trim(), 10);
         if (Number.isFinite(gold)) goldToAdd += gold;
       }
+      // Доспех и щит из набора сразу надеты, если персонаж ими владеет
+      // (гриллинг 2026-09-23): иначе КЗ после создания считался без доспеха.
+      // Владения класса берутся из его записи — в список владений листа
+      // визард их не кладёт.
+      const armorNames = [
+        ...armorProfNames(character.proficiencies),
+        ...(((classEntry?.data.armor_profs as { name?: string }[] | undefined) ?? []).map((p) => p?.name ?? "")),
+      ];
+      const wearable = (item: (typeof addedItems)[number], shield: boolean) => {
+        const type = (item.armorType ?? "").trim().toLowerCase();
+        const matches = shield ? type.startsWith("щит") : /^(л[её]гк|средн|тяж)/.test(type);
+        return matches && isArmorProficient(item.armorType, armorNames);
+      };
+      for (const shield of [false, true]) {
+        const item = addedItems.find((i) => wearable(i, shield));
+        if (item) item.equipped = true;
+      }
       if (addedItems.length > 0) {
         const sections = character.equipmentSections.length > 0 ? character.equipmentSections : [{ name: "Общее", items: [] }];
         character.equipmentSections = sections.map((sec, i) =>
@@ -2447,7 +2466,14 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
                         value={chosenStyle[i] ?? ""}
                         onChange={(e) => {
                           const id = e.target.value ? Number(e.target.value) : null;
-                          setChosenStyle((prev) => prev.map((v, j) => (j === i ? id : v)));
+                          // Не prev.map: свежий визард и смена класса дают [],
+                          // и map по пустому массиву молча терял выбор.
+                          setChosenStyle((prev) => {
+                            const next = [...prev];
+                            while (next.length <= i) next.push(null);
+                            next[i] = id;
+                            return next;
+                          });
                           if (id != null) void fetchStyleEntry(id);
                         }}
                       >

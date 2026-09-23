@@ -21,10 +21,12 @@ export function portablePayload(character, catalog) {
     if (sourceId != null) {
       const data = catalog?.entries.find(e => e.id === sourceId)?.data;
       const blueprint = data?.companion ?? data?.summon;
-      if (!blueprint || typeof blueprint !== 'object' || !blueprint.hp) throw Error(`Не найден чертёж спутника «${companion.name}».`);
-    } else if (companion.entryId != null) {
-      throw Error(`Спутнику «${companion.name}» нужен статблок бестиария. Его автономный экспорт пока не поддержан.`);
+      // Хиты бывают и у вариантов (Первобытный зверь: наземный/морской/небесный).
+      const hasHp = blueprint && typeof blueprint === 'object' && (blueprint.hp || (Array.isArray(blueprint.variants) && blueprint.variants.some(v => v?.hp)));
+      if (!hasHp) throw Error(`Не найден чертёж спутника «${companion.name}».`);
     }
+    // Спутник из бестиария едет записью справочника с карточкой существа
+    // (entry.creature): его entryId уже попадает в срез через auditExport.
   }
   const entries = new Map(audit.candidate.entries.map(e => [e.id, e]));
   const sectionIds = new Set([...entries.values()].map(e => e.section_id));

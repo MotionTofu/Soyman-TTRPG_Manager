@@ -31,9 +31,53 @@ export function parseCatalog(input) {
       ? `data:${value.mime};base64,${value.base64}` : null;
     const large = typeof e.avatar_large_url === 'string' ? e.avatar_large_url : embedded(e.avatar_data);
     const preview = typeof e.avatar_preview_url === 'string' ? e.avatar_preview_url : embedded(e.avatar_preview_data) || large;
-    return { id: e.id, system_id: 1, section_id: e.section_id, parent_id: e.parent_id ?? null, name: e.name, name_original: e.name_original || '', aliases: Array.isArray(e.aliases) ? e.aliases.filter(a => typeof a === 'string') : [], kind: e.kind, level: e.level ?? null, position: e.position || 0, data: structuredClone(e.data), description: typeof e.description === 'string' ? e.description : '', avatar_preview_url: preview, avatar_large_url: large };
+    const creature = cleanCreature(e.creature);
+    return { id: e.id, system_id: 1, section_id: e.section_id, parent_id: e.parent_id ?? null, name: e.name, name_original: e.name_original || '', aliases: Array.isArray(e.aliases) ? e.aliases.filter(a => typeof a === 'string') : [], kind: e.kind, level: e.level ?? null, position: e.position || 0, data: structuredClone(e.data), description: typeof e.description === 'string' ? e.description : '', avatar_preview_url: preview, avatar_large_url: large, ...(creature ? { creature } : {}) };
   });
   if (entries.some(e => e.parent_id != null && !ids.has(e.parent_id))) throw Error('В справочнике отсутствует родитель записи');
   return { system: { id: 1, name: input.system.name, code: 'dnd55', description: input.system.description || '' }, sections: cleanSections, entries };
 }
 
+
+// Карточка существа бестиария для игрока (гриллинг 2026-09-23): то же, что
+// отдаёт игроку основной SoyMan (server/src/routes/player.ts,
+// /creature-card/compendium_entry) — статблок, роли, тактика. Секрета в
+// справочнике нет вовсе: prepare-catalog его не выбирает.
+function cleanCreature(value) {
+  if (!value || typeof value !== 'object') return null;
+  const list = v => Array.isArray(v) ? v.filter(x => typeof x === 'string') : [];
+  const s = value.statblock;
+  const statblock = s && typeof s === 'object' && s.format === 'dnd_creature' && typeof s.content === 'string'
+    ? { id: Number.isSafeInteger(s.id) ? s.id : 0, kind: typeof s.kind === 'string' ? s.kind : 'full', format: 'dnd_creature', content: s.content, theme: typeof s.theme === 'string' ? s.theme : null, density: typeof s.density === 'string' ? s.density : null }
+    : null;
+  return { combat_roles: list(value.combat_roles), tactics: list(value.tactics), statblock };
+}
+export function creatureCardPayload(entry, avatarUrl) {
+  const creature = entry.creature || { combat_roles: [], tactics: [], statblock: null };
+  return {
+    type: 'compendium_entry', id: entry.id, name: entry.name, description: entry.description || '',
+    combat_roles: creature.combat_roles, tactics: creature.tactics, secret: '',
+    avatar_image_url: avatarUrl ?? null,
+    statblock: creature.statblock ? { ...creature.statblock, avatar_image_url: null } : null,
+    statblock_inherited: false, inherited: null,
+  };
+}
+// Поиск записей справочника вместо серверного /search: имя, синонимы и
+// оригинальное название, без учёта регистра и различия ё/е.
+const fold = text => String(text || '').toLocaleLowerCase('ru').replaceAll('ё', 'е');
+export function searchEntries(entries, query, kinds, limit = 50) {
+  const q = fold(query).trim();
+  if (!q) return [];
+  const wanted = kinds && kinds.length ? new Set(kinds) : null;
+  const byId = new Map(entries.map(e => [e.id, e]));
+  const results = [];
+  for (const e of entries) {
+    if (wanted && !wanted.has(e.kind)) continue;
+    if (!fold([e.name, ...(e.aliases || []), e.name_original].join(' ')).includes(q)) continue;
+    const parent = e.parent_id != null ? byId.get(e.parent_id)?.name : null;
+    results.push({ type: 'compendium_entry', id: e.id, title: e.name, subtitle: `${e.kind}${parent ? ` · ${parent}` : ''}`, system_id: 1, section_id: e.section_id, kind: e.kind, level: e.level });
+  }
+  // Сначала имена, которые начинаются с запроса: «кот» — это Кот, а не …кот… в середине.
+  const starts = r => (fold(r.title).startsWith(q) ? 0 : 1);
+  return results.sort((a, b) => starts(a) - starts(b) || a.title.localeCompare(b.title, 'ru')).slice(0, limit);
+}

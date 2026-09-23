@@ -13,8 +13,12 @@ test('portable payload excludes unrelated entries and rejects unsupported depend
   assert.equal(payload.catalog.entries[0].avatar_large_url, undefined);
   assert.equal(c.content.equipmentSections[0].items[0].transferIn.fromCharacterId, 77);
   assert.throws(() => portablePayload({ ...c, portrait: 'https://example.test/a.png' }, catalog));
-  assert.throws(() => portablePayload({ content: { companions: [{ entryId: 1, name: 'Волк' }] } }, catalog), /статблок бестиария/);
+  catalog.entries[1].creature = { combat_roles: [], tactics: [], statblock: { id: 9, kind: 'full', format: 'dnd_creature', content: '{}', theme: null, density: null } };
+  const pet = portablePayload({ content: { companions: [{ entryId: 2, name: 'Волк' }] } }, catalog);
+  assert.equal(pet.catalog.entries.find(e => e.id === 2).creature.statblock.id, 9);
   assert.throws(() => portablePayload({ content: { companions: [{ entryId: null, featureEntryId: 1, name: 'Защитник' }] } }, catalog), /Не найден чертёж/);
+  const beast = { system: {}, sections: [{ id: 1 }], entries: [{ id: 5, section_id: 1, name: 'Первичный спутник', kind: 'feature', data: { companion: { name: 'Первобытный зверь', variants: [{ name: 'Наземный зверь', hp: '5+5*level' }] } } }] };
+  assert.equal(portablePayload({ content: { companions: [{ entryId: null, featureEntryId: 5, name: 'Первобытный зверь' }] } }, beast).catalog.entries[0].id, 5);
   assert.throws(() => portablePayload({ content: { companions: [{ entryId: null, statblockId: 42, name: 'Спутник' }] } }, catalog), /статблок/);
 });
 test('GM copy drops only private notes and names the file after the character', () => {
