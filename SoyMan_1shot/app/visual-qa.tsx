@@ -7,6 +7,8 @@ import { queryClient } from '../../client/src/data/queryClient';
 import { DndCharacterView } from '../../client/src/components/dnd/DndCharacterForm';
 import { DndRuntimeContext } from '../../client/src/components/dnd/DndRuntime';
 import { Modal } from '../../client/src/components/Modal';
+import { Button } from './ui/Button';
+import { ActionRow } from './ui/ActionRow';
 import { applyTheme, findTheme } from '../../client/src/themes';
 import { emptyDndCharacter } from '@shared/dnd/normalize';
 import type { DndSpellEntry } from '@shared/dnd/types';
@@ -63,31 +65,31 @@ function ModalFixture() {
   return <>
     <header className="oneshot-header"><strong>OneShot SoyMan / Modal QA</strong></header>
     <main className="oneshot-home" style={{ padding: 16 }}>
-      <div className="row oneshot-actions">
-        <button onClick={() => setOpen('import')}>Импорт</button>
-        <button onClick={() => setOpen('share')}>Публикация</button>
-        <button onClick={() => setOpen('conflict')}>Конфликт</button>
-      </div>
+      <ActionRow>
+        <Button onClick={() => setOpen('import')}>Импорт</Button>
+        <Button onClick={() => setOpen('share')}>Публикация</Button>
+        <Button onClick={() => setOpen('conflict')}>Конфликт</Button>
+      </ActionRow>
     </main>
     {open && <Modal className="oneshot-modal" ariaLabel={{ import: 'Импорт персонажа', share: 'Публикация персонажа для мастера', conflict: 'Конфликты синхронизации' }[open]} onClose={() => setOpen(null)}>
       {open === 'import' && <>
         <h3>Найден существующий персонаж «Лунная странница Астэрия»</h3>
         <p>Файл может содержать более новое игровое состояние.</p>
         <p className="muted">Данные из файла заменят текущее состояние этого персонажа: хиты, ресурсы, заклинания, заметки и остальные данные листа.</p>
-        <div className="row oneshot-actions"><button className="primary" onClick={() => setOpen(null)}>Обновить существующего</button><button onClick={() => setOpen(null)}>Создать копию</button><button onClick={() => setOpen(null)}>Отмена</button></div>
+        <ActionRow><Button variant="primary" onClick={() => setOpen(null)}>Обновить существующего</Button><Button onClick={() => setOpen(null)}>Создать копию</Button><Button onClick={() => setOpen(null)}>Отмена</Button></ActionRow>
       </>}
       {open === 'share' && <>
         <h3>Поделиться с мастером — «Лунная странница Астэрия»</h3>
         <p className="muted">Ссылка создана.</p>
         <p><a href="#qa-link">https://example.invalid/s/long-character-share-link-for-layout-check</a></p>
-        <div className="row oneshot-actions"><button className="primary" onClick={() => setOpen(null)}>Скопировать ссылку</button><a role="button" href="#qa-link">Открыть</a><button onClick={() => setOpen(null)}>Обновить опубликованную версию</button><button className="danger" onClick={() => setOpen(null)}>Отключить ссылку</button></div>
-        <div className="row oneshot-actions"><button onClick={() => setOpen(null)}>Закрыть</button></div>
+        <ActionRow><Button variant="primary" onClick={() => setOpen(null)}>Скопировать ссылку</Button><a role="button" href="#qa-link">Открыть</a><Button onClick={() => setOpen(null)}>Обновить опубликованную версию</Button><Button variant="danger" onClick={() => setOpen(null)}>Отключить ссылку</Button></ActionRow>
+        <ActionRow><Button onClick={() => setOpen(null)}>Закрыть</Button></ActionRow>
       </>}
       {open === 'conflict' && <>
         <h3>Конфликты синхронизации</h3>
         <p className="muted">Обе версии персонажа изменились после последней синхронизации.</p>
-        <section aria-label="Конфликт: Лунная странница Астэрия"><h2>Персонаж «Лунная странница Астэрия» удалён на другом устройстве, но здесь есть несинхронизированные изменения.</h2><div className="row oneshot-actions"><button className="primary" onClick={() => setOpen(null)}>Оставить версию этого устройства</button><button className="danger" onClick={() => setOpen(null)}>Удалить и здесь</button></div></section>
-        <div className="row oneshot-actions"><button onClick={() => setOpen(null)}>Отмена</button></div>
+        <section aria-label="Конфликт: Лунная странница Астэрия"><h2>Персонаж «Лунная странница Астэрия» удалён на другом устройстве, но здесь есть несинхронизированные изменения.</h2><ActionRow><Button variant="primary" onClick={() => setOpen(null)}>Оставить версию этого устройства</Button><Button variant="danger" onClick={() => setOpen(null)}>Удалить и здесь</Button></ActionRow></section>
+        <ActionRow><Button onClick={() => setOpen(null)}>Отмена</Button></ActionRow>
       </>}
     </Modal>}
   </>;
