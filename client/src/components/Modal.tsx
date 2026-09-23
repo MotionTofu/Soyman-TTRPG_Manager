@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
 interface Props {
@@ -20,6 +20,9 @@ interface Props {
   // Дополнительный класс на само окно (не на затемнение): размерные
   // варианты вроде модалки состояний, которой на мобиле нужен весь экран.
   className?: string;
+  // When the opener disappears while the dialog is open (e.g. a context
+  // menu item), return to a stable trigger instead of focusing a dead node.
+  returnFocusTo?: RefObject<HTMLElement | null>;
 }
 
 // Стек открытых модалок: вложенная (кроп портрета внутри визарда) тоже
@@ -33,7 +36,7 @@ const modalStack: (() => void)[] = [];
 // otherwise forward any click inside the modal (like a mouseup after
 // dragging in an image cropper) to that input, silently reopening the file
 // picker.
-export function Modal({ onClose, children, closeOnBackdropClick = true, wide, ariaLabel, autoFocus = true, className }: Props) {
+export function Modal({ onClose, children, closeOnBackdropClick = true, wide, ariaLabel, autoFocus = true, className, returnFocusTo }: Props) {
   // A "click" only means the mousedown AND mouseup landed on the same
   // element. Selecting text inside the modal and dragging past its edge
   // before releasing ends the drag over the backdrop — the browser then
@@ -94,7 +97,8 @@ export function Modal({ onClose, children, closeOnBackdropClick = true, wide, ar
       const i = modalStack.indexOf(closeTop);
       if (i >= 0) modalStack.splice(i, 1);
       // Возврат фокуса на триггер
-      prev?.focus?.();
+      if (returnFocusTo?.current?.isConnected) returnFocusTo.current.focus();
+      else if (prev?.isConnected) prev.focus();
     };
   }, []);
 

@@ -43,6 +43,7 @@ import './shell.css';
 import './components.css';
 import './wizard.css';
 import './sheet.css';
+import './modals.css';
 
 applyTheme(findTheme('noir'));
 // Resumable level-up drafts (C2): one localStorage record per character,
@@ -1239,6 +1240,7 @@ function App() {
   // surface the existing CAS error and ask for a retry — no sync layer.
   const [openMenu, setOpenMenu] = useState<number | null>(null);
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const modalReturnFocusRef = useRef<HTMLButtonElement | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Character | null>(null);
   const [libraryBusy, setLibraryBusy] = useState(false);
   async function refreshCharacters() { setCharacters(await listCharacters()); }
@@ -1310,8 +1312,8 @@ function App() {
           {showArchived
             ? <button role="menuitem" disabled={libraryBusy} onClick={() => void restore(c.id)}>Восстановить</button>
             : <button role="menuitem" disabled={libraryBusy} onClick={() => void archive(c.id)}>Архивировать</button>}
-          {syncCred && c.content && c.characterUid && <button role="menuitem" onClick={() => { setOpenMenu(null); void openShare(c); }}>Поделиться с мастером</button>}
-          <button role="menuitem" disabled={libraryBusy} onClick={() => { setDeleteTarget(c); setOpenMenu(null); }}>Удалить</button>
+          {syncCred && c.content && c.characterUid && <button role="menuitem" onClick={e => { modalReturnFocusRef.current = e.currentTarget.closest('.oneshot-menu')?.querySelector<HTMLButtonElement>(':scope > button') ?? null; setOpenMenu(null); void openShare(c); }}>Поделиться с мастером</button>}
+          <button role="menuitem" disabled={libraryBusy} onClick={e => { modalReturnFocusRef.current = e.currentTarget.closest('.oneshot-menu')?.querySelector<HTMLButtonElement>(':scope > button') ?? null; setDeleteTarget(c); setOpenMenu(null); }}>Удалить</button>
         </div>}
       </div>
     </div>;
@@ -1330,7 +1332,7 @@ function App() {
       </div>
     </header>
     {active?.content && <div className="oneshot-export-action"><button disabled={exporting} onClick={() => void exportHtml()}>{exporting ? 'Собираем автономную копию…' : 'Скачать автономный HTML'}</button><button onClick={() => void inspectExport()}>Проверить состав</button></div>}
-    {exportAudit && <Modal onClose={() => setExportAudit(null)}>
+    {exportAudit && <Modal className="oneshot-modal" ariaLabel="Проверка автономной копии" onClose={() => setExportAudit(null)}>
       <h3>Подготовка автономной копии</h3>
       <p>Найдено {exportAudit.entryCount} связанных с персонажем записей из {exportAudit.totalEntryCount} в справочнике. Остальные заклинания и предметы в этот предварительный срез не включены.</p>
       {exportAudit.problems.length > 0 ? <><strong>Нужно дополнить данные</strong><ul>{exportAudit.problems.map(p => <li key={p}>{p}</li>)}</ul></> : <p>Прямые ссылки персонажа найдены в справочнике.</p>}
@@ -1339,7 +1341,7 @@ function App() {
       <button onClick={() => setExportAudit(null)}>Вернуться к чарнику</button>
     </Modal>}
     {updateAvailable && <div className="oneshot-update" role="status"><span>Доступна новая версия SoyMan</span><button className="primary" disabled={updateApplying} onClick={() => void applyAppUpdate()}>{updateApplying ? 'Сохраняем…' : 'Обновить'}</button><button disabled={updateApplying} onClick={() => { dismissedUpdateRef.current = true; setUpdateAvailable(false); }}>Позже</button></div>}
-    {portablePending && <Modal onClose={cancelPortableImport}>
+    {portablePending && <Modal className="oneshot-modal" ariaLabel="Импорт персонажа" onClose={cancelPortableImport}>
       {portableMatches.length === 1 ? <>
         <h3>Найден существующий персонаж «{portableMatches[0].name}»</h3>
         <p>Файл может содержать более новое игровое состояние.</p>
@@ -1352,29 +1354,29 @@ function App() {
         <div className="row oneshot-actions"><button className="primary" disabled={busy} onClick={() => void copyPortableImport()}>Создать копию</button><button disabled={busy} onClick={cancelPortableImport}>Отмена</button></div>
       </>}
     </Modal>}
-    {deleteTarget && <Modal onClose={() => { if (!libraryBusy) setDeleteTarget(null); }}>
+    {deleteTarget && <Modal className="oneshot-modal oneshot-modal-danger" ariaLabel={`Удалить ${displayName(deleteTarget)}?`} returnFocusTo={modalReturnFocusRef} onClose={() => { if (!libraryBusy) setDeleteTarget(null); }}>
       <h3>Удалить «{displayName(deleteTarget)}»?</h3>
       <p>Персонаж будет удалён с этого устройства. Это действие нельзя отменить.</p>
       <ActionRow><Button variant="danger" disabled={libraryBusy} onClick={() => void confirmDelete()}>{libraryBusy ? 'Удаляем…' : 'Удалить'}</Button><Button disabled={libraryBusy} onClick={() => setDeleteTarget(null)}>Отмена</Button></ActionRow>
     </Modal>}
-    {pairing && <Modal onClose={() => { if (!syncBusy) setPairing(null); }}>
+    {pairing && <Modal className="oneshot-modal" ariaLabel="Подключение другого устройства" onClose={() => { if (!syncBusy) setPairing(null); }}>
       <h3>Подключить другое устройство</h3>
       <p className="muted">На новом устройстве откройте код камерой или вставьте ссылку. Ссылка одноразовая, действует около 10 минут.</p>
       <p><QRCodeSVG value={pairing.link} size={220} /></p>
       <p><button disabled={syncBusy} onClick={() => void copyPairingLink()}>Скопировать ссылку</button></p>
       <div className="row oneshot-actions"><button disabled={syncBusy} onClick={() => setPairing(null)}>Готово</button></div>
     </Modal>}
-    {incomingPair && <Modal onClose={() => { if (!syncBusy) declinePairing(); }}>
+    {incomingPair && <Modal className="oneshot-modal" ariaLabel="Подключение синхронизации" onClose={() => { if (!syncBusy) declinePairing(); }}>
       <h3>Подключить это устройство к синхронизации SoyMan?</h3>
       <p className="muted">Устройство получит собственный доступ к вашему пространству. Персонажи пока никуда не отправляются.</p>
       <div className="row oneshot-actions"><button className="primary" disabled={syncBusy} onClick={() => void acceptPairing()}>{syncBusy ? 'Подключаем…' : 'Подключить'}</button><button disabled={syncBusy} onClick={declinePairing}>Отмена</button></div>
     </Modal>}
-    {confirmUnlink && <Modal onClose={() => { if (!syncBusy) setConfirmUnlink(false); }}>
+    {confirmUnlink && <Modal className="oneshot-modal" ariaLabel="Отключение синхронизации" onClose={() => { if (!syncBusy) setConfirmUnlink(false); }}>
       <h3>Отключить это устройство?</h3>
       <p>Локальные персонажи останутся на месте. Синхронизация просто перестанет работать на этом устройстве.</p>
       <div className="row oneshot-actions"><button className="primary" disabled={syncBusy} onClick={() => void disconnectSync()}>{syncBusy ? 'Отключаем…' : 'Отключить'}</button><button disabled={syncBusy} onClick={() => setConfirmUnlink(false)}>Отмена</button></div>
     </Modal>}
-    {syncConflicts && <Modal onClose={() => { if (resolvingUid === null) setSyncConflicts(null); }}>
+    {syncConflicts && <Modal className="oneshot-modal" ariaLabel="Конфликты синхронизации" onClose={() => { if (resolvingUid === null) setSyncConflicts(null); }}>
       <h3>Конфликты синхронизации</h3>
       <p className="muted">Обе версии персонажа изменились после последней синхронизации.</p>
       {syncConflicts.map((conflict) => <section key={conflict.uid} aria-label={`Конфликт: ${conflict.name}`}>
@@ -1385,16 +1387,16 @@ function App() {
             : `Персонаж «${conflict.name}» изменился и здесь, и на другом устройстве.`}</h2>
         <div className="row oneshot-actions">
           {conflict.kind === 'local-deleted-remote-changed'
-            ? <button className="primary" disabled={resolvingUid !== null} onClick={() => void resolveConflictKeepLocal(conflict.uid)}>{resolvingUid === conflict.uid ? 'Удаляем…' : 'Удалить везде'}</button>
+            ? <button className="danger" disabled={resolvingUid !== null} onClick={() => void resolveConflictKeepLocal(conflict.uid)}>{resolvingUid === conflict.uid ? 'Удаляем…' : 'Удалить везде'}</button>
             : <button className="primary" disabled={resolvingUid !== null} onClick={() => void resolveConflictKeepLocal(conflict.uid)}>{resolvingUid === conflict.uid ? 'Сохраняем…' : 'Оставить версию этого устройства'}</button>}
           {conflict.remoteDeleted
-            ? <button disabled={resolvingUid !== null} onClick={() => void resolveConflictUseServer(conflict.uid)}>{resolvingUid === conflict.uid ? 'Удаляем…' : 'Удалить и здесь'}</button>
+            ? <button className="danger" disabled={resolvingUid !== null} onClick={() => void resolveConflictUseServer(conflict.uid)}>{resolvingUid === conflict.uid ? 'Удаляем…' : 'Удалить и здесь'}</button>
             : <button disabled={resolvingUid !== null} onClick={() => void resolveConflictUseServer(conflict.uid)}>{resolvingUid === conflict.uid ? 'Загружаем…' : 'Использовать версию с сервера'}</button>}
         </div>
       </section>)}
       <div className="row oneshot-actions"><button disabled={resolvingUid !== null} onClick={() => setSyncConflicts(null)}>Отмена</button></div>
     </Modal>}
-    {shareTarget && <Modal onClose={() => { if (!shareBusy) setShareTarget(null); }}>
+    {shareTarget && <Modal className="oneshot-modal" ariaLabel="Публикация персонажа для мастера" returnFocusTo={modalReturnFocusRef} onClose={() => { if (!shareBusy) setShareTarget(null); }}>
       <h3>Поделиться с мастером — «{shareTarget.name}»</h3>
       {(() => {
         const conflicted = [...(syncConflicts ?? []), ...(autoConflictNotice ?? [])].some((c) => c.uid === shareTarget.uid);

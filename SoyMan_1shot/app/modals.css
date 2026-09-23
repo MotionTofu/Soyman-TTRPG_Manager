@@ -1,0 +1,77 @@
+/* App-owned dialogs use the same paper / ink / accent grammar as Library. */
+html[data-app="oneshot"] .modal-backdrop:has(.oneshot-modal) {
+  padding: 12px;
+  background: rgba(16, 16, 16, .76);
+}
+html[data-app="oneshot"] .modal.oneshot-modal {
+  width: 560px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px);
+  box-sizing: border-box;
+  padding: clamp(18px, 3vw, 30px);
+  border: 3px solid var(--ui-border);
+  border-radius: 0;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  box-shadow: 7px 7px 0 var(--ui-accent-secondary);
+}
+html[data-app="oneshot"] .modal.oneshot-modal-danger {
+  border-inline-start: 10px solid var(--ui-danger);
+  box-shadow: 7px 7px 0 var(--ui-danger);
+}
+html[data-app="oneshot"] .oneshot-modal h3 {
+  margin: 0 0 16px;
+  font-family: var(--font-display);
+  font-size: clamp(22px, 3vw, 30px);
+  line-height: 1.08;
+  overflow-wrap: anywhere;
+}
+html[data-app="oneshot"] .oneshot-modal h2 {
+  font-size: var(--fs-h3);
+  line-height: 1.2;
+}
+html[data-app="oneshot"] .oneshot-modal p,
+html[data-app="oneshot"] .oneshot-modal li {
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+html[data-app="oneshot"] .oneshot-modal a {
+  overflow-wrap: anywhere;
+}
+html[data-app="oneshot"] .oneshot-modal section {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 2px solid var(--ui-border);
+}
+html[data-app="oneshot"] .oneshot-modal button:not([data-ui="button"]) {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 2px solid var(--ui-border);
+  border-radius: 0;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font-weight: 800;
+}
+html[data-app="oneshot"] .oneshot-modal button.primary:not([data-ui="button"]) {
+  background: var(--ui-accent);
+}
+html[data-app="oneshot"] .oneshot-modal button.danger:not([data-ui="button"]) {
+  background: var(--ui-danger);
+  color: var(--ui-text-inverse);
+}
+html[data-app="oneshot"] .oneshot-modal :is(button, input, select, textarea):focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 3px;
+}
+html[data-app="oneshot"] .oneshot-modal .oneshot-actions {
+  gap: 12px;
+  margin-top: 24px;
+}
+@media (max-width: 700px) {
+  html[data-app="oneshot"] .modal.oneshot-modal {
+    box-shadow: 4px 4px 0 var(--ui-accent-secondary);
+  }
+  html[data-app="oneshot"] .modal.oneshot-modal-danger {
+    box-shadow: 4px 4px 0 var(--ui-danger);
+  }
+}
