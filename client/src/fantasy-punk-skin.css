@@ -208,10 +208,9 @@ body.sheet-fullscreen {
     3px 3px 0 rgba(23, 23, 23, 0.9);
 }
 /* ---- R3.2 card signature: two asymmetric accents, frame-bound. ----
- * Prominent: crescent medallion straddling the TOP-LEFT corner (overlaps
- * frame edge + photo corner like a stamp; top-right is reserved for the
- * inspiration token control). Quiet: shard rising from the BOTTOM-LEFT
- * corner. Both share the left frame line instead of floating randomly.
+ * Prominent: crescent medallion straddling the TOP-LEFT portrait corner.
+ * Quiet: the bottom-left frame corner closes the paper body. The no-portrait
+ * state replaces the crescent with a compact label rail in OneShot CSS.
  * pointer-events:none, inside the card stacking context; positioned
  * controls (token, flip corner) paint above. Nothing over name, dice,
  * values, descriptions. The card stays whole with ornaments mentally
@@ -235,9 +234,9 @@ body.sheet-fullscreen {
 .dnd-card-face::after {
   bottom: -4px;
   left: -4px;
-  width: 88px;
+  width: 104px;
   height: 84px;
-  background-image: var(--skin-shard);
+  background-image: var(--skin-frame-bl);
   background-position: bottom left;
   background-size: contain;
 }
@@ -570,8 +569,8 @@ body.sheet-fullscreen {
  * - portrait-breakup-top: photo→paper transition on the grain overlay span
  *   (bottom-anchored, full width, 96px, sunk 12px; faces clean; cartouche
  *   lifted above; treatment mode keeps exact dots + breakup over them).
- * - card-corner-crescent: top-left stamp. shard-corner-right: bottom-left
- *   riser. Two accents, left edge, pointer-events none. Shard stands down
+ * - card-corner-crescent: top-left stamp. frame-corner-bottom-left closes
+ *   the bottom-left paper edge, pointer-events none. Bottom corner stands down
  *   on mobile (existing 700px breakpoint); crescent shrinks.
  * - underline-acid-magenta: active-tab marker over flat acid bed.
  * - card-fan-paper/acid: fan button default/hover-press, CSS-only swap

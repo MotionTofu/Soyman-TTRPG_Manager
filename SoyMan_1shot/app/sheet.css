@@ -122,6 +122,25 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-card-portrait-zone.is-empty {
   margin: 0;
   box-shadow: none;
 }
+/* Empty portraits are compact, but their two corner controls still need a
+   dedicated rail. Without it they sit on top of the warning and the name. */
+html[data-app="oneshot"] .oneshot-sheet .dnd-card-face:has(> .dnd-card-portrait-zone.is-empty) {
+  padding-top: 58px;
+}
+html[data-app="oneshot"] .oneshot-sheet .dnd-card-face:has(> .dnd-card-portrait-zone.is-empty)::before {
+  content: "ПЕРСОНАЖ";
+  top: 17px;
+  left: 56px;
+  width: calc(100% - 112px);
+  height: auto;
+  background: none;
+  color: var(--skin-ink-soft);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .16em;
+  text-align: center;
+}
 html[data-app="oneshot"] .oneshot-sheet .dnd-card-portrait-zone.is-empty .dnd-card-cartouche {
   position: relative;
   inset: auto;
