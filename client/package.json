@@ -4,8 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "node scripts/check-type-scale.mjs && node scripts/check-spacing.mjs && node scripts/check-raster-assets.mjs && node scripts/check-entity-page.mjs && node scripts/check-list.mjs && node scripts/check-inline-styles.mjs && node scripts/check-page-frame.mjs && tsc -b && vite build",
+    "dev": "node ../SoyMan_1shot/sync-ui-assets.mjs && vite",
+    "build": "node ../SoyMan_1shot/sync-ui-assets.mjs && node scripts/check-type-scale.mjs && node scripts/check-spacing.mjs && node scripts/check-raster-assets.mjs && node scripts/check-entity-page.mjs && node scripts/check-list.mjs && node scripts/check-inline-styles.mjs && node scripts/check-page-frame.mjs && tsc -b && vite build",
     "lint": "oxlint && node scripts/check-type-scale.mjs && node scripts/check-spacing.mjs && node scripts/check-raster-assets.mjs && node scripts/check-entity-page.mjs && node scripts/check-list.mjs && node scripts/check-inline-styles.mjs && node scripts/check-page-frame.mjs",
     "preview": "vite preview",
     "check:scale": "node scripts/check-type-scale.mjs",

@@ -2,6 +2,7 @@ import { createServer, build } from '../client/node_modules/vite/dist/node/index
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { copyFile } from 'node:fs/promises';
+import { syncUiAssets } from './sync-ui-assets.mjs';
 const configFile = fileURLToPath(new URL('./vite.config.mjs', import.meta.url));
 // The browser bundle and node tests resolve the shared portable contract
 // from ../shared/dist. Rebuild it on every standard entry point (dev and
@@ -14,6 +15,7 @@ function buildShared() {
 }
 if (process.argv.includes('--build')) {
   buildShared();
+  await syncUiAssets();
   const { buildStandalone } = await import('./build-standalone.mjs');
   await buildStandalone();
   await build({ configFile });
@@ -24,6 +26,7 @@ if (process.argv.includes('--build')) {
 }
 else {
   buildShared();
+  await syncUiAssets();
   const { buildStandalone } = await import('./build-standalone.mjs');
   // Vite's production build sets NODE_ENV for this process. Restore it before
   // starting the development host, otherwise DEV and React Refresh disagree.

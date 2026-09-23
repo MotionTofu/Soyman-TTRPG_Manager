@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "maxBytes": 1600000,
+  "files": [
+    "textures/acid-yellow.webp",
+    "textures/ink-surface.webp",
+    "textures/paper-panel.webp",
+    "textures/paper-tile.webp",
+    "textures/punk-magenta.webp",
+    "decorative/accents/edge-fragment-vertical.webp",
+    "decorative/dividers/divider-ink-long.webp",
+    "decorative/dividers/divider-rough-medium.webp",
+    "decorative/dividers/underline-acid-magenta.webp",
+    "decorative/frames/card-corner-crescent.webp",
+    "decorative/frames/frame-corner-bottom-left.webp",
+    "decorative/frames/frame-corner-bottom-right.webp",
+    "decorative/frames/frame-corner-top-left.webp",
+    "decorative/frames/frame-corner-top-right.webp",
+    "decorative/frames/halftone-corner-large.webp",
+    "decorative/frames/shard-corner-right.webp",
+    "decorative/portrait/portrait-breakup-top.webp",
+    "semantic/card-buttons/card-fan-acid.webp",
+    "semantic/card-buttons/card-fan-paper.webp"
+  ]
+}

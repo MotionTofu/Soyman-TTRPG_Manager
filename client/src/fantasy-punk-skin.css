@@ -28,11 +28,10 @@
  *   acid / magenta regardless of the app theme (see §1). The global theme
  *   engine is not modified; overrides live inside the sheet scope only.
  *
- * Assets: canonical bundle in ui/fantasy-punk/ (textures/, decorative/),
- * mirrored 1:1 between SoyMan_1shot/public and client/public so both hosts
- * serve the same URLs. Production .webp only; PNG sources stay in
- * SoyMan_1shot/public as the untouched source archive. URL variables live
- * ONLY in the :root block below so a later swap touches one place.
+ * Assets: the sole source archive is SoyMan_1shot/assets/fantasy-punk/.
+ * runtime-manifest.json selects the WebP files copied to client/public,
+ * which serves both hosts. PNG, concepts and proofs remain outside public.
+ * URL variables live ONLY in the :root block below.
  */
 
 /* ---- §0. Asset URLs (canonical bundle paths). ---- */
