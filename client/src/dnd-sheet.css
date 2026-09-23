@@ -2188,7 +2188,7 @@ body.sheet-fullscreen .app-content {
      просвечивала, разрезая его пополам (аудит 09.09). Тон тот же, но собран
      смешением с бумагой, поэтому линия под уголком не видна.
      z-index — страховка порядка: уголок и так позиционирован, а подвал нет. */
-  background: color-mix(in oklab, var(--muted) 45%, var(--paper));
+  background: var(--dnd-corner-color, color-mix(in oklab, var(--muted) 45%, var(--paper)));
   z-index: 4;
 }
 /* Десктопный угол — индикатор без клика: оборот и так в правой колонке. */

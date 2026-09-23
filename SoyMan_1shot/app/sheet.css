@@ -152,6 +152,28 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-card-portrait-zone.is-empty .dnd-ca
   overflow-wrap: anywhere;
   font-size: clamp(26px, 2.8vw, 40px);
 }
+/* The fold stays triangular, but the mobile flip control keeps its entire
+   44px square hit area. Clipping the button itself halves the tappable area. */
+html[data-app="oneshot"] .oneshot-sheet button.dnd-card-corner,
+html[data-app="oneshot"] .oneshot-sheet button.dnd-card-back-corner {
+  clip-path: none;
+  background: transparent;
+  touch-action: manipulation;
+}
+html[data-app="oneshot"] .oneshot-sheet button.dnd-card-corner::before,
+html[data-app="oneshot"] .oneshot-sheet button.dnd-card-back-corner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+  pointer-events: none;
+}
+html[data-app="oneshot"] .oneshot-sheet button.dnd-card-corner::before {
+  background: var(--dnd-corner-color, color-mix(in oklab, var(--muted) 45%, var(--paper)));
+}
+html[data-app="oneshot"] .oneshot-sheet button.dnd-card-back-corner::before {
+  background: var(--on-surface);
+}
 /* A long character name must remain in the paper-fade, not cover the face. */
 html[data-app="oneshot"] .oneshot-sheet .dnd-card-portrait-zone:not(.is-empty) .dnd-card-cartouche-name {
   font-size: clamp(26px, 2.3vw, 32px);

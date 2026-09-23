@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
 import { useAction, useResource, write } from "../../data/hooks";
 import { afterWriteAnywhere, readResource } from "../../data/imperative";
 import { showSaveError } from "../../data/notices";
@@ -11878,7 +11878,7 @@ export function DndCharacterView({
                 <button
                   type="button"
                   className={`dnd-card-corner${unreadTotal > 0 ? " has-unread" : ""}${cornerGlint ? " glint" : ""}`}
-                  style={unreadTotal > 0 ? { background: cardColor } : undefined}
+                  style={unreadTotal > 0 ? { '--dnd-corner-color': cardColor } as CSSProperties : undefined}
                   onClick={() => {
                     setCardFlipped(true);
                     if (canUseInbox) {
