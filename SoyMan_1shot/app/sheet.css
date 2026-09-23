@@ -152,6 +152,28 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-card-portrait-zone.is-empty .dnd-ca
   overflow-wrap: anywhere;
   font-size: clamp(26px, 2.8vw, 40px);
 }
+/* A long character name must remain in the paper-fade, not cover the face. */
+html[data-app="oneshot"] .oneshot-sheet .dnd-card-portrait-zone:not(.is-empty) .dnd-card-cartouche-name {
+  font-size: clamp(26px, 2.3vw, 32px);
+  line-height: 1;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+/* The desktop Magic page is a reading list. Keep mobile's larger targets. */
+@media (min-width: 701px) {
+  html[data-app="oneshot"] .oneshot-sheet .dnd-spell-row.comp-row {
+    gap: 10px;
+    padding-block: 6px 7px;
+  }
+  html[data-app="oneshot"] .oneshot-sheet .dnd-spell-main {
+    gap: 2px;
+  }
+}
+/* The school is a small acid category tag, not another full-width band. */
+html[data-app="oneshot"] .oneshot-sheet .dnd-spell-school {
+  background: color-mix(in srgb, var(--skin-acid) 65%, var(--paper));
+  font-weight: 700;
+}
 html[data-app="oneshot"] .oneshot-sheet .dnd-deck-strip {
   gap: 0;
   margin-bottom: 14px;
