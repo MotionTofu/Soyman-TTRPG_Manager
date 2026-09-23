@@ -4036,6 +4036,16 @@ span.dnd-tab-btn {
   border-top: 1px solid var(--line);
   padding-top: var(--sp-3);
 }
+/* Действующее заклинание под костью КЗ («+5 Щит ✕»): видно, откуда в
+   числе временная прибавка, и снимается одним касанием. */
+.dnd-ac-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-meta);
+  white-space: nowrap;
+}
 
 /* Наклейки на печати гаснут — остаётся слово (правило растра п.5,
    src/rasterAssets.ts). Цветной квадрат на чёрно-белом принтере становится

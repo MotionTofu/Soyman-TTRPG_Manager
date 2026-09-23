@@ -1,4 +1,4 @@
-import type { DndClassEntry, DndEquipmentSection, DndFeature } from "./types";
+import type { DndEquipmentItem, DndEquipmentSection } from "./types";
 
 // Щит в компендиуме размечен как доспех: `armor_type: "Щит"`, `ac: "2"` —
 // то есть двойка лежит в том же поле, что и 18 у лат. Прежний расчёт брал
@@ -33,111 +33,39 @@ function dexApplies(item: { armorType?: string; dexBonus?: boolean }): boolean {
   return !(item.armorType ?? "").trim().toLowerCase().startsWith("тяж");
 }
 
-// PHB 2024 ("5.5") КЗ formula: 10 + мод. Ловкости by default. An equipped
-// item with cached armor fields (armorType/ac) replaces the base and caps
-// the Ловкость bonus per its maxDexBonus ("" = unlimited, "0" = none, N =
-// capped at N). Any equipped item's acBonus (rings, magic cloaks, …) stacks
-// flat on top, plus a manual bonus for effects not captured by inventory
-// (Shield/Mage Armor spells, etc.). Защита без доспехов здесь НЕ считается —
-// она ниже, в unarmoredDefenseBonus, и прибавляется поверх.
-export function computeArmorClass(dexMod: number, sections: DndEquipmentSection[], manualBonus: number): number {
-  // Отданная вещь (transferOut) снята с носки и из расчётов исключена: бонус
-  // от неё отправитель больше не получает (этап 4б).
-  const equipped = equippedItems(sections);
-  // S-03: если надето несколько доспехов — берём лучший (макс КЗ), а не первый по порядку.
-  const armors = equipped.filter((i) => i.armorType && i.ac && !isShield(i.armorType));
-  const armor = armors.length
-    ? armors.reduce((best, cur) => ((parseInt(cur.ac ?? "", 10) || 0) > (parseInt(best.ac ?? "", 10) || 0) ? cur : best))
-    : undefined;
+/** Лучший надетый доспех (не щит): при нескольких — с большим КЗ (S-03). */
+export function wornBodyArmor(sections: DndEquipmentSection[]): DndEquipmentItem | undefined {
+  const armors = equippedItems(sections).filter((i) => i.armorType && i.ac && !isShield(i.armorType));
+  if (!armors.length) return undefined;
+  return armors.reduce((best, cur) => ((parseInt(cur.ac ?? "", 10) || 0) > (parseInt(best.ac ?? "", 10) || 0) ? cur : best));
+}
 
-  let base: number;
-  let dexBonus: number;
-  if (armor) {
-    // Магическая прибавка «Доспех +1» лежит на той же строке, что и сам
-    // доспех (решение R3): второй строки инвентаря у него нет, поэтому и
-    // прибавлять её надо здесь, а не искать отдельный предмет.
-    base = (parseInt(armor.ac ?? "", 10) || 0) + (armor.magicBonus ?? 0);
-    const maxDex = (armor.maxDexBonus ?? "").trim();
-    if (!dexApplies(armor)) {
-      // Тяжёлый доспех: Ловкость не применяется вовсе, ни плюсом, ни минусом.
-      dexBonus = 0;
-    } else if (maxDex === "") dexBonus = dexMod;
-    else {
-      const cap = parseInt(maxDex, 10);
-      // «0» — та же тяжесть, размеченная пределом. Прежний Math.min(dexMod, 0)
-      // при Лов 8 давал −1 к КЗ, то есть наказывал за то, что по правилам не
-      // считается.
-      //
-      // Ненулевой предел — средний доспех: он ограничивает только бонус.
-      // Отрицательный модификатор в нём применяется как есть, поэтому здесь
-      // нижней границы нет.
-      if (!Number.isFinite(cap)) dexBonus = dexMod;
-      else if (cap === 0) dexBonus = 0;
-      else dexBonus = Math.min(dexMod, cap);
-    }
-  } else {
-    base = 10;
-    dexBonus = dexMod;
+/**
+ * Сколько Ловкости доспех пропускает в КЗ: maxDexBonus "" — без предела,
+ * "0" — нисколько, N — не больше N. Нулевой предел не наказывает за
+ * отрицательную Ловкость (Лов 8 в латах — не −1), ненулевой режет только
+ * бонус: отрицательный модификатор в среднем доспехе применяется как есть.
+ */
+export function armorDexBonus(armor: DndEquipmentItem, dexMod: number): number {
+  if (!dexApplies(armor)) return 0;
+  const maxDex = (armor.maxDexBonus ?? "").trim();
+  if (maxDex === "") return dexMod;
+  const cap = parseInt(maxDex, 10);
+  if (!Number.isFinite(cap)) return dexMod;
+  if (cap === 0) return 0;
+  return Math.min(dexMod, cap);
+}
+
+/**
+ * Лучший надетый щит с его прибавкой. Щитом можно пользоваться только одним —
+ * надетые сверх первого не складываются.
+ */
+export function wornShield(sections: DndEquipmentSection[]): { item: DndEquipmentItem; bonus: number } | undefined {
+  let best: { item: DndEquipmentItem; bonus: number } | undefined;
+  for (const i of equippedItems(sections)) {
+    if (!isShield(i.armorType)) continue;
+    const bonus = (parseInt(i.ac ?? "", 10) || 0) + (i.magicBonus ?? 0);
+    if (!best || bonus > best.bonus) best = { item: i, bonus };
   }
-
-  // Щитом можно пользоваться только одним — надетые сверх первого не
-  // складываются, берётся лучший.
-  const shieldBonus = equipped
-    .filter((i) => isShield(i.armorType))
-    .reduce((best, i) => Math.max(best, (parseInt(i.ac ?? "", 10) || 0) + (i.magicBonus ?? 0)), 0);
-
-  const flatBonus = equipped.reduce((sum, i) => sum + (parseInt(i.acBonus ?? "", 10) || 0), 0);
-
-  return base + dexBonus + shieldBonus + flatBonus + manualBonus;
-}
-
-// ——— Защита без доспехов (Монах 10 + Лов + Муд, Варвар 10 + Лов + Тел) ———
-//
-// Источник истины — умение «Защита без доспехов» в классовых особенностях
-// листа, а не имя класса в коде: хоумбрю-класс с тем же умением заводится
-// данными. Родительский класс умения определяется через sourceParentId —
-// имя, вписанное до скобки оригинала («Монах [Monk]»), чтобы импорт модуля
-// не ломал сопоставление (тот же приём, что classKey в dndClassColors).
-// Ручное умение (sourceParentId пуст) приписывается единственному классу.
-function parentClassKey(feature: DndFeature, classes: DndClassEntry[]): string {
-  const own = classes.find((c) => c.classId != null && c.classId === feature.sourceParentId);
-  const name = own?.className ?? (classes.length === 1 ? classes[0]?.className ?? "" : "");
-  return name
-    .split(/[[(]/)[0]
-    .trim()
-    .toLowerCase();
-}
-
-export interface UnarmoredDefense {
-  /** Прибавка к КЗ сверх формулы computeArmorClass (0 — нет активной защиты). */
-  bonus: number;
-  /** Подпись для листа («Защита без доспехов (Муд)»). */
-  source: string | null;
-}
-
-export function unarmoredDefenseBonus(
-  features: DndFeature[],
-  classes: DndClassEntry[],
-  wisMod: number,
-  conMod: number,
-  sections: DndEquipmentSection[]
-): UnarmoredDefense {
-  const none: UnarmoredDefense = { bonus: 0, source: null };
-  const hasDefense = (features ?? []).some((f) => (f.name ?? "").trim() === "Защита без доспехов");
-  if (!hasDefense) return none;
-  const { hasArmor, hasShield } = wornArmorState(sections);
-  if (hasArmor) return none;
-  const keys = new Set(
-    (features ?? [])
-      .filter((f) => (f.name ?? "").trim() === "Защита без доспехов")
-      .map((f) => parentClassKey(f, classes ?? []))
-  );
-  const candidates: UnarmoredDefense[] = [];
-  // Монаху щит тоже гасит умение, варвару — нет.
-  if (keys.has("монах") && !hasShield) candidates.push({ bonus: wisMod, source: "Защита без доспехов (Муд)" });
-  if (keys.has("варвар")) candidates.push({ bonus: conMod, source: "Защита без доспехов (Тел)" });
-  if (candidates.length === 0) return none;
-  // Мультикласс монах/варвар: по правилам выбирается одна защита — берём
-  // большую прибавку, меньшую игроку не предлагаем (документировано в тикете).
-  return candidates.reduce((best, cur) => (cur.bonus > best.bonus ? cur : best));
+  return best;
 }

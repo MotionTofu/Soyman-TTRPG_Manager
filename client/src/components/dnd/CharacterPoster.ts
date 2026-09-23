@@ -163,7 +163,7 @@ export async function renderPosterBlob(d: PosterData): Promise<Blob> {
   // Ключевые числа.
   const stats: [string, string][] = [
     ["ХИТЫ", d.hp || "—"],
-    ["КД", d.ac || "—"],
+    ["КЗ", d.ac || "—"],
     ["БМ", d.pb || "—"],
   ];
   if (d.extra && d.extra.value.trim()) stats.push([d.extra.label, d.extra.value]);

@@ -41,9 +41,9 @@ import {
   totalCharacterLevel,
 } from "./abilities";
 import { SKILL_CATALOG } from "./skillCatalog";
-import { computeArmorClass, equippedItems, unarmoredDefenseBonus } from "./armorClass";
+import { armorDexBonus, equippedItems, wornArmorState, wornBodyArmor, wornShield } from "./armorClass";
 import { carryCapacityLb, findCarryDoublings } from "./equipment";
-import type { DndEffect, DndProficiencyShare, DndRollTarget } from "./effects";
+import type { DndArmorCondition, DndEffect, DndProficiencyShare, DndRollTarget, DndWeaponFilter } from "./effects";
 import type { DndCreatureData } from "./types";
 
 /** Одно слагаемое производной величины. */
@@ -61,6 +61,12 @@ export interface Derived {
    * значит посчитано.
    */
   stale?: string;
+  /**
+   * Что могло бы войти в число, но не вошло, и почему («Оборона — нет
+   * доспеха», «Плащ защиты — не настроено»). Игрок видит, отчего число именно
+   * такое, а не гадает (гриллинг 2026-09-23, Q23).
+   */
+  inactive?: { label: string; reason: string }[];
 }
 
 export interface Sheet {
@@ -254,6 +260,226 @@ export function creatureInitiativeModifier(c: DndCreatureData): number {
 }
 
 /**
+ * Носитель эффектов: умение, черта, надетая вещь или действующее заклинание.
+ * `off` — почему носитель сейчас ничего не даёт (вещь надета, но не
+ * настроена); такие попадают в разбор «не учтено», а не в число.
+ */
+export interface EffectCarrier {
+  name: string;
+  effects: DndEffect[];
+  off?: string;
+}
+
+/**
+ * Все носители эффектов листа — одно правило «что сейчас действует» для
+ * КЗ, инициативы, атаки и урона.
+ *
+ * - Умения, черты, особые способности — всегда.
+ * - Вещь — пока надета; требующая настройки — только настроенной (Q18).
+ * - Заклинание — пока действует: на нём концентрация или оно в
+ *   `activeSpells` (Q16). Недействующие не перечисляются вовсе: иначе разбор
+ *   КЗ волшебника тонул бы в строках про каждое неналоженное заклинание.
+ */
+export function effectCarriers(c: DndCharacterData): EffectCarrier[] {
+  const out: EffectCarrier[] = [];
+  for (const f of [
+    ...(c.speciesFeatures ?? []),
+    ...(c.classFeatures ?? []),
+    ...(c.feats ?? []),
+    ...(c.specialAbilities ?? []),
+  ]) {
+    if (f.effects?.length) out.push({ name: (f.name || "Умение").trim(), effects: f.effects });
+  }
+  for (const it of equippedItems(c.equipmentSections ?? [])) {
+    if (!it.effects?.length) continue;
+    out.push({
+      name: (it.name || "Предмет").trim(),
+      effects: it.effects,
+      ...(it.requiresAttunement && !it.attuned ? { off: "не настроено" } : {}),
+    });
+  }
+  const active = new Set([...(c.activeSpells ?? []), c.concentration ?? ""].map((n) => n.trim()).filter(Boolean));
+  for (const sp of [...(c.cantrips ?? []), ...(c.spellsByLevel ?? []).flat()]) {
+    const name = (sp.name ?? "").trim();
+    if (sp.effects?.length && active.has(name)) out.push({ name, effects: sp.effects });
+  }
+  return out;
+}
+
+type Worn = { hasArmor: boolean; hasShield: boolean };
+
+export function armorConditionHolds(cond: DndArmorCondition | undefined, worn: Worn): boolean {
+  if (cond === "armor") return worn.hasArmor;
+  if (cond === "no_armor") return !worn.hasArmor;
+  if (cond === "no_armor_no_shield") return !worn.hasArmor && !worn.hasShield;
+  return true;
+}
+
+/** Почему условие не выполнено — подпись в разборе. */
+function armorConditionReason(cond: DndArmorCondition | undefined, worn: Worn): string {
+  if (cond === "armor") return "нет доспеха";
+  if (cond === "no_armor_no_shield" && !worn.hasArmor) return "со щитом";
+  return "в доспехе";
+}
+
+const ABILITY_LABEL: Record<DndAbilityKey, string> = {
+  str: "Сила",
+  dex: "Ловкость",
+  con: "Телосложение",
+  int: "Интеллект",
+  wis: "Мудрость",
+  cha: "Харизма",
+};
+
+type Inactive = { label: string; reason: string };
+
+/**
+ * КЗ со слагаемыми.
+ *
+ * База — лучшая из доступных формул: надетый доспех (его КЗ + магия +
+ * Ловкость в пределе), «10 + Ловкость» без доспеха или формула умения
+ * (`acBase`: «Защита без доспехов», «Доспехи мага»). Складывать формулы
+ * правила не дают — берётся одна, большая (гриллинг 2026-09-23, Q3).
+ * Поверх — щит, прибавки вещей (`acBonus`), эффекты `defense` с `flat` и
+ * ручное «Прочее».
+ */
+function armorClassParts(c: DndCharacterData, mods: Record<DndAbilityKey, Derived>): { parts: Part[]; inactive: Inactive[] } {
+  const sections = c.equipmentSections ?? [];
+  const worn = wornArmorState(sections);
+  const dex = mods.dex.value;
+  const inactive: Inactive[] = [];
+  // Носитель не действует — одна строка на носитель, а не на каждый его эффект.
+  const skip = (label: string, reason: string) => {
+    if (!inactive.some((i) => i.label === label)) inactive.push({ label, reason });
+  };
+
+  const armor = wornBodyArmor(sections);
+  const candidates: Part[][] = [
+    armor
+      ? [
+          { label: (armor.name || "Доспех").trim(), value: (parseInt(armor.ac ?? "", 10) || 0) + (armor.magicBonus ?? 0) },
+          { label: "Ловкость", value: armorDexBonus(armor, dex) },
+        ]
+      : [
+          { label: "Без доспеха", value: 10 },
+          { label: "Ловкость", value: dex },
+        ],
+  ];
+  const carriers = effectCarriers(c);
+  const bonuses: Part[] = [];
+  for (const k of carriers) {
+    for (const eff of k.effects) {
+      if (eff.type !== "defense") continue;
+      const hasFlat = typeof eff.flat === "number" && eff.flat !== 0;
+      if (!eff.acBase && !hasFlat) continue;
+      if (k.off) { skip(k.name, k.off); continue; }
+      if (!armorConditionHolds(eff.armorCondition, worn)) {
+        skip(k.name, armorConditionReason(eff.armorCondition, worn));
+        continue;
+      }
+      if (eff.acBase) {
+        candidates.push([
+          { label: k.name, value: eff.acBase.base },
+          ...eff.acBase.abilities.map((a) => ({ label: ABILITY_LABEL[a], value: mods[a]?.value ?? 0 })),
+        ]);
+      }
+      if (hasFlat) bonuses.push({ label: k.name, value: eff.flat as number });
+    }
+  }
+  const total = (ps: Part[]) => ps.reduce((n, p) => n + p.value, 0);
+  const base = candidates.reduce((best, cur) => (total(cur) > total(best) ? cur : best));
+  const parts: Part[] = [...base];
+
+  const shield = wornShield(sections);
+  if (shield) parts.push({ label: (shield.item.name || "Щит").trim(), value: shield.bonus });
+
+  for (const it of equippedItems(sections)) {
+    const bonus = parseInt(it.acBonus ?? "", 10) || 0;
+    if (!bonus) continue;
+    const label = (it.name || "Предмет").trim();
+    if (it.requiresAttunement && !it.attuned) skip(label, "не настроено");
+    else parts.push({ label, value: bonus });
+  }
+  parts.push(...bonuses);
+  parts.push({ label: "Прочее", value: parseBonus(c.manualAcBonus || "") });
+  return { parts, inactive };
+}
+
+/**
+ * Как атакуют оружием — что нужно знать, чтобы понять, задевает ли атаку
+ * прибавка с фильтром оружия (гриллинг 2026-09-23, Q9).
+ */
+export interface WeaponUse {
+  /** Дальнобойное оружие (лук, арбалет, дротики), а не брошенное рукопашное. */
+  ranged?: boolean;
+  /** Бросок оружия со свойством «метательное». */
+  thrown?: boolean;
+  /** Рукопашное в одной руке без другого рукопашного оружия. */
+  oneHand?: boolean;
+  /** Рукопашное в двух руках: двуручное или универсальное двумя. */
+  twoHand?: boolean;
+  /** Дополнительная атака лёгким оружием (бонусное действие). */
+  offhand?: boolean;
+  unarmed?: boolean;
+}
+
+function weaponMatches(filter: DndWeaponFilter, use: WeaponUse): boolean {
+  switch (filter) {
+    case "ranged": return !!use.ranged;
+    case "thrown": return !!use.thrown;
+    case "melee_one_hand": return !!use.oneHand;
+    case "melee_two_hand": return !!use.twoHand;
+    case "offhand_light": return !!use.offhand;
+    case "unarmed": return !!use.unarmed;
+  }
+  return false;
+}
+
+/** Что эффекты дают одной атаке оружием. */
+export interface WeaponEffects {
+  attack: Part[];
+  damage: Part[];
+  /** Вернуть модификатор характеристики в урон доп. атаки — чьё это правило. */
+  addAbility: string | null;
+  /** 1 и 2 на кости считаются этим числом, и чьё это правило. */
+  dieMinimum: { value: number; source: string } | null;
+  /** Своя кость урона («Сражение голыми руками»), уже выбранная по рукам. */
+  dice: { value: string; source: string } | null;
+  /** Правила, числом не выражаемые («1к4 схваченному в начале хода»). */
+  notes: string[];
+}
+
+/**
+ * Прибавки к атаке и урону одной атакой — из эффектов с фильтром оружия.
+ * `freeHands` — ни оружия, ни щита в руках (вторая кость безоружного).
+ */
+export function weaponEffects(c: DndCharacterData, use: WeaponUse, pb: number, freeHands = false): WeaponEffects {
+  const out: WeaponEffects = { attack: [], damage: [], addAbility: null, dieMinimum: null, dice: null, notes: [] };
+  const worn = wornArmorState(c.equipmentSections ?? []);
+  for (const k of effectCarriers(c)) {
+    if (k.off) continue;
+    for (const eff of k.effects) {
+      if (eff.type !== "roll_modifier" || !eff.weapon || !weaponMatches(eff.weapon, use)) continue;
+      if (eff.appliesTo !== "attack" && eff.appliesTo !== "damage") continue;
+      if (!armorConditionHolds(eff.armorCondition, worn)) continue;
+      const fromPb = eff.proficiency === "full" ? pb : eff.proficiency === "half" ? Math.floor(pb / 2) : 0;
+      const value = (typeof eff.flat === "number" && Number.isFinite(eff.flat) ? eff.flat : 0) + fromPb;
+      if (value) (eff.appliesTo === "attack" ? out.attack : out.damage).push({ label: k.name, value });
+      if (eff.appliesTo === "damage") {
+        if (eff.addAbility) out.addAbility = k.name;
+        if (eff.dieMinimum && (!out.dieMinimum || eff.dieMinimum > out.dieMinimum.value)) {
+          out.dieMinimum = { value: eff.dieMinimum, source: k.name };
+        }
+        const die = (freeHands && eff.diceFreeHands) || eff.dice;
+        if (die) out.dice = { value: die, source: k.name };
+      }
+      if (eff.text) out.notes.push(eff.text);
+    }
+  }
+  return out;
+}
+
+/**
  * Прибавки к одному броску, собранные из эффектов умений и надетых вещей.
  *
  * Читается только размеченное: у эффекта должен стоять `appliesTo`, а величина
@@ -272,19 +498,13 @@ export function creatureInitiativeModifier(c: DndCreatureData): number {
  */
 function rollBonusParts(c: DndCharacterData, target: DndRollTarget, pb: number): Part[] {
   const parts: Part[] = [];
-  const carriers: { name: string; effects?: DndEffect[] }[] = [
-    ...(c.speciesFeatures ?? []),
-    ...(c.classFeatures ?? []),
-    ...(c.feats ?? []),
-    ...(c.specialAbilities ?? []),
-    // Вещь даёт прибавку, только пока надета — то же правило, что у КЗ.
-    // Второго правила «когда предмет работает» в листе быть не должно.
-    ...(c.equipmentSections ?? []).flatMap((sec) => sec.items ?? []).filter((it) => it.equipped),
-  ];
+  const carriers = effectCarriers(c).filter((k) => !k.off);
+  const worn = wornArmorState(c.equipmentSections ?? []);
   const matched: { name: string; flat: number; share?: DndProficiencyShare }[] = [];
   for (const carrier of carriers) {
     for (const eff of carrier.effects ?? []) {
-      if (eff.type !== "roll_modifier" || eff.appliesTo !== target) continue;
+      if (eff.type !== "roll_modifier" || eff.appliesTo !== target || eff.weapon) continue;
+      if (!armorConditionHolds(eff.armorCondition, worn)) continue;
       matched.push({
         name: (carrier.name || "Умение").trim(),
         flat: typeof eff.flat === "number" && Number.isFinite(eff.flat) ? eff.flat : 0,
@@ -364,6 +584,9 @@ export function deriveSheet(c: DndCharacterData): Sheet {
     const proficient = !!c.savingThrowProfs?.[key];
     const parts: Part[] = [{ label: "Характеристика", value: mods[key].value }];
     if (proficient) parts.push({ label: "Владение", value: pb });
+    // Кольцо и плащ защиты: +1 ко всем спасброскам — тем же правилом
+    // размеченных эффектов, что инициатива.
+    parts.push(...rollBonusParts(c, "save", pb));
     if (penalty) parts.push({ label: `Истощение ${exhaustion}`, value: -penalty });
     saves[key] = sum(parts);
   }
@@ -380,17 +603,8 @@ export function deriveSheet(c: DndCharacterData): Sheet {
   }
 
   const sections = c.equipmentSections ?? [];
-  const acBase = computeArmorClass(mods.dex.value, sections, parseBonus(c.manualAcBonus || ""));
-  const unarmored = unarmoredDefenseBonus(
-    c.classFeatures ?? [],
-    c.classes ?? [],
-    mods.wis.value,
-    mods.con.value,
-    sections
-  );
-  const acParts: Part[] = [{ label: "Доспех и Ловкость", value: acBase }];
-  if (unarmored.bonus) acParts.push({ label: unarmored.source ?? "Защита без доспехов", value: unarmored.bonus });
-  const armorClass = armorClassOf(c, sections, acParts);
+  const ac = armorClassParts(c, mods);
+  const armorClass: Derived = { ...armorClassOf(c, sections, ac.parts), ...(ac.inactive.length ? { inactive: ac.inactive } : {}) };
 
   // Пассивное восприятие: 10 + навык. Штраф истощения сюда входит, потому что
   // пассивное значение — это тот же бросок, только без кубика. В шпаргалках

@@ -1,3 +1,5 @@
+import { useCompendiumEntries } from "../components/dnd/useCompendiumEntries";
+import { liveEffectEntryIds, withLiveEffects } from "../components/dnd/dndFeatures";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { entityQuery, resourceQuery, useAction, useEntity, useResource, write } from "../data/hooks";
@@ -1596,6 +1598,17 @@ function CampaignSquadSummary({ characters }: { characters: Character[] }) {
       resourceQuery<{ content: string; format: string }[]>(statblockListPath("character", c.id))
     ),
   });
+  // Эффекты умений и вещей — из справочника, как в самом листе: «Оборона» и
+  // «Защита без доспехов» живут в записях, а не в сохранённом листе.
+  const parsedSheets = statblocks.map((q) => {
+    const dnd = q.data?.find((s) => s.format === "dnd_character");
+    try {
+      return dnd ? normalizeDndCharacter(JSON.parse(dnd.content || "{}")) : null;
+    } catch {
+      return null;
+    }
+  });
+  const getEntry = useCompendiumEntries(parsedSheets.flatMap((d) => (d ? liveEffectEntryIds(d) : [])));
   if (statblocks.some((q) => q.isPending)) return null;
   const rows = characters.map((c, i) => {
     const empty = { id: c.id, name: c.character_name, level: "—", ac: "—", hp: "—", speed: "—" };
@@ -1606,7 +1619,9 @@ function CampaignSquadSummary({ characters }: { characters: Character[] }) {
       // свободный текст, который пишет импорт и который устаревает при
       // любой правке класса или снаряжения. Теперь числа те же, что на
       // самом чарнике: один модуль на оба экрана.
-      const sheet = deriveSheet(normalizeDndCharacter(JSON.parse(dnd.content || "{}")));
+      const parsed = parsedSheets[i];
+      if (!parsed) return empty;
+      const sheet = deriveSheet(withLiveEffects(parsed, getEntry));
       return {
         id: c.id,
         name: c.character_name,

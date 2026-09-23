@@ -67,7 +67,7 @@ export const WeaponMasteryPicker = memo(function WeaponMasteryPicker({
                 disabled={!picked.has(e.id) && picked.size >= limit}
                 onChange={() => onToggle(e)}
               />
-              {e.name}
+              {e.name}{" "}
               <span className="muted">
                 {[damage, mastery && `мастерство: ${mastery}`].filter(Boolean).join(" · ")}
               </span>

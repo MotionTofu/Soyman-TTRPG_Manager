@@ -67,7 +67,39 @@ export type DndEffectWhen = "always" | "hit" | "miss" | "save_fail" | "save_succ
  * Ссылка на неё открыла бы словарь: вторая заведённая «Инициатива» разошлась
  * бы с первой молча.
  */
-export type DndRollTarget = "initiative" | "attack" | "save" | "ability_check";
+export type DndRollTarget = "initiative" | "attack" | "save" | "ability_check" | "damage";
+
+/**
+ * Когда прибавка действует — по надетому, закрытым списком (гриллинг
+ * 2026-09-23, Q4). Пусто — всегда. Лист определяет условие сам: «Оборона»
+ * работает только в доспехе, «Защита без доспехов» монаха — без доспеха и
+ * без щита, варвара — без доспеха (щит можно).
+ */
+export type DndArmorCondition = "armor" | "no_armor" | "no_armor_no_shield";
+
+/**
+ * Каким оружием должна быть атака, чтобы прибавка к атаке или урону её
+ * задела (гриллинг 2026-09-23, Q9). Руки лист выводит из надетого:
+ * «в одной руке» — ровно одно рукопашное оружие, не двуручное (щит можно);
+ * «в двух» — двуручное, или универсальное без щита и без второго оружия.
+ */
+export type DndWeaponFilter =
+  | "ranged"
+  | "thrown"
+  | "melee_one_hand"
+  | "melee_two_hand"
+  | "offhand_light"
+  | "unarmed";
+
+/**
+ * Своя формула КЗ вместо «10 + Ловкость» («Защита без доспехов»: 10 + Лов +
+ * Мдр; «Доспехи мага»: 13 + Лов). Из нескольких доступных формул лист берёт
+ * лучшую — складывать их правила не дают.
+ */
+export interface DndAcBase {
+  base: number;
+  abilities: DndAbilityKey[];
+}
 
 /** Доля бонуса мастерства: полный или половина с округлением вниз. */
 export type DndProficiencyShare = "full" | "half";
@@ -162,6 +194,30 @@ export interface DndEffect {
    * округлением вниз («Мастер на все руки» барда).
    */
   proficiency?: DndProficiencyShare;
+  /** roll_modifier к атаке/урону — только этим оружием (Q9). */
+  weapon?: DndWeaponFilter;
+  /**
+   * roll_modifier к урону: 1 и 2 на кости считаются этим числом
+   * («Сражение большим оружием» — 3). Не прибавка: лист показывает правило
+   * на подходящих строках, среднее не пересчитывает — бросает игрок.
+   */
+  dieMinimum?: number;
+  /**
+   * roll_modifier к урону: вернуть модификатор характеристики в урон доп.
+   * атаки лёгким оружием («Сражение двумя оружиями»). Величина — сам
+   * модификатор, поэтому флагом, а не числом.
+   */
+  addAbility?: boolean;
+  /**
+   * roll_modifier к урону безоружного удара: `dice` — своя кость вместо «1»
+   * («Сражение голыми руками» 1к6), `diceFreeHands` — когда в руках нет ни
+   * оружия, ни щита (1к8).
+   */
+  diceFreeHands?: string;
+  /** defense: прибавка к КЗ числом лежит в `flat`; база — здесь. */
+  acBase?: DndAcBase;
+  /** defense и roll_modifier: при каком надетом действует. Пусто — всегда. */
+  armorCondition?: DndArmorCondition;
 
   // summon / transform / create_object / defense / special, and free-form
   // detail for any of the above.
@@ -236,6 +292,22 @@ export const ROLL_TARGET_LABELS: Record<DndRollTarget, string> = {
   attack: "к броскам атаки",
   save: "к спасброскам",
   ability_check: "к проверкам характеристик",
+  damage: "к урону",
+};
+
+export const ARMOR_CONDITION_LABELS: Record<DndArmorCondition, string> = {
+  armor: "в доспехе",
+  no_armor: "без доспеха",
+  no_armor_no_shield: "без доспеха и щита",
+};
+
+export const WEAPON_FILTER_LABELS: Record<DndWeaponFilter, string> = {
+  ranged: "дальнобойным оружием",
+  thrown: "брошенным метательным оружием",
+  melee_one_hand: "рукопашным в одной руке",
+  melee_two_hand: "рукопашным в двух руках",
+  offhand_light: "доп. атакой лёгким оружием",
+  unarmed: "безоружным ударом",
 };
 
 /** Подписи долей бонуса мастерства. */
@@ -433,7 +505,11 @@ function whenSummary(effect: DndEffect, checks: DndCheck[]): string | null {
 
 // One-line summary shown on a collapsed chip. Only the parts that are
 // actually filled in appear — a half-entered effect still reads sensibly.
-export function effectSummary(effect: DndEffect, checks: DndCheck[]): string {
+/**
+ * `profBonus` — бонус мастерства владельца, если известен: тогда «+ БМ» в
+ * защите («Перехват»: урон меньше на 1к10 + БМ) печатается готовым числом.
+ */
+export function effectSummary(effect: DndEffect, checks: DndCheck[], profBonus?: number): string {
   const parts: string[] = [EFFECT_TYPE_LABELS[effect.type]];
   switch (effect.type) {
     case "damage":
@@ -458,7 +534,26 @@ export function effectSummary(effect: DndEffect, checks: DndCheck[]): string {
       break;
     case "roll_modifier":
       if (effect.modifier) parts.push(effect.modifier);
+      if (effect.weapon) parts.push(WEAPON_FILTER_LABELS[effect.weapon]);
       break;
+    case "defense": {
+      const ac: string[] = [];
+      if (effect.acBase) {
+        const abbr = effect.acBase.abilities.map((a) => ABILITY_KEY_ABBR[a]).join(" + ");
+        ac.push(`КЗ ${effect.acBase.base}${abbr ? ` + ${abbr}` : ""}`);
+      }
+      if (typeof effect.flat === "number" && effect.flat) ac.push(`КЗ ${effect.flat > 0 ? "+" : ""}${effect.flat}`);
+      parts.push(...ac);
+      if (effect.dice) {
+        const share = effect.proficiency;
+        const pb = share && profBonus != null ? (share === "half" ? Math.floor(profBonus / 2) : profBonus) : null;
+        const tail = pb != null ? ` +${pb}` : share ? " + БМ" : "";
+        parts.push(`урон меньше на ${effect.dice}${tail}`);
+      }
+      if (effect.armorCondition) parts.push(ARMOR_CONDITION_LABELS[effect.armorCondition]);
+      if (effect.text) parts.push(effect.text);
+      break;
+    }
     default:
       if (effect.text) parts.push(effect.text);
       break;
@@ -526,13 +621,13 @@ function trimSpecialText(text: string): string {
   return `${words.slice(0, SPECIAL_TEXT_WORDS).join(" ")}…`;
 }
 
-export function effectsLabel(effects: DndEffect[], checks: DndCheck[] = []): string {
+export function effectsLabel(effects: DndEffect[], checks: DndCheck[] = [], profBonus?: number): string {
   if (!effects || effects.length === 0) return "—";
   const numeric = effects.filter((e) => e.type === "damage" || e.type === "heal" || e.type === "temp_hp");
   if (numeric.length === 0) {
     // Ничего числового — показываем типы, чтобы строка не была пустой.
     return effects
-      .map((e) => effectSummary(e.text ? { ...e, text: trimSpecialText(e.text) } : e, checks))
+      .map((e) => effectSummary(e.text ? { ...e, text: trimSpecialText(e.text) } : e, checks, profBonus))
       .join("; ");
   }
   return numeric
@@ -549,7 +644,16 @@ export function effectsLabel(effects: DndEffect[], checks: DndCheck[] = []): str
 // прятало половину книги.
 export function hasResolvableEffect(checks: DndCheck[], effects: DndEffect[]): boolean {
   if (checks && checks.length > 0) return true;
-  return (effects ?? []).some((e) => e.type === "damage" || e.type === "heal" || e.type === "temp_hp");
+  // Числовая защита («Доспехи мага», «Щит») — тоже разрешимое: её накладывают
+  // из «Действий», и наложение отмечает её действующей в КЗ.
+  return (effects ?? []).some(
+    (e) => e.type === "damage" || e.type === "heal" || e.type === "temp_hp" || isNumericDefense(e)
+  );
+}
+
+/** Эффект `defense`, который меняет КЗ числом, а не только текстом. */
+export function isNumericDefense(e: DndEffect): boolean {
+  return e.type === "defense" && (!!e.acBase || (typeof e.flat === "number" && e.flat !== 0));
 }
 
 // Редакторное представление levelSteps: «3:2, 5:3, 9:4, 15:5» (уровень:макс).

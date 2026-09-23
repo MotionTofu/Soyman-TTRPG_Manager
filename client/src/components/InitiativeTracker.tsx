@@ -1,3 +1,5 @@
+import { ensureEntries, getCachedEntry } from "./dnd/entryCache";
+import { liveEffectEntryIds, withLiveEffects } from "./dnd/dndFeatures";
 import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { dataKeys } from "../data/entities";
@@ -241,13 +243,11 @@ export function InitiativeTracker({ sessionId }: Props) {
         return { initiativeModifier, maxHp: max, currentHp: max };
       }
       const character = parsed as DndCharacterData;
-      // Прибавки от умений сюда не доедут: лист хранит у умения только имя и
-      // `entryId`, а эффекты подставляет справочник при отрисовке чарника
-      // (`resolveFeature`). Трекер справочник не грузит, поэтому число здесь —
-      // Ловкость с ручной поправкой и истощением. Сегодня это точно (записей
-      // с разметкой под инициативу в справочнике ноль); когда разметка
-      // появится, за числом придётся идти на сервер.
-      const initiativeModifier = deriveSheet(character).initiative.value;
+      // Эффекты умений лист хранит ссылкой (`entryId`), поэтому записи
+      // догружаются здесь — иначе «Бдительный» был бы в листе, а в очереди
+      // боя нет.
+      await ensureEntries(liveEffectEntryIds(character));
+      const initiativeModifier = deriveSheet(withLiveEffects(character, getCachedEntry)).initiative.value;
       const max = Number(character.hitPointMax) || null;
       return { initiativeModifier, maxHp: max, currentHp: max };
     } catch {

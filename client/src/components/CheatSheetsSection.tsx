@@ -11,7 +11,8 @@ import { abilityModifier, parseBonus } from "./dnd/AbilityScores";
 import { SKILL_CATALOG } from "./dnd/skillCatalog";
 import { deriveSheet } from "@shared/dnd/derive";
 import { normalizeDndCharacter } from "@shared/dnd/normalize";
-import { computeArmorClass, unarmoredDefenseBonus } from "./dnd/armorClass";
+import { ensureEntries, getCachedEntry } from "./dnd/entryCache";
+import { liveEffectEntryIds, withLiveEffects } from "./dnd/dndFeatures";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
 import type { Character, DndCharacterData, SettingBeing, Statblock, StorySecret } from "../types";
@@ -161,7 +162,10 @@ async function loadCharacterCards(campaignId: number): Promise<CharacterCardData
       // пассивного восприятия — БЕЗ штрафа истощения, в отличие от листа.
       // Заодно ушёл разбор JSON мимо нормализации: он требовал руками сводить
       // старый русский ключ навыка, и это было записано прямо в комментарии.
-      const sheet = deriveSheet(data);
+      // По эффектам из справочника — как лист: иначе «Оборона» и «Защита без
+      // доспехов» были бы в листе, а в шпаргалке нет.
+      await ensureEntries(liveEffectEntryIds(data).filter((id): id is number => typeof id === "number"));
+      const sheet = deriveSheet(withLiveEffects(data, getCachedEntry));
       const ac = sheet.armorClass.value;
       const passivePerception = sheet.passivePerception.value;
       const { className, subclassName } = classAndSubclassSummary(data.classes);

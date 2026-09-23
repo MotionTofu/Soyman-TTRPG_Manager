@@ -114,7 +114,7 @@ export const WizardMiniSheet = memo(function WizardMiniSheet({
           Хиты <strong className="wizard-data">{previewHp ?? "—"}</strong>
         </span>
         <span className="muted">
-          КД без доспеха <strong className="wizard-data">{10 + dexMod}</strong>
+          КЗ без доспеха <strong className="wizard-data">{10 + dexMod}</strong>
         </span>
         <span className="muted">
           Инициатива <strong className="wizard-data">{formatModifier(dexMod)}</strong>

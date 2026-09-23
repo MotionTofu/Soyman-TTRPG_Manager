@@ -1554,6 +1554,15 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
           ? (classEntry.data.tool_profs as { id: number; name: string }[])
           : [];
         character.proficiencies = toolPicks.map((t) => ({ entryId: t.id, name: t.name, abilityKey: null }));
+        // Доспехи класса — теми же строками: по ним лист решает «без владения».
+        const armorPicks = Array.isArray(classEntry.data.armor_profs)
+          ? (classEntry.data.armor_profs as { id: number; name: string }[])
+          : [];
+        for (const a of armorPicks) {
+          if (a?.name && !character.proficiencies.some((p) => p.name === a.name)) {
+            character.proficiencies = [...character.proficiencies, { entryId: a.id ?? null, name: a.name, abilityKey: null }];
+          }
+        }
         // Инструменты подкласса (Набор травника Орудий милосердия) — той же
         // строкой без характеристики, как классовые выше; способность
         // подтянется на листе при смене класса/подкласса.
@@ -1627,7 +1636,10 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         originFeats.find((f) => f.id === effectiveFeatId) ??
         (featEntry ? { id: featEntry.id, name: featEntry.name } : null);
       if (chosenFeat) {
-        character.feats = [...character.feats, { name: chosenFeat.name, description: featEntry?.description ?? "" }];
+        // Со ссылкой на запись: по ней лист подставляет эффекты черты
+        // («Бдительный» → инициатива) и выдаваемые чувства. Без entryId черта
+        // оставалась текстом, и её механика до чисел не доходила.
+        character.feats = [...character.feats, { name: chosenFeat.name, description: featEntry?.description ?? "", entryId: chosenFeat.id }];
       }
       // Владения от черты («Музыкант», «Ремесленник») — строкой: конкретные
       // инструменты игрок выбирает сам, а приложение за него не решает.
@@ -1740,12 +1752,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       }
       // Доспех и щит из набора сразу надеты, если персонаж ими владеет
       // (гриллинг 2026-09-23): иначе КЗ после создания считался без доспеха.
-      // Владения класса берутся из его записи — в список владений листа
-      // визард их не кладёт.
-      const armorNames = [
-        ...armorProfNames(character.proficiencies),
-        ...(((classEntry?.data.armor_profs as { name?: string }[] | undefined) ?? []).map((p) => p?.name ?? "")),
-      ];
+      const armorNames = armorProfNames(character.proficiencies);
       const wearable = (item: (typeof addedItems)[number], shield: boolean) => {
         const type = (item.armorType ?? "").trim().toLowerCase();
         const matches = shield ? type.startsWith("щит") : /^(л[её]гк|средн|тяж)/.test(type);

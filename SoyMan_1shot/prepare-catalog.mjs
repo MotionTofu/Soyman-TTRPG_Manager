@@ -8,7 +8,10 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 const registry = JSON.parse(await readFile(path.join(root, '../server/config/storages.json'), 'utf8'));
 const storage = registry.storages.find(s => s.id === registry.activeId);
 if (!storage) throw Error('Активное хранилище SoyMan не найдено');
-const db = new Database(path.join(storage.dbDir, 'app.db'), { readonly: true, fileMustExist: true });
+// --db <file> — собрать из другой базы (копии для проверки), а не из активной.
+const dbArg = process.argv.indexOf('--db');
+const dbFile = dbArg >= 0 ? process.argv[dbArg + 1] : path.join(storage.dbDir, 'app.db');
+const db = new Database(dbFile, { readonly: true, fileMustExist: true });
 try {
   const data = db.transaction(() => {
     const system = db.prepare("SELECT id, name, code, description FROM systems WHERE (code IN ('phb','dnd55') OR name = 'D&D 5.5') AND archived_at IS NULL ORDER BY id LIMIT 1").get();

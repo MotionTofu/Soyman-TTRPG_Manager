@@ -78,6 +78,7 @@ import {
   costSummary,
   effectsLabel,
   hasResolvableEffect,
+  isNumericDefense,
   resolveLevelDice,
   type DcExtra,
   type DndCheck,
@@ -135,7 +136,6 @@ import { MentionTextarea } from "../mentions/MentionTextarea";
 import { MentionText } from "../mentions/MentionText";
 import { SEARCH_DRAG_MIME } from "../LinkDropZone";
 import { useBag } from "../../bag";
-import { computeArmorClass, unarmoredDefenseBonus } from "./armorClass";
 import {
   isItemMonkWeapon,
   resolveMartialArts,
@@ -166,7 +166,7 @@ import { useConfirm } from "../../hooks/useConfirm";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { useDndPrefs } from "../../hooks/useDndPrefs";
 import { useEvent, useLatest } from "../../hooks/useEvent";
-import { choicesFromEntries, featuresFromEntries, inferTimingFromLegacyText, spellTimingFromData, sumEntrySlots, TIMING_KEY_TO_LABEL, type ChoiceDef } from "./dndFeatures";
+import { choicesFromEntries, featuresFromEntries, inferTimingFromLegacyText, liveEffectEntryIds, spellTimingFromData, sumEntrySlots, TIMING_KEY_TO_LABEL, withGrantedSenses, withLiveEffects, type ChoiceDef } from "./dndFeatures";
 import { WeaponMasteryPicker, isMasterableWeapon } from "./StartingEquipmentPicker";
 import { extractEnglishName } from "../../compendium";
 import { ChecklistEditor, emptySpeed, formatSpeed, SensesEditor, SpeedEditor } from "./DndCreatureForm";
@@ -178,7 +178,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useTabState } from "../../hooks/useTabState";
 import { CompendiumEntryPicker } from "../MonsterTemplatePicker";
 import { classAndLevelSummary } from "./dndSummary";
-import { deriveSheet, type Derived } from "@shared/dnd/derive";
+import { deriveSheet, weaponEffects, type Derived, type WeaponEffects, type WeaponUse } from "@shared/dnd/derive";
+import { wornArmorState } from "./armorClass";
 import { NavIcon, type NavIconName } from "../NavIcons";
 
 const SPELL_LEVELS = 9;
@@ -1292,7 +1293,7 @@ function sheetEntryIds(value: DndCharacterData): (number | null | undefined)[] {
   // Что это было упущение, а не решение, видно по `deadLinkNames`: спутников
   // она уже считает (найдено 09.09 при подключении знаков типов).
   const companions = (value.companions ?? []).flatMap((c) => [c.entryId, c.featureEntryId, c.spellEntryId, c.classId]);
-  return [...spells, ...features, ...classes, ...subclasses, ...companions, value.raceId, value.backgroundId];
+  return [...spells, ...features, ...classes, ...subclasses, ...companions, ...liveEffectEntryIds(value), value.raceId, value.backgroundId];
 }
 
 // Full field set shown when a spell name is clicked (requirement 2).
@@ -2176,10 +2177,22 @@ function equipmentMarks(item: DndEquipmentItem, armorProficient: boolean | null)
   if (String(item.weight ?? "").trim() !== "" && !isValidWeight(String(item.weight ?? ""))) {
     all.push({ text: "вес?", title: "Вес — число ≥ 0 с единицей, напр. 5 кг; иначе в вес не считается" });
   }
+  if (magicPlusWithoutBase(item) != null) {
+    all.push({ text: "основа?", title: "Выберите в меню строки, на чём лежит прибавка, — до этого КЗ и атака её не считают" });
+  }
   if (item.attuned) all.push({ text: "настроен", title: "Настроено — занимает слот настройки" });
   if (item.replicaId) all.push({ text: "реплика", title: "Создано умением: исчезнет вместе с ним" });
   if (!item.entryId) all.push({ text: "без механики", title: "Вписано вручную: КЗ, вес и цена из справочника не подтянуты" });
   return all.slice(0, 2);
+}
+
+// «Доспех +1», «Щит +2», «Оружие +3» из справочника — не вещь, а прибавка к
+// базовой (решение R3, гриллинг 2026-09-23 Q19). Пока база не выбрана, у
+// строки нет ни КЗ, ни урона, и прибавка никуда не идёт.
+function magicPlusWithoutBase(item: DndEquipmentItem): number | null {
+  if (item.armorType || item.weaponDamage || item.magicBonus) return null;
+  const m = /^\s*(доспех|щит|оружие)\s*\+\s*(\d)/i.exec(item.name ?? "");
+  return m ? Number(m[2]) : null;
 }
 
 /** Тихая вторая строка: цена, вес, заметка. Из имени они ушли — длинное
@@ -3002,6 +3015,8 @@ function DndEquipmentQuickView({
   const [descOpen, setDescOpen] = useState<{ si: number; ii: number } | null>(null);
   const [descriptions, setDescriptions] = useState<Record<number, string>>({});
   const [dragOverSection, setDragOverSection] = useState<number | null>(null);
+  // Строка «Доспех +N» без базы, для которой открыт выбор основы.
+  const [baseRow, setBaseRow] = useState<{ si: number; ii: number } | null>(null);
   const { items: bagItems } = useBag();
   const [confirmDialog, confirm] = useConfirm();
   // Действия принятой передачи (вернуть/сделать своим) идут сервером, а не
@@ -3385,6 +3400,43 @@ function DndEquipmentQuickView({
   return (
     <>
       {confirmDialog}
+      {baseRow && sections[baseRow.si]?.items[baseRow.ii] && (
+        <DndReplicaBasePicker
+          title={sections[baseRow.si].items[baseRow.ii].name}
+          systemId={systemId}
+          onClose={() => setBaseRow(null)}
+          onPick={(base) => {
+            const { si, ii } = baseRow;
+            setBaseRow(null);
+            const fresh = sectionsRef.current;
+            const row = fresh[si]?.items[ii];
+            const bonus = row ? magicPlusWithoutBase(row) : null;
+            if (!row || bonus == null) return;
+            // Одна строка: базовый предмет со своими КЗ и уроном плюс прибавка
+            // и пометка «магический» — как у реплик Артефактора. Настройка,
+            // количество и заметка строки остаются.
+            const merged: DndEquipmentItem = {
+              ...row,
+              ...base.meta,
+              id: row.id,
+              name: `${base.name} +${bonus}`,
+              entryId: base.entryId,
+              magical: true,
+              magicBonus: bonus,
+              equipped: row.equipped,
+              attuned: row.attuned,
+              qty: row.qty,
+              notes: row.notes,
+              rarity: row.rarity,
+            };
+            commit?.({
+              equipmentSections: fresh.map((sec, sIdx) =>
+                sIdx !== si ? sec : { ...sec, items: sec.items.map((it, iIdx) => (iIdx === ii ? merged : it)) }
+              ),
+            });
+          }}
+        />
+      )}
       <div className="dnd-equipment-head">Снаряжение</div>
       {/* Шапка: не строка «Предметов · Вес · Нести», а одна величина, за
           которой действительно следят, — вес полосой. Пока веса хватает,
@@ -3702,6 +3754,9 @@ function DndEquipmentQuickView({
                           : String(item.qty ?? "").trim() !== ""
                             ? [{ text: "Добавить одну", onPick: () => bumpQty(si, ii, 1) }]
                             : []),
+                        ...(magicPlusWithoutBase(item) != null
+                          ? [{ text: "Выбрать основу", onPick: () => setBaseRow({ si, ii }) }]
+                          : []),
                         ...(item.requiresAttunement || item.attuned
                           ? [{ text: item.attuned ? "Снять настройку" : "Настроить", onPick: () => void toggleAttuned(si, ii) }]
                           : []),
@@ -4038,6 +4093,15 @@ function useDndOrigin(
               ...proficiencies,
               ...newTools.map((t, idx) => ({ entryId: t.id, name: t.name, abilityKey: abilityKeys[idx] })),
             ];
+          }
+          // Доспехи — только от первого класса: мультикласс в 5.5 даёт их
+          // урезанно, а строки ниже лист читает как полное владение.
+          const armorPicks = i === 0 && Array.isArray(entry.data.armor_profs)
+            ? (entry.data.armor_profs as { id: number; name: string }[])
+            : [];
+          const newArmor = armorPicks.filter((a) => a?.name && !proficiencies.some((p) => p.name === a.name));
+          if (newArmor.length > 0) {
+            proficiencies = [...proficiencies, ...newArmor.map((a) => ({ entryId: a.id ?? null, name: a.name, abilityKey: null }))];
           }
         } catch {
           /* class has no compendium entry — nothing to fill */
@@ -4413,7 +4477,7 @@ function useDndOrigin(
           } catch {
             /* feat entry missing — leave description blank */
           }
-          patch.feats = [...base.feats, { name: originFeat.name, description }];
+          patch.feats = [...base.feats, { name: originFeat.name, description, entryId: originFeat.id }];
         }
       } catch {
         /* background has no compendium entry (freehand) — nothing to fill */
@@ -4479,6 +4543,23 @@ interface AttackRow {
 // once it's marked "надето". Attack bonus assumes proficiency (this app
 // doesn't track weapon-proficiency booleans separately) and picks the
 // higher of STR/DEX for finesse weapons, DEX for ranged-only, STR otherwise.
+//
+// Руки (гриллинг 2026-09-23, Q9): «надето» у оружия значит «в руках».
+// Одной рукой — единственное надетое рукопашное оружие, не двуручное (щит
+// можно). Универсальное без щита и без второго оружия даёт две строки —
+// одной рукой и двумя. Два лёгких рукопашных дают строку доп. атаки
+// бонусным действием без положительного модификатора (Q11). Прибавки стилей
+// приходят из `fx` — эффектов с фильтром оружия; их источник подписан в
+// строке, чтобы число не было загадкой (Q23).
+const DIE_STEPS = [4, 6, 8, 10, 12];
+/** «1к8 рубящий» → «1к10»: кость на ступень больше, или undefined. */
+function nextDamageDie(damage: string): string | undefined {
+  const m = /^\s*(\d+)\s*к\s*(\d+)/i.exec(damage);
+  if (!m) return undefined;
+  const step = DIE_STEPS.indexOf(Number(m[2]));
+  return step >= 0 && step < DIE_STEPS.length - 1 ? `${m[1]}к${DIE_STEPS[step + 1]}` : undefined;
+}
+
 function weaponAttackRows(
   sections: DndEquipmentSection[],
   abilities: DndCharacterData["abilities"],
@@ -4490,68 +4571,146 @@ function weaponAttackRows(
   // Освоенные типы оружия («Оружейные приёмы» Воина, тикет 06): свойство
   // мастерства применимо только к освоенному. null/пусто — воин без выбора,
   // не-воин или старый лист: показ как раньше, без пометок.
-  mastered?: { ids: Set<number>; names: Set<string> } | null
+  mastered?: { ids: Set<number>; names: Set<string> } | null,
+  fx?: (use: WeaponUse) => WeaponEffects
 ): AttackRow[] {
   const str = abilityModifier(abilities.str);
   const dex = abilityModifier(abilities.dex);
-  return sections
-    .flatMap((s) => s.items)
-    // Отданная вещь из боя исключена вместе с КЗ (этап 4б): ею не бьют.
-    .filter((i) => i.equipped && !i.transferOut && i.weaponDamage)
-    .map((i) => {
-      // Свойства оружия приходят строкой из компендиума, поэтому признаки
-      // ищутся без учёта регистра: «Фехтовальное» и «фехтовальное» — одно и
-      // то же, а раньше вторая форма молча меняла характеристику атаки.
-      const props = (i.weaponProperties ?? "").toLowerCase();
-      const finesse = props.includes("фехтовальн");
-      const thrown = props.includes("метательн");
-      // Метательное ближнее оружие бросают Силой, если оно не фехтовальное —
-      // то есть выбор характеристики тот же, что и в ближнем бою.
-      const rangedOnly = !!i.weaponAttackRanged && !i.weaponAttackMelee && !thrown;
-      // Ловкие атаки монаха: монашеское оружие бьёт Ловкостью (фехтовальное —
-      // как было, max, чтобы умение не занижало готовую строку).
-      const monkWeapon = !!martial && martial.isMonkWeapon(i);
-      const mod = monkWeapon ? (finesse ? Math.max(str, dex) : dex) : finesse ? Math.max(str, dex) : rangedOnly ? dex : str;
-      const range = i.weaponAttackMelee && i.weaponAttackRanged ? "Ближний/Дальний" : i.weaponAttackRanged ? "Дальний" : "Ближний";
-      // Кость боевых искусств вместо своей, если больше («1к4 колющий» кинжала
-      // на 1к8 с 5 уровня). Тип урона и хвост сохраняются в upgradeDamageDie.
-      const upgraded = monkWeapon ? upgradeDamageDie(i.weaponDamage ?? "", martial.die) : null;
-      const baseDamage = upgraded ?? i.weaponDamage;
-      // Урон печатался как есть — «1к8» без модификатора, который игрок
-      // прибавлял в уме каждый бросок. Теперь формула полная: «1к8 +3».
-      const damageWithMod = baseDamage
-        ? `${baseDamage}${mod !== 0 ? ` ${formatModifier(mod)}` : ""}`
-        : "";
-      // Мастерство применимо, только если оружие освоено. Список пуст —
-      // старый лист или не-воин: показываем как раньше, без пометок.
-      const masteryKnown = mastered == null || (mastered.ids.size === 0 && mastered.names.size === 0);
-      const isMastered =
-        masteryKnown ||
-        (i.entryId != null && mastered.ids.has(i.entryId)) ||
-        mastered.names.has(i.name.trim().toLowerCase());
-      const masteryText =
-        i.weaponMastery && isMastered
-          ? `Мастерство: ${i.weaponMastery}`
-          : i.weaponMastery && !masteryKnown
-            ? "Мастерство: не освоено"
-            : "";
-      const damage = [
-        damageWithMod,
-        i.weaponProperties,
-        masteryText,
-        upgraded || (monkWeapon && !finesse && !rangedOnly) ? "кость боевых искусств" : "",
-      ]
-        .filter(Boolean)
-        .join(" · ");
-      return {
-        name: i.name,
-        bonus: formatModifier(mod + profBonus - exhaustionPenalty),
-        damage,
-        range,
-        timing: "action" as const,
-        entryId: i.entryId ?? null,
-      };
-    });
+  const noFx: WeaponEffects = { attack: [], damage: [], addAbility: null, dieMinimum: null, dice: null, notes: [] };
+  const effectsOf = (use: WeaponUse) => (fx ? fx(use) : noFx);
+  // Отданная вещь из боя исключена вместе с КЗ (этап 4б): ею не бьют.
+  const weapons = sections.flatMap((s) => s.items).filter((i) => i.equipped && !i.transferOut && i.weaponDamage);
+  const { hasShield } = wornArmorState(sections);
+  // Свойства оружия приходят строкой из компендиума, поэтому признаки
+  // ищутся без учёта регистра: «Фехтовальное» и «фехтовальное» — одно и
+  // то же, а раньше вторая форма молча меняла характеристику атаки.
+  const propsOf = (i: DndEquipmentItem) => (i.weaponProperties ?? "").toLowerCase();
+  const melee = weapons.filter((i) => i.weaponAttackMelee);
+  const lights = melee.filter((i) => /л[её]гк/.test(propsOf(i)));
+  const rows: AttackRow[] = [];
+
+  const build = (
+    i: DndEquipmentItem,
+    use: WeaponUse,
+    opts: { label?: string; range?: string; die?: string; timing?: DndActionTiming; offhand?: boolean } = {}
+  ): AttackRow => {
+    const props = propsOf(i);
+    const finesse = props.includes("фехтовальн");
+    const thrown = props.includes("метательн");
+    // Метательное ближнее оружие бросают Силой, если оно не фехтовальное —
+    // то есть выбор характеристики тот же, что и в ближнем бою.
+    const rangedOnly = !!i.weaponAttackRanged && !i.weaponAttackMelee && !thrown;
+    // Ловкие атаки монаха: монашеское оружие бьёт Ловкостью (фехтовальное —
+    // как было, max, чтобы умение не занижало готовую строку).
+    const monkWeapon = !!martial && martial.isMonkWeapon(i);
+    const mod = monkWeapon ? (finesse ? Math.max(str, dex) : dex) : finesse ? Math.max(str, dex) : rangedOnly ? dex : str;
+    const range =
+      opts.range ?? (i.weaponAttackMelee && i.weaponAttackRanged ? "Ближний/Дальний" : i.weaponAttackRanged ? "Дальний" : "Ближний");
+    // Кость боевых искусств вместо своей, если больше («1к4 колющий» кинжала
+    // на 1к8 с 5 уровня). Тип урона и хвост сохраняются в upgradeDamageDie.
+    const upgraded = monkWeapon ? upgradeDamageDie(i.weaponDamage ?? "", martial.die) : null;
+    const versatile = opts.die ? upgradeDamageDie(i.weaponDamage ?? "", opts.die) : null;
+    const baseDamage = versatile ?? upgraded ?? i.weaponDamage;
+    const e = effectsOf(use);
+    const magic = i.magicBonus ?? 0;
+    const attackExtra = e.attack.reduce((n, p) => n + p.value, 0);
+    const damageExtra = e.damage.reduce((n, p) => n + p.value, 0);
+    // Доп. атака: модификатор в урон не идёт, если он положительный (5.5);
+    // «Сражение двумя оружиями» его возвращает.
+    const abilityDmg = opts.offhand && !e.addAbility ? Math.min(mod, 0) : mod;
+    const dmgMod = abilityDmg + magic + damageExtra;
+    // Урон печатался как есть — «1к8» без модификатора, который игрок
+    // прибавлял в уме каждый бросок. Теперь формула полная: «1к8 +3».
+    const damageWithMod = baseDamage ? `${baseDamage}${dmgMod !== 0 ? ` ${formatModifier(dmgMod)}` : ""}` : "";
+    // Мастерство применимо, только если оружие освоено. Список пуст —
+    // старый лист или не-воин: показываем как раньше, без пометок.
+    const masteryKnown = mastered == null || (mastered.ids.size === 0 && mastered.names.size === 0);
+    const isMastered =
+      masteryKnown ||
+      (i.entryId != null && mastered.ids.has(i.entryId)) ||
+      mastered.names.has(i.name.trim().toLowerCase());
+    const masteryText =
+      i.weaponMastery && isMastered
+        ? `Мастерство: ${i.weaponMastery}`
+        : i.weaponMastery && !masteryKnown
+          ? "Мастерство: не освоено"
+          : "";
+    const sources = [
+      ...e.attack.map((p) => `${p.label} ${formatModifier(p.value)} к атаке`),
+      ...e.damage.map((p) => `${p.label} ${formatModifier(p.value)} к урону`),
+      ...(e.addAbility && opts.offhand ? [`${e.addAbility}: модификатор в урон`] : []),
+      ...(e.dieMinimum ? [`1–2 на кости = ${e.dieMinimum.value} (${e.dieMinimum.source})`] : []),
+      ...e.notes,
+    ];
+    const damage = [
+      damageWithMod,
+      i.weaponProperties,
+      masteryText,
+      upgraded || (monkWeapon && !finesse && !rangedOnly) ? "кость боевых искусств" : "",
+      ...sources,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    return {
+      name: opts.label ? `${i.name} (${opts.label})` : i.name,
+      bonus: formatModifier(mod + profBonus + magic + attackExtra - exhaustionPenalty),
+      damage,
+      range,
+      timing: opts.timing ?? ("action" as const),
+      entryId: i.entryId ?? null,
+    };
+  };
+
+  for (const i of weapons) {
+    const props = propsOf(i);
+    const thrown = props.includes("метательн");
+    if (!i.weaponAttackMelee) {
+      // Дальнобойное: лук, арбалет, праща; дротики — дальнобойное и
+      // метательное сразу.
+      rows.push(build(i, { ranged: true, thrown }));
+      continue;
+    }
+    const alone = melee.length === 1;
+    // Кость двумя руками — из скобок свойства, если справочник её пишет, иначе
+    // по правилу 5.5: у всего универсального оружия она на ступень больше
+    // (посох 1к6 → 1к8, длинный меч 1к8 → 1к10). В живом справочнике поле
+    // пустое у всех, поэтому правило — основной путь.
+    const versatile = props.includes("универсальн");
+    const versatileDie = versatile
+      ? /универсальн\S*\s*\((\d+\s*к\s*\d+)\)/.exec(props)?.[1]?.trim() ?? nextDamageDie(i.weaponDamage ?? "")
+      : undefined;
+    if (props.includes("двуручн")) rows.push(build(i, { twoHand: true }));
+    else if (versatileDie && alone && !hasShield) {
+      rows.push(build(i, { oneHand: true }, { label: "одной рукой" }));
+      rows.push(build(i, { twoHand: true }, { label: "двумя руками", die: versatileDie }));
+    } else {
+      const row = build(i, { oneHand: alone });
+      // Прибавка «одной рукой» есть, но второе рукопашное в руках её гасит —
+      // сказать об этом в строке, а не молча недодать (Q23).
+      const other = melee.find((m) => m !== i);
+      const lost = effectsOf({ oneHand: true }).damage;
+      if (!alone && other && lost.length) {
+        row.damage = [row.damage, ...lost.map((p) => `${p.label} — не учтено: в другой руке ${other.name}`)].join(" · ");
+      }
+      rows.push(row);
+    }
+    // Бросок метательного рукопашного — отдельной строкой, только когда
+    // бросок считается иначе («Сражение метательным оружием»): иначе строка
+    // была бы дублем.
+    const throwFx = effectsOf({ thrown: true });
+    if (thrown && (throwFx.attack.length || throwFx.damage.length || throwFx.dieMinimum || throwFx.notes.length)) {
+      rows.push(build(i, { thrown: true }, { label: "метнуть", range: "Дальний" }));
+    }
+  }
+  if (lights.length >= 2) {
+    rows.push(build(lights[1], { offhand: true }, { label: "доп. атака", timing: "bonus", offhand: true }));
+  }
+  // Два одинаковых кинжала в руках дают одну строку атаки, а не две.
+  const seen = new Set<string>();
+  return rows.filter((r) => {
+    const key = [r.name, r.bonus, r.damage, r.range, r.timing].join("|");
+    return seen.has(key) ? false : (seen.add(key), true);
+  });
 }
 
 // A spell's `attackSave` field holds one of SPELL_ATTACK_SAVE_OPTIONS —
@@ -4637,7 +4796,8 @@ function featureActionRows(
       bonus: checksLabel(f.checks ?? [], spellAttackBonus, spellDc, dcExtra),
       damage: effectsLabel(
         resolveLevelDice(f.effects ?? [], classLevelOf?.(f.sourceParentId) ?? null),
-        f.checks ?? []
+        f.checks ?? [],
+        dcExtra?.profBonus
       ),
       // Время не дублируем — оно и есть заголовок секции таблицы; в этой
       // колонке у умения полезнее его стоимость («Ячейка», «1 за долгий
@@ -5867,6 +6027,47 @@ function collectSheetHits(
 // сигнал мастеру (напоминалка + живое событие), цель выбирает мастер.
 const MARK_SPELLS = ["Метка охотника", "Сглаз"];
 
+// Наложенное заклинание начинает действовать (гриллинг 2026-09-23, Q16):
+// заклинание на концентрации становится концентрацией (по правилам вторая
+// снимает первую), числовая защита без концентрации («Доспехи мага», «Щит»)
+// — действующим, чтобы КЗ посчитал её сам. Остальное лист не отслеживает.
+function spellActivationPatch(spell: DndSpellEntry, value: DndCharacterData): Partial<DndCharacterData> {
+  if (spell.concentration) return { concentration: spell.name };
+  if ((spell.effects ?? []).some(isNumericDefense)) {
+    const active = value.activeSpells ?? [];
+    return active.includes(spell.name) ? {} : { activeSpells: [...active, spell.name] };
+  }
+  return {};
+}
+
+// Отметка «действует» руками — для наложенного без ячейки (воззвание
+// «Доспехи теней», свиток) и чтобы снять досрочно. Только у числовой защиты:
+// у остального отметка ничего бы не меняла.
+function ActiveSpellToggle({
+  spell,
+  value,
+  onQuickUpdate,
+}: {
+  spell: DndSpellEntry;
+  value: DndCharacterData;
+  onQuickUpdate: (patch: Partial<DndCharacterData>) => void;
+}) {
+  if (!(spell.effects ?? []).some(isNumericDefense)) return null;
+  const on = spell.concentration ? value.concentration === spell.name : (value.activeSpells ?? []).includes(spell.name);
+  const toggle = () => {
+    if (spell.concentration) onQuickUpdate({ concentration: on ? "" : spell.name });
+    else {
+      const active = value.activeSpells ?? [];
+      onQuickUpdate({ activeSpells: on ? active.filter((n) => n !== spell.name) : [...active, spell.name] });
+    }
+  };
+  return (
+    <button type="button" className="comp-mini" aria-pressed={on} onClick={toggle}>
+      {on ? "Действует — снять" : "Уже действует — отметить"}
+    </button>
+  );
+}
+
 function SpendAction({
   row,
   value,
@@ -5890,7 +6091,15 @@ function SpendAction({
 }) {
   if (row.source?.kind === "spell") {
     const level = row.source.level;
-    if (level === 0) return <span className="muted">Заговор — тратить нечего.</span>;
+    const castSpell = row.source.spell;
+    const toggle = <ActiveSpellToggle spell={castSpell} value={value} onQuickUpdate={onQuickUpdate} />;
+    if (level === 0)
+      return (
+        <div className="stack" style={{ gap: 6, alignItems: "flex-start" }}>
+          <span className="muted">Заговор — тратить нечего.</span>
+          {toggle}
+        </div>
+      );
     // Арканум колдуна (тикет 03 warlock): ячейки нет, есть 1 использование
     // на долгий отдых — трек тот же (пипсы круга), подпись честная.
     const isArcanum = row.source.spell.arcanum === true;
@@ -5914,6 +6123,7 @@ function SpendAction({
     const usePact = pactFree && (use < 0 || pact!.circle <= use + 1);
     if (use < 0 && !pactFree)
       return (
+        <div className="stack" style={{ gap: 6, alignItems: "flex-start" }}>
         <span className="muted">
           {isArcanum
             ? "Арканум уже использован — вернётся долгим отдыхом."
@@ -5924,6 +6134,8 @@ function SpendAction({
                 "Ячейки договора кончились — вернутся коротким отдыхом."
               : `Свободных ячеек ${level} круга и выше нет.`}
         </span>
+        {toggle}
+        </div>
       );
     // Вниз кастовать нельзя (только вверх), поэтому другие круги — тоже
     // от своего и выше. Основная кнопка — ближайший свободный (обычный
@@ -5933,11 +6145,11 @@ function SpendAction({
     const spend = (circle: number) => {
       const next = value.spellSlotsUsed.slice();
       next[circle] = (next[circle] ?? 0) + 1;
-      onQuickUpdate({ spellSlotsUsed: next });
+      onQuickUpdate({ spellSlotsUsed: next, ...spellActivationPatch(castSpell, value) });
       onDone();
     };
     const spendPact = () => {
-      onQuickUpdate({ pactSlotsUsed: pactUsed + 1 });
+      onQuickUpdate({ pactSlotsUsed: pactUsed + 1, ...spellActivationPatch(castSpell, value) });
       onDone();
     };
     const spendPrimary = () => (usePact ? spendPact() : spend(use));
@@ -6006,6 +6218,7 @@ function SpendAction({
               ? `Потратить ячейку договора (${pact!.circle} круг)`
               : `Потратить ячейку ${use + 1} круга`}
         </button>
+        {toggle}
         {markSpell && characterId != null && (
           <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
             <button
@@ -7916,64 +8129,108 @@ function InitiativeRollModal({
 // not captured by inventory (Shield/Mage Armor spells, …), same click-to-edit
 // shell as TextQuickBox.
 function AcQuickBox({
-  computed,
+  derived,
   manualBonus,
-  hint,
+  activeSpells,
   onQuickUpdate,
 }: {
-  computed: number;
+  derived: Derived;
   manualBonus: string;
-  hint?: string | null;
+  /** Действующие заклинания без концентрации — плашками под костью. */
+  activeSpells: string[];
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(manualBonus);
-  function commit() {
-    onQuickUpdate?.({ manualAcBonus: draft });
-    setEditing(false);
-  }
+  const [open, setOpen] = useState(false);
+  // Плашка — только у заклинания, которое сейчас меняет КЗ: «Доспехи мага»
+  // под латами не действуют, и плашка без эффекта путала бы.
+  const chips = activeSpells
+    .map((name) => ({ name, part: derived.parts.find((p) => p.label === name) }))
+    .filter((c) => c.part);
+  const dismiss = (name: string) =>
+    onQuickUpdate?.({ activeSpells: activeSpells.filter((n) => n !== name) });
   return (
     <div>
       <div className="sb-label">КЗ</div>
-      {editing ? (
-        <input
-          autoFocus
-          type="number"
-          style={{ width: 48 }}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => e.key === "Enter" && commit()}
-          title="Доп. бонус к КЗ (не из инвентаря)"
-        />
-      ) : (
-        <SbQuickValue
-          className="dnd-die-quick"
-          title={onQuickUpdate ? "Нажмите, чтобы задать доп. бонус к КЗ" : undefined}
-          ariaLabel="Класс защиты — задать дополнительный бонус"
-          onClick={
-            onQuickUpdate
-              ? () => {
-                  setDraft(manualBonus);
-                  setEditing(true);
-                }
-              : undefined
-          }
-        >
-          {/* Кость только вокруг показываемого значения: правка открывается
-              обычным полем, и силуэт в неё не лезет — иначе ввод пришлось бы
-              вписывать в шестиугольник. */}
-          <DndDie size="lg" textured>
-            <span className="dnd-die-value">{computed}</span>
-          </DndDie>
-        </SbQuickValue>
-      )}
-      {hint && (
-        <div className="muted" style={{ fontSize: "var(--fs-meta)" }}>
-          {hint}
+      <SbQuickValue
+        className="dnd-die-quick"
+        title="Нажмите, чтобы увидеть, из чего сложился КЗ"
+        ariaLabel={`Класс защиты ${derived.value} — из чего сложился`}
+        onClick={() => setOpen(true)}
+      >
+        <DndDie size="lg" textured>
+          <span className="dnd-die-value">{derived.value}</span>
+        </DndDie>
+      </SbQuickValue>
+      {chips.map(({ name, part }) => (
+        <div key={name} className="dnd-ac-chip">
+          <span>{derived.parts.indexOf(part!) === 0 ? name : `${formatModifier(part!.value)} ${name}`}</span>
+          {onQuickUpdate && (
+            <button type="button" className="comp-mini" aria-label={`${name} — закончилось`} onClick={() => dismiss(name)}>
+              ✕
+            </button>
+          )}
         </div>
+      ))}
+      {open && (
+        <AcBreakdownModal derived={derived} manualBonus={manualBonus} onQuickUpdate={onQuickUpdate} onClose={() => setOpen(false)} />
       )}
     </div>
+  );
+}
+
+// Разбор КЗ (гриллинг 2026-09-23, Q23): из чего сложилось число и что не
+// вошло, с причиной. Первая строка — база (доспех, «Без доспеха» или формула
+// умения), дальше — прибавки. Ручная поправка — отдельной строкой с полем,
+// как у инициативы: задать её больше негде.
+function AcBreakdownModal({
+  derived,
+  manualBonus,
+  onQuickUpdate,
+  onClose,
+}: {
+  derived: Derived;
+  manualBonus: string;
+  onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
+  onClose: () => void;
+}) {
+  const [draft, setDraft] = useState(manualBonus);
+  const rows = derived.parts.filter((p) => p.label !== "Прочее");
+  return (
+    <Modal onClose={onClose} ariaLabel="Класс защиты">
+      <div className="stack dnd-init-modal" style={{ gap: 10 }}>
+        <strong>Класс защиты {derived.value}</strong>
+        {derived.stale && <div className="muted">{derived.stale}</div>}
+        <div className="stack dnd-init-breakdown" style={{ gap: 2 }}>
+          {rows.map((p, i) => (
+            <div key={`${p.label}-${i}`} className="row dnd-init-row" style={{ justifyContent: "space-between" }}>
+              <span>{p.label}</span>
+              <span>{i === 0 ? p.value : formatModifier(p.value)}</span>
+            </div>
+          ))}
+          {(derived.inactive ?? []).map((x) => (
+            <div key={`off-${x.label}`} className="row dnd-init-row muted" style={{ justifyContent: "space-between" }}>
+              <span>{x.label}</span>
+              <span>не учтено: {x.reason}</span>
+            </div>
+          ))}
+          <div className="row dnd-init-row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+            <span>Дополнительный бонус</span>
+            {onQuickUpdate ? (
+              <input
+                type="number"
+                style={{ width: 56 }}
+                aria-label="Дополнительный бонус к КЗ"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={() => draft !== manualBonus && onQuickUpdate({ manualAcBonus: draft })}
+              />
+            ) : (
+              <span>{manualBonus || "0"}</span>
+            )}
+          </div>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -8266,7 +8523,7 @@ function DndReplicaBlock({
       )}
       {baseFor && (
         <DndReplicaBasePicker
-          scheme={baseFor}
+          title={baseFor.name}
           systemId={systemId}
           onClose={() => setBaseFor(null)}
           onPick={(base) => {
@@ -8598,12 +8855,13 @@ function DndReplicaSchemePicker({
 
 /** Какое именно оружие (доспех, щит) стало «+1» — решение R3. */
 function DndReplicaBasePicker({
-  scheme,
+  title,
   systemId,
   onPick,
   onClose,
 }: {
-  scheme: DndReplicaScheme;
+  /** Название прибавки («Доспех +1»): по слову в нём отбирается база. */
+  title: string;
   systemId: number | null;
   onPick: (base: { name: string; entryId: number | null; meta: Partial<DndEquipmentItem> }) => void;
   onClose: () => void;
@@ -8623,9 +8881,12 @@ function DndReplicaBasePicker({
 
   // Отбор по тому же слову, что стоит в названии схемы: «Оружие +1» — оружие,
   // «Доспех +1» — доспехи, «Щит +1» — щиты.
-  const wanted = /доспех/i.test(scheme.name) ? "armor" : /щит/i.test(scheme.name) ? "shield" : "weapon";
+  const wanted = /доспех/i.test(title) ? "armor" : /щит/i.test(title) ? "shield" : "weapon";
   const q = query.trim().toLowerCase();
   const rows = (options ?? []).filter((e) => {
+    // Основа — обычный предмет: «Латы дварфов» с классом доспеха в данных
+    // основой для «Доспеха +1» не бывают.
+    if (e.kind !== "equipment") return false;
     const armorType = typeof e.data.armor_type === "string" ? e.data.armor_type : "";
     const isShield = armorType.trim().toLowerCase().startsWith("щит");
     const kind = isShield ? "shield" : armorType ? "armor" : e.data.damage ? "weapon" : "";
@@ -8637,7 +8898,7 @@ function DndReplicaBasePicker({
     <Modal onClose={onClose}>
       <div className="stack dnd-replica-modal">
         <div className="row" style={{ justifyContent: "space-between" }}>
-          <h3 style={{ margin: 0 }}>{scheme.name}: что именно?</h3>
+          <h3 style={{ margin: 0 }}>{title}: что именно?</h3>
           <button type="button" className="comp-mini" onClick={onClose} aria-label="Закрыть">
             <NavIcon name="close" />
           </button>
@@ -9092,6 +9353,9 @@ function DndRestModal({
       deathSaveSuccesses: 0,
       deathSaveFailures: 0,
       concentration: "",
+      // Действующие заклинания (8 часов «Доспехов мага», «Щит») отдых не
+      // переживают — иначе КЗ назавтра считал бы вчерашнее (Q16).
+      activeSpells: [],
       // 5.5: длинный отдых снимает один уровень истощения, а не всё сразу.
       exhaustion: Math.max(0, value.exhaustion - 1),
     });
@@ -10146,7 +10410,7 @@ export function DndCharacterView({
     );
   }, [needsFallbackTable, systemIdForSlots, fallbackProgressions.length]);
 
-  if (compact) return <DndCharacterViewMini value={value} />;
+  if (compact) return <DndCharacterViewMini value={withGrantedSenses(withLiveEffects(value, getEntry), getEntry)} />;
   const liveCantrips = value.cantrips.map((s) => resolveSpell(s, getEntry));
   const liveSpellsByLevel = value.spellsByLevel.map((lvl) => lvl.map((s) => resolveSpell(s, getEntry)));
   const computedSlots = computeSpellSlots(slotSources, fallbackProgressions);
@@ -10438,7 +10702,10 @@ export function DndCharacterView({
   // они были константами в теле компонента, вызвать их было нельзя, а бонус
   // мастерства читался из сохранённой строки — и устаревал молча при любой
   // правке класса или уровня.
-  const derived = deriveSheet(value);
+  // Числа — по эффектам из справочника, а не по сохранённым умениям: иначе
+  // разметка записи («Оборона», «Бдительный») до числа не доходила.
+  const liveValue = withLiveEffects(value, getEntry);
+  const derived = deriveSheet(liveValue);
   const spellAbilityMod = spellAbilityKey ? abilityModifier(value.abilities[spellAbilityKey]) : 0;
   const spellProfBonus = derived.proficiencyBonus.value;
   const spellAttackBonus = derived.spellcasting
@@ -10477,27 +10744,50 @@ export function DndCharacterView({
   // заклинания, умения классов, видов, черт и вручную вписанные атаки.
   // Считается здесь, а не на карте «Действия»: те же строки нужны закладкам
   // на первой карте, а собирать их дважды значит однажды разойтись.
-  // Безоружный удар монаха — первой строкой: им бьют и вместо атаки, и Шквалом.
-  const dexModForMartial = abilityModifier(value.abilities.dex);
-  const unarmedRows =
-    martial.active && martial.die
-      ? [
-          {
-            name: "Безоружный удар",
-            bonus: formatModifier(dexModForMartial + parseBonus(value.proficiencyBonus) - exhaustionPenalty),
-            damage: `${martial.die}${dexModForMartial !== 0 ? ` ${formatModifier(dexModForMartial)}` : ""}`,
-            range: "Ближний",
-            timing: "action" as const,
-            entryId: null,
-          },
-        ]
-      : [];
+  // Безоружный удар — первой строкой, но только когда его что-то меняет
+  // (гриллинг 2026-09-23, Q12): монах бьёт им вместо атаки и Шквалом, а
+  // «Сражение голыми руками» даёт свою кость. У остальных строки нет — «1 +
+  // Сила» почти никто не бросает, а место в таблице она занимала бы всегда.
+  const pb = derived.proficiencyBonus.value;
+  const freeHandsForUnarmed =
+    !wornArmorState(value.equipmentSections).hasShield &&
+    !value.equipmentSections.some((sec) => sec.items.some((it) => it.equipped && !it.transferOut && it.weaponDamage));
+  const weaponFx = (use: WeaponUse) => weaponEffects(liveValue, use, pb, freeHandsForUnarmed);
+  const unarmedFx = weaponFx({ unarmed: true });
+  const monkUnarmed = martial.active && !!martial.die;
+  const unarmedRows: AttackRow[] = [];
+  if (monkUnarmed || unarmedFx.dice || unarmedFx.attack.length || unarmedFx.damage.length || unarmedFx.notes.length) {
+    const strMod = abilityModifier(value.abilities.str);
+    const dexMod = abilityModifier(value.abilities.dex);
+    // Монах бьёт Ловкостью, если она не хуже; стиль сам по себе — Силой.
+    const mod = monkUnarmed ? Math.max(strMod, dexMod) : strMod;
+    const styleDie = unarmedFx.dice?.value ?? null;
+    const monkDie = monkUnarmed ? martial.die : null;
+    // Две кости (монах со стилем) — берётся большая.
+    const die = monkDie && styleDie ? (upgradeDamageDie(monkDie, styleDie) ? styleDie : monkDie) : monkDie ?? styleDie;
+    const attackExtra = unarmedFx.attack.reduce((n, x) => n + x.value, 0);
+    const damageExtra = unarmedFx.damage.reduce((n, x) => n + x.value, 0);
+    const dmg = mod + damageExtra;
+    unarmedRows.push({
+      name: "Безоружный удар",
+      bonus: formatModifier(mod + pb + attackExtra - exhaustionPenalty),
+      damage: [
+        die ? `${die} дробящий${dmg !== 0 ? ` ${formatModifier(dmg)}` : ""}` : `${Math.max(1, 1 + dmg)} дробящий`,
+        ...(unarmedFx.dice ? [unarmedFx.dice.source] : []),
+        ...unarmedFx.attack.map((x) => `${x.label} ${formatModifier(x.value)} к атаке`),
+        ...unarmedFx.notes,
+      ].join(" · "),
+      range: "Ближний",
+      timing: "action" as const,
+      entryId: null,
+    });
+  }
   const actionRows = [
     ...unarmedRows,
     ...weaponAttackRows(
       value.equipmentSections,
       value.abilities,
-      parseBonus(value.proficiencyBonus),
+      pb,
       exhaustionPenalty,
       martial.active && martial.die
         ? { die: martial.die, isMonkWeapon: monkWeaponOf }
@@ -10509,7 +10799,8 @@ export function DndCharacterView({
             ),
             names: new Set(value.masteredWeapons.map((w) => w.name.trim().toLowerCase()).filter(Boolean)),
           }
-        : null
+        : null,
+      weaponFx
     ),
     ...combatSpellRows(liveCantrips, liveSpellsByLevel, spellAttackBonus, spellDc),
     // Уровень класса-хозяина для кубов levelDice: строка класса/подкласса
@@ -10586,20 +10877,7 @@ export function DndCharacterView({
     (value.hitPointsCurrent !== "" && (Number(value.hitPointsCurrent) || 0) <= 0) ||
     value.deathSaveSuccesses > 0 ||
     value.deathSaveFailures > 0;
-  // Защита без доспехов — плюсом поверх computeArmorClass (та же схема, что в
-  // мини-карте выше): базовая формула про умение не знает.
-  const unarmored = unarmoredDefenseBonus(
-    value.classFeatures,
-    value.classes,
-    abilityModifier(value.abilities.wis),
-    abilityModifier(value.abilities.con),
-    value.equipmentSections
-  );
-  // Число берём из общего модуля; `unarmored` рядом остаётся ради подписи
-  // «откуда прибавка» — это уже разметка, а не расчёт.
   const computedAc = derived.armorClass.value;
-  // Подпись под костью КЗ — откуда прибавка, если защита без доспехов активна.
-  const unarmoredHint = unarmored.source;
   return (
     <div className="sb-scope" onClickCapture={() => highlight && setHighlight(null)}>
       <div className="sb-card">
@@ -11154,7 +11432,7 @@ export function DndCharacterView({
                 только свободное поле во вкладке «Действия», которое пять
                 листов из семи так и оставили пустым. */}
             <div className="dnd-triad">
-              <AcQuickBox computed={computedAc} manualBonus={value.manualAcBonus} hint={unarmoredHint} onQuickUpdate={onQuickUpdate} />
+              <AcQuickBox derived={derived.armorClass} manualBonus={value.manualAcBonus} activeSpells={value.activeSpells ?? []} onQuickUpdate={onQuickUpdate} />
               <HpQuickBox value={value} onQuickUpdate={onQuickUpdate} accentColor={cardColor} />
               <InitiativeQuickBox
                 derived={derived.initiative}
@@ -12287,7 +12565,7 @@ export function DndCharacterView({
                   </div>
                 </div>
               ) : (
-                <DndTraitsView value={value} />
+                <DndTraitsView value={withGrantedSenses(value, getEntry)} />
               )}
               {draftFeatures ? (
                 <>

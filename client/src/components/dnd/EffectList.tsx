@@ -7,6 +7,8 @@ import {
   EFFECT_TYPE_LABELS,
   ROLL_TARGET_LABELS,
   PROFICIENCY_SHARE_LABELS,
+  ARMOR_CONDITION_LABELS,
+  WEAPON_FILTER_LABELS,
   EFFECT_TYPE_ORDER,
   EFFECT_WHEN_LABELS,
   EMPTY_COST,
@@ -34,6 +36,8 @@ import {
   type DndMovementKind,
   type DndRollTarget,
   type DndProficiencyShare,
+  type DndArmorCondition,
+  type DndWeaponFilter,
 } from "./effects";
 import { loadDndMechanicsGroup, type DndMechanicsOption } from "./dndCompendium";
 import { ABILITY_LABELS } from "./AbilityScores";
@@ -101,6 +105,29 @@ function RefSelect({
 // The per-type field set. Kept as one switch rather than a component per
 // effect type: each branch is two or three inputs, and splitting them would
 // spread one small decision across thirteen files.
+function ArmorConditionSelect({
+  value,
+  onChange,
+}: {
+  value: DndArmorCondition | undefined;
+  onChange: (patch: Partial<DndEffect>) => void;
+}) {
+  return (
+    <select
+      value={value ?? ""}
+      title="При каком надетом действует"
+      onChange={(e) => onChange({ armorCondition: e.target.value ? (e.target.value as DndArmorCondition) : undefined })}
+    >
+      <option value="">всегда</option>
+      {(Object.keys(ARMOR_CONDITION_LABELS) as DndArmorCondition[]).map((c) => (
+        <option key={c} value={c}>
+          {ARMOR_CONDITION_LABELS[c]}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function EffectFields({
   effect,
   damageTypes,
@@ -258,8 +285,109 @@ function EffectFields({
                   </option>
                 ))}
               </select>
+              <ArmorConditionSelect value={effect.armorCondition} onChange={onChange} />
             </>
           )}
+          {/* Атака и урон — только выбранным оружием («Стрельба из лука»,
+              «Дуэлянт»). Без фильтра прибавка к атаке или урону листом не
+              применяется: «ко всем атакам» в 5.5 почти не бывает, а ошибка
+              разметки дала бы число на каждой строке. */}
+          {(effect.appliesTo === "attack" || effect.appliesTo === "damage") && (
+            <select
+              value={effect.weapon ?? ""}
+              title="Каким оружием"
+              onChange={(e) => onChange({ weapon: e.target.value ? (e.target.value as DndWeaponFilter) : undefined })}
+            >
+              <option value="">оружие не выбрано</option>
+              {(Object.keys(WEAPON_FILTER_LABELS) as DndWeaponFilter[]).map((w) => (
+                <option key={w} value={w}>
+                  {WEAPON_FILTER_LABELS[w]}
+                </option>
+              ))}
+            </select>
+          )}
+          {effect.appliesTo === "damage" && effect.weapon && (
+            <>
+              <input
+                type="number"
+                style={{ width: 56 }}
+                placeholder="мин."
+                title="1 и 2 на кости урона считаются этим числом («Сражение большим оружием» — 3)"
+                value={effect.dieMinimum ?? ""}
+                onChange={(e) => onChange({ dieMinimum: e.target.value === "" ? undefined : Number(e.target.value) })}
+              />
+              <label className="row" style={{ gap: 4 }} title="Вернуть модификатор характеристики в урон доп. атаки">
+                <input
+                  type="checkbox"
+                  checked={!!effect.addAbility}
+                  onChange={(e) => onChange({ addAbility: e.target.checked || undefined })}
+                />
+                модификатор в урон
+              </label>
+              {effect.weapon === "unarmed" && (
+                <>
+                  <input
+                    placeholder="Кость, напр. 1к6"
+                    value={effect.dice ?? ""}
+                    onChange={(e) => onChange({ dice: e.target.value || undefined })}
+                  />
+                  <input
+                    placeholder="Без оружия и щита, напр. 1к8"
+                    value={effect.diceFreeHands ?? ""}
+                    onChange={(e) => onChange({ diceFreeHands: e.target.value || undefined })}
+                  />
+                </>
+              )}
+            </>
+          )}
+        </>
+      );
+    case "defense":
+      // Числа КЗ — машинная разметка: прибавка («Оборона» +1, «Щит» +5) или
+      // своя формула («Доспехи мага» 13 + Лов). Пусто — защита описана
+      // текстом в «Уточнении» и в КЗ не входит.
+      return (
+        <>
+          <input
+            type="number"
+            style={{ width: 56 }}
+            placeholder="+КЗ"
+            title="Прибавка к КЗ"
+            value={effect.flat ?? ""}
+            onChange={(e) => onChange({ flat: e.target.value === "" ? undefined : Number(e.target.value) })}
+          />
+          <input
+            type="number"
+            style={{ width: 64 }}
+            placeholder="база"
+            title="Своя формула КЗ: база (13 у «Доспехов мага») плюс отмеченные характеристики"
+            value={effect.acBase?.base ?? ""}
+            onChange={(e) =>
+              onChange({
+                acBase: e.target.value === "" ? undefined : { base: Number(e.target.value), abilities: effect.acBase?.abilities ?? ["dex"] },
+              })
+            }
+          />
+          {effect.acBase &&
+            ABILITY_LABELS.map(({ key: a, label }) => (
+              <label key={a} className="row" style={{ gap: 2 }}>
+                <input
+                  type="checkbox"
+                  checked={effect.acBase!.abilities.includes(a)}
+                  onChange={(e) => {
+                    const cur = effect.acBase!.abilities;
+                    onChange({
+                      acBase: {
+                        base: effect.acBase!.base,
+                        abilities: e.target.checked ? [...cur, a] : cur.filter((x) => x !== a),
+                      },
+                    });
+                  }}
+                />
+                {label}
+              </label>
+            ))}
+          <ArmorConditionSelect value={effect.armorCondition} onChange={onChange} />
         </>
       );
     default:

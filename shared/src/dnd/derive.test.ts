@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { deriveSheet, proficiencyBonusForLevel, creatureInitiativeModifier, hitPointLumpFor } from "./derive";
+import { deriveSheet, proficiencyBonusForLevel, creatureInitiativeModifier, hitPointLumpFor, weaponEffects } from "./derive";
 import { emptyDndCharacter } from "./normalize";
-import type { DndCharacterData, DndClassEntry, DndEquipmentItem, DndFeature } from "./types";
+import type { DndCharacterData, DndClassEntry, DndEquipmentItem, DndFeature, DndSpellEntry } from "./types";
 import type { DndEffect } from "./effects";
 import { resolveSkillOriginal } from "./skillCatalog";
 
@@ -35,6 +35,10 @@ function item(over: Partial<DndEquipmentItem> = {}): DndEquipmentItem {
 
 function feature(name: string): DndFeature {
   return { name, description: "" } as DndFeature;
+}
+
+function defense(name: string, over: Partial<DndEffect>): DndFeature {
+  return { name, description: "", effects: [{ id: "d", type: "defense", when: "always", ...over }] } as DndFeature;
 }
 
 /** Слагаемые обязаны складываться в само число — иначе разбор врёт. */
@@ -150,31 +154,105 @@ describe("класс защиты", () => {
     expect(deriveSheet(c).armorClass.value).toBe(10 + 2 + 2);
   });
 
-  it("защита без доспехов монаха добавляет Мудрость и гасится щитом", () => {
+  it("защита без доспехов монаха — формула из эффекта, гасится щитом", () => {
     const base = {
       abilities: { str: 10, dex: 14, con: 12, int: 10, wis: 16, cha: 10 },
       classes: [cls({ className: "Монах", level: 5 })],
-      classFeatures: [feature("Защита без доспехов")],
+      classFeatures: [defense("Защита без доспехов", { acBase: { base: 10, abilities: ["dex", "wis"] }, armorCondition: "no_armor_no_shield" })],
     } as Partial<DndCharacterData>;
 
-    expect(deriveSheet(character(base)).armorClass.value).toBe(10 + 2 + 3);
+    const bare = deriveSheet(character(base)).armorClass;
+    expect(bare.value).toBe(10 + 2 + 3);
+    partsAddUp(bare);
 
-    const withShield = character({
+    const withShield = deriveSheet(character({
       ...base,
       equipmentSections: [{ name: "Общее", items: [item({ name: "Щит", armorType: "Щит", ac: "2" })] }],
-    });
+    })).armorClass;
     // Монаху щит умение гасит: 10 + Ловкость + щит, без Мудрости.
-    expect(deriveSheet(withShield).armorClass.value).toBe(10 + 2 + 2);
+    expect(withShield.value).toBe(10 + 2 + 2);
+    expect(withShield.inactive).toEqual([{ label: "Защита без доспехов", reason: "со щитом" }]);
   });
 
   it("варвару щит умение не гасит", () => {
     const c = character({
       abilities: { str: 10, dex: 14, con: 16, int: 10, wis: 10, cha: 10 },
       classes: [cls({ className: "Варвар", level: 5 })],
-      classFeatures: [feature("Защита без доспехов")],
+      classFeatures: [defense("Защита без доспехов", { acBase: { base: 10, abilities: ["dex", "con"] }, armorCondition: "no_armor" })],
       equipmentSections: [{ name: "Общее", items: [item({ name: "Щит", armorType: "Щит", ac: "2" })] }],
     });
-    expect(deriveSheet(c).armorClass.value).toBe(10 + 2 + 2 + 3);
+    expect(deriveSheet(c).armorClass.value).toBe(10 + 2 + 3 + 2);
+  });
+
+  it("имя умения без эффекта КЗ не меняет — правило живёт в данных", () => {
+    const c = character({
+      abilities: { str: 10, dex: 14, con: 10, int: 10, wis: 16, cha: 10 },
+      classes: [cls({ className: "Монах", level: 5 })],
+      classFeatures: [feature("Защита без доспехов")],
+    });
+    expect(deriveSheet(c).armorClass.value).toBe(12);
+  });
+
+  it("«Оборона» даёт +1 только в доспехе и объясняет, почему нет", () => {
+    const oborona = defense("Оборона", { flat: 1, armorCondition: "armor" });
+    const mail = item({ name: "Кольчуга", armorType: "Тяжёлый", ac: "16", dexBonus: false });
+    const worn = deriveSheet(character({ feats: [oborona], equipmentSections: [{ name: "", items: [mail] }] })).armorClass;
+    expect(worn.value).toBe(17);
+    expect(worn.parts.map((p) => p.label)).toEqual(["Кольчуга", "Оборона"]);
+    partsAddUp(worn);
+
+    const bare = deriveSheet(character({ feats: [oborona] })).armorClass;
+    expect(bare.value).toBe(10);
+    expect(bare.inactive).toEqual([{ label: "Оборона", reason: "нет доспеха" }]);
+  });
+
+  it("«Доспехи мага» считаются, только пока действуют, и уступают лучшей формуле", () => {
+    const mageArmor = { entryId: 1, name: "Доспехи мага", prepared: 1, effects: [{ id: "d", type: "defense", when: "always", acBase: { base: 13, abilities: ["dex"] }, armorCondition: "no_armor" }] } as DndSpellEntry;
+    const base = {
+      abilities: { str: 10, dex: 16, con: 10, int: 10, wis: 10, cha: 10 },
+      spellsByLevel: [[mageArmor], [], [], [], [], [], [], [], []],
+    } as Partial<DndCharacterData>;
+    expect(deriveSheet(character(base)).armorClass.value).toBe(13);
+    const on = deriveSheet(character({ ...base, activeSpells: ["Доспехи мага"] })).armorClass;
+    expect(on.value).toBe(16);
+    expect(on.parts[0]).toEqual({ label: "Доспехи мага", value: 13 });
+  });
+
+  it("заклинание на концентрации действует через неё («Щит веры»)", () => {
+    const sof = { entryId: 2, name: "Щит веры", prepared: 1, concentration: true, effects: [{ id: "d", type: "defense", when: "always", flat: 2 }] } as DndSpellEntry;
+    const base = { spellsByLevel: [[sof], [], [], [], [], [], [], [], []] } as Partial<DndCharacterData>;
+    expect(deriveSheet(character(base)).armorClass.value).toBe(10);
+    expect(deriveSheet(character({ ...base, concentration: "Щит веры" })).armorClass.value).toBe(12);
+  });
+
+  it("вещь с настройкой даёт КЗ только настроенной", () => {
+    const cloak = (attuned: boolean) => item({ name: "Плащ защиты", requiresAttunement: true, attuned, effects: [{ id: "d", type: "defense", when: "always", flat: 1 }] });
+    expect(deriveSheet(character({ equipmentSections: [{ name: "", items: [cloak(true)] }] })).armorClass.value).toBe(11);
+    const off = deriveSheet(character({ equipmentSections: [{ name: "", items: [cloak(false)] }] })).armorClass;
+    expect(off.value).toBe(10);
+    expect(off.inactive).toEqual([{ label: "Плащ защиты", reason: "не настроено" }]);
+  });
+
+  it("кольцо защиты: +1 к КЗ и ко всем спасброскам, пока настроено", () => {
+    const ring = item({
+      name: "Кольцо защиты",
+      requiresAttunement: true,
+      attuned: true,
+      effects: [
+        { id: "a", type: "defense", when: "always", flat: 1 },
+        { id: "s", type: "roll_modifier", when: "always", appliesTo: "save", flat: 1 },
+      ],
+    });
+    const sheet = deriveSheet(character({ equipmentSections: [{ name: "", items: [ring] }] }));
+    expect(sheet.armorClass.value).toBe(11);
+    expect(sheet.saves.wis.value).toBe(1);
+    partsAddUp(sheet.saves.wis);
+  });
+
+  it("ненастроенная вещь не даёт и инициативы", () => {
+    const eff = [{ id: "i", type: "roll_modifier", when: "always", appliesTo: "initiative", flat: 5 }] as DndEffect[];
+    const c = character({ equipmentSections: [{ name: "", items: [item({ name: "Кольцо", requiresAttunement: true, attuned: false, effects: eff })] }] });
+    expect(deriveSheet(c).initiative.value).toBe(0);
   });
 
   it("сохранённое поле armorClass не читается, пока есть что надето", () => {
@@ -642,5 +720,44 @@ describe("разбор не врёт", () => {
     ]) {
       partsAddUp(d);
     }
+  });
+});
+
+describe("прибавки боевых стилей к оружию", () => {
+  function style(name: string, over: Partial<DndEffect>): DndFeature {
+    return { name, description: "", effects: [{ id: "s", type: "roll_modifier", when: "always", ...over }] } as DndFeature;
+  }
+
+  it("«Стрельба из лука» — +2 к атаке только дальнобойным", () => {
+    const c = character({ feats: [style("Стрельба из лука", { appliesTo: "attack", weapon: "ranged", flat: 2 })] });
+    expect(weaponEffects(c, { ranged: true }, 2).attack).toEqual([{ label: "Стрельба из лука", value: 2 }]);
+    expect(weaponEffects(c, { oneHand: true }, 2).attack).toEqual([]);
+    // До инициативы и прочих бросков прибавка с фильтром оружия не доходит.
+    expect(deriveSheet(c).initiative.value).toBe(0);
+  });
+
+  it("«Дуэлянт» — +2 к урону одной рукой, не двумя", () => {
+    const c = character({ feats: [style("Дуэлянт", { appliesTo: "damage", weapon: "melee_one_hand", flat: 2 })] });
+    expect(weaponEffects(c, { oneHand: true }, 2).damage).toEqual([{ label: "Дуэлянт", value: 2 }]);
+    expect(weaponEffects(c, { twoHand: true }, 2).damage).toEqual([]);
+  });
+
+  it("«Сражение большим оружием» — минимум на кости, не число", () => {
+    const c = character({ feats: [style("Сражение большим оружием", { appliesTo: "damage", weapon: "melee_two_hand", dieMinimum: 3 })] });
+    const e = weaponEffects(c, { twoHand: true }, 2);
+    expect(e.dieMinimum).toEqual({ value: 3, source: "Сражение большим оружием" });
+    expect(e.damage).toEqual([]);
+  });
+
+  it("«Сражение двумя оружиями» возвращает модификатор в доп. атаку", () => {
+    const c = character({ feats: [style("Сражение двумя оружиями", { appliesTo: "damage", weapon: "offhand_light", addAbility: true })] });
+    expect(weaponEffects(c, { offhand: true }, 2).addAbility).toBe("Сражение двумя оружиями");
+    expect(weaponEffects(c, { oneHand: true }, 2).addAbility).toBeNull();
+  });
+
+  it("«Сражение голыми руками» — 1к6, без оружия и щита 1к8", () => {
+    const c = character({ feats: [style("Сражение голыми руками", { appliesTo: "damage", weapon: "unarmed", dice: "1к6", diceFreeHands: "1к8" })] });
+    expect(weaponEffects(c, { unarmed: true }, 2).dice?.value).toBe("1к6");
+    expect(weaponEffects(c, { unarmed: true }, 2, true).dice?.value).toBe("1к8");
   });
 });

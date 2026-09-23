@@ -1,4 +1,4 @@
-import type { CompendiumEntry, DndActionTiming, DndFeature } from "../../types";
+import type { CompendiumEntry, DndActionTiming, DndCharacterData, DndFeature } from "../../types";
 import type { DndCheck, DndCost, DndEffect } from "./effects";
 
 // Выделено из DndCharacterForm: раздача особенностей нужна и форме, и
@@ -180,4 +180,68 @@ export function sumEntrySlots(list: EntrySlotSource[]): EntrySlot[] {
     else out.push({ key: def.key, group: def.group, total: def.count });
   }
   return out;
+}
+
+// Эффекты живут в записях справочника и подставляются по entryId, а не
+// хранятся в листе: разметка записи («Оборона» +1 КЗ) доходит до всех
+// персонажей сразу, без пересохранения листов. Числа листа (`deriveSheet`)
+// обязаны считаться по подставленному — иначе «Бдительный» показывался в
+// карточке, а в инициативу не шёл (найдено 2026-09-23). Вещи — только
+// надетые: остальные в числа не входят, и тянуть их записи незачем.
+type EntryLookup = (id: number | null | undefined) => CompendiumEntry | undefined;
+
+function liveEffects<T extends { entryId?: number | null; effects?: DndEffect[] }>(row: T, get: EntryLookup): T {
+  const effects = get(row.entryId)?.data.effects as DndEffect[] | undefined;
+  return effects ? { ...row, effects } : row;
+}
+
+export function withLiveEffects(value: DndCharacterData, get: EntryLookup): DndCharacterData {
+  const features = (list: DndFeature[]) => list.map((f) => liveEffects(f, get));
+  return {
+    ...value,
+    speciesFeatures: features(value.speciesFeatures),
+    classFeatures: features(value.classFeatures),
+    feats: features(value.feats),
+    specialAbilities: features(value.specialAbilities),
+    cantrips: value.cantrips.map((s) => liveEffects(s, get)),
+    spellsByLevel: value.spellsByLevel.map((lvl) => lvl.map((s) => liveEffects(s, get))),
+    equipmentSections: value.equipmentSections.map((sec) => ({
+      ...sec,
+      items: sec.items.map((it) => (it.equipped ? liveEffects(it, get) : it)),
+    })),
+  };
+}
+
+/** id записей, чьи эффекты нужны числам листа. */
+export function liveEffectEntryIds(value: DndCharacterData): (number | null | undefined)[] {
+  return [
+    ...value.speciesFeatures,
+    ...value.classFeatures,
+    ...value.feats,
+    ...value.specialAbilities,
+    ...value.cantrips,
+    ...value.spellsByLevel.flat(),
+    ...value.equipmentSections.flatMap((s) => s.items).filter((it) => it.equipped),
+  ].map((r) => r.entryId);
+}
+
+// Чувства, которые дают вид и черты («Тёмное зрение» дроу, «Сражение
+// вслепую»), — из их записей, как эффекты: в лист они не копируются и потому
+// не устаревают. Сливаются с вписанными руками; у одного чувства из
+// нескольких источников берётся большая дальность (гриллинг 2026-09-23, Q13).
+export function withGrantedSenses(value: DndCharacterData, get: EntryLookup): DndCharacterData {
+  const granted = [get(value.raceId), ...value.feats.map((f) => get(f.entryId))].flatMap(
+    (e) => (e?.data.senses as { name?: string; distance?: string }[] | undefined) ?? []
+  );
+  if (granted.length === 0) return value;
+  const byName = new Map<string, { name: string; distance: string }>();
+  for (const s of [...value.sensesList, ...granted]) {
+    const name = (s.name ?? "").trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    const prev = byName.get(key);
+    const dist = (x: string | undefined) => Number.parseInt(x ?? "", 10) || 0;
+    if (!prev || dist(s.distance) > dist(prev.distance)) byName.set(key, { name, distance: String(s.distance ?? "") });
+  }
+  return { ...value, sensesList: [...byName.values()] };
 }
