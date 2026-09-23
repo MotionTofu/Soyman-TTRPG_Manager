@@ -75,3 +75,84 @@ html[data-app="oneshot"] .oneshot-modal .oneshot-actions {
     box-shadow: 4px 4px 0 var(--ui-danger);
   }
 }
+
+/* Sheet-owned fullscreen surfaces also belong to OneShot, including their
+   portal roots. Keep the shared D&D implementation and skin only this app. */
+html[data-app="oneshot"] .dnd-spell-picker {
+  background-color: var(--ui-surface);
+  background-image: var(--skin-paper-panel);
+  color: var(--ui-text);
+}
+html[data-app="oneshot"] .dnd-spell-picker-head {
+  border-bottom: 3px solid var(--ui-border);
+}
+html[data-app="oneshot"] .dnd-spell-picker-title,
+html[data-app="oneshot"] .dnd-deck-fan-title {
+  font-family: var(--font-ui);
+  font-size: clamp(24px, 5vw, 32px);
+  font-weight: 800;
+  line-height: 1.05;
+  text-transform: uppercase;
+}
+html[data-app="oneshot"] .dnd-spell-picker-sub {
+  line-height: 1.35;
+}
+html[data-app="oneshot"] .dnd-spell-picker-close,
+html[data-app="oneshot"] .dnd-deck-fan-close {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  border: 2px solid currentColor;
+}
+html[data-app="oneshot"] .dnd-spell-picker-search {
+  padding: 0 10px;
+  border: 2px solid var(--ui-border);
+  background: var(--ui-surface);
+}
+html[data-app="oneshot"] .dnd-spell-picker-search input {
+  min-height: 44px;
+  outline: none;
+}
+html[data-app="oneshot"] .dnd-spell-picker-search:focus-within {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+html[data-app="oneshot"] .dnd-spell-picker-chips .dnd-pick-chip {
+  min-height: 44px;
+  border: 2px solid var(--ui-border);
+  color: var(--ui-text);
+  font-weight: 800;
+}
+html[data-app="oneshot"] .dnd-spell-picker-chips .dnd-pick-chip.is-on {
+  background: var(--ui-accent);
+  color: var(--ui-text);
+}
+html[data-app="oneshot"] .dnd-spell-picker-list > p.muted {
+  margin: 16px;
+  padding: 12px;
+  border-left: 3px solid var(--ui-accent);
+  background: var(--ui-surface);
+  line-height: 1.4;
+}
+html[data-app="oneshot"] .dnd-spell-picker-foot {
+  border-top: 3px solid var(--ui-border);
+  background: var(--ui-surface);
+}
+html[data-app="oneshot"] .dnd-spell-picker-foot button {
+  min-height: 44px;
+  border: 2px solid var(--ui-border);
+  border-radius: 0;
+  font-weight: 800;
+}
+html[data-app="oneshot"] .dnd-spell-picker :is(button, input):focus-visible,
+html[data-app="oneshot"] .dnd-deck-fan-overlay button:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+@media (max-width: 360px) {
+  html[data-app="oneshot"] .dnd-deck-fan-sub { display: none; }
+  html[data-app="oneshot"] .dnd-deck-fan-head .dnd-deck-fan-close:first-of-type {
+    margin-left: auto;
+  }
+}
