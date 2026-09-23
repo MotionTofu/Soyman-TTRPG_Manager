@@ -76,6 +76,81 @@ html[data-app="oneshot"] .oneshot-modal .oneshot-actions {
   }
 }
 
+/* The shared sheet owns initiative and AC breakdowns. Its plain Modal shell
+   needs the same paper treatment without changing mechanics or other apps. */
+html[data-app="oneshot"] .modal-backdrop:has(.dnd-init-modal) {
+  padding: 12px;
+  background: rgba(16, 16, 16, .76);
+}
+html[data-app="oneshot"] .modal:has(.dnd-init-modal) {
+  width: 480px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px);
+  box-sizing: border-box;
+  padding: clamp(18px, 3vw, 28px);
+  border: 3px solid var(--ui-border);
+  border-radius: 0;
+  background: var(--ui-surface) var(--skin-paper-panel);
+  color: var(--ui-text);
+  box-shadow: 5px 5px 0 var(--ui-accent-secondary);
+}
+html[data-app="oneshot"] .dnd-init-modal {
+  min-width: 0;
+}
+html[data-app="oneshot"] .dnd-init-modal > strong {
+  font-family: var(--font-display);
+  font-size: clamp(22px, 4vw, 28px);
+  line-height: 1.08;
+  text-transform: uppercase;
+}
+html[data-app="oneshot"] .dnd-init-modal > .muted {
+  font-size: 13px;
+  line-height: 1.45;
+}
+html[data-app="oneshot"] .dnd-init-modal .dnd-init-breakdown {
+  padding-top: 10px;
+  border-top: 2px solid var(--ui-border);
+}
+html[data-app="oneshot"] .dnd-init-modal .dnd-init-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+  gap: 12px;
+  padding: 5px 0;
+  font-size: 13px;
+  line-height: 1.35;
+}
+html[data-app="oneshot"] .dnd-init-modal .dnd-init-row > :last-child {
+  max-width: 18ch;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+html[data-app="oneshot"] .dnd-init-modal input {
+  min-width: 72px;
+  min-height: 44px;
+  box-sizing: border-box;
+  border: 2px solid var(--ui-border);
+  border-radius: 0;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font-size: 16px;
+}
+html[data-app="oneshot"] .dnd-init-modal button {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 2px solid var(--ui-border);
+  border-radius: 0;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font-weight: 800;
+}
+html[data-app="oneshot"] .dnd-init-modal button:not(:disabled):hover {
+  background: var(--ui-accent);
+}
+html[data-app="oneshot"] .dnd-init-modal :is(button, input):focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+
 /* Sheet-owned fullscreen surfaces also belong to OneShot, including their
    portal roots. Keep the shared D&D implementation and skin only this app. */
 html[data-app="oneshot"] .dnd-spell-picker {
