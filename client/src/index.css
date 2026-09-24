@@ -66,7 +66,7 @@
   --primary-text: #ffffff;
   --player-bar-text: #1c1c1c;
   --font-display: 'Cormorant SC', serif;
-  --font-body: 'Archivo', sans-serif;
+  --font-body: 'Sofia Sans Semi Condensed', sans-serif;
   /* Typography voices (design doc §4.1). Display/Body vary per theme (see
      themes.ts); UI and Mono are the same everywhere — the doc doesn't call
      for them to shift per skin, only Display (headline face) does. Both
@@ -6283,7 +6283,7 @@ details.card[open] summary {
   justify-content: space-between;
 }
 /* C1: легенды fieldset — капс-подпись (Label: Oswald, капс, трекинг),
-   а не проза Archivo. Счётчики (n/N) внутри — значения, им моно. */
+   а не проза Sofia Sans. Счётчики (n/N) внутри — значения, им моно. */
 .wizard-legend {
   font-family: var(--font-ui);
   font-size: var(--fs-meta);

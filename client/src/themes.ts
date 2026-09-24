@@ -370,7 +370,7 @@ function skinTheme(
 // ZINE — the base skin: aged paper, ink, one blood red. Palette from §3.1.
 const ZINE_THEME = buildTheme("zine", "Соевый панк", "light", {
   bg: "#EDE7D9", text: "#12100E", accent: "#D6321E", border: "#12100E",
-  fontDisplay: "'RussianPunk', 'Anton', sans-serif", fontBody: "'Archivo', sans-serif",
+  fontDisplay: "'RussianPunk', 'Anton', sans-serif", fontBody: "'Sofia Sans Semi Condensed', sans-serif",
   textMutedOverride: "#6E675C",
   cardBorderWidth: 1, cardRadius: 0,
   bandBg: "#12100E",
@@ -391,7 +391,7 @@ const RIOT_THEME = skinTheme("riot", "Соевый бунт", "dark", {
   accent: "#C7261B", accent2: "#F2EDE1",
   surface: "#F2EDE1", onSurface: "#0B0B0B",
   line: "rgba(242,237,225,.22)", glow: "none",
-  fontDisplay: "'NewZelek', 'Anton', sans-serif", fontBody: "'Archivo', sans-serif",
+  fontDisplay: "'NewZelek', 'Anton', sans-serif", fontBody: "'Sofia Sans Semi Condensed', sans-serif",
   bandBg: "#F2EDE1",
   pageTexture: "radial-gradient(rgba(242,237,225,.05) 1px, transparent 1px) 0 0/3px 3px",
   semantic: { gm: "#F2EDE1", player: "#C7261B", paid: "#C7261B", free: "#8A8378", active: "#F2EDE1", hold: "#8A8378", danger: "#C7261B" },
@@ -404,7 +404,7 @@ const NEON_THEME = skinTheme("neon", "Соевый неон", "dark", {
   accent: "#FF2E88", accent2: "#B6FF2E",
   surface: "#0F0F14", onSurface: "#F0FFE8",
   line: "rgba(182,255,46,.35)", glow: "0 0 12px rgba(182,255,46,.45)",
-  fontDisplay: "'NewZelek', 'Anton', sans-serif", fontBody: "'Archivo', sans-serif",
+  fontDisplay: "'NewZelek', 'Anton', sans-serif", fontBody: "'Sofia Sans Semi Condensed', sans-serif",
   bandBg: "#0F0F14",
   bandImage: "repeating-linear-gradient(0deg, rgba(182,255,46,.07) 0 2px, transparent 2px 4px)",
   playerBarText: "#FF2E88",
@@ -413,7 +413,7 @@ const NEON_THEME = skinTheme("neon", "Соевый неон", "dark", {
 
 const SOY_NOIR_THEME = buildTheme("noir", "Соевый нуар", "light", {
   bg: "#e8e4da", text: "#1c1c1c", accent: "#1c1c1c", border: "#2a2a2a",
-  fontDisplay: "'Cormorant SC', serif", fontBody: "'Archivo', sans-serif",
+  fontDisplay: "'Cormorant SC', serif", fontBody: "'Sofia Sans Semi Condensed', sans-serif",
   bandImage: "repeating-linear-gradient(180deg, rgba(0,0,0,.06) 0 3px, transparent 3px 22px)",
   pageTexture: "radial-gradient(rgba(0,0,0,.05) 1px, transparent 1px) 0 0/3px 3px",
   cardBodyTexture: "radial-gradient(rgba(0,0,0,.035) 1px, transparent 1px) 0 0/3px 3px",
@@ -423,7 +423,7 @@ const SOY_NOIR_THEME = buildTheme("noir", "Соевый нуар", "light", {
 
 const ABERRANT_THEME = buildTheme("aberrant", "Соевая аберрация", "dark", {
   bg: "#0e0c14", text: "#c4b8d4", accent: "#b366e8", border: "#4a2f5c",
-  fontDisplay: "'PT Serif', serif", fontBody: "'PT Serif', serif",
+  fontDisplay: "'PT Serif', serif", fontBody: "'Sofia Sans Semi Condensed', sans-serif",
   bandBg: "radial-gradient(ellipse at 30% -10%, #3a1f4a, #0e0c14 70%)",
   textMutedOverride: "#7fd88a",
   levelInk: "#e0c15f",
@@ -439,7 +439,7 @@ const PEACE_THEME = buildTheme("peace", "Соевый покой", "dark", {
   accent2: "#2A835F",
   border: "#12544F",
   fontDisplay: "'Cormorant SC', serif",
-  fontBody: "'Archivo', sans-serif",
+  fontBody: "'Sofia Sans Semi Condensed', sans-serif",
   // Приглушённый текст — ровно самый светлый из палитры, а не микс
   // к фону: так вся четвёрка (#092328/#12544F/#2A835F/#8BBB92) живёт
   // в теме как есть, и при этом muted остаётся читаемым на тёмной бумаге.
@@ -571,6 +571,6 @@ export function createCustomTheme(name: string, mode: ThemeMode, accent: string)
   return buildTheme("custom-" + Date.now(), name, mode, {
     ...base, accent,
     fontDisplay: "'Cormorant Garamond', serif",
-    fontBody: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    fontBody: "'Sofia Sans Semi Condensed', sans-serif",
   });
 }

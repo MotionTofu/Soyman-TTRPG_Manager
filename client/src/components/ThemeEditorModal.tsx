@@ -29,6 +29,7 @@ const FONT_DISPLAY_OPTIONS = [
 ];
 
 const FONT_BODY_OPTIONS = [
+  { value: "'Sofia Sans Semi Condensed', sans-serif", label: "Sofia Sans Semi Condensed" },
   { value: "'Archivo', sans-serif", label: "Archivo" },
   { value: "'PT Serif', serif", label: "PT Serif" },
   { value: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", label: "System" },
