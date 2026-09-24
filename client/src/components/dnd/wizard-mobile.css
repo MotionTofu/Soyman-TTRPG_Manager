@@ -1,0 +1,744 @@
+/* Мобильный визард создания персонажа (гриллинг 2026-09-24).
+   Каркас: шапка — тело со скроллом — подвал с «Назад / Далее» на одном
+   месте. На телефоне визард во весь экран, на ПК — модалка со сплитом. */
+
+.modal.wz-modal {
+  width: 620px;
+  max-width: 94vw;
+  height: 92dvh;
+  max-height: 92dvh;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+@media (min-width: 1001px) {
+  .modal.wz-modal:has(.wizard-split) {
+    width: 1020px;
+  }
+}
+@media (max-width: 700px) {
+  .modal-backdrop:has(> .wz-modal) {
+    padding: 0;
+  }
+  .modal.wz-modal {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+}
+
+.wz {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+/* ——— шапка ——— */
+.wz-top {
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4) 0;
+}
+.wz-steps-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-height: 48px;
+  padding: var(--sp-2) var(--sp-3);
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.wz-steps-btn small {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+.wz-steps-btn strong {
+  font-size: var(--fs-h3);
+}
+.wz-progress {
+  grid-column: 1 / -1;
+  height: 4px;
+  background: var(--line);
+  overflow: hidden;
+}
+.wz-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+.wz-icon-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  font-size: 22px;
+  line-height: 1;
+}
+.wz-icon-btn[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ——— тело ——— */
+.wz-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--sp-5) var(--sp-5) var(--sp-7);
+}
+.wz-body .wizard-split {
+  min-height: 100%;
+}
+.wz-step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+.wz-step-lead {
+  margin: 0;
+  opacity: 0.8;
+}
+.wz-toast {
+  margin-bottom: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  border-left: 4px solid var(--accent);
+  background: var(--paper);
+  animation: wz-toast 3.5s ease forwards;
+}
+@keyframes wz-toast {
+  0%,
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ——— подвал ——— */
+.wz-foot {
+  flex: none;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--sp-3) var(--sp-4);
+  align-items: center;
+  padding: var(--sp-4) var(--sp-4) max(var(--sp-4), env(safe-area-inset-bottom));
+  border-top: var(--card-border-width, 1px) solid var(--line);
+  background: var(--paper-2);
+}
+.wz-foot-hint {
+  grid-column: 1 / -1;
+  font-size: var(--fs-meta);
+  opacity: 0.85;
+}
+.wz-foot button {
+  min-height: 48px;
+}
+.wz-foot .primary {
+  width: 100%;
+}
+
+/* ——— список шагов ——— */
+.wz-steplist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wz-steplist button {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  min-height: 52px;
+  padding: 0 var(--sp-2);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.wz-steplist button[aria-current="step"] {
+  font-weight: 700;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.wz-steplist .wz-step-num {
+  font-family: var(--font-mono);
+  opacity: 0.7;
+}
+.wz-steplist .wz-step-state {
+  font-size: var(--fs-meta);
+}
+.wz-steplist .is-missing {
+  color: var(--accent);
+}
+
+/* ——— шторка ——— */
+.modal-backdrop:has(> .wz-sheet) {
+  align-items: flex-end;
+  padding: 0;
+}
+.modal.wz-sheet {
+  width: 600px;
+  max-width: 100vw;
+  max-height: 88dvh;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 14px 14px 0 0;
+  box-sizing: border-box;
+  animation: wz-sheet-in 0.2s ease;
+}
+@media (min-width: 701px) {
+  .modal-backdrop:has(> .wz-sheet) {
+    align-items: center;
+    padding: var(--sp-5);
+  }
+  .modal.wz-sheet {
+    border-radius: var(--card-radius);
+    max-height: 80dvh;
+  }
+}
+@keyframes wz-sheet-in {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
+.wz-sheet-in {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+.wz-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-5);
+  border-bottom: 1px solid var(--line);
+}
+.wz-sheet-head strong {
+  font-size: var(--fs-h3);
+}
+.wz-sheet-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.wz-sheet-meta {
+  font-size: var(--fs-meta);
+  opacity: 0.8;
+}
+.wz-sheet-foot {
+  padding: var(--sp-4) var(--sp-5) max(var(--sp-4), env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+}
+.wz-wide-btn {
+  width: 100%;
+  min-height: 48px;
+}
+
+/* ——— список со строками под палец ——— */
+.wz-group-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-3);
+  padding-bottom: var(--sp-2);
+}
+.wz-group-label {
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.wz-count {
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+.wz-count.is-done {
+  color: var(--accent);
+}
+.wz-group-hint {
+  flex-basis: 100%;
+  font-size: var(--fs-meta);
+  opacity: 0.8;
+}
+.wz-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+.wz-row {
+  display: flex;
+  align-items: stretch;
+  min-height: 52px;
+  border-bottom: 1px solid var(--line);
+}
+.wz-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: var(--sp-3) var(--sp-2);
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.wz-row-title {
+  font-weight: 600;
+}
+.wz-row-title,
+.wz-row-meta {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.wz-row.is-picked {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.wz-more {
+  width: 100%;
+  min-height: 44px;
+  margin-top: var(--sp-2);
+}
+.wz .dnd-level-step-btn.wizard-touch {
+  flex-basis: 44px;
+  min-width: 44px;
+  min-height: 44px;
+}
+.wz-row-meta {
+  font-size: var(--fs-meta);
+  opacity: 0.75;
+}
+.wz-row-check {
+  flex: none;
+  width: 52px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  display: grid;
+  place-items: center;
+  color: inherit;
+  cursor: pointer;
+}
+.wz-row-check > span {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--line);
+  border-radius: 50%;
+  font-weight: 800;
+}
+.wz-row.is-picked .wz-row-check > span {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--paper);
+}
+.wz-row.is-blocked .wz-row-main,
+.wz-row.is-blocked .wz-row-check {
+  opacity: 0.45;
+}
+.wz-search {
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+}
+
+/* ——— лента карт ——— */
+.wz-ribbon {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.wz-ribbon-track {
+  display: flex;
+  gap: var(--sp-5);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  /* Отступы по бокам — половина экрана минус полкарты: крайние карты тоже
+     встают по центру. Проценты паддинга считаются от ширины родителя. */
+  --wz-slide: min(72vw, 300px);
+  padding: var(--sp-2) calc(50% - var(--wz-slide) / 2);
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.wz-ribbon-track::-webkit-scrollbar {
+  display: none;
+}
+.wz-slide {
+  position: relative;
+  flex: 0 0 var(--wz-slide);
+  scroll-snap-align: center;
+  opacity: 0.55;
+  transform: scale(0.93);
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+.wz-slide.is-current {
+  opacity: 1;
+  transform: none;
+}
+@media (min-width: 701px) {
+  .wz-ribbon-track {
+    --wz-slide: 220px;
+  }
+}
+.wz-slide-face {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.wz-slide.is-selected .dc-img,
+.wz-slide.is-selected .wz-slide-custom {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+.wz-slide-badge {
+  position: absolute;
+  top: var(--sp-3);
+  left: var(--sp-3);
+  padding: 2px var(--sp-3);
+  background: var(--accent);
+  color: var(--paper);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 700;
+}
+.wz-slide-custom {
+  aspect-ratio: 2 / 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  border: 2px dashed var(--line);
+  border-radius: 6px;
+  font-size: var(--fs-h3);
+  font-weight: 700;
+}
+.wz-slide-back {
+  aspect-ratio: 2 / 3;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+}
+.wz-slide-flip {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  width: 100%;
+  min-height: 40px;
+}
+.wz-ribbon-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.wz-ribbon-caption {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.wz-ribbon-caption strong {
+  font-size: var(--fs-h3);
+}
+.wz-ribbon-caption .muted {
+  font-size: var(--fs-meta);
+}
+.wz-center {
+  text-align: center;
+}
+
+/* ——— характеристики ——— */
+.wz-seg {
+  display: flex;
+  border: 2px solid var(--line);
+}
+.wz-seg button {
+  flex: 1;
+  min-height: 44px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+}
+.wz-seg button + button {
+  border-left: 2px solid var(--line);
+}
+.wz-seg button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--paper);
+}
+.wz-abil-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-4);
+}
+.wz-abil {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 96px;
+  padding: var(--sp-3) var(--sp-2);
+  border: 2px solid var(--line);
+  border-radius: 0;
+  background: var(--paper);
+  color: inherit;
+  font: inherit;
+}
+button.wz-abil {
+  cursor: pointer;
+}
+.wz-abil.is-armed {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--paper));
+}
+.wz-abil.is-key .wz-abil-label::after {
+  content: " ★";
+  color: var(--accent);
+}
+.wz-abil-label {
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.wz-abil-value {
+  font-family: var(--font-mono);
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+.wz-abil-final {
+  font-size: var(--fs-meta);
+}
+.wz-abil-final.is-boosted {
+  color: var(--accent);
+  font-weight: 700;
+}
+.wz-abil-pb {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.wz-abil-pb button {
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+}
+.wz-abil input {
+  width: 64px;
+  text-align: center;
+}
+.wz-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+.wz-chip {
+  min-height: 40px;
+  padding: 0 var(--sp-5);
+  border: 2px solid var(--line);
+  border-radius: 20px;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+.wz-chip[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--paper);
+}
+.wz-warn {
+  padding: var(--sp-3) var(--sp-4);
+  border-left: 4px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+/* ——— снаряжение: набор или сундук ——— */
+.wz-duel-row {
+  display: grid;
+  gap: var(--sp-4);
+}
+.wz-set {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+}
+.wz-set.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.wz-set-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  min-height: 190px;
+  padding: var(--sp-4) var(--sp-3) var(--sp-5);
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+.wz-set-art {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+}
+.wz-set-letter {
+  font-family: var(--font-display, var(--font-ui));
+  font-size: 22px;
+  font-weight: 800;
+}
+.wz-set-items {
+  font-size: var(--fs-meta);
+  line-height: 1.35;
+}
+.wz-set-gold {
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+.wz-set-gold.is-big {
+  font-size: 24px;
+}
+.wz-set-info {
+  position: absolute;
+  top: var(--sp-2);
+  right: var(--sp-2);
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+  font-style: italic;
+  font-weight: 800;
+}
+.wz-set-pending {
+  margin: 0 var(--sp-3) var(--sp-3);
+  min-height: 40px;
+  border: 2px dashed var(--accent);
+}
+.wz-total {
+  font-weight: 700;
+}
+
+/* ——— досье ——— */
+.wz-portrait {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.wz-portrait img {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+}
+.wz-file-btn {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  min-height: 44px;
+  padding: 0 var(--sp-5);
+  border: 2px solid var(--line);
+  cursor: pointer;
+  font-weight: 600;
+}
+.wz-file-btn input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.wz-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  font-weight: 600;
+}
+.wz-field :is(input, select, textarea) {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 44px;
+  font-weight: 400;
+}
+@media (max-width: 700px) {
+  .wz :is(input, select, textarea) {
+    font-size: 16px;
+  }
+}
+
+/* Живой лист на ПК и так справа — кнопка предпросмотра нужна только без
+   сайдбара. Место в сетке шапки держится, чтобы крестик не прыгал. */
+@media (min-width: 1001px) {
+  .wz-preview-btn {
+    visibility: hidden;
+  }
+}
+.wz-level {
+  align-items: center;
+  gap: var(--sp-3);
+}
+.wz-set-main,
+.wz-set-pending,
+.wz-ribbon button,
+.wz-steps-btn {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

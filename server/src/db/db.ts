@@ -11,6 +11,7 @@ import { migrateDndGrantedSpells } from "./dndGrantedSpells";
 import { migrateDndOriginGrants } from "./dndOriginGrants";
 import { migrateDndCombatEffects } from "./dndCombatEffects";
 import { migrateDndFindingsEffects } from "./dndFindingsEffects";
+import { migrateDndWizardData } from "./dndWizardData";
 import { migrateDndSpeedStructure } from "./dndSpeedStructure";
 import { migrateDndSheetRefs } from "./dndSheetRefs";
 import { migrateDndStartingSets } from "./dndStartingSets";
@@ -6445,6 +6446,11 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
   // воин», основа на выбор, ситуативный КЗ (гриллинг 2026-09-24, см.
   // dndFindingsEffects.ts).
   migrateDndFindingsEffects(database);
+
+  // Данные мобильного визарда: раскладка массива по классу, набор B и
+  // вариант C Воина, инструменты «на ваш выбор» моделью (гриллинг
+  // 2026-09-24, см. dndWizardData.ts).
+  migrateDndWizardData(database);
 
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.

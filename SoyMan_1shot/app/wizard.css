@@ -1,168 +1,126 @@
-/* OneShot Wizard: editorial frame around a clean, dense working area. */
-html[data-app="oneshot"] .modal:has(.wizard) {
+/* OneShot Wizard: editorial frame around a clean, dense working area.
+   Каркас (шапка, тело, подвал, шторки, лента) — общий, в
+   client/src/components/dnd/wizard-mobile.css; здесь только облик OneShot. */
+html[data-app="oneshot"] .modal.wz-modal {
   width: 1080px;
   max-width: calc(100vw - 32px);
+  height: 94dvh;
   max-height: 94dvh;
-  box-sizing: border-box;
-  padding: 0;
   border: 3px solid var(--ui-border);
   border-radius: 0;
   background: var(--ui-surface);
   box-shadow: 8px 8px 0 var(--ui-accent-secondary);
 }
-
-html[data-app="oneshot"] .modal .card.wizard {
-  padding: 18px 20px 20px;
-  border: 0;
-  border-radius: 0;
-  background: var(--ui-surface);
-  color: var(--ui-text);
-  box-shadow: none;
+@media (max-width: 700px) {
+  html[data-app="oneshot"] .modal.wz-modal {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border: 0;
+    box-shadow: none;
+  }
 }
 
-html[data-app="oneshot"] .card.wizard .campaign-player-header {
-  display: flex;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  margin: 0;
-  padding: 10px 14px;
-  border-inline-start: 7px solid var(--ui-accent);
+html[data-app="oneshot"] .wz {
+  --accent: var(--ui-accent-secondary);
+  --line: var(--ui-border);
+  color: var(--ui-text);
+}
+html[data-app="oneshot"] .wz-top {
   background: var(--ui-surface-ink);
   color: var(--ui-text-inverse);
-  font-weight: 800;
-  letter-spacing: .07em;
+  padding-bottom: 0;
 }
-
-html[data-app="oneshot"] .wizard-progress {
-  display: block;
-  width: 100%;
-  height: 6px;
-  margin: 0;
+html[data-app="oneshot"] .wz-top .wz-icon-btn {
   border: 0;
-  border-radius: 0;
-  background: var(--ui-surface-raised);
-  accent-color: var(--ui-accent-secondary);
-}
-html[data-app="oneshot"] .wizard-progress::-webkit-progress-bar {
-  background: var(--ui-surface-raised);
-}
-html[data-app="oneshot"] .wizard-progress::-webkit-progress-value {
-  background: var(--ui-accent-secondary);
-}
-
-html[data-app="oneshot"] .card.wizard .wizard-steps-tabs {
-  margin: 2px 0 18px;
-  padding: 0 4px;
-  border-bottom: 2px solid var(--ui-border);
-  background: var(--ui-surface-raised);
-  box-shadow: none;
-}
-html[data-app="oneshot"] .card.wizard .wizard-steps-tabs button {
-  min-height: 44px;
-  border: 0;
-  border-bottom: 4px solid transparent;
   background: transparent;
-  color: var(--ui-text-muted);
-  font-weight: 750;
+  color: var(--ui-text-inverse);
 }
-html[data-app="oneshot"] .card.wizard .wizard-steps-tabs button[aria-selected="true"] {
-  border-bottom-color: var(--ui-accent-secondary);
+html[data-app="oneshot"] .wz-top .wz-icon-btn[aria-pressed="true"] {
+  color: var(--ui-accent);
+}
+html[data-app="oneshot"] .wz-steps-btn strong {
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+html[data-app="oneshot"] .wz-progress {
+  height: 6px;
+  margin: 0 calc(-1 * var(--sp-4));
+  background: var(--ui-surface-raised);
+}
+html[data-app="oneshot"] .wz-progress > span {
   background: var(--ui-accent);
-  color: var(--ui-text);
 }
-html[data-app="oneshot"] .card.wizard .wizard-steps-tabs button:focus-visible,
-html[data-app="oneshot"] .card.wizard button:focus-visible,
-html[data-app="oneshot"] .card.wizard select:focus-visible {
-  outline: 3px solid var(--ui-focus);
-  outline-offset: 2px;
-}
-
-html[data-app="oneshot"] .card.wizard .wizard-split {
-  gap: 20px;
-}
-html[data-app="oneshot"] .card.wizard .wizard-side {
-  padding: 12px 0 12px 20px;
-  border-left: 2px solid var(--ui-border);
-}
-html[data-app="oneshot"] .card.wizard .wizard-main {
-  min-width: 0;
-}
-html[data-app="oneshot"] .card.wizard .wizard-main > .stack > label:not(.row) {
-  display: grid;
-  gap: 7px;
-  width: min(100%, 480px);
-  font-weight: 700;
-}
-html[data-app="oneshot"] .card.wizard .wizard-main > .stack > label:not(.row)
-  :is(input, select, textarea) {
-  width: 100%;
-  box-sizing: border-box;
-}
-html[data-app="oneshot"] .card.wizard :is(input[type="checkbox"], input[type="radio"]) {
-  accent-color: var(--ui-accent-secondary);
-}
-html[data-app="oneshot"] .card.wizard .wizard-main
-  :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
-  min-height: 44px;
-  border: 2px solid var(--ui-border);
-  border-radius: 0;
-  background: var(--ui-surface);
-  color: var(--ui-text);
-}
-html[data-app="oneshot"] .card.wizard .wizard-pick-list {
-  border: 1px solid var(--ui-border);
-  background: var(--ui-surface);
-}
-html[data-app="oneshot"] .card.wizard .wizard-footer {
+html[data-app="oneshot"] .wz-foot {
   border-top: 2px solid var(--ui-border);
   background: var(--ui-surface);
 }
-html[data-app="oneshot"] .card.wizard .wizard-footer button {
-  min-height: 44px;
+html[data-app="oneshot"] .wz :is(.wz-foot, .wz-sheet-foot, .wz-ribbon) button,
+html[data-app="oneshot"] .wz-sheet .wz-sheet-foot button {
   border: 2px solid var(--ui-border);
   border-radius: 0;
   background: var(--ui-surface);
   color: var(--ui-text);
   font-weight: 750;
 }
-html[data-app="oneshot"] .card.wizard .wizard-footer button.primary {
+html[data-app="oneshot"] .wz :is(.wz-foot, .wz-ribbon) button.primary,
+html[data-app="oneshot"] .wz-sheet .wz-sheet-foot button.primary {
   background: var(--ui-accent);
   color: var(--ui-text);
 }
-html[data-app="oneshot"] .card.wizard .wizard-footer button:disabled {
-  opacity: .55;
+html[data-app="oneshot"] .wz button:disabled {
+  opacity: 0.5;
+}
+html[data-app="oneshot"] .wz button:focus-visible,
+html[data-app="oneshot"] .wz-sheet button:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+/* Отметка «взято» и выбранное — жёлтым по чёрному, как акцент OneShot. */
+html[data-app="oneshot"] :is(.wz, .wz-sheet) .wz-row.is-picked .wz-row-check > span,
+html[data-app="oneshot"] :is(.wz, .wz-sheet) .wz-seg button[aria-pressed="true"],
+html[data-app="oneshot"] :is(.wz, .wz-sheet) .wz-chip[aria-pressed="true"],
+html[data-app="oneshot"] .wz .wz-slide-badge {
+  background: var(--ui-accent);
+  border-color: var(--ui-border);
+  color: var(--ui-text);
+}
+html[data-app="oneshot"] :is(.wz, .wz-sheet) .wz-row.is-picked {
+  background: color-mix(in srgb, var(--ui-accent) 35%, transparent);
+}
+html[data-app="oneshot"] .wz .wz-set.is-selected {
+  border-color: var(--ui-border);
+  box-shadow: 4px 4px 0 var(--ui-accent-secondary);
+  background: color-mix(in srgb, var(--ui-accent) 30%, var(--ui-surface));
+}
+html[data-app="oneshot"] .wz .wz-abil.is-armed {
+  background: var(--ui-accent);
+}
+html[data-app="oneshot"] .modal.wz-sheet {
+  border: 3px solid var(--ui-border);
+  background: var(--ui-surface);
+  color: var(--ui-text);
+}
+html[data-app="oneshot"] .wz-sheet {
+  --accent: var(--ui-accent-secondary);
+  --line: var(--ui-border);
+}
+html[data-app="oneshot"] .wz :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
+  min-height: 44px;
+  border: 2px solid var(--ui-border);
+  border-radius: 0;
+  background: var(--ui-surface);
+  color: var(--ui-text);
 }
 
-@media (max-width: 1000px) {
-  html[data-app="oneshot"] .card.wizard .wizard-flip-row button {
-    min-height: 44px;
-    border: 2px solid var(--ui-border);
-    background: var(--ui-surface-raised);
-    color: var(--ui-text);
-    font-weight: 700;
-  }
+html[data-app="oneshot"] .wz .wizard-split {
+  gap: 20px;
 }
-@media (max-width: 700px) {
-  html[data-app="oneshot"] .modal-backdrop:has(.wizard) { padding: 6px; }
-  html[data-app="oneshot"] .modal:has(.wizard) {
-    width: 100%;
-    max-width: calc(100vw - 12px);
-    max-height: 97dvh;
-    box-shadow: 3px 3px 0 var(--ui-accent-secondary);
-  }
-  html[data-app="oneshot"] .modal .card.wizard { padding: 12px; }
-  html[data-app="oneshot"] .card.wizard .campaign-player-header { padding: 8px 10px; }
-  html[data-app="oneshot"] .card.wizard .wizard-step-row { margin: 0; }
-  html[data-app="oneshot"] .card.wizard .wizard-step-picker {
-    width: 100%;
-    max-width: none;
-    min-height: 44px;
-    background: var(--ui-accent);
-    font-weight: 750;
-  }
-  html[data-app="oneshot"] .card.wizard .wizard-footer {
-    gap: 8px;
-    padding: 10px 12px;
-  }
+html[data-app="oneshot"] .wz .wizard-side {
+  padding: 12px 0 12px 20px;
+  border-left: 2px solid var(--ui-border);
+}
+html[data-app="oneshot"] .wz .wizard-main {
+  min-width: 0;
 }

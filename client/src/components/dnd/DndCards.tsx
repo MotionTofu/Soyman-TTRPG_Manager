@@ -50,7 +50,7 @@ export interface CardOption {
   card: string | null;
 }
 
-function CardPicture({ id, name, card, thumb }: { id: number; name: string; card: string | null; thumb?: 160 | 320 }) {
+export function CardPicture({ id, name, card, thumb }: { id: number; name: string; card: string | null; thumb?: 160 | 320 }) {
   const cardBack = useCardBack();
   // Ссылка на файл подписана на 60 секунд, а списки карт живут дольше:
   // плитка, впервые нарисованная позже (вкладка подклассов, лента), получала

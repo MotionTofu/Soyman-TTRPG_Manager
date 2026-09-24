@@ -19,13 +19,13 @@ import {
   startingSetsFrom,
   type StartingSet,
 } from "./dndEquipment";
-import { WeaponMasteryPicker, isMasterableWeapon } from "./StartingEquipmentPicker";
+import { isMasterableWeapon, weaponMasteryName } from "./StartingEquipmentPicker";
 import { PosterButtons } from "./PosterButtons";
 import { renderPosterBlob, type PosterData } from "./CharacterPoster";
 import { WizardMiniSheet, type MiniSheetProblem } from "./WizardMiniSheet";
-import { CardGrid, CardSpread, CardTile, type CardOption } from "./DndCards";
+import { type CardOption } from "./DndCards";
+import { CardRibbon, CUSTOM_CARD_ID, EntrySheet, PickHead, PickList, SearchField, Sheet, SetDuel } from "./wizardUi";
 import { MentionText } from "../mentions/MentionText";
-import { useIsMobile } from "../../hooks/useIsMobile";
 import { choicesFromEntries, featuresFromEntries, sumEntrySlots, type ChoiceDef } from "./dndFeatures";
 import { cantripsAtLevel, preparedAtLevel, spellSlotsAtLevel, type ClassProgression } from "./progression";
 import { useDndSkills } from "./useDndSkills";
@@ -72,21 +72,27 @@ import {
 // Снаряжение — предпоследним шагом: набор зависит и от класса, и от
 // предыстории, а до сих пор его приходилось брать вручную уже после
 // создания, кнопкой во вкладке «Инвентарь» (решение Q5).
+// Мобильный редизайн (гриллинг 2026-09-24, Q5, Q16, Q17): имя и портрет ушли
+// в Досье, выборы класса — отдельным шагом сразу за классом, языки — к
+// навыкам. Шаги, где выбирать нечего, из пути выпадают (stepVisible).
 const STEPS = [
-  "Личность",
-  "Портрет",
   "Класс",
+  "Умения класса",
   "Вид",
   "Предыстория",
   "Черта",
   "Характеристики",
-  "Навыки",
+  "Навыки и языки",
   "Заклинания",
-  "Досье",
   "Снаряжение",
+  "Досье",
   "Обзор",
 ] as const;
 type Step = (typeof STEPS)[number];
+// Черновики до редизайна помнят старые имена шагов.
+const LEGACY_STEPS: Record<string, Step> = { Личность: "Досье", Портрет: "Досье", Навыки: "Навыки и языки" };
+// По правилам 2024: Общий плюс два языка на выбор.
+const LANGUAGE_PICKS = 2;
 
 const STANDARD_ARRAY = [15, 14, 13, 12, 10, 8];
 const POINT_BUY_COST: Record<number, number> = { 8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9 };
@@ -132,6 +138,10 @@ interface WizardDraftV1 {
   bonds?: unknown;
   flaws?: unknown;
   notes?: unknown;
+  speciesFeatId?: unknown;
+  chosenTools?: unknown;
+  setChoicePicks?: unknown;
+  abilitiesTouched?: unknown;
 }
 function loadWizardDraft(key: string): WizardDraftV1 | null {
   try {
@@ -151,6 +161,13 @@ function loadWizardDraft(key: string): WizardDraftV1 | null {
 }
 function isWizardStep(v: unknown): v is Step {
   return typeof v === "string" && (STEPS as readonly string[]).includes(v);
+}
+function draftStep(v: unknown): Step {
+  if (isWizardStep(v)) return v;
+  return (typeof v === "string" && LEGACY_STEPS[v]) || "Класс";
+}
+function strList(v: unknown, max = 60): string[] {
+  return Array.isArray(v) ? v.filter((t): t is string => typeof t === "string").slice(0, max) : [];
 }
 function numOrNull(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
@@ -182,6 +199,26 @@ function rollAbilityScore(): number {
   return rolls[1] + rolls[2] + rolls[3];
 }
 
+// Раскладка стандартного массива под класс (Q7): таблица PHB 2024 из
+// справочника (`standard_array`, миграция dndWizardData). Нет таблицы —
+// основная характеристика класса получает 15, дальше ТЕЛ, ЛОВ, МДР…
+const FALLBACK_ORDER: (keyof DndAbilityScores)[] = ["con", "dex", "wis", "int", "cha", "str"];
+function classStandardArray(entry: CompendiumEntry | null): DndAbilityScores | null {
+  if (!entry) return null;
+  const keys = Object.keys(emptyAbilities()) as (keyof DndAbilityScores)[];
+  const raw = entry.data.standard_array as Record<string, unknown> | undefined;
+  const a = emptyAbilities();
+  if (raw && keys.every((k) => typeof raw[k] === "number")) {
+    for (const k of keys) a[k] = raw[k] as number;
+    return a;
+  }
+  const primary = parseAbilityNames(entry.data.primary_abilities);
+  if (primary.length === 0) return null;
+  const order = [...new Set([...primary, ...FALLBACK_ORDER])];
+  order.forEach((k, i) => (a[k] = STANDARD_ARRAY[i]));
+  return a;
+}
+
 interface Props {
   ownerType: "character" | "being";
   ownerId: number;
@@ -210,7 +247,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   // в обработчиках ниже не видят «смену» при восстановлении черновика.
   const [savedDraft] = useState<WizardDraftV1 | null>(() => loadWizardDraft(draftKey));
   const [hadDraft, setHadDraft] = useState(() => savedDraft !== null);
-  const [step, setStep] = useState<Step>(() => (isWizardStep(savedDraft?.step) ? savedDraft.step : "Личность"));
+  const [step, setStep] = useState<Step>(() => draftStep(savedDraft?.step));
   const [systemId, setSystemId] = useState<number | null>(initialSystemId ?? null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -370,6 +407,22 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   const [featId, setFeatId] = useState<number | null>(() => numOrNull(savedDraft?.featId));
   const [featTouched, setFeatTouched] = useState(() => savedDraft?.featTouched === true);
   const [featEntry, setFeatEntry] = useState<CompendiumEntry | null>(null);
+  // Вторая черта происхождения — от вида («Универсальность» Человека):
+  // своя, не делит слот с чертой предыстории.
+  const [speciesFeatId, setSpeciesFeatId] = useState<number | null>(() => numOrNull(savedDraft?.speciesFeatId));
+  const [speciesFeatEntry, setSpeciesFeatEntry] = useState<CompendiumEntry | null>(null);
+  // Инструменты «на ваш выбор» (Q10): «источник:id записи», как навыки.
+  const [chosenTools, setChosenTools] = useState<string[]>(() => strList(savedDraft?.chosenTools));
+  // Выборы внутри стартового набора: «метка набора#номер выбора» → id предметов.
+  const [setChoicePicks, setSetChoicePicks] = useState<Record<string, number[]>>(() => {
+    const d = savedDraft?.setChoicePicks;
+    if (!d || typeof d !== "object") return {};
+    const next: Record<string, number[]> = {};
+    for (const [k, v] of Object.entries(d as Record<string, unknown>)) {
+      if (Array.isArray(v)) next[k] = v.filter((x): x is number => typeof x === "number" && Number.isFinite(x));
+    }
+    return next;
+  });
 
   // Прибавка от предыстории: либо +2 одной и +1 другой, либо +1 каждой из
   // трёх (решение W5).
@@ -413,6 +466,9 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     (Object.keys(a) as (keyof DndAbilityScores)[]).forEach((k, i) => (a[k] = STANDARD_ARRAY[i]));
     return a;
   });
+  // Игрок переставлял характеристики руками — смена класса раскладку не трогает
+  // (Q7). Без касания массив ложится по таблице класса.
+  const [abilitiesTouched, setAbilitiesTouched] = useState(() => savedDraft?.abilitiesTouched === true);
   const [rolledPool, setRolledPool] = useState<number[]>(() => {
     const d = savedDraft?.rolledPool;
     if (Array.isArray(d) && d.length === 6 && d.every((v) => typeof v === "number" && Number.isFinite(v))) {
@@ -476,8 +532,6 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   const [spellSearch, setSpellSearch] = useState("");
   // Поиск по селектам класс/вид/предыстория/черта — тоже эфемерен:
   // голый скролл длинных справочников искать не даёт.
-  const [classQ, setClassQ] = useState("");
-  const [speciesQ, setSpeciesQ] = useState("");
   const [backgroundQ, setBackgroundQ] = useState("");
   const [featQ, setFeatQ] = useState("");
   const matchQ = (name: string, q: string) => {
@@ -493,7 +547,10 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
 
   // Есть что терять — для beforeunload и вопроса у «Отмены».
   const wizardDirty =
-    step !== "Личность" ||
+    step !== "Класс" ||
+    speciesFeatId !== null ||
+    chosenTools.length > 0 ||
+    Object.values(setChoicePicks).some((a) => a.length > 0) ||
     characterName.trim() !== "" ||
     playerName.trim() !== "" ||
     classId !== null ||
@@ -565,6 +622,10 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       chosenStyle,
       chosenEntries,
       masteredWeapons,
+      speciesFeatId,
+      chosenTools,
+      setChoicePicks,
+      abilitiesTouched,
     };
     try {
       localStorage.setItem(draftKey, JSON.stringify(state));
@@ -605,6 +666,10 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     chosenStyle,
     chosenEntries,
     masteredWeapons,
+    speciesFeatId,
+    chosenTools,
+    setChoicePicks,
+    abilitiesTouched,
   ]);
 
   // Уход со страницы с несобранным персонажем — подтверждение.
@@ -731,6 +796,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     const next = { ...abilities, [key]: newValue };
     if (holder && holder !== key) next[holder] = abilities[key];
     setAbilities(next);
+    setAbilitiesTouched(true);
   }
 
   function applyMethod(next: AbilityMethod) {
@@ -739,9 +805,10 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     if (next === "standard") {
       setRolledPool(STANDARD_ARRAY);
       const keys = Object.keys(abilities) as (keyof DndAbilityScores)[];
-      const a = emptyAbilities();
-      keys.forEach((k, i) => (a[k] = STANDARD_ARRAY[i]));
+      const a = classStandardArray(classEntry) ?? emptyAbilities();
+      if (!classStandardArray(classEntry)) keys.forEach((k, i) => (a[k] = STANDARD_ARRAY[i]));
       setAbilities(a);
+      setAbilitiesTouched(false);
     } else if (next === "roll") {
       const pool = Array.from({ length: 6 }, rollAbilityScore).sort((a, b) => b - a);
       setRolledPool(pool);
@@ -786,6 +853,14 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     });
   }
 
+  // Класс сменился, а игрок массив не трогал — раскладка идёт за классом.
+  useEffect(() => {
+    if (method !== "standard" || abilitiesTouched) return;
+    const a = classStandardArray(classEntry);
+    if (a) setAbilities(a);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [classEntry]);
+
   const classOption = hierarchy.classes.find((c) => c.id === classId);
   const subclassOptions = classId ? hierarchy.subclassesByClass[classId] ?? [] : [];
   // Подкласс доступен с уровня класса (subclass_level, у монаха 3): карточка
@@ -795,20 +870,9 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     if (subclassLocked) setSubclassId((prev) => (prev == null ? prev : null));
   }, [subclassLocked]);
 
-  // Карты вместо списков (П3.к4, гриллинг 2026-09-18). ПК: щелчок выбирает,
-  // сетка сворачивается в ленту, под ней лицо и рубашка. Телефон: две
-  // колонки, касание открывает просмотр с «Выбрать» (cardPreview). Вкладка
-  // подклассов видна всегда; до уровня подкласса карты только смотрятся.
-  const mobile = useIsMobile();
-  const [classTab, setClassTab] = useState<"class" | "subclass">("class");
-  const [subPreview, setSubPreview] = useState<number | null>(null);
-  const [cardPreview, setCardPreview] = useState<{ kind: "class" | "subclass" | "species"; id: number } | null>(null);
-  useEffect(() => setCardPreview(null), [step]);
-
   function pickClass(id: number | null) {
     setClassId(id);
     setSubclassId(null);
-    setSubPreview(null);
     setChosenStyle([]);
     setChosenEntries({});
     setChosenExpertise([]);
@@ -818,7 +882,6 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   }
   function pickSubclass(id: number | null) {
     setSubclassId(id);
-    setSubPreview(null);
     setChosenSkills((prev) => prev.filter((t) => !t.startsWith("subclass:")));
     setChosenSpells((prev) => prev.filter((t) => !t.startsWith("spell:subclass:")));
     setChosenEntries((prev) => {
@@ -841,21 +904,19 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     setChosenSkills((prev) => prev.filter((t) => !t.startsWith("species:")));
     setChosenSpells((prev) => prev.filter((t) => !t.startsWith("spell:species:")));
   }
-  // Лента подклассов наверху рубашки класса (решение 18): кто пришёл за
-  // подклассом, не листает весь класс.
-  function openSubclass(id: number) {
-    if (mobile) return setCardPreview({ kind: "subclass", id });
-    setClassTab("subclass");
-    if (subclassLocked) setSubPreview(id);
-    else pickSubclass(id);
+  function pickSpeciesFeat(id: number | null) {
+    setSpeciesFeatId(id);
+    setChosenSkills((prev) => prev.filter((t) => !t.startsWith("feat2:")));
+    setChosenSpells((prev) => prev.filter((t) => !t.startsWith("spell:feat2:")));
+    setChosenTools((prev) => prev.filter((t) => !t.startsWith("feat2:")));
   }
-  const subclassStrip =
-    subclassOptions.length > 0 ? (
-      <div className="dc-substrip">
-        <span className="dc-substrip-label">Подклассы</span>
-        <CardGrid options={subclassOptions} selectedId={subclassId} collapsed onPick={(o) => openSubclass(o.id)} />
-      </div>
-    ) : undefined;
+  function pickBackgroundFeat(id: number | null) {
+    setFeatTouched(true);
+    setFeatId(id);
+    setChosenSkills((prev) => prev.filter((t) => !t.startsWith("feat:")));
+    setChosenSpells((prev) => prev.filter((t) => !t.startsWith("spell:feat:")));
+    setChosenTools((prev) => prev.filter((t) => !t.startsWith("feat:")));
+  }
   const subLockNote = `с ${classOption?.subclassLevel ?? 0} ур.`;
   // Ключами (английский `original`), а не именами из компендиума: в
   // `skillProfs` листа теперь ключ, и визард, выдающий имя, оставлял бы
@@ -885,7 +946,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     .filter((s) => setTaken(s.label))
     .reduce(
       (acc, s) => ({
-        items: acc.items + s.items.length + s.manual.length,
+        items: acc.items + s.items.length + s.manual.length + s.choices.reduce((n, c) => n + c.count, 0),
         gold: acc.gold + (Number.parseInt((s.gold ?? "").trim(), 10) || 0),
       }),
       { items: 0, gold: 0 }
@@ -959,7 +1020,11 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   const effectiveFeatId = featTouched ? featId : featId ?? suggestedFeatId;
   // Свой вариант вида/предыстории черты не несёт, но выбрать черту вручную
   // уже можно — Мастер разрешает.
-  const featNeeded = !!backgroundId || backgroundCustom !== null || speciesGrants.originFeatChoice || speciesCustom !== null;
+  const featNeeded = !!backgroundId || backgroundCustom !== null || speciesCustom !== null;
+  // Вторая черта — от вида, который даёт её выбрать («Универсальность»).
+  // Раньше вид и предыстория делили один слот, и Человек терял черту.
+  const speciesFeatNeeded = speciesGrants.originFeatChoice;
+  const effectiveSpeciesFeatId = speciesFeatNeeded ? speciesFeatId : null;
 
   useEffect(() => {
     if (!effectiveFeatId) {
@@ -976,6 +1041,23 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       });
     return () => ac.abort();
   }, [effectiveFeatId]);
+
+  useEffect(() => {
+    if (!effectiveSpeciesFeatId) {
+      setSpeciesFeatEntry(null);
+      return;
+    }
+    const ac = new AbortController();
+    readResource<CompendiumEntry>(`/systems/entries/${effectiveSpeciesFeatId}`)
+      .then((entry) => {
+        if (!ac.signal.aborted) setSpeciesFeatEntry(entry);
+      })
+      .catch((e) => {
+        if (!ac.signal.aborted && !isAbortError(e)) setLoadError(errorMessage(e));
+      });
+    return () => ac.abort();
+  }, [effectiveSpeciesFeatId]);
+  const speciesFeatGrants = grantsFromEntry(speciesFeatEntry ?? undefined, resolveSkill);
 
   // Определения выборов (data.choices) из умений класса и подкласса.
   // Ошибка — тихий []: выборы это улучшение, а не гейт; класть создание
@@ -1031,7 +1113,6 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   // Гейт только по загруженным определениям: null (грузятся) и [] (офлайн
   // или выборы не положены) — не гейтят, иначе тупик.
   const styleMissing = choiceDefs == null ? 0 : Math.max(0, styleSlots.length - stylePicked);
-  const styleComplete = styleMissing === 0;
 
   // Выборы записей каталога (приёмы/выстрелы, тикет 05; воззвания, тикет 02
   // warlock): дефы kind entry. Слоты по ключу — сумма count открытых уровнем
@@ -1083,6 +1164,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         const next = cur.filter((x) => x !== id);
         return { ...prev, [key]: next };
       }
+      if (limit === 1) return { ...prev, [key]: [id] };
       if (cur.length >= limit) return prev;
       return { ...prev, [key]: [...cur, id] };
     });
@@ -1095,9 +1177,11 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       return { ...s, picked, missing: Math.max(0, Math.min(s.total, available) - picked) };
     })
     .filter((s) => s.missing > 0);
-  const entryComplete = entryShortfall.length === 0;
 
   const [weaponCatalog, setWeaponCatalog] = useState<CompendiumEntry[] | null>(null);
+  // Инструменты с разметкой `tool_kind` (миграция dndWizardData): из них
+  // выбирается «музыкальный инструмент на ваш выбор».
+  const [toolCatalog, setToolCatalog] = useState<CompendiumEntry[]>([]);
   useEffect(() => {
     if (!systemId) {
       setWeaponCatalog(null);
@@ -1105,12 +1189,101 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     }
     const ac = new AbortController();
     loadDndEquipmentEntries(systemId, { signal: ac.signal })
-      .then((rows) => setWeaponCatalog(rows.filter(isMasterableWeapon)))
+      .then((rows) => {
+        setWeaponCatalog(rows.filter(isMasterableWeapon));
+        setToolCatalog(rows.filter((r) => typeof r.data.tool_kind === "string"));
+      })
       .catch(() => {
         setWeaponCatalog([]);
       });
     return () => ac.abort();
   }, [systemId]);
+
+  // Выборы инструментов по источникам — как навыки: у каждого своя квота.
+  // Группа «А|Б» — выбор из двух видов (Монах: ремесленные или музыкальные).
+  interface ToolGroup {
+    key: string;
+    label: string;
+    group: string;
+    count: number;
+    options: CompendiumEntry[];
+  }
+  const toolGroups: ToolGroup[] = (
+    [
+      ["class", `От класса${classOption ? ` (${classOption.name})` : ""}`, classGrants],
+      ["subclass", `От подкласса${subclassEntry ? ` (${subclassEntry.name})` : ""}`, subclassGrants],
+      ["background", `От предыстории${backgroundEntry ? ` (${backgroundEntry.name})` : ""}`, backgroundGrants],
+      ["feat", `От черты${featEntry ? ` (${featEntry.name})` : ""}`, featGrants],
+      ["feat2", `От черты вида${speciesFeatEntry ? ` (${speciesFeatEntry.name})` : ""}`, speciesFeatGrants],
+    ] as const
+  ).flatMap(([key, label, g]) => {
+    if (!g.toolChoice) return [];
+    const kinds = g.toolChoice.group.split("|").map((k) => k.trim()).filter(Boolean);
+    const options = toolCatalog.filter((e) => kinds.length === 0 || kinds.includes(String(e.data.tool_kind)));
+    return [{ key, label, group: g.toolChoice.group.replace("|", " или "), count: g.toolChoice.count, options }];
+  });
+  const chosenToolsIn = (key: string) =>
+    chosenTools.filter((t) => t.startsWith(`${key}:`)).map((t) => Number(t.slice(t.indexOf(":") + 1)));
+  function toggleTool(key: string, id: number, limit: number) {
+    const token = `${key}:${id}`;
+    setChosenTools((prev) => {
+      if (prev.includes(token)) return prev.filter((t) => t !== token);
+      const mine = prev.filter((t) => t.startsWith(`${key}:`));
+      // Квота 1 — тап по другому меняет выбор, а не упирается в лимит.
+      if (limit === 1) return [...prev.filter((t) => !t.startsWith(`${key}:`)), token];
+      return mine.length < limit ? [...prev, token] : prev;
+    });
+  }
+  // Выборы внутри взятых наборов («музыкальный инструмент по вашему
+  // выбору»). «Тот, владение которым выбрали» берётся из выбранных владений
+  // того же вида — и подставляется сам, если выбирать уже нечего.
+  interface SetChoiceSlot {
+    key: string;
+    setLabel: string;
+    label: string;
+    count: number;
+    options: CompendiumEntry[];
+    auto: boolean;
+  }
+  const chosenToolIds = new Set(chosenTools.map((t) => Number(t.slice(t.indexOf(":") + 1))));
+  const setChoiceSlots: SetChoiceSlot[] = startingSets
+    .filter((set) => setTaken(set.label))
+    .flatMap((set) =>
+      set.choices.map((c, i) => {
+        const kinds = c.group.split("|").map((k) => k.trim());
+        const all = toolCatalog.filter((e) => kinds.includes(String(e.data.tool_kind)));
+        const own = c.fromProficiency ? all.filter((e) => chosenToolIds.has(e.id)) : [];
+        return {
+          key: `${set.label}#${i}`,
+          setLabel: set.label,
+          label: kinds.join(" или ").toLowerCase(),
+          count: c.count,
+          options: own.length > 0 ? own : all,
+          auto: own.length > 0 && own.length <= c.count,
+        };
+      })
+    );
+  const setChoicePicked = (slot: SetChoiceSlot) =>
+    slot.auto
+      ? slot.options.map((o) => o.id)
+      : (setChoicePicks[slot.key] ?? []).filter((id) => slot.options.some((o) => o.id === id));
+  function toggleSetChoice(slot: SetChoiceSlot, id: number) {
+    setSetChoicePicks((prev) => {
+      const cur = (prev[slot.key] ?? []).filter((x) => slot.options.some((o) => o.id === x));
+      if (cur.includes(id)) return { ...prev, [slot.key]: cur.filter((x) => x !== id) };
+      if (slot.count === 1) return { ...prev, [slot.key]: [id] };
+      return cur.length < slot.count ? { ...prev, [slot.key]: [...cur, id] } : prev;
+    });
+  }
+  const setChoiceMissing = setChoiceSlots.filter(
+    (sl) => sl.options.length > 0 && setChoicePicked(sl).length < Math.min(sl.count, sl.options.length)
+  );
+
+  const toolMissing = (keys: string[]) =>
+    toolGroups
+      .filter((g) => keys.includes(g.key))
+      .map((g) => ({ g, missing: Math.max(0, Math.min(g.count, g.options.length) - chosenToolsIn(g.key).length) }))
+      .filter((x) => x.missing > 0);
   const weaponSlots = (choiceDefs ?? [])
     .filter((d) => d.kind === "weapon" && d.minLevel <= level)
     .reduce((n, d) => n + d.count, 0);
@@ -1126,7 +1299,6 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     choiceDefs == null || weaponCatalog == null
       ? 0
       : Math.max(0, Math.min(weaponSlots, weaponCatalog.length) - masteredWeapons.length);
-  const weaponComplete = weaponMissing === 0;
 
   // Экспертность из выборов умений (deft_explorer_expertise следопыта 2 ур.,
   // ranger_expertise 9 ур.): слоты суммой count открытых уровнем дефов.
@@ -1143,7 +1315,6 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   }
   const expertiseMissing =
     choiceDefs == null ? 0 : Math.max(0, expertiseSlots - chosenExpertise.length);
-  const expertiseComplete = expertiseMissing === 0;
 
   // Индекс заклинаний для шага выбора: фильтруем кандидатов по списку
   // классов и школе здесь, короткими именами тут не обойтись.
@@ -1203,6 +1374,14 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       options: featGrants.skillChoice.options,
     });
   }
+  if (speciesFeatGrants.skillChoice) {
+    skillGroups.push({
+      key: "feat2",
+      label: `От черты вида${speciesFeatEntry ? ` (${speciesFeatEntry.name})` : ""}`,
+      count: speciesFeatGrants.skillChoice.count,
+      options: speciesFeatGrants.skillChoice.options,
+    });
+  }
   // Подкласс выбирает наравне с остальными (Ученик войны, Посланник
   // рыцарства): свой список из книги, своя квота — в кучу не складываем.
   if (subclassGrants.skillChoice) {
@@ -1234,7 +1413,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   // Что уже выдано без выбора — эти навыки в выборе не показываются: взять
   // владение дважды нельзя, а место в выборе оно бы съело. Выдачи подкласса
   // (Орудия милосердия) — наравне с остальными.
-  const grantedSkills = new Set([...backgroundSkills, ...classGrants.skills, ...subclassGrants.skills, ...speciesGrants.skills, ...featGrants.skills]);
+  const grantedSkills = new Set([...backgroundSkills, ...classGrants.skills, ...subclassGrants.skills, ...speciesGrants.skills, ...featGrants.skills, ...speciesFeatGrants.skills]);
 
   // Ключ выбора — «источник:навык», чтобы один навык, выбранный по двум
   // источникам, не схлопнулся в одну отметку и не сбил счётчики.
@@ -1242,6 +1421,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     const token = `${groupKey}:${name}`;
     setChosenSkills((prev) => {
       if (prev.includes(token)) return prev.filter((s) => s !== token);
+      if (limit === 1) return [...prev.filter((s) => !s.startsWith(`${groupKey}:`)), token];
       const used = prev.filter((s) => s.startsWith(`${groupKey}:`)).length;
       return used < limit ? [...prev, token] : prev;
     });
@@ -1263,10 +1443,6 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       return { group: g, picked, missing: Math.max(0, Math.min(g.count, available) - picked) };
     })
     .filter((s) => s.missing > 0);
-  const skillsComplete = skillShortfall.length === 0;
-  // Черта происхождения обязательна по правилам, когда её даёт предыстория
-  // или вид, — без неё лист недособран.
-  const featMissing = featNeeded && !effectiveFeatId;
 
   // Обычные vs редкие — хардкод по Книге игрока: в данных категорий нет
   // (проверено чтением базы: 19 записей плоско). Несовпавшее с группой —
@@ -1311,7 +1487,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   function toggleLanguage(name: string) {
     setChosenLanguages((prev) => (prev.includes(name) ? prev.filter((l) => l !== name) : [...prev, name]));
   }
-  const dossierLangNames = [...new Set([...chosenLanguages, ...autoLanguages])];
+  const dossierLangNames = [...new Set(["Общий", ...chosenLanguages, ...autoLanguages])];
 
   // Прибавка от предыстории. Три характеристики предлагает сама предыстория
   // (`abilities`), а как их разложить — выбор игрока. Свой вариант списка
@@ -1320,6 +1496,20 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     backgroundCustom !== null && backgroundCustom.trim() !== ""
       ? Object.keys(ABILITY_NAME_TO_KEY)
       : backgroundGrants.abilityOptions;
+  // По умолчанию +2 и +1 — в самые важные для класса из предложенных (Q7):
+  // порядок — по раскладке массива класса, без класса — как в предыстории.
+  const classArray = classStandardArray(classEntry);
+  const awardByPriority = classArray
+    ? [...awardOptions].sort(
+        (a, b) => (classArray[ABILITY_NAME_TO_KEY[b]] ?? 0) - (classArray[ABILITY_NAME_TO_KEY[a]] ?? 0)
+      )
+    : awardOptions;
+  const effectiveAwardPrimary =
+    awardPrimary && awardOptions.includes(awardPrimary) ? awardPrimary : awardByPriority[0] ?? null;
+  const effectiveAwardSecondary =
+    awardSecondary && awardSecondary !== effectiveAwardPrimary && awardOptions.includes(awardSecondary)
+      ? awardSecondary
+      : awardByPriority.find((a) => a !== effectiveAwardPrimary) ?? null;
   const abilityAward: Partial<Record<keyof DndAbilityScores, number>> = {};
   if (awardOptions.length > 0) {
     if (awardMode === "1+1+1") {
@@ -1328,9 +1518,9 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         if (key) abilityAward[key] = (abilityAward[key] ?? 0) + 1;
       }
     } else {
-      const primary = awardPrimary ?? awardOptions[0];
-      const secondary = awardSecondary ?? awardOptions.find((a) => a !== primary) ?? null;
-      const pk = ABILITY_NAME_TO_KEY[primary];
+      const primary = effectiveAwardPrimary;
+      const secondary = effectiveAwardSecondary;
+      const pk = primary ? ABILITY_NAME_TO_KEY[primary] : null;
       if (pk) abilityAward[pk] = (abilityAward[pk] ?? 0) + 2;
       const sk = secondary ? ABILITY_NAME_TO_KEY[secondary] : null;
       if (sk) abilityAward[sk] = (abilityAward[sk] ?? 0) + 1;
@@ -1405,6 +1595,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         ["subclass", `От подкласса${subclassEntry ? ` (${subclassEntry.name})` : ""}`, subclassGrants],
         ["species", `От вида${speciesEntry ? ` (${speciesEntry.name})` : ""}`, speciesGrants],
         ["feat", `От черты${featEntry ? ` (${featEntry.name})` : ""}`, featGrants],
+        ["feat2", `От черты вида${speciesFeatEntry ? ` (${speciesFeatEntry.name})` : ""}`, speciesFeatGrants],
         ["style", "От черты боевого стиля", styleGrants],
       ];
     for (const [src, label, g] of choiceSources) {
@@ -1432,9 +1623,9 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   // Заклинания, которые придут сами пересчётом выдач (не выбор, а грант), —
   // их в кандидатах помечаем, а не даём взять дублем.
   const grantedSpellIds = new Set(
-    [...classGrants.spells, ...speciesGrants.spells, ...featGrants.spells].map((s) => s.id)
+    [...classGrants.spells, ...speciesGrants.spells, ...featGrants.spells, ...speciesFeatGrants.spells].map((s) => s.id)
   );
-  const grantedSpellNames = [...classGrants.spells, ...speciesGrants.spells, ...featGrants.spells].map((s) => s.name);
+  const grantedSpellNames = [...classGrants.spells, ...speciesGrants.spells, ...featGrants.spells, ...speciesFeatGrants.spells].map((s) => s.name);
   function spellCandidates(group: SpellPickGroup): CompendiumEntry[] {
     if (!spellIndex) return [];
     return spellIndex.filter((e) => {
@@ -1467,6 +1658,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     if (!chosenSpells.includes(token) && chosenSpellEntryIds.has(entryId) && !group?.fromBook) return;
     setChosenSpells((prev) => {
       if (prev.includes(token)) return prev.filter(s => s !== token && !(group?.bookAcquisition && spellGroups.some(g => g.fromBook && s === `${g.key}:${entryId}`)));
+      if (limit === 1 && !group?.fromBook) return [...prev.filter((s) => !s.startsWith(`${groupKey}:`)), token];
       const used = prev.filter((s) => s.startsWith(`${groupKey}:`)).length;
       return used < limit ? [...prev, token] : prev;
     });
@@ -1480,7 +1672,6 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       return { group: g, picked, missing: Math.max(0, Math.min(g.count, available) - picked) };
     })
     .filter((s) => s.missing > 0);
-  const spellsComplete = spellShortfall.length === 0;
 
   async function finish() {
     // Recheck against current choices: changing level or restoring an old
@@ -1646,13 +1837,29 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         // оставалась текстом, и её механика до чисел не доходила.
         character.feats = [...character.feats, { name: chosenFeat.name, description: featEntry?.description ?? "", entryId: chosenFeat.id }];
       }
-      // Владения от черты («Музыкант», «Ремесленник») — строкой: конкретные
-      // инструменты игрок выбирает сам, а приложение за него не решает.
-      if (featGrants.toolChoice) {
-        const { count, group } = featGrants.toolChoice;
+    }
+    // Черта вида («Универсальность» Человека) — вторая, своя запись.
+    if (effectiveSpeciesFeatId && speciesFeatEntry && !character.feats.some((f) => f.entryId === speciesFeatEntry.id)) {
+      character.feats = [
+        ...character.feats,
+        { name: speciesFeatEntry.name, description: speciesFeatEntry.description ?? "", entryId: speciesFeatEntry.id },
+      ];
+    }
+    // Инструменты «на ваш выбор» (Q10): выбранные в визарде — ссылкой на
+    // запись; не из чего было выбрать (справочник без разметки) — строкой,
+    // как раньше, чтобы выбор не потерялся.
+    for (const g of toolGroups) {
+      const picked = chosenToolsIn(g.key);
+      for (const id of picked) {
+        const e = toolCatalog.find((x) => x.id === id);
+        if (e && !character.proficiencies.some((p) => p.entryId === e.id)) {
+          character.proficiencies = [...character.proficiencies, { entryId: e.id, name: e.name, abilityKey: null }];
+        }
+      }
+      if (g.options.length === 0) {
         character.proficiencies = [
           ...character.proficiencies,
-          { entryId: null, name: `${group} — выбрать ${count}`, abilityKey: null },
+          { entryId: null, name: `${g.group} — выбрать ${g.count}`, abilityKey: null },
         ];
       }
     }
@@ -1747,6 +1954,25 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
             entryId: item.entryId,
           });
         });
+        // Выбор внутри набора — выбранным предметом со снимком полей; не из
+        // чего было выбрать — строкой, чтобы позиция не пропала.
+        for (const slot of setChoiceSlots.filter((sl) => sl.setLabel === set.label)) {
+          const ids = setChoicePicked(slot);
+          if (ids.length === 0) {
+            addedItems.push({ ...EMPTY_EQUIPMENT_ITEM, id: makeEquipmentId(), name: slot.label, notes: "выбрать самому" });
+          }
+          for (const id of ids) {
+            const e = toolCatalog.find((x) => x.id === id);
+            const { entryId: _eid, ...restMeta } = (await fetchEquipmentMeta(id).catch(() => ({}))) as Record<string, unknown>;
+            addedItems.push({
+              ...EMPTY_EQUIPMENT_ITEM,
+              ...(restMeta as object),
+              id: makeEquipmentId(),
+              name: e?.name ?? slot.label,
+              entryId: id,
+            });
+          }
+        }
         // Выборные позиции кладутся строкой: выбрать за игрока приложение не
         // вправе, а потерять их из набора тем более.
         for (const text of set.manual) {
@@ -1979,7 +2205,6 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       featLines.push(featEntry.name);
       const picked = named(chosenIn("feat").map((t) => t.slice(t.indexOf(":") + 1)));
       if (picked.length > 0) featLines.push(`навыки: ${picked.join(", ")}`);
-      if (featGrants.toolChoice) featLines.push(`владения: ${featGrants.toolChoice.group} — выбрать ${featGrants.toolChoice.count}`);
       if (featGrants.resources.length > 0) featLines.push(`ресурсы: ${featGrants.resources.map((r) => r.label).join(", ")}`);
       if (featGrants.spellChoices.length > 0) {
         featLines.push(
@@ -1989,6 +2214,13 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         );
       }
     }
+    if (speciesFeatEntry && effectiveSpeciesFeatId) {
+      featLines.push(`${speciesFeatEntry.name} (от вида)`);
+      const picked = named(chosenIn("feat2").map((t) => t.slice(t.indexOf(":") + 1)));
+      if (picked.length > 0) featLines.push(`навыки: ${picked.join(", ")}`);
+    }
+    const toolNames = toolGroups.flatMap((g) => chosenToolsIn(g.key).map((id) => toolCatalog.find((e) => e.id === id)?.name ?? ""));
+    if (toolNames.filter(Boolean).length > 0) featLines.push(`инструменты: ${toolNames.filter(Boolean).join(", ")}`);
     overviewSources.push({ label: "Черта происхождения", lines: featLines });
   }
 
@@ -2013,16 +2245,10 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   }
   const pendingPicks: { label: string; text: string }[] = [];
   {
-    const choiceSources: [string, typeof featGrants][] = [
-      ["Класс", classGrants],
-      ["Подкласс", subclassGrants],
-      ["Вид", speciesGrants],
-      ["Черта", featGrants],
-    ];
-    for (const [src, g] of choiceSources) {
-      if (g.toolChoice) {
-        pendingPicks.push({ label: src, text: `владения на выбор: ${g.toolChoice.group} — ${g.toolChoice.count}` });
-      }
+    // Инструменты выбираются в визарде; «добрать» остаётся только там, где
+    // справочник не размечен и выбирать не из чего.
+    for (const g of toolGroups) {
+      if (g.options.length === 0) pendingPicks.push({ label: g.label, text: `владения на выбор: ${g.group} — ${g.count}` });
     }
     // Язык Баннерета («Посланник рыцарства»): модели выбора языка нет,
     // берётся руками на шаге языков — как автовыдачи плута/друида выше,
@@ -2066,30 +2292,87 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   // Данные мини-чарника (D0): чеклист, снаряжение и имена заклинаний
   // считаются здесь, показ — в WizardMiniSheet (один источник для
   // Обзора, сплита D1 и оборота D2).
-  const overviewProblems: MiniSheetProblem[] = [];
-  if (!characterName.trim()) overviewProblems.push({ text: "Нет имени", target: "Личность" });
-  if (!classId) overviewProblems.push({ text: "Не выбран класс", target: "Класс" });
-  if (!speciesId && !speciesCustom?.trim()) overviewProblems.push({ text: "Не выбран вид", target: "Вид" });
-  if (!backgroundId && !backgroundCustom?.trim())
-    overviewProblems.push({ text: "Не выбрана предыстория", target: "Предыстория" });
-  if (featMissing) overviewProblems.push({ text: "Не выбрана черта происхождения", target: "Черта" });
-  if (!pointBuyValid) {
-    overviewProblems.push({ text: "Покупка характеристик: значения вне 8–15 или превышен бюджет", target: "Характеристики" });
+  // Языки: Общий всем, плюс два на выбор (плюс язык Баннерета). Без
+  // справочника языков выбирать не из чего — и гейта нет.
+  const bonusLanguage = subclassId != null && !!subclassEntry && nameMatches(subclassEntry.name, "Баннерет") ? 1 : 0;
+  const languagePicks = chosenLanguages.filter((l) => l !== "Общий" && !autoLanguages.includes(l)).length;
+  const languageMissing = languageOptions.length === 0 ? 0 : Math.max(0, LANGUAGE_PICKS + bonusLanguage - languagePicks);
+
+  // Что держит «Далее» на каждом шаге (Q6) — и чеклист Обзора тем же списком.
+  function stepMissing(st: Step): string[] {
+    const out: string[] = [];
+    const more = (label: string, n: number) => n > 0 && out.push(`${label} — ещё ${n}`);
+    switch (st) {
+      case "Класс":
+        if (!systemId) break;
+        if (!classId) out.push("выбери класс");
+        else if (!classEntry || choiceDefs == null) out.push("загружаю класс…");
+        else if (!subclassLocked && subclassOptions.length > 0 && !subclassId) out.push("выбери подкласс");
+        break;
+      case "Умения класса":
+        more("Боевой стиль", styleMissing);
+        for (const x of entryShortfall) more(x.group, x.missing);
+        more("Оружейные приёмы", weaponMissing);
+        for (const x of toolMissing(["class", "subclass"])) more(`Инструменты (${x.g.group.toLowerCase()})`, x.missing);
+        break;
+      case "Вид":
+        if (!speciesId && speciesCustom === null) out.push("выбери вид");
+        else if (speciesCustom !== null && !speciesCustom.trim()) out.push("впиши название своего вида");
+        break;
+      case "Предыстория":
+        if (!backgroundId && backgroundCustom === null) out.push("выбери предысторию");
+        else if (backgroundCustom !== null && !backgroundCustom.trim()) out.push("впиши название своей предыстории");
+        for (const x of toolMissing(["background"])) more(`Инструменты (${x.g.group.toLowerCase()})`, x.missing);
+        break;
+      case "Черта":
+        if (featNeeded && !effectiveFeatId) out.push("выбери черту предыстории");
+        if (speciesFeatNeeded && !effectiveSpeciesFeatId) out.push("выбери черту вида");
+        for (const x of toolMissing(["feat", "feat2"])) more(`Инструменты (${x.g.group.toLowerCase()})`, x.missing);
+        break;
+      case "Характеристики":
+        if (!pointBuyValid) out.push("покупка: значения вне 8–15 или превышен бюджет");
+        break;
+      case "Навыки и языки":
+        for (const x of skillShortfall) more(`Навыки ${x.group.label.charAt(0).toLowerCase()}${x.group.label.slice(1)}`, x.missing);
+        more("Экспертность", expertiseMissing);
+        more("Языки", languageMissing);
+        break;
+      case "Заклинания":
+        for (const x of spellShortfall) more(x.group.label, x.missing);
+        break;
+      case "Снаряжение":
+        for (const sl of setChoiceMissing) out.push(`выбери: ${sl.label}`);
+        break;
+      case "Досье":
+        if (!characterName.trim()) out.push("впиши имя персонажа");
+        break;
+    }
+    return out;
   }
-  if (styleMissing > 0) {
-    overviewProblems.push({ text: `Боевой стиль: ещё ${styleMissing}`, target: "Класс" });
+  // Шаг виден, только если на нём есть что выбирать (Q5, Q16).
+  const classChoiceCount =
+    styleSlots.length + entrySlots.length + (weaponSlots > 0 ? 1 : 0) + toolGroups.filter((g) => g.key === "class" || g.key === "subclass").length;
+  function stepVisible(st: Step): boolean {
+    if (st === "Умения класса") return classChoiceCount > 0;
+    if (st === "Черта") return featNeeded || speciesFeatNeeded;
+    if (st === "Заклинания") return spellGroups.length > 0;
+    return true;
   }
-  for (const s of entryShortfall) {
-    overviewProblems.push({ text: `${s.group}: ещё ${s.missing}`, target: "Класс" });
-  }
-  if (weaponMissing > 0) {
-    overviewProblems.push({ text: `Оружейные приёмы: ещё ${weaponMissing}`, target: "Класс" });
-  }
-  for (const s of skillShortfall) {
-    overviewProblems.push({ text: `Навыки (${s.group.label}): ещё ${s.missing}`, target: "Навыки" });
-  }
-  for (const s of spellShortfall) {
-    overviewProblems.push({ text: `Заклинания (${s.group.label}): ещё ${s.missing}`, target: "Заклинания" });
+  const visibleSteps = STEPS.filter((st) => stepVisible(st) || st === step);
+  const overviewProblems: MiniSheetProblem[] = visibleSteps.flatMap((st) =>
+    st === "Обзор" ? [] : stepMissing(st).map((text) => ({ text, target: st }))
+  );
+  // Предупреждения Обзора (Q11): законно, но сомнительно — создать можно.
+  const overviewWarnings: string[] = [];
+  {
+    const primary = classEntry ? parseAbilityNames(classEntry.data.primary_abilities) : [];
+    if (primary.length > 0 && Math.max(...primary.map((k) => awardedAbilities[k])) < 13) {
+      const names = primary.map((k) => ABILITY_LABELS.find((a) => a.key === k)?.label ?? k).join(" / ");
+      overviewWarnings.push(
+        `Основная характеристика класса (${names}) — ${Math.max(...primary.map((k) => awardedAbilities[k]))}. Классу она нужна больше всего: уверен?`
+      );
+    }
+    if (abilityModifier(awardedAbilities.con) < 0) overviewWarnings.push("Телосложение ниже 10 — хитов будет меньше обычного.");
   }
   const overviewTaken = startingSets.filter((s) => setTaken(s.label));
   const overviewSpellNames = chosenSpells
@@ -2099,13 +2382,16 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       return spellIndex?.find((e) => e.id === id)?.name ?? `#${id}`;
     });
 
-  const stepIndex = STEPS.indexOf(step);
-  // D2: оборот на мобиле — лицо (шаг) ↔ оборот (живой чарник). Без 3D-сцены:
-  // лицо прячется, оборот доворачивается (прецедент .dnd-card-back).
-  // Любая смена шага возвращает лицо; на десктопе состояние сбрасывается.
+  // Навигация — по видимым шагам: пустые (нечего выбирать) пропускаются.
+  const stepPos = Math.max(0, visibleSteps.indexOf(step));
+  const missingHere = stepMissing(step);
+  // D2: оборот на мобиле — лицо (шаг) ↔ оборот (живой чарник). Любая смена
+  // шага возвращает лицо; на десктопе состояние сбрасывается.
   const [mobilePreview, setMobilePreview] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     setMobilePreview(false);
+    bodyRef.current?.scrollTo({ top: 0 });
   }, [step]);
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 1001px)");
@@ -2115,6 +2401,25 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     mq.addEventListener("change", reset);
     return () => mq.removeEventListener("change", reset);
   }, []);
+  // Шторка: описание записи, состав набора или список шагов.
+  type SheetState =
+    | {
+        kind: "entry";
+        entryId: number;
+        entry?: CompendiumEntry | null;
+        meta?: string;
+        picked: boolean;
+        onToggle: () => void;
+        disabled?: boolean;
+      }
+    | { kind: "set"; label: string }
+    | { kind: "steps" }
+    | null;
+  const [sheet, setSheet] = useState<SheetState>(null);
+  // Перестановка характеристик тапом: первая «взведена», вторая меняется с ней.
+  const [armedAbility, setArmedAbility] = useState<keyof DndAbilityScores | null>(null);
+  const [weaponQ, setWeaponQ] = useState("");
+
   // Данные постера собираются в момент нажатия (кнопки зовут колбэк),
   // поэтому черновик и правки между рендерами не протухают.
   function posterData(): PosterData {
@@ -2169,10 +2474,10 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     );
   }
   function next() {
-    setStep(STEPS[Math.min(STEPS.length - 1, stepIndex + 1)]);
+    setStep(visibleSteps[Math.min(visibleSteps.length - 1, stepPos + 1)]);
   }
   function back() {
-    setStep(STEPS[Math.max(0, stepIndex - 1)]);
+    setStep(visibleSteps[Math.max(0, stepPos - 1)]);
   }
   function cancelWizard() {
     // Черновик уже лежит в localStorage — закрытие ничего не стирает,
@@ -2193,7 +2498,8 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     if (!window.confirm("Очистить черновик и начать заново? Это действие не отменить.")) return;
     clearWizardDraft();
     setHadDraft(false);
-    setStep("Личность");
+    setSheet(null);
+    setStep("Класс");
     setCharacterName(ownerName ?? "");
     setPlayerName(ownerType === "character" ? ownerPlayerName ?? "" : "");
     setClassId(null);
@@ -2206,17 +2512,25 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     setBackgroundCustom(null);
     setFeatId(null);
     setFeatTouched(false);
+    setSpeciesFeatId(null);
     setAwardMode("2+1");
     setAwardPrimary(null);
     setAwardSecondary(null);
     setTakenSets({});
+    setSetChoicePicks({});
     setMethod("standard");
     const a = emptyAbilities();
     (Object.keys(a) as (keyof DndAbilityScores)[]).forEach((k, i) => (a[k] = STANDARD_ARRAY[i]));
     setAbilities(a);
+    setAbilitiesTouched(false);
     setRolledPool(STANDARD_ARRAY.slice());
     setChosenSkills([]);
+    setChosenExpertise([]);
     setChosenSpells([]);
+    setChosenStyle([]);
+    setChosenEntries({});
+    setMasteredWeapons([]);
+    setChosenTools([]);
     setSpellSearch("");
     setAlignment("");
     setChosenLanguages([]);
@@ -2231,818 +2545,619 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     setSaveError(null);
   }
 
-  return (
-    // Визард — модалкой, как SettingWizard: фокус на семи шагах, фокус-трап и
-    // возврат фокуса из коробки. Клик по фону отключён (черновик и так
-    // спасает, но выход — только через явную кнопку), ESC идёт в cancelWizard
-    // с вопросом. Внутренняя .card остаётся — вёрстка не едет, а класс
-    // .wizard включает готовые 620px (.modal:has(.wizard)).
-    <Modal onClose={cancelWizard} closeOnBackdropClick={false} ariaLabel="Создание персонажа">
-    <div className={`card stack wizard${visualVariant === "oneshot" ? " wizard--oneshot" : ""}`}>
-      {/* Шапка-инверсия §1.4: плашка называет карточку, счётчик — справа. */}
-      <div className="campaign-player-header">
-        <span>Создание персонажа</span>
-        <span>
-          Шаг {stepIndex + 1} из {STEPS.length} · {step}
-        </span>
-      </div>
-      {visualVariant === "oneshot" && <progress className="wizard-progress" value={stepIndex + 1} max={STEPS.length} aria-label="Прогресс создания персонажа" />}
-      <div className="row wizard-step-row">
-        {/* Мобильный пикер вместо ленты табов: 12 язычков не влезают в 390px.
-            Тот же приём, что .dnd-section-picker у листа персонажа.
-            Шаги не залочены: заглядывать вперёд и в Обзор можно, гейты
-            держат «Далее» (навыки/заклинания) и «Создать» (чеклист). */}
-        <select
-          className="wizard-step-picker"
-          aria-label="Шаг создания персонажа"
-          value={step}
-          onChange={(e) => setStep(e.target.value as Step)}
-        >
-          {STEPS.map((s, i) => (
-            <option key={s} value={s}>
-              {i + 1}. {s}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="tabs wizard-steps-tabs" role="tablist" aria-label="Шаги создания персонажа">
-        {STEPS.map((s) => (
-          <button
-            key={s}
-            role="tab"
-            aria-selected={step === s}
-            aria-current={step === s ? "step" : undefined}
-            className={step === s ? "active" : ""}
-            onClick={() => setStep(s)}
-          >
-            {s}
-          </button>
-        ))}
-      </div>
+  // Шторка записи: тап по строке списка.
+  function openEntry(
+    entryId: number,
+    picked: boolean,
+    onToggle: () => void,
+    extra?: { entry?: CompendiumEntry | null; meta?: string; disabled?: boolean }
+  ) {
+    setSheet({ kind: "entry", entryId, picked, onToggle, ...extra });
+  }
 
-      {/* D2: кнопка оборота — только там, где нет сайдбара (≤1000px).
-          На «Обзоре» не нужна: чарник уже показан. */}
-      {step !== "Обзор" && (
-        <div className="row wizard-flip-row">
-          <button type="button" onClick={() => setMobilePreview((v) => !v)} aria-expanded={mobilePreview}>
-            {mobilePreview ? "К шагам" : "Предпросмотр"}
-          </button>
-        </div>
-      )}
+  const abilityLabel = (k: keyof DndAbilityScores) => ABILITY_LABELS.find((a) => a.key === k)?.label ?? k;
+  const classPrimary = classEntry ? parseAbilityNames(classEntry.data.primary_abilities) : [];
 
-      {/* D1: десктоп-сплит — шаги слева, живой чарник справа липко.
-          На шаге «Обзор» сайдбар прячем: чарник уже во всю ширину. */}
-      <div className="wizard-split">
-      <div className="wizard-main stack">
-      {mobilePreview && step !== "Обзор" ? (
-        <div className="wizard-back">
-          {miniSheet()}
-          <button
-            type="button"
-            className="wizard-back-corner"
-            aria-label="К шагам"
-            onClick={() => setMobilePreview(false)}
+  function renderToolGroups(keys: string[]) {
+    return toolGroups
+      .filter((g) => keys.includes(g.key))
+      .map((g) => {
+        const picked = chosenToolsIn(g.key);
+        return (
+          <section key={`tools:${g.key}`}>
+            <PickHead label={`Инструменты: ${g.group.toLowerCase()}`} picked={picked.length} total={g.count} hint={g.label} />
+            {g.options.length === 0 ? (
+              <span className="muted">Справочник не знает вариантов — выбор ляжет строкой на лист.</span>
+            ) : (
+              <PickList
+                rows={g.options.map((e) => {
+                  // Владение одним инструментом дважды не берётся.
+                  const other = toolGroups.find((o) => o.key !== g.key && chosenToolsIn(o.key).includes(e.id));
+                  return { key: String(e.id), title: e.name, meta: other ? `уже есть: ${other.label}` : undefined, picked: picked.includes(e.id), disabled: !!other };
+                })}
+                full={g.count > 1 && picked.length >= g.count}
+                collapse={picked.length >= g.count}
+                onToggle={(k) => toggleTool(g.key, Number(k), g.count)}
+              />
+            )}
+          </section>
+        );
+      });
+  }
+
+  function renderClass() {
+    return (
+      <div className="wz-step">
+        {!systemId && <span className="muted">У кампании не указана система — выбор класса недоступен, можно будет добавить позже.</span>}
+        <div className="row wz-level">
+          <span className="wz-group-label">Уровень</span>
+          <span className="dnd-class-level-stepper">
+            <button type="button" className="dnd-level-step-btn wizard-touch" aria-label="Уровень −1" disabled={level <= 1} onClick={() => stepLevel(-1)}>
+              <NavIcon name="minus" />
+            </button>
+            <button type="button" className="dnd-level-step-btn wizard-touch" aria-label="Уровень +1" disabled={level >= 20} onClick={() => stepLevel(1)}>
+              <NavIcon name="plus" />
+            </button>
+          </span>
+          <input
+            type="number"
+            min={1}
+            max={20}
+            className="wizard-level-input"
+            aria-label="Уровень"
+            value={levelText ?? level}
+            onChange={(e) => setLevelText(e.target.value)}
+            onBlur={(e) => commitLevel(e.target.value)}
           />
         </div>
-      ) : (
-      <>
-      {step === "Личность" && (
-        <div className="stack">
-          <label>
-            Имя персонажа
-            <input value={characterName} onChange={(e) => setCharacterName(e.target.value)} maxLength={80} />
-          </label>
-          <label>
-            Имя игрока
-            <input value={playerName} onChange={(e) => setPlayerName(e.target.value)} maxLength={80} />
-          </label>
-          <span className="muted">Имя можно придумать позже — для создания оно понадобится на шаге «Обзор».</span>
-        </div>
-      )}
-
-      {step === "Портрет" && (
-        <div className="stack">
-          <span className="muted">Необязательный шаг — можно пропустить. Фото зальётся при создании персонажа.</span>
-          {portraitPreview ? (
-            <div className="row">
-              <img src={portraitPreview} alt="Портрет персонажа" className="wizard-avatar-preview" />
-              <button type="button" onClick={clearPortrait}>
-                Убрать фото
-              </button>
-            </div>
-          ) : (
-            <>
-              <label className="row">
-                Выбрать фото
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    portraitCrop.onSelect(e.target.files?.[0] ?? null);
-                    e.target.value = "";
-                  }}
-                />
-              </label>
-              {ownerPortraitUrl && (
-                <div className="row">
-                  <button type="button" onClick={takeOwnerPortrait} disabled={portraitFetching}>
-                    {portraitFetching ? "Загружаю…" : "Взять как у владельца"}
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-          {portraitCrop.modal}
-          {portraitError && (
-            <div className="sb-save-status is-error" role="alert">
-              {portraitError}
-            </div>
-          )}
-        </div>
-      )}
-
-      {step === "Класс" && cardPreview && (
-        <CardSpread
+        <CardRibbon
           systemId={systemId}
-          entryId={cardPreview.id}
-          strip={cardPreview.kind === "class" && cardPreview.id === classId ? subclassStrip : undefined}
-          actions={
-            <>
-              {cardPreview.kind === "subclass" && subclassLocked ? (
-                <span className="muted">Подкласс выбирается {subLockNote}</span>
-              ) : (
-                <button
-                  type="button"
-                  className="primary"
-                  onClick={() => {
-                    if (cardPreview.kind === "class") pickClass(cardPreview.id);
-                    else pickSubclass(cardPreview.id);
-                    setCardPreview(null);
-                  }}
-                >
-                  Выбрать
-                </button>
-              )}
-              <button type="button" onClick={() => setCardPreview(null)}>
-                Назад
-              </button>
-            </>
-          }
+          options={hierarchy.classes}
+          selectedId={classId}
+          onPick={(id) => id !== classId && pickClass(id)}
+          searchPlaceholder="Поиск класса"
         />
-      )}
-      {step === "Класс" && !cardPreview && (
-        <div className="stack">
-          {!systemId && <span className="muted">У кампании не указана система — выбор класса недоступен, можно будет добавить позже.</span>}
-          <div className="tabs wizard-card-tabs" role="tablist" aria-label="Класс или подкласс">
-            <button type="button" role="tab" aria-selected={classTab === "class"} className={classTab === "class" ? "active" : ""} onClick={() => setClassTab("class")}>
-              Класс{classOption ? ` · ${classOption.name}` : ""}
-            </button>
-            <button type="button" role="tab" aria-selected={classTab === "subclass"} className={classTab === "subclass" ? "active" : ""} onClick={() => setClassTab("subclass")}>
-              Подкласс{subclassId ? ` · ${subclassOptions.find((o) => o.id === subclassId)?.name ?? ""}` : ""}
-            </button>
-          </div>
-          {classTab === "class" && (!classId || mobile) && (
-            <label className="row">
-              Поиск
-              <input
-                value={classQ}
-                onChange={(e) => setClassQ(e.target.value)}
-                placeholder="Название класса"
-                aria-label="Поиск класса"
-              />
-            </label>
-          )}
-          {classTab === "class" && (
-            <CardGrid
-              options={hierarchy.classes.filter((c) => matchQ(c.name, classQ))}
-              selectedId={classId}
-              collapsed={!mobile && classId != null}
-              onPick={(o: CardOption) => (mobile ? setCardPreview({ kind: "class", id: o.id }) : o.id !== classId && pickClass(o.id))}
-            />
-          )}
-          {classTab === "subclass" &&
-            (!classId ? (
-              <span className="muted">Сначала выбери класс.</span>
-            ) : subclassOptions.length === 0 ? (
-              <span className="muted">У класса в справочнике нет подклассов.</span>
+        {classId != null && subclassOptions.length > 0 && (
+          <section>
+            <PickHead label="Подкласс" />
+            {subclassLocked ? (
+              <span className="muted">Подкласс выбирается {subLockNote} — на листе при повышении уровня.</span>
             ) : (
-              <>
-                {subclassLocked && <span className="muted">Подкласс выбирается {subLockNote} — пока карты можно посмотреть.</span>}
-                <CardGrid
-                  options={subclassOptions}
-                  selectedId={subPreview ?? subclassId}
-                  collapsed={!mobile && (subPreview ?? subclassId) != null}
-                  noteFor={subclassLocked ? () => subLockNote : undefined}
-                  onPick={(o: CardOption) =>
-                    mobile ? setCardPreview({ kind: "subclass", id: o.id }) : subclassLocked ? setSubPreview(o.id) : pickSubclass(o.id)
+              <CardRibbon key={classId} systemId={systemId} options={subclassOptions} selectedId={subclassId} onPick={(id) => pickSubclass(id)} />
+            )}
+          </section>
+        )}
+      </div>
+    );
+  }
+
+  function renderClassChoices() {
+    return (
+      <div className="wz-step">
+        <p className="wz-step-lead">
+          Что {classOption?.name ?? "класс"} выбирает на {level} уровне.{styleSlots.length + entrySlots.length > 0 && " Тап по названию — описание."}
+        </p>
+        {styleSlots.map((def, i) => {
+          const takenElsewhere = new Set(chosenStyle.filter((_, j) => j !== i));
+          const options = styleFeats.filter((f) => !takenElsewhere.has(f.id) && featFitsClasses(f, [classId]));
+          const pick = (id: number) => {
+            const nextId = chosenStyle[i] === id ? null : id;
+            setChosenStyle((prev) => {
+              const out = [...prev];
+              while (out.length <= i) out.push(null);
+              out[i] = nextId;
+              return out;
+            });
+            if (nextId != null) void fetchStyleEntry(nextId);
+          };
+          return (
+            <section key={`${def.sourceEntryId}:${i}`}>
+              <PickHead label="Боевой стиль" picked={chosenStyle[i] != null ? 1 : 0} total={1} hint={`от умения «${def.sourceName}»`} />
+              {styleFeats.length === 0 ? (
+                <span className="muted">Черты стиля не загрузились — выбери позже на листе.</span>
+              ) : (
+                <PickList
+                  rows={options.map((f) => ({ key: String(f.id), title: f.name, picked: chosenStyle[i] === f.id }))}
+                  collapse
+                  onToggle={(k) => pick(Number(k))}
+                  onOpen={(k) =>
+                    openEntry(Number(k), chosenStyle[i] === Number(k), () => pick(Number(k)), { entry: styleFeatEntries[Number(k)] })
                   }
                 />
-              </>
-            ))}
-          <div className="row">
-            <label className="row">
-              Уровень
-              <span className="dnd-class-level-stepper">
-                <button
-                  type="button"
-                  className="dnd-level-step-btn wizard-touch"
-                  aria-label="Уровень −1"
-                  disabled={level <= 1}
-                  onClick={() => stepLevel(-1)}
-                >
-                  <NavIcon name="minus" />
-                </button>
-                <button
-                  type="button"
-                  className="dnd-level-step-btn wizard-touch"
-                  aria-label="Уровень +1"
-                  disabled={level >= 20}
-                  onClick={() => stepLevel(1)}
-                >
-                  <NavIcon name="plus" />
-                </button>
-              </span>
-              <input
-                type="number"
-                min={1}
-                max={20}
-                className="wizard-level-input"
-                value={levelText ?? level}
-                onChange={(e) => setLevelText(e.target.value)}
-                onBlur={(e) => commitLevel(e.target.value)}
-              />
-            </label>
-          </div>
-          {styleSlots.length > 0 && (
-            <details className="stack wizard-choice" open>
-              <summary>
-                Боевой стиль — выбери черту{styleSlots.length > 1 ? " (у Чемпиона их две)" : ""} ({stylePicked}/{styleSlots.length})
-              </summary>
-              {styleSlots.map((def, i) => {
-                const takenElsewhere = new Set(chosenStyle.filter((_, j) => j !== i));
-                return (
-                  <div key={`${def.sourceEntryId}:${i}`} className="stack" style={{ gap: "var(--sp-2)" }}>
-                    <div className="row">
-                      <select
-                        value={chosenStyle[i] ?? ""}
-                        onChange={(e) => {
-                          const id = e.target.value ? Number(e.target.value) : null;
-                          // Не prev.map: свежий визард и смена класса дают [],
-                          // и map по пустому массиву молча терял выбор.
-                          setChosenStyle((prev) => {
-                            const next = [...prev];
-                            while (next.length <= i) next.push(null);
-                            next[i] = id;
-                            return next;
-                          });
-                          if (id != null) void fetchStyleEntry(id);
-                        }}
-                      >
-                        <option value="">— черта стиля —</option>
-                        {styleFeats
-                          .filter((f) => !takenElsewhere.has(f.id) && featFitsClasses(f, [classId]))
-                          .map((f) => (
-                            <option key={f.id} value={f.id}>
-                              {f.name}
-                            </option>
-                          ))}
-                      </select>
-                      <span className="muted">от умения «{def.sourceName}»</span>
-                    </div>
-                    {chosenStyle[i] != null && styleFeatEntries[chosenStyle[i]!] && (
-                      <EntryBlurb text={styleFeatEntries[chosenStyle[i]!].description} />
-                    )}
-                  </div>
-                );
-              })}
-              {styleFeats.length === 0 && styleSlots.length > 0 && (
-                <span className="muted">Черты стиля не загрузились — выбери позже на листе.</span>
               )}
-              {chosenStyle.slice(styleSlots.length).map(
-                (id, k) =>
-                  id != null && (
-                    <div key={`orphan:${k}`} className="row">
-                      <span>
-                        {styleFeatEntries[id]?.name ?? styleFeats.find((f) => f.id === id)?.name ?? "Черта"} — сверх
-                        лимита (уровень снижен), на листе подсветит.
-                      </span>
-                      <button
-                        type="button"
-                        className="comp-mini"
-                        onClick={() =>
-                          setChosenStyle((prev) => prev.filter((_, j) => j !== styleSlots.length + k))
-                        }
-                      >
-                        Убрать
-                      </button>
-                    </div>
-                  )
-              )}
-            </details>
-          )}
-          {entrySlots.length > 0 && (
-            <div className="stack">
-              {entrySlots.map((slot) => {
-                const picked = chosenEntries[slot.key] ?? [];
-                const catalog = entryCatalog[slot.group];
-                return (
-                  <details key={slot.key} className="stack wizard-choice" style={{ gap: "var(--sp-2)" }} open>
-                    <summary>
-                      {slot.group}: выбери {slot.total} ({picked.length}/{slot.total})
-                    </summary>
-                    {catalog === undefined && (
-                      <span className="muted">Загружаю {slot.group.toLowerCase()}…</span>
-                    )}
-                    {catalog !== undefined && catalog.length === 0 && (
-                      <span className="muted">Список пуст — выбери позже на листе.</span>
-                    )}
-                    {(catalog ?? []).map((e) => {
-                      // Требование уровня — полем записи (воззвания, тикет 02
-                      // warlock): недоступное видно, но не жмётся. У приёмов
-                      // поля нет — для них ничего не меняется.
-                      const needLevel = e.level ?? 1;
-                      const locked = needLevel > level;
-                      return (
-                        <div key={e.id}>
-                          <label className="row">
-                            <input
-                              type="checkbox"
-                              checked={picked.includes(e.id)}
-                              disabled={locked}
-                              onChange={() => toggleEntry(slot.key, e.id, slot.total)}
-                            />
-                            {e.name}
-                            {locked && <span className="muted"> · с {needLevel} ур.</span>}
-                          </label>
-                        {e.description && (
-                          <details className="muted wizard-blurb">
-                            <summary>Описание</summary>
-                            <div className="wizard-blurb-more">{e.description}</div>
-                          </details>
-                        )}
-                        </div>
-                      );
-                    })}
-                  </details>
-                );
-              })}
-            </div>
-          )}
-          {weaponSlots > 0 && (
-            <details className="stack wizard-choice" open>
-              <summary>
-                Оружейные приёмы ({masteredWeapons.length}/{weaponSlots})
-              </summary>
-              {weaponCatalog === null && <span className="muted">Загружаю оружие…</span>}
-              {weaponCatalog !== null && (
-                <WeaponMasteryPicker
-                  title="Выбрано"
-                  entries={weaponCatalog}
-                  pickedIds={masteredWeapons.map((w) => w.entryId)}
-                  limit={weaponSlots}
-                  onToggle={toggleMastered}
+            </section>
+          );
+        })}
+        {chosenStyle.slice(styleSlots.length).map(
+          (id, k) =>
+            id != null && (
+              <div key={`orphan:${k}`} className="row wz-warn">
+                <span>
+                  {styleFeatEntries[id]?.name ?? styleFeats.find((f) => f.id === id)?.name ?? "Черта"} — сверх лимита (уровень снижен).
+                </span>
+                <button type="button" onClick={() => setChosenStyle((prev) => prev.filter((_, j) => j !== styleSlots.length + k))}>
+                  Убрать
+                </button>
+              </div>
+            )
+        )}
+        {entrySlots.map((slot) => {
+          const picked = chosenEntries[slot.key] ?? [];
+          const catalog = entryCatalog[slot.group];
+          return (
+            <section key={slot.key}>
+              <PickHead label={slot.group} picked={picked.length} total={slot.total} />
+              {catalog === undefined ? (
+                <span className="muted">Загружаю…</span>
+              ) : catalog.length === 0 ? (
+                <span className="muted">Список пуст — выбери позже на листе.</span>
+              ) : (
+                <PickList
+                  rows={catalog.map((e) => {
+                    const needLevel = e.level ?? 1;
+                    return {
+                      key: String(e.id),
+                      title: e.name,
+                      meta: needLevel > level ? `с ${needLevel} ур.` : undefined,
+                      picked: picked.includes(e.id),
+                      disabled: needLevel > level,
+                    };
+                  })}
+                  full={slot.total > 1 && picked.length >= slot.total}
+                  collapse={picked.length >= slot.total}
+                  onToggle={(k) => toggleEntry(slot.key, Number(k), slot.total)}
+                  onOpen={(k) => {
+                    const e = catalog.find((x) => x.id === Number(k));
+                    openEntry(Number(k), picked.includes(Number(k)), () => toggleEntry(slot.key, Number(k), slot.total), {
+                      entry: e,
+                      disabled: (e?.level ?? 1) > level,
+                    });
+                  }}
                 />
               )}
-            </details>
-          )}
-          {!mobile && classTab === "class" && classId != null && (
-            <CardSpread systemId={systemId} entryId={classId} strip={subclassStrip} />
-          )}
-          {!mobile && classTab === "subclass" && (subPreview ?? subclassId) != null && (
-            <CardSpread
-              systemId={systemId}
-              entryId={(subPreview ?? subclassId)!}
-              actions={subclassLocked ? <span className="muted">Подкласс выбирается {subLockNote}</span> : undefined}
-            />
-          )}
-        </div>
-      )}
+            </section>
+          );
+        })}
+        {weaponSlots > 0 && (
+          <section>
+            <PickHead label="Оружейные приёмы" picked={masteredWeapons.length} total={weaponSlots} />
+            {weaponCatalog === null ? (
+              <span className="muted">Загружаю оружие…</span>
+            ) : (
+              <>
+                <SearchField value={weaponQ} onChange={setWeaponQ} placeholder="Поиск оружия" />
+                <PickList
+                  rows={weaponCatalog
+                    .filter((e) => matchQ(`${e.name} ${e.name_original ?? ""}`, weaponQ))
+                    .slice(0, 60)
+                    .map((e) => {
+                      const damage = typeof e.data.damage === "string" ? e.data.damage : "";
+                      const mastery = weaponMasteryName(e);
+                      return {
+                        key: String(e.id),
+                        title: e.name,
+                        meta: [damage, mastery && `мастерство: ${mastery}`].filter(Boolean).join(" · "),
+                        picked: masteredWeapons.some((w) => w.entryId === e.id),
+                      };
+                    })}
+                  full={masteredWeapons.length >= weaponSlots}
+                  collapse={masteredWeapons.length >= weaponSlots}
+                  onToggle={(k) => {
+                    const e = weaponCatalog.find((x) => x.id === Number(k));
+                    if (e) toggleMastered(e);
+                  }}
+                />
+              </>
+            )}
+          </section>
+        )}
+        {renderToolGroups(["class", "subclass"])}
+      </div>
+    );
+  }
 
-      {step === "Вид" && cardPreview && (
-        <CardSpread
+  function renderSpecies() {
+    const options: CardOption[] = [...speciesOptions, { id: CUSTOM_CARD_ID, name: "Свой вариант", card: null }];
+    return (
+      <div className="wz-step">
+        <CardRibbon
           systemId={systemId}
-          entryId={cardPreview.id}
-          actions={
-            <>
-              <button
-                type="button"
-                className="primary"
-                onClick={() => {
-                  pickSpecies(cardPreview.id);
-                  setCardPreview(null);
-                }}
-              >
-                Выбрать
-              </button>
-              <button type="button" onClick={() => setCardPreview(null)}>
-                Назад
-              </button>
-            </>
+          options={options}
+          selectedId={speciesCustom !== null ? CUSTOM_CARD_ID : speciesId}
+          onPick={(id) => (id === CUSTOM_CARD_ID ? pickSpecies("custom") : id !== speciesId && pickSpecies(id))}
+          searchPlaceholder="Поиск вида"
+        />
+        {speciesCustom !== null && (
+          <label className="wz-field">
+            Название своего вида
+            <input value={speciesCustom} onChange={(e) => setSpeciesCustom(e.target.value)} placeholder="Например, полуогр" maxLength={80} />
+            <span className="muted">
+              1 навык на выбор — на шаге «Навыки», черта происхождения — на своём шаге. Остальное договоритесь с Мастером и
+              доберёте на листе.
+            </span>
+          </label>
+        )}
+      </div>
+    );
+  }
+
+  function selectBackground(id: number | "custom" | null) {
+    if (id === "custom") {
+      setBackgroundId(null);
+      setBackgroundCustom((prev) => prev ?? "");
+    } else {
+      setBackgroundId(id);
+      setBackgroundCustom(null);
+    }
+    setAwardPrimary(null);
+    setAwardSecondary(null);
+    setChosenSkills((prev) => prev.filter((t) => !t.startsWith("background:")));
+    setChosenTools((prev) => prev.filter((t) => !t.startsWith("background:")));
+  }
+
+  function renderBackground() {
+    const rows = backgroundOptions
+      .filter((b) => matchQ(b.name, backgroundQ))
+      .map((b) => ({ key: String(b.id), title: b.name, meta: b.summary, picked: backgroundId === b.id }));
+    rows.push({ key: "custom", title: "Свой вариант", meta: "договоритесь с Мастером", picked: backgroundCustom !== null });
+    return (
+      <div className="wz-step">
+        {backgroundCustom !== null && (
+          <label className="wz-field">
+            Название своей предыстории
+            <input value={backgroundCustom} onChange={(e) => setBackgroundCustom(e.target.value)} placeholder="Например, контрабандист" maxLength={80} />
+            <span className="muted">
+              Прибавка из любых характеристик и 2 навыка — на своих шагах, черта — на своём шаге. Набора снаряжения из справочника не
+              будет — договоритесь с Мастером.
+            </span>
+          </label>
+        )}
+        {backgroundId != null && backgroundEntry && (
+          <div className="stack wz-warn" aria-live="polite">
+            <strong>{backgroundEntry.name}</strong>
+            {backgroundGrants.skills.length > 0 && <span>Навыки: {backgroundGrants.skills.map((k) => skills.nameOf(k)).join(", ")}</span>}
+            {backgroundGrants.toolNames.length > 0 && <span>Владения: {backgroundGrants.toolNames.join(", ")}</span>}
+            {backgroundGrants.originFeat && <span>Черта происхождения: {backgroundGrants.originFeat.name}</span>}
+            {backgroundGrants.abilityOptions.length > 0 && (
+              <span>Характеристики: {backgroundGrants.abilityOptions.join(", ")} — +2/+1 или +1 каждой</span>
+            )}
+          </div>
+        )}
+        {renderToolGroups(["background"])}
+        <SearchField value={backgroundQ} onChange={setBackgroundQ} placeholder="Поиск предыстории" />
+        <PickList
+          rows={rows}
+          collapse
+          onToggle={(k) => (k === "custom" ? selectBackground("custom") : selectBackground(backgroundId === Number(k) ? null : Number(k)))}
+          onOpen={(k) =>
+            k === "custom"
+              ? selectBackground("custom")
+              : openEntry(Number(k), backgroundId === Number(k), () => selectBackground(backgroundId === Number(k) ? null : Number(k)), {
+                  meta: backgroundOptions.find((b) => b.id === Number(k))?.summary,
+                })
           }
         />
-      )}
-      {step === "Вид" && !cardPreview && (
-        <div className="stack">
-          {(mobile || (speciesId == null && speciesCustom === null)) && (
-            <label className="row">
-              Поиск
-              <input
-                value={speciesQ}
-                onChange={(e) => setSpeciesQ(e.target.value)}
-                placeholder="Название вида"
-                aria-label="Поиск вида"
-              />
-            </label>
-          )}
-          <CardGrid
-            options={speciesOptions.filter((o) => matchQ(o.name, speciesQ))}
-            selectedId={speciesId}
-            collapsed={!mobile && (speciesId != null || speciesCustom !== null)}
-            onPick={(o: CardOption) => (mobile ? setCardPreview({ kind: "species", id: o.id }) : o.id !== speciesId && pickSpecies(o.id))}
-            trailing={
-              <CardTile
-                option={{ id: -1, name: "Свой вариант", card: null }}
-                selected={speciesCustom !== null}
-                small={!mobile && (speciesId != null || speciesCustom !== null)}
-                onClick={() => pickSpecies("custom")}
-              />
-            }
-          />
-          {speciesCustom !== null && (
-            <>
-              <input
-                value={speciesCustom}
-                onChange={(e) => setSpeciesCustom(e.target.value)}
-                placeholder="Название вида"
-                maxLength={80}
-              />
-              <span className="muted">
-                Свой вид: 1 навык на выбор — на шаге «Навыки», черта происхождения — вручную на своём шаге.
-                Остальное договоритесь с Мастером и доберёте на листе.
-              </span>
-            </>
-          )}
-          {!mobile && speciesId != null && <CardSpread systemId={systemId} entryId={speciesId} />}
-        </div>
-      )}
+      </div>
+    );
+  }
 
-      {step === "Предыстория" && (
-        <div className="stack">
-          <label className="row">
-            Поиск
-            <input
-              value={backgroundQ}
-              onChange={(e) => setBackgroundQ(e.target.value)}
-              placeholder="Название предыстории"
-              aria-label="Поиск предыстории"
-            />
-          </label>
-          <select
-            value={backgroundId ?? (backgroundCustom !== null ? "__custom" : "")}
-            onChange={(e) => {
-              if (e.target.value === "__custom") {
-                setBackgroundId(null);
-                setBackgroundCustom("");
-              } else {
-                setBackgroundId(e.target.value ? Number(e.target.value) : null);
-                setBackgroundCustom(null);
+  function renderFeat() {
+    const featRows = (pickedId: number | null, exclude: number | null) =>
+      originFeats
+        .filter((f) => f.id !== exclude && matchQ(f.name, featQ))
+        .map((f) => ({ key: String(f.id), title: f.name, meta: f.id === suggestedFeatId ? "черта предыстории" : undefined, picked: pickedId === f.id }));
+    return (
+      <div className="wz-step">
+        <SearchField value={featQ} onChange={setFeatQ} placeholder="Поиск черты" />
+        {featNeeded && (
+          <section>
+            <PickHead
+              label="Черта предыстории"
+              picked={effectiveFeatId ? 1 : 0}
+              total={1}
+              hint={
+                suggestedFeatId
+                  ? "Предыстория уже предлагает черту — можно просто идти дальше. Другую — с разрешения Мастера."
+                  : "Выбери черту происхождения."
               }
-              setAwardPrimary(null);
-              setAwardSecondary(null);
-              setChosenSkills((prev) => prev.filter((t) => !t.startsWith("background:")));
-            }}
-          >
-            <option value="">— предыстория —</option>
-            {backgroundOptions.filter((b) => matchQ(b.name, backgroundQ)).map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-            <option value="__custom">Свой вариант…</option>
-          </select>
-          {backgroundCustom !== null && (
-            <>
-              <input
-                value={backgroundCustom}
-                onChange={(e) => setBackgroundCustom(e.target.value)}
-                placeholder="Название предыстории"
-                maxLength={80}
-              />
-              <span className="muted">
-                Своя предыстория: прибавка из любых характеристик и 2 навыка — на своих шагах, черта — вручную.
-                Набор снаряжения из справочника не придёт — договоритесь с Мастером и доберёте на листе.
-              </span>
-            </>
-          )}
-          <EntryBlurb text={backgroundEntry?.description} />
-          {backgroundId != null && backgroundEntry && (
-            <div className="stack" style={{ gap: "var(--sp-2)" }} aria-live="polite">
-              {backgroundGrants.skills.length > 0 && (
-                <div>
-                  <strong>Навыки:</strong>{" "}
-                  {backgroundGrants.skills.map((k) => skills.nameOf(k)).join(", ")}
-                </div>
-              )}
-              {backgroundGrants.toolNames.length > 0 && (
-                <div>
-                  <strong>Владения:</strong> {backgroundGrants.toolNames.join(", ")}
-                </div>
-              )}
-              {backgroundGrants.originFeat && (
-                <div>
-                  <strong>Черта происхождения:</strong> {backgroundGrants.originFeat.name}
-                </div>
-              )}
-              {backgroundGrants.abilityOptions.length > 0 && (
-                <div>
-                  <strong>Характеристики:</strong> {backgroundGrants.abilityOptions.join(", ")} — на выбор +2/+1 или +1/+1/+1
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {step === "Черта" && (
-        <div className="stack">
-          {!featNeeded ? (
-            <span className="muted">Черта происхождения приходит от предыстории или вида — выберите их на прошлых шагах.</span>
-          ) : (
-            <>
-              <span className="muted">
-                {suggestedFeatId
-                  ? "Предыстория предлагает эту черту. Согласиться — просто идите дальше; Мастер может разрешить другую."
-                  : "Вид даёт выбрать черту происхождения самому."}
-              </span>
-              <label className="row">
-                Поиск
-                <input
-                  value={featQ}
-                  onChange={(e) => setFeatQ(e.target.value)}
-                  placeholder="Название черты"
-                  aria-label="Поиск черты"
-                />
-              </label>
-              <select
-                value={effectiveFeatId ?? ""}
-                onChange={(e) => {
-                  setFeatTouched(true);
-                  setFeatId(e.target.value ? Number(e.target.value) : null);
-                  setChosenSkills((prev) => prev.filter((t) => !t.startsWith("feat:")));
-                  setChosenSpells((prev) => prev.filter((t) => !t.startsWith("spell:feat:")));
+            />
+            {featTouched && suggestedFeatId && effectiveFeatId !== suggestedFeatId && (
+              <button
+                type="button"
+                className="wz-wide-btn"
+                onClick={() => {
+                  setFeatTouched(false);
+                  setFeatId(null);
                 }}
               >
-                <option value="">— черта —</option>
-                {originFeats.filter((f) => matchQ(f.name, featQ)).map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name}
-                  </option>
-                ))}
-              </select>
-              {featTouched && suggestedFeatId && effectiveFeatId !== suggestedFeatId && (
+                Вернуть черту предыстории
+              </button>
+            )}
+            <PickList
+              rows={featRows(effectiveFeatId, effectiveSpeciesFeatId)}
+              collapse
+              onToggle={(k) => pickBackgroundFeat(effectiveFeatId === Number(k) ? null : Number(k))}
+              onOpen={(k) =>
+                openEntry(Number(k), effectiveFeatId === Number(k), () =>
+                  pickBackgroundFeat(effectiveFeatId === Number(k) ? null : Number(k))
+                )
+              }
+            />
+          </section>
+        )}
+        {speciesFeatNeeded && (
+          <section>
+            <PickHead
+              label={`Черта вида${speciesEntry ? ` (${speciesEntry.name})` : ""}`}
+              picked={effectiveSpeciesFeatId ? 1 : 0}
+              total={1}
+              hint="Вид даёт ещё одну черту происхождения на выбор."
+            />
+            <PickList
+              rows={featRows(effectiveSpeciesFeatId, effectiveFeatId)}
+              collapse
+              onToggle={(k) => pickSpeciesFeat(effectiveSpeciesFeatId === Number(k) ? null : Number(k))}
+              onOpen={(k) =>
+                openEntry(Number(k), effectiveSpeciesFeatId === Number(k), () =>
+                  pickSpeciesFeat(effectiveSpeciesFeatId === Number(k) ? null : Number(k))
+                )
+              }
+            />
+          </section>
+        )}
+        {renderToolGroups(["feat", "feat2"])}
+      </div>
+    );
+  }
+
+  function renderAbilities() {
+    const methods: [AbilityMethod, string][] = [
+      ["standard", "Стандарт"],
+      ["pointbuy", "Покупка"],
+      ...(allowDiceRolls ? ([["roll", "Кубы"]] as [AbilityMethod, string][]) : []),
+      ["manual", "Вручную"],
+    ];
+    const swapMode = method === "standard" || method === "roll";
+    return (
+      <div className="wz-step">
+        <div className="wz-seg" role="group" aria-label="Способ определения характеристик">
+          {methods.map(([m, label]) => (
+            <button key={m} type="button" aria-pressed={method === m} onClick={() => applyMethod(m)}>
+              {label}
+            </button>
+          ))}
+        </div>
+        {method === "standard" && (
+          <p className="wz-step-lead">
+            {classArray ? `Массив уже разложен под класс ${classOption?.name ?? ""}.` : "Стандартный массив."} Тапни две характеристики —
+            они поменяются местами.
+          </p>
+        )}
+        {method === "pointbuy" && (
+          <p className="wz-step-lead">
+            Осталось очков: <span className="wizard-data">{pointBuyRemaining}</span> из <span className="wizard-data">{POINT_BUY_BUDGET}</span>
+          </p>
+        )}
+        {allowDiceRolls && method === "roll" && (
+          <div className="row">
+            <span className="muted">Выпало: {rolledPool.join(", ")}. Тапни две характеристики, чтобы поменять.</span>
+            <button type="button" onClick={reroll}>
+              Перебросить
+            </button>
+          </div>
+        )}
+        <div className="wz-abil-grid">
+          {ABILITY_LABELS.map(({ key, label }) => {
+            const boosted = !!abilityAward[key];
+            const final = (
+              <span className={`wz-abil-final${boosted ? " is-boosted" : ""}`}>
+                {boosted ? `→ ${awardedAbilities[key]} ` : ""}({formatModifier(abilityModifier(awardedAbilities[key]))})
+              </span>
+            );
+            const cls = `wz-abil${armedAbility === key ? " is-armed" : ""}${classPrimary.includes(key) ? " is-key" : ""}`;
+            if (swapMode) {
+              return (
                 <button
+                  key={key}
                   type="button"
+                  className={cls}
+                  aria-pressed={armedAbility === key}
                   onClick={() => {
-                    setFeatTouched(false);
-                    setFeatId(null);
+                    if (armedAbility == null) return setArmedAbility(key);
+                    if (armedAbility !== key) assignFromPool(armedAbility, abilities[key]);
+                    setArmedAbility(null);
                   }}
                 >
-                  Вернуть черту предыстории
+                  <span className="wz-abil-label">{label}</span>
+                  <span className="wz-abil-value">{abilities[key]}</span>
+                  {final}
                 </button>
-              )}
-              <EntryBlurb text={featEntry?.description} />
-            </>
-          )}
-        </div>
-      )}
-
-      {step === "Характеристики" && (
-        <div className="stack">
-          <fieldset className="row wizard-fieldset">
-            <legend className="muted wizard-legend">Способ определения характеристик</legend>
-            <label className="row">
-              <input type="radio" name="dnd-ability-method" checked={method === "standard"} onChange={() => applyMethod("standard")} />
-              Стандартный массив
-            </label>
-            <label className="row">
-              <input type="radio" name="dnd-ability-method" checked={method === "pointbuy"} onChange={() => applyMethod("pointbuy")} />
-              Point-buy
-            </label>
-            {allowDiceRolls && <label className="row">
-              <input type="radio" name="dnd-ability-method" checked={method === "roll"} onChange={() => applyMethod("roll")} />
-              Бросок костей
-            </label>}
-            <label className="row">
-              <input type="radio" name="dnd-ability-method" checked={method === "manual"} onChange={() => applyMethod("manual")} />
-              Вручную
-            </label>
-          </fieldset>
-          <span className="muted">Не знаете что выбрать — берите стандартный массив.</span>
-
-          {method === "pointbuy" && <div className="muted">Осталось очков: <span className="wizard-data">{pointBuyRemaining}</span> из <span className="wizard-data">{POINT_BUY_BUDGET}</span></div>}
-          {allowDiceRolls && method === "roll" && (
-            <div className="row">
-              <span className="muted">Пул: {rolledPool.join(", ")}</span>
-              <button type="button" onClick={reroll}>
-                Перебросить
-              </button>
-            </div>
-          )}
-
-          <div className="dnd-abilities-row">
-            {ABILITY_LABELS.map(({ key, label }) => (
-              <div key={key} className="dnd-ability-box">
-                <span className="dnd-ability-label">{label}</span>
-                {method === "standard" || method === "roll" ? (
-                  <select value={abilities[key]} onChange={(e) => assignFromPool(key, Number(e.target.value))}>
-                    {rolledPool.map((v, i) => (
-                      <option key={`${v}-${i}`} value={v}>
-                        {v}
-                      </option>
-                    ))}
-                  </select>
-                ) : method === "pointbuy" ? (
-                  <div className="row" style={{ gap: "var(--sp-2)" }}>
-                    <button type="button" aria-label={`Уменьшить ${label}`} className="wizard-touch" onClick={() => adjustPointBuy(key, -1)}>
+              );
+            }
+            return (
+              <div key={key} className={cls}>
+                <span className="wz-abil-label">{label}</span>
+                {method === "pointbuy" ? (
+                  <span className="wz-abil-pb">
+                    <button type="button" aria-label={`Уменьшить ${label}`} onClick={() => adjustPointBuy(key, -1)}>
                       <NavIcon name="minus" />
                     </button>
-                    <span className="dnd-ability-score">{abilities[key]}</span>
-                    <button type="button" aria-label={`Увеличить ${label}`} className="wizard-touch" onClick={() => adjustPointBuy(key, 1)}>
+                    <span className="wz-abil-value">{abilities[key]}</span>
+                    <button type="button" aria-label={`Увеличить ${label}`} onClick={() => adjustPointBuy(key, 1)}>
                       <NavIcon name="plus" />
                     </button>
-                  </div>
+                  </span>
                 ) : (
                   <input
                     type="number"
                     min={1}
                     max={30}
-                    className="dnd-ability-input"
+                    aria-label={label}
                     value={abilities[key]}
                     onChange={(e) => setAbilities({ ...abilities, [key]: clampAbilityScore(Number(e.target.value)) })}
                   />
                 )}
-                <span className={abilityAward[key] ? "dnd-ability-mod is-boosted" : "dnd-ability-mod"}>
-                  {formatModifier(abilityModifier(abilities[key]))}
-                </span>
+                {final}
               </div>
-            ))}
-          </div>
-
-          {awardOptions.length > 0 && (
-            <div className="stack" style={{ gap: "var(--sp-2)" }}>
-              <span className="muted">
-                {backgroundCustom !== null
-                  ? "Прибавка (свой вариант — любые характеристики)"
-                  : `Прибавка от предыстории: ${awardOptions.join(", ")}`}
-              </span>
-              <div className="row" role="group" aria-label="Как распределить прибавку">
-                <label className="row">
-                  <input type="radio" name="dnd-award-mode" checked={awardMode === "2+1"} onChange={() => setAwardMode("2+1")} />
-                  +2 и +1
-                </label>
-                <label className="row">
-                  <input type="radio" name="dnd-award-mode" checked={awardMode === "1+1+1"} onChange={() => setAwardMode("1+1+1")} />
-                  +1 каждой
-                </label>
-              </div>
-              {awardMode === "2+1" && (
-                <div className="row">
-                  <label className="row">
-                    +2
-                    <select value={awardPrimary ?? awardOptions[0]} onChange={(e) => setAwardPrimary(e.target.value)}>
-                      {awardOptions.map((a) => (
-                        <option key={a} value={a}>
-                          {a}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="row">
-                    +1
-                    <select
-                      value={awardSecondary ?? awardOptions.find((a) => a !== (awardPrimary ?? awardOptions[0])) ?? ""}
-                      onChange={(e) => setAwardSecondary(e.target.value)}
-                    >
-                      {awardOptions
-                        .filter((a) => a !== (awardPrimary ?? awardOptions[0]))
-                        .map((a) => (
-                          <option key={a} value={a}>
-                            {a}
-                          </option>
-                        ))}
-                    </select>
-                  </label>
-                </div>
-              )}
-              <span className="muted">
-                Итог:{" "}
-                {ABILITY_LABELS.filter(({ key }) => awardedAbilities[key] !== abilities[key])
-                  .map(({ key, label }) => `${label} ${abilities[key]} → ${awardedAbilities[key]}`)
-                  .join(" · ") || "—"}
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {step === "Навыки" && (
-        <div className="stack">
-          {skillGroups.length === 0 && (
-            <span className="muted">Ни класс, ни вид, ни черта не дают навыков на выбор.</span>
-          )}
-          {skillGroups.map((group) => {
-            const picked = chosenIn(group.key);
-            return (
-              <fieldset key={group.key} className="stack wizard-fieldset" style={{ gap: "var(--sp-2)" }}>
-                <legend className="muted wizard-legend">
-                  {group.label}: выберите {group.count} ({picked.length}/{group.count})
-                </legend>
-                <div className="stack" style={{ gap: "var(--sp-2)" }}>
-                  {/* В списке ключ, на экране — имя из справочника. */}
-                  {optionsFor(group)
-                    .filter((key) => !grantedSkills.has(key))
-                    .map((key) => (
-                      <label key={key} className="row">
-                        <input
-                          type="checkbox"
-                          checked={chosenSkills.includes(`${group.key}:${key}`)}
-                          onChange={() => toggleSkill(group.key, key, group.count)}
-                        />
-                        {skills.nameOf(key)}
-                      </label>
-                    ))}
-                </div>
-              </fieldset>
             );
           })}
-          {skillShortfall.length > 0 && (
-            <span className="muted">
-              Чтобы идти дальше: {skillShortfall.map((s) => `${s.group.label} — ещё ${s.missing}`).join("; ")}.
-            </span>
-          )}
-          {[...grantedSkills].length > 0 && (
-            <span className="muted">
-              Уже выдано без выбора: {[...grantedSkills].map((k) => skills.nameOf(k)).join(", ")}
-            </span>
-          )}
-          {expertiseSlots > 0 && (
-            <fieldset className="stack wizard-fieldset" style={{ gap: "var(--sp-2)" }}>
-              <legend className="muted wizard-legend">
-                Экспертность (умение класса): выберите {expertiseSlots} ({chosenExpertise.length}/{expertiseSlots})
-              </legend>
-              <div className="stack" style={{ gap: "var(--sp-2)" }}>
-                {skills.rows.map((r) => (
-                  <label key={r.original} className="row">
-                    <input
-                      type="checkbox"
-                      checked={chosenExpertise.includes(r.original)}
-                      onChange={() => toggleExpertise(r.original)}
-                    />
-                    {skills.nameOf(r.original)}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-          )}
-          {expertiseMissing > 0 && (
-            <span className="muted">Чтобы идти дальше: экспертность — ещё {expertiseMissing}.</span>
-          )}
         </div>
-      )}
+        {classPrimary.length > 0 && <span className="muted">★ — основная характеристика класса.</span>}
+        {awardOptions.length > 0 && (
+          <section className="stack">
+            <PickHead
+              label="Прибавка от предыстории"
+              hint={backgroundCustom !== null ? "Свой вариант — любые характеристики." : `Из: ${awardOptions.join(", ")}.`}
+            />
+            <div className="wz-seg" role="group" aria-label="Как распределить прибавку">
+              <button type="button" aria-pressed={awardMode === "2+1"} onClick={() => setAwardMode("2+1")}>
+                +2 и +1
+              </button>
+              <button type="button" aria-pressed={awardMode === "1+1+1"} onClick={() => setAwardMode("1+1+1")}>
+                +1 каждой
+              </button>
+            </div>
+            {awardMode === "2+1" && (
+              <>
+                <span className="wz-group-label">+2</span>
+                <div className="wz-chips">
+                  {awardOptions.map((a) => (
+                    <button
+                      key={a}
+                      type="button"
+                      className="wz-chip"
+                      aria-pressed={effectiveAwardPrimary === a}
+                      onClick={() => {
+                        setAwardPrimary(a);
+                        if (a === effectiveAwardSecondary) setAwardSecondary(null);
+                      }}
+                    >
+                      {a}
+                    </button>
+                  ))}
+                </div>
+                <span className="wz-group-label">+1</span>
+                <div className="wz-chips">
+                  {awardOptions
+                    .filter((a) => a !== effectiveAwardPrimary)
+                    .map((a) => (
+                      <button key={a} type="button" className="wz-chip" aria-pressed={effectiveAwardSecondary === a} onClick={() => setAwardSecondary(a)}>
+                        {a}
+                      </button>
+                    ))}
+                </div>
+              </>
+            )}
+          </section>
+        )}
+      </div>
+    );
+  }
 
-      {step === "Заклинания" && (
-        <div className="stack">
-          {spellIndex === null && !loadError && <span className="muted">Загружаю заклинания…</span>}
-          {spellIndex === null && loadError && (
-            <span className="muted">Список заклинаний не загрузился — выбрать не из чего, шаг пропускается.</span>
-          )}
-          {spellGroups.length === 0 && spellIndex !== null && (
-            <span className="muted">Ни класс, ни подкласс, ни вид, ни черта не дают заклинаний на выбор.</span>
-          )}
-          {grantedSpellNames.length > 0 && (
-            <span className="muted">Придут сами, выбирать не надо: {grantedSpellNames.join(", ")}</span>
-          )}
-          {spellGroups.length > 0 && spellIndex !== null && (
-            <label className="row">
-              Поиск
-              <input
-                value={spellSearch}
-                onChange={(e) => setSpellSearch(e.target.value)}
-                placeholder="Название заклинания"
+  function renderSkills() {
+    const common = commonLangs.filter((o) => o.name !== "Общий" && !autoLanguages.includes(o.name));
+    const rare = rareLangs.filter((o) => !autoLanguages.includes(o.name));
+    const langRow = (o: DndMechanicsOption) => ({ key: o.name, title: o.name, picked: chosenLanguages.includes(o.name) });
+    const skillMeta = (key: string) => {
+      const ab = skills.rows.find((r) => r.original === key)?.ability;
+      return ab ? `${abilityLabel(ab)} ${formatModifier(abilityModifier(awardedAbilities[ab]))}` : undefined;
+    };
+    return (
+      <div className="wz-step">
+        {skillGroups.length === 0 && <span className="muted">Ни класс, ни вид, ни черта не дают навыков на выбор.</span>}
+        {skillGroups.map((group) => {
+          const picked = chosenIn(group.key);
+          return (
+            <section key={group.key}>
+              <PickHead label={group.label} picked={picked.length} total={group.count} />
+              <PickList
+                rows={optionsFor(group)
+                  .filter((key) => !grantedSkills.has(key))
+                  .map((key) => {
+                    // Навык, взятый по другому источнику, второй раз не берётся:
+                    // владение не складывается, а место в квоте сгорело бы.
+                    const other = skillGroups.find((g) => g.key !== group.key && chosenSkills.includes(`${g.key}:${key}`));
+                    return {
+                      key,
+                      title: skills.nameOf(key),
+                      meta: other ? `${skillMeta(key) ?? ""} · уже взят (${other.label.toLowerCase()})` : skillMeta(key),
+                      picked: chosenSkills.includes(`${group.key}:${key}`),
+                      disabled: !!other,
+                    };
+                  })}
+                full={group.count > 1 && picked.length >= group.count}
+                collapse={picked.length >= group.count}
+                onToggle={(k) => toggleSkill(group.key, k, group.count)}
               />
-            </label>
-          )}
-          {spellGroups.map((group) => {
+            </section>
+          );
+        })}
+        {grantedSkills.size > 0 && (
+          <span className="muted">Уже есть без выбора: {[...grantedSkills].map((k) => skills.nameOf(k)).join(", ")}</span>
+        )}
+        {expertiseSlots > 0 && (
+          <section>
+            <PickHead label="Экспертность" picked={chosenExpertise.length} total={expertiseSlots} hint="Удвоенный бонус мастерства к навыку." />
+            <PickList
+              rows={skills.rows.map((r) => ({ key: r.original, title: skills.nameOf(r.original), meta: skillMeta(r.original), picked: chosenExpertise.includes(r.original) }))}
+              full={chosenExpertise.length >= expertiseSlots}
+              onToggle={(k) => toggleExpertise(k)}
+            />
+          </section>
+        )}
+        {languageOptions.length > 0 && (
+          <section>
+            <PickHead
+              label="Языки"
+              picked={languagePicks}
+              total={LANGUAGE_PICKS + bonusLanguage}
+              hint={`Общий знают все${autoLanguages.length > 0 ? `, от класса: ${autoLanguages.join(", ")}` : ""}.${bonusLanguage ? " Посланник рыцарства даёт ещё один." : ""}`}
+            />
+            <PickList rows={common.map(langRow)} onToggle={toggleLanguage} />
+            {rare.length > 0 && (
+              <>
+                <PickHead label="Редкие — с разрешения Мастера" />
+                <PickList rows={rare.map(langRow)} onToggle={toggleLanguage} />
+              </>
+            )}
+            {otherLangs.length > 0 && (
+              <>
+                <PickHead label="Прочие из справочника" />
+                <PickList rows={otherLangs.map(langRow)} onToggle={toggleLanguage} />
+              </>
+            )}
+          </section>
+        )}
+      </div>
+    );
+  }
+
+  function renderSpells() {
+    return (
+      <div className="wz-step">
+        {spellIndex === null && !loadError && <span className="muted">Загружаю заклинания…</span>}
+        {spellIndex === null && loadError && <span className="muted">Список заклинаний не загрузился — выбрать не из чего.</span>}
+        {grantedSpellNames.length > 0 && <span className="muted">Придут сами: {grantedSpellNames.join(", ")}</span>}
+        {spellIndex !== null && <SearchField value={spellSearch} onChange={setSpellSearch} placeholder="Поиск заклинания" />}
+        {spellIndex !== null &&
+          spellGroups.map((group) => {
             const picked = chosenSpellsIn(group.key);
             const q = spellSearch.trim().toLowerCase();
             const cands = spellCandidates(group).filter((e) => !q || e.name.toLowerCase().includes(q));
+            const meta = (e: CompendiumEntry) => {
+              const circle = e.level ?? 0;
+              const school = (e.data.school as { name?: string } | undefined)?.name ?? "";
+              return [circle === 0 ? "заговор" : `${circle} круг`, school, e.data.casting_timing, e.data.range]
+                .filter((x) => typeof x === "string" && x)
+                .join(" · ");
+            };
             return (
-              <fieldset key={group.key} className="stack wizard-fieldset" style={{ gap: "var(--sp-2)" }}>
-                <legend className="muted wizard-legend">
-                  {group.label}: выберите {group.count} ({picked.length}/{group.count})
-                </legend>
-                <span className="muted">
-                  {spellChoiceText({
+              <section key={group.key}>
+                <PickHead
+                  label={group.label}
+                  picked={picked.length}
+                  total={group.count}
+                  hint={spellChoiceText({
                     count: group.count,
                     classIds: group.classIds,
                     schools: group.schools,
@@ -3050,301 +3165,445 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
                     outsideLimit: group.outsideLimit,
                     maxCircle: group.maxCircle,
                   })}
-                </span>
-                {cands.map((e) => {
-                  const token = `${group.key}:${e.id}`;
-                  const isHere = chosenSpells.includes(token);
-                  const elsewhere =
-                    !isHere && !group.fromBook
-                      ? spellGroups.find((g) => g.key !== group.key && chosenSpells.includes(`${g.key}:${e.id}`))
-                      : undefined;
-                  // Круг и школа видны в момент выбора — вслепую по одному
-                  // имени брать не приходится. Данные уже загружены кандидатами.
-                  const circle = e.level ?? 0;
-                  const school = (e.data.school as { name?: string } | undefined)?.name ?? "";
-                  const meta = `${circle === 0 ? "заговор" : `${circle} круг`}${school ? ` · ${school}` : ""}`;
-                  if (grantedSpellIds.has(e.id)) {
-                    return (
-                      <div key={e.id} className="row">
-                        <span className="muted">{e.name} <span className="muted">({meta})</span> — уже есть</span>
-                      </div>
-                    );
-                  }
-                  return (
-                    <label key={e.id} className="row">
-                      <input
-                        type="checkbox"
-                        checked={isHere}
-                        disabled={!!elsewhere}
-                        onChange={() => toggleSpell(group.key, e.id, group.count)}
-                      />
-                      {e.name} <span className="muted">({meta})</span>
-                      {elsewhere && <span className="muted"> — выбрано ({elsewhere.label})</span>}
-                    </label>
-                  );
-                })}
-                {cands.length === 0 && <span className="muted">Ничего не найдено.</span>}
-              </fieldset>
+                />
+                <PickList
+                  rows={cands.map((e) => {
+                    const isHere = chosenSpells.includes(`${group.key}:${e.id}`);
+                    const elsewhere =
+                      !isHere && !group.fromBook
+                        ? spellGroups.find((g) => g.key !== group.key && chosenSpells.includes(`${g.key}:${e.id}`))
+                        : undefined;
+                    const granted = grantedSpellIds.has(e.id);
+                    return {
+                      key: String(e.id),
+                      title: e.name,
+                      meta: granted ? `${meta(e)} · уже есть` : elsewhere ? `${meta(e)} · выбрано: ${elsewhere.label}` : meta(e),
+                      picked: isHere,
+                      disabled: granted || !!elsewhere,
+                    };
+                  })}
+                  full={group.count > 1 && picked.length >= group.count}
+                  collapse={picked.length >= group.count}
+                  onToggle={(k) => toggleSpell(group.key, Number(k), group.count)}
+                  onOpen={(k) => {
+                    const e = cands.find((x) => x.id === Number(k));
+                    openEntry(Number(k), chosenSpells.includes(`${group.key}:${k}`), () => toggleSpell(group.key, Number(k), group.count), {
+                      entry: e,
+                      meta: e ? meta(e) : undefined,
+                      disabled: grantedSpellIds.has(Number(k)),
+                    });
+                  }}
+                />
+              </section>
             );
           })}
-          {spellShortfall.length > 0 && (
-            <span className="muted">
-              Чтобы идти дальше: {spellShortfall.map((s) => `${s.group.label} — ещё ${s.missing}`).join("; ")}.
-            </span>
+      </div>
+    );
+  }
+
+  const setItemNames = (set: StartingSet) => [
+    ...set.items.map((i) => (i.qty > 1 ? `${i.name} ×${i.qty}` : i.name)),
+    ...set.manual,
+    ...set.choices.map((c) => `${c.group.split("|").join(" или ").toLowerCase()} на выбор`),
+  ];
+
+  function renderEquipment() {
+    const sources = [
+      { title: `От класса${classOption ? ` (${classOption.name})` : ""}`, sets: equipmentGroups[0] },
+      { title: `От предыстории${backgroundEntry ? ` (${backgroundEntry.name})` : ""}`, sets: equipmentGroups[1] },
+    ].filter((s) => s.sets.length > 0);
+    return (
+      <div className="wz-step">
+        {startingSets.length === 0 && setsStillLoading && <span className="muted">Справочник ещё грузится — подождите секунду.</span>}
+        {startingSets.length === 0 && !setsStillLoading && (
+          <span className="muted">
+            {classId || backgroundId
+              ? "У выбранных класса и предыстории набора в справочнике нет — снаряжение добавите во вкладке «Инвентарь»."
+              : "Класс и предыстория не выбраны — набор брать неоткуда."}
+          </span>
+        )}
+        {sources.map((src) => (
+          <SetDuel
+            key={src.title}
+            title={src.title}
+            selected={selectedStartingSet(src.sets, takenSets)?.label ?? null}
+            onSelect={chooseStartingSet}
+            onOpen={(label) => setSheet({ kind: "set", label })}
+            options={src.sets.map((set) => ({
+              label: set.label,
+              letter: set.letter,
+              gold: Number.parseInt(set.gold, 10) || 0,
+              items: set.items.length + set.manual.length + set.choices.length > 0 ? setItemNames(set) : [],
+              pending: setChoiceMissing.filter((sl) => sl.setLabel === set.label).map((sl) => sl.label),
+            }))}
+          />
+        ))}
+        {startingSets.length > 0 && (
+          <span className="wz-total">
+            Итого: {takenSummary.items} предметов{takenSummary.gold > 0 && `, ${takenSummary.gold} ЗМ`}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  function renderDossier() {
+    return (
+      <div className="wz-step">
+        <p className="wz-step-lead">Всё, кроме имени, можно оставить пустым и дописать на листе.</p>
+        <label className="wz-field">
+          Имя персонажа *
+          <input value={characterName} onChange={(e) => setCharacterName(e.target.value)} maxLength={80} />
+        </label>
+        <label className="wz-field">
+          Имя игрока
+          <input value={playerName} onChange={(e) => setPlayerName(e.target.value)} maxLength={80} />
+        </label>
+        <div className="stack">
+          <span className="wz-group-label">Портрет</span>
+          <div className="wz-portrait">
+            {portraitPreview ? (
+              <>
+                <img src={portraitPreview} alt="Портрет персонажа" />
+                <button type="button" onClick={clearPortrait}>
+                  Убрать фото
+                </button>
+              </>
+            ) : (
+              <>
+                <label className="wz-file-btn">
+                  Выбрать фото
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      portraitCrop.onSelect(e.target.files?.[0] ?? null);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+                {ownerPortraitUrl && (
+                  <button type="button" onClick={takeOwnerPortrait} disabled={portraitFetching}>
+                    {portraitFetching ? "Загружаю…" : "Взять как у владельца"}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+          {portraitCrop.modal}
+          {portraitError && (
+            <div className="sb-save-status is-error" role="alert">
+              {portraitError}
+            </div>
           )}
         </div>
-      )}
-
-      {step === "Досье" && (
-        <div className="stack">
-          <label>
-            Мировоззрение
-            <select value={alignment} onChange={(e) => setAlignment(e.target.value)}>
-              <option value="">— мировоззрение —</option>
-              {alignment && !alignmentOptions.some((o) => o.name === alignment) && (
-                <option value={alignment}>{alignment}</option>
-              )}
-              {alignmentOptions.map((o) => (
-                <option key={o.id} value={o.name}>
-                  {o.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          {autoLanguages.length > 0 && <span className="muted">От класса: {autoLanguages.join(", ")}</span>}
-          <fieldset className="stack wizard-fieldset" style={{ gap: "var(--sp-2)" }}>
-            <legend className="muted wizard-legend">Языки — обычные</legend>
-            {commonLangs
-              .filter((o) => !autoLanguages.includes(o.name))
-              .map((o) => (
-                <label key={o.id} className="row">
-                  <input
-                    type="checkbox"
-                    checked={chosenLanguages.includes(o.name)}
-                    onChange={() => toggleLanguage(o.name)}
-                  />
-                  {o.name}
-                </label>
-              ))}
-          </fieldset>
-          {rareLangs.filter((o) => !autoLanguages.includes(o.name)).length > 0 && (
-            <fieldset className="stack wizard-fieldset" style={{ gap: "var(--sp-2)" }}>
-              <legend className="muted wizard-legend">Языки — редкие, только с разрешения Мастера</legend>
-              {rareLangs
-                .filter((o) => !autoLanguages.includes(o.name))
-                .map((o) => (
-                  <label key={o.id} className="row">
-                    <input
-                      type="checkbox"
-                      checked={chosenLanguages.includes(o.name)}
-                      onChange={() => toggleLanguage(o.name)}
-                    />
-                    {o.name}
-                  </label>
-                ))}
-            </fieldset>
-          )}
-          {otherLangs.length > 0 && (
-            <fieldset className="stack wizard-fieldset" style={{ gap: "var(--sp-2)" }}>
-              <legend className="muted wizard-legend">Языки — прочие из справочника</legend>
-              {otherLangs.map((o) => (
-                <label key={o.id} className="row">
-                  <input
-                    type="checkbox"
-                    checked={chosenLanguages.includes(o.name)}
-                    onChange={() => toggleLanguage(o.name)}
-                  />
-                  {o.name}
-                </label>
-              ))}
-            </fieldset>
-          )}
-          <div className="wizard-dossier-grid">
+        <label className="wz-field">
+          Мировоззрение
+          <select value={alignment} onChange={(e) => setAlignment(e.target.value)}>
+            <option value="">— не выбрано —</option>
+            {alignment && !alignmentOptions.some((o) => o.name === alignment) && <option value={alignment}>{alignment}</option>}
+            {alignmentOptions.map((o) => (
+              <option key={o.id} value={o.name}>
+                {o.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="wizard-dossier-grid">
           <label>
             Черты характера
-            <textarea
-              value={personalityTraits}
-              onChange={(e) => setPersonalityTraits(e.target.value)}
-              placeholder="Как ведёт себя персонаж"
-              rows={2}
-              maxLength={500}
-            />
+            <textarea value={personalityTraits} onChange={(e) => setPersonalityTraits(e.target.value)} placeholder="Как ведёт себя персонаж" rows={2} maxLength={500} />
           </label>
           <label>
             Идеалы
-            <textarea
-              value={ideals}
-              onChange={(e) => setIdeals(e.target.value)}
-              placeholder="Во что верит"
-              rows={2}
-              maxLength={500}
-            />
+            <textarea value={ideals} onChange={(e) => setIdeals(e.target.value)} placeholder="Во что верит" rows={2} maxLength={500} />
           </label>
           <label>
             Узы
-            <textarea
-              value={bonds}
-              onChange={(e) => setBonds(e.target.value)}
-              placeholder="Кто и что дорого"
-              rows={2}
-              maxLength={500}
-            />
+            <textarea value={bonds} onChange={(e) => setBonds(e.target.value)} placeholder="Кто и что дорого" rows={2} maxLength={500} />
           </label>
           <label>
             Изъяны
-            <textarea
-              value={flaws}
-              onChange={(e) => setFlaws(e.target.value)}
-              placeholder="Слабости и пороки"
-              rows={2}
-              maxLength={500}
-            />
+            <textarea value={flaws} onChange={(e) => setFlaws(e.target.value)} placeholder="Слабости и пороки" rows={2} maxLength={500} />
           </label>
           <label className="wizard-dossier-wide">
             Заметки
-            <textarea
-              value={dossierNotes}
-              onChange={(e) => setDossierNotes(e.target.value)}
-              placeholder="Внешность, биография, прочее"
-              rows={3}
-              maxLength={1000}
-            />
+            <textarea value={dossierNotes} onChange={(e) => setDossierNotes(e.target.value)} placeholder="Внешность, биография, прочее" rows={3} maxLength={1000} />
           </label>
+        </div>
+      </div>
+    );
+  }
+
+  function renderOverview() {
+    return (
+      <div className="wz-step">
+        {overviewWarnings.map((w) => (
+          <div key={w} className="wz-warn" role="note">
+            {w}
           </div>
-        </div>
-      )}
-
-      {step === "Снаряжение" && (
-        <div className="stack">
-          {/* Три разных «ничего» вместо одного. Раньше строка была одна — «в
-              справочнике набора нет», — и она же показывалась, когда запись
-              класса просто ещё не догрузилась. Персонаж в этом случае
-              создавался без снаряжения и без золота, и понять, почему, было
-              неоткуда. */}
-          {startingSets.length === 0 && setsStillLoading && (
-            <span className="muted">Справочник ещё грузится — подождите секунду.</span>
-          )}
-          {startingSets.length === 0 && !setsStillLoading && (
-            <span className="muted">
-              {classId || backgroundId
-                ? "У выбранных класса и предыстории набора в справочнике нет — снаряжение добавите вручную во вкладке «Инвентарь»."
-                : "Класс и предыстория не выбраны — набор брать неоткуда."}
-            </span>
-          )}
-          {startingSets.length > 0 && (
-            startingSets.map((set) => (
-              <label key={set.label} className="row" style={{ alignItems: "flex-start", gap: "var(--sp-4)" }}>
-                <input
-                  type="radio"
-                  name={`starting-equipment-${equipmentGroups.findIndex(group => group.includes(set))}`}
-                  checked={setTaken(set.label)}
-                  onChange={() => chooseStartingSet(set.label)}
-                />
-                <span className="stack" style={{ gap: "var(--sp-2)" }}>
-                  <strong>
-                    {set.label}
-                    {set.gold && ` — ${set.gold} ЗМ`}
-                  </strong>
-                  {set.items.length > 0 && (
-                    <span className="muted">
-                      {set.items.map((i) => (i.qty > 1 ? `${i.name} ×${i.qty}` : i.name)).join(", ")}
-                    </span>
-                  )}
-                  {set.manual.map((text) => (
-                    <span key={text} className="muted">
-                      {text} — выбрать самому
-                    </span>
-                  ))}
-                </span>
-              </label>
-            ))
-          )}
-          {/* Итог прямо здесь: сколько предметов и сколько золота ляжет на
-              лист. Проверить это после создания дороже, чем увидеть до. */}
-          {startingSets.length > 0 && (
-            <span>
-              <strong>Итого:</strong> {takenSummary.items} предметов
-              {takenSummary.gold > 0 && `, ${takenSummary.gold} ЗМ`}
-              {takenSummary.items === 0 && takenSummary.gold === 0 && " — ничего не отмечено"}
-            </span>
-          )}
-          <span className="muted">
-            Выберите один вариант от класса и один от предыстории. Наборы «A» и «B» — альтернативы.
-          </span>
-        </div>
-      )}
-
-      {step === "Обзор" && (
-        <>
-          {miniSheet()}
-          <PosterButtons
-            getBlob={() => renderPosterBlob(posterData())}
-            fileBase={characterName.trim() || "personazh"}
-            shareTitle={characterName.trim() || "Без имени"}
-          />
-        </>
-      )}
-      </>
-      )}
+        ))}
+        {miniSheet()}
+        <PosterButtons
+          getBlob={() => renderPosterBlob(posterData())}
+          fileBase={characterName.trim() || "personazh"}
+          shareTitle={characterName.trim() || "Без имени"}
+        />
       </div>
-      {step !== "Обзор" && (
-        <aside className="wizard-side" aria-label="Живой предпросмотр персонажа">
-          {miniSheet()}
-        </aside>
-      )}
+    );
+  }
+
+  function renderStep() {
+    switch (step) {
+      case "Класс":
+        return renderClass();
+      case "Умения класса":
+        return renderClassChoices();
+      case "Вид":
+        return renderSpecies();
+      case "Предыстория":
+        return renderBackground();
+      case "Черта":
+        return renderFeat();
+      case "Характеристики":
+        return renderAbilities();
+      case "Навыки и языки":
+        return renderSkills();
+      case "Заклинания":
+        return renderSpells();
+      case "Снаряжение":
+        return renderEquipment();
+      case "Досье":
+        return renderDossier();
+      case "Обзор":
+        return renderOverview();
+    }
+  }
+
+  function renderSheet() {
+    if (!sheet) return null;
+    const close = () => setSheet(null);
+    if (sheet.kind === "steps") {
+      return (
+        <Sheet
+          title="Шаги"
+          onClose={close}
+          actions={
+            wizardDirty &&
+            !avatarFailed && (
+              <button type="button" className="wz-wide-btn" onClick={resetWizard}>
+                Начать заново
+              </button>
+            )
+          }
+        >
+          <ol className="wz-steplist">
+            {visibleSteps.map((st, i) => {
+              const miss = st !== "Обзор" && stepMissing(st).length > 0;
+              return (
+                <li key={st}>
+                  <button
+                    type="button"
+                    aria-current={st === step ? "step" : undefined}
+                    onClick={() => {
+                      setStep(st);
+                      close();
+                    }}
+                  >
+                    <span className="wz-step-num">{i + 1}</span>
+                    <span>{st}</span>
+                    <span className={`wz-step-state${miss ? " is-missing" : ""}`}>{miss ? "не готово" : i < stepPos ? "✓" : ""}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+        </Sheet>
+      );
+    }
+    if (sheet.kind === "set") {
+      const set = startingSets.find((s) => s.label === sheet.label);
+      if (!set) return null;
+      const taken = setTaken(set.label);
+      const slots = setChoiceSlots.filter((sl) => sl.setLabel === set.label);
+      return (
+        <Sheet
+          title={set.label}
+          onClose={close}
+          actions={
+            <button
+              type="button"
+              className="primary wz-wide-btn"
+              onClick={() => {
+                if (!taken) chooseStartingSet(set.label);
+                if (taken) close();
+              }}
+            >
+              {taken ? "Готово" : "Взять набор"}
+            </button>
+          }
+        >
+          <ul className="wz-list">
+            {set.items.map((i) => (
+              <li key={`${i.entryId}:${i.name}`} className="wz-row">
+                <span className="wz-row-main">{i.qty > 1 ? `${i.name} ×${i.qty}` : i.name}</span>
+              </li>
+            ))}
+            {set.manual.map((text) => (
+              <li key={text} className="wz-row">
+                <span className="wz-row-main">{text}</span>
+              </li>
+            ))}
+            {Number.parseInt(set.gold, 10) > 0 && (
+              <li className="wz-row">
+                <span className="wz-row-main">{set.gold} ЗМ</span>
+              </li>
+            )}
+          </ul>
+          {!taken &&
+            set.choices.map((c, i) => (
+              <span key={i} className="muted">
+                На выбор: {c.group.split("|").join(" или ").toLowerCase()} — после того, как возьмёшь набор.
+              </span>
+            ))}
+          {slots.map((sl) => {
+            const picked = setChoicePicked(sl);
+            return (
+              <section key={sl.key}>
+                <PickHead label={`На выбор: ${sl.label}`} picked={picked.length} total={sl.count} />
+                {sl.auto ? (
+                  <span className="muted">Тот, которым владеешь: {sl.options.map((o) => o.name).join(", ")}.</span>
+                ) : sl.options.length === 0 ? (
+                  <span className="muted">Вариантов в справочнике нет — ляжет строкой «выбрать самому».</span>
+                ) : (
+                  <PickList
+                    rows={sl.options.map((o) => ({ key: String(o.id), title: o.name, picked: picked.includes(o.id) }))}
+                    full={sl.count > 1 && picked.length >= sl.count}
+                    onToggle={(k) => toggleSetChoice(sl, Number(k))}
+                  />
+                )}
+              </section>
+            );
+          })}
+        </Sheet>
+      );
+    }
+    return (
+      <EntrySheet
+        key={sheet.entryId}
+        entryId={sheet.entryId}
+        entry={sheet.entry}
+        meta={sheet.meta}
+        onClose={close}
+        action={{
+          label: sheet.picked ? "Убрать" : "Взять",
+          disabled: sheet.disabled,
+          onClick: () => {
+            sheet.onToggle();
+            close();
+          },
+        }}
+      />
+    );
+  }
+
+  const createBlocked = saving || overviewProblems.length > 0;
+
+  return (
+    // Визард — модалкой: фокус-трап и возврат фокуса из коробки. Клик по фону
+    // отключён (черновик и так спасает, но выход — только явной кнопкой), ESC
+    // идёт в cancelWizard с вопросом. На телефоне окно во весь экран.
+    <Modal onClose={cancelWizard} closeOnBackdropClick={false} ariaLabel="Создание персонажа" className="wz-modal" autoFocus={false}>
+      <div className={`wizard wz${visualVariant === "oneshot" ? " wizard--oneshot" : ""}`}>
+        <header className="wz-top">
+          <button type="button" className="wz-steps-btn" aria-haspopup="dialog" onClick={() => setSheet({ kind: "steps" })}>
+            <small>
+              Шаг {stepPos + 1} из {visibleSteps.length}
+            </small>
+            <strong>{step} ▾</strong>
+          </button>
+          {step !== "Обзор" ? (
+            <button
+              type="button"
+              className="wz-icon-btn wz-preview-btn"
+              aria-pressed={mobilePreview}
+              aria-label={mobilePreview ? "К шагу" : "Предпросмотр листа"}
+              title={mobilePreview ? "К шагу" : "Предпросмотр листа"}
+              onClick={() => setMobilePreview((v) => !v)}
+            >
+              <NavIcon name="eye" />
+            </button>
+          ) : (
+            <span />
+          )}
+          <button type="button" className="wz-icon-btn" aria-label="Закрыть" title="Закрыть" onClick={cancelWizard} disabled={saving}>
+            ×
+          </button>
+          <div className="wz-progress" aria-hidden="true">
+            <span style={{ width: `${((stepPos + 1) / visibleSteps.length) * 100}%` }} />
+          </div>
+        </header>
+
+        <div className="wz-body" ref={bodyRef}>
+          {hadDraft && (
+            <div className="wz-toast" role="status">
+              Продолжаем с места — черновик восстановлен.
+            </div>
+          )}
+          {/* D1: десктоп-сплит — шаги слева, живой чарник справа липко. */}
+          <div className="wizard-split">
+            <div className="wizard-main">
+              {mobilePreview && step !== "Обзор" ? <div className="wizard-back">{miniSheet()}</div> : renderStep()}
+            </div>
+            {step !== "Обзор" && (
+              <aside className="wizard-side" aria-label="Живой предпросмотр персонажа">
+                {miniSheet()}
+              </aside>
+            )}
+          </div>
+
+          {loadError && (
+            <div className="sb-save-status is-error" role="alert">
+              Справочник не загрузился: {loadError}. Выбор класса, вида и предыстории будет пустым — закройте визард и попробуйте
+              ещё раз.
+            </div>
+          )}
+          {saveError && (
+            <div className="sb-save-status is-error" role="alert">
+              {saveError}
+            </div>
+          )}
+          {avatarFailed && (
+            <div className="row">
+              <button className="primary" onClick={finish} disabled={saving}>
+                {saving ? "Загружаю…" : "Повторить загрузку фото"}
+              </button>
+              <button onClick={onDone}>Готово без фото</button>
+            </div>
+          )}
+        </div>
+
+        <footer className="wz-foot">
+          {step !== "Обзор" && missingHere.length > 0 && <span className="wz-foot-hint">Чтобы идти дальше: {missingHere.join("; ")}.</span>}
+          {step === "Обзор" && overviewProblems.length > 0 && (
+            <span className="wz-foot-hint">Чтобы создать: {overviewProblems.map((p) => p.text).join("; ")}.</span>
+          )}
+          {/* На время сохранения уход запрещён: finish пишет и зовёт onDone. */}
+          <button type="button" onClick={back} disabled={saving || stepPos === 0}>
+            Назад
+          </button>
+          {step === "Обзор" ? (
+            <button type="button" className="primary" onClick={finish} disabled={createBlocked}>
+              {saving ? "Создаю…" : saveError ? "Попробовать ещё раз" : "Создать персонажа"}
+            </button>
+          ) : (
+            <button type="button" className="primary" onClick={next} disabled={missingHere.length > 0}>
+              Далее
+            </button>
+          )}
+        </footer>
+        {renderSheet()}
       </div>
-
-      {loadError && (
-        <div className="sb-save-status is-error" role="alert">
-          Справочник не загрузился: {loadError}. Выбор класса, вида и предыстории
-          будет пустым — закройте визард и попробуйте ещё раз.
-        </div>
-      )}
-
-      {saveError && (
-        <div className="sb-save-status is-error" role="alert">
-          {saveError}
-        </div>
-      )}
-
-      {avatarFailed && (
-        <div className="row">
-          <button className="primary" onClick={finish} disabled={saving}>
-            {saving ? "Загружаю…" : "Повторить загрузку фото"}
-          </button>
-          <button onClick={onDone}>Готово без фото</button>
-        </div>
-      )}
-
-      {(hadDraft || wizardDirty) && !avatarFailed && (
-        <div className="row wizard-spread">
-          <span className="muted">
-            {hadDraft ? "Восстановлен черновик — можно продолжить с места." : "Есть несохранённый ввод — можно очистить всё."}
-          </span>
-          <button type="button" onClick={resetWizard}>
-            Начать заново
-          </button>
-        </div>
-      )}
-
-      <div className="row wizard-footer wizard-spread">
-        <div className="row">
-          {/* На время сохранения уход запрещён: finish пишет и зовёт onDone,
-              отмена в середине давала setState на размонтированном. */}
-          <button onClick={cancelWizard} disabled={saving}>Отмена</button>
-          {stepIndex > 0 && <button onClick={back} disabled={saving}>Назад</button>}
-        </div>
-        {step === "Обзор" ? (
-          <button className="primary" onClick={finish} disabled={saving || !pointBuyValid || !characterName.trim() || !skillsComplete || !expertiseComplete || !spellsComplete || !styleComplete || !entryComplete || !weaponComplete || featMissing}>
-            {saving ? "Создаю…" : saveError ? "Попробовать ещё раз" : "Создать персонажа"}
-          </button>
-        ) : (
-          <button className="primary" onClick={next} disabled={(step === "Навыки" && (!skillsComplete || !expertiseComplete)) || (step === "Заклинания" && !spellsComplete)}>
-            Далее
-          </button>
-        )}
-      </div>
-    </div>
     </Modal>
   );
 }

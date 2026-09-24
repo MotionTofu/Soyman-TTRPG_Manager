@@ -19,17 +19,43 @@ export interface StartingSet {
    *  ссылки — выбрать за игрока приложение не вправе, а потерять из набора
    *  тем более. */
   manual: string[];
+  /** Выбор внутри набора («музыкальный инструмент по вашему выбору») —
+   *  из предметов с `tool_kind` из `group` («А|Б» — из двух видов).
+   *  `fromProficiency` — «тот, владение которым вы выбрали». */
+  choices: StartingSetChoice[];
+  letter: string;
+}
+
+export interface StartingSetChoice {
+  count: number;
+  group: string;
+  fromProficiency: boolean;
+}
+
+function parseSetChoices(raw: unknown): StartingSetChoice[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((c) => {
+    if (!c || typeof c !== "object") return [];
+    const r = c as Record<string, unknown>;
+    const count = typeof r.count === "number" && r.count > 0 ? r.count : 1;
+    return typeof r.group === "string" && r.group.trim()
+      ? [{ count, group: r.group.trim(), fromProficiency: r.fromProficiency === true }]
+      : [];
+  });
 }
 
 export function startingSetsFrom(entry: CompendiumEntry | undefined, ownerLabel: string): StartingSet[] {
   if (!entry) return [];
   const sets: StartingSet[] = [];
-  for (const slot of ["a", "b"] as const) {
+  // «C» — у Воина 2024 три варианта: два набора и 155 ЗМ.
+  for (const slot of ["a", "b", "c"] as const) {
     const items = (entry.data[`equipment_${slot}_items`] as StartingSet["items"] | undefined) ?? [];
     const manual = (entry.data[`equipment_${slot}_manual`] as string[] | undefined) ?? [];
     const gold = (entry.data[`equipment_${slot}_gold`] as string | undefined) ?? "";
-    if (items.length === 0 && manual.length === 0 && !gold) continue;
-    sets.push({ label: `${ownerLabel} — набор ${slot.toUpperCase()}`, gold, items, manual });
+    const choices = parseSetChoices(entry.data[`equipment_${slot}_choices`]);
+    if (items.length === 0 && manual.length === 0 && choices.length === 0 && !gold) continue;
+    const letter = slot.toUpperCase();
+    sets.push({ label: `${ownerLabel} — набор ${letter}`, gold, items, manual, choices, letter });
   }
   return sets;
 }

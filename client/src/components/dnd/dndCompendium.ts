@@ -250,6 +250,16 @@ export async function loadDndOriginFeats(systemId: number, opts?: LoadOpts): Pro
 export interface DndBackgroundOption {
   id: number;
   name: string;
+  /** Подпись строки визарда: навыки · характеристики · черта. */
+  summary?: string;
+}
+
+function backgroundSummary(data: Record<string, unknown>): string {
+  const list = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+  const feat = (data.origin_feat as { name?: string } | undefined)?.name?.replace(/\s*\[.*\]$/, "");
+  return [list(data.skills).join(", "), list(data.abilities).map((a) => a.slice(0, 3)).join("/"), feat ?? ""]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 export async function loadDndBackgroundOptions(systemId: number, opts?: LoadOpts): Promise<DndBackgroundOption[]> {
@@ -259,7 +269,7 @@ export async function loadDndBackgroundOptions(systemId: number, opts?: LoadOpts
   for (const section of bgSections) {
     const entries = await get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${section.id}`, opts);
     for (const e of entries) {
-      if (e.kind === "background") results.push({ id: e.id, name: e.name });
+      if (e.kind === "background") results.push({ id: e.id, name: e.name, summary: backgroundSummary(e.data) });
     }
   }
   return results.sort(byNameRu);

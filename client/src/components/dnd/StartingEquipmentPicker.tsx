@@ -13,7 +13,7 @@ export function isMasterableWeapon(entry: CompendiumEntry): boolean {
   return true;
 }
 
-function weaponMasteryName(entry: CompendiumEntry): string {
+export function weaponMasteryName(entry: CompendiumEntry): string {
   const data = entry.data as Record<string, unknown>;
   const mastery = data.weapon_mastery;
   if (mastery && typeof mastery === "object") {
