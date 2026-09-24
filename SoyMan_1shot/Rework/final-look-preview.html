@@ -102,11 +102,13 @@
     .tabs span { flex:none; min-height:47px; display:grid; place-items:center; padding:8px 13px; border-right:1px solid var(--ink); font:600 15px/1.15 Oswald,'Arial Narrow',sans-serif; letter-spacing:.025em; text-transform:uppercase; white-space:nowrap; }
     .tabs .active { position:relative; background:var(--acid); }
     .tabs .active::after { content:""; position:absolute; left:6px; right:6px; bottom:-4px; height:10px; background:url("../assets/fantasy-punk/decorative/markers/marker-magenta-small.webp") center/100% 100% no-repeat; pointer-events:none; }
-    .work-head { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:2px; }
+    .work-head { display:grid; grid-template-columns:48px minmax(0,1fr) 48px; align-items:center; gap:12px; margin-bottom:2px; }
     .work-head h2 { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
-    .work-head strong { font:600 20px/1.1 Oswald,'Arial Narrow',sans-serif; }
+    .work-head strong { font:600 20px/1.1 Oswald,'Arial Narrow',sans-serif; text-align:center; }
     .edit-button { flex:none; width:48px; height:44px; border:0; background:url("../assets/fantasy-punk/decorative/states/edit-badge-pencil.webp") center/contain no-repeat; color:transparent; font-size:0; filter:drop-shadow(1px 2px 0 var(--ink)); }
     .edit-button:hover { filter:drop-shadow(2px 2px 0 var(--pink)) brightness(1.08); }
+    .fan-button { width:44px; height:44px; justify-self:end; padding:0; border:0; background:transparent url("../assets/fantasy-punk/semantic/card-buttons/card-fan-paper.webp") center/contain no-repeat; filter:drop-shadow(1px 2px 0 var(--ink)); }
+    .fan-button:hover { background-image:url("../assets/fantasy-punk/semantic/card-buttons/card-fan-acid.webp"); }
     .spell-meta { display:flex; justify-content:flex-start; flex-wrap:wrap; gap:7px 24px; margin-bottom:10px; font:500 16px/1.2 Oswald,'Arial Narrow',sans-serif; }
     .controls { display:flex; flex-wrap:wrap; gap:8px; margin:0 0 10px; }
     .small-button { min-height:34px; padding:5px 12px; background:#e8dfc9; border:0; color:var(--ink); font:600 14px/1.1 Oswald,'Arial Narrow',sans-serif; text-transform:uppercase; filter:drop-shadow(1px 2px 0 var(--ink)); }
@@ -172,7 +174,7 @@
     </section>
     <section class="work" aria-label="Рабочая область — Магия">
       <nav class="tabs" aria-label="Разделы листа"><span>Карта-действия</span><span class="active">Магия</span><span>Снаряжение</span><span>Навыки</span><span>Особенности</span><span>Досье</span><span>Ресурсы</span></nav>
-      <div class="work-head"><h2>Магия</h2><button class="edit-button" type="button" aria-label="Редактировать">✎</button><strong>СЛ: 11 · АТК: +3</strong></div>
+      <div class="work-head"><h2>Магия</h2><button class="edit-button" type="button" aria-label="Редактировать">✎</button><strong>СЛ: 11 · АТК: +3</strong><button class="fan-button" type="button" aria-label="Открыть колоду карт" title="Колода карт"></button></div>
       <div class="controls"><button class="small-button" type="button">Подготовленные / доступные</button><button class="small-button" type="button">Добавить</button></div>
       <div class="spell-meta"><span>Заговоры 2 из 3</span><span>Подготовлено 4 из 4</span><span>Вне лимита 7</span></div>
       <div class="section-title">Заговоры <small>5</small></div>
