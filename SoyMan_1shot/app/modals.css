@@ -159,8 +159,7 @@ html[data-app="oneshot"] .dnd-spell-picker {
 html[data-app="oneshot"] .dnd-spell-picker-head {
   border-bottom: 3px solid var(--ui-border);
 }
-html[data-app="oneshot"] .dnd-spell-picker-title,
-html[data-app="oneshot"] .dnd-deck-fan-title {
+html[data-app="oneshot"] .dnd-spell-picker-title {
   font-family: var(--font-ui);
   font-size: clamp(24px, 5vw, 32px);
   font-weight: 800;

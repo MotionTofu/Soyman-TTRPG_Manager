@@ -9902,7 +9902,6 @@ function DndRestModal({
 // заглянувшему в чужой чарник.
 function DndDeckFan({
   current,
-  color,
   pendingItems,
   subtitle,
   details,
@@ -9910,7 +9909,6 @@ function DndDeckFan({
   onClose,
 }: {
   current: DndViewTab;
-  color: string;
   pendingItems: number;
   /** «Имя · класс уровень» в шапку (канвас DeckFan). */
   subtitle: string;
@@ -9980,11 +9978,7 @@ function DndDeckFan({
             key={t}
             type="button"
             className={`dnd-deck-fan-card${t === current ? " is-current" : ""}${t === "Ресурсы" ? " is-muted" : ""}`}
-            style={
-              t === current
-                ? { background: color, borderColor: "#e8e4da" }
-                : { borderLeftColor: color, borderRightColor: color }
-            }
+            aria-current={t === current ? "page" : undefined}
             onClick={() => {
               onPick(t);
               onClose();
@@ -9992,6 +9986,9 @@ function DndDeckFan({
           >
             <span className="dnd-deck-fan-name">
               {t}
+              {/* Текущая карта — кислотой с наклейкой (макет 2026-09-25):
+                  жёлтое = выбрано. */}
+              {t === current && <span className="dnd-deck-fan-here">здесь</span>}
               {t === "Снаряжение" && pendingItems > 0 && <span className="dnd-fan-dot" aria-label="есть непринятое" />}
             </span>
             <span className="dnd-deck-fan-rule" aria-hidden="true" />
@@ -11730,7 +11727,6 @@ export function DndCharacterView({
         {fanOpen && (
           <DndDeckFan
             current={tab}
-            color={cardColor}
             pendingItems={pendingItems}
             subtitle={`${value.characterName || "Без имени"} · ${stripLatin(
               value.classes.find((c) => c.className)?.className ?? "Без класса"
