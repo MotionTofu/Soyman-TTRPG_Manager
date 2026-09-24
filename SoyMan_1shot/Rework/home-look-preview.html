@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SoyMan_1shot — макет главной страницы</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    @font-face { font-family:Punk; src:url("../../client/public/fonts/RussianPunk.ttf") format("truetype"); font-display:swap; }
+    :root { --ink:#171717; --paper:#f0ede4; --acid:#f3ff3a; --pink:#ff3e91; --muted:#595650; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { position:relative; min-height:100vh; margin:0; overflow-x:clip; color:var(--ink); background:#e7e2d6 url("../assets/fantasy-punk/textures/paper-tile.webp") repeat; font:16px/1.35 Arial,sans-serif; }
+    body::before { content:""; position:fixed; z-index:0; top:88px; right:0; width:min(28vw,340px); height:290px; background:url("../assets/fantasy-punk/decorative/frames/halftone-corner-large.webp") right top/contain no-repeat; transform:scaleX(-1); opacity:.55; pointer-events:none; }
+    button,input { font:inherit; }
+    button { cursor:pointer; }
+    :focus-visible { outline:3px solid #b10058; outline-offset:3px; }
+    .top { position:relative; z-index:10; display:flex; align-items:center; gap:24px; min-height:66px; padding:4px max(24px,calc((100vw - 1420px)/2)); background:var(--ink) url("../assets/fantasy-punk/textures/ink-surface.webp") repeat; color:var(--paper); }
+    .top::after { content:""; position:absolute; left:0; right:0; bottom:-9px; height:17px; background:url("../assets/fantasy-punk/decorative/dividers/divider-ink-long.webp") center/100% 100% no-repeat; pointer-events:none; }
+    .brand { display:block; flex:none; width:244px; height:58px; }
+    .brand img { display:block; width:100%; height:100%; }
+    .top-label { margin-left:auto; color:#d3d0bd; font:500 12px/1.1 Oswald,'Arial Narrow',sans-serif; letter-spacing:.08em; text-transform:uppercase; }
+    .page { position:relative; z-index:1; max-width:1420px; margin:auto; padding:30px 24px 56px; }
+    .intro { position:relative; display:flex; justify-content:space-between; align-items:end; gap:24px; margin-bottom:28px; padding:4px 4px 23px; background:url("../assets/fantasy-punk/decorative/dividers/divider-ink-hairline.webp") center bottom/100% 5px no-repeat; }
+    .intro-copy { position:relative; min-width:0; max-width:780px; }
+    .kicker,.section-index { margin:0 0 8px; font:600 12px/1.1 Oswald,'Arial Narrow',sans-serif; letter-spacing:.14em; text-transform:uppercase; }
+    .intro h1 { position:relative; width:max-content; max-width:100%; margin:0 0 8px; font:clamp(44px,5vw,72px)/.95 Punk,Georgia,serif; text-transform:uppercase; }
+    .intro h1::after { content:""; position:absolute; z-index:-1; left:0; right:-8px; bottom:-6px; height:15px; background:url("../assets/fantasy-punk/decorative/markers/marker-magenta-wide.webp") center/100% 100% no-repeat; }
+    .intro-copy > p:last-child { max-width:580px; margin:14px 0 0; color:var(--muted); font-size:14px; }
+    .counts { display:flex; flex:none; gap:9px; padding-bottom:4px; }
+    .count { display:flex; align-items:baseline; gap:7px; padding:7px 9px; border-bottom:2px solid var(--ink); background:rgba(240,237,228,.78); font:600 13px Oswald,'Arial Narrow',sans-serif; text-transform:uppercase; }
+    .count b { font:700 21px/1 Oswald,'Arial Narrow',sans-serif; }
+    .count:first-child { border-color:var(--pink); }
+    .layout { display:grid; grid-template-columns:minmax(0,1fr) 330px; grid-template-areas:"library create" "library tools"; align-items:start; gap:20px 25px; }
+    .library { grid-area:library; min-width:0; }
+    .create { grid-area:create; }
+    .tools { grid-area:tools; }
+    .section-head { display:flex; justify-content:space-between; align-items:end; gap:14px; margin-bottom:14px; }
+    .section-head h2,.create h2 { margin:0; font:700 28px/1.05 Oswald,'Arial Narrow',sans-serif; text-transform:uppercase; }
+    .section-head .section-index { margin-bottom:5px; }
+    .section-note { padding-bottom:2px; color:var(--muted); font:500 12px Oswald,'Arial Narrow',sans-serif; text-transform:uppercase; white-space:nowrap; }
+    .character-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+    .character { position:relative; min-width:0; background:var(--paper) url("../assets/fantasy-punk/textures/paper-panel.webp") repeat; border:2px solid var(--ink); box-shadow:4px 5px 0 rgba(23,23,23,.68); }
+    .character::after { content:""; position:absolute; z-index:3; bottom:-9px; right:-9px; width:63px; height:63px; background:url("../assets/fantasy-punk/decorative/frames/frame-corner-bottom-right.webp") right bottom/contain no-repeat; pointer-events:none; }
+    .character-art { position:relative; height:205px; overflow:hidden; background:#180c18 url("./assets/character-portrait-duo-v2.png") 75% 54%/cover no-repeat; }
+    .character-art::after { content:""; position:absolute; inset:62% 0 0; background:linear-gradient(transparent,rgba(23,23,23,.72)); pointer-events:none; }
+    .character-draft .character-art { display:grid; place-items:center; background:var(--ink) url("../assets/fantasy-punk/textures/ink-surface.webp") repeat; }
+    .character-draft .character-art::before { content:""; width:138px; height:138px; background:url("../assets/fantasy-punk/semantic/dice/d20-paper.webp") center/contain no-repeat; opacity:.21; transform:rotate(-10deg); }
+    .character-draft .character-art::after { inset:auto 0 0; height:8px; background:url("../assets/fantasy-punk/decorative/dividers/divider-rough-paper-long.webp") center/100% 100% no-repeat; }
+    .character-type { position:absolute; z-index:2; top:12px; left:12px; padding:5px 8px; background:var(--paper); color:var(--ink); font:700 11px/1 Oswald,'Arial Narrow',sans-serif; letter-spacing:.08em; text-transform:uppercase; transform:rotate(-2deg); }
+    .character-draft .character-type { background:var(--acid); }
+    .character-menu { position:absolute; z-index:4; top:10px; right:10px; }
+    .character-menu > button { display:grid; place-items:center; width:42px; height:42px; padding:0; border:0; background:var(--paper); color:var(--ink); font:bold 26px/1 Arial,sans-serif; filter:drop-shadow(2px 2px 0 var(--ink)); -webkit-mask-image:url("./assets/button-edge-mask.svg"); mask-image:url("./assets/button-edge-mask.svg"); -webkit-mask-size:100% 100%; mask-size:100% 100%; }
+    .character-menu > button:hover,.character-menu > button[aria-expanded="true"] { background:var(--acid); }
+    .character-menu-list { position:absolute; top:calc(100% + 6px); right:0; width:180px; padding:5px; border:2px solid var(--ink); background:var(--paper) url("../assets/fantasy-punk/textures/paper-panel.webp") repeat; box-shadow:4px 4px 0 var(--pink); }
+    .character-menu-list[hidden] { display:none; }
+    .character-menu-list button { display:block; width:100%; min-height:35px; padding:6px 7px; border:0; border-bottom:1px solid #c3bcb0; background:none; color:var(--ink); text-align:left; font:600 13px Oswald,'Arial Narrow',sans-serif; text-transform:uppercase; }
+    .character-menu-list button:last-child { border-bottom:0; }
+    .character-menu-list button:hover { background:var(--acid); }
+    .character-body { display:flex; flex-direction:column; min-height:140px; padding:14px 15px 15px; }
+    .character-body h3 { margin:0 0 5px; font:700 24px/1.05 Oswald,'Arial Narrow',sans-serif; text-transform:uppercase; }
+    .character-body p { margin:0; color:var(--muted); font:500 13px/1.3 Oswald,'Arial Narrow',sans-serif; }
+    .character-body .open { display:flex; justify-content:space-between; align-items:center; gap:8px; width:100%; min-height:40px; margin-top:auto; padding:7px 10px; border:0; background:var(--ink); color:var(--paper); font:600 14px/1 Oswald,'Arial Narrow',sans-serif; text-decoration:none; text-transform:uppercase; }
+    .character-body .open::after { content:"↗"; color:var(--acid); font-size:20px; }
+    .character-body .open:hover { background:#333; }
+    .library-imports { display:flex; flex-wrap:wrap; gap:8px 17px; margin-top:20px; padding:15px 0 0; background:url("../assets/fantasy-punk/decorative/dividers/divider-ink-hairline.webp") center top/100% 4px no-repeat; }
+    .library-imports button { min-height:35px; padding:4px 0; border:0; border-bottom:2px solid var(--ink); background:transparent; color:var(--ink); font:600 13px Oswald,'Arial Narrow',sans-serif; text-transform:uppercase; }
+    .library-imports button:hover { border-color:var(--pink); }
+    .create { position:relative; padding:20px 19px 21px; border:2px solid var(--ink); background:var(--paper) url("../assets/fantasy-punk/textures/paper-panel.webp") repeat; box-shadow:4px 5px 0 rgba(23,23,23,.7); }
+    .create::before { content:""; position:absolute; top:-10px; right:-8px; width:70px; height:70px; background:url("../assets/fantasy-punk/decorative/frames/frame-corner-top-right.webp") right top/contain no-repeat; pointer-events:none; }
+    .create .section-index { margin-bottom:9px; }
+    .create h2 { margin-bottom:18px; }
+    .create label { display:block; margin-bottom:7px; font:600 12px Oswald,'Arial Narrow',sans-serif; letter-spacing:.08em; text-transform:uppercase; }
+    .create input { display:block; width:100%; min-height:45px; padding:10px 11px; border:2px solid var(--ink); border-radius:0; background:#f9f5ea; color:var(--ink); font-size:15px; }
+    .create input::placeholder { color:#77736b; }
+    .create-actions { display:grid; gap:9px; margin-top:13px; }
+    .create-actions button { min-height:44px; padding:9px 10px; border:0; font:600 15px/1.1 Oswald,'Arial Narrow',sans-serif; text-align:left; text-transform:uppercase; -webkit-mask-image:url("./assets/button-edge-mask.svg"); mask-image:url("./assets/button-edge-mask.svg"); -webkit-mask-size:100% 100%; mask-size:100% 100%; }
+    .create-primary { background:var(--ink); color:var(--paper); filter:drop-shadow(3px 3px 0 var(--acid)); }
+    .create-secondary { background:#e1dacb; color:var(--ink); filter:drop-shadow(2px 2px 0 var(--ink)); }
+    .create-actions button:hover { background:var(--pink); color:var(--ink); }
+    .create-hint { margin:16px 0 0; padding-top:12px; background:url("../assets/fantasy-punk/decorative/dividers/divider-ink-hairline.webp") center top/100% 3px no-repeat; color:var(--muted); font:13px/1.35 Oswald,'Arial Narrow',sans-serif; }
+    .tools { border:2px solid var(--ink); background:#ded7c7 url("../assets/fantasy-punk/textures/paper-panel.webp") repeat; }
+    .tools summary { display:flex; justify-content:space-between; align-items:center; gap:10px; min-height:52px; padding:10px 16px; font:600 16px Oswald,'Arial Narrow',sans-serif; text-transform:uppercase; list-style:none; cursor:pointer; }
+    .tools summary::-webkit-details-marker { display:none; }
+    .tools summary::after { content:"+"; font-size:25px; line-height:1; }
+    .tools[open] summary::after { content:"−"; }
+    .tools-content { padding:0 16px 16px; }
+    .tools-content p { margin:0 0 10px; color:var(--muted); font-size:12px; }
+    .tools-content button { display:block; width:100%; min-height:38px; padding:6px 0; border:0; border-top:1px solid #a9a395; background:transparent; color:var(--ink); text-align:left; font:600 13px Oswald,'Arial Narrow',sans-serif; text-transform:uppercase; }
+    .tools-content button:hover { color:#971343; }
+    .footer { display:flex; justify-content:space-between; gap:16px; margin-top:35px; padding-top:14px; background:url("../assets/fantasy-punk/decorative/dividers/divider-ink-hairline.webp") center top/100% 4px no-repeat; color:var(--muted); font:500 11px Oswald,'Arial Narrow',sans-serif; text-transform:uppercase; }
+    @media(max-width:980px) {
+      .layout { grid-template-columns:minmax(0,1fr) 290px; gap:18px; }
+      .character-art { height:195px; }
+      .character-body { min-height:140px; }
+    }
+    @media(max-width:740px) {
+      .top { padding:4px 15px; }
+      .page { padding:25px 16px 46px; }
+      .intro { align-items:start; flex-direction:column; gap:13px; }
+      .intro h1 { font-size:clamp(39px,8vw,60px); }
+      .layout { grid-template-columns:minmax(0,1fr); grid-template-areas:"create" "library" "tools"; gap:26px; }
+      .create { max-width:none; }
+      .create-actions { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    }
+    @media(max-width:520px) {
+      .top { min-height:60px; }
+      .brand { width:195px; height:50px; }
+      .top-label { font-size:10px; }
+      .page { padding:22px 12px 36px; }
+      .intro { padding-inline:4px; }
+      .intro h1 { font-size:41px; }
+      .intro-copy > p:last-child { font-size:13px; }
+      .counts { flex-wrap:wrap; }
+      .character-grid { grid-template-columns:minmax(0,1fr); }
+      .character-art { height:235px; }
+      .character-body { min-height:150px; }
+      .section-head h2 { font-size:24px; }
+      .section-note { display:none; }
+      .create-actions { grid-template-columns:minmax(0,1fr); }
+      .footer { flex-direction:column; gap:3px; }
+    }
+    @media(max-width:350px) { .top-label { display:none; } .intro h1 { font-size:34px; } }
+  </style>
+</head>
+<body>
+  <header class="top"><a class="brand" href="#top" aria-label="SoyMan_1shot — наверх"><img src="./assets/logo-soyman-1shot-v1.png" alt="SoyMan_1shot"></a><span class="top-label">Библиотека персонажей</span></header>
+  <main class="page" id="top">
+    <header class="intro">
+      <div class="intro-copy"><p class="kicker">SoyMan_1shot / библиотека</p><h1>Твои персонажи</h1><p>Создайте героя в визарде или заполните пустой лист вручную. Персонажи сохраняются на этом устройстве.</p></div>
+      <div class="counts" aria-label="Состав библиотеки"><span class="count">Активных <b>2</b></span><span class="count">В архиве <b>0</b></span></div>
+    </header>
+    <div class="layout">
+      <section class="library" aria-labelledby="library-title">
+        <div class="section-head"><div><p class="section-index">02 / Библиотека</p><h2 id="library-title">Сохранённые персонажи</h2></div><span class="section-note">Продолжить историю</span></div>
+        <div class="character-grid">
+          <article class="character">
+            <div class="character-art"><span class="character-type">Готовый лист</span></div>
+            <div class="character-menu"><button type="button" aria-label="Действия: Кэрри" aria-expanded="false" aria-controls="menu-carrie">⋯</button><div class="character-menu-list" id="menu-carrie" hidden><button type="button">Открыть</button><button type="button">Создать копию</button><button type="button">Архивировать</button><button type="button">Удалить</button></div></div>
+            <div class="character-body"><h3>Кэрри</h3><p>Артефактор · 3 уровень</p><a class="open" href="./final-look-preview.html">Открыть лист</a></div>
+          </article>
+          <article class="character character-draft">
+            <div class="character-art"><span class="character-type">Черновик</span></div>
+            <div class="character-menu"><button type="button" aria-label="Действия: черновик" aria-expanded="false" aria-controls="menu-draft">⋯</button><div class="character-menu-list" id="menu-draft" hidden><button type="button">Продолжить</button><button type="button">Архивировать</button><button type="button">Удалить</button></div></div>
+            <div class="character-body"><h3>Новый герой</h3><p>Создание не завершено</p><button class="open" type="button">Продолжить создание</button></div>
+          </article>
+        </div>
+        <div class="library-imports"><button type="button">Восстановить из копии</button><button type="button">Импортировать персонажа</button></div>
+      </section>
+      <section class="create" aria-labelledby="create-title"><p class="section-index">01 / Создание</p><h2 id="create-title">Новый персонаж</h2><label for="character-name">Имя</label><input id="character-name" type="text" maxlength="100" placeholder="Как зовут героя?"><div class="create-actions"><button class="create-primary" type="button">Создать через визард</button><button class="create-secondary" type="button">Открыть пустой лист</button></div><p class="create-hint">Два пути: пошаговое создание или свободное заполнение листа.</p></section>
+      <details class="tools"><summary>Инструменты и данные</summary><div class="tools-content"><p>Дополнительные действия остаются рядом, но не отвлекают от персонажей.</p><button type="button">Импортировать справочник вручную</button><button type="button">Локальные данные</button><button type="button">Синхронизация между устройствами</button></div></details>
+    </div>
+    <footer class="footer"><span>Персонажи сохраняются на этом устройстве</span><span>Автономную копию можно скачать из листа персонажа</span></footer>
+  </main>
+  <script>
+    const menus = [...document.querySelectorAll('.character-menu')];
+    function closeMenus() { for (const menu of menus) { menu.querySelector('.character-menu-list').hidden = true; menu.querySelector('button').setAttribute('aria-expanded','false'); } }
+    for (const menu of menus) menu.querySelector('button').addEventListener('click', event => { event.stopPropagation(); const list = menu.querySelector('.character-menu-list'); const open = list.hidden; closeMenus(); list.hidden = !open; menu.querySelector('button').setAttribute('aria-expanded',String(open)); });
+    document.addEventListener('click', event => { if (!event.target.closest('.character-menu')) closeMenus(); });
+    document.addEventListener('keydown', event => { if (event.key === 'Escape') closeMenus(); });
+  </script>
+</body>
+</html>
