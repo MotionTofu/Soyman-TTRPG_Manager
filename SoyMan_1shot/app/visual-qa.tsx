@@ -74,6 +74,18 @@ fixture.equipmentSections = [{
   ],
 }];
 fixture.coins = { ...fixture.coins, cp: '14', sp: '32', gp: '54', pp: '1' };
+// Особенности по доске макета: группы, уровни у классовых.
+const feat = (name: string, level?: number, description = 'Описание особенности.') => ({ name, description, level });
+fixture.speciesFeatures = [feat('Тёмное зрение'), feat('Родословная фей'), feat('Транс'), feat('Острые чувства')];
+fixture.classFeatures = [
+  feat('Колдовство', 1),
+  feat('Врождённое чародейство', 1, 'Бонусным действием высвободите магию на 1 минуту: Сл спасброска ваших заклинаний чародея +1, и броски атаки ими совершаются с преимуществом.'),
+  feat('Источник магии', 2),
+  feat('Метамагия', 2),
+  feat('Чародейское восстановление', 5),
+];
+fixture.feats = [feat('Посвящённый в магию: волшебник')];
+fixture.sensesList = [{ name: 'Тёмное зрение', distance: '60' }];
 
 // Static, unsaved examples of app-owned dialogs. Their actions only close the
 // preview: this page never imports, publishes, or resolves sync state.

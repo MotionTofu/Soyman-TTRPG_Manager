@@ -7638,12 +7638,14 @@ function DndTraitsView({ value }: { value: DndCharacterData }) {
             <span className="dnd-feat-section-mark" aria-hidden="true" />
             <span className="dnd-feat-section-title">Свойства</span>
           </div>
-          {rows.map(([label, text]) => (
-            <div key={label} className="dnd-feat-prop">
-              <span className="dnd-feat-prop-label">{label}</span>
-              <span className="dnd-feat-prop-value">{text}</span>
-            </div>
-          ))}
+          <div className="dnd-feat-list">
+            {rows.map(([label, text]) => (
+              <div key={label} className="dnd-feat-prop">
+                <span className="dnd-feat-prop-label">{label}</span>
+                <span className="dnd-feat-prop-value">{text}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
       {notes && (
@@ -7680,28 +7682,31 @@ function SbFeatureGroup({ title, values }: { title: string; values: DndFeature[]
         <span className="dnd-feat-section-count">{values.length}</span>
         <NavIcon name="chevron" className="chevron-icon" />
       </summary>
-      {values.map((f, i) => {
-        const open = openIndex === i;
-        return (
-          <div key={i} className={`dnd-feat-item${open ? " is-open" : ""}`}>
-            <button
-              type="button"
-              className="dnd-feat-row"
-              aria-expanded={open}
-              onClick={() => setOpenIndex(open ? null : i)}
-            >
-              <span className="dnd-feat-name">{f.name || "Без названия"}</span>
-              {showLevels && f.level ? <span className="dnd-feat-level">ур. {f.level}</span> : null}
-              <NavIcon name="chevron" className={`chevron-icon${open ? " is-open" : ""}`} />
-            </button>
-            {open && (
-              <div className="dnd-feat-description">
-                <MentionText text={f.description} />
-              </div>
-            )}
-          </div>
-        );
-      })}
+      {/* Строки — одним листом под заголовком (макет 2026-09-25). */}
+      <div className="dnd-feat-list">
+        {values.map((f, i) => {
+          const open = openIndex === i;
+          return (
+            <div key={i} className={`dnd-feat-item${open ? " is-open" : ""}`}>
+              <button
+                type="button"
+                className="dnd-feat-row"
+                aria-expanded={open}
+                onClick={() => setOpenIndex(open ? null : i)}
+              >
+                <span className="dnd-feat-name">{f.name || "Без названия"}</span>
+                {showLevels && f.level ? <span className="dnd-feat-level">ур. {f.level}</span> : null}
+                <NavIcon name="chevron" className={`chevron-icon${open ? " is-open" : ""}`} />
+              </button>
+              {open && (
+                <div className="dnd-feat-description">
+                  <MentionText text={f.description} />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </details>
   );
 }
@@ -8696,6 +8701,7 @@ function LabeledEditButton({
     <button
       type="button"
       className="dnd-chip dnd-edit-labeled"
+      aria-pressed={!!editing}
       title={editing ? "Сохранить" : `Редактировать: ${label}`}
       onClick={onToggle}
     >
