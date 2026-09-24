@@ -8618,6 +8618,7 @@ function TabEditToggle({ editing, onToggle }: { editing: boolean; onToggle: () =
     <button
       type="button"
       className="comp-mini dnd-tab-edit-toggle dnd-tab-btn"
+      aria-pressed={editing}
       title={editing ? "Сохранить" : "Редактировать"}
       aria-label={editing ? "Сохранить" : "Редактировать"}
       onClick={onToggle}
@@ -10097,6 +10098,7 @@ export function DndCharacterView({
   campaignId,
   ownerCharacterId,
   onSheetBack,
+  fanSignal,
   onPortraitRefresh,
   levelUpDraft,
   onLevelUpApply,
@@ -10134,6 +10136,9 @@ export function DndCharacterView({
   // уводит с полноэкранной страницы чарника обратно в профиль. Встроенному
   // листу возвращаться некуда — без пропса жест молчит.
   onSheetBack?: () => void;
+  // Колода веером по команде хоста — пункт «Колода карт» в меню «⋯» OneShot
+  // для тех, кто не знает двойного тапа. Каждое новое число открывает веер.
+  fanSignal?: number;
   // Портрет протух (подпись URL живёт 60 секунд): перезагрузить персонажа,
   // чтобы приехал свежий avatar_image_url. Без пропса — просто плейсхолдер.
   onPortraitRefresh?: () => void;
@@ -10203,6 +10208,9 @@ export function DndCharacterView({
   // берётся класс с наибольшим уровнем (dndClassColors.ts).
   const cardColor = sheetClassColor(value.classes, getEntry);
   const [fanOpen, setFanOpen] = useState(false);
+  useEffect(() => {
+    if (fanSignal) setFanOpen(true);
+  }, [fanSignal]);
   // Модалка передачи из Снаряжения: то же меню, что оборот карты.
   const [transferModalOpen, setTransferModalOpen] = useState(false);
   // Предмет, выбранный из меню строки: диалог передачи открывается уже

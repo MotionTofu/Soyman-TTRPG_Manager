@@ -429,3 +429,106 @@ html[data-app="oneshot"] .oneshot-header-options > button:hover { background: va
   html[data-app="oneshot"] .oneshot-header .oneshot-header-toggle { grid-column: 2; grid-row: 1 / 4; align-self: center; }
   html[data-app="oneshot"] .oneshot-header-options { right: 8px; }
 }
+
+/* Меню «⋯» (макет 2026-09-25): сверху навигация для тех, кто не знает
+   свайпов, — «Колода карт» кислотой с иконкой веера и «На главную»; ниже
+   разделы «Вид» и «Файлы», последним — «Показать жесты». */
+html[data-app="oneshot"] .oneshot-header-options > button.oneshot-menu-deck,
+html[data-app="oneshot"] .oneshot-header-options > button.oneshot-menu-home {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 0 12px;
+  border-top: 0;
+  font: 600 15px Oswald, "Arial Narrow", sans-serif;
+  letter-spacing: .06em;
+}
+html[data-app="oneshot"] .oneshot-header-options > button.oneshot-menu-deck {
+  background: #f3ff3a url("/ui/wizard/acid-yellow.webp") center / 360px;
+}
+html[data-app="oneshot"] .oneshot-header-options > button.oneshot-menu-deck::before {
+  content: "";
+  width: 32px;
+  height: 32px;
+  background: var(--skin-fan-paper) center / contain no-repeat;
+}
+html[data-app="oneshot"] .oneshot-header-options > button.oneshot-menu-home {
+  border-top: 2px solid var(--ui-border);
+}
+html[data-app="oneshot"] .oneshot-header-options > button.oneshot-menu-home::before {
+  content: "⌂";
+  width: 32px;
+  text-align: center;
+  font-size: 20px;
+}
+html[data-app="oneshot"] .oneshot-menu-section {
+  padding: 10px 9px 4px;
+  border-top: 2px solid var(--ui-border);
+  color: #56534f;
+  font: 600 11px Oswald, "Arial Narrow", sans-serif;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+html[data-app="oneshot"] .oneshot-header-options > button.oneshot-menu-gestures::before {
+  content: "☝ ";
+}
+
+/* Экран жестов — поверх листа, один раз на устройство. */
+html[data-app="oneshot"] .oneshot-gestures {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 90px 22px 30px;
+  overflow-y: auto;
+  background: rgba(12, 12, 12, .86);
+  color: #e8e4da;
+}
+html[data-app="oneshot"] .oneshot-gestures-title {
+  font: 400 34px/1 "Rubik Dirt", Oswald, sans-serif;
+}
+html[data-app="oneshot"] .oneshot-gestures-sub {
+  margin-top: -10px;
+  color: #bdb8ad;
+  font-size: 15px;
+}
+html[data-app="oneshot"] .oneshot-gestures-row {
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  gap: 12px;
+  align-items: center;
+  font-size: 15px;
+  line-height: 1.25;
+  color: #d6d1c6;
+}
+html[data-app="oneshot"] .oneshot-gestures-row > span:first-child {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  background: #f3ff3a url("/ui/wizard/acid-yellow.webp") center / 360px;
+  color: #171717;
+  font: 700 26px Oswald, sans-serif;
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, .6);
+}
+html[data-app="oneshot"] .oneshot-gestures-row b {
+  display: block;
+  color: #e8e4da;
+  font: 600 15px Oswald, sans-serif;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+html[data-app="oneshot"] .oneshot-gestures > button {
+  margin-top: auto;
+  min-height: 56px;
+  border: 0;
+  background: #f3ff3a url("/ui/wizard/acid-yellow.webp") center / 360px;
+  color: #171717;
+  font: 600 17px Oswald, sans-serif;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}

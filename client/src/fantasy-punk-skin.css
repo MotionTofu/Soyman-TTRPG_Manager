@@ -68,6 +68,8 @@
   --skin-tab-marker: url("/ui/fantasy-punk/decorative/dividers/underline-acid-magenta.webp");
   --skin-fan-paper: url("/ui/fantasy-punk/semantic/card-buttons/card-fan-paper.webp");
   --skin-fan-acid: url("/ui/fantasy-punk/semantic/card-buttons/card-fan-acid.webp");
+  --skin-edit-paper: url("/ui/sheet/card-edit-paper.webp");
+  --skin-edit-acid: url("/ui/sheet/card-edit-acid.webp");
 
   --skin-paper-base: #e8e4da;
   --skin-ink: #171717;
@@ -903,4 +905,26 @@ body.sheet-fullscreen {
   .dnd-desktop-split > .dnd-card-face {
     margin-top: -6px;
   }
+}
+
+/* Кнопки шапок вкладок — рисунки владельца (card-buttons), 52 px по макету.
+ * Правка — карандаш на бумаге, в режиме правки — кислотой: жёлтое = выбрано.
+ * Состояние несёт aria-pressed, NavIcon внутри остаётся запасным глифом. */
+.dnd-tab-btn {
+  width: 52px;
+  height: 52px;
+}
+.dnd-fan-btn {
+  border: 0;
+  background-size: 44px 44px;
+}
+.dnd-tab-edit-toggle {
+  border: 0;
+  background: var(--paper) var(--skin-edit-paper) center / 44px 44px no-repeat;
+}
+.dnd-tab-edit-toggle[aria-pressed="true"] {
+  background-image: var(--skin-edit-acid);
+}
+.dnd-tab-edit-toggle > svg {
+  display: none;
 }

@@ -49,6 +49,34 @@ import './modals.css';
 import './home.css';
 
 applyTheme(findTheme('noir'));
+// Жесты листа (макет 2026-09-25, «как в тиндере»): при первом заходе на
+// телефоне лист показывает, как им листать, — свайпов и двойного тапа не
+// видно. Один раз на устройство; повторить — «Показать жесты» в меню «⋯».
+const GESTURES_SEEN_KEY = 'oneshot-sheet-gestures-seen';
+function gesturesSeen(): boolean {
+  try { return localStorage.getItem(GESTURES_SEEN_KEY) === '1'; } catch { return true; }
+}
+function markGesturesSeen() {
+  try { localStorage.setItem(GESTURES_SEEN_KEY, '1'); } catch { /* private mode */ }
+}
+const GESTURES: [string, string, string][] = [
+  ['⇆', 'Свайп влево и вправо', 'Соседняя карта: Действия, Магия, Снаряжение…'],
+  ['→', 'Свайп вправо на этой карте', 'Назад в библиотеку персонажей'],
+  ['✌', 'Двойной тап по портрету', 'Вся колода веером — прыгнуть сразу на нужную'],
+  ['◢', 'Уголок карты', 'Оборот: отдых, цитата, постер, правка'],
+];
+function SheetGestures({ onClose }: { onClose: () => void }) {
+  return <div className="oneshot-gestures" role="dialog" aria-modal="true" aria-label="Как листать карты">
+    <strong className="oneshot-gestures-title">Лист — это колода</strong>
+    <span className="oneshot-gestures-sub">Покажем один раз. Повторить — в меню ⋯</span>
+    {GESTURES.map(([icon, title, text]) => <div key={title} className="oneshot-gestures-row">
+      <span aria-hidden="true">{icon}</span>
+      <span><b>{title}</b>{text}</span>
+    </div>)}
+    <button type="button" autoFocus onClick={onClose}>Понятно</button>
+  </div>;
+}
+
 // Resumable level-up drafts (C2): one localStorage record per character,
 // separate from the creation-wizard key. The wizard owns the shape (see
 // dndLevelUpDraft); here only load/save/remove by character id.
@@ -1268,6 +1296,8 @@ function App() {
   // surface the existing CAS error and ask for a retry — no sync layer.
   const [openMenu, setOpenMenu] = useState<number | null>(null);
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const [fanSignal, setFanSignal] = useState(0);
+  const [gesturesOpen, setGesturesOpen] = useState(false);
   const dndPrefs = useDndPrefs();
   // Главная по макету (гриллинг 2026-09-24): архив — вкладка, экспорт — из
   // меню карты; gmFor/exportingFor привязывают общий экспорт к своей карте.
@@ -1290,6 +1320,17 @@ function App() {
       document.removeEventListener('keydown', closeOnEscape);
     };
   }, [openMenu]);
+  const sheetOpen = !!active?.content;
+  // Уход с листа до сохранения теряет правку: и логотип, и «На главную» в
+  // меню спрашивают одно и то же.
+  const canLeaveSheet = () => {
+    if (status === 'Сохранено на устройстве' || !active?.content) return true;
+    setError('Дождитесь сохранения или скачайте резервную копию перед выходом.');
+    return false;
+  };
+  useEffect(() => {
+    if (sheetOpen && !gesturesSeen() && matchMedia('(max-width: 700px)').matches) setGesturesOpen(true);
+  }, [sheetOpen]);
   useEffect(() => {
     if (!headerMenuOpen) return;
     const closeOnOutsideClick = (event: MouseEvent) => {
@@ -1394,21 +1435,28 @@ function App() {
   const archivedList = archivedCharacters(characters);
   return <DndRuntimeContext.Provider value={{ allowDiceRolls: false, campaignConnected: false }}>
     <header className="oneshot-header">
-      <a href="/" onClick={e => { if (status !== 'Сохранено на устройстве' && active?.content) { e.preventDefault(); setError('Дождитесь сохранения или скачайте резервную копию перед выходом.'); } }}>SoyMan_1shot</a>
+      <a href="/" onClick={e => { if (!canLeaveSheet()) e.preventDefault(); }}>SoyMan_1shot</a>
       {active && <span className="muted oneshot-header-name">{active.name}</span>}
       <span role="status" className={!status && !active ? 'oneshot-header-note' : undefined}>{status || (active ? '' : 'Всё хранится в этом браузере')}</span>
       {active?.content && <>
         <button type="button" className="oneshot-header-toggle" aria-label="Дополнительные действия" aria-expanded={headerMenuOpen} aria-controls="oneshot-header-options" onClick={() => setHeaderMenuOpen(v => !v)}>⋯</button>
         <div id="oneshot-header-options" className="oneshot-header-options" data-open={headerMenuOpen}>
+          {/* Навигация — для тех, кто не знает свайпов и двойного тапа. */}
+          <button className="oneshot-menu-deck" onClick={() => { setHeaderMenuOpen(false); setFanSignal(n => n + 1); }}>Колода карт</button>
+          <button className="oneshot-menu-home" onClick={() => { if (canLeaveSheet()) location.assign('/'); }}>На главную</button>
+          <span className="oneshot-menu-section">Вид</span>
           <label className="oneshot-large-cards"><input type="checkbox" checked={dndPrefs.abilityPrimary === 'mod'} onChange={e => saveDndPrefs({ ...dndPrefs, abilityPrimary: e.target.checked ? 'mod' : 'score' })} /> На кости — модификатор</label>
           <label className="oneshot-large-cards"><input type="checkbox" checked={includeLargeCards} onChange={e => setIncludeLargeCards(e.target.checked)} /> Большие карты в копии</label>
-          <button onClick={() => void backup()}>Скачать резервную копию</button>
+          <span className="oneshot-menu-section">Файлы</span>
           {gmFile ? <button onClick={() => void shareGmFile(gmFile).catch(e => setError((e as Error).message))}>Файл готов — отправить Мастеру</button> : <button disabled={exporting} onClick={() => void exportHtml(true)}>Отправить Мастеру</button>}
           <button disabled={exporting} onClick={() => void exportHtml()}>{exporting ? 'Собираем автономную копию…' : 'Скачать автономный HTML'}</button>
+          <button onClick={() => void backup()}>Скачать резервную копию</button>
           <button onClick={() => void inspectExport()}>Проверить состав</button>
+          <button className="oneshot-menu-gestures" onClick={() => { setHeaderMenuOpen(false); setGesturesOpen(true); }}>Показать жесты</button>
         </div>
       </>}
     </header>
+    {gesturesOpen && active?.content && <SheetGestures onClose={() => { markGesturesSeen(); setGesturesOpen(false); }} />}
     {exportAudit && <Modal className="oneshot-modal" ariaLabel="Проверка автономной копии" onClose={() => setExportAudit(null)}>
       <h3>Подготовка автономной копии</h3>
       <p>Найдено {exportAudit.entryCount} связанных с персонажем записей из {exportAudit.totalEntryCount} в справочнике. Остальные заклинания и предметы в этот предварительный срез не включены.</p>
@@ -1506,7 +1554,7 @@ function App() {
       })()}
     </Modal>}
     {error && <Banner>{error}</Banner>}
-    {!ready ? <p className="oneshot-home">Открываем локальные данные…</p> : active?.content ? <div className="oneshot-sheet"><div className="fp-page-backdrop" aria-hidden="true" /><DndCharacterView key={active.id} value={active.content} portraitUrl={active.portrait} onQuickUpdate={update} onLevelUpApply={applyLevelUp} syncTabToUrl levelUpDraft={{ identity: { characterId: active.id, characterUid: active.characterUid ?? null, catalogKey: active.catalogKey }, initial: loadLevelUpDraft(active.id), onChange: saveLevelUpDraft, onClear: () => clearLevelUpDraft(active.id) }} onSheetBack={() => { if (status === 'Сохранено на устройстве') location.assign('/'); }} /></div> : <main className="oneshot-home lib">
+    {!ready ? <p className="oneshot-home">Открываем локальные данные…</p> : active?.content ? <div className="oneshot-sheet"><div className="fp-page-backdrop" aria-hidden="true" /><DndCharacterView key={active.id} value={active.content} portraitUrl={active.portrait} onQuickUpdate={update} onLevelUpApply={applyLevelUp} syncTabToUrl levelUpDraft={{ identity: { characterId: active.id, characterUid: active.characterUid ?? null, catalogKey: active.catalogKey }, initial: loadLevelUpDraft(active.id), onChange: saveLevelUpDraft, onClear: () => clearLevelUpDraft(active.id) }} onSheetBack={() => { if (status === 'Сохранено на устройстве') location.assign('/'); }} fanSignal={fanSignal} /></div> : <main className="oneshot-home lib">
       <div className="lib-top"><div className="lib-head">
         <p className="lib-kicker">Библиотека</p>
         <h1 className="lib-title">Твои персонажи</h1>
