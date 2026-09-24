@@ -333,3 +333,121 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-deck-strip button:focus-visible {
   html[data-app="oneshot"] .oneshot-sheet .dnd-prepared-filter-long { display: none; }
   html[data-app="oneshot"] .oneshot-sheet .dnd-prepared-filter-short { display: inline; }
 }
+
+/* Approved OneShot header: image mark, small save signal, one utility menu.
+   The menu contains the existing export/backup handlers, not replacements. */
+html[data-app="oneshot"]:has(.oneshot-home) body,
+html[data-app="oneshot"]:has(.oneshot-sheet) body {
+  background: #e7e2d6 var(--skin-paper-tile) repeat;
+}
+html[data-app="oneshot"] .oneshot-header {
+  min-height: 66px;
+  padding: 4px max(24px, calc((100vw - 1500px) / 2));
+  gap: 12px 22px;
+  border: 0;
+  background: var(--ui-surface-ink) var(--skin-ink-surface) repeat;
+}
+html[data-app="oneshot"] .oneshot-header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -9px;
+  height: 17px;
+  background: var(--skin-divider-ink) center / 100% 100% no-repeat;
+  pointer-events: none;
+}
+html[data-app="oneshot"] .oneshot-header > a {
+  display: block;
+  flex: none;
+  width: 244px;
+  height: 58px;
+  background: url("/ui/oneshot/branding/logo-soyman-1shot.webp") center / 100% auto no-repeat;
+  color: transparent;
+  font-size: 0;
+}
+html[data-app="oneshot"] .oneshot-header > .muted {
+  color: var(--ui-text-inverse);
+  font: 700 13px/1.1 "Arial Narrow", Arial, sans-serif;
+  text-transform: uppercase;
+}
+html[data-app="oneshot"] .oneshot-header [role="status"] {
+  flex: 0 1 88px;
+  max-width: 88px;
+  min-width: 0;
+  margin-left: auto;
+  color: #d3d0bd;
+  font: 700 10px/1.08 "Arial Narrow", Arial, sans-serif;
+  letter-spacing: .025em;
+  text-transform: uppercase;
+}
+html[data-app="oneshot"] .oneshot-header .oneshot-header-toggle {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--ui-text-inverse);
+  font: 700 32px/1 Arial, sans-serif;
+}
+html[data-app="oneshot"] .oneshot-header .oneshot-header-toggle:hover,
+html[data-app="oneshot"] .oneshot-header .oneshot-header-toggle[aria-expanded="true"] {
+  background: var(--ui-accent);
+  color: var(--ui-text);
+}
+html[data-app="oneshot"] .oneshot-header-options {
+  display: none;
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 9px);
+  right: max(24px, calc((100vw - 1500px) / 2));
+  width: min(310px, calc(100vw - 24px));
+  padding: 8px;
+  border: 2px solid var(--ui-border);
+  background: var(--ui-surface) var(--skin-paper-panel) repeat;
+  box-shadow: 5px 5px 0 var(--ui-accent);
+  color: var(--ui-text);
+}
+html[data-app="oneshot"] .oneshot-header-options[data-open="true"] { display: grid; }
+html[data-app="oneshot"] .oneshot-header-options .oneshot-large-cards {
+  min-height: 44px;
+  padding: 6px 9px;
+  color: var(--ui-text);
+  font-size: 12px;
+  font-weight: 700;
+}
+html[data-app="oneshot"] .oneshot-header-options > button {
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 0;
+  border-top: 1px solid #aaa397;
+  background: transparent;
+  color: var(--ui-text);
+  font: 700 13px "Arial Narrow", Arial, sans-serif;
+  text-align: left;
+  text-transform: uppercase;
+}
+html[data-app="oneshot"] .oneshot-header-options > button:hover { background: var(--ui-accent); color: var(--ui-text); }
+@media (max-width: 700px) {
+  html[data-app="oneshot"] .oneshot-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 1px 8px;
+    padding: 4px 13px 8px;
+  }
+  html[data-app="oneshot"] .oneshot-header > a { grid-column: 1; grid-row: 1; width: 195px; height: 50px; max-width: 100%; }
+  html[data-app="oneshot"] .oneshot-header > .muted { grid-column: 1; grid-row: 2; }
+  html[data-app="oneshot"] .oneshot-header [role="status"] {
+    grid-column: 1;
+    grid-row: 3;
+    max-width: 130px;
+    margin: 0;
+    font-size: 9px;
+  }
+  html[data-app="oneshot"] .oneshot-header .oneshot-header-toggle { grid-column: 2; grid-row: 1 / 4; align-self: center; }
+  html[data-app="oneshot"] .oneshot-header-options { right: 8px; }
+}

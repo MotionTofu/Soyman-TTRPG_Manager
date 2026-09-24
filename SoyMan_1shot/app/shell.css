@@ -226,3 +226,315 @@ html[data-app="oneshot"] .oneshot-home-aside section {
   html[data-app="oneshot"] .oneshot-home .oneshot-home-library { grid-template-columns: 1fr; }
   html[data-app="oneshot"] .oneshot-home-library > button { grid-column: 1; }
 }
+
+/* Approved library mock: paper page, ink creation slip, portrait posters.
+   All actions remain the existing controls; this layer changes presentation. */
+html[data-app="oneshot"] .oneshot-home {
+  max-width: 1420px;
+  margin: 0 auto;
+  padding: 31px 24px 56px;
+  color: var(--ui-text);
+}
+html[data-app="oneshot"] .oneshot-home-intro {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 0;
+  padding: 4px 4px 23px;
+  overflow: visible;
+  border: 0;
+  background: url("/ui/fantasy-punk/decorative/dividers/divider-ink-long.webp") center bottom / 100% 5px no-repeat;
+  color: var(--ui-text);
+  box-shadow: none;
+}
+html[data-app="oneshot"] .oneshot-home-intro::before,
+html[data-app="oneshot"] .oneshot-home-intro::after { content: none; }
+html[data-app="oneshot"] .oneshot-home-intro-copy { flex: 1 1 auto; min-width: 0; max-width: 780px; }
+html[data-app="oneshot"] .oneshot-home-intro .oneshot-home-kicker {
+  margin: 0 0 8px;
+  color: var(--ui-text);
+  font: 700 12px/1.1 "Arial Narrow", Arial, sans-serif;
+  letter-spacing: .14em;
+}
+html[data-app="oneshot"] .oneshot-home-intro h1 {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 0 10px;
+  color: var(--ui-text);
+  font: clamp(40px, 5vw, 70px)/.95 'Rubik Dirt', Oswald, sans-serif;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+html[data-app="oneshot"] .oneshot-home-intro h1::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 0;
+  right: 0;
+  bottom: -6px;
+  height: 12px;
+  background: url("/ui/oneshot/decorative/marker-magenta-wide.webp") center / 100% 100% no-repeat;
+}
+html[data-app="oneshot"] .oneshot-home-intro p:not(.oneshot-home-kicker) {
+  max-width: 580px;
+  color: var(--ui-text-muted);
+  font-size: 14px;
+}
+html[data-app="oneshot"] .oneshot-home-counts {
+  flex: none;
+  gap: 13px;
+  margin: 0 0 1px auto;
+  color: var(--ui-text);
+  font: 700 13px "Arial Narrow", Arial, sans-serif;
+  text-transform: uppercase;
+}
+html[data-app="oneshot"] .oneshot-home-counts span {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 6px 0 7px;
+  border: 0;
+  border-bottom: 2px solid var(--ui-text);
+}
+html[data-app="oneshot"] .oneshot-home-counts span:first-child { border-bottom-color: var(--ui-accent-secondary); }
+html[data-app="oneshot"] .oneshot-home-counts b { font-size: 21px; }
+html[data-app="oneshot"] .oneshot-home-grid {
+  grid-template-columns: minmax(0, 1fr) 330px;
+  grid-template-areas: "library create" "library tools";
+  gap: 20px 25px;
+  margin-top: 27px;
+}
+html[data-app="oneshot"] .oneshot-home-main { display: contents; }
+html[data-app="oneshot"] .oneshot-home .oneshot-home-create {
+  grid-area: create;
+  position: relative;
+  min-width: 0;
+  padding: 23px 21px 24px;
+  border: 0;
+  background: var(--ui-surface-ink) var(--skin-ink-surface) repeat;
+  color: var(--ui-text-inverse);
+  box-shadow: none;
+  -webkit-mask: url("/ui/oneshot/masks/create-panel-mask.svg") center / 100% 100% no-repeat;
+  mask: url("/ui/oneshot/masks/create-panel-mask.svg") center / 100% 100% no-repeat;
+}
+html[data-app="oneshot"] .oneshot-home .oneshot-home-create::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 68px;
+  height: 68px;
+  background: var(--skin-frame-tr) right top / contain no-repeat;
+  pointer-events: none;
+}
+html[data-app="oneshot"] .oneshot-home-create .oneshot-section-index { color: var(--ui-accent); }
+html[data-app="oneshot"] .oneshot-home-create h2,
+html[data-app="oneshot"] .oneshot-home-library h2 {
+  margin: 0 0 16px;
+  font: 700 28px/1.05 "Arial Narrow", Arial, sans-serif;
+  text-transform: uppercase;
+}
+html[data-app="oneshot"] .oneshot-home-create .oneshot-name-field {
+  max-width: none;
+  color: var(--ui-text-inverse);
+  font: 700 12px "Arial Narrow", Arial, sans-serif;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+html[data-app="oneshot"] .oneshot-name-field input {
+  min-height: 45px;
+  padding: 10px 11px;
+  border: 2px solid var(--ui-border);
+  border-radius: 0;
+  background: #f9f5ea;
+  color: var(--ui-text);
+  font: 15px/1.2 Arial, sans-serif;
+  -webkit-mask: url("/ui/oneshot/masks/form-control-mask.svg") center / 100% 100% no-repeat;
+  mask: url("/ui/oneshot/masks/form-control-mask.svg") center / 100% 100% no-repeat;
+}
+html[data-app="oneshot"] .oneshot-name-field input:focus-visible { border-color: var(--ui-accent-secondary); }
+html[data-app="oneshot"] .oneshot-home-create [data-ui="action-row"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 9px;
+  margin-top: 13px;
+}
+html[data-app="oneshot"] .oneshot-home-create button[data-ui="button"] {
+  min-width: 0;
+  min-height: 44px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 0;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  box-shadow: none;
+  filter: drop-shadow(2px 2px 0 var(--ui-accent-secondary));
+  font: 700 15px/1.1 "Arial Narrow", Arial, sans-serif;
+  text-align: left;
+  -webkit-mask: url("/ui/oneshot/masks/form-control-mask.svg") center / 100% 100% no-repeat;
+  mask: url("/ui/oneshot/masks/form-control-mask.svg") center / 100% 100% no-repeat;
+}
+html[data-app="oneshot"] .oneshot-home-create button[data-ui="button"][data-variant="primary"] { background: var(--ui-accent); }
+html[data-app="oneshot"] .oneshot-home-create button[data-ui="button"]:hover:not(:disabled) { background: var(--ui-accent-secondary); }
+html[data-app="oneshot"] .oneshot-home-create .oneshot-create-hint {
+  margin: 16px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid #8b8578;
+  color: #d1cab9;
+  font: 13px/1.35 "Arial Narrow", Arial, sans-serif;
+}
+html[data-app="oneshot"] .oneshot-home .oneshot-home-library {
+  grid-area: library;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 24px;
+  align-content: start;
+  min-width: 0;
+  margin: 0;
+}
+html[data-app="oneshot"] .oneshot-home-library > .oneshot-section-index { grid-column: 1 / -1; margin-bottom: -9px; }
+html[data-app="oneshot"] .oneshot-home-library > h2 { grid-column: 1 / -1; margin-bottom: 0; }
+html[data-app="oneshot"] .oneshot-home-library > .oneshot-character {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+html[data-app="oneshot"] .oneshot-home-library > .oneshot-character > a {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  padding: 0;
+  color: var(--ui-text);
+}
+html[data-app="oneshot"] .oneshot-character-art {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 205px;
+  overflow: hidden;
+  background: var(--ui-surface-ink) var(--skin-ink-surface) repeat;
+  -webkit-mask: url("/ui/oneshot/masks/create-panel-mask.svg") center / 100% 100% no-repeat;
+  mask: url("/ui/oneshot/masks/create-panel-mask.svg") center / 100% 100% no-repeat;
+}
+html[data-app="oneshot"] .oneshot-character-art > img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center 28%; }
+html[data-app="oneshot"] .oneshot-character-art:not(:has(img))::before {
+  content: "";
+  position: absolute;
+  inset: 30px;
+  background: url("/ui/oneshot/decorative/d20-paper.webp") center / contain no-repeat;
+  opacity: .19;
+  transform: rotate(-10deg);
+}
+html[data-app="oneshot"] .oneshot-character-art .oneshot-character-type {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
+  padding: 5px 8px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font: 700 11px/1 "Arial Narrow", Arial, sans-serif;
+  letter-spacing: .08em;
+  transform: rotate(-2deg);
+}
+html[data-app="oneshot"] .oneshot-character.is-draft .oneshot-character-type { background: var(--ui-accent); }
+html[data-app="oneshot"] .oneshot-character-body { display: flex; flex-direction: column; align-items: flex-start; min-height: 119px; padding: 12px 5px 0; }
+html[data-app="oneshot"] .oneshot-home-library > .oneshot-character .oneshot-character-body > strong {
+  color: var(--ui-text);
+  font: 700 24px/1.05 "Arial Narrow", Arial, sans-serif;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+html[data-app="oneshot"] .oneshot-home-library > .oneshot-character .oneshot-character-body > span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  margin-top: auto;
+  padding: 7px 13px;
+  background: var(--ui-surface-ink);
+  color: var(--ui-text-inverse);
+  font: 700 14px/1 "Arial Narrow", Arial, sans-serif;
+  text-transform: uppercase;
+  -webkit-mask: url("/ui/oneshot/masks/form-control-mask.svg") center / 100% 100% no-repeat;
+  mask: url("/ui/oneshot/masks/form-control-mask.svg") center / 100% 100% no-repeat;
+}
+html[data-app="oneshot"] .oneshot-home-library > .oneshot-character > a:hover .oneshot-character-body > span { background: var(--ui-accent-secondary); color: var(--ui-text); }
+html[data-app="oneshot"] .oneshot-home-library > .oneshot-character .oneshot-menu { top: 10px; right: 10px; }
+html[data-app="oneshot"] .oneshot-character .oneshot-menu > button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font-size: 25px;
+}
+html[data-app="oneshot"] .oneshot-character .oneshot-menu > button:hover { background: var(--ui-accent); }
+html[data-app="oneshot"] .oneshot-home-library > .oneshot-character .oneshot-menu-list {
+  top: calc(100% + 6px);
+  min-width: 190px;
+  padding: 6px;
+  border: 0;
+  background: var(--ui-surface) var(--skin-paper-panel) repeat;
+  box-shadow: none;
+  filter: drop-shadow(3px 4px 0 var(--ui-accent-secondary));
+  -webkit-mask: url("/ui/oneshot/masks/create-panel-mask.svg") center / 100% 100% no-repeat;
+  mask: url("/ui/oneshot/masks/create-panel-mask.svg") center / 100% 100% no-repeat;
+}
+html[data-app="oneshot"] .oneshot-home-library > .oneshot-character .oneshot-menu-list > * {
+  min-height: 37px;
+  border-bottom: 1px solid #c3bcb0;
+  font: 700 13px "Arial Narrow", Arial, sans-serif;
+  text-transform: uppercase;
+}
+html[data-app="oneshot"] .oneshot-home-library > .oneshot-character .oneshot-menu-list > :last-child { border-bottom: 0; }
+html[data-app="oneshot"] .oneshot-library-imports {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  gap: 8px 17px;
+  margin-top: 5px;
+  padding-top: 14px;
+  border-top: 1px solid var(--ui-border);
+}
+html[data-app="oneshot"] .oneshot-library-imports button {
+  min-height: 40px;
+  padding: 4px 0;
+  border: 0;
+  border-bottom: 2px solid var(--ui-border);
+  background: transparent;
+  color: var(--ui-text);
+  font: 700 13px "Arial Narrow", Arial, sans-serif;
+  text-transform: uppercase;
+}
+html[data-app="oneshot"] .oneshot-library-imports button:hover { border-bottom-color: var(--ui-accent-secondary); }
+html[data-app="oneshot"] .oneshot-home-aside {
+  grid-area: tools;
+  padding: 8px 0 0;
+  border: 0;
+  border-top: 3px solid var(--ui-border);
+  background: transparent;
+}
+html[data-app="oneshot"] .oneshot-home-aside > details > summary { min-height: 44px; font: 700 17px "Arial Narrow", Arial, sans-serif; text-transform: uppercase; }
+html[data-app="oneshot"] .oneshot-home-aside section { padding-block: 14px; }
+@media (max-width: 900px) {
+  html[data-app="oneshot"] .oneshot-home-grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "create" "library" "tools"; }
+}
+@media (max-width: 700px) {
+  html[data-app="oneshot"] .oneshot-home { padding: 23px 12px 40px; }
+  html[data-app="oneshot"] .oneshot-home-intro { display: block; padding: 4px 4px 21px; }
+  html[data-app="oneshot"] .oneshot-home-intro h1 { font-size: clamp(36px, 9vw, 52px); }
+  html[data-app="oneshot"] .oneshot-home-counts { margin-top: 12px; }
+  html[data-app="oneshot"] .oneshot-home-grid { margin-top: 23px; gap: 26px; }
+  html[data-app="oneshot"] .oneshot-home .oneshot-home-create { padding: 21px 21px 24px; }
+  html[data-app="oneshot"] .oneshot-home .oneshot-home-library { grid-template-columns: minmax(0, 1fr); }
+  html[data-app="oneshot"] .oneshot-character-art { height: 235px; }
+}

@@ -43,7 +43,7 @@
     .section-note { padding-bottom:2px; color:var(--muted); font:500 12px Oswald,'Arial Narrow',sans-serif; text-transform:uppercase; white-space:nowrap; }
     .character-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; }
     .character { position:relative; min-width:0; }
-    .character-art { position:relative; height:205px; overflow:hidden; background:#180c18 url("./assets/character-portrait-duo-v2.png") 75% 54%/cover no-repeat; -webkit-mask:url("./assets/panel-edge-mask.svg") center/100% 100% no-repeat; mask:url("./assets/panel-edge-mask.svg") center/100% 100% no-repeat; filter:drop-shadow(2px 3px 0 var(--ink)); }
+    .character-art { position:relative; height:205px; overflow:hidden; background:#180c18 url("./assets/character-portrait-duo-v2.png") 75% 54%/cover no-repeat; -webkit-mask:url("./assets/create-panel-mask.svg?v=2") center/100% 100% no-repeat; mask:url("./assets/create-panel-mask.svg?v=2") center/100% 100% no-repeat; filter:drop-shadow(2px 3px 0 var(--ink)); }
     .character-art::after { content:""; position:absolute; inset:58% 0 0; background:url("../assets/fantasy-punk/decorative/dividers/divider-rough-paper-long.webp") center bottom/100% 11px no-repeat,linear-gradient(transparent,rgba(23,23,23,.64)); pointer-events:none; }
     .character-draft .character-art { display:grid; place-items:center; background:var(--ink) url("../assets/fantasy-punk/textures/ink-surface.webp") repeat; }
     .character-draft .character-art::before { content:""; width:138px; height:138px; background:url("../assets/fantasy-punk/semantic/dice/d20-paper.webp") center/contain no-repeat; opacity:.21; transform:rotate(-10deg); }
@@ -67,15 +67,16 @@
     .library-imports { display:flex; flex-wrap:wrap; gap:8px 17px; margin-top:20px; padding:15px 0 0; background:url("../assets/fantasy-punk/decorative/dividers/divider-ink-hairline.webp") center top/100% 4px no-repeat; }
     .library-imports button { min-height:35px; padding:4px 0; border:0; border-bottom:2px solid var(--ink); background:transparent; color:var(--ink); font:600 13px Oswald,'Arial Narrow',sans-serif; text-transform:uppercase; }
     .library-imports button:hover { border-color:var(--pink); }
-    .create { position:relative; padding:22px 21px 23px; background:var(--ink) url("../assets/fantasy-punk/textures/ink-surface.webp") repeat; color:var(--paper); -webkit-mask:url("./assets/panel-edge-mask.svg") center/100% 100% no-repeat; mask:url("./assets/panel-edge-mask.svg") center/100% 100% no-repeat; }
+    .create { position:relative; padding:22px 21px 23px; background:var(--ink) url("../assets/fantasy-punk/textures/ink-surface.webp") repeat; color:var(--paper); -webkit-mask:url("./assets/create-panel-mask.svg?v=2") center/100% 100% no-repeat; mask:url("./assets/create-panel-mask.svg?v=2") center/100% 100% no-repeat; }
     .create::before { content:""; position:absolute; top:0; right:0; width:68px; height:68px; background:url("../assets/fantasy-punk/decorative/frames/frame-corner-top-right.webp") right top/contain no-repeat; pointer-events:none; }
     .create .section-index { margin-bottom:9px; color:var(--acid); }
     .create h2 { margin-bottom:18px; }
     .create label { display:block; margin-bottom:7px; color:var(--paper); font:600 12px Oswald,'Arial Narrow',sans-serif; letter-spacing:.08em; text-transform:uppercase; }
-    .create input { display:block; width:100%; min-height:45px; padding:10px 11px; border:2px solid var(--ink); border-radius:0; background:#f9f5ea; color:var(--ink); font-size:15px; }
+    .create input { display:block; width:100%; min-height:45px; padding:10px 11px; border:2px solid var(--ink); border-radius:0; background:#f9f5ea; color:var(--ink); font-size:15px; -webkit-mask:url("./assets/form-control-mask.svg") center/100% 100% no-repeat; mask:url("./assets/form-control-mask.svg") center/100% 100% no-repeat; }
+    .create input:focus-visible { border-color:var(--pink); }
     .create input::placeholder { color:#77736b; }
     .create-actions { display:grid; gap:9px; margin-top:13px; }
-    .create-actions button { min-height:44px; padding:9px 10px; border:0; font:600 15px/1.1 Oswald,'Arial Narrow',sans-serif; text-align:left; text-transform:uppercase; -webkit-mask-image:url("./assets/button-edge-mask.svg"); mask-image:url("./assets/button-edge-mask.svg"); -webkit-mask-size:100% 100%; mask-size:100% 100%; }
+    .create-actions button { min-height:44px; padding:9px 10px; border:0; font:600 15px/1.1 Oswald,'Arial Narrow',sans-serif; text-align:left; text-transform:uppercase; -webkit-mask:url("./assets/form-control-mask.svg") center/100% 100% no-repeat; mask:url("./assets/form-control-mask.svg") center/100% 100% no-repeat; }
     .create-primary { background:var(--acid); color:var(--ink); filter:drop-shadow(3px 3px 0 var(--pink)); }
     .create-secondary { background:var(--paper); color:var(--ink); filter:drop-shadow(2px 2px 0 var(--pink)); }
     .create-actions button:hover { background:var(--pink); color:var(--ink); }
