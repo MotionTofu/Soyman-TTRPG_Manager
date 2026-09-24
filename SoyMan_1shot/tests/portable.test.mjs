@@ -70,12 +70,16 @@ test('full React HTML boots without network and reexports changed state safely',
   const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true, beforeParse, virtualConsole: vc, url: 'file:///character.html' });
   t.after(() => dom.window.close());
   const wait = () => new Promise(resolve => setTimeout(resolve, 100));
-  for (let i = 0; i < 30 && !dom.window.document.querySelector('[aria-label="Вдохновения нет"]'); i++) await wait();
+  // Проба — концентрация на лицевой: жетон вдохновения спрятан флагом
+  // (INSPIRATION_TOKEN_ENABLED, 2026-09-25), а отметка должна пережить
+  // пересохранение так же.
+  const concOff = '[aria-label="Концентрация: нет — переключить"]';
+  for (let i = 0; i < 30 && !dom.window.document.querySelector(concOff); i++) await wait();
   const doc = dom.window.document;
   assert.equal(dom.window.injected, undefined);
-  const inspiration = doc.querySelector('[aria-label="Вдохновения нет"]');
-  assert.ok(inspiration, 'Sheet must render: ' + errors.join('\n'));
-  inspiration.click(); await wait();
+  const concentration = doc.querySelector(concOff);
+  assert.ok(concentration, 'Sheet must render: ' + errors.join('\n'));
+  concentration.click(); await wait();
   for (let i = 0; i < 30 && !doc.querySelector('.dnd-companion-body'); i++) await wait();
   const companion = doc.querySelector('.dnd-companion-body');
   assert.ok(companion, 'Companion blueprint must load without its spell in the selected spell list');
@@ -93,9 +97,10 @@ test('full React HTML boots without network and reexports changed state safely',
   const editedHtml = await saved.text();
   const reopened = new JSDOM(editedHtml, { runScripts: 'dangerously', pretendToBeVisual: true, beforeParse, virtualConsole: vc, url: 'file:///reopened.html' });
   t.after(() => reopened.window.close());
-  for (let i = 0; i < 30 && !reopened.window.document.querySelector('[aria-label="Вдохновение есть — потратить"]'); i++) await wait();
-  assert.ok(reopened.window.document.querySelector('[aria-label="Вдохновение есть — потратить"]'), 'Reopened sheet must render changed state');
-  assert.equal(JSON.parse(reopened.window.document.getElementById('oneshot-payload').textContent).character.content.inspiration, true);
+  const concOn = '[aria-label="Концентрация: есть — переключить"]';
+  for (let i = 0; i < 30 && !reopened.window.document.querySelector(concOn); i++) await wait();
+  assert.ok(reopened.window.document.querySelector(concOn), 'Reopened sheet must render changed state');
+  assert.equal(JSON.parse(reopened.window.document.getElementById('oneshot-payload').textContent).character.content.concentration, 'есть');
   assert.equal(JSON.parse(reopened.window.document.getElementById('oneshot-payload').textContent).character.content.companions[0].dismissed, true);
   assert.equal(JSON.parse(reopened.window.document.getElementById('oneshot-payload').textContent).character.content.companions[0].hpUsed, 4);
   for (let i = 0; i < 30 && !reopened.window.document.querySelector('.dnd-companion-body.is-dismissed'); i++) await wait();
