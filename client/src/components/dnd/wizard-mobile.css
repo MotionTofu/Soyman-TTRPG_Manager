@@ -742,3 +742,23 @@ button.wz-abil {
   white-space: normal;
   overflow-wrap: anywhere;
 }
+
+/* Выбор при взятии черты (featChoices.tsx): группы стопкой — в визарде,
+   в шаге «Черта» повышения уровня и в окне листа. */
+.wz-feat-choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5, 16px);
+}
+.wz-feat-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3, 8px);
+}
+.wz-feat-group .wz-seg button:disabled,
+.wz-feat-group .wz-chip:disabled {
+  opacity: 0.45;
+}
+.wz-feat-inline {
+  margin-top: var(--sp-4, 12px);
+}

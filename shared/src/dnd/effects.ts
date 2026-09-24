@@ -52,6 +52,8 @@ export type DndEffectType =
   | "create_object"
   | "roll_modifier"
   | "defense"
+  | "hit_points"
+  | "resistance"
   | "special";
 
 // "always" = no roll gates it (Cure Wounds, Shield). The rest name a check
@@ -89,7 +91,8 @@ export type DndWeaponFilter =
   | "melee_one_hand"
   | "melee_two_hand"
   | "offhand_light"
-  | "unarmed";
+  | "unarmed"
+  | "heavy";
 
 /**
  * Своя формула КЗ вместо «10 + Ловкость» («Защита без доспехов»: 10 + Лов +
@@ -234,6 +237,21 @@ export interface DndEffect {
   acBase?: DndAcBase;
   /** defense и roll_modifier: при каком надетом действует. Пусто — всегда. */
   armorCondition?: DndArmorCondition;
+  /**
+   * hit_points: прибавка к максимуму хитов за каждый уровень персонажа
+   * («Крепкий» — 2). Разовая прибавка («Дар стойкости» — 40) — в `flat`.
+   * Считается вживую по наличию носителя: снятая черта уносит хиты с собой
+   * (гриллинг черт 2026-09-24, Q7).
+   */
+  perLevel?: number;
+  /**
+   * resistance: сопротивление на выбор («Портальный странник» — одно из
+   * трёх). Выбранное лежит в `choices.resistances` черты на листе; готовое
+   * сопротивление — в `damageType`.
+   */
+  options?: DndMechanicsRef[];
+  /** resistance: сколько выбрать из `options`. */
+  count?: number;
 
   // summon / transform / create_object / defense / special, and free-form
   // detail for any of the above.
@@ -324,6 +342,7 @@ export const WEAPON_FILTER_LABELS: Record<DndWeaponFilter, string> = {
   melee_two_hand: "рукопашным в двух руках",
   offhand_light: "доп. атакой лёгким оружием",
   unarmed: "безоружным ударом",
+  heavy: "тяжёлым оружием",
 };
 
 /** Подписи долей бонуса мастерства. */
@@ -345,6 +364,8 @@ export const EFFECT_TYPE_LABELS: Record<DndEffectType, string> = {
   create_object: "Создание объекта",
   roll_modifier: "Модификатор броска",
   defense: "Защита",
+  hit_points: "Максимум хитов",
+  resistance: "Сопротивление",
   special: "Особое",
 };
 
@@ -363,6 +384,8 @@ export const EFFECT_TYPE_ORDER: DndEffectType[] = [
   "create_object",
   "roll_modifier",
   "defense",
+  "hit_points",
+  "resistance",
   "special",
 ];
 
@@ -542,8 +565,22 @@ export function effectSummary(effect: DndEffect, checks: DndCheck[], profBonus?:
       break;
     case "movement":
       parts.push(
-        [MOVEMENT_KIND_LABELS[effect.movementKind ?? "push"], effect.distance].filter(Boolean).join(" ")
+        [
+          MOVEMENT_KIND_LABELS[effect.movementKind ?? "push"],
+          typeof effect.flat === "number" && effect.flat ? `+${effect.flat} фт.` : "",
+          effect.distance,
+        ]
+          .filter(Boolean)
+          .join(" ")
       );
+      break;
+    case "hit_points":
+      if (effect.perLevel) parts.push(`+${effect.perLevel} за уровень`);
+      if (effect.flat) parts.push(`+${effect.flat}`);
+      break;
+    case "resistance":
+      if (effect.damageType?.name) parts.push(effect.damageType.name);
+      if (effect.options?.length) parts.push(`${effect.count ?? 1} на выбор: ${effect.options.map((o) => o.name).join(", ")}`);
       break;
     case "zone":
       parts.push([effect.zoneShape, effect.zoneSize].filter(Boolean).join(" "));

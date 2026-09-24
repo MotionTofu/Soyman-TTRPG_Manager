@@ -104,6 +104,11 @@ export interface Sheet {
   exhaustionPenalty: Derived;
   /** Пешая скорость в футах. */
   walkSpeed: Derived;
+  /**
+   * Сопротивления урону: вписанные в лист плюс эффекты `resistance` умений
+   * и черт (у черт с выбором — выбранные). `source` пусто у вписанных руками.
+   */
+  damageResistances: { name: string; source: string }[];
   /** Грузоподъёмность в фунтах. */
   carryCapacity: Derived;
   /** Заклинательство — `null` у неколдующего персонажа. */
@@ -168,24 +173,45 @@ function maxHitPoints(c: DndCharacterData, conMod: number, level: number): Deriv
   }
 
   const rolls = (c.hpRolls ?? []).reduce((a, b) => a + b, 0);
-  const perLevel = hpPerLevelBonus(c);
 
   const parts: Part[] = [
     { label: "Кости хитов (база)", value: c.hpLump },
     { label: "Броски за уровни", value: rolls },
     { label: `Телосложение ×${level}`, value: conMod * level },
   ];
-  if (perLevel) parts.push({ label: `Прочее за уровень ×${level}`, value: perLevel * level });
+  for (const h of hitPointEffects(c)) {
+    if (h.perLevel) parts.push({ label: `${h.name} ×${level}`, value: h.perLevel * level });
+    if (h.flat) parts.push({ label: h.name, value: h.flat });
+  }
+  if (c.hpMiscPerLevel) parts.push({ label: `Прочее за уровень ×${level}`, value: c.hpMiscPerLevel * level });
   parts.push(...tempPart);
 
   // Отрицательное Телосложение с «прочим» может увести итог в ноль.
   return sum(parts, { min: 1 });
 }
 
-/** Хиты за каждый уровень сверх Телосложения: черта «Крепкий» и «прочее». */
-function hpPerLevelBonus(c: Pick<DndCharacterData, "feats" | "hpMiscPerLevel">): number {
-  const hasTough = (c.feats ?? []).some((f) => (f.name ?? "").includes("Крепкий"));
-  return (hasTough ? 2 : 0) + (c.hpMiscPerLevel ?? 0);
+type HpCarrier = Pick<DndCharacterData, "feats" | "speciesFeatures" | "classFeatures" | "specialAbilities">;
+
+/**
+ * Прибавки к максимуму хитов от умений и черт — эффекты `hit_points`
+ * («Крепкий» 2 за уровень, «Дар стойкости» 40). Раньше «Крепкий» узнавался
+ * по имени; эффект приходит из справочника по `entryId`, как «Бдительный»
+ * (гриллинг черт 2026-09-24, Q7, Q25).
+ */
+function hitPointEffects(c: Partial<HpCarrier>): { name: string; perLevel: number; flat: number }[] {
+  const out: { name: string; perLevel: number; flat: number }[] = [];
+  for (const f of [...(c.speciesFeatures ?? []), ...(c.classFeatures ?? []), ...(c.feats ?? []), ...(c.specialAbilities ?? [])]) {
+    for (const e of f.effects ?? []) {
+      if (e.type !== "hit_points") continue;
+      out.push({ name: (f.name || "Умение").trim(), perLevel: e.perLevel ?? 0, flat: e.flat ?? 0 });
+    }
+  }
+  return out;
+}
+
+/** Хиты за каждый уровень сверх Телосложения — для обратной формулы. */
+function hpPerLevelBonus(c: Partial<HpCarrier> & Pick<DndCharacterData, "hpMiscPerLevel">): number {
+  return hitPointEffects(c).reduce((a, h) => a + h.perLevel, 0) + (c.hpMiscPerLevel ?? 0);
 }
 
 /**
@@ -198,12 +224,13 @@ function hpPerLevelBonus(c: Pick<DndCharacterData, "feats" | "hpMiscPerLevel">):
  * поэтому смена правила здесь не разойдётся с числом на экране.
  */
 export function hitPointLumpFor(
-  c: Pick<DndCharacterData, "classes" | "abilities" | "feats" | "hpMiscPerLevel">,
+  c: Pick<DndCharacterData, "classes" | "abilities" | "feats" | "hpMiscPerLevel"> & Partial<HpCarrier>,
   max: number
 ): number {
   const level = totalCharacterLevel(c.classes ?? []);
   const conMod = abilityModifier(c.abilities?.con ?? 10);
-  return max - (conMod + hpPerLevelBonus(c)) * level;
+  const flat = hitPointEffects(c).reduce((a, h) => a + h.flat, 0);
+  return max - (conMod + hpPerLevelBonus(c)) * level - flat;
 }
 
 /**
@@ -238,9 +265,38 @@ function armorClassOf(
 function walkSpeed(c: DndCharacterData, exhaustion: number): Derived {
   const base = c.speeds?.walk ?? 0;
   const parts: Part[] = [{ label: "Пешая скорость", value: base }];
+  // Прибавки числом от черт и действующих заклинаний («Подвижный» +10,
+  // «Преобразованная анатомия» +5). Текстовые эффекты скорости («скорость
+  // цели увеличивается…») в число не идут — их читает человек.
+  for (const carrier of effectCarriers(c)) {
+    if (carrier.off) continue;
+    for (const e of carrier.effects) {
+      if (e.type === "movement" && e.movementKind === "speed" && e.when === "always" && typeof e.flat === "number" && e.flat) {
+        parts.push({ label: carrier.name, value: e.flat });
+      }
+    }
+  }
   // 5.5: истощение снимает 5 футов за уровень.
   if (exhaustion) parts.push({ label: `Истощение ${exhaustion}`, value: -exhaustion * 5 });
   return sum(parts, { min: 0 });
+}
+
+function damageResistances(c: DndCharacterData): { name: string; source: string }[] {
+  const out: { name: string; source: string }[] = (c.damageResistances ?? [])
+    .filter((n) => n.trim())
+    .map((name) => ({ name, source: "" }));
+  const seen = new Set(out.map((r) => r.name.toLowerCase()));
+  for (const carrier of effectCarriers(c)) {
+    if (carrier.off) continue;
+    for (const e of carrier.effects) {
+      if (e.type !== "resistance" || !e.damageType?.name) continue;
+      const key = e.damageType.name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ name: e.damageType.name, source: carrier.name });
+    }
+  }
+  return out;
 }
 
 /**
@@ -293,7 +349,9 @@ export function effectCarriers(c: DndCharacterData): EffectCarrier[] {
   ]) {
     const name = (f.name || "Умение").trim();
     // Выключенное игроком (Q14) — как будто его нет.
-    const effects = (f.effects ?? []).filter((e) => !(e.toggleable && off.has(name)));
+    const effects = (f.effects ?? [])
+      .filter((e) => !(e.toggleable && off.has(name)))
+      .flatMap((e) => chosenResistances(e, f.choices?.resistances));
     if (effects.length) out.push({ name, effects });
   }
   for (const it of equippedItems(c.equipmentSections ?? [])) {
@@ -315,6 +373,14 @@ export function effectCarriers(c: DndCharacterData): EffectCarrier[] {
     if (r.effects?.length) out.push({ name: r.name.trim(), effects: r.effects });
   }
   return out;
+}
+
+/** Сопротивление «на выбор» — выбранными типами; невыбранное не действует. */
+function chosenResistances(e: DndEffect, chosen: string[] | undefined): DndEffect[] {
+  if (e.type !== "resistance" || !e.options?.length) return [e];
+  return e.options
+    .filter((o) => chosen?.includes(o.name))
+    .map((o) => ({ ...e, options: undefined, damageType: o }));
 }
 
 type Worn = { hasArmor: boolean; hasShield: boolean };
@@ -460,6 +526,8 @@ export interface WeaponUse {
   /** Дополнительная атака лёгким оружием (бонусное действие). */
   offhand?: boolean;
   unarmed?: boolean;
+  /** Оружие со свойством «тяжёлое» («Мастер большого оружия»). */
+  heavy?: boolean;
 }
 
 function weaponMatches(filter: DndWeaponFilter, use: WeaponUse): boolean {
@@ -470,6 +538,7 @@ function weaponMatches(filter: DndWeaponFilter, use: WeaponUse): boolean {
     case "melee_two_hand": return !!use.twoHand;
     case "offhand_light": return !!use.offhand;
     case "unarmed": return !!use.unarmed;
+    case "heavy": return !!use.heavy;
   }
   return false;
 }
@@ -700,6 +769,7 @@ export function deriveSheet(c: DndCharacterData): Sheet {
     passiveInvestigation: passive("Investigation"),
     exhaustionPenalty: { value: penalty, parts: [{ label: `Истощение ${exhaustion}`, value: penalty }] },
     walkSpeed: walkSpeed(c, exhaustion),
+    damageResistances: damageResistances(c),
     carryCapacity: carryCapacity(c),
     spellcasting,
   };

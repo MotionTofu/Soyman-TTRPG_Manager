@@ -30,6 +30,17 @@ import { choicesFromEntries, featuresFromEntries, sumEntrySlots, type ChoiceDef 
 import { cantripsAtLevel, preparedAtLevel, spellSlotsAtLevel, type ClassProgression } from "./progression";
 import { useDndSkills } from "./useDndSkills";
 import { grantsFromEntry, mergeGrants } from "./dndGrants";
+import { FeatChoices } from "./FeatChoices";
+import {
+  bestMental,
+  EMPTY_FEAT_PICK,
+  featHitPoints,
+  featPickMissing,
+  resistanceChoice,
+  type FeatCtx,
+  type FeatPart,
+  type FeatPick,
+} from "./featPick";
 import type { GrantedSpellChoice } from "./dndGrants";
 import { nameMatches } from "./dndResources";
 import {
@@ -142,6 +153,7 @@ interface WizardDraftV1 {
   chosenTools?: unknown;
   setChoicePicks?: unknown;
   abilitiesTouched?: unknown;
+  featSel?: unknown;
 }
 function loadWizardDraft(key: string): WizardDraftV1 | null {
   try {
@@ -168,6 +180,26 @@ function draftStep(v: unknown): Step {
 }
 function strList(v: unknown, max = 60): string[] {
   return Array.isArray(v) ? v.filter((t): t is string => typeof t === "string").slice(0, max) : [];
+}
+/** Выбор внутри черты происхождения на слот («feat» — от предыстории, «feat2» — от вида). */
+interface WizardFeatSel {
+  spellList?: number;
+  spellAbility?: DndAbilityKey;
+  resistances?: string[];
+}
+function featSelFrom(v: unknown): Record<string, WizardFeatSel> {
+  if (!v || typeof v !== "object") return {};
+  const out: Record<string, WizardFeatSel> = {};
+  for (const slot of ["feat", "feat2"]) {
+    const r = (v as Record<string, unknown>)[slot] as Record<string, unknown> | undefined;
+    if (!r || typeof r !== "object") continue;
+    out[slot] = {
+      ...(typeof r.spellList === "number" ? { spellList: r.spellList } : {}),
+      ...(r.spellAbility === "int" || r.spellAbility === "wis" || r.spellAbility === "cha" ? { spellAbility: r.spellAbility } : {}),
+      resistances: strList(r.resistances, 9),
+    };
+  }
+  return out;
 }
 function numOrNull(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
@@ -411,6 +443,10 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   // своя, не делит слот с чертой предыстории.
   const [speciesFeatId, setSpeciesFeatId] = useState<number | null>(() => numOrNull(savedDraft?.speciesFeatId));
   const [speciesFeatEntry, setSpeciesFeatEntry] = useState<CompendiumEntry | null>(null);
+  // Выбор внутри черт происхождения (гриллинг черт 2026-09-24): список и
+  // характеристика «Посвящённого», сопротивление «Портального странника».
+  // Характеристика пустая — «самая высокая» на момент создания (Q2).
+  const [featSel, setFeatSel] = useState<Record<string, WizardFeatSel>>(() => featSelFrom(savedDraft?.featSel));
   // Инструменты «на ваш выбор» (Q10): «источник:id записи», как навыки.
   const [chosenTools, setChosenTools] = useState<string[]>(() => strList(savedDraft?.chosenTools));
   // Выборы внутри стартового набора: «метка набора#номер выбора» → id предметов.
@@ -626,6 +662,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       chosenTools,
       setChoicePicks,
       abilitiesTouched,
+      featSel,
     };
     try {
       localStorage.setItem(draftKey, JSON.stringify(state));
@@ -670,6 +707,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     chosenTools,
     setChoicePicks,
     abilitiesTouched,
+    featSel,
   ]);
 
   // Уход со страницы с несобранным персонажем — подтверждение.
@@ -906,6 +944,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   }
   function pickSpeciesFeat(id: number | null) {
     setSpeciesFeatId(id);
+    setFeatSel((prev) => ({ ...prev, feat2: {} }));
     setChosenSkills((prev) => prev.filter((t) => !t.startsWith("feat2:")));
     setChosenSpells((prev) => prev.filter((t) => !t.startsWith("spell:feat2:")));
     setChosenTools((prev) => prev.filter((t) => !t.startsWith("feat2:")));
@@ -913,6 +952,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   function pickBackgroundFeat(id: number | null) {
     setFeatTouched(true);
     setFeatId(id);
+    setFeatSel((prev) => ({ ...prev, feat: {} }));
     setChosenSkills((prev) => prev.filter((t) => !t.startsWith("feat:")));
     setChosenSpells((prev) => prev.filter((t) => !t.startsWith("spell:feat:")));
     setChosenTools((prev) => prev.filter((t) => !t.startsWith("feat:")));
@@ -1058,6 +1098,62 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     return () => ac.abort();
   }, [effectiveSpeciesFeatId]);
   const speciesFeatGrants = grantsFromEntry(speciesFeatEntry ?? undefined, resolveSkill);
+
+  // Список «Посвящённого» у Послушника, Мудреца и Путешественника закреплён
+  // предысторией (PHB 2024) — пока черта та самая, что она предлагает.
+  const fixedFeatList =
+    effectiveFeatId != null && effectiveFeatId === suggestedFeatId && typeof backgroundEntry?.data.origin_feat_list === "number"
+      ? (backgroundEntry.data.origin_feat_list as number)
+      : undefined;
+  const fixedListName = hierarchy.classes.find((c) => c.id === fixedFeatList)?.name;
+  const slotList = (slot: "feat" | "feat2"): number | undefined =>
+    slot === "feat" ? fixedFeatList ?? featSel.feat?.spellList : featSel.feat2?.spellList;
+  const slotAbility = (slot: "feat" | "feat2"): DndAbilityKey => featSel[slot]?.spellAbility ?? bestMental(awardedAbilities);
+  const slotGrants = (slot: "feat" | "feat2") => (slot === "feat" ? featGrants : speciesFeatGrants);
+  const slotEntry = (slot: "feat" | "feat2") => (slot === "feat" ? featEntry : speciesFeatEntry);
+  // Второй «Посвящённый» — с другим списком (Q5): занятое другим слотом.
+  const slotTaken = (slot: "feat" | "feat2"): number[] => {
+    const other = slot === "feat" ? "feat2" : "feat";
+    const same = slotEntry(slot) && slotEntry(other) && slotEntry(slot)!.id === slotEntry(other)!.id;
+    const l = slotList(other);
+    return same && l != null ? [l] : [];
+  };
+  const slotPick = (slot: "feat" | "feat2"): FeatPick => ({
+    ...EMPTY_FEAT_PICK,
+    spellList: slotList(slot),
+    spellAbility: slotAbility(slot),
+    resistances: featSel[slot]?.resistances ?? [],
+  });
+  const slotCtx = (slot: "feat" | "feat2"): FeatCtx => ({
+    abilities: awardedAbilities,
+    saves: emptySavingThrowProfs(),
+    skills: {},
+    pb: 2,
+    takenLists: slotTaken(slot),
+    knownSpellIds: [],
+    masteredNames: [],
+    profNames: [],
+  });
+  const WIZARD_FEAT_PARTS: FeatPart[] = ["spellList", "spellAbility", "resist"];
+  const slotMissing = (slot: "feat" | "feat2"): string[] => {
+    const g = slotGrants(slot);
+    const entry = slotEntry(slot);
+    if (!entry) return [];
+    const miss = featPickMissing(entry, g, slotPick(slot), slotCtx(slot), WIZARD_FEAT_PARTS);
+    const l = slotList(slot);
+    if (l != null && slotTaken(slot).includes(l)) miss.push("другой список (этот уже у первой черты)");
+    return miss;
+  };
+  const featChoicesFor = (slot: "feat" | "feat2") => {
+    const entry = slotEntry(slot);
+    if (!entry) return undefined;
+    const list = slotList(slot);
+    return {
+      ...(list != null ? { spellList: list } : {}),
+      ...(slotGrants(slot).spellAbilityChoice ? { spellAbility: slotAbility(slot) } : {}),
+      ...(featSel[slot]?.resistances?.length ? { resistances: featSel[slot]!.resistances } : {}),
+    };
+  };
 
   // Определения выборов (data.choices) из умений класса и подкласса.
   // Ошибка — тихий []: выборы это улучшение, а не гейт; класть создание
@@ -1553,6 +1649,8 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     fromBook?: boolean;
     /** Своя заклинательная характеристика выбранных (стиль Паладина — Хар). */
     ability?: DndAbilityKey;
+    /** Раз в долгий отдых без ячейки (заклинание 1 круга «Посвящённого»). */
+    freeCast?: boolean;
   }
   // Число выбора: фиксированное или из колонки прогрессии на уровне
   // (заговоры/подготовленные ЭК растут; прогрессия класса первична,
@@ -1602,7 +1700,11 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       const isSub = src === "subclass";
       const classProg = (src === "class" ? classEntry?.data.progression : undefined) as ClassProgression | undefined;
       const subProg = (isSub ? subclassEntry?.data.progression : undefined) as ClassProgression | undefined;
+      const featSlot = src === "feat" || src === "feat2" ? (src as "feat" | "feat2") : null;
       g.spellChoices.forEach((c, i) => {
+        // Список «Посвящённого» выбирается на шаге «Черта»; пока не выбран —
+        // кандидатов нет (id −1 не совпадёт ни с одним классом).
+        const list = featSlot && g.spellListChoice.length ? slotList(featSlot) ?? -1 : null;
         // Ключ с префиксом spell: — токены навыков матчат группы через
         // startsWith("class:") и чужие токены им не нужны.
         spellGroups.push({
@@ -1610,12 +1712,13 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
           label,
           count: choiceCount(c, classProg, subProg),
           level: c.level,
-          classIds: c.classIds,
+          classIds: list != null ? [list] : c.classIds,
           schools: c.schools,
           outsideLimit: c.outsideLimit,
           maxCircle: isSub && c.level == null ? topCircle : null,
           names: c.names ?? [],
-          ability: c.ability,
+          ability: c.ability ?? (featSlot && g.spellAbilityChoice ? slotAbility(featSlot) : undefined),
+          freeCast: c.freeCast,
         });
       });
     }
@@ -1731,7 +1834,9 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         if (Number.isFinite(dieNum)) {
           const conMod = abilityModifier(awardedAbilities.con);
           const avg = Math.floor(dieNum / 2) + 1;
-          const max = Math.max(1, dieNum + conMod + (level - 1) * (avg + conMod));
+          // Хиты черт происхождения («Крепкий» +2 за уровень) — из эффектов.
+          const featHp = featHitPoints([featEntry, effectiveSpeciesFeatId ? speciesFeatEntry : null]);
+          const max = Math.max(1, dieNum + conMod + (level - 1) * (avg + conMod) + featHp.perLevel * level + featHp.flat);
           character.hitPointMax = String(max);
           character.hitPointsCurrent = String(max);
           character.hpLump = dieNum + (level - 1) * avg;
@@ -1835,14 +1940,29 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         // Со ссылкой на запись: по ней лист подставляет эффекты черты
         // («Бдительный» → инициатива) и выдаваемые чувства. Без entryId черта
         // оставалась текстом, и её механика до чисел не доходила.
-        character.feats = [...character.feats, { name: chosenFeat.name, description: featEntry?.description ?? "", entryId: chosenFeat.id }];
+        character.feats = [
+          ...character.feats,
+          { name: chosenFeat.name, description: featEntry?.description ?? "", entryId: chosenFeat.id, choices: featChoicesFor("feat") ?? {} },
+        ];
       }
     }
     // Черта вида («Универсальность» Человека) — вторая, своя запись.
-    if (effectiveSpeciesFeatId && speciesFeatEntry && !character.feats.some((f) => f.entryId === speciesFeatEntry.id)) {
+    // Дубль не кладём — кроме повторяемой черты («Посвящённый» со вторым
+    // списком, Q5).
+    const repeatable = /повторяем/i.test(String(speciesFeatEntry?.data.prerequisite ?? ""));
+    if (
+      effectiveSpeciesFeatId &&
+      speciesFeatEntry &&
+      (repeatable || !character.feats.some((f) => f.entryId === speciesFeatEntry.id))
+    ) {
       character.feats = [
         ...character.feats,
-        { name: speciesFeatEntry.name, description: speciesFeatEntry.description ?? "", entryId: speciesFeatEntry.id },
+        {
+          name: speciesFeatEntry.name,
+          description: speciesFeatEntry.description ?? "",
+          entryId: speciesFeatEntry.id,
+          choices: featChoicesFor("feat2") ?? {},
+        },
       ];
     }
     // Инструменты «на ваш выбор» (Q10): выбранные в визарде — ссылкой на
@@ -2033,12 +2153,16 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
           : group.dailyPreparation ? 1 as const : 2 as const,
         outsideLimit: group.outsideLimit,
         ...(group.ability ? { ability: group.ability } : {}),
+        ...(group.freeCast ? { freeCast: true } : {}),
       };
       if (lvl <= 0) {
         character.cantrips = [...character.cantrips, rec];
       } else {
         while (character.spellsByLevel.length < lvl) character.spellsByLevel.push([]);
         character.spellsByLevel[lvl - 1] = [...character.spellsByLevel[lvl - 1], rec];
+        // Круг без ячеек (Воин с «Посвящённым») тоже виден на листе — иначе
+        // заклинание 1 круга лежало в данных, а раздела не было.
+        character.spellSlotLevels = Math.max(character.spellSlotLevels, lvl);
       }
     }
 
@@ -2265,9 +2389,17 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   const previewDieNum = previewDie !== null ? Number.parseInt(previewDie, 10) : null;
   const previewConMod = abilityModifier(awardedAbilities.con);
   const previewDexMod = abilityModifier(awardedAbilities.dex);
+  const previewFeatHp = featHitPoints([featEntry, effectiveSpeciesFeatId ? speciesFeatEntry : null]);
   const previewHp =
     previewDieNum !== null && Number.isFinite(previewDieNum)
-      ? Math.max(1, previewDieNum + previewConMod + (level - 1) * (Math.floor(previewDieNum / 2) + 1 + previewConMod))
+      ? Math.max(
+          1,
+          previewDieNum +
+            previewConMod +
+            (level - 1) * (Math.floor(previewDieNum / 2) + 1 + previewConMod) +
+            previewFeatHp.perLevel * level +
+            previewFeatHp.flat
+        )
       : null;
   const previewClasses =
     classId && classOption
@@ -2327,6 +2459,8 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       case "Черта":
         if (featNeeded && !effectiveFeatId) out.push("выбери черту предыстории");
         if (speciesFeatNeeded && !effectiveSpeciesFeatId) out.push("выбери черту вида");
+        if (featNeeded) for (const m of slotMissing("feat")) out.push(`черта предыстории: ${m}`);
+        if (speciesFeatNeeded) for (const m of slotMissing("feat2")) out.push(`черта вида: ${m}`);
         for (const x of toolMissing(["feat", "feat2"])) more(`Инструменты (${x.g.group.toLowerCase()})`, x.missing);
         break;
       case "Характеристики":
@@ -2841,11 +2975,59 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     );
   }
 
+  // Выбор внутри черты: список «Посвящённого», характеристика, сопротивление.
+  // Навыки, инструменты и заклинания черты — на своих шагах.
+  function renderFeatChoices(slot: "feat" | "feat2") {
+    const entry = slotEntry(slot);
+    const g = slotGrants(slot);
+    if (!entry) return null;
+    const fixed = slot === "feat" && fixedFeatList != null;
+    const parts = WIZARD_FEAT_PARTS.filter((p) => !(fixed && p === "spellList"));
+    const hasAny = (g.spellListChoice.length > 0 && !fixed) || g.spellAbilityChoice || !!resistanceChoice(entry);
+    if (!hasAny && !fixed) return null;
+    return (
+      <div className="wz-feat-inline">
+        {fixed && <p className="wz-step-lead">Список заклинаний закреплён предысторией: {fixedListName ?? "…"}.</p>}
+        <FeatChoices
+          entry={entry}
+          grants={g}
+          ctx={slotCtx(slot)}
+          pick={slotPick(slot)}
+          parts={parts}
+          onChange={(next) => {
+            const prev = featSel[slot] ?? {};
+            if (next.spellList !== slotList(slot)) {
+              // Смена списка сбрасывает выбранные заклинания этой черты (Q1).
+              setChosenSpells((cur) => cur.filter((t) => !t.startsWith(`spell:${slot}:`)));
+            }
+            setFeatSel((all) => ({
+              ...all,
+              [slot]: {
+                ...prev,
+                spellList: next.spellList,
+                // Умолчание («самая высокая») не записываем: пусть следует за
+                // характеристиками, пока игрок не выбрал сам.
+                spellAbility: prev.spellAbility || next.spellAbility !== slotAbility(slot) ? next.spellAbility : undefined,
+                resistances: next.resistances,
+              },
+            }));
+          }}
+          spellIndex={[]}
+          tools={[]}
+          weapons={[]}
+          skills={[]}
+        />
+      </div>
+    );
+  }
+
   function renderFeat() {
-    const featRows = (pickedId: number | null, exclude: number | null) =>
+    const featRows = (pickedId: number | null, exclude: number | null, fromBackground: boolean) =>
       originFeats
-        .filter((f) => f.id !== exclude && matchQ(f.name, featQ))
-        .map((f) => ({ key: String(f.id), title: f.name, meta: f.id === suggestedFeatId ? "черта предыстории" : undefined, picked: pickedId === f.id }));
+        // Черта, взятая другим слотом, скрыта — кроме повторяемых
+        // («Посвящённый» с другим списком, Q5).
+        .filter((f) => (f.id !== exclude || /повторяем/i.test(f.prerequisite ?? "")) && matchQ(f.name, featQ))
+        .map((f) => ({ key: String(f.id), title: f.name, meta: fromBackground && f.id === suggestedFeatId ? "черта предыстории" : undefined, picked: pickedId === f.id }));
     return (
       <div className="wz-step">
         <SearchField value={featQ} onChange={setFeatQ} placeholder="Поиск черты" />
@@ -2874,7 +3056,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
               </button>
             )}
             <PickList
-              rows={featRows(effectiveFeatId, effectiveSpeciesFeatId)}
+              rows={featRows(effectiveFeatId, effectiveSpeciesFeatId, true)}
               collapse
               onToggle={(k) => pickBackgroundFeat(effectiveFeatId === Number(k) ? null : Number(k))}
               onOpen={(k) =>
@@ -2883,6 +3065,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
                 )
               }
             />
+            {renderFeatChoices("feat")}
           </section>
         )}
         {speciesFeatNeeded && (
@@ -2894,7 +3077,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
               hint="Вид даёт ещё одну черту происхождения на выбор."
             />
             <PickList
-              rows={featRows(effectiveSpeciesFeatId, effectiveFeatId)}
+              rows={featRows(effectiveSpeciesFeatId, effectiveFeatId, false)}
               collapse
               onToggle={(k) => pickSpeciesFeat(effectiveSpeciesFeatId === Number(k) ? null : Number(k))}
               onOpen={(k) =>
@@ -2903,6 +3086,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
                 )
               }
             />
+            {renderFeatChoices("feat2")}
           </section>
         )}
         {renderToolGroups(["feat", "feat2"])}

@@ -48,6 +48,10 @@ export interface GrantedSpellRef {
   original: string;
   grantLevel: number;
   outsideLimit: boolean;
+  /** Раз в долгий отдых без ячейки («Затронутый феями», метки). */
+  freeCast: boolean;
+  /** «Адепты»: приходит, когда у персонажа есть ячейки этого круга. */
+  slotCircle: number | null;
 }
 
 /**
@@ -81,6 +85,20 @@ export interface GrantedSpellChoice {
   /** Чем колдуются выбранные («Благословенный воин» — Хар). Пусто —
    *  классовой либо выбор игрока на листе. */
   ability?: DndAbilityKey;
+  /** Раз в долгий отдых без ячейки (заклинание 1 круга «Посвящённого»). */
+  freeCast?: boolean;
+  /** Только ритуалы («Ритуальный заклинатель»). */
+  ritual?: boolean;
+  /** Число — бонус мастерства на момент взятия («Ритуальный заклинатель»). */
+  countFromPb?: boolean;
+}
+
+/** +1 к характеристике у универсальных черт и даров (Q18). */
+export interface GrantedAbilityIncrease {
+  options: DndAbilityKey[];
+  amount: number;
+  /** Потолок: 20, у эпических даров 30. */
+  max: number;
 }
 
 /** «Выбери N владений» — три музыкальных инструмента у «Музыканта», три
@@ -110,6 +128,31 @@ export interface SourceGrants {
   spells: GrantedSpellRef[];
   spellChoices: GrantedSpellChoice[];
   resources: GrantedResource[];
+  /** Выбор списка заклинаний («Посвящённый»: Жрец, Друид, Волшебник) — id
+   *  записей классов. Выбранный список подставляется во все `spellChoices`
+   *  черты вместо их `classIds`. */
+  spellListChoice: number[];
+  /** Заклинательная характеристика заклинаний черты — Инт, Мдр или Хар на выбор. */
+  spellAbilityChoice: boolean;
+  /** Заклинательная — та, что получила +1 («Затронутые»). */
+  spellAbilityFromIncrease: boolean;
+  /** Список и характеристика — как у другой черты («Знаток магии» ← «Посвящённый»). */
+  spellListFrom: number | null;
+  abilityIncrease: GrantedAbilityIncrease | null;
+  /** «Устойчивый»: владение спасброском той характеристики, что получила +1. */
+  saveFromAbility: boolean;
+  /** Владения доспехами и оружием черты («Знаток средних доспехов»). */
+  armorProfs: { id: number | null; name: string }[];
+  weaponProfs: { id: number | null; name: string }[];
+  /** «Наблюдательный», «Острый ум»: навык из списка — владение, а если уже
+   *  есть, компетентность. */
+  skillOrExpertise: { count: number; options: string[] } | null;
+  /** Компетентность в навыке, которым уже владеешь («Эксперт в навыке»). */
+  expertiseChoice: number;
+  /** Владение всеми навыками («Дар навыка»). */
+  allSkills: boolean;
+  /** Приём оружия на выбор («Мастер оружия»). */
+  masteryChoice: number;
 }
 
 export const EMPTY_GRANTS: SourceGrants = {
@@ -126,6 +169,18 @@ export const EMPTY_GRANTS: SourceGrants = {
   spells: [],
   spellChoices: [],
   resources: [],
+  spellListChoice: [],
+  spellAbilityChoice: false,
+  spellAbilityFromIncrease: false,
+  spellListFrom: null,
+  abilityIncrease: null,
+  saveFromAbility: false,
+  armorProfs: [],
+  weaponProfs: [],
+  skillOrExpertise: null,
+  expertiseChoice: 0,
+  allSkills: false,
+  masteryChoice: 0,
 };
 
 /** «Лечащее слово [Healing Word]» → имя и оригинал по отдельности. Импорт
@@ -185,6 +240,8 @@ function parseSpellRefs(raw: unknown, outsideLimit: boolean): GrantedSpellRef[] 
       original: (typeof r.original === "string" ? r.original.trim() : "") || split.original,
       grantLevel: typeof r.grantLevel === "number" && r.grantLevel > 0 ? r.grantLevel : 1,
       outsideLimit: typeof r.outsideLimit === "boolean" ? r.outsideLimit : outsideLimit,
+      freeCast: r.freeCast === true,
+      slotCircle: typeof r.slotCircle === "number" && r.slotCircle > 0 ? r.slotCircle : null,
     });
   }
   return out;
@@ -196,7 +253,9 @@ function parseSpellChoices(raw: unknown): GrantedSpellChoice[] {
   for (const item of raw) {
     if (!item || typeof item !== "object") continue;
     const r = item as Record<string, unknown>;
-    const count = typeof r.count === "number" ? r.count : Number.parseInt(String(r.count ?? ""), 10);
+    // «Бонус мастерства» — число на момент взятия; count здесь запасной (2).
+    const countFromPb = r.countFrom === "pb";
+    const count = typeof r.count === "number" ? r.count : countFromPb ? 2 : Number.parseInt(String(r.count ?? ""), 10);
     if (!Number.isFinite(count) || count <= 0) continue;
     out.push({
       count,
@@ -208,10 +267,39 @@ function parseSpellChoices(raw: unknown): GrantedSpellChoice[] {
       names: Array.isArray(r.names)
         ? (r.names as unknown[]).filter((x): x is string => typeof x === "string" && !!x.trim())
         : undefined,
-      ability: r.ability === "int" || r.ability === "wis" || r.ability === "cha" ? r.ability : undefined,
+      ability: r.ability === "int" || r.ability === "wis" || r.ability === "cha" || r.ability === "con" ? r.ability : undefined,
+      freeCast: r.freeCast === true || undefined,
+      ritual: r.ritual === true || undefined,
+      countFromPb: countFromPb || undefined,
     });
   }
   return out;
+}
+
+function parseAbilityIncrease(raw: unknown): GrantedAbilityIncrease | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const options = (Array.isArray(r.options) ? r.options : []).filter((k): k is DndAbilityKey =>
+    ABILITY_KEYS.includes(k as DndAbilityKey)
+  );
+  if (!options.length) return null;
+  return {
+    options,
+    amount: typeof r.amount === "number" && r.amount > 0 ? r.amount : 1,
+    max: typeof r.max === "number" && r.max > 0 ? r.max : 20,
+  };
+}
+
+function parseRefs(raw: unknown): { id: number | null; name: string }[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((x) => {
+    if (typeof x === "string" && x.trim()) return [{ id: null, name: x.trim() }];
+    if (x && typeof x === "object" && typeof (x as { name?: unknown }).name === "string") {
+      const r = x as { id?: unknown; name: string };
+      return r.name.trim() ? [{ id: typeof r.id === "number" ? r.id : null, name: r.name.trim() }] : [];
+    }
+    return [];
+  });
 }
 
 function parseToolChoice(raw: unknown): GrantedToolChoice | null {
@@ -265,6 +353,30 @@ export function grantsFromEntry(
     spells: parseSpellRefs(data.granted_spells, data.granted_spells_outside_limit === true),
     spellChoices: parseSpellChoices(data.spell_choices),
     resources: parseResources(data.resource_pools, entry.id),
+    spellListChoice: Array.isArray(data.spell_list_choice)
+      ? (data.spell_list_choice as unknown[]).filter((n): n is number => typeof n === "number")
+      : [],
+    spellAbilityChoice: data.spell_ability_choice === true,
+    spellAbilityFromIncrease: data.spell_ability_from_increase === true,
+    spellListFrom: typeof data.spell_list_from === "number" ? data.spell_list_from : null,
+    abilityIncrease: parseAbilityIncrease(data.ability_increase),
+    saveFromAbility: data.save_from_ability === true,
+    // Классовые armor_profs/weapon_profs сюда не идут — их пишет выбор класса
+    // (у классов своя логика: доспехи даёт только первый класс).
+    armorProfs: entry.kind === "feat" ? parseRefs(data.armor_profs) : [],
+    weaponProfs: entry.kind === "feat" ? [...parseRefs(data.weapon_profs), ...parseRefs(data.weapon_prof_names)] : [],
+    skillOrExpertise: (() => {
+      const r = data.skill_or_expertise as { count?: unknown; options?: unknown } | undefined;
+      const count = Number(r?.count) || 0;
+      if (!r || count <= 0) return null;
+      const options = (Array.isArray(r.options) ? r.options : [])
+        .filter((x): x is string => typeof x === "string" && !!x.trim())
+        .map((x) => resolve(x) ?? x.trim());
+      return { count, options };
+    })(),
+    expertiseChoice: Number(data.expertise_choice) || 0,
+    allSkills: data.all_skills === true,
+    masteryChoice: Number(data.mastery_choice) || 0,
   };
 }
 
@@ -285,5 +397,17 @@ export function mergeGrants(list: SourceGrants[]): SourceGrants {
     spells: list.flatMap((g) => g.spells),
     spellChoices: list.flatMap((g) => g.spellChoices),
     resources: list.flatMap((g) => g.resources),
+    spellListChoice: list.flatMap((g) => g.spellListChoice),
+    spellAbilityChoice: list.some((g) => g.spellAbilityChoice),
+    spellAbilityFromIncrease: list.some((g) => g.spellAbilityFromIncrease),
+    spellListFrom: list.find((g) => g.spellListFrom != null)?.spellListFrom ?? null,
+    abilityIncrease: list.find((g) => g.abilityIncrease)?.abilityIncrease ?? null,
+    saveFromAbility: list.some((g) => g.saveFromAbility),
+    armorProfs: list.flatMap((g) => g.armorProfs),
+    weaponProfs: list.flatMap((g) => g.weaponProfs),
+    skillOrExpertise: list.find((g) => g.skillOrExpertise)?.skillOrExpertise ?? null,
+    expertiseChoice: list.reduce((a, g) => a + g.expertiseChoice, 0),
+    allSkills: list.some((g) => g.allSkills),
+    masteryChoice: list.reduce((a, g) => a + g.masteryChoice, 0),
   };
 }

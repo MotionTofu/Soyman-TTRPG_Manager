@@ -1,3 +1,4 @@
+import type { FeatPick } from "./featPick";
 import type { DndCharacterData } from "../../types";
 
 // Resumable level-up draft (C2): explicit versioned shape with only the
@@ -18,6 +19,8 @@ export interface LevelUpDraftSelections {
   featId: number | null;
   asiPrimary: string | null;
   asiSecondary: string | null;
+  /** Выбор при взятии черты (+1, заклинания, навыки) — featPick.ts. */
+  featPick?: FeatPick;
 }
 
 // Progression-relevant base the draft depends on. Runtime-only fields

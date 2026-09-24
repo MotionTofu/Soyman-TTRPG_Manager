@@ -37,6 +37,9 @@ function feature(name: string): DndFeature {
   return { name, description: "" } as DndFeature;
 }
 
+// «Крепкий» с эффектом из справочника — так его подставляет withLiveEffects.
+const TOUGH: DndFeature = { name: "Крепкий", description: "", effects: [{ id: "feat-hp", type: "hit_points", when: "always", perLevel: 2 }] };
+
 function defense(name: string, over: Partial<DndEffect>): DndFeature {
   return { name, description: "", effects: [{ id: "d", type: "defense", when: "always", ...over }] } as DndFeature;
 }
@@ -376,9 +379,23 @@ describe("максимум хитов", () => {
       abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
       hpLump: 20,
       hpRolls: [],
-      feats: [feature("Крепкий")],
+      feats: [TOUGH],
     });
     expect(deriveSheet(c).maxHitPoints.value).toBe(20 + 2 * 4);
+  });
+
+  it("хиты черты — по эффекту, а не по имени (гриллинг черт 2026-09-24)", () => {
+    const base = {
+      classes: [cls({ level: 4 })],
+      abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+      hpLump: 20,
+      hpRolls: [],
+    };
+    expect(deriveSheet(character({ ...base, feats: [feature("Крепкий")] })).maxHitPoints.value).toBe(20);
+    const fortitude: DndFeature = { name: "Дар стойкости", description: "", effects: [{ id: "feat-hp", type: "hit_points", when: "always", flat: 40 }] };
+    const hp = deriveSheet(character({ ...base, feats: [fortitude] })).maxHitPoints;
+    expect(hp.value).toBe(60);
+    expect(hp.parts.some((p) => p.label === "Дар стойкости" && p.value === 40)).toBe(true);
   });
 
   describe("обратный вывод кубовой части из готового максимума", () => {
@@ -403,7 +420,7 @@ describe("максимум хитов", () => {
       const c = character({
         classes: [cls({ className: "Воин", level: 4 }), cls({ className: "Плут", level: 3 })],
         abilities: { str: 10, dex: 10, con: 8, int: 10, wis: 10, cha: 10 },
-        feats: [feature("Крепкий")],
+        feats: [TOUGH],
         hpMiscPerLevel: 1,
       });
       const lump = hitPointLumpFor(c, 55);
@@ -826,5 +843,53 @@ describe("прибавки боевых стилей к оружию", () => {
     expect(weaponEffects(off, { oneHand: true }, 2).damage).toEqual([]);
     // Непереключаемое имя в списке выключенных ничего не выключает.
     expect(weaponEffects(off, { ranged: true }, 2).attack).toEqual([{ label: "Стрельба из лука", value: 2 }]);
+  });
+});
+
+describe("скорость и сопротивления от черт", () => {
+  it("прибавка скорости числом идёт в пешую скорость, текстовая — нет", () => {
+    const speedy: DndFeature = {
+      name: "Подвижный",
+      description: "",
+      effects: [{ id: "s", type: "movement", when: "always", movementKind: "speed", flat: 10 }],
+    };
+    const textOnly: DndFeature = {
+      name: "Текст",
+      description: "",
+      effects: [{ id: "t", type: "movement", when: "always", movementKind: "speed", distance: "скорость растёт" }],
+    };
+    const sheet = deriveSheet(character({ speeds: { walk: 30 } as DndCharacterData["speeds"], feats: [speedy, textOnly] }));
+    expect(sheet.walkSpeed.value).toBe(40);
+  });
+
+  it("сопротивление на выбор действует только выбранным", () => {
+    const portal: DndFeature = {
+      name: "Портальный странник",
+      description: "",
+      choices: { resistances: ["Излучение"] },
+      effects: [
+        {
+          id: "r",
+          type: "resistance",
+          when: "always",
+          count: 1,
+          options: [
+            { id: 1, name: "Некротическая энергия" },
+            { id: 2, name: "Излучение" },
+          ],
+        },
+      ],
+    };
+    const storm: DndFeature = {
+      name: "Метка шторма",
+      description: "",
+      effects: [{ id: "e", type: "resistance", when: "always", damageType: { id: 3, name: "Электрический" } }],
+    };
+    const sheet = deriveSheet(character({ damageResistances: ["Огненный"], feats: [portal, storm] }));
+    expect(sheet.damageResistances).toEqual([
+      { name: "Огненный", source: "" },
+      { name: "Излучение", source: "Портальный странник" },
+      { name: "Электрический", source: "Метка шторма" },
+    ]);
   });
 });

@@ -213,7 +213,48 @@ function EffectFields({
             value={effect.distance ?? ""}
             onChange={(e) => onChange({ distance: e.target.value })}
           />
+          {effect.movementKind === "speed" && (
+            // Числом — прибавка к пешей скорости листа («Подвижный» +10).
+            <input
+              type="number"
+              style={{ width: 64 }}
+              placeholder="+фт."
+              title="Прибавка к скорости листа, футов"
+              value={effect.flat ?? ""}
+              onChange={(e) => onChange({ flat: e.target.value === "" ? undefined : Number(e.target.value) })}
+            />
+          )}
         </>
+      );
+    case "hit_points":
+      return (
+        <>
+          <input
+            type="number"
+            style={{ width: 72 }}
+            placeholder="за ур."
+            title="Прибавка к максимуму хитов за каждый уровень персонажа («Крепкий» — 2)"
+            value={effect.perLevel ?? ""}
+            onChange={(e) => onChange({ perLevel: e.target.value === "" ? undefined : Number(e.target.value) })}
+          />
+          <input
+            type="number"
+            style={{ width: 72 }}
+            placeholder="разово"
+            title="Разовая прибавка к максимуму хитов («Дар стойкости» — 40)"
+            value={effect.flat ?? ""}
+            onChange={(e) => onChange({ flat: e.target.value === "" ? undefined : Number(e.target.value) })}
+          />
+        </>
+      );
+    case "resistance":
+      return (
+        <RefSelect
+          value={effect.damageType}
+          options={damageTypes}
+          placeholder="Тип урона"
+          onChange={(v) => onChange({ damageType: v })}
+        />
       );
     case "zone":
       return (

@@ -12,6 +12,7 @@ import { migrateDndOriginGrants } from "./dndOriginGrants";
 import { migrateDndCombatEffects } from "./dndCombatEffects";
 import { migrateDndFindingsEffects } from "./dndFindingsEffects";
 import { migrateDndWizardData } from "./dndWizardData";
+import { migrateDndFeatData } from "./dndFeatData";
 import { migrateDndSpeedStructure } from "./dndSpeedStructure";
 import { migrateDndSheetRefs } from "./dndSheetRefs";
 import { migrateDndStartingSets } from "./dndStartingSets";
@@ -6451,6 +6452,11 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
   // вариант C Воина, инструменты «на ваш выбор» моделью (гриллинг
   // 2026-09-24, см. dndWizardData.ts).
   migrateDndWizardData(database);
+
+  // Выдачи черт: +1 к характеристике, владения, заклинания, хиты, скорость,
+  // сопротивления; список «Посвящённого» (гриллинг черт 2026-09-24, см.
+  // dndFeatData.ts).
+  migrateDndFeatData(database);
 
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.

@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useDndRuntime } from './DndRuntime';
 import { useResource } from "../../data/hooks";
 import type { CompendiumEntry, DndAbilityScores, DndCharacterData } from "../../types";
 import { Modal } from "../Modal";
-import { EntryBlurb } from "./DndCharacterWizard";
 import { featuresFromEntries } from "./dndFeatures";
 import {
   ABILITY_LABELS,
@@ -18,10 +17,28 @@ import {
   isAbortError,
   loadDndClassFeatures,
   loadDndClassHierarchy,
+  loadDndEquipmentEntries,
   loadDndFeatsByCategory,
+  loadDndSpellIndex,
   type DndClassHierarchy,
   type DndFeatOption,
 } from "./dndCompendium";
+import { grantsFromEntry } from "./dndGrants";
+import { useDndSkills } from "./useDndSkills";
+import { useCompendiumEntries } from "./useCompendiumEntries";
+import { isMasterableWeapon } from "./StartingEquipmentPicker";
+import { EntrySheet, PickList, SearchField, type PickRow } from "./wizardUi";
+import { FeatChoices } from "./FeatChoices";
+import {
+  applyFeatPick,
+  defaultFeatPick,
+  EMPTY_FEAT_PICK,
+  featCtxFrom,
+  featHitPoints,
+  featPickMissing,
+  featPrereqProblem,
+  type FeatPick,
+} from "./featPick";
 import { recomputeGrantedSpells } from "./DndCharacterForm";
 import {
   cantripsAtLevel,
@@ -59,12 +76,6 @@ function parseDie(raw: unknown): number | null {
   const m = /\d+/.exec(raw);
   return m ? Number(m[0]) : null;
 }
-function parseFeatMinLevel(prereq: unknown): number | null {
-  if (typeof prereq !== "string") return null;
-  const m = /Уровень\s*(\d+)\s*\+/.exec(prereq);
-  return m ? Number(m[1]) : null;
-}
-
 interface Props {
   value: DndCharacterData;
   onApply: (patch: Partial<DndCharacterData>) => void | Promise<unknown>;
@@ -124,6 +135,14 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
   const [featId, setFeatId] = useState<number | null>(resumed?.state.featId ?? null);
   const [asiPrimary, setAsiPrimary] = useState<string | null>(resumed?.state.asiPrimary ?? null);
   const [asiSecondary, setAsiSecondary] = useState<string | null>(resumed?.state.asiSecondary ?? null);
+  const [featPick, setFeatPick] = useState<FeatPick>(resumed?.state.featPick ?? EMPTY_FEAT_PICK);
+  const [featQuery, setFeatQuery] = useState("");
+  const [featSheetId, setFeatSheetId] = useState<number | null>(null);
+  const [spellIndex, setSpellIndex] = useState<CompendiumEntry[]>([]);
+  const [equipment, setEquipment] = useState<CompendiumEntry[]>([]);
+  const skills = useDndSkills(systemId ?? value.systemId);
+  // Записи уже взятых черт — ради их хитов («Крепкий» по эффекту, не по имени).
+  const getEntry = useCompendiumEntries(value.feats.map((f) => f.entryId));
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   // A resumed session already has a stored draft: clearing back to defaults
   // must remove it, not leave it orphaned.
@@ -193,7 +212,9 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
     }
     const ac = new AbortController();
     const opts = { signal: ac.signal };
-    const cats = ["Универсальная Черта", ...(newLevel >= 19 ? ["Эпический дар", "Эпическая черта"] : [])];
+    // PHB 2024: «Улучшение характеристик» или любая черта, требованиям
+    // которой персонаж соответствует, — черты происхождения тоже (Q17).
+    const cats = ["Универсальная Черта", "Черта происхождения", ...(newLevel >= 19 ? ["Эпический дар", "Эпическая черта"] : [])];
     Promise.all(cats.map((c) => loadDndFeatsByCategory(systemId, c, opts)))
       .then((lists) => {
         const seen = new Set<string>();
@@ -210,6 +231,16 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
       });
     return () => ac.abort();
   }, [systemId, isFeatLevel, newLevel]);
+
+  // Справочники для выбора черты: заклинания, инструменты, оружие.
+  useEffect(() => {
+    if (!systemId || !isFeatLevel) return;
+    const ac = new AbortController();
+    const opts = { signal: ac.signal };
+    loadDndSpellIndex(systemId, opts).then(setSpellIndex).catch(() => undefined);
+    loadDndEquipmentEntries(systemId, opts).then(setEquipment).catch(() => undefined);
+    return () => ac.abort();
+  }, [systemId, isFeatLevel]);
 
   useEffect(() => {
     const sid = subclassId ?? cls?.subclassId;
@@ -279,28 +310,68 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
     return a.filter((r) => !b.some((x) => x.key === r.key && x.value === r.value));
   })();
 
-  // Черта шага: фильтр по парсимому «Уровень N+», остальное текстом.
-  //
-  // Требования берутся из самого списка (`prerequisite` едет в DndFeatOption).
-  // Раньше запись догружалась только для УЖЕ выбранной черты, поэтому до
-  // выбора список был полным: игрок выбирал недоступную, она исчезала из
-  // списка, селект обнулялся, а объяснением была приглушённая строка
-  // (аудит 09.09, В4). Теперь недоступного в списке нет вовсе.
-  const blockedFeats = new Set(
-    featPool.filter((f) => (parseFeatMinLevel(f.prerequisite) ?? 0) > newLevel).map((f) => f.id)
-  );
-  const availableFeats = featPool.filter((f) => !blockedFeats.has(f.id));
+  // Черта шага: требования разбираются (Q20) — уровень, «Характеристика 13+»,
+  // владение доспехами, заклинательство, черта-требование. Неподходящая черта
+  // видна серой с причиной, а не спрятана: так ясно, чего не хватает.
+  // Уже взятая — тоже серая, кроме повторяемых.
+  const totalLevelAfterPreview = value.classes.reduce((n, c, i) => n + (i === clsIdx ? newLevel : c.level || 0), 0);
+  const featWho = {
+    level: totalLevelAfterPreview,
+    abilities: value.abilities,
+    profNames: value.proficiencies.map((p) => p.name),
+    // Колдует класс (или подкласс — у Мистического рыцаря свои заклинания в
+    // лимите). Заклинания черт — вне лимита и умения «Сотворение» не дают.
+    casts:
+      value.classes.some((c) => !!c.spellcastingAbility) ||
+      [...value.cantrips, ...value.spellsByLevel.flat()].some((sp) => !sp.outsideLimit),
+    featNames: value.feats.map((f) => f.name),
+  };
+  const featReason = (f: DndFeatOption): string | null => {
+    const taken = value.feats.some((x) => x.entryId === f.id || x.name === f.name);
+    if (taken && !/повторяем/i.test(f.prerequisite ?? "")) return "уже есть";
+    return featPrereqProblem(f.prerequisite, featWho);
+  };
+  const availableFeats = featPool.filter((f) => !featReason(f));
   const chosenFeat = availableFeats.find((f) => f.id === featId) ?? null;
   const chosenFeatEntry = featId != null ? featEntry : null;
   const isAsi = chosenFeat != null && ASI_NAMES.includes(chosenFeat.name);
+  const featGrants = useMemo(
+    () => (chosenFeatEntry && !isAsi ? grantsFromEntry(chosenFeatEntry, skills.resolve) : null),
+    [chosenFeatEntry, isAsi, skills.resolve]
+  );
+  const pbAfter = Number.parseInt(
+    computeProficiencyBonus(value.classes.map((c, i) => (i === clsIdx ? { ...c, level: newLevel } : c))),
+    10
+  ) || 2;
+  const featCtx = chosenFeatEntry ? featCtxFrom(value, pbAfter, chosenFeatEntry.id, { listSourceId: featGrants?.spellListFrom }) : null;
+  const featMissing = featGrants && featCtx ? featPickMissing(chosenFeatEntry, featGrants, featPick, featCtx) : [];
+  const featCatalogs = {
+    spellIndex,
+    tools: equipment.filter((e) => typeof e.data.tool_kind === "string"),
+    weapons: equipment.filter(isMasterableWeapon),
+    skills: skills.rows,
+  };
+  // Новая черта — выбор с умолчаниями заново (характеристика заклинаний —
+  // самая высокая). Возобновлённый черновик свой выбор уже принёс.
+  const featPickFor = useRef<number | null>(resumed?.state.featId ?? null);
+  useEffect(() => {
+    if (!featGrants || !featCtx || featPickFor.current === chosenFeatEntry?.id) return;
+    featPickFor.current = chosenFeatEntry?.id ?? null;
+    setFeatPick(defaultFeatPick(featGrants, featCtx));
+    // featCtx пересобирается каждый рендер — ждём только смену черты.
+  }, [featGrants]); // oxlint-disable-line react-hooks/exhaustive-deps
+  const featAbilityBump = (k: string) =>
+    featGrants?.abilityIncrease && featPick.ability === k ? featGrants.abilityIncrease.amount : 0;
 
   // ВЫН после возможного ПУХ в этом же визарде — превью честное.
   const conBonus = isAsi
     ? (asiPrimary === "Телосложение" ? 2 : 0) + (asiSecondary === "Телосложение" ? 1 : 0)
-    : 0;
-  const conMod = abilityModifier(Math.min(20, (value.abilities.con ?? 10) + conBonus));
-  const hasTough =
-    value.feats.some((f) => f.name.includes("Крепкий")) || (chosenFeat?.name.includes("Крепкий") ?? false);
+    : featAbilityBump("con");
+  const conCap = featGrants?.abilityIncrease && featPick.ability === "con" ? featGrants.abilityIncrease.max : 20;
+  const conMod = abilityModifier(Math.min(conCap, (value.abilities.con ?? 10) + conBonus));
+  // Хиты черт — из эффектов: «Крепкий» +2 за уровень, «Дар стойкости» +40.
+  const hpBefore = featHitPoints(value.feats.map((f) => getEntry(f.entryId)));
+  const hpNewFeat = featHitPoints(chosenFeat && !value.feats.some((f) => f.entryId === chosenFeat.id) ? [chosenFeatEntry] : []);
 
   // Движок хитов знает две модели, и путать их нельзя.
   //
@@ -332,26 +403,27 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
   const isLegacyHp = value.hpLump == null;
   const baseLump = value.hpLump ?? 0;
   const baseRolls = value.hpRolls ?? [];
-  const perLevelBonus = (hasTough ? 2 : 0) + (misc || 0);
+  const perLevelBonus = hpBefore.perLevel + hpNewFeat.perLevel + (misc || 0);
+  const flatAfter = hpBefore.flat + hpNewFeat.flat;
   const dieAvg = die != null ? Math.floor(die / 2) + 1 : null;
 
   const gainDie = hpMode === "roll" ? rolled : hpMode === "average" ? dieAvg : null;
   const curMax = Number.parseInt(value.hitPointMax || "0", 10) || 0;
   // Что у листа было до этого визарда — точка отсчёта ретро-части.
   const conModBefore = abilityModifier(value.abilities.con ?? 10);
-  const perLevelBonusBefore =
-    (value.feats.some((f) => f.name.includes("Крепкий")) ? 2 : 0) + (value.hpMiscPerLevel ?? 0);
+  const perLevelBonusBefore = hpBefore.perLevel + (value.hpMiscPerLevel ?? 0);
   const retroPerLevel = conMod - conModBefore + (perLevelBonus - perLevelBonusBefore);
   const autoMaxRaw =
     die == null
       ? null
       : isLegacyHp
-        ? curMax + (gainDie ?? 0) + conMod + perLevelBonus + retroPerLevel * totalLevelBefore
+        ? curMax + (gainDie ?? 0) + conMod + perLevelBonus + retroPerLevel * totalLevelBefore + hpNewFeat.flat
         : baseLump +
           baseRolls.reduce((a, b) => a + b, 0) +
           (gainDie ?? 0) +
           conMod * totalLevelAfter +
-          perLevelBonus * totalLevelAfter;
+          perLevelBonus * totalLevelAfter +
+          flatAfter;
   // Итог хитов не может уйти в ноль/минус (отрицательный ВЫН + misc).
   const autoMax = autoMaxRaw != null ? Math.max(1, autoMaxRaw) : null;
   // Ручной итог: история бросков сносится, lump пересчитывается из математики —
@@ -360,7 +432,7 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
   const manualValid = manualTotal.trim() !== "" && Number.isFinite(manualNum) && manualNum > 0;
   const manualLump =
     manualValid && die != null
-      ? manualNum - (conMod + perLevelBonus) * totalLevelAfter
+      ? manualNum - (conMod + perLevelBonus) * totalLevelAfter - flatAfter
       : null;
   const newMax = hpMode === "manual" ? (manualValid ? manualNum : null) : autoMax;
   const delta = newMax != null ? newMax - curMax : null;
@@ -408,6 +480,8 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
     setFeatId(null);
     setAsiPrimary(null);
     setAsiSecondary(null);
+    setFeatPick(EMPTY_FEAT_PICK);
+    featPickFor.current = null;
     setConfirmDiscard(false);
   }
   const defaultMiscText = String(value.hpMiscPerLevel ?? 0);
@@ -444,17 +518,18 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
         base: mountBase,
         targetLevel: newLevel,
         updatedAt: new Date().toISOString(),
-        state: { clsIdx, step, hpMode, rolled, manualTotal, miscText, subclassId, featId, asiPrimary, asiSecondary },
+        state: { clsIdx, step, hpMode, rolled, manualTotal, miscText, subclassId, featId, asiPrimary, asiSecondary, featPick },
       });
     }, 250);
     return () => clearTimeout(t);
     // Callbacks intentionally out of deps (same pattern as the loader
     // effects above): the host passes fresh closures every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clsIdx, step, hpMode, rolled, manualTotal, miscText, subclassId, featId, asiPrimary, asiSecondary, stale, mountBase, newLevel]);
+  }, [clsIdx, step, hpMode, rolled, manualTotal, miscText, subclassId, featId, asiPrimary, asiSecondary, featPick, stale, mountBase, newLevel]);
   const hpReady =
     die == null ? hpMode === "manual" && manualValid : hpMode === "roll" ? rolled != null : hpMode === "average" ? true : manualValid;
-  const featReady = !isFeatLevel || (featId != null && (!isAsi || asiPrimary != null));
+  const featReady =
+    !isFeatLevel || (chosenFeat != null && (isAsi ? asiPrimary != null : !!chosenFeatEntry && featMissing.length === 0));
   const subReady = !subclassOffered || subclassId != null;
   // Шаги не залочены (можно заглянуть вперёд), поэтому готовность нужна
   // и на кнопке «Взять уровень», а не только на «Далее» шагов.
@@ -581,7 +656,7 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
         hpPatch = {
           hitPointMax: String(finalMax),
           hitPointsCurrent: nextCurrent,
-          hpLump: finalMax - (gainDie ?? 0) - (conMod + perLevelBonus) * totalLevelAfter,
+          hpLump: finalMax - (gainDie ?? 0) - (conMod + perLevelBonus) * totalLevelAfter - flatAfter,
           hpRolls: gainDie != null ? [gainDie] : [],
           hpMiscPerLevel: misc || 0,
         };
@@ -595,30 +670,44 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
         };
       }
 
-      const nextFeats = [...value.feats];
-      // Дубль черты не кладём (аудит: повторный заход плодил строки).
-      if (chosenFeat && !value.feats.some((f) => f.name === chosenFeat.name)) {
-        nextFeats.push({
-          name: chosenFeat.name,
-          description: chosenFeatEntry?.description ?? "",
-          entryId: chosenFeat.id,
-        });
-      }
-
-      const nextValue: DndCharacterData = {
+      let nextValue: DndCharacterData = {
         ...value,
         classes: nextClasses,
         abilities: nextAbilities,
         classFeatures: [...value.classFeatures, ...addedFeatures],
         proficiencyBonus: computeProficiencyBonus(nextClasses),
         hitDice,
-        feats: nextFeats,
         ...hpPatch,
       };
+      if (chosenFeat && chosenFeatEntry && featGrants && featCtx) {
+        // Выбор черты — в лист: +1, спасбросок, навыки, владения, заклинания.
+        nextValue = applyFeatPick(nextValue, chosenFeatEntry, featGrants, featPick, featCtx, featCatalogs);
+      } else if (chosenFeat && !value.feats.some((f) => f.name === chosenFeat.name)) {
+        // «Улучшение характеристик» — прибавки уже в nextAbilities.
+        nextValue = {
+          ...nextValue,
+          feats: [...value.feats, { name: chosenFeat.name, description: chosenFeatEntry?.description ?? "", entryId: chosenFeat.id }],
+        };
+      }
       const { cantrips, spellsByLevel, spellSlotLevels } = await recomputeGrantedSpells(nextValue);
       // Awaited: hosts with an async commit (or a throwing one) keep the
       // draft on failure for a retry; it is cleared only after success.
-      await onApply({ ...hpPatch, classes: nextClasses, abilities: nextAbilities, classFeatures: nextValue.classFeatures, proficiencyBonus: nextValue.proficiencyBonus, hitDice, feats: nextFeats, cantrips, spellsByLevel, spellSlotLevels });
+      await onApply({
+        ...hpPatch,
+        classes: nextClasses,
+        abilities: nextValue.abilities,
+        savingThrowProfs: nextValue.savingThrowProfs,
+        skillProfs: nextValue.skillProfs,
+        proficiencies: nextValue.proficiencies,
+        masteredWeapons: nextValue.masteredWeapons,
+        classFeatures: nextValue.classFeatures,
+        proficiencyBonus: nextValue.proficiencyBonus,
+        hitDice,
+        feats: nextValue.feats,
+        cantrips,
+        spellsByLevel,
+        spellSlotLevels,
+      });
       levelUpDraft?.onClear?.();
       onClose();
     } catch (e) {
@@ -776,7 +865,7 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
                 <div className="stack" style={{ gap: "var(--sp-2)" }}>
                   <span className="muted">
                     Кость {die != null ? `к${die}` : "—"} + ВЫН {formatModifier(conMod)}
-                    {hasTough && " + Крепкий 2"}
+                    {hpBefore.perLevel + hpNewFeat.perLevel ? ` + черты ${hpBefore.perLevel + hpNewFeat.perLevel}` : ""}
                     {misc ? ` + прочие ${misc}` : ""}
                     {/* Легаси-лист (импорт из LSS, ручное заведение) прибавляет
                         за ЭТОТ уровень к сохранённому максимуму, а разобранный
@@ -861,30 +950,69 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
 
             {step === "Черта" && (
               <div className="stack">
-                <span className="muted">На {newLevel}-м уровне — черта на выбор.</span>
-                <select
-                  value={featId ?? ""}
-                  onChange={(e) => {
-                    setFeatId(e.target.value ? Number(e.target.value) : null);
+                <span className="muted">
+                  На {newLevel}-м уровне — «Улучшение характеристик» или любая черта, требованиям которой персонаж
+                  соответствует. Тап по названию — описание.
+                </span>
+                <SearchField value={featQuery} onChange={setFeatQuery} placeholder="Поиск черты" />
+                <PickList
+                  collapse
+                  rows={featPool
+                    .filter((f) => !featQuery.trim() || f.name.toLowerCase().includes(featQuery.trim().toLowerCase()) || f.id === featId)
+                    .map((f): PickRow => {
+                      const reason = featReason(f);
+                      return {
+                        key: String(f.id),
+                        title: f.name,
+                        meta: reason ?? (f.category === "Черта происхождения" ? "черта происхождения" : undefined),
+                        picked: f.id === featId,
+                        disabled: !!reason,
+                      };
+                    })}
+                  onOpen={(k) => setFeatSheetId(Number(k))}
+                  onToggle={(k) => {
+                    const id = Number(k);
+                    setFeatId(featId === id ? null : id);
                     setAsiPrimary(null);
                     setAsiSecondary(null);
                   }}
-                >
-                  <option value="">— черта —</option>
-                  {availableFeats.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.name}
-                    </option>
-                  ))}
-                </select>
-                {/* Сказать сразу, а не после неудачного выбора: список теперь
-                    честно неполон с самого начала, и молчать об этом нельзя. */}
-                {blockedFeats.size > 0 && (
-                  <span className="muted">
-                    Скрыто черт по уровню требований: {blockedFeats.size}.
-                  </span>
+                />
+                {featSheetId != null && (
+                  <EntrySheet
+                    entryId={featSheetId}
+                    meta={(() => {
+                      const f = featPool.find((x) => x.id === featSheetId);
+                      const reason = f ? featReason(f) : null;
+                      return [f?.prerequisite, reason ? `нельзя: ${reason}` : ""].filter(Boolean).join(" · ") || undefined;
+                    })()}
+                    action={(() => {
+                      const f = featPool.find((x) => x.id === featSheetId);
+                      const reason = f ? featReason(f) : "нет";
+                      return {
+                        label: featId === featSheetId ? "✓ Выбрано" : reason ? `Нельзя: ${reason}` : "Взять черту",
+                        disabled: !!reason || featId === featSheetId,
+                        onClick: () => {
+                          setFeatId(featSheetId);
+                          setAsiPrimary(null);
+                          setAsiSecondary(null);
+                          setFeatSheetId(null);
+                        },
+                      };
+                    })()}
+                    onClose={() => setFeatSheetId(null)}
+                  />
                 )}
-                {chosenFeatEntry?.description && <EntryBlurb text={chosenFeatEntry.description} />}
+                {chosenFeatEntry && featGrants && featCtx && (
+                  <FeatChoices
+                    entry={chosenFeatEntry}
+                    grants={featGrants}
+                    ctx={featCtx}
+                    pick={featPick}
+                    onChange={setFeatPick}
+                    {...featCatalogs}
+                  />
+                )}
+                {featMissing.length > 0 && <span className="muted">Осталось выбрать: {featMissing.join(", ")}.</span>}
                 {isAsi && (
                   <div className="stack" style={{ gap: "var(--sp-2)" }}>
                     <span className="muted">+2 одной или +1 двум (потолок 20):</span>
@@ -971,7 +1099,14 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
                 {subclassId && (
                   <div>Подкласс: {subclassOptions.find((s) => s.id === subclassId)?.name}</div>
                 )}
-                {chosenFeat && <div>Черта: {chosenFeat.name}</div>}
+                {chosenFeat && (
+                  <div>
+                    Черта: {chosenFeat.name}
+                    {featGrants?.abilityIncrease && featPick.ability && (
+                      <span className="muted"> · +{featGrants.abilityIncrease.amount} {ABILITY_LABELS.find((a) => a.key === featPick.ability)?.label}</span>
+                    )}
+                  </div>
+                )}
                 {isAsi && (asiPrimary || asiSecondary) && (
                   <div className="muted">
                     Прибавки:{" "}

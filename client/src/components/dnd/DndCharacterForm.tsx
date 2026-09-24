@@ -90,6 +90,7 @@ import {
   type DndEffect,
 } from "./effects";
 import { useCompendiumEntries } from "./useCompendiumEntries";
+import { FeatPending } from "./FeatPending";
 import { sheetClassColor, textOnClassColor } from "./dndClassColors";
 import { DEFAULT_PORTRAIT_FOCUS, useFrameDrag } from "./portraitFrame";
 import { DndDie } from "./DndDie";
@@ -132,7 +133,7 @@ import { armorProfNames, carryCapacityLb, EMPTY_EQUIPMENT_ITEM, ensureEquipmentI
 import { DndCoinCalculator } from "./DndCoinCalculator";
 import { deadEntryIds, ensureEntries, getCachedEntry, hasFailedEntries, retryFailedEntries } from "./entryCache";
 import { deadLinkNames } from "./deadLinks";
-import { ARCANUM_UNLOCKS, arcanumCountByCircle, arcanumTopCircle, arcanumUnlockedCircles, computeSpellSlots, effectiveCasterLevel, highestCircle, isRoundUpCaster, sourceCasterKind } from "./dndSlots";
+import { ARCANUM_UNLOCKS, arcanumCountByCircle, arcanumTopCircle, arcanumUnlockedCircles, computeSpellSlots, effectiveCasterLevel, highestCircle, isRoundUpCaster, sourceCasterKind, type ClassSlotSource } from "./dndSlots";
 import { cantripsAtLevel, classPreparedFormula, formulaPreparedLimit, preparedAtLevel, PROGRESSION_RECHARGE_LABELS, type ClassProgression } from "./progression";
 import { AutoFeatureListEdit, FeatureListEdit } from "./FeatureList";
 import { PipTrack } from "../litm/PipTrack";
@@ -1084,6 +1085,10 @@ interface GrantedSpellDef {
   grantLevel: number;
   /** «Не в счёт лимита» — «Починка» Артефактора и заклинания подкласса. */
   outsideLimit: boolean;
+  /** Раз в долгий отдых без ячейки (заклинания черт). */
+  freeCast: boolean;
+  /** «Адепты»: приходит, когда у персонажа есть ячейки этого круга. */
+  slotCircle: number | null;
 }
 
 // Имена в списке приезжают из импорта в виде «Лечащее слово [Healing Word]»,
@@ -1101,6 +1106,8 @@ function parseGrantedSpellDefs(entry: CompendiumEntry): GrantedSpellDef[] {
         grantLevel?: number;
         original?: string;
         outsideLimit?: boolean;
+        freeCast?: boolean;
+        slotCircle?: number;
       }[])
     : [];
   // Заклинания подкласса по правилам 5.5 всегда подготовлены и не занимают
@@ -1114,6 +1121,8 @@ function parseGrantedSpellDefs(entry: CompendiumEntry): GrantedSpellDef[] {
       original: (s.original ?? "").trim() || split.original,
       grantLevel: typeof s.grantLevel === "number" && s.grantLevel > 0 ? s.grantLevel : 1,
       outsideLimit: s.outsideLimit !== false,
+      freeCast: s.freeCast === true,
+      slotCircle: typeof s.slotCircle === "number" && s.slotCircle > 0 ? s.slotCircle : null,
     };
   });
 }
@@ -1130,7 +1139,8 @@ function parseGrantedSpellDefs(entry: CompendiumEntry): GrantedSpellDef[] {
 async function fetchGrantedSpells(
   grantedSpells: GrantedSpellDef[],
   sourceParentId: number,
-  systemId: number | null
+  systemId: number | null,
+  ability?: DndAbilityKey
 ): Promise<{ level: number; entry: DndSpellEntry }[]> {
   const results: { level: number; entry: DndSpellEntry }[] = [];
   let index: Map<string, CompendiumEntry> | null = null;
@@ -1167,11 +1177,24 @@ async function fetchGrantedSpells(
         prepared: 2,
         sourceParentId,
         outsideLimit: g.outsideLimit,
+        ...(g.freeCast ? { freeCast: true } : {}),
+        ...(ability ? { ability } : {}),
         ...spellSnapshotFromEntry(full),
       },
     });
   }
   return results;
+}
+
+// Долгий отдых возвращает бесплатные сотворения черт. Патч только с тем,
+// что изменилось, — у листа без таких заклинаний он пустой.
+export function restoreFreeCasts(
+  value: Pick<DndCharacterData, "cantrips" | "spellsByLevel">
+): Partial<Pick<DndCharacterData, "cantrips" | "spellsByLevel">> {
+  const reset = (s: DndSpellEntry) => (s.freeCastUsed ? { ...s, freeCastUsed: false } : s);
+  const any = [...value.cantrips, ...value.spellsByLevel.flat()].some((s) => s.freeCastUsed);
+  if (!any) return {};
+  return { cantrips: value.cantrips.map(reset), spellsByLevel: value.spellsByLevel.map((lvl) => lvl.map(reset)) };
 }
 
 // Strips every granted spell (any sourceParentId) from cantrips and every
@@ -1215,17 +1238,29 @@ function addGrantedSpells(
 // down (grants above the new level disappear) uniformly. Called after any
 // change to raceId, a class's subclassId, or a class's level.
 export async function recomputeGrantedSpells(
-  value: Pick<DndCharacterData, "raceId" | "classes" | "cantrips" | "spellsByLevel" | "spellSlotLevels" | "systemId">
+  value: Pick<DndCharacterData, "raceId" | "classes" | "cantrips" | "spellsByLevel" | "spellSlotLevels" | "systemId"> &
+    Partial<Pick<DndCharacterData, "feats">>
 ): Promise<{ cantrips: DndSpellEntry[]; spellsByLevel: DndSpellEntry[][]; spellSlotLevels: number }> {
+  // Бесплатное сотворение, уже потраченное, переживает пересчёт: иначе
+  // смена уровня возвращала бы точку без долгого отдыха.
+  const usedFree = new Set(
+    [...value.cantrips, ...value.spellsByLevel.flat()]
+      .filter((s) => s.sourceParentId != null && s.freeCastUsed)
+      .map((s) => `${s.sourceParentId}:${s.entryId}`)
+  );
   let { cantrips, spellsByLevel } = stripGrantedSpells(value.cantrips, value.spellsByLevel);
   let spellSlotLevels = value.spellSlotLevels;
 
-  async function grantFrom(entryId: number, characterLevel: number) {
+  async function grantFrom(entryId: number, characterLevel: number, opts: { topCircle?: number; ability?: DndAbilityKey } = {}) {
     try {
       const entry = await readResource<CompendiumEntry>(`/systems/entries/${entryId}`);
-      const eligible = parseGrantedSpellDefs(entry).filter((d) => d.grantLevel <= characterLevel);
+      const eligible = parseGrantedSpellDefs(entry).filter(
+        (d) => d.grantLevel <= characterLevel && (d.slotCircle == null || d.slotCircle <= (opts.topCircle ?? 0))
+      );
       if (eligible.length === 0) return;
-      const granted = await fetchGrantedSpells(eligible, entryId, value.systemId);
+      const granted = (await fetchGrantedSpells(eligible, entryId, value.systemId, opts.ability)).map((g) =>
+        usedFree.has(`${entryId}:${g.entry.entryId}`) ? { ...g, entry: { ...g.entry, freeCastUsed: true } } : g
+      );
       ({ cantrips, spellsByLevel, spellSlotLevels } = addGrantedSpells(
         { cantrips, spellsByLevel, spellSlotLevels },
         granted
@@ -1243,6 +1278,30 @@ export async function recomputeGrantedSpells(
     // сколько её ни вписывай в запись класса, перебор до неё не доходил.
     if (c.classId != null) await grantFrom(c.classId, c.level || 0);
     if (c.subclassId != null) await grantFrom(c.subclassId, c.level || 0);
+  }
+
+  // Черты (гриллинг черт 2026-09-24): «Затронутые», метки, «Адепты».
+  // «Адепты» дают заклинание круга N, когда у персонажа есть ячейки этого
+  // круга, — отсюда высший круг по таблицам классов.
+  const feats = (value.feats ?? []).filter((f) => f.entryId != null);
+  if (feats.length > 0) {
+    const sources: ClassSlotSource[] = [];
+    for (const c of value.classes) {
+      if (c.classId == null || !(c.level > 0)) continue;
+      const cls = await readResource<CompendiumEntry>(`/systems/entries/${c.classId}`).catch(() => null);
+      const sub = c.subclassId != null ? await readResource<CompendiumEntry>(`/systems/entries/${c.subclassId}`).catch(() => null) : null;
+      sources.push({
+        level: c.level,
+        progression: cls?.data.progression as ClassProgression | undefined,
+        subProgression: sub?.data.progression as ClassProgression | undefined,
+        roundUp: isRoundUpCaster(cls?.data as Record<string, unknown> | undefined),
+      });
+    }
+    const slots = computeSpellSlots(sources);
+    const topCircle = Math.max(highestCircle(slots.slots), slots.pact?.circle ?? 0);
+    for (const f of feats) {
+      await grantFrom(f.entryId as number, totalLevel, { topCircle, ability: f.choices?.spellAbility });
+    }
   }
 
   return { cantrips, spellsByLevel, spellSlotLevels };
@@ -1409,6 +1468,7 @@ function DndSpellLevelSection({
   onSpellsChange,
   used,
   onUsedChange,
+  onFreeCastToggle,
   preparedOnly,
   onCast,
   slotsLocked,
@@ -1428,6 +1488,8 @@ function DndSpellLevelSection({
   // (the max, only editable via onSlotsChange in edit mode).
   used?: number;
   onUsedChange?: (v: number) => void;
+  /** Погасить/вернуть бесплатное сотворение (черты) — индекс в `spells`. */
+  onFreeCastToggle?: (index: number) => void;
   preparedOnly?: boolean;
   /** Тап по названию — модалка использования (трата ячейки). */
   onCast?: (row: AttackRow) => void;
@@ -1634,6 +1696,20 @@ function DndSpellLevelSection({
           ) : s.outsideLimit && s.sourceParentId == null ? (
             <span className="dnd-outside-mark" title="Отметьте характеристику в правке раздела">чем колдует?</span>
           ) : null;
+          // Раз в долгий отдых без ячейки: тофу — есть или съедено.
+          const freeCast = s.freeCast ? (
+            <button
+              type="button"
+              className={`dnd-free-cast${s.freeCastUsed ? " is-used" : ""}`}
+              disabled={!onFreeCastToggle}
+              aria-pressed={!!s.freeCastUsed}
+              title={s.freeCastUsed ? "Бесплатное сотворение потрачено — вернётся после долгого отдыха" : "Можно сотворить 1 раз без ячейки"}
+              aria-label={`${s.name}: бесплатное сотворение ${s.freeCastUsed ? "потрачено" : "есть"}`}
+              onClick={() => onFreeCastToggle?.(realIndex)}
+            >
+              {s.freeCastUsed ? "без ячейки: 0" : "без ячейки: 1"}
+            </button>
+          ) : null;
           return (
             <div key={realIndex}>
               <div
@@ -1681,6 +1757,7 @@ function DndSpellLevelSection({
                       {abilityMark}
                     </span>
                   )}
+                  {freeCast}
                   {s.entryId ? (
                     <button
                       type="button"
@@ -1829,6 +1906,7 @@ function DndSpellsView({
   spellSlotsUsed,
   spellsByLevel,
   onUsedChange,
+  onFreeCastToggle,
   edit,
   systemId,
   onCantripsChange,
@@ -1846,6 +1924,8 @@ function DndSpellsView({
   spellSlotsUsed?: number[];
   spellsByLevel: DndSpellEntry[][];
   onUsedChange?: (level0idx: number, v: number) => void;
+  /** Бесплатное сотворение: круг (0 — заговоры) и индекс заклинания. */
+  onFreeCastToggle?: (level: number, index: number) => void;
   // Local per-tab edit toggle (see TabEditToggle/editingSpells in
   // DndCharacterView) — when set, this is otherwise the same view but with
   // add-spell/drag-drop/slot-count editing turned on directly, no need for
@@ -1888,6 +1968,7 @@ function DndSpellsView({
           showSlots={false}
           onSlotsChange={() => {}}
           onSpellsChange={edit && onCantripsChange ? onCantripsChange : () => {}}
+          onFreeCastToggle={onFreeCastToggle ? (idx) => onFreeCastToggle(0, idx) : undefined}
           onCast={onCast}
           color={color}
         />
@@ -1908,6 +1989,7 @@ function DndSpellsView({
           slotsLocked={slotsLockedCircles?.has(i + 1) ?? false}
           onSlotsChange={edit && onSlotsChange ? (v) => onSlotsChange(i, v) : () => {}}
           onSpellsChange={edit && onSpellsChange ? (v) => onSpellsChange(i, v) : () => {}}
+          onFreeCastToggle={onFreeCastToggle ? (idx) => onFreeCastToggle(i + 1, idx) : undefined}
           onCast={onCast}
           color={color}
         />
@@ -4676,7 +4758,8 @@ function weaponAttackRows(
     const upgraded = monkWeapon ? upgradeDamageDie(i.weaponDamage ?? "", martial.die) : null;
     const versatile = opts.die ? upgradeDamageDie(i.weaponDamage ?? "", opts.die) : null;
     const baseDamage = versatile ?? upgraded ?? i.weaponDamage;
-    const e = effectsOf(use);
+    // «Тяжёлое» — свойство оружия, а не хват: ставится здесь, для любой строки.
+    const e = effectsOf({ ...use, heavy: /тяж[её]л/.test(props) });
     // «Защитник»: перенесённое в КЗ уходит из атаки и урона (Q11).
     const shift = i.acShiftable ? Math.min(i.acShift ?? 0, i.magicBonus ?? 0) : 0;
     const magic = (i.magicBonus ?? 0) - shift;
@@ -7484,14 +7567,18 @@ function DndEquipmentPickerModal({
 
 function DndTraitsView({ value }: { value: DndCharacterData }) {
   const prefs = useDndPrefs();
-  const speeds = formatSpeed(value.speeds, prefs.distanceUnit);
+  // Скорость и сопротивления — посчитанные: черты («Подвижный» +10,
+  // «Портальный странник») доходят сюда эффектами (гриллинг черт 2026-09-24).
+  const sheet = deriveSheet(value);
+  const walk = sheet.walkSpeed.parts.length > 1 ? { ...value.speeds, walk: sheet.walkSpeed.value } : value.speeds;
+  const speeds = formatSpeed(walk, prefs.distanceUnit);
   const senses = value.sensesList
     .map((sn) => [sn.name, sn.distance].filter(Boolean).join(" "))
     .filter(Boolean)
     .join(", ");
   const defences: [string, string[]][] = [
     ["Уязвимости", value.damageVulnerabilities],
-    ["Сопротивления", value.damageResistances],
+    ["Сопротивления", sheet.damageResistances.map((r) => (r.source ? `${r.name} (${r.source})` : r.name))],
     ["Иммунитет к урону", value.damageImmunities],
     ["Иммунитет к состояниям", value.conditionImmunities],
   ];
@@ -9665,6 +9752,8 @@ function DndRestModal({
       receivedSpells: [],
       // 5.5: длинный отдых снимает один уровень истощения, а не всё сразу.
       exhaustion: Math.max(0, value.exhaustion - 1),
+      // Бесплатные сотворения черт («Посвящённый», «Затронутые», метки).
+      ...restoreFreeCasts(value),
     });
     onClose();
   }
@@ -10842,9 +10931,12 @@ export function DndCharacterView({
   // быть вовсе, и обнулять ему ячейки расчётом нельзя.
   const autoSlots = !value.spellSlotsManual && computedSlots.basis !== "none";
   const shownSlotPips = autoSlots ? computedSlots.slots : value.spellSlotPips;
+  // Круг, где лежат заклинания, виден и без ячеек: «Посвящённый» у Воина
+  // даёт заклинание 1 круга, а ячеек нет (гриллинг черт 2026-09-24).
+  const filledTop = value.spellsByLevel.reduce((top, lvl, i) => (lvl.length > 0 ? i + 1 : top), 0);
   const shownSlotLevels = autoSlots
-    ? Math.max(highestCircle(computedSlots.slots), value.spellSlotLevels)
-    : value.spellSlotLevels;
+    ? Math.max(highestCircle(computedSlots.slots), value.spellSlotLevels, filledTop)
+    : Math.max(value.spellSlotLevels, filledTop);
   // Таинственный арканум (тикет 03 warlock): уровень КОЛДУНА (не суммарный),
   // пики — строки с меткой arcanum в кругах 6–9. Пипсы кругов с арканумом
   // выводятся из самих пиков (1 заклинание = 1 использование) поверх обычных
@@ -12580,6 +12672,22 @@ export function DndCharacterView({
                       }
                     : undefined
                 }
+                onFreeCastToggle={
+                  onQuickUpdate
+                    ? (circle, idx) => {
+                        const flip = (s: DndSpellEntry) => ({ ...s, freeCastUsed: !s.freeCastUsed });
+                        if (circle === 0) {
+                          onQuickUpdate({ cantrips: value.cantrips.map((s, j) => (j === idx ? flip(s) : s)) });
+                        } else {
+                          onQuickUpdate({
+                            spellsByLevel: value.spellsByLevel.map((lvl, k) =>
+                              k === circle - 1 ? lvl.map((s, j) => (j === idx ? flip(s) : s)) : lvl
+                            ),
+                          });
+                        }
+                      }
+                    : undefined
+                }
                 onCantripsChange={onQuickUpdate ? (v) => onQuickUpdate({ cantrips: v }) : undefined}
                 onSlotsChange={
                   onQuickUpdate
@@ -12958,7 +13066,7 @@ export function DndCharacterView({
                   </div>
                 </div>
               ) : (
-                <DndTraitsView value={withGrantedSenses(value, getEntry)} />
+                <DndTraitsView value={withGrantedSenses(withLiveEffects(value, getEntry), getEntry)} />
               )}
               {draftFeatures ? (
                 <>
@@ -13009,6 +13117,12 @@ export function DndCharacterView({
                       onToggle={() => {
                         onQuickUpdate?.(draftFeatures);
                         setDraftFeatures(null);
+                        // Черту убрали или добавили — её выданные заклинания
+                        // («Туманный шаг» «Затронутого феями») пересчитываются.
+                        const ids = (list: DndFeature[]) => list.map((f) => f.entryId ?? "").join(",");
+                        if (onQuickUpdate && ids(draftFeatures.feats) !== ids(value.feats)) {
+                          void recomputeGrantedSpells({ ...value, feats: draftFeatures.feats }).then((spells) => onQuickUpdate(spells));
+                        }
                       }}
                     />
                     <button type="button" onClick={() => setDraftFeatures(null)}>
@@ -13029,6 +13143,9 @@ export function DndCharacterView({
                   </div>
                   <SbFeatureGroup title="Классовые особенности" values={liveFeatureGroups[0]} />
                   <SbFeatureGroup title="Черты" values={liveFeatureGroups[2]} />
+                  {/* Черта без сделанного выбора (+1, список, навыки) — строкой с
+                      кнопкой (гриллинг черт 2026-09-24, Q8, Q9). */}
+                  {onQuickUpdate && <FeatPending value={value} getEntry={getEntry} onApply={onQuickUpdate} />}
                   <SbFeatureGroup title="Особые умения" values={liveFeatureGroups[3]} />
                 </>
               )}
