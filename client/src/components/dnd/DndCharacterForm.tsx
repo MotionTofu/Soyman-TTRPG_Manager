@@ -9604,7 +9604,7 @@ function DndResourcesView({
         />
       ))}
       {stats.length > 0 && (
-        <div className="sb-entry">
+        <div className="sb-entry dnd-level-stats">
           {/* Показатели по уровню — тратить нечего, поэтому без дорожек. */}
           {stats.map((st) => (
             <div key={st.key} className="row" style={{ justifyContent: "space-between" }}>
