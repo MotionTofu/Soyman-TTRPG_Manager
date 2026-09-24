@@ -80,3 +80,43 @@ export function buildDuplicatePayload(original, name, characterUid) {
     archivedAt: null,
   };
 }
+
+// Card of the home library (grilling 2026-09-24): which catalog entries may
+// give the card its art, most specific first — subclass, class, species. The
+// portrait beats all of them and the card back ends the chain; both are the
+// caller's, since neither is a catalog entry.
+const isId = (v) => (typeof v === 'number' && Number.isFinite(v)) || (typeof v === 'string' && v !== '');
+export function cardArtIds(content, draft) {
+  if (content) {
+    const classes = Array.isArray(content.classes) ? content.classes : [];
+    return [...classes.map((c) => c?.subclassId), ...classes.map((c) => c?.classId), content.raceId].filter(isId);
+  }
+  if (draft && typeof draft === 'object') return [draft.subclassId, draft.classId, draft.speciesId].filter(isId);
+  return [];
+}
+
+// "Воин 3 · Плут 2 · Эльф": every class with its level (a multiclass needs
+// both), species last. Empty parts drop out instead of leaving a stray dot.
+export function cardCaption(content) {
+  const classes = (Array.isArray(content?.classes) ? content.classes : [])
+    .filter((c) => c?.className)
+    .map((c) => (c.level ? `${c.className} ${c.level}` : c.className));
+  return [...classes, content?.raceName].filter(Boolean).join(' · ');
+}
+
+// A draft knows ids only; names come from the catalog via nameOf.
+export function draftCaption(draft, nameOf) {
+  if (!draft || typeof draft !== 'object') return '';
+  return [draft.classId, draft.speciesId].filter(isId).map(nameOf).filter(Boolean).join(' · ');
+}
+
+// Wizard draft as stored by DndCharacterWizard, or null when absent/broken.
+export function parseWizardDraft(raw) {
+  if (typeof raw !== 'string' || !raw) return null;
+  try {
+    const v = JSON.parse(raw);
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : null;
+  } catch {
+    return null;
+  }
+}

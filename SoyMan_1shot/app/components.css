@@ -73,8 +73,8 @@ html[data-app="oneshot"] [data-ui="banner"][data-tone="hint"] {
   line-height: 1.5;
 }
 
-/* Визард сюда не входит: у него свой облик (wizard-skin.css). */
-html[data-app="oneshot"] :is(.oneshot-home, .oneshot-header)
+/* Визард сюда не входит: у него свой облик (wizard-skin.css), главная — тоже (home.css). */
+html[data-app="oneshot"] .oneshot-header
   :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
   border: 2px solid var(--ui-border);
   border-radius: var(--radius-sm);

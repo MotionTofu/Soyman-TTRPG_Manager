@@ -107,3 +107,22 @@ test('delete safety: shared catalogs stay, orphaned managed slices collect', () 
     ['slice-1'],
   );
 });
+
+test('card art: subclass, class, species — most specific first', async () => {
+  const { cardArtIds } = await import('../app/library.mjs');
+  const content = { classes: [{ classId: 5, subclassId: 51 }, { classId: 7, subclassId: null }], raceId: 9 };
+  assert.deepEqual(cardArtIds(content, null), [51, 5, 7, 9]);
+  assert.deepEqual(cardArtIds(null, { classId: 5, subclassId: null, speciesId: 9 }), [5, 9]);
+  assert.deepEqual(cardArtIds(null, null), []);
+  assert.deepEqual(cardArtIds({ classes: [], raceId: null }, null), []);
+});
+
+test('card caption: every class with level, species last', async () => {
+  const { cardCaption, draftCaption, parseWizardDraft } = await import('../app/library.mjs');
+  assert.equal(cardCaption({ classes: [{ className: 'Воин', level: 3 }, { className: 'Плут', level: 2 }], raceName: 'Эльф' }), 'Воин 3 · Плут 2 · Эльф');
+  assert.equal(cardCaption({ classes: [], raceName: '' }), '');
+  assert.equal(draftCaption({ classId: 1, speciesId: 2 }, (id) => ({ 1: 'Волшебник', 2: 'Человек' })[id]), 'Волшебник · Человек');
+  assert.equal(parseWizardDraft('{"step":"Черта"}').step, 'Черта');
+  assert.equal(parseWizardDraft('oops'), null);
+  assert.equal(parseWizardDraft('[1]'), null);
+});

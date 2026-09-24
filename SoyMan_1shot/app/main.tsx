@@ -26,6 +26,7 @@ import { parseCatalog } from './catalog.mjs';
 import { auditExport } from './export-audit.mjs';
 import { gmPayload, portableFileName, portablePayload, renderPortable } from './portable.mjs';
 import { Modal } from '../../client/src/components/Modal';
+import { LibraryCard, useCatalogMedia } from './home';
 import { QRCodeSVG } from 'qrcode.react';
 import { shouldNotifyForWaiting, shouldNotifyForInstalled, createControllerChangeHandler, applyUpdateSafely } from './pwa/update.mjs';
 import { readStorageStatus, requestPersistentStorage, shouldAdviseBackup, storageProtectionText } from './pwa/storage.mjs';
@@ -45,6 +46,7 @@ import './components.css';
 import './wizard.css';
 import './sheet.css';
 import './modals.css';
+import './home.css';
 
 applyTheme(findTheme('noir'));
 // Resumable level-up drafts (C2): one localStorage record per character,
@@ -471,31 +473,31 @@ function App() {
     setTimeout(() => URL.revokeObjectURL(url), 60000);
     setGmFile(null); setStatus('Файл для Мастера скачан — отправьте его в чат');
   }
-  async function exportHtml(forGm = false) {
-    setExporting(true); setError('');
+  async function exportHtml(forGm = false, target?: Character) {
+    setExporting(true); setError(''); if (target) setExportingFor(`${target.id}:${forGm ? 'gm' : 'html'}`);
     try {
-      const c = activeRef.current; if (!c?.content) return;
+      const c = target ?? activeRef.current; if (!c?.content) return;
       // Lazy UID backfill (phase B1.2): old records get their stable identity
       // on first export, persisted before the payload is built, so every
       // export of one character carries one characterUid.
       let source = c;
       if (!isCharacterUid(source.characterUid)) {
-        const saved = await saveCharacter({ ...source, characterUid: crypto.randomUUID(), revision: revision.current });
-        revision.current = saved.revision;
+        const saved = await saveCharacter({ ...source, characterUid: crypto.randomUUID(), revision: target ? source.revision : revision.current });
         source = { ...saved, revision: saved.revision };
-        activeRef.current = source; setActive(source);
+        if (target) void refreshCharacters();
+        else { revision.current = saved.revision; activeRef.current = source; setActive(source); }
       }
       const catalog = source.catalogKey ? (await getCatalog(source.catalogKey)) ?? null : null;
       const payload = forGm ? gmPayload(source, catalog) : portablePayload(source, catalog);
       const response = await fetch('/standalone-template.html');
       if (!response.ok) throw Error('Не удалось загрузить оболочку автономного чарника.');
       const html = renderPortable(await response.text(), payload);
-      if (forGm) { await shareGmFile(new File([html], portableFileName(displayName(source)), { type: 'text/html' })); return; }
+      if (forGm) { if (target) setGmFor(target.id); await shareGmFile(new File([html], portableFileName(displayName(source)), { type: 'text/html' })); return; }
       const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
       const link = document.createElement('a'); link.href = url; link.download = `OneShot-${source.id}.html`; link.click();
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (e) { setError((e as Error).message); }
-    finally { setExporting(false); }
+    finally { setExporting(false); setExportingFor(null); }
   }
   async function inspectExport() {
     try {
@@ -1267,6 +1269,27 @@ function App() {
   const [openMenu, setOpenMenu] = useState<number | null>(null);
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   const dndPrefs = useDndPrefs();
+  // Главная по макету (гриллинг 2026-09-24): архив — вкладка, экспорт — из
+  // меню карты; gmFor/exportingFor привязывают общий экспорт к своей карте.
+  const [libTab, setLibTab] = useState<'active' | 'archive'>('active');
+  const [gmFor, setGmFor] = useState<number | null>(null);
+  const [exportingFor, setExportingFor] = useState<string | null>(null);
+  const catalogMedia = useCatalogMedia(characters);
+  useEffect(() => {
+    if (openMenu === null) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!(event.target as Element).closest('.lib-menu, .lib-dots')) setOpenMenu(null);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpenMenu(null);
+    };
+    document.addEventListener('click', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('click', closeOnOutsideClick);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [openMenu]);
   useEffect(() => {
     if (!headerMenuOpen) return;
     const closeOnOutsideClick = (event: MouseEvent) => {
@@ -1343,36 +1366,37 @@ function App() {
     } catch (e) { setError((e as Error).message); }
     finally { setLibraryBusy(false); }
   }
-  function characterRow(c: Character, showArchived: boolean) {
-    return <div className={`oneshot-character${c.content ? '' : ' is-draft'}`} key={c.id}>
-      <a href={`/?character=${c.id}`}>
-        <span className="oneshot-character-art" aria-hidden="true">
-          {c.portrait && <img src={c.portrait} alt="" loading="lazy" />}
-          <span className="oneshot-character-type">{showArchived ? 'Архив' : c.content ? 'Готовый лист' : 'Черновик'}</span>
-        </span>
-        <span className="oneshot-character-body"><strong>{displayName(c)}</strong><span>{c.content ? 'Открыть чарник ↗' : 'Продолжить создание ↗'}</span></span>
-      </a>
-      <div className="oneshot-menu">
-        <button aria-label={`Действия: ${displayName(c)}`} aria-expanded={openMenu === c.id} disabled={libraryBusy} onClick={() => setOpenMenu(openMenu === c.id ? null : c.id)}>⋯</button>
-        {openMenu === c.id && <div className="oneshot-menu-list" role="menu">
-          <a role="menuitem" href={`/?character=${c.id}`}>Открыть</a>
-          {canDuplicate(c) && <button role="menuitem" disabled={libraryBusy} onClick={() => void duplicate(c.id)}>Создать копию</button>}
-          {showArchived
-            ? <button role="menuitem" disabled={libraryBusy} onClick={() => void restore(c.id)}>Восстановить</button>
-            : <button role="menuitem" disabled={libraryBusy} onClick={() => void archive(c.id)}>Архивировать</button>}
-          {syncCred && c.content && c.characterUid && <button role="menuitem" onClick={e => { modalReturnFocusRef.current = e.currentTarget.closest('.oneshot-menu')?.querySelector<HTMLButtonElement>(':scope > button') ?? null; setOpenMenu(null); void openShare(c); }}>Поделиться с мастером</button>}
-          <button role="menuitem" disabled={libraryBusy} onClick={e => { modalReturnFocusRef.current = e.currentTarget.closest('.oneshot-menu')?.querySelector<HTMLButtonElement>(':scope > button') ?? null; setDeleteTarget(c); setOpenMenu(null); }}>Удалить</button>
-        </div>}
-      </div>
-    </div>;
+  function libraryCard(c: Character, archived: boolean) {
+    const keepFocus = (e: { currentTarget: Element }) => { modalReturnFocusRef.current = e.currentTarget.closest('.lib-card')?.querySelector<HTMLButtonElement>('.lib-dots') ?? null; };
+    const busyExport = (kind: string) => exportingFor === `${c.id}:${kind}`;
+    const remove = <button role="menuitem" className="is-danger" disabled={libraryBusy} onClick={e => { keepFocus(e); setDeleteTarget(c); setOpenMenu(null); }}>Удалить…</button>;
+    const menu = archived ? <>
+      <button role="menuitem" disabled={libraryBusy} onClick={() => void restore(c.id)}>Вернуть из архива</button>
+      {remove}
+    </> : c.content ? <>
+      <a role="menuitem" href={`/?character=${c.id}`}>Открыть</a>
+      {gmFile && gmFor === c.id
+        ? <button role="menuitem" onClick={() => void shareGmFile(gmFile).catch(e => setError((e as Error).message))}>Файл готов — отправить Мастеру</button>
+        : <button role="menuitem" disabled={exporting} onClick={() => void exportHtml(true, c)}>{busyExport('gm') ? 'Собираем…' : 'Отправить Мастеру'}</button>}
+      <button role="menuitem" disabled={exporting} onClick={() => void exportHtml(false, c).then(() => setOpenMenu(null))}>{busyExport('html') ? 'Собираем…' : 'Скачать автономный HTML'}</button>
+      {canDuplicate(c) && <button role="menuitem" disabled={libraryBusy} onClick={() => void duplicate(c.id)}>Создать копию</button>}
+      <button role="menuitem" disabled={libraryBusy} onClick={() => void archive(c.id)}>В архив</button>
+      {syncCred && c.characterUid && <button role="menuitem" onClick={e => { keepFocus(e); setOpenMenu(null); void openShare(c); }}>Поделиться с мастером</button>}
+      {remove}
+    </> : <>
+      <a role="menuitem" href={`/?character=${c.id}`}>Продолжить создание</a>
+      <button role="menuitem" disabled={libraryBusy} onClick={() => void archive(c.id)}>В архив</button>
+      {remove}
+    </>;
+    return <LibraryCard key={c.id} character={c} media={catalogMedia} archived={archived} menuOpen={openMenu === c.id} onMenu={() => setOpenMenu(openMenu === c.id ? null : c.id)} menu={menu} />;
   }
   const visibleCharacters = activeCharacters(characters);
   const archivedList = archivedCharacters(characters);
   return <DndRuntimeContext.Provider value={{ allowDiceRolls: false, campaignConnected: false }}>
     <header className="oneshot-header">
       <a href="/" onClick={e => { if (status !== 'Сохранено на устройстве' && active?.content) { e.preventDefault(); setError('Дождитесь сохранения или скачайте резервную копию перед выходом.'); } }}>SoyMan_1shot</a>
-      <span className="muted oneshot-header-name">{active?.name || 'Ваши персонажи'}</span>
-      <span role="status">{status}</span>
+      {active && <span className="muted oneshot-header-name">{active.name}</span>}
+      <span role="status" className={!status && !active ? 'oneshot-header-note' : undefined}>{status || (active ? '' : 'Всё хранится в этом браузере')}</span>
       {active?.content && <>
         <button type="button" className="oneshot-header-toggle" aria-label="Дополнительные действия" aria-expanded={headerMenuOpen} aria-controls="oneshot-header-options" onClick={() => setHeaderMenuOpen(v => !v)}>⋯</button>
         <div id="oneshot-header-options" className="oneshot-header-options" data-open={headerMenuOpen}>
@@ -1482,21 +1506,33 @@ function App() {
       })()}
     </Modal>}
     {error && <Banner>{error}</Banner>}
-    {!ready ? <p className="oneshot-home">Открываем локальные данные…</p> : active?.content ? <div className="oneshot-sheet"><div className="fp-page-backdrop" aria-hidden="true" /><DndCharacterView key={active.id} value={active.content} portraitUrl={active.portrait} onQuickUpdate={update} onLevelUpApply={applyLevelUp} syncTabToUrl levelUpDraft={{ identity: { characterId: active.id, characterUid: active.characterUid ?? null, catalogKey: active.catalogKey }, initial: loadLevelUpDraft(active.id), onChange: saveLevelUpDraft, onClear: () => clearLevelUpDraft(active.id) }} onSheetBack={() => { if (status === 'Сохранено на устройстве') location.assign('/'); }} /></div> : <main className="oneshot-home">
-      <header className="oneshot-home-intro">
-        <div className="oneshot-home-intro-copy">
-        <p className="oneshot-home-kicker">SoyMan_1shot / библиотека</p>
-        <h1>Твои персонажи</h1>
-        <p>Создайте героя в визарде или заполните пустой лист вручную. Персонажи сохраняются в этом браузере.</p>
-        </div>
-        <div className="oneshot-home-counts" aria-label="Состав библиотеки"><span>Активных <b>{visibleCharacters.length}</b></span><span>В архиве <b>{archivedList.length}</b></span></div>
-      </header>
-      <div className="oneshot-home-grid">
-      <div className="oneshot-home-main">
-      <section className="oneshot-home-create"><p className="oneshot-section-index">01 / Создание</p><h2>Новый персонаж</h2><label className="oneshot-name-field">Имя<input value={name} onChange={e => setName(e.target.value)} maxLength={100} placeholder="Как зовут героя?" /></label><ActionRow><Button variant="primary" disabled={busy} onClick={() => void create()}>Создать через визард</Button><Button disabled={busy} onClick={() => void create(true)}>Открыть пустой лист</Button></ActionRow><p className="oneshot-create-hint">Два пути: пошаговое создание или свободное заполнение листа.</p>{managed === 'working' && !catalogKey && <p className="muted">Подготавливаем игровые данные…</p>}{managed === 'failed' && !catalogKey && <p className="muted">Для первого создания персонажа нужно один раз загрузить игровые данные. <button onClick={retryManaged}>Повторить</button></p>}{media === 'working' && <p className="muted">Загружаем изображения…</p>}</section>
-      <section className="oneshot-home-library"><p className="oneshot-section-index">02 / Библиотека</p><h2>Сохранённые персонажи</h2>{!visibleCharacters.length && <p className="muted">Здесь появятся ваши персонажи и незавершённые черновики.</p>}{visibleCharacters.map(c => characterRow(c, false))}<div className="oneshot-library-imports"><button onClick={() => restoreFile.current?.click()}>Восстановить из копии</button><button disabled={busy} onClick={() => portableFile.current?.click()}>Импортировать персонажа</button></div>{archivedList.length > 0 && <details className="oneshot-archive"><summary>Архив ({archivedList.length})</summary>{archivedList.map(c => characterRow(c, true))}</details>}<input ref={portableFile} hidden type="file" accept=".html,text/html" onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void importPortableFile(file); }} /><input ref={restoreFile} hidden type="file" accept=".json,application/json" onChange={async e => { const file = e.target.files?.[0]; if (!file) return; try { const data = await readFile(file); if (data.format !== 'soyman-1shot-backup' || data.version !== 1) throw Error('Нужна резервная копия OneShot'); const content = parseCharacterContent(data.character?.content); const key = data.catalog ? await saveCatalog(parseCatalog(data.catalog)) : null; const c = await createCharacter(content.characterName || 'Восстановленный персонаж', key); const portrait = typeof data.character?.portrait === 'string' && /^data:image\/(png|jpeg|webp);base64,/.test(data.character.portrait) ? data.character.portrait : null; await saveCharacter({ ...c, content, portrait, characterUid: isCharacterUid(data.character?.characterUid) ? data.character.characterUid : c.characterUid }); location.assign(`/?character=${c.id}`); } catch (err) { setError((err as Error).message); } e.target.value = ''; }} /></section>
+    {!ready ? <p className="oneshot-home">Открываем локальные данные…</p> : active?.content ? <div className="oneshot-sheet"><div className="fp-page-backdrop" aria-hidden="true" /><DndCharacterView key={active.id} value={active.content} portraitUrl={active.portrait} onQuickUpdate={update} onLevelUpApply={applyLevelUp} syncTabToUrl levelUpDraft={{ identity: { characterId: active.id, characterUid: active.characterUid ?? null, catalogKey: active.catalogKey }, initial: loadLevelUpDraft(active.id), onChange: saveLevelUpDraft, onClear: () => clearLevelUpDraft(active.id) }} onSheetBack={() => { if (status === 'Сохранено на устройстве') location.assign('/'); }} /></div> : <main className="oneshot-home lib">
+      <div className="lib-top"><div className="lib-head">
+        <p className="lib-kicker">Библиотека</p>
+        <h1 className="lib-title">Твои персонажи</h1>
       </div>
-      <aside className="oneshot-home-aside"><details><summary>Инструменты и данные</summary>
+      <div className="lib-seg" role="group" aria-label="Состав библиотеки">
+        <button type="button" aria-pressed={libTab === 'active'} onClick={() => setLibTab('active')}>Активные <b>{visibleCharacters.length}</b></button>
+        <button type="button" aria-pressed={libTab === 'archive'} onClick={() => setLibTab('archive')}>Архив <b>{archivedList.length}</b></button>
+      </div></div>
+      {libTab === 'active' && <div className="lib-new-wrap"><section className="lib-new" aria-label="Новый персонаж">
+        <h2 className="lib-new-title">Новый персонаж</h2>
+        <label className="lib-name"><span>Имя</span><input value={name} onChange={e => setName(e.target.value)} maxLength={100} placeholder="Как зовут героя?" /></label>
+        <span className="lib-primary-shadow"><button type="button" className="lib-primary" disabled={busy} onClick={() => void create()}>Создать через визард<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg></button></span>
+        <button type="button" className="lib-blank" disabled={busy} onClick={() => void create(true)}>или открыть пустой лист</button>
+        {managed === 'working' && !catalogKey && <p className="muted">Подготавливаем игровые данные…</p>}{managed === 'failed' && !catalogKey && <p className="muted">Для первого создания персонажа нужно один раз загрузить игровые данные. <button onClick={retryManaged}>Повторить</button></p>}{media === 'working' && <p className="muted">Загружаем изображения…</p>}
+      </section></div>}
+      <div className="lib-cards">
+        {(libTab === 'active' ? visibleCharacters : archivedList).map(c => libraryCard(c, libTab === 'archive'))}
+        {libTab === 'active' && !visibleCharacters.length && <div className="lib-empty">Здесь появятся твои персонажи</div>}
+        {libTab === 'archive' && !archivedList.length && <p className="lib-empty-note">Архив пуст.</p>}
+      </div>
+      <footer className="lib-foot">
+        <button type="button" className="lib-btn" onClick={() => restoreFile.current?.click()}>Восстановить из копии</button>
+        <button type="button" className="lib-btn" disabled={busy} onClick={() => portableFile.current?.click()}>Импортировать персонажа</button>
+        <p className="lib-note">Автономный HTML и «Отправить Мастеру» — в меню «⋯» у карты и в открытом листе.</p>
+        <input ref={portableFile} hidden type="file" accept=".html,text/html" onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void importPortableFile(file); }} /><input ref={restoreFile} hidden type="file" accept=".json,application/json" onChange={async e => { const file = e.target.files?.[0]; if (!file) return; try { const data = await readFile(file); if (data.format !== 'soyman-1shot-backup' || data.version !== 1) throw Error('Нужна резервная копия OneShot'); const content = parseCharacterContent(data.character?.content); const key = data.catalog ? await saveCatalog(parseCatalog(data.catalog)) : null; const c = await createCharacter(content.characterName || 'Восстановленный персонаж', key); const portrait = typeof data.character?.portrait === 'string' && /^data:image\/(png|jpeg|webp);base64,/.test(data.character.portrait) ? data.character.portrait : null; await saveCharacter({ ...c, content, portrait, characterUid: isCharacterUid(data.character?.characterUid) ? data.character.characterUid : c.characterUid }); location.assign(`/?character=${c.id}`); } catch (err) { setError((err as Error).message); } e.target.value = ''; }} />
+      <details className="lib-tools"><summary>Инструменты и данные</summary>
         {diag && <p className="muted">Игровые данные{diag.version ? `: версия ${diag.version}` : ''} · установлено версий: {diag.count}</p>}
         <p><button onClick={() => importFile.current?.click()}>Импортировать справочник вручную</button><input hidden ref={importFile} type="file" accept=".json,application/json" onChange={async e => { const file = e.target.files?.[0]; if (!file) return; try { await saveCatalog(parseCatalog(await readFile(file))); location.reload(); } catch (err) { setError((err as Error).message); } e.target.value = ''; }} /></p>
         {import.meta.env.DEV && <p><button onClick={async () => { try { const response = await fetch('/__local/catalog'); if (!response.ok) throw Error('Локальная копия справочника ещё не подготовлена'); await saveCatalog(parseCatalog(await response.json())); location.reload(); } catch (e) { setError((e as Error).message); } }}>Подключить локальный справочник SoyMan</button></p>}
@@ -1523,8 +1559,7 @@ function App() {
           {syncError && <Banner as="p">{syncError}</Banner>}
         </section>}
       </details>
-      <p className="muted">Автономный HTML можно скачать из листа персонажа. Изменения в копии сохраняются повторным скачиванием. Резервная копия JSON содержит лист и игровые данные.</p></aside>
-      </div>
+      </footer>
     </main>}
     {wizard && active && <DndCharacterWizard ownerType="character" ownerId={active.id} ownerName={active.name} initialSystemId={active.catalogKey ? 1 : null} visualVariant="oneshot" onDone={() => location.reload()} onCancel={() => location.assign('/')} />}
     <SaveNotices />

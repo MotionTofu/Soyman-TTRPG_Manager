@@ -27,3 +27,8 @@ export function buildDuplicatePayload(
   name: string,
   characterUid: string,
 ): DuplicatePayload;
+export function cardArtIds(content: import('@shared/dnd/types').DndCharacterData | null | undefined, draft?: WizardDraft | null): Array<number | string>;
+export function cardCaption(content: import('@shared/dnd/types').DndCharacterData | null | undefined): string;
+export function draftCaption(draft: WizardDraft | null | undefined, nameOf: (id: number | string) => string | undefined): string;
+export interface WizardDraft { step?: unknown; classId?: unknown; subclassId?: unknown; speciesId?: unknown; [key: string]: unknown }
+export function parseWizardDraft(raw: string | null | undefined): WizardDraft | null;
