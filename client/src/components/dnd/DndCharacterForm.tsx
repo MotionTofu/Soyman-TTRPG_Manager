@@ -3649,8 +3649,10 @@ function DndEquipmentQuickView({
       {filtering && visibleSections.length === 0 && (
         <p className="muted">Ничего не нашлось — ослабьте поиск или фильтр.</p>
       )}
-      {/* Пустая вкладка (§1.11): не «пустоту», а приглашение с действием. */}
-      {!filtering && summary.totalItems === 0 && sections.length > 0 ? (
+      {/* Пустая вкладка (§1.11): не «пустоту», а приглашение с действием.
+          Пока открыта форма «+ Свой», приглашение уступает место разделам —
+          иначе форма, которая живёт в разделе, не появлялась вовсе. */}
+      {!filtering && summary.totalItems === 0 && sections.length > 0 && addingSection === null ? (
         <div className="sb-entry">
           <p className="muted" style={{ margin: "0 0 8px" }}>
             Имущества пока нет — возьмите из компендиума или запишите своё.
@@ -3787,59 +3789,52 @@ function DndEquipmentQuickView({
                       })()}
                     </div>
                     {(() => {
+                      // Количество и трата — одна кнопка (макет 2026-09-25):
+                      // «×3» рядом с отдельным «−» читались как два минуса.
+                      // Тап тратит один: тратят за столом, пополняют в меню.
                       // Правая клетка держит своё место даже пустой: иначе
                       // имена соседних строк разъезжаются по ширине.
                       const qty = String(item.qty ?? "").trim();
                       if (item.chargesMax) {
                         return (
-                          <div className="dnd-item-rt">
-                            <div className="dnd-item-rt-top">
+                          <button
+                            type="button"
+                            className="dnd-item-rt dnd-spend-btn"
+                            aria-label={`${item.name || "Предмет"}: заряды ${item.chargesLeft ?? "?"} из ${item.chargesMax} — потратить заряд`}
+                            title="Потратить заряд"
+                            disabled={(item.chargesLeft ?? 0) <= 0}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              bumpCharges(si, ii, -1);
+                            }}
+                          >
+                            <span className="dnd-item-rt-top">
                               {item.chargesLeft ?? "?"}/{item.chargesMax}
-                            </div>
-                            <div className="dnd-item-rt-bot">заряды</div>
-                          </div>
+                            </span>
+                            <span className="dnd-item-rt-bot">заряды · −1</span>
+                          </button>
                         );
                       }
                       if (qty !== "") {
                         return (
-                          <div className="dnd-item-rt">
-                            <div className="dnd-item-rt-top">×{qty}</div>
-                            <div className="dnd-item-rt-bot">{isRationRow(item) ? "дня" : "шт."}</div>
-                          </div>
+                          <button
+                            type="button"
+                            className="dnd-item-rt dnd-spend-btn"
+                            aria-label={`${item.name || "Предмет"}: ${qty} — использовать, потратить один`}
+                            title="Использовать — потратить 1"
+                            disabled={qty === "0"}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              bumpQty(si, ii, -1);
+                            }}
+                          >
+                            <span className="dnd-item-rt-top">{qty}</span>
+                            <span className="dnd-item-rt-bot">{isRationRow(item) ? "дня" : "шт."} · −1</span>
+                          </button>
                         );
                       }
                       return <div className="dnd-item-rt" />;
                     })()}
-                    {/* Единственная кнопка строки — трата. Пополнение ушло
-                        в меню: тратят за столом, пополняют в городе. */}
-                    {item.chargesMax ? (
-                      <button
-                        type="button"
-                        className="comp-mini dnd-spend-btn"
-                        aria-label={`${item.name || "Предмет"}: потратить заряд`}
-                        title="Потратить заряд"
-                        disabled={(item.chargesLeft ?? 0) <= 0}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          bumpCharges(si, ii, -1);
-                        }}
-                      >
-                        −
-                      </button>
-                    ) : String(item.qty ?? "").trim() !== "" ? (
-                      <button
-                        type="button"
-                        className="comp-mini dnd-spend-btn"
-                        aria-label={`${item.name || "Предмет"}: использовать, потратить один`}
-                        title="Использовать — потратить 1 шт."
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          bumpQty(si, ii, -1);
-                        }}
-                      >
-                        −
-                      </button>
-                    ) : null}
                     {/* Переданное чужой репликой: пока не принято, строка
                         стоит с пометкой — это и есть всё «уведомление»,
                         которого в приложении нет (R2/W8). */}

@@ -928,3 +928,41 @@ body.sheet-fullscreen {
 .dnd-tab-edit-toggle > svg {
   display: none;
 }
+
+/* Снаряжение: счёт и трата — одна кнопка (макет 2026-09-25). */
+button.dnd-item-rt.dnd-spend-btn {
+  width: 64px;
+  min-height: 48px;
+  padding: 2px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  border: 2px solid var(--skin-ink);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--skin-ink);
+  text-align: center;
+  cursor: pointer;
+}
+button.dnd-item-rt.dnd-spend-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+button.dnd-item-rt.dnd-spend-btn .dnd-item-rt-top {
+  font-family: var(--font-ui);
+  font-size: 19px;
+  font-variant-numeric: tabular-nums;
+}
+button.dnd-item-rt.dnd-spend-btn .dnd-item-rt-bot {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.dnd-row-menu-btn {
+  font-size: 26px;
+}
