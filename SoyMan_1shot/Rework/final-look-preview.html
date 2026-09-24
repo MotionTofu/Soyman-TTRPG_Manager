@@ -12,19 +12,24 @@
     @font-face { font-family: Steamy; src: url("../../client/public/fonts/Steamy.otf") format("opentype"); font-display: swap; }
     :root { --ink:#171717; --paper:#f0ede4; --acid:#f3ff3a; --pink:#ff3e91; --muted:#595650; }
     * { box-sizing:border-box; }
-    body { position:relative; min-height:100vh; margin:0; color:var(--ink); background:#e7e2d6 url("../assets/fantasy-punk/textures/paper-tile.webp") repeat; font:16px/1.35 Arial, sans-serif; }
+    body { position:relative; min-height:100vh; margin:0; overflow-x:clip; color:var(--ink); background:#e7e2d6 url("../assets/fantasy-punk/textures/paper-tile.webp") repeat; font:16px/1.35 Arial, sans-serif; }
     body::before { content:""; position:fixed; top:62px; right:0; width:min(34vw,440px); height:300px; background:url("../assets/fantasy-punk/decorative/frames/halftone-corner-large.webp") right top/contain no-repeat; transform:scaleX(-1); opacity:.72; pointer-events:none; }
     body::after { content:""; position:fixed; bottom:0; left:0; width:min(24vw,280px); height:180px; background:url("../assets/fantasy-punk/decorative/markers/patch-halftone-rough.webp") left bottom/contain no-repeat; transform:rotate(180deg); opacity:.43; pointer-events:none; }
     button { font:inherit; cursor:pointer; }
     button:focus-visible { outline:3px solid #b10058; outline-offset:3px; }
-    .top { position:relative; z-index:10; min-height:62px; display:flex; align-items:center; gap:24px; padding:9px max(24px,calc((100vw - 1500px)/2)); color:var(--paper); background:var(--ink) url("../assets/fantasy-punk/textures/ink-surface.webp") repeat; border-bottom:3px solid var(--acid); }
-    .brand { font:700 31px/1 Georgia,serif; letter-spacing:-.06em; white-space:nowrap; }
-    .brand em { display:inline-block; margin-left:6px; color:var(--acid); font:29px/1 Steamy,Punk,cursive; font-style:normal; letter-spacing:0; transform:rotate(-4deg); }
+    .top { position:relative; z-index:10; min-height:62px; display:flex; align-items:center; gap:24px; padding:4px max(24px,calc((100vw - 1500px)/2)); color:var(--paper); background:var(--ink) url("../assets/fantasy-punk/textures/ink-surface.webp") repeat; border-bottom:3px solid var(--acid); }
+    .brand { display:block; flex:none; width:244px; height:58px; }
+    .brand img { display:block; width:100%; height:100%; }
     .saved { margin-left:auto; color:var(--acid); font-size:12px; font-weight:800; text-transform:uppercase; white-space:nowrap; }
     .saved-short { display:none; }
     .utility { position:relative; flex:none; }
-    .menu-toggle { display:grid; place-items:center; width:44px; height:44px; padding:0 0 9px; border:2px solid var(--acid); color:var(--acid); background:transparent; font:32px/1 Arial,sans-serif; }
-    .menu-toggle:hover,.menu-toggle[aria-expanded="true"] { color:var(--ink); background:var(--acid); }
+    .menu-toggle { display:flex; align-items:center; justify-content:center; gap:5px; width:44px; height:44px; padding:0; border:0; background:transparent; }
+    .menu-toggle::before { content:""; position:absolute; inset:13px 2px 8px; background:url("../assets/fantasy-punk/decorative/markers/marker-acid-small.webp") center/contain no-repeat; opacity:0; transform:rotate(-3deg); transition:opacity .15s; pointer-events:none; }
+    .menu-dot { position:relative; z-index:1; width:6px; height:6px; border-radius:50%; background:var(--paper); box-shadow:1px 1px 0 var(--pink); }
+    .menu-dot:nth-child(2) { width:5px; height:5px; transform:translateY(-2px); }
+    .menu-dot:nth-child(3) { transform:translateY(1px); }
+    .menu-toggle:hover::before,.menu-toggle[aria-expanded="true"]::before { opacity:1; }
+    .menu-toggle:hover .menu-dot,.menu-toggle[aria-expanded="true"] .menu-dot { background:var(--ink); box-shadow:none; }
     .utility-menu { position:absolute; top:calc(100% + 12px); right:0; width:min(310px,calc(100vw - 24px)); padding:6px; border:3px solid var(--ink); background:var(--paper) url("../assets/fantasy-punk/textures/paper-panel.webp") repeat; box-shadow:6px 6px 0 var(--acid); color:var(--ink); }
     .utility-menu[hidden] { display:none; }
     .utility-menu::before { content:""; position:absolute; top:-11px; right:13px; width:16px; height:16px; transform:rotate(45deg); border-top:3px solid var(--ink); border-left:3px solid var(--ink); background:var(--paper); }
@@ -42,8 +47,11 @@
     .portrait { position:relative; height:380px; overflow:hidden; background:#180c18 url("./assets/character-portrait-duo-v2.png") center 25%/cover no-repeat; }
     .portrait::before { content:""; position:absolute; z-index:1; top:1px; left:8px; right:8px; height:14px; background:url("../assets/fantasy-punk/decorative/dividers/divider-rough-paper-long.webp") center top/100% 100% no-repeat; pointer-events:none; }
     .portrait::after { content:""; position:absolute; inset:66% 0 0; background:linear-gradient(transparent 0%,rgba(240,237,228,.66) 34%,var(--paper) 100%); pointer-events:none; }
-    .portrait-stamp { position:absolute; z-index:2; top:13px; left:14px; width:54px; height:54px; background:url("../assets/fantasy-punk/decorative/frames/card-corner-crescent.webp") center/contain no-repeat; }
-    .portrait-sun { position:absolute; z-index:2; top:15px; right:15px; display:grid; place-items:center; width:48px; height:48px; border:3px double var(--paper); border-radius:50%; color:var(--acid); background:var(--ink); font:31px/1 Georgia,serif; text-shadow:2px 1px var(--pink); }
+    .portrait-token { position:absolute; z-index:5; top:12px; display:grid; place-items:center; width:48px; height:48px; padding:2px; border:0; border-radius:50%; background:rgba(23,23,23,.6); }
+    .portrait-token img { display:block; width:100%; height:100%; object-fit:contain; }
+    .rest-token { left:12px; }
+    .inspiration-token { right:12px; }
+    .portrait-token:hover { background:var(--ink); outline:2px solid var(--acid); }
     .identity { position:absolute; z-index:2; left:20px; right:16px; bottom:12px; }
     .identity h1 { margin:0; font:clamp(35px,3.2vw,53px)/.95 Punk,Georgia,serif; text-transform:uppercase; text-shadow:1px 1px 0 var(--paper); }
     .identity p { margin:7px 0 0; font-size:13px; font-weight:800; text-transform:uppercase; }
@@ -65,6 +73,11 @@
     .spotlight { min-height:52px; margin-bottom:4px; padding:5px 7px 5px 11px; border-left:3px solid var(--acid); background:rgba(23,23,23,.06); }
     .spotlight strong { display:block; font:700 18px/1.1 Oswald,'Arial Narrow',sans-serif; }
     .spotlight span { display:block; margin-top:3px; overflow:hidden; color:var(--muted); font:13px/1.2 Oswald,'Arial Narrow',sans-serif; white-space:nowrap; text-overflow:ellipsis; }
+    .companions { display:flex; align-items:center; gap:10px; min-height:58px; margin:0 0 0; padding:8px 12px 10px; border-top:1px solid rgba(23,23,23,.5); background:rgba(23,23,23,.035); }
+    .companion-add { display:grid; place-items:center; flex:none; width:42px; height:42px; padding:1px; border:1px solid var(--ink); background:var(--paper); }
+    .companion-add img { display:block; width:100%; height:100%; object-fit:contain; }
+    .companion-add:hover { outline:2px solid var(--acid); }
+    .companions-label { font:600 13px/1 Oswald,'Arial Narrow',sans-serif; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
     .fold { display:none; position:absolute; z-index:5; bottom:0; right:0; width:48px; height:48px; border:0; background:transparent; }
     .fold::before { content:""; position:absolute; inset:0; background:var(--ink); clip-path:polygon(100% 0,100% 100%,0 100%); pointer-events:none; }
     .fold::after { content:"↶"; position:absolute; right:2px; bottom:0; color:var(--paper); font:bold 23px/1 Arial,sans-serif; transform:rotate(-35deg); pointer-events:none; }
@@ -105,7 +118,7 @@
     .spell mark { padding:1px 5px; background:var(--acid); color:var(--ink); font-size:10px; font-weight:800; text-transform:uppercase; }
     .star { font-size:23px; text-align:center; }
     @media(max-width:900px) {
-      .top { gap:10px; padding:9px 15px; }
+      .top { gap:10px; padding:4px 15px; }
       .saved { font-size:10px; }
       .sheet { grid-template-columns:minmax(0,1fr); padding:18px 12px 30px; max-width:540px; }
       .fold { display:block; }
@@ -113,8 +126,7 @@
       .work { min-height:0; }
     }
     @media(max-width:430px) {
-      .brand { font-size:25px; }
-      .brand em { font-size:24px; }
+      .brand { width:195px; height:50px; }
       .saved { font-size:11px; }
       .saved-long { display:none; }
       .saved-short { display:inline; }
@@ -135,19 +147,23 @@
     }
     @media(max-width:360px) {
       .saved { display:none; }
+      .utility { margin-left:auto; }
+      .utility-menu { position:fixed; top:62px; right:12px; width:calc(100% - 24px); }
+      .utility-menu::before { right:17px; }
     }
   </style>
 </head>
 <body>
-  <header class="top"><div class="brand">OneShot <em>SoyMan</em></div><div class="saved"><span class="saved-long">● Сохранено на устройстве</span><span class="saved-short">● Сохранено</span></div><div class="utility"><button class="menu-toggle" id="menu-toggle" type="button" aria-label="Действия с листом" aria-expanded="false" aria-controls="utility-menu">⋯</button><div class="utility-menu" id="utility-menu" aria-label="Действия с листом" hidden><p>Действия с листом</p><button type="button">Скачать резервную копию</button><button type="button">Скачать автономный HTML</button><button type="button">Проверить состав</button><button type="button">Отправить мастеру</button></div></div></header>
+  <header class="top"><div class="brand"><img src="./assets/logo-soyman-1shot-v1.png" alt="SoyMan_1shot"></div><div class="saved"><span class="saved-long">● Сохранено на устройстве</span><span class="saved-short">● Сохранено</span></div><div class="utility"><button class="menu-toggle" id="menu-toggle" type="button" aria-label="Действия с листом" aria-expanded="false" aria-controls="utility-menu"><span class="menu-dot"></span><span class="menu-dot"></span><span class="menu-dot"></span></button><div class="utility-menu" id="utility-menu" aria-label="Действия с листом" hidden><p>Действия с листом</p><button type="button">Скачать резервную копию</button><button type="button">Скачать автономный HTML</button><button type="button">Проверить состав</button><button type="button">Отправить мастеру</button></div></div></header>
   <main class="sheet">
     <section class="card" id="preview-card" aria-label="Карта персонажа">
       <div class="card-front">
-        <div class="portrait"><span class="portrait-stamp" aria-hidden="true"></span><span class="portrait-sun" aria-hidden="true">✴</span><div class="identity"><h1>Кэрри</h1><p><b>3</b> Артефактор · Картограф<br>Калдатар · Мудрец · БМ +2</p></div></div>
+        <div class="portrait"><button class="portrait-token rest-token" type="button" aria-label="Отдых" title="Отдых"><img src="../../client/public/tokens/rest.webp" alt=""></button><button class="portrait-token inspiration-token" type="button" aria-label="Вдохновение" title="Вдохновение"><img src="../../client/public/tokens/inspiration.webp" alt=""></button><div class="identity"><h1>Кэрри</h1><p><b>3</b> Артефактор · Картограф<br>Калдатар · Мудрец · БМ +2</p></div></div>
         <div class="vitals"><div class="die"><span class="die-shape">12</span><small>КЗ</small></div><div class="die"><span class="die-shape">24</span><small>Хиты</small></div><div class="die"><span class="die-shape">+2</span><small>Инициатива</small></div><div class="die"><span class="die-shape">10</span><small>Пасс. воспр.</small></div><div class="die"><span class="die-shape">30</span><small>Скорость</small></div></div>
         <div class="statuses"><span>Состояния <strong>Нет</strong></span><span>Концентрация <strong>—</strong></span><span>Истощение <strong>0</strong></span></div>
         <div class="abilities"><div class="ability"><span class="die-shape">+2</span><small>СИЛ</small></div><div class="ability"><span class="die-shape">+2</span><small>ЛОВ</small></div><div class="ability"><span class="die-shape">+2</span><small>ТЕЛ</small></div><div class="ability"><span class="die-shape">+1</span><small>ИНТ</small></div><div class="ability"><span class="die-shape">+0</span><small>МДР</small></div><div class="ability"><span class="die-shape">−1</span><small>ХАР</small></div></div>
         <div class="spotlights"><div class="spotlight"><strong>Убежище</strong><span>СП Мдр 11 · Защита · Вы защищаете… · 30 футов</span></div><div class="spotlight"><strong>Меткий удар</strong><span>АТК +3 · 1к6 Излучение · На себя</span></div></div>
+        <div class="companions"><button class="companion-add" type="button" aria-label="Добавить спутника" title="Добавить спутника"><img src="../../client/public/tokens/familiar.webp" alt=""></button><span class="companions-label">Спутники</span></div>
       </div>
       <div class="card-back"><h2>Входящие</h2><div class="back-sub">Кэрри · новых нет</div><section><p>Пока тихо — Мастер ещё ничего не прислал.</p></section><section><h3>Передачи</h3><p>Предметов и монет в пути нет.</p></section><section><h3>Постер персонажа</h3><span class="back-action">Скачать постер (PNG)</span><span class="back-action">Поделиться</span></section></div>
       <button class="fold" id="flip" type="button" aria-label="Перевернуть карту: входящие, передачи, постер" aria-pressed="false"></button>
