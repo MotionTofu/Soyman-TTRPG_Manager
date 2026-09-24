@@ -4,9 +4,13 @@ import { readResource } from "../../data/imperative";
 import { Modal } from "../Modal";
 import { MentionText } from "../mentions/MentionText";
 import { CardPicture, CardScroll, useCardEntry, type CardOption } from "./DndCards";
-import setPackArt from "../../assets/wizard/set-pack.svg";
-import setChestArt from "../../assets/wizard/set-chest.svg";
 import "./wizard-mobile.css";
+import "./wizard-skin.css";
+
+// Арт наборов и прочие ассеты облика визарда — в public/ui/wizard (OneShot
+// берёт public из client).
+const setPackArt = "/ui/wizard/set-pack.webp";
+const setChestArt = "/ui/wizard/set-chest.webp";
 
 /**
  * Детали мобильного визарда (гриллинг 2026-09-24): шторка снизу, список со
@@ -79,9 +83,11 @@ export function EntrySheet({
       onClose={onClose}
       actions={
         action && (
-          <button type="button" className="primary wz-wide-btn" disabled={action.disabled} onClick={action.onClick}>
-            {action.label}
-          </button>
+          <span className="wz-shadow">
+            <button type="button" className="primary wz-wide-btn" disabled={action.disabled} onClick={action.onClick}>
+              {action.label}
+            </button>
+          </span>
         )
       }
     >
@@ -223,6 +229,7 @@ export function CardRibbon({
   searchPlaceholder,
   noteFor,
   pickDisabled,
+  aside,
 }: {
   systemId: number | null;
   options: CardOption[];
@@ -232,6 +239,8 @@ export function CardRibbon({
   noteFor?: (o: CardOption) => string | undefined;
   /** Выбор недоступен (подкласс раньше своего уровня) — только смотреть. */
   pickDisabled?: string;
+  /** Рядом с поиском — например, уровень у ленты классов. */
+  aside?: ReactNode;
 }) {
   const [q, setQ] = useState("");
   const needle = q.trim().toLowerCase();
@@ -279,7 +288,12 @@ export function CardRibbon({
 
   return (
     <div className="wz-ribbon">
-      {searchPlaceholder && <SearchField value={q} onChange={setQ} placeholder={searchPlaceholder} />}
+      {(searchPlaceholder || aside) && (
+        <div className="wz-ribbon-tools">
+          {searchPlaceholder && <SearchField value={q} onChange={setQ} placeholder={searchPlaceholder} />}
+          {aside}
+        </div>
+      )}
       {list.length === 0 ? (
         <span className="muted">Ничего не найдено.</span>
       ) : (
@@ -327,7 +341,7 @@ export function CardRibbon({
               ‹
             </button>
             <div className="wz-ribbon-caption">
-              <strong>{current?.name}</strong>
+              <strong className="wz-display">{current?.name}</strong>
               <span className="muted">
                 {cur + 1} / {list.length}
                 {!isCustom && " · коснись карты — текст"}
@@ -352,7 +366,15 @@ export function CardRibbon({
               disabled={chosen || !current}
               onClick={() => current && onPick(current.id)}
             >
-              {chosen ? "✓ Выбрано" : `Выбрать: ${current?.name ?? ""}`}
+              {chosen ? (
+                <>
+                  ✓ Выбрано: <span className="wz-hl">{current?.name}</span>
+                </>
+              ) : (
+                <>
+                  Выбрать: <span className="wz-hl">{current?.name ?? ""}</span>
+                </>
+              )}
             </button>
           )}
         </>
@@ -446,5 +468,31 @@ export function SetDuel({
         })}
       </div>
     </section>
+  );
+}
+
+// ——— прогресс: нотный стан ———
+
+/** Центры черепов-нот стана (% ширины картинки staff.webp) и начало его
+ *  концовки — тактовая черта со звездой. Картинка одна на 11 нот: шагов
+ *  меньше — стан режется после последней нужной ноты и подклеивается концовка,
+ *  поэтому высота одна и шапка не прыгает, когда меняется число шагов. */
+const STAFF_NOTES = [16.2, 23.2, 30.1, 36.4, 43.8, 50.6, 58.1, 66.0, 73.2, 80.1, 88.3];
+const STAFF_END = 91.5;
+
+export function StepStaff({ index, total, onOpen }: { index: number; total: number; onOpen: () => void }) {
+  const t = Math.max(1, Math.min(total, STAFF_NOTES.length));
+  const i = Math.max(0, Math.min(index, t - 1));
+  const last = i === t - 1;
+  const left = t === STAFF_NOTES.length ? STAFF_END : (STAFF_NOTES[t - 1] + STAFF_NOTES[t]) / 2;
+  const done = last ? left : (STAFF_NOTES[i] + STAFF_NOTES[i + 1]) / 2;
+  const w = (pct: number) => `calc(var(--staff-w) * ${pct / 100})`;
+  return (
+    <button type="button" className="wz-staff" aria-label={`Шаг ${i + 1} из ${t} — все шаги`} onClick={onOpen}>
+      <span className="wz-staff-part is-dim" style={{ width: w(left) }} />
+      <span className={`wz-staff-part wz-staff-end${last ? "" : " is-dim"}`} style={{ width: w(100 - STAFF_END) }} />
+      <span className="wz-staff-part wz-staff-done" style={{ width: w(done) }} />
+      <span className="wz-staff-mark" style={{ left: w(STAFF_NOTES[i]) }} />
+    </button>
   );
 }

@@ -1,0 +1,750 @@
+/* Облик визарда создания персонажа (рестайлинг 2026-09-24, холст
+   «Визард персонажа — рестайлинг»). Каркас — в wizard-mobile.css, здесь
+   только облик: бумага, чернила, кислотно-жёлтое «выбрано», розовое
+   «в процессе», неровные контуры и рваные края.
+
+   Облик свой во всех темах (решение владельца), пока не появится своя тема:
+   иначе в тёмных темах пропадает текст. Поэтому токены темы
+   переопределяются прямо на корне модалки и шторок — всё внутри, включая
+   общие кнопки и поля, красится ими.
+
+   Рваный край — mask-border: Chrome, Safari и телефоны; в Firefox — ровный
+   прямоугольник той же фактуры (принято). */
+
+:is(.modal.wz-modal, .modal.wz-sheet) {
+  --wz-paper: #e8e4da;
+  --wz-ink: #171717;
+  --wz-muted: #4a4743;
+  --wz-acid: #f3ff3a;
+  --wz-mag: #ff3e91;
+  --wz-rough-ink: url("/ui/wizard/rough-border-ink.png");
+  --wz-rough-paper: url("/ui/wizard/rough-border-paper.png");
+  --wz-torn: url("/ui/wizard/torn-edge-mask.png");
+  --wz-panel: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+
+  --paper: var(--wz-paper);
+  --paper-2: #dcd6c6;
+  --bg-elevated: #efebe1;
+  --ink: var(--wz-ink);
+  --ink-2: #2a2a2a;
+  --text-bright: var(--wz-ink);
+  --muted: var(--wz-muted);
+  --on-surface-muted: var(--wz-muted);
+  --surface: var(--wz-paper);
+  --on-surface: var(--wz-ink);
+  --line: var(--wz-ink);
+  --accent: var(--wz-ink);
+  --accent-text: var(--wz-acid);
+  --accent-soft: rgba(23, 23, 23, 0.08);
+  --primary-bg: var(--wz-acid);
+  --primary-text: var(--wz-ink);
+  --card-radius: 0px;
+  --card-border-width: 2px;
+  --font-body: "Sofia Sans Semi Condensed", sans-serif;
+  --font-display: "Rubik Dirt", "Oswald", sans-serif;
+  --font-ui: "Oswald", var(--font-body);
+  --font-mono: "Oswald", var(--font-body);
+  --name-transform: uppercase;
+
+  color: var(--wz-ink);
+  font-family: var(--font-body);
+  background: var(--wz-paper) url("/ui/wizard/paper-tile.webp") repeat;
+  background-size: 320px;
+  border-color: var(--wz-ink);
+}
+
+/* ——— общие приёмы ——— */
+
+/* Неровный контур: border-image по нарисованной рамке. Вешается на то, что
+   было ровной рамкой — кнопки, поля, плитки. */
+:is(.wz, .wz-sheet)
+  :is(
+    button:not(.wz-row-main, .wz-row-check, .wz-slide-face, .wz-steps-btn, .wz-staff, .wz-slide-flip, .wz-set-main, .wz-abil, .primary),
+    input:not([type="checkbox"], [type="radio"], [type="file"]),
+    select,
+    textarea,
+    .wz-set,
+    .wz-seg,
+    .wz-file-btn
+  ) {
+  border: 4px solid transparent;
+  border-image: var(--wz-rough-ink) 16 / 4px round;
+  background-clip: padding-box;
+  border-radius: 0;
+}
+:is(.wz, .wz-sheet) :is(button, input, select, textarea):not(.primary, .wz-row-main, .wz-row-check, .wz-slide-face, .wz-steps-btn, .wz-staff, .wz-slide-flip, .wz-set-main, .wz-abil) {
+  background-color: #efebe1;
+  background-image: url("/ui/wizard/paper-panel.webp");
+  background-size: 420px;
+  color: var(--wz-ink);
+}
+:is(.wz, .wz-sheet) :is(button, .wz-chip, .wz-seg button, .wz-foot button, .wz-wide-btn) {
+  font-family: var(--font-ui);
+  letter-spacing: 0.05em;
+}
+:is(.wz, .wz-sheet) button:disabled {
+  opacity: 0.5;
+}
+:is(.wz, .wz-sheet) button:focus-visible,
+:is(.wz, .wz-sheet) :is(input, select, textarea):focus-visible {
+  outline: 3px solid var(--wz-mag);
+  outline-offset: 2px;
+}
+
+/* Главная кнопка — кислотная фактура с рваным краем. Тень — на обёртке
+   .wz-shadow: маска срезала бы её вместе с краем. */
+:is(.wz, .wz-sheet) button.primary {
+  border: 0;
+  background: var(--wz-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
+  color: var(--wz-ink);
+  font-family: var(--font-ui);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  -webkit-mask-box-image: var(--wz-torn) 48 / 10px round;
+  mask-border: var(--wz-torn) 48 / 10px round;
+}
+:is(.wz, .wz-sheet) button.primary:disabled {
+  opacity: 1;
+  background: #dcd6c6 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background-blend-mode: multiply;
+  color: #6b675f;
+}
+.wz-shadow {
+  display: flex;
+  min-width: 0;
+  filter: drop-shadow(4px 4px 0 #171717);
+}
+.wz-shadow:has(button:disabled) {
+  filter: none;
+}
+.wz-shadow > button {
+  flex: 1;
+}
+
+.wz-display,
+:is(.wz, .wz-sheet) :is(h1, h2) {
+  font-family: var(--font-display);
+  font-weight: 400;
+}
+
+/* ——— шапка: чернила, рваный край, номер и нотный стан ——— */
+
+.wz .wz-top {
+  position: relative;
+  z-index: 2;
+  padding: var(--sp-3) var(--sp-3) 22px var(--sp-4);
+  background: #141414 url("/ui/wizard/ink-surface.webp") center / 620px repeat;
+  color: var(--wz-paper);
+}
+.wz .wz-top::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 18px;
+  background: url("/ui/wizard/paper-edge.webp") left bottom / auto 100% repeat-x;
+  pointer-events: none;
+}
+.wz .wz-steps-btn {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 0;
+  color: var(--wz-paper);
+}
+.wz-step-no {
+  flex: none;
+  font-family: var(--font-ui);
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--wz-acid);
+}
+.wz-step-txt {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.wz .wz-steps-btn small {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: #bdb8ad;
+  opacity: 1;
+}
+/* Rubik Dirt широкий: «Характеристики» с галкой на 360 px впритык — кегль
+   тянется за шириной экрана, а строка не переносится. */
+.wz .wz-steps-btn strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: clamp(17px, 5.2vw, 22px);
+  font-weight: 400;
+  line-height: 1.05;
+}
+.wz .wz-top .wz-icon-btn {
+  border-image: var(--wz-rough-paper) 16 / 3px round;
+  border-width: 3px;
+  background: transparent;
+  color: var(--wz-paper);
+}
+.wz .wz-top .wz-icon-btn[aria-pressed="true"] {
+  color: var(--wz-acid);
+}
+
+.wz-staff {
+  --staff-w: min(348px, calc(100vw - 40px));
+  grid-column: 1 / -1;
+  position: relative;
+  display: flex;
+  width: max-content;
+  height: calc(var(--staff-w) * 0.066);
+  margin-top: var(--sp-2);
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.wz-staff-part {
+  display: block;
+  height: 100%;
+  background: url("/ui/wizard/staff.webp") 0 0 / var(--staff-w) 100% no-repeat;
+}
+.wz-staff-end {
+  background-position: calc(var(--staff-w) * -0.915) 0;
+}
+.wz-staff-part.is-dim {
+  filter: grayscale(1) brightness(0.6);
+  opacity: 0.5;
+}
+.wz-staff-done {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transition: width 0.25s ease;
+}
+.wz-staff-mark {
+  position: absolute;
+  bottom: -6px;
+  width: 16px;
+  height: 5px;
+  margin-left: -8px;
+  background: var(--wz-mag) url("/ui/wizard/punk-magenta.webp") center / 360px;
+  -webkit-mask-box-image: var(--wz-torn) 48 / 5px round;
+  mask-border: var(--wz-torn) 48 / 5px round;
+}
+
+/* ——— тело и подвал ——— */
+
+.wz .wz-body {
+  padding-top: var(--sp-3);
+}
+/* Карта на телефоне — как на макете: имя, счётчик и «Выбрать» под ней
+   видны без прокрутки. */
+@media (max-width: 700px) {
+  .wz .wz-ribbon-track {
+    --wz-slide: min(68vw, 270px);
+  }
+}
+.wz .wz-foot {
+  border-top: 2px solid transparent;
+  border-image: var(--wz-rough-ink) 16 round;
+  background: none;
+}
+.wz .wz-foot-hint,
+.wz .wz-step-lead,
+.wz .muted {
+  color: var(--wz-muted);
+  opacity: 1;
+}
+.wz .wz-foot button {
+  min-height: 52px;
+  text-transform: uppercase;
+}
+.wz .wz-toast,
+.wz .wz-warn {
+  border-left: 0;
+  box-shadow: inset 6px 0 0 var(--wz-mag);
+  background: var(--wz-panel);
+}
+
+/* ——— списки ——— */
+
+:is(.wz, .wz-sheet) .wz-list {
+  border-top: 2px solid transparent;
+  border-image: var(--wz-rough-ink) 16 round;
+}
+:is(.wz, .wz-sheet) .wz-row {
+  border-bottom: 2px solid transparent;
+  border-image: var(--wz-rough-ink) 16 round;
+}
+:is(.wz, .wz-sheet) .wz-row.is-picked {
+  background: rgba(23, 23, 23, 0.06);
+}
+:is(.wz, .wz-sheet) .wz-row-title {
+  font-family: var(--font-ui);
+  font-size: 18px;
+  font-weight: 500;
+}
+:is(.wz, .wz-sheet) .wz-row-meta {
+  color: var(--wz-muted);
+  opacity: 1;
+}
+:is(.wz, .wz-sheet) .wz-row-check > span {
+  width: 26px;
+  height: 26px;
+  border: 4px solid transparent;
+  border-image: var(--wz-rough-ink) 16 / 4px round;
+  border-radius: 0;
+  background: var(--wz-panel);
+  background-clip: padding-box;
+  color: transparent;
+}
+:is(.wz, .wz-sheet) .wz-row.is-picked .wz-row-check > span {
+  border: 0;
+  width: 30px;
+  height: 30px;
+  background: var(--wz-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
+  color: var(--wz-ink);
+  -webkit-mask-box-image: var(--wz-torn) 48 / 5px round;
+  mask-border: var(--wz-torn) 48 / 5px round;
+}
+:is(.wz, .wz-sheet) .wz-group-label {
+  font-family: var(--font-ui);
+  letter-spacing: 0.06em;
+}
+/* Счётчик квоты: набрано — жёлтое, в процессе — розовое. */
+:is(.wz, .wz-sheet) .wz-count {
+  padding: 2px 8px 3px;
+  font-family: var(--font-ui);
+  line-height: 1;
+  background: var(--wz-mag) url("/ui/wizard/punk-magenta.webp") center / 360px;
+  -webkit-mask-box-image: var(--wz-torn) 48 / 5px round;
+  mask-border: var(--wz-torn) 48 / 5px round;
+}
+:is(.wz, .wz-sheet) .wz-count.is-done {
+  color: var(--wz-ink);
+  background: var(--wz-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
+}
+
+/* ——— переключатели и чипы ——— */
+
+:is(.wz, .wz-sheet) .wz-seg {
+  gap: 4px;
+  border: 0;
+  border-image: none;
+  align-self: flex-start;
+}
+:is(.wz, .wz-sheet) .wz-seg button + button {
+  border-left: 4px solid transparent;
+}
+/* Режим — чёрное: не «выбрано», а переключатель. */
+:is(.wz, .wz-sheet) .wz-seg button[aria-pressed="true"] {
+  background: var(--wz-ink);
+  color: var(--wz-acid);
+}
+:is(.wz, .wz-sheet) .wz-chip {
+  border-radius: 0;
+}
+:is(.wz, .wz-sheet) .wz-chip[aria-pressed="true"] {
+  border: 0;
+  padding: 4px calc(var(--sp-5) + 4px);
+  background: var(--wz-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
+  color: var(--wz-ink);
+  -webkit-mask-box-image: var(--wz-torn) 48 / 10px round;
+  mask-border: var(--wz-torn) 48 / 10px round;
+}
+
+/* ——— лента карт ——— */
+
+.wz-ribbon-tools {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: stretch;
+}
+.wz-ribbon-tools .wz-search {
+  flex: 1;
+  min-width: 0;
+}
+.wz-level {
+  flex: none;
+  display: flex;
+  align-items: center;
+  border: 4px solid transparent;
+  border-image: var(--wz-rough-ink) 16 / 4px round;
+}
+:is(.wz, .wz-sheet) .wz-level button {
+  width: 38px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-image: none;
+  display: grid;
+  place-items: center;
+}
+.wz-level-num {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 38px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+:is(.wz, .wz-sheet) .wz-level-num input {
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-image: none;
+  background: none;
+  text-align: center;
+  font-family: var(--font-ui);
+  font-size: 18px;
+  font-weight: 700;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.wz-level-num input::-webkit-inner-spin-button,
+.wz-level-num input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Тень карты — полупрозрачные чернила со сдвигом, а не плоская заливка. */
+.wz .wz-slide-face::before {
+  content: "";
+  position: absolute;
+  inset: 6px -6px -6px 6px;
+  background: #141414 url("/ui/wizard/ink-surface.webp") center / 620px;
+  opacity: 0.6;
+}
+.wz .wz-slide-face > :not(.wz-slide-badge, .dc-tile-note) {
+  position: relative;
+}
+.wz .wz-slide.is-selected .dc-img,
+.wz .wz-slide.is-selected .wz-slide-custom {
+  outline: 0;
+}
+.wz .wz-slide-badge {
+  top: -8px;
+  left: auto;
+  right: -8px;
+  z-index: 2;
+  padding: 3px 9px 4px;
+  background: var(--wz-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
+  color: var(--wz-ink);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  -webkit-mask-box-image: var(--wz-torn) 48 / 5px round;
+  mask-border: var(--wz-torn) 48 / 5px round;
+}
+.wz .wz-ribbon-caption strong {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 400;
+  line-height: 1;
+}
+.wz .wz-ribbon-caption .muted {
+  font-size: 12px;
+}
+/* «Выбрать» в ленте — действие, не состояние: чёрная с жёлтым именем. */
+.wz .wz-ribbon .wz-wide-btn,
+.wz .wz-ribbon .wz-wide-btn.primary {
+  border: 4px solid transparent;
+  border-image: var(--wz-rough-ink) 16 / 4px round;
+  background: var(--wz-ink);
+  color: var(--wz-paper);
+  font-family: var(--font-ui);
+  font-weight: 400;
+  text-transform: uppercase;
+  -webkit-mask-box-image: none;
+  mask-border: none;
+}
+.wz .wz-ribbon .wz-wide-btn:disabled {
+  opacity: 1;
+}
+.wz-hl {
+  color: var(--wz-acid);
+}
+.wz .wz-slide-custom {
+  border: 4px solid transparent;
+  border-image: var(--wz-rough-ink) 16 / 4px round;
+  border-radius: 0;
+  background: var(--wz-panel);
+  background-clip: padding-box;
+  font-family: var(--font-display);
+  font-weight: 400;
+}
+
+/* ——— характеристики костью, как в листе ——— */
+
+.wz .wz-abil-grid {
+  gap: var(--sp-2) var(--sp-3);
+  align-items: start;
+}
+.wz .wz-abil {
+  min-height: 0;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  gap: 2px;
+}
+.wz-die {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 84px;
+  height: 97px;
+  padding-top: 3px;
+  box-sizing: border-box;
+  background: url("/textures/dice-d20.webp") center / contain no-repeat;
+}
+/* Взведённая кость — розовая фактура по силуэту кости, со сдвигом. */
+.wz .wz-abil.is-armed .wz-die::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  transform: translate(5px, 5px);
+  background: var(--wz-mag) url("/ui/wizard/punk-magenta.webp") center / 360px;
+  -webkit-mask: url("/textures/dice-d20.webp") center / contain no-repeat;
+  mask: url("/textures/dice-d20.webp") center / contain no-repeat;
+}
+.wz .wz-abil.is-armed {
+  background: none;
+  isolation: isolate;
+}
+.wz .wz-abil .wz-abil-value {
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+}
+.wz-abil-mod {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 1.1;
+  color: var(--wz-muted);
+}
+.wz-abil-boost {
+  position: absolute;
+  top: 2px;
+  right: -10px;
+  padding: 2px 6px 3px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.1;
+  transform: rotate(6deg);
+  background: var(--wz-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
+  -webkit-mask-box-image: var(--wz-torn) 48 / 5px round;
+  mask-border: var(--wz-torn) 48 / 5px round;
+}
+.wz .wz-abil-label {
+  font-size: 13px;
+  letter-spacing: 0.1em;
+}
+.wz .wz-abil.is-key .wz-abil-label::after {
+  color: inherit;
+}
+.wz-abil-was {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--wz-muted);
+}
+.wz-abil-armed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 10px 7px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 0.9;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  background: var(--wz-mag) url("/ui/wizard/punk-magenta.webp") center / 360px;
+  -webkit-mask-box-image: var(--wz-torn) 48 / 5px round;
+  mask-border: var(--wz-torn) 48 / 5px round;
+}
+/* Покупка и ручной ввод — плитки бумаги, кость только у перестановки. */
+.wz div.wz-abil {
+  padding: var(--sp-3) var(--sp-2);
+  border: 4px solid transparent;
+  border-image: var(--wz-rough-ink) 16 / 4px round;
+  background: var(--wz-panel);
+  background-clip: padding-box;
+}
+
+/* ——— снаряжение: набор или сундук ——— */
+
+.wz .wz-set {
+  background: var(--wz-panel);
+  background-clip: padding-box;
+}
+.wz .wz-set.is-selected {
+  border-width: 5px;
+  border-image: var(--wz-rough-ink) 16 / 5px round;
+  box-shadow: none;
+}
+/* Выбранный — рваная кислотная подложка со сдвигом. */
+.wz .wz-set.is-selected::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  z-index: -1;
+  transform: translate(8px, 8px);
+  background: var(--wz-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
+  -webkit-mask-box-image: var(--wz-torn) 48 / 10px round;
+  mask-border: var(--wz-torn) 48 / 10px round;
+}
+.wz .wz-duel-row {
+  isolation: isolate;
+}
+.wz .wz-set-main {
+  position: relative;
+  padding: 0 0 var(--sp-4);
+  gap: var(--sp-2);
+}
+.wz .wz-set-art {
+  width: 100%;
+  height: 118px;
+  object-fit: cover;
+  object-position: 50% 30%;
+}
+.wz .wz-set-letter {
+  position: absolute;
+  left: 6px;
+  top: 82px;
+  padding: 0 9px;
+  font-family: var(--font-ui);
+  font-size: 17px;
+  font-weight: 700;
+  background: var(--wz-ink);
+  color: var(--wz-paper);
+}
+.wz .wz-set.is-selected .wz-set-letter {
+  background: var(--wz-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
+  color: var(--wz-ink);
+  -webkit-mask-box-image: var(--wz-torn) 48 / 5px round;
+  mask-border: var(--wz-torn) 48 / 5px round;
+}
+.wz .wz-set-items,
+.wz .wz-set-gold {
+  padding: 0 var(--sp-3);
+}
+.wz .wz-set-gold {
+  font-family: var(--font-ui);
+}
+.wz .wz-set-gold.is-big {
+  font-size: 28px;
+}
+.wz .wz-set.is-selected::after {
+  content: "";
+  position: absolute;
+  right: -10px;
+  top: -14px;
+  width: 42px;
+  height: 36px;
+  background: url("/ui/wizard/crown.webp") center / contain no-repeat;
+  pointer-events: none;
+}
+.wz .wz-set-info {
+  top: 6px;
+  right: 6px;
+  border-radius: 0;
+}
+.wz .wz-set-pending {
+  border: 0;
+  background: var(--wz-mag) url("/ui/wizard/punk-magenta.webp") center / 360px;
+  -webkit-mask-box-image: var(--wz-torn) 48 / 5px round;
+  mask-border: var(--wz-torn) 48 / 5px round;
+}
+
+/* ——— шторка ——— */
+
+.modal.wz-sheet {
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+}
+.modal.wz-sheet::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -17px;
+  height: 18px;
+  background: url("/ui/wizard/paper-edge.webp") left bottom / auto 100% repeat-x;
+  pointer-events: none;
+}
+.wz-sheet .wz-sheet-in {
+  overflow: hidden;
+}
+.wz-sheet .wz-sheet-head {
+  position: relative;
+  padding-left: 46px;
+  border-bottom: 0;
+}
+.wz-sheet .wz-sheet-head::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 4px;
+  width: 64px;
+  height: 50px;
+  background: url("/ui/wizard/corner-tl.webp") left top / contain no-repeat;
+  pointer-events: none;
+}
+.wz-sheet .wz-sheet-head strong {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 400;
+  line-height: 1;
+}
+.wz-sheet .wz-sheet-meta {
+  font-family: var(--font-ui);
+  color: var(--wz-muted);
+  opacity: 1;
+}
+.wz-sheet .wz-sheet-foot {
+  border-top: 2px solid transparent;
+  border-image: var(--wz-rough-ink) 16 round;
+}
+.wz-sheet .wz-sheet-foot .wz-shadow {
+  width: 100%;
+}
+.wz-sheet .wz-sheet-foot button.primary {
+  min-height: 52px;
+  font-size: 18px;
+}
+
+/* Список шагов: текущий — кислотный с розовой полосой. */
+.wz-sheet .wz-steplist button {
+  border-bottom: 2px solid transparent;
+  border-image: var(--wz-rough-ink) 16 round;
+  font-family: var(--font-ui);
+  font-size: 17px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.wz-sheet .wz-steplist button[aria-current="step"] {
+  background: var(--wz-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
+  box-shadow: inset 5px 0 0 var(--wz-mag);
+  font-weight: 600;
+}
+.wz-sheet .wz-steplist .wz-step-num {
+  font-family: var(--font-ui);
+}
+.wz-sheet .wz-steplist .is-missing {
+  color: var(--wz-ink);
+  text-decoration: underline 2px var(--wz-mag);
+  text-transform: none;
+}

@@ -1,15 +1,14 @@
-/* OneShot Wizard: editorial frame around a clean, dense working area.
-   Каркас (шапка, тело, подвал, шторки, лента) — общий, в
-   client/src/components/dnd/wizard-mobile.css; здесь только облик OneShot. */
+/* OneShot Wizard: только размер окна. Каркас — в
+   client/src/components/dnd/wizard-mobile.css, облик (бумага, чернила,
+   кислотное «выбрано») — в wizard-skin.css, он один во всех темах. */
 html[data-app="oneshot"] .modal.wz-modal {
   width: 1080px;
   max-width: calc(100vw - 32px);
   height: 94dvh;
   max-height: 94dvh;
-  border: 3px solid var(--ui-border);
+  border: 3px solid #171717;
   border-radius: 0;
-  background: var(--ui-surface);
-  box-shadow: 8px 8px 0 var(--ui-accent-secondary);
+  box-shadow: 8px 8px 0 #ff3e91;
 }
 @media (max-width: 700px) {
   html[data-app="oneshot"] .modal.wz-modal {
@@ -20,107 +19,4 @@ html[data-app="oneshot"] .modal.wz-modal {
     border: 0;
     box-shadow: none;
   }
-}
-
-html[data-app="oneshot"] .wz {
-  --accent: var(--ui-accent-secondary);
-  --line: var(--ui-border);
-  color: var(--ui-text);
-}
-html[data-app="oneshot"] .wz-top {
-  background: var(--ui-surface-ink);
-  color: var(--ui-text-inverse);
-  padding-bottom: 0;
-}
-html[data-app="oneshot"] .wz-top .wz-icon-btn {
-  border: 0;
-  background: transparent;
-  color: var(--ui-text-inverse);
-}
-html[data-app="oneshot"] .wz-top .wz-icon-btn[aria-pressed="true"] {
-  color: var(--ui-accent);
-}
-html[data-app="oneshot"] .wz-steps-btn strong {
-  font-weight: 800;
-  letter-spacing: 0.02em;
-}
-html[data-app="oneshot"] .wz-progress {
-  height: 6px;
-  margin: 0 calc(-1 * var(--sp-4));
-  background: var(--ui-surface-raised);
-}
-html[data-app="oneshot"] .wz-progress > span {
-  background: var(--ui-accent);
-}
-html[data-app="oneshot"] .wz-foot {
-  border-top: 2px solid var(--ui-border);
-  background: var(--ui-surface);
-}
-html[data-app="oneshot"] .wz :is(.wz-foot, .wz-sheet-foot, .wz-ribbon) button,
-html[data-app="oneshot"] .wz-sheet .wz-sheet-foot button {
-  border: 2px solid var(--ui-border);
-  border-radius: 0;
-  background: var(--ui-surface);
-  color: var(--ui-text);
-  font-weight: 750;
-}
-html[data-app="oneshot"] .wz :is(.wz-foot, .wz-ribbon) button.primary,
-html[data-app="oneshot"] .wz-sheet .wz-sheet-foot button.primary {
-  background: var(--ui-accent);
-  color: var(--ui-text);
-}
-html[data-app="oneshot"] .wz button:disabled {
-  opacity: 0.5;
-}
-html[data-app="oneshot"] .wz button:focus-visible,
-html[data-app="oneshot"] .wz-sheet button:focus-visible {
-  outline: 3px solid var(--ui-focus);
-  outline-offset: 2px;
-}
-/* Отметка «взято» и выбранное — жёлтым по чёрному, как акцент OneShot. */
-html[data-app="oneshot"] :is(.wz, .wz-sheet) .wz-row.is-picked .wz-row-check > span,
-html[data-app="oneshot"] :is(.wz, .wz-sheet) .wz-seg button[aria-pressed="true"],
-html[data-app="oneshot"] :is(.wz, .wz-sheet) .wz-chip[aria-pressed="true"],
-html[data-app="oneshot"] .wz .wz-slide-badge {
-  background: var(--ui-accent);
-  border-color: var(--ui-border);
-  color: var(--ui-text);
-}
-html[data-app="oneshot"] :is(.wz, .wz-sheet) .wz-row.is-picked {
-  background: color-mix(in srgb, var(--ui-accent) 35%, transparent);
-}
-html[data-app="oneshot"] .wz .wz-set.is-selected {
-  border-color: var(--ui-border);
-  box-shadow: 4px 4px 0 var(--ui-accent-secondary);
-  background: color-mix(in srgb, var(--ui-accent) 30%, var(--ui-surface));
-}
-html[data-app="oneshot"] .wz .wz-abil.is-armed {
-  background: var(--ui-accent);
-}
-html[data-app="oneshot"] .modal.wz-sheet {
-  border: 3px solid var(--ui-border);
-  background: var(--ui-surface);
-  color: var(--ui-text);
-}
-html[data-app="oneshot"] .wz-sheet {
-  --accent: var(--ui-accent-secondary);
-  --line: var(--ui-border);
-}
-html[data-app="oneshot"] .wz :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
-  min-height: 44px;
-  border: 2px solid var(--ui-border);
-  border-radius: 0;
-  background: var(--ui-surface);
-  color: var(--ui-text);
-}
-
-html[data-app="oneshot"] .wz .wizard-split {
-  gap: 20px;
-}
-html[data-app="oneshot"] .wz .wizard-side {
-  padding: 12px 0 12px 20px;
-  border-left: 2px solid var(--ui-border);
-}
-html[data-app="oneshot"] .wz .wizard-main {
-  min-width: 0;
 }

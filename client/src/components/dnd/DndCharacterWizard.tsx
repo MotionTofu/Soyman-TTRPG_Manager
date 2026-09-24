@@ -24,7 +24,7 @@ import { PosterButtons } from "./PosterButtons";
 import { renderPosterBlob, type PosterData } from "./CharacterPoster";
 import { WizardMiniSheet, type MiniSheetProblem } from "./WizardMiniSheet";
 import { type CardOption } from "./DndCards";
-import { CardRibbon, CUSTOM_CARD_ID, EntrySheet, PickHead, PickList, SearchField, Sheet, SetDuel } from "./wizardUi";
+import { CardRibbon, CUSTOM_CARD_ID, EntrySheet, PickHead, PickList, SearchField, Sheet, SetDuel, StepStaff } from "./wizardUi";
 import { MentionText } from "../mentions/MentionText";
 import { choicesFromEntries, featuresFromEntries, sumEntrySlots, type ChoiceDef } from "./dndFeatures";
 import { cantripsAtLevel, preparedAtLevel, spellSlotsAtLevel, type ClassProgression } from "./progression";
@@ -2723,33 +2723,35 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     return (
       <div className="wz-step">
         {!systemId && <span className="muted">У кампании не указана система — выбор класса недоступен, можно будет добавить позже.</span>}
-        <div className="row wz-level">
-          <span className="wz-group-label">Уровень</span>
-          <span className="dnd-class-level-stepper">
-            <button type="button" className="dnd-level-step-btn wizard-touch" aria-label="Уровень −1" disabled={level <= 1} onClick={() => stepLevel(-1)}>
-              <NavIcon name="minus" />
-            </button>
-            <button type="button" className="dnd-level-step-btn wizard-touch" aria-label="Уровень +1" disabled={level >= 20} onClick={() => stepLevel(1)}>
-              <NavIcon name="plus" />
-            </button>
-          </span>
-          <input
-            type="number"
-            min={1}
-            max={20}
-            className="wizard-level-input"
-            aria-label="Уровень"
-            value={levelText ?? level}
-            onChange={(e) => setLevelText(e.target.value)}
-            onBlur={(e) => commitLevel(e.target.value)}
-          />
-        </div>
         <CardRibbon
           systemId={systemId}
           options={hierarchy.classes}
           selectedId={classId}
           onPick={(id) => id !== classId && pickClass(id)}
           searchPlaceholder="Поиск класса"
+          aside={
+            <div className="wz-level" role="group" aria-label="Уровень">
+              <button type="button" aria-label="Уровень −1" disabled={level <= 1} onClick={() => stepLevel(-1)}>
+                <NavIcon name="minus" />
+              </button>
+              <label className="wz-level-num">
+                <span>ур</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  inputMode="numeric"
+                  aria-label="Уровень"
+                  value={levelText ?? level}
+                  onChange={(e) => setLevelText(e.target.value)}
+                  onBlur={(e) => commitLevel(e.target.value)}
+                />
+              </label>
+              <button type="button" aria-label="Уровень +1" disabled={level >= 20} onClick={() => stepLevel(1)}>
+                <NavIcon name="plus" />
+              </button>
+            </div>
+          }
         />
         {classId != null && subclassOptions.length > 0 && (
           <section>
@@ -3152,9 +3154,19 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
                     setArmedAbility(null);
                   }}
                 >
+                  <span className="wz-die">
+                    <span className="wz-abil-value">{awardedAbilities[key]}</span>
+                    <span className="wz-abil-mod">{formatModifier(abilityModifier(awardedAbilities[key]))}</span>
+                    {boosted && <span className="wz-abil-boost">+{awardedAbilities[key] - abilities[key]}</span>}
+                  </span>
                   <span className="wz-abil-label">{label}</span>
-                  <span className="wz-abil-value">{abilities[key]}</span>
-                  {final}
+                  {boosted && <span className="wz-abil-was">было {abilities[key]}</span>}
+                  {armedAbility === key && (
+                    <span className="wz-abil-armed">
+                      <span>выбрана</span>
+                      <span>нажми вторую</span>
+                    </span>
+                  )}
                 </button>
               );
             }
@@ -3701,10 +3713,15 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       <div className={`wizard wz${visualVariant === "oneshot" ? " wizard--oneshot" : ""}`}>
         <header className="wz-top">
           <button type="button" className="wz-steps-btn" aria-haspopup="dialog" onClick={() => setSheet({ kind: "steps" })}>
-            <small>
-              Шаг {stepPos + 1} из {visibleSteps.length}
-            </small>
-            <strong>{step} ▾</strong>
+            <span className="wz-step-no" aria-hidden="true">
+              {String(stepPos + 1).padStart(2, "0")}
+            </span>
+            <span className="wz-step-txt">
+              <small>
+                Шаг {stepPos + 1} из {visibleSteps.length} · все шаги
+              </small>
+              <strong>{step} ▾</strong>
+            </span>
           </button>
           {step !== "Обзор" ? (
             <button
@@ -3723,9 +3740,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
           <button type="button" className="wz-icon-btn" aria-label="Закрыть" title="Закрыть" onClick={cancelWizard} disabled={saving}>
             ×
           </button>
-          <div className="wz-progress" aria-hidden="true">
-            <span style={{ width: `${((stepPos + 1) / visibleSteps.length) * 100}%` }} />
-          </div>
+          <StepStaff index={stepPos} total={visibleSteps.length} onOpen={() => setSheet({ kind: "steps" })} />
         </header>
 
         <div className="wz-body" ref={bodyRef}>
@@ -3776,15 +3791,17 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
           <button type="button" onClick={back} disabled={saving || stepPos === 0}>
             Назад
           </button>
-          {step === "Обзор" ? (
-            <button type="button" className="primary" onClick={finish} disabled={createBlocked}>
-              {saving ? "Создаю…" : saveError ? "Попробовать ещё раз" : "Создать персонажа"}
-            </button>
-          ) : (
-            <button type="button" className="primary" onClick={next} disabled={missingHere.length > 0}>
-              Далее
-            </button>
-          )}
+          <span className="wz-shadow">
+            {step === "Обзор" ? (
+              <button type="button" className="primary" onClick={finish} disabled={createBlocked}>
+                {saving ? "Создаю…" : saveError ? "Попробовать ещё раз" : "Создать персонажа"}
+              </button>
+            ) : (
+              <button type="button" className="primary" onClick={next} disabled={missingHere.length > 0}>
+                Далее
+              </button>
+            )}
+          </span>
         </footer>
         {renderSheet()}
       </div>

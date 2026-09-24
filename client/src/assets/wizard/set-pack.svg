@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none" stroke="#2b2118" stroke-width="4" stroke-linejoin="round" stroke-linecap="round">
-  <!-- Заглушка «набор»: рюкзак. Замените файлом с тем же именем. -->
-  <path d="M42 34c0-12 8-18 18-18s18 6 18 18" />
-  <rect x="26" y="34" width="68" height="70" rx="14" fill="#c9a66b" />
-  <path d="M26 58h68" />
-  <rect x="44" y="66" width="32" height="22" rx="4" fill="#e3c68e" />
-  <path d="M60 66v8" />
-</svg>
