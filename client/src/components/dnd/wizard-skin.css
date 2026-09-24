@@ -11,7 +11,7 @@
    Рваный край — mask-border: Chrome, Safari и телефоны; в Firefox — ровный
    прямоугольник той же фактуры (принято). */
 
-:is(.modal.wz-modal, .modal.wz-sheet) {
+:is(.modal.wz-modal, .modal.wz-sheet, .modal.wz-lvl) {
   --wz-paper: #e8e4da;
   --wz-ink: #171717;
   --wz-muted: #4a4743;
@@ -57,7 +57,7 @@
 
 /* Неровный контур: border-image по нарисованной рамке. Вешается на то, что
    было ровной рамкой — кнопки, поля, плитки. */
-:is(.wz, .wz-sheet)
+:is(.wz, .wz-sheet, .wz-lvl)
   :is(
     button:not(.wz-row-main, .wz-row-check, .wz-slide-face, .wz-steps-btn, .wz-staff, .wz-slide-flip, .wz-set-main, .wz-abil, .primary),
     input:not([type="checkbox"], [type="radio"], [type="file"]),
@@ -72,28 +72,28 @@
   background-clip: padding-box;
   border-radius: 0;
 }
-:is(.wz, .wz-sheet) :is(button, input, select, textarea):not(.primary, .wz-row-main, .wz-row-check, .wz-slide-face, .wz-steps-btn, .wz-staff, .wz-slide-flip, .wz-set-main, .wz-abil) {
+:is(.wz, .wz-sheet, .wz-lvl) :is(button, input, select, textarea):not(.primary, .wz-row-main, .wz-row-check, .wz-slide-face, .wz-steps-btn, .wz-staff, .wz-slide-flip, .wz-set-main, .wz-abil) {
   background-color: #efebe1;
   background-image: url("/ui/wizard/paper-panel.webp");
   background-size: 420px;
   color: var(--wz-ink);
 }
-:is(.wz, .wz-sheet) :is(button, .wz-chip, .wz-seg button, .wz-foot button, .wz-wide-btn) {
+:is(.wz, .wz-sheet, .wz-lvl) :is(button, .wz-chip, .wz-seg button, .wz-foot button, .wz-wide-btn) {
   font-family: var(--font-ui);
   letter-spacing: 0.05em;
 }
-:is(.wz, .wz-sheet) button:disabled {
+:is(.wz, .wz-sheet, .wz-lvl) button:disabled {
   opacity: 0.5;
 }
-:is(.wz, .wz-sheet) button:focus-visible,
-:is(.wz, .wz-sheet) :is(input, select, textarea):focus-visible {
+:is(.wz, .wz-sheet, .wz-lvl) button:focus-visible,
+:is(.wz, .wz-sheet, .wz-lvl) :is(input, select, textarea):focus-visible {
   outline: 3px solid var(--wz-mag);
   outline-offset: 2px;
 }
 
 /* Главная кнопка — кислотная фактура с рваным краем. Тень — на обёртке
    .wz-shadow: маска срезала бы её вместе с краем. */
-:is(.wz, .wz-sheet) button.primary {
+:is(.wz, .wz-sheet, .wz-lvl) button.primary {
   border: 0;
   background: var(--wz-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
   color: var(--wz-ink);
@@ -104,7 +104,7 @@
   -webkit-mask-box-image: var(--wz-torn) 48 / 10px round;
   mask-border: var(--wz-torn) 48 / 10px round;
 }
-:is(.wz, .wz-sheet) button.primary:disabled {
+:is(.wz, .wz-sheet, .wz-lvl) button.primary:disabled {
   opacity: 1;
   background: #dcd6c6 url("/ui/wizard/paper-panel.webp") center / 420px;
   background-blend-mode: multiply;
@@ -123,7 +123,7 @@
 }
 
 .wz-display,
-:is(.wz, .wz-sheet) :is(h1, h2) {
+:is(.wz, .wz-sheet, .wz-lvl) :is(h1, h2) {
   font-family: var(--font-display);
   font-weight: 400;
 }
@@ -272,27 +272,27 @@
 
 /* ——— списки ——— */
 
-:is(.wz, .wz-sheet) .wz-list {
+:is(.wz, .wz-sheet, .wz-lvl) .wz-list {
   border-top: 2px solid transparent;
   border-image: var(--wz-rough-ink) 16 round;
 }
-:is(.wz, .wz-sheet) .wz-row {
+:is(.wz, .wz-sheet, .wz-lvl) .wz-row {
   border-bottom: 2px solid transparent;
   border-image: var(--wz-rough-ink) 16 round;
 }
-:is(.wz, .wz-sheet) .wz-row.is-picked {
+:is(.wz, .wz-sheet, .wz-lvl) .wz-row.is-picked {
   background: rgba(23, 23, 23, 0.06);
 }
-:is(.wz, .wz-sheet) .wz-row-title {
+:is(.wz, .wz-sheet, .wz-lvl) .wz-row-title {
   font-family: var(--font-ui);
   font-size: 18px;
   font-weight: 500;
 }
-:is(.wz, .wz-sheet) .wz-row-meta {
+:is(.wz, .wz-sheet, .wz-lvl) .wz-row-meta {
   color: var(--wz-muted);
   opacity: 1;
 }
-:is(.wz, .wz-sheet) .wz-row-check > span {
+:is(.wz, .wz-sheet, .wz-lvl) .wz-row-check > span {
   width: 26px;
   height: 26px;
   border: 4px solid transparent;
@@ -302,7 +302,7 @@
   background-clip: padding-box;
   color: transparent;
 }
-:is(.wz, .wz-sheet) .wz-row.is-picked .wz-row-check > span {
+:is(.wz, .wz-sheet, .wz-lvl) .wz-row.is-picked .wz-row-check > span {
   border: 0;
   width: 30px;
   height: 30px;
@@ -311,12 +311,12 @@
   -webkit-mask-box-image: var(--wz-torn) 48 / 5px round;
   mask-border: var(--wz-torn) 48 / 5px round;
 }
-:is(.wz, .wz-sheet) .wz-group-label {
+:is(.wz, .wz-sheet, .wz-lvl) .wz-group-label {
   font-family: var(--font-ui);
   letter-spacing: 0.06em;
 }
 /* Счётчик квоты: набрано — жёлтое, в процессе — розовое. */
-:is(.wz, .wz-sheet) .wz-count {
+:is(.wz, .wz-sheet, .wz-lvl) .wz-count {
   padding: 2px 8px 3px;
   font-family: var(--font-ui);
   line-height: 1;
@@ -324,31 +324,31 @@
   -webkit-mask-box-image: var(--wz-torn) 48 / 5px round;
   mask-border: var(--wz-torn) 48 / 5px round;
 }
-:is(.wz, .wz-sheet) .wz-count.is-done {
+:is(.wz, .wz-sheet, .wz-lvl) .wz-count.is-done {
   color: var(--wz-ink);
   background: var(--wz-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
 }
 
 /* ——— переключатели и чипы ——— */
 
-:is(.wz, .wz-sheet) .wz-seg {
+:is(.wz, .wz-sheet, .wz-lvl) .wz-seg {
   gap: 4px;
   border: 0;
   border-image: none;
   align-self: flex-start;
 }
-:is(.wz, .wz-sheet) .wz-seg button + button {
+:is(.wz, .wz-sheet, .wz-lvl) .wz-seg button + button {
   border-left: 4px solid transparent;
 }
 /* Режим — чёрное: не «выбрано», а переключатель. */
-:is(.wz, .wz-sheet) .wz-seg button[aria-pressed="true"] {
+:is(.wz, .wz-sheet, .wz-lvl) .wz-seg button[aria-pressed="true"] {
   background: var(--wz-ink);
   color: var(--wz-acid);
 }
-:is(.wz, .wz-sheet) .wz-chip {
+:is(.wz, .wz-sheet, .wz-lvl) .wz-chip {
   border-radius: 0;
 }
-:is(.wz, .wz-sheet) .wz-chip[aria-pressed="true"] {
+:is(.wz, .wz-sheet, .wz-lvl) .wz-chip[aria-pressed="true"] {
   border: 0;
   padding: 4px calc(var(--sp-5) + 4px);
   background: var(--wz-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
@@ -375,7 +375,7 @@
   border: 4px solid transparent;
   border-image: var(--wz-rough-ink) 16 / 4px round;
 }
-:is(.wz, .wz-sheet) .wz-level button {
+:is(.wz, .wz-sheet, .wz-lvl) .wz-level button {
   width: 38px;
   min-height: 44px;
   padding: 0;
@@ -394,7 +394,7 @@
   line-height: 1;
   text-transform: uppercase;
 }
-:is(.wz, .wz-sheet) .wz-level-num input {
+:is(.wz, .wz-sheet, .wz-lvl) .wz-level-num input {
   width: 100%;
   min-height: 0;
   padding: 0;
@@ -1373,4 +1373,70 @@
   .wz .wz-abil-label {
     font-size: 15px;
   }
+}
+
+/* ——— Повышение уровня: тот же облик, раскладка своя (гриллинг Q11) ——— */
+
+.modal.wz-lvl .card.wizard {
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+.wz-lvl .campaign-player-header {
+  margin: calc(-1 * var(--sp-5)) calc(-1 * var(--sp-5)) 0;
+  padding: var(--sp-4) var(--sp-5) 22px;
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-4);
+  background: #141414 url("/ui/wizard/ink-surface.webp") center / 620px repeat;
+  color: var(--wz-paper);
+}
+.wz-lvl .campaign-player-header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 18px;
+  background: url("/ui/wizard/paper-edge.webp") left bottom / auto 100% repeat-x;
+  pointer-events: none;
+}
+.wz-lvl .campaign-player-header > :first-child {
+  font-family: var(--font-display);
+  font-size: 26px;
+  text-transform: none;
+}
+.wz-lvl .campaign-player-header > :last-child {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #bdb8ad;
+}
+.wz-lvl .wizard-steps-tabs {
+  gap: 4px;
+  border: 0;
+}
+.wz-lvl .wizard-steps-tabs button {
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+}
+.wz-lvl .wizard-steps-tabs button[aria-selected="true"] {
+  border: 0;
+  background: var(--wz-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
+  box-shadow: inset 5px 0 0 var(--wz-mag);
+  color: var(--wz-ink);
+  font-weight: 600;
+}
+.wz-lvl .wizard-data {
+  font-family: var(--font-ui);
+  font-weight: 700;
+}
+.wz-lvl .wizard-footer {
+  padding-top: var(--sp-4);
+  border-top: 2px solid transparent;
+  border-image: var(--wz-rough-ink) 16 round;
 }

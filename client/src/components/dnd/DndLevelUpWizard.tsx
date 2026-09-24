@@ -722,7 +722,7 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
   }
 
   return (
-    <Modal onClose={onClose} closeOnBackdropClick={false} ariaLabel="Новый уровень">
+    <Modal onClose={onClose} closeOnBackdropClick={false} ariaLabel="Новый уровень" className="wz-lvl">
       <div className="card stack wizard">
         <div className="campaign-player-header">
           <span>Новый уровень</span>
