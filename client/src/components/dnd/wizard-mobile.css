@@ -390,13 +390,17 @@
   gap: var(--sp-4);
 }
 .wz-ribbon-track {
+  /* offsetLeft карт считается от ближайшего позиционированного предка: без
+     этого — от подложки модалки, и на ПК центр ленты уезжал на её отступ,
+     а последняя карта не становилась текущей и не нажималась. */
+  position: relative;
   display: flex;
   gap: var(--sp-5);
   overflow-x: auto;
   scroll-snap-type: x mandatory;
   /* Отступы по бокам — половина экрана минус полкарты: крайние карты тоже
      встают по центру. Проценты паддинга считаются от ширины родителя. */
-  --wz-slide: min(72vw, 300px);
+  --wz-slide: min(82vw, 380px);
   padding: var(--sp-2) calc(50% - var(--wz-slide) / 2);
   scrollbar-width: none;
   overscroll-behavior-x: contain;
@@ -418,7 +422,7 @@
 }
 @media (min-width: 701px) {
   .wz-ribbon-track {
-    --wz-slide: 220px;
+    --wz-slide: 300px;
   }
 }
 .wz-slide-face {
@@ -761,4 +765,20 @@ button.wz-abil {
 }
 .wz-feat-inline {
   margin-top: var(--sp-4, 12px);
+}
+
+/* Оборот карты в ленте визарда — для чтения, а не для колоды: рамка тоньше
+   на 40%, текст шире. Полная рамка съедала треть ширины, и на карте в 220 px
+   в строку влезало два-три слова. Пропорции те же, что в dnd-cards.css, ×0.6. */
+.wz-slide-back .dc-scroll--evil .dc-scroll-frame {
+  border-width: 48.633cqi 7.617cqi 27.89cqi;
+}
+.wz-slide-back .dc-scroll--evil .dc-scroll-body {
+  padding: 22.265cqi 9.5cqi 17.578cqi;
+}
+.wz-slide-back .dc-scroll--good .dc-scroll-frame {
+  border-width: 19.336cqi 8.203cqi;
+}
+.wz-slide-back .dc-scroll--good .dc-scroll-body {
+  padding: 21.094cqi 10cqi 17.578cqi;
 }
