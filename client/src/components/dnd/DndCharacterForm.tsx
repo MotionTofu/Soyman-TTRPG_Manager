@@ -3099,6 +3099,7 @@ function DndEquipmentQuickView({
   calcSenderName,
   onCalcChanged,
   attunementMax,
+  attunement,
   onTransferItem,
   onQuickUpdate,
 }: {
@@ -3122,6 +3123,8 @@ function DndEquipmentQuickView({
   /** Лимит слотов настройки (3 + extra): счёт и подтверждение сверх лимита
    *  живут там, где настраивают, а не только во вкладке магии. */
   attunementMax?: number;
+  /** Блок настройки предметов — в боковую колонку рядом с весом и кошельком. */
+  attunement?: ReactNode;
   /** Передать эту строку: меню строки открывает тот же диалог передачи,
    *  но с уже выбранным предметом — из строки он выбран, из шапки нет. */
   onTransferItem?: (itemKey: string) => void;
@@ -3521,8 +3524,9 @@ function DndEquipmentQuickView({
     }))
     .filter(({ section, rows }) => rows.length > 0 || (!filtering && section.items.length === 0));
   return (
-    <>
+    <div className="dnd-equipment-view">
       {confirmDialog}
+      <div className="dnd-equipment-main">
       {baseRow && sections[baseRow.si]?.items[baseRow.ii] && (
         <DndReplicaBasePicker
           title={sections[baseRow.si].items[baseRow.ii].name}
@@ -3585,39 +3589,6 @@ function DndEquipmentQuickView({
         />
       )}
       <div className="dnd-equipment-head">Снаряжение</div>
-      {/* Шапка: не строка «Предметов · Вес · Нести», а одна величина, за
-          которой действительно следят, — вес полосой. Пока веса хватает,
-          полоса тихая; перегруз — единственное место раздела, где берётся
-          цвет предупреждения. Штрафа к скорости лист не считает, поэтому
-          и не обещает его словами. */}
-      <div className="dnd-equipment-summary">
-        <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-          <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
-            <span className="dnd-summary-num">{summary.totalItems}</span> предметов
-          </span>
-          <span
-            className={`muted${summary.attuned > attuneMax ? " dnd-limit-over" : ""}`}
-            style={{ fontSize: "var(--fs-meta)" }}
-            title={summary.attuned > attuneMax ? "Лимит настройки превышен" : `Настроено ${summary.attuned} из ${attuneMax}`}
-          >
-            Настройка <span className="dnd-summary-num">{summary.attuned}/{attuneMax}</span>
-          </span>
-        </div>
-        <div className="row dnd-weight-row" style={{ gap: 8, alignItems: "center" }}>
-          <div
-            className={`dnd-weight-bar${summary.overloaded ? " is-over" : ""}`}
-            role="img"
-            aria-label={`Вес ${formatWeight(summary.totalWeight, prefs.weightUnit)} из ${formatWeight(capacityLb, prefs.weightUnit)}`}
-            title={doublings.length > 0 ? `СИЛ × 15 × 2^${doublings.length} (${doublings.join(", ")})` : "СИЛ × 15"}
-          >
-            <span style={{ width: `${Math.min(100, capacityLb > 0 ? (summary.totalWeight / capacityLb) * 100 : 0)}%` }} />
-          </div>
-          <span className={`dnd-weight-num${summary.overloaded ? " dnd-limit-over" : ""}`}>
-            {formatWeight(summary.totalWeight, prefs.weightUnit)} / {formatWeight(capacityLb, prefs.weightUnit)}
-          </span>
-        </div>
-        {summary.overloaded && <div className="dnd-limit-over dnd-overload-note">Перегруз</div>}
-      </div>
       {/* Поиск по снаряжению: имя и заметка. Фильтр надето/магия — те же два
           вопроса за столом. */}
       <div className="row dnd-equipment-search" style={{ gap: 6, flexWrap: "wrap", marginTop: 6 }}>
@@ -4045,7 +4016,6 @@ function DndEquipmentQuickView({
       {/* Монеты — в самом низу вкладки, в своей рамке отдельно от настройки.
           Порядок — от медной к платиновой. Подписи столбиком (М над М), иначе
           пятая монета не влезает. */}
-      <DndCoinPurse coins={coins ?? EMPTY_COINS} onCommit={(c) => commit({ coins: c })} onOpenCalc={() => setCalcOpen(true)} />
       {calcOpen && (
         <DndCoinCalculator
           campaignId={calcCampaignId}
@@ -4057,7 +4027,47 @@ function DndEquipmentQuickView({
           onClose={() => setCalcOpen(false)}
         />
       )}
-    </>
+      </div>
+      {/* Боковая колонка (макет 2026-09-25): вес, настройка, кошелёк. На
+          телефоне колонка растворяется в потоке, вес встаёт наверх. */}
+      <aside className="dnd-equipment-aside">
+        {/* Шапка: не строка «Предметов · Вес · Нести», а одна величина, за
+            которой действительно следят, — вес полосой. Пока веса хватает,
+            полоса тихая; перегруз — единственное место раздела, где берётся
+            цвет предупреждения. Штрафа к скорости лист не считает, поэтому
+            и не обещает его словами. */}
+        <div className="dnd-equipment-summary">
+          <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+            <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+              <span className="dnd-summary-num">{summary.totalItems}</span> предметов
+            </span>
+            <span
+              className={`muted${summary.attuned > attuneMax ? " dnd-limit-over" : ""}`}
+              style={{ fontSize: "var(--fs-meta)" }}
+              title={summary.attuned > attuneMax ? "Лимит настройки превышен" : `Настроено ${summary.attuned} из ${attuneMax}`}
+            >
+              Настройка <span className="dnd-summary-num">{summary.attuned}/{attuneMax}</span>
+            </span>
+          </div>
+          <div className="row dnd-weight-row" style={{ gap: 8, alignItems: "center" }}>
+            <div
+              className={`dnd-weight-bar${summary.overloaded ? " is-over" : ""}`}
+              role="img"
+              aria-label={`Вес ${formatWeight(summary.totalWeight, prefs.weightUnit)} из ${formatWeight(capacityLb, prefs.weightUnit)}`}
+              title={doublings.length > 0 ? `СИЛ × 15 × 2^${doublings.length} (${doublings.join(", ")})` : "СИЛ × 15"}
+            >
+              <span style={{ width: `${Math.min(100, capacityLb > 0 ? (summary.totalWeight / capacityLb) * 100 : 0)}%` }} />
+            </div>
+            <span className={`dnd-weight-num${summary.overloaded ? " dnd-limit-over" : ""}`}>
+              {formatWeight(summary.totalWeight, prefs.weightUnit)} / {formatWeight(capacityLb, prefs.weightUnit)}
+            </span>
+          </div>
+          {summary.overloaded && <div className="dnd-limit-over dnd-overload-note">Перегруз</div>}
+        </div>
+        {attunement}
+        <DndCoinPurse coins={coins ?? EMPTY_COINS} onCommit={(c) => commit({ coins: c })} onOpenCalc={() => setCalcOpen(true)} />
+      </aside>
+    </div>
   );
 }
 
@@ -10709,6 +10719,71 @@ export function DndCharacterView({
       </DndCardBack>
     );
   }
+  // Настройка предметов: ромбы вместо точек, слоты сверх трёх. Счёт — по
+  // строкам с ◆: ручное число осталось только для старых листов, где строк
+  // с флагом ещё нет. Стоит в боковой колонке «Снаряжения» (макет) и под
+  // правкой раздела.
+  function renderAttunement() {
+    const rows = value.equipmentSections.flatMap((s) => s.items).filter((it) => !it.transferOut);
+    const rowsAreSource = rows.some((it) => "attuned" in it);
+    const counted = rows.filter((it) => it.attuned).length;
+    const shown = rowsAreSource ? counted : (value.attunementCount ?? 0);
+    const over = counted > 3 + (value.attunementExtra ?? 0);
+    return (shown > 0 || onQuickUpdate) ? (
+      <div className="dnd-frame">
+        <div className="row" style={{ gap: 6, alignItems: "center" }}>
+          <span className="sb-prop-label">Настроено предметов</span>{" "}
+          {over && (
+            <span className="dnd-limit-over" title="Лимит настройки превышен">
+              сверх лимита!
+            </span>
+          )}
+        </div>
+        {/* Кнопки слотов — в строке с ячейками, у правого края. */}
+        <div className="row" style={{ gap: 8, alignItems: "center", justifyContent: "space-between" }}>
+          <PipTrack
+            diamondFrom={4}
+            value={shown}
+            label="Настроено предметов"
+            max={3 + (value.attunementExtra ?? 0)}
+            onChange={
+              !rowsAreSource && onQuickUpdate ? (n) => onQuickUpdate({ attunementCount: n }) : undefined
+            }
+          />
+          {onQuickUpdate && (
+            <span className="row" style={{ gap: 4 }}>
+              <button
+                type="button"
+                className="comp-mini"
+                title="Добавить слот настройки"
+                aria-label="Добавить слот настройки"
+                onClick={() => onQuickUpdate({ attunementExtra: (value.attunementExtra ?? 0) + 1 })}
+              >
+                +
+              </button>
+              {(value.attunementExtra ?? 0) > 0 && (
+                <button
+                  type="button"
+                  className="comp-mini"
+                  title="Убрать слот настройки"
+                  aria-label="Убрать слот настройки"
+                  onClick={() =>
+                    onQuickUpdate({
+                      attunementExtra: (value.attunementExtra ?? 0) - 1,
+                      attunementCount: Math.min(shown, 3 + (value.attunementExtra ?? 0) - 1),
+                    })
+                  }
+                >
+                  −
+                </button>
+              )}
+            </span>
+          )}
+        </div>
+      </div>
+    ) : null;
+  
+  }
   // Правка основной информации — раскрывашкой (решение владельца): поля
   // сохраняются мгновенно, как везде на листе, «Сохранить» лишь закрывает
   // панель. На десктопе стоит под оборотом в правой колонке, на телефоне —
@@ -12895,6 +12970,7 @@ export function DndCharacterView({
                       refreshInbox();
                     }}
                     attunementMax={3 + (value.attunementExtra ?? 0)}
+                    attunement={renderAttunement()}
                     onTransferItem={
                       canUseInbox && ownerCharacterId != null
                         ? (key) => {
@@ -12907,69 +12983,7 @@ export function DndCharacterView({
                   />
                 </>
               )}
-              {/* Настройка предметов: ромбы вместо точек, слоты сверх трёх.
-                  Счёт — по строкам с ◆: ручное число осталось только для
-                  старых листов, где строк с флагом ещё нет. */}
-              {(() => {
-                const rows = value.equipmentSections.flatMap((s) => s.items).filter((it) => !it.transferOut);
-                const rowsAreSource = rows.some((it) => "attuned" in it);
-                const counted = rows.filter((it) => it.attuned).length;
-                const shown = rowsAreSource ? counted : (value.attunementCount ?? 0);
-                const over = counted > 3 + (value.attunementExtra ?? 0);
-                return (shown > 0 || onQuickUpdate) ? (
-                <div className="dnd-frame">
-                  <div className="row" style={{ gap: 6, alignItems: "center" }}>
-                    <span className="sb-prop-label">Настроено предметов</span>{" "}
-                    {over && (
-                      <span className="dnd-limit-over" title="Лимит настройки превышен">
-                        сверх лимита!
-                      </span>
-                    )}
-                  </div>
-                  {/* Кнопки слотов — в строке с ячейками, у правого края. */}
-                  <div className="row" style={{ gap: 8, alignItems: "center", justifyContent: "space-between" }}>
-                    <PipTrack
-                      diamondFrom={4}
-                      value={shown}
-                      label="Настроено предметов"
-                      max={3 + (value.attunementExtra ?? 0)}
-                      onChange={
-                        !rowsAreSource && onQuickUpdate ? (n) => onQuickUpdate({ attunementCount: n }) : undefined
-                      }
-                    />
-                    {onQuickUpdate && (
-                      <span className="row" style={{ gap: 4 }}>
-                        <button
-                          type="button"
-                          className="comp-mini"
-                          title="Добавить слот настройки"
-                          aria-label="Добавить слот настройки"
-                          onClick={() => onQuickUpdate({ attunementExtra: (value.attunementExtra ?? 0) + 1 })}
-                        >
-                          +
-                        </button>
-                        {(value.attunementExtra ?? 0) > 0 && (
-                          <button
-                            type="button"
-                            className="comp-mini"
-                            title="Убрать слот настройки"
-                            aria-label="Убрать слот настройки"
-                            onClick={() =>
-                              onQuickUpdate({
-                                attunementExtra: (value.attunementExtra ?? 0) - 1,
-                                attunementCount: Math.min(shown, 3 + (value.attunementExtra ?? 0) - 1),
-                              })
-                            }
-                          >
-                            −
-                          </button>
-                        )}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                ) : null;
-              })()}
+              {editingInventory && renderAttunement()}
               {transferModalOpen && canUseInbox && ownerCharacterId != null && (
                 <Modal
                   onClose={() => {

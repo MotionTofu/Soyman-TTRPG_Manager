@@ -487,3 +487,10 @@ html[data-app="oneshot"] .oneshot-gestures > button {
   letter-spacing: .06em;
   text-transform: uppercase;
 }
+/* Ромбы настройки — метки, а не кнопки в рост пальца: общая мишень 44px
+   вытягивала их в овалы. */
+@media (max-width: 700px) {
+  html[data-app="oneshot"] .oneshot-sheet .dnd-desktop-tab button[aria-label^="Настроено предметов"] {
+    min-height: 0;
+  }
+}
