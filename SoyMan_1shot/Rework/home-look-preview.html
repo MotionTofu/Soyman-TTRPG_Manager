@@ -30,9 +30,9 @@
     .intro h1::after { content:""; position:absolute; z-index:-1; left:0; right:-8px; bottom:-6px; height:15px; background:url("../assets/fantasy-punk/decorative/markers/marker-magenta-wide.webp") center/100% 100% no-repeat; }
     .intro-copy > p:last-child { max-width:580px; margin:14px 0 0; color:var(--muted); font-size:14px; }
     .counts { display:flex; flex:none; gap:9px; padding-bottom:4px; }
-    .count { display:flex; align-items:baseline; gap:7px; padding:7px 9px; border-bottom:2px solid var(--ink); background:rgba(240,237,228,.78); font:600 13px Oswald,'Arial Narrow',sans-serif; text-transform:uppercase; }
+    .count { display:flex; align-items:baseline; gap:7px; padding:6px 0 8px; background:url("../assets/fantasy-punk/decorative/dividers/divider-ink-hairline.webp") center bottom/100% 3px no-repeat; font:600 13px Oswald,'Arial Narrow',sans-serif; text-transform:uppercase; }
     .count b { font:700 21px/1 Oswald,'Arial Narrow',sans-serif; }
-    .count:first-child { border-color:var(--pink); }
+    .count:first-child { background-image:url("../assets/fantasy-punk/decorative/markers/marker-magenta-small.webp"); background-size:100% 5px; }
     .layout { display:grid; grid-template-columns:minmax(0,1fr) 330px; grid-template-areas:"library create" "library tools"; align-items:start; gap:20px 25px; }
     .library { grid-area:library; min-width:0; }
     .create { grid-area:create; }
@@ -41,11 +41,10 @@
     .section-head h2,.create h2 { margin:0; font:700 28px/1.05 Oswald,'Arial Narrow',sans-serif; text-transform:uppercase; }
     .section-head .section-index { margin-bottom:5px; }
     .section-note { padding-bottom:2px; color:var(--muted); font:500 12px Oswald,'Arial Narrow',sans-serif; text-transform:uppercase; white-space:nowrap; }
-    .character-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
-    .character { position:relative; min-width:0; background:var(--paper) url("../assets/fantasy-punk/textures/paper-panel.webp") repeat; border:2px solid var(--ink); box-shadow:4px 5px 0 rgba(23,23,23,.68); }
-    .character::after { content:""; position:absolute; z-index:3; bottom:-9px; right:-9px; width:63px; height:63px; background:url("../assets/fantasy-punk/decorative/frames/frame-corner-bottom-right.webp") right bottom/contain no-repeat; pointer-events:none; }
-    .character-art { position:relative; height:205px; overflow:hidden; background:#180c18 url("./assets/character-portrait-duo-v2.png") 75% 54%/cover no-repeat; }
-    .character-art::after { content:""; position:absolute; inset:62% 0 0; background:linear-gradient(transparent,rgba(23,23,23,.72)); pointer-events:none; }
+    .character-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; }
+    .character { position:relative; min-width:0; }
+    .character-art { position:relative; height:205px; overflow:hidden; background:#180c18 url("./assets/character-portrait-duo-v2.png") 75% 54%/cover no-repeat; -webkit-mask:url("./assets/panel-edge-mask.svg") center/100% 100% no-repeat; mask:url("./assets/panel-edge-mask.svg") center/100% 100% no-repeat; filter:drop-shadow(2px 3px 0 var(--ink)); }
+    .character-art::after { content:""; position:absolute; inset:58% 0 0; background:url("../assets/fantasy-punk/decorative/dividers/divider-rough-paper-long.webp") center bottom/100% 11px no-repeat,linear-gradient(transparent,rgba(23,23,23,.64)); pointer-events:none; }
     .character-draft .character-art { display:grid; place-items:center; background:var(--ink) url("../assets/fantasy-punk/textures/ink-surface.webp") repeat; }
     .character-draft .character-art::before { content:""; width:138px; height:138px; background:url("../assets/fantasy-punk/semantic/dice/d20-paper.webp") center/contain no-repeat; opacity:.21; transform:rotate(-10deg); }
     .character-draft .character-art::after { inset:auto 0 0; height:8px; background:url("../assets/fantasy-punk/decorative/dividers/divider-rough-paper-long.webp") center/100% 100% no-repeat; }
@@ -54,39 +53,39 @@
     .character-menu { position:absolute; z-index:4; top:10px; right:10px; }
     .character-menu > button { display:grid; place-items:center; width:42px; height:42px; padding:0; border:0; background:var(--paper); color:var(--ink); font:bold 26px/1 Arial,sans-serif; filter:drop-shadow(2px 2px 0 var(--ink)); -webkit-mask-image:url("./assets/button-edge-mask.svg"); mask-image:url("./assets/button-edge-mask.svg"); -webkit-mask-size:100% 100%; mask-size:100% 100%; }
     .character-menu > button:hover,.character-menu > button[aria-expanded="true"] { background:var(--acid); }
-    .character-menu-list { position:absolute; top:calc(100% + 6px); right:0; width:180px; padding:5px; border:2px solid var(--ink); background:var(--paper) url("../assets/fantasy-punk/textures/paper-panel.webp") repeat; box-shadow:4px 4px 0 var(--pink); }
+    .character-menu-list { position:absolute; top:calc(100% + 6px); right:0; width:180px; padding:7px; border:0; background:var(--paper) url("../assets/fantasy-punk/textures/paper-panel.webp") repeat; filter:drop-shadow(3px 4px 0 var(--pink)); -webkit-mask:url("./assets/panel-edge-mask.svg") center/100% 100% no-repeat; mask:url("./assets/panel-edge-mask.svg") center/100% 100% no-repeat; }
     .character-menu-list[hidden] { display:none; }
     .character-menu-list button { display:block; width:100%; min-height:35px; padding:6px 7px; border:0; border-bottom:1px solid #c3bcb0; background:none; color:var(--ink); text-align:left; font:600 13px Oswald,'Arial Narrow',sans-serif; text-transform:uppercase; }
     .character-menu-list button:last-child { border-bottom:0; }
     .character-menu-list button:hover { background:var(--acid); }
-    .character-body { display:flex; flex-direction:column; min-height:140px; padding:14px 15px 15px; }
+    .character-body { display:flex; flex-direction:column; min-height:126px; padding:12px 7px 0; }
     .character-body h3 { margin:0 0 5px; font:700 24px/1.05 Oswald,'Arial Narrow',sans-serif; text-transform:uppercase; }
     .character-body p { margin:0; color:var(--muted); font:500 13px/1.3 Oswald,'Arial Narrow',sans-serif; }
-    .character-body .open { display:flex; justify-content:space-between; align-items:center; gap:8px; width:100%; min-height:40px; margin-top:auto; padding:7px 10px; border:0; background:var(--ink); color:var(--paper); font:600 14px/1 Oswald,'Arial Narrow',sans-serif; text-decoration:none; text-transform:uppercase; }
+    .character-body .open { display:flex; justify-content:space-between; align-items:center; gap:10px; width:max-content; max-width:100%; min-width:170px; min-height:40px; margin-top:auto; padding:7px 12px; border:0; background:var(--ink); color:var(--paper); font:600 14px/1 Oswald,'Arial Narrow',sans-serif; text-decoration:none; text-transform:uppercase; filter:drop-shadow(2px 2px 0 var(--acid)); -webkit-mask:url("./assets/button-edge-mask.svg") center/100% 100% no-repeat; mask:url("./assets/button-edge-mask.svg") center/100% 100% no-repeat; }
     .character-body .open::after { content:"↗"; color:var(--acid); font-size:20px; }
     .character-body .open:hover { background:#333; }
     .library-imports { display:flex; flex-wrap:wrap; gap:8px 17px; margin-top:20px; padding:15px 0 0; background:url("../assets/fantasy-punk/decorative/dividers/divider-ink-hairline.webp") center top/100% 4px no-repeat; }
     .library-imports button { min-height:35px; padding:4px 0; border:0; border-bottom:2px solid var(--ink); background:transparent; color:var(--ink); font:600 13px Oswald,'Arial Narrow',sans-serif; text-transform:uppercase; }
     .library-imports button:hover { border-color:var(--pink); }
-    .create { position:relative; padding:20px 19px 21px; border:2px solid var(--ink); background:var(--paper) url("../assets/fantasy-punk/textures/paper-panel.webp") repeat; box-shadow:4px 5px 0 rgba(23,23,23,.7); }
-    .create::before { content:""; position:absolute; top:-10px; right:-8px; width:70px; height:70px; background:url("../assets/fantasy-punk/decorative/frames/frame-corner-top-right.webp") right top/contain no-repeat; pointer-events:none; }
-    .create .section-index { margin-bottom:9px; }
+    .create { position:relative; padding:22px 21px 23px; background:var(--ink) url("../assets/fantasy-punk/textures/ink-surface.webp") repeat; color:var(--paper); -webkit-mask:url("./assets/panel-edge-mask.svg") center/100% 100% no-repeat; mask:url("./assets/panel-edge-mask.svg") center/100% 100% no-repeat; }
+    .create::before { content:""; position:absolute; top:0; right:0; width:68px; height:68px; background:url("../assets/fantasy-punk/decorative/frames/frame-corner-top-right.webp") right top/contain no-repeat; pointer-events:none; }
+    .create .section-index { margin-bottom:9px; color:var(--acid); }
     .create h2 { margin-bottom:18px; }
-    .create label { display:block; margin-bottom:7px; font:600 12px Oswald,'Arial Narrow',sans-serif; letter-spacing:.08em; text-transform:uppercase; }
+    .create label { display:block; margin-bottom:7px; color:var(--paper); font:600 12px Oswald,'Arial Narrow',sans-serif; letter-spacing:.08em; text-transform:uppercase; }
     .create input { display:block; width:100%; min-height:45px; padding:10px 11px; border:2px solid var(--ink); border-radius:0; background:#f9f5ea; color:var(--ink); font-size:15px; }
     .create input::placeholder { color:#77736b; }
     .create-actions { display:grid; gap:9px; margin-top:13px; }
     .create-actions button { min-height:44px; padding:9px 10px; border:0; font:600 15px/1.1 Oswald,'Arial Narrow',sans-serif; text-align:left; text-transform:uppercase; -webkit-mask-image:url("./assets/button-edge-mask.svg"); mask-image:url("./assets/button-edge-mask.svg"); -webkit-mask-size:100% 100%; mask-size:100% 100%; }
-    .create-primary { background:var(--ink); color:var(--paper); filter:drop-shadow(3px 3px 0 var(--acid)); }
-    .create-secondary { background:#e1dacb; color:var(--ink); filter:drop-shadow(2px 2px 0 var(--ink)); }
+    .create-primary { background:var(--acid); color:var(--ink); filter:drop-shadow(3px 3px 0 var(--pink)); }
+    .create-secondary { background:var(--paper); color:var(--ink); filter:drop-shadow(2px 2px 0 var(--pink)); }
     .create-actions button:hover { background:var(--pink); color:var(--ink); }
-    .create-hint { margin:16px 0 0; padding-top:12px; background:url("../assets/fantasy-punk/decorative/dividers/divider-ink-hairline.webp") center top/100% 3px no-repeat; color:var(--muted); font:13px/1.35 Oswald,'Arial Narrow',sans-serif; }
-    .tools { border:2px solid var(--ink); background:#ded7c7 url("../assets/fantasy-punk/textures/paper-panel.webp") repeat; }
-    .tools summary { display:flex; justify-content:space-between; align-items:center; gap:10px; min-height:52px; padding:10px 16px; font:600 16px Oswald,'Arial Narrow',sans-serif; text-transform:uppercase; list-style:none; cursor:pointer; }
+    .create-hint { margin:16px 0 0; padding-top:12px; background:url("../assets/fantasy-punk/decorative/dividers/divider-rough-paper-long.webp") center top/100% 4px no-repeat; color:#d1cab9; font:13px/1.35 Oswald,'Arial Narrow',sans-serif; }
+    .tools { padding-top:8px; background:url("../assets/fantasy-punk/decorative/dividers/divider-ink-long.webp") center top/100% 6px no-repeat; }
+    .tools summary { display:flex; justify-content:space-between; align-items:center; gap:10px; min-height:52px; padding:8px 4px; font:600 16px Oswald,'Arial Narrow',sans-serif; text-transform:uppercase; list-style:none; cursor:pointer; }
     .tools summary::-webkit-details-marker { display:none; }
     .tools summary::after { content:"+"; font-size:25px; line-height:1; }
     .tools[open] summary::after { content:"−"; }
-    .tools-content { padding:0 16px 16px; }
+    .tools-content { padding:0 4px 16px; }
     .tools-content p { margin:0 0 10px; color:var(--muted); font-size:12px; }
     .tools-content button { display:block; width:100%; min-height:38px; padding:6px 0; border:0; border-top:1px solid #a9a395; background:transparent; color:var(--ink); text-align:left; font:600 13px Oswald,'Arial Narrow',sans-serif; text-transform:uppercase; }
     .tools-content button:hover { color:#971343; }
