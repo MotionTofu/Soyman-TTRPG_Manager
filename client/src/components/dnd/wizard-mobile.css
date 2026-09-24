@@ -769,13 +769,8 @@ button.wz-abil {
 
 /* Оборот карты в ленте визарда — для чтения, а не для колоды: рамка тоньше
    на 40%, текст шире. Полная рамка съедала треть ширины, и на карте в 220 px
-   в строку влезало два-три слова. Пропорции те же, что в dnd-cards.css, ×0.6. */
-.wz-slide-back .dc-scroll--evil .dc-scroll-frame {
-  border-width: 48.633cqi 7.617cqi 27.89cqi;
-}
-.wz-slide-back .dc-scroll--evil .dc-scroll-body {
-  padding: 22.265cqi 9.5cqi 17.578cqi;
-}
+   в строку влезало два-три слова. Пропорции те же, что в dnd-cards.css, ×0.6.
+   Злая рамка уже нарисована тонкой (2026-09-24) и не ужимается. */
 .wz-slide-back .dc-scroll--good .dc-scroll-frame {
   border-width: 19.336cqi 8.203cqi;
 }
