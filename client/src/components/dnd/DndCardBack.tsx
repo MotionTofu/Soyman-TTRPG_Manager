@@ -71,7 +71,7 @@ export function DndCardBack({
       className="dnd-card-back"
       style={{ borderLeftColor: color, borderRightColor: color }}
       role="region"
-      aria-label="Оборот карты: входящие, передачи, постер"
+      aria-label="Оборот карты"
     >
       {campaignConnected && <><div className="dnd-card-back-head">
         <span className="dnd-card-back-title">Входящие</span>
@@ -135,14 +135,18 @@ export function DndCardBack({
         </div>
       )}
       {notice && <p className="dnd-card-back-notice" role="status">{notice}</p>}</>}
-      {children}
+      {/* Цитата — первой плашкой (макет 2026-09-25): оборот открывают
+          ради неё и отдыха, передачи и постер — ниже. */}
       {oracle && (
         <figure className="dnd-oracle-slip" style={{ borderLeftColor: color }}>
           <blockquote>«{oracle}»</blockquote>
+          <figcaption>Оракул · новая при каждом перевороте</figcaption>
         </figure>
       )}
+      {children}
       {/* Угол возврата — тот же треугольник, что на лицевой, но бумажный на
           чёрном (по канвасу). Единственный жест назад с оборота. */}
+      <span className="dnd-card-frame-art" aria-hidden="true" />
       <button
         type="button"
         className="dnd-card-back-corner"

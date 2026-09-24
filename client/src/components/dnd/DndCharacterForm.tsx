@@ -5078,24 +5078,6 @@ function LiveChip({
   );
 }
 
-// Морда тофу для спасбросков от смерти. Тот же слепок маскота, что у пипсов
-// пулов (TofuPips): куб, контур, глаза — плюс рот, потому что здесь он и есть
-// смысл. Цвета канонные, вне темы: дорожка обязана читаться и на портрете, и
-// на бумаге. Отдельной графики не заводится.
-function TofuFace({ mood }: { mood: "good" | "bad" }) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <rect x="2" y="2" width="20" height="20" className="dnd-tofu-body" />
-      <circle cx="8.6" cy="10" r="2.1" className="dnd-tofu-eye" />
-      <circle cx="15.4" cy="10" r="2.1" className="dnd-tofu-eye" />
-      <path
-        className="dnd-tofu-mouth"
-        d={mood === "good" ? "M8.2 15.4c1.5 2 6.1 2 7.6 0" : "M8.2 17.6c1.5-2 6.1-2 7.6 0"}
-      />
-    </svg>
-  );
-}
-
 // Спасброски от смерти — поверх портрета, крупно (решение владельца 09.09).
 // Раньше дорожки жили только на карте «Ресурсы», а урон вводится с «Карты»:
 // упавший на нуле игрок оказывался за шесть карт от того, чем этот ноль
@@ -5123,6 +5105,7 @@ function DeathSaveOverlay({
   function row(field: "deathSaveSuccesses" | "deathSaveFailures", filled: number, mood: "good" | "bad", label: string) {
     return (
       <div className="dnd-death-row" role="group" aria-label={label}>
+        <span className="dnd-death-label" aria-hidden="true">{label}</span>
         {[0, 1, 2].map((i) => {
           const on = i < filled;
           return (
@@ -5138,7 +5121,10 @@ function DeathSaveOverlay({
               // откатывается одним движением, учиться нечему.
               onClick={onQuickUpdate ? () => onQuickUpdate({ [field]: i + 1 === filled ? i : i + 1 }) : undefined}
             >
-              {on && <TofuFace mood={mood} />}
+              {/* Черепушки владельца (DeathSaves.png): весёлая — успех,
+                  грустная — провал. Картинка фоном из CSS — автономный
+                  HTML встраивает только url() стилей. */}
+              {on && <span className={`dnd-death-skull is-${mood}`} aria-hidden="true" />}
             </button>
           );
         })}
@@ -9580,12 +9566,16 @@ function DndRestModal({
   companionsAfterRest,
   shortGrants,
   tireless,
+  kind,
   onQuickUpdate,
   onClose,
 }: {
   value: DndCharacterData;
   resources: DndResourceDef[];
   pools: HitDicePool[];
+  /** Какой отдых открыт: на обороте карты две кнопки — «Короткий» и
+   *  «Долгий» (макет 2026-09-25), каждая ведёт в свой раздел. */
+  kind: "short" | "long";
   /** Тела спутников после долгого отдыха (пушки развеяны, защитник пересобран)
    *  — null, когда менять нечего. Считает родитель: модалке компендиум не виден. */
   companionsAfterRest?: DndCompanion[] | null;
@@ -9780,14 +9770,14 @@ function DndRestModal({
     <Modal onClose={onClose}>
       <div className="stack dnd-spell-modal">
         <div className="row" style={{ justifyContent: "space-between" }}>
-          <h3 style={{ margin: 0 }}>Отдых</h3>
+          <h3 style={{ margin: 0 }}>{kind === "short" ? "Короткий отдых" : "Длинный отдых"}</h3>
           <button type="button" className="comp-mini" onClick={onClose} aria-label="Закрыть">
             <NavIcon name="close" />
           </button>
         </div>
 
+        {kind === "short" && (
         <div className="stack" style={{ gap: 4 }}>
-          <strong>Короткий отдых</strong>
           <p className="muted" style={{ margin: 0 }}>
             {shortNames.length > 0
               ? `Восстановит: ячейки договора магии, ${shortNames.join(", ")}.`
@@ -9803,9 +9793,10 @@ function DndRestModal({
             Провести короткий отдых
           </button>
         </div>
+        )}
 
+        {kind === "long" && (
         <div className="stack" style={{ gap: 4 }}>
-          <strong>Длинный отдых</strong>
           <p className="muted" style={{ margin: 0 }}>
             Восстановит хиты, снимет спасброски от смерти и концентрацию, вернёт все ячейки
             {longNames.length + shortNames.length > 0 ? " и ресурсы классов" : ""}
@@ -9826,6 +9817,7 @@ function DndRestModal({
             Провести длинный отдых
           </button>
         </div>
+        )}
         {confirmDialog}
       </div>
     </Modal>
@@ -10538,7 +10530,7 @@ export function DndCharacterView({
   // Оборот рисуется дважды (слева при перевороте, справа на десктопной
   // «Карте»), но никогда разом: условия исключают друг друга. Одна функция,
   // чтобы две копии не разъехались.
-  function renderCardBack() {
+  function renderCardBack(edit?: ReactNode) {
     // Постер — снимок лицевой стороны как есть. Переворот на телефоне
     // лицевую размонтирует — тогда на время снимка доворачиваем карту
     // обратно: два кадра на отрисовку, снимок, возврат на оборот.
@@ -10626,12 +10618,114 @@ export function DndCharacterView({
             лицевой стороне. Здесь он висел под отказом «оборот читает
             владелец персонажа», то есть мастеру предлагался ровно там, где
             ему только что отказали. */}
-        <PosterButtons
-          getBlob={snapshotFaceBlob}
-          fileBase={value.characterName.trim() || "personazh"}
-          shareTitle={value.characterName.trim() || "Без имени"}
-        />
+        {/* ОТДЫХ — на обороте (макет 2026-09-25): его нажимают раз за
+            сцену, а на лицевой жетон спорил с рамкой карты. */}
+        {onQuickUpdate && (
+          <section className="dnd-back-plate" aria-label="Отдых">
+            <h4 className="dnd-back-plate-title">Отдых</h4>
+            <div className="dnd-back-plate-row">
+              <button type="button" className="dnd-back-btn is-ink" onClick={() => setRestOpen("short")}>
+                Короткий<span>кости хитов</span>
+              </button>
+              <button type="button" className="dnd-back-btn is-ink" onClick={() => setRestOpen("long")}>
+                Долгий<span>всё заново</span>
+              </button>
+            </div>
+          </section>
+        )}
+        <section className="dnd-back-plate" aria-label="Постер">
+          <h4 className="dnd-back-plate-title">Постер</h4>
+          <PosterButtons
+            short
+            getBlob={snapshotFaceBlob}
+            fileBase={value.characterName.trim() || "personazh"}
+            shareTitle={value.characterName.trim() || "Без имени"}
+          />
+          <span className="dnd-back-plate-note">Снимок лицевой стороны карты</span>
+        </section>
+        {edit}
       </DndCardBack>
+    );
+  }
+  // Правка основной информации — раскрывашкой (решение владельца): поля
+  // сохраняются мгновенно, как везде на листе, «Сохранить» лишь закрывает
+  // панель. На десктопе стоит под оборотом в правой колонке, на телефоне —
+  // последней плашкой самого оборота (макет 2026-09-25): другого входа в
+  // правку с телефона в OneShot нет.
+  function renderFaceEdit() {
+    if (!syncTabToUrl || !onQuickUpdate || readOnly) return null;
+    return (
+      <div className="stack dnd-face-edit">
+        <button
+          type="button"
+          className="dnd-face-edit-head"
+          aria-expanded={rightEditOpen}
+          onClick={() => setRightEditOpen((v) => !v)}
+        >
+          <span>
+            Редактировать <span className="dnd-face-edit-hint">портрет, происхождение, характеристики</span>
+          </span>
+          <span aria-hidden="true">{rightEditOpen ? "−" : "+"}</span>
+        </button>
+        {rightEditOpen && (
+          <>
+            {/* Аватар — та же метка-загрузка, что в профиле: миниатюра
+                кликабельна целиком, хинт поверх. Без персонажа
+                (превью, компакт) лить некуда — блок молчит. */}
+            {ownerCharacterId != null && (
+              <label
+                className="avatar-upload-label dnd-face-avatar"
+                title={avatarUploading ? "Загрузка…" : "Сменить аватар"}
+              >
+                {portraitUrl ? (
+                  <img src={portraitUrl} alt="Аватар персонажа" />
+                ) : (
+                  <span className="dnd-face-avatar-empty" aria-hidden="true">
+                    +
+                  </span>
+                )}
+                <span className="avatar-upload-hint">
+                  {avatarUploading ? "Загрузка…" : portraitUrl ? "Сменить" : "Добавить"}
+                </span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  disabled={avatarUploading}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (file) void uploadPortrait(file);
+                  }}
+                />
+              </label>
+            )}
+            <DndOriginEditForm origin={origin} value={value} onQuickUpdate={onQuickUpdate} />
+            {/* Характеристики — в ту же раскрывашку: на десктопе это и
+                есть «режим редактирования» (лицевая при этом тоже
+                правится только через ?edit=1, которого здесь нет).
+                В ?edit=1 редактор уже стоит на лицевой и на обороте,
+                поэтому тут его гасим, чтобы не двоился. */}
+            {!editFromUrl && (
+              <AbilitySavesSkillsEdit
+                abilities={value.abilities}
+                proficiencyBonus={formatModifier(derived.proficiencyBonus.value)}
+                savingThrowProfs={value.savingThrowProfs}
+                skillProfs={value.skillProfs}
+                classSkillPool={classSkillPool(value.classes)}
+                classSkillChoiceCount={classSkillChoiceTotal(value.classes)}
+                backgroundSkillNames={value.backgroundSkillNames}
+                onAbilitiesChange={(v) => onQuickUpdate({ abilities: v })}
+                onSavingThrowProfsChange={(v) => onQuickUpdate({ savingThrowProfs: v })}
+                onSkillProfsChange={(v) => onQuickUpdate({ skillProfs: v })}
+              />
+            )}
+            <button type="button" className="primary" onClick={() => setRightEditOpen(false)}>
+              Сохранить
+            </button>
+          </>
+        )}
+      </div>
     );
   }
   // Блик загнутого угла раз в 30 секунд, пока есть непрочитанное и вкладка
@@ -10766,7 +10860,7 @@ export function DndCharacterView({
   // (мощь тела зависит от круга, а ритуал ячейки не тратит — форсить трату
   // выбором круга нельзя).
   const [summonSpell, setSummonSpell] = useState<number | null>(null);
-  const [restOpen, setRestOpen] = useState(false);
+  const [restOpen, setRestOpen] = useState<false | "short" | "long">(false);
   // Происхождение правится адресом ?edit=1 (карандаш на плашке чарника в
   // профиле): кнопки-карандаша в шапке больше нет (решение владельца
   // 2026-09-06). На самой карте органов правки нет — за столом лист читают.
@@ -11596,6 +11690,7 @@ export function DndCharacterView({
             companionsAfterRest={companionsRest}
             shortGrants={shortRestGrants}
             tireless={tireless}
+            kind={restOpen}
             onQuickUpdate={onQuickUpdate!}
             onClose={() => setRestOpen(false)}
           />
@@ -11634,7 +11729,10 @@ export function DndCharacterView({
               десктопе — шапка правой колонки (R2.1, по макету). Та же
               навигация, только место другое: showDesktopFace синхронен
               с CSS-брейкпоинтом 700px через useIsMobile. */}
-          {!showDesktopFace && !cardOnly && (
+          {/* На «Карте» телефона полоски нет (макет 2026-09-25): карта встаёт
+              от края до края, а в колоду ведут свайп, веер по двойному тапу и
+              «Колода карт» в меню «⋯». */}
+          {!showDesktopFace && !cardOnly && tab !== "Карта" && (
           <div className="dnd-deck-strip" role="tablist" aria-label="Карты листа" ref={deckStripRef}>
             {DND_VIEW_TABS.map((t) => (
               <button
@@ -11824,24 +11922,9 @@ export function DndCharacterView({
                     )}
                   </div>
               </div>
-              {/* ВДОХНОВЕНИЕ — жетон-звезда в углу карты, а не плашка в ряду
-                  (гриллинг 2026-09-04). Оно тратится ровно в тот момент, когда
-                  на карту смотрят, поэтому нажимается прямо здесь; а держать
-                  его в общей сетке нельзя — оно там двигало соседей. */}
-              {/* ОТДЫХ — жетон в левом углу, зеркально вдохновению: обе
-                  кнопки, которые нажимают прямо с карты, стоят по краям
-                  портрета, а не полосой над ним. */}
-              {onQuickUpdate && (
-                <button
-                  type="button"
-                  className={`dnd-rest-token${portraitUrl ? " on-portrait" : ""}`}
-                  title="Отдых"
-                  aria-label="Отдых"
-                  onClick={() => setRestOpen(true)}
-                >
-                  <img className="dnd-token-img" src={rasterAsset("tokens", "rest") ?? undefined} alt="" aria-hidden="true" draggable={false} />
-                </button>
-              )}
+              {/* ВДОХНОВЕНИЕ — жетон-звезда в углу карты (гриллинг 2026-09-04);
+                  спрятано флагом. Отдых переехал на оборот (макет 2026-09-25):
+                  его нажимают раз за сцену, а не посреди хода. */}
               {INSPIRATION_TOKEN_ENABLED && (value.inspiration || onQuickUpdate) && (
                 <button
                   type="button"
@@ -12046,7 +12129,8 @@ export function DndCharacterView({
                 его имя, и лист должен уметь ответить, не заставляя искать
                 зверя в бестиарии. */}
             {((value.companions ?? []).length > 0 || onQuickUpdate) && (
-              <div className="dnd-companions">
+              <div className="dnd-companions" aria-label="Спутники">
+                <span className="dnd-companions-label" aria-hidden="true">Спутники</span>
                 {(value.companions ?? []).map((c, i) => {
                   const remove = onQuickUpdate
                     ? () =>
@@ -12256,7 +12340,7 @@ export function DndCharacterView({
                       aria-label="Добавить спутника"
                       onClick={() => setAddingCompanion(true)}
                     >
-                      <img className="dnd-token-img" src={rasterAsset("tokens", "familiar") ?? undefined} alt="" aria-hidden="true" draggable={false} />
+                      +
                     </button>
                   ))}
               </div>
@@ -12266,18 +12350,21 @@ export function DndCharacterView({
                   без входящих, цвета класса при непрочитанных, без текста —
                   карту показывают соседям по столу. На десктопе оборот и так
                   стоит в правой колонке, поэтому угол там не кликается. */}
+              {/* Таро-рамка владельца (Card_Border2.png) — поверх карты, мимо
+                  кликов; уголок ниже лежит на её правом нижнем орнаменте. */}
+              <span className="dnd-card-frame-art" aria-hidden="true" />
               {showDesktopFace ? (
                 <span
                   className={`dnd-card-corner${unreadTotal > 0 ? " has-unread" : ""}${cornerGlint ? " glint" : ""}`}
-                  style={unreadTotal > 0 ? { background: cardColor } : undefined}
                   role="img"
                   aria-label={unreadTotal > 0 ? `${unreadTotal} новых входящих` : "Входящих нет"}
-                />
+                >
+                  {unreadTotal > 0 && <span className="dnd-card-corner-badge">{unreadTotal}</span>}
+                </span>
               ) : (
                 <button
                   type="button"
                   className={`dnd-card-corner${unreadTotal > 0 ? " has-unread" : ""}${cornerGlint ? " glint" : ""}`}
-                  style={unreadTotal > 0 ? { '--dnd-corner-color': cardColor } as CSSProperties : undefined}
                   onClick={() => {
                     setCardFlipped(true);
                     if (canUseInbox) {
@@ -12287,17 +12374,19 @@ export function DndCharacterView({
                   }}
                   aria-label={
                     unreadTotal > 0
-                      ? `Перевернуть карту: входящие, передачи, постер; ${unreadTotal} новых входящих`
-                      : "Перевернуть карту: входящие, передачи, постер"
+                      ? `Перевернуть карту: отдых, постер, правка; ${unreadTotal} новых входящих`
+                      : "Перевернуть карту: отдых, постер, правка"
                   }
-                />
+                >
+                  {unreadTotal > 0 && <span className="dnd-card-corner-badge">{unreadTotal}</span>}
+                </button>
               )}
             </div>
           )}
           {/* Оборот первой карты — входящие игрока. Отдельная сторона, а не
               модалка (разбор): возврат — уголком и уходом с карты. На десктопе
               при перевороте оборот встаёт в левую колонку вместо лицевой. */}
-          {tab === "Карта" && cardFlipped && renderCardBack()}
+          {tab === "Карта" && cardFlipped && renderCardBack(renderFaceEdit())}
 
           {!cardOnly && (
           <div className="dnd-desktop-tab">
@@ -12325,80 +12414,7 @@ export function DndCharacterView({
           {showDesktopFace && tab === "Карта" && !cardFlipped && (
             <div className="stack dnd-desktop-back">
               {renderCardBack()}
-              {/* Правка основной информации — раскрывашкой под оборотом
-                  (решение владельца): поля сохраняются мгновенно, как везде
-                  на листе, «Сохранить» лишь закрывает панель. */}
-              {syncTabToUrl && onQuickUpdate && !readOnly && (
-                <div className="stack dnd-face-edit">
-                  <button
-                    type="button"
-                    className="dnd-face-edit-head"
-                    aria-expanded={rightEditOpen}
-                    onClick={() => setRightEditOpen((v) => !v)}
-                  >
-                    <span>Редактировать</span>
-                    <span aria-hidden="true">{rightEditOpen ? "−" : "+"}</span>
-                  </button>
-                  {rightEditOpen && (
-                    <>
-                      {/* Аватар — та же метка-загрузка, что в профиле: миниатюра
-                          кликабельна целиком, хинт поверх. Без персонажа
-                          (превью, компакт) лить некуда — блок молчит. */}
-                      {ownerCharacterId != null && (
-                        <label
-                          className="avatar-upload-label dnd-face-avatar"
-                          title={avatarUploading ? "Загрузка…" : "Сменить аватар"}
-                        >
-                          {portraitUrl ? (
-                            <img src={portraitUrl} alt="Аватар персонажа" />
-                          ) : (
-                            <span className="dnd-face-avatar-empty" aria-hidden="true">
-                              +
-                            </span>
-                          )}
-                          <span className="avatar-upload-hint">
-                            {avatarUploading ? "Загрузка…" : portraitUrl ? "Сменить" : "Добавить"}
-                          </span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            style={{ display: "none" }}
-                            disabled={avatarUploading}
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              e.target.value = "";
-                              if (file) void uploadPortrait(file);
-                            }}
-                          />
-                        </label>
-                      )}
-                      <DndOriginEditForm origin={origin} value={value} onQuickUpdate={onQuickUpdate} />
-                      {/* Характеристики — в ту же раскрывашку: на десктопе это и
-                          есть «режим редактирования» (лицевая при этом тоже
-                          правится только через ?edit=1, которого здесь нет).
-                          В ?edit=1 редактор уже стоит на лицевой и на обороте,
-                          поэтому тут его гасим, чтобы не двоился. */}
-                      {!editFromUrl && (
-                        <AbilitySavesSkillsEdit
-                          abilities={value.abilities}
-                          proficiencyBonus={formatModifier(derived.proficiencyBonus.value)}
-                          savingThrowProfs={value.savingThrowProfs}
-                          skillProfs={value.skillProfs}
-                          classSkillPool={classSkillPool(value.classes)}
-                          classSkillChoiceCount={classSkillChoiceTotal(value.classes)}
-                          backgroundSkillNames={value.backgroundSkillNames}
-                          onAbilitiesChange={(v) => onQuickUpdate({ abilities: v })}
-                          onSavingThrowProfsChange={(v) => onQuickUpdate({ savingThrowProfs: v })}
-                          onSkillProfsChange={(v) => onQuickUpdate({ skillProfs: v })}
-                        />
-                      )}
-                      <button type="button" className="primary" onClick={() => setRightEditOpen(false)}>
-                        Сохранить
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
+              {renderFaceEdit()}
             </div>
           )}
           {tab === "Действия" && (

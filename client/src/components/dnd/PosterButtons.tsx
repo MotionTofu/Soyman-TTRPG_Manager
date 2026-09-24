@@ -10,10 +10,14 @@ export function PosterButtons({
   getBlob,
   fileBase,
   shareTitle,
+  short,
 }: {
   getBlob: () => Promise<Blob>;
   fileBase: string;
   shareTitle: string;
+  /** Короткие подписи — на плашке «Постер» оборота карты, где слово
+   *  «постер» уже стоит заголовком. */
+  short?: boolean;
 }) {
   const [busy, setBusy] = useState<null | "png" | "share">(null);
   const [error, setError] = useState<string | null>(null);
@@ -42,11 +46,11 @@ export function PosterButtons({
 
   return (
     <div className="stack" style={{ gap: "var(--sp-2)" }}>
-      <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-        <button type="button" onClick={() => void run("png")} disabled={busy !== null}>
-          {busy === "png" ? "Собираю…" : "Скачать постер (PNG)"}
+      <div className={short ? "dnd-back-plate-row" : "row"} style={short ? undefined : { flexWrap: "wrap", gap: 8 }}>
+        <button type="button" className={short ? "dnd-back-btn" : undefined} onClick={() => void run("png")} disabled={busy !== null}>
+          {busy === "png" ? "Собираю…" : short ? "Скачать" : "Скачать постер (PNG)"}
         </button>
-        <button type="button" onClick={() => void run("share")} disabled={busy !== null}>
+        <button type="button" className={short ? "dnd-back-btn" : undefined} onClick={() => void run("share")} disabled={busy !== null}>
           {busy === "share" ? "Собираю…" : "Поделиться"}
         </button>
       </div>

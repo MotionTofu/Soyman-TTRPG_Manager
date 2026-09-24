@@ -588,3 +588,319 @@ body.sheet-fullscreen {
  * R3.6 owns mobile decor. Nothing from those packs is referenced above.
  * Unused global [data-active] pseudo-element hook was removed: future
  * decorative states must be explicitly scoped to a sheet surface. */
+
+/* ---- §11. Таро-рамка карты и оборот (макет 2026-09-25). ----
+ * Рамка владельца (Card_Border2.png) лежит пролётом поверх карты: срез
+ * 300 px, вынос наружу — цепь рамки ложится ровно на край карты. Прежние
+ * орнаменты R3.2 (полумесяц, нижний угол), контур и тень уступают ей место.
+ * isolation держит рамку внутри карты: модалки и веер ложатся поверх неё.
+ * Уголок-переворот — прозрачная мишень на правом нижнем орнаменте рамки,
+ * непрочитанное — маджентовой меткой с числом. */
+.dnd-card-face,
+.dnd-desktop-split > .dnd-card-face,
+.dnd-card-back {
+  --frame-b: 84px;
+  --frame-o: 21px;
+  position: relative;
+  isolation: isolate;
+  outline: none;
+  box-shadow: none;
+  border-left-width: 0;
+  border-right-width: 0;
+  border-bottom-width: 0;
+  border-top-width: 0;
+  margin-bottom: var(--frame-o);
+}
+.dnd-card-face::before,
+.dnd-card-face::after {
+  content: none;
+}
+.dnd-card-frame-art {
+  position: absolute;
+  inset: calc(var(--frame-o) * -1);
+  border: var(--frame-b) solid transparent;
+  border-image: url("/ui/sheet/card-frame.webp") 300 / var(--frame-b) round;
+  pointer-events: none;
+  z-index: 3;
+}
+.dnd-card-corner,
+.dnd-card-back-corner {
+  right: calc(var(--frame-o) * -1);
+  bottom: calc(var(--frame-o) * -1);
+  width: calc(var(--frame-b) - 8px);
+  height: calc(var(--frame-b) - 8px);
+  clip-path: none;
+  background: none;
+  opacity: 1;
+  z-index: 4;
+}
+.dnd-card-corner-badge {
+  position: absolute;
+  right: 18px;
+  bottom: 16px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--skin-magenta) url("/ui/wizard/punk-magenta.webp") center / 360px;
+  color: var(--skin-ink);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 2px 2px 0 var(--skin-ink);
+}
+@media (max-width: 700px) {
+  .dnd-card-face,
+  .dnd-card-back {
+    --frame-b: 66px;
+    --frame-o: 16px;
+    /* Край в край: цепь рамки упирается в края экрана. Гасим поля тела
+       листа (--sp-4) и его боковины (5px + 1px карточки). */
+    /* 1px карточки + 5px боковины + 10px поля тела листа. */
+    margin-inline: -16px;
+  }
+  /* Верхняя цепь — сразу под шапкой приложения. */
+  .dnd-desktop-split > .dnd-card-face,
+  .dnd-desktop-split > .dnd-card-back {
+    margin-top: calc(var(--pad-y, 10px) * -1);
+  }
+  /* Низ карты — и низ листа: полоса тела листа под ней не нужна, вынос
+     рамки уходит на фон страницы. */
+  .dnd-card-face,
+  .dnd-card-back {
+    margin-bottom: 0;
+  }
+  .sb-body:has(> .dnd-desktop-split > :is(.dnd-card-face, .dnd-card-back)) {
+    padding-bottom: 0;
+  }
+  .dnd-desktop-tab:empty {
+    display: none;
+  }
+  .sb-scope {
+    overflow-x: clip;
+  }
+}
+
+/* Спасброски — черепушки владельца (DeathSaves.png). */
+.dnd-death-row {
+  align-items: center;
+}
+.dnd-death-label {
+  width: 74px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #bdb8ad;
+}
+.dnd-death-cell {
+  border: 2px dashed #bdb8ad;
+  border-radius: 50%;
+  padding: 0;
+}
+.dnd-death-cell.is-on {
+  border-color: transparent;
+}
+.dnd-death-skull {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: center / contain no-repeat;
+}
+.dnd-death-skull.is-good {
+  background-image: url("/ui/sheet/save-ok.webp");
+}
+.dnd-death-skull.is-bad {
+  background-image: url("/ui/sheet/save-bad.webp");
+}
+
+/* Оборот: чернильная фактура и бумажные плашки с неровным контуром —
+ * цитата оракула, отдых, постер, правка. */
+.dnd-card-back {
+  background: #141414 url("/ui/wizard/ink-surface.webp") center / 620px repeat;
+  color: #e8e4da;
+  padding: 58px 22px;
+  gap: 12px;
+}
+.dnd-back-plate,
+.dnd-card-back .dnd-oracle-slip,
+.dnd-card-back .dnd-face-edit {
+  margin: 0;
+  padding: 12px 14px;
+  border: 4px solid transparent;
+  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background-clip: padding-box;
+  color: var(--skin-ink);
+  transform: none;
+}
+.dnd-card-back .dnd-oracle-slip {
+  padding: 16px 16px 14px;
+}
+.dnd-card-back .dnd-oracle-slip blockquote {
+  font-family: "Rubik Dirt", var(--font-ui), sans-serif;
+  font-style: normal;
+  font-size: 22px;
+  line-height: 1.12;
+}
+.dnd-oracle-slip figcaption,
+.dnd-back-plate-title,
+.dnd-back-plate-note {
+  display: block;
+  margin: 8px 0 0;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--skin-ink-soft);
+}
+.dnd-back-plate-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+.dnd-back-plate-note {
+  margin-top: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.dnd-back-plate-row {
+  display: flex;
+  gap: 8px;
+}
+.dnd-back-btn {
+  flex: 1;
+  min-height: 52px;
+  padding: 6px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  border: 4px solid transparent;
+  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  border-radius: 0;
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background-clip: padding-box;
+  color: var(--skin-ink);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.dnd-back-btn.is-ink {
+  border: 0;
+  background: var(--skin-ink);
+  color: #e8e4da;
+}
+.dnd-back-btn > span {
+  font-family: var(--font-body, inherit);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: 0.75;
+}
+.dnd-card-back .dnd-face-edit {
+  padding: 0;
+}
+.dnd-face-edit-head {
+  min-height: 52px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.dnd-face-edit-hint {
+  font-family: var(--font-body, inherit);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--skin-ink-soft);
+}
+/* ПК: оборот — плашками прямо в правой колонке «Карты», без рамки и без
+ * чернил (макет PC-Card). С входящими кампании (основное приложение)
+ * остаётся чернильным: они свёрстаны под тёмную рубашку. */
+@media (min-width: 701px) {
+  .dnd-desktop-back .dnd-card-back:not(:has(.dnd-card-back-head, .dnd-transfer-box)) {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    max-width: 760px;
+    margin: 0;
+    padding: 0;
+    background: none;
+    color: var(--skin-ink);
+    animation: none;
+  }
+  .dnd-desktop-back .dnd-card-back:not(:has(.dnd-card-back-head, .dnd-transfer-box)) > :not(.dnd-back-plate) {
+    grid-column: 1 / -1;
+  }
+  .dnd-desktop-back .dnd-card-back:not(:has(.dnd-card-back-head, .dnd-transfer-box)) .dnd-oracle-slip blockquote {
+    font-size: 26px;
+  }
+  .dnd-desktop-back .dnd-card-back > .dnd-card-frame-art,
+  .dnd-desktop-back .dnd-card-back > .dnd-card-back-corner {
+    display: none;
+  }
+  .dnd-desktop-back > .dnd-face-edit {
+    max-width: 760px;
+    border: 4px solid transparent;
+    border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+    background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+    background-clip: padding-box;
+  }
+}
+
+/* Поля карты под рамкой: содержимое не заходит под цепь, портрет и
+ * чернильные полосы (виталы, подвал) идут от рельса до рельса. */
+.dnd-card-face,
+.dnd-desktop-split > .dnd-card-face {
+  --pad-x: 22px;
+  --pad-y: 10px;
+  padding: var(--pad-y) var(--pad-x) 0;
+}
+/* Подвал спутников — чернильная полоса по низу карты; «+» справа, но левее
+ * уголка-переворота. */
+.dnd-card-face > .dnd-companions {
+  margin: auto calc(var(--pad-x) * -1) 0;
+  padding: 12px 64px 14px 36px;
+  border-top: 0;
+  background: #141414 url("/ui/wizard/ink-surface.webp") center / 620px repeat;
+  color: #e8e4da;
+  gap: 14px;
+}
+.dnd-companions-label {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #bdb8ad;
+}
+.dnd-card-face .dnd-companion-add {
+  margin-left: auto;
+  width: 46px;
+  height: 46px;
+  border: 2px dashed #bdb8ad;
+  background: none;
+  color: #e8e4da;
+  font-size: 24px;
+  line-height: 1;
+}
+@media (max-width: 700px) {
+  .dnd-card-face > .dnd-triad {
+    margin-inline: calc(var(--pad-x) * -1);
+  }
+}
+@media (min-width: 701px) {
+  /* Верхняя цепь рамки — по верху полоски разделов справа. */
+  .dnd-desktop-split > .dnd-card-face {
+    margin-top: -6px;
+  }
+}
