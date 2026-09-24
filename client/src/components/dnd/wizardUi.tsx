@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import type { CompendiumEntry } from "../../types";
 import { readResource } from "../../data/imperative";
 import { Modal } from "../Modal";
@@ -48,6 +49,24 @@ export function Sheet({
 }
 
 /** Шторка записи справочника: описание догружается, если его не принесли. */
+function useEntry(entryId: number, given?: CompendiumEntry | null) {
+  const [entry, setEntry] = useState<CompendiumEntry | null>(given ?? null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setEntry(given ?? null);
+    setFailed(false);
+    if (given?.description != null) return;
+    let alive = true;
+    readResource<CompendiumEntry>(`/systems/entries/${entryId}`)
+      .then((e) => alive && setEntry(e))
+      .catch(() => alive && setFailed(true));
+    return () => {
+      alive = false;
+    };
+  }, [entryId, given]);
+  return { entry, failed };
+}
+
 export function EntrySheet({
   entryId,
   entry: given,
@@ -65,18 +84,7 @@ export function EntrySheet({
   action?: { label: string; onClick: () => void; disabled?: boolean };
   onClose: () => void;
 }) {
-  const [entry, setEntry] = useState<CompendiumEntry | null>(given ?? null);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    if (given?.description != null) return;
-    let alive = true;
-    readResource<CompendiumEntry>(`/systems/entries/${entryId}`)
-      .then((e) => alive && setEntry(e))
-      .catch(() => alive && setFailed(true));
-    return () => {
-      alive = false;
-    };
-  }, [entryId, given]);
+  const { entry, failed } = useEntry(entryId, given);
   return (
     <Sheet
       title={title ?? entry?.name ?? "…"}
@@ -242,6 +250,7 @@ export function CardRibbon({
   /** Рядом с поиском — например, уровень у ленты классов. */
   aside?: ReactNode;
 }) {
+  const desktop = useIsDesktop();
   const [q, setQ] = useState("");
   const needle = q.trim().toLowerCase();
   const list = needle ? options.filter((o) => o.id === CUSTOM_CARD_ID || o.name.toLowerCase().includes(needle)) : options;
@@ -281,6 +290,17 @@ export function CardRibbon({
     scrollToIndex(i, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [needle]);
+
+  if (desktop) {
+    return (
+      <CardStage
+        systemId={systemId}
+        searchPlaceholder={searchPlaceholder}
+        aside={aside}
+        groups={[{ key: "one", label: "", options, selectedId, onPick, noteFor, pickDisabled }]}
+      />
+    );
+  }
 
   const current = list[Math.min(cur, list.length - 1)];
   const isCustom = current?.id === CUSTOM_CARD_ID;
@@ -494,5 +514,296 @@ export function StepStaff({ index, total, onOpen }: { index: number; total: numb
       <span className="wz-staff-part wz-staff-done" style={{ width: w(done) }} />
       <span className="wz-staff-mark" style={{ left: w(STAFF_NOTES[i]) }} />
     </button>
+  );
+}
+
+// ——— ПК: сцена карты, рамка описания ———
+
+const DESKTOP_MQ = "(min-width: 1001px)";
+
+/** ПК-раскладка визарда (рейка, сцена, рамка) — от той же границы, где
+ *  включается сплит с живым листом. */
+export function useIsDesktop(): boolean {
+  const [on, setOn] = useState(() => typeof window !== "undefined" && window.matchMedia(DESKTOP_MQ).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(DESKTOP_MQ);
+    const sync = () => setOn(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+  return on;
+}
+
+/** Альбомная рамка: прозрачная середина, фактура бумаги под всей рамкой. */
+function Plate({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={`wz-plate${className ? ` ${className}` : ""}`}>
+      <div className="wz-plate-body">{children}</div>
+    </div>
+  );
+}
+
+type PlateAction = { label: string; onClick: () => void; disabled?: boolean };
+
+/** Рамка записи справочника на ПК — то же, что шторка на телефоне, но на месте. */
+export function EntryPlate({
+  entryId,
+  entry,
+  meta,
+  action,
+}: {
+  entryId: number | null;
+  entry?: CompendiumEntry | null;
+  meta?: ReactNode;
+  action?: PlateAction;
+}) {
+  if (entryId == null) {
+    return (
+      <div className="wz-plate-col">
+        <Plate className="is-empty">
+          <p className="wz-plate-hint">Нажми на строку слева — описание появится здесь.</p>
+        </Plate>
+      </div>
+    );
+  }
+  return <EntryPlateLoaded key={entryId} entryId={entryId} entry={entry} meta={meta} action={action} />;
+}
+
+function EntryPlateLoaded({
+  entryId,
+  entry: given,
+  meta,
+  action,
+}: {
+  entryId: number;
+  entry?: CompendiumEntry | null;
+  meta?: ReactNode;
+  action?: PlateAction;
+}) {
+  const { entry, failed } = useEntry(entryId, given);
+  return (
+    <div className="wz-plate-col">
+      <Plate>
+        <h2 className="wz-plate-title">{entry?.name ?? "…"}</h2>
+        {meta && <p className="wz-plate-meta">{meta}</p>}
+        {entry ? (
+          <MentionText text={entry.description?.trim() ? entry.description : "Описания нет."} />
+        ) : (
+          <span className="muted">{failed ? "Описание не загрузилось." : "Загружаю…"}</span>
+        )}
+      </Plate>
+      {action && (
+        <div className="wz-plate-actions">
+          <span className="muted">Смотришь: {entry?.name ?? "…"}</span>
+          <span className="wz-shadow">
+            <button type="button" className="primary" disabled={action.disabled} onClick={action.onClick}>
+              {action.label}
+              {entry ? `: ${entry.name}` : ""}
+            </button>
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StagePlate({ systemId, option }: { systemId: number | null; option: CardOption }) {
+  const custom = option.id === CUSTOM_CARD_ID;
+  const { data, error } = useCardEntry(systemId, custom ? null : option.id);
+  return (
+    <Plate className="wz-stage-plate">
+      {custom ? (
+        <>
+          <h2 className="wz-plate-title">{option.name}</h2>
+          <p>Своего варианта нет в справочнике — договоритесь с Мастером, а на листе впишете сами.</p>
+        </>
+      ) : error ? (
+        <span className="muted">Текст не загрузился: {error}</span>
+      ) : !data ? (
+        <span className="muted">Загружаю…</span>
+      ) : (
+        <CardScroll entry={data.entry} features={data.features} anchorPrefix={`wzs${option.id}`} />
+      )}
+    </Plate>
+  );
+}
+
+export interface StageGroup {
+  key: string;
+  /** Подпись полосы миниатюр; пустая — полоса одна, подпись не нужна. */
+  label: string;
+  note?: string;
+  options: CardOption[];
+  selectedId: number | null;
+  onPick: (id: number) => void;
+  noteFor?: (o: CardOption) => string | undefined;
+  pickDisabled?: string;
+}
+
+/**
+ * Сцена карты на ПК (гриллинг рестайлинга, Q6/Q13): крупная карта, рядом —
+ * её текст в альбомной рамке, под ними имя, уровень и «Выбрать», ниже —
+ * полосы миниатюр. Полос несколько (класс и подкласс) — на сцене та, по
+ * которой щёлкнули последней. Переворота нет: текст и так рядом.
+ */
+export function CardStage({
+  systemId,
+  groups,
+  searchPlaceholder,
+  aside,
+}: {
+  systemId: number | null;
+  groups: StageGroup[];
+  searchPlaceholder?: string;
+  aside?: ReactNode;
+}) {
+  const openGroup = () => {
+    const i = groups.findIndex((g) => g.selectedId == null && !g.pickDisabled && g.options.length > 0);
+    return groups[i >= 0 ? i : 0]?.key ?? "";
+  };
+  const [activeKey, setActiveKey] = useState(openGroup);
+  const [curBy, setCurBy] = useState<Record<string, number>>({});
+  const [q, setQ] = useState("");
+  // Поиск — в шапке шага справа (как на макете): по высоте сцена с двумя
+  // полосами иначе не влезает в окно.
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => setSlot(document.querySelector<HTMLElement>(".wz-stage-slot")), []);
+  // Открылась новая полоса (класс выбран, уровень дорос до подкласса) —
+  // сцена к ней.
+  const groupKeys = groups.map((g) => `${g.key}${g.pickDisabled ? "-" : "+"}`).join("|");
+  useEffect(() => {
+    setActiveKey(openGroup());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupKeys]);
+
+  const needle = q.trim().toLowerCase();
+  const filtered = (g: StageGroup) =>
+    needle ? g.options.filter((o) => o.id === CUSTOM_CARD_ID || o.name.toLowerCase().includes(needle)) : g.options;
+  const curOf = (g: StageGroup) => {
+    const gl = filtered(g);
+    const saved = curBy[g.key];
+    if (saved != null && saved < gl.length) return saved;
+    return Math.max(0, gl.findIndex((o) => o.id === g.selectedId));
+  };
+  const setCur = (g: StageGroup, i: number) => {
+    setActiveKey(g.key);
+    setCurBy((m) => ({ ...m, [g.key]: i }));
+  };
+  const group = groups.find((g) => g.key === activeKey) ?? groups[0];
+  if (!group) return null;
+  const list = filtered(group);
+  const cur = curOf(group);
+  const current = list[cur];
+  const chosen = current != null && current.id === group.selectedId;
+  const note = current ? group.noteFor?.(current) : undefined;
+
+  return (
+    <div className="wz-stage">
+      {searchPlaceholder &&
+        slot &&
+        createPortal(<SearchField value={q} onChange={setQ} placeholder={searchPlaceholder} />, slot)}
+      {!current ? (
+        <span className="muted">Ничего не найдено.</span>
+      ) : (
+        <>
+          <div className="wz-stage-main">
+            <div className={`wz-stage-card${chosen ? " is-selected" : ""}`}>
+              {current.id === CUSTOM_CARD_ID ? (
+                <span className="wz-slide-custom">
+                  <span>{current.name}</span>
+                  <span className="muted">договоритесь с Мастером</span>
+                </span>
+              ) : (
+                <CardPicture id={current.id} name={current.name} card={current.card} />
+              )}
+              {note && <span className="dc-tile-note">{note}</span>}
+            </div>
+            <StagePlate key={current.id} systemId={systemId} option={current} />
+          </div>
+          <div className="wz-stage-bar">
+            <button type="button" className="wz-icon-btn" aria-label="Предыдущая" disabled={cur <= 0} onClick={() => setCur(group, cur - 1)}>
+              ‹
+            </button>
+            <div className="wz-stage-name">
+              <strong className="wz-display">{current.name}</strong>
+              <span className="muted">
+                {group.label ? `${group.label} · ` : ""}
+                {cur + 1} из {list.length} · стрелки ← → листают
+              </span>
+            </div>
+            <button
+              type="button"
+              className="wz-icon-btn"
+              aria-label="Следующая"
+              disabled={cur >= list.length - 1}
+              onClick={() => setCur(group, cur + 1)}
+            >
+              ›
+            </button>
+            <div className="wz-stage-aside">{aside}</div>
+            {group.pickDisabled ? (
+              <span className="muted">{group.pickDisabled}</span>
+            ) : chosen ? (
+              <button type="button" className="wz-stage-chosen" disabled>
+                <span className="wz-hl">✓</span> Выбран: {current.name}
+              </button>
+            ) : (
+              <span className="wz-shadow">
+                <button type="button" className="primary" onClick={() => group.onPick(current.id)}>
+                  Выбрать: {current.name}
+                </button>
+              </span>
+            )}
+          </div>
+        </>
+      )}
+      <div className="wz-stage-strips">
+        {groups.map((g) => {
+          const gl = filtered(g);
+          const gc = curOf(g);
+          const on = g.key === group.key;
+          return (
+            <div key={g.key} className={`wz-strip${on ? " is-active" : ""}`}>
+              {g.label && (
+                <div className="wz-strip-head">
+                  <span className="wz-strip-label">{g.label}</span>
+                  {g.note && <span className="muted">{g.note}</span>}
+                </div>
+              )}
+              <div
+                className="wz-strip-row"
+                role="group"
+                aria-label={g.label || "Варианты"}
+                onKeyDown={(e) => {
+                  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+                  e.preventDefault();
+                  const next = Math.max(0, Math.min(gl.length - 1, gc + (e.key === "ArrowLeft" ? -1 : 1)));
+                  setCur(g, next);
+                  (e.currentTarget.children[next] as HTMLElement | undefined)?.focus();
+                }}
+              >
+                {gl.map((o, i) => (
+                  <button
+                    key={o.id}
+                    type="button"
+                    className={`wz-thumb${on && i === gc ? " is-current" : ""}${o.id === g.selectedId ? " is-selected" : ""}`}
+                    aria-label={o.name}
+                    aria-pressed={on && i === gc}
+                    onClick={() => setCur(g, i)}
+                  >
+                    {o.id === CUSTOM_CARD_ID ? (
+                      <span className="wz-thumb-custom">+</span>
+                    ) : (
+                      <CardPicture id={o.id} name={o.name} card={o.card} thumb={160} />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

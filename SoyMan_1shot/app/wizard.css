@@ -2,10 +2,10 @@
    client/src/components/dnd/wizard-mobile.css, облик (бумага, чернила,
    кислотное «выбрано») — в wizard-skin.css, он один во всех темах. */
 html[data-app="oneshot"] .modal.wz-modal {
-  width: 1080px;
-  max-width: calc(100vw - 32px);
-  height: 94dvh;
-  max-height: 94dvh;
+  width: min(1440px, calc(100vw - 32px));
+  max-width: none;
+  height: min(900px, 96dvh);
+  max-height: 96dvh;
   border: 3px solid #171717;
   border-radius: 0;
   box-shadow: 8px 8px 0 #ff3e91;

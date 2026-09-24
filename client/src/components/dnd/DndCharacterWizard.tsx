@@ -24,7 +24,7 @@ import { PosterButtons } from "./PosterButtons";
 import { renderPosterBlob, type PosterData } from "./CharacterPoster";
 import { WizardMiniSheet, type MiniSheetProblem } from "./WizardMiniSheet";
 import { type CardOption } from "./DndCards";
-import { CardRibbon, CUSTOM_CARD_ID, EntrySheet, PickHead, PickList, SearchField, Sheet, SetDuel, StepStaff } from "./wizardUi";
+import { CardRibbon, CardStage, CUSTOM_CARD_ID, EntryPlate, EntrySheet, PickHead, PickList, SearchField, Sheet, SetDuel, StepStaff, useIsDesktop } from "./wizardUi";
 import { MentionText } from "../mentions/MentionText";
 import { choicesFromEntries, featuresFromEntries, sumEntrySlots, type ChoiceDef } from "./dndFeatures";
 import { cantripsAtLevel, preparedAtLevel, spellSlotsAtLevel, type ClassProgression } from "./progression";
@@ -2523,8 +2523,10 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   // шага возвращает лицо; на десктопе состояние сбрасывается.
   const [mobilePreview, setMobilePreview] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const desktop = useIsDesktop();
   useEffect(() => {
     setMobilePreview(false);
+    setSheet(null);
     bodyRef.current?.scrollTo({ top: 0 });
   }, [step]);
   useEffect(() => {
@@ -2583,6 +2585,8 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     if (dossierNotes.trim()) dossier.push({ label: "Заметки", text: dossierNotes.trim() });
     return (
       <WizardMiniSheet
+        banner={portraitPreview ? { src: portraitPreview, placeholder: false } : classOption?.card ? { src: classOption.card, placeholder: true } : null}
+        subtitle={[classOption ? `${classOption.name} ${level}` : "", speciesOptions.find((x) => x.id === speciesId)?.name ?? ""].filter(Boolean).join(" · ")}
         characterName={characterName}
         playerName={playerName}
         problems={overviewProblems}
@@ -2720,40 +2724,65 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   }
 
   function renderClass() {
+    const levelControl = (
+    <div className="wz-level" role="group" aria-label="Уровень">
+      <button type="button" aria-label="Уровень −1" disabled={level <= 1} onClick={() => stepLevel(-1)}>
+        <NavIcon name="minus" />
+      </button>
+      <label className="wz-level-num">
+        <span>ур</span>
+        <input
+          type="number"
+          min={1}
+          max={20}
+          inputMode="numeric"
+          aria-label="Уровень"
+          value={levelText ?? level}
+          onChange={(e) => setLevelText(e.target.value)}
+          onBlur={(e) => commitLevel(e.target.value)}
+        />
+      </label>
+      <button type="button" aria-label="Уровень +1" disabled={level >= 20} onClick={() => stepLevel(1)}>
+        <NavIcon name="plus" />
+      </button>
+    </div>
+    );
     return (
       <div className="wz-step">
         {!systemId && <span className="muted">У кампании не указана система — выбор класса недоступен, можно будет добавить позже.</span>}
+        {desktop ? (
+          <CardStage
+            systemId={systemId}
+            searchPlaceholder="Поиск класса"
+            aside={levelControl}
+            groups={[
+              { key: "class", label: "Класс", note: classOption ? `${classOption.name} выбран` : "выбери один", options: hierarchy.classes, selectedId: classId, onPick: (id) => id !== classId && pickClass(id) },
+              ...(classId != null && subclassOptions.length > 0
+                ? [
+                    {
+                      key: `sub:${classId}`,
+                      label: "Подкласс",
+                      note: subclassLocked ? `выбирается ${subLockNote}` : "выбери один",
+                      options: subclassOptions,
+                      selectedId: subclassId,
+                      onPick: (id: number) => pickSubclass(id),
+                      pickDisabled: subclassLocked ? `Подкласс выбирается ${subLockNote} — на листе при повышении уровня.` : undefined,
+                    },
+                  ]
+                : []),
+            ]}
+          />
+        ) : (
         <CardRibbon
           systemId={systemId}
           options={hierarchy.classes}
           selectedId={classId}
           onPick={(id) => id !== classId && pickClass(id)}
           searchPlaceholder="Поиск класса"
-          aside={
-            <div className="wz-level" role="group" aria-label="Уровень">
-              <button type="button" aria-label="Уровень −1" disabled={level <= 1} onClick={() => stepLevel(-1)}>
-                <NavIcon name="minus" />
-              </button>
-              <label className="wz-level-num">
-                <span>ур</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={20}
-                  inputMode="numeric"
-                  aria-label="Уровень"
-                  value={levelText ?? level}
-                  onChange={(e) => setLevelText(e.target.value)}
-                  onBlur={(e) => commitLevel(e.target.value)}
-                />
-              </label>
-              <button type="button" aria-label="Уровень +1" disabled={level >= 20} onClick={() => stepLevel(1)}>
-                <NavIcon name="plus" />
-              </button>
-            </div>
-          }
+          aside={levelControl}
         />
-        {classId != null && subclassOptions.length > 0 && (
+        )}
+        {!desktop && classId != null && subclassOptions.length > 0 && (
           <section>
             <PickHead label="Подкласс" />
             {subclassLocked ? (
@@ -3549,6 +3578,35 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     );
   }
 
+  // Шаги, где строка открывает описание: на ПК оно в рамке рядом, а не шторкой.
+  const PLATE_STEPS: Step[] = ["Умения класса", "Предыстория", "Черта", "Заклинания"];
+  function renderStepLaid() {
+    if (!desktop || !PLATE_STEPS.includes(step)) return renderStep();
+    const viewed = sheet?.kind === "entry" ? sheet : null;
+    return (
+      <div className="wz-listplate">
+        <div className="wz-listplate-list">{renderStep()}</div>
+        <EntryPlate
+          entryId={viewed?.entryId ?? null}
+          entry={viewed?.entry}
+          meta={viewed?.meta}
+          action={
+            viewed
+              ? {
+                  label: viewed.picked ? "Убрать" : "Выбрать",
+                  disabled: viewed.disabled,
+                  onClick: () => {
+                    viewed.onToggle();
+                    setSheet({ ...viewed, picked: !viewed.picked });
+                  },
+                }
+              : undefined
+          }
+        />
+      </div>
+    );
+  }
+
   function renderStep() {
     switch (step) {
       case "Класс":
@@ -3578,6 +3636,8 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
 
   function renderSheet() {
     if (!sheet) return null;
+    // На ПК описание записи — в рамке шага (renderStepLaid), не шторкой.
+    if (desktop && sheet.kind === "entry" && PLATE_STEPS.includes(step)) return null;
     const close = () => setSheet(null);
     if (sheet.kind === "steps") {
       return (
@@ -3711,6 +3771,52 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     // идёт в cancelWizard с вопросом. На телефоне окно во весь экран.
     <Modal onClose={cancelWizard} closeOnBackdropClick={false} ariaLabel="Создание персонажа" className="wz-modal" autoFocus={false}>
       <div className={`wizard wz${visualVariant === "oneshot" ? " wizard--oneshot" : ""}`}>
+        {desktop && (
+          <nav className="wz-rail" aria-label="Шаги создания">
+            {visualVariant === "oneshot" && <img className="wz-rail-logo" src="/ui/oneshot/branding/logo-soyman-1shot.webp" alt="SoyMan 1shot" />}
+            <div className="wz-rail-head">
+              <span>Создание персонажа</span>
+              <small>Главы можно открывать в любом порядке</small>
+            </div>
+            <ol className="wz-rail-steps">
+              {visibleSteps.map((st, i) => {
+                // Галка — пройденный и закрытый шаг; впереди — номер, даже
+                // если выбирать там нечего.
+                const cur = st === step;
+                const done = i < stepPos && (st === "Обзор" || stepMissing(st).length === 0);
+                return (
+                  <li key={st}>
+                    <button type="button" aria-current={cur ? "step" : undefined} className={done ? "is-done" : ""} onClick={() => setStep(st)}>
+                      <span className="wz-rail-num">{done ? "✓" : String(i + 1).padStart(2, "0")}</span>
+                      <span>{st}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+            <div className="wz-rail-foot">
+              <small>Черновик сохраняется на устройстве</small>
+              {wizardDirty && !avatarFailed && (
+                <button type="button" onClick={resetWizard}>
+                  Начать заново
+                </button>
+              )}
+              <button type="button" onClick={cancelWizard} disabled={saving}>
+                Закрыть визард
+              </button>
+            </div>
+          </nav>
+        )}
+        {desktop && (
+          <header className="wz-stage-head">
+            <span className="wz-stage-no">
+              {String(stepPos + 1).padStart(2, "0")}
+              <small> / {visibleSteps.length}</small>
+            </span>
+            <h1 className="wz-stage-title">{step}</h1>
+            <div className="wz-stage-slot" />
+          </header>
+        )}
         <header className="wz-top">
           <button type="button" className="wz-steps-btn" aria-haspopup="dialog" onClick={() => setSheet({ kind: "steps" })}>
             <span className="wz-step-no" aria-hidden="true">
@@ -3752,7 +3858,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
           {/* D1: десктоп-сплит — шаги слева, живой чарник справа липко. */}
           <div className="wizard-split">
             <div className="wizard-main">
-              {mobilePreview && step !== "Обзор" ? <div className="wizard-back">{miniSheet()}</div> : renderStep()}
+              {mobilePreview && step !== "Обзор" ? <div className="wizard-back">{miniSheet()}</div> : renderStepLaid()}
             </div>
             {step !== "Обзор" && (
               <aside className="wizard-side" aria-label="Живой предпросмотр персонажа">

@@ -42,6 +42,9 @@ interface Props {
   equipmentGold: number;
   pendingPicks: MiniSheetPick[];
   chosenSpellNames: string[];
+  /** Шапка листа: портрет, а пока его нет — арт класса с подписью. */
+  banner?: { src: string; placeholder: boolean } | null;
+  subtitle?: string;
 }
 
 export const WizardMiniSheet = memo(function WizardMiniSheet({
@@ -64,13 +67,22 @@ export const WizardMiniSheet = memo(function WizardMiniSheet({
   equipmentGold,
   pendingPicks,
   chosenSpellNames,
+  banner,
+  subtitle,
 }: Props) {
   const trimmed = characterName.trim();
   return (
-    <div className="stack">
+    <div className="stack wz-mini">
+      {banner && (
+        <div className="wz-mini-banner">
+          <img src={banner.src} alt="" />
+          {banner.placeholder && <span>портрет — в Досье</span>}
+        </div>
+      )}
       <div>
-        <strong>{trimmed || "Без имени"}</strong>
+        <strong className="wz-mini-name">{trimmed || "Без имени"}</strong>
         {playerName && <span className="muted"> — {playerName}</span>}
+        {subtitle && <div className="wz-mini-sub">{subtitle}</div>}
       </div>
       {!trimmed && (
         <span className="muted">Назовите персонажа выше — без имени создать нельзя.</span>
