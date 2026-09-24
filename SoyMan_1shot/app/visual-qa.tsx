@@ -31,8 +31,12 @@ const portraitUrl = new URLSearchParams(window.location.search).get('portrait') 
   : '/mascot/hero-idle.webp';
 const arcanumCase = new URLSearchParams(window.location.search).get('case') === 'arcanum';
 const modalCase = new URLSearchParams(window.location.search).get('case') === 'modals';
-const spell = (name: string, prepared: 0 | 1 | 2, school = 'Воплощение'): DndSpellEntry =>
-  ({ entryId: null, name, prepared, school, castingTiming: 'action' });
+const spell = (name: string, prepared: 0 | 1 | 2, school = 'Воплощение', combat: Partial<DndSpellEntry> = {}): DndSpellEntry =>
+  ({ entryId: null, name, prepared, school, castingTiming: 'action', ...combat });
+// Боевые строки для вкладки «Действия»: без записей справочника лист берёт
+// их по старому признаку category/damage.
+const hit = (damage: string, range: string, timing: DndSpellEntry['castingTiming'] = 'action'): Partial<DndSpellEntry> =>
+  ({ category: 'Боевое', attackSave: 'Атака', damage, range, castingTiming: timing });
 const fixture = emptyDndCharacter();
 fixture.characterName = 'Лунная странница Астэрия';
 fixture.raceName = 'Эльф';
@@ -50,13 +54,26 @@ fixture.spellSlotsManual = true;
 fixture.spellSlotLevels = 3;
 fixture.spellSlotPips = [4, 3, 2, 0, 0, 0, 0, 0, 0];
 fixture.spellSlotsUsed = [1, 1, 0, 0, 0, 0, 0, 0, 0];
-fixture.cantrips = [spell('Огненная стрела', 1), spell('Леденящее прикосновение', 1), spell('Метка звезды', 2), spell('Починка', 0), spell('Волшебная рука', 1)];
+fixture.cantrips = [spell('Огненная стрела', 1, 'Воплощение', hit('2к10 огонь', '120 фт')), spell('Леденящее прикосновение', 1, 'Некромантия', hit('2к10 некрот.', 'касание')), spell('Метка звезды', 2), spell('Починка', 0), spell('Волшебная рука', 1)];
 fixture.spellsByLevel = [
-  [spell('Доспехи мага', 1, 'Ограждение'), spell('Лечащее слово', 1), spell('Волшебная стрела', 2), spell('Падение пёрышком', 0), spell('Туманное облако', 1), spell('Щит', 1, 'Ограждение'), spell('Опознание', 0)],
+  [spell('Доспехи мага', 1, 'Ограждение'), spell('Лечащее слово', 1), spell('Волшебная стрела', 2, 'Воплощение', hit('3 × 1к4+1 сил.', '120 фт')), spell('Падение пёрышком', 0), spell('Туманное облако', 1), spell('Щит', 1, 'Ограждение', { category: 'Боевое', damage: '+5 к КЗ', range: 'на себя', castingTiming: 'reaction' }), spell('Опознание', 0)],
   [spell('Туманный шаг', 1), spell('Зеркальный образ', 1), spell('Паутина', 0), spell('Палящий луч', 1), spell('Невидимость', 0)],
   [spell('Огненный шар', 1), spell('Контрзаклинание', 1), spell('Ускорение', 0)],
   [], [], [], [], [], [],
 ];
+// Снаряжение по доске макета: оружие в руке даёт строку «Действий», счёт и
+// заряды — кнопку траты.
+fixture.equipmentSections = [{
+  name: 'Снаряжение',
+  items: [
+    { id: 'qa-dagger', name: 'Кинжал', qty: '2', weight: '1 фнт', notes: '', equipped: true, weaponDamage: '1к4 колющ.', weaponAttackMelee: true, weaponProperties: 'Лёгкое, метательное' },
+    { id: 'qa-wand', name: 'Жезл волшебных стрел', qty: '', weight: '1 фнт', notes: '', equipped: true, chargesMax: '7', chargesLeft: 5 },
+    { id: 'qa-potion', name: 'Зелье лечения', qty: '2', weight: '½ фнт', notes: '' },
+    { id: 'qa-rations', name: 'Рационы', qty: '5', weight: '2 фнт', notes: '' },
+    { id: 'qa-pack', name: 'Набор путешественника', qty: '', weight: '38 фнт', notes: '' },
+  ],
+}];
+fixture.coins = { ...fixture.coins, cp: '14', sp: '32', gp: '54', pp: '1' };
 
 // Static, unsaved examples of app-owned dialogs. Their actions only close the
 // preview: this page never imports, publishes, or resolves sync state.

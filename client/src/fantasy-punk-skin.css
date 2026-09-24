@@ -1164,3 +1164,138 @@ button.dnd-card-level {
   box-shadow: none;
   border-bottom: 0;
 }
+
+/* ---- §13. «Действия» по макету (2026-09-25). ----
+ * Лента ячеек — бумажная полоса с квадратиками (закрашен — потрачен);
+ * заголовки групп — слово без планки; строки — одним листом в неровном
+ * контуре, числа двумя колонками: чем бьёшь и что выходит. */
+.dnd-pool-band {
+  border: 4px solid transparent;
+  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background-clip: padding-box;
+  color: var(--skin-ink);
+  padding: 10px 14px;
+}
+.dnd-pool-band-label {
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+.dnd-pool-band-muted {
+  color: var(--skin-ink-soft);
+}
+.dnd-pool-slot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 14px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--skin-ink-soft);
+}
+.dnd-pool-pips {
+  display: inline-flex;
+  gap: 4px;
+}
+.dnd-pool-pips > span {
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border: 2px solid var(--skin-ink);
+}
+.dnd-pool-pips > span.is-used {
+  background: var(--skin-ink);
+}
+.dnd-action-head {
+  padding: 18px 0 6px;
+}
+.dnd-action-head > span:not(.dnd-action-head-extra) {
+  font-size: 16px;
+  letter-spacing: 0.08em;
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.dnd-action-cards {
+  border: 4px solid transparent;
+  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background-clip: padding-box;
+}
+.dnd-action-card {
+  min-height: 52px;
+  padding: 6px 16px 6px 10px;
+  gap: 12px;
+}
+.dnd-action-card + .dnd-action-card {
+  border-top: 1px solid rgba(23, 23, 23, 0.16);
+}
+.dnd-action-card.is-spending {
+  margin: 0;
+  padding-left: 7px;
+  background: rgba(255, 62, 145, 0.12);
+}
+.dnd-action-chip {
+  border: 0;
+  opacity: 0.55;
+}
+.dnd-action-name {
+  font-size: 17px;
+}
+.dnd-action-meta {
+  font-family: var(--font-body, inherit);
+  font-size: 13px;
+  opacity: 1;
+}
+@media (min-width: 701px) {
+  .dnd-action-nums {
+    width: auto;
+    display: grid;
+    grid-template-columns: 64px 170px;
+    align-items: center;
+    column-gap: 14px;
+  }
+  .dnd-action-bonus {
+    height: auto;
+    text-align: center;
+    font-family: var(--font-ui);
+    font-size: 18px;
+  }
+  .dnd-action-damage {
+    height: auto;
+    margin: 0;
+    text-align: left;
+    font-family: var(--font-ui);
+    font-size: 14px;
+    color: var(--skin-ink);
+  }
+}
+@media (max-width: 700px) {
+  .dnd-action-bonus,
+  .dnd-action-damage {
+    font-family: var(--font-ui);
+  }
+}
+/* Поиск по листу — бумажная строка в неровном контуре с лупой (макет). */
+.dnd-sheet-search > input[type="search"] {
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 0 12px 0 38px;
+  border: 4px solid transparent;
+  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  border-radius: 0;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%23171717' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-4-4'/%3E%3C/svg%3E") 10px center no-repeat,
+    #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background-clip: padding-box;
+  font-size: 15px;
+}
+.dnd-card-face .dnd-bookmark-meta {
+  font-family: var(--font-ui);
+  font-size: 12px;
+}
+.dnd-pool-slots {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}

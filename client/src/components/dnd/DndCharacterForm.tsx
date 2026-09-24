@@ -9371,8 +9371,19 @@ function DndActionPools({
           <span className="dnd-pool-band-label">Ячейки</span>{" "}
           {shownSlotPips.map((max, i) =>
             max > 0 ? (
-              <span key={i} className="dnd-pool-slot">
-                {i + 1}й ×{Math.max(0, slotLeft[i])}
+              // Квадратик на ячейку, закрашен — потрачен (макет 2026-09-25):
+              // остаток круга виден без счёта, как пипсы на «Ресурсах».
+              <span
+                key={i}
+                className="dnd-pool-slot"
+                aria-label={`${i + 1} круг: осталось ${Math.max(0, slotLeft[i])} из ${max}`}
+              >
+                <span aria-hidden="true">{i + 1} круг</span>
+                <span className="dnd-pool-pips" aria-hidden="true">
+                  {Array.from({ length: max }, (_, k) => (
+                    <span key={k} className={k < max - Math.max(0, slotLeft[i]) ? "is-used" : undefined} />
+                  ))}
+                </span>
               </span>
             ) : null
           )}
