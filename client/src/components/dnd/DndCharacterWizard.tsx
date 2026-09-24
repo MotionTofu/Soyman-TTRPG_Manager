@@ -8,7 +8,7 @@ import { Modal } from "../Modal";
 import { NavIcon } from "../NavIcons";
 import { useImageCrop } from "../../hooks/useImageCrop";
 import type { CompendiumEntry, DndAbilityKey, DndAbilityScores } from "../../types";
-import { emptyDndCharacter, recomputeGrantedSpells } from "./DndCharacterForm";
+import { DndCharacterView, emptyDndCharacter, recomputeGrantedSpells } from "./DndCharacterForm";
 import {
   armorProfNames,
   isWeaponProficient,
@@ -2576,7 +2576,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   }
   // Живой мини-чарник одним источником: Обзор, сплит D1 и оборот D2
   // рисуют одно и то же, двух расходящихся превью нет.
-  function miniSheet() {
+  function miniSheet(withoutCore = false) {
     const dossier: { label: string; text: string }[] = [];
     if (personalityTraits.trim()) dossier.push({ label: "Черты", text: personalityTraits.trim() });
     if (ideals.trim()) dossier.push({ label: "Идеалы", text: ideals.trim() });
@@ -2587,6 +2587,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       <WizardMiniSheet
         banner={portraitPreview ? { src: portraitPreview, placeholder: false } : classOption?.card ? { src: classOption.card, placeholder: true } : null}
         subtitle={[classOption ? `${classOption.name} ${level}` : "", speciesOptions.find((x) => x.id === speciesId)?.name ?? ""].filter(Boolean).join(" · ")}
+        withoutCore={withoutCore}
         characterName={characterName}
         playerName={playerName}
         problems={overviewProblems}
@@ -3560,7 +3561,39 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     );
   }
 
+  // Лицевая карта листа для Обзора на ПК: те же числа, что покажет лист, из
+  // текущих выборов. Снаряжения на ней нет (КЗ — без доспеха, как в мини-листе):
+  // вещи наборов собираются только при создании.
+  function previewCharacter() {
+    const c = emptyDndCharacter();
+    if (systemId) c.systemId = systemId;
+    c.characterName = characterName.trim();
+    c.playerName = playerName.trim();
+    c.abilities = awardedAbilities;
+    c.classes = previewClasses;
+    c.proficiencyBonus = computeProficiencyBonus(previewClasses);
+    c.raceId = speciesId;
+    c.raceName = speciesOptions.find((x) => x.id === speciesId)?.name ?? "";
+    c.backgroundName = backgroundEntry?.name ?? "";
+    c.alignment = alignment;
+    if (previewHp !== null) c.hitPointMax = c.hitPointsCurrent = String(previewHp);
+    if (previewSpeed) c.speed = String(previewSpeed);
+    return c;
+  }
+
   function renderOverview() {
+    // На ПК — пополам (владелец 2026-09-24): слева главная карта листа,
+    // справа всё остальное из мини-листа.
+    const body = desktop ? (
+      <div className="wz-overview-split">
+        <div className="wz-overview-card">
+          <DndCharacterView value={previewCharacter()} portraitUrl={portraitPreview ?? classOption?.card ?? null} cardOnly readOnly />
+        </div>
+        <div className="wz-overview-rest">{miniSheet(true)}</div>
+      </div>
+    ) : (
+      miniSheet()
+    );
     return (
       <div className="wz-step">
         {overviewWarnings.map((w) => (
@@ -3568,7 +3601,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
             {w}
           </div>
         ))}
-        {miniSheet()}
+        {body}
         <PosterButtons
           getBlob={() => renderPosterBlob(posterData())}
           fileBase={characterName.trim() || "personazh"}

@@ -679,6 +679,12 @@ button.wz-abil {
   min-height: 40px;
   border: 2px dashed var(--accent);
 }
+/* Слово «Набор»/«Сундук», подпись сундука и «Состав» — только на ПК. */
+.wz-set-kind,
+.wz-set-note,
+.wz-set-info-t {
+  display: none;
+}
 .wz-total {
   font-weight: 700;
 }

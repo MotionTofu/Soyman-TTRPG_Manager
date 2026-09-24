@@ -45,6 +45,9 @@ interface Props {
   /** Шапка листа: портрет, а пока его нет — арт класса с подписью. */
   banner?: { src: string; placeholder: boolean } | null;
   subtitle?: string;
+  /** Обзор на ПК: портрет, имя, кости и виталы уже на карте листа слева —
+   *  здесь только остальное. */
+  withoutCore?: boolean;
 }
 
 export const WizardMiniSheet = memo(function WizardMiniSheet({
@@ -69,21 +72,22 @@ export const WizardMiniSheet = memo(function WizardMiniSheet({
   chosenSpellNames,
   banner,
   subtitle,
+  withoutCore,
 }: Props) {
   const trimmed = characterName.trim();
   return (
     <div className="stack wz-mini">
-      {banner && (
+      {banner && !withoutCore && (
         <div className="wz-mini-banner">
           <img src={banner.src} alt="" />
           {banner.placeholder && <span>портрет — в Досье</span>}
         </div>
       )}
-      <div>
+      {!withoutCore && <div>
         <strong className="wz-mini-name">{trimmed || "Без имени"}</strong>
         {playerName && <span className="muted"> — {playerName}</span>}
         {subtitle && <div className="wz-mini-sub">{subtitle}</div>}
-      </div>
+      </div>}
       {!trimmed && (
         <span className="muted">Назовите персонажа выше — без имени создать нельзя.</span>
       )}
@@ -102,6 +106,7 @@ export const WizardMiniSheet = memo(function WizardMiniSheet({
           ))}
         </div>
       )}
+      {!withoutCore && <>
       <div className="dnd-abilities-row">
         {ABILITY_LABELS.map(({ key, label }) => (
           <div key={key} className="dnd-ability-box">
@@ -135,6 +140,7 @@ export const WizardMiniSheet = memo(function WizardMiniSheet({
           Скорость <strong className="wizard-data">{speed ? `${speed} фт.` : "—"}</strong>
         </span>
       </div>
+      </>}
 
       <div>
         <strong>Мировоззрение:</strong>{" "}

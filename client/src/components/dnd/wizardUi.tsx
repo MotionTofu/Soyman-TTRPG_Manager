@@ -460,9 +460,16 @@ export function SetDuel({
             <div key={o.label} className={`wz-set${on ? " is-selected" : ""}`}>
               <button type="button" className="wz-set-main" aria-pressed={on} onClick={() => onSelect(o.label)}>
                 <img className="wz-set-art" src={chest ? setChestArt : setPackArt} alt="" draggable={false} />
-                <span className="wz-set-letter">{o.letter}</span>
+                {/* «Набор А» / «Сундук Б» — на ПК по макету; на телефоне только буква. */}
+                <span className="wz-set-letter">
+                  <span className="wz-set-kind">{chest ? "Сундук" : "Набор"} </span>
+                  {o.letter}
+                </span>
                 {chest ? (
-                  <span className="wz-set-gold is-big">{o.gold} ЗМ</span>
+                  <>
+                    <span className="wz-set-gold is-big">{o.gold} ЗМ</span>
+                    <span className="wz-set-note">Только золото — купите сами</span>
+                  </>
                 ) : (
                   <>
                     <span className="wz-set-items">
@@ -475,7 +482,8 @@ export function SetDuel({
               </button>
               {!chest && (
                 <button type="button" className="wz-set-info" aria-label={`Состав: ${o.label}`} onClick={() => onOpen(o.label)}>
-                  i
+                  <span className="wz-set-info-i">i</span>
+                  <span className="wz-set-info-t">Состав</span>
                 </button>
               )}
               {on && o.pending.length > 0 && (

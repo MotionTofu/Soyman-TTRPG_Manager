@@ -1722,7 +1722,10 @@ button.dnd-card-level:hover {
 .dnd-triad .dnd-die {
   margin: 0 auto;
 }
-.dnd-triad .sb-value-button {
+/* Без правки (readOnly, чужой лист) виталы — div, а не кнопка: ширина
+   нужна обоим, иначе кость внутри схлопывается в ноль. */
+.dnd-triad .sb-value-button,
+.dnd-triad .dnd-die-quick {
   display: block;
   width: 100%;
 }

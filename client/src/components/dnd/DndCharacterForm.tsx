@@ -10099,6 +10099,7 @@ export function DndCharacterView({
   value,
   portraitUrl,
   compact,
+  cardOnly,
   onQuickUpdate,
   syncTabToUrl,
   campaignId,
@@ -10120,6 +10121,9 @@ export function DndCharacterView({
   // помещается. Видом статблока (`kind`) это больше не управляется — краткого
   // чарника в списке статблоков нет, см. StatblockList.
   compact?: boolean;
+  // Только лицевая карта, без вкладок и колоды: предпросмотр в Обзоре визарда
+  // (владелец 2026-09-24: «слева — главная карта из чарника»).
+  cardOnly?: boolean;
   // View-mode quick edits (HP, inspiration, death saves, spell slots used)
   // save immediately without entering the full DndCharacterEdit form —
   // mirrors LitMCharacterView's onQuickUpdate for tag edits.
@@ -11630,7 +11634,7 @@ export function DndCharacterView({
               десктопе — шапка правой колонки (R2.1, по макету). Та же
               навигация, только место другое: showDesktopFace синхронен
               с CSS-брейкпоинтом 700px через useIsMobile. */}
-          {!showDesktopFace && (
+          {!showDesktopFace && !cardOnly && (
           <div className="dnd-deck-strip" role="tablist" aria-label="Карты листа" ref={deckStripRef}>
             {DND_VIEW_TABS.map((t) => (
               <button
@@ -12295,6 +12299,7 @@ export function DndCharacterView({
               при перевороте оборот встаёт в левую колонку вместо лицевой. */}
           {tab === "Карта" && cardFlipped && renderCardBack()}
 
+          {!cardOnly && (
           <div className="dnd-desktop-tab">
           {showDesktopFace && (
           <div className="dnd-deck-strip" role="tablist" aria-label="Карты листа">
@@ -13276,6 +13281,7 @@ export function DndCharacterView({
             </div>
           )}
           </div>
+          )}
         </div>
       </div>
     </div>

@@ -66,13 +66,13 @@
     .wz-set,
     .wz-seg,
     .wz-file-btn
-  ) {
+  ):not(:where(.wz-overview-card *)) {
   border: 4px solid transparent;
   border-image: var(--wz-rough-ink) 16 / 4px round;
   background-clip: padding-box;
   border-radius: 0;
 }
-:is(.wz, .wz-sheet, .wz-lvl) :is(button, input, select, textarea):not(.primary, .wz-row-main, .wz-row-check, .wz-slide-face, .wz-steps-btn, .wz-staff, .wz-slide-flip, .wz-set-main, .wz-abil) {
+:is(.wz, .wz-sheet, .wz-lvl) :is(button, input, select, textarea):not(.primary, .wz-row-main, .wz-row-check, .wz-slide-face, .wz-steps-btn, .wz-staff, .wz-slide-flip, .wz-set-main, .wz-abil, :where(.wz-overview-card *)) {
   background-color: #efebe1;
   background-image: url("/ui/wizard/paper-panel.webp");
   background-size: 420px;
@@ -891,6 +891,11 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
+    /* Текущий шаг выступает на 6px в стороны; без запаса overflow-y: auto
+       обрезал его вбок и рисовал горизонтальную прокрутку. */
+    margin: 0 -6px;
+    padding: 0 6px;
+    overflow-x: hidden;
     overflow-y: auto;
   }
   .wz .wz-rail-steps button {
@@ -980,11 +985,12 @@
   }
   .wz .wz-stage-title {
     margin: 0;
-    padding: 0 6px 10px 2px;
+    padding: 0 6px 22px 2px;
     font-size: 54px;
     line-height: 0.95;
     text-transform: uppercase;
-    background: url("/ui/wizard/underline.webp") left bottom / 100% 14px no-repeat;
+    /* Колючая проволока из Stripes_002 — та же, что под заголовком главной. */
+    background: url("/ui/wizard/stripe-wire.webp") left bottom / 100% auto no-repeat;
   }
   .wz .wz-body {
     grid-column: 2;
@@ -1440,3 +1446,122 @@
   border-top: 2px solid transparent;
   border-image: var(--wz-rough-ink) 16 round;
 }
+
+/* ——— снаряжение на ПК — по макету «ПК · Снаряжение»: картинка набора слева,
+   справа «Набор А», состав, золото и «Состав»; два варианта в ряд ——— */
+@media (min-width: 1001px) {
+  .wz .wz-duel .wz-group-label {
+    font-size: 19px;
+  }
+  .wz .wz-duel-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 26px;
+    max-width: 980px;
+  }
+  .wz .wz-set-main {
+    display: grid;
+    grid-template-columns: 136px minmax(0, 1fr);
+    grid-auto-rows: min-content;
+    align-content: start;
+    justify-items: start;
+    column-gap: 16px;
+    row-gap: 8px;
+    min-height: 204px;
+    padding: 0 16px 60px 0;
+    text-align: left;
+  }
+  .wz .wz-set-art {
+    grid-column: 1;
+    grid-row: 1 / span 6;
+    width: 136px;
+    height: 204px;
+    object-position: 50% 50%;
+  }
+  .wz .wz-set-main > :not(.wz-set-art) {
+    grid-column: 2;
+  }
+  .wz .wz-set-letter {
+    position: static;
+    margin-top: 14px;
+    padding: 0 12px;
+    font-size: 22px;
+  }
+  .wz .wz-set-kind {
+    display: inline;
+  }
+  .wz .wz-set-items,
+  .wz .wz-set-gold {
+    padding: 0;
+  }
+  .wz .wz-set-items {
+    font-size: 15px;
+    line-height: 1.4;
+  }
+  .wz .wz-set-gold {
+    font-size: 20px;
+    font-weight: 600;
+  }
+  .wz .wz-set-gold.is-big {
+    font-size: 44px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .wz .wz-set-note {
+    display: block;
+    font-size: 14px;
+    color: var(--wz-muted);
+  }
+  /* Под золотом, в колонке текста: внизу набора его закрывала строка
+     «Выбрать: …» невыбранной вещи. */
+  .wz .wz-set-info {
+    top: 150px;
+    right: auto;
+    left: 152px;
+    bottom: auto;
+    width: auto;
+    height: 40px;
+    padding: 0 14px;
+    border: 4px solid transparent;
+    border-image: var(--wz-rough-ink) 16 / 4px round;
+    background: var(--wz-paper);
+    background-clip: padding-box;
+    font-family: var(--font-ui);
+    font-size: 14px;
+    font-style: normal;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .wz .wz-set-info-i {
+    display: none;
+  }
+  .wz .wz-set-info-t {
+    display: inline;
+  }
+  .wz .wz-set.is-selected::after {
+    right: -18px;
+    top: -20px;
+    width: 58px;
+    height: 48px;
+  }
+  .wz .wz-total {
+    font-family: var(--font-ui);
+    font-size: 17px;
+    font-weight: 500;
+  }
+}
+
+/* ——— обзор на ПК: слева лицевая карта листа, справа остальное. Карта — сам
+   лист (DndCharacterView), поэтому общие рамки и бумага кнопок визарда её не
+   касаются (:not(.wz-overview-card *) в общих правилах выше) ——— */
+@media (min-width: 1001px) {
+  .wz .wz-overview-split {
+    display: grid;
+    grid-template-columns: minmax(340px, 420px) minmax(0, 1fr);
+    gap: 36px;
+    align-items: start;
+  }
+  /* Лист без правой колонки: его сетка на две колонки здесь не нужна. */
+  .wz .wz-overview-card .dnd-desktop-split {
+    display: block;
+  }}
