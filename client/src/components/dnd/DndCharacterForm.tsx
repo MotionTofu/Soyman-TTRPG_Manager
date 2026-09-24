@@ -1722,6 +1722,9 @@ function DndSpellLevelSection({
                 {/* Значок школы — слева от названия, высотой в обе строки
                     (имя + подпись): школа уже есть текстом в подписи, значок
                     её дублирует графикой, поэтому скрыт от скринридера. */}
+                {/* Ромб подготовки (макет 2026-09-25): залит — подготовлено,
+                    контур — нет; «всегда» — с кислотной сердцевиной. */}
+                <span className={`dnd-prep-diamond is-${s.prepared}`} aria-hidden="true" />
                 {schoolSrc && (
                   <span className="dnd-spell-school-icon" title={s.school} aria-hidden="true">
                     <img src={schoolSrc} alt="" draggable={false} />
@@ -12541,8 +12544,17 @@ export function DndCharacterView({
                 )}
                 <div className="dnd-tab-center dnd-tab-mid">
                   {spellAbilityKey ? (
-                    <span>
-                      СЛ: {spellDc} · АТК: {formatModifier(spellAttackBonus)}
+                    // Плашки чисел и характеристика словом (макет 2026-09-25).
+                    <span className="dnd-magic-nums">
+                      <span className="dnd-magic-num">
+                        <span>СЛ спасброска</span> <b>{spellDc}</b>
+                      </span>
+                      <span className="dnd-magic-num">
+                        <span>Атака</span> <b>{formatModifier(spellAttackBonus)}</b>
+                      </span>
+                      <span className="dnd-magic-ability">
+                        {Object.keys(ABILITY_NAME_TO_KEY).find((n) => ABILITY_NAME_TO_KEY[n] === spellAbilityKey)}
+                      </span>
                     </span>
                   ) : (
                     <span className="muted">Нет заклинательной характеристики</span>
@@ -12597,15 +12609,26 @@ export function DndCharacterView({
                   чтобы не листать книгу. Скрытое всегда посчитано вслух —
                   иначе через сессию это выглядит как пропажа заклинаний. */}
               <div className="row sb-entry dnd-prepared-filter" style={{ gap: 8, flexWrap: "wrap" }}>
-                <button
-                  type="button"
-                  className={`dnd-chip${prefs.spellsPreparedOnly ? " is-on" : ""}`}
-                  aria-pressed={prefs.spellsPreparedOnly}
-                  onClick={() => saveDndPrefs({ ...prefs, spellsPreparedOnly: !prefs.spellsPreparedOnly })}
-                >
-                  <span className="dnd-prepared-filter-long">Подготовленные/Доступные</span>
-                  <span className="dnd-prepared-filter-short">Подг. / все</span>
-                </button>
+                {/* Режим — двумя половинами (макет): видно, какой включён и
+                    какой будет по тапу. Чёрное — только переключатель режима. */}
+                <span className="dnd-seg" role="group" aria-label="Какие заклинания показывать">
+                  <button
+                    type="button"
+                    aria-pressed={prefs.spellsPreparedOnly}
+                    onClick={() => saveDndPrefs({ ...prefs, spellsPreparedOnly: true })}
+                  >
+                    <span className="dnd-prepared-filter-long">Подготовленные</span>
+                    <span className="dnd-prepared-filter-short">Подгот.</span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={!prefs.spellsPreparedOnly}
+                    onClick={() => saveDndPrefs({ ...prefs, spellsPreparedOnly: false })}
+                  >
+                    <span className="dnd-prepared-filter-long">Все известные</span>
+                    <span className="dnd-prepared-filter-short">Все</span>
+                  </button>
+                </span>
                 {onQuickUpdate && (
                   <button type="button" className="dnd-chip" onClick={() => setSpellListOpen(true)}>
                     Добавить

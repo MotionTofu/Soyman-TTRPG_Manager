@@ -163,11 +163,6 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-prepared-filter-short { display: no
     gap: 2px;
   }
 }
-/* The school is a small acid category tag, not another full-width band. */
-html[data-app="oneshot"] .oneshot-sheet .dnd-spell-school {
-  background: color-mix(in srgb, var(--skin-acid) 65%, var(--paper));
-  font-weight: 700;
-}
 @media (min-width: 1100px) {
   html[data-app="oneshot"] .oneshot-sheet .dnd-desktop-split {
     grid-template-columns: minmax(390px, 31.5%) minmax(0, 1fr);
