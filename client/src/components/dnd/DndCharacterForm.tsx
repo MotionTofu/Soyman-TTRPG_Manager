@@ -56,7 +56,6 @@ import {
   SKILL_DOTS,
   SKILL_TITLES,
 } from "./AbilitySavesSkills";
-import { skillSourceClass, skillSourceWord } from "./skillSource";
 import { resolveSkillOriginal } from "./skillCatalog";
 import { useDndSkills, type DndSkills, type SkillRow } from "./useDndSkills";
 import { formatDistance, formatWeight, LB_PER_KG, loadDndPrefs, saveDndPrefs, type DndDistanceUnit } from "../../dndPrefs";
@@ -6009,46 +6008,92 @@ function DndSkillsView({
 
   return (
     <div className="stack">
-      <div className="dnd-save-skill-col dnd-skills-tab">
-        {rows.map(({ row, abilityLabel }) => {
-          const skill = row.original;
-          // Без характеристики (навык мастера, у которого её не задали)
-          // модификатор считается только от бонуса мастерства: врать числом
-          // хуже, чем показать меньшее.
-          const mod = row.ability ? abilityModifier(abilities[row.ability]) : 0;
-          const level = skillProfs[skill] ?? 0;
-          return (
-            <div
-              key={skill}
-              className={`dnd-save-row${level > 0 ? " is-proficient" : ""}${level === 2 ? " is-expertise" : ""}${skillSourceClass(skill, pool, backgroundSkillNames)}${highlight === `skill-${skill}` ? " is-search-hit" : ""}`}
-            >
-              <button
-                type="button"
-                className="dnd-save-dot-btn"
-                title={SKILL_TITLES[level]}
-                aria-label={`${row.name}: ${SKILL_TITLES[level]} — сменить`}
-                disabled={!onQuickUpdate}
-                onClick={() =>
-                  onQuickUpdate?.({
-                    skillProfs: { ...skillProfs, [skill]: ((level + 1) % 3) as DndSkillProfLevel },
-                  })
-                }
-              >
-                {SKILL_DOTS[level]}
-              </button>
-              <span className="dnd-save-name">
-                {row.name} <span className="muted">({abilityLabel})</span>
-                {/* Видно только на печати: там заливка источника гаснет. */}
-                {skillSourceWord(skill, pool, backgroundSkillNames) && (
-                  <span className="dnd-skill-source-word">
-                    {skillSourceWord(skill, pool, backgroundSkillNames)}
-                  </span>
+      {/* Легенда (макет 2026-09-25): квадрат владения и источник в скобках
+          заменили заливку строки — тона темы делали её нечитаемой на бумаге. */}
+      <div className="dnd-skills-legend">
+        <span><span className="dnd-prof-box is-0" aria-hidden="true" /> нет</span>
+        <span><span className="dnd-prof-box is-1" aria-hidden="true" /> владение</span>
+        <span><span className="dnd-prof-box is-2" aria-hidden="true" /> экспертиза</span>
+        <span>· тап по квадрату — сменить · [в скобках] — откуда навык</span>
+      </div>
+      <div className="dnd-skills-groups">
+        {(() => {
+          // Группы по характеристике — как строки уже упорядочены; при
+          // сортировке по алфавиту группа одна, без заголовка.
+          const alphabet = loadDndPrefs().skillSortMode === "alphabet";
+          const groups: { label: string; items: typeof rows }[] = [];
+          for (const item of rows) {
+            const key = alphabet ? "" : item.abilityLabel;
+            const last = groups[groups.length - 1];
+            if (last && last.label === key) last.items.push(item);
+            else groups.push({ label: key, items: [item] });
+          }
+          const sourceTag = (skill: string) => {
+            const fromClass = pool.includes(skill);
+            const fromBackground = backgroundSkillNames.includes(skill);
+            if (fromClass && fromBackground) return "класс · предыст.";
+            if (fromClass) return "класс";
+            if (fromBackground) return "предыст.";
+            return "";
+          };
+          return groups.map((g) => {
+            const ab = ABILITY_LABELS.find((a) => a.label === g.label);
+            const mod = ab ? abilityModifier(abilities[ab.key]) : null;
+            const full = ab ? Object.keys(ABILITY_NAME_TO_KEY).find((n) => ABILITY_NAME_TO_KEY[n] === ab.key) : null;
+            return (
+              <section key={g.label || "all"} className="dnd-skills-group">
+                {g.label && (
+                  <h3 className="dnd-skills-group-head">
+                    {full ?? g.label}
+                    {mod != null && (
+                      <span>
+                        {g.label} {formatModifier(mod)}
+                      </span>
+                    )}
+                  </h3>
                 )}
-              </span>
-              <span className="dnd-save-value">{computeSkillValue(mod, level, profBonus, exhaustionPenalty)}</span>
-            </div>
-          );
-        })}
+                <div className="dnd-save-skill-col dnd-skills-tab">
+                  {g.items.map(({ row, abilityLabel }) => {
+                    const skill = row.original;
+                    // Без характеристики (навык мастера, у которого её не задали)
+                    // модификатор считается только от бонуса мастерства: врать
+                    // числом хуже, чем показать меньшее.
+                    const mod = row.ability ? abilityModifier(abilities[row.ability]) : 0;
+                    const level = skillProfs[skill] ?? 0;
+                    const tag = sourceTag(skill);
+                    return (
+                      <div
+                        key={skill}
+                        className={`dnd-save-row${level > 0 ? " is-proficient" : ""}${level === 2 ? " is-expertise" : ""}${highlight === `skill-${skill}` ? " is-search-hit" : ""}`}
+                      >
+                        <button
+                          type="button"
+                          className="dnd-save-dot-btn dnd-prof-btn"
+                          title={SKILL_TITLES[level]}
+                          aria-label={`${row.name}: ${SKILL_TITLES[level]} — сменить`}
+                          disabled={!onQuickUpdate}
+                          onClick={() =>
+                            onQuickUpdate?.({
+                              skillProfs: { ...skillProfs, [skill]: ((level + 1) % 3) as DndSkillProfLevel },
+                            })
+                          }
+                        >
+                          <span className={`dnd-prof-box is-${level}`} aria-hidden="true" />
+                        </button>
+                        <span className="dnd-save-name">
+                          {row.name}
+                          {(alphabet || !row.ability) && <span className="muted"> ({abilityLabel})</span>}
+                          {tag && <span className="dnd-skill-tag"> [{tag}]</span>}
+                        </span>
+                        <span className="dnd-save-value">{computeSkillValue(mod, level, profBonus, exhaustionPenalty)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          });
+        })()}
       </div>
       {unresolved.length > 0 && (
         <div className="dnd-save-skill-col dnd-skills-unresolved">
@@ -12775,8 +12820,12 @@ export function DndCharacterView({
                   навыки правятся прямо в строках, владение добавляется
                   списком инструментов ниже. */}
               <div className="dnd-tab-tools">
-                <span className="dnd-tab-bm">БМ {value.proficiencyBonus}</span>
-                <span style={{ flex: "1 1 auto" }} aria-hidden="true" />
+                <span className="dnd-tab-btn" aria-hidden="true" />
+                <span className="dnd-tab-center dnd-tab-mid">
+                  <span className="dnd-magic-num">
+                    <span>Бонус мастерства</span> <b>{value.proficiencyBonus}</b>
+                  </span>
+                </span>
                 <DndFanButton onOpen={() => setFanOpen(true)} />
               </div>
               <DndSkillsView
