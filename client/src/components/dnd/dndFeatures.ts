@@ -190,6 +190,13 @@ export function sumEntrySlots(list: EntrySlotSource[]): EntrySlot[] {
 // надетые: остальные в числа не входят, и тянуть их записи незачем.
 type EntryLookup = (id: number | null | undefined) => CompendiumEntry | undefined;
 
+// Механики, спрятанные владельцем на обкатку (2026-09-25), а не удалённые:
+// «Наложено на меня» — за таким следят за столом; вдохновение Мастер выдаёт
+// физическими жетонами. Выключенное «наложенное» не входит и в числа листа —
+// иначе прибавка к КЗ висела бы невидимой, снять её было бы нечем.
+export const RECEIVED_SPELLS_ENABLED = false;
+export const INSPIRATION_TOKEN_ENABLED = false;
+
 function liveEffects<T extends { entryId?: number | null; effects?: DndEffect[] }>(row: T, get: EntryLookup): T {
   const effects = get(row.entryId)?.data.effects as DndEffect[] | undefined;
   return effects ? { ...row, effects } : row;
@@ -209,7 +216,7 @@ export function withLiveEffects(value: DndCharacterData, get: EntryLookup): DndC
       ...sec,
       items: sec.items.map((it) => (it.equipped ? liveEffects(it, get) : it)),
     })),
-    receivedSpells: (value.receivedSpells ?? []).map((r) => liveEffects(r, get)),
+    receivedSpells: RECEIVED_SPELLS_ENABLED ? (value.receivedSpells ?? []).map((r) => liveEffects(r, get)) : [],
   };
 }
 

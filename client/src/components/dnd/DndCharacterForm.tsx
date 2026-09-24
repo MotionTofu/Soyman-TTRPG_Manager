@@ -171,7 +171,7 @@ import { useConfirm } from "../../hooks/useConfirm";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { useDndPrefs } from "../../hooks/useDndPrefs";
 import { useEvent, useLatest } from "../../hooks/useEvent";
-import { choicesFromEntries, featuresFromEntries, inferTimingFromLegacyText, liveEffectEntryIds, spellTimingFromData, sumEntrySlots, TIMING_KEY_TO_LABEL, withGrantedSenses, withLiveEffects, type ChoiceDef } from "./dndFeatures";
+import { choicesFromEntries, featuresFromEntries, inferTimingFromLegacyText, liveEffectEntryIds, spellTimingFromData, sumEntrySlots, TIMING_KEY_TO_LABEL, withGrantedSenses, withLiveEffects, INSPIRATION_TOKEN_ENABLED, RECEIVED_SPELLS_ENABLED, type ChoiceDef } from "./dndFeatures";
 import { WeaponMasteryPicker, isMasterableWeapon } from "./StartingEquipmentPicker";
 import { extractEnglishName } from "../../compendium";
 import { ChecklistEditor, emptySpeed, formatSpeed, SensesEditor, SpeedEditor } from "./DndCreatureForm";
@@ -8551,7 +8551,7 @@ function AcBreakdownModal({
             )}
           </div>
         </div>
-        {onQuickUpdate && systemId != null && (
+        {RECEIVED_SPELLS_ENABLED && onQuickUpdate && systemId != null && (
           picking ? (
             <ReceivedSpellPicker
               systemId={systemId}
@@ -11842,7 +11842,7 @@ export function DndCharacterView({
                   <img className="dnd-token-img" src={rasterAsset("tokens", "rest") ?? undefined} alt="" aria-hidden="true" draggable={false} />
                 </button>
               )}
-              {(value.inspiration || onQuickUpdate) && (
+              {INSPIRATION_TOKEN_ENABLED && (value.inspiration || onQuickUpdate) && (
                 <button
                   type="button"
                   className={`dnd-inspiration-token${value.inspiration ? " is-on" : ""}${portraitUrl ? " on-portrait" : ""}`}
@@ -11875,7 +11875,7 @@ export function DndCharacterView({
                 derived={derived.armorClass}
                 manualBonus={value.manualAcBonus}
                 activeSpells={value.activeSpells ?? []}
-                received={value.receivedSpells ?? []}
+                received={RECEIVED_SPELLS_ENABLED ? value.receivedSpells ?? [] : []}
                 systemId={value.systemId ?? null}
                 sections={value.equipmentSections}
                 onQuickUpdate={onQuickUpdate}
