@@ -24,7 +24,7 @@ const TOKEN_RE =
 function parseSpanAttrs(attrs: string): CSSProperties {
   const style: CSSProperties = {};
   const attrRe = /(\w+)="([^"]*)"/g;
-  const allowedFonts = new Set(["PT Mono", "Oswald", "Cormorant SC", "JetBrains Mono", "RussianPunk", "NewZelek", "RookiePunk", "serif", "monospace", "sans-serif"]);
+  const allowedFonts = new Set(["PT Mono", "Oswald", "Cormorant SC", "JetBrains Mono", "Rubik Dirt", "RussianPunk", "NewZelek", "RookiePunk", "serif", "monospace", "sans-serif"]);
   for (const m of attrs.matchAll(attrRe)) {
     const [, key, val] = m;
     if (/[;{}]/.test(val)) continue;

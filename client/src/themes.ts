@@ -370,7 +370,7 @@ function skinTheme(
 // ZINE — the base skin: aged paper, ink, one blood red. Palette from §3.1.
 const ZINE_THEME = buildTheme("zine", "Соевый панк", "light", {
   bg: "#EDE7D9", text: "#12100E", accent: "#D6321E", border: "#12100E",
-  fontDisplay: "'RussianPunk', 'Anton', sans-serif", fontBody: "'Sofia Sans Semi Condensed', sans-serif",
+  fontDisplay: "'Rubik Dirt', 'Oswald', sans-serif", fontBody: "'Sofia Sans Semi Condensed', sans-serif",
   textMutedOverride: "#6E675C",
   cardBorderWidth: 1, cardRadius: 0,
   bandBg: "#12100E",

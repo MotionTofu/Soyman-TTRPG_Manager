@@ -20,6 +20,7 @@ const COLOR_FIELDS: { key: string; label: string; varName: string }[] = [
 ];
 
 const FONT_DISPLAY_OPTIONS = [
+  { value: "'Rubik Dirt', 'Oswald', sans-serif", label: "Rubik Dirt" },
   { value: "'RussianPunk', 'Anton', sans-serif", label: "RussianPunk" },
   { value: "'NewZelek', 'Anton', sans-serif", label: "NewZelek" },
   { value: "'Cormorant SC', serif", label: "Cormorant SC" },
