@@ -152,30 +152,6 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-card-portrait-zone.is-empty .dnd-ca
   overflow-wrap: anywhere;
   font-size: clamp(26px, 2.8vw, 40px);
 }
-/* A long character name must remain in the paper-fade, not cover the face. */
-html[data-app="oneshot"] .oneshot-sheet .dnd-card-portrait-zone:not(.is-empty) .dnd-card-cartouche-name {
-  font-size: clamp(26px, 2.3vw, 32px);
-  line-height: 1;
-  overflow-wrap: anywhere;
-  text-wrap: balance;
-}
-/* Keep identity metadata readable above the rough portrait-breakup strip. */
-html[data-app="oneshot"] .oneshot-sheet .dnd-card-portrait-zone:not(.is-empty) .dnd-card-cartouche-class {
-  width: fit-content;
-  max-width: 100%;
-  box-sizing: border-box;
-  margin-top: 6px;
-  padding: 3px 5px;
-  background: color-mix(in srgb, var(--paper) 94%, transparent);
-}
-html[data-app="oneshot"] .oneshot-sheet .dnd-card-portrait-zone:not(.is-empty) .dnd-card-cartouche-origin {
-  width: fit-content;
-  max-width: 100%;
-  box-sizing: border-box;
-  margin-top: 0;
-  padding: 2px 5px;
-  background: color-mix(in srgb, var(--paper) 94%, transparent);
-}
 html[data-app="oneshot"] .oneshot-sheet .dnd-prepared-filter-short { display: none; }
 /* The desktop Magic page is a reading list. Keep mobile's larger targets. */
 @media (min-width: 701px) {
@@ -191,22 +167,6 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-prepared-filter-short { display: no
 html[data-app="oneshot"] .oneshot-sheet .dnd-spell-school {
   background: color-mix(in srgb, var(--skin-acid) 65%, var(--paper));
   font-weight: 700;
-}
-html[data-app="oneshot"] .oneshot-sheet .dnd-deck-strip {
-  gap: 0;
-  margin-bottom: 14px;
-  border-bottom: 2px solid var(--ui-border);
-}
-html[data-app="oneshot"] .oneshot-sheet .dnd-deck-strip button {
-  min-height: 44px;
-  padding: 9px 12px;
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: .035em;
-}
-html[data-app="oneshot"] .oneshot-sheet .dnd-deck-strip button:focus-visible {
-  outline: 3px solid var(--ui-focus);
-  outline-offset: -3px;
 }
 @media (min-width: 1100px) {
   html[data-app="oneshot"] .oneshot-sheet .dnd-desktop-split {

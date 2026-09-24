@@ -966,3 +966,201 @@ button.dnd-item-rt.dnd-spend-btn .dnd-item-rt-bot {
 .dnd-row-menu-btn {
   font-size: 26px;
 }
+
+/* ---- §12. Лицевая и каркас листа по макету (2026-09-25). ----
+ * Макет: карта и вкладка лежат прямо на бумаге страницы — без общей доски
+ * листа с контуром и боковинами цвета класса; полоска разделов — ряд
+ * бумажных вкладок в неровном контуре, текущая — чернилами; плашки карты —
+ * фактура paper-panel в неровном контуре, «в процессе» — маджентой. */
+.sb-card:has(> .sb-body.dnd-card-frame) {
+  border: 0;
+  background: none;
+}
+.sb-body.dnd-card-frame {
+  border-left-width: 0;
+  border-right-width: 0;
+  background: none;
+}
+.sheet-page:has(.dnd-card-frame) {
+  outline: none;
+  box-shadow: none;
+  background: none;
+}
+.sheet-page:has(.dnd-card-frame)::before,
+.sheet-page:has(.dnd-card-frame)::after {
+  content: none;
+}
+.dnd-desktop-tab {
+  outline: none;
+  box-shadow: none;
+  background: none;
+}
+.dnd-desktop-tab::after {
+  content: none;
+}
+
+/* Полоска разделов. */
+.dnd-deck-strip {
+  width: fit-content;
+  max-width: 100%;
+  gap: 0;
+  margin-bottom: 16px;
+  border: 4px solid transparent;
+  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  outline: none;
+  background: none;
+}
+.dnd-deck-strip button {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-right: 1px solid rgba(23, 23, 23, 0.2);
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  color: var(--skin-ink);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  box-shadow: none;
+}
+.dnd-deck-strip button:not(:first-child) {
+  box-shadow: none;
+}
+.dnd-deck-strip button.active {
+  background: var(--skin-ink);
+  color: #e8e4da;
+  font-weight: 400;
+  border-bottom-color: transparent !important;
+}
+.dnd-deck-strip button:hover:not(.active) {
+  background-color: #dcd6c6;
+  background-blend-mode: multiply;
+}
+@media (max-width: 700px) {
+  .dnd-deck-strip button {
+    padding: 0 14px;
+    font-size: 14px;
+  }
+}
+
+/* Карта: бумага paper-panel, портрет гаснет в неё ровно — без рваной
+ * полосы R3.2 (на макете её нет). */
+.dnd-card-face {
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+}
+.dnd-card-portrait-grain {
+  background-image: none;
+}
+.dnd-card-portrait-fade {
+  background: linear-gradient(
+    to bottom,
+    rgba(239, 235, 225, 0) 42%,
+    rgba(239, 235, 225, 0.86) 72%,
+    #efebe1 100%
+  );
+}
+/* Картуш: имя — Rubik Dirt строчными, уровень — чёрная кнопка с кислотной
+ * цифрой, класс — капс UI, происхождение — простой строкой. */
+.dnd-card-cartouche {
+  padding: 0 calc(var(--pad-x, 22px) + 6px) 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.dnd-card-cartouche-name {
+  font-family: "Rubik Dirt", var(--font-ui), sans-serif;
+  font-weight: 400;
+  font-size: 34px;
+  line-height: 0.95;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--skin-ink);
+  overflow-wrap: anywhere;
+}
+.dnd-card-cartouche-class {
+  margin-top: 0;
+  gap: 8px;
+}
+.dnd-card-level,
+button.dnd-card-level {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  display: inline-grid;
+  place-items: center;
+  box-sizing: border-box;
+  background: var(--skin-ink) !important;
+  color: var(--skin-acid) !important;
+  font-family: var(--font-ui);
+  font-size: 17px;
+  font-weight: 700;
+}
+.dnd-card-cartouche-classline {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--skin-ink);
+}
+.dnd-card-cartouche-origin {
+  margin-top: 0;
+  font-family: var(--font-body, inherit);
+  font-size: 14px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--skin-ink-soft);
+}
+.dnd-card-text-link {
+  color: inherit;
+}
+@media (max-width: 700px) {
+  .dnd-card-cartouche-name {
+    font-size: 30px;
+  }
+}
+
+/* Живой ряд: бумажные плашки в неровном контуре; включённое — маджентой. */
+.dnd-live-row {
+  gap: 6px;
+}
+.dnd-live-row > div,
+.dnd-live-row > button {
+  min-height: 34px;
+  align-items: center;
+  border: 4px solid transparent;
+  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background-clip: padding-box;
+}
+.dnd-live-chip.is-on {
+  background: var(--skin-magenta) url("/ui/wizard/punk-magenta.webp") center / 360px;
+  background-clip: padding-box;
+  color: var(--skin-ink);
+}
+.dnd-live-chip.is-on .sb-label,
+.dnd-live-chip.is-on .sb-value {
+  color: var(--skin-ink);
+}
+/* Характеристики — в неровном контуре, без пунктира и вклейки. */
+.dnd-card-face .dnd-abilities-block {
+  border: 4px solid transparent;
+  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  background: none;
+  box-shadow: none;
+}
+.dnd-card-face .dnd-abilities-block::before {
+  content: none;
+}
+/* Закладки — бумажные полосы с кромкой. */
+.dnd-card-face .dnd-bookmark {
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  border-left-width: 5px;
+}
+/* Бумага страницы с фактурой видна и под листом, а не только ниже него. */
+.oneshot-sheet {
+  background-color: transparent;
+}
+.dnd-card-portrait-zone:not(.is-empty) {
+  box-shadow: none;
+  border-bottom: 0;
+}
