@@ -30,6 +30,8 @@ import { QRCodeSVG } from 'qrcode.react';
 import { shouldNotifyForWaiting, shouldNotifyForInstalled, createControllerChangeHandler, applyUpdateSafely } from './pwa/update.mjs';
 import { readStorageStatus, requestPersistentStorage, shouldAdviseBackup, storageProtectionText } from './pwa/storage.mjs';
 import type { LevelUpDraft } from '../../client/src/components/dnd/dndLevelUpDraft';
+import { useDndPrefs } from '../../client/src/hooks/useDndPrefs';
+import { saveDndPrefs } from '../../client/src/dndPrefs';
 import '../../client/src/index.css';
 import '../../client/src/dnd-sheet.css';
 import '../../client/src/creature-card.css';
@@ -1264,6 +1266,7 @@ function App() {
   // surface the existing CAS error and ask for a retry — no sync layer.
   const [openMenu, setOpenMenu] = useState<number | null>(null);
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const dndPrefs = useDndPrefs();
   const modalReturnFocusRef = useRef<HTMLButtonElement | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Character | null>(null);
   const [libraryBusy, setLibraryBusy] = useState(false);
@@ -1352,6 +1355,7 @@ function App() {
       {active?.content && <>
         <button type="button" className="oneshot-header-toggle" aria-expanded={headerMenuOpen} aria-controls="oneshot-header-options" onClick={() => setHeaderMenuOpen(v => !v)}>{headerMenuOpen ? 'Закрыть' : 'Настройки'}</button>
         <div id="oneshot-header-options" className="oneshot-header-options" data-open={headerMenuOpen}>
+          <label className="oneshot-large-cards"><input type="checkbox" checked={dndPrefs.abilityPrimary === 'mod'} onChange={e => saveDndPrefs({ ...dndPrefs, abilityPrimary: e.target.checked ? 'mod' : 'score' })} /> На кости — модификатор</label>
           <label className="oneshot-large-cards"><input type="checkbox" checked={includeLargeCards} onChange={e => setIncludeLargeCards(e.target.checked)} /> Большие карты в копии</label><button onClick={() => void backup()}>Скачать резервную копию</button>
         </div>
       </>}

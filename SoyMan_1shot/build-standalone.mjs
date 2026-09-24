@@ -20,7 +20,7 @@ export async function buildStandalone() {
   let css = output.filter(x => x.type === 'asset' && x.fileName.endsWith('.css')).map(x => x.source).join('\n');
   for (const match of [...css.matchAll(/url\(["']?(\/[^)"']+)["']?\)/g)]) {
     const file = path.resolve(root, '../client/public', '.' + match[1]);
-    const ext = path.extname(file); const mime = { '.ttf': 'font/ttf', '.webp': 'image/webp', '.svg': 'image/svg+xml' }[ext];
+    const ext = path.extname(file); const mime = { '.ttf': 'font/ttf', '.woff2': 'font/woff2', '.webp': 'image/webp', '.png': 'image/png', '.svg': 'image/svg+xml' }[ext];
     if (!mime) throw Error('Unknown standalone asset: ' + match[1]);
     const bytes = await readFile(file);
     css = css.replaceAll(match[0], `url("data:${mime};base64,${bytes.toString('base64')}")`);

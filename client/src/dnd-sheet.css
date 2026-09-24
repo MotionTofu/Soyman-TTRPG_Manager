@@ -4091,3 +4091,14 @@ span.dnd-tab-btn {
     display: none;
   }
 }
+
+/* Второе число характеристики — у подписи, а не на кости («СИЛ 10»). */
+.dnd-ability-label-sub {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--ink);
+}
+.dnd-ability-die .dnd-ability-label {
+  white-space: nowrap;
+}

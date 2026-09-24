@@ -159,15 +159,19 @@ function AbilityBox({
       onClick={() => setShowSave((v) => !v)}
       title="Клик — переключить характеристику/спасбросок"
     >
+      {/* На кости одно число, второе — у подписи («СИЛ 10»): два числа в
+          одном силуэте читались строчками, а не костью. */}
       <DndDie size="sm" textured edge={isSaveProficient} accentColor={accentColor}>
         <span className="dnd-die-value">
           {showSave ? save : primary === "score" ? score : formatModifier(mod - exhaustionPenalty)}
         </span>
-        <span className="dnd-die-sub">
+      </DndDie>
+      <span className="dnd-ability-label">
+        {label}{" "}
+        <span className="dnd-ability-label-sub">
           {showSave ? "спас" : primary === "score" ? formatModifier(mod - exhaustionPenalty) : score}
         </span>
-      </DndDie>
-      <span className="dnd-ability-label">{label}</span>
+      </span>
     </div>
   );
 }
