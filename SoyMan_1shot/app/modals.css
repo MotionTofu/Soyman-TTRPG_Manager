@@ -88,7 +88,8 @@ html[data-app="oneshot"] .modal:has(.dnd-init-modal) {
   padding: clamp(18px, 3vw, 28px);
   border: 3px solid var(--ui-border);
   border-radius: 0;
-  background: var(--ui-surface) var(--skin-paper-panel);
+  /* Бумага чище — та же, что у окна состояний (владелец 2026-09-25). */
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
   color: var(--ui-text);
   box-shadow: 5px 5px 0 var(--ui-accent-secondary);
 }
@@ -96,10 +97,12 @@ html[data-app="oneshot"] .dnd-init-modal {
   min-width: 0;
 }
 html[data-app="oneshot"] .dnd-init-modal > strong {
-  font-family: var(--font-display);
-  font-size: clamp(22px, 4vw, 28px);
-  line-height: 1.08;
-  text-transform: uppercase;
+  /* Как заголовок окна состояний: --font-display в OneShot не задан, и
+     заголовок падал в Times. */
+  font-family: "Rubik Dirt", var(--font-ui), sans-serif;
+  font-size: 28px;
+  font-weight: 400;
+  line-height: 1;
 }
 html[data-app="oneshot"] .dnd-init-modal > .muted {
   font-size: 13px;
