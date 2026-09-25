@@ -878,7 +878,82 @@ body.sheet-fullscreen {
   border-top: 0;
   background: #141414 url("/ui/wizard/ink-surface.webp") center / 620px repeat;
   color: #e8e4da;
-  gap: 14px;
+  /* Каждое существо — своей строкой, поиск — последней. */
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 10px;
+}
+.dnd-card-face > .dnd-companions > .dnd-companion {
+  display: flex;
+  gap: 10px;
+}
+.dnd-card-face > .dnd-companions > .dnd-companion > .dnd-companion-remove {
+  margin-left: auto;
+}
+/* Жетон спутника по макету: квадратный портрет 46 с тенью, справа имя и
+ * строка «КЗ · хиты». */
+.dnd-card-face > .dnd-companions .dnd-companion-link {
+  gap: 10px;
+  text-align: left;
+}
+.dnd-card-face > .dnd-companions .dnd-companion-face {
+  width: 46px;
+  height: 46px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.6);
+}
+.dnd-companion-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.dnd-card-face > .dnd-companions .dnd-companion-name {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.dnd-companion-meta {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #bdb8ad;
+}
+/* Поиск спутника в чернильном подвале: поле бумажное, текст — чернилами
+ * (иначе наследовал светлый цвет подвала и набранного не было видно). */
+.dnd-card-face > .dnd-companions :is(input, .combobox-option, [role="option"]) {
+  color: #171717;
+}
+.dnd-companion-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.dnd-companion-search > :first-child {
+  flex: 1;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+.dnd-companion-search input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  box-sizing: border-box;
+}
+.dnd-card-face .dnd-companion-search-close {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 2px solid #bdb8ad;
+  background: none;
+  color: #e8e4da;
 }
 .dnd-companions-label {
   font-family: var(--font-ui);
@@ -2150,25 +2225,11 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-spell-school {
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-/* Спутников нет — «+» по центру и подпись под ним. */
+/* Спутников нет — одна строка: подпись слева, «+» справа. */
 .dnd-card-face > .dnd-companions.is-empty {
-  flex-direction: column;
-  justify-content: center;
-  gap: 4px;
-  padding-inline: 64px;
-}
-.dnd-card-face > .dnd-companions.is-empty > .dnd-companions-label {
-  display: none;
-}
-.dnd-card-face > .dnd-companions.is-empty .dnd-companion-add {
-  margin: 0;
-}
-.dnd-companion-add-caption {
-  font-family: var(--font-ui);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #bdb8ad;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
 }
 /* Спасброски от смерти — чернильная плашка ниже верхней цепи и её
  * орнаментов; «Стабилизирован» — такой же плашкой, а не полосой под цепью. */

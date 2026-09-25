@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEve
 import { useQuery } from "@tanstack/react-query";
 import { useAction, useResource, write } from "../../data/hooks";
 import { creatureCardQuery } from "../../data/creatureCard";
-import { cardMaxHp } from "../CreatureCard";
+import { cardAc, cardMaxHp } from "../CreatureCard";
 import { afterWriteAnywhere, readResource } from "../../data/imperative";
 import { showSaveError } from "../../data/notices";
 import { statblockAffects, statblockListPath } from "../../data/statblocks";
@@ -5333,6 +5333,11 @@ function CompanionToken({
   const card = useQuery({ ...creatureCardQuery("compendium_entry", companion.entryId ?? 0), enabled: companion.entryId != null });
   const maxHp = cardMaxHp(card.data);
   const hpLeft = maxHp != null ? maxHp - Math.min(companion.hpUsed ?? 0, maxHp) : null;
+  const ac = cardAc(card.data);
+  // Строкой, как в макете (2026-09-25): «КЗ 12 · хиты 2 / 2», без полосы.
+  const meta = [ac != null ? `КЗ ${ac}` : null, maxHp != null && hpLeft != null ? `хиты ${hpLeft} / ${maxHp}` : null]
+    .filter(Boolean)
+    .join(" · ");
   const body = (
     <>
       {/* Знак типа существа — бейджем поверх лица (полотно «Подвал
@@ -5344,7 +5349,10 @@ function CompanionToken({
         </span>
         <CreatureTypeBadge type={creatureTypeName(entry)} />
       </span>
-      <span className="dnd-companion-name">{stripLatin(entry?.name || companion.name)}</span>
+      <span className="dnd-companion-text">
+        <span className="dnd-companion-name">{stripLatin(entry?.name || companion.name)}</span>
+        {meta && <span className="dnd-companion-meta">{meta}</span>}
+      </span>
     </>
   );
   return (
@@ -5361,16 +5369,6 @@ function CompanionToken({
       )}
       {open && companion.entryId && (
         <EntityPreviewModal type="compendium_entry" id={companion.entryId} onClose={() => setOpen(false)} />
-      )}
-      {maxHp != null && hpLeft != null && (
-        <span className="dnd-companion-hp">
-          <PoolMeter
-            max={maxHp}
-            left={hpLeft}
-            label={`Хиты: ${companion.name}`}
-            onSetLeft={onPatch ? (next) => onPatch({ hpUsed: maxHp - next }) : undefined}
-          />
-        </span>
       )}
       {onRemove && (
         <button
@@ -12316,7 +12314,11 @@ export function DndCharacterView({
                 className={`dnd-companions${(value.companions ?? []).length === 0 && onQuickUpdate && !detached ? " is-empty" : ""}`}
                 aria-label="Спутники"
               >
-                <span className="dnd-companions-label" aria-hidden="true">Спутники</span>
+                {/* Пока никого нет — одна строка «подпись [+]»; «+» открывает в
+                    ней же поиск с крестиком (владелец, 2026-09-25). */}
+                {(value.companions ?? []).length === 0 && !(addingCompanion && onQuickUpdate && !detached) && (
+                  <span className="dnd-companions-label">Спутники/фамильяры/призывы</span>
+                )}
                 {(value.companions ?? []).map((c, i) => {
                   const remove = onQuickUpdate
                     ? () =>
@@ -12499,11 +12501,12 @@ export function DndCharacterView({
                       </span>
                     );
                   })}
-                {/* Поле поиска не стоит на карте постоянно: спутника заводят
-                    раз в кампанию, а орган управления виден каждый ход.
-                    Пока он не нужен — на его месте «+». */}
+                {/* Каждое существо — своей строкой; когда хоть одно есть,
+                    последняя строка — сразу поле поиска, без «+». Пустой
+                    подвал — «+», открывающий поиск на месте подписи. */}
                 {onQuickUpdate && !detached &&
-                  (addingCompanion ? (
+                  (addingCompanion || (value.companions ?? []).length > 0 ? (
+                    <span className="dnd-companion-search">
                     <CompendiumEntryPicker
                       value={null}
                       kind="monster"
@@ -12518,6 +12521,17 @@ export function DndCharacterView({
                         setAddingCompanion(false);
                       }}
                     />
+                    {/* Отмена: случайно открытый поиск не висит на карте. */}
+                    {(value.companions ?? []).length === 0 && <button
+                      type="button"
+                      className="comp-mini dnd-companion-search-close"
+                      title="Отменить поиск"
+                      aria-label="Отменить поиск спутника"
+                      onClick={() => setAddingCompanion(false)}
+                    >
+                      <NavIcon name="close" />
+                    </button>}
+                    </span>
                   ) : (
                     <button
                       type="button"
@@ -12529,10 +12543,6 @@ export function DndCharacterView({
                       +
                     </button>
                   ))}
-                {/* Пока спутников нет — подпись под «+» (владелец, 2026-09-25). */}
-                {onQuickUpdate && !detached && !addingCompanion && (value.companions ?? []).length === 0 && (
-                  <span className="dnd-companion-add-caption" aria-hidden="true">спутник</span>
-                )}
               </div>
             )}
               {/* Загнутый угол — индикатор «пришло послание» и (только на

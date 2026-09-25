@@ -101,6 +101,13 @@ export function cardHitPoints(value: DndCreatureData): string {
   return fromFormula ? fromFormula[0] : "";
 }
 
+/** КЗ существа из карточки — для строки питомца на листе. Нет статблока — null. */
+export function cardAc(card: CreatureCardPayload | null | undefined): string | null {
+  if (!card?.statblock) return null;
+  const ac = cardArmorClass(normalizeDndCreature(safeParse(card.statblock.content)));
+  return ac === "—" ? null : ac;
+}
+
 /** Максимум хитов существа из карточки — для счётчика питомца на листе. */
 export function cardMaxHp(card: CreatureCardPayload | null | undefined): number | null {
   if (!card?.statblock) return null;
