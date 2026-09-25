@@ -12910,14 +12910,6 @@ export function DndCharacterView({
                           />
                         </label>
                       </div>
-                      <label>
-                        Заклинания — общая информация
-                        <MentionTextarea
-                          value={value.spellcasting}
-                          onChange={(v) => onQuickUpdate({ spellcasting: v })}
-                          rows={3}
-                        />
-                      </label>
                     </div>
                   )}
                 </>

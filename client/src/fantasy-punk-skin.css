@@ -1458,7 +1458,7 @@ button.dnd-card-level {
   box-shadow: none !important;
   border-left: 0 !important;
 }
-.dnd-spell-school-icon,
+/* Значки школ вернулись (владелец 2026-09-26) — ромб подготовки остаётся. */
 .dnd-prepared-badge {
   display: none;
 }
