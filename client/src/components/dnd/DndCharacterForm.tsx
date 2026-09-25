@@ -8355,6 +8355,7 @@ function InitiativePlate({
         <InitiativeRollModal
           derived={derived}
           misc={misc}
+          local={local}
           characterId={characterId}
           onQuickUpdate={onQuickUpdate}
           onClose={() => setOpen(false)}
@@ -8375,11 +8376,13 @@ function InitiativePlate({
 function InitiativeQuickBox({
   derived,
   misc,
+  local,
   characterId,
   onQuickUpdate,
 }: {
   derived: Derived;
   misc: string;
+  local: number | null;
   characterId?: number | null;
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
 }) {
@@ -8402,6 +8405,7 @@ function InitiativeQuickBox({
         <InitiativeRollModal
           derived={derived}
           misc={misc}
+          local={local}
           characterId={characterId}
           onQuickUpdate={onQuickUpdate}
           onClose={() => setOpen(false)}
@@ -8414,12 +8418,15 @@ function InitiativeQuickBox({
 function InitiativeRollModal({
   derived,
   misc,
+  local,
   characterId,
   onQuickUpdate,
   onClose,
 }: {
   derived: Derived;
   misc: string;
+  /** Записанное в листе число — без кампании сбрасывается оно. */
+  local: number | null;
   characterId?: number | null;
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
   onClose: () => void;
@@ -8469,6 +8476,7 @@ function InitiativeRollModal({
   }
 
   async function reset() {
+    if (!campaignConnected) { onQuickUpdate?.({ initiative: null }); onClose(); return; }
     if (characterId == null || sending) return;
     setSending(true);
     try {
@@ -8544,8 +8552,8 @@ function InitiativeRollModal({
         )}
 
         <div className="row" style={{ gap: 6, justifyContent: "flex-end" }}>
-          {standing?.initiative != null && (
-            <button type="button" className="comp-mini" onClick={reset} disabled={sending}>
+          {(campaignConnected ? standing?.initiative != null : local != null) && (
+            <button type="button" className="comp-mini" onClick={reset} disabled={sending || !onQuickUpdate}>
               Сбросить
             </button>
           )}
@@ -12263,6 +12271,7 @@ export function DndCharacterView({
               <InitiativeQuickBox
                 derived={derived.initiative}
                 misc={value.initiativeMisc}
+                local={value.initiative}
                 characterId={ownerCharacterId}
                 onQuickUpdate={onQuickUpdate}
               />
