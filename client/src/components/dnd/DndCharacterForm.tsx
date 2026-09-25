@@ -10360,8 +10360,12 @@ export function DndCharacterView({
       if (!best || (c.level || 0) > (best.level || 0)) best = c;
     }
     if (!best) return [];
-    const raw = getEntry(best.classId)?.data.oracle_quotes;
-    return Array.isArray(raw) ? raw.filter((q): q is string => typeof q === "string") : [];
+    // К пулу класса — цитаты его подкласса (домен Жреца, Дикая магия).
+    const quotes = (id: number | null | undefined) => {
+      const raw = getEntry(id)?.data.oracle_quotes;
+      return Array.isArray(raw) ? raw.filter((q): q is string => typeof q === "string") : [];
+    };
+    return [...quotes(best.classId), ...quotes(best.subclassId)];
   })();
   // Визард левелапа с оборота карты (игрок своего, мастер любого): модалка
   // живёт здесь же, применение — тем же мгновенным сохранением, что значения.
