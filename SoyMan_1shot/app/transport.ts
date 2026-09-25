@@ -1,4 +1,4 @@
-import { creatureCardPayload, searchEntries } from './catalog.mjs';
+import { creatureCardPayload, mentionIndexPayload, searchEntries } from './catalog.mjs';
 import { getCharacter, saveCharacter, parseCharacterContent, getCatalog, getCatalogPreviews, currentCatalog, type Catalog } from './repository';
 // Vite sees this file both as the shell's direct import and as the replacement
 // for client/api/client.ts. Some builds keep those as two module instances;
@@ -59,6 +59,7 @@ async function request<T>(path: string, method = 'GET', body?: any, options?: Re
       if (!entry) throw Error('Существо отсутствует в подключённом справочнике');
       result = creatureCardPayload(entry, presentEntry(entry, true).avatar_image_url);
     }
+    else if (route === '/mentions/index') result = mentionIndexPayload(transportState.catalog?.entries);
     else if (/^\/player\/characters\/\d+\/inbox$/.test(route)) result = [];
     else if (/^\/systems\/\d+$/.test(route)) result = transportState.catalog?.system;
     else throw Error(`В OneShot пока недоступно: ${route}`);

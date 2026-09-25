@@ -295,7 +295,9 @@
 .dc-fullcard {
   position: fixed;
   inset: 0;
-  z-index: 2000;
+  /* Как у окон (.modal-backdrop — 50): открытое позже окно ссылки ложится
+     поверх, а сам текст — поверх окна карт, из которого он открыт. */
+  z-index: 50;
   overflow-y: auto;
   overscroll-behavior: contain;
   background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;

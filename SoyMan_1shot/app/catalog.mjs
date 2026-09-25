@@ -32,7 +32,10 @@ export function parseCatalog(input) {
     const large = typeof e.avatar_large_url === 'string' ? e.avatar_large_url : embedded(e.avatar_data);
     const preview = typeof e.avatar_preview_url === 'string' ? e.avatar_preview_url : embedded(e.avatar_preview_data) || large;
     const creature = cleanCreature(e.creature);
-    return { id: e.id, system_id: 1, section_id: e.section_id, parent_id: e.parent_id ?? null, name: e.name, name_original: e.name_original || '', aliases: Array.isArray(e.aliases) ? e.aliases.filter(a => typeof a === 'string') : [], kind: e.kind, level: e.level ?? null, position: e.position || 0, data: structuredClone(e.data), description: typeof e.description === 'string' ? e.description : '', avatar_preview_url: preview, avatar_large_url: large, ...(creature ? { creature } : {}) };
+    // Глобальный ключ — цель ссылок [[compendium_entry@…]] в описаниях.
+    // Каталог приходит и импортом, поэтому формат проверяется.
+    const uid = typeof e.uid === 'string' && /^[0-9a-f]{8}(-?[0-9a-f]{4}){3}-?[0-9a-f]{12}$/i.test(e.uid) ? e.uid.toLowerCase() : null;
+    return { id: e.id, ...(uid ? { uid } : {}), system_id: 1, section_id: e.section_id, parent_id: e.parent_id ?? null, name: e.name, name_original: e.name_original || '', aliases: Array.isArray(e.aliases) ? e.aliases.filter(a => typeof a === 'string') : [], kind: e.kind, level: e.level ?? null, position: e.position || 0, data: structuredClone(e.data), description: typeof e.description === 'string' ? e.description : '', avatar_preview_url: preview, avatar_large_url: large, ...(creature ? { creature } : {}) };
   });
   if (entries.some(e => e.parent_id != null && !ids.has(e.parent_id))) throw Error('В справочнике отсутствует родитель записи');
   return { system: { id: 1, name: input.system.name, code: 'dnd55', description: input.system.description || '' }, sections: cleanSections, entries };
@@ -51,6 +54,12 @@ function cleanCreature(value) {
     ? { id: Number.isSafeInteger(s.id) ? s.id : 0, kind: typeof s.kind === 'string' ? s.kind : 'full', format: 'dnd_creature', content: s.content, theme: typeof s.theme === 'string' ? s.theme : null, density: typeof s.density === 'string' ? s.density : null }
     : null;
   return { combat_roles: list(value.combat_roles), tactics: list(value.tactics), statblock };
+}
+// Карта глобальных ключей в формате /mentions/index основного SoyMan
+// (client/src/mentions.ts): ссылки в описаниях оживают без сервера. Ключи —
+// без дефисов, как в тексте ссылок (normUid).
+export function mentionIndexPayload(entries) {
+  return { owners: {}, entities: { compendium_entry: (entries ?? []).filter(e => typeof e.uid === 'string').map(e => [e.id, e.uid.replace(/-/g, '').toLowerCase(), null]) } };
 }
 export function creatureCardPayload(entry, avatarUrl) {
   const creature = entry.creature || { combat_roles: [], tactics: [], statblock: null };

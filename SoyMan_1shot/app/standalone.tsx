@@ -7,6 +7,8 @@ import { DndCharacterView } from '../../client/src/components/dnd/DndCharacterFo
 import { DndRuntimeContext } from '../../client/src/components/dnd/DndRuntime';
 import { applyTheme, findTheme } from '../../client/src/themes';
 import { snapshot } from './standalone-transport';
+import { refreshMentionIndex } from '../../client/src/mentions';
+import { MentionPreviewRoot } from '../../client/src/components/mentions/MentionPreviewRoot';
 import { normalizeDndCharacter } from '@shared/dnd/normalize';
 import '../../client/src/index.css';
 import '../../client/src/dnd-sheet.css';
@@ -47,8 +49,9 @@ function App() {
   }
   return <DndRuntimeContext.Provider value={{ allowDiceRolls: false, campaignConnected: false, detached: true }}>
     <header className="oneshot-header oneshot-standalone-header"><strong>OneShot SoyMan</strong><span className="oneshot-standalone-label">Автономная копия</span><span role="status">{status}</span><button onClick={save}>Скачать обновлённую копию</button></header>
-    <div className="oneshot-sheet"><div className="fp-page-backdrop" aria-hidden="true" /><DndCharacterView value={value} portraitUrl={snapshot.character.portrait} onQuickUpdate={patch => { setDirty(true); setValue(v => ({ ...v, ...patch })); setStatus('Есть изменения — скачайте обновлённую копию перед закрытием.'); }} /></div>
+    <div className="oneshot-sheet"><div className="fp-page-backdrop" aria-hidden="true" /><DndCharacterView value={value} portraitUrl={snapshot.character.portrait} onQuickUpdate={patch => { setDirty(true); setValue(v => ({ ...v, ...patch })); setStatus('Есть изменения — скачайте обновлённую копию перед закрытием.'); }} /><MentionPreviewRoot /></div>
     <details className="oneshot-sources"><summary>Источники правил</summary><p>This work includes material from the System Reference Document 5.2 ("SRD 5.2") by Wizards of the Coast LLC, available at https://www.dndbeyond.com/srd. The SRD 5.2 is licensed under the Creative Commons Attribution 4.0 International License, available at https://creativecommons.org/licenses/by/4.0/legalcode.</p><p>Тексты и переводы импортированного справочника сохраняют условия своих источников.</p></details>
   </DndRuntimeContext.Provider>;
 }
+void refreshMentionIndex();
 createRoot(document.getElementById('root')!).render(<QueryClientProvider client={queryClient}><MemoryRouter><App /></MemoryRouter></QueryClientProvider>);

@@ -7,6 +7,7 @@ import { DndCharacterWizard } from '../../client/src/components/dnd/DndCharacter
 import { DndCharacterView } from '../../client/src/components/dnd/DndCharacterForm';
 import { DndRuntimeContext } from '../../client/src/components/dnd/DndRuntime';
 import { SaveNotices } from '../../client/src/components/SaveNotices';
+import { MentionPreviewRoot } from '../../client/src/components/mentions/MentionPreviewRoot';
 import { applyTheme, findTheme } from '../../client/src/themes';
 import { emptyDndCharacter } from '@shared/dnd/normalize';
 import type { DndCharacterData } from '@shared/dnd/types';
@@ -21,6 +22,7 @@ import { Button } from './ui/Button';
 import { ActionRow } from './ui/ActionRow';
 import { Banner } from './ui/Banner';
 import { selectCharacter, refreshSelectedCatalogMedia } from './transport';
+import { refreshMentionIndex } from '../../client/src/mentions';
 import { ensureCurrentCatalog, ensureCatalogPreviews, garbageCollectCatalogs, mergePreviews } from './catalog-manager.mjs';
 import { parseCatalog } from './catalog.mjs';
 import { auditExport } from './export-audit.mjs';
@@ -728,7 +730,8 @@ function App() {
   }
   async function open(id: number) {
     const c = await getCharacter(id); if (!c) throw Error('Персонаж не найден');
-    await selectCharacter(id); revision.current = c.revision; activeRef.current = c; setActive(c); setWizard(!c.content);
+    // Карта ключей — от справочника этого персонажа: ссылки в описаниях.
+    await selectCharacter(id); void refreshMentionIndex(); revision.current = c.revision; activeRef.current = c; setActive(c); setWizard(!c.content);
     setStatus('Сохранено на устройстве');
   }
   // Catalog GC via the existing helper: removes a managed slice exactly when
@@ -1622,6 +1625,8 @@ function App() {
     </main>}
     {wizard && active && <DndCharacterWizard ownerType="character" ownerId={active.id} ownerName={active.name} initialSystemId={active.catalogKey ? 1 : null} visualVariant="oneshot" onDone={() => location.reload()} onCancel={() => location.assign('/')} />}
     <SaveNotices />
+    {/* Окно по ссылке [[…]] из описаний справочника. */}
+    <MentionPreviewRoot />
   </DndRuntimeContext.Provider>;
 }
 const root = createRoot(document.getElementById('root')!);

@@ -1,4 +1,4 @@
-import { creatureCardPayload } from './catalog.mjs';
+import { creatureCardPayload, mentionIndexPayload } from './catalog.mjs';
 const payload = JSON.parse(document.getElementById('oneshot-payload')!.textContent!);
 export const snapshot = payload;
 export const getAuthToken = () => null;
@@ -27,6 +27,7 @@ async function get<T>(path: string): Promise<T> {
     if (!entry) throw Error('Это существо не включено в автономную копию.');
     result = creatureCardPayload(entry, presentEntry(entry, true).avatar_image_url);
   }
+  else if (u.pathname === '/mentions/index') result = mentionIndexPayload(c.entries);
   else if (u.pathname === '/search' || u.pathname === '/statblocks' || u.pathname.endsWith('/inbox')) result = [];
   else return unavailable();
   return structuredClone(result) as T;

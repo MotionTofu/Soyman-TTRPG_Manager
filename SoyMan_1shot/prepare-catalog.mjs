@@ -20,7 +20,7 @@ try {
     // secret is never selected: the catalog is served to players.
     const list = raw => { try { const v = JSON.parse(raw || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } };
     const statblock = db.prepare("SELECT id, kind, format, content, theme, density FROM statblocks WHERE owner_type = 'compendium_entry' AND owner_id = ? AND format = 'dnd_creature' ORDER BY CASE kind WHEN 'full' THEN 0 ELSE 1 END, id LIMIT 1");
-    const entries = db.prepare('SELECT id, section_id, parent_id, name, name_original, aliases, kind, level, position, data, description, avatar_image_path, combat_roles, tactics FROM compendium_entries WHERE system_id = ?').all(system.id).map(({ combat_roles, tactics, ...e }) => ({
+    const entries = db.prepare('SELECT id, uid, section_id, parent_id, name, name_original, aliases, kind, level, position, data, description, avatar_image_path, combat_roles, tactics FROM compendium_entries WHERE system_id = ?').all(system.id).map(({ combat_roles, tactics, ...e }) => ({
       ...e, data: JSON.parse(e.data || '{}'), aliases: JSON.parse(e.aliases || '[]'),
       // Bestiary companions need the same card the player route of SoyMan serves.
       ...(e.kind === 'monster' ? { creature: { combat_roles: list(combat_roles), tactics: list(tactics), statblock: statblock.get(e.id) ?? null } } : {}),
