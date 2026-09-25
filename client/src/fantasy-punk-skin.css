@@ -1512,6 +1512,50 @@ button.dnd-prep-diamond::after {
   position: absolute;
   inset: -12px;
 }
+/* Ромб — справа, по центру строки, как значок школы слева (2026-09-26). */
+.dnd-spell-row > .dnd-prep-diamond {
+  align-self: center;
+  margin: 0 6px 0 auto;
+}
+/* «Всегда подготовлено» — розовая текстура под строкой на 45%. */
+.dnd-spell-row.is-prepared {
+  position: relative;
+  isolation: isolate;
+}
+.dnd-spell-row.is-prepared::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--skin-magenta) url("/ui/wizard/punk-magenta.webp") center / 360px;
+  opacity: 0.45;
+  pointer-events: none;
+}
+/* Жёлтая плашка для пометок-исключений: «без ячейки: N» и «особое». */
+.dnd-free-cast,
+.dnd-special-mark,
+.dnd-spell-pick-special {
+  display: inline-block;
+  min-height: 0;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border: 0;
+  border-radius: 0;
+  background: var(--skin-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
+  color: var(--skin-ink);
+  font-family: var(--font-ui, inherit);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+.dnd-free-cast {
+  margin-left: 0;
+}
+.dnd-free-cast.is-used {
+  opacity: 0.5;
+}
 /* ПК: круги двумя колонками — строки короткие, одна колонка оставляла
  * полэкрана пустым. */
 @media (min-width: 1200px) {

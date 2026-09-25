@@ -1746,20 +1746,6 @@ function DndSpellLevelSection({
                 {/* Значок школы — слева от названия, высотой в обе строки
                     (имя + подпись): школа уже есть текстом в подписи, значок
                     её дублирует графикой, поэтому скрыт от скринридера. */}
-                {/* Ромб подготовки (макет 2026-09-25): залит — подготовлено,
-                    контур — нет; «всегда» — с кислотной сердцевиной. */}
-                {onTogglePrepared && !edit && s.prepared !== 2 ? (
-                  <button
-                    type="button"
-                    className={`dnd-prep-diamond is-${s.prepared}`}
-                    aria-pressed={s.prepared === 1}
-                    aria-label={`${s.name}: ${s.prepared === 1 ? "подготовлено — снять" : "подготовить"}`}
-                    title={s.prepared === 1 ? "Подготовлено — снять" : "Подготовить"}
-                    onClick={() => onTogglePrepared(s, realIndex >= 0 ? realIndex : null)}
-                  />
-                ) : (
-                  <span className={`dnd-prep-diamond is-${s.prepared}`} aria-hidden="true" />
-                )}
                 {schoolSrc && (
                   <span className="dnd-spell-school-icon" title={s.school} aria-hidden="true">
                     <img src={schoolSrc} alt="" draggable={false} />
@@ -1786,7 +1772,7 @@ function DndSpellLevelSection({
                       {en && <span className="dnd-spell-en">{en}</span>}
                       {s.outsideLimit && <span className="dnd-outside-mark" title="Не в счёт подготовленных">∞</span>}
                       {abilityMark}
-                      {s.special && <span className="dnd-outside-mark" title="Взято по разрешению Мастера">особое</span>}
+                      {s.special && <span className="dnd-special-mark" title="Взято по разрешению Мастера">особое</span>}
                     </button>
                   ) : (
                     <span className="dnd-spell-title">
@@ -1794,7 +1780,7 @@ function DndSpellLevelSection({
                       {en && <span className="dnd-spell-en">{en}</span>}
                       {s.outsideLimit && <span className="dnd-outside-mark" title="Не в счёт подготовленных">∞</span>}
                       {abilityMark}
-                      {s.special && <span className="dnd-outside-mark" title="Взято по разрешению Мастера">особое</span>}
+                      {s.special && <span className="dnd-special-mark" title="Взято по разрешению Мастера">особое</span>}
                     </span>
                   )}
                   {freeCast}
@@ -1879,6 +1865,21 @@ function DndSpellLevelSection({
                       <NavIcon name="star" filled />
                     </span>
                   )
+                )}
+                {/* Ромб подготовки (макет 2026-09-25; справа по центру строки —
+                    владелец 2026-09-26, слева теперь значок школы): залит — подготовлено,
+                    контур — нет; «всегда» — с кислотной сердцевиной. */}
+                {onTogglePrepared && !edit && s.prepared !== 2 ? (
+                  <button
+                    type="button"
+                    className={`dnd-prep-diamond is-${s.prepared}`}
+                    aria-pressed={s.prepared === 1}
+                    aria-label={`${s.name}: ${s.prepared === 1 ? "подготовлено — снять" : "подготовить"}`}
+                    title={s.prepared === 1 ? "Подготовлено — снять" : "Подготовить"}
+                    onClick={() => onTogglePrepared(s, realIndex >= 0 ? realIndex : null)}
+                  />
+                ) : (
+                  <span className={`dnd-prep-diamond is-${s.prepared}`} aria-hidden="true" />
                 )}
               </div>
               {expandedIndex === rowKey && s.entryId && (
