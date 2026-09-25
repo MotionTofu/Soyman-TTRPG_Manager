@@ -2506,3 +2506,66 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-spell-school {
   white-space: nowrap;
   cursor: help;
 }
+
+/* Окно кадра: обёртка только гасит всплытие жестов, раскладку не трогает. */
+.dnd-frame-body {
+  display: contents;
+}
+/* «+ Портрет» в пустой зоне карты — вход к кадру без оборота (2026-09-25). */
+.dnd-card-portrait-add {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 14px;
+  background: var(--skin-ink);
+  color: var(--skin-acid, #f3ff3a);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.dnd-card-portrait-zone.is-empty:has(> .dnd-card-portrait-add) {
+  position: relative;
+  padding-top: 56px;
+}
+/* Уголок-переворот виден: кислотный загнутый угол — прежде мишень была
+ * прозрачной на орнаменте рамки и находилась только по подсказке жестов. */
+button.dnd-card-corner::after,
+button.dnd-card-back-corner::after {
+  content: "";
+  position: absolute;
+  right: 22px;
+  bottom: 22px;
+  width: 24px;
+  height: 24px;
+  background: linear-gradient(135deg, transparent 50%, #f3ff3a 50%);
+  filter: drop-shadow(-2px -2px 0 #171717);
+  pointer-events: none;
+}
+/* Телефон: карта край в край, и вынесенный за неё уголок уходил за экран
+ * наполовину — ставим его внутрь. */
+@media (max-width: 700px) {
+  .dnd-card-corner,
+  .dnd-card-back-corner {
+    right: 0;
+    bottom: 0;
+  }
+  button.dnd-card-corner::after,
+  button.dnd-card-back-corner::after {
+    right: 10px;
+    bottom: 10px;
+  }
+}
+
+/* Поля ввода и счётчики — без неровного контура, бумагой (владелец 2026-09-25). */
+.dnd-sheet-search > input[type="search"],
+.dnd-equipment-search > input,
+.dnd-edit-labeled {
+  border: 0;
+  border-image: none;
+}

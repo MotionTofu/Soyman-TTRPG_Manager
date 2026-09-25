@@ -82,8 +82,12 @@ export function PortraitFrameModal({
   }
   const setZoom = (v: number) => setZ(Math.min(PORTRAIT_ZOOM_MAX, Math.max(1, Math.round(v * 100) / 100)));
 
+  // События из портала всплывают по дереву React в карту — перетаскивание
+  // кадра листало бы карты и крутило веер. Гасим на корне окна.
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
   return (
     <Modal className="dnd-frame-modal" ariaLabel="Кадр портрета" onClose={onClose}>
+      <div className="dnd-frame-body" onPointerDown={stop} onPointerMove={stop} onPointerUp={stop} onTouchStart={stop} onTouchEnd={stop} onClick={stop}>
       <div className="dnd-frame-head">
         <h3>Кадр портрета</h3>
         <button type="button" className="dnd-conditions-close" aria-label="Закрыть" onClick={onClose}>
@@ -127,6 +131,7 @@ export function PortraitFrameModal({
         <button type="button" className="primary" disabled={busy} onClick={() => onApply(f, z)}>
           {busy ? "Сохраняем…" : "Готово"}
         </button>
+      </div>
       </div>
     </Modal>
   );

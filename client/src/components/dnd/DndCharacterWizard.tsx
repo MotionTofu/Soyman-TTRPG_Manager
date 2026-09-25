@@ -3837,7 +3837,11 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
           spellGroups.map((group) => {
             const picked = chosenSpellsIn(group.key);
             const q = spellSearch.trim().toLowerCase();
-            const cands = spellCandidates(group).filter((e) => !q || e.name.toLowerCase().includes(q));
+            // По кругам (владелец 2026-09-25): заговоры, 1 круг, 2 круг…
+            const cands = spellCandidates(group)
+              .filter((e) => !q || e.name.toLowerCase().includes(q))
+              .sort((a, b) => (a.level ?? 0) - (b.level ?? 0));
+            const circles = new Set(cands.map((e) => e.level ?? 0)).size > 1;
             const meta = (e: CompendiumEntry) => {
               const circle = e.level ?? 0;
               const school = (e.data.school as { name?: string } | undefined)?.name ?? "";
@@ -3846,7 +3850,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
                 .join(" · ");
             };
             return (
-              <section key={group.key}>
+              <section key={group.key} className={`wz-spell-group${picked.length >= group.count ? " is-done" : ""}`}>
                 <PickHead
                   label={group.label}
                   picked={picked.length}
@@ -3874,6 +3878,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
                       meta: granted ? `${meta(e)} · уже есть` : elsewhere ? `${meta(e)} · выбрано: ${elsewhere.label}` : meta(e),
                       picked: isHere,
                       disabled: granted || !!elsewhere,
+                      group: circles ? ((e.level ?? 0) === 0 ? "Заговоры" : `${e.level} круг`) : undefined,
                     };
                   })}
                   full={group.count > 1 && picked.length >= group.count}

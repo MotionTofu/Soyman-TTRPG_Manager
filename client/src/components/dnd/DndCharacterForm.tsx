@@ -10848,22 +10848,6 @@ export function DndCharacterView({
                 )}
               </div>
             )}
-            {frameEdit && (
-              <PortraitFrameModal
-                src={frameEdit.src}
-                focus={frameEdit.file ? undefined : value.portraitFocus}
-                zoom={frameEdit.file ? undefined : value.portraitZoom}
-                name={value.characterName}
-                subtitle={classAndLevelSummary(value.classes)}
-                busy={avatarUploading}
-                onClose={closeFrameEdit}
-                onApply={async (focus, zoom) => {
-                  if (frameEdit.file && !(await uploadPortrait(frameEdit.file))) return;
-                  onQuickUpdate({ portraitFocus: focus, portraitZoom: zoom > 1 ? zoom : undefined });
-                  closeFrameEdit();
-                }}
-              />
-            )}
             <DndOriginEditForm origin={origin} value={value} onQuickUpdate={onQuickUpdate} identityOnly />
             {/* Характеристики — в ту же раскрывашку: на десктопе это и
                 есть «режим редактирования» (лицевая при этом тоже
@@ -11980,6 +11964,25 @@ export function DndCharacterView({
                   больше нет. Без портрета зона схлопывается по содержимому.
                   Двойной тап по портрету разворачивает колоду веером, а в
                   ?edit=1 портрет тянется для кадрирования (см. useFrameDrag). */}
+              {/* Окно кадра — одно на лицевую и оборот: с лицевой его
+                  открывает «+ Портрет» пустой зоны (на телефоне оборот
+                  прячется за уголком), с оборота — «Новый портрет»/«Кадр». */}
+              {frameEdit && onQuickUpdate && (
+                <PortraitFrameModal
+                  src={frameEdit.src}
+                  focus={frameEdit.file ? undefined : value.portraitFocus}
+                  zoom={frameEdit.file ? undefined : value.portraitZoom}
+                  name={value.characterName}
+                  subtitle={classAndLevelSummary(value.classes)}
+                  busy={avatarUploading}
+                  onClose={closeFrameEdit}
+                  onApply={async (focus, zoom) => {
+                    if (frameEdit.file && !(await uploadPortrait(frameEdit.file))) return;
+                    onQuickUpdate({ portraitFocus: focus, portraitZoom: zoom > 1 ? zoom : undefined });
+                    closeFrameEdit();
+                  }}
+                />
+              )}
               <div
                 className={`dnd-card-portrait-zone${portraitUrl ? "" : " is-empty"}${canFrame ? " is-framing" : ""}${frame.dragging ? " is-dragging" : ""}${atZeroHp ? " has-death" : ""}`}
                 onTouchEnd={onPortraitTouchEnd}
@@ -11989,6 +11992,25 @@ export function DndCharacterView({
                 onPointerCancel={frame.handlers.onPointerCancel}
                 onClickCapture={frame.handlers.onClickCapture}
               >
+                  {/* Портрета нет — ставится прямо здесь, файл сразу в окно
+                      кадра (владелец 2026-09-25: на телефоне до оборота с
+                      «Редактировать» было не добраться). */}
+                  {!portraitUrl && canUploadPortrait && onQuickUpdate && (
+                    <label className="dnd-card-portrait-add">
+                      + Портрет
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        style={{ display: "none" }}
+                        disabled={avatarUploading}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = "";
+                          if (file) setFrameEdit({ src: URL.createObjectURL(file), file });
+                        }}
+                      />
+                    </label>
+                  )}
                   {portraitUrl && !portraitStale && (
                   <div className="dnd-card-portrait">
                     <img

@@ -402,3 +402,9 @@ html[data-app="oneshot"] .oneshot-header .oneshot-header-toggle[aria-expanded="t
   html[data-app="oneshot"] .lib-tools > summary { justify-content: space-between; }
   html[data-app="oneshot"] .oneshot-header .oneshot-header-note { display: none; }
 }
+
+/* Поля ввода и счётчики — без неровного контура, бумагой (владелец 2026-09-25). */
+html[data-app="oneshot"] .lib :is(.lib-name, .lib-tools) input:not([type="checkbox"]) {
+  border: 0;
+  border-image: none;
+}

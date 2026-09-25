@@ -1565,3 +1565,38 @@
   .wz .wz-overview-card .dnd-desktop-split {
     display: block;
   }}
+
+/* Поля ввода и счётчики — без неровного контура, бумагой (владелец 2026-09-25). */
+:is(.wz, .wz-sheet, .wz-lvl) :is(input:not([type="checkbox"], [type="radio"], [type="file"]), select, textarea),
+:is(.wz, .wz-sheet, .wz-lvl) .wz-level {
+  border: 0;
+  border-image: none;
+}
+:is(.wz, .wz-sheet, .wz-lvl) .wz-level {
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+}
+
+/* Шаг «Заклинания»: раздел — чернильная шапка; собранный — кислотная
+ * (владелец 2026-09-25: разделы сливались). Внутри — подзаголовки кругов. */
+:is(.wz, .wz-lvl) .wz-spell-group > .wz-group-head {
+  margin-bottom: 6px;
+  padding: 8px 10px;
+  background: #141414 url("/ui/wizard/ink-surface.webp") center / 620px;
+  color: #e8e4da;
+}
+:is(.wz, .wz-lvl) .wz-spell-group.is-done > .wz-group-head {
+  background: var(--wz-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
+  color: var(--wz-ink);
+}
+:is(.wz, .wz-lvl) .wz-spell-group > .wz-group-head .wz-group-hint {
+  opacity: 0.75;
+}
+:is(.wz, .wz-sheet, .wz-lvl) .wz-row-group {
+  padding: 12px 0 4px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--wz-mag, #ff3e91);
+  border-bottom: 2px solid currentColor;
+}

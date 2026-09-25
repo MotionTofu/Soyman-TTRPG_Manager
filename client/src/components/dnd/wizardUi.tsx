@@ -119,6 +119,9 @@ export interface PickRow {
   picked: boolean;
   /** Строка видна, но не берётся («с 5 ур.», «уже есть»). */
   disabled?: boolean;
+  /** Подзаголовок группы (круг заклинания): печатается перед первой
+   *  строкой группы. Строки должны идти уже сгруппированными. */
+  group?: string;
 }
 
 /**
@@ -148,9 +151,15 @@ export function PickList({
   return (
     <>
     <ul className="wz-list">
-      {shown.map((r) => {
+      {shown.map((r, i) => {
         const blocked = r.disabled || (full && !r.picked);
-        return (
+        const head = r.group && r.group !== shown[i - 1]?.group ? (
+          <li key={`g:${r.group}`} className="wz-row-group" aria-hidden="true">
+            {r.group}
+          </li>
+        ) : null;
+        return [
+          head,
           <li key={r.key} className={`wz-row${r.picked ? " is-picked" : ""}${blocked ? " is-blocked" : ""}`}>
             <button
               type="button"
@@ -171,8 +180,8 @@ export function PickList({
             >
               <span aria-hidden="true">{r.picked ? "✓" : "+"}</span>
             </button>
-          </li>
-        );
+          </li>,
+        ];
       })}
     </ul>
     {folded && (
