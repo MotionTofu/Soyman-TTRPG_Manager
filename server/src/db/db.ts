@@ -6458,6 +6458,68 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
   // dndFeatData.ts).
   migrateDndFeatData(database);
 
+  // Владения мультикласса (PHB 2024, гл. 2, «Мультиклассирование»): новый
+  // класс даёт только часть стартовых. Доспехи и инструменты — подмножеством
+  // собственных списков класса (id оттуда же), навык — числом из списка
+  // класса или любой (Бард). Читают визарды создания и повышения
+  // (multiclass.ts). Только недостающее поле. Одноразовая (флаг).
+  if (!appSettingFlag(database, "class_multiclass_profs_v1")) {
+    const LIGHT = "Лёгкие доспехи";
+    const MEDIUM = "Средние доспехи";
+    const SHIELD = "Щиты";
+    const table: Record<string, { armor: string[]; tools?: string[]; skills?: number; skillAny?: boolean; toolChoice?: { count: number; group: string } }> = {
+      "Бард": { armor: [LIGHT], skills: 1, skillAny: true, toolChoice: { count: 1, group: "Музыкальный инструмент" } },
+      "Варвар": { armor: [SHIELD] },
+      "Воин": { armor: [LIGHT, MEDIUM, SHIELD] },
+      "Волшебник": { armor: [] },
+      "Друид": { armor: [LIGHT, SHIELD] },
+      "Жрец": { armor: [LIGHT, MEDIUM, SHIELD] },
+      "Колдун": { armor: [LIGHT] },
+      "Монах": { armor: [] },
+      "Паладин": { armor: [LIGHT, MEDIUM, SHIELD] },
+      "Плут": { armor: [LIGHT], tools: ["Воровские инструменты"], skills: 1 },
+      "Следопыт": { armor: [LIGHT, MEDIUM, SHIELD], skills: 1 },
+      "Чародей": { armor: [] },
+      "Артефактор": { armor: [LIGHT, MEDIUM, SHIELD], tools: ["Воровские инструменты", "Инструменты ремонтника"] },
+    };
+    const rows = database
+      .prepare(
+        `SELECT e.id, e.name, e.data
+           FROM compendium_entries e
+           JOIN system_sections s ON s.id = e.section_id
+          WHERE s.kind = 'class' AND e.parent_id IS NULL`
+      )
+      .all() as { id: number; name: string; data: string }[];
+    const update = database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?");
+    const refs = (list: unknown, names: string[] | undefined) =>
+      (Array.isArray(list) ? (list as { id?: number; name?: string }[]) : [])
+        .filter((r) => r?.name && names?.includes(r.name))
+        .map((r) => ({ id: r.id ?? null, name: r.name! }));
+    let fixed = 0;
+    for (const row of rows) {
+      const want = table[row.name];
+      if (!want) continue;
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        continue;
+      }
+      if (data.multiclass_profs != null) continue;
+      data.multiclass_profs = {
+        armor: refs(data.armor_profs, want.armor),
+        tools: refs(data.tool_profs, want.tools),
+        ...(want.skills ? { skill_count: want.skills } : {}),
+        ...(want.skillAny ? { skill_any: true } : {}),
+        ...(want.toolChoice ? { tool_choice: want.toolChoice } : {}),
+      };
+      update.run(JSON.stringify(data), row.id);
+      fixed++;
+    }
+    if (fixed > 0) console.log(`[db] Владения мультикласса: записей: ${fixed}`);
+    setAppSettingFlag(database, "class_multiclass_profs_v1");
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);

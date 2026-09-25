@@ -603,6 +603,13 @@ button.wz-abil {
   border-color: var(--accent);
   color: var(--paper);
 }
+/* Строки мультикласса: «убрать» — отдельной узкой кнопкой у своей строки. */
+.wz-chip-x {
+  margin-left: calc(var(--sp-3) * -1);
+  padding: 0 var(--sp-3);
+  font-size: 20px;
+  line-height: 1;
+}
 .wz-warn {
   padding: var(--sp-3) var(--sp-4);
   border-left: 4px solid var(--accent);

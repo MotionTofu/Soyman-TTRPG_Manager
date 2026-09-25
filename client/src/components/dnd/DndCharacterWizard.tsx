@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useDndRuntime } from './DndRuntime';
 import { selectedStartingSet } from './startingSetChoice';
 import { classSpellPicks, wizardBookPicks } from './classSpellPicks';
@@ -40,8 +40,9 @@ import {
   type FeatPart,
   type FeatPick,
 } from "./featPick";
-import type { GrantedSpellChoice } from "./dndGrants";
+import type { GrantedSpellChoice, GrantedToolChoice, SourceGrants } from "./dndGrants";
 import { nameMatches } from "./dndResources";
+import { multiclassPrereqUnmet, multiclassProfs } from "./multiclass";
 import { PortraitFrameModal } from "./PortraitFrameModal";
 import type { PortraitFocus } from "./portraitFrame";
 import {
@@ -155,6 +156,7 @@ interface WizardDraftV1 {
   setChoicePicks?: unknown;
   abilitiesTouched?: unknown;
   featSel?: unknown;
+  extraClasses?: unknown;
 }
 function loadWizardDraft(key: string): WizardDraftV1 | null {
   try {
@@ -201,6 +203,44 @@ function featSelFrom(v: unknown): Record<string, WizardFeatSel> {
     };
   }
   return out;
+}
+/** Второй и следующие классы (гриллинг 2026-09-25, Q15): свой уровень,
+ *  подкласс и выборы умений. Навыки, инструменты и заклинания — общими
+ *  токенами с ключом строки: mc-<uid> — класс, ms-<uid> — подкласс. */
+interface ExtraClassRow {
+  uid: string;
+  classId: number | null;
+  subclassId: number | null;
+  level: number;
+  style: (number | null)[];
+  expertise: string[];
+  weapons: { entryId: number; name: string }[];
+}
+const mcKey = (r: { uid: string }) => `mc-${r.uid}`;
+const mcsKey = (r: { uid: string }) => `ms-${r.uid}`;
+function extraClassesFrom(v: unknown): ExtraClassRow[] {
+  if (!Array.isArray(v)) return [];
+  return v.slice(0, 11).flatMap((raw) => {
+    if (!raw || typeof raw !== "object") return [];
+    const o = raw as Record<string, unknown>;
+    if (typeof o.uid !== "string" || !o.uid) return [];
+    return [
+      {
+        uid: o.uid,
+        classId: numOrNull(o.classId),
+        subclassId: numOrNull(o.subclassId),
+        level: Math.min(19, Math.max(1, Math.round(numOrNull(o.level) ?? 1))),
+        style: Array.isArray(o.style) ? o.style.slice(0, 4).map((x) => (typeof x === "number" ? x : null)) : [],
+        expertise: strList(o.expertise, 8),
+        weapons: (Array.isArray(o.weapons) ? (o.weapons as unknown[]) : [])
+          .filter(
+            (w): w is { entryId: number; name: string } =>
+              !!w && typeof (w as { entryId?: unknown }).entryId === "number" && typeof (w as { name?: unknown }).name === "string"
+          )
+          .slice(0, 8),
+      },
+    ];
+  });
 }
 function numOrNull(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
@@ -312,12 +352,16 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   // Lets the field sit empty mid-edit instead of every keystroke snapping
   // it back to "1" — the default only applies once, on blur, if left empty.
   const [levelText, setLevelText] = useState<string | null>(null);
-  function commitLevel(raw: string) {
-    setLevel(Math.min(20, Math.max(1, Math.round(Number(raw)) || 1)));
-    setLevelText(null);
-  }
-  function stepLevel(delta: number) {
-    setLevel((l) => Math.min(20, Math.max(1, l + delta)));
+  // Мультикласс (гриллинг 2026-09-25, Q15): строки второго и следующих
+  // классов. Стартовый — classId/subclassId/level выше: он даёт спасброски,
+  // полные владения и снаряжение.
+  const [extraClasses, setExtraClasses] = useState<ExtraClassRow[]>(() => extraClassesFrom(savedDraft?.extraClasses));
+  // Строка, к которой привязан выбор карты на шаге «Класс»: 0 — стартовый.
+  const [activeRow, setActiveRow] = useState(0);
+  const extraLevels = extraClasses.reduce((n, r) => n + r.level, 0);
+  const totalLevel = level + extraLevels;
+  function patchExtra(uid: string, patch: Partial<ExtraClassRow>) {
+    setExtraClasses((prev) => prev.map((r) => (r.uid === uid ? { ...r, ...patch } : r)));
   }
   const [classEntry, setClassEntry] = useState<CompendiumEntry | null>(null);
   // Запись подкласса целиком: выдачи (навыки/инструменты Орудий милосердия,
@@ -600,6 +644,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   // Есть что терять — для beforeunload и вопроса у «Отмены».
   const wizardDirty =
     step !== "Класс" ||
+    extraClasses.length > 0 ||
     speciesFeatId !== null ||
     chosenTools.length > 0 ||
     Object.values(setChoicePicks).some((a) => a.length > 0) ||
@@ -679,6 +724,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       setChoicePicks,
       abilitiesTouched,
       featSel,
+      extraClasses,
     };
     try {
       localStorage.setItem(draftKey, JSON.stringify(state));
@@ -724,6 +770,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     setChoicePicks,
     abilitiesTouched,
     featSel,
+    extraClasses,
   ]);
 
   // Уход со страницы с несобранным персонажем — подтверждение.
@@ -1037,6 +1084,10 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       setClassId(null);
       setSubclassId(null);
     }
+    const gone = (id: number | null) => hierarchy.classes.length > 0 && id != null && !hierarchy.classes.some((c) => c.id === id);
+    if (extraClasses.some((r) => gone(r.classId))) {
+      setExtraClasses((prev) => prev.map((r) => (gone(r.classId) ? { ...r, classId: null, subclassId: null } : r)));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hierarchy, classId]);
   useEffect(() => {
@@ -1226,6 +1277,108 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   // или выборы не положены) — не гейтят, иначе тупик.
   const styleMissing = choiceDefs == null ? 0 : Math.max(0, styleSlots.length - stylePicked);
 
+  // Строки мультикласса: записи классов/подклассов и определения выборов —
+  // кэшем по id (строк немного, класс дважды не берётся).
+  const [rowEntries, setRowEntries] = useState<Record<number, CompendiumEntry>>({});
+  const [rowDefs, setRowDefs] = useState<Record<number, ChoiceDef[]>>({});
+  const extraIdsKey = extraClasses
+    .flatMap((r) => [r.classId != null ? `c${r.classId}` : "", r.subclassId != null ? `s${r.subclassId}` : ""])
+    .filter(Boolean)
+    .join("|");
+  useEffect(() => {
+    if (!systemId || !extraIdsKey) return;
+    const ac = new AbortController();
+    for (const tok of extraIdsKey.split("|")) {
+      const id = Number(tok.slice(1));
+      if (!rowEntries[id]) {
+        readResource<CompendiumEntry>(`/systems/entries/${id}`)
+          .then((e) => {
+            if (!ac.signal.aborted) setRowEntries((p) => ({ ...p, [id]: e }));
+          })
+          .catch((e) => {
+            if (!ac.signal.aborted && !isAbortError(e)) setLoadError(errorMessage(e));
+          });
+      }
+      if (!rowDefs[id]) {
+        loadDndClassFeatures(systemId, id, { signal: ac.signal })
+          .then((es) => {
+            if (!ac.signal.aborted) setRowDefs((p) => ({ ...p, [id]: choicesFromEntries(es, tok[0] === "c") }));
+          })
+          .catch((e) => {
+            // Как у стартового: выборы — улучшение, а не гейт.
+            if (!isAbortError(e)) setRowDefs((p) => ({ ...p, [id]: [] }));
+          });
+      }
+    }
+    return () => ac.abort();
+    // Кэши читаются как «уже есть» — зависимость по ключу строк.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [systemId, extraIdsKey]);
+  const extraModels = extraClasses.map((r) => {
+    const opt = hierarchy.classes.find((c) => c.id === r.classId);
+    const entry = r.classId != null ? rowEntries[r.classId] : undefined;
+    const subEntry = r.subclassId != null ? rowEntries[r.subclassId] : undefined;
+    const defs = [...(r.classId != null ? rowDefs[r.classId] ?? [] : []), ...(r.subclassId != null ? rowDefs[r.subclassId] ?? [] : [])];
+    const upTo = (kind: string) => defs.filter((d) => d.kind === kind && d.minLevel <= r.level);
+    return {
+      row: r,
+      opt,
+      entry,
+      subEntry,
+      subOptions: r.classId != null ? hierarchy.subclassesByClass[r.classId] ?? [] : [],
+      subLocked: (opt?.subclassLevel ?? 0) > r.level,
+      defs,
+      defsLoaded: r.classId == null || (r.classId in rowDefs && (r.subclassId == null || r.subclassId in rowDefs)),
+      styleSlots: upTo("feat").flatMap((d) => Array<ChoiceDef>(d.count).fill(d)),
+      // Ключи приёмов — со строкой: группа у двух классов может совпасть.
+      entrySlots: sumEntrySlots(
+        defs.filter((d) => d.kind === "entry" && d.group).map((d) => ({ def: { ...d, key: `${mcKey(r)}|${d.key}` }, level: r.level }))
+      ),
+      weaponSlots: upTo("weapon").reduce((n, d) => n + d.count, 0),
+      expertiseSlots: upTo("skill").reduce((n, d) => n + d.count, 0),
+      grants: grantsFromEntry(entry, resolveSkill),
+      subGrants: grantsFromEntry(subEntry, resolveSkill),
+      mc: multiclassProfs(entry?.data),
+    };
+  });
+  type ExtraModel = (typeof extraModels)[number];
+  // Чистка выборов строки: токены навыков/инструментов «ключ:…»,
+  // заклинаний «spell:ключ:…», приёмы — ключом «mc-uid|…».
+  function purgeRow(keys: string[], entryPrefix?: string) {
+    const hit = (t: string) => keys.some((k) => t.startsWith(`${k}:`) || t.startsWith(`spell:${k}:`));
+    setChosenSkills((prev) => prev.filter((t) => !hit(t)));
+    setChosenSpells((prev) => prev.filter((t) => !hit(t)));
+    setChosenTools((prev) => prev.filter((t) => !hit(t)));
+    if (entryPrefix) setChosenEntries((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith(entryPrefix))));
+  }
+  function addExtraClass() {
+    const uid = Math.random().toString(36).slice(2, 8);
+    setExtraClasses((prev) => [...prev, { uid, classId: null, subclassId: null, level: 1, style: [], expertise: [], weapons: [] }]);
+    setActiveRow(extraClasses.length + 1);
+    setLevelText(null);
+  }
+  function removeExtraClass(r: ExtraClassRow) {
+    purgeRow([mcKey(r), mcsKey(r)], `${mcKey(r)}|`);
+    setExtraClasses((prev) => prev.filter((x) => x.uid !== r.uid));
+    setActiveRow(0);
+    setLevelText(null);
+  }
+  function pickExtraClass(r: ExtraClassRow, id: number) {
+    purgeRow([mcKey(r), mcsKey(r)], `${mcKey(r)}|`);
+    patchExtra(r.uid, { classId: id, subclassId: null, style: [], expertise: [], weapons: [] });
+  }
+  function pickExtraSubclass(r: ExtraClassRow, id: number | null) {
+    purgeRow([mcsKey(r)]);
+    // Приёмы подкласса уходят вместе с ним — как у стартового (pickSubclass).
+    const drop = new Set((r.subclassId != null ? rowDefs[r.subclassId] ?? [] : []).map((d) => `${mcKey(r)}|${d.key}`));
+    if (drop.size > 0) setChosenEntries((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => !drop.has(k))));
+    patchExtra(r.uid, { subclassId: id });
+  }
+  function setExtraLevel(m: ExtraModel, n: number) {
+    if ((m.opt?.subclassLevel ?? 0) > n && m.row.subclassId != null) pickExtraSubclass(m.row, null);
+    patchExtra(m.row.uid, { level: n });
+  }
+
   // Выборы записей каталога (приёмы/выстрелы, тикет 05; воззвания, тикет 02
   // warlock): дефы kind entry. Слоты по ключу — сумма count открытых уровнем
   // дефов (лесенка БМ: 3 +2@7 +2@10 +2@15 собирается в один общий лимит).
@@ -1237,7 +1390,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   );
   // Каталог групп: полные записи с описаниями (выбирать вслепую нельзя).
   const [entryCatalog, setEntryCatalog] = useState<Record<string, CompendiumEntry[]>>({});
-  const entryGroupsKey = [...new Set((choiceDefs ?? []).filter((d) => d.kind === "entry").map((d) => d.group ?? "").filter(Boolean))].sort().join("|");
+  const entryGroupsKey = [...new Set([...(choiceDefs ?? []), ...extraModels.flatMap((m) => m.defs)].filter((d) => d.kind === "entry").map((d) => d.group ?? "").filter(Boolean))].sort().join("|");
   const loadedEntryGroups = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!systemId || !entryGroupsKey) return;
@@ -1282,7 +1435,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     });
   }
   // Недобор — честный гейт с тем же антитупиком: нет каталога — нет гейта.
-  const entryShortfall = entrySlots
+  const entryShortfall = [...entrySlots, ...extraModels.flatMap((m) => m.entrySlots)]
     .map((s) => {
       const picked = (chosenEntries[s.key] ?? []).length;
       const available = entryCatalog[s.group]?.length ?? 0;
@@ -1320,19 +1473,23 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     count: number;
     options: CompendiumEntry[];
   }
-  const toolGroups: ToolGroup[] = (
-    [
-      ["class", `От класса${classOption ? ` (${classOption.name})` : ""}`, classGrants],
-      ["subclass", `От подкласса${subclassEntry ? ` (${subclassEntry.name})` : ""}`, subclassGrants],
-      ["background", `От предыстории${backgroundEntry ? ` (${backgroundEntry.name})` : ""}`, backgroundGrants],
-      ["feat", `От черты${featEntry ? ` (${featEntry.name})` : ""}`, featGrants],
-      ["feat2", `От черты вида${speciesFeatEntry ? ` (${speciesFeatEntry.name})` : ""}`, speciesFeatGrants],
-    ] as const
-  ).flatMap(([key, label, g]) => {
-    if (!g.toolChoice) return [];
-    const kinds = g.toolChoice.group.split("|").map((k) => k.trim()).filter(Boolean);
+  const toolSources: [string, string, GrantedToolChoice | null][] = [
+    ["class", `От класса${classOption ? ` (${classOption.name})` : ""}`, classGrants.toolChoice],
+    ["subclass", `От подкласса${subclassEntry ? ` (${subclassEntry.name})` : ""}`, subclassGrants.toolChoice],
+    ["background", `От предыстории${backgroundEntry ? ` (${backgroundEntry.name})` : ""}`, backgroundGrants.toolChoice],
+    ["feat", `От черты${featEntry ? ` (${featEntry.name})` : ""}`, featGrants.toolChoice],
+    ["feat2", `От черты вида${speciesFeatEntry ? ` (${speciesFeatEntry.name})` : ""}`, speciesFeatGrants.toolChoice],
+    // Мультикласс: урезанный выбор класса (инструмент Барда) и подкласс строки.
+    ...extraModels.flatMap((m): [string, string, GrantedToolChoice | null][] => [
+      [mcKey(m.row), `Мультикласс (${m.opt?.name ?? "класс"})`, m.mc?.toolChoice ?? null],
+      [mcsKey(m.row), `От подкласса${m.subEntry ? ` (${m.subEntry.name})` : ""}`, m.subGrants.toolChoice],
+    ]),
+  ];
+  const toolGroups: ToolGroup[] = toolSources.flatMap(([key, label, tc]) => {
+    if (!tc) return [];
+    const kinds = tc.group.split("|").map((k) => k.trim()).filter(Boolean);
     const options = toolCatalog.filter((e) => kinds.length === 0 || kinds.includes(String(e.data.tool_kind)));
-    return [{ key, label, group: g.toolChoice.group.replace("|", " или "), count: g.toolChoice.count, options }];
+    return [{ key, label, group: tc.group.replace("|", " или "), count: tc.count, options }];
   });
   const chosenToolsIn = (key: string) =>
     chosenTools.filter((t) => t.startsWith(`${key}:`)).map((t) => Number(t.slice(t.indexOf(":") + 1)));
@@ -1427,6 +1584,12 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   }
   const expertiseMissing =
     choiceDefs == null ? 0 : Math.max(0, expertiseSlots - chosenExpertise.length);
+  // Недобор строк мультикласса — тем же антитупиком, что у стартового.
+  const extraMissing = (m: ExtraModel) => ({
+    style: m.defsLoaded ? m.styleSlots.filter((_, i) => m.row.style[i] == null).length : 0,
+    weapons: !m.defsLoaded || weaponCatalog == null ? 0 : Math.max(0, Math.min(m.weaponSlots, weaponCatalog.length) - m.row.weapons.length),
+    expertise: m.defsLoaded ? Math.max(0, m.expertiseSlots - m.row.expertise.length) : 0,
+  });
 
   // Индекс заклинаний для шага выбора: фильтруем кандидатов по списку
   // классов и школе здесь, короткими именами тут не обойтись.
@@ -1504,6 +1667,26 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       options: subclassGrants.skillChoice.options,
     });
   }
+  for (const m of extraModels) {
+    // Урезанный выбор мультикласса (PHB 2024): 1 навык у Барда (любой),
+    // Следопыта и Плута (из списка класса); у остальных — ничего.
+    if (m.mc && m.mc.skillCount > 0) {
+      skillGroups.push({
+        key: mcKey(m.row),
+        label: `По мультиклассу (${m.opt?.name ?? "класс"})`,
+        count: m.mc.skillCount,
+        options: m.mc.skillAny ? [] : m.grants.skillChoice?.options ?? [],
+      });
+    }
+    if (m.subGrants.skillChoice) {
+      skillGroups.push({
+        key: mcsKey(m.row),
+        label: `От подкласса${m.subEntry ? ` (${m.subEntry.name})` : ""}`,
+        count: m.subGrants.skillChoice.count,
+        options: m.subGrants.skillChoice.options,
+      });
+    }
+  }
   // Свой вариант предыстории: 2 навыка на выбор из любых (Хвосты 2.1).
   // У обычной предыстории выбора нет — навыки выданы фиксированно.
   if (backgroundCustom !== null && backgroundCustom.trim() !== "") {
@@ -1525,7 +1708,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   // Что уже выдано без выбора — эти навыки в выборе не показываются: взять
   // владение дважды нельзя, а место в выборе оно бы съело. Выдачи подкласса
   // (Орудия милосердия) — наравне с остальными.
-  const grantedSkills = new Set([...backgroundSkills, ...classGrants.skills, ...subclassGrants.skills, ...speciesGrants.skills, ...featGrants.skills, ...speciesFeatGrants.skills]);
+  const grantedSkills = new Set([...backgroundSkills, ...classGrants.skills, ...subclassGrants.skills, ...speciesGrants.skills, ...featGrants.skills, ...speciesFeatGrants.skills, ...extraModels.flatMap((m) => [...m.grants.skills, ...m.subGrants.skills])]);
 
   // Ключ выбора — «источник:навык», чтобы один навык, выбранный по двум
   // источникам, не схлопнулся в одну отметку и не сбил счётчики.
@@ -1592,7 +1775,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   // Матчим и русские, и английские имена — хоумбрю иначе молча мимо.
   const autoLanguages: string[] = [];
   {
-    const cn = classOption?.name.toLowerCase() ?? "";
+    const cn = [classOption?.name, ...extraModels.map((m) => m.opt?.name)].join(" ").toLowerCase();
     if (cn.includes("плут") || cn.includes("rogue")) autoLanguages.push("Воровской жаргон");
     if (cn.includes("друид") || cn.includes("druid")) autoLanguages.push("Друидический");
   }
@@ -1674,48 +1857,65 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   function choiceCount(
     c: { count: number; countFrom?: "cantrips" | "prepared" },
     classProg: ClassProgression | undefined,
-    subProg: ClassProgression | undefined
+    subProg: ClassProgression | undefined,
+    lvl: number
   ): number {
     if (c.countFrom === "cantrips") {
-      return cantripsAtLevel(classProg, level) ?? cantripsAtLevel(subProg, level) ?? c.count;
+      return cantripsAtLevel(classProg, lvl) ?? cantripsAtLevel(subProg, lvl) ?? c.count;
     }
     if (c.countFrom === "prepared") {
-      return preparedAtLevel(classProg, level) ?? preparedAtLevel(subProg, level) ?? c.count;
+      return preparedAtLevel(classProg, lvl) ?? preparedAtLevel(subProg, lvl) ?? c.count;
     }
     return c.count;
   }
-  // Высший круг с ячейками на уровне (потолок «любого круга» ЭК).
-  function slotTopCircle(): number | null {
-    const prog = (subclassEntry?.data.progression ?? classEntry?.data.progression) as ClassProgression | undefined;
-    const slots = spellSlotsAtLevel(prog, level);
+  // Высший круг с ячейками на уровне класса (потолок «любого круга» ЭК).
+  function slotTopCircle(sub: CompendiumEntry | null | undefined, cls: CompendiumEntry | null | undefined, lvl: number): number | null {
+    const prog = (sub?.data.progression ?? cls?.data.progression) as ClassProgression | undefined;
+    const slots = spellSlotsAtLevel(prog, lvl);
     if (!slots) return null;
     let top = 0;
     for (let i = 0; i < slots.length; i += 1) if (slots[i] > 0) top = i + 1;
     return top > 0 ? top : null;
   }
   const spellGroups: SpellPickGroup[] = [];
-  if (classEntry && classGrants.spellChoices.length === 0) {
-    const abilityKey = ABILITY_NAME_TO_KEY[String(classEntry.data.spellcasting_ability || '')];
-    const picks = classSpellPicks(classEntry.data, level, abilityKey ? abilityModifier(awardedAbilities[abilityKey]) : 0);
-    const hasBook = nameMatches(classEntry.name, 'Волшебник') || nameMatches(classEntry.name_original || '', 'Wizard');
-    if (picks.cantrips > 0) spellGroups.push({ key: 'spell:class:auto:cantrips', label: `Заговоры класса (${classEntry.name})`, count: picks.cantrips, level: 0, maxCircle: 0, classIds: [classEntry.id], schools: [], names: [], outsideLimit: false });
-    if (hasBook) for (const book of wizardBookPicks(classEntry.data, level)) spellGroups.push({ key: `spell:class:book:${book.level}`, label: `Книга заклинаний — ${book.level === 1 ? 'начальные заклинания' : `получены на уровне ${book.level}`}`, count: book.count, level: null, maxCircle: book.topCircle, classIds: [classEntry.id], schools: [], names: [], outsideLimit: false, bookAcquisition: true });
-    if (picks.prepared > 0) spellGroups.push({ key: 'spell:class:auto:prepared', label: `Подготовленные заклинания (${classEntry.name})`, count: picks.prepared, level: null, maxCircle: picks.topCircle, classIds: [classEntry.id], schools: [], names: [], outsideLimit: false, dailyPreparation: true, fromBook: hasBook });
+  // Заговоры, книга и подготовленные класса — по его собственному уровню: при
+  // мультиклассе каждый класс готовит заклинания как одноклассовый (PHB 2024).
+  // Второй и следующие колдуют своей характеристикой — она пишется в запись.
+  function pushClassAuto(entry: CompendiumEntry, lvl: number, key: string, withAbility: boolean) {
+    const abilityKey = ABILITY_NAME_TO_KEY[String(entry.data.spellcasting_ability || '')];
+    const picks = classSpellPicks(entry.data, lvl, abilityKey ? abilityModifier(awardedAbilities[abilityKey]) : 0);
+    const hasBook = nameMatches(entry.name, 'Волшебник') || nameMatches(entry.name_original || '', 'Wizard');
+    const own = withAbility && abilityKey ? { ability: abilityKey } : {};
+    if (picks.cantrips > 0) spellGroups.push({ key: `spell:${key}:auto:cantrips`, label: `Заговоры класса (${entry.name})`, count: picks.cantrips, level: 0, maxCircle: 0, classIds: [entry.id], schools: [], names: [], outsideLimit: false, ...own });
+    if (hasBook) for (const book of wizardBookPicks(entry.data, lvl)) spellGroups.push({ key: `spell:${key}:book:${book.level}`, label: `Книга заклинаний — ${book.level === 1 ? 'начальные заклинания' : `получены на уровне ${book.level}`}`, count: book.count, level: null, maxCircle: book.topCircle, classIds: [entry.id], schools: [], names: [], outsideLimit: false, bookAcquisition: true, ...own });
+    if (picks.prepared > 0) spellGroups.push({ key: `spell:${key}:auto:prepared`, label: `Подготовленные заклинания (${entry.name})`, count: picks.prepared, level: null, maxCircle: picks.topCircle, classIds: [entry.id], schools: [], names: [], outsideLimit: false, dailyPreparation: true, fromBook: hasBook, ...own });
   }
+  if (classEntry && classGrants.spellChoices.length === 0) pushClassAuto(classEntry, level, "class", false);
+  for (const m of extraModels) if (m.entry && m.grants.spellChoices.length === 0) pushClassAuto(m.entry, m.row.level, mcKey(m.row), true);
   {
-    const topCircle = slotTopCircle();
-      const choiceSources: [string, string, typeof featGrants][] = [
-        ["class", `От класса${classOption ? ` (${classOption.name})` : ""}`, classGrants],
-        ["subclass", `От подкласса${subclassEntry ? ` (${subclassEntry.name})` : ""}`, subclassGrants],
-        ["species", `От вида${speciesEntry ? ` (${speciesEntry.name})` : ""}`, speciesGrants],
-        ["feat", `От черты${featEntry ? ` (${featEntry.name})` : ""}`, featGrants],
-        ["feat2", `От черты вида${speciesFeatEntry ? ` (${speciesFeatEntry.name})` : ""}`, speciesFeatGrants],
-        ["style", "От черты боевого стиля", styleGrants],
-      ];
-    for (const [src, label, g] of choiceSources) {
-      const isSub = src === "subclass";
-      const classProg = (src === "class" ? classEntry?.data.progression : undefined) as ClassProgression | undefined;
-      const subProg = (isSub ? subclassEntry?.data.progression : undefined) as ClassProgression | undefined;
+    interface ChoiceSource {
+      src: string;
+      label: string;
+      g: SourceGrants;
+      classProg?: unknown;
+      subProg?: unknown;
+      lvl: number;
+      /** Потолок «любого круга» — только у подклассов-полузаклинателей. */
+      top?: number | null;
+    }
+    const choiceSources: ChoiceSource[] = [
+      { src: "class", label: `От класса${classOption ? ` (${classOption.name})` : ""}`, g: classGrants, classProg: classEntry?.data.progression, lvl: level },
+      { src: "subclass", label: `От подкласса${subclassEntry ? ` (${subclassEntry.name})` : ""}`, g: subclassGrants, subProg: subclassEntry?.data.progression, lvl: level, top: slotTopCircle(subclassEntry, classEntry, level) },
+      { src: "species", label: `От вида${speciesEntry ? ` (${speciesEntry.name})` : ""}`, g: speciesGrants, lvl: totalLevel },
+      { src: "feat", label: `От черты${featEntry ? ` (${featEntry.name})` : ""}`, g: featGrants, lvl: totalLevel },
+      { src: "feat2", label: `От черты вида${speciesFeatEntry ? ` (${speciesFeatEntry.name})` : ""}`, g: speciesFeatGrants, lvl: totalLevel },
+      { src: "style", label: "От черты боевого стиля", g: styleGrants, lvl: totalLevel },
+      ...extraModels.flatMap((m): ChoiceSource[] => [
+        { src: mcKey(m.row), label: `От класса (${m.opt?.name ?? "класс"})`, g: m.grants, classProg: m.entry?.data.progression, lvl: m.row.level },
+        { src: mcsKey(m.row), label: `От подкласса${m.subEntry ? ` (${m.subEntry.name})` : ""}`, g: m.subGrants, subProg: m.subEntry?.data.progression, lvl: m.row.level, top: slotTopCircle(m.subEntry, m.entry, m.row.level) },
+      ]),
+    ];
+    for (const { src, label, g, classProg, subProg, lvl, top } of choiceSources) {
       const featSlot = src === "feat" || src === "feat2" ? (src as "feat" | "feat2") : null;
       g.spellChoices.forEach((c, i) => {
         // Список «Посвящённого» выбирается на шаге «Черта»; пока не выбран —
@@ -1726,12 +1926,12 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         spellGroups.push({
           key: `spell:${src}:${i}`,
           label,
-          count: choiceCount(c, classProg, subProg),
+          count: choiceCount(c, classProg as ClassProgression | undefined, subProg as ClassProgression | undefined, lvl),
           level: c.level,
           classIds: list != null ? [list] : c.classIds,
           schools: c.schools,
           outsideLimit: c.outsideLimit,
-          maxCircle: isSub && c.level == null ? topCircle : null,
+          maxCircle: top != null && c.level == null ? top : null,
           names: c.names ?? [],
           ability: c.ability ?? (featSlot && g.spellAbilityChoice ? slotAbility(featSlot) : undefined),
           freeCast: c.freeCast,
@@ -1741,10 +1941,9 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   }
   // Заклинания, которые придут сами пересчётом выдач (не выбор, а грант), —
   // их в кандидатах помечаем, а не даём взять дублем.
-  const grantedSpellIds = new Set(
-    [...classGrants.spells, ...speciesGrants.spells, ...featGrants.spells, ...speciesFeatGrants.spells].map((s) => s.id)
-  );
-  const grantedSpellNames = [...classGrants.spells, ...speciesGrants.spells, ...featGrants.spells, ...speciesFeatGrants.spells].map((s) => s.name);
+  const grantedSpellRefs = [...classGrants.spells, ...speciesGrants.spells, ...featGrants.spells, ...speciesFeatGrants.spells, ...extraModels.flatMap((m) => m.grants.spells)];
+  const grantedSpellIds = new Set(grantedSpellRefs.map((s) => s.id));
+  const grantedSpellNames = grantedSpellRefs.map((s) => s.name);
   function spellCandidates(group: SpellPickGroup): CompendiumEntry[] {
     if (!spellIndex) return [];
     return spellIndex.filter((e) => {
@@ -1834,40 +2033,18 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       .map(([k, v]) => ({ key: k as DndAbilityKey, amount: v as number, source: bgSource }));
 
     if (classId && classOption) {
-      const subclassOpt = subclassOptions.find((s) => s.id === subclassId);
-      character.classes = [
-        {
-          classId,
-          className: classOption.name,
-          subclassId: subclassId,
-          subclassName: subclassOpt?.name ?? "",
-          level,
-          skillChoiceOptions: classGrants.skillChoice?.options ?? [],
-          skillChoiceCount: classGrants.skillChoice?.count ?? 0,
-          spellcastingAbility:
-            typeof classEntry?.data.spellcasting_ability === "string" ? (classEntry!.data.spellcasting_ability as string) : "",
-        },
-      ];
+      character.classes = previewClasses;
       character.proficiencyBonus = computeProficiencyBonus(character.classes);
-      const hitDieMatch = /\d+/.exec(classOption.hitDie);
-      if (hitDieMatch) character.hitDice = `${level}к${hitDieMatch[0]}`;
-      // Хиты пишутся сразу тем же счётом, что превью Обзора: кость + ВЫН,
-      // выше 1-го — среднее + ВЫН. lump хранит только кубовую часть
-      // (движок левелапа прибавляет ВЫН×уровень сам), иначе двойной счёт.
-      {
-        const dieNum = hitDieMatch ? Number.parseInt(hitDieMatch[0], 10) : NaN;
-        if (Number.isFinite(dieNum)) {
-          const conMod = abilityModifier(awardedAbilities.con);
-          const avg = Math.floor(dieNum / 2) + 1;
-          // Хиты черт происхождения («Крепкий» +2 за уровень) — из эффектов.
-          const featHp = featHitPoints([featEntry, effectiveSpeciesFeatId ? speciesFeatEntry : null]);
-          const max = Math.max(1, dieNum + conMod + (level - 1) * (avg + conMod) + featHp.perLevel * level + featHp.flat);
-          character.hitPointMax = String(max);
-          character.hitPointsCurrent = String(max);
-          character.hpLump = dieNum + (level - 1) * avg;
-          character.hpRolls = [];
-          character.hpMiscPerLevel = 0;
-        }
+      // Кости хитов по классам — «3к10 + 2к8», как собирает лист.
+      character.hitDice = hitDiceRows.map((d) => `${d.levels}к${d.die}`).join(" + ");
+      // Хиты — тем же счётом, что превью Обзора (hpCalc). lump хранит только
+      // кубовую часть: движок левелапа прибавляет ВЫН×уровень сам.
+      if (hpCalc) {
+        character.hitPointMax = String(hpCalc.max);
+        character.hitPointsCurrent = String(hpCalc.max);
+        character.hpLump = hpCalc.lump;
+        character.hpRolls = [];
+        character.hpMiscPerLevel = 0;
       }
 
       if (classEntry) {
@@ -1913,6 +2090,26 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       } catch {
         // compendium unreachable — leave classFeatures empty, editable later
       }
+      // Второй и следующие классы (Q15): урезанные владения мультикласса,
+      // без спасбросков и снаряжения; умения — по уровню своей строки.
+      for (const m of extraModels) {
+        if (m.row.classId == null) continue;
+        const addProf = (pr: { id: number | null; name: string }) => {
+          if (!character.proficiencies.some((x) => x.name === pr.name)) {
+            character.proficiencies = [...character.proficiencies, { entryId: pr.id, name: pr.name, abilityKey: null }];
+          }
+        };
+        for (const pr of [...(m.mc?.armor ?? []), ...(m.mc?.tools ?? [])]) addProf(pr);
+        const subTools = Array.isArray(m.subEntry?.data.tool_profs) ? (m.subEntry!.data.tool_profs as { id: number; name: string }[]) : [];
+        for (const t of subTools) addProf({ id: t.id, name: t.name });
+        try {
+          const own = featuresFromEntries(await loadDndClassFeatures(sid, m.row.classId), m.row.classId, m.row.level);
+          const sub = m.row.subclassId != null ? featuresFromEntries(await loadDndClassFeatures(sid, m.row.subclassId), m.row.subclassId, m.row.level) : [];
+          character.classFeatures = [...character.classFeatures, ...own, ...sub];
+        } catch {
+          // справочник недоступен — умения добавятся на листе
+        }
+      }
     }
 
     if (speciesId || speciesCustom?.trim()) {
@@ -1932,7 +2129,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       if (speciesId) {
         try {
           const speciesFeatureEntries = await loadDndSpeciesFeatures(sid, speciesId);
-          character.speciesFeatures = featuresFromEntries(speciesFeatureEntries, speciesId, level);
+          character.speciesFeatures = featuresFromEntries(speciesFeatureEntries, speciesId, totalLevel);
         } catch {
           // ignore — editable later
         }
@@ -2013,7 +2210,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     // описание и так лежит в записи, дублируем снимком на случай офлайна.
     // Пишем всё выбранное, включая хвост сверх лимита: эксцесс виден
     // счётчиком на листе, молча не режем — как заклинания/приёмы/оружие.
-    for (const id of chosenStyle) {
+    for (const id of [...chosenStyle, ...extraModels.flatMap((m) => m.styleSlots.map((_, i) => m.row.style[i]))]) {
       if (typeof id !== "number") continue;
       let entry: CompendiumEntry | undefined = styleFeatEntries[id];
       if (!entry) {
@@ -2030,7 +2227,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     }
 
     // Освоенное оружие — снимком {entryId, name} (тикет 06). Дедуп по entryId.
-    for (const w of masteredWeapons) {
+    for (const w of [...masteredWeapons, ...extraModels.flatMap((m) => m.row.weapons)]) {
       if (character.masteredWeapons.some((m) => m.entryId === w.entryId)) continue;
       character.masteredWeapons = [...character.masteredWeapons, { entryId: w.entryId, name: w.name }];
     }
@@ -2045,7 +2242,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
           .map((f) => f.entryId)
           .filter((id): id is number => typeof id === "number")
       );
-      for (const slot of entrySlots) {
+      for (const slot of [...entrySlots, ...extraModels.flatMap((m) => m.entrySlots)]) {
         const catalog = entryCatalog[slot.group] ?? [];
         for (const id of chosenEntries[slot.key] ?? []) {
           if (seen.has(id)) continue;
@@ -2077,7 +2274,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     for (const s of chosenSkillKeys) character.skillProfs[s] = 1;
     for (const s of grantedSkills) character.skillProfs[s] = 1;
     // Экспертность из выборов умений — уровнем владения 2, поверх выданного.
-    for (const s of chosenExpertise) character.skillProfs[s] = 2;
+    for (const s of [...chosenExpertise, ...extraModels.flatMap((m) => m.row.expertise)]) character.skillProfs[s] = 2;
 
     // Стартовые наборы. Метаданные предмета (вес, КЗ, свойства) тянутся из
     // справочника здесь же: лист их не пересчитывает, а хранит снимком, как
@@ -2310,6 +2507,28 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       }
     }
     overviewSources.push({ label: "Класс", lines: classLines });
+    for (const m of extraModels) {
+      if (!m.opt) continue;
+      const lines = [`${m.opt.name} ${m.row.level}`];
+      const sub = m.subOptions.find((x) => x.id === m.row.subclassId);
+      if (sub) lines.push(sub.name);
+      const profs = [...(m.mc?.armor ?? []), ...(m.mc?.tools ?? [])].map((pr) => pr.name);
+      if (profs.length > 0) lines.push(`владения: ${profs.join(", ")}`);
+      const picked = named([...chosenIn(mcKey(m.row)), ...chosenIn(mcsKey(m.row))].map((t) => t.slice(t.indexOf(":") + 1)));
+      if (picked.length > 0) lines.push(`навыки: ${picked.join(", ")}`);
+      if (m.row.expertise.length > 0) lines.push(`экспертность: ${named(m.row.expertise).join(", ")}`);
+      const style = m.styleSlots
+        .map((_, i) => m.row.style[i])
+        .filter((id): id is number => typeof id === "number")
+        .map((id) => styleFeatEntries[id]?.name ?? styleFeats.find((f) => f.id === id)?.name ?? "черта стиля");
+      if (style.length > 0) lines.push(`боевой стиль: ${style.join(", ")}`);
+      if (m.row.weapons.length > 0) lines.push(`приёмы: ${m.row.weapons.map((w) => w.name).join(", ")}`);
+      for (const slot of m.entrySlots) {
+        const ids = chosenEntries[slot.key] ?? [];
+        if (ids.length > 0) lines.push(`${slot.group.toLowerCase()}: ${ids.map((id) => entryCatalog[slot.group]?.find((e) => e.id === id)?.name ?? "запись").join(", ")}`);
+      }
+      overviewSources.push({ label: `Мультикласс · ${m.opt.name}`, lines });
+    }
 
     const speciesLines: string[] = [];
     const speciesOpt = speciesOptions.find((x) => x.id === speciesId);
@@ -2405,27 +2624,35 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     if (subclassId != null && subclassEntry && nameMatches(subclassEntry.name, "Баннерет")) {
       pendingPicks.push({ label: "Подкласс", text: "язык на выбор (Посланник рыцарства) — отметь на шаге языков" });
     }
+    for (const m of extraModels) {
+      if (m.entry && !m.mc) {
+        pendingPicks.push({ label: "Мультикласс", text: `владения мультикласса (${m.entry.name}) не размечены в справочнике — добери на листе` });
+      }
+    }
   }
 
   // Стартовые числа тем же счётом, что лист: БМ — общей формулой (вызов, не
   // копия правила), хиты — кость класса + ВЫН, КД — без доспеха (10 + ЛОВ).
   // Форма записи класса — та же, что собирает finish() ниже.
-  const previewDie = classOption ? (/\d+/.exec(classOption.hitDie)?.[0] ?? null) : null;
-  const previewDieNum = previewDie !== null ? Number.parseInt(previewDie, 10) : null;
+  // Кости по классам, стартовый первым (Q17: его 1-й уровень — максимумом).
+  const dieOf = (hitDie: string | undefined) => Number.parseInt(/\d+/.exec(hitDie ?? "")?.[0] ?? "", 10);
+  const hitDiceRows = [
+    { die: dieOf(classOption?.hitDie), levels: level },
+    ...extraModels.flatMap((m) => (m.opt ? [{ die: dieOf(m.opt.hitDie), levels: m.row.level }] : [])),
+  ].filter((d) => Number.isFinite(d.die));
   const previewConMod = abilityModifier(awardedAbilities.con);
   const previewDexMod = abilityModifier(awardedAbilities.dex);
   const previewFeatHp = featHitPoints([featEntry, effectiveSpeciesFeatId ? speciesFeatEntry : null]);
-  const previewHp =
-    previewDieNum !== null && Number.isFinite(previewDieNum)
-      ? Math.max(
-          1,
-          previewDieNum +
-            previewConMod +
-            (level - 1) * (Math.floor(previewDieNum / 2) + 1 + previewConMod) +
-            previewFeatHp.perLevel * level +
-            previewFeatHp.flat
-        )
-      : null;
+  // Хиты (Q17): кость стартового на 1-м уровне целиком, дальше среднее вверх
+  // по кости своего класса; ВЫН и хиты черт («Крепкий») — за каждый уровень.
+  const avgDie = (d: number) => Math.floor(d / 2) + 1;
+  const hpCalc = Number.isFinite(dieOf(classOption?.hitDie))
+    ? (() => {
+        const lump = hitDiceRows.reduce((n, d, i) => n + (i === 0 ? d.die + (d.levels - 1) * avgDie(d.die) : d.levels * avgDie(d.die)), 0);
+        return { lump, max: Math.max(1, lump + (previewConMod + previewFeatHp.perLevel) * totalLevel + previewFeatHp.flat) };
+      })()
+    : null;
+  const previewHp = hpCalc?.max ?? null;
   const previewClasses =
     classId && classOption
       ? [
@@ -2442,8 +2669,27 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
                 ? (classEntry!.data.spellcasting_ability as string)
                 : "",
           },
+          ...extraModels.flatMap((m) =>
+            m.row.classId != null && m.opt
+              ? [
+                  {
+                    classId: m.row.classId,
+                    className: m.opt.name,
+                    subclassId: m.row.subclassId,
+                    subclassName: m.subOptions.find((s) => s.id === m.row.subclassId)?.name ?? "",
+                    level: m.row.level,
+                    skillChoiceOptions: m.mc?.skillAny ? [] : m.grants.skillChoice?.options ?? [],
+                    skillChoiceCount: m.mc?.skillCount ?? 0,
+                    spellcastingAbility: typeof m.entry?.data.spellcasting_ability === "string" ? (m.entry.data.spellcasting_ability as string) : "",
+                  },
+                ]
+              : []
+          ),
         ]
       : [];
+  const classLine = [classOption ? `${classOption.name} ${level}` : "", ...extraModels.map((m) => (m.opt ? `${m.opt.name} ${m.row.level}` : ""))]
+    .filter(Boolean)
+    .join(" · ");
   const previewSpeed = speciesOptions.find((x) => x.id === speciesId)?.walkSpeed ?? null;
 
   // Данные мини-чарника (D0): чеклист, снаряжение и имена заклинаний
@@ -2465,12 +2711,24 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         if (!classId) out.push("выбери класс");
         else if (!classEntry || choiceDefs == null) out.push("загружаю класс…");
         else if (!subclassLocked && subclassOptions.length > 0 && !subclassId) out.push("выбери подкласс");
+        for (const m of extraModels) {
+          if (m.row.classId == null) out.push("выбери класс в новой строке или убери её");
+          else if (!m.entry || !m.defsLoaded) out.push(`загружаю ${m.opt?.name ?? "класс"}…`);
+          else if (!m.subLocked && m.subOptions.length > 0 && m.row.subclassId == null) out.push(`выбери подкласс (${m.opt?.name})`);
+        }
         break;
       case "Умения класса":
         more("Боевой стиль", styleMissing);
         for (const x of entryShortfall) more(x.group, x.missing);
         more("Оружейные приёмы", weaponMissing);
-        for (const x of toolMissing(["class", "subclass"])) more(`Инструменты (${x.g.group.toLowerCase()})`, x.missing);
+        for (const m of extraModels) {
+          const x = extraMissing(m);
+          more(`Боевой стиль (${m.opt?.name})`, x.style);
+          more(`Оружейные приёмы (${m.opt?.name})`, x.weapons);
+        }
+        for (const x of toolMissing(["class", "subclass", ...extraModels.flatMap((m) => [mcKey(m.row), mcsKey(m.row)])])) {
+          more(`Инструменты (${x.g.group.toLowerCase()})`, x.missing);
+        }
         break;
       case "Вид":
         if (!speciesId && speciesCustom === null) out.push("выбери вид");
@@ -2494,6 +2752,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       case "Навыки и языки":
         for (const x of skillShortfall) more(`Навыки ${x.group.label.charAt(0).toLowerCase()}${x.group.label.slice(1)}`, x.missing);
         more("Экспертность", expertiseMissing);
+        for (const m of extraModels) more(`Экспертность (${m.opt?.name})`, extraMissing(m).expertise);
         more("Языки", languageMissing);
         break;
       case "Заклинания":
@@ -2510,7 +2769,11 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   }
   // Шаг виден, только если на нём есть что выбирать (Q5, Q16).
   const classChoiceCount =
-    styleSlots.length + entrySlots.length + (weaponSlots > 0 ? 1 : 0) + toolGroups.filter((g) => g.key === "class" || g.key === "subclass").length;
+    styleSlots.length +
+    entrySlots.length +
+    (weaponSlots > 0 ? 1 : 0) +
+    extraModels.reduce((n, m) => n + m.styleSlots.length + m.entrySlots.length + (m.weaponSlots > 0 ? 1 : 0), 0) +
+    toolGroups.filter((g) => !["background", "feat", "feat2"].includes(g.key)).length;
   function stepVisible(st: Step): boolean {
     if (st === "Умения класса") return classChoiceCount > 0;
     if (st === "Черта") return featNeeded || speciesFeatNeeded;
@@ -2521,8 +2784,16 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   const overviewProblems: MiniSheetProblem[] = visibleSteps.flatMap((st) =>
     st === "Обзор" ? [] : stepMissing(st).map((text) => ({ text, target: st }))
   );
+  // Требование 13+ (Q16) предупреждает, а не запирает — у стартового и у
+  // каждого следующего, как в книге.
+  const prereqWarnings =
+    extraClasses.length === 0
+      ? []
+      : [classOption, ...extraModels.map((m) => m.opt)]
+          .filter((o): o is NonNullable<typeof o> => !!o?.multiclassPrereq && multiclassPrereqUnmet(o.multiclassPrereq, awardedAbilities))
+          .map((o) => `Мультикласс: ${o.name} требует «${o.multiclassPrereq}» — сейчас не хватает. Поправь на шаге «Характеристики» или договорись с Мастером.`);
   // Предупреждения Обзора (Q11): законно, но сомнительно — создать можно.
-  const overviewWarnings: string[] = [];
+  const overviewWarnings: string[] = [...prereqWarnings];
   {
     const primary = classEntry ? parseAbilityNames(classEntry.data.primary_abilities) : [];
     if (primary.length > 0 && Math.max(...primary.map((k) => awardedAbilities[k])) < 13) {
@@ -2588,7 +2859,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       speciesOptions.find((x) => x.id === speciesId)?.name ?? speciesCustom?.trim() ?? "";
     return {
       name: characterName.trim() || "Без имени",
-      subtitle: [classOption ? `${classOption.name} ${level}` : "", speciesName]
+      subtitle: [classLine, speciesName]
         .filter(Boolean)
         .join(" · "),
       hp: previewHp != null ? String(previewHp) : "—",
@@ -2611,7 +2882,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     return (
       <WizardMiniSheet
         banner={portraitPreview ? { src: portraitPreview, placeholder: false } : classOption?.card ? { src: classOption.card, placeholder: true } : null}
-        subtitle={[classOption ? `${classOption.name} ${level}` : "", speciesOptions.find((x) => x.id === speciesId)?.name ?? ""].filter(Boolean).join(" · ")}
+        subtitle={[classLine, speciesOptions.find((x) => x.id === speciesId)?.name ?? ""].filter(Boolean).join(" · ")}
         withoutCore={withoutCore}
         characterName={characterName}
         playerName={playerName}
@@ -2670,6 +2941,8 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     setSubclassId(null);
     setLevel(1);
     setLevelText(null);
+    setExtraClasses([]);
+    setActiveRow(0);
     setSpeciesId(null);
     setSpeciesCustom(null);
     setBackgroundId(null);
@@ -2750,9 +3023,42 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   }
 
   function renderClass() {
+    // Карта, подкласс и уровень — у активной строки (0 — стартовый класс).
+    const act = activeRow > 0 ? extraModels[activeRow - 1] : undefined;
+    const cur = act
+      ? {
+          key: act.row.uid,
+          classId: act.row.classId,
+          subOptions: act.subOptions,
+          subclassId: act.row.subclassId,
+          subLocked: act.subLocked,
+          subNote: `с ${act.opt?.subclassLevel ?? 0} ур.`,
+          level: act.row.level,
+          pickClass: (id: number) => id !== act.row.classId && pickExtraClass(act.row, id),
+          pickSub: (id: number) => pickExtraSubclass(act.row, id),
+          setLevel: (n: number) => setExtraLevel(act, n),
+        }
+      : {
+          key: "start",
+          classId,
+          subOptions: subclassOptions,
+          subclassId,
+          subLocked: subclassLocked,
+          subNote: subLockNote,
+          level,
+          pickClass: (id: number) => id !== classId && pickClass(id),
+          pickSub: (id: number) => pickSubclass(id),
+          setLevel: (n: number) => setLevel(n),
+        };
+    const curName = hierarchy.classes.find((c) => c.id === cur.classId)?.name;
+    const maxLevel = 20 - (totalLevel - cur.level);
+    const clampLevel = (n: number) => Math.min(maxLevel, Math.max(1, n));
+    // Класс берётся один раз: занятые другими строками в выборе не видны.
+    const taken = new Set([classId, ...extraClasses.map((r) => r.classId)].filter((id) => id != null && id !== cur.classId));
+    const classOptions = hierarchy.classes.filter((c) => !taken.has(c.id));
     const levelControl = (
     <div className="wz-level" role="group" aria-label="Уровень">
-      <button type="button" aria-label="Уровень −1" disabled={level <= 1} onClick={() => stepLevel(-1)}>
+      <button type="button" aria-label="Уровень −1" disabled={cur.level <= 1} onClick={() => cur.setLevel(clampLevel(cur.level - 1))}>
         <NavIcon name="minus" />
       </button>
       <label className="wz-level-num">
@@ -2760,39 +3066,82 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         <input
           type="number"
           min={1}
-          max={20}
+          max={maxLevel}
           inputMode="numeric"
           aria-label="Уровень"
-          value={levelText ?? level}
+          value={levelText ?? cur.level}
           onChange={(e) => setLevelText(e.target.value)}
-          onBlur={(e) => commitLevel(e.target.value)}
+          onBlur={(e) => {
+            cur.setLevel(clampLevel(Math.round(Number(e.target.value)) || 1));
+            setLevelText(null);
+          }}
         />
       </label>
-      <button type="button" aria-label="Уровень +1" disabled={level >= 20} onClick={() => stepLevel(1)}>
+      <button type="button" aria-label="Уровень +1" disabled={cur.level >= maxLevel} onClick={() => cur.setLevel(clampLevel(cur.level + 1))}>
         <NavIcon name="plus" />
       </button>
     </div>
     );
+    const toRow = (n: number) => {
+      setActiveRow(n);
+      setLevelText(null);
+    };
     return (
       <div className="wz-step">
         {!systemId && <span className="muted">У кампании не указана система — выбор класса недоступен, можно будет добавить позже.</span>}
+        {/* Мультикласс (Q15): строки «класс · уровень», первая — стартовая. */}
+        {classId != null && (
+          <div className="wz-chips wz-class-rows" role="group" aria-label="Классы персонажа">
+            <button type="button" className="wz-chip" aria-pressed={activeRow === 0} onClick={() => toRow(0)}>
+              {classOption ? `${classOption.name} ${level}` : "Класс"}
+              {extraClasses.length > 0 && " · стартовый"}
+            </button>
+            {extraModels.map((m, i) => (
+              <Fragment key={m.row.uid}>
+                <button type="button" className="wz-chip" aria-pressed={activeRow === i + 1} onClick={() => toRow(i + 1)}>
+                  {m.opt ? `${m.opt.name} ${m.row.level}` : "Новый класс"}
+                </button>
+                <button
+                  type="button"
+                  className="wz-chip wz-chip-x"
+                  aria-label={`Убрать: ${m.opt?.name ?? "новый класс"}`}
+                  title="Убрать класс"
+                  onClick={() => removeExtraClass(m.row)}
+                >
+                  ×
+                </button>
+              </Fragment>
+            ))}
+            {totalLevel < 20 && extraClasses.every((r) => r.classId != null) && (
+              <button type="button" className="wz-chip" onClick={addExtraClass}>
+                + Ещё класс
+              </button>
+            )}
+          </div>
+        )}
+        {prereqWarnings.map((w) => (
+          <div key={w} className="wz-warn" role="note">
+            {w}
+          </div>
+        ))}
         {desktop ? (
           <CardStage
+            key={cur.key}
             systemId={systemId}
             searchPlaceholder="Поиск класса"
             aside={levelControl}
             groups={[
-              { key: "class", label: "Класс", note: classOption ? `${classOption.name} выбран` : "выбери один", options: hierarchy.classes, selectedId: classId, onPick: (id) => id !== classId && pickClass(id) },
-              ...(classId != null && subclassOptions.length > 0
+              { key: "class", label: act ? "Ещё класс" : "Класс", note: curName ? `${curName} выбран` : "выбери один", options: classOptions, selectedId: cur.classId, onPick: cur.pickClass },
+              ...(cur.classId != null && cur.subOptions.length > 0
                 ? [
                     {
-                      key: `sub:${classId}`,
+                      key: `sub:${cur.classId}`,
                       label: "Подкласс",
-                      note: subclassLocked ? `выбирается ${subLockNote}` : "выбери один",
-                      options: subclassOptions,
-                      selectedId: subclassId,
-                      onPick: (id: number) => pickSubclass(id),
-                      pickDisabled: subclassLocked ? `Подкласс выбирается ${subLockNote} — на листе при повышении уровня.` : undefined,
+                      note: cur.subLocked ? `выбирается ${cur.subNote}` : "выбери один",
+                      options: cur.subOptions,
+                      selectedId: cur.subclassId,
+                      onPick: cur.pickSub,
+                      pickDisabled: cur.subLocked ? `Подкласс выбирается ${cur.subNote} — на листе при повышении уровня.` : undefined,
                     },
                   ]
                 : []),
@@ -2800,21 +3149,22 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
           />
         ) : (
         <CardRibbon
+          key={cur.key}
           systemId={systemId}
-          options={hierarchy.classes}
-          selectedId={classId}
-          onPick={(id) => id !== classId && pickClass(id)}
+          options={classOptions}
+          selectedId={cur.classId}
+          onPick={cur.pickClass}
           searchPlaceholder="Поиск класса"
           aside={levelControl}
         />
         )}
-        {!desktop && classId != null && subclassOptions.length > 0 && (
+        {!desktop && cur.classId != null && cur.subOptions.length > 0 && (
           <section>
             <PickHead label="Подкласс" />
-            {subclassLocked ? (
-              <span className="muted">Подкласс выбирается {subLockNote} — на листе при повышении уровня.</span>
+            {cur.subLocked ? (
+              <span className="muted">Подкласс выбирается {cur.subNote} — на листе при повышении уровня.</span>
             ) : (
-              <CardRibbon key={classId} systemId={systemId} options={subclassOptions} selectedId={subclassId} onPick={(id) => pickSubclass(id)} />
+              <CardRibbon key={`${cur.key}:${cur.classId}`} systemId={systemId} options={cur.subOptions} selectedId={cur.subclassId} onPick={cur.pickSub} />
             )}
           </section>
         )}
@@ -2823,126 +3173,186 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   }
 
   function renderClassChoices() {
+    // Разделы по классам (Q18): стартовый и каждая строка мультикласса со
+    // своими выборами; пустые строки мультикласса не показываются.
+    interface Block {
+      key: string;
+      name: string;
+      level: number;
+      classId: number | null;
+      styleSlots: ChoiceDef[];
+      style: (number | null)[];
+      setStyle: (i: number, id: number | null) => void;
+      entrySlots: typeof entrySlots;
+      weaponSlots: number;
+      weapons: { entryId: number; name: string }[];
+      toggleWeapon: (e: CompendiumEntry) => void;
+      toolKeys: string[];
+    }
+    const put = (arr: (number | null)[], i: number, id: number | null) => {
+      const out = [...arr];
+      while (out.length <= i) out.push(null);
+      out[i] = id;
+      return out;
+    };
+    const blocks: Block[] = [
+      {
+        key: "start",
+        name: classOption?.name ?? "класс",
+        level,
+        classId,
+        styleSlots,
+        style: chosenStyle,
+        setStyle: (i: number, id: number | null) => setChosenStyle((prev) => put(prev, i, id)),
+        entrySlots,
+        weaponSlots,
+        weapons: masteredWeapons,
+        toggleWeapon: toggleMastered,
+        toolKeys: ["class", "subclass"],
+      },
+      ...extraModels.map(
+        (m): Block => ({
+          key: m.row.uid,
+          name: m.opt?.name ?? "класс",
+          level: m.row.level,
+          classId: m.row.classId,
+          styleSlots: m.styleSlots,
+          style: m.row.style,
+          setStyle: (i, id) => setExtraClasses((prev) => prev.map((r) => (r.uid === m.row.uid ? { ...r, style: put(r.style, i, id) } : r))),
+          entrySlots: m.entrySlots,
+          weaponSlots: m.weaponSlots,
+          weapons: m.row.weapons,
+          toggleWeapon: (e) =>
+            setExtraClasses((prev) =>
+              prev.map((r) => {
+                if (r.uid !== m.row.uid) return r;
+                if (r.weapons.some((w) => w.entryId === e.id)) return { ...r, weapons: r.weapons.filter((w) => w.entryId !== e.id) };
+                return r.weapons.length >= m.weaponSlots ? r : { ...r, weapons: [...r.weapons, { entryId: e.id, name: e.name }] };
+              })
+            ),
+          toolKeys: [mcKey(m.row), mcsKey(m.row)],
+        })
+      ),
+    ].filter((b, bi) => bi === 0 || b.styleSlots.length + b.entrySlots.length + b.weaponSlots + toolGroups.filter((g) => b.toolKeys.includes(g.key)).length > 0);
     return (
       <div className="wz-step">
-        <p className="wz-step-lead">
-          Что {classOption?.name ?? "класс"} выбирает на {level} уровне.{styleSlots.length + entrySlots.length > 0 && " Тап по названию — описание."}
-        </p>
-        {styleSlots.map((def, i) => {
-          const takenElsewhere = new Set(chosenStyle.filter((_, j) => j !== i));
-          const options = styleFeats.filter((f) => !takenElsewhere.has(f.id) && featFitsClasses(f, [classId]));
-          const pick = (id: number) => {
-            const nextId = chosenStyle[i] === id ? null : id;
-            setChosenStyle((prev) => {
-              const out = [...prev];
-              while (out.length <= i) out.push(null);
-              out[i] = nextId;
-              return out;
-            });
-            if (nextId != null) void fetchStyleEntry(nextId);
-          };
-          return (
-            <section key={`${def.sourceEntryId}:${i}`}>
-              <PickHead label="Боевой стиль" picked={chosenStyle[i] != null ? 1 : 0} total={1} hint={`от умения «${def.sourceName}»`} />
-              {styleFeats.length === 0 ? (
-                <span className="muted">Черты стиля не загрузились — выбери позже на листе.</span>
-              ) : (
-                <PickList
-                  rows={options.map((f) => ({ key: String(f.id), title: f.name, picked: chosenStyle[i] === f.id }))}
-                  collapse
-                  onToggle={(k) => pick(Number(k))}
-                  onOpen={(k) =>
-                    openEntry(Number(k), chosenStyle[i] === Number(k), () => pick(Number(k)), { entry: styleFeatEntries[Number(k)] })
-                  }
-                />
+        {blocks.map((b, bi) => (
+          <Fragment key={b.key}>
+            <p className="wz-step-lead">
+              Что {b.name} выбирает на {b.level} уровне.{b.styleSlots.length + b.entrySlots.length > 0 && " Тап по названию — описание."}
+            </p>
+            {b.styleSlots.map((def, i) => {
+              // Черта стиля берётся один раз — и в другом слоте, и у другого класса.
+              const takenElsewhere = new Set([...b.style.filter((_, j) => j !== i), ...blocks.filter((o) => o.key !== b.key).flatMap((o) => o.style)]);
+              const options = styleFeats.filter((f) => !takenElsewhere.has(f.id) && featFitsClasses(f, [b.classId]));
+              const pick = (id: number) => {
+                const nextId = b.style[i] === id ? null : id;
+                b.setStyle(i, nextId);
+                if (nextId != null) void fetchStyleEntry(nextId);
+              };
+              return (
+                <section key={`${def.sourceEntryId}:${i}`}>
+                  <PickHead label="Боевой стиль" picked={b.style[i] != null ? 1 : 0} total={1} hint={`от умения «${def.sourceName}»`} />
+                  {styleFeats.length === 0 ? (
+                    <span className="muted">Черты стиля не загрузились — выбери позже на листе.</span>
+                  ) : (
+                    <PickList
+                      rows={options.map((f) => ({ key: String(f.id), title: f.name, picked: b.style[i] === f.id }))}
+                      collapse
+                      onToggle={(k) => pick(Number(k))}
+                      onOpen={(k) => openEntry(Number(k), b.style[i] === Number(k), () => pick(Number(k)), { entry: styleFeatEntries[Number(k)] })}
+                    />
+                  )}
+                </section>
+              );
+            })}
+            {bi === 0 &&
+              chosenStyle.slice(styleSlots.length).map(
+                (id, k) =>
+                  id != null && (
+                    <div key={`orphan:${k}`} className="row wz-warn">
+                      <span>
+                        {styleFeatEntries[id]?.name ?? styleFeats.find((f) => f.id === id)?.name ?? "Черта"} — сверх лимита (уровень снижен).
+                      </span>
+                      <button type="button" onClick={() => setChosenStyle((prev) => prev.filter((_, j) => j !== styleSlots.length + k))}>
+                        Убрать
+                      </button>
+                    </div>
+                  )
               )}
-            </section>
-          );
-        })}
-        {chosenStyle.slice(styleSlots.length).map(
-          (id, k) =>
-            id != null && (
-              <div key={`orphan:${k}`} className="row wz-warn">
-                <span>
-                  {styleFeatEntries[id]?.name ?? styleFeats.find((f) => f.id === id)?.name ?? "Черта"} — сверх лимита (уровень снижен).
-                </span>
-                <button type="button" onClick={() => setChosenStyle((prev) => prev.filter((_, j) => j !== styleSlots.length + k))}>
-                  Убрать
-                </button>
-              </div>
-            )
-        )}
-        {entrySlots.map((slot) => {
-          const picked = chosenEntries[slot.key] ?? [];
-          const catalog = entryCatalog[slot.group];
-          return (
-            <section key={slot.key}>
-              <PickHead label={slot.group} picked={picked.length} total={slot.total} />
-              {catalog === undefined ? (
-                <span className="muted">Загружаю…</span>
-              ) : catalog.length === 0 ? (
-                <span className="muted">Список пуст — выбери позже на листе.</span>
-              ) : (
-                <PickList
-                  rows={catalog.map((e) => {
-                    const needLevel = e.level ?? 1;
-                    return {
-                      key: String(e.id),
-                      title: e.name,
-                      meta: needLevel > level ? `с ${needLevel} ур.` : undefined,
-                      picked: picked.includes(e.id),
-                      disabled: needLevel > level,
-                    };
-                  })}
-                  full={slot.total > 1 && picked.length >= slot.total}
-                  collapse={picked.length >= slot.total}
-                  onToggle={(k) => toggleEntry(slot.key, Number(k), slot.total)}
-                  onOpen={(k) => {
-                    const e = catalog.find((x) => x.id === Number(k));
-                    openEntry(Number(k), picked.includes(Number(k)), () => toggleEntry(slot.key, Number(k), slot.total), {
-                      entry: e,
-                      disabled: (e?.level ?? 1) > level,
-                    });
-                  }}
-                />
-              )}
-            </section>
-          );
-        })}
-        {weaponSlots > 0 && (
-          <section>
-            <PickHead label="Оружейные приёмы" picked={masteredWeapons.length} total={weaponSlots} />
-            {weaponCatalog === null ? (
-              <span className="muted">Загружаю оружие…</span>
-            ) : (
-              <>
-                <SearchField value={weaponQ} onChange={setWeaponQ} placeholder="Поиск оружия" />
-                <PickList
-                  rows={weaponCatalog
-                    .filter((e) => matchQ(`${e.name} ${e.name_original ?? ""}`, weaponQ))
-                    .slice(0, 60)
-                    .map((e) => {
-                      const damage = typeof e.data.damage === "string" ? e.data.damage : "";
-                      const mastery = weaponMasteryName(e);
-                      return {
-                        key: String(e.id),
-                        title: e.name,
-                        meta: [damage, mastery && `мастерство: ${mastery}`].filter(Boolean).join(" · "),
-                        picked: masteredWeapons.some((w) => w.entryId === e.id),
-                      };
-                    })}
-                  full={masteredWeapons.length >= weaponSlots}
-                  collapse={masteredWeapons.length >= weaponSlots}
-                  onToggle={(k) => {
-                    const e = weaponCatalog.find((x) => x.id === Number(k));
-                    if (e) toggleMastered(e);
-                  }}
-                />
-              </>
+            {b.entrySlots.map((slot) => {
+              const picked = chosenEntries[slot.key] ?? [];
+              const catalog = entryCatalog[slot.group];
+              return (
+                <section key={slot.key}>
+                  <PickHead label={slot.group} picked={picked.length} total={slot.total} />
+                  {catalog === undefined ? (
+                    <span className="muted">Загружаю…</span>
+                  ) : catalog.length === 0 ? (
+                    <span className="muted">Список пуст — выбери позже на листе.</span>
+                  ) : (
+                    <PickList
+                      rows={catalog.map((e) => {
+                        const needLevel = e.level ?? 1;
+                        return {
+                          key: String(e.id),
+                          title: e.name,
+                          meta: needLevel > b.level ? `с ${needLevel} ур.` : undefined,
+                          picked: picked.includes(e.id),
+                          disabled: needLevel > b.level,
+                        };
+                      })}
+                      full={slot.total > 1 && picked.length >= slot.total}
+                      collapse={picked.length >= slot.total}
+                      onToggle={(k) => toggleEntry(slot.key, Number(k), slot.total)}
+                      onOpen={(k) => {
+                        const e = catalog.find((x) => x.id === Number(k));
+                        openEntry(Number(k), picked.includes(Number(k)), () => toggleEntry(slot.key, Number(k), slot.total), {
+                          entry: e,
+                          disabled: (e?.level ?? 1) > b.level,
+                        });
+                      }}
+                    />
+                  )}
+                </section>
+              );
+            })}
+            {b.weaponSlots > 0 && (
+              <section>
+                <PickHead label="Оружейные приёмы" picked={b.weapons.length} total={b.weaponSlots} />
+                {weaponCatalog === null ? (
+                  <span className="muted">Загружаю оружие…</span>
+                ) : (
+                  <>
+                    <SearchField value={weaponQ} onChange={setWeaponQ} placeholder="Поиск оружия" />
+                    <PickList
+                      rows={weaponCatalog
+                        .filter((e) => matchQ(`${e.name} ${e.name_original ?? ""}`, weaponQ))
+                        .slice(0, 60)
+                        .map((e) => {
+                          const damage = typeof e.data.damage === "string" ? e.data.damage : "";
+                          const mastery = weaponMasteryName(e);
+                          return {
+                            key: String(e.id),
+                            title: e.name,
+                            meta: [damage, mastery && `мастерство: ${mastery}`].filter(Boolean).join(" · "),
+                            picked: b.weapons.some((w) => w.entryId === e.id),
+                          };
+                        })}
+                      full={b.weapons.length >= b.weaponSlots}
+                      collapse={b.weapons.length >= b.weaponSlots}
+                      onToggle={(k) => {
+                        const e = weaponCatalog.find((x) => x.id === Number(k));
+                        if (e) b.toggleWeapon(e);
+                      }}
+                    />
+                  </>
+                )}
+              </section>
             )}
-          </section>
-        )}
-        {renderToolGroups(["class", "subclass"])}
+            {renderToolGroups(b.toolKeys)}
+          </Fragment>
+        ))}
       </div>
     );
   }
@@ -3355,6 +3765,39 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
               onToggle={(k) => toggleExpertise(k)}
             />
           </section>
+        )}
+        {extraModels.map(
+          (m) =>
+            m.expertiseSlots > 0 && (
+              <section key={`exp:${m.row.uid}`}>
+                <PickHead
+                  label={`Экспертность (${m.opt?.name ?? "класс"})`}
+                  picked={m.row.expertise.length}
+                  total={m.expertiseSlots}
+                  hint="Удвоенный бонус мастерства к навыку."
+                />
+                <PickList
+                  rows={skills.rows.map((r) => ({
+                    key: r.original,
+                    title: skills.nameOf(r.original),
+                    meta: skillMeta(r.original),
+                    picked: m.row.expertise.includes(r.original),
+                    // Экспертность в одном навыке дважды не берётся.
+                    disabled: chosenExpertise.includes(r.original) || extraClasses.some((x) => x.uid !== m.row.uid && x.expertise.includes(r.original)),
+                  }))}
+                  full={m.row.expertise.length >= m.expertiseSlots}
+                  onToggle={(k) =>
+                    patchExtra(m.row.uid, {
+                      expertise: m.row.expertise.includes(k)
+                        ? m.row.expertise.filter((s) => s !== k)
+                        : m.row.expertise.length < m.expertiseSlots
+                          ? [...m.row.expertise, k]
+                          : m.row.expertise,
+                    })
+                  }
+                />
+              </section>
+            )
         )}
         {languageOptions.length > 0 && (
           <section>
