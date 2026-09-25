@@ -3088,6 +3088,18 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
                 full={g.count > 1 && picked.length >= g.count}
                 collapse={picked.length >= g.count}
                 onToggle={(k) => toggleTool(g.key, Number(k), g.count)}
+                // Описание инструмента — как у черт: у ремесленных характеристика
+                // и использование лежат полями записи, не в тексте.
+                onOpen={(k) => {
+                  const e = g.options.find((x) => x.id === Number(k));
+                  const other = toolGroups.find((o) => o.key !== g.key && chosenToolsIn(o.key).includes(Number(k)));
+                  const meta = [e?.data.ability, e?.data.usage].filter((x): x is string => typeof x === "string" && !!x).join(" · ");
+                  openEntry(Number(k), picked.includes(Number(k)), () => toggleTool(g.key, Number(k), g.count), {
+                    entry: e,
+                    meta: meta || undefined,
+                    disabled: !!other,
+                  });
+                }}
               />
             )}
           </section>

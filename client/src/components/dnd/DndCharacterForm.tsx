@@ -729,6 +729,8 @@ function DndProficienciesView({
   onChange?: (v: DndProficiencyEntry[]) => void;
 }) {
   const [adding, setAdding] = useState(false);
+  // Описание владения из справочника (инструменты: характеристика, сложности).
+  const [previewId, setPreviewId] = useState<number | null>(null);
   const { detached } = useDndRuntime();
   const [draft, setDraft] = useState("");
   const [tools, setTools] = useState<CompendiumEntry[] | null>(null);
@@ -778,7 +780,13 @@ function DndProficienciesView({
       <div className="dnd-proficiency-chips">
         {value.map((p, i) => (
           <span key={i} className="dnd-proficiency-chip">
-            {p.name}
+            {p.entryId != null ? (
+              <button type="button" className="dnd-proficiency-name" onClick={() => setPreviewId(p.entryId ?? null)} title="Описание">
+                {p.name}
+              </button>
+            ) : (
+              p.name
+            )}
             {onChange && (
               <button type="button" className="comp-mini" onClick={() => remove(i)} title="Убрать" aria-label="Убрать владение">
                 <NavIcon name="close" />
@@ -823,6 +831,7 @@ function DndProficienciesView({
             </button>
           ))}
       </div>
+      {previewId != null && <EntityPreviewModal type="compendium_entry" id={previewId} onClose={() => setPreviewId(null)} />}
     </div>
   );
 }

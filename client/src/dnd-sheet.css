@@ -4105,3 +4105,11 @@ span.dnd-tab-btn {
 .dnd-ability-die .dnd-ability-label {
   white-space: nowrap;
 }
+/* Владение из справочника — имя кнопкой, открывает описание. */
+.dnd-proficiency-chip .dnd-proficiency-name {
+  padding: 0;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  text-transform: inherit;
+  letter-spacing: inherit;
+}
