@@ -2225,11 +2225,17 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-spell-school {
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-/* Спутников нет — одна строка: подпись слева, «+» справа. */
+/* Спутников нет — одна строка: «+» слева, подпись за ним. Справа внизу
+ * уголок-переворот: промах мимо «+» у края переворачивал карту. */
 .dnd-card-face > .dnd-companions.is-empty {
   flex-direction: row;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 14px;
+}
+.dnd-card-face > .dnd-companions.is-empty .dnd-companion-add {
+  order: -1;
+  margin: 0;
 }
 /* Спасброски от смерти — чернильная плашка ниже верхней цепи и её
  * орнаментов; «Стабилизирован» — такой же плашкой, а не полосой под цепью. */
