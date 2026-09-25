@@ -370,6 +370,26 @@
 .dc-scroll--evil .dc-scroll-body {
   padding: 26cqi 9.5cqi 29.297cqi;
 }
+/* Рамка владельца Card_Border1 — везде вместо рубашек (2026-09-25): нарезка
+   80 px из 683, углы целиком, стороны повтором; середина — бумага. Полоса
+   рамки — 0.7…4.3cqi от края, чёрная линия — до 5.3cqi. */
+.dc-scroll:is(.dc-scroll--good, .dc-scroll--evil) .dc-scroll-frame {
+  border-image: url("/ui/sheet/card-border1.webp") 80 / 12cqi round;
+  border-width: 12cqi;
+}
+/* Бумага — под рамкой от середины её полосы: снаружи рваного края не видна,
+   под скруглённые углы чёрной линии заходит. */
+.dc-scroll:is(.dc-scroll--good, .dc-scroll--evil)::before {
+  content: "";
+  position: absolute;
+  inset: 3cqi;
+  z-index: -2;
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+}
+.dc-scroll:is(.dc-scroll--good, .dc-scroll--evil) .dc-scroll-body {
+  min-height: 0;
+  padding: 10cqi 9cqi 11cqi;
+}
 .dc-scroll a,
 .dc-scroll .muted {
   color: inherit;

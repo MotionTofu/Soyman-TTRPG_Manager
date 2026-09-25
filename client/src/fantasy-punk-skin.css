@@ -603,8 +603,10 @@ body.sheet-fullscreen {
 .dnd-card-face,
 .dnd-desktop-split > .dnd-card-face,
 .dnd-card-back {
-  --frame-b: 84px;
-  --frame-o: 21px;
+  /* Card_Border1 (2026-09-25): нарезка 80 px, полоса — 3…20 px рамки,
+     вынос 10 px кладёт её середину на край карты. */
+  --frame-b: 48px;
+  --frame-o: 10px;
   position: relative;
   isolation: isolate;
   outline: none;
@@ -623,7 +625,7 @@ body.sheet-fullscreen {
   position: absolute;
   inset: calc(var(--frame-o) * -1);
   border: var(--frame-b) solid transparent;
-  border-image: url("/ui/sheet/card-frame-v2.webp") 200 / var(--frame-b) repeat;
+  border-image: url("/ui/sheet/card-border1.webp") 80 / var(--frame-b) round;
   pointer-events: none;
   z-index: 3;
 }
@@ -659,8 +661,8 @@ body.sheet-fullscreen {
 @media (max-width: 700px) {
   .dnd-card-face,
   .dnd-card-back {
-    --frame-b: 66px;
-    --frame-o: 16px;
+    --frame-b: 40px;
+    --frame-o: 8px;
     /* Край в край: цепь рамки упирается в края экрана. Гасим поля тела
        листа (--sp-4) и его боковины (5px + 1px карточки). */
     /* 1px карточки + 5px боковины + 10px поля тела листа. */

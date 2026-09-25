@@ -767,7 +767,7 @@
 .wz-plate::before {
   content: "";
   position: absolute;
-  inset: 5cqi 3cqi 3cqi;
+  inset: 8px;
   background: var(--wz-panel);
 }
 .wz-plate::after {
@@ -776,18 +776,21 @@
   inset: 0;
   z-index: 2;
   border-style: solid;
-  border-width: 9.47cqi 6.84cqi 12.99cqi;
-  border-image: url("/ui/wizard/plate.webp") 97 70 133 70 / 9.47cqi 6.84cqi 12.99cqi stretch round;
+  /* Рамка владельца Card_Border1 (2026-09-25): нарезка 80 px, углы целиком,
+     стороны повтором. Размер постоянный, не от ширины окна: бежевая полоса
+     (4…14 px от края) — по ширине полосы прокрутки, чёрная линия — до 18 px. */
+  border-width: 44px;
+  border-image: url("/ui/sheet/card-border1.webp") 80 / 44px round;
   pointer-events: none;
 }
 /* Область прокрутки — до внешнего края: полоса ложится поверх рамки, текст
    держится внутри отступом (владелец, 2026-09-25). */
 .wz-plate-body {
   position: absolute;
-  /* Правый край области — посреди нарисованной рамки (её краска —
-     1.8…6.4cqi от края), текст — на прежних 8.3cqi. */
-  inset: 10.5cqi 3.3cqi 12.99cqi 8.3cqi;
-  padding-right: 5cqi;
+  /* Текст обрезан по внутренней чёрной линии рамки сверху и снизу; правый
+     край области — у края, полоса прокрутки ложится на бежевую полосу. */
+  inset: 22px 3px 26px 28px;
+  padding-right: 22px;
   z-index: 3;
   overflow-y: auto;
   padding-bottom: var(--sp-4);
@@ -816,10 +819,11 @@
   color: var(--wz-muted);
 }
 /* Текст карты в рамке — без её собственной рамки оборота. */
-.wz-plate .dc-scroll-frame {
+.wz-plate .dc-scroll-frame,
+.wz-plate .dc-scroll::before {
   display: none;
 }
-.wz-plate .dc-scroll-body {
+.wz-plate .dc-scroll .dc-scroll-body {
   min-height: 0;
   padding: 0;
   font-size: 16px;
@@ -1327,6 +1331,9 @@
     transform: translateY(-6px);
     border: 4px solid transparent;
     border-image: none;
+  }
+  /* Тень — у картинки, не у имени над ней (владелец, 2026-09-25). */
+  .wz .wz-thumb.is-current .dc-img {
     filter: drop-shadow(3px 3px 0 #171717);
   }
   .wz .wz-thumb.is-selected::after {
