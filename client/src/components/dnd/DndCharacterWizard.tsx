@@ -1571,24 +1571,15 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
 
   // Экспертность из выборов умений (deft_explorer_expertise следопыта 2 ур.,
   // ranger_expertise 9 ур.): слоты суммой count открытых уровнем дефов.
-  // Брать можно любой навык из каталога — владение им проверяет стол, а не
-  // визард (итоговые владения на этом шаге ещё не собраны).
+  // Список навыков — ниже, после навыков шага (expertiseOptions).
   const expertiseSlots = (choiceDefs ?? [])
     .filter((d) => d.kind === "skill" && d.minLevel <= level)
     .reduce((n, d) => n + d.count, 0);
-  function toggleExpertise(key: string) {
-    setChosenExpertise((prev) => {
-      if (prev.includes(key)) return prev.filter((s) => s !== key);
-      return prev.length < expertiseSlots ? [...prev, key] : prev;
-    });
-  }
-  const expertiseMissing =
-    choiceDefs == null ? 0 : Math.max(0, expertiseSlots - chosenExpertise.length);
   // Недобор строк мультикласса — тем же антитупиком, что у стартового.
   const extraMissing = (m: ExtraModel) => ({
     style: m.defsLoaded ? m.styleSlots.filter((_, i) => m.row.style[i] == null).length : 0,
     weapons: !m.defsLoaded || weaponCatalog == null ? 0 : Math.max(0, Math.min(m.weaponSlots, weaponCatalog.length) - m.row.weapons.length),
-    expertise: m.defsLoaded ? Math.max(0, m.expertiseSlots - m.row.expertise.length) : 0,
+    expertise: m.defsLoaded ? Math.max(0, Math.min(m.expertiseSlots, rowExpertiseOpts(m).length) - rowExpertise(m).length) : 0,
   });
 
   // Индекс заклинаний для шага выбора: фильтруем кандидатов по списку
@@ -1724,6 +1715,34 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   const chosenIn = (groupKey: string) => chosenSkills.filter((s) => s.startsWith(`${groupKey}:`));
   /** Выбранные навыки без пометки источника — то, что реально ляжет на лист. */
   const chosenSkillKeys = [...new Set(chosenSkills.map((s) => s.slice(s.indexOf(":") + 1)))];
+
+  // Экспертность — только в навыке, которым персонаж владеет (выдан или
+  // выбран на этом же шаге), и из списка дефа, если он задан («Учёный»
+  // волшебника). Пик, потерявший владение, в зачёт и на лист не идёт.
+  const ownedSkills = new Set([...grantedSkills, ...chosenSkillKeys]);
+  function expertiseOptions(defs: ChoiceDef[], lvl: number): string[] {
+    const lists = defs.filter((d) => d.kind === "skill" && d.minLevel <= lvl).map((d) => d.options ?? []);
+    const allow = lists.length > 0 && lists.every((l) => l.length > 0) ? new Set(lists.flat().map((n) => resolveSkill(n) ?? n)) : null;
+    return allSkillKeys.filter((k) => ownedSkills.has(k) && (!allow || allow.has(k)));
+  }
+  const expertiseOpts = expertiseOptions(choiceDefs ?? [], level);
+  const validExpertise = chosenExpertise.filter((k) => expertiseOpts.includes(k));
+  function toggleExpertise(key: string) {
+    setChosenExpertise((prev) => {
+      const valid = prev.filter((k) => expertiseOpts.includes(k));
+      if (valid.includes(key)) return valid.filter((s) => s !== key);
+      return valid.length < expertiseSlots ? [...valid, key] : valid;
+    });
+  }
+  const expertiseMissing =
+    choiceDefs == null ? 0 : Math.max(0, Math.min(expertiseSlots, expertiseOpts.length) - validExpertise.length);
+  function rowExpertiseOpts(m: ExtraModel): string[] {
+    return expertiseOptions(m.defs, m.row.level);
+  }
+  function rowExpertise(m: ExtraModel): string[] {
+    const opts = rowExpertiseOpts(m);
+    return m.row.expertise.filter((k) => opts.includes(k));
+  }
 
   // Недобор навыков — честный гейт: «Далее» на шаге навыков ждёт полного
   // выбора, а Обзор показывает чего не хватает. Требование режется
@@ -2274,7 +2293,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     for (const s of chosenSkillKeys) character.skillProfs[s] = 1;
     for (const s of grantedSkills) character.skillProfs[s] = 1;
     // Экспертность из выборов умений — уровнем владения 2, поверх выданного.
-    for (const s of [...chosenExpertise, ...extraModels.flatMap((m) => m.row.expertise)]) character.skillProfs[s] = 2;
+    for (const s of [...validExpertise, ...extraModels.flatMap(rowExpertise)]) character.skillProfs[s] = 2;
 
     // Стартовые наборы. Метаданные предмета (вес, КЗ, свойства) тянутся из
     // справочника здесь же: лист их не пересчитывает, а хранит снимком, как
@@ -2480,8 +2499,8 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       if (classGrants.toolNames.length > 0) classLines.push(`владения: ${classGrants.toolNames.join(", ")}`);
       const classPicked = named(chosenIn("class").map((t) => t.slice(t.indexOf(":") + 1)));
       if (classPicked.length > 0) classLines.push(`навыки: ${classPicked.join(", ")}`);
-      if (chosenExpertise.length > 0) {
-        classLines.push(`экспертность: ${chosenExpertise.map((k) => skills.nameOf(k)).join(", ")}`);
+      if (validExpertise.length > 0) {
+        classLines.push(`экспертность: ${validExpertise.map((k) => skills.nameOf(k)).join(", ")}`);
       }
       const subclassPicked = named(chosenIn("subclass").map((t) => t.slice(t.indexOf(":") + 1)));
       if (subclassPicked.length > 0) classLines.push(`навыки подкласса: ${subclassPicked.join(", ")}`);
@@ -2516,7 +2535,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       if (profs.length > 0) lines.push(`владения: ${profs.join(", ")}`);
       const picked = named([...chosenIn(mcKey(m.row)), ...chosenIn(mcsKey(m.row))].map((t) => t.slice(t.indexOf(":") + 1)));
       if (picked.length > 0) lines.push(`навыки: ${picked.join(", ")}`);
-      if (m.row.expertise.length > 0) lines.push(`экспертность: ${named(m.row.expertise).join(", ")}`);
+      if (rowExpertise(m).length > 0) lines.push(`экспертность: ${named(rowExpertise(m)).join(", ")}`);
       const style = m.styleSlots
         .map((_, i) => m.row.style[i])
         .filter((id): id is number => typeof id === "number")
@@ -3758,12 +3777,12 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         )}
         {expertiseSlots > 0 && (
           <section>
-            <PickHead label="Экспертность" picked={chosenExpertise.length} total={expertiseSlots} hint="Удвоенный бонус мастерства к навыку." />
-            <PickList
-              rows={skills.rows.map((r) => ({ key: r.original, title: skills.nameOf(r.original), meta: skillMeta(r.original), picked: chosenExpertise.includes(r.original) }))}
-              full={chosenExpertise.length >= expertiseSlots}
+            <PickHead label="Экспертность" picked={validExpertise.length} total={expertiseSlots} hint="Удвоенный бонус мастерства к навыку, которым вы владеете." />
+            {expertiseOpts.length === 0 ? <span className="muted">Сначала выберите владения навыками выше.</span> : <PickList
+              rows={expertiseOpts.map((k) => ({ key: k, title: skills.nameOf(k), meta: skillMeta(k), picked: validExpertise.includes(k) }))}
+              full={validExpertise.length >= expertiseSlots}
               onToggle={(k) => toggleExpertise(k)}
-            />
+            />}
           </section>
         )}
         {extraModels.map(
@@ -3772,30 +3791,27 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
               <section key={`exp:${m.row.uid}`}>
                 <PickHead
                   label={`Экспертность (${m.opt?.name ?? "класс"})`}
-                  picked={m.row.expertise.length}
+                  picked={rowExpertise(m).length}
                   total={m.expertiseSlots}
-                  hint="Удвоенный бонус мастерства к навыку."
+                  hint="Удвоенный бонус мастерства к навыку, которым вы владеете."
                 />
-                <PickList
-                  rows={skills.rows.map((r) => ({
-                    key: r.original,
-                    title: skills.nameOf(r.original),
-                    meta: skillMeta(r.original),
-                    picked: m.row.expertise.includes(r.original),
+                {rowExpertiseOpts(m).length === 0 ? <span className="muted">Сначала выберите владения навыками выше.</span> : <PickList
+                  rows={rowExpertiseOpts(m).map((k) => ({
+                    key: k,
+                    title: skills.nameOf(k),
+                    meta: skillMeta(k),
+                    picked: rowExpertise(m).includes(k),
                     // Экспертность в одном навыке дважды не берётся.
-                    disabled: chosenExpertise.includes(r.original) || extraClasses.some((x) => x.uid !== m.row.uid && x.expertise.includes(r.original)),
+                    disabled: validExpertise.includes(k) || extraModels.some((x) => x.row.uid !== m.row.uid && rowExpertise(x).includes(k)),
                   }))}
-                  full={m.row.expertise.length >= m.expertiseSlots}
-                  onToggle={(k) =>
+                  full={rowExpertise(m).length >= m.expertiseSlots}
+                  onToggle={(k) => {
+                    const cur = rowExpertise(m);
                     patchExtra(m.row.uid, {
-                      expertise: m.row.expertise.includes(k)
-                        ? m.row.expertise.filter((s) => s !== k)
-                        : m.row.expertise.length < m.expertiseSlots
-                          ? [...m.row.expertise, k]
-                          : m.row.expertise,
-                    })
-                  }
-                />
+                      expertise: cur.includes(k) ? cur.filter((s) => s !== k) : cur.length < m.expertiseSlots ? [...cur, k] : cur,
+                    });
+                  }}
+                />}
               </section>
             )
         )}

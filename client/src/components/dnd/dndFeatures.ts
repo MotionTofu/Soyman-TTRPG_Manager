@@ -100,6 +100,9 @@ export interface ChoiceDef {
   category?: string;
   /** Для kind === "entry": имя группы механик ("Боевые приёмы"). */
   group?: string;
+  /** Для kind === "skill": из каких навыков выбирать («Учёный» волшебника).
+   *  Нет списка — любой навык, которым персонаж владеет. */
+  options?: string[];
   /** Сколько пиков даёт это определение. */
   count: number;
   /** Минимальный уровень: явный minLevel из данных или уровень умения.
@@ -129,6 +132,7 @@ function parseChoiceDef(raw: unknown, entry: CompendiumEntry): ChoiceDef | null 
     kind,
     category: typeof r.category === "string" && r.category.trim() ? r.category.trim() : undefined,
     group: typeof r.group === "string" && r.group.trim() ? r.group.trim() : undefined,
+    options: Array.isArray(r.options) ? r.options.filter((o): o is string => typeof o === "string" && o.trim() !== "") : undefined,
     count,
     minLevel: Number.isFinite(explicitMin) && explicitMin > 0 ? explicitMin : (entry.level ?? 1),
     sourceName: entry.name,
