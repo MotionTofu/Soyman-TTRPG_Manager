@@ -4403,11 +4403,6 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
             <div className="wizard-main">
               {mobilePreview && step !== "Обзор" ? <div className="wizard-back">{miniSheet()}</div> : renderStepLaid()}
             </div>
-            {step !== "Обзор" && (
-              <aside className="wizard-side" aria-label="Живой предпросмотр персонажа">
-                {miniSheet()}
-              </aside>
-            )}
           </div>
 
           {loadError && (
@@ -4431,6 +4426,13 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
           )}
         </div>
 
+        {/* Живой лист — правый блок во всю высоту окна (владелец, 2026-09-25);
+            на узком экране скрыт, там предпросмотр — кнопкой «глаз». */}
+        {step !== "Обзор" && (
+          <aside className="wizard-side" aria-label="Живой предпросмотр персонажа">
+            {miniSheet()}
+          </aside>
+        )}
         <footer className="wz-foot">
           {step !== "Обзор" && missingHere.length > 0 && <span className="wz-foot-hint">Чтобы идти дальше: {missingHere.join("; ")}.</span>}
           {step === "Обзор" && overviewProblems.length > 0 && (

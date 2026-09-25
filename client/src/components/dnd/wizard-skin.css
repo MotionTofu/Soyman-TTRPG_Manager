@@ -845,7 +845,8 @@
   }
   .wz {
     display: grid;
-    grid-template-columns: 240px minmax(0, 1fr);
+    /* Рейка | шаг | живой лист во всю высоту (на «Обзоре» его нет — auto). */
+    grid-template-columns: 240px minmax(0, 1fr) auto;
     grid-template-rows: auto minmax(0, 1fr) auto;
   }
   .wz .wz-top {
@@ -981,7 +982,7 @@
     display: flex;
     align-items: flex-end;
     gap: 22px;
-    padding: 26px 40px 0 60px;
+    padding: 26px 24px 0 60px;
   }
   .wz-stage-no {
     flex: none;
@@ -1010,27 +1011,23 @@
   .wz .wz-body {
     grid-column: 2;
     grid-row: 2 / -1;
-    padding: 22px 0 22px 60px;
+    padding: 22px 24px 22px 60px;
   }
   .wz .wz-foot {
-    --wz-foot-h: 52px;
+    padding-right: 24px;
     grid-column: 2;
     grid-row: 3;
     position: relative;
-    z-index: 2;
+    /* Под рваным краем рейки (у неё 2). */
+    z-index: 1;
     display: flex;
     align-items: center;
     gap: 18px;
-    min-height: var(--wz-foot-h);
+    min-height: 52px;
     box-sizing: border-box;
     padding: 7px 40px 7px 60px;
     /* Та же бумага, что у окна: тайл от угла экрана — шва нет. */
     background: var(--wz-paper) url("/ui/wizard/paper-tile.webp") 0 0 / 320px repeat fixed;
-  }
-  /* Есть предпросмотр — подвал кончается у его левой границы. */
-  .wz:has(.wizard-side) .wz-foot {
-    margin-right: 312px;
-    padding-right: 24px;
   }
   .wz .wizard-main {
     padding-bottom: 60px;
@@ -1053,17 +1050,21 @@
     padding: 0 30px;
   }
 
-  /* Живой лист — колонка справа во всю высоту тела. */
   .wz .wizard-split {
-    grid-template-columns: minmax(0, 1fr) 312px;
-    gap: 34px;
-    min-height: 100%;
+    display: block;
   }
+  /* Живой лист — колонка справа во всю высоту окна, со своей прокруткой. */
   .wz .wizard-side {
-    top: 0;
+    grid-column: 3;
+    grid-row: 1 / -1;
+    position: relative;
+    z-index: 2;
+    width: 312px;
+    box-sizing: border-box;
     max-height: none;
-    align-self: stretch;
-    margin: -22px 0;
+    min-height: 0;
+    overflow-y: auto;
+    margin: 0;
     padding: 24px 24px 22px;
     border-left: 2px solid transparent;
     border-image: none;
@@ -1117,8 +1118,15 @@
   }
   .wz-stage-slot {
     margin-left: auto;
-    width: 300px;
+    width: 340px;
     padding-bottom: 8px;
+  }
+  /* Поиск был незаметен (владелец, 2026-09-25): крупнее и с тенью. */
+  .wz .wz-stage-slot .wz-search {
+    min-height: 52px;
+    font-size: 18px;
+    background: #fbf9f3;
+    box-shadow: 4px 4px 0 rgba(23, 23, 23, 0.85);
   }
   .wz-stage-main {
     display: flex;
@@ -1287,7 +1295,7 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    width: 112px;
+    width: 140px;
     height: auto;
     padding: 0;
     border: 0;
@@ -1307,7 +1315,7 @@
   }
   .wz .wz-thumb .dc-img {
     width: 100%;
-    height: 168px;
+    height: 210px;
     object-fit: cover;
     display: block;
   }
@@ -1330,7 +1338,7 @@
   .wz-thumb-custom {
     display: grid;
     place-items: center;
-    height: 168px;
+    height: 210px;
     font-family: var(--font-ui);
     font-size: 22px;
   }
