@@ -489,6 +489,82 @@ export function CardScroll({
     );
   }
 
+  // Телефон: таблица — списком уровней (макет 2026-09-25): умения, счётчики
+  // класса метками, ячейки с подписью уровня; выросшее с прошлого уровня —
+  // кислотой.
+  function progList() {
+    if (!prog) return null;
+    const key = (role: string) => prog.columns.find((c) => c.role === role)?.key ?? "";
+    const pactLevel = key("pact_level");
+    const blank = (v: string | undefined) => v == null || v === "" || v === "—" || v === "-";
+    return (
+      <ol className="dc-plist">
+        {prog.rows.map((row, ri) => {
+          const prev = ri > 0 ? prog.rows[ri - 1] : null;
+          const grew = (k: string) => prev != null && prev[k] !== row[k];
+          const lvl = Number(row[key("level")]) || ri + 1;
+          const chips: ReactNode[] = [];
+          const slots: ReactNode[] = [];
+          for (const c of prog.columns) {
+            const v = row[c.key];
+            const role = c.role ?? "";
+            if (["level", "prof_bonus", "features", "pact_level"].includes(role) || blank(v)) continue;
+            const slot = /^slot(\d)$/.exec(role);
+            if (slot || role === "pact_slots") {
+              const circle = slot ? slot[1] : row[pactLevel];
+              const isNew = prev == null || grew(c.key) || (!slot && grew(pactLevel));
+              slots.push(
+                <span key={c.key} className={`dc-plist-slot${isNew ? " is-new" : ""}`}>
+                  <i>{circle} уровень</i>
+                  <b>{slot ? v : `×${v}`}</b>
+                </span>
+              );
+            } else {
+              chips.push(
+                <span key={c.key} className={`dc-plist-chip${grew(c.key) ? " is-new" : ""}`}>
+                  {role === "cantrips" ? "Заговоры" : role === "prepared" ? "Подготовлено" : c.label} <b>{v}</b>
+                </span>
+              );
+            }
+          }
+          const feats = row[key("features")];
+          return (
+            <li key={ri} className={currentLevel === lvl ? "is-current" : currentLevel != null && lvl > currentLevel ? "is-ahead" : ""}>
+              <div className="dc-plist-lvl">
+                {levels.includes(lvl) ? (
+                  <button
+                    type="button"
+                    className="dc-lvl"
+                    onClick={() => {
+                      setProgOpen(false);
+                      requestAnimationFrame(() => jump(lvl));
+                    }}
+                    title="К умениям уровня"
+                  >
+                    {lvl}
+                  </button>
+                ) : (
+                  <span>{lvl}</span>
+                )}
+                <small>БМ {row[key("prof_bonus")]}</small>
+              </div>
+              <div className="dc-plist-main">
+                <span className="dc-plist-feats">{blank(feats) ? "—" : featureCell(feats ?? "")}</span>
+                {chips.length > 0 && <span className="dc-plist-row">{chips}</span>}
+                {slots.length > 0 && (
+                  <span className="dc-plist-row">
+                    <span className="dc-plist-cap">{pactLevel ? "Договор" : "Ячейки"}</span>
+                    {slots}
+                  </span>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    );
+  }
+
   return (
     <div className="dc-scroll">
       <div className="dc-scroll-frame" aria-hidden="true" />
@@ -501,7 +577,7 @@ export function CardScroll({
             <MentionText text={entry.description} />
           </div>
         )}
-        {prog && !mobile && (
+        {prog && (
           <button type="button" className="dc-prog-open" onClick={() => setProgOpen(true)}>
             Открыть таблицу развития {entry.kind === "subclass" ? "подкласса" : "класса"}
           </button>
@@ -516,7 +592,23 @@ export function CardScroll({
             {progTable()}
           </Modal>
         )}
-        {prog && mobile && progTable()}
+        {prog &&
+          mobile &&
+          progOpen &&
+          createPortal(
+            <div className="dc-fullcard dc-prog-full" role="dialog" aria-modal="true" aria-label={`Таблица развития: ${entry.name}`}>
+              <span className="dc-prog-full-frame" aria-hidden="true" />
+              <div className="dc-prog-full-body">
+                <p className="dc-prog-full-cap">Таблица развития{currentLevel != null ? ` · сейчас ${currentLevel} уровень` : ""}</p>
+                <h3 className="dc-title">{entry.name}</h3>
+                {progList()}
+              </div>
+              <button type="button" className="dc-fullcard-back" onClick={() => setProgOpen(false)}>
+                Вернуться
+              </button>
+            </div>,
+            document.body
+          )}
         {levels.map((lvl) => (
           <section
             key={lvl}

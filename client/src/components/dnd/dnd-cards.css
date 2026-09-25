@@ -449,7 +449,7 @@
   cursor: pointer;
 }
 /* В таблице развития — без подложки общего стиля кнопок: только пунктир. */
-.dc-prog :is(.dc-ability, .dc-lvl) {
+:is(.dc-prog, .dc-plist) :is(.dc-ability, .dc-lvl) {
   background: none;
   border: 0;
   border-image: none;
@@ -475,6 +475,122 @@
   color: #2a2018;
   font-family: var(--font-body, Georgia, serif);
   font-size: 16px;
+}
+/* Телефон: таблица развития на весь экран — списком уровней. */
+.dc-prog-full-frame {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  border: 40px solid transparent;
+  border-image: url("/ui/sheet/card-border1.webp") 80 / 40px round;
+  pointer-events: none;
+}
+.dc-prog-full-body {
+  padding: 22px 22px calc(96px + env(safe-area-inset-bottom)) 26px;
+  font-family: var(--font-body, Georgia, serif);
+}
+.dc-prog-full-cap {
+  margin: 4px 0 2px;
+  text-align: center;
+  font-family: Oswald, var(--font-ui, sans-serif);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #4a4743;
+}
+.dc-prog-full .dc-title {
+  margin-bottom: 10px;
+}
+.dc-plist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.dc-plist > li {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 10px;
+  padding: 8px 8px 9px 6px;
+  border-bottom: 1px solid rgba(42, 32, 24, 0.22);
+}
+.dc-plist > li.is-ahead {
+  opacity: 0.55;
+}
+.dc-plist > li.is-current,
+.dc-plist-chip.is-new,
+.dc-plist-slot.is-new b {
+  background: #f3ff3a url("/ui/fantasy-punk/textures/acid-yellow.webp") center / 360px;
+}
+.dc-plist-lvl {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: Oswald, var(--font-ui, sans-serif);
+}
+.dc-plist-lvl > :first-child {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+}
+.dc-plist-lvl small {
+  font-size: 12px;
+  color: #4a4743;
+}
+.dc-plist-main {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.dc-plist-feats {
+  font-size: 15px;
+  line-height: 1.25;
+}
+.dc-plist-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.dc-plist-cap {
+  margin-right: 2px;
+  font-family: Oswald, var(--font-ui, sans-serif);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #4a4743;
+}
+.dc-plist-chip {
+  display: inline-flex;
+  gap: 5px;
+  align-items: baseline;
+  padding: 2px 7px;
+  font-size: 13px;
+  white-space: nowrap;
+  background: rgba(23, 23, 23, 0.07);
+}
+.dc-plist-chip b,
+.dc-plist-slot {
+  font-family: Oswald, var(--font-ui, sans-serif);
+  font-variant-numeric: tabular-nums;
+}
+.dc-plist-slot {
+  display: inline-flex;
+  align-items: stretch;
+  line-height: 1;
+  white-space: nowrap;
+}
+.dc-plist-slot i {
+  padding: 4px 5px 3px;
+  font-style: normal;
+  font-size: 11px;
+  background: #171717;
+  color: #efebe1;
+}
+.dc-plist-slot b {
+  padding: 3px 7px;
+  font-size: 14px;
+  background: rgba(23, 23, 23, 0.07);
 }
 .dc-prog-modal .dc-prog {
   font-size: 15px;
