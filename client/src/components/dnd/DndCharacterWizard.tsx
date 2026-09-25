@@ -4442,6 +4442,8 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
           <button type="button" onClick={back} disabled={saving || stepPos === 0}>
             Назад
           </button>
+          {/* Сюда сцена карт кладёт «К плитке». */}
+          <span className="wz-foot-slot" />
           <span className="wz-shadow">
             {step === "Обзор" ? (
               <button type="button" className="primary" onClick={finish} disabled={createBlocked}>

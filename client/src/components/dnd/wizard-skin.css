@@ -57,7 +57,7 @@
    было ровной рамкой — кнопки, поля, плитки. */
 :is(.wz, .wz-sheet, .wz-lvl)
   :is(
-    button:not(.wz-row-main, .wz-row-check, .wz-slide-face, .wz-steps-btn, .wz-staff, .wz-slide-flip, .wz-set-main, .wz-abil, .primary),
+    button:not(.wz-row-main, .wz-row-check, .wz-slide-face, .wz-steps-btn, .wz-staff, .wz-slide-flip, .wz-set-main, .wz-abil, .wz-tile-card, .wz-thumb, .primary),
     input:not([type="checkbox"], [type="radio"], [type="file"]),
     select,
     textarea,
@@ -70,7 +70,7 @@
   background-clip: padding-box;
   border-radius: 0;
 }
-:is(.wz, .wz-sheet, .wz-lvl) :is(button, input, select, textarea):not(.primary, .wz-row-main, .wz-row-check, .wz-slide-face, .wz-steps-btn, .wz-staff, .wz-slide-flip, .wz-set-main, .wz-abil, :where(.wz-overview-card *)) {
+:is(.wz, .wz-sheet, .wz-lvl) :is(button, input, select, textarea):not(.primary, .wz-row-main, .wz-row-check, .wz-slide-face, .wz-steps-btn, .wz-staff, .wz-slide-flip, .wz-set-main, .wz-abil, .wz-tile-card, .wz-thumb, :where(.wz-overview-card *)) {
   background-color: #efebe1;
   background-image: url("/ui/wizard/paper-panel.webp");
   background-size: 420px;
@@ -1042,9 +1042,12 @@
   .wz .wz-foot button {
     min-height: 36px;
   }
-  .wz .wz-foot .wz-shadow {
+  .wz .wz-foot-slot {
     order: 3;
     margin-left: auto;
+  }
+  .wz .wz-foot .wz-shadow {
+    order: 4;
   }
   .wz .wz-foot .wz-shadow button {
     padding: 0 30px;
@@ -1330,7 +1333,8 @@
     content: "";
     position: absolute;
     right: -10px;
-    top: -12px;
+    /* У угла картинки, а не поверх имени над ней. */
+    top: 6px;
     width: 24px;
     height: 20px;
     background: url("/ui/wizard/crown.webp") center / contain no-repeat;
@@ -1341,6 +1345,65 @@
     height: 210px;
     font-family: var(--font-ui);
     font-size: 22px;
+  }
+
+  /* Плитка карт до выбора: карта постоянного размера, в ряд — сколько
+     влезет. */
+  .wz-tile {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, 180px);
+    gap: 26px 20px;
+    padding: 6px 0 12px;
+  }
+  .wz .wz-tile-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    border-image: none;
+    background: none;
+    min-height: 0;
+    text-align: center;
+    white-space: normal;
+  }
+  .wz .wz-tile-card .dc-img,
+  .wz-tile-custom {
+    display: block;
+    width: 180px;
+    height: 270px;
+    object-fit: cover;
+    filter: drop-shadow(3px 3px 0 #171717);
+    transition: transform 0.12s ease;
+  }
+  .wz .wz-tile-card:hover .dc-img,
+  .wz .wz-tile-card:focus-visible .dc-img {
+    transform: translateY(-4px) rotate(-1deg);
+  }
+  .wz-tile-custom {
+    display: grid;
+    place-items: center;
+    background: var(--wz-panel);
+    font-family: var(--font-ui);
+    font-size: 40px;
+  }
+  .wz-tile-name {
+    font-family: var(--font-ui);
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.15;
+    text-transform: uppercase;
+    color: var(--wz-ink);
+  }
+  .wz .wz-tile-card.is-selected::after {
+    content: "";
+    position: absolute;
+    right: -14px;
+    top: -16px;
+    width: 52px;
+    height: 42px;
+    background: url("/ui/wizard/crown.webp") center / contain no-repeat;
   }
 
   /* Шаги-списки: список слева, рамка справа. */

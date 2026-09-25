@@ -685,6 +685,11 @@ export function CardStage({
   const [activeKey, setActiveKey] = useState(openGroup);
   const [curBy, setCurBy] = useState<Record<string, number>>({});
   const [q, setQ] = useState("");
+  // Плитка — пока в первой полосе ничего не выбрано; щелчок по карте ведёт
+  // на сцену, «К плитке» в подвале — обратно (гриллинг 2026-09-25).
+  const [tile, setTile] = useState(() => groups[0]?.selectedId == null);
+  const [footSlot, setFootSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => setFootSlot(document.querySelector<HTMLElement>(".wz-foot-slot")), []);
   // Поиск — в шапке шага справа (как на макете): по высоте сцена с двумя
   // полосами иначе не влезает в окно.
   const [slot, setSlot] = useState<HTMLElement | null>(null);
@@ -717,12 +722,52 @@ export function CardStage({
   const current = list[cur];
   const chosen = current != null && current.id === group.selectedId;
   const note = current ? group.noteFor?.(current) : undefined;
+  const search = searchPlaceholder && slot && createPortal(<SearchField value={q} onChange={setQ} placeholder={searchPlaceholder} />, slot);
+
+  if (tile) {
+    const g = groups[0];
+    const gl = filtered(g);
+    return (
+      <div className="wz-stage">
+        {search}
+        {gl.length === 0 ? (
+          <span className="muted">Ничего не найдено.</span>
+        ) : (
+          <div className="wz-tile" role="group" aria-label={g.label || "Варианты"}>
+            {gl.map((o, i) => (
+              <button
+                key={o.id}
+                type="button"
+                className={`wz-tile-card${o.id === g.selectedId ? " is-selected" : ""}`}
+                onClick={() => {
+                  setCur(g, i);
+                  setTile(false);
+                }}
+              >
+                {o.id === CUSTOM_CARD_ID ? (
+                  <span className="wz-tile-custom">+</span>
+                ) : (
+                  <CardPicture id={o.id} name={o.name} card={o.card} thumb={320} />
+                )}
+                <span className="wz-tile-name">{o.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="wz-stage">
-      {searchPlaceholder &&
-        slot &&
-        createPortal(<SearchField value={q} onChange={setQ} placeholder={searchPlaceholder} />, slot)}
+      {search}
+      {footSlot &&
+        createPortal(
+          <button type="button" className="wz-to-tile" onClick={() => setTile(true)}>
+            К плитке
+          </button>,
+          footSlot
+        )}
       {!current ? (
         <span className="muted">Ничего не найдено.</span>
       ) : (
@@ -817,7 +862,7 @@ export function CardStage({
                     {o.id === CUSTOM_CARD_ID ? (
                       <span className="wz-thumb-custom">+</span>
                     ) : (
-                      <CardPicture id={o.id} name={o.name} card={o.card} thumb={160} />
+                      <CardPicture id={o.id} name={o.name} card={o.card} thumb={320} />
                     )}
                   </button>
                 ))}
