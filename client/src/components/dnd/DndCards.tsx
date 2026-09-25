@@ -3,15 +3,12 @@ import { createPortal } from "react-dom";
 import type { CompendiumEntry } from "../../types";
 import { readResource } from "../../data/imperative";
 import { api } from "../../api/client";
-import { useDndPrefs } from "../../hooks/useDndPrefs";
-import type { DndCardBack } from "../../dndPrefs";
 import { MentionText } from "../mentions/MentionText";
 import { openMentionPreview } from "../mentions/mentionPreviewStore";
 import { ContextMenu } from "../ContextMenu";
 import { Modal } from "../Modal";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { loadDndClassFeatures, loadDndSpeciesFeatures } from "./dndCompendium";
-import backGood from "../../assets/cards/back-good.webp";
 import backEvil from "../../assets/cards/back-evil.webp";
 import "./dnd-cards.css";
 
@@ -21,18 +18,9 @@ import "./dnd-cards.css";
  * иначе три места разошлись бы в том, что на рубашке написано.
  *
  * Карта — `avatar_image_url` записи (WebP 1024×1536). Нет карты — рисуется
- * рубашка с набранным именем. В основном SoyMan это личная настройка;
- * OneShot использует только злую рубашку.
+ * рубашка с набранным именем. Рубашка одна — злая: выбор добрая/злая убран
+ * вместе с рамками-рубашками (владелец, 2026-09-25).
  */
-
-const BACKS: Record<DndCardBack, string> = { good: backGood, evil: backEvil };
-
-// OneShot has a single visual identity. The main SoyMan app keeps its
-// personal card-back preference; only the OneShot host pins the evil back.
-function useCardBack(): DndCardBack {
-  const { cardBack } = useDndPrefs();
-  return document.documentElement.dataset.app === "oneshot" ? "evil" : cardBack;
-}
 
 /** Превью карты: сервер ужимает файл по `?w=` (160/320), подпись ссылки
  *  остаётся в силе — параметр дописывается к ней. */
@@ -51,7 +39,6 @@ export interface CardOption {
 }
 
 export function CardPicture({ id, name, card, thumb }: { id: number; name: string; card: string | null; thumb?: 160 | 320 }) {
-  const cardBack = useCardBack();
   // Ссылка на файл подписана на 60 секунд, а списки карт живут дольше:
   // плитка, впервые нарисованная позже (вкладка подклассов, лента), получала
   // бы протухшую подпись. Отказ картинки — один перезапрос записи мимо кэша
@@ -83,7 +70,7 @@ export function CardPicture({ id, name, card, thumb }: { id: number; name: strin
     );
   }
   return (
-    <span className="dc-img dc-img--blank" style={{ backgroundImage: `url(${BACKS[cardBack]})` }}>
+    <span className="dc-img dc-img--blank" style={{ backgroundImage: `url(${backEvil})` }}>
       <span className="dc-blank-name">{name}</span>
     </span>
   );
@@ -429,7 +416,6 @@ export function CardScroll({
   /** Префикс якорей уровней — две рубашки на странице не должны делить id. */
   anchorPrefix: string;
 }) {
-  const cardBack = useCardBack();
   const mobile = useIsMobile();
   const [progOpen, setProgOpen] = useState(false);
   const prog = readProgression(entry);
@@ -504,7 +490,7 @@ export function CardScroll({
   }
 
   return (
-    <div className={`dc-scroll dc-scroll--${cardBack}`}>
+    <div className="dc-scroll">
       <div className="dc-scroll-frame" aria-hidden="true" />
       <div className="dc-scroll-body">
         {strip}

@@ -6426,23 +6426,6 @@ details.card[open] summary {
   padding: 0;
   margin: 0;
 }
-.settings-dnd-card-legend {
-  margin-block: var(--sp-4) var(--sp-2);
-  font-family: var(--font-ui);
-  font-size: var(--fs-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-.settings-dnd-card-options {
-  flex-wrap: wrap;
-  gap: var(--sp-5);
-}
-.settings-dnd-card-option {
-  gap: var(--sp-3);
-}
-.settings-dnd-card-note {
-  max-width: 62ch;
-}
 /* Досье визарда: четыре поля парами, заметки — во всю ширину; подпись над
    полем, поля одной высоты (владелец, 2026-09-18). */
 .wizard-dossier-grid {

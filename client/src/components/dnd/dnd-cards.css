@@ -327,10 +327,10 @@
 }
 
 /* ——— свиток ———
-   Рамка — картинка рубашки через border-image с повтором средней части
-   (решение 2026-09-18: растяжение отвергнуто). Все размеры — в долях
-   ширины свитка (cqi от 1024 px исходника), чтобы рамка масштабировалась
-   вместе с колонкой. Текст идёт поверх верха и низа рамки. */
+   Рамка — Card_Border1 владельца через border-image (2026-09-25): нарезка
+   80 px из 683, углы целиком, стороны повтором, растяжение отвергнуто.
+   Размеры — в долях ширины свитка (cqi): рамка растёт вместе с колонкой.
+   Полоса — 0.7…4.3cqi от края, чёрная линия — до 5.3cqi. */
 .dc-scroll {
   position: relative;
   container-type: inline-size;
@@ -341,54 +341,24 @@
   position: absolute;
   inset: 0;
   z-index: -1;
-  border-style: solid;
-  border-image-repeat: round;
-}
-.dc-scroll--good .dc-scroll-frame {
-  border-image-source: url("../../assets/cards/back-good.webp");
-  border-image-slice: 330 140 330 140 fill;
-  border-width: 32.227cqi 13.672cqi;
-}
-/* У злой повторяется полоса от полумесяца над черепом до крючков над
-   шпилями низа (разметка владельца 2026-09-24): она стыкуется сама с собой,
-   а глаз сверху и шпили снизу не размножаются. */
-.dc-scroll--evil .dc-scroll-frame {
-  border-image-source: url("../../assets/cards/back-evil.webp");
-  border-image-slice: 370 75 471 75 fill;
-  border-width: 36.133cqi 7.324cqi 45.996cqi;
+  border: 12cqi solid transparent;
+  border-image: url("/ui/sheet/card-border1.webp") 80 / 12cqi round;
 }
 .dc-scroll-body {
   box-sizing: border-box;
-  min-height: 150cqi;
+  padding: 10cqi 9cqi 11cqi;
   font-family: var(--font-body, Georgia, serif);
   font-size: clamp(13px, 3.6cqi, 16px);
   line-height: 1.5;
 }
-.dc-scroll--good .dc-scroll-body {
-  padding: 35.156cqi 17.5cqi 29.297cqi;
-}
-.dc-scroll--evil .dc-scroll-body {
-  padding: 26cqi 9.5cqi 29.297cqi;
-}
-/* Рамка владельца Card_Border1 — везде вместо рубашек (2026-09-25): нарезка
-   80 px из 683, углы целиком, стороны повтором; середина — бумага. Полоса
-   рамки — 0.7…4.3cqi от края, чёрная линия — до 5.3cqi. */
-.dc-scroll:is(.dc-scroll--good, .dc-scroll--evil) .dc-scroll-frame {
-  border-image: url("/ui/sheet/card-border1.webp") 80 / 12cqi round;
-  border-width: 12cqi;
-}
 /* Бумага — под рамкой от середины её полосы: снаружи рваного края не видна,
    под скруглённые углы чёрной линии заходит. */
-.dc-scroll:is(.dc-scroll--good, .dc-scroll--evil)::before {
+.dc-scroll::before {
   content: "";
   position: absolute;
   inset: 3cqi;
   z-index: -2;
   background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
-}
-.dc-scroll:is(.dc-scroll--good, .dc-scroll--evil) .dc-scroll-body {
-  min-height: 0;
-  padding: 10cqi 9cqi 11cqi;
 }
 .dc-scroll a,
 .dc-scroll .muted {

@@ -27,9 +27,9 @@ import { loadBagSize, saveBagSize, MIN_BAG_SIZE, MAX_BAG_SIZE } from "../bag";
 import { loadUseEpithets, saveUseEpithets } from "../initiativeTrackerPrefs";
 import { loadPultFinishAction, savePultFinishAction, type PultFinishAction } from "../pultPrefs";
 import {
-  DND_ABILITY_PRIMARY_OPTIONS, DND_CARD_BACK_OPTIONS, DND_DISTANCE_UNIT_OPTIONS, DND_SKILL_SORT_OPTIONS, DND_WEIGHT_UNIT_OPTIONS,
+  DND_ABILITY_PRIMARY_OPTIONS, DND_DISTANCE_UNIT_OPTIONS, DND_SKILL_SORT_OPTIONS, DND_WEIGHT_UNIT_OPTIONS,
   loadDndPrefs, saveDndPrefs,
-  type DndAbilityPrimary, type DndCardBack, type DndDistanceUnit, type DndSkillSortMode, type DndWeightUnit,
+  type DndAbilityPrimary, type DndDistanceUnit, type DndSkillSortMode, type DndWeightUnit,
 } from "../dndPrefs";
 import { CURSOR_SETS, applyCursorSet, loadCursorSet, type CursorSetId, type CursorSetInfo } from "../cursorSets";
 
@@ -145,11 +145,6 @@ export function StoragesSettingsPage() {
   }
   function changeDndWeightUnit(unit: DndWeightUnit) {
     const next = { ...dndPrefs, weightUnit: unit };
-    setDndPrefs(next);
-    saveDndPrefs(next);
-  }
-  function changeDndCardBack(back: DndCardBack) {
-    const next = { ...dndPrefs, cardBack: back };
     setDndPrefs(next);
     saveDndPrefs(next);
   }
@@ -884,18 +879,6 @@ export function StoragesSettingsPage() {
               </div>
               </fieldset>
               <span className="muted" style={{ maxWidth: "62ch" }}>Только показ: вес в листах хранится в фунтах, грузоподъёмность считается СИЛ × 15 фунтов.</span>
-              <fieldset className="wizard-fieldset">
-              <legend className="muted settings-dnd-card-legend">Рубашка карт классов и видов</legend>
-              <div className="row settings-dnd-card-options">
-                {DND_CARD_BACK_OPTIONS.map((opt) => (
-                  <label key={opt.key} className="row settings-dnd-card-option">
-                    <input type="radio" name="dnd-card-back" checked={dndPrefs.cardBack === opt.key} onChange={() => changeDndCardBack(opt.key)} />
-                    {opt.label}
-                  </label>
-                ))}
-              </div>
-              </fieldset>
-              <span className="muted settings-dnd-card-note">Только в этом браузере: у каждого игрока своя.</span>
             </div>
           </details>
 
