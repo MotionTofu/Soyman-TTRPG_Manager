@@ -771,7 +771,7 @@ export function CardStage({
             ) : (
               <span className="wz-shadow">
                 <button type="button" className="primary" onClick={() => group.onPick(current.id)}>
-                  Выбрать: {current.name}
+                  Выбрать
                 </button>
               </span>
             )}
@@ -812,6 +812,8 @@ export function CardStage({
                     aria-pressed={on && i === gc}
                     onClick={() => setCur(g, i)}
                   >
+                    {/* Имя — над картой (владелец, 2026-09-25). */}
+                    <span className="wz-thumb-name">{o.name}</span>
                     {o.id === CUSTOM_CARD_ID ? (
                       <span className="wz-thumb-custom">+</span>
                     ) : (
