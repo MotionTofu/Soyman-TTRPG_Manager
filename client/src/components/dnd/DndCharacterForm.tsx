@@ -112,8 +112,6 @@ import { useDndRuntime } from './DndRuntime';
 import { DndCardBack } from "./DndCardBack";
 import { DndLevelUpWizard } from "./DndLevelUpWizard";
 import type { LevelUpDraftHost } from "./dndLevelUpDraft";
-import { PosterButtons } from "./PosterButtons";
-import { snapshotNodeBlob } from "./cardSnapshot";
 import { DndTransferBox } from "./DndTransferBox";
 import {
   fetchCharacterInbox,
@@ -10344,8 +10342,6 @@ export function DndCharacterView({
   // пустотой: угол одинаково доступен, содержимое только владельцу.
   // Загрузка ленивая: угол-индикатор нужен только на первой карте.
   const [cardFlipped, setCardFlipped] = useState(false);
-  // Узел лицевой для постера: «Скачать постер» снимает лицевую как есть.
-  const cardFaceRef = useRef<HTMLDivElement | null>(null);
   // Оракул класса: счётчик переворотов — по нему рубашка тянет новую цитату.
   // Десктоп-панель («Карта» без переворота) счётчик не трогает: цитата там
   // стоит, пока карту не перевернут на телефоне/мобильной вёрстке.
@@ -10624,25 +10620,6 @@ export function DndCharacterView({
   // «Карте»), но никогда разом: условия исключают друг друга. Одна функция,
   // чтобы две копии не разъехались.
   function renderCardBack(edit?: ReactNode) {
-    // Постер — снимок лицевой стороны как есть. Переворот на телефоне
-    // лицевую размонтирует — тогда на время снимка доворачиваем карту
-    // обратно: два кадра на отрисовку, снимок, возврат на оборот.
-    async function snapshotFaceBlob(): Promise<Blob> {
-      const restored = cardFaceRef.current == null && cardFlipped;
-      if (restored) {
-        setCardFlipped(false);
-        await new Promise<void>((resolve) => {
-          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-        });
-      }
-      try {
-        const node = cardFaceRef.current;
-        if (!node) throw new Error("Лицевая сторона недоступна");
-        return await snapshotNodeBlob(node);
-      } finally {
-        if (restored) setCardFlipped(true);
-      }
-    }
     return (
       <DndCardBack
         characterName={value.characterName || "Без имени"}
@@ -10727,16 +10704,6 @@ export function DndCharacterView({
             </div>
           </section>
         )}
-        <section className="dnd-back-plate" aria-label="Постер">
-          <h4 className="dnd-back-plate-title">Постер</h4>
-          <PosterButtons
-            short
-            getBlob={snapshotFaceBlob}
-            fileBase={value.characterName.trim() || "personazh"}
-            shareTitle={value.characterName.trim() || "Без имени"}
-          />
-          <span className="dnd-back-plate-note">Снимок лицевой стороны карты</span>
-        </section>
         {edit}
       </DndCardBack>
     );
@@ -11934,7 +11901,6 @@ export function DndCharacterView({
               одним числом. */}
           {(tab === "Карта" || showDesktopFace) && !cardFlipped && (
             <div
-              ref={cardFaceRef}
               className="stack dnd-card-face"
               style={{ borderLeftColor: cardColor, borderRightColor: cardColor, borderBottomColor: cardColor }}
             >

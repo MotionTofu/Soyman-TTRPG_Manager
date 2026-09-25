@@ -19,8 +19,6 @@ import {
   type StartingSet,
 } from "./dndEquipment";
 import { isMasterableWeapon, weaponMasteryName } from "./StartingEquipmentPicker";
-import { PosterButtons } from "./PosterButtons";
-import { renderPosterBlob, type PosterData } from "./CharacterPoster";
 import { WizardMiniSheet, type MiniSheetProblem } from "./WizardMiniSheet";
 import { type CardOption } from "./DndCards";
 import { CardRibbon, CardStage, CUSTOM_CARD_ID, EntryPlate, EntrySheet, PickHead, PickList, SearchField, Sheet, SetDuel, StepStaff, useIsDesktop } from "./wizardUi";
@@ -2938,24 +2936,6 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   const [armedAbility, setArmedAbility] = useState<keyof DndAbilityScores | null>(null);
   const [weaponQ, setWeaponQ] = useState("");
 
-  // Данные постера собираются в момент нажатия (кнопки зовут колбэк),
-  // поэтому черновик и правки между рендерами не протухают.
-  function posterData(): PosterData {
-    const speciesName =
-      speciesOptions.find((x) => x.id === speciesId)?.name ?? speciesCustom?.trim() ?? "";
-    return {
-      name: characterName.trim() || "Без имени",
-      subtitle: [classLine, speciesName]
-        .filter(Boolean)
-        .join(" · "),
-      hp: previewHp != null ? String(previewHp) : "—",
-      ac: String(10 + previewDexMod),
-      pb: computeProficiencyBonus(previewClasses),
-      extra: previewSpeed ? { label: "СКОР", value: previewSpeed } : undefined,
-      abilities: ABILITY_LABELS.map(({ key, label }) => ({ label, value: awardedAbilities[key] })),
-      portraitSrc: portraitPreview,
-    };
-  }
   // Живой мини-чарник одним источником: Обзор, сплит D1 и оборот D2
   // рисуют одно и то же, двух расходящихся превью нет.
   function miniSheet(withoutCore = false) {
@@ -4282,11 +4262,6 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
           </div>
         ))}
         {body}
-        <PosterButtons
-          getBlob={() => renderPosterBlob(posterData())}
-          fileBase={characterName.trim() || "personazh"}
-          shareTitle={characterName.trim() || "Без имени"}
-        />
       </div>
     );
   }
