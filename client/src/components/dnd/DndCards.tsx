@@ -531,9 +531,9 @@ export function useCardEntry(systemId: number | null, entryId: number | null) {
 }
 
 /**
- * Лицо и рубашка. ПК — рядом, лицо липнет к верху. Телефон (решение 5,
- * вариант «Б») — одна сторона, переворот касанием по лицу; на рубашке
- * липкая полоска: имя, «к оглавлению», «↺ лицо».
+ * Лицо и рубашка. ПК — рядом, лицо липнет к верху. Телефон — касание по лицу
+ * открывает текст на весь экран, внизу поверх — плашка «Вернуться»
+ * (владелец, 2026-09-25; раньше рубашка открывалась внутри окна).
  */
 export function CardSpread({
   systemId,
@@ -567,12 +567,12 @@ export function CardSpread({
         type="button"
         className="dc-face-btn"
         onClick={() => mobile && setFlipped(true)}
-        aria-label={mobile ? `${entry.name}: перевернуть` : entry.name}
+        aria-label={mobile ? `${entry.name}: описание` : entry.name}
         tabIndex={mobile ? 0 : -1}
       >
         <CardPicture id={entry.id} name={entry.name} card={entry.avatar_image_url ?? null} />
       </button>
-      {mobile && <span className="dc-flip-hint muted">Коснись карты — перевернуть</span>}
+      {mobile && <span className="dc-flip-hint muted">Коснись карты — описание</span>}
       {actions && <div className="dc-face-actions">{actions}</div>}
     </div>
   );
@@ -594,28 +594,24 @@ export function CardSpread({
       </div>
     );
   }
+  // Портал в body: окно-хозяин (Modal) может держать transform, и fixed
+  // внутри него сжался бы до окна, а не до экрана.
   return (
     <div ref={rootRef} className="dc-spread is-mobile">
-      {flipped ? (
-        <>
-          <div className="dc-mobile-bar">
-            <strong>{entry.name}</strong>
-            <button
-              type="button"
-              onClick={() => rootRef.current?.querySelector(".dc-prog-wrap, .dc-summary")?.scrollIntoView({ block: "start" })}
-            >
-              к оглавлению
+      {face}
+      {flipped &&
+        createPortal(
+          <div className="dc-fullcard" role="dialog" aria-modal="true" aria-label={entry.name}>
+            <div className="dc-fullcard-body">
+              {scroll}
+              {actions && <div className="dc-face-actions">{actions}</div>}
+            </div>
+            <button type="button" className="dc-fullcard-back" onClick={() => setFlipped(false)}>
+              Вернуться
             </button>
-            <button type="button" onClick={() => setFlipped(false)}>
-              ↺ лицо
-            </button>
-          </div>
-          {scroll}
-          {actions && <div className="dc-face-actions">{actions}</div>}
-        </>
-      ) : (
-        face
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

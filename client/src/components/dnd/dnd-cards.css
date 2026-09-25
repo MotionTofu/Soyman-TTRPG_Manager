@@ -291,23 +291,36 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.dc-mobile-bar {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  display: flex;
-  gap: var(--sp-2, 8px);
-  align-items: center;
-  padding: var(--sp-3) var(--sp-4);
-  background: var(--paper);
-  border-bottom: 1px solid var(--line);
+/* Телефон: текст карты на весь экран, «Вернуться» — плашкой поверх низа. */
+.dc-fullcard {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  color: #171717;
 }
-.dc-mobile-bar strong {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.dc-fullcard-body {
+  padding: 12px 12px calc(96px + env(safe-area-inset-bottom));
+}
+.dc-fullcard-back {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 2001;
+  min-height: 52px;
+  border: 0;
+  background: #f3ff3a url("/ui/fantasy-punk/textures/acid-yellow.webp") center / 360px;
+  color: #171717;
+  font-family: Oswald, var(--font-ui, sans-serif);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow: 4px 4px 0 rgba(23, 23, 23, 0.7);
+  cursor: pointer;
 }
 
 /* ——— свиток ———
