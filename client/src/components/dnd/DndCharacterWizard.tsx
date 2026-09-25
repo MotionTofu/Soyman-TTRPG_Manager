@@ -65,6 +65,7 @@ import {
   loadDndClassHierarchy,
   loadDndEquipmentEntries,
   loadDndMechanicsGroupEntries,
+  loadDndSpeciesChildren,
   loadDndSpeciesFeatures,
   loadDndSpeciesOptions,
   loadDndSpellIndex,
@@ -92,6 +93,9 @@ const STEPS = [
   "Класс",
   "Умения класса",
   "Вид",
+  // Драконий предок Драконорождённого (гриллинг 2026-09-25): свой шаг с
+  // картами, только если у вида есть записи kind "lineage".
+  "Предок",
   "Предыстория",
   "Черта",
   "Характеристики",
@@ -128,6 +132,8 @@ interface WizardDraftV1 {
   speciesId?: unknown;
   backgroundId?: unknown;
   speciesCustom?: unknown;
+  lineageId?: unknown;
+  speciesResist?: unknown;
   backgroundCustom?: unknown;
   featId?: unknown;
   featTouched?: unknown;
@@ -376,6 +382,18 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   );
 
   const [speciesEntry, setSpeciesEntry] = useState<CompendiumEntry | null>(null);
+  // Дети вида: умения (сопротивление на выбор у Возрождённого) и предки.
+  const [speciesChildren, setSpeciesChildren] = useState<CompendiumEntry[]>([]);
+  const [lineageId, setLineageId] = useState<number | null>(() => numOrNull(savedDraft?.lineageId));
+  const [speciesResist, setSpeciesResist] = useState<string[]>(() =>
+    Array.isArray(savedDraft?.speciesResist) ? savedDraft.speciesResist.filter((x): x is string => typeof x === "string") : []
+  );
+  const lineageOptions: CardOption[] = speciesChildren
+    .filter((e) => e.kind === "lineage")
+    .sort((a, b) => a.position - b.position)
+    .map((e) => ({ id: e.id, name: e.name, card: e.avatar_image_url ?? null }));
+  const resistFeature = speciesChildren.find((e) => e.kind === "feature" && resistanceChoice(e));
+  const speciesResistChoice = resistFeature ? resistanceChoice(resistFeature) : null;
 
   const [backgroundOptions, setBackgroundOptions] = useState<DndBackgroundOption[]>([]);
   const [backgroundId, setBackgroundId] = useState<number | null>(() => numOrNull(savedDraft?.backgroundId));
@@ -695,6 +713,8 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       level,
       speciesId,
       speciesCustom,
+      lineageId,
+      speciesResist,
       backgroundId,
       backgroundCustom,
       alignment,
@@ -741,6 +761,8 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     level,
     speciesId,
     speciesCustom,
+    lineageId,
+    speciesResist,
     backgroundId,
     backgroundCustom,
     alignment,
@@ -884,6 +906,19 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       });
     return () => ac.abort();
   }, [speciesId]);
+  useEffect(() => {
+    setSpeciesChildren([]);
+    if (!speciesId || !systemId) return;
+    let alive = true;
+    loadDndSpeciesChildren(systemId, speciesId)
+      .then((list) => {
+        if (alive) setSpeciesChildren(list);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [speciesId, systemId]);
 
   // Standard array/roll assignment is a permutation of a fixed pool — picking
   // a value already used elsewhere swaps the two abilities instead of
@@ -1004,6 +1039,8 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     }
     setChosenSkills((prev) => prev.filter((t) => !t.startsWith("species:")));
     setChosenSpells((prev) => prev.filter((t) => !t.startsWith("spell:species:")));
+    setLineageId(null);
+    setSpeciesResist([]);
   }
   function pickSpeciesFeat(id: number | null) {
     setSpeciesFeatId(id);
@@ -2148,7 +2185,19 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       if (speciesId) {
         try {
           const speciesFeatureEntries = await loadDndSpeciesFeatures(sid, speciesId);
-          character.speciesFeatures = featuresFromEntries(speciesFeatureEntries, speciesId, totalLevel);
+          character.speciesFeatures = featuresFromEntries(speciesFeatureEntries, speciesId, totalLevel).map((f) =>
+            // Сопротивление на выбор (Возрождённый) — выбор в самой строке, как у черт.
+            resistFeature && f.entryId === resistFeature.id && speciesResist.length > 0
+              ? { ...f, choices: { resistances: speciesResist } }
+              : f
+          );
+          // Предок — строкой умений вида: его сопротивление считается само,
+          // и видно, откуда оно.
+          const lineage = speciesChildren.find((e) => e.id === lineageId && e.kind === "lineage");
+          if (lineage) {
+            const [row] = featuresFromEntries([lineage], speciesId);
+            character.speciesFeatures = [...character.speciesFeatures, { ...row, name: `Предок: ${lineage.name}` }];
+          }
         } catch {
           // ignore — editable later
         }
@@ -2752,6 +2801,10 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       case "Вид":
         if (!speciesId && speciesCustom === null) out.push("выбери вид");
         else if (speciesCustom !== null && !speciesCustom.trim()) out.push("впиши название своего вида");
+        if (speciesId && speciesResistChoice && speciesResist.length < speciesResistChoice.count) out.push("выбери сопротивление");
+        break;
+      case "Предок":
+        if (lineageOptions.length > 0 && !lineageOptions.some((o) => o.id === lineageId)) out.push("выбери предка");
         break;
       case "Предыстория":
         if (!backgroundId && backgroundCustom === null) out.push("выбери предысторию");
@@ -2797,6 +2850,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     if (st === "Умения класса") return classChoiceCount > 0;
     if (st === "Черта") return featNeeded || speciesFeatNeeded;
     if (st === "Заклинания") return spellGroups.length > 0;
+    if (st === "Предок") return lineageOptions.length > 0;
     return true;
   }
   const visibleSteps = STEPS.filter((st) => stepVisible(st) || st === step);
@@ -3381,12 +3435,35 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     return (
       <div className="wz-step">
         <CardRibbon
+          key="species"
           systemId={systemId}
           options={options}
           selectedId={speciesCustom !== null ? CUSTOM_CARD_ID : speciesId}
           onPick={(id) => (id === CUSTOM_CARD_ID ? pickSpecies("custom") : id !== speciesId && pickSpecies(id))}
           searchPlaceholder="Поиск вида"
         />
+        {speciesResistChoice && (
+          <section>
+            <PickHead label="Сопротивление" picked={speciesResist.length} total={speciesResistChoice.count} />
+            <div className="wz-chips">
+              {speciesResistChoice.options.map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  className="wz-chip"
+                  aria-pressed={speciesResist.includes(n)}
+                  onClick={() =>
+                    setSpeciesResist((prev) =>
+                      prev.includes(n) ? prev.filter((x) => x !== n) : [...prev, n].slice(-speciesResistChoice.count)
+                    )
+                  }
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
         {speciesCustom !== null && (
           <label className="wz-field">
             Название своего вида
@@ -3397,6 +3474,16 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
             </span>
           </label>
         )}
+      </div>
+    );
+  }
+
+  function renderLineage() {
+    return (
+      <div className="wz-step">
+        {/* Свой key: иначе React берёт ленту шага «Вид» с её состоянием (сцена
+            вместо плитки, текущая карта). */}
+        <CardRibbon key="lineage" systemId={systemId} options={lineageOptions} selectedId={lineageId} onPick={setLineageId} />
       </div>
     );
   }
@@ -4158,6 +4245,8 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         return renderClassChoices();
       case "Вид":
         return renderSpecies();
+      case "Предок":
+        return renderLineage();
       case "Предыстория":
         return renderBackground();
       case "Черта":

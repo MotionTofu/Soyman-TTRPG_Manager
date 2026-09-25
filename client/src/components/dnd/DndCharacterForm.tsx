@@ -171,7 +171,7 @@ import { useConfirm } from "../../hooks/useConfirm";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { useDndPrefs } from "../../hooks/useDndPrefs";
 import { useEvent, useLatest } from "../../hooks/useEvent";
-import { choicesFromEntries, featuresFromEntries, inferTimingFromLegacyText, liveEffectEntryIds, spellTimingFromData, sumEntrySlots, TIMING_KEY_TO_LABEL, withGrantedSenses, withLiveEffects, INSPIRATION_TOKEN_ENABLED, RECEIVED_SPELLS_ENABLED, type ChoiceDef } from "./dndFeatures";
+import { choicesFromEntries, featuresFromEntries, inferTimingFromLegacyText, lineageDamageType, liveEffectEntryIds, spellTimingFromData, sumEntrySlots, TIMING_KEY_TO_LABEL, withGrantedSenses, withLineageDamage, withLiveEffects, INSPIRATION_TOKEN_ENABLED, RECEIVED_SPELLS_ENABLED, type ChoiceDef } from "./dndFeatures";
 import { WeaponMasteryPicker, isMasterableWeapon } from "./StartingEquipmentPicker";
 import { extractEnglishName } from "../../compendium";
 import { ChecklistEditor, emptySpeed, formatSpeed, SensesEditor, SpeedEditor } from "./DndCreatureForm";
@@ -4961,7 +4961,9 @@ function featureActionRows(
       // Время не дублируем — оно и есть заголовок секции таблицы; в этой
       // колонке у умения полезнее его стоимость («Ячейка», «1 за долгий
       // отдых»), и «Иное» показываем только когда оно что-то уточняет.
-      range: [f.castingTiming === "other" ? f.castingTimingOther : "", costSummary(f.cost)]
+      // Уточнение времени — и у «Действия»: Дыхание дракона — «вместо одной
+      // атаки; конус или линия».
+      range: [f.castingTimingOther ?? "", costSummary(f.cost)]
         .filter(Boolean)
         .join(", ") || "—",
       timing: f.castingTiming as DndActionTiming,
@@ -11205,23 +11207,34 @@ export function DndCharacterView({
     if (rows.length > 0 && rows.every((s) => s.arcanum)) arcanumTitles[i + 1] = `Арканум (${i + 1} круг)`;
   }
   const arcanumLocked = new Set(Object.keys(arcanumTitles).map(Number));
+  // Тип урона от предка вида (Дыхание дракона) — один на лист.
+  const lineageDamage = lineageDamageType(value.speciesFeatures, getEntry);
   const liveFeatureGroups = [
     value.classFeatures,
     value.speciesFeatures,
     value.feats,
     value.specialAbilities,
-  ].map((g) => g.map((f) => resolveFeature(f, getEntry)));
+  ].map((g) =>
+    g.map((f) => {
+      const r = resolveFeature(f, getEntry);
+      return r.effects?.length ? { ...r, effects: withLineageDamage(r.effects, lineageDamage) } : r;
+    })
+  );
+  // Умения вида растут с уровнем персонажа (Дыхание дракона: кости и число
+  // использований), классовые — с уровнем своего класса.
+  const characterLevel = value.classes.reduce((n, c) => n + (c.level || 0), 0) || null;
   // Свои ресурсы умений (структурность): пулы из cost {uses, ownResource}
   // живых (разрешённых) особенностей. Дальше едут одним списком с
   // классовыми: трата, лента, «Ресурсы», сброс на отдыхе.
   // Уровень класса-хозяина умения (для levelSteps): вверх по родителям записи
-  // до строки классов листа (фича → подкласс → класс). Чужие (виды, черты)
-  // ни к чему не привяжутся — там откат к amount.
+  // до строки классов листа (фича → подкласс → класс). Умения вида — уровень
+  // персонажа; черты ни к чему не привяжутся — там откат к amount.
   const featureClassLevel = (entryId: number): number | null => {
     let cur: number | null | undefined = entryId;
     const seen = new Set<number>();
     while (cur != null && !seen.has(cur)) {
       seen.add(cur);
+      if (value.raceId != null && cur === value.raceId) return characterLevel;
       const hit = value.classes.find((c) => c.classId === cur || c.subclassId === cur);
       if (hit) return hit.level;
       cur = getEntry(cur)?.parent_id ?? null;
@@ -11486,6 +11499,7 @@ export function DndCharacterView({
     // по sourceParentId особенности. Ручные (без sourceParentId) — без скейла.
     ...featureActionRows(liveFeatureGroups, spellAttackBonus, spellDc, (pid) => {
       if (pid == null) return null;
+      if (value.raceId != null && pid === value.raceId) return characterLevel;
       const hit = value.classes.find((c) => c.classId === pid || c.subclassId === pid);
       return hit ? hit.level : null;
     },

@@ -120,12 +120,18 @@ export async function loadDndClassFeatures(systemId: number, parentId: number, o
 // Feature entries of a given species entry, for auto-filling Видовые
 // особенности when a species is picked.
 export async function loadDndSpeciesFeatures(systemId: number, speciesId: number, opts?: LoadOpts): Promise<CompendiumEntry[]> {
+  return (await loadDndSpeciesChildren(systemId, speciesId, opts)).filter((e) => e.kind === "feature");
+}
+
+// Все дочерние записи вида: умения (kind "feature") и предки (kind "lineage" —
+// драконьи предки Драконорождённого, свой шаг визарда).
+export async function loadDndSpeciesChildren(systemId: number, speciesId: number, opts?: LoadOpts): Promise<CompendiumEntry[]> {
   const sections = await get<SystemSection[]>(`/systems/${systemId}/sections`, opts);
   const speciesSections = sections.filter((s) => s.kind === "species");
   for (const section of speciesSections) {
     const entries = await get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${section.id}`, opts);
     if (entries.some((e) => e.id === speciesId)) {
-      return entries.filter((e) => e.kind === "feature" && e.parent_id === speciesId);
+      return entries.filter((e) => e.parent_id === speciesId);
     }
   }
   return [];

@@ -156,6 +156,10 @@ export interface DndEffect {
   // feature's source (class/subclass row), never typed by hand.
   levelDice?: { level: number; dice: string }[];
   cantripScaling?: string;
+  // Тип урона берётся из выбранного предка вида (Дыхание дракона: предок —
+  // запись kind "lineage" среди умений вида, её сопротивление и есть тип).
+  // Лист подставляет damageType сам; без предка — подсказка выбрать.
+  damageTypeFrom?: "lineage";
 
   // condition / condition_remove
   condition?: DndMechanicsRef | null;

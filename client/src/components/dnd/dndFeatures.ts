@@ -201,6 +201,26 @@ type EntryLookup = (id: number | null | undefined) => CompendiumEntry | undefine
 export const RECEIVED_SPELLS_ENABLED = false;
 export const INSPIRATION_TOKEN_ENABLED = false;
 
+/** Тип урона предка — сопротивление записи kind "lineage" среди умений вида
+ *  (Драконорождённый: красный предок — огонь). */
+export function lineageDamageType(speciesFeatures: { entryId?: number | null }[], get: EntryLookup): { id: number; name: string } | null {
+  for (const f of speciesFeatures) {
+    const entry = get(f.entryId);
+    if (entry?.kind !== "lineage") continue;
+    const res = (entry.data.effects as DndEffect[] | undefined)?.find((e) => e.type === "resistance" && e.damageType?.name);
+    if (res?.damageType) return { id: res.damageType.id, name: res.damageType.name };
+  }
+  return null;
+}
+
+/** Урон «от предка» — с подставленным типом, без предка — подсказка. */
+export function withLineageDamage(effects: DndEffect[], lineage: { id: number; name: string } | null): DndEffect[] {
+  if (!effects.some((e) => e.damageTypeFrom === "lineage")) return effects;
+  return effects.map((e) =>
+    e.damageTypeFrom === "lineage" ? { ...e, damageType: lineage ?? { id: 0, name: "тип урона — выберите предка" } } : e
+  );
+}
+
 function liveEffects<T extends { entryId?: number | null; effects?: DndEffect[] }>(row: T, get: EntryLookup): T {
   const effects = get(row.entryId)?.data.effects as DndEffect[] | undefined;
   return effects ? { ...row, effects } : row;
