@@ -1208,12 +1208,20 @@
     min-width: 0;
   }
   .wz-stage-name strong {
+    display: grid;
     font-size: 30px;
     font-weight: 400;
     line-height: 1;
   }
   .wz-stage-name .muted {
     font-size: 13px;
+  }
+  /* Все имена в одной ячейке — ширина по самому длинному, видно текущее. */
+  .wz-stage-name strong > span {
+    grid-area: 1 / 1;
+  }
+  .wz-stage-name-ghost {
+    visibility: hidden;
   }
   .wz-stage-aside {
     margin-left: auto;

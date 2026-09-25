@@ -803,7 +803,16 @@ export function CardStage({
               ‹
             </button>
             <div className="wz-stage-name">
-              <strong className="wz-display">{current.name}</strong>
+              {/* Ширина — по самому длинному имени ленты: стрелка «›» не скачет
+                  при листании (владелец, 2026-09-25). */}
+              <strong className="wz-display">
+                <span>{current.name}</span>
+                {list.map((o) => (
+                  <span key={o.id} className="wz-stage-name-ghost" aria-hidden="true">
+                    {o.name}
+                  </span>
+                ))}
+              </strong>
               <span className="muted">
                 {group.label ? `${group.label} · ` : ""}
                 {cur + 1} из {list.length} · стрелки ← → листают
