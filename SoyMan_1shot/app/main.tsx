@@ -771,7 +771,18 @@ function App() {
   }, []);
   function update(patch: Partial<DndCharacterData>) {
     const old = activeRef.current; if (!old?.content) return;
-    const next = { ...old, content: { ...old.content, ...patch } }; activeRef.current = next; setActive(next);
+    persist({ ...old, content: { ...old.content, ...patch } });
+  }
+  // Портрет из «Редактировать» — той же очередью, что правки листа: мимо неё
+  // следующая правка упёрлась бы в устаревшую ревизию.
+  async function uploadPortrait(file: File) {
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 15 * 1024 * 1024) throw Error('Нужна картинка PNG, JPEG или WebP до 15 МБ');
+    const portrait = await new Promise<string>((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(String(r.result)); r.onerror = reject; r.readAsDataURL(file); });
+    const old = activeRef.current; if (!old) return;
+    persist({ ...old, portrait });
+  }
+  function persist(next: Character) {
+    activeRef.current = next; setActive(next);
     if (failed.current) { setStatus('Не сохранено'); return; }
     pending.current += 1;
     setStatus('Сохраняем на устройстве…');
@@ -1554,7 +1565,7 @@ function App() {
       })()}
     </Modal>}
     {error && <Banner>{error}</Banner>}
-    {!ready ? <p className="oneshot-home">Открываем локальные данные…</p> : active?.content ? <div className="oneshot-sheet"><div className="fp-page-backdrop" aria-hidden="true" /><DndCharacterView key={active.id} value={active.content} portraitUrl={active.portrait} onQuickUpdate={update} onLevelUpApply={applyLevelUp} syncTabToUrl levelUpDraft={{ identity: { characterId: active.id, characterUid: active.characterUid ?? null, catalogKey: active.catalogKey }, initial: loadLevelUpDraft(active.id), onChange: saveLevelUpDraft, onClear: () => clearLevelUpDraft(active.id) }} onSheetBack={() => { if (status === 'Сохранено на устройстве') location.assign('/'); }} fanSignal={fanSignal} /></div> : <main className="oneshot-home lib">
+    {!ready ? <p className="oneshot-home">Открываем локальные данные…</p> : active?.content ? <div className="oneshot-sheet"><div className="fp-page-backdrop" aria-hidden="true" /><DndCharacterView key={active.id} value={active.content} portraitUrl={active.portrait} onQuickUpdate={update} onLevelUpApply={applyLevelUp} syncTabToUrl onPortraitUpload={uploadPortrait} levelUpDraft={{ identity: { characterId: active.id, characterUid: active.characterUid ?? null, catalogKey: active.catalogKey }, initial: loadLevelUpDraft(active.id), onChange: saveLevelUpDraft, onClear: () => clearLevelUpDraft(active.id) }} onSheetBack={() => { if (status === 'Сохранено на устройстве') location.assign('/'); }} fanSignal={fanSignal} /></div> : <main className="oneshot-home lib">
       <div className="lib-top"><div className="lib-head">
         <p className="lib-kicker">Библиотека</p>
         <h1 className="lib-title">Твои персонажи</h1>

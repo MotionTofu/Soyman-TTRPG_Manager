@@ -7,6 +7,7 @@ import { queryClient } from '../../client/src/data/queryClient';
 import { DndCharacterView } from '../../client/src/components/dnd/DndCharacterForm';
 import { DndRuntimeContext } from '../../client/src/components/dnd/DndRuntime';
 import { Modal } from '../../client/src/components/Modal';
+import { PortraitFrameModal } from '../../client/src/components/dnd/PortraitFrameModal';
 import { Button } from './ui/Button';
 import { ActionRow } from './ui/ActionRow';
 import { applyTheme, findTheme } from '../../client/src/themes';
@@ -131,6 +132,7 @@ function ModalFixture() {
 function App() {
   const [value, setValue] = useState(fixture);
   if (modalCase) return <ModalFixture />;
+  if (new URLSearchParams(window.location.search).get('case') === 'frame') return <PortraitFrameModal src='/mascot/hero-idle.webp' name={value.characterName} subtitle='Чародей 5' onApply={() => {}} onClose={() => {}} />;
   return <DndRuntimeContext.Provider value={{ allowDiceRolls: false, campaignConnected: false, detached: true }}>
     <header className="oneshot-header"><strong>OneShot SoyMan / Visual QA</strong></header>
     <div className="oneshot-sheet"><div className="fp-page-backdrop" aria-hidden="true" /><DndCharacterView value={value} portraitUrl={portraitUrl} onQuickUpdate={patch => setValue(current => ({ ...current, ...patch }))} /></div>

@@ -6,7 +6,6 @@ import { write } from "../../data/hooks";
 import { afterWriteAnywhere, readResource } from "../../data/imperative";
 import { Modal } from "../Modal";
 import { NavIcon } from "../NavIcons";
-import { useImageCrop } from "../../hooks/useImageCrop";
 import type { CompendiumEntry, DndAbilityKey, DndAbilityScores } from "../../types";
 import { DndCharacterView, emptyDndCharacter, recomputeGrantedSpells } from "./DndCharacterForm";
 import {
@@ -43,6 +42,8 @@ import {
 } from "./featPick";
 import type { GrantedSpellChoice } from "./dndGrants";
 import { nameMatches } from "./dndResources";
+import { PortraitFrameModal } from "./PortraitFrameModal";
+import type { PortraitFocus } from "./portraitFrame";
 import {
   ABILITY_LABELS,
   ABILITY_NAME_TO_KEY,
@@ -347,6 +348,22 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   // Статблок уже создан, повтор — только за фото: иначе повтор дублировал бы
   // персонажа.
   const createdRef = useRef(false);
+  // Кадр портрета — то же окно, что в листе (гриллинг 2026-09-25, Q5):
+  // копия портретной зоны карты этого устройства вместо квадратной обрезки.
+  const [portraitFrame, setPortraitFrame] = useState<{ focus: PortraitFocus; zoom: number } | null>(null);
+  const [framing, setFraming] = useState<{ src: string; file?: File } | null>(null);
+  function closeFraming() {
+    if (framing?.file) URL.revokeObjectURL(framing.src);
+    setFraming(null);
+  }
+  function startFraming(file: File | null) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setPortraitError("Можно загружать только изображения");
+      return;
+    }
+    setFraming({ src: URL.createObjectURL(file), file });
+  }
   function takePortrait(file: File) {
     if (!file.type.startsWith("image/")) {
       setPortraitError("Можно загружать только изображения");
@@ -370,7 +387,6 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       return null;
     });
   }
-  const portraitCrop = useImageCrop("square", takePortrait, "dnd-portrait");
   // Портрет владельца как основа (Хвосты 2.3): тот же кроп, что у файла.
   // Подписанный URL протухает за минуту — провал честно показывается,
   // лечится обновлением страницы (там же onPortraitRefresh).
@@ -384,7 +400,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
       if (!blob.type.startsWith("image/")) throw new Error("По ссылке не изображение");
-      portraitCrop.onSelect(new File([blob], "portrait", { type: blob.type }));
+      startFraming(new File([blob], "portrait", { type: blob.type }));
     } catch {
       setPortraitError("Не удалось взять портрет владельца — обновите страницу и попробуйте снова");
     } finally {
@@ -1805,6 +1821,10 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     const character = emptyDndCharacter();
     character.systemId = sid;
     character.characterName = characterName.trim();
+    if (portraitFile && portraitFrame) {
+      character.portraitFocus = portraitFrame.focus;
+      if (portraitFrame.zoom > 1) character.portraitZoom = portraitFrame.zoom;
+    }
     character.playerName = playerName.trim();
     character.abilities = awardedAbilities;
 
@@ -3491,7 +3511,10 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
             {portraitPreview ? (
               <>
                 <img src={portraitPreview} alt="Портрет персонажа" />
-                <button type="button" onClick={clearPortrait}>
+                <button type="button" onClick={() => setFraming({ src: portraitPreview })}>
+                  Кадр
+                </button>
+                <button type="button" onClick={() => { clearPortrait(); setPortraitFrame(null); }}>
                   Убрать фото
                 </button>
               </>
@@ -3503,7 +3526,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
                     type="file"
                     accept="image/*"
                     onChange={(e) => {
-                      portraitCrop.onSelect(e.target.files?.[0] ?? null);
+                      startFraming(e.target.files?.[0] ?? null);
                       e.target.value = "";
                     }}
                   />
@@ -3516,7 +3539,21 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
               </>
             )}
           </div>
-          {portraitCrop.modal}
+          {framing && (
+            <PortraitFrameModal
+              src={framing.src}
+              focus={framing.file ? undefined : portraitFrame?.focus}
+              zoom={framing.file ? undefined : portraitFrame?.zoom}
+              name={characterName.trim()}
+              subtitle={classOption?.name}
+              onClose={closeFraming}
+              onApply={(focus, zoom) => {
+                if (framing.file) takePortrait(framing.file);
+                setPortraitFrame({ focus, zoom });
+                closeFraming();
+              }}
+            />
+          )}
           {portraitError && (
             <div className="sb-save-status is-error" role="alert">
               {portraitError}
@@ -3568,6 +3605,10 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     const c = emptyDndCharacter();
     if (systemId) c.systemId = systemId;
     c.characterName = characterName.trim();
+    if (portraitFrame) {
+      c.portraitFocus = portraitFrame.focus;
+      if (portraitFrame.zoom > 1) c.portraitZoom = portraitFrame.zoom;
+    }
     c.playerName = playerName.trim();
     c.abilities = awardedAbilities;
     c.classes = previewClasses;

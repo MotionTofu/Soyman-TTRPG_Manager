@@ -283,6 +283,8 @@ export function normalizeDndCharacter(raw: unknown): DndCharacterData {
     focus && typeof focus.x === "number" && typeof focus.y === "number"
       ? { x: Math.min(1, Math.max(0, focus.x)), y: Math.min(1, Math.max(0, focus.y)) }
       : undefined;
+  merged.portraitZoom =
+    typeof merged.portraitZoom === "number" && merged.portraitZoom > 1 ? Math.min(3, merged.portraitZoom) : undefined;
   // Монеты — отдельное поле (S-08). Старые листы его не имели — дефолт пустые строки.
   const rawCoins = r.coins as Record<string, unknown> | undefined;
   if (rawCoins && typeof rawCoins === "object") {

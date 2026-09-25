@@ -92,6 +92,7 @@ import { useCompendiumEntries } from "./useCompendiumEntries";
 import { FeatPending } from "./FeatPending";
 import { sheetClassColor, textOnClassColor } from "./dndClassColors";
 import { DEFAULT_PORTRAIT_FOCUS, useFrameDrag } from "./portraitFrame";
+import { PortraitFrameModal, portraitImgStyle } from "./PortraitFrameModal";
 import { DndDie } from "./DndDie";
 import { PoolMeter, poolShowsNumber } from "./TofuPips";
 import { CreatureTypeBadge, creatureTypeName } from "./creatureTypeIcons";
@@ -10178,6 +10179,7 @@ export function DndCharacterView({
   syncTabToUrl,
   campaignId,
   ownerCharacterId,
+  onPortraitUpload,
   onSheetBack,
   fanSignal,
   onPortraitRefresh,
@@ -10213,6 +10215,9 @@ export function DndCharacterView({
   // (решение R2/W8). Без них кнопка «Передать» просто скажет, что некому.
   campaignId?: number | null;
   ownerCharacterId?: number | null;
+  // Загрузка портрета силами хоста (OneShot): через его очередь сохранений,
+  // иначе следующая правка листа упрётся в устаревшую ревизию.
+  onPortraitUpload?: (file: File) => Promise<void>;
   // Жест «назад» с первой карты (свайп вправо, решение владельца 2026-09-06):
   // уводит с полноэкранной страницы чарника обратно в профиль. Встроенному
   // листу возвращаться некуда — без пропса жест молчит.
@@ -10312,19 +10317,32 @@ export function DndCharacterView({
   // Кадрирование тут не нужно — оно уже есть на лицевой (?edit=1 тянет
   // портрет через portraitFocus), здесь только сам файл.
   const [avatarUploading, setAvatarUploading] = useState(false);
-  async function uploadPortrait(file: File) {
-    if (ownerCharacterId == null) return;
+  const canUploadPortrait = !!onPortraitUpload || ownerCharacterId != null;
+  // Окно кадра: новый файл (ещё не залит — «Отмена» ничего не льёт) или
+  // текущий портрет.
+  const [frameEdit, setFrameEdit] = useState<{ src: string; file?: File } | null>(null);
+  function closeFrameEdit() {
+    if (frameEdit?.file) URL.revokeObjectURL(frameEdit.src);
+    setFrameEdit(null);
+  }
+  async function uploadPortrait(file: File): Promise<boolean> {
+    if (!canUploadPortrait) return false;
     setAvatarUploading(true);
     try {
-      const form = new FormData();
-      form.append("file", file);
-      await write.post(`/characters/${ownerCharacterId}/avatar`, form, { timeoutMs: 60_000 });
-      afterWriteAnywhere([{ kind: "character", id: ownerCharacterId }]);
-      onPortraitRefresh?.();
+      if (onPortraitUpload) await onPortraitUpload(file);
+      else if (ownerCharacterId != null) {
+        const form = new FormData();
+        form.append("file", file);
+        await write.post(`/characters/${ownerCharacterId}/avatar`, form, { timeoutMs: 60_000 });
+        afterWriteAnywhere([{ kind: "character", id: ownerCharacterId }]);
+        onPortraitRefresh?.();
+      }
+      return true;
     } catch (e) {
       // Раньше падение загрузки уходило в никуда: кнопка гасла, портрет
       // оставался прежним, и было не понять, что файл не принят.
       showSaveError(`Портрет не загрузился: ${e instanceof Error ? e.message : String(e)}`);
+      return false;
     } finally {
       setAvatarUploading(false);
     }
@@ -10823,36 +10841,50 @@ export function DndCharacterView({
         </button>
         {rightEditOpen && (
           <>
-            {/* Аватар — та же метка-загрузка, что в профиле: миниатюра
-                кликабельна целиком, хинт поверх. Без персонажа
-                (превью, компакт) лить некуда — блок молчит. */}
-            {ownerCharacterId != null && (
-              <label
-                className="avatar-upload-label dnd-face-avatar"
-                title={avatarUploading ? "Загрузка…" : "Сменить аватар"}
-              >
-                {portraitUrl ? (
-                  <img src={portraitUrl} alt="Аватар персонажа" />
-                ) : (
-                  <span className="dnd-face-avatar-empty" aria-hidden="true">
-                    +
-                  </span>
-                )}
-                <span className="avatar-upload-hint">
-                  {avatarUploading ? "Загрузка…" : portraitUrl ? "Сменить" : "Добавить"}
+            {/* Портрет: файл сразу уходит в окно кадра — точную копию
+                портретной зоны карты этого устройства (гриллинг 2026-09-25).
+                Льётся только по «Готово». */}
+            {canUploadPortrait && (
+              <div className="dnd-face-portrait">
+                <span className="dnd-face-avatar" aria-hidden="true">
+                  {portraitUrl ? <img src={portraitUrl} alt="" style={portraitImgStyle(value.portraitFocus, value.portraitZoom)} /> : <span className="dnd-face-avatar-empty">+</span>}
                 </span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  style={{ display: "none" }}
-                  disabled={avatarUploading}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    e.target.value = "";
-                    if (file) void uploadPortrait(file);
-                  }}
-                />
-              </label>
+                <label className="dnd-back-btn">
+                  {portraitUrl ? "Новый портрет" : "Загрузить портрет"}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    style={{ display: "none" }}
+                    disabled={avatarUploading}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (file) setFrameEdit({ src: URL.createObjectURL(file), file });
+                    }}
+                  />
+                </label>
+                {portraitUrl && (
+                  <button type="button" className="dnd-back-btn" onClick={() => setFrameEdit({ src: portraitUrl })}>
+                    Кадр
+                  </button>
+                )}
+              </div>
+            )}
+            {frameEdit && (
+              <PortraitFrameModal
+                src={frameEdit.src}
+                focus={frameEdit.file ? undefined : value.portraitFocus}
+                zoom={frameEdit.file ? undefined : value.portraitZoom}
+                name={value.characterName}
+                subtitle={classAndLevelSummary(value.classes)}
+                busy={avatarUploading}
+                onClose={closeFrameEdit}
+                onApply={async (focus, zoom) => {
+                  if (frameEdit.file && !(await uploadPortrait(frameEdit.file))) return;
+                  onQuickUpdate({ portraitFocus: focus, portraitZoom: zoom > 1 ? zoom : undefined });
+                  closeFrameEdit();
+                }}
+              />
             )}
             <DndOriginEditForm origin={origin} value={value} onQuickUpdate={onQuickUpdate} />
             {/* Характеристики — в ту же раскрывашку: на десктопе это и
@@ -11036,7 +11068,6 @@ export function DndCharacterView({
     onQuickUpdate?.({ portraitFocus: f })
   );
   const canFrame = !!editFromUrl && !!onQuickUpdate;
-  const portraitPosition = `${frame.shown.x * 100}% ${frame.shown.y * 100}%`;
   // Запасные таблицы подгружаются лениво и только когда без них не обойтись
   // (многоклассье без полного заклинателя) — обычному персонажу лишний
   // запрос ни к чему.
@@ -11961,7 +11992,7 @@ export function DndCharacterView({
                   <img
                     src={portraitUrl}
                     alt=""
-                    style={{ objectPosition: portraitPosition, filter: `grayscale(${portraitDrain})` }}
+                    style={{ ...portraitImgStyle(frame.shown, value.portraitZoom), filter: `grayscale(${portraitDrain})` }}
                   />
                 </span>
               )}
@@ -11984,7 +12015,7 @@ export function DndCharacterView({
                     <img
                       src={portraitUrl}
                       alt=""
-                      style={{ objectPosition: portraitPosition, filter: `var(--portrait-tone) grayscale(${portraitDrain})` }}
+                      style={{ ...portraitImgStyle(frame.shown, value.portraitZoom), filter: `var(--portrait-tone) grayscale(${portraitDrain})` }}
                       // Подписанные URL файлов живут 60 секунд: посидев на
                       // другой карте дольше, возвращаемся к протухшей ссылке.
                       // Прячем битую картинку и один раз просим свежий URL —

@@ -2323,3 +2323,160 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-spell-school {
 .dnd-card-face .dnd-card-cartouche {
   padding-bottom: 22px;
 }
+
+/* ---- §21. Кадр портрета (гриллинг 2026-09-25, Q3–Q5). ----
+ * Окно — бумага, как окно состояний; сцена — копия портретной зоны карты
+ * этого устройства: те же затухание и картуш. */
+.modal.dnd-frame-modal {
+  width: auto;
+  max-width: calc(100vw - 8px);
+  padding: 16px;
+  border: 0;
+  border-radius: 0;
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  box-shadow: 6px 6px 0 rgba(23, 23, 23, 0.55);
+  color: var(--skin-ink);
+}
+.dnd-frame-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.dnd-frame-head h3 {
+  flex: 1;
+  margin: 0;
+  font-family: "Rubik Dirt", var(--font-ui), sans-serif;
+  font-size: 28px;
+  font-weight: 400;
+  line-height: 1;
+}
+.dnd-frame-hint {
+  margin: 4px 0 12px;
+  max-width: 440px;
+  font-size: 14px;
+  color: #4a4743;
+}
+.dnd-frame-stage {
+  position: relative;
+  max-width: 100%;
+  overflow: hidden;
+  background: var(--skin-ink);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.dnd-frame-stage:active {
+  cursor: grabbing;
+}
+.dnd-frame-stage > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+.dnd-frame-stage > .dnd-card-portrait-fade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.dnd-frame-caption {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  pointer-events: none;
+}
+.dnd-frame-caption .dnd-card-cartouche-name {
+  font-family: "Rubik Dirt", var(--font-ui), sans-serif;
+  font-size: 34px;
+  line-height: 0.95;
+}
+.dnd-frame-caption .dnd-card-cartouche-classline {
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.dnd-frame-zoom {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.dnd-frame-zoom input {
+  flex: 1;
+  accent-color: var(--skin-ink);
+}
+.dnd-frame-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+.dnd-frame-actions button {
+  min-height: 48px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--skin-ink);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.dnd-frame-actions button.primary {
+  background: var(--skin-ink);
+  color: #e8e4da;
+}
+/* «Редактировать»: миниатюра в кадре карты и две кнопки. */
+.dnd-face-portrait {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.dnd-face-portrait .dnd-face-avatar {
+  flex: none;
+  width: 72px;
+  height: 52px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--skin-ink);
+  color: #e8e4da;
+}
+.dnd-face-portrait .dnd-face-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.dnd-face-portrait .dnd-back-btn {
+  flex: 0 1 auto;
+  cursor: pointer;
+}
+.dnd-face-edit > .dnd-face-portrait {
+  padding: 0 14px 12px;
+}
+@media (max-width: 700px) {
+  /* Сцена — во всю ширину, как зона на карте: поля только у текста. */
+  .modal.dnd-frame-modal {
+    padding: 14px 0;
+  }
+  .dnd-frame-modal :is(.dnd-frame-head, .dnd-frame-hint, .dnd-frame-zoom, .dnd-frame-actions) {
+    padding-inline: 12px;
+  }
+  .dnd-frame-caption .dnd-card-cartouche-name {
+    font-size: 30px;
+  }
+}
