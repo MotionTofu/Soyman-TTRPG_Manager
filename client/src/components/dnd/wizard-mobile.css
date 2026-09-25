@@ -476,6 +476,32 @@
   width: 100%;
   min-height: 40px;
 }
+/* Текст карты ленты — на весь экран; «Вернуться» — плашкой поверх низа. */
+.wz-fullcard {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+}
+.wz-fullcard-body.wz-slide-back {
+  aspect-ratio: auto;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  padding: 12px 12px calc(96px + env(safe-area-inset-bottom));
+}
+.wz-fullcard-back {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 1001;
+  min-height: 52px;
+  box-shadow: 4px 4px 0 rgba(23, 23, 23, 0.7);
+}
 .wz-ribbon-bar {
   display: flex;
   align-items: center;

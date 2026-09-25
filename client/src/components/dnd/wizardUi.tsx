@@ -336,9 +336,7 @@ export function CardRibbon({
                   className={`wz-slide${i === cur ? " is-current" : ""}${o.id === selectedId ? " is-selected" : ""}`}
                   aria-current={i === cur}
                 >
-                  {flipped === o.id ? (
-                    <RibbonBack systemId={systemId} entryId={o.id} onFlip={() => setFlipped(null)} />
-                  ) : (
+                  {(
                     <button
                       type="button"
                       className="wz-slide-face"
@@ -365,6 +363,7 @@ export function CardRibbon({
               );
             })}
           </div>
+          {flipped != null && <RibbonBack systemId={systemId} entryId={flipped} onFlip={() => setFlipped(null)} />}
           <div className="wz-ribbon-bar">
             <button type="button" className="wz-icon-btn wz-ribbon-arrow" aria-label="Предыдущая" disabled={cur <= 0} onClick={() => scrollToIndex(cur - 1)}>
               ‹
@@ -412,20 +411,24 @@ export function CardRibbon({
   );
 }
 
+// Текст карты — на весь экран, а не оборотом в ленте (владелец, 2026-09-25):
+// на карте в 220 px читать было нечего. Внизу поверх — плашка «Вернуться».
 function RibbonBack({ systemId, entryId, onFlip }: { systemId: number | null; entryId: number; onFlip: () => void }) {
   const { data, error } = useCardEntry(systemId, entryId);
   return (
-    <div className="wz-slide-back">
-      <button type="button" className="wz-slide-flip" onClick={onFlip}>
-        ↺ к карте
+    <div className="wz-fullcard" role="dialog" aria-modal="true" aria-label={data?.entry.name ?? "Описание"}>
+      <div className="wz-fullcard-body wz-slide-back">
+        {error ? (
+          <span className="muted">Текст не загрузился: {error}</span>
+        ) : !data ? (
+          <span className="muted">Загружаю…</span>
+        ) : (
+          <CardScroll entry={data.entry} features={data.features} anchorPrefix={`wz${entryId}`} />
+        )}
+      </div>
+      <button type="button" className="primary wz-fullcard-back" onClick={onFlip}>
+        Вернуться
       </button>
-      {error ? (
-        <span className="muted">Текст не загрузился: {error}</span>
-      ) : !data ? (
-        <span className="muted">Загружаю…</span>
-      ) : (
-        <CardScroll entry={data.entry} features={data.features} anchorPrefix={`wz${entryId}`} />
-      )}
     </div>
   );
 }
