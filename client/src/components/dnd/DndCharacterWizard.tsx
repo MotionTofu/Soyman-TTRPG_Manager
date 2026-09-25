@@ -1489,6 +1489,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   // выбирается «музыкальный инструмент на ваш выбор».
   const [toolCatalog, setToolCatalog] = useState<CompendiumEntry[]>([]);
   const [masteryEntries, setMasteryEntries] = useState<CompendiumEntry[]>([]);
+  const [propertyEntries, setPropertyEntries] = useState<CompendiumEntry[]>([]);
   useEffect(() => {
     if (!systemId) {
       setWeaponCatalog(null);
@@ -1497,6 +1498,9 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     const ac = new AbortController();
     loadDndMechanicsGroupEntries(systemId, "Мастерство оружия", { signal: ac.signal })
       .then(setMasteryEntries)
+      .catch(() => undefined);
+    loadDndMechanicsGroupEntries(systemId, "Свойства оружия", { signal: ac.signal })
+      .then(setPropertyEntries)
       .catch(() => undefined);
     loadDndEquipmentEntries(systemId, { signal: ac.signal })
       .then((rows) => {
@@ -3439,23 +3443,47 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
                         const e = weaponCatalog.find((x) => x.id === Number(k));
                         if (e) b.toggleWeapon(e);
                       }}
-                      // Описание оружия и его приёма — в окне описания.
+                      // Описание оружия, его приёма и свойств — в окне описания.
+                      // Связь с записями механик — по имени без [англ.].
                       onOpen={(k) => {
                         const e = weaponCatalog.find((x) => x.id === Number(k));
                         if (!e) return;
                         const picked = b.weapons.some((w) => w.entryId === e.id);
-                        const masteryName = weaponMasteryName(e).replace(/\s*\[.*\]$/, "");
+                        const bare = (s: string) => s.replace(/\s*\[.*\]$/, "");
+                        const masteryName = bare(weaponMasteryName(e));
                         const mastery = masteryEntries.find((m) => m.name === masteryName);
+                        const props = (Array.isArray(e.data.weapon_properties) ? e.data.weapon_properties : [])
+                          .map((x: { name?: unknown; distance?: unknown }) => ({
+                            name: typeof x?.name === "string" ? bare(x.name) : "",
+                            distance: typeof x?.distance === "string" ? x.distance : "",
+                          }))
+                          .filter((x: { name: string }) => x.name);
                         openEntry(e.id, picked, () => b.toggleWeapon(e), {
                           entry: e,
                           meta: typeof e.data.damage === "string" ? e.data.damage : undefined,
                           disabled: !picked && b.weapons.length >= b.weaponSlots,
-                          extra: masteryName ? (
-                            <div className="wz-plate-extra">
-                              <h3>Приём: {masteryName}</h3>
-                              {mastery?.description?.trim() ? <MentionText text={mastery.description} /> : null}
-                            </div>
-                          ) : undefined,
+                          extra: (
+                            <>
+                              {masteryName && (
+                                <div className="wz-plate-extra">
+                                  <h3>Приём: {masteryName}</h3>
+                                  {mastery?.description?.trim() ? <MentionText text={mastery.description} /> : null}
+                                </div>
+                              )}
+                              {props.map((pr: { name: string; distance: string }) => {
+                                const d = propertyEntries.find((m) => m.name === pr.name)?.description?.trim();
+                                return (
+                                  <div key={pr.name} className="wz-plate-extra">
+                                    <h3>
+                                      Свойство: {pr.name}
+                                      {pr.distance ? ` (${pr.distance})` : ""}
+                                    </h3>
+                                    {d ? <MentionText text={d} /> : null}
+                                  </div>
+                                );
+                              })}
+                            </>
+                          ),
                         });
                       }}
                     />

@@ -732,6 +732,25 @@ export function CardStage({
     setActiveKey(g.key);
     setCurBy((m) => ({ ...m, [g.key]: i }));
   };
+  // Лента сама держит текущую карту (просматриваемую, а при возврате на шаг —
+  // выбранную) по центру, если есть куда крутить (владелец, 2026-09-25).
+  const stripsRef = useRef<HTMLDivElement>(null);
+  const centeredOnce = useRef(false);
+  const centerKey = tile ? "" : groups.map((g) => `${g.key}:${curOf(g)}:${filtered(g).length}`).join("|");
+  useLayoutEffect(() => {
+    if (!centerKey || !stripsRef.current) return;
+    const behavior = centeredOnce.current ? "smooth" : "auto";
+    centeredOnce.current = true;
+    stripsRef.current.querySelectorAll<HTMLElement>(".wz-strip-row").forEach((row, gi) => {
+      const g = groups[gi];
+      const child = g ? (row.children[curOf(g)] as HTMLElement | undefined) : undefined;
+      if (!child) return;
+      const r = row.getBoundingClientRect();
+      const c = child.getBoundingClientRect();
+      row.scrollTo({ left: row.scrollLeft + (c.left + c.width / 2) - (r.left + r.width / 2), behavior });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [centerKey]);
   const group = groups.find((g) => g.key === activeKey) ?? groups[0];
   if (!group) return null;
   const list = filtered(group);
@@ -852,7 +871,7 @@ export function CardStage({
           </div>
         </>
       )}
-      <div className="wz-stage-strips">
+      <div className="wz-stage-strips" ref={stripsRef}>
         {groups.map((g) => {
           const gl = filtered(g);
           const gc = curOf(g);
