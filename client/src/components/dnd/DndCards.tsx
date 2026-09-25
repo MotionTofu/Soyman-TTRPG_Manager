@@ -430,6 +430,8 @@ export function CardScroll({
   anchorPrefix: string;
 }) {
   const cardBack = useCardBack();
+  const mobile = useIsMobile();
+  const [progOpen, setProgOpen] = useState(false);
   const prog = readProgression(entry);
   const byName = new Map(features.map((f) => [norm(f.name), f]));
   const levels = [...new Set(features.map((f) => f.level ?? 0))].sort((a, b) => a - b);
@@ -452,19 +454,9 @@ export function CardScroll({
     });
   }
 
-  return (
-    <div className={`dc-scroll dc-scroll--${cardBack}`}>
-      <div className="dc-scroll-frame" aria-hidden="true" />
-      <div className="dc-scroll-body">
-        {strip}
-        <h3 className="dc-title">{entry.name}</h3>
-        {stats && <p className="dc-stats">{stats}</p>}
-        {entry.description && (
-          <div className="dc-summary">
-            <MentionText text={entry.description} />
-          </div>
-        )}
-        {prog && (
+  function progTable() {
+    if (!prog) return null;
+    return (
           <div className="dc-prog-wrap">
             <table className="dc-prog">
               <thead>
@@ -484,7 +476,15 @@ export function CardScroll({
                       {prog.columns.map((c) => (
                         <td key={c.key}>
                           {c.role === "level" && levels.includes(lvl) ? (
-                            <button type="button" className="dc-lvl" onClick={() => jump(lvl)} title="К умениям уровня">
+                            <button
+                              type="button"
+                              className="dc-lvl"
+                              onClick={() => {
+                                setProgOpen(false);
+                                requestAnimationFrame(() => jump(lvl));
+                              }}
+                              title="К умениям уровня"
+                            >
                               {row[c.key]}
                             </button>
                           ) : c.role === "features" ? (
@@ -500,7 +500,37 @@ export function CardScroll({
               </tbody>
             </table>
           </div>
+    );
+  }
+
+  return (
+    <div className={`dc-scroll dc-scroll--${cardBack}`}>
+      <div className="dc-scroll-frame" aria-hidden="true" />
+      <div className="dc-scroll-body">
+        {strip}
+        <h3 className="dc-title">{entry.name}</h3>
+        {stats && <p className="dc-stats">{stats}</p>}
+        {entry.description && (
+          <div className="dc-summary">
+            <MentionText text={entry.description} />
+          </div>
         )}
+        {prog && !mobile && (
+          <button type="button" className="dc-prog-open" onClick={() => setProgOpen(true)}>
+            Открыть таблицу развития {entry.kind === "subclass" ? "подкласса" : "класса"}
+          </button>
+        )}
+        {/* На ПК таблица — в окне, описание не распирает (владелец, 2026-09-25). */}
+        {prog && !mobile && progOpen && (
+          <Modal wide className="dc-prog-modal" ariaLabel={`Таблица развития: ${entry.name}`} onClose={() => setProgOpen(false)}>
+            <button type="button" className="dc-card-image-close" aria-label="Закрыть" title="Закрыть" onClick={() => setProgOpen(false)}>
+              ×
+            </button>
+            <h3 className="dc-title">{entry.name}</h3>
+            {progTable()}
+          </Modal>
+        )}
+        {prog && mobile && progTable()}
         {levels.map((lvl) => (
           <section
             key={lvl}

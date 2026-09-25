@@ -459,12 +459,38 @@
   cursor: pointer;
 }
 /* В таблице развития — без подложки общего стиля кнопок: только пунктир. */
-.dc-scroll .dc-prog :is(.dc-ability, .dc-lvl) {
+.dc-prog :is(.dc-ability, .dc-lvl) {
   background: none;
   border: 0;
   border-image: none;
   box-shadow: none;
   min-height: 0;
+}
+/* ПК: таблица развития — в окне, в описании только кнопка. */
+.dc-prog-open {
+  display: block;
+  margin: 0 auto 1.2em;
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.modal.dc-prog-modal {
+  position: relative;
+  width: min(1100px, 94vw);
+  max-width: 94vw;
+  max-height: 90vh;
+  overflow: auto;
+  padding: var(--sp-6) var(--sp-6) var(--sp-5);
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  color: #2a2018;
+  font-family: var(--font-body, Georgia, serif);
+  font-size: 16px;
+}
+.dc-prog-modal .dc-prog {
+  font-size: 15px;
+}
+.dc-prog-modal .dc-prog-wrap {
+  margin: 0;
 }
 .dc-ability[aria-expanded="true"] {
   text-decoration-style: solid;

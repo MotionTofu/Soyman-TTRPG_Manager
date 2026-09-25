@@ -1,22 +1,16 @@
 /* OneShot Wizard: только размер окна. Каркас — в
    client/src/components/dnd/wizard-mobile.css, облик (бумага, чернила,
-   кислотное «выбрано») — в wizard-skin.css, он один во всех темах. */
-html[data-app="oneshot"] .modal.wz-modal {
-  width: min(1440px, calc(100vw - 32px));
-  max-width: none;
-  height: min(900px, 96dvh);
-  max-height: 96dvh;
-  border: 3px solid #171717;
-  border-radius: 0;
-  box-shadow: 8px 8px 0 #ff3e91;
+   кислотное «выбрано») — в wizard-skin.css, он один во всех темах.
+   На весь экран и на ПК, а не окном поверх приложения (владелец, 2026-09-25). */
+html[data-app="oneshot"] .modal-backdrop:has(> .modal.wz-modal) {
+  padding: 0;
 }
-@media (max-width: 700px) {
-  html[data-app="oneshot"] .modal.wz-modal {
-    width: 100vw;
-    max-width: 100vw;
-    height: 100dvh;
-    max-height: 100dvh;
-    border: 0;
-    box-shadow: none;
-  }
+html[data-app="oneshot"] .modal.wz-modal {
+  width: 100vw;
+  max-width: none;
+  height: 100dvh;
+  max-height: 100dvh;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
