@@ -6553,6 +6553,50 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     setAppSettingFlag(database, "scholar_expertise_options_v1");
   }
 
+  // Постоянные сопротивления видов были только текстом — лист их не видел
+  // (Кованый без сопротивления яду, 2026-09-25). Умения — по глобальному
+  // ключу, тип урона — по имени в группе «Типы урона» этой же базы.
+  if (!appSettingFlag(database, "species_resistance_effects_v1")) {
+    const grants: [string, string[]][] = [
+      ["6d584fc8-47c8-4b50-aecb-865f6e2ec6b1", ["Ядовитый"]], // Кованый · Устойчивость конструкта
+      ["c00eee51-e651-440a-92a2-843ddadce855", ["Ядовитый"]], // Дварф · Дварфийская стойкость
+      ["5c6db041-7532-4019-9f3a-8e962b11b4e6", ["Некротическая энергия", "Излучение"]], // Аасимар · Небесное сопротивление
+      ["471b1e56-f3ca-4053-8ee0-10f1de08886b", ["Психическая энергия"]], // Калаштар · Ментальная дисциплина
+      ["e0ce457a-1113-4322-94ad-87c03c36f31f", ["Ядовитый"]], // Тифлинг Бездны · Происхождение исчадия
+      ["ca499cdf-a82b-4248-9f10-e7cb3b796e42", ["Некротическая энергия"]], // Хтонический тифлинг
+      ["eb6e3903-25cf-422f-9217-566512f80b00", ["Огненный"]], // Инфернальный тифлинг
+    ];
+    const damageType = database.prepare(
+      `SELECT e.id FROM compendium_entries e JOIN compendium_entries p ON p.id = e.parent_id
+       WHERE e.kind = 'mechanic_item' AND p.name = 'Типы урона' AND e.name = ? LIMIT 1`
+    );
+    const read = database.prepare("SELECT id, data FROM compendium_entries WHERE uid = ?");
+    const update = database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?");
+    let fixed = 0;
+    for (const [uid, names] of grants) {
+      const row = read.get(uid) as { id: number; data: string } | undefined;
+      if (!row) continue;
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        continue;
+      }
+      const effects = Array.isArray(data.effects) ? (data.effects as Record<string, unknown>[]) : [];
+      if (effects.some((e) => e?.type === "resistance")) continue;
+      for (const name of names) {
+        const dt = damageType.get(name) as { id: number } | undefined;
+        if (!dt) continue;
+        effects.push({ id: `species-resist-${dt.id}`, type: "resistance", when: "always", damageType: { id: dt.id, name } });
+      }
+      data.effects = effects;
+      update.run(JSON.stringify(data), row.id);
+      fixed++;
+    }
+    if (fixed) console.log(`[migrate] species_resistance_effects_v1: сопротивления у ${fixed} умений видов`);
+    setAppSettingFlag(database, "species_resistance_effects_v1");
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);
