@@ -1448,7 +1448,7 @@ function App() {
     <header className="oneshot-header">
       <a href="/" onClick={e => { if (!canLeaveSheet()) e.preventDefault(); }}>SoyMan_1shot</a>
       {active && <span className="muted oneshot-header-name">{active.name}</span>}
-      <span role="status" className={!status && !active ? 'oneshot-header-note' : undefined}>{status || (active ? '' : 'Всё хранится в этом браузере')}</span>
+      <span role="status" className={!status && !active ? 'oneshot-header-note' : undefined}>{/* «на устройстве» — одной строкой, как на макете. */}{(status || (active ? '' : 'Всё хранится в этом браузере')).replace(' на ', ' на ')}</span>
       {active?.content && <>
         <button type="button" className="oneshot-header-toggle" aria-label="Дополнительные действия" aria-expanded={headerMenuOpen} aria-controls="oneshot-header-options" onClick={() => setHeaderMenuOpen(v => !v)}>⋯</button>
         <div id="oneshot-header-options" className="oneshot-header-options" data-open={headerMenuOpen}>

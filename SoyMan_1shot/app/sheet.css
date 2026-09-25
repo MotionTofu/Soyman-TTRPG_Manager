@@ -498,18 +498,17 @@ html[data-app="oneshot"] .oneshot-gestures > button {
 /* ---- Шапка и меню «⋯» по доске «Лист · ПК · Карта» (правки 2026-09-25).
    Под шапкой нет серой полосы: рваный край вырезан маской из той же
    фоновой бумаги, что и страница (фон закреплён, поэтому стыка нет). ---- */
+/* Низ шапки — ровный срез, как на макетах (владелец 2026-09-25); чёрная
+   текстура — та же ink-surface в масштабе макета (620 px на #141414). */
 html[data-app="oneshot"] .oneshot-header {
   min-height: 64px;
-  padding: 0 max(40px, calc((100vw - 1500px) / 2)) 10px;
+  padding: 0 max(40px, calc((100vw - 1500px) / 2));
   gap: 24px;
   align-items: center;
+  background: #141414 var(--skin-ink-surface) center / 620px repeat;
 }
 html[data-app="oneshot"] .oneshot-header::after {
-  bottom: -2px;
-  height: 20px;
-  background: var(--skin-page-veil), var(--skin-paper-base) var(--skin-paper-tile) 0 0 / 640px auto repeat fixed;
-  -webkit-mask: url("/ui/wizard/paper-edge.webp") left bottom / auto 100% repeat-x;
-  mask: url("/ui/wizard/paper-edge.webp") left bottom / auto 100% repeat-x;
+  content: none;
 }
 html[data-app="oneshot"] .oneshot-header > a { width: 119px; height: 42px; background-size: contain; }
 html[data-app="oneshot"] .oneshot-header > .muted {
@@ -596,3 +595,26 @@ html[data-app="oneshot"] .oneshot-header-options .oneshot-large-cards input[type
 }
 html[data-app="oneshot"] .oneshot-header-options > button.oneshot-menu-gestures::before { content: "☝"; font-size: 18px; }
 html[data-app="oneshot"] .oneshot-header-options > button:hover:not(.oneshot-menu-deck) { background: rgba(243, 255, 58, .55); }
+
+/* Телефон по доскам «Лист · Телефон»: одна строка — логотип, статус справа,
+   «⋯»; имени нет (оно на карте). Автономная копия — со своей раскладкой. */
+@media (max-width: 700px) {
+  html[data-app="oneshot"] .oneshot-header:not(.oneshot-standalone-header) {
+    display: flex;
+    min-height: 56px;
+    padding: 0 14px;
+    gap: 12px;
+  }
+  html[data-app="oneshot"] .oneshot-header:not(.oneshot-standalone-header) > a { width: 96px; height: 34px; }
+  html[data-app="oneshot"] .oneshot-header:not(.oneshot-standalone-header) > .muted { display: none; }
+  html[data-app="oneshot"] .oneshot-header:not(.oneshot-standalone-header) [role="status"] {
+    margin-left: auto;
+    max-width: 16ch;
+    font-size: 11px;
+  }
+  html[data-app="oneshot"] .oneshot-header:not(.oneshot-standalone-header) .oneshot-header-toggle {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+  }
+}
