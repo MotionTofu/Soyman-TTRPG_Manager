@@ -12,6 +12,7 @@ import { migrateDndOriginGrants } from "./dndOriginGrants";
 import { migrateDndCombatEffects } from "./dndCombatEffects";
 import { migrateDndFindingsEffects } from "./dndFindingsEffects";
 import { migrateDndWizardData } from "./dndWizardData";
+import { migrateClassOracleQuotes } from "./oracleQuotes";
 import { migrateDndFeatData } from "./dndFeatData";
 import { migrateDndSpeedStructure } from "./dndSpeedStructure";
 import { migrateDndSheetRefs } from "./dndSheetRefs";
@@ -6815,6 +6816,9 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     if (fixed) console.log(`[migrate] prof_refs_by_name_v1: ссылки перепривязаны у ${fixed} записей`);
     setAppSettingFlag(database, "prof_refs_by_name_v1");
   }
+
+  // Цитаты оракула десяти классов и подклассов (владелец, 2026-09-26).
+  migrateClassOracleQuotes(database);
 
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
