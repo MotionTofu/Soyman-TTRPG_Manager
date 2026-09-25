@@ -365,6 +365,10 @@ body.sheet-fullscreen {
 .dnd-triad .muted {
   color: var(--on-surface-muted);
 }
+/* Плашка действующего заклинания под КЗ («+5 Щит») — светлым по чёрному. */
+.dnd-triad .dnd-ac-chip {
+  color: #e8e4da;
+}
 
 /* ---- Tabs: inactive muted and clean, active acid marker. ----
  * Chip via background + color (no positioning, no layout shift); the inline
@@ -1278,14 +1282,22 @@ button.dnd-card-level {
   display: inline-flex;
   gap: 4px;
 }
-.dnd-pool-pips > span {
+.dnd-pool-pips > button {
   width: 14px;
   height: 14px;
+  min-height: 0;
+  padding: 0;
   box-sizing: border-box;
   border: 2px solid var(--skin-ink);
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
 }
-.dnd-pool-pips > span.is-used {
+.dnd-pool-pips > button.is-used {
   background: var(--skin-ink);
+}
+.dnd-pool-pips > button:disabled {
+  cursor: default;
 }
 .dnd-action-head {
   padding: 18px 0 6px;
@@ -1331,7 +1343,8 @@ button.dnd-card-level {
   .dnd-action-nums {
     width: auto;
     display: grid;
-    grid-template-columns: 64px 170px;
+    /* «СЛ Мдр 13 · Инт» в 64px не влезал — обрезался в «СЛ Мд…». */
+    grid-template-columns: 128px 170px;
     align-items: center;
     column-gap: 14px;
   }

@@ -170,7 +170,7 @@ import { useIsMobile } from "../../hooks/useIsMobile";
 import { useDndPrefs } from "../../hooks/useDndPrefs";
 import { useEvent, useLatest } from "../../hooks/useEvent";
 import { choicesFromEntries, featuresFromEntries, inferTimingFromLegacyText, lineageDamageType, liveEffectEntryIds, spellTimingFromData, sumEntrySlots, TIMING_KEY_TO_LABEL, withGrantedSenses, withLineageDamage, withLiveEffects, INSPIRATION_TOKEN_ENABLED, RECEIVED_SPELLS_ENABLED, type ChoiceDef } from "./dndFeatures";
-import { WeaponMasteryPicker, isMasterableWeapon } from "./StartingEquipmentPicker";
+import { WeaponMasteryPicker, isMasterableWeapon, weaponMasteryName } from "./StartingEquipmentPicker";
 import { extractEnglishName } from "../../compendium";
 import { ChecklistEditor, emptySpeed, formatSpeed, SensesEditor, SpeedEditor } from "./DndCreatureForm";
 import { errorMessage, findDndSystemId, isAbortError, linkFeatsByName, loadDndFeats, loadDndMechanicsGroup, loadDndMechanicsGroupEntries, type DndMechanicsOption } from "./dndCompendium";
@@ -5875,12 +5875,12 @@ function AttacksTable({
               key={i}
               className={`dnd-action-card${spending ? " is-spending" : ""}`}
               style={spending && color ? { borderLeftColor: color } : undefined}
-              role={r.source && onOpen ? "button" : undefined}
-              tabIndex={r.source && onOpen ? 0 : undefined}
-              aria-label={r.source && onOpen ? `${r.name} — открыть описание` : undefined}
-              onClick={r.source && onOpen ? () => onOpen(r) : undefined}
+              role={onOpen ? "button" : undefined}
+              tabIndex={onOpen ? 0 : undefined}
+              aria-label={onOpen ? `${r.name} — открыть описание` : undefined}
+              onClick={onOpen ? () => onOpen(r) : undefined}
               onKeyDown={
-                r.source && onOpen
+                onOpen
                   ? (e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
@@ -6274,19 +6274,32 @@ function spellActivationPatch(spell: DndSpellEntry, value: DndCharacterData, onO
   return {};
 }
 
+// Заклинание меняет числа листа: защита или плоская прибавка к броскам.
+// Действующее (activeSpells/концентрация) лист считает сам — effectCarriers.
+function spellChangesSheet(spell: DndSpellEntry): boolean {
+  return (spell.effects ?? []).some(
+    (e) => isNumericDefense(e) || (e.type === "roll_modifier" && typeof e.flat === "number")
+  );
+}
+
 // Отметка «действует» руками — для наложенного без ячейки (воззвание
-// «Доспехи теней», свиток) и чтобы снять досрочно. Только у числовой защиты:
-// у остального отметка ничего бы не меняла.
+// «Доспехи теней», свиток) и чтобы снять досрочно. Только у меняющего лист:
+// у остального отметка ничего бы не меняла. Подпись «Уже действует —
+// отметить» читалась как «уже действует» — владелец снял Щит и решил, что
+// снятие не сработало (2026-09-26).
 function ActiveSpellToggle({
   spell,
   value,
+  free,
   onQuickUpdate,
 }: {
   spell: DndSpellEntry;
   value: DndCharacterData;
+  /** Заговор: ячейки у него нет вовсе, «без траты ячейки» — лишнее. */
+  free?: boolean;
   onQuickUpdate: (patch: Partial<DndCharacterData>) => void;
 }) {
-  if (!(spell.effects ?? []).some(isNumericDefense)) return null;
+  if (!spellChangesSheet(spell)) return null;
   const on = spell.concentration ? value.concentration === spell.name : (value.activeSpells ?? []).includes(spell.name);
   const toggle = () => {
     if (spell.concentration) onQuickUpdate({ concentration: on ? "" : spell.name, concentrationOnOther: "" });
@@ -6297,7 +6310,7 @@ function ActiveSpellToggle({
   };
   return (
     <button type="button" className="comp-mini" aria-pressed={on} onClick={toggle}>
-      {on ? "Действует — снять" : "Уже действует — отметить"}
+      {on ? "Действует — снять" : free ? "Применить" : "Применить без траты ячейки"}
     </button>
   );
 }
@@ -6327,11 +6340,9 @@ function SpendAction({
   if (row.source?.kind === "spell") {
     const level = row.source.level;
     const castSpell = row.source.spell;
-    const toggle = <ActiveSpellToggle spell={castSpell} value={value} onQuickUpdate={onQuickUpdate} />;
+    const toggle = <ActiveSpellToggle spell={castSpell} value={value} free={level === 0} onQuickUpdate={onQuickUpdate} />;
     // Меняет числа и накладывается не только на себя — спросить, на кого.
-    const changesNumbers = (castSpell.effects ?? []).some(
-      (e) => isNumericDefense(e) || (e.type === "roll_modifier" && typeof e.flat === "number")
-    );
+    const changesNumbers = spellChangesSheet(castSpell);
     const targetPick = changesNumbers && !/на себя|личн/i.test(castSpell.range ?? "") && (
       <div className="row" role="group" aria-label="На кого" style={{ gap: 6 }}>
         <button type="button" className="comp-mini" aria-pressed={!onOther} onClick={() => setOnOther(false)}>
@@ -6668,6 +6679,87 @@ function SpendAction({
     <div className="stack" style={{ gap: 6, alignItems: "flex-start" }}>
       {blocks}
     </div>
+  );
+}
+
+// Окно строки «Действий» без источника: оружие и вписанные руками атаки
+// (владелец 2026-09-26: описание должно читаться у всех действий). Оружие —
+// числа строки, описание записи снаряжения, приём и свойства с описаниями
+// из групп механик (связь по имени без [англ.], как в визарде).
+function ActionInfoModal({ row, systemId, onClose }: { row: AttackRow; systemId: number | null; onClose: () => void }) {
+  const getEntry = useCompendiumEntries([row.entryId]);
+  const entry = getEntry(row.entryId);
+  const [mech, setMech] = useState<{ mastery: CompendiumEntry[]; props: CompendiumEntry[] } | null>(null);
+  useEffect(() => {
+    if (!systemId || row.entryId == null) return;
+    const ac = new AbortController();
+    Promise.all([
+      loadDndMechanicsGroupEntries(systemId, "Мастерство оружия", { signal: ac.signal }),
+      loadDndMechanicsGroupEntries(systemId, "Свойства оружия", { signal: ac.signal }),
+    ])
+      .then(([mastery, props]) => setMech({ mastery, props }))
+      .catch(() => undefined);
+    return () => ac.abort();
+  }, [systemId, row.entryId]);
+  const bare = (x: string) => x.replace(/\s*\[.*\]$/, "");
+  const masteryName = entry ? bare(weaponMasteryName(entry)) : "";
+  const mastery = mech?.mastery.find((m) => m.name === masteryName);
+  const props = (Array.isArray(entry?.data.weapon_properties) ? (entry.data.weapon_properties as unknown[]) : [])
+    .map((x) => x as { name?: unknown; distance?: unknown })
+    .map((x) => ({
+      name: typeof x?.name === "string" ? bare(x.name) : "",
+      distance: typeof x?.distance === "string" ? x.distance : "",
+    }))
+    .filter((x) => x.name);
+  const { ru, en } = spellNameParts({ name: row.name, nameOriginal: entry?.name_original });
+  // Урон строки — «1к8 +3 · Свойства · Мастерство: … · источники»: по пункту
+  // в строку, первым — урон.
+  const lines = [row.bonus && row.bonus !== "—" ? `Атака ${row.bonus}` : "", row.range, ...(row.damage || "").split(" · ")].filter(
+    (x) => x && x !== "—"
+  );
+  return (
+    <Modal onClose={onClose}>
+      <div className="stack dnd-spell-modal">
+        <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div className="dnd-spell-modal-title">
+            <h3 style={{ margin: 0 }}>{ru}</h3>
+            {en && <div className="dnd-spell-modal-en">{en}</div>}
+          </div>
+          <button type="button" className="comp-mini" onClick={onClose} aria-label="Закрыть">
+            <NavIcon name="close" />
+          </button>
+        </div>
+        {lines.length > 0 && (
+          <div className="stack" style={{ gap: 2 }}>
+            {lines.map((l, i) => (
+              <span key={i} className={i === 0 ? undefined : "muted"}>
+                {l}
+              </span>
+            ))}
+          </div>
+        )}
+        {entry?.description?.trim() ? <MentionText text={entry.description} /> : null}
+        {row.description?.trim() ? <MentionText text={row.description} /> : null}
+        {masteryName && (
+          <div className="stack" style={{ gap: 4 }}>
+            <strong>Приём: {masteryName}</strong>
+            {mastery?.description?.trim() ? <MentionText text={mastery.description} /> : null}
+          </div>
+        )}
+        {props.map((pr) => {
+          const d = mech?.props.find((m) => m.name === pr.name)?.description?.trim();
+          return (
+            <div key={pr.name} className="stack" style={{ gap: 4 }}>
+              <strong>
+                Свойство: {pr.name}
+                {pr.distance ? ` (${pr.distance})` : ""}
+              </strong>
+              {d ? <MentionText text={d} /> : null}
+            </div>
+          );
+        })}
+      </div>
+    </Modal>
   );
 }
 
@@ -8218,28 +8310,55 @@ function HpEditModal({
   );
 }
 
-// Строка-напоминание в «Действиях»: своё число и своё место в очереди боя.
-//
-// Только чтение. Вписывают бросок в модалке с кости на лице карты — там же
-// видно, из чего складывается бонус, и там же считается сумма. Второе поле
-// ввода для одного числа означало бы два места, где его правят.
-function InitiativeReminder({ characterId }: { characterId?: number | null }) {
-  // Мастер поправил число в очереди — строка обновляется тем же событием,
-  // которым обновляется весь лист: character-updated задевает карточку
-  // персонажа, а с ней и этот путь (data/syncAffects.ts). Не прочиталось —
-  // персонажа могли не звать в бой, сессии может не быть вовсе: строка просто
-  // не показывается, ошибку тут показывать нечего.
+// Плашка инициативы в «Действиях» (по центру между правкой и веером):
+// своё число — чтобы помнить его и назвать Мастеру. Число — из калькулятора
+// на кости с лица карты; щелчок по плашке открывает тот же калькулятор.
+// С кампанией число и место в очереди берутся у Мастера (туда уходит бросок).
+function InitiativePlate({
+  characterId,
+  local,
+  derived,
+  misc,
+  onQuickUpdate,
+}: {
+  characterId?: number | null;
+  /** Своё записанное число — без кампании только оно и есть. */
+  local: number | null;
+  derived: Derived;
+  misc: string;
+  onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
+}) {
+  const { campaignConnected } = useDndRuntime();
+  const [open, setOpen] = useState(false);
+  // Мастер поправил число в очереди — плашка обновляется тем же событием,
+  // которым обновляется весь лист (data/syncAffects.ts).
   const standing = useResource<{ initiative: number | null; place: number | null }>(
-    characterId != null ? `/characters/${characterId}/initiative` : null
+    campaignConnected && characterId != null ? `/characters/${characterId}/initiative` : null
   ).data;
-
-  if (!standing || standing.place == null) return null;
+  const inQueue = standing?.place != null;
+  const shown = inQueue ? standing.initiative : local;
   return (
-    <span className="dnd-initiative-reminder muted">
-      {standing.initiative == null
-        ? "Инициатива не брошена"
-        : `Инициатива ${standing.initiative} · ${standing.place}-й в очереди`}
-    </span>
+    <>
+      <button
+        type="button"
+        className="dnd-magic-num dnd-initiative-plate"
+        disabled={!onQuickUpdate}
+        onClick={() => setOpen(true)}
+        aria-label={`Инициатива ${shown ?? "не брошена"} — открыть калькулятор`}
+      >
+        <span>Инициатива</span> <b>{shown ?? "—"}</b>
+        {inQueue && <span>{standing.place}-й в очереди</span>}
+      </button>
+      {open && (
+        <InitiativeRollModal
+          derived={derived}
+          misc={misc}
+          characterId={characterId}
+          onQuickUpdate={onQuickUpdate}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
   );
 }
 
@@ -9459,16 +9578,34 @@ function DndActionPools({
             max > 0 ? (
               // Квадратик на ячейку, закрашен — потрачен (макет 2026-09-25):
               // остаток круга виден без счёта, как пипсы на «Ресурсах».
+              // Щелчок тратит (как PipTrack): закрашивает до квадрата
+              // включительно, по крайнему закрашенному — снимает трату.
               <span
                 key={i}
                 className="dnd-pool-slot"
+                role="group"
                 aria-label={`${i + 1} круг: осталось ${Math.max(0, slotLeft[i])} из ${max}`}
               >
                 <span aria-hidden="true">{i + 1} круг</span>
-                <span className="dnd-pool-pips" aria-hidden="true">
-                  {Array.from({ length: max }, (_, k) => (
-                    <span key={k} className={k < max - Math.max(0, slotLeft[i]) ? "is-used" : undefined} />
-                  ))}
+                <span className="dnd-pool-pips">
+                  {Array.from({ length: max }, (_, k) => {
+                    const used = max - Math.max(0, slotLeft[i]);
+                    return (
+                      <button
+                        key={k}
+                        type="button"
+                        className={k < used ? "is-used" : undefined}
+                        disabled={!onQuickUpdate}
+                        aria-pressed={k < used}
+                        aria-label={`${i + 1} круг: потрачено ${k + 1}`}
+                        onClick={() => {
+                          const next = spellSlotsUsed.slice();
+                          next[i] = used === k + 1 ? k : k + 1;
+                          onQuickUpdate?.({ spellSlotsUsed: next });
+                        }}
+                      />
+                    );
+                  })}
                 </span>
               </span>
             ) : null
@@ -10370,7 +10507,7 @@ export function DndCharacterView({
   // Визард левелапа с оборота карты (игрок своего, мастер любого): модалка
   // живёт здесь же, применение — тем же мгновенным сохранением, что значения.
   const [showLevelUp, setShowLevelUp] = useState(false);
-  const { detached } = useDndRuntime();
+  const { detached, campaignConnected } = useDndRuntime();
   const [inbox, setInbox] = useState<CharacterInboxMessage[] | null>(null);
   const [inboxLoading, setInboxLoading] = useState(false);
   const [inboxError, setInboxError] = useState<string | null>(null);
@@ -11608,6 +11745,9 @@ export function DndCharacterView({
             (решение владельца 2026-09-06). Верх страницы — поиск, потом
             полоска карт. Отдых — жетоном с лицевой, происхождение правится
             адресом ?edit=1. */}
+        {openAction && !openAction.source && (
+          <ActionInfoModal row={openAction} systemId={value.systemId} onClose={() => setOpenAction(null)} />
+        )}
         {openAction?.source && (
           <DndCardModal
             title={openAction.name}
@@ -12275,8 +12415,7 @@ export function DndCharacterView({
                     type="button"
                     className="dnd-bookmark"
                     style={{ borderLeftColor: cardColor }}
-                    onClick={row.source ? () => setOpenAction(row) : undefined}
-                    disabled={!row.source}
+                    onClick={() => setOpenAction(row)}
                   >
                     <span className="dnd-bookmark-main">
                       {/* Как и в картуше: оригинал в скобках нужен поиску по
@@ -12620,10 +12759,15 @@ export function DndCharacterView({
                 ) : (
                   <span className="dnd-tab-btn" aria-hidden="true" />
                 )}
-                {/* Напоминание, а не поле: бросок вписывают в модалке с кости
-                    на лице карты. Здесь — только «какая инициатива и какой я
-                    в очереди», чтобы не лезть за этим к Мастеру. */}
-                <InitiativeReminder characterId={ownerCharacterId} />
+                <span className="dnd-tab-center dnd-tab-mid">
+                  <InitiativePlate
+                    characterId={ownerCharacterId}
+                    local={value.initiative}
+                    derived={derived.initiative}
+                    misc={value.initiativeMisc}
+                    onQuickUpdate={onQuickUpdate}
+                  />
+                </span>
                 <DndFanButton onOpen={() => setFanOpen(true)} />
               </div>
               {/* Лента пулов (этап 5): только то, что тратит хоть одна строка
@@ -13411,7 +13555,7 @@ export function DndCharacterView({
                   setHighlight(hit.highlight ?? null);
                 }}
               />
-              {onSheetBack && (
+              {onSheetBack && campaignConnected && (
                 <button type="button" className="dnd-sheet-back" onClick={onSheetBack}>
                   ← Профиль персонажа
                 </button>
