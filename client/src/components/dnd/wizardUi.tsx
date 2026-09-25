@@ -815,7 +815,10 @@ export function CardStage({
               </strong>
               <span className="muted">
                 {group.label ? `${group.label} · ` : ""}
-                {cur + 1} из {list.length} · стрелки ← → листают
+                <span className="wz-stage-num" style={{ minWidth: `${String(list.length).length}ch` }}>
+                  {cur + 1}
+                </span>{" "}
+                из {list.length} · стрелки ← → листают
               </span>
             </div>
             <button

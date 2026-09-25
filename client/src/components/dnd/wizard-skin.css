@@ -1223,6 +1223,12 @@
   .wz-stage-name-ghost {
     visibility: hidden;
   }
+  /* «9 из 13» и «10 из 13» одной ширины — подпись длиннее короткого имени. */
+  .wz-stage-num {
+    display: inline-block;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
   .wz-stage-aside {
     margin-left: auto;
   }
