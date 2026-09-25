@@ -2297,3 +2297,29 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-spell-school {
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+/* Бумага карты — внутри цепи рамки, а не до края карты: иначе фактура
+ * выглядывала за цепь. Отражённый призрак портрета — тоже внутри. */
+.dnd-card-face {
+  background: none;
+}
+.dnd-card-face::before {
+  content: "";
+  position: absolute;
+  inset: 8px 4px 4px;
+  z-index: -2;
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  pointer-events: none;
+}
+.dnd-card-face .dnd-card-portrait-ghost {
+  left: 4px;
+  right: 4px;
+  bottom: 4px;
+}
+/* Портрет доходит до чёрной полосы костей: без зазора бумаги между
+ * срезом портрета и виталами (владелец, 2026-09-25). */
+.dnd-card-face .dnd-card-portrait-zone {
+  margin-bottom: -12px;
+}
+.dnd-card-face .dnd-card-cartouche {
+  padding-bottom: 22px;
+}
