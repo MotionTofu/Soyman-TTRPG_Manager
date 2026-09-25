@@ -4929,7 +4929,9 @@ function combatSpellRows(
       const label = structured ? checksLabel(s.checks ?? [], atk, dc) : formatSpellAttackSave(s.attackSave, atk, dc);
       return {
         name: s.name,
-        bonus: own && label ? `${label} · ${ABILITY_KEY_ABBR[s.ability!]}` : label,
+        // Своя характеристика заклинания (черта) уже в числе; подпись «· Инт»
+        // не читалась и отнимала место (владелец 2026-09-26).
+        bonus: label,
         damage: structured ? effectsLabel(s.effects ?? [], s.checks ?? []) : s.damage || s.healing || "—",
         range: s.range || "—",
         timing,
@@ -9576,37 +9578,24 @@ function DndActionPools({
           <span className="dnd-pool-band-label">Ячейки</span>{" "}
           {shownSlotPips.map((max, i) =>
             max > 0 ? (
-              // Квадратик на ячейку, закрашен — потрачен (макет 2026-09-25):
-              // остаток круга виден без счёта, как пипсы на «Ресурсах».
-              // Щелчок тратит (как PipTrack): закрашивает до квадрата
-              // включительно, по крайнему закрашенному — снимает трату.
-              <span
-                key={i}
-                className="dnd-pool-slot"
-                role="group"
-                aria-label={`${i + 1} круг: осталось ${Math.max(0, slotLeft[i])} из ${max}`}
-              >
+              // Ячейки — теми же тофу, что пулы и круги на «Магии» (владелец
+              // 2026-09-26): одна система трат на весь лист.
+              <span key={i} className="dnd-pool-slot">
                 <span aria-hidden="true">{i + 1} круг</span>
-                <span className="dnd-pool-pips">
-                  {Array.from({ length: max }, (_, k) => {
-                    const used = max - Math.max(0, slotLeft[i]);
-                    return (
-                      <button
-                        key={k}
-                        type="button"
-                        className={k < used ? "is-used" : undefined}
-                        disabled={!onQuickUpdate}
-                        aria-pressed={k < used}
-                        aria-label={`${i + 1} круг: потрачено ${k + 1}`}
-                        onClick={() => {
-                          const next = spellSlotsUsed.slice();
-                          next[i] = used === k + 1 ? k : k + 1;
-                          onQuickUpdate?.({ spellSlotsUsed: next });
-                        }}
-                      />
-                    );
-                  })}
-                </span>
+                <PoolMeter
+                  max={max}
+                  left={Math.max(0, slotLeft[i])}
+                  label={`Ячейки ${i + 1} круга`}
+                  onSetLeft={
+                    onQuickUpdate
+                      ? (next) => {
+                          const used = spellSlotsUsed.slice();
+                          used[i] = max - next;
+                          onQuickUpdate({ spellSlotsUsed: used });
+                        }
+                      : undefined
+                  }
+                />
               </span>
             ) : null
           )}

@@ -1,4 +1,5 @@
 import { NavIcon } from "../NavIcons";
+import { useDndPrefs } from "../../hooks/useDndPrefs";
 
 // Пипсы пулов — головы тофу (структурность): ресурс есть — голову видно,
 // потратили — тофу «съеден», окошко блеклое. Слепок маскота под 18px, а не
@@ -20,6 +21,10 @@ export function TofuPips({
    *  PipTrack) — снимает её, иначе последнее тофу несъедаемо. */
   onSetLeft?: (left: number) => void;
 }) {
+  // «Зачёркивать» (меню ⋯): та же дорожка, клетка вместо головы — целая
+  // пустая, потраченная крест-накрест. Бумажная клетка с тёмным крестом
+  // читается и на чёрной ленте, и на светлой бумаге, как и тофу.
+  const strike = useDndPrefs().poolMarks === "strike";
   return (
     <span className="dnd-tofu-pips" role="group" aria-label={label}>
       {Array.from({ length: max }, (_, i) => {
@@ -35,7 +40,12 @@ export function TofuPips({
             onClick={() => onSetLeft?.(i + 1 === left ? i : i + 1)}
           >
             <svg viewBox="0 0 18 18" aria-hidden="true">
-              {full ? (
+              {strike ? (
+                <>
+                  <rect x="1.5" y="1.5" width="15" height="15" className="dnd-tofu-body" />
+                  {!full && <path d="M4.5 4.5l9 9M13.5 4.5l-9 9" className="dnd-strike-cross" />}
+                </>
+              ) : full ? (
                 <>
                   <rect x="1.5" y="1.5" width="15" height="15" className="dnd-tofu-body" />
                   <circle cx="6.5" cy="8" r="2.2" className="dnd-tofu-eye" />

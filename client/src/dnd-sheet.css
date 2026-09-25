@@ -2673,6 +2673,11 @@ span.dnd-card-corner {
 .dnd-tofu-eye {
   fill: #241e18;
 }
+.dnd-strike-cross {
+  stroke: #241e18;
+  stroke-width: 2.2;
+  stroke-linecap: square;
+}
 .dnd-tofu-empty {
   fill: none;
   stroke: currentColor;

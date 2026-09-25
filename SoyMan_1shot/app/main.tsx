@@ -1464,6 +1464,7 @@ function App() {
           <button className="oneshot-menu-home" onClick={() => { if (canLeaveSheet()) location.assign('/'); }}>На главную</button>
           <span className="oneshot-menu-section">Вид</span>
           <label className="oneshot-large-cards"><input type="checkbox" checked={dndPrefs.abilityPrimary === 'mod'} onChange={e => saveDndPrefs({ ...dndPrefs, abilityPrimary: e.target.checked ? 'mod' : 'score' })} /> На кости — модификатор</label>
+          <label className="oneshot-large-cards"><input type="checkbox" checked={dndPrefs.poolMarks === 'strike'} onChange={e => saveDndPrefs({ ...dndPrefs, poolMarks: e.target.checked ? 'strike' : 'tofu' })} /> Ресурсы — зачёркивать</label>
           <label className="oneshot-large-cards"><input type="checkbox" checked={includeLargeCards} onChange={e => setIncludeLargeCards(e.target.checked)} /> Большие карты в копии</label>
           <span className="oneshot-menu-section">Файлы</span>
           {gmFile ? <button onClick={() => void shareGmFile(gmFile).catch(e => setError((e as Error).message))}>Файл готов — отправить Мастеру</button> : <button disabled={exporting} onClick={() => void exportHtml(true)}>Отправить Мастеру</button>}

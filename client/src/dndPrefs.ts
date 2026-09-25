@@ -79,6 +79,10 @@ interface DndPrefs {
   spellsPreparedOnly: boolean;
   distanceUnit: DndDistanceUnit;
   weightUnit: DndWeightUnit;
+  // Как отмечать потраченное в пулах и ячейках: съедать тофу (по умолчанию,
+  // так построен весь лист) или зачёркивать клетки — кому привычнее бумага
+  // (владелец 2026-09-26). Только показ: хранится одно и то же число.
+  poolMarks: "tofu" | "strike";
 }
 
 const DEFAULTS: DndPrefs = {
@@ -93,6 +97,7 @@ const DEFAULTS: DndPrefs = {
   distanceUnit: "feet",
   // По умолчанию фунты: так написаны веса в книге.
   weightUnit: "lb",
+  poolMarks: "tofu",
 };
 
 const STORAGE_KEY = "rpgManagerDndPrefs";
@@ -110,6 +115,7 @@ export function loadDndPrefs(): DndPrefs {
       if (typeof parsed.spellsPreparedOnly === "boolean") out.spellsPreparedOnly = parsed.spellsPreparedOnly;
       if (parsed.distanceUnit === "feet" || parsed.distanceUnit === "cells") out.distanceUnit = parsed.distanceUnit;
       if (parsed.weightUnit === "lb" || parsed.weightUnit === "kg") out.weightUnit = parsed.weightUnit;
+      if (parsed.poolMarks === "tofu" || parsed.poolMarks === "strike") out.poolMarks = parsed.poolMarks;
       return out;
     }
   } catch {

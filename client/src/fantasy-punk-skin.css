@@ -1278,27 +1278,6 @@ button.dnd-card-level {
   text-transform: uppercase;
   color: var(--skin-ink-soft);
 }
-.dnd-pool-pips {
-  display: inline-flex;
-  gap: 4px;
-}
-.dnd-pool-pips > button {
-  width: 14px;
-  height: 14px;
-  min-height: 0;
-  padding: 0;
-  box-sizing: border-box;
-  border: 2px solid var(--skin-ink);
-  border-radius: 0;
-  background: transparent;
-  cursor: pointer;
-}
-.dnd-pool-pips > button.is-used {
-  background: var(--skin-ink);
-}
-.dnd-pool-pips > button:disabled {
-  cursor: default;
-}
 .dnd-action-head {
   padding: 18px 0 6px;
 }
