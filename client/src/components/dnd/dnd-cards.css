@@ -301,8 +301,9 @@
   background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
   color: #171717;
 }
+/* Рамка — до краёв экрана. */
 .dc-fullcard-body {
-  padding: 12px 12px calc(96px + env(safe-area-inset-bottom));
+  padding: 0 0 calc(96px + env(safe-area-inset-bottom));
 }
 .dc-fullcard-back {
   position: fixed;
@@ -453,6 +454,14 @@
   text-decoration-style: dotted;
   text-underline-offset: 2px;
   cursor: pointer;
+}
+/* В таблице развития — без подложки общего стиля кнопок: только пунктир. */
+.dc-scroll .dc-prog :is(.dc-ability, .dc-lvl) {
+  background: none;
+  border: 0;
+  border-image: none;
+  box-shadow: none;
+  min-height: 0;
 }
 .dc-ability[aria-expanded="true"] {
   text-decoration-style: solid;

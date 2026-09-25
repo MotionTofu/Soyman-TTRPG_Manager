@@ -491,7 +491,7 @@
   border: 0;
   border-radius: 0;
   background: none;
-  padding: 12px 12px calc(96px + env(safe-area-inset-bottom));
+  padding: 0 0 calc(96px + env(safe-area-inset-bottom));
 }
 .wz-fullcard-back {
   position: fixed;

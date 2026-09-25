@@ -267,6 +267,27 @@ function readProgression(entry: CompendiumEntry): Progression | null {
 
 const norm = (s: string) => s.trim().toLocaleLowerCase("ru").replace(/ё/g, "е");
 
+// Общие столбцы — короткими подписями по роли (владелец, 2026-09-25); столбцы
+// своих механик класса («Ярость», «Воззвания») остаются как в справочнике.
+function progLabel(c: ProgressionColumn): string {
+  const slot = /^slot(\d)$/.exec(c.role ?? "");
+  if (slot) return `Яч ${slot[1]}`;
+  switch (c.role) {
+    case "level":
+      return "УРВ";
+    case "prof_bonus":
+      return "БМ";
+    case "features":
+      return "Умения";
+    case "cantrips":
+      return "Заг.";
+    case "prepared":
+      return "Подг. Закл.";
+    default:
+      return c.label;
+  }
+}
+
 /**
  * Имя умения, по щелчку — окошко с его текстом (решение 8: и ПК, и телефон,
  * под словом или над ним — по тому, где больше места). Стрелка — в полную
@@ -449,7 +470,9 @@ export function CardScroll({
               <thead>
                 <tr>
                   {prog.columns.map((c) => (
-                    <th key={c.key}>{c.label}</th>
+                    <th key={c.key} title={c.label}>
+                      {progLabel(c)}
+                    </th>
                   ))}
                 </tr>
               </thead>
