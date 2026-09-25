@@ -154,13 +154,15 @@ html[data-app="oneshot"] .dnd-init-modal :is(button, input):focus-visible {
 
 /* Sheet-owned fullscreen surfaces also belong to OneShot, including their
    portal roots. Keep the shared D&D implementation and skin only this app. */
+/* Список — ровная бумага без пятен (владелец 2026-09-26), текстура —
+   только в шапке. */
 html[data-app="oneshot"] .dnd-spell-picker {
   background-color: var(--ui-surface);
-  background-image: var(--skin-paper-panel);
   color: var(--ui-text);
 }
 html[data-app="oneshot"] .dnd-spell-picker-head {
   border-bottom: 3px solid var(--ui-border);
+  background-image: var(--skin-paper-panel);
 }
 html[data-app="oneshot"] .dnd-spell-picker-title {
   font-family: var(--font-ui);

@@ -171,6 +171,7 @@ import { useDndPrefs } from "../../hooks/useDndPrefs";
 import { useEvent, useLatest } from "../../hooks/useEvent";
 import { choicesFromEntries, featuresFromEntries, inferTimingFromLegacyText, lineageDamageType, liveEffectEntryIds, spellTimingFromData, sumEntrySlots, TIMING_KEY_TO_LABEL, withGrantedSenses, withLineageDamage, withLiveEffects, INSPIRATION_TOKEN_ENABLED, RECEIVED_SPELLS_ENABLED, type ChoiceDef } from "./dndFeatures";
 import { WeaponMasteryPicker, isMasterableWeapon, weaponMasteryName } from "./StartingEquipmentPicker";
+import { classSpellPicks } from "./classSpellPicks";
 import { extractEnglishName } from "../../compendium";
 import { ChecklistEditor, emptySpeed, formatSpeed, SensesEditor, SpeedEditor } from "./DndCreatureForm";
 import { errorMessage, findDndSystemId, isAbortError, linkFeatsByName, loadDndFeats, loadDndMechanicsGroup, loadDndMechanicsGroupEntries, type DndMechanicsOption } from "./dndCompendium";
@@ -1463,6 +1464,11 @@ function buildSpellDetail(entry: CompendiumEntry): SpellDetail {
   };
 }
 
+// Классы, что готовят из всего своего списка (гриллинг 2026-09-26, Q1):
+// на «Магии» им виден весь список класса доступных кругов. Узнаются по
+// имени, как Колдун и Воин ниже (nameMatches).
+const FULL_LIST_CLASSES = ["Артефактор", "Друид", "Жрец", "Паладин", "Следопыт"];
+
 function DndSpellLevelSection({
   level,
   title,
@@ -1480,6 +1486,8 @@ function DndSpellLevelSection({
   onCast,
   slotsLocked,
   color,
+  listSpells,
+  onTogglePrepared,
 }: {
   level: number;
   /** Переименование секции (арканум): по умолчанию «Заговоры»/«N круг». */
@@ -1505,6 +1513,12 @@ function DndSpellLevelSection({
   slotsLocked?: boolean;
   /** Цвет класса — им заливается звёздочка «всегда подготовлено». */
   color?: string;
+  /** Весь список класса (гриллинг 2026-09-26): заклинания круга, которых нет
+   *  в листе, — только показ, неподготовленными; в правке их не видно. */
+  listSpells?: DndSpellEntry[];
+  /** Ромб — кнопка подготовки вне правки. index — место в `spells`,
+   *  null — строка из списка класса (её ещё нет в листе). */
+  onTogglePrepared?: (spell: DndSpellEntry, index: number | null) => void;
 }) {
   const [dragOver, setDragOver] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -1593,7 +1607,8 @@ function DndSpellLevelSection({
   const filtered = query.trim()
     ? options.filter((o) => o.name.toLowerCase().includes(query.trim().toLowerCase()))
     : options;
-  const ordered = edit ? spells : sortSpells(spells);
+  const fromList = edit ? [] : (listSpells ?? []);
+  const ordered = edit ? spells : sortSpells([...spells, ...fromList]);
   // В режиме правки фильтр не применяется: подготовить нельзя то, чего не
   // видно. Круг при этом не прячется целиком даже когда всё скрыто — в его
   // заголовке живут ячейки, и они нужны независимо от подготовки.
@@ -1694,6 +1709,8 @@ function DndSpellLevelSection({
         )}
         {sorted.map((s) => {
           const realIndex = spells.indexOf(s);
+          // Строка из списка класса в `spells` не лежит: ключ — после них.
+          const rowKey = realIndex >= 0 ? realIndex : spells.length + fromList.indexOf(s);
           const { ru, en } = spellNameParts(s);
           const schoolSrc = s.school ? schoolIconSrc(s.school) : null;
           // Вне лимита и не от класса/вида — скорее всего черта: спросить,
@@ -1718,7 +1735,7 @@ function DndSpellLevelSection({
             </button>
           ) : null;
           return (
-            <div key={realIndex}>
+            <div key={rowKey}>
               <div
                 className={`comp-row dnd-spell-row${s.prepared === 2 ? " is-prepared" : ""}${s.prepared === 1 ? " is-prepared-once" : ""}`}
               >
@@ -1731,7 +1748,18 @@ function DndSpellLevelSection({
                     её дублирует графикой, поэтому скрыт от скринридера. */}
                 {/* Ромб подготовки (макет 2026-09-25): залит — подготовлено,
                     контур — нет; «всегда» — с кислотной сердцевиной. */}
-                <span className={`dnd-prep-diamond is-${s.prepared}`} aria-hidden="true" />
+                {onTogglePrepared && !edit && s.prepared !== 2 ? (
+                  <button
+                    type="button"
+                    className={`dnd-prep-diamond is-${s.prepared}`}
+                    aria-pressed={s.prepared === 1}
+                    aria-label={`${s.name}: ${s.prepared === 1 ? "подготовлено — снять" : "подготовить"}`}
+                    title={s.prepared === 1 ? "Подготовлено — снять" : "Подготовить"}
+                    onClick={() => onTogglePrepared(s, realIndex >= 0 ? realIndex : null)}
+                  />
+                ) : (
+                  <span className={`dnd-prep-diamond is-${s.prepared}`} aria-hidden="true" />
+                )}
                 {schoolSrc && (
                   <span className="dnd-spell-school-icon" title={s.school} aria-hidden="true">
                     <img src={schoolSrc} alt="" draggable={false} />
@@ -1758,6 +1786,7 @@ function DndSpellLevelSection({
                       {en && <span className="dnd-spell-en">{en}</span>}
                       {s.outsideLimit && <span className="dnd-outside-mark" title="Не в счёт подготовленных">∞</span>}
                       {abilityMark}
+                      {s.special && <span className="dnd-outside-mark" title="Взято по разрешению Мастера">особое</span>}
                     </button>
                   ) : (
                     <span className="dnd-spell-title">
@@ -1765,6 +1794,7 @@ function DndSpellLevelSection({
                       {en && <span className="dnd-spell-en">{en}</span>}
                       {s.outsideLimit && <span className="dnd-outside-mark" title="Не в счёт подготовленных">∞</span>}
                       {abilityMark}
+                      {s.special && <span className="dnd-outside-mark" title="Взято по разрешению Мастера">особое</span>}
                     </span>
                   )}
                   {freeCast}
@@ -1772,9 +1802,9 @@ function DndSpellLevelSection({
                     <button
                       type="button"
                       className="dnd-spell-meta-link"
-                      aria-expanded={expandedIndex === realIndex}
+                      aria-expanded={expandedIndex === rowKey}
                       aria-label={`${s.name} — открыть описание`}
-                      onClick={() => toggleDescription(realIndex, s.entryId!)}
+                      onClick={() => toggleDescription(rowKey, s.entryId!)}
                     >
                       <SpellMetaLine s={s} />
                     </button>
@@ -1851,7 +1881,7 @@ function DndSpellLevelSection({
                   )
                 )}
               </div>
-              {expandedIndex === realIndex && s.entryId && (
+              {expandedIndex === rowKey && s.entryId && (
                 <SpellDescription detail={details[s.entryId]} />
               )}
             </div>
@@ -1927,6 +1957,8 @@ function DndSpellsView({
   levelTitles,
   slotsLockedCircles,
   color,
+  listByLevel,
+  onTogglePrepared,
 }: {
   cantrips: DndSpellEntry[];
   spellSlotLevels: number;
@@ -1955,9 +1987,13 @@ function DndSpellsView({
   slotsLockedCircles?: ReadonlySet<number>;
   /** Цвет класса — им заливается звёздочка «всегда подготовлено». */
   color?: string;
+  /** Весь список класса по кругам (индекс 0 — 1 круг), без того, что в листе. */
+  listByLevel?: DndSpellEntry[][];
+  /** Подготовка ромбом вне правки: круг (0 — заговоры), заклинание, место. */
+  onTogglePrepared?: (level: number, spell: DndSpellEntry, index: number | null) => void;
 }) {
   const activeLevels = Array.from({ length: spellSlotLevels }, (_, i) => i).filter(
-    (i) => edit || spellSlotPips[i] > 0 || spellsByLevel[i].length > 0
+    (i) => edit || spellSlotPips[i] > 0 || spellsByLevel[i].length > 0 || (listByLevel?.[i]?.length ?? 0) > 0
   );
   if (!edit && activeLevels.length === 0 && cantrips.length === 0) return null;
   // Не `.stack`: на широком экране вкладка раскладывается в две колонки
@@ -1981,6 +2017,7 @@ function DndSpellsView({
           onFreeCastToggle={onFreeCastToggle ? (idx) => onFreeCastToggle(0, idx) : undefined}
           onCast={onCast}
           color={color}
+          onTogglePrepared={onTogglePrepared ? (sp, idx) => onTogglePrepared(0, sp, idx) : undefined}
         />
       )}
       {activeLevels.map((i) => (
@@ -2002,6 +2039,8 @@ function DndSpellsView({
           onFreeCastToggle={onFreeCastToggle ? (idx) => onFreeCastToggle(i + 1, idx) : undefined}
           onCast={onCast}
           color={color}
+          listSpells={listByLevel?.[i]}
+          onTogglePrepared={onTogglePrepared ? (sp, idx) => onTogglePrepared(i + 1, sp, idx) : undefined}
         />
       ))}
     </div>
@@ -6980,6 +7019,7 @@ function DndClassSpellListModal({
   maxCircle,
   titleLine,
   color,
+  listIds,
   onPick,
   onClose,
 }: {
@@ -6995,13 +7035,16 @@ function DndClassSpellListModal({
   titleLine: string;
   /** Цвет класса — заливка выбранных галочек и кнопки. */
   color: string;
-  /** Пачка: отметить несколько и добавить разом, одним сохранением. */
-  onPick: (items: { level: number; entry: CompendiumEntry }[]) => void;
+  /** Весь список класса, уже видный на «Магии» (готовящие из списка):
+   *  брать его незачем — строка помечена «в списке». */
+  listIds?: ReadonlySet<number>;
+  /** Пачка: отметить несколько и добавить разом, одним сохранением.
+   *  special — недоступное персонажу, взятое по разрешению Мастера. */
+  onPick: (items: { level: number; entry: CompendiumEntry; special: boolean }[]) => void;
   onClose: () => void;
 }) {
   const [all, setAll] = useState<CompendiumEntry[] | null>(null);
   const [query, setQuery] = useState("");
-  const [myClass, setMyClass] = useState(true);
   const [myCircle, setMyCircle] = useState(true);
   const [circleSel, setCircleSel] = useState<number | null>(null);
   const [picked, setPicked] = useState<ReadonlySet<number>>(new Set());
@@ -7046,17 +7089,27 @@ function DndClassSpellListModal({
   const presentCircles = [...new Set(classSpells.map((e) => e.level ?? 0))].sort((a, b) => a - b);
 
   const q = query.trim().toLowerCase();
-  // Сначала фильтр класса (свой список), потом круга, поиск — последним:
-  // пустое поле показывает выкладку, а не пустой экран. Конкретный круг
-  // перекрывает «мой круг», «Все» сбрасывает оба ограничения.
-  const base = myClass ? classSpells : (all ?? []);
-  const matching = base.filter((e) => {
+  // Круг: конкретный перекрывает «мой круг», «Все» снимает оба. Поиск
+  // перекрывает круги: пустое поле — выкладка, а не пустой экран.
+  const passes = (e: CompendiumEntry) => {
     const lvl = e.level ?? 0;
     if (q) return e.name.toLowerCase().includes(q);
     if (circleSel != null) return lvl === circleSel;
     if (myCircle) return lvl <= Math.max(0, maxCircle);
     return true;
-  });
+  };
+  const overCircle = (e: CompendiumEntry) => (e.level ?? 0) > maxCircle;
+  const classIdSet = new Set(classSpells.map((e) => e.id));
+  const isSpecial = (e: CompendiumEntry) => !classIdSet.has(e.id) || overCircle(e);
+  // Недоступное (гриллинг 2026-09-26, Q3–Q5): выше доступного круга — из
+  // своего списка по фильтру, чужое — только поиском (иначе сотни строк).
+  // Брать можно: Мастер разрешает; в листе будет пометка «особое».
+  const matching = classSpells.filter((e) => !overCircle(e) && passes(e));
+  const unavailable = (all ?? []).filter((e) =>
+    classIdSet.has(e.id) ? overCircle(e) && passes(e) : q !== "" && passes(e)
+  );
+  const unavailableReason = (e: CompendiumEntry) =>
+    classIdSet.has(e.id) ? `${e.level} круг — пока нет ячеек` : "не из списка класса";
   const byLevel = new Map<number, CompendiumEntry[]>();
   for (const e of matching) {
     const lvl = e.level ?? 0;
@@ -7064,6 +7117,11 @@ function DndClassSpellListModal({
     byLevel.get(lvl)!.push(e);
   }
   const levels = [...byLevel.keys()].sort((a, b) => a - b);
+  const byId = new Map((all ?? []).map((e) => [e.id, e]));
+  const pickedSpecial = [...picked].filter((id) => {
+    const e = byId.get(id);
+    return !!e && isSpecial(e);
+  }).length;
 
   function toggle(id: number) {
     setPicked((prev) => {
@@ -7091,14 +7149,58 @@ function DndClassSpellListModal({
       .filter(Boolean)
       .join(" · ");
 
+  // Строка в одну линию (макет 2026-09-26): галочка, школа, имя, подпись,
+  // справа — «в листе», «в списке» или причина недоступности.
+  const pickRow = (e: CompendiumEntry, note: string, isUnavailable: boolean) => {
+    const locked = owned.has(e.id) || (!isUnavailable && !!listIds?.has(e.id));
+    const isPicked = picked.has(e.id);
+    const meta = spellMeta(e);
+    const school = schoolIconSrc(spellSchoolName(e.data?.school));
+    return (
+      <button
+        key={e.id}
+        type="button"
+        className={`dnd-spell-pick-row${isPicked ? " is-picked" : ""}${isUnavailable ? " is-unavailable" : ""}`}
+        disabled={locked}
+        aria-pressed={isPicked || locked}
+        onClick={() => toggle(e.id)}
+      >
+        <span
+          className="dnd-pick-box"
+          style={isPicked || locked ? { background: color, borderColor: color } : undefined}
+          aria-hidden="true"
+        >
+          {(isPicked || locked) && (
+            <svg viewBox="0 0 18 18">
+              <path d="M3 9 L7 13 L15 4" fill="none" stroke="#e8e4da" strokeWidth="2.6" />
+            </svg>
+          )}
+        </span>
+        {school ? (
+          <img className="dnd-spell-pick-school" src={school} alt="" draggable={false} />
+        ) : (
+          <span className="dnd-spell-pick-school" aria-hidden="true" />
+        )}
+        <span className="dnd-spell-pick-main">
+          <span className="dnd-spell-pick-name">{stripLatin(e.name)}</span>
+          {meta && <span className="dnd-spell-pick-meta">{meta}</span>}
+        </span>
+        {isUnavailable && isPicked && <span className="dnd-spell-pick-special">особое</span>}
+        {note && <span className="dnd-spell-pick-circle">{note}</span>}
+      </button>
+    );
+  };
+
   return (
+    <>
+    <div className="dnd-spell-picker-backdrop" aria-hidden="true" onClick={onClose} />
     <div ref={dialogRef} className="dnd-spell-picker" role="dialog" aria-modal="true" aria-label="Взять заклинания" tabIndex={-1}>
       <div className="dnd-spell-picker-head">
         <div className="dnd-spell-picker-title-row">
           <div>
             <div className="dnd-spell-picker-title">Взять заклинания</div>
             <div className="dnd-spell-picker-sub">
-              {titleLine} · известно {owned.size} из {classSpells.length}
+              {titleLine} · в листе {owned.size}
             </div>
           </div>
           <button type="button" className="dnd-spell-picker-close" onClick={onClose} aria-label="Закрыть">
@@ -7107,21 +7209,14 @@ function DndClassSpellListModal({
         </div>
         <div className="dnd-spell-picker-search">
           <input
-            placeholder="Искать, если уже знаете название"
+            type="search"
+            placeholder="Название — найдёт и недоступные"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             aria-label="Поиск заклинаний по названию"
           />
         </div>
         <div className="dnd-spell-picker-chips" role="group" aria-label="Фильтры">
-          <button
-            type="button"
-            className={`dnd-pick-chip${myClass ? " is-on" : ""}`}
-            aria-pressed={myClass}
-            onClick={() => setMyClass((v) => !v)}
-          >
-            Мой класс
-          </button>
           <button
             type="button"
             className={`dnd-pick-chip${myCircle && circleSel == null ? " is-on" : ""}`}
@@ -7148,10 +7243,9 @@ function DndClassSpellListModal({
             ))}
           <button
             type="button"
-            className={`dnd-pick-chip${!myClass && !myCircle && circleSel == null ? " is-on" : ""}`}
-            aria-pressed={!myClass && !myCircle && circleSel == null}
+            className={`dnd-pick-chip${!myCircle && circleSel == null ? " is-on" : ""}`}
+            aria-pressed={!myCircle && circleSel == null}
             onClick={() => {
-              setMyClass(false);
               setMyCircle(false);
               setCircleSel(null);
             }}
@@ -7163,9 +7257,9 @@ function DndClassSpellListModal({
       <div className="dnd-spell-picker-list">
         {failed && <p className="muted">Не удалось загрузить справочник заклинаний.</p>}
         {!failed && all === null && <p className="muted">Загрузка…</p>}
-        {all !== null && levels.length === 0 && (
+        {all !== null && levels.length === 0 && unavailable.length === 0 && (
           <p className="muted">
-            {sources.length === 0 && myClass
+            {sources.length === 0
               ? "Сначала выберите класс — список строится по нему."
               : "Ничего не нашлось: у класса нет заклинаний в справочнике либо не подходит поиск."}
           </p>
@@ -7175,49 +7269,30 @@ function DndClassSpellListModal({
             <div className="dnd-spell-picker-group">
               <span>{lvl === 0 ? "Заговоры" : `${lvl} круг`}</span>
             </div>
-            {byLevel.get(lvl)!.map((e) => {
-              const isOwned = owned.has(e.id);
-              const isPicked = picked.has(e.id);
-              // Круга ещё нет (выше ячеек): брать нельзя — готовить такое
-              // заклинание правила запрещают. «Мой круг» их и так прячет;
-              // запрет нужен режиму «Все», где их видно. Заговоры (0) — всегда.
-              const overCircle = (e.level ?? 0) > maxCircle;
-              const meta = spellMeta(e);
-              return (
-                <button
-                  key={e.id}
-                  type="button"
-                  className={`dnd-spell-pick-row${isPicked ? " is-picked" : ""}`}
-                  disabled={isOwned || overCircle}
-                  title={overCircle ? `Нужен ${e.level} круг — у вас пока ${maxCircle}` : undefined}
-                  aria-pressed={isPicked}
-                  onClick={() => toggle(e.id)}
-                >
-                  <span
-                    className="dnd-pick-box"
-                    style={isPicked ? { background: color, borderColor: color } : undefined}
-                    aria-hidden="true"
-                  >
-                    {isPicked && (
-                      <svg viewBox="0 0 18 18">
-                        <path d="M3 9 L7 13 L15 4" fill="none" stroke="#e8e4da" strokeWidth="2.6" />
-                      </svg>
-                    )}
-                  </span>
-                  <span className="dnd-spell-pick-main">
-                    <span className="dnd-spell-pick-name">{e.name}</span>
-                    {meta && <span className="dnd-spell-pick-meta">{meta}</span>}
-                  </span>
-                  <span className="dnd-spell-pick-circle">{lvl === 0 ? "Заговор" : `${lvl} круг`}</span>
-                </button>
-              );
-            })}
+            {byLevel.get(lvl)!.map((e) =>
+              pickRow(e, owned.has(e.id) ? "в листе" : listIds?.has(e.id) ? "в списке" : "", false)
+            )}
           </div>
         ))}
+        {unavailable.length > 0 && (
+          <div className="dnd-spell-picker-unavailable">
+            <div className="dnd-spell-picker-group">
+              <span>Недоступные</span>
+              <em>берите, если разрешил Мастер</em>
+            </div>
+            {unavailable.map((e) => pickRow(e, owned.has(e.id) ? "в листе" : unavailableReason(e), true))}
+          </div>
+        )}
       </div>
       <div className="dnd-spell-picker-foot">
         <span className="muted dnd-spell-picker-count">
           Отмечено <strong>{picked.size}</strong>
+          {pickedSpecial > 0 && (
+            <span className="dnd-spell-picker-warn" role="status">
+              {pickedSpecial === 1 ? "1 недоступное" : `Недоступных: ${pickedSpecial}`} — берите, если разрешил Мастер. В
+              листе пометка «особое».
+            </span>
+          )}
         </span>
         <button type="button" className="comp-mini" disabled={picked.size === 0} onClick={() => setPicked(new Set())}>
           Снять
@@ -7228,12 +7303,11 @@ function DndClassSpellListModal({
           style={{ background: color, borderColor: color }}
           disabled={picked.size === 0}
           onClick={() => {
-            const byId = new Map((all ?? []).map((e) => [e.id, e]));
             onPick(
               [...picked]
                 .map((id) => byId.get(id))
                 .filter((e): e is CompendiumEntry => !!e)
-                .map((e) => ({ level: e.level ?? 0, entry: e }))
+                .map((e) => ({ level: e.level ?? 0, entry: e, special: isSpecial(e) }))
             );
           }}
         >
@@ -7241,6 +7315,7 @@ function DndClassSpellListModal({
         </button>
       </div>
     </div>
+    </>
   );
 }
 
@@ -10385,6 +10460,21 @@ export function DndCharacterView({
   // пачкой на весь лист, а не запросом на запись (см. entryCache.ts).
   const wantedIds = sheetEntryIds(value);
   const getEntry = useCompendiumEntries(wantedIds);
+  // Весь список класса (Q2): справочник заклинаний грузится, только если среди
+  // классов есть готовящий из всего списка; в лист ничего не пишется.
+  const fullListClasses = value.classes.filter(
+    (c) => c.classId != null && FULL_LIST_CLASSES.some((n) => nameMatches(c.className, n))
+  );
+  const needSpellIndex = fullListClasses.length > 0 && value.systemId != null;
+  const [spellIndex, setSpellIndex] = useState<CompendiumEntry[] | null>(null);
+  useEffect(() => {
+    if (!needSpellIndex || value.systemId == null) return;
+    const ac = new AbortController();
+    loadDndSpellIndex(value.systemId, { signal: ac.signal })
+      .then(setSpellIndex)
+      .catch(() => undefined);
+    return () => ac.abort();
+  }, [needSpellIndex, value.systemId]);
   // Мёртвые ссылки этого листа (этап 8): запросили пачкой, сервер промолчал —
   // запись снесли из компендиума уже после вписки. Кэш общий на сессию,
   // поэтому пересекаем с запрошенным именно этим листом.
@@ -11667,6 +11757,64 @@ export function DndCharacterView({
     if (num && !hasKind && value.speeds.walk != null && Number(num[1]) === value.speeds.walk) return "";
     return text;
   })();
+  // Список класса по кругам — до старшего круга по уровню самого класса
+  // (Q8); без того, что уже в листе. classListIds — весь список, по нему
+  // снятая подготовка решает, стереть ли строку из листа (Q7).
+  const classListIds = new Set<number>();
+  const classListByLevel: DndSpellEntry[][] = Array.from({ length: 9 }, () => []);
+  if (spellIndex) {
+    const inSheet = new Set(
+      [...value.cantrips, ...value.spellsByLevel.flat()].map((sp) => sp.entryId).filter((id): id is number => id != null)
+    );
+    for (const c of fullListClasses) {
+      const data = getEntry(c.classId)?.data;
+      if (!data) continue;
+      const top = classSpellPicks(data, c.level, 0).topCircle;
+      for (const e of spellIndex) {
+        const lvl = e.level ?? 0;
+        if (lvl < 1 || lvl > top || classListIds.has(e.id)) continue;
+        const refs = Array.isArray(e.data?.classes) ? (e.data.classes as { id?: number }[]) : [];
+        if (!refs.some((r) => r.id === c.classId)) continue;
+        classListIds.add(e.id);
+        if (!inSheet.has(e.id)) {
+          classListByLevel[lvl - 1].push({ entryId: e.id, name: e.name, prepared: 0, ...spellSnapshotFromEntry(e) });
+        }
+      }
+    }
+  }
+  // Ромб вне правки: подготовить / снять. Из списка класса — пишется в лист
+  // подготовленным; снятое, если оно из списка и ничем не особо, стирается
+  // (в списке останется контуром). Взятое через «Добавить», «особое», выдачи
+  // и арканум остаются неподготовленными.
+  const togglePreparedInView = (level: number, sp: DndSpellEntry, index: number | null) => {
+    if (!onQuickUpdate) return;
+    const flip = (x: DndSpellEntry): DndSpellEntry => ({ ...x, prepared: x.prepared === 1 ? 0 : 1 });
+    if (level === 0) {
+      if (index != null) onQuickUpdate({ cantrips: value.cantrips.map((x, i) => (i === index ? flip(x) : x)) });
+      return;
+    }
+    const list = value.spellsByLevel[level - 1] ?? [];
+    let nextList: DndSpellEntry[];
+    if (index == null) {
+      nextList = [...list, { entryId: sp.entryId, name: sp.name, prepared: 1 }];
+    } else {
+      const cur = list[index];
+      if (!cur) return;
+      const drop =
+        cur.prepared === 1 &&
+        cur.entryId != null &&
+        classListIds.has(cur.entryId) &&
+        !cur.special &&
+        !cur.outsideLimit &&
+        !cur.arcanum &&
+        cur.sourceParentId == null;
+      nextList = drop ? list.filter((_, i) => i !== index) : list.map((x, i) => (i === index ? flip(x) : x));
+    }
+    onQuickUpdate({
+      spellsByLevel: value.spellsByLevel.map((l, i) => (i === level - 1 ? nextList : l)),
+      spellSlotLevels: Math.max(value.spellSlotLevels, level),
+    });
+  };
   // Класс и подкласс — источники списка. Многоклассовый персонаж видит
   // объединение: заклинание из любого своего списка он взять вправе.
   const spellListSources = value.classes.flatMap((c) => [
@@ -11803,6 +11951,7 @@ export function DndCharacterView({
               value.classes.find((c) => c.className)?.className ?? "Без класса"
             )} ${totalLevel}`}
             color={cardColor}
+            listIds={classListIds}
             onPick={(items) => {
               if (!onQuickUpdate || items.length === 0) return;
               // Берутся неподготовленными: взять в книгу и подготовить на день
@@ -11810,16 +11959,17 @@ export function DndCharacterView({
               // игрока. Снапшот не пишем — его подставит resolveSpell из
               // кэша справочника, как и у заклинаний, добавленных поиском.
               // Пачка уходит одним сохранением, а не N подряд.
-              const make = (entry: CompendiumEntry): DndSpellEntry => ({
+              const make = (entry: CompendiumEntry, special: boolean): DndSpellEntry => ({
                 entryId: entry.id,
                 name: entry.name,
                 prepared: 0,
+                ...(special ? { special: true } : {}),
               });
-              const newCantrips = items.filter((i) => i.level <= 0).map((i) => make(i.entry));
+              const newCantrips = items.filter((i) => i.level <= 0).map((i) => make(i.entry, i.special));
               const topLevel = Math.max(0, ...items.map((i) => i.level));
               const next = value.spellsByLevel.map((lvl, i) => [
                 ...lvl,
-                ...items.filter((it) => it.level === i + 1).map((it) => make(it.entry)),
+                ...items.filter((it) => it.level === i + 1).map((it) => make(it.entry, it.special)),
               ]);
               onQuickUpdate({
                 cantrips: [...value.cantrips, ...newCantrips],
@@ -12935,7 +13085,8 @@ export function DndCharacterView({
                     aria-pressed={!prefs.spellsPreparedOnly}
                     onClick={() => saveDndPrefs({ ...prefs, spellsPreparedOnly: false })}
                   >
-                    <span className="dnd-prepared-filter-long">Все известные</span>
+                    {/* У готовящих из всего списка «известные» — неправда (Q10). */}
+                    <span className="dnd-prepared-filter-long">{fullListClasses.length > 0 ? "Весь список" : "Все известные"}</span>
                     <span className="dnd-prepared-filter-short">Все</span>
                   </button>
                 </span>
@@ -13057,6 +13208,8 @@ export function DndCharacterView({
                     : undefined
                 }
                 onCantripsChange={onQuickUpdate ? (v) => onQuickUpdate({ cantrips: v }) : undefined}
+                listByLevel={classListByLevel}
+                onTogglePrepared={onQuickUpdate ? togglePreparedInView : undefined}
                 onSlotsChange={
                   onQuickUpdate
                     ? (i, v) => {

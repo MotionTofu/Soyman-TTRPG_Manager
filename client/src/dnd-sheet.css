@@ -3106,28 +3106,97 @@ span.dnd-card-corner {
   height: 14px;
   display: block;
 }
+/* Строка в одну линию (макет Sheet-PC-SpellPicker, 2026-09-26): имя и
+   подпись рядом, подпись уступает место и обрезается первой. */
 .dnd-spell-pick-main {
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
+  align-items: baseline;
+  gap: var(--sp-4);
 }
 .dnd-spell-pick-name {
+  flex: none;
+  max-width: 60%;
   font-size: var(--fs-h3);
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.2;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .dnd-spell-pick-meta {
-  font-family: var(--font-ui);
-  font-size: var(--fs-micro);
-  letter-spacing: 0.1em;
-  text-transform: var(--label-transform);
+  min-width: 0;
+  font-size: var(--fs-meta);
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.dnd-spell-pick-school {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  object-fit: contain;
+}
+.dnd-spell-pick-special {
+  flex: none;
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
+  text-transform: var(--label-transform);
+  padding: 1px 6px;
+  background: var(--ink);
+  color: var(--paper);
+}
+/* Недоступные — внизу, отбиты пунктиром и чуть темнее; блеклые, пока не
+   отмечены (гриллинг 2026-09-26, Q3). */
+.dnd-spell-picker-unavailable {
+  margin-top: var(--sp-5);
+  border-top: 2px dashed var(--line);
+  background: var(--paper-2);
+}
+.dnd-spell-picker-unavailable .dnd-spell-picker-group em {
+  font-style: normal;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.dnd-spell-pick-row.is-unavailable:not(.is-picked) {
+  opacity: 0.62;
+}
+.dnd-spell-picker-warn {
+  display: block;
+  margin-top: var(--sp-1);
+  color: var(--ink);
+}
+.dnd-spell-picker-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 44;
+  background: rgba(20, 20, 20, 0.62);
+}
+/* ПК: окно по центру, а не весь экран (владелец 2026-09-26: «неоправданно
+   большое»). Телефон остаётся полноэкранным. */
+@media (min-width: 701px) {
+  .dnd-spell-picker {
+    inset: auto;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(760px, calc(100vw - 32px));
+    height: min(880px, calc(100vh - 48px));
+    box-shadow: 10px 10px 0 rgba(0, 0, 0, 0.55);
+    /* Над шапкой приложения: затемнение должно накрыть и её. */
+    z-index: 61;
+  }
+  .dnd-spell-picker-backdrop {
+    z-index: 60;
+  }
+  .dnd-spell-pick-row {
+    min-height: 44px;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
 }
 .dnd-spell-pick-circle {
   flex: none;
