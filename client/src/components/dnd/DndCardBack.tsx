@@ -58,6 +58,9 @@ export function DndCardBack({
   const unread = messages.filter((m) => !m.read_at).length;
   const { campaignConnected } = useDndRuntime();
   const [oracle, setOracle] = useState<string | null>(null);
+  // После F5 оборот рисуется раньше, чем загрузится запись класса: пул пуст.
+  // Поэтому выбор — и по перевороту, и когда пул впервые стал непустым.
+  const hasQuotes = (oracleQuotes?.length ?? 0) > 0;
   useEffect(() => {
     const pool = (oracleQuotes ?? [])
       .map((q) => q.trim().replace(/^«+|»+$/g, "").trim())
@@ -65,7 +68,7 @@ export function DndCardBack({
     setOracle(pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : null);
     // Реролл только по перевороту: входящие и передачи цитату не дёргают.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flipKey]);
+  }, [flipKey, hasQuotes]);
   return (
     <div
       className="dnd-card-back"
