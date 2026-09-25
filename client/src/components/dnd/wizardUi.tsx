@@ -583,11 +583,13 @@ export function EntryPlate({
   entryId,
   entry,
   meta,
+  extra,
   action,
 }: {
   entryId: number | null;
   entry?: CompendiumEntry | null;
   meta?: ReactNode;
+  extra?: ReactNode;
   action?: PlateAction;
 }) {
   if (entryId == null) {
@@ -599,18 +601,20 @@ export function EntryPlate({
       </div>
     );
   }
-  return <EntryPlateLoaded key={entryId} entryId={entryId} entry={entry} meta={meta} action={action} />;
+  return <EntryPlateLoaded key={entryId} entryId={entryId} entry={entry} meta={meta} extra={extra} action={action} />;
 }
 
 function EntryPlateLoaded({
   entryId,
   entry: given,
   meta,
+  extra,
   action,
 }: {
   entryId: number;
   entry?: CompendiumEntry | null;
   meta?: ReactNode;
+  extra?: ReactNode;
   action?: PlateAction;
 }) {
   const { entry, failed } = useEntry(entryId, given);
@@ -624,6 +628,7 @@ function EntryPlateLoaded({
         ) : (
           <span className="muted">{failed ? "Описание не загрузилось." : "Загружаю…"}</span>
         )}
+        {extra}
       </Plate>
       {action && (
         <div className="wz-plate-actions">

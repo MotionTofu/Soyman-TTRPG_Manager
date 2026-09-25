@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { useDndRuntime } from './DndRuntime';
 import { selectedStartingSet } from './startingSetChoice';
 import { classSpellPicks, wizardBookPicks } from './classSpellPicks';
@@ -1488,12 +1488,16 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   // Инструменты с разметкой `tool_kind` (миграция dndWizardData): из них
   // выбирается «музыкальный инструмент на ваш выбор».
   const [toolCatalog, setToolCatalog] = useState<CompendiumEntry[]>([]);
+  const [masteryEntries, setMasteryEntries] = useState<CompendiumEntry[]>([]);
   useEffect(() => {
     if (!systemId) {
       setWeaponCatalog(null);
       return;
     }
     const ac = new AbortController();
+    loadDndMechanicsGroupEntries(systemId, "Мастерство оружия", { signal: ac.signal })
+      .then(setMasteryEntries)
+      .catch(() => undefined);
     loadDndEquipmentEntries(systemId, { signal: ac.signal })
       .then((rows) => {
         setWeaponCatalog(rows.filter(isMasterableWeapon));
@@ -2917,6 +2921,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         entryId: number;
         entry?: CompendiumEntry | null;
         meta?: string;
+        extra?: ReactNode;
         picked: boolean;
         onToggle: () => void;
         disabled?: boolean;
@@ -3064,7 +3069,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     entryId: number,
     picked: boolean,
     onToggle: () => void,
-    extra?: { entry?: CompendiumEntry | null; meta?: string; disabled?: boolean }
+    extra?: { entry?: CompendiumEntry | null; meta?: string; extra?: ReactNode; disabled?: boolean }
   ) {
     setSheet({ kind: "entry", entryId, picked, onToggle, ...extra });
   }
@@ -3433,6 +3438,25 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
                       onToggle={(k) => {
                         const e = weaponCatalog.find((x) => x.id === Number(k));
                         if (e) b.toggleWeapon(e);
+                      }}
+                      // Описание оружия и его приёма — в окне описания.
+                      onOpen={(k) => {
+                        const e = weaponCatalog.find((x) => x.id === Number(k));
+                        if (!e) return;
+                        const picked = b.weapons.some((w) => w.entryId === e.id);
+                        const masteryName = weaponMasteryName(e).replace(/\s*\[.*\]$/, "");
+                        const mastery = masteryEntries.find((m) => m.name === masteryName);
+                        openEntry(e.id, picked, () => b.toggleWeapon(e), {
+                          entry: e,
+                          meta: typeof e.data.damage === "string" ? e.data.damage : undefined,
+                          disabled: !picked && b.weapons.length >= b.weaponSlots,
+                          extra: masteryName ? (
+                            <div className="wz-plate-extra">
+                              <h3>Приём: {masteryName}</h3>
+                              {mastery?.description?.trim() ? <MentionText text={mastery.description} /> : null}
+                            </div>
+                          ) : undefined,
+                        });
                       }}
                     />
                   </>
@@ -4251,6 +4275,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
           entryId={viewed?.entryId ?? null}
           entry={viewed?.entry}
           meta={viewed?.meta}
+          extra={viewed?.extra}
           action={
             viewed
               ? {
@@ -4413,6 +4438,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         entryId={sheet.entryId}
         entry={sheet.entry}
         meta={sheet.meta}
+        extra={sheet.extra}
         onClose={close}
         action={{
           label: sheet.picked ? "Убрать" : "Взять",
