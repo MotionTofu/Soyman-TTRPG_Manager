@@ -404,10 +404,11 @@
   text-align: left;
   vertical-align: top;
 }
+/* Заголовок из двух слов — в две строки, столбец не распирает. */
 .dc-prog th {
   font-family: var(--font-ui);
   font-weight: 600;
-  white-space: nowrap;
+  vertical-align: bottom;
 }
 .dc-prog tr.is-current td {
   background: rgba(160, 110, 40, 0.22);
