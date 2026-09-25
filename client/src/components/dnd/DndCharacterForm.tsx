@@ -10041,20 +10041,16 @@ function DndOriginEditForm({
   origin,
   value,
   onQuickUpdate,
+  identityOnly,
 }: {
   origin: ReturnType<typeof useDndOrigin>;
   value: DndCharacterData;
   onQuickUpdate: (patch: Partial<DndCharacterData>) => void;
+  // «Редактировать» на обороте: только имя, игрок и мировоззрение. Класс, вид
+  // и предыстория меняются пересборкой в визарде — строкой их менять
+  // бессмысленно, механика оставалась прежней (гриллинг 2026-09-25, Q1).
+  identityOnly?: boolean;
 }) {
-  // Собранным считается лист, у которого выбрана система И есть хоть один
-  // источник из компендиума: дальше смена системы оборвёт ссылки. А листа,
-  // у которого система не выбрана вовсе, замок не касается — выбрать её
-  // впервые ничего оборвать не может, наоборот, чинит (было наоборот:
-  // персонаж с классом, но без системы запирался навсегда).
-  const systemKnown = origin.systems.some((sy) => sy.id === value.systemId);
-  const hasCompendiumSources =
-    value.raceId != null || value.backgroundId != null || value.classes.some((c) => c.classId != null);
-  const isSystemLocked = value.systemId != null && systemKnown && hasCompendiumSources;
   return (
     <div className="sb-origin-edit stack">
       <div className="row">
@@ -10071,6 +10067,7 @@ function DndOriginEditForm({
         </label>
       </div>
 
+      {!identityOnly && (
       <DndClassesEdit
         classes={value.classes}
         hierarchy={origin.hierarchy}
@@ -10082,8 +10079,11 @@ function DndOriginEditForm({
         loadError={origin.loadError}
         onRetryLoad={origin.reloadOrigin}
       />
+      )}
 
       <div className="row">
+        {!identityOnly && (
+        <>
         <label style={{ flex: 1 }}>
           Вид
           {origin.species.length > 0 ? (
@@ -10135,37 +10135,14 @@ function DndOriginEditForm({
             />
           )}
         </label>
+        </>
+        )}
         <label>
           Мировоззрение
           <input value={value.alignment} onChange={(e) => onQuickUpdate({ alignment: e.target.value })} />
         </label>
       </div>
 
-      {/* Система выбирается один раз: смена обрывает все ссылки на
-          компендиум — классы, вид, заклинания и умения остаются именами
-          без записей. На собранном листе поле только показывается. */}
-      {isSystemLocked ? (
-        <div className="sb-entry muted">
-          <span className="sb-prop-label">Система</span>{" "}
-          {origin.systems.find((sy) => sy.id === value.systemId)?.name ?? "не выбрана"} — менять нельзя,
-          иначе оборвутся ссылки на компендиум
-        </div>
-      ) : (
-        <label>
-          Система (для подсказок класса, вида и предыстории)
-          <select
-            value={value.systemId ?? ""}
-            onChange={(e) => onQuickUpdate({ systemId: e.target.value ? Number(e.target.value) : null })}
-          >
-            <option value="">Не выбрана</option>
-            {origin.systems.map((sy) => (
-              <option key={sy.id} value={sy.id}>
-                {sy.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
     </div>
   );
 }
@@ -10835,7 +10812,7 @@ export function DndCharacterView({
           onClick={() => setRightEditOpen((v) => !v)}
         >
           <span>
-            Редактировать <span className="dnd-face-edit-hint">портрет, происхождение, характеристики</span>
+            Редактировать <span className="dnd-face-edit-hint">имя, портрет, характеристики</span>
           </span>
           <span aria-hidden="true">{rightEditOpen ? "−" : "+"}</span>
         </button>
@@ -10886,7 +10863,7 @@ export function DndCharacterView({
                 }}
               />
             )}
-            <DndOriginEditForm origin={origin} value={value} onQuickUpdate={onQuickUpdate} />
+            <DndOriginEditForm origin={origin} value={value} onQuickUpdate={onQuickUpdate} identityOnly />
             {/* Характеристики — в ту же раскрывашку: на десктопе это и
                 есть «режим редактирования» (лицевая при этом тоже
                 правится только через ?edit=1, которого здесь нет).
