@@ -623,7 +623,7 @@ body.sheet-fullscreen {
   position: absolute;
   inset: calc(var(--frame-o) * -1);
   border: var(--frame-b) solid transparent;
-  border-image: url("/ui/sheet/card-frame.webp") 300 / var(--frame-b) round;
+  border-image: url("/ui/sheet/card-frame-v2.webp") 200 / var(--frame-b) round;
   pointer-events: none;
   z-index: 3;
 }
