@@ -1741,8 +1741,9 @@ function DndSpellLevelSection({
               >
                 {/* Две ступени вместо одной ленты: имя — объект, параметры —
                     подпись под ним. Раньше и то и другое стояло в строку
-                    одним кеглем, и глаз читал всё подряд. Мишени остались
-                    прежние: имя — использовать, подпись — раскрыть описание. */}
+                    одним кеглем, и глаз читал всё подряд. Мишень одна
+                    (владелец 2026-09-26): вся строка открывает окно — там и
+                    описание, и трата; в правке строка не нажимается. */}
                 {/* Значок школы — слева от названия, высотой в обе строки
                     (имя + подпись): школа уже есть текстом в подписи, значок
                     её дублирует графикой, поэтому скрыт от скринридера. */}
@@ -1752,11 +1753,11 @@ function DndSpellLevelSection({
                   </span>
                 )}
                 <span className="dnd-spell-main">
-                  {s.entryId && onCast ? (
+                  {s.entryId && onCast && !edit ? (
                     <button
                       type="button"
                       className="dnd-spell-title dnd-spell-name-link"
-                      aria-label={`${s.name} — использовать (трата ячейки)`}
+                      aria-label={`${s.name} — описание и использование`}
                       onClick={() =>
                         onCast({
                           name: s.name,
@@ -1784,7 +1785,7 @@ function DndSpellLevelSection({
                     </span>
                   )}
                   {freeCast}
-                  {s.entryId ? (
+                  {s.entryId && !onCast ? (
                     <button
                       type="button"
                       className="dnd-spell-meta-link"

@@ -1517,11 +1517,26 @@ button.dnd-prep-diamond::after {
   align-self: center;
   margin: 0 6px 0 auto;
 }
-/* «Всегда подготовлено» — розовая текстура под строкой на 45%. */
-.dnd-spell-row.is-prepared {
+/* Вся строка — мишень окна заклинания: кнопка имени растянута на строку,
+   ромб и «без ячейки» лежат над ней своими кнопками (2026-09-26). */
+.dnd-spell-row {
   position: relative;
   isolation: isolate;
 }
+.dnd-spell-row .dnd-spell-name-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.dnd-spell-row:has(.dnd-spell-name-link):hover {
+  box-shadow: inset 4px 0 0 var(--skin-ink) !important;
+}
+.dnd-spell-row > button.dnd-prep-diamond,
+.dnd-spell-row .dnd-free-cast {
+  position: relative;
+  z-index: 1;
+}
+/* «Всегда подготовлено» — розовая текстура под строкой на 45%. */
 .dnd-spell-row.is-prepared::before {
   content: "";
   position: absolute;
