@@ -2480,3 +2480,12 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-spell-school {
     font-size: 30px;
   }
 }
+/* База и начисленное в правке характеристик (Q13). */
+.dnd-ability-bonus {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--skin-ink-soft);
+  white-space: nowrap;
+  cursor: help;
+}

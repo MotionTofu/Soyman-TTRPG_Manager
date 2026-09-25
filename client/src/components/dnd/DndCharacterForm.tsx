@@ -10664,6 +10664,7 @@ export function DndCharacterView({
             classSkillPool={classSkillPool(value.classes)}
             classSkillChoiceCount={classSkillChoiceTotal(value.classes)}
             backgroundSkillNames={value.backgroundSkillNames}
+            bonuses={value.abilityBonuses}
             onAbilitiesChange={(v) => onQuickUpdate({ abilities: v })}
             onSavingThrowProfsChange={(v) => onQuickUpdate({ savingThrowProfs: v })}
             onSkillProfsChange={(v) => onQuickUpdate({ skillProfs: v })}
@@ -10878,7 +10879,8 @@ export function DndCharacterView({
                 classSkillPool={classSkillPool(value.classes)}
                 classSkillChoiceCount={classSkillChoiceTotal(value.classes)}
                 backgroundSkillNames={value.backgroundSkillNames}
-                onAbilitiesChange={(v) => onQuickUpdate({ abilities: v })}
+                bonuses={value.abilityBonuses}
+            onAbilitiesChange={(v) => onQuickUpdate({ abilities: v })}
                 onSavingThrowProfsChange={(v) => onQuickUpdate({ savingThrowProfs: v })}
                 onSkillProfsChange={(v) => onQuickUpdate({ skillProfs: v })}
               />
@@ -12230,7 +12232,8 @@ export function DndCharacterView({
                 classSkillPool={classSkillPool(value.classes)}
                 classSkillChoiceCount={classSkillChoiceTotal(value.classes)}
                 backgroundSkillNames={value.backgroundSkillNames}
-                onAbilitiesChange={(v) => onQuickUpdate({ abilities: v })}
+                bonuses={value.abilityBonuses}
+            onAbilitiesChange={(v) => onQuickUpdate({ abilities: v })}
                 onSavingThrowProfsChange={(v) => onQuickUpdate({ savingThrowProfs: v })}
                 onSkillProfsChange={(v) => onQuickUpdate({ skillProfs: v })}
               />

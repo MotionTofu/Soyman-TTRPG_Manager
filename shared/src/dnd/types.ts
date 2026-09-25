@@ -104,6 +104,12 @@ export interface DndClassEntry {
 }
 
 export type DndAbilityKey = keyof DndAbilityScores;
+/** Начисленное к характеристике: предыстория, черта, увеличение на уровне. */
+export interface DndAbilityBonus {
+  key: DndAbilityKey;
+  amount: number;
+  source: string;
+}
 
 // 0 = not proficient, 1 = proficient (bonus once), 2 = expertise (bonus x2).
 export type DndSkillProfLevel = 0 | 1 | 2;
@@ -292,6 +298,11 @@ export interface DndCharacterData {
   // Масштаб кадра вокруг точки фокуса, 1..3 (гриллинг 2026-09-25, Q3):
   // исходник + фокус + масштаб — один кадр на ПК и на телефоне.
   portraitZoom?: number;
+  // Откуда взялись очки сверх базы (гриллинг 2026-09-25, Q8/Q13): итог
+  // по-прежнему в `abilities`, а база — итог минус эти бонусы. Нужна, чтобы
+  // пересборка снимала бонусы старой предыстории честно, а правка руками
+  // меняла базу, не трогая начисленное.
+  abilityBonuses?: DndAbilityBonus[];
   // До трёх закладок «оружие/заклинание» на лицевой стороне карты. Лист
   // предлагает их сам; закреплённые перекрывают предложенные. Хранят имя
   // рядом с id — правило №3: id не переживает переустановку модуля.

@@ -1,6 +1,7 @@
 import { memo, useState } from "react";
 import { DndDie } from "./DndDie";
-import type { DndAbilityKey, DndAbilityScores, DndSkillProfLevel } from "../../types";
+import type { DndAbilityBonus, DndAbilityKey, DndAbilityScores, DndSkillProfLevel } from "../../types";
+import { abilityBase } from "@shared/dnd/abilities";
 import { ABILITY_LABELS, abilityModifier, formatModifier, parseBonus } from "./AbilityScores";
 import { useDndPrefs } from "../../hooks/useDndPrefs";
 import type { DndAbilityPrimary } from "../../dndPrefs";
@@ -42,6 +43,12 @@ export const SKILL_TITLES = ["Не владеет", "Владение", "Экс�
 // re-renders on every keystroke elsewhere in the form, and without memo this
 // block (6 ability columns, plus saving-throw rows when expanded) re-diffs
 // along with it.
+// Короткое имя источника для строки «= 18 (+2 предыстория)»: полное — в подсказке.
+function bonusWord(source: string): string {
+  const lvl = /ур\. \d+/.exec(source);
+  return lvl ? lvl[0] : source.split(":")[0].toLowerCase();
+}
+
 export const AbilitySavesSkillsEdit = memo(function AbilitySavesSkillsEdit({
   abilities,
   proficiencyBonus,
@@ -50,10 +57,14 @@ export const AbilitySavesSkillsEdit = memo(function AbilitySavesSkillsEdit({
   classSkillPool,
   classSkillChoiceCount,
   backgroundSkillNames,
+  bonuses,
   onAbilitiesChange,
   onSavingThrowProfsChange,
 }: CommonProps & {
   classSkillChoiceCount: number;
+  // Журнал бонусов (гриллинг 2026-09-25, Q13): поле правит базу, итог и
+  // начисленное стоят рядом — «15 = 13 + 2 предыстория».
+  bonuses?: DndAbilityBonus[];
   onAbilitiesChange: (v: DndAbilityScores) => void;
   onSavingThrowProfsChange: (v: Record<DndAbilityKey, boolean>) => void;
   onSkillProfsChange: (v: Record<string, DndSkillProfLevel>) => void;
@@ -65,6 +76,7 @@ export const AbilitySavesSkillsEdit = memo(function AbilitySavesSkillsEdit({
     (s) => (skillProfs[s] ?? 0) > 0 && !backgroundSkillNames.includes(s)
   ).length;
   const remaining = Math.max(0, classSkillChoiceCount - chosenFromPool);
+  const base = abilityBase(abilities, bonuses);
 
   return (
     <div className="dnd-abilities-block">
@@ -84,9 +96,20 @@ export const AbilitySavesSkillsEdit = memo(function AbilitySavesSkillsEdit({
                 <input
                   type="number"
                   className="dnd-ability-input"
-                  value={abilities[key]}
-                  onChange={(e) => onAbilitiesChange({ ...abilities, [key]: Number(e.target.value) || 0 })}
+                  aria-label={`${label}: база`}
+                  value={base[key]}
+                  onChange={(e) =>
+                    onAbilitiesChange({ ...abilities, [key]: abilities[key] - base[key] + (Number(e.target.value) || 0) })
+                  }
                 />
+                {base[key] !== abilities[key] && (
+                  <span
+                    className="dnd-ability-bonus"
+                    title={(bonuses ?? []).filter((b) => b.key === key).map((b) => `+${b.amount} ${b.source}`).join("; ")}
+                  >
+                    = {abilities[key]} ({(bonuses ?? []).filter((b) => b.key === key).map((b) => `+${b.amount} ${bonusWord(b.source)}`).join(", ")})
+                  </span>
+                )}
                 <span className="dnd-ability-mod">
                   {formatModifier(mod)}
                   <button

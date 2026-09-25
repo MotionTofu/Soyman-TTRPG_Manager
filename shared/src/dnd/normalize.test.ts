@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { normalizeDndCharacter, emptyDndCharacter } from "./normalize";
 import { resolveSkillOriginal } from "./skillCatalog";
+import { abilityBase } from "./abilities";
 
 /**
  * Первые тесты клиентских правил D&D в этом проекте.
@@ -174,5 +175,19 @@ describe("инициатива: строка-модификатор станов
     expect(normalizeDndCharacter({ initiativeMisc: "+1" }).initiativeMisc).toBe("+1");
     // Число вместо строки пришло бы из чужого формата — не роняем разбор.
     expect(normalizeDndCharacter({ initiativeMisc: 3 }).initiativeMisc).toBe("");
+  });
+});
+
+describe("журнал бонусов характеристик", () => {
+  it("база — итог минус бонусы; мусор в журнале отбрасывается", () => {
+    const c = normalizeDndCharacter({
+      abilities: { str: 10, dex: 16, con: 14, int: 12, wis: 13, cha: 18 },
+      abilityBonuses: [{ key: "cha", amount: 2, source: "Предыстория: Мудрец" }, { key: "dex", amount: 1, source: "Черта: X" }, { key: "zzz", amount: 1, source: "?" }, null],
+    });
+    expect(c.abilityBonuses).toHaveLength(2);
+    const base = abilityBase(c.abilities, c.abilityBonuses);
+    expect(base.cha).toBe(16);
+    expect(base.dex).toBe(15);
+    expect(base.str).toBe(10);
   });
 });

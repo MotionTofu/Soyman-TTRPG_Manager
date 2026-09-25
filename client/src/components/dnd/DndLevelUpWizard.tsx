@@ -590,12 +590,17 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
             : []),
       ];
       const nextAbilities: DndAbilityScores = { ...value.abilities };
+      // Прибавки — ещё и в журнал бонусов: база = итог − журнал (Q8/Q13).
+      const nextBonuses = [...(value.abilityBonuses ?? [])];
       if (isAsi) {
         const bump = (name: string | null, by: number) => {
           if (!name) return;
           const key = ABILITY_NAME_TO_KEY[name];
           if (!key) return;
-          nextAbilities[key] = Math.min(20, (nextAbilities[key] ?? 10) + by);
+          const before = nextAbilities[key] ?? 10;
+          nextAbilities[key] = Math.min(20, before + by);
+          if (nextAbilities[key] > before)
+            nextBonuses.push({ key, amount: nextAbilities[key] - before, source: `Увеличение характеристик, ур. ${newLevel}` });
         };
         bump(asiPrimary, 2);
         bump(asiSecondary, 1);
@@ -674,6 +679,7 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
         ...value,
         classes: nextClasses,
         abilities: nextAbilities,
+        abilityBonuses: nextBonuses,
         classFeatures: [...value.classFeatures, ...addedFeatures],
         proficiencyBonus: computeProficiencyBonus(nextClasses),
         hitDice,
@@ -696,6 +702,7 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
         ...hpPatch,
         classes: nextClasses,
         abilities: nextValue.abilities,
+        abilityBonuses: nextValue.abilityBonuses,
         savingThrowProfs: nextValue.savingThrowProfs,
         skillProfs: nextValue.skillProfs,
         proficiencies: nextValue.proficiencies,

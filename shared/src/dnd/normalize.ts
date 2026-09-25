@@ -283,6 +283,11 @@ export function normalizeDndCharacter(raw: unknown): DndCharacterData {
     focus && typeof focus.x === "number" && typeof focus.y === "number"
       ? { x: Math.min(1, Math.max(0, focus.x)), y: Math.min(1, Math.max(0, focus.y)) }
       : undefined;
+  merged.abilityBonuses = Array.isArray(merged.abilityBonuses)
+    ? merged.abilityBonuses.filter(
+        (b) => b && typeof b.amount === "number" && typeof b.source === "string" && b.key in merged.abilities
+      )
+    : undefined;
   merged.portraitZoom =
     typeof merged.portraitZoom === "number" && merged.portraitZoom > 1 ? Math.min(3, merged.portraitZoom) : undefined;
   // Монеты — отдельное поле (S-08). Старые листы его не имели — дефолт пустые строки.

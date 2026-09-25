@@ -229,7 +229,11 @@ export function applyFeatPick(
   };
   if (g.abilityIncrease && pick.ability) {
     const k = pick.ability;
-    next.abilities[k] = Math.min(g.abilityIncrease.max, (next.abilities[k] ?? 10) + g.abilityIncrease.amount);
+    const before = next.abilities[k] ?? 10;
+    next.abilities[k] = Math.min(g.abilityIncrease.max, before + g.abilityIncrease.amount);
+    // В журнал бонусов — чтобы правка базы и пересборка его не теряли.
+    if (next.abilities[k] > before)
+      next.abilityBonuses = [...(value.abilityBonuses ?? []), { key: k, amount: next.abilities[k] - before, source: `Черта: ${entry.name}` }];
     if (g.saveFromAbility) next.savingThrowProfs[k] = true;
   }
   const prof = (key: string) => {

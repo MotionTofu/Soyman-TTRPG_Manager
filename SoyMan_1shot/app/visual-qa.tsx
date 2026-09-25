@@ -87,6 +87,7 @@ fixture.classFeatures = [
 ];
 fixture.feats = [feat('Посвящённый в магию: волшебник')];
 fixture.sensesList = [{ name: 'Тёмное зрение', distance: '60' }];
+fixture.abilityBonuses = [{ key: 'cha', amount: 2, source: 'Предыстория: Картограф' }, { key: 'dex', amount: 1, source: 'Предыстория: Картограф' }];
 // Состояния карты по доске Sheet-Card-States: ?state=fight|down|stable.
 const stateCase = new URLSearchParams(window.location.search).get('state');
 if (stateCase === 'fight') Object.assign(fixture, { conditions: ['Отравлен', 'Лежит', 'Испуган'], concentration: 'есть', exhaustion: 2, hitPointsTemp: '5' });
@@ -135,7 +136,7 @@ function App() {
   if (new URLSearchParams(window.location.search).get('case') === 'frame') return <PortraitFrameModal src='/mascot/hero-idle.webp' name={value.characterName} subtitle='Чародей 5' onApply={() => {}} onClose={() => {}} />;
   return <DndRuntimeContext.Provider value={{ allowDiceRolls: false, campaignConnected: false, detached: true }}>
     <header className="oneshot-header"><strong>OneShot SoyMan / Visual QA</strong></header>
-    <div className="oneshot-sheet"><div className="fp-page-backdrop" aria-hidden="true" /><DndCharacterView value={value} portraitUrl={portraitUrl} onQuickUpdate={patch => setValue(current => ({ ...current, ...patch }))} /></div>
+    <div className="oneshot-sheet"><div className="fp-page-backdrop" aria-hidden="true" /><DndCharacterView value={value} portraitUrl={portraitUrl} onQuickUpdate={patch => setValue(current => ({ ...current, ...patch }))} syncTabToUrl onPortraitUpload={async () => {}} /></div>
   </DndRuntimeContext.Provider>;
 }
 createRoot(document.getElementById('root')!).render(<QueryClientProvider client={queryClient}><MemoryRouter><App /></MemoryRouter></QueryClientProvider>);

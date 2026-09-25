@@ -575,6 +575,7 @@ export type {
   DndFeature,
   DndClassEntry,
   DndAbilityKey,
+  DndAbilityBonus,
   DndSkillProfLevel,
   DndSpellPreparedState,
   DndCharacterData,

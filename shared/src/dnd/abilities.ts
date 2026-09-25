@@ -7,7 +7,7 @@
  * привязаны к React. Пока она была, ни один из этих модулей не мог переехать
  * в общий с сервером пакет.
  */
-import type { DndAbilityKey, DndAbilityScores, DndClassEntry, DndSkillProfLevel } from "./types";
+import type { DndAbilityBonus, DndAbilityKey, DndAbilityScores, DndClassEntry, DndSkillProfLevel } from "./types";
 import { SKILL_CATALOG } from "./skillCatalog";
 
 /** Полные русские имена характеристик — в таком виде их пишет компендиум. */
@@ -15,6 +15,13 @@ export const ABILITY_NAMES = ["Сила", "Ловкость", "Телослож�
 
 export function emptyAbilities(): DndAbilityScores {
   return { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
+}
+
+/** База характеристик — итог минус начисленные бонусы (см. abilityBonuses). */
+export function abilityBase(abilities: DndAbilityScores, bonuses: DndAbilityBonus[] | undefined): DndAbilityScores {
+  const base = { ...abilities };
+  for (const b of bonuses ?? []) base[b.key] -= b.amount;
+  return base;
 }
 
 export function emptySavingThrowProfs(): Record<DndAbilityKey, boolean> {

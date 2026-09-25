@@ -1827,6 +1827,11 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     }
     character.playerName = playerName.trim();
     character.abilities = awardedAbilities;
+    // Бонус предыстории — в журнал: база = итог − журнал (гриллинг Q8).
+    const bgSource = `Предыстория: ${backgroundEntry?.name ?? (backgroundCustom?.trim() || "своя")}`;
+    character.abilityBonuses = Object.entries(abilityAward)
+      .filter(([, v]) => v)
+      .map(([k, v]) => ({ key: k as DndAbilityKey, amount: v as number, source: bgSource }));
 
     if (classId && classOption) {
       const subclassOpt = subclassOptions.find((s) => s.id === subclassId);

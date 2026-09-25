@@ -57,6 +57,8 @@ describe("applyFeatPick", () => {
     const next = applyFeatPick(value, entry, g, { ...EMPTY_FEAT_PICK, ability: "wis" }, ctx, catalogs());
     expect(next.abilities.wis).toBe(13);
     expect(next.savingThrowProfs.wis).toBe(true);
+    // Прибавка — ещё и в журнал бонусов: база = итог − журнал.
+    expect(next.abilityBonuses).toEqual([{ key: "wis", amount: 1, source: "Черта: Устойчивый" }]);
     expect(next.feats).toEqual([{ name: "Устойчивый", description: "", entryId: 5, choices: { ability: "wis" } }]);
   });
 
