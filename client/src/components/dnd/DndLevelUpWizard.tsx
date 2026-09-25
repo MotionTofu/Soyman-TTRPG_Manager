@@ -27,6 +27,7 @@ import { grantsFromEntry } from "./dndGrants";
 import { useDndSkills } from "./useDndSkills";
 import { useCompendiumEntries } from "./useCompendiumEntries";
 import { isMasterableWeapon } from "./StartingEquipmentPicker";
+import { multiclassPrereqUnmet, multiclassProfs } from "./multiclass";
 import { EntrySheet, PickList, SearchField, type PickRow } from "./wizardUi";
 import { FeatChoices } from "./FeatChoices";
 import {
@@ -57,8 +58,9 @@ import {
 
 // Визард левелапа: один уровень вверх (N→N+1) за раз, модалкой с оборота
 // заглавной карты. Скелет — правилами (хиты, чертоуровни, подкласс),
-// мясо — данными (новые умения, заклинания). Мультикласс не разводит:
-// качается выбранная строка класса, слоты многоклассовья — на листе.
+// мясо — данными (новые умения, заклинания). Качается выбранная строка
+// класса либо «+ новый класс» (Q19 гриллинга 2026-09-25): виртуальная строка
+// уровня 0 → 1 с урезанными владениями мультикласса.
 const FEAT_LEVELS_BASE = [4, 8, 12, 16, 19];
 function featLevelsFor(className: string): number[] {
   // Матчим и русские, и английские имена: хоумбрю-классы иначе пролетают
@@ -105,7 +107,16 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
   );
   const [stale, setStale] = useState(() => !!levelUpDraft?.initial && !!draftIdentity && !resumed);
   const [clsIdx, setClsIdx] = useState(resumed?.state.clsIdx ?? 0);
-  const cls = value.classes[Math.min(clsIdx, Math.max(0, value.classes.length - 1))] ?? null;
+  // clsIdx === classes.length — «+ новый класс»: строки ещё нет, качается 0 → 1.
+  const isNewClass = value.classes.length > 0 && clsIdx === value.classes.length;
+  const [newClassId, setNewClassId] = useState<number | null>(resumed?.state.newClassId ?? null);
+  const [newSkills, setNewSkills] = useState<string[]>(resumed?.state.newSkills ?? []);
+  const [newTools, setNewTools] = useState<number[]>(resumed?.state.newTools ?? []);
+  const [hierarchy, setHierarchy] = useState<DndClassHierarchy>({ classes: [], subclassesByClass: {} });
+  const newClassOption = isNewClass ? hierarchy.classes.find((c) => c.id === newClassId) ?? null : null;
+  const cls = isNewClass
+    ? { classId: newClassId, className: newClassOption?.name ?? "", level: 0, subclassId: null, subclassName: "" }
+    : value.classes[Math.min(clsIdx, Math.max(0, value.classes.length - 1))] ?? null;
   const oldLevel = cls?.level ?? 1;
   // Выше 20 некуда: визард показывает потолок, а не ломается.
   const newLevel = Math.min(20, oldLevel + 1);
@@ -113,7 +124,6 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
 
   const [systemId, setSystemId] = useState<number | null>(value.systemId);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [hierarchy, setHierarchy] = useState<DndClassHierarchy>({ classes: [], subclassesByClass: {} });
   const [classFeatureEntries, setClassFeatureEntries] = useState<CompendiumEntry[]>([]);
   const [subFeatureEntries, setSubFeatureEntries] = useState<CompendiumEntry[]>([]);
   const [featPool, setFeatPool] = useState<DndFeatOption[]>([]);
@@ -170,19 +180,25 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
     };
   }, [value.systemId]);
 
+  // Иерархия — и без класса строки: «+ новый класс» выбирает из неё.
+  useEffect(() => {
+    if (!systemId) return;
+    const ac = new AbortController();
+    loadDndClassHierarchy(systemId, { signal: ac.signal })
+      .then(setHierarchy)
+      .catch((e) => {
+        if (!isAbortError(e)) setLoadError(errorMessage(e));
+      });
+    return () => ac.abort();
+  }, [systemId]);
+
   useEffect(() => {
     if (!systemId || !cls?.classId) {
-      setHierarchy({ classes: [], subclassesByClass: {} });
       setClassFeatureEntries([]);
       return;
     }
     const ac = new AbortController();
     const opts = { signal: ac.signal };
-    loadDndClassHierarchy(systemId, opts)
-      .then(setHierarchy)
-      .catch((e) => {
-        if (!isAbortError(e)) setLoadError(errorMessage(e));
-      });
     loadDndClassFeatures(systemId, cls.classId, opts)
       .then(setClassFeatureEntries)
       .catch((e) => {
@@ -192,6 +208,32 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
   }, [systemId, cls?.classId]);
 
   const entryError = classEntryState.error ?? featEntryState.error ?? null;
+
+  // Новый класс: урезанные владения (multiclass_profs), навыки — из списка
+  // класса или любые, инструмент — из группы. Уже имеющееся не предлагаем.
+  const mc = isNewClass && classEntry && classEntry.id === newClassId ? multiclassProfs(classEntry.data) : null;
+  const newClassGrants = isNewClass && classEntry && classEntry.id === newClassId ? grantsFromEntry(classEntry, skills.resolve) : null;
+  const newSkillOptions = !mc || mc.skillCount === 0
+    ? []
+    : (mc.skillAny ? skills.rows.map((r) => r.original) : newClassGrants?.skillChoice?.options ?? []).filter((k) => (value.skillProfs[k] ?? 0) < 1);
+  const newSkillCount = Math.min(mc?.skillCount ?? 0, newSkillOptions.length);
+  const toolKinds = mc?.toolChoice ? mc.toolChoice.group.split("|").map((k) => k.trim()).filter(Boolean) : [];
+  const newToolOptions = mc?.toolChoice
+    ? equipment.filter(
+        (e) =>
+          typeof e.data.tool_kind === "string" &&
+          (toolKinds.length === 0 || toolKinds.includes(String(e.data.tool_kind))) &&
+          !value.proficiencies.some((p) => p.name === e.name)
+      )
+    : [];
+  const newToolCount = Math.min(mc?.toolChoice?.count ?? 0, newToolOptions.length);
+  // Требование 13+ (Q16) предупреждает, а не запирает — у нового класса и у
+  // уже взятых, как в книге.
+  const prereqWarnings = !isNewClass
+    ? []
+    : [newClassOption, ...value.classes.map((c) => hierarchy.classes.find((o) => o.id === c.classId))]
+        .filter((o): o is NonNullable<typeof o> => !!o?.multiclassPrereq && multiclassPrereqUnmet(o.multiclassPrereq, value.abilities))
+        .map((o) => `${o.name} требует «${o.multiclassPrereq}» — сейчас не хватает. Договорись с Мастером.`);
   const classOption = hierarchy.classes.find((c) => c.id === cls?.classId);
   const die =
     parseDie(classEntry?.data.hit_die) ?? parseDie(classEntry?.data.hitDie) ?? parseDie(classOption?.hitDie);
@@ -233,14 +275,15 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
   }, [systemId, isFeatLevel, newLevel]);
 
   // Справочники для выбора черты: заклинания, инструменты, оружие.
+  // Снаряжение — ещё и для инструмента нового класса (Бард).
   useEffect(() => {
-    if (!systemId || !isFeatLevel) return;
+    if (!systemId || !(isFeatLevel || isNewClass)) return;
     const ac = new AbortController();
     const opts = { signal: ac.signal };
-    loadDndSpellIndex(systemId, opts).then(setSpellIndex).catch(() => undefined);
+    if (isFeatLevel) loadDndSpellIndex(systemId, opts).then(setSpellIndex).catch(() => undefined);
     loadDndEquipmentEntries(systemId, opts).then(setEquipment).catch(() => undefined);
     return () => ac.abort();
-  }, [systemId, isFeatLevel]);
+  }, [systemId, isFeatLevel, isNewClass]);
 
   useEffect(() => {
     const sid = subclassId ?? cls?.subclassId;
@@ -314,7 +357,7 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
   // владение доспехами, заклинательство, черта-требование. Неподходящая черта
   // видна серой с причиной, а не спрятана: так ясно, чего не хватает.
   // Уже взятая — тоже серая, кроме повторяемых.
-  const totalLevelAfterPreview = value.classes.reduce((n, c, i) => n + (i === clsIdx ? newLevel : c.level || 0), 0);
+  const totalLevelAfterPreview = value.classes.reduce((n, c, i) => n + (i === clsIdx ? newLevel : c.level || 0), 0) + (isNewClass ? 1 : 0);
   const featWho = {
     level: totalLevelAfterPreview,
     abilities: value.abilities,
@@ -340,7 +383,7 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
     [chosenFeatEntry, isAsi, skills.resolve]
   );
   const pbAfter = Number.parseInt(
-    computeProficiencyBonus(value.classes.map((c, i) => (i === clsIdx ? { ...c, level: newLevel } : c))),
+    computeProficiencyBonus([...value.classes.map((c, i) => (i === clsIdx ? { ...c, level: newLevel } : c)), ...(isNewClass ? [{ ...value.classes[0], level: 1 }] : [])]),
     10
   ) || 2;
   const featCtx = chosenFeatEntry ? featCtxFrom(value, pbAfter, chosenFeatEntry.id, { listSourceId: featGrants?.spellListFrom }) : null;
@@ -399,7 +442,7 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
   const totalLevelAfter = value.classes.reduce(
     (n, c, i) => n + (i === clsIdx ? newLevel : c.level || 0),
     0
-  );
+  ) + (isNewClass ? 1 : 0);
   const isLegacyHp = value.hpLump == null;
   const baseLump = value.hpLump ?? 0;
   const baseRolls = value.hpRolls ?? [];
@@ -438,6 +481,7 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
   const delta = newMax != null ? newMax - curMax : null;
 
   const STEPS = [
+    ...(isNewClass ? ["Класс"] : []),
     "Хиты",
     "Новое",
     ...(subclassOffered ? ["Подкласс"] : []),
@@ -452,7 +496,7 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
     if (!STEPS.includes(step)) setStep(STEPS[0]);
     // STEPS собирается каждый рендер — зависимость по флагам, а не по ней.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subclassOffered, isFeatLevel]);
+  }, [subclassOffered, isFeatLevel, isNewClass]);
   // Бросок привязан к кости: смена кости делает старый бросок чужим.
   useEffect(() => {
     setRolled(null);
@@ -471,6 +515,9 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
   // dependent choices valid, so only an explicit reset clears everything.
   function resetSelections() {
     setClsIdx(0);
+    setNewClassId(null);
+    setNewSkills([]);
+    setNewTools([]);
     setStep("Хиты");
     setHpMode("average");
     setRolled(null);
@@ -495,7 +542,8 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
     subclassId != null ||
     featId != null ||
     asiPrimary != null ||
-    asiSecondary != null;
+    asiSecondary != null ||
+    newClassId != null;
   // Persist after every meaningful choice (debounced): never wait for the
   // next step. Selections the wizard itself invalidated (class change resets,
   // die change clears the roll) persist only in their cleaned form, because
@@ -516,25 +564,31 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
         version: 1,
         identity: draftIdentity,
         base: mountBase,
-        targetLevel: newLevel,
+        // Общий уровень персонажа — с ним сверяет isCompatibleLevelUpDraft.
+        // Раньше писался уровень строки, и черновик мультикласса не возобновлялся.
+        targetLevel: totalLevelAfter,
         updatedAt: new Date().toISOString(),
-        state: { clsIdx, step, hpMode, rolled, manualTotal, miscText, subclassId, featId, asiPrimary, asiSecondary, featPick },
+        state: { clsIdx, step, hpMode, rolled, manualTotal, miscText, subclassId, featId, asiPrimary, asiSecondary, featPick, newClassId, newSkills, newTools },
       });
     }, 250);
     return () => clearTimeout(t);
     // Callbacks intentionally out of deps (same pattern as the loader
     // effects above): the host passes fresh closures every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clsIdx, step, hpMode, rolled, manualTotal, miscText, subclassId, featId, asiPrimary, asiSecondary, featPick, stale, mountBase, newLevel]);
+  }, [clsIdx, step, hpMode, rolled, manualTotal, miscText, subclassId, featId, asiPrimary, asiSecondary, featPick, newClassId, newSkills, newTools, stale, mountBase, totalLevelAfter]);
   const hpReady =
     die == null ? hpMode === "manual" && manualValid : hpMode === "roll" ? rolled != null : hpMode === "average" ? true : manualValid;
   const featReady =
     !isFeatLevel || (chosenFeat != null && (isAsi ? asiPrimary != null : !!chosenFeatEntry && featMissing.length === 0));
   const subReady = !subclassOffered || subclassId != null;
+  // Без разметки справочника (mc === null) выбирать нечего — не гейт.
+  const classReady =
+    !isNewClass || (newClassId != null && newSkills.length >= newSkillCount && newTools.length >= newToolCount);
   // Шаги не залочены (можно заглянуть вперёд), поэтому готовность нужна
   // и на кнопке «Взять уровень», а не только на «Далее» шагов.
-  const applyBlocked = !hpReady || !subReady || !featReady;
+  const applyBlocked = !classReady || !hpReady || !subReady || !featReady;
   const nextBlocked =
+    (step === "Класс" && !classReady) ||
     (step === "Хиты" && !hpReady) ||
     (step === "Подкласс" && !subReady) ||
     (step === "Черта" && !featReady);
@@ -556,7 +610,22 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
       if (JSON.stringify(getLevelUpBaseSignature(value)) !== JSON.stringify(mountBase)) {
         throw new Error("Персонаж изменился, пока было открыто повышение — начните его заново.");
       };
-      const nextClasses = value.classes.map((c, i) =>
+      const baseClasses = isNewClass && newClassOption
+        ? [
+            ...value.classes,
+            {
+              classId: newClassOption.id,
+              className: newClassOption.name,
+              subclassId: null,
+              subclassName: "",
+              level: 0,
+              skillChoiceOptions: mc?.skillAny ? [] : newClassGrants?.skillChoice?.options ?? [],
+              skillChoiceCount: mc?.skillCount ?? 0,
+              spellcastingAbility: typeof classEntry?.data.spellcasting_ability === "string" ? (classEntry.data.spellcasting_ability as string) : "",
+            },
+          ]
+        : value.classes;
+      const nextClasses = baseClasses.map((c, i) =>
         i === clsIdx
           ? {
               ...c,
@@ -617,7 +686,9 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
       }));
       let nextSegs = segs;
       if (die != null) {
-        if (segs.length === value.classes.length) {
+        if (isNewClass) {
+          nextSegs = [...segs, { n: 1, d: die }];
+        } else if (segs.length === value.classes.length) {
           // Строка строке: сегменты собраны в порядке классов (computeHitDice),
           // поэтому качаемый — просто свой по счёту.
           nextSegs = segs.map((s, i) => (i === clsIdx ? { n: newLevel, d: die } : s));
@@ -675,8 +746,21 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
         };
       }
 
+      // Новый класс (Q15): урезанные владения, выбранные навыки и инструмент.
+      // Без спасбросков и снаряжения — они только у стартового.
+      let proficiencies = value.proficiencies;
+      const skillProfs = { ...value.skillProfs };
+      if (isNewClass) {
+        const picked = newToolOptions.filter((e) => newTools.includes(e.id)).map((e) => ({ id: e.id, name: e.name }));
+        for (const pr of [...(mc?.armor ?? []), ...(mc?.tools ?? []), ...picked]) {
+          if (!proficiencies.some((x) => x.name === pr.name)) proficiencies = [...proficiencies, { entryId: pr.id, name: pr.name, abilityKey: null }];
+        }
+        for (const k of newSkills) if (!skillProfs[k]) skillProfs[k] = 1;
+      }
       let nextValue: DndCharacterData = {
         ...value,
+        proficiencies,
+        skillProfs,
         classes: nextClasses,
         abilities: nextAbilities,
         abilityBonuses: nextBonuses,
@@ -767,9 +851,9 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
           ))}
         </div>
 
-        {value.classes.length > 1 && (
+        {value.classes.length > 0 && (
           <label className="row">
-            Класс
+            Повысить
             <select
               value={clsIdx}
               onChange={(e) => {
@@ -777,11 +861,15 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
                 // от старой строки недействительны (аудит: чужой подкласс
                 // применялся к другому классу).
                 setClsIdx(Number(e.target.value));
+                if (Number(e.target.value) === value.classes.length) setStep("Класс");
                 setSubclassId(null);
                 setFeatId(null);
                 setAsiPrimary(null);
                 setAsiSecondary(null);
                 setRolled(null);
+                setNewClassId(null);
+                setNewSkills([]);
+                setNewTools([]);
               }}
             >
               {value.classes.map((c, i) => (
@@ -789,6 +877,7 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
                   {c.className} {c.level}
                 </option>
               ))}
+              {value.classes.reduce((n, c) => n + (c.level || 0), 0) < 20 && <option value={value.classes.length}>+ новый класс</option>}
             </select>
           </label>
         )}
@@ -818,6 +907,67 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
           </div>
         ) : (
           <>
+            {step === "Класс" && (
+              <div className="stack">
+                <select
+                  aria-label="Новый класс"
+                  value={newClassId ?? ""}
+                  onChange={(e) => {
+                    setNewClassId(e.target.value ? Number(e.target.value) : null);
+                    setNewSkills([]);
+                    setNewTools([]);
+                    setRolled(null);
+                  }}
+                >
+                  <option value="">— класс —</option>
+                  {hierarchy.classes
+                    .filter((o) => !value.classes.some((c) => c.classId === o.id))
+                    .map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name}
+                      </option>
+                    ))}
+                </select>
+                {prereqWarnings.map((w) => (
+                  <span key={w} className="muted" role="alert">
+                    {w}
+                  </span>
+                ))}
+                {newClassOption && classEntry?.id === newClassId && (
+                  <span className="muted">
+                    Владения мультикласса:{" "}
+                    {mc
+                      ? [...mc.armor, ...mc.tools].map((x) => x.name).join(", ") || "нет"
+                      : "не размечены в справочнике — добери на листе"}
+                    . Спасброски и снаряжение даёт только первый класс.
+                  </span>
+                )}
+                {newSkillCount > 0 && (
+                  <PickList
+                    collapse
+                    rows={newSkillOptions.map((k): PickRow => ({ key: k, title: skills.nameOf(k), picked: newSkills.includes(k) }))}
+                    full={newSkills.length >= newSkillCount}
+                    onToggle={(k) =>
+                      setNewSkills(newSkills.includes(k) ? newSkills.filter((s) => s !== k) : newSkills.length < newSkillCount ? [...newSkills, k] : newSkills)
+                    }
+                  />
+                )}
+                {newSkillCount > 0 && <span className="muted">Навыки: {newSkills.length} из {newSkillCount}.</span>}
+                {newToolCount > 0 && (
+                  <PickList
+                    collapse
+                    rows={newToolOptions.map((e): PickRow => ({ key: String(e.id), title: e.name, picked: newTools.includes(e.id) }))}
+                    full={newTools.length >= newToolCount}
+                    onToggle={(k) => {
+                      const id = Number(k);
+                      setNewTools(newTools.includes(id) ? newTools.filter((t) => t !== id) : newTools.length < newToolCount ? [...newTools, id] : newTools);
+                    }}
+                  />
+                )}
+                {newToolCount > 0 && <span className="muted">{mc?.toolChoice?.group}: {newTools.length} из {newToolCount}.</span>}
+              </div>
+            )}
+
             {step === "Хиты" && (
               <div className="stack">
                 <fieldset className="row wizard-fieldset">
@@ -1091,6 +1241,7 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
                   <span className="muted">
                     Перед применением осталось:{" "}
                     {[
+                      !classReady && "новый класс (шаг «Класс»)",
                       !hpReady && "хиты (шаг «Хиты»)",
                       !subReady && "подкласс",
                       !featReady && "черта",
@@ -1103,6 +1254,15 @@ export function DndLevelUpWizard({ value, onApply, onClose, levelUpDraft }: Prop
                   Хиты: <strong className="wizard-data">{curMax} → {newMax ?? "—"}</strong>
                 </div>
                 {newFeatureNames.length > 0 && <div>Умения: {newFeatureNames.join(", ")}</div>}
+                {isNewClass && newSkills.length > 0 && <div>Навыки: {newSkills.map((k) => skills.nameOf(k)).join(", ")}</div>}
+                {isNewClass && newTools.length > 0 && (
+                  <div>Инструменты: {newToolOptions.filter((e) => newTools.includes(e.id)).map((e) => e.name).join(", ")}</div>
+                )}
+                {prereqWarnings.map((w) => (
+                  <div key={w} className="muted">
+                    {w}
+                  </div>
+                ))}
                 {subclassId && (
                   <div>Подкласс: {subclassOptions.find((s) => s.id === subclassId)?.name}</div>
                 )}

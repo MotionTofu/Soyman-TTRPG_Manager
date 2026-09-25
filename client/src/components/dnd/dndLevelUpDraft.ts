@@ -21,6 +21,10 @@ export interface LevelUpDraftSelections {
   asiSecondary: string | null;
   /** Выбор при взятии черты (+1, заклинания, навыки) — featPick.ts. */
   featPick?: FeatPick;
+  /** «+ новый класс» (clsIdx === classes.length): класс и выборы мультикласса. */
+  newClassId?: number | null;
+  newSkills?: string[];
+  newTools?: number[];
 }
 
 // Progression-relevant base the draft depends on. Runtime-only fields
