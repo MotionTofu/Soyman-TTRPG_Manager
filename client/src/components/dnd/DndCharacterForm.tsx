@@ -5176,10 +5176,13 @@ function ActiveConditionIcons({ conditions, onOpen }: { conditions: string[]; on
     <div className="dnd-active-conditions" role="list" aria-label="Активные состояния">
       {conditions.map((c) => {
         const src = conditionIconSrc(c);
-        const body = src ? (
-          <img src={src} alt="" aria-hidden="true" draggable={false} />
-        ) : (
-          <span className="dnd-active-condition-text">{c}</span>
+        // Значок и имя капсом, как на доске состояний: значки одни
+        // различались хуже, чем читались бы словами.
+        const body = (
+          <>
+            {src && <img src={src} alt="" aria-hidden="true" draggable={false} />}
+            <span className="dnd-active-condition-text">{c}</span>
+          </>
         );
         // Без правки (чужой лист) — просто значки, кнопке без действия
         // на карте не место.
@@ -5272,7 +5275,14 @@ function ConditionsBox({
       {open && (
         <Modal onClose={() => onOpenChange(false)} className="modal-conditions" ariaLabel="Состояния">
           <div className="stack dnd-conditions-modal">
-            <h3 style={{ margin: 0, fontFamily: "var(--font-display)", textTransform: "uppercase" }}>Состояния</h3>
+            {/* Шапка, подсказка и «Готово · N» — по доске «Состояния» макета. */}
+            <div className="dnd-conditions-head">
+              <h3>Состояния</h3>
+              <button type="button" className="dnd-conditions-close" aria-label="Закрыть" onClick={() => onOpenChange(false)}>
+                ✕
+              </button>
+            </div>
+            <p className="dnd-conditions-hint">Тап — наложить или снять. На карте — значками над живым рядом.</p>
             {options.length === 0 && (
               <p className="muted" style={{ margin: 0 }}>
                 В системе не нашлось раздела механик «Состояния».
@@ -5291,8 +5301,9 @@ function ConditionsBox({
                   <ConditionRow key={c} name={c} />
                 ))}
             </div>
-            <button type="button" className="primary" onClick={() => onOpenChange(false)} style={{ alignSelf: "flex-end" }}>
+            <button type="button" className="primary dnd-conditions-done" onClick={() => onOpenChange(false)}>
               Готово
+              {conditions.length > 0 && ` · ${conditions.length} ${pluralRu(conditions.length, "состояние", "состояния", "состояний")}`}
             </button>
           </div>
         </Modal>
@@ -7848,7 +7859,11 @@ function HpQuickBox({
   const { effective: effMax } = effectiveMaxHp(value);
   return (
     <div style={{ flex: 1.2 }}>
-      <div className="sb-label">Хиты</div>
+      {/* «из N» — в подписи под костью, а не на ней (макет, правка владельца
+          2026-09-25): на кости одно число — сколько осталось. */}
+      <div className="sb-label">
+        Хиты <b>из {value.hitPointMax ? effMax : "—"}</b>
+      </div>
       <SbQuickValue
         className="dnd-die-quick"
         onClick={onQuickUpdate ? () => setModalOpen(true) : undefined}
@@ -7860,13 +7875,12 @@ function HpQuickBox({
             заливается классовым цветом, как раньше. */}
         <DndDie size="lg" filled textured accentColor={accentColor}>
           <span className="dnd-die-value">{value.hitPointsCurrent || "—"}</span>
-          <span className="dnd-die-sub">
-            из {value.hitPointMax ? effMax : "—"}
-            {/* Именно по числу, а не по «строка не пустая»: и урон, и длинный
-                отдых записывают сюда строку "0", а она истинна — после
-                первого же попадания лист навсегда показывал «(+0)». */}
-            {Number(value.hitPointsTemp) > 0 ? ` +${value.hitPointsTemp}` : ""}
-          </span>
+          {/* Временные — кислотной меткой в углу кости. Именно по числу, а не
+              по «строка не пустая»: и урон, и длинный отдых записывают сюда
+              строку "0", а она истинна. */}
+          {Number(value.hitPointsTemp) > 0 && (
+            <span className="dnd-die-badge" title="Временные хиты">+{value.hitPointsTemp}</span>
+          )}
         </DndDie>
       </SbQuickValue>
       {modalOpen && onQuickUpdate && (
@@ -12001,15 +12015,6 @@ export function DndCharacterView({
                       мастерства — то, что спрашивают редко, но глазами
                       ищут именно здесь. */}
                   <div className="dnd-card-cartouche">
-                    {/* Пометка истощения стоит над именем, а не под костями:
-                        внизу она вклинивалась между рядами и двигала половину
-                        карты, стоило уровню измениться. */}
-                    {value.exhaustion > 0 && (
-                      <div className="dnd-card-cartouche-warning">
-                        Истощение {value.exhaustion}: −{exhaustionPenalty} ко всем броскам к20, −{value.exhaustion * 5} фт
-                        скорости
-                      </div>
-                    )}
                     <div className="dnd-card-cartouche-name">{value.characterName || "Без имени"}</div>
                     <div className="dnd-card-cartouche-class">
                       {/* Цифра уровня — вход в визард повышения. Она уже стоит
@@ -12118,9 +12123,10 @@ export function DndCharacterView({
               <div>
                 <DndDie size="lg" textured>
                   <span className="dnd-die-value">{walkDie.value}</span>
-                  {walkDie.sub && <span className="dnd-die-sub">{walkDie.sub}</span>}
                 </DndDie>
-                <div className="sb-label">Скорость</div>
+                <div className="sb-label">
+                  {walkDie.sub ? <>Скор. <b>{walkDie.sub}</b></> : "Скорость"}
+                </div>
               </div>
             </div>
             {(otherSpeeds || legacySpeedNote || (moveBonus.bonus > 0 && value.speeds.walk != null)) && (
@@ -12186,7 +12192,12 @@ export function DndCharacterView({
                 label="Истощение"
                 value={value.exhaustion >= 6 ? "смерть" : value.exhaustion}
                 active={value.exhaustion > 0}
-                title={onQuickUpdate ? "Клик — следующий уровень истощения" : undefined}
+                // Штрафы — подсказкой плашки: строка над именем поднимала
+                // картуш, стоило взять первый уровень (владелец, 2026-09-25).
+                title={[
+                  value.exhaustion > 0 ? `−${exhaustionPenalty} ко всем броскам к20, −${value.exhaustion * 5} фт скорости` : "",
+                  onQuickUpdate ? "Клик — следующий уровень истощения" : "",
+                ].filter(Boolean).join(". ") || undefined}
                 ariaLabel={`Истощение ${value.exhaustion} — сменить уровень`}
                 onClick={onQuickUpdate ? () => onQuickUpdate({ exhaustion: (value.exhaustion + 1) % 7 }) : undefined}
                 onUndo={
@@ -12268,7 +12279,10 @@ export function DndCharacterView({
                 его имя, и лист должен уметь ответить, не заставляя искать
                 зверя в бестиарии. */}
             {((value.companions ?? []).length > 0 || onQuickUpdate) && (
-              <div className="dnd-companions" aria-label="Спутники">
+              <div
+                className={`dnd-companions${(value.companions ?? []).length === 0 && onQuickUpdate && !detached ? " is-empty" : ""}`}
+                aria-label="Спутники"
+              >
                 <span className="dnd-companions-label" aria-hidden="true">Спутники</span>
                 {(value.companions ?? []).map((c, i) => {
                   const remove = onQuickUpdate
@@ -12482,6 +12496,10 @@ export function DndCharacterView({
                       +
                     </button>
                   ))}
+                {/* Пока спутников нет — подпись под «+» (владелец, 2026-09-25). */}
+                {onQuickUpdate && !detached && !addingCompanion && (value.companions ?? []).length === 0 && (
+                  <span className="dnd-companion-add-caption" aria-hidden="true">спутник</span>
+                )}
               </div>
             )}
               {/* Загнутый угол — индикатор «пришло послание» и (только на

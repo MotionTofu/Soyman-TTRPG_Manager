@@ -86,6 +86,10 @@ fixture.classFeatures = [
 ];
 fixture.feats = [feat('Посвящённый в магию: волшебник')];
 fixture.sensesList = [{ name: 'Тёмное зрение', distance: '60' }];
+// Состояния карты по доске Sheet-Card-States: ?state=fight|down|stable.
+const stateCase = new URLSearchParams(window.location.search).get('state');
+if (stateCase === 'fight') Object.assign(fixture, { conditions: ['Отравлен', 'Лежит', 'Испуган'], concentration: 'есть', exhaustion: 2, hitPointsTemp: '5' });
+if (stateCase === 'down' || stateCase === 'stable') Object.assign(fixture, { conditions: ['Лежит'], hitPointsCurrent: '0', deathSaveSuccesses: stateCase === 'stable' ? 3 : 2, deathSaveFailures: stateCase === 'stable' ? 0 : 1 });
 
 // Static, unsaved examples of app-owned dialogs. Their actions only close the
 // preview: this page never imports, publishes, or resolves sync state.

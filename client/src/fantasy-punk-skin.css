@@ -72,6 +72,8 @@
   --skin-edit-acid: url("/ui/sheet/card-edit-acid.webp");
 
   --skin-paper-base: #e8e4da;
+  /* Вуаль над фоновой бумагой: текстура на 30 % тише (владелец, 2026-09-25). */
+  --skin-page-veil: linear-gradient(rgb(232 228 218 / .3), rgb(232 228 218 / .3));
   --skin-ink: #171717;
   --skin-ink-soft: #56534f;
   --skin-acid: #f3ff3a;
@@ -121,8 +123,8 @@ body.sheet-fullscreen {
   z-index: -1;
   pointer-events: none;
   background-color: var(--skin-paper-base);
-  background-image: var(--skin-paper-tile);
-  background-size: 640px auto;
+  background-image: var(--skin-page-veil), var(--skin-paper-tile);
+  background-size: auto, 640px auto;
   background-repeat: repeat;
 }
 
@@ -2042,4 +2044,256 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-spell-school {
 }
 .dnd-deck-fan-card .dnd-fan-lines {
   margin-top: 10px;
+}
+
+/* ---- §20. Правки владельца по ПК-карте (2026-09-25). ----
+ * Портрет — внутри цепи рамки, с полями, как на макете (карта с paper-panel
+ * вокруг), а не во всю карту: иначе он вылезал над верхней цепью. Поля
+ * карты шире, чтобы полосы не упирались в звёзды рамки. */
+@media (min-width: 701px) {
+  .dnd-card-face,
+  .dnd-desktop-split > .dnd-card-face {
+    --pad-x: 28px;
+  }
+}
+.dnd-card-portrait-zone {
+  margin: 0 calc((var(--pad-x) - 10px) * -1) 0;
+}
+/* Класс и подкласс — кнопки-ссылки: без наследования регистр терялся. */
+.dnd-card-text-link {
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+/* Виталы: без пунктирных швов; «из 38» и «фт» — в подписи, светлым. */
+.dnd-card-face .dnd-triad {
+  box-shadow: none;
+}
+.dnd-card-face .dnd-triad::before,
+.dnd-card-face .dnd-triad::after {
+  content: none;
+}
+.dnd-triad .sb-label b {
+  color: #e8e4da;
+  font-weight: 700;
+}
+.dnd-die-badge {
+  position: absolute;
+  top: -4px;
+  right: -8px;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 3px;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  background: var(--skin-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
+  color: var(--skin-ink);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+/* Живой ряд и характеристики — без рамок; включённое — маджентой. */
+.dnd-card-face .dnd-live-row {
+  box-shadow: none;
+}
+.dnd-card-face .dnd-live-row > div,
+.dnd-card-face .dnd-live-row > button,
+.dnd-card-face .dnd-live-row :is(.dnd-live-chip, .dnd-live-chip-undo, .dnd-conditions) {
+  border: 0;
+  border-image: none;
+  background: none;
+}
+.dnd-card-face .dnd-live-row .dnd-live-chip.is-on {
+  background: var(--skin-magenta) url("/ui/wizard/punk-magenta.webp") center / 360px;
+}
+.dnd-card-face .dnd-abilities-block {
+  border: 0;
+  border-image: none;
+}
+/* Навешанные состояния — значок и имя капсом, без плашек. */
+.dnd-card-face .dnd-active-conditions {
+  gap: 6px 14px;
+  margin-bottom: 8px;
+}
+.dnd-card-face .dnd-active-condition {
+  min-width: 0;
+  min-height: 36px;
+  gap: 7px;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.dnd-card-face .dnd-active-condition img {
+  width: 28px;
+  height: 28px;
+  box-shadow: 2px 2px 0 rgba(23, 23, 23, 0.55);
+}
+.dnd-card-face .dnd-active-condition-text {
+  max-width: none;
+  padding: 0;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+/* Спутников нет — «+» по центру и подпись под ним. */
+.dnd-card-face > .dnd-companions.is-empty {
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding-inline: 64px;
+}
+.dnd-card-face > .dnd-companions.is-empty > .dnd-companions-label {
+  display: none;
+}
+.dnd-card-face > .dnd-companions.is-empty .dnd-companion-add {
+  margin: 0;
+}
+.dnd-companion-add-caption {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #bdb8ad;
+}
+/* Спасброски от смерти — чернильная плашка ниже верхней цепи и её
+ * орнаментов; «Стабилизирован» — такой же плашкой, а не полосой под цепью. */
+.dnd-card-face :is(.dnd-death-overlay, .dnd-death-strip) {
+  top: 58px;
+  left: 50%;
+  right: auto;
+  width: max-content;
+  max-width: calc(100% - 40px);
+  box-sizing: border-box;
+  transform: translateX(-50%);
+  padding: 12px 16px;
+  background: #141414 url("/ui/wizard/ink-surface.webp") center / 620px;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.5);
+}
+.dnd-card-face .dnd-death-overlay {
+  align-items: stretch;
+  gap: 8px;
+}
+.dnd-card-face .dnd-death-title {
+  font-family: "Rubik Dirt", var(--font-ui), sans-serif;
+  font-size: 20px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #e8e4da;
+}
+.dnd-card-face .dnd-death-strip .sb-label {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  color: #e8e4da;
+}
+.dnd-card-face .dnd-death-strip .comp-mini {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 0;
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  color: var(--skin-ink);
+}
+.dnd-card-portrait-zone.is-empty.has-death {
+  min-height: 250px;
+}
+/* ПК-оборот: плашки и кнопки без рамок, как на макете. */
+@media (min-width: 701px) {
+  .dnd-desktop-back .dnd-card-back:not(:has(.dnd-card-back-head, .dnd-transfer-box)) :is(.dnd-back-plate, .dnd-oracle-slip, .dnd-back-btn:not(.is-ink)),
+  .dnd-desktop-back > .dnd-face-edit {
+    border: 0;
+    border-image: none;
+  }
+}
+/* Окно состояний по доске макета: бумага, заголовок Rubik Dirt с крестиком,
+ * подсказка, две колонки плашек (наложенное — маджентой, чекбокс чернилами
+ * с кислотной галкой) и чернильное «Готово · N» во всю ширину. */
+.modal.modal-conditions {
+  width: 640px;
+  padding: 18px 16px 20px;
+  border: 0;
+  border-radius: 0;
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  box-shadow: 6px 6px 0 rgba(23, 23, 23, 0.55);
+  color: var(--skin-ink);
+}
+.dnd-conditions-modal {
+  gap: 12px;
+}
+.dnd-conditions-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.dnd-conditions-head h3 {
+  flex: 1;
+  margin: 0;
+  font-family: "Rubik Dirt", var(--font-ui), sans-serif;
+  font-size: 30px;
+  font-weight: 400;
+  line-height: 1;
+  text-transform: none;
+}
+.dnd-conditions-close {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 22px;
+}
+.dnd-conditions-hint {
+  margin: -8px 0 0;
+  font-size: 14px;
+  color: #4a4743;
+}
+.dnd-conditions-list.stack {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.dnd-condition-option {
+  gap: 8px;
+  min-height: 52px;
+  padding: 0 8px;
+  border: 4px solid transparent;
+  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background-clip: padding-box;
+  font-size: 15px;
+}
+.dnd-condition-option:has(input:checked) {
+  background: var(--skin-magenta) url("/ui/wizard/punk-magenta.webp") center / 360px;
+  background-clip: padding-box;
+}
+.dnd-condition-option input[type="checkbox"] {
+  appearance: none;
+  margin: 0;
+  border: 2px solid var(--skin-ink);
+  border-radius: 0;
+  background: transparent;
+}
+.dnd-condition-option input[type="checkbox"]:checked {
+  background: var(--skin-ink) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f3ff3a' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7'/%3E%3C/svg%3E") center / 14px no-repeat;
+}
+.dnd-condition-icon {
+  width: 32px;
+  height: 32px;
+}
+.dnd-conditions-done.primary {
+  align-self: stretch;
+  min-height: 56px;
+  border: 0;
+  border-radius: 0;
+  background: var(--skin-ink);
+  color: #e8e4da;
+  font-family: var(--font-ui);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }

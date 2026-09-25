@@ -271,7 +271,7 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-prepared-filter-short { display: no
    The menu contains the existing export/backup handlers, not replacements. */
 html[data-app="oneshot"]:has(.oneshot-home) body,
 html[data-app="oneshot"]:has(.oneshot-sheet) body {
-  background: #e7e2d6 var(--skin-paper-tile) repeat;
+  background: var(--skin-page-veil), #e7e2d6 var(--skin-paper-tile) repeat;
 }
 html[data-app="oneshot"] .oneshot-header {
   min-height: 66px;
@@ -494,3 +494,105 @@ html[data-app="oneshot"] .oneshot-gestures > button {
     min-height: 0;
   }
 }
+
+/* ---- Шапка и меню «⋯» по доске «Лист · ПК · Карта» (правки 2026-09-25).
+   Под шапкой нет серой полосы: рваный край вырезан маской из той же
+   фоновой бумаги, что и страница (фон закреплён, поэтому стыка нет). ---- */
+html[data-app="oneshot"] .oneshot-header {
+  min-height: 64px;
+  padding: 0 max(40px, calc((100vw - 1500px) / 2)) 10px;
+  gap: 24px;
+  align-items: center;
+}
+html[data-app="oneshot"] .oneshot-header::after {
+  bottom: -2px;
+  height: 20px;
+  background: var(--skin-page-veil), var(--skin-paper-base) var(--skin-paper-tile) 0 0 / 640px auto repeat fixed;
+  -webkit-mask: url("/ui/wizard/paper-edge.webp") left bottom / auto 100% repeat-x;
+  mask: url("/ui/wizard/paper-edge.webp") left bottom / auto 100% repeat-x;
+}
+html[data-app="oneshot"] .oneshot-header > a { width: 119px; height: 42px; background-size: contain; }
+html[data-app="oneshot"] .oneshot-header > .muted {
+  max-width: 40ch;
+  color: #e8e4da;
+  font: 400 14px/1.1 Oswald, "Arial Narrow", sans-serif;
+  letter-spacing: .1em;
+}
+html[data-app="oneshot"] .oneshot-header [role="status"] {
+  flex: 0 1 auto;
+  max-width: 16ch;
+  color: #bdb8ad;
+  font: 400 11px/1.1 Oswald, "Arial Narrow", sans-serif;
+  letter-spacing: .14em;
+  text-align: right;
+}
+html[data-app="oneshot"] .oneshot-header .oneshot-header-toggle { width: 40px; min-width: 40px; height: 40px; }
+
+html[data-app="oneshot"] .oneshot-header-options {
+  top: calc(100% - 4px);
+  width: min(300px, calc(100vw - 20px));
+  padding: 0;
+  border: 4px solid transparent;
+  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background-clip: padding-box;
+  box-shadow: 6px 6px 0 rgba(23, 23, 23, .55);
+}
+html[data-app="oneshot"] .oneshot-header-options > button,
+html[data-app="oneshot"] .oneshot-header-options .oneshot-large-cards {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 0;
+  border-top: 1px solid rgba(23, 23, 23, .16);
+  color: var(--ui-text);
+  font: 400 16px/1.2 "Sofia Sans Semi Condensed", sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+}
+html[data-app="oneshot"] .oneshot-header-options > button.oneshot-menu-deck,
+html[data-app="oneshot"] .oneshot-header-options > button.oneshot-menu-home {
+  min-height: 52px;
+  padding: 0 14px;
+  font: 600 15px Oswald, "Arial Narrow", sans-serif;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+html[data-app="oneshot"] .oneshot-header-options > button.oneshot-menu-deck { border-top: 0; }
+html[data-app="oneshot"] .oneshot-header-options > button.oneshot-menu-home {
+  border-top: 2px solid transparent;
+  border-image: url("/ui/wizard/rough-border-ink.png") 16 round;
+}
+html[data-app="oneshot"] .oneshot-header-options > button.oneshot-menu-home::before {
+  content: "";
+  width: 18px;
+  height: 18px;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 11l9-7 9 7'/%3E%3Cpath d='M5 10v10h14V10'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 11l9-7 9 7'/%3E%3Cpath d='M5 10v10h14V10'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+html[data-app="oneshot"] .oneshot-menu-section {
+  padding: 10px 14px 4px;
+  border-top: 2px solid transparent;
+  border-image: url("/ui/wizard/rough-border-ink.png") 16 round;
+  color: #4a4743;
+  font: 400 11px Oswald, "Arial Narrow", sans-serif;
+  letter-spacing: .08em;
+}
+html[data-app="oneshot"] .oneshot-header-options .oneshot-large-cards input[type="checkbox"] {
+  appearance: none;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  border: 2px solid #171717;
+  border-radius: 0;
+  background: transparent;
+}
+html[data-app="oneshot"] .oneshot-header-options .oneshot-large-cards input[type="checkbox"]:checked {
+  background: #171717 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f3ff3a' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7'/%3E%3C/svg%3E") center / 14px no-repeat;
+}
+html[data-app="oneshot"] .oneshot-header-options > button.oneshot-menu-gestures::before { content: "☝"; font-size: 18px; }
+html[data-app="oneshot"] .oneshot-header-options > button:hover:not(.oneshot-menu-deck) { background: rgba(243, 255, 58, .55); }
