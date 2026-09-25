@@ -315,6 +315,7 @@ html[data-app="oneshot"] .lib-tools :is(p, section) > button {
   cursor: pointer;
 }
 html[data-app="oneshot"] .lib-btn:disabled { opacity: .6; cursor: default; }
+html[data-app="oneshot"] a.lib-btn { display: inline-flex; align-items: center; box-sizing: border-box; text-decoration: none; }
 html[data-app="oneshot"] .lib-note { margin: 0 0 0 8px; max-width: 420px; font-size: 14px; color: var(--lib-muted); }
 html[data-app="oneshot"] .lib-tools { margin-left: auto; }
 html[data-app="oneshot"] .lib-tools[open] { flex-basis: 100%; margin-left: 0; }

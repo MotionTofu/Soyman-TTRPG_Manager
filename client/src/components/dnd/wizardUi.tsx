@@ -101,7 +101,7 @@ export function EntrySheet({
     >
       {meta && <div className="wz-sheet-meta">{meta}</div>}
       {entry ? (
-        <MentionText text={entry.description?.trim() ? entry.description : "Описания нет."} />
+        entry.description?.trim() ? <MentionText text={entry.description} /> : <NoDescription />
       ) : (
         <span className="muted">{failed ? "Описание не загрузилось." : "Загружаю…"}</span>
       )}
@@ -567,6 +567,18 @@ function Plate({ children, className }: { children: ReactNode; className?: strin
 type PlateAction = { label: string; onClick: () => void; disabled?: boolean };
 
 /** Рамка записи справочника на ПК — то же, что шторка на телефоне, но на месте. */
+/** Пустое описание — просьба сообщить автору (владелец, 2026-09-25). */
+function NoDescription() {
+  return (
+    <p className="muted">
+      Либо тут нечего описывать, либо я пропустил описание, если считаешь, что второй вариант, напиши мне:{" "}
+      <a href="https://t.me/brothertofu" target="_blank" rel="noopener noreferrer">
+        https://t.me/brothertofu
+      </a>
+    </p>
+  );
+}
+
 export function EntryPlate({
   entryId,
   entry,
@@ -608,7 +620,7 @@ function EntryPlateLoaded({
         <h2 className="wz-plate-title">{entry?.name ?? "…"}</h2>
         {meta && <p className="wz-plate-meta">{meta}</p>}
         {entry ? (
-          <MentionText text={entry.description?.trim() ? entry.description : "Описания нет."} />
+          entry.description?.trim() ? <MentionText text={entry.description} /> : <NoDescription />
         ) : (
           <span className="muted">{failed ? "Описание не загрузилось." : "Загружаю…"}</span>
         )}
