@@ -258,6 +258,8 @@ export interface DndBackgroundOption {
   name: string;
   /** Подпись строки визарда: навыки · характеристики · черта. */
   summary?: string;
+  /** Характеристики прибавки предыстории — фильтр шага визарда. */
+  abilities?: string[];
 }
 
 function backgroundSummary(data: Record<string, unknown>): string {
@@ -275,7 +277,10 @@ export async function loadDndBackgroundOptions(systemId: number, opts?: LoadOpts
   for (const section of bgSections) {
     const entries = await get<CompendiumEntry[]>(`/systems/${systemId}/entries?section_id=${section.id}`, opts);
     for (const e of entries) {
-      if (e.kind === "background") results.push({ id: e.id, name: e.name, summary: backgroundSummary(e.data) });
+      if (e.kind === "background") {
+        const abilities = Array.isArray(e.data.abilities) ? e.data.abilities.filter((x): x is string => typeof x === "string") : [];
+        results.push({ id: e.id, name: e.name, summary: backgroundSummary(e.data), abilities });
+      }
     }
   }
   return results.sort(byNameRu);

@@ -1038,8 +1038,16 @@
   .wz .wizard-main {
     padding-bottom: 60px;
   }
+  /* Подсказка «что дальше» — крупно, по центру между «Назад» и «Далее»
+     (владелец, 2026-09-25). */
   .wz .wz-foot-hint {
     order: 2;
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+    font-size: 17px;
+    line-height: 1.25;
+    color: var(--wz-ink, #171717);
   }
   .wz .wz-foot > button {
     order: 1;

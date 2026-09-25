@@ -148,8 +148,9 @@
 }
 .wz-foot-hint {
   grid-column: 1 / -1;
-  font-size: var(--fs-meta);
-  opacity: 0.85;
+  font-size: 15px;
+  line-height: 1.25;
+  text-align: center;
 }
 .wz-foot button {
   min-height: 48px;

@@ -89,6 +89,9 @@ import {
 // Мобильный редизайн (гриллинг 2026-09-24, Q5, Q16, Q17): имя и портрет ушли
 // в Досье, выборы класса — отдельным шагом сразу за классом, языки — к
 // навыкам. Шаги, где выбирать нечего, из пути выпадают (stepVisible).
+// Характеристики прибавки предыстории — как в записях справочника.
+const BACKGROUND_ABILITIES = ["Сила", "Ловкость", "Телосложение", "Интеллект", "Мудрость", "Харизма"];
+
 const STEPS = [
   "Класс",
   "Умения класса",
@@ -647,6 +650,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   // Поиск по селектам класс/вид/предыстория/черта — тоже эфемерен:
   // голый скролл длинных справочников искать не даёт.
   const [backgroundQ, setBackgroundQ] = useState("");
+  const [backgroundAbilities, setBackgroundAbilities] = useState<string[]>([]);
   const [featQ, setFeatQ] = useState("");
   const matchQ = (name: string, q: string) => {
     const needle = q.trim().toLowerCase();
@@ -3515,8 +3519,10 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   }
 
   function renderBackground() {
+    // Фильтр по характеристикам прибавки: предыстория даёт все отмеченные.
     const rows = backgroundOptions
       .filter((b) => matchQ(b.name, backgroundQ))
+      .filter((b) => backgroundAbilities.every((a) => b.abilities?.includes(a)))
       .map((b) => ({ key: String(b.id), title: b.name, meta: b.summary, picked: backgroundId === b.id }));
     rows.push({ key: "custom", title: "Свой вариант", meta: "договоритесь с Мастером", picked: backgroundCustom !== null });
     return (
@@ -3544,6 +3550,19 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         )}
         {renderToolGroups(["background"])}
         <SearchField value={backgroundQ} onChange={setBackgroundQ} placeholder="Поиск предыстории" />
+        <div className="wz-chips" role="group" aria-label="Фильтр по характеристикам">
+          {BACKGROUND_ABILITIES.map((a) => (
+            <button
+              key={a}
+              type="button"
+              className="wz-chip"
+              aria-pressed={backgroundAbilities.includes(a)}
+              onClick={() => setBackgroundAbilities((prev) => (prev.includes(a) ? prev.filter((x) => x !== a) : [...prev, a]))}
+            >
+              {a}
+            </button>
+          ))}
+        </div>
         <PickList
           rows={rows}
           collapse
