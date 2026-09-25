@@ -6520,6 +6520,39 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     setAppSettingFlag(database, "class_multiclass_profs_v1");
   }
 
+  // «Учёный» волшебника (2 ур.): экспертность не в любом навыке, а в одном из
+  // шести (PHB 2024). Список — в деф выбора (options), визард фильтрует по
+  // нему и по владению. Только если options ещё нет. Одноразовая (флаг).
+  if (!appSettingFlag(database, "scholar_expertise_options_v1")) {
+    const options = ["История", "Медицина", "Природа", "Анализ", "Религия", "Аркана"];
+    const rows = database
+      .prepare(`SELECT id, data FROM compendium_entries WHERE data LIKE '%"scholar_expertise"%'`)
+      .all() as { id: number; data: string }[];
+    const update = database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?");
+    let fixed = 0;
+    for (const row of rows) {
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        continue;
+      }
+      if (!Array.isArray(data.choices)) continue;
+      let touched = false;
+      for (const c of data.choices as Record<string, unknown>[]) {
+        if (c?.key === "scholar_expertise" && c.kind === "skill" && !Array.isArray(c.options)) {
+          c.options = options;
+          touched = true;
+        }
+      }
+      if (!touched) continue;
+      update.run(JSON.stringify(data), row.id);
+      fixed++;
+    }
+    if (fixed > 0) console.log(`[db] «Учёный»: список навыков экспертности: записей: ${fixed}`);
+    setAppSettingFlag(database, "scholar_expertise_options_v1");
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);
