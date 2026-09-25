@@ -24,7 +24,7 @@ import { Banner } from './ui/Banner';
 import { selectCharacter, refreshSelectedCatalogMedia } from './transport';
 import { refreshMentionIndex } from '../../client/src/mentions';
 import { ensureCurrentCatalog, ensureCatalogPreviews, garbageCollectCatalogs, mergePreviews } from './catalog-manager.mjs';
-import { parseCatalog } from './catalog.mjs';
+import { parseCatalog, relinkProficiencies } from './catalog.mjs';
 import { auditExport } from './export-audit.mjs';
 import { gmPayload, portableFileName, portablePayload, renderPortable } from './portable.mjs';
 import { Modal } from '../../client/src/components/Modal';
@@ -729,7 +729,11 @@ function App() {
     finally { setBusy(false); }
   }
   async function open(id: number) {
-    const c = await getCharacter(id); if (!c) throw Error('Персонаж не найден');
+    let c = await getCharacter(id); if (!c) throw Error('Персонаж не найден');
+    // Старые ссылки владений (устаревшие номера пунктов механик) — по имени.
+    const pinned = c.content && c.catalogKey ? await getCatalog(c.catalogKey) : null;
+    const relinked = pinned ? relinkProficiencies(c.content, pinned.entries) : null;
+    if (relinked) c = await saveCharacter({ ...c, content: relinked });
     // Карта ключей — от справочника этого персонажа: ссылки в описаниях.
     await selectCharacter(id); void refreshMentionIndex(); revision.current = c.revision; activeRef.current = c; setActive(c); setWizard(!c.content);
     setStatus('Сохранено на устройстве');

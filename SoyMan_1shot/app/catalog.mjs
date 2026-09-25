@@ -15,6 +15,24 @@ export function repairSpellLevels(catalog, reference) {
       ? { ...e, level: source.level } : e;
   }) };
 }
+// Владения на листе ссылались на пункты механик по устаревшим номерам
+// (миграция prof_refs_by_name_v1 чинит справочник, эта — уже созданных
+// персонажей): ссылки нет в каталоге — ищем запись с тем же именем, иначе
+// ссылку убираем, имя остаётся. null — чинить нечего.
+export function relinkProficiencies(content, entries) {
+  const profs = content?.proficiencies;
+  if (!Array.isArray(profs)) return null;
+  const ids = new Set(entries.map(e => e.id));
+  const byName = new Map();
+  for (const e of entries) if (e.kind === 'mechanic_item' && !byName.has(e.name)) byName.set(e.name, e.id);
+  let changed = false;
+  const next = profs.map(p => {
+    if (p?.entryId == null || ids.has(p.entryId)) return p;
+    changed = true;
+    return { ...p, entryId: byName.get(p.name) ?? null };
+  });
+  return changed ? { ...content, proficiencies: next } : null;
+}
 export function parseCatalog(input) {
   if (!input || typeof input !== 'object' || !input.system || !Array.isArray(input.sections) || !Array.isArray(input.entries)) throw Error('Нужна JSON-выгрузка системы из SoyMan');
   if (typeof input.system.name !== 'string' || !(/d&d|днд/i.test(input.system.name) || ['phb', 'dnd55'].includes(input.system.code))) throw Error('Выберите выгрузку D&D 5.5');

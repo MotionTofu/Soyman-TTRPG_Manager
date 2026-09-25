@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { creatureCardPayload, parseCatalog, repairSpellLevels, searchEntries } from '../app/catalog.mjs';
+import { creatureCardPayload, parseCatalog, relinkProficiencies, repairSpellLevels, searchEntries } from '../app/catalog.mjs';
 const fixture = () => ({ system: { id: 7, name: 'D&D 5.5', folder_path: 'private/path' }, sections: [{ id: 2, name: 'Классы', kind: 'class' }], entries: [{ id: 10, section_id: 2, parent_id: null, name: 'Тестовый класс', kind: 'class', data: { hit_die: 'к10' }, folder_path: 'private/entry' }] });
 test('spell circles survive export and legacy repair leaves pinned mechanics intact', () => {
   const raw = fixture();
@@ -60,4 +60,10 @@ test('search folds case and ё, filters kinds and puts prefix matches first', ()
   assert.deepEqual(searchEntries(entries, 'колюч', ['monster']).map(r => r.title), ['Ёж']);
   assert.deepEqual(searchEntries(entries, '  ', null), []);
   assert.equal(searchEntries(entries, 'кот', ['monster'])[0].type, 'compendium_entry');
+});
+test('proficiency links to missing entries relink by name, unknown names drop the link', () => {
+  const entries = [{ id: 11877, name: 'Лёгкие доспехи', kind: 'mechanic_item' }, { id: 5, name: 'Кости', kind: 'equipment' }];
+  const content = { proficiencies: [{ entryId: 31226, name: 'Лёгкие доспехи' }, { entryId: 5, name: 'Кости' }, { entryId: 31299, name: 'Неведомое' }, { entryId: null, name: 'Общий' }] };
+  assert.deepEqual(relinkProficiencies(content, entries).proficiencies.map(p => p.entryId), [11877, 5, null, null]);
+  assert.equal(relinkProficiencies({ proficiencies: [{ entryId: 5, name: 'Кости' }] }, entries), null);
 });
