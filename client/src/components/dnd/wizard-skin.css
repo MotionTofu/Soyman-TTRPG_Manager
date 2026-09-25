@@ -798,6 +798,8 @@
   font-size: 16px;
   line-height: 1.5;
   scrollbar-width: thin;
+  /* MentionText делит абзацы переводами строк — без этого они слипаются. */
+  white-space: pre-line;
 }
 .wz .wz-plate-title {
   margin: 0 0 var(--sp-2);

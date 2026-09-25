@@ -378,6 +378,8 @@
 }
 .dc-summary {
   margin-bottom: 1em;
+  /* Абзацы MentionText — переводами строк. */
+  white-space: pre-line;
 }
 .dc-prog-wrap {
   overflow-x: auto;

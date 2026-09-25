@@ -179,9 +179,9 @@ export function ensureSubfolder(basePath: string, sub: string): string {
   return vaultRel(ensureDir(assertVaultPath(path.join(vaultAbs(basePath), sub))));
 }
 
-// Записи, у которых изображение — карта 2:3 (вид, класс, подкласс).
+// Записи, у которых изображение — карта 2:3 (вид, класс, подкласс, предок вида).
 export function isCardKind(entryKind: string): boolean {
-  return entryKind === "class" || entryKind === "subclass" || entryKind === "species";
+  return entryKind === "class" || entryKind === "subclass" || entryKind === "species" || entryKind === "lineage";
 }
 
 // Куда ложится собственное изображение записи компендиума — по разделу, к
