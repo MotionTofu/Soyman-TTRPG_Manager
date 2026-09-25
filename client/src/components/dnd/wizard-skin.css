@@ -17,8 +17,6 @@
   --wz-muted: #4a4743;
   --wz-acid: #f3ff3a;
   --wz-mag: #ff3e91;
-  --wz-rough-ink: url("/ui/wizard/rough-border-ink.png");
-  --wz-rough-paper: url("/ui/wizard/rough-border-paper.png");
   --wz-torn: url("/ui/wizard/torn-edge-mask.png");
   --wz-panel: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
 
@@ -68,7 +66,7 @@
     .wz-file-btn
   ):not(:where(.wz-overview-card *)) {
   border: 4px solid transparent;
-  border-image: var(--wz-rough-ink) 16 / 4px round;
+  border-image: none;
   background-clip: padding-box;
   border-radius: 0;
 }
@@ -185,7 +183,7 @@
   line-height: 1.05;
 }
 .wz .wz-top .wz-icon-btn {
-  border-image: var(--wz-rough-paper) 16 / 3px round;
+  border-image: none;
   border-width: 3px;
   background: transparent;
   color: var(--wz-paper);
@@ -250,7 +248,8 @@
 }
 .wz .wz-foot {
   border-top: 2px solid transparent;
-  border-image: var(--wz-rough-ink) 16 round;
+  border-image: none;
+  border-color: rgba(23, 23, 23, 0.22);
   background: none;
 }
 .wz .wz-foot-hint,
@@ -274,11 +273,13 @@
 
 :is(.wz, .wz-sheet, .wz-lvl) .wz-list {
   border-top: 2px solid transparent;
-  border-image: var(--wz-rough-ink) 16 round;
+  border-image: none;
+  border-color: rgba(23, 23, 23, 0.22);
 }
 :is(.wz, .wz-sheet, .wz-lvl) .wz-row {
   border-bottom: 2px solid transparent;
-  border-image: var(--wz-rough-ink) 16 round;
+  border-image: none;
+  border-color: rgba(23, 23, 23, 0.22);
 }
 :is(.wz, .wz-sheet, .wz-lvl) .wz-row.is-picked {
   background: rgba(23, 23, 23, 0.06);
@@ -295,8 +296,7 @@
 :is(.wz, .wz-sheet, .wz-lvl) .wz-row-check > span {
   width: 26px;
   height: 26px;
-  border: 4px solid transparent;
-  border-image: var(--wz-rough-ink) 16 / 4px round;
+  border: 2px solid var(--wz-ink);
   border-radius: 0;
   background: var(--wz-panel);
   background-clip: padding-box;
@@ -373,7 +373,7 @@
   display: flex;
   align-items: center;
   border: 4px solid transparent;
-  border-image: var(--wz-rough-ink) 16 / 4px round;
+  border-image: none;
 }
 :is(.wz, .wz-sheet, .wz-lvl) .wz-level button {
   width: 38px;
@@ -456,7 +456,7 @@
 .wz .wz-ribbon .wz-wide-btn,
 .wz .wz-ribbon .wz-wide-btn.primary {
   border: 4px solid transparent;
-  border-image: var(--wz-rough-ink) 16 / 4px round;
+  border-image: none;
   background: var(--wz-ink);
   color: var(--wz-paper);
   font-family: var(--font-ui);
@@ -472,8 +472,7 @@
   color: var(--wz-acid);
 }
 .wz .wz-slide-custom {
-  border: 4px solid transparent;
-  border-image: var(--wz-rough-ink) 16 / 4px round;
+  border: 2px solid var(--wz-ink);
   border-radius: 0;
   background: var(--wz-panel);
   background-clip: padding-box;
@@ -578,7 +577,7 @@
 .wz div.wz-abil {
   padding: var(--sp-3) var(--sp-2);
   border: 4px solid transparent;
-  border-image: var(--wz-rough-ink) 16 / 4px round;
+  border-image: none;
   background: var(--wz-panel);
   background-clip: padding-box;
 }
@@ -591,7 +590,7 @@
 }
 .wz .wz-set.is-selected {
   border-width: 5px;
-  border-image: var(--wz-rough-ink) 16 / 5px round;
+  border-image: none;
   box-shadow: none;
 }
 /* Выбранный — рваная кислотная подложка со сдвигом. */
@@ -716,7 +715,8 @@
 }
 .wz-sheet .wz-sheet-foot {
   border-top: 2px solid transparent;
-  border-image: var(--wz-rough-ink) 16 round;
+  border-image: none;
+  border-color: rgba(23, 23, 23, 0.22);
 }
 .wz-sheet .wz-sheet-foot .wz-shadow {
   width: 100%;
@@ -729,7 +729,8 @@
 /* Список шагов: текущий — кислотный с розовой полосой. */
 .wz-sheet .wz-steplist button {
   border-bottom: 2px solid transparent;
-  border-image: var(--wz-rough-ink) 16 round;
+  border-image: none;
+  border-color: rgba(23, 23, 23, 0.22);
   font-family: var(--font-ui);
   font-size: 17px;
   text-transform: uppercase;
@@ -957,7 +958,7 @@
   .wz .wz-rail-foot button {
     min-height: 44px;
     border: 3px solid transparent;
-    border-image: var(--wz-rough-paper) 16 / 3px round;
+    border-image: none;
     background: transparent;
     color: var(--wz-paper);
     text-transform: uppercase;
@@ -1031,7 +1032,8 @@
     margin: -22px 0;
     padding: 24px 24px 22px;
     border-left: 2px solid transparent;
-    border-image: var(--wz-rough-ink) 16 round;
+    border-image: none;
+    border-color: rgba(23, 23, 23, 0.22);
     background: rgba(255, 255, 255, 0.28);
   }
   .wz-mini-banner {
@@ -1039,7 +1041,7 @@
     height: 132px;
     overflow: hidden;
     border: 4px solid transparent;
-    border-image: var(--wz-rough-ink) 16 / 4px round;
+    border-image: none;
   }
   .wz-mini-banner img {
     width: 100%;
@@ -1252,7 +1254,7 @@
     opacity: 1;
     transform: translateY(-6px);
     border: 4px solid transparent;
-    border-image: var(--wz-rough-ink) 16 / 4px round;
+    border-image: none;
     filter: drop-shadow(3px 3px 0 #171717);
   }
   .wz .wz-thumb.is-selected::after {
@@ -1444,7 +1446,8 @@
 .wz-lvl .wizard-footer {
   padding-top: var(--sp-4);
   border-top: 2px solid transparent;
-  border-image: var(--wz-rough-ink) 16 round;
+  border-image: none;
+  border-color: rgba(23, 23, 23, 0.22);
 }
 
 /* ——— снаряжение на ПК — по макету «ПК · Снаряжение»: картинка набора слева,
@@ -1522,7 +1525,7 @@
     height: 40px;
     padding: 0 14px;
     border: 4px solid transparent;
-    border-image: var(--wz-rough-ink) 16 / 4px round;
+    border-image: none;
     background: var(--wz-paper);
     background-clip: padding-box;
     font-family: var(--font-ui);

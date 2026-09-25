@@ -735,7 +735,7 @@ body.sheet-fullscreen {
   margin: 0;
   padding: 12px 14px;
   border: 4px solid transparent;
-  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  border-image: none;
   background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
   background-clip: padding-box;
   color: var(--skin-ink);
@@ -788,7 +788,7 @@ body.sheet-fullscreen {
   justify-content: center;
   gap: 1px;
   border: 4px solid transparent;
-  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  border-image: none;
   border-radius: 0;
   background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
   background-clip: padding-box;
@@ -856,7 +856,7 @@ body.sheet-fullscreen {
   .dnd-desktop-back > .dnd-face-edit {
     max-width: 760px;
     border: 4px solid transparent;
-    border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+    border-image: none;
     background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
     background-clip: padding-box;
   }
@@ -1008,7 +1008,7 @@ button.dnd-item-rt.dnd-spend-btn .dnd-item-rt-bot {
   gap: 0;
   margin-bottom: 16px;
   border: 4px solid transparent;
-  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  border-image: none;
   outline: none;
   background: none;
 }
@@ -1130,7 +1130,7 @@ button.dnd-card-level {
   min-height: 34px;
   align-items: center;
   border: 4px solid transparent;
-  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  border-image: none;
   background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
   background-clip: padding-box;
 }
@@ -1146,7 +1146,7 @@ button.dnd-card-level {
 /* Характеристики — в неровном контуре, без пунктира и вклейки. */
 .dnd-card-face .dnd-abilities-block {
   border: 4px solid transparent;
-  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  border-image: none;
   background: none;
   box-shadow: none;
 }
@@ -1173,7 +1173,7 @@ button.dnd-card-level {
  * контуре, числа двумя колонками: чем бьёшь и что выходит. */
 .dnd-pool-band {
   border: 4px solid transparent;
-  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  border-image: none;
   background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
   background-clip: padding-box;
   color: var(--skin-ink);
@@ -1221,7 +1221,7 @@ button.dnd-card-level {
 }
 .dnd-action-cards {
   border: 4px solid transparent;
-  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  border-image: none;
   background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
   background-clip: padding-box;
 }
@@ -1285,7 +1285,7 @@ button.dnd-card-level {
   box-sizing: border-box;
   padding: 0 12px 0 38px;
   border: 4px solid transparent;
-  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  border-image: none;
   border-radius: 0;
   background:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%23171717' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-4-4'/%3E%3C/svg%3E") 10px center no-repeat,
@@ -1374,7 +1374,7 @@ button.dnd-card-level {
 }
 .dnd-spell-level-card[open] > .dnd-spell-list {
   border: 4px solid transparent;
-  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  border-image: none;
   background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
   background-clip: padding-box;
 }
@@ -1491,7 +1491,7 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-spell-school {
 .dnd-skills-tab {
   display: block;
   border: 4px solid transparent;
-  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  border-image: none;
   background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
   background-clip: padding-box;
   columns: auto !important;
@@ -1591,7 +1591,7 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-spell-school {
   align-items: center;
   gap: 6px;
   border: 4px solid transparent;
-  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  border-image: none;
   background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
   background-clip: padding-box;
   font-family: var(--font-ui);
@@ -1649,7 +1649,7 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-spell-school {
   margin: 0;
   padding: 12px 14px;
   border: 4px solid transparent;
-  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  border-image: none;
   background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
   background-clip: padding-box;
 }
@@ -1671,7 +1671,7 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-spell-school {
 .dnd-equipment-view-list {
   gap: 0;
   border: 4px solid transparent;
-  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  border-image: none;
   background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
   background-clip: padding-box;
 }
@@ -1723,7 +1723,7 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-spell-school {
   min-height: 44px;
   box-sizing: border-box;
   border: 4px solid transparent;
-  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  border-image: none;
   border-radius: 0;
   background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
   background-clip: padding-box;
@@ -1774,7 +1774,7 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-spell-school {
 }
 .dnd-feat-list {
   border: 4px solid transparent;
-  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  border-image: none;
   background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
   background-clip: padding-box;
 }
@@ -1840,7 +1840,7 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-spell-school {
   padding: 0 14px 0 6px;
   gap: 8px;
   border: 4px solid transparent;
-  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  border-image: none;
   border-radius: 0;
   background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
   background-clip: padding-box;
@@ -1904,7 +1904,7 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-spell-school {
   margin: 0;
   padding: 14px 16px;
   border: 4px solid transparent;
-  border-image: url("/ui/wizard/rough-border-ink.png") 16 / 4px round;
+  border-image: none;
   background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
   background-clip: padding-box;
 }
