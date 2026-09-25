@@ -6749,6 +6749,73 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     setAppSettingFlag(database, "dragon_ancestry_v1");
   }
 
+  // Ссылки на пункты механик по устаревшим номерам (пункты пересоздавались):
+  // владения классов (Лёгкие доспехи №31226 при живом №11877) визард клал на
+  // лист как entryId — экспорт OneShot их не находил, описание не открывалось.
+  // Перепривязка по имени в своей группе механик; живые ссылки не трогаются.
+  if (!appSettingFlag(database, "prof_refs_by_name_v1")) {
+    const exists = database.prepare("SELECT name FROM compendium_entries WHERE id = ?");
+    const byName = database.prepare(
+      `SELECT e.id FROM compendium_entries e JOIN compendium_entries p ON p.id = e.parent_id
+       WHERE e.kind = 'mechanic_item' AND e.system_id = ? AND p.name = ? AND e.name = ? LIMIT 1`
+    );
+    const groups: Record<string, string> = {
+      armor_profs: "Владения доспехами",
+      weapon_profs: "Владения оружием",
+      tool_profs: "Владения инструментами",
+      weapon_properties: "Свойства оружия",
+      weapon_mastery: "Мастерство оружия",
+    };
+    const bare = (s: string) => s.replace(/\s*\[.*\]$/, "");
+    const rows = database
+      .prepare(
+        `SELECT id, system_id, data FROM compendium_entries
+         WHERE kind IN ('class', 'subclass', 'feat', 'equipment')
+           AND (data LIKE '%_profs%' OR data LIKE '%weapon_properties%' OR data LIKE '%weapon_mastery%')`
+      )
+      .all() as { id: number; system_id: number; data: string }[];
+    const update = database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?");
+    let fixed = 0;
+    for (const row of rows) {
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        continue;
+      }
+      let changed = false;
+      const relink = (ref: unknown, group: string) => {
+        if (!ref || typeof ref !== "object") return;
+        const r = ref as { id?: unknown; name?: unknown };
+        if (typeof r.name !== "string" || !r.name) return;
+        const live = typeof r.id === "number" ? (exists.get(r.id) as { name: string } | undefined) : undefined;
+        if (live && bare(live.name) === bare(r.name)) return;
+        const hit = byName.get(row.system_id, group, bare(r.name)) as { id: number } | undefined;
+        if (hit && hit.id !== r.id) {
+          r.id = hit.id;
+          changed = true;
+        }
+      };
+      for (const [key, group] of Object.entries(groups)) {
+        const v = data[key];
+        if (Array.isArray(v)) v.forEach((x) => relink(x, group));
+        else relink(v, group);
+      }
+      // Владения при мультиклассе — те же пункты.
+      const mc = data.multiclass_profs as { armor?: unknown; tools?: unknown } | undefined;
+      if (mc && typeof mc === "object") {
+        if (Array.isArray(mc.armor)) mc.armor.forEach((x) => relink(x, "Владения доспехами"));
+        if (Array.isArray(mc.tools)) mc.tools.forEach((x) => relink(x, "Владения инструментами"));
+      }
+      if (changed) {
+        update.run(JSON.stringify(data), row.id);
+        fixed++;
+      }
+    }
+    if (fixed) console.log(`[migrate] prof_refs_by_name_v1: ссылки перепривязаны у ${fixed} записей`);
+    setAppSettingFlag(database, "prof_refs_by_name_v1");
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);
