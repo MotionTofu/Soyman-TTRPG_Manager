@@ -262,19 +262,32 @@ export function liveEffectEntryIds(value: DndCharacterData): (number | null | un
 // вслепую»), — из их записей, как эффекты: в лист они не копируются и потому
 // не устаревают. Сливаются с вписанными руками; у одного чувства из
 // нескольких источников берётся большая дальность (гриллинг 2026-09-23, Q13).
+// Умения класса и подкласса тоже дают чувства («Теневой взор», «Сила тени»,
+// 2026-09-26). `stack` — «если уже есть, дальность растёт на N»: такие
+// прибавляются после того, как собраны все обычные.
 export function withGrantedSenses(value: DndCharacterData, get: EntryLookup): DndCharacterData {
-  const granted = [get(value.raceId), ...value.feats.map((f) => get(f.entryId))].flatMap(
-    (e) => (e?.data.senses as { name?: string; distance?: string }[] | undefined) ?? []
-  );
+  type Sense = { name?: string; distance?: string; stack?: boolean };
+  const granted = [
+    get(value.raceId),
+    ...value.feats.map((f) => get(f.entryId)),
+    ...value.classFeatures.map((f) => get(f.entryId)),
+  ].flatMap((e) => (e?.data.senses as Sense[] | undefined) ?? []);
   if (granted.length === 0) return value;
   const byName = new Map<string, { name: string; distance: string }>();
-  for (const s of [...value.sensesList, ...granted]) {
+  const dist = (x: string | undefined) => Number.parseInt(x ?? "", 10) || 0;
+  for (const s of [...value.sensesList, ...granted.filter((g) => !g.stack)]) {
     const name = (s.name ?? "").trim();
     if (!name) continue;
     const key = name.toLowerCase();
     const prev = byName.get(key);
-    const dist = (x: string | undefined) => Number.parseInt(x ?? "", 10) || 0;
     if (!prev || dist(s.distance) > dist(prev.distance)) byName.set(key, { name, distance: String(s.distance ?? "") });
+  }
+  for (const s of granted.filter((g) => g.stack)) {
+    const name = (s.name ?? "").trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    const prev = byName.get(key);
+    byName.set(key, { name, distance: String(dist(prev?.distance) + dist(s.distance)) });
   }
   return { ...value, sensesList: [...byName.values()] };
 }
