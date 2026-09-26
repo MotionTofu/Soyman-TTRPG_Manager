@@ -3305,14 +3305,57 @@ span.dnd-card-corner {
   white-space: nowrap;
   justify-self: end;
 }
-/* Узко — «− N/M +» в правую колонку, бонус под ним. */
+/* Узко — «− N/M +» в правую колонку на две строки, бонус под названием,
+   а не отдельной строкой во всю ширину (владелец 2026-09-26). */
 @media (max-width: 560px) {
   .dnd-pool-row {
     grid-template-columns: minmax(0, 1fr) auto;
   }
+  .dnd-pool-title {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .dnd-pool-center {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
   .dnd-pool-bonus {
-    grid-column: 1 / -1;
+    grid-column: 1;
+    grid-row: 2;
     justify-self: start;
+  }
+}
+@media (max-width: 700px) {
+  .dnd-pool-row > .dnd-tofu-pips {
+    display: none;
+  }
+  /* «3 из 3» рядом со счётчиком повторяет его число. */
+  .dnd-pool-count {
+    display: none;
+  }
+  /* Телефон: пул любого размера — «− N/M +», кнопки по 44px (PoolMeter). */
+  .dnd-pool-meter {
+    gap: 8px;
+  }
+  .dnd-pool-meter > .dnd-pool-step {
+    width: 44px;
+    height: 44px;
+    border-width: 2px;
+    opacity: 1;
+  }
+  .dnd-pool-meter > .dnd-pool-step:disabled {
+    opacity: 0.3;
+  }
+  .dnd-pool-meter .dnd-pool-meter-num {
+    min-width: 40px;
+    justify-content: center;
+    font-family: var(--font-ui);
+  }
+  .dnd-pool-meter .dnd-pool-meter-left {
+    font-size: 22px;
+  }
+  .dnd-pool-meter .dnd-pool-meter-max {
+    font-size: 16px;
   }
 }
 .dnd-tofu-pips {

@@ -221,12 +221,14 @@ export function DndCoinCalculator({
         </button>
       </div>
       <p className="muted" style={{ margin: 0, fontSize: "var(--fs-meta)" }}>
-        Курс книги: 10 мм = 1 см · 5 см = 1 эм · 2 эм = 1 зм · 10 зм = 1 пм. Делёж — без эм.
+        Курс книги: 10 мм = 1 см · 10 см = 1 зм · 10 зм = 1 пм.
       </p>
 
       <span className="sb-prop-label">Добыча</span>
       <div className="stack" style={{ gap: 4 }}>
-        {COIN_DEFS.map((d) => (
+        {/* Электрум пока убран с листа (владелец 2026-09-26): «ЭМ» и «ЗМ»
+            мелко не различить, а в игре им почти не платят. */}
+        {COIN_DEFS.filter((d) => d.key !== "ep").map((d) => (
           <div className="row" key={d.key} style={{ gap: 6, alignItems: "center" }}>
             <span className="muted" style={{ flex: "0 0 88px" }} title={d.title}>
               {d.title}

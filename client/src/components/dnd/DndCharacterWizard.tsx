@@ -255,6 +255,7 @@ function numOrNull(v: unknown): number | null {
 function strOrNull(v: unknown): string | null {
   return typeof v === "string" ? v : null;
 }
+const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 // Ручной ввод характеристик: дикие значения (0, 99, NaN) на лист не пускаем —
 // режем до игрового диапазона 1–30 прямо при вводе.
 function clampAbilityScore(v: number): number {
@@ -2383,7 +2384,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         for (const slot of setChoiceSlots.filter((sl) => sl.setLabel === set.label)) {
           const ids = setChoicePicked(slot);
           if (ids.length === 0) {
-            addedItems.push({ ...EMPTY_EQUIPMENT_ITEM, id: makeEquipmentId(), name: slot.label, notes: "выбрать самому" });
+            addedItems.push({ ...EMPTY_EQUIPMENT_ITEM, id: makeEquipmentId(), name: capitalize(slot.label), notes: "выбрать самому" });
           }
           for (const id of ids) {
             const e = toolCatalog.find((x) => x.id === id);
@@ -2400,7 +2401,9 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         // Выборные позиции кладутся строкой: выбрать за игрока приложение не
         // вправе, а потерять их из набора тем более.
         for (const text of set.manual) {
-          addedItems.push({ ...EMPTY_EQUIPMENT_ITEM, id: makeEquipmentId(), name: text, notes: "выбрать самому" });
+          // В данных класса строка — кусок перечня («книга заклинаний»),
+          // в листе это название предмета: с заглавной.
+          addedItems.push({ ...EMPTY_EQUIPMENT_ITEM, id: makeEquipmentId(), name: capitalize(text), notes: "выбрать самому" });
         }
         const gold = Number.parseInt((set.gold ?? "").trim(), 10);
         if (Number.isFinite(gold)) goldToAdd += gold;

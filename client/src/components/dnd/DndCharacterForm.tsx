@@ -2532,7 +2532,10 @@ function equipmentMarks(item: DndEquipmentItem, armorProficient: boolean | null)
   }
   if (item.attuned) all.push({ text: "настроен", title: "Настроено — занимает слот настройки" });
   if (item.replicaId) all.push({ text: "реплика", title: "Создано умением: исчезнет вместе с ним" });
-  if (!item.entryId) all.push({ text: "без механики", title: "Вписано вручную: КЗ, вес и цена из справочника не подтянуты" });
+  // У строки из набора визарда («выбрать самому») пометка уже есть — вторая
+  // «без механики» рядом лишняя (владелец 2026-09-26).
+  if (!item.entryId && item.notes !== "выбрать самому")
+    all.push({ text: "без механики", title: "Вписано вручную: КЗ, вес и цена из справочника не подтянуты" });
   return all.slice(0, 2);
 }
 
@@ -3321,7 +3324,9 @@ function DndCoinPurse({
         </span>
       </div>
       <div className="dnd-purse-row">
-        {COIN_FIELDS.map(({ key, label, title }) => {
+        {/* Электрум пока убран (владелец 2026-09-26): «ЭМ» и «ЗМ» мелко не
+            различить. Уже лежащий в кошельке — виден, чтобы не пропал. */}
+        {COIN_FIELDS.filter(({ key }) => key !== "ep" || Number(coins.ep || 0) > 0).map(({ key, label, title }) => {
           const raw = coins[key] ?? "";
           const empty = raw.trim() === "" || raw.trim() === "0";
           return (
@@ -10350,8 +10355,10 @@ function DndResourcesView({
                 }
               />
             </label>
+            {/* Ряд голов под строкой — только ПК: на телефоне счётчик
+                посередине уже «− N/M +», второй был бы повтором (CSS). */}
             {!poolShowsNumber(max) && (
-              <PoolMeter
+              <TofuPips
                 max={max}
                 left={max - used}
                 label={r.label}
@@ -14018,8 +14025,8 @@ export function DndCharacterView({
                   {pools.map((pool) => (
                     <span key={pool.die} className="row dnd-hitdice-pool">
                       <span className="dnd-hitdice-die">{pool.die}</span>
-                      {/* Тофу, как у всех запасов листа: целая голова — кость в запасе. */}
-                      <TofuPips
+                      {/* Как у всех запасов листа: тофу на ПК, «− N/M +» на телефоне. */}
+                      <PoolMeter
                         max={pool.total}
                         left={pool.total - pool.used}
                         label={`Кости хитов ${pool.die}`}

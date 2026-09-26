@@ -1,5 +1,6 @@
 import { NavIcon } from "../NavIcons";
 import { useDndPrefs } from "../../hooks/useDndPrefs";
+import { useIsMobile } from "../../hooks/useIsMobile";
 
 // Пипсы пулов — головы тофу (структурность): ресурс есть — голову видно,
 // потратили — тофу «съеден», окошко блеклое. Слепок маскота под 18px, а не
@@ -100,10 +101,20 @@ export function PoolMeter({
   label: string;
   onSetLeft?: (left: number) => void;
 }) {
+  // Телефон: головы по 18px — мишень мимо пальца (аудит 2026-09-26), там
+  // любой пул — «− N/M +» по 44px, как на «Ресурсах». На ПК — тофу.
+  const isMobile = useIsMobile();
+  const shown = Math.max(0, Math.min(left, max));
+  if (max <= POOL_PIPS_MAX && isMobile) {
+    return (
+      <span className="dnd-pool-meter is-compact" role="group" aria-label={`${label}: осталось ${shown} из ${max}`}>
+        <PoolStepper max={max} left={shown} label={label} onSetLeft={onSetLeft} />
+      </span>
+    );
+  }
   if (max <= POOL_PIPS_MAX) {
     return <TofuPips max={max} left={left} label={label} onSetLeft={onSetLeft} />;
   }
-  const shown = Math.max(0, Math.min(left, max));
   return (
     <span className="dnd-pool-meter" role="group" aria-label={`${label}: осталось ${shown} из ${max}`}>
       <PoolStepper max={max} left={shown} label={label} onSetLeft={onSetLeft} />
