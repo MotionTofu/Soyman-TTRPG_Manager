@@ -62,7 +62,7 @@ import {
 // класса либо «+ новый класс» (Q19 гриллинга 2026-09-25): виртуальная строка
 // уровня 0 → 1 с урезанными владениями мультикласса.
 const FEAT_LEVELS_BASE = [4, 8, 12, 16, 19];
-function featLevelsFor(className: string): number[] {
+export function featLevelsFor(className: string): number[] {
   // Матчим и русские, и английские имена: хоумбрю-классы иначе пролетают
   // мимо чертоуровней молча.
   const cn = className.toLowerCase();
@@ -71,7 +71,7 @@ function featLevelsFor(className: string): number[] {
   const extra = isFighter ? [6, 14] : isRogue ? [10] : [];
   return [...FEAT_LEVELS_BASE, ...extra];
 }
-const ASI_NAMES = ["Улучшение характеристик", "Увеличение характеристик"];
+export const ASI_NAMES = ["Улучшение характеристик", "Увеличение характеристик"];
 
 function parseDie(raw: unknown): number | null {
   if (typeof raw !== "string") return null;

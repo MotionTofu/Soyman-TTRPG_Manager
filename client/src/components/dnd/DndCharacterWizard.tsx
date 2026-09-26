@@ -29,11 +29,18 @@ import { useDndSkills } from "./useDndSkills";
 import { grantsFromEntry, mergeGrants } from "./dndGrants";
 import { FeatChoices } from "./FeatChoices";
 import {
+  applyFeatPick,
   bestMental,
+  choiceClassIds,
   EMPTY_FEAT_PICK,
+  featCtxFrom,
   featHitPoints,
+  featNeedsChoice,
   featPickMissing,
+  featPrereqProblem,
   resistanceChoice,
+  spellCandidates as featSpellCandidates,
+  spellChoiceCount,
   type FeatCtx,
   type FeatPart,
   type FeatPick,
@@ -43,6 +50,7 @@ import { nameMatches } from "./dndResources";
 import { multiclassPrereqUnmet, multiclassProfs } from "./multiclass";
 import { PortraitFrameModal } from "./PortraitFrameModal";
 import { randomName } from "./randomNames";
+import { ASI_NAMES, featLevelsFor } from "./DndLevelUpWizard";
 import type { PortraitFocus } from "./portraitFrame";
 import {
   ABILITY_LABELS,
@@ -60,6 +68,7 @@ import {
   loadDndOriginFeats,
   featFitsClasses,
   loadDndFeatsByCategory,
+  loadDndFeats,
   loadDndClassFeatures,
   loadDndClassHierarchy,
   loadDndEquipmentEntries,
@@ -99,8 +108,10 @@ const STEPS = [
   // картами, только если у вида есть записи kind "lineage".
   "Предок",
   "Предыстория",
-  "Черта",
+  // Черты — после характеристик (гриллинг 2026-09-26): увеличения уровней
+  // прибавляются к уже разложенным, «Посвящённый» видит раскладку.
   "Характеристики",
+  "Черты",
   "Навыки и языки",
   "Заклинания",
   "Снаряжение",
@@ -109,7 +120,7 @@ const STEPS = [
 ] as const;
 type Step = (typeof STEPS)[number];
 // Черновики до редизайна помнят старые имена шагов.
-const LEGACY_STEPS: Record<string, Step> = { Личность: "Досье", Портрет: "Досье", Навыки: "Навыки и языки" };
+const LEGACY_STEPS: Record<string, Step> = { Личность: "Досье", Портрет: "Досье", Навыки: "Навыки и языки", Черта: "Черты" };
 // По правилам 2024: Общий плюс два языка на выбор.
 const LANGUAGE_PICKS = 2;
 
@@ -166,6 +177,7 @@ interface WizardDraftV1 {
   featSel?: unknown;
   extraClasses?: unknown;
   random?: unknown;
+  levelFeats?: unknown;
 }
 function loadWizardDraft(key: string): WizardDraftV1 | null {
   try {
@@ -325,6 +337,78 @@ function shuffled<T>(list: readonly T[]): T[] {
   return out;
 }
 
+/** Выбор на уровне с чертой: «Увеличение характеристик» (+2 одной или +1
+ *  двум — split) или черта со своим выбором. */
+interface LevelFeatSel {
+  featId: number | null;
+  split: boolean;
+  a: DndAbilityKey | null;
+  b: DndAbilityKey | null;
+  pick: FeatPick;
+}
+const ABILITY_KEYS_ALL: DndAbilityKey[] = ["str", "dex", "con", "int", "wis", "cha"];
+const ABILITY_SHORT: Record<DndAbilityKey, string> = { str: "Сил", dex: "Лов", con: "Тел", int: "Инт", wis: "Мдр", cha: "Хар" };
+const isAbilityKey = (v: unknown): v is DndAbilityKey => ABILITY_KEYS_ALL.includes(v as DndAbilityKey);
+function levelFeatsFrom(v: unknown): Record<string, LevelFeatSel> {
+  if (typeof v !== "object" || v === null) return {};
+  const out: Record<string, LevelFeatSel> = {};
+  for (const [k, raw] of Object.entries(v as Record<string, unknown>)) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const r = raw as Record<string, unknown>;
+    out[k] = {
+      featId: typeof r.featId === "number" ? r.featId : null,
+      split: r.split === true,
+      a: isAbilityKey(r.a) ? r.a : null,
+      b: isAbilityKey(r.b) ? r.b : null,
+      pick: { ...EMPTY_FEAT_PICK, ...(typeof r.pick === "object" && r.pick ? (r.pick as Partial<FeatPick>) : {}) },
+    };
+  }
+  return out;
+}
+/** Досыпать недостающее во выбор черты наугад — для «Создать случайно». */
+function randomFeatPick(
+  entry: CompendiumEntry,
+  g: SourceGrants,
+  pick: FeatPick,
+  ctx: FeatCtx,
+  cat: { spellIndex: CompendiumEntry[]; tools: CompendiumEntry[]; weapons: CompendiumEntry[]; skillKeys: string[] },
+  prefer: DndAbilityKey[] = []
+): FeatPick {
+  const next: FeatPick = { ...pick, spells: { ...pick.spells } };
+  const inc = g.abilityIncrease;
+  if (inc && !next.ability) {
+    const open = inc.options.filter((k) => (ctx.abilities[k] ?? 10) < inc.max);
+    next.ability = prefer.find((k) => open.includes(k)) ?? pickOne(open) ?? inc.options[0];
+  }
+  if (g.spellListChoice.length && !next.spellList) next.spellList = pickOne(g.spellListChoice.filter((id) => !ctx.takenLists.includes(id)));
+  if (g.spellAbilityChoice && !next.spellAbility) next.spellAbility = bestMental(ctx.abilities);
+  const rc = resistanceChoice(entry);
+  if (rc && next.resistances.length < rc.count) next.resistances = shuffled(rc.options).slice(0, rc.count);
+  const owned = (k: string) => (ctx.skills[k] ?? 0) >= 1;
+  if (g.skillChoice && next.skills.length < g.skillChoice.count) {
+    const opts = (g.skillChoice.options.length ? g.skillChoice.options : cat.skillKeys).filter((k) => !owned(k));
+    next.skills = shuffled(opts).slice(0, g.skillChoice.count);
+  }
+  if (g.skillOrExpertise && next.skillOrExpertise.length < g.skillOrExpertise.count) {
+    next.skillOrExpertise = shuffled(g.skillOrExpertise.options.length ? g.skillOrExpertise.options : cat.skillKeys).slice(0, g.skillOrExpertise.count);
+  }
+  if (g.expertiseChoice > 0 && next.expertise.length < g.expertiseChoice) {
+    next.expertise = shuffled(cat.skillKeys.filter((k) => owned(k) || next.skills.includes(k))).slice(0, g.expertiseChoice);
+  }
+  if (g.toolChoice && next.tools.length < g.toolChoice.count) {
+    const kinds = g.toolChoice.group.split("|").map((k) => k.trim()).filter(Boolean);
+    next.tools = shuffled(cat.tools.filter((t) => !kinds.length || kinds.includes(String(t.data.tool_kind)))).slice(0, g.toolChoice.count).map((t) => t.id);
+  }
+  if (g.masteryChoice > 0 && next.mastery.length < g.masteryChoice) next.mastery = shuffled(cat.weapons).slice(0, g.masteryChoice).map((w) => w.id);
+  g.spellChoices.forEach((c, i) => {
+    const n = spellChoiceCount(c, ctx);
+    if ((next.spells[i] ?? []).length >= n) return;
+    const cands = featSpellCandidates(cat.spellIndex, c, choiceClassIds(c, g, next, ctx)).filter((e) => !ctx.knownSpellIds.includes(e.id));
+    next.spells[i] = shuffled(cands).slice(0, n).map((e) => e.id);
+  });
+  return next;
+}
+
 interface Props {
   ownerType: "character" | "being";
   ownerId: number;
@@ -361,6 +445,10 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   // перезапускает.
   const [randomCfg, setRandomCfg] = useState<WizardRandom | null>(() => randomFrom(savedDraft?.random) ?? random ?? null);
   const [autopilot, setAutopilot] = useState<WizardRandom | null>(() => (random && !randomFrom(savedDraft?.random) ? random : null));
+  // Черты уровней (гриллинг 2026-09-26): ключ «строка класса:уровень».
+  const [levelFeats, setLevelFeats] = useState<Record<string, LevelFeatSel>>(() => levelFeatsFrom(savedDraft?.levelFeats));
+  const [levelFeatPool, setLevelFeatPool] = useState<DndFeatOption[] | null>(null);
+  const [levelFeatEntries, setLevelFeatEntries] = useState<Record<number, CompendiumEntry>>({});
   const [systemId, setSystemId] = useState<number | null>(initialSystemId ?? null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -783,6 +871,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       featSel,
       extraClasses,
       random: randomCfg,
+      levelFeats,
     };
     try {
       localStorage.setItem(draftKey, JSON.stringify(state));
@@ -832,6 +921,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     featSel,
     extraClasses,
     randomCfg,
+    levelFeats,
   ]);
 
   // Уход со страницы с несобранным персонажем — подтверждение.
@@ -1932,6 +2022,86 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     awardedAbilities[key] = abilities[key] + (v ?? 0);
   }
 
+  // ——— Черты уровней (гриллинг 2026-09-26) ———
+  // Уровни с чертой — по уровню каждого класса (Q5); модель — как у
+  // «Повышения уровня»: «Увеличение характеристик» или черта (Q2).
+  interface LevelFeatSlot {
+    key: string;
+    label: string;
+    level: number;
+    classId: number | null;
+  }
+  const featLevelsUpTo = (name: string, lvl: number) =>
+    featLevelsFor(name)
+      .filter((l) => l <= lvl)
+      .sort((a, b) => a - b);
+  const levelFeatSlots: LevelFeatSlot[] = [
+    ...(classOption
+      ? featLevelsUpTo(classOption.name, level).map((l) => ({
+          key: `start:${l}`,
+          label: extraModels.length ? `${classOption.name} · ${l} уровень` : `${l} уровень`,
+          level: l,
+          classId,
+        }))
+      : []),
+    ...extraModels.flatMap((m) =>
+      m.opt
+        ? featLevelsUpTo(m.opt.name, m.row.level).map((l) => ({ key: `${mcKey(m.row)}:${l}`, label: `${m.opt!.name} · ${l} уровень`, level: l, classId: m.row.classId }))
+        : []
+    ),
+  ];
+  const hasLevelFeats = levelFeatSlots.length > 0;
+  useEffect(() => {
+    if (!systemId || !hasLevelFeats) return;
+    const ac = new AbortController();
+    const cats = ["Универсальная Черта", "Черта происхождения", "Эпический дар", "Эпическая черта"];
+    loadDndFeats(systemId, { signal: ac.signal })
+      .then((all) => setLevelFeatPool(all.filter((f) => cats.includes(f.category ?? ""))))
+      .catch((e) => !isAbortError(e) && setLevelFeatPool([]));
+    return () => ac.abort();
+  }, [systemId, hasLevelFeats]);
+  const levelFeatIdsKey = [...new Set(Object.values(levelFeats).map((s) => s.featId).filter((x): x is number => x != null))].sort().join(",");
+  useEffect(() => {
+    const ids = levelFeatIdsKey ? levelFeatIdsKey.split(",").map(Number) : [];
+    const missing = ids.filter((id) => !levelFeatEntries[id]);
+    if (missing.length === 0) return;
+    let alive = true;
+    Promise.all(missing.map((id) => readResource<CompendiumEntry>(`/systems/entries/${id}`).catch(() => null))).then((list) => {
+      if (!alive) return;
+      setLevelFeatEntries((prev) => {
+        const next = { ...prev };
+        for (const e of list) if (e) next[e.id] = e;
+        return next;
+      });
+    });
+    return () => {
+      alive = false;
+    };
+    // Догружаем только по смене набора выбранных черт.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [levelFeatIdsKey]);
+  const featOptionOf = (id: number | null) => (id != null ? levelFeatPool?.find((f) => f.id === id) : undefined);
+  const isAsiFeat = (id: number | null) => ASI_NAMES.includes(featOptionOf(id)?.name ?? "");
+  // Характеристики по порядку уровней: к 8-му — с тем, что взято на 4-м (Q9).
+  const abilitiesBeforeSlot: DndAbilityScores[] = [];
+  const finalAbilities: DndAbilityScores = { ...awardedAbilities };
+  for (const slot of levelFeatSlots) {
+    abilitiesBeforeSlot.push({ ...finalAbilities });
+    const sel = levelFeats[slot.key];
+    if (!sel?.featId) continue;
+    const bump = (k: DndAbilityKey | null, by: number, max: number) => {
+      if (k) finalAbilities[k] = Math.max(finalAbilities[k], Math.min(max, finalAbilities[k] + by));
+    };
+    if (isAsiFeat(sel.featId)) {
+      bump(sel.a, sel.split ? 1 : 2, 20);
+      if (sel.split && sel.b !== sel.a) bump(sel.b, 1, 20);
+    } else {
+      const e = levelFeatEntries[sel.featId];
+      const inc = e ? grantsFromEntry(e, resolveSkill).abilityIncrease : null;
+      if (inc && sel.pick.ability) bump(sel.pick.ability, inc.amount, inc.max);
+    }
+  }
+
   // Выборы заклинаний — блоками по одному на выбор, как навыки: у черты свои
   // круги и списки, у вида свои, у подкласса свои (Мистический рыцарь).
   // В одну кучу не складываем по той же причине.
@@ -1988,7 +2158,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   // Второй и следующие колдуют своей характеристикой — она пишется в запись.
   function pushClassAuto(entry: CompendiumEntry, lvl: number, key: string, withAbility: boolean) {
     const abilityKey = ABILITY_NAME_TO_KEY[String(entry.data.spellcasting_ability || '')];
-    const picks = classSpellPicks(entry.data, lvl, abilityKey ? abilityModifier(awardedAbilities[abilityKey]) : 0);
+    const picks = classSpellPicks(entry.data, lvl, abilityKey ? abilityModifier(finalAbilities[abilityKey]) : 0);
     const hasBook = nameMatches(entry.name, 'Волшебник') || nameMatches(entry.name_original || '', 'Wizard');
     const own = withAbility && abilityKey ? { ability: abilityKey } : {};
     if (picks.cantrips > 0) spellGroups.push({ key: `spell:${key}:auto:cantrips`, label: `Заговоры класса (${entry.name})`, count: picks.cantrips, level: 0, maxCircle: 0, classIds: [entry.id], schools: [], names: [], outsideLimit: false, ...own });
@@ -2397,6 +2567,43 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     // Экспертность из выборов умений — уровнем владения 2, поверх выданного.
     for (const s of [...validExpertise, ...extraModels.flatMap(rowExpertise)]) character.skillProfs[s] = 2;
 
+    // Черты уровней — по порядку, как рос бы персонаж; запись та же, что у
+    // «Повышения уровня»: прибавки в журнал, черта — applyFeatPick.
+    for (const slot of levelFeatSlots) {
+      const sel = levelFeats[slot.key];
+      const opt = featOptionOf(sel?.featId ?? null);
+      if (!sel || !opt) continue;
+      if (ASI_NAMES.includes(opt.name)) {
+        const source = `Увеличение характеристик, ур. ${slot.level}`;
+        const bump = (k: DndAbilityKey | null, by: number) => {
+          if (!k) return;
+          const before = character.abilities[k];
+          const after = Math.min(20, before + by);
+          if (after <= before) return;
+          character.abilities = { ...character.abilities, [k]: after };
+          character.abilityBonuses = [...(character.abilityBonuses ?? []), { key: k, amount: after - before, source }];
+        };
+        bump(sel.a, sel.split ? 1 : 2);
+        if (sel.split && sel.b !== sel.a) bump(sel.b, 1);
+        if (!character.feats.some((f) => f.name === opt.name)) {
+          character.feats = [...character.feats, { name: opt.name, description: levelFeatEntries[opt.id]?.description ?? "", entryId: opt.id }];
+        }
+        continue;
+      }
+      const entry = levelFeatEntries[opt.id];
+      if (!entry) continue;
+      const pb = Number.parseInt(character.proficiencyBonus, 10) || 2;
+      Object.assign(
+        character,
+        applyFeatPick(character, entry, grantsFromEntry(entry, resolveSkill), sel.pick, featCtxFrom(character, pb, entry.id), {
+          spellIndex: spellIndex ?? [],
+          tools: toolCatalog,
+          weapons: weaponCatalog ?? [],
+          skills: skills.rows,
+        })
+      );
+    }
+
     // Стартовые наборы. Метаданные предмета (вес, КЗ, свойства) тянутся из
     // справочника здесь же: лист их не пересчитывает, а хранит снимком, как
     // и при добавлении предмета руками.
@@ -2714,6 +2921,21 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     if (toolNames.filter(Boolean).length > 0) featLines.push(`инструменты: ${toolNames.filter(Boolean).join(", ")}`);
     overviewSources.push({ label: "Черта происхождения", lines: featLines });
   }
+  // Черты уровней — строкой на уровень: «4 ур.: Улучшение характеристик (Хар +2)».
+  if (levelFeatSlots.length > 0) {
+    const lines = levelFeatSlots.map((slot) => {
+      const sel = levelFeats[slot.key];
+      const opt = featOptionOf(sel?.featId ?? null);
+      const lvl = slot.label.replace(/ уровень$/, " ур.");
+      if (!sel || !opt) return `${lvl}: не выбрано`;
+      if (isAsiFeat(opt.id)) {
+        const parts = [sel.a && `${ABILITY_SHORT[sel.a]} +${sel.split ? 1 : 2}`, sel.split && sel.b && `${ABILITY_SHORT[sel.b]} +1`].filter(Boolean);
+        return `${lvl}: ${opt.name}${parts.length ? ` (${parts.join(", ")})` : ""}`;
+      }
+      return `${lvl}: ${opt.name}${sel.pick.ability ? ` (${ABILITY_SHORT[sel.pick.ability]} +1)` : ""}`;
+    });
+    overviewSources.push({ label: "Черты уровней", lines });
+  }
 
   // Выборы инструментов, которые визард не делает за игрока («Музыкант»),
   // честно показываются как «добрать на листе». Выборы заклинаний живут на
@@ -2764,9 +2986,16 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     { die: dieOf(classOption?.hitDie), levels: level },
     ...extraModels.flatMap((m) => (m.opt ? [{ die: dieOf(m.opt.hitDie), levels: m.row.level }] : [])),
   ].filter((d) => Number.isFinite(d.die));
-  const previewConMod = abilityModifier(awardedAbilities.con);
-  const previewDexMod = abilityModifier(awardedAbilities.dex);
-  const previewFeatHp = featHitPoints([featEntry, effectiveSpeciesFeatId ? speciesFeatEntry : null]);
+  const previewConMod = abilityModifier(finalAbilities.con);
+  const previewDexMod = abilityModifier(finalAbilities.dex);
+  const previewFeatHp = featHitPoints([
+    featEntry,
+    effectiveSpeciesFeatId ? speciesFeatEntry : null,
+    ...levelFeatSlots.map((s) => {
+      const id = levelFeats[s.key]?.featId;
+      return id != null && !isAsiFeat(id) ? levelFeatEntries[id] ?? null : null;
+    }),
+  ]);
   // Хиты (Q17): кость стартового на 1-м уровне целиком, дальше среднее вверх
   // по кости своего класса; ВЫН и хиты черт («Крепкий») — за каждый уровень.
   const avgDie = (d: number) => Math.floor(d / 2) + 1;
@@ -2825,6 +3054,54 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   const languagePicks = chosenLanguages.filter((l) => l !== "Общий" && !autoLanguages.includes(l)).length;
   const languageMissing = languageOptions.length === 0 ? 0 : Math.max(0, LANGUAGE_PICKS + bonusLanguage - languagePicks);
 
+  // Черты уровней: требования, контекст выбора и недобор (Q4, Q9).
+  const classArmorNames = (Array.isArray(classEntry?.data.armor_profs) ? (classEntry!.data.armor_profs as { name?: string }[]) : [])
+    .map((a) => a?.name ?? "")
+    .filter(Boolean);
+  function levelFeatReason(f: DndFeatOption, idx: number): string | null {
+    const slot = levelFeatSlots[idx];
+    if (!ASI_NAMES.includes(f.name) && !/повторяем/i.test(f.prerequisite ?? "")) {
+      const others = [effectiveFeatId, effectiveSpeciesFeatId, ...levelFeatSlots.map((s, j) => (j !== idx ? levelFeats[s.key]?.featId : null))];
+      if (others.includes(f.id)) return "уже есть";
+    }
+    if (!featFitsClasses(f, [slot.classId])) return "не для этого класса";
+    const earlier = levelFeatSlots.slice(0, idx).map((s) => featOptionOf(levelFeats[s.key]?.featId ?? null)?.name ?? "");
+    return featPrereqProblem(f.prerequisite, {
+      level: slot.level,
+      abilities: abilitiesBeforeSlot[idx] ?? finalAbilities,
+      profNames: classArmorNames,
+      casts: spellGroups.length > 0,
+      featNames: [featEntry?.name ?? "", speciesFeatEntry?.name ?? "", ...earlier].filter(Boolean),
+    });
+  }
+  function levelFeatCtx(idx: number): FeatCtx {
+    return {
+      abilities: abilitiesBeforeSlot[idx] ?? finalAbilities,
+      saves: emptySavingThrowProfs(),
+      skills: Object.fromEntries([...ownedSkills].map((k) => [k, 1])),
+      pb: Number.parseInt(computeProficiencyBonus(previewClasses), 10) || 2,
+      takenLists: [],
+      knownSpellIds: [...chosenSpellEntryIds],
+      masteredNames: masteredWeapons.map((w) => w.name),
+      profNames: classArmorNames,
+    };
+  }
+  function levelFeatMissing(idx: number): string[] {
+    const slot = levelFeatSlots[idx];
+    // Справочник черт не пришёл — выбрать не из чего, и гейта нет (антитупик).
+    if (levelFeatPool === null) return [`${slot.label}: загружаю черты…`];
+    if (levelFeatPool.length === 0) return [];
+    const sel = levelFeats[slot.key];
+    const opt = featOptionOf(sel?.featId ?? null);
+    if (!sel || !opt) return [`${slot.label}: выбери черту или увеличение`];
+    const reason = levelFeatReason(opt, idx);
+    if (reason) return [`${slot.label}: ${opt.name} — нельзя (${reason})`];
+    if (isAsiFeat(opt.id)) return !sel.a || (sel.split && (!sel.b || sel.b === sel.a)) ? [`${slot.label}: куда прибавить`] : [];
+    const e = levelFeatEntries[opt.id];
+    if (!e) return [`${slot.label}: загружаю черту…`];
+    return featPickMissing(e, grantsFromEntry(e, resolveSkill), sel.pick, levelFeatCtx(idx)).map((m) => `${slot.label}: ${m}`);
+  }
+
   // Что держит «Далее» на каждом шаге (Q6) — и чеклист Обзора тем же списком.
   function stepMissing(st: Step): string[] {
     const out: string[] = [];
@@ -2867,11 +3144,12 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         else if (backgroundCustom !== null && !backgroundCustom.trim()) out.push("впиши название своей предыстории");
         for (const x of toolMissing(["background"])) more(`Инструменты (${x.g.group.toLowerCase()})`, x.missing);
         break;
-      case "Черта":
+      case "Черты":
         if (featNeeded && !effectiveFeatId) out.push("выбери черту предыстории");
         if (speciesFeatNeeded && !effectiveSpeciesFeatId) out.push("выбери черту вида");
         if (featNeeded) for (const m of slotMissing("feat")) out.push(`черта предыстории: ${m}`);
         if (speciesFeatNeeded) for (const m of slotMissing("feat2")) out.push(`черта вида: ${m}`);
+        levelFeatSlots.forEach((_, i) => out.push(...levelFeatMissing(i)));
         for (const x of toolMissing(["feat", "feat2"])) more(`Инструменты (${x.g.group.toLowerCase()})`, x.missing);
         break;
       case "Характеристики":
@@ -2904,7 +3182,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     toolGroups.filter((g) => !["background", "feat", "feat2"].includes(g.key)).length;
   function stepVisible(st: Step): boolean {
     if (st === "Умения класса") return classChoiceCount > 0;
-    if (st === "Черта") return featNeeded || speciesFeatNeeded;
+    if (st === "Черты") return featNeeded || speciesFeatNeeded || levelFeatSlots.length > 0;
     if (st === "Заклинания") return spellGroups.length > 0;
     if (st === "Предок") return lineageOptions.length > 0;
     return true;
@@ -2919,19 +3197,19 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     extraClasses.length === 0
       ? []
       : [classOption, ...extraModels.map((m) => m.opt)]
-          .filter((o): o is NonNullable<typeof o> => !!o?.multiclassPrereq && multiclassPrereqUnmet(o.multiclassPrereq, awardedAbilities))
+          .filter((o): o is NonNullable<typeof o> => !!o?.multiclassPrereq && multiclassPrereqUnmet(o.multiclassPrereq, finalAbilities))
           .map((o) => `Мультикласс: ${o.name} требует «${o.multiclassPrereq}» — сейчас не хватает. Поправь на шаге «Характеристики» или договорись с Мастером.`);
   // Предупреждения Обзора (Q11): законно, но сомнительно — создать можно.
   const overviewWarnings: string[] = [...prereqWarnings];
   {
     const primary = classEntry ? parseAbilityNames(classEntry.data.primary_abilities) : [];
-    if (primary.length > 0 && Math.max(...primary.map((k) => awardedAbilities[k])) < 13) {
+    if (primary.length > 0 && Math.max(...primary.map((k) => finalAbilities[k])) < 13) {
       const names = primary.map((k) => ABILITY_LABELS.find((a) => a.key === k)?.label ?? k).join(" / ");
       overviewWarnings.push(
-        `Основная характеристика класса (${names}) — ${Math.max(...primary.map((k) => awardedAbilities[k]))}. Классу она нужна больше всего: уверен?`
+        `Основная характеристика класса (${names}) — ${Math.max(...primary.map((k) => finalAbilities[k]))}. Классу она нужна больше всего: уверен?`
       );
     }
-    if (abilityModifier(awardedAbilities.con) < 0) overviewWarnings.push("Телосложение ниже 10 — хитов будет меньше обычного.");
+    if (abilityModifier(finalAbilities.con) < 0) overviewWarnings.push("Телосложение ниже 10 — хитов будет меньше обычного.");
   }
   const overviewTaken = startingSets.filter((s) => setTaken(s.label));
   const overviewSpellNames = chosenSpells
@@ -3003,7 +3281,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
           if (isWizardStep(t)) setStep(t);
         }}
         abilities={abilities}
-        awardedAbilities={awardedAbilities}
+        awardedAbilities={finalAbilities}
         proficiencyBonus={computeProficiencyBonus(previewClasses)}
         previewHp={previewHp}
         dexMod={previewDexMod}
@@ -3092,6 +3370,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     setChosenEntries({});
     setMasteredWeapons([]);
     setChosenTools([]);
+    setLevelFeats({});
     setSpellSearch("");
     setAlignment("");
     setChosenLanguages([]);
@@ -3123,6 +3402,8 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     }, 20000);
     return () => window.clearTimeout(t);
   }, [autopilot]);
+  // Без списка зависимостей нарочно: шаг автопилота — после каждого рендера.
+  // oxlint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!autopilot) return;
     const cfg = autopilot;
@@ -3200,6 +3481,60 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         setAwardSecondary(p2 ?? null);
       }
       return;
+    }
+    // Черты уровней (Q10): «играбельно» — главная до 20 (на 19 — «+1/+1» или
+    // полу-черта в главную), потом черта с +1 к важной; «хаос» — 50/50.
+    if (hasLevelFeats) {
+      if (levelFeatPool === null) return;
+      const arr = classStandardArray(classEntry);
+      const order = arr ? [...ABILITY_KEYS_ALL].sort((x, y) => arr[y] - arr[x]) : ABILITY_KEYS_ALL;
+      for (let i = 0; i < levelFeatSlots.length; i += 1) {
+        const slot = levelFeatSlots[i];
+        const sel = levelFeats[slot.key];
+        const before = abilitiesBeforeSlot[i];
+        const put = (s: LevelFeatSel) => setLevelFeats((prev) => ({ ...prev, [slot.key]: s }));
+        const blank = { split: false, a: null, b: null, pick: EMPTY_FEAT_PICK };
+        if (!sel?.featId) {
+          const avail = levelFeatPool.filter((f) => (slot.level >= 19 || !/^Эпическ/i.test(f.category ?? "")) && !levelFeatReason(f, i));
+          const asi = avail.find((f) => ASI_NAMES.includes(f.name));
+          const feats = avail.filter((f) => !ASI_NAMES.includes(f.name));
+          const open = ABILITY_KEYS_ALL.filter((k) => before[k] < 20);
+          if (chaos) {
+            if (asi && open.length && (Math.random() < 0.5 || !feats.length)) {
+              const ks = shuffled(open);
+              const split = ks.length > 1 && Math.random() < 0.5;
+              return put({ ...blank, featId: asi.id, split, a: ks[0], b: split ? ks[1] : null });
+            }
+            const f = pickOne(feats);
+            if (f) return put({ ...blank, featId: f.id });
+            continue;
+          }
+          const [p] = order;
+          if (asi && before[p] <= 18) return put({ ...blank, featId: asi.id, a: p });
+          if (before[p] === 19) {
+            const half = feats.filter((f) => f.abilityOptions?.includes(p));
+            if (half.length && (!asi || Math.random() < 0.5)) return put({ ...blank, featId: pickOne(half)!.id, pick: { ...EMPTY_FEAT_PICK, ability: p } });
+            const second = order.find((k) => k !== p && before[k] < 20) ?? null;
+            if (asi) return put({ ...blank, featId: asi.id, split: second != null, a: p, b: second });
+          }
+          const important = [...order.slice(1, 3), "con" as DndAbilityKey].filter((k) => before[k] < 20);
+          const half = feats.filter((f) => f.abilityOptions?.some((k) => important.includes(k)));
+          const f = pickOne(half.length ? half : feats);
+          if (f) return put({ ...blank, featId: f.id, pick: { ...EMPTY_FEAT_PICK, ...(f.abilityOptions?.find((k) => important.includes(k)) ? { ability: f.abilityOptions.find((k) => important.includes(k)) } : {}) } });
+          if (asi && open.length) return put({ ...blank, featId: asi.id, a: pickOne(open)! });
+          continue;
+        }
+        if (isAsiFeat(sel.featId)) continue;
+        const e = levelFeatEntries[sel.featId];
+        if (!e) return;
+        const g = grantsFromEntry(e, resolveSkill);
+        const ctx = levelFeatCtx(i);
+        if (featPickMissing(e, g, sel.pick, ctx).length > 0 && !done.has(`feat:${slot.key}`)) {
+          done.add(`feat:${slot.key}`);
+          const next = randomFeatPick(e, g, sel.pick, ctx, { spellIndex: spellIndex ?? [], tools: toolCatalog, weapons: weaponCatalog ?? [], skillKeys: allSkillKeys }, chaos ? [] : order);
+          return put({ ...sel, pick: next });
+        }
+      }
     }
     // Умения класса.
     for (let i = 0; i < styleSlots.length; i += 1) {
@@ -3892,6 +4227,107 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     );
   }
 
+  // Блок уровня с чертой (Q2): первой строкой «Увеличение характеристик»,
+  // ниже черты; выбор черты — тут же, под ней (Q3).
+  function renderLevelFeat(slot: LevelFeatSlot, idx: number) {
+    const sel = levelFeats[slot.key];
+    const picked = sel?.featId ?? null;
+    const set = (patch: Partial<LevelFeatSel>) =>
+      setLevelFeats((prev) => ({ ...prev, [slot.key]: { ...(prev[slot.key] ?? { featId: null, split: false, a: null, b: null, pick: EMPTY_FEAT_PICK }), ...patch } }));
+    const choose = (id: number) => set(picked === id ? { featId: null, split: false, a: null, b: null, pick: EMPTY_FEAT_PICK } : { featId: id, split: false, a: null, b: null, pick: EMPTY_FEAT_PICK });
+    const pool = (levelFeatPool ?? []).filter((f) => slot.level >= 19 || !/^Эпическ/i.test(f.category ?? ""));
+    const ordered = [...pool.filter((f) => ASI_NAMES.includes(f.name)), ...pool.filter((f) => !ASI_NAMES.includes(f.name) && matchQ(f.name, featQ))];
+    const rows = ordered.map((f) => {
+      const reason = levelFeatReason(f, idx);
+      const meta = reason
+        ? `нельзя: ${reason}`
+        : ASI_NAMES.includes(f.name)
+          ? "+2 одной или +1 двум, не выше 20"
+          : f.abilityOptions
+            ? `${f.abilityOptions.map((k) => ABILITY_SHORT[k]).join(", ")} +1`
+            : undefined;
+      return { key: String(f.id), title: f.name, meta, picked: picked === f.id, disabled: !!reason && picked !== f.id };
+    });
+    const before = abilitiesBeforeSlot[idx] ?? finalAbilities;
+    const entry = picked != null && !isAsiFeat(picked) ? levelFeatEntries[picked] : undefined;
+    const grants = entry ? grantsFromEntry(entry, resolveSkill) : null;
+    return (
+      <section key={slot.key}>
+        <PickHead label={slot.label} picked={picked != null ? 1 : 0} total={1} hint={picked == null ? "Увеличение характеристик или черта." : undefined} />
+        {levelFeatPool === null ? (
+          <span className="muted">Загружаю черты…</span>
+        ) : (
+          <PickList
+            rows={rows}
+            collapse
+            onToggle={(k) => choose(Number(k))}
+            onOpen={(k) => {
+              const r = rows.find((x) => x.key === k);
+              openEntry(Number(k), picked === Number(k), () => choose(Number(k)), { meta: r?.meta, disabled: r?.disabled });
+            }}
+          />
+        )}
+        {picked != null && isAsiFeat(picked) && sel && (
+          <div className="wz-feat-inline wz-asi">
+            <div className="wz-seg" role="group" aria-label="Как прибавить">
+              <button type="button" aria-pressed={!sel.split} onClick={() => set({ split: false, b: null })}>
+                +2 одной
+              </button>
+              <button type="button" aria-pressed={sel.split} onClick={() => set({ split: true })}>
+                +1 двум
+              </button>
+            </div>
+            <div className="wz-chips" role="group" aria-label={sel.split ? "+1 к двум характеристикам" : "+2 к характеристике"}>
+              {ABILITY_KEYS_ALL.map((k) => {
+                const on = sel.a === k || (sel.split && sel.b === k);
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    className="wz-chip"
+                    aria-pressed={on}
+                    disabled={!on && before[k] >= 20}
+                    onClick={() => {
+                      if (!sel.split) set({ a: on ? null : k });
+                      else if (on) set(sel.a === k ? { a: sel.b, b: null } : { b: null });
+                      else if (!sel.a) set({ a: k });
+                      else set({ b: k });
+                    }}
+                  >
+                    {ABILITY_SHORT[k]} {before[k]}
+                  </button>
+                );
+              })}
+            </div>
+            {sel.a && (
+              <span className="muted">
+                {[sel.a, sel.split ? sel.b : null]
+                  .filter((k): k is DndAbilityKey => !!k)
+                  .map((k) => `${ABILITY_SHORT[k]} ${before[k]} → ${Math.min(20, before[k] + (sel.split ? 1 : 2))}`)
+                  .join(" · ")}
+              </span>
+            )}
+          </div>
+        )}
+        {entry && grants && sel && featNeedsChoice(entry, grants) && (
+          <div className="wz-feat-inline">
+            <FeatChoices
+              entry={entry}
+              grants={grants}
+              ctx={levelFeatCtx(idx)}
+              pick={sel.pick}
+              onChange={(next) => set({ pick: next })}
+              spellIndex={spellIndex ?? []}
+              tools={toolCatalog}
+              weapons={weaponCatalog ?? []}
+              skills={skills.rows}
+            />
+          </div>
+        )}
+      </section>
+    );
+  }
+
   function renderFeat() {
     const featRows = (pickedId: number | null, exclude: number | null, fromBackground: boolean) =>
       originFeats
@@ -3960,6 +4396,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
             {renderFeatChoices("feat2")}
           </section>
         )}
+        {levelFeatSlots.map((slot, idx) => renderLevelFeat(slot, idx))}
         {renderToolGroups(["feat", "feat2"])}
       </div>
     );
@@ -4464,7 +4901,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       if (portraitFrame.zoom > 1) c.portraitZoom = portraitFrame.zoom;
     }
     c.playerName = playerName.trim();
-    c.abilities = awardedAbilities;
+    c.abilities = finalAbilities;
     c.classes = previewClasses;
     c.proficiencyBonus = computeProficiencyBonus(previewClasses);
     c.raceId = speciesId;
@@ -4502,7 +4939,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   }
 
   // Шаги, где строка открывает описание: на ПК оно в рамке рядом, а не шторкой.
-  const PLATE_STEPS: Step[] = ["Умения класса", "Предыстория", "Черта", "Заклинания"];
+  const PLATE_STEPS: Step[] = ["Умения класса", "Предыстория", "Черты", "Заклинания"];
   function renderStepLaid() {
     if (!desktop || !PLATE_STEPS.includes(step)) return renderStep();
     const viewed = sheet?.kind === "entry" ? sheet : null;
@@ -4543,7 +4980,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         return renderLineage();
       case "Предыстория":
         return renderBackground();
-      case "Черта":
+      case "Черты":
         return renderFeat();
       case "Характеристики":
         return renderAbilities();

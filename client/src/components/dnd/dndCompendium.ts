@@ -1,5 +1,5 @@
 import { readResource } from "../../data/imperative";
-import type { CompendiumEntry, System, SystemSection } from "../../types";
+import type { CompendiumEntry, DndAbilityKey, System, SystemSection } from "../../types";
 
 // Загрузчики принимают signal, чтобы эффект, снятый при размонтировании
 // или при смене системы, не дописывал состояние уже неактуальной формой.
@@ -183,6 +183,9 @@ export interface DndFeatOption {
   classIds?: number[];
   /** Английское имя — для сопоставления старых строк «Имя [Original]». */
   nameOriginal?: string;
+  /** Из каких характеристик черта даёт +1 (`ability_increase.options`) —
+   *  подпись строки и выбор случайного героя без догрузки записи. */
+  abilityOptions?: DndAbilityKey[];
 }
 
 /** Все черты системы одним списком. Отдельно от отбора по категории: импорту
@@ -203,8 +206,16 @@ export async function loadDndFeats(systemId: number, opts?: LoadOpts): Promise<D
       category: typeof e.data.category === "string" ? e.data.category : undefined,
       classIds: Array.isArray(e.data.classIds) ? (e.data.classIds as number[]) : undefined,
       nameOriginal: e.name_original || undefined,
+      abilityOptions: featAbilityOptions(e.data.ability_increase),
     }))
     .sort(byNameRu);
+}
+
+const FEAT_ABILITY_KEYS = ["str", "dex", "con", "int", "wis", "cha"];
+function featAbilityOptions(raw: unknown): DndAbilityKey[] | undefined {
+  const opts = raw && typeof raw === "object" ? (raw as { options?: unknown }).options : undefined;
+  const keys = Array.isArray(opts) ? opts.filter((k): k is DndAbilityKey => FEAT_ABILITY_KEYS.includes(k as string)) : [];
+  return keys.length ? keys : undefined;
 }
 
 /** Черта доступна классам листа: без `classIds` — всем. */
