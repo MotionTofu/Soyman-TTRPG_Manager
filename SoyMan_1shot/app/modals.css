@@ -154,16 +154,8 @@ html[data-app="oneshot"] .dnd-init-modal :is(button, input):focus-visible {
 
 /* Sheet-owned fullscreen surfaces also belong to OneShot, including their
    portal roots. Keep the shared D&D implementation and skin only this app. */
-/* Список — ровная бумага без пятен (владелец 2026-09-26), текстура —
-   только в шапке. */
-html[data-app="oneshot"] .dnd-spell-picker {
-  background-color: var(--ui-surface);
-  color: var(--ui-text);
-}
-html[data-app="oneshot"] .dnd-spell-picker-head {
-  border-bottom: 3px solid var(--ui-border);
-  background-image: var(--skin-paper-panel);
-}
+/* Фон, поиск, круги и низ «Взять заклинания» — в fantasy-punk-skin.css
+   (рестайл 2026-09-26). */
 html[data-app="oneshot"] .dnd-spell-picker-title {
   font-family: var(--font-ui);
   font-size: clamp(24px, 5vw, 32px);
@@ -206,29 +198,6 @@ html[data-app="oneshot"] .dnd-deck-fan-close {
   min-height: 44px;
   border: 2px solid currentColor;
 }
-html[data-app="oneshot"] .dnd-spell-picker-search {
-  padding: 0 10px;
-  border: 2px solid var(--ui-border);
-  background: var(--ui-surface);
-}
-html[data-app="oneshot"] .dnd-spell-picker-search input {
-  min-height: 44px;
-  outline: none;
-}
-html[data-app="oneshot"] .dnd-spell-picker-search:focus-within {
-  outline: 3px solid var(--ui-focus);
-  outline-offset: 2px;
-}
-html[data-app="oneshot"] .dnd-spell-picker-chips .dnd-pick-chip {
-  min-height: 44px;
-  border: 2px solid var(--ui-border);
-  color: var(--ui-text);
-  font-weight: 800;
-}
-html[data-app="oneshot"] .dnd-spell-picker-chips .dnd-pick-chip.is-on {
-  background: var(--ui-accent);
-  color: var(--ui-text);
-}
 html[data-app="oneshot"] .dnd-spell-picker-list > p.muted {
   margin: 16px;
   padding: 12px;
@@ -236,17 +205,9 @@ html[data-app="oneshot"] .dnd-spell-picker-list > p.muted {
   background: var(--ui-surface);
   line-height: 1.4;
 }
-html[data-app="oneshot"] .dnd-spell-picker-foot {
-  border-top: 3px solid var(--ui-border);
-  background: var(--ui-surface);
-}
-html[data-app="oneshot"] .dnd-spell-picker-foot button {
-  min-height: 44px;
-  border: 2px solid var(--ui-border);
-  border-radius: 0;
-  font-weight: 800;
-}
-html[data-app="oneshot"] .dnd-spell-picker :is(button, input):focus-visible,
+/* Поле поиска подчёркивается само (focus-within в скине): розовая рамка
+   поверх полосы была лишней (владелец 2026-09-26). */
+html[data-app="oneshot"] .dnd-spell-picker :is(button, input:not([type="search"])):focus-visible,
 html[data-app="oneshot"] .dnd-deck-fan-overlay button:focus-visible {
   outline: 3px solid var(--ui-focus);
   outline-offset: 2px;

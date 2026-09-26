@@ -2964,3 +2964,218 @@ button.dnd-card-back-corner::after {
   border: 0;
   border-image: none;
 }
+
+/* ——— «Взять заклинания», рестайл по макету (гриллинг Q1–Q8, 2026-09-26) ———
+   Чистая бумага везде, шапку и низ отбивает толстая черта туши; поиск — одна
+   полоса с лупой; круги — язычки, как вкладки листа; отмеченное — кислотой;
+   «Добавить N» — чёрной плашкой. */
+.dnd-spell-picker,
+.dnd-spell-picker-head,
+.dnd-spell-picker-foot {
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  color: var(--skin-ink);
+}
+.dnd-spell-picker-head {
+  border-bottom: 4px solid var(--skin-ink);
+}
+.dnd-spell-picker-title {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.dnd-spell-picker-close {
+  width: 44px;
+  height: 44px;
+  margin-top: 0;
+  border: 2px solid var(--skin-ink);
+  border-radius: 0;
+}
+.dnd-spell-picker-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  margin-top: 14px;
+  padding: 0 14px;
+  border: 0;
+  background: rgba(23, 23, 23, 0.06);
+  cursor: text;
+}
+.dnd-spell-picker-search svg {
+  flex: none;
+}
+.dnd-spell-picker-search input,
+.dnd-spell-picker-search input:focus {
+  min-height: 44px;
+  border: 0;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  font-size: 16px;
+}
+.dnd-spell-picker-search:focus-within {
+  box-shadow: inset 0 -2px 0 var(--skin-ink);
+}
+.dnd-spell-picker-chips {
+  gap: 1px;
+  margin-top: 12px;
+  width: fit-content;
+  max-width: 100%;
+}
+.dnd-spell-picker-chips .dnd-pick-chip {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 0;
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  background-color: #e4dfd2;
+  box-shadow: 1px 0 0 rgba(23, 23, 23, 0.25);
+  color: var(--skin-ink);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+}
+.dnd-spell-picker-chips .dnd-pick-chip.is-on {
+  background: var(--skin-ink);
+  color: #e8e4da;
+}
+.dnd-spell-picker-group {
+  align-items: baseline;
+  gap: 10px;
+  padding: 18px var(--sp-6) 8px;
+}
+.dnd-spell-picker-group b {
+  font-family: var(--font-ui);
+  font-size: 22px;
+  line-height: 1;
+  color: var(--skin-ink);
+}
+.dnd-spell-picker-group > span {
+  font-size: 13px;
+  color: var(--skin-ink-soft);
+}
+.dnd-spell-picker-group::after {
+  align-self: center;
+  height: 2px;
+  background: var(--skin-ink);
+}
+.dnd-spell-pick-row {
+  border-bottom-color: rgba(23, 23, 23, 0.14);
+}
+.dnd-spell-pick-row.is-picked {
+  background: rgba(243, 255, 58, 0.28);
+}
+.dnd-spell-pick-row:disabled {
+  opacity: 1;
+}
+.dnd-spell-pick-row.is-owned {
+  color: rgba(23, 23, 23, 0.45);
+}
+.dnd-spell-pick-row.is-owned .dnd-spell-pick-school {
+  opacity: 0.45;
+  filter: grayscale(1);
+}
+.dnd-pick-box {
+  width: 24px;
+  height: 24px;
+  box-sizing: border-box;
+  border: 2px solid var(--skin-ink);
+  color: var(--skin-ink);
+}
+.dnd-spell-pick-row.is-picked .dnd-pick-box {
+  background: var(--skin-acid) url("/ui/wizard/acid-yellow.webp") center / 200px;
+}
+.dnd-spell-pick-row.is-owned .dnd-pick-box {
+  border-color: rgba(23, 23, 23, 0.3);
+  background: rgba(23, 23, 23, 0.12);
+  color: rgba(23, 23, 23, 0.45);
+}
+.dnd-spell-pick-circle {
+  margin-left: auto;
+  flex: none;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--skin-ink-soft);
+}
+.dnd-spell-picker-taken {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 var(--sp-6);
+  border: 0;
+  border-bottom: 1px dashed rgba(23, 23, 23, 0.35);
+  border-radius: 0;
+  background: none;
+  color: var(--skin-ink-soft);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+}
+.dnd-spell-picker-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  border-top: 4px solid var(--skin-ink);
+}
+.dnd-spell-picker-warn {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.3;
+  color: var(--skin-ink);
+}
+.dnd-spell-picker-warn .dnd-spell-pick-special {
+  background: var(--skin-acid);
+  color: var(--skin-ink);
+}
+.dnd-spell-picker-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.dnd-spell-picker-clear {
+  flex: none;
+  min-height: 44px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--skin-ink);
+  font-size: 15px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.dnd-spell-picker-add {
+  flex: 1;
+  min-height: 52px;
+  border: 0;
+  border-radius: 0;
+  background: #141414 var(--skin-ink-surface) center / 620px;
+  background-color: #141414;
+  color: #e8e4da;
+  font-family: var(--font-ui);
+  font-size: 17px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.dnd-spell-picker-add:disabled {
+  background: none;
+  border: 2px dashed rgba(23, 23, 23, 0.45);
+  color: var(--skin-ink-soft);
+  font-size: 14px;
+  cursor: default;
+}

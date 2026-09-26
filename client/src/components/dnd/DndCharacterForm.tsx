@@ -7297,7 +7297,6 @@ function DndClassSpellListModal({
   spellsByLevel,
   maxCircle,
   titleLine,
-  color,
   listIds,
   onPick,
   onClose,
@@ -7312,8 +7311,6 @@ function DndClassSpellListModal({
   maxCircle: number;
   /** «Имя · Класс N» в шапку (канвас SpellPicker). */
   titleLine: string;
-  /** Цвет класса — заливка выбранных галочек и кнопки. */
-  color: string;
   /** Весь список класса, уже видный на «Магии» (готовящие из списка):
    *  брать его незачем — строка помечена «в списке». */
   listIds?: ReadonlySet<number>;
@@ -7328,6 +7325,8 @@ function DndClassSpellListModal({
   const [circleSel, setCircleSel] = useState<number | null>(null);
   const [picked, setPicked] = useState<ReadonlySet<number>>(new Set());
   const [failed, setFailed] = useState(false);
+  /** Круги с раскрытым «уже есть: N». */
+  const [openTaken, setOpenTaken] = useState<ReadonlySet<number>>(new Set());
   const dialogRef = useOneShotOverlayFocus('.dnd-spell-picker-search input');
 
   useEffect(() => {
@@ -7439,19 +7438,15 @@ function DndClassSpellListModal({
       <button
         key={e.id}
         type="button"
-        className={`dnd-spell-pick-row${isPicked ? " is-picked" : ""}${isUnavailable ? " is-unavailable" : ""}`}
+        className={`dnd-spell-pick-row${isPicked ? " is-picked" : ""}${isUnavailable ? " is-unavailable" : ""}${locked ? " is-owned" : ""}`}
         disabled={locked}
         aria-pressed={isPicked || locked}
         onClick={() => toggle(e.id)}
       >
-        <span
-          className="dnd-pick-box"
-          style={isPicked || locked ? { background: color, borderColor: color } : undefined}
-          aria-hidden="true"
-        >
+        <span className="dnd-pick-box" aria-hidden="true">
           {(isPicked || locked) && (
             <svg viewBox="0 0 18 18">
-              <path d="M3 9 L7 13 L15 4" fill="none" stroke="#e8e4da" strokeWidth="2.6" />
+              <path d="M3 9 L7 13 L15 4" fill="none" stroke="currentColor" strokeWidth="3" />
             </svg>
           )}
         </span>
@@ -7486,7 +7481,12 @@ function DndClassSpellListModal({
             <NavIcon name="close" />
           </button>
         </div>
-        <div className="dnd-spell-picker-search">
+        {/* Одна бумажная полоса с лупой, как «Найти на листе» (рестайл Q5). */}
+        <label className="dnd-spell-picker-search">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M20 20l-4-4" />
+          </svg>
           <input
             type="search"
             placeholder="Название — найдёт и недоступные"
@@ -7494,8 +7494,10 @@ function DndClassSpellListModal({
             onChange={(e) => setQuery(e.target.value)}
             aria-label="Поиск заклинаний по названию"
           />
-        </div>
-        <div className="dnd-spell-picker-chips" role="group" aria-label="Фильтры">
+        </label>
+        {/* Круги — язычками, как вкладки листа (рестайл Q6). «Мой круг» стал
+            «Доступные»: это все круги, до которых есть ячейки. */}
+        <div className="dnd-spell-picker-chips" role="group" aria-label="Круги">
           <button
             type="button"
             className={`dnd-pick-chip${myCircle && circleSel == null ? " is-on" : ""}`}
@@ -7505,7 +7507,7 @@ function DndClassSpellListModal({
               setCircleSel(null);
             }}
           >
-            Мой круг
+            Доступные
           </button>
           {presentCircles
             .filter((lvl) => lvl > 0)
@@ -7515,9 +7517,10 @@ function DndClassSpellListModal({
                 type="button"
                 className={`dnd-pick-chip${circleSel === lvl ? " is-on" : ""}`}
                 aria-pressed={circleSel === lvl}
+                aria-label={`${lvl} круг`}
                 onClick={() => setCircleSel((prev) => (prev === lvl ? null : lvl))}
               >
-                {lvl} круг
+                {lvl}
               </button>
             ))}
           <button
@@ -7543,16 +7546,41 @@ function DndClassSpellListModal({
               : "Ничего не нашлось: у класса нет заклинаний в справочнике либо не подходит поиск."}
           </p>
         )}
-        {levels.map((lvl) => (
-          <div key={lvl}>
-            <div className="dnd-spell-picker-group">
-              <span>{lvl === 0 ? "Заговоры" : `${lvl} круг`}</span>
+        {levels.map((lvl) => {
+          // Уже взятое — не вперемешку, а свёрнутой строкой в конце круга
+          // (рестайл Q1–Q2): отметить его нельзя, выбору оно только мешает.
+          const isTaken = (e: CompendiumEntry) => owned.has(e.id) || !!listIds?.has(e.id);
+          const fresh = byLevel.get(lvl)!.filter((e) => !isTaken(e));
+          const taken = byLevel.get(lvl)!.filter(isTaken);
+          const open = openTaken.has(lvl);
+          return (
+            <div key={lvl}>
+              <div className="dnd-spell-picker-group">
+                {lvl > 0 && <b>{lvl}</b>}
+                <span>{lvl === 0 ? "Заговоры" : "круг"}</span>
+              </div>
+              {fresh.map((e) => pickRow(e, "", false))}
+              {taken.length > 0 && (
+                <button
+                  type="button"
+                  className="dnd-spell-picker-taken"
+                  aria-expanded={open}
+                  onClick={() =>
+                    setOpenTaken((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(lvl)) next.delete(lvl);
+                      else next.add(lvl);
+                      return next;
+                    })
+                  }
+                >
+                  уже есть: {taken.length} <span aria-hidden="true">{open ? "▾" : "▸"}</span>
+                </button>
+              )}
+              {open && taken.map((e) => pickRow(e, owned.has(e.id) ? "в листе" : "в списке", false))}
             </div>
-            {byLevel.get(lvl)!.map((e) =>
-              pickRow(e, owned.has(e.id) ? "в листе" : listIds?.has(e.id) ? "в списке" : "", false)
-            )}
-          </div>
-        ))}
+          );
+        })}
         {unavailable.length > 0 && (
           <div className="dnd-spell-picker-unavailable">
             <div className="dnd-spell-picker-group">
@@ -7563,35 +7591,39 @@ function DndClassSpellListModal({
           </div>
         )}
       </div>
+      {/* Низ (рестайл Q3–Q4): «снять отметки» — только когда есть что
+          снимать; «Добавить N» — чёрной плашкой, пустая — пунктиром. Число
+          на кнопке, отдельной строки «Отмечено N» больше нет. */}
       <div className="dnd-spell-picker-foot">
-        <span className="muted dnd-spell-picker-count">
-          Отмечено <strong>{picked.size}</strong>
-          {pickedSpecial > 0 && (
-            <span className="dnd-spell-picker-warn" role="status">
-              {pickedSpecial === 1 ? "1 недоступное" : `Недоступных: ${pickedSpecial}`} — берите, если разрешил Мастер. В
-              листе пометка «особое».
-            </span>
+        {pickedSpecial > 0 && (
+          <span className="dnd-spell-picker-warn" role="status">
+            <span className="dnd-spell-pick-special">особое</span>
+            {pickedSpecial === 1 ? "1 недоступное" : `Недоступных: ${pickedSpecial}`} — берите, если разрешил Мастер. В
+            листе будет пометка «особое».
+          </span>
+        )}
+        <div className="dnd-spell-picker-actions">
+          {picked.size > 0 && (
+            <button type="button" className="dnd-spell-picker-clear" onClick={() => setPicked(new Set())}>
+              снять отметки
+            </button>
           )}
-        </span>
-        <button type="button" className="comp-mini" disabled={picked.size === 0} onClick={() => setPicked(new Set())}>
-          Снять
-        </button>
-        <button
-          type="button"
-          className="primary"
-          style={{ background: color, borderColor: color }}
-          disabled={picked.size === 0}
-          onClick={() => {
-            onPick(
-              [...picked]
-                .map((id) => byId.get(id))
-                .filter((e): e is CompendiumEntry => !!e)
-                .map((e) => ({ level: e.level ?? 0, entry: e, special: isSpecial(e) }))
-            );
-          }}
-        >
-          Добавить{picked.size > 0 ? ` ${picked.size}` : ""}
-        </button>
+          <button
+            type="button"
+            className="dnd-spell-picker-add"
+            disabled={picked.size === 0}
+            onClick={() => {
+              onPick(
+                [...picked]
+                  .map((id) => byId.get(id))
+                  .filter((e): e is CompendiumEntry => !!e)
+                  .map((e) => ({ level: e.level ?? 0, entry: e, special: isSpecial(e) }))
+              );
+            }}
+          >
+            {picked.size > 0 ? `Добавить ${picked.size}` : "отметьте заклинания"}
+          </button>
+        </div>
       </div>
     </div>
     </>
@@ -12547,7 +12579,6 @@ export function DndCharacterView({
             titleLine={`${value.characterName || "Без имени"} · ${stripLatin(
               value.classes.find((c) => c.className)?.className ?? "Без класса"
             )} ${totalLevel}`}
-            color={cardColor}
             listIds={classListIds}
             onPick={(items) => {
               if (!onQuickUpdate || items.length === 0) return;
@@ -13612,13 +13643,17 @@ export function DndCharacterView({
                     // Плашки чисел и характеристика словом (макет 2026-09-25).
                     <span className="dnd-magic-nums">
                       <span className="dnd-magic-num">
-                        <span>СЛ спасброска</span> <b>{spellDc}</b>
+                        {/* Коротко (владелец 2026-09-26): «СЛ» и ИНТ/МДР/ХАР. */}
+                        <span title="Сложность спасброска">СЛ</span> <b>{spellDc}</b>
                       </span>
                       <span className="dnd-magic-num">
                         <span>Атака</span> <b>{formatModifier(spellAttackBonus)}</b>
                       </span>
-                      <span className="dnd-magic-ability">
-                        {Object.keys(ABILITY_NAME_TO_KEY).find((n) => ABILITY_NAME_TO_KEY[n] === spellAbilityKey)}
+                      <span
+                        className="dnd-magic-ability"
+                        title={Object.keys(ABILITY_NAME_TO_KEY).find((n) => ABILITY_NAME_TO_KEY[n] === spellAbilityKey)}
+                      >
+                        {ABILITY_KEY_ABBR[spellAbilityKey]}
                       </span>
                     </span>
                   ) : (
