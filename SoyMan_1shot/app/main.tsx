@@ -775,7 +775,8 @@ function App() {
       setCharacters(await listCharacters()); const key = await currentCatalog(); setCatalogKey(key || null);
       if (!import.meta.env.DEV) {
         try {
-          const response = await fetch('/server-config.json', { cache: 'no-store' });
+          // Timeout: on a bad network this fetch hung and held the whole app on "Открываем…".
+          const response = await fetch('/server-config.json', { cache: 'no-store', signal: AbortSignal.timeout(4000) });
           const config = response.ok ? await response.json() : null;
           if (config?.catalog === '/catalog.json') setServerCatalog(true);
           if (config?.sync === false) setSyncAllowed(false);
