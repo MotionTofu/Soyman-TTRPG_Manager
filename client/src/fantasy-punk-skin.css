@@ -1475,10 +1475,6 @@ button.dnd-card-level {
   box-shadow: none !important;
   border-left: 0 !important;
 }
-/* Значки школ вернулись (владелец 2026-09-26) — ромб подготовки остаётся. */
-.dnd-prepared-badge {
-  display: none;
-}
 .dnd-spell-name {
   font-family: var(--font-body, inherit);
   font-size: 16px;
@@ -1498,28 +1494,28 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-spell-school {
   font-weight: 400;
   color: var(--skin-ink-soft);
 }
+/* Ромб подготовки — нарисованный набор (правка «Магии», 2026-09-26):
+   пустой — нет, тушь — подготовлено, с кислотной сердцевиной — всегда.
+   Один знак на весь лист, звезды больше нет. */
 .dnd-prep-diamond {
   flex: none;
-  width: 14px;
-  height: 14px;
+  width: 22px;
+  height: 22px;
   margin: 0 4px;
-  box-sizing: border-box;
-  border: 2px solid var(--skin-ink-soft);
-  transform: rotate(45deg);
+  background: url("/ui/fantasy-punk/semantic/spell-prep/diamond-empty.webp") center / contain no-repeat;
 }
-.dnd-prep-diamond.is-1,
-.dnd-prep-diamond.is-2 {
-  border-color: var(--skin-ink);
-  background: var(--skin-ink);
+.dnd-prep-diamond.is-1 {
+  background-image: url("/ui/fantasy-punk/semantic/spell-prep/diamond-full.webp");
 }
 .dnd-prep-diamond.is-2 {
-  box-shadow: inset 0 0 0 3px var(--skin-ink), inset 0 0 0 6px var(--skin-acid);
+  background-image: url("/ui/fantasy-punk/semantic/spell-prep/diamond-always.webp");
 }
 /* Ромб-кнопка подготовки (вне правки): тот же вид, мишень шире самого ромба. */
 button.dnd-prep-diamond {
   padding: 0;
+  border: 0;
   border-radius: 0;
-  background: transparent;
+  background-color: transparent;
   cursor: pointer;
   outline-offset: 6px;
   position: relative;
@@ -1528,6 +1524,80 @@ button.dnd-prep-diamond::after {
   content: "";
   position: absolute;
   inset: -12px;
+}
+/* Правка «Магии» (гриллинг Q1–Q14): строка — значок, имя, метки и четыре
+   плашки по 44px; на телефоне плашки уходят второй строкой вправо (Q12). */
+.dnd-spell-row.is-edit {
+  align-items: center;
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+.dnd-spell-row.is-edit .dnd-spell-main {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+.dnd-spell-actions {
+  display: flex;
+  gap: 6px;
+  flex: none;
+  margin-left: auto;
+}
+.dnd-spell-act {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent center / contain no-repeat;
+  cursor: pointer;
+}
+.dnd-spell-act.dnd-prep-diamond {
+  background-size: 30px;
+}
+.dnd-spell-act.is-inf-off { background-image: url("/ui/fantasy-punk/semantic/spell-prep/glyph-inf-off.webp"); }
+.dnd-spell-act.is-inf-on { background-image: url("/ui/fantasy-punk/semantic/spell-prep/glyph-inf-on.webp"); }
+.dnd-spell-act.is-ab-class { background-image: url("/ui/fantasy-punk/semantic/spell-prep/glyph-cl.webp"); }
+.dnd-spell-act.is-ab-int { background-image: url("/ui/fantasy-punk/semantic/spell-prep/glyph-int.webp"); }
+.dnd-spell-act.is-ab-wis { background-image: url("/ui/fantasy-punk/semantic/spell-prep/glyph-wis.webp"); }
+.dnd-spell-act.is-ab-cha { background-image: url("/ui/fantasy-punk/semantic/spell-prep/glyph-cha.webp"); }
+.dnd-spell-act.is-remove { background-image: url("/ui/fantasy-punk/semantic/spell-prep/plate-x.webp"); }
+.dnd-spell-act:hover {
+  filter: brightness(1.08);
+}
+@media (max-width: 700px) {
+  .dnd-spell-row.is-edit .dnd-spell-main {
+    flex-basis: calc(100% - 60px);
+  }
+}
+.dnd-spell-add-btn {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+/* Ячейки круга в правке: число при расчёте по классам, иначе «− N +». */
+.dnd-slots-auto b {
+  color: var(--skin-ink);
+}
+.dnd-slot-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.dnd-slot-stepper .dnd-pool-step {
+  width: 44px;
+  height: 44px;
+  opacity: 1;
+}
+.dnd-slot-stepper .dnd-pool-step:disabled {
+  opacity: 0.3;
+}
+.dnd-slot-stepper .dnd-pool-meter-left {
+  min-width: 22px;
+  text-align: center;
+  font-family: var(--font-ui);
+  font-size: 22px;
 }
 /* «Снаряжение», шапка: трекер веса из макета боковой колонки — предметы
    слева, вес справа, полоса под ними (2026-09-26). */

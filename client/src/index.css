@@ -8249,13 +8249,6 @@ details[open] > .dnd-feat-section-head .chevron-icon {
      controls in an active edit form — always visible. */
   opacity: 1;
 }
-.dnd-prepared-badge {
-  color: var(--accent);
-  margin-left: auto;
-  /* Строка теперь выровнена по верху (две ступени), поэтому звёздочку
-     приходится опускать на пиксель-другой к базовой линии имени. */
-  margin-top: var(--sp-1);
-}
 .dnd-spell-add {
   position: relative;
   display: flex;

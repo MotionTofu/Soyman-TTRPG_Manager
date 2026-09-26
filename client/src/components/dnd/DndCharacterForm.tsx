@@ -1657,7 +1657,7 @@ function DndSpellLevelSection({
   preparedOnly,
   onCast,
   slotsLocked,
-  color,
+  autoSlots,
   listSpells,
   onTogglePrepared,
 }: {
@@ -1683,8 +1683,8 @@ function DndSpellLevelSection({
   /** Пипсы деривационные (считаются из строк, не из хранилища): редактор
    *  числа прячем, иначе задвоим счётчик. */
   slotsLocked?: boolean;
-  /** Цвет класса — им заливается звёздочка «всегда подготовлено». */
-  color?: string;
+  /** Ячейки считаются по классам: в правке вместо счётчика — число. */
+  autoSlots?: boolean;
   /** Весь список класса (гриллинг 2026-09-26): заклинания круга, которых нет
    *  в листе, — только показ, неподготовленными; в правке их не видно. */
   listSpells?: DndSpellEntry[];
@@ -1804,6 +1804,10 @@ function DndSpellLevelSection({
     openedOnce.current = true;
     if (detailsRef.current && ordered.length > 0) detailsRef.current.open = true;
   }, [ordered.length]);
+  // В правке раскрыты все круги: у пустого тело — «+ заклинание» (Q13).
+  useEffect(() => {
+    if (edit && detailsRef.current) detailsRef.current.open = true;
+  }, [edit]);
 
   return (
     <details className="dnd-spell-level-card" ref={detailsRef}>
@@ -1863,9 +1867,36 @@ function DndSpellLevelSection({
                 />
               </span>
             )}
-            {edit && !slotsLocked && (
-              <PipTrack value={slots} max={MAX_SPELL_SLOTS} onChange={onSlotsChange} label={`Ячейки, ${label}`} />
-            )}
+            {/* Q11: при расчёте по классам править нечего — только число;
+                счётчик — после «задать вручную». */}
+            {edit && !slotsLocked && (autoSlots ? (
+              <span className="muted dnd-slots-auto">
+                ячеек: <b>{slots}</b> · по классам
+              </span>
+            ) : (
+              <span className="dnd-slot-stepper">
+                <span className="muted">ячеек</span>
+                <button
+                  type="button"
+                  className="dnd-pool-step"
+                  disabled={slots <= 0}
+                  aria-label={`${label}: меньше ячеек`}
+                  onClick={() => onSlotsChange(slots - 1)}
+                >
+                  <NavIcon name="minus" />
+                </button>
+                <b className="dnd-pool-meter-left">{slots}</b>
+                <button
+                  type="button"
+                  className="dnd-pool-step"
+                  disabled={slots >= MAX_SPELL_SLOTS}
+                  aria-label={`${label}: больше ячеек`}
+                  onClick={() => onSlotsChange(slots + 1)}
+                >
+                  <NavIcon name="plus" />
+                </button>
+              </span>
+            ))}
           </span>
         )}
       </summary>
@@ -1876,7 +1907,8 @@ function DndSpellLevelSection({
         onDragLeave={edit ? () => setDragOver(false) : undefined}
         onDrop={edit ? handleDrop : undefined}
       >
-        {sorted.length === 0 && (
+        {/* В правке у пустого круга тело — «+ заклинание» (Q13), подпись лишняя. */}
+        {sorted.length === 0 && !edit && (
           <span className="muted">{hiddenCount > 0 ? "Ничего не подготовлено" : "Пусто"}</span>
         )}
         {sorted.map((s) => {
@@ -1909,7 +1941,7 @@ function DndSpellLevelSection({
           return (
             <div key={rowKey}>
               <div
-                className={`comp-row dnd-spell-row${s.prepared === 2 ? " is-prepared" : ""}${s.prepared === 1 ? " is-prepared-once" : ""}`}
+                className={`comp-row dnd-spell-row${edit ? " is-edit" : ""}${s.prepared === 2 ? " is-prepared" : ""}${s.prepared === 1 ? " is-prepared-once" : ""}`}
               >
                 {/* Две ступени вместо одной ленты: имя — объект, параметры —
                     подпись под ним. Раньше и то и другое стояло в строку
@@ -1948,16 +1980,19 @@ function DndSpellLevelSection({
                       {s.special && <span className="dnd-special-mark" title="Взято по разрешению Мастера">особое</span>}
                     </button>
                   ) : (
+                    // В правке — одно имя с метками (гриллинг правки «Магии»
+                    // 2026-09-26, Q1): англ. имя, подпись и «чем колдует»
+                    // уходят — последнее видно на своей плашке справа.
                     <span className="dnd-spell-title">
                       <span className="comp-name dnd-spell-name">{ru}</span>
-                      {en && <span className="dnd-spell-en">{en}</span>}
+                      {!edit && en && <span className="dnd-spell-en">{en}</span>}
                       {s.outsideLimit && <span className="dnd-outside-mark" title="Не в счёт подготовленных">∞</span>}
-                      {abilityMark}
+                      {!edit && abilityMark}
                       {s.special && <span className="dnd-special-mark" title="Взято по разрешению Мастера">особое</span>}
                     </span>
                   )}
-                  {freeCast}
-                  {s.entryId && !onCast ? (
+                  {!edit && freeCast}
+                  {edit ? null : s.entryId && !onCast ? (
                     <button
                       type="button"
                       className="dnd-spell-meta-link"
@@ -1972,77 +2007,49 @@ function DndSpellLevelSection({
                   )}
                 </span>
                 {edit ? (
-                  <span className="comp-actions dnd-spell-actions">
-                    {/* Звёздочка ходит по кругу «не подготовлено → подготовлено
-                        → всегда подготовлено», поэтому не aria-pressed (у него
-                        два состояния, а тут три) — состояние называется прямо
-                        в подписи. */}
+                  // Четыре мишени на виду (Q2: прятать в «⋯» — лишний тап):
+                  // ромб крутит «нет → подготовлено → всегда», ∞ — вне лимита,
+                  // плашка — чем колдует (КЛ → ИНТ → МДР → ХАР), крест — убрать.
+                  // Звезды больше нет: знак подготовки на листе один — ромб (Q3).
+                  <span className="dnd-spell-actions">
                     <button
                       type="button"
-                      className="comp-mini"
-                      style={s.prepared === 2 && color ? { color } : undefined}
-                      title={SPELL_PREPARED_TITLES[s.prepared]}
+                      className={`dnd-spell-act dnd-prep-diamond is-${s.prepared}`}
+                      title={`${SPELL_PREPARED_TITLES[s.prepared]} — сменить`}
                       aria-label={`${s.name}: ${SPELL_PREPARED_TITLES[s.prepared]} — сменить`}
                       onClick={() => togglePrepared(realIndex)}
-                    >
-                      <NavIcon name="star" filled={s.prepared !== 0} />
-                    </button>
+                    />
                     {/* «Вне лимита» ставится и руками: выдач в D&D много —
                         предмет, черта, благословение Мастера, — и все они
                         приходят по-своему. Пометка от источника (вид, класс,
-                        подкласс) приезжает сама, эта галочка — для всего
-                        остального. */}
+                        подкласс) приезжает сама, эта — для всего остального. */}
                     <button
                       type="button"
-                      className="comp-mini"
+                      className={`dnd-spell-act is-inf-${s.outsideLimit ? "on" : "off"}`}
                       title="Не в счёт подготовленных"
                       aria-pressed={!!s.outsideLimit}
                       aria-label={`${s.name}: не в счёт подготовленных`}
                       onClick={() => toggleOutsideLimit(realIndex)}
-                    >
-                      ∞
-                    </button>
+                    />
                     <button
                       type="button"
-                      className="comp-mini"
+                      className={`dnd-spell-act is-ab-${s.ability ?? "class"}`}
                       title="Чем колдует: по классу, Инт, Мдр, Хар"
                       aria-label={`${s.name}: чем колдует — ${s.ability ? ABILITY_KEY_ABBR[s.ability] : "по классу"}, сменить`}
                       onClick={() => cycleAbility(realIndex)}
-                    >
-                      {s.ability ? ABILITY_KEY_ABBR[s.ability] : "кл."}
-                    </button>
+                    />
                     <button
                       type="button"
-                      className="comp-mini danger"
+                      className="dnd-spell-act is-remove"
+                      title="Убрать"
                       aria-label={`Убрать «${s.name}» из списка`}
                       onClick={() => remove(realIndex)}
-                    >
-                      <NavIcon name="close" />
-                    </button>
+                    />
                   </span>
-                ) : (
-                  s.prepared > 0 && (
-                    // «Всегда подготовлено» заливается цветом класса, просто
-                    // «подготовлено» — чернилами. До этого обе звёздочки были
-                    // одинаковыми, и состояния различала только подложка
-                    // строки. Цвет класса — единственная краска на карте, и
-                    // это ровно тот случай, ради которого он заведён: пометка
-                    // владения, а не украшение.
-                    <span
-                      className="dnd-prepared-badge"
-                      style={s.prepared === 2 && color ? { color } : undefined}
-                      title={SPELL_PREPARED_TITLES[s.prepared]}
-                      aria-label={SPELL_PREPARED_TITLES[s.prepared]}
-                      role="img"
-                    >
-                      <NavIcon name="star" filled />
-                    </span>
-                  )
-                )}
-                {/* Ромб подготовки (макет 2026-09-25; справа по центру строки —
-                    владелец 2026-09-26, слева теперь значок школы): залит — подготовлено,
-                    контур — нет; «всегда» — с кислотной сердцевиной. */}
-                {onTogglePrepared && !edit && s.prepared !== 2 ? (
+                ) : onTogglePrepared && s.prepared !== 2 ? (
+                  // Ромб подготовки (макет 2026-09-25; справа по центру строки):
+                  // пустой — нет, залитый — подготовлено, с кислотной
+                  // сердцевиной — всегда (тогда он не кнопка).
                   <button
                     type="button"
                     className={`dnd-prep-diamond is-${s.prepared}`}
@@ -2052,7 +2059,12 @@ function DndSpellLevelSection({
                     onClick={() => onTogglePrepared(s, realIndex >= 0 ? realIndex : null)}
                   />
                 ) : (
-                  <span className={`dnd-prep-diamond is-${s.prepared}`} aria-hidden="true" />
+                  <span
+                    className={`dnd-prep-diamond is-${s.prepared}`}
+                    role="img"
+                    aria-label={SPELL_PREPARED_TITLES[s.prepared]}
+                    title={SPELL_PREPARED_TITLES[s.prepared]}
+                  />
                 )}
               </div>
               {expandedIndex === rowKey && s.entryId && (
@@ -2099,8 +2111,10 @@ function DndSpellLevelSection({
                 </button>
               </div>
             ) : (
-              <button type="button" className="comp-mini" onClick={() => setAdding(true)} style={{ alignSelf: "flex-start" }}>
-                + Добавить заклинание
+              // Пунктирная строка в конце круга — как «+ выбрать схемы» у
+              // реплик (Q5); у пустого круга это всё его тело (Q13).
+              <button type="button" className="dnd-replica-add dnd-spell-add-btn" onClick={() => setAdding(true)}>
+                + заклинание
               </button>
             )}
           </div>
@@ -2130,7 +2144,7 @@ function DndSpellsView({
   onCast,
   levelTitles,
   slotsLockedCircles,
-  color,
+  autoSlots,
   listByLevel,
   onTogglePrepared,
 }: {
@@ -2159,15 +2173,14 @@ function DndSpellsView({
   /** Круги с деривационными пипсами (арканум): ручную правку числа прячем,
    *  чтобы не задвоить счётчик. */
   slotsLockedCircles?: ReadonlySet<number>;
-  /** Цвет класса — им заливается звёздочка «всегда подготовлено». */
-  color?: string;
+  autoSlots?: boolean;
   /** Весь список класса по кругам (индекс 0 — 1 круг), без того, что в листе. */
   listByLevel?: DndSpellEntry[][];
   /** Подготовка ромбом вне правки: круг (0 — заговоры), заклинание, место. */
   onTogglePrepared?: (level: number, spell: DndSpellEntry, index: number | null) => void;
 }) {
   const activeLevels = Array.from({ length: spellSlotLevels }, (_, i) => i).filter(
-    (i) => edit || spellSlotPips[i] > 0 || spellsByLevel[i].length > 0 || (listByLevel?.[i]?.length ?? 0) > 0
+    (i) => edit || (spellSlotPips[i] ?? 0) > 0 || (spellsByLevel[i]?.length ?? 0) > 0 || (listByLevel?.[i]?.length ?? 0) > 0
   );
   if (!edit && activeLevels.length === 0 && cantrips.length === 0) return null;
   // Не `.stack`: на широком экране вкладка раскладывается в две колонки
@@ -2190,7 +2203,6 @@ function DndSpellsView({
           onSpellsChange={edit && onCantripsChange ? onCantripsChange : () => {}}
           onFreeCastToggle={onFreeCastToggle ? (idx) => onFreeCastToggle(0, idx) : undefined}
           onCast={onCast}
-          color={color}
           onTogglePrepared={onTogglePrepared ? (sp, idx) => onTogglePrepared(0, sp, idx) : undefined}
         />
       )}
@@ -2200,8 +2212,8 @@ function DndSpellsView({
           level={i + 1}
           title={levelTitles?.[i + 1]}
           systemId={edit ? systemId ?? null : null}
-          slots={spellSlotPips[i]}
-          spells={spellsByLevel[i]}
+          slots={spellSlotPips[i] ?? 0}
+          spells={spellsByLevel[i] ?? []}
           used={spellSlotsUsed?.[i]}
           onUsedChange={onUsedChange ? (v) => onUsedChange(i, v) : undefined}
           edit={!!edit}
@@ -2212,7 +2224,7 @@ function DndSpellsView({
           onSpellsChange={edit && onSpellsChange ? (v) => onSpellsChange(i, v) : () => {}}
           onFreeCastToggle={onFreeCastToggle ? (idx) => onFreeCastToggle(i + 1, idx) : undefined}
           onCast={onCast}
-          color={color}
+          autoSlots={autoSlots}
           listSpells={listByLevel?.[i]}
           onTogglePrepared={onTogglePrepared ? (sp, idx) => onTogglePrepared(i + 1, sp, idx) : undefined}
         />
@@ -13756,10 +13768,12 @@ export function DndCharacterView({
                 </div>
               )}
               <DndSpellsView
-                color={cardColor}
                 preparedOnly={prefs.spellsPreparedOnly}
                 cantrips={liveCantrips}
-                spellSlotLevels={magicLevels}
+                // Q6: в правке — все девять кругов: Мастер может позволить
+                // и выше, чем даёт таблица.
+                spellSlotLevels={editingSpells ? 9 : magicLevels}
+                autoSlots={autoSlots}
                 spellSlotPips={magicPips}
                 spellSlotsUsed={value.spellSlotsUsed}
                 spellsByLevel={liveSpellsByLevel}
