@@ -1635,6 +1635,13 @@ function App() {
     <MentionPreviewRoot />
   </DndRuntimeContext.Provider>;
 }
+// iOS приближает страницу при фокусе в поле мельче 16px (поиск и т. п.).
+// maximum-scale=1 это гасит, а щипок Safari всё равно разрешает; на Android
+// тот же ключ запретил бы щипок — поэтому только iOS (iPad — «Mac» с касанием).
+if (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+  const meta = document.querySelector('meta[name="viewport"]');
+  meta?.setAttribute('content', `${meta.getAttribute('content')},maximum-scale=1`);
+}
 const root = createRoot(document.getElementById('root')!);
 root.render(<QueryClientProvider client={queryClient}><BrowserRouter><App /></BrowserRouter></QueryClientProvider>);
 if (import.meta.hot) import.meta.hot.dispose(() => root.unmount());
