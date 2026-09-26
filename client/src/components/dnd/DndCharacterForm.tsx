@@ -93,7 +93,7 @@ import { sheetClassColor, textOnClassColor } from "./dndClassColors";
 import { DEFAULT_PORTRAIT_FOCUS, useFrameDrag } from "./portraitFrame";
 import { PortraitFrameModal, portraitImgStyle } from "./PortraitFrameModal";
 import { DndDie } from "./DndDie";
-import { PoolMeter, PoolStepper, poolShowsNumber } from "./TofuPips";
+import { PoolMeter, PoolStepper, TofuPips, poolShowsNumber } from "./TofuPips";
 import { CreatureTypeBadge, creatureTypeName } from "./creatureTypeIcons";
 import {
   blueprintFromEntryData,
@@ -10976,10 +10976,12 @@ export function DndCharacterView({
   // язычок за кадр, и единственный индикатор «на какой я карте» пропадал
   // (аудит 09.09, В2). `inline: nearest` не дёргает полоску, когда язычок и
   // так виден; `block: nearest` не даёт утащить страницу по вертикали.
+  // Карусель, как лента классов в визарде: активный язычок тянется в центр,
+  // пока полоске есть куда ехать (просьба владельца 2026-09-26).
   const deckStripRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const active = deckStripRef.current?.querySelector<HTMLElement>("button.active");
-    active?.scrollIntoView({ inline: "nearest", block: "nearest" });
+    active?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
   }, [tab]);
   // Живые данные компендиума для всех заклинаний и умений листа — одной
   // пачкой на весь лист, а не запросом на запись (см. entryCache.ts).
@@ -13962,14 +13964,15 @@ export function DndCharacterView({
                   {pools.map((pool) => (
                     <span key={pool.die} className="row dnd-hitdice-pool">
                       <span className="dnd-hitdice-die">{pool.die}</span>
-                      <PipTrack
-                        value={pool.used}
-                        label={`Потрачено костей хитов ${pool.die}`}
+                      {/* Тофу, как у всех запасов листа: целая голова — кость в запасе. */}
+                      <TofuPips
                         max={pool.total}
-                        size={18}
-                        onChange={
+                        left={pool.total - pool.used}
+                        label={`Кости хитов ${pool.die}`}
+                        onSetLeft={
                           onQuickUpdate
-                            ? (n) => onQuickUpdate({ hitDiceUsed: { ...value.hitDiceUsed, [pool.die]: n } })
+                            ? (left) =>
+                                onQuickUpdate({ hitDiceUsed: { ...value.hitDiceUsed, [pool.die]: pool.total - left } })
                             : undefined
                         }
                       />

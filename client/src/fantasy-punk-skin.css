@@ -1093,6 +1093,12 @@ button.dnd-item-rt.dnd-spend-btn .dnd-item-rt-bot {
   outline: none;
   background: none;
 }
+/* На ПК полоска — прямой потомок .dnd-desktop-tab, и правило колонок
+   `.dnd-desktop-tab > div { column-gap }` разводило язычки на 16px. По
+   макету они почти вплотную: 1px, чтобы читалась тень справа. */
+.dnd-desktop-tab > .dnd-deck-strip {
+  column-gap: 1px;
+}
 .dnd-deck-strip button {
   min-height: 44px;
   padding: 0 16px;
