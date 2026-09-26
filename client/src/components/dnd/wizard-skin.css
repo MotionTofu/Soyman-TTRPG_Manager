@@ -1767,6 +1767,15 @@
 :is(.wz, .wz-sheet, .wz-lvl) .wz-level {
   background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
 }
+/* Стрелка списков — нарисованная, поверх бумаги (владелец 2026-09-27). */
+:is(.wz, .wz-sheet, .wz-lvl) select:not([multiple], [size]) {
+  appearance: none;
+  padding-right: 26px;
+  background-image: var(--skin-chevron-down), url("/ui/wizard/paper-panel.webp");
+  background-repeat: no-repeat, repeat;
+  background-position: right 7px center, center;
+  background-size: 13px, 420px;
+}
 
 /* Шаг «Заклинания»: раздел — чернильная шапка; собранный — кислотная
  * (владелец 2026-09-25: разделы сливались). Внутри — подзаголовки кругов. */

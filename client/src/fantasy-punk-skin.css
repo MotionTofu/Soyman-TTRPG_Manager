@@ -70,6 +70,7 @@
   --skin-fan-acid: url("/ui/fantasy-punk/semantic/card-buttons/card-fan-acid.webp");
   --skin-edit-paper: url("/ui/sheet/card-edit-paper.webp");
   --skin-edit-acid: url("/ui/sheet/card-edit-acid.webp");
+  --skin-chevron-down: url("/ui/fantasy-punk/semantic/ui-icons/chevron-down.webp");
 
   --skin-paper-base: #e8e4da;
   /* Вуаль над фоновой бумагой: текстура на 30 % тише (владелец, 2026-09-25). */
@@ -105,6 +106,19 @@ body.sheet-fullscreen,
   /* Near-zero radius (Design Codex §7): kills the SaaS-card roundness,
      keeps a hair against crunchy corners. */
   --card-radius: 2px;
+}
+
+/* Выпадающие списки листа — нарисованной стрелкой вместо системной
+ * (владелец 2026-09-27). На тёмной рубашке телефона чёрная стрелка не видна —
+ * там остаётся системная; бумажная рубашка ПК получает свою ниже, в §desktop.
+ * Модалки листа порталятся в body, отсюда body:has(.oneshot-sheet). */
+:is(.oneshot-sheet, body.sheet-fullscreen, body:has(.oneshot-sheet)) select:not([multiple], [size], :where(.dnd-card-back *)) {
+  appearance: none;
+  padding-right: 26px;
+  background-image: var(--skin-chevron-down);
+  background-repeat: no-repeat;
+  background-position: right 7px center;
+  background-size: 13px;
 }
 
 /* Лист всегда на светлой бумаге, а тёмная тема основного SoyMan
@@ -878,6 +892,11 @@ body.sheet-fullscreen {
     background: #efebe1;
     color: var(--skin-ink);
     border-color: var(--skin-ink);
+  }
+  .dnd-desktop-back .dnd-card-back select:not([multiple], [size]) {
+    appearance: none;
+    padding-right: 26px;
+    background: #efebe1 var(--skin-chevron-down) right 7px center / 13px no-repeat;
   }
   .dnd-desktop-back .dnd-card-back-head {
     border-bottom-color: var(--skin-ink);
