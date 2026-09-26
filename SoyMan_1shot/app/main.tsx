@@ -503,9 +503,10 @@ function App() {
     if (key && managed) void ensureMedia(key);
   }
   // One tap for the player (grilling 2026-09-23): the share sheet with the
-  // GM copy; plain download where the browser cannot share files.
+  // GM copy; plain download where the browser cannot share files. Phones only:
+  // on a PC the share sheet is Windows' own (mail, nearby devices), not a chat.
   async function shareGmFile(file: File) {
-    if (navigator.canShare?.({ files: [file] })) {
+    if (matchMedia('(pointer: coarse)').matches && navigator.canShare?.({ files: [file] })) {
       try { await navigator.share({ files: [file], title: file.name }); setGmFile(null); setStatus('Файл для Мастера отправлен'); }
       catch (e) {
         if ((e as Error).name === 'AbortError') setGmFile(null);
