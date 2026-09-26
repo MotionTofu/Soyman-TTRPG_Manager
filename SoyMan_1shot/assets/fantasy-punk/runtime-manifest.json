@@ -20,6 +20,17 @@
     "decorative/frames/shard-corner-right.webp",
     "decorative/portrait/portrait-breakup-top.webp",
     "semantic/card-buttons/card-fan-acid.webp",
-    "semantic/card-buttons/card-fan-paper.webp"
+    "semantic/card-buttons/card-fan-paper.webp",
+    "semantic/spell-prep/diamond-empty.webp",
+    "semantic/spell-prep/diamond-full.webp",
+    "semantic/spell-prep/diamond-always.webp",
+    "semantic/spell-prep/glyph-inf-off.webp",
+    "semantic/spell-prep/glyph-inf-on.webp",
+    "semantic/spell-prep/glyph-cl.webp",
+    "semantic/spell-prep/glyph-int.webp",
+    "semantic/spell-prep/glyph-wis.webp",
+    "semantic/spell-prep/glyph-cha.webp",
+    "semantic/spell-prep/plate-x.webp",
+    "semantic/map-buttons/button-01.webp"
   ]
 }
