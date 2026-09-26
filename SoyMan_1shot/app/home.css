@@ -139,7 +139,7 @@ html[data-app="oneshot"] .lib-primary {
   gap: 4px;
   cursor: pointer;
   -webkit-mask-box-image: var(--lib-torn) 48 / 10px round;
-  mask-border: var(--lib-torn) 48 / 10px round;
+  mask-border: var(--lib-torn) 48 fill / 10px round;
 }
 html[data-app="oneshot"] .lib-primary:disabled { opacity: .6; cursor: default; }
 html[data-app="oneshot"] .lib-blank {
@@ -214,7 +214,7 @@ html[data-app="oneshot"] .lib-chip {
   letter-spacing: .08em;
   text-transform: uppercase;
   -webkit-mask-box-image: var(--lib-torn) 48 / 5px round;
-  mask-border: var(--lib-torn) 48 / 5px round;
+  mask-border: var(--lib-torn) 48 fill / 5px round;
 }
 html[data-app="oneshot"] .lib-dots {
   position: absolute;

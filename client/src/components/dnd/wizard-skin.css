@@ -100,7 +100,7 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
   -webkit-mask-box-image: var(--wz-torn) 48 / 10px round;
-  mask-border: var(--wz-torn) 48 / 10px round;
+  mask-border: var(--wz-torn) 48 fill / 10px round;
 }
 :is(.wz, .wz-sheet, .wz-lvl) button.primary:disabled {
   opacity: 1;
@@ -231,7 +231,7 @@
   margin-left: -8px;
   background: var(--wz-mag) url("/ui/wizard/punk-magenta.webp") center / 360px;
   -webkit-mask-box-image: var(--wz-torn) 48 / 5px round;
-  mask-border: var(--wz-torn) 48 / 5px round;
+  mask-border: var(--wz-torn) 48 fill / 5px round;
 }
 
 /* ——— тело и подвал ——— */
@@ -309,7 +309,7 @@
   background: var(--wz-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
   color: var(--wz-ink);
   -webkit-mask-box-image: var(--wz-torn) 48 / 5px round;
-  mask-border: var(--wz-torn) 48 / 5px round;
+  mask-border: var(--wz-torn) 48 fill / 5px round;
 }
 :is(.wz, .wz-sheet, .wz-lvl) .wz-group-label {
   font-family: var(--font-ui);
@@ -322,7 +322,7 @@
   line-height: 1;
   background: var(--wz-mag) url("/ui/wizard/punk-magenta.webp") center / 360px;
   -webkit-mask-box-image: var(--wz-torn) 48 / 5px round;
-  mask-border: var(--wz-torn) 48 / 5px round;
+  mask-border: var(--wz-torn) 48 fill / 5px round;
 }
 :is(.wz, .wz-sheet, .wz-lvl) .wz-count.is-done {
   color: var(--wz-ink);
@@ -354,7 +354,7 @@
   background: var(--wz-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
   color: var(--wz-ink);
   -webkit-mask-box-image: var(--wz-torn) 48 / 10px round;
-  mask-border: var(--wz-torn) 48 / 10px round;
+  mask-border: var(--wz-torn) 48 fill / 10px round;
 }
 
 /* ——— лента карт ——— */
@@ -441,7 +441,7 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
   -webkit-mask-box-image: var(--wz-torn) 48 / 5px round;
-  mask-border: var(--wz-torn) 48 / 5px round;
+  mask-border: var(--wz-torn) 48 fill / 5px round;
 }
 .wz .wz-ribbon-caption strong {
   font-family: var(--font-display);
@@ -545,7 +545,7 @@
   transform: rotate(6deg);
   background: var(--wz-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
   -webkit-mask-box-image: var(--wz-torn) 48 / 5px round;
-  mask-border: var(--wz-torn) 48 / 5px round;
+  mask-border: var(--wz-torn) 48 fill / 5px round;
 }
 .wz .wz-abil-label {
   font-size: 13px;
@@ -571,7 +571,7 @@
   white-space: nowrap;
   background: var(--wz-mag) url("/ui/wizard/punk-magenta.webp") center / 360px;
   -webkit-mask-box-image: var(--wz-torn) 48 / 5px round;
-  mask-border: var(--wz-torn) 48 / 5px round;
+  mask-border: var(--wz-torn) 48 fill / 5px round;
 }
 /* Покупка и ручной ввод — плитки бумаги, кость только у перестановки. */
 .wz div.wz-abil {
@@ -602,7 +602,7 @@
   transform: translate(8px, 8px);
   background: var(--wz-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
   -webkit-mask-box-image: var(--wz-torn) 48 / 10px round;
-  mask-border: var(--wz-torn) 48 / 10px round;
+  mask-border: var(--wz-torn) 48 fill / 10px round;
 }
 .wz .wz-duel-row {
   isolation: isolate;
@@ -633,7 +633,7 @@
   background: var(--wz-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
   color: var(--wz-ink);
   -webkit-mask-box-image: var(--wz-torn) 48 / 5px round;
-  mask-border: var(--wz-torn) 48 / 5px round;
+  mask-border: var(--wz-torn) 48 fill / 5px round;
 }
 .wz .wz-set-items,
 .wz .wz-set-gold {
@@ -664,7 +664,7 @@
   border: 0;
   background: var(--wz-mag) url("/ui/wizard/punk-magenta.webp") center / 360px;
   -webkit-mask-box-image: var(--wz-torn) 48 / 5px round;
-  mask-border: var(--wz-torn) 48 / 5px round;
+  mask-border: var(--wz-torn) 48 fill / 5px round;
 }
 
 /* ——— шторка ——— */
@@ -1313,7 +1313,7 @@
     font-weight: 700;
     background: var(--wz-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
     -webkit-mask-box-image: var(--wz-torn) 48 / 5px round;
-    mask-border: var(--wz-torn) 48 / 5px round;
+    mask-border: var(--wz-torn) 48 fill / 5px round;
   }
   .wz-strip-head .muted {
     font-size: 12px;
