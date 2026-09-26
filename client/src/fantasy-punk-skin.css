@@ -1403,6 +1403,60 @@ button.dnd-card-level {
   font-size: 22px;
   color: var(--skin-ink);
 }
+/* Полоса настроек правки «Магии»: бонусы плашками, как числа над ними,
+   поле — вписанная цифра с чертой, без рамки формы (владелец 2026-09-26). */
+.dnd-magic-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  margin: 4px 0 10px;
+}
+.dnd-magic-bonus {
+  cursor: text;
+}
+.dnd-magic-bonus input {
+  width: 52px;
+  height: 40px;
+  padding: 0 4px;
+  border: 0;
+  border-bottom: 2px solid var(--skin-ink);
+  border-radius: 0;
+  background: rgba(23, 23, 23, 0.06);
+  color: var(--skin-ink);
+  font-family: var(--font-ui);
+  font-size: 20px;
+  font-weight: 700;
+  text-align: center;
+  box-shadow: none;
+}
+.dnd-magic-bonus input::placeholder {
+  color: rgba(23, 23, 23, 0.3);
+}
+.dnd-magic-bonus input:focus {
+  outline: 2px solid var(--skin-ink);
+  outline-offset: 2px;
+}
+.dnd-magic-cells {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.dnd-magic-cells > .muted {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+@media (max-width: 700px) {
+  .dnd-magic-bonus {
+    flex: 1 1 0;
+    justify-content: space-between;
+  }
+  .dnd-magic-cells {
+    flex-basis: 100%;
+  }
+}
 .dnd-magic-ability {
   font-family: var(--font-ui);
   font-size: 13px;

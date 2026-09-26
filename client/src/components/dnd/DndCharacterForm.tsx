@@ -13627,39 +13627,69 @@ export function DndCharacterView({
                 </div>
                 <DndFanButton onOpen={() => setFanOpen(true)} />
               </div>
-              {(value.spellcasting || spellAbilityKey) && (
-                <>
-                  {value.spellcasting && !editingSpells && (
-                    <div className="sb-entry" style={{ whiteSpace: "pre-wrap" }}>
-                      <MentionText text={value.spellcasting} />
-                    </div>
+              {value.spellcasting && !editingSpells && (
+                <div className="sb-entry" style={{ whiteSpace: "pre-wrap" }}>
+                  <MentionText text={value.spellcasting} />
+                </div>
+              )}
+              {/* Настройки правки одной полосой (владелец 2026-09-26): бонусы
+                  к СЛ и атаке (предметы, черты) — плашками, как «СЛ спасброска»
+                  над ними; расчёт ячеек — двумя половинами рядом. Раньше тут
+                  были голые поля формы. */}
+              {editingSpells && onQuickUpdate && (spellAbilityKey || computedSlots.basis !== "none") && (
+                <div className="dnd-magic-settings">
+                  {spellAbilityKey && (
+                    <>
+                      <label className="dnd-magic-num dnd-magic-bonus">
+                        <span>Бонус к СЛ</span>
+                        <input
+                          value={value.spellDcMisc}
+                          placeholder="+0"
+                          onChange={(e) => onQuickUpdate({ spellDcMisc: e.target.value })}
+                        />
+                      </label>
+                      <label className="dnd-magic-num dnd-magic-bonus">
+                        <span>Бонус к атаке</span>
+                        <input
+                          value={value.spellAttackMisc}
+                          placeholder="+0"
+                          onChange={(e) => onQuickUpdate({ spellAttackMisc: e.target.value })}
+                        />
+                      </label>
+                    </>
                   )}
-                  {/* Прочие бонусы к СЛ и к атаке заклинаниями (предметы,
-                      черты) и общий текст о магии правились только в форме.
-                      Их место — под самими СЛ и бонусом, которые они меняют. */}
-                  {editingSpells && onQuickUpdate && (
-                    <div className="stack sb-entry">
-                      <div className="row">
-                        <label>
-                          Прочие бонусы к сложности
-                          <input
-                            style={{ width: 70 }}
-                            value={value.spellDcMisc}
-                            onChange={(e) => onQuickUpdate({ spellDcMisc: e.target.value })}
-                          />
-                        </label>
-                        <label>
-                          Прочие бонусы к атаке
-                          <input
-                            style={{ width: 70 }}
-                            value={value.spellAttackMisc}
-                            onChange={(e) => onQuickUpdate({ spellAttackMisc: e.target.value })}
-                          />
-                        </label>
-                      </div>
-                    </div>
+                  {computedSlots.basis !== "none" && (
+                    <span className="dnd-magic-cells">
+                      <span className="muted">ячейки</span>
+                      <span className="dnd-seg" role="group" aria-label="Ячейки заклинаний">
+                        <button
+                          type="button"
+                          aria-pressed={autoSlots}
+                          disabled={!onQuickUpdate}
+                          title={
+                            computedSlots.basis === "multiclass"
+                              ? `По таблице многоклассья (уровень заклинателя ${effectiveCasterLevel(slotSources)})`
+                              : "По таблице класса"
+                          }
+                          onClick={() => !autoSlots && onQuickUpdate?.({ spellSlotsManual: false })}
+                        >
+                          по классам
+                        </button>
+                        <button
+                          type="button"
+                          aria-pressed={!autoSlots}
+                          disabled={!onQuickUpdate}
+                          // При переходе на ручной режим переносим рассчитанное в
+                          // хранимое, иначе ячейки обнулятся у всех, кто их никогда
+                          // не вбивал.
+                          onClick={() => autoSlots && onQuickUpdate?.({ spellSlotsManual: true, spellSlotPips: computedSlots.slots })}
+                        >
+                          вручную
+                        </button>
+                      </span>
+                    </span>
                   )}
-                </>
+                </div>
               )}
               {/* Тумблер живёт у самих заклинаний, а не во «Внешнем виде»:
                   утром его выключают, чтобы подготовиться, в бою включают,
@@ -13716,41 +13746,6 @@ export function DndCharacterView({
                   {spellLimits.outside > 0 && (
                     <span className="muted">вне лимита {spellLimits.outside}</span>
                   )}
-                </div>
-              )}
-              {/* Расчёт ячеек — под меню редактирования: пользуются ячейками,
-                  а настраивают расчёт. Вне правки здесь только то, что тратят. */}
-              {/* Две половины, как «Подготовленные | Весь список» (макет правки
-                  «Магии», 2026-09-26). Откуда расчёт — в подсказке «по классам». */}
-              {editingSpells && computedSlots.basis !== "none" && (
-                <div className="row sb-entry" style={{ gap: 8, flexWrap: "wrap" }}>
-                  <span className="muted">ячейки</span>
-                  <span className="dnd-seg" role="group" aria-label="Ячейки заклинаний">
-                    <button
-                      type="button"
-                      aria-pressed={autoSlots}
-                      disabled={!onQuickUpdate}
-                      title={
-                        computedSlots.basis === "multiclass"
-                          ? `По таблице многоклассья (уровень заклинателя ${effectiveCasterLevel(slotSources)})`
-                          : "По таблице класса"
-                      }
-                      onClick={() => !autoSlots && onQuickUpdate?.({ spellSlotsManual: false })}
-                    >
-                      по классам
-                    </button>
-                    <button
-                      type="button"
-                      aria-pressed={!autoSlots}
-                      disabled={!onQuickUpdate}
-                      // При переходе на ручной режим переносим рассчитанное в
-                      // хранимое, иначе ячейки обнулятся у всех, кто их никогда
-                      // не вбивал.
-                      onClick={() => autoSlots && onQuickUpdate?.({ spellSlotsManual: true, spellSlotPips: computedSlots.slots })}
-                    >
-                      вручную
-                    </button>
-                  </span>
                 </div>
               )}
               {computedSlots.pact && (
