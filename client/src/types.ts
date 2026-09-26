@@ -363,6 +363,9 @@ export interface Character {
   campaign_id: number | null;
   campaign_name?: string | null;
   campaign_setting_id?: number | null;
+  /** Система кампании (или своя у персонажа без кампании) — GET /characters/:id. */
+  system_name?: string | null;
+  system_code?: string | null;
   character_name: string;
   short_name: string | null;
   backstory: string;

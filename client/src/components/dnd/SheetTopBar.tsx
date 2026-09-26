@@ -5,6 +5,18 @@ import type { SaveStatus } from "../../data/queuedSave";
 import "./sheet-chrome.css";
 
 /**
+ * Пункты «⋯», которые задаёт страница персонажа (гриллинг «персонаж = лист»
+ * 2026-09-27, Q4/Q24/Q28): досье (у LitM и без листа — окном), отношения,
+ * профиль игрока у Мастера и архив персонажа.
+ */
+export type SheetMenuExtra = {
+  onDossier?: () => void;
+  onRelations?: () => void;
+  player?: { name: string; onOpen: () => void };
+  onArchive?: () => void;
+};
+
+/**
  * Верхняя полоса полноэкранного листа основного SoyMan — как шапка OneShot
  * (гриллинг 2026-09-26, Q9/Q19): «← назад», имя, переключатель листов,
  * статус сохранения и меню «⋯». «Отправить Мастеру» здесь нет — Мастер
@@ -17,7 +29,7 @@ export function SheetTopBar({
   sheets,
   activeId,
   onSelect,
-  onNew,
+  extra,
   onDeck,
   onGestures,
   onDownloadHtml,
@@ -32,10 +44,10 @@ export function SheetTopBar({
   sheets: { id: number; title: string }[];
   activeId: number | null;
   onSelect: (id: number) => void;
-  onNew?: () => void;
+  extra?: SheetMenuExtra;
   /** Колода веером — только у листа D&D. */
   onDeck?: () => void;
-  onGestures: () => void;
+  onGestures?: () => void;
   onDownloadHtml?: () => void;
   onDownloadBackup?: () => void;
   largeCards: boolean;
@@ -88,7 +100,7 @@ export function SheetTopBar({
 
   return (
     <header className="sheet-bar" ref={barRef}>
-      <button type="button" className="sheet-bar-back" onClick={onBack} aria-label="Назад к профилю персонажа">
+      <button type="button" className="sheet-bar-back" onClick={onBack} aria-label="Назад">
         ←
       </button>
       <span className="sheet-bar-title">
@@ -127,27 +139,52 @@ export function SheetTopBar({
             Колода карт
           </button>
         )}
-        <span className="sheet-bar-section">Вид</span>
-        <label className="sheet-bar-check">
-          <input
-            type="checkbox"
-            checked={prefs.abilityPrimary === "mod"}
-            onChange={(e) => saveDndPrefs({ ...prefs, abilityPrimary: e.target.checked ? "mod" : "score" })}
-          />{" "}
-          На кости — модификатор
-        </label>
-        <label className="sheet-bar-check">
-          <input
-            type="checkbox"
-            checked={prefs.poolMarks === "strike"}
-            onChange={(e) => saveDndPrefs({ ...prefs, poolMarks: e.target.checked ? "strike" : "tofu" })}
-          />{" "}
-          Ресурсы — зачёркивать
-        </label>
-        {onDownloadBackup && (
-          <label className="sheet-bar-check">
-            <input type="checkbox" checked={largeCards} onChange={(e) => onLargeCards(e.target.checked)} /> Большие карты в копии
-          </label>
+        {extra?.onDossier && (
+          <button type="button" onClick={run(extra.onDossier)}>
+            Досье
+          </button>
+        )}
+        {extra?.onRelations && (
+          <button type="button" onClick={run(extra.onRelations)}>
+            Отношения
+          </button>
+        )}
+        {/* Вид — настройки листа D&D; у LitM и без листа их не к чему применить. */}
+        {onDeck && (
+          <>
+            <span className="sheet-bar-section">Вид</span>
+            <label className="sheet-bar-check">
+              <input
+                type="checkbox"
+                checked={prefs.abilityPrimary === "mod"}
+                onChange={(e) =>
+                  saveDndPrefs({
+                    ...prefs,
+                    abilityPrimary: e.target.checked ? "mod" : "score",
+                  })
+                }
+              />{" "}
+              На кости — модификатор
+            </label>
+            <label className="sheet-bar-check">
+              <input
+                type="checkbox"
+                checked={prefs.poolMarks === "strike"}
+                onChange={(e) =>
+                  saveDndPrefs({
+                    ...prefs,
+                    poolMarks: e.target.checked ? "strike" : "tofu",
+                  })
+                }
+              />{" "}
+              Ресурсы — зачёркивать
+            </label>
+            {onDownloadBackup && (
+              <label className="sheet-bar-check">
+                <input type="checkbox" checked={largeCards} onChange={(e) => onLargeCards(e.target.checked)} /> Большие карты в копии
+              </label>
+            )}
+          </>
         )}
         {(onDownloadHtml || onDownloadBackup) && <span className="sheet-bar-section">Файлы</span>}
         {onDownloadHtml && (
@@ -160,14 +197,22 @@ export function SheetTopBar({
             Скачать резервную копию
           </button>
         )}
-        {onNew && (
-          <button type="button" onClick={run(onNew)}>
-            + Ещё лист
+        {onGestures && (
+          <button type="button" className="sheet-bar-gestures" onClick={run(onGestures)}>
+            Показать жесты
           </button>
         )}
-        <button type="button" className="sheet-bar-gestures" onClick={run(onGestures)}>
-          Показать жесты
-        </button>
+        {(extra?.player || extra?.onArchive) && <span className="sheet-bar-section">Персонаж</span>}
+        {extra?.player && (
+          <button type="button" onClick={run(extra.player.onOpen)}>
+            Игрок: {extra.player.name}
+          </button>
+        )}
+        {extra?.onArchive && (
+          <button type="button" className="sheet-bar-danger" onClick={run(extra.onArchive)}>
+            Архивировать персонажа
+          </button>
+        )}
       </div>
     </header>
   );

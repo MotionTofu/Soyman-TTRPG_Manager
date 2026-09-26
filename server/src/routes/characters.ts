@@ -91,10 +91,12 @@ charactersRouter.get("/", (req, res) => {
 charactersRouter.get("/:id", (req, res) => {
   const row = db
     .prepare(
-      `SELECT c.*, p.name as player_name, ca.name as campaign_name, ca.setting_id as campaign_setting_id
+      `SELECT c.*, p.name as player_name, ca.name as campaign_name, ca.setting_id as campaign_setting_id,
+              sys.name as system_name, sys.code as system_code
        FROM characters c
        JOIN players p ON p.id = c.player_id
        LEFT JOIN campaigns ca ON ca.id = c.campaign_id
+       LEFT JOIN systems sys ON sys.id = COALESCE(ca.system_id, c.system_id)
        WHERE c.id = ?`
     )
     .get(req.params.id) as { avatar_image_path: string | null } | undefined;

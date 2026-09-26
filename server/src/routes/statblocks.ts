@@ -222,6 +222,28 @@ statblocksRouter.get("/:id/portable", async (req, res, next) => {
   }
 });
 
+// Персонаж = лист (гриллинг 2026-09-27, Q23): имя персонажа берётся из листа,
+// отдельного «Переименовать» больше нет. Папка в хранилище не переименовывается —
+// автосохранение шлёт имя по буквам, а переименование папки на каждую букву
+// ловит блокировки файлов. ponytail: папка остаётся со старым именем; чинить,
+// если имя папки станет видно пользователю.
+function syncCharacterName(ownerType: string, ownerId: number, format: string, content: string | null | undefined): void {
+  if (ownerType !== "character" || !content || (format !== "dnd_character" && format !== "litm_character")) return;
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(content) as Record<string, unknown>;
+  } catch {
+    return;
+  }
+  const raw = format === "dnd_character" ? parsed.characterName : parsed.name;
+  const name = typeof raw === "string" ? raw.trim().slice(0, 80) : "";
+  if (!name) return;
+  const changed = db
+    .prepare("UPDATE characters SET character_name = ? WHERE id = ? AND character_name <> ?")
+    .run(name, ownerId, name).changes;
+  if (changed) broadcastCharacterUpdate(ownerId);
+}
+
 statblocksRouter.post("/", (req, res) => {
   const { owner_type, owner_id, kind, format, content, note } = req.body as {
     owner_type: string;
@@ -250,6 +272,7 @@ statblocksRouter.post("/", (req, res) => {
   if (row.owner_type === "compendium_entry" && row.format === "dnd_creature") {
     syncCreatureDataFromStatblock(db, row.owner_id);
   }
+  syncCharacterName(row.owner_type, row.owner_id, row.format, content);
   res.status(201).json(withAvatarUrl(row));
 });
 
@@ -332,6 +355,7 @@ statblocksRouter.put("/:id", (req, res) => {
   }
   if (updated.owner_type === "character") {
     broadcastCharacterUpdate(updated.owner_id, "sheet");
+    syncCharacterName(updated.owner_type, updated.owner_id, updated.format, nextContent);
     // Брошенная инициатива на листе — зеркалом в очередь боя Мастера.
     if (updated.format === "dnd_character") mirrorSheetRollToQueue(updated.owner_id);
   }

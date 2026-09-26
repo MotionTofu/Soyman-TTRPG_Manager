@@ -306,3 +306,139 @@
   }
   .modal.random-hero .lib-random-head h2 { font-size: 32px; }
 }
+
+.sheet-bar-options > button.sheet-bar-danger { color: #a3161b; }
+
+/* «У персонажа ещё нет листа» (макет Sheet-PC/Phone-NoSheet, 2026-09-27):
+   слева пустая карта (портрет или рубашка), справа три дороги. */
+.no-sheet {
+  display: flex;
+  gap: 90px;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 44px 24px 32px;
+  color: #171717;
+}
+.no-sheet-card {
+  width: 380px;
+  aspect-ratio: 380 / 560;
+  flex-shrink: 0;
+  box-shadow: 8px 8px 0 rgba(23, 23, 23, .7);
+  background: #141414;
+}
+.no-sheet-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.no-sheet-body {
+  width: 560px;
+  max-width: 100%;
+  padding-top: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.no-sheet-kicker {
+  font: 600 12px/1.2 Oswald, sans-serif;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #4a4743;
+}
+.no-sheet-body h1 { margin: 0; font: 400 46px/.95 "Rubik Dirt", Oswald, sans-serif; color: #171717; }
+.no-sheet-body > p { margin: 0 0 22px; font-size: 16px; line-height: 1.4; color: #4a4743; }
+.no-sheet-choices { display: flex; flex-direction: column; gap: 14px; }
+.no-sheet-choice {
+  width: 100%;
+  min-height: 60px;
+  padding: 8px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  text-align: left;
+  border: 0;
+  border-radius: 0;
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  color: #171717;
+  font: 600 18px/1.1 Oswald, sans-serif;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 0 0 2px #171717 inset;
+}
+.no-sheet-choice.is-ink { background: #171717; color: #e8e4da; box-shadow: none; }
+.no-sheet-choice.is-random {
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 12px;
+  min-height: 60px;
+  font-size: 18px;
+  white-space: normal;
+  box-shadow: none;
+}
+.no-sheet-choice-text { display: flex; flex-direction: column; gap: 2px; }
+.no-sheet-choice span span,
+.no-sheet-choice > span:not(.no-sheet-choice-text) {
+  font: 400 15px/1.25 var(--font-body, "Sofia Sans Semi Condensed", sans-serif);
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: .8;
+}
+.no-sheet-choice:disabled { opacity: .6; cursor: default; }
+@media (max-width: 700px) {
+  .no-sheet { flex-direction: column; gap: 22px; padding: 22px 16px 24px; }
+  .no-sheet-card { width: 118px; box-shadow: 4px 4px 0 rgba(23, 23, 23, .7); }
+  .no-sheet-body { padding-top: 0; }
+  .no-sheet-body h1 { font-size: 34px; }
+}
+
+/* Досье персонажа: главы профиля, галерея и даты под полями листа
+   (макет Sheet-PC/Phone-Dossier). Раздел — сворачиваемый, как «Особенности». */
+.character-dossier-extra {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 20px;
+  max-width: 860px;
+  color: #171717;
+}
+.dossier-section > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-height: 36px;
+  cursor: pointer;
+  list-style: none;
+  font: 600 16px/1.2 Oswald, sans-serif;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.dossier-section > summary::-webkit-details-marker { display: none; }
+.dossier-section > summary::after { content: "▼"; margin-left: auto; font-size: 14px; transform: rotate(-90deg); }
+.dossier-section[open] > summary::after { transform: none; }
+.dossier-count { font-size: 14px; color: #4a4743; }
+.dossier-note {
+  font: 400 14px/1.2 var(--font-body, "Sofia Sans Semi Condensed", sans-serif);
+  letter-spacing: 0;
+  text-transform: none;
+  color: #4a4743;
+}
+.dossier-section > :not(summary) { margin-top: 6px; }
+.character-dossier-extra .card {
+  border: 0;
+  border-radius: 0;
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  box-shadow: 0 0 0 2px rgba(23, 23, 23, .75) inset;
+  color: #171717;
+}
+
+/* Окна «Досье» (LitM, без листа) и «Отношения» — бумага листа, а не тема. */
+.modal.sheet-side-modal {
+  background: #e8e4da url("/ui/wizard/paper-panel.webp") center / 420px;
+  color: #171717;
+  border: 0;
+  border-top: 4px solid #171717;
+  border-radius: 0;
+  box-shadow: 8px 8px 0 #171717;
+}
+.sheet-side-modal-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.sheet-side-modal-head h2 { flex: 1; margin: 0; font: 400 32px/1 "Rubik Dirt", Oswald, sans-serif; color: #171717; }
+.sheet-side-modal .character-dossier-extra { margin-top: 0; }

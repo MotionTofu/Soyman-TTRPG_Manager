@@ -10968,6 +10968,8 @@ export function DndCharacterView({
   levelUpDraft,
   onLevelUpApply,
   readOnly,
+  dossierExtra,
+  onRelations,
 }: {
   value: DndCharacterData;
   // Лицо первой карты. Отдельное поле под изображение заводить не пришлось —
@@ -11025,6 +11027,11 @@ export function DndCharacterView({
   // (панель «Редактировать», тоглы разделов), которые без колбэка остались
   // бы висеть бездействующими иконками.
   readOnly?: boolean;
+  // Основной SoyMan (персонаж = лист, 2026-09-27): главы профиля, галерея и
+  // даты — под полями «Досье»; «Отношения» — кнопкой на обороте карты.
+  // OneShot их не передаёт.
+  dossierExtra?: ReactNode;
+  onRelations?: () => void;
 }) {
   // Оба хука вызываются всегда — по правилам хуков ветвиться здесь нельзя,
   // да и незачем: неиспользуемый просто держит своё состояние вхолостую.
@@ -11519,6 +11526,16 @@ export function DndCharacterView({
               </button>
               <button type="button" className="dnd-back-btn is-ink" onClick={() => setRestOpen("long")}>
                 Долгий<span>всё заново</span>
+              </button>
+            </div>
+          </section>
+        )}
+        {onRelations && (
+          <section className="dnd-back-plate" aria-label="Отношения">
+            <h4 className="dnd-back-plate-title">Отношения</h4>
+            <div className="dnd-back-plate-row">
+              <button type="button" className="dnd-back-btn is-ink" onClick={onRelations}>
+                Открыть<span>связи с миром и партией</span>
               </button>
             </div>
           </section>
@@ -14354,6 +14371,7 @@ export function DndCharacterView({
               )}
             </div>
           )}
+          {tab === "Досье" && dossierExtra}
           {/* Низ карты: поиск и возврат в профиль (решение владельца). Поиск
               после просмотра, а не до; возврат — тем же жестом, что свайп
               «назад» с лицевой (onSheetBack задаёт полноэкранная страница). */}
@@ -14371,7 +14389,7 @@ export function DndCharacterView({
               />
               {onSheetBack && campaignConnected && (
                 <button type="button" className="dnd-sheet-back" onClick={onSheetBack}>
-                  ← Профиль персонажа
+                  ← Назад
                 </button>
               )}
             </div>

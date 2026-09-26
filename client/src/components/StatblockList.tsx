@@ -47,7 +47,8 @@ import { findDndSystemId } from "./dnd/dndCompendium";
 import { LitMCharacterWizard } from "./litm/LitMCharacterWizard";
 import { DndCharacterWizard, clearWizardDraftFor, hasWizardDraftFor, type WizardRandom } from "./dnd/DndCharacterWizard";
 import { D20_ICON, RandomHeroDialog } from "./dnd/RandomHeroDialog";
-import { SheetTopBar } from "./dnd/SheetTopBar";
+import { SheetTopBar, type SheetMenuExtra } from "./dnd/SheetTopBar";
+import backEvil from "../assets/cards/back-evil.webp";
 import { brandLogo } from "../brandLogo";
 import { SheetGestures, markGesturesSeen, shouldAutoShowGestures } from "./dnd/SheetGestures";
 import { localLevelUpDraftHost } from "./dnd/dndLevelUpDraft";
@@ -167,6 +168,16 @@ interface Props {
   // страница кладёт своё управление, которое относится к подготовке, а не к
   // листу — например, «Послания персонажу». В табах с чарниками не показывается.
   managerTop?: ReactNode;
+  // Персонаж = лист (гриллинг 2026-09-27): главы профиля под полями «Досье»
+  // листа D&D и «Отношения» на обороте его карты.
+  dossierExtra?: ReactNode;
+  onRelations?: () => void;
+  // Пункты «⋯» полосы листа от страницы персонажа (досье, отношения, архив).
+  sheetMenu?: SheetMenuExtra;
+  // Что предлагать, пока листа нет: визард D&D, пустой LitM, «Золото и прах».
+  systemCode?: string | null;
+  systemName?: string | null;
+  campaignName?: string | null;
 }
 
 // «2026-09-04 08:12:33» из SQLite — в человеческое «4 сентября». Строка
@@ -200,6 +211,12 @@ export function StatblockList({
   onSheetBack,
   onPortraitRefresh,
   managerTop,
+  dossierExtra,
+  onRelations,
+  sheetMenu,
+  systemCode,
+  systemName,
+  campaignName,
 }: Props) {
   // Список владельца — из кэша слоя данных (docs/adr/0001): тот же ключ читает
   // вкладка «Имущество» профиля, правки извне обновляет DataLayerSync.
@@ -378,17 +395,6 @@ export function StatblockList({
       { replace: true }
     );
   }, [searchParams, setSearchParams]);
-  // Создание чарника с таббара (только десктоп, решение владельца 2026-09-06):
-  // undefined — нет, null — выбор системы, number — визард с этой системой.
-  const [creatingSystem, setCreatingSystem] = useState<number | null | undefined>(undefined);
-  // Системы нужны только выбору при создании — и грузятся, только когда он открыт.
-  const createSystems =
-    useResource<{ id: number; name: string }[]>(creatingSystem !== undefined ? "/systems" : null).data ?? [];
-  const [createSystemId, setCreateSystemId] = useState("");
-  function startSheetCreate() {
-    setCreateSystemId("");
-    setCreatingSystem(null);
-  }
   const [confirmDialog, confirm] = useConfirm();
   const { deleteWithUndo } = useUndoDelete();
 
@@ -437,7 +443,7 @@ export function StatblockList({
     [allTemplates, litmFormat, dndFormat]
   );
 
-  async function addStatblock() {
+  async function addStatblock(chosen: StatblockFormat = format) {
     // Создание не повторяется кнопкой плашки: ответ мог потеряться уже после
     // того, как сервер статблок завёл, и повтор сделал бы второй.
     const create = (body: { format: StatblockFormat; content: string; kind?: string }) =>
@@ -446,7 +452,7 @@ export function StatblockList({
         { affects: statblockAffects(ownerType, ownerId), retry: false }
       );
 
-    if (format === "litm_character") {
+    if (chosen === "litm_character") {
       const character = emptyCharacter();
       character.characterName = ownerName ?? "";
       if (campaignId) {
@@ -459,7 +465,7 @@ export function StatblockList({
           // no campaign group theme available — leave the empty default
         }
       }
-      const res = await create({ format, content: JSON.stringify(character) });
+      const res = await create({ format: chosen, content: JSON.stringify(character) });
       if (!res) return;
       setLitmWizardStatblockId(res.id);
       setShowLitmWizard(true);
@@ -467,21 +473,21 @@ export function StatblockList({
     }
 
     let created: { id: number } | undefined;
-    if (format === "litm_challenge") {
-      created = await create({ format, content: JSON.stringify(emptyChallenge()) });
-    } else if (format === "zip_character") {
+    if (chosen === "litm_challenge") {
+      created = await create({ format: chosen, content: JSON.stringify(emptyChallenge()) });
+    } else if (chosen === "zip_character") {
       const character = emptyZipCharacter();
       character.characterName = ownerName ?? "";
       if (ownerType === "character") character.playerName = ownerPlayerName ?? "";
-      created = await create({ format, content: JSON.stringify(character) });
-    } else if (format === "zip_creature") {
-      created = await create({ format, content: JSON.stringify(emptyZipCreature()) });
-    } else if (format === "dnd_character") {
+      created = await create({ format: chosen, content: JSON.stringify(character) });
+    } else if (chosen === "zip_creature") {
+      created = await create({ format: chosen, content: JSON.stringify(emptyZipCreature()) });
+    } else if (chosen === "dnd_character") {
       const character = emptyDndCharacter();
       character.characterName = ownerName ?? "";
       if (ownerType === "character") character.playerName = ownerPlayerName ?? "";
       character.systemId = await findDndSystemId();
-      created = await create({ format, content: JSON.stringify(character) });
+      created = await create({ format: chosen, content: JSON.stringify(character) });
     } else {
       const template = templates.find((t) => String(t.id) === templateId);
       created = await create({
@@ -745,6 +751,8 @@ export function StatblockList({
       onPortraitRefresh={onPortraitRefresh}
       onSheetInfo={sheetOnly ? setSheetInfo : undefined}
       fanSignal={sheetOnly ? fanSignal : undefined}
+      dossierExtra={dossierExtra}
+      onRelations={onRelations}
     />
   ));
 
@@ -772,142 +780,10 @@ export function StatblockList({
     />
   ));
 
-  // Страница чарника: лист и переключатель между листами, если их несколько.
-  // Визард, импорт, корзина и «добавить» остались на профиле — заполняют
-  // лист там, а здесь по нему играют.
-  if (sheetOnly) {
-    return (
-      <div className="stack">
-        {confirmDialog}
-        {/* Десктоп: чарники всегда в таббаре, создание — табом [+]
-            (решение владельца 2026-09-06). На телефоне как было: табы только
-            при нескольких, создание — на профиле. */}
-        {/* Полоса как в OneShot (гриллинг 2026-09-26, Q9/Q19): переключатель
-            листов — «▾ лист N из M» у имени, «+ ещё лист» — в «⋯». Прежний
-            таббар листов (решение 2026-09-06) ушёл в неё. */}
-        <SheetTopBar
-          title={sheetInfo?.name || ownerName || "Персонаж"}
-          status={sheetInfo?.status ?? "idle"}
-          onBack={() => onSheetBack?.()}
-          sheets={statblocks.map((sb) => ({ id: sb.id, title: statblockTitle(sb) }))}
-          activeId={activeId}
-          onSelect={setActiveId}
-          onNew={ownerType === "character" ? startSheetCreate : undefined}
-          onDeck={sheetInfo?.isDnd ? () => setFanSignal((n) => n + 1) : undefined}
-          onGestures={() => setGesturesOpen(true)}
-          onDownloadHtml={
-            sheetInfo?.isDnd && activeId != null
-              ? () => void exportSheet(() => downloadSheetHtml(activeId, sheetInfo.name))
-              : undefined
-          }
-          onDownloadBackup={
-            sheetInfo?.isDnd && activeId != null
-              ? () => void exportSheet(() => downloadSheetBackup(activeId, sheetInfo.name, largeCards))
-              : undefined
-          }
-          busy={exporting}
-          largeCards={largeCards}
-          onLargeCards={(v) => {
-            setLargeCards(v);
-            saveLargeCards(v);
-          }}
-        />
-        {gesturesOpen && (
-          <SheetGestures
-            backTo="Назад к профилю персонажа"
-            onClose={() => {
-              markGesturesSeen();
-              setGesturesOpen(false);
-            }}
-          />
-        )}
-        {/* Пусто и на телефоне: без чарников табы скрыты и страницы создания
-            нет — тупик. Решение владельца (создание табом [+] только десктоп,
-            остальное на профиле) не трогаем: чиним только «ноль чарников». */}
-        {isEmpty && creatingSystem === undefined && ownerType === "character" && (
-          <div className="card stack">
-            <span className="muted">Чарника пока нет — создайте первый.</span>
-            <div className="row">
-              <button type="button" className="primary" onClick={startSheetCreate}>
-                Создать чарник
-              </button>
-            </div>
-          </div>
-        )}
-        {creatingSystem !== undefined ? (
-          creatingSystem === null ? (
-            <div className="card stack">
-              <strong>Новый чарник — какой системы?</strong>
-              <div className="row" style={{ gap: 8 }}>
-                <select value={createSystemId} onChange={(e) => setCreateSystemId(e.target.value)}>
-                  <option value="">Выбрать систему…</option>
-                  {createSystems.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  className="primary"
-                  disabled={!createSystemId}
-                  onClick={() => setCreatingSystem(Number(createSystemId))}
-                >
-                  Далее
-                </button>
-                <button type="button" onClick={() => setCreatingSystem(undefined)}>
-                  Отмена
-                </button>
-              </div>
-            </div>
-          ) : (
-            <DndCharacterWizard
-              railLogo={brandLogo}
-              ownerType="character"
-              ownerId={ownerId}
-              ownerName={ownerName}
-              ownerPlayerName={ownerPlayerName}
-              initialSystemId={creatingSystem}
-              ownerPortraitUrl={ownerPortraitUrl}
-              onCancel={() => setCreatingSystem(undefined)}
-              onDone={() => {
-                setCreatingSystem(undefined);
-                refresh();
-              }}
-            />
-          )
-        ) : (
-          cards
-        )}
-        {/* Визард из «Чарников» (?newSheet=1): на странице чарника тоже,
-            иначе «Сразу в чарник» приводил бы на пустую страницу. */}
-        {showDndWizard && ownerType === "character" && (
-          <DndCharacterWizard
-            railLogo={brandLogo}
-            ownerType="character"
-            ownerId={ownerId}
-            ownerName={ownerName}
-            ownerPlayerName={ownerPlayerName}
-            ownerPortraitUrl={ownerPortraitUrl}
-            random={randomCfg}
-            onCancel={() => {
-              setShowDndWizard(false);
-              setRandomCfg(null);
-            }}
-            onDone={() => {
-              setRandomCfg(null);
-              setShowDndWizard(false);
-              refresh();
-            }}
-          />
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className="stack">
-      {confirmDialog}
+  // Окна создания — общие для менеджера (сущности, бестиарий) и листа на весь
+  // экран: экран «ещё нет листа» зовёт те же визард, импорт и случайного героя.
+  const sharedModals = (
+    <>
       {randomOpen && (
         <RandomHeroDialog
           className="random-hero"
@@ -931,6 +807,196 @@ export function StatblockList({
           }}
         />
       )}
+      {preview && (
+        <Modal onClose={() => { setPreview(null); setPendingJson(null); }}>
+          <div className="stack" style={{ minWidth: 320 }}>
+            <h3 style={{ margin: 0, fontFamily: "var(--font-display)", textTransform: "uppercase" }}>Предпросмотр импорта</h3>
+            <div className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", whiteSpace: "pre-wrap" }}>{preview.shortText}</div>
+            <div className="card" style={{ padding: 10, display: "grid", gridTemplateColumns: "140px 1fr", gap: "4px 10px", fontSize: "var(--fs-meta)" }}>
+              <span className="muted">Имя</span><span>{preview.characterName || "—"}</span>
+              <span className="muted">Раса</span><span>{preview.summary.raceName || "—"} {preview.summary.raceId ? "✓ в справочнике" : preview.summary.raceName ? "— текстом" : ""}</span>
+              <span className="muted">Класс</span><span>{[preview.summary.className, preview.summary.subclassName].filter(Boolean).join(" — ") || "—"} {preview.summary.classId ? "✓" : preview.summary.className ? "— текстом" : ""} · Ур. {preview.summary.level}</span>
+              <span className="muted">КЗ / Хиты / Скорость</span><span>{preview.summary.armorClass || "—"} / {preview.summary.hitPointMax || "—"} / {preview.summary.speed || "—"}</span>
+              <span className="muted">Навыков / Атак / Снаряжения</span><span>{preview.summary.skillCount} / {preview.summary.attackCount} / {preview.summary.equipmentCount}</span>
+            </div>
+            {preview.warnings.length > 0 && (
+              <div className="stack" style={{ gap: 4 }}>
+                <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Замечания — {preview.warnings.length}</span>
+                <ul style={{ margin: "0 0 0 16px", display: "flex", flexDirection: "column", gap: 4, fontSize: "var(--fs-meta)" }}>
+                  {preview.warnings.map((w, i) => (
+                    <li key={i} className="muted"><strong>{w.field}:</strong> {w.message}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <div className="row" style={{ justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+              <button onClick={() => { setPreview(null); setPendingJson(null); }}>Отмена</button>
+              <button onClick={confirmImport} disabled={importing}>{importing ? "Сохраняю…" : "Импортировать как есть"}</button>
+              <button className="primary" onClick={() => setShowLssWizard(true)} disabled={importing}>Доработать в визарде</button>
+            </div>
+            <div className="muted" style={{ fontSize: "var(--fs-meta)" }}>Визард проведёт по шагам: линки справочника, характеристики, бой, снаряжение, заклинания, текст. «Как есть» — сразу статблоком без сверки. Заклинания LSS (по ID) в обоих случаях подбираются вручную — см. замечания.</div>
+          </div>
+        </Modal>
+      )}
+
+      {showLssWizard && preview && (
+        <Modal onClose={() => setShowLssWizard(false)}>
+          <LssImportWizard
+            ownerType={ownerType === "character" ? "character" : "being"}
+            ownerId={ownerId}
+            initial={preview.characterData}
+            rawExtras={preview.rawExtras}
+            warnings={preview.warnings}
+            shortText={preview.shortText}
+            existingCount={statblocks.filter((s) => s.format === "dnd_character").length}
+            onCancel={() => setShowLssWizard(false)}
+            onCreateFresh={() => {
+              setShowLssWizard(false);
+              setPreview(null);
+              setPendingJson(null);
+              if (ownerType === "character") setShowDndWizard(true);
+            }}
+            onDone={() => {
+              setShowLssWizard(false);
+              setPreview(null);
+              setPendingJson(null);
+              refresh();
+              setImportSuccess(`Импортирован ${preview.characterName ? `«${preview.characterName}»` : "персонаж"} — визард`);
+              setImportWarnings(preview.warnings);
+              setTimeout(() => setImportSuccess(""), 6000);
+            }}
+          />
+        </Modal>
+      )}
+
+    </>
+  );
+
+  // Страница чарника: лист и переключатель между листами, если их несколько.
+  // Визард, импорт, корзина и «добавить» остались на профиле — заполняют
+  // лист там, а здесь по нему играют.
+  if (sheetOnly) {
+    const dndSheet = !isEmpty && !!sheetInfo?.isDnd;
+    return (
+      <div className="stack">
+        {confirmDialog}
+        {sharedModals}
+        {/* Полоса как в OneShot (гриллинг 2026-09-26, Q9/Q19). Один персонаж —
+            один лист (2026-09-27, Q3): «+ ещё лист» ушёл, переключатель
+            остаётся только у старых персонажей с несколькими листами. */}
+        <SheetTopBar
+          title={sheetInfo?.name || ownerName || "Персонаж"}
+          status={sheetInfo?.status ?? "idle"}
+          onBack={() => onSheetBack?.()}
+          sheets={statblocks.map((sb) => ({ id: sb.id, title: statblockTitle(sb) }))}
+          activeId={activeId}
+          onSelect={setActiveId}
+          // Досье у D&D — вкладкой листа, окном — у LitM и без листа. Отношения
+          // у LitM пока спрятаны (Q8: лист LitM дорабатываем отдельно).
+          extra={{
+            ...sheetMenu,
+            onDossier: dndSheet ? undefined : sheetMenu?.onDossier,
+            onRelations: dndSheet ? sheetMenu?.onRelations : undefined,
+          }}
+          onDeck={dndSheet ? () => setFanSignal((n) => n + 1) : undefined}
+          onGestures={dndSheet ? () => setGesturesOpen(true) : undefined}
+          onDownloadHtml={
+            sheetInfo?.isDnd && activeId != null
+              ? () => void exportSheet(() => downloadSheetHtml(activeId, sheetInfo.name))
+              : undefined
+          }
+          onDownloadBackup={
+            sheetInfo?.isDnd && activeId != null
+              ? () => void exportSheet(() => downloadSheetBackup(activeId, sheetInfo.name, largeCards))
+              : undefined
+          }
+          busy={exporting}
+          largeCards={largeCards}
+          onLargeCards={(v) => {
+            setLargeCards(v);
+            saveLargeCards(v);
+          }}
+        />
+        {gesturesOpen && (
+          <SheetGestures
+            backTo="Назад"
+            onClose={() => {
+              markGesturesSeen();
+              setGesturesOpen(false);
+            }}
+          />
+        )}
+        {isEmpty ? (
+          <NoSheetScreen
+            portraitUrl={ownerPortraitUrl}
+            systemCode={systemCode}
+            systemName={systemName}
+            campaignName={campaignName}
+            importing={importing}
+            onWizard={() => setShowDndWizard(true)}
+            onRandom={() => setRandomOpen(true)}
+            onImport={() => fileInputRef.current?.click()}
+            onEmpty={(f) => void addStatblock(f)}
+          />
+        ) : (
+          cards
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/json,.json"
+          style={{ display: "none" }}
+          onChange={(e) => void importFiles(e.target.files, e.target as HTMLInputElement)}
+        />
+        {importError && (
+          <div className="backup-info error" role="alert">
+            {importError}
+          </div>
+        )}
+        {showDndWizard && (
+          <DndCharacterWizard
+            railLogo={brandLogo}
+            ownerType="character"
+            ownerId={ownerId}
+            ownerName={ownerName}
+            ownerPlayerName={ownerPlayerName}
+            ownerPortraitUrl={ownerPortraitUrl}
+            random={randomCfg}
+            onCancel={() => {
+              setShowDndWizard(false);
+              setRandomCfg(null);
+            }}
+            onDone={() => {
+              setRandomCfg(null);
+              setShowDndWizard(false);
+              refresh();
+            }}
+          />
+        )}
+        {showLitmWizard && (
+          <LitMCharacterWizard
+            ownerName={ownerName}
+            ownerPlayerName={ownerPlayerName}
+            onComplete={(data) => {
+              setShowLitmWizard(false);
+              if (litmWizardStatblockId) {
+                void run(
+                  () => write.put(`/statblocks/${litmWizardStatblockId}`, { content: JSON.stringify(data) }),
+                  { affects: statblockAffects(ownerType, ownerId) }
+                );
+              }
+            }}
+            onCancel={() => setShowLitmWizard(false)}
+          />
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="stack">
+      {confirmDialog}
+      {sharedModals}
       {isCharProfile && (
         <div className="tabs sb-switcher" role="tablist" aria-label="Чарники">
           <button
@@ -1241,68 +1307,6 @@ export function StatblockList({
         </div>
       )}
 
-      {preview && (
-        <Modal onClose={() => { setPreview(null); setPendingJson(null); }}>
-          <div className="stack" style={{ minWidth: 320 }}>
-            <h3 style={{ margin: 0, fontFamily: "var(--font-display)", textTransform: "uppercase" }}>Предпросмотр импорта</h3>
-            <div className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", whiteSpace: "pre-wrap" }}>{preview.shortText}</div>
-            <div className="card" style={{ padding: 10, display: "grid", gridTemplateColumns: "140px 1fr", gap: "4px 10px", fontSize: "var(--fs-meta)" }}>
-              <span className="muted">Имя</span><span>{preview.characterName || "—"}</span>
-              <span className="muted">Раса</span><span>{preview.summary.raceName || "—"} {preview.summary.raceId ? "✓ в справочнике" : preview.summary.raceName ? "— текстом" : ""}</span>
-              <span className="muted">Класс</span><span>{[preview.summary.className, preview.summary.subclassName].filter(Boolean).join(" — ") || "—"} {preview.summary.classId ? "✓" : preview.summary.className ? "— текстом" : ""} · Ур. {preview.summary.level}</span>
-              <span className="muted">КЗ / Хиты / Скорость</span><span>{preview.summary.armorClass || "—"} / {preview.summary.hitPointMax || "—"} / {preview.summary.speed || "—"}</span>
-              <span className="muted">Навыков / Атак / Снаряжения</span><span>{preview.summary.skillCount} / {preview.summary.attackCount} / {preview.summary.equipmentCount}</span>
-            </div>
-            {preview.warnings.length > 0 && (
-              <div className="stack" style={{ gap: 4 }}>
-                <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Замечания — {preview.warnings.length}</span>
-                <ul style={{ margin: "0 0 0 16px", display: "flex", flexDirection: "column", gap: 4, fontSize: "var(--fs-meta)" }}>
-                  {preview.warnings.map((w, i) => (
-                    <li key={i} className="muted"><strong>{w.field}:</strong> {w.message}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            <div className="row" style={{ justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
-              <button onClick={() => { setPreview(null); setPendingJson(null); }}>Отмена</button>
-              <button onClick={confirmImport} disabled={importing}>{importing ? "Сохраняю…" : "Импортировать как есть"}</button>
-              <button className="primary" onClick={() => setShowLssWizard(true)} disabled={importing}>Доработать в визарде</button>
-            </div>
-            <div className="muted" style={{ fontSize: "var(--fs-meta)" }}>Визард проведёт по шагам: линки справочника, характеристики, бой, снаряжение, заклинания, текст. «Как есть» — сразу статблоком без сверки. Заклинания LSS (по ID) в обоих случаях подбираются вручную — см. замечания.</div>
-          </div>
-        </Modal>
-      )}
-
-      {showLssWizard && preview && (
-        <Modal onClose={() => setShowLssWizard(false)}>
-          <LssImportWizard
-            ownerType={ownerType === "character" ? "character" : "being"}
-            ownerId={ownerId}
-            initial={preview.characterData}
-            rawExtras={preview.rawExtras}
-            warnings={preview.warnings}
-            shortText={preview.shortText}
-            existingCount={statblocks.filter((s) => s.format === "dnd_character").length}
-            onCancel={() => setShowLssWizard(false)}
-            onCreateFresh={() => {
-              setShowLssWizard(false);
-              setPreview(null);
-              setPendingJson(null);
-              if (ownerType === "character") setShowDndWizard(true);
-            }}
-            onDone={() => {
-              setShowLssWizard(false);
-              setPreview(null);
-              setPendingJson(null);
-              refresh();
-              setImportSuccess(`Импортирован ${preview.characterName ? `«${preview.characterName}»` : "персонаж"} — визард`);
-              setImportWarnings(preview.warnings);
-              setTimeout(() => setImportSuccess(""), 6000);
-            }}
-          />
-        </Modal>
-      )}
-
       {adding ? (
         <div className="card stack">
           <div className="row">
@@ -1342,7 +1346,7 @@ export function StatblockList({
                   ? () => setShowDndWizard(true)
                   : format === "dnd_creature"
                   ? () => setShowDndCreatureWizard(true)
-                  : addStatblock
+                  : () => void addStatblock()
               }
             >
               Добавить
@@ -1442,6 +1446,82 @@ export function StatblockList({
   );
 }
 
+/**
+ * «У персонажа ещё нет листа» (гриллинг 2026-09-27, Q2; макет Sheet-*-NoSheet):
+ * вместо менеджера листов — дороги по системе персонажа. Досье работает и без
+ * листа — оно в «⋯».
+ */
+function NoSheetScreen({
+  portraitUrl,
+  systemCode,
+  systemName,
+  campaignName,
+  importing,
+  onWizard,
+  onRandom,
+  onImport,
+  onEmpty,
+}: {
+  portraitUrl?: string | null;
+  systemCode?: string | null;
+  systemName?: string | null;
+  campaignName?: string | null;
+  importing: boolean;
+  onWizard: () => void;
+  onRandom: () => void;
+  onImport: () => void;
+  onEmpty: (format: StatblockFormat) => void;
+}) {
+  // City of Mist кода не имеет, а лист у него тот же, что у LitM.
+  const litm = systemCode === "litm" || /mist/i.test(systemName ?? "");
+  const zip = systemCode === "zip";
+  const dnd = !litm && !zip;
+  return (
+    <div className="no-sheet">
+      <div className="no-sheet-card" aria-hidden="true">
+        <img src={portraitUrl || backEvil} alt="" />
+      </div>
+      <div className="no-sheet-body">
+        <span className="no-sheet-kicker">
+          {campaignName ? `Кампания «${campaignName}»` : "Без кампании"}
+          {systemName ? ` · ${systemName}` : ""}
+        </span>
+        <h1>Листа ещё нет</h1>
+        <p>Выберите, как его завести. Досье уже работает — оно в меню «⋯».</p>
+        <div className="no-sheet-choices">
+          {dnd && (
+            <>
+              <button type="button" className="no-sheet-choice is-ink" onClick={onWizard}>
+                Визард<span>Шаг за шагом: класс, вид, предыстория, характеристики</span>
+              </button>
+              <button type="button" className="random-hero-open no-sheet-choice is-random" onClick={onRandom}>
+                {D20_ICON}
+                <span className="no-sheet-choice-text">
+                  Создать случайно<span>Уровень и «Играбельно / Хаос» — визард соберёт сам</span>
+                </span>
+              </button>
+              <button type="button" className="no-sheet-choice" onClick={onImport} disabled={importing}>
+                {importing ? "Импортирую…" : "Импорт из Long Story Short"}
+                <span>JSON-файл листа с longstoryshort.app</span>
+              </button>
+            </>
+          )}
+          {litm && (
+            <button type="button" className="no-sheet-choice is-ink" onClick={() => onEmpty("litm_character")}>
+              Лист LitM<span>Пустой лист, дальше — мастер тем по шагам</span>
+            </button>
+          )}
+          {zip && (
+            <button type="button" className="no-sheet-choice is-ink" onClick={() => onEmpty("zip_character")}>
+              Лист «Золото и прах»<span>Пустой лист персонажа</span>
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StatblockCard({
   statblock,
   ownerType,
@@ -1456,6 +1536,8 @@ function StatblockCard({
   onPortraitRefresh,
   onSheetInfo,
   fanSignal,
+  dossierExtra,
+  onRelations,
 }: {
   statblock: Statblock;
   ownerType: "character" | "being" | "compendium_entry";
@@ -1476,6 +1558,8 @@ function StatblockCard({
   onSheetInfo?: (info: SheetInfo) => void;
   /** Колода веером по команде полосы («⋯» → «Колода карт»). */
   fanSignal?: number;
+  dossierExtra?: ReactNode;
+  onRelations?: () => void;
 }) {
   const isMobile = useIsMobile();
   const isLitm = statblock.format === "litm_character" || statblock.format === "litm_challenge";
@@ -1880,6 +1964,8 @@ function StatblockCard({
         ownerCharacterId={statblock.owner_type === "character" ? statblock.owner_id : null}
         onSheetBack={onSheetBack}
         onPortraitRefresh={onPortraitRefresh}
+        dossierExtra={dossierExtra}
+        onRelations={onRelations}
       />
     );
   }
