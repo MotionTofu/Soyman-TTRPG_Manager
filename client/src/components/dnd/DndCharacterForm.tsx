@@ -13720,33 +13720,37 @@ export function DndCharacterView({
               )}
               {/* Расчёт ячеек — под меню редактирования: пользуются ячейками,
                   а настраивают расчёт. Вне правки здесь только то, что тратят. */}
+              {/* Две половины, как «Подготовленные | Весь список» (макет правки
+                  «Магии», 2026-09-26). Откуда расчёт — в подсказке «по классам». */}
               {editingSpells && computedSlots.basis !== "none" && (
                 <div className="row sb-entry" style={{ gap: 8, flexWrap: "wrap" }}>
-                  <span className="muted">
-                    {autoSlots
-                      ? computedSlots.basis === "multiclass"
-                        ? `Ячейки рассчитаны по таблице многоклассья (уровень заклинателя ${effectiveCasterLevel(slotSources)})`
-                        : "Ячейки рассчитаны по таблице класса"
-                      : "Ячейки заданы вручную"}
-                  </span>
-                  {onQuickUpdate && (
+                  <span className="muted">ячейки</span>
+                  <span className="dnd-seg" role="group" aria-label="Ячейки заклинаний">
                     <button
                       type="button"
-                      className="comp-mini"
-                      onClick={() =>
-                        onQuickUpdate(
-                          autoSlots
-                            ? // При переходе на ручной режим переносим
-                              // рассчитанное в хранимое, иначе пипсы
-                              // обнулятся у всех, кто их никогда не вбивал.
-                              { spellSlotsManual: true, spellSlotPips: computedSlots.slots }
-                            : { spellSlotsManual: false }
-                        )
+                      aria-pressed={autoSlots}
+                      disabled={!onQuickUpdate}
+                      title={
+                        computedSlots.basis === "multiclass"
+                          ? `По таблице многоклассья (уровень заклинателя ${effectiveCasterLevel(slotSources)})`
+                          : "По таблице класса"
                       }
+                      onClick={() => !autoSlots && onQuickUpdate?.({ spellSlotsManual: false })}
                     >
-                      {autoSlots ? "задать вручную" : "считать по классам"}
+                      по классам
                     </button>
-                  )}
+                    <button
+                      type="button"
+                      aria-pressed={!autoSlots}
+                      disabled={!onQuickUpdate}
+                      // При переходе на ручной режим переносим рассчитанное в
+                      // хранимое, иначе ячейки обнулятся у всех, кто их никогда
+                      // не вбивал.
+                      onClick={() => autoSlots && onQuickUpdate?.({ spellSlotsManual: true, spellSlotPips: computedSlots.slots })}
+                    >
+                      вручную
+                    </button>
+                  </span>
                 </div>
               )}
               {computedSlots.pact && (
