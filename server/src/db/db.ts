@@ -6820,6 +6820,49 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
   // Цитаты оракула десяти классов и подклассов (владелец, 2026-09-26).
   migrateClassOracleQuotes(database);
 
+  // Заклинания наследия видов (PHB 2024): заговор — с 1 уровня, заклинание
+  // 1 круга — с 3-го, 2 круга — с 5-го. Импорт ставил всем grantLevel 1, и
+  // Высший эльф 1 уровня получал «Туманный шаг» (владелец, 2026-09-26).
+  if (!appSettingFlag(database, "species_spell_levels_v1")) {
+    const levels: Record<string, Record<string, number>> = {
+      "High Elf": { "Detect Magic": 3, "Misty Step": 5 },
+      "Wood Elf": { Longstrider: 3, "Pass without Trace": 5 },
+      Drow: { "Faerie Fire": 3, Darkness: 5 },
+      "Abyssal Tiefling": { "Ray of Sickness": 3, "Hold Person": 5 },
+      "Chthonic Tiefling": { "False Life": 3, "Ray of Enfeeblement": 5 },
+      "Infernal Tiefling": { "Hellish Rebuke": 3, Darkness: 5 },
+    };
+    const rows = database
+      .prepare("SELECT id, name_original, data FROM compendium_entries WHERE kind = 'species' AND data LIKE '%granted_spells%'")
+      .all() as { id: number; name_original: string | null; data: string }[];
+    const update = database.prepare("UPDATE compendium_entries SET data = ? WHERE id = ?");
+    let fixed = 0;
+    for (const row of rows) {
+      const want = levels[row.name_original ?? ""];
+      if (!want) continue;
+      let data: { granted_spells?: { original?: string; grantLevel?: number }[] };
+      try {
+        data = JSON.parse(row.data || "{}");
+      } catch {
+        continue;
+      }
+      let changed = false;
+      for (const g of data.granted_spells ?? []) {
+        const lvl = g.original ? want[g.original] : undefined;
+        if (lvl && g.grantLevel !== lvl) {
+          g.grantLevel = lvl;
+          changed = true;
+        }
+      }
+      if (changed) {
+        update.run(JSON.stringify(data), row.id);
+        fixed++;
+      }
+    }
+    if (fixed) console.log(`[migrate] species_spell_levels_v1: уровни выдачи исправлены у ${fixed} видов`);
+    setAppSettingFlag(database, "species_spell_levels_v1");
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);
