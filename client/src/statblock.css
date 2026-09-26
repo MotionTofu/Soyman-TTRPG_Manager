@@ -1122,16 +1122,150 @@ summary.sb-section {
   vertical-align: middle;
 }
 
-/* Реплики Артефактора: список схем и созданного. */
-.dnd-replica-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+/* Реплики Артефактора (макет 2026-09-26): две карточки «Схемы» и
+   «Созданные предметы» рядом, на узком — столбиком. Строка — кнопка во
+   всю ширину, открывает окно. */
+.dnd-replica-block {
+  gap: 10px;
+  min-width: 0;
 }
+.dnd-replica-heading {
+  margin: 0;
+  font-family: var(--font-ui, inherit);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.dnd-replica-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+@media (max-width: 760px) {
+  .dnd-replica-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.dnd-replica-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 14px 16px;
+}
+.dnd-replica-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+}
+.dnd-replica-head-title {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+.dnd-replica-head-title .dnd-special-mark {
+  margin-left: 0;
+}
+.dnd-replica-count {
+  font-family: var(--font-ui, inherit);
+  font-size: 26px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.dnd-replica-count > span {
+  font-size: 18px;
+  font-weight: 400;
+  opacity: 0.7;
+}
+/* Строки пикеров и передачи — как были. */
 .dnd-replica-row {
   gap: var(--sp-4);
   align-items: center;
   padding: var(--sp-1) 0;
+}
+.dnd-replica-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 6px 2px;
+  border: 0;
+  border-top: 1px solid rgba(23, 23, 23, 0.16);
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.dnd-replica-line:hover {
+  background: rgba(23, 23, 23, 0.06);
+}
+.dnd-replica-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 17px;
+  overflow-wrap: anywhere;
+}
+.dnd-replica-sub {
+  font-size: 13px;
+  opacity: 0.7;
+}
+.dnd-replica-made {
+  flex: none;
+  padding: 1px 8px;
+  font-size: 13px;
+  background: rgba(23, 23, 23, 0.1);
+}
+.dnd-replica-add {
+  min-height: 44px;
+  margin-top: 6px;
+  padding: 0 10px;
+  border: 2px dashed rgba(23, 23, 23, 0.45);
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  font-family: var(--font-ui, inherit);
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+}
+.dnd-replica-base-list {
+  display: flex;
+  flex-direction: column;
+}
+.dnd-replica-base {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 10px;
+  border-top: 1px solid rgba(23, 23, 23, 0.16);
+  cursor: pointer;
+}
+.dnd-replica-base > .dnd-replica-name {
+  flex: 1;
+  font-size: 16px;
+}
+/* «Назад / Создать» под длинным списком основ — всегда на виду. */
+.dnd-replica-foot {
+  position: sticky;
+  bottom: 0;
+  padding: 10px 0;
+  background: var(--paper-2);
+}
+.dnd-replica-base.is-picked {
+  background: var(--skin-acid, #f3ff3a);
 }
 .dnd-replica-modal {
   min-width: 0;

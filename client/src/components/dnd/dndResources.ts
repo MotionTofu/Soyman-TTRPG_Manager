@@ -115,6 +115,8 @@ export interface ReplicaBonus {
   schemes: number;
   items: number;
   notes: string[];
+  /** Имена умений, давших прибавку, — для плашки «+1 от «Лучшего бронника»». */
+  from: string[];
 }
 
 /** Пределы реплик на текущем уровне класса: сколько схем можно знать и
