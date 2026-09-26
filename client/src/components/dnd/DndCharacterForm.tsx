@@ -10239,9 +10239,16 @@ function DndActionPools({
         const left = max - used;
         return (
           <span key={r.key} className="dnd-pool-resource">
-            <span className="dnd-pool-band-label">
-              {r.label}
-              {showClass && <span className="dnd-pool-band-muted"> · {r.className}</span>}
+            {/* Имя и под ним мелко «[длинный отдых]» (владелец 2026-09-26):
+                на телефоне два этажа слева, счётчик ровной колонкой справа. */}
+            <span className="dnd-pool-band-name">
+              <span className="dnd-pool-band-label">
+                {r.label}
+                {showClass && <span className="dnd-pool-band-muted"> · {r.className}</span>}
+              </span>
+              <span className="dnd-pool-band-muted dnd-pool-band-recharge">
+                [{PROGRESSION_RECHARGE_LABELS[r.recharge].toLowerCase()}]
+              </span>
             </span>
             <PoolMeter
               max={max}
@@ -10254,7 +10261,6 @@ function DndActionPools({
                 {left} из {max}
               </span>
             )}
-            <span className="dnd-pool-band-muted">{PROGRESSION_RECHARGE_LABELS[r.recharge]}</span>
           </span>
         );
       })}

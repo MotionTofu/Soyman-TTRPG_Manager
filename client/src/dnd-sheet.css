@@ -2552,6 +2552,47 @@ span.dnd-card-corner {
   row-gap: 4px;
   max-width: 100%;
 }
+.dnd-pool-band-name {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+/* Телефон: полоса — ровными строками «название слева, счётчик справа»,
+   счётчики одной колонкой (владелец 2026-09-26: «сейчас скачет»). */
+@media (max-width: 700px) {
+  .dnd-pool-band {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .dnd-pool-slots {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .dnd-pool-band .dnd-pool-slot {
+    display: flex;
+    justify-content: space-between;
+    margin-right: 0;
+  }
+  /* Подпись круга приглушена, счётчик — нет: как у пулов ниже. */
+  .dnd-pool-band .dnd-pool-slot .dnd-pool-meter {
+    color: var(--skin-ink, var(--on-surface));
+  }
+  .dnd-pool-resource {
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .dnd-pool-band-name {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+}
 .dnd-pool-slot,
 .dnd-pool-count {
   font-family: var(--font-mono);
