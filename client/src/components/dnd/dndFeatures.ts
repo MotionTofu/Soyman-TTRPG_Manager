@@ -263,7 +263,7 @@ export function liveEffectEntryIds(value: DndCharacterData): (number | null | un
 // не устаревают. Сливаются с вписанными руками; у одного чувства из
 // нескольких источников берётся большая дальность (гриллинг 2026-09-23, Q13).
 // Умения класса и подкласса тоже дают чувства («Теневой взор», «Сила тени»,
-// 2026-09-26). `stack` — «если уже есть, дальность растёт на N»: такие
+// 2026-09-26), воззвания в «Особых умениях» — «Дьявольское зрение». `stack` — «если уже есть, дальность растёт на N»: такие
 // прибавляются после того, как собраны все обычные.
 export function withGrantedSenses(value: DndCharacterData, get: EntryLookup): DndCharacterData {
   type Sense = { name?: string; distance?: string; stack?: boolean };
@@ -271,6 +271,7 @@ export function withGrantedSenses(value: DndCharacterData, get: EntryLookup): Dn
     get(value.raceId),
     ...value.feats.map((f) => get(f.entryId)),
     ...value.classFeatures.map((f) => get(f.entryId)),
+    ...value.specialAbilities.map((f) => get(f.entryId)),
   ].flatMap((e) => (e?.data.senses as Sense[] | undefined) ?? []);
   if (granted.length === 0) return value;
   const byName = new Map<string, { name: string; distance: string }>();

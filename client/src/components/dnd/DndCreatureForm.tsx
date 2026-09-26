@@ -488,9 +488,9 @@ export function SensesEditor({
       {confirmDialog}
       <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
         {granted?.map((s) => (
-          <span key={`g-${s.name}`} className="row muted" style={{ gap: 4 }} title="Даёт вид или черта — правится там">
+          <span key={`g-${s.name}`} className="row muted" style={{ gap: 4 }} title="Даёт вид, черта или умение — правится там">
             {s.name}
-            {s.distance ? ` ${s.distance} фт.` : ""} (вид/черта)
+            {s.distance ? ` ${s.distance} фт.` : ""} (выдано)
           </span>
         ))}
         {value.map((s) => (
