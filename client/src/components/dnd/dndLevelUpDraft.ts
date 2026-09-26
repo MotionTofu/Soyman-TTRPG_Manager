@@ -114,3 +114,32 @@ export function sanitizeLevelUpStep(step: string | null | undefined, validSteps:
   if (step && validSteps.includes(step)) return step;
   return validSteps[0];
 }
+
+// Черновик в localStorage: одна запись на лист, отдельно от ключа визарда
+// создания. OneShot — scope "character" (id локального персонажа), основной
+// SoyMan — "statblock" (id листа на сервере).
+type DraftScope = "character" | "statblock";
+const draftKey = (scope: DraftScope, id: number) => `dnd-levelup-draft:${scope}:${id}`;
+export function clearLocalLevelUpDraft(scope: DraftScope, id: number) {
+  try { localStorage.removeItem(draftKey(scope, id)); } catch { /* private mode */ }
+}
+export function localLevelUpDraftHost(scope: DraftScope, identity: LevelUpDraftIdentity): LevelUpDraftHost {
+  const key = draftKey(scope, identity.characterId);
+  const clear = () => clearLocalLevelUpDraft(scope, identity.characterId);
+  let initial: LevelUpDraft | null = null;
+  try {
+    const raw = localStorage.getItem(key);
+    const draft = raw ? (JSON.parse(raw) as LevelUpDraft) : null;
+    if (draft && draft.version === 1 && draft.identity?.characterId === identity.characterId) initial = draft;
+  } catch {
+    clear();
+  }
+  return {
+    identity,
+    initial,
+    onChange: (draft) => {
+      try { localStorage.setItem(key, JSON.stringify(draft)); } catch { /* private mode — resume unavailable */ }
+    },
+    onClear: clear,
+  };
+}

@@ -135,6 +135,21 @@ type AbilityMethod = "standard" | "pointbuy" | "roll" | "manual";
 function wizardDraftKey(ownerType: string, ownerId: number) {
   return `dnd-wizard-draft:${ownerType}:${ownerId}`;
 }
+
+/** Есть ли у владельца незаконченный черновик визарда. */
+export function hasWizardDraftFor(ownerType: string, ownerId: number): boolean {
+  return loadWizardDraft(wizardDraftKey(ownerType, ownerId)) !== null;
+}
+
+/** Новый случайный герой начинает с чистого листа: черновик визарда этого
+ *  владельца (ручной или прошлый случайный) убирается до открытия. */
+export function clearWizardDraftFor(ownerType: string, ownerId: number) {
+  try {
+    localStorage.removeItem(wizardDraftKey(ownerType, ownerId));
+  } catch {
+    /* private mode */
+  }
+}
 interface WizardDraftV1 {
   step?: unknown;
   characterName?: unknown;
@@ -424,6 +439,8 @@ interface Props {
   ownerPortraitUrl?: string | null;
   // OneShot opts into its own visual layer without changing the shared wizard.
   visualVariant?: "oneshot";
+  /** Логотип над шагами (ПК). У OneShot свой; основной SoyMan даёт баннер. */
+  railLogo?: string;
   /** Случайный персонаж: визард заполняет себя сам и открывается на Обзоре. */
   random?: WizardRandom | null;
 }
@@ -432,7 +449,7 @@ interface Props {
 // used only when adding a fresh dnd_character (see StatblockList's addStatblock).
 // Leveling up / editing an existing character stays in the regular
 // DndCharacterEdit form; this wizard is a one-time onboarding path only.
-export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerName, onDone, onCancel, initialSystemId, ownerPortraitUrl, visualVariant, random }: Props) {
+export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerName, onDone, onCancel, initialSystemId, ownerPortraitUrl, visualVariant, railLogo, random }: Props) {
   const { allowDiceRolls } = useDndRuntime();
   const draftKey = wizardDraftKey(ownerType, ownerId);
   // Читается один раз при монтировании — поэтому сбросы протухших выборов
@@ -5152,7 +5169,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       <div className={`wizard wz${visualVariant === "oneshot" ? " wizard--oneshot" : ""}`}>
         {desktop && (
           <nav className="wz-rail" aria-label="Шаги создания">
-            {visualVariant === "oneshot" && <img className="wz-rail-logo" src="/ui/oneshot/branding/logo-soyman-1shot.webp" alt="SoyMan 1shot" />}
+            {visualVariant === "oneshot" ? <img className="wz-rail-logo" src="/ui/oneshot/branding/logo-soyman-1shot.webp" alt="SoyMan 1shot" /> : railLogo && <img className="wz-rail-logo" src={railLogo} alt="SoyMan" />}
             <div className="wz-rail-head">
               <span>Создание персонажа</span>
               <small>Главы можно открывать в любом порядке</small>

@@ -7,7 +7,8 @@
   "main": "electron/main.js",
   "scripts": {
     "build:server": "cd server && npm install && npm run build",
-    "build:client": "cd client && npm install && npm run build",
+    "build:client": "cd client && npm install && cd .. && npm run build:standalone && cd client && npm run build",
+    "build:standalone": "node SoyMan_1shot/build-standalone.mjs && node -e \"require('fs').copyFileSync('SoyMan_1shot/generated/standalone-template.html', 'client/public/standalone-template.html')\"",
     "build": "npm run build:server && npm run build:client",
     "rebuild:native": "electron-rebuild -f -w better-sqlite3 --module-dir=server",
     "restore:native": "cd server/node_modules/better-sqlite3 && node ../prebuild-install/bin.js",

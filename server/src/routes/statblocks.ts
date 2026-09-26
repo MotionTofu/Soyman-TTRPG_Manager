@@ -8,6 +8,7 @@ import { broadcastCharacterUpdate } from "../services/realtime";
 import { syncCreatureDataFromStatblock } from "../services/monsterSummary";
 import { beingFolder, ensureSubfolder, toFileUrl, writeReplacingOldFile } from "../services/filesystem";
 import { removeOrArchive } from "../services/vaultDedup";
+import { buildPortableExport, PortableExportError } from "../services/portableExport";
 import { ensureCharacterFolder } from "./characters";
 import { mergeContentPatch } from "../db/statblockContent";
 
@@ -207,6 +208,18 @@ statblocksRouter.get("/", (req, res) => {
     )
     .all(owner_type, owner_id) as { avatar_image_path: string | null }[];
   res.json(rows.map(withAvatarUrl));
+});
+
+// Автономный HTML / резервная копия в форматах OneShot (гриллинг 2026-09-26,
+// Q13/Q14). Игроку — только свой лист (services/playerAccess.ts).
+statblocksRouter.get("/:id/portable", async (req, res, next) => {
+  const kind = req.query.kind === "backup" ? "backup" : "html";
+  try {
+    res.json(await buildPortableExport(Number(req.params.id), kind, req.query.large === "1"));
+  } catch (e) {
+    if (e instanceof PortableExportError) return res.status(e.status).json({ error: e.message });
+    next(e);
+  }
 });
 
 statblocksRouter.post("/", (req, res) => {

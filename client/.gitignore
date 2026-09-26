@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Оболочка автономного листа OneShot — генерируется (npm run build:standalone)
+public/standalone-template.html

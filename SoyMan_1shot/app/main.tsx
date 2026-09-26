@@ -32,7 +32,7 @@ import { LibraryCard, useCatalogMedia } from './home';
 import { QRCodeSVG } from 'qrcode.react';
 import { shouldNotifyForWaiting, shouldNotifyForInstalled, createControllerChangeHandler, applyUpdateSafely } from './pwa/update.mjs';
 import { readStorageStatus, requestPersistentStorage, shouldAdviseBackup, storageProtectionText } from './pwa/storage.mjs';
-import type { LevelUpDraft } from '../../client/src/components/dnd/dndLevelUpDraft';
+import { clearLocalLevelUpDraft, localLevelUpDraftHost } from '../../client/src/components/dnd/dndLevelUpDraft';
 import { useDndPrefs } from '../../client/src/hooks/useDndPrefs';
 import { saveDndPrefs } from '../../client/src/dndPrefs';
 import '../../client/src/index.css';
@@ -47,63 +47,12 @@ import './shell.css';
 import './components.css';
 import './wizard.css';
 import './sheet.css';
+import { SheetGestures, markGesturesSeen, shouldAutoShowGestures } from '../../client/src/components/dnd/SheetGestures';
+import { D20_ICON, RandomHeroDialog } from '../../client/src/components/dnd/RandomHeroDialog';
 import './modals.css';
 import './home.css';
 
 applyTheme(findTheme('noir'));
-// Жесты листа (макет 2026-09-25, «как в тиндере»): при первом заходе на
-// телефоне лист показывает, как им листать, — свайпов и двойного тапа не
-// видно. Один раз на устройство; повторить — «Показать жесты» в меню «⋯».
-const GESTURES_SEEN_KEY = 'oneshot-sheet-gestures-seen';
-function gesturesSeen(): boolean {
-  try { return localStorage.getItem(GESTURES_SEEN_KEY) === '1'; } catch { return true; }
-}
-function markGesturesSeen() {
-  try { localStorage.setItem(GESTURES_SEEN_KEY, '1'); } catch { /* private mode */ }
-}
-const GESTURES: [string, string, string][] = [
-  ['⇆', 'Свайп влево и вправо', 'Соседняя карта: Действия, Магия, Снаряжение…'],
-  ['→', 'Свайп вправо на этой карте', 'Назад в библиотеку персонажей'],
-  ['✌', 'Двойной тап по портрету', 'Вся колода веером — прыгнуть сразу на нужную'],
-  ['◢', 'Уголок карты', 'Оборот: отдых, цитата, постер, правка'],
-];
-function SheetGestures({ onClose }: { onClose: () => void }) {
-  return <div className="oneshot-gestures" role="dialog" aria-modal="true" aria-label="Как листать карты">
-    <strong className="oneshot-gestures-title">Лист — это колода</strong>
-    <span className="oneshot-gestures-sub">Покажем один раз. Повторить — в меню ⋯</span>
-    {GESTURES.map(([icon, title, text]) => <div key={title} className="oneshot-gestures-row">
-      <span aria-hidden="true">{icon}</span>
-      <span><b>{title}</b>{text}</span>
-    </div>)}
-    <button type="button" autoFocus onClick={onClose}>Понятно</button>
-  </div>;
-}
-
-// Resumable level-up drafts (C2): one localStorage record per character,
-// separate from the creation-wizard key. The wizard owns the shape (see
-// dndLevelUpDraft); here only load/save/remove by character id.
-function levelUpDraftKey(characterId: number) {
-  return `dnd-levelup-draft:character:${characterId}`;
-}
-function loadLevelUpDraft(characterId: number): LevelUpDraft | null {
-  try {
-    const raw = localStorage.getItem(levelUpDraftKey(characterId));
-    if (!raw) return null;
-    const draft = JSON.parse(raw) as LevelUpDraft;
-    if (!draft || draft.version !== 1 || draft.identity?.characterId !== characterId) return null;
-    return draft;
-  } catch {
-    try { localStorage.removeItem(levelUpDraftKey(characterId)); } catch { /* private mode */ }
-    return null;
-  }
-}
-function saveLevelUpDraft(draft: LevelUpDraft) {
-  try { localStorage.setItem(levelUpDraftKey(draft.identity.characterId), JSON.stringify(draft)); }
-  catch { /* private mode — resume simply unavailable */ }
-}
-function clearLevelUpDraft(characterId: number) {
-  try { localStorage.removeItem(levelUpDraftKey(characterId)); } catch { /* private mode */ }
-}
 function download(value: unknown, name: string) {
   const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' }));
   const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 60000);
@@ -255,13 +204,13 @@ function readRandom(id: number): WizardRandom | null {
 function dropRandom(id: number) {
   try { localStorage.removeItem(randomKey(id)); } catch { /* private mode */ }
 }
-const D20 = <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden="true"><path d="M12 2l9 5v10l-9 5-9-5V7z" /><path d="M12 2L7.5 9.5h9zM7.5 9.5L3 17h9M16.5 9.5L21 17h-9M7.5 9.5L12 17l4.5-7.5" /></svg>;
+const D20 = D20_ICON;
 
 async function syncPullDelete(uid: string, local: Character, remoteRevision: number) {
   await deleteCharacter(local.id, { origin: 'sync-remote' });
   try { localStorage.removeItem(wizardDraftKey(local.id)); } catch { /* private mode */ }
   dropRandom(local.id);
-  clearLevelUpDraft(local.id);
+  clearLocalLevelUpDraft('character', local.id);
   await trackSyncMeta(uid, remoteRevision, null);
 }
 async function syncPushDelete(cred: SyncCredential, uid: string, base: number) {
@@ -558,8 +507,6 @@ function App() {
   const [name, setName] = useState('');
   const [randomOpen, setRandomOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
-  const [randomLevel, setRandomLevel] = useState(1);
-  const [randomMode, setRandomMode] = useState<WizardRandom['mode']>('playable');
   const queue = useRef(Promise.resolve()); const revision = useRef(0); const failed = useRef(false);
   const pending = useRef(0);
   // Cross-tab invalidation (phase C3): one channel per tab, created once on
@@ -1373,7 +1320,7 @@ function App() {
     return false;
   };
   useEffect(() => {
-    if (sheetOpen && !gesturesSeen() && matchMedia('(max-width: 700px)').matches) setGesturesOpen(true);
+    if (sheetOpen && shouldAutoShowGestures()) setGesturesOpen(true);
   }, [sheetOpen]);
   useEffect(() => {
     if (!headerMenuOpen) return;
@@ -1444,7 +1391,7 @@ function App() {
       // Creation draft (C1) plus the level-up draft (C2).
       try { localStorage.removeItem(wizardDraftKey(target.id)); } catch { /* private mode */ }
       dropRandom(target.id);
-      clearLevelUpDraft(target.id);
+      clearLocalLevelUpDraft('character', target.id);
       setDeleteTarget(null); setOpenMenu(null);
       await refreshCharacters();
       collectGarbage();
@@ -1502,27 +1449,8 @@ function App() {
         </div>
       </>}
     </header>
-    {gesturesOpen && active?.content && <SheetGestures onClose={() => { markGesturesSeen(); setGesturesOpen(false); }} />}
-    {randomOpen && <Modal className="oneshot-modal lib-random" ariaLabel="Случайный герой" onClose={() => setRandomOpen(false)}>
-      <div className="lib-random-head"><h2>Случайный герой</h2><button type="button" className="lib-random-x" aria-label="Закрыть" onClick={() => setRandomOpen(false)}><svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="2.2" /></svg></button></div>
-      <div className="lib-random-field"><span className="lib-random-label">Уровень</span>
-        <div className="lib-random-level">
-          <button type="button" aria-label="Уровень меньше" disabled={randomLevel <= 1} onClick={() => setRandomLevel(l => Math.max(1, l - 1))}>−</button>
-          <output aria-live="polite">{randomLevel}</output>
-          <button type="button" aria-label="Уровень больше" disabled={randomLevel >= 20} onClick={() => setRandomLevel(l => Math.min(20, l + 1))}>+</button>
-          <span>из 20</span>
-        </div>
-      </div>
-      <div className="lib-random-field"><span className="lib-random-label">Как бросаем</span>
-        <div className="lib-seg lib-random-seg" role="group" aria-label="Как бросаем">
-          <button type="button" aria-pressed={randomMode === 'playable'} onClick={() => setRandomMode('playable')}>Играбельно</button>
-          <button type="button" aria-pressed={randomMode === 'chaos'} onClick={() => setRandomMode('chaos')}>Полный хаос</button>
-        </div>
-        <p>{randomMode === 'playable' ? 'Класс, вид и предыстория — наугад. Характеристики разложены под класс, всё остальное — из разрешённого.' : 'Всё наугад: характеристики — 4к6 вразброс, прибавки и выборы — куда выпадет. Но по правилам.'}</p>
-      </div>
-      <p className="lib-random-name">{name.trim() ? <>Имя: <b>{name.trim()}</b> — из поля на главной.</> : 'Имя возьмём случайное — по виду, который выпадет.'}</p>
-      <span className="lib-random-shadow"><button type="button" className="lib-random-btn lib-random-go" disabled={busy} onClick={() => { setRandomOpen(false); void create(false, { level: randomLevel, mode: randomMode }); }}>{D20}Поехали</button></span>
-    </Modal>}
+    {gesturesOpen && active?.content && <SheetGestures backTo="Назад в библиотеку персонажей" onClose={() => { markGesturesSeen(); setGesturesOpen(false); }} />}
+    {randomOpen && <RandomHeroDialog className="oneshot-modal lib-random" name={name} askName={false} busy={busy} onClose={() => setRandomOpen(false)} onGo={r => { setRandomOpen(false); void create(false, { level: r.level, mode: r.mode }); }} />}
     {aboutOpen && <Modal className="oneshot-modal lib-random lib-about" ariaLabel="О приложении" onClose={() => setAboutOpen(false)}>
       <div className="lib-random-head"><h2>О приложении</h2><button type="button" className="lib-random-x" aria-label="Закрыть" onClick={() => setAboutOpen(false)}><svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="2.2" /></svg></button></div>
       <p>Лист D&amp;D 2024 на русском, работает на телефоне и на компьютере. Регистрироваться не нужно.</p>
@@ -1642,7 +1570,7 @@ function App() {
       })()}
     </Modal>}
     {error && <Banner>{error}</Banner>}
-    {!ready ? <p className="oneshot-home">Открываем локальные данные…</p> : active?.content ? <div className="oneshot-sheet"><div className="fp-page-backdrop" aria-hidden="true" /><DndCharacterView key={active.id} value={active.content} portraitUrl={active.portrait} onQuickUpdate={update} onLevelUpApply={applyLevelUp} syncTabToUrl onPortraitUpload={uploadPortrait} levelUpDraft={{ identity: { characterId: active.id, characterUid: active.characterUid ?? null, catalogKey: active.catalogKey }, initial: loadLevelUpDraft(active.id), onChange: saveLevelUpDraft, onClear: () => clearLevelUpDraft(active.id) }} onSheetBack={() => { if (status === 'Сохранено на устройстве') location.assign('/'); }} fanSignal={fanSignal} /></div> : <main className="oneshot-home lib">
+    {!ready ? <p className="oneshot-home">Открываем локальные данные…</p> : active?.content ? <div className="oneshot-sheet"><div className="fp-page-backdrop" aria-hidden="true" /><DndCharacterView key={active.id} value={active.content} portraitUrl={active.portrait} onQuickUpdate={update} onLevelUpApply={applyLevelUp} syncTabToUrl onPortraitUpload={uploadPortrait} levelUpDraft={localLevelUpDraftHost('character', { characterId: active.id, characterUid: active.characterUid ?? null, catalogKey: active.catalogKey })} onSheetBack={() => { if (status === 'Сохранено на устройстве') location.assign('/'); }} fanSignal={fanSignal} /></div> : <main className="oneshot-home lib">
       <div className="lib-top"><div className="lib-head">
         <p className="lib-kicker">Библиотека</p>
         <h1 className="lib-title">Твои персонажи</h1>

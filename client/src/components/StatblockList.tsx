@@ -45,7 +45,14 @@ import { emptyDndCharacter, normalizeDndCharacter, DndCharacterView } from "./dn
 import { classAndLevelSummary } from "./dnd/dndSummary";
 import { findDndSystemId } from "./dnd/dndCompendium";
 import { LitMCharacterWizard } from "./litm/LitMCharacterWizard";
-import { DndCharacterWizard } from "./dnd/DndCharacterWizard";
+import { DndCharacterWizard, clearWizardDraftFor, hasWizardDraftFor, type WizardRandom } from "./dnd/DndCharacterWizard";
+import { D20_ICON, RandomHeroDialog } from "./dnd/RandomHeroDialog";
+import { SheetTopBar } from "./dnd/SheetTopBar";
+import { brandLogo } from "../brandLogo";
+import { SheetGestures, markGesturesSeen, shouldAutoShowGestures } from "./dnd/SheetGestures";
+import { localLevelUpDraftHost } from "./dnd/dndLevelUpDraft";
+import { downloadSheetBackup, downloadSheetHtml, loadLargeCards, saveLargeCards } from "./dnd/sheetExport";
+import type { SaveStatus } from "../data/queuedSave";
 import { LssImportWizard, type LssPreviewExtras } from "./dnd/LssImportWizard";
 import { DndCreatureWizard } from "./dnd/DndCreatureWizard";
 import { MentionTextarea } from "./mentions/MentionTextarea";
@@ -59,6 +66,8 @@ const NO_STATBLOCKS: Statblock[] = [];
 
 // Имя статблока для модалки удаления и тоста отмены: «ЭТО» из прежнего
 // confirm() не называло, что именно сносится.
+type SheetInfo = { name: string; status: SaveStatus; isDnd: boolean };
+
 function statblockTitle(sb: Statblock): string {
   let parsed: Record<string, unknown> = {};
   try {
@@ -247,6 +256,10 @@ export function StatblockList({
   // локально, сохраняет сам; отмена возвращает в превью.
   const [showLssWizard, setShowLssWizard] = useState(false);
   const [showDndWizard, setShowDndWizard] = useState(false);
+  // «Создать случайно» (гриллинг 2026-09-26, Q3/Q6/Q17): окно с уровнем,
+  // режимом и именем, дальше тот же визард с автопилотом.
+  const [randomOpen, setRandomOpen] = useState(false);
+  const [randomCfg, setRandomCfg] = useState<WizardRandom | null>(null);
   // Клон чарника (Волна 2, Q1–Q8): мгновенная копия данных, не префилл
   // визарда — токены визарда (навыки «группа:ключ», метки наборов, прибавка
   // поверх) из готового листа не восстанавливаются без вранья, а копия
@@ -327,7 +340,27 @@ export function StatblockList({
   // живёт в менеджере. На /sheet (sheetOnly) менеджера нет — там играют.
   const [mgrTab, setMgrTab] = useState<number | "manager">("manager");
   const [tabMenu, setTabMenu] = useState<{ x: number; y: number; id: number } | null>(null);
-  const isMobileSheet = useIsMobile();
+  // Верхняя полоса листа (гриллинг 2026-09-26, Q9): статус и имя — от
+  // открытой карты, колода веером — сигналом в неё.
+  const [sheetInfo, setSheetInfo] = useState<SheetInfo | null>(null);
+  const [fanSignal, setFanSignal] = useState(0);
+  const [gesturesOpen, setGesturesOpen] = useState(false);
+  const [largeCards, setLargeCards] = useState(loadLargeCards);
+  // Скачивание идёт секунды (картинки, справочник) — статус в полосе.
+  const [exporting, setExporting] = useState(false);
+  async function exportSheet(run: () => Promise<void>) {
+    setExporting(true);
+    try {
+      await run();
+    } catch (e) {
+      showSaveError(`Не удалось скачать лист: ${(e as Error).message}`);
+    } finally {
+      setExporting(false);
+    }
+  }
+  useEffect(() => {
+    if (sheetOnly && shouldAutoShowGestures()) setGesturesOpen(true);
+  }, [sheetOnly]);
   // Создание из «Чарников»: ?newSheet=1 однократно открывает визард, затем
   // параметр снимается — иначе кнопка «назад» возвращала бы в визард.
   const [searchParams, setSearchParams] = useSearchParams();
@@ -710,6 +743,8 @@ export function StatblockList({
       sheetHref={sheetHref}
       onSheetBack={onSheetBack}
       onPortraitRefresh={onPortraitRefresh}
+      onSheetInfo={sheetOnly ? setSheetInfo : undefined}
+      fanSignal={sheetOnly ? fanSignal : undefined}
     />
   ));
 
@@ -747,24 +782,44 @@ export function StatblockList({
         {/* Десктоп: чарники всегда в таббаре, создание — табом [+]
             (решение владельца 2026-09-06). На телефоне как было: табы только
             при нескольких, создание — на профиле. */}
-        {(!isMobileSheet || statblocks.length > 1) && (
-          <div className="tabs sb-switcher">
-            {statblocks.map((sb) => (
-              <button
-                key={sb.id}
-                type="button"
-                className={sb.id === activeId ? "active" : ""}
-                onClick={() => setActiveId(sb.id)}
-              >
-                {statblockTitle(sb)}
-              </button>
-            ))}
-            {!isMobileSheet && ownerType === "character" && (
-              <button type="button" title="Новый чарник" aria-label="Новый чарник" onClick={startSheetCreate}>
-                +
-              </button>
-            )}
-          </div>
+        {/* Полоса как в OneShot (гриллинг 2026-09-26, Q9/Q19): переключатель
+            листов — «▾ лист N из M» у имени, «+ ещё лист» — в «⋯». Прежний
+            таббар листов (решение 2026-09-06) ушёл в неё. */}
+        <SheetTopBar
+          title={sheetInfo?.name || ownerName || "Персонаж"}
+          status={sheetInfo?.status ?? "idle"}
+          onBack={() => onSheetBack?.()}
+          sheets={statblocks.map((sb) => ({ id: sb.id, title: statblockTitle(sb) }))}
+          activeId={activeId}
+          onSelect={setActiveId}
+          onNew={ownerType === "character" ? startSheetCreate : undefined}
+          onDeck={sheetInfo?.isDnd ? () => setFanSignal((n) => n + 1) : undefined}
+          onGestures={() => setGesturesOpen(true)}
+          onDownloadHtml={
+            sheetInfo?.isDnd && activeId != null
+              ? () => void exportSheet(() => downloadSheetHtml(activeId, sheetInfo.name))
+              : undefined
+          }
+          onDownloadBackup={
+            sheetInfo?.isDnd && activeId != null
+              ? () => void exportSheet(() => downloadSheetBackup(activeId, sheetInfo.name, largeCards))
+              : undefined
+          }
+          busy={exporting}
+          largeCards={largeCards}
+          onLargeCards={(v) => {
+            setLargeCards(v);
+            saveLargeCards(v);
+          }}
+        />
+        {gesturesOpen && (
+          <SheetGestures
+            backTo="Назад к профилю персонажа"
+            onClose={() => {
+              markGesturesSeen();
+              setGesturesOpen(false);
+            }}
+          />
         )}
         {/* Пусто и на телефоне: без чарников табы скрыты и страницы создания
             нет — тупик. Решение владельца (создание табом [+] только десктоп,
@@ -807,6 +862,7 @@ export function StatblockList({
             </div>
           ) : (
             <DndCharacterWizard
+              railLogo={brandLogo}
               ownerType="character"
               ownerId={ownerId}
               ownerName={ownerName}
@@ -827,13 +883,19 @@ export function StatblockList({
             иначе «Сразу в чарник» приводил бы на пустую страницу. */}
         {showDndWizard && ownerType === "character" && (
           <DndCharacterWizard
+            railLogo={brandLogo}
             ownerType="character"
             ownerId={ownerId}
             ownerName={ownerName}
             ownerPlayerName={ownerPlayerName}
             ownerPortraitUrl={ownerPortraitUrl}
-            onCancel={() => setShowDndWizard(false)}
+            random={randomCfg}
+            onCancel={() => {
+              setShowDndWizard(false);
+              setRandomCfg(null);
+            }}
             onDone={() => {
+              setRandomCfg(null);
               setShowDndWizard(false);
               refresh();
             }}
@@ -846,6 +908,29 @@ export function StatblockList({
   return (
     <div className="stack">
       {confirmDialog}
+      {randomOpen && (
+        <RandomHeroDialog
+          className="random-hero"
+          name={ownerName ?? ""}
+          askName
+          onClose={() => setRandomOpen(false)}
+          onGo={async (r) => {
+            setRandomOpen(false);
+            if (
+              hasWizardDraftFor("character", ownerId) &&
+              !(await confirm({
+                title: "Заменить черновик?",
+                message: "В визарде есть незаконченный персонаж. Случайный герой начнётся заново, черновик пропадёт.",
+                confirmLabel: "Заменить",
+              }))
+            )
+              return;
+            clearWizardDraftFor("character", ownerId);
+            setRandomCfg(r);
+            setShowDndWizard(true);
+          }}
+        />
+      )}
       {isCharProfile && (
         <div className="tabs sb-switcher" role="tablist" aria-label="Чарники">
           <button
@@ -899,6 +984,9 @@ export function StatblockList({
                 <button type="button" className="primary" onClick={() => setShowDndWizard(true)}>
                   Создать чарник
                 </button>
+                <button type="button" className="random-hero-open" onClick={() => setRandomOpen(true)}>
+                  {D20_ICON}Создать случайно
+                </button>
                 <label className="comp-mini" style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
                   <NavIcon name="upload" /> {importing ? "Импортирую…" : "Перенести из Long Story Short"}
                   <input
@@ -942,6 +1030,9 @@ export function StatblockList({
                 <button type="button" className="primary" onClick={() => setShowDndWizard(true)}>
                   Создать чарник
                 </button>
+                <button type="button" className="random-hero-open" onClick={() => setRandomOpen(true)}>
+                  {D20_ICON}Создать случайно
+                </button>
                 <label className="comp-mini" style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
                   <NavIcon name="upload" /> {importing ? "Импортирую…" : "Перенести из Long Story Short"}
                   <input
@@ -971,6 +1062,9 @@ export function StatblockList({
             <div className="row" style={{ gap: 8, flexWrap: "wrap", justifyContent: "center", alignItems: "center" }}>
               <button className="primary" onClick={() => setShowDndWizard(true)}>
                 Создать чарник
+              </button>
+              <button type="button" className="random-hero-open" onClick={() => setRandomOpen(true)}>
+                {D20_ICON}Создать случайно
               </button>
               <label className="comp-mini" style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
                 <NavIcon name="upload" /> {importing ? "Импортирую…" : "Перенести из Long Story Short"}
@@ -1287,13 +1381,19 @@ export function StatblockList({
 
       {showDndWizard && ownerType === "character" && (
         <DndCharacterWizard
+          railLogo={brandLogo}
           ownerType="character"
           ownerId={ownerId}
           ownerName={ownerName}
           ownerPlayerName={ownerPlayerName}
           ownerPortraitUrl={ownerPortraitUrl}
-          onCancel={() => setShowDndWizard(false)}
+          random={randomCfg}
+          onCancel={() => {
+            setShowDndWizard(false);
+            setRandomCfg(null);
+          }}
           onDone={() => {
+            setRandomCfg(null);
             setShowDndWizard(false);
             setAdding(false);
             refresh();
@@ -1354,6 +1454,8 @@ function StatblockCard({
   sheetHref,
   onSheetBack,
   onPortraitRefresh,
+  onSheetInfo,
+  fanSignal,
 }: {
   statblock: Statblock;
   ownerType: "character" | "being" | "compendium_entry";
@@ -1370,6 +1472,10 @@ function StatblockCard({
   onSheetBack?: () => void;
   /** Портрет протух: перезагрузить владельца, чтобы приехал свежий URL. */
   onPortraitRefresh?: () => void;
+  /** Полноэкранный лист: имя и статус сохранения — наверх, в полосу. */
+  onSheetInfo?: (info: SheetInfo) => void;
+  /** Колода веером по команде полосы («⋯» → «Колода карт»). */
+  fanSignal?: number;
 }) {
   const isMobile = useIsMobile();
   const isLitm = statblock.format === "litm_character" || statblock.format === "litm_challenge";
@@ -1622,6 +1728,11 @@ function StatblockCard({
       ? (zipValue as import("../types").ZipCreatureData)?.name || "Без названия"
       : null;
 
+  const sheetIsDnd = statblock.format === "dnd_character";
+  useEffect(() => {
+    onSheetInfo?.({ name: summaryTitle ?? "", status: queue.status, isDnd: sheetIsDnd });
+  }, [onSheetInfo, summaryTitle, queue.status, sheetIsDnd]);
+
   // Статблок существа сам рисует плашку-шапку (§1.4), поэтому обёртка
   // <details className="card"> ниже дала бы вторую, более плоскую шапку
   // поверх первой: кнопки уезжают в саму плашку, и она же служит
@@ -1758,6 +1869,12 @@ function StatblockCard({
         value={dndValue as DndCharacterData}
         portraitUrl={ownerPortraitUrl}
         onQuickUpdate={quickSaveDnd}
+        onLevelUpApply={async (patch) => {
+          quickSaveDnd(patch);
+          await queue.flush();
+        }}
+        levelUpDraft={localLevelUpDraftHost("statblock", { characterId: statblock.id, characterUid: null, catalogKey: null })}
+        fanSignal={fanSignal}
         syncTabToUrl={soleOnPage}
         campaignId={campaignId}
         ownerCharacterId={statblock.owner_type === "character" ? statblock.owner_id : null}

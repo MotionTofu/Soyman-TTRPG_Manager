@@ -1,0 +1,308 @@
+/* Обвязка листа, общая для OneShot и основного SoyMan: экран жестов. */
+
+/* Экран жестов — поверх листа, один раз на устройство. */
+.sheet-gestures {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 90px 22px 30px;
+  overflow-y: auto;
+  background: rgba(12, 12, 12, .86);
+  color: #e8e4da;
+}
+.sheet-gestures-title {
+  font: 400 34px/1 "Rubik Dirt", Oswald, sans-serif;
+}
+.sheet-gestures-sub {
+  margin-top: -10px;
+  color: #bdb8ad;
+  font-size: 15px;
+}
+.sheet-gestures-row {
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  gap: 12px;
+  align-items: center;
+  font-size: 15px;
+  line-height: 1.25;
+  color: #d6d1c6;
+}
+.sheet-gestures-row > span:first-child {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  background: #f3ff3a url("/ui/wizard/acid-yellow.webp") center / 360px;
+  color: #171717;
+  font: 700 26px Oswald, sans-serif;
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, .6);
+}
+.sheet-gestures-row b {
+  display: block;
+  color: #e8e4da;
+  font: 600 15px Oswald, sans-serif;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.sheet-gestures > button {
+  margin-top: auto;
+  min-height: 56px;
+  border: 0;
+  border-radius: 0;
+  background: #f3ff3a url("/ui/wizard/acid-yellow.webp") center / 360px;
+  color: #171717;
+  font: 600 17px Oswald, sans-serif;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+/* Верхняя полоса листа основного SoyMan — по шапке OneShot: чёрная ink-
+   полоса, имя, статус, «⋯» кнопкой-точками и меню на бумаге. */
+.sheet-bar {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px 18px;
+  min-height: 58px;
+  /* От края до края экрана: сдвиг к левому краю считает SheetTopBar
+     (поля страницы листа разные на ПК и телефоне). */
+  box-sizing: border-box;
+  width: 100vw;
+  padding: 4px max(16px, calc((100vw - 1500px) / 2));
+  background: #141414 var(--skin-ink-surface) center / 620px repeat;
+  color: #e8e4da;
+}
+.sheet-bar > button.sheet-bar-back {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 2px solid #e8e4da;
+  border-radius: 0;
+  background: transparent;
+  color: #e8e4da;
+  font: 700 22px/1 Arial, sans-serif;
+}
+.sheet-bar > button.sheet-bar-back:hover { background: #f3ff3a; color: #171717; border-color: #f3ff3a; }
+.sheet-bar-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.sheet-bar-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 700 15px/1.1 Oswald, "Arial Narrow", sans-serif;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+/* Переключатель листов: подпись видна, нативный select лежит поверх неё
+   прозрачным — выбор листа системным списком и на телефоне, и на ПК. */
+.sheet-bar-switch {
+  position: relative;
+  align-self: flex-start;
+  color: #f3ff3a;
+  font: 600 12px Oswald, sans-serif;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.sheet-bar-switch select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.sheet-bar-status {
+  flex: 0 1 100px;
+  margin-left: auto;
+  color: #d3d0bd;
+  font: 700 10px/1.1 "Arial Narrow", Arial, sans-serif;
+  letter-spacing: .025em;
+  text-align: right;
+  text-transform: uppercase;
+}
+.sheet-bar > button.sheet-bar-toggle,
+.sheet-bar > button.sheet-bar-toggle:hover,
+.sheet-bar > button.sheet-bar-toggle[aria-expanded="true"] {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: url("/ui/wizard/dots-btn.webp") center / contain no-repeat;
+  color: transparent;
+  font-size: 0;
+  filter: drop-shadow(3px 3px 0 rgba(0, 0, 0, .7));
+}
+.sheet-bar > button.sheet-bar-toggle:hover,
+.sheet-bar > button.sheet-bar-toggle[aria-expanded="true"] { transform: translate(-1px, -1px); }
+.sheet-bar-options {
+  display: none;
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 6px);
+  right: max(16px, calc((100vw - 1500px) / 2));
+  width: min(310px, calc(100vw - 24px));
+  padding: 8px;
+  border: 2px solid #171717;
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  box-shadow: 5px 5px 0 #f3ff3a;
+  color: #171717;
+}
+.sheet-bar-options[data-open="true"] { display: grid; }
+.sheet-bar-options > button {
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 0;
+  border-top: 1px solid #aaa397;
+  border-radius: 0;
+  background: transparent;
+  color: #171717;
+  font: 700 13px "Arial Narrow", Arial, sans-serif;
+  text-align: left;
+  text-transform: uppercase;
+}
+.sheet-bar-options > button:hover { background: #f3ff3a; color: #171717; }
+.sheet-bar-options > button.sheet-bar-deck {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 0 12px;
+  border-top: 0;
+  background: #f3ff3a url("/ui/wizard/acid-yellow.webp") center / 360px;
+  font: 600 15px Oswald, "Arial Narrow", sans-serif;
+  letter-spacing: .06em;
+}
+.sheet-bar-options > button.sheet-bar-deck::before {
+  content: "";
+  width: 32px;
+  height: 32px;
+  background: var(--skin-fan-paper) center / contain no-repeat;
+}
+.sheet-bar-options > button.sheet-bar-gestures::before { content: "☝ "; }
+.sheet-bar-section {
+  padding: 10px 9px 4px;
+  border-top: 2px solid #171717;
+  color: #56534f;
+  font: 600 11px Oswald, "Arial Narrow", sans-serif;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.sheet-bar-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 6px 9px;
+  color: #171717;
+  font-size: 12px;
+  font-weight: 700;
+}
+@media (max-width: 700px) {
+  .sheet-bar { gap: 8px 10px; padding: 4px 12px; }
+}
+
+/* «Создать случайно» в основном SoyMan: розовая рваная плашка с d20 и окно
+   «Случайный герой» — облик OneShot (home.css, .lib-random-*), здесь без
+   его переменных. */
+.random-hero-open,
+.modal.random-hero .lib-random-go {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 0;
+  background: #ff3e91 url("/ui/wizard/punk-magenta.webp") center / 360px;
+  color: #171717;
+  font: 600 15px/1 Oswald, sans-serif;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  -webkit-mask-box-image: url("/ui/wizard/torn-edge-mask.png") 48 / 10px round;
+  mask-border: url("/ui/wizard/torn-edge-mask.png") 48 fill / 10px round;
+}
+.random-hero-open:hover,
+.modal.random-hero .lib-random-go:hover { filter: brightness(1.06); }
+.modal.random-hero {
+  width: 460px;
+  max-width: calc(100vw - 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 22px;
+  border: 0;
+  border-top: 4px solid #171717;
+  border-radius: 0;
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  color: #171717;
+  box-shadow: 8px 8px 0 #171717;
+}
+.modal.random-hero .lib-random-head { display: flex; align-items: flex-start; gap: 12px; }
+.modal.random-hero .lib-random-head h2 { flex: 1; margin: 0; color: #171717; font: 400 38px/.95 "Rubik Dirt", Oswald, sans-serif; }
+.modal.random-hero button.lib-random-x,
+.modal.random-hero .lib-random-level button {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 2px solid #171717;
+  border-radius: 0;
+  background: none;
+  color: #171717;
+  cursor: pointer;
+}
+.modal.random-hero button.lib-random-x { width: 44px; height: 44px; flex: none; }
+.modal.random-hero .lib-random-field { display: flex; flex-direction: column; gap: 8px; }
+.modal.random-hero .lib-random-field p,
+.modal.random-hero .lib-random-name { margin: 0; font-size: 15px; line-height: 1.35; }
+.modal.random-hero .lib-random-name { color: #4a4743; }
+.modal.random-hero .lib-random-name b { color: #171717; }
+.modal.random-hero .lib-random-label { font: 500 12px/1 Oswald, sans-serif; letter-spacing: .14em; text-transform: uppercase; color: #4a4743; }
+.modal.random-hero .lib-random-level { display: flex; align-items: center; gap: 10px; }
+.modal.random-hero .lib-random-level button { width: 48px; height: 48px; font: 400 26px/1 Oswald, sans-serif; }
+.modal.random-hero .lib-random-level button:disabled { opacity: .3; cursor: default; }
+.modal.random-hero .lib-random-level output { min-width: 64px; text-align: center; font: 600 40px/1 Oswald, sans-serif; font-variant-numeric: tabular-nums; }
+.modal.random-hero .lib-random-level span { font-size: 14px; color: #4a4743; }
+.modal.random-hero .lib-seg { display: flex; }
+.modal.random-hero .lib-seg button {
+  flex: 1;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 0;
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
+  color: #171717;
+  font: 500 15px/1 Oswald, sans-serif;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+/* Чёрное = переключатель режима (правило цветов визарда). */
+.modal.random-hero .lib-seg button[aria-pressed="true"] { background: #171717; color: #e8e4da; }
+.modal.random-hero .lib-random-shadow { display: flex; align-self: stretch; filter: drop-shadow(4px 4px 0 #171717); }
+.modal.random-hero .lib-random-go { flex: 1; min-height: 54px; font-size: 19px; }
+.modal.random-hero .lib-random-go:disabled { opacity: .6; cursor: default; }
+@media (max-width: 700px) {
+  .modal-backdrop:has(.random-hero) { align-items: flex-end; padding: 0; }
+  .modal.random-hero {
+    width: 100%;
+    max-width: 100%;
+    padding: 20px 16px max(22px, env(safe-area-inset-bottom));
+    box-shadow: none;
+  }
+  .modal.random-hero .lib-random-head h2 { font-size: 32px; }
+}

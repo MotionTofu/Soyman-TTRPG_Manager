@@ -1820,6 +1820,26 @@ body.sheet-fullscreen .mini-player-bar {
 body.sheet-fullscreen .app-content {
   padding: 0 var(--sp-4) var(--sp-4);
 }
+/* ПК: лист на весь экран, как в OneShot (гриллинг 2026-09-26, Q8) — меню
+   слева вместе с его колонкой, поиск справа и полоса музыки уходят; назад —
+   кнопкой в верхней полосе листа. */
+body.sheet-fullscreen .app-nav,
+body.sheet-fullscreen .preview-dock,
+body.sheet-fullscreen .search-panel-slot,
+body.sheet-fullscreen .search-panel,
+body.sheet-fullscreen .audio-player-slot {
+  display: none !important;
+}
+body.sheet-fullscreen .app-shell,
+body.sheet-fullscreen .app-shell-live {
+  grid-template-columns: 1fr !important;
+}
+body.sheet-fullscreen .app-content {
+  max-width: none;
+}
+body.sheet-fullscreen .app-content.has-player {
+  padding-bottom: var(--sp-4);
+}
 
 /* Живой ряд — инициатива, концентрация, истощение: то, что меняется в бою.
    Плашками в строку, как на макете, а не ячейками общей сетки: концентрация

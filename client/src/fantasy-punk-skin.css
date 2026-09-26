@@ -107,6 +107,22 @@ body.sheet-fullscreen,
   --card-radius: 2px;
 }
 
+/* Лист всегда на светлой бумаге, а тёмная тема основного SoyMan
+ * ([data-theme-mode="dark"] в dnd-sheet.css) подставляла свои кости
+ * (пурпурная текстура) и затемнение портрета (тёмный низ — имя не
+ * читалось). В хостах листа — светлые, как в OneShot (2026-09-26). */
+[data-theme-mode="dark"] :is(.oneshot-sheet, body.sheet-fullscreen, .wz-overview-card) .dnd-die.is-textured {
+  background-image: url("/textures/dice-d20.webp");
+}
+[data-theme-mode="dark"] :is(.oneshot-sheet, body.sheet-fullscreen, .wz-overview-card) .dnd-card-portrait-fade {
+  background: linear-gradient(
+    to bottom,
+    rgba(239, 235, 225, 0) 42%,
+    rgba(239, 235, 225, 0.86) 72%,
+    #efebe1 100%
+  );
+}
+
 /* ---- Page backdrop: warm paper, seamless repeating grain. ----
  * Solid base color + ONE tileable texture on endless repeat: full-viewport
  * coverage with no islands, no masks, no scaling tricks. The tile carries

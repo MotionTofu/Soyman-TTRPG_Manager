@@ -111,7 +111,8 @@ export function apiRoleGate(req: AuthedRequest, res: Response, next: NextFunctio
   // свой чарник, обязан мочь и отменить это. Без отдельной ветки путь не
   // подпадал под regex выше и упирался в forbid() — кнопка «Отменить» в тосте
   // работала бы только у мастера.
-  if ((match = p.match(/^\/statblocks\/(\d+)(\/restore)?$/))) {
+  // `/portable` — скачать свой лист автономным HTML или копией (только GET).
+  if ((match = p.match(/^\/statblocks\/(\d+)(\/restore|\/portable)?$/))) {
     return statblockOwned(playerId, match[1]) ? next() : forbid();
   }
 
