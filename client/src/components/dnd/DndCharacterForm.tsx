@@ -2107,7 +2107,7 @@ function DndSpellLevelSection({
                   </div>
                 )}
                 <button type="button" onClick={() => setAdding(false)}>
-                  Отмена
+                  отмена
                 </button>
               </div>
             ) : (
@@ -13729,8 +13729,14 @@ export function DndCharacterView({
               {/* Тумблер живёт у самих заклинаний, а не во «Внешнем виде»:
                   утром его выключают, чтобы подготовиться, в бою включают,
                   чтобы не листать книгу. Скрытое всегда посчитано вслух —
-                  иначе через сессию это выглядит как пропажа заклинаний. */}
+                  иначе через сессию это выглядит как пропажа заклинаний.
+                  В правке ряда нет (владелец 2026-09-26): там и так видны все
+                  заклинания, а добавляют — «+ заклинание» у своего круга.
+                  Остаётся только «Арканум» — другого входа к нему нет. */}
+              {(!editingSpells || (onQuickUpdate && warlockLevel >= 11)) && (
               <div className="row sb-entry dnd-prepared-filter" style={{ gap: 8, flexWrap: "wrap" }}>
+                {!editingSpells && (
+                <>
                 {/* Режим — двумя половинами (макет): видно, какой включён и
                     какой будет по тапу. Чёрное — только переключатель режима. */}
                 <span className="dnd-seg" role="group" aria-label="Какие заклинания показывать">
@@ -13757,15 +13763,15 @@ export function DndCharacterView({
                     Добавить
                   </button>
                 )}
+                </>
+                )}
                 {onQuickUpdate && warlockLevel >= 11 && (
                   <button type="button" className="dnd-chip" onClick={() => setArcanumOpen(true)}>
                     Арканум
                   </button>
                 )}
-                {prefs.spellsPreparedOnly && editingSpells && (
-                  <span className="muted">в правке показаны все — подготовить можно только видимое</span>
-                )}
               </div>
+              )}
               {(spellLimits.cantrips != null || spellLimits.prepared != null) && (
                 <div className="row sb-entry" style={{ gap: 10, flexWrap: "wrap" }}>
                   {spellLimits.cantrips != null && (

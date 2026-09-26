@@ -1464,15 +1464,17 @@ button.dnd-card-level {
   text-transform: uppercase;
   color: var(--skin-ink-soft);
 }
-/* Узко характеристика уходит строкой ниже — по центру под числами, а не
-   сиротой у левого края (аудит 2026-09-26). */
+/* Узко — одной строкой (владелец 2026-09-26): «СЛ» и ИНТ/МДР/ХАР стали
+   короткими, плашки теснее, переноса нет даже на 360px. */
 @media (max-width: 700px) {
   .dnd-magic-nums {
+    flex-wrap: nowrap;
     justify-content: center;
+    gap: 6px;
   }
-  .dnd-magic-ability {
-    flex-basis: 100%;
-    text-align: center;
+  .dnd-magic-num {
+    padding: 0 10px;
+    gap: 6px;
   }
 }
 /* Переключатель режима — две половины, включённая чернилами. */
@@ -1624,6 +1626,40 @@ button.dnd-prep-diamond::after {
   .dnd-spell-row.is-edit .dnd-spell-main {
     flex-basis: calc(100% - 60px);
   }
+}
+/* Поле «+ заклинание» у круга: бумажная полоса, как поиск в «Взять
+   заклинания»; «отмена» — тихой ссылкой, как «снять отметки». */
+.dnd-spell-add {
+  gap: 10px;
+  margin-top: 6px;
+}
+.dnd-spell-add input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 0;
+  background: rgba(23, 23, 23, 0.06);
+  box-shadow: none;
+  font-size: 16px;
+}
+.dnd-spell-add input:focus {
+  outline: none;
+  box-shadow: inset 0 -2px 0 var(--skin-ink);
+}
+.dnd-spell-add > button {
+  flex: none;
+  min-height: 44px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--skin-ink);
+  font-size: 15px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
 }
 .dnd-spell-add-btn {
   display: flex;

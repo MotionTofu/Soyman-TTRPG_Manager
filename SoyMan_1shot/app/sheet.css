@@ -115,6 +115,11 @@ html[data-app="oneshot"] :is(.oneshot-header, .oneshot-home, .oneshot-sheet)
   outline: 3px solid var(--ui-focus);
   outline-offset: 2px;
 }
+/* Поле «+ заклинание» открывается уже в фокусе: вместо розовой рамки —
+   черта снизу (скин), как у поиска «Взять заклинания» (2026-09-26). */
+html[data-app="oneshot"] .oneshot-sheet .dnd-spell-add input:focus-visible {
+  outline: none;
+}
 /* Without a portrait the cartouche must participate in layout. The shared
    absolute positioning otherwise pushes name and warnings above the card. */
 html[data-app="oneshot"] .oneshot-sheet .dnd-card-portrait-zone.is-empty {
