@@ -100,7 +100,7 @@ export function isStackableEquipmentEntry(e: EquipmentEntryLike): boolean {
   if (cat === "Расходники" || cat === "Материалы") return true;
   const type = typeof data.type === "string" ? (data.type as string) : "";
   if (e.kind === "magic_item" && (type === "Зелья" || cat === "Зелья")) return true;
-  return /стрел|болт|пул(я|и)|ядр(о|а)|порох|зелье|potion|свиток|scroll|па[её]к|факел|масло|противоядие/i.test(e.name);
+  return /стрел|болт|пул(я|и)|ядр(о|а)|порох|зелье|potion|свиток|scroll|па[её]к|рацион|свеч|факел|масло|противоядие/i.test(e.name);
 }
 
 /**

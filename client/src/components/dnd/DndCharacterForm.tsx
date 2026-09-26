@@ -4,6 +4,7 @@ import { useAction, useResource, write } from "../../data/hooks";
 import { creatureCardQuery } from "../../data/creatureCard";
 import { cardAc, cardMaxHp } from "../CreatureCard";
 import { afterWriteAnywhere, readResource } from "../../data/imperative";
+import { plural } from "../../sceneKinds";
 import { showSaveError } from "../../data/notices";
 import { statblockAffects, statblockListPath } from "../../data/statblocks";
 import type {
@@ -3036,6 +3037,21 @@ const COIN_FIELDS = [
 
 const EMPTY_COINS: DndCoins = { cp: "", sp: "", ep: "", gp: "", pp: "" };
 
+/** Строка состава набора: «Рюкзак [Backpack]» × qty. */
+type PackContent = { ru: string; en: string; qty: number };
+
+function readPackContents(entry: CompendiumEntry): PackContent[] {
+  const raw = (entry.data as Record<string, unknown> | undefined)?.contents;
+  if (!Array.isArray(raw)) return [];
+  return (raw as { name?: unknown; qty?: unknown }[]).flatMap((x) => {
+    const name = typeof x?.name === "string" ? x.name.trim() : "";
+    if (!name) return [];
+    const m = /^(.*?)\s*\[(.*)\]$/.exec(name);
+    const qty = Number(x.qty);
+    return [{ ru: m ? m[1] : name, en: m ? m[2] : "", qty: Number.isFinite(qty) && qty > 0 ? qty : 1 }];
+  });
+}
+
 /**
  * Вес и число предметов (S-17): отданное (transferOut) исключено — физически
  * его уже нет. Невалидные qty/вес пропускаются (строка помечается чипом
@@ -3259,6 +3275,9 @@ function DndEquipmentQuickView({
   const [calcOpen, setCalcOpen] = useState(false);
   const [moveTarget, setMoveTarget] = useState<number | null>(null);
   const [descErrors, setDescErrors] = useState<Record<number, true>>({});
+  // Состав наборов снаряжения (data.contents) — по записи набора, приезжает
+  // вместе с описанием; есть состав — в окне кнопка «Распаковать».
+  const [packContents, setPackContents] = useState<Record<number, PackContent[]>>({});
   const descControllers = useRef(new Map<number, AbortController>());
   // Свежий список после await: saveEdit/removeItem ждут диалог, мешок/пикер —
   // сеть, а пишут поверх того, что было на клик. useEvent свеж только на
@@ -3566,12 +3585,63 @@ function DndEquipmentQuickView({
       const entry = await readResource<CompendiumEntry>(`/systems/entries/${entryId}`);
       if (controller.signal.aborted) return;
       setDescriptions((d) => ({ ...d, [entryId]: entry.description || "Нет описания." }));
+      const contents = readPackContents(entry);
+      if (contents.length > 0) setPackContents((m) => ({ ...m, [entryId]: contents }));
     } catch (e) {
       if (controller.signal.aborted || (e instanceof Error && e.name === "AbortError")) return;
       setDescErrors((d) => ({ ...d, [entryId]: true }));
     } finally {
       if (descControllers.current.get(entryId) === controller) descControllers.current.delete(entryId);
     }
+  }
+  // Распаковка набора (гриллинг 2026-09-26): строка набора уходит, предметы
+  // ложатся в её раздел в конец, не надетыми. Повтор расходника — прибавка
+  // к его строке, прочее — новой строкой с количеством. Ссылки в составе
+  // устарели, поэтому предмет ищется по имени: «Рюкзак [Backpack]» — русское
+  // имя или name_original.
+  async function unpackPack(si: number, ii: number) {
+    const row = sectionsRef.current[si]?.items[ii];
+    const contents = row?.entryId ? packContents[row.entryId] : undefined;
+    if (!row || !contents || systemId == null) return;
+    const ok = await confirm({
+      title: `Распаковать «${row.name}»?`,
+      message: `В инвентарь ${plural(contents.length, "ляжет", "лягут", "лягут")} ${contents.length} ${plural(contents.length, "предмет", "предмета", "предметов")}, сам набор уберётся.`,
+      confirmLabel: "Распаковать",
+    });
+    if (!ok) return;
+    setDescOpen(null);
+    const catalog = await loadDndEquipmentEntries(systemId);
+    const find = (c: PackContent) =>
+      catalog.find((e) => e.name === c.ru) ?? (c.en ? catalog.find((e) => e.name_original === c.en) : undefined);
+    const resolved = await Promise.all(
+      contents.map(async (c) => {
+        const e = find(c);
+        return { c, e, meta: e ? await fetchEquipmentMeta(e.id) : null };
+      })
+    );
+    // База — свежая после сети; набор ищется по id, а не по индексу.
+    const base = sectionsRef.current.map((sec) => ({ ...sec, items: sec.items.map((it) => ({ ...it })) }));
+    const at = row.id ? base[si]?.items.findIndex((it) => it.id === row.id) : ii;
+    if (at == null || at < 0) return;
+    base[si].items.splice(at, 1);
+    for (const { c, e, meta } of resolved) {
+      const stackable = e ? isStackableEquipmentEntry(e) : false;
+      const existing = e && stackable ? base.flatMap((sec) => sec.items).find((it) => it.entryId === e.id) : undefined;
+      if (existing) {
+        existing.qty = String(parseQty(String(existing.qty ?? "")) + c.qty);
+        continue;
+      }
+      base[si].items.push({
+        name: e?.name ?? c.ru,
+        weight: "",
+        notes: "",
+        ...meta,
+        qty: stackable || c.qty > 1 ? String(c.qty) : "",
+        id: makeEquipmentId(),
+        ...(e ? { entryId: e.id } : null),
+      });
+    }
+    commit({ equipmentSections: base });
   }
   async function handleDrop(e: DragEvent<HTMLDivElement>, si: number) {
     e.preventDefault();
@@ -4034,6 +4104,16 @@ function DndEquipmentQuickView({
                 <>
                   <MentionText text={descriptions[item.entryId] ?? "Загрузка…"} />
                   {item.notes?.trim() ? <MentionText text={item.notes} /> : null}
+                  {packContents[item.entryId] && !item.transferOut && (
+                    <button
+                      type="button"
+                      className="primary"
+                      style={{ alignSelf: "flex-start" }}
+                      onClick={() => void unpackPack(descOpen.si, descOpen.ii)}
+                    >
+                      Распаковать
+                    </button>
+                  )}
                 </>
               )}
             </div>
