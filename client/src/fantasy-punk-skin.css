@@ -1512,23 +1512,41 @@ button.dnd-prep-diamond::after {
   position: absolute;
   inset: -12px;
 }
-/* «Снаряжение», шапка: вес — плашкой с полосой по низу (2026-09-26). */
+/* «Снаряжение», шапка: трекер веса из макета боковой колонки — предметы
+   слева, вес справа, полоса под ними (2026-09-26). */
 .dnd-load-plate {
-  position: relative;
+  width: min(320px, 100%);
+  padding: 8px 14px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
 }
-.dnd-load-bar {
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  height: 4px;
-  background: var(--skin-ink);
+.dnd-load-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
 }
-.dnd-load-plate.is-over > b,
-.dnd-load-plate.is-over > span {
+.dnd-load-head > span {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--skin-ink-soft);
+}
+.dnd-load-head > b {
+  font-family: var(--font-ui);
+  font-size: 18px;
+  color: var(--skin-ink);
+  white-space: nowrap;
+}
+.dnd-load-head > b > span {
+  font-weight: 400;
+  color: var(--skin-ink-soft);
+}
+.dnd-load-plate.is-over .dnd-load-head > b {
   color: var(--danger, #a03408);
-}
-.dnd-load-plate.is-over .dnd-load-bar {
-  background: var(--danger, #a03408);
 }
 /* Слоты настройки — медальоны: пустой тусклый ч/б, занятый яркий. */
 .dnd-attune-pips {

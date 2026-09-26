@@ -3073,40 +3073,38 @@ function equipmentLoad(sections: DndEquipmentSection[], coins: DndCoins | undefi
   return { totalItems: all.length, totalWeight, capacityLb, overloaded: hasWeight && totalWeight > capacityLb };
 }
 
-/** Шапка «Снаряжения» (владелец 2026-09-26): между правкой и веером —
- *  число предметов и вес, полоса веса — по низу плашки. Перегруз — цветом. */
+/** Шапка «Снаряжения» (владелец 2026-09-26): трекер веса из макета
+ *  боковой колонки — число предметов на месте подписи «Вес», справа вес из
+ *  грузоподъёмности, под ними полоса. Перегруз — цветом. */
 function EquipmentLoadPlate({
   sections,
   coins,
   strength,
-  doublingNames,
+  doublings,
 }: {
   sections: DndEquipmentSection[];
   coins?: DndCoins;
   strength: number;
-  doublingNames: string[];
+  doublings: number;
 }) {
   const prefs = useDndPrefs();
-  const load = equipmentLoad(sections, coins, strength, doublingNames.length);
+  const load = equipmentLoad(sections, coins, strength, doublings);
   const pct = Math.min(100, load.capacityLb > 0 ? (load.totalWeight / load.capacityLb) * 100 : 0);
+  const [w, cap] = [formatWeight(load.totalWeight, prefs.weightUnit), formatWeight(load.capacityLb, prefs.weightUnit)];
   return (
-    <span className="dnd-magic-nums">
-      <span className="dnd-magic-num">
-        <span>Предметов</span> <b>{load.totalItems}</b>
-      </span>
-      <span
-        className={`dnd-magic-num dnd-load-plate${load.overloaded ? " is-over" : ""}`}
-        title={
-          doublingNames.length > 0 ? `СИЛ × 15 × 2^${doublingNames.length} (${doublingNames.join(", ")})` : "СИЛ × 15"
-        }
-      >
-        <span>{load.overloaded ? "Перегруз" : "Вес"}</span>{" "}
+    <div className={`dnd-load-plate${load.overloaded ? " is-over" : ""}`}>
+      <div className="dnd-load-head">
+        <span>
+          {load.totalItems} {plural(load.totalItems, "предмет", "предмета", "предметов")}
+        </span>
         <b>
-          {formatWeight(load.totalWeight, prefs.weightUnit)} / {formatWeight(load.capacityLb, prefs.weightUnit)}
+          {w.replace(/\s*\S+$/, "")} <span>/ {cap}</span>
         </b>
-        <i className="dnd-load-bar" aria-hidden="true" style={{ width: `${pct}%` }} />
-      </span>
-    </span>
+      </div>
+      <div className="dnd-weight-bar" role="img" aria-label={`Вес ${w} из ${cap}`}>
+        <span style={{ width: `${pct}%` }} />
+      </div>
+    </div>
   );
 }
 
@@ -13406,12 +13404,12 @@ export function DndCharacterView({
                     sections={value.equipmentSections}
                     coins={value.coins}
                     strength={value.abilities.str}
-                    doublingNames={findCarryDoublings([
+                    doublings={findCarryDoublings([
                       ...value.speciesFeatures,
                       ...value.classFeatures,
                       ...value.feats,
                       ...value.specialAbilities,
-                    ])}
+                    ]).length}
                   />
                   {canUseInbox && ownerCharacterId != null && (
                     <button type="button" className="dnd-transfer-btn" onClick={() => setTransferModalOpen(true)}>
