@@ -1080,6 +1080,9 @@
   }
   .wz .wz-foot .wz-shadow {
     order: 4;
+    /* Вправо сам: пустой слот теперь скрыт (wizard-mobile.css), и без
+       подсказки «Далее» прилипал к «Назад». */
+    margin-left: auto;
   }
   .wz .wz-foot .wz-shadow button {
     padding: 0 30px;
