@@ -3215,3 +3215,26 @@ button.dnd-card-back-corner::after {
   font-size: 14px;
   cursor: default;
 }
+
+/* «Досье» без кампании (OneShot): простое поле — бумажная полоса, как поиск
+   и «+ заклинание»; фокус — черта туши снизу (2026-09-26). */
+.dnd-dossier-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 96px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 0;
+  background: rgba(23, 23, 23, 0.06);
+  box-shadow: none;
+  color: var(--skin-ink, #171717);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.4;
+  resize: vertical;
+}
+.dnd-dossier-input:focus {
+  outline: none;
+  box-shadow: inset 0 -2px 0 var(--skin-ink, #171717);
+}

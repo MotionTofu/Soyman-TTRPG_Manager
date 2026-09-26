@@ -14282,11 +14282,23 @@ export function DndCharacterView({
                 return (
                   <div key={key} className="sb-entry">
                     <span className="sb-prop-label">{label}</span>
-                    <MentionTextarea
-                      value={draftDossier[dossierKey] ?? ""}
-                      onChange={narrativeCallbacks[key]}
-                      rows={3}
-                    />
+                    {/* Без кампании (OneShot) — простое поле: панель форматирования
+                        и @-ссылки на мир там не к чему (владелец 2026-09-26). */}
+                    {campaignConnected ? (
+                      <MentionTextarea
+                        value={draftDossier[dossierKey] ?? ""}
+                        onChange={narrativeCallbacks[key]}
+                        rows={3}
+                      />
+                    ) : (
+                      <textarea
+                        className="dnd-dossier-input"
+                        value={draftDossier[dossierKey] ?? ""}
+                        onChange={(e) => narrativeCallbacks[key](e.target.value)}
+                        rows={4}
+                        aria-label={label}
+                      />
+                    )}
                   </div>
                 );
               })}

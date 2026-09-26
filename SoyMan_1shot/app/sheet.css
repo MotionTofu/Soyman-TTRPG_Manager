@@ -117,7 +117,8 @@ html[data-app="oneshot"] :is(.oneshot-header, .oneshot-home, .oneshot-sheet)
 }
 /* Поле «+ заклинание» открывается уже в фокусе: вместо розовой рамки —
    черта снизу (скин), как у поиска «Взять заклинания» (2026-09-26). */
-html[data-app="oneshot"] .oneshot-sheet .dnd-spell-add input:focus-visible {
+html[data-app="oneshot"] .oneshot-sheet .dnd-spell-add input:focus-visible,
+html[data-app="oneshot"] .oneshot-sheet .dnd-dossier-input:focus-visible {
   outline: none;
 }
 /* Without a portrait the cartouche must participate in layout. The shared
