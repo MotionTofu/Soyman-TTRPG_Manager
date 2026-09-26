@@ -42,6 +42,7 @@ import type { GrantedSpellChoice, GrantedToolChoice, SourceGrants } from "./dndG
 import { nameMatches } from "./dndResources";
 import { multiclassPrereqUnmet, multiclassProfs } from "./multiclass";
 import { PortraitFrameModal } from "./PortraitFrameModal";
+import { randomName } from "./randomNames";
 import type { PortraitFocus } from "./portraitFrame";
 import {
   ABILITY_LABELS,
@@ -164,6 +165,7 @@ interface WizardDraftV1 {
   abilitiesTouched?: unknown;
   featSel?: unknown;
   extraClasses?: unknown;
+  random?: unknown;
 }
 function loadWizardDraft(key: string): WizardDraftV1 | null {
   try {
@@ -300,6 +302,29 @@ function classStandardArray(entry: CompendiumEntry | null): DndAbilityScores | n
   return a;
 }
 
+/** «Создать случайно» (гриллинг 2026-09-26): уровень, режим и чьё имя —
+ *  из поля на главной (keepName) или случайное по виду. */
+export interface WizardRandom {
+  level: number;
+  mode: "playable" | "chaos";
+  keepName: boolean;
+}
+function randomFrom(v: unknown): WizardRandom | null {
+  if (typeof v !== "object" || v === null) return null;
+  const r = v as Record<string, unknown>;
+  if (typeof r.level !== "number" || (r.mode !== "playable" && r.mode !== "chaos")) return null;
+  return { level: Math.min(20, Math.max(1, Math.round(r.level))), mode: r.mode, keepName: r.keepName === true };
+}
+const pickOne = <T,>(list: readonly T[]): T | undefined => list[Math.floor(Math.random() * list.length)];
+function shuffled<T>(list: readonly T[]): T[] {
+  const out = [...list];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
 interface Props {
   ownerType: "character" | "being";
   ownerId: number;
@@ -315,13 +340,15 @@ interface Props {
   ownerPortraitUrl?: string | null;
   // OneShot opts into its own visual layer without changing the shared wizard.
   visualVariant?: "oneshot";
+  /** Случайный персонаж: визард заполняет себя сам и открывается на Обзоре. */
+  random?: WizardRandom | null;
 }
 
 // Guided step-by-step creation for a brand-new D&D 5.5 character statblock —
 // used only when adding a fresh dnd_character (see StatblockList's addStatblock).
 // Leveling up / editing an existing character stays in the regular
 // DndCharacterEdit form; this wizard is a one-time onboarding path only.
-export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerName, onDone, onCancel, initialSystemId, ownerPortraitUrl, visualVariant }: Props) {
+export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerName, onDone, onCancel, initialSystemId, ownerPortraitUrl, visualVariant, random }: Props) {
   const { allowDiceRolls } = useDndRuntime();
   const draftKey = wizardDraftKey(ownerType, ownerId);
   // Читается один раз при монтировании — поэтому сбросы протухших выборов
@@ -329,6 +356,11 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   const [savedDraft] = useState<WizardDraftV1 | null>(() => loadWizardDraft(draftKey));
   const [hadDraft, setHadDraft] = useState(() => savedDraft !== null);
   const [step, setStep] = useState<Step>(() => draftStep(savedDraft?.step));
+  // Настройки «случайного» живут в черновике: по ним «Перебросить» на Обзоре.
+  // Автопилот стартует один раз — перезагрузка с готовым черновиком его не
+  // перезапускает.
+  const [randomCfg, setRandomCfg] = useState<WizardRandom | null>(() => randomFrom(savedDraft?.random) ?? random ?? null);
+  const [autopilot, setAutopilot] = useState<WizardRandom | null>(() => (random && !randomFrom(savedDraft?.random) ? random : null));
   const [systemId, setSystemId] = useState<number | null>(initialSystemId ?? null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -386,6 +418,8 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   const [speciesEntry, setSpeciesEntry] = useState<CompendiumEntry | null>(null);
   // Дети вида: умения (сопротивление на выбор у Возрождённого) и предки.
   const [speciesChildren, setSpeciesChildren] = useState<CompendiumEntry[]>([]);
+  // Чьи дети загружены: автопилоту «пусто» и «ещё грузится» — разное.
+  const [speciesChildrenOf, setSpeciesChildrenOf] = useState<number | null>(null);
   const [lineageId, setLineageId] = useState<number | null>(() => numOrNull(savedDraft?.lineageId));
   const [speciesResist, setSpeciesResist] = useState<string[]>(() =>
     Array.isArray(savedDraft?.speciesResist) ? savedDraft.speciesResist.filter((x): x is string => typeof x === "string") : []
@@ -748,6 +782,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       abilitiesTouched,
       featSel,
       extraClasses,
+      random: randomCfg,
     };
     try {
       localStorage.setItem(draftKey, JSON.stringify(state));
@@ -796,6 +831,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     abilitiesTouched,
     featSel,
     extraClasses,
+    randomCfg,
   ]);
 
   // Уход со страницы с несобранным персонажем — подтверждение.
@@ -915,9 +951,11 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     let alive = true;
     loadDndSpeciesChildren(systemId, speciesId)
       .then((list) => {
-        if (alive) setSpeciesChildren(list);
+        if (!alive) return;
+        setSpeciesChildren(list);
+        setSpeciesChildrenOf(speciesId);
       })
-      .catch(() => undefined);
+      .catch(() => alive && setSpeciesChildrenOf(speciesId));
     return () => {
       alive = false;
     };
@@ -3005,6 +3043,18 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     // гард на всякий случай.
     if (createdRef.current) return;
     if (!window.confirm("Очистить черновик и начать заново? Это действие не отменить.")) return;
+    resetState();
+    setRandomCfg(null);
+  }
+  // «Перебросить» (Q10): всё заново с теми же уровнем и режимом.
+  function rerollRandom() {
+    if (createdRef.current || !randomCfg) return;
+    const keep = randomCfg.keepName ? characterName : null;
+    resetState();
+    if (keep != null) setCharacterName(keep);
+    setAutopilot(randomCfg);
+  }
+  function resetState() {
     clearWizardDraft();
     setHadDraft(false);
     setSheet(null);
@@ -3055,6 +3105,183 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     createdRef.current = false;
     setSaveError(null);
   }
+
+  // ——— Автопилот «Создать случайно» ———
+  // Каждый рендер — один шаг: первое, чего не хватает, выбирается наугад
+  // теми же сеттерами, что у кнопок, и тем же гейтом (stepMissing), что у
+  // «Далее». Ждёт загрузок, в конце — Обзор. Страховка от тупика: лимит
+  // шагов и таймер — тогда Обзор покажет, чего не хватило.
+  const autopilotSteps = useRef(0);
+  const autopilotDone = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!autopilot) return;
+    autopilotSteps.current = 0;
+    autopilotDone.current = new Set();
+    const t = window.setTimeout(() => {
+      setAutopilot(null);
+      setStep("Обзор");
+    }, 20000);
+    return () => window.clearTimeout(t);
+  }, [autopilot]);
+  useEffect(() => {
+    if (!autopilot) return;
+    const cfg = autopilot;
+    const chaos = cfg.mode === "chaos";
+    const done = autopilotDone.current;
+    const finish = () => {
+      setAutopilot(null);
+      setStep("Обзор");
+    };
+    if ((autopilotSteps.current += 1) > 800) return finish();
+    // Справочники системы.
+    if (!hierarchy.classes.length || !speciesOptions.length || !backgroundOptions.length || !spellIndex || weaponCatalog == null || !skills.rows.length) return;
+    if (level !== cfg.level) return setLevel(cfg.level);
+    // Класс и подкласс.
+    if (!classId) {
+      const c = pickOne(hierarchy.classes);
+      return c ? pickClass(c.id) : finish();
+    }
+    if (classEntry?.id !== classId || choiceDefs == null) return;
+    if (!subclassLocked && subclassOptions.length > 0 && !subclassId) return pickSubclass(pickOne(subclassOptions)!.id);
+    if (subclassId && subclassEntry?.id !== subclassId) return;
+    // Вид, предок, сопротивление.
+    if (!speciesId) return pickSpecies(pickOne(speciesOptions)!.id);
+    if (speciesEntry?.id !== speciesId || speciesChildrenOf !== speciesId) return;
+    if (lineageOptions.length > 0 && !lineageOptions.some((o) => o.id === lineageId)) return setLineageId(pickOne(lineageOptions)!.id);
+    if (speciesResistChoice && speciesResist.length < speciesResistChoice.count) {
+      return setSpeciesResist(shuffled(speciesResistChoice.options).slice(0, speciesResistChoice.count));
+    }
+    // Предыстория и черты (черта предыстории — её собственная, по правилам).
+    if (!backgroundId) return selectBackground(pickOne(backgroundOptions)!.id);
+    if (backgroundEntry?.id !== backgroundId) return;
+    if (featNeeded && !effectiveFeatId && originFeats.length) return pickBackgroundFeat(pickOne(originFeats)!.id);
+    if (speciesFeatNeeded && !effectiveSpeciesFeatId) {
+      const f = pickOne(originFeats.filter((x) => x.id !== effectiveFeatId || /повторяем/i.test(x.prerequisite ?? "")));
+      if (f) return pickSpeciesFeat(f.id);
+    }
+    if (effectiveFeatId && featEntry?.id !== effectiveFeatId) return;
+    if (effectiveSpeciesFeatId && speciesFeatEntry?.id !== effectiveSpeciesFeatId) return;
+    for (const slot of ["feat", "feat2"] as const) {
+      const entry = slotEntry(slot);
+      if (!entry) continue;
+      const g = slotGrants(slot);
+      const cur = featSel[slot] ?? {};
+      const listOpts = g.spellListChoice.filter((id) => !slotTaken(slot).includes(id));
+      const needList = g.spellListChoice.length > 0 && slotList(slot) == null && listOpts.length > 0;
+      const rc = resistanceChoice(entry);
+      const needResist = !!rc && (cur.resistances?.length ?? 0) < rc.count;
+      if (needList || needResist) {
+        return setFeatSel((all) => ({
+          ...all,
+          [slot]: {
+            ...cur,
+            ...(needList ? { spellList: pickOne(listOpts) } : {}),
+            ...(needResist && rc ? { resistances: shuffled(rc.options).slice(0, rc.count) } : {}),
+          },
+        }));
+      }
+    }
+    // Характеристики: «играбельно» — массив под класс (его и так ставит
+    // эффект выше) и прибавка в главные; «хаос» — 4к6 без меньшего вразброс
+    // и прибавка в случайные из разрешённых (Q9).
+    if (chaos && !done.has("abilities")) {
+      done.add("abilities");
+      const keys = Object.keys(emptyAbilities()) as (keyof DndAbilityScores)[];
+      const a = emptyAbilities();
+      keys.forEach((k) => (a[k] = rollAbilityScore()));
+      setMethod("manual");
+      setAbilities(a);
+      setAbilitiesTouched(true);
+      if (awardOptions.length > 0) {
+        const mode = Math.random() < 0.5 ? "2+1" : "1+1+1";
+        const [p1, p2] = shuffled(awardOptions);
+        setAwardMode(mode);
+        setAwardPrimary(p1 ?? null);
+        setAwardSecondary(p2 ?? null);
+      }
+      return;
+    }
+    // Умения класса.
+    for (let i = 0; i < styleSlots.length; i += 1) {
+      if (chosenStyle[i] != null) continue;
+      const taken = new Set(chosenStyle.filter((_, j) => j !== i));
+      const f = pickOne(styleFeats.filter((x) => !taken.has(x.id) && featFitsClasses(x, [classId])));
+      if (!f) continue;
+      void fetchStyleEntry(f.id);
+      return setChosenStyle((prev) => {
+        const out = [...prev];
+        while (out.length <= i) out.push(null);
+        out[i] = f.id;
+        return out;
+      });
+    }
+    for (const sl of entrySlots) {
+      const catalog = entryCatalog[sl.group];
+      if (catalog === undefined) return;
+      const picked = chosenEntries[sl.key] ?? [];
+      if (picked.length >= Math.min(sl.total, catalog.length)) continue;
+      const e = pickOne(catalog.filter((x) => (x.level ?? 1) <= level && !picked.includes(x.id)));
+      if (e) return toggleEntry(sl.key, e.id, sl.total);
+    }
+    if (weaponMissing > 0) {
+      const w = pickOne(weaponCatalog.filter((x) => !masteredWeapons.some((m) => m.entryId === x.id)));
+      if (w) return toggleMastered(w);
+    }
+    for (const x of toolMissing(toolGroups.map((g) => g.key))) {
+      const own = chosenToolsIn(x.g.key);
+      const t = pickOne(x.g.options.filter((o) => !own.includes(o.id)));
+      if (t) return toggleTool(x.g.key, t.id, x.g.count);
+    }
+    // Навыки, экспертность, языки.
+    for (const x of skillShortfall) {
+      const taken = new Set([...grantedSkills, ...chosenSkillKeys]);
+      const name = pickOne(optionsFor(x.group).filter((k) => !taken.has(k)));
+      if (!name) continue;
+      const g = x.group;
+      // Прямой сеттер: протухший пик (стал выдачей) уходит, новый встаёт —
+      // toggle упёрся бы в лимит и шаг не сдвинулся бы.
+      return setChosenSkills((prev) => [
+        ...prev.filter((t) => !(t.startsWith(`${g.key}:`) && grantedSkills.has(t.slice(t.indexOf(":") + 1)))),
+        `${g.key}:${name}`,
+      ]);
+    }
+    if (expertiseMissing > 0) {
+      const k = pickOne(expertiseOpts.filter((o) => !validExpertise.includes(o)));
+      if (k) return toggleExpertise(k);
+    }
+    if (languageMissing > 0) {
+      const pool = (chaos ? languageOptions : commonLangs.length ? commonLangs : languageOptions).filter(
+        (o) => o.name !== "Общий" && !chosenLanguages.includes(o.name) && !autoLanguages.includes(o.name)
+      );
+      const l = pickOne(pool);
+      if (l) return toggleLanguage(l.name);
+    }
+    // Заклинания — после характеристик: число подготовленных от них зависит.
+    for (const x of spellShortfall) {
+      const g = x.group;
+      const e = pickOne(spellCandidates(g).filter((c) => !grantedSpellIds.has(c.id) && (g.fromBook || !chosenSpellEntryIds.has(c.id)) && !chosenSpells.includes(`${g.key}:${c.id}`)));
+      if (e) return toggleSpell(g.key, e.id, g.count);
+    }
+    // Снаряжение: «играбельно» — набор предметов (A), «хаос» — любой.
+    if (setsStillLoading) return;
+    for (const group of equipmentGroups) {
+      if (group.length === 0 || selectedStartingSet(group, takenSets)) continue;
+      const set = chaos ? pickOne(group) : group[0];
+      if (set) return chooseStartingSet(set.label);
+    }
+    for (const sl of setChoiceMissing) {
+      const picked = setChoicePicked(sl);
+      const o = pickOne(sl.options.filter((x) => !picked.includes(x.id)));
+      if (o) return toggleSetChoice(sl, o.id);
+    }
+    // Досье: имя по виду (если на главной не вписали) и мировоззрение.
+    if (!cfg.keepName && !done.has("name")) {
+      done.add("name");
+      return setCharacterName(randomName(speciesEntry?.name_original));
+    }
+    if (!alignment && alignmentOptions.length > 0) return setAlignment(pickOne(alignmentOptions)!.name);
+    finish();
+  });
 
   // Шторка записи: тап по строке списка.
   function openEntry(
@@ -4600,8 +4827,19 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
           <button type="button" onClick={back} disabled={saving || stepPos === 0}>
             Назад
           </button>
-          {/* Сюда сцена карт кладёт «К плитке». */}
-          <span className="wz-foot-slot" />
+          {/* Сюда сцена карт кладёт «К плитке»; на Обзоре случайного героя —
+              «Перебросить» (Q10). */}
+          <span className="wz-foot-slot">
+            {step === "Обзор" && randomCfg && !autopilot && (
+              <button type="button" className="wz-reroll" onClick={rerollRandom} disabled={saving}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 2l9 5v10l-9 5-9-5V7z" />
+                  <path d="M12 2L7.5 9.5h9zM7.5 9.5L3 17h9M16.5 9.5L21 17h-9M7.5 9.5L12 17l4.5-7.5" />
+                </svg>
+                Перебросить
+              </button>
+            )}
+          </span>
           <span className="wz-shadow">
             {step === "Обзор" ? (
               <button type="button" className="primary" onClick={finish} disabled={createBlocked}>
@@ -4615,6 +4853,11 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
           </span>
         </footer>
         {renderSheet()}
+        {autopilot && (
+          <div className="wz-autopilot" role="status" aria-live="polite">
+            Бросаем кости…
+          </div>
+        )}
       </div>
     </Modal>
   );

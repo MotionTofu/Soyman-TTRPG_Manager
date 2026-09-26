@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '../../client/src/data/queryClient';
-import { DndCharacterWizard } from '../../client/src/components/dnd/DndCharacterWizard';
+import { DndCharacterWizard, type WizardRandom } from '../../client/src/components/dnd/DndCharacterWizard';
 import { DndCharacterView } from '../../client/src/components/dnd/DndCharacterForm';
 import { DndRuntimeContext } from '../../client/src/components/dnd/DndRuntime';
 import { SaveNotices } from '../../client/src/components/SaveNotices';
@@ -242,9 +242,25 @@ async function syncPullApply(cred: SyncCredential, uid: string, remoteRevision: 
     });
   }
 }
+// «Создать случайно»: настройки живут до первого открытия визарда — между
+// созданием записи и её открытием страница перезагружается.
+const randomKey = (id: number) => `oneshot-random:${id}`;
+function readRandom(id: number): WizardRandom | null {
+  try {
+    const raw = localStorage.getItem(randomKey(id));
+    const v = raw ? JSON.parse(raw) : null;
+    return v && typeof v.level === 'number' && (v.mode === 'playable' || v.mode === 'chaos') ? { level: v.level, mode: v.mode, keepName: v.keepName === true } : null;
+  } catch { return null; }
+}
+function dropRandom(id: number) {
+  try { localStorage.removeItem(randomKey(id)); } catch { /* private mode */ }
+}
+const D20 = <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden="true"><path d="M12 2l9 5v10l-9 5-9-5V7z" /><path d="M12 2L7.5 9.5h9zM7.5 9.5L3 17h9M16.5 9.5L21 17h-9M7.5 9.5L12 17l4.5-7.5" /></svg>;
+
 async function syncPullDelete(uid: string, local: Character, remoteRevision: number) {
   await deleteCharacter(local.id, { origin: 'sync-remote' });
   try { localStorage.removeItem(wizardDraftKey(local.id)); } catch { /* private mode */ }
+  dropRandom(local.id);
   clearLevelUpDraft(local.id);
   await trackSyncMeta(uid, remoteRevision, null);
 }
@@ -536,6 +552,9 @@ function App() {
     } catch (e) { setError((e as Error).message); }
   }
   const [name, setName] = useState('');
+  const [randomOpen, setRandomOpen] = useState(false);
+  const [randomLevel, setRandomLevel] = useState(1);
+  const [randomMode, setRandomMode] = useState<WizardRandom['mode']>('playable');
   const queue = useRef(Promise.resolve()); const revision = useRef(0); const failed = useRef(false);
   const pending = useRef(0);
   // Cross-tab invalidation (phase C3): one channel per tab, created once on
@@ -1205,7 +1224,7 @@ function App() {
     } catch (e) { setSyncError(syncFailure(e)); }
     finally { setResolvingUid(null); }
   }
-  async function create(blank = false) {
+  async function create(blank = false, random?: Omit<WizardRandom, 'keepName'>) {
     setBusy(true); setError('');
     try {
       let key = catalogKey;
@@ -1219,6 +1238,7 @@ function App() {
       launchMedia(key, managed);
       let c = await createCharacter(name.trim() || 'Новый персонаж', key);
       if (blank) { const content = emptyDndCharacter(); content.characterName = c.name; content.systemId = 1; c = await saveCharacter({ ...c, content }); }
+      if (random) { try { localStorage.setItem(randomKey(c.id), JSON.stringify({ ...random, keepName: name.trim() !== '' })); } catch { /* private mode: обычный визард */ } }
       location.assign(`/?character=${c.id}`);
     } catch (e) { setError((e as Error).message); setBusy(false); }
   }
@@ -1417,6 +1437,7 @@ function App() {
       // Only this character's own wizard draft keys — never anyone else's.
       // Creation draft (C1) plus the level-up draft (C2).
       try { localStorage.removeItem(wizardDraftKey(target.id)); } catch { /* private mode */ }
+      dropRandom(target.id);
       clearLevelUpDraft(target.id);
       setDeleteTarget(null); setOpenMenu(null);
       await refreshCharacters();
@@ -1476,6 +1497,26 @@ function App() {
       </>}
     </header>
     {gesturesOpen && active?.content && <SheetGestures onClose={() => { markGesturesSeen(); setGesturesOpen(false); }} />}
+    {randomOpen && <Modal className="oneshot-modal lib-random" ariaLabel="Случайный герой" onClose={() => setRandomOpen(false)}>
+      <div className="lib-random-head"><h2>Случайный герой</h2><button type="button" className="lib-random-x" aria-label="Закрыть" onClick={() => setRandomOpen(false)}><svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="2.2" /></svg></button></div>
+      <div className="lib-random-field"><span className="lib-random-label">Уровень</span>
+        <div className="lib-random-level">
+          <button type="button" aria-label="Уровень меньше" disabled={randomLevel <= 1} onClick={() => setRandomLevel(l => Math.max(1, l - 1))}>−</button>
+          <output aria-live="polite">{randomLevel}</output>
+          <button type="button" aria-label="Уровень больше" disabled={randomLevel >= 20} onClick={() => setRandomLevel(l => Math.min(20, l + 1))}>+</button>
+          <span>из 20</span>
+        </div>
+      </div>
+      <div className="lib-random-field"><span className="lib-random-label">Как бросаем</span>
+        <div className="lib-seg lib-random-seg" role="group" aria-label="Как бросаем">
+          <button type="button" aria-pressed={randomMode === 'playable'} onClick={() => setRandomMode('playable')}>Играбельно</button>
+          <button type="button" aria-pressed={randomMode === 'chaos'} onClick={() => setRandomMode('chaos')}>Полный хаос</button>
+        </div>
+        <p>{randomMode === 'playable' ? 'Класс, вид и предыстория — наугад. Характеристики разложены под класс, всё остальное — из разрешённого.' : 'Всё наугад: характеристики — 4к6 вразброс, прибавки и выборы — куда выпадет. Но по правилам.'}</p>
+      </div>
+      <p className="lib-random-name">{name.trim() ? <>Имя: <b>{name.trim()}</b> — из поля на главной.</> : 'Имя возьмём случайное — по виду, который выпадет.'}</p>
+      <span className="lib-random-shadow"><button type="button" className="lib-random-btn lib-random-go" disabled={busy} onClick={() => { setRandomOpen(false); void create(false, { level: randomLevel, mode: randomMode }); }}>{D20}Поехали</button></span>
+    </Modal>}
     {exportAudit && <Modal className="oneshot-modal" ariaLabel="Проверка автономной копии" onClose={() => setExportAudit(null)}>
       <h3>Подготовка автономной копии</h3>
       <p>Найдено {exportAudit.entryCount} связанных с персонажем записей из {exportAudit.totalEntryCount} в справочнике. Остальные заклинания и предметы в этот предварительный срез не включены.</p>
@@ -1586,6 +1627,7 @@ function App() {
         <h2 className="lib-new-title">Новый персонаж</h2>
         <label className="lib-name"><span>Имя</span><input value={name} onChange={e => setName(e.target.value)} maxLength={100} placeholder="Как зовут героя?" /></label>
         <span className="lib-primary-shadow"><button type="button" className="lib-primary" disabled={busy} onClick={() => void create()}>Создать через визард<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg></button></span>
+        <span className="lib-random-shadow"><button type="button" className="lib-random-btn" disabled={busy} onClick={() => setRandomOpen(true)}>{D20}Создать случайно</button></span>
         <button type="button" className="lib-blank" disabled={busy} onClick={() => void create(true)}>или открыть пустой лист</button>
         {managed === 'working' && !catalogKey && <p className="muted">Подготавливаем игровые данные…</p>}{managed === 'failed' && !catalogKey && <p className="muted">Для первого создания персонажа нужно один раз загрузить игровые данные. <button onClick={retryManaged}>Повторить</button></p>}{media === 'working' && <p className="muted">Загружаем изображения…</p>}
       </section></div>}
@@ -1629,7 +1671,7 @@ function App() {
       </details>
       </footer>
     </main>}
-    {wizard && active && <DndCharacterWizard ownerType="character" ownerId={active.id} ownerName={active.name} initialSystemId={active.catalogKey ? 1 : null} visualVariant="oneshot" onDone={() => location.reload()} onCancel={() => location.assign('/')} />}
+    {wizard && active && <DndCharacterWizard ownerType="character" ownerId={active.id} ownerName={active.name} initialSystemId={active.catalogKey ? 1 : null} visualVariant="oneshot" random={readRandom(active.id)} onDone={() => { dropRandom(active.id); location.reload(); }} onCancel={() => { dropRandom(active.id); location.assign('/'); }} />}
     <SaveNotices />
     {/* Окно по ссылке [[…]] из описаний справочника. */}
     <MentionPreviewRoot />

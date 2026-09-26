@@ -1,7 +1,8 @@
 /* Главная OneShot по макету «Главная — библиотека» (холст рестайлинга,
    гриллинг 2026-09-24). Облик визарда: бумага, чернила, неровные контуры,
    жёлтое = действие/выбрано, розовое = «в процессе» (черновик). */
-html[data-app="oneshot"] .lib {
+html[data-app="oneshot"] .lib,
+html[data-app="oneshot"] .modal.lib-random {
   --lib-ink: #171717;
   --lib-paper: #e8e4da;
   --lib-muted: #4a4743;
@@ -142,6 +143,29 @@ html[data-app="oneshot"] .lib-primary {
   mask-border: var(--lib-torn) 48 fill / 10px round;
 }
 html[data-app="oneshot"] .lib-primary:disabled { opacity: .6; cursor: default; }
+/* «Создать случайно» — розовая рваная плашка с d20 (гриллинг 2026-09-26). */
+html[data-app="oneshot"] .lib-random-shadow { display: flex; filter: drop-shadow(4px 4px 0 var(--lib-ink)); }
+html[data-app="oneshot"] .lib-random-btn {
+  flex: 1;
+  min-height: 50px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 0;
+  background: var(--lib-mag-tex);
+  color: var(--lib-ink);
+  font: 600 16px/1 var(--lib-ui);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  -webkit-mask-box-image: var(--lib-torn) 48 / 10px round;
+  mask-border: var(--lib-torn) 48 fill / 10px round;
+}
+html[data-app="oneshot"] .lib-random-btn:disabled { opacity: .6; cursor: default; }
 html[data-app="oneshot"] .lib-blank {
   min-height: 40px;
   border: 0;
@@ -410,4 +434,53 @@ html[data-app="oneshot"] .oneshot-header .oneshot-header-toggle[aria-expanded="t
 html[data-app="oneshot"] .lib :is(.lib-name, .lib-tools) input:not([type="checkbox"]) {
   border: 0;
   border-image: none;
+}
+
+/* Окно «Случайный герой»: бумага, черта туши сверху; на телефоне — шторка. */
+html[data-app="oneshot"] .modal.oneshot-modal.lib-random {
+  width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  border: 0;
+  border-top: 4px solid var(--lib-ink);
+  background: var(--lib-panel);
+  color: var(--lib-ink);
+  box-shadow: 8px 8px 0 var(--lib-ink);
+}
+html[data-app="oneshot"] .lib-random-head { display: flex; align-items: flex-start; gap: 12px; }
+html[data-app="oneshot"] .lib-random-head h2 { flex: 1; margin: 0; font: 400 38px/.95 "Rubik Dirt", Oswald, sans-serif; }
+html[data-app="oneshot"] .lib-random-x {
+  width: 44px; height: 44px; flex: none; padding: 0;
+  display: grid; place-items: center;
+  border: 2px solid var(--lib-ink); border-radius: 0; background: none; color: var(--lib-ink); cursor: pointer;
+}
+html[data-app="oneshot"] .lib-random-field { display: flex; flex-direction: column; gap: 8px; }
+html[data-app="oneshot"] .lib-random-field p,
+html[data-app="oneshot"] .lib-random-name { margin: 0; font-size: 15px; line-height: 1.35; }
+html[data-app="oneshot"] .lib-random-name { color: var(--lib-muted); }
+html[data-app="oneshot"] .lib-random-name b { color: var(--lib-ink); }
+html[data-app="oneshot"] .lib-random-label { font: 500 12px/1 var(--lib-ui); letter-spacing: .14em; text-transform: uppercase; color: var(--lib-muted); }
+html[data-app="oneshot"] .lib-random-level { display: flex; align-items: center; gap: 10px; }
+html[data-app="oneshot"] .lib-random-level button {
+  width: 48px; height: 48px; padding: 0;
+  border: 2px solid var(--lib-ink); border-radius: 0; background: none; color: var(--lib-ink);
+  font: 400 26px/1 var(--lib-ui); cursor: pointer;
+}
+html[data-app="oneshot"] .lib-random-level button:disabled { opacity: .3; cursor: default; }
+html[data-app="oneshot"] .lib-random-level output { min-width: 64px; text-align: center; font: 600 40px/1 var(--lib-ui); font-variant-numeric: tabular-nums; }
+html[data-app="oneshot"] .lib-random-level span { font-size: 14px; color: var(--lib-muted); }
+html[data-app="oneshot"] .lib-random-seg { margin-left: 0; }
+html[data-app="oneshot"] .lib-random-seg button { flex: 1; }
+html[data-app="oneshot"] .modal.lib-random .lib-random-shadow { align-self: stretch; }
+html[data-app="oneshot"] .lib-random-go { min-height: 54px; font-size: 19px; }
+@media (max-width: 700px) {
+  html[data-app="oneshot"] .modal-backdrop:has(.lib-random) { align-items: flex-end; padding: 0; }
+  html[data-app="oneshot"] .modal.oneshot-modal.lib-random {
+    width: 100%;
+    max-width: 100%;
+    padding: 20px 16px max(22px, env(safe-area-inset-bottom));
+    box-shadow: none;
+  }
+  html[data-app="oneshot"] .lib-random-head h2 { font-size: 32px; }
 }

@@ -1787,3 +1787,28 @@
   color: var(--wz-mag, #ff3e91);
   border-bottom: 2px solid currentColor;
 }
+
+/* «Создать случайно» (гриллинг 2026-09-26): «Перебросить» на Обзоре —
+   бумажной плашкой рядом с «Создать», и заслонка на время автопилота. */
+.wz .wz-reroll {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 20px;
+  font-family: var(--font-ui);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.wz-autopilot {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  background: #141414 url("/ui/wizard/ink-surface.webp") center / 620px;
+  color: #e8e4da;
+  font: 400 34px/1 "Rubik Dirt", Oswald, sans-serif;
+}
