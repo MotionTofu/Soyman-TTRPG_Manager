@@ -243,7 +243,9 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-prepared-filter-short { display: no
   html[data-app="oneshot"] .oneshot-sheet .dnd-deck-strip button {
     padding-inline: 11px;
   }
-  html[data-app="oneshot"] .oneshot-sheet .dnd-desktop-tab button,
+  /* Ромб подготовки — квадрат под 45°: растянутый до 44px, он косел в
+     прямоугольник; мишень у него и так 38px через ::after. */
+  html[data-app="oneshot"] .oneshot-sheet .dnd-desktop-tab button:not(.dnd-prep-diamond),
   html[data-app="oneshot"] .oneshot-sheet .dnd-desktop-tab :is(input:not([type="checkbox"]):not([type="radio"]), select) {
     min-height: 44px;
   }

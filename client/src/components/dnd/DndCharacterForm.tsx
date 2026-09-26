@@ -10733,7 +10733,7 @@ function DndDeckFan({
           <button
             key={t}
             type="button"
-            className={`dnd-deck-fan-card${t === current ? " is-current" : ""}${t === "Ресурсы" ? " is-muted" : ""}`}
+            className={`dnd-deck-fan-card${t === current ? " is-current" : ""}`}
             aria-current={t === current ? "page" : undefined}
             onClick={() => {
               onPick(t);

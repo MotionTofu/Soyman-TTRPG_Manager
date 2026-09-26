@@ -3601,12 +3601,6 @@ span.dnd-tab-btn {
 .dnd-deck-fan-card.is-current {
   color: #e8e4da;
 }
-.dnd-deck-fan-card.is-muted {
-  background: #e0dcd2;
-  color: #63625f;
-  border-left-color: rgba(28, 28, 28, 0.3);
-  border-right-color: rgba(28, 28, 28, 0.3);
-}
 .dnd-deck-fan-name {
   font-family: var(--font-ui);
   font-size: var(--fs-meta);
@@ -3658,9 +3652,6 @@ span.dnd-tab-btn {
 }
 .dnd-deck-fan-card.is-current .dnd-fan-line:first-child {
   color: #e8e4da;
-}
-.dnd-deck-fan-card.is-muted .dnd-fan-line {
-  color: #63625f;
 }
 .dnd-fan-line.is-dim {
   color: #63625f;
