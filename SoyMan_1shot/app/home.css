@@ -484,3 +484,11 @@ html[data-app="oneshot"] .lib-random-go { min-height: 54px; font-size: 19px; }
   }
   html[data-app="oneshot"] .lib-random-head h2 { font-size: 32px; }
 }
+
+/* Окно «О приложении» — облик «Случайного героя», длинный текст прокручивается. */
+html[data-app="oneshot"] .modal.oneshot-modal.lib-about { width: 560px; gap: 12px; max-height: 88dvh; overflow-y: auto; }
+html[data-app="oneshot"] .lib-about h3 { margin: 8px 0 0; font: 600 15px/1.2 var(--lib-ui); letter-spacing: .06em; text-transform: uppercase; }
+html[data-app="oneshot"] .lib-about p,
+html[data-app="oneshot"] .lib-about ul { margin: 0; font-size: 15px; line-height: 1.4; }
+html[data-app="oneshot"] .lib-about ul { padding-left: 20px; display: grid; gap: 6px; }
+html[data-app="oneshot"] .lib-about a { color: inherit; }

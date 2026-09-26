@@ -557,6 +557,7 @@ function App() {
   }
   const [name, setName] = useState('');
   const [randomOpen, setRandomOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [randomLevel, setRandomLevel] = useState(1);
   const [randomMode, setRandomMode] = useState<WizardRandom['mode']>('playable');
   const queue = useRef(Promise.resolve()); const revision = useRef(0); const failed = useRef(false);
@@ -1522,6 +1523,28 @@ function App() {
       <p className="lib-random-name">{name.trim() ? <>Имя: <b>{name.trim()}</b> — из поля на главной.</> : 'Имя возьмём случайное — по виду, который выпадет.'}</p>
       <span className="lib-random-shadow"><button type="button" className="lib-random-btn lib-random-go" disabled={busy} onClick={() => { setRandomOpen(false); void create(false, { level: randomLevel, mode: randomMode }); }}>{D20}Поехали</button></span>
     </Modal>}
+    {aboutOpen && <Modal className="oneshot-modal lib-random lib-about" ariaLabel="О приложении" onClose={() => setAboutOpen(false)}>
+      <div className="lib-random-head"><h2>О приложении</h2><button type="button" className="lib-random-x" aria-label="Закрыть" onClick={() => setAboutOpen(false)}><svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="2.2" /></svg></button></div>
+      <p>Лист D&amp;D 2024 на русском, работает на телефоне и на компьютере. Регистрироваться не нужно.</p>
+      <h3>Как создать персонажа</h3>
+      <ul>
+        <li><b>«Создать через визард»</b> — по шагам: класс, вид, предыстория, характеристики, навыки, заклинания, снаряжение. Описания всех вариантов тут же, книги не нужны. Шаги можно проходить в любом порядке, черновик не пропадёт.</li>
+        <li><b>«Создать случайно»</b> — выбираете уровень и «Играбельно» или «Полный хаос», получаете готового героя. Если не нравится, жмите «Перебросить».</li>
+        <li><b>«Открыть пустой лист»</b> — если хотите заполнить всё сами.</li>
+      </ul>
+      <h3>Что умеет лист</h3>
+      <ul>
+        <li>Сам считает бонусы, КЗ, хиты, спасброски и ячейки заклинаний.</li>
+        <li>На игре в нём отмечаются урон, ячейки, состояния и снаряжение.</li>
+      </ul>
+      <h3>Важно</h3>
+      <ul>
+        <li>Персонаж хранится только в браузере, на котором вы его создали, на сервер ничего не уходит. На другом устройстве или в другом браузере его не будет.</li>
+        <li>Если почистить данные браузера, персонаж пропадёт. Сделайте резервную копию в библиотеке, так надёжнее.</li>
+        <li>После первого захода сайт работает и без интернета. На телефоне его можно добавить на главный экран, как приложение.</li>
+      </ul>
+      <p>Это первая версия. Если что-то сломалось или неудобно, <a href="https://t.me/brothertofu" target="_blank" rel="noopener noreferrer">пишите мне</a>.</p>
+    </Modal>}
     {exportAudit && <Modal className="oneshot-modal" ariaLabel="Проверка автономной копии" onClose={() => setExportAudit(null)}>
       <h3>Подготовка автономной копии</h3>
       <p>Найдено {exportAudit.entryCount} связанных с персонажем записей из {exportAudit.totalEntryCount} в справочнике. Остальные заклинания и предметы в этот предварительный срез не включены.</p>
@@ -1644,6 +1667,7 @@ function App() {
       <footer className="lib-foot">
         <button type="button" className="lib-btn" onClick={() => restoreFile.current?.click()}>Восстановить из копии</button>
         <button type="button" className="lib-btn" disabled={busy} onClick={() => portableFile.current?.click()}>Импортировать персонажа</button>
+        <button type="button" className="lib-btn" onClick={() => setAboutOpen(true)}>О приложении</button>
         <a className="lib-btn" href="https://t.me/brothertofu" target="_blank" rel="noopener noreferrer">Написать автору</a>
         <p className="lib-note">Автономный HTML и «Отправить Мастеру» — в меню «⋯» у карты и в открытом листе.</p>
         <input ref={portableFile} hidden type="file" accept=".html,text/html" onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void importPortableFile(file); }} /><input ref={restoreFile} hidden type="file" accept=".json,application/json" onChange={async e => { const file = e.target.files?.[0]; if (!file) return; try { const data = await readFile(file); if (data.format !== 'soyman-1shot-backup' || data.version !== 1) throw Error('Нужна резервная копия OneShot'); const content = parseCharacterContent(data.character?.content); const key = data.catalog ? await saveCatalog(parseCatalog(data.catalog)) : null; const c = await createCharacter(content.characterName || 'Восстановленный персонаж', key); const portrait = typeof data.character?.portrait === 'string' && /^data:image\/(png|jpeg|webp);base64,/.test(data.character.portrait) ? data.character.portrait : null; await saveCharacter({ ...c, content, portrait, characterUid: isCharacterUid(data.character?.characterUid) ? data.character.characterUid : c.characterUid }); location.assign(`/?character=${c.id}`); } catch (err) { setError((err as Error).message); } e.target.value = ''; }} />
