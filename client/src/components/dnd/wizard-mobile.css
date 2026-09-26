@@ -103,7 +103,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: none;
   padding: var(--sp-5) var(--sp-5) var(--sp-7);
 }
 .wz-body .wizard-split {
@@ -418,6 +418,8 @@
   display: flex;
   gap: var(--sp-5);
   overflow-x: auto;
+  /* Иначе по вертикали ленту двигает сама лента, а не страница. */
+  overflow-y: hidden;
   scroll-snap-type: x mandatory;
   /* Отступы по бокам — половина экрана минус полкарты: крайние карты тоже
      встают по центру. Проценты паддинга считаются от ширины родителя. */
@@ -503,7 +505,7 @@
   inset: 0;
   z-index: 50;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: none;
   background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
 }
 .wz-fullcard-body.wz-slide-back {

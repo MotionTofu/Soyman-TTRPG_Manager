@@ -9,3 +9,8 @@
 .oneshot-export-action { padding: var(--sp-3) var(--sp-4); }
 .oneshot-update{position:sticky;top:0;z-index:40;display:flex;align-items:center;gap:var(--space-5);flex-wrap:wrap;padding:10px 20px;border-bottom:1px solid var(--ui-border);background:var(--ui-surface-raised);color:var(--ui-text)}
 @media(max-width:700px){.oneshot-update{padding:10px 12px}}
+/* Прокручивает страницу сам документ, а не #root: overflow-x:hidden из
+   index.css делал #root прокручиваемым блоком, и iOS пружинил его, несмотря
+   на overscroll-behavior. clip режет вбок так же, но блока прокрутки не
+   создаёт — тогда overscroll-behavior:none на html гасит пружину. */
+html[data-app="oneshot"],html[data-app="oneshot"] body,html[data-app="oneshot"] #root{overflow-x:clip}

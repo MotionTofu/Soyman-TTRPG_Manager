@@ -305,7 +305,7 @@
      поверх, а сам текст — поверх окна карт, из которого он открыт. */
   z-index: 50;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: none;
   background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
   color: #171717;
 }
