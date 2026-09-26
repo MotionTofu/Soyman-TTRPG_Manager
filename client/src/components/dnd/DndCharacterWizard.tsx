@@ -3587,7 +3587,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         )}
         {renderToolGroups(["background"])}
         <SearchField value={backgroundQ} onChange={setBackgroundQ} placeholder="Поиск предыстории" />
-        <div className="wz-chips" role="group" aria-label="Фильтр по характеристикам">
+        <div className="wz-chips wz-chips-dense" role="group" aria-label="Фильтр по характеристикам">
           {BACKGROUND_ABILITIES.map((a) => (
             <button
               key={a}
