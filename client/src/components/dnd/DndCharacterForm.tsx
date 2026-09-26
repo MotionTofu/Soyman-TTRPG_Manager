@@ -7965,20 +7965,22 @@ function DndEquipmentPickerModal({
     const rest = [...set].filter((t) => !preferred.includes(t)).sort((a, b) => a.localeCompare(b, "ru"));
     return [...preferred.filter((t) => set.has(t)), ...rest];
   }, [all]);
-  const matching = (all ?? [])
+  const beforeRarity = (all ?? [])
     // Поиск — по имени и по характеристике (тип, редкость, цена, КЗ/урон):
     // «кольчуга» находится и как «средний доспех», и как «необычный».
     .filter((e) => !q || e.name.toLowerCase().includes(q) || entrySpecLine(e).toLowerCase().includes(q))
     .filter((e) => typeFilter === "all" || entryTypeKey(e) === typeFilter)
-    // Поиск перекрывает редкость, как круги в «Взять заклинания»: иначе
-    // «зелье лечения» под «Немагическими» не находилось бы вовсе.
+    .filter((e) => !attuneOnly || entryRequiresAttunement((e.data ?? {}) as Record<string, unknown>));
+  // Поиск уважает редкость (владелец 2026-09-26: «Немагические» + «Све»
+  // выдавали магию). Что скрыто редкостью — строкой «ещё N… показать» под
+  // списком: так «зелье лечения» под «Немагическими» всё равно находится.
+  const matching = beforeRarity
     .filter((e) => {
-      if (q || rarityFilter === "any") return true;
+      if (rarityFilter === "any") return true;
       if (rarityFilter === "mundane") return e.kind !== "magic_item";
       const r = (e.data as Record<string, unknown> | undefined)?.rarity;
       return r === rarityFilter;
     })
-    .filter((e) => !attuneOnly || entryRequiresAttunement((e.data ?? {}) as Record<string, unknown>))
     .sort((a, b) =>
       sortMode === "name" ? a.name.localeCompare(b.name, "ru") : entrySortVal(a) - entrySortVal(b) || a.name.localeCompare(b.name, "ru")
     );
@@ -8056,6 +8058,11 @@ function DndEquipmentPickerModal({
         {failed && <p className="muted">Не удалось загрузить справочник снаряжения.</p>}
         {!failed && all === null && <p className="muted">Загрузка…</p>}
         {all !== null && groups.length === 0 && <p className="muted">Ничего не нашлось.</p>}
+        {q && beforeRarity.length > matching.length && (
+          <button type="button" className="dnd-replica-add" onClick={() => setRarityFilter("any")}>
+            Ещё {beforeRarity.length - matching.length} другой редкости — показать
+          </button>
+        )}
         {/* Список: только вертикальный скролл — панорама вбок мешала вести
             пальцем и список «плавал». */}
         <div className="stack picker-list" style={{ gap: 8, overflowX: "hidden", touchAction: "pan-y" }}>
