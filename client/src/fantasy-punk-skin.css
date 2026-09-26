@@ -1566,12 +1566,14 @@ button.dnd-prep-diamond::after {
 button.dnd-attune-pip {
   cursor: pointer;
 }
-.dnd-attune-pip img {
+.dnd-attune-pip-face {
+  display: block;
   width: 100%;
   height: 100%;
+  background: url("/ui/fantasy-punk/semantic/map-buttons/button-01.webp") center / contain no-repeat;
   filter: grayscale(1) opacity(0.35);
 }
-.dnd-attune-pip.is-on img {
+.dnd-attune-pip.is-on .dnd-attune-pip-face {
   filter: none;
 }
 /* Ромб — справа, по центру строки, как значок школы слева (2026-09-26). */

@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAction, useResource, write } from "../../data/hooks";
 import { creatureCardQuery } from "../../data/creatureCard";
@@ -10,6 +10,7 @@ import { statblockAffects, statblockListPath } from "../../data/statblocks";
 import type {
   CompendiumEntry,
   DndAbilityKey,
+  DndAbilityScores,
   DndActionTiming,
   DndCharacterData,
   DndCoins,
@@ -42,9 +43,6 @@ import {
   classSkillChoiceTotal,
   classSkillPool,
   computeProficiencyBonus,
-  emptyAbilities,
-  emptySavingThrowProfs,
-  emptySkillProfs,
   formatModifier,
   parseAbilityNames,
   parseBonus,
@@ -58,7 +56,6 @@ import {
   SKILL_DOTS,
   SKILL_TITLES,
 } from "./AbilitySavesSkills";
-import { resolveSkillOriginal } from "./skillCatalog";
 import { useDndSkills, type DndSkills, type SkillRow } from "./useDndSkills";
 import { formatDistance, formatWeight, LB_PER_KG, loadDndPrefs, saveDndPrefs, type DndDistanceUnit } from "../../dndPrefs";
 import {
@@ -129,7 +126,7 @@ import {
   type CharacterTransfer,
 } from "./characterTransfers";
 import { getCachedUser } from "../../api/currentUser";
-import { armorProfNames, carryCapacityLb, EMPTY_EQUIPMENT_ITEM, ensureEquipmentIds, entryRequiresAttunement, fetchEquipmentMeta, findCarryDoublings, isArmorProficient, isRationRow, isStackableEquipmentEntry, makeEquipmentId } from "./dndEquipment";
+import { armorProfNames, carryCapacityLb, EMPTY_EQUIPMENT_ITEM, entryRequiresAttunement, fetchEquipmentMeta, findCarryDoublings, isArmorProficient, isRationRow, isStackableEquipmentEntry, makeEquipmentId } from "./dndEquipment";
 import { DndCoinCalculator } from "./DndCoinCalculator";
 import { deadEntryIds, ensureEntries, getCachedEntry, hasFailedEntries, retryFailedEntries } from "./entryCache";
 import { deadLinkNames } from "./deadLinks";
@@ -147,7 +144,7 @@ import {
   unarmoredMovementBonus,
   upgradeDamageDie,
 } from "./dndMonk";
-import { EMPTY_GRANTS, grantsFromEntry, mergeGrants, type SourceGrants } from "./dndGrants";
+import { grantsFromEntry, mergeGrants, type SourceGrants } from "./dndGrants";
 import {
   allResources,
   applicableStats,
@@ -175,7 +172,7 @@ import { choicesFromEntries, featuresFromEntries, inferTimingFromLegacyText, lin
 import { WeaponMasteryPicker, isMasterableWeapon, weaponMasteryName } from "./StartingEquipmentPicker";
 import { classSpellPicks } from "./classSpellPicks";
 import { extractEnglishName } from "../../compendium";
-import { ChecklistEditor, emptySpeed, formatSpeed, SensesEditor, SpeedEditor } from "./DndCreatureForm";
+import { ChecklistEditor, formatSpeed, SensesEditor, SpeedEditor } from "./DndCreatureForm";
 import { errorMessage, findDndSystemId, isAbortError, linkFeatsByName, loadDndFeats, loadDndMechanicsGroup, loadDndMechanicsGroupEntries, type DndMechanicsOption } from "./dndCompendium";
 import { conditionIconSrc } from "./conditionIcons";
 import { rasterAsset } from "../../rasterAssets";
@@ -3546,14 +3543,6 @@ function DndEquipmentQuickView({
     setAddingSection(null);
     setAddMode(null);
   }
-  function appendItems(si: number, items: DndEquipmentItem[]) {
-    if (items.length === 0) return;
-    const withIds = items.map((it) => (it.id ? it : { ...it, id: makeEquipmentId() }));
-    const next = sectionsRef.current.map((s, idx) => (idx !== si ? s : { ...s, items: [...s.items, ...withIds] }));
-    commit({ equipmentSections: next });
-    setAddingSection(null);
-    setAddMode(null);
-  }
   function saveAdd() {
     if (addingSection == null || !draft.name.trim()) return;
     appendItem(addingSection, draft);
@@ -5212,7 +5201,9 @@ function combatSpellRows(
   spellAttackBonus: number,
   spellDc: number,
   // Числа для своей характеристики заклинания (Q4, 2026-09-24).
-  numbersFor?: (ability: DndAbilityKey) => { attack: number; dc: number }
+  numbersFor?: (ability: DndAbilityKey) => { attack: number; dc: number },
+  // «2к8 + ваш модификатор…» в кубах — числом (аудит 2026-09-26).
+  mods?: { spell: number | null; abilities: DndAbilityScores }
 ): AttackRow[] {
   // Круг нужен строке: по нему окно знает, какую ячейку тратить.
   const withLevel: { spell: DndSpellEntry; level: number }[] = [
@@ -5241,7 +5232,12 @@ function combatSpellRows(
         // Своя характеристика заклинания (черта) уже в числе; подпись «· Инт»
         // не читалась и отнимала место (владелец 2026-09-26).
         bonus: label,
-        damage: structured ? effectsLabel(s.effects ?? [], s.checks ?? []) : s.damage || s.healing || "—",
+        damage: structured
+          ? effectsLabel(s.effects ?? [], s.checks ?? [], undefined, mods && {
+              spell: s.ability ? abilityModifier(mods.abilities[s.ability]) : mods.spell,
+              int: abilityModifier(mods.abilities.int),
+            })
+          : s.damage || s.healing || "—",
         range: s.range || "—",
         timing,
         source: { kind: "spell", spell: s, level: s.__level },
@@ -5274,7 +5270,8 @@ function featureActionRows(
       damage: effectsLabel(
         resolveLevelDice(f.effects ?? [], classLevelOf?.(f.sourceParentId) ?? null),
         f.checks ?? [],
-        dcExtra?.profBonus
+        dcExtra?.profBonus,
+        dcExtra ? { int: abilityModifier(dcExtra.abilities.int) } : undefined
       ),
       // Время не дублируем — оно и есть заголовок секции таблицы; в этой
       // колонке у умения полезнее его стоимость («Ячейка», «1 за долгий
@@ -11495,7 +11492,9 @@ export function DndCharacterView({
           >
             {Array.from({ length: 3 + (value.attunementExtra ?? 0) }, (_, i) => {
               const on = i < shown;
-              const img = <img src="/ui/fantasy-punk/semantic/map-buttons/button-01.webp" alt="" draggable={false} />;
+              // Медальон — фоном из CSS, не <img>: сборка автономного HTML
+              // встраивает только url() стилей, путь в JSX ушёл бы в сеть.
+              const img = <span className="dnd-attune-pip-face" aria-hidden="true" />;
               return !rowsAreSource && onQuickUpdate ? (
                 <button
                   key={i}
@@ -12279,7 +12278,10 @@ export function DndCharacterView({
         : null,
       weaponFx
     ),
-    ...combatSpellRows(liveCantrips, liveSpellsByLevel, spellAttackBonus, spellDc, spellNumbersFor),
+    ...combatSpellRows(liveCantrips, liveSpellsByLevel, spellAttackBonus, spellDc, spellNumbersFor, {
+      spell: spellAbilityKey ? spellAbilityMod : null,
+      abilities: value.abilities,
+    }),
     // Уровень класса-хозяина для кубов levelDice: строка класса/подкласса
     // по sourceParentId особенности. Ручные (без sourceParentId) — без скейла.
     ...featureActionRows(liveFeatureGroups, spellAttackBonus, spellDc, (pid) => {
@@ -13964,7 +13966,7 @@ export function DndCharacterView({
                         value={pool.used}
                         label={`Потрачено костей хитов ${pool.die}`}
                         max={pool.total}
-                        size={12}
+                        size={18}
                         onChange={
                           onQuickUpdate
                             ? (n) => onQuickUpdate({ hitDiceUsed: { ...value.hitDiceUsed, [pool.die]: n } })

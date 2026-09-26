@@ -678,7 +678,35 @@ function trimSpecialText(text: string): string {
   return `${words.slice(0, SPECIAL_TEXT_WORDS).join(" ")}…`;
 }
 
-export function effectsLabel(effects: DndEffect[], checks: DndCheck[] = [], profBonus?: number): string {
+/** Модификаторы, которые справочник пишет в кубах словами: «2к8 + ваш
+ *  модификатор заклинательной характеристики» («Лечение ран», «Лечащее
+ *  слово»), «+ ваш модификатор Интеллекта (мин. +1)» (пушка Артефактора).
+ *  null — характеристика не известна, текст остаётся как есть. */
+export interface EffectMods {
+  spell?: number | null;
+  int?: number | null;
+}
+
+const signedMod = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
+
+/** «2к8 + ваш модификатор заклинательной характеристики» → «2к8+3». */
+export function resolveModifierText(dice: string, mods?: EffectMods): string {
+  if (!mods) return dice;
+  let out = dice;
+  if (mods.spell != null) {
+    out = out
+      .replace(/\s*\+\s*ваш модификатор заклинательной характеристики/gi, signedMod(mods.spell))
+      .replace(/^ваш модификатор заклинательной характеристики$/i, String(Math.max(0, mods.spell)));
+  }
+  if (mods.int != null) {
+    out = out
+      .replace(/\s*\+\s*ваш модификатор Интеллекта\s*\(мин\.\s*\+1\)/gi, signedMod(Math.max(1, mods.int)))
+      .replace(/\s*\+\s*ваш модификатор Интеллекта/gi, signedMod(mods.int));
+  }
+  return out;
+}
+
+export function effectsLabel(effects: DndEffect[], checks: DndCheck[] = [], profBonus?: number, mods?: EffectMods): string {
   if (!effects || effects.length === 0) return "—";
   const numeric = effects.filter((e) => e.type === "damage" || e.type === "heal" || e.type === "temp_hp");
   if (numeric.length === 0) {
@@ -689,7 +717,7 @@ export function effectsLabel(effects: DndEffect[], checks: DndCheck[] = [], prof
   }
   return numeric
     .map((e) => {
-      const parts = [e.dice, e.type === "damage" ? e.damageType?.name : EFFECT_TYPE_LABELS[e.type]];
+      const parts = [e.dice ? resolveModifierText(e.dice, mods) : e.dice, e.type === "damage" ? e.damageType?.name : EFFECT_TYPE_LABELS[e.type]];
       const text = parts.filter(Boolean).join(" ");
       return e.halfOnSuccess ? `${text} (полов.)` : text;
     })

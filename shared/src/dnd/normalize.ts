@@ -15,13 +15,10 @@
  */
 import type {
   DndCharacterData,
-  DndClassEntry,
   DndSkillProfLevel,
   DndSpellEntry,
   DndEquipmentItem,
-  DndEquipmentSection,
   DndFeature,
-  DndProficiencyEntry,
   DndManualAttack,
   DndMasteredWeapon,
   DndPinnedAction,

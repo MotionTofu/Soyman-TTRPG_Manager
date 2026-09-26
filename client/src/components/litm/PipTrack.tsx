@@ -51,7 +51,9 @@ export function PipTrack({ value, max, onChange, size = 16, label, diamond, diam
             aria-label={label ? `${label}: ${n} из ${max}` : `${n} из ${max}`}
             aria-pressed={filled}
             onClick={() => onChange(value === n ? n - 1 : n)}
-            style={{ ...dot, padding: 0, margin: 0, cursor: "pointer" }}
+            // minHeight/minWidth: 0 — общая мишень 44px на телефоне (OneShot)
+            // тянула кружок в овал 12×44 (аудит 2026-09-26).
+            style={{ ...dot, padding: 0, margin: 0, minHeight: 0, minWidth: 0, cursor: "pointer" }}
           />
         );
       })}

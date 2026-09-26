@@ -2545,6 +2545,13 @@ span.dnd-card-corner {
   align-items: center;
   gap: var(--sp-4);
 }
+/* Длинное имя пула на телефоне («Экспериментальный эликсир») уводило
+   «3 из 3 Длинный отдых» за край — хвост переносится строкой ниже. */
+.dnd-pool-resource {
+  flex-wrap: wrap;
+  row-gap: 4px;
+  max-width: 100%;
+}
 .dnd-pool-slot,
 .dnd-pool-count {
   font-family: var(--font-mono);

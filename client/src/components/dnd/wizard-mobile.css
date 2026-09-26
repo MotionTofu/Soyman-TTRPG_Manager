@@ -158,6 +158,26 @@
 .wz-foot .primary {
   width: 100%;
 }
+/* «Назад | Далее» одной строкой. Слот «К плитке» (сцена карт кладёт его
+   порталом) занимал вторую колонку даже пустым, и «Далее» уезжал строкой
+   ниже в узкую первую (аудит 2026-09-26). Пустой — прячем, с кнопкой —
+   своей строкой; dense возвращает «Далее» к «Назад». */
+.wz-foot {
+  grid-auto-flow: row dense;
+}
+.wz-foot-slot {
+  grid-column: 1 / -1;
+}
+.wz-foot-slot:empty {
+  display: none;
+}
+.wz-foot > button {
+  grid-column: 1;
+}
+.wz-foot .wz-shadow {
+  display: block;
+  grid-column: 2;
+}
 
 /* ——— список шагов ——— */
 .wz-steplist {
@@ -807,3 +827,33 @@ button.wz-abil {
   margin-top: var(--sp-4, 12px);
 }
 
+
+/* Баннер мини-листа на узком экране (аудит 2026-09-26): стили были только
+   для ПК, и на «Обзоре» телефона карта шла во весь экран, а «портрет —
+   в Досье» прилипал к её правому краю. Та же обрезка и плашка, что на ПК. */
+@media (max-width: 1000px) {
+  .wz-mini-banner {
+    position: relative;
+    height: 160px;
+    overflow: hidden;
+  }
+  .wz-mini-banner img {
+    display: block;
+    width: 100%;
+    height: 280px;
+    object-fit: cover;
+    object-position: 50% 18%;
+  }
+  .wz-mini-banner span {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    padding: 3px 8px;
+    background: #141414;
+    color: #e8e4da;
+    font-family: var(--font-ui);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+}

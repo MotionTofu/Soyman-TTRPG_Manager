@@ -96,8 +96,8 @@ export const WizardMiniSheet = memo(function WizardMiniSheet({
       ) : (
         <div className="stack" style={{ gap: "var(--sp-2)" }}>
           <span className="muted">Перед созданием осталось:</span>
-          {problems.map((p) => (
-            <div key={p.text} className="row wizard-spread">
+          {problems.map((p, i) => (
+            <div key={`${p.text}-${i}`} className="row wizard-spread">
               <span>{p.text}</span>
               <button type="button" onClick={() => onFix(p.target)}>
                 Исправить

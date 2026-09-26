@@ -1989,9 +1989,13 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
         const list = featSlot && g.spellListChoice.length ? slotList(featSlot) ?? -1 : null;
         // Ключ с префиксом spell: — токены навыков матчат группы через
         // startsWith("class:") и чужие токены им не нужны.
+        // Два выбора из одного источника («Аберрантная драконья метка»:
+        // заговор и заклинание 1 круга) шли под одной подписью — две
+        // одинаковые строки «ещё 1» и повтор ключа (аудит 2026-09-26).
+        const part = g.spellChoices.length > 1 ? (c.level === 0 ? "заговор" : c.level != null ? `${c.level} круг` : `выбор ${i + 1}`) : "";
         spellGroups.push({
           key: `spell:${src}:${i}`,
-          label,
+          label: part ? `${label}: ${part}` : label,
           count: choiceCount(c, classProg as ClassProgression | undefined, subProg as ClassProgression | undefined, lvl),
           level: c.level,
           classIds: list != null ? [list] : c.classIds,
@@ -2655,7 +2659,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       if (featGrants.spellChoices.length > 0) {
         featLines.push(
           `заклинания на выбор: ${featGrants.spellChoices
-            .map((c) => (c.level === 0 ? `${c.count} заговора` : `${c.count} ${c.level} круга`))
+            .map((c) => (c.level === 0 ? `заговоры — ${c.count}` : `${c.level} круг — ${c.count}`))
             .join(", ")}`
         );
       }
@@ -2675,11 +2679,12 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
   // своём шаге — сюда не дублируются.
   function spellChoiceText(c: GrantedSpellChoice & { maxCircle?: number | null }): string {
     const what =
+      // «заговоры — 1», а не «1 заговора, 1 1 круга» (аудит 2026-09-26).
       c.level === 0
-        ? `${c.count} заговора`
+        ? `заговоры — ${c.count}`
         : c.level == null
-          ? `${c.count} заклинаний${c.maxCircle != null ? ` 1–${c.maxCircle} кругов` : ""}`
-          : `${c.count} ${c.level} круга`;
+          ? `заклинания${c.maxCircle != null ? ` 1–${c.maxCircle} круга` : ""} — ${c.count}`
+          : `${c.level} круг — ${c.count}`;
     const lists =
       c.classIds.length > 0
         ? c.classIds.map((id) => hierarchy.classes.find((cl) => cl.id === id)?.name ?? "класс").join("/")

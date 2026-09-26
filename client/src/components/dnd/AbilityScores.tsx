@@ -1,4 +1,4 @@
-import type { DndAbilityKey, DndAbilityScores, DndClassEntry, DndSkillProfLevel } from "../../types";
+import type { DndAbilityKey, DndAbilityScores } from "../../types";
 import { SKILL_CATALOG } from "./skillCatalog";
 
 const LABELS: { key: keyof DndAbilityScores; label: string }[] = [
