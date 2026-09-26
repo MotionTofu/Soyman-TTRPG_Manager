@@ -2061,8 +2061,12 @@ button.dnd-proficiency-chip {
   text-transform: uppercase;
   color: var(--skin-ink-soft);
 }
+/* Открытая способность: жёлтое притушено бумажной вуалью (2026-09-26 —
+   чистый кислотный слепил на целом абзаце описания). */
 .dnd-feat-item.is-open {
-  background: var(--skin-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
+  background:
+    linear-gradient(rgba(239, 235, 225, 0.62), rgba(239, 235, 225, 0.62)),
+    var(--skin-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
 }
 .dnd-feat-description {
   padding: 0 14px 14px;

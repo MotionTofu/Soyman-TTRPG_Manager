@@ -468,10 +468,13 @@ export function SensesEditor({
   value,
   onChange,
   options,
+  granted,
 }: {
   value: DndCreatureSense[];
   onChange: (v: DndCreatureSense[]) => void;
   options: DndMechanicsOption[];
+  /** Выданное видом и чертами — только показать: правится в их записях. */
+  granted?: { name: string; distance: string }[];
 }) {
   const [pick, setPick] = useState("");
   const [confirmDialog, confirm] = useConfirm();
@@ -484,6 +487,12 @@ export function SensesEditor({
     <div className="stack" style={{ gap: 4 }}>
       {confirmDialog}
       <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+        {granted?.map((s) => (
+          <span key={`g-${s.name}`} className="row muted" style={{ gap: 4 }} title="Даёт вид или черта — правится там">
+            {s.name}
+            {s.distance ? ` ${s.distance} фт.` : ""} (вид/черта)
+          </span>
+        ))}
         {value.map((s) => (
           <span key={s.name} className="row" style={{ gap: 4 }}>
             {s.name}
@@ -531,11 +540,14 @@ export function ChecklistEditor({
   onChange,
   options,
   label,
+  locked,
 }: {
   value: string[];
   onChange: (v: string[]) => void;
   options: DndMechanicsOption[];
   label: string;
+  /** Выданное эффектами (предок, черта): отмечено и закрыто, с источником. */
+  locked?: { name: string; source: string }[];
 }) {
   function toggle(name: string) {
     onChange(value.includes(name) ? value.filter((v) => v !== name) : [...value, name]);
@@ -544,12 +556,21 @@ export function ChecklistEditor({
     <div className="stack" style={{ gap: 4 }}>
       <span className="sb-prop-label">{label}</span>
       <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-        {options.map((o) => (
-          <label key={o.id} className="row" style={{ gap: 4 }}>
-            <input type="checkbox" checked={value.includes(o.name)} onChange={() => toggle(o.name)} />
-            {o.name}
-          </label>
-        ))}
+        {options.map((o) => {
+          const lock = locked?.find((l) => l.name.toLowerCase() === o.name.toLowerCase());
+          return (
+            <label key={o.id} className="row" style={{ gap: 4 }} title={lock ? `Даёт: ${lock.source}` : undefined}>
+              <input
+                type="checkbox"
+                checked={!!lock || value.includes(o.name)}
+                disabled={!!lock}
+                onChange={() => toggle(o.name)}
+              />
+              {o.name}
+              {lock && <span className="muted">({lock.source})</span>}
+            </label>
+          );
+        })}
         {options.length === 0 && <span className="muted">Справочник не заполнен.</span>}
       </div>
     </div>

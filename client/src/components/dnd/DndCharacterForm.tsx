@@ -11849,6 +11849,39 @@ export function DndCharacterView({
     if (own) setOpenSheetCard(own);
     else openMentionPreview("compendium_entry", feature.id);
   }
+  // Карты «Особенностей»: вид, класс и подкласс каждой строки, предок
+  // (строка видовых умений из записи-линии, её пишет визард). Предка окно
+  // правил не знает — он открывается превью записи.
+  const featureCards = [
+    { id: value.raceId, name: value.raceName || "Вид", lineage: false },
+    ...value.classes.flatMap((c) => [
+      { id: c.classId, name: c.className || "Класс", lineage: false },
+      { id: c.subclassId, name: c.subclassName || "Подкласс", lineage: false },
+    ]),
+    ...value.speciesFeatures
+      .filter((f) => f.entryId != null && (getEntry(f.entryId)?.kind === "lineage" || /^Предок:/.test(f.name)))
+      .map((f) => ({ id: f.entryId, name: f.name.replace(/^Предок:\s*/, ""), lineage: true })),
+  ].filter((c): c is { id: number; name: string; lineage: boolean } => c.id != null);
+  // Правка «Свойств»: выданное видом, предком и чертами — отмеченным и
+  // закрытым, с источником. Иначе сопротивление предка было на листе, но
+  // не в галочках, и правка читалась как «его нет».
+  const liveSheet = deriveSheet(withLiveEffects(value, getEntry));
+  const grantedResistances = liveSheet.damageResistances.filter((r) => r.source);
+  // Прибавки к ходьбе от черт («Подвижный» +10) — считаются сами; в правке
+  // базовой скорости их видно подписью, иначе 30 в поле и 40 на листе.
+  const walkBonuses = liveSheet.walkSpeed.parts.slice(1).filter((p) => !/^Истощение/.test(p.label));
+  const grantedSenses = withGrantedSenses({ ...value, sensesList: [] }, getEntry).sensesList;
+  function saveDraftFeatures() {
+    if (!draftFeatures) return;
+    onQuickUpdate?.(draftFeatures);
+    setDraftFeatures(null);
+    // Черту убрали или добавили — её выданные заклинания
+    // («Туманный шаг» «Затронутого феями») пересчитываются.
+    const ids = (list: DndFeature[]) => list.map((f) => f.entryId ?? "").join(",");
+    if (onQuickUpdate && ids(draftFeatures.feats) !== ids(value.feats)) {
+      void recomputeGrantedSpells({ ...value, feats: draftFeatures.feats }).then((spells) => onQuickUpdate(spells));
+    }
+  }
   function rulesCardTile(entryId: number | null, fallbackName: string, onOpen: () => void) {
     if (entryId == null) return null;
     const entry = getEntry(entryId);
@@ -13775,18 +13808,25 @@ export function DndCharacterView({
                       onToggle={() => setEditingTraits((v) => !v)}
                     />
                   )}
-                  {onQuickUpdate && !draftFeatures && (
+                  {/* «умения» в правке — «Сохранить» на том же месте, как у
+                      «Свойств» (владелец 2026-09-26); «Отмена» — рядом. */}
+                  {onQuickUpdate && (
                     <LabeledEditButton
                       label="умения"
-                      onToggle={() =>
-                        setDraftFeatures({
+                      editing={!!draftFeatures}
+                      onToggle={() => (draftFeatures ? saveDraftFeatures() : setDraftFeatures({
                           speciesFeatures: [...value.speciesFeatures],
                           classFeatures: [...value.classFeatures],
                           feats: [...value.feats],
                           specialAbilities: [...value.specialAbilities],
-                        })
+                        }))
                       }
                     />
+                  )}
+                  {draftFeatures && (
+                    <button type="button" className="dnd-chip" onClick={() => setDraftFeatures(null)}>
+                      Отмена
+                    </button>
                   )}
                 </div>
                 <span style={{ flex: "1 1 auto" }} aria-hidden="true" />
@@ -13802,10 +13842,16 @@ export function DndCharacterView({
               {editingTraits && onQuickUpdate ? (
                 <div className="stack">
                   <SpeedEditor value={value.speeds} onChange={(v) => onQuickUpdate({ speeds: v })} />
+                  {walkBonuses.length > 0 && (
+                    <span className="muted">
+                      К ходьбе само: {walkBonuses.map((p) => `${p.label} ${p.value > 0 ? "+" : ""}${p.value}`).join(", ")}
+                    </span>
+                  )}
                   <SensesEditor
                     value={value.sensesList}
                     onChange={(v) => onQuickUpdate({ sensesList: v })}
                     options={origin.senseOptions}
+                    granted={grantedSenses}
                   />
                   <div className="row" style={{ flexWrap: "wrap", gap: 16 }}>
                     <ChecklistEditor
@@ -13819,6 +13865,7 @@ export function DndCharacterView({
                       value={value.damageResistances}
                       onChange={(v) => onQuickUpdate({ damageResistances: v })}
                       options={origin.damageTypes}
+                      locked={grantedResistances}
                     />
                     <ChecklistEditor
                       label="Иммунитет к урону"
@@ -13839,17 +13886,11 @@ export function DndCharacterView({
               )}
               {draftFeatures ? (
                 <>
-                  {rulesCardTile(value.raceId, value.raceName || "Вид", () => setOpenRulesEntryId(value.raceId))}
                   <AutoFeatureListEdit
                     title="Видовые особенности"
                     values={draftFeatures.speciesFeatures}
                     onChange={(v) => setDraftFeatures({ ...draftFeatures, speciesFeatures: v })}
                   />
-                  <div className="dnd-feature-card-strip">
-                    {value.classes.map((c, i) => (
-                      <div key={`${c.classId}-${i}`}>{rulesCardTile(c.classId, c.className || "Класс", () => setOpenRulesEntryId(c.classId))}</div>
-                    ))}
-                  </div>
                   <AutoFeatureListEdit
                     title="Классовые особенности"
                     values={draftFeatures.classFeatures}
@@ -13880,36 +13921,12 @@ export function DndCharacterView({
                     systemId={value.systemId}
                     onChange={onQuickUpdate ? (v) => onQuickUpdate({ masteredWeapons: v }) : undefined}
                   />
-                  <div className="row" style={{ marginTop: 6, alignItems: "center" }}>
-                    <TabEditToggle
-                      editing
-                      onToggle={() => {
-                        onQuickUpdate?.(draftFeatures);
-                        setDraftFeatures(null);
-                        // Черту убрали или добавили — её выданные заклинания
-                        // («Туманный шаг» «Затронутого феями») пересчитываются.
-                        const ids = (list: DndFeature[]) => list.map((f) => f.entryId ?? "").join(",");
-                        if (onQuickUpdate && ids(draftFeatures.feats) !== ids(value.feats)) {
-                          void recomputeGrantedSpells({ ...value, feats: draftFeatures.feats }).then((spells) => onQuickUpdate(spells));
-                        }
-                      }}
-                    />
-                    <button type="button" onClick={() => setDraftFeatures(null)}>
-                      Отмена
-                    </button>
-                  </div>
                 </>
               ) : (
                 <>
-                  {rulesCardTile(value.raceId, value.raceName || "Вид", () => setOpenRulesEntryId(value.raceId))}
                   {/* Живые строки (liveFeatureGroups: класс, вид, черты, особые):
                       пустое описание подставляется из справочника. */}
                   <SbFeatureGroup title="Видовые особенности" values={liveFeatureGroups[1]} />
-                  <div className="dnd-feature-card-strip">
-                    {value.classes.map((c, i) => (
-                      <div key={`${c.classId}-${i}`}>{rulesCardTile(c.classId, c.className || "Класс", () => setOpenRulesEntryId(c.classId))}</div>
-                    ))}
-                  </div>
                   <SbFeatureGroup title="Классовые особенности" values={liveFeatureGroups[0]} />
                   <SbFeatureGroup title="Черты" values={liveFeatureGroups[2]} />
                   {/* Черта без сделанного выбора (+1, список, навыки) — строкой с
@@ -13918,6 +13935,17 @@ export function DndCharacterView({
                   <SbFeatureGroup title="Особые умения" values={liveFeatureGroups[3]} />
                 </>
               )}
+              {/* Карты правил — одной строкой в самом низу (владелец
+                  2026-09-26): вид, классы, подклассы, предок. */}
+              <div className="dnd-feature-card-strip">
+                {featureCards.map((c) => (
+                  <div key={c.id}>
+                    {rulesCardTile(c.id, c.name, () =>
+                      c.lineage ? openMentionPreview("compendium_entry", c.id) : setOpenRulesEntryId(c.id)
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

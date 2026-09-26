@@ -231,18 +231,24 @@
   text-decoration-style: dotted;
   text-underline-offset: 3px;
 }
+/* Карты «Особенностей» — одной строкой внизу, вдвое крупнее прежних 64px
+   (владелец 2026-09-26). */
 .dnd-feature-card-link {
-  width: 64px;
+  width: 128px;
   margin: 0 0 var(--sp-3);
 }
 .dnd-feature-card-link .dc-tile--small {
-  width: 64px;
+  width: 128px;
+}
+.dnd-feature-card-link .dc-tile--small .dc-tile-name {
+  font-size: var(--fs-meta, 13px);
 }
 .dnd-feature-card-strip {
   display: flex;
   gap: var(--sp-4);
   align-items: flex-start;
   overflow-x: auto;
+  margin-top: var(--sp-5);
 }
 .dnd-rules-card-head {
   justify-content: space-between;
