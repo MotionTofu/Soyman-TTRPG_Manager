@@ -142,7 +142,9 @@ export function DndCoinCalculator({
   // Ключ состава: пул + кто в дележе. Смена состава снимает блокировки.
   const setupKey = JSON.stringify([pool, members.map((m) => m.id)]);
 
-  const canWrite = senderId != null;
+  // Запись себе — это правка своего кошелька, персонаж кампании для неё не
+  // нужен (OneShot: senderId нет, и все кнопки были выключены).
+  const canWrite = true;
   const canSend = senderId != null && campaignId != null;
 
   function setPoolKey(key: CoinKey, v: string) {
@@ -253,6 +255,8 @@ export function DndCoinCalculator({
         {poolCp > 0 && <span> ({poolCp} мм)</span>}
       </p>
 
+      {campaignId != null && (
+        <>
       <span className="sb-prop-label">Делёж{n > 0 ? ` на ${n}` : ""}</span>
       {campaignId == null ? (
         <p className="muted" style={{ margin: 0 }}>
@@ -304,12 +308,15 @@ export function DndCoinCalculator({
         />
         добыча у меня: сначала забрать всё, потом разослать
       </label>
+        </>
+      )}
       {formError && (
         <p className="sb-save-error" role="status">
           {formError}
         </p>
       )}
       <div className="row picker-footer" style={{ gap: 8, flexWrap: "wrap" }}>
+        {campaignId != null && (
         <button
           type="button"
           className="primary"
@@ -319,6 +326,8 @@ export function DndCoinCalculator({
         >
           {busy ? "Рассылаю…" : `Разослать доли${sentCount > 0 ? ` (${sentCount})` : ""}`}
         </button>
+        )}
+        {campaignId != null && (
         <button
           type="button"
           disabled={!canWrite || !selfChecked || shareCp === 0 || sharedKey === setupKey || takenKey === setupKey}
@@ -327,13 +336,15 @@ export function DndCoinCalculator({
         >
           Записать мою долю
         </button>
+        )}
         <button
           type="button"
+          className={campaignId == null ? "primary" : undefined}
           disabled={!canWrite || poolCp === 0 || takenKey === setupKey}
           onClick={takeAll}
           title="Добавить всю добычу в свой кошелёк"
         >
-          Забрать всё себе
+          {campaignId == null ? "Записать себе" : "Забрать всё себе"}
         </button>
         <button type="button" onClick={onClose}>
           {bare ? "← Назад" : "Закрыть"}

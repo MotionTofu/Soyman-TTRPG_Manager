@@ -3037,6 +3037,64 @@ const COIN_FIELDS = [
 const EMPTY_COINS: DndCoins = { cp: "", sp: "", ep: "", gp: "", pp: "" };
 
 /**
+ * Вес и число предметов (S-17): отданное (transferOut) исключено — физически
+ * его уже нет. Невалидные qty/вес пропускаются (строка помечается чипом
+ * «счёт?»/«вес?»). Вес хранится в фунтах; монеты весят по правилу книги:
+ * 50 монет = 1 фунт.
+ */
+function equipmentLoad(sections: DndEquipmentSection[], coins: DndCoins | undefined, strength: number, doublings: number) {
+  const all = sections.flatMap((s) => s.items).filter((i) => !i.transferOut);
+  const capacityLb = carryCapacityLb(strength, doublings);
+  let totalWeight = coinsCount(coins ?? EMPTY_COINS) / 50;
+  let hasWeight = totalWeight > 0;
+  for (const it of all) {
+    const w = parseWeight(String(it.weight ?? ""));
+    if (w != null) {
+      totalWeight += w * parseQty(String(it.qty ?? ""));
+      hasWeight = true;
+    }
+  }
+  return { totalItems: all.length, totalWeight, capacityLb, overloaded: hasWeight && totalWeight > capacityLb };
+}
+
+/** Шапка «Снаряжения» (владелец 2026-09-26): между правкой и веером —
+ *  число предметов и вес, полоса веса — по низу плашки. Перегруз — цветом. */
+function EquipmentLoadPlate({
+  sections,
+  coins,
+  strength,
+  doublingNames,
+}: {
+  sections: DndEquipmentSection[];
+  coins?: DndCoins;
+  strength: number;
+  doublingNames: string[];
+}) {
+  const prefs = useDndPrefs();
+  const load = equipmentLoad(sections, coins, strength, doublingNames.length);
+  const pct = Math.min(100, load.capacityLb > 0 ? (load.totalWeight / load.capacityLb) * 100 : 0);
+  return (
+    <span className="dnd-magic-nums">
+      <span className="dnd-magic-num">
+        <span>Предметов</span> <b>{load.totalItems}</b>
+      </span>
+      <span
+        className={`dnd-magic-num dnd-load-plate${load.overloaded ? " is-over" : ""}`}
+        title={
+          doublingNames.length > 0 ? `СИЛ × 15 × 2^${doublingNames.length} (${doublingNames.join(", ")})` : "СИЛ × 15"
+        }
+      >
+        <span>{load.overloaded ? "Перегруз" : "Вес"}</span>{" "}
+        <b>
+          {formatWeight(load.totalWeight, prefs.weightUnit)} / {formatWeight(load.capacityLb, prefs.weightUnit)}
+        </b>
+        <i className="dnd-load-bar" aria-hidden="true" style={{ width: `${pct}%` }} />
+      </span>
+    </span>
+  );
+}
+
+/**
  * Кошелёк: пять чеканных монет с числами, а не пять полей ввода.
  *
  * Монеты читают чаще, чем правят, поэтому по умолчанию это числа — поле
@@ -3140,8 +3198,6 @@ function DndEquipmentQuickView({
   systemId,
   coins,
   accentColor,
-  strength,
-  carryDoublingNames,
   armorProfs,
   calcCampaignId,
   calcSenderId,
@@ -3157,10 +3213,6 @@ function DndEquipmentQuickView({
   coins?: DndCoins;
   /** Цвет класса — кромка магических предметов, единственная краска. */
   accentColor?: string;
-  /** Значение СИЛ — для грузоподъёмности. */
-  strength: number;
-  /** Удвоения грузоподъёмности, каждое ×2. */
-  carryDoublingNames?: string[];
   /** Имена владений доспехами — надетое без владения помечается в тегах. */
   armorProfs?: readonly string[];
   /** Калькулятор монет: кампания и свой персонаж для дележа/рассылки. */
@@ -3180,7 +3232,7 @@ function DndEquipmentQuickView({
   onQuickUpdate?: (patch: Partial<DndCharacterData>) => void;
 }) {
   const [editing, setEditing] = useState<{ si: number; ii: number } | null>(null);
-  const { detached } = useDndRuntime();
+  const { detached, campaignConnected } = useDndRuntime();
   const [addingSection, setAddingSection] = useState<number | null>(null);
   const [addMode, setAddMode] = useState<"bag" | null>(null);
   const [draft, setDraft] = useState<DndEquipmentItem>(EMPTY_EQUIPMENT_ITEM);
@@ -3200,9 +3252,8 @@ function DndEquipmentQuickView({
   // (broadcastCharacterUpdate) — ждать его здесь не надо, только ошибку.
   const [transferBusy, setTransferBusy] = useState<number | null>(null);
   const [transferError, setTransferError] = useState<string | null>(null);
-  // Хуки — все до раннего return (rules-of-hooks): prefs, поиск/фильтр,
+  // Хуки — все до раннего return (rules-of-hooks): поиск/фильтр,
   // калькулятор, цель перемещения, ошибки описаний и их контроллеры.
-  const prefs = useDndPrefs();
   const [equipQuery, setEquipQuery] = useState("");
   const [equipFilter, setEquipFilter] = useState<"all" | "equipped" | "magical">("all");
   const [calcOpen, setCalcOpen] = useState(false);
@@ -3530,33 +3581,12 @@ function DndEquipmentQuickView({
     await addFromBag(si, result);
   }
 
-  // S-17: сводка веса/кол-ва над инвентарём. Отданное (transferOut) исключено:
-  // физически его уже нет. Невалидные qty/вес пропускаются (та же математика,
-  // что валидация; строка помечается чипом «счёт?»/«вес?»). Вес хранится
-  // в фунтах, показывается в единице из настроек. Монеты весят по правилу
-  // книги: 50 монет = 1 фунт.
-  const doublings = carryDoublingNames ?? [];
-  const capacityLb = carryCapacityLb(strength, doublings.length);
-  const summary = (() => {
-    const all = sections.flatMap((s) => s.items).filter((i) => !i.transferOut);
-    const totalItems = all.length;
-    const equipped = all.filter((i) => i.equipped).length;
-    const attuned = all.filter((i) => i.attuned).length;
-    let totalWeight = coinsCount(coins ?? EMPTY_COINS) / 50;
-    let hasWeight = totalWeight > 0;
-    for (const it of all) {
-      const w = parseWeight(String(it.weight ?? ""));
-      if (w != null) {
-        totalWeight += w * parseQty(String(it.qty ?? ""));
-        hasWeight = true;
-      }
-    }
-    return { totalItems, equipped, attuned, totalWeight, hasWeight, overloaded: hasWeight && totalWeight > capacityLb };
-  })();
+  const totalItems = sections.flatMap((s) => s.items).filter((i) => !i.transferOut).length;
   const attuneMax = attunementMax ?? 3;
-  // Видимые строки под поиском/фильтром: порядок — ручной, как лежит в
-  // секциях. Автосортировки «надетое вверх» нет: она прыгала под пальцем при
-  // каждом тоггле; вопрос «что надето» закрывает фильтр. Индексы исходные.
+  // Видимые строки под поиском/фильтром. Настроенное — всегда наверху, под
+  // ним надетое, дальше ручной порядок секции (владелец 2026-09-26; раньше
+  // автосортировки не было — «прыгала под пальцем»). Индексы исходные.
+  const rowRank = (it: DndEquipmentItem) => (it.attuned ? 0 : it.equipped ? 1 : 2);
   const equipQ = equipQuery.trim().toLowerCase();
   const filtering = equipQ !== "" || equipFilter !== "all";
   const visibleSections = sections
@@ -3569,7 +3599,8 @@ function DndEquipmentQuickView({
           ({ item }) =>
             (!equipQ || `${item.name} ${item.notes}`.toLowerCase().includes(equipQ)) &&
             (equipFilter === "all" || (equipFilter === "equipped" ? !!item.equipped : !!item.magical))
-        ),
+        )
+        .sort((a, b) => rowRank(a.item) - rowRank(b.item)),
     }))
     .filter(({ section, rows }) => rows.length > 0 || (!filtering && section.items.length === 0));
   return (
@@ -3674,7 +3705,7 @@ function DndEquipmentQuickView({
       {/* Пустая вкладка (§1.11): не «пустоту», а приглашение с действием.
           Пока открыта форма «+ Свой», приглашение уступает место разделам —
           иначе форма, которая живёт в разделе, не появлялась вовсе. */}
-      {!filtering && summary.totalItems === 0 && sections.length > 0 && addingSection === null ? (
+      {!filtering && totalItems === 0 && sections.length > 0 && addingSection === null ? (
         <div className="sb-entry">
           <p className="muted" style={{ margin: "0 0 8px" }}>
             Имущества пока нет — возьмите из компендиума или запишите своё.
@@ -3702,7 +3733,7 @@ function DndEquipmentQuickView({
         >
           {sections.length > 1 &&   <div className="dnd-section-title">{section.name}</div>}
           <ul className="dnd-equipment-view-list">
-            {/* Порядок ручной — см. visibleSections выше. */}
+            {/* Порядок — см. visibleSections выше. */}
             {rows
               .map(({ item, ii }) =>
               editing && editing.si === si && editing.ii === ii ? (
@@ -3754,7 +3785,8 @@ function DndEquipmentQuickView({
                       меняется за столом, — счёт и заряды: КЗ и бонус атаки
                       живут на карте и во вкладке «Действия», третье место
                       разошлось бы с ними при первой же правке эффектов
-                      (гриллинг 2026-09-10). Тап по строке — описание. */}
+                      (гриллинг 2026-09-10). Тап по строке — окно описания,
+                      как у заклинаний и действий (владелец 2026-09-26). */}
                   <div
                     className="dnd-equipment-quick-row"
                     onClick={() => void toggleDescription(si, ii, item.entryId, !!item.notes)}
@@ -3929,26 +3961,6 @@ function DndEquipmentQuickView({
                       ]}
                     />
                   </div>
-                  {/* Раскрытая строка: у справочной — описание записи, у
-                      вписанной руками — её заметка. Заметка и есть то
-                      описание, которое игрок написал сам. */}
-                  {descOpen && descOpen.si === si && descOpen.ii === ii && (
-                    <div className="dnd-spell-description">
-                      {equipmentTagsLine(item) && <div className="dnd-equipment-tags">{equipmentTagsLine(item)}</div>}
-                      {!item.entryId ? (
-                        <MentionText text={item.notes} />
-                      ) : descErrors[item.entryId] ? (
-                        <span className="row" style={{ gap: 6, alignItems: "center" }}>
-                          <span className="muted">Описание не загрузилось.</span>
-                          <button type="button" className="comp-mini" onClick={() => void loadDescription(item.entryId!)}>
-                            Повторить
-                          </button>
-                        </span>
-                      ) : (
-                        <MentionText text={descriptions[item.entryId] ?? "Загрузка…"} />
-                      )}
-                    </div>
-                  )}
                 </li>
               )
             )}
@@ -3983,7 +3995,7 @@ function DndEquipmentQuickView({
               {!detached && <button type="button" className="dnd-chip" onClick={() => setPickingSection(si)}>
                 + Из компендиума
               </button>}
-              {!detached && <button type="button" className="dnd-chip" onClick={() => startAdd(si, "bag")}>
+              {!detached && campaignConnected && <button type="button" className="dnd-chip" onClick={() => startAdd(si, "bag")}>
                 + Из мешка
               </button>}
             </div>
@@ -3991,6 +4003,43 @@ function DndEquipmentQuickView({
         </div>
       ))
       )}
+      {/* Окно описания: у справочной строки — описание записи, у вписанной
+          руками — её заметка. Заметка и есть то описание, которое игрок
+          написал сам. */}
+      {descOpen && sections[descOpen.si]?.items[descOpen.ii] && (() => {
+        const item = sections[descOpen.si].items[descOpen.ii];
+        const tags = equipmentTagsLine(item);
+        return (
+          <Modal onClose={() => setDescOpen(null)}>
+            <div className="stack dnd-spell-modal">
+              <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div className="dnd-spell-modal-title">
+                  <h3 style={{ margin: 0 }}>{item.name}</h3>
+                </div>
+                <button type="button" className="comp-mini" onClick={() => setDescOpen(null)} aria-label="Закрыть">
+                  <NavIcon name="close" />
+                </button>
+              </div>
+              {tags && <div className="dnd-equipment-tags">{tags}</div>}
+              {!item.entryId ? (
+                <MentionText text={item.notes} />
+              ) : descErrors[item.entryId] ? (
+                <span className="row" style={{ gap: 6, alignItems: "center" }}>
+                  <span className="muted">Описание не загрузилось.</span>
+                  <button type="button" className="comp-mini" onClick={() => void loadDescription(item.entryId!)}>
+                    Повторить
+                  </button>
+                </span>
+              ) : (
+                <>
+                  <MentionText text={descriptions[item.entryId] ?? "Загрузка…"} />
+                  {item.notes?.trim() ? <MentionText text={item.notes} /> : null}
+                </>
+              )}
+            </div>
+          </Modal>
+        );
+      })()}
       {pickingSection != null && (
         <DndEquipmentPickerModal
           systemId={systemId}
@@ -4077,42 +4126,9 @@ function DndEquipmentQuickView({
         />
       )}
       </div>
-      {/* Боковая колонка (макет 2026-09-25): вес, настройка, кошелёк. На
-          телефоне колонка растворяется в потоке, вес встаёт наверх. */}
+      {/* Боковая колонка (макет 2026-09-25): настройка, кошелёк; вес —
+          в шапке вкладки (2026-09-26). */}
       <aside className="dnd-equipment-aside">
-        {/* Шапка: не строка «Предметов · Вес · Нести», а одна величина, за
-            которой действительно следят, — вес полосой. Пока веса хватает,
-            полоса тихая; перегруз — единственное место раздела, где берётся
-            цвет предупреждения. Штрафа к скорости лист не считает, поэтому
-            и не обещает его словами. */}
-        <div className="dnd-equipment-summary">
-          <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-            <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
-              <span className="dnd-summary-num">{summary.totalItems}</span> предметов
-            </span>
-            <span
-              className={`muted${summary.attuned > attuneMax ? " dnd-limit-over" : ""}`}
-              style={{ fontSize: "var(--fs-meta)" }}
-              title={summary.attuned > attuneMax ? "Лимит настройки превышен" : `Настроено ${summary.attuned} из ${attuneMax}`}
-            >
-              Настройка <span className="dnd-summary-num">{summary.attuned}/{attuneMax}</span>
-            </span>
-          </div>
-          <div className="row dnd-weight-row" style={{ gap: 8, alignItems: "center" }}>
-            <div
-              className={`dnd-weight-bar${summary.overloaded ? " is-over" : ""}`}
-              role="img"
-              aria-label={`Вес ${formatWeight(summary.totalWeight, prefs.weightUnit)} из ${formatWeight(capacityLb, prefs.weightUnit)}`}
-              title={doublings.length > 0 ? `СИЛ × 15 × 2^${doublings.length} (${doublings.join(", ")})` : "СИЛ × 15"}
-            >
-              <span style={{ width: `${Math.min(100, capacityLb > 0 ? (summary.totalWeight / capacityLb) * 100 : 0)}%` }} />
-            </div>
-            <span className={`dnd-weight-num${summary.overloaded ? " dnd-limit-over" : ""}`}>
-              {formatWeight(summary.totalWeight, prefs.weightUnit)} / {formatWeight(capacityLb, prefs.weightUnit)}
-            </span>
-          </div>
-          {summary.overloaded && <div className="dnd-limit-over dnd-overload-note">Перегруз</div>}
-        </div>
         {attunement}
         <DndCoinPurse coins={coins ?? EMPTY_COINS} onCommit={(c) => commit({ coins: c })} onOpenCalc={() => setCalcOpen(true)} />
       </aside>
@@ -7524,6 +7540,10 @@ function DndArcanumPicker({
  * несколько и добавить разом. Группы — по виду записи: магические предметы
  * отдельно от обычного снаряжения.
  */
+/** Подписи редкости в фильтре пикера — во множественном там, где так
+ *  назвал владелец; значение фильтра — как в справочнике. */
+const RARITY_LABELS: Record<string, string> = { Обычный: "Обычные", Необычный: "Необычные" };
+
 function DndEquipmentPickerModal({
   systemId,
   ownedIds,
@@ -7542,7 +7562,7 @@ function DndEquipmentPickerModal({
   // Фильтры пикера: тип, редкость, «требует настройки», сортировка.
   // До добавления видна характеристика строки.
   const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [rarityFilter, setRarityFilter] = useState<string>("any");
+  const [rarityFilter, setRarityFilter] = useState<string>("mundane");
   const [attuneOnly, setAttuneOnly] = useState(false);
   const [sortMode, setSortMode] = useState<"name" | "ac" | "cost">("name");
 
@@ -7634,7 +7654,11 @@ function DndEquipmentPickerModal({
       const r = (e.data as Record<string, unknown> | undefined)?.rarity;
       if (typeof r === "string" && r.trim()) set.add(r.trim());
     }
-    return [...set].sort((a, b) => a.localeCompare(b, "ru"));
+    // Порядок — по возрастанию редкости (владелец 2026-09-26); незнакомые
+    // значения (другая система) — в конец по алфавиту.
+    const order = ["Обычный", "Необычный", "Редкий", "Очень редкий", "Легендарный", "Артефакт", "Варьируется"];
+    const rest = [...set].filter((r) => !order.includes(r)).sort((a, b) => a.localeCompare(b, "ru"));
+    return [...order.filter((r) => set.has(r)), ...rest];
   }, [all]);
   const typeOptions = useMemo(() => {
     const set = new Set<string>();
@@ -7648,8 +7672,11 @@ function DndEquipmentPickerModal({
     // «кольчуга» находится и как «средний доспех», и как «необычный».
     .filter((e) => !q || e.name.toLowerCase().includes(q) || entrySpecLine(e).toLowerCase().includes(q))
     .filter((e) => typeFilter === "all" || entryTypeKey(e) === typeFilter)
+    // Поиск перекрывает редкость, как круги в «Взять заклинания»: иначе
+    // «зелье лечения» под «Немагическими» не находилось бы вовсе.
     .filter((e) => {
-      if (rarityFilter === "any") return true;
+      if (q || rarityFilter === "any") return true;
+      if (rarityFilter === "mundane") return e.kind !== "magic_item";
       const r = (e.data as Record<string, unknown> | undefined)?.rarity;
       return r === rarityFilter;
     })
@@ -7702,12 +7729,13 @@ function DndEquipmentPickerModal({
           <label className="row muted" style={{ gap: 4, fontSize: "var(--fs-meta)" }}>
             Редкость:
             <select value={rarityFilter} onChange={(e) => setRarityFilter(e.target.value)} aria-label="Фильтр по редкости">
-              <option value="any">любая</option>
+              <option value="mundane">Немагические</option>
               {rarities.map((r) => (
                 <option key={r} value={r}>
-                  {r}
+                  {RARITY_LABELS[r] ?? r}
                 </option>
               ))}
+              <option value="any">Любая</option>
             </select>
           </label>
           <label className="row muted" style={{ gap: 4, fontSize: "var(--fs-meta)" }}>
@@ -10960,15 +10988,34 @@ export function DndCharacterView({
         </div>
         {/* Кнопки слотов — в строке с ячейками, у правого края. */}
         <div className="row" style={{ gap: 8, alignItems: "center", justifyContent: "space-between" }}>
-          <PipTrack
-            diamondFrom={4}
-            value={shown}
-            label="Настроено предметов"
-            max={3 + (value.attunementExtra ?? 0)}
-            onChange={
-              !rowsAreSource && onQuickUpdate ? (n) => onQuickUpdate({ attunementCount: n }) : undefined
-            }
-          />
+          {/* Медальоны (владелец 2026-09-26): пустой слот — тусклый ч/б,
+              занятый — яркий. Руками число ставится только в старых листах. */}
+          <span
+            className="dnd-attune-pips"
+            role="group"
+            aria-label={`Настроено предметов: ${shown} из ${3 + (value.attunementExtra ?? 0)}`}
+          >
+            {Array.from({ length: 3 + (value.attunementExtra ?? 0) }, (_, i) => {
+              const on = i < shown;
+              const img = <img src="/ui/fantasy-punk/semantic/map-buttons/button-01.webp" alt="" draggable={false} />;
+              return !rowsAreSource && onQuickUpdate ? (
+                <button
+                  key={i}
+                  type="button"
+                  className={`dnd-attune-pip${on ? " is-on" : ""}`}
+                  aria-label={`Слот настройки ${i + 1}`}
+                  aria-pressed={on}
+                  onClick={() => onQuickUpdate({ attunementCount: on && i + 1 === shown ? i : i + 1 })}
+                >
+                  {img}
+                </button>
+              ) : (
+                <span key={i} className={`dnd-attune-pip${on ? " is-on" : ""}`} aria-hidden="true">
+                  {img}
+                </span>
+              );
+            })}
+          </span>
           {onQuickUpdate && (
             <span className="row" style={{ gap: 4 }}>
               <button
@@ -13275,6 +13322,17 @@ export function DndCharacterView({
                   <span className="dnd-tab-btn" aria-hidden="true" />
                 )}
                 <div className="dnd-tab-center dnd-tab-mid">
+                  <EquipmentLoadPlate
+                    sections={value.equipmentSections}
+                    coins={value.coins}
+                    strength={value.abilities.str}
+                    doublingNames={findCarryDoublings([
+                      ...value.speciesFeatures,
+                      ...value.classFeatures,
+                      ...value.feats,
+                      ...value.specialAbilities,
+                    ])}
+                  />
                   {canUseInbox && ownerCharacterId != null && (
                     <button type="button" className="dnd-transfer-btn" onClick={() => setTransferModalOpen(true)}>
                       Передать предмет
@@ -13300,13 +13358,6 @@ export function DndCharacterView({
                     coins={value.coins}
                     accentColor={cardColor}
                     armorProfs={armorProfNames(value.proficiencies)}
-                    strength={value.abilities.str}
-                    carryDoublingNames={findCarryDoublings([
-                      ...value.speciesFeatures,
-                      ...value.classFeatures,
-                      ...value.feats,
-                      ...value.specialAbilities,
-                    ])}
                     calcCampaignId={campaignId}
                     calcSenderId={ownerCharacterId}
                     calcSenderName={value.characterName}
