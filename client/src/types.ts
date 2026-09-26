@@ -366,6 +366,11 @@ export interface Character {
   /** Система кампании (или своя у персонажа без кампании) — GET /characters/:id. */
   system_name?: string | null;
   system_code?: string | null;
+  /** Кампания персонажа ушла в архив — игрок может вывести его «без кампании». */
+  campaign_archived?: number;
+  /** Заявка «без кампании» → кампания, ждёт Мастера (гриллинг «персонаж = лист», Q11). */
+  requested_campaign_id?: number | null;
+  requested_campaign_name?: string | null;
   character_name: string;
   short_name: string | null;
   backstory: string;

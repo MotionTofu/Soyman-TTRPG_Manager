@@ -5,6 +5,8 @@ import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
 import { Modal } from "../components/Modal";
 import { PageFrame } from "../components/PageFrame";
 import { PORTABLE_MAX_HTML_BYTES } from "@shared/portable/parse";
+import backEvil from "../assets/cards/back-evil.webp";
+import "./player-library.css";
 
 interface SheetSummary {
   format: string;
@@ -19,18 +21,56 @@ interface MyCharacter {
   character_name: string;
   campaign_id: number | null;
   campaign_name: string | null;
+  campaign_archived: number;
+  requested_campaign_id: number | null;
+  requested_campaign_name: string | null;
+  avatar_image_url: string | null;
   sheet: SheetSummary | null;
 }
 
-// Подпись кнопки: для D&D — вид · класс [подкласс] · уровень, для остальных
-// систем и без чарника — кампания. Имя рядом, как везде.
+const SHEET_LABEL: Record<string, string> = { litm_character: "Лист LitM", zip_character: "Лист «Золото и прах»" };
+
+// Подпись карточки как в OneShot (Q19): «Класс N ур.» у D&D, у остальных — лист
+// системы, без листа — «Без листа».
 function characterSubtitle(c: MyCharacter): string {
   const s = c.sheet;
-  if (s && s.format === "dnd_character" && (s.race || s.class || s.level)) {
-    const cls = [s.class, s.subclass ? `[${s.subclass}]` : ""].filter(Boolean).join(" ");
-    return [s.race, [cls, s.level > 0 ? `${s.level} ур.` : ""].filter(Boolean).join(" ")].filter(Boolean).join(" · ");
+  if (!s) return "Без листа";
+  if (s.format === "dnd_character") {
+    return [s.class, s.level > 0 ? `${s.level} ур.` : ""].filter(Boolean).join(" ") || "Лист D&D";
   }
-  return c.campaign_name ?? "без кампании";
+  return SHEET_LABEL[s.format] ?? "Лист";
+}
+
+type Group = { key: string; title: string; note?: string; characters: MyCharacter[] };
+
+// Библиотека по кампаниям + «Без кампании» (гриллинг «персонаж = лист», Q10/Q12):
+// живые кампании по алфавиту, за ними архивные — персонаж остаётся в группе
+// кампании, пока игрок сам его не выведет, — и в конце «Без кампании».
+function groupCharacters(list: MyCharacter[]): Group[] {
+  const byCampaign = new Map<number, Group & { archived: boolean }>();
+  const free: MyCharacter[] = [];
+  for (const c of list) {
+    if (c.campaign_id == null) {
+      free.push(c);
+      continue;
+    }
+    let g = byCampaign.get(c.campaign_id);
+    if (!g) {
+      g = {
+        key: `c${c.campaign_id}`,
+        title: c.campaign_name ?? "Кампания",
+        note: c.campaign_archived ? "кампания в архиве" : undefined,
+        archived: !!c.campaign_archived,
+        characters: [],
+      };
+      byCampaign.set(c.campaign_id, g);
+    }
+    g.characters.push(c);
+  }
+  const campaigns = [...byCampaign.values()].sort(
+    (a, b) => Number(a.archived) - Number(b.archived) || a.title.localeCompare(b.title, "ru")
+  );
+  return [...campaigns, { key: "free", title: "Без кампании", characters: free }];
 }
 
 interface MyCampaign {
@@ -45,10 +85,9 @@ interface NameOnly {
   name: string;
 }
 
-// Чарники игрока: все его персонажи на этом сервере + создание нового.
-// Создание идёт от кампании (первый шаг), потом система (по умолчанию —
-// кампании), потом имя: меньше неинтуитивных кликов, чем «создай в пустоте,
-// а Мастер потом привяжет». После создания — сразу в визард (?newSheet=1).
+// Библиотека персонажей игрока: группы по кампаниям и «Без кампании»
+// (гриллинг «персонаж = лист» 2026-09-27, Q10–Q19). Игрок заводит персонажа
+// только без кампании, в кампанию — заявкой, которую принимает Мастер.
 export function PlayerSheetsPage() {
   const navigate = useNavigate();
   const me = useResource<{ characters: MyCharacter[] }>("/player/me");
@@ -108,7 +147,7 @@ export function PlayerSheetsPage() {
         html: await file.text(),
       });
       afterWrite([{ path: "/player/me" }, { kind: "character" }]);
-      navigate(`/characters/${created.id}/sheet`);
+      navigate(`/characters/${created.id}`);
     } catch (e) {
       const decision = portableDecision(e);
       if (decision?.code === "portable-character-exists" && decision.match) {
@@ -137,7 +176,7 @@ export function PlayerSheetsPage() {
       });
       closeDecision();
       afterWrite([{ path: "/player/me" }, { kind: "character" }]);
-      navigate(`/characters/${result.id}/sheet`);
+      navigate(`/characters/${result.id}`);
     } catch (e) {
       // A conflict surfacing at commit (or any other failure): never proceed
       // with a stale decision — close and show the server's message.
@@ -162,19 +201,14 @@ export function PlayerSheetsPage() {
     setName("");
   }
 
-  // Система кампании — умолчание: менять нужно редко, а выбирать каждый раз
-  // заставляло думать ни о чём.
+  // Система кампании заявки — умолчание, если своя ещё не выбрана.
   function pickCampaign(id: string) {
     setCampaignId(id);
-    if (!id) {
-      setSystemId("");
-      return;
-    }
     const camp = campaigns?.find((c) => c.id === Number(id));
-    setSystemId(camp?.system_id ? String(camp.system_id) : "");
+    if (!systemId && camp?.system_id) setSystemId(String(camp.system_id));
   }
 
-  async function create(goSheet: boolean) {
+  async function create() {
     if (!name.trim()) {
       setCreateError("Назовите персонажа.");
       return;
@@ -188,9 +222,9 @@ export function PlayerSheetsPage() {
         system_id: systemId ? Number(systemId) : null,
       });
       afterWrite([{ path: "/player/me" }, { path: "/player/campaigns" }, { kind: "character" }]);
-      // Выбор лучше навязывания: кому профиль (досье, заметки), кому сразу
-      // чарник. Визард откроется и там, и там (?newSheet=1).
-      navigate(goSheet ? `/characters/${created.id}/sheet?newSheet=1` : `/characters/${created.id}?tab=statblock&newSheet=1`);
+      // Персонаж = лист: страница откроется экраном «Листа ещё нет» с дорогами
+      // по системе (визард, случайно, импорт).
+      navigate(`/characters/${created.id}`);
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -207,7 +241,7 @@ export function PlayerSheetsPage() {
         !creating && (
           <>
             <button type="button" className="primary" onClick={startCreate}>
-              + Новый чарник
+              + Новый персонаж
             </button>
             <button type="button" disabled={importing} onClick={() => importFile.current?.click()}>
               {importing ? "Импортируем…" : "Импортировать персонажа"}
@@ -264,42 +298,49 @@ export function PlayerSheetsPage() {
       )}
       {listError && <LoadErrorCard message={<>Не удалось загрузить персонажей: {listError}</>} onRetry={me.reload} />}
       {characters === null && !listError && <ListSkeleton variant="rows" label="Загрузка персонажей" />}
-      {characters !== null && characters.length === 0 && !creating && (
-        <p className="muted">Чарников пока нет — заведите первого.</p>
-      )}
-      {characters !== null && characters.length > 0 && (
-        <div className="stack" style={{ gap: 8 }}>
-          {characters.map((c) => (
-            <Link key={c.id} to={`/characters/${c.id}`} className="card row" style={{ textDecoration: "none", gap: 12 }}>
-              <strong>{c.character_name}</strong>
-              <span className="muted">{characterSubtitle(c)}</span>
-            </Link>
-          ))}
-        </div>
-      )}
+      {characters !== null &&
+        groupCharacters(characters).map((g) => (
+          <section key={g.key} className="player-library-group">
+            <h3 className="player-library-title">
+              {g.title}
+              {g.note && <span className="muted"> · {g.note}</span>}
+              <span className="player-library-count">{g.characters.length}</span>
+            </h3>
+            {g.characters.length === 0 ? (
+              <p className="muted">
+                Здесь — персонажи, которых вы завели сами или импортировали из OneShot. В кампанию их подают заявкой из меню «⋯» листа.
+              </p>
+            ) : (
+              <div className="player-library-grid">
+                {g.characters.map((c) => (
+                  <Link key={c.id} to={`/characters/${c.id}`} className="player-library-card">
+                    <img src={c.avatar_image_url || backEvil} alt="" />
+                    <span className="player-library-name">{c.character_name}</span>
+                    <span className="player-library-sub">{characterSubtitle(c)}</span>
+                    {c.requested_campaign_id != null && (
+                      <span className="player-library-badge">Заявка в «{c.requested_campaign_name}» ждёт Мастера</span>
+                    )}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+        ))}
       {creating && (
         <div className="card stack">
-          <strong>Новый чарник</strong>
+          <strong>Новый персонаж</strong>
           <label>
-            Кампания
-            <select value={campaignId} onChange={(e) => pickCampaign(e.target.value)}>
-              <option value="">Без кампании</option>
-              {(campaigns ?? []).map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            Имя персонажа
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Как зовут?"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void create();
+              }}
+            />
           </label>
-          {/* Пустой список читается как поломка: игрок видит одну строку «Без
-              кампании» и не понимает, почему его стола там нет. Причина бывает
-              разная — его убрали из состава, кампанию увели в архив, — и снаружи
-              они неразличимы, поэтому говорим о следствии и к кому идти. */}
-          {campaigns !== null && campaigns.length === 0 && (
-            <p className="muted" style={{ margin: 0 }}>
-              Вероятно, у вас нет доступа к кампании — уточните у своего мастера.
-            </p>
-          )}
           <label>
             Система
             <select value={systemId} onChange={(e) => setSystemId(e.target.value)}>
@@ -311,24 +352,23 @@ export function PlayerSheetsPage() {
               ))}
             </select>
           </label>
+          {/* Персонаж заводится «без кампании» (Q16); кампания здесь — сразу
+              заявка Мастеру, как «Подать в кампанию» из меню листа. */}
           <label>
-            Имя персонажа
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Как зовут?"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void create(true);
-              }}
-            />
+            Подать заявку в кампанию
+            <select value={campaignId} onChange={(e) => pickCampaign(e.target.value)}>
+              <option value="">Не подавать</option>
+              {(campaigns ?? []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
           </label>
           {createError && <p className="error">{createError}</p>}
           <div className="row" style={{ gap: 8 }}>
-            <button type="button" className="primary" disabled={saving} onClick={() => void create(false)}>
-              {saving ? "Создаю…" : "В профиль"}
-            </button>
-            <button type="button" disabled={saving} onClick={() => void create(true)}>
-              Сразу в чарник
+            <button type="button" className="primary" disabled={saving} onClick={() => void create()}>
+              {saving ? "Создаю…" : "Создать"}
             </button>
             <button type="button" onClick={() => setCreating(false)} disabled={saving}>
               Отмена

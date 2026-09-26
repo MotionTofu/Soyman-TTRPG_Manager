@@ -35,6 +35,7 @@ import { CampaignAdventuresCard } from "../components/CampaignAdventuresCard";
 import { CrossLinksWizard } from "../components/CrossLinksWizard";
 import { EmptyState } from "../components/EmptyState";
 import { RemindersWidget } from "../components/RemindersWidget";
+import { CharacterRequestsBlock } from "../components/CharacterRequestsBlock";
 import { NavIcon } from "../components/NavIcons";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import {
@@ -816,6 +817,7 @@ export function CampaignDetailPage() {
               <h3 className="section-heading-sub-title"><span className="section-heading-sub-icon" aria-hidden="true">◆</span> Состав</h3>
               <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>{campaign.roster.length} в игре</span>
             </div>
+            <CharacterRequestsBlock campaignId={campaignId} />
             <PlayersAndCharactersTab
               campaignId={campaignId}
               roster={campaign.roster}

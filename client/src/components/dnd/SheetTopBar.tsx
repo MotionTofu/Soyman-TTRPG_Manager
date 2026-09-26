@@ -14,6 +14,8 @@ export type SheetMenuExtra = {
   onRelations?: () => void;
   player?: { name: string; onOpen: () => void };
   onArchive?: () => void;
+  /** Пункты раздела «Персонаж» до архива: заявка в кампанию, вывод из архивной. */
+  actions?: { label: string; onClick: () => void }[];
 };
 
 /**
@@ -202,12 +204,17 @@ export function SheetTopBar({
             Показать жесты
           </button>
         )}
-        {(extra?.player || extra?.onArchive) && <span className="sheet-bar-section">Персонаж</span>}
+        {(extra?.player || extra?.onArchive || !!extra?.actions?.length) && <span className="sheet-bar-section">Персонаж</span>}
         {extra?.player && (
           <button type="button" onClick={run(extra.player.onOpen)}>
             Игрок: {extra.player.name}
           </button>
         )}
+        {extra?.actions?.map((a) => (
+          <button key={a.label} type="button" onClick={run(a.onClick)}>
+            {a.label}
+          </button>
+        ))}
         {extra?.onArchive && (
           <button type="button" className="sheet-bar-danger" onClick={run(extra.onArchive)}>
             Архивировать персонажа

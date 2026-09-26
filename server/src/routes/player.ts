@@ -83,6 +83,12 @@ function canWriteInCampaign(playerId: number, campaignId: number): boolean {
   return row?.status === "active";
 }
 
+// Подать персонажа можно только в свою живую кампанию, из которой игрок не выбыл.
+function canRequestCampaign(playerId: number, campaignId: number): boolean {
+  if (!canWriteInCampaign(playerId, campaignId)) return false;
+  return !!db.prepare("SELECT id FROM campaigns WHERE id = ? AND archived_at IS NULL").get(campaignId);
+}
+
 // Throws-as-404 guard used by every route below that takes a :characterId —
 // keeps "not mine" and "doesn't exist" indistinguishable to the caller.
 function requireOwnCharacter(playerId: number, characterId: string | number): CharacterRow | null {
@@ -98,8 +104,12 @@ playerRouter.get("/me", (req: AuthedRequest, res) => {
   const player = db.prepare("SELECT id, name FROM players WHERE id = ?").get(playerId);
   const characters = db
     .prepare(
-      `SELECT c.id, c.character_name, c.campaign_id, c.avatar_image_path, camp.name as campaign_name
-       FROM characters c LEFT JOIN campaigns camp ON camp.id = c.campaign_id
+      `SELECT c.id, c.character_name, c.campaign_id, c.avatar_image_path, camp.name as campaign_name,
+              camp.archived_at IS NOT NULL as campaign_archived,
+              c.requested_campaign_id, req.name as requested_campaign_name
+       FROM characters c
+       LEFT JOIN campaigns camp ON camp.id = c.campaign_id
+       LEFT JOIN campaigns req ON req.id = c.requested_campaign_id
        WHERE c.player_id = ? AND c.archived_at IS NULL
        ORDER BY c.created_at`
     )
@@ -109,6 +119,9 @@ playerRouter.get("/me", (req: AuthedRequest, res) => {
     campaign_id: number | null;
     avatar_image_path: string | null;
     campaign_name: string | null;
+    campaign_archived: number;
+    requested_campaign_id: number | null;
+    requested_campaign_name: string | null;
   }[];
   // Сводка листа для кнопок «Чарников»: вид/класс/уровень для D&D, иначе
   // кнопки показывают кампанию. Парсинг дешёвый — персонажей у игрока единицы.
@@ -116,7 +129,8 @@ playerRouter.get("/me", (req: AuthedRequest, res) => {
     const sheet = db
       .prepare("SELECT format, content FROM statblocks WHERE owner_type = 'character' AND owner_id = ? ORDER BY id LIMIT 1")
       .get(c.id) as { format: string; content: string } | undefined;
-    if (!sheet) return { ...c, sheet: null };
+    const base = { ...c, avatar_image_url: c.avatar_image_path ? toFileUrl(c.avatar_image_path) : null };
+    if (!sheet) return { ...base, sheet: null };
     let summary: { format: string; race: string; class: string; subclass: string; level: number } | null = null;
     if (sheet.format === "dnd_character") {
       try {
@@ -139,7 +153,7 @@ playerRouter.get("/me", (req: AuthedRequest, res) => {
     } else {
       summary = { format: sheet.format, race: "", class: "", subclass: "", level: 0 };
     }
-    return { ...c, sheet: summary };
+    return { ...base, sheet: summary };
   });
   res.json({ user: req.user, player, characters: withSheets });
 });
@@ -232,9 +246,9 @@ playerRouter.get("/campaigns", (req: AuthedRequest, res) => {
 
 // Standalone character — not tied to any campaign, filed under the player's
 // own vault folder. system_id is optional (a character can exist with no
-// mechanical system attached yet). campaign_id — тоже опционален, но если
-// дан, то только своя активная кампания из ростера: создавать персонажа
-// сразу привязанным быстрее, чем просить Мастера.
+// mechanical system attached yet). Игрок заводит персонажа только «без
+// кампании» (гриллинг «персонаж = лист» 2026-09-27, Q16): `campaign_id`
+// становится заявкой в эту кампанию, а принимает её Мастер (Q11).
 playerRouter.post("/characters", (req: AuthedRequest, res) => {
   const playerId = req.user!.playerId!;
   const { character_name, system_id, campaign_id } = req.body as {
@@ -248,7 +262,7 @@ playerRouter.post("/characters", (req: AuthedRequest, res) => {
     if (!myCampaignIds(playerId).includes(Number(campaign_id))) {
       return res.status(404).json({ error: "not found" });
     }
-    if (!canWriteInCampaign(playerId, Number(campaign_id))) {
+    if (!canRequestCampaign(playerId, Number(campaign_id))) {
       return res.status(403).json({ error: "read only in this campaign" });
     }
     campaignId = Number(campaign_id);
@@ -262,7 +276,7 @@ playerRouter.post("/characters", (req: AuthedRequest, res) => {
   const folder = standaloneCharacterFolder(ensurePlayerFolder(playerId, player.name, player.folder_path), character_name);
   const info = db
     .prepare(
-      "INSERT INTO characters (player_id, campaign_id, system_id, character_name, folder_path) VALUES (?, ?, ?, ?, ?)"
+      "INSERT INTO characters (player_id, requested_campaign_id, system_id, character_name, folder_path) VALUES (?, ?, ?, ?, ?)"
     )
     .run(playerId, campaignId, system_id ?? null, character_name, folder);
   // Новый персонаж — такое же событие персонажа, как и правка: у Мастера
@@ -640,6 +654,67 @@ playerRouter.get("/search", (req: AuthedRequest, res) => {
   }
 
   res.json(results.slice(0, 50));
+});
+
+// Библиотека персонажей игрока (гриллинг «персонаж = лист», Q11/Q12/Q16).
+// Персонаж «без кампании» подаётся в кампанию заявкой — привязывает его
+// Мастер (`POST /campaigns/:id/character-requests/:characterId/accept`).
+// Заявка одна: новая заменяет прежнюю.
+playerRouter.post("/characters/:id/campaign-request", (req: AuthedRequest, res) => {
+  const playerId = req.user!.playerId!;
+  const character = requireOwnCharacter(playerId, req.params.id);
+  if (!character) return res.status(404).json({ error: "not found" });
+  if (character.campaign_id != null) return res.status(409).json({ error: "персонаж уже в кампании" });
+  const campaignId = Number((req.body as { campaign_id?: number }).campaign_id);
+  if (!Number.isInteger(campaignId) || !myCampaignIds(playerId).includes(campaignId)) {
+    return res.status(404).json({ error: "not found" });
+  }
+  if (!canRequestCampaign(playerId, campaignId)) return res.status(403).json({ error: "read only in this campaign" });
+  db.prepare("UPDATE characters SET requested_campaign_id = ? WHERE id = ?").run(campaignId, character.id);
+  broadcastCharacterUpdate(character.id);
+  res.json({ ok: true });
+});
+
+playerRouter.delete("/characters/:id/campaign-request", (req: AuthedRequest, res) => {
+  const character = requireOwnCharacter(req.user!.playerId!, req.params.id);
+  if (!character) return res.status(404).json({ error: "not found" });
+  db.prepare("UPDATE characters SET requested_campaign_id = NULL WHERE id = ?").run(character.id);
+  broadcastCharacterUpdate(character.id);
+  res.json({ ok: true });
+});
+
+// Кампанию увели в архив — персонаж остаётся в её группе, пока игрок сам не
+// выведет его «без кампании» (Q12). Из живой кампании выводит только Мастер.
+playerRouter.post("/characters/:id/leave-campaign", (req: AuthedRequest, res) => {
+  const character = requireOwnCharacter(req.user!.playerId!, req.params.id);
+  if (!character) return res.status(404).json({ error: "not found" });
+  const archived = character.campaign_id
+    ? db.prepare("SELECT id FROM campaigns WHERE id = ? AND archived_at IS NOT NULL").get(character.campaign_id)
+    : null;
+  if (!archived) return res.status(409).json({ error: "кампания не в архиве" });
+  db.prepare("UPDATE characters SET campaign_id = NULL WHERE id = ?").run(character.id);
+  broadcastCharacterUpdate(character.id);
+  res.json({ ok: true });
+});
+
+// Архив своего персонажа «без кампании» (Q16: архив да, удаление нет) и его
+// отмена из тоста. Персонажа кампании архивирует только Мастер.
+playerRouter.post("/characters/:id/archive", (req: AuthedRequest, res) => {
+  const character = requireOwnCharacter(req.user!.playerId!, req.params.id);
+  if (!character) return res.status(404).json({ error: "not found" });
+  if (character.campaign_id != null) return res.status(403).json({ error: "персонажа кампании архивирует Мастер" });
+  db.prepare("UPDATE characters SET archived_at = datetime('now'), requested_campaign_id = NULL WHERE id = ?").run(character.id);
+  broadcastCharacterUpdate(character.id);
+  res.json({ ok: true });
+});
+
+playerRouter.post("/characters/:id/unarchive", (req: AuthedRequest, res) => {
+  const info = db
+    .prepare("UPDATE characters SET archived_at = NULL WHERE id = ? AND player_id = ? AND campaign_id IS NULL AND archived_at IS NOT NULL")
+    .run(req.params.id, req.user!.playerId!);
+  if (!info.changes) return res.status(404).json({ error: "not found" });
+  broadcastCharacterUpdate(Number(req.params.id));
+  res.json({ ok: true });
 });
 
 playerRouter.get("/characters/:id", (req: AuthedRequest, res) => {

@@ -6863,6 +6863,13 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     setAppSettingFlag(database, "species_spell_levels_v1");
   }
 
+  // Заявка персонажа «без кампании» в кампанию (гриллинг «персонаж = лист»
+  // 2026-09-27, Q11): игрок подаёт, Мастер принимает — тогда кампания
+  // переезжает в campaign_id, а заявка очищается.
+  if (!columnExists(database, "characters", "requested_campaign_id")) {
+    database.exec("ALTER TABLE characters ADD COLUMN requested_campaign_id INTEGER REFERENCES campaigns(id) ON DELETE SET NULL");
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);

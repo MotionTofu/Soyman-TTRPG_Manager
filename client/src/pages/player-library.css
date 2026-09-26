@@ -1,0 +1,80 @@
+/* Библиотека персонажей игрока (гриллинг «персонаж = лист», Q10/Q19):
+   группы по кампаниям, карточка — портрет, имя, «Класс N ур.». */
+.player-library-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.player-library-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+}
+
+.player-library-count {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.player-library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 14px;
+}
+
+.player-library-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+}
+
+.player-library-card img {
+  width: 100%;
+  aspect-ratio: 5 / 7;
+  object-fit: cover;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  transition: transform 0.15s ease;
+}
+
+.player-library-card:hover img,
+.player-library-card:focus-visible img {
+  transform: translateY(-3px);
+}
+
+.player-library-name {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-library-sub {
+  font-size: var(--fs-meta);
+  opacity: 0.75;
+}
+
+.player-library-badge {
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 1px 6px;
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+@media (max-width: 480px) {
+  .player-library-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+}

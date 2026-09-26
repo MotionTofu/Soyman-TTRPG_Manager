@@ -42,27 +42,36 @@ export function ensureCharacterFolder(characterId: number | string): string {
   const character = db
     .prepare(
       `SELECT c.folder_path, c.character_name, ca.folder_path as campaign_folder_path
-       FROM characters c JOIN campaigns ca ON ca.id = c.campaign_id
+       FROM characters c LEFT JOIN campaigns ca ON ca.id = c.campaign_id
        WHERE c.id = ?`
     )
     .get(characterId) as
-    | { folder_path: string | null; character_name: string; campaign_folder_path: string }
+    | { folder_path: string | null; character_name: string; campaign_folder_path: string | null }
     | undefined;
   if (!character) throw new Error("character not found");
   if (character.folder_path) return character.folder_path;
+  // Персонаж игрока «без кампании» заводится сразу с папкой, так что сюда
+  // доходят только старые персонажи кампаний.
+  if (!character.campaign_folder_path) throw new Error("character folder not found");
   const folder = characterFolder(character.campaign_folder_path, character.character_name);
   db.prepare("UPDATE characters SET folder_path = ? WHERE id = ?").run(folder, characterId);
   return folder;
 }
 
 charactersRouter.get("/", (req, res) => {
-  const { campaign_id, player_id, setting_id } = req.query as {
+  const { campaign_id, player_id, setting_id, requested_campaign_id } = req.query as {
     campaign_id?: string;
     player_id?: string;
     setting_id?: string;
+    requested_campaign_id?: string;
   };
   const clauses = ["c.archived_at IS NULL"];
   const params: Record<string, string> = {};
+  // Заявки в кампанию — блок вверху её «Состава» (гриллинг «персонаж = лист», Q18).
+  if (requested_campaign_id) {
+    clauses.push("c.requested_campaign_id = @requested_campaign_id");
+    params.requested_campaign_id = requested_campaign_id;
+  }
   if (campaign_id) {
     clauses.push("c.campaign_id = @campaign_id");
     params.campaign_id = campaign_id;
@@ -92,10 +101,12 @@ charactersRouter.get("/:id", (req, res) => {
   const row = db
     .prepare(
       `SELECT c.*, p.name as player_name, ca.name as campaign_name, ca.setting_id as campaign_setting_id,
-              sys.name as system_name, sys.code as system_code
+              sys.name as system_name, sys.code as system_code,
+              ca.archived_at IS NOT NULL as campaign_archived, req.name as requested_campaign_name
        FROM characters c
        JOIN players p ON p.id = c.player_id
        LEFT JOIN campaigns ca ON ca.id = c.campaign_id
+       LEFT JOIN campaigns req ON req.id = c.requested_campaign_id
        LEFT JOIN systems sys ON sys.id = COALESCE(ca.system_id, c.system_id)
        WHERE c.id = ?`
     )

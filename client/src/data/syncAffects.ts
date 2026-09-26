@@ -27,7 +27,9 @@ export function affectsForWindowEvent(type: string, detail: unknown): Affect[] |
       // `card`: правка листа состава персонажей не меняет, а быстрые правки
       // хитов тянули бы лишний запрос. Старый сервер поля не шлёт — тогда
       // ничего лишнего не перечитываем.
-      const owner: Affect[] = d.playerId != null ? [{ kind: "player", id: d.playerId }] : [];
+      // Библиотека игрока (`/player/me`) — тоже: Мастер принял заявку, персонаж
+      // переехал в группу кампании.
+      const owner: Affect[] = d.playerId != null ? [{ kind: "player", id: d.playerId }, { path: "/player/me" }] : [];
       // Сохранён только лист (server/src/services/realtime.ts): карточку
       // персонажа не перечитываем — иначе каждая быстрая правка хитов тянула бы
       // лишний запрос. Старый сервер поля не шлёт — тогда задето всё.

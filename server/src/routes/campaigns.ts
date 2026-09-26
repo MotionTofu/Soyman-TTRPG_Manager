@@ -435,6 +435,24 @@ campaignsRouter.delete("/:id/roster/:playerId", (req, res) => {
   res.json({ ok: true });
 });
 
+// Заявки персонажей «без кампании» (гриллинг «персонаж = лист», Q11/Q18):
+// игрок подаёт из своей библиотеки, Мастер решает в «Составе». Принятие —
+// единственный путь игрока в кампанию: сам он персонажа не привязывает.
+campaignsRouter.post("/:id/character-requests/:characterId/:decision(accept|decline)", (req, res) => {
+  const character = db
+    .prepare("SELECT id FROM characters WHERE id = ? AND requested_campaign_id = ? AND archived_at IS NULL")
+    .get(req.params.characterId, req.params.id) as { id: number } | undefined;
+  if (!character) return res.status(404).json({ error: "заявки нет — игрок её отозвал или она уже решена" });
+  if (req.params.decision === "accept") {
+    // ponytail: папка персонажа остаётся в папке игрока, в папку кампании не переезжает.
+    db.prepare("UPDATE characters SET campaign_id = requested_campaign_id, requested_campaign_id = NULL WHERE id = ?").run(character.id);
+  } else {
+    db.prepare("UPDATE characters SET requested_campaign_id = NULL WHERE id = ?").run(character.id);
+  }
+  broadcastCharacterUpdate(character.id);
+  res.json({ ok: true });
+});
+
 campaignsRouter.put("/:id/roster/:playerId", (req, res) => {
   const { status } = req.body as { status: string };
   if (!status) return res.status(400).json({ error: "status is required" });
