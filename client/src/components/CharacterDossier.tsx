@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { useAfterWrite, write } from "../data/hooks";
+import { useAfterWrite, useResource, write } from "../data/hooks";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { formatImportantDate } from "../inworldCalendar";
-import type { Character, DateRecurrence } from "../types";
+import type { Character, DateRecurrence, RelationTone } from "../types";
+import { RELATION_TONE_COLORS, RELATION_TONE_LABELS } from "../relations";
 import { ChapterList } from "./ChapterList";
 import { GalleryTab } from "./GalleryTab";
 import { RelationsTab } from "./RelationsTab";
@@ -116,7 +117,29 @@ export function CharacterDossierModal({ character, onClose }: { character: Chara
 }
 
 /** «Отношения» — кнопкой на обороте карты D&D и пунктом «⋯» (Q4, Q28). */
-export function CharacterRelationsModal({ character, onClose }: { character: Character; onClose: () => void }) {
+export function CharacterRelationsModal({
+  character,
+  readOnly,
+  onClose,
+}: {
+  character: Character;
+  /** Игрок: только просмотр связей с тем, что он и так видит. */
+  readOnly?: boolean;
+  onClose: () => void;
+}) {
+  if (readOnly) {
+    return (
+      <Modal wide className="sheet-side-modal" ariaLabel="Отношения" onClose={onClose}>
+        <div className="sheet-side-modal-head">
+          <h2>Отношения · {character.character_name}</h2>
+          <button type="button" onClick={onClose}>
+            Закрыть
+          </button>
+        </div>
+        <PlayerRelationsList characterId={character.id} />
+      </Modal>
+    );
+  }
   return (
     <Modal wide className="sheet-side-modal" ariaLabel="Отношения" onClose={onClose}>
       <div className="sheet-side-modal-head">
@@ -133,6 +156,45 @@ export function CharacterRelationsModal({ character, onClose }: { character: Cha
         defaultSettingId={character.campaign_setting_id ?? undefined}
       />
     </Modal>
+  );
+}
+
+type PlayerRelation = {
+  id: number;
+  direction: "out" | "in";
+  tone: RelationTone;
+  label: string;
+  description: string;
+  other_name: string | null;
+};
+
+/**
+ * Связи персонажа глазами игрока — только чтение. Сервер отдаёт лишь те, чей
+ * другой конец игрок и так видит (сопартийцы, выданное Мастером), поэтому
+ * здесь ничего не прячется и не считается.
+ */
+function PlayerRelationsList({ characterId }: { characterId: number }) {
+  const state = useResource<PlayerRelation[]>(`/player/characters/${characterId}/relations`);
+  if (state.error) return <p className="error">{state.error}</p>;
+  if (!state.data) return <p className="muted">Загрузка…</p>;
+  if (state.data.length === 0) return <p className="muted">Отношений пока нет — их заводит Мастер по ходу игры.</p>;
+  return (
+    <div className="stack" style={{ gap: 10 }}>
+      {state.data.map((r) => (
+        <div key={r.id} className="row" style={{ gap: 10, alignItems: "flex-start" }}>
+          <span
+            title={RELATION_TONE_LABELS[r.tone]}
+            aria-label={RELATION_TONE_LABELS[r.tone]}
+            style={{ width: 10, height: 10, borderRadius: "50%", marginTop: 6, flex: "none", background: RELATION_TONE_COLORS[r.tone] }}
+          />
+          <span style={{ minWidth: 0 }}>
+            <strong>{r.other_name ?? "—"}</strong>
+            {r.label && <span className="muted"> · {r.direction === "in" ? `${r.label} (к вам)` : r.label}</span>}
+            {r.description && <div style={{ whiteSpace: "pre-wrap" }}>{r.description}</div>}
+          </span>
+        </div>
+      ))}
+    </div>
   );
 }
 

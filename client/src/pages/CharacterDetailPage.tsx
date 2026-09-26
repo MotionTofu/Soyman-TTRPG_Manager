@@ -154,11 +154,11 @@ export function CharacterDetailPage() {
         systemName={character.system_name}
         campaignName={character.campaign_name}
         dossierExtra={<CharacterDossier character={character} />}
-        // Связи и граф открыты только Мастеру: игроку сервер их не отдаёт.
-        onRelations={isGm ? () => setRelationsOpen(true) : undefined}
+        // Игроку — просмотр связей с тем, что он и так видит; граф — только Мастеру.
+        onRelations={() => setRelationsOpen(true)}
         sheetMenu={{
           onDossier: () => setDossierOpen(true),
-          onRelations: isGm ? () => setRelationsOpen(true) : undefined,
+          onRelations: () => setRelationsOpen(true),
           player:
             isGm && character.player_name
               ? {
@@ -171,7 +171,7 @@ export function CharacterDetailPage() {
         }}
       />
       {dossierOpen && <CharacterDossierModal character={character} onClose={() => setDossierOpen(false)} />}
-      {relationsOpen && <CharacterRelationsModal character={character} onClose={() => setRelationsOpen(false)} />}
+      {relationsOpen && <CharacterRelationsModal character={character} readOnly={!isGm} onClose={() => setRelationsOpen(false)} />}
       {requestOpen && (
         <CampaignRequestModal
           onClose={() => setRequestOpen(false)}

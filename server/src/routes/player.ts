@@ -17,6 +17,7 @@ import { unpaidSessionsForPlayer } from "../services/finance";
 import { getFlaggedSettingContent, getPlayerSectionsFor, getSettingPlayerContent } from "../services/playerContent";
 import { broadcastCharacterUpdate, broadcastToGm } from "../services/realtime";
 import { ensurePlayerFolder } from "../services/folderRepair";
+import { entityNames, refKey } from "../services/entityNames";
 import { mergeContentPatch } from "../db/statblockContent";
 import { normalizeDndCharacter, deriveSheet } from "@soyman/shared";
 import {
@@ -715,6 +716,72 @@ playerRouter.post("/characters/:id/unarchive", (req: AuthedRequest, res) => {
   if (!info.changes) return res.status(404).json({ error: "not found" });
   broadcastCharacterUpdate(Number(req.params.id));
   res.json({ ok: true });
+});
+
+// «Отношения» своего персонажа — только просмотр (2026-09-27, после шага 2
+// «персонаж = лист»). Общий /entity-relations игроку закрыт: у связи на
+// другом конце бывает скрытый NPC, а в описании — тайна Мастера. Поэтому
+// отдаются только связи, чей другой конец игрок и так видит: персонаж той же
+// кампании или сущность мира, выданная ему в этой кампании (любой ступени —
+// имя видно и у «упомянутой»). Остальные не отдаются вовсе, даже счётом.
+const RELATION_GRANT_TYPES: Record<string, string> = {
+  being: "setting_being",
+  location: "setting_location",
+  community: "setting_community",
+};
+
+playerRouter.get("/characters/:id/relations", (req: AuthedRequest, res) => {
+  const playerId = req.user!.playerId!;
+  const character = requireOwnCharacter(playerId, req.params.id);
+  if (!character) return res.status(404).json({ error: "not found" });
+  const rows = db
+    .prepare(
+      `SELECT id, from_type, from_id, to_type, to_id, tone, label, description, section FROM entity_relations
+       WHERE (from_type = 'character' AND from_id = @id) OR (to_type = 'character' AND to_id = @id)
+       ORDER BY created_at DESC`
+    )
+    .all({ id: character.id }) as {
+    id: number;
+    from_type: string;
+    from_id: number;
+    to_type: string;
+    to_id: number;
+    tone: string;
+    label: string;
+    description: string;
+    section: string | null;
+  }[];
+  const campaignId = character.campaign_id;
+  const granted = new Set(
+    campaignId == null
+      ? []
+      : (
+          db
+            .prepare("SELECT target_type, target_id FROM player_visibility_grants WHERE campaign_id = ? AND player_id = ?")
+            .all(campaignId, playerId) as { target_type: string; target_id: number }[]
+        ).map((g) => `${g.target_type}:${g.target_id}`)
+  );
+  const partyMember = db.prepare(
+    "SELECT id FROM characters WHERE id = ? AND archived_at IS NULL AND (player_id = ? OR (campaign_id IS NOT NULL AND campaign_id = ?))"
+  );
+  const visible = (type: string, id: number) =>
+    type === "character" ? !!partyMember.get(id, playerId, campaignId) : granted.has(`${RELATION_GRANT_TYPES[type] ?? "-"}:${id}`);
+
+  const out = rows
+    .map((r) => {
+      const outgoing = r.from_type === "character" && r.from_id === character.id;
+      const otherType = outgoing ? r.to_type : r.from_type;
+      const otherId = outgoing ? r.to_id : r.from_id;
+      return { ...r, direction: outgoing ? "out" : "in", other_type: otherType, other_id: otherId };
+    })
+    .filter((r) => !(r.other_type === "character" && r.other_id === character.id) && visible(r.other_type, r.other_id));
+  const names = entityNames(out.map((r) => ({ kind: r.other_type, id: r.other_id })));
+  res.json(
+    out.map(({ from_type: _ft, from_id: _fi, to_type: _tt, to_id: _ti, ...r }) => ({
+      ...r,
+      other_name: names.get(refKey(r.other_type, r.other_id)) ?? null,
+    }))
+  );
 });
 
 playerRouter.get("/characters/:id", (req: AuthedRequest, res) => {

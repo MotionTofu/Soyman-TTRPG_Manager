@@ -103,6 +103,39 @@ describe("библиотека игрока: заявки в кампанию", 
     expect(row(id).archived_at).toBeNull();
   });
 
+  it("«Отношения» игроку — только связи с тем, что он и так видит", async () => {
+    const settingId = insert("INSERT INTO settings (name) VALUES ('Мир отношений')");
+    const table = insert("INSERT INTO campaigns (name, setting_id) VALUES ('Стол отношений', ?)", settingId);
+    insert("INSERT INTO campaign_roster (campaign_id, player_id) VALUES (?, ?)", table, playerId);
+    const me = insert("INSERT INTO characters (player_id, campaign_id, character_name) VALUES (?, ?, 'Связной')", playerId, table);
+    const friend = insert("INSERT INTO characters (player_id, campaign_id, character_name) VALUES (?, ?, 'Сопартиец')", playerId, table);
+    // Чужой игрок за чужим столом — своих персонажей игрок и так знает.
+    const stranger = insert(
+      "INSERT INTO characters (player_id, campaign_id, character_name) VALUES ((SELECT id FROM players WHERE name = 'Чужой'), ?, 'С чужого стола')",
+      foreignCampaignId
+    );
+    const known = insert("INSERT INTO setting_beings (setting_id, name) VALUES (?, 'Выданный')", settingId);
+    const secret = insert("INSERT INTO setting_beings (setting_id, name) VALUES (?, 'Тайный культист')", settingId);
+    insert(
+      "INSERT INTO player_visibility_grants (campaign_id, player_id, target_type, target_id, access_level) VALUES (?, ?, 'setting_being', ?, 'mentioned')",
+      table,
+      playerId,
+      known
+    );
+    const rel = (ft: string, fi: number, tt: string, ti: number, label: string) =>
+      insert("INSERT INTO entity_relations (from_type, from_id, to_type, to_id, label) VALUES (?, ?, ?, ?, ?)", ft, fi, tt, ti, label);
+    rel("character", me, "being", known, "знает");
+    rel("being", secret, "character", me, "следит");
+    rel("character", me, "character", friend, "друг");
+    rel("character", me, "character", stranger, "чужой");
+
+    const r = await request(server.app).get(`/api/player/characters/${me}/relations`).auth(player, { type: "bearer" });
+    expect(r.status).toBe(200);
+    expect(r.body.map((x: { label: string }) => x.label).sort()).toEqual(["друг", "знает"]);
+    expect(JSON.stringify(r.body)).not.toContain("Тайный");
+    expect((await request(server.app).get(`/api/player/characters/${me}/relations`).auth(other, { type: "bearer" })).status).toBe(404);
+  });
+
   it("из архивной кампании игрок выводит персонажа сам", async () => {
     const id = insert("INSERT INTO characters (player_id, campaign_id, character_name) VALUES (?, ?, 'Ветеран')", playerId, archivedCampaignId);
     expect((await asPlayer(player).post(`/api/player/characters/${id}/leave-campaign`)).status).toBe(200);
