@@ -728,6 +728,9 @@
 
 /* Список шагов: текущий — кислотный с розовой полосой. */
 .wz-sheet .wz-steplist button {
+  /* Без рамки (владелец 2026-09-26): общее правило кнопок визарда даёт 4px со
+     всех сторон, здесь — только разделитель снизу. */
+  border-width: 0 0 2px;
   border-bottom: 2px solid transparent;
   border-image: none;
   border-color: rgba(23, 23, 23, 0.22);
