@@ -398,6 +398,8 @@ html[data-app="oneshot"] .oneshot-header .oneshot-header-toggle[aria-expanded="t
   /* Карта узкая: наклейка черновика уходит вниз, чтобы не упираться в «⋯». */
   html[data-app="oneshot"] .lib-chip { top: auto; bottom: 10px; left: 8px; max-width: calc(100% - 16px); }
   html[data-app="oneshot"] .lib-foot { flex-direction: column; align-items: stretch; gap: 10px; padding-top: 14px; }
+  /* Во всю ширину — подписи у левого края, как «Написать автору» и «Инструменты». */
+  html[data-app="oneshot"] .lib-foot .lib-btn { text-align: left; }
   html[data-app="oneshot"] .lib-note { display: none; }
   html[data-app="oneshot"] .lib-tools { margin-left: 0; }
   html[data-app="oneshot"] .lib-tools > summary { justify-content: space-between; }
