@@ -106,6 +106,34 @@ export function PoolMeter({
   const shown = Math.max(0, Math.min(left, max));
   return (
     <span className="dnd-pool-meter" role="group" aria-label={`${label}: осталось ${shown} из ${max}`}>
+      <PoolStepper max={max} left={shown} label={label} onSetLeft={onSetLeft} />
+      <span className="dnd-pool-scale" aria-hidden="true">
+        <span className="dnd-pool-scale-track" />
+        <span className="dnd-pool-scale-fill" style={{ width: `${(shown / max) * 100}%` }} />
+        {scaleTicks(max).map((pos) => (
+          <span key={pos} className="dnd-pool-tick" style={{ left: `${pos}%` }} />
+        ))}
+      </span>
+    </span>
+  );
+}
+
+/** «− N/M +»: у большого пула — часть метра, на «Ресурсах» — и у малого,
+ *  посередине строки над тофу (макет Sheet-PC-Resources, 2026-09-26). */
+export function PoolStepper({
+  max,
+  left,
+  label,
+  onSetLeft,
+}: {
+  max: number;
+  left: number;
+  label: string;
+  onSetLeft?: (left: number) => void;
+}) {
+  const shown = Math.max(0, Math.min(left, max));
+  return (
+    <>
       <button
         type="button"
         className="dnd-pool-step"
@@ -128,13 +156,6 @@ export function PoolMeter({
       >
         <NavIcon name="plus" />
       </button>
-      <span className="dnd-pool-scale" aria-hidden="true">
-        <span className="dnd-pool-scale-track" />
-        <span className="dnd-pool-scale-fill" style={{ width: `${(shown / max) * 100}%` }} />
-        {scaleTicks(max).map((pos) => (
-          <span key={pos} className="dnd-pool-tick" style={{ left: `${pos}%` }} />
-        ))}
-      </span>
-    </span>
+    </>
   );
 }

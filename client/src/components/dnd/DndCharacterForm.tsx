@@ -96,7 +96,7 @@ import { sheetClassColor, textOnClassColor } from "./dndClassColors";
 import { DEFAULT_PORTRAIT_FOCUS, useFrameDrag } from "./portraitFrame";
 import { PortraitFrameModal, portraitImgStyle } from "./PortraitFrameModal";
 import { DndDie } from "./DndDie";
-import { PoolMeter, poolShowsNumber } from "./TofuPips";
+import { PoolMeter, PoolStepper, poolShowsNumber } from "./TofuPips";
 import { CreatureTypeBadge, creatureTypeName } from "./creatureTypeIcons";
 import {
   blueprintFromEntryData,
@@ -6273,7 +6273,7 @@ function AttacksTable({
 // потом всё остальное. «Ресурсы» стоят последними и нужны редко: пулы
 // всплывают над той картой, где их тратят, а здесь остаётся то, что не
 // тратится ни на «Действиях», ни в «Магии» — реплики Артефактора и подобное.
-const DND_VIEW_TABS = ["Карта", "Действия", "Магия", "Снаряжение", "Навыки", "Особенности", "Досье", "Ресурсы"] as const;
+const DND_VIEW_TABS = ["Карта", "Действия", "Магия", "Снаряжение", "Навыки", "Особенности", "Ресурсы", "Досье"] as const;
 type DndViewTab = (typeof DND_VIEW_TABS)[number];
 
 // Flat list of all skills — either grouped by governing ability (default,
@@ -10048,10 +10048,41 @@ function DndResourcesView({
         const max = r.max + bonus;
         const used = Math.min(resourceUsed[r.key] ?? 0, max);
         return (
+          // Макет Sheet-PC-Resources: название и правило восстановления
+          // слева, «− N/M +» посередине строки, бонус справа, тофу ниже.
           <div key={r.key} className="sb-entry dnd-pool-row">
-            <span className="sb-prop-label">
-              {r.label}
-              {showClass && r.className && <span className="muted"> · {r.className}</span>}
+            <span className="dnd-pool-title">
+              <span className="sb-prop-label">
+                {r.label}
+                {showClass && r.className && <span className="muted"> · {r.className}</span>}
+              </span>
+              <span className="dnd-pool-recharge">
+                {r.recharge === "none"
+                  ? PROGRESSION_RECHARGE_LABELS.none.toLowerCase()
+                  : `восстановление: ${PROGRESSION_RECHARGE_LABELS[r.recharge].toLowerCase()}`}
+                {r.restore ? ` · или за ${r.restore.amount} ${r.restore.pool}` : ""}
+              </span>
+            </span>
+            <span className="dnd-pool-center">
+              {poolShowsNumber(max) ? (
+                <PoolMeter
+                  max={max}
+                  left={max - used}
+                  label={r.label}
+                  onSetLeft={
+                    onQuickUpdate ? (next) => onQuickUpdate({ resourceUsed: { ...resourceUsed, [r.key]: max - next } }) : undefined
+                  }
+                />
+              ) : (
+                <PoolStepper
+                  max={max}
+                  left={max - used}
+                  label={r.label}
+                  onSetLeft={
+                    onQuickUpdate ? (next) => onQuickUpdate({ resourceUsed: { ...resourceUsed, [r.key]: max - next } }) : undefined
+                  }
+                />
+              )}
             </span>
             <label className="row muted dnd-pool-bonus" style={{ gap: 4, fontSize: "var(--fs-meta)" }}>
               доп. бонус
@@ -10065,14 +10096,16 @@ function DndResourcesView({
                 }
               />
             </label>
-            <PoolMeter
-              max={max}
-              left={max - used}
-              label={r.label}
-              onSetLeft={
-                onQuickUpdate ? (next) => onQuickUpdate({ resourceUsed: { ...resourceUsed, [r.key]: max - next } }) : undefined
-              }
-            />
+            {!poolShowsNumber(max) && (
+              <PoolMeter
+                max={max}
+                left={max - used}
+                label={r.label}
+                onSetLeft={
+                  onQuickUpdate ? (next) => onQuickUpdate({ resourceUsed: { ...resourceUsed, [r.key]: max - next } }) : undefined
+                }
+              />
+            )}
             {/* Восстановление чужой ценой («Крылья»: пополнить за 3 очка
                 чародейства): одним сохранением обнуляет свой и списывает
                 с донора. Видна, только когда есть что чинить и чем платить. */}

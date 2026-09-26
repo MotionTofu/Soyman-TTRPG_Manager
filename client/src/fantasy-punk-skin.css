@@ -2170,7 +2170,7 @@ button.dnd-proficiency-chip {
   background: #efebe1 url("/ui/wizard/paper-panel.webp") center / 420px;
   background-clip: padding-box;
 }
-.dnd-pool-row > .sb-prop-label {
+.dnd-pool-row .dnd-pool-title > .sb-prop-label {
   font-family: var(--font-body, inherit);
   font-size: 17px;
   font-weight: 700;

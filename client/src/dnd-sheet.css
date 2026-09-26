@@ -3250,7 +3250,7 @@ span.dnd-card-corner {
 }
 .dnd-pool-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   gap: var(--sp-2) var(--sp-4);
   align-items: center;
 }
@@ -3259,8 +3259,54 @@ span.dnd-card-corner {
   grid-column: 1 / -1;
   justify-self: start;
 }
+.dnd-pool-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.dnd-pool-recharge {
+  font-size: 13px;
+  color: var(--skin-ink-soft, var(--text-muted));
+}
+.dnd-pool-center {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+.dnd-pool-center > .dnd-pool-step,
+.dnd-pool-center > .dnd-pool-meter > .dnd-pool-step {
+  width: 44px;
+  height: 44px;
+  border-width: 2px;
+  opacity: 1;
+}
+.dnd-pool-center .dnd-pool-step:disabled {
+  opacity: 0.3;
+}
+.dnd-pool-center .dnd-pool-meter-num {
+  min-width: 58px;
+  justify-content: center;
+  font-family: var(--font-ui);
+}
+.dnd-pool-center .dnd-pool-meter-left {
+  font-size: 26px;
+}
+.dnd-pool-center .dnd-pool-meter-max {
+  font-size: 18px;
+}
 .dnd-pool-bonus {
   white-space: nowrap;
+  justify-self: end;
+}
+/* Узко — «− N/M +» в правую колонку, бонус под ним. */
+@media (max-width: 560px) {
+  .dnd-pool-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .dnd-pool-bonus {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
 }
 .dnd-tofu-pips {
   flex-wrap: wrap;
