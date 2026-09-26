@@ -6,7 +6,7 @@
 // Полный рост — растровые арты public/mascot/<класс>-<состояние>.webp
 // (реестр rasterAssets, ≤100КБ): живописный рендер вместо зинной печати —
 // осознанное исключение из канона по решению владельца артов. Голова
-// (headOnly, узкие экраны) — прежний SVG: лёгкий и едет за темой.
+// (headOnly, только явные мелкие места) — прежний SVG: лёгкий и едет за темой.
 //
 // Неприкасаемое (§25) соблюдено и там, и там — куб, лицо, росток, пропорции.
 // Тофу светлый (§23), контур тёмный (§12).
@@ -414,10 +414,7 @@ function Face({ state, guise }: { state: SoyManState; guise: SoyManGuise }) {
 // стоит — невидимый он не рисуется, а оба помечены decorative.
 export function SoyManResponsive(props: Parameters<typeof SoyMan>[0]) {
   const cls = (extra: string) => (props.className ? `${extra} ${props.className}` : extra);
-  return (
-    <>
-      <SoyMan {...props} className={cls("soy-only-wide")} />
-      <SoyMan {...props} headOnly className={cls("soy-only-narrow")} />
-    </>
-  );
+  // Растр и на узком экране (владелец 2026-09-26): старая SVG-голова выглядела
+  // другим маскотом. Высоту на телефоне ограничивает .soy-responsive.
+  return <SoyMan {...props} className={cls("soy-responsive")} />;
 }
