@@ -1648,7 +1648,8 @@ button.dnd-prep-diamond::after {
   outline: none;
   box-shadow: inset 0 -2px 0 var(--skin-ink);
 }
-.dnd-spell-add > button {
+.dnd-spell-add > button,
+.dnd-quiet-link {
   flex: none;
   min-height: 44px;
   padding: 0 6px;

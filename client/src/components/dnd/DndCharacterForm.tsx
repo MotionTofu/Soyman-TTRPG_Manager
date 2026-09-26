@@ -14310,8 +14310,8 @@ export function DndCharacterView({
                     setDraftDossier(null);
                   }}
                 />
-                <button type="button" onClick={() => setDraftDossier(null)}>
-                  Отмена
+                <button type="button" className="dnd-quiet-link" onClick={() => setDraftDossier(null)}>
+                  отмена
                 </button>
               </div>
             </div>
