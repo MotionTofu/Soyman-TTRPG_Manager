@@ -539,6 +539,30 @@ export function StatblockList({
     }
   }
 
+  // «Импорт из файла» на экране «Листа ещё нет» (шаг 3): файл OneShot — HTML
+  // или резервная копия — ложится листом в этого же персонажа на сервере, всё
+  // остальное идёт прежним путём импорта Long Story Short.
+  async function importSheetFile(files: FileList | null, inputEl: HTMLInputElement) {
+    const file = files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    const head = text.slice(0, 4000);
+    const oneshot = text.includes("oneshot-payload") || /"format"\s*:\s*"soyman-1shot-backup"/.test(head) || /\.html?$/i.test(file.name);
+    if (!oneshot) return importFiles(files, inputEl);
+    inputEl.value = "";
+    setImporting(true);
+    setImportError("");
+    try {
+      await write.post(`/characters/${ownerId}/import/portable`, { html: text }, { timeoutMs: 120_000 });
+      afterWrite([...statblockAffects(ownerType, ownerId), { kind: "character", id: ownerId }]);
+      onPortraitRefresh?.();
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setImporting(false);
+    }
+  }
+
   async function importFile(file: File | null, inputEl?: HTMLInputElement | null) {
     if (!file) return;
     const targetInput = inputEl ?? fileInputRef.current;
@@ -944,9 +968,9 @@ export function StatblockList({
         <input
           ref={fileInputRef}
           type="file"
-          accept="application/json,.json"
+          accept=".json,.html,application/json,text/html"
           style={{ display: "none" }}
-          onChange={(e) => void importFiles(e.target.files, e.target as HTMLInputElement)}
+          onChange={(e) => void importSheetFile(e.target.files, e.target as HTMLInputElement)}
         />
         {importError && (
           <div className="backup-info error" role="alert">
@@ -1501,8 +1525,8 @@ function NoSheetScreen({
                 </span>
               </button>
               <button type="button" className="no-sheet-choice" onClick={onImport} disabled={importing}>
-                {importing ? "Импортирую…" : "Импорт из Long Story Short"}
-                <span>JSON-файл листа с longstoryshort.app</span>
+                {importing ? "Импортирую…" : "Импорт из файла"}
+                <span>Персонаж из OneShot (HTML или копия) · лист Long Story Short</span>
               </button>
             </>
           )}

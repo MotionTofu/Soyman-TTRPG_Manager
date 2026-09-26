@@ -7,6 +7,7 @@ import { characterFolder, ensureSubfolder, toFileUrl, vaultAbs, vaultRel, writeR
 import { broadcastCharacterUpdate } from "../services/realtime";
 import { folderMissing, repairCampaignFolder } from "../services/folderRepair";
 import { queueStanding, setCharacterRoll } from "../services/initiativeSync";
+import { matchSystemId, parsePortableImport } from "../services/portableImport";
 
 export const charactersRouter = Router();
 const ALLOWED_IMAGE_MIMES = /^image\/(jpeg|png|gif|webp|avif)$/;
@@ -416,6 +417,64 @@ charactersRouter.post("/:id/thumbnail", upload.single("file"), async (req, res) 
     req.params.id
   );
   res.json(withAvatarUrl({ thumbnail_image_path: target }));
+});
+
+// «Импорт из файла» на экране «Листа ещё нет» (гриллинг «персонаж = лист»,
+// шаг 3): лист из файла OneShot — HTML или резервной копии — ложится в уже
+// заведённого персонажа, а не создаёт нового, как импорт в библиотеке. Игрок
+// доходит сюда только до своего персонажа (services/playerAccess.ts).
+// Имя — из листа (Q23); портрет и UID — только если своих ещё нет: UID, уже
+// занятый другим персонажем того же игрока, дал бы при следующем импорте
+// конфликт идентичности.
+charactersRouter.post("/:id/import/portable", async (req, res) => {
+  const character = db
+    .prepare("SELECT id, player_id, campaign_id, system_id, avatar_image_path, character_uid FROM characters WHERE id = ? AND archived_at IS NULL")
+    .get(req.params.id) as
+    | { id: number; player_id: number; campaign_id: number | null; system_id: number | null; avatar_image_path: string | null; character_uid: string | null }
+    | undefined;
+  if (!character) return res.status(404).json({ error: "not found" });
+  let data: ReturnType<typeof parsePortableImport>;
+  try {
+    data = parsePortableImport((req.body as { html?: unknown }).html);
+  } catch (e) {
+    const { status, error } = e as { status?: number; error?: string };
+    if (status && error) return res.status(status).json({ error });
+    console.error("portable import into character failed:", e);
+    return res.status(500).json({ error: "internal server error" });
+  }
+  const hasSheet = db
+    .prepare("SELECT id FROM statblocks WHERE owner_type = 'character' AND owner_id = ? AND archived_at IS NULL")
+    .get(character.id);
+  if (hasSheet) return res.status(409).json({ error: "У персонажа уже есть лист" });
+
+  let avatarPath: string | null = null;
+  if (data.portrait && !character.avatar_image_path) {
+    avatarPath = path.join(ensureCharacterFolder(character.id), `avatar${data.portrait.ext}`);
+    await writeReplacingOldFile(avatarPath, data.portrait.buffer, null, "avatar");
+  }
+  const uidTaken = db
+    .prepare("SELECT id FROM characters WHERE player_id = ? AND character_uid = ? AND id != ?")
+    .get(character.player_id, data.characterUid, character.id);
+  db.transaction(() => {
+    db.prepare(
+      "INSERT INTO statblocks (owner_type, owner_id, kind, format, content, note) VALUES ('character', ?, 'full', 'dnd_character', ?, '')"
+    ).run(character.id, JSON.stringify(data.content));
+    db.prepare(
+      `UPDATE characters SET character_name = ?,
+         avatar_image_path = COALESCE(avatar_image_path, ?),
+         character_uid = COALESCE(character_uid, ?),
+         system_id = COALESCE(system_id, ?)
+       WHERE id = ?`
+    ).run(
+      data.name,
+      avatarPath,
+      uidTaken ? null : data.characterUid,
+      character.campaign_id == null ? matchSystemId(data.systemName) : null,
+      character.id
+    );
+  })();
+  broadcastCharacterUpdate(character.id);
+  res.status(201).json({ ok: true });
 });
 
 charactersRouter.delete("/:id", (req, res) => {

@@ -204,6 +204,7 @@ app.use((req, res, next) => {
   const isImport =
     p.startsWith("/api/import") ||
     p.startsWith("/api/player/characters/import") ||
+    /^\/api\/characters\/\d+\/import\/portable$/.test(p) ||
     p.startsWith("/api/sync") ||
     p.startsWith("/api/system-import") ||
     p.startsWith("/api/statblocks/import") ||

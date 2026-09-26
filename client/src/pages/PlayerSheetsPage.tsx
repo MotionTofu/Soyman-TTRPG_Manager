@@ -250,7 +250,7 @@ export function PlayerSheetsPage() {
               ref={importFile}
               hidden
               type="file"
-              accept=".html,text/html"
+              accept=".html,.json,text/html,application/json"
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 e.target.value = "";

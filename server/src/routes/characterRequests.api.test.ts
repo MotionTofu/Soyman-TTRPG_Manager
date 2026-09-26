@@ -136,6 +136,38 @@ describe("библиотека игрока: заявки в кампанию", 
     expect((await request(server.app).get(`/api/player/characters/${me}/relations`).auth(other, { type: "bearer" })).status).toBe(404);
   });
 
+  it("«Импорт из файла» кладёт лист OneShot в уже заведённого персонажа", async () => {
+    const content = { characterName: "Мордекай", classes: [], abilities: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 } };
+    const character = { name: "Мордекай", content, portrait: null };
+    const catalog = { system: { name: "Нет такой" }, sections: [], entries: [] };
+    const html = (uid: string) =>
+      `<script id="oneshot-payload" type="application/json">${JSON.stringify({
+        format: "soyman-1shot-portable",
+        version: 2,
+        identity: { characterUid: uid },
+        character,
+        catalog,
+      })}</script>`;
+    const backup = (uid: string) => JSON.stringify({ format: "soyman-1shot-backup", version: 1, character: { ...character, characterUid: uid }, catalog });
+    const blank = () => insert("INSERT INTO characters (player_id, character_name, folder_path) VALUES (?, 'Без листа', ?)", playerId, "Players/Игрок заявок/Characters/x");
+    const load = (id: number) =>
+      db.prepare("SELECT character_name, character_uid, (SELECT count(*) FROM statblocks WHERE owner_type = 'character' AND owner_id = c.id) AS sheets FROM characters c WHERE id = ?").get(id);
+    const imp = (token: string, id: number, text: string) =>
+      request(server.app).post(`/api/characters/${id}/import/portable`).auth(token, { type: "bearer" }).send({ html: text });
+
+    const a = blank();
+    expect((await imp(other, a, html("uid-a"))).status).toBe(403);
+    expect((await imp(player, a, html("uid-a"))).status).toBe(201);
+    expect(load(a)).toEqual({ character_name: "Мордекай", character_uid: "uid-a", sheets: 1 });
+    expect((await imp(player, a, html("uid-a"))).status).toBe(409);
+
+    // Резервная копия — тот же путь; UID, занятый другим персонажем игрока, не дублируется.
+    const b = blank();
+    expect((await imp(gm, b, backup("uid-a"))).status).toBe(201);
+    expect(load(b)).toEqual({ character_name: "Мордекай", character_uid: null, sheets: 1 });
+    expect((await imp(player, blank(), "{\"format\":\"lss\"}")).status).toBe(400);
+  });
+
   it("из архивной кампании игрок выводит персонажа сам", async () => {
     const id = insert("INSERT INTO characters (player_id, campaign_id, character_name) VALUES (?, ?, 'Ветеран')", playerId, archivedCampaignId);
     expect((await asPlayer(player).post(`/api/player/characters/${id}/leave-campaign`)).status).toBe(200);
