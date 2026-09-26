@@ -27,6 +27,7 @@ import type {
   DndManualAttack,
   DndMasteredWeapon,
   DndProficiencyEntry,
+  DndProficiencyKind,
   DndSkillProfLevel,
   DndSpellEntry,
   DndSpellPreparedState,
@@ -713,12 +714,230 @@ function WeaponMasteryEdit({
   );
 }
 
-// Requirement 10: a droppable list for proficiencies/languages. Anything
-// dragged from search (a compendium item, a mechanics-list tool/language
-// entry, …) lands as a row; an ability can be assigned per row to compute
-// its bonus (score modifier + proficiency bonus) — left unset, the row is
-// just a plain proficiency/language name with no value (matching how
-// languages don't have a "check").
+// Владения тремя группами (гриллинг 2026-09-26): оружие и доспехи,
+// инструменты и игровые наборы, языки. Категория пишется в строку списком,
+// из которого её взяли (kind); у старых листов и вписанного руками без неё —
+// угадывается по имени.
+const PROF_KINDS: { kind: DndProficiencyKind; title: string }[] = [
+  { kind: "gear", title: "Оружие и доспехи" },
+  { kind: "tools", title: "Инструменты и игровые наборы" },
+  { kind: "language", title: "Языки" },
+];
+const LANGUAGE_NAME_RE =
+  /язык|жаргон|речь|^(общий|драконий|дварфский|эльфийский|великаний|гномий|гоблинский|полуросликов|орочий|бездны|небесный|друидический|инфернальный|первичный|сильван|подземный)$/i;
+function proficiencyKind(p: DndProficiencyEntry): DndProficiencyKind {
+  if (p.kind) return p.kind;
+  const name = p.name.trim();
+  if (LANGUAGE_NAME_RE.test(name)) return "language";
+  if (/оружи|доспех|щит/i.test(name)) return "gear";
+  return "tools";
+}
+
+// Окно владения: описание из справочника (если есть) и «Убрать владение»
+// (Q4: крестика на плашке больше нет).
+function ProficiencyInfoModal({
+  prof,
+  onRemove,
+  onClose,
+}: {
+  prof: DndProficiencyEntry;
+  onRemove?: () => void;
+  onClose: () => void;
+}) {
+  const getEntry = useCompendiumEntries([prof.entryId]);
+  const entry = getEntry(prof.entryId);
+  return (
+    <Modal onClose={onClose}>
+      <div className="stack dnd-spell-modal">
+        <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div className="dnd-spell-modal-title">
+            <h3 style={{ margin: 0 }}>{prof.name}</h3>
+          </div>
+          <button type="button" className="comp-mini" onClick={onClose} aria-label="Закрыть">
+            <NavIcon name="close" />
+          </button>
+        </div>
+        {prof.entryId != null && (entry ? entry.description?.trim() ? <MentionText text={entry.description} /> : null : <span className="muted">Загрузка…</span>)}
+        {onRemove && (
+          <button type="button" style={{ alignSelf: "flex-start" }} onClick={onRemove}>
+            Убрать владение
+          </button>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+// Выбор владений: три списка рядом (телефон — друг под другом), общий
+// поиск, отметить несколько и «Добавить N»; под каждым списком — «Своё…».
+function ProficiencyPickerModal({
+  systemId,
+  owned,
+  onPick,
+  onClose,
+}: {
+  systemId: number | null;
+  owned: DndProficiencyEntry[];
+  onPick: (items: DndProficiencyEntry[]) => void;
+  onClose: () => void;
+}) {
+  const [lists, setLists] = useState<Record<DndProficiencyKind, CompendiumEntry[]> | null>(null);
+  const [query, setQuery] = useState("");
+  const [picked, setPicked] = useState<ReadonlyMap<string, DndProficiencyEntry>>(new Map());
+  const [custom, setCustom] = useState<Record<DndProficiencyKind, string>>({ gear: "", tools: "", language: "" });
+  useEffect(() => {
+    if (!systemId) {
+      setLists({ gear: [], tools: [], language: [] });
+      return;
+    }
+    const ac = new AbortController();
+    const opts = { signal: ac.signal };
+    const safe = (pr: Promise<CompendiumEntry[]>) => pr.catch(() => [] as CompendiumEntry[]);
+    Promise.all([
+      safe(loadDndMechanicsGroupEntries(systemId, "Владения оружием", opts)),
+      safe(loadDndMechanicsGroupEntries(systemId, "Владения доспехами", opts)),
+      safe(loadDndEquipmentEntries(systemId, opts)),
+      safe(loadDndMechanicsGroupEntries(systemId, "Языки", opts)),
+    ]).then(([weapons, armor, equipment, languages]) => {
+      if (ac.signal.aborted) return;
+      const tools = equipment
+        .filter(
+          (e) =>
+            e.kind === "equipment" &&
+            (e.data.category === "Инструменты" || e.data.category === "Ремесленные инструменты")
+        )
+        .sort((x, y) => x.name.localeCompare(y.name, "ru"));
+      setLists({ gear: [...weapons, ...armor], tools, language: languages });
+    });
+    return () => ac.abort();
+  }, [systemId]);
+  const ownedIds = new Set(owned.map((p) => p.entryId).filter((id): id is number => id != null));
+  const ownedNames = new Set(owned.map((p) => p.name.trim().toLowerCase()));
+  const isOwned = (e: CompendiumEntry) => ownedIds.has(e.id) || ownedNames.has(e.name.trim().toLowerCase());
+  const q = query.trim().toLowerCase();
+  function toggle(kind: DndProficiencyKind, e: CompendiumEntry) {
+    setPicked((prev) => {
+      const next = new Map(prev);
+      const key = `e${e.id}`;
+      if (next.has(key)) next.delete(key);
+      else
+        next.set(key, {
+          entryId: e.id,
+          name: e.name,
+          abilityKey: typeof e.data.ability === "string" ? (ABILITY_NAME_TO_KEY[e.data.ability] ?? null) : null,
+          kind,
+        });
+      return next;
+    });
+  }
+  function addCustom(kind: DndProficiencyKind) {
+    const name = custom[kind].trim();
+    if (!name) return;
+    setPicked((prev) => new Map(prev).set(`c${kind}:${name.toLowerCase()}`, { entryId: null, name, abilityKey: null, kind }));
+    setCustom((c) => ({ ...c, [kind]: "" }));
+  }
+  const customPicked = [...picked.entries()].filter(([k]) => k.startsWith("c"));
+  return (
+    <Modal wide className="dnd-prof-picker-modal" onClose={onClose}>
+      <div className="stack dnd-prof-picker">
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <h3 style={{ margin: 0 }}>Добавить владение</h3>
+          <button type="button" className="comp-mini" onClick={onClose} aria-label="Закрыть">
+            <NavIcon name="close" />
+          </button>
+        </div>
+        <input type="search" placeholder="Поиск по всем трём спискам" value={query} onChange={(e) => setQuery(e.target.value)} />
+        {lists === null ? (
+          <span className="muted">Загрузка…</span>
+        ) : (
+          <div className="dnd-prof-picker-cols">
+            {PROF_KINDS.map(({ kind, title }) => (
+              <section key={kind} className="dnd-prof-picker-col" aria-label={title}>
+                <div className="dnd-spell-picker-group">
+                  <span>{title}</span>
+                </div>
+                {lists[kind]
+                  .filter((e) => !q || e.name.toLowerCase().includes(q))
+                  .map((e) => {
+                    const locked = isOwned(e);
+                    const on = locked || picked.has(`e${e.id}`);
+                    return (
+                      <button
+                        key={e.id}
+                        type="button"
+                        className={`dnd-spell-pick-row${on && !locked ? " is-picked" : ""}`}
+                        disabled={locked}
+                        aria-pressed={on}
+                        onClick={() => toggle(kind, e)}
+                      >
+                        <span className="dnd-pick-box" aria-hidden="true">
+                          {on && (
+                            <svg viewBox="0 0 18 18">
+                              <path d="M3 9 L7 13 L15 4" fill="none" stroke="currentColor" strokeWidth="2.6" />
+                            </svg>
+                          )}
+                        </span>
+                        <span className="dnd-spell-pick-name">{e.name}</span>
+                        {locked && <span className="dnd-spell-pick-circle">есть</span>}
+                      </button>
+                    );
+                  })}
+                {customPicked
+                  .filter(([, p]) => p.kind === kind)
+                  .map(([k, p]) => (
+                    <button
+                      key={k}
+                      type="button"
+                      className="dnd-spell-pick-row is-picked"
+                      aria-pressed
+                      onClick={() =>
+                        setPicked((prev) => {
+                          const next = new Map(prev);
+                          next.delete(k);
+                          return next;
+                        })
+                      }
+                    >
+                      <span className="dnd-pick-box" aria-hidden="true">
+                        <svg viewBox="0 0 18 18">
+                          <path d="M3 9 L7 13 L15 4" fill="none" stroke="currentColor" strokeWidth="2.6" />
+                        </svg>
+                      </span>
+                      <span className="dnd-spell-pick-name">{p.name}</span>
+                      <span className="dnd-spell-pick-circle">своё</span>
+                    </button>
+                  ))}
+                <input
+                  className="dnd-prof-picker-custom"
+                  placeholder="Своё… (Enter)"
+                  aria-label={`${title}: своё`}
+                  value={custom[kind]}
+                  onChange={(e) => setCustom((c) => ({ ...c, [kind]: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") addCustom(kind);
+                  }}
+                  onBlur={() => addCustom(kind)}
+                />
+              </section>
+            ))}
+          </div>
+        )}
+        <div className="row picker-footer" style={{ gap: 8, justifyContent: "flex-end" }}>
+          <span className="muted" style={{ marginRight: "auto" }}>
+            Отмечено <strong>{picked.size}</strong>
+          </span>
+          <button type="button" onClick={onClose}>
+            Отмена
+          </button>
+          <button type="button" className="primary" disabled={picked.size === 0} onClick={() => onPick([...picked.values()])}>
+            Добавить{picked.size > 0 ? ` ${picked.size}` : ""}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function DndProficienciesView({
   value,
   systemId,
@@ -728,110 +947,65 @@ function DndProficienciesView({
   systemId: number | null;
   onChange?: (v: DndProficiencyEntry[]) => void;
 }) {
-  const [adding, setAdding] = useState(false);
-  // Описание владения из справочника (инструменты: характеристика, сложности).
-  const [previewId, setPreviewId] = useState<number | null>(null);
-  const { detached } = useDndRuntime();
-  const [draft, setDraft] = useState("");
-  const [tools, setTools] = useState<CompendiumEntry[] | null>(null);
-  function commitAdd() {
-    if (draft.trim()) onChange?.([...value, { entryId: null, name: draft.trim(), abilityKey: null }]);
-    setDraft("");
-    setAdding(false);
-  }
-  function remove(i: number) {
-    onChange?.(value.filter((_, idx) => idx !== i));
-  }
-  // Список инструментов, которыми можно овладеть, — из справочника
-  // (снаряжение категорий «Инструменты»/«Ремесленные инструменты»).
-  // Грузим по открытию добавления, а не заранее: нужно не каждому листу.
-  function openAdd() {
-    setAdding(true);
-    setDraft("");
-    if (tools !== null || !systemId || detached) return;
-    loadDndEquipmentEntries(systemId)
-      .then((rows) =>
-        setTools(
-          rows.filter(
-            (e) =>
-              e.kind === "equipment" &&
-              (e.data.category === "Инструменты" || e.data.category === "Ремесленные инструменты") &&
-              !value.some((p) => p.entryId === e.id)
-          )
-        )
-      )
-      .catch(() => setTools([]));
-  }
-  function addTool(e: CompendiumEntry) {
-    onChange?.([
-      ...value,
-      {
-        entryId: e.id,
-        name: e.name,
-        abilityKey: typeof e.data.ability === "string" ? (ABILITY_NAME_TO_KEY[e.data.ability] ?? null) : null,
-      },
-    ]);
-    setTools((prev) => prev?.filter((t) => t.id !== e.id) ?? prev);
-  }
+  const [picking, setPicking] = useState(false);
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
   if (value.length === 0 && !onChange) return null;
+  const open = openIndex != null ? value[openIndex] : undefined;
   return (
     <div className="sb-entry">
       <span className="sb-prop-label">Владения и языки</span>
-      <div className="dnd-proficiency-chips">
-        {value.map((p, i) => (
-          <span key={i} className="dnd-proficiency-chip">
-            {p.entryId != null ? (
-              <button type="button" className="dnd-proficiency-name" onClick={() => setPreviewId(p.entryId ?? null)} title="Описание">
-                {p.name}
-              </button>
-            ) : (
-              p.name
-            )}
-            {onChange && (
-              <button type="button" className="comp-mini" onClick={() => remove(i)} title="Убрать" aria-label="Убрать владение">
-                <NavIcon name="close" />
-              </button>
-            )}
-          </span>
-        ))}
-        {onChange &&
-          (adding ? (
-            <span className="stack dnd-proficiency-chip-add" style={{ gap: 4 }}>
-              {tools !== null && tools.length > 0 ? (
-                <span className="stack" style={{ gap: 4 }}>
-                  {tools.map((t) => (
-                    <button key={t.id} type="button" className="dnd-chip" onClick={() => addTool(t)} style={{ alignSelf: "flex-start" }}>
-                      + {t.name}
-                    </button>
-                  ))}
-                </span>
-              ) : (
-                <span className="row dnd-proficiency-chip-add">
-                  <input
-                    autoFocus
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") commitAdd();
-                      if (e.key === "Escape") setAdding(false);
-                    }}
-                    onBlur={commitAdd}
-                    placeholder={tools === null ? "Загрузка…" : "Название…"}
-                    disabled={tools === null}
-                  />
-                </span>
+      {PROF_KINDS.map(({ kind, title }) => {
+        const rows = value.map((p, i) => ({ p, i })).filter(({ p }) => proficiencyKind(p) === kind);
+        if (rows.length === 0) return null;
+        return (
+          <div key={kind} className="dnd-prof-group">
+            <span className="dnd-prof-group-title">{title}</span>
+            <div className="dnd-proficiency-chips">
+              {rows.map(({ p, i }) =>
+                p.entryId != null || onChange ? (
+                  <button key={i} type="button" className="dnd-proficiency-chip" onClick={() => setOpenIndex(i)}>
+                    {p.name}
+                  </button>
+                ) : (
+                  <span key={i} className="dnd-proficiency-chip">
+                    {p.name}
+                  </span>
+                )
               )}
-              <button type="button" className="dnd-chip" onClick={() => setAdding(false)} style={{ alignSelf: "flex-start" }}>
-                Готово
-              </button>
-            </span>
-          ) : (
-            <button type="button" className="dnd-chip" onClick={openAdd}>
-              + добавить владение
-            </button>
-          ))}
-      </div>
-      {previewId != null && <EntityPreviewModal type="compendium_entry" id={previewId} onClose={() => setPreviewId(null)} />}
+            </div>
+          </div>
+        );
+      })}
+      {onChange && (
+        <button type="button" className="dnd-chip dnd-prof-add" onClick={() => setPicking(true)}>
+          + добавить владение
+        </button>
+      )}
+      {open && (
+        <ProficiencyInfoModal
+          prof={open}
+          onClose={() => setOpenIndex(null)}
+          onRemove={
+            onChange
+              ? () => {
+                  onChange(value.filter((_, idx) => idx !== openIndex));
+                  setOpenIndex(null);
+                }
+              : undefined
+          }
+        />
+      )}
+      {picking && onChange && (
+        <ProficiencyPickerModal
+          systemId={systemId}
+          owned={value}
+          onClose={() => setPicking(false)}
+          onPick={(items) => {
+            onChange([...value, ...items]);
+            setPicking(false);
+          }}
+        />
+      )}
     </div>
   );
 }

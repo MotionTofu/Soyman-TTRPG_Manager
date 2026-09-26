@@ -507,10 +507,15 @@ export interface DndEquipmentSection {
 // A dropped/typed proficiency or language. abilityKey is set only for
 // entries that compute a bonus (tools/weapons/armor); languages and other
 // non-computed proficiencies leave it null and show no value.
+/** Группа владения на «Навыках»: оружие и доспехи, инструменты и игровые
+ *  наборы, языки. Нет у старых листов — угадывается по имени. */
+export type DndProficiencyKind = "gear" | "tools" | "language";
+
 export interface DndProficiencyEntry {
   entryId: number | null;
   name: string;
   abilityKey: DndAbilityKey | null;
+  kind?: DndProficiencyKind;
 }
 
 export interface DndSpellEntry {

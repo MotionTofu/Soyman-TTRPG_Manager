@@ -589,6 +589,7 @@ export type {
   DndCoins,
   DndEquipmentSection,
   DndProficiencyEntry,
+  DndProficiencyKind,
   DndSpellEntry,
   DndCreatureSpeed,
   DndCreatureHitPoints,
