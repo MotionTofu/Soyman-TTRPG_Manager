@@ -1404,6 +1404,17 @@ button.dnd-card-level {
   text-transform: uppercase;
   color: var(--skin-ink-soft);
 }
+/* Узко характеристика уходит строкой ниже — по центру под числами, а не
+   сиротой у левого края (аудит 2026-09-26). */
+@media (max-width: 700px) {
+  .dnd-magic-nums {
+    justify-content: center;
+  }
+  .dnd-magic-ability {
+    flex-basis: 100%;
+    text-align: center;
+  }
+}
 /* Переключатель режима — две половины, включённая чернилами. */
 .dnd-seg {
   display: inline-flex;
