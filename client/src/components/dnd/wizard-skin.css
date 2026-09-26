@@ -726,7 +726,7 @@
   font-size: 18px;
 }
 
-/* Список шагов: текущий — кислотный с розовой полосой. */
+/* Список шагов: текущий — кислотный, готовые — розовые. */
 .wz-sheet .wz-steplist button {
   /* Без рамки (владелец 2026-09-26): общее правило кнопок визарда даёт 4px со
      всех сторон, здесь — только разделитель снизу. */
@@ -739,9 +739,13 @@
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
+/* Пройденный и готовый — розовым, текущий — кислотой, без полосы слева
+   (владелец 2026-09-26). */
+.wz-sheet .wz-steplist button.is-done {
+  background: var(--wz-mag) url("/ui/wizard/punk-magenta.webp") center / 360px;
+}
 .wz-sheet .wz-steplist button[aria-current="step"] {
   background: var(--wz-acid) url("/ui/wizard/acid-yellow.webp") center / 360px;
-  box-shadow: inset 5px 0 0 var(--wz-mag);
   font-weight: 600;
 }
 .wz-sheet .wz-steplist .wz-step-num {

@@ -4360,6 +4360,7 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
                   <button
                     type="button"
                     aria-current={st === step ? "step" : undefined}
+                    className={!miss && i < stepPos ? "is-done" : undefined}
                     onClick={() => {
                       setStep(st);
                       close();
