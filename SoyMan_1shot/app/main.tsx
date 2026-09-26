@@ -533,7 +533,10 @@ function App() {
         if (target) void refreshCharacters();
         else { revision.current = saved.revision; activeRef.current = source; setActive(source); }
       }
-      const catalog = source.catalogKey ? (await getCatalog(source.catalogKey)) ?? null : null;
+      let catalog = source.catalogKey ? (await getCatalog(source.catalogKey)) ?? null : null;
+      // Превью справочника живут в своём хранилище — возвращаем их, как в резервной копии.
+      const previews = catalog?.metadata?.id === source.catalogKey ? await getCatalogPreviews(source.catalogKey!) : null;
+      if (catalog && previews) catalog = mergePreviews(catalog, previews.images);
       const payload = forGm ? gmPayload(source, catalog) : portablePayload(source, catalog);
       const response = await fetch('/standalone-template.html');
       if (!response.ok) throw Error('Не удалось загрузить оболочку автономного чарника.');

@@ -9,7 +9,7 @@ test('portable payload excludes unrelated entries and rejects unsupported depend
   const payload = portablePayload(c, catalog);
   assert.deepEqual(payload.catalog.entries.map(e => e.id), [1]);
   assert.equal(payload.character.content.equipmentSections[0].items[0].transferIn, undefined);
-  assert.equal(payload.catalog.entries[0].avatar_preview_url, undefined);
+  assert.equal(payload.catalog.entries[0].avatar_preview_url, 'data:image/webp;base64,cHJldmlldw==');
   assert.equal(payload.catalog.entries[0].avatar_large_url, undefined);
   assert.equal(c.content.equipmentSections[0].items[0].transferIn.fromCharacterId, 77);
   assert.throws(() => portablePayload({ ...c, portrait: 'https://example.test/a.png' }, catalog));

@@ -33,10 +33,13 @@ export function portablePayload(character, catalog) {
   const content = structuredClone(character.content);
   for (const section of content.equipmentSections || []) for (const item of section.items) { delete item.transferIn; delete item.transferOut; }
   const portableEntries = structuredClone([...entries.values()]);
-  // Однофайловый лист хранит только правила, нужные персонажу. Карты классов
-  // и видов намеренно не раздувают HTML ни превью, ни большими лицами.
+  // Однофайловый лист хранит только правила, нужные персонажу. Большие лица
+  // не едут; маленькое превью (класс, подкласс, вид, спутник — ~34 КБ штука,
+  // решено 2026-09-26) едет, только если оно встроено data:-картинкой.
   for (const entry of portableEntries) {
+    const preview = entry.avatar_preview_url;
     delete entry.avatar_preview_url;
+    if (typeof preview === 'string' && /^data:image\/(png|jpeg|webp);base64,/.test(preview)) entry.avatar_preview_url = preview;
     delete entry.avatar_large_url;
     delete entry.avatar_image_url;
     delete entry.avatar_preview_data;
