@@ -92,7 +92,8 @@
  * Previously --card-radius lived in :root and leaked onto every app page;
  * it now lives here, restoring the other pages to their own token. */
 .oneshot-sheet,
-body.sheet-fullscreen {
+body.sheet-fullscreen,
+.wz .wz-overview-card {
   --paper: #e8e4da;
   --paper-2: #d9d3c2;
   --ink: #171717;

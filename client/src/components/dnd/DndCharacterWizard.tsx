@@ -4921,7 +4921,9 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
     c.backgroundName = backgroundEntry?.name ?? "";
     c.alignment = alignment;
     if (previewHp !== null) c.hitPointMax = c.hitPointsCurrent = String(previewHp);
-    if (previewSpeed) c.speed = String(previewSpeed);
+    // Как в finish: кость скорости читает структуру, строка дала бы «—» и «30» под плашкой.
+    const walk = Number(previewSpeed);
+    if (previewSpeed && Number.isFinite(walk)) c.speeds = { ...c.speeds, walk };
     return c;
   }
 
