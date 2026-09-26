@@ -1814,7 +1814,8 @@ button.dnd-card-level:hover {
 }
 body.sheet-fullscreen .mobile-topbar,
 body.sheet-fullscreen .mobile-bottom-nav,
-body.sheet-fullscreen .mini-player-bar {
+body.sheet-fullscreen .mini-player-bar,
+body.sheet-fullscreen .shell-crumbs {
   display: none !important;
 }
 body.sheet-fullscreen .app-content {

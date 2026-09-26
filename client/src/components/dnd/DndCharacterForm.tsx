@@ -13834,12 +13834,12 @@ export function DndCharacterView({
                   </span>
                   <span className="row muted" style={{ gap: 4, fontSize: "var(--fs-meta)" }}>
                     исп.
-                    <PipTrack
-                      value={Math.min(value.pactSlotsUsed ?? 0, computedSlots.pact.count)}
-                      label="Потрачено ячеек договора"
+                    {/* Те же головы тофу, что у ячеек кругов (владелец, 2026-09-27). */}
+                    <PoolMeter
                       max={computedSlots.pact.count}
-                      onChange={onQuickUpdate ? (v) => onQuickUpdate({ pactSlotsUsed: v }) : undefined}
-                      size={13}
+                      left={Math.max(0, computedSlots.pact.count - (value.pactSlotsUsed ?? 0))}
+                      label="Потрачено ячеек договора"
+                      onSetLeft={onQuickUpdate ? (next) => onQuickUpdate({ pactSlotsUsed: computedSlots.pact!.count - next }) : undefined}
                     />
                   </span>
                 </div>

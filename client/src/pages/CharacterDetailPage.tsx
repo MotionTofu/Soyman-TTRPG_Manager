@@ -11,6 +11,7 @@ import { CharacterDossier, CharacterDossierModal, CharacterRelationsModal } from
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import { useCurrentUser } from "../api/currentUser";
 import type { Character } from "../types";
+import { findTheme } from "../themes";
 
 /**
  * Персонаж = лист (гриллинг 2026-09-27): страница персонажа сразу открывает
@@ -48,9 +49,18 @@ export function CharacterDetailPage() {
 
   // Панели приложения прячутся: лист занимает весь экран (тот же приём, что
   // у пульта, body.live-hide-dock).
+  // Лист и визард вышли самостоятельным модулем в облике OneShot: тема
+  // приложения их не красит (решение владельца 2026-09-27) — поверх неё на
+  // body кладётся тема OneShot («noir»), на уходе снимается.
   useEffect(() => {
-    document.body.classList.add("sheet-fullscreen");
-    return () => document.body.classList.remove("sheet-fullscreen");
+    const body = document.body;
+    const vars = Object.entries(findTheme("noir").vars);
+    body.classList.add("sheet-fullscreen");
+    for (const [k, v] of vars) body.style.setProperty(k, v);
+    return () => {
+      body.classList.remove("sheet-fullscreen");
+      for (const [k] of vars) body.style.removeProperty(k);
+    };
   }, []);
 
   if (notFound) {

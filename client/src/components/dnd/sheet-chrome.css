@@ -422,6 +422,29 @@
   color: #4a4743;
 }
 .dossier-section > :not(summary) { margin-top: 6px; }
+/* Удаление главы — справа на плашке и тихо: красный блок рядом с названием
+   спорил с ним за взгляд (владелец, 2026-09-27). Иконка — общая NavIcon,
+   пока нет своего ассета листа. */
+.character-dossier-extra .chevron-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.character-dossier-extra .chevron-summary > .danger {
+  float: none !important;
+  margin-left: auto;
+  padding: 4px;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  color: #1c1c1c;
+  opacity: 0.45;
+}
+.character-dossier-extra .chevron-summary > .danger:hover,
+.character-dossier-extra .chevron-summary > .danger:focus-visible {
+  opacity: 1;
+  color: #b3261e;
+}
 .character-dossier-extra .card {
   border: 0;
   border-radius: 0;

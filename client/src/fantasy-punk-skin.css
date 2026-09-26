@@ -852,10 +852,11 @@ body.sheet-fullscreen {
   color: var(--skin-ink-soft);
 }
 /* ПК: оборот — плашками прямо в правой колонке «Карты», без рамки и без
- * чернил (макет PC-Card). С входящими кампании (основное приложение)
- * остаётся чернильным: они свёрстаны под тёмную рубашку. */
+ * чернил (макет PC-Card), шириной с полосу вкладок. Входящие кампании
+ * (основное приложение) — тоже на бумаге: от чёрной рубашки отказались и
+ * здесь (владелец, 2026-09-27). */
 @media (min-width: 701px) {
-  .dnd-desktop-back .dnd-card-back:not(:has(.dnd-card-back-head, .dnd-transfer-box)) {
+  .dnd-desktop-back .dnd-card-back {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 14px;
@@ -866,10 +867,22 @@ body.sheet-fullscreen {
     color: var(--skin-ink);
     animation: none;
   }
-  .dnd-desktop-back .dnd-card-back:not(:has(.dnd-card-back-head, .dnd-transfer-box)) > :not(.dnd-back-plate) {
+  .dnd-desktop-back .dnd-card-back > :not(.dnd-back-plate) {
     grid-column: 1 / -1;
   }
-  .dnd-desktop-back .dnd-card-back:not(:has(.dnd-card-back-head, .dnd-transfer-box)) .dnd-oracle-slip blockquote {
+  .dnd-desktop-back .dnd-card-back {
+    color-scheme: light;
+  }
+  .dnd-desktop-back .dnd-card-back select,
+  .dnd-desktop-back .dnd-card-back input {
+    background: #efebe1;
+    color: var(--skin-ink);
+    border-color: var(--skin-ink);
+  }
+  .dnd-desktop-back .dnd-card-back-head {
+    border-bottom-color: var(--skin-ink);
+  }
+  .dnd-desktop-back .dnd-card-back .dnd-oracle-slip blockquote {
     font-size: 26px;
   }
   .dnd-desktop-back .dnd-card-back > .dnd-card-frame-art,
@@ -2662,7 +2675,7 @@ button.dnd-proficiency-chip {
 }
 /* ПК-оборот: плашки и кнопки без рамок, как на макете. */
 @media (min-width: 701px) {
-  .dnd-desktop-back .dnd-card-back:not(:has(.dnd-card-back-head, .dnd-transfer-box)) :is(.dnd-back-plate, .dnd-oracle-slip, .dnd-back-btn:not(.is-ink)),
+  .dnd-desktop-back .dnd-card-back :is(.dnd-back-plate, .dnd-oracle-slip, .dnd-back-btn:not(.is-ink)),
   .dnd-desktop-back > .dnd-face-edit {
     border: 0;
     border-image: none;
