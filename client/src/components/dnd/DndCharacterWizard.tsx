@@ -3433,7 +3433,19 @@ export function DndCharacterWizard({ ownerType, ownerId, ownerName, ownerPlayerN
       return setSpeciesResist(shuffled(speciesResistChoice.options).slice(0, speciesResistChoice.count));
     }
     // Предыстория и черты (черта предыстории — её собственная, по правилам).
-    if (!backgroundId) return selectBackground(pickOne(backgroundOptions)!.id);
+    if (!backgroundId) {
+      // «Играбельно»: из предысторий, чья прибавка покрывает главные
+      // характеристики класса — паладину Сил/Хар, а не Лов/Мдр (владелец
+      // 2026-09-26). Счёт: главная 2, вторая 1; берём наугад из лучших.
+      const arr = classStandardArray(classEntry);
+      const [p1, p2] = arr ? [...ABILITY_KEYS_ALL].sort((x, y) => arr[y] - arr[x]) : [];
+      const score = (b: DndBackgroundOption) => {
+        const keys = (b.abilities ?? []).map((n) => ABILITY_NAME_TO_KEY[n]);
+        return (keys.includes(p1) ? 2 : 0) + (keys.includes(p2) ? 1 : 0);
+      };
+      const best = chaos || !arr ? 0 : Math.max(...backgroundOptions.map(score));
+      return selectBackground(pickOne(backgroundOptions.filter((b) => score(b) >= best))!.id);
+    }
     if (backgroundEntry?.id !== backgroundId) return;
     if (featNeeded && !effectiveFeatId && originFeats.length) return pickBackgroundFeat(pickOne(originFeats)!.id);
     if (speciesFeatNeeded && !effectiveSpeciesFeatId) {
