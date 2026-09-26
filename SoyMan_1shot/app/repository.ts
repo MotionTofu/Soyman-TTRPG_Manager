@@ -64,6 +64,9 @@ function database() {
       // ambiguous shape are left untouched; migration errors never abort upgrade.
       if (event.oldVersion < 2) migratePreviewsV2(request.transaction!);
     };
+    // Some in-app browsers (Telegram on Android) never answer open() at all —
+    // neither success nor error — which left the app on "Открываем…" forever.
+    setTimeout(() => reject(Error('Этот встроенный браузер не даёт хранить персонажей. Откройте ссылку в Chrome или Safari (меню ⋮ → «Открыть в браузере»)')), 8000);
     request.onerror = () => reject(request.error); request.onblocked = () => reject(Error('Закройте другие окна OneShot и повторите'));
     request.onsuccess = () => { request.result.onversionchange = () => request.result.close(); resolve(request.result); };
   });
