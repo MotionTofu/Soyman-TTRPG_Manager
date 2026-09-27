@@ -40,7 +40,7 @@ import {
   featPrereqProblem,
   type FeatPick,
 } from "./featPick";
-import { recomputeGrantedSpells } from "./DndCharacterForm";
+import { recomputeGrantedSpells } from "./grantedSpells";
 import {
   cantripsAtLevel,
   preparedAtLevel,

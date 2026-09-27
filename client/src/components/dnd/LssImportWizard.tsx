@@ -13,7 +13,8 @@ import type {
   DndSkillProfLevel,
   DndSpellEntry,
 } from "../../types";
-import { normalizeDndCharacter, recomputeGrantedSpells } from "./DndCharacterForm";
+import { normalizeDndCharacter } from "./DndCharacterForm";
+import { recomputeGrantedSpells } from "./grantedSpells";
 import { EMPTY_EQUIPMENT_ITEM, fetchEquipmentMeta, splitEquipmentQty } from "./dndEquipment";
 import { useDndSkills } from "./useDndSkills";
 import { ABILITY_LABELS, computeProficiencyBonus } from "./AbilityScores";

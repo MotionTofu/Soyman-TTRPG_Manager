@@ -4,7 +4,7 @@ import { grantsFromEntry } from "./dndGrants";
 import { useDndSkills } from "./useDndSkills";
 import { loadDndEquipmentEntries, loadDndSpellIndex } from "./dndCompendium";
 import { isMasterableWeapon } from "./StartingEquipmentPicker";
-import { recomputeGrantedSpells } from "./DndCharacterForm";
+import { recomputeGrantedSpells } from "./grantedSpells";
 import { Sheet } from "./wizardUi";
 import { withLiveEffects } from "./dndFeatures";
 import { totalCharacterLevel } from "./AbilityScores";

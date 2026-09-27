@@ -7,7 +7,8 @@ import { afterWriteAnywhere, readResource } from "../../data/imperative";
 import { Modal } from "../Modal";
 import { NavIcon } from "../NavIcons";
 import type { CompendiumEntry, DndAbilityKey, DndAbilityScores } from "../../types";
-import { DndCharacterView, emptyDndCharacter, recomputeGrantedSpells } from "./DndCharacterForm";
+import { DndCharacterView, emptyDndCharacter } from "./DndCharacterForm";
+import { recomputeGrantedSpells } from "./grantedSpells";
 import {
   armorProfNames,
   isWeaponProficient,
