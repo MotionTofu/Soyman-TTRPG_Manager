@@ -1,3 +1,4 @@
+import './legacy-polyfills';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
@@ -35,6 +36,9 @@ function App() {
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, [dirty]);
+  // Подсказка «открыто в предпросмотре» лежит в самом HTML и уходит, только
+  // когда лист смонтировался: если скрипт упал, игрок видит её, а не пустоту.
+  useEffect(() => { document.getElementById('oneshot-nojs')?.remove(); }, []);
   const [status, setStatus] = useState('Изменения хранятся до закрытия страницы. Скачайте обновлённую копию после игры.');
   function save() {
     const html = template.cloneNode(true) as HTMLElement;
