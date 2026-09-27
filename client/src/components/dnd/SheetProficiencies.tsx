@@ -14,6 +14,7 @@ import { MentionText } from "../mentions/MentionText";
 import type { DndSkills, SkillRow } from "./useDndSkills";
 import { loadDndPrefs } from "../../dndPrefs";
 import { SKILL_TITLES, computed as computeSkillValue, SKILL_DOTS } from "./AbilitySavesSkills";
+import { SheetModalHead } from "./sheetShared";
 
 // Счётчик черт боевого стиля (тикет 03): положено — 1 за Воина + 1 за
 // Чемпиона 7+; есть — строки с entryId из категории «Боевой Стиль».
@@ -324,14 +325,7 @@ function ProficiencyInfoModal({
   return (
     <Modal onClose={onClose}>
       <div className="stack dnd-spell-modal">
-        <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div className="dnd-spell-modal-title">
-            <h3 style={{ margin: 0 }}>{prof.name}</h3>
-          </div>
-          <button type="button" className="comp-mini" onClick={onClose} aria-label="Закрыть">
-            <NavIcon name="close" />
-          </button>
-        </div>
+        <SheetModalHead title={prof.name} onClose={onClose} />
         {prof.entryId != null && (entry ? entry.description?.trim() ? <MentionText text={entry.description} /> : null : <span className="muted">Загрузка…</span>)}
         {onRemove && (
           <button type="button" style={{ alignSelf: "flex-start" }} onClick={onRemove}>

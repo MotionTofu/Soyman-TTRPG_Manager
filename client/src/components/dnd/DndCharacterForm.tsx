@@ -1,7 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { write } from "../../data/hooks";
 import { afterWriteAnywhere } from "../../data/imperative";
-import { plural } from "../../sceneKinds";
 import { showSaveError } from "../../data/notices";
 import type { CompendiumEntry, DndAbilityKey, DndActionTiming, DndCharacterData, DndCompanion, DndElixir, DndPinnedAction, DndReplicaItem, DndClassEntry, DndEquipmentItem, DndFeature, DndManualAttack, DndSpellEntry } from "../../types";
 import { ABILITY_LABELS, ABILITY_NAME_TO_KEY, abilityModifier, characterSpellcastingAbility, classSkillChoiceTotal, classSkillPool, formatModifier, parseAbilityNames, parseBonus, SKILLS_BY_ABILITY } from "./AbilityScores";
@@ -80,7 +79,7 @@ import { classAndLevelSummary } from "./dndSummary";
 import { deriveSheet, weaponEffects, type WeaponUse } from "@shared/dnd/derive";
 import { wornArmorState } from "./armorClass";
 import { NavIcon } from "../NavIcons";
-import { type DndViewTab, useOneShotOverlayFocus, DND_VIEW_TABS, stripLatin, TabEditToggle, LabeledEditButton } from "./sheetShared";
+import { type DndViewTab, useOneShotOverlayFocus, DND_VIEW_TABS, stripLatin, TabEditToggle, LabeledEditButton, SheetModalHead } from "./sheetShared";
 import { spellNameParts, buildSpellDetail, SpellFields, FULL_LIST_CLASSES, DndClassSpellListModal, DndArcanumPicker, DndSpellsView } from "./SheetSpells";
 import { equippedWeaponSummaries, type AttackRow, weaponAttackRows, combatSpellRows, featureActionRows, manualAttackRows, pickBookmarks, walkDieParts, ActionInfoModal, SpendAction, DndActionPools, AttacksTable } from "./SheetCombat";
 import { DndOriginEditForm, NARRATIVE_FIELDS, useDndOrigin } from "./SheetOrigin";
@@ -433,15 +432,7 @@ function DndCardModal({
   return (
     <Modal onClose={onClose}>
       <div className="stack dnd-spell-modal">
-        <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div className="dnd-spell-modal-title">
-            <h3 style={{ margin: 0 }}>{ru}</h3>
-            {en && <div className="dnd-spell-modal-en">{en}</div>}
-          </div>
-          <button type="button" className="comp-mini" onClick={onClose} aria-label="Закрыть">
-            <NavIcon name="close" />
-          </button>
-        </div>
+        <SheetModalHead title={ru} sub={en} onClose={onClose} />
         {spell && entry && (() => {
           const d = buildSpellDetail(entry);
           return (

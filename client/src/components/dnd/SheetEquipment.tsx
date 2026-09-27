@@ -7,7 +7,7 @@ import { useState, useRef, useEffect, memo, type DragEvent, useMemo, useCallback
 import { NavIcon } from "../NavIcons";
 import { useConfirm } from "../../hooks/useConfirm";
 import { useEvent, useLatest } from "../../hooks/useEvent";
-import { readSearchDrop } from "./sheetShared";
+import { readSearchDrop, SheetModalHead } from "./sheetShared";
 import { LB_PER_KG, formatWeight } from "../../dndPrefs";
 import { useDndPrefs } from "../../hooks/useDndPrefs";
 import { plural } from "../../sceneKinds";
@@ -1857,14 +1857,7 @@ export function DndEquipmentQuickView({
         return (
           <Modal onClose={() => setDescOpen(null)}>
             <div className="stack dnd-spell-modal">
-              <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-                <div className="dnd-spell-modal-title">
-                  <h3 style={{ margin: 0 }}>{item.name}</h3>
-                </div>
-                <button type="button" className="comp-mini" onClick={() => setDescOpen(null)} aria-label="Закрыть">
-                  <NavIcon name="close" />
-                </button>
-              </div>
+              <SheetModalHead title={item.name} onClose={() => setDescOpen(null)} />
               {tags && <div className="dnd-equipment-tags">{tags}</div>}
               {!item.entryId ? (
                 <MentionText text={item.notes} />

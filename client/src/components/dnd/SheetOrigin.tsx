@@ -84,6 +84,27 @@ function upsertClassNotesBlock(notes: string, className: string, block: string):
   return cleaned ? `${cleaned}\n\n${block}` : block;
 }
 
+// Новые инструменты выдачи (класс, подкласс) — строками владений. Характеристика
+// инструмента лежит на его записи справочника (data.ability, см. TOOL_ABILITY_FIELD
+// в CompendiumSection), а не в tool_profs выдачи: без запроса строка пришла бы
+// без характеристики.
+async function withToolProfs(proficiencies: DndProficiencyEntry[], toolPicks: { id: number; name: string }[]): Promise<DndProficiencyEntry[]> {
+  const newTools = toolPicks.filter((t) => !proficiencies.some((p) => p.name === t.name));
+  if (newTools.length === 0) return proficiencies;
+  const abilityKeys = await Promise.all(
+    newTools.map(async (t) => {
+      try {
+        const toolEntry = await readResource<CompendiumEntry>(`/systems/entries/${t.id}`);
+        const ability = typeof toolEntry.data.ability === "string" ? toolEntry.data.ability : "";
+        return ability ? ABILITY_NAME_TO_KEY[ability] ?? null : null;
+      } catch {
+        return null;
+      }
+    })
+  );
+  return [...proficiencies, ...newTools.map((t, idx) => ({ entryId: t.id, name: t.name, abilityKey: abilityKeys[idx] }))];
+}
+
 // Removes any auto-filled features tagged with the given source id(s),
 // keeping hand-added features (sourceParentId is unset) and features from
 // other sources (other classes, in a multiclass character) untouched.
@@ -536,28 +557,7 @@ export function useDndOrigin(
           const toolPicks = Array.isArray(entry.data.tool_profs)
             ? (entry.data.tool_profs as { id: number; name: string }[])
             : [];
-          const newTools = toolPicks.filter((t) => !proficiencies.some((p) => p.name === t.name));
-          if (newTools.length > 0) {
-            // Each tool's governing ability lives on its own compendium
-            // entry (data.ability, see CompendiumSection's TOOL_ABILITY_FIELD),
-            // not on the class's tool_profs pick — fetch it so the row
-            // doesn't come in with the ability unset.
-            const abilityKeys = await Promise.all(
-              newTools.map(async (t) => {
-                try {
-                  const toolEntry = await readResource<CompendiumEntry>(`/systems/entries/${t.id}`);
-                  const ability = typeof toolEntry.data.ability === "string" ? toolEntry.data.ability : "";
-                  return ability ? ABILITY_NAME_TO_KEY[ability] ?? null : null;
-                } catch {
-                  return null;
-                }
-              })
-            );
-            proficiencies = [
-              ...proficiencies,
-              ...newTools.map((t, idx) => ({ entryId: t.id, name: t.name, abilityKey: abilityKeys[idx] })),
-            ];
-          }
+          proficiencies = await withToolProfs(proficiencies, toolPicks);
           // Доспехи — только от первого класса: мультикласс в 5.5 даёт их
           // урезанно, а строки ниже лист читает как полное владение.
           const armorPicks = i === 0 && Array.isArray(entry.data.armor_profs)
@@ -642,24 +642,7 @@ export function useDndOrigin(
           const toolPicks = Array.isArray(entry.data.tool_profs)
             ? (entry.data.tool_profs as { id: number; name: string }[])
             : [];
-          const newTools = toolPicks.filter((t) => !proficiencies.some((p) => p.name === t.name));
-          if (newTools.length > 0) {
-            const abilityKeys = await Promise.all(
-              newTools.map(async (t) => {
-                try {
-                  const toolEntry = await readResource<CompendiumEntry>(`/systems/entries/${t.id}`);
-                  const ability = typeof toolEntry.data.ability === "string" ? toolEntry.data.ability : "";
-                  return ability ? ABILITY_NAME_TO_KEY[ability] ?? null : null;
-                } catch {
-                  return null;
-                }
-              })
-            );
-            proficiencies = [
-              ...proficiencies,
-              ...newTools.map((t, idx) => ({ entryId: t.id, name: t.name, abilityKey: abilityKeys[idx] })),
-            ];
-          }
+          proficiencies = await withToolProfs(proficiencies, toolPicks);
         } catch {
           /* subclass has no compendium entry — nothing to grant */
         }

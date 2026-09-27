@@ -13,6 +13,7 @@ import { readResource, afterWriteAnywhere } from "../../data/imperative";
 import { statblockListPath, statblockAffects } from "../../data/statblocks";
 import { ensureEntries, getCachedEntry } from "./entryCache";
 import { loadDndEquipmentEntries } from "./dndCompendium";
+import { SheetModalHead } from "./sheetShared";
 
 export function DndReplicaBlock({
   limits,
@@ -309,15 +310,7 @@ function DndReplicaSchemeModal({
   return (
     <Modal onClose={onClose}>
       <div className="stack dnd-spell-modal dnd-replica-modal">
-        <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div className="dnd-spell-modal-title">
-            <h3 style={{ margin: 0 }}>{scheme.name}</h3>
-            <div className="dnd-spell-modal-en">{step === "base" ? "выберите основу" : "схема"}</div>
-          </div>
-          <button type="button" className="comp-mini" onClick={onClose} aria-label="Закрыть">
-            <NavIcon name="close" />
-          </button>
-        </div>
+        <SheetModalHead title={scheme.name} sub={step === "base" ? "выберите основу" : "схема"} onClose={onClose} />
         {step === "about" ? (
           <>
             {meta && <span className="muted">{meta}</span>}
@@ -383,15 +376,7 @@ function DndReplicaItemModal({
   return (
     <Modal onClose={onClose}>
       <div className="stack dnd-spell-modal dnd-replica-modal">
-        <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div className="dnd-spell-modal-title">
-            <h3 style={{ margin: 0 }}>{replicaItemTitle(item)}</h3>
-            {item.baseName && <div className="dnd-spell-modal-en">по схеме: {item.name}</div>}
-          </div>
-          <button type="button" className="comp-mini" onClick={onClose} aria-label="Закрыть">
-            <NavIcon name="close" />
-          </button>
-        </div>
+        <SheetModalHead title={replicaItemTitle(item)} sub={item.baseName ? `по схеме: ${item.name}` : null} onClose={onClose} />
         {baseMeta ? <span className="muted">{baseMeta}</span> : replicaEntryMeta(entry) && <span className="muted">{replicaEntryMeta(entry)}</span>}
         {entry?.description?.trim() ? <MentionText text={entry.description} /> : null}
         {canEdit && (

@@ -208,3 +208,19 @@ export function pluralRu(n: number, one: string, few: string, many: string): str
   if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
   return many;
 }
+
+// Шапка окна описания (заклинание, действие, предмет, владение, схема): имя,
+// под ним подпись мельче, справа крестик.
+export function SheetModalHead({ title, sub, onClose }: { title: ReactNode; sub?: ReactNode; onClose: () => void }) {
+  return (
+    <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
+      <div className="dnd-spell-modal-title">
+        <h3 style={{ margin: 0 }}>{title}</h3>
+        {sub && <div className="dnd-spell-modal-en">{sub}</div>}
+      </div>
+      <button type="button" className="comp-mini" onClick={onClose} aria-label="Закрыть">
+        <NavIcon name="close" />
+      </button>
+    </div>
+  );
+}

@@ -22,6 +22,7 @@ import { Modal } from "../Modal";
 import { type DndDistanceUnit, formatDistance } from "../../dndPrefs";
 import { PoolMeter, poolShowsNumber } from "./TofuPips";
 import { PROGRESSION_RECHARGE_LABELS } from "./progression";
+import { SheetModalHead } from "./sheetShared";
 
 export interface AttackRow {
   name: string;
@@ -972,15 +973,7 @@ export function ActionInfoModal({ row, systemId, onClose }: { row: AttackRow; sy
   return (
     <Modal onClose={onClose}>
       <div className="stack dnd-spell-modal">
-        <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div className="dnd-spell-modal-title">
-            <h3 style={{ margin: 0 }}>{ru}</h3>
-            {en && <div className="dnd-spell-modal-en">{en}</div>}
-          </div>
-          <button type="button" className="comp-mini" onClick={onClose} aria-label="Закрыть">
-            <NavIcon name="close" />
-          </button>
-        </div>
+        <SheetModalHead title={ru} sub={en} onClose={onClose} />
         {lines.length > 0 && (
           <div className="stack" style={{ gap: 2 }}>
             {lines.map((l, i) => (
