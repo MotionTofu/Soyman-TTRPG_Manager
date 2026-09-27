@@ -71,6 +71,7 @@ const walkWizard = `async({cls,level})=>{${HELPERS}
     if(t==='Предыстория'){ document.querySelector('.wz-row .wz-row-check')?.click(); await W(1500); }
     if(t==='Снаряжение'){ const b=[...document.querySelectorAll('button,[role=radio],label')].filter(x=>/Сундук/.test(x.textContent)); b[b.length-1]?.click(); await W(1500); }
     R(/^\\|Выбрать$/)?.click(); await W(1200); await fill();
+    if(t==='Черты'){ /* fill() отмечает «Увеличение характеристик» первой строкой — чипы появляются после неё */ for(const a of document.querySelectorAll('.wz-asi')){ if(!a.querySelector('.wz-chip[aria-pressed="true"]')){ a.querySelector('.wz-chip:not([disabled])')?.click(); await W(600);} } }
     const n=R(/^\\|Далее$/); if(!n||n.disabled) return 'визард встал на «'+t+'»: '+(document.querySelector('.wz-foot-hint')?.textContent||''); n.click(); await W(1800); }
   return 'визард не дошёл до «Обзора»'}`;
 const createCharacter = `async()=>{${HELPERS} const b=R(/Создать персонажа/); if(!b||b.disabled) return 'кнопка «Создать» недоступна'; setTimeout(()=>b.click(),0); return 'ok'}`;
