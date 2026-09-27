@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAction, useResource, write } from "../../data/hooks";
 import { creatureCardQuery } from "../../data/creatureCard";
@@ -7636,47 +7636,41 @@ function DndClassSpellListModal({
 }
 
 /**
- * Пикер Таинственного арканума (тикет 03 warlock): отдельная модалка,
- * открывается кнопкой «Арканум» при уровне колдуна 11+. Четыре секции
- * 6/7/8/9: закрытые — серым «с N ур.», в открытой — текущий выбор и замена
- * на месте (1 в круге, только список колдуна). Удаления нет: по книге
+ * Пикер Таинственного арканума (гриллинг 2026-09-27, Q1–Q5, макет на холсте):
+ * один экран — вкладки кругов 6/7/8/9 (на вкладке — что взято; закрытые
+ * видны «с N ур.» и не нажимаются), под ними список колдуна этого круга
+ * строками «Взять заклинания». Щелчок отмечает и раскрывает описание, внизу
+ * чёрная плашка «Взять «X»» / «Заменить старое → новое». Окно не
+ * закрывается: на 17 уровне брать четыре штуки. Удаления нет — по книге
  * арканум только заменяется.
  */
 function DndArcanumPicker({
   systemId,
   warlockClassId,
   warlockLevel,
+  characterName,
   spellsByLevel,
-  color,
   onPick,
   onClose,
 }: {
   systemId: number | null;
   warlockClassId: number | null;
   warlockLevel: number;
+  characterName: string;
   spellsByLevel: DndSpellEntry[][];
-  color: string;
   /** Замена арканума круга целиком; чужие строки круга не трогаем. */
   onPick: (circleIdx0: number, entry: CompendiumEntry) => void;
   onClose: () => void;
 }) {
-  const [pickCircle, setPickCircle] = useState<number | null>(null);
+  const unlocked = arcanumUnlockedCircles(warlockLevel);
+  const current = (circle: number) => spellsByLevel[circle - 1]?.find((s) => s.arcanum);
+  // Открывается на первом пустом открытом круге: его и пришли заполнять.
+  const [circle, setCircle] = useState(() => unlocked.find((c) => !current(c)) ?? unlocked[0] ?? 6);
   const [all, setAll] = useState<CompendiumEntry[] | null>(null);
   const [query, setQuery] = useState("");
   const [chosen, setChosen] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);
-  const dialogRef = useOneShotOverlayFocus('.dnd-spell-picker-close');
-  const previousCircle = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (document.documentElement.dataset.app !== "oneshot") return;
-    if (pickCircle != null) {
-      dialogRef.current?.querySelector<HTMLInputElement>('.dnd-spell-picker-search input')?.focus();
-    } else if (previousCircle.current != null) {
-      dialogRef.current?.querySelector<HTMLButtonElement>(`[data-arcanum-circle="${previousCircle.current}"]`)?.focus();
-    }
-    previousCircle.current = pickCircle;
-  }, [pickCircle, dialogRef]);
+  const dialogRef = useOneShotOverlayFocus(".dnd-spell-picker-close");
 
   useEffect(() => {
     if (!systemId) {
@@ -7695,140 +7689,172 @@ function DndArcanumPicker({
   // Escape закрывает (крестик — для пальца), как у списка заклинаний.
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === "Escape") {
-        if (pickCircle != null) setPickCircle(null);
-        else onClose();
-      }
+      if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose, pickCircle]);
+  }, [onClose]);
 
-  const unlocked = arcanumUnlockedCircles(warlockLevel);
-  const current = (circle: number) => spellsByLevel[circle - 1].find((s) => s.arcanum);
+  const cur = current(circle);
   const options =
-    pickCircle == null || warlockClassId == null
+    warlockClassId == null
       ? []
       : (all ?? []).filter((e) => {
           const refs = Array.isArray(e.data?.classes) ? (e.data.classes as { id?: number }[]) : [];
-          return (e.level ?? 0) === pickCircle && refs.some((r) => r.id === warlockClassId);
+          return (e.level ?? 0) === circle && refs.some((r) => r.id === warlockClassId);
         });
   const q = query.trim().toLowerCase();
   const shown = q ? options.filter((e) => e.name.toLowerCase().includes(q)) : options;
-  const chosenEntry = chosen != null ? (all ?? []).find((e) => e.id === chosen) : undefined;
+  const chosenEntry = chosen != null ? options.find((e) => e.id === chosen) : undefined;
+
+  const spellMeta = (e: CompendiumEntry): string => {
+    const t = spellTimingFromData(e.data).castingTiming;
+    return [
+      spellSchoolName(e.data?.school),
+      t === "action" ? "действие" : t === "bonus" ? "бонусное" : t === "reaction" ? "реакция" : undefined,
+      typeof e.data?.range === "string" ? e.data.range : undefined,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  };
 
   return (
-    <div ref={dialogRef} className="dnd-spell-picker" role="dialog" aria-modal="true" aria-label="Таинственный арканум" tabIndex={-1}>
-      <div className="dnd-spell-picker-head">
-        <div className="dnd-spell-picker-title-row">
-          <div>
-            <div className="dnd-spell-picker-title">Таинственный арканум</div>
-            <div className="dnd-spell-picker-sub">По одному заклинанию круга, 1/долгий отдых без ячейки</div>
+    <>
+      <div className="dnd-spell-picker-backdrop" aria-hidden="true" onClick={onClose} />
+      <div ref={dialogRef} className="dnd-spell-picker dnd-arcanum-picker" role="dialog" aria-modal="true" aria-label="Таинственный арканум" tabIndex={-1}>
+        <div className="dnd-spell-picker-head">
+          <div className="dnd-spell-picker-title-row">
+            <div>
+              <div className="dnd-spell-picker-title">Таинственный арканум</div>
+              <div className="dnd-spell-picker-sub">
+                {characterName && <span className="dnd-arcanum-sub-long">{characterName} · </span>}Колдун {warlockLevel} · по одному на круг<span className="dnd-arcanum-sub-long"> · раз в долгий отдых без ячейки</span>
+              </div>
+            </div>
+            <button type="button" className="dnd-spell-picker-close" onClick={onClose} aria-label="Закрыть">
+              <NavIcon name="close" />
+            </button>
           </div>
-          <button type="button" className="dnd-spell-picker-close" onClick={onClose} aria-label="Закрыть">
-            <NavIcon name="close" />
-          </button>
-        </div>
-        {pickCircle != null && (
-          <div className="dnd-spell-picker-search">
+          <div className="dnd-spell-picker-chips dnd-arcanum-tabs" role="tablist" aria-label="Круги арканума">
+            {ARCANUM_UNLOCKS.map(({ circle: c, warlockLevel: need }) => {
+              const open = unlocked.includes(c);
+              const on = open && c === circle;
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  role="tab"
+                  aria-selected={on}
+                  disabled={!open}
+                  className={`dnd-pick-chip dnd-arcanum-tab${on ? " is-on" : ""}`}
+                  onClick={() => {
+                    setCircle(c);
+                    setChosen(null);
+                    setQuery("");
+                  }}
+                >
+                  <b>{c} круг</b>
+                  <span>{open ? stripLatin(current(c)?.name ?? "—") : `с ${need} ур.`}</span>
+                </button>
+              );
+            })}
+          </div>
+          <label className="dnd-spell-picker-search">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20 20l-4-4" />
+            </svg>
             <input
-              placeholder="Искать, если уже знаете название"
+              type="search"
+              placeholder="Искать по названию"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               aria-label="Поиск заклинаний по названию"
             />
-          </div>
-        )}
-      </div>
-      {pickCircle == null ? (
+          </label>
+        </div>
         <div className="dnd-spell-picker-list">
-          {ARCANUM_UNLOCKS.map(({ circle, warlockLevel: need }) => {
-            const open = unlocked.includes(circle);
-            const cur = current(circle);
+          <div className="dnd-spell-picker-group">
+            <b>{circle}</b>
+            <span>круг · список колдуна</span>
+          </div>
+          {warlockClassId == null && <p className="muted">Класс без записи справочника — список колдуна не собрать.</p>}
+          {failed && <p className="muted">Не удалось загрузить справочник заклинаний.</p>}
+          {!failed && all === null && <p className="muted">Загрузка…</p>}
+          {!failed && all !== null && warlockClassId != null && shown.length === 0 && (
+            <p className="muted">{q ? "Ничего не нашлось." : "В списке колдуна нет заклинаний этого круга."}</p>
+          )}
+          {shown.map((e) => {
+            const taken = cur?.entryId === e.id;
+            const isPicked = chosen === e.id;
+            const meta = spellMeta(e);
+            const school = schoolIconSrc(spellSchoolName(e.data?.school));
             return (
-              <div key={circle} className="row sb-entry" style={{ justifyContent: "space-between" }}>
-                <span>
-                  {circle} круг · {cur ? cur.name : <span className="muted">—</span>}
-                </span>
-                {open ? (
-                  <button
-                    type="button"
-                    className="comp-mini"
-                    data-arcanum-circle={circle}
-                    onClick={() => {
-                      setChosen(cur?.entryId ?? null);
-                      setQuery("");
-                      setPickCircle(circle);
-                    }}
-                  >
-                    {cur ? "Заменить" : "Выбрать"}
-                  </button>
-                ) : (
-                  <span className="muted">с {need} ур.</span>
+              <Fragment key={e.id}>
+                <button
+                  type="button"
+                  className={`dnd-spell-pick-row${isPicked ? " is-picked" : ""}${taken ? " is-owned" : ""}`}
+                  disabled={taken}
+                  aria-pressed={isPicked}
+                  onClick={() => setChosen((prev) => (prev === e.id ? null : e.id))}
+                >
+                  <span className="dnd-pick-box" aria-hidden="true">
+                    {isPicked && (
+                      <svg viewBox="0 0 18 18">
+                        <path d="M3 9 L7 13 L15 4" fill="none" stroke="currentColor" strokeWidth="3" />
+                      </svg>
+                    )}
+                  </span>
+                  {school ? (
+                    <img className="dnd-spell-pick-school" src={school} alt="" draggable={false} />
+                  ) : (
+                    <span className="dnd-spell-pick-school" aria-hidden="true" />
+                  )}
+                  <span className="dnd-spell-pick-main">
+                    <span className="dnd-spell-pick-name">{stripLatin(e.name)}</span>
+                    {meta && <span className="dnd-spell-pick-meta">{meta}</span>}
+                  </span>
+                  {taken && <span className="dnd-arcanum-taken">взято</span>}
+                </button>
+                {isPicked && e.description?.trim() && (
+                  <div className="dnd-arcanum-desc">
+                    <MentionText text={e.description} />
+                  </div>
                 )}
-              </div>
+              </Fragment>
             );
           })}
-          {warlockClassId == null && (
-            <p className="muted">Класс без записи справочника — список колдуна не собрать.</p>
-          )}
         </div>
-      ) : (
-        <>
-          <div className="dnd-spell-picker-list">
-            {failed && <p className="muted">Не удалось загрузить справочник заклинаний.</p>}
-            {!failed && all === null && <p className="muted">Загрузка…</p>}
-            {!failed && all !== null && shown.length === 0 && (
-              <p className="muted">В списке колдуна нет заклинаний этого круга.</p>
-            )}
-            {shown.map((e) => (
-              <button
-                key={e.id}
-                type="button"
-                className={`dnd-spell-pick-row${chosen === e.id ? " is-picked" : ""}`}
-                aria-pressed={chosen === e.id}
-                onClick={() => setChosen((prev) => (prev === e.id ? null : e.id))}
-              >
-                <span
-                  className="dnd-pick-box"
-                  style={chosen === e.id ? { background: color, borderColor: color } : undefined}
-                  aria-hidden="true"
-                >
-                  {chosen === e.id && (
-                    <svg viewBox="0 0 18 18">
-                      <path d="M3 9 L7 13 L15 4" fill="none" stroke="#e8e4da" strokeWidth="2.6" />
-                    </svg>
-                  )}
-                </span>
-                <span className="dnd-spell-pick-main">
-                  <span className="dnd-spell-pick-name">{e.name}</span>
-                </span>
+        <div className="dnd-spell-picker-foot">
+          <div className="dnd-spell-picker-actions">
+            {chosenEntry && (
+              <button type="button" className="dnd-spell-picker-clear" onClick={() => setChosen(null)}>
+                снять отметку
               </button>
-            ))}
-          </div>
-          <div className="dnd-spell-picker-foot">
-            <button type="button" className="comp-mini" onClick={() => setPickCircle(null)}>
-              Назад
-            </button>
+            )}
             <button
               type="button"
-              className="primary"
-              style={{ background: color, borderColor: color }}
-              disabled={chosenEntry == null}
+              className="dnd-spell-picker-add"
+              disabled={!chosenEntry}
               onClick={() => {
-                if (chosenEntry) {
-                  onPick(pickCircle - 1, chosenEntry);
-                  setPickCircle(null);
-                  setQuery("");
-                }
+                if (!chosenEntry) return;
+                onPick(circle - 1, chosenEntry);
+                setChosen(null);
               }}
             >
-              Взять в арканум
+              {!chosenEntry ? (
+                "отметьте заклинание"
+              ) : cur ? (
+                <>
+                  Заменить <s>{stripLatin(cur.name)}</s> → {stripLatin(chosenEntry.name)}
+                </>
+              ) : (
+                `Взять «${stripLatin(chosenEntry.name)}»`
+              )}
             </button>
           </div>
-        </>
-      )}
-    </div>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -12653,8 +12679,8 @@ export function DndCharacterView({
             systemId={value.systemId}
             warlockClassId={value.classes.find((c) => nameMatches(c.className, "Колдун"))?.classId ?? null}
             warlockLevel={warlockLevel}
+            characterName={value.characterName}
             spellsByLevel={value.spellsByLevel}
-            color={cardColor}
             onPick={(idx, entry) => {
               // Замена арканума круга целиком: свои строки уходят, чужие
               // (настоящие ячейки мультикласса) остаются. Арканум всегда

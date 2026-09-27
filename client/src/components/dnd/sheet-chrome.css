@@ -447,8 +447,8 @@
   position: absolute;
   inset: 0;
   background: currentColor;
-  -webkit-mask: url("/ui/fantasy-punk/semantic/ui-icons/trash.webp") center / 22px no-repeat;
-  mask: url("/ui/fantasy-punk/semantic/ui-icons/trash.webp") center / 22px no-repeat;
+  -webkit-mask: var(--skin-trash) center / 22px no-repeat;
+  mask: var(--skin-trash) center / 22px no-repeat;
 }
 .character-dossier-extra .chevron-summary > .danger:hover,
 .character-dossier-extra .chevron-summary > .danger:focus-visible {

@@ -71,6 +71,7 @@
   --skin-edit-paper: url("/ui/sheet/card-edit-paper.webp");
   --skin-edit-acid: url("/ui/sheet/card-edit-acid.webp");
   --skin-chevron-down: url("/ui/fantasy-punk/semantic/ui-icons/chevron-down.webp");
+  --skin-trash: url("/ui/fantasy-punk/semantic/ui-icons/trash.webp");
 
   --skin-paper-base: #e8e4da;
   /* Вуаль над фоновой бумагой: текстура на 30 % тише (владелец, 2026-09-25). */
@@ -3264,6 +3265,103 @@ button.dnd-card-back-corner::after {
   color: var(--skin-ink-soft);
   font-size: 14px;
   cursor: default;
+}
+
+/* ——— «Таинственный арканум» по макету (гриллинг 2026-09-27, Q1–Q5) ———
+   Вкладки кругов во всю ширину: круг сверху, взятое под ним; закрытые —
+   бледно «с N ур.». Отмеченное раскрывает описание под строкой. На телефоне —
+   шторка снизу, а не весь экран: список круга короткий. */
+.dnd-arcanum-tabs {
+  display: flex;
+  width: 100%;
+}
+.dnd-spell-picker-chips .dnd-arcanum-tab {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  min-height: 60px;
+  padding: 8px 14px;
+  text-align: left;
+}
+.dnd-arcanum-tab b {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.dnd-arcanum-tab span {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dnd-spell-picker-chips .dnd-arcanum-tab.is-on span {
+  color: var(--skin-acid);
+}
+.dnd-spell-picker-chips .dnd-arcanum-tab:disabled {
+  color: rgba(23, 23, 23, 0.42);
+  opacity: 1;
+  cursor: default;
+}
+.dnd-arcanum-tab:disabled span {
+  font-size: 14px;
+  font-weight: 400;
+}
+.dnd-arcanum-taken {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  margin-left: auto;
+  padding: 0 6px;
+  border: 2px solid var(--skin-ink);
+  color: var(--skin-ink);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.dnd-arcanum-desc {
+  padding: 2px var(--sp-6) 14px 88px;
+  border-bottom: 1px solid rgba(23, 23, 23, 0.14);
+  background: rgba(243, 255, 58, 0.14);
+  font-size: 15px;
+  line-height: 1.35;
+}
+.dnd-arcanum-picker .dnd-spell-picker-add s {
+  opacity: 0.6;
+}
+@media (max-width: 700px) {
+  .dnd-spell-picker.dnd-arcanum-picker {
+    top: auto;
+    height: min(720px, 88dvh);
+    box-shadow: 0 -6px 0 rgba(0, 0, 0, 0.45);
+  }
+  .dnd-arcanum-sub-long,
+  .dnd-arcanum-picker .dnd-spell-picker-search {
+    display: none;
+  }
+  .dnd-spell-picker-chips .dnd-arcanum-tab {
+    padding: 8px;
+  }
+  .dnd-arcanum-desc {
+    padding-left: 16px;
+  }
+  .dnd-arcanum-picker .dnd-spell-picker-add {
+    padding: 6px 10px;
+    font-size: 15px;
+    letter-spacing: 0.04em;
+    line-height: 1.2;
+  }
 }
 
 /* «Досье» без кампании (OneShot): простое поле — бумажная полоса, как поиск
