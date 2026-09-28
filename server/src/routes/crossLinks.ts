@@ -24,6 +24,13 @@ export const crossLinksRouter = Router();
  * Это умолчание, а не запрет: любой источник можно добавить руками.
  */
 function defaultSources(ownerKind: string, ownerId: number): SourceRef[] {
+  // Лента сессии — как её кампания (Q6: кампания, сеттинг, система).
+  if (ownerKind === "session") {
+    const row = db.prepare("SELECT campaign_id FROM sessions WHERE id = ?").get(ownerId) as
+      | { campaign_id: number }
+      | undefined;
+    return row ? defaultSources("campaign", row.campaign_id) : [];
+  }
   if (ownerKind === "campaign") {
     const row = db.prepare("SELECT setting_id, system_id FROM campaigns WHERE id = ?").get(ownerId) as
       | { setting_id: number | null; system_id: number | null }
@@ -97,6 +104,38 @@ crossLinksRouter.get("/plan", (req, res) => {
 crossLinksRouter.post("/apply", (req, res) => {
   const chosen = (req.body as { chosen?: CrossLinkChoice[] })?.chosen ?? [];
   res.json(applyCrossLinks(request(req as never), chosen));
+});
+
+// Один проход по всем типам разом — «Проставить упоминания» в ленте сессии.
+// Шаги визарда нужны книгам с сотнями находок; в ленте одного вечера их
+// десяток, и листать шесть вкладок за Мастера — лишняя работа. Область —
+// умолчание владельца, без выбора источников.
+function allTypes(req: { query: Record<string, unknown> }) {
+  const ownerKind = String(req.query.ownerKind || "session");
+  const ownerId = Number(req.query.ownerId);
+  const sources = defaultSources(ownerKind, ownerId);
+  return LINKABLE_TYPES.filter((t) => sources.some((s) => s.kind === t.owner)).map((t) => ({
+    ownerKind,
+    ownerId,
+    targetType: t.key,
+    sources,
+  }));
+}
+
+crossLinksRouter.get("/plan-all", (req, res) => {
+  res.json(allTypes(req as never).flatMap((r) => planCrossLinks(r)));
+});
+
+// Типы применяются по очереди: следующий видит разметку предыдущего и не
+// лезет внутрь уже поставленной ссылки.
+crossLinksRouter.post("/apply-all", (req, res) => {
+  const chosen = (req.body as { chosen?: CrossLinkChoice[] })?.chosen ?? [];
+  let written = 0;
+  for (const r of allTypes(req as never)) {
+    const mine = chosen.filter((c) => c.ref.startsWith(`${r.targetType}:`));
+    if (mine.length) written += applyCrossLinks(r, mine).written;
+  }
+  res.json({ written });
 });
 
 // Снятие расставленного — по владельцу целиком, безотносительно шагов.

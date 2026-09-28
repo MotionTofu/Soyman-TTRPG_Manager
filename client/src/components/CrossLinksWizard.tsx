@@ -3,6 +3,7 @@ import { readOnce } from "../data/imperative";
 import { errorText, useAfterWrite, write } from "../data/hooks";
 import { showSaveError } from "../data/notices";
 import { useConfirm } from "../hooks/useConfirm";
+import { proposalId, type CrossLinkProposal, type Tier } from "./crossLinkProposal";
 
 // Расстановка ссылок в текстах — шагами, по одному типу цели за раз.
 //
@@ -17,24 +18,6 @@ import { useConfirm } from "../hooks/useConfirm";
 // поздние шаги видят разметку ранних, а брошенный на середине визард не теряет
 // проверенного.
 
-type Tier = "exact" | "likely" | "doubtful";
-
-export interface CrossLinkProposal {
-  ownerType: string;
-  ownerId: number;
-  ownerName: string;
-  ownerLabel: string;
-  field: string;
-  fieldLabel: string;
-  ref: string;
-  targetName: string;
-  matched: string;
-  context: string;
-  via: string;
-  tier: Tier;
-  doubt?: string;
-}
-
 interface Step {
   key: string;
   label: string;
@@ -48,8 +31,6 @@ interface Source {
   checked: boolean;
 }
 
-const proposalId = (p: CrossLinkProposal) =>
-  `${p.ownerType}|${p.ownerId}|${p.field}|${p.ref}|${p.matched}`;
 
 // Цвет — быстрый сигнал, подпись — ответ на «почему». Одного цвета мало:
 // серый в этом интерфейсе уже значит «выключено», а полагаться только на
@@ -254,68 +235,7 @@ export function CrossLinksWizard({
                 Расставить отмеченные ({picked})
               </button>
             </div>
-            {TIERS.map(({ key, label, className }) => {
-              const list = proposals.filter((p) => p.tier === key);
-              if (!list.length) return null;
-              const doubts = [...new Set(list.map((p) => p.doubt).filter(Boolean))];
-              return (
-                <div key={key} className={`stack xl-tier ${className}`} style={{ gap: 6 }}>
-                  <div className="row" style={{ justifyContent: "space-between" }}>
-                    <strong>
-                      {label} · {list.length}
-                      {doubts.length > 0 && (
-                        <span className="muted"> · {doubts.slice(0, 2).join("; ")}</span>
-                      )}
-                    </strong>
-                    <div className="row">
-                      <button
-                        onClick={() =>
-                          setChosen((prev) => ({
-                            ...prev,
-                            ...Object.fromEntries(list.map((p) => [proposalId(p), true])),
-                          }))
-                        }
-                      >
-                        Все
-                      </button>
-                      <button
-                        onClick={() =>
-                          setChosen((prev) => ({
-                            ...prev,
-                            ...Object.fromEntries(list.map((p) => [proposalId(p), false])),
-                          }))
-                        }
-                      >
-                        Никого
-                      </button>
-                    </div>
-                  </div>
-                  {list.map((p) => (
-                    <label
-                      key={proposalId(p)}
-                      className="row"
-                      style={{ gap: 6, alignItems: "start" }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={!!chosen[proposalId(p)]}
-                        onChange={(e) =>
-                          setChosen((prev) => ({ ...prev, [proposalId(p)]: e.target.checked }))
-                        }
-                      />
-                      <span>
-                        <strong>{p.targetName}</strong>{" "}
-                        <span className="muted">
-                          ← «{p.matched}» · {p.ownerLabel} «{p.ownerName}» · {p.fieldLabel} · по «
-                          {p.via}»
-                        </span>
-                        <div className="muted">{p.context}</div>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              );
-            })}
+            <ProposalTiers proposals={proposals} chosen={chosen} setChosen={setChosen} />
             <div className="row">
               <button className="primary" disabled={!!busy || !picked} onClick={() => void apply()}>
                 Расставить отмеченные ({picked})
@@ -326,5 +246,86 @@ export function CrossLinksWizard({
       </div>
       </div>
     </details>
+  );
+}
+
+/**
+ * Находки по уровням уверенности, с галочками и «Все / Никого» на уровень.
+ * Общее у визарда и у «Проставить упоминания» в ленте сессии.
+ */
+export function ProposalTiers({
+  proposals,
+  chosen,
+  setChosen,
+}: {
+  proposals: CrossLinkProposal[];
+  chosen: Record<string, boolean>;
+  setChosen: (update: (prev: Record<string, boolean>) => Record<string, boolean>) => void;
+}) {
+  return (
+    <>
+      {TIERS.map(({ key, label, className }) => {
+        const list = proposals.filter((p) => p.tier === key);
+        if (!list.length) return null;
+        const doubts = [...new Set(list.map((p) => p.doubt).filter(Boolean))];
+        return (
+          <div key={key} className={`stack xl-tier ${className}`} style={{ gap: 6 }}>
+            <div className="row" style={{ justifyContent: "space-between" }}>
+              <strong>
+                {label} · {list.length}
+                {doubts.length > 0 && (
+                  <span className="muted"> · {doubts.slice(0, 2).join("; ")}</span>
+                )}
+              </strong>
+              <div className="row">
+                <button
+                  onClick={() =>
+                    setChosen((prev) => ({
+                      ...prev,
+                      ...Object.fromEntries(list.map((p) => [proposalId(p), true])),
+                    }))
+                  }
+                >
+                  Все
+                </button>
+                <button
+                  onClick={() =>
+                    setChosen((prev) => ({
+                      ...prev,
+                      ...Object.fromEntries(list.map((p) => [proposalId(p), false])),
+                    }))
+                  }
+                >
+                  Никого
+                </button>
+              </div>
+            </div>
+            {list.map((p) => (
+              <label
+                key={proposalId(p)}
+                className="row"
+                style={{ gap: 6, alignItems: "start" }}
+              >
+                <input
+                  type="checkbox"
+                  checked={!!chosen[proposalId(p)]}
+                  onChange={(e) =>
+                    setChosen((prev) => ({ ...prev, [proposalId(p)]: e.target.checked }))
+                  }
+                />
+                <span>
+                  <strong>{p.targetName}</strong>{" "}
+                  <span className="muted">
+                    ← «{p.matched}» · {p.ownerLabel} «{p.ownerName}» · {p.fieldLabel} · по «
+                    {p.via}»
+                  </span>
+                  <div className="muted">{p.context}</div>
+                </span>
+              </label>
+            ))}
+          </div>
+        );
+      })}
+    </>
   );
 }

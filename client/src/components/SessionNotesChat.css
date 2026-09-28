@@ -145,3 +145,16 @@
   border-radius: var(--card-radius);
   font-size: var(--fs-meta);
 }
+
+/* Карточка ленты на странице сессии: заголовок и «Проставить упоминания». */
+.sp-notes__head {
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.sp-notes .session-chat {
+  max-height: 60vh;
+}
+.session-mentions__title {
+  margin: 0;
+}

@@ -6,6 +6,7 @@ import { ObstacleDropZone } from "../components/ObstacleDropZone";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { SessionLiveControls } from "../components/SessionLiveControls";
 import { SessionNotesChat } from "../components/SessionNotesChat";
+import { SessionMentionsButton } from "../components/SessionMentionsButton";
 import { EntityPage } from "../components/EntityPage";
 import { NavIcon } from "../components/NavIcons";
 import { SectionDropZone } from "../components/SectionDropZone";
@@ -1128,7 +1129,10 @@ export function SessionDetailPage() {
               писал в правой панели по ходу игры, — дописать и поправить
               можно и здесь. Игрокам не показывается. */}
           <div className="card stack sp-notes">
-            <span className="sp-title">Лента сессии</span>
+            <div className="row sp-notes__head">
+              <span className="sp-title">Лента сессии</span>
+              <SessionMentionsButton sessionId={sessionId} />
+            </div>
             <SessionNotesChat sessionId={sessionId} settingId={campaign.setting_id} />
           </div>
 

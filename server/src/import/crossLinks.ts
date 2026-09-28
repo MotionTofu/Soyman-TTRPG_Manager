@@ -22,6 +22,7 @@
 // сущности или нескольким.
 
 import { db } from "../db/db";
+import { syncSessionMentions } from "../routes/sessionNotes";
 import { parseAliases } from "./names";
 import {
   scanMentions,
@@ -33,7 +34,7 @@ import {
 } from "../services/mentions";
 
 /** Где какие текстовые поля и как они называются для человека. */
-const OWNER_TEXT: Record<string, { table: string; label: string; fields: Record<string, string> }> = {
+const OWNER_TEXT: Record<string, { table: string; label: string; fields: Record<string, string>; nameExpr?: string }> = {
   scene: {
     table: "story_scenes",
     label: "Сцена",
@@ -84,7 +85,16 @@ const OWNER_TEXT: Record<string, { table: string; label: string; fields: Record<
   session: {
     table: "sessions",
     label: "Сессия",
-    fields: { idea_notes: "Задумки", main_events: "Главные события" },
+    fields: { idea_notes: "Задумки" },
+  },
+  // Лента сессии (2026-09-28): каждое сообщение — свой текст. Упоминания в
+  // ней ведут от самой сессии, их пересобирает syncSessionMentions.
+  session_note: {
+    table: "session_notes",
+    label: "Лента",
+    fields: { text: "Сообщение" },
+    // Имени у сообщения нет — в списке находок его зовут временем.
+    nameExpr: "strftime('%H:%M', created_at, 'localtime')",
   },
   preproduction: {
     table: "preproduction",
@@ -392,7 +402,7 @@ function readDocs(ownerType: string, where: string, params: unknown[]): Doc[] {
   const cols = (db.prepare(`PRAGMA table_info(${meta.table})`).all() as { name: string }[]).map(
     (c) => c.name
   );
-  const nameExpr = cols.includes("name") ? "name" : cols.includes("title") ? "title" : "''";
+  const nameExpr = meta.nameExpr ?? (cols.includes("name") ? "name" : cols.includes("title") ? "title" : "''");
   const rows = db
     .prepare(`SELECT id, ${nameExpr} AS owner_name, ${fields.join(", ")} FROM ${meta.table} ${where}`)
     .all(...params) as Record<string, string | number>[];
@@ -441,11 +451,17 @@ function docsOfCampaign(campaignId: number): Doc[] {
   return [
     ...readDocs("campaign_entry", "WHERE campaign_id = ?", [campaignId]),
     ...readDocs("session", "WHERE campaign_id = ? AND archived_at IS NULL", [campaignId]),
+    ...readDocs(
+      "session_note",
+      "WHERE session_id IN (SELECT id FROM sessions WHERE campaign_id = ? AND archived_at IS NULL)",
+      [campaignId]
+    ),
     ...readDocs("preproduction", "WHERE campaign_id = ?", [campaignId]),
   ];
 }
 
 export function docsOfOwner(ownerKind: string, ownerId: number): Doc[] {
+  if (ownerKind === "session") return readDocs("session_note", "WHERE session_id = ? ORDER BY created_at, id", [ownerId]);
   if (ownerKind === "adventure") return docsOfArc(ownerId);
   if (ownerKind === "campaign") return docsOfCampaign(ownerId);
   return docsOfSetting(ownerId);
@@ -649,6 +665,7 @@ export function applyCrossLinks(req: PlanRequest, chosen: CrossLinkChoice[]): { 
     `INSERT OR IGNORE INTO generic_links (from_type, from_id, to_type, to_id, section)
      VALUES (?, ?, ?, ?, 'mention')`
   );
+  const touchedSessions = new Set<number>();
   const run = db.transaction(() => {
     let written = 0;
     for (const proposal of proposals) {
@@ -678,12 +695,22 @@ export function applyCrossLinks(req: PlanRequest, chosen: CrossLinkChoice[]): { 
       // «mention» — здесь то же самое, иначе текст и карточка «Связи»
       // разъедутся. Уже существующую связь INSERT OR IGNORE не трогает:
       // ключ таблицы не включает section.
-      linkMention.run(proposal.ownerType, proposal.ownerId, type, numId);
+      if (proposal.ownerType === "session_note") {
+        // Связь заводит сессия, а не сообщение: так её видят «Упоминания».
+        const note = db.prepare("SELECT session_id FROM session_notes WHERE id = ?").get(proposal.ownerId) as {
+          session_id: number;
+        };
+        touchedSessions.add(note.session_id);
+      } else {
+        linkMention.run(proposal.ownerType, proposal.ownerId, type, numId);
+      }
       written++;
     }
     return { written };
   });
-  return run();
+  const result = run();
+  for (const id of touchedSessions) syncSessionMentions(id);
+  return result;
 }
 
 /** Снятие меншенов: подпись остаётся, ссылка уходит. */
