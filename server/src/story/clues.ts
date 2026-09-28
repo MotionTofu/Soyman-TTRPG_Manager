@@ -44,6 +44,9 @@ export interface GraphNode {
   role: string;
   /** Имя показанной строки (с заготовки у нетронутой вставки). */
   name: string;
+  node_type: string | null;
+  /** «Когда приходит сам» — у проактивного. */
+  trigger: string;
 }
 
 export interface GraphClue extends ClueRow {
@@ -64,6 +67,8 @@ export interface ClueGraph {
   tray: GraphClue[];
   /** Узлы, в которые ведёт хоть один проход: правило трёх их не касается (Q31). */
   passage_targets: Set<number>;
+  /** Откуда в узел ведут проходы — список выводов пишет «проход из …». */
+  passage_sources: Map<number, number[]>;
 }
 
 export interface NodeCounts {
@@ -94,7 +99,7 @@ export function adventureClueGraph(arcId: number, campaignId: number | null): Cl
 
   const originals = db
     .prepare(
-      `SELECT id, arc_id, campaign_id, source_scene_id, library_scene_id, node_role, name FROM story_scenes
+      `SELECT id, arc_id, campaign_id, source_scene_id, library_scene_id, node_role, name, node_type, node_trigger FROM story_scenes
        WHERE arc_id IN (${ph}) AND archived_at IS NULL
          AND (campaign_id IS NULL OR (campaign_id = ? AND source_scene_id IS NULL))`
     )
@@ -103,7 +108,7 @@ export function adventureClueGraph(arcId: number, campaignId: number | null): Cl
   if (campaignId != null) {
     const rows = db
       .prepare(
-        `SELECT id, arc_id, campaign_id, source_scene_id, library_scene_id, node_role, name FROM story_scenes
+        `SELECT id, arc_id, campaign_id, source_scene_id, library_scene_id, node_role, name, node_type, node_trigger FROM story_scenes
          WHERE campaign_id = ? AND source_scene_id IS NOT NULL AND archived_at IS NULL`
       )
       .all(campaignId) as SceneRow[];
@@ -130,7 +135,16 @@ export function adventureClueGraph(arcId: number, campaignId: number | null): Cl
     const shown = overrides.get(s.id) ?? s;
     // Нетронутая вставка заготовки: роль и имя — с заготовки.
     const content = withLibraryContent(shown);
-    nodes.set(s.id, { id: s.id, shown_id: shown.id, arc_id: s.arc_id, role: content.node_role, name: content.name });
+    const extra = content as unknown as { node_type: string | null; node_trigger: string };
+    nodes.set(s.id, {
+      id: s.id,
+      shown_id: shown.id,
+      arc_id: s.arc_id,
+      role: content.node_role,
+      name: content.name,
+      node_type: extra.node_type ?? null,
+      trigger: extra.node_trigger ?? "",
+    });
     contentOf.set(s.id, shown.library_scene_id ?? shown.id);
   }
 
@@ -162,17 +176,25 @@ export function adventureClueGraph(arcId: number, campaignId: number | null): Cl
 
   // Проходы — переходы между узлами приключения, в том же виде кампании.
   const passage_targets = new Set<number>();
-  const contentIds = [...new Set(contentOf.values())];
+  const passage_sources = new Map<number, number[]>();
+  const nodesOfContent = new Map<number, number[]>();
+  for (const [nodeId, contentId] of contentOf) nodesOfContent.set(contentId, [...(nodesOfContent.get(contentId) ?? []), nodeId]);
+  const contentIds = [...nodesOfContent.keys()];
   if (contentIds.length) {
     const rows = db
       .prepare(
-        `SELECT to_scene_id FROM story_scene_transitions WHERE from_scene_id IN (${contentIds.map(() => "?").join(",")})`
+        `SELECT from_scene_id, to_scene_id FROM story_scene_transitions WHERE from_scene_id IN (${contentIds.map(() => "?").join(",")})`
       )
-      .all(...contentIds) as { to_scene_id: number }[];
-    for (const r of rows) if (nodes.has(r.to_scene_id)) passage_targets.add(r.to_scene_id);
+      .all(...contentIds) as { from_scene_id: number; to_scene_id: number }[];
+    for (const r of rows) {
+      if (!nodes.has(r.to_scene_id)) continue;
+      passage_targets.add(r.to_scene_id);
+      const from = nodesOfContent.get(r.from_scene_id) ?? [];
+      passage_sources.set(r.to_scene_id, [...(passage_sources.get(r.to_scene_id) ?? []), ...from]);
+    }
   }
 
-  return { root_arc_id: root, arc_ids: arcIds, nodes, clues, tray, passage_targets };
+  return { root_arc_id: root, arc_ids: arcIds, nodes, clues, tray, passage_targets, passage_sources };
 }
 
 /**

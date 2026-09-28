@@ -14,13 +14,17 @@ import { dataKeys } from "../data/entities";
 import { useAction, useResource, write } from "../data/hooks";
 import { secretStateAffects, sessionPaths } from "../data/sessions";
 import { ToInitiativeButton } from "../components/ToInitiativeButton";
+import { RevealList } from "../components/RevealList";
+import { campaignPaths } from "../data/campaigns";
 import { kindLabel } from "../compendium";
 import type {
   CampaignDetail,
   CampaignGrouped,
   Character,
   SessionDetail,
+  SessionStage,
   SessionUnionRow,
+  StoryArc,
   StorySecret,
 } from "../types";
 
@@ -58,6 +62,7 @@ export type SessionPanelKey =
   | "loot"
   | "roster"
   | "secrets"
+  | "reveals"
   | "reminders"
   | "compendium";
 
@@ -68,6 +73,7 @@ export const SESSION_PANEL_TITLES: Record<SessionPanelKey, string> = {
   loot: "Лут",
   roster: "Персонажи игроков",
   secrets: "Тайны и зацепки",
+  reveals: "Выводы",
   reminders: "Напоминания",
   compendium: "Компендиум",
 };
@@ -393,6 +399,52 @@ function CompendiumContent({ campaign }: PanelProps) {  const [q, setQ] = useSta
   );
 }
 
+/**
+ * Список выводов на Пульте (Q6, Q16). Приключение — то, чья сцена идёт или
+ * запланирована на вечер; другое выбирается списком и запоминается на
+ * кампанию (в этом браузере — выбор удобства, а не данные).
+ */
+function RevealsContent({ sessionId, campaign }: PanelProps) {
+  const storageKey = `pult-reveal-arc-${campaign.id}`;
+  const [chosen, setChosen] = useState<number | null>(() => {
+    try {
+      return Number(localStorage.getItem(storageKey)) || null;
+    } catch {
+      return null;
+    }
+  });
+  const stage = useResource<SessionStage>(sessionPaths.stage(sessionId)).data;
+  const adventures = useResource<StoryArc[]>(campaignPaths.adventures(campaign.id)).data ?? NO_ARCS;
+  const auto = stage?.current?.arc_id ?? stage?.planned.find((p) => p.arc_id != null)?.arc_id ?? adventures[0]?.id ?? null;
+  const arcId = chosen && adventures.some((a) => a.id === chosen) ? chosen : auto;
+  const choose = (v: string) => {
+    const next = Number(v) || null;
+    setChosen(next);
+    try {
+      if (next) localStorage.setItem(storageKey, String(next));
+      else localStorage.removeItem(storageKey);
+    } catch {
+      /* приватный режим — выбор просто не переживёт перезагрузку */
+    }
+  };
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      {adventures.length > 1 && (
+        <select aria-label="Приключение" value={chosen ?? ""} onChange={(e) => choose(e.target.value)}>
+          <option value="">По сцене вечера</option>
+          {adventures.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name}
+            </option>
+          ))}
+        </select>
+      )}
+      {arcId ? <RevealList arcId={arcId} campaignId={campaign.id} /> : <span className="muted">В кампании нет приключений.</span>}
+    </div>
+  );
+}
+const NO_ARCS: StoryArc[] = [];
+
 // Keyed lookup used by the standalone pop-out page (SessionPanelPopoutPage)
 // to render just one panel's content, bare, without any of the embedded
 // wrappers below.
@@ -403,6 +455,7 @@ export const SESSION_PANEL_CONTENT: Record<SessionPanelKey, (props: PanelProps) 
   loot: LootContent,
   roster: RosterContent,
   secrets: SecretsContent,
+  reveals: RevealsContent,
   reminders: RemindersContent,
   compendium: CompendiumContent,
 };
@@ -458,6 +511,14 @@ export function SecretsPanel(props: PanelProps) {
   return (
     <LazyDetails title={SESSION_PANEL_TITLES.secrets} summaryClassName="pult-drag-handle" defaultOpen>
       <SecretsContent {...props} />
+    </LazyDetails>
+  );
+}
+
+export function RevealsPanel(props: PanelProps) {
+  return (
+    <LazyDetails title={SESSION_PANEL_TITLES.reveals} summaryClassName="pult-drag-handle" defaultOpen>
+      <RevealsContent {...props} />
     </LazyDetails>
   );
 }

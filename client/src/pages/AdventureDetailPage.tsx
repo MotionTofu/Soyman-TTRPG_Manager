@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { RevealList } from "../components/RevealList";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
 import type { Affect } from "../data/entities";
@@ -24,7 +25,8 @@ import { readOnce } from "../data/imperative";
 // собирался из связей сцен и информационной пользы не нёс, а награды книги без
 // работы с сокровищницей выглядели свалкой строк. Данные наград и связей
 // остались в базе нетронутыми — вернуть их будет чем.
-const TABS = ["Обзор", "Главы и сцены", "Вехи", "Тайны и зацепки"] as const;
+// «Выводы» — список узлового дизайна (Q6): что партия может знать и куда идти.
+const TABS = ["Обзор", "Главы и сцены", "Выводы", "Вехи", "Тайны и зацепки"] as const;
 
 // Правка приключения видна не только здесь: главы, сцены, вехи и тайны
 // читают полотно, дерево сцен и тайны кампании на пульте. Всё это лежит под
@@ -223,6 +225,8 @@ export function AdventureDetailPage() {
           <ChaptersAndScenes arc={arc} campaignId={campaignId} />
         </>
       )}
+
+      {tab === "Выводы" && <RevealList arcId={arc.id} campaignId={campaignId} />}
 
       {tab === "Вехи" && <Milestones arc={arc} campaignId={campaignId} />}
 

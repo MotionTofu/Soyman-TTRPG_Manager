@@ -27,6 +27,7 @@ import {
   RemindersPanel,
   RosterPanel,
   SecretsPanel,
+  RevealsPanel,
   SESSION_PANEL_TITLES,
 } from "./sessionLivePanels";
 
@@ -72,6 +73,9 @@ const DEFAULTS: WidgetDef[] = [
   { id: "compendium", x: 6, y: 28, w: 6, h: 10, minW: 3, minH: 3, maxW: 12 },
   { id: "roster", x: 0, y: 38, w: 6, h: 10, minW: 3, minH: 3, maxW: 12 },
   { id: "secrets", x: 6, y: 38, w: 6, h: 10, minW: 3, minH: 3, maxW: 12 },
+  // Список выводов (узловой дизайн) — новый виджет встаёт под остальными и в
+  // сохранённой раскладке ничего не сдвигает; поднять его можно за шапку.
+  { id: "reveals", x: 0, y: 48, w: 12, h: 12, minW: 3, minH: 3, maxW: 12 },
 ];
 
 function validCell(v: Partial<SavedCell> | null | undefined): v is SavedCell {
@@ -270,6 +274,7 @@ export function PultGrid({ ideaCard, eventsCard, panelProps }: PultGridProps) {
     { id: "compendium", title: SESSION_PANEL_TITLES.compendium, node: <CompendiumPanel {...panelProps} /> },
     { id: "roster", title: SESSION_PANEL_TITLES.roster, node: <RosterPanel {...panelProps} /> },
     { id: "secrets", title: SESSION_PANEL_TITLES.secrets, node: <SecretsPanel {...panelProps} /> },
+    { id: "reveals", title: SESSION_PANEL_TITLES.reveals, node: <RevealsPanel {...panelProps} /> },
   ];
 
   if (narrow) {

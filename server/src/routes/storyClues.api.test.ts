@@ -54,7 +54,7 @@ describe("улики", () => {
     expect(list.body.clues[0]).toMatchObject({ node_id: aId, target_id: bId, target_missing: false, found: false });
     // Карточке узла: имена узлов и тайны приключения — цели улик.
     expect(list.body.nodes.find((n: { id: number }) => n.id === bId).name).toBe("Гильдия");
-    expect(list.body.secrets).toEqual([{ id: secretId, title: "Инсценировка" }]);
+    expect(list.body.secrets).toEqual([{ id: secretId, title: "Инсценировка", revealed: 0 }]);
   });
 
   it("не принимает несуществующую цель и улику в собственный узел", async () => {
@@ -204,5 +204,25 @@ describe("поля узла", () => {
       (await request(app).put(`/api/story/scenes/${aId}`).send({ subject_type: "community", subject_id: 99999 })).status
     ).toBe(400);
     expect((await request(app).put(`/api/story/scenes/${aId}`).send({ node_type: null })).status).toBe(200);
+  });
+});
+
+describe("список выводов", () => {
+  it("отдаёт «посещён», откуда проход, главы и раскрытость тайн кампании", async () => {
+    const path = `/api/story/arcs/${arcId}/clues?campaign_id=${campaignId}`;
+    // Отметки кампании стоят на показанной строке — у «Мастерской» это уже копия.
+    const shownA = (await request(app).get(path)).body.nodes.find((n: { id: number }) => n.id === aId).shown_id;
+    db.prepare("INSERT INTO story_scene_transitions (from_scene_id, to_scene_id, label) VALUES (?, ?, 'дверь')").run(shownA, bId);
+    db.prepare("INSERT INTO campaign_scene_state (campaign_id, scene_id, status) VALUES (?, ?, 'done')").run(campaignId, shownA);
+    db.prepare("INSERT INTO campaign_secret_state (campaign_id, secret_id, revealed) VALUES (?, ?, 1)").run(campaignId, secretId);
+    const res = await request(app).get(path);
+    const node = (id: number) => res.body.nodes.find((n: { id: number }) => n.id === id);
+    expect(node(aId).visited).toBe(true);
+    expect(node(bId)).toMatchObject({ visited: false, passage_in: true, passage_from: ["Мастерская"] });
+    expect(res.body.chapters).toEqual([]);
+    expect(res.body.secrets.find((t: { id: number }) => t.id === secretId).revealed).toBe(1);
+    // Вне кампании «посещённых» нет.
+    const bare = await request(app).get(`/api/story/arcs/${arcId}/clues`);
+    expect(bare.body.nodes.every((n: { visited: boolean }) => !n.visited)).toBe(true);
   });
 });

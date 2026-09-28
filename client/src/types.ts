@@ -1103,16 +1103,26 @@ export interface ArcClueNode {
   arc_id: number | null;
   role: NodeRole;
   name: string;
+  node_type: NodeType | null;
+  /** «Когда приходит сам» — у проактивного. */
+  trigger: string;
   clue_in: number;
   clue_out: number;
   passage_in: boolean;
+  /** Сцену отметили пройденной или запускали на Пульте (только в кампании). */
+  visited: boolean;
+  /** Имена узлов, откуда сюда ведут проходы. */
+  passage_from: string[];
 }
 export interface ArcClues {
   root_arc_id: number;
   clues: ArcClue[];
   tray: ArcClue[];
   nodes: ArcClueNode[];
-  secrets: { id: number; title: string }[];
+  /** Главы приключения по порядку; узлы корня — без главы. */
+  chapters: { id: number; name: string }[];
+  /** revealed — отметка кампании (0 вне кампании). */
+  secrets: { id: number; title: string; revealed: number }[];
 }
 export type SceneStatus = "pending" | "done" | "skipped";
 

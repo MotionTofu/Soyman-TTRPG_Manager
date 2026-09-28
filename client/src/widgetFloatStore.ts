@@ -20,7 +20,8 @@ export type PultWidgetId =
   | "reminders"
   | "compendium"
   | "roster"
-  | "secrets";
+  | "secrets"
+  | "reveals";
 
 const KEY = "rpgManagerWidgetFloat";
 const LEGACY_KEY = "rpgManagerScenesDetached";

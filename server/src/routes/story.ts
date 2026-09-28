@@ -3331,17 +3331,44 @@ storyRouter.get("/arcs/:id/clues", (req, res) => {
   const graph = adventureClueGraph(Number(req.params.id), campaignId);
   if (!graph) return res.status(404).json({ error: "not found" });
   const counts = nodeCounts(graph);
+  const arcPh = graph.arc_ids.map(() => "?").join(",");
+  // «Посещён» (Q14): сцену отметили пройденной или запускали на Пульте
+  // в сессии этой кампании. Обе отметки — по показанной строке.
+  const visited = new Set<number>(
+    campaignId != null
+      ? (
+          db
+            .prepare(
+              `SELECT scene_id FROM campaign_scene_state WHERE campaign_id = ? AND status = 'done'
+               UNION
+               SELECT j.scene_id FROM session_scenes j JOIN sessions se ON se.id = j.session_id WHERE se.campaign_id = ?`
+            )
+            .all(campaignId, campaignId) as { scene_id: number }[]
+        ).map((r) => r.scene_id)
+      : []
+  );
+  const nameOf = (id: number) => graph.nodes.get(id)?.name ?? "";
   res.json({
     root_arc_id: graph.root_arc_id,
     clues: graph.clues,
     tray: graph.tray,
-    nodes: [...graph.nodes.values()].map((n) => ({ ...n, ...counts.get(n.id) })),
-    // Тайны приключения — цели понятийных улик (Q2) в карточке узла.
+    nodes: [...graph.nodes.values()].map((n) => ({
+      ...n,
+      ...counts.get(n.id),
+      visited: visited.has(n.shown_id),
+      passage_from: [...new Set(graph.passage_sources.get(n.id) ?? [])].map(nameOf),
+    })),
+    // Главы — группы списка выводов, в порядке приключения.
+    chapters: db
+      .prepare(`SELECT id, name FROM story_arcs WHERE id IN (${arcPh}) AND id != ? ORDER BY position, id`)
+      .all(...graph.arc_ids, graph.root_arc_id),
+    // Тайны приключения — цели понятийных улик (Q2); revealed — отметка кампании.
     secrets: db
       .prepare(
-        `SELECT id, title FROM story_secrets WHERE arc_id IN (${graph.arc_ids.map(() => "?").join(",")})
-         ORDER BY position, id`
+        `SELECT t.id, t.title, COALESCE(st.revealed, 0) AS revealed FROM story_secrets t
+         LEFT JOIN campaign_secret_state st ON st.secret_id = t.id AND st.campaign_id = ?
+         WHERE t.arc_id IN (${arcPh}) ORDER BY t.position, t.id`
       )
-      .all(...graph.arc_ids),
+      .all(campaignId ?? -1, ...graph.arc_ids),
   });
 });
