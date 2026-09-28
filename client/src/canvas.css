@@ -709,6 +709,13 @@
   background: var(--cv-node-sound_set);
   color: var(--cv-node-sound_set-ink);
 }
+/* Тайна — понятие, а не место: двойная рамка, как у цели-тайны в карточке. */
+.canvas-node--secret {
+  border-style: double;
+  border-width: 4px;
+  /* Один вход и никакого состава — высота сцены ей не нужна. */
+  min-height: 0;
+}
 .canvas-node--playlist {
   border-color: var(--cv-node-playlist);
 }

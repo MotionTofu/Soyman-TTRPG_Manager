@@ -72,6 +72,28 @@ describe("холст приключения: улики", () => {
     expect(res.body.clue_tray.map((c: { text: string }) => c.text)).toEqual(["в лотке"]);
   });
 
+  it("тайна, положенная на холст, — узел со своими входящими уликами (Q20)", async () => {
+    const secret = id(db.prepare("INSERT INTO story_secrets (arc_id, title) VALUES (?, 'Инсценировка')").run(arcId));
+    db.prepare("INSERT INTO story_clues (arc_id, scene_id, text, target_type, target_id) VALUES (?, ?, 'не плачет', 'secret', ?)").run(
+      arcId,
+      s.widow,
+      secret
+    );
+    const before = await request(app).get(`/api/canvas/board?arc_id=${arcId}`);
+    // Не положена — стрелки нет.
+    expect(before.body.edges.some((e: { id: string }) => e.id === `clue:${s.widow}:s${secret}`)).toBe(false);
+
+    const put = await request(app).post("/api/canvas/board/node").send({ arc_id: arcId, node_type: "secret", node_id: secret, x: 10, y: 10 });
+    expect(put.status).toBe(201);
+    const res = await request(app).get(`/api/canvas/board?arc_id=${arcId}`);
+    const node = res.body.nodes.find((n: { key: string }) => n.key === `secret:${secret}`);
+    expect(node.secret).toMatchObject({ title: "Инсценировка", clue_in: 1 });
+    const edge = res.body.edges.find((e: { id: string }) => e.id === `clue:${s.widow}:s${secret}`);
+    expect(edge).toMatchObject({ source: `scene:${s.widow}`, target: `secret:${secret}`, kind: "clue" });
+    // Следующие проверки считают исходы вдовы — улика к тайне им не нужна.
+    db.prepare("DELETE FROM story_clues WHERE target_type = 'secret' AND target_id = ?").run(secret);
+  });
+
   it("список выводов отдаёт узлы приключения вместе с главами и счётчиками", async () => {
     const res = await request(app).get(`/api/story/arcs/${chapterId}/clues`);
     expect(res.status).toBe(200);

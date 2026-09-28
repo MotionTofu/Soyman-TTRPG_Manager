@@ -63,6 +63,7 @@ import {
   type SwatchOption,
 } from "../canvasPalette";
 import type {
+  ArcClues,
   CanvasBoard,
   CanvasBoardNode,
   CanvasThread,
@@ -630,6 +631,27 @@ function SoundSetNode({ data, selected }: NodeProps<Node<SoundSetNodeData>>) {
     </div>
   );
 }
+interface SecretNodeData extends Record<string, unknown> {
+  title: string;
+  clueIn: number;
+}
+/** Тайна-вывод (Q2, Q20): улики тянутся в неё, как в узел; правило трёх то же. */
+function SecretNode({ data, selected }: NodeProps<Node<SecretNodeData>>) {
+  return (
+    <div className={`canvas-node canvas-node--secret${selected ? " is-selected" : ""}`}>
+      <Handle type="target" id="story" position={Position.Left} style={{ top: 18 }} className="canvas-handle--story" title="Улики сюда" />
+      <div className="canvas-node__band">
+        <span className="canvas-node__name">◇ {data.title}</span>
+        <span className="canvas-node__kind">Тайна</span>
+      </div>
+      <div className="canvas-node__chips">
+        <span className={`canvas-node__chip${data.clueIn < 3 ? " is-bad" : ""}`}>
+          {data.clueIn < 3 ? `вход ${data.clueIn} / 3` : `вход ${data.clueIn}`}
+        </span>
+      </div>
+    </div>
+  );
+}
 interface PlaylistNodeData extends Record<string, unknown> {
   name: string;
 }
@@ -1147,6 +1169,7 @@ const NODE_TYPES = {
   frame: FrameNode,
   chapter: ChapterNode,
   sound_set: SoundSetNode,
+  secret: SecretNode,
   playlist: PlaylistNode,
   pin: PinNode,
   route: RouteNode,
@@ -1187,9 +1210,16 @@ type CanvasNodeData =
   | FrameNodeData
   | ChapterNodeData
   | SoundSetNodeData
+  | SecretNodeData
   | PlaylistNodeData
   | PinNodeData
   | RouteNodeData;
+
+/** `clue:<откуда>:<куда>` или `clue:<откуда>:s<тайна>` — id стрелки улики с сервера. */
+function parseClueEdgeId(id: string): { from: number; to: number; secret: boolean } | null {
+  const m = /^clue:(\d+):(s?)(\d+)$/.exec(id);
+  return m ? { from: Number(m[1]), to: Number(m[3]), secret: m[2] === "s" } : null;
+}
 
 /** Рамки лежат в том же массиве нод — отличать их надо по ключу. */
 /**
@@ -1476,6 +1506,7 @@ function boardNodeTitle(n: CanvasBoardNode): string {
     case "adventure": return n.adventure.name;
     case "chapter": return n.chapter.name;
     case "sound_set": return n.sound_set.name || "Набор";
+    case "secret": return n.secret.title;
     case "playlist": return n.playlist.name || "Плейлист";
     case "setting_event":
     case "campaign_event": return n.event.title;
@@ -1645,6 +1676,9 @@ function toFlowNode(
   }
   if (n.node_type === "sound_set") {
     return { ...base, type: "sound_set", data: { name: n.sound_set.name, battle_playlist_id: n.sound_set.battle_playlist_id } };
+  }
+  if (n.node_type === "secret") {
+    return { ...base, type: "secret", data: { title: n.secret.title, clueIn: n.secret.clue_in } };
   }
   if (n.node_type === "playlist") {
     return { ...base, type: "playlist", data: { name: n.playlist.name } };
@@ -2198,8 +2232,9 @@ export function CanvasPage() {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
   // Узловой дизайн: протянутая стрелка ждёт решения «улика или проход», а
   // щелчок по стрелке улики открывает её улики. Оба — показанные id сцен.
-  const [pendingLink, setPendingLink] = useState<{ from: number; to: number } | null>(null);
-  const [clueEdge, setClueEdge] = useState<{ from: number; to: number } | null>(null);
+  // secret — цель не сцена, а тайна на холсте (Q20): тогда только улика.
+  const [pendingLink, setPendingLink] = useState<{ from: number; to: number; secret?: boolean } | null>(null);
+  const [clueEdge, setClueEdge] = useState<{ from: number; to: number; secret?: boolean } | null>(null);
   // Карточка существа (шаг 4 ревизии). Нода остаётся компактной, карточка —
   // поповер: 30+ карточек по 200 px это уже не схема. Координаты ЭКРАННЫЕ,
   // масштаб полотна на карточку не действует — на 40% именно в неё и лезут.
@@ -3781,6 +3816,13 @@ export function CanvasPage() {
     },
     [board]
   );
+  const secretName = useCallback(
+    (id: number) => {
+      const n = board?.nodes.find((x) => x.node_type === "secret" && x.node_id === id);
+      return n && n.node_type === "secret" ? `◇ ${n.secret.title}` : `тайна #${id}`;
+    },
+    [board]
+  );
 
   /**
    * Окно новой связи решило (Q18): улика — строка улики с целью-сценой,
@@ -3790,11 +3832,11 @@ export function CanvasPage() {
   const saveLink = useCallback(
     async (kind: "clue" | "passage", text: string, how: string) => {
       if (!pendingLink) return;
-      const { from, to } = pendingLink;
+      const { from, to, secret } = pendingLink;
       await boardAction(
         () =>
           kind === "clue"
-            ? write.post(`/story/scenes/${from}/clues`, { text, how, target_type: "scene", target_id: to })
+            ? write.post(`/story/scenes/${from}/clues`, { text, how, target_type: secret ? "secret" : "scene", target_id: to })
             : write.post(`/story/scenes/${from}/transitions`, { to_scene_id: to, label: text }),
         { retry: false, failure: kind === "clue" ? "Улика" : "Проход", affects: clueAffects() }
       );
@@ -3930,6 +3972,10 @@ export function CanvasPage() {
       // запись делает окно.
       if (sourceType === "scene" && targetType === "scene" && handle === "story") {
         if (sourceId !== targetId) setPendingLink({ from: sourceId, to: targetId });
+        return;
+      }
+      if (sourceType === "scene" && targetType === "secret") {
+        setPendingLink({ from: sourceId, to: targetId, secret: true });
         return;
       }
 
@@ -4511,11 +4557,12 @@ export function CanvasPage() {
       event.preventDefault();
       const [kind, rawId] = edge.id.split(":");
       if (kind === "clue") {
-        const [, from, to] = edge.id.split(":").map(Number);
+        const link = parseClueEdgeId(edge.id);
+        if (!link) return;
         setContextMenu({
           x: event.clientX,
           y: event.clientY,
-          items: [{ label: "Улики этой стрелки…", onClick: () => setClueEdge({ from, to }) }],
+          items: [{ label: "Улики этой стрелки…", onClick: () => setClueEdge(link) }],
         });
         return;
       }
@@ -5450,8 +5497,8 @@ export function CanvasPage() {
           onEdgeContextMenu={handleEdgeContextMenu}
           onEdgeClick={(_, edge) => {
             // Стрелка улики «×N» — щелчок открывает её улики (Q19).
-            const m = edge.id.match(/^clue:(\d+):(\d+)$/);
-            if (m) setClueEdge({ from: Number(m[1]), to: Number(m[2]) });
+            const link = parseClueEdgeId(edge.id);
+            if (link) setClueEdge(link);
           }}
           onNodeDoubleClick={handleNodeDoubleClick}
           onDrop={handleDrop}
@@ -6129,7 +6176,8 @@ export function CanvasPage() {
       {pendingLink && (
         <NewLinkDialog
           fromName={sceneName(pendingLink.from)}
-          toName={sceneName(pendingLink.to)}
+          toName={pendingLink.secret ? secretName(pendingLink.to) : sceneName(pendingLink.to)}
+          clueOnly={pendingLink.secret}
           onCancel={() => setPendingLink(null)}
           onSave={saveLink}
         />
@@ -6140,8 +6188,9 @@ export function CanvasPage() {
           campaignId={campaignIdParam || null}
           fromShownId={clueEdge.from}
           toShownId={clueEdge.to}
+          toSecret={clueEdge.secret}
           fromName={sceneName(clueEdge.from)}
-          toName={sceneName(clueEdge.to)}
+          toName={clueEdge.secret ? secretName(clueEdge.to) : sceneName(clueEdge.to)}
           onClose={() => setClueEdge(null)}
         />
       )}
@@ -6346,6 +6395,7 @@ const MULTI_TYPE_LABEL: Record<string, string> = {
   bundle: "Набор",
   event: "Событие",
   sound_set: "Саундсет",
+  secret: "Тайна",
   playlist: "Плейлист",
   being: "Существо",
   location: "Локация",
@@ -7341,6 +7391,8 @@ const PALETTE_TABS = [
   // значат разное.
   { key: "characters", label: "Персонажи" },
   { key: "adventures", label: "Приключения" },
+  // Тайны приключения — выводы-понятия (Q20). Только на холсте приключения.
+  { key: "secrets", label: "Тайны" },
   { key: "bundles", label: "Наборы" },
   { key: "tools", label: "Инструменты" },
   { key: "audio", label: "Аудио" },
@@ -7438,6 +7490,7 @@ const ENTITY_LIST_URL: Record<string, string> = {
 };
 
 const EMPTY_SHELF: LibraryScene[] = [];
+const EMPTY_SECRETS: ArcClues["secrets"] = [];
 // фриформ: полка сцен не нужна, но наборы — глобальные
 const EMPTY_BUNDLES: LibraryBundle[] = [];
 
@@ -7572,6 +7625,11 @@ function CanvasPalette({
       );
   }, [tab, campaignId]);
 
+  // Тот же ключ, что у карточки узла: список тайн уже в кэше, если её открывали.
+  const arcSecrets =
+    useResource<ArcClues>(
+      tab === "secrets" && arcId > 0 ? `/story/arcs/${arcId}/clues${campaignId ? `?campaign_id=${campaignId}` : ""}` : null
+    ).data?.secrets ?? EMPTY_SECRETS;
   const [audioSets, setAudioSets] = useState<PaletteItem[]>([]);
   const [battlePlaylists, setBattlePlaylists] = useState<PaletteItem[]>([]);
   useEffect(() => {
@@ -7708,7 +7766,10 @@ function CanvasPalette({
       <div className="canvas-palette__head">
         <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
           {PALETTE_TABS.filter(
-            (t) => (t.key !== "adventures" || !arcId) && (t.key !== "characters" || !!campaignId)
+            (t) =>
+              (t.key !== "adventures" || !arcId) &&
+              (t.key !== "characters" || !!campaignId) &&
+              (t.key !== "secrets" || arcId > 0)
           ).map((t) => (
             <button
               key={t.key}
@@ -7831,6 +7892,31 @@ function CanvasPalette({
             {characters.length === 0 && (
               <p className="muted" style={{ fontSize: "var(--fs-meta)", margin: 0 }}>
                 В кампании нет персонажей — их заводят в её составе.
+              </p>
+            )}
+          </>
+        )}
+
+        {tab === "secrets" && (
+          <>
+            {filtered(arcSecrets.map((t) => ({ type: "secret", id: t.id, name: t.title }))).map((item) => (
+              <button
+                key={item.id}
+                className="canvas-palette__item"
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData(PALETTE_DRAG_MIME, JSON.stringify({ kind: "entity", item }));
+                  e.dataTransfer.effectAllowed = "copy";
+                }}
+                onClick={() => place(item)}
+                disabled={busy}
+              >
+                <span className="canvas-palette__item-name">◇ {item.name}</span>
+              </button>
+            ))}
+            {arcSecrets.length === 0 && (
+              <p className="muted" style={{ fontSize: "var(--fs-meta)", margin: 0 }}>
+                У приключения нет тайн — их заводят на его странице, в «Тайнах и зацепках».
               </p>
             )}
           </>

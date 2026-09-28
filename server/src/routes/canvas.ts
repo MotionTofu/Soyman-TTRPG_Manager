@@ -797,6 +797,33 @@ function entityNodes(boardId: number, placed: PlacedNode[]) {
         };
       }
 
+      if (p.node_type === "secret") {
+        // Тайна-вывод на холсте приключения (Q20). Входящие — улики с этой
+        // целью; копии кампании считаются по исходной улике.
+        const row = db.prepare("SELECT title, kind FROM story_secrets WHERE id = ?").get(p.node_id) as
+          | { title: string; kind: string }
+          | undefined;
+        if (!row) return null;
+        const clueIn = (
+          db
+            .prepare(
+              `SELECT COUNT(DISTINCT COALESCE(source_clue_id, id)) AS n FROM story_clues
+               WHERE target_type = 'secret' AND target_id = ? AND scene_id IS NOT NULL`
+            )
+            .get(p.node_id) as { n: number }
+        ).n;
+        return {
+          key: `secret:${p.node_id}`,
+          node_type: "secret",
+          node_id: p.node_id,
+          x: p.x,
+          y: p.y,
+          z_index: p.z_index ?? 0,
+          parent_key: p.parent_key ?? null,
+          placed: true,
+          secret: { id: p.node_id, title: row.title, kind: row.kind, clue_in: clueIn },
+        };
+      }
       if (p.node_type === "sound_set") {
         const row = db.prepare("SELECT name, battle_playlist_id FROM sound_sets WHERE id = ?").get(p.node_id) as { name: string; battle_playlist_id: number | null } | undefined;
         if (!row) return null;
@@ -1890,11 +1917,20 @@ canvasRouter.get("/board", (req, res) => {
    */
   const shownByNode = new Map<number, number>();
   scenes.forEach((s) => shownByNode.set(s.source_scene_id ?? s.id, s.id));
-  const cluePairs = new Map<string, { from: number; to: number; n: number }>();
+  // Тайна рисуется, только если её положили на этот холст (Q20); ключ цели
+  // тогда `secret:<id>`, а id стрелки — `clue:<откуда>:s<id>`.
+  const placedSecrets = new Set(saved.filter((p) => p.node_type === "secret").map((p) => p.node_id));
+  const cluePairs = new Map<string, { from: number; to: string; n: number }>();
   for (const c of clueGraph?.clues ?? []) {
-    if (c.target_type !== "scene" || c.target_missing || c.node_id == null) continue;
+    if (c.target_missing || c.node_id == null) continue;
     const from = shownByNode.get(c.node_id);
-    const to = shownByNode.get(c.target_id as number);
+    let to: string | null = null;
+    if (c.target_type === "scene") {
+      const shown = shownByNode.get(c.target_id as number);
+      if (shown != null) to = String(shown);
+    } else if (c.target_type === "secret" && placedSecrets.has(c.target_id as number)) {
+      to = `s${c.target_id}`;
+    }
     if (from == null || to == null) continue;
     const key = `${from}:${to}`;
     const pair = cluePairs.get(key) ?? { from, to, n: 0 };
@@ -1905,7 +1941,7 @@ canvasRouter.get("/board", (req, res) => {
     id: `clue:${p.from}:${p.to}`,
     kind: "clue",
     source: `scene:${p.from}`,
-    target: `scene:${p.to}`,
+    target: p.to.startsWith("s") ? `secret:${p.to.slice(1)}` : `scene:${p.to}`,
     target_handle: "story",
     label: p.n > 1 ? `×${p.n}` : "",
   }));

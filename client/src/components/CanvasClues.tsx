@@ -26,11 +26,14 @@ export type LinkKind = "clue" | "passage";
 export function NewLinkDialog({
   fromName,
   toName,
+  clueOnly = false,
   onCancel,
   onSave,
 }: {
   fromName: string;
   toName: string;
+  /** Цель — тайна: проход в понятие не ведёт, только улика. */
+  clueOnly?: boolean;
   onCancel: () => void;
   onSave: (kind: LinkKind, text: string, how: string) => void | Promise<void>;
 }) {
@@ -59,6 +62,7 @@ export function NewLinkDialog({
             {fromName} → {toName}
           </span>
         </div>
+        {!clueOnly && (
         <div className="seg" role="group" aria-label="Вид связи">
           <button type="button" className={kind === "clue" ? "is-active" : ""} onClick={() => setKind("clue")}>
             Улика
@@ -67,6 +71,7 @@ export function NewLinkDialog({
             Проход
           </button>
         </div>
+        )}
         <label className="clue-dialog__field">
           <span className="canvas-props__label">{kind === "clue" ? "Что находят" : "Условие прохода · необязательно"}</span>
           <input
@@ -109,6 +114,7 @@ export function ClueEdgeDialog({
   campaignId,
   fromShownId,
   toShownId,
+  toSecret = false,
   fromName,
   toName,
   onClose,
@@ -116,7 +122,9 @@ export function ClueEdgeDialog({
   arcId: number;
   campaignId: number | null;
   fromShownId: number;
+  /** Показанная сцена — или id тайны, если toSecret. */
   toShownId: number;
+  toSecret?: boolean;
   fromName: string;
   toName: string;
   onClose: () => void;
@@ -125,9 +133,10 @@ export function ClueEdgeDialog({
   const data = useResource<ArcClues>(arcCluesPath(arcId, campaignId)).data;
   const original = (shown: number) => data?.nodes.find((n) => n.shown_id === shown)?.id ?? null;
   const from = original(fromShownId);
-  const to = original(toShownId);
+  const targetType = toSecret ? "secret" : "scene";
+  const to = toSecret ? toShownId : original(toShownId);
   const clues = (data?.clues ?? []).filter(
-    (c) => c.node_id === from && c.target_type === "scene" && c.target_id === to
+    (c) => c.node_id === from && c.target_type === targetType && c.target_id === to
   );
   // Записи — без кампании, как весь холст: он правит ту строку, что показана
   // (копию кампании, если она есть), и копий сам не заводит.
@@ -141,7 +150,7 @@ export function ClueEdgeDialog({
     });
   const add = () =>
     act(
-      () => write.post(`/story/scenes/${fromShownId}/clues`, { text: "Новая улика", target_type: "scene", target_id: toShownId }),
+      () => write.post(`/story/scenes/${fromShownId}/clues`, { text: "Новая улика", target_type: targetType, target_id: toShownId }),
       { affects: clueAffects(), retry: false }
     );
 

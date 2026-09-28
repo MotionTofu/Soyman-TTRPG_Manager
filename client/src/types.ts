@@ -2070,6 +2070,16 @@ export interface CanvasSoundSetNode {
   placed: boolean;
   sound_set: { id: number; name: string; battle_playlist_id: number | null };
 }
+/** Тайна-вывод на холсте приключения (Q20): кладётся рукой из палитры. */
+export interface CanvasSecretNode {
+  key: string;
+  node_type: "secret";
+  node_id: number;
+  x: number;
+  y: number;
+  placed: boolean;
+  secret: { id: number; title: string; kind: string; clue_in: number };
+}
 export interface CanvasPlaylistNode {
   key: string;
   node_type: "playlist";
@@ -2097,7 +2107,7 @@ export interface CanvasCheckNode {
   };
 }
 
-export type CanvasAnyNode = CanvasNode | CanvasEntityNode | CanvasBundleNode | CanvasEventNode | CanvasCheckNode | CanvasAdventureNode | CanvasChapterNode | CanvasStickerNode | CanvasImageNode | CanvasFrameNode | CanvasPinNode | CanvasSoundSetNode | CanvasPlaylistNode | CanvasRouteNode;
+export type CanvasAnyNode = CanvasNode | CanvasEntityNode | CanvasBundleNode | CanvasEventNode | CanvasCheckNode | CanvasAdventureNode | CanvasChapterNode | CanvasStickerNode | CanvasImageNode | CanvasFrameNode | CanvasPinNode | CanvasSoundSetNode | CanvasSecretNode | CanvasPlaylistNode | CanvasRouteNode;
 
 /**
  * Рераут-нода («Маршрут»): визуальный проход-развязка, который рвёт длинное
