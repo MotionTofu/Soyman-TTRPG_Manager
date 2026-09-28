@@ -22,6 +22,10 @@ interface Props {
   // in sync with mentions typed into this field.
   entityType?: string;
   entityId?: number;
+  // Упоминания этого текста пересобирает сервер при сохранении (задумка
+  // сессии — вместе с её лентой, routes/sessionNotes.ts). Разность «было/
+  // стало» с клиента сняла бы ссылку, живую в соседнем тексте.
+  serverSyncsMentions?: boolean;
   // Forwarded to MentionTextarea — preselects "Сеттинг" in the @-mention
   // modal's "Создать новую сущность" flow when this card's own context has
   // an obvious one (a location/being/community/setting page).
@@ -62,6 +66,7 @@ export function EditableTextCard({
   rows = 5,
   entityType,
   entityId,
+  serverSyncsMentions,
   defaultSettingId,
   collapsible,
   defaultOpen = false,
@@ -130,7 +135,7 @@ export function EditableTextCard({
   async function handleExtra() {
     if (!extraAction) return;
     await onSave(draft);
-    if (entityType && entityId) syncMentionLinks(entityType, entityId, value, draft);
+    if (entityType && entityId && !serverSyncsMentions) syncMentionLinks(entityType, entityId, value, draft);
     await extraAction.onAct(draft);
     if (draftKey) clearFieldDraft(draftKey);
     setDraftRestored(false);
@@ -144,7 +149,7 @@ export function EditableTextCard({
       await onSaveFields(fieldValues);
     }
     await onSave(draft);
-    if (entityType && entityId) {
+    if (entityType && entityId && !serverSyncsMentions) {
       syncMentionLinks(entityType, entityId, value, draft);
     }
     if (draftKey) clearFieldDraft(draftKey);

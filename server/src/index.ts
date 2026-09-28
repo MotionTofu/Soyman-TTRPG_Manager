@@ -34,6 +34,7 @@ import { playerGroupsRouter } from "./routes/playerGroups";
 import { playersRouter } from "./routes/players";
 import { campaignsRouter } from "./routes/campaigns";
 import { sessionsRouter } from "./routes/sessions";
+import { sessionNotesRouter } from "./routes/sessionNotes";
 import { resourcesRouter } from "./routes/resources";
 import { masteringRouter } from "./routes/mastering";
 import { calendarRouter } from "./routes/calendar";
@@ -415,6 +416,8 @@ app.use("/api/campaign-groups", campaignGroupsRouter);
 app.use("/api/player-groups", playerGroupsRouter);
 app.use("/api/players", playersRouter);
 app.use("/api/campaigns", campaignsRouter);
+// Раньше sessionsRouter: иначе GET /live уходит в его /:id.
+app.use("/api/sessions", sessionNotesRouter);
 app.use("/api/sessions", sessionsRouter);
 app.use("/api/resources", resourcesRouter);
 app.use("/api/mastering", masteringRouter);

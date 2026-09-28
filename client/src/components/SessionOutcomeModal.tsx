@@ -29,12 +29,11 @@ export function SessionOutcomeModal({ sessionId, onClose, onSaved }: Props) {
   const stored = useEntity<SessionDetail>("session", sessionId);
   const campaignState = useEntity<Campaign>("campaign", stored.data?.campaign_id);
   const campaign = campaignState.data ?? null;
-  // Окно — форма: отметки, суммы и заметка правятся здесь до «Сохранить».
+  // Окно — форма: отметки и суммы правятся здесь до «Сохранить».
   // Поэтому сессия из кэша копируется в неё один раз, при открытии, и
   // перечитывание посреди заполнения набранное не затирает.
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [saving, setSaving] = useState(false);
-  const [notes, setNotes] = useState("");
   const [cancelChoice, setCancelChoice] = useState(false);
   const [dialog, confirm] = useConfirm();
   const afterWrite = useAfterWrite();
@@ -43,11 +42,6 @@ export function SessionOutcomeModal({ sessionId, onClose, onSaved }: Props) {
   useEffect(() => {
     if (session || !stored.data) return;
     setSession(stored.data);
-    // Заметка предзаполняется тем, что уже написано, и правится на месте:
-    // Мастер видит, что там есть, и дописывает сам. Автоматическая склейка
-    // вслепую однажды приклеила бы абзац к тексту, который он только что
-    // дописал в соседнем окне, — а работать в двух окнах здесь штатно.
-    setNotes(stored.data.main_events ?? "");
   }, [stored.data, session]);
 
   // Сессия ещё не пришла — грузимся; кампания, которая не прочиталась, окно не держит.
@@ -126,9 +120,9 @@ export function SessionOutcomeModal({ sessionId, onClose, onSaved }: Props) {
         ? session.attendance.map((a) => ({ ...a, amount_paid: 0, amount_forgiven: 0 }))
         : session.attendance;
       await write.put(`/sessions/${sessionId}/attendance`, { attendance: attendanceBody(rows) });
-      const patch: Record<string, unknown> = { main_events: notes };
-      if (status) patch.status = status;
-      await write.put(`/sessions/${sessionId}`, patch);
+      // Заметок здесь больше нет: лента сессии разбирается на её странице
+      // (гриллинг 2026-09-28, Q16).
+      if (status) await write.put(`/sessions/${sessionId}`, { status });
       afterWrite(affects);
       onSaved?.();
       onClose();
@@ -292,16 +286,6 @@ export function SessionOutcomeModal({ sessionId, onClose, onSaved }: Props) {
                 </tbody>
               </table>
             )}
-
-            <label className="stack editable-card-field">
-              <span>Главные события</span>
-              <textarea
-                rows={4}
-                value={notes}
-                placeholder="Что случилось на игре — попадёт в хронику кампании"
-                onChange={(e) => setNotes(e.target.value)}
-              />
-            </label>
 
             {cancelChoice && (
               <div className="card stack" style={{ gap: 8, borderLeft: "1px solid var(--line)" }}>

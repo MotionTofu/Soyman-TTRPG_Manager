@@ -63,8 +63,9 @@ interface WidgetDef extends SavedCell {
 
 // Дефолт повторяет старую вёрстку: пары по полряда.
 const DEFAULTS: WidgetDef[] = [
-  { id: "idea", x: 0, y: 0, w: 6, h: 8, minW: 3, minH: 3, maxW: 12 },
-  { id: "events", x: 6, y: 0, w: 6, h: 8, minW: 3, minH: 3, maxW: 12 },
+  // «Основные события» ушли лентой в правую панель (2026-09-28) — задумка
+  // одна на ряд.
+  { id: "idea", x: 0, y: 0, w: 12, h: 8, minW: 3, minH: 3, maxW: 12 },
   { id: "plot", x: 0, y: 8, w: 6, h: 10, minW: 3, minH: 3, maxW: 12 },
   { id: "locations", x: 6, y: 8, w: 6, h: 10, minW: 3, minH: 3, maxW: 12 },
   { id: "obstacles", x: 0, y: 18, w: 6, h: 10, minW: 3, minH: 3, maxW: 12 },
@@ -235,11 +236,10 @@ export interface PultPanelProps {
 
 interface PultGridProps {
   ideaCard: ReactNode;
-  eventsCard: ReactNode;
   panelProps: PultPanelProps;
 }
 
-export function PultGrid({ ideaCard, eventsCard, panelProps }: PultGridProps) {
+export function PultGrid({ ideaCard, panelProps }: PultGridProps) {
   // На узких — обычная стопка, как была: таскать пальцем нечего, сетка там
   // только мешала бы. Тот же порог 860, что у остального пульта.
   const narrow = useMediaQuery("(max-width: 860px)");
@@ -265,7 +265,6 @@ export function PultGrid({ ideaCard, eventsCard, panelProps }: PultGridProps) {
 
   const widgets: { id: PultWidgetId; title: string; node: ReactNode }[] = [
     { id: "idea", title: "Задумка на сессию", node: ideaCard },
-    { id: "events", title: "Основные события сессии", node: eventsCard },
     { id: "plot", title: SESSION_PANEL_TITLES.plotCharacters, node: <PlotCharactersPanel {...panelProps} /> },
     { id: "locations", title: SESSION_PANEL_TITLES.locations, node: <LocationsPanel {...panelProps} /> },
     { id: "obstacles", title: SESSION_PANEL_TITLES.obstacles, node: <ObstaclesPanel {...panelProps} /> },

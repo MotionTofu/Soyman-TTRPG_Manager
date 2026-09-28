@@ -4,6 +4,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { PAYMENT_TYPE_LABELS, PAYMENT_TYPE_OPTIONS } from "../paymentTypes";
 import { ObstacleDropZone } from "../components/ObstacleDropZone";
 import { EditableTextCard } from "../components/EditableTextCard";
+import { SessionLiveControls } from "../components/SessionLiveControls";
+import { SessionNotesChat } from "../components/SessionNotesChat";
 import { EntityPage } from "../components/EntityPage";
 import { NavIcon } from "../components/NavIcons";
 import { SectionDropZone } from "../components/SectionDropZone";
@@ -290,10 +292,6 @@ export function SessionDetailPage() {
 
   function setBattlePlaylist(id: number | null) {
     void save({ battle_playlist_id: id });
-  }
-
-  function toggleMainEventsVisible() {
-    void save({ main_events_visible: session!.main_events_visible ? 0 : 1 });
   }
 
   function startTitleEdit() {
@@ -653,9 +651,12 @@ export function SessionDetailPage() {
       // Главное действие — пульт: за ним сюда и приходят во время игры.
       primaryAction={
         !isPlayer ? (
-          <button className="primary" onClick={() => navigate(`/sessions/${sessionId}/live`)}>
-            <NavIcon name="die" /> Пульт сессии
-          </button>
+          <>
+            <SessionLiveControls session={session} />
+            <button className="primary" onClick={() => navigate(`/sessions/${sessionId}/live`)}>
+              <NavIcon name="die" /> Пульт сессии
+            </button>
+          </>
         ) : undefined
       }
       actions={[
@@ -994,6 +995,7 @@ export function SessionDetailPage() {
             onSave={(value) => saveText({ idea_notes: value })}
             entityType="session"
             entityId={sessionId}
+            serverSyncsMentions
             collapsible
             defaultOpen
           >
@@ -1122,30 +1124,13 @@ export function SessionDetailPage() {
             </div>
           )}
 
-          <EditableTextCard
-            key={`events-${session.id}`}
-            title="Основные события сессии"
-            value={session.main_events}
-            onSave={(value) => saveText({ main_events: value })}
-            entityType="session"
-            entityId={sessionId}
-            collapsible
-          >
-            <label className="sp-visibility-row">
-              <input
-                type="checkbox"
-                checked={!!session.main_events_visible}
-                onChange={toggleMainEventsVisible}
-              />
-              {session.main_events_visible ? (
-                <>
-                  <NavIcon name="eye" /> Видно игрокам
-                </>
-              ) : (
-                "Видно игрокам"
-              )}
-            </label>
-          </EditableTextCard>
+          {/* Лента сессии (гриллинг 2026-09-28): те же сообщения, что Мастер
+              писал в правой панели по ходу игры, — дописать и поправить
+              можно и здесь. Игрокам не показывается. */}
+          <div className="card stack sp-notes">
+            <span className="sp-title">Лента сессии</span>
+            <SessionNotesChat sessionId={sessionId} settingId={campaign.setting_id} />
+          </div>
 
           {held && report && (
             <div className="card sp-revealed">

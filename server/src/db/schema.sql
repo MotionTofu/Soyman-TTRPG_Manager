@@ -211,6 +211,9 @@ CREATE TABLE IF NOT EXISTS sessions (
   combat_round INTEGER NOT NULL DEFAULT 0,
   battle_playlist_id INTEGER REFERENCES playlists(id) ON DELETE SET NULL,
   cheatsheet_data TEXT,
+  -- Идёт ли сессия (гриллинг 2026-09-28, Q38): NULL — нет, 'live' — Мастер
+  -- нажал «Начать», 'rehearsal' — тестовый прогон. Идёт одна на всё приложение.
+  live_mode TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   archived_at TEXT
 );
@@ -1095,6 +1098,21 @@ CREATE TABLE IF NOT EXISTS session_scenes (
 );
 CREATE INDEX IF NOT EXISTS idx_session_scenes_session ON session_scenes(session_id, id);
 
+-- Лента сессии (гриллинг 2026-09-28): заменила текстовое поле
+-- sessions.main_events. Мастер пишет по ходу игры сообщениями, каждое —
+-- отдельная строка со своим временем. inworld_date — дата в мире на момент
+-- записи ("Y-M-D", NULL — полоса времени не ведётся). Упоминания из текста
+-- ведут в generic_links от самой сессии (from_type='session').
+CREATE TABLE IF NOT EXISTS session_notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  text TEXT NOT NULL,
+  inworld_date TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_session_notes_session ON session_notes(session_id, id);
+
 -- Per-campaign playthrough progress. Kept out of story_scenes on purpose:
 -- marking a scene "пройдена" must not spawn a copy-on-write override, which
 -- is what writing to the scene row itself would mean.
@@ -1496,7 +1514,8 @@ CREATE TABLE IF NOT EXISTS world_exploration_entries (
   campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
   player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
   -- Дневник ведёт персонаж, а не игрок: у двух персонажей одного игрока в
-  -- одной кампании — два независимых дневника, и видит их только автор.
+  -- одной кампании — два независимых дневника. Из игроков видит только автор;
+  -- Мастер читает все (решения 2026-09-07 и 2026-09-28).
   -- NULL — запись, чей персонаж ещё не выбран (игрок пишет до того, как завёл
   -- персонажа, или у него их несколько и он ещё не сказал, чей это дневник).
   character_id INTEGER REFERENCES characters(id) ON DELETE SET NULL,

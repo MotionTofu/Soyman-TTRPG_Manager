@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { Modal } from "./Modal";
@@ -14,7 +14,8 @@ import type { CompendiumEntry, SearchResult } from "../types";
 
 const NO_ENTRIES: CompendiumEntry[] = [];
 
-export function BagWidget() {
+// title — заголовок снаружи: в правой панели это кнопка, сворачивающая модуль.
+export function BagWidget({ title }: { title?: ReactNode } = {}) {
   const location = useLocation();
   const { items, size } = useBag();
   const targets = useUnloadTargets();
@@ -91,7 +92,7 @@ export function BagWidget() {
   return (
     <div className="bag-widget">
       <div className="search-heading bag-heading">
-        <strong>Мешок</strong>
+        {title ?? <strong>Мешок</strong>}
         <div className="row" style={{ gap: 4 }}>
           <button
             type="button"

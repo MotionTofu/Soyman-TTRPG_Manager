@@ -916,18 +916,8 @@ playerRouter.get("/campaigns/:id/visible", (req: AuthedRequest, res) => {
     | undefined;
   if (!campaign) return res.status(404).json({ error: "not found" });
 
-  const sessions = db
-    .prepare(
-      `SELECT id, date, title, main_events FROM sessions
-       WHERE campaign_id = ? AND main_events_visible = 1 AND archived_at IS NULL
-       ORDER BY date DESC`
-    )
-    .all(campaignId);
-
-  // Just date/time/status — not gated behind main_events_visible like the
-  // recap content above. A player in the campaign always gets to know when
-  // sessions are happening, independent of whether the GM has written up
-  // (and revealed) a summary of what happened in them.
+  // Just date/time/status. Итогов сессий игроки больше не видят: «Основные
+  // события» стали лентой Мастера без галочки видимости (гриллинг 2026-09-28).
   const schedule = db
     .prepare(
       `SELECT id, date, start_time, title, status FROM sessions
@@ -951,7 +941,7 @@ playerRouter.get("/campaigns/:id/visible", (req: AuthedRequest, res) => {
 
   const { locationArticles, beingArticles, chronicleEvents } = getFlaggedSettingContent(campaign.setting_id);
 
-  res.json({ campaign, sessions, schedule, secrets, locationArticles, beingArticles, chronicleEvents });
+  res.json({ campaign, schedule, secrets, locationArticles, beingArticles, chronicleEvents });
 });
 
 // The rest of the party — other players' characters in this campaign, name

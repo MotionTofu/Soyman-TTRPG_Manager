@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useResource } from "../data/hooks";
 import { useSearch } from "../data/search";
 import { useCurrentUser } from "../api/currentUser";
-import type { SearchResult } from "../types";
+import type { LiveSession, SearchResult } from "../types";
 import { SEARCH_DRAG_MIME } from "../components/LinkDropZone";
 import { ACCEPT_TYPES as DOCK_ACCEPT_TYPES } from "./PreviewDock";
 import { addPreviewDockCard } from "../previewDockStore";
@@ -14,6 +14,10 @@ import { NavIcon } from "../components/NavIcons";
 import { BagWidget } from "../components/BagWidget";
 import { InitiativeTracker } from "../components/InitiativeTracker";
 import { EntityPreviewModal } from "../components/EntityPreviewModal";
+import { SessionNotesChat } from "../components/SessionNotesChat";
+import { sessionPaths } from "../data/sessions";
+import { SideModules, type SideModule, type SideModuleId } from "./SideModules";
+import { loadSideLayout, saveSideLayout, type SideLayout } from "./sideLayout";
 
 // Most types deep-link via DETAIL_ROUTES/:id; compendium entries instead
 // live inside a System's tab and need system_id+section_id to open at.
@@ -63,6 +67,28 @@ export function SearchPanel({ horizontal, onNavigate }: Props = {}) {
   // со страницы, — за столом это чаще всего «что делает Опутанный».
   const [card, setCard] = useState<{ type: string; id: number } | null>(null);
   const { pins, pin, unpin } = usePinnedPages();
+  // Модули панели: свёрнутые и высоты, заданные ползунками (Q41, Q48).
+  const [layout, setLayout] = useState<SideLayout>(loadSideLayout);
+  // Идущая сессия — одна на приложение; пока она есть, в панели её лента.
+  const live = useResource<LiveSession | null>(isPlayer || horizontal ? null : sessionPaths.live()).data ?? null;
+
+  function toggleModule(id: SideModuleId) {
+    setLayout((prev) => {
+      const collapsed = prev.collapsed.includes(id) ? prev.collapsed.filter((c) => c !== id) : [...prev.collapsed, id];
+      const next = { ...prev, collapsed };
+      saveSideLayout(next);
+      return next;
+    });
+  }
+  // Заголовок модуля — он же переключатель: щелчок по названию сворачивает.
+  function titleOf(id: SideModuleId, text: string) {
+    if (horizontal) return <strong>{text}</strong>;
+    return (
+      <button type="button" className="side-module-title" title="Свернуть" aria-expanded onClick={() => toggleModule(id)}>
+        {text}
+      </button>
+    );
+  }
 
   const systems = useResource<{ id: number; name: string }[]>(isPlayer ? null : "/systems").data;
   const dndSystemId = systems?.find((s) => s.name === "D&D 5.5")?.id ?? null;
@@ -75,7 +101,13 @@ export function SearchPanel({ horizontal, onNavigate }: Props = {}) {
         // Не перехватывать "/" внутри набора механик/описаний — только когда фокус на body
         if (ae && ae !== document.body) return;
         e.preventDefault();
-        inputRef.current?.focus();
+        setLayout((prev) => {
+          if (!prev.collapsed.includes("search")) return prev;
+          const next = { ...prev, collapsed: prev.collapsed.filter((c) => c !== "search") };
+          saveSideLayout(next);
+          return next;
+        });
+        requestAnimationFrame(() => inputRef.current?.focus());
       }
     }
     window.addEventListener("keydown", onKey);
@@ -112,11 +144,11 @@ export function SearchPanel({ horizontal, onNavigate }: Props = {}) {
     e.dataTransfer.effectAllowed = "link";
   }
 
-  return (
-    <div className={`search-panel${horizontal ? " horizontal" : ""}`}>
+  const searchBody = (
+    <>
       <div className="search-heading">
         <ParticleField count={2} />
-        <strong>Поиск</strong>
+        {titleOf("search", "Поиск")}
       </div>
       <div className="row search-input-row">
         <div className="search-input-wrap">
@@ -263,9 +295,12 @@ export function SearchPanel({ horizontal, onNavigate }: Props = {}) {
         })}
       </div>
       {card && <EntityPreviewModal type={card.type} id={card.id} onClose={() => setCard(null)} />}
-      {liveMatch ? <InitiativeTracker sessionId={Number(liveMatch[1])} /> : horizontal ? null : <BagWidget />}
+    </>
+  );
+
+  const pinsBody = (
       <div className="search-pins">
-        <strong>Закреплённые страницы</strong>
+        {titleOf("pins", "Закреплённые страницы")}
         {pins.map((p) => (
           <div key={p.path} className="search-pin-row row" style={{ justifyContent: "space-between" }}>
             <Link to={p.path} title={p.label} onClick={onNavigate}>
@@ -287,6 +322,49 @@ export function SearchPanel({ horizontal, onNavigate }: Props = {}) {
           </button>
         )}
       </div>
-    </div>
   );
+
+  // Полоса у LocationMap — прежняя вёрстка в строку, без модулей.
+  if (horizontal) {
+    return (
+      <div className="search-panel horizontal">
+        {searchBody}
+        {pinsBody}
+      </div>
+    );
+  }
+
+  const modules: SideModule[] = [
+    { id: "search", title: "Поиск", node: searchBody },
+    liveMatch
+      ? {
+          id: "tracker",
+          title: "Трекер инициативы",
+          node: <InitiativeTracker sessionId={Number(liveMatch[1])} title={titleOf("tracker", "Трекер инициативы")} />,
+        }
+      : { id: "bag", title: "Мешок", node: <BagWidget title={titleOf("bag", "Мешок")} /> },
+    ...(live
+      ? [
+          {
+            id: "chat" as const,
+            title: "Лента",
+            minHeight: 180,
+            node: (
+              <div className="side-chat">
+                <div className="row side-chat__head">
+                  {titleOf("chat", "Лента")}
+                  <Link to={`/sessions/${live.id}/live`} className="muted side-chat__session" onClick={onNavigate}>
+                    {live.live_mode === "rehearsal" ? "Прогон · " : ""}Сессия №{live.session_number} · {live.campaign_name}
+                  </Link>
+                </div>
+                <SessionNotesChat sessionId={live.id} settingId={live.setting_id} />
+              </div>
+            ),
+          },
+        ]
+      : []),
+    { id: "pins", title: "Закреплённые страницы", node: pinsBody },
+  ];
+
+  return <SideModules modules={modules} layout={layout} setLayout={setLayout} flexId={live ? "chat" : null} />;
 }

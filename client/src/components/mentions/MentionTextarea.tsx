@@ -44,6 +44,9 @@ interface Props {
   // obvious setting (a location/being/community/artifact page, or the
   // setting page itself). Left unset elsewhere; the user just picks one.
   defaultSettingId?: number;
+  // Своя клавиатура поверх поля: чат ленты сессии шлёт по Enter и правит
+  // последнее по ↑. preventDefault в обработчике гасит встроенные сочетания.
+  onKeyDown?: (e: KeyboardEvent<HTMLTextAreaElement>) => void;
 }
 
 // A plain <textarea> that opens the "продвинутое упоминание" modal
@@ -56,6 +59,7 @@ export const MentionTextarea = memo(function MentionTextarea({
   rows = 5,
   placeholder,
   defaultSettingId,
+  onKeyDown,
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const menuWrapRef = useRef<HTMLDivElement>(null);
@@ -176,6 +180,8 @@ export const MentionTextarea = memo(function MentionTextarea({
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    onKeyDown?.(e);
+    if (e.defaultPrevented) return;
     if (e.ctrlKey || e.metaKey) {
       if (isShortcutKey(e, "B")) {
         e.preventDefault();

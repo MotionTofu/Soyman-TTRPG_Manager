@@ -1594,6 +1594,10 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     backfill();
   }
 
+  if (!columnExists(database, "resources", "file_sha256")) {
+    database.exec("ALTER TABLE resources ADD COLUMN file_sha256 TEXT");
+  }
+
   // "Идеи из интернета" and "Заметки по ведению" were the same tool (a free
   // title+content list) split across two tabs by category alone — merged
   // into one tab, so fold any existing internet_ideas rows into gm_notes.
@@ -6982,6 +6986,29 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
   }
   if (!columnExists(database, "story_arcs", "node_trigger")) {
     database.exec("ALTER TABLE story_arcs ADD COLUMN node_trigger TEXT NOT NULL DEFAULT ''");
+  }
+
+  // Лента сессии (гриллинг 2026-09-28): «Основные события» стали сообщениями.
+  // Таблицу создаёт schema.sql; здесь — статус «идёт» и перенос старого
+  // текста одним сообщением со временем начала сессии (Q4). Колонка
+  // main_events остаётся нетронутой — это и есть откат.
+  if (!columnExists(database, "sessions", "live_mode")) {
+    database.exec("ALTER TABLE sessions ADD COLUMN live_mode TEXT");
+  }
+  if (!appSettingFlag(database, "session_notes_from_main_events_v1")) {
+    const moved = database
+      .prepare(
+        `INSERT INTO session_notes (session_id, text, created_at, updated_at)
+         SELECT id, main_events,
+                COALESCE(datetime(date || ' ' || COALESCE(start_time, '00:00'), 'utc'), created_at),
+                COALESCE(datetime(date || ' ' || COALESCE(start_time, '00:00'), 'utc'), created_at)
+         FROM sessions
+         WHERE trim(COALESCE(main_events, '')) <> ''
+           AND id NOT IN (SELECT session_id FROM session_notes)`
+      )
+      .run().changes;
+    if (moved) console.log(`[migrate] session_notes_from_main_events_v1: перенесено ${moved}`);
+    setAppSettingFlag(database, "session_notes_from_main_events_v1");
   }
 
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.

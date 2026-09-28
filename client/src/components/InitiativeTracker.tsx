@@ -1,6 +1,6 @@
 import { ensureEntries, getCachedEntry } from "./dnd/entryCache";
 import { liveEffectEntryIds, withLiveEffects } from "./dnd/dndFeatures";
-import { useEffect, useMemo, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { dataKeys } from "../data/entities";
 import { useAction, useEntity, useResource, write } from "../data/hooks";
@@ -115,7 +115,8 @@ function patchRow(id: number, fields: Partial<InitiativeEntry>) {
   return (rows: InitiativeEntry[]) => rows.map((e) => (e.id === id ? { ...e, ...fields } : e));
 }
 
-export function InitiativeTracker({ sessionId }: Props) {
+// title — заголовок снаружи: в правой панели это кнопка, сворачивающая модуль.
+export function InitiativeTracker({ sessionId, title }: Props & { title?: ReactNode }) {
   const [confirmDialog, confirm] = useConfirm();
   const [resettingRolls, setResettingRolls] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -657,7 +658,7 @@ export function InitiativeTracker({ sessionId }: Props) {
     >
       {confirmDialog}
       <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-        <strong>Трекер инициативы</strong>
+        {title ?? <strong>Трекер инициативы</strong>}
         <span className="row" style={{ gap: 4 }}>
           {/* Кнопка появляется, только когда есть кому бросать: пустая
               кнопка на пульте — лишний орган управления. */}

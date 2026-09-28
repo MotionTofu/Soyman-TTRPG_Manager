@@ -296,7 +296,7 @@ export function CampaignDetailPage() {
     let list = sessions.filter((s) => showCancelled || s.status !== "cancelled");
     if (chronicleFilter.trim()) {
       const q = chronicleFilter.trim().toLowerCase();
-      list = list.filter((s) => s.title?.toLowerCase().includes(q) || s.date.includes(q) || (s.main_events ?? "").toLowerCase().includes(q));
+      list = list.filter((s) => s.title?.toLowerCase().includes(q) || s.date.includes(q) || (s.notes_text ?? "").toLowerCase().includes(q));
     }
     return [...list].sort((a, b) => chronicleSort === "asc" ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date));
   }, [sessions, chronicleFilter, showCancelled, chronicleSort]);
@@ -935,13 +935,13 @@ export function CampaignDetailPage() {
                                   </span>
                                 )}
                             </div>
-                            {s.main_events ? (
+                            {s.notes_text ? (
                               <p style={{ whiteSpace: "pre-wrap" }}>
-                                <MentionText text={s.main_events} />
+                                <MentionText text={s.notes_text} />
                               </p>
                             ) : (
                               <p className="muted">
-                                Итоги не записаны. <Link to={`/sessions/${s.id}`}>Записать →</Link>
+                                Лента пуста. <Link to={`/sessions/${s.id}`}>Дописать →</Link>
                               </p>
                             )}
                             <div className="row" style={{ gap: 8, marginTop: 4, flexWrap: "wrap" }}>
@@ -2484,7 +2484,7 @@ function ProductionDashboard({ campaign, sessions, onSchedule }: { campaign: Cam
     .filter((s) => s.status === "planned" && s.date >= today)
     .sort((a, b) => a.date.localeCompare(b.date))[0], [sessions, today]);
   const recentChronicle = useMemo(() => sessions
-    .filter((s) => s.status === "held" && s.main_events)
+    .filter((s) => s.status === "held" && s.notes_text)
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 2), [sessions]);
 
@@ -2513,7 +2513,7 @@ function ProductionDashboard({ campaign, sessions, onSchedule }: { campaign: Cam
                 {s.date} — {sessionLabel(s)}
               </Link>
               <p className="muted" style={{ whiteSpace: "pre-wrap" }}>
-                <MentionText text={s.main_events ?? ""} />
+                <MentionText text={s.notes_text ?? ""} />
               </p>
             </div>
           ))

@@ -637,6 +637,31 @@ export interface MentioningSession {
   status?: SessionStatus;
 }
 
+export type SessionLiveMode = "live" | "rehearsal";
+
+/** Идущая сессия (GET /sessions/live) — одна на всё приложение. */
+export interface LiveSession {
+  id: number;
+  campaign_id: number;
+  campaign_name: string;
+  setting_id: number | null;
+  title: string | null;
+  date: string;
+  live_mode: SessionLiveMode;
+  session_number: number;
+}
+
+/** Сообщение ленты сессии (GET /sessions/:id/notes). */
+export interface SessionNote {
+  id: number;
+  session_id: number;
+  text: string;
+  /** Дата в мире на момент записи, "Y-M-D"; null — полоса времени не велась. */
+  inworld_date: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface SessionSummary {
   id: number;
   campaign_id: number;
@@ -648,7 +673,10 @@ export interface SessionSummary {
   effective_payment_type: PaymentType;
   session_number?: number;
   campaign_role?: CampaignRole;
-  main_events?: string;
+  /** Лента сессии одним текстом, строки по порядку (хроника, фильтр, превью). */
+  notes_text?: string | null;
+  /** Идёт ли сессия: 'live' — «Начать», 'rehearsal' — тестовый прогон. */
+  live_mode?: SessionLiveMode | null;
   idea_notes?: string;
   inworld_year: number | null;
   inworld_month: number | null;
@@ -691,8 +719,6 @@ export interface CampaignDebt {
 export interface SessionDetail extends SessionSummary {
   stake_override: number | null;
   idea_notes: string;
-  main_events: string;
-  main_events_visible: number;
   combat_active: number;
   combat_turn_entry_id: number | null;
   /** Номер раунда идущего боя; 0 — боя нет. */
@@ -1639,13 +1665,6 @@ export interface PlayerVisibilityGrant {
 // same shapes the player-app reads, reused here so the desktop client's own
 // player-role account gets the same "what the GM revealed" view instead of
 // the GM-only CampaignDetailPage. See server/src/routes/player.ts.
-export interface VisibleSession {
-  id: number;
-  date: string;
-  title: string | null;
-  main_events: string;
-}
-
 export interface VisibleSecret {
   id: number;
   title: string;
@@ -1687,7 +1706,6 @@ export interface JournalFolder {
 
 export interface VisibleCampaignContent {
   campaign: { id: number; name: string; setting_id: number | null; system_id: number | null };
-  sessions: VisibleSession[];
   schedule: SessionScheduleEntry[];
   secrets: VisibleSecret[];
   locationArticles: VisibleArticle[];

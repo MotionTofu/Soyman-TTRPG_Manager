@@ -504,7 +504,9 @@ campaignsRouter.get("/:id/sessions", (req, res) => {
   const rows = db
     .prepare(
       `SELECT s.*,
-              ${SESSION_NUMBER_SQL} as session_number
+              ${SESSION_NUMBER_SQL} as session_number,
+              -- Лента сессии одним текстом: хроника кампании и фильтр списка.
+              (SELECT group_concat(text, char(10)) FROM (SELECT text FROM session_notes n WHERE n.session_id = s.id ORDER BY n.created_at, n.id)) as notes_text
        FROM sessions s
        WHERE s.campaign_id = ? AND s.archived_at IS NULL
        ORDER BY s.date`

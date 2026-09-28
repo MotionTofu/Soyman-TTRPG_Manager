@@ -305,7 +305,7 @@ function OtherEntityPreview({
               {String(detail.description ?? "").trim() && <MentionText text={String(detail.description)} />}
               {String(detail.notes ?? "").trim() && <MentionText text={String(detail.notes)} />}
               {String(detail.content ?? "").trim() && <MentionText text={String(detail.content)} />}
-              {String(detail.main_events ?? "").trim() && <MentionText text={String(detail.main_events)} />}
+              {String(detail.notes_text ?? "").trim() && <MentionText text={String(detail.notes_text)} />}
               {String(detail.current_situation ?? "").trim() && <MentionText text={String(detail.current_situation)} />}
               {String(detail.backstory ?? "").trim() && <MentionText text={String(detail.backstory)} />}
               {String(detail.history ?? "").trim() && <MentionText text={String(detail.history)} />}

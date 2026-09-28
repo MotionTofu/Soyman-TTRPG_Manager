@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { EditableTextCard } from "../components/EditableTextCard";
-import { NavIcon } from "../components/NavIcons";
 import { SceneSwitcher } from "../components/SceneSwitcher";
 import { PresentationPanel } from "../components/presentation/PresentationPanel";
 import { SessionTimeStrip } from "../components/SessionTimeStrip";
-import { SceneJournal } from "../components/SceneJournal";
+import { SessionLiveControls } from "../components/SessionLiveControls";
 import { PultGrid } from "./PultGrid";
 import type { CampaignDetail, Character, SessionDetail, SessionUnionRow } from "../types";
 // session.css нужен пульту не меньше cockpit.css: цвета панелей
@@ -18,8 +17,8 @@ import "../session.css";
 import "../cockpit.css";
 import { loadPultFinishAction } from "../pultPrefs";
 import { SessionOutcomeModal } from "../components/SessionOutcomeModal";
-import { useAction, useEntity, useResource, useSaveEntity, write } from "../data/hooks";
-import { sessionMoneyAffects, sessionPaths } from "../data/sessions";
+import { useEntity, useResource, useSaveEntity } from "../data/hooks";
+import { sessionPaths } from "../data/sessions";
 
 // Пустые списки — постоянными ссылками: панели мемоизированы, и новый `[]` на
 // каждой отрисовке перерисовывал бы их зря.
@@ -48,7 +47,6 @@ export function SessionLivePage() {
   const { save } = useSaveEntity<SessionDetail>("session", sessionId, {
     affects: session ? [{ path: sessionPaths.campaignSessions(session.campaign_id) }] : [],
   });
-  const run = useAction();
 
   // Текст из карточки: не сохранилось — карточка остаётся в правке с набранным,
   // а плашка предлагает повтор.
@@ -56,24 +54,12 @@ export function SessionLivePage() {
     if (!(await save(patch))) throw new Error("Не сохранилось");
   }
 
-  // «Сохранить и завершить сессию» — одна кнопка вместо двух шагов: записать
-  // итог и пойти в профиль ставить статус. Без подтверждения: статус правится
-  // там же обратно, а лишний вопрос за столом это лишняя секунда.
-  //
-  // Про оплату здесь по умолчанию НЕ спрашиваем: пульт закрывают, когда игра
-  // только кончилась и все расходятся. Игра уйдёт в плашку неразобранных на
-  // Главной и там дождётся. Кому удобнее считать сразу — включает окно во
-  // вкладке настроек «Пульт сессии».
-  async function finishSession(text: string) {
-    if (!session) return;
-    const done = await run(
-      async () => {
-        await write.put(`/sessions/${sessionId}`, { main_events: text, status: "held" });
-        return true;
-      },
-      { affects: sessionMoneyAffects(sessionId, session.campaign_id) }
-    );
-    if (!done) throw new Error("Не сохранилось");
+  // «Завершить» (SessionLiveControls) делает сессию проведённой. Про оплату
+  // здесь по умолчанию НЕ спрашиваем: пульт закрывают, когда игра только
+  // кончилась и все расходятся. Игра уйдёт в плашку неразобранных на Главной
+  // и там дождётся. Кому удобнее считать сразу — включает окно во вкладке
+  // настроек «Пульт сессии».
+  function onFinished() {
     if (loadPultFinishAction() === "modal") setOutcomeOpen(true);
   }
 
@@ -118,10 +104,13 @@ export function SessionLivePage() {
           на экране у игроков → с чем сели играть → чем пользуемся.
           Переключатель сцен стоит первым потому, что это главный орган пульта:
           ради него сюда и смотрят, и искать его прокруткой посреди игры
-          некогда. Задумка и «Основные события» — под ним: их
-          читают редко, а пишут в них под конец. Боевая тема — кнопкой
-          в трекере инициативы, рядом со своим событием. */}
-      <SessionTimeStrip session={session} settingId={campaign.setting_id} campaignId={campaign.id} />
+          некогда. Задумка — под ним. Лента сессии живёт в правой панели,
+          пока сессия идёт: писать в неё можно с любой страницы. Боевая
+          тема — кнопкой в трекере инициативы, рядом со своим событием. */}
+      <div className="row session-live-top">
+        <SessionTimeStrip session={session} settingId={campaign.setting_id} campaignId={campaign.id} />
+        <SessionLiveControls session={session} onFinished={onFinished} />
+      </div>
 
       <SceneSwitcher sessionId={sessionId} />
 
@@ -141,52 +130,11 @@ export function SessionLivePage() {
             onSave={(value) => saveText({ idea_notes: value })}
             entityType="session"
             entityId={sessionId}
+            serverSyncsMentions
             collapsible
             defaultOpen
             summaryClassName="pult-drag-handle"
           />
-        }
-        eventsCard={
-          <EditableTextCard
-            key={`events-${session.id}`}
-            title="Основные события сессии"
-            draftKey={`session-main-events-${sessionId}`}
-            value={session.main_events}
-            onSave={(value) => saveText({ main_events: value })}
-            entityType="session"
-            entityId={sessionId}
-            collapsible
-            defaultOpen={!!session.main_events}
-            summaryClassName="pult-drag-handle"
-            extraAction={
-              session.status === "held"
-                ? undefined
-                : { label: "Сохранить и завершить сессию", onAct: finishSession }
-            }
-            inlineFooter={
-              <label className="row muted" style={{ gap: 6, alignItems: "center" }}>
-                <input
-                  type="checkbox"
-                  checked={!!session.main_events_visible}
-                  onChange={() => void save({ main_events_visible: session.main_events_visible ? 0 : 1 })}
-                />
-                {session.main_events_visible ? (
-                  <>
-                    <NavIcon name="eye" /> Видно игрокам
-                  </>
-                ) : (
-                  "Видно игрокам"
-                )}
-              </label>
-            }
-          >
-            <SceneJournal
-              sessionId={sessionId}
-              onInsert={(text) =>
-                void save({ main_events: session.main_events ? `${session.main_events}\n${text}` : text })
-              }
-            />
-          </EditableTextCard>
         }
       />
       {outcomeOpen && <SessionOutcomeModal sessionId={sessionId} onClose={() => setOutcomeOpen(false)} />}

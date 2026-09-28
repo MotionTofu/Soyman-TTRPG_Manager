@@ -472,7 +472,8 @@ searchRouter.get("/", (req, res) => {
     const rows = db
       .prepare(
         `SELECT s.id, s.date, c.name as campaign_name,
-                (COALESCE(s.title,'') || ' ' || s.idea_notes || ' ' || s.main_events) as blob
+                (COALESCE(s.title,'') || ' ' || COALESCE(s.idea_notes,'') || ' ' ||
+                 COALESCE((SELECT group_concat(n.text, ' ') FROM session_notes n WHERE n.session_id = s.id), '')) as blob
          FROM sessions s
          JOIN campaigns c ON c.id = s.campaign_id
          WHERE (lower_u(c.name) LIKE ? OR lower_u(s.date) LIKE ? OR lower_u(blob) LIKE ?) AND s.archived_at IS NULL`

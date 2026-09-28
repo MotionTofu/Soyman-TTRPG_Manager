@@ -133,22 +133,6 @@ export function PlayerCampaignPage() {
   const contentGroups = useMemo(() => {
     const groups: { key: string; label: string; entries: ReaderEntry[] }[] = [];
     if (content) {
-      if (content.sessions.length > 0) {
-        groups.push({
-          key: "sessions",
-          label: "Сессии",
-          entries: content.sessions.map((s) => ({
-            key: `session-${s.id}`,
-            section: "Сессии",
-            title: s.title ? `${s.date} — ${s.title}` : s.date,
-            body: (
-              <div className="muted" style={{ whiteSpace: "pre-wrap" }}>
-                <MentionText text={s.main_events} />
-              </div>
-            ),
-          })),
-        });
-      }
       if (content.secrets.length > 0) {
         groups.push({
           key: "secrets",
@@ -210,19 +194,6 @@ export function PlayerCampaignPage() {
   const recentMaster = useMemo(() => {
     if (!content) return [];
     const out: ReaderEntry[] = [];
-    // sessions are already visible only if main_events_visible=1, sorted DESC on server
-    for (const s of content.sessions.slice(0, 2)) {
-      out.push({
-        key: `recent-session-${s.id}`,
-        section: "Сессии",
-        title: s.title ? `${s.date} — ${s.title}` : s.date,
-        body: (
-          <div className="muted" style={{ whiteSpace: "pre-wrap" }}>
-            <MentionText text={s.main_events} />
-          </div>
-        ),
-      });
-    }
     for (const sec of content.secrets.slice(0, 2)) {
       out.push({
         key: `recent-secret-${sec.id}`,
@@ -374,7 +345,7 @@ export function PlayerCampaignPage() {
               groups={contentGroups}
               recent={recentMaster}
               onAdd={handleAddFromLore}
-              header={(openEntry) => (
+              header={() => (
                 <div className="card stack" style={{ gap: 6 }}>
                   {prevSession && (
                     <div className="row" style={{ gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
@@ -383,15 +354,6 @@ export function PlayerCampaignPage() {
                       </span>
                       <span style={{ fontFamily: "var(--font-mono)" }}>{formatIsoDate(prevSession.date)}</span>
                       {prevSession.title && <span>— {prevSession.title}</span>}
-                      {content?.sessions.some((s) => s.id === prevSession.id) && (
-                        <button
-                          type="button"
-                          onClick={() => openEntry(`session-${prevSession.id}`)}
-                          style={{ fontSize: "var(--fs-meta)", padding: "2px 8px", height: 24 }}
-                        >
-                          Чем кончилось
-                        </button>
-                      )}
                     </div>
                   )}
                   <div className="row" style={{ gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>

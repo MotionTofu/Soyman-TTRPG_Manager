@@ -12,7 +12,6 @@ export type WidgetFloatMode = "grid" | "float" | "dock";
 export type PultWidgetId =
   | "scenes"
   | "idea"
-  | "events"
   | "plot"
   | "locations"
   | "obstacles"

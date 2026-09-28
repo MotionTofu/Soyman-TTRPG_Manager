@@ -1,0 +1,122 @@
+/* Лента сессии чатом (SessionNotesChat). Высоту задаёт место, куда её
+   поставили: модуль правой панели или карточка страницы сессии; список
+   прокручивается внутри, поле ввода прижато к низу. */
+.session-chat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-height: 0;
+  height: 100%;
+}
+
+.session-chat__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.session-chat__empty {
+  font-size: var(--fs-meta);
+}
+
+.session-chat__msg {
+  position: relative;
+  display: flex;
+  gap: var(--sp-3);
+  align-items: baseline;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--card-radius);
+  background: var(--bg-elevated);
+}
+.session-chat__msg--editing {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.session-chat__time {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--muted);
+}
+
+.session-chat__text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* Карандаш и крестик — при наведении, чтобы ряд сообщений читался, а не
+   рябил кнопками. С клавиатуры — по фокусу. */
+.session-chat__actions {
+  position: absolute;
+  top: var(--sp-1);
+  right: var(--sp-1);
+  display: none;
+  gap: var(--sp-1);
+  background: var(--bg-elevated);
+}
+.session-chat__msg:hover .session-chat__actions,
+.session-chat__msg:focus-within .session-chat__actions {
+  display: flex;
+}
+@media (hover: none) {
+  .session-chat__actions {
+    position: static;
+    display: flex;
+  }
+}
+.session-chat__actions button {
+  padding: var(--sp-1);
+  line-height: 0;
+}
+
+.session-chat__edit-actions {
+  gap: var(--sp-2);
+}
+
+/* Разделитель: смена сцены или дня в мире. Не сообщение — посередине, мелко. */
+.session-chat__divider {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.session-chat__divider::before,
+.session-chat__divider::after {
+  content: "";
+  flex: 1;
+  border-top: var(--card-border-width, 1px) solid var(--line);
+}
+.session-chat__divider--day {
+  color: var(--accent);
+}
+
+.session-chat__input {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+.session-chat__input .mention-textarea-wrap {
+  flex: 1;
+  min-width: 0;
+}
+.session-chat__input textarea,
+.session-chat__msg--editing textarea {
+  min-height: 0;
+  max-height: 160px;
+}
+.session-chat__send {
+  flex-shrink: 0;
+  line-height: 0;
+  padding: var(--sp-3);
+}

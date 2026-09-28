@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/db";
 import { SESSION_NUMBER_SQL } from "../services/sessionNumber";
+import { syncSessionMentions } from "./sessionNotes";
 import { ensureSubfolder, openInFileExplorer, sessionFolder, toFileUrl } from "../services/filesystem";
 import { sessionEarnings } from "../services/finance";
 import {
@@ -34,7 +35,8 @@ sessionsRouter.get("/:id", (req, res) => {
     .prepare(
       `SELECT s.*, c.name as campaign_name, c.payment_type as campaign_payment_type,
               c.session_rate as campaign_session_rate, c.currency,
-              ${SESSION_NUMBER_SQL} as session_number
+              ${SESSION_NUMBER_SQL} as session_number,
+              (SELECT group_concat(text, char(10)) FROM (SELECT text FROM session_notes n WHERE n.session_id = s.id ORDER BY n.created_at, n.id)) as notes_text
        FROM sessions s
        JOIN campaigns c ON c.id = s.campaign_id
        WHERE s.id = ?`
@@ -240,6 +242,7 @@ sessionsRouter.put("/:id", (req, res) => {
     cheatsheet_data ?? null,
     req.params.id
   );
+  if (idea_notes !== undefined) syncSessionMentions(Number(req.params.id));
   res.json(db.prepare("SELECT * FROM sessions WHERE id = ?").get(req.params.id));
 });
 

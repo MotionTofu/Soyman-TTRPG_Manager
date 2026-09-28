@@ -1,0 +1,112 @@
+/* Модули правой панели (SideModules.tsx). Панель больше не прокручивается
+   целиком: высоту делят развёрнутые модули, прокрутка — внутри каждого. */
+.search-panel.side-modules {
+  overflow: hidden;
+  gap: 0;
+}
+
+.side-module {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  min-height: 0;
+  overflow-y: auto;
+}
+/* Лента прокручивает свой список сама, поле ввода — снаружи прокрутки. */
+.side-module--chat {
+  overflow: hidden;
+}
+/* Закреплённые страницы — у низа панели, как было до модулей; плашки
+   свёрнутых — под ними. */
+.side-module--pins {
+  margin-top: auto;
+}
+.side-module--pins ~ .side-module-planks {
+  margin-top: 0;
+}
+.side-module .search-pins {
+  margin-top: 0;
+  border-top: none;
+  padding-top: 0;
+}
+
+/* Название модуля — кнопка, но выглядит заголовком: щелчок сворачивает. */
+.side-module-title {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.side-module-title:hover {
+  color: var(--accent);
+}
+
+.side-module-splitter {
+  flex-shrink: 0;
+  height: var(--sp-5);
+  cursor: row-resize;
+  touch-action: none;
+  display: flex;
+  align-items: center;
+}
+.side-module-splitter::before {
+  content: "";
+  flex: 1;
+  border-top: var(--card-border-width, 1px) solid var(--line);
+}
+.side-module-splitter:hover::before {
+  border-top-color: var(--accent);
+}
+
+.side-module-planks {
+  margin-top: auto;
+  padding-top: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+.side-module-plank {
+  display: block;
+  width: 100%;
+  padding: var(--sp-3) var(--sp-3);
+  border: none;
+  border-top: var(--card-border-width, 1px) solid var(--line);
+  background: var(--paper);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  text-align: left;
+  cursor: pointer;
+}
+.side-module-plank:hover {
+  color: var(--ink);
+}
+
+.side-chat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  height: 100%;
+  min-height: 0;
+}
+.side-chat__head {
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--sp-3);
+}
+.side-chat__session {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-micro);
+}
+.side-chat .session-chat {
+  flex: 1;
+}

@@ -17,6 +17,10 @@ export const sessionPaths = {
   castUnion: (sessionId: number) => `/sessions/${sessionId}/cast-union`,
   summary: (sessionId: number) => `/sessions/${sessionId}/summary`,
   journal: (sessionId: number) => `/sessions/${sessionId}/journal`,
+  /** Лента сессии: сообщения и запуски сцен (разделители). */
+  notes: (sessionId: number) => `/sessions/${sessionId}/notes`,
+  /** Идущая сессия — одна на всё приложение, или null. */
+  live: () => "/sessions/live",
   stage: (sessionId: number) => `/sessions/${sessionId}/stage`,
   showState: (sessionId: number) => `/sessions/${sessionId}/show-state`,
   planned: (sessionId: number) => `/sessions/${sessionId}/planned`,

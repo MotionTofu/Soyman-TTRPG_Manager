@@ -55,12 +55,11 @@ export function PreviewDock({ open }: { open?: boolean }) {
   // SESSION_PANEL_TITLES, сцена — из кэша стейджа).
   const floatModes = useWidgetFloatModes();
   const stage = useResource<SessionStage>(sessionId != null ? sessionPaths.stage(sessionId) : null).data ?? null;
-  const dockedPanels: { id: PultWidgetId; title: string; subtitle?: string }[] = [
+  const dockedPanels: { id: PultWidgetId; title: string; subtitle?: string }[] = ([
     ...(floatModes.scenes === "dock"
       ? [{ id: "scenes" as PultWidgetId, title: "Сцены", subtitle: stage?.current?.name ?? "—" }]
       : []),
     { id: "idea", title: "Задумка" },
-    { id: "events", title: "События" },
     { id: "plot", title: SESSION_PANEL_TITLES.plotCharacters },
     { id: "locations", title: SESSION_PANEL_TITLES.locations },
     { id: "obstacles", title: SESSION_PANEL_TITLES.obstacles },
@@ -69,7 +68,9 @@ export function PreviewDock({ open }: { open?: boolean }) {
     { id: "compendium", title: SESSION_PANEL_TITLES.compendium },
     { id: "roster", title: SESSION_PANEL_TITLES.roster },
     { id: "secrets", title: SESSION_PANEL_TITLES.secrets },
-  ].filter((w) => w.id === "scenes" || floatModes[w.id] === "dock");
+  ] satisfies { id: PultWidgetId; title: string; subtitle?: string }[]).filter(
+    (w) => w.id === "scenes" || floatModes[w.id] === "dock",
+  );
 
   // «Открыть в доке» с пульта разворачивает карточку, даже свёрнутую раньше.
   useEffect(() => {
