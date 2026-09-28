@@ -7010,6 +7010,10 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     if (moved) console.log(`[migrate] session_notes_from_main_events_v1: перенесено ${moved}`);
     setAppSettingFlag(database, "session_notes_from_main_events_v1");
   }
+  // Тестовый прогон (шаг 2): снимок вечера, которым прогон откатывается.
+  if (!columnExists(database, "sessions", "rehearsal_snapshot")) {
+    database.exec("ALTER TABLE sessions ADD COLUMN rehearsal_snapshot TEXT");
+  }
 
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.

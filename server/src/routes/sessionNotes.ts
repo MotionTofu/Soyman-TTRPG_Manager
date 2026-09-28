@@ -3,6 +3,7 @@ import { db } from "../db/db";
 import { SESSION_NUMBER_SQL } from "../services/sessionNumber";
 import { idOfUid, scanMentions } from "../services/mentions";
 import { graphCache } from "./links";
+import { restoreSnapshot, takeSnapshot } from "../services/rehearsal";
 
 // Лента сессии и статус «идёт» (гриллинг 2026-09-28).
 //
@@ -25,7 +26,7 @@ interface NoteRow {
   updated_at: string;
 }
 
-const LIVE_MODES = ["live"] as const;
+const LIVE_MODES = ["live", "rehearsal"] as const;
 
 /**
  * Упоминания сессии пересобираются целиком из задумки и всех сообщений ленты.
@@ -92,29 +93,50 @@ sessionNotesRouter.get("/live", (_req, res) => {
   res.json(liveSession());
 });
 
-// «Начать» — mode: 'live'; «Завершить» — mode: null, и сессия становится
-// проведённой. Вторая идущая сессия без replace — 409 с той, что идёт: Мастеру
-// показывают вопрос «завершить её?» (Q46).
+/**
+ * Конец вечера. Настоящая сессия становится проведённой; прогон
+ * откатывается снимком и возвращается в прежний статус (Q43, Q45).
+ */
+function endSession(sessionId: number): void {
+  const row = db.prepare("SELECT campaign_id, live_mode, rehearsal_snapshot FROM sessions WHERE id = ?").get(sessionId) as
+    | { campaign_id: number; live_mode: string | null; rehearsal_snapshot: string | null }
+    | undefined;
+  if (!row) return;
+  if (row.live_mode === "rehearsal" && row.rehearsal_snapshot) {
+    restoreSnapshot(sessionId, row.campaign_id, row.rehearsal_snapshot);
+    graphCache.clear();
+    return;
+  }
+  db.prepare("UPDATE sessions SET live_mode = NULL, rehearsal_snapshot = NULL, status = 'held' WHERE id = ?").run(sessionId);
+}
+
+// «Начать» — mode: 'live'; «Тестовый прогон» — 'rehearsal'; «Завершить» и
+// «Закончить прогон» — null. Вторая идущая сессия без replace — 409 с той,
+// что идёт: Мастеру показывают вопрос «завершить её?» (Q46).
 sessionNotesRouter.post("/:id/live", (req, res) => {
   const sessionId = Number(req.params.id);
   const { mode, replace } = (req.body ?? {}) as { mode?: string | null; replace?: boolean };
-  const session = db.prepare("SELECT id FROM sessions WHERE id = ?").get(sessionId);
+  const session = db.prepare("SELECT id, campaign_id, live_mode FROM sessions WHERE id = ?").get(sessionId) as
+    | { id: number; campaign_id: number; live_mode: string | null }
+    | undefined;
   if (!session) return res.status(404).json({ error: "not found" });
   if (mode == null) {
-    db.prepare("UPDATE sessions SET live_mode = NULL, status = 'held' WHERE id = ?").run(sessionId);
+    endSession(sessionId);
     return res.json(db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId));
   }
   if (!LIVE_MODES.includes(mode as (typeof LIVE_MODES)[number])) {
-    return res.status(400).json({ error: "mode must be live|null" });
+    return res.status(400).json({ error: "mode must be live|rehearsal|null" });
   }
+  if (session.live_mode) return res.status(409).json({ error: "session is already running", live: liveSession() });
   const other = db
     .prepare("SELECT id FROM sessions WHERE live_mode IS NOT NULL AND id <> ? AND archived_at IS NULL")
     .all(sessionId) as { id: number }[];
   if (other.length && !replace) return res.status(409).json({ error: "another session is live", live: liveSession() });
   db.transaction(() => {
-    // Завершённая чужая — проведена: её «Завершить» Мастер и подтвердил.
-    for (const o of other) db.prepare("UPDATE sessions SET live_mode = NULL, status = 'held' WHERE id = ?").run(o.id);
-    db.prepare("UPDATE sessions SET live_mode = ? WHERE id = ?").run(mode, sessionId);
+    // Чужую Мастер подтвердил завершить: настоящая станет проведённой, прогон откатится.
+    for (const o of other) endSession(o.id);
+    const snapshot = mode === "rehearsal" ? takeSnapshot(sessionId, session.campaign_id) : null;
+    db.prepare("UPDATE sessions SET live_mode = ?, rehearsal_snapshot = ? WHERE id = ?").run(mode, snapshot, sessionId);
   })();
   res.json(db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId));
 });

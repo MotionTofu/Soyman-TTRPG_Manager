@@ -933,6 +933,9 @@ playerRouter.get("/campaigns/:id/visible", (req: AuthedRequest, res) => {
       `SELECT s.id, s.title, s.content, s.kind FROM story_secrets s
        JOIN campaign_secret_state st ON st.secret_id = s.id AND st.campaign_id = @campaign
        WHERE st.revealed = 1
+         -- Раскрытое на тестовом прогоне игрокам не уходит (Q44): прогон
+         -- откатится, а увиденное назад не забрать.
+         AND COALESCE((SELECT live_mode FROM sessions WHERE id = st.revealed_session_id), '') <> 'rehearsal'
          AND (s.campaign_id = @campaign
               OR s.arc_id IN (SELECT arc_id FROM campaign_adventures WHERE campaign_id = @campaign))
        ORDER BY st.updated_at DESC`

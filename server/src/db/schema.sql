@@ -214,6 +214,9 @@ CREATE TABLE IF NOT EXISTS sessions (
   -- Идёт ли сессия (гриллинг 2026-09-28, Q38): NULL — нет, 'live' — Мастер
   -- нажал «Начать», 'rehearsal' — тестовый прогон. Идёт одна на всё приложение.
   live_mode TEXT,
+  -- Снимок вечера на старте тестового прогона (services/rehearsal.ts): им
+  -- «Закончить прогон» возвращает всё как было. NULL — прогона нет.
+  rehearsal_snapshot TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   archived_at TEXT
 );

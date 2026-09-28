@@ -120,3 +120,28 @@
   line-height: 0;
   padding: var(--sp-3);
 }
+
+/* «Начать / Тестовый прогон» и полоса прогона (SessionLiveControls.tsx). */
+.session-live-controls {
+  gap: var(--sp-3);
+  align-items: center;
+}
+.session-live-controls__badge {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+.rehearsal-strip {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  border: var(--card-border-width, 1px) dashed var(--accent);
+  border-radius: var(--card-radius);
+  font-size: var(--fs-meta);
+}

@@ -21,7 +21,11 @@ export function PresentationShowPage() {
   // show-state сессии (data/sessions.ts), и сигнал другого окна доходит сюда
   // через DataLayerSync в корне приложения. Опрос раз в 2 с — страховка на
   // случай пропущенного сигнала: застывший кадр видят игроки.
-  const campaignId = useEntity<SessionDetail>("session", sessionId).data?.campaign_id ?? null;
+  const session = useEntity<SessionDetail>("session", sessionId).data;
+  const campaignId = session?.campaign_id ?? null;
+  // Тестовый прогон игрокам не показывается (Q44): Пульт живёт как обычно,
+  // предпросмотр у Мастера работает, а этот экран остаётся чёрным.
+  const rehearsal = session?.live_mode === "rehearsal";
   const state = useResource<ShowState>(sessionPaths.showState(sessionId), { pollMs: 2000 }).data ?? null;
   const showMode = state?.mode;
   const showSceneId = state?.scene_id;
@@ -46,7 +50,7 @@ export function PresentationShowPage() {
 
   // playKey — только смена кадра (режим/сцена): тоглы слоёв идут через
   // visibleIds без переигрывания перехода и титра.
-  if (!state.shown || state.mode === "black") {
+  if (!state.shown || state.mode === "black" || rehearsal) {
     return (
       <div style={{ background: "#000", minHeight: "100vh" }}>
         <PresentationStage

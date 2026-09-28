@@ -19,6 +19,7 @@ import { useNearestSessionCockpitId } from "../nearestSessionCockpit";
 import { openSecondWindow, openExternalLink } from "../electronApi";
 import { UnloadTargetsProvider } from "../unloadTargets";
 import { UndoDeleteProvider } from "../hooks/useUndoDelete";
+import { RehearsalStrip } from "../components/SessionLiveControls";
 import { brandLogo } from "../brandLogo";
 import { ExternalLinkConfirmModal, BOOSTY_URL } from "../components/ExternalLinkConfirmModal";
 import { Breadcrumbs } from "../components/Breadcrumbs";
@@ -752,6 +753,7 @@ export function AppShell() {
         </nav>
       )}
       <main className={`app-content${userLoading ? "" : isPlayer ? "" : " has-player"}`}>
+        {!userLoading && !isPlayer && <RehearsalStrip />}
         {/* Крошки не рисуются на полноэкранном чарнике: у него своя полоса
             с «назад» и именем, а вторая шапка сверху и есть та самая рамка
             в рамке, ради ухода от которой лист съехал на свой маршрут. */}
