@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { afterWriteAnywhere, readResource } from "./data/imperative";
 import { write } from "./data/hooks";
+import { getCachedUser } from "./api/currentUser";
 
 // Ссылки внутри текста: единственное место, где на клиенте описана их
 // грамматика, и карта, по которой они резолвятся.
@@ -266,8 +267,11 @@ export async function buildMentionToken(
   const prefix = mentionPrefix(type, id);
   if (prefix) return formatMentionToken(type, prefix, mentionSource(type, id), label);
   try {
+    // Игроку общий маршрут закрыт гейтом ролей; его собственный отдаёт ключ
+    // только открытого ему (гриллинг 2026-09-28, Q27).
+    const base = getCachedUser()?.role === "player" ? "/player/mentions/token" : "/mentions/token";
     const r = await readResource<{ prefix: string | null; source: string }>(
-      `/mentions/token?type=${encodeURIComponent(type)}&id=${id}`
+      `${base}?type=${encodeURIComponent(type)}&id=${id}`
     );
     if (!r.prefix) return null;
     void loadMentionIndex();

@@ -1,0 +1,52 @@
+/* Колонка заметок справа от вкладок листа (SheetNotesColumn, гриллинг
+   2026-09-28, Q20/Q23). Вкладки ужимаются до ширины таббара — остаток уходит
+   колонке. Колонка встаёт, только когда ей хватает места; уже — её место
+   займёт нижний бар (следующий шаг), а пока она прячется. */
+.sheet-notes {
+  display: none;
+}
+
+/* 1600: карта 406 + таббар ~770 + колонка 320 + поля и зазоры. Замерено на
+   листе D&D: уже этого колонка вылезает за край. */
+@media (min-width: 1600px) {
+  .dnd-desktop-split:has(> .sheet-notes) {
+    grid-template-columns: 406px min-content minmax(320px, 1fr);
+  }
+  /* Ширину колонки вкладок задаёт таббар: полоска кладётся в свою полную
+     ширину, остальное содержимое переносится под неё. */
+  .dnd-desktop-split:has(> .sheet-notes) > .dnd-desktop-tab > .dnd-deck-strip {
+    width: max-content;
+  }
+  .sheet-notes {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    position: sticky;
+    top: var(--sp-4);
+    /* Лист начинается под шапкой страницы (~80px): колонка не длиннее
+       того, что видно, иначе поле ввода уходит за низ экрана. */
+    height: calc(100vh - 100px);
+    min-height: 320px;
+    padding: var(--sp-4);
+    background: var(--paper);
+    outline: 1px solid var(--line);
+  }
+}
+
+.sheet-notes__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.sheet-notes__target {
+  flex: 1;
+  font-size: var(--fs-micro);
+}
+.sheet-notes__all {
+  font-size: var(--fs-micro);
+}
+.sheet-notes .session-chat {
+  flex: 1;
+  min-height: 0;
+}

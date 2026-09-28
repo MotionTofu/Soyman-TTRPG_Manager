@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAction, useResource, write } from "../../data/hooks";
 import { useSearch } from "../../data/search";
+import { getCachedUser } from "../../api/currentUser";
 import { Modal } from "../Modal";
 import { LocationCascadePicker } from "../LocationCascadePicker";
 import { ENTITY_TYPES, ENTITY_TYPE_SINGULAR } from "../../entityTypes";
@@ -42,6 +43,10 @@ function chunkPairs<T>(items: T[]): T[][] {
   return rows;
 }
 
+// Что игрок может упомянуть: у остального из его поиска (записи дневника)
+// нет глобального ключа, и ссылка не собралась бы.
+const PLAYER_MENTION_TYPES = ["being", "location", "community", "character", "compendium_entry"];
+
 export function MentionPickerModal({
   initialQuery,
   defaultSettingId,
@@ -63,7 +68,18 @@ export function MentionPickerModal({
   const [activeTypes, setActiveTypes] = useState<Set<string>>(() => new Set(ENTITY_TYPES.map((t) => t.key)));
   const [filtersOpen, setFiltersOpen] = useState(false);
   const types = Array.from(activeTypes).join(",");
-  const results = useSearch<SearchHit>(query.trim() ? `/search?q=${encodeURIComponent(query)}&types=${types}` : null).results;
+  // Игрок ищет только открытое ему (гриллинг 2026-09-28, Q27): выданное
+  // «глазом», свою партию и компендиум своей системы. Общий поиск ему закрыт
+  // и выдал бы неоткрытого NPC. Создавать сущности игрок не может.
+  const isPlayer = getCachedUser()?.role === "player";
+  const found = useSearch<SearchHit>(
+    query.trim()
+      ? isPlayer
+        ? `/player/search?q=${encodeURIComponent(query)}`
+        : `/search?q=${encodeURIComponent(query)}&types=${types}`
+      : null
+  ).results;
+  const results = isPlayer ? found.filter((r) => PLAYER_MENTION_TYPES.includes(r.type)) : found;
   const [selected, setSelected] = useState<PickResult | null>(null);
   const [label, setLabel] = useState("");
 
@@ -185,6 +201,7 @@ export function MentionPickerModal({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
+            {!isPlayer && (
             <div className="row">
               <button
                 type="button"
@@ -194,7 +211,8 @@ export function MentionPickerModal({
                 Фильтры
               </button>
             </div>
-            {filtersOpen && (
+            )}
+            {!isPlayer && filtersOpen && (
               <>
                 <div className="row">
                   <button
@@ -239,9 +257,11 @@ export function MentionPickerModal({
                 </div>
               ))}
             </div>
-            <button type="button" onClick={openCreate} style={{ alignSelf: "flex-start" }}>
-              + Создать новую сущность
-            </button>
+            {!isPlayer && (
+              <button type="button" onClick={openCreate} style={{ alignSelf: "flex-start" }}>
+                + Создать новую сущность
+              </button>
+            )}
             {selected && (
               <div className="stack" style={{ borderTop: "1px solid var(--line)", paddingTop: 10 }}>
                 <label>

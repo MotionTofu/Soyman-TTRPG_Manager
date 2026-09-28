@@ -22,6 +22,8 @@ import { mergeContentPatch } from "../db/statblockContent";
 import { normalizeDndCharacter, deriveSheet } from "@soyman/shared";
 import { matchSystemId, parsePortableImport, portableHttpError, type PortableImportData } from "../services/portableImport";
 import { setCharacterRoll, mirrorSheetRollToQueue } from "../services/initiativeSync";
+import { noteSessionFor } from "../services/sheetNotes";
+import { prefixOf, sourceCodeOf } from "../services/mentions";
 
 const ALLOWED_IMAGE_MIMES = /^image\/(jpeg|png|gif|webp|avif)$/;
 const upload = multer({
@@ -547,6 +549,19 @@ playerRouter.get("/search", (req: AuthedRequest, res) => {
       }))
     );
 
+    // Выданное «глазом»: только оно и находится из сеттинга (Q27).
+    for (const [type, g] of Object.entries(GRANT_TYPES)) {
+      const ids = grantedIds(playerId, type);
+      if (!ids.length) continue;
+      const rows = db
+        .prepare(
+          `SELECT id, name FROM ${g.table} WHERE id IN (${ids.map(() => "?").join(",")})
+             AND archived_at IS NULL AND lower_u(name) LIKE ?`
+        )
+        .all(...ids, like) as { id: number; name: string }[];
+      results.push(...rows.map((r) => ({ type, id: r.id, title: r.name })));
+    }
+
     const systemIds = db
       .prepare(`SELECT DISTINCT system_id FROM campaigns WHERE id IN (${inClause}) AND system_id IS NOT NULL`)
       .all(...campaignIds) as { system_id: number }[];
@@ -578,6 +593,60 @@ playerRouter.get("/search", (req: AuthedRequest, res) => {
   }
 
   res.json(results.slice(0, 50));
+});
+
+// Что из сеттинга открыто игроку: личности, локации и сообщества, выданные ему
+// «глазом» в любой из его кампаний. По этому списку ищет его «@» (Q27) и
+// строится токен упоминания: неоткрытого NPC подсказка не выдаёт.
+const GRANT_TYPES: Record<string, { grant: string; table: string }> = {
+  being: { grant: "setting_being", table: "setting_beings" },
+  location: { grant: "setting_location", table: "setting_locations" },
+  community: { grant: "setting_community", table: "setting_communities" },
+};
+
+function grantedIds(playerId: number, type: string): number[] {
+  const g = GRANT_TYPES[type];
+  if (!g) return [];
+  const campaignIds = myCampaignIds(playerId);
+  if (!campaignIds.length) return [];
+  return (
+    db
+      .prepare(
+        `SELECT DISTINCT target_id FROM player_visibility_grants
+         WHERE player_id = ? AND target_type = ? AND campaign_id IN (${campaignIds.map(() => "?").join(",")})`
+      )
+      .all(playerId, g.grant, ...campaignIds) as { target_id: number }[]
+  ).map((r) => r.target_id);
+}
+
+function visibleToPlayer(playerId: number, type: string, id: number): boolean {
+  if (GRANT_TYPES[type]) return grantedIds(playerId, type).includes(id);
+  if (type === "character") {
+    const campaignIds = myCampaignIds(playerId);
+    const row = db.prepare("SELECT player_id, campaign_id FROM characters WHERE id = ? AND archived_at IS NULL").get(id) as
+      | { player_id: number; campaign_id: number | null }
+      | undefined;
+    return !!row && (row.player_id === playerId || (row.campaign_id != null && campaignIds.includes(row.campaign_id)));
+  }
+  if (type === "compendium_entry") {
+    const campaignIds = myCampaignIds(playerId);
+    if (!campaignIds.length) return false;
+    return !!db
+      .prepare(
+        `SELECT 1 FROM compendium_entries WHERE id = ? AND system_id IN
+           (SELECT system_id FROM campaigns WHERE id IN (${campaignIds.map(() => "?").join(",")}))`
+      )
+      .get(id, ...campaignIds);
+  }
+  return false;
+}
+
+playerRouter.get("/mentions/token", (req: AuthedRequest, res) => {
+  const type = String(req.query.type || "");
+  const id = Number(req.query.id);
+  if (!type || !Number.isFinite(id)) return res.status(400).json({ error: "нужны type и id" });
+  if (!visibleToPlayer(req.user!.playerId!, type, id)) return res.status(404).json({ error: "not found" });
+  res.json({ prefix: prefixOf(type, id), source: sourceCodeOf(type, id) });
 });
 
 // Библиотека персонажей игрока (гриллинг «персонаж = лист», Q11/Q12/Q16).
@@ -1119,7 +1188,7 @@ const LEGACY_DISK_FOLDER =
   "(folder_path LIKE '%\\WorldExploration\\%' OR folder_path LIKE '%/WorldExploration/%')";
 const WORLD_ENTRY_COLUMNS =
   `id, campaign_id, player_id, character_id, kind, name, description,
-   CASE WHEN ${LEGACY_DISK_FOLDER} THEN NULL ELSE folder_path END AS folder_path, position, created_at`;
+   CASE WHEN ${LEGACY_DISK_FOLDER} THEN NULL ELSE folder_path END AS folder_path, position, session_id, created_at`;
 
 // Вкладки дневника — это папки записей (Кабинет игрока, 2026-09-12, шаг 4).
 // Пусто/NULL — Лента, непустое — именная вкладка. Порядок везде один:
@@ -1241,12 +1310,14 @@ playerRouter.post("/campaigns/:id/world-entries", (req: AuthedRequest, res) => {
   if (!canWriteInCampaign(playerId, campaignId)) {
     return res.status(403).json({ error: "read only in this campaign" });
   }
-  const { kind, name, description, character_id, folder_path } = req.body as {
+  const { kind, name, description, character_id, folder_path, to_session } = req.body as {
     kind?: string;
     name?: string;
     description?: string;
     character_id?: number | null;
     folder_path?: string | null;
+    // Заметка из колонки листа: сервер сам решает, к какой сессии (Q10).
+    to_session?: boolean;
   };
   const cleanKind = typeof kind === "string" ? kind : "";
   if (!WORLD_ENTRY_KINDS.has(cleanKind)) return res.status(400).json({ error: "unknown kind" });
@@ -1258,8 +1329,8 @@ playerRouter.post("/campaigns/:id/world-entries", (req: AuthedRequest, res) => {
   ensureFolder(campaignId, playerId, folder);
   const info = db
     .prepare(
-      `INSERT INTO world_exploration_entries (campaign_id, player_id, character_id, kind, name, description, folder_path, position)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO world_exploration_entries (campaign_id, player_id, character_id, kind, name, description, folder_path, position, session_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       campaignId,
@@ -1269,7 +1340,8 @@ playerRouter.post("/campaigns/:id/world-entries", (req: AuthedRequest, res) => {
       cleanName,
       cleanDescription,
       folder,
-      topPosition(campaignId, playerId, folder)
+      topPosition(campaignId, playerId, folder),
+      to_session ? (noteSessionFor(campaignId)?.id ?? null) : null
     );
   res
     .status(201)

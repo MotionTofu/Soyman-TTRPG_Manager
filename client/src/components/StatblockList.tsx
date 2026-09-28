@@ -171,6 +171,8 @@ interface Props {
   // Персонаж = лист (гриллинг 2026-09-27): главы профиля под полями «Досье»
   // листа D&D и «Отношения» на обороте его карты.
   dossierExtra?: ReactNode;
+  // Колонка заметок справа от вкладок листа D&D (SheetNotesColumn).
+  sideColumn?: ReactNode;
   onRelations?: () => void;
   // Пункты «⋯» полосы листа от страницы персонажа (досье, отношения, архив).
   sheetMenu?: SheetMenuExtra;
@@ -212,6 +214,7 @@ export function StatblockList({
   onPortraitRefresh,
   managerTop,
   dossierExtra,
+  sideColumn,
   onRelations,
   sheetMenu,
   systemCode,
@@ -776,6 +779,7 @@ export function StatblockList({
       onSheetInfo={sheetOnly ? setSheetInfo : undefined}
       fanSignal={sheetOnly ? fanSignal : undefined}
       dossierExtra={dossierExtra}
+        sideColumn={sideColumn}
       onRelations={onRelations}
     />
   ));
@@ -1561,6 +1565,7 @@ function StatblockCard({
   onSheetInfo,
   fanSignal,
   dossierExtra,
+  sideColumn,
   onRelations,
 }: {
   statblock: Statblock;
@@ -1583,6 +1588,8 @@ function StatblockCard({
   /** Колода веером по команде полосы («⋯» → «Колода карт»). */
   fanSignal?: number;
   dossierExtra?: ReactNode;
+  // Колонка заметок справа от вкладок листа D&D (SheetNotesColumn).
+  sideColumn?: ReactNode;
   onRelations?: () => void;
 }) {
   const isMobile = useIsMobile();
@@ -1989,6 +1996,7 @@ function StatblockCard({
         onSheetBack={onSheetBack}
         onPortraitRefresh={onPortraitRefresh}
         dossierExtra={dossierExtra}
+        sideColumn={sideColumn}
         onRelations={onRelations}
       />
     );

@@ -8,6 +8,7 @@ import { broadcastCharacterUpdate } from "../services/realtime";
 import { folderMissing, repairCampaignFolder } from "../services/folderRepair";
 import { queueStanding, setCharacterRoll } from "../services/initiativeSync";
 import { matchSystemId, parsePortableImport } from "../services/portableImport";
+import { sheetNotes } from "../services/sheetNotes";
 
 export const charactersRouter = Router();
 const ALLOWED_IMAGE_MIMES = /^image\/(jpeg|png|gif|webp|avif)$/;
@@ -96,6 +97,13 @@ charactersRouter.get("/", (req, res) => {
     )
     .all(params) as { avatar_image_path: string | null }[];
   res.json(rows.map(withAvatarUrl));
+});
+
+// Заметки игрока в колонке листа (гриллинг 2026-09-28). Мастер читает все
+// (Q11, Q26), игрок сюда проходит только к своему персонажу — гейт ролей
+// (services/playerAccess.ts). Писать — через /api/player/.../world-entries.
+charactersRouter.get("/:id/notes", (req, res) => {
+  res.json(sheetNotes(Number(req.params.id)));
 });
 
 charactersRouter.get("/:id", (req, res) => {

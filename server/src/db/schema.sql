@@ -1529,6 +1529,10 @@ CREATE TABLE IF NOT EXISTS world_exploration_entries (
   avatar_image_path TEXT,
   folder_path TEXT,
   position INTEGER NOT NULL DEFAULT 0,
+  -- К какой сессии заметка (гриллинг 2026-09-28, Q10): идущая, иначе
+  -- запланированная на сегодня, иначе последняя проведённая. NULL — записи
+  -- до этой колонки и записи, заведённые в дневнике вне сессий.
+  session_id INTEGER REFERENCES sessions(id) ON DELETE SET NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   archived_at TEXT
 );

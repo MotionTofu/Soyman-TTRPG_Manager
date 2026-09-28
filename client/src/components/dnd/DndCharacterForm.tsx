@@ -840,6 +840,7 @@ export function DndCharacterView({
   readOnly,
   dossierExtra,
   onRelations,
+  sideColumn,
 }: {
   value: DndCharacterData;
   // Лицо первой карты. Отдельное поле под изображение заводить не пришлось —
@@ -901,6 +902,9 @@ export function DndCharacterView({
   // даты — под полями «Досье»; «Отношения» — кнопкой на обороте карты.
   // OneShot их не передаёт.
   dossierExtra?: ReactNode;
+  // Колонка справа от вкладок на десктопе — заметки игрока (гриллинг
+  // 2026-09-28, Q20). Её ширину берёт то, что вкладки ужаты до таббара.
+  sideColumn?: ReactNode;
   onRelations?: () => void;
 }) {
   // Оба хука вызываются всегда — по правилам хуков ветвиться здесь нельзя,
@@ -4300,6 +4304,7 @@ export function DndCharacterView({
           )}
           </div>
           )}
+          {showDesktopFace && !cardOnly && sideColumn}
         </div>
       </div>
     </div>

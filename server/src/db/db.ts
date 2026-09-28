@@ -7014,6 +7014,12 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
   if (!columnExists(database, "sessions", "rehearsal_snapshot")) {
     database.exec("ALTER TABLE sessions ADD COLUMN rehearsal_snapshot TEXT");
   }
+  // Заметки игрока на листе (шаг 4): запись дневника знает свою сессию.
+  if (!columnExists(database, "world_exploration_entries", "session_id")) {
+    database.exec(
+      "ALTER TABLE world_exploration_entries ADD COLUMN session_id INTEGER REFERENCES sessions(id) ON DELETE SET NULL"
+    );
+  }
 
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.

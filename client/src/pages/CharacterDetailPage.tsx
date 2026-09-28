@@ -12,6 +12,7 @@ import { useUndoDelete } from "../hooks/useUndoDelete";
 import { useCurrentUser } from "../api/currentUser";
 import type { Character } from "../types";
 import { findTheme } from "../themes";
+import { SheetNotesColumn } from "../components/dnd/SheetNotesColumn";
 
 /**
  * Персонаж = лист (гриллинг 2026-09-27): страница персонажа сразу открывает
@@ -164,6 +165,13 @@ export function CharacterDetailPage() {
         systemName={character.system_name}
         campaignName={character.campaign_name}
         dossierExtra={<CharacterDossier character={character} />}
+        // Заметки игрока (гриллинг 2026-09-28): пишет владелец листа, Мастер
+        // читает. Персонаж без кампании — колонки нет.
+        sideColumn={
+          character.campaign_id != null ? (
+            <SheetNotesColumn characterId={character.id} readOnly={isGm} />
+          ) : undefined
+        }
         // Игроку — просмотр связей с тем, что он и так видит; граф — только Мастеру.
         onRelations={() => setRelationsOpen(true)}
         sheetMenu={{
