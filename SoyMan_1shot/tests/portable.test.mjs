@@ -91,7 +91,7 @@ test('full React HTML boots without network and reexports changed state safely',
   const dismiss = [...companion.querySelectorAll('button')].find(b => b.textContent.includes('Развеять'));
   assert.ok(dismiss); dismiss.click(); await wait();
   assert.equal(doc.querySelector('[aria-label="Добавить спутника"]'), null);
-  const saveButton = [...doc.querySelectorAll('button')].find(b => b.textContent === 'Скачать обновлённую копию');
+  const saveButton = [...doc.querySelectorAll('button')].find(b => b.textContent === 'Скачать копию с изменениями');
   assert.ok(saveButton, 'Save button must remain: ' + errors.join('\n') + doc.body.textContent.slice(0, 300));
   saveButton.click();
   const editedHtml = await saved.text();
