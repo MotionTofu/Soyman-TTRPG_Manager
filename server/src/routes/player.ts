@@ -24,6 +24,15 @@ import { matchSystemId, parsePortableImport, portableHttpError, type PortableImp
 import { setCharacterRoll, mirrorSheetRollToQueue } from "../services/initiativeSync";
 import { noteSessionFor } from "../services/sheetNotes";
 import { prefixOf, sourceCodeOf } from "../services/mentions";
+import {
+  LINKABLE_TYPES,
+  applyCrossLinks,
+  docsOfPlayerSession,
+  planCrossLinks,
+  type CrossLinkChoice,
+  type PlanRequest,
+  type SourceRef,
+} from "../import/crossLinks";
 
 const ALLOWED_IMAGE_MIMES = /^image\/(jpeg|png|gif|webp|avif)$/;
 const upload = multer({
@@ -640,6 +649,61 @@ function visibleToPlayer(playerId: number, type: string, id: number): boolean {
   }
   return false;
 }
+
+// «Проставить упоминания» в дневнике игрока — по заметкам одной сессии
+// (гриллинг 2026-09-28, Q12, Q35). Область — сеттинг и система кампании, но
+// цели только открытые ему: выданное «глазом» и компендиум своей системы.
+function playerCrossLinkRequests(playerId: number, campaignId: number, sessionId: number): PlanRequest[] {
+  const campaign = db.prepare("SELECT setting_id, system_id FROM campaigns WHERE id = ?").get(campaignId) as
+    | { setting_id: number | null; system_id: number | null }
+    | undefined;
+  const sources: SourceRef[] = [];
+  if (campaign?.setting_id) sources.push({ kind: "setting", id: campaign.setting_id });
+  if (campaign?.system_id) sources.push({ kind: "system", id: campaign.system_id });
+  const granted = new Set(
+    Object.keys(GRANT_TYPES).flatMap((type) => grantedIds(playerId, type).map((id) => `${type}:${id}`))
+  );
+  const allow = (ref: string) => ref.startsWith("compendium_entry:") || granted.has(ref);
+  const docs = docsOfPlayerSession(playerId, campaignId, sessionId);
+  return LINKABLE_TYPES.filter((t) => sources.some((src) => src.kind === t.owner)).map((t) => ({
+    ownerKind: "player_session",
+    ownerId: sessionId,
+    targetType: t.key,
+    sources,
+    docs,
+    allow,
+  }));
+}
+
+function crossLinkTarget(req: AuthedRequest): { playerId: number; campaignId: number; sessionId: number } | null {
+  const playerId = req.user!.playerId!;
+  const campaignId = Number(req.params.id);
+  const sessionId = Number(req.query.session_id);
+  if (!myCampaignIds(playerId).includes(campaignId) || !Number.isInteger(sessionId)) return null;
+  return { playerId, campaignId, sessionId };
+}
+
+playerRouter.get("/campaigns/:id/cross-links", (req: AuthedRequest, res) => {
+  const t = crossLinkTarget(req);
+  if (!t) return res.status(404).json({ error: "not found" });
+  res.json(playerCrossLinkRequests(t.playerId, t.campaignId, t.sessionId).flatMap((r) => planCrossLinks(r)));
+});
+
+// Типы по очереди, как у Мастера: следующий видит разметку предыдущего.
+// Тексты перечитываются перед каждым типом — после записи они другие.
+playerRouter.post("/campaigns/:id/cross-links", (req: AuthedRequest, res) => {
+  const t = crossLinkTarget(req);
+  if (!t) return res.status(404).json({ error: "not found" });
+  if (!canWriteInCampaign(t.playerId, t.campaignId)) return res.status(403).json({ error: "read only in this campaign" });
+  const chosen = (req.body as { chosen?: CrossLinkChoice[] })?.chosen ?? [];
+  let written = 0;
+  for (const type of playerCrossLinkRequests(t.playerId, t.campaignId, t.sessionId).map((r) => r.targetType)) {
+    const r = playerCrossLinkRequests(t.playerId, t.campaignId, t.sessionId).find((x) => x.targetType === type)!;
+    const mine = chosen.filter((c) => c.ref.startsWith(`${type}:`) && c.ownerType === "world_entry");
+    if (mine.length) written += applyCrossLinks(r, mine).written;
+  }
+  res.json({ written });
+});
 
 playerRouter.get("/mentions/token", (req: AuthedRequest, res) => {
   const type = String(req.query.type || "");

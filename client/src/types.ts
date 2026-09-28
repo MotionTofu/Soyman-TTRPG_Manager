@@ -1540,6 +1540,8 @@ export interface WorldExplorationEntry {
   folder_path: string | null;
   /** Ручной порядок внутри вкладки: меньше — выше. */
   position: number;
+  /** Сессия заметки с листа (гриллинг 2026-09-28); NULL — запись вне сессий. */
+  session_id?: number | null;
   created_at: string;
 }
 

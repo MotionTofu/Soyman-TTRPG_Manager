@@ -11,17 +11,18 @@ import { Modal } from "./Modal";
 // и показывает находки списком. Точные отмечены, вероятные и сомнительные —
 // нет: «Щит» и «Свет» почти всегда значат себя, а не заклинание.
 
-export function SessionMentionsButton({ sessionId }: { sessionId: number }) {
+// У Мастера — лента сессии (/cross-links/plan-all|apply-all), у игрока —
+// его заметки к сессии (/player/campaigns/:id/cross-links, только открытое).
+export function SessionMentionsButton({ planUrl, applyUrl }: { planUrl: string; applyUrl: string }) {
   const afterWrite = useAfterWrite();
   const [proposals, setProposals] = useState<CrossLinkProposal[] | null>(null);
   const [chosen, setChosen] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
-  const query = `ownerKind=session&ownerId=${sessionId}`;
 
   async function open() {
     setBusy(true);
     try {
-      const found = await readOnce<CrossLinkProposal[]>(`/cross-links/plan-all?${query}`, { timeoutMs: 30000 });
+      const found = await readOnce<CrossLinkProposal[]>(planUrl, { timeoutMs: 30000 });
       setProposals(found);
       setChosen(Object.fromEntries(found.map((p) => [proposalId(p), p.tier === "exact"])));
     } catch (e) {
@@ -36,7 +37,7 @@ export function SessionMentionsButton({ sessionId }: { sessionId: number }) {
     setBusy(true);
     try {
       await write.post(
-        `/cross-links/apply-all?${query}`,
+        applyUrl,
         { chosen: proposals.filter((p) => chosen[proposalId(p)]) },
         { timeoutMs: 30000 }
       );

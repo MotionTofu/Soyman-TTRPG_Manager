@@ -99,4 +99,31 @@ describe("заметки на листе", () => {
     expect(ok.status).toBe(200);
     expect(ok.body.prefix).toBeTruthy();
   });
+
+  it("«Проставить упоминания» в дневнике: только открытое, текст правится, граф Мастера не трогается", async () => {
+    const sid = session("2002-01-01", "held", "live");
+    const entry = await note("Тайный Мирт спорил, а Открытый Мирт молчал.");
+    expect(entry.session_id).toBe(sid);
+
+    const plan = await request(app).get(`/api/player/campaigns/${campaignId}/cross-links?session_id=${sid}`);
+    expect(plan.status).toBe(200);
+    const targets = (plan.body as { targetName: string }[]).map((p) => p.targetName);
+    expect(targets).toEqual(["Открытый Мирт"]);
+
+    const applied = await request(app)
+      .post(`/api/player/campaigns/${campaignId}/cross-links?session_id=${sid}`)
+      .send({ chosen: plan.body });
+    expect(applied.body.written).toBe(1);
+    const text = (db.prepare("SELECT description FROM world_exploration_entries WHERE id = ?").get(entry.id) as {
+      description: string;
+    }).description;
+    expect(text).toMatch(/\[\[being@[0-9a-f]+\|[^|]*\|Открытый Мирт\]\]/);
+    expect(text).toContain("Тайный Мирт спорил");
+    expect(
+      db.prepare("SELECT COUNT(*) AS n FROM generic_links WHERE from_type = 'world_entry'").get()
+    ).toEqual({ n: 0 });
+
+    // Чужая кампания — 404.
+    expect((await request(app).get(`/api/player/campaigns/999999/cross-links?session_id=${sid}`)).status).toBe(404);
+  });
 });

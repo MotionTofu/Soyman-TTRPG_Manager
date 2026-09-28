@@ -96,6 +96,14 @@ const OWNER_TEXT: Record<string, { table: string; label: string; fields: Record<
     // Имени у сообщения нет — в списке находок его зовут временем.
     nameExpr: "strftime('%H:%M', created_at, 'localtime')",
   },
+  // Заметка игрока в дневнике (шаг 6). Ссылки в ней — проза для самого
+  // игрока: в граф связей Мастера они не пишутся.
+  world_entry: {
+    table: "world_exploration_entries",
+    label: "Заметка",
+    fields: { description: "Текст" },
+    nameExpr: "strftime('%H:%M', created_at, 'localtime')",
+  },
   preproduction: {
     table: "preproduction",
     label: "Препродакшен",
@@ -388,7 +396,7 @@ function ambiguousSpellings(all: Candidate[]): Set<string> {
 
 // ─── Тексты, в которых ищем ──────────────────────────────────────────────────
 
-interface Doc {
+export interface Doc {
   ownerType: string;
   ownerId: number;
   ownerName: string;
@@ -458,6 +466,15 @@ function docsOfCampaign(campaignId: number): Doc[] {
     ),
     ...readDocs("preproduction", "WHERE campaign_id = ?", [campaignId]),
   ];
+}
+
+/** Заметки игрока к одной сессии — «Проставить упоминания» в его дневнике. */
+export function docsOfPlayerSession(playerId: number, campaignId: number, sessionId: number): Doc[] {
+  return readDocs(
+    "world_entry",
+    "WHERE player_id = ? AND campaign_id = ? AND session_id = ? AND archived_at IS NULL ORDER BY created_at, id",
+    [playerId, campaignId, sessionId]
+  );
 }
 
 export function docsOfOwner(ownerKind: string, ownerId: number): Doc[] {
@@ -535,6 +552,14 @@ export interface PlanRequest {
   ownerId: number;
   targetType: string;
   sources: SourceRef[];
+  /** Свои тексты вместо текстов владельца — у игрока их задаёт маршрут. */
+  docs?: Doc[];
+  /**
+   * Какие цели вообще можно предлагать («being:410»). Игроку — только
+   * открытое ему (Q12): неоткрытый NPC не должен всплыть ни находкой, ни
+   * пометкой «так зовут не только её».
+   */
+  allow?: (ref: string) => boolean;
 }
 
 /** Что проход предлагает разметить. Ничего не пишет. */
@@ -543,13 +568,15 @@ export function planCrossLinks(req: PlanRequest): CrossLinkProposal[] {
   if (!type) return [];
 
   // Карта неоднозначности — по всем типам области, см. ambiguousSpellings.
-  const everything = LINKABLE_TYPES.flatMap((t) => candidatesOfType(t, req.sources));
+  const everything = LINKABLE_TYPES.flatMap((t) => candidatesOfType(t, req.sources)).filter(
+    (c) => !req.allow || req.allow(c.ref)
+  );
   const ambiguous = ambiguousSpellings(everything);
   const candidates = everything.filter((c) => c.ref.startsWith(`${type.key}:`));
   if (!candidates.length) return [];
 
   const proposals: CrossLinkProposal[] = [];
-  for (const doc of docsOfOwner(req.ownerKind, req.ownerId)) {
+  for (const doc of req.docs ?? docsOfOwner(req.ownerKind, req.ownerId)) {
     const meta = OWNER_TEXT[doc.ownerType];
     if (!meta) continue;
     for (const [field, fieldLabel] of Object.entries(meta.fields)) {
@@ -701,7 +728,7 @@ export function applyCrossLinks(req: PlanRequest, chosen: CrossLinkChoice[]): { 
           session_id: number;
         };
         touchedSessions.add(note.session_id);
-      } else {
+      } else if (proposal.ownerType !== "world_entry") {
         linkMention.run(proposal.ownerType, proposal.ownerId, type, numId);
       }
       written++;

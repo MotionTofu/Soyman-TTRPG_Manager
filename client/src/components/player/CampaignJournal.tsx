@@ -8,6 +8,7 @@ import { EmptyState } from "../EmptyState";
 import { LoadErrorCard } from "../Loadable";
 import { useConfirm, usePrompt } from "../../hooks/useConfirm";
 import { useUndoDelete } from "../../hooks/useUndoDelete";
+import { SessionMentionsButton } from "../SessionMentionsButton";
 import type {
   JournalFolder,
   PlayerCampaignCharacter,
@@ -49,13 +50,24 @@ function formatIsoDate(iso: string): string {
   return m ? `${m[3]}.${m[2]}.${m[1]}` : iso;
 }
 
-// Ключ «после какой сессии» для заметки: последняя не отменённая сессия, чья
-// дата не позже даты заметки. Заметки, написанные до первой сессии, собираются
-// в свою группу — иначе они висели бы без заголовка.
+// Ключ группы для заметки. Заметка с листа знает свою сессию (session_id) —
+// группа «Сессия …», и у неё есть «Проставить упоминания» (гриллинг
+// 2026-09-28, Q35). Остальные — «после какой сессии»: последняя не
+// отменённая, чья дата не позже даты заметки; до первой — своя группа.
 function sessionDividerFor(
-  createdAt: string,
+  entry: WorldExplorationEntry,
   sessions: SessionScheduleEntry[]
-): { key: string; label: string } {
+): { key: string; label: string; sessionId?: number } {
+  if (entry.session_id != null) {
+    const s = sessions.find((x) => x.id === entry.session_id);
+    const date = s ? formatIsoDate(s.date) : "";
+    return {
+      key: `of-session-${entry.session_id}`,
+      label: s?.title ? `Сессия ${date} — ${s.title}` : `Сессия ${date}`,
+      sessionId: entry.session_id,
+    };
+  }
+  const createdAt = entry.created_at;
   const day = createdAt.slice(0, 10);
   const hit = sessions.find((s) => s.date <= day);
   if (!hit) return { key: "before", label: "До первой сессии" };
@@ -145,12 +157,12 @@ export function CampaignJournal({
   }, [entries, activeFolder, charFilter, tagFilter, query]);
 
   const groups = useMemo(() => {
-    const out: { key: string; label: string; items: WorldExplorationEntry[] }[] = [];
+    const out: { key: string; label: string; sessionId?: number; items: WorldExplorationEntry[] }[] = [];
     for (const e of visible) {
-      const d = sessionDividerFor(e.created_at, dividerSessions);
+      const d = sessionDividerFor(e, dividerSessions);
       const last = out[out.length - 1];
       if (last && last.key === d.key) last.items.push(e);
-      else out.push({ key: d.key, label: d.label, items: [e] });
+      else out.push({ key: d.key, label: d.label, sessionId: d.sessionId, items: [e] });
     }
     return out;
   }, [visible, dividerSessions]);
@@ -441,9 +453,17 @@ export function CampaignJournal({
 
       {groups.map((g) => (
         <div key={g.key} className="stack" style={{ gap: 8 }}>
-          <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)" }}>
-            {g.label}
-          </span>
+          <div className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+            <span style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)" }}>
+              {g.label}
+            </span>
+            {g.sessionId != null && (
+              <SessionMentionsButton
+                planUrl={`/player/campaigns/${campaignId}/cross-links?session_id=${g.sessionId}`}
+                applyUrl={`/player/campaigns/${campaignId}/cross-links?session_id=${g.sessionId}`}
+              />
+            )}
+          </div>
           {g.items.map((entry) => {
             const pos = folderOrder.indexOf(entry.id);
             const canReorder = !filtersActive && pos !== -1;

@@ -1131,7 +1131,10 @@ export function SessionDetailPage() {
           <div className="card stack sp-notes">
             <div className="row sp-notes__head">
               <span className="sp-title">Лента сессии</span>
-              <SessionMentionsButton sessionId={sessionId} />
+              <SessionMentionsButton
+                planUrl={`/cross-links/plan-all?ownerKind=session&ownerId=${sessionId}`}
+                applyUrl={`/cross-links/apply-all?ownerKind=session&ownerId=${sessionId}`}
+              />
             </div>
             <SessionNotesChat sessionId={sessionId} settingId={campaign.setting_id} />
           </div>
