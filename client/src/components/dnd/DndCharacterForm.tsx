@@ -4304,7 +4304,9 @@ export function DndCharacterView({
           )}
           </div>
           )}
-          {showDesktopFace && !cardOnly && sideColumn}
+          {/* На телефоне сетка прозрачна (display: contents), и колонка
+              рисует там плашку внизу экрана — см. SheetNotesColumn. */}
+          {!cardOnly && sideColumn}
         </div>
       </div>
     </div>

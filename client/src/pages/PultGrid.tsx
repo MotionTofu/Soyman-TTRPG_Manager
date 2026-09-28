@@ -4,6 +4,7 @@ import type { GridStackOptions, GridStackWidget } from "gridstack";
 import "gridstack/dist/gridstack.css";
 import "./PultGrid.css";
 import { PultGridForceOpenContext } from "../pultForceOpen";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import { PULT_GRID_RESET_EVENT } from "../pultGridReset";
 import { FloatWindow } from "../components/FloatWindow";
 import { NavIcon } from "../components/NavIcons";
@@ -124,17 +125,6 @@ const GRID_OPTIONS: GridStackOptions = {
   // остаётся стартовой. Высотой владеет GridSync ниже: тот же resizeToContent,
   // но когда контент уже в DOM (и с проверкой).
 };
-
-function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
-  useEffect(() => {
-    const mq = window.matchMedia(query);
-    const onChange = (e: MediaQueryListEvent) => setMatches(e.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, [query]);
-  return matches;
-}
 
 /**
  * Мост движок ↔ React: запоминает раскладку, подгоняет высоту под растущий

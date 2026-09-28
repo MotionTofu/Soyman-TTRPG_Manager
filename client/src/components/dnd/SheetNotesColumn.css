@@ -50,3 +50,38 @@
   flex: 1;
   min-height: 0;
 }
+
+/* Плашка внизу экрана — уже порога колонки (телефон, планшет, ноутбук).
+   Лист под ней получает отступ, чтобы последняя строка не пряталась. */
+.sheet-notes-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+  min-height: 48px;
+  padding: var(--sp-3) var(--sp-5) max(var(--sp-3), env(safe-area-inset-bottom));
+  border: none;
+  border-top: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+}
+.sheet-page:has(.sheet-notes-bar) {
+  padding-bottom: 56px;
+}
+/* В шторке у ленты своя высота: список прокручивается, поле ввода — внизу. */
+.sheet-notes__sheet-feed {
+  display: flex;
+  flex-direction: column;
+  height: 60dvh;
+  min-height: 0;
+}
+.sheet-notes__sheet-feed .session-chat {
+  flex: 1;
+  min-height: 0;
+}
