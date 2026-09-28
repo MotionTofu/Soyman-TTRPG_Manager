@@ -439,7 +439,7 @@ function RevealsContent({ sessionId, campaign }: PanelProps) {
           ))}
         </select>
       )}
-      {arcId ? <RevealList arcId={arcId} campaignId={campaign.id} /> : <span className="muted">В кампании нет приключений.</span>}
+      {arcId ? <RevealList arcId={arcId} campaignId={campaign.id} focusArcId={stage?.current?.arc_id ?? null} /> : <span className="muted">В кампании нет приключений.</span>}
     </div>
   );
 }

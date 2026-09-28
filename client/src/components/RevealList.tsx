@@ -18,10 +18,21 @@ type Mark = "unknown" | "known" | "done";
 
 const MARK_LABEL: Record<Mark, string> = { unknown: "не известен", known: "известен", done: "посещён" };
 
-export function RevealList({ arcId, campaignId }: { arcId: number; campaignId: number | null }) {
+export function RevealList({
+  arcId,
+  campaignId,
+  focusArcId = null,
+}: {
+  arcId: number;
+  campaignId: number | null;
+  /** Глава (или корень) текущей сцены: раскрыта только она, остальные свёрнуты. */
+  focusArcId?: number | null;
+}) {
   const act = useAction();
   const data = useResource<ArcClues>(`/story/arcs/${arcId}/clues${campaignId ? `?campaign_id=${campaignId}` : ""}`).data;
   const [open, setOpen] = useState<string | null>(null);
+  // Свёрнутость главы — по щелчку Мастера; до щелчка решает focusArcId.
+  const [folded, setFolded] = useState<Record<string, boolean>>({});
   if (!data) return <p className="muted">Загрузка…</p>;
 
   const inCampaign = campaignId != null;
@@ -114,6 +125,8 @@ export function RevealList({ arcId, campaignId }: { arcId: number; campaignId: n
     { key: "root", name: data.chapters.length ? "Без главы" : null, nodes: reactive.filter((n) => n.arc_id === data.root_arc_id) },
     ...data.chapters.map((c) => ({ key: `c${c.id}`, name: c.name, nodes: reactive.filter((n) => n.arc_id === c.id) })),
   ].filter((g) => g.nodes.length > 0);
+  const focusKey =
+    focusArcId == null ? null : focusArcId === data.root_arc_id ? "root" : groups.some((g) => g.key === `c${focusArcId}`) ? `c${focusArcId}` : null;
   const secrets = data.secrets.filter((t) => into("secret", t.id).length > 0);
   const proactive = data.nodes.filter((n) => n.role === "proactive");
 
@@ -132,15 +145,34 @@ export function RevealList({ arcId, campaignId }: { arcId: number; campaignId: n
         </div>
       )}
 
-      {groups.map((g) => (
-        <section key={g.key} className="reveal__group">
-          <div className="reveal__group-head">
-            <span>{g.name ?? "Узлы"}</span>
-            <span>{inCampaign ? "найдено" : ""}</span>
-          </div>
-          {sortNodes(g.nodes).map(nodeRow)}
-        </section>
-      ))}
+      {groups.map((g) => {
+        const isFolded = folded[g.key] ?? (focusKey != null && groups.length > 1 && g.key !== focusKey);
+        const done = inCampaign ? g.nodes.filter((n) => n.visited).length : null;
+        return (
+          <section key={g.key} className="reveal__group">
+            <button
+              type="button"
+              className="reveal__group-head reveal__group-toggle"
+              aria-expanded={!isFolded}
+              onClick={() => setFolded((prev) => ({ ...prev, [g.key]: !isFolded }))}
+            >
+              <span>
+                {isFolded ? "▸" : "▾"} {g.name ?? "Узлы"}
+              </span>
+              <span>
+                {isFolded
+                  ? done != null
+                    ? `посещено ${done} / ${g.nodes.length}`
+                    : `узлов ${g.nodes.length}`
+                  : inCampaign
+                    ? "найдено"
+                    : ""}
+              </span>
+            </button>
+            {!isFolded && sortNodes(g.nodes).map(nodeRow)}
+          </section>
+        );
+      })}
 
       {secrets.length > 0 && (
         <section className="reveal__group">
