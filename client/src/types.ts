@@ -1082,7 +1082,7 @@ export interface StoryClue {
   source_clue_id: number | null;
   text: string;
   how: string;
-  target_type: "scene" | "secret" | null;
+  target_type: "scene" | "secret" | "adventure" | null;
   target_id: number | null;
   position: number;
   /** 1 — предложена «Предложить улики», ещё не принята (Q29). */
@@ -1147,6 +1147,9 @@ export interface StoryArc {
   is_default: number;
   /** Избранное: такие приключения идут первыми в списке сеттинга. */
   is_favorite: number;
+  /** Узел карты кампании: роль для правила трёх и «когда приходит само». */
+  node_role?: "normal" | "start" | "finale" | "proactive";
+  node_trigger?: string;
   position: number;
   /** Сцены дуги вместе со сценами её глав. */
   scene_count: number;

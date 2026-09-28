@@ -6954,6 +6954,14 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     database.exec("ALTER TABLE story_clues ADD COLUMN proposed INTEGER NOT NULL DEFAULT 0");
   }
 
+  // Уровень кампании (шаг 8): приключение — узел со своей ролью и триггером.
+  if (!columnExists(database, "story_arcs", "node_role")) {
+    database.exec("ALTER TABLE story_arcs ADD COLUMN node_role TEXT NOT NULL DEFAULT 'normal'");
+  }
+  if (!columnExists(database, "story_arcs", "node_trigger")) {
+    database.exec("ALTER TABLE story_arcs ADD COLUMN node_trigger TEXT NOT NULL DEFAULT ''");
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);

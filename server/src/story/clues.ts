@@ -88,6 +88,15 @@ export function rootArcId(arcId: number): number | null {
   return arc.parent_id ?? arc.id;
 }
 
+/** Оригинал сеттинга для копии приключения кампании — в нём лежат цели улик кампании. */
+export function originalArcId(arcId: number | null): number | null {
+  if (arcId == null) return null;
+  const row = db.prepare("SELECT source_arc_id FROM story_arcs WHERE id = ?").get(arcId) as
+    | { source_arc_id: number | null }
+    | undefined;
+  return row?.source_arc_id ?? arcId;
+}
+
 export function adventureClueGraph(arcId: number, campaignId: number | null): ClueGraph | null {
   const root = rootArcId(arcId);
   if (root == null) return null;
@@ -123,6 +132,11 @@ export function adventureClueGraph(arcId: number, campaignId: number | null): Cl
           clue_id: number;
         }[]).map((r) => r.clue_id)
       : []
+  );
+  const adventureTitles = new Map(
+    (db
+      .prepare("SELECT id, name FROM story_arcs WHERE kind = 'adventure' AND campaign_id IS NULL AND archived_at IS NULL")
+      .all() as { id: number; name: string }[]).map((r) => [r.id, r.name])
   );
   const secretTitles = new Map(
     (db.prepare("SELECT id, title FROM story_secrets").all() as { id: number; title: string }[]).map((r) => [
@@ -161,8 +175,15 @@ export function adventureClueGraph(arcId: number, campaignId: number | null): Cl
         ? !nodes.has(c.target_id as number)
         : c.target_type === "secret"
           ? !secretTitles.has(c.target_id as number)
-          : false,
-    target_title: c.target_type === "secret" ? (secretTitles.get(c.target_id as number) ?? null) : null,
+          : c.target_type === "adventure"
+            ? !adventureTitles.has(c.target_id as number)
+            : false,
+    target_title:
+      c.target_type === "secret"
+        ? (secretTitles.get(c.target_id as number) ?? null)
+        : c.target_type === "adventure"
+          ? (adventureTitles.get(c.target_id as number) ?? null)
+          : null,
   });
 
   const byScene = db.prepare("SELECT * FROM story_clues WHERE scene_id = ? ORDER BY position, id");

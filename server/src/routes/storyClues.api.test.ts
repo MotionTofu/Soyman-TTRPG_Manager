@@ -264,3 +264,39 @@ describe("предложить улики", () => {
     expect((await request(app).post(`/api/story/arcs/${arcId}/clues/proposals`).send({ answer: "нет json" })).status).toBe(400);
   });
 });
+
+describe("уровень кампании (шаг 8)", () => {
+  it("улика ведёт в другое приключение целиком, но не в своё; копия кампании сводится к оригиналу", async () => {
+    const settingId = (db.prepare("SELECT setting_id FROM story_arcs WHERE id = ?").get(arcId) as { setting_id: number })
+      .setting_id;
+    const otherId = Number(
+      db.prepare("INSERT INTO story_arcs (setting_id, name) VALUES (?, 'Склеп')").run(settingId).lastInsertRowid
+    );
+    // Правка роли из кампании заводит копию — и цель по копии сводится к оригиналу.
+    const role = await request(app)
+      .put(`/api/story/arcs/${otherId}`)
+      .send({ campaign_id: campaignId, node_role: "proactive", node_trigger: "через месяц" });
+    expect(role.status).toBe(200);
+    expect(role.body).toMatchObject({ node_role: "proactive", node_trigger: "через месяц", is_override: true });
+    const copyId = role.body.override_id as number;
+    expect((db.prepare("SELECT node_role FROM story_arcs WHERE id = ?").get(otherId) as { node_role: string }).node_role).toBe(
+      "normal"
+    );
+    expect((await request(app).put(`/api/story/arcs/${otherId}`).send({ node_role: "dead_end" })).status).toBe(400);
+
+    const res = await request(app)
+      .post(`/api/story/scenes/${aId}/clues`)
+      .send({ text: "Карта склепа", target_type: "adventure", target_id: copyId });
+    expect(res.status).toBe(201);
+    expect(res.body.clues.find((c: { id: number }) => c.id === res.body.id)).toMatchObject({ target_type: "adventure", target_id: otherId });
+    const own = await request(app)
+      .post(`/api/story/scenes/${aId}/clues`)
+      .send({ text: "x", target_type: "adventure", target_id: arcId });
+    expect(own.status).toBe(400);
+
+    const list = (await request(app).get(`/api/story/arcs/${arcId}/clues`)).body;
+    const clue = list.clues.find((c: { id: number }) => c.id === res.body.id);
+    expect(clue).toMatchObject({ target_missing: false, target_title: "Склеп" });
+    db.prepare("DELETE FROM story_clues WHERE id = ?").run(res.body.id);
+  });
+});

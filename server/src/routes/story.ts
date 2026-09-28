@@ -26,7 +26,7 @@ import {
   validatePresentationPatch,
 } from "../story/presentation";
 import { SCENE_SOUND_SECTION, sceneSoundSet } from "../story/stage";
-import { adventureClueGraph, nodeCounts, type ClueRow } from "../story/clues";
+import { adventureClueGraph, nodeCounts, originalArcId, rootArcId, type ClueRow } from "../story/clues";
 import { cluePrompt, parseLabel, parseProposals } from "../story/cluePrompt";
 import {
   CAST_ROLE_BY_SECTION,
@@ -250,7 +250,12 @@ const ARC_OVERRIDE_FIELDS = [
   "duration",
   "source",
   "tags",
+  "node_role",
+  "node_trigger",
 ] as const;
+
+// Роль приключения на карте кампании; тупика на этом уровне нет (Q36).
+const ARC_ROLES = new Set(["normal", "start", "finale", "proactive"]);
 
 interface ArcRow {
   id: number;
@@ -310,10 +315,10 @@ function resolveWritableArc(arcId: number, campaignId: number | null): ArcRow | 
       `INSERT INTO story_arcs
          (setting_id, parent_id, campaign_id, source_arc_id, name, kind, description, hook,
           recommended_level, player_count, duration, source, tags, thumbnail_image_path,
-          is_default, position)
+          is_default, position, node_role, node_trigger)
        SELECT setting_id, parent_id, ?, id, name, kind, description, hook,
               recommended_level, player_count, duration, source, tags, thumbnail_image_path,
-              0, position
+              0, position, node_role, node_trigger
        FROM story_arcs WHERE id = ?`
     )
     .run(campaignId, arcId);
@@ -332,6 +337,8 @@ const ARC_FIELDS = [
   "tags",
   "position",
   "parent_id",
+  "node_role",
+  "node_trigger",
 ] as const;
 
 // Every setting owns exactly one "Сцены вне приключений" adventure so a scene
@@ -664,6 +671,9 @@ storyRouter.put("/arcs/:id", (req, res) => {
   // The auto-created bucket keeps its name so it stays recognizable.
   if (arc.is_default === 1 && req.body.name !== undefined) {
     return res.status(400).json({ error: "Стандартное приключение нельзя переименовать" });
+  }
+  if (req.body.node_role !== undefined && !ARC_ROLES.has(String(req.body.node_role))) {
+    return res.status(400).json({ error: "invalid node_role" });
   }
   // Правка изнутри кампании уходит в её собственную копию приключения, а не
   // в оригинал сеттинга, который читают все остальные кампании.
@@ -3226,12 +3236,26 @@ storyRouter.get("/scenes/:id/incoming", (req, res) => {
 // Цели — id оригиналов сеттинга (как to_scene_id у переходов); «найдено»
 // висит на исходной улике (source_clue_id ?? id), поэтому переживает копию.
 
-const CLUE_TARGETS = new Set(["scene", "secret"]);
+const CLUE_TARGETS = new Set(["scene", "secret", "adventure"]);
 
 /** Цель улики: пусто, сцена или тайна, и она существует. Иначе — текст ошибки. */
 function invalidClueTarget(type: unknown, id: unknown, fromSceneId: number | null): string | null {
   if (type == null && id == null) return null;
   if (type == null || id == null || !CLUE_TARGETS.has(String(type))) return "invalid target";
+  if (type === "adventure") {
+    // Улика кампании ведёт в приключение целиком (Q43), и не в своё же.
+    const adv = db.prepare("SELECT id, kind, is_default FROM story_arcs WHERE id = ?").get(Number(id)) as
+      | { id: number; kind: string; is_default: number }
+      | undefined;
+    if (!adv || adv.kind !== "adventure" || adv.is_default) return "target not found";
+    const from =
+      fromSceneId == null
+        ? undefined
+        : (db.prepare("SELECT arc_id FROM story_scenes WHERE id = ?").get(fromSceneId) as { arc_id: number | null } | undefined);
+    const own = from?.arc_id != null ? originalArcId(rootArcId(from.arc_id)) : null;
+    if (own != null && own === originalArcId(adv.id)) return "clue cannot point to its own adventure";
+    return null;
+  }
   const table = type === "scene" ? "story_scenes" : "story_secrets";
   if (!db.prepare(`SELECT id FROM ${table} WHERE id = ?`).get(Number(id))) return "target not found";
   if (type === "scene" && fromSceneId != null) {
@@ -3250,6 +3274,7 @@ function invalidClueTarget(type: unknown, id: unknown, fromSceneId: number | nul
  */
 function originalSceneId(type: unknown, id: unknown): number | null {
   if (id == null) return null;
+  if (type === "adventure") return originalArcId(Number(id));
   if (type !== "scene") return Number(id);
   const row = db.prepare("SELECT source_scene_id FROM story_scenes WHERE id = ?").get(Number(id)) as
     | { source_scene_id: number | null }

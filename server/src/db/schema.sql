@@ -671,6 +671,10 @@ CREATE TABLE IF NOT EXISTS story_arcs (
   source TEXT NOT NULL DEFAULT '',        -- книга/автор/страницы, заполняет импортёр
   tags TEXT NOT NULL DEFAULT '',
   thumbnail_image_path TEXT,
+  -- Узел карты кампании (шаг 8 узлового дизайна): роль приключения для правила
+  -- трёх — start/proactive улик не ждут; тупика на этом уровне нет.
+  node_role TEXT NOT NULL DEFAULT 'normal', -- normal | start | finale | proactive
+  node_trigger TEXT NOT NULL DEFAULT '', -- «когда приходит само», только у proactive
   -- Each setting gets exactly one auto-created "Сцены вне приключений"
   -- bucket, so a scene never has to live outside an adventure. It can't be
   -- renamed or archived.
@@ -959,7 +963,7 @@ CREATE TABLE IF NOT EXISTS story_clues (
   source_clue_id INTEGER REFERENCES story_clues(id) ON DELETE SET NULL,
   text TEXT NOT NULL DEFAULT '',
   how TEXT NOT NULL DEFAULT '',
-  target_type TEXT, -- NULL | scene | secret
+  target_type TEXT, -- NULL | scene | secret | adventure (оригинал приключения, улика кампании)
   target_id INTEGER,
   position INTEGER NOT NULL DEFAULT 0,
   -- 1 — предложена нейросетью («Предложить улики»), ждёт решения Мастера.
