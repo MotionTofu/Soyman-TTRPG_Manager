@@ -11,7 +11,7 @@ import {
   setLinkQty,
 } from "../story/cast";
 import { SCENE_SOUND_SECTION } from "../story/stage";
-import { adventureClueGraph, nodeCounts, type NodeCounts } from "../story/clues";
+import { adventureClueEdges, adventureClueGraph, adventureClueLayer, nodeCounts, type NodeCounts } from "../story/clues";
 import { HINT_SCENE_COLUMNS, sceneHints } from "../story/hints";
 import { firstSceneOf, rehearsalStep } from "../story/rehearsal";
 import { CANVAS_PRESETS, isPresetKey } from "../story/presets";
@@ -1028,7 +1028,7 @@ canvasRouter.get("/board", (req, res) => {
     // кампанийных копий: схема показывает заготовку, а не прохождение.
     const allArcs = db
       .prepare(
-        `SELECT a.id, a.name, a.position, a.is_default,
+        `SELECT a.id, a.name, a.position, a.is_default, a.node_role, a.node_trigger,
                 (SELECT COUNT(*) FROM story_arcs c
                   WHERE c.parent_id = a.id AND c.archived_at IS NULL AND c.campaign_id IS NULL) AS chapter_count,
                 (SELECT COUNT(*) FROM story_scenes s
@@ -1046,6 +1046,8 @@ canvasRouter.get("/board", (req, res) => {
       name: string;
       position: number;
       is_default: number;
+      node_role: string;
+      node_trigger: string;
       chapter_count: number;
       scene_count: number;
     }[];
@@ -1103,6 +1105,9 @@ canvasRouter.get("/board", (req, res) => {
     const savedArc = new Map(
       saved.filter((p) => p.node_type === "adventure").map((p) => [p.node_id, p])
     );
+    // Правило трёх на уровне приключений (шаг 8): связь — проход, улика — стрелка.
+    const clueLayer = adventureClueLayer([...shownIds], null);
+    const passageIn = new Set(links.map((l) => l.to_arc_id));
     const column = new Map<number, number>();
     const arcNodes = arcs.map((a) => {
       const placed = savedArc.get(a.id);
@@ -1124,6 +1129,10 @@ canvasRouter.get("/board", (req, res) => {
           setting_id: settingId,
           chapter_count: a.chapter_count,
           scene_count: a.scene_count,
+          node_role: a.node_role,
+          node_trigger: a.node_trigger,
+          ...clueLayer.counts.get(a.id)!,
+          passage_in: passageIn.has(a.id),
         },
       };
     });
@@ -1160,7 +1169,7 @@ canvasRouter.get("/board", (req, res) => {
     const routeRows = board
       ? boardRoutes(board.id, saved.filter((p) => p.node_type !== "adventure"))
       : { nodes: [], rows: [] };
-    const routed = routedEdges(edges, routeRows.rows);
+    const routed = [...routedEdges(edges, routeRows.rows), ...adventureClueEdges(clueLayer.links)];
     return res.json({
       board_id: board?.id ?? null,
       setting: { id: setting.id, name: setting.name },
@@ -1218,7 +1227,7 @@ canvasRouter.get("/board", (req, res) => {
     // берётся у копии, если она есть.
     const arcs = db
       .prepare(
-        `SELECT a.id, a.name, a.position, a.updated_at,
+        `SELECT a.id, a.name, a.position, a.updated_at, a.node_role, a.node_trigger,
                 (SELECT COUNT(*) FROM story_arcs c
                   WHERE c.parent_id = a.id AND c.archived_at IS NULL AND c.campaign_id IS NULL) AS chapter_count,
                 (SELECT COUNT(*) FROM story_scenes s
@@ -1236,6 +1245,8 @@ canvasRouter.get("/board", (req, res) => {
       name: string;
       position: number;
       updated_at: string | null;
+      node_role: string;
+      node_trigger: string;
       chapter_count: number;
       scene_count: number;
     }[];
@@ -1245,7 +1256,7 @@ canvasRouter.get("/board", (req, res) => {
     // `campaign_adventures` она не значится.
     const ownArcs = db
       .prepare(
-        `SELECT a.id, a.name, a.position, a.updated_at,
+        `SELECT a.id, a.name, a.position, a.updated_at, a.node_role, a.node_trigger,
                 0 AS chapter_count,
                 (SELECT COUNT(*) FROM story_scenes s
                   WHERE s.arc_id = a.id AND s.archived_at IS NULL) AS scene_count
@@ -1262,9 +1273,9 @@ canvasRouter.get("/board", (req, res) => {
       (
         db
           .prepare(
-            "SELECT source_arc_id, name, created_at FROM story_arcs WHERE campaign_id = ? AND source_arc_id IS NOT NULL AND archived_at IS NULL"
+            "SELECT source_arc_id, name, created_at, node_role, node_trigger FROM story_arcs WHERE campaign_id = ? AND source_arc_id IS NOT NULL AND archived_at IS NULL"
           )
-          .all(campaignId) as { source_arc_id: number; name: string; created_at: string }[]
+          .all(campaignId) as { source_arc_id: number; name: string; created_at: string; node_role: string; node_trigger: string }[]
       ).map((o) => [o.source_arc_id, o] as const)
     );
 
@@ -1341,6 +1352,8 @@ canvasRouter.get("/board", (req, res) => {
     const savedArc = new Map(
       saved.filter((p) => p.node_type === "adventure").map((p) => [p.node_id, p] as const)
     );
+    const clueLayer = adventureClueLayer([...shownIds], campaignId);
+    const passageIn = new Set(transitionRows.map((t) => t.to_arc_id));
     const column = new Map<number, number>();
     const arcNodes = allArcs.map((a) => {
       const placed = savedArc.get(a.id);
@@ -1366,6 +1379,11 @@ canvasRouter.get("/board", (req, res) => {
           setting_id: campaign.setting_id ?? 0,
           chapter_count: a.chapter_count,
           scene_count: a.scene_count,
+          // Роль правит кампания своей копией (Q36).
+          node_role: ov?.node_role ?? a.node_role,
+          node_trigger: ov?.node_trigger ?? a.node_trigger,
+          ...clueLayer.counts.get(a.id)!,
+          passage_in: passageIn.has(a.id),
           /** done | active | untouched — раскраска узла по прохождению. */
           progress:
             st && st.total > 0 && st.done >= st.total
@@ -1402,7 +1420,7 @@ canvasRouter.get("/board", (req, res) => {
     const routeRows = board
       ? boardRoutes(board.id, saved.filter((p) => p.node_type !== "adventure"))
       : { nodes: [], rows: [] };
-    const routed = routedEdges(edges, routeRows.rows);
+    const routed = [...routedEdges(edges, routeRows.rows), ...adventureClueEdges(clueLayer.links)];
 
     return res.json({
       board_id: board?.id ?? null,

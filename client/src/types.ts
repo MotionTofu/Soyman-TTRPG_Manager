@@ -1996,6 +1996,12 @@ export interface CanvasAdventureNode {
     setting_changed_at?: string | null;
     /** Добавлено в кампанию после того, как карту разложили. */
     is_new?: boolean;
+    /** Узел уровня кампании (шаг 8): только на схеме сеттинга и карте кампании. */
+    node_role?: "normal" | "start" | "finale" | "proactive";
+    node_trigger?: string;
+    clue_in?: number;
+    clue_out?: number;
+    passage_in?: boolean;
   };
 }
 

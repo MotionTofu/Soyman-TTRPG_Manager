@@ -33,6 +33,7 @@ import { SectionBackground } from "../components/SectionBackground";
 import { EditableTextCard } from "../components/EditableTextCard";
 import {
   ClueEdgeDialog,
+  AdventureClueDialog,
   ClueTray,
   NewLinkDialog,
   NodeCluesCard,
@@ -221,11 +222,18 @@ function HintChip({ hints, onOpen }: { hints: SceneHint[]; onOpen: (x: number, y
  * Улики в тупик — бонусные, их нехватка не ошибка. Выход — только
  * подсказка пунктиром: мало выходов — повод подумать, а не авария.
  */
-function ClueCounters({ data }: { data: SceneNodeData }) {
+function ClueCounters({
+  data,
+  itself = "сам",
+}: {
+  data: Pick<SceneNodeData, "nodeRole" | "clueIn" | "clueOut" | "passageIn">;
+  /** «приходит сам» у сцены, «само» у приключения. */
+  itself?: string;
+}) {
   const role = data.nodeRole;
   let inChip: ReactNode;
   if (role === "start") inChip = <span className="canvas-node__chip">старт</span>;
-  else if (role === "proactive") inChip = <span className="canvas-node__chip">приходит сам</span>;
+  else if (role === "proactive") inChip = <span className="canvas-node__chip">приходит {itself}</span>;
   else if (role === "dead_end")
     inChip = <span className="canvas-node__chip is-hint">вход {data.clueIn} · бонус</span>;
   else if (data.clueIn >= 3) inChip = <span className="canvas-node__chip">вход {data.clueIn}</span>;
@@ -558,6 +566,12 @@ interface AdventureNodeData extends Record<string, unknown> {
   isOverride?: boolean;
   settingChangedAt?: string | null;
   isNew?: boolean;
+  /** Правило трёх между приключениями (шаг 8) — только там, где есть связи. */
+  nodeRole: string;
+  nodeTrigger: string;
+  clueIn?: number;
+  clueOut: number;
+  passageIn: boolean;
 }
 
 /**
@@ -610,6 +624,7 @@ function AdventureNode({ data, selected }: NodeProps<Node<AdventureNodeData>>) {
         {data.isNew && <span className="canvas-node__mark">новое в кампании</span>}
         {data.isOverride && <span className="canvas-node__mark">изменено в кампании</span>}
       </div>
+      {data.clueIn !== undefined && <ClueCounters data={{ ...data, clueIn: data.clueIn }} itself="само" />}
       {data.linkable && (
         <Handle type="source" position={Position.Right} id="next" className="canvas-handle--story" title="Отсюда идут дальше" />
       )}
@@ -1224,6 +1239,12 @@ type CanvasNodeData =
   | PinNodeData
   | RouteNodeData;
 
+/** `clue:a<откуда>:a<куда>` — стрелка улик между приключениями (шаг 8). */
+function parseAdventureClueEdgeId(id: string): { from: number; to: number } | null {
+  const m = /^clue:a(\d+):a(\d+)$/.exec(id);
+  return m ? { from: Number(m[1]), to: Number(m[2]) } : null;
+}
+
 /** `clue:<откуда>:<куда>` или `clue:<откуда>:s<тайна>` — id стрелки улики с сервера. */
 function parseClueEdgeId(id: string): { from: number; to: number; secret: boolean } | null {
   const m = /^clue:(\d+):(s?)(\d+)$/.exec(id);
@@ -1651,6 +1672,11 @@ function toFlowNode(
         isOverride: n.adventure.is_override,
         settingChangedAt: n.adventure.setting_changed_at,
         isNew: n.adventure.is_new,
+        nodeRole: n.adventure.node_role ?? "normal",
+        nodeTrigger: n.adventure.node_trigger ?? "",
+        clueIn: n.adventure.clue_in,
+        clueOut: n.adventure.clue_out ?? 0,
+        passageIn: n.adventure.passage_in ?? false,
       },
     };
   }
@@ -2245,6 +2271,7 @@ export function CanvasPage() {
   const [pendingLink, setPendingLink] = useState<{ from: number; to: number; secret?: boolean } | null>(null);
   const [proposeOpen, setProposeOpen] = useState(false);
   const [clueEdge, setClueEdge] = useState<{ from: number; to: number; secret?: boolean } | null>(null);
+  const [adventureClue, setAdventureClue] = useState<{ from: number; to: number } | null>(null);
   // Карточка существа (шаг 4 ревизии). Нода остаётся компактной, карточка —
   // поповер: 30+ карточек по 200 px это уже не схема. Координаты ЭКРАННЫЕ,
   // масштаб полотна на карточку не действует — на 40% именно в неё и лезут.
@@ -3826,6 +3853,13 @@ export function CanvasPage() {
     },
     [board]
   );
+  const adventureName = useCallback(
+    (id: number) => {
+      const n = board?.nodes.find((x) => x.node_type === "adventure" && x.node_id === id);
+      return n && n.node_type === "adventure" ? n.adventure.name : `#${id}`;
+    },
+    [board]
+  );
   const secretName = useCallback(
     (id: number) => {
       const n = board?.nodes.find((x) => x.node_type === "secret" && x.node_id === id);
@@ -4567,6 +4601,15 @@ export function CanvasPage() {
       event.preventDefault();
       const [kind, rawId] = edge.id.split(":");
       if (kind === "clue") {
+        const adv = parseAdventureClueEdgeId(edge.id);
+        if (adv) {
+          setContextMenu({
+            x: event.clientX,
+            y: event.clientY,
+            items: [{ label: "Улики этой стрелки…", onClick: () => setAdventureClue(adv) }],
+          });
+          return;
+        }
         const link = parseClueEdgeId(edge.id);
         if (!link) return;
         setContextMenu({
@@ -5509,6 +5552,8 @@ export function CanvasPage() {
             // Стрелка улики «×N» — щелчок открывает её улики (Q19).
             const link = parseClueEdgeId(edge.id);
             if (link) setClueEdge(link);
+            const adv = parseAdventureClueEdgeId(edge.id);
+            if (adv) setAdventureClue(adv);
           }}
           onNodeDoubleClick={handleNodeDoubleClick}
           onDrop={handleDrop}
@@ -6212,6 +6257,16 @@ export function CanvasPage() {
           onClose={() => setClueEdge(null)}
         />
       )}
+      {adventureClue && (
+        <AdventureClueDialog
+          fromArcId={adventureClue.from}
+          toArcId={adventureClue.to}
+          campaignId={board?.campaign_id ?? null}
+          fromName={adventureName(adventureClue.from)}
+          toName={adventureName(adventureClue.to)}
+          onClose={() => setAdventureClue(null)}
+        />
+      )}
       {alertDialog}
       {promptDialog}
       {confirmDialog}
@@ -6485,6 +6540,9 @@ function MultiselectPanel({
  * молчалив по устройству: правка в кампании снимает копию, и оригинал в
  * сеттинге может уехать вперёд, а Мастер об этом не узнает. Здесь узнаёт.
  */
+// Роли узла-приключения: тупика на уровне кампании нет (Q36).
+const ADVENTURE_ROLES = NODE_ROLES.filter((r) => r.key !== "dead_end");
+
 function AdventureProperties({
   arcId,
   board,
@@ -6516,6 +6574,45 @@ function AdventureProperties({
             {data.progress ? ` · ${PROGRESS_LABEL[data.progress]}` : ""}
           </span>
         </div>
+
+        {data.clueIn !== undefined && (
+          <label className="canvas-props__field">
+            <span className="canvas-props__label">Роль</span>
+            <select
+              value={data.nodeRole}
+              onChange={(e) =>
+                void act(() => write.put(`/story/arcs/${arcId}`, { node_role: e.target.value, campaign_id: map?.id }), {
+                  failure: "Роль приключения",
+                  affects: canvasStoryAffects(),
+                })
+              }
+            >
+              {ADVENTURE_ROLES.map((r) => (
+                <option key={r.key} value={r.key}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {/* Как у сцены: «когда приходит само» — только у проактивного. */}
+        {data.nodeRole === "proactive" && (
+          <label className="canvas-props__field">
+            <span className="canvas-props__label">Когда приходит само</span>
+            <textarea
+              key={`adv-trigger-${arcId}`}
+              rows={2}
+              defaultValue={data.nodeTrigger}
+              onBlur={(e) =>
+                e.target.value !== data.nodeTrigger &&
+                void act(() => write.put(`/story/arcs/${arcId}`, { node_trigger: e.target.value, campaign_id: map?.id }), {
+                  failure: "Триггер приключения",
+                  affects: canvasStoryAffects(),
+                })
+              }
+            />
+          </label>
+        )}
 
         {map && data.isOverride && (
           <div className="canvas-props__field">

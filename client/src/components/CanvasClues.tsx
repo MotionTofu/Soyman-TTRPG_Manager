@@ -201,6 +201,61 @@ export function ClueEdgeDialog({
   );
 }
 
+/**
+ * Стрелка «×N» между приключениями на карте кампании (шаг 8): какие улики
+ * приключения «откуда» ведут в «куда» и в какой сцене их находят. Правка — в
+ * карточке узла на холсте приключения, здесь только ответ «откуда узнают».
+ */
+export function AdventureClueDialog({
+  fromArcId,
+  toArcId,
+  campaignId,
+  fromName,
+  toName,
+  onClose,
+}: {
+  fromArcId: number;
+  toArcId: number;
+  campaignId: number | null;
+  fromName: string;
+  toName: string;
+  onClose: () => void;
+}) {
+  const data = useResource<ArcClues>(arcCluesPath(fromArcId, campaignId)).data;
+  const clues = (data?.clues ?? []).filter(
+    (c) => c.target_type === "adventure" && c.target_id === toArcId && !c.proposed
+  );
+  const nameOf = (id: number | null) => data?.nodes.find((n) => n.id === id)?.name ?? "—";
+  return (
+    <Modal onClose={onClose} ariaLabel="Улики между приключениями">
+      <div className="clue-dialog">
+        <div className="clue-dialog__head">
+          <span className="canvas-props__label">Улики · {clues.length}</span>
+          <span className="clue-dialog__route">
+            {fromName} → {toName}
+          </span>
+        </div>
+        {!data && <span className="muted">Загрузка…</span>}
+        {clues.map((c) => (
+          <div className={`node-clue${c.found ? " is-found" : ""}`} key={c.id}>
+            <span className="node-clue__text">{c.text}</span>
+            <span className="node-clue__meta">
+              в: {nameOf(c.node_id)}
+              {c.how && ` · ${c.how}`}
+              {c.found && " · найдена"}
+            </span>
+          </div>
+        ))}
+        <div className="clue-dialog__foot">
+          <button type="button" className="primary" onClick={onClose}>
+            Готово
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ─── Лоток неразмещённых ──────────────────────────────────────────────────
 
 /**

@@ -126,3 +126,45 @@ describe("исходы проверок больше не ведут в сцен
     expect(row(filled)).toEqual({ consequence: "шум (вело в «lab»)", target_type: null, target_id: null });
   });
 });
+
+describe("карта кампании: улики между приключениями (шаг 8)", () => {
+  it("стрелка «×N» из приключения в приключение, счётчики, роль копии и проход", async () => {
+    const settingId = (db.prepare("SELECT setting_id FROM story_arcs WHERE id = ?").get(arcId) as { setting_id: number })
+      .setting_id;
+    const crypt = id(db.prepare("INSERT INTO story_arcs (setting_id, name) VALUES (?, 'Склеп')").run(settingId));
+    const tower = id(db.prepare("INSERT INTO story_arcs (setting_id, name) VALUES (?, 'Башня')").run(settingId));
+    const campaignId = id(db.prepare("INSERT INTO campaigns (name, setting_id) VALUES ('К8', ?)").run(settingId));
+    for (const a of [arcId, crypt, tower])
+      db.prepare("INSERT INTO campaign_adventures (campaign_id, arc_id) VALUES (?, ?)").run(campaignId, a);
+    db.prepare("INSERT INTO story_arc_transitions (from_arc_id, to_arc_id, label) VALUES (?, ?, '')").run(crypt, tower);
+    const clue = db.prepare(
+      "INSERT INTO story_clues (arc_id, scene_id, text, target_type, target_id) VALUES (?, ?, ?, 'adventure', ?)"
+    );
+    clue.run(arcId, s.widow, "карта склепа", crypt);
+    clue.run(chapterId, s.dock, "ключ от склепа", crypt);
+    await request(app).put(`/api/story/arcs/${crypt}`).send({ campaign_id: campaignId, node_role: "proactive" });
+
+    const res = await request(app).get(`/api/canvas/board?campaign_id=${campaignId}`);
+    expect(res.status).toBe(200);
+    const adv = (arc: number) =>
+      res.body.nodes.find((n: { node_type: string; node_id: number }) => n.node_type === "adventure" && n.node_id === arc)
+        .adventure;
+    expect(adv(arcId)).toMatchObject({ clue_in: 0, clue_out: 2, passage_in: false });
+    expect(adv(crypt)).toMatchObject({ clue_in: 2, node_role: "proactive" });
+    expect(adv(tower)).toMatchObject({ clue_in: 0, passage_in: true, node_role: "normal" });
+    expect(res.body.edges.find((e: { id: string }) => e.id === `clue:a${arcId}:a${crypt}`)).toMatchObject({
+      kind: "clue",
+      source: `adventure:${arcId}`,
+      target: `adventure:${crypt}`,
+      label: "×2",
+    });
+
+    // Схема сеттинга видит ту же стрелку, но роль — сеттинга, не кампании.
+    const scheme = await request(app).get(`/api/canvas/board?setting_id=${settingId}`);
+    const cryptNode = scheme.body.nodes.find(
+      (n: { node_type: string; node_id: number }) => n.node_type === "adventure" && n.node_id === crypt
+    );
+    expect(cryptNode.adventure).toMatchObject({ clue_in: 2, node_role: "normal" });
+    expect(scheme.body.edges.some((e: { id: string }) => e.id === `clue:a${arcId}:a${crypt}`)).toBe(true);
+  });
+});

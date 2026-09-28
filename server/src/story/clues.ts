@@ -221,6 +221,42 @@ export function adventureClueGraph(arcId: number, campaignId: number | null): Cl
 }
 
 /**
+ * Уровень кампании (шаг 8): улики из приключения в приключение. Граф каждого
+ * приключения уже знает копии кампании и заготовки, поэтому улики берутся
+ * из него, а не отдельным запросом. Считаются только принятые, живые и
+ * ведущие в приключение с этой же карты.
+ */
+export function adventureClueLayer(advIds: number[], campaignId: number | null) {
+  const shown = new Set(advIds);
+  const counts = new Map(advIds.map((id) => [id, { clue_in: 0, clue_out: 0 }]));
+  const links = new Map<string, { from: number; to: number; n: number }>();
+  for (const adv of advIds) {
+    // ponytail: граф на каждое приключение карты — их там единицы; общий запрос, если карт станет с сотню.
+    for (const c of adventureClueGraph(adv, campaignId)?.clues ?? []) {
+      const to = c.target_id as number;
+      if (c.target_type !== "adventure" || c.proposed || c.target_missing || to === adv || !shown.has(to)) continue;
+      counts.get(adv)!.clue_out++;
+      counts.get(to)!.clue_in++;
+      const link = links.get(`${adv}:${to}`) ?? { from: adv, to, n: 0 };
+      link.n++;
+      links.set(`${adv}:${to}`, link);
+    }
+  }
+  return { counts, links: [...links.values()] };
+}
+
+/** Стрелки улик между приключениями: `clue:a<откуда>:a<куда>`, «×N». */
+export function adventureClueEdges(links: { from: number; to: number; n: number }[]) {
+  return links.map((l) => ({
+    id: `clue:a${l.from}:a${l.to}`,
+    kind: "clue" as const,
+    source: `adventure:${l.from}`,
+    target: `adventure:${l.to}`,
+    label: l.n > 1 ? `×${l.n}` : "",
+  }));
+}
+
+/**
  * Счётчики правила трёх по узлам (Q11). Считаются только живые улики с целью:
  * «в никуда» и лоток ничего не доказывают. Бонусность (цель — тупик) и
  * освобождения (старт, проактивный, за проходом) решает показ — здесь только
