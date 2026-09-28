@@ -18,13 +18,20 @@ export async function buildStandalone() {
   const output = (Array.isArray(result) ? result[0] : result).output;
   const script = output.filter(x => x.type === 'chunk').map(x => x.code).join('\n');
   let css = output.filter(x => x.type === 'asset' && x.fileName.endsWith('.css')).map(x => x.source).join('\n');
+  // Картинка встраивается один раз — переменной на :root, а упоминания ссылаются
+  // на неё: иначе каждая копия url() в CSS тащила файл заново (151 вставка
+  // 53 картинок, 4,8 МБ повторов). Шрифты — прямо в url(): в @font-face var() не работает.
+  const imageVars = new Map();
   for (const match of [...css.matchAll(/url\(["']?(\/[^)"']+)["']?\)/g)]) {
     const file = path.resolve(root, '../client/public', '.' + match[1]);
     const ext = path.extname(file); const mime = { '.ttf': 'font/ttf', '.woff2': 'font/woff2', '.webp': 'image/webp', '.png': 'image/png', '.svg': 'image/svg+xml' }[ext];
     if (!mime) throw Error('Unknown standalone asset: ' + match[1]);
-    const bytes = await readFile(file);
-    css = css.replaceAll(match[0], `url("data:${mime};base64,${bytes.toString('base64')}")`);
+    const inline = `url("data:${mime};base64,${(await readFile(file)).toString('base64')}")`;
+    if (mime.startsWith('font/')) { css = css.replaceAll(match[0], inline); continue; }
+    if (!imageVars.has(inline)) imageVars.set(inline, `--oneshot-img-${imageVars.size}`);
+    css = css.replaceAll(match[0], `var(${imageVars.get(inline)})`);
   }
+  css = `:root{${[...imageVars].map(([inline, name]) => `${name}:${inline}`).join(';')}}\n` + css;
   const html = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'"><title>OneShot SoyMan</title><style>${css.replaceAll('</style', '<\\/style')}</style></head><body><div id="oneshot-nojs" style="max-width:560px;margin:40px auto;padding:0 20px;font:17px/1.45 -apple-system,system-ui,sans-serif;color:#171717;background:#e8e4da"><h1 style="font-size:24px;margin:0 0 12px">OneShot SoyMan — лист персонажа</h1><p>Если вы видите этот текст, файл открыт в режиме предпросмотра (Telegram, почта, «Файлы»): там не работают скрипты, и лист не может запуститься.</p><p><b>Как открыть:</b></p><ol style="padding-left:22px"><li>Сохраните файл: «Поделиться» → «Сохранить в Файлы».</li><li>Откройте в браузере <b>soyman-1shot.vercel.app</b>.</li><li>Нажмите «Импорт» → «Импортировать персонажа» и выберите этот файл.</li></ol><p>На компьютере файл можно открыть прямо в браузере — двойным щелчком.</p></div><div id="root"></div><script id="oneshot-payload" type="application/json">__ONESHOT_PAYLOAD__</script><script>${script.replaceAll('</script', '<\\/script')}</script></body></html>`;
   await mkdir(path.join(root, 'generated'), { recursive: true });
   const scopedHtml = html.replace('<html lang="ru">', '<html lang="ru" data-app="oneshot">');
