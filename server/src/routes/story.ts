@@ -1529,6 +1529,11 @@ export function buildAdventureExportData(arcId: number | string): Record<string,
     .prepare(`SELECT * FROM story_secrets WHERE arc_id IN (${placeholders}) ORDER BY position`)
     .all(...allArcIds) as Record<string, unknown>[];
 
+  // Улики узлового дизайна: в сценах и в лотке приключения.
+  const clues = db
+    .prepare(`SELECT * FROM story_clues WHERE arc_id IN (${placeholders}) OR scene_id IN (${scPh || "NULL"}) ORDER BY position, id`)
+    .all(...allArcIds, ...sceneIds) as ClueRow[];
+
   const arcTransitions = db
     .prepare(`SELECT * FROM story_arc_transitions WHERE from_arc_id IN (${placeholders}) OR to_arc_id IN (${placeholders}) ORDER BY position`)
     .all(...allArcIds, ...allArcIds) as Record<string, unknown>[];
@@ -1603,6 +1608,19 @@ export function buildAdventureExportData(arcId: number | string): Record<string,
     const sceneTransitions = (transitionsByScene.get(sid) ?? []).map((t) => ({
       to: sceneKeyMap.get(t.to_scene_id as number) ?? null, label: t.label, position: t.position,
     }));
+    // Цель улики — ключ сцены или тайны этого же файла; чужая цель теряется.
+    const sceneClues = clues
+      .filter((c) => c.scene_id === sid)
+      .map((c) => ({
+        text: c.text,
+        how: c.how,
+        to:
+          c.target_type === "scene"
+            ? (sceneKeyMap.get(c.target_id as number) ?? null)
+            : c.target_type === "secret" && secrets.some((t) => t.id === c.target_id)
+              ? `secret_${c.target_id}`
+              : null,
+      }));
     const sceneCast = (castByScene.get(sid) ?? []).map((l) => {
       const ce = linkCast.find((c) => c.link_id === l.id);
       return { target_type: l.to_type, target_id: l.to_id, section: l.section, role: ce?.role ?? "", qty: ce?.qty ?? null, notes: l.notes };
@@ -1613,6 +1631,9 @@ export function buildAdventureExportData(arcId: number | string): Record<string,
       summary: s.summary, read_aloud: s.read_aloud, whats_happening: s.whats_happening,
       entry_condition: s.entry_condition, outcomes: s.outcomes,
       hidden_from_players: s.hidden_from_players, position: s.position ?? idx,
+      node_type: s.node_type, node_role: s.node_role, node_trigger: s.node_trigger,
+      subject_type: s.subject_type, subject_id: s.subject_id,
+      clues: sceneClues.length > 0 ? sceneClues : undefined,
       checks: sceneChecks.length > 0 ? sceneChecks : undefined,
       rewards: sceneRewards.length > 0 ? sceneRewards : undefined,
       transitions: sceneTransitions.length > 0 ? sceneTransitions : undefined,
@@ -1636,9 +1657,14 @@ export function buildAdventureExportData(arcId: number | string): Record<string,
       title: m.title, description: m.description, position: m.position,
     })),
     secrets: secrets.map((s) => ({
+      // key — для целей улик и для тайн, положенных на холст (canvas.nodes).
+      key: `secret_${s.id}`,
       arc: s.arc_id ? arcKeyMap.get(s.arc_id as number) ?? null : null,
       kind: s.kind, title: s.title, content: s.content, position: s.position,
     })),
+    clue_tray: clues
+      .filter((c) => c.scene_id == null)
+      .map((c) => ({ arc: c.arc_id ? (arcKeyMap.get(c.arc_id) ?? null) : null, text: c.text, how: c.how })),
     arc_transitions: arcTransitions.map((t) => ({
       from: arcKeyMap.get(t.from_arc_id as number) ?? null,
       to: arcKeyMap.get(t.to_arc_id as number) ?? null,
@@ -1760,8 +1786,12 @@ export async function importAdventureExport(
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const insertScene = db.prepare(
-    `INSERT INTO story_scenes (setting_id, arc_id, name, kind, summary, read_aloud, whats_happening, entry_condition, outcomes, hidden_from_players, position)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO story_scenes (setting_id, arc_id, name, kind, summary, read_aloud, whats_happening, entry_condition, outcomes, hidden_from_players, position,
+       node_type, node_role, node_trigger, subject_type, subject_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const insertClue = db.prepare(
+    `INSERT INTO story_clues (arc_id, scene_id, text, how, target_type, target_id, position) VALUES (?, ?, ?, ?, ?, ?, ?)`
   );
   const insertCheck = db.prepare(
     `INSERT INTO story_scene_checks (scene_id, what, difficulty, position) VALUES (?, ?, ?, ?)`
@@ -1813,11 +1843,23 @@ export async function importAdventureExport(
       const s = scenes[i];
       const chapterKey = s.chapter as string | undefined;
       const arcId = chapterKey && chapterIdMap.has(chapterKey) ? chapterIdMap.get(chapterKey) : newArcId;
+      // Поля узла — как на холсте: неизвестное значение не пишется вовсе.
+      // «О ком» — сырой id этой же базы; в чужой базе такой сущности может не
+      // быть, тогда ссылка отбрасывается.
+      const nodeFields = { node_type: s.node_type ?? null, node_role: s.node_role ?? undefined };
+      const nodeOk = invalidNodeField(nodeFields) == null;
+      const subjectOk =
+        s.subject_type != null && s.subject_id != null && entityName(String(s.subject_type), Number(s.subject_id)) != null;
       const r = insertScene.run(
         settingId, arcId, s.name, s.kind ?? "scene",
         s.summary ?? "", s.read_aloud ?? "", s.whats_happening ?? "",
         s.entry_condition ?? "", s.outcomes ?? "",
-        s.hidden_from_players ?? 1, s.position ?? i
+        s.hidden_from_players ?? 1, s.position ?? i,
+        nodeOk ? nodeFields.node_type : null,
+        nodeOk && s.node_role ? s.node_role : s.kind === "ending" ? "finale" : "normal",
+        String(s.node_trigger ?? ""),
+        subjectOk ? s.subject_type : null,
+        subjectOk ? s.subject_id : null
       );
       sceneIdMap.set(sceneKeys[i], Number(r.lastInsertRowid));
     }
@@ -1875,11 +1917,32 @@ export async function importAdventureExport(
     }
 
     // 8. Create secrets
+    const secretIdMap = new Map<string, number>();
     for (let i = 0; i < secrets.length; i++) {
       const s = secrets[i];
       const arcKey = s.arc as string | undefined;
       const arcId = arcKey ? (chapterIdMap.get(arcKey) ?? newArcId) : newArcId;
-      insertSecret.run(arcId, s.kind ?? "secret", s.title ?? "", s.content ?? "", s.position ?? i);
+      const r = insertSecret.run(arcId, s.kind ?? "secret", s.title ?? "", s.content ?? "", s.position ?? i);
+      if (s.key) secretIdMap.set(String(s.key), Number(r.lastInsertRowid));
+    }
+
+    // 8а. Улики — после тайн: цель бывает и тайной.
+    for (let si = 0; si < scenes.length; si++) {
+      const sceneId = sceneIdMap.get(sceneKeys[si]);
+      if (!sceneId) continue;
+      const arcId = (db.prepare("SELECT arc_id FROM story_scenes WHERE id = ?").get(sceneId) as { arc_id: number }).arc_id;
+      const sceneClues = (scenes[si].clues ?? []) as Record<string, unknown>[];
+      sceneClues.forEach((c, ci) => {
+        const to = String(c.to ?? "");
+        const toScene = sceneIdMap.get(to);
+        const toSecret = secretIdMap.get(to);
+        const [type, id] = toScene && toScene !== sceneId ? ["scene", toScene] : toSecret ? ["secret", toSecret] : [null, null];
+        insertClue.run(arcId, sceneId, String(c.text ?? ""), String(c.how ?? ""), type, id, ci);
+      });
+    }
+    for (const c of (data.clue_tray ?? []) as Record<string, unknown>[]) {
+      const arcId = c.arc ? (chapterIdMap.get(String(c.arc)) ?? newArcId) : newArcId;
+      insertClue.run(arcId, null, String(c.text ?? ""), String(c.how ?? ""), null, null, 0);
     }
 
     // 9. Create arc transitions
@@ -1901,6 +1964,8 @@ export async function importAdventureExport(
       const boardId = boardRow.id;
 
       const nodeIdMap = new Map<string, number>();
+      // Тайны на холсте (Q20) ищутся тем же ключом `secret_<старый id>`.
+      for (const [key, id] of secretIdMap) nodeIdMap.set(key, id);
 
       // Stickers
       const exportStickers = (canvas.stickers ?? []) as Record<string, unknown>[];

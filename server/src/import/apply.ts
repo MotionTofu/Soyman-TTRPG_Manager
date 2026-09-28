@@ -122,6 +122,9 @@ export const ROLLBACK_TABLES: Record<string, string> = {
   milestone: "story_milestones",
   secret: "story_secrets",
   reward: "story_scene_rewards",
+  // Улики уходят каскадом за сценой, но улика лотка висит на дуге, а дуга
+  // могла существовать до импорта.
+  clue: "story_clues",
   // Статблок висит на существе полиморфно, без внешнего ключа: каскад его не
   // унесёт, удалять должен откат.
   statblock: "statblocks",
@@ -928,8 +931,8 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
           .prepare(
             `INSERT INTO story_scenes
                (setting_id, arc_id, name, kind, summary, read_aloud, whats_happening,
-                entry_condition, outcomes, position)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                entry_condition, outcomes, position, node_type, node_role, node_trigger)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           )
           .run(
             settingId,
@@ -941,7 +944,10 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
             scene.whats_happening,
             scene.entry_condition,
             scene.outcomes,
-            position
+            position,
+            scene.node_type ?? null,
+            scene.node_role ?? (scene.kind === "ending" ? "finale" : "normal"),
+            scene.trigger
           );
         const sceneId = record("scene", Number(sInfo.lastInsertRowid));
         keys.set(scene.key, { type: "scene", id: sceneId });
@@ -1017,6 +1023,16 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
         scene.participants.forEach((k) => link(k, "scene_participants"));
         scene.items.forEach((k) => link(k, "scene_items"));
 
+        // «О ком» — сущность мира; сцена, глава или веха узлу в «о ком» не годятся.
+        const about = resolve(scene.about);
+        if (about && ["location", "being", "community", "artifact"].includes(about.type)) {
+          db.prepare("UPDATE story_scenes SET subject_type = ?, subject_id = ? WHERE id = ?").run(
+            about.type,
+            about.id,
+            self.id
+          );
+        }
+
         scene.next.forEach((next, index) => {
           const to = resolve(next.to, "scene");
           if (!to) return;
@@ -1065,6 +1081,20 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
 
       adv.secrets.forEach((secret, index) => {
         if (!shouldCreate(secret.key)) return;
+        // Старый вид «Улика» — теперь улика без места, в лоток приключения
+        // (тот же перенос, что у живой базы, Q9).
+        if (secret.kind === "clue") {
+          const text = secret.content ? `${secret.title} — ${secret.content}` : secret.title;
+          record(
+            "clue",
+            Number(
+              db.prepare("INSERT INTO story_clues (arc_id, scene_id, text) VALUES (?, NULL, ?)").run(advRef.id, text)
+                .lastInsertRowid
+            )
+          );
+          bump("улики");
+          return;
+        }
         const id = Number(
           db
             .prepare(
@@ -1077,6 +1107,28 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
         remember("story_secrets", "content", id, secret.content);
         bump("тайны");
       });
+
+      // Улики — после тайн: цель бывает и сценой, и тайной (Q2).
+      for (const scene of adv.scenes) {
+        const self = keys.get(scene.key);
+        if (!self || !created.has(scene.key)) continue;
+        const arcId = (db.prepare("SELECT arc_id FROM story_scenes WHERE id = ?").get(self.id) as { arc_id: number })
+          .arc_id;
+        scene.clues.forEach((clue, index) => {
+          const target = resolve(clue.to);
+          const kind = target?.type === "scene" && target.id !== self.id ? "scene" : target?.type === "secret" ? "secret" : null;
+          const id = Number(
+            db
+              .prepare(
+                `INSERT INTO story_clues (arc_id, scene_id, text, how, target_type, target_id, position)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`
+              )
+              .run(arcId, self.id, clue.text, clue.how, kind, kind ? target!.id : null, index).lastInsertRowid
+          );
+          record("clue", id);
+          bump("улики");
+        });
+      }
 
       adv.rewards.forEach((reward, index) => {
         // У вех и тайн есть ключи, и повтор отсекается по ним. У награды

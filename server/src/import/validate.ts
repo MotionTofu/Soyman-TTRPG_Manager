@@ -147,6 +147,8 @@ export function validateImport(raw: unknown, known: Record<string, string> = {})
       checkRefs(s.participants, `${at}.participants`, ["npc.", "bst.", "com."]);
       checkRefs(s.items, `${at}.items`, ["item."]);
       s.next.forEach((n, k) => checkRef(n.to, `${at}.next[${k}].to`, ["scn."]));
+      s.clues.forEach((c, k) => checkRef(c.to, `${at}.clues[${k}].to`, ["scn.", "sec."]));
+      checkRef(s.about, `${at}.about`, ["loc.", "npc.", "bst.", "com.", "item."]);
       s.rewards.forEach((r, k) => checkRef(r.item, `${at}.rewards[${k}].item`, ["item."]));
     });
     a.milestones.forEach((m, j) =>
@@ -221,6 +223,7 @@ export function validateImport(raw: unknown, known: Record<string, string> = {})
     сцены: scenes.length,
     вехи: data.adventures.flatMap((a) => a.milestones).length,
     тайны: data.adventures.flatMap((a) => a.secrets).length,
+    улики: scenes.flatMap((s) => s.clues).length,
     проверки: scenes.flatMap((s) => s.checks).length,
     награды: scenes.flatMap((s) => s.rewards).length + data.adventures.flatMap((a) => a.rewards).length,
     события: data.calendar_events.length,

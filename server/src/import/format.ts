@@ -220,7 +220,21 @@ export const sceneSchema = z.object({
   items: refs,
   checks: z.array(checkSchema).default([]),
   rewards: z.array(rewardSchema).default([]),
+  // `next` — проходы узлового дизайна: надёжная связь (дверь, «после боя их
+  // уводят»). Улики — отдельно, ниже (гриллинг «Узловой дизайн», Q21–Q25).
   next: z.array(z.object({ to: ref, label: text })).default([]),
+  // Узел: тип и роль. Без роли `kind: "ending"` читается как финал — старые
+  // файлы грузятся как раньше.
+  node_type: z.enum(["place", "person", "organization", "event", "activity"]).nullish(),
+  node_role: z.enum(["normal", "start", "dead_end", "finale", "proactive"]).nullish(),
+  /** «Когда приходит сам» — у проактивного узла. */
+  trigger: text,
+  /** «О ком / о чём» узел: одна сущность мира (loc./npc./bst./com./item.). */
+  about: optionalRef,
+  /** Улики, которые находят ЗДЕСЬ; `to` — сцена или тайна, к которой ведут. */
+  clues: z
+    .array(z.object({ text: z.string().min(1), how: text, to: optionalRef }))
+    .default([]),
 });
 
 export const adventureSchema = z.object({
