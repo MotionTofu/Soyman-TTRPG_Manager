@@ -76,6 +76,7 @@ interface UseMapInputArgs {
   ruler: { locked: boolean } | null;
   setHover: (h: string | null) => void;
   setRectPreview: (r: { x: number; y: number; w: number; h: number } | null) => void;
+  onFogCell: (x: number, y: number, reverse: boolean) => boolean;
   tools: MapInputTools;
 }
 
@@ -131,13 +132,19 @@ export function useMapInput(args: UseMapInputArgs) {
   const roomRectRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
   const [spaceDown, setSpaceDown] = useState(false);
 
+  function paintFogAt(a: UseMapInputArgs, wx: number, wy: number): boolean {
+    if (!a.geom) return false;
+    const cell = pixelToCell(a.geom.grid, wx, wy, a.geom.width, a.geom.height);
+    return cell ? a.onFogCell(cell.x, cell.y, eraseOverrideRef.current) : false;
+  }
+
   function flushPaint() {
     const a = argsRef.current;
     paintRafRef.current = 0;
     const p = pendingPaintRef.current;
     pendingPaintRef.current = null;
-    if (!p) return;
-    if (a.tools.paint.paintAt(p.wx, p.wy, { eraseOverride: eraseOverrideRef.current }))
+    if (!p || !a.canEdit) return;
+    if (a.tool === "fog" ? paintFogAt(a, p.wx, p.wy) : a.tools.paint.paintAt(p.wx, p.wy, { eraseOverride: eraseOverrideRef.current }))
       a.history.markStrokeChanged();
   }
 
@@ -146,6 +153,26 @@ export function useMapInput(args: UseMapInputArgs) {
     paintRafRef.current = 0;
     flushPaint();
   }
+
+  // Переключение в просмотр может застать незавершённый мазок/drag.
+  // Закрываем жест и отменяем отложенный кадр, чтобы правка не дошла после
+  // включения режима только для чтения.
+  useEffect(() => {
+    if (args.canEdit) return;
+    const a = argsRef.current;
+    if (paintRafRef.current) cancelAnimationFrame(paintRafRef.current);
+    paintRafRef.current = 0;
+    pendingPaintRef.current = null;
+    const drag = objDragRef.current;
+    if (drag) a.tools.objects.cancelDrag(drag.before);
+    objDragRef.current = null;
+    rectRef.current = null;
+    shapeDragRef.current = null;
+    strokeTouchRef.current = null;
+    eraseOverrideRef.current = false;
+    a.setRectPreview(null);
+    if (a.history.isPainting()) a.history.commitStroke();
+  }, [args.canEdit]);
 
   // Пробел — временная панорама левой кнопкой.
   useEffect(() => {
@@ -193,13 +220,19 @@ export function useMapInput(args: UseMapInputArgs) {
         a.history.beginStroke();
         eraseOverrideRef.current = true;
         const { wx, wy } = a.camera.toWorld(e);
-        if (a.tools.paint.paintAt(wx, wy, { eraseOverride: eraseOverrideRef.current }))
+        if (a.tool === "fog" ? paintFogAt(a, wx, wy) : a.tools.paint.paintAt(wx, wy, { eraseOverride: eraseOverrideRef.current }))
           a.history.markStrokeChanged();
       }
       return;
     }
     const geom = a.geom;
     const { wx, wy } = a.camera.toWorld(e);
+    if (a.tool === "fog") {
+      capture(e);
+      a.history.beginStroke();
+      if (paintFogAt(a, wx, wy)) a.history.markStrokeChanged();
+      return;
+    }
     // Выбор (пакет A + P1-3): клик по объекту — потянуть или панель; по пустому —
     // тянуть прямоугольник комнаты или панель создания. Двери на рёбрах —
     // только квадраты (на гексах создание дверей заблокировано в модалке).
@@ -216,6 +249,13 @@ export function useMapInput(args: UseMapInputArgs) {
           if (rect) {
             ox = cell.x - rect.x;
             oy = cell.y - rect.y;
+          }
+        }
+        if (hit.sel.kind === "object") {
+          const object = doc.layers.flatMap((layer) => layer.kind === "object" ? layer.items : []).find((item) => item.id === hit.sel.entityId);
+          if (object) {
+            ox = wx - object.transform.position.x;
+            oy = wy - object.transform.position.y;
           }
         }
         capture(e);
@@ -276,7 +316,8 @@ export function useMapInput(args: UseMapInputArgs) {
       placeTool === "altar" ||
       placeTool === "marker" ||
       placeTool === "start" ||
-      placeTool === "finish"
+      placeTool === "finish" ||
+      placeTool === "asset"
     ) {
       a.tools.paint.placeObject(placeTool, wx, wy);
       return;
@@ -308,6 +349,11 @@ export function useMapInput(args: UseMapInputArgs) {
     if (!a.geom) return;
     const geom = a.geom;
     const { wx, wy } = a.camera.toWorld(e);
+    if (!a.canEdit) {
+      const cell = pixelToCell(geom.grid, wx, wy, geom.width, geom.height);
+      a.setHover(cell ? cellKey(cell.x, cell.y) : null);
+      return;
+    }
     if (a.history.isPainting() && (e.buttons & 3) !== 0) {
       pendingPaintRef.current = { wx, wy };
       if (!paintRafRef.current)
@@ -488,7 +534,8 @@ export function useMapInput(args: UseMapInputArgs) {
         a.tool === "altar" ||
         a.tool === "marker" ||
         a.tool === "start" ||
-        a.tool === "finish"
+        a.tool === "finish" ||
+        a.tool === "asset"
       ) {
         // Тач-установка: тап — объект (иначе тач красил бы террейном).
         const { wx, wy } = a.camera.touchToWorld(t.clientX, t.clientY);
@@ -497,7 +544,7 @@ export function useMapInput(args: UseMapInputArgs) {
         strokeTouchRef.current = t.identifier;
         a.history.beginStroke();
         const { wx, wy } = a.camera.touchToWorld(t.clientX, t.clientY);
-        if (a.tools.paint.paintAt(wx, wy, { eraseOverride: eraseOverrideRef.current }))
+        if (a.tool === "fog" ? paintFogAt(a, wx, wy) : a.tools.paint.paintAt(wx, wy, { eraseOverride: eraseOverrideRef.current }))
           a.history.markStrokeChanged();
       }
       return;
@@ -523,13 +570,17 @@ export function useMapInput(args: UseMapInputArgs) {
 
   function onTouchMove(e: React.TouchEvent) {
     const a = argsRef.current;
+    if (!a.canEdit && strokeTouchRef.current !== null) {
+      strokeTouchRef.current = null;
+      if (a.history.isPainting()) a.history.commitStroke();
+    }
     if (strokeTouchRef.current !== null) {
       for (let i = 0; i < e.changedTouches.length; i++) {
         const t = e.changedTouches[i];
         if (t.identifier !== strokeTouchRef.current) continue;
         touches.current.set(t.identifier, { x: t.clientX, y: t.clientY });
         const { wx, wy } = a.camera.touchToWorld(t.clientX, t.clientY);
-        if (a.tools.paint.paintAt(wx, wy, { eraseOverride: eraseOverrideRef.current }))
+        if (a.tool === "fog" ? paintFogAt(a, wx, wy) : a.tools.paint.paintAt(wx, wy, { eraseOverride: eraseOverrideRef.current }))
           a.history.markStrokeChanged();
       }
       return;

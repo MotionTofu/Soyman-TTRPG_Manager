@@ -355,9 +355,8 @@ describe("unsupported V5 content", () => {
       "unsupported-room-geometry",
       "unsupported-scatter-layer",
       "unsupported-spline-path",
-      "unsupported-terrain-mask",
     ]);
-    // Model валидной формы: дефолтный террейн, пути/комнаты пропущены.
+    // Пустая маска поддерживается; пути/комнаты неподдерживаемых форм пропущены.
     const flat = flattenRenderModel(model);
     expect(flat.terrain.defaultCode).toBe("plain");
     expect(flat.terrain.entries).toEqual([]);

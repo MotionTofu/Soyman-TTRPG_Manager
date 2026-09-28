@@ -8,8 +8,11 @@ import { showSaveError } from "../../data/notices";
 import { sessionPaths } from "../../data/sessions";
 import { LazyDetails } from "../LazyDetails";
 import { PresentationStage } from "./PresentationStage";
+import { PlayerMapStage } from "./PlayerMapStage";
 import { getScreens, loadLastScreenId, openOnScreen, type ScreenChoice } from "./screens";
 import type { CampaignCover, ScenePresentation, SessionStage, ShowState, StorySceneDetail } from "../../types";
+
+interface SceneMapList { scene_id: number; maps: { id: number; name: string }[] }
 
 // Блок «Представление» пульта сессии: превью того, что на экране игроков
 // (тот же PresentationStage, только маленький), тумблер показа, кнопки слоёв
@@ -40,13 +43,25 @@ export function PresentationPanel({
     useResource<ScenePresentation>(
       currentId != null ? `/story/scenes/${currentId}/presentation?campaign_id=${campaignId}` : null
     ).data ?? null;
+  const currentPresentationSceneId = currentPres?.scene_id ?? currentId;
+  const currentMapsData = useResource<SceneMapList>(
+    currentId != null ? `/story/scenes/${currentId}/maps?campaign_id=${campaignId}` : null
+  ).data ?? null;
+  const currentMaps = currentMapsData?.maps ?? [];
+  const currentMapSceneId = currentMapsData?.scene_id ?? currentId;
 
   // Висящий кадр: экран показывает не текущую сцену. show.scene_id — уже
   // writable-строка, разруливать copy-on-write нечего; имя — для пометки.
-  const hangingId = show?.mode === "scene" && show.scene_id != null && show.scene_id !== currentId ? show.scene_id : null;
+  const hangingId = show?.mode === "scene" && show.scene_id != null && show.scene_id !== currentPresentationSceneId ? show.scene_id : null;
   const shownPres =
     useResource<ScenePresentation>(hangingId != null ? `/story/scenes/${hangingId}/presentation` : null).data ?? null;
   const shownName = useEntity<StorySceneDetail>("scene", hangingId).data?.name ?? "";
+  const hangingMapSceneId = show?.mode === "map" && show.scene_id != null && show.scene_id !== currentMapSceneId ? show.scene_id : null;
+  const hangingMaps = useResource<SceneMapList>(
+    hangingMapSceneId != null ? `/story/scenes/${hangingMapSceneId}/maps` : null
+  ).data?.maps ?? [];
+  const shownMap = (show?.scene_id === currentMapSceneId ? currentMaps : hangingMaps).find((m) => m.id === show?.map_id);
+  const shownMapSceneName = useEntity<StorySceneDetail>("scene", hangingMapSceneId).data?.name ?? "";
 
   const hasContent = useCallback((p: ScenePresentation | CampaignCover | null) => {
     return !!p && (!!p.background_url || p.layers.length > 0);
@@ -56,14 +71,14 @@ export function PresentationPanel({
     if (!show || !show.shown) return null;
     if (show.mode === "cover") return cover;
     if (show.mode === "scene" && show.scene_id != null) {
-      return show.scene_id === currentId ? currentPres : shownPres;
+      return show.scene_id === currentPresentationSceneId ? currentPres : shownPres;
     }
     return null;
-  }, [show, cover, currentId, currentPres, shownPres]);
+  }, [show, cover, currentPresentationSceneId, currentPres, shownPres]);
 
   const currentHas = hasContent(currentPres);
   const coverHas = hasContent(cover);
-  const screenHas = hasContent(screenPres);
+  const screenHas = show?.mode === "map" ? !!show.map_id : hasContent(screenPres);
 
   async function putShow(patch: Partial<ShowState>) {
     try {
@@ -94,7 +109,7 @@ export function PresentationPanel({
   }
 
   const showing = !!show?.shown && !!screenHas;
-  const hanging = showing && show?.mode === "scene" && show.scene_id !== currentId;
+  const hanging = showing && show?.mode === "scene" && show.scene_id !== currentPresentationSceneId;
 
   // --- Хоткеи: 1–9 — слои экрана. Esc — пропуск титра превью, и только
   // тогда перехватываем событие в capture-фазе, чтобы SceneSwitcher не снял
@@ -154,7 +169,7 @@ export function PresentationPanel({
 
   // Нет контента вообще = нет блока (решение Q18). Хук-правила: ранний
   // return — после всех хуков выше.
-  if (show && !currentHas && !coverHas && !(show.mode === "scene" && screenHas)) return null;
+  if (show && !currentHas && !coverHas && currentMaps.length === 0 && !screenHas) return null;
 
   const buttonLayers = (screenPres?.layers ?? [])
     .filter((l) => l.has_button === 1)
@@ -200,7 +215,11 @@ export function PresentationPanel({
       )}
       <div className="row" style={{ gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div style={{ flex: "1 1 220px", minWidth: 200, maxWidth: 360 }}>
-          {screenPres && showing ? (
+          {show?.mode === "map" && show.map_id != null && showing ? (
+            <div style={{ aspectRatio: "16 / 9", width: "100%", overflow: "hidden" }}>
+              <PlayerMapStage mapId={show.map_id} />
+            </div>
+          ) : screenPres && showing ? (
             <PresentationStage
               backgroundUrl={screenPres.background_url}
               layers={screenPres.layers}
@@ -241,6 +260,10 @@ export function PresentationPanel({
               <button type="button" onClick={() => void putShow({ shown: 0 })}>
                 Скрыть
               </button>
+            ) : show?.mode === "map" && show.map_id != null && shownMap ? (
+              <button type="button" className="primary" onClick={() => void putShow({ shown: 1 })}>
+                Показать
+              </button>
             ) : show?.mode === "scene" && show.scene_id != null ? (
               <button type="button" className="primary" onClick={() => void putShow({ shown: 1 })}>
                 Показать
@@ -252,7 +275,7 @@ export function PresentationPanel({
                 onClick={() =>
                   void putShow({
                     mode: "scene",
-                    scene_id: currentId,
+                    scene_id: currentPresentationSceneId,
                     visible_layer_ids: defaultsOf(currentPres),
                     shown: 1,
                   })
@@ -279,11 +302,27 @@ export function PresentationPanel({
                 Заглавное
               </button>
             ) : null}
+            {currentHas && showing && !(show?.mode === "scene" && show.scene_id === currentPresentationSceneId) && (
+              <button type="button" onClick={() => void putShow({
+                mode: "scene", scene_id: currentPresentationSceneId, visible_layer_ids: defaultsOf(currentPres), shown: 1,
+              })}>Сцена</button>
+            )}
+            {currentId != null && currentMaps.map((map) => (
+              <button key={map.id} type="button"
+                className={showing && show?.mode === "map" && show.map_id === map.id ? "primary" : undefined}
+                onClick={() => void putShow({ mode: "map", scene_id: currentMapSceneId, map_id: map.id, visible_layer_ids: [], shown: 1 })}>
+                Карта: {map.name}
+              </button>
+            ))}
           </div>
           <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>
             {showing
               ? show?.mode === "cover"
                 ? "На экране: заглавное кампании"
+                : show?.mode === "map"
+                  ? show.scene_id !== currentMapSceneId
+                    ? `На экране — карта «${shownMap?.name ?? "…"}» из: ${shownMapSceneName || "…"}`
+                    : `На экране: карта «${shownMap?.name ?? "…"}»`
                 : hanging
                   ? `На экране — кадр из: ${shownName || "…"}`
                   : `На экране: ${stage?.current?.name ?? "…"}`
@@ -309,7 +348,7 @@ export function PresentationPanel({
               })}
             </div>
           )}
-          {showing && buttonLayers.length === 0 && (
+          {showing && show?.mode !== "map" && buttonLayers.length === 0 && (
             <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
               Кнопочных слоёв нет — всё видимое уже на экране.
             </span>

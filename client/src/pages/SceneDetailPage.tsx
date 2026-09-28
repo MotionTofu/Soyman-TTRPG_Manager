@@ -12,6 +12,7 @@ import type { Setting, StoryScene, StorySceneDetail } from "../types";
 import { NavIcon } from "../components/NavIcons";
 import { LoadErrorCard } from "../components/Loadable";
 import { PresentationEditor } from "../components/presentation/PresentationEditor";
+import { SceneMaps } from "../components/presentation/SceneMaps";
 import { useTabState } from "../hooks/useTabState";
 import "../session.css";
 import { useConfirm } from "../hooks/useConfirm";
@@ -460,6 +461,7 @@ export function SceneDetailPage() {
             <div className="campaign-overview-header" style={{ marginBottom: 8 }}>Представление</div>
             <PresentationEditor owner={{ kind: "scene", sceneId, sceneName: scene.name, campaignId }} />
           </div>
+          <SceneMaps sceneId={sceneId} campaignId={campaignId} />
           <SceneAudioCard sceneId={sceneId} />
         </>
       )}

@@ -1,6 +1,6 @@
 // Current editor compatibility profile (Фаза 3A, §78–83).
 // Отличается от validateMapDocument: валидный V5 может быть не по зубам
-// текущему редактору (mask/spline/objects/scatter, несколько road paths
+// текущему редактору (неизвестные mask encoding/spline/unknown objects/scatter, несколько road paths
 // внутри одного слоя, неквадратные комнаты...). Такое нельзя молча открыть
 // на редактирование: renderer бы скрыл данные, а autosave — перезаписал.
 // Разрешены: arbitrary layer order, 0..N TerrainCell/Path/Gameplay/Label
@@ -36,6 +36,11 @@ export function assessCurrentEditorCompatibility(doc: MapDocumentV5): EditorComp
     if (doc.grid.type !== "square" && doc.grid.type !== "hex") {
       issue("grid-type", `editor supports square|hex, got ${doc.grid.type}`);
     }
+    // Canvas/tools still use the legacy unit-cell geometry. A valid V5 grid
+    // with a different origin or cell size would be drawn in the wrong place.
+    if (doc.grid.cellSize !== 1 || doc.grid.origin.x !== 0 || doc.grid.origin.y !== 0) {
+      issue("grid-geometry", "editor requires unit cells with origin (0,0)");
+    }
     if (
       !Number.isInteger(doc.grid.columns) ||
       !Number.isInteger(doc.grid.rows) ||
@@ -52,7 +57,7 @@ export function assessCurrentEditorCompatibility(doc: MapDocumentV5): EditorComp
   }
 
   // Render-подмножество: любой unsupported diagnostic = несовместимость.
-  // (mask/spline/objects/scatter/non-rect rooms/non-cardinal doors/
+  // (unknown mask encoding/spline/unknown objects/scatter/non-rect rooms/non-cardinal doors/
   // non-terrain materials/unknown path kinds — см. createV5RenderModel).
   const { diagnostics } = createV5RenderModel(doc);
   for (const d of diagnostics) {
@@ -62,6 +67,9 @@ export function assessCurrentEditorCompatibility(doc: MapDocumentV5): EditorComp
   // Terrain default: кисти/пипетка/ластик работают кодами builtin:terrain/*.
   for (const layer of doc.layers) {
     if (layer.kind !== "terrain") continue;
+    if (doc.exploration?.enabled && layer.representation === "mask") {
+      issue("exploration-terrain-mask", "fog with detailed terrain mask is not supported yet");
+    }
     const dm = layer.defaultMaterial;
     if (dm.type !== "builtin" || !dm.key.startsWith("terrain/")) {
       issue(

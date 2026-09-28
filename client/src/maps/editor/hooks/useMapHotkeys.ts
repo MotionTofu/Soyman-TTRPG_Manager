@@ -111,7 +111,7 @@ export function useMapHotkeys(args: UseMapHotkeysArgs) {
         return;
       }
       // Enter без модификаторов — финиш полилинии стен с живым концом (Этап E).
-      if (e.code === "Enter" && a.canFinishWall) {
+      if (e.code === "Enter" && a.canEdit && a.canFinishWall) {
         e.preventDefault();
         a.onFinishWall();
         return;

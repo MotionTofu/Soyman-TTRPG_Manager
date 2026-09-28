@@ -161,7 +161,8 @@ describe("rename/visible/locked/opacity", () => {
     expect(v.ok && v.changed).toBe(true);
     if (v.ok && v.changed) {
       expect(v.document.layers.find((l) => l.id === "lyr-gameplay")?.visible).toBe(false);
-      expect(v.ok && !setLayerVisible(v.document, "lyr-gameplay", false).changed).toBe(true);
+      const repeated = setLayerVisible(v.document, "lyr-gameplay", false);
+      expect(repeated.ok && !repeated.changed).toBe(true);
     }
     const l = setLayerLocked(d, "lyr-gameplay", true);
     expect(l.ok && l.changed).toBe(true);

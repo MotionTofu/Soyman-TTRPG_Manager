@@ -12,8 +12,10 @@ import type {
   LayerId,
   MapDocumentV5,
   MapLayer,
+  ObjectLayer,
   PathLayer,
   TerrainCellLayer,
+  TerrainMaskLayer,
 } from "../types";
 import { collectIds, findLayer, withReplacedLayer } from "./helpers";
 import { changed, mutationError, noChange, type MutationResult } from "./types";
@@ -74,6 +76,24 @@ export function createTerrainLayer(doc: MapDocumentV5, spec: LayerSpec): Mutatio
   return changed({ ...doc, layers: [...doc.layers, layer] });
 }
 
+/** A denser world-space surface, initially plain, with sparse painted samples. */
+export function createTerrainMaskLayer(doc: MapDocumentV5, spec: LayerSpec): MutationResult {
+  const idCheck = checkNewId(doc, spec.id);
+  if (!idCheck.ok) return idCheck.error;
+  const nameCheck = checkName(spec.name);
+  if (!nameCheck.ok) return nameCheck.error;
+  const sampleSize = doc.grid ? doc.grid.cellSize / 4
+    : Math.min(doc.world.bounds.maxX - doc.world.bounds.minX, doc.world.bounds.maxY - doc.world.bounds.minY) / 400;
+  const plain = { type: "builtin" as const, key: "terrain/plain" };
+  const layer: TerrainMaskLayer = {
+    ...baseOf(spec), name: nameCheck.name, kind: "terrain",
+    defaultMaterial: plain, representation: "mask",
+    mask: { origin: { x: doc.world.bounds.minX, y: doc.world.bounds.minY }, sampleSize,
+      materials: [plain], chunks: [] },
+  };
+  return changed({ ...doc, layers: [...doc.layers, layer] });
+}
+
 /** Новый PathLayer: paths [] (§51). */
 export function createPathLayer(doc: MapDocumentV5, spec: LayerSpec): MutationResult {
   const idCheck = checkNewId(doc, spec.id);
@@ -81,6 +101,15 @@ export function createPathLayer(doc: MapDocumentV5, spec: LayerSpec): MutationRe
   const nameCheck = checkName(spec.name);
   if (!nameCheck.ok) return nameCheck.error;
   const layer: PathLayer = { ...baseOf(spec), name: nameCheck.name, kind: "path", paths: [] };
+  return changed({ ...doc, layers: [...doc.layers, layer] });
+}
+
+export function createObjectLayer(doc: MapDocumentV5, spec: LayerSpec): MutationResult {
+  const idCheck = checkNewId(doc, spec.id);
+  if (!idCheck.ok) return idCheck.error;
+  const nameCheck = checkName(spec.name);
+  if (!nameCheck.ok) return nameCheck.error;
+  const layer: ObjectLayer = { ...baseOf(spec), name: nameCheck.name, kind: "object", items: [] };
   return changed({ ...doc, layers: [...doc.layers, layer] });
 }
 

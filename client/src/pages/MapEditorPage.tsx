@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { subscribeMapImageAssets } from "../maps/assets/registry";
 import { useAfterWrite, useResource, write } from "../data/hooks";
 import { readOnce } from "../data/imperative";
 import { useCurrentUser } from "../api/currentUser";
@@ -18,7 +19,6 @@ import {
   MAP_TERRAIN_FILL,
   MAP_TERRAIN_LABELS,
   MAP_TERRAIN_ORDER,
-  MAP_TOOL_ORDER,
   MAP_DOOR_LABELS,
   MAP_DOOR_KINDS,
   MAP_DOOR_FILL,
@@ -55,17 +55,24 @@ import {
 // Фаза 2G: canonical editor state — MapDocumentV5 (иммутабельный).
 import { serializeMapDocument } from "../maps/core/serialize";
 import { createV5RenderModel } from "../maps/renderModel";
+import {
+  MAP_SYMBOL_ASSETS, loadMapImageAsset, prepareMapImageAssets,
+  registerMapImageResources, resourceImageAssetId, resolveMapSymbol,
+  type MapImageResource,
+} from "../maps/assets/registry";
 import type { MapDocumentV5 } from "../maps/core/types";
 import { loadStoredEditorDocument, type LoadedEditorDocument } from "../maps/editor/loadDocument";
 import { compareLegacySemantics } from "../maps/core/semanticEquivalence";
 import { parseCellsBlob } from "../maps/render";
-import { parseSoyMapV2, buildSoyMapV2 } from "../maps/core/exchangeV2";
+import { parseSoyMapV2, buildSoyMapV2, checkSoyMapV2ImportTarget } from "../maps/core/exchangeV2";
+import { projectMapDocumentForPlayer } from "../maps/core/playerProjection";
 import { assessCurrentEditorCompatibility } from "../maps/core/compatibility";
 import { migrateLegacyMap, legacyDoorWorldPosition, legacyEdgeOrientation } from "../maps/core/migrateLegacy";
 import { validateMapDocument } from "../maps/core/validate";
 import { createUuidIdFactory } from "../maps/editor/idFactory";
 import { fixConnectivityV5 } from "../maps/editor/fixConnectivityV5";
 import { findEntityLayer } from "../maps/core/mutations/layers";
+import { transformMapObject } from "../maps/core/mutations/mapObjects";
 import {
   NO_COMPATIBLE_LAYER_ERROR,
   resolveToolTargetLayer,
@@ -81,6 +88,7 @@ import {
 import { applyTerrainCellEdits } from "../maps/core/mutations/terrain";
 import { createLabel, deleteLabel, moveLabel, updateLabelText } from "../maps/core/mutations/labels";
 import { clearEditableContent, resizeGridDocument } from "../maps/core/mutations/document";
+import { paintExplorationCell, setAllExplorationCells, setExplorationEnabled } from "../maps/core/mutations/exploration";
 import type { GameplayEntity, LayerId } from "../maps/core/types";
 import { useMapCamera } from "../maps/editor/hooks/useMapCamera";
 import { useMapHistory } from "../maps/editor/hooks/useMapHistory";
@@ -92,6 +100,16 @@ import { useMapTools } from "../maps/editor/hooks/useMapTools";
 import { MapViewport } from "../maps/editor/components/MapViewport";
 import { LayerPanel } from "../maps/editor/components/LayerPanel";
 import type { BrushSize, PaintTool } from "../maps/editor/editorTypes";
+import {
+  COMMON_TOOLS,
+  DEFAULT_MODE_TOOL,
+  MODE_TOOLS,
+  TOOL_DESCRIPTIONS,
+  extraToolsForMode,
+  toolUnavailableReason,
+  type EditorMode,
+} from "../maps/editor/toolModes";
+import "./map-editor-layout.css";
 
 const UNDO_DEPTH = 50;
 
@@ -170,6 +188,10 @@ export function MapEditorPage() {
   // Фаза 2G: единственный mutable editor state — MapDocumentV5 (иммутабельный;
   // мутации только через Mutation Core, целые замены — load/undo/import/generator).
   const [document, setDocument] = useState<MapDocumentV5 | null>(null);
+  const [imageResources, setImageResources] = useState<MapImageResource[]>([]);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageRevision, setImageRevision] = useState(0);
+  useEffect(() => subscribeMapImageAssets(() => setImageRevision((revision) => revision + 1)), []);
   // Фаза 3A: activeLayerId — editor-only state (§27), НЕ входит в документ.
   // Разделён с selected entityId (§29): слой — куда пишут инструменты,
   // entity — что выбрано hit-test'ом.
@@ -184,11 +206,35 @@ export function MapEditorPage() {
   const [hover, setHover] = useState<string | null>(null);
   const [showGrid, setShowGrid] = useState(() => loadFlag("maps.showGrid", true));
   const [showCoords, setShowCoords] = useState(() => loadFlag("maps.showCoords", false));
+  const [previewAsPlayer, setPreviewAsPlayer] = useState(false);
+  const canEditInView = canEdit && !previewAsPlayer;
+  const [fogAction, setFogAction] = useState<"reveal" | "hide">("reveal");
 
   // Инструменты (тикет 04). Пипетка и заливка — одноразовые действия,
   // кисть/дорога/ластик — мазки от нажатия до отпускания.
-  const [tool, setTool] = useState<PaintTool>("brush");
-  const [terrain, setTerrain] = useState<string>("forest");
+  const [editorMode, setEditorMode] = useState<EditorMode>(() => {
+    try {
+      const mode = localStorage.getItem("maps.editorMode");
+      if (mode === "region" || mode === "local" || mode === "dungeon") return mode;
+      const legacyPanel = localStorage.getItem("maps.panel");
+      return legacyPanel === "surface" ? "local" : legacyPanel === "objects" ? "dungeon" : "region";
+    } catch {
+      return "region";
+    }
+  });
+  const [activePanel, setActivePanelState] = useState<"biomes" | "surface">(() => {
+    try {
+      const v = localStorage.getItem("maps.panel");
+      return v === "surface" || v === "biomes" ? v : editorMode === "region" ? "biomes" : "surface";
+    } catch {
+      return editorMode === "region" ? "biomes" : "surface";
+    }
+  });
+  const [tool, setTool] = useState<PaintTool>(() => DEFAULT_MODE_TOOL[editorMode]);
+  const modeToolRef = useRef<Record<EditorMode, PaintTool>>({ ...DEFAULT_MODE_TOOL });
+  const [extraToolsOpen, setExtraToolsOpen] = useState(false);
+  const paletteTerrainRef = useRef({ biomes: "forest", surface: "stone" });
+  const [terrain, setTerrain] = useState<string>(() => paletteTerrainRef.current[activePanel]);
   const [brushSize, setBrushSize] = useState<BrushSize>(1);
   // История (V5 snapshots; Mutation Core иммутабелен — храним references,
   // identity clone безопасен и зафиксирован тестом, §22 ТЗ 2G).
@@ -207,6 +253,7 @@ export function MapEditorPage() {
   // не меняют — только запоминаются для следующего прогона.
   const [genOpen, setGenOpen] = useState(false);
   const [genParams, setGenParams] = useState<GeneratorParams>({ seed: 0, sea: 55, mountains: 12, forest: 30 });
+  const [shapeContent, setShapeContent] = useState<"room" | "terrain" | "road" | "river" | "wall" | "eraser">("room");
 
   const documentRef = useRef<MapDocumentV5 | null>(null);
   documentRef.current = document;
@@ -231,8 +278,14 @@ export function MapEditorPage() {
     return r.model;
   }, [document]);
 
+  // Превью мастера использует ту же проекцию документа, что сервер отдаёт игроку.
+  const displayModel = useMemo(() => {
+    if (!document || !canEdit || !previewAsPlayer) return model;
+    return createV5RenderModel(projectMapDocumentForPlayer(document)).model;
+  }, [document, model, canEdit, previewAsPlayer]);
+
   // Экранная легенда — из видимых слоёв модели (3A §109), как PNG-легенда.
-  const legend = useMemo(() => (model ? collectLegendContent(model) : null), [model]);
+  const legend = useMemo(() => (displayModel ? collectLegendContent(displayModel) : null), [displayModel]);
 
   const newId = useMemo(() => createUuidIdFactory(), []);
 
@@ -303,15 +356,21 @@ export function MapEditorPage() {
   });
 
   useEffect(() => {
+    if (!user) return;
     let alive = true;
     setLoading(true);
     setLoadError(null);
     autosave.beginLoad();
     // Карта читается мимо кэша слоя: перечитывание по чужой правке легло бы
     // поверх несохранённых правок.
-    readOnce<MapFull>(`/maps/${id}`)
-      .then((data) => {
+    Promise.all([
+      readOnce<MapFull>(`/maps/${id}`),
+      canEdit ? readOnce<MapImageResource[]>("/maps/asset-catalog") : readOnce<MapImageResource[]>(`/maps/${id}/assets`),
+    ])
+      .then(([data, resources]) => {
         if (!alive) return;
+        registerMapImageResources(resources);
+        setImageResources(resources);
         setMap(data);
         // Load normalization (§10–12 ТЗ 2G): legacy → migrate, V5 → напрямую.
         const loaded = loadStoredEditorDocument({
@@ -322,6 +381,9 @@ export function MapEditorPage() {
         });
         documentRef.current = loaded.document;
         setDocument(loaded.document);
+        void prepareMapImageAssets(loaded.document).catch((error) => {
+          if (alive) setUnsupported(`Изображение карты не загрузилось: ${error instanceof Error ? error.message : String(error)}`);
+        });
         setUnsupported(loaded.compatibility.compatible ? null : describeUnsupported(loaded));
         // Эталон — canonical serialization migrated-документа (§14 ТЗ 2G):
         // иначе in-memory V5 сразу казался бы dirty. Write-on-load нет (§13).
@@ -361,7 +423,7 @@ export function MapEditorPage() {
     return () => {
       alive = false;
     };
-  }, [id]);
+  }, [id, user?.role]);
 
   // Автосохранение (V5): debounce/seq/thumb/dirty/retry/unload/corrupt — в хуке.
   // Битый blob / unsupported V5 (P1-7, §56–57 ТЗ 2G): показываем fallback,
@@ -607,7 +669,7 @@ export function MapEditorPage() {
     }, 800);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [document, map]);
+  }, [document, map, imageRevision]);
 
   function jumpToMini(e: React.MouseEvent) {
     const wrap = wrapRef.current;
@@ -737,9 +799,6 @@ export function MapEditorPage() {
     b: { x: number; y: number } | null;
     locked: boolean;
   } | null>(null);
-  // Взгляд игрока (пакет A §6): мастер смотрит карту без секретного.
-  const [previewAsPlayer, setPreviewAsPlayer] = useState(false);
-
   useEffect(() => {
     if (tool !== "ruler") setRuler(null);
   }, [tool]);
@@ -759,7 +818,6 @@ export function MapEditorPage() {
   }, [tool]);
 
   // Шейпы (Этап E): прямоугольник + содержимое. Мышь — drag, тач — два тапа по углам.
-  const [shapeContent, setShapeContent] = useState<"room" | "terrain" | "road" | "river" | "wall" | "eraser">("room");
   shapeContentRef.current = shapeContent;
   const [shapeAnchor, setShapeAnchor] = useState<{ x: number; y: number } | null>(null);
 
@@ -895,6 +953,21 @@ export function MapEditorPage() {
     onActiveLayer: setActiveLayer,
   });
   const { selected } = selection;
+  const selectedMapObject = selected?.kind === "object"
+    ? document?.layers.flatMap((layer) => layer.kind === "object" ? layer.items : []).find((item) => item.id === selected.entityId)
+    : undefined;
+
+  function changeSelectedMapObject(rotation: number, size: number) {
+    const doc = documentRef.current;
+    if (!doc || !selectedMapObject || !canEdit || unsupported !== null) return;
+    const owner = findEntityLayer(doc, selectedMapObject.id);
+    if (!owner) return;
+    const layer = doc.layers[owner.layerIndex];
+    if (!layer.visible || layer.locked) return;
+    const r = transformMapObject(doc, selectedMapObject.id, rotation, size);
+    if (!r.ok) { setActionError(r.issues[0]?.message ?? "Не удалось изменить символ."); return; }
+    if (r.changed) commitDocument(r.document, doc);
+  }
 
   // Хит-тест и перемещение/удаление — в useMapSelection (та же геометрия
   // и приоритеты: door → trap → marker → start/finish → room).
@@ -1305,10 +1378,21 @@ export function MapEditorPage() {
     setRectPreview(null);
   }
 
-  function selectTool(t: PaintTool) {
+  function selectTool(t: PaintTool, mode: EditorMode = editorMode) {
+    if (toolUnavailableReason(t, map?.grid)) return;
     if (toolRef.current === "select" && t !== "select") closeObjPanels();
     setTool(t);
+    if (MODE_TOOLS[mode].includes(t)) modeToolRef.current[mode] = t;
+    setExtraToolsOpen(!COMMON_TOOLS.includes(t) && !MODE_TOOLS[mode].includes(t));
   }
+
+  useEffect(() => {
+    if (toolUnavailableReason(tool, map?.grid)) {
+      modeToolRef.current[editorMode] = DEFAULT_MODE_TOOL[editorMode];
+      setTool(DEFAULT_MODE_TOOL[editorMode]);
+      setExtraToolsOpen(false);
+    }
+  }, [tool, map?.grid, editorMode]);
 
   // Панели — аккордеоном (P1-1): CTA-кнопки внутри них залиты акцентом, а
   // бюджет §1.8 — один горячий объект. Два открытых CTA разом нельзя.
@@ -1350,6 +1434,7 @@ export function MapEditorPage() {
     const data = buildSoyMapV2(
       { name: map.name, scale: map.scale, cellLore: map.cell_lore },
       doc,
+      genParams,
     );
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -1374,7 +1459,7 @@ export function MapEditorPage() {
         setXferMsg("Не похоже на выгрузку карты (ждём soyman-map/1 или soyman-map/2).");
         return;
       }
-      const format = (parsed as { format?: unknown }).format;
+      const format = parsed && typeof parsed === "object" ? (parsed as { format?: unknown }).format : undefined;
       if (format === "soyman-map/2") {
         const res = parseSoyMapV2(parsed);
         if (!res.ok) {
@@ -1386,9 +1471,14 @@ export function MapEditorPage() {
           setXferMsg(`V2 использует функции вне текущего редактора (${compat.reasons[0]?.code ?? "unknown"}) — импорт отклонён без изменений.`);
           return;
         }
+        const mismatch = checkSoyMapV2ImportTarget(res.value.document, geom);
+        if (mismatch) {
+          setXferMsg(mismatch);
+          return;
+        }
         documentRef.current = res.value.document;
         setDocument(res.value.document);
-        setGenParams((p) => ({ ...p }));
+        if (res.value.generator) setGenParams(res.value.generator);
         history.push(before);
         setXferMsg("Загружено из soyman-map/2. Шаг — в историю.");
         return;
@@ -1503,6 +1593,7 @@ export function MapEditorPage() {
     if (!doc) return;
     setActionError(null);
     try {
+      await prepareMapImageAssets(doc);
       const thumb = geom ? renderThumbnail(geom.grid, geom.width, geom.height, doc, readChrome()) : null;
       // V5 create: размеры/сетка выводятся из документа (§18 ТЗ 2F).
       const created = await write.post<{ id: number }>("/maps", {
@@ -1568,9 +1659,12 @@ export function MapEditorPage() {
     };
     const density = pngDensity;
     // Таймер: дать кнопке перерисоваться в «Генерируется…» до блокировки потока.
-    setTimeout(() => {
+    setTimeout(async () => {
       try {
+        await prepareMapImageAssets(snapshot.document);
         buildAndDownloadPng(snapshot, density);
+      } catch (error) {
+        setActionError(error instanceof Error ? error.message : "Изображение для PNG не загрузилось.");
       } finally {
         setPngBusy(false);
       }
@@ -1587,6 +1681,40 @@ export function MapEditorPage() {
   const [lastTrapKind, setLastTrapKind] = useState<MapTrapKind>("pit");
   // Вид маркера для инструмента «Маркер» (города/POI; сундук/алтарь — свои кнопки).
   const [markerKind, setMarkerKind] = useState<Exclude<MapMarkerKind, "chest" | "altar">>("city");
+  const [assetId, setAssetId] = useState(MAP_SYMBOL_ASSETS[0].id);
+
+  async function selectAsset(id: string) {
+    setAssetId(id);
+    if (!id.startsWith("soyman-resource-images:")) return;
+    try {
+      await loadMapImageAsset(id);
+      setActionError(null);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Изображение не загрузилось.");
+    }
+  }
+
+  async function uploadMapImage(file: File | null) {
+    if (!file || imageUploading) return;
+    setImageUploading(true);
+    try {
+      const form = new FormData();
+      form.append("name", file.name);
+      form.append("type", "link");
+      form.append("scope", "global");
+      form.append("category", "image");
+      form.append("file", file);
+      const saved = await write.post<MapImageResource>("/resources", form);
+      if (!saved.uid || !saved.file_url) throw new Error("Не удалось получить ссылку на изображение.");
+      registerMapImageResources([saved]);
+      setImageResources((before) => [...before, saved]);
+      await selectAsset(resourceImageAssetId(saved.uid));
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Не удалось добавить изображение.");
+    } finally {
+      setImageUploading(false);
+    }
+  }
 
   // Живая ссылка на инструмент для selectTool/double-click —
   // иначе читали бы то, что было выбрано при монтировании.
@@ -1600,7 +1728,7 @@ export function MapEditorPage() {
   // Хоткеи (Этап Hotkeys): keyboard router — в хуке, mapping и гарды те же.
   // Space-пан — отдельным эффектом выше (input/camera), не часть роутера.
   useMapHotkeys({
-    canEdit: canEdit && unsupported === null,
+    canEdit: canEditInView && unsupported === null,
     onSelectTool: selectTool,
     onUndo: history.undo,
     onRedo: history.redo,
@@ -1655,6 +1783,7 @@ export function MapEditorPage() {
     ruler,
     lastTrapKind,
     markerKind,
+    assetId,
     activeLayerId,
     onActiveLayer: setActiveLayer,
     documentRef,
@@ -1663,7 +1792,7 @@ export function MapEditorPage() {
     commitDocument,
     newId,
     selectTool,
-    setTerrain,
+    setTerrain: chooseTerrain,
     setRuler,
     setWallDraft,
     setWallLive,
@@ -1703,12 +1832,22 @@ export function MapEditorPage() {
     selection,
     geom,
     tool,
-    canEdit: canEdit && unsupported === null,
+    canEdit: canEditInView && unsupported === null,
     wallMode: wallLineMode,
     wallDraft,
     ruler,
     setHover,
     setRectPreview,
+    onFogCell: (x, y, reverse) => {
+      const doc = documentRef.current;
+      if (!doc || !canEditInView || unsupported !== null) return false;
+      const reveal = reverse ? fogAction === "hide" : fogAction === "reveal";
+      const result = paintExplorationCell(doc, x, y, reveal);
+      if (!result.ok || !result.changed) return false;
+      documentRef.current = result.document;
+      setDocument(result.document);
+      return true;
+    },
     tools,
   });
 
@@ -1744,7 +1883,7 @@ export function MapEditorPage() {
     }
     const ok = await confirm({
       title: "Очистить карту?",
-      message: "Все клетки станут равниной, дороги, реки, подписи, маркеры и объекты исчезнут. Шаг попадёт в историю — его можно отменить.",
+      message: "Все клетки станут равниной, дороги, реки, подписи, маркеры и объекты исчезнут. Маска раскрытия игроков тоже сбросится. Шаг попадёт в историю — его можно отменить.",
       confirmLabel: "Очистить",
       cancelLabel: "Отмена",
       danger: true,
@@ -1761,47 +1900,73 @@ export function MapEditorPage() {
     history.push(doc);
   }
 
-  // Главный ряд (Этап F): модификаторы + размер + история + аккордеоны.
-  // ЧТО красить — в панелях ниже (Биомы/Поверхность/Объекты).
-  const MAIN_TOOLS: { id: PaintTool; label: string; hotkey: string; title: string }[] = [
-    { id: "brush", label: "Кисть", hotkey: "B", title: "Кисть террейна (B)" },
-    { id: "fill", label: "Заливка", hotkey: "G", title: "Заливка связной области (G)" },
-    { id: "eraser", label: "Ластик", hotkey: "E", title: "Ластик: равнина + снять дорогу/реку (E)" },
-    { id: "picker", label: "Пипетка", hotkey: "I", title: "Взять террейн с карты (I)" },
-    { id: "ruler", label: "Линейка", hotkey: "M", title: "Замер по прямой: клик — начало, клик — конец, Esc — сбросить (M)" },
-  ];
-
-  const OBJECT_TOOLS: { id: PaintTool; label: string; hotkey: string; title: string }[] = [
-    { id: "select", label: "Выбор", hotkey: "V", title: "Выбор (V): клик — панель, тяни объект — двигать, Del — удалить (двери — только квадраты)" },
-    { id: "door", label: "Дверь", hotkey: "D", title: "Дверь (D): клик — поставить обычную (вид — выбором)" },
-    { id: "trap", label: "Ловушка", hotkey: "L", title: "Ловушка (L): клик — поставить" },
-    { id: "chest", label: "Сундук", hotkey: "C", title: "Сундук (C): клик — поставить" },
-    { id: "altar", label: "Алтарь", hotkey: "A", title: "Алтарь (A): клик — поставить" },
-    { id: "marker", label: "Маркер", hotkey: "K", title: "Маркер (K): выбери вид ниже, клик — поставить" },
-    { id: "start", label: "Старт", hotkey: "S", title: "Старт (S): клик — поставить (заменит)" },
-    { id: "finish", label: "Финиш", hotkey: "F", title: "Финиш (F): клик — поставить (заменит)" },
-    { id: "label", label: "Подпись", hotkey: "T", title: "Подпись на карте (T): клик — новая, клик по готовой — править" },
-    { id: "shape", label: "Шейп", hotkey: "U", title: "Шейп-прямоугольник (U): выбери содержимое ниже и тяни" },
-  ];
-
-  const ALL_TOOL_LABELS = [...MAIN_TOOLS, ...OBJECT_TOOLS];
-
-  // Активная панель paint/object (Этап F) — запоминается, как вкладка генератора.
-  const [activePanel, setActivePanelState] = useState<"biomes" | "surface" | "objects">(() => {
-    try {
-      const v = localStorage.getItem("maps.panel");
-      return v === "surface" || v === "objects" ? v : "biomes";
-    } catch {
-      return "biomes";
+  // Материалы доступны независимо от набора инструментов режима.
+  const inspectorRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (genOpen || pngOpen || xferOpen || legendOpen || bindOpen || tool === "asset" || tool === "marker" || tool === "shape") {
+      if (inspectorRef.current) inspectorRef.current.scrollTop = 0;
     }
-  });
-  function setActivePanel(p: "biomes" | "surface" | "objects") {
+  }, [genOpen, pngOpen, xferOpen, legendOpen, bindOpen, tool]);
+  function setActivePanel(p: "biomes" | "surface") {
     setActivePanelState(p);
+    setTerrain(paletteTerrainRef.current[p]);
     try {
       localStorage.setItem("maps.panel", p);
     } catch {
       // приватный режим — просто не запоминаем
     }
+  }
+  function chooseTerrain(code: string) {
+    const panel = MAP_FLOOR_TERRAINS.some((terrain) => terrain === code)
+      ? "surface"
+      : MAP_BIOME_TERRAINS.some((terrain) => terrain === code) ? "biomes" : activePanel;
+    paletteTerrainRef.current[panel] = code;
+    if (panel !== activePanel) setActivePanel(panel);
+    setTerrain(code);
+  }
+  function changeEditorMode(mode: EditorMode) {
+    if (mode === editorMode) return;
+    setEditorMode(mode);
+    try {
+      localStorage.setItem("maps.editorMode", mode);
+    } catch {
+      // приватный режим — просто не запоминаем
+    }
+    setActivePanel(mode === "region" ? "biomes" : "surface");
+    const rememberedTool = modeToolRef.current[mode];
+    selectTool(toolUnavailableReason(rememberedTool, map?.grid) ? DEFAULT_MODE_TOOL[mode] : rememberedTool, mode);
+  }
+
+  const hasDetailedTerrain = document?.layers.some((layer) => layer.kind === "terrain" && layer.representation === "mask") ?? false;
+  function toggleExploration() {
+    const doc = documentRef.current;
+    if (!doc || unsupported !== null || (hasDetailedTerrain && !doc.exploration?.enabled)) return;
+    const result = setExplorationEnabled(doc, !doc.exploration?.enabled);
+    if (result.ok && result.changed) commitDocument(result.document, doc);
+  }
+  function changeAllExploration(reveal: boolean) {
+    const doc = documentRef.current;
+    if (!doc || unsupported !== null) return;
+    const result = setAllExplorationCells(doc, reveal);
+    if (result.ok && result.changed) commitDocument(result.document, doc);
+  }
+
+  function toolButton(id: PaintTool) {
+    const unavailable = toolUnavailableReason(id, map?.grid);
+    const description = TOOL_DESCRIPTIONS[id];
+    return (
+      <button
+        key={id}
+        type="button"
+        className="map-tool"
+        aria-pressed={tool === id}
+        disabled={unavailable !== null}
+        title={unavailable ?? description.title}
+        onClick={() => selectTool(id)}
+      >
+        {description.label}
+      </button>
+    );
   }
 
   // Свотч краски: одна вёрстка на Биомы и Поверхность.
@@ -1815,7 +1980,7 @@ export function MapEditorPage() {
         title={MAP_TERRAIN_LABELS[code]}
         aria-label={MAP_TERRAIN_LABELS[code]}
         onClick={() => {
-          setTerrain(code);
+          chooseTerrain(code);
           selectTool("brush");
         }}
         style={{
@@ -1838,14 +2003,14 @@ export function MapEditorPage() {
   }
 
   return (
-    <div className="stack map-editor" style={{ position: "relative" }}>
+    <div className={`stack map-editor${canEditInView ? "" : " map-editor--readonly"}`} style={{ position: "relative" }}>
       <SectionBackground />
       <div className="page-header-row row">
         <SectionHeading section="map" compact>
           {map ? map.name : "Карта"}
         </SectionHeading>
         <div className="row">
-          {map && canEdit && (
+          {map && canEditInView && (
             <>
               <button type="button" title="Название, масштаб, подпись клетки, размер поля" onClick={openSettings}>
                 Настройки
@@ -1883,7 +2048,7 @@ export function MapEditorPage() {
 
       {!loading && !loadError && map && (
         <>
-          <div className="res-toolbar" style={{ marginTop: 4 }}>
+          <div className="res-toolbar map-editor-summary" style={{ marginTop: 4 }}>
             <span className="badge tag">{MAP_GRID_LABELS[map.grid]}</span>
             <span className="badge tag">{MAP_SCALE_LABELS[map.scale]}</span>
             <span
@@ -1894,7 +2059,7 @@ export function MapEditorPage() {
               {map.width}×{map.height} · клетка {map.cell_lore}
             </span>
             <span style={{ flex: 1 }} />
-            {canEdit && (
+            {canEditInView && (
               <label className="row" style={{ gap: 6 }} title="Игроки увидят карту в своём разделе (только просмотр)">
                 <input
                   type="checkbox"
@@ -1916,7 +2081,7 @@ export function MapEditorPage() {
                 Видят игроки
               </label>
             )}
-            {canEdit && (
+            {canEditInView && (
               <button
                 type="button"
                 title="Открыть карту игрокам и скопировать ссылку — скажите игрокам обновить раздел «Карты»"
@@ -1935,40 +2100,38 @@ export function MapEditorPage() {
             </label>
           </div>
 
+          {canEditInView && (
+            <div className="map-editor-modebar" aria-label="Режим инструментов карты">
+              <div>
+                <span className="map-editor-eyebrow">Режим инструментов</span>
+                <strong>{editorMode === "region" ? "Регион" : editorMode === "local" ? "Местность" : "Подземелье"}</strong>
+              </div>
+              <div className="map-editor-mode-switch" role="tablist" aria-label="Режим инструментов">
+                {([
+                  ["region", "Регион"],
+                  ["local", "Местность"],
+                  ["dungeon", "Подземелье"],
+                ] as const).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    role="tab"
+                    aria-selected={editorMode === mode}
+                    onClick={() => changeEditorMode(mode)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <span className="muted">Для каждого режима — свои инструменты. Масштаб и сетка карты сохраняются.</span>
+            </div>
+          )}
+
           {!canEdit && <p className="muted">Просмотр: правит карты только мастер.</p>}
 
-          {canEdit && (
+          {canEditInView && (
             <>
-              <div className="res-toolbar" role="toolbar" aria-label="Инструменты карты">
-                {MAIN_TOOLS.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    className="map-tool"
-                    aria-pressed={tool === t.id}
-                    title={t.title}
-                    onClick={() => selectTool(t.id)}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-                <span className="muted" title="Размер кисти" style={{ fontSize: "var(--fs-micro)" }}>
-                  Размер
-                </span>
-                {([1, 2, 3] as BrushSize[]).map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    className="map-tool"
-                    aria-pressed={brushSize === n}
-                    title={`Кисть ${n}`}
-                    disabled={!(tool === "brush" || tool === "road" || tool === "river" || (tool === "wall" && !wallLineMode))}
-                    onClick={() => setBrushSize(n)}
-                    style={{ minWidth: 30 }}
-                  >
-                    {n}
-                  </button>
-                ))}
+              <div className="res-toolbar map-editor-commandbar" role="toolbar" aria-label="Команды карты">
                 <button type="button" disabled={!canUndo} title="Отменить (Ctrl+Z)" onClick={history.undo}>
                   ←
                 </button>
@@ -2031,11 +2194,38 @@ export function MapEditorPage() {
                   </button>
                 )}
               </div>
-              {/* Панели paint/object (Этап F): табы + контент. Главный ряд выше —
-                  только модификаторы (кисть/заливка/ластик/пипетка), размер, история,
-                  аккордеоны и статус; ЧТО красить — здесь. */}
-              <div className="res-toolbar" role="tablist" aria-label="Панели инструментов">
-                {(["biomes", "surface", "objects"] as const).map((p) => (
+              <aside className="map-editor-tool-column" aria-label="Инструменты карты">
+                <div className="map-editor-panel-heading">Инструменты <span>{editorMode === "region" ? "Регион" : editorMode === "local" ? "Местность" : "Подземелье"}</span></div>
+                <span className="map-editor-group-label">Общие</span>
+                <div className="map-editor-common-tools" role="toolbar" aria-label="Основные инструменты">
+                  {COMMON_TOOLS.map(toolButton)}
+                </div>
+                <span className="map-editor-group-label">{editorMode === "region" ? "Регион" : editorMode === "local" ? "Местность" : "Подземелье"}</span>
+                <div className="map-editor-mode-tools" role="toolbar" aria-label="Инструменты режима">
+                  {MODE_TOOLS[editorMode].map(toolButton)}
+                </div>
+                {editorMode === "dungeon" && map?.grid === "hex" && (
+                  <span className="muted map-editor-tool-note">Двери доступны только на квадратной сетке.</span>
+                )}
+                <div className="map-editor-brush-size" role="group" aria-label="Размер кисти">
+                  <span className="muted">Размер кисти</span>
+                  {([1, 2, 3] as BrushSize[]).map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      className="map-tool"
+                      aria-pressed={brushSize === n}
+                      title={`Кисть ${n}`}
+                      disabled={!(tool === "brush" || tool === "road" || tool === "river" || (tool === "wall" && !wallLineMode))}
+                      onClick={() => setBrushSize(n)}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              <span className="map-editor-group-label">Материалы кисти</span>
+              <div className="res-toolbar" role="tablist" aria-label="Материалы кисти">
+                {(["biomes", "surface"] as const).map((p) => (
                   <button
                     key={p}
                     type="button"
@@ -2045,7 +2235,7 @@ export function MapEditorPage() {
                     aria-pressed={activePanel === p}
                     onClick={() => setActivePanel(p)}
                   >
-                    {p === "biomes" ? "Биомы" : p === "surface" ? "Поверхность" : "Объекты"}
+                    {p === "biomes" ? "Биомы" : "Поверхность"}
                   </button>
                 ))}
                 <span style={{ flex: 1 }} />
@@ -2071,92 +2261,82 @@ export function MapEditorPage() {
               {activePanel === "surface" && (
                 <div className="res-toolbar" role="toolbar" aria-label="Поверхность">
                   {MAP_FLOOR_TERRAINS.map((code) => paintSwatch(code))}
-                  <button
-                    type="button"
-                    className="map-tool"
-                    aria-pressed={tool === "road"}
-                    title="Дорога — поверх террейна (R)"
-                    onClick={() => selectTool("road")}
-                    style={{ width: 26, height: 26, padding: 0 }}
-                  >
-                    <span
-                      aria-hidden="true"
-                      style={{ display: "block", height: 4, margin: "9px 3px", background: "var(--ink)" }}
-                    />
-                  </button>
-                  <button
-                    type="button"
-                    className="map-tool"
-                    aria-pressed={tool === "river"}
-                    title="Река — поверх террейна, под дорогами (N)"
-                    onClick={() => selectTool("river")}
-                    style={{ width: 26, height: 26, padding: 0 }}
-                  >
-                    <span
-                      aria-hidden="true"
-                      style={{ display: "block", height: 4, margin: "9px 3px", background: MAP_RIVER_FILL }}
-                    />
-                  </button>
-                  <button
-                    type="button"
-                    className="map-tool"
-                    aria-pressed={tool === "wall"}
-                    title="Стена (W): даб — мазок, линия — полилиния"
-                    aria-label="Стена"
-                    onClick={() => selectTool("wall")}
-                    style={{
-                      width: 26,
-                      height: 26,
-                      padding: 0,
-                      background: MAP_TERRAIN_FILL.wall,
-                      border: "1px solid var(--line)",
-                    }}
-                  />
                   <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>
-                    {tool === "road" ? "Дорога" : tool === "river" ? MAP_RIVER_LABEL : tool === "wall" ? "Стена" : (MAP_TERRAIN_LABELS[terrain] ?? terrain)}
+                    {MAP_TERRAIN_LABELS[terrain] ?? terrain}
                   </span>
-                  {tool === "wall" && (
+                </div>
+              )}
+              <button
+                type="button"
+                className="map-editor-extra-toggle"
+                aria-expanded={extraToolsOpen}
+                onClick={() => setExtraToolsOpen((open) => !open)}
+              >
+                {extraToolsOpen ? "Скрыть остальные инструменты" : "Остальные инструменты"}
+              </button>
+              {extraToolsOpen && (
+                <div id="map-editor-extra-tools" className="map-editor-mode-tools" role="toolbar" aria-label="Остальные инструменты">
+                  {extraToolsForMode(editorMode).map(toolButton)}
+                </div>
+              )}
+              </aside>
+              <aside ref={inspectorRef} className="map-editor-inspector-column" aria-label="Слои и свойства карты">
+                <div className="map-editor-panel-heading">Слои и свойства <span>{TOOL_DESCRIPTIONS[tool].label}</span></div>
+              {tool === "fog" && document?.grid && (
+                <div className="card map-editor-fog-controls" aria-label="Раскрытие карты">
+                  <strong>Открытие карты игрокам</strong>
+                  <span className="muted">Мастер видит всю карту. Закрытые клетки скрыты от игроков и на втором экране.</span>
+                  <button type="button" className="map-tool"
+                    aria-pressed={document.exploration?.enabled ?? false}
+                    disabled={hasDetailedTerrain && !document.exploration?.enabled}
+                    title={hasDetailedTerrain ? "Сначала уберите слой детального рельефа: его маска пока несовместима с раскрытием клеток." : undefined}
+                    onClick={toggleExploration}>
+                    {document.exploration?.enabled
+                      ? "Выключить туман"
+                      : document.exploration?.revealedCells.length
+                        ? "Включить туман · вернуть открытые клетки"
+                        : "Включить туман · скрыть всё"}
+                  </button>
+                  {hasDetailedTerrain && !document.exploration?.enabled && (
+                    <span className="muted">Раскрытие пока недоступно вместе со слоем детального рельефа.</span>
+                  )}
+                  {document.exploration?.enabled && (
                     <>
-                      <button
-                        type="button"
-                        className="map-tool"
-                        aria-pressed={wallLineMode}
-                        title="Линия: клики — вершины, дабл-клик/Enter — готово, Esc — отмена"
-                        onClick={() => {
-                          setWallLineMode((v) => !v);
-                          setWallDraft(null);
-                          setWallLive(null);
-                        }}
-                      >
-                        Линия
-                      </button>
-                      {wallLineMode && (
-                        <label className="row" style={{ gap: 6 }} title="Вершины квантуются к центрам клеток; выкл — свободная полилиния">
-                          <input type="checkbox" checked={wallSnap} onChange={(e) => setWallSnap(e.target.checked)} />
-                          Снеп к сетке
-                        </label>
-                      )}
+                      <span className="muted">Открыто {document.exploration.revealedCells.length} из {document.grid.columns * document.grid.rows} клеток</span>
+                      <div className="map-editor-fog-actions" role="group" aria-label="Действие с клетками">
+                        <button type="button" className="map-tool" aria-pressed={fogAction === "reveal"} onClick={() => setFogAction("reveal")}>Показать</button>
+                        <button type="button" className="map-tool" aria-pressed={fogAction === "hide"} onClick={() => setFogAction("hide")}>Скрыть</button>
+                      </div>
+                      <span className="muted">Клик или мазок по клеткам. Правая кнопка делает обратное. Ctrl+Z отменяет мазок.</span>
+                      <div className="map-editor-fog-actions">
+                        <button type="button" onClick={() => changeAllExploration(true)}>Показать всё</button>
+                        <button type="button" onClick={() => changeAllExploration(false)}>Скрыть всё</button>
+                      </div>
                     </>
                   )}
                 </div>
               )}
-              {activePanel === "objects" && (
-                <div className="res-toolbar" role="toolbar" aria-label="Объекты">
-                  {OBJECT_TOOLS.map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      className="map-tool"
-                      aria-pressed={tool === t.id}
-                      title={t.title}
-                      onClick={() => selectTool(t.id)}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                  <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>
-                    {OBJECT_TOOLS.find((t) => t.id === tool)?.label ?? "—"}
-                  </span>
+              {tool === "wall" && (
+                <div className="res-toolbar" role="toolbar" aria-label="Параметры стены">
+                  <button
+                    type="button"
+                    className="map-tool"
+                    aria-pressed={wallLineMode}
+                    title="Линия: клики — вершины, двойной клик или Enter — завершить, Esc — отменить"
+                    onClick={() => {
+                      setWallLineMode((v) => !v);
+                      setWallDraft(null);
+                      setWallLive(null);
+                    }}
+                  >
+                    Линия
+                  </button>
+                  {wallLineMode && (
+                    <label className="row" style={{ gap: 6 }} title="Привязывать вершины к центрам клеток">
+                      <input type="checkbox" checked={wallSnap} onChange={(e) => setWallSnap(e.target.checked)} />
+                      Снеп к сетке
+                    </label>
+                  )}
                 </div>
               )}
               {tool === "marker" && (
@@ -2178,15 +2358,44 @@ export function MapEditorPage() {
                   </span>
                 </div>
               )}
+              {tool === "asset" && (
+                <div className="res-toolbar" role="toolbar" aria-label="Символ карты">
+                  <select value={assetId} onChange={(e) => { void selectAsset(e.target.value); }} aria-label="Символ карты">
+                    {MAP_SYMBOL_ASSETS.map((asset) => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
+                    {imageResources.length > 0 && <optgroup label="Мои изображения">
+                      {imageResources.map((resource) => <option key={resource.uid} value={resourceImageAssetId(resource.uid)}>{resource.name}</option>)}
+                    </optgroup>}
+                  </select>
+                  <label className="character-avatar-upload" style={{ cursor: "pointer" }}>
+                    {imageUploading ? "Добавляю…" : "+ Изображение"}
+                    <input type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" disabled={imageUploading}
+                      style={{ position: "absolute", width: 1, height: 1, overflow: "hidden" }}
+                      onChange={(e) => { void uploadMapImage(e.target.files?.[0] ?? null); e.target.value = ""; }} />
+                  </label>
+                  <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>
+                    Клик — разместить свободно. Выбор (V) — переместить или удалить.
+                  </span>
+                </div>
+              )}
+              {selectedMapObject && tool === "select" && (
+                <div className="res-toolbar" role="toolbar" aria-label="Выбранный символ">
+                  <span>{resolveMapSymbol(selectedMapObject.visual)?.name ?? "Символ"}</span>
+                  <button type="button" onClick={() => changeSelectedMapObject(selectedMapObject.transform.rotation - 45, selectedMapObject.transform.scale.x)}>↶ 45°</button>
+                  <button type="button" onClick={() => changeSelectedMapObject(selectedMapObject.transform.rotation + 45, selectedMapObject.transform.scale.x)}>↷ 45°</button>
+                  <button type="button" onClick={() => changeSelectedMapObject(selectedMapObject.transform.rotation, Math.max(0.25, selectedMapObject.transform.scale.x / 2))}>− Размер</button>
+                  <button type="button" onClick={() => changeSelectedMapObject(selectedMapObject.transform.rotation, Math.min(8, selectedMapObject.transform.scale.x * 2))}>+ Размер</button>
+                  <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>Del — удалить</span>
+                </div>
+              )}
               {tool === "shape" && (
-                <div className="res-toolbar" role="toolbar" aria-label="Шейп">
+                <div className="res-toolbar" role="toolbar" aria-label="Параметры прямоугольника">
                   <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>
                     Прямоугольник
                   </span>
                   <select
                     value={shapeContent}
                     onChange={(e) => setShapeContent(e.target.value as typeof shapeContent)}
-                    aria-label="Содержимое шейпа"
+                    aria-label="Содержимое прямоугольника"
                     title="Чем заполнить прямоугольник"
                   >
                     <option value="room">Комната</option>
@@ -2539,7 +2748,7 @@ export function MapEditorPage() {
                       <input type="checkbox" checked={pngLegend} onChange={(e) => setPngLegend(e.target.checked)} />
                       Легенда
                     </label>
-                    <label className="row" style={{ gap: 6 }} title="PNG без секретных дверей и ловушек — как видят игроки">
+                    <label className="row" style={{ gap: 6 }} title="Скрывает ловушки, секретные двери и типы комнат; названия комнат и подписи остаются видны">
                       <input type="checkbox" checked={pngPlayerView} onChange={(e) => setPngPlayerView(e.target.checked)} />
                       Вид игрока
                     </label>
@@ -2677,6 +2886,7 @@ export function MapEditorPage() {
                   {(bindError || bindLoadError) && <p className="muted">{bindError ?? translateMapError(new Error(bindLoadError ?? ""))}</p>}
                 </div>
               )}
+              </aside>
               {settingsOpen && map && (
                 <Modal onClose={() => setSettingsOpen(false)}>
                   <h2>Настройки карты</h2>
@@ -3017,6 +3227,7 @@ export function MapEditorPage() {
               <span>{unsupported}</span>
             </div>
           )}
+          <section className="map-editor-stage" aria-label="Поле карты">
           <div className="res-toolbar" role="toolbar" aria-label="Камера">
             <button type="button" title="Приблизить (+)" aria-label="Приблизить" onClick={() => zoomBy(1.25)}>
               +
@@ -3032,12 +3243,13 @@ export function MapEditorPage() {
                 type="button"
                 className="map-tool"
                 aria-pressed={previewAsPlayer}
-                title="Показать карту глазами игрока: без секретных дверей и ловушек"
+                title={previewAsPlayer ? "Вернуться к редактированию" : "Глазами игрока: скрытые клетки и секреты не видны; открытые клетки показаны как на втором экране"}
                 onClick={() => setPreviewAsPlayer((v) => !v)}
               >
                 Глазами игрока
               </button>
             )}
+            {previewAsPlayer && <span className="muted" role="status">Просмотр игрока · редактирование отключено</span>}
             <span
               className="muted"
               style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}
@@ -3061,13 +3273,13 @@ export function MapEditorPage() {
               wrapRef={wrapRef}
               canvasRef={canvasRef}
               map={map}
-              model={model}
+              model={displayModel}
               cam={cam}
               view={{
                 showGrid,
                 showCoords,
                 previewAsPlayer,
-                canEdit,
+                canEdit: canEditInView,
               }}
               tool={{
                 tool,
@@ -3075,12 +3287,12 @@ export function MapEditorPage() {
                 wallLineMode,
               }}
               overlays={{
-                hover,
-                selectedId: selected?.entityId ?? null,
-                ruler,
-                wallDraft,
-                wallLive,
-                rectPreview,
+                hover: previewAsPlayer ? null : hover,
+                selectedId: previewAsPlayer ? null : selected?.entityId ?? null,
+                ruler: previewAsPlayer ? null : ruler,
+                wallDraft: previewAsPlayer ? null : wallDraft,
+                wallLive: previewAsPlayer ? null : wallLive,
+                rectPreview: previewAsPlayer ? null : rectPreview,
               }}
               input={{
                 onPointerDown: input.onPointerDown,
@@ -3092,12 +3304,12 @@ export function MapEditorPage() {
                 onTouchEnd: input.onTouchEnd,
                 onDoubleClick: () => {
                   // Дабл-клик — финиш полилинии стен по готовым вершинам (Этап E).
-                  if (tool === "wall" && wallLineMode && canEdit) tools.wall.finishWallLine(false);
+                  if (tool === "wall" && wallLineMode && canEditInView) tools.wall.finishWallLine(false);
                 },
                 spaceDown: input.spaceDown,
               }}
             />
-            {map && miniThumb && (
+            {map && miniThumb && !previewAsPlayer && (
               <div
                 role="button"
                 aria-label="Миникарта: клик — перейти"
@@ -3151,11 +3363,11 @@ export function MapEditorPage() {
             )}
           </div>
           <p className="muted" style={{ fontSize: "var(--fs-micro)" }}>
-            {canEdit
+            {canEditInView
               ? "Выбор (V): клик — панель, тяни объект — двигать, Del — удалить, пустое — создать. Левая — рисовать, правая — стереть, Alt+клик — пипетка, N — река, W — стены, U — шейп, D — дверь, M — линейка, T — подпись, колесо или +/− — масштаб, 0 — вписать, средняя кнопка или пробел — сдвиг. Alt+G — генератор, Alt+P — PNG."
               : "Колесо или +/− — масштаб, 0 — вписать, средняя кнопка или пробел — сдвиг."}
           </p>
-          {canEdit && (
+          {canEditInView && (
             <details className="muted" style={{ fontSize: "var(--fs-micro)" }}>
               <summary style={{ cursor: "pointer" }}>Горячие клавиши</summary>
               <p style={{ margin: "4px 0" }}>
@@ -3165,6 +3377,7 @@ export function MapEditorPage() {
               </p>
             </details>
           )}
+          </section>
           {/* Живой регион (P2-7): инструмент/террейн/статус для скринридера.
               Ховер сюда не идёт — иначе spell-check очереди на каждый пиксель. */}
           <p
@@ -3179,7 +3392,7 @@ export function MapEditorPage() {
             }}
           >
             {map
-              ? `Инструмент: ${ALL_TOOL_LABELS.find((t) => t.id === tool)?.label ?? tool}${
+              ? `Инструмент: ${TOOL_DESCRIPTIONS[tool].label}${
                   tool === "brush" ? `, террейн: ${MAP_TERRAIN_LABELS[terrain] ?? terrain}` : ""
                 }. ${saveLabel()}.`
               : "Карта загружается."}

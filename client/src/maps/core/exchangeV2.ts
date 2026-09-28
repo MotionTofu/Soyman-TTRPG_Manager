@@ -37,14 +37,30 @@ function checkMeta(meta: { name?: unknown; scale?: unknown; cellLore?: unknown }
   return out;
 }
 
-export function buildSoyMapV2(meta: SoyMapV2Meta, doc: MapDocumentV5): SoyMapV2Envelope {
+export function buildSoyMapV2(meta: SoyMapV2Meta, doc: MapDocumentV5, generator?: GeneratorParams): SoyMapV2Envelope {
   return {
     format: "soyman-map/2",
     name: meta.name,
     scale: meta.scale,
     cellLore: meta.cellLore,
+    ...(generator ? { generator } : {}),
     document: doc,
   };
+}
+
+function checkGenerator(value: unknown): ValidationIssue[] {
+  if (value === undefined) return [];
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return [metaIssue("generator", "generator must be an object")];
+  }
+  const generator = value as Record<string, unknown>;
+  const bounds = { seed: null, sea: [20, 80], mountains: [0, 40], forest: [0, 60] } as const;
+  return Object.entries(bounds).flatMap(([key, range]) => {
+    const n = generator[key];
+    return typeof n === "number" && Number.isInteger(n) && (!range || (n >= range[0] && n <= range[1]))
+      ? []
+      : [metaIssue(`generator.${key}`, `invalid generator ${key}`)];
+  });
 }
 
 export function parseSoyMapV2(raw: unknown): ParseResult<SoyMapV2Envelope> {
@@ -60,6 +76,7 @@ export function parseSoyMapV2(raw: unknown): ParseResult<SoyMapV2Envelope> {
   }
   const errors: ValidationIssue[] = [
     ...checkMeta({ name: env.name, scale: env.scale, cellLore: env.cellLore }),
+    ...checkGenerator(env.generator),
     ...validateMapDocument(env.document).map((i) => ({ ...i, path: `document.${i.path}` })),
   ];
   if (errors.length > 0) return { ok: false, errors };
@@ -70,9 +87,28 @@ export function parseSoyMapV2(raw: unknown): ParseResult<SoyMapV2Envelope> {
       name: env.name as string,
       scale: env.scale as MapScale,
       cellLore: env.cellLore as string,
+      ...(env.generator === undefined ? {} : {
+        generator: {
+          seed: (env.generator as GeneratorParams).seed,
+          sea: (env.generator as GeneratorParams).sea,
+          mountains: (env.generator as GeneratorParams).mountains,
+          forest: (env.generator as GeneratorParams).forest,
+        },
+      }),
       document: env.document as MapDocumentV5,
     },
   };
+}
+
+/** Импорт в существующую карту меняет содержимое, но не её сетку и размер. */
+export function checkSoyMapV2ImportTarget(
+  doc: MapDocumentV5,
+  target: { grid: MapGrid; width: number; height: number },
+): string | null {
+  const grid = doc.grid;
+  if (grid?.type === target.grid && grid.columns === target.width && grid.rows === target.height) return null;
+  const incoming = grid ? `${grid.type === "hex" ? "гексы" : "квадраты"} ${grid.columns}×${grid.rows}` : "без сетки";
+  return `Файл — ${incoming}, а карта — ${target.width}×${target.height} (${target.grid === "hex" ? "гексы" : "квадраты"}). Размер и сетка должны совпадать.`;
 }
 
 // --- V1 import: soyman-map/1 → validated legacy → V5 (без UI) ---

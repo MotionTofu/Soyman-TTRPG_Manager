@@ -3032,6 +3032,49 @@ function presentationSceneId(sceneId: number, campaignId: number | null): number
   return scene.id;
 }
 
+function sceneMaps(sceneId: number) {
+  return db.prepare(
+    `SELECT m.id, m.name, m.grid, m.width, m.height
+     FROM map_bindings b JOIN maps m ON m.id = b.map_id
+     WHERE b.target_type = 'scene' AND b.target_id = ? AND m.archived_at IS NULL
+     ORDER BY m.name, m.id`
+  ).all(contentSceneId(sceneId));
+}
+
+storyRouter.get("/scenes/:id/maps", (req, res) => {
+  const campaignId = req.query.campaign_id ? Number(req.query.campaign_id) : null;
+  const shownId = presentationSceneId(Number(req.params.id), campaignId);
+  if (shownId == null) return res.status(404).json({ error: "not found" });
+  res.json({ scene_id: shownId, maps: sceneMaps(shownId) });
+});
+
+storyRouter.post("/scenes/:id/maps", (req, res) => {
+  const mapId = req.body?.map_id;
+  if (!Number.isInteger(mapId) || mapId <= 0) return res.status(400).json({ error: "map_id must be a positive integer" });
+  if (!db.prepare("SELECT id FROM maps WHERE id = ? AND archived_at IS NULL").get(mapId)) {
+    return res.status(400).json({ error: "map not found" });
+  }
+  const campaignId = req.body?.campaign_id != null ? Number(req.body.campaign_id) : null;
+  const target = resolveWritableScene(Number(req.params.id), campaignId);
+  if (!target) return res.status(404).json({ error: "not found" });
+  db.prepare("INSERT OR IGNORE INTO map_bindings (map_id, target_type, target_id) VALUES (?, 'scene', ?)").run(mapId, target.id);
+  res.status(201).json({ scene_id: target.id, maps: sceneMaps(target.id) });
+});
+
+storyRouter.delete("/scenes/:id/maps/:mapId", (req, res) => {
+  const mapId = Number(req.params.mapId);
+  if (!Number.isInteger(mapId) || mapId <= 0) return res.status(400).json({ error: "invalid map id" });
+  const campaignId = req.query.campaign_id ? Number(req.query.campaign_id) : null;
+  const shownId = presentationSceneId(Number(req.params.id), campaignId);
+  if (shownId == null) return res.status(404).json({ error: "not found" });
+  if (!db.prepare("SELECT id FROM map_bindings WHERE target_type = 'scene' AND target_id = ? AND map_id = ?")
+    .get(contentSceneId(shownId), mapId)) return res.status(404).json({ error: "not found" });
+  const target = resolveWritableScene(Number(req.params.id), campaignId);
+  if (!target) return res.status(404).json({ error: "not found" });
+  db.prepare("DELETE FROM map_bindings WHERE target_type = 'scene' AND target_id = ? AND map_id = ?").run(target.id, mapId);
+  res.json({ scene_id: target.id, maps: sceneMaps(target.id) });
+});
+
 storyRouter.get("/scenes/:id/presentation", (req, res) => {
   const campaignId = req.query.campaign_id ? Number(req.query.campaign_id) : null;
   const shownId = presentationSceneId(Number(req.params.id), campaignId);

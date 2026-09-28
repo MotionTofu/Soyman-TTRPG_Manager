@@ -5,6 +5,7 @@ import { buildMapExport } from "../mapExchange";
 import { serializeCells } from "../render";
 import {
   buildSoyMapV2,
+  checkSoyMapV2ImportTarget,
   importSoyMapV1,
   parseSoyMapV2,
 } from "./exchangeV2";
@@ -35,6 +36,27 @@ describe("soyman-map/2", () => {
     if (!parsed.ok) return;
     expect(serializeMapDocument(parsed.value.document)).toBe(serializeMapDocument(doc));
     expect(validateMapDocument(parsed.value.document)).toEqual([]);
+  });
+
+  it("переносит настройки генератора и принимает старый V2 без них", () => {
+    const generator = { seed: 42, sea: 55, mountains: 12, forest: 30 };
+    const exported = buildSoyMapV2(META, doc8(), generator);
+    const parsed = parseSoyMapV2(JSON.parse(JSON.stringify(exported)));
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) expect(parsed.value.generator).toEqual(generator);
+    const old = parseSoyMapV2(buildSoyMapV2(META, doc8()));
+    expect(old.ok).toBe(true);
+    if (old.ok) expect(old.value.generator).toBeUndefined();
+    expect(parseSoyMapV2({ ...exported, generator: { ...generator, sea: 99 } }).ok).toBe(false);
+  });
+
+  it("импорт в текущую карту принимает только ту же сетку и размер", () => {
+    const doc = doc8();
+    const target = { grid: "square" as const, width: 8, height: 8 };
+    expect(checkSoyMapV2ImportTarget(doc, target)).toBeNull();
+    expect(checkSoyMapV2ImportTarget(doc, { ...target, width: 10 })).toContain("Размер и сетка");
+    expect(checkSoyMapV2ImportTarget(doc, { ...target, grid: "hex" })).toContain("Размер и сетка");
+    expect(checkSoyMapV2ImportTarget({ ...doc, grid: null }, target)).toContain("без сетки");
   });
 
   it("invalid format", () => {

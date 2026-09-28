@@ -24,6 +24,7 @@ beforeAll(async () => {
   const { storyRouter } = await import("./story");
   const { campaignsRouter } = await import("./campaigns");
   const { sessionsRouter } = await import("./sessions");
+  const { mapsRouter } = await import("./maps");
   const { db } = await import("../db/db");
 
   app = express();
@@ -35,6 +36,7 @@ beforeAll(async () => {
   app.use("/api/story", storyRouter);
   app.use("/api/campaigns", campaignsRouter);
   app.use("/api/sessions", sessionsRouter);
+  app.use("/api/maps", mapsRouter);
 
   const settingId = Number(
     (db.prepare("INSERT INTO settings (name, folder_path) VALUES ('S', 'Settings/S')").run() as { lastInsertRowid: unknown })
@@ -263,6 +265,66 @@ describe("presentation API", () => {
     expect(explicit.body.w_pct).toBe(7);
     await request(app).delete(`/api/story/scenes/${sceneId}/presentation/layers/${fitted.body.id}`);
     await request(app).delete(`/api/story/scenes/${sceneId}/presentation/layers/${explicit.body.id}`);
+  });
+});
+
+describe("карта сцены на втором экране", () => {
+  it("привязка копируется в кампанию, выбор карты ограничен сценой", async () => {
+    const { db } = await import("../db/db");
+    const base = db.prepare("SELECT setting_id, arc_id FROM story_scenes WHERE id = ?").get(sceneId) as
+      { setting_id: number; arc_id: number };
+    const mapSceneId = Number(db.prepare("INSERT INTO story_scenes (setting_id, arc_id, name) VALUES (?, ?, 'Сцена с картой')")
+      .run(base.setting_id, base.arc_id).lastInsertRowid);
+    const first = await request(app).post("/api/maps").send({ name: "Карта сцены", grid: "square", scale: "locality" });
+    const second = await request(app).post("/api/maps").send({ name: "Другая карта", grid: "square", scale: "locality" });
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    const empty = await request(app).get(`/api/story/scenes/${mapSceneId}/maps`);
+    expect(empty.body.maps).toEqual([]);
+    expect((await request(app).post(`/api/story/scenes/${mapSceneId}/maps`).send({ map_id: -1 })).status).toBe(400);
+    const linked = await request(app).post(`/api/story/scenes/${mapSceneId}/maps`).send({ map_id: first.body.id });
+    expect(linked.status).toBe(201);
+    expect(linked.body.maps.map((m: { id: number }) => m.id)).toEqual([first.body.id]);
+    expect((await request(app).put(`/api/sessions/${sessionId}/show-state`)
+      .send({ mode: "map", scene_id: mapSceneId, map_id: second.body.id, shown: 1 })).status).toBe(400);
+    const shown = await request(app).put(`/api/sessions/${sessionId}/show-state`)
+      .send({ mode: "map", scene_id: mapSceneId, map_id: first.body.id, shown: 1 });
+    expect(shown.status).toBe(200);
+    expect(shown.body).toMatchObject({ mode: "map", map_id: first.body.id, scene_id: mapSceneId, shown: 1 });
+
+    const copied = await request(app).post(`/api/story/scenes/${mapSceneId}/maps`)
+      .send({ map_id: second.body.id, campaign_id: campaignId });
+    expect(copied.status).toBe(201);
+    expect(copied.body.scene_id).not.toBe(mapSceneId);
+    expect(copied.body.maps.map((m: { id: number }) => m.id).sort()).toEqual([first.body.id, second.body.id].sort());
+    expect((await request(app).put(`/api/sessions/${sessionId}/show-state`)
+      .send({ mode: "map", scene_id: copied.body.scene_id, map_id: second.body.id, shown: 1 })).status).toBe(200);
+    expect((await request(app).get(`/api/story/scenes/${mapSceneId}/maps`)).body.maps.map((m: { id: number }) => m.id))
+      .toEqual([first.body.id]);
+    const removed = await request(app).delete(`/api/story/scenes/${mapSceneId}/maps/${first.body.id}?campaign_id=${campaignId}`);
+    expect(removed.status).toBe(200);
+    expect(removed.body.maps.map((m: { id: number }) => m.id)).toEqual([second.body.id]);
+    expect((await request(app).get(`/api/story/scenes/${mapSceneId}/maps`)).body.maps.map((m: { id: number }) => m.id))
+      .toEqual([first.body.id]);
+  });
+
+  it("кадр скрытой карты отдаёт мастерскому окну только проекцию игрока", async () => {
+    const created = await request(app).post("/api/maps").send({ name: "Секретная карта", grid: "square", scale: "locality" });
+    expect(created.status).toBe(201);
+    const cells = JSON.stringify({ v: 3, cells: {}, roads: [], labels: [], rooms: [
+      { x: 1, y: 1, w: 2, h: 2, type: "treasury", name: "Комната" },
+    ], doors: [{ x: 1, y: 1, edge: "n", kind: "secret", secret: false, pair: null }],
+    traps: [{ x: 2, y: 2, kind: "pit" }], start: null, finish: null });
+    expect((await request(app).put(`/api/maps/${created.body.id}`).send({ cells })).status).toBe(200);
+    const full = await request(app).get(`/api/maps/${created.body.id}`);
+    expect(JSON.parse(full.body.cells).rooms[0].type).toBe("treasury");
+    const player = await request(app).get(`/api/maps/${created.body.id}/player-view`);
+    expect(player.status).toBe(200);
+    expect(player.body.thumbnail).toBeNull();
+    const projected = JSON.parse(player.body.cells);
+    expect(projected.rooms[0].type).toBe("empty");
+    expect(projected.doors).toEqual([]);
+    expect(projected.traps).toEqual([]);
   });
 });
 

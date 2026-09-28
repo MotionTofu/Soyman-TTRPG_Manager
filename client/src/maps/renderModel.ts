@@ -22,7 +22,9 @@ import {
   legacyTrapId,
 } from "./core/ids";
 import type { MaterialRef } from "./core/refs";
-import type { LayerId, MapDocumentV5 } from "./core/types";
+import type { LayerId, MapDocumentV5, MapObject } from "./core/types";
+import { mapAssetPackForId, resolveMapSymbol, type MapVisualAsset } from "./assets/registry";
+import { isPaletteIndexMaskPayload, TERRAIN_MASK_CHUNK_SIDE } from "@shared/maps/core/terrainMask";
 import { cellCenter } from "./grid";
 import type { MapGrid } from "./mapTypes";
 import type {
@@ -94,6 +96,8 @@ export interface RenderTerrainView {
   readonly defaultCode: string;
   /** Только non-default клетки "x,y" → код (legacy: тот же Map без копирования). */
   readonly entries: ReadonlyMap<string, string>;
+  /** World-space samples for a denser mask layer; absent for cell terrain. */
+  readonly mask?: { origin: RenderPoint; sampleSize: number; entries: ReadonlyMap<string, string> };
 }
 
 export interface RenderLayerBase {
@@ -136,10 +140,14 @@ export interface RenderLabelLayer extends RenderLayerBase {
   labels: readonly RenderLabel[];
 }
 
-/** Object/Scatter слои: содержимое renderer не рисует (compat gate держит
- *  nonempty вне редактора); слой присутствует для порядка и флагов. */
+export interface RenderMapObject {
+  object: MapObject;
+  asset: MapVisualAsset;
+}
+
 export interface RenderObjectLayer extends RenderLayerBase {
   kind: "object";
+  items: readonly RenderMapObject[];
 }
 
 export interface RenderScatterLayer extends RenderLayerBase {
@@ -157,6 +165,7 @@ export type MapRenderLayer =
 export interface MapRenderModel {
   /** Canonical composition order документа: первый = самый нижний (§3). */
   readonly layers: readonly MapRenderLayer[];
+  readonly exploration?: { enabled: boolean; revealedCells: ReadonlySet<string> };
 }
 
 // ADR §D.1 (независимая копия правила, см. migrateLegacy/comparator):
@@ -333,11 +342,32 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
         diag("unsupported-material", "terrain defaultMaterial is not a builtin terrain: rendered as plain");
       }
       if (layer.representation === "mask") {
-        diag("unsupported-terrain-mask", `layer ${layer.id}: mask terrain rendered as default`);
+        if (doc.grid?.type !== "square")
+          diag("unsupported-terrain-mask", `layer ${layer.id}: dense terrain currently requires a square grid`);
+        const maskEntries = new Map<string, string>();
+        const materialCodes = layer.mask.materials.map(materialCode);
+        if (materialCodes.some((code) => code === null))
+          diag("unsupported-material", `layer ${layer.id}: mask uses unavailable material`);
+        for (const chunk of layer.mask.chunks) {
+          if (!isPaletteIndexMaskPayload(chunk.payload, layer.mask.materials.length)) {
+            diag("unsupported-terrain-mask", `layer ${layer.id}: unknown mask encoding`);
+            continue;
+          }
+          chunk.payload.values.forEach((paletteIndex, index) => {
+            if (paletteIndex === 0) return;
+            const code = materialCodes[paletteIndex - 1];
+            if (code === null || code === undefined) return;
+            const sx = chunk.cx * TERRAIN_MASK_CHUNK_SIDE + index % TERRAIN_MASK_CHUNK_SIDE;
+            const sy = chunk.cy * TERRAIN_MASK_CHUNK_SIDE + Math.floor(index / TERRAIN_MASK_CHUNK_SIDE);
+            maskEntries.set(`${sx},${sy}`, code);
+          });
+        }
         layers.push({
           ...baseOf(layer),
           kind: "terrain",
-          terrain: { defaultCode, entries: new Map() },
+          terrain: { defaultCode, entries: new Map(), mask: {
+            origin: layer.mask.origin, sampleSize: layer.mask.sampleSize, entries: maskEntries,
+          } },
         });
         continue;
       }
@@ -436,10 +466,17 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
       }
       layers.push({ ...baseOf(layer), kind: "gameplay", items });
     } else if (layer.kind === "object") {
-      if (layer.items.length > 0) {
-        diag("unsupported-object-layer", `layer ${layer.id}: ${layer.items.length} object(s) not rendered`);
+      const items: RenderMapObject[] = [];
+      for (const object of layer.items) {
+        const asset = resolveMapSymbol(object.visual);
+        const requiredPack = mapAssetPackForId(object.visual.type === "asset" ? object.visual.assetId : "");
+        if (!asset || !requiredPack || !doc.assetPacks.some((pack) => pack.id === requiredPack.id && pack.version === requiredPack.version)) {
+          diag("unsupported-object-layer", `object ${object.id}: asset or pack unavailable`);
+          continue;
+        }
+        items.push({ object, asset });
       }
-      layers.push({ ...baseOf(layer), kind: "object" });
+      layers.push({ ...baseOf(layer), kind: "object", items });
     } else if (layer.kind === "scatter") {
       if (layer.areas.length > 0) {
         diag("unsupported-scatter-layer", `layer ${layer.id}: ${layer.areas.length} area(s) not rendered`);
@@ -452,5 +489,11 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
     diag("unsupported-material", `${nonTerrainMaterials} cell(s) use non-terrain materials: rendered as default`);
   }
 
-  return { model: { layers }, diagnostics };
+  return { model: {
+    layers,
+    ...(doc.exploration === undefined ? {} : { exploration: {
+      enabled: doc.exploration.enabled,
+      revealedCells: new Set(doc.exploration.revealedCells.map((cell) => `${cell.x},${cell.y}`)),
+    } }),
+  }, diagnostics };
 }

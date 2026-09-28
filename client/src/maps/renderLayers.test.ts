@@ -3,14 +3,17 @@
 // Mocked ctx с эмуляцией globalAlpha (как в renderParity.test.ts).
 
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { MapDocumentV5 } from "./core/types";
+import { createTerrainMaskLayer } from "./core/mutations/layers";
+import { floodTerrainMask, paintTerrainMask } from "./core/mutations/terrainMask";
+import { projectMapDocumentForPlayer } from "./core/playerProjection";
 import { createV5RenderModel } from "./renderModel";
 import { MAP_TERRAIN_FILL, renderMap, type MapChrome, type RenderOptions } from "./render";
 
 const CHROME: MapChrome = { paper: "#fff", line: "#000", muted: "#666", ink: "#111" };
 
-function makeCtx(): { ctx: CanvasRenderingContext2D; calls: string[] } {
+function makeCtx(canvas: HTMLCanvasElement | null = null): { ctx: CanvasRenderingContext2D; calls: string[] } {
   const calls: string[] = [];
   let alpha = 1;
   const stack: number[] = [];
@@ -25,7 +28,7 @@ function makeCtx(): { ctx: CanvasRenderingContext2D; calls: string[] } {
     {},
     {
       get(_t, prop) {
-        if (prop === "canvas") return null;
+        if (prop === "canvas") return canvas;
         if (prop === "globalAlpha") return alpha;
         return (...args: unknown[]) => {
           if (prop === "save") stack.push(alpha);
@@ -133,9 +136,9 @@ function weirdDoc(): MapDocumentV5 {
   };
 }
 
-function renderCalls(doc: MapDocumentV5, patch: Partial<RenderOptions> = {}): string[] {
+function renderCalls(doc: MapDocumentV5, patch: Partial<RenderOptions> = {}, canvas: HTMLCanvasElement | null = null): string[] {
   const { model } = createV5RenderModel(doc);
-  const { ctx, calls } = makeCtx();
+  const { ctx, calls } = makeCtx(canvas);
   renderMap(ctx, 400, 400, {
     grid: "square",
     width: 8,
@@ -157,7 +160,123 @@ function renderCalls(doc: MapDocumentV5, patch: Partial<RenderOptions> = {}): st
 
 const q = (s: string) => JSON.stringify(s);
 
+describe("exploration overlay", () => {
+  it("скрывает клетки у игрока и показывает полупрозрачную подсказку мастеру с инструментом тумана", () => {
+    const doc: MapDocumentV5 = { ...baseDoc(), exploration: { enabled: true, revealedCells: [{ x: 1, y: 1 }] } };
+    const master = renderCalls(doc);
+    const player = renderCalls(doc, { playerView: true });
+    const guide = renderCalls(doc, { fogGuide: true });
+    expect(master).not.toContain('set:fillStyle="#17252A"');
+    expect(player).toContain('set:fillStyle="#17252A"');
+    expect(guide).toContain('set:fillStyle="#17252A"');
+    const guideFog = guide.indexOf('set:fillStyle="#17252A"');
+    expect(guide.slice(guideFog, guideFog + 4).some((call) => call.startsWith("set:globalAlpha=0.58"))).toBe(true);
+    expect(player.filter((call) => call === "fill()").length).toBeGreaterThan(master.filter((call) => call === "fill()").length);
+  });
+
+  it("покрывает видимые гексы после сдвига камеры", () => {
+    const doc: MapDocumentV5 = {
+      ...baseDoc(),
+      grid: { type: "hex", cellSize: 1, columns: 18, rows: 12, origin: { x: 0, y: 0 } },
+      exploration: { enabled: true, revealedCells: [] },
+    };
+    const calls = renderCalls(doc, {
+      grid: "hex", width: 18, height: 12, scale: 40, ox: -300, oy: -100, playerView: true,
+    });
+    // Верхняя вершина (5, 4) видна при x≈46, y=100. Старый квадратный
+    // отсев начинал рисовать с колонки 6 и оставлял её открытой.
+    expect(calls).toContain(`moveTo(${(Math.sqrt(3) * 5 * 40 - 300).toPrecision(12)},100)`);
+  });
+});
+
+describe("terrain mask overlay", () => {
+  it("uses a cached, smoothed bitmap in a browser canvas", () => {
+    const created = createTerrainMaskLayer(baseDoc(), { id: "mask", name: "Mask" });
+    if (!created.ok) throw new Error("fixture failed");
+    const painted = paintTerrainMask(created.document, "mask", 1.25, 1.25, 0.2,
+      { type: "builtin", key: "terrain/forest" }, () => "chunk");
+    if (!painted.ok) throw new Error("fixture failed");
+    const putImageData = vi.fn();
+    const source = {
+      width: 0, height: 0,
+      getContext: () => ({
+        createImageData: (w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4) }),
+        putImageData,
+      }),
+    } as unknown as HTMLCanvasElement;
+    const createElement = vi.spyOn(document, "createElement").mockReturnValue(source);
+    try {
+      const { model } = createV5RenderModel(painted.document);
+      const surface = {} as HTMLCanvasElement;
+      const run = () => {
+        const { ctx, calls } = makeCtx(surface);
+        renderMap(ctx, 400, 400, {
+          grid: "square", width: 8, height: 8, model, scale: 24, ox: 10, oy: 10,
+          showGrid: false, showCoords: false, hover: null, chrome: CHROME,
+          playerView: false, selectedId: null,
+        });
+        return calls;
+      };
+      const first = run();
+      const second = run();
+      expect(first).toContain("set:imageSmoothingEnabled=true");
+      expect(first).toContain('set:imageSmoothingQuality="high"');
+      expect(first).toContain("clip()");
+      expect(first.some((call) => call.startsWith("drawImage("))).toBe(true);
+      expect(second.some((call) => call.startsWith("drawImage("))).toBe(true);
+      expect(createElement).toHaveBeenCalledTimes(1);
+      expect(putImageData).toHaveBeenCalledTimes(1);
+      const playerCalls = renderCalls(projectMapDocumentForPlayer(painted.document), {}, surface);
+      expect(playerCalls.some((call) => call.startsWith("drawImage("))).toBe(true);
+    } finally {
+      createElement.mockRestore();
+    }
+  });
+
+  it("draws a dense fill as row runs rather than one rectangle per sample", () => {
+    const created = createTerrainMaskLayer(baseDoc(), { id: "mask", name: "Mask" });
+    if (!created.ok) throw new Error("fixture failed");
+    let chunk = 0;
+    const filled = floodTerrainMask(created.document, "mask", 4, 4,
+      { type: "builtin", key: "terrain/forest" }, () => `chunk-${++chunk}`);
+    if (!filled.ok) throw new Error("fixture failed");
+    const calls = renderCalls(filled.document);
+    expect(calls.filter((call) => call.startsWith("fillRect("))).toHaveLength(34);
+  });
+  it("paints finer samples while unpainted areas keep the lower terrain", () => {
+    const base: MapDocumentV5 = { ...baseDoc(), layers: [{
+      id: "base", name: "Base", kind: "terrain", representation: "cells",
+      defaultMaterial: { type: "builtin", key: "terrain/lava" }, cells: [],
+      visible: true, locked: false, opacity: 1,
+    }] };
+    const created = createTerrainMaskLayer(base, { id: "mask", name: "Mask" });
+    if (!created.ok) throw new Error("fixture failed");
+    const painted = paintTerrainMask(created.document, "mask", 1.25, 1.25, 0.2,
+      { type: "builtin", key: "terrain/forest" }, () => "chunk");
+    if (!painted.ok) throw new Error("fixture failed");
+    const calls = renderCalls(painted.document);
+    expect(calls.filter((call) => call === "fillRect(10,10,192,192)")).toHaveLength(1);
+    expect(calls).toContain(`set:fillStyle=${q(MAP_TERRAIN_FILL.lava)}`);
+    expect(calls).toContain(`set:fillStyle=${q(MAP_TERRAIN_FILL.forest)}`);
+    expect(renderCalls(projectMapDocumentForPlayer(painted.document)).filter((call) => call === "fillRect(10,10,192,192)")).toHaveLength(1);
+  });
+});
+
 describe("layer render order (§117)", () => {
+  it("draws a registered symbol in its object layer", () => {
+    const doc: MapDocumentV5 = {
+      ...baseDoc(),
+      assetPacks: [{ id: "soyman-symbols", version: "1" }],
+      layers: [{
+        id: "symbols", name: "Symbols", kind: "object", visible: true, locked: false, opacity: 0.5,
+        items: [{ id: "symbol-1", transform: { position: { x: 2.25, y: 3.5 }, rotation: 45, scale: { x: 2, y: 2 } }, visual: { type: "asset", assetId: "soyman-symbols:tree" } }],
+      }],
+    };
+    const calls = renderCalls(doc, { selectedId: "symbol-1" });
+    expect(calls).toContain("rotate(0.785398163397)");
+    expect(calls).toContain("scale(48,48)");
+    expect(calls.some((call) => call.includes("strokeRect(-0.500000000000,-0.500000000000,1,1)"))).toBe(true);
+  });
   it("Labels → Terrain → Gameplay → Roads → Terrain 2 рисуются именно так", () => {
     const calls = renderCalls(weirdDoc());
     const idxLabel = calls.findIndex((c) => c.startsWith('fillText("TOP"'));

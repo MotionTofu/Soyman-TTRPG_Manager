@@ -1,6 +1,6 @@
 // TerrainCellLayer mutations: read + batch edits + flood fill.
-// Только cells-представление (mask — read/validation-only: structured
-// unsupported issue, без конвертации). Grid — из документа.
+// Только cells-представление; mask редактируется отдельным terrainMask.ts.
+// При ошибочной цели возвращаем structured unsupported issue. Grid — из документа.
 
 import { neighbors } from "../../grid";
 import type { MaterialRef } from "../refs";

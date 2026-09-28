@@ -135,7 +135,7 @@ function setup(patch: Partial<ViewportProps> = {}) {
 }
 
 function lastOpts() {
-  return renderMapMock.mock.calls[renderMapMock.mock.calls.length - 1][3] as Record<string, unknown>;
+  return renderMapMock.mock.calls[renderMapMock.mock.calls.length - 1][3] as unknown as Record<string, unknown>;
 }
 
 function calls() {

@@ -81,6 +81,34 @@ describe("база старого релиза открывается текущ
 });
 
 describe("точечные шаги для старых баз", () => {
+  it("старые привязки карт сохраняются, а сцены становятся допустимой целью", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "soyman-old-map-bindings-"));
+    const initial = openDatabase(dir);
+    const mapId = Number(initial.prepare("INSERT INTO maps (name, grid, scale) VALUES ('Старая карта', 'square', 'locality')")
+      .run().lastInsertRowid);
+    initial.exec("DROP TABLE map_bindings");
+    initial.exec(`CREATE TABLE map_bindings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      map_id INTEGER NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+      target_type TEXT NOT NULL CHECK (target_type IN ('setting','campaign','location')),
+      target_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(map_id, target_type, target_id)
+    )`);
+    initial.prepare("INSERT INTO map_bindings (id, map_id, target_type, target_id) VALUES (7, ?, 'setting', 12)").run(mapId);
+    initial.close();
+
+    const migrated = openDatabase(dir);
+    expect(migrated.prepare("SELECT id, map_id, target_type, target_id FROM map_bindings WHERE id = 7").get())
+      .toEqual({ id: 7, map_id: mapId, target_type: "setting", target_id: 12 });
+    expect(() => migrated.prepare("INSERT INTO map_bindings (map_id, target_type, target_id) VALUES (?, 'scene', 34)")
+      .run(mapId)).not.toThrow();
+    const indexes = (migrated.prepare("PRAGMA index_list(map_bindings)").all() as { name: string }[]).map((row) => row.name);
+    expect(indexes).toContain("idx_map_bindings_map");
+    expect(indexes).toContain("idx_map_bindings_target");
+    migrated.close();
+  }, 60_000);
+
   it("canvas_routes теряет отменённый to_key, и вставка без него проходит", () => {
     // Так таблицу оставила модель рераута до 2026-08-30: to_key NOT NULL без
     // умолчания. Импорт приключения пишет рераут без to_key и на такой базе

@@ -7,8 +7,10 @@ import { useEffect, useRef, useState } from "react";
 import {
   createGameplayLayer,
   createLabelLayer,
+  createObjectLayer,
   createPathLayer,
   createTerrainLayer,
+  createTerrainMaskLayer,
   deleteLayer,
   moveLayer,
   renameLayer,
@@ -18,29 +20,33 @@ import {
 } from "../../core/mutations/layers";
 import type { LayerId, MapDocumentV5, MapLayer } from "../../core/types";
 
-export type NewLayerKind = "terrain" | "path" | "gameplay" | "label";
+export type NewLayerKind = "terrain" | "terrain-mask" | "path" | "gameplay" | "label" | "object";
 
 const KIND_LABEL: Record<MapLayer["kind"], string> = {
   terrain: "Рельеф",
   path: "Пути",
   gameplay: "Объекты",
   label: "Подписи",
-  object: "Объекты+",
+  object: "Свободные объекты",
   scatter: "Россыпь",
 };
 
 const NEW_KINDS: Array<{ kind: NewLayerKind; label: string }> = [
   { kind: "terrain", label: "Рельеф" },
+  { kind: "terrain-mask", label: "Детальный рельеф" },
   { kind: "path", label: "Пути" },
   { kind: "gameplay", label: "Объекты" },
   { kind: "label", label: "Подписи" },
+  { kind: "object", label: "Свободные объекты" },
 ];
 
 const NEW_BASE_NAME: Record<NewLayerKind, string> = {
   terrain: "Terrain",
+  "terrain-mask": "Детальный рельеф",
   path: "Paths",
   gameplay: "Gameplay",
   label: "Labels",
+  object: "Map Objects",
 };
 
 function uniqueLayerName(doc: MapDocumentV5, base: string): string {
@@ -55,7 +61,7 @@ function uniqueLayerName(doc: MapDocumentV5, base: string): string {
 function layerNonEmpty(layer: MapLayer): boolean {
   switch (layer.kind) {
     case "terrain":
-      return layer.representation === "cells" ? layer.cells.length > 0 : true;
+      return layer.representation === "cells" ? layer.cells.length > 0 : layer.mask.chunks.length > 0;
     case "path":
       return layer.paths.length > 0;
     case "gameplay":
@@ -114,11 +120,15 @@ export function LayerPanel(p: LayerPanelProps) {
     const r =
       kind === "terrain"
         ? createTerrainLayer(document, { id, name })
+        : kind === "terrain-mask"
+          ? createTerrainMaskLayer(document, { id, name })
         : kind === "path"
           ? createPathLayer(document, { id, name })
           : kind === "gameplay"
             ? createGameplayLayer(document, { id, name })
-            : createLabelLayer(document, { id, name });
+            : kind === "object"
+              ? createObjectLayer(document, { id, name })
+              : createLabelLayer(document, { id, name });
     if (!r.ok || !r.changed) {
       if (!r.ok) fail(r);
       return;
@@ -195,7 +205,7 @@ export function LayerPanel(p: LayerPanelProps) {
   const rows = [...document.layers].reverse();
 
   return (
-    <div className="card" style={{ padding: "10px 12px" }} aria-label="Слои карты">
+    <div className="card map-layer-panel" style={{ padding: "10px 12px" }} aria-label="Слои карты">
       <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
         <strong>Слои</strong>
         <button type="button" title="Добавить слой" onClick={() => setAdding((v) => !v)}>
@@ -205,7 +215,9 @@ export function LayerPanel(p: LayerPanelProps) {
       {adding && (
         <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: "wrap" }}>
           {NEW_KINDS.map((k) => (
-            <button key={k.kind} type="button" onClick={() => commitAdd(k.kind)}>
+            <button key={k.kind} type="button" onClick={() => commitAdd(k.kind)}
+              disabled={k.kind === "terrain-mask" && document.grid?.type !== "square"}
+              title={k.kind === "terrain-mask" ? "Детальная кисть пока доступна на квадратных картах" : undefined}>
               {k.label}
             </button>
           ))}
@@ -219,7 +231,7 @@ export function LayerPanel(p: LayerPanelProps) {
           return (
             <div
               key={layer.id}
-              className="row"
+              className="row map-layer-row"
               style={{
                 gap: 6,
                 alignItems: "center",
@@ -253,6 +265,7 @@ export function LayerPanel(p: LayerPanelProps) {
               </button>
               {renaming ? (
                 <input
+                  className="map-layer-name"
                   autoFocus
                   value={renameText}
                   onChange={(e) => setRenameText(e.target.value)}
@@ -266,6 +279,7 @@ export function LayerPanel(p: LayerPanelProps) {
                 />
               ) : (
                 <button
+                  className="map-layer-name"
                   type="button"
                   title="Выбрать слой (двойной клик — переименовать)"
                   onClick={() => p.onActiveLayer(layer.id)}
@@ -278,8 +292,8 @@ export function LayerPanel(p: LayerPanelProps) {
                   {layer.name}
                 </button>
               )}
-              <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>
-                {KIND_LABEL[layer.kind]}
+              <span className="muted map-layer-kind" style={{ fontSize: "var(--fs-micro)" }}>
+                {layer.kind === "terrain" && layer.representation === "mask" ? "Маска" : KIND_LABEL[layer.kind]}
               </span>
               <button
                 type="button"
@@ -300,8 +314,14 @@ export function LayerPanel(p: LayerPanelProps) {
         })}
       </div>
       {active && (
-        <label className="row" style={{ gap: 8, marginTop: 8, alignItems: "center" }}>
-          <span style={{ fontSize: "var(--fs-micro)" }}>
+        <>
+        {active.kind === "terrain" && active.representation === "mask" && (
+          <span className="muted" style={{ fontSize: "var(--fs-micro)" }}>
+            Кисть и заливка рисуют мельче клетки; материалы имеют мягкие границы и фактуру. Ластик открывает слой под маской.
+          </span>
+        )}
+        <label className="row map-layer-opacity" style={{ gap: 8, marginTop: 8, alignItems: "center" }}>
+          <span className="map-layer-opacity-label" style={{ fontSize: "var(--fs-micro)" }}>
             Непрозрачность «{active.name}»
           </span>
           <input
@@ -319,6 +339,7 @@ export function LayerPanel(p: LayerPanelProps) {
             {Math.round(active.opacity * 100)}%
           </span>
         </label>
+        </>
       )}
     </div>
   );

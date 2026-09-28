@@ -6170,13 +6170,12 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     database.exec(`CREATE INDEX idx_maps_updated ON maps(updated_at)`);
   }
 
-  // Привязки карты многие-ко-многим (одна карта — к нескольким
-  // сеттингам/кампаниям/локациям). Схема сейчас, UI — следующим шагом.
+  // Привязки карты многие-ко-многим: сеттинги, кампании, локации и сцены.
   if (!tableExists(database, "map_bindings")) {
     database.exec(`CREATE TABLE map_bindings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       map_id INTEGER NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
-      target_type TEXT NOT NULL CHECK (target_type IN ('setting','campaign','location')),
+      target_type TEXT NOT NULL CHECK (target_type IN ('setting','campaign','location','scene')),
       target_id INTEGER NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(map_id, target_type, target_id)
@@ -6278,10 +6277,33 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
       session_id INTEGER PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
       mode TEXT NOT NULL DEFAULT 'black',
       scene_id INTEGER REFERENCES story_scenes(id) ON DELETE SET NULL,
+      map_id INTEGER REFERENCES maps(id) ON DELETE SET NULL,
       visible_layer_ids TEXT NOT NULL DEFAULT '[]',
       shown INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`);
+  }
+  const bindingsSql = (database.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'map_bindings'")
+    .get() as { sql: string } | undefined)?.sql ?? "";
+  if (!bindingsSql.includes("'scene'")) {
+    database.transaction(() => {
+      database.exec(`CREATE TABLE map_bindings_next (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        map_id INTEGER NOT NULL REFERENCES maps(id) ON DELETE CASCADE,
+        target_type TEXT NOT NULL CHECK (target_type IN ('setting','campaign','location','scene')),
+        target_id INTEGER NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(map_id, target_type, target_id)
+      )`);
+      database.exec("INSERT INTO map_bindings_next (id, map_id, target_type, target_id, created_at) SELECT id, map_id, target_type, target_id, created_at FROM map_bindings");
+      database.exec("DROP TABLE map_bindings");
+      database.exec("ALTER TABLE map_bindings_next RENAME TO map_bindings");
+      database.exec("CREATE INDEX idx_map_bindings_map ON map_bindings(map_id)");
+      database.exec("CREATE INDEX idx_map_bindings_target ON map_bindings(target_type, target_id)");
+    })();
+  }
+  if (!columnExists(database, "session_show_state", "map_id")) {
+    database.exec("ALTER TABLE session_show_state ADD COLUMN map_id INTEGER REFERENCES maps(id) ON DELETE SET NULL");
   }
 
   // Рераут холста больше не помнит выход в своей строке: с 2026-08-30 выходы

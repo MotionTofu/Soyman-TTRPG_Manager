@@ -15,7 +15,9 @@ import {
   createLabelLayer,
   createPathLayer,
   createTerrainLayer,
+  createTerrainMaskLayer,
 } from "../../core/mutations/layers";
+import { readTerrainMaskAt } from "../../core/mutations/terrainMask";
 import { createCellNetworkPath } from "../../core/mutations/paths";
 import { createLabel } from "../../core/mutations/labels";
 import { updateLabelText } from "../../core/mutations/labels";
@@ -105,6 +107,34 @@ function paintDeps(overrides: Record<string, unknown> = {}) {
 }
 
 describe("paintTools (V5)", () => {
+  it("brush and eraser edit the active mask without changing cell terrain", () => {
+    const h = paintDeps({ activeLayerId: "mask", terrain: "mountains" });
+    const created = createTerrainMaskLayer(h.documentRef.current!, { id: "mask", name: "Mask" });
+    if (!created.ok) throw new Error("fixture failed");
+    h.documentRef.current = created.document;
+    const brush = createPaintTools(h.deps as never);
+    expect(brush.paintAt(2.25, 2.25)).toBe(true);
+    expect(readTerrainMaskAt(h.documentRef.current!, "mask", 2.25, 2.25)).toEqual({ type: "builtin", key: "terrain/mountains" });
+    expect(terrainEntries(h.documentRef.current!).get("2,2")).toBe("terrain/forest");
+    const eraser = createPaintTools({ ...h.deps, tool: "eraser" } as never);
+    expect(eraser.paintAt(2.25, 2.25)).toBe(true);
+    expect(readTerrainMaskAt(h.documentRef.current!, "mask", 2.25, 2.25)).toEqual({ type: "builtin", key: "terrain/plain" });
+    expect(terrainEntries(h.documentRef.current!).get("2,2")).toBe("terrain/forest");
+  });
+
+  it("fill edits the active mask as one history step", () => {
+    const h = paintDeps({ activeLayerId: "mask", tool: "fill", terrain: "mountains" });
+    const created = createTerrainMaskLayer(h.documentRef.current!, { id: "mask", name: "Mask" });
+    if (!created.ok) throw new Error("fixture failed");
+    h.documentRef.current = created.document;
+    const fill = createPaintTools(h.deps as never);
+    fill.singleAction(2.25, 2.25);
+    expect(readTerrainMaskAt(h.documentRef.current!, "mask", 18, 18)).toEqual({ type: "builtin", key: "terrain/mountains" });
+    expect(terrainEntries(h.documentRef.current!).get("2,2")).toBe("terrain/forest");
+    expect(h.push).toHaveBeenCalledTimes(1);
+    fill.singleAction(2.25, 2.25);
+    expect(h.push).toHaveBeenCalledTimes(1);
+  });
   it("brush красит и возвращает changed; повтор — no-op", () => {
     const h = paintDeps();
     const paint = createPaintTools(h.deps as never);
@@ -528,7 +558,7 @@ describe("tool target routing (3A §122–126)", () => {
   function terrainCellsOf(doc: MapDocumentV5, layerId: string): Map<string, string> {
     const l = doc.layers.find((x) => x.id === layerId);
     if (!l || l.kind !== "terrain" || l.representation !== "cells") throw new Error("no terrain " + layerId);
-    return new Map(l.cells.map((c) => [`${c.x},${c.y}`, c.material.key]));
+    return new Map(l.cells.map((c) => [`${c.x},${c.y}`, c.material.type === "builtin" ? c.material.key : c.material.assetId]));
   }
 
   it("§122: active compatible wins; manual active retained (без onActiveLayer)", () => {

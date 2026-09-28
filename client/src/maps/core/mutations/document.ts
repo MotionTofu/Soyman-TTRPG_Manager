@@ -60,8 +60,9 @@ export function clearEditableContent(doc: MapDocumentV5): MutationResult {
     if (r.touched) touched = true;
     return r.layer;
   });
+  if (doc.exploration !== undefined) touched = true;
   if (!touched) return noChange(doc);
-  return changed({ ...doc, layers });
+  return changed({ ...doc, layers, exploration: undefined });
 }
 
 function shapeFitsGrid(shape: ShapeGeometry, width: number, height: number): boolean {
@@ -170,6 +171,12 @@ export function resizeGridDocument(doc: MapDocumentV5, width: number, height: nu
       touched = true;
       return { ...layer, items };
     }
+    if (layer.kind === "object") {
+      const items = layer.items.filter((object) => pointFits(object.transform.position.x, object.transform.position.y));
+      if (items.length === layer.items.length) return layer;
+      touched = true;
+      return { ...layer, items };
+    }
     if (layer.kind === "gameplay") {
       const items: GameplayEntity[] = [];
       for (const e of layer.items) {
@@ -188,11 +195,15 @@ export function resizeGridDocument(doc: MapDocumentV5, width: number, height: nu
   });
 
   const newGrid = { ...grid, columns: width, rows: height };
+  const exploration = doc.exploration === undefined ? undefined : {
+    ...doc.exploration,
+    revealedCells: doc.exploration.revealedCells.filter((cell) => inNew(cell.x, cell.y)),
+  };
   const world =
     grid.type === "square"
       ? { bounds: { minX: 0, minY: 0, maxX: width, maxY: height } }
       : hexBounds(width, height);
-  return changed({ ...doc, grid: newGrid, world, layers });
+  return changed({ ...doc, grid: newGrid, world, layers, exploration });
 }
 
 function hexBounds(width: number, height: number): MapDocumentV5["world"] {

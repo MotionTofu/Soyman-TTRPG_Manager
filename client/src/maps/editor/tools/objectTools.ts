@@ -1,6 +1,8 @@
 import { cellCenter, pixelToCell } from "../../grid";
 import { createGameplayEntity, setFinish, setStart } from "../../core/mutations/gameplay";
 import { legacyDoorWorldPosition } from "../../core/migrateLegacy";
+import { addMapObject } from "../../core/mutations/mapObjects";
+import { mapAssetPackForId, resolveMapSymbol } from "../../assets/registry";
 import type { GameplayEntity, LayerId, MapDocumentV5 } from "../../core/types";
 import type { MapGeometry } from "../hooks/useMapSelection";
 import type { MapDoorEdge, MapMarkerKind, MapTrapKind } from "../../render";
@@ -16,6 +18,7 @@ interface CreateObjectToolsArgs {
   geom: MapGeometry | null;
   lastTrapKind: MapTrapKind;
   markerKind: MapMarkerKind;
+  assetId: string;
   activeLayerId: LayerId | null;
   onActiveLayer: (id: LayerId) => void;
   setActionError: (e: string | null) => void;
@@ -33,6 +36,44 @@ export function createObjectTools(a: CreateObjectToolsArgs) {
     if (!g || !doc) return;
     const cell = pixelToCell(g.grid, wx, wy, g.width, g.height);
     if (!cell) return;
+    if (kind === "asset") {
+      const visual = { type: "asset" as const, assetId: a.assetId };
+      const asset = resolveMapSymbol(visual);
+      if (!asset) {
+        a.setActionError("Ресурс для карты не найден.");
+        return;
+      }
+      if ("kind" in asset && !asset.image) {
+        a.setActionError("Изображение ещё загружается. Повторите размещение через мгновение.");
+        return;
+      }
+      const tgt = resolveToolTargetLayer(doc, a.activeLayerId, "object");
+      if (!tgt.ok) {
+        a.setActionError("Добавьте доступный слой «Свободные объекты» в панели слоёв.");
+        return;
+      }
+      if (!tgt.keptActive) a.onActiveLayer(tgt.layerId);
+      const requiredPack = mapAssetPackForId(a.assetId);
+      if (!requiredPack) {
+        a.setActionError("Ресурс для карты не найден.");
+        return;
+      }
+      const packed = doc.assetPacks.some((pack) => pack.id === requiredPack.id && pack.version === requiredPack.version)
+        ? doc
+        : { ...doc, assetPacks: [...doc.assetPacks.filter((pack) => pack.id !== requiredPack.id), requiredPack] };
+      const r = addMapObject(packed, tgt.layerId, {
+        id: a.newId(),
+        transform: { position: { x: wx, y: wy }, rotation: 0, scale: { x: 1, y: 1 } },
+        visual,
+      });
+      if (!r.ok) {
+        a.setActionError(r.issues[0]?.message ?? "Не удалось разместить объект.");
+        return;
+      }
+      a.commitDocument(r.document, doc);
+      a.setActionError(null);
+      return;
+    }
     // Target GameplayLayer через resolver (§41); нет — structured error.
     const tgt = resolveToolTargetLayer(doc, a.activeLayerId, "gameplay");
     if (!tgt.ok) {

@@ -11,6 +11,7 @@ import {
   MAP_TRAP_KINDS,
 } from "./literals";
 import { isJsonValue } from "./json";
+import { isPaletteIndexMaskPayload, TERRAIN_MASK_ENCODING } from "./terrainMask";
 import {
   isMaterialRef,
   isScatterProfileRef,
@@ -290,7 +291,7 @@ function checkTerrainLayer(
     return;
   }
   if (layer.representation === "mask") {
-    // Логическая оболочка mask (§18 ТЗ): byte encoding — решение Terrain Phase.
+    // Неизвестные encoding сохраняются; известный palette-index-v1 проверяется строго.
     const m = layer.mask;
     if (!isRecord(m)) {
       out.push(issue("terrain.mask.not-object", `${path}.mask`, "expected mask object"));
@@ -314,6 +315,7 @@ function checkTerrainLayer(
       return;
     }
     const chunkIds = new Set<string>();
+    const chunkCoords = new Set<string>();
     m.chunks.forEach((ch, i) => {
       const chp = `${path}.mask.chunks[${i}]`;
       if (!isRecord(ch)) {
@@ -323,9 +325,16 @@ function checkTerrainLayer(
       claimId(chunkIds, ch.id, `${chp}.id`, "mask chunk", out);
       if (!Number.isInteger(ch.cx) || !Number.isInteger(ch.cy)) {
         out.push(issue("terrain.mask.bad-chunk-coords", chp, "chunk cx/cy must be integers"));
+      } else {
+        const coords = `${ch.cx},${ch.cy}`;
+        if (chunkCoords.has(coords)) out.push(issue("terrain.mask.duplicate-chunk", chp, `duplicate chunk ${coords}`));
+        chunkCoords.add(coords);
       }
       if (!isRecord(ch.payload) || !isJsonValue(ch.payload)) {
         out.push(issue("terrain.mask.bad-payload", `${chp}.payload`, "payload must be a JSON-safe object"));
+      } else if (ch.payload.encoding === TERRAIN_MASK_ENCODING &&
+        !isPaletteIndexMaskPayload(ch.payload, Array.isArray(m.materials) ? m.materials.length : 0)) {
+        out.push(issue("terrain.mask.bad-index-payload", `${chp}.payload`, "expected 256 palette indexes within materials"));
       }
     });
     return;
@@ -610,6 +619,31 @@ export function validateMapDocument(doc: unknown): ValidationIssue[] {
         grid.columns = g.columns as number;
         grid.rows = g.rows as number;
       }
+    }
+  }
+
+  if (doc.exploration !== undefined) {
+    const exploration = doc.exploration;
+    if (!isRecord(exploration) || typeof exploration.enabled !== "boolean" || !Array.isArray(exploration.revealedCells)) {
+      out.push(issue("exploration.bad-shape", "exploration", "expected enabled and revealedCells"));
+    } else {
+      if (!grid.hasGrid) out.push(issue("exploration.no-grid", "exploration", "exploration requires a grid"));
+      if (grid.hasGrid && exploration.revealedCells.length > grid.columns * grid.rows) {
+        out.push(issue("exploration.too-many-cells", "exploration.revealedCells", "more cells than grid size"));
+      }
+      const seen = new Set<string>();
+      exploration.revealedCells.forEach((cell, index) => {
+        const path = `exploration.revealedCells[${index}]`;
+        if (!isRecord(cell) || !Number.isInteger(cell.x) || !Number.isInteger(cell.y) ||
+          (cell.x as number) < 0 || (cell.y as number) < 0 ||
+          (grid.hasGrid && ((cell.x as number) >= grid.columns || (cell.y as number) >= grid.rows))) {
+          out.push(issue("exploration.bad-cell", path, "expected an in-bounds integer cell"));
+          return;
+        }
+        const key = `${cell.x},${cell.y}`;
+        if (seen.has(key)) out.push(issue("exploration.duplicate-cell", path, "duplicate revealed cell"));
+        seen.add(key);
+      });
     }
   }
 

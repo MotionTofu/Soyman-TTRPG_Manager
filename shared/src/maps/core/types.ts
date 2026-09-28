@@ -35,8 +35,16 @@ export interface MapDocumentV5 {
   world: MapWorld;
   /** null = карта без grid (режим «Красивости» без привязки). */
   grid: MapGridConfig | null;
+  /** Отсутствует на старых картах: игрок видит всё. */
+  exploration?: MapExploration;
   assetPacks: AssetPackRef[];
   layers: MapLayer[];
+}
+
+export interface MapExploration {
+  /** Включённая маска скрывает от игроков все клетки вне revealedCells. */
+  enabled: boolean;
+  revealedCells: Array<{ x: number; y: number }>;
 }
 
 /** Метаданные записи (будущий MapRecordV5). Сервер на Фазе 2F не переключается. */
@@ -143,7 +151,8 @@ export interface TerrainMaskChunk {
   id: EntityId;
   cx: number;
   cy: number;
-  /** Непрозрачная нагрузка; encoding — решение Terrain Phase. */
+  /** palette-index-v1: 256 индексов (0 = прозрачно, 1..N = materials).
+   *  Другие JSON encoding остаются валидными для будущих версий. */
   payload: JsonObject;
 }
 
@@ -291,5 +300,7 @@ export interface SoyMapV2Envelope {
   name: string;
   scale: MapScale;
   cellLore: string;
+  /** Необязательные настройки генератора для переноса между установками. */
+  generator?: { seed: number; sea: number; mountains: number; forest: number };
   document: MapDocumentV5;
 }

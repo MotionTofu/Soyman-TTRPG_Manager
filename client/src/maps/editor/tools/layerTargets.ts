@@ -12,7 +12,7 @@
 import type { LayerId, MapDocumentV5, MapLayer } from "../../core/types";
 import type { PaintTool } from "../editorTypes";
 
-export type ToolLayerKind = "terrain" | "path" | "gameplay" | "label";
+export type ToolLayerKind = "terrain" | "path" | "gameplay" | "label" | "object";
 
 export const NO_COMPATIBLE_LAYER_ERROR = "Нет доступного слоя подходящего типа.";
 
@@ -38,6 +38,8 @@ export function toolLayerKind(tool: PaintTool): ToolLayerKind | null {
       return "gameplay";
     case "label":
       return "label";
+    case "asset":
+      return "object";
     default:
       return null;
   }

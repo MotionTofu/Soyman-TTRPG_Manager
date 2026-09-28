@@ -113,6 +113,10 @@ describe("maps API", () => {
     expect(one.body).toEqual({ id: visibleId, thumbnail: "data:image/png;base64,iVBORw0KGgo=" });
 
     expect((await request(app).get(`/api/maps/${visibleId}/thumbnail`).set(player)).status).toBe(200);
+    const playerDetail = await request(app).get(`/api/maps/${visibleId}`).set(player);
+    expect(playerDetail.body.thumbnail).toBeNull();
+    const gmDetail = await request(app).get(`/api/maps/${visibleId}`).set(gm);
+    expect(gmDetail.body.thumbnail).toBe("data:image/png;base64,iVBORw0KGgo=");
     expect((await request(app).get(`/api/maps/${hiddenId}/thumbnail`).set(player)).status).toBe(404);
     expect((await request(app).get("/api/maps/999999/thumbnail").set(gm)).status).toBe(404);
   });

@@ -4,19 +4,13 @@ import type { MapFull } from "../../mapTypes";
 import type { MapDocumentV5 } from "../../core/types";
 
 // Автосохранение карты (Фаза 2G: value = MapDocumentV5 вместо MapCells).
-// Механизм — тот же, что раньше: debounce 800ms, эталон нормализованного
-// состояния (canonical serialization), seq-защита от гонок, thumbnail
+// Механизм: debounce 800ms, эталон нормализованного состояния
+// (canonical serialization), последовательные записи, thumbnail
 // throttle 2.5s, dirty/error/retry, beforeunload, corrupt-блок.
 // Транспорт (PUT с `document`) и рендер миниатюры приходят колбэками.
 
-// KNOWN QUIRKS (техдолг Фазы 1, НЕ исправлять здесь — зафиксировано
-// владельцем после Этапа Autosave; менять только отдельным решением):
-// 1. revert к эталону не шлёт PUT, но оставляет status=dirty (ранний return
-//    в debounce-эффекте не сбрасывает статус обратно в saved);
-// 2. debounce-таймер не перепроверяет эталон перед sendSave;
-// 3. retry() не проверяет blocked (corrupt-guard);
-// 4. onSaved вызывается для каждого ответа, включая проигравший seq-response
-//    (проверка pendingSeq идёт после).
+// В каждый момент для одной страницы открыт максимум один PUT. После его
+// завершения отправляется текущее состояние, если за время запроса были правки.
 
 export type MapSaveKind = "saved" | "dirty" | "saving" | "error";
 
@@ -70,10 +64,14 @@ export function useMapAutosave({
   const [blocked, setBlocked] = useState(false);
   // Эталон последнего сохранённого — canonical serialization (§53 ТЗ).
   const etalonRef = useRef<string>("");
-  // Версии против гонки (P1-6): два overlapping PUT — побеждает поздний
-  // мазок, а не поздний ответ; устаревший ответ игнорируется по seq.
-  const saveSeqRef = useRef(0);
-  const pendingSeqRef = useRef(0);
+  const epochRef = useRef(0);
+  const inFlightRef = useRef<{ epoch: number; key: string } | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadingRef = useRef(false);
+  const blockedRef = useRef(blocked);
+  const disabledRef = useRef(disabled);
+  blockedRef.current = blocked;
+  disabledRef.current = disabled;
   // Кэш миниатюры (P1-5): печь canvas+toDataURL на каждый мазок дорого.
   const thumbCacheRef = useRef<{ doc: string; thumb: string | null; at: number }>({
     doc: "",
@@ -82,8 +80,8 @@ export function useMapAutosave({
   });
   // Живое состояние для retry (same-tick, как раньше documentRef): retry шлёт
   // актуальное, а не snapshot из debounce-замыкания.
-  const liveRef = useRef({ value, params });
-  liveRef.current = { value, params };
+  const liveRef = useRef({ map, value, params });
+  liveRef.current = { map, value, params };
   // Транспорт — через ref: в эффектах от него не зависим (как раньше от
   // модульных write/renderThumbnail), всегда вызываем свежий.
   const transportRef = useRef({ save, buildThumbnail, onSaved });
@@ -105,74 +103,98 @@ export function useMapAutosave({
     return thumb;
   }
 
+  function liveSnapshot() {
+    const live = liveRef.current;
+    if (!live.map || !live.value) return null;
+    const docStr = serialize(live.value);
+    const paramsStr = JSON.stringify(live.params);
+    return {
+      map: live.map,
+      value: live.value,
+      params: live.params,
+      docStr,
+      paramsStr,
+      key: keyOf(docStr, paramsStr),
+    };
+  }
+
   function sendSave(payload: {
+    map: MapFull;
+    key: string;
     docStr: string;
     paramsStr: string;
     thumb: string | null;
     params: GeneratorParams;
   }) {
-    if (!map) return;
-    const seq = ++saveSeqRef.current;
-    pendingSeqRef.current = seq;
+    const epoch = epochRef.current;
+    inFlightRef.current = { epoch, key: payload.key };
     setStatus((s) => ({ ...s, kind: "saving" }));
-    const mapId = map.id;
+    const mapId = payload.map.id;
     transportRef.current
       .save(mapId, { document: payload.docStr, thumbnail: payload.thumb, ...payload.params })
       .then(() => {
-        // Список карт (дата, миниатюра) — и в других окнах; привязки не задеты.
+        if (epochRef.current !== epoch) return;
+        inFlightRef.current = null;
+        etalonRef.current = payload.key;
         transportRef.current.onSaved?.(mapId);
-        if (pendingSeqRef.current !== seq) return;
-        etalonRef.current = keyOf(payload.docStr, payload.paramsStr);
-        setStatus({ kind: "saved", at: stampedNow() });
+        const latest = liveSnapshot();
+        if (latest && latest.map.id === mapId && latest.key !== payload.key && !loadingRef.current && !blockedRef.current && !disabledRef.current) {
+          sendSave({ ...latest, thumb: pickThumbnail(latest.map, latest.docStr, latest.value) });
+        } else {
+          setStatus({ kind: "saved", at: stampedNow() });
+        }
       })
       .catch(() => {
-        if (pendingSeqRef.current !== seq) return;
-        setStatus((s) => ({ ...s, kind: "error" }));
+        if (epochRef.current !== epoch) return;
+        inFlightRef.current = null;
+        const latest = liveSnapshot();
+        if (latest && latest.map.id === mapId && latest.key !== payload.key && latest.key !== etalonRef.current && !loadingRef.current && !blockedRef.current && !disabledRef.current) {
+          sendSave({ ...latest, thumb: pickThumbnail(latest.map, latest.docStr, latest.value) });
+        } else if (latest?.key === etalonRef.current) {
+          setStatus({ kind: "saved", at: stampedNow() });
+        } else {
+          setStatus((s) => ({ ...s, kind: "error" }));
+        }
       });
+  }
+
+  function saveLatest() {
+    if (loadingRef.current || blockedRef.current || disabledRef.current || inFlightRef.current) return;
+    const latest = liveSnapshot();
+    if (!latest) return;
+    if (latest.key === etalonRef.current) {
+      setStatus({ kind: "saved", at: stampedNow() });
+      return;
+    }
+    sendSave({ ...latest, thumb: pickThumbnail(latest.map, latest.docStr, latest.value) });
   }
 
   // Debounce; пропуск, если документ равен последнему сохранённому — так
   // загрузка и undo-в-ту-же-точку ничего не шлют.
   useEffect(() => {
     if (!map || !value) return;
-    if (blocked || disabled) return; // P1-7 + §57: поверх битого/unsupported — только с явного разрешения (unsupported — никогда)
+    if (loadingRef.current || blocked || disabled) return;
     const docStr = serialize(value);
     const paramsStr = JSON.stringify(params);
-    if (keyOf(docStr, paramsStr) === etalonRef.current) return;
+    if (keyOf(docStr, paramsStr) === etalonRef.current && !inFlightRef.current) {
+      setStatus((s) => s.kind === "saved" ? s : { kind: "saved", at: stampedNow() });
+      return;
+    }
     setStatus((s) => (s.kind === "saving" ? s : { kind: "dirty", at: s.at }));
-    const snapshot = { live: value, params };
-    const timer = setTimeout(() => {
-      if (!map) return;
-      sendSave({
-        docStr,
-        paramsStr,
-        thumb: pickThumbnail(map, docStr, snapshot.live),
-        params: snapshot.params,
-      });
-    }, debounceMs);
-    return () => clearTimeout(timer);
+    if (inFlightRef.current) return;
+    const timer = setTimeout(saveLatest, debounceMs);
+    timerRef.current = timer;
+    return () => {
+      clearTimeout(timer);
+      if (timerRef.current === timer) timerRef.current = null;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, params, map, blocked, disabled]);
 
-  // Повтор сохранения вручную (P0-1): при kind === "error" следующий мазок
-  // и так повторит, но закрытие вкладки до него теряло данные — поэтому
-  // рядом со статусом есть кнопка «Повторить», а уход с несохранённым
-  // тормозит beforeunload.
+  // Повтор сохранения вручную после ошибки; блокировка повреждённого или
+  // неподдерживаемого документа действует и для этой кнопки.
   function retry() {
-    if (!map || !liveRef.current.value) return;
-    const live = liveRef.current as { value: MapDocumentV5; params: GeneratorParams };
-    const docStr = serialize(live.value);
-    const paramsStr = JSON.stringify(live.params);
-    if (keyOf(docStr, paramsStr) === etalonRef.current) {
-      setStatus({ kind: "saved", at: stampedNow() });
-      return;
-    }
-    sendSave({
-      docStr,
-      paramsStr,
-      thumb: pickThumbnail(map, docStr, live.value),
-      params: live.params,
-    });
+    saveLatest();
   }
 
   useEffect(() => {
@@ -190,12 +212,20 @@ export function useMapAutosave({
   // Начало загрузки новой карты: баннер битого blob гаснет, остальное —
   // как было (статус/эталон перепишет markLoaded по факту данных).
   function beginLoad() {
+    epochRef.current += 1;
+    inFlightRef.current = null;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = null;
+    loadingRef.current = true;
+    blockedRef.current = false;
     setBlocked(false);
   }
 
   // Данные с сервера применены: эталон + статус + corrupt-блок одним шагом.
   function markLoaded(docStr: string, paramsStr: string, corrupt: boolean) {
     etalonRef.current = keyOf(docStr, paramsStr);
+    loadingRef.current = false;
+    blockedRef.current = corrupt;
     setStatus({ kind: "saved", at: "" });
     setBlocked(corrupt);
   }
@@ -203,6 +233,7 @@ export function useMapAutosave({
   // Явное разрешение из баннера: «Понял, разрешаю перезапись».
   // Unsupported V5 не разблокирует (его сохранять нельзя, §57 ТЗ).
   function allowOverwrite() {
+    blockedRef.current = false;
     setBlocked(false);
   }
 

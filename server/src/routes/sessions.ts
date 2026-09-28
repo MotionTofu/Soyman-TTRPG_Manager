@@ -564,14 +564,14 @@ sessionsRouter.get("/:id/summary", (req, res) => {
 // клиента (см. dataSync.ts). Пустая сцена show-state не трогает вовсе —
 // экран держит последний кадр (решение Q19).
 
-const SHOW_MODES = ["black", "scene", "cover"] as const;
+const SHOW_MODES = ["black", "scene", "cover", "map"] as const;
 
 function readShowState(sessionId: number) {
   const row = db.prepare("SELECT * FROM session_show_state WHERE session_id = ?").get(sessionId) as
-    | { session_id: number; mode: string; scene_id: number | null; visible_layer_ids: string; shown: number; updated_at: string }
+    | { session_id: number; mode: string; scene_id: number | null; map_id: number | null; visible_layer_ids: string; shown: number; updated_at: string }
     | undefined;
   if (!row) {
-    return { session_id: sessionId, mode: "black", scene_id: null, visible_layer_ids: [] as number[], shown: 0 };
+    return { session_id: sessionId, mode: "black", scene_id: null, map_id: null, visible_layer_ids: [] as number[], shown: 0 };
   }
   let ids: number[] = [];
   try {
@@ -599,6 +599,7 @@ sessionsRouter.put("/:id/show-state", (req, res) => {
   const body = (req.body ?? {}) as {
     mode?: string;
     scene_id?: number | null;
+    map_id?: number | null;
     visible_layer_ids?: unknown;
     shown?: number | boolean;
   };
@@ -606,15 +607,31 @@ sessionsRouter.put("/:id/show-state", (req, res) => {
   const current = readShowState(session.id);
   const mode = body.mode !== undefined ? body.mode : current.mode;
   if (!SHOW_MODES.includes(mode as (typeof SHOW_MODES)[number])) {
-    return res.status(400).json({ error: "mode must be black|scene|cover" });
+    return res.status(400).json({ error: "mode must be black|scene|cover|map" });
   }
   let sceneId: number | null = body.scene_id !== undefined ? body.scene_id : current.scene_id;
-  if (mode === "scene") {
-    if (sceneId == null) return res.status(400).json({ error: "scene_id is required for mode=scene" });
+  if (mode === "scene" || mode === "map") {
+    if (sceneId == null || !Number.isInteger(sceneId)) return res.status(400).json({ error: "scene_id is required for scene/map" });
     const scene = db.prepare("SELECT id FROM story_scenes WHERE id = ? AND archived_at IS NULL").get(sceneId);
     if (!scene) return res.status(400).json({ error: "scene not found" });
   } else if (body.scene_id === undefined) {
     sceneId = current.scene_id;
+  }
+
+  let mapId: number | null = null;
+  if (mode === "map") {
+    mapId = body.map_id !== undefined ? body.map_id : current.map_id;
+    if (mapId == null || !Number.isInteger(mapId) || mapId <= 0) {
+      return res.status(400).json({ error: "map_id is required for mode=map" });
+    }
+    const linked = db.prepare(
+      `SELECT m.id FROM maps m JOIN map_bindings b ON b.map_id = m.id
+       WHERE m.id = ? AND m.archived_at IS NULL AND b.target_type = 'scene' AND b.target_id = ?`
+    ).get(mapId, contentSceneId(sceneId!));
+    // Если привязку сняли во время показа, экран всё ещё можно выключить.
+    if (!linked && body.shown !== 0 && body.shown !== false) {
+      return res.status(400).json({ error: "map is not linked to scene" });
+    }
   }
 
   // Чужие/удалённые id не храним: молча пересекаем с существующими слоями
@@ -645,12 +662,12 @@ sessionsRouter.put("/:id/show-state", (req, res) => {
   }
 
   db.prepare(
-    `INSERT INTO session_show_state (session_id, mode, scene_id, visible_layer_ids, shown, updated_at)
-     VALUES (?, ?, ?, ?, ?, datetime('now'))
+    `INSERT INTO session_show_state (session_id, mode, scene_id, map_id, visible_layer_ids, shown, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
      ON CONFLICT(session_id) DO UPDATE SET
-       mode = excluded.mode, scene_id = excluded.scene_id,
+       mode = excluded.mode, scene_id = excluded.scene_id, map_id = excluded.map_id,
        visible_layer_ids = excluded.visible_layer_ids, shown = excluded.shown,
        updated_at = datetime('now')`
-  ).run(session.id, mode, sceneId, JSON.stringify(ids), shown);
+  ).run(session.id, mode, sceneId, mapId, JSON.stringify(ids), shown);
   res.json(readShowState(session.id));
 });

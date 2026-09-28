@@ -2477,8 +2477,9 @@ export interface CampaignCover extends PresentationData {
 /** Состояние экрана показа — GET/PUT /sessions/:id/show-state. */
 export interface ShowState {
   session_id: number;
-  mode: "black" | "scene" | "cover";
+  mode: "black" | "scene" | "cover" | "map";
   scene_id: number | null;
+  map_id: number | null;
   visible_layer_ids: number[];
   shown: number;
 }

@@ -5,6 +5,8 @@
 
 import { cellCenter, cellCorners, coordLabel, neighbors, worldBounds } from "./grid";
 import { createV5RenderModel } from "./renderModel";
+import { drawMapSymbol } from "./assets/draw";
+import { buildTerrainMaskRaster } from "./terrainMaskRaster";
 import type {
   MapRenderModel,
   RenderDoor,
@@ -61,6 +63,34 @@ export const MAP_TERRAIN_FILL: Record<string, string> = {
   darkness: "#000000",
   necro: "#4E4A52",
 };
+
+type TerrainMaskView = NonNullable<RenderTerrainLayer["terrain"]["mask"]>;
+interface TerrainMaskBitmap {
+  mapWidth: number;
+  mapHeight: number;
+  minSX: number;
+  minSY: number;
+  canvas: HTMLCanvasElement;
+}
+const terrainMaskBitmaps = new WeakMap<object, TerrainMaskBitmap>();
+
+function terrainMaskBitmap(mask: TerrainMaskView, mapWidth: number, mapHeight: number): TerrainMaskBitmap | null {
+  const cached = terrainMaskBitmaps.get(mask);
+  if (cached && cached.mapWidth === mapWidth && cached.mapHeight === mapHeight) return cached;
+  const raster = buildTerrainMaskRaster(mask, mapWidth, mapHeight, MAP_TERRAIN_FILL, true);
+  if (!raster) return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = raster.width;
+  canvas.height = raster.height;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  const image = context.createImageData(raster.width, raster.height);
+  image.data.set(raster.pixels);
+  context.putImageData(image, 0, 0);
+  const bitmap = { mapWidth, mapHeight, minSX: raster.minSX, minSY: raster.minSY, canvas };
+  terrainMaskBitmaps.set(mask, bitmap);
+  return bitmap;
+}
 
 export const MAP_TERRAIN_LABELS: Record<string, string> = {
   deep_water: "Глубокая вода",
@@ -637,6 +667,8 @@ export interface RenderOptions {
   chrome: MapChrome;
   // Взгляд игрока (пакет A §6): секретное скрыто, trapped видна обычной дверью.
   playerView: boolean;
+  /** Мастер видит полную карту под полупрозрачной подсказкой маски при редактировании. */
+  fogGuide?: boolean;
   // Выбранный объект для подсветки — stable EntityId (Фаза 2G, §46).
   selectedId: string | null;
 }
@@ -683,10 +715,16 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
           const m = scale * 3;
           return sx >= -m && sx <= canvasW + m && sy >= -m && sy <= canvasH + m;
         };
-  const vx0 = Math.max(0, Math.floor(-ox / scale) - 1);
-  const vy0 = Math.max(0, Math.floor(-oy / scale) - 1);
-  const vx1 = Math.min(width - 1, Math.ceil((canvasW - ox) / scale) + 1);
-  const vy1 = Math.min(height - 1, Math.ceil((canvasH - oy) / scale) + 1);
+  // У гексов индекс клетки не равен мировой координате: шаг по X — √3,
+  // по Y — 1.5. Без этого справа и снизу на увеличенной карте остаются
+  // незакрашенные клетки, включая клетки тумана.
+  const stepX = grid === "hex" ? Math.sqrt(3) : 1;
+  const stepY = grid === "hex" ? 1.5 : 1;
+  const margin = grid === "hex" ? 2 : 1;
+  const vx0 = Math.max(0, Math.floor(-ox / scale / stepX) - margin);
+  const vy0 = Math.max(0, Math.floor(-oy / scale / stepY) - margin);
+  const vx1 = Math.min(width - 1, Math.ceil((canvasW - ox) / scale / stepX) + margin);
+  const vy1 = Math.min(height - 1, Math.ceil((canvasH - oy) / scale / stepY) + margin);
 
   const traceCell = (x: number, y: number) => {
     const pts = cellCorners(grid, x, y);
@@ -710,15 +748,24 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       }
     }
   }
-  // Композитный террейн для wallAt обводки: верхний видимый terrain-слой
-  // полностью перекрывает нижние (§12). Без terrain-слоёв — бумага.
+  // Композитный террейн для wallAt: маска пропускает неокрашенные samples,
+  // клеточный слой остаётся полным surface.
   const visibleTerrains = model.layers.filter(
     (l): l is RenderTerrainLayer => l.kind === "terrain" && l.visible,
   );
-  const topTerrain = visibleTerrains[visibleTerrains.length - 1];
   const terrainAt = (x: number, y: number): string => {
-    if (!topTerrain) return "plain";
-    return topTerrain.terrain.entries.get(`${x},${y}`) ?? topTerrain.terrain.defaultCode;
+    for (let i = visibleTerrains.length - 1; i >= 0; i--) {
+      const terrain = visibleTerrains[i].terrain;
+      const mask = terrain.mask;
+      if (mask) {
+        const center = cellCenter(grid, x, y);
+        const sx = Math.floor((center.cx - mask.origin.x) / mask.sampleSize);
+        const sy = Math.floor((center.cy - mask.origin.y) / mask.sampleSize);
+        const painted = mask.entries.get(`${sx},${sy}`);
+        if (painted) return painted;
+      } else return terrain.entries.get(`${x},${y}`) ?? terrain.defaultCode;
+    }
+    return visibleTerrains[0]?.terrain.defaultCode ?? "plain";
   };
 
   // Один terrain-слой — полный surface (§12): default заливает всё поле одним
@@ -750,6 +797,66 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       for (const { x, y } of list) {
         traceCell(x, y);
         ctx.fill();
+      }
+    }
+  };
+
+  const fillTerrainMask = (mask: NonNullable<RenderTerrainLayer["terrain"]["mask"]>) => {
+    if (mask.entries.size === 0) return;
+    const bitmap = ctx.canvas && typeof document !== "undefined"
+      ? terrainMaskBitmap(mask, width, height) : null;
+    if (bitmap) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(X(0), Y(0), width * scale, height * scale);
+      ctx.clip();
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(
+        bitmap.canvas,
+        X(mask.origin.x + bitmap.minSX * mask.sampleSize),
+        Y(mask.origin.y + bitmap.minSY * mask.sampleSize),
+        bitmap.canvas.width * mask.sampleSize * scale,
+        bitmap.canvas.height * mask.sampleSize * scale,
+      );
+      ctx.restore();
+      return;
+    }
+    const size = mask.sampleSize;
+    const minSX = Math.floor((Math.max(0, -ox / scale) - mask.origin.x) / size);
+    const maxSX = Math.ceil((Math.min(width, (canvasW - ox) / scale) - mask.origin.x) / size) - 1;
+    const minSY = Math.floor((Math.max(0, -oy / scale) - mask.origin.y) / size);
+    const maxSY = Math.ceil((Math.min(height, (canvasH - oy) / scale) - mask.origin.y) / size) - 1;
+    if (maxSX < minSX || maxSY < minSY) return;
+    const drawRun = (sx: number, endSX: number, sy: number, code: string) => {
+      const left = Math.max(0, mask.origin.x + sx * size);
+      const top = Math.max(0, mask.origin.y + sy * size);
+      const right = Math.min(width, mask.origin.x + endSX * size);
+      const bottom = Math.min(height, mask.origin.y + (sy + 1) * size);
+      if (right <= left || bottom <= top) return;
+      ctx.fillStyle = MAP_TERRAIN_FILL[code] ?? MAP_TERRAIN_FILL.plain;
+      ctx.fillRect(X(left), Y(top), (right - left) * scale, (bottom - top) * scale);
+    };
+    const visibleArea = (maxSX - minSX + 1) * (maxSY - minSY + 1);
+    if (mask.entries.size < visibleArea / 4) {
+      // Sparse paint: traverse only stored samples.
+      for (const [key, code] of mask.entries) {
+        const [sx, sy] = key.split(",").map(Number);
+        if (sx < minSX || sx > maxSX || sy < minSY || sy > maxSY) continue;
+        drawRun(sx, sx + 1, sy, code);
+      }
+      return;
+    }
+    // Dense fill: combine adjacent equal samples into one Canvas rectangle.
+    for (let sy = minSY; sy <= maxSY; sy++) {
+      let runCode: string | undefined;
+      let runStart = minSX;
+      for (let sx = minSX; sx <= maxSX + 1; sx++) {
+        const code = sx <= maxSX ? mask.entries.get(`${sx},${sy}`) : undefined;
+        if (code === runCode) continue;
+        if (runCode !== undefined) drawRun(runStart, sx, sy, runCode);
+        runCode = code;
+        runStart = sx;
       }
     }
   };
@@ -1218,14 +1325,22 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
   // skip (§21). Opacity — умножением на весь content слоя (§22–23).
   // Locked на изображение не влияет. Grid/coords — глобальный оверлей ПОСЛЕ
   // всех document layers (§19, intentional delta), editor overlays — после.
+  let hasTerrainSurface = false;
   for (const layer of model.layers) {
     if (!layer.visible) continue;
     ctx.save();
     ctx.globalAlpha *= layer.opacity;
     if (layer.kind === "terrain") {
-      fillTerrainDefault(layer.terrain.defaultCode);
-      fillTerrainEntries(layer.terrain.entries, layer.terrain.defaultCode);
-      drawTerrainMotifs(layer.terrain.entries, layer.terrain.defaultCode);
+      if (layer.terrain.mask) {
+        if (!hasTerrainSurface) fillTerrainDefault(layer.terrain.defaultCode);
+        fillTerrainMask(layer.terrain.mask);
+      }
+      else {
+        fillTerrainDefault(layer.terrain.defaultCode);
+        fillTerrainEntries(layer.terrain.entries, layer.terrain.defaultCode);
+        drawTerrainMotifs(layer.terrain.entries, layer.terrain.defaultCode);
+      }
+      hasTerrainSurface = true;
     } else if (layer.kind === "path") {
       // paths[] order = render order (§14): реки отдельно ниже дорог НЕ
       // фиксируются — порядок задают сами слои (migrated: river-слой ниже).
@@ -1251,9 +1366,53 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       if (scale >= 12) {
         for (const l of layer.labels) drawLabel(l);
       }
+    } else if (layer.kind === "object") {
+      for (const { object, asset } of layer.items) {
+        const { position, rotation, scale: objectScale } = object.transform;
+        const margin = Math.max(Math.abs(objectScale.x), Math.abs(objectScale.y)) * scale * Math.SQRT2 / 2;
+        const sx = X(position.x);
+        const sy = Y(position.y);
+        if (sx < -margin || sx > canvasW + margin || sy < -margin || sy > canvasH + margin) continue;
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.rotate(rotation * Math.PI / 180);
+        ctx.scale(scale * objectScale.x, scale * objectScale.y);
+        if ("glyph" in asset) drawMapSymbol(ctx, asset);
+        else if (asset.image) {
+          const aspect = asset.image.naturalWidth / asset.image.naturalHeight;
+          const w = Math.min(1, aspect);
+          const h = Math.min(1, 1 / aspect);
+          ctx.drawImage(asset.image, -w / 2, -h / 2, w, h);
+        }
+        else {
+          ctx.fillStyle = "#b9a68e";
+          ctx.fillRect(-0.5, -0.5, 1, 1);
+          ctx.strokeStyle = "#282922";
+          ctx.lineWidth = 0.05;
+          ctx.strokeRect(-0.5, -0.5, 1, 1);
+        }
+        if (selectedId === object.id && !playerView) {
+          ctx.strokeStyle = chrome.ink;
+          ctx.lineWidth = 0.045;
+          ctx.strokeRect(-0.5, -0.5, 1, 1);
+        }
+        ctx.restore();
+      }
     }
-    // object/scatter: содержимое не рисуется (compat gate держит nonempty
-    // вне редактора); слой присутствует ради порядка/флагов.
+    // Scatter пока не рисуется (compatibility gate блокирует nonempty).
+    ctx.restore();
+  }
+
+  const exploration = model.exploration;
+  if (exploration?.enabled && (playerView || o.fogGuide)) {
+    ctx.save();
+    ctx.fillStyle = "#17252A";
+    ctx.globalAlpha = playerView ? 1 : 0.58;
+    for (let y = vy0; y <= vy1; y++) for (let x = vx0; x <= vx1; x++) {
+      if (exploration.revealedCells.has(`${x},${y}`)) continue;
+      traceCell(x, y);
+      ctx.fill();
+    }
     ctx.restore();
   }
 

@@ -1,5 +1,6 @@
 import { cellDistance } from "../../grid";
 import type { MapGrid } from "../../mapTypes";
+import type { Dispatch, SetStateAction } from "react";
 
 // Линейка (Фаза 1, Tool Controller): тапы начала/конца + живой конец за
 // курсором. Состояние ruler живёт снаружи (рендер его тоже рисует) и приходит
@@ -30,9 +31,7 @@ export function rulerMeasure(
 
 interface CreateRulerToolsArgs {
   ruler: RulerState | null;
-  setRuler: (
-    updater: (r: RulerState | null) => RulerState | null
-  ) => void;
+  setRuler: Dispatch<SetStateAction<RulerState | null>>;
 }
 
 export function createRulerTools(a: CreateRulerToolsArgs) {

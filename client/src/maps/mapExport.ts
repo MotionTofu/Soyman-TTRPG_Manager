@@ -27,6 +27,7 @@ import {
 } from "./render";
 import { createV5RenderModel, type MapRenderModel } from "./renderModel";
 import type { MapDocumentV5 } from "./core/types";
+import { projectMapDocumentForPlayer } from "./core/playerProjection";
 import { MAP_SCALE_LABELS, type MapGrid, type MapScale } from "./mapTypes";
 
 /** Content легенды из видимых слоёв модели (3A §109): террейны со всех
@@ -51,11 +52,13 @@ export function collectLegendContent(model: MapRenderModel): LegendContent {
   let hasStart = false;
   let hasFinish = false;
   let hasRivers = false;
+  let hasTerrainSurface = false;
   for (const layer of model.layers) {
     if (!layer.visible) continue;
     if (layer.kind === "terrain") {
-      terrainCodes.add(layer.terrain.defaultCode);
-      for (const code of layer.terrain.entries.values()) terrainCodes.add(code);
+      if (!layer.terrain.mask || !hasTerrainSurface) terrainCodes.add(layer.terrain.defaultCode);
+      for (const code of (layer.terrain.mask?.entries ?? layer.terrain.entries).values()) terrainCodes.add(code);
+      hasTerrainSurface = true;
     } else if (layer.kind === "path") {
       for (const p of layer.paths) {
         if (p.kind === "river" && p.cells.size > 0) hasRivers = true;
@@ -115,7 +118,7 @@ export function buildAndDownloadPng(snap: PngSnapshot, PX: number) {
   const mctx = mapCanvas.getContext("2d");
   if (!mctx) return;
   const chrome = readChrome();
-  const model = createV5RenderModel(snap.document).model;
+  const model = createV5RenderModel(snap.pv ? projectMapDocumentForPlayer(snap.document) : snap.document).model;
   renderMap(mctx, mapW, mapH, {
     grid: snap.grid,
     width: snap.width,

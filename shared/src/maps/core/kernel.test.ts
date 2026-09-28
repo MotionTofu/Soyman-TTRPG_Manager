@@ -91,6 +91,50 @@ describe("shared kernel", () => {
     expect(room && room.kind === "room" && room.name).toBe("Кладовая");
   });
 
+  it("fog: игрок получает только раскрытые клетки, мастерский документ сохраняется", () => {
+    const doc = gmDoc();
+    doc.exploration = { enabled: true, revealedCells: [{ x: 1, y: 1 }] };
+    const terrain = doc.layers[0];
+    if (terrain.kind !== "terrain" || terrain.representation !== "cells") throw new Error("fixture");
+    terrain.cells.push({ x: 2, y: 1, material: { type: "builtin", key: "terrain/mountains" } });
+    doc.layers.push({ id: "labels", kind: "label", name: "Labels", visible: true, locked: false, opacity: 1,
+      items: [{ id: "visible-label", position: { x: 1.5, y: 1.5 }, text: "Тропа" },
+        { id: "hidden-label", position: { x: 2.5, y: 1.5 }, text: "Тайник" }] });
+    const before = serializeMapDocument(doc);
+    const player = projectMapDocumentForPlayer(doc);
+    expect(validateMapDocument(player)).toEqual([]);
+    const raw = serializeMapDocument(player);
+    expect(raw).toContain('"terrain/forest"');
+    expect(raw).toContain('"visible-label"');
+    expect(raw).not.toContain('"terrain/mountains"');
+    expect(raw).not.toContain("Тайник");
+    expect(raw).not.toContain("Кладовая");
+    expect(serializeMapDocument(doc)).toBe(before);
+    expect(parseMapDocument(raw).ok).toBe(true);
+  });
+
+  it("fog: гекс попадает в раскрытую клетку по геометрии сетки", () => {
+    const doc = gmDoc();
+    doc.grid = { type: "hex", cellSize: 1, columns: 4, rows: 3, origin: { x: 0, y: 0 },
+      hex: { orientation: "pointy", offset: "odd-q" } };
+    doc.exploration = { enabled: true, revealedCells: [{ x: 1, y: 1 }] };
+    doc.layers.push({ id: "hex-markers", kind: "gameplay", name: "Markers", visible: true, locked: false, opacity: 1,
+      items: [{ id: "revealed-marker", kind: "marker", position: { x: Math.sqrt(3) * 1.5, y: 1.5 }, markerKind: "city" },
+        { id: "hidden-marker", kind: "marker", position: { x: Math.sqrt(3) * 2.5, y: 1.5 }, markerKind: "village" }] });
+    const projected = projectMapDocumentForPlayer(doc);
+    const raw = serializeMapDocument(projected);
+    expect(raw).toContain("revealed-marker");
+    expect(raw).not.toContain("hidden-marker");
+  });
+
+  it("fog: повторные и внекартные клетки отвергаются", () => {
+    const doc = gmDoc();
+    doc.exploration = { enabled: true, revealedCells: [{ x: 1, y: 1 }, { x: 1, y: 1 }, { x: 9, y: 0 }] };
+    const codes = validateMapDocument(doc).map((issue) => issue.code);
+    expect(codes).toContain("exploration.duplicate-cell");
+    expect(codes).toContain("exploration.bad-cell");
+  });
+
   it("canonical ordering: порядок входа не влияет на выход", () => {
     const a = structuredClone(gmDoc());
     const b = structuredClone(gmDoc());

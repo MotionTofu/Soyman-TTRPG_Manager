@@ -1,5 +1,6 @@
 import { brushCells, pixelToCell } from "../../grid";
 import { applyTerrainCellEdits, floodTerrainFill, readTerrainMaterialAt } from "../../core/mutations/terrain";
+import { floodTerrainMask, paintTerrainMask, readTerrainMaskAt } from "../../core/mutations/terrainMask";
 import type { MaterialRef } from "../../core/refs";
 import type { LayerId, MapDocumentV5 } from "../../core/types";
 import type { MapGeometry } from "../hooks/useMapSelection";
@@ -183,6 +184,23 @@ export function createPaintTools(a: CreatePaintToolsArgs) {
     const effTool = opts.eraseOverride ? "eraser" : ctx.tool;
     // Стена дабом — та же кисть террейна, только краска зафиксирована.
     const effTerrain = effTool === "wall" ? "wall" : ctx.terrain;
+    const active = doc.layers.find((layer) => layer.id === ctx.activeLayerId);
+    if (active?.kind === "terrain" && active.representation === "mask" &&
+      (effTool === "brush" || effTool === "eraser" || effTool === "wall")) {
+      if (!active.visible || active.locked) {
+        ctx.setActionError("Слой детального рельефа скрыт или заблокирован.");
+        return false;
+      }
+      const radius = active.mask.sampleSize * 0.75 + (ctx.brushSize - 1) * (doc.grid?.cellSize ?? 1) / 2;
+      const r = paintTerrainMask(doc, active.id, wx, wy, radius,
+        effTool === "eraser" ? null : materialForCode(effTerrain), ctx.newId);
+      if (!r.ok) {
+        ctx.setActionError(r.issues[0]?.message ?? "Не удалось покрасить детальный рельеф.");
+        return false;
+      }
+      if (!r.changed) return false;
+      return commit(ctx, doc, r.document, false);
+    }
     return paintStrokeCells(ctx, g, doc, cell.x, cell.y, effTool, effTerrain);
   }
 
@@ -193,6 +211,15 @@ export function createPaintTools(a: CreatePaintToolsArgs) {
     const cell = pixelToCell(g.grid, wx, wy, g.width, g.height);
     if (!cell) return;
     if (ctx.tool === "picker") {
+      const active = doc.layers.find((layer) => layer.id === ctx.activeLayerId);
+      if (active?.kind === "terrain" && active.representation === "mask") {
+        const material = readTerrainMaskAt(doc, active.id, wx, wy);
+        const code = material && codeOfMaterial(material);
+        if (!code) { ctx.setActionError("Материал маски не удалось прочитать."); return; }
+        ctx.setTerrain(code);
+        ctx.selectTool("brush");
+        return;
+      }
       // Пипетка читает active/target TerrainLayer, не композит (§36).
       const layerId = target(ctx, doc, "terrain");
       if (!layerId) return;
@@ -208,6 +235,20 @@ export function createPaintTools(a: CreatePaintToolsArgs) {
       }
       ctx.setTerrain(code);
       ctx.selectTool("brush");
+      return;
+    }
+    const active = doc.layers.find((layer) => layer.id === ctx.activeLayerId);
+    if (active?.kind === "terrain" && active.representation === "mask") {
+      if (!active.visible || active.locked) {
+        ctx.setActionError("Слой детального рельефа скрыт или заблокирован.");
+        return;
+      }
+      const r = floodTerrainMask(doc, active.id, wx, wy, materialForCode(ctx.terrain), ctx.newId);
+      if (!r.ok) {
+        ctx.setActionError(r.issues[0]?.message ?? "Не удалось залить детальный рельеф.");
+        return;
+      }
+      if (r.changed) commit(ctx, doc, r.document, true);
       return;
     }
     // fill: flood только внутри target TerrainCellLayer (§37).
@@ -243,6 +284,15 @@ export function createPaintTools(a: CreatePaintToolsArgs) {
       }
       if (!r.changed) return;
       commit(ctx, doc, r.document, true);
+      return;
+    }
+    const activeLayer = doc.layers.find((layer) => layer.id === ctx.activeLayerId);
+    if (activeLayer?.kind === "terrain" && activeLayer.representation === "mask") {
+      const material = readTerrainMaskAt(doc, activeLayer.id, wx, wy);
+      const code = material && codeOfMaterial(material);
+      if (!code) return;
+      ctx.setTerrain(code);
+      ctx.selectTool("brush");
       return;
     }
     const layerId = target(ctx, doc, "terrain", true);

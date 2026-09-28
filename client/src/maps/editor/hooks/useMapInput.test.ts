@@ -86,6 +86,7 @@ function setup(overrides: Record<string, unknown> = {}) {
     ruler: null,
     setHover: vi.fn(),
     setRectPreview: vi.fn(),
+    onFogCell: vi.fn(() => true),
     tools,
     ...overrides,
   };
@@ -160,6 +161,20 @@ function up(h: ReturnType<typeof setup>, patch: Record<string, unknown> = {}) {
 }
 
 describe("useMapInput: mouse", () => {
+  it("fog рисует клетки мазком и правая кнопка вызывает обратное действие", () => {
+    const h = setup({ tool: "fog" });
+    down(h, { clientX: 2.5, clientY: 3.5 });
+    move(h, { clientX: 4.5, clientY: 3.5 });
+    flushRaf();
+    up(h, { clientX: 4.5, clientY: 3.5 });
+    expect(h.props.onFogCell).toHaveBeenCalledWith(2, 3, false);
+    expect(h.props.onFogCell).toHaveBeenCalledWith(4, 3, false);
+    expect(h.history.commitStroke).toHaveBeenCalledTimes(1);
+    expect(h.tools.paint.paintAt).not.toHaveBeenCalled();
+    down(h, { button: 2, buttons: 2, clientX: 2.5, clientY: 3.5 });
+    expect(h.props.onFogCell).toHaveBeenLastCalledWith(2, 3, true);
+  });
+
   it("1. LMB → активный инструмент (stroke + paint)", () => {
     const h = setup();
     down(h, { clientX: 5, clientY: 5 });
@@ -381,5 +396,23 @@ describe("useMapInput: read-only", () => {
     down(h, { button: 1, buttons: 4, clientX: 50, clientY: 50 });
     move(h, { button: 1, buttons: 4, clientX: 60, clientY: 50 });
     expect(h.camRef.current).toMatchObject({ ox: 10, oy: 0 });
+  });
+
+  it("не раскрывает клетки тумана в режиме просмотра", () => {
+    const h = setup({ tool: "fog", canEdit: false });
+    down(h, { clientX: 25, clientY: 35 });
+    expect(h.props.onFogCell).not.toHaveBeenCalled();
+    expect(h.history.beginStroke).not.toHaveBeenCalled();
+  });
+
+  it("закрывает активный мазок при переходе в просмотр и не красит отложенный кадр", () => {
+    const h = setup({ tool: "fog" });
+    down(h, { clientX: 2.5, clientY: 3.5 });
+    move(h, { clientX: 4.5, clientY: 3.5 });
+    h.rerender({ canEdit: false });
+    flushRaf();
+    move(h, { clientX: 5.5, clientY: 3.5 });
+    expect(h.props.onFogCell).toHaveBeenCalledTimes(1);
+    expect(h.history.commitStroke).toHaveBeenCalledTimes(1);
   });
 });

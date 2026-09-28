@@ -1,6 +1,6 @@
 // V5 gameplay hit-test: world point → stable EntityId (Фазы 2E/3A).
-// 3A layer-aware (§84–87): слои обходятся сверху вниз, hidden/locked/
-// non-gameplay пропускаются; внутри слоя — существующий semantic priority
+// 3A layer-aware (§84–87): слои обходятся сверху вниз, hidden/locked
+// пропускаются; внутри gameplay-слоя — существующий semantic priority
 // (door → trap → marker → start → finish → room reverse). Layer stack бьёт
 // kind priority: marker верхнего слоя побеждает дверь нижнего (§87).
 // Геометрия — напрямую из V5, без реконструкции x/y/edge.
@@ -82,9 +82,23 @@ export function hitTestGameplay(
   // Слои сверху вниз: первый hit побеждает (§85–87).
   for (let li = doc.layers.length - 1; li >= 0; li--) {
     const layer = doc.layers[li];
-    if (layer.kind !== "gameplay") continue;
     if (!layer.visible) continue; // §25
     if (layer.locked) continue; // §26
+    if (layer.kind === "object") {
+      for (let oi = layer.items.length - 1; oi >= 0; oi--) {
+        const object = layer.items[oi];
+        const { position, rotation, scale } = object.transform;
+        const dx = point.x - position.x;
+        const dy = point.y - position.y;
+        const rad = rotation * Math.PI / 180;
+        const localX = (dx * Math.cos(rad) + dy * Math.sin(rad)) / scale.x;
+        const localY = (-dx * Math.sin(rad) + dy * Math.cos(rad)) / scale.y;
+        if (Math.abs(localX) <= 0.5 + tolerance && Math.abs(localY) <= 0.5 + tolerance)
+          return { entityId: object.id, kind: "object" };
+      }
+      continue;
+    }
+    if (layer.kind !== "gameplay") continue;
     const hit = hitInItems(layer.items, point, tolerance);
     if (hit) return hit;
   }

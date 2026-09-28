@@ -101,12 +101,20 @@ describe("useMapSelection (V5 stable IDs)", () => {
     expect(h.result.current.selected).toBeNull();
   });
 
-  it("замена документа сбрасывает выбор (legacy parity)", () => {
+  it("замена документа сохраняет выбор существующего объекта и сбрасывает удалённый", () => {
     const h = setup(squareDoc());
     act(() => {
       h.result.current.select({ entityId: "legacy-trap-0", kind: "trap" });
     });
     h.rerender({ document: squareDoc() });
+    expect(h.result.current.selected).toEqual({ entityId: "legacy-trap-0", kind: "trap" });
+    const withoutTrap = squareDoc();
+    h.rerender({ document: {
+      ...withoutTrap,
+      layers: withoutTrap.layers.map((layer) => layer.kind === "gameplay"
+        ? { ...layer, items: layer.items.filter((item) => item.id !== "legacy-trap-0") }
+        : layer),
+    } });
     expect(h.result.current.selected).toBeNull();
   });
 });

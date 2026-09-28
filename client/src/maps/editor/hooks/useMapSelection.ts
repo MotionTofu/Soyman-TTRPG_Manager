@@ -4,6 +4,7 @@ import {
   moveGameplayEntity,
 } from "../../core/mutations/gameplay";
 import { findEntityLayer } from "../../core/mutations/layers";
+import { deleteMapObject, moveMapObject } from "../../core/mutations/mapObjects";
 import { legacyDoorWorldPosition, legacyEdgeOrientation } from "../../core/migrateLegacy";
 import { hitTestGameplay } from "../../core/selection/hitTest";
 import type { V5Selection } from "../../core/selection/types";
@@ -52,6 +53,10 @@ export function moveSelectedInDocument(
 ): MapDocumentV5 | null {
   const cell = pixelToCell(geom.grid, wx, wy, geom.width, geom.height);
   if (!cell) return null;
+  if (sel.kind === "object") {
+    const r = moveMapObject(before, sel.entityId, { x: wx - anchor.ox, y: wy - anchor.oy });
+    return r.ok ? r.document : null;
+  }
   if (sel.kind === "door") {
     // Двери — только квадраты (legacy-ограничение сохранено).
     if (geom.grid !== "square") return null;
@@ -169,7 +174,7 @@ export function deleteSelectedFromDocument(
   live: MapDocumentV5,
   sel: V5Selection
 ): { next: MapDocumentV5; before: MapDocumentV5 } | null {
-  const r = deleteGameplayEntity(live, sel.entityId);
+  const r = sel.kind === "object" ? deleteMapObject(live, sel.entityId) : deleteGameplayEntity(live, sel.entityId);
   if (!r.ok || !r.changed) return null;
   return { next: r.document, before: live };
 }
@@ -188,10 +193,10 @@ export function useMapSelection({ document, documentRef, setDocument, commitDocu
   const [selected, setSelected] = useState<V5Selection | null>(null);
   const selectedRef = useRef<V5Selection | null>(null);
   selectedRef.current = selected;
-  // Любая замена документа выбор сбрасывает (панели и drag живут на рефах,
-  // им не мешает).
+  // Сохраняем выбор через собственные правки объекта; удаление или загрузка
+  // другого документа без этого ID сбрасывают его.
   useEffect(() => {
-    setSelected(null);
+    setSelected((current) => current && document && findEntityLayer(document, current.entityId) ? current : null);
   }, [document]);
 
   function select(sel: NonNullable<V5Selection>) {
@@ -229,7 +234,7 @@ export function useMapSelection({ document, documentRef, setDocument, commitDocu
     const own = findEntityLayer(live, session.sel.entityId);
     if (!own) return;
     const layer = live.layers[own.layerIndex];
-    if (!layer || layer.kind !== "gameplay" || layer.locked || !layer.visible) return;
+    if (!layer || (layer.kind !== "gameplay" && layer.kind !== "object") || layer.locked || !layer.visible) return;
     const draft = moveSelectedInDocument(session.before, session.sel, session, geom, wx, wy);
     if (!draft) return;
     documentRef.current = draft;
@@ -245,7 +250,7 @@ export function useMapSelection({ document, documentRef, setDocument, commitDocu
     const own = findEntityLayer(doc, s.entityId);
     if (!own) return;
     const layer = doc.layers[own.layerIndex];
-    if (!layer || layer.kind !== "gameplay" || layer.locked || !layer.visible) return;
+    if (!layer || (layer.kind !== "gameplay" && layer.kind !== "object") || layer.locked || !layer.visible) return;
     const r = deleteSelectedFromDocument(doc, s);
     if (!r) return;
     commitDocument(r.next, r.before);

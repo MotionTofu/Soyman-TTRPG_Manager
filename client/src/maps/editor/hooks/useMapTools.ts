@@ -28,6 +28,7 @@ interface UseMapToolsArgs {
   ruler: RulerState | null;
   lastTrapKind: MapTrapKind;
   markerKind: MapMarkerKind;
+  assetId: string;
   // 3A: resolver target слоёв читает active и переключает его при auto-pick.
   activeLayerId: LayerId | null;
   onActiveLayer: (id: LayerId) => void;
@@ -38,7 +39,7 @@ interface UseMapToolsArgs {
   newId: () => string;
   selectTool: (t: PaintTool) => void;
   setTerrain: (t: string) => void;
-  setRuler: (updater: (r: RulerState | null) => RulerState | null) => void;
+  setRuler: Dispatch<SetStateAction<RulerState | null>>;
   setWallDraft: Dispatch<SetStateAction<{ x: number; y: number }[] | null>>;
   setWallLive: (v: { x: number; y: number } | null) => void;
   setShapeAnchor: (v: { x: number; y: number } | null) => void;
@@ -106,6 +107,7 @@ export function useMapTools(a: UseMapToolsArgs): MapInputTools {
     geom: a.geom,
     lastTrapKind: a.lastTrapKind,
     markerKind: a.markerKind,
+    assetId: a.assetId,
     activeLayerId: a.activeLayerId,
     onActiveLayer: a.onActiveLayer,
     setActionError: a.setActionError,

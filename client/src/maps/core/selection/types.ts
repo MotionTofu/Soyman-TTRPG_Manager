@@ -3,7 +3,7 @@
 
 import type { EntityId } from "../types";
 
-export type V5SelectableKind = "door" | "trap" | "marker" | "start" | "finish" | "room";
+export type V5SelectableKind = "door" | "trap" | "marker" | "start" | "finish" | "room" | "object";
 
 export interface V5Selection {
   entityId: EntityId;

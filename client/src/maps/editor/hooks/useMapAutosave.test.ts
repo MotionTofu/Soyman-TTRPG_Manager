@@ -121,7 +121,7 @@ describe("useMapAutosave (Этап Autosave)", () => {
     expect(h.save.mock.calls[0][1]).toMatchObject({ document: "c2" });
   });
 
-  it("2. возврат к эталону → PUT нет (статус-quirks сохранён: остаётся dirty)", () => {
+  it("2. возврат к эталону → PUT нет, статус снова saved", () => {
     const h = setup();
     loadAs(h);
     edit(h, 1);
@@ -129,11 +129,10 @@ describe("useMapAutosave (Этап Autosave)", () => {
     edit(h, 0);
     fire();
     expect(h.save).not.toHaveBeenCalled();
-    // Quirk исходного кода: ранний return не сбрасывает dirty обратно.
-    expect(h.result.current.status.kind).toBe("dirty");
+    expect(h.result.current.status.kind).toBe("saved");
   });
 
-  it("3. поздний ответ A после B не перетирает актуальное", async () => {
+  it("3. записи идут по очереди; пока A открыт, сохраняется только последнее состояние", async () => {
     const h = setup();
     loadAs(h);
     edit(h, 1);
@@ -141,14 +140,17 @@ describe("useMapAutosave (Этап Autosave)", () => {
     expect(h.save).toHaveBeenCalledTimes(1);
     edit(h, 2);
     fire();
-    expect(h.save).toHaveBeenCalledTimes(2);
-    // A разрешается после отправки B — его результат игнорируется...
+    edit(h, 3);
+    fire();
+    expect(h.save).toHaveBeenCalledTimes(1);
+    // Второй PUT начинается только после завершения первого и берёт живой v3.
     await act(async () => {
       h.defers[0].resolve();
     });
     await flush();
+    expect(h.save).toHaveBeenCalledTimes(2);
+    expect(h.save.mock.calls[1][1]).toMatchObject({ document: "c3" });
     expect(h.result.current.status.kind).toBe("saving");
-    // ...но onSaved вызывается для каждого ответа, как раньше.
     expect(h.onSaved).toHaveBeenCalledTimes(1);
     await act(async () => {
       h.defers[1].resolve();
@@ -156,7 +158,7 @@ describe("useMapAutosave (Этап Autosave)", () => {
     await flush();
     expect(h.result.current.status.kind).toBe("saved");
     expect(h.onSaved).toHaveBeenCalledTimes(2);
-    // Эталон — v2: возврат к v0 снова считается изменением.
+    // Эталон — v3: возврат к v0 снова считается изменением.
     edit(h, 0);
     fire();
     expect(h.save).toHaveBeenCalledTimes(3);
@@ -172,6 +174,19 @@ describe("useMapAutosave (Этап Autosave)", () => {
     });
     await flush();
     expect(h.result.current.status.kind).toBe("error");
+  });
+
+  it("ошибка старого запроса не мешает сохранить более свежую правку", async () => {
+    const h = setup();
+    loadAs(h);
+    edit(h, 1);
+    fire();
+    edit(h, 2);
+    await act(async () => h.defers[0].reject());
+    expect(h.save).toHaveBeenCalledTimes(2);
+    expect(h.save.mock.calls[1][1]).toMatchObject({ document: "c2" });
+    await act(async () => h.defers[1].resolve());
+    expect(h.result.current.status.kind).toBe("saved");
   });
 
   it("5. retry шлёт актуальное, а не старый snapshot; noop без PUT", async () => {
@@ -214,18 +229,28 @@ describe("useMapAutosave (Этап Autosave)", () => {
     expect(h.save.mock.calls[0][1]).toMatchObject({ document: "c2" });
   });
 
-  it("8. thumbnail throttle 2.5s: повтор — null, пауза — свежий", () => {
+  it("retry соблюдает блокировку повреждённого документа", () => {
+    const h = setup();
+    loadAs(h, 0, true);
+    edit(h, 1);
+    act(() => h.result.current.retry());
+    expect(h.save).not.toHaveBeenCalled();
+  });
+
+  it("8. thumbnail throttle 2.5s: повтор — null, пауза — свежий", async () => {
     const h = setup();
     loadAs(h);
     edit(h, 1);
     fire();
     expect(h.buildThumbnail).toHaveBeenCalledTimes(1);
     expect(h.save.mock.calls[0][1]).toMatchObject({ thumbnail: "thumb-1" });
+    await act(async () => h.defers[0].resolve());
     h.setNow(1_001_000);
     edit(h, 2);
     fire();
     expect(h.buildThumbnail).toHaveBeenCalledTimes(1);
     expect(h.save.mock.calls[1][1]).toMatchObject({ thumbnail: null });
+    await act(async () => h.defers[1].resolve());
     h.setNow(1_003_000);
     edit(h, 3);
     fire();
@@ -283,5 +308,7 @@ describe("useMapAutosave (Этап Autosave)", () => {
     fire();
     expect(h.save).not.toHaveBeenCalled();
     expect(h.result.current.status.kind).toBe("saved");
+    act(() => h.result.current.retry());
+    expect(h.save).not.toHaveBeenCalled();
   });
 });

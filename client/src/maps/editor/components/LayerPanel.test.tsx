@@ -22,7 +22,7 @@ function squareDoc(): MapDocumentV5 {
 
 function setup(doc: MapDocumentV5 = squareDoc()) {
   let current = doc;
-  const commitDocument = vi.fn((next: MapDocumentV5) => {
+  const commitDocument = vi.fn((next: MapDocumentV5, _before: MapDocumentV5) => {
     current = next;
   });
   const setDocument = vi.fn((d: MapDocumentV5) => {
@@ -48,6 +48,15 @@ function setup(doc: MapDocumentV5 = squareDoc()) {
 }
 
 describe("LayerPanel", () => {
+  it("adds a detailed terrain mask and selects it", () => {
+    const h = setup();
+    fireEvent.click(h.getByTitle("Добавить слой"));
+    fireEvent.click(h.getByRole("button", { name: "Детальный рельеф" }));
+    const layer = h.state().layers.at(-1);
+    expect(layer?.kind).toBe("terrain");
+    expect(layer?.kind === "terrain" ? layer.representation : null).toBe("mask");
+    expect(h.onActiveLayer).toHaveBeenCalledWith(layer?.id);
+  });
   it("visibility toggle = 1 commit; lock toggle = 1 commit", () => {
     const h = setup();
     const hideBtns = h.getAllByTitle("Скрыть");

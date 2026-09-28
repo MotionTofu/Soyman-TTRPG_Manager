@@ -175,13 +175,15 @@ describe("useMapHotkeys (Этап Hotkeys)", () => {
   });
 
   it("read-only: инструменты/undo/delete закрыты, zoom/fit/cancel живы", () => {
-    const h = setup({ canEdit: false, hasSelection: true });
+    const h = setup({ canEdit: false, hasSelection: true, canFinishWall: true });
     press({ code: "KeyB" });
     press({ code: "KeyZ", ctrlKey: true });
     press({ code: "Delete" });
+    press({ code: "Enter" });
     expect(h.handlers.onSelectTool).not.toHaveBeenCalled();
     expect(h.handlers.onUndo).not.toHaveBeenCalled();
     expect(h.handlers.onDeleteSelected).not.toHaveBeenCalled();
+    expect(h.handlers.onFinishWall).not.toHaveBeenCalled();
     press({ code: "Equal" });
     press({ code: "Digit0" });
     press({ code: "Escape" });

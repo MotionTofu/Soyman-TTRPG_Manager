@@ -22,7 +22,16 @@ describe("assessCurrentEditorCompatibility", () => {
     expect(c.reasons).toEqual([]);
   });
 
-  it("mask terrain → incompatible", () => {
+  it("rejects V5 grid geometry that the current canvas cannot position", () => {
+    const doc = squareDoc();
+    if (!doc.grid) throw new Error("fixture must have grid");
+    const scaled = { ...doc, grid: { ...doc.grid, cellSize: 2 } };
+    const shifted = { ...doc, grid: { ...doc.grid, origin: { x: 3, y: 0 } } };
+    expect(assessCurrentEditorCompatibility(scaled).reasons.map((r) => r.code)).toContain("grid-geometry");
+    expect(assessCurrentEditorCompatibility(shifted).reasons.map((r) => r.code)).toContain("grid-geometry");
+  });
+
+  it("supports an empty mask but preserves the gate for unknown encodings", () => {
     const doc = squareDoc();
     const li = doc.layers.findIndex((l) => l.id === "lyr-terrain");
     const masked: MapDocumentV5 = {
@@ -44,8 +53,14 @@ describe("assessCurrentEditorCompatibility", () => {
       ),
     };
     const c = assessCurrentEditorCompatibility(masked);
-    expect(c.compatible).toBe(false);
-    expect(c.reasons.some((r) => r.code === "unsupported-terrain-mask")).toBe(true);
+    expect(c.compatible).toBe(true);
+    const unknown: MapDocumentV5 = {
+      ...masked,
+      layers: masked.layers.map((layer) => layer.kind === "terrain" && layer.representation === "mask"
+        ? { ...layer, mask: { ...layer.mask, chunks: [{ id: "unknown-mask-chunk", cx: 0, cy: 0, payload: { encoding: "future-v2" } }] } }
+        : layer),
+    };
+    expect(assessCurrentEditorCompatibility(unknown).reasons.map((r) => r.code)).toContain("unsupported-terrain-mask");
   });
 
   it("spline / objects / scatter → incompatible", () => {

@@ -1,4 +1,6 @@
 import { Router } from "express";
+import fs from "fs";
+import path from "path";
 import {
   parseMapDocument,
   parseStoredMapDocument,
@@ -7,6 +9,7 @@ import {
   validateMapDocument,
 } from "@soyman/shared";
 import { db } from "../db/db";
+import { isVaultPath, toFileUrl, vaultAbs } from "../services/filesystem";
 import type { AuthedRequest } from "../services/auth";
 import {
   emptyCellsBlob,
@@ -24,6 +27,45 @@ import {
 // (player_visible=1): остальное режет apiRoleGate, а видимость строк —
 // запросы ниже через isPlayer(). Запись игрокам запрещена гейтом целиком.
 export const mapsRouter = Router();
+
+interface ImageAssetRow { uid: string; name: string; tags: string; file_path: string }
+
+function imageAssets(uids?: readonly string[]) {
+  if (uids && uids.length === 0) return [];
+  const where = uids ? `AND lower(uid) IN (${uids.map(() => "?").join(",")})` : "";
+  const rows = db.prepare(`SELECT uid, name, tags, file_path FROM resources
+    WHERE category = 'image' AND archived_at IS NULL AND uid IS NOT NULL AND file_path IS NOT NULL ${where}`)
+    .all(...(uids ?? [])) as ImageAssetRow[];
+  return rows.filter((row) => isVaultPath(row.file_path) &&
+    /\.(png|jpe?g|webp|gif|avif)$/i.test(path.extname(row.file_path)) &&
+    fs.existsSync(vaultAbs(row.file_path)))
+    .map((row) => ({ uid: row.uid, name: row.name, tags: row.tags, file_url: toFileUrl(row.file_path) }));
+}
+
+// GM picker: lightweight image metadata, no artwork in MapDocument.
+mapsRouter.get("/asset-catalog", (req: AuthedRequest, res) => {
+  if (isPlayer(req)) return res.status(403).json({ error: "forbidden" });
+  res.json(imageAssets());
+});
+
+// Only images referenced by this visible map are returned to player clients.
+mapsRouter.get("/:id/assets", (req: AuthedRequest, res) => {
+  const row = db.prepare("SELECT cells, player_visible FROM maps WHERE id = ? AND archived_at IS NULL")
+    .get(req.params.id) as { cells: string; player_visible: number } | undefined;
+  if (!row || (isPlayer(req) && !row.player_visible)) return res.status(404).json({ error: "not found" });
+  const stored = parseStoredMapDocument(row.cells);
+  if (stored.format !== "v5") return res.json([]);
+  const parsed = parseMapDocument(stored.raw);
+  if (!parsed.ok) return res.status(500).json({ error: "stored V5 document invalid" });
+  const doc = isPlayer(req) || req.query.player_view === "1"
+    ? projectMapDocumentForPlayer(parsed.value) : parsed.value;
+  const prefix = "soyman-resource-images:";
+  const uids = [...new Set(doc.layers.flatMap((layer) => layer.kind === "object"
+    ? layer.items.flatMap((item) => item.visual.type === "asset" && item.visual.assetId.startsWith(prefix)
+      ? [item.visual.assetId.slice(prefix.length).toLowerCase()] : []) : []))]
+    .filter((uid) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(uid));
+  res.json(imageAssets(uids));
+});
 
 function isPlayer(req: AuthedRequest): boolean {
   return req.user?.role === "player";
@@ -125,12 +167,32 @@ mapsRouter.get("/:id", (req: AuthedRequest, res) => {
       if (validateMapDocument(projected).length > 0) {
         return res.status(500).json({ error: "V5 player projection invalid" });
       }
-      return res.json({ ...row, cells: serializeMapDocument(projected) });
+      // Миниатюра создана мастерским рендером и может показывать секреты.
+      return res.json({ ...row, thumbnail: null, cells: serializeMapDocument(projected) });
     }
     return res.json(row);
   }
-  if (isPlayer(req)) return res.json({ ...row, cells: stripCellsForPlayer(row.cells) });
+  if (isPlayer(req)) return res.json({ ...row, thumbnail: null, cells: stripCellsForPlayer(row.cells) });
   res.json(row);
+});
+
+// Второй экран работает под учётной записью мастера и может показывать карту,
+// ещё не открытую в библиотеке игроков. Здесь всегда отдаётся только проекция
+// для игроков; мастерский thumbnail и сырой документ никогда не уходят в кадр.
+mapsRouter.get("/:id/player-view", (req: AuthedRequest, res) => {
+  const row = db.prepare(`SELECT ${META_COLUMNS}, cells FROM maps WHERE id = ? AND archived_at IS NULL`)
+    .get(req.params.id) as { player_visible: number; cells: string } | undefined;
+  if (!row || (isPlayer(req) && !row.player_visible)) return res.status(404).json({ error: "not found" });
+  const stored = parseStoredMapDocument(row.cells);
+  if (stored.format === "v5") {
+    const parsed = parseMapDocument(stored.raw);
+    if (!parsed.ok) return res.status(500).json({ error: "stored V5 document invalid" });
+    const projected = projectMapDocumentForPlayer(parsed.value);
+    if (validateMapDocument(projected).length > 0) return res.status(500).json({ error: "V5 player projection invalid" });
+    return res.json({ ...row, thumbnail: null, cells: serializeMapDocument(projected) });
+  }
+  try { JSON.parse(row.cells); } catch { return res.status(500).json({ error: "stored map invalid" }); }
+  res.json({ ...row, thumbnail: null, cells: stripCellsForPlayer(row.cells) });
 });
 
 // Чистка секретного слоя для игроков (пакет A §6): секретные двери — вон,

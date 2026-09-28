@@ -280,6 +280,12 @@ export function canonicalizeMapDocument(doc: MapDocumentV5): MapDocumentV5 {
       },
     },
     grid: canonGrid(doc.grid),
+    ...(doc.exploration === undefined ? {} : {
+      exploration: {
+        enabled: doc.exploration.enabled,
+        revealedCells: sortCells(doc.exploration.revealedCells).map((cell) => ({ x: cell.x, y: cell.y })),
+      },
+    }),
     assetPacks: doc.assetPacks.map(canonPack),
     layers: doc.layers.map(canonLayer),
   };

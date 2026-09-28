@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { subscribeMapImageAssets } from "../../assets/registry";
 import { brushCells, cellCenter, cellKey, coordLabel } from "../../grid";
 import { MAP_GRID_LABELS, formatMeters, parseCellLore } from "../../mapTypes";
 import type { MapFull } from "../../mapTypes";
@@ -54,6 +55,8 @@ interface MapViewportProps {
 }
 
 export function MapViewport({ wrapRef, canvasRef, map, model, cam, view, tool, overlays, input }: MapViewportProps) {
+  const [imageRevision, setImageRevision] = useState(0);
+  useEffect(() => subscribeMapImageAssets(() => setImageRevision((revision) => revision + 1)), []);
   // Кадр. Зависимости — те же, что были (selectedId — чистая производная
   // от selected, canEdit в deps не было и нет — quirk сохранён).
   // canvasRef/wrapRef стабильны весь маунт — в deps не добавляем, как было.
@@ -102,6 +105,7 @@ export function MapViewport({ wrapRef, canvasRef, map, model, cam, view, tool, o
       chrome,
       // Игрок всегда видит карту глазами игрока; у мастера — тумблер превью (§6).
       playerView: !view.canEdit || view.previewAsPlayer,
+      fogGuide: view.canEdit && !view.previewAsPlayer && tool.tool === "fog",
       selectedId: overlays.selectedId,
     });
     // Линейка поверх поля (P2-1): экранные координаты, читаема при любом зуме.
@@ -195,6 +199,7 @@ export function MapViewport({ wrapRef, canvasRef, map, model, cam, view, tool, o
   }, [
     map,
     model,
+    imageRevision,
     cam,
     view.showGrid,
     view.showCoords,

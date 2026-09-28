@@ -1022,11 +1022,12 @@ CREATE TABLE IF NOT EXISTS campaign_presentation_layers (
 CREATE INDEX IF NOT EXISTS idx_campaign_presentation_layers_campaign ON campaign_presentation_layers(campaign_id);
 
 -- Состояние экрана показа: серверный источник правды (окно игроков
--- переживает перезагрузку). Пишет только пульт. mode: black | scene | cover.
+-- переживает перезагрузку). Пишет только пульт. mode: black | scene | cover | map.
 CREATE TABLE IF NOT EXISTS session_show_state (
   session_id INTEGER PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
   mode TEXT NOT NULL DEFAULT 'black',
   scene_id INTEGER REFERENCES story_scenes(id) ON DELETE SET NULL,
+  map_id INTEGER REFERENCES maps(id) ON DELETE SET NULL,
   visible_layer_ids TEXT NOT NULL DEFAULT '[]',
   shown INTEGER NOT NULL DEFAULT 0,
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))

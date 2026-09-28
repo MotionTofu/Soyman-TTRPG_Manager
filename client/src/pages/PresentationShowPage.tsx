@@ -4,6 +4,7 @@ import { useEntity, useResource } from "../data/hooks";
 import { sessionPaths } from "../data/sessions";
 import { PresentationStage } from "../components/presentation/PresentationStage";
 import { FullscreenButton } from "../components/presentation/FullscreenButton";
+import { PlayerMapStage } from "../components/presentation/PlayerMapStage";
 import type { CampaignCover, ScenePresentation, SessionDetail, ShowState } from "../types";
 
 // Окно показа игрокам — второй монитор. Рендерится вне <AppShell> (см.
@@ -62,6 +63,13 @@ export function PresentationShowPage() {
         />
       </div>
     );
+  }
+
+  if (state.mode === "map") {
+    return <div style={{ background: "#000", width: "100vw", height: "100vh" }}>
+      <FullscreenButton />
+      {state.map_id != null && <PlayerMapStage key={state.map_id} mapId={state.map_id} />}
+    </div>;
   }
 
   const data = state.mode === "cover" ? cover : scene;

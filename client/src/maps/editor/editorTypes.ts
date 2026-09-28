@@ -23,7 +23,9 @@ export type PaintTool =
   | "altar"
   | "marker"
   | "start"
-  | "finish";
+  | "finish"
+  | "asset"
+  | "fog";
 
 // Размер кисти 1/2/3: Чебышев-окрестность на квадратах, hex-distance на гексах.
 export type BrushSize = 1 | 2 | 3;
