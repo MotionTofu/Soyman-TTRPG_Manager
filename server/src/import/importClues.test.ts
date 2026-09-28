@@ -123,3 +123,53 @@ describe("импорт книги: улики и узлы", () => {
     ).toEqual({ node_id: copySecret, x: 40 });
   });
 });
+
+describe("уровень кампании в импорте и выгрузке (шаг 8)", () => {
+  it("улика `to: adv.` ведёт в другое приключение книги; выгрузка несёт её по имени и роль приключения", async () => {
+    const v = validateImport({
+      format: "adventure-import/1",
+      setting: { key: "set.fog", name: "Туман" },
+      adventures: [
+        {
+          key: "adv.first",
+          name: "Первое",
+          scenes: [
+            {
+              key: "scn.inn",
+              name: "Трактир",
+              clues: [
+                { text: "Карта склепа", to: "adv.second" },
+                { text: "Сама себе", to: "adv.first" },
+              ],
+            },
+          ],
+        },
+        { key: "adv.second", name: "Второе", scenes: [{ key: "scn.crypt", name: "Склеп" }] },
+      ],
+    });
+    expect(v.ok).toBe(true);
+    const res = applyImport(v.data!, { settingId: null, fileName: "fog.json" });
+    const first = Number(res.keys["adv.first"].split(":")[1]);
+    const second = Number(res.keys["adv.second"].split(":")[1]);
+    const inn = db.prepare("SELECT id FROM story_scenes WHERE arc_id = ? AND name = 'Трактир'").get(first) as { id: number };
+    const clues = db
+      .prepare("SELECT text, target_type, target_id FROM story_clues WHERE scene_id = ? ORDER BY position")
+      .all(inn.id);
+    // В своё приключение улика не ведёт — цель теряется, текст остаётся.
+    expect(clues).toEqual([
+      { text: "Карта склепа", target_type: "adventure", target_id: second },
+      { text: "Сама себе", target_type: null, target_id: null },
+    ]);
+
+    db.prepare("UPDATE story_arcs SET node_role = 'start' WHERE id = ?").run(first);
+    const data = story.buildAdventureExportData(first)!;
+    const settingId = (db.prepare("SELECT setting_id FROM story_arcs WHERE id = ?").get(first) as { setting_id: number })
+      .setting_id;
+    const copyId = (await story.importAdventureExport(settingId, data, { withImages: false }))!;
+    expect(db.prepare("SELECT node_role FROM story_arcs WHERE id = ?").get(copyId)).toEqual({ node_role: "start" });
+    const copyInn = db.prepare("SELECT id FROM story_scenes WHERE arc_id = ? AND name = 'Трактир'").get(copyId) as { id: number };
+    expect(
+      db.prepare("SELECT target_type, target_id FROM story_clues WHERE scene_id = ? AND text = 'Карта склепа'").get(copyInn.id)
+    ).toEqual({ target_type: "adventure", target_id: second });
+  });
+});

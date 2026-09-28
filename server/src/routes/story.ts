@@ -1621,6 +1621,7 @@ export function buildAdventureExportData(arcId: number | string): Record<string,
       to: sceneKeyMap.get(t.to_scene_id as number) ?? null, label: t.label, position: t.position,
     }));
     // Цель улики — ключ сцены или тайны этого же файла; чужая цель теряется.
+    // Другое приключение (шаг 8) — по имени: в другой базе id ничего не значат.
     const sceneClues = clues
       .filter((c) => c.scene_id === sid)
       .map((c) => ({
@@ -1632,6 +1633,11 @@ export function buildAdventureExportData(arcId: number | string): Record<string,
             : c.target_type === "secret" && secrets.some((t) => t.id === c.target_id)
               ? `secret_${c.target_id}`
               : null,
+        to_adventure:
+          c.target_type === "adventure"
+            ? ((db.prepare("SELECT name FROM story_arcs WHERE id = ?").get(c.target_id) as { name: string } | undefined)?.name ??
+              undefined)
+            : undefined,
       }));
     const sceneCast = (castByScene.get(sid) ?? []).map((l) => {
       const ce = linkCast.find((c) => c.link_id === l.id);
@@ -1659,6 +1665,7 @@ export function buildAdventureExportData(arcId: number | string): Record<string,
       name: arc.name, description: arc.description, hook: arc.hook,
       recommended_level: arc.recommended_level, player_count: arc.player_count,
       duration: arc.duration, source: arc.source, tags: arc.tags,
+      node_role: arc.node_role, node_trigger: arc.node_trigger,
       thumbnail_image_path: thumbData,
     },
     chapters: chapters.map((ch) => ({ name: ch.name, description: ch.description, position: ch.position })),
@@ -1836,6 +1843,14 @@ export async function importAdventureExport(
       adv.tags ?? "", thumbnail, 0
     );
     const newArcId = Number(arcResult.lastInsertRowid);
+    // Роль узла карты кампании (шаг 8); незнакомая — обычная.
+    if (adv.node_role && ARC_ROLES.has(String(adv.node_role))) {
+      db.prepare("UPDATE story_arcs SET node_role = ?, node_trigger = ? WHERE id = ?").run(
+        String(adv.node_role),
+        String(adv.node_trigger ?? ""),
+        newArcId
+      );
+    }
 
     // 2. Create chapters
     const chapterIdMap = new Map<string, number>();
@@ -1948,7 +1963,23 @@ export async function importAdventureExport(
         const to = String(c.to ?? "");
         const toScene = sceneIdMap.get(to);
         const toSecret = secretIdMap.get(to);
-        const [type, id] = toScene && toScene !== sceneId ? ["scene", toScene] : toSecret ? ["secret", toSecret] : [null, null];
+        // Улика в другое приключение — по имени среди приключений сеттинга.
+        const toAdventure = c.to_adventure
+          ? (db
+              .prepare(
+                `SELECT id FROM story_arcs WHERE setting_id = ? AND name = ? AND kind = 'adventure' AND parent_id IS NULL
+                   AND campaign_id IS NULL AND archived_at IS NULL AND id != ? ORDER BY id LIMIT 1`
+              )
+              .get(settingId, String(c.to_adventure), newArcId) as { id: number } | undefined)?.id
+          : undefined;
+        const [type, id] =
+          toScene && toScene !== sceneId
+            ? ["scene", toScene]
+            : toSecret
+              ? ["secret", toSecret]
+              : toAdventure
+                ? ["adventure", toAdventure]
+                : [null, null];
         insertClue.run(arcId, sceneId, String(c.text ?? ""), String(c.how ?? ""), type, id, ci);
       });
     }

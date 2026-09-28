@@ -147,7 +147,8 @@ export function validateImport(raw: unknown, known: Record<string, string> = {})
       checkRefs(s.participants, `${at}.participants`, ["npc.", "bst.", "com."]);
       checkRefs(s.items, `${at}.items`, ["item."]);
       s.next.forEach((n, k) => checkRef(n.to, `${at}.next[${k}].to`, ["scn."]));
-      s.clues.forEach((c, k) => checkRef(c.to, `${at}.clues[${k}].to`, ["scn.", "sec."]));
+      // adv. — улика в другое приключение книги (шаг 8 узлового дизайна).
+      s.clues.forEach((c, k) => checkRef(c.to, `${at}.clues[${k}].to`, ["scn.", "sec.", "adv."]));
       checkRef(s.about, `${at}.about`, ["loc.", "npc.", "bst.", "com.", "item."]);
       s.rewards.forEach((r, k) => checkRef(r.item, `${at}.rewards[${k}].item`, ["item."]));
     });

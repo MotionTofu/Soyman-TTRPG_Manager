@@ -1116,7 +1116,14 @@ export function applyImport(data: ImportFile, opts: ApplyOptions): ApplyResult {
           .arc_id;
         scene.clues.forEach((clue, index) => {
           const target = resolve(clue.to);
-          const kind = target?.type === "scene" && target.id !== self.id ? "scene" : target?.type === "secret" ? "secret" : null;
+          const kind =
+            target?.type === "scene" && target.id !== self.id
+              ? "scene"
+              : target?.type === "secret"
+                ? "secret"
+                : target?.type === "adventure" && target.id !== advRef.id
+                  ? "adventure"
+                  : null;
           const id = Number(
             db
               .prepare(
