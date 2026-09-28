@@ -11,6 +11,7 @@
 // заготовки.
 
 import { db } from "../db/db";
+import { withLibraryContent } from "./library";
 
 export interface ClueRow {
   id: number;
@@ -31,6 +32,7 @@ interface SceneRow {
   source_scene_id: number | null;
   library_scene_id: number | null;
   node_role: string;
+  name: string;
 }
 
 export interface GraphNode {
@@ -40,6 +42,8 @@ export interface GraphNode {
   shown_id: number;
   arc_id: number | null;
   role: string;
+  /** Имя показанной строки (с заготовки у нетронутой вставки). */
+  name: string;
 }
 
 export interface GraphClue extends ClueRow {
@@ -53,6 +57,8 @@ export interface GraphClue extends ClueRow {
 
 export interface ClueGraph {
   root_arc_id: number;
+  /** Корень и его главы. */
+  arc_ids: number[];
   nodes: Map<number, GraphNode>;
   clues: GraphClue[];
   tray: GraphClue[];
@@ -88,7 +94,7 @@ export function adventureClueGraph(arcId: number, campaignId: number | null): Cl
 
   const originals = db
     .prepare(
-      `SELECT id, arc_id, campaign_id, source_scene_id, library_scene_id, node_role FROM story_scenes
+      `SELECT id, arc_id, campaign_id, source_scene_id, library_scene_id, node_role, name FROM story_scenes
        WHERE arc_id IN (${ph}) AND archived_at IS NULL
          AND (campaign_id IS NULL OR (campaign_id = ? AND source_scene_id IS NULL))`
     )
@@ -97,7 +103,7 @@ export function adventureClueGraph(arcId: number, campaignId: number | null): Cl
   if (campaignId != null) {
     const rows = db
       .prepare(
-        `SELECT id, arc_id, campaign_id, source_scene_id, library_scene_id, node_role FROM story_scenes
+        `SELECT id, arc_id, campaign_id, source_scene_id, library_scene_id, node_role, name FROM story_scenes
          WHERE campaign_id = ? AND source_scene_id IS NOT NULL AND archived_at IS NULL`
       )
       .all(campaignId) as SceneRow[];
@@ -122,7 +128,9 @@ export function adventureClueGraph(arcId: number, campaignId: number | null): Cl
   const contentOf = new Map<number, number>();
   for (const s of originals) {
     const shown = overrides.get(s.id) ?? s;
-    nodes.set(s.id, { id: s.id, shown_id: shown.id, arc_id: s.arc_id, role: shown.node_role });
+    // Нетронутая вставка заготовки: роль и имя — с заготовки.
+    const content = withLibraryContent(shown);
+    nodes.set(s.id, { id: s.id, shown_id: shown.id, arc_id: s.arc_id, role: content.node_role, name: content.name });
     contentOf.set(s.id, shown.library_scene_id ?? shown.id);
   }
 
@@ -164,7 +172,7 @@ export function adventureClueGraph(arcId: number, campaignId: number | null): Cl
     for (const r of rows) if (nodes.has(r.to_scene_id)) passage_targets.add(r.to_scene_id);
   }
 
-  return { root_arc_id: root, nodes, clues, tray, passage_targets };
+  return { root_arc_id: root, arc_ids: arcIds, nodes, clues, tray, passage_targets };
 }
 
 /**

@@ -52,6 +52,9 @@ describe("улики", () => {
     const list = await request(app).get(`/api/story/arcs/${arcId}/clues`);
     expect(list.body.clues).toHaveLength(1);
     expect(list.body.clues[0]).toMatchObject({ node_id: aId, target_id: bId, target_missing: false, found: false });
+    // Карточке узла: имена узлов и тайны приключения — цели улик.
+    expect(list.body.nodes.find((n: { id: number }) => n.id === bId).name).toBe("Гильдия");
+    expect(list.body.secrets).toEqual([{ id: secretId, title: "Инсценировка" }]);
   });
 
   it("не принимает несуществующую цель и улику в собственный узел", async () => {
@@ -170,15 +173,22 @@ describe("перенос старых «Улик» (node_design_clues_v1)", () =
 
 describe("поля узла", () => {
   it("сохраняет тип, роль, триггер и «о ком»; копия кампании их несёт", async () => {
+    const settingId = (db.prepare("SELECT setting_id FROM story_scenes WHERE id = ?").get(bId) as { setting_id: number })
+      .setting_id;
+    const guild = Number(
+      db.prepare("INSERT INTO setting_communities (setting_id, name) VALUES (?, 'Гильдия фонарщиков')").run(settingId)
+        .lastInsertRowid
+    );
     const res = await request(app).put(`/api/story/scenes/${bId}`).send({
       node_type: "organization",
       node_role: "proactive",
       node_trigger: "шум в гильдии",
       subject_type: "community",
-      subject_id: 7,
+      subject_id: guild,
     });
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ node_type: "organization", node_role: "proactive", subject_id: 7 });
+    expect(res.body).toMatchObject({ node_type: "organization", node_role: "proactive", subject_id: guild });
+    expect((await request(app).get(`/api/story/scenes/${bId}`)).body.subject_title).toBe("Гильдия фонарщиков");
 
     const copy = await request(app).put(`/api/story/scenes/${bId}`).send({ campaign_id: campaignId, summary: "своё" });
     expect(copy.body.source_scene_id).toBe(bId);
@@ -189,6 +199,10 @@ describe("поля узла", () => {
     expect((await request(app).put(`/api/story/scenes/${aId}`).send({ node_role: "boss" })).status).toBe(400);
     expect((await request(app).put(`/api/story/scenes/${aId}`).send({ node_type: "dungeon" })).status).toBe(400);
     expect((await request(app).put(`/api/story/scenes/${aId}`).send({ subject_type: "being" })).status).toBe(400);
+    // Пара целиком, но сущности нет — пустая ссылка тоже не нужна.
+    expect(
+      (await request(app).put(`/api/story/scenes/${aId}`).send({ subject_type: "community", subject_id: 99999 })).status
+    ).toBe(400);
     expect((await request(app).put(`/api/story/scenes/${aId}`).send({ node_type: null })).status).toBe(200);
   });
 });

@@ -1086,6 +1086,34 @@ export interface StoryClue {
   target_id: number | null;
   position: number;
 }
+/** Улика в графе приключения (GET /story/arcs/:id/clues). */
+export interface ArcClue extends StoryClue {
+  /** Узел, где улику находят (id оригинала); null — лоток. */
+  node_id: number | null;
+  root_id: number;
+  found: boolean;
+  target_missing: boolean;
+  target_title: string | null;
+}
+export interface ArcClueNode {
+  /** id оригинала — в этом пространстве лежат цели улик. */
+  id: number;
+  /** Строка, которая показывается (копия кампании или сам оригинал). */
+  shown_id: number;
+  arc_id: number | null;
+  role: NodeRole;
+  name: string;
+  clue_in: number;
+  clue_out: number;
+  passage_in: boolean;
+}
+export interface ArcClues {
+  root_arc_id: number;
+  clues: ArcClue[];
+  tray: ArcClue[];
+  nodes: ArcClueNode[];
+  secrets: { id: number; title: string }[];
+}
 export type SceneStatus = "pending" | "done" | "skipped";
 
 export interface StoryArc {
@@ -1275,6 +1303,8 @@ export interface SceneTransition {
 }
 
 export interface StorySceneDetail extends StoryScene {
+  /** Имя сущности «о ком» (Q26); null — не задано или исчезла. */
+  subject_title?: string | null;
   checks: SceneCheck[];
   rewards: SceneReward[];
   transitions: SceneTransition[];

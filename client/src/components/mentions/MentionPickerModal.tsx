@@ -47,10 +47,16 @@ export function MentionPickerModal({
   defaultSettingId,
   onPick,
   onClose,
+  heading = "Упоминание",
+  direct = false,
 }: {
   initialQuery: string;
   defaultSettingId?: number;
   onPick: (result: PickResult) => void;
+  /** Заголовок окна вне текста — например, «О ком» у узла. */
+  heading?: string;
+  /** Выбор сразу, без шага «Как отображается»: подпись нужна только упоминанию в тексте. */
+  direct?: boolean;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState(initialQuery);
@@ -102,6 +108,7 @@ export function MentionPickerModal({
   }
 
   function choose(result: PickResult) {
+    if (direct) return onPick(result);
     setSelected(result);
     setLabel(result.title);
   }
@@ -162,7 +169,7 @@ export function MentionPickerModal({
     <Modal onClose={onClose} closeOnBackdropClick={false}>
       <div className="stack mention-picker-modal">
         <div className="row" style={{ justifyContent: "space-between" }}>
-          <h3 style={{ margin: 0 }}>{creating ? "Новая сущность" : "Упоминание"}</h3>
+          <h3 style={{ margin: 0 }}>{creating ? "Новая сущность" : heading}</h3>
           {!creating && (
             <button type="button" onClick={onClose} title="Закрыть">
               ✕

@@ -31,7 +31,7 @@ import { CLUE_DRAG_MIME, boardIndexAffects, boardLayoutAffects, boardObjectAffec
 import { SectionHeading } from "../components/SectionHeading";
 import { SectionBackground } from "../components/SectionBackground";
 import { EditableTextCard } from "../components/EditableTextCard";
-import { ClueEdgeDialog, ClueTray, NewLinkDialog } from "../components/CanvasClues";
+import { ClueEdgeDialog, ClueTray, NewLinkDialog, NodeCluesCard, NodeSubjectField } from "../components/CanvasClues";
 import { AdventureWizard } from "../components/AdventureWizard";
 import { NODE_ROLES, NODE_ROLE_LABELS, NODE_TYPES as NODE_TYPE_OPTIONS, NODE_TYPE_LABELS, nodeLabel, plural } from "../sceneKinds";
 import { formatByPrecision } from "../inworldCalendar";
@@ -8150,6 +8150,16 @@ function SceneProperties({
     );
   }
 
+  // «О ком» пишется парой всегда: общий save() отсеял бы неизменившийся вид,
+  // а половину пары сервер не примет.
+  async function saveSubject(next: { type: string; id: number } | null) {
+    if (!scenePath) return;
+    await act(() => write.put(scenePath, { subject_type: next?.type ?? null, subject_id: next?.id ?? null }), {
+      failure: "О ком",
+      affects: canvasStoryAffects(),
+    });
+  }
+
   // Отвязка кнопкой — отдельно от автоматики: «эта засада дальше пойдёт своим
   // путём» решают ДО правки, а не в момент.
   async function detach() {
@@ -8283,6 +8293,19 @@ function SceneProperties({
             save({ name: String(v.name).trim(), node_type: v.node_type || null, node_role: v.node_role })
           }
         />
+
+        <NodeSubjectField
+          type={scene.subject_type}
+          id={scene.subject_id}
+          title={scene.subject_title ?? null}
+          settingId={scene.setting_id ?? undefined}
+          onChange={saveSubject}
+        />
+
+        {/* Улики — у узла приключения; сцена вне приключения в граф не входит. */}
+        {scene.arc_id != null && (
+          <NodeCluesCard sceneId={scene.id} arcId={scene.arc_id} campaignId={board?.campaign_id ?? null} />
+        )}
 
         {/* Триггер — только у проактивного: остальным узлам «когда приходит
             сам» не нужно, и лишнее поле в панели — шум. */}

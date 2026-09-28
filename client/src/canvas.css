@@ -1735,3 +1735,66 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* Карточка узла: «Ведут сюда» / «Улики здесь» (макет Node-Panel). */
+.node-clues {
+  gap: var(--sp-3);
+}
+.node-clues__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.node-clues__note {
+  font-size: var(--fs-meta);
+}
+.node-clues__add {
+  border-style: dashed;
+}
+.node-clue {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--sp-3);
+  row-gap: var(--sp-1);
+  align-items: start;
+}
+.node-clue > :not(input[type="checkbox"]) {
+  grid-column: 2;
+}
+.node-clue > input[type="checkbox"] {
+  grid-row: span 2;
+  margin-top: 3px;
+}
+.node-clue__text {
+  font-weight: 600;
+}
+.node-clue.is-found .node-clue__text {
+  text-decoration: line-through;
+  color: var(--muted);
+  font-weight: 500;
+}
+.node-clue__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+.node-clue__meta input {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+.node-clue__meta select {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+.node-subject {
+  flex: 1;
+  text-align: left;
+}
+.node-clue__del {
+  padding: 0 var(--sp-2);
+  min-width: 0;
+}

@@ -2,7 +2,7 @@ import { Router } from "express";
 import path from "path";
 import { db } from "../db/db";
 import { kindOf } from "../db/entityKinds";
-import { entityNames, refKey } from "../services/entityNames";
+import { entityName, entityNames, refKey } from "../services/entityNames";
 import { ensureSubfolder, readFileAsBase64, sanitizeName, toFileUrl, vaultAbs, vaultRel, writeBase64File } from "../services/filesystem";
 import { storeDeduped } from "../services/vaultDedup";
 import { pruneRoutesForKeys } from "./canvas";
@@ -72,6 +72,7 @@ function invalidNodeField(body: Record<string, unknown>): string | null {
   // «О ком» — пара: тип без id (или наоборот) показал бы пустую ссылку.
   if ((body.subject_type === undefined) !== (body.subject_id === undefined)) return "subject";
   if ((body.subject_type == null) !== (body.subject_id == null)) return "subject";
+  if (body.subject_type != null && entityName(String(body.subject_type), Number(body.subject_id)) == null) return "subject";
   return null;
 }
 
@@ -1293,6 +1294,12 @@ storyRouter.get("/scenes", (req, res) => {
   res.json(resolved);
 });
 
+function subjectTitle(scene: Record<string, unknown>): string | null {
+  return scene.subject_type != null && scene.subject_id != null
+    ? entityName(String(scene.subject_type), Number(scene.subject_id))
+    : null;
+}
+
 storyRouter.get("/scenes/:id", (req, res) => {
   const scene = db.prepare("SELECT * FROM story_scenes WHERE id = ?").get(req.params.id) as
     | SceneRow
@@ -1307,9 +1314,12 @@ storyRouter.get("/scenes/:id", (req, res) => {
   if (campaignId != null && scene.campaign_id == null && scene.setting_id != null) {
     shown = (overrideMap(campaignId, scene.setting_id).get(scene.id) ?? scene) as SceneRow;
   }
+  const content = withLibraryContent(shown);
   res.json({
-    ...withLibraryContent(shown),
+    ...content,
     is_override: shown.campaign_id != null && shown.source_scene_id != null,
+    // «О ком» (Q26): имя — чтобы карточка узла не искала его сама.
+    subject_title: subjectTitle(content as unknown as Record<string, unknown>),
     campaign_only: shown.campaign_id != null && shown.source_scene_id == null,
     state:
       campaignId != null
@@ -3326,5 +3336,12 @@ storyRouter.get("/arcs/:id/clues", (req, res) => {
     clues: graph.clues,
     tray: graph.tray,
     nodes: [...graph.nodes.values()].map((n) => ({ ...n, ...counts.get(n.id) })),
+    // Тайны приключения — цели понятийных улик (Q2) в карточке узла.
+    secrets: db
+      .prepare(
+        `SELECT id, title FROM story_secrets WHERE arc_id IN (${graph.arc_ids.map(() => "?").join(",")})
+         ORDER BY position, id`
+      )
+      .all(...graph.arc_ids),
   });
 });

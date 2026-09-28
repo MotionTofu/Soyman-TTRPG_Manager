@@ -4,11 +4,13 @@
 // Лежит отдельно от CanvasPage.tsx: страница и так восемь тысяч строк, а
 // здесь всё про одно — улику как стрелку.
 
-import { useState, type DragEvent, type FormEvent } from "react";
+import { useState, type DragEvent, type FormEvent, type ReactNode } from "react";
 import { Modal } from "./Modal";
 import { useAction, useResource, write } from "../data/hooks";
 import { CLUE_DRAG_MIME, clueAffects } from "../data/canvas";
-import type { StoryClue } from "../types";
+import { MentionPickerModal } from "./mentions/MentionPickerModal";
+import { openPreviewDockCard } from "../previewDockStore";
+import type { ArcClue, ArcClues, StoryClue } from "../types";
 
 // ─── Окно новой связи ─────────────────────────────────────────────────────
 
@@ -96,18 +98,6 @@ export function NewLinkDialog({
 
 // ─── Окно улик одной стрелки ──────────────────────────────────────────────
 
-interface GraphClue extends StoryClue {
-  node_id: number | null;
-}
-interface GraphNode {
-  id: number;
-  shown_id: number;
-}
-interface ArcClues {
-  clues: GraphClue[];
-  nodes: GraphNode[];
-}
-
 /**
  * Щелчок по стрелке «×N» (Q19): все улики этой пары, правка на месте.
  *
@@ -132,8 +122,7 @@ export function ClueEdgeDialog({
   onClose: () => void;
 }) {
   const act = useAction();
-  const path = `/story/arcs/${arcId}/clues${campaignId ? `?campaign_id=${campaignId}` : ""}`;
-  const data = useResource<ArcClues>(path).data;
+  const data = useResource<ArcClues>(arcCluesPath(arcId, campaignId)).data;
   const original = (shown: number) => data?.nodes.find((n) => n.shown_id === shown)?.id ?? null;
   const from = original(fromShownId);
   const to = original(toShownId);
@@ -229,5 +218,232 @@ export function ClueTray({ clues }: { clues: { id: number; text: string; how: st
         </div>
       )}
     </aside>
+  );
+}
+
+// ─── Карточка узла: улики ─────────────────────────────────────────────────
+
+/** Путь графа улик приключения — общий ключ кэша для холста и карточки. */
+function arcCluesPath(arcId: number, campaignId: number | null) {
+  return `/story/arcs/${arcId}/clues${campaignId ? `?campaign_id=${campaignId}` : ""}`;
+}
+
+/**
+ * «Ведут сюда» и «Улики здесь» (макет Node-Panel, Q17/Q18/Q20).
+ *
+ * Входящие правятся в карточке узла-источника: здесь только «найдено». Свои
+ * улики — на месте: текст, как найти, цель (узел или тайна приключения).
+ * Галочки «найдено» — только в кампании (Q27: вне её — одна структура).
+ */
+export function NodeCluesCard({
+  sceneId,
+  arcId,
+  campaignId,
+}: {
+  sceneId: number;
+  arcId: number;
+  campaignId: number | null;
+}) {
+  const act = useAction();
+  const data = useResource<ArcClues>(arcCluesPath(arcId, campaignId)).data;
+  const me = data?.nodes.find((n) => n.shown_id === sceneId);
+  if (!data || !me) return null;
+  const nameOf = (id: number | null) => data.nodes.find((n) => n.id === id)?.name ?? "?";
+  const incoming = data.clues.filter((c) => c.target_type === "scene" && c.target_id === me.id);
+  const outgoing = data.clues.filter((c) => c.node_id === me.id);
+
+  // Тот же счёт, что у чипов на узле холста (Q11, Q31).
+  let need: string | null = null;
+  if (me.role === "start") need = "старт";
+  else if (me.role === "proactive") need = "приходит сам";
+  else if (me.role === "dead_end") need = "бонусные";
+  else if (incoming.length < 3 && me.passage_in) need = "за проходом";
+  const missing = need == null ? Math.max(0, 3 - incoming.length) : 0;
+
+  const opts = { affects: clueAffects() };
+  const setFound = (c: ArcClue, found: boolean) =>
+    act(() => write.put(`/story/clues/${c.id}/state`, { campaign_id: campaignId, found }), opts);
+  const put = (id: number, patch: Partial<StoryClue>) => act(() => write.put(`/story/clues/${id}`, patch), opts);
+  const add = () =>
+    act(() => write.post(`/story/scenes/${sceneId}/clues`, { text: "Новая улика" }), { ...opts, retry: false });
+
+  const foundBox = (c: ArcClue) =>
+    campaignId != null && (
+      <input type="checkbox" checked={c.found} onChange={(e) => void setFound(c, e.target.checked)} aria-label="Найдено" />
+    );
+
+  return (
+    <>
+      <div className="card stack node-clues">
+        <div className="node-clues__head">
+          <span className="canvas-props__label">Ведут сюда · {incoming.length}</span>
+          {need != null ? (
+            <span className="canvas-node__chip">{need}</span>
+          ) : missing > 0 ? (
+            <span className="canvas-node__chip is-bad">нужно ещё {missing}</span>
+          ) : null}
+        </div>
+        {campaignId != null && incoming.length + outgoing.length > 0 && (
+          <span className="muted node-clues__note">✓ — найдено в этой кампании</span>
+        )}
+        {incoming.length === 0 && <span className="muted">Сюда не ведёт ни одна улика — протяните стрелку к узлу.</span>}
+        {incoming.map((c) => (
+          <div key={c.id} className={`node-clue${c.found ? " is-found" : ""}`}>
+            {foundBox(c)}
+            <span className="node-clue__text">{c.text}</span>
+            <span className="node-clue__meta">
+              в: {nameOf(c.node_id)}
+              {c.how && ` · ${c.how}`}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div className="card stack node-clues">
+        <div className="node-clues__head">
+          <span className="canvas-props__label">Улики здесь · {outgoing.length}</span>
+        </div>
+        {outgoing.map((c) => (
+          <OwnClueRow key={c.id} clue={c} data={data} selfId={me.id} foundBox={foundBox(c)} put={put} act={act} />
+        ))}
+        <button type="button" className="node-clues__add" onClick={() => void add()}>
+          + Улика
+        </button>
+      </div>
+    </>
+  );
+}
+
+function OwnClueRow({
+  clue,
+  data,
+  selfId,
+  foundBox,
+  put,
+  act,
+}: {
+  clue: ArcClue;
+  data: ArcClues;
+  selfId: number;
+  foundBox: ReactNode;
+  put: (id: number, patch: Partial<StoryClue>) => Promise<unknown>;
+  act: ReturnType<typeof useAction>;
+}) {
+  const target = clue.target_missing || clue.target_type == null ? "" : `${clue.target_type}:${clue.target_id}`;
+  return (
+    <div className={`node-clue${clue.found ? " is-found" : ""}`}>
+      {foundBox}
+      <input
+        className="node-clue__text"
+        aria-label="Что находят"
+        defaultValue={clue.text}
+        onBlur={(e) => e.target.value.trim() !== clue.text && void put(clue.id, { text: e.target.value.trim() })}
+      />
+      <div className="node-clue__meta">
+        <input
+          aria-label="Как найти"
+          placeholder="как найти"
+          defaultValue={clue.how}
+          onBlur={(e) => e.target.value.trim() !== clue.how && void put(clue.id, { how: e.target.value.trim() })}
+        />
+        {clue.target_missing && <span className="canvas-node__chip is-bad">ведёт в никуда</span>}
+        <select
+          aria-label="Куда ведёт"
+          value={target}
+          onChange={(e) => {
+            const [type, id] = e.target.value.split(":");
+            void put(
+              clue.id,
+              type ? { target_type: type as "scene" | "secret", target_id: Number(id) } : { target_type: null, target_id: null }
+            );
+          }}
+        >
+          <option value="">— цель не выбрана —</option>
+          <optgroup label="Узлы">
+            {data.nodes
+              .filter((n) => n.id !== selfId)
+              .map((n) => (
+                <option key={n.id} value={`scene:${n.id}`}>
+                  → {n.name}
+                </option>
+              ))}
+          </optgroup>
+          {data.secrets.length > 0 && (
+            <optgroup label="Тайны">
+              {data.secrets.map((t) => (
+                <option key={t.id} value={`secret:${t.id}`}>
+                  ◇ {t.title}
+                </option>
+              ))}
+            </optgroup>
+          )}
+        </select>
+        <button
+          type="button"
+          className="node-clue__del"
+          title="Удалить улику"
+          aria-label={`Удалить улику «${clue.text}»`}
+          onClick={() => void act(() => write.del(`/story/clues/${clue.id}`), { affects: clueAffects() })}
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Карточка узла: «о ком» ───────────────────────────────────────────────
+
+/**
+ * Одна сущность мира, о которой узел (Q26): имя открывает её в доке
+ * предпросмотра, ✕ убирает, «Выбрать…» — то же окно, что у @-упоминаний.
+ */
+export function NodeSubjectField({
+  type,
+  id,
+  title,
+  settingId,
+  onChange,
+}: {
+  type: string | null;
+  id: number | null;
+  title: string | null;
+  settingId?: number;
+  onChange: (next: { type: string; id: number } | null) => void;
+}) {
+  const [picking, setPicking] = useState(false);
+  return (
+    <div className="canvas-props__field">
+      <span className="canvas-props__label">О ком · о чём</span>
+      <div className="row" style={{ gap: 6 }}>
+        {type && id ? (
+          <>
+            <button type="button" className="node-subject" onClick={() => openPreviewDockCard({ type, id })}>
+              {title ?? "сущность удалена"}
+            </button>
+            <button type="button" aria-label="Убрать" onClick={() => onChange(null)}>
+              ✕
+            </button>
+          </>
+        ) : (
+          <button type="button" onClick={() => setPicking(true)}>
+            Выбрать…
+          </button>
+        )}
+      </div>
+      {picking && (
+        <MentionPickerModal
+          initialQuery=""
+          heading="О ком · о чём"
+          direct
+          defaultSettingId={settingId}
+          onClose={() => setPicking(false)}
+          onPick={(r) => {
+            setPicking(false);
+            onChange({ type: r.type, id: r.id });
+          }}
+        />
+      )}
+    </div>
   );
 }
