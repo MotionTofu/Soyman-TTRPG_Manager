@@ -204,7 +204,9 @@ export function ClueEdgeDialog({
  * стрелкой или в карточке узла. Пустой лоток не показывается вовсе.
  */
 export function ClueTray({ clues }: { clues: { id: number; text: string; how: string }[] }) {
-  const [open, setOpen] = useState(true);
+  // На узком экране лоток открытым закрыл бы собой весь холст — там он
+  // начинает свёрнутой полоской.
+  const [open, setOpen] = useState(() => window.matchMedia("(min-width: 900px)").matches);
   if (clues.length === 0) return null;
   const onDragStart = (e: DragEvent, id: number) => {
     e.dataTransfer.setData(CLUE_DRAG_MIME, String(id));
