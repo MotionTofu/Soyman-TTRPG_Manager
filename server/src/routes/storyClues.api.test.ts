@@ -226,3 +226,41 @@ describe("список выводов", () => {
     expect(bare.body.nodes.every((n: { visited: boolean }) => !n.visited)).toBe(true);
   });
 });
+
+describe("предложить улики", () => {
+  it("запрос → ответ чата → пунктир вне счёта → принять все", async () => {
+    const prompt = (await request(app).get(`/api/story/arcs/${arcId}/clues/prompt`)).body.prompt as string;
+    expect(prompt).toContain(`S${bId} «Гильдия»`);
+    expect(prompt).toContain(`T${secretId} «Инсценировка»`);
+
+    const inBefore = (await request(app).get(`/api/story/arcs/${arcId}/clues`)).body.nodes.find(
+      (n: { id: number }) => n.id === bId
+    ).clue_in;
+    const answer = [
+      "Вот предложения:",
+      "```json",
+      JSON.stringify({
+        clues: [
+          { from: `S${aId}`, to: `S${bId}`, text: "Счёт гильдии в кармане", how: "обыскать" },
+          { from: `S${aId}`, to: `T${secretId}`, text: "Замок взломан изнутри" },
+          { from: "S999999", to: `S${bId}`, text: "мимо" },
+          { from: `S${aId}`, to: `S${aId}`, text: "сам в себя" },
+        ],
+      }),
+      "```",
+    ].join("\n");
+    const res = await request(app).post(`/api/story/arcs/${arcId}/clues/proposals`).send({ answer });
+    expect(res.body.added).toBe(2);
+    expect(res.body.skipped.map((s: { index: number }) => s.index)).toEqual([2, 3]);
+
+    const mid = (await request(app).get(`/api/story/arcs/${arcId}/clues`)).body;
+    expect(mid.nodes.find((n: { id: number }) => n.id === bId).clue_in).toBe(inBefore);
+    expect(mid.clues.filter((c: { proposed: number }) => c.proposed)).toHaveLength(2);
+
+    expect((await request(app).post(`/api/story/arcs/${arcId}/clues/proposals/accept`).send({})).body.accepted).toBe(2);
+    const after = (await request(app).get(`/api/story/arcs/${arcId}/clues`)).body;
+    expect(after.nodes.find((n: { id: number }) => n.id === bId).clue_in).toBe(inBefore + 1);
+
+    expect((await request(app).post(`/api/story/arcs/${arcId}/clues/proposals`).send({ answer: "нет json" })).status).toBe(400);
+  });
+});

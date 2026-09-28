@@ -7,6 +7,7 @@
 import { useState, type DragEvent, type FormEvent, type ReactNode } from "react";
 import { Modal } from "./Modal";
 import { useAction, useResource, write } from "../data/hooks";
+import { readResource } from "../data/imperative";
 import { CLUE_DRAG_MIME, clueAffects } from "../data/canvas";
 import { MentionPickerModal } from "./mentions/MentionPickerModal";
 import { openPreviewDockCard } from "../previewDockStore";
@@ -165,7 +166,7 @@ export function ClueEdgeDialog({
         </div>
         {!data && <span className="muted">Загрузка…</span>}
         {clues.map((c) => (
-          <div className="clue-dialog__row" key={c.id}>
+          <div className={`clue-dialog__row${c.proposed ? " is-proposed" : ""}`} key={c.id}>
             <input
               aria-label="Что находят"
               defaultValue={c.text}
@@ -177,8 +178,13 @@ export function ClueEdgeDialog({
               defaultValue={c.how}
               onBlur={(e) => e.target.value.trim() !== c.how && void put(c.id, { how: e.target.value.trim() })}
             />
+            {c.proposed ? (
+              <button type="button" className="primary" onClick={() => void put(c.id, { proposed: 0 })}>
+                Принять
+              </button>
+            ) : null}
             <button type="button" className="danger" onClick={() => void remove(c.id)} aria-label={`Удалить улику «${c.text}»`}>
-              Удалить
+              {c.proposed ? "Отклонить" : "Удалить"}
             </button>
           </div>
         ))}
@@ -260,14 +266,16 @@ export function NodeCluesCard({
   const nameOf = (id: number | null) => data.nodes.find((n) => n.id === id)?.name ?? "?";
   const incoming = data.clues.filter((c) => c.target_type === "scene" && c.target_id === me.id);
   const outgoing = data.clues.filter((c) => c.node_id === me.id);
+  // Счёт правила трёх — по принятым: предложенные ещё ничего не доказывают (Q29).
+  const accepted = incoming.filter((c) => !c.proposed).length;
 
   // Тот же счёт, что у чипов на узле холста (Q11, Q31).
   let need: string | null = null;
   if (me.role === "start") need = "старт";
   else if (me.role === "proactive") need = "приходит сам";
   else if (me.role === "dead_end") need = "бонусные";
-  else if (incoming.length < 3 && me.passage_in) need = "за проходом";
-  const missing = need == null ? Math.max(0, 3 - incoming.length) : 0;
+  else if (accepted < 3 && me.passage_in) need = "за проходом";
+  const missing = need == null ? Math.max(0, 3 - accepted) : 0;
 
   const opts = { affects: clueAffects() };
   const setFound = (c: ArcClue, found: boolean) =>
@@ -285,7 +293,7 @@ export function NodeCluesCard({
     <>
       <div className="card stack node-clues">
         <div className="node-clues__head">
-          <span className="canvas-props__label">Ведут сюда · {incoming.length}</span>
+          <span className="canvas-props__label">Ведут сюда · {accepted}</span>
           {need != null ? (
             <span className="canvas-node__chip">{need}</span>
           ) : missing > 0 ? (
@@ -297,12 +305,13 @@ export function NodeCluesCard({
         )}
         {incoming.length === 0 && <span className="muted">Сюда не ведёт ни одна улика — протяните стрелку к узлу.</span>}
         {incoming.map((c) => (
-          <div key={c.id} className={`node-clue${c.found ? " is-found" : ""}`}>
-            {foundBox(c)}
+          <div key={c.id} className={`node-clue${c.found ? " is-found" : ""}${c.proposed ? " is-proposed" : ""}`}>
+            {c.proposed ? null : foundBox(c)}
             <span className="node-clue__text">{c.text}</span>
             <span className="node-clue__meta">
               в: {nameOf(c.node_id)}
               {c.how && ` · ${c.how}`}
+              {c.proposed ? <ProposedActions id={c.id} put={put} act={act} /> : null}
             </span>
           </div>
         ))}
@@ -340,8 +349,8 @@ function OwnClueRow({
 }) {
   const target = clue.target_missing || clue.target_type == null ? "" : `${clue.target_type}:${clue.target_id}`;
   return (
-    <div className={`node-clue${clue.found ? " is-found" : ""}`}>
-      {foundBox}
+    <div className={`node-clue${clue.found ? " is-found" : ""}${clue.proposed ? " is-proposed" : ""}`}>
+      {clue.proposed ? null : foundBox}
       <input
         className="node-clue__text"
         aria-label="Что находят"
@@ -356,6 +365,7 @@ function OwnClueRow({
           onBlur={(e) => e.target.value.trim() !== clue.how && void put(clue.id, { how: e.target.value.trim() })}
         />
         {clue.target_missing && <span className="canvas-node__chip is-bad">ведёт в никуда</span>}
+        {clue.proposed ? <ProposedActions id={clue.id} put={put} act={act} /> : null}
         <select
           aria-label="Куда ведёт"
           value={target}
@@ -454,5 +464,133 @@ export function NodeSubjectField({
         />
       )}
     </div>
+  );
+}
+
+// ─── Предложенные улики ───────────────────────────────────────────────────
+
+/** «Принять / отклонить» у предложенной улики (Q29). */
+function ProposedActions({
+  id,
+  put,
+  act,
+}: {
+  id: number;
+  put: (id: number, patch: Partial<StoryClue>) => Promise<unknown>;
+  act: ReturnType<typeof useAction>;
+}) {
+  return (
+    <>
+      <span className="canvas-node__chip">предложена</span>
+      <button type="button" className="primary" onClick={() => void put(id, { proposed: 0 })}>
+        Принять
+      </button>
+      <button type="button" onClick={() => void act(() => write.del(`/story/clues/${id}`), { affects: clueAffects() })}>
+        Отклонить
+      </button>
+    </>
+  );
+}
+
+/**
+ * «Предложить улики» (Q28): как импорт книги — запрос копируется во внешний
+ * чат, ответ вставляется сюда. Предложенные ложатся пунктиром и в правило
+ * трёх не идут, пока их не примут: здесь все разом или по одной в карточке.
+ */
+export function ProposeCluesDialog({
+  arcId,
+  campaignId,
+  onClose,
+}: {
+  arcId: number;
+  campaignId: number | null;
+  onClose: () => void;
+}) {
+  const act = useAction();
+  const q = campaignId ? `?campaign_id=${campaignId}` : "";
+  const data = useResource<ArcClues>(arcCluesPath(arcId, campaignId)).data;
+  const pending = (data?.clues ?? []).filter((c) => c.proposed).length;
+  const [answer, setAnswer] = useState("");
+  const [status, setStatus] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function copyPrompt() {
+    setBusy(true);
+    try {
+      const { prompt } = await readResource<{ prompt: string }>(`/story/arcs/${arcId}/clues/prompt${q}`, { fresh: true });
+      await navigator.clipboard.writeText(prompt);
+      setStatus("Запрос скопирован — вставьте его в чат нейросети, а ответ — ниже.");
+    } catch {
+      setStatus("Не удалось скопировать запрос.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function parse() {
+    setBusy(true);
+    try {
+      const res = (await act(
+        () => write.post(`/story/arcs/${arcId}/clues/proposals`, { answer, campaign_id: campaignId }),
+        { affects: clueAffects(), retry: false }
+      )) as { added: number; skipped: { index: number; reason: string }[] } | undefined;
+      if (res) {
+        setStatus(
+          `Добавлено предложений: ${res.added}.` +
+            (res.skipped.length ? ` Пропущено ${res.skipped.length}: ${res.skipped.map((x) => x.reason).join("; ")}.` : "")
+        );
+        setAnswer("");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const all = (accept: boolean) =>
+    act(
+      () =>
+        accept
+          ? write.post(`/story/arcs/${arcId}/clues/proposals/accept`, { campaign_id: campaignId })
+          : write.del(`/story/arcs/${arcId}/clues/proposals${q}`),
+      { affects: clueAffects(), retry: false }
+    );
+
+  return (
+    <Modal onClose={onClose} ariaLabel="Предложить улики">
+      <div className="clue-dialog propose-dialog">
+        <div className="clue-dialog__head">
+          <span className="canvas-props__label">Предложить улики</span>
+        </div>
+        <p className="muted" style={{ margin: 0 }}>
+          1. Скопируйте запрос — в нём узлы приключения, их улики и где не хватает до трёх. 2. Вставьте его в чат
+          нейросети. 3. Ответ вставьте сюда. Предложенные улики лягут пунктиром и не будут считаться, пока вы их не
+          примете.
+        </p>
+        <button type="button" onClick={() => void copyPrompt()} disabled={busy}>
+          Скопировать запрос
+        </button>
+        <label className="clue-dialog__field">
+          <span className="canvas-props__label">Ответ чата</span>
+          <textarea value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder='{"clues": [ … ]}' />
+        </label>
+        {status && <span className="muted">{status}</span>}
+        <div className="clue-dialog__foot">
+          {pending > 0 && (
+            <>
+              <span className="muted">Предложено: {pending}</span>
+              <button type="button" onClick={() => void all(false)}>
+                Отклонить все
+              </button>
+              <button type="button" onClick={() => void all(true)}>
+                Принять все
+              </button>
+            </>
+          )}
+          <button type="button" className="primary" disabled={busy || !answer.trim()} onClick={() => void parse()}>
+            Разобрать ответ
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }

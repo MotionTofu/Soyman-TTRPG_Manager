@@ -37,8 +37,9 @@ export function RevealList({
 
   const inCampaign = campaignId != null;
   const nameOf = (id: number | null) => data.nodes.find((n) => n.id === id)?.name ?? "?";
+  // Предложенные, но не принятые улики за столом не существуют (Q29).
   const into = (type: "scene" | "secret", id: number) =>
-    data.clues.filter((c) => c.target_type === type && c.target_id === id);
+    data.clues.filter((c) => c.target_type === type && c.target_id === id && !c.proposed);
 
   const setFound = (c: ArcClue, found: boolean) =>
     act(() => write.put(`/story/clues/${c.id}/state`, { campaign_id: campaignId, found }), { affects: clueAffects() });

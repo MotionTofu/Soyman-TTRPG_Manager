@@ -31,7 +31,14 @@ import { CLUE_DRAG_MIME, boardIndexAffects, boardLayoutAffects, boardObjectAffec
 import { SectionHeading } from "../components/SectionHeading";
 import { SectionBackground } from "../components/SectionBackground";
 import { EditableTextCard } from "../components/EditableTextCard";
-import { ClueEdgeDialog, ClueTray, NewLinkDialog, NodeCluesCard, NodeSubjectField } from "../components/CanvasClues";
+import {
+  ClueEdgeDialog,
+  ClueTray,
+  NewLinkDialog,
+  NodeCluesCard,
+  NodeSubjectField,
+  ProposeCluesDialog,
+} from "../components/CanvasClues";
 import { AdventureWizard } from "../components/AdventureWizard";
 import { NODE_ROLES, NODE_ROLE_LABELS, NODE_TYPES as NODE_TYPE_OPTIONS, NODE_TYPE_LABELS, nodeLabel, plural } from "../sceneKinds";
 import { formatByPrecision } from "../inworldCalendar";
@@ -1191,6 +1198,8 @@ const EDGE_CLASS: Record<string, string | undefined> = {
   // Улика — обычная сплошная стрелка, «×N» подписью (Q19).
   transition: "canvas-edge--passage",
   clue: "canvas-edge--clue",
+  // Только предложенные улики (Q29) — пунктиром, пока Мастер их не примет.
+  clue_proposed: "canvas-edge--clue canvas-edge--proposed",
   outcome: "canvas-edge--outcome",
   cast: "canvas-edge--cast",
   member: "canvas-edge--cast",
@@ -2234,6 +2243,7 @@ export function CanvasPage() {
   // щелчок по стрелке улики открывает её улики. Оба — показанные id сцен.
   // secret — цель не сцена, а тайна на холсте (Q20): тогда только улика.
   const [pendingLink, setPendingLink] = useState<{ from: number; to: number; secret?: boolean } | null>(null);
+  const [proposeOpen, setProposeOpen] = useState(false);
   const [clueEdge, setClueEdge] = useState<{ from: number; to: number; secret?: boolean } | null>(null);
   // Карточка существа (шаг 4 ревизии). Нода остаётся компактной, карточка —
   // поповер: 30+ карточек по 200 px это уже не схема. Координаты ЭКРАННЫЕ,
@@ -2758,7 +2768,7 @@ export function CanvasPage() {
         // сцена собрана. На чёрно-белой печати различие остаётся.
         className: EDGE_CLASS[e.kind],
         selectable: true,
-        deletable: e.kind !== "clue",
+        deletable: e.kind !== "clue" && e.kind !== "clue_proposed",
       }];
       }),
 
@@ -5907,6 +5917,11 @@ export function CanvasPage() {
                 {rehearsalOn ? "Выйти из прогона" : "Пройти"}
               </button>
             )}
+            {arcId > 0 && hasScenesOnBoard && !rehearsalOn && (
+              <button title="Запрос для внешнего чата: добрать улик до правила трёх" onClick={() => setProposeOpen(true)}>
+                Предложить улики
+              </button>
+            )}
             {/* «+ Приключение», а не «+ Холст» (решение D0 §15): холста
                 приключения отдельно от приключения не существует, и слово
                 «холст» в подписи через месяц никто не свяжет с тем, что
@@ -6181,6 +6196,9 @@ export function CanvasPage() {
           onCancel={() => setPendingLink(null)}
           onSave={saveLink}
         />
+      )}
+      {proposeOpen && arcId > 0 && (
+        <ProposeCluesDialog arcId={arcId} campaignId={campaignIdParam || null} onClose={() => setProposeOpen(false)} />
       )}
       {clueEdge && arcId > 0 && (
         <ClueEdgeDialog

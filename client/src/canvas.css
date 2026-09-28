@@ -1652,6 +1652,21 @@
 .canvas-flow .react-flow__edge.canvas-edge--clue {
   cursor: pointer;
 }
+/* Предложенная улика (Q29) — пунктир, пока Мастер не принял. */
+.canvas-flow .react-flow__edge.canvas-edge--proposed .react-flow__edge-path {
+  stroke-dasharray: 6 5;
+}
+.node-clue.is-proposed,
+.clue-dialog__row.is-proposed {
+  border-left: 2px dashed var(--ink);
+  padding-left: var(--sp-2);
+}
+.propose-dialog textarea {
+  width: 100%;
+  min-height: 140px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+}
 
 /* Окно новой связи и окно улик стрелки. */
 .clue-dialog {

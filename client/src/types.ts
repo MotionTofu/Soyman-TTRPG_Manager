@@ -1085,6 +1085,8 @@ export interface StoryClue {
   target_type: "scene" | "secret" | null;
   target_id: number | null;
   position: number;
+  /** 1 — предложена «Предложить улики», ещё не принята (Q29). */
+  proposed: number;
 }
 /** Улика в графе приключения (GET /story/arcs/:id/clues). */
 export interface ArcClue extends StoryClue {
@@ -1895,7 +1897,7 @@ export interface CanvasEdge {
    * transition — переход между сценами, outcome — исход проверки,
    * cast — сущность втекает в сцену, member — член набора, thread — нить между пинами.
    */
-  kind: "transition" | "outcome" | "cast" | "member" | "thread" | "check" | "story" | "clue";
+  kind: "transition" | "outcome" | "cast" | "member" | "thread" | "check" | "story" | "clue" | "clue_proposed";
   /** Ключи нод, а не номера: на холсте рядом со сценами стоят сущности. */
   source: string;
   target: string;

@@ -23,6 +23,8 @@ export interface ClueRow {
   target_type: string | null;
   target_id: number | null;
   position: number;
+  /** 1 — предложена, ещё не принята (Q29). */
+  proposed: number;
 }
 
 interface SceneRow {
@@ -209,7 +211,8 @@ export function nodeCounts(graph: ClueGraph): Map<number, NodeCounts> {
     counts.set(id, { clue_in: 0, clue_out: 0, passage_in: graph.passage_targets.has(id) });
   }
   for (const c of graph.clues) {
-    if (c.target_missing || c.target_type == null) continue;
+    // Предложенная, но не принятая улика ничего не доказывает (Q29).
+    if (c.target_missing || c.target_type == null || c.proposed) continue;
     if (c.node_id != null) counts.get(c.node_id)!.clue_out++;
     if (c.target_type === "scene") counts.get(c.target_id as number)!.clue_in++;
   }

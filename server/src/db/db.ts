@@ -6948,6 +6948,12 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     setAppSettingFlag(database, "node_design_outcomes_v1");
   }
 
+  // «Предложить улики» (Q28, Q29): предложенная улика лежит пунктиром и не
+  // считается в правиле трёх, пока Мастер её не примет.
+  if (!columnExists(database, "story_clues", "proposed")) {
+    database.exec("ALTER TABLE story_clues ADD COLUMN proposed INTEGER NOT NULL DEFAULT 0");
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);

@@ -143,9 +143,9 @@ export function copySceneChildren(fromId: number, toId: number): void {
     .get(fromId, toId) as { src: number | null; dst: number | null };
   const keepTarget = arcs.src != null && arcs.src === arcs.dst;
   db.prepare(
-    `INSERT INTO story_clues (arc_id, scene_id, source_clue_id, text, how, target_type, target_id, position)
+    `INSERT INTO story_clues (arc_id, scene_id, source_clue_id, text, how, target_type, target_id, position, proposed)
      SELECT ?, ?, COALESCE(source_clue_id, id), text, how,
-            CASE WHEN ? THEN target_type END, CASE WHEN ? THEN target_id END, position
+            CASE WHEN ? THEN target_type END, CASE WHEN ? THEN target_id END, position, proposed
      FROM story_clues WHERE scene_id = ? ORDER BY position, id`
   ).run(arcs.dst, toId, keepTarget ? 1 : 0, keepTarget ? 1 : 0, fromId);
   db.prepare(

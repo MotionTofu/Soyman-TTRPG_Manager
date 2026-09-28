@@ -27,6 +27,7 @@ import {
 } from "../story/presentation";
 import { SCENE_SOUND_SECTION, sceneSoundSet } from "../story/stage";
 import { adventureClueGraph, nodeCounts, type ClueRow } from "../story/clues";
+import { cluePrompt, parseLabel, parseProposals } from "../story/cluePrompt";
 import {
   CAST_ROLE_BY_SECTION,
   CAST_SECTIONS,
@@ -1532,7 +1533,8 @@ export function buildAdventureExportData(arcId: number | string): Record<string,
   // Улики узлового дизайна: в сценах и в лотке приключения.
   const clues = db
     .prepare(`SELECT * FROM story_clues WHERE arc_id IN (${placeholders}) OR scene_id IN (${scPh || "NULL"}) ORDER BY position, id`)
-    .all(...allArcIds, ...sceneIds) as ClueRow[];
+    .all(...allArcIds, ...sceneIds)
+    .filter((c) => !(c as ClueRow).proposed) as ClueRow[];
 
   const arcTransitions = db
     .prepare(`SELECT * FROM story_arc_transitions WHERE from_arc_id IN (${placeholders}) OR to_arc_id IN (${placeholders}) ORDER BY position`)
@@ -3345,7 +3347,7 @@ storyRouter.put("/clues/:clueId", (req, res) => {
     if (bad) return res.status(400).json({ error: bad });
   }
   db.prepare(
-    `UPDATE story_clues SET text = ?, how = ?, target_type = ?, target_id = ?, scene_id = ?, arc_id = ?
+    `UPDATE story_clues SET text = ?, how = ?, target_type = ?, target_id = ?, scene_id = ?, arc_id = ?, proposed = ?
      WHERE id = ?`
   ).run(
     body.text !== undefined ? String(body.text) : clue.text,
@@ -3354,6 +3356,8 @@ storyRouter.put("/clues/:clueId", (req, res) => {
     originalSceneId(targetType, targetId),
     sceneId,
     arcId,
+    // Принять предложенную можно, «разпринять» — нет: это уже правка Мастера.
+    body.proposed === false || body.proposed === 0 ? 0 : clue.proposed,
     clue.id
   );
   res.json(db.prepare("SELECT * FROM story_clues WHERE id = ?").get(clue.id));
@@ -3391,6 +3395,79 @@ storyRouter.put("/clues/:clueId/state", (req, res) => {
  * `node_id` — id оригинала сеттинга, в том же пространстве, что и цели улик;
  * `found` — отметка кампании (без кампании всегда false).
  */
+// «Предложить улики» (Q28): запрос для внешнего чата — структура приключения
+// в тех же строках, что показаны на холсте (кампания — через campaign_id).
+storyRouter.get("/arcs/:id/clues/prompt", (req, res) => {
+  const campaignId = req.query.campaign_id != null ? Number(req.query.campaign_id) : null;
+  const graph = adventureClueGraph(Number(req.params.id), campaignId);
+  if (!graph) return res.status(404).json({ error: "not found" });
+  res.json({ prompt: cluePrompt(graph) });
+});
+
+// Ответ чата → предложенные улики (proposed = 1). Негодные строки не валят
+// весь ответ: они возвращаются списком с причиной.
+storyRouter.post("/arcs/:id/clues/proposals", (req, res) => {
+  const campaignId = req.body.campaign_id != null ? Number(req.body.campaign_id) : null;
+  const graph = adventureClueGraph(Number(req.params.id), campaignId);
+  if (!graph) return res.status(404).json({ error: "not found" });
+  const list = parseProposals(String(req.body.answer ?? ""));
+  if (!list) return res.status(400).json({ error: "в ответе не нашлось JSON со списком улик" });
+  const secretIds = new Set(
+    (
+      db
+        .prepare(`SELECT id FROM story_secrets WHERE arc_id IN (${graph.arc_ids.map(() => "?").join(",")})`)
+        .all(...graph.arc_ids) as { id: number }[]
+    ).map((r) => r.id)
+  );
+  const skipped: { index: number; reason: string }[] = [];
+  let added = 0;
+  db.transaction(() => {
+    list.forEach((item, index) => {
+      const it = (item ?? {}) as Record<string, unknown>;
+      const from = parseLabel(it.from);
+      const to = parseLabel(it.to);
+      const text = String(it.text ?? "").trim().slice(0, 500);
+      const node = from?.type === "scene" ? graph.nodes.get(from.id) : undefined;
+      if (!node) return skipped.push({ index, reason: `нет узла «${String(it.from)}»` });
+      if (!text) return skipped.push({ index, reason: "пустая улика" });
+      const ok =
+        to?.type === "scene" ? graph.nodes.has(to.id) && to.id !== from!.id : to?.type === "secret" && secretIds.has(to.id);
+      if (!ok) return skipped.push({ index, reason: `нет цели «${String(it.to)}»` });
+      const scene = resolveWritableScene(node.shown_id, null);
+      if (!scene) return skipped.push({ index, reason: "узел недоступен" });
+      const position =
+        (db.prepare("SELECT MAX(position) AS m FROM story_clues WHERE scene_id = ?").get(scene.id) as { m: number | null })
+          .m ?? -1;
+      db.prepare(
+        `INSERT INTO story_clues (arc_id, scene_id, text, how, target_type, target_id, position, proposed)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 1)`
+      ).run(scene.arc_id, scene.id, text, String(it.how ?? "").trim().slice(0, 300), to!.type, to!.id, position + 1);
+      added++;
+    });
+  })();
+  res.json({ added, skipped });
+});
+
+// Все предложенные приключения разом: принять или отклонить.
+function proposedIds(arcId: number, campaignId: number | null): number[] | null {
+  const graph = adventureClueGraph(arcId, campaignId);
+  return graph ? graph.clues.filter((c) => c.proposed).map((c) => c.id) : null;
+}
+storyRouter.post("/arcs/:id/clues/proposals/accept", (req, res) => {
+  const ids = proposedIds(Number(req.params.id), req.body.campaign_id != null ? Number(req.body.campaign_id) : null);
+  if (!ids) return res.status(404).json({ error: "not found" });
+  const accept = db.prepare("UPDATE story_clues SET proposed = 0 WHERE id = ?");
+  db.transaction(() => ids.forEach((id) => accept.run(id)))();
+  res.json({ accepted: ids.length });
+});
+storyRouter.delete("/arcs/:id/clues/proposals", (req, res) => {
+  const ids = proposedIds(Number(req.params.id), req.query.campaign_id != null ? Number(req.query.campaign_id) : null);
+  if (!ids) return res.status(404).json({ error: "not found" });
+  const drop = db.prepare("DELETE FROM story_clues WHERE id = ?");
+  db.transaction(() => ids.forEach((id) => drop.run(id)))();
+  res.json({ rejected: ids.length });
+});
+
 storyRouter.get("/arcs/:id/clues", (req, res) => {
   const campaignId = req.query.campaign_id != null ? Number(req.query.campaign_id) : null;
   const graph = adventureClueGraph(Number(req.params.id), campaignId);

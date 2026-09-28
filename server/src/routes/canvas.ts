@@ -53,7 +53,7 @@ interface EdgeOut {
   /** `story` — связь между главами приключения (блок G6.2). Тем же именем,
    *  что у связи между приключениями на схеме сеттинга: это одна таблица и
    *  одно утверждение, только на другом уровне. */
-  kind: "transition" | "outcome" | "cast" | "member" | "check" | "thread" | "story" | "clue";
+  kind: "transition" | "outcome" | "cast" | "member" | "check" | "thread" | "story" | "clue" | "clue_proposed";
   source: string;
   target: string;
   target_handle: string;
@@ -808,7 +808,7 @@ function entityNodes(boardId: number, placed: PlacedNode[]) {
           db
             .prepare(
               `SELECT COUNT(DISTINCT COALESCE(source_clue_id, id)) AS n FROM story_clues
-               WHERE target_type = 'secret' AND target_id = ? AND scene_id IS NOT NULL`
+               WHERE target_type = 'secret' AND target_id = ? AND scene_id IS NOT NULL AND proposed = 0`
             )
             .get(p.node_id) as { n: number }
         ).n;
@@ -1920,7 +1920,7 @@ canvasRouter.get("/board", (req, res) => {
   // Тайна рисуется, только если её положили на этот холст (Q20); ключ цели
   // тогда `secret:<id>`, а id стрелки — `clue:<откуда>:s<id>`.
   const placedSecrets = new Set(saved.filter((p) => p.node_type === "secret").map((p) => p.node_id));
-  const cluePairs = new Map<string, { from: number; to: string; n: number }>();
+  const cluePairs = new Map<string, { from: number; to: string; n: number; p: number }>();
   for (const c of clueGraph?.clues ?? []) {
     if (c.target_missing || c.node_id == null) continue;
     const from = shownByNode.get(c.node_id);
@@ -1933,17 +1933,20 @@ canvasRouter.get("/board", (req, res) => {
     }
     if (from == null || to == null) continue;
     const key = `${from}:${to}`;
-    const pair = cluePairs.get(key) ?? { from, to, n: 0 };
-    pair.n++;
+    const pair = cluePairs.get(key) ?? { from, to, n: 0, p: 0 };
+    // Предложенные (Q29) — в той же стрелке, но отдельным счётом: «+2?».
+    if (c.proposed) pair.p++;
+    else pair.n++;
     cluePairs.set(key, pair);
   }
   const clueEdges: EdgeOut[] = [...cluePairs.values()].map((p) => ({
     id: `clue:${p.from}:${p.to}`,
-    kind: "clue",
+    // Только предложенные — стрелка пунктиром (клиент красит по kind).
+    kind: p.n === 0 ? "clue_proposed" : "clue",
     source: `scene:${p.from}`,
     target: p.to.startsWith("s") ? `secret:${p.to.slice(1)}` : `scene:${p.to}`,
     target_handle: "story",
-    label: p.n > 1 ? `×${p.n}` : "",
+    label: [p.n > 1 ? `×${p.n}` : "", p.p ? `+${p.p}?` : ""].filter(Boolean).join(" "),
   }));
 
   const edges = [...storyEdges, ...clueEdges, ...castEdges, ...memberEdges, ...chapterEdges];

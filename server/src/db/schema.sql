@@ -962,6 +962,8 @@ CREATE TABLE IF NOT EXISTS story_clues (
   target_type TEXT, -- NULL | scene | secret
   target_id INTEGER,
   position INTEGER NOT NULL DEFAULT 0,
+  -- 1 — предложена нейросетью («Предложить улики»), ждёт решения Мастера.
+  proposed INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_story_clues_arc ON story_clues(arc_id);
