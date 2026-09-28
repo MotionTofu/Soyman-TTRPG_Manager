@@ -39,10 +39,11 @@ function App() {
   // Подсказка «открыто в предпросмотре» лежит в самом HTML и уходит, только
   // когда лист смонтировался: если скрипт упал, игрок видит её, а не пустоту.
   useEffect(() => { document.getElementById('oneshot-nojs')?.remove(); }, []);
-  // Напоминание сжималось в узкую колонку (на телефоне — на полэкрана), поэтому
-  // оно под кнопкой «Внимание» (2026-09-28).
+  // В шапке — одна кнопка «Внимание» (решение владельца 2026-09-28): изменения
+  // в автономной копии не сохраняются, персонажа ведут на сайте после импорта;
+  // скачивание копии с изменениями — запасной выход для тех, кто уже играл здесь.
   const [noteOpen, setNoteOpen] = useState(false);
-  const [status, setStatus] = useState('Изменения хранятся до закрытия страницы. Скачайте обновлённую копию после игры.');
+  const [downloaded, setDownloaded] = useState(false);
   function save() {
     const html = template.cloneNode(true) as HTMLElement;
     // Round-trip contract (phase B1.2): only the runtime content is swapped.
@@ -52,11 +53,21 @@ function App() {
     const url = URL.createObjectURL(new Blob(['<!doctype html>\n' + html.outerHTML], { type: 'text/html' }));
     const link = document.createElement('a'); link.href = url; link.download = 'OneShot-персонаж.html'; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
-    setStatus('Скачивание запрошено. Убедитесь, что файл сохранён, прежде чем закрыть страницу.');
+    setDownloaded(true);
   }
   return <DndRuntimeContext.Provider value={{ allowDiceRolls: false, campaignConnected: false, detached: true }}>
-    <header className="oneshot-header oneshot-standalone-header"><strong>OneShot SoyMan</strong><span className="oneshot-standalone-label">Автономная копия</span><button type="button" className="oneshot-standalone-note-toggle" aria-expanded={noteOpen} aria-controls="oneshot-standalone-note" onClick={() => setNoteOpen(v => !v)}>Внимание</button><span id="oneshot-standalone-note" role="status" data-open={noteOpen}>{status}</span><button onClick={save}>Скачать обновлённую копию</button></header>
-    <div className="oneshot-sheet"><div className="fp-page-backdrop" aria-hidden="true" /><DndCharacterView value={value} portraitUrl={snapshot.character.portrait} onQuickUpdate={patch => { setDirty(true); setValue(v => ({ ...v, ...patch })); setStatus('Есть изменения — скачайте обновлённую копию перед закрытием.'); }} /><MentionPreviewRoot /></div>
+    <header className="oneshot-header oneshot-standalone-header"><strong>OneShot SoyMan</strong><span className="oneshot-standalone-label">Автономная копия</span>
+      <button type="button" className="oneshot-standalone-note-toggle" aria-expanded={noteOpen} aria-controls="oneshot-standalone-note" aria-label={dirty ? 'Внимание — есть несохранённые изменения' : undefined} onClick={() => setNoteOpen(v => !v)}>Внимание{dirty && <span className="oneshot-standalone-dirty" aria-hidden="true" />}</button>
+      <div id="oneshot-standalone-note" className="oneshot-standalone-note" hidden={!noteOpen}>
+        <p><b>Изменения здесь не сохраняются.</b></p>
+        <p>Это автономная копия: всё, что вы меняете, пропадёт, когда вы закроете страницу.</p>
+        <p>Чтобы вести персонажа дальше, откройте <b>soyman-1shot.vercel.app</b> → «Импорт» → «Импортировать персонажа» и выберите этот файл. Там все изменения сохраняются сами.</p>
+        <p>Уже что-то поменяли здесь? Сначала скачайте копию с изменениями и импортируйте её.</p>
+        <button type="button" onClick={save}>Скачать копию с изменениями</button>
+        <p className="oneshot-standalone-saved" aria-live="polite">{downloaded ? 'Скачивание запрошено — проверьте, что файл сохранился, прежде чем закрыть страницу.' : ''}</p>
+      </div>
+    </header>
+    <div className="oneshot-sheet"><div className="fp-page-backdrop" aria-hidden="true" /><DndCharacterView value={value} portraitUrl={snapshot.character.portrait} onQuickUpdate={patch => { setDirty(true); setValue(v => ({ ...v, ...patch })); }} /><MentionPreviewRoot /></div>
     <details className="oneshot-sources"><summary>Источники правил</summary><p>This work includes material from the System Reference Document 5.2 ("SRD 5.2") by Wizards of the Coast LLC, available at https://www.dndbeyond.com/srd. The SRD 5.2 is licensed under the Creative Commons Attribution 4.0 International License, available at https://creativecommons.org/licenses/by/4.0/legalcode.</p><p>Тексты и переводы импортированного справочника сохраняют условия своих источников.</p></details>
   </DndRuntimeContext.Provider>;
 }

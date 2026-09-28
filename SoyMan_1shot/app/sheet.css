@@ -28,22 +28,16 @@ html[data-app="oneshot"] .oneshot-standalone-header .oneshot-standalone-label {
   color: var(--ui-accent);
   font-weight: 800;
 }
-html[data-app="oneshot"] .oneshot-standalone-header [role="status"] {
-  max-width: 52ch;
-  font-size: 12px;
-  line-height: 1.3;
-}
-html[data-app="oneshot"] .oneshot-standalone-header > button {
-  padding-inline: 12px;
-}
-/* Напоминание «Изменения хранятся до закрытия…» сжималось в узкую колонку
-   (на телефоне — на полэкрана): оно под кнопкой «Внимание» и раскрывается
-   строкой обычного текста под шапкой (2026-09-28). */
-html[data-app="oneshot"] .oneshot-standalone-header { flex-wrap: wrap; }
+/* Автономная копия: в шапке одна кнопка «Внимание» (2026-09-28). Под ней —
+   что изменения здесь не сохраняются, путь через импорт на сайт и запасное
+   скачивание копии с изменениями; после первой правки на кнопке метка. */
 html[data-app="oneshot"] .oneshot-standalone-header .oneshot-standalone-note-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   margin-left: auto;
   min-height: 40px;
-  padding: 0 12px;
+  padding: 0 14px;
   background: transparent;
   border: 2px solid var(--ui-accent);
   color: var(--ui-accent);
@@ -53,18 +47,34 @@ html[data-app="oneshot"] .oneshot-standalone-header .oneshot-standalone-note-tog
   background: var(--ui-accent);
   color: var(--ui-surface-ink);
 }
-html[data-app="oneshot"] .oneshot-standalone-header [role="status"][data-open="false"] { display: none; }
-html[data-app="oneshot"] .oneshot-standalone-header [role="status"][data-open="true"] {
-  order: 10;
-  flex: 1 0 100%;
-  max-width: none;
-  margin: 0;
+html[data-app="oneshot"] .oneshot-standalone-note-toggle .oneshot-standalone-dirty {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: currentColor;
+}
+html[data-app="oneshot"] .oneshot-standalone-header { position: relative; }
+/* На ПК — выпадающей панелью под кнопкой, поверх листа: шапка не растёт. */
+html[data-app="oneshot"] .oneshot-standalone-note {
+  position: absolute;
+  top: calc(100% - 6px);
+  right: 16px;
+  z-index: 30;
+  width: min(460px, calc(100vw - 32px));
+  padding: 16px 18px;
+  background: var(--ui-surface-ink);
+  border: 2px solid var(--ui-accent);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .45);
   color: var(--ui-text-inverse);
-  font: 400 14px/1.35 var(--font-body, system-ui), sans-serif;
+  font: 400 14px/1.4 var(--font-body, system-ui), sans-serif;
   letter-spacing: 0;
   text-transform: none;
-  text-align: right;
 }
+html[data-app="oneshot"] .oneshot-standalone-note[hidden] { display: none; }
+html[data-app="oneshot"] .oneshot-standalone-note p { margin: 0 0 8px; }
+html[data-app="oneshot"] .oneshot-standalone-note b { color: var(--ui-accent); }
+html[data-app="oneshot"] .oneshot-standalone-note button { min-height: 44px; padding-inline: 14px; }
+html[data-app="oneshot"] .oneshot-standalone-note .oneshot-standalone-saved { margin: 8px 0 0; font-size: 13px; }
 html[data-app="oneshot"] .oneshot-sources {
   max-width: 1500px;
   margin: 0 auto 40px;
@@ -214,25 +224,14 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-prepared-filter-short { display: no
   }
   html[data-app="oneshot"] .oneshot-header > a { font-size: 24px; }
   html[data-app="oneshot"] .oneshot-standalone-header > strong {
-    grid-column: 1 / -1;
+    grid-column: 1;
     grid-row: 1;
     font-size: 24px;
   }
   html[data-app="oneshot"] .oneshot-standalone-header .oneshot-standalone-label {
-    grid-column: 1 / -1;
+    grid-column: 1;
     grid-row: 2;
     font-size: 12px;
-  }
-  html[data-app="oneshot"] .oneshot-standalone-header [role="status"] {
-    grid-column: 1 / -1;
-    grid-row: 3;
-    max-width: none;
-  }
-  html[data-app="oneshot"] .oneshot-standalone-header > button {
-    grid-column: 1 / -1;
-    grid-row: 4;
-    margin-top: 8px;
-    min-height: 44px;
   }
   html[data-app="oneshot"] .oneshot-standalone-header .oneshot-standalone-note-toggle {
     grid-column: 2;
@@ -240,11 +239,16 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-prepared-filter-short { display: no
     align-self: center;
     margin: 0;
   }
-  html[data-app="oneshot"] .oneshot-standalone-header [role="status"][data-open="true"] {
+  html[data-app="oneshot"] .oneshot-standalone-note {
+    position: static;
     grid-column: 1 / -1;
-    margin-top: 6px;
-    text-align: left;
+    width: auto;
+    margin: 8px 0 4px;
+    padding: 0;
+    border: 0;
+    box-shadow: none;
   }
+  html[data-app="oneshot"] .oneshot-standalone-note button { width: 100%; }
   html[data-app="oneshot"] .oneshot-header > .muted {
     grid-column: 1;
     grid-row: 2;
