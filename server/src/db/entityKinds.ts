@@ -482,6 +482,14 @@ export const UNSWEPT_PAIRS: Readonly<Record<string, UnsweptPair>> = {
     vocabulary: "registry",
     why: "исход проверки в сцене; сцена удаляется вместе с приключением редко",
   },
+  "story_clues.target_type": {
+    vocabulary: "own",
+    why: "вывод улики: 'scene' | 'secret' — узел или тайна приключения; удалённая цель — намеренно «ведёт в никуда», Мастер перецеливает сам",
+  },
+  "story_scenes.subject_type": {
+    vocabulary: "registry",
+    why: "«о ком» узла; удалённая сущность показывается пустым полем, сцена не страдает",
+  },
 };
 
 /** Ключи из явных наборов — для проверки, что там нет опечаток. */

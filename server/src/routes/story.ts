@@ -52,7 +52,27 @@ const SCENE_FIELDS = [
   "hidden_from_players",
   "position",
   "arc_id",
+  "node_type",
+  "node_role",
+  "node_trigger",
+  "subject_type",
+  "subject_id",
 ] as const;
+
+// Допустимые значения осей узла. Проверяются на входе: неизвестная роль
+// молча выпала бы из правила трёх, и холст врал бы про связность.
+const NODE_TYPES = new Set(["place", "person", "organization", "event", "activity"]);
+const NODE_ROLES = new Set(["normal", "start", "dead_end", "finale", "proactive"]);
+
+function invalidNodeField(body: Record<string, unknown>): string | null {
+  if (body.node_type !== undefined && body.node_type !== null && !NODE_TYPES.has(String(body.node_type)))
+    return "node_type";
+  if (body.node_role !== undefined && !NODE_ROLES.has(String(body.node_role))) return "node_role";
+  // «О ком» — пара: тип без id (или наоборот) показал бы пустую ссылку.
+  if ((body.subject_type === undefined) !== (body.subject_id === undefined)) return "subject";
+  if ((body.subject_type == null) !== (body.subject_id == null)) return "subject";
+  return null;
+}
 
 interface SceneRow {
   id: number;
@@ -140,8 +160,9 @@ function cloneSceneForCampaign(sceneId: number, campaignId: number): SceneRow {
            (setting_id, arc_id, campaign_id, source_scene_id, name, kind, summary, read_aloud,
             whats_happening, entry_condition, outcomes, hidden_from_players, position,
             presentation_background_path, presentation_transition, presentation_transition_ms,
-            presentation_title, presentation_title_secs, presentation_fade_ms)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            presentation_title, presentation_title_secs, presentation_fade_ms,
+            node_type, node_role, node_trigger, subject_type, subject_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         source.setting_id,
@@ -162,7 +183,12 @@ function cloneSceneForCampaign(sceneId: number, campaignId: number): SceneRow {
         content.presentation_transition_ms,
         content.presentation_title,
         content.presentation_title_secs,
-        content.presentation_fade_ms
+        content.presentation_fade_ms,
+        content.node_type,
+        content.node_role,
+        content.node_trigger,
+        content.subject_type,
+        content.subject_id
       );
     const newId = Number(info.lastInsertRowid);
     copySceneChildren(contentId, newId);
@@ -1328,6 +1354,8 @@ storyRouter.post("/scenes", (req, res) => {
 });
 
 storyRouter.put("/scenes/:id", (req, res) => {
+  const bad = invalidNodeField(req.body as Record<string, unknown>);
+  if (bad) return res.status(400).json({ error: `invalid ${bad}` });
   const campaignId = req.body.campaign_id != null ? Number(req.body.campaign_id) : null;
   const target = resolveWritableScene(Number(req.params.id), campaignId);
   if (!target) return res.status(404).json({ error: "not found" });
@@ -2424,8 +2452,9 @@ storyRouter.post("/scenes/:id/library", (req, res) => {
            (setting_id, in_library, name, kind, summary, read_aloud, whats_happening,
             entry_condition, outcomes, hidden_from_players, position,
             presentation_background_path, presentation_transition, presentation_transition_ms,
-            presentation_title, presentation_title_secs, presentation_fade_ms)
-         VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)`
+            presentation_title, presentation_title_secs, presentation_fade_ms,
+            node_type, node_role, node_trigger, subject_type, subject_id)
+         VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         scene.setting_id,
@@ -2442,7 +2471,12 @@ storyRouter.post("/scenes/:id/library", (req, res) => {
         content.presentation_transition_ms,
         content.presentation_title,
         content.presentation_title_secs,
-        content.presentation_fade_ms
+        content.presentation_fade_ms,
+        content.node_type,
+        content.node_role,
+        content.node_trigger,
+        content.subject_type,
+        content.subject_id
       );
     const newId = Number(info.lastInsertRowid);
     copySceneChildren(contentId, newId);
@@ -3102,4 +3136,238 @@ storyRouter.get("/scenes/:id/incoming", (req, res) => {
     .all(...ids);
 
   res.json({ transitions, outcomes });
+});
+
+// ─── Улики узлового дизайна (гриллинг 2026-09-28) ─────────────────────────
+//
+// Улика живёт на сцене, как проверка и переход, и так же уходит в копию сцены
+// кампании при первой правке. В отличие от проверок, правка и удаление по id
+// тоже идут через копию: иначе правка улики из кампании переписала бы
+// оригинал сеттинга у всех остальных кампаний.
+//
+// Цели — id оригиналов сеттинга (как to_scene_id у переходов); «найдено»
+// висит на исходной улике (source_clue_id ?? id), поэтому переживает копию.
+
+interface ClueRow {
+  id: number;
+  arc_id: number | null;
+  scene_id: number | null;
+  source_clue_id: number | null;
+  text: string;
+  how: string;
+  target_type: string | null;
+  target_id: number | null;
+  position: number;
+}
+
+const CLUE_TARGETS = new Set(["scene", "secret"]);
+
+/** Цель улики: пусто, сцена или тайна, и она существует. Иначе — текст ошибки. */
+function invalidClueTarget(type: unknown, id: unknown, fromSceneId: number | null): string | null {
+  if (type == null && id == null) return null;
+  if (type == null || id == null || !CLUE_TARGETS.has(String(type))) return "invalid target";
+  const table = type === "scene" ? "story_scenes" : "story_secrets";
+  if (!db.prepare(`SELECT id FROM ${table} WHERE id = ?`).get(Number(id))) return "target not found";
+  if (type === "scene" && fromSceneId != null) {
+    const from = db.prepare("SELECT id, source_scene_id FROM story_scenes WHERE id = ?").get(fromSceneId) as
+      | { id: number; source_scene_id: number | null }
+      | undefined;
+    if (from && (from.source_scene_id ?? from.id) === Number(id)) return "clue cannot point to its own scene";
+  }
+  return null;
+}
+
+function cluesOfScene(sceneId: number): ClueRow[] {
+  return db
+    .prepare("SELECT * FROM story_clues WHERE scene_id = ? ORDER BY position, id")
+    .all(sceneId) as ClueRow[];
+}
+
+/**
+ * Строка улики, в которую должна уйти правка из кампании: сама улика, если
+ * её сцена уже принадлежит кампании (или правят вне кампании), иначе её
+ * двойник в копии сцены — копия заводится здесь же.
+ */
+function resolveWritableClue(clueId: number, campaignId: number | null): ClueRow | null {
+  const clue = db.prepare("SELECT * FROM story_clues WHERE id = ?").get(clueId) as ClueRow | undefined;
+  if (!clue) return null;
+  if (clue.scene_id == null || campaignId == null) return clue;
+  const scene = resolveWritableScene(clue.scene_id, campaignId);
+  if (!scene || scene.id === clue.scene_id) return clue;
+  const root = clue.source_clue_id ?? clue.id;
+  return (
+    (db
+      .prepare("SELECT * FROM story_clues WHERE scene_id = ? AND COALESCE(source_clue_id, id) = ?")
+      .get(scene.id, root) as ClueRow | undefined) ?? null
+  );
+}
+
+// Улика в узле. Правка из кампании заводит копию сцены (resolveWritableScene).
+storyRouter.post("/scenes/:id/clues", (req, res) => {
+  const campaignId = req.body.campaign_id != null ? Number(req.body.campaign_id) : null;
+  const target = resolveWritableScene(Number(req.params.id), campaignId);
+  if (!target) return res.status(404).json({ error: "not found" });
+  const { text, how, target_type, target_id } = req.body as Record<string, unknown>;
+  const bad = invalidClueTarget(target_type, target_id, target.id);
+  if (bad) return res.status(400).json({ error: bad });
+  const position =
+    (db.prepare("SELECT MAX(position) AS m FROM story_clues WHERE scene_id = ?").get(target.id) as {
+      m: number | null;
+    }).m ?? -1;
+  const info = db
+    .prepare(
+      `INSERT INTO story_clues (arc_id, scene_id, text, how, target_type, target_id, position)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      target.arc_id,
+      target.id,
+      String(text ?? ""),
+      String(how ?? ""),
+      target_type ?? null,
+      target_id != null ? Number(target_id) : null,
+      position + 1
+    );
+  res.status(201).json({ id: Number(info.lastInsertRowid), scene_id: target.id, clues: cluesOfScene(target.id) });
+});
+
+// Улика в лоток неразмещённых: места ещё нет, есть только приключение.
+storyRouter.post("/arcs/:id/clues", (req, res) => {
+  const arcId = Number(req.params.id);
+  if (!db.prepare("SELECT id FROM story_arcs WHERE id = ?").get(arcId)) return res.status(404).json({ error: "not found" });
+  const { text, how } = req.body as Record<string, unknown>;
+  const info = db
+    .prepare("INSERT INTO story_clues (arc_id, scene_id, text, how) VALUES (?, NULL, ?, ?)")
+    .run(arcId, String(text ?? ""), String(how ?? ""));
+  res.status(201).json(db.prepare("SELECT * FROM story_clues WHERE id = ?").get(Number(info.lastInsertRowid)));
+});
+
+// Правка улики; scene_id кладёт улику из лотка в узел.
+storyRouter.put("/clues/:clueId", (req, res) => {
+  const campaignId = req.body.campaign_id != null ? Number(req.body.campaign_id) : null;
+  const clue = resolveWritableClue(Number(req.params.clueId), campaignId);
+  if (!clue) return res.status(404).json({ error: "not found" });
+  const body = req.body as Record<string, unknown>;
+
+  let sceneId = clue.scene_id;
+  let arcId = clue.arc_id;
+  if (body.scene_id !== undefined && body.scene_id !== clue.scene_id) {
+    // Из лотка в узел. Узел в кампании — через копию, как любая правка сцены.
+    if (body.scene_id == null) return res.status(400).json({ error: "clue cannot return to the tray" });
+    const scene = resolveWritableScene(Number(body.scene_id), campaignId);
+    if (!scene) return res.status(400).json({ error: "scene not found" });
+    sceneId = scene.id;
+    arcId = scene.arc_id;
+  }
+  const targetChanged = body.target_type !== undefined || body.target_id !== undefined;
+  const targetType = targetChanged ? (body.target_type ?? null) : clue.target_type;
+  const targetId = targetChanged ? (body.target_id ?? null) : clue.target_id;
+  if (targetChanged || sceneId !== clue.scene_id) {
+    const bad = invalidClueTarget(targetType, targetId, sceneId);
+    if (bad) return res.status(400).json({ error: bad });
+  }
+  db.prepare(
+    `UPDATE story_clues SET text = ?, how = ?, target_type = ?, target_id = ?, scene_id = ?, arc_id = ?
+     WHERE id = ?`
+  ).run(
+    body.text !== undefined ? String(body.text) : clue.text,
+    body.how !== undefined ? String(body.how) : clue.how,
+    targetType,
+    targetId != null ? Number(targetId) : null,
+    sceneId,
+    arcId,
+    clue.id
+  );
+  res.json(db.prepare("SELECT * FROM story_clues WHERE id = ?").get(clue.id));
+});
+
+storyRouter.delete("/clues/:clueId", (req, res) => {
+  const campaignId = req.query.campaign_id != null ? Number(req.query.campaign_id) : null;
+  const clue = resolveWritableClue(Number(req.params.clueId), campaignId);
+  if (!clue) return res.status(404).json({ error: "not found" });
+  db.prepare("DELETE FROM story_clues WHERE id = ?").run(clue.id);
+  res.json({ ok: true });
+});
+
+// «Найдено» в кампании. Пишется на исходную улику и сцену не копирует:
+// отметка — ход игры, а не правка приключения.
+storyRouter.put("/clues/:clueId/state", (req, res) => {
+  const { campaign_id, found } = req.body as { campaign_id?: number; found?: boolean };
+  if (!campaign_id) return res.status(400).json({ error: "campaign_id is required" });
+  const clue = db.prepare("SELECT id, source_clue_id FROM story_clues WHERE id = ?").get(req.params.clueId) as
+    | { id: number; source_clue_id: number | null }
+    | undefined;
+  if (!clue) return res.status(404).json({ error: "not found" });
+  db.prepare(
+    `INSERT INTO campaign_clue_state (campaign_id, clue_id, found, updated_at)
+     VALUES (?, ?, ?, datetime('now'))
+     ON CONFLICT(campaign_id, clue_id) DO UPDATE SET found = excluded.found, updated_at = datetime('now')`
+  ).run(Number(campaign_id), clue.source_clue_id ?? clue.id, found ? 1 : 0);
+  res.json({ ok: true });
+});
+
+/**
+ * Все улики приключения — то, из чего холст рисует стрелки, а список выводов
+ * считает правило трёх.
+ *
+ * С campaign_id узлы читаются так, как их видит кампания: у сцены с копией
+ * кампании улики берутся с копии, у нетронутой вставки заготовки — с
+ * заготовки. `node_id` — id оригинала сеттинга, в том же пространстве, что и
+ * цели улик; `found` — отметка кампании (без кампании всегда false).
+ */
+storyRouter.get("/arcs/:id/clues", (req, res) => {
+  const arcId = Number(req.params.id);
+  const campaignId = req.query.campaign_id != null ? Number(req.query.campaign_id) : null;
+  const arc = db.prepare("SELECT id, setting_id FROM story_arcs WHERE id = ?").get(arcId) as
+    | { id: number; setting_id: number }
+    | undefined;
+  if (!arc) return res.status(404).json({ error: "not found" });
+
+  const originals = db
+    .prepare(
+      `SELECT * FROM story_scenes WHERE arc_id = ? AND archived_at IS NULL
+         AND (campaign_id IS NULL OR (campaign_id = ? AND source_scene_id IS NULL))`
+    )
+    .all(arcId, campaignId ?? -1) as SceneRow[];
+  const overrides = campaignId != null ? overrideMap(campaignId, arc.setting_id) : new Map<number, SceneRow>();
+
+  const found = new Set(
+    campaignId != null
+      ? (db.prepare("SELECT clue_id FROM campaign_clue_state WHERE campaign_id = ? AND found = 1").all(campaignId) as {
+          clue_id: number;
+        }[]).map((r) => r.clue_id)
+      : []
+  );
+  const liveScenes = new Set(originals.map((s) => s.id));
+  const secretTitles = new Map(
+    (db.prepare("SELECT id, title FROM story_secrets").all() as { id: number; title: string }[]).map((r) => [
+      r.id,
+      r.title,
+    ])
+  );
+  const shape = (c: ClueRow, nodeId: number | null) => ({
+    ...c,
+    node_id: nodeId,
+    root_id: c.source_clue_id ?? c.id,
+    found: found.has(c.source_clue_id ?? c.id),
+    // Цель удалена или в архиве — «ведёт в никуда».
+    target_missing:
+      c.target_type === "scene"
+        ? !liveScenes.has(c.target_id as number)
+        : c.target_type === "secret"
+          ? !secretTitles.has(c.target_id as number)
+          : false,
+    target_title: c.target_type === "secret" ? (secretTitles.get(c.target_id as number) ?? null) : null,
+  });
+
+  const clues: ReturnType<typeof shape>[] = [];
+  for (const scene of originals) {
+    const shown = overrides.get(scene.id) ?? scene;
+    const contentId = shown.library_scene_id ?? shown.id;
+    for (const c of cluesOfScene(contentId)) clues.push(shape(c, scene.id));
+  }
+  const tray = (
+    db.prepare("SELECT * FROM story_clues WHERE arc_id = ? AND scene_id IS NULL ORDER BY position, id").all(arcId) as ClueRow[]
+  ).map((c) => shape(c, null));
+  res.json({ clues, tray });
 });

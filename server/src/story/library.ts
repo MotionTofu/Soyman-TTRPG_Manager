@@ -31,6 +31,12 @@ export const INHERITED_SCENE_FIELDS = [
   "entry_condition",
   "outcomes",
   "hidden_from_players",
+  // Узел: тип, роль, триггер и «о ком» — содержимое, как и тексты.
+  "node_type",
+  "node_role",
+  "node_trigger",
+  "subject_type",
+  "subject_id",
   // Представление сцены — содержимое, а не место: вставка читает фон, переход
   // и титр с заготовки, пока её не тронули.
   "presentation_background_path",
@@ -128,6 +134,20 @@ export function copySceneChildren(fromId: number, toId: number): void {
      SELECT ?, to_scene_id, label, position
      FROM story_scene_transitions WHERE from_scene_id = ?`
   ).run(toId, fromId);
+  // Улики едут с узлом. Копия помнит исходную (source_clue_id): отметка
+  // «найдено» висит на исходной. Цель сохраняется, только пока копия в том же
+  // приключении — на полке и в чужом приключении id сцен сеттинга ничего не
+  // значат, и улика честно становится «в никуда».
+  const arcs = db
+    .prepare("SELECT (SELECT arc_id FROM story_scenes WHERE id = ?) AS src, (SELECT arc_id FROM story_scenes WHERE id = ?) AS dst")
+    .get(fromId, toId) as { src: number | null; dst: number | null };
+  const keepTarget = arcs.src != null && arcs.src === arcs.dst;
+  db.prepare(
+    `INSERT INTO story_clues (arc_id, scene_id, source_clue_id, text, how, target_type, target_id, position)
+     SELECT ?, ?, COALESCE(source_clue_id, id), text, how,
+            CASE WHEN ? THEN target_type END, CASE WHEN ? THEN target_id END, position
+     FROM story_clues WHERE scene_id = ? ORDER BY position, id`
+  ).run(arcs.dst, toId, keepTarget ? 1 : 0, keepTarget ? 1 : 0, fromId);
   db.prepare(
     `INSERT OR IGNORE INTO generic_links (from_type, from_id, to_type, to_id, section, origin)
      SELECT 'scene', ?, to_type, to_id, section, origin

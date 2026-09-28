@@ -743,6 +743,16 @@ CREATE TABLE IF NOT EXISTS story_scenes (
   in_library INTEGER NOT NULL DEFAULT 0,
   name TEXT NOT NULL,
   kind TEXT NOT NULL DEFAULT 'scene', -- scene | encounter | branch | ending
+  -- Узел по Александрийцу (гриллинг 2026-09-28). Две оси вместо `kind`:
+  -- тип — что это в мире, роль — как узел считает правило трёх улик.
+  -- `kind` остаётся, пока холст не перейдёт на них (шаг 3).
+  node_type TEXT, -- NULL | place | person | organization | event | activity
+  node_role TEXT NOT NULL DEFAULT 'normal', -- normal | start | dead_end | finale | proactive
+  node_trigger TEXT NOT NULL DEFAULT '', -- «когда приходит сам», только у proactive
+  -- «О ком / о чём» — одна сущность мира (Q26). Полиморфная ссылка, без FK:
+  -- удалённая сущность показывается пустым полем, а не роняет сцену.
+  subject_type TEXT,
+  subject_id INTEGER,
   summary TEXT NOT NULL DEFAULT '',        -- краткое описание для мастера
   read_aloud TEXT NOT NULL DEFAULT '',     -- текст для зачитывания игрокам
   whats_happening TEXT NOT NULL DEFAULT '',
@@ -923,6 +933,49 @@ CREATE TABLE IF NOT EXISTS story_scene_transitions (
   label TEXT NOT NULL DEFAULT '',
   position INTEGER NOT NULL DEFAULT 0,
   UNIQUE(from_scene_id, to_scene_id, label)
+);
+
+-- Улика: «в этом узле находят X, и оно ведёт туда-то» (гриллинг 2026-09-28).
+-- Стрелка узлового холста. Переход (story_scene_transitions) остаётся —
+-- это «проход», надёжная связь; улика — хрупкая, и для неё правило трёх.
+--
+-- scene_id — где находят; NULL — лоток неразмещённых (Q9), тогда улика
+-- держится за приключение через arc_id. Сцена удалена — её улики уходят
+-- с ней (каскад), а ведущие в неё остаются и показываются «в никуда».
+-- arc_id — приключение сцены на момент записи; NULL только у улик сцены на
+-- полке заготовок (у неё нет приключения).
+--
+-- target — вывод, к которому ведёт улика: вывод об узле ('scene', id
+-- оригинала сеттинга — как to_scene_id у переходов) или понятийный ('secret').
+-- Без FK намеренно: цель удаляют, улика остаётся с пустой целью.
+--
+-- source_clue_id — копия, сделанная при первой правке сцены в кампании,
+-- помнит исходную улику: отметка «найдено» висит на исходной и переживает
+-- копирование (см. campaign_clue_state).
+CREATE TABLE IF NOT EXISTS story_clues (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  arc_id INTEGER REFERENCES story_arcs(id) ON DELETE CASCADE,
+  scene_id INTEGER REFERENCES story_scenes(id) ON DELETE CASCADE,
+  source_clue_id INTEGER REFERENCES story_clues(id) ON DELETE SET NULL,
+  text TEXT NOT NULL DEFAULT '',
+  how TEXT NOT NULL DEFAULT '',
+  target_type TEXT, -- NULL | scene | secret
+  target_id INTEGER,
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_story_clues_arc ON story_clues(arc_id);
+CREATE INDEX IF NOT EXISTS idx_story_clues_scene ON story_clues(scene_id);
+CREATE INDEX IF NOT EXISTS idx_story_clues_target ON story_clues(target_type, target_id);
+
+-- «Найдено» — своё в каждой кампании и только для Мастера (Q15, Q17).
+-- clue_id — исходная улика (source_clue_id ?? id), не копия кампании.
+CREATE TABLE IF NOT EXISTS campaign_clue_state (
+  campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  clue_id INTEGER NOT NULL REFERENCES story_clues(id) ON DELETE CASCADE,
+  found INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (campaign_id, clue_id)
 );
 CREATE INDEX IF NOT EXISTS idx_story_scene_transitions_from ON story_scene_transitions(from_scene_id);
 

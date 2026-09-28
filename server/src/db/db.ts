@@ -6870,6 +6870,27 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     database.exec("ALTER TABLE characters ADD COLUMN requested_campaign_id INTEGER REFERENCES campaigns(id) ON DELETE SET NULL");
   }
 
+  // Узловой дизайн приключений (гриллинг 2026-09-28): сцена — узел с типом,
+  // ролью, триггером и «о ком». Таблицы улик и их состояния заводит schema.sql.
+  const nodeColumns: [string, string][] = [
+    ["node_type", "TEXT"],
+    ["node_role", "TEXT NOT NULL DEFAULT 'normal'"],
+    ["node_trigger", "TEXT NOT NULL DEFAULT ''"],
+    ["subject_type", "TEXT"],
+    ["subject_id", "INTEGER"],
+  ];
+  for (const [col, decl] of nodeColumns) {
+    if (!columnExists(database, "story_scenes", col)) {
+      database.exec(`ALTER TABLE story_scenes ADD COLUMN ${col} ${decl}`);
+    }
+  }
+  // Финальная сцена (`kind = 'ending'`) — роль «финал» (Q8). Остальные виды
+  // роли не несут: encounter виден по составу, branch — обычный узел.
+  if (!appSettingFlag(database, "node_design_roles_v1")) {
+    database.exec("UPDATE story_scenes SET node_role = 'finale' WHERE kind = 'ending' AND node_role = 'normal'");
+    setAppSettingFlag(database, "node_design_roles_v1");
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);
