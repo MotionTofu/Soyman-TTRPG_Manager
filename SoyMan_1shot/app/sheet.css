@@ -36,6 +36,35 @@ html[data-app="oneshot"] .oneshot-standalone-header [role="status"] {
 html[data-app="oneshot"] .oneshot-standalone-header > button {
   padding-inline: 12px;
 }
+/* Напоминание «Изменения хранятся до закрытия…» сжималось в узкую колонку
+   (на телефоне — на полэкрана): оно под кнопкой «Внимание» и раскрывается
+   строкой обычного текста под шапкой (2026-09-28). */
+html[data-app="oneshot"] .oneshot-standalone-header { flex-wrap: wrap; }
+html[data-app="oneshot"] .oneshot-standalone-header .oneshot-standalone-note-toggle {
+  margin-left: auto;
+  min-height: 40px;
+  padding: 0 12px;
+  background: transparent;
+  border: 2px solid var(--ui-accent);
+  color: var(--ui-accent);
+  font-size: 13px;
+}
+html[data-app="oneshot"] .oneshot-standalone-header .oneshot-standalone-note-toggle[aria-expanded="true"] {
+  background: var(--ui-accent);
+  color: var(--ui-surface-ink);
+}
+html[data-app="oneshot"] .oneshot-standalone-header [role="status"][data-open="false"] { display: none; }
+html[data-app="oneshot"] .oneshot-standalone-header [role="status"][data-open="true"] {
+  order: 10;
+  flex: 1 0 100%;
+  max-width: none;
+  margin: 0;
+  color: var(--ui-text-inverse);
+  font: 400 14px/1.35 var(--font-body, system-ui), sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+  text-align: right;
+}
 html[data-app="oneshot"] .oneshot-sources {
   max-width: 1500px;
   margin: 0 auto 40px;
@@ -204,6 +233,17 @@ html[data-app="oneshot"] .oneshot-sheet .dnd-prepared-filter-short { display: no
     grid-row: 4;
     margin-top: 8px;
     min-height: 44px;
+  }
+  html[data-app="oneshot"] .oneshot-standalone-header .oneshot-standalone-note-toggle {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    align-self: center;
+    margin: 0;
+  }
+  html[data-app="oneshot"] .oneshot-standalone-header [role="status"][data-open="true"] {
+    grid-column: 1 / -1;
+    margin-top: 6px;
+    text-align: left;
   }
   html[data-app="oneshot"] .oneshot-header > .muted {
     grid-column: 1;

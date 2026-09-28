@@ -39,6 +39,9 @@ function App() {
   // Подсказка «открыто в предпросмотре» лежит в самом HTML и уходит, только
   // когда лист смонтировался: если скрипт упал, игрок видит её, а не пустоту.
   useEffect(() => { document.getElementById('oneshot-nojs')?.remove(); }, []);
+  // Напоминание сжималось в узкую колонку (на телефоне — на полэкрана), поэтому
+  // оно под кнопкой «Внимание» (2026-09-28).
+  const [noteOpen, setNoteOpen] = useState(false);
   const [status, setStatus] = useState('Изменения хранятся до закрытия страницы. Скачайте обновлённую копию после игры.');
   function save() {
     const html = template.cloneNode(true) as HTMLElement;
@@ -52,7 +55,7 @@ function App() {
     setStatus('Скачивание запрошено. Убедитесь, что файл сохранён, прежде чем закрыть страницу.');
   }
   return <DndRuntimeContext.Provider value={{ allowDiceRolls: false, campaignConnected: false, detached: true }}>
-    <header className="oneshot-header oneshot-standalone-header"><strong>OneShot SoyMan</strong><span className="oneshot-standalone-label">Автономная копия</span><span role="status">{status}</span><button onClick={save}>Скачать обновлённую копию</button></header>
+    <header className="oneshot-header oneshot-standalone-header"><strong>OneShot SoyMan</strong><span className="oneshot-standalone-label">Автономная копия</span><button type="button" className="oneshot-standalone-note-toggle" aria-expanded={noteOpen} aria-controls="oneshot-standalone-note" onClick={() => setNoteOpen(v => !v)}>Внимание</button><span id="oneshot-standalone-note" role="status" data-open={noteOpen}>{status}</span><button onClick={save}>Скачать обновлённую копию</button></header>
     <div className="oneshot-sheet"><div className="fp-page-backdrop" aria-hidden="true" /><DndCharacterView value={value} portraitUrl={snapshot.character.portrait} onQuickUpdate={patch => { setDirty(true); setValue(v => ({ ...v, ...patch })); setStatus('Есть изменения — скачайте обновлённую копию перед закрытием.'); }} /><MentionPreviewRoot /></div>
     <details className="oneshot-sources"><summary>Источники правил</summary><p>This work includes material from the System Reference Document 5.2 ("SRD 5.2") by Wizards of the Coast LLC, available at https://www.dndbeyond.com/srd. The SRD 5.2 is licensed under the Creative Commons Attribution 4.0 International License, available at https://creativecommons.org/licenses/by/4.0/legalcode.</p><p>Тексты и переводы импортированного справочника сохраняют условия своих источников.</p></details>
   </DndRuntimeContext.Provider>;
