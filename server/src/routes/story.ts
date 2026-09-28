@@ -26,7 +26,7 @@ import {
   validatePresentationPatch,
 } from "../story/presentation";
 import { SCENE_SOUND_SECTION, sceneSoundSet } from "../story/stage";
-import { adventureClueGraph, nodeCounts, originalArcId, rootArcId, type ClueRow } from "../story/clues";
+import { adventureClueGraph, adventureCluesIn, mapAdventures, nodeCounts, originalArcId, rootArcId, type ClueRow } from "../story/clues";
 import { cluePrompt, parseLabel, parseProposals } from "../story/cluePrompt";
 import {
   CAST_ROLE_BY_SECTION,
@@ -3537,5 +3537,8 @@ storyRouter.get("/arcs/:id/clues", (req, res) => {
          WHERE t.arc_id IN (${arcPh}) ORDER BY t.position, t.id`
       )
       .all(campaignId ?? -1, ...graph.arc_ids),
+    // Уровень кампании (шаг 8): куда ещё могут вести улики и кто ведёт сюда.
+    adventures: mapAdventures(graph.root_arc_id, campaignId).filter((a) => a.id !== graph.root_arc_id),
+    adventures_in: adventureCluesIn(graph.root_arc_id, campaignId),
   });
 });

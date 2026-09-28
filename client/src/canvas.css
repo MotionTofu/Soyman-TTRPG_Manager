@@ -1705,6 +1705,22 @@
   font-size: var(--fs-meta);
 }
 
+/* Улики из других приключений (шаг 8) — плашкой в левом верхнем углу, рядом с палитрой. */
+.adventure-clues-in {
+  position: absolute;
+  left: 72px;
+  top: var(--sp-6);
+  z-index: 5;
+  max-width: 50%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  background: var(--paper-2);
+  border: 1px dashed var(--ink);
+  padding: var(--sp-2) var(--sp-4);
+}
+
 /* Лоток неразмещённых улик — в правом нижнем углу холста, над миникартой. */
 .clue-tray {
   position: absolute;

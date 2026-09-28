@@ -1125,6 +1125,10 @@ export interface ArcClues {
   chapters: { id: number; name: string }[];
   /** revealed — отметка кампании (0 вне кампании). */
   secrets: { id: number; title: string; revealed: number }[];
+  /** Другие приключения той же карты — цели улик уровня кампании (шаг 8). */
+  adventures: { id: number; name: string }[];
+  /** Откуда улики ведут в это приключение. */
+  adventures_in: { arc_id: number; name: string; n: number }[];
 }
 export type SceneStatus = "pending" | "done" | "skipped";
 
@@ -1784,6 +1788,8 @@ export interface OutsideLink {
   setting_id: number;
   /** Холст, на который ведёт щелчок. */
   board_arc_id: number;
+  /** Улика в другое приключение (шаг 8): scene_id = 0, конец — приключение целиком. */
+  clue?: boolean;
 }
 
 /** Нода на холсте: ссылка на реальную запись плюс её место. */
@@ -2281,6 +2287,8 @@ export interface CanvasBoard {
   routes?: CanvasRoute[];
   /** Лоток неразмещённых улик приключения — только у холста приключения. */
   clue_tray?: { id: number; text: string; how: string }[];
+  /** Откуда в это приключение ведут улики других приключений (шаг 8). */
+  adventure_clues_in?: { arc_id: number; name: string; n: number }[];
 }
 
 

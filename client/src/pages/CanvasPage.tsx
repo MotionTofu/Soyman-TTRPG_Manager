@@ -34,6 +34,7 @@ import { EditableTextCard } from "../components/EditableTextCard";
 import {
   ClueEdgeDialog,
   AdventureClueDialog,
+  AdventureCluesIn,
   ClueTray,
   NewLinkDialog,
   NodeCluesCard,
@@ -172,10 +173,15 @@ function OutsideChips({ links, onOpen }: { links: OutsideLink[]; onOpen: (l: Out
         <button
           key={`${l.dir}:${l.scene_id}:${i}`}
           className="nodrag canvas-node__outlink"
-          title={`${l.dir === "out" ? "Отсюда в" : "Сюда из"}: «${l.scene_name}» — ${l.arc_name}${l.label ? ` (${l.label})` : ""}`}
+          title={
+            l.clue
+              ? `Улики в приключение «${l.arc_name}»${l.label ? ` ${l.label}` : ""}`
+              : `${l.dir === "out" ? "Отсюда в" : "Сюда из"}: «${l.scene_name}» — ${l.arc_name}${l.label ? ` (${l.label})` : ""}`
+          }
           onClick={(e) => { e.stopPropagation(); onOpen(l); }}
         >
-          {l.dir === "out" ? "→" : "←"} {l.scene_name}
+          {l.clue ? "⇒" : l.dir === "out" ? "→" : "←"} {l.scene_name}
+          {l.clue && l.label ? ` ${l.label}` : ""}
         </button>
       ))}
     </div>
@@ -2957,8 +2963,11 @@ export function CanvasPage() {
       const next: Record<string, string> = {
         setting: String(link.setting_id || settingId),
         arc: String(link.board_arc_id),
-        focus: `scene:${link.scene_id}`,
       };
+      // Улика в приключение целиком (шаг 8) — сцены, на которой встать, нет,
+      // и панель не должна остаться со сценой прежнего холста.
+      if (link.scene_id) next.focus = `scene:${link.scene_id}`;
+      else setSelectedSceneId(null);
       if (campaignIdParam) next.campaign = String(campaignIdParam);
       setSearchParams(next);
     },
@@ -5576,6 +5585,15 @@ export function CanvasPage() {
           <MiniMap pannable zoomable />
           <CanvasLegend />
           <ClueTray clues={board?.clue_tray ?? []} />
+          <AdventureCluesIn
+            links={board?.adventure_clues_in ?? []}
+            onOpen={(id) => {
+              const next: Record<string, string> = { setting: String(settingId), arc: String(id) };
+              if (campaignIdParam) next.campaign = String(campaignIdParam);
+              setSelectedSceneId(null);
+              setSearchParams(next);
+            }}
+          />
           {/*
             Пустая свободная доска обязана объяснить, что здесь будет (блок G5).
             Инвариант п. 11 велит блоку без содержимого не показываться, но у

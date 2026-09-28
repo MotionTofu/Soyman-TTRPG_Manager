@@ -166,5 +166,19 @@ describe("карта кампании: улики между приключен�
     );
     expect(cryptNode.adventure).toMatchObject({ clue_in: 2, node_role: "normal" });
     expect(scheme.body.edges.some((e: { id: string }) => e.id === `clue:a${arcId}:a${crypt}`)).toBe(true);
+
+    // Холст приключения: исходящие — висящим разъёмом у сцены-источника,
+    // входящие — плашкой на холсте цели (Q41).
+    const own = await request(app).get(`/api/canvas/board?arc_id=${arcId}&campaign_id=${campaignId}`);
+    const widow = own.body.nodes.find((n: { node_type: string; node_id: number }) => n.node_type === "scene" && n.node_id === s.widow);
+    expect(widow.scene.outside).toEqual([
+      expect.objectContaining({ dir: "out", clue: true, scene_id: 0, scene_name: "Склеп", board_arc_id: crypt }),
+    ]);
+    const target = await request(app).get(`/api/canvas/board?arc_id=${crypt}&campaign_id=${campaignId}`);
+    expect(target.body.adventure_clues_in).toEqual([{ arc_id: arcId, name: "Алхимик", n: 2 }]);
+
+    // Карточке узла — цели «Приключения» с карты кампании, без своего.
+    const card = (await request(app).get(`/api/story/arcs/${arcId}/clues?campaign_id=${campaignId}`)).body;
+    expect(card.adventures.map((a: { id: number }) => a.id).sort()).toEqual([crypt, tower].sort());
   });
 });

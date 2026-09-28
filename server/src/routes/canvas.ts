@@ -11,7 +11,7 @@ import {
   setLinkQty,
 } from "../story/cast";
 import { SCENE_SOUND_SECTION } from "../story/stage";
-import { adventureClueEdges, adventureClueGraph, adventureClueLayer, nodeCounts, type NodeCounts } from "../story/clues";
+import { adventureClueEdges, adventureClueGraph, adventureClueLayer, adventureCluesIn, nodeCounts, type NodeCounts } from "../story/clues";
 import { HINT_SCENE_COLUMNS, sceneHints } from "../story/hints";
 import { firstSceneOf, rehearsalStep } from "../story/rehearsal";
 import { CANVAS_PRESETS, isPresetKey } from "../story/presets";
@@ -75,6 +75,7 @@ interface OutsideLink {
    *  входящий стоит слева, исходящий справа, как и обычные переходы. */
   dir: "out" | "in";
   label: string;
+  /** 0 — улика ведёт в приключение целиком (шаг 8), сцены у конца нет. */
   scene_id: number;
   scene_name: string;
   arc_id: number;
@@ -82,6 +83,8 @@ interface OutsideLink {
   setting_id: number;
   /** Холст, на который ведёт щелчок. */
   board_arc_id: number;
+  /** Улика в другое приключение, а не переход. */
+  clue?: boolean;
 }
 
 /** Ключ ноды сцены, или null если сцены на холсте нет. */
@@ -2052,6 +2055,30 @@ canvasRouter.get("/board", (req, res) => {
       board_arc_id: far.arc_id,
     });
   }
+  // Улики в другие приключения (шаг 8) — теми же висящими разъёмами: конец
+  // у них на карте кампании, а не на этом холсте. Одна плашка на цель с «×N».
+  const adventureOut = new Map<string, { shown: number; to: number; name: string; n: number }>();
+  for (const c of clueGraph?.clues ?? []) {
+    if (c.target_type !== "adventure" || c.proposed || c.target_missing || c.node_id == null) continue;
+    const shown = shownByNode.get(c.node_id);
+    if (shown == null) continue;
+    const key = `${shown}:${c.target_id}`;
+    const link = adventureOut.get(key) ?? { shown, to: c.target_id as number, name: c.target_title ?? "", n: 0 };
+    link.n++;
+    adventureOut.set(key, link);
+  }
+  for (const l of adventureOut.values())
+    addOutside(l.shown, {
+      dir: "out",
+      label: l.n > 1 ? `×${l.n}` : "",
+      scene_id: 0,
+      scene_name: l.name,
+      arc_id: l.to,
+      arc_name: l.name,
+      setting_id: arc.setting_id,
+      board_arc_id: l.to,
+      clue: true,
+    });
   for (const n of nodes) {
     const links = outsideByScene.get(n.node_id);
     if (links) n.scene.outside = links;
@@ -2091,6 +2118,8 @@ canvasRouter.get("/board", (req, res) => {
     // Лоток неразмещённых улик приключения (Q9) — на любом его холсте:
     // положить улику можно в сцену любой главы.
     clue_tray: (clueGraph?.tray ?? []).map((c) => ({ id: c.id, text: c.text, how: c.how })),
+    // Откуда в приключение ведут улики других приключений (шаг 8, Q41).
+    adventure_clues_in: adventureCluesIn(arc.id, campaignId),
   });
 });
 

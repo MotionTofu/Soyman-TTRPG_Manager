@@ -256,6 +256,38 @@ export function AdventureClueDialog({
   );
 }
 
+/**
+ * Плашка «сюда ведут улики» (шаг 8, Q41): приключение-цель — весь холст, а не
+ * узел, поэтому входящие висят одной плашкой на холсте. Щелчок — на холст
+ * приключения, откуда улика.
+ */
+export function AdventureCluesIn({
+  links,
+  onOpen,
+}: {
+  links: { arc_id: number; name: string; n: number }[];
+  onOpen: (arcId: number) => void;
+}) {
+  if (links.length === 0) return null;
+  return (
+    <aside className="adventure-clues-in nopan nowheel nodrag" aria-label="Улики из других приключений">
+      <span className="canvas-props__label">Сюда ведут улики</span>
+      {links.map((l) => (
+        <button
+          key={l.arc_id}
+          type="button"
+          className="canvas-node__outlink"
+          title={`Улики из «${l.name}»: ${l.n}`}
+          onClick={() => onOpen(l.arc_id)}
+        >
+          ← {l.name}
+          {l.n > 1 ? ` ×${l.n}` : ""}
+        </button>
+      ))}
+    </aside>
+  );
+}
+
 // ─── Лоток неразмещённых ──────────────────────────────────────────────────
 
 /**
@@ -428,7 +460,9 @@ function OwnClueRow({
             const [type, id] = e.target.value.split(":");
             void put(
               clue.id,
-              type ? { target_type: type as "scene" | "secret", target_id: Number(id) } : { target_type: null, target_id: null }
+              type
+                ? { target_type: type as "scene" | "secret" | "adventure", target_id: Number(id) }
+                : { target_type: null, target_id: null }
             );
           }}
         >
@@ -447,6 +481,15 @@ function OwnClueRow({
               {data.secrets.map((t) => (
                 <option key={t.id} value={`secret:${t.id}`}>
                   ◇ {t.title}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {data.adventures.length > 0 && (
+            <optgroup label="Приключения">
+              {data.adventures.map((a) => (
+                <option key={a.id} value={`adventure:${a.id}`}>
+                  ⇒ {a.name}
                 </option>
               ))}
             </optgroup>

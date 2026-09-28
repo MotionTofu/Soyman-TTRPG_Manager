@@ -245,6 +245,50 @@ export function adventureClueLayer(advIds: number[], campaignId: number | null) 
   return { counts, links: [...links.values()] };
 }
 
+/**
+ * Приключения той же карты, что и это: в кампании — её приключения (и свои,
+ * заведённые прямо в ней), вне кампании — верхний уровень сеттинга. Имя — с
+ * копии кампании, если она есть. Среди них ищутся цели и источники улик
+ * уровня кампании.
+ */
+export function mapAdventures(arcId: number, campaignId: number | null): { id: number; name: string }[] {
+  const root = originalArcId(rootArcId(arcId));
+  if (root == null) return [];
+  const rows =
+    campaignId != null
+      ? (db
+          .prepare(
+            `SELECT a.id, COALESCE(o.name, a.name) AS name FROM story_arcs a
+               LEFT JOIN story_arcs o ON o.source_arc_id = a.id AND o.campaign_id = ? AND o.archived_at IS NULL
+              WHERE a.archived_at IS NULL AND a.campaign_id IS NULL
+                AND a.id IN (SELECT arc_id FROM campaign_adventures WHERE campaign_id = ?)
+             UNION ALL
+             SELECT id, name FROM story_arcs
+              WHERE campaign_id = ? AND source_arc_id IS NULL AND parent_id IS NULL AND archived_at IS NULL`
+          )
+          .all(campaignId, campaignId, campaignId) as { id: number; name: string }[])
+      : (db
+          .prepare(
+            `SELECT id, name FROM story_arcs
+              WHERE setting_id = (SELECT setting_id FROM story_arcs WHERE id = ?)
+                AND parent_id IS NULL AND campaign_id IS NULL AND archived_at IS NULL AND is_default = 0
+              ORDER BY position, id`
+          )
+          .all(root) as { id: number; name: string }[]);
+  return rows;
+}
+
+/** Откуда в это приключение ведут улики других приключений той же карты. */
+export function adventureCluesIn(arcId: number, campaignId: number | null) {
+  const root = originalArcId(rootArcId(arcId));
+  const advs = mapAdventures(arcId, campaignId);
+  if (root == null || !advs.some((a) => a.id === root)) return [];
+  const names = new Map(advs.map((a) => [a.id, a.name]));
+  return adventureClueLayer([...names.keys()], campaignId)
+    .links.filter((l) => l.to === root)
+    .map((l) => ({ arc_id: l.from, name: names.get(l.from) ?? "", n: l.n }));
+}
+
 /** Стрелки улик между приключениями: `clue:a<откуда>:a<куда>`, «×N». */
 export function adventureClueEdges(links: { from: number; to: number; n: number }[]) {
   return links.map((l) => ({
