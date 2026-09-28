@@ -26,6 +26,7 @@ import {
   validatePresentationPatch,
 } from "../story/presentation";
 import { SCENE_SOUND_SECTION, sceneSoundSet } from "../story/stage";
+import { adventureClueGraph, nodeCounts, type ClueRow } from "../story/clues";
 import {
   CAST_ROLE_BY_SECTION,
   CAST_SECTIONS,
@@ -2404,7 +2405,7 @@ storyRouter.get("/library", (req, res) => {
   const settingId = req.query.setting_id ? Number(req.query.setting_id) : null;
   const rows = db
     .prepare(
-      `SELECT s.id, s.name, s.kind, s.summary, s.setting_id, s.arc_id,
+      `SELECT s.id, s.name, s.kind, s.node_type, s.node_role, s.summary, s.setting_id, s.arc_id,
               t.name AS setting_name, a.name AS arc_name,
               (SELECT COUNT(*) FROM story_scenes i
                 WHERE i.library_scene_id = s.id AND i.archived_at IS NULL) AS insertions
@@ -3148,18 +3149,6 @@ storyRouter.get("/scenes/:id/incoming", (req, res) => {
 // Цели — id оригиналов сеттинга (как to_scene_id у переходов); «найдено»
 // висит на исходной улике (source_clue_id ?? id), поэтому переживает копию.
 
-interface ClueRow {
-  id: number;
-  arc_id: number | null;
-  scene_id: number | null;
-  source_clue_id: number | null;
-  text: string;
-  how: string;
-  target_type: string | null;
-  target_id: number | null;
-  position: number;
-}
-
 const CLUE_TARGETS = new Set(["scene", "secret"]);
 
 /** Цель улики: пусто, сцена или тайна, и она существует. Иначе — текст ошибки. */
@@ -3172,9 +3161,23 @@ function invalidClueTarget(type: unknown, id: unknown, fromSceneId: number | nul
     const from = db.prepare("SELECT id, source_scene_id FROM story_scenes WHERE id = ?").get(fromSceneId) as
       | { id: number; source_scene_id: number | null }
       | undefined;
-    if (from && (from.source_scene_id ?? from.id) === Number(id)) return "clue cannot point to its own scene";
+    if (from && (from.source_scene_id ?? from.id) === originalSceneId("scene", id)) return "clue cannot point to its own scene";
   }
   return null;
+}
+
+/**
+ * Цель-сцена — всегда id оригинала сеттинга: холст показывает копию кампании,
+ * и без приведения улика указывала бы на строку, которой в других кампаниях
+ * нет, а счётчики её бы не нашли.
+ */
+function originalSceneId(type: unknown, id: unknown): number | null {
+  if (id == null) return null;
+  if (type !== "scene") return Number(id);
+  const row = db.prepare("SELECT source_scene_id FROM story_scenes WHERE id = ?").get(Number(id)) as
+    | { source_scene_id: number | null }
+    | undefined;
+  return row?.source_scene_id ?? Number(id);
 }
 
 function cluesOfScene(sceneId: number): ClueRow[] {
@@ -3225,7 +3228,7 @@ storyRouter.post("/scenes/:id/clues", (req, res) => {
       String(text ?? ""),
       String(how ?? ""),
       target_type ?? null,
-      target_id != null ? Number(target_id) : null,
+      originalSceneId(target_type, target_id),
       position + 1
     );
   res.status(201).json({ id: Number(info.lastInsertRowid), scene_id: target.id, clues: cluesOfScene(target.id) });
@@ -3273,7 +3276,7 @@ storyRouter.put("/clues/:clueId", (req, res) => {
     body.text !== undefined ? String(body.text) : clue.text,
     body.how !== undefined ? String(body.how) : clue.how,
     targetType,
-    targetId != null ? Number(targetId) : null,
+    originalSceneId(targetType, targetId),
     sceneId,
     arcId,
     clue.id
@@ -3307,67 +3310,21 @@ storyRouter.put("/clues/:clueId/state", (req, res) => {
 });
 
 /**
- * Все улики приключения — то, из чего холст рисует стрелки, а список выводов
- * считает правило трёх.
+ * Все улики приключения (корень и главы) — то, из чего список выводов
+ * считает правило трёх. Сборка графа — story/clues.ts, общая с холстом.
  *
- * С campaign_id узлы читаются так, как их видит кампания: у сцены с копией
- * кампании улики берутся с копии, у нетронутой вставки заготовки — с
- * заготовки. `node_id` — id оригинала сеттинга, в том же пространстве, что и
- * цели улик; `found` — отметка кампании (без кампании всегда false).
+ * `node_id` — id оригинала сеттинга, в том же пространстве, что и цели улик;
+ * `found` — отметка кампании (без кампании всегда false).
  */
 storyRouter.get("/arcs/:id/clues", (req, res) => {
-  const arcId = Number(req.params.id);
   const campaignId = req.query.campaign_id != null ? Number(req.query.campaign_id) : null;
-  const arc = db.prepare("SELECT id, setting_id FROM story_arcs WHERE id = ?").get(arcId) as
-    | { id: number; setting_id: number }
-    | undefined;
-  if (!arc) return res.status(404).json({ error: "not found" });
-
-  const originals = db
-    .prepare(
-      `SELECT * FROM story_scenes WHERE arc_id = ? AND archived_at IS NULL
-         AND (campaign_id IS NULL OR (campaign_id = ? AND source_scene_id IS NULL))`
-    )
-    .all(arcId, campaignId ?? -1) as SceneRow[];
-  const overrides = campaignId != null ? overrideMap(campaignId, arc.setting_id) : new Map<number, SceneRow>();
-
-  const found = new Set(
-    campaignId != null
-      ? (db.prepare("SELECT clue_id FROM campaign_clue_state WHERE campaign_id = ? AND found = 1").all(campaignId) as {
-          clue_id: number;
-        }[]).map((r) => r.clue_id)
-      : []
-  );
-  const liveScenes = new Set(originals.map((s) => s.id));
-  const secretTitles = new Map(
-    (db.prepare("SELECT id, title FROM story_secrets").all() as { id: number; title: string }[]).map((r) => [
-      r.id,
-      r.title,
-    ])
-  );
-  const shape = (c: ClueRow, nodeId: number | null) => ({
-    ...c,
-    node_id: nodeId,
-    root_id: c.source_clue_id ?? c.id,
-    found: found.has(c.source_clue_id ?? c.id),
-    // Цель удалена или в архиве — «ведёт в никуда».
-    target_missing:
-      c.target_type === "scene"
-        ? !liveScenes.has(c.target_id as number)
-        : c.target_type === "secret"
-          ? !secretTitles.has(c.target_id as number)
-          : false,
-    target_title: c.target_type === "secret" ? (secretTitles.get(c.target_id as number) ?? null) : null,
+  const graph = adventureClueGraph(Number(req.params.id), campaignId);
+  if (!graph) return res.status(404).json({ error: "not found" });
+  const counts = nodeCounts(graph);
+  res.json({
+    root_arc_id: graph.root_arc_id,
+    clues: graph.clues,
+    tray: graph.tray,
+    nodes: [...graph.nodes.values()].map((n) => ({ ...n, ...counts.get(n.id) })),
   });
-
-  const clues: ReturnType<typeof shape>[] = [];
-  for (const scene of originals) {
-    const shown = overrides.get(scene.id) ?? scene;
-    const contentId = shown.library_scene_id ?? shown.id;
-    for (const c of cluesOfScene(contentId)) clues.push(shape(c, scene.id));
-  }
-  const tray = (
-    db.prepare("SELECT * FROM story_clues WHERE arc_id = ? AND scene_id IS NULL ORDER BY position, id").all(arcId) as ClueRow[]
-  ).map((c) => shape(c, null));
-  res.json({ clues, tray });
 });

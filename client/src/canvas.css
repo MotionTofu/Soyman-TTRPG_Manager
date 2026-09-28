@@ -1598,3 +1598,140 @@
   color: var(--ink);
   border-color: var(--paper) !important;
 }
+
+/* ─── Узловой дизайн (гриллинг 2026-09-28) ─────────────────────────────── */
+
+/* Шапка узла — цветом типа, теми же цветами, что у сущностей мира (слово
+   владельца: маркировку оставить). Событие и действие — чернилами, как
+   сцены: своего цвета у них в палитре нет. */
+.canvas-node--t-place { border-color: var(--cv-node-location); }
+.canvas-node--t-place .canvas-node__band { background: var(--cv-node-location); color: var(--cv-node-location-ink); }
+.canvas-node--t-person { border-color: var(--cv-node-being); }
+.canvas-node--t-person .canvas-node__band { background: var(--cv-node-being); color: var(--cv-node-being-ink); }
+.canvas-node--t-organization { border-color: var(--cv-node-community); }
+.canvas-node--t-organization .canvas-node__band { background: var(--cv-node-community); color: var(--cv-node-community-ink); }
+
+/* Нехватка улик — залитая плашка опасного цвета: это единственная ошибка
+   на узле, и видна она должна быть издалека. Остальное — контуром. */
+.canvas-node__chip.is-bad {
+  background: var(--danger-bg);
+  border-color: var(--danger-bg);
+  color: var(--danger-text);
+  font-weight: 600;
+}
+.canvas-node__trigger {
+  font-size: var(--fs-meta);
+  line-height: 1.25;
+  border: 1px dashed var(--ink);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+/* Проход — надёжная связь: толще улики. Двойную линию одним путём SVG не
+   нарисовать, а своя разновидность ребра ради неё — лишний код. */
+.canvas-flow .react-flow__edge.canvas-edge--passage .react-flow__edge-path {
+  stroke-width: 4.5;
+}
+/* «×N» у стрелки улики — залитой плашкой, как в макете. */
+.canvas-flow .react-flow__edge.canvas-edge--clue .react-flow__edge-textbg {
+  fill: var(--ink);
+  stroke: var(--ink);
+}
+.canvas-flow .react-flow__edge.canvas-edge--clue .react-flow__edge-text {
+  fill: var(--paper);
+  font-family: var(--font-mono);
+  letter-spacing: 0;
+  cursor: pointer;
+}
+.canvas-flow .react-flow__edge.canvas-edge--clue {
+  cursor: pointer;
+}
+
+/* Окно новой связи и окно улик стрелки. */
+.clue-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+.clue-dialog__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.clue-dialog__route {
+  font-weight: 600;
+}
+.clue-dialog__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.clue-dialog__row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
+  gap: var(--sp-3);
+  align-items: center;
+}
+.clue-dialog__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+}
+.clue-dialog__foot .muted {
+  margin-right: auto;
+  font-size: var(--fs-meta);
+}
+
+/* Лоток неразмещённых улик — в правом нижнем углу холста, над миникартой. */
+.clue-tray {
+  position: absolute;
+  right: var(--sp-6);
+  bottom: 190px;
+  z-index: 5;
+  width: 280px;
+  max-height: 50%;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper-2);
+  border: var(--card-border-width-strong, 1px) solid var(--ink);
+}
+.clue-tray__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--surface);
+  color: var(--on-surface);
+  border: 0;
+  border-radius: 0;
+  padding: var(--sp-3) var(--sp-4);
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.clue-tray__body {
+  overflow-y: auto;
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.clue-tray__hint {
+  margin: 0;
+  font-size: var(--fs-meta);
+  color: var(--ink-2);
+}
+.clue-tray__card {
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  padding: var(--sp-3) var(--sp-4);
+  font-size: var(--fs-meta);
+  line-height: 1.25;
+  cursor: grab;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

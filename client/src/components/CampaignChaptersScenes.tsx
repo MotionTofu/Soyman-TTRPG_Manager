@@ -7,7 +7,7 @@ import { campaignPaths, sceneStatusAffects } from "../data/campaigns";
 import { labelled } from "../data/notices";
 import { MentionText } from "./mentions/MentionText";
 import { EmptyState } from "./EmptyState";
-import { SCENE_KIND_LABELS, SCENE_STATUSES, chapterWord, sceneWord } from "../sceneKinds";
+import { SCENE_STATUSES, chapterWord, nodeLabel, sceneWord } from "../sceneKinds";
 import type { CampaignAdventureTree, SceneStatus, StoryScene } from "../types";
 
 // Раздел «Главы и сцены» кампании: приключение → главы → сцены. Базово
@@ -253,7 +253,7 @@ const SceneRow = memo(function SceneRow({
   return (
     <details className="entity-row" style={{ display: "block", padding: 0, borderBottom: "1px solid var(--line)" }}>
       <summary className="entity-row" style={{ cursor: "pointer", listStyle: "none", margin: 0, borderBottom: "none" }}>
-        <span className="entity-type-chip" style={{ fontSize: "var(--fs-micro)" }}>{SCENE_KIND_LABELS[s.kind] ?? s.kind}</span>
+        <span className="entity-type-chip" style={{ fontSize: "var(--fs-micro)" }}>{nodeLabel(s)}</span>
         <span className="entity-row-name" style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-meta)", fontWeight: 600 }}>{s.name}</span>
         {statusBadge}
         {s.is_override && <span className="badge tag">правка</span>}

@@ -7,7 +7,7 @@ import { EntityPage } from "../components/EntityPage";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { MentionText } from "../components/mentions/MentionText";
 import { useTabState } from "../hooks/useTabState";
-import { SCENE_KINDS, SCENE_STATUSES, sceneWord } from "../sceneKinds";
+import { SCENE_STATUSES, nodeLabel, sceneWord } from "../sceneKinds";
 import { CrossLinksWizard } from "../components/CrossLinksWizard";
 import type { Setting, StoryArcDetail, StoryScene } from "../types";
 import { NavIcon } from "../components/NavIcons";
@@ -33,7 +33,6 @@ const STORY_AFFECTS: Affect[] = [{ path: "/story" }, { path: "/sessions" }, { pa
 
 const SECRET_KINDS = [
   { key: "secret", label: "Тайна" },
-  { key: "clue", label: "Улика" },
   { key: "thread", label: "Нить" },
 ];
 
@@ -424,7 +423,7 @@ function ChaptersAndScenes({ arc, campaignId }: { arc: StoryArcDetail; campaignI
                   <Link to={`/scenes/${s.id}${suffix}`} className="entity-row-name">
                     {s.name}
                   </Link>
-                  <span className="muted">{SCENE_KINDS.find((k) => k.key === s.kind)?.label}</span>
+                  <span className="muted">{nodeLabel(s)}</span>
                   <SegmentFullness scene={s} />
                   {s.is_override && <span className="badge tag">изменено в кампании</span>}
                   {s.campaign_only && <span className="badge tag">только в кампании</span>}

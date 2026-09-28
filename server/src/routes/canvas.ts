@@ -11,6 +11,7 @@ import {
   setLinkQty,
 } from "../story/cast";
 import { SCENE_SOUND_SECTION } from "../story/stage";
+import { adventureClueGraph, nodeCounts, type NodeCounts } from "../story/clues";
 import { HINT_SCENE_COLUMNS, sceneHints } from "../story/hints";
 import { firstSceneOf, rehearsalStep } from "../story/rehearsal";
 import { CANVAS_PRESETS, isPresetKey } from "../story/presets";
@@ -52,7 +53,7 @@ interface EdgeOut {
   /** `story` — связь между главами приключения (блок G6.2). Тем же именем,
    *  что у связи между приключениями на схеме сеттинга: это одна таблица и
    *  одно утверждение, только на другом уровне. */
-  kind: "transition" | "outcome" | "cast" | "member" | "check" | "thread" | "story";
+  kind: "transition" | "outcome" | "cast" | "member" | "check" | "thread" | "story" | "clue";
   source: string;
   target: string;
   target_handle: string;
@@ -101,6 +102,9 @@ interface SceneRow {
   kind: string;
   summary: string;
   position: number;
+  node_type: string | null;
+  node_role: string;
+  node_trigger: string;
 }
 
 /**
@@ -1570,6 +1574,10 @@ canvasRouter.get("/board", (req, res) => {
   const freshStartY = lowest === Number.NEGATIVE_INFINITY ? 0 : lowest + ROW_H;
   let freshIndex = 0;
 
+  // Улики — по приключению целиком (главы — свои холсты, а правило трёх одно).
+  const clueGraph = adventureClueGraph(arcId, campaignId);
+  const clueCounts = clueGraph ? nodeCounts(clueGraph) : new Map<number, NodeCounts>();
+
   const nodes = scenes.map((s, i) => {
     const placed = placedFor[i];
     const pos = placed
@@ -1592,6 +1600,11 @@ canvasRouter.get("/board", (req, res) => {
         id: s.id,
         name: shown.name,
         kind: shown.kind,
+        node_type: shown.node_type ?? null,
+        node_role: shown.node_role ?? "normal",
+        node_trigger: shown.node_trigger ?? "",
+        // Счётчики правила трёх — по узлу-оригиналу, в пространстве целей улик.
+        ...(clueCounts.get(s.source_scene_id ?? s.id) ?? { clue_in: 0, clue_out: 0, passage_in: false }),
         summary: shown.summary ?? s.summary ?? "",
         arc_id: s.arc_id,
         is_override: s.campaign_id != null && s.source_scene_id != null,
@@ -1869,7 +1882,35 @@ canvasRouter.get("/board", (req, res) => {
     label: t.label ?? "",
   }));
 
-  const edges = [...storyEdges, ...castEdges, ...memberEdges, ...chapterEdges];
+  /**
+   * Улики — одна стрелка на пару узлов в каждую сторону, «×N» подписью (Q19).
+   * Рисуются только те, у которых оба конца на этом холсте; остальные всё
+   * равно сидят в счётчиках узлов. id — `clue:<откуда>:<куда>` по показанным
+   * строкам: щелчок по стрелке находит свои улики по этой паре.
+   */
+  const shownByNode = new Map<number, number>();
+  scenes.forEach((s) => shownByNode.set(s.source_scene_id ?? s.id, s.id));
+  const cluePairs = new Map<string, { from: number; to: number; n: number }>();
+  for (const c of clueGraph?.clues ?? []) {
+    if (c.target_type !== "scene" || c.target_missing || c.node_id == null) continue;
+    const from = shownByNode.get(c.node_id);
+    const to = shownByNode.get(c.target_id as number);
+    if (from == null || to == null) continue;
+    const key = `${from}:${to}`;
+    const pair = cluePairs.get(key) ?? { from, to, n: 0 };
+    pair.n++;
+    cluePairs.set(key, pair);
+  }
+  const clueEdges: EdgeOut[] = [...cluePairs.values()].map((p) => ({
+    id: `clue:${p.from}:${p.to}`,
+    kind: "clue",
+    source: `scene:${p.from}`,
+    target: `scene:${p.to}`,
+    target_handle: "story",
+    label: p.n > 1 ? `×${p.n}` : "",
+  }));
+
+  const edges = [...storyEdges, ...clueEdges, ...castEdges, ...memberEdges, ...chapterEdges];
 
   /**
    * Переходы, второй конец которых лежит на ДРУГОМ холсте (решение Q17).
@@ -1990,6 +2031,9 @@ canvasRouter.get("/board", (req, res) => {
     edges: routedEdgesArc,
     threads: decorArc.threads,
     routes: routeRowsArc,
+    // Лоток неразмещённых улик приключения (Q9) — на любом его холсте:
+    // положить улику можно в сцену любой главы.
+    clue_tray: (clueGraph?.tray ?? []).map((c) => ({ id: c.id, text: c.text, how: c.how })),
   });
 });
 

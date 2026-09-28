@@ -51,12 +51,14 @@ export interface StageScene {
   id: number;
   name: string;
   kind: string | null;
+  node_type: string | null;
+  node_role: string;
   arc_id: number | null;
   arc_name: string | null;
 }
 
 const SCENE_SELECT = `
-  SELECT s.id, s.name, s.kind, s.arc_id, s.library_scene_id, a.name AS arc_name
+  SELECT s.id, s.name, s.kind, s.node_type, s.node_role, s.arc_id, s.library_scene_id, a.name AS arc_name
   FROM story_scenes s
   LEFT JOIN story_arcs a ON a.id = s.arc_id
 `;
@@ -70,6 +72,8 @@ function readScene(row: Record<string, unknown> | undefined): StageScene | null 
     id: scene.id,
     name: scene.name,
     kind: scene.kind ?? null,
+    node_type: scene.node_type ?? null,
+    node_role: scene.node_role ?? "normal",
     arc_id: scene.arc_id ?? null,
     arc_name: scene.arc_name ?? null,
   };

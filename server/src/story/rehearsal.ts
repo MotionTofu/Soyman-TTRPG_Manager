@@ -120,7 +120,7 @@ function orderedScenes(adventureId: number, campaignId: number | null): OrderRow
 function stageScene(sceneId: number): StageScene | null {
   const row = db
     .prepare(
-      `SELECT s.id, s.name, s.kind, s.arc_id, s.library_scene_id, a.name AS arc_name
+      `SELECT s.id, s.name, s.kind, s.node_type, s.node_role, s.arc_id, s.library_scene_id, a.name AS arc_name
        FROM story_scenes s LEFT JOIN story_arcs a ON a.id = s.arc_id
        WHERE s.id = ? AND s.archived_at IS NULL`
     )
@@ -131,6 +131,8 @@ function stageScene(sceneId: number): StageScene | null {
     id: shown.id,
     name: shown.name,
     kind: shown.kind ?? null,
+    node_type: shown.node_type ?? null,
+    node_role: shown.node_role ?? "normal",
     arc_id: shown.arc_id ?? null,
     arc_name: (row.arc_name as string) ?? null,
   };
@@ -188,10 +190,11 @@ export function rehearsalStep(sceneId: number, campaignId: number | null): Rehea
   // при живых стрелках она была бы вторым, спорящим ответом на один вопрос.
   //
   // У концовки её нет вовсе, даже если по `position` за ней что-то лежит:
-  // `kind='ending'` — это конец истории, а не сцена, у которой забыли стрелку.
+  // Роль «финал» — это конец истории, а не сцена, у которой забыли стрелку
+  // (прежде `kind='ending'`, перенесено миграцией node_design_roles_v1).
   // Без этой оговорки прогон уводил бы с развязки на соседнюю сцену главы.
   const steppable = exits.some((e) => !e.outside);
-  const ending = preview.scene.kind === "ending";
+  const ending = preview.scene.node_role === "finale";
   return {
     preview,
     exits,

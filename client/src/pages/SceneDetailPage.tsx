@@ -7,7 +7,7 @@ import { EntityPage } from "../components/EntityPage";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { SectionDropZone } from "../components/SectionDropZone";
 import { LazyDetails } from "../components/LazyDetails";
-import { SCENE_KINDS, SCENE_STATUSES } from "../sceneKinds";
+import { NODE_ROLES, NODE_TYPES, SCENE_STATUSES, nodeLabel } from "../sceneKinds";
 import type { Setting, StoryScene, StorySceneDetail } from "../types";
 import { NavIcon } from "../components/NavIcons";
 import { LoadErrorCard } from "../components/Loadable";
@@ -80,10 +80,6 @@ export function SceneDetailPage() {
     save(patch).catch(() => {
       // Плашку уже показал слой.
     });
-  }
-
-  async function saveNameKind(name: string, kind: string) {
-    await save({ name: name.trim(), kind });
   }
 
   async function addCheck() {
@@ -172,8 +168,8 @@ export function SceneDetailPage() {
           >
             <NavIcon name="canvas" /> На полотне
           </Link>
-          {scene.kind !== "scene" && (
-            <span className="badge tag">{SCENE_KINDS.find((k) => k.key === scene.kind)?.label}</span>
+          {(scene.node_type || scene.node_role !== "normal") && (
+            <span className="badge tag">{nodeLabel(scene)}</span>
           )}
           {scene.is_override && <span className="badge tag">правка кампании</span>}
           {scene.campaign_only && <span className="badge tag">только в кампании</span>}
@@ -229,13 +225,19 @@ export function SceneDetailPage() {
         fields={[
           { key: "name", label: "Имя сцены", value: scene.name, required: true },
           {
-            key: "kind",
-            label: "Вид",
-            value: scene.kind,
-            options: SCENE_KINDS.map((k) => ({ value: k.key, label: k.label })),
+            key: "node_type",
+            label: "Тип узла",
+            value: scene.node_type ?? "",
+            options: [{ value: "", label: "—" }, ...NODE_TYPES.map((t) => ({ value: t.key, label: t.label }))],
+          },
+          {
+            key: "node_role",
+            label: "Роль",
+            value: scene.node_role,
+            options: NODE_ROLES.map((r) => ({ value: r.key, label: r.label })),
           },
         ]}
-        onSaveFields={(v) => saveNameKind(v.name, v.kind)}
+        onSaveFields={(v) => save({ name: v.name.trim(), node_type: v.node_type || null, node_role: v.node_role })}
       />
       <EditableTextCard
         title="Зачитать игрокам"

@@ -6930,6 +6930,23 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     }
     setAppSettingFlag(database, "node_design_clues_v1");
   }
+  // Исход проверки больше не ведёт в сцену (Q3): это ветвление «выбери своё
+  // приключение», от которого узловой дизайн и уходит. Текст последствия
+  // остаётся, к нему дописывается, куда исход вёл, — чтобы не пропало.
+  if (!appSettingFlag(database, "node_design_outcomes_v1")) {
+    database.exec(
+      `UPDATE story_check_outcomes SET
+         consequence = CASE
+           WHEN (SELECT name FROM story_scenes WHERE id = target_id) IS NULL THEN consequence
+           WHEN trim(consequence) = '' THEN 'Вело в «' || (SELECT name FROM story_scenes WHERE id = target_id) || '»'
+           ELSE consequence || ' (вело в «' || (SELECT name FROM story_scenes WHERE id = target_id) || '»)'
+         END,
+         target_type = NULL,
+         target_id = NULL
+       WHERE target_type = 'scene'`
+    );
+    setAppSettingFlag(database, "node_design_outcomes_v1");
+  }
 
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.

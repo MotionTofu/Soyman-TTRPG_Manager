@@ -1,4 +1,33 @@
-import type { SceneKind, SceneStatus } from "./types";
+import type { NodeRole, NodeType, SceneKind, SceneStatus } from "./types";
+
+// Узел по Александрийцу (гриллинг 2026-09-28, Q7): тип — что это в мире,
+// роль — как узел считает правило трёх улик. Заменяют прежний «вид» сцены
+// (SCENE_KINDS ниже остаётся для импорта и старых данных).
+export const NODE_TYPES: { key: NodeType; label: string }[] = [
+  { key: "place", label: "Место" },
+  { key: "person", label: "Персона" },
+  { key: "organization", label: "Организация" },
+  { key: "event", label: "Событие" },
+  { key: "activity", label: "Действие" },
+];
+export const NODE_ROLES: { key: NodeRole; label: string }[] = [
+  { key: "normal", label: "Обычный" },
+  { key: "start", label: "Старт" },
+  { key: "dead_end", label: "Тупик" },
+  { key: "finale", label: "Финал" },
+  { key: "proactive", label: "Проактивный" },
+];
+export const NODE_TYPE_LABELS: Record<string, string> = Object.fromEntries(NODE_TYPES.map((t) => [t.key, t.label]));
+export const NODE_ROLE_LABELS: Record<string, string> = Object.fromEntries(NODE_ROLES.map((r) => [r.key, r.label]));
+
+/** «Персона · Проактивный», «Финал», «Узел» — подпись узла в списках. */
+export function nodeLabel(s: { node_type?: string | null; node_role?: string | null }): string {
+  const parts = [
+    s.node_type ? NODE_TYPE_LABELS[s.node_type] : null,
+    s.node_role && s.node_role !== "normal" ? NODE_ROLE_LABELS[s.node_role] : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : "Узел";
+}
 
 export const SCENE_KINDS: { key: SceneKind; label: string }[] = [
   { key: "scene", label: "Сцена" },

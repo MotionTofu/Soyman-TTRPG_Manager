@@ -27,12 +27,13 @@ import { useAction, useResource, write, afterWrite } from "../data/hooks";
 import { readResource } from "../data/imperative";
 import { useFieldDraft } from "../data/fieldDraft";
 import { dismissNotice, showSaveError } from "../data/notices";
-import { boardIndexAffects, boardLayoutAffects, boardObjectAffects, canvasPaths, canvasStoryAffects, createLayoutWriter, labelled, type LayoutWrite } from "../data/canvas";
+import { CLUE_DRAG_MIME, boardIndexAffects, boardLayoutAffects, boardObjectAffects, canvasPaths, canvasStoryAffects, clueAffects, createLayoutWriter, labelled, type LayoutWrite } from "../data/canvas";
 import { SectionHeading } from "../components/SectionHeading";
 import { SectionBackground } from "../components/SectionBackground";
 import { EditableTextCard } from "../components/EditableTextCard";
+import { ClueEdgeDialog, ClueTray, NewLinkDialog } from "../components/CanvasClues";
 import { AdventureWizard } from "../components/AdventureWizard";
-import { SCENE_KINDS, SCENE_KIND_LABELS, plural } from "../sceneKinds";
+import { NODE_ROLES, NODE_ROLE_LABELS, NODE_TYPES as NODE_TYPE_OPTIONS, NODE_TYPE_LABELS, nodeLabel, plural } from "../sceneKinds";
 import { formatByPrecision } from "../inworldCalendar";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { EmptyState } from "../components/EmptyState";
@@ -116,6 +117,13 @@ const AUDIO_HANDLES = [
 interface SceneNodeData extends Record<string, unknown> {
   name: string;
   kind: string;
+  /** Узел (гриллинг 2026-09-28): тип красит шапку, роль решает правило трёх. */
+  nodeType: string | null;
+  nodeRole: string;
+  nodeTrigger: string;
+  clueIn: number;
+  clueOut: number;
+  passageIn: boolean;
   summary: string;
   /** Вытащить на холст тех, кто к сцене уже подцеплен. */
   onPullCast: () => void;
@@ -197,10 +205,40 @@ function HintChip({ hints, onOpen }: { hints: SceneHint[]; onOpen: (x: number, y
   );
 }
 
+/**
+ * Счётчики правила трёх улик (гриллинг 2026-09-28, Q11, Q31).
+ *
+ * Вход: меньше трёх — красная плашка «вход 2 / 3»; старт и проактивный
+ * входящих не требуют, узел за проходом — тоже (дверь надёжнее улики).
+ * Улики в тупик — бонусные, их нехватка не ошибка. Выход — только
+ * подсказка пунктиром: мало выходов — повод подумать, а не авария.
+ */
+function ClueCounters({ data }: { data: SceneNodeData }) {
+  const role = data.nodeRole;
+  let inChip: ReactNode;
+  if (role === "start") inChip = <span className="canvas-node__chip">старт</span>;
+  else if (role === "proactive") inChip = <span className="canvas-node__chip">приходит сам</span>;
+  else if (role === "dead_end")
+    inChip = <span className="canvas-node__chip is-hint">вход {data.clueIn} · бонус</span>;
+  else if (data.clueIn >= 3) inChip = <span className="canvas-node__chip">вход {data.clueIn}</span>;
+  else if (data.passageIn) inChip = <span className="canvas-node__chip" title={`Улик сюда: ${data.clueIn}`}>за проходом</span>;
+  else inChip = <span className="canvas-node__chip is-bad" title="В узел ведёт меньше трёх улик">вход {data.clueIn} / 3</span>;
+  const needsOut = role !== "dead_end" && role !== "finale";
+  return (
+    <div className="canvas-node__chips">
+      {inChip}
+      {needsOut && (
+        <span className={`canvas-node__chip${data.clueOut < 3 ? " is-hint" : ""}`}>выход {data.clueOut}</span>
+      )}
+    </div>
+  );
+}
+
 function SceneNode({ data, selected }: NodeProps<Node<SceneNodeData>>) {
+  const typeLabel = data.nodeType ? NODE_TYPE_LABELS[data.nodeType] : null;
   return (
     <div
-      className={`canvas-node${selected ? " is-selected" : ""}${data.isRehearsing ? " is-rehearsing" : ""}`}
+      className={`canvas-node${data.nodeType ? ` canvas-node--t-${data.nodeType}` : ""}${selected ? " is-selected" : ""}${data.isRehearsing ? " is-rehearsing" : ""}`}
     >
       {/* Слева всё, из чего сцена собрана. Ромб — «история»: сюда приходит
           переход. Квадраты — состав: место, участники, предметы. Тип разъёма
@@ -242,9 +280,17 @@ function SceneNode({ data, selected }: NodeProps<Node<SceneNodeData>>) {
       ))}
       <div className="canvas-node__band">
         <span className="canvas-node__name">{data.name}</span>
-        <span className="canvas-node__kind">{SCENE_KIND_LABELS[data.kind] ?? data.kind}</span>
+        <span className="canvas-node__kind">
+          {[typeLabel, data.nodeRole !== "normal" ? NODE_ROLE_LABELS[data.nodeRole] : null].filter(Boolean).join(" · ") || "Узел"}
+        </span>
       </div>
       <div className="canvas-node__body">
+        {data.nodeRole === "proactive" && data.nodeTrigger && (
+          <div className="canvas-node__trigger" title={data.nodeTrigger}>
+            Когда: {data.nodeTrigger}
+          </div>
+        )}
+        <ClueCounters data={data} />
         <div className="canvas-node__chips">
           {data.campaignOnly && <span className="canvas-node__chip is-solid">Только в кампании</span>}
           {data.isOverride && <span className="canvas-node__chip">Своя правка</span>}
@@ -1118,7 +1164,10 @@ const CANVAS_OVERLAYS_MIN_PX = 596;
 const EDGE_MARKER = { type: MarkerType.ArrowClosed, width: 18, height: 18 };
 
 const EDGE_CLASS: Record<string, string | undefined> = {
-  transition: undefined,
+  // Переход — «проход» узлового дизайна: надёжная связь, двойная линия (Q3).
+  // Улика — обычная сплошная стрелка, «×N» подписью (Q19).
+  transition: "canvas-edge--passage",
+  clue: "canvas-edge--clue",
   outcome: "canvas-edge--outcome",
   cast: "canvas-edge--cast",
   member: "canvas-edge--cast",
@@ -1515,6 +1564,12 @@ function toFlowNode(
       data: {
         name: n.scene.name,
         kind: n.scene.kind,
+        nodeType: n.scene.node_type ?? null,
+        nodeRole: n.scene.node_role ?? "normal",
+        nodeTrigger: n.scene.node_trigger ?? "",
+        clueIn: n.scene.clue_in ?? 0,
+        clueOut: n.scene.clue_out ?? 0,
+        passageIn: n.scene.passage_in ?? false,
         summary: n.scene.summary ?? "",
         isOverride: n.scene.is_override,
         campaignOnly: n.scene.campaign_only,
@@ -2141,6 +2196,10 @@ export function CanvasPage() {
   const [canvasTab, setCanvasTab] = useState<"campaigns" | "settings" | "boards">("campaigns");
   const [panelCollapsed, setPanelCollapsed] = useState(() => localStorage.getItem("canvasPropsCollapsed") === "1");
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
+  // Узловой дизайн: протянутая стрелка ждёт решения «улика или проход», а
+  // щелчок по стрелке улики открывает её улики. Оба — показанные id сцен.
+  const [pendingLink, setPendingLink] = useState<{ from: number; to: number } | null>(null);
+  const [clueEdge, setClueEdge] = useState<{ from: number; to: number } | null>(null);
   // Карточка существа (шаг 4 ревизии). Нода остаётся компактной, карточка —
   // поповер: 30+ карточек по 200 px это уже не схема. Координаты ЭКРАННЫЕ,
   // масштаб полотна на карточку не действует — на 40% именно в неё и лезут.
@@ -2664,7 +2723,7 @@ export function CanvasPage() {
         // сцена собрана. На чёрно-белой печати различие остаётся.
         className: EDGE_CLASS[e.kind],
         selectable: true,
-        deletable: true,
+        deletable: e.kind !== "clue",
       }];
       }),
 
@@ -3715,6 +3774,53 @@ export function CanvasPage() {
     [boardAction]
   );
 
+  const sceneName = useCallback(
+    (id: number) => {
+      const n = board?.nodes.find((x) => x.node_type === "scene" && x.node_id === id);
+      return n && n.node_type === "scene" ? n.scene.name : `#${id}`;
+    },
+    [board]
+  );
+
+  /**
+   * Окно новой связи решило (Q18): улика — строка улики с целью-сценой,
+   * проход — прежний переход с условием подписью. Без кампании, как весь
+   * холст: пишется показанная строка.
+   */
+  const saveLink = useCallback(
+    async (kind: "clue" | "passage", text: string, how: string) => {
+      if (!pendingLink) return;
+      const { from, to } = pendingLink;
+      await boardAction(
+        () =>
+          kind === "clue"
+            ? write.post(`/story/scenes/${from}/clues`, { text, how, target_type: "scene", target_id: to })
+            : write.post(`/story/scenes/${from}/transitions`, { to_scene_id: to, label: text }),
+        { retry: false, failure: kind === "clue" ? "Улика" : "Проход", affects: clueAffects() }
+      );
+      setPendingLink(null);
+    },
+    [pendingLink, boardAction]
+  );
+
+  /** Улику из лотка бросили на узел — там её и находят. */
+  const dropClue = useCallback(
+    async (clueId: number, clientX: number, clientY: number) => {
+      const hit = document
+        .elementsFromPoint(clientX, clientY)
+        .map((el) => (el as HTMLElement).closest?.(".react-flow__node") as HTMLElement | null)
+        .find((el) => el?.dataset.id?.startsWith("scene:"));
+      const sceneId = hit ? Number(hit.dataset.id!.split(":")[1]) : null;
+      if (!sceneId) return;
+      await boardAction(() => write.put(`/story/clues/${clueId}`, { scene_id: sceneId }), {
+        retry: false,
+        failure: "Улика в узел",
+        affects: clueAffects(),
+      });
+    },
+    [boardAction]
+  );
+
   // Что означает протянутая стрелка, решает РАЗЪЁМ, в который её воткнули, а
   // не тип того, что тянули. Существо бывает и участником, и обстановкой; в
   // «место» его тоже можно воткнуть, и это осмысленно.
@@ -3724,7 +3830,6 @@ export function CanvasPage() {
       const [sourceType, sourceId] = splitKey(connection.source);
       const [targetType, targetId] = splitKey(connection.target);
       const handle = connection.targetHandle ?? "story";
-      const sourceHandle = connection.sourceHandle ?? "";
 
       // Рераут («Маршрут») как носитель-хаб: один вход (носитель слева —
       // существо/локация/сцена) и N выходов (сцены справа, куда носитель
@@ -3817,17 +3922,15 @@ export function CanvasPage() {
         return;
       }
 
-      // Исход проверки → сцена (Q2, Q4): хендл outcome:<id> на check-ноде
-      if (sourceType === "check" && targetType === "scene") {
-        const m = sourceHandle.match(/^outcome:(\d+)$/);
-        const outcomeId = m ? Number(m[1]) : null;
-        if (outcomeId) {
-          await connectAction(
-            () => write.put(`/story/outcomes/${outcomeId}`, { target_type: "scene", target_id: targetId }),
-            "Исход проверки"
-          );
-          return;
-        }
+      // Исход проверки больше не ведёт в сцену (узловой дизайн, Q3): это
+      // ветвление по броску, от которого узлы уходят. Стрелка молча не ложится.
+      if (sourceType === "check" && targetType === "scene") return;
+
+      // Сцена → сцена по «истории» — улика или проход: спрашиваем окном (Q18),
+      // запись делает окно.
+      if (sourceType === "scene" && targetType === "scene" && handle === "story") {
+        if (sourceId !== targetId) setPendingLink({ from: sourceId, to: targetId });
+        return;
       }
 
       // Последствие тянут ОТ сцены К событию — единственная связь сцены с
@@ -3870,8 +3973,7 @@ export function CanvasPage() {
             ...(campaignMapId ? { campaign_id: campaignMapId } : {}),
           });
         } else if (handle === "story") {
-          if (sourceType !== "scene" || targetType !== "scene") return false;
-          await write.post(`/story/scenes/${sourceId}/transitions`, { to_scene_id: targetId });
+          return false;
         } else {
           await write.post(`/story/scenes/${targetId}/cast`, {
             to_type: sourceType,
@@ -3921,6 +4023,11 @@ export function CanvasPage() {
             return write.del(
               `/story/arc-transitions/${rawId}${campaignMapId ? `?campaign_id=${campaignMapId}` : ""}`
             );
+          // Стрелка улики несёт ×N улик, и стереть их все одной клавишей
+          // нельзя: улики удаляются по одной в окне стрелки. Сюда она не
+          // доходит (deletable: false), но и провалиться ниже — в «удалить
+          // переход с этим номером» — не должна.
+          if (kind === "clue") return Promise.resolve();
           return write.del(`/story/transitions/${rawId}`);
         })
           ),
@@ -4117,25 +4224,18 @@ export function CanvasPage() {
   }, [openHints]);
 
   /**
-   * Обход недоделок: порядок и прыжок.
-   *
-   * Порядок — сперва РЕДКИЕ виды (развилка без выхода, недопроставленные цели
-   * исходов), потом массовые. Иначе две настоящие дыры утонут в двух десятках
-   * сцен без локации, и Мастер их никогда не увидит. Внутри вида — в порядке,
-   * в котором сцены пришли с сервера (position, id), чтобы возвраты шли по
-   * одному и тому же кругу, а не случайно.
+   * Обход недоделок: порядок и прыжок — в порядке, в котором сцены пришли с
+   * сервера (position, id), чтобы возвраты шли по одному и тому же кругу, а не
+   * случайно. Редких видов (развилка без выхода, исход без цели), которые
+   * раньше шли первыми, больше нет — их снял узловой дизайн.
    */
-  const hintRoute = useMemo(() => {
-    const order = (board?.nodes ?? []).filter((n) => n.node_type === "scene").map((n) => n.node_id);
-    const rare: number[] = [];
-    const rest: number[] = [];
-    order.forEach((id) => {
-      const h = hintsByScene.get(id);
-      if (!h?.length) return;
-      (h.some((x) => x.kind === "branch_dead_end" || x.kind === "outcome_no_target") ? rare : rest).push(id);
-    });
-    return [...rare, ...rest];
-  }, [board, hintsByScene]);
+  const hintRoute = useMemo(
+    () =>
+      (board?.nodes ?? [])
+        .filter((n) => n.node_type === "scene" && (hintsByScene.get(n.node_id)?.length ?? 0) > 0)
+        .map((n) => n.node_id),
+    [board, hintsByScene]
+  );
 
   const hintTotal = useMemo(
     () => [...hintsByScene.values()].reduce((sum, h) => sum + h.length, 0),
@@ -4410,6 +4510,15 @@ export function CanvasPage() {
     (event: React.MouseEvent, edge: Edge) => {
       event.preventDefault();
       const [kind, rawId] = edge.id.split(":");
+      if (kind === "clue") {
+        const [, from, to] = edge.id.split(":").map(Number);
+        setContextMenu({
+          x: event.clientX,
+          y: event.clientY,
+          items: [{ label: "Улики этой стрелки…", onClick: () => setClueEdge({ from, to }) }],
+        });
+        return;
+      }
       const items: ContextMenuItem[] = [
         {
           label: "Удалить связь",
@@ -4960,6 +5069,11 @@ export function CanvasPage() {
   const handleDrop = useCallback(
     async (event: React.DragEvent) => {
       event.preventDefault();
+      const clueRaw = event.dataTransfer.getData(CLUE_DRAG_MIME);
+      if (clueRaw) {
+        await dropClue(Number(clueRaw), event.clientX, event.clientY);
+        return;
+      }
       // палитра → холст: перетащил и там где бросил — там и нода
       const paletteRaw = event.dataTransfer.getData(PALETTE_DRAG_MIME);
       if (paletteRaw && board) {
@@ -5082,7 +5196,7 @@ export function CanvasPage() {
         { retry: false, failure: "Картинка на холсте" }
       );
     },
-    [board, boardAction, arcId, boardTarget, nodes, edges]
+    [board, boardAction, arcId, boardTarget, nodes, edges, dropClue]
   );
 
   // Delete клавишей — для фриформ стикеров/картинок (после onNodesDelete, иначе TDZ)
@@ -5334,6 +5448,11 @@ export function CanvasPage() {
           onPaneContextMenu={handlePaneContextMenu}
           onSelectionContextMenu={handleSelectionContextMenu}
           onEdgeContextMenu={handleEdgeContextMenu}
+          onEdgeClick={(_, edge) => {
+            // Стрелка улики «×N» — щелчок открывает её улики (Q19).
+            const m = edge.id.match(/^clue:(\d+):(\d+)$/);
+            if (m) setClueEdge({ from: Number(m[1]), to: Number(m[2]) });
+          }}
           onNodeDoubleClick={handleNodeDoubleClick}
           onDrop={handleDrop}
           onDragOver={(e) => e.preventDefault()}
@@ -5354,6 +5473,7 @@ export function CanvasPage() {
               прячет @container ниже порога узкого экрана. */}
           <MiniMap pannable zoomable />
           <CanvasLegend />
+          <ClueTray clues={board?.clue_tray ?? []} />
           {/*
             Пустая свободная доска обязана объяснить, что здесь будет (блок G5).
             Инвариант п. 11 велит блоку без содержимого не показываться, но у
@@ -6006,6 +6126,25 @@ export function CanvasPage() {
         />
       )}
       {contextMenu && <ContextMenu x={contextMenu.x} y={contextMenu.y} items={contextMenu.items} onClose={() => setContextMenu(null)} />}
+      {pendingLink && (
+        <NewLinkDialog
+          fromName={sceneName(pendingLink.from)}
+          toName={sceneName(pendingLink.to)}
+          onCancel={() => setPendingLink(null)}
+          onSave={saveLink}
+        />
+      )}
+      {clueEdge && arcId > 0 && (
+        <ClueEdgeDialog
+          arcId={arcId}
+          campaignId={campaignIdParam || null}
+          fromShownId={clueEdge.from}
+          toShownId={clueEdge.to}
+          fromName={sceneName(clueEdge.from)}
+          toName={sceneName(clueEdge.to)}
+          onClose={() => setClueEdge(null)}
+        />
+      )}
       {alertDialog}
       {promptDialog}
       {confirmDialog}
@@ -6424,7 +6563,7 @@ function RehearsalPanel({
     );
   }
   const p = step.preview;
-  const ending = p.scene.kind === "ending";
+  const ending = p.scene.node_role === "finale";
   const steppable = step.exits.filter((e) => !e.outside);
   const outside = step.exits.filter((e) => e.outside);
   // Порядок ролей — тот же, что в панели правки состава: место, персонажи,
@@ -6453,7 +6592,7 @@ function RehearsalPanel({
             {p.scene.name}
           </Link>
           <span className="canvas-props__label">
-            {SCENE_KIND_LABELS[p.scene.kind ?? ""] ?? p.scene.kind}
+            {nodeLabel(p.scene)}
             {p.scene.arc_name ? ` · ${p.scene.arc_name}` : ""}
           </span>
         </div>
@@ -7626,7 +7765,7 @@ function CanvasPalette({
                   >
                     <span className="canvas-palette__item-name">{blank.name}</span>
                     <span className="canvas-palette__item-meta">
-                      {SCENE_KIND_LABELS[blank.kind] ?? blank.kind}
+                      {nodeLabel(blank)}
                       {blank.foreign && ` · из «${blank.setting_name ?? "другого сеттинга"}»`}
                       {blank.insertions > 0 && ` · вставок: ${blank.insertions}`}
                     </span>
@@ -8038,7 +8177,7 @@ function SceneProperties({
   return (
     <PropsPanel
       label="Свойства"
-      aside={<span className="canvas-props__label">{SCENE_KIND_LABELS[scene.kind] ?? scene.kind}</span>}
+      aside={<span className="canvas-props__label">{nodeLabel(scene)}</span>}
     >
 
       {/* Полка — до текстов, а не после: «эта сцена по заготовке» меняет
@@ -8128,14 +8267,39 @@ function SceneProperties({
           fields={[
             { key: "name", label: "Имя сцены", value: scene.name, required: true },
             {
-              key: "kind",
-              label: "Вид",
-              value: scene.kind,
-              options: SCENE_KINDS.map((k) => ({ value: k.key, label: k.label })),
+              key: "node_type",
+              label: "Тип узла",
+              value: scene.node_type ?? "",
+              options: [{ value: "", label: "—" }, ...NODE_TYPE_OPTIONS.map((t) => ({ value: t.key, label: t.label }))],
+            },
+            {
+              key: "node_role",
+              label: "Роль",
+              value: scene.node_role,
+              options: NODE_ROLES.map((r) => ({ value: r.key, label: r.label })),
             },
           ]}
-          onSaveFields={(v) => save({ name: String(v.name).trim(), kind: v.kind })}
+          onSaveFields={(v) =>
+            save({ name: String(v.name).trim(), node_type: v.node_type || null, node_role: v.node_role })
+          }
         />
+
+        {/* Триггер — только у проактивного: остальным узлам «когда приходит
+            сам» не нужно, и лишнее поле в панели — шум. */}
+        {scene.node_role === "proactive" && (
+          <EditableTextCard
+            key={`trigger-${scene.id}`}
+            title="Когда приходит сам"
+            value={scene.node_trigger}
+            onSave={(v) => save({ node_trigger: v })}
+            rows={2}
+            entityType="scene"
+            entityId={scene.id}
+            defaultSettingId={scene.setting_id ?? undefined}
+            collapsible
+            defaultOpen
+          />
+        )}
 
         <EditableTextCard
           key={`read-${scene.id}`}

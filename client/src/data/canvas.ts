@@ -40,6 +40,14 @@ export function boardObjectAffects(boardUrl: string): Affect[] {
  *
  * Перечитывается из этого только открытое: на холсте это доска и панель.
  */
+/** Улика задевает холст и список выводов приключения (узловой дизайн). */
+export function clueAffects(): Affect[] {
+  return [...canvasStoryAffects(), { path: "/story/arcs" }];
+}
+
+/** MIME перетаскивания улики из лотка на узел холста. */
+export const CLUE_DRAG_MIME = "application/x-soyman-clue";
+
 export function canvasStoryAffects(): Affect[] {
   return [
     { kind: "scene" },

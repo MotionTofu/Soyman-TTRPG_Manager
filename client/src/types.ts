@@ -1069,6 +1069,23 @@ export interface SettingBeingDetail extends SettingBeing {
 // "Приключения" — see schema.sql's story_arcs / story_scenes for the
 // copy-on-write campaign layer these types mirror.
 export type SceneKind = "scene" | "encounter" | "branch" | "ending";
+/** Узловой дизайн (гриллинг 2026-09-28): что узел в мире… */
+export type NodeType = "place" | "person" | "organization" | "event" | "activity";
+/** …и как он считает правило трёх улик. */
+export type NodeRole = "normal" | "start" | "dead_end" | "finale" | "proactive";
+
+/** Улика: где находят (scene_id, null — лоток) и к какому выводу ведёт. */
+export interface StoryClue {
+  id: number;
+  arc_id: number | null;
+  scene_id: number | null;
+  source_clue_id: number | null;
+  text: string;
+  how: string;
+  target_type: "scene" | "secret" | null;
+  target_id: number | null;
+  position: number;
+}
 export type SceneStatus = "pending" | "done" | "skipped";
 
 export interface StoryArc {
@@ -1183,6 +1200,11 @@ export interface StoryScene {
   in_library: number;
   name: string;
   kind: SceneKind;
+  node_type: NodeType | null;
+  node_role: NodeRole;
+  node_trigger: string;
+  subject_type: string | null;
+  subject_id: number | null;
   summary: string;
   read_aloud: string;
   whats_happening: string;
@@ -1733,6 +1755,14 @@ export interface CanvasNode {
     id: number;
     name: string;
     kind: SceneKind;
+    node_type: NodeType | null;
+    node_role: NodeRole;
+    node_trigger: string;
+    /** Правило трёх: живые улики в узел и из узла по всему приключению. */
+    clue_in: number;
+    clue_out: number;
+    /** В узел ведёт проход — от правила трёх он свободен (Q31). */
+    passage_in: boolean;
     summary: string;
     arc_id: number | null;
     is_override: boolean;
@@ -1800,6 +1830,8 @@ export interface LibraryScene {
   id: number;
   name: string;
   kind: SceneKind;
+  node_type?: NodeType | null;
+  node_role?: NodeRole;
   summary: string;
   setting_id: number | null;
   setting_name: string | null;
@@ -1823,7 +1855,7 @@ export interface CanvasEdge {
    * transition — переход между сценами, outcome — исход проверки,
    * cast — сущность втекает в сцену, member — член набора, thread — нить между пинами.
    */
-  kind: "transition" | "outcome" | "cast" | "member" | "thread";
+  kind: "transition" | "outcome" | "cast" | "member" | "thread" | "check" | "story" | "clue";
   /** Ключи нод, а не номера: на холсте рядом со сценами стоят сущности. */
   source: string;
   target: string;
@@ -2130,7 +2162,7 @@ export type CanvasBoardNode = CanvasAnyNode & {
  * стоит 142 мс против 54–91 мс на всю загрузку холста.
  */
 export interface SceneHint {
-  kind: "no_place" | "branch_dead_end" | "outcome_no_target" | "mentioned_not_cast";
+  kind: "no_place" | "mentioned_not_cast";
   text: string;
   /** Только у `mentioned_not_cast` — то, что можно заглушить «это не оно». */
   entity_type?: string;
@@ -2186,6 +2218,8 @@ export interface CanvasBoard {
   /** Память прохода рераут-нод. Приходит вместе с доской, но в стороне от
    *  раскладки: это данные, а не место. */
   routes?: CanvasRoute[];
+  /** Лоток неразмещённых улик приключения — только у холста приключения. */
+  clue_tray?: { id: number; text: string; how: string }[];
 }
 
 
@@ -2195,6 +2229,8 @@ export interface StageScene {
   id: number;
   name: string;
   kind: string | null;
+  node_type?: string | null;
+  node_role?: string;
   arc_id: number | null;
   arc_name: string | null;
 }

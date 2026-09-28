@@ -10,7 +10,6 @@ import { useConfirm } from "../hooks/useConfirm";
 
 export const SECRET_KINDS = [
   { key: "secret", label: "Тайна" },
-  { key: "clue", label: "Улика" },
   { key: "thread", label: "Нить" },
 ] as const;
 

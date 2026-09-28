@@ -23,13 +23,12 @@ import { CAST_SECTIONS } from "./cast";
 
 /**
  * Виды подсказок. `rare` отделяет точечные дыры от массовой доводки импорта:
- * обход счётчика идёт сперва по редким, иначе два `branch` без выхода утонут
- * в двух десятках сцен без локации и не попадутся Мастеру никогда.
+ * обход счётчика идёт сперва по редким, иначе точечная дыра утонет в двух
+ * десятках сцен без локации и не попадётся Мастеру никогда. Сейчас редких
+ * нет: обе (развилка без выхода, исход без цели) сняты узловым дизайном.
  */
 export const SCENE_HINT_KINDS = {
   no_place: { rare: false, label: "Нет места" },
-  branch_dead_end: { rare: true, label: "Развилка никуда не ведёт" },
-  outcome_no_target: { rare: true, label: "У исхода проверки нет цели" },
   mentioned_not_cast: { rare: false, label: "Упомянут, но не в составе" },
 } as const;
 
@@ -52,7 +51,7 @@ export interface SceneHints {
 
 interface HintSceneRow {
   id: number;
-  kind: string;
+  node_role: string;
   name: string;
   summary: string;
   read_aloud: string;
@@ -139,37 +138,6 @@ export function sceneHints(scenes: HintSceneRow[], settingId: number | null): Sc
     set.add(`${l.to_type}:${l.to_id}`);
   });
 
-  // Развилка без выхода: вид выставлен рукой и заявляет ветвление.
-  const hasOut = new Set(
-    (
-      db
-        .prepare(
-          `SELECT DISTINCT from_scene_id AS id FROM story_scene_transitions WHERE from_scene_id IN (${ph})`
-        )
-        .all(...ids) as { id: number }[]
-    ).map((r) => r.id)
-  );
-
-  // Исходы проверок: считаем только те проверки, где цель проставлена хотя бы
-  // у одного исхода. «Две двери проставил, третью забыл» — дефект; ни одной
-  // не проставил — ещё не начатая работа, и чип об этом молчит.
-  const outcomeGap = new Map<number, number>();
-  (
-    db
-      .prepare(
-        `SELECT c.scene_id, c.id AS check_id,
-                SUM(CASE WHEN o.target_id IS NULL THEN 1 ELSE 0 END) AS empty,
-                SUM(CASE WHEN o.target_id IS NULL THEN 0 ELSE 1 END) AS filled
-         FROM story_scene_checks c
-         JOIN story_check_outcomes o ON o.check_id = c.id
-         WHERE c.scene_id IN (${ph})
-         GROUP BY c.id`
-      )
-      .all(...ids) as { scene_id: number; check_id: number; empty: number; filled: number }[]
-  ).forEach((r) => {
-    if (r.filled > 0 && r.empty > 0) outcomeGap.set(r.scene_id, (outcomeGap.get(r.scene_id) ?? 0) + r.empty);
-  });
-
   // Заглушки «это не оно». Ключ — оригинал сеттинга: оборот речи одинаков во
   // всех кампаниях, и глушить его по разу на кампанию — издевательство.
   const dismissKeys = scenes.map((s) => s.source_scene_id ?? s.id);
@@ -206,20 +174,13 @@ export function sceneHints(scenes: HintSceneRow[], settingId: number | null): Sc
   scenes.forEach((s) => {
     const hints: SceneHint[] = [];
 
-    if (!placed.has(s.id) && s.kind !== "ending") {
-      // У концовки места чаще не нужно, чем нужно, — единственное исключение.
+    if (!placed.has(s.id) && s.node_role !== "finale") {
+      // У финала места чаще не нужно, чем нужно, — единственное исключение.
       hints.push({ kind: "no_place", text: SCENE_HINT_KINDS.no_place.label });
     }
-    if (s.kind === "branch" && !hasOut.has(s.id)) {
-      hints.push({ kind: "branch_dead_end", text: SCENE_HINT_KINDS.branch_dead_end.label });
-    }
-    const gap = outcomeGap.get(s.id);
-    if (gap) {
-      hints.push({
-        kind: "outcome_no_target",
-        text: gap === 1 ? "У исхода проверки нет цели" : `Без цели исходов: ${gap}`,
-      });
-    }
+    // «Развилка никуда не ведёт» и «у исхода нет цели» сняты вместе с
+    // ветвлением через вид сцены и исходы (узловой дизайн, Q3): связность
+    // теперь показывает счётчик улик на узле.
 
     if (index.size > 0) {
       const text = [s.name, s.summary, s.read_aloud, s.whats_happening, s.outcomes, s.entry_condition]
@@ -254,4 +215,4 @@ export function sceneHints(scenes: HintSceneRow[], settingId: number | null): Sc
 
 /** Колонки, которых `sceneHints` ждёт от строки сцены. */
 export const HINT_SCENE_COLUMNS =
-  "id, kind, name, summary, read_aloud, whats_happening, outcomes, entry_condition, source_scene_id";
+  "id, node_role, name, summary, read_aloud, whats_happening, outcomes, entry_condition, source_scene_id";
