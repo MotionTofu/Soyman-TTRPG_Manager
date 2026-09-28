@@ -138,6 +138,36 @@ describe("улики", () => {
   });
 });
 
+describe("перенос старых «Улик» (node_design_clues_v1)", () => {
+  it("раскрытая остаётся тайной, нераскрытая уходит в лоток", async () => {
+    const hidden = Number(
+      (db
+        .prepare("INSERT INTO story_secrets (arc_id, kind, title, content) VALUES (?, 'clue', 'Дневник', 'в сундуке')")
+        .run(arcId) as { lastInsertRowid: unknown }).lastInsertRowid
+    );
+    const shown = Number(
+      (db.prepare("INSERT INTO story_secrets (arc_id, kind, title) VALUES (?, 'clue', 'Монеты')").run(arcId) as {
+        lastInsertRowid: unknown;
+      }).lastInsertRowid
+    );
+    db.prepare("INSERT INTO campaign_secret_state (campaign_id, secret_id, revealed) VALUES (?, ?, 1)").run(
+      campaignId,
+      shown
+    );
+    db.prepare("DELETE FROM app_settings WHERE key = 'node_design_clues_v1'").run();
+    const { switchToDatabase } = await import("../db/db");
+    // Переоткрыть ту же базу — миграции пройдут заново. Каталог берётся у
+    // текущего подключения: временную базу открывает общая настройка vitest.
+    switchToDatabase(path.dirname(db.name));
+
+    expect(db.prepare("SELECT id FROM story_secrets WHERE id = ?").get(hidden)).toBeUndefined();
+    expect(db.prepare("SELECT kind FROM story_secrets WHERE id = ?").get(shown)).toEqual({ kind: "secret" });
+    const tray = (await request(app).get(`/api/story/arcs/${arcId}/clues`)).body.tray.map((c: { text: string }) => c.text);
+    expect(tray).toContain("Дневник — в сундуке");
+    expect(tray).not.toContain("Монеты");
+  });
+});
+
 describe("поля узла", () => {
   it("сохраняет тип, роль, триггер и «о ком»; копия кампании их несёт", async () => {
     const res = await request(app).put(`/api/story/scenes/${bId}`).send({

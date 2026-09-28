@@ -6890,6 +6890,46 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     database.exec("UPDATE story_scenes SET node_role = 'finale' WHERE kind = 'ending' AND node_role = 'normal'");
     setAppSettingFlag(database, "node_design_roles_v1");
   }
+  // Старые «Улики» из «Тайн и зацепок» (Q9, Q32). Раскрытая хоть в одной
+  // кампании становится «Тайной»: её уже видят игроки, а улика — только для
+  // Мастера. Остальные уходят в лоток неразмещённых своего приключения
+  // (места и цели у них не было). Строка тайны удаляется — снимок до шага.
+  if (!appSettingFlag(database, "node_design_clues_v1")) {
+    const oldClues = database
+      .prepare(
+        `SELECT s.id, s.arc_id, s.title, s.content, s.position,
+                EXISTS (SELECT 1 FROM campaign_secret_state c WHERE c.secret_id = s.id AND c.revealed = 1) AS revealed
+         FROM story_secrets s WHERE s.kind = 'clue'`
+      )
+      .all() as { id: number; arc_id: number | null; title: string; content: string; position: number; revealed: number }[];
+    if (oldClues.length) {
+      const snapshot = path.join(dbDir, `app-before-node-clues-${randomUUID()}.db`);
+      database.prepare("VACUUM INTO ?").run(snapshot);
+      const toSecret = database.prepare("UPDATE story_secrets SET kind = 'secret' WHERE id = ?");
+      const toTray = database.prepare(
+        "INSERT INTO story_clues (arc_id, scene_id, text, position) VALUES (?, NULL, ?, ?)"
+      );
+      const drop = database.prepare("DELETE FROM story_secrets WHERE id = ?");
+      let secrets = 0;
+      let tray = 0;
+      database.transaction(() => {
+        for (const c of oldClues) {
+          // Без приключения лотку не за что держаться — остаётся тайной.
+          if (c.revealed || c.arc_id == null) {
+            toSecret.run(c.id);
+            secrets++;
+            continue;
+          }
+          const text = c.content.trim() ? `${c.title} — ${c.content.trim()}` : c.title;
+          toTray.run(c.arc_id, text, c.position);
+          drop.run(c.id);
+          tray++;
+        }
+      })();
+      console.log(`[migrate] node_design_clues_v1: в лоток ${tray}, в тайны ${secrets}. Снимок: ${snapshot}`);
+    }
+    setAppSettingFlag(database, "node_design_clues_v1");
+  }
 
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
