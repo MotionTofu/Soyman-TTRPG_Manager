@@ -250,8 +250,11 @@ export function WeaponMasteryEdit({
     return () => ac.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [systemId, classKey]);
+  // Справочник оружия грузится один раз, когда появились выборы мастерства, —
+  // не на каждую их перечитку.
+  const hasDefs = defs.length > 0;
   useEffect(() => {
-    if (!systemId || defs.length === 0) return;
+    if (!systemId || !hasDefs) return;
     const ac = new AbortController();
     loadDndEquipmentEntries(systemId, { signal: ac.signal })
       .then((rows) => setCatalog(rows.filter(isMasterableWeapon)))
@@ -259,7 +262,7 @@ export function WeaponMasteryEdit({
         setCatalog([]);
       });
     return () => ac.abort();
-  }, [systemId, defs.length > 0]);
+  }, [systemId, hasDefs]);
   if (defs.length === 0) return null;
   const limit = defs.reduce((n, { level, def }) => n + (def.minLevel <= level ? def.count : 0), 0);
   if (limit <= 0) return null;

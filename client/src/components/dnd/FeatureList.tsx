@@ -118,6 +118,9 @@ export const FeatureListEdit = memo(function FeatureListEdit({
   // Stable per-row callbacks — rebuilt only when the row count changes
   // (add/remove), not on every keystroke, so FeatureRow's memo actually
   // skips the rows the user isn't currently editing.
+  /* Пересборка только по values.length — сознательно: update/remove читают
+     свежие строки через valuesRef, их ссылка постоянна. */
+  /* eslint-disable react-hooks/exhaustive-deps */
   const nameCallbacks = useMemo(
     () => values.map((_, i) => (v: string) => update(i, { name: v })),
     [values.length, update]
@@ -127,6 +130,7 @@ export const FeatureListEdit = memo(function FeatureListEdit({
     [values.length, update]
   );
   const removeCallbacks = useMemo(() => values.map((_, i) => () => remove(i)), [values.length, remove]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   return (
     <div
@@ -200,11 +204,15 @@ export const AutoFeatureListEdit = memo(function AutoFeatureListEdit({
     onChangeRef.current(valuesRef.current.filter((_, idx) => idx !== i));
   }, [confirm]);
 
+  /* Пересборка только по values.length — сознательно: update/remove читают
+     свежие строки через valuesRef, их ссылка постоянна. */
+  /* eslint-disable react-hooks/exhaustive-deps */
   const removeCallbacks = useMemo(() => values.map((_, i) => () => remove(i)), [values.length, remove]);
   const toggleCallbacks = useMemo(
     () => values.map((_, i) => () => setExpandedIndex((cur) => (cur === i ? null : i))),
     [values.length]
   );
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   function confirmAdd() {
     if (!draftName.trim()) return;

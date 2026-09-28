@@ -356,6 +356,11 @@ const EquipmentSectionBlock = memo(function EquipmentSectionBlock({
   });
 
   const items = section.items;
+  /* Колбэки по индексу строки пересобираются только при смене числа строк, а не
+     на каждое нажатие клавиши: иначе memo строки не срабатывает и правка одной
+     перерисовывает весь список. Функции внутри — useEvent, их ссылка постоянна,
+     а свежие данные они читают сами, поэтому items.length вместо items — сознательно. */
+  /* eslint-disable react-hooks/exhaustive-deps */
   const nameCallbacks = useMemo(
     () => items.map((_, ii) => (v: string) => updateItem(ii, { name: v })),
     [items.length, updateItem]
@@ -393,6 +398,7 @@ const EquipmentSectionBlock = memo(function EquipmentSectionBlock({
       ),
     [items.length, si]
   );
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   return (
     <>
@@ -549,6 +555,11 @@ export const DndEquipmentEdit = memo(function DndEquipmentEdit({
     onChange(next);
   });
 
+  /* Колбэки по индексу строки пересобираются только при смене числа строк, а не
+     на каждое нажатие клавиши: иначе memo строки не срабатывает и правка одной
+     перерисовывает весь список. Функции внутри — useEvent, их ссылка постоянна,
+     а свежие данные они читают сами, поэтому sections.length вместо sections — сознательно. */
+  /* eslint-disable react-hooks/exhaustive-deps */
   const nameChangeCallbacks = useMemo(
     () => sections.map((_, si) => (v: string) => updateSectionName(si, v)),
     [sections.length, updateSectionName]
@@ -574,6 +585,7 @@ export const DndEquipmentEdit = memo(function DndEquipmentEdit({
     () => sections.map((_, si) => (e: DragEvent<HTMLDivElement>) => handleDrop(e, si)),
     [sections.length, handleDrop]
   );
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   return (
     <div className="stack">

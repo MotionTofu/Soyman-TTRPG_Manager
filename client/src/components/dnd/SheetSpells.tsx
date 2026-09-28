@@ -271,7 +271,7 @@ function DndSpellLevelSection({
   useEffect(() => {
     if (!adding || !systemId || detached) return;
     loadDndSpellsByLevel(systemId, level).then(setOptions);
-  }, [adding, systemId, level]);
+  }, [adding, systemId, level, detached]);
 
   // Клик по названию раскрывает полные поля заклинания. Запись берётся из
   // общего кэша листа (entryCache), а не отдельным GET на каждое открытие:

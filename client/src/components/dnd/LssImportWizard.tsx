@@ -346,6 +346,8 @@ export function LssImportWizard({
   // фикстуры lss-filled.json, 09.09).
   const replacedSpecies = grantsReady && raceId != null && grants!.species.length > 0;
   const replacedCls = grantsReady && classIdForGrants != null && grants!.cls.length > 0;
+  // featRows пересобирается каждый рендер — эффект следит за её содержимым.
+  const featRowsKey = JSON.stringify(featRows.map((r) => [r.raw, r.chosen?.id ?? null, r.asText]));
   useEffect(() => {
     const lss = lssTextRef.current;
     if (!lss) return;
@@ -366,15 +368,9 @@ export function LssImportWizard({
       }
       return { ...v, speciesFeatures: wantSpecies, classFeatures: wantCls, feats: wantFeats };
     });
-    // featRows пересобирается каждый рендер — зависимости по её содержимому.
+    // featRows — по содержимому (featRowsKey выше), не по ссылке.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    grantsReady,
-    replacedSpecies,
-    replacedCls,
-    grants,
-    JSON.stringify(featRows.map((r) => [r.raw, r.chosen?.id ?? null, r.asText])),
-  ]);
+  }, [grantsReady, replacedSpecies, replacedCls, grants, featRowsKey]);
 
   // Текст LSS в «Заметки» под маркером: приём тот же, что у блока заметок
   // класса на листе (upsertClassNotesBlock) — маркер делает вставку обратимой.
