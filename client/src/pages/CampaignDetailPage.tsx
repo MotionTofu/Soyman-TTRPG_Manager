@@ -93,6 +93,7 @@ import { Timeline } from "../components/Timeline";
 import { PresentationEditor } from "../components/presentation/PresentationEditor";
 import { EntityTabWorkspace } from "../components/EntityTabWorkspace";
 import { sessionLabel } from "../sessionLabel";
+import { CampaignRevealList } from "../components/RevealList";
 
 const GM_TABS = [
   "Обзор",
@@ -102,6 +103,8 @@ const GM_TABS = [
   "Главы и сцены",
   "Вехи",
   "Тайны и зацепки",
+  // Узловой дизайн на уровне кампании (шаг 8): какие приключения партия уже может найти.
+  "Выводы",
   "Заметки",
   "Сессии",
   "Хроника мира",
@@ -752,6 +755,8 @@ export function CampaignDetailPage() {
           />
         </EntityTabWorkspace>
       )}
+
+      {tab === "Выводы" && <CampaignRevealList campaignId={campaignId} />}
 
       {tab === "Тайны и зацепки" && (
         <EntityTabWorkspace

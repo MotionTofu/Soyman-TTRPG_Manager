@@ -26,7 +26,7 @@ import {
   validatePresentationPatch,
 } from "../story/presentation";
 import { SCENE_SOUND_SECTION, sceneSoundSet } from "../story/stage";
-import { adventureClueGraph, adventureCluesIn, mapAdventures, nodeCounts, originalArcId, rootArcId, type ClueRow } from "../story/clues";
+import { adventureClueGraph, adventureCluesIn, campaignReveals, mapAdventures, nodeCounts, originalArcId, rootArcId, type ClueRow } from "../story/clues";
 import { cluePrompt, parseLabel, parseProposals } from "../story/cluePrompt";
 import {
   CAST_ROLE_BY_SECTION,
@@ -3493,6 +3493,12 @@ storyRouter.delete("/arcs/:id/clues/proposals", (req, res) => {
   res.json({ rejected: ids.length });
 });
 
+// «Выводы» кампании (шаг 8): приключения-узлы и улики между ними.
+storyRouter.get("/campaigns/:id/reveals", (req, res) => {
+  if (!db.prepare("SELECT id FROM campaigns WHERE id = ?").get(req.params.id)) return res.status(404).json({ error: "not found" });
+  res.json(campaignReveals(Number(req.params.id)));
+});
+
 storyRouter.get("/arcs/:id/clues", (req, res) => {
   const campaignId = req.query.campaign_id != null ? Number(req.query.campaign_id) : null;
   const graph = adventureClueGraph(Number(req.params.id), campaignId);
@@ -3538,7 +3544,9 @@ storyRouter.get("/arcs/:id/clues", (req, res) => {
       )
       .all(campaignId ?? -1, ...graph.arc_ids),
     // Уровень кампании (шаг 8): куда ещё могут вести улики и кто ведёт сюда.
-    adventures: mapAdventures(graph.root_arc_id, campaignId).filter((a) => a.id !== graph.root_arc_id),
+    adventures: mapAdventures(graph.root_arc_id, campaignId)
+      .filter((a) => a.id !== graph.root_arc_id)
+      .map((a) => ({ id: a.id, name: a.name })),
     adventures_in: adventureCluesIn(graph.root_arc_id, campaignId),
   });
 });

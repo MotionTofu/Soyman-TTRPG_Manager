@@ -180,5 +180,16 @@ describe("карта кампании: улики между приключен�
     // Карточке узла — цели «Приключения» с карты кампании, без своего.
     const card = (await request(app).get(`/api/story/arcs/${arcId}/clues?campaign_id=${campaignId}`)).body;
     expect(card.adventures.map((a: { id: number }) => a.id).sort()).toEqual([crypt, tower].sort());
+
+    // «Выводы» кампании (Q40): «начато» по посещённой сцене, улики с местом, проход.
+    db.prepare("INSERT INTO campaign_scene_state (campaign_id, scene_id, status) VALUES (?, ?, 'done')").run(campaignId, s.guild);
+    const rev = (await request(app).get(`/api/story/campaigns/${campaignId}/reveals`)).body;
+    const row = (arc: number) => rev.adventures.find((a: { id: number }) => a.id === arc);
+    expect(row(arcId)).toMatchObject({ started: true, passage_from: [] });
+    expect(row(crypt)).toMatchObject({ started: false, node_role: "proactive" });
+    expect(row(tower)).toMatchObject({ passage_from: ["Склеп"] });
+    expect(rev.clues.filter((c: { target_id: number }) => c.target_id === crypt).map((c: { node_name: string }) => c.node_name).sort()).toEqual(
+      ["dock", "widow"]
+    );
   });
 });

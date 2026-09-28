@@ -42,7 +42,7 @@ export function boardObjectAffects(boardUrl: string): Affect[] {
  */
 /** Улика задевает холст и список выводов приключения (узловой дизайн). */
 export function clueAffects(): Affect[] {
-  return [...canvasStoryAffects(), { path: "/story/arcs" }];
+  return [...canvasStoryAffects(), { path: "/story/arcs" }, { path: "/story/campaigns" }];
 }
 
 /** MIME перетаскивания улики из лотка на узел холста. */

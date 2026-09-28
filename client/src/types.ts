@@ -1130,6 +1130,27 @@ export interface ArcClues {
   /** Откуда улики ведут в это приключение. */
   adventures_in: { arc_id: number; name: string; n: number }[];
 }
+/** «Выводы» кампании (шаг 8): приключения-узлы и улики между ними. */
+export interface CampaignReveals {
+  adventures: {
+    id: number;
+    name: string;
+    node_role: "normal" | "start" | "finale" | "proactive";
+    node_trigger: string;
+    started: boolean;
+    passage_from: string[];
+  }[];
+  clues: {
+    id: number;
+    text: string;
+    how: string;
+    found: boolean;
+    from_arc_id: number;
+    from_name: string;
+    node_name: string;
+    target_id: number;
+  }[];
+}
 export type SceneStatus = "pending" | "done" | "skipped";
 
 export interface StoryArc {

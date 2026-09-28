@@ -11,7 +11,7 @@ import { useState } from "react";
 import { useAction, useResource, write } from "../data/hooks";
 import { clueAffects } from "../data/canvas";
 import { nodeLabel } from "../sceneKinds";
-import type { ArcClue, ArcClueNode, ArcClues } from "../types";
+import type { ArcClue, ArcClueNode, ArcClues, CampaignReveals } from "../types";
 import "./RevealList.css";
 
 type Mark = "unknown" | "known" | "done";
@@ -210,6 +210,111 @@ export function RevealList({
                   </button>
                 ))}
               {n.trigger && <span className="reveal__trigger">Когда: {n.trigger}</span>}
+            </div>
+          ))}
+        </section>
+      )}
+    </div>
+  );
+}
+
+/**
+ * «Выводы» кампании (шаг 8, Q40): те же строки, но узел — приключение.
+ * «Начато» — посещена хоть одна его сцена; «известно» — старт или найдена
+ * хоть одна улика сюда. Улика раскрывается с местом: приключение → сцена.
+ */
+export function CampaignRevealList({ campaignId }: { campaignId: number }) {
+  const act = useAction();
+  const data = useResource<CampaignReveals>(`/story/campaigns/${campaignId}/reveals`).data;
+  const [open, setOpen] = useState<number | null>(null);
+  if (!data) return <p className="muted">Загрузка…</p>;
+  if (data.adventures.length === 0) return <p className="muted">В кампании нет приключений.</p>;
+
+  const setFound = (id: number, found: boolean) =>
+    act(() => write.put(`/story/clues/${id}/state`, { campaign_id: campaignId, found }), { affects: clueAffects() });
+  const into = (id: number) => data.clues.filter((c) => c.target_id === id);
+  const label: Record<string, string> = { unknown: "не известно", known: "известно", done: "начато" };
+  // Не начатые — вверх: за столом важнее то, куда ещё не ходили.
+  const reactive = data.adventures
+    .filter((a) => a.node_role !== "proactive")
+    .sort((a, b) => Number(a.started) - Number(b.started));
+  const proactive = data.adventures.filter((a) => a.node_role === "proactive");
+
+  return (
+    <div className="reveal">
+      <div className="reveal__legend">
+        {(["unknown", "known", "done"] as Mark[]).map((m) => (
+          <span key={m}>
+            <span className={`reveal__mark reveal__mark--${m}`} />
+            {label[m]}
+          </span>
+        ))}
+      </div>
+      <section className="reveal__group">
+        <div className="reveal__group-head">
+          <span>Приключения</span>
+          <span>найдено</span>
+        </div>
+        {reactive.map((a) => {
+          const clues = into(a.id);
+          const found = clues.filter((c) => c.found).length;
+          const mark: Mark = a.started ? "done" : a.node_role === "start" || found > 0 ? "known" : "unknown";
+          const right = a.started
+            ? "начато"
+            : clues.length
+              ? `${found} / ${clues.length}`
+              : a.node_role === "start"
+                ? "старт"
+                : a.passage_from.length
+                  ? "проход"
+                  : "нет улик";
+          return (
+            <div key={a.id}>
+              <button
+                type="button"
+                className={`reveal__row${open === a.id ? " is-open" : ""}${a.started ? " is-done" : ""}`}
+                aria-expanded={open === a.id}
+                onClick={() => setOpen(open === a.id ? null : a.id)}
+              >
+                <span className={`reveal__mark reveal__mark--${mark}`} title={label[mark]} />
+                <span className="reveal__name">
+                  {a.name}
+                  {a.node_role !== "normal" && <span className="reveal__type">{a.node_role === "start" ? "Старт" : "Финал"}</span>}
+                </span>
+                <span className="reveal__count">{right}</span>
+                {a.passage_from.length > 0 && (
+                  <span className="reveal__note">проход из «{a.passage_from.join("», «")}»</span>
+                )}
+              </button>
+              {open === a.id && (
+                <div className="reveal__sub">
+                  {clues.length === 0 && <span className="muted">Улик сюда нет.</span>}
+                  {clues.map((c) => (
+                    <label key={c.id} className={`reveal__clue${c.found ? " is-found" : ""}`}>
+                      <input type="checkbox" checked={c.found} onChange={(e) => void setFound(c.id, e.target.checked)} />
+                      <span className="reveal__clue-text">{c.text}</span>
+                      <span className="reveal__clue-meta">
+                        в: «{c.from_name}» → {c.node_name}
+                        {c.how && ` · ${c.how}`}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </section>
+      {proactive.length > 0 && (
+        <section className="reveal__group">
+          <div className="reveal__group-head">
+            <span>Может прийти само</span>
+          </div>
+          {proactive.map((a) => (
+            <div key={a.id} className={`reveal__proactive${a.started ? " is-done" : ""}`}>
+              <span className="reveal__name">{a.name}</span>
+              {a.started && <span className="reveal__count">начато</span>}
+              {a.node_trigger && <span className="reveal__trigger">Когда: {a.node_trigger}</span>}
             </div>
           ))}
         </section>

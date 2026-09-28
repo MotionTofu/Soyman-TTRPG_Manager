@@ -14,7 +14,7 @@ import { dataKeys } from "../data/entities";
 import { useAction, useResource, write } from "../data/hooks";
 import { secretStateAffects, sessionPaths } from "../data/sessions";
 import { ToInitiativeButton } from "../components/ToInitiativeButton";
-import { RevealList } from "../components/RevealList";
+import { CampaignRevealList, RevealList } from "../components/RevealList";
 import { campaignPaths } from "../data/campaigns";
 import { kindLabel } from "../compendium";
 import type {
@@ -406,9 +406,11 @@ function CompendiumContent({ campaign }: PanelProps) {  const [q, setQ] = useSta
  */
 function RevealsContent({ sessionId, campaign }: PanelProps) {
   const storageKey = `pult-reveal-arc-${campaign.id}`;
-  const [chosen, setChosen] = useState<number | null>(() => {
+  // Номер приключения или «campaign» — «Выводы» кампании (шаг 8).
+  const [chosen, setChosen] = useState<number | "campaign" | null>(() => {
     try {
-      return Number(localStorage.getItem(storageKey)) || null;
+      const v = localStorage.getItem(storageKey);
+      return v === "campaign" ? v : Number(v) || null;
     } catch {
       return null;
     }
@@ -416,9 +418,9 @@ function RevealsContent({ sessionId, campaign }: PanelProps) {
   const stage = useResource<SessionStage>(sessionPaths.stage(sessionId)).data;
   const adventures = useResource<StoryArc[]>(campaignPaths.adventures(campaign.id)).data ?? NO_ARCS;
   const auto = stage?.current?.arc_id ?? stage?.planned.find((p) => p.arc_id != null)?.arc_id ?? adventures[0]?.id ?? null;
-  const arcId = chosen && adventures.some((a) => a.id === chosen) ? chosen : auto;
+  const arcId = typeof chosen === "number" && adventures.some((a) => a.id === chosen) ? chosen : auto;
   const choose = (v: string) => {
-    const next = Number(v) || null;
+    const next = v === "campaign" ? v : Number(v) || null;
     setChosen(next);
     try {
       if (next) localStorage.setItem(storageKey, String(next));
@@ -432,6 +434,7 @@ function RevealsContent({ sessionId, campaign }: PanelProps) {
       {adventures.length > 1 && (
         <select aria-label="Приключение" value={chosen ?? ""} onChange={(e) => choose(e.target.value)}>
           <option value="">По сцене вечера</option>
+          <option value="campaign">Кампания — приключения</option>
           {adventures.map((a) => (
             <option key={a.id} value={a.id}>
               {a.name}
@@ -439,7 +442,9 @@ function RevealsContent({ sessionId, campaign }: PanelProps) {
           ))}
         </select>
       )}
-      {arcId ? <RevealList arcId={arcId} campaignId={campaign.id} focusArcId={stage?.current?.arc_id ?? null} /> : <span className="muted">В кампании нет приключений.</span>}
+      {chosen === "campaign" ? (
+        <CampaignRevealList campaignId={campaign.id} />
+      ) : arcId ? <RevealList arcId={arcId} campaignId={campaign.id} focusArcId={stage?.current?.arc_id ?? null} /> : <span className="muted">В кампании нет приключений.</span>}
     </div>
   );
 }

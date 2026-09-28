@@ -251,31 +251,109 @@ export function adventureClueLayer(advIds: number[], campaignId: number | null) 
  * копии кампании, если она есть. Среди них ищутся цели и источники улик
  * уровня кампании.
  */
-export function mapAdventures(arcId: number, campaignId: number | null): { id: number; name: string }[] {
+export interface MapAdventure {
+  id: number;
+  name: string;
+  node_role: string;
+  node_trigger: string;
+}
+
+/** Приключения карты кампании; arcId не нужен. */
+export function campaignAdventures(campaignId: number): MapAdventure[] {
+  return db
+    .prepare(
+      `SELECT a.id, COALESCE(o.name, a.name) AS name,
+              COALESCE(o.node_role, a.node_role) AS node_role, COALESCE(o.node_trigger, a.node_trigger) AS node_trigger
+         FROM campaign_adventures ca
+         JOIN story_arcs a ON a.id = ca.arc_id
+         LEFT JOIN story_arcs o ON o.source_arc_id = a.id AND o.campaign_id = ca.campaign_id AND o.archived_at IS NULL
+        WHERE ca.campaign_id = ? AND a.archived_at IS NULL AND a.campaign_id IS NULL
+       UNION ALL
+       SELECT id, name, node_role, node_trigger FROM story_arcs
+        WHERE campaign_id = ? AND source_arc_id IS NULL AND parent_id IS NULL AND archived_at IS NULL`
+    )
+    .all(campaignId, campaignId) as MapAdventure[];
+}
+
+export function mapAdventures(arcId: number, campaignId: number | null): MapAdventure[] {
+  if (campaignId != null) return campaignAdventures(campaignId);
   const root = originalArcId(rootArcId(arcId));
   if (root == null) return [];
-  const rows =
-    campaignId != null
-      ? (db
-          .prepare(
-            `SELECT a.id, COALESCE(o.name, a.name) AS name FROM story_arcs a
-               LEFT JOIN story_arcs o ON o.source_arc_id = a.id AND o.campaign_id = ? AND o.archived_at IS NULL
-              WHERE a.archived_at IS NULL AND a.campaign_id IS NULL
-                AND a.id IN (SELECT arc_id FROM campaign_adventures WHERE campaign_id = ?)
-             UNION ALL
-             SELECT id, name FROM story_arcs
-              WHERE campaign_id = ? AND source_arc_id IS NULL AND parent_id IS NULL AND archived_at IS NULL`
-          )
-          .all(campaignId, campaignId, campaignId) as { id: number; name: string }[])
-      : (db
-          .prepare(
-            `SELECT id, name FROM story_arcs
-              WHERE setting_id = (SELECT setting_id FROM story_arcs WHERE id = ?)
-                AND parent_id IS NULL AND campaign_id IS NULL AND archived_at IS NULL AND is_default = 0
-              ORDER BY position, id`
-          )
-          .all(root) as { id: number; name: string }[]);
-  return rows;
+  return db
+    .prepare(
+      `SELECT id, name, node_role, node_trigger FROM story_arcs
+        WHERE setting_id = (SELECT setting_id FROM story_arcs WHERE id = ?)
+          AND parent_id IS NULL AND campaign_id IS NULL AND archived_at IS NULL AND is_default = 0
+        ORDER BY position, id`
+    )
+    .all(root) as MapAdventure[];
+}
+
+/**
+ * «Выводы» кампании (шаг 8, Q40): приключения как узлы. «Начато» — посещена
+ * хоть одна сцена (те же отметки, что у списка выводов приключения); улики —
+ * принятые, живые, из других приключений той же карты, с местом находки.
+ */
+export function campaignReveals(campaignId: number) {
+  const advs = campaignAdventures(campaignId);
+  const ids = new Set(advs.map((a) => a.id));
+  const names = new Map(advs.map((a) => [a.id, a.name]));
+  const visited = new Set(
+    (db
+      .prepare(
+        `SELECT scene_id FROM campaign_scene_state WHERE campaign_id = ? AND status = 'done'
+         UNION
+         SELECT j.scene_id FROM session_scenes j JOIN sessions se ON se.id = j.session_id WHERE se.campaign_id = ?`
+      )
+      .all(campaignId, campaignId) as { scene_id: number }[]).map((r) => r.scene_id)
+  );
+  const started = new Set<number>();
+  const clues: {
+    id: number;
+    text: string;
+    how: string;
+    found: boolean;
+    from_arc_id: number;
+    from_name: string;
+    node_name: string;
+    target_id: number;
+  }[] = [];
+  for (const adv of ids) {
+    const g = adventureClueGraph(adv, campaignId);
+    if (!g) continue;
+    if ([...g.nodes.values()].some((n) => visited.has(n.shown_id))) started.add(adv);
+    for (const c of g.clues) {
+      const to = c.target_id as number;
+      if (c.target_type !== "adventure" || c.proposed || c.target_missing || to === adv || !ids.has(to)) continue;
+      clues.push({
+        id: c.id,
+        text: c.text,
+        how: c.how,
+        found: c.found,
+        from_arc_id: adv,
+        from_name: names.get(adv) ?? "",
+        node_name: g.nodes.get(c.node_id as number)?.name ?? "",
+        target_id: to,
+      });
+    }
+  }
+  // Связи-переходы кампании — проходы (Q35): свой набор, если кампания его завела.
+  const own = (db.prepare("SELECT own_arc_transitions FROM campaigns WHERE id = ?").get(campaignId) as
+    | { own_arc_transitions: number }
+    | undefined)?.own_arc_transitions === 1;
+  const passages = (
+    db
+      .prepare("SELECT from_arc_id, to_arc_id FROM story_arc_transitions WHERE campaign_id IS ?")
+      .all(own ? campaignId : null) as { from_arc_id: number; to_arc_id: number }[]
+  ).filter((t) => ids.has(t.from_arc_id) && ids.has(t.to_arc_id));
+  return {
+    adventures: advs.map((a) => ({
+      ...a,
+      started: started.has(a.id),
+      passage_from: passages.filter((t) => t.to_arc_id === a.id).map((t) => names.get(t.from_arc_id) ?? ""),
+    })),
+    clues,
+  };
 }
 
 /** Откуда в это приключение ведут улики других приключений той же карты. */
