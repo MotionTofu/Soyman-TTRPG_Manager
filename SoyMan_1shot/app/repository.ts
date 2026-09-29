@@ -1,4 +1,5 @@
 import type { DndCharacterData } from '@shared/dnd/types';
+import type { PortableNote } from '../../shared/src/portable/parse';
 import { normalizeDndCharacter } from '@shared/dnd/normalize';
 import { parseCatalog, repairSpellLevels } from './catalog.mjs';
 import { splitManagedPreviews } from './catalog-manager.mjs';
@@ -44,6 +45,10 @@ export interface Character {
   // Set => hidden from the active list, shown under Archive; nothing else
   // (catalog pin, portrait, runtime state) is touched by archiving.
   archivedAt?: string | null;
+  // Лента заметок листа (гриллинг 2026-09-28, Q30): живёт в записи
+  // персонажа — уходит с ним в портативный HTML и Мастеру. Необязательна:
+  // старым записям миграция не нужна.
+  sessionNotes?: PortableNote[] | null;
 }
 let opening: Promise<IDBDatabase>;
 function database() {
@@ -269,6 +274,7 @@ export interface PortableImportRecord {
   // Phase B1.2: a valid v2 UID is preserved across devices; null (v1 import,
   // explicit copy) mints a fresh logical identity.
   characterUid?: string | null;
+  sessionNotes?: PortableNote[];
 }
 // Portable HTML import (phase B1.1): the character-specific catalog slice gets
 // its own UUID identity — never a managed release id — and the character is
@@ -285,8 +291,9 @@ export async function importPortableRecord(record: PortableImportRecord, options
   return new Promise((resolve, reject) => {
     const tx = db.transaction(['catalogs', 'characters'], 'readwrite');
     tx.objectStore('catalogs').put(record.catalog, key);
+    const sessionNotes = record.sessionNotes ?? [];
     const add = tx.objectStore('characters').add({
-      name: record.name, content: record.content, portrait: record.portrait, catalogKey: key, revision: 0, characterUid,
+      name: record.name, content: record.content, portrait: record.portrait, catalogKey: key, revision: 0, characterUid, sessionNotes,
     });
     let id = 0;
     add.onsuccess = () => { id = add.result as number; };
@@ -294,7 +301,7 @@ export async function importPortableRecord(record: PortableImportRecord, options
       tabSync().publish(characterUpdated(id, 0));
       notifyCharacterCommit(origin);
       resolve({
-        id, name: record.name, content: record.content, portrait: record.portrait, catalogKey: key, revision: 0, characterUid,
+        id, name: record.name, content: record.content, portrait: record.portrait, catalogKey: key, revision: 0, characterUid, sessionNotes,
       });
     };
     tx.onerror = tx.onabort = () => reject(tx.error || Error('Не удалось импортировать персонажа'));

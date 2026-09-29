@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { JSDOM, VirtualConsole } from '../../client/node_modules/jsdom/lib/api.js';
 import { gmPayload, portableFileName, portablePayload, renderPortable } from '../app/portable.mjs';
+import { validatePortablePayload } from '../../shared/src/portable/parse.ts';
 test('portable payload excludes unrelated entries and rejects unsupported dependencies', () => {
   const c = { content: { classes: [], equipmentSections: [{ items: [{ entryId: 1, transferIn: { fromCharacterId: 77 } }] }] } };
   const catalog = { system: {}, sections: [{ id: 1 }], entries: [1, 2].map(id => ({ id, section_id: 1, parent_id: null, kind: 'equipment', name: `Item ${id}`, data: {}, avatar_preview_url: 'data:image/webp;base64,cHJldmlldw==', avatar_large_url: 'data:image/webp;base64,bGFyZ2U=' })) };
@@ -21,12 +22,18 @@ test('portable payload excludes unrelated entries and rejects unsupported depend
   assert.equal(portablePayload({ content: { companions: [{ entryId: null, featureEntryId: 5, name: 'Первобытный зверь' }] } }, beast).catalog.entries[0].id, 5);
   assert.throws(() => portablePayload({ content: { companions: [{ entryId: null, statblockId: 42, name: 'Спутник' }] } }, catalog), /статблок/);
 });
-test('GM copy drops only private notes and names the file after the character', () => {
-  const c = { characterUid: 'u1', content: { characterName: 'Арья', notes: 'личное', ideals: 'Свобода', classes: [] } };
+// Мастер читает всё (гриллинг 2026-09-28, Q11, Q31): «Заметки класса» листа и
+// лента заметок игрока уходят в его копию целиком.
+test('GM copy keeps the sheet and the notes feed and names the file after the character', () => {
+  const sessionNotes = [{ id: 1, text: 'Мирт врёт', created_at: '2026-09-27 19:05:00' }];
+  const c = { characterUid: 'u1', sessionNotes, content: { characterName: 'Арья', notes: 'Владения навыками: …', ideals: 'Свобода', classes: [] } };
   const payload = gmPayload(c, { system: {}, sections: [], entries: [] });
-  assert.equal(payload.character.content.notes, '');
+  assert.equal(payload.character.content.notes, 'Владения навыками: …');
   assert.equal(payload.character.content.ideals, 'Свобода');
-  assert.equal(c.content.notes, 'личное');
+  assert.deepEqual(payload.character.notes, sessionNotes);
+  assert.deepEqual(validatePortablePayload(payload).notes, sessionNotes);
+  // Битая заметка не роняет импорт листа — просто отбрасывается.
+  assert.deepEqual(validatePortablePayload({ ...payload, character: { ...payload.character, notes: [{ id: 'x' }, ...sessionNotes] } }).notes, sessionNotes);
   assert.equal(payload.identity.characterUid, 'u1');
   assert.equal(portableFileName('Арья / "Тень"'), 'Арья Тень.html');
   assert.equal(portableFileName('  '), 'Персонаж.html');

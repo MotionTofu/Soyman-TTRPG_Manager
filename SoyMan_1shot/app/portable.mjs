@@ -52,17 +52,19 @@ export function portablePayload(character, catalog) {
   return {
     format: 'soyman-1shot-portable', version: characterUid ? 2 : 1, exportedAt: new Date().toISOString(),
     ...(characterUid ? { identity: { characterUid } } : {}),
-    character: { name: content.characterName, content, portrait: character.portrait || null }, catalog: { system: catalog?.system || null, sections: (catalog?.sections || []).filter(s => sectionIds.has(s.id)), entries: portableEntries } };
+    character: { name: content.characterName, content, portrait: character.portrait || null, notes: character.sessionNotes || [] }, catalog: { system: catalog?.system || null, sections: (catalog?.sections || []).filter(s => sectionIds.has(s.id)), entries: portableEntries } };
 }
 export function renderPortable(template, payload) {
   if (!template.includes('__ONESHOT_PAYLOAD__')) throw Error('Повреждён шаблон автономного чарника.');
   return template.replace('__ONESHOT_PAYLOAD__', () => JSON.stringify(payload).replaceAll('<', '\\u003c'));
 }
 // Copy for the GM's review (grilling 2026-09-23): the same portable HTML,
-// minus the player's private notes. Named after the character so the GM
-// tells files apart in the chat.
+// notes included — Мастер читает всё (гриллинг 2026-09-28, Q11, Q31). Раньше
+// здесь вырезалось content.notes как «личное», но это «Заметки класса» листа
+// (владения и снаряжение класса), а не записи игрока. Named after the
+// character so the GM tells files apart in the chat.
 export function gmPayload(character, catalog) {
-  return portablePayload({ ...character, content: { ...character.content, notes: '' } }, catalog);
+  return portablePayload(character, catalog);
 }
 export function portableFileName(name) {
   const clean = String(name || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);

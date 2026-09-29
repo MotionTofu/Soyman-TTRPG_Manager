@@ -106,9 +106,14 @@
   align-items: flex-end;
   flex-shrink: 0;
 }
-.session-chat__input .mention-textarea-wrap {
+.session-chat__input .mention-textarea-wrap,
+.session-chat__input .session-chat__plain {
   flex: 1;
   min-width: 0;
+}
+.session-chat__plain {
+  field-sizing: content;
+  resize: none;
 }
 .session-chat__input textarea,
 .session-chat__msg--editing textarea {

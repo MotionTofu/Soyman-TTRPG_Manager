@@ -1,4 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
+// Тост рисует провайдер — он и тянет его стили: OneShot берёт провайдер без
+// main.tsx основного приложения, где archive.css подключён.
+import "../archive.css";
 
 interface UndoToast {
   msg: string;

@@ -1,21 +1,16 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useAction, useAfterWrite, useResource, write } from "../../data/hooks";
 import { journalAffects } from "../../data/playerCampaign";
 import { useUndoDelete } from "../../hooks/useUndoDelete";
-import { useMediaQuery } from "../../hooks/useMediaQuery";
-import { Sheet } from "./wizardUi";
 import { NotesFeed, type FeedItem } from "../NotesFeed";
-import "./SheetNotesColumn.css";
+import { NotesDock } from "./NotesDock";
 
 // Заметки игрока в колонке листа (гриллинг 2026-09-28, Q8–Q11, Q20–Q26).
 // Это записи его дневника от персонажа, каждая встаёт к сессии: идущей,
 // иначе к сегодняшней запланированной, иначе к последней проведённой — это
 // решает сервер. Мастер видит колонку только на чтение.
-//
-// Колонкой — где ей хватает места (порог в SheetNotesColumn.css). Уже —
-// плашкой внизу экрана, которая открывает ту же ленту шторкой поверх
-// текущей вкладки (Q22): записать мысль посреди боя, не уходя с «Действий».
+// Колонка это или плашка со шторкой — решает NotesDock.
 
 interface NoteSession {
   id: number;
@@ -32,9 +27,6 @@ interface SheetNotes {
   entries: { id: number; session_id: number | null; name: string; description: string; created_at: string }[];
 }
 
-// Тот же порог, что в SheetNotesColumn.css: шире — колонка, уже — плашка.
-const WIDE = "(min-width: 1600px)";
-
 const sessionLabel = (s: NoteSession) =>
   `Сессия №${s.session_number}${s.title ? ` · ${s.title}` : ""} · ${s.date.split("-").reverse().join(".")}`;
 
@@ -43,8 +35,6 @@ export function SheetNotesColumn({ characterId, readOnly }: { characterId: numbe
   const data = useResource<SheetNotes | null>(path).data;
   const run = useAction();
   const afterWrite = useAfterWrite();
-  const wide = useMediaQuery(WIDE);
-  const [open, setOpen] = useState(false);
   const { deleteWithUndo } = useUndoDelete();
 
   const items = useMemo<FeedItem[]>(() => {
@@ -66,7 +56,7 @@ export function SheetNotesColumn({ characterId, readOnly }: { characterId: numbe
 
   // Персонаж без кампании — колонки нет (Q25), вкладки на всю ширину.
   if (data === null) return null;
-  if (!data) return wide ? <aside className="sheet-notes" /> : null;
+  if (!data) return null;
 
   const affects = [{ path }, ...journalAffects(data.campaign_id)];
   const target = data.target;
@@ -125,31 +115,9 @@ export function SheetNotesColumn({ characterId, readOnly }: { characterId: numbe
       />
   );
 
-  if (!wide) {
-    return (
-      <>
-        <button type="button" className="sheet-notes-bar" onClick={() => setOpen(true)}>
-          <strong>Заметки</strong>
-          <span className="muted">{targetLabel}</span>
-        </button>
-        {open && (
-          <Sheet title="Заметки" onClose={() => setOpen(false)} actions={allLink || undefined}>
-            <span className="muted sheet-notes__target">{targetLabel}</span>
-            <div className="sheet-notes__sheet-feed">{feed}</div>
-          </Sheet>
-        )}
-      </>
-    );
-  }
-
   return (
-    <aside className="sheet-notes" aria-label="Заметки">
-      <div className="sheet-notes__head">
-        <strong>Заметки</strong>
-        <span className="muted sheet-notes__target">{targetLabel}</span>
-        {allLink}
-      </div>
+    <NotesDock status={targetLabel} link={allLink || undefined}>
       {feed}
-    </aside>
+    </NotesDock>
   );
 }

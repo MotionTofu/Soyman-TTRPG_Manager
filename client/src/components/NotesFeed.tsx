@@ -31,6 +31,7 @@ export function NotesFeed({
   onSend,
   onEdit,
   onDelete,
+  plain = false,
 }: {
   items: FeedItem[];
   loaded: boolean;
@@ -43,6 +44,8 @@ export function NotesFeed({
   onEdit: (id: number, text: string) => Promise<boolean>;
   /** label — начало текста без разметки, для тоста «удалено». */
   onDelete: (id: number, label: string) => void;
+  /** Простое поле без «@» — там, где нет базы мира (OneShot, Q33). */
+  plain?: boolean;
 }) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -111,12 +114,12 @@ export function NotesFeed({
           if (editing?.id === it.id) {
             return (
               <div key={it.key} className="session-chat__msg session-chat__msg--editing">
-                <MentionTextarea
+                <Field
+                  plain={plain}
                   value={editing.text}
                   onChange={(text) => setEditing({ id: it.id, text })}
                   onKeyDown={onEditKey}
-                  rows={1}
-                  defaultSettingId={settingId ?? undefined}
+                  settingId={settingId}
                 />
                 <div className="row session-chat__edit-actions">
                   <button type="button" className="comp-mini" onClick={() => void saveEdit()}>
@@ -156,13 +159,13 @@ export function NotesFeed({
       </div>
       {!readOnly && (
         <div className="session-chat__input">
-          <MentionTextarea
+          <Field
+            plain={plain}
             value={draft}
             onChange={setDraft}
             onKeyDown={onDraftKey}
-            rows={1}
             placeholder={placeholder}
-            defaultSettingId={settingId ?? undefined}
+            settingId={settingId}
           />
           <button
             type="button"
@@ -177,6 +180,45 @@ export function NotesFeed({
         </div>
       )}
     </div>
+  );
+}
+
+function Field({
+  plain,
+  value,
+  onChange,
+  onKeyDown,
+  placeholder,
+  settingId,
+}: {
+  plain: boolean;
+  value: string;
+  onChange: (v: string) => void;
+  onKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => void;
+  placeholder?: string;
+  settingId?: number | null;
+}) {
+  if (plain) {
+    return (
+      <textarea
+        className="session-chat__plain"
+        rows={1}
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={onKeyDown}
+      />
+    );
+  }
+  return (
+    <MentionTextarea
+      value={value}
+      onChange={onChange}
+      onKeyDown={onKeyDown}
+      rows={1}
+      placeholder={placeholder}
+      defaultSettingId={settingId ?? undefined}
+    />
   );
 }
 

@@ -16,6 +16,7 @@ export interface ValidatedPortableImport {
   portrait: string | null;
   catalog: import('./repository').Catalog;
   characterUid: string | null;
+  notes: import('../../shared/src/portable/parse').PortableNote[];
 }
 export function validatePortablePayload(payload: unknown): ValidatedPortableImport;
 export function parsePortableHtml(htmlText: string): ValidatedPortableImport;

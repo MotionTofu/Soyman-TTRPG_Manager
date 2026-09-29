@@ -11,6 +11,8 @@ import { snapshot } from './standalone-transport';
 import { refreshMentionIndex } from '../../client/src/mentions';
 import { MentionPreviewRoot } from '../../client/src/components/mentions/MentionPreviewRoot';
 import { normalizeDndCharacter } from '@shared/dnd/normalize';
+import { portableNotes } from '../../shared/src/portable/parse';
+import { OneShotNotes } from './notes';
 import '../../client/src/index.css';
 import '../../client/src/dnd-sheet.css';
 import '../../client/src/creature-card.css';
@@ -28,6 +30,9 @@ applyTheme(findTheme('noir'));
 const template = document.documentElement.cloneNode(true) as HTMLElement;
 template.querySelector('#root')!.replaceChildren();
 function App() {
+  // Заметки игрока из файла — только чтение: копия ничего не сохраняет, а
+  // Мастер их читает (гриллинг 2026-09-28, Q31).
+  const [notes] = useState(() => portableNotes((snapshot.character as { notes?: unknown }).notes));
   const [value, setValue] = useState(() => normalizeDndCharacter(snapshot.character.content));
   const [dirty, setDirty] = useState(false);
   useEffect(() => {
@@ -67,7 +72,7 @@ function App() {
         <p className="oneshot-standalone-saved" aria-live="polite">{downloaded ? 'Скачивание запрошено — проверьте, что файл сохранился, прежде чем закрыть страницу.' : ''}</p>
       </div>
     </header>
-    <div className="oneshot-sheet"><div className="fp-page-backdrop" aria-hidden="true" /><DndCharacterView value={value} portraitUrl={snapshot.character.portrait} onQuickUpdate={patch => { setDirty(true); setValue(v => ({ ...v, ...patch })); }} /><MentionPreviewRoot /></div>
+    <div className="oneshot-sheet"><div className="fp-page-backdrop" aria-hidden="true" /><DndCharacterView value={value} portraitUrl={snapshot.character.portrait} onQuickUpdate={patch => { setDirty(true); setValue(v => ({ ...v, ...patch })); }} sideColumn={notes.length ? <OneShotNotes notes={notes} /> : undefined} /><MentionPreviewRoot /></div>
     <details className="oneshot-sources"><summary>Источники правил</summary><p>This work includes material from the System Reference Document 5.2 ("SRD 5.2") by Wizards of the Coast LLC, available at https://www.dndbeyond.com/srd. The SRD 5.2 is licensed under the Creative Commons Attribution 4.0 International License, available at https://creativecommons.org/licenses/by/4.0/legalcode.</p><p>Тексты и переводы импортированного справочника сохраняют условия своих источников.</p></details>
   </DndRuntimeContext.Provider>;
 }

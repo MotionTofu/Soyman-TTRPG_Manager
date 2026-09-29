@@ -37,6 +37,30 @@ export interface PortableCatalogContainer {
   entries?: unknown;
 }
 
+/** Заметка ленты листа: created_at — UTC "YYYY-MM-DD HH:MM:SS", как в SQLite. */
+export interface PortableNote {
+  id: number;
+  text: string;
+  created_at: string;
+}
+
+const NOTE_TIME = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
+
+/** Годные заметки из сырого поля; всё прочее молча отбрасывается. */
+export function portableNotes(raw: unknown): PortableNote[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (n): n is PortableNote =>
+      !!n &&
+      typeof n === "object" &&
+      Number.isInteger((n as PortableNote).id) &&
+      typeof (n as PortableNote).text === "string" &&
+      (n as PortableNote).text.trim() !== "" &&
+      typeof (n as PortableNote).created_at === "string" &&
+      NOTE_TIME.test((n as PortableNote).created_at)
+  ).map((n) => ({ id: n.id, text: n.text.slice(0, 5000), created_at: n.created_at }));
+}
+
 export interface ValidatedPortablePayload {
   /** Display name: content.characterName → character.name → fallback. */
   name: string;
@@ -48,6 +72,11 @@ export interface ValidatedPortablePayload {
   catalog: PortableCatalogContainer;
   /** Stable UID (v2) или null (v1). */
   characterUid: string | null;
+  /**
+   * Лента заметок игрока (OneShot, гриллинг 2026-09-28, Q30–Q31). Нет её или
+   * она битая — пусто: заметки не повод отказать в импорте листа.
+   */
+  notes: PortableNote[];
 }
 
 const PAYLOAD_OPEN = '<script id="oneshot-payload" type="application/json">';
@@ -147,6 +176,7 @@ export function validatePortablePayload(payload: unknown): ValidatedPortablePayl
     portrait,
     catalog: catalog as PortableCatalogContainer,
     characterUid,
+    notes: portableNotes(container["notes"]),
   };
 }
 

@@ -28,6 +28,9 @@ import { parseCatalog, relinkProficiencies } from './catalog.mjs';
 import { auditExport } from './export-audit.mjs';
 import { gmPayload, portableFileName, portablePayload, renderPortable } from './portable.mjs';
 import { Modal } from '../../client/src/components/Modal';
+import { UndoDeleteProvider } from '../../client/src/hooks/useUndoDelete';
+import type { PortableNote } from '../../shared/src/portable/parse';
+import { OneShotNotes } from './notes';
 import { LibraryCard, useCatalogMedia } from './home';
 import { QRCodeSVG } from 'qrcode.react';
 import { shouldNotifyForWaiting, shouldNotifyForInstalled, createControllerChangeHandler, applyUpdateSafely } from './pwa/update.mjs';
@@ -1235,11 +1238,11 @@ function App() {
       // preserving/assigning identity; a known UID asks the player.
       const decision = decidePortableImport({ characterUid: parsed.characterUid, characters: await listCharacters() });
       if (decision.action === 'create') {
-        const c = await importPortableRecord({ catalog: parsed.catalog, name: parsed.name, content, portrait: parsed.portrait, characterUid: parsed.characterUid });
+        const c = await importPortableRecord({ catalog: parsed.catalog, name: parsed.name, content, portrait: parsed.portrait, characterUid: parsed.characterUid, sessionNotes: parsed.notes });
         location.assign(`/?character=${c.id}`);
         return;
       }
-      const pending = { name: parsed.name, content, portrait: parsed.portrait, catalog: parsed.catalog, characterUid: parsed.characterUid };
+      const pending = { name: parsed.name, content, portrait: parsed.portrait, catalog: parsed.catalog, characterUid: parsed.characterUid, notes: parsed.notes };
       if (decision.action === 'confirm') {
         const m = decision.match;
         setPortableMatches([{ id: m.id, name: m.content?.characterName || m.name }]);
@@ -1251,7 +1254,7 @@ function App() {
     } catch (e) { setError(portableImportMessage(e)); setBusy(false); }
   }
   interface PortablePendingData {
-    name: string; content: DndCharacterData; portrait: string | null; catalog: Catalog; characterUid: string | null;
+    name: string; content: DndCharacterData; portrait: string | null; catalog: Catalog; characterUid: string | null; notes: PortableNote[];
   }
   const [portablePending, setPortablePending] = useState<PortablePendingData | null>(null);
   const [portableMatches, setPortableMatches] = useState<{ id: number; name: string }[]>([]);
@@ -1277,7 +1280,7 @@ function App() {
     try {
       const c = await importPortableRecord({
         catalog: portablePending.catalog, name: portablePending.name,
-        content: portablePending.content, portrait: portablePending.portrait, characterUid: null,
+        content: portablePending.content, portrait: portablePending.portrait, characterUid: null, sessionNotes: portablePending.notes,
       });
       setPortablePending(null); setPortableMatches([]);
       location.assign(`/?character=${c.id}`);
@@ -1425,7 +1428,7 @@ function App() {
   }
   const visibleCharacters = activeCharacters(characters);
   const archivedList = archivedCharacters(characters);
-  return <DndRuntimeContext.Provider value={{ allowDiceRolls: false, campaignConnected: false }}>
+  return <UndoDeleteProvider><DndRuntimeContext.Provider value={{ allowDiceRolls: false, campaignConnected: false }}>
     <header className="oneshot-header">
       <a href="/" onClick={e => { if (!canLeaveSheet()) e.preventDefault(); }}>SoyMan_1shot</a>
       {active && <span className="muted oneshot-header-name">{active.name}</span>}
@@ -1570,7 +1573,7 @@ function App() {
       })()}
     </Modal>}
     {error && <Banner>{error}</Banner>}
-    {!ready ? <p className="oneshot-home">Открываем локальные данные…</p> : active?.content ? <div className="oneshot-sheet"><div className="fp-page-backdrop" aria-hidden="true" /><DndCharacterView key={active.id} value={active.content} portraitUrl={active.portrait} onQuickUpdate={update} onLevelUpApply={applyLevelUp} syncTabToUrl onPortraitUpload={uploadPortrait} levelUpDraft={localLevelUpDraftHost('character', { characterId: active.id, characterUid: active.characterUid ?? null, catalogKey: active.catalogKey })} onSheetBack={() => { if (status === 'Сохранено на устройстве') location.assign('/'); }} fanSignal={fanSignal} /></div> : <main className="oneshot-home lib">
+    {!ready ? <p className="oneshot-home">Открываем локальные данные…</p> : active?.content ? <div className="oneshot-sheet"><div className="fp-page-backdrop" aria-hidden="true" /><DndCharacterView key={active.id} value={active.content} portraitUrl={active.portrait} onQuickUpdate={update} onLevelUpApply={applyLevelUp} syncTabToUrl onPortraitUpload={uploadPortrait} levelUpDraft={localLevelUpDraftHost('character', { characterId: active.id, characterUid: active.characterUid ?? null, catalogKey: active.catalogKey })} onSheetBack={() => { if (status === 'Сохранено на устройстве') location.assign('/'); }} fanSignal={fanSignal} sideColumn={<OneShotNotes notes={active.sessionNotes ?? []} onChange={notes => { const old = activeRef.current; if (old) persist({ ...old, sessionNotes: notes }); }} />} /></div> : <main className="oneshot-home lib">
       <div className="lib-top"><div className="lib-head">
         <p className="lib-kicker">Библиотека</p>
         <h1 className="lib-title">Твои персонажи</h1>
@@ -1632,7 +1635,7 @@ function App() {
     <SaveNotices />
     {/* Окно по ссылке [[…]] из описаний справочника. */}
     <MentionPreviewRoot />
-  </DndRuntimeContext.Provider>;
+  </DndRuntimeContext.Provider></UndoDeleteProvider>;
 }
 // iOS приближает страницу при фокусе в поле мельче 16px (поиск и т. п.).
 // maximum-scale=1 это гасит, а щипок Safari всё равно разрешает; на Android
