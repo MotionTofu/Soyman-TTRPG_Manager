@@ -7,6 +7,8 @@ import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import type { CampaignEntry } from "../types";
 import { useConfirm } from "../hooks/useConfirm";
+import { useIsMobile } from "../hooks/useIsMobile";
+import { SheetOverlay } from "./sheet/SheetOverlay";
 import { EntityTabWorkspace } from "./EntityTabWorkspace";
 
 interface Props {
@@ -159,7 +161,19 @@ function EntryCard({
   const [title, setTitle] = useState(entry.title);
   const [content, setContent] = useState(entry.content);
   const open = editMode || expanded || forceOpen;
+  // Текст записи листом (Q11); заголовок правится в карточке, как раньше.
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const isMobile = useIsMobile();
   const run = useAction();
+
+  async function saveContent(next: string) {
+    const saved = await run(labelled("Запись кампании", () => write.put(`/campaign-entries/${entry.id}`, { content: next }).then(() => true)), {
+      affects: campaignEntryAffects(campaignId),
+    });
+    if (saved === undefined) throw new Error("Запись не сохранилась");
+    void syncMentionLinks("campaign", campaignId, entry.content, next);
+    setContent(next);
+  }
 
   async function save() {
     // Форма закрывается только после записи: при отказе набранное остаётся.
@@ -215,11 +229,25 @@ function EntryCard({
               <div style={{ whiteSpace: "pre-wrap" }}>
                 <MentionText text={entry.content} />
               </div>
-              <button onClick={() => setEditMode(true)} style={{ alignSelf: "flex-start" }}>
-                Редактировать
-              </button>
+              <div className="row">
+                <button onClick={() => setEditMode(true)}>Редактировать</button>
+                {!isMobile && (
+                  <button type="button" title="Открыть листом" aria-label="Открыть листом" onClick={() => setSheetOpen(true)}>⤢</button>
+                )}
+              </div>
             </>
           ))}
+        {sheetOpen && (
+          <SheetOverlay
+            docKey={`campaign-entry-${entry.id}`}
+            caption={entry.title || "Запись кампании"}
+            value={entry.content}
+            initialMode={entry.content.trim() ? "reading" : "hybrid"}
+            defaultSettingId={defaultSettingId}
+            onSave={saveContent}
+            onClose={() => setSheetOpen(false)}
+          />
+        )}
       </div>
     </details>
   );

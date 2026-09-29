@@ -8,6 +8,8 @@ import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import { NavIcon } from "./NavIcons";
 import { useConfirm } from "../hooks/useConfirm";
+import { useIsMobile } from "../hooks/useIsMobile";
+import { SheetOverlay } from "./sheet/SheetOverlay";
 
 /**
  * Главы лежат внутри карточки владельца (`GET ${apiBase}/${ownerId}` отдаёт их
@@ -188,8 +190,20 @@ function ChapterCard<T extends ChapterLike>({
   const [campaignId, setCampaignId] = useState<number | "">(chapter.campaign_id ?? "");
   const [important, setImportant] = useState(!!chapter.important);
   const [uploading, setUploading] = useState(false);
+  // Текст главы листом (гриллинг 2026-09-29, Q11). Название, кампания и
+  // «Важно» правятся по-прежнему в карточке — лист только для текста.
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const isMobile = useIsMobile();
   const run = useAction();
   const affects = chapterAffects(apiBase, ownerId);
+
+  async function saveContent(next: string) {
+    const before = chapter.content;
+    const ok = await run(() => write.put(`${apiBase}/chapters/${chapter.id}`, { content: next }).then(() => true), { affects });
+    if (!ok) throw new Error("Глава не сохранилась");
+    syncMentionLinks(ownerType, ownerId, before, next);
+    setContent(next);
+  }
 
   async function toggleVisibleToPlayers(e: MouseEvent) {
     e.preventDefault();
@@ -316,10 +330,24 @@ function ChapterCard<T extends ChapterLike>({
               <div style={{ whiteSpace: "pre-wrap" }}>
                 <MentionText text={chapter.content} />
               </div>
-              <button onClick={() => setEditMode(true)} style={{ alignSelf: "flex-start" }}>
-                Редактировать
-              </button>
+              <div className="row">
+                <button onClick={() => setEditMode(true)}>Редактировать</button>
+                {!isMobile && (
+                  <button type="button" title="Открыть листом" aria-label="Открыть листом" onClick={() => setSheetOpen(true)}>⤢</button>
+                )}
+              </div>
             </>
+          )}
+          {sheetOpen && (
+            <SheetOverlay
+              docKey={`chapter-${apiBase}-${chapter.id}`}
+              caption={chapter.title || "Без названия"}
+              value={chapter.content}
+              initialMode={chapter.content.trim() ? "reading" : "hybrid"}
+              defaultSettingId={defaultSettingId}
+              onSave={saveContent}
+              onClose={() => setSheetOpen(false)}
+            />
           )}
         </div>
       </div>

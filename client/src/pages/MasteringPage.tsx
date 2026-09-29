@@ -12,6 +12,8 @@ import { SectionBackground } from "../components/SectionBackground";
 import type { MasteringNote, MasteringSection, System } from "../types";
 import { NavIcon } from "../components/NavIcons";
 import { useConfirm } from "../hooks/useConfirm";
+import { useIsMobile } from "../hooks/useIsMobile";
+import { SheetOverlay } from "../components/sheet/SheetOverlay";
 
 const NO_NOTES: MasteringNote[] = [];
 const NO_SECTIONS: MasteringSection[] = [];
@@ -836,6 +838,16 @@ export function NoteCard({
   const [content, setContent] = useState(note.content);
   const [systemId, setSystemId] = useState(note.system_id ? String(note.system_id) : "");
   const [sectionId, setSectionId] = useState(note.section_id ? String(note.section_id) : "");
+  // Текст заметки листом (Q11); заголовок, система и раздел — в строке, как раньше.
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const isMobile = useIsMobile();
+
+  async function saveContent(next: string) {
+    const saved = await run(labelled("Заметка", () => write.put(`/mastering/${note.id}`, { content: next })), { affects: MASTERING_AFFECTS });
+    if (saved === undefined) throw new Error("Заметка не сохранилась");
+    syncMentionLinks("mastering", note.id, note.content, next);
+    setContent(next);
+  }
 
   async function save() {
     if (!title.trim()) return;
@@ -916,6 +928,20 @@ export function NoteCard({
           >
             <NavIcon name={editMode ? "close" : "edit"} />
           </button>
+          {!isMobile && !editMode && (
+            <button
+              type="button"
+              className="res-row__act"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSheetOpen(true);
+              }}
+              title="Открыть листом"
+              aria-label="Открыть листом"
+            >
+              ⤢
+            </button>
+          )}
           <button
             type="button"
             className="res-row__act"
@@ -985,6 +1011,16 @@ export function NoteCard({
             <button onClick={() => setEditMode(false)}>Отмена</button>
           </div>
         </div>
+      )}
+      {sheetOpen && (
+        <SheetOverlay
+          docKey={`mastering-${note.id}`}
+          caption={note.title}
+          value={note.content}
+          initialMode={hasContent ? "reading" : "hybrid"}
+          onSave={saveContent}
+          onClose={() => setSheetOpen(false)}
+        />
       )}
     </div>
   );

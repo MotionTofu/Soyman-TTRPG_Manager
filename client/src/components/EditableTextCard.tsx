@@ -4,6 +4,9 @@ import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import { clearFieldDraft, loadFieldDraft, saveFieldDraft } from "../fieldDrafts";
+import { useIsMobile } from "../hooks/useIsMobile";
+import { SheetOverlay } from "./sheet/SheetOverlay";
+import type { SheetMode } from "./sheet/SheetView";
 import {
   EntityFieldInputs,
   hasEmptyRequired,
@@ -103,6 +106,13 @@ export function EditableTextCard({
     toFieldValues(fields ?? [])
   );
   const [expandedText, setExpandedText] = useState(false);
+  // Лист (гриллинг 2026-09-29, Q19): «Редактировать» открывает его в
+  // «Гибриде», ⤢ — в «Чтении». Не там, где правку ведут прямо в карточке:
+  // вместе с полями профиля, с черновиком пульта, со вторым действием и на
+  // телефоне — пульт и мобильная версия этим шагом не меняются.
+  const isMobile = useIsMobile();
+  const sheetAllowed = !isMobile && !forceOpen && !draftKey && !extraAction && !(fields && fields.length > 0);
+  const [sheetMode, setSheetMode] = useState<SheetMode | null>(null);
 
   // U-P2-3: Ctrl+S в режиме правки — как в Notion/Obsidian
   useEffect(() => {
@@ -219,7 +229,11 @@ export function EditableTextCard({
           })()}
           <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
             <div className="row">
-              <button onClick={startEdit}>Редактировать</button>
+              <button onClick={sheetAllowed ? () => setSheetMode("hybrid") : startEdit}>Редактировать</button>
+              {sheetAllowed && value && (
+                <button type="button" title="Открыть листом" aria-label="Открыть листом"
+                  onClick={() => setSheetMode("reading")}>⤢</button>
+              )}
               {extraAction && (
                 <>
                   <span style={{ flex: 1 }} />
@@ -235,6 +249,21 @@ export function EditableTextCard({
     </>
   );
 
+  const sheet = sheetMode && (
+    <SheetOverlay
+      docKey={`${entityType ?? "card"}-${entityId ?? "x"}-${title}`}
+      caption={title}
+      value={value}
+      initialMode={sheetMode}
+      defaultSettingId={defaultSettingId}
+      onClose={() => setSheetMode(null)}
+      onSave={async (next) => {
+        await onSave(next);
+        if (entityType && entityId && !serverSyncsMentions) syncMentionLinks(entityType, entityId, value, next);
+      }}
+    />
+  );
+
   if (collapsible) {
     return (
       <details className="card" open={defaultOpen || draftRestored || forceOpen}>
@@ -247,6 +276,7 @@ export function EditableTextCard({
         <div className="stack" style={{ marginTop: "var(--sp-3)" }}>
           {body}
         </div>
+        {sheet}
       </details>
     );
   }
@@ -255,6 +285,7 @@ export function EditableTextCard({
     <div className="card stack">
       <h3 className={summaryClassName}>{title}</h3>
       {body}
+      {sheet}
     </div>
   );
 }

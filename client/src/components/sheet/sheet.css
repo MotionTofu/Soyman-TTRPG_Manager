@@ -29,6 +29,8 @@
   gap: 2px;
 }
 .sheet-toc__back {
+  all: unset;
+  cursor: pointer;
   margin-bottom: 10px;
   color: var(--accent);
   text-decoration: none;
@@ -324,3 +326,15 @@
   border: 1px solid var(--line);
 }
 .sheet-menu__row > button.is-on { background: var(--ink); color: var(--paper); }
+
+/* ---- лист поверх рабочей области (SheetOverlay) ---- */
+.sheet-overlay {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+  background-image: var(--page-texture, none);
+}
+.sheet-caption { margin: 0 0 6px; font-size: 13px; color: var(--muted); }
+.sheet-caption:first-child { font: 500 12px var(--font-ui); letter-spacing: .06em; text-transform: uppercase; }

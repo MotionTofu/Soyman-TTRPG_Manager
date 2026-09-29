@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { EditorSelection } from "@codemirror/state";
+import { EditorView } from "@codemirror/view";
 import "./sheet.css";
 
 // Экран «Лист»: длинный текст страницей А4 (гриллинг 2026-09-29, Q1–Q34).
@@ -84,7 +86,8 @@ interface Heading { level: number; text: string; el: HTMLElement }
 interface Props {
   /** Ключ документа — под ним запоминается место прокрутки (Q30). */
   docKey: string;
-  back: { to: string; label: string; onClick?: (event: MouseEvent<HTMLAnchorElement>) => void };
+  /** «Назад»: ссылкой (`to`) или действием — лист поверх карточки закрывается, а не уходит. */
+  back: { to?: string; label: string; onClick?: (event: MouseEvent<HTMLElement>) => void };
   /** Кнопки левой плашки, после «Назад». */
   actions?: ReactNode;
   modes: SheetMode[];
@@ -204,15 +207,28 @@ export function SheetView({ docKey, back, actions, modes, mode, onMode, contentK
     return () => { stage.removeEventListener("scroll", onScroll); window.clearTimeout(timer); };
   }, [scrollKey, headings]);
 
+  // Щелчок по пустому полю листа под текстом — курсор в конец, как в
+  // Obsidian; иначе промах мимо строк не давал писать вовсе.
+  function focusEditorEnd(event: MouseEvent<HTMLElement>) {
+    if (event.button !== 0 || mode === "reading") return;
+    const content = sheetRef.current?.querySelector<HTMLElement>(".cm-content");
+    if (!content || content.contains(event.target as Node)) return;
+    const view = EditorView.findFromDOM(content);
+    if (!view) return;
+    event.preventDefault();
+    view.dispatch({ selection: EditorSelection.cursor(view.state.doc.length), scrollIntoView: true });
+    view.focus();
+  }
+
   function jump(h: Heading) {
     h.el.scrollIntoView({ behavior: "smooth", block: "start" });
     setTocOpen(false);
   }
 
   const pages = breaks ? Math.max(0, Math.ceil(sheetHeight / pageHeight) - 1) : 0;
-  const backLink = (
-    <Link to={back.to} onClick={back.onClick} className="sheet-btn" title={back.label} aria-label={back.label}>←</Link>
-  );
+  const backLink = back.to
+    ? <Link to={back.to} onClick={back.onClick} className="sheet-btn" title={back.label} aria-label={back.label}>←</Link>
+    : <button type="button" onClick={back.onClick} className="sheet-btn" title={back.label} aria-label={back.label}>←</button>;
   const toc = (
     <nav className="sheet-toc__list" aria-label="Содержание">
       {headings.map((h, i) => (
@@ -229,7 +245,9 @@ export function SheetView({ docKey, back, actions, modes, mode, onMode, contentK
       <div className="sheet-layout">
         {showToc && (
           <aside className="sheet-toc">
-            <Link to={back.to} onClick={back.onClick} className="sheet-toc__back">← {back.label}</Link>
+            {back.to
+              ? <Link to={back.to} onClick={back.onClick} className="sheet-toc__back">← {back.label}</Link>
+              : <button type="button" onClick={back.onClick} className="sheet-toc__back">← {back.label}</button>}
             <span className="sheet-toc__title">Содержание</span>
             {toc}
           </aside>
@@ -266,7 +284,7 @@ export function SheetView({ docKey, back, actions, modes, mode, onMode, contentK
                 title="Разрывы страниц" aria-label="Разрывы страниц" onClick={toggleBreaks}>⋯</button>
             </div>
           </div>
-          <article ref={sheetRef} className={`sheet sheet--${mode}`}
+          <article ref={sheetRef} className={`sheet sheet--${mode}`} onMouseDown={focusEditorEnd}
             style={{ ["--sheet-z" as string]: z, minHeight: pageHeight }}>
             {children}
             {Array.from({ length: pages }, (_, i) => (
