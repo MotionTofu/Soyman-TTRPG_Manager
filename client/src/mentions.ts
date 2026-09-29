@@ -80,13 +80,15 @@ export function formatMentionToken(
 
 interface IndexPayload {
   owners: Record<string, { code: string; name: string }>;
-  entities: Record<string, [number, string, string | null][]>;
+  entities: Record<string, [number, string, string | null, string?][]>;
 }
 
 interface Entry {
   id: number;
   uid: string;
   owner: string | null;
+  /** Категория существа или вид статьи компендиума — ради цвета упоминания. */
+  sub?: string;
 }
 
 interface Loaded {
@@ -112,8 +114,8 @@ function build(payload: IndexPayload): Loaded {
   const byId = new Map<string, Entry>();
   for (const [type, rows] of Object.entries(payload.entities)) {
     const heads = new Map<string, Entry[]>();
-    for (const [id, uid, owner] of rows) {
-      const entry: Entry = { id, uid, owner };
+    for (const [id, uid, owner, sub] of rows) {
+      const entry: Entry = { id, uid, owner, sub };
       const head = uid.slice(0, 8);
       const list = heads.get(head);
       if (list) list.push(entry);
@@ -206,6 +208,42 @@ export function resolveMention(type: string, uid: string): number | null {
     return null;
   }
   return hit.id;
+}
+
+/**
+ * Цвет маркера упоминания — те же цвета типов, что на Полотне и в Пульте
+ * (canvasPalette.ts). Существа сеттинга делятся на жителей и бестиарий, статьи
+ * компендиума — на монстров, предметы и прочее; остальное — цвет акцента темы.
+ */
+export type MentionTone = "pop" | "loc" | "cre" | "itm" | "com" | "pc" | "other";
+
+const COMPENDIUM_TONE: Record<string, MentionTone> = {
+  monster: "cre",
+  zip_creature: "cre",
+  magic_item: "itm",
+  equipment: "itm",
+  zip_equipment: "itm",
+  zip_relic: "itm",
+  treasure: "itm",
+};
+
+export function mentionTone(type: string, id: number): MentionTone {
+  switch (type) {
+    case "being":
+      return loaded?.byId.get(`being:${id}`)?.sub === "bestiary" ? "cre" : "pop";
+    case "location":
+      return "loc";
+    case "community":
+      return "com";
+    case "artifact":
+      return "itm";
+    case "character":
+      return "pc";
+    case "compendium_entry":
+      return COMPENDIUM_TONE[loaded?.byId.get(`compendium_entry:${id}`)?.sub ?? ""] ?? "other";
+    default:
+      return "other";
+  }
 }
 
 /** Загрузилась ли карта вообще: до этого «не нашлось» ничего не значит. */

@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import { ANY_MENTION_RE, resolveMention } from "../../mentions";
+import { ANY_MENTION_RE, mentionTone, resolveMention, useMentionIndex } from "../../mentions";
 import { DeadMention } from "./DeadMention";
 import { openMentionPreview } from "./mentionPreviewStore";
 import { getCachedUser } from "../../api/currentUser";
@@ -114,7 +114,7 @@ function parseInline(text: string, keyPrefix: string, mentionsAsBold: boolean): 
           <button
             key={`${keyPrefix}-${key++}`}
             type="button"
-            className="mention-link"
+            className={`mention-link mention--${mentionTone(refType, target)}`}
             onClick={() => openMentionPreview(refType, target)}
           >
             {refLabel}
@@ -141,7 +141,7 @@ function parseInline(text: string, keyPrefix: string, mentionsAsBold: boolean): 
           <button
             key={`${keyPrefix}-${key++}`}
             type="button"
-            className="mention-link"
+            className={`mention-link mention--${mentionTone(mType, id)}`}
             onClick={() => openMentionPreview(mType, id)}
           >
             {mLabel}
@@ -239,6 +239,9 @@ function unmaskMentions(text: string, tokens: string[]): string {
 }
 
 export function MentionText({ text, mentionsAsBold = false }: { text: string; mentionsAsBold?: boolean }) {
+  // Карта ключей приезжает после первой отрисовки: без подписки на неё текст,
+  // нарисованный раньше, так и остался бы с зачёркнутыми ссылками и без цвета.
+  useMentionIndex();
   const lines = text.split("\n");
   const blocks: ReactNode[] = [];
   let key = 0;

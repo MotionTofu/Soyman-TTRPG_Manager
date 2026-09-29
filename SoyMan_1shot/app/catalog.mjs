@@ -77,7 +77,7 @@ function cleanCreature(value) {
 // (client/src/mentions.ts): ссылки в описаниях оживают без сервера. Ключи —
 // без дефисов, как в тексте ссылок (normUid).
 export function mentionIndexPayload(entries) {
-  return { owners: {}, entities: { compendium_entry: (entries ?? []).filter(e => typeof e.uid === 'string').map(e => [e.id, e.uid.replace(/-/g, '').toLowerCase(), null]) } };
+  return { owners: {}, entities: { compendium_entry: (entries ?? []).filter(e => typeof e.uid === 'string').map(e => e.kind ? [e.id, e.uid.replace(/-/g, '').toLowerCase(), null, e.kind] : [e.id, e.uid.replace(/-/g, '').toLowerCase(), null]) } };
 }
 export function creatureCardPayload(entry, avatarUrl) {
   const creature = entry.creature || { combat_roles: [], tactics: [], statblock: null };

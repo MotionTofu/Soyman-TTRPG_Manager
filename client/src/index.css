@@ -8279,17 +8279,33 @@ details[open] > .dnd-feat-section-head .chevron-icon {
   gap: var(--sp-2);
 }
 
+/* Упоминание — маркер цвета типа сущности, те же цвета, что на Полотне и в
+   Пульте (canvasPalette.ts → --cv-node-*). Текст остаётся цветом темы: маркер
+   полупрозрачный, в тёмных темах плотнее, иначе цвет на тёмной бумаге тонет. */
 .mention-link {
-  color: var(--accent);
+  --mention-c: var(--accent);
+  --mention-a: 24%;
   font-weight: 600;
+  padding: 0 0.18em;
+  border-radius: 2px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  background: color-mix(in srgb, var(--mention-c) var(--mention-a), transparent);
 }
-[data-theme-id="peace"] .mention-link {
-  color: color-mix(in srgb, var(--accent) 80%, white 20%);
+/* В тёмных темах текст на маркере светлее обычного: бирюза «сообщества» под
+   текстом «Покоя» иначе давала 3,8:1 при нужных 4,5. */
+[data-theme-mode="dark"] .mention-link {
+  --mention-a: 38%;
+  color: color-mix(in srgb, currentColor 60%, white);
 }
+.mention--pop { --mention-c: var(--cv-node-being); }
+.mention--loc { --mention-c: var(--cv-node-location); }
+.mention--cre { --mention-c: var(--cv-node-compendium_entry); }
+.mention--itm { --mention-c: var(--cv-node-artifact); }
+.mention--com { --mention-c: var(--cv-node-community); }
+.mention--pc { --mention-c: var(--cv-node-character); }
 button.mention-link {
-  background: none;
   border: none;
-  padding: 0;
   margin: 0;
   font: inherit;
   color: inherit;
@@ -8299,8 +8315,10 @@ button.mention-link {
   display: inline;
 }
 button.mention-link:hover {
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  --mention-a: 40%;
+}
+[data-theme-mode="dark"] button.mention-link:hover {
+  --mention-a: 45%;
 }
 button.mention-link:focus-visible {
   outline: 2px solid var(--accent);

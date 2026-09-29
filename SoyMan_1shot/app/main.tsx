@@ -9,6 +9,7 @@ import { DndRuntimeContext } from '../../client/src/components/dnd/DndRuntime';
 import { SaveNotices } from '../../client/src/components/SaveNotices';
 import { MentionPreviewRoot } from '../../client/src/components/mentions/MentionPreviewRoot';
 import { applyTheme, findTheme } from '../../client/src/themes';
+import { applyCanvasPaletteVars } from '../../client/src/canvasPalette';
 import { emptyDndCharacter } from '@shared/dnd/normalize';
 import type { DndCharacterData } from '@shared/dnd/types';
 import { listCharacters, getCharacter, createCharacter, saveCharacter, importPortableRecord, updatePortableCharacter, archiveCharacter, restoreCharacter, deleteCharacter, duplicateCharacter, currentCatalog, setCurrentCatalog, hasCatalog, installCatalogRecord, getCatalogPreviews, saveCatalogPreviews, listCatalogRecords, deleteCatalogAndPreviews, saveCatalog, getCatalog, getSyncCredential, saveSyncCredential, clearSyncCredential, getSyncMeta, listSyncMeta, saveSyncMeta, parseCharacterContent, subscribeCharacterCommits, getAutoSyncEnabled, setAutoSyncEnabled, getShareTokens, saveShareToken, dropShareToken, type Character, type Catalog, type CatalogPreviewRecord, type SyncCredential } from './repository';
@@ -56,6 +57,8 @@ import './modals.css';
 import './home.css';
 
 applyTheme(findTheme('noir'));
+// Цвета типов сущностей — маркер упоминаний (index.css, .mention--*).
+applyCanvasPaletteVars();
 function download(value: unknown, name: string) {
   const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' }));
   const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 60000);

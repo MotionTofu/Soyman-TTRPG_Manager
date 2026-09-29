@@ -11,6 +11,7 @@ import { PortraitFrameModal } from '../../client/src/components/dnd/PortraitFram
 import { Button } from './ui/Button';
 import { ActionRow } from './ui/ActionRow';
 import { applyTheme, findTheme } from '../../client/src/themes';
+import { applyCanvasPaletteVars } from '../../client/src/canvasPalette';
 import { emptyDndCharacter } from '@shared/dnd/normalize';
 import type { DndSpellEntry } from '@shared/dnd/types';
 import '../../client/src/index.css';
@@ -27,6 +28,8 @@ import './sheet.css';
 import './modals.css';
 
 applyTheme(findTheme('noir'));
+// Цвета типов сущностей — маркер упоминаний (index.css, .mention--*).
+applyCanvasPaletteVars();
 const portraitUrl = new URLSearchParams(window.location.search).get('portrait') === 'none'
   ? undefined
   : '/mascot/hero-idle.webp';

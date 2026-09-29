@@ -7,6 +7,7 @@ import { queryClient } from '../../client/src/data/queryClient';
 import { DndCharacterView } from '../../client/src/components/dnd/DndCharacterForm';
 import { DndRuntimeContext } from '../../client/src/components/dnd/DndRuntime';
 import { applyTheme, findTheme } from '../../client/src/themes';
+import { applyCanvasPaletteVars } from '../../client/src/canvasPalette';
 import { snapshot } from './standalone-transport';
 import { refreshMentionIndex } from '../../client/src/mentions';
 import { MentionPreviewRoot } from '../../client/src/components/mentions/MentionPreviewRoot';
@@ -27,6 +28,8 @@ import './sheet.css';
 import './modals.css';
 
 applyTheme(findTheme('noir'));
+// Цвета типов сущностей — маркер упоминаний (index.css, .mention--*).
+applyCanvasPaletteVars();
 const template = document.documentElement.cloneNode(true) as HTMLElement;
 template.querySelector('#root')!.replaceChildren();
 function App() {

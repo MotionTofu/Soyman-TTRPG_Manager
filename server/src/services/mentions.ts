@@ -661,8 +661,16 @@ export function rewriteAllMentions(
  */
 export interface MentionIndex {
   owners: Record<string, { code: string; name: string }>;
-  entities: Record<string, [number, string, string | null][]>;
+  /** [id, uid, владелец, подвид] — подвид есть только у типов из SUBTYPE_COL. */
+  entities: Record<string, [number, string, string | null, string?][]>;
 }
+
+/**
+ * Колонка, которая делит тип на части с разным цветом упоминания: существо
+ * бестиария и житель сеттинга — одна таблица, монстр и предмет компендиума —
+ * тоже. Цвет рисуется синхронно из карты, поэтому подвид едет в ней же.
+ */
+const SUBTYPE_COL: Record<string, string> = { being: "category", compendium_entry: "kind" };
 
 export function mentionIndex(): MentionIndex {
   const owners: MentionIndex["owners"] = {};
@@ -686,20 +694,17 @@ export function mentionIndex(): MentionIndex {
     if (!cols.includes("uid")) continue;
     const ownerCol = type === "setting" ? null : cols.includes("system_id") ? "system_id" : cols.includes("setting_id") ? "setting_id" : null;
     const ownerPrefix = ownerCol === "system_id" ? "y" : "s";
+    const subCol = SUBTYPE_COL[type] && cols.includes(SUBTYPE_COL[type]) ? SUBTYPE_COL[type] : null;
     const rows = db
       .prepare(
-        `SELECT id, uid${ownerCol ? `, ${ownerCol} AS owner` : ""} FROM ${table} WHERE uid IS NOT NULL`
+        `SELECT id, uid${ownerCol ? `, ${ownerCol} AS owner` : ""}${subCol ? `, ${subCol} AS sub` : ""} FROM ${table} WHERE uid IS NOT NULL`
       )
-      .all() as { id: number; uid: string; owner?: number | null }[];
-    entities[type] = rows.map((r) => [
-      r.id,
-      normUid(r.uid),
-      type === "setting"
-        ? `s${r.id}`
-        : r.owner == null
-          ? null
-          : `${ownerPrefix}${r.owner}`,
-    ]);
+      .all() as { id: number; uid: string; owner?: number | null; sub?: string | null }[];
+    entities[type] = rows.map((r) => {
+      const owner =
+        type === "setting" ? `s${r.id}` : r.owner == null ? null : `${ownerPrefix}${r.owner}`;
+      return r.sub ? [r.id, normUid(r.uid), owner, r.sub] : [r.id, normUid(r.uid), owner];
+    });
   }
   return { owners, entities };
 }
