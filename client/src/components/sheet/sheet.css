@@ -196,23 +196,6 @@
 .sheet h3, .sheet .rt-h3 { font-size: 1.12em; margin: 1em 0 .3em; }
 .sheet .rt-h { display: block; font-family: var(--font-display); color: var(--text-bright); }
 .sheet > :first-child { margin-top: 0; }
-/* Поле растёт по тексту — прокручивается сцена, а не поле. field-sizing
-   перебивает «fixed» страницы Markdown-ресурса; где его нет, растит JS
-   (MentionTextarea, SUPPORTS_FIELD_SIZING). */
-.sheet .mention-textarea-wrap textarea {
-  field-sizing: content;
-  overflow: hidden;
-  max-height: none;
-  min-height: 60vh;
-  border: 0;
-  background: transparent;
-  resize: none;
-  padding: 0;
-  font: inherit;
-  line-height: inherit;
-  color: inherit;
-}
-.sheet .mention-textarea-wrap textarea:focus { outline: none; box-shadow: none; }
 
 .sheet-break {
   position: absolute;
@@ -246,4 +229,72 @@
   .sheet-plate { position: static; flex-wrap: wrap; }
   .sheet { padding: 12px; min-height: 0 !important; box-shadow: none; font-size: 1rem; }
   .sheet-break { display: none; }
+}
+
+/* ---- редактор «Исходника» (SheetEditor, CodeMirror 6) ---- */
+.sheet-editor .cm-editor { background: transparent; color: inherit; font: inherit; }
+.sheet-editor .cm-editor.cm-focused { outline: none; }
+.sheet-editor .cm-scroller { font: inherit; line-height: inherit; overflow: visible; }
+.sheet-editor .cm-content { padding: 0; min-height: 50vh; caret-color: var(--ink); }
+.sheet-editor .cm-line { padding: 0; }
+.sheet-editor .cm-placeholder { color: var(--muted); }
+.sheet-editor .cm-selectionBackground,
+.sheet-editor .cm-editor.cm-focused .cm-selectionBackground { background: var(--accent-soft) !important; }
+/* Токен упоминания — тот же маркер, что в чтении (index.css, .mention--*). */
+.sheet-editor .cm-mention {
+  --mention-a: 24%;
+  background: color-mix(in srgb, var(--mention-c, var(--accent)) var(--mention-a), transparent);
+  border-radius: 2px;
+}
+[data-theme-mode="dark"] .sheet-editor .cm-mention { --mention-a: 38%; }
+.sheet-editor .cm-mention--dead { background: none; text-decoration: line-through; color: var(--muted); }
+.sheet-editor .cm-rt-tag { color: var(--muted); }
+
+/* ---- меню по ПКМ ---- */
+.sheet-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 240px;
+  padding: 4px 0;
+  background: var(--bg-elevated);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .35);
+  display: flex;
+  flex-direction: column;
+  font-size: 14px;
+}
+.sheet-menu > button {
+  all: unset;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 5px 14px;
+  cursor: pointer;
+}
+.sheet-menu > button:hover, .sheet-menu > button:focus-visible { background: var(--accent-soft); }
+.sheet-menu kbd { font: 11px var(--font-ui); color: var(--muted); }
+.sheet-menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; opacity: .6; }
+.sheet-menu__row { display: flex; gap: 2px; padding: 4px 10px; }
+.sheet-menu__row > button {
+  all: unset;
+  width: 30px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  cursor: pointer;
+  font-size: 13px;
+}
+.sheet-menu__row > button:hover { background: var(--accent-soft); }
+.sheet-menu__row--fields { align-items: center; gap: 6px; }
+.sheet-menu__row--fields label { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }
+.sheet-menu__row--fields input[type="color"] { width: 26px; height: 22px; padding: 0; border: 0; background: none; }
+.sheet-menu__row--fields select { font-size: 13px; max-width: 90px; }
+.sheet-menu__link { display: grid; gap: 4px; padding: 4px 14px 8px; }
+.sheet-menu__note { padding: 4px 14px; font-size: 12px; color: var(--muted); }
+@media (pointer: coarse) {
+  .sheet-menu > button { padding: 10px 14px; }
+  .sheet-menu__row > button { width: 38px; height: 36px; }
 }

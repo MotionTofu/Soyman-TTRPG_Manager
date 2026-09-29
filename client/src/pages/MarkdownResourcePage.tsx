@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { errorText, useAfterWrite, useResource, write } from "../data/hooks";
 import { MentionText } from "../components/mentions/MentionText";
-import { MentionTextarea } from "../components/mentions/MentionTextarea";
 import type { Resource } from "../types";
 import { getAuthToken } from "../api/client";
+import { SheetEditor } from "../components/sheet/SheetEditor";
 import { SheetMenu, SheetView, rememberedSheetMode, type SheetMode } from "../components/sheet/SheetView";
 import "./pdf-markdown.css";
 
@@ -30,6 +30,9 @@ export function MarkdownResourcePage() {
   const [chosenMode, setChosenMode] = useState<SheetMode | null>(null);
   const [insertOpen, setInsertOpen] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
+  // На сенсорном экране правой кнопки нет — то же меню открывает «Aa» (Q27).
+  const [menuRequest, setMenuRequest] = useState(0);
+  const [coarsePointer] = useState(() => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches);
   const [version, setVersion] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [saveError, setSaveError] = useState("");
@@ -209,6 +212,8 @@ export function MarkdownResourcePage() {
       onClick={() => void save()} disabled={!dirty || saveState === "saving" || saveState === "conflict"}>
       ✓{dirty && <span className="sheet-btn__dot" />}
     </button>}
+    {editing && coarsePointer && <button type="button" className="sheet-btn" title="Форматирование" aria-label="Форматирование"
+      onClick={() => setMenuRequest(n => n + 1)}>Aa</button>}
     {editing && <SheetMenu label="Вставить" icon="+" wide open={insertOpen}
       onOpenChange={open => { setInsertOpen(open); if (!open) setResourcePicker(null); }}>
       {!resourcePicker ? <>
@@ -252,7 +257,7 @@ export function MarkdownResourcePage() {
       } }}
       actions={actions} notice={notice}>
       {editing
-        ? <MentionTextarea value={draft} onChange={changeDraft} rows={18} insertRequest={insertRequest}
+        ? <SheetEditor value={draft} onChange={changeDraft} insertRequest={insertRequest} menuRequest={menuRequest}
             onInsertHandled={key => setInsertRequest(previous => previous?.key === key ? null : previous)} />
         : <MentionText text={draft} />}
     </SheetView>

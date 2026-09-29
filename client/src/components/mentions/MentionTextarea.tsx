@@ -2,8 +2,8 @@ import { memo, useEffect, useRef, useState, type ChangeEvent, type DragEvent, ty
 import { buildMentionToken } from "../../mentions";
 import { FONT_OPTIONS, ensureFontLoaded } from "../../fonts";
 import { SEARCH_DRAG_MIME } from "../LinkDropZone";
-import { Modal } from "../Modal";
 import { MentionPickerModal } from "./MentionPickerModal";
+import { TableInsertModal } from "./TableInsertModal";
 import { NavIcon } from "../NavIcons";
 import type { SearchResult } from "../../types";
 import { scheduleAutoResize, cancelAutoResize } from "./textareaAutoResize";
@@ -17,21 +17,12 @@ const FONT_SIZES = [12, 14, 16, 18, 20, 24, 28, 32, 40];
 const SUPPORTS_FIELD_SIZING =
   typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("field-sizing", "content");
 
-// Rebuilds the table modal's cell grid to the given size, keeping any values
-// that still fit and defaulting new header cells to "Заголовок N" (matching
-// the old fixed 2×2 template) and new body cells to empty.
 // Сочетание клавиш сверяется по физической клавише (e.code): e.key на
 // кириллической раскладке даёт «и»/«л», и хоткей там бы не работал. Но code
 // приходит пустым у экранных клавиатур и части автоматизации, поэтому буква
 // принимается и как запасной вариант.
 function isShortcutKey(e: KeyboardEvent<HTMLTextAreaElement>, letter: string): boolean {
   return e.code === `Key${letter}` || e.key.toUpperCase() === letter;
-}
-
-function resizeGrid(prev: string[][], rows: number, cols: number): string[][] {
-  return Array.from({ length: rows }, (_, r) =>
-    Array.from({ length: cols }, (_, c) => prev[r]?.[c] ?? (r === 0 ? `Заголовок ${c + 1}` : ""))
-  );
 }
 
 interface Props {
@@ -77,9 +68,6 @@ export const MentionTextarea = memo(function MentionTextarea({
   const [extLabel, setExtLabel] = useState("");
   const [extUrl, setExtUrl] = useState("");
   const [tableModalOpen, setTableModalOpen] = useState(false);
-  const [tableRows, setTableRows] = useState(2);
-  const [tableCols, setTableCols] = useState(2);
-  const [tableCells, setTableCells] = useState<string[][]>([]);
   const lastInsertKey = useRef<number | null>(null);
 
   useEffect(() => {
@@ -377,39 +365,17 @@ export const MentionTextarea = memo(function MentionTextarea({
     });
   }
 
-  // Requirement 1: opens a rows×columns modal with a live editable grid
-  // instead of inserting a fixed template — the pipe-markdown text is only
-  // built once on "Создать".
+  // Окно строк × столбцов (TableInsertModal); текст таблицы собирается по «Создать».
   function openTableModal() {
-    setTableRows(2);
-    setTableCols(2);
-    setTableCells(resizeGrid([], 2, 2));
     setTableModalOpen(true);
     setMenuOpen(false);
   }
 
-  function changeTableSize(rows: number, cols: number) {
-    const clampedRows = Math.min(101, Math.max(1, rows));
-    const clampedCols = Math.min(10, Math.max(1, cols));
-    setTableRows(clampedRows);
-    setTableCols(clampedCols);
-    setTableCells((prev) => resizeGrid(prev, clampedRows, clampedCols));
-  }
-
-  function setTableCell(r: number, c: number, text: string) {
-    setTableCells((prev) => prev.map((row, ri) => (ri === r ? row.map((cell, ci) => (ci === c ? text : cell)) : row)));
-  }
-
-  function confirmTable() {
+  function confirmTable(table: string) {
     const el = textareaRef.current;
     const start = el?.selectionStart ?? value.length;
     const needsLeadingBreak = start > 0 && value[start - 1] !== "\n";
-    const rowLine = (cells: string[]) => `| ${cells.map((c) => c || " ").join(" | ")} |\n`;
-    const sepLine = `| ${tableCols === 0 ? "" : Array(tableCols).fill("---").join(" | ")} |\n`;
-    const template =
-      `${needsLeadingBreak ? "\n" : ""}${rowLine(tableCells[0] ?? [])}` +
-      sepLine +
-      tableCells.slice(1).map(rowLine).join("");
+    const template = `${needsLeadingBreak ? "\n" : ""}${table}`;
     const newText = value.slice(0, start) + template + value.slice(start);
     onChange(newText);
     const newCursor = start + template.length;
@@ -581,57 +547,7 @@ export const MentionTextarea = memo(function MentionTextarea({
           onClose={() => setQuery(null)}
         />
       )}
-      {tableModalOpen && (
-        <Modal onClose={() => setTableModalOpen(false)}>
-          <div className="stack">
-            <h3 style={{ margin: 0 }}>Новая таблица</h3>
-            <div className="row">
-              <label className="row" style={{ gap: 6 }}>
-                Строк
-                <input
-                  type="number"
-                  min={1}
-                  max={101}
-                  value={tableRows}
-                  onChange={(e) => changeTableSize(Number(e.target.value) || 1, tableCols)}
-                  style={{ width: 60 }}
-                />
-              </label>
-              <label className="row" style={{ gap: 6 }}>
-                Столбцов
-                <input
-                  type="number"
-                  min={1}
-                  max={10}
-                  value={tableCols}
-                  onChange={(e) => changeTableSize(tableRows, Number(e.target.value) || 1)}
-                  style={{ width: 60 }}
-                />
-              </label>
-            </div>
-            <div className="rt-table-editor">
-              {tableCells.map((row, r) => (
-                <div key={r} className="row rt-table-editor-row">
-                  {row.map((cell, c) => (
-                    <input
-                      key={c}
-                      value={cell}
-                      placeholder={r === 0 ? `Заголовок ${c + 1}` : "ячейка"}
-                      onChange={(e) => setTableCell(r, c, e.target.value)}
-                    />
-                  ))}
-                </div>
-              ))}
-            </div>
-            <div className="row">
-              <button className="primary" onClick={confirmTable}>
-                Создать
-              </button>
-              <button onClick={() => setTableModalOpen(false)}>Отмена</button>
-            </div>
-          </div>
-        </Modal>
-      )}
+      {tableModalOpen && <TableInsertModal onInsert={confirmTable} onClose={() => setTableModalOpen(false)} />}
     </div>
   );
 });
