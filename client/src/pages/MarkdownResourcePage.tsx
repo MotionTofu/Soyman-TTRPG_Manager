@@ -5,7 +5,11 @@ import { MentionText } from "../components/mentions/MentionText";
 import { MentionTextarea } from "../components/mentions/MentionTextarea";
 import type { Resource } from "../types";
 import { getAuthToken } from "../api/client";
+import { SheetMenu, SheetView, rememberedSheetMode, type SheetMode } from "../components/sheet/SheetView";
 import "./pdf-markdown.css";
+
+// «Гибрид» появится вместе с CodeMirror (шаг 4 плана листа).
+const SHEET_MODES: SheetMode[] = ["source", "reading"];
 
 const IMAGE_FILE_RE = /\.(?:png|jpe?g|gif|webp|avif)(?:\?|$)/i;
 
@@ -23,7 +27,9 @@ export function MarkdownResourcePage() {
   const resourceList = useResource<Resource[]>("/resources");
   const [draft, setDraft] = useState("");
   const [dirty, setDirty] = useState(false);
-  const [editing, setEditing] = useState(false);
+  const [chosenMode, setChosenMode] = useState<SheetMode | null>(null);
+  const [insertOpen, setInsertOpen] = useState(false);
+  const [downloadOpen, setDownloadOpen] = useState(false);
   const [version, setVersion] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [saveError, setSaveError] = useState("");
@@ -90,6 +96,17 @@ export function MarkdownResourcePage() {
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
+
+  // Ctrl+S — сохранить сразу, не дожидаясь автосохранения.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "s") return;
+      event.preventDefault();
+      void save();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [save]);
 
   function changeDraft(value: string) {
     draftRef.current = value;
@@ -177,50 +194,67 @@ export function MarkdownResourcePage() {
   if (resourceQuery.error || documentQuery.error || resourceQuery.data?.type !== "markdown" || !documentQuery.data)
     return <p role="alert">Markdown-ресурс не найден. <Link to="/resources">К Ресурсам</Link></p>;
 
+  const content = documentQuery.data.content;
+  const mode: SheetMode = chosenMode ?? (content.trim() ? rememberedSheetMode(SHEET_MODES) ?? "reading" : "source");
+  const editing = mode !== "reading";
+  const saveTitle = saveState === "saving" ? "Сохраняю…" : saveState === "saved" ? "Сохранено"
+    : saveState === "unsaved" ? "Сохранить (Ctrl+S) — черновик сохраняется сам" : saveError || "Сохранить";
+  function openPicker(kind: "link" | "image") {
+    setResourcePicker(kind);
+    setAttachmentError("");
+  }
+
+  const actions = <>
+    {editing && <button type="button" className="sheet-btn sheet-btn--primary" title={saveTitle} aria-label={saveTitle}
+      onClick={() => void save()} disabled={!dirty || saveState === "saving" || saveState === "conflict"}>
+      ✓{dirty && <span className="sheet-btn__dot" />}
+    </button>}
+    {editing && <SheetMenu label="Вставить" icon="+" wide open={insertOpen}
+      onOpenChange={open => { setInsertOpen(open); if (!open) setResourcePicker(null); }}>
+      {!resourcePicker ? <>
+        <button type="button" onClick={() => openPicker("link")}>Ссылка на Ресурс</button>
+        <button type="button" onClick={() => openPicker("image")}>Изображение</button>
+        <span className="pdf-markdown__hint" style={{ padding: "4px 14px", fontSize: 12 }}>Alt+Q — внутренняя ссылка, Alt+W — цитата</span>
+      </> : <div className="markdown-resource__picker" style={{ margin: 0, border: 0 }}>
+        <div className="markdown-resource__picker-head"><strong>{resourcePicker === "image" ? "Изображение" : "Ресурс"}</strong><button type="button" onClick={() => setResourcePicker(null)}>Назад</button></div>
+        <label>Найти Ресурс <input value={resourceSearch} onChange={event => setResourceSearch(event.target.value)} placeholder="Название" /></label>
+        <div className="markdown-resource__picker-list">
+          {pickableResources.slice(0, 40).map(resource => <button type="button" key={resource.id} onClick={() => { insertResource(resource); setInsertOpen(false); }}>{resource.name}</button>)}
+          {!pickableResources.length && <span>Подходящих Ресурсов нет</span>}
+        </div>
+        <label>Или прикрепить файл <input type="file" accept={resourcePicker === "image" ? "image/png,image/jpeg,image/gif,image/webp,image/avif" : "image/*,.pdf,.md"} onChange={event => setAttachment(event.target.files?.[0] ?? null)} /></label>
+        <button type="button" disabled={!attachment || inserting} onClick={() => void uploadAttachment().then(() => setInsertOpen(false))}>{inserting ? "Прикрепляю…" : "Прикрепить и вставить"}</button>
+        {attachmentError && <p role="alert">{attachmentError}</p>}
+      </div>}
+    </SheetMenu>}
+    <SheetMenu label="Скачать" icon="⤓" open={downloadOpen} onOpenChange={setDownloadOpen}>
+      <button type="button" onClick={() => { download(); setDownloadOpen(false); }}>Скачать .md</button>
+      <button type="button" disabled={bundleBusy || saveState === "conflict"}
+        onClick={() => { void downloadBundle(); setDownloadOpen(false); }}>{bundleBusy ? "Собираю ZIP…" : "Скачать с вложениями"}</button>
+    </SheetMenu>
+  </>;
+
+  const notice = (bundleError || saveState === "conflict" || saveState === "error") && <p role="alert" className="markdown-resource__notice">
+    {bundleError || saveError}
+    {saveState === "conflict" && <button type="button" onClick={download}>Скачать черновик .md</button>}
+  </p>;
+
   return <section className="pdf-markdown markdown-resource">
-    <header className="pdf-markdown__toolbar">
-      <Link to={returnTo} onClick={event => {
+    <SheetView docKey={`resource-md-${id}`} contentKey={draft} modes={SHEET_MODES} mode={mode} onMode={next => {
+        // Уход в «Чтение» сохраняет набранное (Q10).
+        if (next === "reading" && dirty) void save();
+        setChosenMode(next);
+      }}
+      back={{ to: returnTo, label: "Назад", onClick: event => {
         if (!dirty) return;
         event.preventDefault();
         void save().then(ok => { if (ok) navigate(returnTo); });
-      }}>← Назад</Link>
-      <strong>{resourceQuery.data.name}</strong>
-      <span className="pdf-markdown__spacer" />
-      <button type="button" onClick={() => setEditing(value => !value)} aria-pressed={editing}>
-        {editing ? "Читать" : "Редактировать .md"}
-      </button>
-      <button type="button" onClick={download}>Скачать .md</button>
-      <button type="button" onClick={() => void downloadBundle()} disabled={bundleBusy || saveState === "conflict"}>{bundleBusy ? "Собираю ZIP…" : "Скачать с вложениями"}</button>
-    </header>
-    {bundleError && <p role="alert">{bundleError}</p>}
-    <main className="pdf-markdown__body">
-      {editing ? <>
-        <p className="pdf-markdown__hint">Исходный Markdown. Alt+Q открывает внутреннюю ссылку, Alt+W оформляет цитату. Если ссылка помечена «Вложение не прикреплено», прикрепите файл ниже и замените старую ссылку.</p>
-        <div className="markdown-resource__insert-actions">
-          <button type="button" onClick={() => { setResourcePicker("link"); setAttachmentError(""); }}>Вставить ссылку на Ресурс</button>
-          <button type="button" onClick={() => { setResourcePicker("image"); setAttachmentError(""); }}>Вставить изображение</button>
-        </div>
-        {resourcePicker && <div className="markdown-resource__picker">
-          <div className="markdown-resource__picker-head"><strong>{resourcePicker === "image" ? "Изображение" : "Ресурс"}</strong><button type="button" onClick={() => setResourcePicker(null)}>Закрыть</button></div>
-          <label>Найти Ресурс <input value={resourceSearch} onChange={event => setResourceSearch(event.target.value)} placeholder="Название" /></label>
-          <div className="markdown-resource__picker-list">
-            {pickableResources.slice(0, 40).map(resource => <button type="button" key={resource.id} onClick={() => insertResource(resource)}>{resource.name}</button>)}
-            {!pickableResources.length && <span>Подходящих Ресурсов нет</span>}
-          </div>
-          <label>Или прикрепить файл <input type="file" accept={resourcePicker === "image" ? "image/png,image/jpeg,image/gif,image/webp,image/avif" : "image/*,.pdf,.md"} onChange={event => setAttachment(event.target.files?.[0] ?? null)} /></label>
-          <button type="button" disabled={!attachment || inserting} onClick={() => void uploadAttachment()}>{inserting ? "Прикрепляю…" : "Прикрепить и вставить"}</button>
-          {attachmentError && <p role="alert">{attachmentError}</p>}
-        </div>}
-        <MentionTextarea value={draft} onChange={changeDraft} rows={18} insertRequest={insertRequest}
-          onInsertHandled={key => setInsertRequest(previous => previous?.key === key ? null : previous)} />
-        <div className="markdown-resource__actions">
-          <button type="button" className="primary" onClick={() => void save()} disabled={!dirty || saveState === "saving" || saveState === "conflict"}>Сохранить файл</button>
-          <span role="status">{saveState === "saving" ? "Сохраняю…" : saveState === "saved" ? "Сохранено" : saveState === "unsaved" ? "Черновик сохраняется автоматически" : saveError}</span>
-          {saveState === "conflict" && <button type="button" onClick={download}>Скачать черновик .md</button>}
-        </div>
-        <h2>Предпросмотр</h2>
-      </> : null}
-      <article className="markdown-resource__preview"><MentionText text={draft} /></article>
-    </main>
+      } }}
+      actions={actions} notice={notice}>
+      {editing
+        ? <MentionTextarea value={draft} onChange={changeDraft} rows={18} insertRequest={insertRequest}
+            onInsertHandled={key => setInsertRequest(previous => previous?.key === key ? null : previous)} />
+        : <MentionText text={draft} />}
+    </SheetView>
   </section>;
 }

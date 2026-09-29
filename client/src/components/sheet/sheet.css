@@ -1,0 +1,249 @@
+/* Экран «Лист» — см. SheetView.tsx. Лист чуть светлее фона темы, с рамкой и
+   тенью (Q7); цвета — только токены темы. */
+
+.sheet-stage {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.sheet-layout {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px 24px 48px;
+  min-width: min-content;
+}
+
+/* ---- оглавление ---- */
+.sheet-toc {
+  position: sticky;
+  top: 16px;
+  align-self: flex-start;
+  width: 174px;
+  flex-shrink: 0;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sheet-toc__back {
+  margin-bottom: 10px;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: var(--fs-small, 14px);
+}
+.sheet-toc__title {
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.sheet-toc__list { display: flex; flex-direction: column; }
+.sheet-toc__item {
+  all: unset;
+  cursor: pointer;
+  padding: 3px 0;
+  font-size: 14px;
+  line-height: 1.3;
+  color: var(--ink);
+}
+.sheet-toc__item:hover { color: var(--accent); }
+.sheet-toc__item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sheet-toc__item--h2 { padding-left: 10px; }
+.sheet-toc__item--h3 { padding-left: 20px; }
+.sheet-toc__item.is-current { color: var(--accent); font-weight: 700; }
+
+.sheet-toc-spine { display: none; position: sticky; top: 16px; align-self: flex-start; z-index: 6; }
+.sheet-toc-spine__btn {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  height: 140px;
+  width: 30px;
+  padding: 0;
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-size: 11px;
+}
+.sheet-toc-spine__pop {
+  position: absolute;
+  left: 36px;
+  top: 0;
+  width: 240px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 12px 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .25);
+}
+.sheet-back--narrow { display: none; }
+
+@media (max-width: 1100px) {
+  .sheet-toc { display: none; }
+  .sheet-toc-spine { display: block; }
+  .sheet-back--narrow { display: contents; }
+}
+
+/* ---- колонка листа и плашки ---- */
+.sheet-col { position: relative; flex-shrink: 0; }
+.sheet-bar {
+  position: sticky;
+  top: 8px;
+  height: 0;
+  z-index: 5;
+}
+.sheet-plate {
+  position: absolute;
+  top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+  border: 1px solid var(--line);
+}
+.sheet-plate--left { left: 8px; }
+.sheet-plate--right { right: 8px; }
+.sheet-plate__sep { width: 1px; height: 16px; background: var(--line); margin: 0 3px; opacity: .6; }
+.sheet-plate__zoom { font: 500 11px var(--font-ui); min-width: 34px; text-align: center; color: var(--muted); }
+
+.sheet-btn {
+  all: unset;
+  box-sizing: border-box;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font: 500 12px var(--font-ui);
+  color: var(--ink);
+  cursor: pointer;
+  position: relative;
+}
+.sheet-btn:hover { background: var(--accent-soft); }
+.sheet-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.sheet-btn.is-on { background: var(--ink); color: var(--paper); }
+.sheet-btn:disabled { opacity: .4; cursor: default; }
+.sheet-btn--primary { background: var(--primary-bg); color: var(--primary-text); }
+.sheet-btn svg { width: 15px; height: 15px; }
+/* Точка «не сохранено» у кнопки сохранения. */
+.sheet-btn__dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--level-ink, #D2C49E);
+}
+@media (pointer: coarse) {
+  .sheet-btn { width: 36px; height: 36px; font-size: 13px; }
+}
+
+/* Всплывающее меню кнопки плашки. */
+.sheet-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 7;
+  min-width: 220px;
+  padding: 6px 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .3);
+  display: flex;
+  flex-direction: column;
+  cursor: default;
+  font: inherit;
+  text-align: left;
+}
+.sheet-pop > button:not(.sheet-btn) {
+  all: unset;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--ink);
+}
+.sheet-pop > button:not(.sheet-btn):hover { background: var(--accent-soft); }
+.sheet-pop > button:not(.sheet-btn):focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* ---- сам лист ---- */
+.sheet {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  /* Сверху — не меньше плашек, иначе заголовок подпирает их при мелком масштабе. */
+  padding: max(52px, calc(72px * var(--sheet-z))) calc(80px * var(--sheet-z)) calc(72px * var(--sheet-z));
+  /* Q17: масштаб растит шрифт, но не опускает его ниже обычного. */
+  font-size: max(1rem, calc(1rem * var(--sheet-z)));
+  line-height: 1.6;
+  background: color-mix(in srgb, var(--paper) 55%, white);
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .28);
+  overflow-wrap: anywhere;
+}
+[data-theme-mode="dark"] .sheet {
+  background: color-mix(in srgb, var(--paper) 88%, white);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .5);
+}
+.sheet h1, .sheet .rt-h1 { font-size: 1.9em; line-height: 1.15; margin: 0 0 .5em; }
+.sheet h2, .sheet .rt-h2 { font-size: 1.35em; margin: 1.1em 0 .4em; }
+.sheet h3, .sheet .rt-h3 { font-size: 1.12em; margin: 1em 0 .3em; }
+.sheet .rt-h { display: block; font-family: var(--font-display); color: var(--text-bright); }
+.sheet > :first-child { margin-top: 0; }
+/* Поле растёт по тексту — прокручивается сцена, а не поле. field-sizing
+   перебивает «fixed» страницы Markdown-ресурса; где его нет, растит JS
+   (MentionTextarea, SUPPORTS_FIELD_SIZING). */
+.sheet .mention-textarea-wrap textarea {
+  field-sizing: content;
+  overflow: hidden;
+  max-height: none;
+  min-height: 60vh;
+  border: 0;
+  background: transparent;
+  resize: none;
+  padding: 0;
+  font: inherit;
+  line-height: inherit;
+  color: inherit;
+}
+.sheet .mention-textarea-wrap textarea:focus { outline: none; box-shadow: none; }
+
+.sheet-break {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px dashed color-mix(in srgb, var(--accent) 60%, transparent);
+  pointer-events: none;
+}
+/* Номер — на правом поле: по центру он закрывал бы слова строки, через
+   которую проходит черта (текст течёт сквозь разрыв, Q14). */
+.sheet-break span {
+  position: absolute;
+  right: 4px;
+  top: 0;
+  transform: translateY(-50%);
+  padding: 0 4px;
+  font: 500 11px var(--font-ui);
+  letter-spacing: .08em;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--paper) 55%, white);
+}
+[data-theme-mode="dark"] .sheet-break span { background: color-mix(in srgb, var(--paper) 88%, white); }
+
+/* Телефон — без листа: текст во всю ширину, плашки строкой сверху (Q6). */
+@media (max-width: 700px) {
+  .sheet-layout { padding: 8px 0 24px; min-width: 0; }
+  .sheet-toc-spine { display: none; }
+  .sheet-col { width: 100% !important; flex-shrink: 1; min-width: 0; }
+  .sheet-bar { position: static; height: auto; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  .sheet-plate { position: static; flex-wrap: wrap; }
+  .sheet { padding: 12px; min-height: 0 !important; box-shadow: none; font-size: 1rem; }
+  .sheet-break { display: none; }
+}

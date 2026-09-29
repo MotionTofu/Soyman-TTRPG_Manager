@@ -20,3 +20,4 @@
 .markdown-resource__picker label { display: grid; gap: .25rem; }
 .markdown-resource__picker input[type="text"], .markdown-resource__picker input:not([type]) { width: 100%; }
 .markdown-resource__picker-list { display: flex; flex-wrap: wrap; gap: .5rem; max-height: 10rem; overflow: auto; }
+.markdown-resource__notice { display: flex; align-items: center; gap: .75rem; margin: 0 0 8px; }
