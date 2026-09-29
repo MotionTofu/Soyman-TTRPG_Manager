@@ -8,8 +8,7 @@ import { SheetEditor } from "../components/sheet/SheetEditor";
 import { SheetMenu, SheetView, rememberedSheetMode, type SheetMode } from "../components/sheet/SheetView";
 import "./pdf-markdown.css";
 
-// «Гибрид» появится вместе с CodeMirror (шаг 4 плана листа).
-const SHEET_MODES: SheetMode[] = ["source", "reading"];
+const SHEET_MODES: SheetMode[] = ["source", "hybrid", "reading"];
 
 const IMAGE_FILE_RE = /\.(?:png|jpe?g|gif|webp|avif)(?:\?|$)/i;
 
@@ -198,7 +197,7 @@ export function MarkdownResourcePage() {
     return <p role="alert">Markdown-ресурс не найден. <Link to="/resources">К Ресурсам</Link></p>;
 
   const content = documentQuery.data.content;
-  const mode: SheetMode = chosenMode ?? (content.trim() ? rememberedSheetMode(SHEET_MODES) ?? "reading" : "source");
+  const mode: SheetMode = chosenMode ?? (content.trim() ? rememberedSheetMode(SHEET_MODES) ?? "reading" : "hybrid");
   const editing = mode !== "reading";
   const saveTitle = saveState === "saving" ? "Сохраняю…" : saveState === "saved" ? "Сохранено"
     : saveState === "unsaved" ? "Сохранить (Ctrl+S) — черновик сохраняется сам" : saveError || "Сохранить";
@@ -257,7 +256,7 @@ export function MarkdownResourcePage() {
       } }}
       actions={actions} notice={notice}>
       {editing
-        ? <SheetEditor value={draft} onChange={changeDraft} insertRequest={insertRequest} menuRequest={menuRequest}
+        ? <SheetEditor hybrid={mode === "hybrid"} value={draft} onChange={changeDraft} insertRequest={insertRequest} menuRequest={menuRequest}
             onInsertHandled={key => setInsertRequest(previous => previous?.key === key ? null : previous)} />
         : <MentionText text={draft} />}
     </SheetView>

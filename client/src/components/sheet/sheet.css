@@ -186,6 +186,8 @@
   border: 1px solid var(--line);
   box-shadow: 0 10px 28px rgba(0, 0, 0, .28);
   overflow-wrap: anywhere;
+  /* Плавающая картинка в конце текста остаётся внутри листа. */
+  display: flow-root;
 }
 [data-theme-mode="dark"] .sheet {
   background: color-mix(in srgb, var(--paper) 88%, white);
@@ -298,3 +300,27 @@
   .sheet-menu > button { padding: 10px 14px; }
   .sheet-menu__row > button { width: 38px; height: 36px; }
 }
+
+/* ---- «Гибрид»: нарисованные куски (hybrid.tsx) ---- */
+.sheet-editor .cm-hy { cursor: text; }
+.sheet-editor .cm-hy > div > :first-child,
+.sheet-editor .cm-hy .rt-md-paragraph:first-child { margin-top: 0; }
+.sheet-editor .cm-hy .rt-h { margin: 0; }
+.sheet-editor .cm-hy .rt-table-wrap, .sheet-editor .cm-hy .rt-md-code { margin: .2em 0; }
+.sheet-editor .cm-hy .mention-link, .sheet-editor .cm-hy a { cursor: text; }
+/* Обтекания в редакторе нет (Q22) — картинка блоком, с пометкой, как встанет. */
+.sheet-editor .cm-hy .rt-md-figure { float: none; position: relative; margin: .2em 0; }
+.sheet-editor .cm-hy .rt-md-figure--right { margin-left: auto; }
+.sheet-editor .cm-hy .rt-md-figure--center { margin-left: auto; margin-right: auto; }
+.sheet-editor .cm-hy .rt-md-figure[data-layout]::after {
+  content: "⇥ " attr(data-layout);
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 1px 6px;
+  font: 500 11px var(--font-ui);
+  background: var(--bg-elevated);
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+.sheet-menu__row > button.is-on { background: var(--ink); color: var(--paper); }

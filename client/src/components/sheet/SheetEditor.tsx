@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { EditorSelection, EditorState, StateEffect } from "@codemirror/state";
+import { Compartment, EditorSelection, EditorState, StateEffect } from "@codemirror/state";
 import {
   Decoration, EditorView, MatchDecorator, ViewPlugin, keymap, placeholder as cmPlaceholder,
   type DecorationSet, type ViewUpdate,
@@ -14,6 +14,8 @@ import { SEARCH_DRAG_MIME } from "../LinkDropZone";
 import { MentionPickerModal } from "../mentions/MentionPickerModal";
 import { TableInsertModal } from "../mentions/TableInsertModal";
 import type { SearchResult } from "../../types";
+import { formatImageAlt, parseImageLayout, type ImageSide } from "../mentions/imageLayout";
+import { hybridField } from "./hybrid";
 
 // Редактор листа на CodeMirror 6 — режим «Исходник» (гриллинг 2026-09-29,
 // Q8): разметка видна как есть, но размечена цветом. Умеет то же, что
@@ -121,7 +123,28 @@ function insertAtCursor(view: EditorView, text: string, blockLevel = false) {
   view.focus();
 }
 
-interface MenuState { x: number; y: number; link?: boolean }
+/** Картинка в строке, по которой щёлкнули ПКМ: где её подпись. */
+interface ImageTarget { altFrom: number; altTo: number; alt: string }
+interface MenuState { x: number; y: number; link?: boolean; image?: ImageTarget }
+
+const IMAGE_RE = /!\[([^\]]*)\]\([^)]*\)/g;
+
+/** Картинка под точкой щелчка: в строке — та, над которой мышь, иначе первая. */
+function imageAt(view: EditorView, x: number, y: number): ImageTarget | undefined {
+  const pos = view.posAtCoords({ x, y });
+  if (pos == null) return undefined;
+  const line = view.state.doc.lineAt(pos);
+  let first: ImageTarget | undefined;
+  for (const m of line.text.matchAll(IMAGE_RE)) {
+    const start = line.from + (m.index ?? 0);
+    const target = { altFrom: start + 2, altTo: start + 2 + m[1].length, alt: m[1] };
+    if (pos >= start && pos <= start + m[0].length) return target;
+    first ??= target;
+  }
+  return first;
+}
+
+const hybridMode = new Compartment();
 
 interface Props {
   value: string;
@@ -132,9 +155,11 @@ interface Props {
   placeholder?: string;
   /** Растёт — открыть меню форматирования у курсора («Aa» на сенсорном экране, Q27). */
   menuRequest?: number;
+  /** «Гибрид»: вне курсора разметка нарисована, как в чтении (Q9). */
+  hybrid?: boolean;
 }
 
-export function SheetEditor({ value, onChange, insertRequest, onInsertHandled, defaultSettingId, placeholder, menuRequest }: Props) {
+export function SheetEditor({ value, onChange, insertRequest, onInsertHandled, defaultSettingId, placeholder, menuRequest, hybrid = false }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
@@ -181,6 +206,7 @@ export function SheetEditor({ value, onChange, insertRequest, onInsertHandled, d
           cmPlaceholder(placeholder ?? "Пишите в Markdown: # заголовок, **жирный**, @ — упоминание"),
           decoPlugin(mentionDecorator),
           decoPlugin(legacyTagDecorator),
+          hybridMode.of(hybrid ? hybridField : []),
           EditorView.updateListener.of(u => {
             if (!u.docChanged) return;
             onChangeRef.current(u.state.doc.toString());
@@ -216,6 +242,10 @@ export function SheetEditor({ value, onChange, insertRequest, onInsertHandled, d
     // Редактор создаётся один раз; value дальше сверяется в эффекте ниже.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    viewRef.current?.dispatch({ effects: hybridMode.reconfigure(hybrid ? hybridField : []) });
+  }, [hybrid]);
 
   // Текст сменился снаружи (перечитан с сервера) — подменить целиком.
   useEffect(() => {
@@ -263,7 +293,8 @@ export function SheetEditor({ value, onChange, insertRequest, onInsertHandled, d
   function onContextMenu(event: ReactMouseEvent) {
     if (event.shiftKey) return; // Shift+ПКМ — родное меню браузера (орфография)
     event.preventDefault();
-    setMenu({ x: event.clientX, y: event.clientY });
+    const view = viewRef.current;
+    setMenu({ x: event.clientX, y: event.clientY, image: view ? imageAt(view, event.clientX, event.clientY) : undefined });
   }
 
   return (
@@ -348,6 +379,7 @@ function FormatMenu({ view, at, onClose, onMention, onTable }: {
 
   return (
     <div ref={ref} className="sheet-menu" role="menu" style={pos}>
+      {at.image && <ImageSection view={view} image={at.image} onDone={onClose} />}
       <button type="button" onMouseDown={keep} onClick={clip("cut")}>Вырезать <kbd>Ctrl+X</kbd></button>
       <button type="button" onMouseDown={keep} onClick={clip("copy")}>Копировать <kbd>Ctrl+C</kbd></button>
       <button type="button" onMouseDown={keep} onClick={() => void paste()}>Вставить <kbd>Ctrl+V</kbd></button>
@@ -399,4 +431,31 @@ function FormatMenu({ view, at, onClose, onMention, onTable }: {
       <span className="sheet-menu__note">Меню браузера — Shift+ПКМ</span>
     </div>
   );
+}
+
+/** Сторона и ширина картинки (Q24): переписывает хвост её подписи. */
+function ImageSection({ view, image, onDone }: { view: EditorView; image: ImageTarget; onDone: () => void }) {
+  const layout = parseImageLayout(image.alt);
+  const set = (patch: { side?: ImageSide; width?: number }) => {
+    const alt = formatImageAlt({ ...layout, ...patch });
+    view.dispatch({ changes: { from: image.altFrom, to: image.altTo, insert: alt }, userEvent: "input.format" });
+    onDone();
+  };
+  const sides: [ImageSide, string][] = [["left", "Слева"], ["right", "Справа"], ["center", "По центру"]];
+  return <>
+    <span className="sheet-menu__note">Картинка</span>
+    <div className="sheet-menu__row">
+      {sides.map(([side, label]) => (
+        <button key={side} type="button" className={layout.side === side ? "is-on" : undefined}
+          style={{ width: "auto", padding: "0 8px" }} onClick={() => set({ side })}>{label}</button>
+      ))}
+    </div>
+    <div className="sheet-menu__row">
+      {[25, 40, 60, 100].map(width => (
+        <button key={width} type="button" className={layout.width === width ? "is-on" : undefined}
+          style={{ width: "auto", padding: "0 8px" }} onClick={() => set({ width })}>{width}%</button>
+      ))}
+    </div>
+    <hr />
+  </>;
 }

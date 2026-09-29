@@ -2,6 +2,7 @@ import { useMemo, type CSSProperties, type ReactNode } from "react";
 import { Lexer, marked, type Token, type Tokens } from "marked";
 import { ANY_MENTION_RE, mentionTone, resolveMention, useMentionIndex } from "../../mentions";
 import { DeadMention } from "./DeadMention";
+import { SIDE_LABEL, parseImageLayout } from "./imageLayout";
 import { openMentionPreview } from "./mentionPreviewStore";
 import { getCachedUser } from "../../api/currentUser";
 import { useResource } from "../../data/hooks";
@@ -288,15 +289,23 @@ function renderMarkdown(text: string, mentionsAsBold: boolean, resources: Map<st
           : <span key={key} className={isRelativeAttachment(token.href) ? "rt-md-missing-resource" : undefined} title={isRelativeAttachment(token.href) ? "Прикрепите файл через редактор Markdown" : undefined}>{inline(token.tokens ?? [], key)}{isRelativeAttachment(token.href) ? " (Вложение не прикреплено)" : ""}</span>;
       }
       case "image": {
+        const layout = parseImageLayout(token.text);
+        const figure = (src: string) => layout.side || layout.width != null
+          ? <span key={key} className={`rt-md-figure rt-md-figure--${layout.side ?? "center"}`}
+              style={layout.width != null ? { width: `${layout.width}%` } : undefined}
+              data-layout={[layout.side && SIDE_LABEL[layout.side], layout.width != null && `${layout.width}%`].filter(Boolean).join(" · ")}>
+              <img src={src} alt={layout.alt} title={token.title ?? undefined} className="rt-md-image" />
+            </span>
+          : <img key={key} src={src} alt={layout.alt} title={token.title ?? undefined} className="rt-md-image" />;
         const resourceUid = RESOURCE_URL_RE.exec(token.href)?.[1]?.toLowerCase();
         if (resourceUid) {
           const target = resources.get(resourceUid);
           return target?.file_url && isImageResource(target)
-            ? <img key={key} src={target.file_url} alt={token.text} title={token.title ?? undefined} className="rt-md-image" />
-            : <span key={key} className="rt-md-missing-resource">{token.text || "Изображение"} (Ресурс недоступен)</span>;
+            ? figure(target.file_url)
+            : <span key={key} className="rt-md-missing-resource">{layout.alt || "Изображение"} (Ресурс недоступен)</span>;
         }
         const src = safeUrl(token.href);
-        return src && !src.startsWith("mailto:") ? <img key={key} src={src} alt={token.text} title={token.title ?? undefined} className="rt-md-image" /> : <span key={key} className={isRelativeAttachment(token.href) ? "rt-md-missing-resource" : undefined}>{token.text}{isRelativeAttachment(token.href) ? " (Вложение не прикреплено)" : ""}</span>;
+        return src && !src.startsWith("mailto:") ? figure(src) : <span key={key} className={isRelativeAttachment(token.href) ? "rt-md-missing-resource" : undefined}>{layout.alt}{isRelativeAttachment(token.href) ? " (Вложение не прикреплено)" : ""}</span>;
       }
       case "html": return <span key={key}>{token.raw}</span>;
       default: return <span key={key}>{"text" in token ? String(token.text) : token.raw}</span>;
