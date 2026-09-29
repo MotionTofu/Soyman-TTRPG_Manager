@@ -37,6 +37,8 @@ function resizeGrid(prev: string[][], rows: number, cols: number): string[][] {
 interface Props {
   value: string;
   onChange: (v: string) => void;
+  insertRequest?: { key: number; text: string } | null;
+  onInsertHandled?: (key: number) => void;
   rows?: number;
   placeholder?: string;
   // Preselects the "Сеттинг" dropdown in the @-mention modal's "Создать
@@ -56,12 +58,15 @@ interface Props {
 export const MentionTextarea = memo(function MentionTextarea({
   value,
   onChange,
+  insertRequest,
+  onInsertHandled,
   rows = 5,
   placeholder,
   defaultSettingId,
   onKeyDown,
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastSelection = useRef<[number, number] | null>(null);
   const menuWrapRef = useRef<HTMLDivElement>(null);
   // Поле адреса — в него встаёт курсор по Ctrl+K.
   const extUrlRef = useRef<HTMLInputElement>(null);
@@ -75,6 +80,23 @@ export const MentionTextarea = memo(function MentionTextarea({
   const [tableRows, setTableRows] = useState(2);
   const [tableCols, setTableCols] = useState(2);
   const [tableCells, setTableCells] = useState<string[][]>([]);
+  const lastInsertKey = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!insertRequest || lastInsertKey.current === insertRequest.key) return;
+    lastInsertKey.current = insertRequest.key;
+    const el = textareaRef.current;
+    const [start, end] = lastSelection.current ?? [value.length, value.length];
+    const prefix = lastSelection.current === null && start > 0 && !value.endsWith("\n") ? "\n\n" : "";
+    onChange(value.slice(0, start) + prefix + insertRequest.text + value.slice(end));
+    onInsertHandled?.(insertRequest.key);
+    const next = start + prefix.length + insertRequest.text.length;
+    lastSelection.current = [next, next];
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(next, next);
+    });
+  }, [insertRequest, onChange, onInsertHandled, value]);
 
   // Auto-grow to fit content instead of scrolling internally. Handled by
   // CSS field-sizing (see SUPPORTS_FIELD_SIZING) where available — this JS
@@ -124,6 +146,7 @@ export const MentionTextarea = memo(function MentionTextarea({
 
   function handleChange(e: ChangeEvent<HTMLTextAreaElement>) {
     const text = e.target.value;
+    lastSelection.current = [e.target.selectionStart, e.target.selectionEnd];
     onChange(text);
     const cursor = e.target.selectionStart;
     const upToCursor = text.slice(0, cursor);
@@ -545,6 +568,7 @@ export const MentionTextarea = memo(function MentionTextarea({
         value={value}
         placeholder={placeholder}
         onChange={handleChange}
+        onSelect={(event) => { lastSelection.current = [event.currentTarget.selectionStart, event.currentTarget.selectionEnd]; }}
         onKeyDown={handleKeyDown}
         onDragOver={(e) => e.preventDefault()}
         onDrop={handleDrop}

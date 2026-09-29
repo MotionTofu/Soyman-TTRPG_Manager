@@ -1,10 +1,11 @@
 import type { NavIconName } from "./components/NavIcons";
 
-export type ResourceCategory = "folder" | "pdf" | "map" | "image" | "audio" | "link" | "other";
+export type ResourceCategory = "folder" | "pdf" | "markdown" | "map" | "image" | "audio" | "link" | "other";
 
 export const RESOURCE_CATEGORIES: { key: ResourceCategory; label: string; icon: NavIconName }[] = [
   { key: "folder", label: "Папки", icon: "folder" },
   { key: "pdf", label: "PDF", icon: "document" },
+  { key: "markdown", label: "Markdown", icon: "document" },
   { key: "map", label: "Карты", icon: "map" },
   { key: "image", label: "Изображения", icon: "image" },
   { key: "audio", label: "Звуки", icon: "volume" },
@@ -19,6 +20,7 @@ export const RESOURCE_CATEGORY_LABELS: Record<ResourceCategory, string> = Object
 const IMAGE_EXT = /\.(jpe?g|png|gif|webp)$/i;
 const AUDIO_EXT = /\.(mp3|wav|ogg|m4a|flac|aac)$/i;
 const PDF_EXT = /\.pdf$/i;
+const MARKDOWN_EXT = /\.md$/i;
 // Windows drive path ("C:\..."), UNC share ("\\server\...") or a file://
 // URL — the closest thing to "a folder on this computer" a plain text
 // field can express (there's no real folder-picker in a browser/webview).
@@ -30,6 +32,7 @@ export function guessResourceCategory(nameOrUrl: string): ResourceCategory {
   if (FOLDER_LIKE.test(nameOrUrl)) return "folder";
   const withoutQuery = nameOrUrl.split(/[?#]/)[0];
   if (PDF_EXT.test(withoutQuery)) return "pdf";
+  if (MARKDOWN_EXT.test(withoutQuery)) return "markdown";
   if (IMAGE_EXT.test(withoutQuery)) return "image";
   if (AUDIO_EXT.test(withoutQuery)) return "audio";
   if (/^https?:\/\//i.test(nameOrUrl)) return "link";

@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { db } from "../db/db";
 import { VAULT_ROOT } from "../services/filesystem";
+import { syncAllPdfNoteDocuments } from "../services/pdfNoteMarkdown";
 
 export const backupRouter = Router();
 
@@ -16,7 +17,16 @@ export const backupRouter = Router();
 const nativeImport = new Function("specifier", "return import(specifier)") as (
   specifier: string
 ) => Promise<typeof import("archiver")>;
-const loadArchiver = () => nativeImport("archiver");
+const loadArchiver = () => {
+  // Recent Node versions can require ESM directly. This also works inside
+  // Vitest's VM, where a Function-created import has no dynamic-import hook.
+  // Older Electron runtimes still use the native import fallback.
+  try { return Promise.resolve(require("archiver") as typeof import("archiver")); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ERR_REQUIRE_ESM") throw error;
+    return nativeImport("archiver");
+  }
+};
 
 const BACKUP_DIR =
   process.env.BACKUP_DIR || path.join(path.dirname(VAULT_ROOT), "RPG-Backups");
@@ -71,6 +81,9 @@ backupRouter.post("/", async (req, res) => {
       .replace(":", "-");
     const zipPath = targetFile ?? path.join(targetDir, `rpg-backup-${stamp}.zip`);
 
+    // Materialize every author's generated notes before snapshotting both
+    // the database and vault, including legacy notes not opened since update.
+    syncAllPdfNoteDocuments();
     // Consistent DB snapshot even while the app is running (WAL mode)
     const dbSnapshotPath = path.join(targetDir, `app-snapshot-${stamp}.db`);
     await db.backup(dbSnapshotPath);

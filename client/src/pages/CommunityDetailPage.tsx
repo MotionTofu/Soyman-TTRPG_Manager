@@ -12,6 +12,7 @@ import { GalleryTab } from "../components/GalleryTab";
 import { LinkDropZone, SEARCH_DRAG_MIME } from "../components/LinkDropZone";
 import { RelationsTab } from "../components/RelationsTab";
 import { EntityPage } from "../components/EntityPage";
+import { PdfEntitySources } from "../components/PdfEntitySources";
 import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
 import { EntityFieldsCard } from "../components/EntityFieldsCard";
 import { BeingQuickCreate } from "../components/BeingQuickCreate";
@@ -277,6 +278,7 @@ export function CommunityDetailPage() {
       }
     >
 
+      {tab === "Досье" && <PdfEntitySources kind="community" id={community.id} />}
       {tab === "Досье" && (
         <div className="stack">
           <EntityFieldsCard

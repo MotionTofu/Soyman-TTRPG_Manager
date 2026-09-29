@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/db";
 import { ENTITY_KINDS } from "../db/entityKinds";
+import type { AuthedRequest } from "../services/auth";
 
 export const searchRouter = Router();
 
@@ -37,7 +38,7 @@ function snippet(text: string, q: string): string {
   );
 }
 
-searchRouter.get("/", (req, res) => {
+searchRouter.get("/", (req: AuthedRequest, res) => {
   const q = ((req.query.q as string) || "").trim();
   const qLower = q.toLowerCase();
   const typesParam = (req.query.types as string) || "";
@@ -191,9 +192,12 @@ searchRouter.get("/", (req, res) => {
   if (wantsType("resource")) {
     const rows = db
       .prepare(
-        "SELECT id, name, scope, notes, tags FROM resources WHERE (lower_u(name) LIKE ? OR lower_u(notes) LIKE ? OR lower_u(tags) LIKE ?) AND archived_at IS NULL"
+        `SELECT r.id, r.name, r.scope, r.notes, r.tags FROM resources r
+         LEFT JOIN pdf_note_documents d ON d.markdown_resource_id = r.id
+         WHERE (lower_u(r.name) LIKE ? OR lower_u(r.notes) LIKE ? OR lower_u(r.tags) LIKE ?)
+           AND r.archived_at IS NULL AND (r.type <> 'pdf_notes' OR d.author_user_id = ?)`
       )
-      .all(like, like, like) as {
+      .all(like, like, like, req.user!.id) as {
       id: number;
       name: string;
       scope: string;

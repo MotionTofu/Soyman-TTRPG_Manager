@@ -36,6 +36,9 @@ import { campaignsRouter } from "./routes/campaigns";
 import { sessionsRouter } from "./routes/sessions";
 import { sessionNotesRouter } from "./routes/sessionNotes";
 import { resourcesRouter } from "./routes/resources";
+import { pdfNotesRouter } from "./routes/pdfNotes";
+import { pdfEntitySourcesRouter } from "./routes/pdfEntitySources";
+import { isPrivatePdfNotesPath } from "./services/pdfNoteMarkdown";
 import { masteringRouter } from "./routes/mastering";
 import { calendarRouter } from "./routes/calendar";
 import { searchRouter } from "./routes/search";
@@ -214,7 +217,9 @@ app.use((req, res, next) => {
     p.startsWith("/api/story") ||
     p.startsWith("/api/modules") ||
     p.startsWith("/api/backup");
-  const limit = p.startsWith("/api/statblocks/import")
+  const limit = /^\/api\/resources\/\d+\/markdown-content$/.test(p)
+    ? "3mb"
+    : p.startsWith("/api/statblocks/import")
     ? "5mb"
     : // Sync split (D1.3): small character documents vs heavy immutable
       // artifacts. The character endpoint no longer accepts 50mb just
@@ -377,6 +382,15 @@ app.use("/files", (req: AuthedRequest, _res, next) => {
   }
   next();
 });
+// Generated PDF notes are private to their author. Generic /files URLs,
+// including signed URLs, must never serve these vault files directly.
+app.use("/files", (req, res, next) => {
+  try {
+    const candidate = path.join(VAULT_ROOT, decodeURIComponent(req.path));
+    if (isPrivatePdfNotesPath(candidate)) return res.status(404).end();
+  } catch { return res.status(400).end(); }
+  next();
+});
 app.use("/files", (req: AuthedRequest, res, next) => {
   if ((req as unknown as { signedUrlValid?: boolean }).signedUrlValid) return next();
   return (requireAuth() as unknown as (req: AuthedRequest, res: unknown, next: () => void) => void)(req, res, next);
@@ -419,6 +433,8 @@ app.use("/api/campaigns", campaignsRouter);
 // Раньше sessionsRouter: иначе GET /live уходит в его /:id.
 app.use("/api/sessions", sessionNotesRouter);
 app.use("/api/sessions", sessionsRouter);
+app.use("/api/resources", pdfNotesRouter);
+app.use("/api/pdf-entity-sources", pdfEntitySourcesRouter);
 app.use("/api/resources", resourcesRouter);
 app.use("/api/mastering", masteringRouter);
 app.use("/api/calendar", calendarRouter);

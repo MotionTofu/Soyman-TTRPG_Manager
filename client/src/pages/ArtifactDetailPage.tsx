@@ -9,6 +9,7 @@ import { ArtifactCardEditor } from "../components/ArtifactCardEditor";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { EntityFieldsCard } from "../components/EntityFieldsCard";
 import { EntityPage } from "../components/EntityPage";
+import { PdfEntitySources } from "../components/PdfEntitySources";
 import { ListSkeleton, LoadErrorCard } from "../components/Loadable";
 import { MentionText } from "../components/mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
@@ -206,6 +207,7 @@ export function ArtifactDetailPage() {
       }
     >
 
+      {tab === "Досье" && <PdfEntitySources kind="artifact" id={artifact.id} />}
       {tab === "Досье" && (
         <div className="stack">
           <EntityFieldsCard

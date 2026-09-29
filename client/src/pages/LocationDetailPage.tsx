@@ -13,6 +13,7 @@ import { MentionsTab } from "../components/MentionsTab";
 import { SEARCH_DRAG_MIME } from "../components/LinkDropZone";
 import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
 import { EntityPage } from "../components/EntityPage";
+import { PdfEntitySources } from "../components/PdfEntitySources";
 import { LoadErrorCard } from "../components/Loadable";
 import { RelationsTab, type RelationsSection, type RelationStats } from "../components/RelationsTab";
 import { RELATION_TONE_LABELS } from "../relations";
@@ -845,6 +846,7 @@ export function LocationDetailPage() {
       overlays={confirmDialog}
     >
 
+      {tab === "Досье" && <PdfEntitySources kind="location" id={location.id} />}
       {tab === "Досье" && (
         <LocationInfoTab
           key={location.id}

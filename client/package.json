@@ -23,6 +23,8 @@
     "@xyflow/react": "^12.11.3",
     "gridstack": "^13.3.0",
     "html-to-image": "^1.11.13",
+    "marked": "file:vendor/marked-18.0.9.tgz",
+    "pdfjs-dist": "file:vendor/pdfjs-dist-4.10.38.tgz",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

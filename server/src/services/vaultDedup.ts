@@ -115,3 +115,37 @@ export function archiveFile(filePath: string, ownerType: string, ownerId: number
     .run(ownerType, ownerId, displayName, vaultRel(target), size);
   return Number(info.lastInsertRowid);
 }
+
+// Large uploads arrive on disk. Hash them incrementally so a PDF never has to
+// occupy a second full copy in server memory. `sourcePath` is a temporary file
+// inside the vault and is removed by the caller in all outcomes.
+export async function storeDedupedFile(sourcePath: string, targetPath: string): Promise<string> {
+  const hashBuilder = crypto.createHash("sha256");
+  for await (const chunk of fs.createReadStream(assertVaultPath(sourcePath))) hashBuilder.update(chunk);
+  const hash = hashBuilder.digest("hex");
+  const relTarget = vaultRel(targetPath);
+  const absTarget = assertVaultPath(targetPath);
+  const existing = db.prepare("SELECT path FROM vault_files WHERE hash = ?").get(hash) as { path: string } | undefined;
+  const existingAbs = existing?.path ? vaultAbs(existing.path) : null;
+  const reusable = !!(existingAbs && existing?.path !== relTarget && isVaultPath(existingAbs) && fs.existsSync(existingAbs));
+  const staged = assertVaultPath(path.join(path.dirname(absTarget), `.upload-${crypto.randomUUID()}.tmp`));
+  try {
+    let linked = false;
+    if (reusable) {
+      try { fs.linkSync(existingAbs!, staged); linked = true; } catch { /* copy below */ }
+    }
+    if (!linked) await fs.promises.copyFile(sourcePath, staged);
+    fs.renameSync(staged, absTarget);
+    db.transaction(() => {
+      db.prepare("DELETE FROM vault_files WHERE path = ?").run(relTarget);
+      if (!reusable) {
+        db.prepare(`INSERT INTO vault_files (hash, path, size) VALUES (?, ?, ?)
+          ON CONFLICT(hash) DO UPDATE SET path = excluded.path, size = excluded.size`)
+          .run(hash, relTarget, fs.statSync(absTarget).size);
+      }
+    })();
+    return hash;
+  } finally {
+    if (fs.existsSync(staged)) fs.unlinkSync(staged);
+  }
+}

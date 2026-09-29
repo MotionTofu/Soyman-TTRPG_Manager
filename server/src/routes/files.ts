@@ -10,6 +10,7 @@ import {
 import { vaultAbs, VAULT_ROOT } from "../services/filesystem";
 import { signPath } from "../services/signedUrl";
 import { requireAuth } from "../services/auth";
+import { isPdfNoteDocument, isPrivatePdfNotesPath } from "../services/pdfNoteMarkdown";
 
 function isInsideVault(p: string): boolean {
   try {
@@ -27,6 +28,8 @@ filesRouter.get("/signed-url", requireAuth(), (req, res) => {
   if (!p || typeof p !== "string" || !p.startsWith("/files/") || p.includes("\0") || p.length > 1024) {
     return res.status(400).json({ error: "invalid path" });
   }
+  try { if (isPrivatePdfNotesPath(path.join(VAULT_ROOT, decodeURIComponent(p.slice(6))))) return res.status(404).json({ error: "not found" }); }
+  catch { return res.status(400).json({ error: "invalid path" }); }
   res.json({ url: signPath(p, 60) });
 });
 
@@ -34,6 +37,7 @@ filesRouter.get("/signed-url", requireAuth(), (req, res) => {
 // берётся из базы по id, поэтому подсунуть сюда «..» нельзя: отдаётся ровно
 // то, что записано в file_path конкретного ресурса.
 filesRouter.get("/raw/:id", (req, res) => {
+  if (isPdfNoteDocument(Number(req.params.id))) return res.status(404).json({ error: "not found" });
   const row = db
     .prepare("SELECT file_path FROM resources WHERE id = ?")
     .get(req.params.id) as { file_path: string | null } | undefined;

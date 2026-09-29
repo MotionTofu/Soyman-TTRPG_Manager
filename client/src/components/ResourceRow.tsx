@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useAction, write } from "../data/hooks";
 import { labelled } from "../data/notices";
 import { MentionTextarea } from "./mentions/MentionTextarea";
@@ -58,6 +59,11 @@ export function ResourceRow({ resource, onArchive, allSettings }: Props) {
   }
 
   const href = resource.link_url || resource.file_url || null;
+  const pdfRoute = resource.file_url && (resource.category === "pdf" || /\.pdf$/i.test(resource.file_url.split(/[?#]/)[0]))
+    ? `/resources/${resource.id}/read` : null;
+  const markdownRoute = resource.type === "pdf_notes" && resource.linked_pdf_resource_id
+    ? `/resources/${resource.id}/markdown` : null;
+  const markdownFileRoute = resource.type === "markdown" ? `/resources/${resource.id}/markdown-file` : null;
   // Расширение проверяется по пути, а не по всему URL: /files/... приходит
   // с ?v=…&token=… на хвосте, и якорь регулярки на конце строки не срабатывал
   // — картинки в списке показывались иконкой документа.
@@ -82,7 +88,11 @@ export function ResourceRow({ resource, onArchive, allSettings }: Props) {
           )}
         </span>
 
-        {href ? (
+        {pdfRoute ? (
+          <Link className="res-row__name" to={pdfRoute} title={resource.name}>{resource.name}</Link>
+        ) : markdownRoute || markdownFileRoute ? (
+          <Link className="res-row__name" to={markdownRoute || markdownFileRoute!} title={resource.name}>{resource.name}</Link>
+        ) : href ? (
           <a
             className="res-row__name"
             href={href}
@@ -112,20 +122,22 @@ export function ResourceRow({ resource, onArchive, allSettings }: Props) {
             )}
           </span>
         )}
+        {resource.type === "pdf_notes" && <span className="res-row__tag">Из заметок PDF</span>}
 
         <span className="res-row__meta">
           {formatSize(resource.size_bytes)} · {formatDate(resource.created_at)}
         </span>
 
         <span className="res-row__actions">
-          <SettingLinksPopover
+          {resource.type !== "pdf_notes" && <SettingLinksPopover
             compact
             ownerType="resource"
             ownerId={resource.id}
             homeSettingId={resource.setting_id}
             linkedSettingIds={resource.also_in_settings ?? []}
             allSettings={allSettings}
-          />
+          />}
+          {resource.type !== "pdf_notes" && <>
           <button
             type="button"
             className="res-row__act"
@@ -142,6 +154,7 @@ export function ResourceRow({ resource, onArchive, allSettings }: Props) {
           >
             <NavIcon name="delete" />
           </button>
+          </>}
         </span>
       </div>
 

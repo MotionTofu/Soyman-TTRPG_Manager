@@ -1,8 +1,26 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useMemo, type CSSProperties, type ReactNode } from "react";
+import { Lexer, marked, type Token, type Tokens } from "marked";
 import { ANY_MENTION_RE, mentionTone, resolveMention, useMentionIndex } from "../../mentions";
 import { DeadMention } from "./DeadMention";
 import { openMentionPreview } from "./mentionPreviewStore";
 import { getCachedUser } from "../../api/currentUser";
+import { useResource } from "../../data/hooks";
+
+type LinkedResource = { uid: string; id: number; name: string; type: string; category: string | null; file_url: string | null };
+const RESOURCE_URL_RE = /^soyman:resource\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+const RESOURCE_URL_SCAN = /soyman:resource\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi;
+const IMAGE_FILE_RE = /\.(?:png|jpe?g|gif|webp|avif)(?:\?|$)/i;
+
+function isImageResource(resource: LinkedResource): boolean {
+  return resource.category === "image" || !!resource.file_url && IMAGE_FILE_RE.test(resource.file_url);
+}
+
+function resourceTarget(resource: LinkedResource): string | null {
+  if (!resource.file_url) return null;
+  if (resource.category === "pdf") return `/resources/${resource.id}/read`;
+  if (resource.type === "markdown") return `/resources/${resource.id}/markdown-file`;
+  return `/resources/link/${resource.uid}`;
+}
 
 // Inline markup recognized inside any text field, alongside the existing
 // [[type:id|Label]] mention token: **bold**, *italic*, [label](url) external
@@ -199,132 +217,135 @@ function parseInline(text: string, keyPrefix: string, mentionsAsBold: boolean): 
   return nodes;
 }
 
-const HEADING_RE = /^(#{1,3})\s+(.*)$/;
-const BULLET_RE = /^-\s+(.*)$/;
-// A table row is any line wrapped in pipes: "| a | b |". The row right after
-// the header — cells made only of dashes/colons ("---", ":--:") — is the
-// separator and isn't rendered as a row, matching plain markdown tables.
-const TABLE_ROW_RE = /^\|(.+)\|\s*$/;
-const TABLE_SEP_CELL_RE = /^:?-+:?$/;
+type Protected = { kind: "mention" | "quote" | "span"; text: string; attrs?: string };
+const PROTECTED_RE = /\uE000(\d+)\uE001/g;
 
-function splitTableRow(line: string): string[] {
-  return line
-    .trim()
-    .replace(/^\|/, "")
-    .replace(/\|$/, "")
-    .split("|")
-    .map((c) => c.trim());
+function protectLegacy(source: string): { source: string; protectedRuns: Protected[] } {
+  const protectedRuns: Protected[] = [];
+  const put = (run: Protected) => { protectedRuns.push(run); return `\uE000${protectedRuns.length - 1}\uE001`; };
+  // Mask links before GFM sees the pipes inside [[type@uid|source|label]].
+  let result = source.replace(ANY_MENTION_RE, (text) => put({ kind: "mention", text }));
+  // Repeated innermost replacement also preserves nested legacy spans.
+  const wrappers = /\{span([^}]*)\}((?:(?!\{(?:span\b|quote\})|\{\/(?:span|quote)\})[\s\S])*)\{\/span\}|\{quote\}((?:(?!\{(?:span\b|quote\})|\{\/(?:span|quote)\})[\s\S])*)\{\/quote\}/g;
+  for (let i = 0; i < 32; i++) {
+    const next = result.replace(wrappers, (_full, attrs: string | undefined, spanText: string | undefined, quoteText: string | undefined) =>
+      put({ kind: attrs === undefined ? "quote" : "span", text: (attrs === undefined ? quoteText : spanText) ?? "", attrs }));
+    if (next === result) break;
+    result = next;
+  }
+  return { source: result, protectedRuns };
 }
 
-// A mention token's own "|" is indistinguishable from a table-cell separator
-// once a line has been recognized as a table row — mask each token out to a
-// pipe-free placeholder before row-splitting, then restore it into whichever
-// cell it landed in.
-//
-// Маскируются обе формы одной регуляркой из mentions.ts: пока эта строка знала
-// только про локальный id, ссылка с глобальным ключом внутри таблицы
-// разъезжалась по ячейкам — у неё разделителей на один больше.
+function safeUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    if (url.protocol === "http:" || url.protocol === "https:") return url.href;
+    if (url.protocol === "mailto:") return url.href;
+  } catch { /* Render an unsafe or malformed target as text. */ }
+  return null;
+}
 
-function maskMentions(line: string): { masked: string; tokens: string[] } {
-  const tokens: string[] = [];
-  const masked = line.replace(ANY_MENTION_RE, (m) => {
-    tokens.push(m);
-    return `\u0000${tokens.length - 1}\u0000`;
+function isRelativeAttachment(value: string): boolean {
+  return !value.startsWith("/") && !value.startsWith("\\") && !/^[a-z][a-z0-9+.-]*:/i.test(value) && !value.startsWith("#");
+}
+
+function renderMarkdown(text: string, mentionsAsBold: boolean, resources: Map<string, LinkedResource> = new Map()): ReactNode {
+  const prepared = protectLegacy(text);
+  const options = { gfm: true, breaks: false };
+  const inline = (tokens: Token[], prefix: string): ReactNode[] => tokens.map((token, index) => {
+    const key = `${prefix}-${index}`;
+    switch (token.type) {
+      case "text": {
+        const parts: ReactNode[] = [];
+        let from = 0;
+        for (const match of token.text.matchAll(PROTECTED_RE)) {
+          if (match.index > from) parts.push(parseInline(token.text.slice(from, match.index), `${key}-t${from}`, mentionsAsBold));
+          const run = prepared.protectedRuns[Number(match[1])];
+          if (run?.kind === "mention") parts.push(parseInline(run.text, `${key}-m${match.index}`, mentionsAsBold));
+          else if (run?.kind === "quote") parts.push(<span key={`${key}-q${match.index}`} className="rt-quote">{inline(Lexer.lexInline(run.text, options), `${key}-q`)}</span>);
+          else if (run?.kind === "span") parts.push(<span key={`${key}-s${match.index}`} style={parseSpanAttrs(run.attrs ?? "")}>{inline(Lexer.lexInline(run.text, options), `${key}-s`)}</span>);
+          from = match.index + match[0].length;
+        }
+        if (from < token.text.length) parts.push(parseInline(token.text.slice(from), `${key}-t${from}`, mentionsAsBold));
+        return <span key={key}>{parts}</span>;
+      }
+      case "strong": return <strong key={key}>{inline(token.tokens ?? [], key)}</strong>;
+      case "em": return <em key={key}>{inline(token.tokens ?? [], key)}</em>;
+      case "del": return <del key={key}>{inline(token.tokens ?? [], key)}</del>;
+      case "codespan": return <code key={key}>{token.text}</code>;
+      case "escape": return <span key={key}>{token.text}</span>;
+      case "br": return <br key={key} />;
+      case "link": {
+        const resourceUid = RESOURCE_URL_RE.exec(token.href)?.[1]?.toLowerCase();
+        if (resourceUid) {
+          const target = resources.get(resourceUid);
+          const href = target && resourceTarget(target);
+          return href ? <a key={key} className="ext-link" href={href}>{inline(token.tokens ?? [], key)}</a>
+            : <span key={key} className="rt-md-missing-resource" title="Ресурс недоступен">{inline(token.tokens ?? [], key)} (Ресурс недоступен)</span>;
+        }
+        const href = safeUrl(token.href);
+        return href ? <a key={key} className="ext-link" href={href} target="_blank" rel="noreferrer">{inline(token.tokens ?? [], key)}</a>
+          : <span key={key} className={isRelativeAttachment(token.href) ? "rt-md-missing-resource" : undefined} title={isRelativeAttachment(token.href) ? "Прикрепите файл через редактор Markdown" : undefined}>{inline(token.tokens ?? [], key)}{isRelativeAttachment(token.href) ? " (Вложение не прикреплено)" : ""}</span>;
+      }
+      case "image": {
+        const resourceUid = RESOURCE_URL_RE.exec(token.href)?.[1]?.toLowerCase();
+        if (resourceUid) {
+          const target = resources.get(resourceUid);
+          return target?.file_url && isImageResource(target)
+            ? <img key={key} src={target.file_url} alt={token.text} title={token.title ?? undefined} className="rt-md-image" />
+            : <span key={key} className="rt-md-missing-resource">{token.text || "Изображение"} (Ресурс недоступен)</span>;
+        }
+        const src = safeUrl(token.href);
+        return src && !src.startsWith("mailto:") ? <img key={key} src={src} alt={token.text} title={token.title ?? undefined} className="rt-md-image" /> : <span key={key} className={isRelativeAttachment(token.href) ? "rt-md-missing-resource" : undefined}>{token.text}{isRelativeAttachment(token.href) ? " (Вложение не прикреплено)" : ""}</span>;
+      }
+      case "html": return <span key={key}>{token.raw}</span>;
+      default: return <span key={key}>{"text" in token ? String(token.text) : token.raw}</span>;
+    }
   });
-  return { masked, tokens };
-}
-
-function unmaskMentions(text: string, tokens: string[]): string {
-  return text.replace(/\u0000(\d+)\u0000/g, (_, i) => tokens[Number(i)] ?? "");
+  const blocks = (tokens: Token[], prefix: string): ReactNode[] => tokens.map((token, index) => {
+    const key = `${prefix}-${index}`;
+    switch (token.type) {
+      case "space": return null;
+      case "checkbox": return null;
+      case "paragraph": return <span key={key} className="rt-md-paragraph">{inline(token.tokens ?? [], key)}</span>;
+      case "text": return <span key={key} className="rt-md-paragraph">{inline(token.tokens ?? Lexer.lexInline(token.text, options), key)}</span>;
+      case "heading": return <span key={key} className={`rt-h rt-h${Math.min(token.depth, 3)}`}>{inline(token.tokens ?? [], key)}</span>;
+      case "blockquote": return <span key={key} className="rt-quote rt-md-quote">{blocks(token.tokens ?? [], key)}</span>;
+      case "code": return <pre key={key} className="rt-md-code"><code>{token.text}</code></pre>;
+      case "hr": return <hr key={key} className="rt-md-rule" />;
+      case "list": {
+        const list = token as Tokens.List;
+        const items = list.items.map((item, ii) => <li key={ii}>
+          {item.task && <input type="checkbox" checked={!!item.checked} readOnly aria-label="Пункт списка" />}
+          {blocks(item.tokens, `${key}-${ii}`)}
+        </li>);
+        return list.ordered ? <ol key={key} className="rt-ul" start={typeof list.start === "number" ? list.start : undefined}>{items}</ol>
+          : <ul key={key} className="rt-ul">{items}</ul>;
+      }
+      case "table": return <div key={key} className="rt-table-wrap"><table className="rt-table">
+        <thead><tr>{(token as Tokens.Table).header.map((cell, ci) => <th key={ci} style={{ textAlign: cell.align ?? undefined }}>{inline(cell.tokens, `${key}-h${ci}`)}</th>)}</tr></thead>
+        <tbody>{(token as Tokens.Table).rows.map((row, ri) => <tr key={ri}>{row.map((cell, ci) => <td key={ci} style={{ textAlign: cell.align ?? undefined }}>{inline(cell.tokens, `${key}-r${ri}-${ci}`)}</td>)}</tr>)}</tbody>
+      </table></div>;
+      case "html": return <span key={key} className="rt-md-paragraph">{token.raw}</span>;
+      default: return <span key={key}>{token.raw}</span>;
+    }
+  });
+  return <>{blocks(marked.lexer(prepared.source, options), "md")}</>;
 }
 
 export function MentionText({ text, mentionsAsBold = false }: { text: string; mentionsAsBold?: boolean }) {
   // Карта ключей приезжает после первой отрисовки: без подписки на неё текст,
   // нарисованный раньше, так и остался бы с зачёркнутыми ссылками и без цвета.
-  useMentionIndex();
-  const lines = text.split("\n");
-  const blocks: ReactNode[] = [];
-  let key = 0;
-  let i = 0;
-  while (i < lines.length) {
-    const firstMasked = maskMentions(lines[i]);
-    if (TABLE_ROW_RE.test(firstMasked.masked)) {
-      const rows: string[][] = [];
-      while (i < lines.length) {
-        const { masked, tokens } = maskMentions(lines[i]);
-        if (!TABLE_ROW_RE.test(masked)) break;
-        rows.push(splitTableRow(masked).map((c) => unmaskMentions(c, tokens)));
-        i++;
-      }
-      let header: string[] | null = null;
-      let body = rows;
-      if (rows.length > 1 && rows[1].every((c) => TABLE_SEP_CELL_RE.test(c))) {
-        header = rows[0];
-        body = rows.slice(2);
-      }
-      const tkey = key++;
-      blocks.push(
-        <div key={`b${tkey}`} className="rt-table-wrap">
-          <table className="rt-table">
-            {header && (
-              <thead>
-                <tr>
-                  {header.map((c, ci) => (
-                    <th key={ci}>{parseInline(c, `th${tkey}-${ci}`, mentionsAsBold)}</th>
-                  ))}
-                </tr>
-              </thead>
-            )}
-            <tbody>
-              {body.map((row, ri) => (
-                <tr key={ri}>
-                  {row.map((c, ci) => (
-                    <td key={ci}>{parseInline(c, `td${tkey}-${ri}-${ci}`, mentionsAsBold)}</td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      );
-      continue;
-    }
+  const indexVersion = useMentionIndex();
+  const refs = useMemo(() => [...new Set([...text.matchAll(RESOURCE_URL_SCAN)].map(match => match[1].toLowerCase()))].sort(), [text]);
+  const content = useMemo(() => renderMarkdown(text, mentionsAsBold), [text, mentionsAsBold, indexVersion]);
+  return refs.length ? <ResourceMentionText text={text} mentionsAsBold={mentionsAsBold} refs={refs} /> : <>{content}</>;
+}
 
-    const bulletMatch = BULLET_RE.exec(lines[i]);
-    if (bulletMatch) {
-      const items: string[] = [];
-      while (i < lines.length) {
-        const m = BULLET_RE.exec(lines[i]);
-        if (!m) break;
-        items.push(m[1]);
-        i++;
-      }
-      blocks.push(
-        <ul key={`b${key++}`} className="rt-ul">
-          {items.map((item, ii) => (
-            <li key={ii}>{parseInline(item, `bi${key}-${ii}`, mentionsAsBold)}</li>
-          ))}
-        </ul>
-      );
-      continue;
-    }
-
-    const heading = HEADING_RE.exec(lines[i]);
-    if (heading) {
-      blocks.push(
-        <span key={`b${key++}`} className={`rt-h rt-h${heading[1].length}`}>
-          {parseInline(heading[2], `h${key}`, mentionsAsBold)}
-        </span>
-      );
-      i++;
-      continue;
-    }
-
-    blocks.push(<span key={`b${key++}`}>{parseInline(lines[i], `l${key}`, mentionsAsBold)}</span>);
-    i++;
-    if (i < lines.length && !BULLET_RE.test(lines[i]) && !HEADING_RE.test(lines[i])) {
-      blocks.push("\n");
-    }
-  }
-  return <>{blocks}</>;
+function ResourceMentionText({ text, mentionsAsBold, refs }: { text: string; mentionsAsBold: boolean; refs: string[] }) {
+  const indexVersion = useMentionIndex();
+  const query = useResource<LinkedResource[]>(`/resources/resolve?uids=${refs.join(",")}`);
+  const resources = useMemo(() => new Map((query.data ?? []).map(resource => [resource.uid.toLowerCase(), resource])), [query.data]);
+  const content = useMemo(() => renderMarkdown(text, mentionsAsBold, resources), [text, mentionsAsBold, resources, indexVersion]);
+  return <>{content}</>;
 }

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAction, useResource, write } from "../data/hooks";
 import { useConfirm } from "../hooks/useConfirm";
 import { labelled } from "../data/notices";
@@ -38,6 +39,7 @@ const RESOURCE_TABS = [
 ] as const;
 
 export function ResourcesListPage() {
+  const navigate = useNavigate();
   const [section, setSection] = useState<"all" | "sound" | "sets" | "templates">("all");
   const [query, setQuery] = useState("");
   const run = useAction();
@@ -75,10 +77,12 @@ export function ResourcesListPage() {
     form.append("name", name);
     form.append("scope", "global");
     form.append("type", type);
+    if (type === "markdown" && !file) { form.append("category", "markdown"); form.append("content", ""); }
     form.append("tags", tags);
     if (file) form.append("file", file);
     if (linkUrl) form.append("link_url", linkUrl);
-    const created = await run(labelled("Новый ресурс", () => write.post("/resources", form, { timeoutMs: 120000 })), {
+    const bundle = type === "markdown" && !!file && /\.zip$/i.test(file.name);
+    const created = await run(labelled("Новый ресурс", () => write.post<Resource>(bundle ? "/resources/markdown-bundle" : "/resources", form, { timeoutMs: 120000 })), {
       affects: [{ kind: "resource" }],
       retry: false,
     });
@@ -88,6 +92,7 @@ export function ResourcesListPage() {
     setTags("");
     setFile(null);
     setLinkUrl("");
+    if (bundle) navigate(`/resources/${created.id}/markdown-file`);
   }
 
   async function archiveResource(id: number) {
@@ -208,6 +213,7 @@ export function ResourcesListPage() {
                   <option value="note">Заметка</option>
                   <option value="item">Предмет</option>
                   <option value="map">Карта</option>
+                  <option value="markdown">Markdown (.md)</option>
                 </select>
                 <input
                   placeholder="Теги через запятую"
@@ -215,6 +221,7 @@ export function ResourcesListPage() {
                   onChange={(e) => setTags(e.target.value)}
                 />
                 <input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+                {type === "markdown" && <small>Можно выбрать один .md или ZIP с .md и его вложениями.</small>}
                 <input
                   placeholder="…или ссылка (вместо файла)"
                   value={linkUrl}

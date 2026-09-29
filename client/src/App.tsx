@@ -46,6 +46,10 @@ const SystemsListPage = lazy(() => import("./pages/SystemsListPage").then((m) =>
 const SystemDetailPage = lazy(() => import("./pages/SystemDetailPage").then((m) => ({ default: m.SystemDetailPage })));
 const DndCardProfilePage = lazy(() => import("./pages/DndCardProfilePage").then((m) => ({ default: m.DndCardProfilePage })));
 const ResourcesListPage = lazy(() => import("./pages/ResourcesListPage").then((m) => ({ default: m.ResourcesListPage })));
+const PdfReaderPage = lazy(() => import("./pages/PdfReaderPage").then((m) => ({ default: m.PdfReaderPage })));
+const PdfMarkdownPage = lazy(() => import("./pages/PdfMarkdownPage").then((m) => ({ default: m.PdfMarkdownPage })));
+const MarkdownResourcePage = lazy(() => import("./pages/MarkdownResourcePage").then((m) => ({ default: m.MarkdownResourcePage })));
+const ResourceLinkPage = lazy(() => import("./pages/ResourceLinkPage").then((m) => ({ default: m.ResourceLinkPage })));
 const MasteringPage = lazy(() => import("./pages/MasteringPage").then((m) => ({ default: m.MasteringPage })));
 const CharacterDetailPage = lazy(() => import("./pages/CharacterDetailPage").then((m) => ({ default: m.CharacterDetailPage })));
 const CharacterSheetPage = lazy(() => import("./pages/CharacterSheetPage").then((m) => ({ default: m.CharacterSheetPage })));
@@ -217,6 +221,10 @@ function App() {
               <Route path="/systems/:id" element={<SystemDetailPage />} />
               <Route path="/systems/:id/entries/:entryId" element={<DndCardProfilePage />} />
               <Route path="/resources" element={<ResourcesListPage />} />
+              <Route path="/resources/:id/read" element={<PdfReaderPage />} />
+              <Route path="/resources/:id/markdown" element={<PdfMarkdownPage />} />
+              <Route path="/resources/:id/markdown-file" element={<MarkdownResourcePage />} />
+              <Route path="/resources/link/:uid" element={<ResourceLinkPage />} />
               <Route path="/mastering" element={<MasteringPage />} />
               <Route path="/characters/:id" element={<CharacterDetailPage />} />
               <Route path="/characters/:id/sheet" element={<CharacterSheetPage />} />

@@ -235,6 +235,7 @@ CREATE TABLE IF NOT EXISTS session_attendance (
 
 CREATE TABLE IF NOT EXISTS resources (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  uid TEXT,
   name TEXT NOT NULL,
   type TEXT DEFAULT 'note',
   scope TEXT NOT NULL DEFAULT 'global', -- global | campaign | session | setting | system
@@ -245,6 +246,7 @@ CREATE TABLE IF NOT EXISTS resources (
   template_kind TEXT, -- short | full, for type = statblock_template
   template_format TEXT NOT NULL DEFAULT 'text', -- text | litm_character | litm_challenge | dnd_character | dnd_creature, for type = statblock_template
   file_path TEXT,
+  file_sha256 TEXT, -- checksum of an uploaded PDF for future note anchors
   link_url TEXT, -- for type = link (external URL/folder button)
   category TEXT, -- folder | pdf | image | audio | link | other, sub-grouping within type = link
   tags TEXT DEFAULT '',
@@ -253,6 +255,57 @@ CREATE TABLE IF NOT EXISTS resources (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   archived_at TEXT
 );
+
+CREATE TABLE IF NOT EXISTS pdf_notes (
+  id TEXT PRIMARY KEY,
+  resource_id INTEGER NOT NULL REFERENCES resources(id) ON DELETE CASCADE,
+  author_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  page_number INTEGER,
+  quote TEXT NOT NULL DEFAULT '',
+  body TEXT NOT NULL,
+  anchors_json TEXT NOT NULL DEFAULT '[]',
+  context_before TEXT NOT NULL DEFAULT '',
+  context_after TEXT NOT NULL DEFAULT '',
+  file_sha256 TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pdf_notes_resource_author ON pdf_notes(resource_id, author_user_id, page_number);
+
+-- One generated, private Markdown Resource per PDF and author. Notes in
+-- pdf_notes remain authoritative; file_path is a portable vault-relative copy.
+CREATE TABLE IF NOT EXISTS pdf_note_documents (
+  pdf_resource_id INTEGER NOT NULL REFERENCES resources(id) ON DELETE CASCADE,
+  author_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  markdown_resource_id INTEGER NOT NULL UNIQUE REFERENCES resources(id) ON DELETE CASCADE,
+  file_path TEXT NOT NULL,
+  PRIMARY KEY (pdf_resource_id, author_user_id)
+);
+
+CREATE TABLE IF NOT EXISTS pdf_reader_preferences (
+  resource_id INTEGER NOT NULL REFERENCES resources(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  note_mode TEXT NOT NULL DEFAULT 'margins',
+  notes_collapsed INTEGER NOT NULL DEFAULT 0,
+  show_highlights INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY (resource_id, user_id)
+);
+
+-- A PDF passage can be cited by an entity without creating a PDF note.
+-- The entity's prose remains editable; this row preserves the original source.
+CREATE TABLE IF NOT EXISTS pdf_entity_sources (
+  id TEXT PRIMARY KEY,
+  resource_id INTEGER NOT NULL REFERENCES resources(id) ON DELETE CASCADE,
+  target_kind TEXT NOT NULL,
+  target_id INTEGER NOT NULL,
+  field_name TEXT NOT NULL,
+  page_number INTEGER,
+  quote TEXT NOT NULL DEFAULT '',
+  file_sha256 TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_pdf_entity_sources_target ON pdf_entity_sources(target_kind, target_id);
+CREATE INDEX IF NOT EXISTS idx_pdf_entity_sources_resource ON pdf_entity_sources(resource_id);
 
 -- Named, manually-ordered collections of audio resources. A session can
 -- either own playlists directly or attach a setting's playlist via
@@ -2112,3 +2165,21 @@ CREATE INDEX IF NOT EXISTS idx_artifacts_archived ON artifacts(archived_at) WHER
 CREATE INDEX IF NOT EXISTS idx_story_arcs_archived ON story_arcs(archived_at) WHERE archived_at IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_story_scenes_archived ON story_scenes(archived_at) WHERE archived_at IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_canvas_boards_archived ON canvas_boards(archived_at) WHERE archived_at IS NOT NULL;
+
+-- Polymorphic PDF citations cannot use a foreign key to six entity kinds.
+-- Remove their links when an entity is permanently deleted.
+CREATE TRIGGER IF NOT EXISTS pdf_sources_delete_being AFTER DELETE ON setting_beings BEGIN
+  DELETE FROM pdf_entity_sources WHERE target_kind = 'being' AND target_id = OLD.id;
+END;
+CREATE TRIGGER IF NOT EXISTS pdf_sources_delete_location AFTER DELETE ON setting_locations BEGIN
+  DELETE FROM pdf_entity_sources WHERE target_kind = 'location' AND target_id = OLD.id;
+END;
+CREATE TRIGGER IF NOT EXISTS pdf_sources_delete_community AFTER DELETE ON setting_communities BEGIN
+  DELETE FROM pdf_entity_sources WHERE target_kind = 'community' AND target_id = OLD.id;
+END;
+CREATE TRIGGER IF NOT EXISTS pdf_sources_delete_artifact AFTER DELETE ON artifacts BEGIN
+  DELETE FROM pdf_entity_sources WHERE target_kind = 'artifact' AND target_id = OLD.id;
+END;
+CREATE TRIGGER IF NOT EXISTS pdf_sources_delete_entry AFTER DELETE ON compendium_entries BEGIN
+  DELETE FROM pdf_entity_sources WHERE target_kind IN ('item', 'magic_item') AND target_id = OLD.id;
+END;

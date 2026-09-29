@@ -363,6 +363,7 @@ const CRUMB_LABEL: Record<string, string> = {
   sheets: "Персонажи",
   mastering: "Мастерение",
   resources: "Ресурсы",
+  read: "Читалка",
   canvas: "Полотно",
   graph: "Граф",
   maps: "Карты",

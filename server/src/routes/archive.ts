@@ -1,11 +1,13 @@
 import { Router } from "express";
+import fs from "fs";
 import { db } from "../db/db";
 import { sweepOrphans } from "../services/orphans";
 import {
   ARCHIVE_TABLES as REGISTRY_ARCHIVE_TABLES,
   ARCHIVE_KEYS as REGISTRY_ARCHIVE_KEYS,
 } from "../db/entityKinds";
-import { deleteVaultFolder } from "../services/filesystem";
+import { deleteVaultFolder, isVaultPath, vaultAbs } from "../services/filesystem";
+import { isPdfNoteDocument } from "../services/pdfNoteMarkdown";
 
 export const archiveRouter = Router();
 
@@ -127,7 +129,8 @@ archiveRouter.get("/", (_req, res) => {
          LEFT JOIN systems sy ON sy.id = r.system_id
          LEFT JOIN settings se ON se.id = r.setting_id
          LEFT JOIN campaigns ca ON ca.id = r.campaign_id
-        WHERE r.archived_at IS NOT NULL`
+        WHERE r.archived_at IS NOT NULL
+          AND r.type <> 'pdf_notes'`
     )
     .all() as { id: number; name: string; scope: string; archived_at: string; system_name: string | null; setting_name: string | null; campaign_name: string | null }[];
   items.push(
@@ -395,6 +398,9 @@ archiveRouter.delete("/:type/:id", (req, res) => {
   if (!Number.isFinite(numericId) || !Number.isInteger(numericId) || numericId <= 0) {
     return res.status(400).json({ error: "некорректный id" });
   }
+  if (req.params.type === "resource" && isPdfNoteDocument(numericId)) {
+    return res.status(409).json({ error: "Удалите связанный PDF" });
+  }
 
   const row = db
     .prepare(`SELECT archived_at FROM ${table} WHERE ${key} = ?`)
@@ -407,6 +413,10 @@ archiveRouter.delete("/:type/:id", (req, res) => {
   // Grab the folder path before the row (and its nested children) are gone; the
   // recursive delete on disk happens last, after the DB is consistent.
   let folderPath: string | null = null;
+  const generated = req.params.type === "resource"
+    ? db.prepare("SELECT markdown_resource_id, file_path FROM pdf_note_documents WHERE pdf_resource_id = ?")
+      .all(numericId) as { markdown_resource_id: number; file_path: string }[]
+    : [];
   if (FOLDER_OWNED_TYPES.has(req.params.type)) {
     const withFolder = db
       .prepare(`SELECT folder_path FROM ${table} WHERE ${key} = ?`)
@@ -428,6 +438,7 @@ archiveRouter.delete("/:type/:id", (req, res) => {
          WHERE setting_id = ? AND in_library = 1 AND archived_at IS NULL`
       ).run(numericId);
     }
+    for (const child of generated) db.prepare("DELETE FROM resources WHERE id = ?").run(child.markdown_resource_id);
     db.prepare(`DELETE FROM ${table} WHERE ${key} = ?`).run(numericId);
     sweepOrphans();
   });
@@ -439,5 +450,13 @@ archiveRouter.delete("/:type/:id", (req, res) => {
     return res.status(500).json({ error: "не удалось удалить — попробуйте ещё раз" });
   }
   deleteVaultFolder(folderPath);
+  for (const child of generated) {
+    const abs = vaultAbs(child.file_path);
+    if (isVaultPath(abs)) {
+      try { fs.unlinkSync(abs); } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") console.error("Cannot remove generated PDF notes file", error);
+      }
+    }
+  }
   res.json({ ok: true });
 });

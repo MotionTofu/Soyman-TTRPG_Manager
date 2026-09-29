@@ -737,6 +737,7 @@ export interface SessionDetail extends SessionSummary {
 
 export interface Resource {
   id: number;
+  uid?: string | null;
   name: string;
   type: string;
   // Sub-grouping within the "link" type (folder/pdf/image/audio/link/other)
@@ -753,7 +754,10 @@ export interface Resource {
   template_kind: "short" | "full" | null;
   template_format?: StatblockFormat;
   file_path: string | null;
+  file_sha256?: string | null;
+  linked_pdf_resource_id?: number | null;
   file_url?: string | null;
+  markdown_linkable?: boolean;
   link_url: string | null;
   tags: string;
   notes: string;

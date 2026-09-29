@@ -1,4 +1,5 @@
 import { memo, useEffect, useMemo, useState, type ChangeEvent, type DragEvent } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { useQueries } from "@tanstack/react-query";
 import { type Affect } from "../data/entities";
 import { entityQuery, useAction, useEntity, useResource, write } from "../data/hooks";
@@ -79,6 +80,7 @@ export const ResourcesSection = memo(function ResourcesSection({
   const [draftName, setDraftName] = useState("");
   const [draftCategory, setDraftCategory] = useState<ResourceCategory>("link");
   const [draftLinkUrl, setDraftLinkUrl] = useState("");
+  const [draftMarkdown, setDraftMarkdown] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
@@ -116,11 +118,13 @@ export const ResourcesSection = memo(function ResourcesSection({
       setDraftName(file.name);
       setDraftCategory(guessResourceCategory(file.name));
       setDraftLinkUrl("");
+      setDraftMarkdown("");
     } else {
       setDraftFile(null);
       setDraftName("");
       setDraftCategory("link");
       setDraftLinkUrl("");
+      setDraftMarkdown("");
     }
     setModalOpen(true);
   }
@@ -134,6 +138,7 @@ export const ResourcesSection = memo(function ResourcesSection({
     form.append(scope === "session" ? "session_id" : "setting_id", String(entityId));
     form.append("category", draftCategory);
     if (draftFile) form.append("file", draftFile);
+    else if (draftCategory === "markdown") form.append("content", draftMarkdown);
     else if (draftLinkUrl.trim()) form.append("link_url", draftLinkUrl.trim());
     // Окно закрывается, только если записалось; повтор создал бы второй ресурс.
     const done = await run(() => write.post("/resources", form).then(() => true), { affects, retry: false });
@@ -409,12 +414,16 @@ export const ResourcesSection = memo(function ResourcesSection({
                 <input type="file" style={{ display: "none" }} onChange={handleFilePick} />
               </label>
             )}
+            {!draftFile && draftCategory === "markdown" && <label>
+              Текст .md (можно оставить пустым)
+              <textarea value={draftMarkdown} onChange={(e) => setDraftMarkdown(e.target.value)} rows={5} />
+            </label>}
             <div className="row">
               <button
                 type="button"
                 className="primary"
                 onClick={submitModal}
-                disabled={!draftName.trim() || (!draftFile && !draftLinkUrl.trim())}
+                disabled={!draftName.trim() || (!draftFile && !draftLinkUrl.trim() && draftCategory !== "markdown")}
               >
                 Добавить
               </button>
@@ -823,6 +832,7 @@ function ResourceRow({
   canPromote: boolean;
   onPromote: () => Promise<void>;
 }) {
+  const location = useLocation();
   const [editMode, setEditMode] = useState(false);
   const [name, setName] = useState(resource.name);
   const [linkUrl, setLinkUrl] = useState(resource.link_url ?? "");
@@ -874,6 +884,11 @@ function ResourceRow({
       ? resource.link_url
       : null;
   const openUrl = resource.link_url || resource.file_url;
+  const pdfRoute = resource.file_url && (resource.category === "pdf" || /\.pdf$/i.test(resource.file_url.split(/[?#]/)[0]))
+    ? `/resources/${resource.id}/read` : null;
+  const markdownRoute = resource.type === "pdf_notes" && resource.linked_pdf_resource_id
+    ? `/resources/${resource.id}/markdown` : null;
+  const markdownFileRoute = resource.type === "markdown" ? `/resources/${resource.id}/markdown-file` : null;
   const canReveal = !!resource.file_path || resource.category === "folder";
 
   async function reveal() {
@@ -912,7 +927,13 @@ function ResourceRow({
             <NavIcon name="link" /> из сеттинга
           </span>
         )}
-        {openUrl && (
+        {pdfRoute ? (
+          <Link to={pdfRoute} state={{ from: `${location.pathname}${location.search}` }}>Читать →</Link>
+        ) : markdownRoute || markdownFileRoute ? (
+          <Link to={markdownRoute || markdownFileRoute!} state={{ from: `${location.pathname}${location.search}` }}>
+            {markdownRoute ? "Читать заметки →" : "Читать .md →"}
+          </Link>
+        ) : openUrl && (
           <a href={openUrl} target="_blank" rel="noopener noreferrer">
             Открыть →
           </a>
@@ -933,7 +954,7 @@ function ResourceRow({
         <audio controls src={audioSrc} className="resource-row-audio" />
       )}
       <div className="row" style={{ flexShrink: 0 }}>
-        {canPromote && (
+        {resource.type !== "pdf_notes" && canPromote && (
           <button
             type="button"
             onClick={handlePromote}
@@ -953,7 +974,7 @@ function ResourceRow({
             )}
           </button>
         )}
-        {isAttached ? (
+        {resource.type === "pdf_notes" ? null : isAttached ? (
           <button type="button" onClick={onDetach} title="Открепить от сессии">
             Открепить
           </button>

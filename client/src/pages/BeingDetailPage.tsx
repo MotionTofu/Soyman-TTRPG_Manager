@@ -1,5 +1,6 @@
 import { useMemo, useState, type DragEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { PdfEntitySources } from "../components/PdfEntitySources";
 import { useAction, useAfterWrite, useEntity, useResource, useSaveEntity, write } from "../data/hooks";
 import { showSaveError } from "../data/notices";
 import { beingAffects, settingPaths } from "../data/settingEntities";
@@ -481,6 +482,7 @@ export function BeingDetailPage() {
         </Modal>
       )}
 
+      {tab === "Досье" && <PdfEntitySources kind="being" id={being.id} />}
       {tab === "Досье" && (
         <div className="stack">
           <div className="row" style={{ gap: 8 }}>

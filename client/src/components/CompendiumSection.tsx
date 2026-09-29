@@ -11,6 +11,7 @@ import { notifyDataChanged } from "../dataSync";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { LitmThemeBookBody, LitmTreasureBody, LitmMagicWayBody, LitmThemeKitBody } from "./litm/LitmCompendiumBodies";
 import { MentionText } from "./mentions/MentionText";
+import { PdfEntitySources } from "./PdfEntitySources";
 import { syncMentionLinks } from "../mentions";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { addToBag } from "../bag";
@@ -3335,6 +3336,7 @@ function EntryNode(props: NodeProps) {
               )}
             </div>
           )}
+          {(entry.kind === "item" || entry.kind === "magic_item") && <PdfEntitySources kind={entry.kind} id={entry.id} />}
           {entry.description && (
             <div style={{ whiteSpace: "pre-wrap" }}>
               <MentionText text={entry.description} />
