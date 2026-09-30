@@ -261,7 +261,7 @@ const SceneRow = memo(function SceneRow({
       </summary>
       <div className="entity-row-expanded" style={{ marginTop: 0 }}>
         {s.summary ? (
-          <div style={{ whiteSpace: "pre-wrap" }}>
+          <div className="reading-text" style={{ whiteSpace: "pre-wrap" }}>
             <MentionText text={s.summary} />
           </div>
         ) : (

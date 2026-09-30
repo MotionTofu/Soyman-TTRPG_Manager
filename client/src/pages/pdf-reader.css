@@ -83,7 +83,7 @@
 .pdf-reader__note-detail-head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
 .pdf-reader__note-detail-head button { border: 0; background: transparent; font-size: 1.3rem; line-height: 1; }
 .pdf-reader__note-detail blockquote { margin: .6rem 0; padding: .5rem; background: #fff3df; white-space: pre-wrap; overflow-wrap: anywhere; }
-.pdf-reader__note-detail .pdf-reader__note-body { white-space: pre-wrap; overflow-wrap: anywhere; }
+.pdf-reader__note-detail .pdf-reader__note-body { white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--fs-body); line-height: 1.6; }
 .pdf-reader__notes-lane[data-density="1"] .pdf-reader__note-card { padding: .4rem .5rem; }
 .pdf-reader__notes-lane[data-density="1"] .pdf-reader__note-card blockquote { max-height: 2.5rem; }
 .pdf-reader__notes-lane[data-density="1"] .pdf-reader__note-card .pdf-reader__note-body { max-height: 3rem; overflow: hidden; }

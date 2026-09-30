@@ -187,11 +187,13 @@ export function EditableTextCard({
           {/* Подпись у текста нужна только когда над ним есть другие поля —
               иначе заголовок карточки её уже дал. */}
           {fields && fields.length > 0 && <span className="editable-card-field-label">{title}</span>}
-          {entityType && entityId ? (
-            <MentionTextarea value={draft} onChange={setDraft} rows={rows} defaultSettingId={defaultSettingId} />
-          ) : (
-            <textarea rows={rows} value={draft} onChange={(e) => setDraft(e.target.value)} />
-          )}
+          <div className="reading-text">
+            {entityType && entityId ? (
+              <MentionTextarea value={draft} onChange={setDraft} rows={rows} defaultSettingId={defaultSettingId} />
+            ) : (
+              <textarea rows={rows} value={draft} onChange={(e) => setDraft(e.target.value)} />
+            )}
+          </div>
           <div className="row">
             <button className="primary" onClick={handleSave}>
               Сохранить
@@ -212,7 +214,7 @@ export function EditableTextCard({
             const clampClass = isLong && !expandedText ? "editable-clamp" : "";
             return (
               <>
-                <div className={clampClass} style={{ whiteSpace: "pre-wrap" }}>
+                <div className={`reading-text ${clampClass}`} style={{ whiteSpace: "pre-wrap" }}>
                   {value ? <MentionText text={value} /> : <span className="muted">Пусто</span>}
                 </div>
                 {isLong && (

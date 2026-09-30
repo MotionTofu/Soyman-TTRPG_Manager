@@ -1,7 +1,10 @@
 import { Router } from "express";
 import { db } from "../db/db";
+import { masteringSummary, validMasteringCover } from "../services/masteringSummary";
+import { masteringAnnotationsRouter } from "./masteringAnnotations";
 
 export const masteringRouter = Router();
+masteringRouter.use(masteringAnnotationsRouter);
 
 // --- Разделы (сворачиваемые, плашка — инверсия §1.4) --------------------
 // Один набор на каждую категорию prep/live/knowledge, как res-group у Ресурсов
@@ -82,7 +85,7 @@ masteringRouter.delete("/sections/:id", (req, res) => {
 });
 
 masteringRouter.get("/", (req, res) => {
-  const { category, system_id, section_id, q, sort, limit, offset } = req.query as {
+  const { category, system_id, section_id, q, sort, limit, offset, view } = req.query as {
     category?: string;
     system_id?: string;
     section_id?: string;
@@ -90,6 +93,7 @@ masteringRouter.get("/", (req, res) => {
     sort?: string;
     limit?: string;
     offset?: string;
+    view?: string;
   };
   const clauses = ["m.archived_at IS NULL"];
   const params: Record<string, string> = {};
@@ -124,8 +128,8 @@ masteringRouter.get("/", (req, res) => {
        LEFT JOIN mastering_sections sec ON sec.id = m.section_id
        WHERE ${clauses.join(" AND ")} ORDER BY ${order}${pageClause}`
     )
-    .all(params);
-  res.json(rows);
+    .all(params) as Array<{ content: string; [key: string]: unknown }>;
+  res.json(view === "library" ? rows.map(masteringSummary) : rows);
 });
 
 masteringRouter.get("/:id", (req, res) => {
@@ -137,20 +141,23 @@ masteringRouter.get("/:id", (req, res) => {
 });
 
 masteringRouter.post("/", (req, res) => {
-  const { category, system_id, section_id, title, content } = req.body as {
+  const { category, system_id, section_id, title, content, cover_image } = req.body as {
     category: string;
     system_id?: number | null;
     section_id?: number | null;
     title: string;
     content?: string;
+    cover_image?: string | null;
   };
   if (!category || !title?.trim())
     return res.status(400).json({ error: "category and title are required" });
+  if (cover_image !== undefined && !validMasteringCover(cover_image))
+    return res.status(400).json({ error: "Нужна ссылка на изображение или ресурс" });
   const info = db
     .prepare(
-      "INSERT INTO mastering_notes (category, section_id, system_id, title, content) VALUES (?, ?, ?, ?, ?)"
+      "INSERT INTO mastering_notes (category, section_id, system_id, title, content, cover_image) VALUES (?, ?, ?, ?, ?, ?)"
     )
-    .run(category, section_id ?? null, system_id ?? null, title.trim(), content || "");
+    .run(category, section_id ?? null, system_id ?? null, title.trim(), content || "", cover_image ?? null);
   res
     .status(201)
     .json(
@@ -159,16 +166,22 @@ masteringRouter.post("/", (req, res) => {
 });
 
 masteringRouter.put("/:id", (req, res) => {
-  const { title, content, system_id, section_id } = req.body as {
+  const { title, content, system_id, section_id, cover_image } = req.body as {
     title?: string;
     content?: string;
     system_id?: number | null;
     section_id?: number | null;
+    cover_image?: string | null;
   };
   const hasSystemId = Object.prototype.hasOwnProperty.call(req.body, "system_id");
   const hasSectionId = Object.prototype.hasOwnProperty.call(req.body, "section_id");
   const sets: string[] = [];
   const vals: unknown[] = [];
+  if (Object.prototype.hasOwnProperty.call(req.body, "cover_image")) {
+    if (!validMasteringCover(cover_image)) return res.status(400).json({ error: "Нужна ссылка на изображение или ресурс" });
+    sets.push("cover_image = ?");
+    vals.push(cover_image);
+  }
   if (title !== undefined) {
     sets.push("title = ?");
     vals.push(title);

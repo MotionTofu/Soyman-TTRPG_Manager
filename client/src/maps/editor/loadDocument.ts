@@ -13,10 +13,14 @@ import { migrateLegacyMap, type LegacyMigrationWarning } from "../core/migrateLe
 import { parseMapDocument } from "../core/parse";
 import type { MapDocumentV5 } from "../core/types";
 import { validateMapDocument } from "../core/validate";
+import { parseStoredMapDocument, upgradeMapDocumentV5, parseMapDocumentV6, type MapDocumentV6 } from "@shared/maps/core";
 
 export interface LoadedEditorDocument {
   document: MapDocumentV5;
-  sourceFormat: "legacy" | "v5";
+  sourceFormat: "legacy" | "v5" | "unsupported";
+  status: "supported" | "unsupported" | "corrupt";
+  /** Kept separately from a display-only fallback. Never serialize fallback over this. */
+  raw: string;
   /** Corrupt legacy / invalid V5: display fallback, autosave blocked. */
   corrupt: boolean;
   compatibility: EditorCompatibility;
@@ -46,11 +50,14 @@ function withCompatibility(
   corrupt: boolean,
   migrationWarnings: LegacyMigrationWarning[],
 ): LoadedEditorDocument {
+  const compatibility = assessCurrentEditorCompatibility(document);
   return {
     document,
     sourceFormat,
+    status: corrupt ? "corrupt" : compatibility.compatible ? "supported" : "unsupported",
+    raw: "",
     corrupt,
-    compatibility: assessCurrentEditorCompatibility(document),
+    compatibility,
     migrationWarnings,
   };
 }
@@ -60,7 +67,22 @@ function withCompatibility(
  * любая беда → corrupt fallback (пустой документ на мета-сетке).
  */
 export function loadStoredEditorDocument(stored: StoredMapInput): LoadedEditorDocument {
+  const result = loadV5EditorDocument(stored);
+  return { ...result, raw: stored.cells };
+}
+
+function unsupportedDocument(stored: StoredMapInput, message: string): LoadedEditorDocument {
+  return { document: emptyGridDocument(stored.grid, stored.width, stored.height), sourceFormat: "unsupported",
+    status: "unsupported", raw: stored.cells, corrupt: false, migrationWarnings: [],
+    compatibility: { compatible: false, reasons: [{ code: "map-version-unsupported", message }] } };
+}
+
+function loadV5EditorDocument(stored: StoredMapInput): LoadedEditorDocument {
   const { cells, grid, width, height } = stored;
+  const version = parseStoredMapDocument(cells);
+  if (version.format === "v6" || version.format === "unsupported") {
+    return unsupportedDocument(stored, "Требуется редактор, поддерживающий версию этого документа.");
+  }
   let parsed: unknown = null;
   let parsedOk = false;
   try {
@@ -75,6 +97,9 @@ export function loadStoredEditorDocument(stored: StoredMapInput): LoadedEditorDo
     if (result.ok) {
       return withCompatibility(result.value, "v5", false, []);
     }
+    if (result.errors.some((e) => e.code.includes("unknown") || e.code === "version.invalid")) {
+      return unsupportedDocument(stored, "Неизвестная функция документа; исходные данные сохранены.");
+    }
     return withCompatibility(emptyGridDocument(grid, width, height), "v5", true, []);
   }
   if (cellsBlobStatus(cells) === "corrupt") {
@@ -87,4 +112,26 @@ export function loadStoredEditorDocument(stored: StoredMapInput): LoadedEditorDo
     return withCompatibility(emptyGridDocument(grid, width, height), "legacy", true, []);
   }
   return withCompatibility(migrated.document, "legacy", false, migrated.warnings);
+}
+
+/** New workspace reader. An upgrade is in memory only, with no write-on-load. */
+export type LoadedWorkspaceDocument =
+  | { status: "supported"; sourceFormat: "legacy" | "v5" | "v6"; raw: string; document: MapDocumentV6 }
+  | { status: "unsupported" | "corrupt"; raw: string; document: null };
+export function loadStoredWorkspaceDocument(stored: StoredMapInput): LoadedWorkspaceDocument {
+  const detected = parseStoredMapDocument(stored.cells);
+  if (detected.format === "unsupported") return { status: "unsupported", raw: stored.cells, document: null };
+  if (detected.format === "v6") {
+    const parsed = parseMapDocumentV6(stored.cells);
+    if (!parsed.ok) return { status: parsed.errors.some((e) => e.code.includes("unknown") || e.code.includes("unsupported")) ? "unsupported" : "corrupt", raw: stored.cells, document: null };
+    return { status: "supported", sourceFormat: "v6", raw: stored.cells, document: parsed.value };
+  }
+  if (detected.format === "v5") {
+    const parsed = parseMapDocument(stored.cells);
+    if (!parsed.ok) return { status: parsed.errors.some((e) => e.code.includes("unknown")) ? "unsupported" : "corrupt", raw: stored.cells, document: null };
+    return { status: "supported", sourceFormat: "v5", raw: stored.cells, document: upgradeMapDocumentV5(parsed.value) };
+  }
+  const loaded = loadStoredEditorDocument(stored);
+  if (loaded.status !== "supported" || loaded.sourceFormat === "unsupported") return { status: loaded.status === "supported" ? "unsupported" : loaded.status, raw: stored.cells, document: null };
+  return { status: "supported", sourceFormat: loaded.sourceFormat, raw: stored.cells, document: upgradeMapDocumentV5(loaded.document) };
 }

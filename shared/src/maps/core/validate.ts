@@ -190,6 +190,8 @@ function checkPathGeometry(
       checkVec2(n.position, `${np}.position`, out);
       if (n.in !== undefined && !checkVec2(n.in, `${np}.in`, out)) return;
       if (n.out !== undefined && !checkVec2(n.out, `${np}.out`, out)) return;
+      if (n.width !== undefined && (!isFiniteNumber(n.width) || n.width <= 0))
+        out.push(issue("path.spline.bad-node-width", `${np}.width`, "node width must be finite and > 0"));
     });
     return;
   }
@@ -369,6 +371,12 @@ function checkPathLayer(
     }
     if (!isStyleRef(p.styleRef)) {
       out.push(issue("path.bad-style-ref", `${pp}.styleRef`, "expected builtin | asset style ref"));
+    }
+    if (p.branchFrom !== undefined && (!isRecord(p.branchFrom) ||
+      typeof p.branchFrom.pathId !== "string" || !p.branchFrom.pathId ||
+      !Number.isInteger(p.branchFrom.nodeIndex) || (p.branchFrom.nodeIndex as number) < 0 ||
+      !isRecord(p.geometry) || p.geometry.type !== "spline")) {
+      out.push(issue("path.bad-branch", `${pp}.branchFrom`, "expected a spline parent path and node index"));
     }
     if (p.properties !== undefined && !isJsonValue(p.properties)) {
       out.push(issue("path.bad-properties", `${pp}.properties`, "properties must be JSON-safe"));
@@ -697,6 +705,49 @@ export function validateMapDocument(doc: unknown): ValidationIssue[] {
       out.push(issue("layer.unknown-kind", `${lp}.kind`, "expected terrain | path | object | scatter | label | gameplay"));
     }
   });
+
+  const splines = new Map<string, { path: Record<string, unknown>; location: string }>();
+  doc.layers.forEach((layer, layerIndex) => {
+    if (!isRecord(layer) || layer.kind !== "path" || !Array.isArray(layer.paths)) return;
+    layer.paths.forEach((path, pathIndex) => {
+      if (isRecord(path) && typeof path.id === "string" && isRecord(path.geometry) &&
+        path.geometry.type === "spline") {
+        splines.set(path.id, { path, location: `layers[${layerIndex}].paths[${pathIndex}]` });
+      }
+    });
+  });
+  for (const [id, entry] of splines) {
+    const source = entry.path.branchFrom;
+    if (!isRecord(source) || typeof source.pathId !== "string" ||
+      !Number.isInteger(source.nodeIndex)) continue;
+    const parent = splines.get(source.pathId);
+    const parentNodes = parent && isRecord(parent.path.geometry) &&
+      Array.isArray(parent.path.geometry.nodes) ? parent.path.geometry.nodes : null;
+    const childNodes = isRecord(entry.path.geometry) && Array.isArray(entry.path.geometry.nodes)
+      ? entry.path.geometry.nodes : null;
+    const parentNode = parentNodes?.[source.nodeIndex as number];
+    const childNode = childNodes?.[0];
+    if (!parent || parent.path.kind !== entry.path.kind ||
+      !isRecord(parentNode) || !isRecord(parentNode.position) ||
+      !isRecord(childNode) || !isRecord(childNode.position) ||
+      parentNode.position.x !== childNode.position.x ||
+      parentNode.position.y !== childNode.position.y) {
+      out.push(issue("path.branch-detached", `${entry.location}.branchFrom`,
+        "branch must begin at a matching spline node"));
+      continue;
+    }
+    const seen = new Set([id]);
+    let current: string | null = source.pathId;
+    while (current) {
+      if (seen.has(current)) {
+        out.push(issue("path.branch-cycle", `${entry.location}.branchFrom`, "branch links cannot form a cycle"));
+        break;
+      }
+      seen.add(current);
+      const next: unknown = splines.get(current)?.path.branchFrom;
+      current = isRecord(next) && typeof next.pathId === "string" ? next.pathId : null;
+    }
+  }
 
   // Инвариант 16 снят в Фазе 3A (§10 ТЗ): 0..N TerrainLayer валидны
   // (multi-terrain compositing, terrain-less compositions). Был ограничением

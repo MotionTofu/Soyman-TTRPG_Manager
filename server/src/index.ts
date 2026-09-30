@@ -40,6 +40,8 @@ import { pdfNotesRouter } from "./routes/pdfNotes";
 import { pdfEntitySourcesRouter } from "./routes/pdfEntitySources";
 import { isPrivatePdfNotesPath } from "./services/pdfNoteMarkdown";
 import { masteringRouter } from "./routes/mastering";
+import { bookLibraryRouter } from "./routes/bookLibrary";
+import {workbooksRouter,seedWorkbooks} from "./routes/workbooks";
 import { calendarRouter } from "./routes/calendar";
 import { searchRouter } from "./routes/search";
 import { linksRouter } from "./routes/links";
@@ -219,6 +221,8 @@ app.use((req, res, next) => {
     p.startsWith("/api/backup");
   const limit = /^\/api\/resources\/\d+\/markdown-content$/.test(p)
     ? "3mb"
+    : p.startsWith("/api/mastering")
+    ? "20mb" // Markdown до 10 МБ плюс JSON-экранирование при сохранении книги.
     : p.startsWith("/api/statblocks/import")
     ? "5mb"
     : // Sync split (D1.3): small character documents vs heavy immutable
@@ -437,6 +441,9 @@ app.use("/api/resources", pdfNotesRouter);
 app.use("/api/pdf-entity-sources", pdfEntitySourcesRouter);
 app.use("/api/resources", resourcesRouter);
 app.use("/api/mastering", masteringRouter);
+app.use("/api/book-library", bookLibraryRouter);
+seedWorkbooks();
+app.use("/api/workbooks",workbooksRouter);
 app.use("/api/calendar", calendarRouter);
 app.use("/api/search", searchRouter);
 app.use("/api/links", linksRouter);

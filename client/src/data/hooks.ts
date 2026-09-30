@@ -139,6 +139,7 @@ export function useEntityList<T>(kind: EntityKind, scope: ListScope | null): Dat
 /** Что можно передать записи: таймаут дольше обычного — для загрузки файлов. */
 export interface WriteOptions {
   timeoutMs?: number;
+  headers?: Record<string, string>;
 }
 
 /** Записи слоя: мимо широковещания транспорта, адресный сигнал шлёт сам слой. */

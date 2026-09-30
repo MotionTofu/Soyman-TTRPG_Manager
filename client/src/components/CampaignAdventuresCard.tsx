@@ -226,7 +226,7 @@ function AdventureBlock({
             {filledTexts.map((f) => (
               <div key={f.key} className="stack" style={{ gap: 4, borderTop: "1px solid var(--line)", paddingTop: 8 }}>
                 <span className="campaign-field-label" style={{ color: "var(--ink)" }}>{f.label}</span>
-                <div style={{ whiteSpace: "pre-wrap" }}>
+                <div className="reading-text" style={{ whiteSpace: "pre-wrap" }}>
                   <MentionText text={(arc as unknown as Record<string, string>)[f.key]} />
                 </div>
               </div>

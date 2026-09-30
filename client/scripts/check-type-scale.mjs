@@ -2,8 +2,9 @@
 /**
  * Барьер шкалы кегля.
  *
- * Шкала объявлена в index.css (`--fs-micro` 10 / `--fs-meta` 12 / `--fs-h3` 16 /
- * `--fs-h2` 26 плюс clamp-ступени для героя и чисел) — но объявить мало.
+ * Шкала объявлена в index.css (`--fs-micro` 10 / `--fs-meta` 12 /
+ * `--fs-data` 14 / `--fs-body` 16 / `--fs-h3` 16 / `--fs-h2` 26
+ * плюс clamp-ступени для героя и чисел) — но объявить мало.
  * До этой проверки в коде жило 570 мест с сырым кеглем, включая 14 разных
  * значений и половинные 9.5/10.5/12.5/14.5. Шкала была документом, а не
  * правилом: удержать §1.6 при таком разбросе нельзя даже теоретически.
@@ -117,7 +118,7 @@ if (offenders.length) {
   console.error("Кегль мимо шкалы — " + offenders.length + " мест:\n");
   for (const o of offenders) console.error("  " + o);
   console.error(
-    "\nШкала: var(--fs-micro) 10 · var(--fs-meta) 12 · var(--fs-h3) 16 · var(--fs-h2) 26" +
+    "\nШкала: var(--fs-micro) 10 · var(--fs-meta) 12 · var(--fs-data) 14 · var(--fs-body) 16 · var(--fs-h3) 16 · var(--fs-h2) 26" +
       "\nПлюс var(--fs-h1) / var(--fs-hero) / var(--fs-stat) для крупного и чисел." +
       "\nСм. комментарий к шкале в client/src/index.css."
   );

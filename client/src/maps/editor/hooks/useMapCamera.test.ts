@@ -41,6 +41,21 @@ describe("useMapCamera (Этап 1, smoke)", () => {
     expect(result.current.cam).toEqual({ scale: 50, ox: 10, oy: 20 });
   });
 
+  it("не возвращает камеру к сохранённой позиции после правки документа", () => {
+    localStorage.setItem("maps.cam.7", JSON.stringify({ scale: 50, ox: 10, oy: 20 }));
+    const { wrapRef, canvasRef } = makeRefs();
+    const { result, rerender } = renderHook(
+      ({ geom }: { geom: typeof GEOM }) => useMapCamera({ mapId: 7, geom, wrapRef, canvasRef }),
+      { initialProps: { geom: { ...GEOM } } },
+    );
+    act(() => {
+      result.current.setCam({ scale: 50, ox: -300, oy: -200 });
+    });
+    // Рисование меняет документ и может создать новый объект geom с теми же размерами.
+    rerender({ geom: { ...GEOM } });
+    expect(result.current.cam).toEqual({ scale: 50, ox: -300, oy: -200 });
+  });
+
   it("игнорирует битую память и вписывает карту (fit)", () => {
     localStorage.setItem("maps.cam.7", JSON.stringify({ scale: 500, ox: 0, oy: 0 }));
     const { wrapRef, canvasRef } = makeRefs();

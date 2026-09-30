@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { installMapNavigationBridge } from "./maps/workspace/navigationGuardBridge";
 import { AppShell } from "./layout/AppShell";
 import { LoginGate } from "./components/LoginGate";
 import { RealtimeListener } from "./RealtimeListener";
@@ -46,11 +47,14 @@ const SystemsListPage = lazy(() => import("./pages/SystemsListPage").then((m) =>
 const SystemDetailPage = lazy(() => import("./pages/SystemDetailPage").then((m) => ({ default: m.SystemDetailPage })));
 const DndCardProfilePage = lazy(() => import("./pages/DndCardProfilePage").then((m) => ({ default: m.DndCardProfilePage })));
 const ResourcesListPage = lazy(() => import("./pages/ResourcesListPage").then((m) => ({ default: m.ResourcesListPage })));
+const WorkbookPage = lazy(()=>import("./pages/WorkbookPage").then(m=>({default:m.WorkbookPage})));
+const WorkbooksPage = lazy(()=>import("./pages/WorkbooksPage").then(m=>({default:m.WorkbooksPage})));
+const AudioLibraryPage = lazy(() => import("./pages/AudioLibraryPage").then(m=>({default:m.AudioLibraryPage})));
 const PdfReaderPage = lazy(() => import("./pages/PdfReaderPage").then((m) => ({ default: m.PdfReaderPage })));
 const PdfMarkdownPage = lazy(() => import("./pages/PdfMarkdownPage").then((m) => ({ default: m.PdfMarkdownPage })));
 const MarkdownResourcePage = lazy(() => import("./pages/MarkdownResourcePage").then((m) => ({ default: m.MarkdownResourcePage })));
 const ResourceLinkPage = lazy(() => import("./pages/ResourceLinkPage").then((m) => ({ default: m.ResourceLinkPage })));
-const MasteringPage = lazy(() => import("./pages/MasteringPage").then((m) => ({ default: m.MasteringPage })));
+const MasteringPage = lazy(() => import("./pages/BookLibraryPage").then((m) => ({ default: m.BookLibraryPage })));
 const CharacterDetailPage = lazy(() => import("./pages/CharacterDetailPage").then((m) => ({ default: m.CharacterDetailPage })));
 const CharacterSheetPage = lazy(() => import("./pages/CharacterSheetPage").then((m) => ({ default: m.CharacterSheetPage })));
 const ArchivePage = lazy(() => import("./pages/ArchivePage").then((m) => ({ default: m.ArchivePage })));
@@ -69,6 +73,7 @@ const CompendiumEntryRedirectPage = lazy(() =>
 const GraphPage = lazy(() => import("./pages/GraphPage").then((m) => ({ default: m.GraphPage })));
 const MapsListPage = lazy(() => import("./pages/MapsListPage").then((m) => ({ default: m.MapsListPage })));
 const MapEditorPage = lazy(() => import("./pages/MapEditorPage").then((m) => ({ default: m.MapEditorPage })));
+const MapWorkspacePage = lazy(() => import("./pages/MapWorkspacePage").then((m) => ({ default: m.MapWorkspacePage })));
 // Полотно тянет за собой @xyflow/react — единственную тяжёлую внешнюю
 // зависимость клиента, и грузить её тем, кто на холст не заходит, незачем.
 const CanvasPage = lazy(() => import("./pages/CanvasPage").then((m) => ({ default: m.CanvasPage })));
@@ -157,6 +162,9 @@ function NotFoundPage() {
   );
 }
 
+// Subscribe before BrowserRouter so failed map saves can reverse browser Back.
+installMapNavigationBridge();
+
 function App() {
   return (
     <BrowserRouter>
@@ -198,6 +206,7 @@ function App() {
                 Своего звука у него нет — движок живёт в главном окне, см.
                 sound/engine.tsx. */}
             <Route path="/sound-console" element={<SoundConsolePage />} />
+            <Route path="/workbook-window/:id" element={<WorkbookPage popout />} />
             <Route element={<AppShell />}>
               <Route path="/" element={<HomeRoute />} />
               <Route path="/library" element={<LibraryRoute />} />
@@ -221,11 +230,15 @@ function App() {
               <Route path="/systems/:id" element={<SystemDetailPage />} />
               <Route path="/systems/:id/entries/:entryId" element={<DndCardProfilePage />} />
               <Route path="/resources" element={<ResourcesListPage />} />
+              <Route path="/gallery" element={<ResourcesListPage mode="gallery" />} />
+              <Route path="/audio-library" element={<AudioLibraryPage />} />
               <Route path="/resources/:id/read" element={<PdfReaderPage />} />
               <Route path="/resources/:id/markdown" element={<PdfMarkdownPage />} />
               <Route path="/resources/:id/markdown-file" element={<MarkdownResourcePage />} />
               <Route path="/resources/link/:uid" element={<ResourceLinkPage />} />
               <Route path="/mastering" element={<MasteringPage />} />
+              <Route path="/workbooks" element={<WorkbooksPage />} />
+              <Route path="/workbooks/:id" element={<WorkbookPage />} />
               <Route path="/characters/:id" element={<CharacterDetailPage />} />
               <Route path="/characters/:id/sheet" element={<CharacterSheetPage />} />
               <Route path="/locations/:id" element={<LocationDetailPage />} />
@@ -241,6 +254,7 @@ function App() {
               <Route path="/graph/:view" element={<GraphPage />} />
               <Route path="/maps" element={<MapsListPage />} />
               <Route path="/maps/:id" element={<MapEditorPage />} />
+              <Route path="/maps/:id/workspace" element={<MapWorkspacePage />} />
               <Route path="/storages" element={<StoragesSettingsPage />} />
               <Route path="/appearance" element={<Navigate to="/storages" replace state={{ fromAppearance: true }} />} />
               <Route path="/health" element={<HealthPage />} />

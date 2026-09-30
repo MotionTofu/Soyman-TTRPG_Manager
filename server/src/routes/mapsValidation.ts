@@ -13,6 +13,9 @@ import {
   serializeMapDocument,
   type MapDocumentV5,
   type ValidationIssue,
+  parseMapDocumentV6,
+  serializeMapDocumentV6,
+  type MapDocumentV6,
 } from "@soyman/shared";
 
 export const MAP_GRIDS = ["square", "hex"] as const;
@@ -361,6 +364,29 @@ export interface V5DocumentBodyResult {
   grid: MapGrid;
   width: number;
   height: number;
+}
+
+export function validateV6DocumentBody(raw: unknown): { error: string; issues?: ValidationIssue[] } | {
+  value: Omit<V5DocumentBodyResult, "document"> & { document: MapDocumentV6 }
+} {
+  const parsed = parseMapDocumentV6(raw);
+  if (!parsed.ok) return { error: "document invalid", issues: parsed.errors };
+  const document = parsed.value;
+  const grid = document.grid;
+  if (!grid || grid.columns < MAP_MIN_SIDE || grid.columns > MAP_MAX_SIDE || grid.rows < MAP_MIN_SIDE || grid.rows > MAP_MAX_SIDE) {
+    return { error: `V6 persistence requires a square/hex grid ${MAP_MIN_SIDE}..${MAP_MAX_SIDE}` };
+  }
+  return { value: { document, cells: serializeMapDocumentV6(document), grid: grid.type, width: grid.columns, height: grid.rows } };
+}
+
+export function validateV6Create(body: V5CreateInput, parentExists: (id: number) => boolean) {
+  const result = validateV6DocumentBody(body.document);
+  if ("error" in result) return result;
+  const doc = result.value.document;
+  // Reuse all record metadata rules, with a token-free V5 validation view.
+  const metadata = validateV5Create({ ...body, document: { ...doc, v: 5, layers: doc.layers.map((l) =>
+    l.kind === "gameplay" ? { ...l, items: l.items.filter((e) => e.kind !== "token") } : l) } }, parentExists);
+  return "error" in metadata ? metadata : { value: { ...metadata.value, cells: result.value.cells } };
 }
 
 function v5Fail(message: string, issues?: ValidationIssue[]): { error: string; issues?: ValidationIssue[] } {

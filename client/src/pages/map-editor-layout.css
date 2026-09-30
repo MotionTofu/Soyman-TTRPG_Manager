@@ -6,9 +6,9 @@
   gap: var(--sp-4);
 }
 
-.map-editor > .page-header-row,
+.map-editor > .map-editor-breadcrumbs,
 .map-editor > .map-editor-summary,
-.map-editor > .map-editor-modebar,
+.map-editor > .map-editor-menubar,
 .map-editor > .map-editor-commandbar,
 .map-editor > .card,
 .map-editor > p.muted {
@@ -16,67 +16,63 @@
   min-width: 0;
 }
 
-.map-editor > .page-header-row {
-  grid-row: 1;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-}
-.map-editor > .page-header-row > .row {
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--sp-2);
-}
-.map-editor > .map-editor-summary { grid-row: 2; }
-.map-editor > .map-editor-modebar { grid-row: 3; }
+.map-editor > .map-editor-breadcrumbs { grid-row: 1; }
+.map-editor > .map-editor-menubar { grid-row: 2; }
+.map-editor > .map-editor-summary { grid-row: 3; }
 .map-editor > .map-editor-commandbar { grid-row: 4; }
 
-.map-editor-modebar {
+.map-editor-menubar {
+  position: relative;
+  z-index: 5;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   flex-wrap: wrap;
-  gap: var(--sp-4);
-  padding: var(--sp-4);
+  gap: var(--sp-1);
+  padding: var(--sp-1) var(--sp-2);
   border: 1px solid var(--line);
   background: var(--bg-elevated);
 }
 
-.map-editor-modebar > div:first-child {
+.map-editor-menu { position: relative; }
+.map-editor-menu-trigger { border: 0; background: transparent; color: var(--ink); }
+.map-editor-menu-trigger:hover,
+.map-editor-menu-trigger[aria-expanded="true"] { background: var(--paper-2); }
+.map-editor-menu-trigger[aria-expanded="true"] { outline: 1px solid var(--line); }
+.map-editor-menu-popup {
+  position: absolute;
+  top: calc(100% + var(--sp-1));
+  left: 0;
+  z-index: 10;
   display: grid;
   gap: var(--sp-1);
-}
-
-.map-editor-eyebrow {
-  color: var(--muted);
-  font-size: var(--fs-micro);
-  letter-spacing: .08em;
-  text-transform: uppercase;
-}
-
-.map-editor-modebar strong {
-  font-family: var(--font-display);
-  font-size: var(--fs-h3);
-  line-height: 1;
-}
-
-.map-editor-mode-switch {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 0;
-}
-
-.map-editor-mode-switch button {
-  border-radius: 0;
-}
-
-.map-editor-mode-switch button + button { border-left: 0; }
-.map-editor-mode-switch button[aria-selected="true"] {
-  outline: 1px solid var(--ink);
-  outline-offset: -3px;
+  min-width: 220px;
+  max-width: calc(100vw - 32px);
+  padding: var(--sp-2);
+  border: 1px solid var(--line);
   background: var(--paper);
+  box-shadow: 0 12px 24px rgb(0 0 0 / 18%);
 }
-
-.map-editor-modebar > .muted { font-size: var(--fs-micro); }
+.map-editor-menu-popup > button,
+.map-editor-menu-popup > label {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  min-height: 32px;
+  padding: var(--sp-1) var(--sp-2);
+  text-align: left;
+  white-space: nowrap;
+}
+.map-editor-menu-popup > button { border: 0; background: transparent; color: var(--ink); }
+.map-editor-menu-popup > button:hover,
+.map-editor-menu-popup > label:hover { background: var(--paper-2); }
+.map-editor-menu-popup > button[aria-selected="true"]::before { content: "✓"; }
+.map-editor-menu-popup > button[aria-selected="false"]::before { content: ""; width: 1em; }
+.map-editor-menu-popup input { margin: 0; }
+.map-editor-menu-popup .map-editor-menu-danger { color: var(--danger-bg); }
+.map-editor-menu-separator { height: 1px; margin: var(--sp-1) 0; background: var(--line); }
+.map-editor-menubar-spacer { flex: 1; }
+.map-editor-mode-indicator { color: var(--muted); font-size: var(--fs-meta); }
 .map-editor-commandbar { padding: var(--sp-2) 0; }
 
 .map-editor-tool-column,
@@ -132,6 +128,13 @@
 .map-editor-common-tools button:last-child { grid-column: 1 / -1; }
 
 .map-editor-tool-note { font-size: var(--fs-micro); }
+.map-editor-terrain-surface { display: grid; gap: var(--sp-2); }
+.map-editor-terrain-surface-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-2);
+}
+.map-editor-terrain-surface-options button { min-width: 0; }
 .map-editor-extra-toggle { align-self: stretch; }
 
 .map-editor-brush-size {
@@ -155,6 +158,21 @@
 .map-editor-fog-controls > .muted { font-size: var(--fs-micro); }
 .map-editor-fog-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); }
 .map-editor-fog-actions button { min-width: 0; }
+.map-editor-path-choice {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+}
+.map-editor-path-choice[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.map-editor-path-width { display: grid; gap: var(--sp-2); }
+.map-editor-path-width label { display: grid; gap: var(--sp-2); }
+.map-editor-path-width input { width: 100%; margin: 0; accent-color: var(--accent); }
+.map-editor-path-width .muted { font-size: var(--fs-micro); }
+.map-editor-spline-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+.map-editor-spline-actions .muted { flex: 1 1 100%; font-size: var(--fs-micro); }
 .map-editor-inspector-column .res-toolbar select,
 .map-editor-inspector-column .card select { max-width: 100%; }
 .map-editor-inspector-column .map-layer-panel { min-width: 0; order: 99; }
@@ -201,7 +219,7 @@
 .map-editor-stage > p { margin: 0; }
 .map-editor-stage > details { max-width: 100%; }
 
-.map-editor--readonly .map-editor-stage { grid-column: 1 / -1; grid-row: 3; }
+.map-editor--readonly .map-editor-stage { grid-column: 1 / -1; grid-row: 5; }
 
 @media (max-width: 1250px) {
   .map-editor {
@@ -220,14 +238,14 @@
   .map-editor-inspector-column { grid-row: 7; max-height: 420px; }
   .map-editor-common-tools { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .map-editor-common-tools button:last-child { grid-column: auto; }
-  .map-editor--readonly .map-editor-stage { grid-row: 3; }
-  .map-editor > .page-header-row > .row { justify-content: flex-start; }
+  .map-editor--readonly .map-editor-stage { grid-row: 5; }
+  .map-editor-menu:nth-of-type(n+3) .map-editor-menu-popup { left: auto; right: 0; }
 }
 
 @media print {
   .map-editor-tool-column,
   .map-editor-inspector-column,
-  .map-editor-modebar,
+  .map-editor-menubar,
   .map-editor-commandbar,
   .map-editor-stage > .res-toolbar,
   .map-editor-stage > p,

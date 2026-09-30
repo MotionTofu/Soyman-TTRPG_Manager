@@ -155,6 +155,7 @@ function canonPath(p: MapPath): MapPath {
             position: canonVec2(n.position),
             ...(n.in !== undefined ? { in: canonVec2(n.in) } : {}),
             ...(n.out !== undefined ? { out: canonVec2(n.out) } : {}),
+            ...(n.width !== undefined ? { width: n.width } : {}),
           })),
         }
       : {
@@ -167,6 +168,8 @@ function canonPath(p: MapPath): MapPath {
     geometry,
     width: p.width,
     styleRef: canonStyleRef(p.styleRef),
+    ...(p.branchFrom ? { branchFrom: { pathId: p.branchFrom.pathId,
+      nodeIndex: p.branchFrom.nodeIndex } } : {}),
   };
   const props = canonOptJson(p.properties);
   if (props !== undefined) out.properties = props;

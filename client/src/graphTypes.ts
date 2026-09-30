@@ -63,6 +63,14 @@ export const GRAPH_VIEW_EDGE_KINDS: Record<GraphView, EdgeKind[]> = {
   adventures: ["scene", "link", "mention"],
 };
 
+// Типы, скрытые по умолчанию в каждом графе (решения 2026-09-30, Q1): в графе
+// мира сюжет засоряет «кто с кем», в графе приключений сюжет и есть основа —
+// скрыта только кампания, она одна на весь выбранный охват.
+export const GRAPH_VIEW_HIDDEN_TYPES: Record<GraphView, string[]> = {
+  world: ["scene", "adventure", "campaign", "session"],
+  adventures: ["campaign"],
+};
+
 export const TYPE_LABELS: Record<string, string> = {
   campaign: "Кампании",
   setting: "Сеттинги",
@@ -73,7 +81,7 @@ export const TYPE_LABELS: Record<string, string> = {
   community: "Сообщества",
   artifact: "Артефакты",
   resource: "Ресурсы",
-  mastering: "Мастерение",
+  mastering: "Библиотека",
   scene: "Сцены",
   adventure: "Приключения",
   session: "Сессии",

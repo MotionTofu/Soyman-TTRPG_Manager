@@ -1,6 +1,6 @@
 // Current editor compatibility profile (Фаза 3A, §78–83).
 // Отличается от validateMapDocument: валидный V5 может быть не по зубам
-// текущему редактору (неизвестные mask encoding/spline/unknown objects/scatter, несколько road paths
+// текущему редактору (неизвестные mask encoding/Bezier handles/unknown objects/scatter, несколько road paths
 // внутри одного слоя, неквадратные комнаты...). Такое нельзя молча открыть
 // на редактирование: renderer бы скрыл данные, а autosave — перезаписал.
 // Разрешены: arbitrary layer order, 0..N TerrainCell/Path/Gameplay/Label
@@ -57,7 +57,7 @@ export function assessCurrentEditorCompatibility(doc: MapDocumentV5): EditorComp
   }
 
   // Render-подмножество: любой unsupported diagnostic = несовместимость.
-  // (unknown mask encoding/spline/unknown objects/scatter/non-rect rooms/non-cardinal doors/
+  // (unknown mask encoding/Bezier handles/unknown objects/scatter/non-rect rooms/non-cardinal doors/
   // non-terrain materials/unknown path kinds — см. createV5RenderModel).
   const { diagnostics } = createV5RenderModel(doc);
   for (const d of diagnostics) {
@@ -67,8 +67,9 @@ export function assessCurrentEditorCompatibility(doc: MapDocumentV5): EditorComp
   // Terrain default: кисти/пипетка/ластик работают кодами builtin:terrain/*.
   for (const layer of doc.layers) {
     if (layer.kind !== "terrain") continue;
-    if (doc.exploration?.enabled && layer.representation === "mask") {
-      issue("exploration-terrain-mask", "fog with detailed terrain mask is not supported yet");
+    if (doc.exploration?.enabled && layer.representation === "mask" &&
+      (layer.defaultMaterial.type !== "builtin" || layer.defaultMaterial.key !== "terrain/plain")) {
+      issue("exploration-mask-default", "fog requires a plain default material on detailed terrain");
     }
     const dm = layer.defaultMaterial;
     if (dm.type !== "builtin" || !dm.key.startsWith("terrain/")) {

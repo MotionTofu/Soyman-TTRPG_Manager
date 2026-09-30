@@ -22,10 +22,11 @@ import {
   legacyTrapId,
 } from "./core/ids";
 import type { MaterialRef } from "./core/refs";
-import type { LayerId, MapDocumentV5, MapObject } from "./core/types";
+import type { LayerId, MapDocumentV5, MapObject, SplineNode } from "./core/types";
 import { mapAssetPackForId, resolveMapSymbol, type MapVisualAsset } from "./assets/registry";
 import { isPaletteIndexMaskPayload, TERRAIN_MASK_CHUNK_SIDE } from "@shared/maps/core/terrainMask";
 import { cellCenter } from "./grid";
+import type { GameplayToken } from "@shared/maps/core";
 import type { MapGrid } from "./mapTypes";
 import type {
   MapCells,
@@ -84,6 +85,7 @@ export interface RenderStartFinish {
 /** Gameplay-сущность в порядке items[] слоя — render order внутри layer (§16).
  *  По kind НЕ сортируется. */
 export type RenderGameplayItem =
+  | { kind: "token"; token: GameplayToken; display?: { name: string; state: "active" | "missing"; portrait?: HTMLImageElement | null } }
   | { kind: "room"; room: RenderRoom }
   | { kind: "door"; door: RenderDoor }
   | { kind: "trap"; trap: RenderTrap }
@@ -118,10 +120,12 @@ export interface RenderTerrainLayer extends RenderLayerBase {
 }
 
 /** Path-слой со своим paths[]; порядок paths[] = render order (§14). */
-/** Один рисуемый путь слоя: kind road|river, клетки cell-network. */
+/** Один рисуемый путь: legacy cell network или свободная мировая линия. */
 export interface RenderPath {
   kind: "road" | "river";
   cells: ReadonlySet<string>;
+  nodes?: readonly SplineNode[];
+  width?: number;
 }
 
 export interface RenderPathLayer extends RenderLayerBase {
@@ -384,12 +388,12 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
     } else if (layer.kind === "path") {
       const paths: RenderPath[] = [];
       for (const p of layer.paths) {
-        if (p.geometry.type === "spline") {
-          diag("unsupported-spline-path", `path ${p.id}: spline not rendered`);
-          continue;
-        }
         if (p.kind !== "road" && p.kind !== "river") {
           diag("unsupported-path-kind", `path ${p.id}: kind "${p.kind}" not rendered`);
+          continue;
+        }
+        if (p.geometry.type === "spline") {
+          paths.push({ kind: p.kind, cells: new Set(), nodes: p.geometry.nodes, width: p.width });
           continue;
         }
         const cells = new Set<string>();

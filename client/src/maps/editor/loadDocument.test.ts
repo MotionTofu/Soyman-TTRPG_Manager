@@ -7,13 +7,35 @@ import { migrateLegacyMap } from "../core/migrateLegacy";
 import { serializeMapDocument } from "../core/serialize";
 import type { MapDocumentV5 } from "../core/types";
 import { validateMapDocument } from "../core/validate";
-import { loadStoredEditorDocument } from "./loadDocument";
+import { loadStoredEditorDocument, loadStoredWorkspaceDocument } from "./loadDocument";
 
 function legacyBlob(): string {
   return serializeCells(parseFixture(FIXTURES.dungeonV3));
 }
 
 describe("loadStoredEditorDocument", () => {
+  it("V6/future versions are unsupported in V5 editor, never corrupt-overwrite candidates", () => {
+    for (const v of [6, 7, 99, "6"]) {
+      const raw = ` { "v": ${JSON.stringify(v)}, "private": "Test raw" } \n`;
+      const loaded = loadStoredEditorDocument({ cells: raw, grid: "square", width: 8, height: 8 });
+      expect(loaded).toMatchObject({ sourceFormat: "unsupported", status: "unsupported", raw, corrupt: false });
+      expect(loaded.compatibility.compatible).toBe(false);
+    }
+  });
+  it("new reader upgrades legacy/V5 in memory, returns no saving fallback for future bytes", () => {
+    const stored = { cells: legacyBlob(), grid: "square" as const, width: 8, height: 8 };
+    const upgraded = loadStoredWorkspaceDocument(stored);
+    expect(upgraded.status).toBe("supported");
+    expect(upgraded.document?.v).toBe(6);
+    expect(stored.cells).toBe(legacyBlob());
+    const future = { ...stored, cells: ' {"v":7} \n' };
+    expect(loadStoredWorkspaceDocument(future)).toEqual({ status: "unsupported", document: null, raw: future.cells });
+    expect(loadStoredWorkspaceDocument({ ...stored, cells: "garbage" })).toMatchObject({ status: "corrupt", document: null });
+    const gridless = { ...stored, cells: JSON.stringify({ v: 5, world: { bounds: { minX: 0, minY: 0, maxX: 8, maxY: 8 } }, grid: null, layers: [], assetPacks: [] }) };
+    expect(loadStoredEditorDocument(gridless).status).toBe("unsupported");
+    // The new pure reader understands the full V5 schema, not just old UI tools.
+    expect(loadStoredWorkspaceDocument(gridless)).toMatchObject({ status: "supported", document: { v: 6, grid: null } });
+  });
   it("legacy load → V5 state, sourceFormat legacy, baseline canonical", () => {
     const r = loadStoredEditorDocument({ cells: legacyBlob(), grid: "square", width: 8, height: 8 });
     expect(r.sourceFormat).toBe("legacy");

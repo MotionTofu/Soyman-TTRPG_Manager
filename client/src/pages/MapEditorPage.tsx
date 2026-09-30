@@ -3,9 +3,10 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { subscribeMapImageAssets } from "../maps/assets/registry";
 import { useAfterWrite, useResource, write } from "../data/hooks";
 import { readOnce } from "../data/imperative";
+import { downloadStoredMapOriginal, downloadMapJson } from "../maps/workspace/mapApi";
 import { useCurrentUser } from "../api/currentUser";
 import { Modal } from "../components/Modal";
-import { SectionHeading } from "../components/SectionHeading";
+import { Breadcrumbs } from "../components/Breadcrumbs";
 import { SectionBackground } from "../components/SectionBackground";
 import { useConfirm } from "../hooks/useConfirm";
 import { coordLabel, pixelToCell, cellCenter, worldBounds } from "../maps/grid";
@@ -60,7 +61,7 @@ import {
   registerMapImageResources, resourceImageAssetId, resolveMapSymbol,
   type MapImageResource,
 } from "../maps/assets/registry";
-import type { MapDocumentV5 } from "../maps/core/types";
+import type { MapDocumentV5, SplineNode } from "../maps/core/types";
 import { loadStoredEditorDocument, type LoadedEditorDocument } from "../maps/editor/loadDocument";
 import { compareLegacySemantics } from "../maps/core/semanticEquivalence";
 import { parseCellsBlob } from "../maps/render";
@@ -71,10 +72,11 @@ import { migrateLegacyMap, legacyDoorWorldPosition, legacyEdgeOrientation } from
 import { validateMapDocument } from "../maps/core/validate";
 import { createUuidIdFactory } from "../maps/editor/idFactory";
 import { fixConnectivityV5 } from "../maps/editor/fixConnectivityV5";
-import { findEntityLayer } from "../maps/core/mutations/layers";
+import { createTerrainLayer, createTerrainMaskLayer, findEntityLayer, moveLayer } from "../maps/core/mutations/layers";
 import { transformMapObject } from "../maps/core/mutations/mapObjects";
 import {
   NO_COMPATIBLE_LAYER_ERROR,
+  ensurePathTargetLayer,
   resolveToolTargetLayer,
   toolLayerKind,
 } from "../maps/editor/tools/layerTargets";
@@ -86,6 +88,10 @@ import {
   updateGameplayEntity,
 } from "../maps/core/mutations/gameplay";
 import { applyTerrainCellEdits } from "../maps/core/mutations/terrain";
+import { createSplinePath, deletePath as deleteMapPath, updateSplinePath } from "../maps/core/mutations/paths";
+import { branchSplineNodes, extendSplineNodes, freePathHandleIndices,
+  insertSplineNodeAt, setSplineNodeLinear, type FreePathJoin } from "../maps/editor/freePathEditing";
+import { splineFromAnchors } from "../maps/core/spline";
 import { createLabel, deleteLabel, moveLabel, updateLabelText } from "../maps/core/mutations/labels";
 import { clearEditableContent, resizeGridDocument } from "../maps/core/mutations/document";
 import { paintExplorationCell, setAllExplorationCells, setExplorationEnabled } from "../maps/core/mutations/exploration";
@@ -110,6 +116,10 @@ import {
   type EditorMode,
 } from "../maps/editor/toolModes";
 import "./map-editor-layout.css";
+import { MapWorkspaceTools } from "../maps/workspace/MapWorkspace";
+import { useMapWorkspace } from "../maps/workspace/workspaceContext";
+import { NavIcon } from "../components/NavIcons";
+import { MapToolIcon } from "../maps/workspace/MapToolIcon";
 
 const UNDO_DEPTH = 50;
 
@@ -169,15 +179,30 @@ function editableOwningLayer(
 
 // Текст баннера unsupported-карты (§8 ТЗ 2G): без потери данных.
 function describeUnsupported(loaded: LoadedEditorDocument): string {
-  const first = loaded.compatibility.reasons[0];
-  return (
-    "Карта использует функции, которые эта версия редактора не поддерживает. " +
-    "Редактирование отключено, чтобы не потерять данные." +
-    (first ? ` (${first.code}: ${first.message})` : "")
-  );
+  return loaded.status === "unsupported"
+    ? "Карту пока нельзя прочитать в этом редакторе. Исходные данные сохранены; вы можете скачать их без изменений."
+    : "Карта использует возможности, которые редактор пока не поддерживает. Редактирование отключено, чтобы сохранить все данные.";
 }
 
 export function MapEditorPage() {
+  const workspace = useMapWorkspace();
+  const inWorkspace = workspace !== null;
+  const [toolSettingsOpen, setToolSettingsOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  useEffect(() => {
+    if (!inWorkspace || (!toolSettingsOpen && !inspectorOpen)) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      const panel = globalThis.document.querySelector<HTMLElement>(".map-editor-workspace-drawer:not([hidden])");
+      if (panel?.contains(globalThis.document.activeElement)) {
+        globalThis.document.querySelector<HTMLButtonElement>(inspectorOpen ? "[data-map-inspector-toggle]" : "[data-map-settings-toggle]")?.focus();
+      }
+      setToolSettingsOpen(false);
+      setInspectorOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [inWorkspace, toolSettingsOpen, inspectorOpen]);
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const afterWrite = useAfterWrite();
@@ -198,7 +223,10 @@ export function MapEditorPage() {
   const [activeLayerId, setActiveLayerId] = useState<LayerId | null>(null);
   const activeLayerRef = useRef<LayerId | null>(null);
   activeLayerRef.current = activeLayerId;
+  const preferredTerrainLayerRef = useRef<LayerId | null>(null);
   const activeMapRef = useRef<string | undefined>(undefined);
+  const previousLayerToolRef = useRef<PaintTool | null>(null);
+  const previousLayerShapeRef = useRef<string | null>(null);
   // Совместимость загруженного документа с текущим редактором (§4–8 ТЗ 2G).
   const [unsupported, setUnsupported] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -207,8 +235,49 @@ export function MapEditorPage() {
   const [showGrid, setShowGrid] = useState(() => loadFlag("maps.showGrid", true));
   const [showCoords, setShowCoords] = useState(() => loadFlag("maps.showCoords", false));
   const [previewAsPlayer, setPreviewAsPlayer] = useState(false);
-  const canEditInView = canEdit && !previewAsPlayer;
+  const canEditInView = canEdit && !previewAsPlayer && unsupported === null;
   const [fogAction, setFogAction] = useState<"reveal" | "hide">("reveal");
+  const [topMenu, setTopMenu] = useState<"map" | "mode" | "view" | "tools" | null>(null);
+  const menuBarRef = useRef<HTMLDivElement>(null);
+  const [sidePanelsHidden, setSidePanelsHidden] = useState(() =>
+    globalThis.document.body.classList.contains("live-hide-dock") &&
+    globalThis.document.body.classList.contains("live-hide-search"),
+  );
+
+  useEffect(() => {
+    const sync = () => setSidePanelsHidden(
+      globalThis.document.body.classList.contains("live-hide-dock") &&
+      globalThis.document.body.classList.contains("live-hide-search"),
+    );
+    const observer = new MutationObserver(sync);
+    observer.observe(globalThis.document.body, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!topMenu) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!menuBarRef.current?.contains(event.target as Node)) setTopMenu(null);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        setTopMenu(null);
+      }
+    };
+    globalThis.document.addEventListener("pointerdown", closeOutside);
+    globalThis.document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      globalThis.document.removeEventListener("pointerdown", closeOutside);
+      globalThis.document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [topMenu]);
+
+  function toggleSidePanels(hidden: boolean) {
+    globalThis.document.body.classList.toggle("live-hide-dock", hidden);
+    globalThis.document.body.classList.toggle("live-hide-search", hidden);
+    setSidePanelsHidden(hidden);
+  }
 
   // Инструменты (тикет 04). Пипетка и заливка — одноразовые действия,
   // кисть/дорога/ластик — мазки от нажатия до отпускания.
@@ -236,6 +305,16 @@ export function MapEditorPage() {
   const paletteTerrainRef = useRef({ biomes: "forest", surface: "stone" });
   const [terrain, setTerrain] = useState<string>(() => paletteTerrainRef.current[activePanel]);
   const [brushSize, setBrushSize] = useState<BrushSize>(1);
+  const [freePathMode, setFreePathMode] = useState(false);
+  const [freePathEditMode, setFreePathEditMode] = useState(false);
+  const [selectedFreePathId, setSelectedFreePathId] = useState<string | null>(null);
+  const [selectedSplineNodeIndex, setSelectedSplineNodeIndex] = useState<number>(0);
+  const [freePathJoinCandidate, setFreePathJoinCandidate] = useState<(FreePathJoin & { pathId: string }) | null>(null);
+  const [freePathWidthDraft, setFreePathWidthDraft] = useState<number | null>(null);
+  const freePathWidthDraftRef = useRef<number | null>(null);
+  const [freePathShapeDraft, setFreePathShapeDraft] = useState<{ pathId: string; nodes: SplineNode[] } | null>(null);
+  const [freePathPreview, setFreePathPreview] = useState<{ kind: "road" | "river";
+    anchors: { x: number; y: number }[]; hover: { x: number; y: number } | null } | null>(null);
   // История (V5 snapshots; Mutation Core иммутабелен — храним references,
   // identity clone безопасен и зафиксирован тестом, §22 ТЗ 2G).
   // Эфемерная (не переживает перезагрузку).
@@ -267,16 +346,43 @@ export function MapEditorPage() {
     return { grid: document.grid.type, width: document.grid.columns, height: document.grid.rows };
   }, [document]);
 
+  const selectedFreePath = document?.layers.flatMap((layer) => layer.kind === "path" && layer.visible && !layer.locked
+    ? layer.paths : []).find((path) => path.id === selectedFreePathId && path.kind === tool &&
+      path.geometry.type === "spline") ?? null;
+  const selectedSplineNode = selectedFreePath?.geometry.type === "spline"
+    ? selectedFreePath.geometry.nodes[selectedSplineNodeIndex] ?? null : null;
+
+  const previewDocument = useMemo(() => {
+    if (!document || (!freePathShapeDraft && freePathWidthDraft === null)) return document;
+    let preview = document;
+    if (freePathShapeDraft) {
+      const changed = updateSplinePath(preview, freePathShapeDraft.pathId,
+        { nodes: freePathShapeDraft.nodes });
+      if (changed.ok) preview = changed.document;
+    }
+    if (freePathWidthDraft !== null && selectedFreePathId) {
+      const path = preview.layers.flatMap((layer) => layer.kind === "path" ? layer.paths : [])
+        .find((item) => item.id === selectedFreePathId);
+      if (path?.geometry.type === "spline") {
+        const nodes = path.geometry.nodes.map((node, index) => index === selectedSplineNodeIndex
+          ? { ...node, width: freePathWidthDraft } : node);
+        const changed = updateSplinePath(preview, selectedFreePathId, { nodes });
+        if (changed.ok) preview = changed.document;
+      }
+    }
+    return preview;
+  }, [document, freePathShapeDraft, freePathWidthDraft, selectedFreePathId, selectedSplineNodeIndex]);
+
   // Render model из документа (§47 ТЗ 2G). Неожиданные diagnostics в DEV —
   // ошибка разработки: Tool создал feature вне renderer-подмножества (§48).
   const model = useMemo(() => {
-    if (!document) return null;
-    const r = createV5RenderModel(document);
+    if (!previewDocument) return null;
+    const r = createV5RenderModel(previewDocument);
     if (import.meta.env.DEV && r.diagnostics.length > 0) {
       console.error("[Map V5] unexpected render diagnostics", r.diagnostics);
     }
     return r.model;
-  }, [document]);
+  }, [previewDocument]);
 
   // Превью мастера использует ту же проекцию документа, что сервер отдаёт игроку.
   const displayModel = useMemo(() => {
@@ -289,9 +395,54 @@ export function MapEditorPage() {
 
   const newId = useMemo(() => createUuidIdFactory(), []);
 
+  function selectFreePath(pathId: string | null, nodeIndex?: number | null, join?: FreePathJoin) {
+    if (join) setSelectedSplineNodeIndex(-1);
+    else if (pathId !== selectedFreePathId || pathId === null || selectedSplineNodeIndex < 0)
+      setSelectedSplineNodeIndex(nodeIndex ?? 0);
+    else if (nodeIndex !== undefined && nodeIndex !== null) setSelectedSplineNodeIndex(nodeIndex);
+    setSelectedFreePathId(pathId);
+    setFreePathJoinCandidate(pathId && join ? { pathId, ...join } : null);
+    setFreePathShapeDraft(null);
+    freePathWidthDraftRef.current = null;
+    setFreePathWidthDraft(null);
+  }
+
+  function commitFreePathWidth() {
+    const width = freePathWidthDraftRef.current;
+    freePathWidthDraftRef.current = null;
+    setFreePathWidthDraft(null);
+    const doc = documentRef.current;
+    if (width === null || !doc || !selectedFreePathId || !canEditInView || unsupported !== null) return;
+    const path = doc.layers.flatMap((layer) => layer.kind === "path" ? layer.paths : [])
+      .find((item) => item.id === selectedFreePathId);
+    if (path?.geometry.type !== "spline" || !path.geometry.nodes[selectedSplineNodeIndex]) return;
+    const nodes = path.geometry.nodes.map((node, index) => index === selectedSplineNodeIndex
+      ? { ...node, width } : node);
+    const result = updateSplinePath(doc, selectedFreePathId, { nodes });
+    if (result.ok && result.changed) commitDocument(result.document, doc);
+  }
+
+  function changeSelectedSplineNodeLinear(linear: boolean) {
+    const doc = documentRef.current;
+    if (!doc || !selectedFreePathId || !canEditInView || unsupported !== null) return;
+    const path = doc.layers.flatMap((layer) => layer.kind === "path" ? layer.paths : [])
+      .find((item) => item.id === selectedFreePathId);
+    if (path?.geometry.type !== "spline" || !path.geometry.nodes[selectedSplineNodeIndex]) return;
+    const nodes = setSplineNodeLinear(path.geometry.nodes, selectedSplineNodeIndex, linear);
+    const result = updateSplinePath(doc, selectedFreePathId, { nodes });
+    if (result.ok && result.changed) commitDocument(result.document, doc);
+  }
+
   function setActiveLayer(id: LayerId) {
     activeLayerRef.current = id;
     setActiveLayerId(id);
+  }
+
+  function selectLayerInPanel(id: LayerId) {
+    if (documentRef.current?.layers.some((layer) => layer.id === id && layer.kind === "terrain")) {
+      preferredTerrainLayerRef.current = id;
+    }
+    setActiveLayer(id);
   }
 
   // Shape-инструмент — контейнер: target kind задаёт содержимое (§33).
@@ -315,11 +466,18 @@ export function MapEditorPage() {
       return;
     }
     const newMap = activeMapRef.current !== id;
-    if (newMap) activeMapRef.current = id;
+    if (newMap) {
+      activeMapRef.current = id;
+      preferredTerrainLayerRef.current = null;
+    }
     const cur = newMap ? null : activeLayerRef.current;
     if (cur) {
       const existing = doc.layers.find((l) => l.id === cur);
-      if (existing) {
+      if (existing && !newMap) {
+        const changedTool = previousLayerToolRef.current !== tool || previousLayerShapeRef.current !== shapeContent;
+        previousLayerToolRef.current = tool;
+        previousLayerShapeRef.current = shapeContent;
+        if (!changedTool) return;
         const want = tool === "shape" ? shapeKind() : toolLayerKind(tool);
         if (!want) return;
         if (existing.kind === want && existing.visible && !existing.locked) return;
@@ -327,6 +485,8 @@ export function MapEditorPage() {
       }
     }
     const want = tool === "shape" ? shapeKind() : toolLayerKind(tool);
+    previousLayerToolRef.current = tool;
+    previousLayerShapeRef.current = shapeContent;
     let next: LayerId | null = null;
     if (want) {
       const r = resolveToolTargetLayer(doc, null, want);
@@ -391,7 +551,7 @@ export function MapEditorPage() {
         const paramsStr = JSON.stringify(params);
         setGenParams(params);
         history.clear();
-        autosave.markLoaded(serializeMapDocument(loaded.document), paramsStr, loaded.corrupt);
+        autosave.markLoaded(loaded.status === "unsupported" ? loaded.raw : serializeMapDocument(loaded.document), paramsStr, loaded.corrupt, data.revision);
         setShared(false);
         if (import.meta.env.DEV) {
           for (const w of loaded.migrationWarnings) {
@@ -757,27 +917,38 @@ export function MapEditorPage() {
     }
   }
 
-  // Показ игрокам (P2-5): выставить флаг + тост со ссылкой. Канала автопуша нет,
-  // поэтому честно: открываем видимость и даём ссылку, игроки обновляют раздел сами.
+  // Показ игрокам (P2-5): галочка управляет доступом, при включении даём ссылку.
   const [shared, setShared] = useState(false);
+  const [visibilityBusy, setVisibilityBusy] = useState(false);
+  const visibilityBusyRef = useRef(false);
 
-  async function shareWithPlayers() {
-    if (!map) return;
+  async function setPlayerVisibility(visible: boolean) {
+    if (!map || visibilityBusyRef.current) return;
+    const before = map.player_visible;
+    const player_visible = visible ? 1 : 0;
+    if (before === player_visible) return;
+    visibilityBusyRef.current = true;
+    setVisibilityBusy(true);
     setActionError(null);
+    setMap((current) => current ? { ...current, player_visible } : current);
     try {
-      if (map.player_visible !== 1) {
-        await write.put(`/maps/${map.id}`, { player_visible: 1 });
-        afterWrite([{ kind: "map", id: map.id, card: true }]);
-        setMap((m) => (m ? { ...m, player_visible: 1 } : m));
+      const updated = await autosave.saveRecord((expectedRevision) => write.put<MapFull>(`/maps/${map.id}`, { player_visible, expectedRevision }));
+      setMap((current) => current && current.id === map.id ? { ...current, player_visible, revision: updated?.revision ?? current.revision } : current);
+      afterWrite([{ kind: "map", id: map.id, card: true }]);
+      if (visible) {
+        try {
+          await navigator.clipboard.writeText(`${window.location.origin}/maps/${map.id}`);
+        } catch {
+          // буфер недоступен — ссылка остаётся в сообщении ниже
+        }
       }
-      try {
-        await navigator.clipboard.writeText(`${window.location.origin}/maps/${map.id}`);
-      } catch {
-        // буфер недоступен (не-HTTPS/приват) — ссылка всё равно видна в тосте ниже
-      }
-      setShared(true);
+      setShared(visible);
     } catch (e) {
+      setMap((current) => current ? { ...current, player_visible: before } : current);
       setActionError(translateMapError(e));
+    } finally {
+      visibilityBusyRef.current = false;
+      setVisibilityBusy(false);
     }
   }
 
@@ -990,6 +1161,7 @@ export function MapEditorPage() {
   const [rectPreview, setRectPreview] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
 
   function openObjPanel(sel: NonNullable<V5Selection>) {
+    if (workspace) { setInspectorOpen(true); setToolSettingsOpen(false); }
     const doc = documentRef.current;
     setObjError(null);
     if (!doc) return;
@@ -1381,7 +1553,15 @@ export function MapEditorPage() {
   function selectTool(t: PaintTool, mode: EditorMode = editorMode) {
     if (toolUnavailableReason(t, map?.grid)) return;
     if (toolRef.current === "select" && t !== "select") closeObjPanels();
+    if (t === "brush" || t === "fill" || t === "eraser" || t === "picker") {
+      const preferred = documentRef.current?.layers.find((layer) => layer.id === preferredTerrainLayerRef.current);
+      if (preferred?.kind === "terrain" && preferred.visible && !preferred.locked) setActiveLayer(preferred.id);
+    }
     setTool(t);
+    if (workspace && !["brush", "fill", "eraser", "picker", "ruler", "label", "select"].includes(t)) {
+      setInspectorOpen(true);
+      setToolSettingsOpen(false);
+    }
     if (MODE_TOOLS[mode].includes(t)) modeToolRef.current[mode] = t;
     setExtraToolsOpen(!COMMON_TOOLS.includes(t) && !MODE_TOOLS[mode].includes(t));
   }
@@ -1548,7 +1728,7 @@ export function MapEditorPage() {
     // мета-настройки — можно.
     const grid = doc.grid;
     const resizing = grid && (w !== grid.columns || h !== grid.rows);
-    if (unsupported !== null && resizing) {
+    if ((unsupported !== null || autosave.blocked) && resizing) {
       setSettingsError("Размер этой карты менять нельзя: редактор не поддерживает её функции.");
       return;
     }
@@ -1563,15 +1743,15 @@ export function MapEditorPage() {
     }
     setSettingsError(null);
     try {
-      const updated = await write.put<MapFull>(`/maps/${map.id}`, {
+      const updated = await autosave.saveRecord((expectedRevision) => write.put<MapFull>(`/maps/${map.id}`, {
+        expectedRevision,
         name,
         scale: sScale,
         cell_lore: sLore,
-        width: w,
-        height: h,
+        ...(resizing ? {} : { width: w, height: h }),
         // После switch контент всегда едет документом (§54 ТЗ 2G).
         ...(resizing ? { document: JSON.parse(serializeMapDocument(next)) } : {}),
-      });
+      }));
       if (resizing && next !== doc) {
         documentRef.current = next;
         setDocument(next);
@@ -1832,7 +2012,108 @@ export function MapEditorPage() {
     selection,
     geom,
     tool,
+    freePathMode,
+    freePathEditMode,
+    selectedFreePathId,
     canEdit: canEditInView && unsupported === null,
+    onFreePathPreview: (draft) => setFreePathPreview(draft && (tool === "road" || tool === "river")
+      ? { kind: tool, ...draft } : null),
+    onFreePathBegin: (kind) => {
+      const doc = documentRef.current;
+      if (!doc || unsupported !== null) return false;
+      const target = ensurePathTargetLayer(doc, activeLayerRef.current, kind, newId);
+      if (!target.ok) { setActionError(target.error); return false; }
+      if (target.layerId !== activeLayerRef.current) setActiveLayer(target.layerId);
+      if (target.created) commitDocument(target.document, doc);
+      return true;
+    },
+    onFreePathCommit: (points, kind, origin) => {
+      const doc = documentRef.current;
+      if (!doc || unsupported !== null) return;
+      if (origin) {
+        const owner = doc.layers.find((layer) => layer.kind === "path" && layer.paths.some((path) => path.id === origin.pathId));
+        const parent = owner?.kind === "path" ? owner.paths.find((path) => path.id === origin.pathId) : null;
+        if (!owner || owner.kind !== "path" || !owner.visible || owner.locked ||
+            !parent || parent.kind !== kind || parent.geometry.type !== "spline") {
+          setActionError("Исходная линия больше недоступна для редактирования.");
+          return;
+        }
+        const parentNodes = parent.geometry.nodes;
+        if (origin.action === "branch-segment") {
+          const split = insertSplineNodeAt(parentNodes, origin.segmentIndex, origin.t, parent.width);
+          if (!split || Math.hypot(split.point.x - points[0].x,
+            split.point.y - points[0].y) > 1e-6) {
+            setActionError("Участок исходной линии изменился. Начните ответвление заново.");
+            return;
+          }
+          const inserted = updateSplinePath(doc, parent.id, { nodes: split.nodes,
+            insertedAt: { index: split.nodeIndex, count: 1 } });
+          if (!inserted.ok) { setActionError(inserted.issues[0]?.message ?? "Не удалось добавить точку соединения."); return; }
+          const nodes = branchSplineNodes(split.nodes[split.nodeIndex], points, parent.width);
+          const branchId = newId();
+          const created = createSplinePath(inserted.document, owner.id, {
+            id: branchId, kind, styleRef: parent.styleRef, width: parent.width, nodes,
+            branchFrom: { pathId: parent.id, nodeIndex: split.nodeIndex },
+          });
+          if (!created.ok) { setActionError(created.issues[0]?.message ?? "Не удалось создать ответвление."); return; }
+          commitDocument(created.document, doc);
+          if (owner.id !== activeLayerRef.current) setActiveLayer(owner.id);
+          setFreePathEditMode(true);
+          selectFreePath(branchId, nodes.length - 1);
+          return;
+        }
+        const anchor = parentNodes[origin.nodeIndex];
+        if (!anchor || Math.hypot(anchor.position.x - points[0].x,
+          anchor.position.y - points[0].y) > 1e-6) {
+          setActionError("Точка исходной линии изменилась. Начните ответвление заново.");
+          return;
+        }
+        if (origin.action === "extend") {
+          const end = origin.nodeIndex === 0 ? "start"
+            : origin.nodeIndex === parentNodes.length - 1 ? "end" : null;
+          if (!end) { setActionError("Продолжить линию можно только от крайней точки."); return; }
+          const nodes = extendSplineNodes(parentNodes, points, end, parent.width);
+          const result = updateSplinePath(doc, parent.id, { nodes,
+            prependCount: end === "start" ? nodes.length - parentNodes.length : 0 });
+          if (!result.ok) { setActionError(result.issues[0]?.message ?? "Не удалось продолжить линию."); return; }
+          if (result.changed) commitDocument(result.document, doc);
+          if (owner.id !== activeLayerRef.current) setActiveLayer(owner.id);
+          setFreePathEditMode(true);
+          selectFreePath(parent.id, end === "end" ? nodes.length - 1 : 0);
+          return;
+        }
+        const nodes = branchSplineNodes(anchor, points, parent.width);
+        const branchId = newId();
+        const result = createSplinePath(doc, owner.id, {
+          id: branchId, kind, styleRef: parent.styleRef, width: parent.width, nodes,
+          branchFrom: { pathId: parent.id, nodeIndex: origin.nodeIndex },
+        });
+        if (!result.ok) { setActionError(result.issues[0]?.message ?? "Не удалось создать ответвление."); return; }
+        commitDocument(result.document, doc);
+        if (owner.id !== activeLayerRef.current) setActiveLayer(owner.id);
+        setFreePathEditMode(true);
+        selectFreePath(branchId, nodes.length - 1);
+        return;
+      }
+      const target = ensurePathTargetLayer(doc, activeLayerRef.current, kind, newId);
+      if (!target.ok) { setActionError(target.error); return; }
+      const result = createSplinePath(target.document, target.layerId, {
+        id: newId(), kind, styleRef: { type: "builtin", key: kind }, width: 0.22,
+        nodes: splineFromAnchors(points).map((node) => ({ ...node, width: 0.22 })),
+      });
+      if (!result.ok) { setActionError(result.issues[0]?.message ?? "Не удалось нарисовать линию."); return; }
+      if (target.layerId !== activeLayerRef.current) setActiveLayer(target.layerId);
+      commitDocument(result.document, doc);
+    },
+    onFreePathSelect: selectFreePath,
+    onFreePathEditPreview: setFreePathShapeDraft,
+    onFreePathEditCommit: (pathId, nodes) => {
+      const doc = documentRef.current;
+      if (!doc || !canEditInView || unsupported !== null) return;
+      const result = updateSplinePath(doc, pathId, { nodes });
+      if (!result.ok) { setActionError(result.issues[0]?.message ?? "Не удалось изменить линию."); return; }
+      if (result.changed) commitDocument(result.document, doc);
+    },
     wallMode: wallLineMode,
     wallDraft,
     ruler,
@@ -1937,12 +2218,53 @@ export function MapEditorPage() {
     selectTool(toolUnavailableReason(rememberedTool, map?.grid) ? DEFAULT_MODE_TOOL[mode] : rememberedTool, mode);
   }
 
-  const hasDetailedTerrain = document?.layers.some((layer) => layer.kind === "terrain" && layer.representation === "mask") ?? false;
+  const preferredTerrainLayer = document?.layers.find((layer) => layer.id === preferredTerrainLayerRef.current);
+  const activeTerrainLayer = document?.layers.find((layer) => layer.id === activeLayerId);
+  const terrainSurface = activeTerrainLayer?.kind === "terrain" ? activeTerrainLayer.representation
+    : preferredTerrainLayer?.kind === "terrain" ? preferredTerrainLayer.representation : "cells";
+
+  function chooseTerrainSurface(surface: "cells" | "mask") {
+    const doc = documentRef.current;
+    if (!doc || unsupported !== null || (surface === "mask" && doc.grid?.type !== "square")) return;
+    const existing = [...doc.layers].reverse().find((layer) =>
+      layer.kind === "terrain" && layer.representation === surface && layer.visible && !layer.locked);
+    if (existing) {
+      preferredTerrainLayerRef.current = existing.id;
+      setActiveLayer(existing.id);
+    } else {
+      const layerId = newId();
+      const name = surface === "mask" ? "Детальный рельеф" : "Рельеф";
+      const result = surface === "mask"
+        ? createTerrainMaskLayer(doc, { id: layerId, name })
+        : createTerrainLayer(doc, { id: layerId, name });
+      if (!result.ok) {
+        setActionError(result.issues[0]?.message ?? "Не удалось создать слой рельефа.");
+        return;
+      }
+      const aboveTerrain = doc.layers.reduce((index, layer, i) => layer.kind === "terrain" ? i + 1 : index, 0);
+      const placed = moveLayer(result.document, layerId, surface === "cells" ? 0 : aboveTerrain);
+      if (!placed.ok) {
+        setActionError(placed.issues[0]?.message ?? "Не удалось разместить слой рельефа.");
+        return;
+      }
+      commitDocument(placed.document, doc);
+      preferredTerrainLayerRef.current = layerId;
+      setActiveLayer(layerId);
+    }
+    selectTool("brush");
+  }
+
   function toggleExploration() {
     const doc = documentRef.current;
-    if (!doc || unsupported !== null || (hasDetailedTerrain && !doc.exploration?.enabled)) return;
+    if (!doc || unsupported !== null) return;
     const result = setExplorationEnabled(doc, !doc.exploration?.enabled);
-    if (result.ok && result.changed) commitDocument(result.document, doc);
+    if (!result.ok || !result.changed) return;
+    const compatibility = assessCurrentEditorCompatibility(result.document);
+    if (!compatibility.compatible) {
+      setActionError("Нельзя включить раскрытие: " + (compatibility.reasons[0]?.message ?? "карта содержит неподдерживаемые данные."));
+      return;
+    }
+    commitDocument(result.document, doc);
   }
   function changeAllExploration(reveal: boolean) {
     const doc = documentRef.current;
@@ -1959,12 +2281,13 @@ export function MapEditorPage() {
         key={id}
         type="button"
         className="map-tool"
+        aria-label={description.label}
         aria-pressed={tool === id}
         disabled={unavailable !== null}
         title={unavailable ?? description.title}
         onClick={() => selectTool(id)}
       >
-        {description.label}
+        {workspace ? <><MapToolIcon tool={id} /><span>{description.label}</span></> : description.label}
       </button>
     );
   }
@@ -1997,6 +2320,7 @@ export function MapEditorPage() {
   function saveLabel(): string {
     if (autosave.blocked) return "Сохранение остановлено — данные повреждены";
     if (autosave.status.kind === "saving") return "Сохранение…";
+    if (autosave.status.kind === "conflict") return "Карта изменена в другом окне · сохраните копию своих правок";
     if (autosave.status.kind === "error") return "Не сохранилось — нажмите «Повторить»";
     if (autosave.status.kind === "dirty") return "Есть несохранённое…";
     return autosave.status.at ? `Сохранено ${autosave.status.at}` : "Сохранено";
@@ -2005,41 +2329,25 @@ export function MapEditorPage() {
   return (
     <div className={`stack map-editor${canEditInView ? "" : " map-editor--readonly"}`} style={{ position: "relative" }}>
       <SectionBackground />
-      <div className="page-header-row row">
-        <SectionHeading section="map" compact>
-          {map ? map.name : "Карта"}
-        </SectionHeading>
-        <div className="row">
-          {map && canEditInView && (
-            <>
-              <button type="button" title="Название, масштаб, подпись клетки, размер поля" onClick={openSettings}>
-                Настройки
-              </button>
-              <button
-                type="button"
-                title="К каким сеттингам, кампаниям и локациям относится карта"
-                aria-expanded={bindOpen}
-                onClick={() => setBindOpen((v) => !v)}
-              >
-                Привязки{bindings.length > 0 ? ` · ${bindings.length}` : ""}
-              </button>
-              <button type="button" title="Создать копию карты со всей росписью" onClick={duplicateMap}>
-                Дублировать
-              </button>
-              <button type="button" title="Убрать карту в архив" onClick={deleteMap}>
-                Удалить
-              </button>
-            </>
-          )}
-          <Link to="/maps">← К картам</Link>
-        </div>
+      <div className="map-editor-breadcrumbs" title={map?.name}>
+        <Breadcrumbs items={[
+          { label: "Главная", to: "/" },
+          { label: "Карты", to: "/maps" },
+          { label: map?.name ?? "Карта" },
+        ]} />
       </div>
+
+      {canEdit && map && !loadError && <div className="row">
+        <span className="muted">Классический редактор</span>
+        <Link to={`/maps/${map.id}/workspace`}>Открыть основной редактор с токенами</Link>
+      </div>}
 
       {loading && <p className="muted">Загрузка карты…</p>}
 
       {loadError && (
         <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
           <span>Не удалось открыть карту: {loadError}</span>
+          {canEdit && <button type="button" onClick={() => { void downloadStoredMapOriginal(Number(id)).catch((e) => setLoadError(String(e instanceof Error ? e.message : e))); }}>Скачать исходный документ</button>}
           <Link to="/maps" className="primary" style={{ padding: "6px 12px", textDecoration: "none" }}>
             К списку
           </Link>
@@ -2048,6 +2356,62 @@ export function MapEditorPage() {
 
       {!loading && !loadError && map && (
         <>
+          <div className="map-editor-menubar" ref={menuBarRef} aria-label="Меню редактора карты">
+            {canEditInView && (
+              <div className="map-editor-menu">
+                <button type="button" className="map-editor-menu-trigger" aria-expanded={topMenu === "map"} aria-controls="map-editor-menu-map" onClick={() => setTopMenu(topMenu === "map" ? null : "map")}>Карта</button>
+                {topMenu === "map" && (
+                  <div className="map-editor-menu-popup" id="map-editor-menu-map" aria-label="Пункты меню Карта">
+                    <button type="button" onClick={() => { setTopMenu(null); openSettings(); }}>Настройки карты</button>
+                    <button type="button" onClick={() => { setTopMenu(null); setBindOpen(true); }}>Привязки карты</button>
+                    <span className="map-editor-menu-separator" />
+                    <button type="button" onClick={() => { setTopMenu(null); void duplicateMap(); }}>Дублировать</button>
+                    <button type="button" onClick={() => { setTopMenu(null); navigate("/maps?create=1"); }}>Создать новую</button>
+                    <button type="button" className="map-editor-menu-danger" onClick={() => { setTopMenu(null); void deleteMap(); }}>Удалить</button>
+                    <span className="map-editor-menu-separator" />
+                    <button type="button" onClick={() => { setTopMenu(null); togglePng(); }}>Экспорт PNG</button>
+                    <button type="button" title="Открыть экспорт и импорт JSON" onClick={() => { setTopMenu(null); toggleXfer(); }}>Экспорт JSON</button>
+                  </div>
+                )}
+              </div>
+            )}
+            {canEditInView && (
+              <div className="map-editor-menu">
+                <button type="button" className="map-editor-menu-trigger" aria-label="Режим инструментов" aria-expanded={topMenu === "mode"} aria-controls="map-editor-menu-mode" onClick={() => setTopMenu(topMenu === "mode" ? null : "mode")}>{workspace ? "Режим" : "Режим инструментов"}</button>
+                {topMenu === "mode" && (
+                  <div className="map-editor-menu-popup" id="map-editor-menu-mode" role="tablist" aria-label="Режим инструментов">
+                    {([ ["region", "Регион"], ["local", "Местность"], ["dungeon", "Подземелье"] ] as const).map(([mode, label]) => (
+                      <button key={mode} type="button" role="tab" aria-selected={editorMode === mode} onClick={() => { changeEditorMode(mode); setTopMenu(null); }}>{label}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="map-editor-menu">
+              <button type="button" className="map-editor-menu-trigger" aria-expanded={topMenu === "view"} aria-controls="map-editor-menu-view" onClick={() => setTopMenu(topMenu === "view" ? null : "view")}>Вид</button>
+              {topMenu === "view" && (
+                <div className="map-editor-menu-popup" id="map-editor-menu-view" aria-label="Пункты меню Вид">
+                  {!workspace && <label><input type="checkbox" checked={sidePanelsHidden} onChange={(event) => toggleSidePanels(event.target.checked)} />Скрыть боковые панели</label>}
+                  {canEdit && <label title="Открывает карту в разделе игрока и копирует ссылку"><input type="checkbox" checked={map.player_visible === 1} disabled={!canEditInView || visibilityBusy} onChange={(event) => void setPlayerVisibility(event.target.checked)} />Показать игрокам</label>}
+                  <span className="map-editor-menu-separator" />
+                  <label><input type="checkbox" checked={showGrid} onChange={toggleGrid} />Сетка</label>
+                  <label><input type="checkbox" checked={showCoords} onChange={toggleCoords} />Координаты</label>
+                </div>
+              )}
+            </div>
+            {canEditInView && (
+              <div className="map-editor-menu">
+                <button type="button" className="map-editor-menu-trigger" aria-expanded={topMenu === "tools"} aria-controls="map-editor-menu-tools" onClick={() => setTopMenu(topMenu === "tools" ? null : "tools")}>Инструменты</button>
+                {topMenu === "tools" && (
+                  <div className="map-editor-menu-popup" id="map-editor-menu-tools" aria-label="Пункты меню Инструменты">
+                    <button type="button" onClick={() => { setTopMenu(null); toggleGen(); }}>Генератор</button>
+                  </div>
+                )}
+              </div>
+            )}
+            <span className="map-editor-menubar-spacer" />
+            {canEditInView && <span className="map-editor-mode-indicator">{editorMode === "region" ? "Регион" : editorMode === "local" ? "Местность" : "Подземелье"}</span>}
+          </div>
           <div className="res-toolbar map-editor-summary" style={{ marginTop: 4 }}>
             <span className="badge tag">{MAP_GRID_LABELS[map.grid]}</span>
             <span className="badge tag">{MAP_SCALE_LABELS[map.scale]}</span>
@@ -2058,74 +2422,7 @@ export function MapEditorPage() {
             >
               {map.width}×{map.height} · клетка {map.cell_lore}
             </span>
-            <span style={{ flex: 1 }} />
-            {canEditInView && (
-              <label className="row" style={{ gap: 6 }} title="Игроки увидят карту в своём разделе (только просмотр)">
-                <input
-                  type="checkbox"
-                  checked={map.player_visible === 1}
-                  onChange={(e) => {
-                    const player_visible = e.target.checked ? 1 : 0;
-                    setMap((m) => (m ? { ...m, player_visible } : m));
-                    const mapId = map.id;
-                    write
-                      .put(`/maps/${mapId}`, { player_visible })
-                      .then(() => afterWrite([{ kind: "map", id: mapId, card: true }]))
-                      .catch((err: unknown) => {
-                        // Откат при ошибке: тумблер не должен врать
-                        setMap((m) => (m ? { ...m, player_visible: player_visible === 1 ? 0 : 1 } : m));
-                        setActionError(translateMapError(err));
-                      });
-                  }}
-                />
-                Видят игроки
-              </label>
-            )}
-            {canEditInView && (
-              <button
-                type="button"
-                title="Открыть карту игрокам и скопировать ссылку — скажите игрокам обновить раздел «Карты»"
-                onClick={shareWithPlayers}
-              >
-                Показать игрокам
-              </button>
-            )}
-            <label className="row" style={{ gap: 6 }} title="Показать сетку">
-              <input type="checkbox" checked={showGrid} onChange={toggleGrid} />
-              Сетка
-            </label>
-            <label className="row" style={{ gap: 6 }} title="Показать координаты клеток">
-              <input type="checkbox" checked={showCoords} onChange={toggleCoords} />
-              Координаты
-            </label>
           </div>
-
-          {canEditInView && (
-            <div className="map-editor-modebar" aria-label="Режим инструментов карты">
-              <div>
-                <span className="map-editor-eyebrow">Режим инструментов</span>
-                <strong>{editorMode === "region" ? "Регион" : editorMode === "local" ? "Местность" : "Подземелье"}</strong>
-              </div>
-              <div className="map-editor-mode-switch" role="tablist" aria-label="Режим инструментов">
-                {([
-                  ["region", "Регион"],
-                  ["local", "Местность"],
-                  ["dungeon", "Подземелье"],
-                ] as const).map(([mode, label]) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    role="tab"
-                    aria-selected={editorMode === mode}
-                    onClick={() => changeEditorMode(mode)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <span className="muted">Для каждого режима — свои инструменты. Масштаб и сетка карты сохраняются.</span>
-            </div>
-          )}
 
           {!canEdit && <p className="muted">Просмотр: правит карты только мастер.</p>}
 
@@ -2142,36 +2439,6 @@ export function MapEditorPage() {
                   onClick={history.redo}
                 >
                   →
-                </button>
-                <button
-                  type="button"
-                  className="map-tool"
-                  aria-pressed={genOpen}
-                  aria-expanded={genOpen}
-                  title="Генератор черновика суши по сиду (Alt+G; Ctrl+Enter — сгенерировать)"
-                  onClick={toggleGen}
-                >
-                  Генератор
-                </button>
-                <button
-                  type="button"
-                  className="map-tool"
-                  aria-pressed={pngOpen}
-                  aria-expanded={pngOpen}
-                  title="Экспорт карты в PNG для печати и показа игрокам (Alt+P)"
-                  onClick={togglePng}
-                >
-                  PNG
-                </button>
-                <button
-                  type="button"
-                  className="map-tool"
-                  aria-pressed={xferOpen}
-                  aria-expanded={xferOpen}
-                  title="Обмен: выгрузка и загрузка карты JSON"
-                  onClick={toggleXfer}
-                >
-                  Обмен
                 </button>
                 <button
                   type="button"
@@ -2194,8 +2461,25 @@ export function MapEditorPage() {
                   </button>
                 )}
               </div>
-              <aside className="map-editor-tool-column" aria-label="Инструменты карты">
+              {workspace && <MapWorkspaceTools>
+                <div className="map-workspace-tool-list">
+                <div role="toolbar" aria-label="Основные инструменты" className="map-workspace-primary-tools">{COMMON_TOOLS.map(toolButton)}</div>
+                <div role="toolbar" aria-label="Инструменты режима" className="map-workspace-mode-tools">{MODE_TOOLS[editorMode].map(toolButton)}</div>
+                </div>
+                <div className="map-workspace-tool-panels">
+                <button type="button" data-map-settings-toggle aria-label="Материалы и параметры" title="Материалы и параметры"
+                  aria-expanded={toolSettingsOpen} aria-controls="map-workspace-tool-settings"
+                  onClick={() => { setToolSettingsOpen(!toolSettingsOpen); setInspectorOpen(false); }}><NavIcon name="palette" /><span>Палитра</span></button>
+                <button type="button" data-map-inspector-toggle aria-label="Слои и свойства" title="Слои и свойства"
+                  aria-expanded={inspectorOpen} aria-controls="map-workspace-inspector"
+                  onClick={() => { setInspectorOpen(!inspectorOpen); setToolSettingsOpen(false); }}><NavIcon name="sliders" /><span>Слои</span></button>
+                </div>
+              </MapWorkspaceTools>}
+              <aside id="map-workspace-tool-settings" hidden={!!workspace && !toolSettingsOpen}
+                className={`map-editor-tool-column${workspace ? " map-editor-workspace-drawer" : ""}`} aria-label="Инструменты карты">
+                {workspace && <button type="button" className="map-workspace-drawer-close" aria-label="Закрыть материалы и параметры" onClick={() => setToolSettingsOpen(false)}><NavIcon name="close" /></button>}
                 <div className="map-editor-panel-heading">Инструменты <span>{editorMode === "region" ? "Регион" : editorMode === "local" ? "Местность" : "Подземелье"}</span></div>
+                {!workspace && <>
                 <span className="map-editor-group-label">Общие</span>
                 <div className="map-editor-common-tools" role="toolbar" aria-label="Основные инструменты">
                   {COMMON_TOOLS.map(toolButton)}
@@ -2204,9 +2488,21 @@ export function MapEditorPage() {
                 <div className="map-editor-mode-tools" role="toolbar" aria-label="Инструменты режима">
                   {MODE_TOOLS[editorMode].map(toolButton)}
                 </div>
+                </>}
                 {editorMode === "dungeon" && map?.grid === "hex" && (
                   <span className="muted map-editor-tool-note">Двери доступны только на квадратной сетке.</span>
                 )}
+                <div className="map-editor-terrain-surface" role="group" aria-label="Способ рисования рельефа">
+                  <span className="map-editor-group-label">Рисование рельефа</span>
+                  <div className="map-editor-terrain-surface-options">
+                    <button type="button" className="map-tool" aria-pressed={terrainSurface === "cells"}
+                      onClick={() => chooseTerrainSurface("cells")}>По клеткам</button>
+                    <button type="button" className="map-tool" aria-pressed={terrainSurface === "mask"}
+                      disabled={map.grid !== "square"} title={map.grid !== "square" ? "Детальное рисование пока доступно на квадратных картах" : undefined}
+                      onClick={() => chooseTerrainSurface("mask")}>Свободная кисть</button>
+                  </div>
+                  <span className="muted map-editor-tool-note">Выбирает слой для кисти: оба слоя остаются видимыми. Детальный слой создаётся при первом выборе и рисует с шагом ¼ клетки.</span>
+                </div>
                 <div className="map-editor-brush-size" role="group" aria-label="Размер кисти">
                   <span className="muted">Размер кисти</span>
                   {([1, 2, 3] as BrushSize[]).map((n) => (
@@ -2280,7 +2576,9 @@ export function MapEditorPage() {
                 </div>
               )}
               </aside>
-              <aside ref={inspectorRef} className="map-editor-inspector-column" aria-label="Слои и свойства карты">
+              <aside ref={inspectorRef} id="map-workspace-inspector" hidden={!!workspace && !inspectorOpen}
+                className={`map-editor-inspector-column${workspace ? " map-editor-workspace-drawer" : ""}`} aria-label="Слои и свойства карты">
+                {workspace && <button type="button" className="map-workspace-drawer-close" aria-label="Закрыть слои и свойства" onClick={() => setInspectorOpen(false)}><NavIcon name="close" /></button>}
                 <div className="map-editor-panel-heading">Слои и свойства <span>{TOOL_DESCRIPTIONS[tool].label}</span></div>
               {tool === "fog" && document?.grid && (
                 <div className="card map-editor-fog-controls" aria-label="Раскрытие карты">
@@ -2288,8 +2586,6 @@ export function MapEditorPage() {
                   <span className="muted">Мастер видит всю карту. Закрытые клетки скрыты от игроков и на втором экране.</span>
                   <button type="button" className="map-tool"
                     aria-pressed={document.exploration?.enabled ?? false}
-                    disabled={hasDetailedTerrain && !document.exploration?.enabled}
-                    title={hasDetailedTerrain ? "Сначала уберите слой детального рельефа: его маска пока несовместима с раскрытием клеток." : undefined}
                     onClick={toggleExploration}>
                     {document.exploration?.enabled
                       ? "Выключить туман"
@@ -2297,9 +2593,6 @@ export function MapEditorPage() {
                         ? "Включить туман · вернуть открытые клетки"
                         : "Включить туман · скрыть всё"}
                   </button>
-                  {hasDetailedTerrain && !document.exploration?.enabled && (
-                    <span className="muted">Раскрытие пока недоступно вместе со слоем детального рельефа.</span>
-                  )}
                   {document.exploration?.enabled && (
                     <>
                       <span className="muted">Открыто {document.exploration.revealedCells.length} из {document.grid.columns * document.grid.rows} клеток</span>
@@ -2312,6 +2605,113 @@ export function MapEditorPage() {
                         <button type="button" onClick={() => changeAllExploration(true)}>Показать всё</button>
                         <button type="button" onClick={() => changeAllExploration(false)}>Скрыть всё</button>
                       </div>
+                    </>
+                  )}
+                </div>
+              )}
+              {(tool === "road" || tool === "river") && (
+                <div className="card map-editor-fog-controls" aria-label="Рисование путей">
+                  <strong>{tool === "road" ? "Дорога" : "Река"}</strong>
+                  <div className="map-editor-fog-actions" role="group" aria-label="Способ рисования пути">
+                    <button type="button" className="map-tool" aria-pressed={!freePathMode} onClick={() => { setFreePathMode(false); selectFreePath(null); }}>По клеткам</button>
+                    <button type="button" className="map-tool" aria-pressed={freePathMode} onClick={() => setFreePathMode(true)}>Сплайн</button>
+                  </div>
+                  {freePathMode && (
+                    <>
+                      <div className="map-editor-fog-actions" role="group" aria-label="Действие со свободной линией">
+                        <button type="button" className="map-tool" aria-pressed={!freePathEditMode} onClick={() => { setFreePathEditMode(false); selectFreePath(null); }}>Рисовать</button>
+                        <button type="button" className="map-tool" aria-pressed={freePathEditMode} onClick={() => setFreePathEditMode(true)}>Править</button>
+                      </div>
+                      <span className="muted">{freePathEditMode
+                        ? "Выберите линию, затем точку. Круглая точка меняет форму, квадратные усики — изгиб."
+                        : "Ставьте опорные точки кликами или касаниями. Двойной клик или Enter завершает линию, Backspace убирает точку, Esc отменяет."}</span>
+                      {!freePathEditMode && freePathPreview && (
+                        <div className="map-editor-spline-actions">
+                          <span className="muted">Опорных точек: {freePathPreview.anchors.length}</span>
+                          <button type="button" disabled={freePathPreview.anchors.length < 2}
+                            onClick={() => input.finishFreePath()}>Завершить</button>
+                          <button type="button" onClick={() => input.removeFreePathAnchor()}>Убрать точку</button>
+                          <button type="button" onClick={() => input.cancelFreePath()}>Отменить</button>
+                        </div>
+                      )}
+                      {freePathEditMode && selectedFreePath && freePathJoinCandidate?.pathId === selectedFreePath.id && (
+                        <div className="map-editor-spline-actions">
+                          <span className="muted">Выбран участок линии. При ответвлении здесь появится новая опорная точка.</span>
+                          <button type="button" onClick={() => {
+                            if (tool !== "road" && tool !== "river") return;
+                            if (input.startFreePathFrom(freePathJoinCandidate.point, tool, {
+                              action: "branch-segment", pathId: selectedFreePath.id,
+                              segmentIndex: freePathJoinCandidate.segmentIndex, t: freePathJoinCandidate.t,
+                            })) setFreePathEditMode(false);
+                          }}>Ответвить здесь</button>
+                        </div>
+                      )}
+                      {freePathEditMode && selectedFreePath && selectedSplineNode && (
+                        <div className="map-editor-path-width">
+                          <strong>Точка {selectedSplineNodeIndex + 1} из {selectedFreePath.geometry.type === "spline" ? selectedFreePath.geometry.nodes.length : 0}</strong>
+                          {selectedFreePath.branchFrom && selectedSplineNodeIndex === 0 &&
+                            <span className="muted">Начало ответвления привязано к исходной линии.</span>}
+                          <div className="map-editor-fog-actions" role="group" aria-label="Тип точки сплайна">
+                            <button type="button" className="map-tool" aria-pressed={!!(selectedSplineNode.in || selectedSplineNode.out)}
+                              onClick={() => changeSelectedSplineNodeLinear(false)}>Плавная</button>
+                            <button type="button" className="map-tool" aria-pressed={!selectedSplineNode.in && !selectedSplineNode.out}
+                              onClick={() => changeSelectedSplineNodeLinear(true)}>Линейная</button>
+                          </div>
+                          <div className="map-editor-fog-actions" role="group" aria-label="Продолжение и ответвление">
+                            <button type="button" className="map-tool"
+                              title={selectedFreePath.branchFrom && selectedSplineNodeIndex === 0
+                                ? "Продолжайте ответвление от свободного конца" : undefined}
+                              disabled={selectedFreePath.geometry.type !== "spline" ||
+                                (selectedSplineNodeIndex !== 0 && selectedSplineNodeIndex !== selectedFreePath.geometry.nodes.length - 1) ||
+                                (selectedSplineNodeIndex === 0 && !!selectedFreePath.branchFrom)}
+                              onClick={() => {
+                                if (tool !== "road" && tool !== "river") return;
+                                if (input.startFreePathFrom(selectedSplineNode.position, tool,
+                                  { action: "extend", pathId: selectedFreePath.id, nodeIndex: selectedSplineNodeIndex }))
+                                  setFreePathEditMode(false);
+                              }}>Продолжить от точки</button>
+                            <button type="button" className="map-tool" onClick={() => {
+                              if (tool !== "road" && tool !== "river") return;
+                              if (input.startFreePathFrom(selectedSplineNode.position, tool,
+                                { action: "branch", pathId: selectedFreePath.id, nodeIndex: selectedSplineNodeIndex }))
+                                setFreePathEditMode(false);
+                            }}>Ответвить от точки</button>
+                          </div>
+                          <label>Толщина точки · {(freePathWidthDraft ?? selectedSplineNode.width ?? selectedFreePath.width).toFixed(2)} кл
+                          <input type="range" min="0.06" max={Math.max(2, selectedSplineNode.width ?? selectedFreePath.width)} step="0.02"
+                            aria-label="Толщина выбранной точки"
+                            value={freePathWidthDraft ?? selectedSplineNode.width ?? selectedFreePath.width}
+                            onChange={(event) => {
+                              const width = Number(event.target.value);
+                              freePathWidthDraftRef.current = width;
+                              setFreePathWidthDraft(width);
+                            }}
+                            onPointerUp={commitFreePathWidth}
+                            onTouchEnd={commitFreePathWidth}
+                            onKeyUp={commitFreePathWidth}
+                            onBlur={commitFreePathWidth}
+                          />
+                          </label>
+                          <span className="muted">{freePathHandleIndices(selectedFreePath.geometry.type === "spline" ? selectedFreePath.geometry.nodes : []).length} точек формы</span>
+                        </div>
+                      )}
+                      {document?.layers.flatMap((layer) => layer.kind === "path"
+                        ? layer.paths.filter((path) => path.kind === tool && path.geometry.type === "spline")
+                          .map((path) => ({ path, editable: layer.visible && !layer.locked })) : []).map(({ path, editable }, index) => (
+                      <div className="row" key={path.id} style={{ justifyContent: "space-between", gap: 8 }}>
+                        <button type="button" className="map-editor-path-choice" aria-pressed={selectedFreePathId === path.id && freePathEditMode}
+                          disabled={!editable || !canEditInView || unsupported !== null}
+                          onClick={() => { setFreePathEditMode(true); selectFreePath(path.id); }}>
+                          {path.branchFrom ? "Ответвление" : "Линия"} {index + 1}{editable ? "" : " · слой недоступен"}
+                        </button>
+                        <button type="button" aria-label={`Удалить линию ${index + 1}`} disabled={!editable || !canEditInView || unsupported !== null} onClick={() => {
+                        const doc = documentRef.current;
+                        if (!doc || !canEditInView || unsupported !== null) return;
+                        const result = deleteMapPath(doc, path.id);
+                        if (result.ok && result.changed) { commitDocument(result.document, doc); if (selectedFreePathId === path.id) selectFreePath(null); }
+                      }}>Удалить</button>
+                    </div>
+                      ))}
                     </>
                   )}
                 </div>
@@ -2414,7 +2814,7 @@ export function MapEditorPage() {
                 <LayerPanel
                   document={document}
                   activeLayerId={activeLayerId}
-                  onActiveLayer={setActiveLayer}
+                  onActiveLayer={selectLayerInPanel}
                   setDocument={(d) => {
                     documentRef.current = d;
                     setDocument(d);
@@ -3225,6 +3625,13 @@ export function MapEditorPage() {
           {unsupported !== null && (
             <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
               <span>{unsupported}</span>
+              {canEdit && map && <button type="button" onClick={() => downloadMapJson(map.cells, `map-${map.id}-original.json`)}>Скачать исходный документ</button>}
+            </div>
+          )}
+          {autosave.status.kind === "conflict" && map && document && (
+            <div className="card" role="alert">
+              <span>Карта изменена в другом окне. Автосохранение остановлено; ваши правки остаются здесь. Сохраните их копию перед повторным открытием карты.</span>
+              <button type="button" onClick={() => downloadMapJson(JSON.stringify(buildSoyMapV2({ name: map.name, scale: map.scale, cellLore: map.cell_lore }, document, genParams)), `map-${map.id}-my-changes.json`)}>Скачать мои правки</button>
             </div>
           )}
           <section className="map-editor-stage" aria-label="Поле карты">
@@ -3266,7 +3673,7 @@ export function MapEditorPage() {
           </div>
           <div
             ref={wrapRef}
-            className="card"
+            className="card map-editor-viewport"
             style={{ height: "clamp(420px, 68vh, 780px)", padding: 0, overflow: "hidden", touchAction: "none", position: "relative" }}
           >
             <MapViewport
@@ -3285,6 +3692,7 @@ export function MapEditorPage() {
                 tool,
                 brushSize,
                 wallLineMode,
+                freePathMode,
               }}
               overlays={{
                 hover: previewAsPlayer ? null : hover,
@@ -3293,6 +3701,15 @@ export function MapEditorPage() {
                 wallDraft: previewAsPlayer ? null : wallDraft,
                 wallLive: previewAsPlayer ? null : wallLive,
                 rectPreview: previewAsPlayer ? null : rectPreview,
+                freePathPreview: previewAsPlayer ? null : freePathPreview,
+                selectedFreePath: freePathMode && freePathEditMode && canEditInView && !previewAsPlayer &&
+                  selectedFreePath?.geometry.type === "spline"
+                  ? { nodes: freePathShapeDraft?.pathId === selectedFreePath.id
+                    ? freePathShapeDraft.nodes : selectedFreePath.geometry.nodes,
+                    selectedNodeIndex: selectedSplineNodeIndex,
+                    joinCandidate: freePathJoinCandidate?.pathId === selectedFreePath.id
+                      ? freePathJoinCandidate.point : null }
+                  : null,
               }}
               input={{
                 onPointerDown: input.onPointerDown,
@@ -3305,6 +3722,8 @@ export function MapEditorPage() {
                 onDoubleClick: () => {
                   // Дабл-клик — финиш полилинии стен по готовым вершинам (Этап E).
                   if (tool === "wall" && wallLineMode && canEditInView) tools.wall.finishWallLine(false);
+                  if (freePathMode && !freePathEditMode && (tool === "road" || tool === "river") && canEditInView)
+                    input.finishFreePath();
                 },
                 spaceDown: input.spaceDown,
               }}

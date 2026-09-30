@@ -10,6 +10,7 @@
 // Topmost — ожидаемая compositing semantics (§35); explicit active — приоритет (§93).
 
 import type { LayerId, MapDocumentV5, MapLayer } from "../../core/types";
+import { createPathLayer } from "../../core/mutations/layers";
 import type { PaintTool } from "../editorTypes";
 
 export type ToolLayerKind = "terrain" | "path" | "gameplay" | "label" | "object";
@@ -87,4 +88,22 @@ export function resolveToolTargetLayer(
     return { ok: true, layerId: l.id, keptActive: false };
   }
   return { ok: false, error: NO_COMPATIBLE_LAYER_ERROR };
+}
+
+/** First road/river action creates a path layer when the map has none. */
+export function ensurePathTargetLayer(doc: MapDocumentV5, activeLayerId: LayerId | null,
+  kind: "road" | "river", newId: () => string):
+  | { ok: true; document: MapDocumentV5; layerId: LayerId; created: boolean }
+  | { ok: false; error: string } {
+  const existing = resolveToolTargetLayer(doc, activeLayerId, "path");
+  if (existing.ok) return { ok: true, document: doc, layerId: existing.layerId, created: false };
+  if (doc.layers.some((layer) => layer.kind === "path")) return existing;
+  const base = kind === "road" ? "Дороги" : "Реки";
+  const used = new Set(doc.layers.map((layer) => layer.name));
+  let name = base;
+  for (let suffix = 2; used.has(name); suffix++) name = `${base} ${suffix}`;
+  const layerId = newId();
+  const result = createPathLayer(doc, { id: layerId, name });
+  if (!result.ok) return { ok: false, error: result.issues[0]?.message ?? NO_COMPATIBLE_LAYER_ERROR };
+  return { ok: true, document: result.document, layerId, created: true };
 }

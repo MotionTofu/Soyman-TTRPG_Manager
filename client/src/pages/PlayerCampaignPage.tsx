@@ -142,7 +142,7 @@ export function PlayerCampaignPage() {
             section: "Раскрытые тайны",
             title: s.title,
             body: s.content ? (
-              <div className="muted" style={{ whiteSpace: "pre-wrap" }}>
+              <div className="muted reading-text" style={{ whiteSpace: "pre-wrap" }}>
                 <MentionText text={s.content} />
               </div>
             ) : null,
@@ -175,7 +175,7 @@ export function PlayerCampaignPage() {
             section: s.name,
             title: a.title || "Без названия",
             body: (
-              <div className="muted" style={{ whiteSpace: "pre-wrap" }}>
+              <div className="muted reading-text" style={{ whiteSpace: "pre-wrap" }}>
                 <MentionText text={a.content} />
               </div>
             ),
@@ -200,7 +200,7 @@ export function PlayerCampaignPage() {
         section: "Раскрытые тайны",
         title: sec.title,
         body: sec.content ? (
-          <div className="muted" style={{ whiteSpace: "pre-wrap" }}>
+          <div className="muted reading-text" style={{ whiteSpace: "pre-wrap" }}>
             <MentionText text={sec.content} />
           </div>
         ) : null,

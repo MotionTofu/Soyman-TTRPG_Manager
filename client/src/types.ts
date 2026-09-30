@@ -818,8 +818,18 @@ export interface MasteringNote {
   system_name?: string;
   title: string;
   content: string;
+  /** null/undefined — из статьи, пустая строка — без картинки. */
+  cover_image?: string | null;
   created_at: string;
   archived_at: string | null;
+}
+
+/** Список книг загружается без полных текстов статей. */
+export interface MasteringBook extends Omit<MasteringNote, "content"> {
+  format?: "pdf" | "markdown" | "workbook";
+  note_count?: number;
+  reading_minutes: number;
+  cover_image: string | null;
 }
 
 export interface Preproduction {

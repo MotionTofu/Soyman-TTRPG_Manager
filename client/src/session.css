@@ -479,8 +479,9 @@
 .sp-secret__content {
   white-space: pre-wrap;
   margin: var(--sp-1) 0 0 0;
-  font-size: var(--fs-meta);
-  color: var(--muted);
+  font-size: var(--fs-body);
+  line-height: 1.6;
+  color: var(--ink);
   max-width: 100%;
   overflow-wrap: break-word;
 }

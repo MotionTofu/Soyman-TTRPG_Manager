@@ -1,22 +1,23 @@
-import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useState, type DragEvent, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { Modal } from "./Modal";
-import { NavIcon } from "./NavIcons";
 import { Verstak } from "./Verstak/Verstak";
 import { onBagToast, useBag, addToBag, removeFromBag, removeItemsFromBag } from "../bag";
 import { detectCurrentEntity, resolveCurrentEntityDetails } from "../currentEntity";
 import { useUnloadTargets, type UnloadTarget } from "../unloadTargets";
 import { useResource, write } from "../data/hooks";
 import { attemptWithNotice } from "../data/notices";
-import { stripMentions } from "../mentions";
 import type { CompendiumEntry, SearchResult } from "../types";
+import { useMapWorkspace } from "../maps/workspace/workspaceContext";
+import { placementSource } from "../maps/workspace/tokenPlacement";
 
 const NO_ENTRIES: CompendiumEntry[] = [];
 
 // title — заголовок снаружи: в правой панели это кнопка, сворачивающая модуль.
-export function BagWidget({ title }: { title?: ReactNode } = {}) {
+export function BagWidget({ title, onMapPlace }: { title?: ReactNode; onMapPlace?: () => void } = {}) {
   const location = useLocation();
+  const mapPlacement = useMapWorkspace()?.placement;
   const { items, size } = useBag();
   const targets = useUnloadTargets();
   const [dragOver, setDragOver] = useState(false);
@@ -139,6 +140,8 @@ export function BagWidget({ title }: { title?: ReactNode } = {}) {
               title={item.title}
             >
               <span className="bag-cell-label">{item.title}</span>
+              {mapPlacement && placementSource(item) && <button type="button" className="bag-cell-place" title="Разместить на карте" aria-label={`Разместить из мешка: ${item.title}`}
+                onClick={() => { mapPlacement.place(placementSource(item)!); onMapPlace?.(); }}>На карту</button>}
               <button
                 type="button"
                 className="bag-cell-remove"

@@ -205,7 +205,7 @@ const SecretRow = memo(function SecretRow({
         <span className="muted"> · {SECRET_KIND_LABELS[secret.kind] ?? secret.kind}</span>
         {secret.campaign_id && <span className="badge tag"> запись кампании</span>}
         {secret.content && (
-          <div className="muted">
+          <div className="muted reading-text">
             <MentionText text={secret.content} />
           </div>
         )}

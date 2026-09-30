@@ -1,0 +1,23 @@
+.workbook { min-width: 0; }
+.workbook-toolbar { position: sticky; top: 0; z-index: 12; padding: var(--sp-5); background: var(--paper-2); border-bottom: var(--card-border-width, 1px) solid var(--line); display: flex; gap: var(--sp-5); flex-wrap: wrap; justify-content: space-between; }
+.workbook-toolbar strong,.workbook-toolbar span { display: block; }
+.workbook-layout { display: grid; grid-template-columns: 230px minmax(0,1fr); gap: var(--sp-8); margin-top: var(--sp-7); }
+.workbook-layout nav { position: sticky; top: 100px; max-height: calc(100dvh - 180px); overflow: auto; align-self: start; display: flex; flex-direction: column; gap: var(--sp-2); }
+.workbook-layout nav button { text-align: left; white-space: normal; }
+.workbook-layout nav [aria-current] { background: var(--accent-soft); border-color: var(--accent); }
+.workbook-sheet { min-width: 0; max-width: 1000px; }
+.workbook-field { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
+.workbook-field small { white-space: pre-wrap; }
+.workbook-check { display: flex; gap: var(--sp-4); align-items: start; }
+.workbook-check input { width: auto; }
+.workbook-field textarea { min-height: 96px; resize: vertical; width: 100%; }
+.workbook-repeat { min-width: 0; padding: var(--sp-6); border: var(--card-border-width, 1px) solid var(--line); }
+.workbook-repeat__row { padding: var(--sp-6) 0; border-bottom: var(--card-border-width, 1px) solid var(--line); }
+.workbook-repeat__actions { display: flex; gap: var(--sp-4); margin-bottom: var(--sp-5); }
+.workbook-table-row { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: var(--sp-5); }
+.workbook-instructions { margin: var(--sp-6) 0; padding: var(--sp-5); border: var(--card-border-width, 1px) solid var(--line); overflow-wrap: anywhere; }
+.workbook-error { padding: var(--sp-5); border: var(--card-border-width, 1px) solid var(--accent); }
+.workbook--popout { padding: var(--sp-7); height: 100dvh; overflow: auto; }
+@media(max-width:800px) { .workbook-layout { grid-template-columns: minmax(0,1fr); gap: var(--sp-6); } .workbook-layout nav { position: static; max-height: 200px; } .workbook--popout { padding: var(--sp-5); } }
+
+.workbook-fields { border: 0; padding: 0; margin: 0; min-width: 0; }

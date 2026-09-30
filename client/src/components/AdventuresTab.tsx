@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { getAuthToken } from "../api/client";
 import { readOnce } from "../data/imperative";
@@ -324,13 +324,9 @@ export function AdventuresTab({
                   </button>
                 )}
                 <span className="adventure-row-main">
-                  <Link
-                    to={`/adventures/${a.id}${campaignId ? `?campaign=${campaignId}` : ""}`}
-                    className="entity-row-name adventure-row-name"
-                    onClick={() => setSelectedId(a.id)}
-                  >
+                  <span className="entity-row-name adventure-row-name">
                     {a.name}
-                  </Link>
+                  </span>
                   <span className="muted adventure-row-meta">
                     {!!a.chapter_count && `${a.chapter_count} ${chapterWord(a.chapter_count)} · `}
                     {a.scene_count} {sceneWord(a.scene_count)}

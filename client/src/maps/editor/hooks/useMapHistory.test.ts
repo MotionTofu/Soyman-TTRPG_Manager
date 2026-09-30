@@ -112,6 +112,16 @@ describe("useMapHistory (Этап 2, smoke)", () => {
     expect(undos).toBe(3);
   });
 
+  it("cancelStroke restores the before snapshot without creating an undo step", () => {
+    const h = setup();
+    act(() => h.result.current.beginStroke());
+    h.rerender({ n: 8, tags: ["test"] });
+    act(() => { h.result.current.markStrokeChanged(); h.result.current.cancelStroke(); });
+    expect(h.get()).toEqual({ n: 0, tags: [] });
+    expect(h.result.current.canUndo).toBe(false);
+    expect(h.result.current.isPainting()).toBe(false);
+  });
+
   it("clear сбрасывает всё", () => {
     const h = setup();
     act(() => {

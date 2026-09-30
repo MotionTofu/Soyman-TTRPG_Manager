@@ -9,6 +9,7 @@ import { EmptyState } from "../components/EmptyState";
 import { ListPage } from "../components/ListPage";
 import { Modal } from "../components/Modal";
 import type { ArchiveItem, ArchivedFile } from "../types";
+import { MAP_VERSION_HEADER } from "@shared/maps/core";
 
 const RESTORE_ENDPOINTS: Record<string, string> = {
   campaign: "/campaigns",
@@ -39,7 +40,7 @@ const TYPE_LABELS: Record<string, string> = {
   character: "персонаж",
   session: "сессия",
   resource: "ресурс",
-  mastering: "мастерение",
+  mastering: "библиотека",
   location: "локация",
   being: "существо",
   artifact: "артефакт",
@@ -99,7 +100,7 @@ function impactLines(impact: PurgeImpact | null): string[] {
   if (impact.resources > 0)
     severed.push(plural(impact.resources, "ресурс", "ресурса", "ресурсов") + " потеряют привязку");
   if (impact.masteringNotes > 0)
-    severed.push(plural(impact.masteringNotes, "заметка", "заметки", "заметок") + " мастерения потеряют привязку");
+    severed.push(plural(impact.masteringNotes, "книга", "книги", "книг") + " библиотеки потеряют привязку");
   if (impact.modules > 0)
     severed.push(plural(impact.modules, "модуль", "модуля", "модулей") + " будет удалён");
   if (severed.length > 0) lines.push(`Будет разорвано: ${severed.join("; ")}.`);
@@ -343,7 +344,7 @@ export function ArchivePage() {
     const base = RESTORE_ENDPOINTS[item.type];
     if (!base) return;
     try {
-      await write.del(`${base}/${item.id}`);
+      await write.del(`${base}/${item.id}`, item.type === "map" ? { headers: { [MAP_VERSION_HEADER]: "6" } } : undefined);
     } catch (e) {
       setErrorMsg(`Не удалось вернуть в архив: ${e instanceof Error ? e.message : String(e)}`);
       return;
@@ -355,7 +356,7 @@ export function ArchivePage() {
     const base = RESTORE_ENDPOINTS[item.type];
     if (!base) { setErrorMsg(`Нет маршрута восстановления для ${item.type}`); return; }
     try {
-      await write.put(`${base}/${item.id}/restore`);
+      await write.put(`${base}/${item.id}/restore`, undefined, item.type === "map" ? { headers: { [MAP_VERSION_HEADER]: "6" } } : undefined);
     } catch (e) {
       setErrorMsg(`Не удалось восстановить: ${e instanceof Error ? e.message : String(e)}`);
       return;
@@ -420,7 +421,7 @@ export function ArchivePage() {
     const results = await Promise.allSettled(snapshot.map((it) => {
       const base = RESTORE_ENDPOINTS[it.type];
       if (!base) return Promise.reject(new Error(`нет маршрута для ${it.type}`));
-      return write.put(`${base}/${it.id}/restore`);
+      return write.put(`${base}/${it.id}/restore`, undefined, it.type === "map" ? { headers: { [MAP_VERSION_HEADER]: "6" } } : undefined);
     }));
     const fails = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
     setBusy(false);
@@ -429,7 +430,7 @@ export function ArchivePage() {
       void Promise.allSettled(snapshot.map((it) => {
         const base = RESTORE_ENDPOINTS[it.type];
         if (!base) return Promise.resolve();
-        return write.del(`${base}/${it.id}`).catch(() => {});
+        return write.del(`${base}/${it.id}`, it.type === "map" ? { headers: { [MAP_VERSION_HEADER]: "6" } } : undefined).catch(() => {});
       })).then(() => refresh());
     });
     setBulkConfirm(null);

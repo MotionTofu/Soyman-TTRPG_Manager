@@ -231,29 +231,15 @@
   --text-name: 18px;
   --text-name-sub: 14px;
 
-  /* Шкала кегля. Одна на все режимы — поэтому живёт здесь и никогда не
-     дублируется в объект темы.
-
-     Ступеней ЧЕТЫРЕ, и это замкнутый список: 10 / 12 / 16 / 26. Сырых
-     пикселей в кегле больше нет нигде, кроме печатной шпаргалки
-     (.cheatsheet-*, .dnd-cheatsheet-*) — печатный лист живёт по своим
-     бумажным правилам и экранной шкале не подчиняется.
-
-     Почему 10 и 12 стоят рядом, хотя §1.6 требует скачка ×1.6: это не
-     соседи по иерархии, а РАЗНЫЕ ГОЛОСА (§1.5). 10 — голос Label: капс с
-     трекингом, подписи, бейджи, счётчики. 12 — голоса Body и Data: проза
-     интерфейса и числа в строках. Документ ровно для этого случая
-     оговаривает: «если два текста близки по размеру — один уходит в другую
-     гарнитуру или в капс с трекингом». Дальше скачки настоящие:
-     12 → 16 это ×1.33, 16 → 26 это ×1.63.
-
-     Ступень 14px убрана (была --fs-body): она сидела между Body и Lead и
-     ни одному голосу не принадлежала. Её 53 места разошлись по 12 и 16. */
+  /* Компактные интерфейсные элементы используют старую шкалу, а длинная
+     проза получает отдельную читаемую ступень. */
   --fs-hero: clamp(40px, 6vw, 76px);
   --fs-h1: clamp(28px, 3.4vw, 40px);
   --fs-h2: 26px;   /* H2 — заголовки разделов */
   --fs-h3: 16px;   /* Lead — подзаголовки, крупные значения */
-  --fs-meta: 12px; /* Body + Data — основная проза и числа */
+  --fs-body: 16px; /* Длинные описания и заметки */
+  --fs-data: 14px; /* Значения и второстепенные строки в подробном просмотре */
+  --fs-meta: 12px; /* Компактные элементы управления и метаданные */
   --fs-micro: 10px;/* Label — капс-подписи, бейджи, счётчики */
   --fs-stat: clamp(24px, 3vw, 34px);
 
@@ -450,6 +436,16 @@ body {
   color: var(--ink);
   font-family: var(--font-body);
   font-size: var(--fs-meta);
+}
+
+/* Длинные пользовательские тексты: описания, главы, заметки и Markdown.
+   Служебные подписи и плотные списки сохраняют собственную компактную шкалу. */
+.reading-text {
+  font-size: var(--fs-body);
+  line-height: 1.6;
+  color: var(--ink);
+  max-width: 80ch;
+  overflow-wrap: anywhere;
 }
 
 a {
@@ -2682,6 +2678,9 @@ button.place-card__row-name {
 .muted {
   color: var(--muted);
 }
+.muted.reading-text {
+  color: var(--ink);
+}
 
 /* Empty-state block (ticket 16 / EmptyState.tsx): mascot + Display-voice
    slogan + one action, replacing bare "Пока нет ..." captions on the main
@@ -2884,7 +2883,7 @@ button.place-card__row-name {
   align-items: start;
 }
 /* Строка приключения: название крупно, доп. инфа — строкой ниже, мельче
-   и блеклым. Левая колонка уже — это навигация, работа идёт справа. */
+   и блеклым. Левая колонка уже — здесь выбирают превью, работа идёт справа. */
 .adventure-row-main {
   display: flex;
   flex-direction: column;
@@ -2897,11 +2896,8 @@ button.place-card__row-name {
   font-size: var(--fs-h3);
   color: var(--ink);
 }
-.adventure-row-name:hover {
-  color: var(--ink);
-}
 .adventure-row-meta {
-  font-size: var(--fs-meta);
+  font-size: var(--fs-data);
   color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
@@ -2914,6 +2910,21 @@ button.place-card__row-name {
   min-width: 0;
   border-left: var(--card-border-width, 1px) solid var(--line);
   padding-left: var(--sp-5);
+  font-size: var(--fs-data);
+  line-height: 1.5;
+}
+.adventures-preview .adventure-preview-header {
+  flex-wrap: wrap;
+}
+.adventures-preview .detail-table {
+  font-size: var(--fs-data);
+}
+.adventures-preview .detail-label,
+.adventures-preview .campaign-field-label {
+  font-size: var(--fs-meta);
+}
+.adventures-preview button {
+  font-size: var(--fs-data);
 }
 .entity-row.selected {
   background: var(--paper-2);
@@ -3688,6 +3699,23 @@ button.place-card__row-name {
 }
 
 /* App shell layout */
+/* F4 keeps panels mounted so playback and panel state survive hiding. */
+body .app-shell.app-shell-panels-hidden {
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-rows: minmax(0, 1fr) !important;
+}
+.app-shell.app-shell-panels-hidden > :is(.app-nav, .preview-dock, .map-workspace-rail, .search-panel-slot, .audio-player-slot, .mini-player-bar, .nav-widget, .mobile-topbar, .mobile-bottom-nav, .mobile-drawer-backdrop) {
+  display: none !important;
+}
+.app-shell.app-shell-panels-hidden > .app-content {
+  max-width: none;
+  padding-bottom: 0 !important;
+}
+@media (max-width: 860px) {
+  .app-shell.app-shell-panels-hidden > .app-content {
+    padding-top: 0 !important;
+  }
+}
 .app-shell {
   display: grid;
   grid-template-columns: var(--app-nav-width) 1fr var(--app-search-width);
@@ -6828,7 +6856,8 @@ details.card[open] summary {
 .player-profile-notes {
   margin-top: var(--sp-3);
   color: var(--on-surface-muted);
-  font-size: var(--fs-meta);
+  font-size: var(--fs-body);
+  line-height: 1.6;
 }
 .player-cabinet-password {
   max-width: 400px;
@@ -8033,8 +8062,8 @@ details[open] > .dnd-feat-section-head .chevron-icon {
 }
 .dnd-feat-description {
   padding: 0 var(--sp-8) var(--sp-5) var(--sp-5);
-  font-size: var(--fs-meta);
-  line-height: 20px;
+  font-size: var(--fs-body);
+  line-height: 1.6;
   color: var(--ink);
   white-space: pre-wrap;
 }
@@ -8060,8 +8089,8 @@ details[open] > .dnd-feat-section-head .chevron-icon {
 .dnd-feat-notes {
   padding: var(--sp-4) var(--sp-5) var(--sp-5);
   border-top: 1px solid color-mix(in oklab, var(--line) 40%, transparent);
-  font-size: var(--fs-meta);
-  line-height: 20px;
+  font-size: var(--fs-body);
+  line-height: 1.6;
   white-space: pre-wrap;
 }
 @media print {

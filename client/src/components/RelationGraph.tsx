@@ -30,6 +30,7 @@ import {
   TYPE_SHAPES,
   canvasSizeFor,
   simulateGraph,
+  GRAPH_VIEW_HIDDEN_TYPES,
   type EdgeKind,
   type GraphData,
   type GraphEdge,
@@ -50,8 +51,6 @@ const ARROW_PAN_STEP = 90;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 18;
 
-// Типы, скрытые по умолчанию — операционные сущности, засоряющие граф.
-const DEFAULT_HIDDEN_TYPES = new Set(["scene", "adventure", "campaign"]);
 
 interface View {
   zoom: number;
@@ -98,6 +97,8 @@ interface Props {
   activeKinds?: Set<EdgeKind>;
   /** Колбэк смены набора видов рёбер (управление извне). */
   onActiveKindsChange?: (next: Set<EdgeKind>) => void;
+  /** Типы, скрытые при открытии. По умолчанию — как в графе мира. */
+  defaultHiddenTypes?: string[];
 }
 
 interface ManualLayout {
@@ -533,7 +534,7 @@ function GraphCanvas({
 
 // ─── Outer component — React state for toolbar/legend ────────────
 
-export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layoutKey, scopeBar, edgeKinds, activeKinds: activeKindsProp, onActiveKindsChange }: Props) {
+export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layoutKey, scopeBar, edgeKinds, activeKinds: activeKindsProp, onActiveKindsChange, defaultHiddenTypes = GRAPH_VIEW_HIDDEN_TYPES.world }: Props) {
   const navigate = useNavigate();
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -557,7 +558,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     () => edgeKinds ? EDGE_KINDS.filter((k) => edgeKinds.includes(k.key)) : EDGE_KINDS,
     [edgeKinds]
   );
-  const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(() => new Set(DEFAULT_HIDDEN_TYPES));
+  const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(() => new Set(defaultHiddenTypes));
   const [highlightIdx, setHighlightIdx] = useState(-1);
   const [isolatedOpen, setIsolatedOpen] = useState(false);
   const [edgeKindsOpen, setEdgeKindsOpen] = useState(false);
@@ -987,9 +988,9 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
           {entityTypesOpen && (() => {
             const typesInData = new Map<string, number>();
             for (const n of data?.nodes ?? []) {
-              if (!hiddenTypes.has(n.type)) typesInData.set(n.type, (typesInData.get(n.type) ?? 0) + 1);
+              typesInData.set(n.type, (typesInData.get(n.type) ?? 0) + 1);
             }
-            const ORDER = ["character", "being", "artifact", "location", "community", "compendium_entry", "mastering", "scene", "adventure", "campaign", "setting"];
+            const ORDER = ["character", "being", "artifact", "location", "community", "compendium_entry", "mastering", "scene", "adventure", "session", "campaign", "setting"];
             const ordered = ORDER.filter((t) => typesInData.has(t));
             for (const t of typesInData.keys()) if (!ordered.includes(t)) ordered.push(t);
             return (

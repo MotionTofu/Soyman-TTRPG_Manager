@@ -207,8 +207,8 @@
 .creature-card__prose,
 .creature-card__secret {
   font-family: var(--font-body);
-  font-size: var(--fs-meta);
-  line-height: 1.4;
+  font-size: var(--fs-body);
+  line-height: 1.6;
   max-width: none;
   overflow-wrap: normal;
   word-break: normal;

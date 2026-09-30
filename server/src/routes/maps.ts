@@ -7,7 +7,11 @@ import {
   projectMapDocumentForPlayer,
   serializeMapDocument,
   validateMapDocument,
+  mapClientMaxVersion,
+  MAP_VERSION_HEADER,
+  parseMapDocumentV6,
 } from "@soyman/shared";
+import { resolveMapTokenSource, presentMapTokenSources, validateMapTokenSources } from "../services/mapTokenSources";
 import { db } from "../db/db";
 import { isVaultPath, toFileUrl, vaultAbs } from "../services/filesystem";
 import type { AuthedRequest } from "../services/auth";
@@ -18,6 +22,8 @@ import {
   validateMapCreate,
   validateV5Create,
   validateV5DocumentBody,
+  validateV6Create,
+  validateV6DocumentBody,
   MAP_MIN_SIDE,
   MAP_MAX_SIDE,
   MAP_SCALES,
@@ -28,7 +34,59 @@ import {
 // запросы ниже через isPlayer(). Запись игрокам запрещена гейтом целиком.
 export const mapsRouter = Router();
 
+// Must run before projection, asset lookup, thumbnail or legacy mutation.
+mapsRouter.param("id", (req: AuthedRequest, res, next, id: string) => {
+  // Validate the decoded route parameter, including percent-encoded IDs.
+  if (!/^\d+$/.test(id) || !Number.isSafeInteger(Number(id))) return res.status(404).json({ error: "not found" });
+  if (req.method === "GET" && req.route.path === "/:id/raw") return next();
+  const row = db.prepare("SELECT cells, player_visible, archived_at FROM maps WHERE id = ?").get(id) as
+    { cells: string; player_visible: number; archived_at: string | null } | undefined;
+  if (!row || (isPlayer(req) && (!row.player_visible || row.archived_at))) return next();
+  const stored = parseStoredMapDocument(row.cells);
+  const unsupported = stored.format === "unsupported" || (stored.format === "v6" && mapClientMaxVersion(req.get(MAP_VERSION_HEADER)) < 6);
+  if (unsupported) return res.status(409).json({ error: "Эта версия карты не поддерживается редактором", code: "map-version-unsupported",
+    requiredVersion: "version" in stored ? stored.version : null });
+  if (stored.format === "v5" || stored.format === "v6") {
+    const parsed = stored.format === "v5" ? parseMapDocument(stored.raw) : parseMapDocumentV6(stored.raw);
+    if (!parsed.ok && parsed.errors.some((e) => e.code.includes("unknown") || e.code.includes("unsupported"))) {
+      return res.status(409).json({ error: "Неизвестная функция документа", code: "map-version-unsupported", requiredVersion: stored.version });
+    }
+  }
+  // Public V6 presentation is connected in ticket 09. Fail closed until then.
+  if (stored.format === "v6" && (isPlayer(req) || req.path.endsWith("/player-view") || req.query.player_view === "1")) {
+    return res.status(409).json({ error: "Показ карт нового формата ещё не подключён", code: "map-presentation-unavailable" });
+  }
+  if (req.method === "GET" && stored.format === "corrupt" && (isPlayer(req) || req.path.endsWith("/player-view") || req.path.endsWith("/assets"))) {
+    return res.status(500).json({ error: "stored map invalid" });
+  }
+  next();
+});
+
+// Explicit recovery download: preserve bytes, even for a future version.
+mapsRouter.get("/:id/raw", (req: AuthedRequest, res) => {
+  if (isPlayer(req)) return res.status(403).json({ error: "forbidden" });
+  const row = db.prepare("SELECT cells FROM maps WHERE id = ? AND archived_at IS NULL").get(req.params.id) as { cells: string } | undefined;
+  if (!row) return res.status(404).json({ error: "not found" });
+  res.type("application/json").attachment(`map-${req.params.id}-original.json`).send(row.cells);
+});
+
+mapsRouter.post("/:id/token-source", (req: AuthedRequest, res) => {
+  if (isPlayer(req)) return res.status(403).json({ error: "forbidden" });
+  if (!db.prepare("SELECT id FROM maps WHERE id = ? AND archived_at IS NULL").get(req.params.id)) return res.status(404).json({ error: "not found" });
+  const result = resolveMapTokenSource(req.body?.kind, req.body?.id);
+  if (!result) return res.status(400).json({ error: "Источник недоступен. На карту можно перенести локацию, существо сеттинга или существо из бестиария", code: "map-token-source-unavailable" });
+  res.json(result);
+});
+
 interface ImageAssetRow { uid: string; name: string; tags: string; file_path: string }
+
+mapsRouter.post("/:id/token-presentations", (req: AuthedRequest, res) => {
+  if (isPlayer(req)) return res.status(403).json({ error: "forbidden" });
+  if (!db.prepare("SELECT id FROM maps WHERE id = ? AND archived_at IS NULL").get(req.params.id)) return res.status(404).json({ error: "not found" });
+  const result = presentMapTokenSources(req.body?.sources);
+  if (!result) return res.status(400).json({ error: "Некорректные источники токенов" });
+  res.json(result);
+});
 
 function imageAssets(uids?: readonly string[]) {
   if (uids && uids.length === 0) return [];
@@ -54,11 +112,11 @@ mapsRouter.get("/:id/assets", (req: AuthedRequest, res) => {
     .get(req.params.id) as { cells: string; player_visible: number } | undefined;
   if (!row || (isPlayer(req) && !row.player_visible)) return res.status(404).json({ error: "not found" });
   const stored = parseStoredMapDocument(row.cells);
-  if (stored.format !== "v5") return res.json([]);
-  const parsed = parseMapDocument(stored.raw);
+  if (stored.format !== "v5" && stored.format !== "v6") return res.json([]);
+  const parsed = stored.format === "v6" ? parseMapDocumentV6(stored.raw) : parseMapDocument(stored.raw);
   if (!parsed.ok) return res.status(500).json({ error: "stored V5 document invalid" });
   const doc = isPlayer(req) || req.query.player_view === "1"
-    ? projectMapDocumentForPlayer(parsed.value) : parsed.value;
+    ? projectMapDocumentForPlayer(parsed.value as import("@soyman/shared").MapDocumentV5) : parsed.value;
   const prefix = "soyman-resource-images:";
   const uids = [...new Set(doc.layers.flatMap((layer) => layer.kind === "object"
     ? layer.items.flatMap((item) => item.visual.type === "asset" && item.visual.assetId.startsWith(prefix)
@@ -76,27 +134,34 @@ function parentExists(id: number): boolean {
 }
 
 const META_COLUMNS =
-  "id, name, grid, scale, width, height, cell_lore, seed, sea, mountains, forest, thumbnail, player_visible, parent_map_id, created_at, updated_at";
+  "id, name, grid, scale, width, height, cell_lore, seed, sea, mountains, forest, thumbnail, player_visible, parent_map_id, created_at, updated_at, revision";
 
 // Список без миниатюр (P0-2): thumbnail до 300k символов на карту —
 // отдавать его на каждую строку списка значит грузить мегабайты за один
 // запрос. Плитки догружают превью точечно через GET /:id/thumbnail.
 const LIST_COLUMNS =
-  "id, name, grid, scale, width, height, cell_lore, seed, sea, mountains, forest, player_visible, parent_map_id, created_at, updated_at";
+  "id, name, grid, scale, width, height, cell_lore, seed, sea, mountains, forest, player_visible, parent_map_id, created_at, updated_at, revision";
 
 mapsRouter.get("/", (req: AuthedRequest, res) => {
   const where = isPlayer(req) ? "WHERE archived_at IS NULL AND player_visible = 1" : "WHERE archived_at IS NULL";
   const rows = db
-    .prepare(`SELECT ${LIST_COLUMNS} FROM maps ${where} ORDER BY updated_at DESC, id DESC`)
-    .all();
-  res.json(rows);
+    .prepare(`SELECT ${LIST_COLUMNS}, cells FROM maps ${where} ORDER BY updated_at DESC, id DESC`)
+    .all() as Array<Record<string, unknown> & { cells: string }>;
+  res.json(rows.map(({ cells, ...meta }) => {
+    const stored = parseStoredMapDocument(cells);
+    const parsed = stored.format === "v5" ? parseMapDocument(stored.raw) : stored.format === "v6" ? parseMapDocumentV6(stored.raw) : null;
+    const unknownFeature = parsed && !parsed.ok && parsed.errors.some((e) => e.code.includes("unknown") || e.code.includes("unsupported"));
+    return { ...meta, document_version: "version" in stored ? stored.version : null,
+      document_unsupported: !!unknownFeature || stored.format === "unsupported" || stored.format === "corrupt" ||
+        (stored.format === "v6" && (isPlayer(req) || mapClientMaxVersion(req.get(MAP_VERSION_HEADER)) < 6)) };
+  }));
 });
 
 // Точечная догрузка превью для плиток списка (те же правила видимости,
 // что у GET /:id — скрытое игрокам отдаёт 404).
 mapsRouter.get("/:id/thumbnail", (req: AuthedRequest, res) => {
   const row = db
-    .prepare("SELECT id, thumbnail, player_visible FROM maps WHERE id = ?")
+    .prepare("SELECT id, thumbnail, player_visible FROM maps WHERE id = ? AND archived_at IS NULL")
     .get(req.params.id) as { id: number; thumbnail: string | null; player_visible: number } | undefined;
   if (!row) return res.status(404).json({ error: "not found" });
   if (isPlayer(req) && !row.player_visible) return res.status(404).json({ error: "not found" });
@@ -114,8 +179,19 @@ mapsRouter.post("/", (req: AuthedRequest, res) => {
     if (body.cells !== undefined || body.grid !== undefined || body.width !== undefined || body.height !== undefined) {
       return res.status(400).json({ error: "V5 create takes document only (no cells/grid/width/height)" });
     }
-    const result = validateV5Create(body, parentExists);
+    const incoming = parseStoredMapDocument(typeof body.document === "string" ? body.document : JSON.stringify(body.document));
+    const v6 = incoming.format === "v6";
+    if ((v6 && mapClientMaxVersion(req.get(MAP_VERSION_HEADER)) < 6) || incoming.format === "unsupported") {
+      return res.status(409).json({ error: "Unsupported map version", code: "map-version-unsupported", requiredVersion: "version" in incoming ? incoming.version : null });
+    }
+    const result = v6 ? validateV6Create(body, parentExists) : validateV5Create(body, parentExists);
     if ("error" in result) return res.status(400).json(result);
+    if (v6) {
+      const parsed = parseMapDocumentV6(result.value.cells);
+      if (!parsed.ok) return res.status(400).json({ error: "invalid document" });
+      const error = validateMapTokenSources(parsed.value);
+      if (error) return res.status(400).json({ error, code: "map-token-source-unavailable" });
+    }
     const v = result.value;
     const info = db
       .prepare(
@@ -157,6 +233,10 @@ mapsRouter.get("/:id", (req: AuthedRequest, res) => {
   // V5 rows (§21–23 ТЗ 2F): GM — полный документ, player — server projection.
   // Legacy-ветка ниже — побайтово как раньше (§25 ТЗ).
   const stored = parseStoredMapDocument(row.cells);
+  if (stored.format === "v6") {
+    if (!parseMapDocumentV6(stored.raw).ok) return res.status(500).json({ error: "stored V6 document invalid" });
+    return res.json(row);
+  }
   if (stored.format === "v5") {
     // Хранимое уже canonical (пишем только canonical), но доверять строке
     // из БД нельзя: parse + validate заново, иначе 500 integrity error.
@@ -286,10 +366,30 @@ mapsRouter.put("/:id", (req: AuthedRequest, res) => {
         width: number;
         height: number;
         cells: string;
+        revision: number;
       }
     | undefined;
   if (!current) return res.status(404).json({ error: "not found" });
   const body = (req.body ?? {}) as Record<string, unknown>;
+  const persisted = parseStoredMapDocument(current.cells);
+  const incoming = body.document === undefined ? null : parseStoredMapDocument(typeof body.document === "string" ? body.document : JSON.stringify(body.document));
+  const v6 = incoming?.format === "v6";
+  if (incoming?.format === "unsupported" || (v6 && mapClientMaxVersion(req.get(MAP_VERSION_HEADER)) < 6)) {
+    return res.status(409).json({ error: "Unsupported map version", code: "map-version-unsupported", requiredVersion: incoming && "version" in incoming ? incoming.version : null });
+  }
+  if (persisted.format === "v6" && ((body.document !== undefined && !v6) ||
+    ["cells", "clearCells", "grid", "width", "height"].some((k) => body[k] !== undefined))) {
+    return res.status(409).json({ error: "V6 map cannot be downgraded", code: "map-version-unsupported", requiredVersion: 6 });
+  }
+  if ((v6 || persisted.format === "v6") && body.expectedRevision === undefined) {
+    return res.status(428).json({ error: "expectedRevision is required", code: "map-revision-required" });
+  }
+  if (body.expectedRevision !== undefined && (!Number.isSafeInteger(body.expectedRevision) || (body.expectedRevision as number) < 0)) {
+    return res.status(400).json({ error: "invalid expectedRevision" });
+  }
+  if (body.expectedRevision !== undefined && body.expectedRevision !== current.revision) {
+    return res.status(409).json({ error: "Карта изменена в другом окне. Ваши правки сохранены в этом окне.", code: "map-revision-conflict", currentRevision: current.revision });
+  }
 
   // Сетка — свойство навсегда: смена без флага очистки отклоняется, иначе
   // клетки сбрасываются (пересчёт гексы↔квадраты без потерь невозможен).
@@ -309,8 +409,15 @@ mapsRouter.put("/:id", (req: AuthedRequest, res) => {
         return res.status(400).json({ error: "V5 save takes document only (no cells/grid/width/height/clearCells)" });
       }
     }
-    const docResult = validateV5DocumentBody(body.document);
+    const docResult = v6 ? validateV6DocumentBody(body.document) : validateV5DocumentBody(body.document);
     if ("error" in docResult) return res.status(400).json(docResult);
+    if (v6) {
+      const next = parseMapDocumentV6(docResult.value.cells);
+      const old = persisted.format === "v6" ? parseMapDocumentV6(persisted.raw) : null;
+      if (!next.ok || (old && !old.ok)) return res.status(400).json({ error: "invalid V6 document" });
+      const error = validateMapTokenSources(next.value, old?.ok ? old.value : undefined);
+      if (error) return res.status(400).json({ error, code: "map-token-source-unavailable" });
+    }
     grid = docResult.value.grid;
     width = docResult.value.width;
     height = docResult.value.height;
@@ -373,7 +480,7 @@ mapsRouter.put("/:id", (req: AuthedRequest, res) => {
     if (!parentExists(body.parent_map_id)) return res.status(400).json({ error: "parent map not found" });
   }
 
-  db.prepare(
+  const saved = db.prepare(
     `UPDATE maps SET
        name = COALESCE(?, name), grid = ?, scale = COALESCE(?, scale),
        width = ?, height = ?, cell_lore = COALESCE(?, cell_lore),
@@ -382,8 +489,8 @@ mapsRouter.put("/:id", (req: AuthedRequest, res) => {
        cells = COALESCE(?, cells), thumbnail = COALESCE(?, thumbnail),
        player_visible = COALESCE(?, player_visible),
        parent_map_id = COALESCE(?, parent_map_id),
-       updated_at = datetime('now')
-     WHERE id = ?`
+       updated_at = datetime('now'), revision = revision + 1
+     WHERE id = ? AND revision = ?`
   ).run(
     typeof body.name === "string" ? body.name.trim() : null,
     grid,
@@ -399,8 +506,10 @@ mapsRouter.put("/:id", (req: AuthedRequest, res) => {
     (body.thumbnail as string | null | undefined) ?? null,
     body.player_visible === undefined ? null : body.player_visible ? 1 : 0,
     (body.parent_map_id as number | null | undefined) ?? null,
-    req.params.id
+    req.params.id,
+    current.revision
   );
+  if (!saved.changes) return res.status(409).json({ error: "Карта изменена в другом окне", code: "map-revision-conflict" });
   res.json(db.prepare(`SELECT ${META_COLUMNS}, cells FROM maps WHERE id = ?`).get(req.params.id));
 });
 
@@ -409,7 +518,7 @@ mapsRouter.delete("/:id", (req: AuthedRequest, res) => {
   // часы росписи одним confirm, а обещанного тоста отмены не было.
   // Окончательно карта удаляется из раздела «Архив» (`routes/archive.ts`).
   const info = db
-    .prepare("UPDATE maps SET archived_at = datetime('now') WHERE id = ? AND archived_at IS NULL")
+    .prepare("UPDATE maps SET archived_at = datetime('now'), revision = revision + 1 WHERE id = ? AND archived_at IS NULL")
     .run(req.params.id);
   if (info.changes === 0) return res.status(404).json({ error: "not found" });
   res.json({ ok: true });
@@ -417,7 +526,7 @@ mapsRouter.delete("/:id", (req: AuthedRequest, res) => {
 
 mapsRouter.put("/:id/restore", (req: AuthedRequest, res) => {
   const info = db
-    .prepare("UPDATE maps SET archived_at = NULL WHERE id = ? AND archived_at IS NOT NULL")
+    .prepare("UPDATE maps SET archived_at = NULL, revision = revision + 1 WHERE id = ? AND archived_at IS NOT NULL")
     .run(req.params.id);
   if (info.changes === 0) return res.status(404).json({ error: "not found" });
   res.json({ ok: true });

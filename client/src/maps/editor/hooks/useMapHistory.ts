@@ -10,9 +10,10 @@ interface UseMapHistoryArgs<T> {
   onChange: (next: T) => void;
   clone: (v: T) => T;
   depth?: number;
+  getValue?: () => T;
 }
 
-export function useMapHistory<T>({ value, onChange, clone, depth = MAP_HISTORY_DEFAULT_DEPTH }: UseMapHistoryArgs<T>) {
+export function useMapHistory<T>({ value, onChange, clone, depth = MAP_HISTORY_DEFAULT_DEPTH, getValue }: UseMapHistoryArgs<T>) {
   const pastRef = useRef<T[]>([]);
   const futureRef = useRef<T[]>([]);
   const strokeRef = useRef<{ before: T; changed: boolean } | null>(null);
@@ -34,7 +35,7 @@ export function useMapHistory<T>({ value, onChange, clone, depth = MAP_HISTORY_D
   function undo() {
     const prev = pastRef.current.pop();
     if (!prev) return;
-    futureRef.current.push(clone(valueRef.current));
+    futureRef.current.push(clone(getValue ? getValue() : valueRef.current));
     onChange(prev);
     setCanUndo(pastRef.current.length > 0);
     setCanRedo(true);
@@ -43,7 +44,7 @@ export function useMapHistory<T>({ value, onChange, clone, depth = MAP_HISTORY_D
   function redo() {
     const next = futureRef.current.pop();
     if (!next) return;
-    pastRef.current.push(clone(valueRef.current));
+    pastRef.current.push(clone(getValue ? getValue() : valueRef.current));
     onChange(next);
     setCanUndo(true);
     setCanRedo(futureRef.current.length > 0);
@@ -60,7 +61,7 @@ export function useMapHistory<T>({ value, onChange, clone, depth = MAP_HISTORY_D
 
   // Мазок: snapshot до первого изменения, коммит — один шаг, если красило.
   function beginStroke() {
-    strokeRef.current = { before: clone(valueRef.current), changed: false };
+    strokeRef.current = { before: clone(getValue ? getValue() : valueRef.current), changed: false };
     paintingRef.current = true;
   }
 
@@ -81,6 +82,13 @@ export function useMapHistory<T>({ value, onChange, clone, depth = MAP_HISTORY_D
     return paintingRef.current;
   }
 
+  function cancelStroke() {
+    const stroke = strokeRef.current;
+    strokeRef.current = null;
+    paintingRef.current = false;
+    if (stroke?.changed) onChange(stroke.before);
+  }
+
   return {
     push,
     undo,
@@ -89,6 +97,7 @@ export function useMapHistory<T>({ value, onChange, clone, depth = MAP_HISTORY_D
     beginStroke,
     markStrokeChanged,
     commitStroke,
+    cancelStroke,
     isPainting,
     canUndo,
     canRedo,

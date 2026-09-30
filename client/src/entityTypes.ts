@@ -39,7 +39,7 @@ export const ENTITY_TYPE_SINGULAR: Record<string, string> = {
   community: "Сообщество",
   artifact: "Артефакт",
   resource: "Ресурс",
-  mastering: "Мастерение",
+  mastering: "Библиотека",
   adventure: "Приключение",
   scene: "Сцена",
   session: "Сессия",

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { getAuthToken, setAuthToken } from "../api/client";
 import { useEntity, useResource, write } from "../data/hooks";
@@ -27,6 +27,9 @@ import { useConfirm } from "../hooks/useConfirm";
 import { requestPultGridReset } from "../pultGridReset";
 import { sessionLabel } from "../sessionLabel";
 import type { CampaignDetail, SessionDetail } from "../types";
+import { workspaceMode } from "./workspaceMode";
+import { MapWorkspaceRail } from "../maps/workspace/MapWorkspace";
+import { MapWorkspaceContext, type MapPlacementController } from "../maps/workspace/workspaceContext";
 
 interface NavItem {
   to?: string;
@@ -42,12 +45,13 @@ const GM_NAV_ITEMS: NavItem[] = [
   { to: "/settings", label: "Сеттинги", icon: "settings" },
   { to: "/systems", label: "Системы", icon: "systems" },
   { to: "/players", label: "Игроки", icon: "players" },
-  { to: "/mastering", label: "Мастерение", icon: "mastering" },
-  { to: "/resources", label: "Ресурсы", icon: "resources" },
-  { to: "/canvas", label: "Полотно", icon: "canvas" },
-  { to: "/graph/world", label: "Граф мира", icon: "graph" },
-  { to: "/graph/adventures", label: "Граф приключений", icon: "graph" },
-  { to: "/maps", label: "Карты", icon: "map" },
+  { to: "/canvas", label: "Узлы", icon: "canvas" },
+  { to: "/graph/world", label: "Связи миров", icon: "graph" },
+  { to: "/graph/adventures", label: "Связи приключений", icon: "graph" },
+  { to: "/maps", label: "Редактор карт", icon: "map" },
+  { to: "/mastering", label: "Библиотека", icon: "mastering" },
+  {to:"/gallery",label:"Галерея",icon:"image"},
+  {to:"/audio-library",label:"Аудиотека",icon:"volume"},
 ];
 
 // Player role: четыре места (Кабинет игрока, шаг 5) — Главная, Дневники,
@@ -350,23 +354,26 @@ const NAV_EMPTY_HINT: Record<string, string> = {
   settings: "Сеттингов пока нет — мир создаётся мастером сеттингов",
   players: "Игроков пока нет — добавь их к кампании",
   resources: "Ресурсов пока нет — сюда кладут карты, музыку и файлы",
-  mastering: "Заметок мастерения пока нет",
+  mastering: "Книг в библиотеке пока нет",
 };
 
 const CRUMB_LABEL: Record<string, string> = {
   campaigns: "Кампании",
-  library: "Библиотека",
+  library: "Обзор",
   settings: "Сеттинги",
   systems: "Системы",
   players: "Игроки",
   cabinet: "Кабинет",
   sheets: "Персонажи",
-  mastering: "Мастерение",
-  resources: "Ресурсы",
+  mastering: "Библиотека",
+  resources: "Другие материалы",
+  gallery:"Галерея",
+  "audio-library":"Аудиотека",
+  workbooks:"Рабочие тетради",
   read: "Читалка",
-  canvas: "Полотно",
-  graph: "Граф",
-  maps: "Карты",
+  canvas: "Узлы",
+  graph: "Связи",
+  maps: "Редактор карт",
   storages: "Настройки",
   health: "Здоровье",
   about: "Справка",
@@ -448,7 +455,7 @@ export function AppShell() {
   const settingsList = useResource<unknown[]>(gm ? "/settings" : null).data;
   const playersList = useResource<unknown[]>(gm ? "/players" : null).data;
   const resourcesList = useResource<unknown[]>(gm ? "/resources" : null).data;
-  const masteringList = useResource<unknown>(gm ? "/mastering" : null).data;
+  const masteringList = useResource<unknown>(gm ? "/mastering?view=library" : null).data;
   const navCounts: Record<string, number | null | undefined> = {
     campaigns: campaignsList?.length,
     settings: settingsList?.length,
@@ -474,8 +481,23 @@ export function AppShell() {
   // dock (see PreviewDock) instead — a GM running a live session gets a
   // place to keep creature/location previews visible instead of the app
   // nav they're not using mid-session.
-  const { pathname } = useLocation();
-  const isLivePult = /^\/sessions\/\d+\/live$/.test(pathname);
+  const { pathname, search } = useLocation();
+  const mode = workspaceMode(pathname, user?.role);
+  const isLivePult = mode === "session";
+  const isMapWorkspace = mode === "maps";
+  const [mapRail, setMapRail] = useState<HTMLDivElement | null>(null);
+  const [mapPlacement, setMapPlacement] = useState<MapPlacementController | null>(null);
+  const returnTo = useRef("/");
+  useEffect(() => {
+    if (!isMapWorkspace && !pathname.startsWith("/maps")) returnTo.current = pathname + search;
+  }, [pathname, search, isMapWorkspace]);
+  // Скрытые панели пульта не должны скрывать инструменты нового модуля.
+  useEffect(() => {
+    if (!isMapWorkspace) return;
+    const flags = ["live-hide-dock", "live-hide-search"].filter((flag) => document.body.classList.contains(flag));
+    document.body.classList.remove(...flags);
+    return () => document.body.classList.add(...flags);
+  }, [isMapWorkspace]);
 
   // Имена для крошек пульта: сессия из кэша слоя (её же читает сам пульт),
   // кампания — по campaign_id сессии. Хуки безусловны: вне пульта id null и
@@ -507,6 +529,26 @@ export function AppShell() {
   const [navOpen, setNavOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
+  useEffect(() => { setNavOpen(false); setSearchOpen(false); }, [pathname]);
+  useEffect(() => {
+    if (!isMapWorkspace || !searchOpen) return;
+    const previous = document.activeElement as HTMLElement | null;
+    document.querySelector<HTMLInputElement>("#search-panel input")?.focus();
+    return () => { if (previous?.isConnected) previous.focus(); };
+  }, [isMapWorkspace, searchOpen]);
+  useEffect(() => {
+    if (!isMapWorkspace) return;
+    const onKey = (event: KeyboardEvent) => {
+      const active = document.activeElement as HTMLElement | null;
+      if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey ||
+        active?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(active?.tagName ?? "")) return;
+      event.preventDefault();
+      if (window.matchMedia("(max-width: 900px)").matches) setSearchOpen(true);
+      else document.querySelector<HTMLInputElement>("#search-panel input")?.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isMapWorkspace]);
 
   const navigate = useNavigate();
   const cockpitId = useNearestSessionCockpitId();
@@ -520,7 +562,7 @@ export function AppShell() {
     ? [{ key: "diaries", label: "Дневники", icon: "campaigns", to: "/campaigns" }]
     : [
         { key: "home", label: "Главная", icon: "home", to: "/" },
-        { key: "library", label: "Библиотека", icon: "library", to: "/library" },
+        { key: "library", label: "Обзор", icon: "library", to: "/library" },
       ];
   const bottomNavRight: BottomNavItem[] = isPlayer
     ? [{ key: "sheets", label: "Персонажи", icon: "card", to: "/sheets" }]
@@ -557,6 +599,7 @@ export function AppShell() {
   // Глобальные хоткеи пульта — независимы от раскладки (code + key), не спорят с существующими
   // [ / Х — левая докстанция, ] / Ъ — правый поиск, Ctrl+\ — оба. Игнор когда в поле ввода.
   useEffect(() => {
+    if (isMapWorkspace) return;
     const onKey = (e: KeyboardEvent) => {
       const tag = (document.activeElement as HTMLElement | null)?.tagName;
       const ae = document.activeElement as HTMLElement | null;
@@ -581,11 +624,22 @@ export function AppShell() {
     };
     window.addEventListener("keydown", onKey, { capture: true });
     return () => window.removeEventListener("keydown", onKey, { capture: true } as any);
-  }, []);
+  }, [isMapWorkspace]);
 
   const [playerHidden, setPlayerHidden] = useState(() => {
     try { return localStorage.getItem("playerHidden") === "1"; } catch { return false; }
   });
+  const [panelsHidden, setPanelsHidden] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "F4" || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      e.preventDefault();
+      if (!e.repeat) setPanelsHidden((hidden) => !hidden);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // Alt+F1 — на главную, Alt+F2 — показать/скрыть нижний плеер, Alt+F3 — свернуть/развернуть все <details>
   useEffect(() => {
@@ -636,7 +690,8 @@ export function AppShell() {
         кампании или персонажа уводит с неё, и тост, нарисованный самой
         страницей, уходил вместе с ней. */}
     <UndoDeleteProvider>
-    <div className={`app-shell${isLivePult ? " app-shell-live" : ""}`}>
+    <MapWorkspaceContext.Provider value={isMapWorkspace ? { rail: mapRail, placement: mapPlacement, setPlacement: setMapPlacement } : null}>
+    <div className={`app-shell${isLivePult ? " app-shell-live" : ""}${isMapWorkspace ? " app-shell-maps" : ""}${panelsHidden ? " app-shell-panels-hidden" : ""}`} data-workspace={mode}>
       <div className="mobile-topbar">
         <button className="mobile-topbar-button" onClick={() => setNavOpen(true)} aria-label="Меню" aria-expanded={navOpen} aria-controls="app-nav">
           <NavIcon name="menu" />
@@ -663,7 +718,12 @@ export function AppShell() {
           onClick={() => setSearchOpen(false)}
         />
       )}
-      {isLivePult ? (
+      {isMapWorkspace ? (
+        <MapWorkspaceRail returnTo={returnTo.current} setRail={setMapRail} searchOpen={searchOpen} onSearch={() => {
+          if (window.matchMedia("(max-width: 900px)").matches) setSearchOpen((open) => !open);
+          else document.querySelector<HTMLInputElement>("#search-panel input")?.focus();
+        }} />
+      ) : isLivePult ? (
         <PreviewDock open={navOpen} />
       ) : userLoading ? (
         <nav id="app-nav" className={`app-nav${navOpen ? " open" : ""}`} aria-busy="true" aria-label="Загрузка навигации">
@@ -755,12 +815,13 @@ export function AppShell() {
       )}
       <main className={`app-content${userLoading ? "" : isPlayer ? "" : " has-player"}`}>
         {!userLoading && !isPlayer && <RehearsalStrip />}
-        {/* Крошки не рисуются на полноэкранном чарнике: у него своя полоса
-            с «назад» и именем, а вторая шапка сверху и есть та самая рамка
-            в рамке, ради ухода от которой лист съехал на свой маршрут. */}
+        {/* У листа персонажа своя полноэкранная полоса, у редактора карты —
+            крошки с названием карты. Общие крошки там дублировали бы шапку. */}
         {!userLoading &&
+          !isMapWorkspace &&
           !/^\/sessions\/\d+\/live\/panel\/\w+/.test(pathname) &&
-          !/^\/characters\/\d+\/sheet$/.test(pathname) && (
+          !/^\/characters\/\d+\/sheet$/.test(pathname) &&
+          !/^\/maps\/\d+$/.test(pathname) && (
           // На карточке сущности (EntityPage) крошки рисует сама карточка — с
           // именем, а не номером. Строка оболочки там прячется в CSS
           // (`.shell-crumbs`), иначе крошек две (F-50, решение 2026-09-18).
@@ -791,7 +852,8 @@ export function AppShell() {
         <Outlet />
       </main>
       <div id="search-panel" className={`search-panel-slot${searchOpen ? " open" : ""}`}>
-        <SearchPanel onNavigate={() => setSearchOpen(false)} />
+        {isMapWorkspace && <button type="button" className="map-workspace-search-close" aria-label="Закрыть поиск и мешок" onClick={() => setSearchOpen(false)}><NavIcon name="close" /></button>}
+        <SearchPanel workspace={isMapWorkspace} onNavigate={() => setSearchOpen(false)} />
       </div>
       <NavWidget />
       {/* Players never had a reason to control music — only the GM runs the
@@ -833,6 +895,7 @@ export function AppShell() {
         />
       )}
     </div>
+    </MapWorkspaceContext.Provider>
     </UndoDeleteProvider>
     </UnloadTargetsProvider>
     </SoundEngineProvider>

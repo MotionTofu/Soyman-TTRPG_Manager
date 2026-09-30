@@ -1,3 +1,4 @@
+import {ProjectWorkbooks} from "../components/workbooks/ProjectWorkbooks";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { RevealList } from "../components/RevealList";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -178,6 +179,7 @@ export function AdventureDetailPage() {
       }
     >
 
+      <ProjectWorkbooks type="adventure" id={arcId}/>
       {tab === "Обзор" && (
         <div className="stack">
           <div className="card stack">
@@ -613,7 +615,7 @@ function Milestones({ arc, campaignId }: { arc: StoryArcDetail; campaignId: numb
             <strong>{m.title}</strong>
             {m.scene_name && <span className="muted"> · сцена «{m.scene_name}»</span>}
             {m.description && (
-              <div className="muted">
+              <div className="muted reading-text">
                 <MentionText text={m.description} />
               </div>
             )}
@@ -717,7 +719,7 @@ function Secrets({ arc, campaignId }: { arc: StoryArcDetail; campaignId: number 
             <strong>{s.title}</strong>
             <span className="muted"> · {SECRET_KINDS.find((k) => k.key === s.kind)?.label}</span>
             {s.content && (
-              <div className="muted">
+              <div className="muted reading-text">
                 <MentionText text={s.content} />
               </div>
             )}

@@ -26,11 +26,14 @@ function isShortcutKey(e: KeyboardEvent<HTMLTextAreaElement>, letter: string): b
 }
 
 interface Props {
+  id?: string;
   value: string;
   onChange: (v: string) => void;
   insertRequest?: { key: number; text: string } | null;
   onInsertHandled?: (key: number) => void;
   rows?: number;
+  /** Отключает рост поля в редакторах с собственной прокруткой. */
+  autoGrow?: boolean;
   placeholder?: string;
   // Preselects the "Сеттинг" dropdown in the @-mention modal's "Создать
   // новую сущность" flow — pass it when the caller's own context has an
@@ -47,11 +50,13 @@ interface Props {
 // Picking (or creating) a result inserts a [[type@ключ|код|Подпись]] token —
 // rendered as a clickable link by <MentionText> in view mode.
 export const MentionTextarea = memo(function MentionTextarea({
+  id,
   value,
   onChange,
   insertRequest,
   onInsertHandled,
   rows = 5,
+  autoGrow = true,
   placeholder,
   defaultSettingId,
   onKeyDown,
@@ -92,7 +97,7 @@ export const MentionTextarea = memo(function MentionTextarea({
   // height="auto"+scrollHeight read on every keystroke is what made typing
   // in these fields noticeably laggy on statblocks with many open fields.
   useEffect(() => {
-    if (SUPPORTS_FIELD_SIZING) return;
+    if (!autoGrow || SUPPORTS_FIELD_SIZING) return;
     const el = textareaRef.current;
     if (!el) return;
     // Scheduled through the shared batcher (see textareaAutoResize.ts)
@@ -106,7 +111,7 @@ export const MentionTextarea = memo(function MentionTextarea({
     // write/read/write pass per frame instead.
     scheduleAutoResize(el);
     return () => cancelAutoResize(el);
-  }, [value]);
+  }, [value, autoGrow]);
 
   // Closes the formatting flyout (and any nested link submenu) on an
   // outside click or Escape — same pattern as ContextMenu.tsx.
@@ -529,6 +534,7 @@ export const MentionTextarea = memo(function MentionTextarea({
         )}
       </div>
       <textarea
+        id={id}
         ref={textareaRef}
         rows={rows}
         value={value}

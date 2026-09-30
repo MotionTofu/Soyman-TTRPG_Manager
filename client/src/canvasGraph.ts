@@ -575,7 +575,7 @@ const TYPE_LABELS_FULL: Record<string, string> = {
   community: "Сообщества",
   artifact: "Артефакты",
   resource: "Ресурсы",
-  mastering: "Мастерение",
+  mastering: "Библиотека",
   scene: "Сцены",
   adventure: "Приключения",
   compendium_entry: "Компендиум",

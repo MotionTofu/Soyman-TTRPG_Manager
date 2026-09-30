@@ -226,7 +226,7 @@ export function BeingEntityRowList<B extends SettingBeing>({
                   </div>
                 )}
                 {b.description ? (
-                  <MentionText text={b.description} />
+                  <div className="reading-text"><MentionText text={b.description} /></div>
                 ) : (
                   <span className="muted">Описания пока нет.</span>
                 )}

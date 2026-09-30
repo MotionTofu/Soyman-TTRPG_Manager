@@ -20,16 +20,16 @@ const PARAMS0 = JSON.stringify(P0);
 const MAP = { id: 42, grid: "square", width: 10, height: 10 } as unknown as MapFull;
 
 function deferred() {
-  let resolve!: () => void;
-  let reject!: () => void;
-  const promise = new Promise<void>((res, rej) => {
+  let resolve!: (value?: unknown) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<unknown>((res, rej) => {
     resolve = res;
     reject = rej;
   });
   return { promise, resolve, reject };
 }
 
-function setup() {
+function setup(unstableParams = false) {
   const defers: Array<ReturnType<typeof deferred>> = [];
   const save = vi.fn((_mapId: number, _body: unknown) => {
     const d = deferred();
@@ -51,7 +51,7 @@ function setup() {
   };
   const utils = renderHook(
     (p: typeof baseProps) =>
-      useMapAutosave(p as unknown as Parameters<typeof useMapAutosave>[0]),
+      useMapAutosave({ ...p, params: unstableParams ? { ...p.params } : p.params } as unknown as Parameters<typeof useMapAutosave>[0]),
     { initialProps: baseProps }
   );
   const show = (cellsV: number) =>
@@ -111,6 +111,83 @@ afterEach(() => {
 });
 
 describe("useMapAutosave (Этап Autosave)", () => {
+  it("equivalent freshly allocated params do not create a dirty-status render loop or postpone saves indefinitely", async () => {
+    const h = setup(true); loadAs(h); edit(h, 1);
+    expect(h.result.current.status.kind).toBe("dirty");
+    fire(); expect(h.save).toHaveBeenCalledTimes(1);
+    await act(async () => { h.defers[0].resolve({ revision: 1 }); });
+    expect(h.result.current.status.kind).toBe("saved");
+  });
+  it("flush bypasses debounce, drains newer edits in flight, and permits leaving only after the latest acknowledgement", async () => {
+    const h = setup(); loadAs(h); edit(h, 1);
+    let result!: Promise<boolean>;
+    act(() => { result = h.result.current.flush(); });
+    expect(h.save).toHaveBeenCalledTimes(1);
+    edit(h, 2);
+    await act(async () => { h.defers[0].resolve({ revision: 1 }); });
+    expect(h.save).toHaveBeenCalledTimes(2);
+    await act(async () => { h.defers[1].resolve({ revision: 2 }); });
+    expect(await result).toBe(true);
+    expect(h.result.current.hasPendingChanges()).toBe(false);
+  });
+  it("flush failure retains dirty state and returns false; an explicit retry can recover", async () => {
+    const h = setup(); loadAs(h); edit(h, 1);
+    let result!: Promise<boolean>;
+    act(() => { result = h.result.current.flush(); });
+    await act(async () => { h.defers[0].reject(new Error("offline")); });
+    expect(await result).toBe(false);
+    expect(h.result.current.hasPendingChanges()).toBe(true);
+    act(() => { result = h.result.current.flush(); });
+    await act(async () => { h.defers[1].resolve({ revision: 1 }); });
+    expect(await result).toBe(true);
+  });
+  it("flush cannot retry a revision conflict", async () => {
+    const h = setup(); loadAs(h); edit(h, 1);
+    let result!: Promise<boolean>;
+    act(() => { result = h.result.current.flush(); });
+    await act(async () => { h.defers[0].reject({ status: 409, payload: { code: "map-revision-conflict" } }); });
+    expect(await result).toBe(false);
+    expect(await h.result.current.flush()).toBe(false);
+    expect(h.save).toHaveBeenCalledTimes(1);
+  });
+  it("conditional saves advance revisions and conflict blocks all retries/edits", async () => {
+    const h = setup();
+    loadAs(h);
+    act(() => h.result.current.markLoaded("c0", PARAMS0, false, 3));
+    edit(h, 1);
+    fire();
+    expect(h.save.mock.calls[0][1]).toMatchObject({ expectedRevision: 3 });
+    await act(async () => h.defers[0].resolve({ revision: 4 }));
+    edit(h, 2);
+    fire();
+    expect(h.save.mock.calls[1][1]).toMatchObject({ expectedRevision: 4 });
+    edit(h, 3);
+    await act(async () => h.defers[1].reject({ status: 409, payload: { code: "map-revision-conflict" } }));
+    expect(h.result.current.status.kind).toBe("conflict");
+    expect(unloadPrevented()).toBe(true);
+    edit(h, 4);
+    fire();
+    act(() => h.result.current.retry());
+    expect(h.save).toHaveBeenCalledTimes(2);
+    expect(h.result.current.status.kind).toBe("conflict");
+  });
+  it("metadata waits for autosave and advances the same revision", async () => {
+    const h = setup();
+    loadAs(h);
+    act(() => h.result.current.markLoaded("c0", PARAMS0, false, 0));
+    edit(h, 1);
+    fire();
+    const metadata = vi.fn(async (revision: number | undefined) => ({ revision: (revision ?? 0) + 1 }));
+    let saving!: Promise<unknown>;
+    act(() => { saving = h.result.current.saveRecord(metadata); });
+    expect(metadata).not.toHaveBeenCalled();
+    edit(h, 2);
+    await act(async () => { h.defers[0].resolve({ revision: 1 }); await saving; });
+    expect(metadata).toHaveBeenCalledWith(1);
+    fire();
+    expect(h.save.mock.calls[1][1]).toMatchObject({ expectedRevision: 2, document: "c2" });
+    await act(async () => h.defers[1].resolve({ revision: 3 }));
+  });
   it("1. несколько изменений за <800ms → один save последнего", () => {
     const h = setup();
     loadAs(h);

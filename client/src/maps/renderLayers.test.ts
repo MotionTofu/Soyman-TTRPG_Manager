@@ -189,7 +189,80 @@ describe("exploration overlay", () => {
   });
 });
 
+describe("free roads and rivers", () => {
+  it("renders Bézier road segments as curves", () => {
+    const doc: MapDocumentV5 = { ...baseDoc(), layers: [{
+      id: "curves", name: "Curves", kind: "path", visible: true, locked: false, opacity: 1,
+      paths: [{ id: "curve", kind: "road", width: 0.22,
+        styleRef: { type: "builtin", key: "road" }, geometry: { type: "spline", nodes: [
+          { position: { x: 1, y: 1 }, out: { x: 1.5, y: 1 } },
+          { position: { x: 2, y: 2 }, in: { x: 1.5, y: 2 } },
+        ] } }],
+    }] };
+    expect(createV5RenderModel(doc).diagnostics).toEqual([]);
+    expect(renderCalls(doc).some((call) => call.startsWith("bezierCurveTo("))).toBe(true);
+  });
+
+  it("smoothly changes the drawn width between spline points", () => {
+    const doc: MapDocumentV5 = { ...baseDoc(), layers: [{
+      id: "paths", name: "Paths", kind: "path", visible: true, locked: false, opacity: 1,
+      paths: [{ id: "varying-road", kind: "road", width: 0.2,
+        styleRef: { type: "builtin", key: "road" }, geometry: { type: "spline", nodes: [
+          { position: { x: 1, y: 1 }, width: 0.2 },
+          { position: { x: 3, y: 1 }, width: 0.8 },
+        ] } }],
+    }] };
+    const calls = renderCalls(doc);
+    const widths = calls.filter((call) => call.startsWith("set:lineWidth="))
+      .map((call) => Number(call.slice("set:lineWidth=".length)));
+    expect(widths.some((width) => width > 5 && width < 19)).toBe(true);
+    expect(widths.some((width) => width > 17)).toBe(true);
+  });
+
+  it("renders world-coordinate lines with the chosen width and keeps paths on their layer", () => {
+    const doc: MapDocumentV5 = { ...baseDoc(), layers: [{
+      id: "free-paths", name: "Paths", kind: "path", visible: true, locked: false, opacity: 1,
+      paths: [
+        { id: "road", kind: "road", geometry: { type: "spline", nodes: [
+          { position: { x: 1.2, y: 1.3 } }, { position: { x: 2.2, y: 1.8 } },
+        ] }, width: 0.3, styleRef: { type: "builtin", key: "road" } },
+        { id: "river", kind: "river", geometry: { type: "spline", nodes: [
+          { position: { x: 3.2, y: 2.3 } }, { position: { x: 4.2, y: 2.8 } },
+        ] }, width: 0.22, styleRef: { type: "builtin", key: "river" } },
+      ],
+    }] };
+    const { diagnostics } = createV5RenderModel(doc);
+    expect(diagnostics).toEqual([]);
+    const calls = renderCalls(doc);
+    expect(calls).toContain("moveTo(38.8000000000,41.2000000000)");
+    expect(calls).toContain("lineTo(62.8000000000,53.2000000000)");
+    expect(calls).toContain("set:lineWidth=7.20000000000");
+    expect(calls).toContain(`set:strokeStyle=${q("#4E7E96")}`);
+  });
+});
+
 describe("terrain mask overlay", () => {
+  it("covers detailed terrain on hidden player cells", () => {
+    const created = createTerrainMaskLayer(baseDoc(), { id: "mask", name: "Mask" });
+    if (!created.ok) throw new Error("fixture failed");
+    const painted = paintTerrainMask(created.document, "mask", 1.25, 1.25, 0.2,
+      { type: "builtin", key: "terrain/forest" }, () => "chunk");
+    if (!painted.ok) throw new Error("fixture failed");
+    const doc: MapDocumentV5 = {
+      ...painted.document,
+      exploration: { enabled: true, revealedCells: [] },
+    };
+    const master = renderCalls(doc);
+    const player = renderCalls(projectMapDocumentForPlayer(doc), { playerView: true });
+    const terrainIndex = master.indexOf(`set:fillStyle=${q(MAP_TERRAIN_FILL.forest)}`);
+    const fogIndex = player.indexOf('set:fillStyle="#17252A"');
+    expect(terrainIndex).toBeGreaterThan(-1);
+    expect(player).not.toContain(`set:fillStyle=${q(MAP_TERRAIN_FILL.forest)}`);
+    expect(fogIndex).toBeGreaterThan(-1);
+    expect(master).not.toContain('set:fillStyle="#17252A"');
+    expect(player.slice(fogIndex).filter((call) => call === "fill()")).toHaveLength(64);
+  });
+
   it("uses a cached, smoothed bitmap in a browser canvas", () => {
     const created = createTerrainMaskLayer(baseDoc(), { id: "mask", name: "Mask" });
     if (!created.ok) throw new Error("fixture failed");

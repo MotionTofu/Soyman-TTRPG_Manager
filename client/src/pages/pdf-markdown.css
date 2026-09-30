@@ -7,7 +7,7 @@
 .pdf-markdown__note { padding: 18px 0; border-bottom: 1px solid var(--border, #9995); }
 .pdf-markdown__note h2 { margin: 0 0 12px; }
 .pdf-markdown__note blockquote { margin: 0 0 12px; padding: 8px 16px; border-left: 3px solid currentColor; white-space: pre-wrap; opacity: .8; }
-.pdf-markdown__note-body { white-space: pre-wrap; margin-bottom: 12px; }
+.pdf-markdown__note-body { white-space: pre-wrap; margin-bottom: 12px; font-size: var(--fs-body); line-height: 1.6; }
 .pdf-markdown__source { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 .markdown-resource .pdf-markdown__body { max-width: 1000px; }
 .markdown-resource .mention-textarea-wrap { width: 100%; }

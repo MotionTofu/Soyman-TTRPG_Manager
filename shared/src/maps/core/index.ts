@@ -14,3 +14,4 @@ export * from "./serialize";
 export * from "./parse";
 export * from "./playerProjection";
 export * from "./storedDocument";
+export * from "./v6";

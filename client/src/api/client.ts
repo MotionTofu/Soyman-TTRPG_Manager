@@ -89,11 +89,11 @@ function announceUnaddressedWrite(): void {
  * (data/hooks.ts): он шлёт сигнал сам и с адресатом, а безадресный сигнал
  * транспорта заставил бы другое окно перечитать всё.
  */
-type RequestOptions = RequestInit & { timeoutMs?: number; broadcast?: boolean };
+type RequestOptions = RequestInit & { timeoutMs?: number; broadcast?: boolean; responseType?: "text" };
 
 async function request<T>(path: string, options?: RequestOptions): Promise<T> {
   const method = (options?.method ?? "GET").toUpperCase();
-  const { timeoutMs: rawTimeout, broadcast = true, ...rest } = (options ?? {}) as RequestOptions;
+  const { timeoutMs: rawTimeout, broadcast = true, responseType, ...rest } = (options ?? {}) as RequestOptions;
   const timeoutMs = rawTimeout ?? 10000;
   const controller = new AbortController();
   let timedOut = false;
@@ -169,10 +169,11 @@ async function request<T>(path: string, options?: RequestOptions): Promise<T> {
   // Любая удачная правка — повод остальным окнам приложения обновиться: они
   // работают с той же базой, но своей копией уже загруженных данных.
   if (method !== "GET" && broadcast) announceUnaddressedWrite();
-  return withFileTokens(await res.json());
+  return responseType === "text" ? await res.text() as T : withFileTokens(await res.json());
 }
 
 export const api = {
+  getText: (path: string, options?: RequestOptions) => request<string>(path, { ...options, responseType: "text" }),
   get: <T>(path: string, options?: RequestOptions) => request<T>(path, options),
   post: <T>(path: string, body?: unknown, options?: RequestOptions) =>
     request<T>(path, {

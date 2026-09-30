@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { resourceQuery, useAction, useAfterWrite, useResource, write } from "../data/hooks";
 import { labelled } from "../data/notices";
 import { useCurrentUser } from "../api/currentUser";
@@ -11,6 +11,7 @@ import { NavIcon } from "../components/NavIcons";
 import { SectionBackground } from "../components/SectionBackground";
 import { useConfirm } from "../hooks/useConfirm";
 import { ListPage } from "../components/ListPage";
+import { MAP_VERSION_HEADER } from "@shared/maps/core";
 import {
   MAP_GRID_LABELS,
   MAP_SCALE_LABELS,
@@ -53,7 +54,7 @@ function MapTile({ map, canEdit }: { map: MapSummary; canEdit: boolean }) {
     });
     if (!ok) return;
     // При отказе карта остаётся на месте, плашка предлагает повторить.
-    await run(labelled("Карта не убрана в архив", () => write.del(`/maps/${map.id}`)), {
+    await run(labelled("Карта не убрана в архив", () => write.del(`/maps/${map.id}`, map.document_version === 6 ? { headers: { [MAP_VERSION_HEADER]: "6" } } : undefined)), {
       // Только список: миниатюру удалённой карты перечитывать незачем (404).
       affects: [{ kind: "map", id: map.id, card: true }],
     });
@@ -61,7 +62,7 @@ function MapTile({ map, canEdit }: { map: MapSummary; canEdit: boolean }) {
 
   return (
     <div className="card campaign-tile">
-      <Link to={`/maps/${map.id}`} className="campaign-tile-cover">
+      <Link to={canEdit ? `/maps/${map.id}/workspace` : `/maps/${map.id}`} className="campaign-tile-cover">
         {thumb ? (
           <div
             className="map-tile-art"
@@ -79,10 +80,13 @@ function MapTile({ map, canEdit }: { map: MapSummary; canEdit: boolean }) {
         <h3 className="campaign-tile-name">{map.name}</h3>
       </Link>
       <div className="campaign-tile-meta">
+        {canEdit && <Link to={`/maps/${map.id}/workspace`}>Открыть редактор</Link>}
+        {canEdit && map.document_version !== 6 && <Link to={`/maps/${map.id}`}>Классический редактор</Link>}
         <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
           <span className="badge tag">{MAP_GRID_LABELS[map.grid]}</span>
           <span className="badge tag">{MAP_SCALE_LABELS[map.scale]}</span>
           {map.player_visible === 1 && <span className="badge tag">видят игроки</span>}
+          {map.document_unsupported && <span className="badge tag">{canEdit && map.document_version === 6 ? "новый редактор" : "формат пока не поддерживается"}</span>}
         </div>
         <div
           className="muted row"
@@ -118,6 +122,8 @@ export function MapsListPage() {
   const { user } = useCurrentUser();
   const canEdit = user?.role !== "player";
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const createRequested = searchParams.get("create") === "1";
 
   const afterWrite = useAfterWrite();
   const mapsState = useResource<MapSummary[]>("/maps");
@@ -141,14 +147,14 @@ export function MapsListPage() {
   // Миниатюры — отдельными запросами (в списке их нет: тяжёлые), под путём с
   // датой правки: не изменившаяся карта берёт миниатюру из кэша.
   const thumbs = useQueries({
-    queries: listed.map((m) =>
-      resourceQuery<{ thumbnail: string | null }>(thumbPath(m), { staleMs: Infinity, gcMs: 30 * 60_000 })
-    ),
+    queries: listed.map((m) => (
+      { ...resourceQuery<{ thumbnail: string | null }>(thumbPath(m), { staleMs: Infinity, gcMs: 30 * 60_000 }), enabled: !m.document_unsupported }
+    )),
   });
   const maps = useMemo(
     () => listed.map((m, i) => ({ ...m, thumbnail: thumbs[i]?.data?.thumbnail ?? null })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [listed, ...thumbs.map((t) => t.data)]
+    [listed, thumbs]
   );
 
   const filtered = useMemo(() => {
@@ -179,6 +185,16 @@ export function MapsListPage() {
     setCreating(true);
   }
 
+  useEffect(() => {
+    if (!canEdit || !createRequested) return;
+    openCreate();
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete("create");
+      return next;
+    }, { replace: true });
+  }, [canEdit, createRequested, setSearchParams]);
+
   async function quickDraft() {
     setCreateError(null);
     try {
@@ -192,7 +208,7 @@ export function MapsListPage() {
       });
       // Новая карта — только список: миниатюры остальных не задеты.
       afterWrite([{ kind: "map", card: true }]);
-      navigate(`/maps/${created.id}`);
+      navigate(`/maps/${created.id}/workspace`);
     } catch (e) {
       setCreateError(translateMapError(e));
     }
@@ -221,7 +237,7 @@ export function MapsListPage() {
       // Новая карта — только список: миниатюры остальных не задеты.
       afterWrite([{ kind: "map", card: true }]);
       setCreating(false);
-      navigate(`/maps/${created.id}`);
+      navigate(`/maps/${created.id}/workspace`);
     } catch (e) {
       setCreateError(translateMapError(e));
     }
@@ -278,7 +294,7 @@ export function MapsListPage() {
       <SectionBackground />
       <ListPage
         headingSection="map"
-        title="Карты"
+        title="Редактор карт"
         groups={[]}
         allLabel={null}
         ungroupedLabel={null}

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // Круглый регулятор громкости со стопом канала в середине.
 //
@@ -51,9 +51,19 @@ export function Knob({
   stopLabel?: string;
 }) {
   const [dragging, setDragging] = useState(false);
+  const [draft, setDraft] = useState<number | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
+  const releaseTimer = useRef<number | null>(null);
 
-  const v = Math.max(0, Math.min(1, value));
+  const v = Math.max(0, Math.min(1, draft ?? value));
+
+  useEffect(() => {
+    if (!dragging && draft !== null && Math.abs(value - draft) < 0.001) setDraft(null);
+  }, [value, draft, dragging]);
+
+  useEffect(() => () => {
+    if (releaseTimer.current !== null) window.clearTimeout(releaseTimer.current);
+  }, []);
   const angle = ((START + SWEEP * v) * Math.PI) / 180;
   const at = (r: number, fn: (n: number) => number) => Math.round((32 + r * fn(angle)) * 10) / 10;
 
@@ -73,13 +83,20 @@ export function Knob({
 
   function start(e: React.PointerEvent<HTMLDivElement>) {
     e.preventDefault();
+    if (releaseTimer.current !== null) window.clearTimeout(releaseTimer.current);
     setDragging(true);
-    onChange(valueFromPointer(e.clientX, e.clientY));
-    const move = (ev: PointerEvent) => onChange(valueFromPointer(ev.clientX, ev.clientY));
+    const update = (clientX: number, clientY: number) => {
+      const next = valueFromPointer(clientX, clientY);
+      setDraft(next);
+      onChange(next);
+    };
+    update(e.clientX, e.clientY);
+    const move = (ev: PointerEvent) => update(ev.clientX, ev.clientY);
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       setDragging(false);
+      releaseTimer.current = window.setTimeout(() => setDraft(null), 1000);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);

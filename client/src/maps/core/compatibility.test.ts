@@ -5,6 +5,9 @@ import { FIXTURES, parseFixture } from "./fixtures";
 import { migrateLegacyMap } from "./migrateLegacy";
 import type { MapDocumentV5 } from "./types";
 import { assessCurrentEditorCompatibility } from "./compatibility";
+import { createTerrainMaskLayer } from "./mutations/layers";
+import { createSplinePath } from "./mutations/paths";
+import { setExplorationEnabled } from "./mutations/exploration";
 
 function squareDoc(): MapDocumentV5 {
   return migrateLegacyMap({
@@ -20,6 +23,29 @@ describe("assessCurrentEditorCompatibility", () => {
     const c = assessCurrentEditorCompatibility(squareDoc());
     expect(c.compatible).toBe(true);
     expect(c.reasons).toEqual([]);
+  });
+
+  it("accepts free roads alongside existing cell roads", () => {
+    const created = createSplinePath(squareDoc(), "lyr-road", {
+      id: "free-road", kind: "road", width: 0.22,
+      styleRef: { type: "builtin", key: "road" },
+      nodes: [{ position: { x: 1.2, y: 1.3 } }, { position: { x: 2.8, y: 2.7 } }],
+    });
+    if (!created.ok) throw new Error("fixture failed");
+    expect(assessCurrentEditorCompatibility(created.document)).toEqual({ compatible: true, reasons: [] });
+  });
+
+  it("allows fog together with detailed terrain", () => {
+    const created = createTerrainMaskLayer(squareDoc(), { id: "mask-fog", name: "Детальный рельеф" });
+    if (!created.ok) throw new Error("fixture failed");
+    const fog = setExplorationEnabled(created.document, true);
+    if (!fog.ok) throw new Error("fixture failed");
+    expect(assessCurrentEditorCompatibility(fog.document)).toEqual({ compatible: true, reasons: [] });
+    const exotic = { ...fog.document, layers: fog.document.layers.map((layer) =>
+      layer.id === "mask-fog" && layer.kind === "terrain"
+        ? { ...layer, defaultMaterial: { type: "builtin" as const, key: "terrain/forest" } }
+        : layer) };
+    expect(assessCurrentEditorCompatibility(exotic).reasons.map((reason) => reason.code)).toContain("exploration-mask-default");
   });
 
   it("rejects V5 grid geometry that the current canvas cannot position", () => {
@@ -63,7 +89,7 @@ describe("assessCurrentEditorCompatibility", () => {
     expect(assessCurrentEditorCompatibility(unknown).reasons.map((r) => r.code)).toContain("unsupported-terrain-mask");
   });
 
-  it("spline / objects / scatter → incompatible", () => {
+  it("unknown spline kind / objects / scatter → incompatible", () => {
     const doc = squareDoc();
     const layers = doc.layers.map((l) => {
       if (l.id === "lyr-road" && l.kind === "path") {
@@ -115,7 +141,7 @@ describe("assessCurrentEditorCompatibility", () => {
     const c = assessCurrentEditorCompatibility({ ...doc, layers });
     expect(c.compatible).toBe(false);
     const codes = c.reasons.map((r) => r.code);
-    expect(codes).toContain("unsupported-spline-path");
+    expect(codes).toContain("unsupported-path-kind");
     expect(codes).toContain("unsupported-object-layer");
     expect(codes).toContain("unsupported-scatter-layer");
   });

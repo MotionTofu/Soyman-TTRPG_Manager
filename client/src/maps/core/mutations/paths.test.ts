@@ -6,12 +6,16 @@ import { FIXTURES, parseFixture } from "../fixtures";
 import { migrateLegacyMap } from "../migrateLegacy";
 import type { MapDocumentV5, PathLayer } from "../types";
 import { validateMapDocument } from "../validate";
+import { serializeMapDocument } from "../serialize";
 import type { MutationResult } from "./types";
 import {
   addPathCells,
   createCellNetworkPath,
+  createSplinePath,
+  deletePath,
   removePathCells,
   replacePathCells,
+  updateSplinePath,
 } from "./paths";
 
 const ROAD = "legacy-path-road";
@@ -53,6 +57,115 @@ function expectErr(r: MutationResult, codePart: string): void {
 }
 
 describe("path cells add/remove/replace", () => {
+  it("creates and deletes a free road without changing legacy cells", () => {
+    const doc = squareDoc();
+    const before = roadCells(doc);
+    const created = expectOk(createSplinePath(doc, "lyr-road", {
+      id: "free-road", kind: "road", styleRef: ROAD_STYLE, width: 0.22,
+      nodes: [{ position: { x: 1.2, y: 1.3 } }, { position: { x: 2.8, y: 2.7 } }],
+    }));
+    expect(roadLayer(created).paths.find((path) => path.id === "free-road")?.geometry.type).toBe("spline");
+    expect(roadCells(created)).toEqual(before);
+    const deleted = expectOk(deletePath(created, "free-road"));
+    expect(roadLayer(deleted).paths.find((path) => path.id === "free-road")).toBeUndefined();
+    expect(roadCells(deleted)).toEqual(before);
+  });
+  it("updates a free line in place without touching cell roads", () => {
+    const base = squareDoc();
+    const created = expectOk(createSplinePath(base, "lyr-road", {
+      id: "editable-road", kind: "road", styleRef: ROAD_STYLE, width: 0.22,
+      nodes: [{ position: { x: 1.2, y: 1.3 } }, { position: { x: 2.8, y: 2.7 } }],
+    }));
+    const updated = expectOk(updateSplinePath(created, "editable-road", {
+      width: 0.42, nodes: [{ position: { x: 1.2, y: 1.3 } }, { position: { x: 3.1, y: 2.4 } }],
+    }));
+    const path = roadLayer(updated).paths.find((item) => item.id === "editable-road")!;
+    expect(path.width).toBe(0.42);
+    expect(path.geometry.type === "spline" ? path.geometry.nodes[1].position : null).toEqual({ x: 3.1, y: 2.4 });
+    expect(roadCells(updated)).toEqual(roadCells(base));
+    const unchanged = updateSplinePath(updated, "editable-road", { width: 0.42 });
+    expect(unchanged.ok && unchanged.changed).toBe(false);
+    expectErr(updateSplinePath(updated, ROAD, { width: 0.5 }), "not-editable");
+  });
+  it("stores and updates Bézier handles without losing curve geometry", () => {
+    const base = squareDoc();
+    const nodes = [
+      { position: { x: 1, y: 1 }, out: { x: 1.5, y: 1 }, width: 0.2 },
+      { position: { x: 2, y: 2 }, in: { x: 1.5, y: 2 }, width: 0.6 },
+    ];
+    const created = expectOk(createSplinePath(base, "lyr-road", {
+      id: "curve", kind: "road", styleRef: ROAD_STYLE, width: 0.22, nodes,
+    }));
+    nodes[0].out!.x = 9;
+    const stored = roadLayer(created).paths.find((path) => path.id === "curve")!;
+    expect(stored.geometry.type === "spline" ? stored.geometry.nodes[0].out?.x : null).toBe(1.5);
+    const updated = expectOk(updateSplinePath(created, "curve", { width: 0.4 }));
+    const result = roadLayer(updated).paths.find((path) => path.id === "curve")!;
+    expect(result.geometry.type === "spline" ? result.geometry.nodes[0].out?.x : null).toBe(1.5);
+    expect(result.geometry.type === "spline" ? result.geometry.nodes[1].width : null).toBe(0.6);
+    expectErr(updateSplinePath(updated, "curve", { nodes: [
+      { position: { x: 1, y: 1 }, width: 0 },
+      { position: { x: 2, y: 2 } },
+    ] }), "bad-nodes");
+  });
+  it("keeps a branch joined when the parent point moves or gains points at its start", () => {
+    const parent = expectOk(createSplinePath(squareDoc(), "lyr-road", {
+      id: "parent", kind: "road", styleRef: ROAD_STYLE, width: 0.2,
+      nodes: [{ position: { x: 1, y: 1 }, width: 0.2 },
+        { position: { x: 3, y: 1 }, width: 0.4 }],
+    }));
+    const branched = expectOk(createSplinePath(parent, "lyr-road", {
+      id: "branch", kind: "road", styleRef: ROAD_STYLE, width: 0.2,
+      branchFrom: { pathId: "parent", nodeIndex: 1 },
+      nodes: [{ position: { x: 3, y: 1 }, out: { x: 3, y: 1.4 }, width: 0.4 },
+        { position: { x: 3, y: 3 }, in: { x: 3, y: 2.6 }, width: 0.4 }],
+    }));
+    expect(serializeMapDocument(branched)).toContain('"branchFrom":{"pathId":"parent","nodeIndex":1}');
+    const nested = expectOk(createSplinePath(branched, "lyr-road", {
+      id: "nested-branch", kind: "road", styleRef: ROAD_STYLE, width: 0.2,
+      branchFrom: { pathId: "branch", nodeIndex: 0 },
+      nodes: [{ position: { x: 3, y: 1 }, width: 0.4 },
+        { position: { x: 4, y: 2 }, width: 0.4 }],
+    }));
+    expectErr(createSplinePath(parent, "lyr-road", {
+      id: "bad-branch", kind: "road", styleRef: ROAD_STYLE, width: 0.2,
+      branchFrom: { pathId: "parent", nodeIndex: 1 },
+      nodes: [{ position: { x: 2, y: 1 } }, { position: { x: 3, y: 3 } }],
+    }), "bad-branch");
+    const moved = expectOk(updateSplinePath(nested, "parent", { nodes: [
+      { position: { x: 1, y: 1 }, width: 0.2 },
+      { position: { x: 4, y: 2 }, width: 0.6 },
+    ] }));
+    let child = roadLayer(moved).paths.find((path) => path.id === "branch")!;
+    if (child.geometry.type !== "spline") throw new Error("expected spline");
+    expect(child.geometry.nodes[0]).toMatchObject({
+      position: { x: 4, y: 2 }, out: { x: 4, y: 2.4 }, width: 0.6,
+    });
+    const grandchild = roadLayer(moved).paths.find((path) => path.id === "nested-branch")!;
+    expect(grandchild.geometry.type === "spline" ? grandchild.geometry.nodes[0].position : null)
+      .toEqual({ x: 4, y: 2 });
+    const prepended = expectOk(updateSplinePath(moved, "parent", {
+      prependCount: 1, nodes: [{ position: { x: 0.5, y: 0.5 }, width: 0.2 },
+        { position: { x: 1, y: 1 }, width: 0.2 },
+        { position: { x: 4, y: 2 }, width: 0.6 }],
+    }));
+    child = roadLayer(prepended).paths.find((path) => path.id === "branch")!;
+    expect(child.branchFrom).toEqual({ pathId: "parent", nodeIndex: 2 });
+    const inserted = expectOk(updateSplinePath(prepended, "parent", {
+      insertedAt: { index: 1, count: 1 },
+      nodes: [{ position: { x: 0.5, y: 0.5 }, width: 0.2 },
+        { position: { x: 0.75, y: 0.75 }, width: 0.2 },
+        { position: { x: 1, y: 1 }, width: 0.2 },
+        { position: { x: 4, y: 2 }, width: 0.6 }],
+    }));
+    expect(roadLayer(inserted).paths.find((path) => path.id === "branch")?.branchFrom)
+      .toEqual({ pathId: "parent", nodeIndex: 3 });
+    const detached = expectOk(deletePath(inserted, "parent"));
+    expect(roadLayer(detached).paths.find((path) => path.id === "branch")?.branchFrom)
+      .toBeUndefined();
+    expect(roadLayer(detached).paths.find((path) => path.id === "nested-branch")?.branchFrom)
+      .toEqual({ pathId: "branch", nodeIndex: 0 });
+  });
   it("add road cell (sorted, valid)", () => {
     const doc = squareDoc();
     const next = expectOk(addPathCells(doc, ROAD, [{ x: 3, y: 2 }]));

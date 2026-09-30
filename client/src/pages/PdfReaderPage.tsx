@@ -11,6 +11,7 @@ import { PdfNotesPanel } from "./PdfNotesPanel";
 import { PdfEntityPanel, type PdfEntitySource } from "./PdfEntityPanel";
 import { capturePdfSelection, DEFAULT_PDF_PREFERENCES, type PdfNote, type PdfNoteDraft, type PdfReaderPreferences } from "./pdfNotes";
 import "./pdf-reader.css";
+import {FileBookControls} from "../components/mastering/FileBookControls";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -55,7 +56,7 @@ export function PdfReaderPage() {
   const { id } = useParams();
   const location = useLocation();
   const from = (location.state as { from?: unknown } | null)?.from;
-  const returnTo = typeof from === "string" && from.startsWith("/") && !from.startsWith("//") ? from : "/resources";
+  const returnTo = typeof from === "string" && from.startsWith("/") && !from.startsWith("//") ? from : "/mastering";
   const { data: resource, loading, error: resourceError } = useResource<Resource>(id ? `/resources/${id}` : null);
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<HTMLDivElement>(null);
@@ -77,6 +78,7 @@ export function PdfReaderPage() {
   const [notes, setNotes] = useState<PdfNote[]>([]);
   const [preferences, setPreferences] = useState<PdfReaderPreferences>(DEFAULT_PDF_PREFERENCES);
   const preferencesRef = useRef(preferences);
+  const notesOpenedFor=useRef<string|undefined>(undefined);
   const preferenceSaveRef = useRef(Promise.resolve());
   const [notesError, setNotesError] = useState("");
   const [selectionMenu, setSelectionMenu] = useState<SelectionMenu | null>(null);
@@ -109,8 +111,8 @@ export function PdfReaderPage() {
   }, [ready, pageCount, location.search]);
   useEffect(() => {
     if (!preferencesQuery.data) return;
-    preferencesRef.current = preferencesQuery.data;
-    setPreferences(preferencesQuery.data);
+    const next=notesOpenedFor.current!==id&&new URLSearchParams(location.search).get("notes")==="1"?{...preferencesQuery.data,notes_collapsed:false}:preferencesQuery.data;
+    notesOpenedFor.current=id;preferencesRef.current=next;setPreferences(next);
   }, [preferencesQuery.data]);
 
   useEffect(() => {
@@ -420,6 +422,7 @@ export function PdfReaderPage() {
   return (
     <section className="pdf-reader" aria-label={`Читалка: ${resource.name}`}>
       <header className="pdf-reader__toolbar">
+        <FileBookControls page={page} ready={ready} onRestore={value=>{if(Number.isInteger(value)&&value>0&&value<=pageCount&&readerRef.current?.viewer)readerRef.current.viewer.currentPageNumber=value;}}/>
         <Link to={returnTo}>← Назад</Link>
         <strong className="pdf-reader__title" title={resource.name}>{resource.name}</strong>
         <div className="pdf-reader__controls">

@@ -1,0 +1,9 @@
+.library-departments { flex-wrap: wrap; }
+.library-room-intro { padding: var(--sp-6); border: var(--card-border-width, 1px) solid var(--line); background: var(--paper-2); }
+.library-room-intro h2, .library-all-label { font-size: var(--fs-h2); }
+.library-note-badge { width: 100%; font-size: var(--fs-meta); }
+.library-book-settings { width: 100%; font-size: var(--fs-meta); display: flex; align-items: center; justify-content: center; gap: var(--sp-4); }
+.library-file-controls { display: flex; align-items: center; gap: var(--sp-4); font-size: var(--fs-meta); }
+.library-placement-list { display: flex; flex-wrap: wrap; gap: var(--sp-4); margin-top: var(--sp-6); }
+.library-placement-list button, .library-department-settings { font-size: var(--fs-meta); }
+.library-gallery-preview img { width: 160px; height: 120px; object-fit: contain; }

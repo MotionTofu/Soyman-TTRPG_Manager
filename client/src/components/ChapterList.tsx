@@ -317,7 +317,9 @@ function ChapterCard<T extends ChapterLike>({
                   </label>
                 </div>
               )}
-              <MentionTextarea value={content} onChange={setContent} rows={8} defaultSettingId={defaultSettingId} />
+              <div className="reading-text">
+                <MentionTextarea value={content} onChange={setContent} rows={8} defaultSettingId={defaultSettingId} />
+              </div>
               <div className="row">
                 <button className="primary" onClick={save}>
                   Сохранить
@@ -327,7 +329,7 @@ function ChapterCard<T extends ChapterLike>({
             </>
           ) : (
             <>
-              <div style={{ whiteSpace: "pre-wrap" }}>
+              <div className="reading-text" style={{ whiteSpace: "pre-wrap" }}>
                 <MentionText text={chapter.content} />
               </div>
               <div className="row">

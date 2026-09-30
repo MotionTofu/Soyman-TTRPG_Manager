@@ -48,6 +48,8 @@ export function readEntity<T>(kind: EntityKind, id: number): Promise<T> {
  * кнопке. Результат нужен один раз и сразу, держать его в кэше незачем, а
  * такой запрос бывает долгим — `timeoutMs` длиннее обычного.
  */
-export function readOnce<T>(path: string, options?: { timeoutMs?: number; signal?: AbortSignal }): Promise<T> {
+export function readOnce<T>(path: string, options?: { timeoutMs?: number; signal?: AbortSignal; headers?: Record<string, string> }): Promise<T> {
   return api.get<T>(path, options);
 }
+/** Recovery downloads preserve the original text rather than parsing JSON. */
+export function readTextOnce(path: string): Promise<string> { return api.getText(path); }

@@ -80,6 +80,9 @@ function setup(overrides: Record<string, unknown> = {}) {
     selection,
     geom: { ...GEOM },
     tool: "brush",
+    freePathMode: false,
+    freePathEditMode: false,
+    selectedFreePathId: null as string | null,
     canEdit: true,
     wallMode: false,
     wallDraft: null,
@@ -87,6 +90,12 @@ function setup(overrides: Record<string, unknown> = {}) {
     setHover: vi.fn(),
     setRectPreview: vi.fn(),
     onFogCell: vi.fn(() => true),
+    onFreePathPreview: vi.fn(),
+    onFreePathBegin: vi.fn(() => true),
+    onFreePathCommit: vi.fn(),
+    onFreePathSelect: vi.fn(),
+    onFreePathEditPreview: vi.fn(),
+    onFreePathEditCommit: vi.fn(),
     tools,
     ...overrides,
   };
@@ -161,6 +170,163 @@ function up(h: ReturnType<typeof setup>, patch: Record<string, unknown> = {}) {
 }
 
 describe("useMapInput: mouse", () => {
+  it("selects a free road, drags its handle and commits one edit", () => {
+    const nodes = [1, 2, 3].map((x) => ({ position: { x, y: 2 } }));
+    const documentRef = { current: { layers: [{ kind: "path", visible: true, locked: false,
+      paths: [{ id: "free-road", kind: "road", width: 0.22, geometry: { type: "spline", nodes } }] }] } };
+    const h = setup({ tool: "road", freePathMode: true, freePathEditMode: true, documentRef });
+    down(h, { clientX: 1.5, clientY: 2 });
+    expect(h.props.onFreePathSelect).toHaveBeenLastCalledWith("free-road", null,
+      expect.objectContaining({ segmentIndex: 0, point: { x: 1.5, y: 2 } }));
+    expect(h.props.onFreePathEditCommit).not.toHaveBeenCalled();
+    h.rerender({ selectedFreePathId: "free-road" });
+    down(h, { clientX: 2, clientY: 2 });
+    move(h, { clientX: 2, clientY: 2.5 });
+    expect(h.props.onFreePathEditPreview).toHaveBeenLastCalledWith(expect.objectContaining({
+      pathId: "free-road", nodes: expect.arrayContaining([{ position: { x: 2, y: 2.5 } }]),
+    }));
+    up(h, { clientX: 2, clientY: 2.5 });
+    expect(h.props.onFreePathEditCommit).toHaveBeenCalledTimes(1);
+    expect(h.history.beginStroke).not.toHaveBeenCalled();
+    expect(h.tools.paint.paintAt).not.toHaveBeenCalled();
+  });
+
+  it("drags a spline whisker and mirrors the opposite whisker", () => {
+    const nodes = [
+      { position: { x: 1, y: 2 }, out: { x: 1.3, y: 2 } },
+      { position: { x: 2, y: 2 }, in: { x: 1.5, y: 2 }, out: { x: 2.5, y: 2 } },
+      { position: { x: 3, y: 2 }, in: { x: 2.7, y: 2 } },
+    ];
+    const documentRef = { current: { layers: [{ kind: "path", visible: true, locked: false,
+      paths: [{ id: "free-road", kind: "road", width: 0.22, geometry: { type: "spline", nodes } }] }] } };
+    const h = setup({ tool: "road", freePathMode: true, freePathEditMode: true,
+      selectedFreePathId: "free-road", documentRef });
+    down(h, { clientX: 2.5, clientY: 2 });
+    expect(h.props.onFreePathSelect).toHaveBeenLastCalledWith("free-road", 1);
+    move(h, { clientX: 2.5, clientY: 2.4 });
+    expect(h.props.onFreePathEditPreview).toHaveBeenLastCalledWith(expect.objectContaining({
+      nodes: expect.arrayContaining([expect.objectContaining({
+        position: { x: 2, y: 2 }, out: { x: 2.5, y: 2.4 }, in: { x: 1.5, y: 1.6 },
+      })]),
+    }));
+    up(h, { clientX: 2.5, clientY: 2.4 });
+    expect(h.props.onFreePathEditCommit).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels a dragged free line without committing it", () => {
+    const nodes = [1, 2, 3].map((x) => ({ position: { x, y: 2 } }));
+    const documentRef = { current: { layers: [{ kind: "path", visible: true, locked: false,
+      paths: [{ id: "free-road", kind: "road", width: 0.22, geometry: { type: "spline", nodes } }] }] } };
+    const h = setup({ tool: "road", freePathMode: true, freePathEditMode: true,
+      selectedFreePathId: "free-road", documentRef });
+    down(h, { clientX: 2, clientY: 2 });
+    move(h, { clientX: 2, clientY: 2.5 });
+    act(() => h.result.current.onPointerCancel());
+    expect(h.props.onFreePathEditPreview).toHaveBeenLastCalledWith(null);
+    expect(h.props.onFreePathEditCommit).not.toHaveBeenCalled();
+  });
+
+  it("строит дорогу опорными точками и завершает отдельной командой", () => {
+    const h = setup({ tool: "road", freePathMode: true });
+    down(h, { clientX: 1.2, clientY: 1.3 });
+    expect(h.props.onFreePathBegin).toHaveBeenCalledTimes(1);
+    expect(h.props.onFreePathBegin).toHaveBeenCalledWith("road");
+    move(h, { clientX: 1.6, clientY: 1.5 });
+    expect(h.props.onFreePathPreview).toHaveBeenLastCalledWith({
+      anchors: [{ x: 1.2, y: 1.3 }], hover: { x: 1.6, y: 1.5 },
+    });
+    up(h, { clientX: 1.6, clientY: 1.5 });
+    expect(h.props.onFreePathCommit).not.toHaveBeenCalled();
+    down(h, { clientX: 2.1, clientY: 1.8 });
+    down(h, { clientX: 3.1, clientY: 2.2 });
+    down(h, { clientX: 3.2, clientY: 2.2, detail: 2 });
+    act(() => h.result.current.finishFreePath());
+    expect(h.props.onFreePathCommit).toHaveBeenCalledWith([
+      { x: 1.2, y: 1.3 }, { x: 2.1, y: 1.8 }, { x: 3.1, y: 2.2 },
+    ], "road");
+    expect(h.props.onFreePathPreview).toHaveBeenLastCalledWith(null);
+    expect(h.tools.paint.paintAt).not.toHaveBeenCalled();
+    expect(h.history.beginStroke).not.toHaveBeenCalled();
+  });
+
+  it("continues a selected spline from its endpoint", () => {
+    const h = setup({ tool: "road", freePathMode: true, freePathEditMode: true });
+    const origin = { action: "extend" as const, pathId: "road-1", nodeIndex: 2 };
+    act(() => expect(h.result.current.startFreePathFrom({ x: 2, y: 2 }, "road", origin)).toBe(true));
+    expect(h.props.onFreePathPreview).toHaveBeenLastCalledWith({
+      anchors: [{ x: 2, y: 2 }], hover: null,
+    });
+    h.rerender({ freePathEditMode: false });
+    down(h, { clientX: 3, clientY: 3 });
+    act(() => h.result.current.finishFreePath());
+    expect(h.props.onFreePathBegin).not.toHaveBeenCalled();
+    expect(h.props.onFreePathCommit).toHaveBeenCalledWith([
+      { x: 2, y: 2 }, { x: 3, y: 3 },
+    ], "road", origin);
+  });
+
+  it("cancels a branch without modifying its parent", () => {
+    const h = setup({ tool: "river", freePathMode: true, freePathEditMode: true });
+    act(() => h.result.current.startFreePathFrom({ x: 2, y: 2 }, "river",
+      { action: "branch", pathId: "river-1", nodeIndex: 1 }));
+    h.rerender({ freePathEditMode: false });
+    down(h, { clientX: 3, clientY: 3 });
+    act(() => h.result.current.cancelFreePath());
+    expect(h.props.onFreePathCommit).not.toHaveBeenCalled();
+    expect(h.props.onFreePathPreview).toHaveBeenLastCalledWith(null);
+  });
+
+  it("starts a branch from a point between existing spline nodes", () => {
+    const h = setup({ tool: "road", freePathMode: true, freePathEditMode: true });
+    const origin = { action: "branch-segment" as const, pathId: "road-1",
+      segmentIndex: 1, t: 0.4 };
+    act(() => h.result.current.startFreePathFrom({ x: 2.4, y: 2 }, "road", origin));
+    h.rerender({ freePathEditMode: false });
+    down(h, { clientX: 3, clientY: 3 });
+    act(() => h.result.current.finishFreePath());
+    expect(h.props.onFreePathCommit).toHaveBeenCalledWith([
+      { x: 2.4, y: 2 }, { x: 3, y: 3 },
+    ], "road", origin);
+  });
+
+  it("отменяет незавершённый сплайн без сохранения", () => {
+    const h = setup({ tool: "river", freePathMode: true });
+    down(h, { clientX: 1.2, clientY: 1.3 });
+    down(h, { clientX: 2.2, clientY: 1.3 });
+    act(() => h.result.current.cancelFreePath());
+    expect(h.props.onFreePathCommit).not.toHaveBeenCalled();
+    expect(h.props.onFreePathPreview).toHaveBeenLastCalledWith(null);
+  });
+
+  it("не начинает линию, если создать или выбрать слой пути не удалось", () => {
+    const onFreePathBegin = vi.fn(() => false);
+    const h = setup({ tool: "road", freePathMode: true, onFreePathBegin });
+    down(h, { clientX: 1.2, clientY: 1.3 });
+    expect(onFreePathBegin).toHaveBeenCalledTimes(1);
+    expect(onFreePathBegin).toHaveBeenCalledWith("road");
+    expect(h.props.onFreePathPreview).not.toHaveBeenCalled();
+    act(() => h.result.current.finishFreePath());
+    expect(h.props.onFreePathCommit).not.toHaveBeenCalled();
+  });
+
+  it("завершает сплайн Enter и отменяет следующий Esc", () => {
+    const h = setup({ tool: "road", freePathMode: true });
+    down(h, { clientX: 1, clientY: 1 });
+    down(h, { clientX: 2, clientY: 2 });
+    down(h, { clientX: 3, clientY: 2 });
+    act(() => window.dispatchEvent(new KeyboardEvent("keydown", { code: "Backspace" })));
+    expect(h.props.onFreePathPreview).toHaveBeenLastCalledWith({
+      anchors: [{ x: 1, y: 1 }, { x: 2, y: 2 }], hover: null,
+    });
+    act(() => window.dispatchEvent(new KeyboardEvent("keydown", { code: "Enter" })));
+    expect(h.props.onFreePathCommit).toHaveBeenCalledTimes(1);
+    down(h, { clientX: 1, clientY: 1 });
+    down(h, { clientX: 2, clientY: 2 });
+    act(() => window.dispatchEvent(new KeyboardEvent("keydown", { code: "Escape" })));
+    expect(h.props.onFreePathCommit).toHaveBeenCalledTimes(1);
+    expect(h.props.onFreePathPreview).toHaveBeenLastCalledWith(null);
+  });
+
   it("fog рисует клетки мазком и правая кнопка вызывает обратное действие", () => {
     const h = setup({ tool: "fog" });
     down(h, { clientX: 2.5, clientY: 3.5 });
@@ -316,6 +482,43 @@ describe("useMapInput: touch", () => {
       h.result.current.onTouchEnd({ changedTouches: touchList(...ids) } as never);
     });
   }
+
+  it("drags a selected free-line point by touch and cancels on a second finger", () => {
+    const nodes = [1, 2, 3].map((x) => ({ position: { x, y: 2 } }));
+    const documentRef = { current: { layers: [{ kind: "path", visible: true, locked: false,
+      paths: [{ id: "free-road", kind: "road", width: 0.22, geometry: { type: "spline", nodes } }] }] } };
+    const h = setup({ tool: "road", freePathMode: true, freePathEditMode: true,
+      selectedFreePathId: "free-road", documentRef });
+    tstart(h, [[1, 2, 2]]);
+    tmove(h, [[1, 2, 2.4]]);
+    tend(h, [[1, 2, 2.4]]);
+    expect(h.props.onFreePathEditCommit).toHaveBeenCalledTimes(1);
+    tstart(h, [[2, 2, 2]]);
+    tmove(h, [[2, 2, 2.3]]);
+    tstart(h, [[3, 3, 3]]);
+    expect(h.props.onFreePathEditCommit).toHaveBeenCalledTimes(1);
+    expect(h.props.onFreePathEditPreview).toHaveBeenLastCalledWith(null);
+  });
+
+  it("ставит точки реки касаниями и сохраняет черновик при зуме двумя пальцами", () => {
+    const h = setup({ tool: "river", freePathMode: true });
+    tstart(h, [[1, 1.2, 1.3]]);
+    tmove(h, [[1, 1.8, 1.6]]);
+    tend(h, [[1, 1.8, 1.6]]);
+    tstart(h, [[2, 2.3, 1.9]]);
+    tend(h, [[2, 2.3, 1.9]]);
+    tstart(h, [[3, 2.8, 2.1]]);
+    tstart(h, [[4, 3.2, 2.1]]);
+    expect(h.props.onFreePathCommit).not.toHaveBeenCalled();
+    expect(h.props.onFreePathPreview).toHaveBeenLastCalledWith({
+      anchors: [{ x: 1.2, y: 1.3 }, { x: 2.3, y: 1.9 }, { x: 2.8, y: 2.1 }], hover: null,
+    });
+    act(() => h.result.current.finishFreePath());
+    expect(h.props.onFreePathCommit).toHaveBeenCalledWith([
+      { x: 1.2, y: 1.3 }, { x: 2.3, y: 1.9 }, { x: 2.8, y: 2.1 },
+    ], "river");
+    expect(h.props.onFreePathPreview).toHaveBeenLastCalledWith(null);
+  });
 
   it("13. один палец с кистью РИСУЕТ (факт кода, не pan)", () => {
     const h = setup();

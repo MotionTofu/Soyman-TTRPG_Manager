@@ -476,9 +476,26 @@ CREATE TABLE IF NOT EXISTS mastering_notes (
   system_id INTEGER REFERENCES systems(id) ON DELETE SET NULL,
   title TEXT NOT NULL,
   content TEXT DEFAULT '',
+  cover_image TEXT, -- null: из статьи, '': без картинки, иначе URL/soyman:resource
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   archived_at TEXT
 );
+
+-- Личные заметки читателя: привязка к тексту, независимая от ширины окна.
+CREATE TABLE IF NOT EXISTS mastering_annotations (
+  id TEXT PRIMARY KEY,
+  book_id INTEGER NOT NULL REFERENCES mastering_notes(id) ON DELETE CASCADE,
+  author_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  quote TEXT NOT NULL DEFAULT '',
+  body TEXT NOT NULL,
+  anchor_json TEXT,
+  context_before TEXT NOT NULL DEFAULT '',
+  context_after TEXT NOT NULL DEFAULT '',
+  content_sha256 TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mastering_annotations_author ON mastering_annotations(book_id, author_user_id);
 
 CREATE TABLE IF NOT EXISTS preproduction (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

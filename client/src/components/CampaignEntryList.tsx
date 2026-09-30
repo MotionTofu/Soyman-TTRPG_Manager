@@ -216,7 +216,9 @@ function EntryCard({
         {open &&
           (editMode ? (
             <>
-              <MentionTextarea value={content} onChange={setContent} rows={4} defaultSettingId={defaultSettingId} />
+              <div className="reading-text">
+                <MentionTextarea value={content} onChange={setContent} rows={4} defaultSettingId={defaultSettingId} />
+              </div>
               <div className="row">
                 <button className="primary" onClick={save}>
                   Сохранить
@@ -226,7 +228,7 @@ function EntryCard({
             </>
           ) : (
             <>
-              <div style={{ whiteSpace: "pre-wrap" }}>
+              <div className="reading-text" style={{ whiteSpace: "pre-wrap" }}>
                 <MentionText text={entry.content} />
               </div>
               <div className="row">

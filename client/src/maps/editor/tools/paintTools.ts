@@ -7,6 +7,7 @@ import type { MapGeometry } from "../hooks/useMapSelection";
 import type { BrushSize, PaintTool } from "../editorTypes";
 import {
   NO_COMPATIBLE_LAYER_ERROR,
+  ensurePathTargetLayer,
   resolveToolTargetLayer,
   type ToolLayerKind,
 } from "./layerTargets";
@@ -99,11 +100,11 @@ function paintStrokeCells(
   if (tool === "road" || tool === "river") {
     // Оверлеи ложатся поверх любого террейна (река — и поверх дороги).
     // Кисть работает внутри target PathLayer (§38–40).
-    const layerId = target(ctx, doc, "path");
-    if (!layerId) return false;
+    const ensured = ensurePathTargetLayer(doc, ctx.activeLayerId, tool, ctx.newId);
+    if (!ensured.ok) { ctx.setActionError(ensured.error); return false; }
     const r = addCellsToLayerPath(
-      doc,
-      layerId,
+      ensured.document,
+      ensured.layerId,
       tool,
       brush.map((c) => ({ x: c.x, y: c.y })),
       ctx.newId,
@@ -113,6 +114,7 @@ function paintStrokeCells(
       return false;
     }
     if (!r.changed) return false;
+    if (ensured.layerId !== ctx.activeLayerId) ctx.onActiveLayer(ensured.layerId);
     return commit(ctx, doc, r.document, false);
   }
   const layerId = target(ctx, doc, "terrain");

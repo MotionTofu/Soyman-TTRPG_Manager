@@ -1,3 +1,4 @@
+import {ProjectWorkbooks} from "../components/workbooks/ProjectWorkbooks";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -711,6 +712,7 @@ export function SettingDetailPage() {
         </>
       }
     >
+      <ProjectWorkbooks type="setting" id={settingId}/>
       {showExport && (
         <SettingExportModal settingId={settingId} settingName={setting.name} onClose={() => setShowExport(false)} />
       )}

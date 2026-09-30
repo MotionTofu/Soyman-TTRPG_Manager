@@ -893,21 +893,6 @@ systemsRouter.post("/", (req, res) => {
       .prepare("SELECT id FROM system_sections WHERE system_id = ? AND kind = 'mechanics' LIMIT 1")
       .get(newId) as { id: number } | undefined;
     if (mechSection) seedMechanicsGroups(String(newId), mechSection.id);
-    // Шаблоны статблоков D&D
-    const templates: { name: string; format: string }[] = [
-      { name: "Существо D&D 5.5", format: "dnd_creature" },
-      { name: "Персонаж D&D 5.5", format: "dnd_character" },
-    ];
-    const insertTpl = db.prepare(
-      `INSERT INTO resources (name, type, scope, system_id, template_kind, template_format, tags, notes)
-       VALUES (?, 'statblock_template', 'system', ?, 'full', ?, '', '')`,
-    );
-    for (const t of templates) {
-      const exists = db
-        .prepare("SELECT id FROM resources WHERE system_id = ? AND name = ? AND archived_at IS NULL")
-        .get(newId, t.name);
-      if (!exists) insertTpl.run(newId, t.format);
-    }
   }
   res.status(201).json(db.prepare("SELECT * FROM systems WHERE id = ?").get(newId));
 });
@@ -946,10 +931,10 @@ systemsRouter.put("/:id/restore", (req, res) => {
   res.json(db.prepare("SELECT * FROM systems WHERE id = ?").get(req.params.id));
 });
 
-// --- Export/import: compendium (sections + entries) + this system's statblock
-// templates, as one JSON file. Metadata only by default — pass ?images=1 to
+// --- Export/import: compendium (sections + entries + actual statblocks)
+// as one JSON file. Metadata only by default — pass ?images=1 to
 // additionally embed the system thumbnail as base64 (the only image type a
-// system row owns; compendium entries and templates carry no images).
+// system row owns; entry and statblock images are embedded separately).
 export function buildSystemExportData(systemId: number | string, includeImages: boolean): SystemExportData | null {
   const system = db.prepare("SELECT * FROM systems WHERE id = ?").get(systemId) as
     | { name: string; description: string; thumbnail_image_path: string | null }
@@ -1017,11 +1002,8 @@ export function buildSystemExportData(systemId: number | string, includeImages: 
     }
   }
 
-  const templates = db
-    .prepare(
-      "SELECT * FROM resources WHERE system_id = ? AND type = 'statblock_template' AND archived_at IS NULL"
-    )
-    .all(systemId) as SystemExportData["templates"];
+  // Kept as an empty field for compatibility with existing module files.
+  const templates: SystemExportData["templates"] = [];
 
   const systemOut: Record<string, unknown> = { ...system };
   if (includeImages) {
@@ -1099,7 +1081,7 @@ export interface SystemExportData {
 // and by the modules "enable" flow.
 export async function importSystemExport(data: SystemExportData): Promise<number> {
   if (!data.system?.name) throw new Error("invalid export file");
-  const { system, sections, entries, templates } = data;
+  const { system, sections, entries } = data;
   // Ссылки правятся после вставки — почему именно так, см. ImportedEntities.
   const imported = new ImportedEntities();
 
@@ -1255,15 +1237,6 @@ export async function importSystemExport(data: SystemExportData): Promise<number
     updateData.run(JSON.stringify(remapped), newId);
   }
 
-  const insertTemplate = db.prepare(
-    `INSERT INTO resources (name, type, scope, system_id, template_kind, template_format, tags, notes)
-     VALUES (?, 'statblock_template', 'system', ?, ?, ?, ?, ?)`
-  );
-  for (const t of templates ?? []) {
-    const tr = insertTemplate.run(t.name, newSystemId, t.template_kind, t.template_format, t.tags || "", t.notes || "");
-    imported.track("resources", tr.lastInsertRowid as number);
-  }
-
   imported.resolve();
   // Импорт принёс data пустой (дача её хранит в статблоках) — заполняем сводку
   // тут же, а не на каждый GET. См. backfillEntrySummary/backfillCompendiumSummaries.
@@ -1312,7 +1285,7 @@ export interface SystemUpdateSummary {
 
 export async function updateSystemFromExport(
   targetSystemId: number,
-  { system, sections, entries, templates }: SystemExportData
+  { system, sections, entries }: SystemExportData
 ): Promise<SystemUpdateSummary> {
   // Кинды сверяются с каноническим списком ДО любых записей, как в
   // importSystemExport — иначе битая выгрузка прошла бы частично (секции
@@ -1533,31 +1506,6 @@ export async function updateSystemFromExport(
         );
         db.prepare("UPDATE statblocks SET avatar_image_path = ? WHERE id = ?").run(target, statblockId);
       }
-    }
-  }
-
-  // --- Statblock templates: match by name ---
-  const existingTemplates = db
-    .prepare(
-      "SELECT id, name FROM resources WHERE system_id = ? AND type = 'statblock_template' AND archived_at IS NULL"
-    )
-    .all(targetSystemId) as { id: number; name: string }[];
-  const existingTemplateByName = new Map(existingTemplates.map((t) => [t.name, t.id]));
-  const insertTemplate = db.prepare(
-    `INSERT INTO resources (name, type, scope, system_id, template_kind, template_format, tags, notes)
-     VALUES (?, 'statblock_template', 'system', ?, ?, ?, ?, ?)`
-  );
-  const updateTemplate = db.prepare(
-    "UPDATE resources SET template_kind = ?, template_format = ?, tags = ?, notes = ? WHERE id = ?"
-  );
-  for (const t of templates ?? []) {
-    const existingId = existingTemplateByName.get(t.name);
-    if (existingId) {
-      updateTemplate.run(t.template_kind, t.template_format, t.tags || "", t.notes || "", existingId);
-      summary.templatesUpdated++;
-    } else {
-      insertTemplate.run(t.name, targetSystemId, t.template_kind, t.template_format, t.tags || "", t.notes || "");
-      summary.templatesAdded++;
     }
   }
 

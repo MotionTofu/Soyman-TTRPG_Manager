@@ -29,6 +29,7 @@ const CATEGORY_SUBDIR: Record<string, string> = {
 
 export const resourcesRouter = Router();
 const ALLOWED_IMAGE_MIMES = /^image\/(jpeg|png|gif|webp|avif)$/;
+const ALLOWED_AUDIO_EXTENSION = /\.(mp3|wav|ogg|m4a|flac|aac|opus|webm)$/i;
 const upload = multer({
   storage: multer.diskStorage({
     destination(_req, _file, cb) {
@@ -39,8 +40,8 @@ const upload = multer({
   }),
   limits: { fileSize: 200 * 1024 * 1024 },
   fileFilter(_req, file, cb) {
-    if (ALLOWED_IMAGE_MIMES.test(file.mimetype) || /\.(pdf|md)$/i.test(file.originalname)) cb(null, true);
-    else cb(new Error("Допускаются изображения, PDF и Markdown (.md)"));
+    if (ALLOWED_IMAGE_MIMES.test(file.mimetype) || /\.(pdf|md)$/i.test(file.originalname) || (ALLOWED_AUDIO_EXTENSION.test(file.originalname)&&/^(audio\/|application\/ogg$)/i.test(file.mimetype))) cb(null, true);
+    else cb(new Error("Допускаются изображения, PDF, Markdown и аудиофайлы"));
   },
 });
 
@@ -296,6 +297,7 @@ resourcesRouter.get("/", (req: AuthedRequest, res) => {
     params.q = `%${q.toLowerCase()}%`;
   }
   clauses.push("r.archived_at IS NULL");
+  clauses.push("r.type <> 'statblock_template'");
   clauses.push("(r.type <> 'pdf_notes' OR d.author_user_id = @viewer_id)");
   params.viewer_id = String(req.user!.id);
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
@@ -523,6 +525,8 @@ resourcesRouter.post("/", uploadResourceFile, async (req, res) => {
   try {
     if (!body.name || !body.scope)
       return res.status(400).json({ error: "name and scope are required" });
+    if (body.type === "statblock_template")
+      return res.status(410).json({ error: "Шаблоны статблоков больше не используются" });
 
     const isPdf = !!req.file && /\.pdf$/i.test(req.file.originalname);
     const isMarkdownFile = !!req.file && /\.md$/i.test(req.file.originalname);
@@ -543,6 +547,8 @@ resourcesRouter.post("/", uploadResourceFile, async (req, res) => {
         if (markdownContent == null) return res.status(400).json({ error: "Нужен UTF-8 Markdown до 2 МБ" });
         body.category = "markdown";
         body.type = "markdown";
+      } else if (ALLOWED_AUDIO_EXTENSION.test(req.file.originalname)&&/^(audio\/|application\/ogg$)/i.test(req.file.mimetype)) {
+        body.category = "audio";
       } else if (body.category === "pdf") {
         return res.status(400).json({ error: "Для категории PDF нужен PDF-файл" });
       } else if (body.category === "markdown") {
@@ -567,7 +573,7 @@ resourcesRouter.post("/", uploadResourceFile, async (req, res) => {
       const targetFolder = subdir ? ensureSubfolder(folder, subdir) : folder;
       const original = sanitizeName(req.file?.originalname ?? `${body.name}.md`);
       const targetName = isPdf ? `${path.parse(original).name}-${crypto.randomUUID()}.pdf`
-        : (isMarkdownFile || createMarkdown) ? `${path.parse(original).name}-${crypto.randomUUID()}.md` : original;
+        : (isMarkdownFile || createMarkdown) ? `${path.parse(original).name}-${crypto.randomUUID()}.md` : body.category === "audio" ? `${path.parse(original).name}-${crypto.randomUUID()}${path.extname(original)}` : original;
       const target = path.join(vaultAbs(targetFolder), targetName);
       if (isPdf) {
         uploadedPdfPath = target;
@@ -578,7 +584,7 @@ resourcesRouter.post("/", uploadResourceFile, async (req, res) => {
         await storeDeduped(buffer, target);
         fileSha256 = crypto.createHash("sha256").update(buffer).digest("hex");
       } else if (req.file) {
-        await storeDeduped(fs.readFileSync(req.file.path), target);
+        fileSha256 = await storeDedupedFile(req.file.path, target);
       }
       filePath = target;
     }
@@ -680,6 +686,8 @@ resourcesRouter.post("/bulk-rename", (req, res) => {
 });
 
 resourcesRouter.put("/:id", (req, res) => {
+  if (req.body.type === "statblock_template")
+    return res.status(410).json({ error: "Шаблоны статблоков больше не используются" });
   if (isPdfNoteDocument(Number(req.params.id))) return res.status(409).json({ error: "Заметки правятся в PDF-читалке" });
   const { name, type, tags, notes, system_id, template_kind, template_format, link_url, category } = req.body as {
     name?: string;

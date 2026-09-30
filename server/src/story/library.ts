@@ -98,6 +98,13 @@ export function withLibraryContent<T extends LibraryAwareScene>(scene: T): WithL
  * в одном месте, где это видно.
  */
 export function copySceneChildren(fromId: number, toId: number): void {
+  // Карты следуют содержимому сцены при копировании в кампанию и отвязке
+  // вставки от заготовки. Сама карта остаётся общей записью.
+  db.prepare(
+    `INSERT OR IGNORE INTO map_bindings (map_id, target_type, target_id)
+     SELECT map_id, 'scene', ? FROM map_bindings
+     WHERE target_type = 'scene' AND target_id = ?`
+  ).run(toId, fromId);
   // Проверки копируются по одной, а не одним INSERT ... SELECT: у каждой
   // висят исходы, и без соответствия «старый id → новый» их не перенести.
   // Копия с проверками, но без исходов — это проверка, у которой нечему

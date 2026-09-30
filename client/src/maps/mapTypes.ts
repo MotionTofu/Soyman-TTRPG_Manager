@@ -125,6 +125,10 @@ export interface MapSummary {
   parent_map_id: number | null;
   created_at: string;
   updated_at: string;
+  /** Optional for older servers; new server returns a monotonic revision. */
+  revision?: number;
+  document_version?: number | null;
+  document_unsupported?: boolean;
 }
 
 // Полная строка GET /api/maps/:id (мета + blob клеток).

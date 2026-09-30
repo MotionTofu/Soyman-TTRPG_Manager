@@ -169,6 +169,8 @@ export interface MapPath {
   /** Для cell-network — в клетках; для spline — в world units. > 0. */
   width: number;
   styleRef: StyleRef;
+  /** Branch start follows this node of another spline. */
+  branchFrom?: { pathId: EntityId; nodeIndex: number };
   properties?: JsonObject;
 }
 
@@ -180,6 +182,8 @@ export interface SplineNode {
   position: Vec2;
   in?: Vec2;
   out?: Vec2;
+  /** Local stroke width in world units; falls back to MapPath.width. */
+  width?: number;
 }
 
 export interface MapObject {

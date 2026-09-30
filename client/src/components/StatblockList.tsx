@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useIsMobile } from "../hooks/useIsMobile";
@@ -24,7 +24,6 @@ import type {
   DndCreatureData,
   LitMCharacterData,
   LitMChallengeData,
-  Resource,
   Statblock,
   StatblockFormat,
   ZipCharacterData,
@@ -60,7 +59,6 @@ import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 
-const TEMPLATE_TYPE = "statblock_template";
 // Пока список грузится — пустой, и один и тот же массив: новый на каждой
 // отрисовке сбивал бы мемоизацию всего, что от списка зависит.
 const NO_STATBLOCKS: Statblock[] = [];
@@ -230,13 +228,10 @@ export function StatblockList({
   // Корзина — тот же запрос с флагом и тот же префикс ключа: восстановленный
   // статблок не окажется разом и в списке, и в корзине.
   const archived = useResource<Statblock[]>(archivedStatblockListPath(ownerType, ownerId)).data ?? NO_STATBLOCKS;
-  const allTemplates = useResource<Resource[]>(`/resources?scope=global&type=${TEMPLATE_TYPE}`).data;
   const run = useAction();
   const afterWrite = useAfterWrite();
   const [adding, setAdding] = useState(false);
   const [format, setFormat] = useState<StatblockFormat>("text");
-  const [templateId, setTemplateId] = useState("");
-  const [newKind, setNewKind] = useState<"short" | "full">("full");
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState("");
   const [importSuccess, setImportSuccess] = useState("");
@@ -432,20 +427,6 @@ export function StatblockList({
     });
   }
 
-  const templates = useMemo(
-    () =>
-      (allTemplates ?? []).filter(
-        (t) =>
-          !t.template_format ||
-          t.template_format === "text" ||
-          t.template_format === litmFormat ||
-          t.template_format === dndFormat ||
-          t.template_format === "zip_character" ||
-          t.template_format === "zip_creature"
-      ),
-    [allTemplates, litmFormat, dndFormat]
-  );
-
   async function addStatblock(chosen: StatblockFormat = format) {
     // Создание не повторяется кнопкой плашки: ответ мог потеряться уже после
     // того, как сервер статблок завёл, и повтор сделал бы второй.
@@ -492,17 +473,14 @@ export function StatblockList({
       character.systemId = await findDndSystemId();
       created = await create({ format: chosen, content: JSON.stringify(character) });
     } else {
-      const template = templates.find((t) => String(t.id) === templateId);
       created = await create({
-        format: (template?.template_format || "text") as StatblockFormat,
-        kind: template?.template_kind ?? newKind,
-        content: template?.notes ?? "",
+        format: chosen,
+        content: "",
       });
     }
     // Не создалось — форма остаётся открытой с выбранным, ошибка на плашке.
     if (!created) return;
     setAdding(false);
-    setTemplateId("");
     setFormat("text");
   }
 
@@ -1345,28 +1323,6 @@ export function StatblockList({
               <option value="zip_character">{FORMAT_LABELS.zip_character}</option>
               <option value="zip_creature">{FORMAT_LABELS.zip_creature}</option>
             </select>
-            {format === "text" && (
-              <>
-                <select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
-                  <option value="">Без шаблона</option>
-                  {templates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} ({t.system_name ?? "любая система"},{" "}
-                      {t.template_format && t.template_format !== "text"
-                        ? FORMAT_LABELS[t.template_format]
-                        : KIND_LABELS[t.template_kind ?? "full"]}
-                      )
-                    </option>
-                  ))}
-                </select>
-                {!templateId && (
-                  <select value={newKind} onChange={(e) => setNewKind(e.target.value as "short" | "full")}>
-                    <option value="short">Краткий</option>
-                    <option value="full">Полный</option>
-                  </select>
-                )}
-              </>
-            )}
             <button
               className="primary"
               onClick={

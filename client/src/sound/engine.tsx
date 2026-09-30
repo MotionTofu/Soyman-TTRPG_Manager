@@ -166,10 +166,9 @@ export function SoundEngineProvider({ children }: { children: ReactNode }) {
   const weatherDeck = useRef<Deck>({ a: null, b: null, live: "a", timer: null });
   const stingerRef = useRef<HTMLAudioElement | null>(null);
   const fadeMsRef = useRef(0);
-  // useAudioPlayer() отдаёт новый объект на каждый рендер, поэтому эффект
-  // громкости запускается чаще, чем меняется сама громкость. Без этой памяти
-  // он звал бы setVolume вхолостую и дёргал провайдер плеера — ровно тот
-  // случай, из-за которого «галочка нажималась четыре секунды».
+  const setBackgroundGainRef = useRef(background.setBackgroundGain);
+  setBackgroundGainRef.current = background.setBackgroundGain;
+  const rampTimers = useRef(new Map<HTMLAudioElement, { id: number; target: number; onDone?: () => void }>());
   const lastBgGainRef = useRef<number | null>(null);
   const duckTimer = useRef<number | null>(null);
   const bgRamp = useRef<number | null>(null);
@@ -180,6 +179,12 @@ export function SoundEngineProvider({ children }: { children: ReactNode }) {
   // тут же возвращал стингеру полную громкость посреди ухода, превращая
   // мягкий обрыв в скачок вверх.
   const stingerCutting = useRef(false);
+
+  useEffect(() => () => {
+    for (const { id } of rampTimers.current.values()) window.clearInterval(id);
+    if (bgRamp.current !== null) window.clearInterval(bgRamp.current);
+    if (duckTimer.current !== null) window.clearTimeout(duckTimer.current);
+  }, []);
 
   // Затухание — из слоя данных: правка в настройках (в любом окне) доходит
   // сюда без перезагрузки окна.
@@ -201,6 +206,18 @@ export function SoundEngineProvider({ children }: { children: ReactNode }) {
 
   function ramp(el: HTMLAudioElement | null, target: number, ms: number, onDone?: () => void) {
     if (!el) return;
+    const running = rampTimers.current.get(el);
+    if (running?.target === target) {
+      if (onDone) {
+        const previous = running.onDone;
+        running.onDone = () => { previous?.(); onDone(); };
+      }
+      return;
+    }
+    if (running) {
+      window.clearInterval(running.id);
+      rampTimers.current.delete(el);
+    }
     const from = el.volume;
     if (ms <= 0 || Math.abs(target - from) < 0.01) {
       el.volume = Math.max(0, Math.min(1, target));
@@ -209,15 +226,19 @@ export function SoundEngineProvider({ children }: { children: ReactNode }) {
     }
     const steps = Math.max(1, Math.round(ms / 50));
     let step = 0;
+    const entry = { id: 0, target, onDone };
     const id = window.setInterval(() => {
       step += 1;
       const value = from + ((target - from) * step) / steps;
       el.volume = Math.max(0, Math.min(1, value));
       if (step >= steps) {
         window.clearInterval(id);
-        onDone?.();
+        rampTimers.current.delete(el);
+        entry.onDone?.();
       }
     }, 50);
+    entry.id = id;
+    rampTimers.current.set(el, entry);
   }
 
   // Бэкграунд звучит не своим <audio>, а плеером, поэтому его громкость
@@ -236,9 +257,10 @@ export function SoundEngineProvider({ children }: { children: ReactNode }) {
         bgRamp.current = null;
       }
       bgTarget.current = target;
+      if (from !== null && Math.abs(target - from) < 0.001) return;
       if (from === null || ms <= 0 || Math.abs(target - from) < 0.01) {
         lastBgGainRef.current = target;
-        background.setBackgroundGain(target);
+        setBackgroundGainRef.current(target);
         return;
       }
       const steps = Math.max(1, Math.round(ms / 100));
@@ -247,14 +269,14 @@ export function SoundEngineProvider({ children }: { children: ReactNode }) {
         step += 1;
         const value = from + ((target - from) * step) / steps;
         lastBgGainRef.current = Math.max(0, Math.min(1, value));
-        background.setBackgroundGain(lastBgGainRef.current);
+        setBackgroundGainRef.current(lastBgGainRef.current);
         if (step >= steps && bgRamp.current) {
           window.clearInterval(bgRamp.current);
           bgRamp.current = null;
         }
       }, 100);
     },
-    [background]
+    []
   );
 
   const liveEl = (deck: React.MutableRefObject<Deck>) =>
@@ -304,8 +326,8 @@ export function SoundEngineProvider({ children }: { children: ReactNode }) {
           ? DUCK_FADE_MS
           : 0;
     wasSilent.current = silence;
-    ramp(liveEl(ambientDeck), ambGain, fade);
-    ramp(liveEl(weatherDeck), weaGain, fade);
+    if (!ambientStopped) ramp(liveEl(ambientDeck), ambGain, fade);
+    if (!weatherStopped) ramp(liveEl(weatherDeck), weaGain, fade);
     const idleAmb = idleEl(ambientDeck);
     const idleWea = idleEl(weatherDeck);
     if (idleAmb && idleAmb.paused) idleAmb.volume = 0;
@@ -319,7 +341,7 @@ export function SoundEngineProvider({ children }: { children: ReactNode }) {
     // от общей и канальной, поэтому его собственный ключ в localStorage
     // становится вычисленным значением и перезаписывается движком на старте.
     rampBackground(gainFor("background", ducking, silence), fade);
-  }, [volumes, duckingId, silence, gainFor, rampBackground]);
+  }, [volumes, duckingId, silence, ambientStopped, weatherStopped, gainFor, rampBackground]);
 
   useEffect(() => {
     localStorage.setItem(VOLUME_KEY, JSON.stringify(volumes));
@@ -367,13 +389,6 @@ export function SoundEngineProvider({ children }: { children: ReactNode }) {
     },
     [background, gainFor, silence, switchLoop]
   );
-
-  useEffect(() => {
-    void loadConsole(null, false);
-    // Один раз при старте: без набора пульт всё равно должен знать про
-    // постоянные стингеры.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Состав играющего набора — под наблюдением слоя данных: правка набора или
   // звука в любом окне перечитывает его, и пульт сразу показывает новый состав.

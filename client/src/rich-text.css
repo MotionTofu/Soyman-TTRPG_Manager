@@ -8,6 +8,8 @@
   resize: none;
   overflow: hidden;
   field-sizing: content;
+  font-size: var(--fs-body);
+  line-height: 1.6;
 }
 .mention-dropdown {
   position: absolute;

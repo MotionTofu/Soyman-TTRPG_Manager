@@ -321,7 +321,7 @@ export function launchScene(sessionId: number, sceneId: number): LaunchResult {
         `INSERT INTO session_show_state (session_id, mode, scene_id, visible_layer_ids, shown, updated_at)
          VALUES (?, 'scene', ?, ?, COALESCE((SELECT shown FROM session_show_state WHERE session_id = ?), 0), datetime('now'))
          ON CONFLICT(session_id) DO UPDATE SET
-           mode = 'scene', scene_id = excluded.scene_id,
+           mode = 'scene', scene_id = excluded.scene_id, map_id = NULL,
            visible_layer_ids = excluded.visible_layer_ids, updated_at = datetime('now')`
       ).run(sessionId, sceneId, JSON.stringify(presVisibleIds), sessionId);
     }

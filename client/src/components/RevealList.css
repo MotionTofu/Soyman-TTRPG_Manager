@@ -89,7 +89,7 @@
   grid-column: 2 / -1;
   min-width: 0;
   overflow-wrap: anywhere;
-  font-size: var(--fs-meta);
+  font-size: var(--fs-data);
   color: var(--muted);
 }
 .reveal__mark {

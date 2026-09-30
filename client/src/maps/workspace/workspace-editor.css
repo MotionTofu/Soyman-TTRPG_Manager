@@ -1,0 +1,47 @@
+/* Base editor shares the shell's local Fantasy Punk tokens. */
+.workspace-editor { height: 100%; min-height: 320px; display: grid; grid-template-rows: 56px 44px minmax(0, 1fr) 28px; overflow: hidden; color: var(--ink); }
+.workspace-editor-header { display: flex; align-items: center; gap: var(--sp-4); padding: 0 var(--sp-4); min-width: 0; }
+.workspace-editor-header h1 { flex: 1; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-ui); font-size: var(--fs-h3); }
+.workspace-editor-header > a { flex-shrink: 0; font-size: var(--fs-meta); }
+.workspace-editor-context { display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-4); border-block: var(--card-border-width) solid var(--line); overflow-x: auto; white-space: nowrap; }
+.workspace-editor-context label { display: flex; align-items: center; gap: var(--sp-1); }
+.workspace-editor-context > * { flex-shrink: 0; }
+.workspace-editor-stage { position: relative; min-height: 0; overflow: hidden; }
+.workspace-editor-stage > canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.workspace-editor-camera { position: absolute; top: var(--sp-3); right: var(--sp-3); display: flex; gap: var(--sp-1); }
+.workspace-editor-camera button { background: var(--paper); }
+.workspace-editor-placement { position: absolute; top: var(--sp-3); left: var(--sp-3); max-width: calc(100% - 180px); display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); padding: var(--sp-3); background: var(--paper); border: var(--card-border-width) solid var(--accent); }
+.workspace-editor-placement span { overflow-wrap: anywhere; }
+.map-workspace-source-bag .bag-cell-filled { position: relative; padding-bottom: var(--sp-6); }
+.map-workspace-source-bag .bag-cell-place { position: absolute; bottom: var(--sp-1); left: var(--sp-1); right: var(--sp-1); padding: var(--sp-1); font-size: var(--fs-meta); }
+.workspace-editor-entity-dialog { width: min(560px, 100%); }
+.workspace-editor-layers, .workspace-editor-properties, .workspace-editor-notice { position: absolute; z-index: 2; padding: var(--sp-4); border: var(--card-border-width) solid var(--line); background: var(--paper); box-shadow: 5px 5px 0 var(--ink); max-height: calc(100% - 32px); overflow: auto; }
+.workspace-editor-layers { top: var(--sp-4); left: var(--sp-4); width: min(256px, calc(100% - 32px)); }
+.workspace-editor-layers p, .workspace-editor-properties p { font-size: var(--fs-data); line-height: 1.4; }
+.workspace-editor-panel-heading { display: flex; align-items: center; justify-content: space-between; }
+.workspace-editor-panel-heading h2 { font-size: var(--fs-h2); font-family: var(--font-display); margin: 0; }
+.workspace-editor-layer { display: flex; flex-wrap: wrap; gap: var(--sp-2); padding-block: var(--sp-3); border-bottom: var(--card-border-width) solid var(--line); }
+.workspace-editor-layer > button { width: 100%; text-align: left; overflow-wrap: anywhere; }
+.workspace-editor-layer > input { width: 100%; min-width: 0; }
+.workspace-editor-layer input[type="range"] { width: 100px; }
+.workspace-editor-layer > button[aria-pressed="true"] { background: var(--accent); }
+.workspace-editor-layer label { display: flex; align-items: center; gap: var(--sp-1); }
+.workspace-editor-add-layers { display: flex; flex-wrap: wrap; gap: var(--sp-2); padding-top: var(--sp-3); }
+.workspace-editor-properties { right: var(--sp-4); top: 64px; width: min(284px, calc(100% - 32px)); }
+.workspace-editor-properties > button:first-child { float: right; }
+.workspace-editor-properties > label { display: grid; gap: var(--sp-2); margin-block: var(--sp-3); }
+.workspace-editor-notice { bottom: var(--sp-4); left: var(--sp-4); right: var(--sp-4); max-height: 40%; }
+.workspace-editor-notice p { margin: 0 0 var(--sp-3); font-size: var(--fs-body); }
+.workspace-editor-notice button { margin-right: var(--sp-2); }
+.workspace-editor-status { display: flex; gap: var(--sp-4); align-items: center; justify-content: space-between; padding: 0 var(--sp-4); font-size: var(--fs-meta); min-width: 0; }
+.workspace-editor-status span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.workspace-editor-message { padding: var(--sp-6); }
+.workspace-editor-label-dialog { --paper: #faf8ef; --paper-2: #f1eedf; --ink: #171717; --line: #171717; --muted: #625f54; --accent: #f3ff3a; --primary-bg: #f3ff3a; --primary-text: #171717; --font-ui: "Sofia Sans Semi Condensed", sans-serif; --font-body: "Sofia Sans Semi Condensed", sans-serif; --font-display: "Rubik Dirt", sans-serif; border-radius: 0; background: var(--paper); color: var(--ink); }
+.modal-backdrop:has(.workspace-editor-label-dialog) { left: 64px; right: 272px; top: 100px; bottom: 80px; }
+@media (max-width: 900px) {
+  .modal-backdrop:has(.workspace-editor-label-dialog) { left: 56px; right: 0; top: 140px; }
+  .workspace-editor { grid-template-rows: 96px 44px minmax(0, 1fr) 28px; }
+  .workspace-editor-header { flex-wrap: wrap; align-content: center; gap: var(--sp-2); }
+  .workspace-editor-header h1 { flex-basis: 65%; }
+  .workspace-editor-status span:last-child { display: none; }
+}

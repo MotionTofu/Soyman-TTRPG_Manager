@@ -2,18 +2,16 @@ import { useEffect, useState } from "react";
 import { useSearchParams, useParams } from "react-router-dom";
 import { useResource } from "../data/hooks";
 import { RelationGraph } from "../components/RelationGraph";
-import { TYPE_LABELS, GRAPH_VIEW_EDGE_KINDS, type GraphData, type GraphView, type EdgeKind } from "../graphTypes";
+import { TYPE_LABELS, GRAPH_VIEW_EDGE_KINDS, GRAPH_VIEW_HIDDEN_TYPES, type GraphData, type GraphView, type EdgeKind } from "../graphTypes";
 import { SectionHeading } from "../components/SectionHeading";
 import { SectionBackground } from "../components/SectionBackground";
 import type { Campaign, Setting } from "../types";
 
 const DEPTH_OPTIONS = [1, 2, 3];
 
-// Типы, отключённые по умолчанию — не несут полезной структуры для графа связей,
-// но засоряют его (сцены, приключения, кампании — операционные сущности, а не то,
-// что ищет пользователь при просмотре связей).
-const DEFAULT_DISABLED_TYPES = new Set(["scene", "adventure", "campaign"]);
-const DEFAULT_ACTIVE_TYPES = new Set(Object.keys(TYPE_LABELS).filter((t) => !DEFAULT_DISABLED_TYPES.has(t)));
+// С сервера приходят все типы: скрытые по умолчанию (GRAPH_VIEW_HIDDEN_TYPES)
+// прячет сам граф, иначе их нельзя было бы включить обратно.
+const ALL_TYPES = Object.keys(TYPE_LABELS).join(",");
 
 // Виды рёбер, включённые по умолчанию для каждого графа.
 function defaultEdgeKinds(view: GraphView): Set<EdgeKind> {
@@ -31,7 +29,6 @@ export function GraphPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const focus = searchParams.get("focus");
   const depth = Number(searchParams.get("depth")) || 2;
-  const activeTypes = DEFAULT_ACTIVE_TYPES;
   const settingsState = useResource<Setting[]>("/settings");
   const campaignsState = useResource<Campaign[]>("/campaigns");
   const settings = settingsState.data ?? NO_SETTINGS;
@@ -49,8 +46,7 @@ export function GraphPage() {
     setActiveKinds(defaultEdgeKinds(view));
   }, [view]);
 
-  const types = Array.from(activeTypes).join(",");
-  const params = new URLSearchParams({ types, view });
+  const params = new URLSearchParams({ types: ALL_TYPES, view });
   if (campaignId) params.set("campaign_id", String(campaignId));
   else if (settingId) params.set("setting_id", String(settingId));
   if (showSpots) params.set("spots", "1");
@@ -69,7 +65,7 @@ export function GraphPage() {
     ? campaigns.filter((c) => c.setting_id === settingId)
     : campaigns;
 
-  const viewTitle = view === "adventures" ? "Граф приключений" : "Граф мира";
+  const viewTitle = view === "adventures" ? "Связи приключений" : "Связи миров";
 
   return (
     <div className="stack" style={{ position: "relative" }}>
@@ -126,7 +122,9 @@ export function GraphPage() {
         </div>
       )}
       <RelationGraph
+        key={view}
         data={data}
+        defaultHiddenTypes={GRAPH_VIEW_HIDDEN_TYPES[view]}
         layoutKey={`${view}:${campaignId ? `campaign:${campaignId}` : settingId ? `setting:${settingId}` : "global"}`}
         emptyMessage={undefined}
         activeKinds={activeKinds}

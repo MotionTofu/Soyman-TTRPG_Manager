@@ -1,3 +1,4 @@
+import {ProjectWorkbooks} from "../components/workbooks/ProjectWorkbooks";
 import { useCompendiumEntries } from "../components/dnd/useCompendiumEntries";
 import { liveEffectEntryIds, withLiveEffects } from "../components/dnd/dndFeatures";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -659,6 +660,7 @@ export function CampaignDetailPage() {
       onTab={(t) => selectTab(t as (typeof tabs)[number])}
     >
       <CampaignFolderNotice campaign={campaign} />
+      {campaign.role!=="player"&&<ProjectWorkbooks type="campaign" id={campaignId}/>}
 
       {tab === "Обзор" && campaign.role === "player" && (
         <PlayerOverviewTab campaign={campaign} systems={systems} settingsList={settingsList} />
@@ -936,7 +938,7 @@ export function CampaignDetailPage() {
                                 )}
                             </div>
                             {s.notes_text ? (
-                              <p style={{ whiteSpace: "pre-wrap" }}>
+                              <p className="reading-text" style={{ whiteSpace: "pre-wrap" }}>
                                 <MentionText text={s.notes_text} />
                               </p>
                             ) : (
@@ -1122,7 +1124,7 @@ export function CampaignDetailPage() {
                             </div>
                           </div>
                           {expanded && ev.description && (
-                            <div className="chronicle-row__expanded" style={{ whiteSpace: "pre-wrap" }}>
+                            <div className="chronicle-row__expanded reading-text" style={{ whiteSpace: "pre-wrap" }}>
                               <MentionText text={ev.description} />
                             </div>
                           )}
@@ -2512,7 +2514,7 @@ function ProductionDashboard({ campaign, sessions, onSchedule }: { campaign: Cam
               <Link to={`/sessions/${s.id}`}>
                 {s.date} — {sessionLabel(s)}
               </Link>
-              <p className="muted" style={{ whiteSpace: "pre-wrap" }}>
+              <p className="muted reading-text" style={{ whiteSpace: "pre-wrap" }}>
                 <MentionText text={s.notes_text ?? ""} />
               </p>
             </div>
@@ -2666,7 +2668,7 @@ function PreproductionTab({
               pre[f.key] && (
                 <div key={f.key} className="card stack">
                   <span className="campaign-field-label" style={{ color: "var(--ink)" }}>{f.label}</span>
-                  <div style={{ whiteSpace: "pre-wrap" }}>
+                  <div className="reading-text" style={{ whiteSpace: "pre-wrap" }}>
                     <MentionText text={pre[f.key] as string} />
                   </div>
                 </div>
@@ -2675,7 +2677,7 @@ function PreproductionTab({
           {pre.adventure_stakes_hooks && (
             <div className="card stack">
               <span className="campaign-field-label" style={{ color: "var(--ink)" }}>Adventure Stakes and Hooks</span>
-              <div style={{ whiteSpace: "pre-wrap" }}>
+              <div className="reading-text" style={{ whiteSpace: "pre-wrap" }}>
                 <MentionText text={pre.adventure_stakes_hooks} />
               </div>
             </div>

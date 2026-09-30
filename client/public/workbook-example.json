@@ -1,0 +1,22 @@
+{
+  "format": "soyman-workbook",
+  "schemaVersion": 1,
+  "key": "travel-journal",
+  "version": 1,
+  "title": "Журнал путешествия",
+  "description": "Пример без курса: один лист, обычные поля и повторяемые карточки.",
+  "sheets": [{
+    "key": "journey",
+    "title": "Дорога",
+    "instructions": "Запиши цель, проверь снаряжение и добавляй карточки остановок по мере путешествия.",
+    "fields": [
+      {"key":"goal","label":"Цель путешествия","type":"text"},
+      {"key":"days","label":"Дней в пути","type":"number"},
+      {"key":"weather","label":"Погода","type":"choice","options":["Ясно","Дождь","Снег"]},
+      {"key":"equipment","label":"Снаряжение","type":"checklist","options":["Вода","Еда","Верёвка"]},
+      {"key":"source","label":"Атлас или источник","type":"link"},
+      {"key":"expenses","label":"Расходы","type":"table","columns":[{"key":"item","label":"На что","type":"text"},{"key":"amount","label":"Сумма","type":"number"}]},
+      {"key":"stops","label":"Остановки","type":"group","fields":[{"key":"place","label":"Место","type":"text"},{"key":"events","label":"Что случилось","type":"text"}]}
+    ]
+  }]
+}

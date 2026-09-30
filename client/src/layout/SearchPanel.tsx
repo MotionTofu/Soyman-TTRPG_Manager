@@ -12,6 +12,8 @@ import { usePinnedPages, buildPageLabel, MAX_PINS } from "../pinnedPages";
 import { ParticleField } from "../components/ParticleField";
 import { NavIcon } from "../components/NavIcons";
 import { BagWidget } from "../components/BagWidget";
+import { useMapWorkspace } from "../maps/workspace/workspaceContext";
+import { placementSource } from "../maps/workspace/tokenPlacement";
 import { InitiativeTracker } from "../components/InitiativeTracker";
 import { EntityPreviewModal } from "../components/EntityPreviewModal";
 import { SessionNotesChat } from "../components/SessionNotesChat";
@@ -34,6 +36,7 @@ function resultLink(r: SearchResult): string | null {
 }
 
 interface Props {
+  workspace?: boolean;
   horizontal?: boolean;
   // Панель живёт в слоте AppShell и сама не знает, открыта ли она оверлеем:
   // по любому уходу в новый раздел просим родителя закрыться.
@@ -48,7 +51,7 @@ const LIVE_SESSION_PATH = /^\/sessions\/(\d+)\/live$/;
 // одним лишь именем, которое ты уже прочёл в строке, обещает больше, чем даёт.
 const CARD_TYPES = ["being", "character", "location", "artifact", "resource", "compendium_entry"];
 
-export function SearchPanel({ horizontal, onNavigate }: Props = {}) {
+export function SearchPanel({ horizontal, workspace = false, onNavigate }: Props = {}) {
   const location = useLocation();
   const liveMatch = location.pathname.match(LIVE_SESSION_PATH);
   const { user } = useCurrentUser();
@@ -66,6 +69,7 @@ export function SearchPanel({ horizontal, onNavigate }: Props = {}) {
   // Открытая карточка. Ради неё всё и затевалось: подглядеть правило, не уходя
   // со страницы, — за столом это чаще всего «что делает Опутанный».
   const [card, setCard] = useState<{ type: string; id: number } | null>(null);
+  const mapPlacement = useMapWorkspace()?.placement;
   const { pins, pin, unpin } = usePinnedPages();
   // Модули панели: свёрнутые и высоты, заданные ползунками (Q41, Q48).
   const [layout, setLayout] = useState<SideLayout>(loadSideLayout);
@@ -82,7 +86,7 @@ export function SearchPanel({ horizontal, onNavigate }: Props = {}) {
   }
   // Заголовок модуля — он же переключатель: щелчок по названию сворачивает.
   function titleOf(id: SideModuleId, text: string) {
-    if (horizontal) return <strong>{text}</strong>;
+    if (horizontal || workspace) return <strong>{text}</strong>;
     return (
       <button type="button" className="side-module-title" title="Свернуть" aria-expanded onClick={() => toggleModule(id)}>
         {text}
@@ -101,7 +105,7 @@ export function SearchPanel({ horizontal, onNavigate }: Props = {}) {
         // Не перехватывать "/" внутри набора механик/описаний — только когда фокус на body
         if (ae && ae !== document.body) return;
         e.preventDefault();
-        setLayout((prev) => {
+        if (!workspace) setLayout((prev) => {
           if (!prev.collapsed.includes("search")) return prev;
           const next = { ...prev, collapsed: prev.collapsed.filter((c) => c !== "search") };
           saveSideLayout(next);
@@ -112,7 +116,7 @@ export function SearchPanel({ horizontal, onNavigate }: Props = {}) {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [workspace]);
 
   function pinCurrentPage() {
     const path = location.pathname + location.search;
@@ -257,6 +261,8 @@ export function SearchPanel({ horizontal, onNavigate }: Props = {}) {
                     хватает, и три мелкие кнопки одна под другой съедают её
                     меньше, чем три в ряд. */}
                 <div className="search-result-actions">
+                  {mapPlacement && placementSource(r) && <button type="button" title="Разместить на карте" aria-label={`Разместить на карте: ${r.title}`}
+                    onClick={() => { mapPlacement.place(placementSource(r)!); onNavigate?.(); }}><NavIcon name="plus" /></button>}
                   {canDock && (
                     <button
                       type="button"
@@ -281,7 +287,7 @@ export function SearchPanel({ horizontal, onNavigate }: Props = {}) {
                       type="button"
                       className="search-result-card"
                       title="Показать карточку"
-                      onClick={() => setCard({ type: r.type, id: r.id })}
+                      onClick={() => { const source = placementSource(r); if (mapPlacement && source) { mapPlacement.preview(source); onNavigate?.(); } else setCard({ type: r.type, id: r.id }); }}
                     >
                       <NavIcon name="card" />
                     </button>
@@ -330,6 +336,17 @@ export function SearchPanel({ horizontal, onNavigate }: Props = {}) {
       <div className="search-panel horizontal">
         {searchBody}
         {pinsBody}
+      </div>
+    );
+  }
+
+  // Те же запросы, результаты, drag payload и мешок; независимая компоновка.
+  // Общая раскладка (свёрнутые модули/высоты) здесь не меняется.
+  if (workspace) {
+    return (
+      <div className="search-panel map-workspace-sources">
+        <section className="map-workspace-source-search" aria-label="Поиск сущностей">{searchBody}</section>
+        <section className="map-workspace-source-bag" aria-label="Мешок"><BagWidget title={<strong>Мешок</strong>} onMapPlace={onNavigate} /></section>
       </div>
     );
   }

@@ -117,25 +117,27 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   const activeSlotRef = useRef(activeSlot);
   activeSlotRef.current = activeSlot;
   const unlockedRef = useRef(false);
+  const unlockPendingRef = useRef(false);
 
-  // Called synchronously at the top of every function that's only ever
-  // reachable from a click handler (toggle/playPlaylist/playTrackAt/next/
-  // prev) — primes BOTH elements while still inside that gesture's call
-  // stack, so a later programmatic play() (e.g. the inactive element's fade-
-  // in during a natural track-end crossfade) is allowed instead of silently
-  // rejected. Runs once per page load.
+  // The active element is about to play the real track in this same call.
+  // Only prime the spare element: pausing the active element when the silent
+  // play promise resolves could stop the newly started track.
   function unlockAudioElements() {
-    if (unlockedRef.current) return;
-    unlockedRef.current = true;
-    for (const el of [audioARef.current, audioBRef.current]) {
-      if (!el) continue;
-      if (!el.src) el.src = SILENT_WAV;
-      const p = el.play();
-      if (p && typeof p.catch === "function") {
-        p.then(() => el.pause()).catch(() => {});
-      } else {
-        el.pause();
-      }
+    if (unlockedRef.current || unlockPendingRef.current) return;
+    const el = getInactive();
+    if (!el) return;
+    if (!el.src) el.src = SILENT_WAV;
+    unlockPendingRef.current = true;
+    const p = el.play();
+    if (p && typeof p.then === "function") {
+      void p.then(() => {
+        unlockedRef.current = true;
+        if (el.src === SILENT_WAV && el !== getActive()) el.pause();
+      }).catch(() => {}).finally(() => { unlockPendingRef.current = false; });
+    } else {
+      unlockedRef.current = true;
+      unlockPendingRef.current = false;
+      if (el.src === SILENT_WAV && el !== getActive()) el.pause();
     }
   }
 
@@ -150,6 +152,8 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
 
   const [progress, setProgress] = useState({ currentTime: 0, duration: 0 });
   const [volume, setVolumeState] = useState(loadStoredVolume);
+  const volumeRef = useRef(volume);
+  volumeRef.current = volume;
   const [repeatMode, setRepeatModeState] = useState<RepeatMode>(loadStoredRepeatMode);
   const [shuffleMode, setShuffleModeState] = useState<boolean>(loadStoredShuffleMode);
 
@@ -157,9 +161,16 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   // Реальная громкость audio-элемента = volume * bgGain.
   // Это позволяет пульту управлять дакингом, не ломая пользовательский ползунок.
   const bgGainRef = useRef(1);
+  const fadeLevelsRef = useRef<{ outgoing: HTMLAudioElement; incoming: HTMLAudioElement; t: number } | null>(null);
 
   function applyVolume(v: number, bg: number) {
     const effective = Math.min(1, Math.max(0, v * bg));
+    const fade = fadeLevelsRef.current;
+    if (fade) {
+      fade.outgoing.volume = effective * (1 - fade.t);
+      fade.incoming.volume = effective * fade.t;
+      return;
+    }
     const a = audioARef.current;
     const b = audioBRef.current;
     if (a) a.volume = effective;
@@ -170,7 +181,6 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   // default) skips the ramp entirely — a plain, instant switch.
   const fadeMsRef = useRef(0);
   const fadeTimerRef = useRef<number | null>(null);
-  const isFadingRef = useRef(false);
   // Плеер живёт и до входа — тогда читать настройки не у кого. Смена входа
   // перезагружает окно, так что проверки токена при монтировании достаточно.
   const fadeSetting = useResource<{ fade_duration_ms: number }>(getAuthToken() ? "/app-settings" : null).data
@@ -197,7 +207,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
       window.clearInterval(fadeTimerRef.current);
       fadeTimerRef.current = null;
     }
-    isFadingRef.current = false;
+    fadeLevelsRef.current = null;
   }
 
   // Instant switch: load the track straight into the active element and
@@ -212,7 +222,8 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     const active = getActive();
     const track = stateRef.current.tracks[newIndex];
     if (!active || !track) return;
-    getInactive()?.pause();
+    const inactive = getInactive();
+    if (inactive && inactive.src !== SILENT_WAV) inactive.pause();
     active.src = track.src;
     active.currentTime = 0;
     active.volume = volume * bgGainRef.current;
@@ -227,7 +238,11 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
       };
       active.addEventListener("loadedmetadata", seekOnce);
     }
-    active.play().catch(() => {});
+    void active.play().catch(() => {
+      if (active === getActive() && active.getAttribute("src") === track.src) {
+        setState((s) => ({ ...s, isPlaying: false }));
+      }
+    });
     setProgress({ currentTime: startAt, duration: 0 });
     setState((s) => ({ ...s, index: newIndex, isPlaying: true }));
   }
@@ -250,14 +265,25 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
       return;
     }
     clearFadeTimer();
-    isFadingRef.current = true;
-    const startVolume = outgoing.volume;
-    const targetVolume = volume;
+    const previousIndex = stateRef.current.index;
+    const previousSlot = activeSlotRef.current;
     incoming.src = track.src;
     incoming.currentTime = 0;
     incoming.volume = 0;
-    incoming.play().catch(() => {});
-    setActiveSlot((prev) => (prev === "a" ? "b" : "a"));
+    void incoming.play().catch(() => {
+      if (incoming !== getActive() || incoming.getAttribute("src") !== track.src) return;
+      clearFadeTimer();
+      incoming.pause();
+      activeSlotRef.current = previousSlot;
+      setActiveSlot(previousSlot);
+      applyVolume(volumeRef.current, bgGainRef.current);
+      setProgress({ currentTime: outgoing.currentTime, duration: outgoing.duration || 0 });
+      setState((s) => ({ ...s, index: previousIndex, isPlaying: !outgoing.paused && !outgoing.ended }));
+    });
+    fadeLevelsRef.current = { outgoing, incoming, t: 0 };
+    const nextSlot = previousSlot === "a" ? "b" : "a";
+    activeSlotRef.current = nextSlot;
+    setActiveSlot(nextSlot);
     setProgress({ currentTime: 0, duration: 0 });
     setState((s) => ({ ...s, index: newIndex, isPlaying: true }));
     const steps = Math.max(1, Math.round(fadeMs / 50));
@@ -265,8 +291,8 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     fadeTimerRef.current = window.setInterval(() => {
       i++;
       const t = Math.min(1, i / steps);
-      outgoing.volume = startVolume * (1 - t);
-      incoming.volume = targetVolume * t;
+      if (fadeLevelsRef.current) fadeLevelsRef.current.t = t;
+      applyVolume(volumeRef.current, bgGainRef.current);
       if (t >= 1) {
         clearFadeTimer();
         outgoing.pause();
@@ -376,18 +402,16 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
 
   function setVolume(v: number) {
     const clamped = Math.min(1, Math.max(0, v));
+    volumeRef.current = clamped;
     setVolumeState(clamped);
     localStorage.setItem(VOLUME_STORAGE_KEY, String(clamped));
-    // Mid-crossfade, the ramp owns both elements' volume — don't fight it.
-    if (!isFadingRef.current) {
-      applyVolume(clamped, bgGainRef.current);
-    }
+    applyVolume(clamped, bgGainRef.current);
   }
 
   function setBackgroundGain(g: number) {
     const clamped = Math.min(1, Math.max(0, g));
     bgGainRef.current = clamped;
-    applyVolume(volume, clamped);
+    applyVolume(volumeRef.current, clamped);
   }
 
   function setRepeatMode(mode: RepeatMode) {

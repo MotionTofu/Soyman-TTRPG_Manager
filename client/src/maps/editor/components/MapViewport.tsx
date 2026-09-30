@@ -3,9 +3,12 @@ import { subscribeMapImageAssets } from "../../assets/registry";
 import { brushCells, cellCenter, cellKey, coordLabel } from "../../grid";
 import { MAP_GRID_LABELS, formatMeters, parseCellLore } from "../../mapTypes";
 import type { MapFull } from "../../mapTypes";
+import type { SplineNode } from "../../core/types";
+import { splineFromAnchors } from "../../core/spline";
 import { readChrome, renderMap } from "../../render";
 import type { MapRenderModel } from "../../renderModel";
 import type { BrushSize, PaintTool } from "../editorTypes";
+import { freePathHandleIndices } from "../freePathEditing";
 import type { Camera } from "../hooks/useMapCamera";
 import { rulerMeasure } from "../tools/rulerTools";
 import type { RulerState } from "../tools/rulerTools";
@@ -42,6 +45,7 @@ interface MapViewportProps {
     tool: PaintTool;
     brushSize: BrushSize;
     wallLineMode: boolean;
+    freePathMode?: boolean;
   };
   overlays: {
     hover: string | null;
@@ -50,12 +54,24 @@ interface MapViewportProps {
     wallDraft: { x: number; y: number }[] | null;
     wallLive: { x: number; y: number } | null;
     rectPreview: { x: number; y: number; w: number; h: number } | null;
+    freePathPreview?: { kind: "road" | "river"; anchors: { x: number; y: number }[];
+      hover: { x: number; y: number } | null } | null;
+    selectedFreePath?: { nodes: readonly SplineNode[]; selectedNodeIndex: number;
+      joinCandidate?: { x: number; y: number } | null } | null;
   };
   input: MapViewportInput;
 }
 
 export function MapViewport({ wrapRef, canvasRef, map, model, cam, view, tool, overlays, input }: MapViewportProps) {
   const [imageRevision, setImageRevision] = useState(0);
+  const [viewportRevision, setViewportRevision] = useState(0);
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setViewportRevision((revision) => revision + 1));
+    observer.observe(wrap);
+    return () => observer.disconnect();
+  }, [map, wrapRef]);
   useEffect(() => subscribeMapImageAssets(() => setImageRevision((revision) => revision + 1)), []);
   // Кадр. Зависимости — те же, что были (selectedId — чистая производная
   // от selected, canEdit в deps не было и нет — quirk сохранён).
@@ -89,12 +105,12 @@ export function MapViewport({ wrapRef, canvasRef, map, model, cam, view, tool, o
       // а не одна клетка; остальным инструментам — одиночка через hover.
       hoverCells: (() => {
         if (!overlays.hover) return null;
-        const paints =
+        const paints = !tool.freePathMode && (
           tool.tool === "brush" ||
           tool.tool === "road" ||
           tool.tool === "river" ||
           tool.tool === "eraser" ||
-          (tool.tool === "wall" && !tool.wallLineMode);
+          (tool.tool === "wall" && !tool.wallLineMode));
         if (!paints) return null;
         const [hx, hy] = overlays.hover.split(",").map(Number);
         if (!Number.isInteger(hx) || !Number.isInteger(hy)) return null;
@@ -108,6 +124,106 @@ export function MapViewport({ wrapRef, canvasRef, map, model, cam, view, tool, o
       fogGuide: view.canEdit && !view.previewAsPlayer && tool.tool === "fog",
       selectedId: overlays.selectedId,
     });
+    const traceSpline = (nodes: readonly SplineNode[]) => {
+      ctx.beginPath();
+      nodes.forEach((node, index) => {
+        const x = cam.ox + node.position.x * cam.scale;
+        const y = cam.oy + node.position.y * cam.scale;
+        if (index === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          const previous = nodes[index - 1];
+          if (previous.out && node.in) {
+            const c1 = previous.out;
+            const c2 = node.in;
+            ctx.bezierCurveTo(cam.ox + c1.x * cam.scale, cam.oy + c1.y * cam.scale,
+              cam.ox + c2.x * cam.scale, cam.oy + c2.y * cam.scale, x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
+        }
+      });
+    };
+    if (overlays.freePathPreview && overlays.freePathPreview.anchors.length > 0) {
+      const { anchors, hover } = overlays.freePathPreview;
+      const points = hover && Math.hypot(hover.x - anchors.at(-1)!.x,
+        hover.y - anchors.at(-1)!.y) > 0.01 ? [...anchors, hover] : anchors;
+      ctx.save();
+      ctx.strokeStyle = overlays.freePathPreview.kind === "river" ? "#4E7E96" : chrome.ink;
+      ctx.globalAlpha = 0.8;
+      ctx.lineWidth = Math.max(1.5, cam.scale * 0.22);
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      if (points.length >= 2) {
+        traceSpline(splineFromAnchors(points));
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      anchors.forEach((point) => {
+        ctx.beginPath();
+        ctx.arc(cam.ox + point.x * cam.scale, cam.oy + point.y * cam.scale, 4, 0, Math.PI * 2);
+        ctx.fillStyle = chrome.paper;
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      });
+      ctx.restore();
+    }
+    if (overlays.selectedFreePath && overlays.selectedFreePath.nodes.length >= 2) {
+      const { nodes, selectedNodeIndex, joinCandidate } = overlays.selectedFreePath;
+      const accent = getComputedStyle(canvas).getPropertyValue("--accent").trim() || chrome.ink;
+      ctx.save();
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 2.5;
+      ctx.globalAlpha = 0.85;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.setLineDash([6, 5]);
+      traceSpline(nodes);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+      for (const index of freePathHandleIndices(nodes)) {
+        const node = nodes[index];
+        const p = node.position;
+        const px = cam.ox + p.x * cam.scale, py = cam.oy + p.y * cam.scale;
+        for (const handle of [node.in, node.out]) {
+          if (!handle) continue;
+          const hx = cam.ox + handle.x * cam.scale, hy = cam.oy + handle.y * cam.scale;
+          ctx.beginPath();
+          ctx.moveTo(px, py);
+          ctx.lineTo(hx, hy);
+          ctx.strokeStyle = accent;
+          ctx.globalAlpha = index === selectedNodeIndex ? 0.9 : 0.55;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = chrome.paper;
+          ctx.fillRect(hx - 4, hy - 4, 8, 8);
+          ctx.strokeStyle = accent;
+          ctx.strokeRect(hx - 4, hy - 4, 8, 8);
+        }
+        ctx.beginPath();
+        ctx.arc(px, py, index === selectedNodeIndex ? 6 : 5, 0, Math.PI * 2);
+        ctx.fillStyle = index === selectedNodeIndex ? accent : chrome.paper;
+        ctx.fill();
+        ctx.strokeStyle = index === selectedNodeIndex ? chrome.paper : accent;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      if (joinCandidate) {
+        const x = cam.ox + joinCandidate.x * cam.scale;
+        const y = cam.oy + joinCandidate.y * cam.scale;
+        ctx.beginPath();
+        ctx.arc(x, y, 7, 0, Math.PI * 2);
+        ctx.fillStyle = accent;
+        ctx.fill();
+        ctx.strokeStyle = chrome.paper;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
     // Линейка поверх поля (P2-1): экранные координаты, читаема при любом зуме.
     if (overlays.ruler) {
       const ruler = overlays.ruler;
@@ -200,6 +316,7 @@ export function MapViewport({ wrapRef, canvasRef, map, model, cam, view, tool, o
     map,
     model,
     imageRevision,
+    viewportRevision,
     cam,
     view.showGrid,
     view.showCoords,
@@ -207,10 +324,13 @@ export function MapViewport({ wrapRef, canvasRef, map, model, cam, view, tool, o
     overlays.ruler,
     overlays.selectedId,
     overlays.rectPreview,
+    overlays.freePathPreview,
+    overlays.selectedFreePath,
     view.previewAsPlayer,
     overlays.wallDraft,
     overlays.wallLive,
     tool.tool,
+    tool.freePathMode,
     tool.brushSize,
     tool.wallLineMode,
   ]);
@@ -241,6 +361,8 @@ export function MapViewport({ wrapRef, canvasRef, map, model, cam, view, tool, o
             ? "grab"
             : tool.tool === "picker"
               ? "copy"
+              : overlays.selectedFreePath
+                ? "crosshair"
               : tool.tool === "select"
                 ? "default"
                 : "crosshair",

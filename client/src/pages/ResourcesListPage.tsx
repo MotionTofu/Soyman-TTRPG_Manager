@@ -3,8 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { useAction, useResource, write } from "../data/hooks";
 import { useConfirm } from "../hooks/useConfirm";
 import { labelled } from "../data/notices";
+import {addToBag} from "../bag";
+import {SEARCH_DRAG_MIME} from "../components/LinkDropZone";
+import { ImageLightbox } from "../components/ImageLightbox";
 import { ResourceRow } from "../components/ResourceRow";
-import { TemplatesTab } from "../components/TemplatesTab";
 import { SoundLibraryTab } from "../components/SoundLibraryTab";
 import { SoundSetsTab } from "../components/SoundSetsTab";
 import { EmptyState } from "../components/EmptyState";
@@ -13,11 +15,20 @@ import { SectionBackground } from "../components/SectionBackground";
 import { RESOURCE_CATEGORIES, guessResourceCategory, type ResourceCategory } from "../resourceCategories";
 import { ListPage } from "../components/ListPage";
 import type { Campaign, Resource, Setting } from "../types";
+import "./book-library.css";
+import {useAuthenticatedFileUrl} from "../utils/fileUrl";
 
 const TEMPLATE_TYPE = "statblock_template";
 const NO_CAMPAIGNS: Campaign[] = [];
 const NO_SETTINGS: Setting[] = [];
 type SortMode = "az" | "size" | "date";
+
+function GalleryResourcePreview({resource,onOpen}:{resource:Resource;onOpen:()=>void}){
+  const path=resource.file_url??resource.link_url;
+  const authenticated=useAuthenticatedFileUrl(path);
+  const url=path?.startsWith('/files/')?authenticated:path;
+  return <button type="button" className="library-gallery-preview" draggable onDragStart={e=>e.dataTransfer.setData(SEARCH_DRAG_MIME,JSON.stringify({type:"resource",id:resource.id,title:resource.name}))} aria-label={`Просмотреть: ${resource.name}`} onClick={onOpen}>{url?<img src={url} alt={resource.name} loading="lazy"/>:resource.name}</button>;
+}
 
 function categoryOf(r: Resource): ResourceCategory {
   if (r.category && RESOURCE_CATEGORIES.some((c) => c.key === r.category)) return r.category as ResourceCategory;
@@ -35,27 +46,28 @@ function sortResources(list: Resource[], mode: SortMode): Resource[] {
 const RESOURCE_TABS = [
   { id: "sound", label: "Звук" },
   { id: "sets", label: "Аудио-наборы" },
-  { id: "templates", label: "Шаблоны" },
 ] as const;
 
-export function ResourcesListPage() {
+export function ResourcesListPage({mode="other"}:{mode?:"other"|"gallery"}) {
+  const gallery=mode==="gallery";
+  const [viewIndex,setViewIndex]=useState<number|null>(null);
   const navigate = useNavigate();
-  const [section, setSection] = useState<"all" | "sound" | "sets" | "templates">("all");
+  const [section, setSection] = useState<"all" | "sound" | "sets">("all");
   const [query, setQuery] = useState("");
   const run = useAction();
   const [confirmDialog, confirm] = useConfirm();
   const allResources = useResource<Resource[]>(query ? `/resources?q=${encodeURIComponent(query)}` : "/resources", {
     keepPrevious: true,
   }).data;
-  const resources = useMemo(() => (allResources ?? []).filter((r) => r.type !== TEMPLATE_TYPE), [allResources]);
+  const resources = useMemo(() => (allResources ?? []).filter((r) => r.type !== TEMPLATE_TYPE && (gallery ? ["image","map"].includes(categoryOf(r)) : !["pdf","markdown","image","map","audio"].includes(categoryOf(r)) && r.type!=="pdf_notes")), [allResources,gallery]);
   // «M» в счётчике — всё, что вкладка «Разное» могла бы показать без поиска и
   // фильтров. Поиск идёт на сервере, поэтому ответ с `?q=` для этого не
   // годится; полный список — тот же ключ, что без поиска, из кэша слоя.
-  // Звук и шаблоны не в счёт: у них свои вкладки, здесь их не показывают.
+  // Звук не в счёт: у него своя вкладка. Старые шаблоны исключены из каталога.
   const everyResource = useResource<Resource[]>("/resources").data;
   const shelfTotal = useMemo(
-    () => (everyResource ?? []).filter((r) => r.type !== TEMPLATE_TYPE && categoryOf(r) !== "audio").length,
-    [everyResource]
+    () => (everyResource ?? []).filter((r) => r.type !== TEMPLATE_TYPE && (gallery?["image","map"].includes(categoryOf(r)):!["pdf","markdown","image","map","audio"].includes(categoryOf(r))&&r.type!=="pdf_notes")).length,
+    [everyResource,gallery]
   );
   const campaigns = useResource<Campaign[]>("/campaigns").data ?? NO_CAMPAIGNS;
   const settings = useResource<Setting[]>("/settings").data ?? NO_SETTINGS;
@@ -66,7 +78,7 @@ export function ResourcesListPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [name, setName] = useState("");
-  const [type, setType] = useState("note");
+  const [type, setType] = useState(gallery?"image":"note");
   const [tags, setTags] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [linkUrl, setLinkUrl] = useState("");
@@ -77,6 +89,7 @@ export function ResourcesListPage() {
     form.append("name", name);
     form.append("scope", "global");
     form.append("type", type);
+    if(gallery)form.append("category",type);
     if (type === "markdown" && !file) { form.append("category", "markdown"); form.append("content", ""); }
     form.append("tags", tags);
     if (file) form.append("file", file);
@@ -179,18 +192,19 @@ export function ResourcesListPage() {
   return (
     <div className="stack" style={{ position: "relative" }}>
       {confirmDialog}
+      {viewIndex!==null&&<ImageLightbox images={filteredResources.map(r=>({id:r.id,image_url:r.file_url??r.link_url??"",caption:r.name}))} index={viewIndex} onIndexChange={setViewIndex} onClose={()=>setViewIndex(null)} onDelete={id=>{setViewIndex(null);void archiveResource(id);}} onCaptionChange={(id,caption)=>{void run(()=>write.put(`/resources/${id}`,{name:caption}),{affects:[{kind:"resource",id}]});}}/>}
       <SectionBackground />
       <ListPage
         headingSection="resources"
-        title="Ресурсы"
+        title={gallery?"Галерея":"Другие материалы"}
         groups={[]}
-        // Не «Все»: звук и шаблоны живут своими вкладками, здесь — остальное
+        // Не «Все»: звук живёт своей вкладкой, здесь — остальное
         // (PDF, изображения, заметки, ссылки). Имя дал владелец 2026-09-18.
-        allLabel="Разное"
+        allLabel={gallery?"Изображения и карты":"Разное"}
         ungroupedLabel={null}
         activeGroup={section === "all" ? null : section}
         onGroupChange={(g) => setSection(g === null ? "all" : g as typeof section)}
-        extraTabs={RESOURCE_TABS}
+        extraTabs={gallery?[]:RESOURCE_TABS}
         search={query}
         onSearch={setQuery}
         searchPlaceholder="Поиск по названию…"
@@ -200,7 +214,7 @@ export function ResourcesListPage() {
         onResetSearch={() => { setQuery(""); setCampaignFilter(null); setSettingFilter(null); }}
         showReset={query.trim() !== "" || campaignFilter !== null || settingFilter !== null}
         toolbarExtra={sortToolbar}
-        // Тулбар — инструмент вкладки «Разное»: у Звука, наборов и шаблонов
+        // Тулбар — инструмент вкладки «Разное»: у Звука и наборов
         // поиск свой, а общий показывал там «0 / N».
         hideToolbar={section !== "all"}
       >
@@ -210,10 +224,10 @@ export function ResourcesListPage() {
               <div className="card res-add">
                 <input placeholder="Название" value={name} onChange={(e) => setName(e.target.value)} />
                 <select value={type} onChange={(e) => setType(e.target.value)}>
-                  <option value="note">Заметка</option>
-                  <option value="item">Предмет</option>
+                  {gallery?<option value="image">Изображение</option>:<option value="note">Заметка</option>}
+                  {!gallery&&<option value="item">Предмет</option>}
                   <option value="map">Карта</option>
-                  <option value="markdown">Markdown (.md)</option>
+                  {!gallery&&<option value="markdown">Markdown (.md)</option>}
                 </select>
                 <input
                   placeholder="Теги через запятую"
@@ -258,7 +272,7 @@ export function ResourcesListPage() {
             )}
 
             {groups.map((g) => (
-              <details key={g.key} className="card res-group">
+              <details key={g.key} className="card res-group" open={gallery?true:undefined}>
                 <summary className="res-group__band">
                   <NavIcon name="chevron" className="chevron-icon" />
                   <NavIcon name={g.icon} className="res-group__icon" />
@@ -267,12 +281,14 @@ export function ResourcesListPage() {
                 </summary>
                 <div className="res-group__body">
                   {g.items.map((r) => (
-                    <ResourceRow
-                      key={r.id}
+                    <div key={r.id}>{gallery&&<div className="row">
+                      {(r.file_url||r.link_url)&&<GalleryResourcePreview resource={r} onOpen={()=>setViewIndex(filteredResources.indexOf(r))}/>}
+                      <button onClick={()=>addToBag({type:"resource",id:r.id,title:r.name})}>В мешок</button>
+                    </div>}<ResourceRow
                       resource={r}
                       onArchive={archiveResource}
                       allSettings={settings}
-                    />
+                    /></div>
                   ))}
                 </div>
               </details>
@@ -280,16 +296,8 @@ export function ResourcesListPage() {
           </>
         ) : section === "sound" ? (
           <SoundLibraryTab />
-        ) : section === "sets" ? (
-          <SoundSetsTab />
         ) : (
-          <>
-            <p className="muted">
-              Общие шаблоны — не привязанные ни к одной системе. Шаблоны конкретной системы теперь
-              живут на странице этой системы, во вкладке «Шаблоны».
-            </p>
-            <TemplatesTab />
-          </>
+          <SoundSetsTab />
         )}
       </ListPage>
     </div>

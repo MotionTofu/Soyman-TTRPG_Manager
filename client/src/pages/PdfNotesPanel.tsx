@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { MentionText } from "../components/mentions/MentionText";
 import type { PdfNote, PdfReaderPreferences } from "./pdfNotes";
+import { ReaderNoteCard } from "../components/ReaderNoteCard";
 
 type PageMetric = { page: number; top: number; height: number };
 
@@ -13,23 +14,7 @@ type NoteActions = {
 };
 
 function NoteCard({ note, active, actions, onOpen }: { note: PdfNote; active: boolean; actions: NoteActions; onOpen: (note: PdfNote) => void }) {
-  return <article className={`pdf-reader__note-card${active ? " is-active" : ""}${note.page_number == null ? " is-general" : ""}`}
-    data-note-id={note.id} onMouseEnter={() => actions.onHover(note.id)} onMouseLeave={() => actions.onHover(null)}>
-    <div className="pdf-reader__note-meta">
-      <span>{note.page_number == null ? "Вся книга" : `Стр. ${note.page_number}`}</span>
-      <time dateTime={note.created_at}>{new Date(note.created_at).toLocaleDateString("ru-RU")}</time>
-    </div>
-    {note.needs_reattach && <div className="pdf-reader__note-stale">Проверьте привязку к PDF</div>}
-    {note.quote && <blockquote title={note.quote}>{note.quote}</blockquote>}
-    <div className="pdf-reader__note-body"><MentionText text={note.body} /></div>
-    <div className="pdf-reader__note-actions">
-      <button type="button" onClick={() => onOpen(note)}>Открыть</button>
-      {note.page_number != null && !note.needs_reattach && <button type="button" onClick={() => actions.onLocate(note)}>К цитате</button>}
-      {note.needs_reattach && <button type="button" onClick={() => actions.onReattach(note)}>Перепривязать</button>}
-      <button type="button" onClick={() => actions.onEdit(note)}>Править</button>
-      <button type="button" onClick={() => actions.onDelete(note)}>Удалить</button>
-    </div>
-  </article>;
+  return <ReaderNoteCard note={note} active={active} general={note.page_number == null} locationLabel={note.page_number == null ? "Вся книга" : `Стр. ${note.page_number}`} staleLabel="Проверьте привязку к PDF" canLocate={note.page_number != null} actions={actions} onOpen={onOpen} />;
 }
 
 function MarginLane({ metric, notes, activeId, actions, onOpen }: {

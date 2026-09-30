@@ -33,6 +33,7 @@ const ROOT = new URL("../src/pages", import.meta.url).pathname.replace(/^\/([A-Z
 const NO_FRAME = {
   "CanvasPage.tsx": "полноэкранный инструмент: своя раскладка во всю ширину",
   "MapEditorPage.tsx": "полноэкранный инструмент: своя раскладка во всю ширину",
+  "MapWorkspacePage.tsx": "новый полноэкранный редактор карт: холст и инструменты в общей оболочке модуля",
   "GraphPage.tsx": "полноэкранный инструмент: граф во всю ширину",
   "SessionLivePage.tsx": "стол игры: живая сессия со своей раскладкой панелей",
   "sessionLivePanels.tsx": "не страница — панели живой сессии",

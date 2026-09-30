@@ -151,8 +151,8 @@ describe("shared kernel", () => {
   it("stored format detection: v5 vs legacy vs corrupt", () => {
     expect(parseStoredMapDocument(serializeMapDocument(gmDoc())).format).toBe("v5");
     expect(parseStoredMapDocument(JSON.stringify({ v: 4, cells: {}, roads: [] })).format).toBe("legacy");
-    expect(parseStoredMapDocument("garbage{{{").format).toBe("legacy");
-    expect(parseStoredMapDocument(JSON.stringify({ v: 6 })).format).toBe("legacy");
+    expect(parseStoredMapDocument("garbage{{{").format).toBe("corrupt");
+    expect(parseStoredMapDocument(JSON.stringify({ v: 6 })).format).toBe("v6");
   });
 
   it("literals contract: канонические наборы зафиксированы", () => {

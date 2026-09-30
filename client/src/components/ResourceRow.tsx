@@ -8,7 +8,7 @@ import { NavIcon } from "./NavIcons";
 import { SettingLinksPopover } from "./SettingLinksPopover";
 import type { Resource, Setting } from "../types";
 
-const IMAGE_EXT = /\.(jpe?g|png|gif|webp)$/i;
+const IMAGE_EXT = /\.(jpe?g|png|gif|webp|avif)$/i;
 
 // Строка библиотеки «Ресурсы» → вкладка «Все». Отдельный компонент, а не
 // режим карточки ресурса: карточка показывала ресурс как объект — с превью,

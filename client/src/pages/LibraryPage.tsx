@@ -47,7 +47,8 @@ export function LibraryPage() {
   const upcoming = campaigns.filter((c) => c.next_planned_date);
 
   return (
-    <PageFrame title="Библиотека">
+    <PageFrame title="Обзор">
+      <Link to="/mastering" className="button">Книжная библиотека →</Link>
 
       {upcoming.length > 0 && (
         <div className="stack" style={{ gap: 4 }}>

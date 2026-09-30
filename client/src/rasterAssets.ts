@@ -71,7 +71,7 @@ export const RASTER_ASSETS: Record<RasterCategory, readonly string[]> = {
   inventory: ["amulet", "key", "pack", "potion", "pouch", "shield", "sword", "wand"],
   tokens: ["familiar", "inspiration", "rest"],
   // Контурный ассет: пара light/dark по п.3.
-  textures: ["dice-d20", "dice-d20-dark"],
+  textures: ["dice-d20", "dice-d20-dark", "mastering-book-cloth", "mastering-shelf-wood"],
   mascot: [
     "agent-error",
     "agent-idle",

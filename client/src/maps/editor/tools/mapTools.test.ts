@@ -193,6 +193,19 @@ describe("paintTools (V5)", () => {
     expect(road?.id.startsWith("legacy-")).toBe(false);
   });
 
+  it("создаёт слой дорог вместе с первым мазком, если path-слоёв нет", () => {
+    const h = paintDeps({ tool: "road" });
+    h.documentRef.current = { ...h.documentRef.current!,
+      layers: h.documentRef.current!.layers.filter((layer) => layer.kind !== "path") };
+    const paint = createPaintTools(h.deps as never);
+
+    expect(paint.paintAt(4.5, 4.5)).toBe(true);
+    const layers = h.documentRef.current!.layers.filter((layer) => layer.kind === "path");
+    expect(layers).toMatchObject([{ name: "Дороги", visible: true, locked: false }]);
+    expect(roadSet(h.documentRef.current!).has("road:4,4")).toBe(true);
+    expect(h.onActiveLayer).toHaveBeenCalledWith(layers[0].id);
+  });
+
   it("wall дабом — фиксированная краска wall", () => {
     const h = paintDeps({ tool: "wall" });
     const paint = createPaintTools(h.deps as never);

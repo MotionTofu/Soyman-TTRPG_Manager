@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { Modal } from "./Modal";
 import type { GalleryImage } from "../types";
+import {useAuthenticatedFileUrl} from "../utils/fileUrl";
 
 interface Props {
-  images: GalleryImage[];
+  images: Pick<GalleryImage,"id"|"image_url"|"caption">[];
   index: number;
   onIndexChange: (i: number) => void;
   onClose: () => void;
@@ -16,6 +17,8 @@ interface Props {
 // Modal portal for consistent backdrop/close behavior).
 export function ImageLightbox({ images, index, onIndexChange, onClose, onDelete, onCaptionChange }: Props) {
   const img = images[index];
+  const authenticated=useAuthenticatedFileUrl(img?.image_url);
+  const imageUrl=img?.image_url.startsWith('/files/')?authenticated:img?.image_url;
   const [captionDraft, setCaptionDraft] = useState(img?.caption ?? "");
 
   useEffect(() => {
@@ -43,7 +46,7 @@ export function ImageLightbox({ images, index, onIndexChange, onClose, onDelete,
               ‹
             </button>
           )}
-          <img src={img.image_url} alt={img.caption || `Изображение ${index + 1}`} className="lightbox-image" />
+          {imageUrl&&<img src={imageUrl} alt={img.caption || `Изображение ${index + 1}`} className="lightbox-image" />}
           {index < images.length - 1 && (
             <button className="lightbox-nav lightbox-nav-next" aria-label="Следующее изображение" title="Стрелка вправо →" onClick={() => onIndexChange(index + 1)}>
               ›

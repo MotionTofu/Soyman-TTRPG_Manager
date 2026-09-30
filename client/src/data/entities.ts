@@ -117,6 +117,7 @@ export function pathHasPrefix(path: string, prefix: string): boolean {
  * Перечитывается только открытая доска: закрытая лишь помечается устаревшей.
  */
 const RESOURCE_DEPENDENCIES: readonly { prefix: string | RegExp; kinds: readonly EntityKind[]; skipCard?: boolean }[] = [
+  { prefix: "/book-library", kinds: ["mastering", "resource", "system"], skipCard: true },
   {
     prefix: "/canvas/board",
     kinds: ["scene", "adventure", "being", "location", "artifact", "community", "setting_event", "character", "setting", "campaign"],

@@ -352,9 +352,9 @@ describe("unsupported V5 content", () => {
     const codes = diagnostics.map((d) => d.code).sort();
     expect(codes).toEqual([
       "unsupported-object-layer",
+      "unsupported-path-kind",
       "unsupported-room-geometry",
       "unsupported-scatter-layer",
-      "unsupported-spline-path",
     ]);
     // Пустая маска поддерживается; пути/комнаты неподдерживаемых форм пропущены.
     const flat = flattenRenderModel(model);

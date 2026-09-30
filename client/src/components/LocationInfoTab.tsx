@@ -466,7 +466,7 @@ function MainEditor({
         </div>
         <div className="entity-field-row">
           <span className="muted">Описание</span>
-          <span style={{ whiteSpace: "pre-wrap", flex: 1, minWidth: 0 }}>
+          <span className="reading-text" style={{ whiteSpace: "pre-wrap", flex: 1, minWidth: 0 }}>
             {location.description ? (
               <MentionText text={location.description} />
             ) : (

@@ -1,0 +1,190 @@
+/* Модуль карт: локальный Fantasy Punk skin, контракт макета v1.1. */
+.app-shell.app-shell-maps {
+  --paper: #faf8ef;
+  --paper-2: #f1eedf;
+  --bg-elevated: #f1eedf;
+  --ink: #171717;
+  --muted: #625f54;
+  --line: #171717;
+  --accent: #f3ff3a;
+  --surface: #171717;
+  --on-surface: #faf8ef;
+  --primary-text: #171717;
+  --primary-bg: #f3ff3a;
+  --text-bright: #171717;
+  --fs-micro: 10px;
+  --fs-meta: 12px;
+  --fs-data: 14px;
+  --fs-body: 16px;
+  --card-radius: 0;
+  --font-body: "Sofia Sans Semi Condensed", sans-serif;
+  --font-ui: "Sofia Sans Semi Condensed", sans-serif;
+  --font-display: "Rubik Dirt", sans-serif;
+  grid-template-columns: 64px minmax(0, 1fr) 272px !important;
+  grid-template-rows: minmax(0, 1fr);
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--fs-data);
+}
+.app-shell.app-shell-maps .mobile-topbar,
+.app-shell.app-shell-maps .mobile-bottom-nav,
+.app-shell.app-shell-maps .mini-player-bar,
+.app-shell.app-shell-maps .nav-widget { display: none; }
+@media (min-width: 901px) {
+  .app-shell.app-shell-maps .mobile-drawer-backdrop { display: none; }
+}
+.app-shell.app-shell-maps .app-content {
+  min-width: 0;
+  min-height: 0;
+  max-width: none;
+  padding: 0;
+  overflow: auto;
+  background: var(--paper-2);
+}
+.app-shell.app-shell-maps .app-content.has-player { padding-bottom: var(--player-bar-height); }
+.app-shell.app-shell-maps .audio-player-bar { left: 64px; right: 272px; }
+.app-shell.app-shell-maps .search-panel-slot {
+  display: block;
+  position: relative;
+  inset: auto;
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  transform: none;
+  z-index: 20;
+}
+.app-shell.app-shell-maps .search-panel.map-workspace-sources {
+  display: grid;
+  grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
+  height: 100%;
+  min-width: 0;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+  border-left: var(--card-border-width) solid var(--line);
+  background: var(--paper);
+}
+.map-workspace-source-search,
+.map-workspace-source-bag { min-width: 0; overflow: auto; padding: var(--sp-6); }
+.map-workspace-source-bag { border-top: var(--card-border-width) solid var(--line); }
+.map-workspace-sources .search-heading { color: var(--ink); }
+.map-workspace-sources a { color: var(--ink); }
+.map-workspace-sources .search-result { overflow-wrap: anywhere; }
+.map-workspace-sources .search-input-row { flex-wrap: wrap; }
+.map-workspace-sources .search-input-wrap { min-width: 0; }
+.map-workspace-sources input { min-width: 0; max-width: 100%; }
+.map-workspace-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 0;
+  overflow-y: auto;
+  background: #171717;
+  color: #faf8ef;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0;
+}
+.map-workspace-rail a,
+.map-workspace-rail button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  min-height: 45px;
+  flex-shrink: 0;
+  padding: var(--sp-1);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #faf8ef;
+  text-decoration: none;
+}
+.map-workspace-rail a.active,
+.map-workspace-rail button[aria-pressed="true"],
+.map-workspace-rail button[aria-expanded="true"] { background: #f3ff3a; color: #171717; }
+.map-workspace-rail button:disabled { opacity: .4; }
+.map-workspace-rail a:hover,
+.map-workspace-rail button:hover:not(:disabled) { outline: var(--card-border-width) solid #f3ff3a; }
+.map-workspace-rail span { font-size: var(--fs-micro); line-height: 1; }
+.map-workspace-rail .nav-icon { width: 22px; height: 22px; }
+.map-workspace-rail .map-tool-icon { width: 22px; height: 22px; }
+.map-workspace-rail-tools { display: flex; flex-direction: column; gap: var(--sp-2); min-height: 0; flex: 1; }
+.map-workspace-tool-list { min-height: 0; overflow-y: auto; overflow-x: hidden; flex: 1; }
+.map-workspace-tool-panels { flex-shrink: 0; border-top: var(--card-border-width) solid #625f54; }
+.map-workspace-rail span { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-shell.app-shell-maps .app-content a { color: var(--ink); }
+.app-shell.app-shell-maps .map-editor-stage > p { display: none; }
+.map-workspace-mode-tools { border-top: var(--card-border-width) solid #625f54; padding-top: var(--sp-2); }
+.map-workspace-search-toggle { margin-top: auto; }
+.map-workspace-search-close { display: none; }
+.app-shell.app-shell-maps .map-editor {
+  height: 100%;
+  min-height: 320px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: 56px 44px minmax(0, 1fr) 28px;
+  gap: 0;
+  align-items: stretch;
+  overflow: hidden;
+}
+.app-shell.app-shell-maps .map-editor > .section-background { display: none; }
+.app-shell.app-shell-maps .map-editor-breadcrumbs { grid-column: 1; grid-row: 1; align-self: center; padding: var(--sp-4) var(--sp-6); overflow: hidden; }
+.app-shell.app-shell-maps .map-editor-breadcrumbs > .row { font-size: var(--fs-meta); flex-wrap: nowrap; min-width: 0; }
+.app-shell.app-shell-maps .map-editor-breadcrumbs > .row > span { flex-shrink: 0; }
+.app-shell.app-shell-maps .map-editor-breadcrumbs > .row > span:last-child { flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-shell.app-shell-maps .map-editor-menubar { grid-column: 2; grid-row: 1; border: 0; gap: 0; flex-wrap: nowrap; }
+.app-shell.app-shell-maps .map-editor-menu-trigger { font-size: var(--fs-data); padding: var(--sp-3); }
+.app-shell.app-shell-maps .map-editor-menu-popup { left: auto; right: 0; }
+.app-shell.app-shell-maps .map-editor-mode-indicator { display: none; }
+.app-shell.app-shell-maps .map-editor-summary { grid-column: 1 / -1; grid-row: 4; margin: 0 !important; padding: 0 var(--sp-4); font-size: var(--fs-meta); overflow: hidden; }
+.app-shell.app-shell-maps .map-editor-commandbar { grid-column: 1 / -1; grid-row: 2; padding: var(--sp-1) var(--sp-4); border-block: var(--card-border-width) solid var(--line); flex-wrap: nowrap; overflow: hidden; }
+.app-shell.app-shell-maps .map-editor-stage { grid-column: 1 / -1; grid-row: 3; min-height: 0; position: relative; gap: 0; }
+.app-shell.app-shell-maps .map-editor-stage > .res-toolbar { position: absolute; top: var(--sp-2); right: var(--sp-2); z-index: 2; max-width: calc(100% - 16px); padding: var(--sp-2); background: var(--paper); border: var(--card-border-width) solid var(--line); }
+.app-shell.app-shell-maps .map-editor-viewport { flex: 1; min-height: 0; height: auto !important; border: 0; }
+.app-shell.app-shell-maps .map-editor-stage > p { font-size: var(--fs-meta); padding: var(--sp-1) var(--sp-4); }
+.app-shell.app-shell-maps .map-editor-stage > details { max-height: 25%; overflow: auto; }
+.app-shell.app-shell-maps .map-editor-workspace-drawer {
+  position: absolute;
+  top: 108px;
+  left: var(--sp-2);
+  width: min(284px, calc(100% - 16px));
+  max-height: calc(100% - 144px);
+  grid-column: auto;
+  grid-row: auto;
+  z-index: 12;
+  border: var(--card-border-width) solid var(--line);
+  box-shadow: 5px 5px 0 #171717;
+  background: var(--paper);
+}
+.app-shell.app-shell-maps .map-editor-workspace-drawer[hidden] { display: none; }
+.map-workspace-drawer-close { align-self: flex-end; }
+.app-shell.app-shell-maps .map-editor-tool-column .map-tool span { font-size: var(--fs-data); }
+.app-shell.app-shell-maps .map-editor-tool-column .map-tool .nav-icon { display: none; }
+.app-shell.app-shell-maps .map-editor-tool-column .map-tool .map-tool-icon { display: none; }
+.app-shell.app-shell-maps .app-content > .stack:not(.map-editor) { padding: var(--sp-7); min-width: 0; }
+.app-shell.app-shell-maps .page-header h1 { font-family: var(--font-display); }
+@media (max-width: 900px) {
+  .app-shell.app-shell-maps { grid-template-columns: 56px minmax(0, 1fr) !important; }
+  .app-shell.app-shell-maps .audio-player-bar { left: 56px; right: 0; }
+  .map-workspace-rail a, .map-workspace-rail button { width: 42px; }
+  .app-shell.app-shell-maps .search-panel-slot { position: fixed; inset: 0 0 0 auto; width: min(272px, calc(100vw - 56px)); transform: translateX(100%); visibility: hidden; z-index: 50; }
+  .app-shell.app-shell-maps .search-panel-slot.open { transform: none; visibility: visible; }
+  .map-workspace-search-close { display: flex; position: absolute; top: var(--sp-2); right: var(--sp-2); z-index: 1; }
+  .app-shell.app-shell-maps .map-editor-breadcrumbs { grid-column: 1 / -1; grid-row: 1; padding: var(--sp-2); }
+  .app-shell.app-shell-maps .map-editor-menubar { grid-column: 1 / -1; grid-row: 2; justify-content: flex-end; }
+  .app-shell.app-shell-maps .map-editor { grid-template-rows: 56px 44px 44px minmax(0, 1fr) 28px; }
+  .app-shell.app-shell-maps .map-editor-commandbar { grid-column: 1 / -1; grid-row: 3; display: flex; }
+  .app-shell.app-shell-maps .map-editor-stage { grid-row: 4; }
+  .app-shell.app-shell-maps .map-editor-summary { grid-row: 5; }
+  .app-shell.app-shell-maps .map-editor-workspace-drawer { top: 152px; max-height: calc(100% - 188px); }
+  .app-shell.app-shell-maps .map-editor-summary .badge { display: none; }
+  .app-shell.app-shell-maps .map-editor-stage > .res-toolbar { font-size: var(--fs-meta); }
+}
+@media print {
+  .app-shell.app-shell-maps .map-workspace-rail, .app-shell.app-shell-maps .search-panel-slot { display: none; }
+  .app-shell.app-shell-maps { display: block; height: auto; overflow: visible; }
+}

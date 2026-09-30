@@ -201,7 +201,7 @@ const MilestoneRow = memo(function MilestoneRow({
         {m.campaign_id && <span className="badge tag"> веха кампании</span>}
         {m.scene_name && <span className="muted"> · сцена «{m.scene_name}»</span>}
         {m.description && (
-          <div className="muted">
+          <div className="muted reading-text">
             <MentionText text={m.description} />
           </div>
         )}

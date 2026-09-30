@@ -7,11 +7,13 @@ import { cellCenter, cellCorners, coordLabel, neighbors, worldBounds } from "./g
 import { createV5RenderModel } from "./renderModel";
 import { drawMapSymbol } from "./assets/draw";
 import { buildTerrainMaskRaster } from "./terrainMaskRaster";
+import { flattenSplineWithWidths } from "./core/spline";
 import type {
   MapRenderModel,
   RenderDoor,
   RenderLabel,
   RenderMarker,
+  RenderPath,
   RenderRoom,
   RenderStartFinish,
   RenderTerrainLayer,
@@ -953,6 +955,62 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     ctx.stroke();
   };
 
+  const strokeFreePath = (path: RenderPath) => {
+    if (!path.nodes || path.nodes.length < 2) return;
+    const baseWidth = path.width ?? 0.22;
+    const firstWidth = path.nodes[0].width ?? baseWidth;
+    const varyingWidth = path.nodes.some((node) => (node.width ?? baseWidth) !== firstWidth);
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    if (varyingWidth) {
+      const samples = flattenSplineWithWidths(path.nodes, baseWidth, 3 / scale);
+      const strokeSamples = (color: string, multiplier: number) => {
+        ctx.strokeStyle = color;
+        for (let index = 1; index < samples.length; index++) {
+          const from = samples[index - 1], to = samples[index];
+          ctx.lineWidth = Math.max(1.5, (from.width + to.width) / 2 * scale) * multiplier;
+          ctx.beginPath();
+          ctx.moveTo(X(from.x), Y(from.y));
+          ctx.lineTo(X(to.x), Y(to.y));
+          ctx.stroke();
+        }
+      };
+      if (path.kind === "river") strokeSamples(chrome.paper, 1.55);
+      strokeSamples(path.kind === "river" ? RIVER_FILL : chrome.ink, 1);
+      ctx.restore();
+      return;
+    }
+    ctx.beginPath();
+    path.nodes.forEach((node, index) => {
+      if (index === 0) {
+        ctx.moveTo(X(node.position.x), Y(node.position.y));
+      } else {
+        const previous = path.nodes![index - 1];
+        if (previous.out && node.in) {
+          const c1 = previous.out;
+          const c2 = node.in;
+          ctx.bezierCurveTo(X(c1.x), Y(c1.y), X(c2.x), Y(c2.y),
+            X(node.position.x), Y(node.position.y));
+        } else {
+          ctx.lineTo(X(node.position.x), Y(node.position.y));
+        }
+      }
+    });
+    const inner = Math.max(1.5, firstWidth * scale);
+    if (path.kind === "river") {
+      ctx.strokeStyle = chrome.paper;
+      ctx.lineWidth = inner * 1.55;
+      ctx.stroke();
+      ctx.strokeStyle = RIVER_FILL;
+    } else {
+      ctx.strokeStyle = chrome.ink;
+    }
+    ctx.lineWidth = inner;
+    ctx.stroke();
+    ctx.restore();
+  };
+
   // Gameplay-сущности рисуются в порядке items[] слоя (§16), без сортировки
   // по kind. Объекты при scale < 10 не рисуются, глифы/текст — при < 14.
   // Комнаты: тинт типа + номер + имя. idx — номер среди комнат слоя.
@@ -1345,7 +1403,8 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       // paths[] order = render order (§14): реки отдельно ниже дорог НЕ
       // фиксируются — порядок задают сами слои (migrated: river-слой ниже).
       for (const p of layer.paths) {
-        if (p.kind === "river") strokeRivers(p.cells);
+        if (p.nodes) strokeFreePath(p);
+        else if (p.kind === "river") strokeRivers(p.cells);
         else strokeRoads(p.cells);
       }
     } else if (layer.kind === "gameplay") {
@@ -1358,6 +1417,41 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
           } else if (it.kind === "door") drawDoor(it.door);
           else if (it.kind === "trap") drawTrap(it.trap);
           else if (it.kind === "marker") drawMarker(it.marker);
+          else if (it.kind === "token" && !playerView) {
+            // Only the GM receives transient source presentation data.
+            const token = it.token;
+            const radius = token.size * scale / 2;
+            const tx = X(token.position.x), ty = Y(token.position.y);
+            ctx.save();
+            ctx.translate(tx, ty);
+            ctx.rotate(token.rotation * Math.PI / 180);
+            ctx.beginPath();
+            if (token.appearance.shape === "circle") ctx.arc(0, 0, radius, 0, Math.PI * 2);
+            else { ctx.moveTo(0, -radius); ctx.lineTo(radius, 0); ctx.lineTo(0, radius); ctx.lineTo(-radius, 0); ctx.closePath(); }
+            ctx.fillStyle = chrome.paper;
+            ctx.fill();
+            const portrait = token.appearance.visual.type === "entity-avatar" ? it.display?.portrait : null;
+            if (portrait) {
+              ctx.save(); ctx.clip();
+              const crop = Math.min(portrait.naturalWidth, portrait.naturalHeight);
+              ctx.drawImage(portrait, (portrait.naturalWidth - crop) / 2, (portrait.naturalHeight - crop) / 2, crop, crop, -radius, -radius, radius * 2, radius * 2);
+              ctx.restore();
+            }
+            ctx.strokeStyle = chrome.ink;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.fillStyle = chrome.ink;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.font = `${Math.max(10, radius)}px sans-serif`;
+            if (!portrait) ctx.fillText(it.display?.state === "missing" ? "?" : token.sourceRef?.kind === "location" || token.appearance.visual.type === "builtin" && token.appearance.visual.key === "location" ? "⌂" : "●", 0, 0);
+            if (selectedId === token.id) { ctx.strokeStyle = "#ff3e91"; ctx.lineWidth = 3; ctx.strokeRect(-radius - 3, -radius - 3, radius * 2 + 6, radius * 2 + 6); }
+            ctx.restore();
+            ctx.font = `12px ${fonts.label}`;
+            ctx.textAlign = "center";
+            ctx.fillStyle = chrome.ink;
+            ctx.fillText(token.label.mode === "custom" ? token.label.text : it.display?.name ?? "Загрузка источника…", tx, ty + radius + 14, Math.max(80, radius * 5));
+          }
           else if (it.kind === "start") drawStartFinish("start", it.start);
           else if (it.kind === "finish") drawStartFinish("finish", it.finish);
         }

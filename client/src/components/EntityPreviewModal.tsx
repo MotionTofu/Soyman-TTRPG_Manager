@@ -100,6 +100,7 @@ export function EntityPreviewContent({
       onClose={onClose}
       collapsed={collapsed}
       onToggleCollapse={onToggleCollapse}
+      hideProfileButton={hideProfileButton}
     />
   );
 }
@@ -182,12 +183,14 @@ function OtherEntityPreview({
   onClose,
   collapsed,
   onToggleCollapse,
+  hideProfileButton,
 }: {
   type: string;
   id: number;
   onClose?: () => void;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
+  hideProfileButton?: boolean;
 }) {
   const [detail, setDetail] = useState<Record<string, unknown> | null | undefined>(undefined);
   const [statblock, setStatblock] = useState<Statblock | null>(null);
@@ -260,7 +263,7 @@ function OtherEntityPreview({
           {type === "location" && (
             <>
               {!!detail.kind && <span className="muted">{String(detail.kind)}</span>}
-              <MentionText text={String(detail.description ?? "")} />
+              <div className="reading-text"><MentionText text={String(detail.description ?? "")} /></div>
             </>
           )}
 
@@ -272,20 +275,20 @@ function OtherEntityPreview({
               />
             ) : (
               <>
-                <MentionText text={String(detail.current_situation ?? "")} />
-                <MentionText text={String(detail.backstory ?? "")} />
+                <div className="reading-text"><MentionText text={String(detail.current_situation ?? "")} /></div>
+                <div className="reading-text"><MentionText text={String(detail.backstory ?? "")} /></div>
               </>
             ))}
 
           {type === "resource" && (
             <>
-              {typeof detail.file_url === "string" && IMAGE_EXT.test(detail.file_url) && (
+              {typeof detail.file_url === "string" && IMAGE_EXT.test(detail.file_url.split(/[?#]/)[0]) && (
                 <img src={detail.file_url} alt="" style={{ maxWidth: "100%", borderRadius: "var(--card-radius)" }} />
               )}
               <span className="muted">
                 {[detail.type, detail.category].filter(Boolean).join(" · ")}
               </span>
-              <MentionText text={String(detail.notes ?? "")} />
+              <div className="reading-text"><MentionText text={String(detail.notes ?? "")} /></div>
               {Array.isArray(detail.tags) && detail.tags.length > 0 && (
                 <div className="row" style={{ flexWrap: "wrap", gap: 4 }}>
                   {(detail.tags as string[]).map((t) => (
@@ -302,14 +305,16 @@ function OtherEntityPreview({
             <>
               {/* Универсальный фолбэк для остальных типов (campaign/setting/community/adventure/scene/session/setting_event/player/mastering).
                   Печатает первое непустое прозаическое поле; порядок отражает частоту использования. */}
-              {String(detail.description ?? "").trim() && <MentionText text={String(detail.description)} />}
-              {String(detail.notes ?? "").trim() && <MentionText text={String(detail.notes)} />}
-              {String(detail.content ?? "").trim() && <MentionText text={String(detail.content)} />}
-              {String(detail.notes_text ?? "").trim() && <MentionText text={String(detail.notes_text)} />}
-              {String(detail.current_situation ?? "").trim() && <MentionText text={String(detail.current_situation)} />}
-              {String(detail.backstory ?? "").trim() && <MentionText text={String(detail.backstory)} />}
-              {String(detail.history ?? "").trim() && <MentionText text={String(detail.history)} />}
-              {String(detail.secret ?? "").trim() && <MentionText text={String(detail.secret)} />}
+              <div className="reading-text">
+                {String(detail.description ?? "").trim() && <MentionText text={String(detail.description)} />}
+                {String(detail.notes ?? "").trim() && <MentionText text={String(detail.notes)} />}
+                {String(detail.content ?? "").trim() && <MentionText text={String(detail.content)} />}
+                {String(detail.notes_text ?? "").trim() && <MentionText text={String(detail.notes_text)} />}
+                {String(detail.current_situation ?? "").trim() && <MentionText text={String(detail.current_situation)} />}
+                {String(detail.backstory ?? "").trim() && <MentionText text={String(detail.backstory)} />}
+                {String(detail.history ?? "").trim() && <MentionText text={String(detail.history)} />}
+                {String(detail.secret ?? "").trim() && <MentionText text={String(detail.secret)} />}
+              </div>
               {/* Сеттинг/кампания могут хранить system_name / status рядом с описанием */}
               {(type === "campaign" || type === "setting") && detail.system_name && (
                 <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>{String(detail.system_name)}</span>
@@ -325,7 +330,7 @@ function OtherEntityPreview({
         </div>
       )}
 
-      {!collapsed && DETAIL_ROUTES[type] && (
+      {!collapsed && !hideProfileButton && DETAIL_ROUTES[type] && (
         <Link to={`${DETAIL_ROUTES[type]}/${id}`} onClick={onClose}>
           Открыть полностью →
         </Link>

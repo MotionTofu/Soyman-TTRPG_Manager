@@ -63,11 +63,11 @@ export function AdventurePreview({
 
   return (
     <div className="stack">
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
+      <div className="row adventure-preview-header" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
         <strong className="entry-title">{detail.name}</strong>
         <span
           className="muted"
-          style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", whiteSpace: "nowrap" }}
+          style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-data)" }}
         >
           {detail.chapters.length} {chapterWord(detail.chapters.length)} · {detail.scenes.length}{" "}
           {sceneWord(detail.scenes.length)} · {detail.milestones.length} вех · {secretsByKind("secret")}{" "}
@@ -95,7 +95,7 @@ export function AdventurePreview({
           <span className="campaign-field-label" style={{ color: "var(--ink)" }}>
             Логлайн
           </span>
-          <div style={{ whiteSpace: "pre-wrap" }}>
+          <div className="reading-text" style={{ whiteSpace: "pre-wrap" }}>
             <MentionText text={detail.description} />
           </div>
         </div>
@@ -105,7 +105,7 @@ export function AdventurePreview({
           <span className="campaign-field-label" style={{ color: "var(--ink)" }}>
             Завязка
           </span>
-          <div style={{ whiteSpace: "pre-wrap" }}>
+          <div className="reading-text" style={{ whiteSpace: "pre-wrap" }}>
             <MentionText text={detail.hook} />
           </div>
         </div>

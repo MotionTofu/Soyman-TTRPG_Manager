@@ -340,7 +340,7 @@ export function SceneDetailPage() {
                 {c.outcomes.map((o) => (
                   <div key={o.id} style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
                     <span className="campaign-field-label" style={{ margin: 0 }}>{o.label}</span>
-                    {o.consequence ? <span style={{ maxWidth: "56ch" }}><MentionText text={o.consequence} /></span> : null}
+                    {o.consequence ? <span className="reading-text" style={{ maxWidth: "56ch" }}><MentionText text={o.consequence} /></span> : null}
                     {o.target_name && <span className="muted">→ {o.target_name}</span>}
                   </div>
                 ))}
@@ -408,7 +408,7 @@ export function SceneDetailPage() {
                   </span>
                 )}
                 {r.notes && (
-                  <div className="muted" style={{ maxWidth: "62ch" }}>
+                  <div className="muted reading-text" style={{ maxWidth: "62ch" }}>
                     <MentionText text={r.notes} />
                   </div>
                 )}

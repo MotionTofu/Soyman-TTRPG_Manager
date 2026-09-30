@@ -7,6 +7,7 @@ import path from "path";
 import { entryImageFolder, systemFolder, vaultAbs, isVaultPath } from "../services/filesystem";
 import { backfillDefaultMechanicsSections, backfillDefaultVehicleSections, migrateBastionsToOwnSection } from "./defaultSections";
 import { migrateDndSkillNames } from "./dndSkillNames";
+import { migrateBookLibrary } from "./bookLibrary";
 import { migrateDndGrantedSpells } from "./dndGrantedSpells";
 import { migrateDndOriginGrants } from "./dndOriginGrants";
 import { migrateDndCombatEffects } from "./dndCombatEffects";
@@ -532,6 +533,9 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     database.exec(
       "ALTER TABLE mastering_notes ADD COLUMN section_id INTEGER REFERENCES mastering_sections(id) ON DELETE SET NULL"
     );
+  }
+  if (!columnExists(database, "mastering_notes", "cover_image")) {
+    database.exec("ALTER TABLE mastering_notes ADD COLUMN cover_image TEXT");
   }
   if (!columnExists(database, "mastering_sections", "system_id")) {
     // Старую таблицу (без системы) догнать — система теперь на всех категориях.
@@ -6442,6 +6446,10 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
   if (tableExists(database, "maps") && !columnExists(database, "maps", "archived_at")) {
     database.exec("ALTER TABLE maps ADD COLUMN archived_at TEXT");
   }
+  // Revision is independent of wall-clock timestamps and leaves map blobs intact.
+  if (tableExists(database, "maps") && !columnExists(database, "maps", "revision")) {
+    database.exec("ALTER TABLE maps ADD COLUMN revision INTEGER NOT NULL DEFAULT 0 CHECK(revision >= 0)");
+  }
 
   // Запись справочника, у которой текст разобран в `data` по буквам
   // ({"0":"Д","1":"е",…}). Так легли «Магические боеприпасы» Чародейного
@@ -7025,6 +7033,7 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);
 
+  migrateBookLibrary(database);
   compactIfBloated(database);
 }
 

@@ -32,6 +32,9 @@ export function useMapCamera({ mapId, geom, wrapRef, canvasRef }: UseMapCameraAr
   const [cam, setCam] = useState<Camera>({ scale: 24, ox: 0, oy: 0 });
   const camRef = useRef(cam);
   camRef.current = cam;
+  const grid = geom?.grid;
+  const width = geom?.width;
+  const height = geom?.height;
 
   // Автомасштаб под окно при открытии карты. Д-16: позиция камеры — по карте
   // (localStorage `maps.cam.<id>`): за столом зумнул на B12 — после перезахода
@@ -39,7 +42,7 @@ export function useMapCamera({ mapId, geom, wrapRef, canvasRef }: UseMapCameraAr
   const fitCamera = useCallback(
     (force = false) => {
       const wrap = wrapRef.current;
-      if (!wrap || mapId === null || !geom) return;
+      if (!wrap || mapId === null || grid === undefined || width === undefined || height === undefined) return;
       if (!force) {
         try {
           const raw = localStorage.getItem(`maps.cam.${mapId}`);
@@ -66,7 +69,7 @@ export function useMapCamera({ mapId, geom, wrapRef, canvasRef }: UseMapCameraAr
       }
       const rect = wrap.getBoundingClientRect();
       if (rect.width < 10 || rect.height < 10) return;
-      const b = worldBounds(geom.grid, geom.width, geom.height);
+      const b = worldBounds(grid, width, height);
       const pad = 24;
       const scale = Math.max(
         4,
@@ -78,7 +81,7 @@ export function useMapCamera({ mapId, geom, wrapRef, canvasRef }: UseMapCameraAr
         oy: pad + (rect.height - pad * 2 - (b.maxY - b.minY) * scale) / 2 - b.minY * scale,
       });
     },
-    [mapId, geom]
+    [mapId, grid, width, height]
   );
 
   useEffect(() => {
@@ -181,7 +184,7 @@ export function useMapCamera({ mapId, geom, wrapRef, canvasRef }: UseMapCameraAr
     };
     canvas.addEventListener("wheel", onWheelNative, { passive: false });
     return () => canvas.removeEventListener("wheel", onWheelNative);
-  }, [mapId, geom, zoomAt]);
+  }, [mapId, grid, width, height, zoomAt]);
 
   return { cam, setCam, camRef, fitCamera, zoomBy, zoomAt, toWorld, touchToWorld, toScreen };
 }

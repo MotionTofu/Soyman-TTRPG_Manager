@@ -17,8 +17,8 @@ export const RESOURCE_CATEGORY_LABELS: Record<ResourceCategory, string> = Object
   RESOURCE_CATEGORIES.map((c) => [c.key, c.label])
 ) as Record<ResourceCategory, string>;
 
-const IMAGE_EXT = /\.(jpe?g|png|gif|webp)$/i;
-const AUDIO_EXT = /\.(mp3|wav|ogg|m4a|flac|aac)$/i;
+const IMAGE_EXT = /\.(jpe?g|png|gif|webp|avif)$/i;
+const AUDIO_EXT = /\.(mp3|wav|ogg|m4a|flac|aac|opus|webm)$/i;
 const PDF_EXT = /\.pdf$/i;
 const MARKDOWN_EXT = /\.md$/i;
 // Windows drive path ("C:\..."), UNC share ("\\server\...") or a file://

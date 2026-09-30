@@ -91,6 +91,7 @@ export function collectOrphans(db: Database = appDb): OrphanRows {
   // scope_type='arc' не описывается видом сущности: это не «вид → таблица»,
   // а одна конкретная привязка Полотна.
   take("canvas_boards:arc", `SELECT * FROM canvas_boards WHERE scope_type = 'arc' AND scope_id NOT IN (SELECT id FROM story_arcs)`);
+  take("map_bindings:scene", `SELECT * FROM map_bindings WHERE target_type = 'scene' AND target_id NOT IN (SELECT id FROM story_scenes)`);
 
   lastSweepProblems = problems;
   return found;
@@ -143,6 +144,7 @@ export function sweepOrphans(db: Database = appDb): number {
       del(`entity_relations:to:${kind}`, `DELETE FROM entity_relations WHERE to_type = ? AND to_id NOT IN (SELECT id FROM ${table})`, kind);
     }
     del("canvas_boards:arc", `DELETE FROM canvas_boards WHERE scope_type = 'arc' AND scope_id NOT IN (SELECT id FROM story_arcs)`);
+    del("map_bindings:scene", `DELETE FROM map_bindings WHERE target_type = 'scene' AND target_id NOT IN (SELECT id FROM story_scenes)`);
   });
   run();
   return removed;

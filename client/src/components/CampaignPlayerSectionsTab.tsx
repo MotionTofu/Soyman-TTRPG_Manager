@@ -638,7 +638,7 @@ function ArticleCard({
           </div>
         ) : (
           <>
-            <div className={clampOpen ? "" : "editable-clamp"} style={{ whiteSpace: "pre-wrap" }}>
+            <div className={`reading-text ${clampOpen ? "" : "editable-clamp"}`} style={{ whiteSpace: "pre-wrap" }}>
               <MentionText text={article.content} />
             </div>
             {article.content.split("\n").length > 8 || article.content.length > 600 ? (

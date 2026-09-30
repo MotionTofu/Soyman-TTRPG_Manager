@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { cellKey, pixelToCell } from "../../grid";
-import type { MapDocumentV5 } from "../../core/types";
+import type { MapDocumentV5, SplineNode } from "../../core/types";
+import { deformFreePath, hitEditableFreePath, moveSplineHandle,
+  type FreePathJoin } from "../freePathEditing";
 import type { Camera } from "./useMapCamera";
 import type { MapGeometry, V5Selection } from "./useMapSelection";
 import type { PaintTool } from "../editorTypes";
@@ -60,6 +62,10 @@ export interface MapInputSelection {
   ) => void;
 }
 
+export type FreePathOrigin =
+  | { action: "extend" | "branch"; pathId: string; nodeIndex: number }
+  | { action: "branch-segment"; pathId: string; segmentIndex: number; t: number };
+
 interface UseMapInputArgs {
   canvasRef: { current: HTMLCanvasElement | null };
   documentRef: { current: MapDocumentV5 | null };
@@ -68,7 +74,19 @@ interface UseMapInputArgs {
   selection: MapInputSelection;
   geom: MapGeometry | null;
   tool: PaintTool;
+  freePathMode: boolean;
+  freePathEditMode: boolean;
+  selectedFreePathId: string | null;
   canEdit: boolean;
+  onFreePathPreview: (draft: { anchors: { x: number; y: number }[];
+    hover: { x: number; y: number } | null } | null) => void;
+  onFreePathBegin: (kind: "road" | "river") => boolean;
+  onFreePathCommit: (points: { x: number; y: number }[], kind: "road" | "river",
+    origin?: FreePathOrigin) => void;
+  onFreePathSelect: (pathId: string | null, nodeIndex?: number | null,
+    join?: FreePathJoin) => void;
+  onFreePathEditPreview: (draft: { pathId: string; nodes: SplineNode[] } | null) => void;
+  onFreePathEditCommit: (pathId: string, nodes: SplineNode[]) => void;
   // Состояние стен/линейки для маршрутизации (зеркало через argsRef,
   // значения — из страницы, второго постоянного зеркала не заводим).
   wallMode: boolean;
@@ -116,6 +134,14 @@ export function useMapInput(args: UseMapInputArgs) {
   const pinchRef = useRef<{ dist: number; scale: number; mx: number; my: number } | null>(null);
   const touches = useRef(new globalThis.Map<number, { x: number; y: number }>());
   const strokeTouchRef = useRef<number | null>(null);
+  const freePathRef = useRef<{ x: number; y: number }[] | null>(null);
+  const freePathKindRef = useRef<"road" | "river" | null>(null);
+  const freePathOriginRef = useRef<FreePathOrigin | null>(null);
+  const freePathDragRef = useRef<{
+    pathId: string; kind: "road" | "river"; nodes: SplineNode[]; anchorIndex: number;
+    handleKind: "anchor" | "in" | "out";
+    sx: number; sy: number; touchId: number | null; edited: SplineNode[] | null;
+  } | null>(null);
   const objDragRef = useRef<ObjDragState | null>(null);
   const rectRef = useRef<{ sx: number; sy: number; wx: number; wy: number; isRect: boolean } | null>(
     null
@@ -136,6 +162,87 @@ export function useMapInput(args: UseMapInputArgs) {
     if (!a.geom) return false;
     const cell = pixelToCell(a.geom.grid, wx, wy, a.geom.width, a.geom.height);
     return cell ? a.onFogCell(cell.x, cell.y, eraseOverrideRef.current) : false;
+  }
+
+  function addFreePathAnchor(a: UseMapInputArgs, wx: number, wy: number) {
+    if (!a.geom || (a.tool !== "road" && a.tool !== "river") ||
+      !pixelToCell(a.geom.grid, wx, wy, a.geom.width, a.geom.height)) return;
+    const points = freePathRef.current ?? [];
+    const last = points.at(-1);
+    if (last && Math.hypot(wx - last.x, wy - last.y) < 0.06) return;
+    if (points.length === 0 && !a.onFreePathBegin(a.tool)) return;
+    const next = [...points, { x: wx, y: wy }];
+    if (points.length === 0) freePathOriginRef.current = null;
+    freePathKindRef.current = a.tool;
+    freePathRef.current = next;
+    a.onFreePathPreview({ anchors: next, hover: null });
+  }
+
+  function previewFreePath(a: UseMapInputArgs, wx: number, wy: number) {
+    const anchors = freePathRef.current;
+    if (!anchors || !a.geom) return;
+    const hover = pixelToCell(a.geom.grid, wx, wy, a.geom.width, a.geom.height)
+      ? { x: wx, y: wy } : null;
+    a.onFreePathPreview({ anchors, hover });
+  }
+
+  function finishFreePath(a: UseMapInputArgs, commit: boolean) {
+    const points = freePathRef.current;
+    const kind = freePathKindRef.current;
+    const origin = freePathOriginRef.current;
+    freePathRef.current = null;
+    freePathKindRef.current = null;
+    freePathOriginRef.current = null;
+    if (points) a.onFreePathPreview(null);
+    if (commit && points && points.length >= 2 && kind) {
+      if (origin) a.onFreePathCommit(points, kind, origin);
+      else a.onFreePathCommit(points, kind);
+    }
+  }
+
+  function startFreePathFrom(point: { x: number; y: number }, kind: "road" | "river",
+    origin: FreePathOrigin): boolean {
+    const a = argsRef.current;
+    if (!a.canEdit || !a.geom || !pixelToCell(a.geom.grid, point.x, point.y,
+      a.geom.width, a.geom.height) || kind !== a.tool) return false;
+    if (freePathRef.current) finishFreePath(a, false);
+    freePathRef.current = [{ ...point }];
+    freePathKindRef.current = kind;
+    freePathOriginRef.current = origin;
+    a.onFreePathPreview({ anchors: [{ ...point }], hover: null });
+    return true;
+  }
+
+  function removeFreePathAnchor(a: UseMapInputArgs) {
+    const points = freePathRef.current;
+    if (!points) return;
+    if (points.length <= 1) {
+      finishFreePath(a, false);
+      return;
+    }
+    const next = points.slice(0, -1);
+    freePathRef.current = next;
+    a.onFreePathPreview({ anchors: next, hover: null });
+  }
+
+  function moveFreePathHandle(a: UseMapInputArgs, wx: number, wy: number) {
+    const drag = freePathDragRef.current;
+    if (!drag || !a.geom || !pixelToCell(a.geom.grid, wx, wy, a.geom.width, a.geom.height)) return;
+    const dx = wx - drag.sx;
+    const dy = wy - drag.sy;
+    if (Math.hypot(dx, dy) < 0.001) return;
+    drag.edited = drag.handleKind === "anchor"
+      ? deformFreePath(drag.nodes, drag.anchorIndex, dx, dy)
+      : moveSplineHandle(drag.nodes, drag.anchorIndex, drag.handleKind, dx, dy);
+    a.onFreePathEditPreview({ pathId: drag.pathId, nodes: drag.edited });
+  }
+
+  function finishFreePathHandle(a: UseMapInputArgs, commit: boolean) {
+    const drag = freePathDragRef.current;
+    if (!drag) return;
+    freePathDragRef.current = null;
+    a.onFreePathEditPreview(null);
+    if (commit && drag.edited) a.onFreePathEditCommit(drag.pathId, drag.edited);
   }
 
   function flushPaint() {
@@ -169,10 +276,22 @@ export function useMapInput(args: UseMapInputArgs) {
     rectRef.current = null;
     shapeDragRef.current = null;
     strokeTouchRef.current = null;
+    finishFreePath(a, false);
+    finishFreePathHandle(a, false);
     eraseOverrideRef.current = false;
     a.setRectPreview(null);
     if (a.history.isPainting()) a.history.commitStroke();
   }, [args.canEdit]);
+
+  useEffect(() => {
+    if (args.freePathMode && args.freePathEditMode && args.tool === freePathDragRef.current?.kind) return;
+    finishFreePathHandle(argsRef.current, false);
+  }, [args.freePathMode, args.freePathEditMode, args.tool]);
+
+  useEffect(() => {
+    if (args.freePathMode && !args.freePathEditMode && args.tool === freePathKindRef.current) return;
+    finishFreePath(argsRef.current, false);
+  }, [args.freePathMode, args.freePathEditMode, args.tool]);
 
   // Пробел — временная панорама левой кнопкой.
   useEffect(() => {
@@ -191,6 +310,29 @@ export function useMapInput(args: UseMapInputArgs) {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
     };
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const a = argsRef.current;
+      if (!a.canEdit || !a.freePathMode || a.freePathEditMode ||
+        (a.tool !== "road" && a.tool !== "river") || !freePathRef.current ||
+        e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target;
+      if (target instanceof Element && target.closest("input, textarea, select, [contenteditable=true]")) return;
+      if (e.code === "Enter") {
+        e.preventDefault();
+        finishFreePath(a, true);
+      } else if (e.code === "Backspace") {
+        e.preventDefault();
+        removeFreePathAnchor(a);
+      } else if (e.code === "Escape") {
+        e.preventDefault();
+        finishFreePath(a, false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   function capture(e: { target: unknown; pointerId: number }) {
@@ -216,6 +358,7 @@ export function useMapInput(args: UseMapInputArgs) {
       // Правая кнопка — стереть, не переключая инструмент (P1-10). Средняя и
       // пробел — панорама (выше). Контекстное меню браузера прибито на canvas.
       if (e.button === 2 && !spaceDown && a.canEdit && a.geom) {
+        if (a.freePathMode && (a.tool === "road" || a.tool === "river")) return;
         capture(e);
         a.history.beginStroke();
         eraseOverrideRef.current = true;
@@ -327,6 +470,23 @@ export function useMapInput(args: UseMapInputArgs) {
       a.tools.paint.altPick(wx, wy);
       return;
     }
+    if (a.freePathMode && (a.tool === "road" || a.tool === "river")) {
+      if (a.freePathEditMode) {
+        const hit = hitEditableFreePath(a.documentRef.current, a.tool, a.selectedFreePathId,
+          { x: wx, y: wy }, a.camera.camRef.current.scale);
+        if (hit?.join) a.onFreePathSelect(hit.pathId, hit.handleIndex, hit.join);
+        else a.onFreePathSelect(hit?.pathId ?? null, hit?.handleIndex);
+        if (hit?.handleIndex !== null && hit?.handleIndex !== undefined) {
+          capture(e);
+          freePathDragRef.current = { pathId: hit.pathId, kind: a.tool, nodes: hit.nodes,
+            anchorIndex: hit.handleIndex, handleKind: hit.handleKind ?? "anchor",
+            sx: wx, sy: wy, touchId: null, edited: null };
+        }
+        return;
+      }
+      if (e.detail === undefined || e.detail <= 1) addFreePathAnchor(a, wx, wy);
+      return;
+    }
     if (a.tool === "fill" || a.tool === "picker") {
       a.tools.paint.singleAction(wx, wy);
       return;
@@ -349,6 +509,14 @@ export function useMapInput(args: UseMapInputArgs) {
     if (!a.geom) return;
     const geom = a.geom;
     const { wx, wy } = a.camera.toWorld(e);
+    if (freePathDragRef.current?.touchId === null) {
+      if ((e.buttons & 1) !== 0) moveFreePathHandle(a, wx, wy);
+      return;
+    }
+    if (freePathRef.current) {
+      previewFreePath(a, wx, wy);
+      return;
+    }
     if (!a.canEdit) {
       const cell = pixelToCell(geom.grid, wx, wy, geom.width, geom.height);
       a.setHover(cell ? cellKey(cell.x, cell.y) : null);
@@ -409,6 +577,13 @@ export function useMapInput(args: UseMapInputArgs) {
 
   function onPointerUp(e: React.PointerEvent) {
     const a = argsRef.current;
+    if (freePathDragRef.current?.touchId === null) {
+      const { wx, wy } = a.camera.toWorld(e);
+      moveFreePathHandle(a, wx, wy);
+      finishFreePathHandle(a, true);
+      return;
+    }
+    if (a.freePathMode && !a.freePathEditMode && (a.tool === "road" || a.tool === "river")) return;
     // Отпускание объекта (выбор): двинули — шаг в историю, клик — панель.
     const od = objDragRef.current;
     if (od) {
@@ -473,6 +648,7 @@ export function useMapInput(args: UseMapInputArgs) {
 
   function onPointerCancel() {
     const a = argsRef.current;
+    finishFreePathHandle(a, false);
     // Отмена drag — откат к снапшоту, без истории.
     const od = objDragRef.current;
     if (od) {
@@ -498,6 +674,23 @@ export function useMapInput(args: UseMapInputArgs) {
     if (touches.current.size === 1 && a.canEdit && a.geom && strokeTouchRef.current === null) {
       const geom = a.geom;
       const t = e.changedTouches[0];
+      if (a.freePathMode && (a.tool === "road" || a.tool === "river")) {
+        const { wx, wy } = a.camera.touchToWorld(t.clientX, t.clientY);
+        if (a.freePathEditMode) {
+          const hit = hitEditableFreePath(a.documentRef.current, a.tool, a.selectedFreePathId,
+            { x: wx, y: wy }, a.camera.camRef.current.scale);
+          if (hit?.join) a.onFreePathSelect(hit.pathId, hit.handleIndex, hit.join);
+          else a.onFreePathSelect(hit?.pathId ?? null, hit?.handleIndex);
+          if (hit?.handleIndex !== null && hit?.handleIndex !== undefined) {
+            freePathDragRef.current = { pathId: hit.pathId, kind: a.tool, nodes: hit.nodes,
+              anchorIndex: hit.handleIndex, handleKind: hit.handleKind ?? "anchor",
+              sx: wx, sy: wy, touchId: t.identifier, edited: null };
+          }
+          return;
+        }
+        addFreePathAnchor(a, wx, wy);
+        return;
+      }
       if (a.tool === "fill" || a.tool === "picker") {
         const { wx, wy } = a.camera.touchToWorld(t.clientX, t.clientY);
         a.tools.paint.singleAction(wx, wy);
@@ -556,6 +749,7 @@ export function useMapInput(args: UseMapInputArgs) {
         strokeTouchRef.current = null;
         a.history.commitStroke();
       }
+      finishFreePathHandle(a, false);
       const [ta, tb] = [...touches.current.values()];
       const canvas = a.canvasRef.current!;
       const rect = canvas.getBoundingClientRect();
@@ -570,6 +764,16 @@ export function useMapInput(args: UseMapInputArgs) {
 
   function onTouchMove(e: React.TouchEvent) {
     const a = argsRef.current;
+    if (freePathDragRef.current && freePathDragRef.current.touchId !== null) {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        if (t.identifier !== freePathDragRef.current?.touchId) continue;
+        touches.current.set(t.identifier, { x: t.clientX, y: t.clientY });
+        const { wx, wy } = a.camera.touchToWorld(t.clientX, t.clientY);
+        moveFreePathHandle(a, wx, wy);
+      }
+      return;
+    }
     if (!a.canEdit && strokeTouchRef.current !== null) {
       strokeTouchRef.current = null;
       if (a.history.isPainting()) a.history.commitStroke();
@@ -610,6 +814,12 @@ export function useMapInput(args: UseMapInputArgs) {
   function onTouchEnd(e: React.TouchEvent) {
     const a = argsRef.current;
     for (let i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === freePathDragRef.current?.touchId) {
+        const t = e.changedTouches[i];
+        const { wx, wy } = a.camera.touchToWorld(t.clientX, t.clientY);
+        moveFreePathHandle(a, wx, wy);
+        finishFreePathHandle(a, true);
+      }
       if (e.changedTouches[i].identifier === strokeTouchRef.current) {
         strokeTouchRef.current = null;
         a.history.commitStroke();
@@ -628,6 +838,10 @@ export function useMapInput(args: UseMapInputArgs) {
     onTouchMove,
     onTouchEnd,
     spaceDown,
+    finishFreePath: () => finishFreePath(argsRef.current, true),
+    startFreePathFrom,
+    cancelFreePath: () => finishFreePath(argsRef.current, false),
+    removeFreePathAnchor: () => removeFreePathAnchor(argsRef.current),
     roomRectRef,
     rectRef,
     shapeDragRef,

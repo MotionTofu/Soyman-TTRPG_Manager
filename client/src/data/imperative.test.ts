@@ -9,6 +9,7 @@ vi.mock("../api/client", () => ({
       server.gets.push(path);
       return { path, n: server.gets.length };
     }),
+    getText: vi.fn(async () => ' {"v":77,"private":"Test raw"} \n'),
     put: vi.fn(),
     post: vi.fn(),
     del: vi.fn(),
@@ -21,7 +22,7 @@ vi.mock("../dataSync", () => ({
   onDataChangedElsewhere: () => () => {},
 }));
 
-import { readResource, afterWriteAnywhere } from "./imperative";
+import { readResource, readTextOnce, afterWriteAnywhere } from "./imperative";
 import { queryClient } from "./queryClient";
 import { dataKeys } from "./entities";
 
@@ -32,6 +33,11 @@ beforeEach(() => {
 });
 
 describe("слой данных вне компонентов", () => {
+  it("recovery download preserves raw text without cache/JSON normalization", async () => {
+    const raw = await readTextOnce("/maps/42/raw");
+    expect(raw).toBe(' {"v":77,"private":"Test raw"} \n');
+    expect(queryClient.getQueryData(dataKeys.resource("/maps/42/raw"))).toBeUndefined();
+  });
   it("повторное чтение того же пути берётся из кэша, `fresh` идёт на сервер", async () => {
     await readResource("/systems/entries/5");
     await readResource("/systems/entries/5");

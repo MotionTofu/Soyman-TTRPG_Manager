@@ -60,6 +60,10 @@ describe("Markdown ZIP bundles", () => {
     const again = await request(server.app).get(`/api/resources/${second.body.id}/markdown-content`).auth(gm, { type: "bearer" });
     expect(again.body.content).not.toContain(uid);
     expect(again.body.content).toContain("soyman:resource/");
+    const template=(await request(server.app).get('/api/workbooks/templates').auth(gm,{type:'bearer'})).body[0];
+    const workbook=(await request(server.app).post('/api/workbooks/instances').auth(gm,{type:'bearer'}).send({template_id:template.id,title:'Тетрадь для восстановления'})).body;
+    const book=(await request(server.app).get('/api/book-library/books').auth(gm,{type:'bearer'}).query({source_type:'resource',source_id:first.body.id})).body.books[0];
+    await request(server.app).put(`/api/workbooks/books/${book.id}`).auth(gm,{type:'bearer'}).send({template_key:workbook.template.key,instance_id:workbook.id});
     const backup = await request(server.app).post("/api/backup").auth(gm, { type: "bearer" }).send({});
     expect(backup.status).toBe(200);
     const snapshot = new AdmZip(backup.body.path as string);
@@ -69,6 +73,10 @@ describe("Markdown ZIP bundles", () => {
     snapshot.extractAllTo(restored);
     const restoredDb = new Database(path.join(restored, "app.db"), { readonly: true });
     try {
+      expect(restoredDb.prepare('SELECT uid,title,author_user_id,template_id FROM workbook_instances WHERE id=?').get(workbook.id)).toEqual({uid:workbook.uid,title:workbook.title,author_user_id:workbook.author_user_id,template_id:workbook.template_id});
+      expect(restoredDb.prepare('SELECT instance_id FROM workbook_book_selection WHERE book_id=? AND author_user_id=?').get(book.id,workbook.author_user_id)).toEqual({instance_id:workbook.id});
+      expect(restoredDb.prepare('SELECT key FROM library_books WHERE id=?').get(book.id)).toEqual({key:book.key});
+      expect(restoredDb.pragma('foreign_key_check')).toEqual([]);
       const restoredDoc = restoredDb.prepare("SELECT file_path FROM resources WHERE uid = ?").get(first.body.uid) as { file_path: string };
       const restoredImage = restoredDb.prepare("SELECT file_path FROM resources WHERE uid = ?").get(uid) as { file_path: string };
       for (const item of [restoredDoc, restoredImage]) {
