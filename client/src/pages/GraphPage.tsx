@@ -34,7 +34,15 @@ export function GraphPage() {
   const settings = settingsState.data ?? NO_SETTINGS;
   const campaigns = campaignsState.data ?? NO_CAMPAIGNS;
   const [settingId, setSettingId] = useState<number | "">("");
-  const [campaignId, setCampaignId] = useState<number | "">("");
+  // null — кампанию ещё не выбирали: граф приключений тогда открывается на
+  // кампании с самой свежей сыгранной сессией — со сценами: пустой ваншот на
+  // холсте ничего не покажет (Q5), граф мира — на всех.
+  const [pickedCampaign, setCampaignId] = useState<number | "" | null>(null);
+  const latestCampaign = campaigns.reduce<Campaign | null>(
+    (best, c) => (c.last_played_date && (!best || c.last_played_date > (best.last_played_date ?? "")) ? c : best),
+    null,
+  );
+  const campaignId = pickedCampaign ?? (view === "adventures" && !settingId && latestCampaign ? latestCampaign.id : "");
   const scopeError = settingsState.error ?? campaignsState.error;
   // Точки (`role=spot`) в граф по умолчанию не идут: 25 комнат данжа давали
   // паутину (план «Зоны», этап 10). Обитание перепривязано на родителя.
@@ -55,7 +63,9 @@ export function GraphPage() {
     params.set("depth", String(depth));
   }
   // Прежний граф держится, пока грузится граф с новыми фильтрами.
-  const graph = useResource<GraphData>(`/links/graph?${params.toString()}`, { keepPrevious: true });
+  // Умолчание кампании ещё не известно — не грузить граф всех кампаний зря.
+  const waitDefault = view === "adventures" && pickedCampaign === null && !campaignsState.data;
+  const graph = useResource<GraphData>(waitDefault ? null : `/links/graph?${params.toString()}`, { keepPrevious: true });
   const data = graph.data ?? null;
   const error = graph.error;
 
@@ -124,6 +134,7 @@ export function GraphPage() {
       <RelationGraph
         key={view}
         view={view}
+        layered={view === "adventures"}
         data={data}
         defaultHiddenTypes={GRAPH_VIEW_HIDDEN_TYPES[view]}
         layoutKey={`${view}:${campaignId ? `campaign:${campaignId}` : settingId ? `setting:${settingId}` : "global"}`}

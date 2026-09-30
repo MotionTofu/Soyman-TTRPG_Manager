@@ -3,6 +3,11 @@ export interface GraphNode {
   type: string;
   id: number;
   title: string;
+  // Ярусная раскладка графа приключений — заполняет сервер.
+  date?: string;
+  campaign_id?: number;
+  planned?: boolean;
+  position?: number;
 }
 export type EdgeKind =
   | "relation"
@@ -409,6 +414,108 @@ export function foldAdventures(nodes: GraphNode[], edges: GraphEdge[], expanded:
   const played = new Set(kept.filter((e) => e.section === "сыграно").map((e) => `${e.from}|${e.to}`));
   const keptEdges = kept.filter((e) => !(e.section === "набрано" && played.has(`${e.from}|${e.to}`)));
   return { nodes: keptNodes, edges: keptEdges, folded };
+}
+
+// Ярусная раскладка графа приключений (решения 2026-09-30, Q4–Q5): сверху
+// лента сессий по дате (полоса на кампанию), посередине приключения — по
+// первой сыгравшей их сессии, несыгранные в конце по position; внизу мир,
+// каждая сущность под средним x тех, с кем связана, в несколько рядов.
+const STORY_TIER = new Set(["campaign", "adventure", "scene"]);
+const LAYER_PAD = 60;
+const LAYER_GAP = 16;
+
+function chipWidth(n: GraphNode, scale: number): number {
+  return Math.max(48, (Math.min(n.title.length * 6.6, 180) + 26) * scale);
+}
+
+export interface LayeredLayout {
+  positions: NodePositions;
+  width: number;
+  height: number;
+  /** x последней проведённой сессии — отсюда граф открывается. */
+  anchorX: number;
+}
+
+export function layeredLayout(nodes: GraphNode[], edges: GraphEdge[], scales: Map<string, number>): LayeredLayout {
+  const positions: NodePositions = new Map();
+  const put = (key: string, x: number, y: number) => positions.set(key, { x, y, vx: 0, vy: 0 });
+  const scale = (n: GraphNode) => scales.get(n.key) ?? 1;
+  const neighbours = new Map<string, string[]>();
+  for (const e of edges) {
+    (neighbours.get(e.from) ?? neighbours.set(e.from, []).get(e.from)!).push(e.to);
+    (neighbours.get(e.to) ?? neighbours.set(e.to, []).get(e.to)!).push(e.from);
+  }
+
+  // Сессии: одна временная ось на все полосы — кампании выровнены по датам.
+  const sessions = nodes.filter((n) => n.type === "session")
+    .sort((a, b) => (a.date ?? "").localeCompare(b.date ?? "") || a.id - b.id);
+  const lanes = [...new Set(sessions.map((n) => n.campaign_id ?? 0))];
+  const laneH = 22 * Math.max(1, ...sessions.map(scale)) + 18;
+  const sessionIndex = new Map<string, number>();
+  let cursor = LAYER_PAD;
+  sessions.forEach((n, i) => {
+    const w = chipWidth(n, scale(n));
+    put(n.key, cursor + w / 2, LAYER_PAD + lanes.indexOf(n.campaign_id ?? 0) * laneH);
+    sessionIndex.set(n.key, i);
+    cursor += w + LAYER_GAP;
+  });
+  let right = cursor;
+
+  // Сюжет: по первой сыгравшей сессии, несыгранные — по position.
+  const firstPlayed = new Map<string, number>();
+  for (const e of edges) {
+    if (e.section !== "сыграно") continue;
+    const [s, other] = sessionIndex.has(e.from) ? [e.from, e.to] : [e.to, e.from];
+    const i = sessionIndex.get(s);
+    if (i === undefined) continue;
+    firstPlayed.set(other, Math.min(firstPlayed.get(other) ?? Infinity, i));
+  }
+  const story = nodes.filter((n) => STORY_TIER.has(n.type)).sort((a, b) =>
+    (firstPlayed.get(a.key) ?? Infinity) - (firstPlayed.get(b.key) ?? Infinity)
+    || (a.type === "campaign" ? -1 : b.type === "campaign" ? 1 : 0)
+    || (a.position ?? Infinity) - (b.position ?? Infinity)
+    || a.title.localeCompare(b.title));
+  const storyH = 22 * Math.max(1, ...story.map(scale));
+  const storyY = LAYER_PAD + (lanes.length - 1) * laneH + laneH / 2 + 70 + storyH / 2;
+  cursor = LAYER_PAD;
+  for (const n of story) {
+    const w = chipWidth(n, scale(n));
+    const first = firstPlayed.get(n.key);
+    const under = first === undefined ? -Infinity : positions.get(sessions[first].key)!.x - w / 2;
+    const left = Math.max(cursor, under);
+    put(n.key, left + w / 2, storyY);
+    cursor = left + w + LAYER_GAP;
+  }
+  right = Math.max(right, cursor, 1200);
+
+  // Мир: под средним x уже расставленных соседей, жадно по рядам.
+  const world = nodes.filter((n) => !positions.has(n.key)).map((n) => {
+    const xs = (neighbours.get(n.key) ?? []).map((k) => positions.get(k)?.x).filter((x): x is number => x !== undefined);
+    // Без сюжетных соседей — NaN: такие встают в конец самого короткого ряда.
+    return { n, w: chipWidth(n, scale(n)), target: xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN };
+  }).sort((a, b) => (Number.isNaN(a.target) ? 1 : 0) - (Number.isNaN(b.target) ? 1 : 0) || (a.target - b.target || 0));
+  const totalW = world.reduce((sum, c) => sum + c.w + LAYER_GAP, 0);
+  const rowCount = Math.max(3, Math.ceil((totalW / right) * 1.5));
+  const rowEnds = new Array<number>(rowCount).fill(LAYER_PAD);
+  const rowH = 36;
+  const worldY = storyY + storyH / 2 + 80;
+  let usedRows = 0;
+  for (const c of world) {
+    const shortest = rowEnds.indexOf(Math.min(...rowEnds));
+    const want = Number.isNaN(c.target) ? rowEnds[shortest] : c.target - c.w / 2;
+    let row = Number.isNaN(c.target) ? shortest : rowEnds.findIndex((end) => Math.max(end, want) - want <= 120);
+    if (row < 0) row = shortest;
+    const left = Math.max(rowEnds[row], want, LAYER_PAD);
+    put(c.n.key, left + c.w / 2, worldY + row * rowH);
+    rowEnds[row] = left + c.w + LAYER_GAP;
+    usedRows = Math.max(usedRows, row + 1);
+    right = Math.max(right, rowEnds[row]);
+  }
+
+  const lastHeld = [...sessions].reverse().find((n) => !n.planned);
+  const anchorX = lastHeld ? positions.get(lastHeld.key)!.x : 0;
+  // Снизу запас больше: нижние ряды — те, что хочется приблизить, а не упирать в край.
+  return { positions, width: right + LAYER_PAD, height: worldY + usedRows * rowH + LAYER_PAD * 3, anchorX };
 }
 
 export const GRAPH_WIDTH = 900;

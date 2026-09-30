@@ -111,6 +111,17 @@ describe("GET /links/graph?view=", () => {
     expect(keys.has(`adventure:${foreign}`)).toBe(false);
   });
 
+  it("view=adventures: лента — все сессии кампании, даже без сцен; отменённые и перенесённые — нет", async () => {
+    const empty = Number(db.prepare("INSERT INTO sessions (campaign_id, date) VALUES (?, '2026-03-01')").run(campaignId).lastInsertRowid);
+    const cancelled = Number(db.prepare("INSERT INTO sessions (campaign_id, date, status) VALUES (?, '2026-03-08', 'cancelled')").run(campaignId).lastInsertRowid);
+    graphCache.clear();
+    const res = await request(app).get(`/api/links/graph?view=adventures&campaign_id=${campaignId}`);
+    const keys = new Set(res.body.nodes.map((n: { key: string }) => n.key));
+    expect(keys.has(`session:${empty}`)).toBe(true);
+    expect(keys.has(`session:${cancelled}`)).toBe(false);
+    expect(res.body.isolated.some((n: { key: string }) => n.key === `session:${empty}`)).toBe(false);
+  });
+
   it("view=adventures: сущности мира появляются как узлы если заняты в сценах", async () => {
     const res = await request(app).get(`/api/links/graph?view=adventures&setting_id=${settingId}`);
     expect(res.status).toBe(200);

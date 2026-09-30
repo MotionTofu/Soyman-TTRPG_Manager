@@ -90,7 +90,10 @@ campaignsRouter.get("/", (req, res) => {
                  WHERE s2.campaign_id = c.id AND s2.status = 'held' AND s2.archived_at IS NULL) as held_sessions_count,
               (SELECT MIN(s3.date) FROM sessions s3
                  WHERE s3.campaign_id = c.id AND s3.status = 'planned' AND s3.archived_at IS NULL
-                   AND s3.date >= date('now')) as next_planned_date
+                   AND s3.date >= date('now')) as next_planned_date,
+              (SELECT MAX(s4.date) FROM sessions s4
+                 WHERE s4.campaign_id = c.id AND s4.status = 'held' AND s4.archived_at IS NULL
+                   AND EXISTS (SELECT 1 FROM session_scenes ss WHERE ss.session_id = s4.id)) as last_played_date
        FROM campaigns c
        LEFT JOIN systems s ON s.id = c.system_id
        LEFT JOIN settings st ON st.id = c.setting_id

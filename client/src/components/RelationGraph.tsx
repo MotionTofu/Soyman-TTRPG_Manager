@@ -33,6 +33,7 @@ import {
   GRAPH_VIEW_HIDDEN_TYPES,
   GRAPH_VIEW_SIZE_MODE,
   autoNodeScales,
+  layeredLayout,
   type GraphView,
   type NodeSizeMode,
   type EdgeKind,
@@ -69,10 +70,14 @@ function clampPan(
   canvasW: number, canvasH: number,
   worldW: number, worldH: number, fs: number,
 ) {
-  const minX = canvasW - worldW * zoom * fs - PAN_OVERSCROLL;
-  const minY = canvasH - worldH * zoom * fs - PAN_OVERSCROLL;
-  const maxX = PAN_OVERSCROLL;
-  const maxY = PAN_OVERSCROLL;
+  // Запас — полэкрана во все стороны: любой узел, даже крайний, можно
+  // вывести в середину и приблизить, а не упираться в обрез холста.
+  const overX = Math.max(PAN_OVERSCROLL, canvasW / 2);
+  const overY = Math.max(PAN_OVERSCROLL, canvasH / 2);
+  const minX = canvasW - worldW * zoom * fs - overX;
+  const minY = canvasH - worldH * zoom * fs - overY;
+  const maxX = overX;
+  const maxY = overY;
   return {
     x: Math.max(minX, Math.min(maxX, panX)),
     y: Math.max(minY, Math.min(maxY, panY)),
@@ -105,6 +110,8 @@ interface Props {
   defaultHiddenTypes?: string[];
   /** Какой это граф: от него зависит размер узлов по умолчанию и где он запоминается. */
   view?: GraphView;
+  /** Ярусы вместо силовой раскладки: сессии / сюжет / мир. Тащить узел можно только вдоль яруса. */
+  layered?: boolean;
 }
 
 const SIZE_MODE_STORE_PREFIX = "rpgManagerGraphSizeMode:";
@@ -157,6 +164,7 @@ function GraphCanvas({
   onBackgroundClick,
   onNodeContextMenu,
   onNodeDrag,
+  fitAnchorX = null,
 }: {
   width: number;
   height: number;
@@ -180,6 +188,8 @@ function GraphCanvas({
   onBackgroundClick: () => void;
   onNodeContextMenu: (e: ReactMouseEvent, node: GraphNode) => void;
   onNodeDrag: (key: string, x: number, y: number) => void;
+  /** Ярусы: вписать по высоте и встать так, чтобы эта точка мира была на 2/3 экрана. */
+  fitAnchorX?: number | null;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -280,6 +290,30 @@ function GraphCanvas({
     ro.observe(el);
     return () => ro.disconnect();
   }, [draw]);
+
+  // Ярусы открываются по высоте на последней проведённой сессии: лента
+  // длиннее экрана, а за столом нужна она, а не начало кампании. Смена
+  // размера (весь экран) вписывает заново.
+  useEffect(() => {
+    if (fitAnchorX == null || isolationView) return;
+    const el = wrapRef.current;
+    if (!el) return;
+    const fit = () => {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) return;
+      const fs = Math.min(r.width / worldWidth, r.height / worldHeight);
+      const top = 40; // под панелью «Типы связей / Типы сущностей» — иначе лента сессий под ней
+      const zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, (r.height - top) / (worldHeight * fs)));
+      const panX = Math.min(0, Math.max(r.width - worldWidth * zoom * fs, r.width * 2 / 3 - fitAnchorX * zoom * fs));
+      viewRef.current = { zoom, panX, panY: top };
+      draw();
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- только при смене мира, не на каждую перерисовку
+  }, [fitAnchorX, isolationView, worldWidth, worldHeight]);
 
   // Sync isolation view centering
   useEffect(() => {
@@ -550,7 +584,7 @@ function GraphCanvas({
 
 // ─── Outer component — React state for toolbar/legend ────────────
 
-export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layoutKey, scopeBar, edgeKinds, activeKinds: activeKindsProp, onActiveKindsChange, defaultHiddenTypes = GRAPH_VIEW_HIDDEN_TYPES.world, view = "world" }: Props) {
+export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layoutKey, scopeBar, edgeKinds, activeKinds: activeKindsProp, onActiveKindsChange, defaultHiddenTypes = GRAPH_VIEW_HIDDEN_TYPES.world, view = "world", layered: layeredMode = false }: Props) {
   const navigate = useNavigate();
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -632,7 +666,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   const [simulated, setSimulated] = useState<NodePositions>(() => new Map());
 
   useEffect(() => {
-    if (!data) { setSimulated(new Map()); return; }
+    if (!data || layeredMode) { setSimulated(new Map()); return; }
     const nodes = data.nodes;
     const edges = data.edges;
     const wb = baseCanvas.width;
@@ -670,10 +704,10 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     worker.postMessage({ nodes, edges, width: wb, height: hb, seed: seedArr.length > 0 ? seedArr : undefined, pinned: pinned.length > 0 ? pinned : undefined });
     return () => { cancelled = true; worker.terminate(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, baseCanvas.width, baseCanvas.height]);
+  }, [data, baseCanvas.width, baseCanvas.height, layeredMode]);
 
   // Merge simulated + manual
-  const positions = useMemo(() => {
+  const forcePositions = useMemo(() => {
     const merged: NodePositions = new Map(simulated);
     for (const [key, p] of Object.entries(manual)) {
       if (merged.has(key)) merged.set(key, { ...p, vx: 0, vy: 0 });
@@ -709,6 +743,22 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     for (const [key, m] of manualScales) scales.set(key, Math.min(3, (scales.get(key) ?? 1) * m));
     return scales;
   }, [pipeline, sizeMode, manualScales]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- списки стабильны в пределах одного прохода pipeline
+  const layered = useMemo(
+    () => (layeredMode && !isolationView ? layeredLayout(visibleNodesList, visibleEdgesList, nodeScales) : null),
+    [layeredMode, pipeline, nodeScales],
+  );
+  // В ярусах ручная раскладка двигает узел только по x: ярус — это смысл, а не место.
+  const positions = useMemo(() => {
+    if (!layered) return forcePositions;
+    const merged: NodePositions = new Map(layered.positions);
+    for (const [key, p] of Object.entries(manual)) {
+      const at = merged.get(key);
+      if (at) merged.set(key, { ...at, x: p.x });
+    }
+    return merged;
+  }, [layered, forcePositions, manual]);
+  const canvasSize = layered ?? baseCanvas;
 
   // Precomputed lookups
   const nodesByKey = useMemo(() => data ? new Map(data.nodes.map((n) => [n.key, n])) : new Map<string, GraphNode>(), [data]);
@@ -931,10 +981,10 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   ) : (
     <div ref={graphWrapRef} style={{ flex: 1, minHeight: fullscreen ? 0 : height, display: "flex", position: "relative" }}>
       <GraphCanvas
-        width={baseCanvas.width}
-        height={baseCanvas.height}
-        worldWidth={baseCanvas.width}
-        worldHeight={baseCanvas.height}
+        width={canvasSize.width}
+        height={canvasSize.height}
+        worldWidth={canvasSize.width}
+        worldHeight={canvasSize.height}
         positions={positions}
         visibleEdges={visibleEdgesList}
         visibleNodes={visibleNodesList}
@@ -953,13 +1003,14 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
         onBackgroundClick={handleBackgroundClick}
         onNodeContextMenu={handleNodeContextMenu}
         onNodeDrag={(key, x, y) => setManual((prev) => ({ ...prev, [key]: { x, y } }))}
+        fitAnchorX={layered?.anchorX ?? null}
       />
       {/* Stats — top right, below fullscreen button */}
       <span style={{ position: "absolute", top: 36, right: 8, zIndex: 5, fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--muted)", pointerEvents: "none" }}>
         {_graphStats}
       </span>
       {/* Canvas overlay controls */}
-      <div style={{ position: "absolute", top: 8, left: 8, display: "flex", gap: 8, zIndex: 5 }}>
+      <div style={{ position: "absolute", top: 8, left: 8, right: 130, display: "flex", flexWrap: "wrap", gap: 8, zIndex: 5 }}>
         <div style={{ position: "relative" }}>
           <button type="button" className={`graph-tb-btn${edgeKindsOpen ? " active" : ""}`}
             onClick={() => { setEdgeKindsOpen((v) => !v); setEntityTypesOpen(false); }}>

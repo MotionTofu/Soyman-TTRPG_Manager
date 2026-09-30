@@ -314,6 +314,7 @@ export interface Campaign {
   player_count?: number;
   held_sessions_count?: number;
   next_planned_date?: string | null;
+  last_played_date?: string | null;
   folder_path: string | null;
   /** Папки кампании нет в хранилище (удалили или перенесли) — считает сервер. */
   folder_missing?: boolean;

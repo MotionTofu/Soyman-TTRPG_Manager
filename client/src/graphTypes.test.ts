@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { TYPE_LABELS, TYPE_COLORS, TYPE_SHAPES, TYPE_ROUTES, EDGE_KINDS, EDGE_KIND_STYLE, foldAdventures, type GraphNode, type GraphEdge } from "./graphTypes";
+import { TYPE_LABELS, TYPE_COLORS, TYPE_SHAPES, TYPE_ROUTES, EDGE_KINDS, EDGE_KIND_STYLE, foldAdventures, layeredLayout, type GraphNode, type GraphEdge } from "./graphTypes";
 
 /**
  * Первый тест клиента. Раньше `vitest` в `client/` был установлен, но не имел
@@ -102,5 +102,36 @@ describe("сворачивание сцен и глав в приключени�
     const g = foldAdventures(nodes, edges, new Set(["adventure:1"]));
     expect(g.nodes.map((n) => n.key)).toContain("adventure:2");
     expect(g.folded.get("adventure:2")).toBe(1);
+  });
+});
+
+describe("ярусная раскладка графа приключений", () => {
+  const n = (key: string, extra: Partial<GraphNode> = {}): GraphNode => ({ key, type: key.split(":")[0], id: Number(key.split(":")[1]), title: key, ...extra });
+  const e = (from: string, to: string, section: string): GraphEdge => ({ from, to, section, tone: null, kind: "scene" });
+  const nodes = [
+    n("session:2", { date: "2026-02-01", campaign_id: 1 }),
+    n("session:1", { date: "2026-01-01", campaign_id: 1 }),
+    n("adventure:1", { position: 0 }),
+    n("adventure:2", { position: 1 }),
+    n("adventure:3", { position: 2 }),
+    n("being:1"),
+  ];
+  const edges = [e("session:2", "adventure:1", "сыграно"), e("session:1", "adventure:3", "сыграно"), e("adventure:1", "being:1", "scene_npcs")];
+  const L = layeredLayout(nodes, edges, new Map());
+  const p = (k: string) => L.positions.get(k)!;
+
+  it("сессии по дате слева направо, над сюжетом; мир под сюжетом", () => {
+    expect(p("session:1").x).toBeLessThan(p("session:2").x);
+    expect(p("session:1").y).toBeLessThan(p("adventure:1").y);
+    expect(p("adventure:1").y).toBeLessThan(p("being:1").y);
+  });
+
+  it("приключения по первой сыгравшей сессии, несыгранные в конце", () => {
+    expect(p("adventure:3").x).toBeLessThan(p("adventure:1").x);
+    expect(p("adventure:1").x).toBeLessThan(p("adventure:2").x);
+  });
+
+  it("открывается на последней проведённой сессии", () => {
+    expect(L.anchorX).toBe(p("session:2").x);
   });
 });

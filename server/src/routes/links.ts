@@ -39,6 +39,11 @@ interface GraphNode {
   type: string;
   id: number;
   title: string;
+  // Для ярусной раскладки графа приключений (решения 2026-09-30, Q4–Q6).
+  date?: string; // сессия
+  campaign_id?: number; // сессия — полоса «Все кампании»
+  planned?: boolean; // сессия ещё не проведена
+  position?: number; // приключение — порядок несыгранных
 }
 // Вид связи. До сих пор клиент различал только «с тоном» и «без тона», и
 // членство, обитание, вложенность, участие в сцене и упоминание рисовались
@@ -361,6 +366,12 @@ linksRouter.get("/graph", (req, res) => {
       .prepare("SELECT id, parent_id FROM story_arcs WHERE parent_id IS NOT NULL AND archived_at IS NULL")
       .all() as { id: number; parent_id: number }[];
     for (const c of chapterRows) connect("adventure", c.id, "adventure", c.parent_id, "глава приключения", null, "scene");
+    // Лента сессий — целиком, а не только сессии со сценами: иначе у
+    // «Вотердипа» из 23 сессий на ленте было 9. Область сужает ниже.
+    const sessionRows = db
+      .prepare("SELECT id FROM sessions WHERE status IN ('held','planned') AND rescheduled_to_id IS NULL AND archived_at IS NULL")
+      .all() as { id: number }[];
+    for (const r of sessionRows) track("session", r.id);
     // Переходы приключений (набор кампании перебивает набор сеттинга — п. 1 задания).
     const campaignTransitions = campaign_id
       ? db.prepare(
@@ -451,6 +462,40 @@ linksRouter.get("/graph", (req, res) => {
     }
   }
 
+  // Сессии: только проведённые и запланированные; перенесённая показывается
+  // один раз — новой строкой (у старой стоит rescheduled_to_id), отменённые
+  // скрыты (Q6). Пустой заголовок — «Сессия N · дата», N по кампании.
+  const sessionIds = nodes.filter((n) => n.type === "session").map((n) => n.id);
+  if (sessionIds.length > 0) {
+    const rows = db
+      .prepare(
+        `SELECT id, campaign_id, date, status,
+                (SELECT COUNT(*) FROM sessions o WHERE o.campaign_id = s.campaign_id AND o.status IN ('held','planned')
+                   AND o.rescheduled_to_id IS NULL AND o.archived_at IS NULL AND (o.date < s.date OR (o.date = s.date AND o.id <= s.id))) as n
+         FROM sessions s WHERE id IN (${sessionIds.map(() => "?").join(",")})
+           AND status IN ('held','planned') AND rescheduled_to_id IS NULL`
+      )
+      .all(...sessionIds) as { id: number; campaign_id: number; date: string; status: string; n: number }[];
+    const meta = new Map(rows.map((r) => [r.id, r]));
+    nodes = nodes.filter((n) => n.type !== "session" || meta.has(n.id));
+    for (const n of nodes) {
+      const m = n.type === "session" ? meta.get(n.id) : undefined;
+      if (!m) continue;
+      n.date = m.date;
+      n.campaign_id = m.campaign_id;
+      n.planned = m.status === "planned";
+      if (!n.title) n.title = `Сессия ${m.n} · ${m.date.slice(8, 10)}.${m.date.slice(5, 7)}`;
+    }
+  }
+  const adventureIds = nodes.filter((n) => n.type === "adventure").map((n) => n.id);
+  if (adventureIds.length > 0) {
+    const rows = db
+      .prepare(`SELECT id, position FROM story_arcs WHERE id IN (${adventureIds.map(() => "?").join(",")})`)
+      .all(...adventureIds) as { id: number; position: number }[];
+    const pos = new Map(rows.map((r) => [r.id, r.position]));
+    for (const n of nodes) if (n.type === "adventure") n.position = pos.get(n.id) ?? 0;
+  }
+
   if (scopeQueries) {
     const allowedByType = new Map<string, Set<number>>();
     for (const type of new Set(nodes.map((n) => n.type))) {
@@ -504,7 +549,8 @@ linksRouter.get("/graph", (req, res) => {
   // области — по всей базе это 1800 записей компендиума и прочий шум.
   const isolated: GraphNode[] = [];
   if (scopeQueries && !focus) {
-    const connected = new Set<string>();
+    // Узел на холсте — не одиночка, даже без рёбер (сессии ленты).
+    const connected = new Set<string>(nodes.map((n) => n.key));
     for (const e of visibleEdges) {
       connected.add(e.from);
       connected.add(e.to);
