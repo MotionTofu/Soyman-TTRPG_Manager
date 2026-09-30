@@ -14,6 +14,10 @@ export const mapWorkspaceApi = {
     document: serializeMapDocumentV6(document), player_visible: 0,
     seed: map.seed, sea: map.sea, mountains: map.mountains, forest: map.forest,
   }, { headers }),
+  createDungeon: (name: string, document: MapDocumentV6, seed: number) => write.post<MapFull>("/maps", {
+    name, scale: "locality", cell_lore: "5 м", player_visible: 0,
+    document: serializeMapDocumentV6(document), seed, sea: 55, mountains: 12, forest: 30,
+  }, { headers }),
   save: (id: number, document: MapDocumentV6, expectedRevision: number) =>
     write.put<MapFull>(`/maps/${id}`, { document: serializeMapDocumentV6(document), expectedRevision }, { headers }),
   saveBody: (id: number, body: MapSaveBody) => {

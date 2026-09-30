@@ -1,3 +1,5 @@
+import { CARTOGRAPHY_OBJECTS, CARTOGRAPHY_SCATTER, CARTOGRAPHY_PACK, cartographyId, cartographyUrl } from "./cartography";
+import type { MapDocumentV6 } from "@shared/maps/core";
 import type { VisualRef } from "../core/refs";
 import type { MapDocumentV5 } from "../core/types";
 
@@ -20,22 +22,32 @@ export interface MapImageAsset {
   kind: "image";
   image: HTMLImageElement | null;
   ready: Promise<void>;
+  failed?: boolean;
 }
 
 export interface MapSymbolAsset {
   id: string;
   name: string;
   tags: readonly string[];
-  glyph: "tree" | "tower" | "camp";
+  glyph: "tree" | "tower" | "camp" | "mountain";
 }
 
 export type MapVisualAsset = MapSymbolAsset | MapImageAsset;
 
 export const MAP_SYMBOL_ASSETS: readonly MapSymbolAsset[] = [
+  { id: "soyman-symbols:mountain", name: "Гора", tags: ["природа", "местность"], glyph: "mountain" },
   { id: "soyman-symbols:tree", name: "Дерево", tags: ["природа", "местность"], glyph: "tree" },
   { id: "soyman-symbols:tower", name: "Башня", tags: ["постройки", "ориентир"], glyph: "tower" },
   { id: "soyman-symbols:camp", name: "Лагерь", tags: ["поселение", "ориентир"], glyph: "camp" },
 ];
+
+export const MAP_CARTOGRAPHY_ASSETS: readonly MapImageAsset[] = CARTOGRAPHY_OBJECTS.map(item => ({
+  id: cartographyId(item.key), name: item.name, tags: [item.group, "картография"], kind: "image", image: null, ready: Promise.resolve(),
+}));
+const localImages = new Map<string, MapImageAsset>([...MAP_CARTOGRAPHY_ASSETS, ...["stone-floor", "earth", "water"].map(key => ({
+  id: cartographyId(key), name: key, tags: [], kind: "image" as const, image: null, ready: Promise.resolve(),
+}))].map(asset => [asset.id, asset]));
+const localLoads = new Map<string, Promise<void>>();
 
 const byId = new Map(MAP_SYMBOL_ASSETS.map((asset) => [asset.id, asset]));
 const imageAssets = new Map<string, MapImageAsset>();
@@ -49,6 +61,7 @@ export function resourceImageAssetId(uid: string): string {
 }
 
 export function mapAssetPackForId(assetId: string): { id: string; version: string } | null {
+  if (localImages.has(assetId)) return CARTOGRAPHY_PACK;
   if (byId.has(assetId)) return MAP_SYMBOL_PACK;
   if (imageAssets.has(assetId)) return MAP_RESOURCE_IMAGE_PACK;
   return null;
@@ -92,10 +105,28 @@ export function registerMapImageResources(resources: readonly MapImageResource[]
 }
 
 export function getMapImageAsset(id: string): MapImageAsset | null {
-  return imageAssets.get(id) ?? null;
+  return localImages.get(id) ?? imageAssets.get(id) ?? null;
 }
 
 export function loadMapImageAsset(id: string): Promise<void> {
+  const local = localImages.get(id);
+  if (local) {
+    const existing = localLoads.get(id);
+    if (existing) return existing;
+    const load = (async () => {
+      const image = new Image();
+      image.src = cartographyUrl(id.slice(CARTOGRAPHY_PACK.id.length + 1));
+      await image.decode();
+      local.image = image;
+      announceImageChange();
+    })();
+    local.ready = load;
+    localLoads.set(id, load);
+    // A failed local file keeps its stable catalog identity and placeholder.
+    // Cache the failure to avoid a request/redraw loop; reloading the app retries it.
+    void load.catch(() => { local.failed = true; announceImageChange(); });
+    return load;
+  }
   const asset = imageAssets.get(id);
   const url = imageUrls.get(id);
   if (!asset || !url) return Promise.reject(new Error(`Ресурс карты ${id} не найден`));
@@ -130,13 +161,26 @@ export function loadMapImageAsset(id: string): Promise<void> {
   return asset.ready;
 }
 
-export async function prepareMapImageAssets(doc: MapDocumentV5): Promise<void> {
+export async function prepareMapImageAssets(doc: MapDocumentV5 | MapDocumentV6): Promise<void> {
   const ids = new Set(doc.layers.flatMap((layer) => layer.kind === "object"
-    ? layer.items.flatMap((item) => item.visual.type === "asset" && item.visual.assetId.startsWith(`${MAP_RESOURCE_IMAGE_PACK.id}:`)
+    ? layer.items.flatMap((item) => item.visual.type === "asset" && (item.visual.assetId.startsWith(`${MAP_RESOURCE_IMAGE_PACK.id}:`) || localImages.has(item.visual.assetId))
       ? [item.visual.assetId] : []) : []));
+  for (const layer of doc.layers) if (layer.kind === "scatter") for (const area of layer.areas) {
+    const profile = area.profileRef.type === "builtin" ? CARTOGRAPHY_SCATTER.find(item => item.key === (area.profileRef.type === "builtin" ? area.profileRef.key : null)) : null;
+    if (profile) ids.add(profile.assetId);
+  }
   await Promise.all([...ids].map(loadMapImageAsset));
 }
 
 export function resolveMapSymbol(visual: VisualRef): MapVisualAsset | null {
-  return visual.type === "asset" ? byId.get(visual.assetId) ?? imageAssets.get(visual.assetId) ?? null : null;
+  return visual.type === "asset" ? byId.get(visual.assetId) ?? localImages.get(visual.assetId) ?? imageAssets.get(visual.assetId) ?? null : null;
+}
+
+/** Built-in decoration is installed with the app and never needs a login. */
+const STYLE_IMAGES = ["stone-floor", "earth", "water", "stone-wall", "wood-door"] as const;
+export function cartographyStyleUnavailable(): boolean {
+  return STYLE_IMAGES.some(key => getMapImageAsset(cartographyId(key))?.failed);
+}
+export async function prepareCartographyStyle(): Promise<void> {
+  await Promise.allSettled(STYLE_IMAGES.map(key => loadMapImageAsset(cartographyId(key))));
 }

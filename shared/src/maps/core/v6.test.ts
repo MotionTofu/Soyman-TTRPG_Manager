@@ -21,6 +21,15 @@ function oldDocument(): MapDocumentV5 {
         mask: { origin: { x: 0, y: 0 }, sampleSize: 1, materials: [{ type: "builtin", key: "terrain/stone" }], chunks: [{ id: "chunk", cx: 0, cy: 0, payload: { encoding: "palette-index-v1", values: Array(256).fill(1) } }] } } ] };
 }
 describe("V6 boundary and tokens", () => {
+  it("drawing styles survive canonical save/reload and token edits; unknown styles are rejected", () => {
+    for (const style of ["blueprint", "paper-ink"] as const) {
+      const doc = { ...upgradeMapDocumentV5(oldDocument()), appearance: { style } };
+      const edited = putGameplayToken(doc, "gp", createGameplayToken("test-style", ref, { x: 1, y: 1 }));
+      expect(parseMapDocumentV6(serializeMapDocumentV6(edited))).toEqual({ ok: true, value: edited });
+      expect(edited.appearance).toEqual({ style });
+    }
+    expect(parseMapDocumentV6({ ...upgradeMapDocumentV5(oldDocument()), appearance: { style: "unknown" } }).ok).toBe(false);
+  });
   it("bestiary refs remain independent and portable; creatures use the being silhouette", () => {
     const source = { kind: "compendium_entry" as const, uid: ref.uid };
     const token = { ...createGameplayToken("bestiary-token", source, { x: 2, y: 3 }), appearance: { shape: "circle" as const, visual: { type: "entity-avatar" as const, source } } };

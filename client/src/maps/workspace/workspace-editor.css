@@ -38,6 +38,28 @@
 .workspace-editor-message { padding: var(--sp-6); }
 .workspace-editor-label-dialog { --paper: #faf8ef; --paper-2: #f1eedf; --ink: #171717; --line: #171717; --muted: #625f54; --accent: #f3ff3a; --primary-bg: #f3ff3a; --primary-text: #171717; --font-ui: "Sofia Sans Semi Condensed", sans-serif; --font-body: "Sofia Sans Semi Condensed", sans-serif; --font-display: "Rubik Dirt", sans-serif; border-radius: 0; background: var(--paper); color: var(--ink); }
 .modal-backdrop:has(.workspace-editor-label-dialog) { left: 64px; right: 272px; top: 100px; bottom: 80px; }
+.modal.modal-wide.workspace-generator { width: min(880px, 100%); max-width: 880px; max-height: calc(100% - 32px); padding: var(--sp-4); overflow: hidden; }
+.workspace-generator > .workspace-editor-panel-heading, .workspace-generator-actions, .workspace-generator > [role="alert"] { flex-shrink: 0; }
+.workspace-generator-body { display: grid; grid-template-columns: 256px minmax(0, 1fr); gap: var(--sp-5); margin-top: var(--sp-4); min-height: 0; overflow-y: auto; }
+.workspace-generator-settings { min-width: 0; margin: 0; padding: 0; border: 0; display: grid; gap: var(--sp-2); }
+.workspace-generator-settings legend { font-size: var(--fs-meta); color: var(--muted); margin-bottom: var(--sp-2); }
+.workspace-generator-settings label { display: grid; gap: var(--sp-1); font-size: var(--fs-data); min-width: 0; }
+.workspace-generator-settings input, .workspace-generator-settings select { width: 100%; min-width: 0; }
+.workspace-generator-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-2); }
+.workspace-generator-presets { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+.workspace-generator-presets button { padding: var(--sp-2); font-size: var(--fs-meta); }
+.workspace-generator-settings .workspace-generator-check { display: flex; align-items: center; }
+.workspace-generator-settings input[type="checkbox"] { width: auto; }
+.workspace-generator-preview { min-width: 0; }
+.workspace-generator-preview canvas { display: block; width: 100%; height: 300px; }
+.workspace-generator-preview p { font-size: var(--fs-data); line-height: 1.4; margin-top: var(--sp-3); }
+.workspace-generator-warning { display: block; font-size: var(--fs-data); line-height: 1.4; padding: var(--sp-3); background: var(--accent); }
+.workspace-generator-actions { display: flex; justify-content: flex-end; gap: var(--sp-3); margin-top: var(--sp-4); }
+@media (max-width: 1100px) {
+  .workspace-generator-body { grid-template-columns: minmax(0, 1fr); }
+  .workspace-generator-preview { grid-row: 1; }
+  .workspace-generator-preview canvas { height: 220px; }
+}
 @media (max-width: 900px) {
   .modal-backdrop:has(.workspace-editor-label-dialog) { left: 56px; right: 0; top: 140px; }
   .workspace-editor { grid-template-rows: 96px 44px minmax(0, 1fr) 28px; }
@@ -45,3 +67,30 @@
   .workspace-editor-header h1 { flex-basis: 65%; }
   .workspace-editor-status span:last-child { display: none; }
 }
+
+.workspace-editor-context input[type="number"] { width: 64px; min-width: 0; }
+.workspace-editor-properties > button { margin-bottom: var(--sp-2); }
+
+/* Local OneShot skin: permanent chrome stays compact; the shelf is temporary. */
+.workspace-editor-header { background: var(--ink); color: var(--paper); border-bottom: 2px solid var(--ink); }
+.workspace-editor-header h1 { font-family: var(--font-display); font-size: var(--fs-h2); font-weight: 400; }
+.workspace-editor-header > a { color: var(--paper); }
+.workspace-editor-header button { background: var(--paper); color: var(--ink); border-color: var(--paper); box-shadow: none; }
+.workspace-editor-header button.primary { background: var(--accent); border-color: var(--accent); }
+.workspace-editor-context, .workspace-editor-status { background: var(--paper); background-image: var(--skin-paper-tile); }
+.workspace-editor-camera button { border: var(--card-border-width) solid var(--ink); box-shadow: 2px 2px 0 var(--ink); }
+.workspace-asset-library { position: absolute; z-index: 3; bottom: 12px; left: 12px; right: 12px; height: min(244px, calc(100% - 24px)); display: flex; flex-direction: column; padding: var(--sp-6); border: var(--card-border-width) solid var(--ink); background: var(--paper); background-image: var(--skin-paper-tile); box-shadow: 4px 4px 0 var(--ink); }
+.workspace-asset-library-heading { display: flex; align-items: center; gap: var(--sp-4); flex-shrink: 0; }
+.workspace-asset-library-heading > strong { font-family: var(--font-display); font-size: var(--fs-h2); font-weight: 400; }
+.workspace-asset-library-heading nav { display: flex; gap: var(--sp-2); }
+.workspace-asset-library-heading > input { margin-left: auto; width: 150px; min-width: 0; }
+.workspace-asset-library-heading button[aria-pressed="true"], .workspace-asset-library-items button[aria-pressed="true"] { background-color: var(--accent); }
+.workspace-asset-library-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(94px, 1fr)); gap: var(--sp-4); overflow-y: auto; min-height: 0; padding: var(--sp-4) var(--sp-1); }
+.workspace-asset-library-items button { min-height: 112px; display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); padding: var(--sp-3); background-color: #eee5ce; white-space: normal; min-width: 0; border: var(--card-border-width) solid var(--ink); }
+.workspace-asset-library-items img, .workspace-asset-library-items button > span:first-child { width: 100%; height: 72px; object-fit: contain; }
+.workspace-asset-library-items button > span:first-child { display: grid; place-items: center; font-size: var(--fs-h2); }
+.workspace-asset-library-items button > span:last-child { max-width: 100%; overflow-wrap: anywhere; font-size: var(--fs-meta); line-height: 1.2; }
+.workspace-asset-library > p { margin: var(--sp-2) 0 0; font-size: var(--fs-meta); line-height: 1.3; flex-shrink: 0; }
+@media (max-width: 1100px) { .workspace-asset-library-heading { flex-wrap: wrap; } .workspace-asset-library-heading nav { order: 1; flex-basis: 100%; } .workspace-asset-library-heading > input { flex: 1; } }
+
+.workspace-editor-artwork-warning { position: absolute; bottom: var(--sp-4); left: var(--sp-4); max-width: calc(100% - 32px); margin: 0; padding: var(--sp-2) var(--sp-4); border: var(--card-border-width) solid var(--ink); background: var(--paper); font-size: var(--fs-meta); pointer-events: none; }

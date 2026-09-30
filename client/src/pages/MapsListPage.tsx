@@ -12,6 +12,8 @@ import { SectionBackground } from "../components/SectionBackground";
 import { useConfirm } from "../hooks/useConfirm";
 import { ListPage } from "../components/ListPage";
 import { MAP_VERSION_HEADER } from "@shared/maps/core";
+import { DungeonGenerator } from "../maps/workspace/DungeonGenerator";
+import { mapWorkspaceApi } from "../maps/workspace/mapApi";
 import {
   MAP_GRID_LABELS,
   MAP_SCALE_LABELS,
@@ -137,6 +139,7 @@ export function MapsListPage() {
   const [sort, setSort] = useState<"recent" | "az">("recent");
 
   const [creating, setCreating] = useState(false);
+  const [generatorOpen, setGeneratorOpen] = useState(false);
   const [name, setName] = useState("");
   const [grid, setGrid] = useState<MapGrid>("hex");
   const [scale, setScale] = useState<MapScale>("continent");
@@ -292,6 +295,11 @@ export function MapsListPage() {
   return (
     <div className="stack" style={{ position: "relative" }}>
       <SectionBackground />
+      {canEdit && <DungeonGenerator open={generatorOpen} onClose={() => setGeneratorOpen(false)} onApply={async (document, settings, _target, name) => {
+        const created = await mapWorkspaceApi.createDungeon(name, document, settings.seed);
+        afterWrite([{ kind: "map", id: created.id, card: true }]);
+        navigate(`/maps/${created.id}/workspace`);
+      }} />}
       <ListPage
         headingSection="map"
         title="Редактор карт"
@@ -303,9 +311,12 @@ export function MapsListPage() {
         createLabel="+ Новая карта"
         onCreate={canEdit ? openCreate : undefined}
         actions={canEdit ? (
+          <>
+          <button type="button" onClick={() => setGeneratorOpen(true)}>Быстрое подземелье</button>
           <button type="button" title="Пустая карта с дефолтами: гексы, континент 40×30. Имя — потом" onClick={quickDraft}>
             + Черновик
           </button>
+          </>
         ) : undefined}
         search={q}
         onSearch={setQ}

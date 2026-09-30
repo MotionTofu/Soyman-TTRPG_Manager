@@ -39,8 +39,10 @@ export function WorkspaceProperties({ document, selection, commit, onClose, onDe
       <option value={0}>Вдоль стены →</option><option value={90}>Вдоль стены ↓</option><option value={180}>Вдоль стены ←</option><option value={270}>Вдоль стены ↑</option>
     </select></label>}
     {"transform" in item && <>
-      <label>Поворот<input type="number" value={item.transform.rotation} step={15} disabled={protectedLayer} onChange={(event) => edit((view) => transformMapObject(view, item.id, Number(event.target.value), item.transform.scale.x))} /></label>
-      <label>Размер<input type="number" value={item.transform.scale.x} min={0.25} max={8} step={0.25} disabled={protectedLayer} onChange={(event) => edit((view) => transformMapObject(view, item.id, item.transform.rotation, Number(event.target.value)))} /></label>
+      <label>Поворот<input type="number" value={item.transform.rotation} step={15} disabled={protectedLayer} onChange={(event) => edit((view) => transformMapObject(view, item.id, Number(event.target.value), Math.abs(item.transform.scale.x)))} /></label>
+      <label>Размер<input type="number" value={Math.abs(item.transform.scale.x)} min={0.25} max={8} step={0.25} disabled={protectedLayer} onChange={(event) => edit((view) => transformMapObject(view, item.id, item.transform.rotation, Number(event.target.value)))} /></label>
+      <label><input aria-label="Отразить по горизонтали" type="checkbox" checked={item.transform.scale.x < 0} disabled={protectedLayer} onChange={e => edit(view => transformMapObject(view, item.id, item.transform.rotation, Math.abs(item.transform.scale.x), e.target.checked))} />Отразить по горизонтали</label>
+      <label><input aria-label="Отразить по вертикали" type="checkbox" checked={item.transform.scale.y < 0} disabled={protectedLayer} onChange={e => edit(view => transformMapObject(view, item.id, item.transform.rotation, Math.abs(item.transform.scale.x), undefined, e.target.checked))} />Отразить по вертикали</label>
     </>}
     <button disabled={protectedLayer} onClick={onDelete}>Удалить с карты</button>
   </aside>;

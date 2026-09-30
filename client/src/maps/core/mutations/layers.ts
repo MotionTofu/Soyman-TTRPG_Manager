@@ -113,6 +113,13 @@ export function createObjectLayer(doc: MapDocumentV5, spec: LayerSpec): Mutation
   return changed({ ...doc, layers: [...doc.layers, layer] });
 }
 
+/** Editable area recipes; derived instances remain outside the document. */
+export function createScatterLayer(doc: MapDocumentV5, spec: LayerSpec): MutationResult {
+  const idCheck = checkNewId(doc, spec.id); if (!idCheck.ok) return idCheck.error;
+  const nameCheck = checkName(spec.name); if (!nameCheck.ok) return nameCheck.error;
+  return changed({ ...doc, layers: [...doc.layers, { ...baseOf(spec), name: nameCheck.name, kind: "scatter", areas: [] }] });
+}
+
 /** Новый GameplayLayer: items [] (§52). */
 export function createGameplayLayer(doc: MapDocumentV5, spec: LayerSpec): MutationResult {
   const idCheck = checkNewId(doc, spec.id);

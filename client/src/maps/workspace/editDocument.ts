@@ -20,7 +20,7 @@ export function editGeometry(document: MapDocumentV6, operation: (view: MapDocum
       throw new Error("Слой содержит связанные токены");
     }
   }
-  const next: MapDocumentV6 = { ...result.document, v: 6, layers: result.document.layers.map((layer) => {
+  const next: MapDocumentV6 = { ...result.document, v: 6, ...(document.appearance ? { appearance: document.appearance } : {}), layers: result.document.layers.map((layer) => {
     const original = document.layers.find((entry) => entry.id === layer.id);
     if (layer.kind !== "gameplay" || original?.kind !== "gameplay") return layer;
     const items = [...layer.items] as typeof original.items;
@@ -38,5 +38,10 @@ export function editGeometry(document: MapDocumentV6, operation: (view: MapDocum
     return { ...layer, items };
   }) };
   if (validateMapDocumentV6(next).length) throw new Error("Изменение нарушает целостность карты");
-  return canonicalizeMapDocumentV6(next);
+  // Core mutations keep untouched layers by identity. Canonicalize only changed
+  // layers so painting does not regenerate a forest or copy every object.
+  const untouched = new Map(document.layers.map(layer => [layer.id, layer]));
+  const canonical = canonicalizeMapDocumentV6({ ...next, layers: next.layers.filter(layer => untouched.get(layer.id) !== layer) });
+  const changed = new Map(canonical.layers.map(layer => [layer.id, layer]));
+  return { ...canonical, layers: next.layers.map(layer => changed.get(layer.id) ?? layer) };
 }

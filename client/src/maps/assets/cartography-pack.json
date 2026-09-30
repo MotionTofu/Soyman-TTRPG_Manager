@@ -1,0 +1,264 @@
+{
+  "id": "soyman-cartography",
+  "version": "1",
+  "generatedAt": "2026-09-30",
+  "source": "image_gen; generated in this conversation at user request",
+  "preparation": "Content bounds from original manifest with 8px padding; maximum side 512; WebP quality 80. Original PNGs unchanged.",
+  "assets": [
+    {
+      "id": "stone-floor",
+      "file": "stone-floor.webp",
+      "sourceSha256": "c97664c652990b80b128595c65b9b23d3287207ed72ff11671e1bd278ca1d233",
+      "sourceCrop": [
+        0,
+        0,
+        1254,
+        1254
+      ],
+      "width": 512,
+      "height": 512,
+      "bytes": 75366,
+      "sha256": "7014182c00a9395b0a787a3e3f38cd729b210f27af3daaabf20b2d134339716d"
+    },
+    {
+      "id": "earth",
+      "file": "earth.webp",
+      "sourceSha256": "b2672ab3b7f9eee071f392c20a71612c8f2f1334919aaad306ec619a96a3d1f7",
+      "sourceCrop": [
+        0,
+        0,
+        1254,
+        1254
+      ],
+      "width": 512,
+      "height": 512,
+      "bytes": 81150,
+      "sha256": "6698b83fa832c0d1a7fdc3cc45d4c35088a1f3bc7dca611d48d0b33011e34f8d"
+    },
+    {
+      "id": "water",
+      "file": "water.webp",
+      "sourceSha256": "5e5f2f9412d1a58f799e1ef7fffaab5290859922d66c8f5367b3a74193fa7381",
+      "sourceCrop": [
+        0,
+        0,
+        1254,
+        1254
+      ],
+      "width": 512,
+      "height": 512,
+      "bytes": 34190,
+      "sha256": "04f0ae31cca01c7ae4f29df061a27e28b72a4edfe9888266ae6242d18405fe54"
+    },
+    {
+      "id": "stone-wall",
+      "file": "stone-wall.webp",
+      "sourceSha256": "7a3bf0082ed76950f2569dd188eaae2322b00996d04d525c7eca607d205029a6",
+      "sourceCrop": [
+        2,
+        520,
+        1253,
+        795
+      ],
+      "width": 512,
+      "height": 113,
+      "bytes": 27630,
+      "sha256": "4d2d7e504c00c4879ff993c1da871e15f53088b7da18c520897340719d0b5066"
+    },
+    {
+      "id": "wood-door",
+      "file": "wood-door.webp",
+      "sourceSha256": "3f772c38b6a7b7e3214f479aecdf29ee2b770db7548d3bbb068229e69e3f9e35",
+      "sourceCrop": [
+        44,
+        505,
+        1212,
+        749
+      ],
+      "width": 512,
+      "height": 107,
+      "bytes": 20744,
+      "sha256": "66542ace720033fe9866e479a737c176310d7cacc6a21eea9500bc539cfd5b12"
+    },
+    {
+      "id": "sarcophagus",
+      "file": "sarcophagus.webp",
+      "sourceSha256": "e64cded5e51b7656efc276727d16300ab8aa8ffffe433bcd3e5cbbc65d5f6992",
+      "sourceCrop": [
+        385,
+        43,
+        868,
+        1208
+      ],
+      "width": 212,
+      "height": 512,
+      "bytes": 36708,
+      "sha256": "b4676db11ec37d2381bf64bfc0aefef90356c6d1979be0746de30b5a23fa695c"
+    },
+    {
+      "id": "altar",
+      "file": "altar.webp",
+      "sourceSha256": "18d0935e1ac86f32c9a99be27e2a6a4ced8a1c30e9e27788ff3df3d38ad01f3b",
+      "sourceCrop": [
+        17,
+        342,
+        1238,
+        915
+      ],
+      "width": 512,
+      "height": 240,
+      "bytes": 50136,
+      "sha256": "f1d2c2c780dc416182334d6600c010873511ec0dd496cd67a8d2586b7afff72c"
+    },
+    {
+      "id": "storage-cluster",
+      "file": "storage-cluster.webp",
+      "sourceSha256": "51eed6d4eb575f55a2385edcc158c1366a01174d840dae698b526de50e2fdf1d",
+      "sourceCrop": [
+        97,
+        87,
+        1158,
+        1175
+      ],
+      "width": 499,
+      "height": 512,
+      "bytes": 89668,
+      "sha256": "e3168f90d725b264704428ad7e1bbd22f75e146fadd4c41ff643975e534a84bd"
+    },
+    {
+      "id": "bone-pile",
+      "file": "bone-pile.webp",
+      "sourceSha256": "15a2eada63bc88373010ac994677b84254ce919d70f1c6511067e956cd585a88",
+      "sourceCrop": [
+        0,
+        248,
+        1254,
+        1053
+      ],
+      "width": 512,
+      "height": 329,
+      "bytes": 59374,
+      "sha256": "b911fe99488b0716e96e7f56fe025b1bc51e8e53478e793a8fc3fa0e3639bf15"
+    },
+    {
+      "id": "rock-cluster",
+      "file": "rock-cluster.webp",
+      "sourceSha256": "226c9e42fef7585716840af261689303c23df5316dcc9f6ca28329f6ec19b0c0",
+      "sourceCrop": [
+        61,
+        42,
+        1201,
+        1210
+      ],
+      "width": 500,
+      "height": 512,
+      "bytes": 79824,
+      "sha256": "19dbfb99d675b6b21a793e8a21a465d4d8a7e1cebb00001f18b15722868bf43b"
+    },
+    {
+      "id": "stone-pillar",
+      "file": "stone-pillar.webp",
+      "sourceSha256": "92c97192d4f0d4636255d517fbf4716599e18408b537538b723ca93e95b9c8b6",
+      "sourceCrop": [
+        61,
+        63,
+        1195,
+        1196
+      ],
+      "width": 512,
+      "height": 512,
+      "bytes": 79454,
+      "sha256": "f5c147d3287b786a885df5bf0bf2bc64026c98fc3929c1b01c22bea67cb157cb"
+    },
+    {
+      "id": "torch",
+      "file": "torch.webp",
+      "sourceSha256": "005f2e74e6530ca70277dbfd5d31c1fc95220b89cb913253f21a577d00788f42",
+      "sourceCrop": [
+        351,
+        205,
+        903,
+        1050
+      ],
+      "width": 334,
+      "height": 512,
+      "bytes": 43588,
+      "sha256": "e251a8f8b1003d12c26e412ccee3180826bd00d67e04e692bf63aeaaaeaf71e4"
+    },
+    {
+      "id": "pine",
+      "file": "pine.webp",
+      "sourceSha256": "2e01f27288aeca5bb645fcbacef07ea54992dc0724b5871dd5c3383e0256a774",
+      "sourceCrop": [
+        306,
+        0,
+        1055,
+        1254
+      ],
+      "width": 306,
+      "height": 512,
+      "bytes": 50204,
+      "sha256": "a6f1e2cb11dd725791c5ea2b286a80391b48ad5fedf50cf0cd222117fdc06d87"
+    },
+    {
+      "id": "mountain-ridge",
+      "file": "mountain-ridge.webp",
+      "sourceSha256": "09963746bab13ed531ba60a046f34512257b6970abf581023caf2d06fdf78caf",
+      "sourceCrop": [
+        0,
+        164,
+        1254,
+        1088
+      ],
+      "width": 512,
+      "height": 377,
+      "bytes": 57892,
+      "sha256": "a95a9877d6e892cc9c819a48a2f991c977240234262ecc4dde6f4721e1cb5723"
+    },
+    {
+      "id": "ruins",
+      "file": "ruins.webp",
+      "sourceSha256": "a158fe063b6e14998e5114a6aefc7571da0467d5bee92b8e8ceab352d3c28466",
+      "sourceCrop": [
+        45,
+        24,
+        1234,
+        1210
+      ],
+      "width": 512,
+      "height": 511,
+      "bytes": 81420,
+      "sha256": "1baff439afe3fb1f905091eea8229fda2255ae79d8237a406632cdbe154ab9c5"
+    },
+    {
+      "id": "outpost",
+      "file": "outpost.webp",
+      "sourceSha256": "001527032913083aca95e3a6d49de85363e9ca867c3c757cdd7df27912335118",
+      "sourceCrop": [
+        118,
+        62,
+        1172,
+        1157
+      ],
+      "width": 493,
+      "height": 512,
+      "bytes": 74330,
+      "sha256": "e5f18fb57de02420f0b67443587a269690795f7aba58a390907c888bdac32ee7"
+    },
+    {
+      "id": "crypt-guard",
+      "file": "crypt-guard.webp",
+      "sourceSha256": "08d9f5cbebc3007769ce0fb9cba65a977ff010d468e0e6caba9dfaf3ec4e704e",
+      "sourceCrop": [
+        0,
+        0,
+        1254,
+        1254
+      ],
+      "width": 512,
+      "height": 512,
+      "bytes": 57104,
+      "sha256": "f99b6d9765f34f4f113c72f9babc2ad6bd7204a2445fb2d28656a837c19c8d96"
+    }
+  ]
+}

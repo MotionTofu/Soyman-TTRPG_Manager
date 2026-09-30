@@ -83,3 +83,13 @@ describe("terrain mask raster", () => {
     expect(textureAt(near)).toEqual(textureAt(wider));
   });
 });
+
+it("dense chunk source and entry fallback produce identical textured pixels", () => {
+  const values = Array.from({ length: 256 }, (_, i) => i % 3 ? 1 : 2);
+  const entries = new Map<string, string>();
+  for (let i = 0; i < values.length; i++) entries.set(`${i % 16},${Math.floor(i / 16)}`, values[i] === 1 ? "forest" : "shallow_water");
+  const mask = { origin, sampleSize, entries };
+  const fallback = buildTerrainMaskRaster(mask, 8, 8, MAP_TERRAIN_FILL, true);
+  const dense = buildTerrainMaskRaster({ ...mask, source: { codes: ["forest", "shallow_water"], chunks: [{ cx: 0, cy: 0, values }] } }, 8, 8, MAP_TERRAIN_FILL, true);
+  expect(dense).toEqual(fallback);
+});

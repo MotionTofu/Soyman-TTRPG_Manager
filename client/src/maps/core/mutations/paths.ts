@@ -401,7 +401,7 @@ export function updateSplinePath(doc: MapDocumentV5, pathId: string,
   if (!validSplineNodes(nodes))
     return mutationError("path.bad-nodes", "patch.nodes", "spline needs at least two finite nodes and handles");
   const prependCount = patch.prependCount ?? 0;
-  if (!Number.isInteger(prependCount) || prependCount < 0 || prependCount > nodes.length - originalNodes.length)
+  if (!Number.isInteger(prependCount) || prependCount < 0 || prependCount > Math.max(0, nodes.length - originalNodes.length))
     return mutationError("path.bad-prepend", "patch.prependCount", "invalid number of prepended nodes");
   const insertion = patch.insertedAt ?? (prependCount ? { index: 0, count: prependCount } : null);
   if ((patch.insertedAt !== undefined && prependCount > 0) || (insertion !== null &&

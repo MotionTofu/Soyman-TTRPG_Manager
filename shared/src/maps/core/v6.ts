@@ -24,7 +24,12 @@ export interface GameplayToken {
 export type GameplayEntityV6 = GameplayEntity | GameplayToken;
 export interface GameplayLayerV6 extends Omit<GameplayLayer, "items"> { items: GameplayEntityV6[] }
 export type MapLayerV6 = Exclude<MapLayer, GameplayLayer> | GameplayLayerV6;
-export interface MapDocumentV6 extends Omit<MapDocumentV5, "v" | "layers"> { v: 6; layers: MapLayerV6[] }
+export type MapDrawingStyle = "blueprint" | "paper-ink";
+export interface MapDocumentV6 extends Omit<MapDocumentV5, "v" | "layers"> {
+  v: 6; layers: MapLayerV6[];
+  /** Map presentation is independent of generated geometry and app theme. */
+  appearance?: { style: MapDrawingStyle };
+}
 export interface MapRecordV6 extends Omit<MapRecordV5, "document"> { revision: number; document: MapDocumentV6 }
 
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -76,6 +81,9 @@ export function validateMapDocumentV6(doc: unknown): ValidationIssue[] {
   if (!record(doc)) return [{ code: "root.not-object", path: "", message: "expected document" }];
   const errors = validateMapDocument(invariantView(doc));
   if (doc.v !== 6) errors.push({ code: "version.invalid", path: "v", message: "expected v === 6" });
+  if (doc.appearance !== undefined && (!record(doc.appearance) || !["blueprint", "paper-ink"].includes(doc.appearance.style as string))) {
+    errors.push({ code: "appearance.unsupported", path: "appearance.style", message: "unsupported drawing style" });
+  }
   if (Array.isArray(doc.layers)) doc.layers.forEach((layer, li) => {
     if (record(layer) && layer.kind === "gameplay" && Array.isArray(layer.items)) layer.items.forEach((item, ei) => {
       if (record(item) && item.kind === "token") errors.push(...validateGameplayToken(item, `layers[${li}].items[${ei}]`));
@@ -100,7 +108,7 @@ export function upgradeMapDocumentV5(doc: MapDocumentV5): MapDocumentV6 {
 }
 export function canonicalizeMapDocumentV6(doc: MapDocumentV6): MapDocumentV6 {
   const base = canonicalizeMapDocument(invariantView(doc as unknown as Record<string, unknown>) as MapDocumentV5);
-  return { ...base, v: 6, layers: base.layers.map((layer, i) => {
+  return { ...base, v: 6, ...(doc.appearance ? { appearance: { style: doc.appearance.style } } : {}), layers: base.layers.map((layer, i) => {
     const original = doc.layers[i];
     if (layer.kind !== "gameplay" || original.kind !== "gameplay") return layer;
     return { ...layer, items: layer.items.map((item, j) => original.items[j].kind === "token"

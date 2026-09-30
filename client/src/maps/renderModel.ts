@@ -1,3 +1,4 @@
+import { CARTOGRAPHY_SCATTER, CARTOGRAPHY_PACK } from "./assets/cartography";
 // MapRenderModel — read-only runtime view для Canvas renderer (Фазы 2D/3A).
 // НЕ формат хранения и НЕ source of truth: не сериализуется, не сохраняется,
 // не мутируется, не входит в History/Autosave.
@@ -25,6 +26,7 @@ import type { MaterialRef } from "./core/refs";
 import type { LayerId, MapDocumentV5, MapObject, SplineNode } from "./core/types";
 import { mapAssetPackForId, resolveMapSymbol, type MapVisualAsset } from "./assets/registry";
 import { isPaletteIndexMaskPayload, TERRAIN_MASK_CHUNK_SIDE } from "@shared/maps/core/terrainMask";
+import { scatterInstances, SCATTER_LIMIT } from "./scatter";
 import { cellCenter } from "./grid";
 import type { GameplayToken } from "@shared/maps/core";
 import type { MapGrid } from "./mapTypes";
@@ -99,7 +101,7 @@ export interface RenderTerrainView {
   /** Только non-default клетки "x,y" → код (legacy: тот же Map без копирования). */
   readonly entries: ReadonlyMap<string, string>;
   /** World-space samples for a denser mask layer; absent for cell terrain. */
-  readonly mask?: { origin: RenderPoint; sampleSize: number; entries: ReadonlyMap<string, string> };
+  readonly mask?: { origin: RenderPoint; sampleSize: number; entries: ReadonlyMap<string, string>; source?: { codes: readonly (string | null)[]; chunks: readonly { cx: number; cy: number; values: readonly number[] }[] } };
 }
 
 export interface RenderLayerBase {
@@ -156,6 +158,7 @@ export interface RenderObjectLayer extends RenderLayerBase {
 
 export interface RenderScatterLayer extends RenderLayerBase {
   kind: "scatter";
+  items: readonly RenderMapObject[];
 }
 
 export type MapRenderLayer =
@@ -330,6 +333,8 @@ function baseOf(layer: { id: string; name: string; visible: boolean; locked: boo
  * valid V5) и не дублирует validator: diagnostics — только про unsupported
  * rendering, не про corruption.
  */
+const maskViews = new WeakMap<object, NonNullable<RenderTerrainView["mask"]>>();
+
 export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
   const diagnostics: RenderModelDiagnostic[] = [];
   const diag = (code: string, message: string) => diagnostics.push({ code, message });
@@ -348,31 +353,37 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
       if (layer.representation === "mask") {
         if (doc.grid?.type !== "square")
           diag("unsupported-terrain-mask", `layer ${layer.id}: dense terrain currently requires a square grid`);
-        const maskEntries = new Map<string, string>();
+        const cachedMask = maskViews.get(layer.mask);
+        if (cachedMask) {
+          layers.push({ ...baseOf(layer), kind: "terrain", terrain: { defaultCode, entries: new Map(), mask: cachedMask } });
+          continue;
+        }
+        const diagnosticCount = diagnostics.length;
         const materialCodes = layer.mask.materials.map(materialCode);
-        if (materialCodes.some((code) => code === null))
-          diag("unsupported-material", `layer ${layer.id}: mask uses unavailable material`);
+        if (materialCodes.some(code => code === null)) diag("unsupported-material", `layer ${layer.id}: mask uses unavailable material`);
+        const chunks: { cx: number; cy: number; values: readonly number[] }[] = [];
         for (const chunk of layer.mask.chunks) {
           if (!isPaletteIndexMaskPayload(chunk.payload, layer.mask.materials.length)) {
-            diag("unsupported-terrain-mask", `layer ${layer.id}: unknown mask encoding`);
-            continue;
+            diag("unsupported-terrain-mask", `layer ${layer.id}: unknown mask encoding`); continue;
           }
-          chunk.payload.values.forEach((paletteIndex, index) => {
-            if (paletteIndex === 0) return;
-            const code = materialCodes[paletteIndex - 1];
-            if (code === null || code === undefined) return;
-            const sx = chunk.cx * TERRAIN_MASK_CHUNK_SIDE + index % TERRAIN_MASK_CHUNK_SIDE;
-            const sy = chunk.cy * TERRAIN_MASK_CHUNK_SIDE + Math.floor(index / TERRAIN_MASK_CHUNK_SIDE);
-            maskEntries.set(`${sx},${sy}`, code);
-          });
+          chunks.push({ cx: chunk.cx, cy: chunk.cy, values: chunk.payload.values });
         }
-        layers.push({
-          ...baseOf(layer),
-          kind: "terrain",
-          terrain: { defaultCode, entries: new Map(), mask: {
-            origin: layer.mask.origin, sampleSize: layer.mask.sampleSize, entries: maskEntries,
-          } },
-        });
+        let entries: Map<string, string> | undefined;
+        const mask = { origin: layer.mask.origin, sampleSize: layer.mask.sampleSize,
+          source: { codes: materialCodes, chunks },
+          get entries(): ReadonlyMap<string, string> {
+            if (!entries) {
+              entries = new Map();
+              for (const chunk of chunks) for (let i = 0; i < chunk.values.length; i++) {
+                const code = materialCodes[chunk.values[i] - 1];
+                if (code) entries.set(`${chunk.cx * TERRAIN_MASK_CHUNK_SIDE + i % TERRAIN_MASK_CHUNK_SIDE},${chunk.cy * TERRAIN_MASK_CHUNK_SIDE + Math.floor(i / TERRAIN_MASK_CHUNK_SIDE)}`, code);
+              }
+            }
+            return entries;
+          },
+        };
+        if (diagnostics.length === diagnosticCount) maskViews.set(layer.mask, mask);
+        layers.push({ ...baseOf(layer), kind: "terrain", terrain: { defaultCode, entries: new Map(), mask } });
         continue;
       }
       const map = new Map<string, string>();
@@ -482,10 +493,20 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
       }
       layers.push({ ...baseOf(layer), kind: "object", items });
     } else if (layer.kind === "scatter") {
-      if (layer.areas.length > 0) {
-        diag("unsupported-scatter-layer", `layer ${layer.id}: ${layer.areas.length} area(s) not rendered`);
+      const items: RenderMapObject[] = [];
+      for (const area of layer.areas) {
+        const instances = scatterInstances(area);
+        const required = area.profileRef.type === "builtin" ? CARTOGRAPHY_SCATTER.find(profile => profile.key === (area.profileRef.type === "builtin" ? area.profileRef.key : null)) : null;
+        if (required && !doc.assetPacks.some(pack => pack.id === CARTOGRAPHY_PACK.id && pack.version === CARTOGRAPHY_PACK.version)) {
+          diag("unsupported-scatter-layer", `area ${area.id}: cartography pack unavailable`); continue;
+        }
+        if (instances.error || items.length + instances.items.length > SCATTER_LIMIT) {
+          diag("unsupported-scatter-layer", `area ${area.id}: ${instances.error ?? "layer exceeds scatter budget"}`);
+          continue;
+        }
+        items.push(...instances.items);
       }
-      layers.push({ ...baseOf(layer), kind: "scatter" });
+      layers.push({ ...baseOf(layer), kind: "scatter", items });
     }
   }
 

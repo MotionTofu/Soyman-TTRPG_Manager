@@ -26,8 +26,8 @@ export function buildTerrainMaskRaster(
   colors: Readonly<Record<string, string>>,
   textured = false,
 ): TerrainMaskRaster | null {
-  const { sampleSize: size, origin, entries } = mask;
-  if (entries.size === 0 || !Number.isFinite(size) || size <= 0) return null;
+  const { sampleSize: size, origin } = mask;
+  if (!Number.isFinite(size) || size <= 0) return null;
   const mapMinSX = Math.ceil((0 - origin.x) / size - 0.5);
   const mapMaxSX = Math.ceil((mapWidth - origin.x) / size - 0.5) - 1;
   const mapMinSY = Math.ceil((0 - origin.y) / size - 0.5);
@@ -36,20 +36,20 @@ export function buildTerrainMaskRaster(
   let minSY = Infinity;
   let maxSX = -Infinity;
   let maxSY = -Infinity;
-  const painted: Array<{ sx: number; sy: number; code: string }> = [];
-  for (const [key, code] of entries) {
-    const comma = key.indexOf(",");
-    const sx = Number(key.slice(0, comma));
-    const sy = Number(key.slice(comma + 1));
-    if (!Number.isInteger(sx) || !Number.isInteger(sy) ||
-      sx < mapMinSX || sx > mapMaxSX || sy < mapMinSY || sy > mapMaxSY) continue;
-    painted.push({ sx, sy, code });
-    minSX = Math.min(minSX, sx);
-    minSY = Math.min(minSY, sy);
-    maxSX = Math.max(maxSX, sx);
-    maxSY = Math.max(maxSY, sy);
-  }
-  if (painted.length === 0) return null;
+  const eachSample = (visit: (sx: number, sy: number, code: string) => void) => {
+    if (mask.source) {
+      for (const chunk of mask.source.chunks) for (let i = 0; i < chunk.values.length; i++) {
+        const code = mask.source.codes[chunk.values[i] - 1]; if (!code) continue;
+        const sx = chunk.cx * 16 + i % 16, sy = chunk.cy * 16 + Math.floor(i / 16);
+        if (sx >= mapMinSX && sx <= mapMaxSX && sy >= mapMinSY && sy <= mapMaxSY) visit(sx, sy, code);
+      }
+    } else for (const [key, code] of mask.entries) {
+      const comma = key.indexOf(","), sx = Number(key.slice(0, comma)), sy = Number(key.slice(comma + 1));
+      if (Number.isInteger(sx) && Number.isInteger(sy) && sx >= mapMinSX && sx <= mapMaxSX && sy >= mapMinSY && sy <= mapMaxSY) visit(sx, sy, code);
+    }
+  };
+  eachSample((sx, sy) => { minSX = Math.min(minSX, sx); minSY = Math.min(minSY, sy); maxSX = Math.max(maxSX, sx); maxSY = Math.max(maxSY, sy); });
+  if (!Number.isFinite(minSX)) return null;
   // A transparent sample around the painted bounds lets the edge fade out.
   minSX--;
   minSY--;
@@ -72,15 +72,21 @@ export function buildTerrainMaskRaster(
     pixels[offset + 2] = b + delta;
     pixels[offset + 3] = 255;
   };
-  for (const { sx, sy, code } of painted) write(sx, sy, code);
+  eachSample(write);
 
   // At the map perimeter, extend the nearest interior sample instead of fading
   // the terrain into the lower layer right on the boundary of the map.
+  const chunksByCell = mask.source ? new Map(mask.source.chunks.map(chunk => [`${chunk.cx},${chunk.cy}`, chunk])) : null;
+  const sampleCode = (sx: number, sy: number) => {
+    if (!mask.source || !chunksByCell) return mask.entries.get(`${sx},${sy}`);
+    const cx = Math.floor(sx / 16), cy = Math.floor(sy / 16), chunk = chunksByCell.get(`${cx},${cy}`);
+    return chunk ? mask.source.codes[chunk.values[(sy - cy * 16) * 16 + sx - cx * 16] - 1] : undefined;
+  };
   const edgeSample = (sx: number, sy: number) => {
     if (sx >= mapMinSX && sx <= mapMaxSX && sy >= mapMinSY && sy <= mapMaxSY) return;
     const nearX = Math.max(mapMinSX, Math.min(mapMaxSX, sx));
     const nearY = Math.max(mapMinSY, Math.min(mapMaxSY, sy));
-    const code = entries.get(`${nearX},${nearY}`);
+    const code = sampleCode(nearX, nearY);
     if (code) write(sx, sy, code, nearX, nearY);
   };
   for (let sx = minSX; sx < minSX + width; sx++) {

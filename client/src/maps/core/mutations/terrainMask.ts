@@ -3,7 +3,7 @@ import { isPaletteIndexMaskPayload, maskChunkCoords, TERRAIN_MASK_CHUNK_AREA, TE
 import type { MapDocumentV5, TerrainMaskChunk } from "../types";
 import { changed, findLayer, mutationError, noChange, withReplacedLayer, type MutationResult } from "./helpers";
 
-const MAX_SAMPLES_PER_DAB = 4096;
+const MAX_SAMPLES_PER_DAB = 4356; // Radius 8 at quarter-cell resolution, including edge samples.
 const MAX_SAMPLES_PER_FILL = 250_000;
 
 function sameMaterial(a: MaterialRef, b: MaterialRef): boolean {

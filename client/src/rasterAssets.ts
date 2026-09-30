@@ -36,10 +36,12 @@
  * перевода в webp лежат в `Archive/2026-09-12/raster-png/`.
  */
 
-export type RasterCategory = "conditions" | "schools" | "coins" | "inventory" | "tokens" | "textures" | "mascot";
+export type RasterCategory = "conditions" | "schools" | "coins" | "inventory" | "tokens" | "textures" | "mascot" | "cartography";
 
 /** Что реально лежит в раздаче. Ключ — имя файла без расширения. */
 export const RASTER_ASSETS: Record<RasterCategory, readonly string[]> = {
+  // Local map artwork; provenance and crop/encoding manifest in maps/assets/cartography-pack.json.
+  cartography: ["stone-floor", "earth", "water", "stone-wall", "wood-door", "sarcophagus", "altar", "storage-cluster", "bone-pile", "rock-cluster", "stone-pillar", "torch", "pine", "mountain-ridge", "ruins", "outpost", "crypt-guard"],
   conditions: [
     "blinded",
     "charmed",

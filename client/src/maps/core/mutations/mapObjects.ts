@@ -31,7 +31,7 @@ export function moveMapObject(doc: MapDocumentV5, id: string, position: Vec2): M
   return mutationError("object.not-found", "id", "object not found");
 }
 
-export function transformMapObject(doc: MapDocumentV5, id: string, rotation: number, size: number): MutationResult {
+export function transformMapObject(doc: MapDocumentV5, id: string, rotation: number, size: number, flipX?: boolean, flipY?: boolean): MutationResult {
   if (!Number.isFinite(rotation) || !Number.isFinite(size) || size < 0.25 || size > 8)
     return mutationError("object.bad-transform", "transform", "rotation must be finite and size 0.25..8");
   for (let i = 0; i < doc.layers.length; i++) {
@@ -40,10 +40,12 @@ export function transformMapObject(doc: MapDocumentV5, id: string, rotation: num
     const index = layer.items.findIndex((item) => item.id === id);
     if (index < 0) continue;
     const item = layer.items[index];
-    if (item.transform.rotation === rotation && item.transform.scale.x === size && item.transform.scale.y === size)
+    const sx = size * ((flipX ?? item.transform.scale.x < 0) ? -1 : 1);
+    const sy = size * ((flipY ?? item.transform.scale.y < 0) ? -1 : 1);
+    if (item.transform.rotation === rotation && item.transform.scale.x === sx && item.transform.scale.y === sy)
       return noChange(doc);
     const items = [...layer.items];
-    items[index] = { ...item, transform: { ...item.transform, rotation, scale: { x: size, y: size } } };
+    items[index] = { ...item, transform: { ...item.transform, rotation, scale: { x: sx, y: sy } } };
     return changed(withReplacedLayer(doc, i, { ...layer, items }));
   }
   return mutationError("object.not-found", "id", "object not found");

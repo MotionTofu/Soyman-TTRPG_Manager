@@ -1,3 +1,4 @@
+import { artworkImage, surfaceImage, surfacePattern, texturedMask, wallPattern } from "./assets/artwork";
 // Рендер карты на canvas 2D. Цвета террейна — фиксированная спокойная
 // палитра (исключение как у Полотна §6 design_revision.md: бюджет акцента
 // на неё не тратится). Обрамление (фон, сетка, координаты, дороги) — из
@@ -5,7 +6,7 @@
 
 import { cellCenter, cellCorners, coordLabel, neighbors, worldBounds } from "./grid";
 import { createV5RenderModel } from "./renderModel";
-import { drawMapSymbol } from "./assets/draw";
+import { drawCachedMapSymbol, drawCachedMapImage } from "./assets/draw";
 import { buildTerrainMaskRaster } from "./terrainMaskRaster";
 import { flattenSplineWithWidths } from "./core/spline";
 import type {
@@ -74,12 +75,12 @@ interface TerrainMaskBitmap {
   minSY: number;
   canvas: HTMLCanvasElement;
 }
-const terrainMaskBitmaps = new WeakMap<object, TerrainMaskBitmap>();
+const terrainMaskBitmaps = new WeakMap<object, WeakMap<object, TerrainMaskBitmap>>();
 
-function terrainMaskBitmap(mask: TerrainMaskView, mapWidth: number, mapHeight: number): TerrainMaskBitmap | null {
-  const cached = terrainMaskBitmaps.get(mask);
+function terrainMaskBitmap(mask: TerrainMaskView, mapWidth: number, mapHeight: number, palette: Readonly<Record<string, string>>): TerrainMaskBitmap | null {
+  const cached = terrainMaskBitmaps.get(mask)?.get(palette);
   if (cached && cached.mapWidth === mapWidth && cached.mapHeight === mapHeight) return cached;
-  const raster = buildTerrainMaskRaster(mask, mapWidth, mapHeight, MAP_TERRAIN_FILL, true);
+  const raster = buildTerrainMaskRaster(mask, mapWidth, mapHeight, palette, true);
   if (!raster) return null;
   const canvas = document.createElement("canvas");
   canvas.width = raster.width;
@@ -90,7 +91,9 @@ function terrainMaskBitmap(mask: TerrainMaskView, mapWidth: number, mapHeight: n
   image.data.set(raster.pixels);
   context.putImageData(image, 0, 0);
   const bitmap = { mapWidth, mapHeight, minSX: raster.minSX, minSY: raster.minSY, canvas };
-  terrainMaskBitmaps.set(mask, bitmap);
+  let palettes = terrainMaskBitmaps.get(mask);
+  if (!palettes) { palettes = new WeakMap(); terrainMaskBitmaps.set(mask, palettes); }
+  palettes.set(palette, bitmap);
   return bitmap;
 }
 
@@ -667,6 +670,11 @@ export interface RenderOptions {
   // Футпринт кисти 2/3 (Этап G): если задан непустым — подсвечивается он, иначе hover.
   hoverCells?: string[] | null;
   chrome: MapChrome;
+  /** Optional palette for workspace drawing styles; legacy defaults stay intact. */
+  terrainFill?: Readonly<Record<string, string>>;
+  fonts?: CanvasFonts;
+  /** Optional local artwork for the workspace; the classic renderer stays unchanged. */
+  cartography?: boolean;
   // Взгляд игрока (пакет A §6): секретное скрыто, trapped видна обычной дверью.
   playerView: boolean;
   /** Мастер видит полную карту под полупрозрачной подсказкой маски при редактировании. */
@@ -689,7 +697,11 @@ export function doorForView(
 
 export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvasH: number, o: RenderOptions): void {
   const { grid, width, height, model, scale, ox, oy, showGrid, showCoords, hover, chrome, playerView, selectedId } = o;
-  const fonts = readCanvasFonts();
+  const terrainFill = o.terrainFill ?? MAP_TERRAIN_FILL;
+  const baseTransform = ctx.getTransform?.();
+  const pixelRatio = baseTransform ? Math.max(Math.hypot(baseTransform.a, baseTransform.b), Math.hypot(baseTransform.c, baseTransform.d)) : 1;
+  const fonts = o.fonts ?? readCanvasFonts();
+  const dungeon = !!o.cartography && model.layers.some(layer => layer.visible && layer.kind === "terrain" && (layer.terrain.defaultCode === "wall" || (!layer.terrain.mask && [...layer.terrain.entries.values()].includes("wall"))));
   ctx.save();
   ctx.clearRect(0, 0, canvasW, canvasH);
   ctx.fillStyle = chrome.paper;
@@ -772,15 +784,29 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
 
   // Один terrain-слой — полный surface (§12): default заливает всё поле одним
   // проходом, поверх — только расписанные и только видимые клетки.
+  const artworkPatterns = new Map<string, CanvasPattern | null>();
+  const paintArtwork = (code: string, fill: () => void) => {
+    if (!o.cartography || !ctx.canvas || typeof document === "undefined") return;
+    let pattern = artworkPatterns.get(code);
+    if (pattern === undefined) {
+      const image = surfaceImage(code, dungeon);
+      pattern = code === "wall" ? wallPattern(ctx, scale, ox, oy) : image ? surfacePattern(ctx, image, scale, ox, oy) : null;
+      artworkPatterns.set(code, pattern);
+    }
+    if (!pattern) return;
+    ctx.save(); ctx.globalAlpha *= 0.65; ctx.fillStyle = pattern; fill(); ctx.restore();
+  };
   const fillTerrainDefault = (defaultCode: string) => {
-    ctx.fillStyle = MAP_TERRAIN_FILL[defaultCode] ?? MAP_TERRAIN_FILL.plain;
+    ctx.fillStyle = terrainFill[defaultCode] ?? terrainFill.plain;
     if (grid === "square") {
       ctx.fillRect(X(0), Y(0), width * scale, height * scale);
+      paintArtwork(defaultCode, () => ctx.fillRect(X(0), Y(0), width * scale, height * scale));
     } else {
       for (let y = vy0; y <= vy1; y++)
         for (let x = vx0; x <= vx1; x++) {
           traceCell(x, y);
           ctx.fill();
+          paintArtwork(defaultCode, () => ctx.fill());
         }
     }
   };
@@ -795,18 +821,19 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       byTerrain.set(t, list);
     }
     for (const [t, list] of byTerrain) {
-      ctx.fillStyle = MAP_TERRAIN_FILL[t] ?? MAP_TERRAIN_FILL[defaultCode] ?? MAP_TERRAIN_FILL.plain;
+      ctx.fillStyle = terrainFill[t] ?? terrainFill[defaultCode] ?? terrainFill.plain;
       for (const { x, y } of list) {
         traceCell(x, y);
         ctx.fill();
+        paintArtwork(t, () => ctx.fill());
       }
     }
   };
 
   const fillTerrainMask = (mask: NonNullable<RenderTerrainLayer["terrain"]["mask"]>) => {
-    if (mask.entries.size === 0) return;
+    if (mask.source ? mask.source.chunks.length === 0 : mask.entries.size === 0) return;
     const bitmap = ctx.canvas && typeof document !== "undefined"
-      ? terrainMaskBitmap(mask, width, height) : null;
+      ? terrainMaskBitmap(mask, width, height, o.terrainFill ?? MAP_TERRAIN_FILL) : null;
     if (bitmap) {
       ctx.save();
       ctx.beginPath();
@@ -821,6 +848,20 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
         bitmap.canvas.width * mask.sampleSize * scale,
         bitmap.canvas.height * mask.sampleSize * scale,
       );
+      if (o.cartography) {
+        const codes = mask.source ? mask.source.codes.filter((code): code is string => !!code) : [...new Set(mask.entries.values())];
+        const byImage = new Map<HTMLImageElement, string[]>();
+        for (const code of new Set(codes)) {
+          const image = surfaceImage(code); if (!image) continue;
+          const group = byImage.get(image) ?? []; group.push(code); byImage.set(image, group);
+        }
+        for (const [image, materials] of byImage) {
+          const texture = texturedMask(mask, materials, image, width, height);
+          if (!texture) continue;
+          ctx.save(); ctx.globalAlpha *= 0.65;
+          ctx.drawImage(texture.canvas, X(texture.x), Y(texture.y), texture.w * scale, texture.h * scale); ctx.restore();
+        }
+      }
       ctx.restore();
       return;
     }
@@ -836,7 +877,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       const right = Math.min(width, mask.origin.x + endSX * size);
       const bottom = Math.min(height, mask.origin.y + (sy + 1) * size);
       if (right <= left || bottom <= top) return;
-      ctx.fillStyle = MAP_TERRAIN_FILL[code] ?? MAP_TERRAIN_FILL.plain;
+      ctx.fillStyle = terrainFill[code] ?? terrainFill.plain;
       ctx.fillRect(X(left), Y(top), (right - left) * scale, (bottom - top) * scale);
     };
     const visibleArea = (maxSX - minSX + 1) * (maxSY - minSY + 1);
@@ -859,6 +900,25 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
         if (runCode !== undefined) drawRun(runStart, sx, sy, runCode);
         runCode = code;
         runStart = sx;
+      }
+    }
+  };
+
+  const drawWallEdges = (terrain: RenderTerrainLayer["terrain"]) => {
+    if (!o.cartography || grid !== "square") return;
+    const walls = terrain.entries;
+    const at = (x: number, y: number) => walls.get(`${x},${y}`) ?? terrain.defaultCode;
+    const image = artworkImage("stone-wall");
+    for (let y = vy0; y <= vy1; y++) for (let x = vx0; x <= vx1; x++) {
+      if (at(x, y) !== "wall") continue;
+      for (const [dx, dy, angle] of [[0, -1, 0], [1, 0, 90], [0, 1, 180], [-1, 0, 270]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height || at(nx, ny) === "wall") continue;
+        ctx.save(); ctx.translate(X(x + 0.5 + dx * 0.36), Y(y + 0.5 + dy * 0.36)); ctx.rotate(angle * Math.PI / 180);
+        ctx.fillStyle = "#a49678"; ctx.fillRect(-scale * 0.52, -scale * 0.15, scale * 1.04, scale * 0.3);
+        if (image) ctx.drawImage(image, -scale * 0.52, -scale * 0.15, scale * 1.04, scale * 0.3);
+        ctx.strokeStyle = "#5b5141"; ctx.lineWidth = Math.max(1, scale * 0.035); ctx.strokeRect(-scale * 0.52, -scale * 0.15, scale * 1.04, scale * 0.3);
+        ctx.restore();
       }
     }
   };
@@ -1021,20 +1081,20 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       const tint = MAP_ROOM_TINT[r.type];
       if (scale >= 14) {
         const cxp = X(rc.x) + (rc.w * scale) / 2;
-        const cyp = Y(rc.y) + (rc.h * scale) / 2;
+        const cyp = o.cartography ? Y(rc.y + 0.7) : Y(rc.y) + (rc.h * scale) / 2;
         ctx.save();
         ctx.fillStyle = chrome.muted;
         ctx.globalAlpha *= 0.8;
-        ctx.font = `${Math.min(10, Math.round(scale * 0.3))}px ${fonts.mono}`;
+        ctx.font = `${Math.max(11, Math.min(14, Math.round(scale * 0.3)))}px ${fonts.mono}`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         // M4: безымянная комната — не голый номер, а «Казарма 3» / «Комната 3».
-        ctx.fillText(r.name || (r.type === "empty" ? `Комната ${idx + 1}` : `${MAP_ROOM_LABELS[r.type] ?? r.type} ${idx + 1}`), cxp, cyp);
+        ctx.fillText(r.name || (r.type === "empty" ? `Комната ${idx + 1}` : `${MAP_ROOM_LABELS[r.type] ?? r.type} ${idx + 1}`), cxp, cyp, Math.max(20, (rc.w - 0.6) * scale));
         ctx.restore();
-        if (r.name) {
+        if (r.name && !o.cartography) {
           ctx.save();
           ctx.fillStyle = chrome.muted;
-          ctx.font = `500 ${Math.min(10, Math.round(scale * 0.3))}px ${fonts.label}`;
+          ctx.font = `500 ${Math.max(11, Math.min(14, Math.round(scale * 0.3)))}px ${fonts.label}`;
           ctx.textAlign = "center";
           ctx.textBaseline = "top";
           ctx.fillText(r.name, cxp, Y(rc.y) + 2, rc.w * scale);
@@ -1144,14 +1204,19 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       const ph = horizontal ? Math.max(3, scale * 0.34) : scale * 0.72;
       const qx = X(px) - pw / 2;
       const qy = Y(py) - ph / 2;
+      const doorArt = o.cartography && kind === "door" && !d.secret ? artworkImage("wood-door") : null;
+      if (doorArt) {
+        ctx.save(); ctx.translate(X(px), Y(py)); if (!horizontal) ctx.rotate(Math.PI / 2);
+        ctx.drawImage(doorArt, -scale * 0.5, -scale * 0.14, scale, scale * 0.28); ctx.restore();
+      }
       ctx.fillStyle = MAP_DOOR_FILL[kind];
-      ctx.fillRect(qx, qy, pw, ph);
+      if (!doorArt) ctx.fillRect(qx, qy, pw, ph);
       ctx.lineWidth = 1;
       ctx.strokeStyle = chrome.ink;
       if (!playerView && (d.kind === "secret" || d.secret)) ctx.setLineDash([3, 2]);
-      ctx.strokeRect(qx + 0.5, qy + 0.5, pw, ph);
+      if (!doorArt) ctx.strokeRect(qx + 0.5, qy + 0.5, pw, ph);
       ctx.setLineDash([]);
-      if (scale >= 14) {
+      if (scale >= 14 && !doorArt) {
         ctx.fillStyle = chrome.ink;
         ctx.font = `700 ${Math.min(11, Math.round(scale * 0.32))}px ${fonts.mono}`;
         ctx.textAlign = "center";
@@ -1361,7 +1426,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     const px = X(l.position.x);
     const py = Y(l.position.y);
     ctx.save();
-    ctx.font = `500 ${Math.min(13, Math.round(scale * 0.36))}px ${fonts.label}`;
+    ctx.font = `500 ${Math.max(11, Math.min(16, Math.round(scale * 0.36)))}px ${fonts.label}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "bottom";
     // Точка-маркер в центре клетки.
@@ -1396,7 +1461,8 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       else {
         fillTerrainDefault(layer.terrain.defaultCode);
         fillTerrainEntries(layer.terrain.entries, layer.terrain.defaultCode);
-        drawTerrainMotifs(layer.terrain.entries, layer.terrain.defaultCode);
+        if (!o.cartography) drawTerrainMotifs(layer.terrain.entries, layer.terrain.defaultCode);
+        drawWallEdges(layer.terrain);
       }
       hasTerrainSurface = true;
     } else if (layer.kind === "path") {
@@ -1460,7 +1526,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       if (scale >= 12) {
         for (const l of layer.labels) drawLabel(l);
       }
-    } else if (layer.kind === "object") {
+    } else if (layer.kind === "object" || layer.kind === "scatter") {
       for (const { object, asset } of layer.items) {
         const { position, rotation, scale: objectScale } = object.transform;
         const margin = Math.max(Math.abs(objectScale.x), Math.abs(objectScale.y)) * scale * Math.SQRT2 / 2;
@@ -1471,12 +1537,9 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
         ctx.translate(sx, sy);
         ctx.rotate(rotation * Math.PI / 180);
         ctx.scale(scale * objectScale.x, scale * objectScale.y);
-        if ("glyph" in asset) drawMapSymbol(ctx, asset);
+        if ("glyph" in asset) drawCachedMapSymbol(ctx, asset);
         else if (asset.image) {
-          const aspect = asset.image.naturalWidth / asset.image.naturalHeight;
-          const w = Math.min(1, aspect);
-          const h = Math.min(1, 1 / aspect);
-          ctx.drawImage(asset.image, -w / 2, -h / 2, w, h);
+          drawCachedMapImage(ctx, asset.image, Math.max(Math.abs(objectScale.x), Math.abs(objectScale.y)) * scale * pixelRatio);
         }
         else {
           ctx.fillStyle = "#b9a68e";
@@ -1493,7 +1556,6 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
         ctx.restore();
       }
     }
-    // Scatter пока не рисуется (compatibility gate блокирует nonempty).
     ctx.restore();
   }
 

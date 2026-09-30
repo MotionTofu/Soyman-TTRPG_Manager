@@ -1,17 +1,19 @@
+import { cartographySize } from "../assets/cartography";
 import { putGameplayToken, removeGameplayToken, type GameplayToken, type MapDocumentV6, type Vec2 } from "@shared/maps/core";
 import { applyTerrainCellEdits, builtinMaterial, createGameplayEntity, createLabel, deleteGameplayEntity,
   deleteLabel, moveGameplayEntity, moveLabel } from "../core";
 import { addMapObject, deleteMapObject, moveMapObject } from "../core/mutations/mapObjects";
-import { MAP_SYMBOL_PACK } from "../assets/registry";
+import { moveArtSelection, removeArtSelection } from "./artisticCommands";
+import { mapAssetPackForId } from "../assets/registry";
 import { cellCenter, pixelToCell } from "../grid";
 import { editGeometry } from "./editDocument";
 
-export type WorkspaceTool = "select" | "brush" | "eraser" | "shape" | "wall" | "door" | "label" | "asset";
-export type WorkspaceSelection = { id: string; layerId: string; kind: "gameplay" | "token" | "label" | "object" };
-export const TOOL_LABELS: Record<WorkspaceTool, string> = { select: "Выбор", brush: "Пол", eraser: "Ластик",
+export type WorkspaceTool = "surface" | "road" | "river" | "scatter" | "select" | "brush" | "eraser" | "shape" | "wall" | "door" | "label" | "asset";
+export type WorkspaceSelection = { id: string; layerId: string; kind: "path" | "scatter" | "gameplay" | "token" | "label" | "object" };
+export const TOOL_LABELS: Record<WorkspaceTool, string> = { surface: "Поверхность", road: "Дорога", river: "Река", scatter: "Россыпь", select: "Выбор", brush: "Пол", eraser: "Ластик",
   shape: "Комната", wall: "Стена", door: "Дверь", label: "Подпись", asset: "Объект" };
-export const toolLayerKind = (tool: WorkspaceTool) => tool === "brush" || tool === "eraser" || tool === "wall"
-  ? "terrain" : tool === "label" ? "label" : tool === "asset" ? "object" : "gameplay";
+export const toolLayerKind = (tool: WorkspaceTool) => tool === "surface" || tool === "brush" || tool === "eraser" || tool === "wall"
+  ? "terrain" : tool === "road" || tool === "river" ? "path" : tool === "scatter" ? "scatter" : tool === "label" ? "label" : tool === "asset" ? "object" : "gameplay";
 
 export function requireEditableLayer(document: MapDocumentV6, id: string, kind?: string) {
   const layer = document.layers.find((entry) => entry.id === id);
@@ -69,16 +71,19 @@ export function addLabel(document: MapDocumentV6, layerId: string, id: string, p
 }
 export function addSymbol(document: MapDocumentV6, layerId: string, id: string, position: Vec2, assetId: string) {
   requireEditableLayer(document, layerId, "object");
-  const installed = document.assetPacks.find((pack) => pack.id === MAP_SYMBOL_PACK.id);
-  if (installed && installed.version !== MAP_SYMBOL_PACK.version) throw new Error("Эта карта использует другую версию набора символов");
-  const base = document.assetPacks.some((pack) => pack.id === MAP_SYMBOL_PACK.id) ? document
-    : { ...document, assetPacks: [...document.assetPacks, MAP_SYMBOL_PACK] };
+  const required = mapAssetPackForId(assetId);
+  if (!required) throw new Error("Этот объект отсутствует в библиотеке");
+  const installed = document.assetPacks.find((pack) => pack.id === required.id);
+  if (installed && installed.version !== required.version) throw new Error("Эта карта использует другую версию набора символов");
+  const base = document.assetPacks.some((pack) => pack.id === required.id) ? document
+    : { ...document, assetPacks: [...document.assetPacks, required] };
   return editGeometry(base, (view) => addMapObject(view, layerId, { id, visual: { type: "asset", assetId },
-    transform: { position, rotation: 0, scale: { x: 1, y: 1 } } }));
+    transform: { position, rotation: 0, scale: { x: cartographySize(assetId), y: cartographySize(assetId) } } }));
 }
 export function moveSelection(document: MapDocumentV6, selection: WorkspaceSelection, delta: Vec2): MapDocumentV6 {
   const layer = requireEditableLayer(document, selection.layerId);
   if (delta.x === 0 && delta.y === 0) return document;
+  if (selection.kind === "path" || selection.kind === "scatter") return moveArtSelection(document, selection, delta);
   if (selection.kind === "token") return updateToken(document, selection, (token) => ({ ...token, position: { x: token.position.x + delta.x, y: token.position.y + delta.y } }));
   return editGeometry(document, (view) => {
     if (selection.kind === "gameplay") return moveGameplayEntity(view, selection.id, delta);
@@ -95,6 +100,7 @@ export function moveSelection(document: MapDocumentV6, selection: WorkspaceSelec
 }
 export function removeSelection(document: MapDocumentV6, selection: WorkspaceSelection) {
   requireEditableLayer(document, selection.layerId);
+  if (selection.kind === "path" || selection.kind === "scatter") return removeArtSelection(document, selection);
   if (selection.kind === "token") return removeGameplayToken(document, selection.id);
   return editGeometry(document, (view) => selection.kind === "gameplay" ? deleteGameplayEntity(view, selection.id)
     : selection.kind === "label" ? deleteLabel(view, selection.id) : deleteMapObject(view, selection.id));
