@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "maxBytes": 1600000,
+  "maxBytes": 5000000,
   "files": [
     "textures/acid-yellow.webp",
     "textures/ink-surface.webp",
@@ -33,6 +33,17 @@
     "semantic/spell-prep/plate-x.webp",
     "semantic/map-buttons/button-01.webp",
     "semantic/ui-icons/trash.webp",
-    "semantic/ui-icons/chevron-down.webp"
+    "semantic/ui-icons/chevron-down.webp",
+    "semantic/type-glyphs/being.webp",
+    "semantic/type-glyphs/community.webp",
+    "semantic/type-glyphs/location.webp",
+    "semantic/type-glyphs/artifact.webp",
+    "semantic/type-glyphs/event.webp",
+    "semantic/type-glyphs/character.webp",
+    "semantic/type-glyphs/player.webp",
+    "semantic/type-glyphs/campaign.webp",
+    "semantic/type-glyphs/adventure.webp",
+    "semantic/type-glyphs/scene.webp",
+    "semantic/type-glyphs/session.webp"
   ]
 }

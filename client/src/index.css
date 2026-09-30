@@ -3061,8 +3061,33 @@ button.place-card__row-name {
    under 15% of the screen, so an eleven-hue rainbow is out) — entity type is
    already spelled out in the label text/icon, so ink-on-surface is enough to
    tell chips apart at a glance; color no longer carries the distinction. */
-.entity-type-chip {
+/* Знак типа: растр-маска, цвет — currentColor. URL — только в
+   fantasy-punk-skin.css (--skin-glyph-*), см. typeGlyphs.ts. */
+.type-glyph {
   display: inline-block;
+  width: 1.15em;
+  height: 1.15em;
+  flex-shrink: 0;
+  background: currentColor;
+  -webkit-mask: var(--type-glyph) center / contain no-repeat;
+  mask: var(--type-glyph) center / contain no-repeat;
+}
+.type-glyph--being { --type-glyph: var(--skin-glyph-being); }
+.type-glyph--community { --type-glyph: var(--skin-glyph-community); }
+.type-glyph--location { --type-glyph: var(--skin-glyph-location); }
+.type-glyph--artifact { --type-glyph: var(--skin-glyph-artifact); }
+.type-glyph--event { --type-glyph: var(--skin-glyph-event); }
+.type-glyph--character { --type-glyph: var(--skin-glyph-character); }
+.type-glyph--player { --type-glyph: var(--skin-glyph-player); }
+.type-glyph--campaign { --type-glyph: var(--skin-glyph-campaign); }
+.type-glyph--adventure { --type-glyph: var(--skin-glyph-adventure); }
+.type-glyph--scene { --type-glyph: var(--skin-glyph-scene); }
+.type-glyph--session { --type-glyph: var(--skin-glyph-session); }
+
+.entity-type-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
   padding: var(--sp-1) var(--sp-4);
   font-size: var(--fs-meta);
   font-weight: 600;

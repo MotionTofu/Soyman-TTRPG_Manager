@@ -43,6 +43,8 @@ import {
   type IsolationView,
   type NodePositions,
 } from "../graphTypes";
+import { glyphName, onGlyphLoad, typeTint } from "../typeGlyphs";
+import { TypeGlyph } from "./TypeGlyph";
 import {
   drawGraph,
   hitTestEdge,
@@ -281,6 +283,8 @@ function GraphCanvas({
 
   // Redraw when props change
   useEffect(() => { draw(); }, [draw]);
+  // Знаки типов грузятся картинками — догрузился знак, перерисовать.
+  useEffect(() => onGlyphLoad(() => draw()), [draw]);
 
   // ResizeObserver
   useEffect(() => {
@@ -1097,6 +1101,10 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
                         style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "10px", padding: "3px 6px", opacity: hidden ? 0.4 : 1, textAlign: "left" }}
                         onClick={() => setHiddenTypes((prev) => { const next = new Set(prev); if (next.has(type)) next.delete(type); else next.add(type); return next; })}>
                         {(() => {
+                          if (glyphName(type)) {
+                            const t = typeTint(type);
+                            return <span style={{ display: "inline-flex", color: t.kind === "color" ? t.color : "var(--ink)" }}><TypeGlyph type={type} /></span>;
+                          }
                           if (shape === "diamond") return <span style={{ display: "inline-block", width: 7, height: 7, background: fill, flexShrink: 0, border: "1px solid var(--line)", transform: "rotate(45deg)" }} />;
                           if (shape === "triangle") return <span style={{ display: "inline-block", width: 0, height: 0, flexShrink: 0, borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderBottom: `7px solid ${fill}` }} />;
                           if (shape === "triangleInverted") return <span style={{ display: "inline-block", width: 0, height: 0, flexShrink: 0, borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderTop: `7px solid ${fill}` }} />;

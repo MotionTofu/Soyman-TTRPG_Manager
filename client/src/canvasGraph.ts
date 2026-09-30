@@ -9,6 +9,7 @@ import {
 } from "./graphTypes";
 import { RELATION_TONE_COLORS, RELATION_TONE_LABELS } from "./relations";
 import type { RelationTone } from "./types";
+import { tintedGlyph, typeTint } from "./typeGlyphs";
 
 const EDGE_LABEL_FONT_SIZE = 1.9;
 const RELATION_ARROW_OFFSET = 5;
@@ -73,6 +74,16 @@ export function drawShape(
 
 // ── Edge rendering ───────────────────────────────────────────────
 
+function edgeTint(e: GraphEdge, nodesByKey: Map<string, GraphNode>): string | null {
+  if (e.kind !== "scene" && e.kind !== "link" && e.kind !== "mention") return null;
+  for (const key of [e.to, e.from]) {
+    const n = nodesByKey.get(key);
+    const t = n ? typeTint(n.type) : null;
+    if (t?.kind === "color") return t.color;
+  }
+  return null;
+}
+
 export function drawEdge(
   ctx: CanvasRenderingContext2D,
   e: GraphEdge,
@@ -95,7 +106,10 @@ export function drawEdge(
   },
 ) {
   const tone = e.tone as RelationTone | null;
-  const color = tone ? RELATION_TONE_COLORS[tone] : "var(--line)";
+  // Связь сюжета с сущностью мира — в цвет сущности (знаки типов, 2026-09-30):
+  // видно, откуда «растёт» существо или место, не читая подписей.
+  const worldTint = !tone ? edgeTint(e, nodesByKey) : null;
+  const color = tone ? RELATION_TONE_COLORS[tone] : worldTint ?? "var(--line)";
   const kindStyle = EDGE_KIND_STYLE[e.kind];
 
   let ax = from.x;
@@ -240,9 +254,23 @@ export function drawNode(
 
   ctx.globalAlpha = options.offPath ? 0.08 : options.dim ? 0.10 : 1;
 
+  // Окраска типа: мир — лёгкая подложка и знак в цвет, событие — инверсия,
+  // остальное — бумага и тушь (знаки типов, 2026-09-30).
+  const tint = typeTint(n.type);
+  const paper = resolveColor("--bg-elevated", resolveColor("--paper", "#fff"));
+  const ink = resolveColor("--ink", "#1a1a1a");
+  const inverse = tint.kind === "inverse";
+
   // Chip background
-  ctx.fillStyle = resolveColor("--bg-elevated", resolveColor("--paper", "#fff"));
+  ctx.fillStyle = inverse ? ink : paper;
   ctx.fillRect(pos.x - chipW / 2, pos.y - chipH / 2, chipW, chipH);
+  if (tint.kind === "color") {
+    const a = ctx.globalAlpha;
+    ctx.globalAlpha = a * 0.2;
+    ctx.fillStyle = tint.color;
+    ctx.fillRect(pos.x - chipW / 2, pos.y - chipH / 2, chipW, chipH);
+    ctx.globalAlpha = a;
+  }
 
   // Border
   ctx.strokeStyle = options.onPath
@@ -260,14 +288,22 @@ export function drawNode(
     ctx.strokeRect(pos.x - chipW / 2, pos.y - chipH / 2, chipW, chipH);
   }
 
-  // Shape icon
-  drawShape(ctx, shape, pos.x - chipW / 2 + padX + shapeIconSize, pos.y, shapeIconSize, fill);
+  // Знак типа; пока картинка не догрузилась (или знака у типа нет) — фигура.
+  const glyphColor = tint.kind === "color" ? tint.color : inverse ? paper : ink;
+  const glyph = tintedGlyph(n.type, glyphColor);
+  const iconX = pos.x - chipW / 2 + padX + shapeIconSize;
+  if (glyph) {
+    const g = shapeIconSize * 2.4;
+    ctx.drawImage(glyph, iconX - g / 2, pos.y - g / 2, g, g);
+  } else {
+    drawShape(ctx, shape, iconX, pos.y, shapeIconSize, fill);
+  }
 
   // Title text — Display voice (Anton, names)
   ctx.font = `400 ${fontSize}px var(--font-display, sans-serif)`;
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  ctx.fillStyle = resolveColor("--ink", "#1a1a1a");
+  ctx.fillStyle = inverse ? paper : ink;
   const textX = pos.x - chipW / 2 + padX + shapeIconSize * 2 + 4 * s;
   ctx.fillText(n.title ?? "", textX, pos.y + 1);
   if (options.foldedCount > 0) {

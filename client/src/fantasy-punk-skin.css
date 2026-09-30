@@ -46,6 +46,18 @@
   /* Reserved washes (not used yet): */
   --skin-acid-wash: url("/ui/fantasy-punk/textures/acid-yellow.webp");
   --skin-magenta-wash: url("/ui/fantasy-punk/textures/punk-magenta.webp");
+  /* Знаки типов сущностей — маски (цвет = currentColor), typeGlyphs.ts. */
+  --skin-glyph-being: url("/ui/fantasy-punk/semantic/type-glyphs/being.webp");
+  --skin-glyph-community: url("/ui/fantasy-punk/semantic/type-glyphs/community.webp");
+  --skin-glyph-location: url("/ui/fantasy-punk/semantic/type-glyphs/location.webp");
+  --skin-glyph-artifact: url("/ui/fantasy-punk/semantic/type-glyphs/artifact.webp");
+  --skin-glyph-event: url("/ui/fantasy-punk/semantic/type-glyphs/event.webp");
+  --skin-glyph-character: url("/ui/fantasy-punk/semantic/type-glyphs/character.webp");
+  --skin-glyph-player: url("/ui/fantasy-punk/semantic/type-glyphs/player.webp");
+  --skin-glyph-campaign: url("/ui/fantasy-punk/semantic/type-glyphs/campaign.webp");
+  --skin-glyph-adventure: url("/ui/fantasy-punk/semantic/type-glyphs/adventure.webp");
+  --skin-glyph-scene: url("/ui/fantasy-punk/semantic/type-glyphs/scene.webp");
+  --skin-glyph-session: url("/ui/fantasy-punk/semantic/type-glyphs/session.webp");
   /* R3.1 decorative set (source_pack === "R3.1", .webp production).
    * R3.1D status: frame corners / halftone corner / edge fragment are
    * PARKED again (valid URLs, mirrored on both hosts, fetched by no rule).
