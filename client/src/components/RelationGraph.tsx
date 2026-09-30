@@ -21,7 +21,7 @@ import {
   EDGE_KINDS,
   buildIsolation,
   findPath,
-  foldGroups,
+  foldAdventures,
   GRAPH_HEIGHT,
   GRAPH_WIDTH,
   TYPE_COLORS,
@@ -690,7 +690,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     );
     const visibleKeys = new Set(visibleNodes.map((n) => n.key));
     const typeEdges = kindEdges.filter((e) => visibleKeys.has(e.from) && visibleKeys.has(e.to));
-    const grouped = foldGroups(visibleNodes, typeEdges, "none", expandedGroups);
+    const grouped = foldAdventures(visibleNodes, typeEdges, expandedGroups);
     const isolationView = isolation
       ? buildIsolation(grouped.nodes, grouped.edges, isolation.key, isolation.depth)
       : null;
@@ -859,7 +859,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
         <button type="button" className="graph-tb-btn" onClick={saveLayout} title="Закрепить всё, что сейчас на экране">Сохранить раскладку</button>
         <button type="button" className="graph-tb-btn" onClick={resetLayout} title="Сбросить ручную раскладку">Сбросить раскладку</button>
         {groupedFoldedCount > 0 && (
-          <button type="button" className="graph-tb-btn" onClick={() => setExpandedGroups(new Set())} title="Развернуть все свёрнутые группы">
+          <button type="button" className="graph-tb-btn" onClick={() => setExpandedGroups((prev) => new Set([...prev, ...(grouped?.folded.keys() ?? [])]))} title="Развернуть все свёрнутые группы">
             Развернуть всё ({groupedFoldedCount})
           </button>
         )}

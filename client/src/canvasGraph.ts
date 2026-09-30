@@ -136,7 +136,8 @@ export function drawEdge(
   ctx.strokeStyle = strokeColor;
   ctx.globalAlpha = options.offPath ? 0.06 : options.dim ? 0.10 : options.onPath ? 1 : options.focused ? 0.95 : tone ? 0.6 : 0.5;
   ctx.lineWidth = 1;
-  if (!options.onPath && kindStyle?.dash) {
+  // «Сыграно» — сплошная: состоявшееся, в отличие от набранного (Q7).
+  if (!options.onPath && kindStyle?.dash && e.section !== "сыграно") {
     const parts = kindStyle.dash.split(" ").map(Number);
     ctx.setLineDash(parts);
   } else {

@@ -355,6 +355,12 @@ linksRouter.get("/graph", (req, res) => {
       .all() as { id: number; arc_id: number }[];
     for (const s of sceneArcs)
       connect("scene", s.id, "adventure", s.arc_id, "сцена приключения", null, "scene");
+    // Главы → родительское приключение (parent_id): клиент сворачивает
+    // главу в родителя, как сцену в приключение (решения 2026-09-30, Q3).
+    const chapterRows = db
+      .prepare("SELECT id, parent_id FROM story_arcs WHERE parent_id IS NOT NULL AND archived_at IS NULL")
+      .all() as { id: number; parent_id: number }[];
+    for (const c of chapterRows) connect("adventure", c.id, "adventure", c.parent_id, "глава приключения", null, "scene");
     // Переходы приключений (набор кампании перебивает набор сеттинга — п. 1 задания).
     const campaignTransitions = campaign_id
       ? db.prepare(

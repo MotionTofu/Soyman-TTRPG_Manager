@@ -355,14 +355,6 @@ export function buildIsolation(
   return { nodes: keptNodes, edges: keptEdges, positions, width, height, depthOf, nextStepCount };
 }
 
-export type GroupMode = "none" | "community" | "location";
-
-export const GROUP_MODES: { key: GroupMode; label: string }[] = [
-  { key: "none", label: "Не группировать" },
-  { key: "community", label: "По фракциям" },
-  { key: "location", label: "По местам" },
-];
-
 export interface FoldedGraph {
   nodes: GraphNode[];
   edges: GraphEdge[];
@@ -370,65 +362,52 @@ export interface FoldedGraph {
   folded: Map<string, number>;
 }
 
-/**
- * Свернуть жителей в их группу. Сотни узлов читаются только пачками: существо,
- * у которого ровно одна фракция (или ровно одно место), прячется внутрь её
- * узла, а все его связи переезжают на группу. У кого фракций несколько или ни
- * одной — остаётся сам собой: сваливать его в произвольную из них значило бы
- * соврать. Развёрнутые группы (expanded) не сворачиваются — так можно раскрыть
- * одну и смотреть её состав, не разворачивая карту целиком.
- */
-export function foldGroups(
-  nodes: GraphNode[],
-  edges: GraphEdge[],
-  mode: GroupMode,
-  expanded: Set<string>
-): FoldedGraph {
-  if (mode === "none") return { nodes, edges, folded: new Map() };
+// Сцены сворачиваются в своё приключение, главы — в родительское (решения
+// 2026-09-30, Q3): узел остаётся видимым, только если его владелец раскрыт.
+// Рёбра свёрнутых переходят на того, в кого они свёрнуты. Набрано и сыграно
+// на одной паре — одно «сыграно» (Q7).
+const OWNER_SECTIONS = new Set(["сцена приключения", "глава приключения"]);
 
-  const groupType = mode === "community" ? "community" : "location";
-  const groupKind: EdgeKind = mode === "community" ? "membership" : "habitat";
+export function foldAdventures(nodes: GraphNode[], edges: GraphEdge[], expanded: Set<string>): FoldedGraph {
   const nodeKeys = new Set(nodes.map((n) => n.key));
-
-  // Кандидат на сворачивание — узел, у которого ровно одна группа этого вида.
-  const groupsOf = new Map<string, Set<string>>();
+  const owner = new Map<string, string>(); // сцена/глава -> приключение
   for (const e of edges) {
-    if (e.kind !== groupKind) continue;
-    const [group, member] = e.from.startsWith(`${groupType}:`) ? [e.from, e.to] : [e.to, e.from];
-    if (!group.startsWith(`${groupType}:`) || member.startsWith(`${groupType}:`)) continue;
-    if (!nodeKeys.has(group) || !nodeKeys.has(member)) continue;
-    const set = groupsOf.get(member) ?? new Set<string>();
-    set.add(group);
-    groupsOf.set(member, set);
+    if (e.section && OWNER_SECTIONS.has(e.section) && nodeKeys.has(e.from) && nodeKeys.has(e.to)) owner.set(e.from, e.to);
   }
+  if (owner.size === 0) return { nodes, edges, folded: new Map() };
 
-  const foldedInto = new Map<string, string>(); // узел -> группа, в которую он спрятан
-  for (const [member, groups] of groupsOf) {
-    if (groups.size !== 1) continue;
-    const group = [...groups][0];
-    if (expanded.has(group)) continue;
-    foldedInto.set(member, group);
-  }
-  if (foldedInto.size === 0) return { nodes, edges, folded: new Map() };
+  const cache = new Map<string, string>();
+  const resolve = (key: string, depth = 0): string => {
+    const hit = cache.get(key);
+    if (hit) return hit;
+    const o = owner.get(key);
+    // depth — страховка от цикла в parent_id.
+    const r = o && !expanded.has(o) && depth < 20 ? resolve(o, depth + 1) : key;
+    cache.set(key, r);
+    return r;
+  };
 
   const folded = new Map<string, number>();
-  for (const group of foldedInto.values()) folded.set(group, (folded.get(group) ?? 0) + 1);
+  const keptNodes: GraphNode[] = [];
+  for (const n of nodes) {
+    const r = resolve(n.key);
+    if (r === n.key) keptNodes.push(n);
+    else folded.set(r, (folded.get(r) ?? 0) + 1);
+  }
 
-  const resolve = (key: string) => foldedInto.get(key) ?? key;
-  const keptNodes = nodes.filter((n) => !foldedInto.has(n.key));
   const seen = new Set<string>();
-  const keptEdges: GraphEdge[] = [];
+  const kept: GraphEdge[] = [];
   for (const e of edges) {
     const from = resolve(e.from);
     const to = resolve(e.to);
-    if (from === to) continue; // связь внутри группы — она теперь один узел
-    // Десять «обитает» от жителей одной фракции к одному городу — это одна
-    // линия, а не десять поверх друг друга.
+    if (from === to) continue;
     const dedupe = `${from}|${to}|${e.kind}|${e.section ?? ""}|${e.tone ?? ""}`;
     if (seen.has(dedupe)) continue;
     seen.add(dedupe);
-    keptEdges.push({ ...e, from, to });
+    kept.push({ ...e, from, to });
   }
+  const played = new Set(kept.filter((e) => e.section === "сыграно").map((e) => `${e.from}|${e.to}`));
+  const keptEdges = kept.filter((e) => !(e.section === "набрано" && played.has(`${e.from}|${e.to}`)));
   return { nodes: keptNodes, edges: keptEdges, folded };
 }
 

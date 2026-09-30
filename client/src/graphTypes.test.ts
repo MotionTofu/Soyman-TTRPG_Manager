@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { TYPE_LABELS, TYPE_COLORS, TYPE_SHAPES, TYPE_ROUTES, EDGE_KINDS, EDGE_KIND_STYLE } from "./graphTypes";
+import { TYPE_LABELS, TYPE_COLORS, TYPE_SHAPES, TYPE_ROUTES, EDGE_KINDS, EDGE_KIND_STYLE, foldAdventures, type GraphNode, type GraphEdge } from "./graphTypes";
 
 /**
  * Первый тест клиента. Раньше `vitest` в `client/` был установлен, но не имел
@@ -73,5 +73,34 @@ describe("виды связей графа", () => {
     // Их больше всех, и включёнными они хоронят под собой отношения — так
     // записано в самом файле. Тест держит это решение.
     expect(EDGE_KINDS.find((k) => k.key === "mention")?.defaultOn).toBe(false);
+  });
+});
+
+describe("сворачивание сцен и глав в приключение", () => {
+  const node = (key: string): GraphNode => ({ key, type: key.split(":")[0], id: Number(key.split(":")[1]), title: key });
+  const edge = (from: string, to: string, section: string): GraphEdge => ({ from, to, section, tone: null, kind: "scene" });
+  const nodes = ["adventure:1", "adventure:2", "scene:10", "session:5", "being:7"].map(node);
+  const edges = [
+    edge("adventure:2", "adventure:1", "глава приключения"),
+    edge("scene:10", "adventure:2", "сцена приключения"),
+    edge("session:5", "scene:10", "набрано"),
+    edge("session:5", "scene:10", "сыграно"),
+    edge("scene:10", "being:7", "scene_obstacles"),
+  ];
+
+  it("всё свёрнуто в верхнее приключение, набрано уступает сыгранному", () => {
+    const g = foldAdventures(nodes, edges, new Set());
+    expect(g.nodes.map((n) => n.key).sort()).toEqual(["adventure:1", "being:7", "session:5"]);
+    expect(g.folded.get("adventure:1")).toBe(2);
+    expect(g.edges.map((e) => `${e.from}>${e.to}:${e.section}`).sort()).toEqual([
+      "adventure:1>being:7:scene_obstacles",
+      "session:5>adventure:1:сыграно",
+    ]);
+  });
+
+  it("раскрытое приключение показывает главу, сцена свёрнута в главу", () => {
+    const g = foldAdventures(nodes, edges, new Set(["adventure:1"]));
+    expect(g.nodes.map((n) => n.key)).toContain("adventure:2");
+    expect(g.folded.get("adventure:2")).toBe(1);
   });
 });
