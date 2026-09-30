@@ -31,6 +31,10 @@ import {
   canvasSizeFor,
   simulateGraph,
   GRAPH_VIEW_HIDDEN_TYPES,
+  GRAPH_VIEW_SIZE_MODE,
+  autoNodeScales,
+  type GraphView,
+  type NodeSizeMode,
   type EdgeKind,
   type GraphData,
   type GraphEdge,
@@ -99,6 +103,18 @@ interface Props {
   onActiveKindsChange?: (next: Set<EdgeKind>) => void;
   /** Типы, скрытые при открытии. По умолчанию — как в графе мира. */
   defaultHiddenTypes?: string[];
+  /** Какой это граф: от него зависит размер узлов по умолчанию и где он запоминается. */
+  view?: GraphView;
+}
+
+const SIZE_MODE_STORE_PREFIX = "rpgManagerGraphSizeMode:";
+
+function loadSizeMode(view: GraphView): NodeSizeMode {
+  try {
+    const v = localStorage.getItem(SIZE_MODE_STORE_PREFIX + view);
+    if (v === "type" || v === "links") return v;
+  } catch {}
+  return GRAPH_VIEW_SIZE_MODE[view];
 }
 
 interface ManualLayout {
@@ -534,7 +550,7 @@ function GraphCanvas({
 
 // ─── Outer component — React state for toolbar/legend ────────────
 
-export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layoutKey, scopeBar, edgeKinds, activeKinds: activeKindsProp, onActiveKindsChange, defaultHiddenTypes = GRAPH_VIEW_HIDDEN_TYPES.world }: Props) {
+export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layoutKey, scopeBar, edgeKinds, activeKinds: activeKindsProp, onActiveKindsChange, defaultHiddenTypes = GRAPH_VIEW_HIDDEN_TYPES.world, view = "world" }: Props) {
   const navigate = useNavigate();
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -547,7 +563,13 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   const [isolation, setIsolation] = useState<{ key: string; depth: number } | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; node: GraphNode } | null>(null);
   const [preview, setPreview] = useState<{ type: string; id: number } | null>(null);
-  const [nodeScales, setNodeScales] = useState<Map<string, number>>(() => new Map());
+  const [manualScales, setManualScales] = useState<Map<string, number>>(() => new Map());
+  const [sizeMode, setSizeMode] = useState<NodeSizeMode>(() => loadSizeMode(view));
+  function toggleSizeMode() {
+    const next: NodeSizeMode = sizeMode === "type" ? "links" : "type";
+    setSizeMode(next);
+    try { localStorage.setItem(SIZE_MODE_STORE_PREFIX + view, next); } catch {}
+  }
   const [resizeTarget, setResizeTarget] = useState<GraphNode | null>(null);
   const [activeKinds, setActiveKindsInternal] = useState<Set<EdgeKind>>(() => activeKindsProp ?? new Set(DEFAULT_EDGE_KINDS));
   // Виды рёбер управляются извне (GraphPage), если переданы.
@@ -681,6 +703,12 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   const visibleEdgesList = isolationView ? isolationView.edges : grouped?.edges ?? [];
   const groupedFoldedCount = grouped?.folded.size ?? 0;
   const showPins = Object.keys(manual).length < visibleNodesList.length;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- списки стабильны в пределах одного прохода pipeline
+  const nodeScales = useMemo(() => {
+    const scales = autoNodeScales(visibleNodesList, visibleEdgesList, sizeMode);
+    for (const [key, m] of manualScales) scales.set(key, Math.min(3, (scales.get(key) ?? 1) * m));
+    return scales;
+  }, [pipeline, sizeMode, manualScales]);
 
   // Precomputed lookups
   const nodesByKey = useMemo(() => data ? new Map(data.nodes.map((n) => [n.key, n])) : new Map<string, GraphNode>(), [data]);
@@ -721,7 +749,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     setPathFrom(null);
     setPathTo(null);
     setMenu(null);
-    setNodeScales((prev) => { if (prev.has(key)) return prev; const next = new Map(prev); next.set(key, 2); return next; });
+    setManualScales((prev) => { if (prev.has(key)) return prev; const next = new Map(prev); next.set(key, 2); return next; });
   }
   function leaveIsolation() { setIsolation(null); }
   function pickPathTo(key: string) { setPathTo(key); setQuery(""); }
@@ -1035,6 +1063,10 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
             );
           })()}
         </div>
+        <button type="button" className="graph-tb-btn" onClick={toggleSizeMode}
+          title="Размер узлов: по типу (сюжет крупнее мира) или по числу связей">
+          Размер: {sizeMode === "type" ? "тип" : "связи"}
+        </button>
       </div>
       <button type="button" className="graph-tb-btn"
         style={{ position: "absolute", top: 8, right: 8, zIndex: 5 }}
@@ -1067,15 +1099,15 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--muted)", minWidth: 36, textAlign: "right" }}>50%</span>
               <input type="range" min={50} max={200} step={5}
-                value={Math.round((nodeScales.get(resizeTarget.key) ?? 1) * 100)}
-                onChange={(e) => { const val = Number(e.target.value) / 100; setNodeScales((prev) => { const next = new Map(prev); if (val === 1) next.delete(resizeTarget.key); else next.set(resizeTarget.key, val); return next; }); }}
+                value={Math.round((manualScales.get(resizeTarget.key) ?? 1) * 100)}
+                onChange={(e) => { const val = Number(e.target.value) / 100; setManualScales((prev) => { const next = new Map(prev); if (val === 1) next.delete(resizeTarget.key); else next.set(resizeTarget.key, val); return next; }); }}
                 style={{ flex: 1, accentColor: "var(--accent, #c2683f)" }} />
               <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--muted)", minWidth: 36 }}>200%</span>
             </div>
-            <div style={{ textAlign: "center", fontFamily: "var(--font-mono)", fontSize: "13px" }}>{Math.round((nodeScales.get(resizeTarget.key) ?? 1) * 100)}%</div>
+            <div style={{ textAlign: "center", fontFamily: "var(--font-mono)", fontSize: "13px" }}>{Math.round((manualScales.get(resizeTarget.key) ?? 1) * 100)}%</div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
-              {(nodeScales.get(resizeTarget.key) ?? 1) !== 1 && (
-                <button type="button" className="graph-tb-btn" onClick={() => setNodeScales((prev) => { const next = new Map(prev); next.delete(resizeTarget.key); return next; })}>Сбросить</button>
+              {(manualScales.get(resizeTarget.key) ?? 1) !== 1 && (
+                <button type="button" className="graph-tb-btn" onClick={() => setManualScales((prev) => { const next = new Map(prev); next.delete(resizeTarget.key); return next; })}>Сбросить</button>
               )}
               <button type="button" className="graph-tb-btn" onClick={() => setResizeTarget(null)} style={{ background: "var(--paper)", color: "var(--ink)" }}>Готово</button>
             </div>

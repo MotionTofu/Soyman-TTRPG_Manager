@@ -71,6 +71,29 @@ export const GRAPH_VIEW_HIDDEN_TYPES: Record<GraphView, string[]> = {
   adventures: ["campaign"],
 };
 
+// Размер узла (решения 2026-09-30, Q2): «по типу» — сюжет крупнее мира,
+// «по связям» — узел растёт с числом видимых рёбер. Ручной «Изменить размер»
+// множится поверх.
+export type NodeSizeMode = "type" | "links";
+export const GRAPH_VIEW_SIZE_MODE: Record<GraphView, NodeSizeMode> = { world: "links", adventures: "type" };
+const TYPE_SIZE: Record<string, number> = { campaign: 1.9, adventure: 1.6, session: 1.3, scene: 1.2 };
+
+export function autoNodeScales(nodes: GraphNode[], edges: GraphEdge[], mode: NodeSizeMode): Map<string, number> {
+  const scales = new Map<string, number>();
+  if (mode === "type") {
+    for (const n of nodes) scales.set(n.key, TYPE_SIZE[n.type] ?? 1);
+    return scales;
+  }
+  const degree = new Map<string, number>();
+  for (const e of edges) {
+    degree.set(e.from, (degree.get(e.from) ?? 0) + 1);
+    degree.set(e.to, (degree.get(e.to) ?? 0) + 1);
+  }
+  // Корень, а не прямая: узел на 40 связях не должен быть в 40 раз больше.
+  for (const n of nodes) scales.set(n.key, Math.min(2, 0.9 + Math.sqrt(degree.get(n.key) ?? 0) * 0.15));
+  return scales;
+}
+
 export const TYPE_LABELS: Record<string, string> = {
   campaign: "Кампании",
   setting: "Сеттинги",

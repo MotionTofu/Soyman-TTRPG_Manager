@@ -82,6 +82,14 @@ const SETTING_SCOPE_QUERIES: Record<string, string> = {
   adventure: "SELECT id FROM story_arcs WHERE setting_id = ? AND campaign_id IS NULL",
 };
 
+// Дерево приключений кампании: c — id кампании (параметр один, а нужен
+// многократно), t — её приключения и все их главы вниз по parent_id.
+const CAMPAIGN_ARC_TREE =
+  "WITH RECURSIVE c(id) AS (SELECT ?), t(id) AS (" +
+  "SELECT arc_id FROM campaign_adventures WHERE campaign_id = (SELECT id FROM c)" +
+  " UNION SELECT id FROM story_arcs WHERE campaign_id = (SELECT id FROM c)" +
+  " UNION SELECT a.id FROM story_arcs a JOIN t ON a.parent_id = t.id) ";
+
 // Node types a `campaign_id` graph filter resolves through the campaign
 // itself. Всё остальное (существа, фракции, локации, артефакты) кампания
 // наследует от своего сеттинга — см. buildScope: без этого граф кампании
@@ -91,8 +99,21 @@ const CAMPAIGN_SCOPE_QUERIES: Record<string, string> = {
   campaign: "SELECT id FROM campaigns WHERE id = ?",
   player: "SELECT player_id as id FROM campaign_roster WHERE campaign_id = ?",
   session: "SELECT id FROM sessions WHERE campaign_id = ?",
-  // Сцены кампании — и собственные, и её copy-on-write копии сценариев.
-  scene: "SELECT id FROM story_scenes WHERE campaign_id = ?",
+  // Сцены кампании: её copy-on-write копии, сцены её приключений (и их глав)
+  // и всё, что её сессии набрали или сыграли. Раньше брались только копии —
+  // у «Вотердипа» это 4 сцены из 138, и граф приключений кампании оставался
+  // без связей.
+  scene:
+    CAMPAIGN_ARC_TREE +
+    "SELECT id FROM story_scenes WHERE campaign_id = (SELECT id FROM c) OR arc_id IN (SELECT id FROM t)" +
+    " OR id IN (SELECT ss.scene_id FROM session_scenes ss JOIN sessions s ON s.id = ss.session_id WHERE s.campaign_id = (SELECT id FROM c))" +
+    " OR id IN (SELECT ps.scene_id FROM session_planned_scenes ps JOIN sessions s ON s.id = ps.session_id WHERE s.campaign_id = (SELECT id FROM c))",
+  // Приключения кампании — подключённые к ней (campaign_adventures) со всеми
+  // главами, её копии и «Сцены вне приключений» сеттинга. По сеттингу
+  // (campaign_id IS NULL) кампания видела все 60 приключений сеттинга.
+  adventure:
+    CAMPAIGN_ARC_TREE +
+    "SELECT id FROM t UNION SELECT id FROM story_arcs WHERE is_default = 1 AND setting_id = (SELECT setting_id FROM campaigns WHERE id = (SELECT id FROM c))",
 };
 
 interface ScopeQuery {

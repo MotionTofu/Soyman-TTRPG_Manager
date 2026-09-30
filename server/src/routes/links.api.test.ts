@@ -5,7 +5,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import express from "express";
 import request from "supertest";
 import { db } from "../db/db";
-import { linksRouter } from "./links";
+import { linksRouter, graphCache } from "./links";
 
 let app: express.Express;
 
@@ -96,6 +96,19 @@ describe("GET /links/graph?view=", () => {
     expect(res.status).toBe(200);
     const types = new Set(res.body.nodes.map((n: { type: string }) => n.type));
     expect(types.has("session")).toBe(true);
+  });
+
+  it("view=adventures по campaign_id: приключения кампании со сценами, чужие приключения сеттинга — нет", async () => {
+    // Несыгранная сцена попадает только через campaign_adventures, а не через сессию.
+    const idle = Number(db.prepare("INSERT INTO story_scenes (name, arc_id, setting_id) VALUES ('Несыгранная', ?, ?)").run(arcId, settingId).lastInsertRowid);
+    const foreign = Number(db.prepare("INSERT INTO story_arcs (name, setting_id) VALUES ('Чужое', ?)").run(settingId).lastInsertRowid);
+    db.prepare("INSERT INTO campaign_adventures (campaign_id, arc_id) VALUES (?, ?)").run(campaignId, arcId);
+    graphCache.clear(); // тот же адрес уже запрашивали выше
+    const res = await request(app).get(`/api/links/graph?view=adventures&campaign_id=${campaignId}`);
+    const keys = new Set(res.body.nodes.map((n: { key: string }) => n.key));
+    expect(keys.has(`scene:${idle}`)).toBe(true);
+    expect(keys.has(`adventure:${arcId}`)).toBe(true);
+    expect(keys.has(`adventure:${foreign}`)).toBe(false);
   });
 
   it("view=adventures: сущности мира появляются как узлы если заняты в сценах", async () => {

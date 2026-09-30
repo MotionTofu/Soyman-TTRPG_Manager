@@ -123,6 +123,7 @@ export function GraphPage() {
       )}
       <RelationGraph
         key={view}
+        view={view}
         data={data}
         defaultHiddenTypes={GRAPH_VIEW_HIDDEN_TYPES[view]}
         layoutKey={`${view}:${campaignId ? `campaign:${campaignId}` : settingId ? `setting:${settingId}` : "global"}`}
