@@ -1483,8 +1483,9 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
           } else if (it.kind === "door") drawDoor(it.door);
           else if (it.kind === "trap") drawTrap(it.trap);
           else if (it.kind === "marker") drawMarker(it.marker);
-          else if (it.kind === "token" && !playerView) {
-            // Only the GM receives transient source presentation data.
+          else if (it.kind === "token" && (!playerView || it.token.sourceRef === null)) {
+            // Only the GM receives transient source presentation data; the
+            // player projection sends detached tokens with resolved labels.
             const token = it.token;
             const radius = token.size * scale / 2;
             const tx = X(token.position.x), ty = Y(token.position.y);

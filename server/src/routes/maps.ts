@@ -10,8 +10,13 @@ import {
   mapClientMaxVersion,
   MAP_VERSION_HEADER,
   parseMapDocumentV6,
+  projectMapDocumentV6ForPlayer,
+  serializeMapDocumentV6,
+  validateMapDocumentV6,
+  type MapDocumentV5,
+  type MapDocumentV6,
 } from "@soyman/shared";
-import { resolveMapTokenSource, presentMapTokenSources, validateMapTokenSources } from "../services/mapTokenSources";
+import { resolveMapTokenSource, presentMapTokenSources, validateMapTokenSources, playerTokenName } from "../services/mapTokenSources";
 import { db } from "../db/db";
 import { isVaultPath, toFileUrl, vaultAbs } from "../services/filesystem";
 import type { AuthedRequest } from "../services/auth";
@@ -52,8 +57,9 @@ mapsRouter.param("id", (req: AuthedRequest, res, next, id: string) => {
       return res.status(409).json({ error: "Неизвестная функция документа", code: "map-version-unsupported", requiredVersion: stored.version });
     }
   }
-  // Public V6 presentation is connected in ticket 09. Fail closed until then.
-  if (stored.format === "v6" && (isPlayer(req) || req.path.endsWith("/player-view") || req.query.player_view === "1")) {
+  // The GM's second screen gets the V6 projection (player-view). Player
+  // accounts stay closed until their own map screen reads V6.
+  if (stored.format === "v6" && isPlayer(req)) {
     return res.status(409).json({ error: "Показ карт нового формата ещё не подключён", code: "map-presentation-unavailable" });
   }
   if (req.method === "GET" && stored.format === "corrupt" && (isPlayer(req) || req.path.endsWith("/player-view") || req.path.endsWith("/assets"))) {
@@ -115,8 +121,9 @@ mapsRouter.get("/:id/assets", (req: AuthedRequest, res) => {
   if (stored.format !== "v5" && stored.format !== "v6") return res.json([]);
   const parsed = stored.format === "v6" ? parseMapDocumentV6(stored.raw) : parseMapDocument(stored.raw);
   if (!parsed.ok) return res.status(500).json({ error: "stored V5 document invalid" });
-  const doc = isPlayer(req) || req.query.player_view === "1"
-    ? projectMapDocumentForPlayer(parsed.value as import("@soyman/shared").MapDocumentV5) : parsed.value;
+  const doc = !(isPlayer(req) || req.query.player_view === "1") ? parsed.value
+    : stored.format === "v6" ? projectMapDocumentV6ForPlayer(parsed.value as MapDocumentV6, () => null)
+      : projectMapDocumentForPlayer(parsed.value as MapDocumentV5);
   const prefix = "soyman-resource-images:";
   const uids = [...new Set(doc.layers.flatMap((layer) => layer.kind === "object"
     ? layer.items.flatMap((item) => item.visual.type === "asset" && item.visual.assetId.startsWith(prefix)
@@ -270,6 +277,13 @@ mapsRouter.get("/:id/player-view", (req: AuthedRequest, res) => {
     const projected = projectMapDocumentForPlayer(parsed.value);
     if (validateMapDocument(projected).length > 0) return res.status(500).json({ error: "V5 player projection invalid" });
     return res.json({ ...row, thumbnail: null, cells: serializeMapDocument(projected) });
+  }
+  if (stored.format === "v6") {
+    const parsed = parseMapDocumentV6(stored.raw);
+    if (!parsed.ok) return res.status(500).json({ error: "stored V6 document invalid" });
+    const projected = projectMapDocumentV6ForPlayer(parsed.value, playerTokenName);
+    if (validateMapDocumentV6(projected).length > 0) return res.status(500).json({ error: "V6 player projection invalid" });
+    return res.json({ ...row, thumbnail: null, cells: serializeMapDocumentV6(projected) });
   }
   try { JSON.parse(row.cells); } catch { return res.status(500).json({ error: "stored map invalid" }); }
   res.json({ ...row, thumbnail: null, cells: stripCellsForPlayer(row.cells) });

@@ -39,6 +39,14 @@ export function presentMapTokenSource(ref: TokenSourceRef) {
     portrait_url: portrait(ref.kind, row) };
 }
 
+/** Name on a public token for the player projection; null → neutral label.
+ * ponytail: the GM's name, not filtered by player visibility levels — the GM
+ * publishes the token explicitly; access-aware names belong to the Table step. */
+export function playerTokenName(ref: TokenSourceRef): string | null {
+  const shown = presentMapTokenSource(ref);
+  return shown.state === "active" ? shown.name : null;
+}
+
 export function presentMapTokenSources(refs: unknown) {
   if (!Array.isArray(refs) || refs.length > 2000 || !refs.every(isTokenSourceRef)) return null;
   return [...new Map(refs.map((ref) => [`${ref.kind}:${ref.uid.toLowerCase()}`, ref])).values()].map(presentMapTokenSource);

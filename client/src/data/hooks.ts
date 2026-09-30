@@ -57,11 +57,11 @@ function useStableReload(refetch: () => Promise<unknown>): () => void {
  */
 export function useResource<T>(
   path: string | null,
-  options?: { staleMs?: number; keepPrevious?: boolean; pollMs?: number }
+  options?: { staleMs?: number; keepPrevious?: boolean; pollMs?: number; headers?: Record<string, string> }
 ): DataState<T> {
   const query = useQuery<T, Error, T, ReturnType<typeof dataKeys.resource>>({
     queryKey: dataKeys.resource(path ?? ""),
-    queryFn: ({ signal }) => api.get<T>(path as string, { signal }),
+    queryFn: ({ signal }) => api.get<T>(path as string, { signal, headers: options?.headers }),
     enabled: path != null,
     // Только заданные: явный `undefined` затирает свежесть клиента (30 с) —
     // опции сливаются разворотом, и данные считались устаревшими сразу.

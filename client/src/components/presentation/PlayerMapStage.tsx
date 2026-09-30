@@ -1,39 +1,58 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { prepareMapImageAssets, registerMapImageResources, subscribeMapImageAssets, type MapImageResource } from "../../maps/assets/registry";
+import { MAP_VERSION_HEADER, parseStoredMapDocument } from "@shared/maps/core";
+import { prepareCartographyStyle, prepareMapImageAssets, registerMapImageResources, subscribeMapImageAssets, type MapImageResource } from "../../maps/assets/registry";
 import { useResource } from "../../data/hooks";
 import { worldBounds } from "../../maps/grid";
-import { loadStoredEditorDocument } from "../../maps/editor/loadDocument";
+import { loadStoredEditorDocument, loadStoredWorkspaceDocument } from "../../maps/editor/loadDocument";
 import type { MapFull } from "../../maps/mapTypes";
 import { readChrome, renderMap } from "../../maps/render";
 import { createV5RenderModel } from "../../maps/renderModel";
+import { workspaceDrawingStyle } from "../../maps/workspace/drawingStyle";
+import { createWorkspaceRenderModel } from "../../maps/workspace/renderV6";
+
+/** This stage reads the projected V6 document, so it may declare V6. */
+const V6_READER = { [MAP_VERSION_HEADER]: "6" };
 
 /** Общий кадр карты для превью пульта и второго экрана. Данные всегда
  * приходят с серверного player-view, в том числе для мастера. */
 export function PlayerMapStage({ mapId }: { mapId: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const mapState = useResource<MapFull>(`/maps/${mapId}/player-view`, { pollMs: 2000 });
-  const assetsState = useResource<MapImageResource[]>(`/maps/${mapId}/assets?player_view=1`, { pollMs: 2000 });
-  const [, refreshImages] = useState(0);
+  const mapState = useResource<MapFull>(`/maps/${mapId}/player-view`, { pollMs: 2000, headers: V6_READER });
+  const assetsState = useResource<MapImageResource[]>(`/maps/${mapId}/assets?player_view=1`, { pollMs: 2000, headers: V6_READER });
+  const [imageRevision, refreshImages] = useState(0);
   const [assetLoadError, setAssetLoadError] = useState(false);
   const map = mapState.data;
-  const loaded = useMemo(() => map ? loadStoredEditorDocument(map) : null, [map]);
+  // The server already projected the document: V6 comes without private tokens.
+  const v6 = useMemo(() => {
+    if (!map || parseStoredMapDocument(map.cells).format !== "v6") return null;
+    const loaded = loadStoredWorkspaceDocument(map);
+    return loaded.status === "supported" ? loaded.document : "corrupt" as const;
+  }, [map]);
+  const loaded = useMemo(() => map && !v6 ? loadStoredEditorDocument(map) : null, [map, v6]);
+  const document = v6 && v6 !== "corrupt" ? v6 : loaded?.document ?? null;
   useEffect(() => subscribeMapImageAssets(() => refreshImages((revision) => revision + 1)), []);
   useEffect(() => {
-    if (!assetsState.data || !loaded) return;
+    if (!assetsState.data || !document) return;
     let active = true;
     registerMapImageResources(assetsState.data);
-    void prepareMapImageAssets(loaded.document).then(() => {
+    if (v6 && v6 !== "corrupt" && v6.appearance?.style !== "blueprint") void prepareCartographyStyle();
+    void prepareMapImageAssets(document).then(() => {
       if (active) setAssetLoadError(false);
     }).catch(() => {
       if (active) setAssetLoadError(true);
     });
     refreshImages((revision) => revision + 1);
     return () => { active = false; };
-  }, [assetsState.data, loaded]);
-  const rendered = loaded && !loaded.corrupt && assetsState.data
-    ? createV5RenderModel(loaded.document) : null;
+  }, [assetsState.data, document, v6]);
+  const rendered = useMemo(() => !assetsState.data ? null
+    : v6 ? (v6 === "corrupt" ? null : createWorkspaceRenderModel(v6))
+      : loaded && !loaded.corrupt ? createV5RenderModel(loaded.document) : null,
+  // Decoded images change the model without changing the document.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [assetsState.data, v6, loaded, imageRevision]);
   const unsupported = !!rendered?.diagnostics.length || !!loaded?.compatibility.reasons.some((r) => r.code === "grid-geometry");
   const model = unsupported ? null : rendered?.model;
+  const style = v6 && v6 !== "corrupt" ? workspaceDrawingStyle(v6) : { chrome: readChrome() };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -54,7 +73,7 @@ export function PlayerMapStage({ mapId }: { mapId: number }) {
         grid: map.grid, width: map.width, height: map.height, model,
         scale, ox: (rect.width - (b.maxX - b.minX) * scale) / 2 - b.minX * scale,
         oy: (rect.height - (b.maxY - b.minY) * scale) / 2 - b.minY * scale,
-        showGrid: true, showCoords: false, hover: null, chrome: readChrome(),
+        showGrid: true, showCoords: false, hover: null, ...style,
         playerView: true, selectedId: null,
       });
     };
@@ -62,9 +81,11 @@ export function PlayerMapStage({ mapId }: { mapId: number }) {
     const observer = new ResizeObserver(draw);
     observer.observe(canvas);
     return () => observer.disconnect();
+    // `style` is derived from the same document as `model`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map, model]);
 
-  if (mapState.error || assetsState.error || assetLoadError || loaded?.corrupt || (assetsState.data && unsupported)) return <div className="muted" role="alert">Карту не удалось показать.</div>;
+  if (mapState.error || assetsState.error || assetLoadError || loaded?.corrupt || v6 === "corrupt" || (assetsState.data && unsupported)) return <div className="muted" role="alert">Карту не удалось показать.</div>;
   return <canvas ref={canvasRef} aria-label={map ? `Карта ${map.name}` : "Загрузка карты"}
     style={{ display: "block", width: "100%", height: "100%", background: "#000" }} />;
 }

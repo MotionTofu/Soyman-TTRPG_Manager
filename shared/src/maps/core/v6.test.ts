@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseStoredMapDocument, mapClientMaxVersion } from "./storedDocument";
 import { serializeMapDocument } from "./serialize";
 import { createGameplayToken, detachGameplayToken, putGameplayToken, removeGameplayToken,
-  readMapDocumentV6, upgradeMapDocumentV5, parseMapDocumentV6, serializeMapDocumentV6,
+  readMapDocumentV6, upgradeMapDocumentV5, projectMapDocumentV6ForPlayer, parseMapDocumentV6, serializeMapDocumentV6,
   tokensOf, validateMapDocumentV6, type MapDocumentV6 } from "./v6";
 import type { MapDocumentV5 } from "./types";
 
@@ -20,6 +20,22 @@ function oldDocument(): MapDocumentV5 {
       { id: "mask", kind: "terrain", name: "Mask", visible: true, locked: false, opacity: 1, representation: "mask", defaultMaterial: { type: "builtin", key: "terrain/plain" },
         mask: { origin: { x: 0, y: 0 }, sampleSize: 1, materials: [{ type: "builtin", key: "terrain/stone" }], chunks: [{ id: "chunk", cx: 0, cy: 0, payload: { encoding: "palette-index-v1", values: Array(256).fill(1) } }] } } ] };
 }
+describe("V6 player projection", () => {
+  it("shows only public tokens in revealed cells, detached, with resolved names and no source data", () => {
+    const place = (id: string, x: number, y: number, publicToken: boolean) => ({ ...createGameplayToken(id, ref, { x, y }),
+      playerVisibility: publicToken ? "public" as const : "private" as const,
+      appearance: { shape: "circle" as const, visual: { type: "entity-avatar" as const, source: ref } } });
+    let doc = upgradeMapDocumentV5(oldDocument());
+    for (const token of [place("shown", 1.5, 1.5, true), place("fogged", 5.5, 5.5, true), place("private", 2.5, 1.5, false)]) doc = putGameplayToken(doc, "gp", token);
+    const projected = projectMapDocumentV6ForPlayer(doc, (source) => source.uid === ref.uid ? "Test guard" : null);
+    expect(validateMapDocumentV6(projected)).toEqual([]);
+    expect(tokensOf(projected)).toEqual([expect.objectContaining({ id: "shown", sourceRef: null,
+      label: { mode: "custom", text: "Test guard" }, appearance: { shape: "circle", visual: { type: "builtin", key: "being" } } })]);
+    expect(serializeMapDocumentV6(projected)).not.toContain(ref.uid);
+    const orphan = projectMapDocumentV6ForPlayer(doc, () => null);
+    expect(tokensOf(orphan)[0].label).toEqual({ mode: "custom", text: "Метка" });
+  });
+});
 describe("V6 boundary and tokens", () => {
   it("drawing styles survive canonical save/reload and token edits; unknown styles are rejected", () => {
     for (const style of ["blueprint", "paper-ink"] as const) {

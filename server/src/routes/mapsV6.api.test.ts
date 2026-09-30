@@ -47,6 +47,18 @@ async function create(doc: unknown = fixture()) {
   return request(app).post("/api/maps").set(gm).send({ name: "Test V6 map", scale: "locality", player_visible: true, document: doc });
 }
 describe("V6 map persistence and gates", () => {
+  it("drawing appearance persists through create/write/read and rejects unknown styles", async () => {
+    const doc = { ...fixture(), appearance: { style: "blueprint" as const } };
+    const made = await create(doc);
+    expect(made.status).toBe(201);
+    const url = `/api/maps/${made.body.id}`;
+    expect(JSON.parse((await request(app).get(url).set(gm)).body.cells).appearance).toEqual({ style: "blueprint" });
+    const changed = { ...doc, appearance: { style: "paper-ink" } };
+    expect((await request(app).put(url).set(gm).send({ document: changed, expectedRevision: 0 })).status).toBe(200);
+    expect(JSON.parse((await request(app).get(url).set(gm)).body.cells).appearance).toEqual({ style: "paper-ink" });
+    expect((await request(app).put(url).set(gm).send({ document: { ...doc, appearance: { style: "future" } }, expectedRevision: 1 })).status).toBe(400);
+    expect(JSON.parse((await request(app).get(url).set(gm)).body.cells).appearance).toEqual({ style: "paper-ink" });
+  });
   it("bestiary monsters resolve stable refs and persist, other entry kinds/archived systems cannot create tokens", async () => {
     const systemId = Number(database.prepare("INSERT INTO systems (name) VALUES ('Test map bestiary')").run().lastInsertRowid);
     const sectionId = Number(database.prepare("INSERT INTO system_sections (system_id, name) VALUES (?, 'Test bestiary')").run(systemId).lastInsertRowid);
@@ -250,7 +262,20 @@ describe("V6 map persistence and gates", () => {
       expect(result.status).toBe(409);
       expect(JSON.stringify(result.body)).not.toContain(uid);
     }
-    expect((await request(app).get(`/api/maps/${made.body.id}/player-view`).set(gm)).body.code).toBe("map-presentation-unavailable");
+  });
+  it("the GM second screen gets the projection: public tokens detached with a name, private ones absent", async () => {
+    const doc = fixture();
+    if (doc.layers[0].kind === "gameplay") doc.layers[0].items.push({ ...createGameplayToken("test-public", { kind: "being", uid }, { x: 3.5, y: 3.5 }),
+      playerVisibility: "public", appearance: { shape: "circle", visual: { type: "entity-avatar", source: { kind: "being", uid } } } });
+    const made = await create(doc);
+    const shown = await request(app).get(`/api/maps/${made.body.id}/player-view`).set(gm);
+    expect(shown.status).toBe(200);
+    expect(shown.body.thumbnail).toBeNull();
+    expect(shown.body.cells).not.toContain(uid);
+    expect(tokensOf(JSON.parse(shown.body.cells))).toEqual([expect.objectContaining({ id: "test-public", sourceRef: null,
+      label: { mode: "custom", text: "Test short name" }, appearance: { shape: "circle", visual: { type: "builtin", key: "being" } } })]);
+    expect((await request(app).get(`/api/maps/${made.body.id}/assets?player_view=1`).set(gm)).status).toBe(200);
+    expect((await request(app).get(`/api/maps/${made.body.id}/player-view`)).body.code).toBe("map-version-unsupported");
   });
   it("old V5 writes advance revision and a new client cannot overwrite them with stale upgrade", async () => {
     const old = { ...fixture(), v: 5, layers: [] };

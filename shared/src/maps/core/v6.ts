@@ -1,6 +1,7 @@
 /** V6 extends V5 geometry without changing the V5 reader/writer contract. */
 import { canonicalizeMapDocument } from "./canonicalize";
 import { parseMapDocument, type ParseResult } from "./parse";
+import { projectMapDocumentForPlayer } from "./playerProjection";
 import type { EntityId, GameplayEntity, GameplayLayer, MapDocumentV5, MapRecordV5, MapLayer, Vec2 } from "./types";
 import { validateMapDocument, type ValidationIssue } from "./validate";
 
@@ -155,6 +156,30 @@ export function detachGameplayToken(t: GameplayToken, label: string): GameplayTo
   if (validateGameplayToken(detached).length) throw new Error("invalid detached token");
   return canonicalizeGameplayToken(detached);
 }
+/** Player projection: V5 secrecy and fog rules, plus only public tokens.
+ * Tokens leave detached: no source UID, the label already resolved by the
+ * caller (null = source unavailable → neutral label), no source portrait. */
+export function projectMapDocumentV6ForPlayer(doc: MapDocumentV6, sourceName: (ref: TokenSourceRef) => string | null): MapDocumentV6 {
+  const shown = new Map(tokensOf(doc).filter((t) => t.playerVisibility === "public").map((t) => [t.id, t]));
+  const withoutPrivate: MapDocumentV6 = { ...doc, layers: doc.layers.map((l) => l.kind === "gameplay"
+    ? { ...l, items: l.items.filter((e) => e.kind !== "token" || shown.has(e.id)) } : l) };
+  // Tokens pass the fog as point entities, the same substitution as validation.
+  const projected = projectMapDocumentForPlayer(invariantView(withoutPrivate as unknown as Record<string, unknown>) as MapDocumentV5);
+  const next: MapDocumentV6 = { ...projected, v: 6, ...(doc.appearance ? { appearance: { style: doc.appearance.style } } : {}),
+    layers: projected.layers.map((layer) => layer.kind !== "gameplay" ? layer : { ...layer, items: layer.items.map((item) => {
+      const token = item.kind === "start" ? shown.get(item.id) : undefined;
+      return token ? playerToken(token, sourceName) : item;
+    }) }) };
+  return canonicalizeMapDocumentV6(next);
+}
+function playerToken(t: GameplayToken, sourceName: (ref: TokenSourceRef) => string | null): GameplayToken {
+  const text = t.label.mode === "custom" ? t.label.text : (t.sourceRef && sourceName(t.sourceRef)) || "Метка";
+  const v = t.appearance.visual;
+  const location = t.sourceRef ? t.sourceRef.kind === "location" : v.type === "builtin" && v.key === "location";
+  return { ...t, sourceRef: null, label: { mode: "custom", text: text.slice(0, 200) },
+    appearance: { shape: t.appearance.shape, visual: v.type === "asset" ? v : { type: "builtin", key: location ? "location" : "being" } } };
+}
+
 /** Upgrade only validated V5 input; legacy migration remains client-owned. */
 export function readMapDocumentV6(raw: unknown): ParseResult<MapDocumentV6> {
   let value = raw;
