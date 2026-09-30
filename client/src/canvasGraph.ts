@@ -6,6 +6,7 @@ import {
   type GraphNode,
   type NodePosition,
   type NodePositions,
+  type LayerBand,
 } from "./graphTypes";
 import { RELATION_TONE_COLORS, RELATION_TONE_LABELS } from "./relations";
 import type { RelationTone } from "./types";
@@ -238,6 +239,7 @@ export function drawNode(
     pinned: boolean;
     scale: number;
     focused: boolean;
+    selected?: boolean;
     fitScale: number;
   },
 ) {
@@ -280,6 +282,13 @@ export function drawNode(
       : resolveColor("--line", "#ccc");
   ctx.lineWidth = 1;
   ctx.strokeRect(pos.x - chipW / 2, pos.y - chipH / 2, chipW, chipH);
+
+  // Выделенный рамкой или Shift — внешняя акцентная рамка.
+  if (options.selected) {
+    ctx.strokeStyle = resolveColor("--accent", "#c2683f");
+    ctx.lineWidth = 2.5;
+    ctx.strokeRect(pos.x - chipW / 2 - 3, pos.y - chipH / 2 - 3, chipW + 6, chipH + 6);
+  }
 
   // Focused node — accent border
   if (options.focused) {
@@ -389,6 +398,9 @@ export interface DrawInput {
   nodeScales: Map<string, number>;
   manual: Record<string, { x: number; y: number }>;
   showPins: boolean;
+  /** Полосы ярусов графа приключений. */
+  bands?: LayerBand[] | null;
+  selectedKeys?: Set<string>;
 }
 
 export function drawGraph(input: DrawInput) {
@@ -432,6 +444,30 @@ export function drawGraph(input: DrawInput) {
   const vpMaxY = ((height - panY) / scale) * (1 + pad);
   const inViewport = (x: number, y: number) =>
     x >= vpMinX && x <= vpMaxX && y >= vpMinY && y <= vpMaxY;
+
+  // Ярусы: пунктир на границах и подпись у левого края экрана.
+  if (input.bands) {
+    const left = -panX / scale;
+    const right = (width - panX) / scale;
+    ctx.save();
+    ctx.strokeStyle = resolveColor("--line", "#ccc");
+    ctx.lineWidth = 1 / scale;
+    ctx.setLineDash([6 / scale, 6 / scale]);
+    ctx.font = `600 ${10 / scale}px var(--font-mono, monospace)`;
+    ctx.fillStyle = resolveColor("--muted", "#999");
+    ctx.textBaseline = "top";
+    ctx.textAlign = "left";
+    input.bands.forEach((b, i) => {
+      if (i > 0) {
+        ctx.beginPath();
+        ctx.moveTo(left, b.top);
+        ctx.lineTo(right, b.top);
+        ctx.stroke();
+      }
+      ctx.fillText(b.label.toUpperCase(), left + 8 / scale, b.top + 6 / scale);
+    });
+    ctx.restore();
+  }
 
   // Edges — skip if BOTH endpoints are outside viewport (unless on path/focused)
   for (const e of visibleEdges) {
@@ -485,6 +521,7 @@ export function drawGraph(input: DrawInput) {
       pinned,
       scale,
       focused: isFocused,
+      selected: input.selectedKeys?.has(n.key) ?? false,
       fitScale,
     });
   }

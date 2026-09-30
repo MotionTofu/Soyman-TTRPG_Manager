@@ -373,6 +373,15 @@ export interface FoldedGraph {
 // на одной паре — одно «сыграно» (Q7).
 const OWNER_SECTIONS = new Set(["сцена приключения", "глава приключения"]);
 
+/** Приключения, в которые свёрнут узел: владелец, его родитель и выше. */
+export function adventureOwners(edges: GraphEdge[], key: string): string[] {
+  const owner = new Map<string, string>();
+  for (const e of edges) if (e.section && OWNER_SECTIONS.has(e.section)) owner.set(e.from, e.to);
+  const chain: string[] = [];
+  for (let k = owner.get(key); k && chain.length < 20 && !chain.includes(k); k = owner.get(k)) chain.push(k);
+  return chain;
+}
+
 export function foldAdventures(nodes: GraphNode[], edges: GraphEdge[], expanded: Set<string>): FoldedGraph {
   const nodeKeys = new Set(nodes.map((n) => n.key));
   const owner = new Map<string, string>(); // сцена/глава -> приключение
@@ -423,6 +432,9 @@ export function foldAdventures(nodes: GraphNode[], edges: GraphEdge[], expanded:
 const STORY_TIER = new Set(["campaign", "adventure", "scene"]);
 const LAYER_PAD = 60;
 const LAYER_GAP = 16;
+const BAND_INSET = 18; // узел не наезжает на линию полосы
+const ROW_H = 36;
+const SPARE_ROWS = 2; // запас полосы под ручное перетаскивание
 
 function chipWidth(n: GraphNode, scale: number): number {
   return Math.max(48, (Math.min(n.title.length * 6.6, 180) + 26) * scale);
@@ -434,6 +446,23 @@ export interface LayeredLayout {
   height: number;
   /** x последней проведённой сессии — отсюда граф открывается. */
   anchorX: number;
+  /** Полосы ярусов: сессии, сюжет, мир — в их пределах узел ходит по y. */
+  bands: LayerBand[];
+}
+
+export interface LayerBand { label: string; top: number; bottom: number }
+
+/** Ярус узла: 0 — сессии, 1 — сюжет, 2 — мир. */
+export function layerOf(type: string): number {
+  return type === "session" ? 0 : STORY_TIER.has(type) ? 1 : 2;
+}
+
+/** y узла в ярусной раскладке: сессии держат ленту, остальные — в своей полосе. */
+export function clampToBand(bands: LayerBand[], type: string, layoutY: number, y: number): number {
+  const layer = layerOf(type);
+  if (layer === 0) return layoutY;
+  const b = bands[layer];
+  return Math.min(b.bottom - BAND_INSET, Math.max(b.top + BAND_INSET, y));
 }
 
 export function layeredLayout(nodes: GraphNode[], edges: GraphEdge[], scales: Map<string, number>): LayeredLayout {
@@ -476,7 +505,9 @@ export function layeredLayout(nodes: GraphNode[], edges: GraphEdge[], scales: Ma
     || (a.position ?? Infinity) - (b.position ?? Infinity)
     || a.title.localeCompare(b.title));
   const storyH = 22 * Math.max(1, ...story.map(scale));
-  const storyY = LAYER_PAD + (lanes.length - 1) * laneH + laneH / 2 + 70 + storyH / 2;
+  const storyTop = LAYER_PAD + (lanes.length - 1) * laneH + laneH / 2 + 35;
+  const storyY = storyTop + 35 + storyH / 2;
+  const storyBottom = storyY + storyH / 2 + SPARE_ROWS * ROW_H + 20;
   cursor = LAYER_PAD;
   for (const n of story) {
     const w = chipWidth(n, scale(n));
@@ -497,8 +528,8 @@ export function layeredLayout(nodes: GraphNode[], edges: GraphEdge[], scales: Ma
   const totalW = world.reduce((sum, c) => sum + c.w + LAYER_GAP, 0);
   const rowCount = Math.max(3, Math.ceil((totalW / right) * 1.5));
   const rowEnds = new Array<number>(rowCount).fill(LAYER_PAD);
-  const rowH = 36;
-  const worldY = storyY + storyH / 2 + 80;
+  const rowH = ROW_H;
+  const worldY = storyBottom + 45;
   let usedRows = 0;
   for (const c of world) {
     const shortest = rowEnds.indexOf(Math.min(...rowEnds));
@@ -515,7 +546,13 @@ export function layeredLayout(nodes: GraphNode[], edges: GraphEdge[], scales: Ma
   const lastHeld = [...sessions].reverse().find((n) => !n.planned);
   const anchorX = lastHeld ? positions.get(lastHeld.key)!.x : 0;
   // Снизу запас больше: нижние ряды — те, что хочется приблизить, а не упирать в край.
-  return { positions, width: right + LAYER_PAD, height: worldY + usedRows * rowH + LAYER_PAD * 3, anchorX };
+  const worldBottom = worldY + (Math.max(1, usedRows) - 0.5 + SPARE_ROWS) * rowH;
+  const bands: LayerBand[] = [
+    { label: "Сессии", top: 0, bottom: storyTop },
+    { label: "Приключения", top: storyTop, bottom: storyBottom },
+    { label: "Мир", top: storyBottom, bottom: worldBottom },
+  ];
+  return { positions, width: right + LAYER_PAD, height: worldBottom + LAYER_PAD * 2, anchorX, bands };
 }
 
 export const GRAPH_WIDTH = 900;

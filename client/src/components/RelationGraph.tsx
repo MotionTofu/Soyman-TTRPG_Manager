@@ -34,6 +34,9 @@ import {
   GRAPH_VIEW_SIZE_MODE,
   autoNodeScales,
   layeredLayout,
+  adventureOwners,
+  clampToBand,
+  type LayerBand,
   type GraphView,
   type NodeSizeMode,
   type EdgeKind,
@@ -114,6 +117,8 @@ interface Props {
   view?: GraphView;
   /** Ярусы вместо силовой раскладки: сессии / сюжет / мир. Тащить узел можно только вдоль яруса. */
   layered?: boolean;
+  /** Узел из «Показать в графе»: раскрыть его приключение и выделить. */
+  focusKey?: string | null;
 }
 
 const SIZE_MODE_STORE_PREFIX = "rpgManagerGraphSizeMode:";
@@ -141,6 +146,9 @@ function loadLayout(key: string | undefined): ManualLayout {
   }
 }
 
+/** Рамка заменяет выделение, рамка с Shift — добавляет, Shift+клик — переключает. */
+type SelectMode = "replace" | "add" | "toggle";
+
 // ─── Canvas component — refs-based, no React re-renders for pan/zoom ───
 
 function GraphCanvas({
@@ -167,6 +175,9 @@ function GraphCanvas({
   onNodeContextMenu,
   onNodeDrag,
   fitAnchorX = null,
+  bands = null,
+  selectedKeys,
+  onSelect,
 }: {
   width: number;
   height: number;
@@ -189,16 +200,23 @@ function GraphCanvas({
   onNodeDoubleClick: (key: string) => void;
   onBackgroundClick: () => void;
   onNodeContextMenu: (e: ReactMouseEvent, node: GraphNode) => void;
-  onNodeDrag: (key: string, x: number, y: number) => void;
+  /** Перетаскивание: один узел или всё выделенное разом. */
+  onNodeDrag: (moves: [string, number, number][]) => void;
   /** Ярусы: вписать по высоте и встать так, чтобы эта точка мира была на 2/3 экрана. */
   fitAnchorX?: number | null;
+  bands?: LayerBand[] | null;
+  selectedKeys: Set<string>;
+  onSelect: (keys: string[], mode: SelectMode) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef(0);
   const viewRef = useRef<View>({ zoom: 1, panX: 0, panY: 0 });
-  const dragState = useRef<{ key: string; moved: boolean } | null>(null);
-  const dragOrigin = useRef<{ x: number; y: number; clientX: number; clientY: number } | null>(null);
+  const dragState = useRef<{ keys: string[]; moved: boolean } | null>(null);
+  const dragOrigin = useRef<{ starts: Map<string, { x: number; y: number }>; clientX: number; clientY: number } | null>(null);
+  // Рамка выделения: протяжка левой кнопкой по пустому месту.
+  const marquee = useRef<{ x0: number; y0: number; x1: number; y1: number; add: boolean; moved: boolean } | null>(null);
+  const marqueeRef = useRef<HTMLDivElement>(null);
   const panState = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
   const justPannedRef = useRef(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -276,10 +294,12 @@ function GraphCanvas({
       nodeScales,
       manual,
       showPins,
+      bands,
+      selectedKeys,
     };
     drawGraph(input);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleEdges, visibleNodes, positions, nodesByKey, groupedFolded, pairCounts, focusedKey, neighborKeys, nodeScales, manual, showPins, worldWidth, worldHeight]);
+  }, [visibleEdges, visibleNodes, positions, nodesByKey, groupedFolded, pairCounts, focusedKey, neighborKeys, nodeScales, manual, showPins, worldWidth, worldHeight, bands, selectedKeys]);
 
   // Redraw when props change
   useEffect(() => { draw(); }, [draw]);
@@ -371,6 +391,7 @@ function GraphCanvas({
     else if (e.key === "ArrowRight") dx = -step;
     else if (e.key === "ArrowUp") dy = step;
     else if (e.key === "ArrowDown") dy = -step;
+    else if (e.key === "Escape") { onSelect([], "replace"); return; }
     else return;
     e.preventDefault();
     const c = canvasRef.current;
@@ -381,7 +402,7 @@ function GraphCanvas({
     viewRef.current = { ...v, panX: clamped.x, panY: clamped.y };
     cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(draw);
-  }, [draw, worldWidth, worldHeight]);
+  }, [draw, worldWidth, worldHeight, onSelect]);
 
   // ── Pointer: world coordinates from event ─────────────────────
   function worldCoords(e: { clientX: number; clientY: number }) {
@@ -409,14 +430,18 @@ function GraphCanvas({
     if (e.button !== 0) return;
     const w = worldCoords(e);
     const hit = hitTestNode(w.x, w.y, visibleNodes, positions, nodeScales);
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
     if (hit) {
-      e.preventDefault();
-      const start = positions.get(hit.key)!;
-      dragState.current = { key: hit.key, moved: false };
-      dragOrigin.current = { x: start.x, y: start.y, clientX: e.clientX, clientY: e.clientY };
-      e.currentTarget.setPointerCapture(e.pointerId);
+      // Схватили выделенный — едет всё выделенное.
+      const keys = selectedKeys.has(hit.key) ? [...selectedKeys].filter((k) => positions.has(k)) : [hit.key];
+      const starts = new Map(keys.map((k) => [k, { x: positions.get(k)!.x, y: positions.get(k)!.y }]));
+      dragState.current = { keys, moved: false };
+      dragOrigin.current = { starts, clientX: e.clientX, clientY: e.clientY };
+    } else {
+      marquee.current = { x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY, add: e.shiftKey, moved: false };
     }
-  }, [visibleNodes, positions, nodeScales, worldWidth, worldHeight]);
+  }, [visibleNodes, positions, nodeScales, worldWidth, worldHeight, selectedKeys]);
 
   const handlePointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
     const c = canvasRef.current;
@@ -434,19 +459,35 @@ function GraphCanvas({
       const dy = (e.clientY - origin.clientY) / scale;
       if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragState.current.moved = true;
       if (!dragState.current.moved) return;
-      const key = dragState.current.key;
+      const keys = dragState.current.keys;
       cancelAnimationFrame(rafRef.current);
       rafRef.current = requestAnimationFrame(() => {
-        const nx = Math.max(CANVAS_EDGE_PADDING, Math.min(width - CANVAS_EDGE_PADDING, origin.x + dx));
-        const ny = Math.max(CANVAS_EDGE_PADDING, Math.min(height - CANVAS_EDGE_PADDING, origin.y + dy));
-        onNodeDrag(key, nx, ny);
-        // Keep custom event for backward compat
-        const evt = new CustomEvent("graph-node-drag", {
-          detail: { key, x: nx, y: ny },
-          bubbles: true,
-        });
-        wrapRef.current?.dispatchEvent(evt);
+        onNodeDrag(keys.map((key) => {
+          const o = origin.starts.get(key)!;
+          return [
+            key,
+            Math.max(CANVAS_EDGE_PADDING, Math.min(width - CANVAS_EDGE_PADDING, o.x + dx)),
+            Math.max(CANVAS_EDGE_PADDING, Math.min(height - CANVAS_EDGE_PADDING, o.y + dy)),
+          ];
+        }));
       });
+      return;
+    }
+
+    // Рамка выделения — div поверх холста, в экранных координатах.
+    const m = marquee.current;
+    if (m) {
+      m.x1 = e.clientX;
+      m.y1 = e.clientY;
+      if (Math.abs(m.x1 - m.x0) > 3 || Math.abs(m.y1 - m.y0) > 3) m.moved = true;
+      const el = marqueeRef.current;
+      if (el && m.moved) {
+        el.style.display = "block";
+        el.style.left = `${Math.min(m.x0, m.x1) - r.left}px`;
+        el.style.top = `${Math.min(m.y0, m.y1) - r.top}px`;
+        el.style.width = `${Math.abs(m.x1 - m.x0)}px`;
+        el.style.height = `${Math.abs(m.y1 - m.y0)}px`;
+      }
       return;
     }
 
@@ -464,6 +505,21 @@ function GraphCanvas({
   }, [draw, width, height, worldWidth, worldHeight, onNodeDrag]);
 
   const handlePointerUp = useCallback(() => {
+    const m = marquee.current;
+    if (m) {
+      marquee.current = null;
+      if (marqueeRef.current) marqueeRef.current.style.display = "none";
+      if (!m.moved) return; // просто клик в пустоту — его разберёт onClick
+      justPannedRef.current = true;
+      const a = worldCoords({ clientX: Math.min(m.x0, m.x1), clientY: Math.min(m.y0, m.y1) });
+      const b = worldCoords({ clientX: Math.max(m.x0, m.x1), clientY: Math.max(m.y0, m.y1) });
+      const keys = visibleNodes.filter((n) => {
+        const p = positions.get(n.key);
+        return p && p.x >= a.x && p.x <= b.x && p.y >= a.y && p.y <= b.y;
+      }).map((n) => n.key);
+      onSelect(keys, m.add ? "add" : "replace");
+      return;
+    }
     if (dragState.current) {
       if (dragState.current.moved) justPannedRef.current = true;
       dragState.current = null;
@@ -472,19 +528,22 @@ function GraphCanvas({
     }
     if (panState.current?.moved) justPannedRef.current = true;
     panState.current = null;
-  }, []);
+  }, [visibleNodes, positions, onSelect, worldWidth, worldHeight]);
 
   const handleClick = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
     if (justPannedRef.current) { justPannedRef.current = false; return; }
     const w = worldCoords(e);
     const hit = hitTestNode(w.x, w.y, visibleNodes, positions, nodeScales);
-    if (hit) {
+    if (hit && e.shiftKey) {
+      e.stopPropagation();
+      onSelect([hit.key], "toggle");
+    } else if (hit) {
       e.stopPropagation();
       onNodeClick(hit, (groupedFolded.get(hit.key) ?? 0) > 0);
     } else {
       onBackgroundClick();
     }
-  }, [visibleNodes, positions, nodeScales, groupedFolded, onNodeClick, onBackgroundClick]);
+  }, [visibleNodes, positions, nodeScales, groupedFolded, onNodeClick, onBackgroundClick, onSelect]);
 
   const handleDoubleClick = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
     const w = worldCoords(e);
@@ -567,6 +626,7 @@ function GraphCanvas({
       onMouseLeave={hideTooltip}
     >
       <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
+      <div ref={marqueeRef} className="graph-marquee" />
       <div
         ref={tooltipRef}
         style={{
@@ -588,7 +648,7 @@ function GraphCanvas({
 
 // ─── Outer component — React state for toolbar/legend ────────────
 
-export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layoutKey, scopeBar, edgeKinds, activeKinds: activeKindsProp, onActiveKindsChange, defaultHiddenTypes = GRAPH_VIEW_HIDDEN_TYPES.world, view = "world", layered: layeredMode = false }: Props) {
+export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layoutKey, scopeBar, edgeKinds, activeKinds: activeKindsProp, onActiveKindsChange, defaultHiddenTypes = GRAPH_VIEW_HIDDEN_TYPES.world, view = "world", layered: layeredMode = false, focusKey = null }: Props) {
   const navigate = useNavigate();
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -608,7 +668,10 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     setSizeMode(next);
     try { localStorage.setItem(SIZE_MODE_STORE_PREFIX + view, next); } catch {}
   }
-  const [resizeTarget, setResizeTarget] = useState<GraphNode | null>(null);
+  const [resizeTarget, setResizeTarget] = useState<{ title: string; keys: string[] } | null>(null);
+  // Выделение (рамка, Shift+клик) и «Скрыть с холста» — только вид, не данные.
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(() => new Set());
   const [activeKinds, setActiveKindsInternal] = useState<Set<EdgeKind>>(() => activeKindsProp ?? new Set(DEFAULT_EDGE_KINDS));
   // Виды рёбер управляются извне (GraphPage), если переданы.
   const setActiveKinds = onActiveKindsChange ?? setActiveKindsInternal;
@@ -663,6 +726,14 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     setPathTo(null);
     setIsolation(null);
   }, [data]);
+
+  // «Показать в графе»: после сброса выше — раскрыть приключение узла и выделить его.
+  useEffect(() => {
+    if (!focusKey || !data?.nodes.some((n) => n.key === focusKey)) return;
+    const chain = adventureOwners(data.edges, focusKey);
+    if (chain.length) setExpandedGroups((prev) => new Set([...prev, ...chain]));
+    setFocusedKey(focusKey);
+  }, [data, focusKey]);
 
   // ── Layout computation ────────────────────────────────────────
   const baseCanvas = data ? canvasSizeFor(data.nodes.length) : { width: GRAPH_WIDTH, height: GRAPH_HEIGHT };
@@ -728,12 +799,17 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     );
     const visibleKeys = new Set(visibleNodes.map((n) => n.key));
     const typeEdges = kindEdges.filter((e) => visibleKeys.has(e.from) && visibleKeys.has(e.to));
-    const grouped = foldAdventures(visibleNodes, typeEdges, expandedGroups);
+    const folded = foldAdventures(visibleNodes, typeEdges, expandedGroups);
+    const grouped = hiddenKeys.size === 0 ? folded : {
+      ...folded,
+      nodes: folded.nodes.filter((n) => !hiddenKeys.has(n.key)),
+      edges: folded.edges.filter((e) => !hiddenKeys.has(e.from) && !hiddenKeys.has(e.to)),
+    };
     const isolationView = isolation
       ? buildIsolation(grouped.nodes, grouped.edges, isolation.key, isolation.depth)
       : null;
     return { grouped, isolationView };
-  }, [data, effectiveActiveKinds, hiddenTypes, expandedGroups, isolation]);
+  }, [data, effectiveActiveKinds, hiddenTypes, expandedGroups, isolation, hiddenKeys]);
 
   const isolationView = pipeline?.isolationView ?? null;
   const grouped = pipeline?.grouped;
@@ -752,20 +828,22 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     () => (layeredMode && !isolationView ? layeredLayout(visibleNodesList, visibleEdgesList, nodeScales) : null),
     [layeredMode, pipeline, nodeScales],
   );
-  // В ярусах ручная раскладка двигает узел только по x: ярус — это смысл, а не место.
+  const nodesByKey = useMemo(() => data ? new Map(data.nodes.map((n) => [n.key, n])) : new Map<string, GraphNode>(), [data]);
+  // В ярусах узел ходит только внутри своей полосы: ярус — это смысл, а не
+  // место. Лента сессий — время, по y не двигается.
   const positions = useMemo(() => {
     if (!layered) return forcePositions;
     const merged: NodePositions = new Map(layered.positions);
     for (const [key, p] of Object.entries(manual)) {
       const at = merged.get(key);
-      if (at) merged.set(key, { ...at, x: p.x });
+      const type = nodesByKey.get(key)?.type;
+      if (at && type) merged.set(key, { ...at, x: p.x, y: clampToBand(layered.bands, type, at.y, p.y) });
     }
     return merged;
-  }, [layered, forcePositions, manual]);
+  }, [layered, forcePositions, manual, nodesByKey]);
   const canvasSize = layered ?? baseCanvas;
 
   // Precomputed lookups
-  const nodesByKey = useMemo(() => data ? new Map(data.nodes.map((n) => [n.key, n])) : new Map<string, GraphNode>(), [data]);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- visibleEdgesList is stable within a pipeline computation
   const pairCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -816,6 +894,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     if (!layoutKey) return;
     try { localStorage.removeItem(LAYOUT_STORE_PREFIX + layoutKey); } catch {}
     setManual({});
+    setHiddenKeys(new Set());
     lastPositions.current = null;
   }
   function handleNodeClick(n: GraphNode, isFoldedGroup: boolean) {
@@ -824,20 +903,31 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     if (expandedGroups.has(n.key)) { setExpandedGroups((prev) => { const next = new Set(prev); next.delete(n.key); return next; }); return; }
     if (focusedKey === n.key) setFocusedKey(null); else focusNode(n.key);
   }
-  function handleBackgroundClick() { setFocusedKey(null); setMenu(null); }
+  function handleBackgroundClick() { setFocusedKey(null); setMenu(null); setSelected(new Set()); }
   function handleNodeContextMenu(e: ReactMouseEvent, node: GraphNode) { setMenu({ x: e.clientX, y: e.clientY, node }); }
 
-  // Node drag handler via custom events
-  useEffect(() => {
-    const el = graphWrapRef.current;
-    if (!el) return;
-    const handler = (e: Event) => {
-      const d = (e as CustomEvent).detail;
-      setManual((prev) => ({ ...prev, [d.key]: { x: d.x, y: d.y } }));
-    };
-    el.addEventListener("graph-node-drag", handler as EventListener);
-    return () => el.removeEventListener("graph-node-drag", handler as EventListener);
+  const handleSelect = useCallback((keys: string[], mode: SelectMode) => {
+    setSelected((prev) => {
+      if (mode === "replace") return new Set(keys);
+      const next = new Set(prev);
+      for (const k of keys) {
+        if (mode === "toggle" && next.has(k)) next.delete(k);
+        else next.add(k);
+      }
+      return next;
+    });
   }, []);
+  const handleNodeDrag = useCallback((moves: [string, number, number][]) => {
+    setManual((prev) => {
+      const next = { ...prev };
+      for (const [key, x, y] of moves) next[key] = { x, y };
+      return next;
+    });
+  }, []);
+  function hideSelected() {
+    setHiddenKeys((prev) => new Set([...prev, ...selected]));
+    setSelected(new Set());
+  }
 
   function dispatchCommand(type: string, detail?: Record<string, unknown>) {
     const el = graphWrapRef.current;
@@ -906,18 +996,21 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
           </div>
         </>
       )}
-      <span className="graph-toolbar-sep" />
-      <div className="graph-toolbar-row">
-        <button type="button" className="graph-tb-btn" onClick={() => dispatchCommand("zoomBy", { factor: 1 / 1.3 })} title="Отдалить"><NavIcon name="minus" /></button>
-        <button type="button" className="graph-tb-btn" onClick={() => dispatchCommand("zoomBy", { factor: 1.3 })} title="Приблизить"><NavIcon name="plus" /></button>
-        <button type="button" className="graph-tb-btn" onClick={saveLayout} title="Закрепить всё, что сейчас на экране">Сохранить раскладку</button>
-        <button type="button" className="graph-tb-btn" onClick={resetLayout} title="Сбросить ручную раскладку">Сбросить раскладку</button>
-        {groupedFoldedCount > 0 && (
-          <button type="button" className="graph-tb-btn" onClick={() => setExpandedGroups((prev) => new Set([...prev, ...(grouped?.folded.keys() ?? [])]))} title="Развернуть все свёрнутые группы">
-            Развернуть всё ({groupedFoldedCount})
-          </button>
-        )}
-      </div>
+      {(selected.size > 0 || hiddenKeys.size > 0) && (
+        <div className="row relation-graph-focus-panel">
+          {selected.size > 0 && (
+            <>
+              <strong>Выделено: {selected.size}</strong>
+              <button type="button" onClick={() => setResizeTarget({ title: `Выделено: ${selected.size}`, keys: [...selected] })}>Изменить размер</button>
+              <button type="button" onClick={hideSelected} title="Убрать с холста — сами сущности не меняются">Скрыть с холста</button>
+              <button type="button" onClick={() => setSelected(new Set())}>Снять выделение</button>
+            </>
+          )}
+          {hiddenKeys.size > 0 && (
+            <button type="button" onClick={() => setHiddenKeys(new Set())}>Вернуть скрытые ({hiddenKeys.size})</button>
+          )}
+        </div>
+      )}
       {focusedKey && (
         <div className="row relation-graph-focus-panel">
           <span className={`entity-type-chip ${nodesByKey.get(focusedKey)?.type ?? ""}`}>
@@ -1006,8 +1099,11 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
         onNodeDoubleClick={isolate}
         onBackgroundClick={handleBackgroundClick}
         onNodeContextMenu={handleNodeContextMenu}
-        onNodeDrag={(key, x, y) => setManual((prev) => ({ ...prev, [key]: { x, y } }))}
+        onNodeDrag={handleNodeDrag}
+        selectedKeys={selected}
+        onSelect={handleSelect}
         fitAnchorX={layered?.anchorX ?? null}
+        bands={layered?.bands ?? null}
       />
       {/* Stats — top right, below fullscreen button */}
       <span style={{ position: "absolute", top: 36, right: 8, zIndex: 5, fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--muted)", pointerEvents: "none" }}>
@@ -1126,6 +1222,18 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
           title="Размер узлов: по типу (сюжет крупнее мира) или по числу связей">
           Размер: {sizeMode === "type" ? "тип" : "связи"}
         </button>
+        {groupedFoldedCount > 0 && (
+          <button type="button" className="graph-tb-btn" onClick={() => setExpandedGroups((prev) => new Set([...prev, ...(grouped?.folded.keys() ?? [])]))} title="Развернуть все свёрнутые группы">
+            Развернуть всё ({groupedFoldedCount})
+          </button>
+        )}
+        <button type="button" className="graph-tb-btn" onClick={saveLayout} title="Сохранить раскладку: закрепить всё, что сейчас на экране">Закрепить</button>
+        <button type="button" className="graph-tb-btn" onClick={resetLayout} title="Сбросить ручную раскладку">Сбросить</button>
+      </div>
+      {/* Масштаб — в углу холста, как на картах. */}
+      <div style={{ position: "absolute", bottom: 8, right: 8, display: "flex", gap: 4, zIndex: 5 }}>
+        <button type="button" className="graph-tb-btn" onClick={() => dispatchCommand("zoomBy", { factor: 1 / 1.3 })} title="Отдалить"><NavIcon name="minus" /></button>
+        <button type="button" className="graph-tb-btn" onClick={() => dispatchCommand("zoomBy", { factor: 1.3 })} title="Приблизить"><NavIcon name="plus" /></button>
       </div>
       <button type="button" className="graph-tb-btn"
         style={{ position: "absolute", top: 8, right: 8, zIndex: 5 }}
@@ -1141,7 +1249,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
         <ContextMenu x={menu.x} y={menu.y}
           items={[
             { label: "Изолировать узел и связи", onClick: () => isolate(menu.node.key) },
-            { label: "Изменить размер", onClick: () => { setResizeTarget(menu.node); setMenu(null); } },
+            { label: "Изменить размер", onClick: () => { setResizeTarget({ title: menu.node.title, keys: [menu.node.key] }); setMenu(null); } },
             { label: "Карточка сущности", onClick: () => { setPreview({ type: menu.node.type, id: menu.node.id }); setMenu(null); } },
             ...(TYPE_ROUTES[menu.node.type] ? [{ label: "Перейти к сущности", onClick: () => { navigate(`${TYPE_ROUTES[menu.node.type]}/${menu.node.id}`); setMenu(null); } }] : []),
             ...(expandedGroups.has(menu.node.key) ? [{ label: "Свернуть группу", onClick: () => { setExpandedGroups((prev) => { const next = new Set(prev); next.delete(menu.node.key); return next; }); setMenu(null); } }] : []),
@@ -1158,15 +1266,15 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--muted)", minWidth: 36, textAlign: "right" }}>50%</span>
               <input type="range" min={50} max={200} step={5}
-                value={Math.round((manualScales.get(resizeTarget.key) ?? 1) * 100)}
-                onChange={(e) => { const val = Number(e.target.value) / 100; setManualScales((prev) => { const next = new Map(prev); if (val === 1) next.delete(resizeTarget.key); else next.set(resizeTarget.key, val); return next; }); }}
+                value={Math.round((manualScales.get(resizeTarget.keys[0]) ?? 1) * 100)}
+                onChange={(e) => { const val = Number(e.target.value) / 100; setManualScales((prev) => { const next = new Map(prev); for (const k of resizeTarget.keys) { if (val === 1) next.delete(k); else next.set(k, val); } return next; }); }}
                 style={{ flex: 1, accentColor: "var(--accent, #c2683f)" }} />
               <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--muted)", minWidth: 36 }}>200%</span>
             </div>
-            <div style={{ textAlign: "center", fontFamily: "var(--font-mono)", fontSize: "13px" }}>{Math.round((manualScales.get(resizeTarget.key) ?? 1) * 100)}%</div>
+            <div style={{ textAlign: "center", fontFamily: "var(--font-mono)", fontSize: "13px" }}>{Math.round((manualScales.get(resizeTarget.keys[0]) ?? 1) * 100)}%</div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
-              {(manualScales.get(resizeTarget.key) ?? 1) !== 1 && (
-                <button type="button" className="graph-tb-btn" onClick={() => setManualScales((prev) => { const next = new Map(prev); next.delete(resizeTarget.key); return next; })}>Сбросить</button>
+              {resizeTarget.keys.some((k) => (manualScales.get(k) ?? 1) !== 1) && (
+                <button type="button" className="graph-tb-btn" onClick={() => setManualScales((prev) => { const next = new Map(prev); for (const k of resizeTarget.keys) next.delete(k); return next; })}>Сбросить</button>
               )}
               <button type="button" className="graph-tb-btn" onClick={() => setResizeTarget(null)} style={{ background: "var(--paper)", color: "var(--ink)" }}>Готово</button>
             </div>

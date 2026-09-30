@@ -42,7 +42,8 @@ export function GraphPage() {
     (best, c) => (c.last_played_date && (!best || c.last_played_date > (best.last_played_date ?? "")) ? c : best),
     null,
   );
-  const campaignId = pickedCampaign ?? (view === "adventures" && !settingId && latestCampaign ? latestCampaign.id : "");
+  // «Показать в графе» ведёт к узлу любой кампании — умолчание его не прячет.
+  const campaignId = pickedCampaign ?? (view === "adventures" && !settingId && !focus && latestCampaign ? latestCampaign.id : "");
   const scopeError = settingsState.error ?? campaignsState.error;
   // Точки (`role=spot`) в граф по умолчанию не идут: 25 комнат данжа давали
   // паутину (план «Зоны», этап 10). Обитание перепривязано на родителя.
@@ -64,7 +65,7 @@ export function GraphPage() {
   }
   // Прежний граф держится, пока грузится граф с новыми фильтрами.
   // Умолчание кампании ещё не известно — не грузить граф всех кампаний зря.
-  const waitDefault = view === "adventures" && pickedCampaign === null && !campaignsState.data;
+  const waitDefault = view === "adventures" && pickedCampaign === null && !focus && !campaignsState.data;
   const graph = useResource<GraphData>(waitDefault ? null : `/links/graph?${params.toString()}`, { keepPrevious: true });
   const data = graph.data ?? null;
   const error = graph.error;
@@ -135,6 +136,7 @@ export function GraphPage() {
         key={view}
         view={view}
         layered={view === "adventures"}
+        focusKey={focus}
         data={data}
         defaultHiddenTypes={GRAPH_VIEW_HIDDEN_TYPES[view]}
         layoutKey={`${view}:${campaignId ? `campaign:${campaignId}` : settingId ? `setting:${settingId}` : "global"}`}
@@ -169,14 +171,16 @@ export function GraphPage() {
                 </option>
               ))}
             </select>
-            <label className="row" style={{ gap: 6, alignItems: "center" }} title="Показывать точки (комнаты) как узлы">
-              <input
-                type="checkbox"
-                checked={showSpots}
-                onChange={(e) => setShowSpots(e.target.checked)}
-              />
-              Точки
-            </label>
+            {view === "world" && (
+              <label className="row" style={{ gap: 6, alignItems: "center" }} title="Показывать точки (комнаты) как узлы">
+                <input
+                  type="checkbox"
+                  checked={showSpots}
+                  onChange={(e) => setShowSpots(e.target.checked)}
+                />
+                Точки
+              </label>
+            )}
           </>
         }
       />

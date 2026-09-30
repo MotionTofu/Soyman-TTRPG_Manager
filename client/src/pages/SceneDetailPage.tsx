@@ -9,6 +9,7 @@ import { SectionDropZone } from "../components/SectionDropZone";
 import { LazyDetails } from "../components/LazyDetails";
 import { NODE_ROLES, NODE_TYPES, SCENE_STATUSES, nodeLabel } from "../sceneKinds";
 import type { Setting, StoryScene, StorySceneDetail } from "../types";
+import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
 import { NavIcon } from "../components/NavIcons";
 import { LoadErrorCard } from "../components/Loadable";
 import { PresentationEditor } from "../components/presentation/PresentationEditor";
@@ -169,6 +170,7 @@ export function SceneDetailPage() {
           >
             <NavIcon name="canvas" /> На полотне
           </Link>
+          <GraphNeighbourhoodLink type="scene" id={scene.id} />
           {(scene.node_type || scene.node_role !== "normal") && (
             <span className="badge tag">{nodeLabel(scene)}</span>
           )}

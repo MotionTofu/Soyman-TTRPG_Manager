@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { TYPE_LABELS, TYPE_COLORS, TYPE_SHAPES, TYPE_ROUTES, EDGE_KINDS, EDGE_KIND_STYLE, foldAdventures, layeredLayout, type GraphNode, type GraphEdge } from "./graphTypes";
+import { TYPE_LABELS, TYPE_COLORS, TYPE_SHAPES, TYPE_ROUTES, EDGE_KINDS, EDGE_KIND_STYLE, foldAdventures, adventureOwners, layeredLayout, clampToBand, type GraphNode, type GraphEdge } from "./graphTypes";
 
 /**
  * Первый тест клиента. Раньше `vitest` в `client/` был установлен, но не имел
@@ -88,6 +88,12 @@ describe("сворачивание сцен и глав в приключени�
     edge("scene:10", "being:7", "scene_obstacles"),
   ];
 
+  it("«Показать в графе»: сцена раскрывает главу и приключение над ней", () => {
+    const chain = adventureOwners(edges, "scene:10");
+    expect(chain).toEqual(["adventure:2", "adventure:1"]);
+    expect(foldAdventures(nodes, edges, new Set(chain)).nodes.map((n) => n.key)).toContain("scene:10");
+  });
+
   it("всё свёрнуто в верхнее приключение, набрано уступает сыгранному", () => {
     const g = foldAdventures(nodes, edges, new Set());
     expect(g.nodes.map((n) => n.key).sort()).toEqual(["adventure:1", "being:7", "session:5"]);
@@ -129,6 +135,13 @@ describe("ярусная раскладка графа приключений", 
   it("приключения по первой сыгравшей сессии, несыгранные в конце", () => {
     expect(p("adventure:3").x).toBeLessThan(p("adventure:1").x);
     expect(p("adventure:1").x).toBeLessThan(p("adventure:2").x);
+  });
+
+  it("узел ходит только в своей полосе, лента сессий не двигается", () => {
+    const [, story, world] = L.bands;
+    expect(clampToBand(L.bands, "session", 60, 500)).toBe(60);
+    expect(clampToBand(L.bands, "being", 0, -1000)).toBeGreaterThan(world.top);
+    expect(clampToBand(L.bands, "adventure", 0, 1e6)).toBeLessThan(story.bottom);
   });
 
   it("открывается на последней проведённой сессии", () => {

@@ -8439,6 +8439,23 @@ button.mention-link:focus-visible {
   text-decoration-color: var(--accent);
 }
 
+.graph-toolbar,
+.graph-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.graph-toolbar {
+  margin-bottom: var(--sp-2);
+}
+.graph-marquee {
+  display: none;
+  position: absolute;
+  pointer-events: none;
+  border: 1px dashed var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
 .graph-toolbar-sep {
   width: 1px;
   height: 20px;
