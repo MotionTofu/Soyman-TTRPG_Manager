@@ -111,8 +111,15 @@ settingCommunitiesRouter.get("/", (req, res) => {
   }
   const d = dir === "desc" ? "DESC" : "ASC";
   const orderBy = sort === "recent" ? `id ${d}` : `name COLLATE NOCASE ${d}`;
+  // member_count — для дерева в «Населении»: число живых членов без
+  // отдельного запроса на каждую строку.
   const rows = db
-    .prepare(`SELECT * FROM setting_communities WHERE ${clauses.join(" AND ")} ORDER BY ${orderBy}`)
+    .prepare(
+      `SELECT *, (SELECT COUNT(*) FROM being_communities bc
+                  JOIN setting_beings b ON b.id = bc.being_id
+                  WHERE bc.community_id = setting_communities.id AND b.archived_at IS NULL) AS member_count
+       FROM setting_communities WHERE ${clauses.join(" AND ")} ORDER BY ${orderBy}`
+    )
     .all(params);
   res.json((rows as { thumbnail_image_path: string | null }[]).map(withThumbUrl));
 });

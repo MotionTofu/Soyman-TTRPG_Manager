@@ -106,11 +106,9 @@ export const populationPaths = {
   },
   communities: (settingId: number, f: PopulationFilters = {}) => {
     const params = new URLSearchParams({ setting_id: String(settingId) });
-    // Без фильтра список остаётся витриной верхнего уровня (вложенные живут на
-    // странице родителя). С фильтром это бессмысленно: вложенное сообщество
-    // без локации иначе просто не покажется — поэтому ищем по всем уровням.
+    // Все уровни сразу: «Население» рисует сообщества деревом вложенности
+    // (разбор «Населения» Q11), а дерево из одного верхнего уровня не собрать.
     if (f.locationId) params.set("location_id", f.locationId);
-    else if (!f.query?.trim()) params.set("parent_id", "null");
     if (f.query?.trim()) params.set("q", f.query.trim());
     if (f.sort && f.sort !== "name") params.set("sort", f.sort);
     if (f.dir === "desc") params.set("dir", "desc");

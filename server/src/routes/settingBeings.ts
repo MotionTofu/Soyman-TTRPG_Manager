@@ -5,6 +5,7 @@ import path from "path";
 import { db } from "../db/db";
 import { beingFolder, toFileUrl, writeReplacingOldFile } from "../services/filesystem";
 import { renameEntityFolder } from "../services/vaultPaths";
+import { parseForce, parseParticipation, serializeForce, serializeParticipation } from "../services/beingForce";
 
 export const settingBeingsRouter = Router();
 const ALLOWED_IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
@@ -98,6 +99,24 @@ export interface CreatureMeta {
   size: string;
   creatureType: string;
   alignment: string;
+  /** КД и средние хиты — для строки бестиария в «Населении». Та же формула,
+   *  что cardHitPoints у клиента: строке списка нельзя ходить за статблоком. */
+  ac: number | null;
+  hp: string;
+}
+
+function metaHitPoints(raw: unknown): string {
+  const hp = (raw ?? {}) as { diceCount?: unknown; dieSize?: unknown; bonus?: unknown; formula?: unknown };
+  if (typeof hp.diceCount === "number" && typeof hp.dieSize === "number" && hp.diceCount && hp.dieSize) {
+    return String(Math.floor(hp.diceCount * (hp.dieSize / 2 + 0.5)) + (typeof hp.bonus === "number" ? hp.bonus : 0));
+  }
+  const m = typeof hp.formula === "string" ? hp.formula.match(/\d+/) : null;
+  return m ? m[0] : "";
+}
+
+/** Строка существа для клиента: двигатель — объектом, а не JSON-текстом. */
+function withForce<T extends object>(row: T): T & { force: Record<string, string> } {
+  return { ...row, force: parseForce((row as { force?: unknown }).force) };
 }
 
 // Сколько карточек статблока заведено у существа — по этому числу список
@@ -140,13 +159,15 @@ export function getCreatureMetaByOwner(ownerType: string, ownerIds: (number | st
     .all(ownerType, ...ownerIds) as { owner_id: number; content: string }[];
   for (const r of rows) {
     try {
-      const parsed = JSON.parse(r.content) as Partial<CreatureMeta>;
+      const parsed = JSON.parse(r.content) as Partial<CreatureMeta> & { armorClass?: { value?: unknown }; hitPoints?: unknown };
       const meta: CreatureMeta = {
         size: typeof parsed.size === "string" ? parsed.size : "",
         creatureType: typeof parsed.creatureType === "string" ? parsed.creatureType : "",
         alignment: typeof parsed.alignment === "string" ? parsed.alignment : "",
+        ac: typeof parsed.armorClass?.value === "number" ? parsed.armorClass.value : null,
+        hp: metaHitPoints(parsed.hitPoints),
       };
-      if (meta.size || meta.creatureType || meta.alignment) map.set(r.owner_id, meta);
+      if (meta.size || meta.creatureType || meta.alignment || meta.ac !== null || meta.hp) map.set(r.owner_id, meta);
     } catch {
       /* malformed statblock content — skip */
     }
@@ -286,7 +307,7 @@ settingBeingsRouter.get("/", (req, res) => {
   }
   res.json(
     rows.map((r) => ({
-      ...withAvatarUrl(r as { avatar_image_path?: string | null }),
+      ...withForce(withAvatarUrl(r as { avatar_image_path?: string | null })),
       locations: getLocations(r.id),
       communities: communitiesByBeing.get(r.id) ?? [],
       community_count: communityCounts.get(r.id) ?? 0,
@@ -337,16 +358,30 @@ settingBeingsRouter.get("/:id", (req, res) => {
   const importantDates = db
     .prepare("SELECT * FROM important_dates WHERE owner_type = 'being' AND owner_id = ? ORDER BY created_at")
     .all(req.params.id);
-  const chapters = db
+  const chapters = (
+    db
+      .prepare(
+        `SELECT bc.*, c.name as campaign_name
+         FROM being_chapters bc
+         LEFT JOIN campaigns c ON c.id = bc.campaign_id
+         WHERE bc.being_id = ? ORDER BY bc.created_at`
+      )
+      .all(req.params.id) as { participation?: unknown }[]
+  ).map((c) => ({ ...c, participation: parseParticipation(c.participation) }));
+  // «В приключениях» (Q13): узлы, у которых существо — «о ком».
+  const scenes = db
     .prepare(
-      `SELECT bc.*, c.name as campaign_name
-       FROM being_chapters bc
-       LEFT JOIN campaigns c ON c.id = bc.campaign_id
-       WHERE bc.being_id = ? ORDER BY bc.created_at`
+      `SELECT s.id, s.name, s.arc_id, a.name AS arc_name, s.campaign_id, c.name AS campaign_name
+       FROM story_scenes s
+       LEFT JOIN story_arcs a ON a.id = s.arc_id
+       LEFT JOIN campaigns c ON c.id = s.campaign_id
+       WHERE s.subject_type = 'being' AND s.subject_id = ? AND s.in_library = 0
+       ORDER BY a.name, s.position, s.id`
     )
     .all(req.params.id);
   res.json({
-    ...withAvatarUrl(row),
+    ...withForce(withAvatarUrl(row)),
+    scenes,
     events,
     relations,
     communities,
@@ -645,6 +680,7 @@ settingBeingsRouter.put("/:id", (req, res) => {
     combat_roles,
     tactics,
     secret,
+    force,
   } = req.body as {
     name?: string;
     category?: string;
@@ -665,6 +701,8 @@ settingBeingsRouter.put("/:id", (req, res) => {
     combat_roles?: string[];
     tactics?: string[];
     secret?: string;
+    // Двигатель силы целиком: клиент шлёт все ключи разом (services/beingForce).
+    force?: Record<string, string>;
   };
   if (name !== undefined) {
     const trimmed = String(name).trim();
@@ -700,6 +738,7 @@ settingBeingsRouter.put("/:id", (req, res) => {
        combat_roles = COALESCE(?, combat_roles),
        tactics = COALESCE(?, tactics),
        secret = COALESCE(?, secret),
+       force = COALESCE(?, force),
        folder_path = ?
      WHERE id = ?`
     ).run(
@@ -721,6 +760,7 @@ settingBeingsRouter.put("/:id", (req, res) => {
       combat_roles ? JSON.stringify((combat_roles as string[]).slice(0, 2)) : null,
       tactics ? JSON.stringify((tactics as string[]).slice(0, 10).map((t) => String(t).slice(0, 200))) : null,
       secret ?? null,
+      force !== undefined ? serializeForce(force) : null,
       folderPath,
       req.params.id
     );
@@ -730,13 +770,15 @@ settingBeingsRouter.put("/:id", (req, res) => {
   });
   updateTx();
   res.json(
-    db
-      .prepare(
-        `SELECT b.*, m.name as base_monster_name FROM setting_beings b
-         LEFT JOIN compendium_entries m ON m.id = b.base_monster_id
-         WHERE b.id = ?`
-      )
-      .get(req.params.id)
+    withForce(
+      db
+        .prepare(
+          `SELECT b.*, m.name as base_monster_name FROM setting_beings b
+           LEFT JOIN compendium_entries m ON m.id = b.base_monster_id
+           WHERE b.id = ?`
+        )
+        .get(req.params.id) as object
+    )
   );
 });
 
@@ -806,12 +848,14 @@ settingBeingsRouter.post("/:id/chapters", (req, res) => {
 });
 
 settingBeingsRouter.put("/chapters/:chapterId", (req, res) => {
-  const { title, content, campaign_id, important, visible_to_players } = req.body as {
+  const { title, content, campaign_id, important, visible_to_players, participation } = req.body as {
     title?: string;
     content?: string;
     campaign_id?: number | null;
     important?: boolean;
     visible_to_players?: boolean;
+    // Участие в кампании (Q7): цель, план, без вмешательства, если помочь.
+    participation?: Record<string, string>;
   };
   // campaign_id needs a real tri-state (unset in the request vs. explicitly
   // cleared to "no campaign"), which COALESCE can't express — build the SET
@@ -822,7 +866,8 @@ settingBeingsRouter.put("/chapters/:chapterId", (req, res) => {
        content = COALESCE(?, content),
        campaign_id = CASE WHEN ? THEN ? ELSE campaign_id END,
        important = COALESCE(?, important),
-       visible_to_players = COALESCE(?, visible_to_players)
+       visible_to_players = COALESCE(?, visible_to_players),
+       participation = COALESCE(?, participation)
      WHERE id = ?`
   ).run(
     title ?? null,
@@ -831,17 +876,17 @@ settingBeingsRouter.put("/chapters/:chapterId", (req, res) => {
     campaign_id ?? null,
     important === undefined ? null : important ? 1 : 0,
     visible_to_players === undefined ? null : visible_to_players ? 1 : 0,
+    participation !== undefined ? serializeParticipation(participation) : null,
     req.params.chapterId
   );
-  res.json(
-    db
-      .prepare(
-        `SELECT bc.*, c.name as campaign_name FROM being_chapters bc
-         LEFT JOIN campaigns c ON c.id = bc.campaign_id
-         WHERE bc.id = ?`
-      )
-      .get(req.params.chapterId)
-  );
+  const updated = db
+    .prepare(
+      `SELECT bc.*, c.name as campaign_name FROM being_chapters bc
+       LEFT JOIN campaigns c ON c.id = bc.campaign_id
+       WHERE bc.id = ?`
+    )
+    .get(req.params.chapterId) as { participation?: unknown } | undefined;
+  res.json(updated ? { ...updated, participation: parseParticipation(updated.participation) } : null);
 });
 
 settingBeingsRouter.delete("/chapters/:chapterId", (req, res) => {

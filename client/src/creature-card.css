@@ -573,3 +573,143 @@ button.role-chip.is-on {
   color: var(--on-surface);
 }
 
+
+/* ── Карточка «за столом» (разбор профилей 2026-10-01) ─────────────────────
+   Двигатель силы, сургуч секрета, шапка встроенной карточки. Карточка —
+   бумажная поверхность (paper.css, .paper-scope): одна и та же в досье, в
+   трекере, на Полотне и в окне упоминания. */
+.creature-card__force {
+  padding: var(--sp-4) var(--sp-4) 0;
+}
+.creature-card__force dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-3);
+}
+.creature-card__force.is-wide dl {
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: var(--sp-5) var(--sp-7);
+}
+.creature-card__force dt,
+.creature-card__head-label {
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.creature-card__force dd {
+  margin: var(--sp-1) 0 0;
+  font-family: var(--font-body);
+  font-size: var(--fs-data);
+  line-height: 1.4;
+}
+.creature-card__force.is-wide dd {
+  font-size: var(--fs-body);
+}
+.creature-card__force .is-extra dt {
+  font-style: italic;
+}
+.creature-card__more {
+  margin-top: var(--sp-3);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  font-family: var(--font-body);
+  font-size: var(--fs-meta);
+  text-align: left;
+  cursor: pointer;
+}
+.creature-card__more:hover {
+  text-decoration: underline;
+}
+.creature-card__secret-wrap {
+  padding: var(--sp-4) var(--sp-4) 0;
+}
+.creature-card__seal {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #7a1f22;
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.creature-card__seal-mark {
+  width: 26px;
+  height: 25px;
+  background: var(--skin-seal) center / contain no-repeat;
+}
+.creature-card__secret-wrap .creature-card__secret {
+  margin-top: var(--sp-3);
+  padding-left: var(--sp-4);
+  border-left: var(--card-border-width-strong) solid #7a1f22;
+}
+/* Встроенная в досье карточка: вместо плашки с именем — подпись «За
+   столом» и «Править». Рамка толще — это главный блок листа. */
+.creature-card.is-embedded {
+  max-width: none;
+  border-width: var(--card-border-width-strong);
+  padding-bottom: var(--sp-5);
+}
+.creature-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: var(--sp-5) var(--sp-4) 0;
+}
+.creature-card__edit {
+  padding: var(--sp-2) var(--sp-4);
+  border: var(--card-border-width) solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.creature-card__edit:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+.creature-card.is-embedded .creature-card__force,
+.creature-card.is-embedded .creature-card__secret-wrap,
+.creature-card.is-embedded .creature-card__chips,
+.creature-card.is-embedded .creature-card__empty {
+  padding-left: var(--sp-6);
+  padding-right: var(--sp-6);
+}
+
+/* Правка карточки по месту в досье (разбор профилей Q8): одна колонка,
+   двигатель сеткой — те же места, что у полей в просмотре. */
+.creature-card-editor.is-inline {
+  grid-template-columns: minmax(0, 1fr);
+}
+.creature-card-editor.is-inline > .card {
+  border-width: var(--card-border-width-strong);
+  border-color: var(--ink);
+}
+.creature-card-editor__force {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--sp-5) var(--sp-6);
+  align-items: start;
+  padding-bottom: var(--sp-5);
+  border-bottom: var(--card-border-width) solid var(--line);
+}
+.creature-card-editor__force > .comp-mini {
+  justify-self: start;
+  align-self: center;
+}
+.creature-card-editor__force-field {
+  gap: var(--sp-2);
+}

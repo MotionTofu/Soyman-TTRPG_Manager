@@ -3,10 +3,15 @@ import { Link } from "react-router-dom";
 import { useAction, useResource, write } from "../data/hooks";
 import type { Affect } from "../data/entities";
 import { COMBAT_ROLES, CreatureCard, MAX_COMBAT_ROLES, type CreatureCardPayload } from "./CreatureCard";
+import { MentionTextarea } from "./mentions/MentionTextarea";
+import { FORCE_FIELDS } from "../beingForce";
+import type { BeingForce } from "../types";
 
-// Вкладка «Карточка существа» — единственное место, где карточка правится.
-// Правка по месту (в ноде полотна, в докстанции пульта) отклонена: это органы
-// управления ровно там, где Мастер вожает (design_revision.md, шаг 4).
+// Правка карточки. У записи компендиума — своя вкладка «Карточка существа»;
+// у существа сеттинга — по месту в досье (`inline`, разбор профилей Q8): одна
+// карточка, просмотр и правка. Правка в ноде полотна и в докстанции пульта
+// по-прежнему отклонена: это органы управления там, где Мастер вожает
+// (design_revision.md, шаг 4).
 
 const SAVE_PATH: Record<string, (id: number) => string> = {
   being: (id) => `/setting-beings/${id}`,
@@ -43,7 +48,20 @@ function suggestRoles(data: CreatureCardPayload): string[] {
   return out.slice(0, MAX_COMBAT_ROLES);
 }
 
-export function CreatureCardEditor({ type, id }: { type: "being" | "compendium_entry"; id: number }) {
+export function CreatureCardEditor({
+  type,
+  id,
+  inline,
+  onDone,
+  settingId,
+}: {
+  type: "being" | "compendium_entry";
+  id: number;
+  // В досье: без живого вида рядом (он сам и есть карточка), с «Готово».
+  inline?: boolean;
+  onDone?: () => void;
+  settingId?: number;
+}) {
   // Редактор — только у Мастера, поэтому читает мастерский маршрут напрямую,
   // без игроцкого запасного пути fetchCreatureCard.
   const card = useResource<CreatureCardPayload>(`/creature-card/${type}/${id}`);
@@ -53,6 +71,8 @@ export function CreatureCardEditor({ type, id }: { type: "being" | "compendium_e
   const [description, setDescription] = useState("");
   const [tactics, setTactics] = useState("");
   const [secret, setSecret] = useState("");
+  const [force, setForce] = useState<BeingForce>({});
+  const [showExtra, setShowExtra] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -67,6 +87,7 @@ export function CreatureCardEditor({ type, id }: { type: "being" | "compendium_e
       (description === seed.description &&
         tactics === seed.tactics.join("\n") &&
         secret === seed.secret &&
+        JSON.stringify(force) === JSON.stringify(seed.force ?? {}) &&
         roles.join("|") === seed.combat_roles.join("|"));
     setSeed(card.data);
     if (!untouched) return;
@@ -74,7 +95,8 @@ export function CreatureCardEditor({ type, id }: { type: "being" | "compendium_e
     setDescription(card.data.description);
     setTactics(card.data.tactics.join("\n"));
     setSecret(card.data.secret);
-  }, [card.data, seed, description, tactics, secret, roles]);
+    setForce(card.data.force ?? {});
+  }, [card.data, seed, description, tactics, secret, roles, force]);
 
   function toggleRole(role: string) {
     setError("");
@@ -100,13 +122,15 @@ export function CreatureCardEditor({ type, id }: { type: "being" | "compendium_e
         .map((l) => l.trim())
         .filter(Boolean),
       secret,
+      ...(type === "being" ? { force } : {}),
     };
     const affects: Affect[] = [
       type === "being" ? { kind: "being", id } : { kind: "compendium_entry", id },
       { path: `/creature-card/${type}/${id}` },
     ];
     try {
-      await run(() => write.put(SAVE_PATH[type](id), body), { affects });
+      const done = await run(() => write.put(SAVE_PATH[type](id), body).then(() => true), { affects });
+      if (done) onDone?.();
     } finally {
       setSaving(false);
     }
@@ -116,10 +140,42 @@ export function CreatureCardEditor({ type, id }: { type: "being" | "compendium_e
   if (data === null) return <span className="muted">Не найдено.</span>;
 
   const suggested = suggestRoles(data).filter((r) => !roles.includes(r));
+  // Двигатель — у существа сеттинга: у личности всегда (Q5), у бестиария —
+  // если его включили (Q3) или он уже заполнен.
+  const isPersonality = type === "being" && data.category !== "bestiary";
+  const forceOpen = type === "being" && (isPersonality || showExtra || Object.keys(data.force ?? {}).length > 0);
+  const forceFields = FORCE_FIELDS.filter((f) => f.core || showExtra || force[f.key]);
 
   return (
-    <div className="creature-card-editor">
+    <div className={`creature-card-editor${inline ? " is-inline" : ""}`}>
       <div className="card stack">
+        {forceOpen && (
+          <div className="creature-card-editor__force">
+            {forceFields.map((f) => (
+              <label key={f.key} className="stack creature-card-editor__force-field">
+                <span className="editable-card-field-label">{f.label}</span>
+                <MentionTextarea
+                  value={force[f.key] ?? ""}
+                  onChange={(v) => setForce((prev) => ({ ...prev, [f.key]: v }))}
+                  rows={2}
+                  autoGrow
+                  defaultSettingId={settingId}
+                />
+              </label>
+            ))}
+            {!showExtra && FORCE_FIELDS.some((f) => !f.core && !force[f.key]) && (
+              <button type="button" className="comp-mini" onClick={() => setShowExtra(true)}>
+                + Средства, интерес, позиция, под давлением
+              </button>
+            )}
+          </div>
+        )}
+        {type === "being" && !forceOpen && (
+          <button type="button" className="comp-mini" onClick={() => setShowExtra(true)}>
+            + Двигатель силы — для разумных: хочет, боится, может…
+          </button>
+        )}
+
         <span className="editable-card-field-label">Роль в бою</span>
         <div className="creature-card-editor__roles">
           {COMBAT_ROLES.map((role) => (
@@ -171,16 +227,23 @@ export function CreatureCardEditor({ type, id }: { type: "being" | "compendium_e
         <textarea rows={5} value={description} onChange={(e) => setDescription(e.target.value)} />
 
         <div className="row">
-          <button type="button" onClick={save} disabled={saving}>
+          <button type="button" className={inline ? "primary" : undefined} onClick={save} disabled={saving}>
             {saving ? "Сохраняю…" : "Сохранить"}
           </button>
+          {onDone && (
+            <button type="button" onClick={onDone} disabled={saving}>
+              Отмена
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="creature-card-editor__preview">
-        <span className="editable-card-field-label">Как выглядит</span>
-        <CreatureCard data={data} variant="page" hideProfileButton />
-      </div>
+      {!inline && (
+        <div className="creature-card-editor__preview">
+          <span className="editable-card-field-label">Как выглядит</span>
+          <CreatureCard data={data} variant="page" hideProfileButton />
+        </div>
+      )}
     </div>
   );
 }

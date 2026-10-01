@@ -10801,6 +10801,16 @@ details[open] > .res-group__band .chevron-icon {
 .app-content:has(.entity-page) .shell-crumbs:not(:has(.shell-crumbs__storage)) {
   display: none;
 }
+/* Значок хранилища — справа, на одной строке с крошками карточки: строка
+   оболочки нулевой высоты, значок свисает в строку крошек. */
+.app-content:has(.entity-page) .shell-crumbs {
+  justify-content: flex-end !important;
+  align-items: flex-start !important;
+  height: 0;
+  margin-bottom: 0 !important;
+  position: relative;
+  z-index: 2;
+}
 
 .entity-page__head {
   display: flex;

@@ -39,7 +39,9 @@ export function relationAffects(): Affect[] {
 
 /** Правка существа: его карточка, подресурсы и списки существ. */
 export function beingAffects(beingId: number): Affect[] {
-  return [{ kind: "being", id: beingId }];
+  // Карточка «за столом» читает своё (`/creature-card/…`): описание, двигатель
+  // и секрет — те же поля существа, и правка в досье должна доходить до неё.
+  return [{ kind: "being", id: beingId }, { path: `/creature-card/being/${beingId}` }];
 }
 
 /** Галерея владельца: сами изображения и карточка владельца (обложка). */

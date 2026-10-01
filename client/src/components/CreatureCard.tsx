@@ -5,7 +5,8 @@ import { creatureCardQuery } from "../data/creatureCard";
 import { Modal } from "./Modal";
 import { MentionText } from "./mentions/MentionText";
 import { DndCreatureView, normalizeDndCreature } from "./dnd/DndCreatureForm";
-import type { DndCreatureAction, DndCreatureData, DndCreatureSpeed } from "../types";
+import type { BeingForce, DndCreatureAction, DndCreatureData, DndCreatureSpeed } from "../types";
+import { FORCE_FIELDS, NARROW_FORCE_KEYS, hasForce } from "../beingForce";
 
 // Карточка существа — быстрый взгляд (design_revision.md, шаг 4). Показывает
 // то, чем существо отличается от других; за полным статблоком Мастер идёт
@@ -45,6 +46,9 @@ export interface CreatureCardPayload {
   combat_roles: string[];
   tactics: string[];
   secret: string;
+  /** Категория существа сеттинга: у личности — двигатель силы, у бестиария — «В бою». */
+  category?: string | null;
+  force?: BeingForce;
   avatar_image_url: string | null;
   statblock: CreatureCardStatblock | null;
   statblock_inherited: boolean;
@@ -209,6 +213,62 @@ function Section({
   );
 }
 
+// Двигатель силы (разбор профилей Q3, Q12): в узкой колонке — хочет, боится,
+// нуждается и «ещё»; на странице — всё заполненное. Пустые поля не рисуются:
+// пустая графа за столом — шум, а приглашение заполнить живёт в правке.
+function ForceBlock({ force, wide }: { force: BeingForce; wide: boolean }) {
+  const [all, setAll] = useState(false);
+  const filled = FORCE_FIELDS.filter((f) => force[f.key]?.trim());
+  const shown = wide || all ? filled : filled.filter((f) => NARROW_FORCE_KEYS.includes(f.key));
+  const rest = filled.length - shown.length;
+  return (
+    <div className={`creature-card__force${wide ? " is-wide" : ""}`}>
+      <dl>
+        {shown.map((f) => (
+          <div key={f.key} className={f.core ? undefined : "is-extra"}>
+            <dt>{f.label}</dt>
+            <dd>
+              <MentionText text={force[f.key] ?? ""} />
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {rest > 0 && (
+        <button type="button" className="creature-card__more" onClick={() => setAll(true)}>
+          ещё: {filled.filter((f) => !shown.includes(f)).map((f) => f.label.toLowerCase()).join(", ")} ›
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Секрет за сургучом (Q15): экран бывает виден игрокам — тайна не должна
+// стоять открытым текстом, пока Мастер не попросил.
+function SecretSeal({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="creature-card__secret-wrap">
+      <button
+        type="button"
+        className="creature-card__seal"
+        aria-expanded={open}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+      >
+        <span className="creature-card__seal-mark" aria-hidden="true" />
+        {open ? "Секрет · спрятать" : "Секрет · показать"}
+      </button>
+      {open && (
+        <div className="creature-card__secret">
+          <MentionText text={text} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="creature-card__row">
@@ -228,6 +288,8 @@ export function CreatureCard({
   onClose,
   collapsed,
   onToggleCollapse,
+  embedded,
+  onEdit,
 }: {
   data: CreatureCardPayload;
   // Показ игрокам: секрет и тактика НЕ рендерятся вовсе — свёрнутый блок
@@ -247,6 +309,11 @@ export function CreatureCard({
   // обе кнопки: это то, ради чего её туда положили.
   collapsed?: boolean;
   onToggleCollapse?: () => void;
+  // Карточка — шапка досье (Q3): имя, портрет и описание уже стоят на
+  // странице, второй раз их не рисуем.
+  embedded?: boolean;
+  // Правка по месту — только в профиле (Q8); в трекере и на Полотне её нет.
+  onEdit?: () => void;
 }) {
   const [statblockOpen, setStatblockOpen] = useState(false);
   const [sectionsOpen, setSectionsOpen] = useState({ mechanics: true, description: true });
@@ -294,9 +361,14 @@ export function CreatureCard({
       ).filter(([, value]) => value.length > 0)
     : [];
 
+  const force = data.force ?? {};
+  // Личность — двигатель всегда (Q5); бестиарий — только если его завели.
+  const isPersonality = data.type === "being" && data.category !== "bestiary";
+  const showForce = !playerSafe && hasForce(force);
+  const showSecret = !playerSafe && !!data.secret.trim();
   const hasMechanics = !!creature || (!playerSafe && tactics.length > 0);
-  const hasDescription = (!playerSafe && !!data.secret.trim()) || !!prose;
-  const isEmpty = !hasMechanics && !hasDescription && roles.length === 0;
+  const hasDescription = !embedded && !!prose;
+  const isEmpty = !hasMechanics && !hasDescription && roles.length === 0 && !showForce && !showSecret;
 
   const profilePath = `${PROFILE_PATH[data.type] ?? "/beings"}/${data.id}`;
   // Портрет — только собственный портрет существа (вкладка «Изображения» его
@@ -306,7 +378,17 @@ export function CreatureCard({
   const avatar = data.avatar_image_url ?? null;
 
   return (
-    <article className={`creature-card${variant === "page" ? " creature-card--page" : ""}`}>
+    <article className={`creature-card paper-scope${variant === "page" ? " creature-card--page" : ""}${embedded ? " is-embedded" : ""}`}>
+      {embedded ? (
+        <div className="creature-card__head">
+          <span className="creature-card__head-label">За столом</span>
+          {onEdit && (
+            <button type="button" className="creature-card__edit" onClick={onEdit}>
+              Править
+            </button>
+          )}
+        </div>
+      ) : (
       <header
         className={`creature-card__band${onToggleCollapse ? " is-clickable" : ""}`}
         onClick={onToggleCollapse}
@@ -340,6 +422,7 @@ export function CreatureCard({
           </button>
         )}
       </header>
+      )}
 
       {!collapsed && (creature?.creatureType || roles.length > 0 || creature?.size) && (
         <div className="creature-card__chips">
@@ -360,10 +443,39 @@ export function CreatureCard({
 
       {!collapsed && isEmpty && (
         <div className="creature-card__empty">
-          Карточка не заполнена.{" "}
-          <Link to={`${profilePath}?tab=${encodeURIComponent("Карточка существа")}`}>Заполнить</Link>
+          {isPersonality ? "Чего хочет, чего боится — пока не записано." : "Карточка не заполнена."}{" "}
+          {onEdit ? (
+            <button type="button" className="creature-card__more" onClick={onEdit}>
+              Заполнить
+            </button>
+          ) : (
+            // У записи компендиума карточка правится своей вкладкой; у существа
+            // сеттинга — по месту в досье (Q8).
+            <Link
+              to={
+                data.type === "compendium_entry"
+                  ? `${profilePath}?tab=${encodeURIComponent("Карточка существа")}`
+                  : profilePath
+              }
+            >
+              Заполнить
+            </Link>
+          )}
         </div>
       )}
+
+      {!collapsed && showForce && <ForceBlock force={force} wide={variant === "page"} />}
+      {/* Пустой двигатель у личности — приглашение (Q5), но только там, где
+          его можно заполнить: в трекере и на Полотне правки нет. */}
+      {!collapsed && isPersonality && !showForce && !isEmpty && onEdit && (
+        <div className="creature-card__empty">
+          Чего хочет, чего боится — пока не записано.{" "}
+          <button type="button" className="creature-card__more" onClick={onEdit}>
+            Заполнить
+          </button>
+        </div>
+      )}
+      {!collapsed && showSecret && <SecretSeal text={data.secret} />}
 
       {!collapsed && hasMechanics && (
         <Section
@@ -419,12 +531,6 @@ export function CreatureCard({
           open={sectionsOpen.description}
           onToggle={() => toggleSection("description")}
         >
-          {!playerSafe && data.secret.trim() && (
-            <div className="creature-card__secret">
-              <div className="creature-card__sublabel">Секрет</div>
-              <MentionText text={data.secret} />
-            </div>
-          )}
           {prose && (
             <div className="creature-card__prose">
               <MentionText text={prose} />
@@ -441,11 +547,11 @@ export function CreatureCard({
           {!hideProfileButton &&
             (profileInNewWindow ? (
               <a className="creature-card__button" href={profilePath} target="_blank" rel="noreferrer">
-                В профиль
+                Профиль ›
               </a>
             ) : (
               <Link className="creature-card__button" to={profilePath}>
-                В профиль
+                Профиль ›
               </Link>
             ))}
           {creature && (
@@ -454,7 +560,7 @@ export function CreatureCard({
               className="creature-card__button"
               onClick={() => (onShowStatblock ? onShowStatblock() : setStatblockOpen(true))}
             >
-              Статблок
+              Статблок ›
             </button>
           )}
         </footer>
@@ -487,6 +593,9 @@ export function CreatureCardLoader({
   onClose,
   collapsed,
   onToggleCollapse,
+  variant,
+  embedded,
+  onEdit,
 }: {
   type: string;
   id: number;
@@ -500,6 +609,9 @@ export function CreatureCardLoader({
   onClose?: () => void;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
+  variant?: "column" | "page";
+  embedded?: boolean;
+  onEdit?: () => void;
 }) {
   const query = useQuery(creatureCardQuery(type, id, statblockId));
   const data = query.isPending ? undefined : (query.data ?? null);
@@ -519,6 +631,9 @@ export function CreatureCardLoader({
       onClose={onClose}
       collapsed={collapsed}
       onToggleCollapse={onToggleCollapse}
+      variant={variant}
+      embedded={embedded}
+      onEdit={onEdit}
     />
   );
 }

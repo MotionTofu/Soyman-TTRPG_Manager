@@ -78,6 +78,9 @@
   --skin-crescent: url("/ui/fantasy-punk/decorative/frames/card-corner-crescent.webp");
   --skin-shard: url("/ui/fantasy-punk/decorative/frames/shard-corner-right.webp");
   --skin-tab-marker: url("/ui/fantasy-punk/decorative/dividers/underline-acid-magenta.webp");
+  /* Профиль на бумаге (paper.css): скотч на портрете, сургуч секрета. */
+  --skin-tape: url("/ui/fantasy-punk/decorative/profile/tape.webp");
+  --skin-seal: url("/ui/fantasy-punk/decorative/profile/seal.webp");
   --skin-fan-paper: url("/ui/fantasy-punk/semantic/card-buttons/card-fan-paper.webp");
   --skin-fan-acid: url("/ui/fantasy-punk/semantic/card-buttons/card-fan-acid.webp");
   --skin-edit-paper: url("/ui/sheet/card-edit-paper.webp");

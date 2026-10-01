@@ -6,7 +6,8 @@ describe("страница Сеттинга в слое данных", () => {
   it("списки «Населения» без фильтров совпадают с путями счётчиков на вкладках", () => {
     expect(populationPaths.beings(3)).toBe("/setting-beings?setting_id=3&exclude_category=bestiary");
     expect(populationPaths.bestiary(3)).toBe("/setting-beings?setting_id=3&category=bestiary");
-    expect(populationPaths.communities(3)).toBe("/setting-communities?setting_id=3&parent_id=null");
+    // Все уровни: сообщества рисуются деревом (разбор «Населения» Q11).
+    expect(populationPaths.communities(3)).toBe("/setting-communities?setting_id=3");
   });
 
   it("клиентские сортировки не попадают в путь, серверные — попадают", () => {

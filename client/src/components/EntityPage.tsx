@@ -122,6 +122,12 @@ export interface EntityPageProps {
   overlays?: ReactNode;
   /** Вкладка занимает всю высоту окна (карта локации). */
   fill?: boolean;
+  /** Вид «на бумаге» (разбор профилей 2026-10-01, Q9): вкладки — язычки,
+   *  тело — лист (paper.css). Это вид, а не гнездо: состав шапки тот же,
+   *  только имя со значками стоит первой строкой листа первой вкладки, без
+   *  значка вида, а «…» — язычком справа на полосе.
+   *  Пилот — профиль существа; остальные карточки переходят своими раундами. */
+  paper?: boolean;
   children: ReactNode;
 }
 
@@ -147,6 +153,7 @@ export function EntityPage({
   missing,
   overlays,
   fill,
+  paper,
   children,
 }: EntityPageProps) {
   // Меню «…» открывается под своей кнопкой, а не там, где щёлкнули: у кнопки
@@ -154,7 +161,9 @@ export function EntityPage({
   const moreRef = useRef<HTMLButtonElement>(null);
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   const moreTabsRef = useRef<HTMLButtonElement>(null);
-  const [tabsMenuAt, setTabsMenuAt] = useState<{ x: number; y: number } | null>(null);
+  const [tabsMenuAt, setTabsMenuAt] = useState<{ x: number; y: number } | null>(
+    null,
+  );
 
   // Выбранная вкладка видна в полосе всегда — даже придя из «Ещё». Иначе
   // страница показывает содержимое «Заметок», а в полосе не подсвечено
@@ -171,55 +180,80 @@ export function EntityPage({
     if (r) setMenuAt({ x: r.right, y: r.bottom });
   }
 
+  const ident = (
+    <div className="entity-page__ident">
+      <div className="entity-page__title-row">
+        {!paper && <EntityTypeChip type={entityType} />}
+        {loading && !title ? (
+          <span className="entity-page__title-skeleton" aria-hidden="true" />
+        ) : (
+          <h1>{title}</h1>
+        )}
+        {badges}
+      </div>
+      {meta && <div className="entity-page__meta muted">{meta}</div>}
+    </div>
+  );
+  const more = actions && actions.length > 0 && (
+    <button
+      ref={moreRef}
+      type="button"
+      className="entity-page__more"
+      aria-label="Ещё действия"
+      aria-haspopup="menu"
+      onClick={openMenu}
+    >
+      …
+    </button>
+  );
+  // На бумаге имя — первая строка листа первой вкладки, а «…» — язычок у
+  // правого края полосы (владелец, 2026-10-01). Значка вида на бумаге нет, а
+  // на остальных вкладках нет и имени: оно в крошках, и Мастер помнит, чей
+  // профиль открыл.
+  const moreInTabs = paper && !!tabs?.length;
+
   return (
-    <div className={`stack entity-page${fill ? " page-fill" : ""}`}>
+    <div
+      className={`stack entity-page${fill ? " page-fill" : ""}${paper ? " entity-page--paper" : ""}`}
+    >
       {overlays}
 
       {backdrop && (
-        <div className="campaign-bg-layer cover-photo cover-halftone" aria-hidden="true">
-          <div className="cover-art-image" style={{ backgroundImage: backdrop }} />
+        <div
+          className="campaign-bg-layer cover-photo cover-halftone"
+          aria-hidden="true"
+        >
+          <div
+            className="cover-art-image"
+            style={{ backgroundImage: backdrop }}
+          />
         </div>
       )}
 
       <Breadcrumbs items={crumbs} />
 
-      <div className="entity-page__head">
-        {avatar && <div className="entity-page__avatar">{avatar}</div>}
+      {(!paper || avatar || primaryAction || (more && !moreInTabs)) && (
+        <div className="entity-page__head">
+          {avatar && <div className="entity-page__avatar">{avatar}</div>}
 
-        <div className="entity-page__ident">
-          <div className="entity-page__title-row">
-            <EntityTypeChip type={entityType} />
-            {loading && !title ? (
-              <span className="entity-page__title-skeleton" aria-hidden="true" />
-            ) : (
-              <h1>{title}</h1>
-            )}
-            {badges}
-          </div>
-          {meta && <div className="entity-page__meta muted">{meta}</div>}
+          {!paper && ident}
+
+          {(primaryAction || (more && !moreInTabs)) && (
+            <div className="entity-page__actions">
+              {primaryAction}
+              {!moreInTabs && more}
+            </div>
+          )}
         </div>
-
-        {(primaryAction || (actions && actions.length > 0)) && (
-          <div className="entity-page__actions">
-            {primaryAction}
-            {actions && actions.length > 0 && (
-              <button
-                ref={moreRef}
-                type="button"
-                className="entity-page__more"
-                aria-label="Ещё действия"
-                aria-haspopup="menu"
-                onClick={openMenu}
-              >
-                …
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+      )}
 
       {menuAt && actions && (
-        <ContextMenu x={menuAt.x} y={menuAt.y} items={actions} onClose={() => setMenuAt(null)} />
+        <ContextMenu
+          x={menuAt.x}
+          y={menuAt.y}
+          items={actions}
+          onClose={() => setMenuAt(null)}
+        />
       )}
 
       {tabs && tabs.length > 0 && (
@@ -265,6 +299,7 @@ export function EntityPage({
               +
             </button>
           )}
+          {moreInTabs && more}
         </div>
       )}
 
@@ -278,13 +313,21 @@ export function EntityPage({
       )}
 
       {error ? (
-        <LoadErrorCard message={<>Ошибка загрузки: {error}</>} onRetry={onRetry} />
+        <LoadErrorCard
+          message={<>Ошибка загрузки: {error}</>}
+          onRetry={onRetry}
+        />
       ) : missing ? (
         <div className="card entity-page__missing muted">
           Записи нет — её удалили или ссылка ведёт не туда.
         </div>
       ) : loading ? (
         <ListSkeleton variant="paragraph" label="Загрузка" />
+      ) : paper ? (
+        <div className="paper-sheet paper-scope">
+          {(!shownTabs.length || tab === shownTabs[0].id) && ident}
+          {children}
+        </div>
       ) : (
         children
       )}

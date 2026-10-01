@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/db";
 import { toFileUrl } from "../services/filesystem";
+import { parseForce } from "../services/beingForce";
 
 export const creatureCardRouter = Router();
 
@@ -27,6 +28,8 @@ interface CardRow {
   secret: string | null;
   avatar_image_path?: string | null;
   base_monster_id?: number | null;
+  category?: string | null;
+  force?: string | null;
 }
 
 interface CardStatblock {
@@ -82,7 +85,7 @@ creatureCardRouter.get("/:type/:id", (req, res) => {
     type === "being"
       ? db.prepare(
           `SELECT b.id, b.name, b.description, b.combat_roles, b.tactics, b.secret,
-                  b.avatar_image_path, b.base_monster_id
+                  b.avatar_image_path, b.base_monster_id, b.category, b.force
            FROM setting_beings b WHERE b.id = ?`
         )
       : db.prepare(
@@ -161,6 +164,10 @@ creatureCardRouter.get("/:type/:id", (req, res) => {
     combat_roles: parseList(row.combat_roles),
     tactics: parseList(row.tactics),
     secret: row.secret ?? "",
+    // Карточка «за столом» (разбор профилей Q3): у личности — двигатель силы,
+    // у бестиария — «В бою». Категория решает, что из двух показывать.
+    category: row.category ?? null,
+    force: parseForce(row.force),
     avatar_image_url: avatarPath ? toFileUrl(avatarPath) : null,
     statblock: statblock ?? baseStatblock,
     statblock_inherited: !statblock && !!baseStatblock,

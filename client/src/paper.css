@@ -1,0 +1,1008 @@
+/* Бумага: профиль существа и «Население» (разбор профилей 2026-10-01, Q9;
+   разбор «Населения» Q1–Q14; макет — холст «Профили»).
+
+   Лист бумаги на столе темы. Внутри листа приложение говорит теми же
+   токенами (--paper, --ink, --line…), только переопределёнными под бумагу:
+   ChapterList, поля правки и прочие общие куски читаются на листе без
+   своих правил.
+
+   Тёмная тема бумагу НЕ отменяет, а приглушает (решение владельца по доске
+   1б): светлый лист на 2/3 экрана слепит за столом в полутьме. Подписи на
+   приглушённой бумаге темнее — иначе они тонут (замечание владельца по
+   «СЕТТИНГ / СООБЩЕСТВА / ГДЕ ОБИТАЕТ»).
+
+   Ассеты — только переменными из fantasy-punk-skin.css. */
+
+.paper-scope {
+  --paper-base: #eee7d6;
+  --paper-ink: #1f1a14;
+  --paper-ink-soft: #3a332a;
+  --paper-muted: #6b6253;
+  --paper-rule: rgb(31 26 20 / 0.22);
+  --paper-acid: #e2f25a;
+  --paper-wash: rgb(255 253 245 / 0.42);
+
+  --paper: var(--paper-base);
+  --paper-2: var(--paper-base);
+  --bg: var(--paper-base);
+  --bg-elevated: var(--paper-wash);
+  --ink: var(--paper-ink);
+  --ink-2: var(--paper-ink-soft);
+  --text: var(--paper-ink);
+  --text-bright: var(--paper-ink);
+  --muted: var(--paper-muted);
+  --line: rgb(31 26 20 / 0.35);
+  --surface: var(--paper-ink);
+  --on-surface: var(--paper-base);
+  --on-surface-muted: #cfc6b0;
+  --accent: var(--paper-ink);
+  --accent-2: var(--paper-ink);
+  --accent-text: var(--paper-base);
+  --accent-soft: rgb(31 26 20 / 0.12);
+  --primary-bg: var(--paper-ink);
+  --primary-text: var(--paper-base);
+  --card-body-texture: none;
+  /* Поверхность объявляет свою пару толщин (check-spacing.mjs): главный
+     блок листа — «За столом» — обведён толще остального. */
+  --card-border-width: 1px;
+  --card-border-width-strong: 2px;
+  color: var(--paper-ink);
+}
+
+[data-theme-mode="dark"] .paper-scope {
+  --paper-base: #c4bca8;
+  --paper-ink-soft: #2e2820;
+  --paper-muted: #3f382e;
+  --paper-rule: rgb(31 26 20 / 0.3);
+  --paper-wash: rgb(255 253 245 / 0.22);
+  --on-surface-muted: #b9b19d;
+}
+
+.paper-scope :is(input, select, textarea) {
+  background: var(--paper-wash);
+  color: var(--paper-ink);
+}
+
+/* Лист и карточка — одна бумага: тайл под цветом, перемножением. */
+.paper-sheet,
+.creature-card.paper-scope {
+  background: var(--paper-base) var(--skin-paper-tile) repeat;
+  background-blend-mode: multiply;
+}
+
+.paper-sheet {
+  position: relative;
+  z-index: 1;
+  padding: var(--sp-8) var(--sp-9);
+  border-radius: 4px;
+  box-shadow: 0 1px 0 rgb(0 0 0 / 0.12), 0 18px 40px rgb(0 0 0 / 0.35);
+}
+
+/* Карточки внутри листа — не рамки, а разделы: лист уже рамка (одна рамка
+   на область, как `.card .card` в index.css). */
+.paper-sheet .card {
+  background: transparent;
+  border: 0;
+  border-top: var(--card-border-width) solid var(--paper-rule);
+  border-radius: 0;
+  padding: var(--sp-5) 0 0;
+}
+.paper-sheet .card-header--inverted {
+  background: none;
+  color: var(--paper-ink);
+  margin: 0 0 var(--sp-4);
+  padding: 0;
+}
+
+.paper-label {
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--paper-muted);
+}
+
+/* ── Каркас карточки на бумаге: имя и язычки ───────────────────────── */
+
+.entity-page--paper .entity-page__title-row h1 {
+  font-family: "Rubik Dirt", var(--font-ui), sans-serif;
+  font-weight: 400;
+  font-size: var(--fs-hero);
+  line-height: 1;
+  text-transform: none;
+}
+.entity-page--paper > .tabs {
+  gap: var(--sp-2);
+  margin: 0 0 calc(-1 * var(--stack-gap, var(--sp-6)));
+  padding: 0 var(--sp-6);
+  box-shadow: none;
+  align-items: flex-end;
+}
+.entity-page--paper > .tabs button {
+  border: 0;
+  border-radius: 9px 7px 0 0;
+  padding: var(--sp-4) var(--sp-7) var(--sp-5);
+  background: var(--paper-tab, #d9d0bc) var(--skin-paper-tile) repeat;
+  background-blend-mode: multiply;
+  color: #2e2820;
+  font-size: var(--fs-data);
+  letter-spacing: 0.04em;
+  text-transform: none;
+  filter: brightness(0.9);
+}
+[data-theme-mode="dark"] .entity-page--paper > .tabs button {
+  --paper-tab: #aea693;
+}
+.entity-page--paper > .tabs button.active {
+  filter: none;
+  background: var(--paper-acid, #e2f25a);
+  color: #141414;
+  padding-bottom: var(--sp-6);
+  box-shadow: 0 -2px 6px rgb(0 0 0 / 0.25);
+}
+
+/* «…» — правый край полосы язычков, а имя — первая строка листа. */
+.entity-page--paper > .tabs .entity-page__more {
+  margin-left: auto;
+  padding-inline: var(--sp-6);
+}
+.paper-sheet > .entity-page__ident {
+  margin-bottom: var(--sp-7);
+}
+.paper-sheet > .entity-page__ident .entity-page__meta {
+  margin-top: 0;
+}
+
+/* Соседи по списку населения — язычки на кромке листа у имени (вариант А,
+   2026-10-01). Ближайший позиционированный предок — сам лист. */
+/* Лист сдвинут внутрь на ширину язычков: у области содержимого отступ
+   12–24px и overflow: hidden — иначе язычок обрезается. Отступ постоянный,
+   чтобы лист не менял ширину между вкладками. */
+.entity-page--paper > .paper-sheet,
+.entity-page--paper > .tabs {
+  margin-left: var(--sp-7);
+  margin-right: var(--sp-7);
+}
+.paper-flap {
+  position: absolute;
+  top: var(--sp-8);
+  width: 24px;
+  height: 64px;
+  padding: 0;
+  border: 0;
+  background: var(--paper-base) var(--skin-paper-tile) repeat;
+  background-blend-mode: multiply;
+  color: var(--paper-ink);
+  font-size: var(--fs-h3);
+  line-height: 1;
+  box-shadow: 0 6px 14px rgb(0 0 0 / 0.3);
+}
+.paper-flap--prev {
+  left: -24px;
+  border-radius: 8px 0 0 8px;
+}
+.paper-flap--next {
+  right: -24px;
+  border-radius: 0 8px 8px 0;
+}
+.paper-flap:hover:not(:disabled) {
+  background-color: var(--paper-acid, #e2f25a);
+}
+.paper-flap:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* ── Досье ─────────────────────────────────────────────────────────── */
+
+.dossier {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: var(--sp-9);
+  align-items: start;
+}
+.dossier__aside {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-7);
+}
+.dossier__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  min-width: 0;
+}
+
+/* Портрет на скотче: лёгкий наклон — бумага, а не рамка интерфейса. */
+.dossier__portrait {
+  position: relative;
+  display: block;
+  margin: var(--sp-4) 0 0;
+  transform: rotate(-1.2deg);
+  cursor: pointer;
+}
+.dossier__portrait img,
+.dossier__portrait-empty {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  box-shadow: 0 2px 0 rgb(0 0 0 / 0.08), 0 10px 18px rgb(60 40 20 / 0.18);
+}
+.dossier__portrait-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--paper-wash);
+  border: var(--card-border-width) dashed var(--paper-rule);
+  color: var(--paper-muted);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.dossier__portrait::before {
+  content: "";
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  width: 110px;
+  height: 24px;
+  transform: translateX(-50%) rotate(2deg);
+  background: var(--skin-tape) center / 100% 100% no-repeat;
+  opacity: 0.85;
+  mix-blend-mode: multiply;
+  z-index: 1;
+}
+.dossier__portrait-hint {
+  position: absolute;
+  inset: auto 0 0;
+  padding: var(--sp-2);
+  background: rgb(31 26 20 / 0.7);
+  color: var(--paper-base);
+  font-size: var(--fs-meta);
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.dossier__portrait:hover .dossier__portrait-hint,
+.dossier__portrait:focus-within .dossier__portrait-hint {
+  opacity: 1;
+}
+
+.paper-facts {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+.paper-facts dd {
+  margin: var(--sp-1) 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-5);
+  font-size: var(--fs-body);
+}
+
+/* Ссылка-упоминание на бумаге: пунктир, не синий. */
+.paper-scope a.paper-link,
+.paper-facts a {
+  color: var(--paper-ink);
+  text-decoration: underline dotted rgb(31 26 20 / 0.6);
+  text-underline-offset: 3px;
+}
+
+.dossier__figure {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-5);
+}
+.dossier__figure .dossier__portrait {
+  align-self: stretch;
+}
+.dossier__search {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-3);
+}
+.dossier__search input {
+  align-self: stretch;
+  background: transparent;
+  border: 0;
+  border-bottom: var(--card-border-width) solid var(--paper-rule);
+}
+
+/* Разделы досье: заголовок на линейке, без плашки. */
+.paper-fold {
+  border-top: var(--card-border-width) solid var(--paper-rule);
+  padding-top: var(--sp-5);
+}
+.paper-fold > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  list-style: none;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: var(--fs-h3);
+  font-weight: 500;
+}
+.paper-fold > summary::-webkit-details-marker {
+  display: none;
+}
+.paper-fold > summary::before {
+  content: "▸";
+  font-size: var(--fs-meta);
+  transition: transform 0.15s;
+}
+.paper-fold[open] > summary::before {
+  transform: rotate(90deg);
+}
+.paper-fold__count {
+  color: var(--paper-muted);
+  font-weight: 400;
+}
+.paper-fold__body {
+  padding: var(--sp-5) 0 0 var(--sp-7);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+}
+
+/* «В кампании X» — участие (Q7, Q14). */
+.participation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+.participation__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  flex-wrap: wrap;
+}
+.participation__title {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: var(--fs-h3);
+  font-weight: 500;
+}
+.participation__live {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-1) var(--sp-4);
+  border-radius: 12px;
+  background: var(--paper-ink);
+  color: var(--paper-acid);
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.participation__live::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--paper-acid);
+}
+.participation__grid {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--sp-5) var(--sp-7);
+  padding: var(--sp-6) var(--sp-7);
+  background: rgb(31 26 20 / 0.05);
+  border-radius: 3px;
+}
+.participation__grid dd {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-body);
+  line-height: 1.4;
+}
+.participation__actions {
+  display: flex;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+}
+
+/* ── Связи и Хроника ──────────────────────────────────────────────── */
+
+.paper-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.paper-group__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-4);
+  margin: 0 0 var(--sp-4);
+  padding-bottom: var(--sp-2);
+  border-bottom: var(--card-border-width-strong) solid var(--paper-ink);
+  font-family: var(--font-ui);
+  font-size: var(--fs-data);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.paper-group__count {
+  color: var(--paper-muted);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.paper-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.paper-rows > li {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  padding: var(--sp-3) var(--sp-2);
+  border-bottom: var(--card-border-width) solid var(--paper-rule);
+}
+.paper-rows__main {
+  flex: 1;
+  min-width: 0;
+}
+.paper-rows__sub {
+  color: var(--paper-muted);
+  font-size: var(--fs-data);
+}
+
+.chronicle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-9);
+  align-items: start;
+}
+
+/* ── Население ─────────────────────────────────────────────────────── */
+
+.population {
+  /* Раскладка — от ширины листа, а не окна: справа бывает открыта панель
+     поиска и мешка, и при окне 1440 листу достаётся 900. */
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  padding: var(--sp-7) var(--sp-8);
+}
+.population__subnav {
+  display: flex;
+  gap: var(--sp-8);
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.population__subtab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: 0 0 var(--sp-4);
+  border: 0;
+  background: none;
+  color: var(--paper-muted);
+  font-family: var(--font-ui);
+  font-size: var(--fs-h2);
+  cursor: pointer;
+}
+.population__subtab[aria-selected="true"] {
+  padding-bottom: 0;
+  color: var(--paper-ink);
+  font-weight: 600;
+}
+.population__subtab[aria-selected="true"]::after {
+  content: "";
+  display: block;
+  height: 10px;
+  background: var(--skin-tab-marker) left center / 100% 100% no-repeat;
+}
+.population__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+.population__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  flex-wrap: wrap;
+}
+.population__search {
+  flex: 0 1 340px;
+  min-width: 180px;
+  background: transparent;
+  border: 0;
+  border-bottom: var(--card-border-width-strong) solid var(--paper-rule);
+  font-size: var(--fs-body);
+}
+.population__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-5);
+  border: var(--card-border-width) dashed rgb(31 26 20 / 0.6);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--paper-ink-soft);
+  font-size: var(--fs-data);
+  cursor: pointer;
+}
+.population__chip.is-on {
+  border-style: solid;
+  background: var(--paper-ink);
+  color: var(--paper-base);
+}
+.population__seg {
+  display: inline-flex;
+  border: var(--card-border-width) solid var(--paper-ink);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.population__seg button {
+  border: 0;
+  border-radius: 0;
+  padding: var(--sp-2) var(--sp-5);
+  background: transparent;
+  color: var(--paper-ink);
+  font-size: var(--fs-data);
+  cursor: pointer;
+}
+.population__seg button[aria-pressed="true"] {
+  background: var(--paper-ink);
+  color: var(--paper-base);
+}
+.population__spacer {
+  flex: 1;
+}
+.population__create {
+  background: var(--paper-ink);
+  color: var(--paper-acid);
+  border-color: var(--paper-ink);
+  font-weight: 700;
+}
+.population__filters {
+  display: flex;
+  gap: var(--sp-5);
+  flex-wrap: wrap;
+  align-items: center;
+}
+.population__split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(280px, 34%, 400px);
+  gap: var(--sp-8);
+  align-items: start;
+}
+.population__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-7);
+  min-width: 0;
+}
+.population__aside {
+  position: sticky;
+  top: var(--sp-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.population__sheet-close {
+  display: none;
+}
+
+.pop-group__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-4);
+  margin: 0 0 var(--sp-5);
+  padding-bottom: var(--sp-2);
+  border-bottom: var(--card-border-width-strong) solid var(--paper-ink);
+  font-family: var(--font-ui);
+  font-size: var(--fs-data);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.pop-group__count {
+  color: var(--paper-muted);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+/* Общая кнопка-запись: щелчок — карточка справа, двойной — профиль. */
+.pop-item {
+  white-space: normal;
+  display: flex;
+  gap: var(--sp-5);
+  align-items: flex-start;
+  width: 100%;
+  min-width: 0;
+  padding: var(--sp-5);
+  border: 0;
+  border-radius: 3px;
+  background: rgb(255 253 245 / 0.2);
+  box-shadow: 0 1px 0 rgb(31 26 20 / 0.22);
+  color: var(--paper-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pop-item:hover {
+  background: rgb(255 253 245 / 0.38);
+}
+.pop-item.is-selected {
+  background: rgb(255 253 245 / 0.48);
+  box-shadow: 0 0 0 2px var(--paper-ink), 0 0 0 5px var(--paper-acid);
+}
+.pop-item__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+.pop-item__name {
+  font-weight: 700;
+  font-size: var(--fs-body);
+  line-height: 1.15;
+}
+.pop-item__alias {
+  font-size: var(--fs-meta);
+  color: var(--paper-muted);
+}
+.pop-item__line {
+  font-size: var(--fs-data);
+  line-height: 1.3;
+  color: var(--paper-ink-soft);
+}
+.pop-item__line.is-clamped {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.pop-item__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+.pop-item__chip {
+  padding: var(--sp-0) var(--sp-4);
+  border: var(--card-border-width) solid rgb(31 26 20 / 0.5);
+  border-radius: 10px;
+  font-size: var(--fs-meta);
+}
+.pop-item__chip.is-dark {
+  border-color: var(--paper-ink);
+  background: var(--paper-ink);
+  color: var(--paper-base);
+}
+
+.pop-avatar {
+  flex: 0 0 auto;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.pop-mono {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--paper-ink);
+  color: #d9d0bc;
+  font-family: "Rubik Dirt", var(--font-ui), sans-serif;
+}
+.pop-avatar.is-l,
+.pop-mono.is-l {
+  width: 56px;
+  height: 56px;
+  font-size: var(--fs-h2);
+}
+.pop-avatar.is-m,
+.pop-mono.is-m {
+  width: 36px;
+  height: 36px;
+  font-size: var(--fs-body);
+}
+.pop-avatar.is-s,
+.pop-mono.is-s {
+  width: 24px;
+  height: 24px;
+  font-size: var(--fs-meta);
+}
+
+.pop-keys {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: var(--sp-5);
+}
+.pop-infl {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--sp-4) var(--sp-5);
+}
+.pop-infl .pop-item {
+  align-items: center;
+  padding: var(--sp-4) var(--sp-5);
+}
+.pop-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pop-row {
+  white-space: normal;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--sp-5);
+  align-items: center;
+  width: 100%;
+  padding: var(--sp-3) var(--sp-3);
+  border: 0;
+  border-bottom: var(--card-border-width) solid var(--paper-rule);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--paper-ink);
+  font: inherit;
+  font-size: var(--fs-body);
+  text-align: left;
+  cursor: pointer;
+}
+.pop-row:hover {
+  background: rgb(255 253 245 / 0.25);
+}
+.pop-row.is-selected {
+  background: rgb(255 253 245 / 0.48);
+  box-shadow: 0 0 0 2px var(--paper-ink), 0 0 0 4px var(--paper-acid);
+}
+.pop-row > :first-child {
+  font-weight: 600;
+}
+.pop-row__muted {
+  color: var(--paper-muted);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.pop-row--beast {
+  grid-template-columns: minmax(0, 1.6fr) 70px 90px minmax(0, 1.4fr);
+}
+.pop-row__num .paper-label {
+  margin-right: var(--sp-2);
+}
+.pop-row__roles {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.pop-row--tree {
+  display: flex;
+  gap: var(--sp-4);
+}
+.pop-row--tree[data-depth="1"] { padding-left: calc(var(--sp-3) + 28px); }
+.pop-row--tree[data-depth="2"] { padding-left: calc(var(--sp-3) + 56px); }
+.pop-row--tree[data-depth="3"] { padding-left: calc(var(--sp-3) + 84px); }
+.pop-row--tree[data-depth="4"] { padding-left: calc(var(--sp-3) + 112px); }
+.pop-row__twisty {
+  width: 14px;
+  flex: 0 0 auto;
+  color: var(--paper-muted);
+  text-align: center;
+}
+.pop-row__glyph {
+  flex: 0 0 auto;
+}
+.pop-more-note {
+  color: var(--paper-muted);
+  font-size: var(--fs-data);
+}
+.pop-check {
+  flex: 0 0 auto;
+  margin-top: var(--sp-1);
+}
+
+/* Пусто справа (Q13): пять последних открытых. */
+.pop-recent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-6);
+  border: var(--card-border-width) dashed var(--paper-rule);
+  border-radius: 3px;
+}
+.pop-recent ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.pop-recent button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--paper-ink);
+  font: inherit;
+  text-align: left;
+  text-decoration: underline dotted rgb(31 26 20 / 0.6);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+/* Карточка сообщества справа — на той же бумаге, что и карточка существа. */
+.population__aside > .card {
+  border: var(--card-border-width-strong) solid var(--paper-ink);
+  border-radius: 3px;
+  padding: var(--sp-6);
+  background: var(--paper-wash);
+}
+
+/* ── Узкие окна и телефон (Q10, Q14 «Населения») ─────────────────── */
+
+@media (max-width: 1100px) {
+  .dossier {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-7);
+  }
+  .dossier__aside {
+    display: grid;
+    grid-template-columns: 160px minmax(0, 1fr);
+    gap: var(--sp-6);
+    align-items: start;
+  }
+  .dossier__search {
+    grid-column: 1 / -1;
+  }
+  .chronicle {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-8);
+  }
+}
+
+@container (max-width: 760px) {
+  .population__split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* Карточка — шторкой снизу; без выбора её нет вовсе. */
+  .population__aside {
+    display: none;
+  }
+  .population__aside.is-open {
+    display: flex;
+    /* sticky, а не fixed: внутри контейнера запросов fixed отсчитывался бы
+       от листа, а не от окна. Прилипает к низу экрана, пока виден список. */
+    position: sticky;
+    /* Над нижней навигацией телефона, а не под ней. */
+    bottom: calc(var(--player-bar-height, 52px) + var(--sp-6));
+    z-index: 45;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: var(--sp-6) var(--sp-6) var(--sp-7);
+    border-radius: 14px 14px 0 0;
+    background: var(--paper-base) var(--skin-paper-tile) repeat;
+    background-blend-mode: multiply;
+    box-shadow: 0 -10px 30px rgb(0 0 0 / 0.5);
+  }
+  .population__aside.is-open .population__sheet-close {
+    display: block;
+    align-self: center;
+    width: 44px;
+    height: 5px;
+    padding: 0;
+    border: 0;
+    border-radius: 3px;
+    background: rgb(31 26 20 / 0.4);
+    cursor: pointer;
+  }
+  .population__aside.is-open .creature-card {
+    border: 0;
+    background: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .paper-sheet {
+    padding: var(--sp-6) var(--sp-6);
+    border-radius: 0;
+  }
+  .entity-page--paper > .tabs {
+    padding: 0 var(--sp-4);
+  }
+  .entity-page--paper > .tabs button {
+    padding: var(--sp-3) var(--sp-5) var(--sp-4);
+  }
+  .entity-page--paper .entity-page__title-row h1 {
+    font-size: var(--fs-h1);
+  }
+  .dossier__aside {
+    grid-template-columns: 96px minmax(0, 1fr);
+  }
+  .population {
+    padding: var(--sp-6) var(--sp-5);
+  }
+  .population__subtab {
+    font-size: var(--fs-body);
+  }
+  .population__subnav {
+    gap: var(--sp-6);
+  }
+  .population__search {
+    flex: 1 1 100%;
+  }
+  .pop-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .pop-row > :nth-child(3) {
+    display: none;
+  }
+  .pop-row--beast {
+    grid-template-columns: minmax(0, 1fr) 56px 70px;
+  }
+  .pop-row--beast > :nth-child(4) {
+    display: none;
+  }
+  .paper-fold__body {
+    padding-left: 0;
+  }
+}
+
+.chronicle__add {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin-top: var(--sp-5);
+}
+.chronicle__line {
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+}
+.chronicle__line > input:not(.chronicle__num) {
+  flex: 1 1 200px;
+}
+
+/* Связи на листе: плашки-инверсии и карточки из общего вида уходят в
+   строки на линейке — вес на странице у разделов «Где» и «С кем · что». */
+.paper-groups .relation-group.card {
+  border: 0;
+  background: none;
+  padding: 0;
+}
+.paper-groups .relation-group-header {
+  margin: 0 0 var(--sp-3);
+  padding: 0 0 var(--sp-2);
+  background: none;
+  color: var(--paper-ink-soft);
+  border-bottom: 1px dashed var(--paper-rule);
+  font-weight: 500;
+}
+.paper-groups .relation-group-header-count,
+.paper-groups .relation-group-header-hint {
+  color: var(--paper-muted);
+}
+.paper-groups .relation-group details.card {
+  background: none;
+  border: 0;
+  border-bottom: var(--card-border-width) solid var(--paper-rule);
+  padding: var(--sp-3) var(--sp-2);
+}
+.chronicle__num {
+  width: 80px;
+}
+
+/* Заголовки разделов общих карточек (Описание и т. п.) — на линейке, без
+   чернильной плашки: на листе плашка спорит с «За столом». */
+.paper-sheet :is(.card-header--inverted, summary.campaign-overview-header),
+.paper-sheet details.card summary.campaign-overview-header:hover {
+  background: none;
+  color: var(--paper-ink);
+  padding: 0;
+  font-size: var(--fs-h3);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}

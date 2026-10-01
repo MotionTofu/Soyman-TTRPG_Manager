@@ -901,7 +901,15 @@ export interface CreatureMeta {
   size: string;
   creatureType: string;
   alignment: string;
+  /** КД и средние хиты из статблока — строка бестиария в «Населении». */
+  ac?: number | null;
+  hp?: string;
 }
+
+/** Двигатель силы (beingForce.ts): короткие тексты по словарным ключам. */
+export type BeingForce = Partial<Record<import("./beingForce").ForceKey, string>>;
+/** Участие в кампании на главе «Текущая ситуация». */
+export type BeingParticipation = Partial<Record<import("./beingForce").ParticipationKey, string>>;
 
 export interface LocationInhabitantBeing extends SettingBeing {
   communities: { id: number; name: string }[];
@@ -961,6 +969,8 @@ export interface SettingBeing {
   creature_meta: CreatureMeta | null;
   /** Сколько карточек статблока заведено: списки помечают значком тех, у кого хотя бы одна. */
   statblock_count?: number;
+  /** Двигатель силы; у старого сервера — нет. */
+  force?: BeingForce;
   tags: string[];
   avatar_image_path: string | null;
   avatar_image_url: string | null;
@@ -975,6 +985,8 @@ export interface SettingCommunity {
   id: number;
   setting_id: number;
   parent_id: number | null;
+  /** Живых членов — список «Населения» рисует число в строке дерева. */
+  member_count?: number;
   name: string;
   description: string;
   /** Другие названия: переводы, сокращения, прозвища. */
@@ -1085,6 +1097,8 @@ export interface BeingChapter {
   campaign_name: string | null;
   important: boolean | number;
   visible_to_players: boolean | number;
+  /** Участие в кампании — у главы «Текущая ситуация» с campaign_id. */
+  participation?: BeingParticipation;
   created_at: string;
 }
 
@@ -1105,6 +1119,8 @@ export interface SettingBeingDetail extends SettingBeing {
   compendium_links: CompendiumLink[];
   important_dates: ImportantDate[];
   chapters: BeingChapter[];
+  /** Узлы приключений, где существо — «о ком» (вкладка «Связи»). */
+  scenes?: { id: number; name: string; arc_id: number | null; arc_name: string | null; campaign_id: number | null; campaign_name: string | null }[];
 }
 
 // "Приключения" — see schema.sql's story_arcs / story_scenes for the

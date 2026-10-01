@@ -7028,6 +7028,14 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
       "ALTER TABLE world_exploration_entries ADD COLUMN session_id INTEGER REFERENCES sessions(id) ON DELETE SET NULL"
     );
   }
+  // Профили (разбор 2026-10-01): двигатель силы существа и участие в
+  // кампании на главе «Текущая ситуация». Словарь ключей — services/beingForce.
+  if (!columnExists(database, "setting_beings", "force")) {
+    database.exec("ALTER TABLE setting_beings ADD COLUMN force TEXT NOT NULL DEFAULT '{}'");
+  }
+  if (!columnExists(database, "being_chapters", "participation")) {
+    database.exec("ALTER TABLE being_chapters ADD COLUMN participation TEXT NOT NULL DEFAULT '{}'");
+  }
 
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
