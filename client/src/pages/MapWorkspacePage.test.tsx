@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { MapWorkspacePage } from "./MapWorkspacePage";
@@ -29,14 +29,15 @@ describe("MapWorkspacePage boundaries", () => {
   it("published old maps are read-only with an explicit private-copy action", async () => {
     mocks.read.mockResolvedValue(record({ player_visible: 1 })); show();
     await screen.findByText("Тестовый холст");
-    expect((screen.getByRole("button", { name: "Пол" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Выбор" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByRole("button", { name: "Создать скрытую копию" })).toBeTruthy();
     expect(mocks.save).not.toHaveBeenCalled();
   });
   it("a server without revisions cannot enable the new writer", async () => {
     mocks.read.mockResolvedValue(record({ revision: undefined })); show();
     expect(await screen.findByRole("alert")).toHaveProperty("textContent", expect.stringContaining("безопасное сохранение"));
-    expect((screen.getByRole("button", { name: "Сохранить" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByTitle("Карта"));
+    expect((screen.getByRole("button", { name: "Сохранить сейчас" }) as HTMLButtonElement).disabled).toBe(true);
     expect(mocks.save).not.toHaveBeenCalled();
   });
   it("players never request the master document", async () => {

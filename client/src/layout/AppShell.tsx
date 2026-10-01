@@ -543,8 +543,9 @@ export function AppShell() {
       if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey ||
         active?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(active?.tagName ?? "")) return;
       event.preventDefault();
-      if (window.matchMedia("(max-width: 900px)").matches) setSearchOpen(true);
-      else document.querySelector<HTMLInputElement>("#search-panel input")?.focus();
+      // Closed: opening focuses the field (effect above); open: focus it now.
+      setSearchOpen(true);
+      document.querySelector<HTMLInputElement>("#search-panel input")?.focus();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -719,10 +720,7 @@ export function AppShell() {
         />
       )}
       {isMapWorkspace ? (
-        <MapWorkspaceRail returnTo={returnTo.current} setRail={setMapRail} searchOpen={searchOpen} onSearch={() => {
-          if (window.matchMedia("(max-width: 900px)").matches) setSearchOpen((open) => !open);
-          else document.querySelector<HTMLInputElement>("#search-panel input")?.focus();
-        }} />
+        <MapWorkspaceRail returnTo={returnTo.current} setRail={setMapRail} searchOpen={searchOpen} onSearch={() => setSearchOpen((open) => !open)} />
       ) : isLivePult ? (
         <PreviewDock open={navOpen} />
       ) : userLoading ? (
@@ -852,6 +850,7 @@ export function AppShell() {
         <Outlet />
       </main>
       <div id="search-panel" className={`search-panel-slot${searchOpen ? " open" : ""}`}>
+        {isMapWorkspace && <button type="button" className="map-workspace-search-tab" aria-controls="search-panel" aria-expanded={false} onClick={() => setSearchOpen(true)}>Поиск и мешок</button>}
         {isMapWorkspace && <button type="button" className="map-workspace-search-close" aria-label="Закрыть поиск и мешок" onClick={() => setSearchOpen(false)}><NavIcon name="close" /></button>}
         <SearchPanel workspace={isMapWorkspace} onNavigate={() => setSearchOpen(false)} />
       </div>
