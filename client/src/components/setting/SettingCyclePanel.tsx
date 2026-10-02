@@ -122,7 +122,22 @@ export function SettingCyclePanel({
     return runs;
   }, [lanes, segments, hidden, from, to]);
 
-  if (cycles.length === 0) return null;
+  // Без циклов панель — одна строка с «+ Цикл»: место под ось видно и в
+  // кампании, у сеттинга которой циклов ещё нет (просьба владельца 2026-10-02).
+  if (cycles.length === 0) {
+    return (
+      <section className="cycle-panel paper-scope" aria-label="Циклы">
+        <div className="cycle-panel__head">
+          <span className="cycle-panel__title">Циклы</span>
+          <span className="muted">пока нет</span>
+          <span className="cycle-panel__grow" />
+          <button type="button" onClick={onAddCycle}>
+            + Цикл
+          </button>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="cycle-panel paper-scope" aria-label="Циклы">
