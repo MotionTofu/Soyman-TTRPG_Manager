@@ -301,7 +301,7 @@ describe("производные карты вычисляются, а не пи
 
     // routes/gallery.ts OWNER_TABLES
     expect(kinds((k) => k.owns.includes("gallery_images"))).toEqual(
-      ["artifact", "being", "campaign_player_section", "character", "community", "location"]
+      ["artifact", "being", "campaign_player_section", "character", "community", "compendium_entry", "location"]
     );
     // story/foreignLinks.ts SETTING_ENTITIES (сущности мира с подписью)
     expect(kinds((k) => k.belongsTo === "world" && k.hasAliases)).toEqual(

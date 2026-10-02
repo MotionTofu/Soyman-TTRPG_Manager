@@ -5,8 +5,9 @@ import { statblockAffects, statblockListPath } from "../data/statblocks";
 import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { useConfirm } from "../hooks/useConfirm";
+import { GalleryTab } from "./GalleryTab";
 
-// Вкладка «Изображения» профиля записи компендиума — бестиария и транспорта.
+// Вкладка «Изображения» («Галерея») профиля записи компендиума — бестиария и транспорта.
 // Собрана из двух подразделов, потому что у записи две разные картинки и
 // раньше их путали: аватар — портрет самого существа (плитка бестиария,
 // модалка предпросмотра, карточка существа), портрет статблока — арт внутри
@@ -38,16 +39,18 @@ export function EntryImagesTab({
   // здесь, виден в статблоке без второго запроса.
   const statblocks = useResource<StatblockSummary[]>(statblockListPath("compendium_entry", entryId)).data ?? [];
 
+  // Аватар и картинки статблоков — одной строкой, под ними галерея записи
+  // (просьба владельца 2026-10-02).
   return (
     <div className="stack">
       <div className="card stack">
-        <h3>Аватар</h3>
+        <h3>Изображения</h3>
         <p className="muted" style={{ margin: 0 }}>
-          Портрет {entryName} — на плитке раздела
-          {hasCreatureCard ? ", в карточке существа" : ""} и в окнах предпросмотра.
-          Без него везде показывается монограмма.
+          Аватар — портрет {entryName} на плитке раздела
+          {hasCreatureCard ? ", в карточке существа" : ""} и в окнах предпросмотра; без него — монограмма.
+          {statblocks.length > 0 && " Картинка статблока — арт внутри самой карточки правил, меняется независимо от аватара."}
         </p>
-        <div className="entity-image-slots">
+        <div className="entity-image-slots entry-images__row">
           <EntryImageSlot
             title="Аватар записи"
             hint="Одна картинка на все места, где встречается запись."
@@ -56,37 +59,21 @@ export function EntryImagesTab({
             deleteUrl={`/systems/entries/${entryId}/avatar`}
             affects={[{ kind: "compendium_entry", id: entryId }]}
           />
+          {statblocks.map((sb) => (
+            <EntryImageSlot
+              key={sb.id}
+              title={sb.kind === "short" ? "Краткий статблок" : "Полный статблок"}
+              hint={sb.note?.trim() || "Показывается в шапке статблока."}
+              url={sb.avatar_image_url}
+              uploadUrl={`/statblocks/${sb.id}/avatar`}
+              deleteUrl={`/statblocks/${sb.id}/avatar`}
+              affects={statblockAffects("compendium_entry", entryId)}
+            />
+          ))}
         </div>
       </div>
 
-      <div className="card stack">
-        <h3>Изображения статблоков</h3>
-        {statblocks.length === 0 ? (
-          <p className="muted" style={{ margin: 0 }}>
-            У записи ещё нет статблоков — их изображения появятся здесь вместе с ними.
-          </p>
-        ) : (
-          <>
-            <p className="muted" style={{ margin: 0 }}>
-              Арт внутри самой карточки правил. Меняется независимо от аватара: в
-              статблоке уместен разворот из книги, на плитке — морда.
-            </p>
-            <div className="entity-image-slots">
-              {statblocks.map((sb) => (
-                <EntryImageSlot
-                  key={sb.id}
-                  title={sb.kind === "short" ? "Краткий статблок" : "Полный статблок"}
-                  hint={sb.note?.trim() || "Показывается в шапке статблока."}
-                  url={sb.avatar_image_url}
-                  uploadUrl={`/statblocks/${sb.id}/avatar`}
-                  deleteUrl={`/statblocks/${sb.id}/avatar`}
-                  affects={statblockAffects("compendium_entry", entryId)}
-                />
-              ))}
-            </div>
-          </>
-        )}
-      </div>
+      <GalleryTab ownerType="compendium_entry" ownerId={entryId} />
     </div>
   );
 }
