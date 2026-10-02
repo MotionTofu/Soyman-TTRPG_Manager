@@ -1330,3 +1330,31 @@
   border-color: transparent;
   color: var(--paper-muted);
 }
+
+/* «Участвует» во «Связях» (тикет 11): приключение, под ним его сцены. */
+.paper-rows.participates > li {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sp-2);
+}
+.participates__adventure {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-5);
+  font-size: var(--fs-body);
+}
+.participates__adventure .mention-link {
+  font-weight: 600;
+}
+.participates__scenes {
+  margin: 0;
+  padding: 0 0 0 var(--sp-7);
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  font-size: var(--fs-data);
+}
+.participates__scenes .mention-link {
+  font-weight: 400;
+}

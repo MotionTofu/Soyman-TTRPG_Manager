@@ -18,6 +18,7 @@ import {
   parseParticipation,
   parsePcParticipation,
   serializeParticipation,
+  parseSceneParticipation,
   serializePcParticipation,
 } from "../services/beingForce";
 import { CAST_SECTIONS } from "../story/cast";
@@ -154,6 +155,68 @@ participationsRouter.delete("/adventure/:arcId/:entityType/:entityId", (req, res
     "DELETE FROM participations WHERE context_type = 'adventure' AND context_id = ? AND entity_type = ? AND entity_id = ?"
   ).run(arcId, req.params.entityType, entityId);
   res.json({ ok: true });
+});
+
+// «Участвует» во «Связях» существа или сообщества (гриллинг профилей
+// 2026-10-02, Q16; тикет 11): приключения, где оно сила, — с целью из хода
+// событий, под ними его сцены с ролью. Те же источники, что у участников
+// приключения: составы сцен (без лута и локаций) и закулисные записи.
+participationsRouter.get("/entity/:entityType/:entityId", (req, res) => {
+  const entityType = req.params.entityType;
+  const entityId = positiveId(req.params.entityId);
+  if (!entityId || !ADVENTURE_ENTITY_TYPES.has(entityType))
+    return res.status(400).json({ error: "Участвовать может существо или сообщество" });
+  const sceneRows = db
+    .prepare(
+      `SELECT s.id AS scene_id, s.name AS scene_name, l.section, lp.data AS participation,
+              COALESCE(ch.parent_id, a.id) AS adventure_id
+       FROM generic_links l
+       JOIN story_scenes s ON s.id = l.from_id
+       JOIN story_arcs a ON a.id = s.arc_id
+       LEFT JOIN story_arcs ch ON ch.id = a.id AND a.kind = 'chapter'
+       LEFT JOIN link_participation lp ON lp.link_id = l.id
+       WHERE l.from_type = 'scene' AND l.to_type = ? AND l.to_id = ?
+         AND l.section IN (${CAST_SECTIONS_FOR_PARTICIPATION.map(() => "?").join(",")})
+         AND s.campaign_id IS NULL AND s.archived_at IS NULL
+         AND a.campaign_id IS NULL AND a.archived_at IS NULL
+       ORDER BY s.position, s.id`
+    )
+    .all(entityType, entityId, ...CAST_SECTIONS_FOR_PARTICIPATION) as {
+    scene_id: number;
+    scene_name: string;
+    section: string;
+    participation: string | null;
+    adventure_id: number;
+  }[];
+  const stored = db
+    .prepare(
+      `SELECT context_id, manual, data FROM participations
+       WHERE context_type = 'adventure' AND entity_type = ? AND entity_id = ?`
+    )
+    .all(entityType, entityId) as { context_id: number; manual: number; data: string }[];
+  const storedById = new Map(stored.map((r) => [r.context_id, r]));
+  const ids = new Set<number>(sceneRows.map((r) => r.adventure_id));
+  for (const r of stored) if (r.manual) ids.add(r.context_id);
+  if (ids.size === 0) return res.json({ adventures: [] });
+  const arcs = db
+    .prepare(
+      `SELECT id, name FROM story_arcs WHERE id IN (${[...ids].map(() => "?").join(",")})
+         AND campaign_id IS NULL AND archived_at IS NULL`
+    )
+    .all(...ids) as { id: number; name: string }[];
+  const adventures = arcs
+    .map((a) => {
+      const row = storedById.get(a.id);
+      const scenes: { id: number; name: string; section: string; role: string; tactic: string }[] = [];
+      for (const r of sceneRows) {
+        if (r.adventure_id !== a.id || scenes.some((sc) => sc.id === r.scene_id)) continue;
+        const p = parseSceneParticipation(r.participation);
+        scenes.push({ id: r.scene_id, name: r.scene_name, section: r.section, role: p.role ?? "", tactic: p.tactic ?? "" });
+      }
+      return { id: a.id, name: a.name, manual: !!row?.manual, goal: parseParticipation(row?.data).goal ?? "", scenes };
+    })
+    .sort((x, y) => x.name.localeCompare(y.name, "ru"));
+  res.json({ adventures });
 });
 
 // Персонаж игрока в кампании: почему здесь, личная ставка, почему сейчас.

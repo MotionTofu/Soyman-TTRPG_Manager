@@ -1,4 +1,5 @@
 import { useState, type DragEvent } from "react";
+import { EntityParticipates } from "../components/EntityParticipates";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAction, useAfterWrite, useEntity, useResource, useSaveEntity, write } from "../data/hooks";
 import { showSaveError } from "../data/notices";
@@ -547,6 +548,7 @@ export function CommunityDetailPage() {
               defaultSettingId={community.setting_id}
             />
           </details>
+          <EntityParticipates entityType="community" entityId={communityId} />
         </div>
       )}
 
