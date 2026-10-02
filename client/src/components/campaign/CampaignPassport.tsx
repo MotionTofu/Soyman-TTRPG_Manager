@@ -50,7 +50,8 @@ function OwnPassport({ campaign }: { campaign: CampaignDetail }) {
 }
 
 function OneshotPassport({ campaign }: { campaign: CampaignDetail }) {
-  const arcs = useResource<StoryArc[]>(campaignPaths.adventures(campaign.id)).data;
+  // «Сцены вне приключения» — служебная корзина, не приключение ваншота.
+  const arcs = useResource<StoryArc[]>(campaignPaths.adventures(campaign.id)).data?.filter((a) => !a.is_default);
   const first = arcs?.[0];
   const detailPath = first ? `/story/arcs/${first.id}?campaign_id=${campaign.id}` : null;
   const arc = useResource<StoryArcDetail>(detailPath).data;

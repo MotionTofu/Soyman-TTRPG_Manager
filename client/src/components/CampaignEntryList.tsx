@@ -22,11 +22,13 @@ interface Props {
   // Master–Detail: список записей слева, выбранная — справа в чтении.
   // Не задано — плоский список, как раньше (остальные места).
   layout?: "list" | "master-detail";
+  /** «Старые заметки» на «Обзоре» (спека campaign-paper, Q32): правятся, новых нет. */
+  canAdd?: boolean;
 }
 
 const EMPTY: CampaignEntry[] = [];
 
-export function CampaignEntryList({ campaignId, category, addLabel, emptyLabel, defaultSettingId, layout = "list" }: Props) {
+export function CampaignEntryList({ campaignId, category, addLabel, emptyLabel, defaultSettingId, layout = "list", canAdd = true }: Props) {
   const [confirmDialog, confirm] = useConfirm();
   const run = useAction();
   const entries = useResource<CampaignEntry[]>(campaignPaths.entries(campaignId, category)).data ?? EMPTY;
@@ -122,7 +124,7 @@ export function CampaignEntryList({ campaignId, category, addLabel, emptyLabel, 
           onRemove={removeEntry}
         />
       ))}
-      {entries.length === 0 ? (
+      {!canAdd ? null : entries.length === 0 ? (
         <div className="card" style={{ borderStyle: "dashed" }}>
           <p style={{ maxWidth: "62ch" }}>
             {isPostProduction

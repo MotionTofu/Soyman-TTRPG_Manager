@@ -64,6 +64,29 @@ workbooksRouter.put('/instances/:id',(req:AuthedRequest,res)=>{
  const updated=db.prepare('UPDATE workbook_instances SET answers_json=?,title=?,project_type=?,project_id=?,archived_at=?,revision=revision+1,updated_at=? WHERE id=? AND revision=?').run(JSON.stringify(answers),d.title??row.title,projectType??null,projectId??null,d.archived===undefined?row.archived_at:d.archived?new Date().toISOString():null,new Date().toISOString(),row.id,d.revision);
  if(!updated.changes)return res.status(409).json({error:'Тетрадь изменилась, перечитайте её'});res.json(present(instance(req)!));
 });
+// «Старые заметки» кампании → записи листа (спека campaign-paper, Q32/Q36).
+// Одной транзакцией: записи встают в лист, заметки кампании удаляются. Без
+// entry_ids — все заметки Мастера этой кампании.
+workbooksRouter.post('/instances/:id/campaign-notes',(req:AuthedRequest,res)=>{
+ const row=instance(req);if(!row)return res.status(404).json({error:'Тетрадь не найдена'});
+ if(row.archived_at)return res.status(400).json({error:'Сначала восстановите тетрадь из архива'});
+ const p=z.object({campaign_id:z.number().int().positive(),sheet_key:z.string().min(1),entry_ids:z.array(z.number().int().positive()).optional()}).safeParse(req.body);
+ if(!p.success)return res.status(400).json({error:'Нужны кампания и лист'});
+ const t=definition(row.template_id);if(!t?.sheets.some(s=>s.key===p.data.sheet_key))return res.status(400).json({error:'В тетради нет такого листа'});
+ const ids=p.data.entry_ids;
+ const entries=db.prepare(`SELECT id,title,content,created_at FROM campaign_entries WHERE campaign_id=? AND category='gm_notes'${ids?` AND id IN (${ids.map(()=>'?').join(',')})`:''} ORDER BY created_at,id`).all(p.data.campaign_id,...(ids??[])) as {id:number;title:string|null;content:string|null;created_at:string}[];
+ if(!entries.length)return res.status(400).json({error:'Переносить нечего'});
+ const answers=JSON.parse(row.answers_json) as WorkbookAnswers;
+ const notes={...((answers[WORKBOOK_NOTES]??{}) as Record<string,unknown>)};
+ const list=Array.isArray(notes[p.data.sheet_key])?[...(notes[p.data.sheet_key] as unknown[])]:[];
+ for(const e of entries){const body=[e.title?.trim(),e.content?.trim()].filter(Boolean).join('\n\n');if(body)list.push({id:randomUUID(),body,at:new Date(e.created_at.replace(' ','T')+'Z').toISOString()});}
+ notes[p.data.sheet_key]=list;const next={...answers,[WORKBOOK_NOTES]:notes};
+ db.transaction(()=>{
+  db.prepare('UPDATE workbook_instances SET answers_json=?,revision=revision+1,updated_at=? WHERE id=?').run(JSON.stringify(next),new Date().toISOString(),row.id);
+  const del=db.prepare('DELETE FROM campaign_entries WHERE id=?');for(const e of entries)del.run(e.id);
+ })();
+ res.json({moved:entries.length,instance:present(instance(req)!)});
+});
 workbooksRouter.post('/instances/:id/upgrade',(req:AuthedRequest,res)=>{
  const row=instance(req);if(!row)return res.status(404).json({error:'Тетрадь не найдена'});
  const p=z.object({revision:z.number().int().positive(),template_id:z.number().int().positive(),mapping:z.record(z.string(),z.string()).optional()}).safeParse(req.body);

@@ -1,7 +1,7 @@
 import {ProjectWorkbooks} from "../components/workbooks/ProjectWorkbooks";
 import { useCompendiumEntries } from "../components/dnd/useCompendiumEntries";
 import { liveEffectEntryIds, withLiveEffects } from "../components/dnd/dndFeatures";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { entityQuery, resourceQuery, useAction, useEntity, useResource, write } from "../data/hooks";
 import { afterWriteAnywhere } from "../data/imperative";
@@ -23,7 +23,6 @@ import { toLocalDateKey, formatDateKeyRu, parseDateKey } from "../utils/date";
 import { copySessionPrep } from "../sessionCopy";
 import { Modal } from "../components/Modal";
 import { MonthCalendar, type CalendarEvent } from "../components/MonthCalendar";
-import { LinkDropZone } from "../components/LinkDropZone";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { CampaignEntryList } from "../components/CampaignEntryList";
 import { WorldExplorationTab } from "../components/WorldExplorationTab";
@@ -71,14 +70,12 @@ import type {
   CampaignDetail,
   CampaignEntry,
   CampaignGroup,
-  CampaignGrouped,
   CampaignType,
   Character,
   ImportantDate,
   PaymentFrequency,
   PaymentType,
   Player,
-  Preproduction,
   RateSplit,
   RosterPlayer,
   SessionStatus,
@@ -86,7 +83,6 @@ import type {
   Setting,
   SettingCalendarEra,
   SettingCycle,
-  StorySecret,
   System,
   CampaignDebt,
   WorldExplorationEntry,
@@ -99,6 +95,9 @@ import { EntityTabWorkspace } from "../components/EntityTabWorkspace";
 import { sessionLabel } from "../sessionLabel";
 import { CampaignRevealList } from "../components/RevealList";
 import { CampaignVesselsTab } from "../components/CampaignVesselsTab";
+import { CampaignPassport } from "../components/campaign/CampaignPassport";
+import { CampaignNow } from "../components/campaign/CampaignNow";
+import { OldNotesFold } from "../components/campaign/OldNotesFold";
 
 const GM_TABS = [
   "Обзор",
@@ -668,9 +667,15 @@ export function CampaignDetailPage() {
           )
         )
       }
-      meta={`${campaign.system_name ?? "система не выбрана"} · ${
-        CAMPAIGN_STATUS_LABELS[campaign.status as keyof typeof CAMPAIGN_STATUS_LABELS] ?? campaign.status
-      }`}
+      // Бумага (спека campaign-paper, доски 41–42): под именем — метки типа
+      // и системы; статус — в фактах «Обзора».
+      paper
+      meta={
+        <span className="paper-ident-tags">
+          <span className="badge tag">{CAMPAIGN_TYPE_OPTIONS.find((o) => o.value === campaign.type)?.label ?? campaign.type}</span>
+          {campaign.system_name && <span className="badge tag">{campaign.system_name}</span>}
+        </span>
+      }
       backdrop={safeBgLayer}
       actions={[{ label: "Архивировать", danger: true, onClick: archiveCampaign }]}
       tabs={tabs}
@@ -808,11 +813,13 @@ export function CampaignDetailPage() {
 
         {tab === "Обзор" && campaign.role !== "player" && (
            <>
-             <OverviewTab campaign={campaign} systems={systems} settingsList={settingsList} sessions={sessions} onSchedule={() => setCreatingDate(toLocalDateKey(new Date()))} />
-             <CrossLinksWizard
-               ownerKind="campaign"
-               ownerId={campaignId}
-               help="Ищет имена сущностей сеттинга и записей компендиума в текстах кампании — и делает их кликабельными. Шаг за шагом, по одному типу цели. Ничего не пишет, пока вы не подтвердите."
+             <OverviewTab
+               campaign={campaign}
+               systems={systems}
+               settingsList={settingsList}
+               sessions={sessions}
+               onSchedule={() => setCreatingDate(toLocalDateKey(new Date()))}
+               onTab={(t) => selectTab(t as (typeof GM_TABS)[number])}
              />
            </>
         )}
@@ -1925,30 +1932,6 @@ function PlayerCharacterTab({ campaignId }: { campaignId: number }) {
   );
 }
 
-const PREPRODUCTION_FIELDS: { key: keyof Preproduction; label: string; help?: string }[] = [
-  {
-    key: "adventure_challenge",
-    label: "Adventure Challenge",
-    help: "Главная проблема, которую предстоит решить в приключении.",
-  },
-  {
-    key: "gameplay_styles",
-    label: "Gameplay styles",
-    help: "Основные предполагаемые активности персонажей в этом приключении.",
-  },
-  {
-    key: "background",
-    label: "Background",
-    help: "Предыстория приключения: что случилось перед ним и способствовало его началу.",
-  },
-  {
-    key: "threads_clues_lore",
-    label: "Threads, clues, and lore",
-    help: "Что связывает между собой происходящее в приключении.",
-  },
-];
-
-// Обзор = Препродакшен (design doc, written before play starts) + Продакшен
 // Player-role overview: "Основное" (editable info) + "Персонажи" (the player's
 // own character card). Same collapsible-section pattern as the GM overview.
 function PlayerOverviewTab({
@@ -2160,41 +2143,48 @@ function PlayerOverviewTab({
 // once it's done) — three phases of the same campaign's life, so the section
 // that's actually relevant right now opens by default while the other two
 // stay collapsed rather than competing for space.
+// «Обзор» кампании — досье на бумаге (спека campaign-paper, Q10–Q18; доски
+// 41–42). Слева обложка и факты, справа «Сейчас», паспорт и приключения;
+// реже нужное — свёртками внизу. «Препродакшен» уехал в паспорт, «Продакшен» —
+// в «Сейчас», «Изображения» — в щелчок по обложке, «Пост-продакшен» — в «Итоги».
 function OverviewTab({
   campaign,
   systems,
   settingsList,
   sessions,
   onSchedule,
+  onTab,
 }: {
   campaign: CampaignDetail;
   systems: System[];
   settingsList: Setting[];
   sessions: SessionSummary[];
-  onSchedule?: () => void;
+  onSchedule: () => void;
+  onTab: (tab: string) => void;
 }) {
   const campaignId = campaign.id;
-  const [editingMain, setEditingMain] = useState(false);
+  const oneshot = campaign.type === "oneshot";
+  const [editing, setEditing] = useState<"main" | "payment" | null>(null);
   const { save, saving } = useCampaignFieldsSave(campaignId);
   const run = useAction();
-  // Навигация внутри «Обзора» (Master–Detail): 7 секций слева.
-  const [ovSel, setOvSel] = useState<{ section: string; item?: string }>({ section: "main" });
   const { allGroups, campaignGroupIds, toggleGroup } = useCampaignGroups(campaignId);
   const [adventuresCount, setAdventuresCount] = useState<number | null>(null);
-  const [form, setForm] = useState({
-    name: campaign.name,
-    type: campaign.type,
-    payment_type: campaign.payment_type,
-    payment_frequency: campaign.payment_frequency,
-    rate_split: campaign.rate_split,
-    session_rate: String(campaign.session_rate ?? 0),
-    currency: campaign.currency,
-    status: campaign.status,
-    system_id: campaign.system_id ? String(campaign.system_id) : "",
-    setting_id: campaign.setting_id ? String(campaign.setting_id) : "",
+  const hideFinance = loadHideFinance();
+  const formFrom = (c: CampaignDetail) => ({
+    name: c.name,
+    type: c.type,
+    payment_type: c.payment_type,
+    payment_frequency: c.payment_frequency,
+    rate_split: c.rate_split,
+    session_rate: String(c.session_rate ?? 0),
+    currency: c.currency,
+    status: c.status,
+    system_id: c.system_id ? String(c.system_id) : "",
+    setting_id: c.setting_id ? String(c.setting_id) : "",
   });
+  const [form, setForm] = useState(() => formFrom(campaign));
   // Загрузка изображения: окно обрезки закрывается сразу, поэтому отказ виден
-  // только плашкой. Раньше он уходил в никуда, и фон просто не менялся.
+  // только плашкой.
   function upload(kind: "background" | "thumbnail", label: string, file: File) {
     const fd = new FormData();
     fd.append("file", file);
@@ -2203,584 +2193,329 @@ function OverviewTab({
     });
   }
   const bgCrop = useImageCrop("background", (file) => upload("background", "Фон кампании", file));
-  const thumbCrop = useImageCrop("thumbnail", (file) => upload("thumbnail", "Тамбнейл кампании", file));
+  const thumbCrop = useImageCrop("thumbnail", (file) => upload("thumbnail", "Обложка кампании", file));
+  const thumbInput = useRef<HTMLInputElement>(null);
+  const bgInput = useRef<HTMLInputElement>(null);
   const [ovConfirmDialog, ovConfirm] = useConfirm();
-  async function deleteBg() {
-    const ok = await ovConfirm({ message: "Удалить фон кампании?", confirmLabel: "Удалить", danger: true });
+  async function removeImage(kind: "background" | "thumbnail") {
+    const what = kind === "background" ? "фон страницы" : "обложку";
+    const ok = await ovConfirm({ message: `Убрать ${what}?`, confirmLabel: "Убрать", danger: true });
     if (!ok) return;
-    await run(labelled("Фон кампании", () => write.del(`/campaigns/${campaignId}/background`)), {
-      affects: campaignFieldsAffects(campaignId),
-    });
-  }
-  async function deleteThumb() {
-    const ok = await ovConfirm({ message: "Удалить тамбнейл?", confirmLabel: "Удалить", danger: true });
-    if (!ok) return;
-    await run(labelled("Тамбнейл кампании", () => write.del(`/campaigns/${campaignId}/thumbnail`)), {
+    await run(labelled(kind === "background" ? "Фон кампании" : "Обложка кампании", () => write.del(`/campaigns/${campaignId}/${kind}`)), {
       affects: campaignFieldsAffects(campaignId),
     });
   }
 
-  function startEdit() {
-    setForm({
-      name: campaign.name,
-      type: campaign.type,
-      payment_type: campaign.payment_type,
-      payment_frequency: campaign.payment_frequency,
-      rate_split: campaign.rate_split,
-      session_rate: String(campaign.session_rate ?? 0),
-      currency: campaign.currency,
-      status: campaign.status,
-      system_id: campaign.system_id ? String(campaign.system_id) : "",
-      setting_id: campaign.setting_id ? String(campaign.setting_id) : "",
-    });
-    setEditingMain(true);
+  function start(which: "main" | "payment") {
+    setForm(formFrom(campaign));
+    setEditing(which);
+  }
+  async function submit() {
+    const patch =
+      editing === "main"
+        ? {
+            name: form.name,
+            type: form.type,
+            status: form.status,
+            system_id: form.system_id ? Number(form.system_id) : null,
+            setting_id: form.setting_id ? Number(form.setting_id) : null,
+          }
+        : {
+            payment_type: form.payment_type,
+            payment_frequency: form.payment_frequency,
+            rate_split: form.rate_split,
+            session_rate: Number(form.session_rate) || 0,
+            currency: form.currency,
+          };
+    // Форма закрывается только после записи: при отказе набранное остаётся.
+    if (await save(patch)) setEditing(null);
   }
 
-  const systemName = systems.find((s) => s.id === campaign.system_id)?.name ?? "—";
-  const settingName = settingsList.find((s) => s.id === campaign.setting_id)?.name ?? "—";
+  const system = systems.find((s) => s.id === campaign.system_id);
+  const setting = settingsList.find((s) => s.id === campaign.setting_id);
+  const held = sessions.filter((s) => s.status === "held").length;
+  const planned = sessions.filter((s) => s.status === "planned").length;
 
-  const rawBgUrl = campaign.background_image_url ?? null;
-  const rawThumbUrl = campaign.thumbnail_image_url ?? null;
-  const bgUrl = rawBgUrl && isSafeImageUrl(rawBgUrl) ? rawBgUrl : null;
+  const rawThumbUrl = campaign.thumbnail_image_url ?? campaign.background_image_url ?? null;
   const thumbUrl = rawThumbUrl && isSafeImageUrl(rawThumbUrl) ? rawThumbUrl : null;
-  const authBgBlob = useAuthenticatedFileUrl(bgUrl);
-  const authThumbBlob = useAuthenticatedFileUrl(thumbUrl);
-  const safeBg = bgUrl?.startsWith("/files/")
-    ? (authBgBlob ? `url("${authBgBlob}")` : undefined)
-    : safeBackgroundImage(bgUrl);
-  const safeThumb = thumbUrl?.startsWith("/files/")
-    ? (authThumbBlob ? `url("${authThumbBlob}")` : undefined)
-    : safeBackgroundImage(thumbUrl);
+  const authThumb = useAuthenticatedFileUrl(thumbUrl?.startsWith("/files/") ? thumbUrl : null);
+  const coverSrc = thumbUrl?.startsWith("/files/") ? authThumb : thumbUrl;
+
+  const paymentSummary =
+    campaign.payment_type === "paid"
+      ? `${campaign.session_rate ?? 0} ${campaign.currency} ${campaign.payment_frequency === "per_month" ? "в месяц" : "за игру"}`
+      : (PAYMENT_TYPE_LABELS[campaign.payment_type] ?? campaign.payment_type).toLowerCase();
+
+  const mainForm = (
+    <div className="campaign-edit-form">
+      <label>
+        <span className="campaign-field-label">Название</span>
+        <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+      </label>
+      <label>
+        <span className="campaign-field-label">Тип</span>
+        <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as CampaignType })}>
+          {CAMPAIGN_TYPE_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+        </select>
+      </label>
+      <label>
+        <span className="campaign-field-label">Система</span>
+        <select value={form.system_id} onChange={(e) => setForm({ ...form, system_id: e.target.value })}>
+          <option value="">—</option>
+          {systems.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
+        </select>
+      </label>
+      <label>
+        <span className="campaign-field-label">Сеттинг</span>
+        <select value={form.setting_id} onChange={(e) => setForm({ ...form, setting_id: e.target.value })}>
+          <option value="">—</option>
+          {settingsList.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
+        </select>
+      </label>
+      <label>
+        <span className="campaign-field-label">Статус</span>
+        <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+          {CAMPAIGN_STATUS_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+        </select>
+      </label>
+      <div className="campaign-actions">
+        <button onClick={() => setEditing(null)} disabled={saving}>Отмена</button>
+        <button className="primary" disabled={saving} onClick={() => void submit()}>{saving ? "Сохранение…" : "Сохранить"}</button>
+      </div>
+    </div>
+  );
+
+  const paymentForm = (
+    <div className="campaign-edit-form">
+      <label>
+        <span className="campaign-field-label">Оплата</span>
+        <select value={form.payment_type} onChange={(e) => setForm({ ...form, payment_type: e.target.value as PaymentType })}>
+          {PAYMENT_TYPE_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+        </select>
+        <span className="muted">Бесплатная — без учёта · Платная — по ставке · Условно — договорная</span>
+      </label>
+      {form.payment_type === "paid" && (
+        <>
+          <label>
+            <span className="campaign-field-label">Периодичность</span>
+            <select value={form.payment_frequency} onChange={(e) => setForm({ ...form, payment_frequency: e.target.value as PaymentFrequency })}>
+              {PAYMENT_FREQUENCY_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+            </select>
+          </label>
+          <label>
+            <span className="campaign-field-label">Тип ставки</span>
+            <select value={form.rate_split} onChange={(e) => setForm({ ...form, rate_split: e.target.value as RateSplit })}>
+              {RATE_SPLIT_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+            </select>
+          </label>
+          <label>
+            <span className="campaign-field-label">
+              Ставка {form.payment_frequency === "per_month" ? "в месяц" : "за сессию"}
+              {form.rate_split === "per_person" ? " (с человека)" : " (со стола)"}
+            </span>
+            <input type="number" value={form.session_rate} onChange={(e) => setForm({ ...form, session_rate: e.target.value })} placeholder="500" />
+          </label>
+        </>
+      )}
+      <label>
+        <span className="campaign-field-label">Валюта</span>
+        <input value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} />
+      </label>
+      <div className="campaign-actions">
+        <button onClick={() => setEditing(null)} disabled={saving}>Отмена</button>
+        <button className="primary" disabled={saving} onClick={() => void submit()}>{saving ? "Сохранение…" : "Сохранить"}</button>
+      </div>
+    </div>
+  );
 
   return (
-    <EntityTabWorkspace
-      sections={[
-        { id: "main", label: "Основное" },
-        { id: "adventures", label: "Приключения", count: adventuresCount ?? 0 },
-        { id: "pre", label: "Препродакшен" },
-        { id: "prod", label: "Продакшен" },
-        ...(sessions.some((s) => s.status === "held") ? [{ id: "post", label: "Пост-продакшен" }] : []),
-        { id: "images", label: "Изображения" },
-        { id: "present", label: "Заглавное представление" },
-      ]}
-      selection={ovSel}
-      onSelect={setOvSel}
-      workspaceKey={campaignId}
-    >
-      {ovSel.section === "main" && (
-      <details className="card res-group" open>
-        <summary className="res-group__band">
-          <span className="res-group__title">Основное</span>
-        </summary>
-        <div className="res-group__body" style={{ padding: 12, gap: 8, display: "flex", flexDirection: "column" }}>
-          {!editingMain ? (
-            <div className="stack">
-              <table className="detail-table">
-                <tbody>
-                  <tr><td className="detail-label">Название</td><td><span className="detail-value-mono">{campaign.name}</span></td></tr>
-                  <tr><td className="detail-label">Тип</td><td><span className="detail-value-mono">{CAMPAIGN_TYPE_OPTIONS.find((o) => o.value === campaign.type)?.label ?? campaign.type}</span></td></tr>
-                  <tr><td className="detail-label">Система</td><td><span className="detail-value-mono">{systemName}</span></td></tr>
-                  <tr><td className="detail-label">Сеттинг</td><td><span className="detail-value-mono">{settingName}</span></td></tr>
-                  <tr><td className="detail-label">Статус</td><td><span className="detail-value-mono">{CAMPAIGN_STATUS_LABELS[campaign.status as keyof typeof CAMPAIGN_STATUS_LABELS] ?? campaign.status}</span></td></tr>
-                  <tr><td className="detail-label">Оплата</td><td><span className="detail-value-mono">{PAYMENT_TYPE_LABELS[campaign.payment_type] ?? campaign.payment_type}</span></td></tr>
-                  {campaign.payment_type === "paid" && (
-                    <>
-                      <tr><td className="detail-label">Периодичность</td><td><span className="detail-value-mono">{PAYMENT_FREQUENCY_LABELS[campaign.payment_frequency] ?? campaign.payment_frequency}</span></td></tr>
-                      <tr><td className="detail-label">Тип ставки</td><td><span className="detail-value-mono">{RATE_SPLIT_LABELS[campaign.rate_split] ?? campaign.rate_split}</span></td></tr>
-                      <tr><td className="detail-label">Ставка</td><td><span className="detail-value-mono">{campaign.session_rate ?? 0} {campaign.currency}</span></td></tr>
-                    </>
-                  )}
-                </tbody>
-              </table>
-              <div className="campaign-actions">
-                <button onClick={startEdit}>Редактировать</button>
-              </div>
-            </div>
-          ) : (
-            <div className="campaign-edit-form">
-              <label>
-                <span className="campaign-field-label">Название</span>
-                <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-              </label>
-              <label>
-                <span className="campaign-field-label">Тип</span>
-                <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as CampaignType })}>
-                  {CAMPAIGN_TYPE_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
-                </select>
-              </label>
-              <label>
-                <span className="campaign-field-label">Система</span>
-                <select value={form.system_id} onChange={(e) => setForm({ ...form, system_id: e.target.value })}>
-                  <option value="">—</option>
-                  {systems.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
-                </select>
-              </label>
-              <label>
-                <span className="campaign-field-label">Сеттинг</span>
-                <select value={form.setting_id} onChange={(e) => setForm({ ...form, setting_id: e.target.value })}>
-                  <option value="">—</option>
-                  {settingsList.map((s) => (<option key={s.id} value={s.id}>{s.name}</option>))}
-                </select>
-              </label>
-              <label>
-                <span className="campaign-field-label">Статус</span>
-                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-                  {CAMPAIGN_STATUS_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
-                </select>
-              </label>
-              <label>
-                <span className="campaign-field-label">Оплата</span>
-                <select value={form.payment_type} onChange={(e) => setForm({ ...form, payment_type: e.target.value as PaymentType })}>
-                  {PAYMENT_TYPE_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
-                </select>
-                <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Бесплатная — без учёта · Платная — по ставке · Условно — договорная</span>
-              </label>
-              {form.payment_type === "paid" && (
-                <>
-                  <label>
-                    <span className="campaign-field-label">Периодичность</span>
-                    <select value={form.payment_frequency} onChange={(e) => setForm({ ...form, payment_frequency: e.target.value as PaymentFrequency })}>
-                      {PAYMENT_FREQUENCY_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
-                    </select>
-                  </label>
-                  <label>
-                    <span className="campaign-field-label">Тип ставки</span>
-                    <select value={form.rate_split} onChange={(e) => setForm({ ...form, rate_split: e.target.value as RateSplit })}>
-                      {RATE_SPLIT_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
-                    </select>
-                  </label>
-                  <label>
-                    <span className="campaign-field-label">Ставка{" "}
-                      {form.payment_frequency === "per_month" ? "в месяц" : "за сессию"}
-                      {form.rate_split === "per_person" ? " (с человека)" : " (со стола)"}</span>
-                    <input type="number" value={form.session_rate} onChange={(e) => setForm({ ...form, session_rate: e.target.value })} placeholder="500" />
-                    <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>С человека — сумма × игроков, со стола — фикс за игру</span>
-                  </label>
-                </>
-              )}
-              <label>
-                <span className="campaign-field-label">Валюта</span>
-                <input value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} />
-              </label>
-              <div className="campaign-actions">
-                <button onClick={() => setEditingMain(false)} disabled={saving}>Отмена</button>
-                <button className="primary" disabled={saving} onClick={async () => {
-                  // Форма закрывается только после записи: при отказе набранное остаётся.
-                  const saved = await save({
-                    name: form.name,
-                    type: form.type,
-                    payment_type: form.payment_type,
-                    payment_frequency: form.payment_frequency,
-                    rate_split: form.rate_split,
-                    session_rate: Number(form.session_rate) || 0,
-                    currency: form.currency,
-                    status: form.status,
-                    system_id: form.system_id ? Number(form.system_id) : null,
-                    setting_id: form.setting_id ? Number(form.setting_id) : null,
-                  });
-                  if (saved) setEditingMain(false);
-                }}>{saving ? "Сохранение…" : "Сохранить"}</button>
-              </div>
-            </div>
+    <div className="dossier campaign-overview">
+      <aside className="dossier__aside">
+        {/* Обложка — щелчком; фон страницы — строкой под ней (Q10). */}
+        <button
+          type="button"
+          className="dossier__portrait dossier__portrait--cover"
+          title="Сменить обложку"
+          onClick={() => thumbInput.current?.click()}
+        >
+          {coverSrc ? <img src={coverSrc} alt={`Обложка: ${campaign.name}`} /> : <span className="dossier__portrait-empty">Обложка</span>}
+          <span className="dossier__portrait-hint">Сменить обложку</span>
+        </button>
+        <input ref={thumbInput} hidden type="file" accept={IMAGE_ACCEPT} onChange={(e) => thumbCrop.onSelect(e.target.files?.[0] ?? null)} />
+        <input ref={bgInput} hidden type="file" accept={IMAGE_ACCEPT} onChange={(e) => bgCrop.onSelect(e.target.files?.[0] ?? null)} />
+        <p className="campaign-overview__images muted">
+          {campaign.thumbnail_image_url && (
+            <>
+              <button type="button" className="paper-more" onClick={() => void removeImage("thumbnail")}>убрать обложку</button>
+              {" · "}
+            </>
           )}
-
-          <div style={{ marginTop: 8 }}>
-            <span className="campaign-field-label" style={{ fontSize: "var(--fs-meta)" }}>Группы кампаний</span>
-            <span className="muted" style={{ fontSize: "var(--fs-meta)", marginLeft: 6 }}>папки в списке кампаний ·</span> <Link to="/campaigns" style={{ fontSize: "var(--fs-meta)" }}>Настроить группы →</Link>
-            {allGroups.length > 0 ? (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+          фон страницы:{" "}
+          <button type="button" className="paper-more" onClick={() => bgInput.current?.click()} title={IMAGE_HINT}>
+            {campaign.background_image_url ? "сменить" : "задать"}
+          </button>
+          {campaign.background_image_url && (
+            <>
+              {" · "}
+              <button type="button" className="paper-more" onClick={() => void removeImage("background")}>убрать</button>
+            </>
+          )}
+        </p>
+        {thumbCrop.modal}
+        {bgCrop.modal}
+        <dl className="paper-facts">
+          <div>
+            <dt className="paper-label">Тип</dt>
+            <dd>{CAMPAIGN_TYPE_OPTIONS.find((o) => o.value === campaign.type)?.label ?? campaign.type}</dd>
+          </div>
+          <div>
+            <dt className="paper-label">Система</dt>
+            <dd>{system ? <Link to={`/systems/${system.id}`}>{system.name}</Link> : "—"}</dd>
+          </div>
+          <div>
+            <dt className="paper-label">Сеттинг</dt>
+            <dd>{setting ? <Link to={`/settings/${setting.id}`}>{setting.name} ›</Link> : "—"}</dd>
+          </div>
+          <div>
+            <dt className="paper-label">Статус</dt>
+            <dd>{CAMPAIGN_STATUS_LABELS[campaign.status as keyof typeof CAMPAIGN_STATUS_LABELS] ?? campaign.status}</dd>
+          </div>
+          <div>
+            <dt className="paper-label">{oneshot ? "Прогонов" : "Сессий"}</dt>
+            <dd>
+              {held} сыграно{planned > 0 ? ` · ${planned} впереди` : ""}
+            </dd>
+          </div>
+          {allGroups.length > 0 && (
+            <div>
+              <dt className="paper-label">Группы</dt>
+              <dd className="campaign-overview__groups">
                 {allGroups.map((g) => {
                   const isIn = campaignGroupIds.includes(g.id);
                   return (
-                    <label
-                      key={g.id}
-                      className={`campaign-group-chip${isIn ? " is-in" : ""}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isIn}
-                        onChange={() => void toggleGroup(g.id, isIn)}
-                      />
+                    <label key={g.id} className={`campaign-group-chip${isIn ? " is-in" : ""}`}>
+                      <input type="checkbox" checked={isIn} onChange={() => void toggleGroup(g.id, isIn)} />
                       {g.name}
                     </label>
                   );
                 })}
-              </div>
-            ) : (
-              <div className="muted" style={{ marginTop: 4 }}>Групп пока нет — создайте на странице кампаний.</div>
-            )}
-          </div>
-        </div>
-      </details>
-
-      )}
-      {ovSel.section === "adventures" && (
-      <details className="card res-group">
-        <summary className="res-group__band">
-          <span className="res-group__title">Приключения</span>
-          {adventuresCount != null && <span className="res-group__count" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>{adventuresCount}</span>}
-        </summary>
-        <div className="res-group__body" style={{ padding: 12 }}>
-          <CampaignAdventuresCard campaignId={campaign.id} settingId={campaign.setting_id} onCount={setAdventuresCount} />
-        </div>
-      </details>
-      )}
-      {ovSel.section === "pre" && (
-      <details className="card res-group">
-        <summary className="res-group__band">
-          <span className="res-group__title">Препродакшен</span>
-        </summary>
-        <div className="res-group__body" style={{ padding: 12 }}>
-          <PreproductionTab campaign={campaign} systems={systems} settingsList={settingsList} />
-        </div>
-      </details>
-      )}
-      {ovSel.section === "prod" && (
-      <details className="card res-group" open>
-        <summary className="res-group__band">
-          <span className="res-group__title">Продакшен</span>
-          <span className="res-group__count" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>{campaignGroupIds.length} из {allGroups.length} групп</span>
-        </summary>
-        <div className="res-group__body" style={{ padding: 12 }}>
-          <ProductionDashboard campaign={campaign} sessions={sessions} onSchedule={onSchedule} />
-        </div>
-      </details>
-      )}
-
-      {ovSel.section === "post" && <PostProductionSection campaign={campaign} sessions={sessions} />}
-
-      {ovSel.section === "images" && (
-      <details className="card res-group">
-        <summary className="res-group__band">
-          <span className="res-group__title">Изображения</span>
-        </summary>
-        <div className="res-group__body" style={{ padding: 12 }}>
-          <div className="row" style={{ gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
-          <div style={{ flex: "1 1 280px", minWidth: 260 }}>
-            <div className="muted" style={{ marginBottom: 6, fontSize: "var(--fs-meta)" }}>Фон страницы — на всю ширину, приглушён на 30 % (как в плитке):</div>
-            {safeBg ? (
-              <div className="campaign-tile-cover cover-halftone" style={{ border: "1px solid var(--line)", marginBottom: 8, aspectRatio: "16 / 10", background: "var(--paper-2)" }}>
-                <div className="cover-art cover-photo">
-                  <div className="cover-art-image" style={{ backgroundImage: safeBg }} aria-hidden="true" />
-                </div>
-                <div className="campaign-tile-scrim" style={{ opacity: 0.35 }} />
-              </div>
-            ) : (
-              <div className="campaign-tile-cover campaign-card-band zine-grain" style={{ border: "1px solid var(--line)", marginBottom: 8, aspectRatio: "16 / 10" }} aria-hidden="true" />
-            )}
-            <label>
-              Заменить фон
-              <input type="file" accept={IMAGE_ACCEPT} onChange={(e) => bgCrop.onSelect(e.target.files?.[0] ?? null)} />
-              <span className="muted image-hint">{IMAGE_HINT} · Рекомендуем 1920×1080, до 15MB</span>
-            </label>
-            {safeBg && <button className="danger comp-mini" style={{ marginTop: 6 }} onClick={deleteBg}>Удалить фон</button>}
-            {bgCrop.modal}
-          </div>
-          <div style={{ flex: "1 1 280px", minWidth: 260 }}>
-            <div className="muted" style={{ marginBottom: 6, fontSize: "var(--fs-meta)" }}>Тамбнейл — 16×10, так в сетке «Кампании» и на Главной:</div>
-            {safeThumb ? (
-              <div className="card campaign-tile" style={{ padding: 0, overflow: "hidden", marginBottom: 8 }}>
-                <div className="campaign-tile-cover cover-halftone">
-                  <div className="cover-art cover-photo">
-                    <div className="cover-art-image" style={{ backgroundImage: safeThumb }} aria-hidden="true" />
-                  </div>
-                  <div className="campaign-tile-scrim" />
-                  <h3 className="campaign-tile-name" style={{ fontSize: "var(--fs-h3)" }}>{campaign.name}</h3>
-                </div>
-                <div className="campaign-tile-meta">
-                  <div className="campaign-tile-system" style={{ fontSize: "var(--fs-meta)" }}>{systems.find((s) => s.id === campaign.system_id)?.name ?? "система не выбрана"}</div>
-                  <div className="campaign-tile-next" style={{ fontSize: "var(--fs-meta)" }}><span className="campaign-tile-next-mark" aria-hidden="true" /><span>превью 16×10</span></div>
-                </div>
-              </div>
-            ) : (
-              <div className="card campaign-tile" style={{ padding: 0, overflow: "hidden", marginBottom: 8 }}>
-                <div className="campaign-tile-cover campaign-card-band zine-grain" style={{ aspectRatio: "16 / 10" }} aria-hidden="true" />
-                <div className="campaign-tile-meta"><span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Без тамбнейла — показывается полоса темы</span></div>
-              </div>
-            )}
-            <label>
-              Заменить тамбнейл
-              <input type="file" accept={IMAGE_ACCEPT} onChange={(e) => thumbCrop.onSelect(e.target.files?.[0] ?? null)} />
-              <span className="muted image-hint">{IMAGE_HINT}</span>
-            </label>
-            {safeThumb && <button className="danger comp-mini" style={{ marginTop: 6 }} onClick={deleteThumb}>Удалить тамбнейл</button>}
-            {thumbCrop.modal}
-          </div>
-        </div>
-        </div>
-      </details>
-      )}
-      {ovSel.section === "present" && (
-      <details className="card res-group">
-        <summary className="res-group__band">
-          <span className="res-group__title">Заглавное представление</span>
-        </summary>
-        <div className="res-group__body" style={{ padding: 12 }}>
-          <p className="muted" style={{ fontSize: "var(--fs-meta)", maxWidth: "62ch" }}>
-            Заглушка на второй экран: показывается до первого представления сцены и по кнопке из пульта.
-            Тот же конструктор, что у сцен, — фон, слои, переход и титр.
-          </p>
-          <PresentationEditor owner={{ kind: "campaign", campaignId: campaign.id, campaignName: campaign.name }} />
-        </div>
-      </details>
-      )}
-      {ovConfirmDialog}
-    </EntityTabWorkspace>
-  );
-}
-
-// A quick "what's the state of this campaign right now" glance: the next
-// planned session, the last couple of chronicle entries, and how many
-// secrets are still unrevealed — everything a GM might otherwise have to
-// visit three different tabs to piece together. Deliberately lighter than
-// Сессии (the full session index) — this is a summary, not a duplicate.
-function ProductionDashboard({ campaign, sessions, onSchedule }: { campaign: CampaignDetail; sessions: SessionSummary[]; onSchedule?: () => void }) {
-  const secrets = useResource<CampaignGrouped<StorySecret>>(campaignPaths.secrets(campaign.id)).data;
-  const secretsCount = secrets
-    ? [...secrets.own, ...secrets.groups.flatMap((g) => g.items)].filter((s) => s.state?.revealed !== 1).length
-    : null;
-
-  const today = toLocalDateKey();
-  const nextSession = useMemo(() => sessions
-    .filter((s) => s.status === "planned" && s.date >= today)
-    .sort((a, b) => a.date.localeCompare(b.date))[0], [sessions, today]);
-  const recentChronicle = useMemo(() => sessions
-    .filter((s) => s.status === "held" && s.notes_text)
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 2), [sessions]);
-
-  return (
-    <div className="stack">
-      <div className="card stack">
-        <span className="campaign-field-label">Ближайшая сессия</span>
-        {nextSession ? (
-          <Link to={`/sessions/${nextSession.id}`} style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
-            {nextSession.date} — {sessionLabel(nextSession)}
-          </Link>
-        ) : (
-          <EmptyState
-            title="Сессий не запланировано"
-            hint="Время наметить следующую игру — здесь появится ближайшая сессия."
-            action={<button className="primary" onClick={() => onSchedule?.()}>Запланировать сессию</button>}
-          />
-        )}
-      </div>
-      <div className="card stack">
-        <span className="campaign-field-label">Недавние события</span>
-        {recentChronicle.length > 0 ? (
-          recentChronicle.map((s) => (
-            <div key={s.id} className="stack" style={{ gap: 2 }}>
-              <Link to={`/sessions/${s.id}`}>
-                {s.date} — {sessionLabel(s)}
-              </Link>
-              <p className="muted reading-text" style={{ whiteSpace: "pre-wrap" }}>
-                <MentionText text={s.notes_text ?? ""} />
-              </p>
+              </dd>
             </div>
-          ))
-        ) : (
-          <span className="muted">Пока нет записанных событий — появятся из «Хроники игр».</span>
+          )}
+        </dl>
+        {editing !== "main" && (
+          <button type="button" className="paper-more" onClick={() => start("main")}>
+            Править основное ›
+          </button>
         )}
+      </aside>
+
+      <div className="dossier__main">
+        {editing === "main" && mainForm}
+        <CampaignNow
+          campaignId={campaignId}
+          oneshot={oneshot}
+          sessions={sessions}
+          onSchedule={onSchedule}
+          onSecrets={() => onTab("Тайны и зацепки")}
+        />
+        <CampaignPassport campaign={campaign} />
+        <section className="paper-groups">
+          <h2 className="paper-group__head">
+            Приключения {adventuresCount != null && <span className="paper-group__count">· {adventuresCount}</span>}
+          </h2>
+          <CampaignAdventuresCard campaignId={campaign.id} settingId={campaign.setting_id} onCount={setAdventuresCount} />
+        </section>
+
+        {!hideFinance && (
+          <details className="paper-fold" open={editing === "payment" || undefined}>
+            <summary>
+              Оплата <span className="paper-fold__count">· {paymentSummary}</span>
+            </summary>
+            <div className="paper-fold__body">
+              {editing === "payment" ? (
+                paymentForm
+              ) : (
+                <>
+                  <dl className="paper-facts">
+                    <div>
+                      <dt className="paper-label">Оплата</dt>
+                      <dd>{PAYMENT_TYPE_LABELS[campaign.payment_type] ?? campaign.payment_type}</dd>
+                    </div>
+                    {campaign.payment_type === "paid" && (
+                      <>
+                        <div>
+                          <dt className="paper-label">Периодичность</dt>
+                          <dd>{PAYMENT_FREQUENCY_LABELS[campaign.payment_frequency] ?? campaign.payment_frequency}</dd>
+                        </div>
+                        <div>
+                          <dt className="paper-label">Ставка</dt>
+                          <dd>
+                            {campaign.session_rate ?? 0} {campaign.currency} · {RATE_SPLIT_LABELS[campaign.rate_split] ?? campaign.rate_split}
+                          </dd>
+                        </div>
+                      </>
+                    )}
+                  </dl>
+                  <button type="button" className="paper-more" onClick={() => start("payment")}>
+                    Править оплату ›
+                  </button>
+                </>
+              )}
+            </div>
+          </details>
+        )}
+
+        <ResultsFold campaign={campaign} sessions={sessions} />
+        <OldNotesFold campaignId={campaignId} settingId={campaign.setting_id} />
+
+        <details className="paper-fold">
+          <summary>Заглавное представление</summary>
+          <div className="paper-fold__body">
+            <p className="muted">
+              Заглушка на второй экран: показывается до первого представления сцены и по кнопке из пульта.
+            </p>
+            <PresentationEditor owner={{ kind: "campaign", campaignId: campaign.id, campaignName: campaign.name }} />
+          </div>
+        </details>
+        <details className="paper-fold">
+          <summary>Связать имена</summary>
+          <div className="paper-fold__body">
+            <CrossLinksWizard
+              ownerKind="campaign"
+              ownerId={campaignId}
+              help="Ищет имена сущностей сеттинга и записей компендиума в текстах кампании — и делает их кликабельными. Шаг за шагом, по одному типу цели. Ничего не пишет, пока вы не подтвердите."
+            />
+          </div>
+        </details>
       </div>
-      <div className="card row" style={{ justifyContent: "space-between" }}>
-        <span><span className="campaign-field-label" style={{ display: "inline", marginRight: 6 }}>Нераскрытых тайн:</span> <span style={{ fontFamily: "var(--font-mono)" }}>{secretsCount ?? "…"}</span></span>
-      </div>
-      {campaign.setting_id && (
-        <div className="row">
-          <Link to={`/settings/${campaign.setting_id}?tab=${encodeURIComponent("Население")}`}>
-            Население сеттинга →
-          </Link>
-          <Link to={`/settings/${campaign.setting_id}?tab=${encodeURIComponent("География")}`}>
-            География сеттинга →
-          </Link>
-        </div>
-      )}
+      {ovConfirmDialog}
     </div>
   );
 }
 
-function PostProductionSection({ campaign, sessions }: { campaign: CampaignDetail; sessions: SessionSummary[] }) {
-  const post = useResource<CampaignEntry[]>(campaignPaths.entries(campaign.id, "post_production"));
-  const postCount = post.data ? post.data.length : post.error ? 0 : null;
-  const hasHeld = sessions.some((s) => s.status === "held");
-  if (postCount === null) {
-    return (
-      <details className="card res-group">
-        <summary className="res-group__band">
-          <span className="res-group__title">Пост-продакшен</span>
-        </summary>
-        <div className="res-group__body" style={{ padding: 12 }}><span className="muted">Загрузка…</span></div>
-      </details>
-    );
-  }
-  if (!hasHeld && postCount === 0) return null;
+// «Итоги» (бывший «Пост-продакшен», Q15): свободные записи итогов кампании.
+// Видны после первой сыгранной сессии или когда записи уже есть.
+function ResultsFold({ campaign, sessions }: { campaign: CampaignDetail; sessions: SessionSummary[] }) {
+  const post = useResource<CampaignEntry[]>(campaignPaths.entries(campaign.id, "post_production")).data;
+  if (!post) return null;
+  if (!sessions.some((s) => s.status === "held") && post.length === 0) return null;
   return (
-    <details className="card res-group">
-      <summary className="res-group__band">
-        <span className="res-group__title">Пост-продакшен</span>
+    <details className="paper-fold">
+      <summary>
+        Итоги <span className="paper-fold__count">· {post.length}</span>
       </summary>
-      <div className="res-group__body" style={{ padding: 12, gap: 8, display: "flex", flexDirection: "column" }}>
-        <p className="muted" style={{ maxWidth: "62ch" }}>
-          Итоги кампании: что получилось, что нет, эпилоги персонажей, несбывшиеся сюжетные
-          линии, идеи для сиквела — свободные записи, как и в остальных списках заметок.
-        </p>
+      <div className="paper-fold__body">
+        <p className="muted">Что получилось, что нет, эпилоги персонажей, несбывшиеся линии, идеи для сиквела.</p>
         <CampaignEntryList
           campaignId={campaign.id}
           category="post_production"
-          addLabel="+ Добавить запись"
+          addLabel="+ Запись"
           emptyLabel="Итогов пока нет."
           defaultSettingId={campaign.setting_id ?? undefined}
         />
       </div>
     </details>
-  );
-}
-
-function PreproductionTab({
-  campaign,
-  systems,
-  settingsList,
-}: {
-  campaign: CampaignDetail;
-  systems: System[];
-  settingsList: Setting[];
-}) {
-  const campaignId = campaign.id;
-  const run = useAction();
-  const originalPre = useResource<Preproduction>(campaignPaths.preproduction(campaignId)).data ?? null;
-  // Черновик живёт только в правке; в чтении показывается прочитанное слоем,
-  // поэтому правка из соседнего окна видна без перезагрузки.
-  const [draft, setDraft] = useState<Preproduction | null>(null);
-  const [editMode, setEditMode] = useState(false);
-  const [initialized, setInitialized] = useState(false);
-  const pre = editMode ? (draft ?? originalPre) : originalPre;
-  const setPre = setDraft;
-
-  useEffect(() => {
-    setInitialized(false);
-  }, [campaignId]);
-
-  useEffect(() => {
-    if (originalPre && !initialized) {
-      const empty =
-        PREPRODUCTION_FIELDS.every((f) => !originalPre[f.key]) && !originalPre.adventure_stakes_hooks;
-      setDraft(originalPre);
-      setEditMode(empty);
-      setInitialized(true);
-    }
-  }, [originalPre, initialized]);
-
-  if (!pre) return <p className="muted">Загрузка…</p>;
-
-  function startEdit() {
-    setDraft(originalPre);
-    setEditMode(true);
-  }
-
-  async function save() {
-    if (!pre) return;
-    const saved = await run(
-      labelled("Препродакшен", () => write.put(`/campaigns/${campaignId}/preproduction`, pre).then(() => true)),
-      { affects: [{ path: campaignPaths.preproduction(campaignId) }] }
-    );
-    // Правка остаётся открытой с набранным, если запись не прошла.
-    if (!saved) return;
-    if (originalPre) {
-      for (const f of PREPRODUCTION_FIELDS) {
-        syncMentionLinks(
-          "campaign",
-          campaignId,
-          (originalPre[f.key] as string) ?? "",
-          (pre[f.key] as string) ?? ""
-        );
-      }
-      syncMentionLinks(
-        "campaign",
-        campaignId,
-        originalPre.adventure_stakes_hooks ?? "",
-        pre.adventure_stakes_hooks ?? ""
-      );
-    }
-    setEditMode(false);
-  }
-
-  const system = systems.find((s) => s.id === campaign.system_id);
-  const setting = settingsList.find((s) => s.id === campaign.setting_id);
-
-  return (
-    <div className="stack">
-      <div className="card row">
-        <span className="row" style={{ gap: 4 }}>
-          <span className="muted">Система:</span>
-          {system ? <Link to={`/systems/${system.id}`}>{system.name}</Link> : <span className="muted">—</span>}
-        </span>
-        <span className="row" style={{ gap: 4 }}>
-          <span className="muted">Сеттинг:</span>
-          {setting ? <Link to={`/settings/${setting.id}`}>{setting.name}</Link> : <span className="muted">—</span>}
-        </span>
-      </div>
-
-      {!editMode ? (
-        <div className="stack">
-          {PREPRODUCTION_FIELDS.map(
-            (f) =>
-              pre[f.key] && (
-                <div key={f.key} className="card stack">
-                  <span className="campaign-field-label" style={{ color: "var(--ink)" }}>{f.label}</span>
-                  <div className="reading-text" style={{ whiteSpace: "pre-wrap" }}>
-                    <MentionText text={pre[f.key] as string} />
-                  </div>
-                </div>
-              )
-          )}
-          {pre.adventure_stakes_hooks && (
-            <div className="card stack">
-              <span className="campaign-field-label" style={{ color: "var(--ink)" }}>Adventure Stakes and Hooks</span>
-              <div className="reading-text" style={{ whiteSpace: "pre-wrap" }}>
-                <MentionText text={pre.adventure_stakes_hooks} />
-              </div>
-            </div>
-          )}
-          <LinkDropZone entityType="preproduction" entityId={campaignId} title="Крючки (персонажи)" />
-          <button className="primary" onClick={startEdit} style={{ alignSelf: "flex-start" }}>
-            Редактировать
-          </button>
-        </div>
-      ) : (
-        <div className="stack">
-          {PREPRODUCTION_FIELDS.map((f) => (
-            <div key={f.key} className="card stack">
-              <span className="campaign-field-label" style={{ color: "var(--ink)" }}>{f.label}</span>
-              {f.help && <span className="muted" style={{ fontSize: "11px", maxWidth: "62ch" }}>{f.help}</span>}
-              <MentionTextarea
-                value={pre[f.key] as string}
-                onChange={(v) => setPre({ ...pre, [f.key]: v })}
-                rows={3}
-              />
-            </div>
-          ))}
-          <div className="card stack">
-            <span className="campaign-field-label" style={{ color: "var(--ink)" }}>Adventure Stakes and Hooks</span>
-            <span className="muted" style={{ fontSize: "11px", maxWidth: "62ch" }}>
-              Как эта проблема связана с героями приключения. Перетащите сюда персонажей игроков
-              из поиска — появится связь в разделе «Отношения» персонажа.
-            </span>
-            <MentionTextarea
-              value={pre.adventure_stakes_hooks}
-              onChange={(v) => setPre({ ...pre, adventure_stakes_hooks: v })}
-              rows={3}
-            />
-            <LinkDropZone entityType="preproduction" entityId={campaignId} title="Крючки (персонажи)" />
-          </div>
-          <div className="row">
-            <button className="primary" onClick={save}>
-              Сохранить
-            </button>
-            <button onClick={() => setEditMode(false)}>Отмена</button>
-          </div>
-        </div>
-      )}
-    </div>
   );
 }
 
