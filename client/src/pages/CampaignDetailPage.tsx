@@ -1,7 +1,7 @@
 import type { InstanceSummary } from "../components/workbooks/model";
 import { useCompendiumEntries } from "../components/dnd/useCompendiumEntries";
 import { liveEffectEntryIds, withLiveEffects } from "../components/dnd/dndFeatures";
-import { useMemo, useRef, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { entityQuery, resourceQuery, useAction, useEntity, useResource, write } from "../data/hooks";
 import { afterWriteAnywhere } from "../data/imperative";
@@ -87,6 +87,7 @@ import type {
   WorldExplorationEntry,
 } from "../types";
 import { Timeline } from "../components/Timeline";
+import { SettingChronicleEventRow } from "../components/SettingChronicleEventRow";
 import { SettingCyclePanel } from "../components/setting/SettingCyclePanel";
 import { SettingCycles } from "../components/SettingCycles";
 import { PresentationEditor } from "../components/presentation/PresentationEditor";
@@ -565,7 +566,7 @@ export function CampaignDetailPage() {
       items: [
         { label: "Редактировать", onClick: () => openEditEventModal(ev) },
         isSettingEvent(ev.id)
-          ? { label: "Скрыть у кампании", onClick: () => deleteCalendarEvent(ev.id) }
+          ? { label: "Убрать из кампании", onClick: () => deleteCalendarEvent(ev.id) }
           : { label: "Удалить", danger: true, onClick: () => deleteCalendarEvent(ev.id) },
       ],
     });
@@ -1175,57 +1176,47 @@ export function CampaignDetailPage() {
                   </div>
                   {worldFiltered.length === 0 && sortedCalendarEvents.length > 0 ? <p className="muted">Ничего не найдено.</p> : null}
                   <div className="stack">
-                    {worldFiltered.map((ev) => {
-                      const expanded = expandedEvents.has(ev.id);
+                    {worldFiltered.map((ev, i) => {
+                      // Как в хронике сеттинга: эпохи заголовками, строка — дата и название.
+                      const eraOf = (year: number) => eras.filter((e) => e.start_year <= year).pop();
+                      const era = eraOf(ev.inworld_year);
+                      const prev = i > 0 ? eraOf(worldFiltered[i - 1].inworld_year) : undefined;
+                      const world = isSettingEvent(ev.id);
                       return (
-                        <div key={ev.id} className="stack" style={{ gap: 2 }}>
-                          <div className="row" style={{ justifyContent: "space-between" }}>
-                            <span className="row" style={{ alignItems: "center" }}>
-                              {ev.description && (
-                                <button style={{ padding: "2px 6px" }} onClick={() => toggleEventExpanded(ev.id)}>
-                                  {expanded ? "▾" : "▸"}
-                                </button>
-                              )}
-                              <span className="row chronicle-row" style={{ alignItems: "center" }}>
-                                <span className="chronicle-date">{calendar ? formatEventDate(ev.inworld_year, ev.inworld_month, ev.inworld_day, calendar.months) : `${ev.inworld_year}.${ev.inworld_month}.${ev.inworld_day}`}</span>
-                                <span className={`chronicle-status is-${ev.status}`}>{ev.status === "cancelled" ? "Отменено" : ev.status === "upcoming" ? "Предстоит" : "Случилось"}</span>
-                                <span className="chronicle-title">{ev.title}</span>
-                                {isSettingEvent(ev.id) && <span className="chronicle-source">мир</span>}
-                              </span>
-                            </span>
-                            <div className="row" style={{ gap: "var(--sp-4)", alignItems: "center" }}>
-                              <button
-                                onClick={() => toggleEventImportant(ev)}
-                                title={ev.important ? "Убрать из избранного" : "В избранное"}
-                                className={`comp-mini ${ev.important ? "primary" : ""}`}
-                                style={{ padding: "2px 6px", fontSize: "var(--fs-meta)", lineHeight: 1 }}
-                              >
-                                {ev.important ? "★" : "☆"}
-                              </button>
-                              <button className="comp-mini" onClick={() => openEditEventModal(ev)}>Редактировать</button>
-                              {isSettingEvent(ev.id) ? (
-                                <button className="comp-mini" onClick={() => deleteCalendarEvent(ev.id)} title="Событие мира — скрыть у этой кампании">
-                                  Скрыть
-                                </button>
-                              ) : (
-                                <button className="comp-mini danger" onClick={() => deleteCalendarEvent(ev.id)}>✕</button>
-                              )}
-                              <button className="comp-mini" onClick={() => { setTimelineFocus({ year: ev.inworld_year, month: ev.inworld_month, day: ev.inworld_day }); axisRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }} title="На оси">Ось</button>
-                              <button className="comp-mini" onClick={() => { setCalendarFocus({ year: ev.inworld_year, month: ev.inworld_month }); calendarRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }} title="На календаре">Календарь</button>
-                            </div>
-                          </div>
-                          {expanded && ev.description && (
-                            <div className="chronicle-row__expanded reading-text" style={{ whiteSpace: "pre-wrap" }}>
-                              <MentionText text={ev.description} />
+                        <Fragment key={ev.id}>
+                          {era && era !== prev && (
+                            <div className="chronicle-era">
+                              {era.name} <span>· с {era.start_year} года</span>
                             </div>
                           )}
-                        </div>
+                          <SettingChronicleEventRow
+                            ev={ev}
+                            href={world ? `/events/${ev.id - SETTING_EVENT_UID}` : null}
+                            tag={world ? <span className="chronicle-source">мир</span> : null}
+                            expanded={expandedEvents.has(ev.id)}
+                            calendar={calendar}
+                            onToggleExpand={toggleEventExpanded}
+                            onToggleImportant={toggleEventImportant}
+                            onEdit={openEditEventModal}
+                            // Событие мира не удаляется, а убирается из кампании — под «…», чтобы не нажать случайно.
+                            onDelete={world ? undefined : deleteCalendarEvent}
+                            menu={world ? [{ label: "Убрать из кампании", onClick: () => void deleteCalendarEvent(ev.id) }] : undefined}
+                            onShowOnAxis={(e) => {
+                              setTimelineFocus({ year: e.inworld_year, month: e.inworld_month, day: e.inworld_day });
+                              axisRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                            }}
+                            onShowOnCalendar={(e) => {
+                              setCalendarFocus({ year: e.inworld_year, month: e.inworld_month });
+                              calendarRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                            }}
+                          />
+                        </Fragment>
                       );
                     })}
                     {hiddenEvents.length > 0 && (
                       <details className="paper-fold">
                         <summary>
-                          Скрытые события мира <span className="paper-fold__count">· {hiddenEvents.length}</span>
+                          Убраны из кампании <span className="paper-fold__count">· {hiddenEvents.length}</span>
                         </summary>
                         <ul className="paper-rows">
                           {hiddenEvents.map((ev) => (

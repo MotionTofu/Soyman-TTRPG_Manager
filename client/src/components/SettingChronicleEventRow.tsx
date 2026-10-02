@@ -1,21 +1,42 @@
-import { memo } from "react";
+import { memo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { MentionText } from "./mentions/MentionText";
 import { RowDeleteButton, RowEditButton } from "./RowIconButtons";
+import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { formatEventDate } from "../inworldCalendar";
-import type { SettingCalendar, SettingCalendarEvent } from "../types";
+import type { EventTimeFields, SettingCalendar } from "../types";
 
-export interface SettingChronicleEventRowProps {
-  ev: SettingCalendarEvent;
+/** Что строке нужно от события — общее у событий сеттинга и кампании. */
+export type ChronicleRowEvent = EventTimeFields & {
+  id: number;
+  title: string;
+  description: string;
+  inworld_year: number;
+  inworld_month: number;
+  inworld_day: number;
+  important: number;
+  visible_to_players?: number;
+};
+
+export interface SettingChronicleEventRowProps<E extends ChronicleRowEvent> {
+  ev: E;
   expanded: boolean;
   calendar: SettingCalendar | null;
+  /** Куда ведёт название; пусто — название просто текстом. */
+  href?: string | null;
+  /** Пометка рядом с датой, например «мир» у события сеттинга в кампании. */
+  tag?: ReactNode;
   onToggleExpand: (id: number) => void;
-  onToggleImportant: (ev: SettingCalendarEvent) => void;
-  onToggleVisible: (ev: SettingCalendarEvent) => void;
-  onEdit: (ev: SettingCalendarEvent) => void;
-  onDelete: (id: number) => void;
-  onShowOnAxis: (ev: SettingCalendarEvent) => void;
-  onShowOnCalendar: () => void;
+  onToggleImportant: (ev: E) => void;
+  /** Без него переключателя «Видно игрокам» нет. */
+  onToggleVisible?: (ev: E) => void;
+  onEdit: (ev: E) => void;
+  /** Без него корзины нет. */
+  onDelete?: (id: number) => void;
+  /** Редкие действия — под «…», чтобы не нажать случайно. */
+  menu?: ContextMenuItem[];
+  onShowOnAxis: (ev: E) => void;
+  onShowOnCalendar: (ev: E) => void;
 }
 
 function extractMentionChips(description: string): string[] {
@@ -28,11 +49,13 @@ function extractMentionChips(description: string): string[] {
   return out;
 }
 
-export const SettingChronicleEventRow = memo(function SettingChronicleEventRow({
-  ev, expanded, calendar,
+// Строка хроники — одна у сеттинга и у кампании (просьба владельца 2026-10-02).
+function ChronicleEventRow<E extends ChronicleRowEvent>({
+  ev, expanded, calendar, href, tag,
   onToggleExpand, onToggleImportant, onToggleVisible,
-  onEdit, onDelete, onShowOnAxis, onShowOnCalendar,
-}: SettingChronicleEventRowProps) {
+  onEdit, onDelete, menu, onShowOnAxis, onShowOnCalendar,
+}: SettingChronicleEventRowProps<E>) {
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   const mentionChips = extractMentionChips(ev.description ?? "");
   // Сетка (просьба владельца 2026-10-02): дата жирно, название — следующей
   // строкой, действия — одинаковыми столбцами у всех строк. «Случилось» —
@@ -54,10 +77,15 @@ export const SettingChronicleEventRow = memo(function SettingChronicleEventRow({
           {ev.status !== "happened" && (
             <span className={`chronicle-status is-${ev.status}`}>{ev.status === "cancelled" ? "Отменено" : "Предстоит"}</span>
           )}
+          {tag}
           {mentionChips.slice(0, 2).map((label) => <span key={label} className="badge tag">{label}</span>)}
           {mentionChips.length > 2 && <span className="muted">+{mentionChips.length - 2}</span>}
         </span>
-        <Link to={`/events/${ev.id}`} className="chronicle-item__title">{ev.title}</Link>
+        {href ? (
+          <Link to={href} className="chronicle-item__title">{ev.title}</Link>
+        ) : (
+          <span className="chronicle-item__title">{ev.title}</span>
+        )}
       </span>
       <span className="chronicle-item__actions">
         <button
@@ -69,14 +97,31 @@ export const SettingChronicleEventRow = memo(function SettingChronicleEventRow({
         >
           {ev.important ? "★" : "☆"}
         </button>
-        <label className="chronicle-item__visible">
-          <input type="checkbox" checked={!!ev.visible_to_players} onChange={() => onToggleVisible(ev)} />
-          Видно игрокам
-        </label>
+        {onToggleVisible && (
+          <label className="chronicle-item__visible">
+            <input type="checkbox" checked={!!ev.visible_to_players} onChange={() => onToggleVisible(ev)} />
+            Видно игрокам
+          </label>
+        )}
         <button type="button" className="comp-mini" onClick={() => onShowOnAxis(ev)} title="Показать на оси">Ось</button>
-        <button type="button" className="comp-mini" onClick={onShowOnCalendar} title="Показать на календаре">Календарь</button>
+        <button type="button" className="comp-mini" onClick={() => onShowOnCalendar(ev)} title="Показать на календаре">Календарь</button>
         <RowEditButton onClick={() => onEdit(ev)} />
-        <RowDeleteButton onClick={() => onDelete(ev.id)} />
+        {onDelete && <RowDeleteButton onClick={() => onDelete(ev.id)} />}
+        {menu && menu.length > 0 && (
+          <button
+            type="button"
+            className="comp-mini"
+            aria-label="Ещё действия"
+            aria-haspopup="menu"
+            onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              setMenuAt({ x: r.right, y: r.bottom });
+            }}
+          >
+            …
+          </button>
+        )}
+        {menuAt && menu && <ContextMenu x={menuAt.x} y={menuAt.y} items={menu} onClose={() => setMenuAt(null)} />}
       </span>
       {expanded && ev.description && (
         <div className="chronicle-item__expanded">
@@ -85,4 +130,6 @@ export const SettingChronicleEventRow = memo(function SettingChronicleEventRow({
       )}
     </div>
   );
-});
+}
+
+export const SettingChronicleEventRow = memo(ChronicleEventRow) as typeof ChronicleEventRow;

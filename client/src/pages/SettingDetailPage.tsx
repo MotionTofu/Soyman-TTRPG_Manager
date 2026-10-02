@@ -941,7 +941,7 @@ export function SettingDetailPage() {
                       <Fragment key={ev.id}>
                       {era && era !== prev && <div className="chronicle-era">{era.name} <span>· с {era.start_year} года</span></div>}
                       <SettingChronicleEventRow
-                        ev={ev}
+                        ev={ev} href={`/events/${ev.id}`}
                         expanded={expandedEvents.has(ev.id)} calendar={calendar}
                         onToggleExpand={toggleEventExpanded}
                         onToggleImportant={toggleEventImportant}
