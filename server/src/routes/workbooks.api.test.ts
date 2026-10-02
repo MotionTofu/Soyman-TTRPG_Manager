@@ -69,4 +69,17 @@ describe('универсальные тетради',()=>{
   const text=workbookMarkdown(a.template,a.title,{day:{events:[{_id:'row',event:'Путь',removed:'Старое описание'}]}});
   expect(text).toContain('Старое описание');expect(text).toContain('Сохранённые ответы прежних полей');
  });
+ it('переносит старые заметки кампании в записи листа и удаляет их у кампании',async()=>{
+  const a=await create(),path=`/workbooks/instances/${a.id}`;
+  const cid=Number(db.prepare("INSERT INTO campaigns(name) VALUES('С заметками')").run().lastInsertRowid);
+  const note=db.prepare("INSERT INTO campaign_entries(campaign_id,category,title,content) VALUES(?,?,?,?)");
+  const n1=Number(note.run(cid,'gm_notes','Идея','Мирт сдаёт партию').lastInsertRowid);note.run(cid,'gm_notes','','Падение — 1к6 за 3 м');note.run(cid,'notes','Игрок','не трогать');
+  expect((await auth(request(app).post(`${path}/campaign-notes`)).send({campaign_id:cid,sheet_key:'nope'})).status).toBe(400);
+  const one=await auth(request(app).post(`${path}/campaign-notes`)).send({campaign_id:cid,sheet_key:'day',entry_ids:[n1]});
+  expect(one.status).toBe(200);expect(one.body.instance.answers._notes.day.map((n:{body:string})=>n.body)).toEqual(['Идея\n\nМирт сдаёт партию']);
+  const rest=await auth(request(app).post(`${path}/campaign-notes`)).send({campaign_id:cid,sheet_key:'day'});
+  expect(rest.body.moved).toBe(1);expect(rest.body.instance.answers._notes.day).toHaveLength(2);
+  expect(db.prepare("SELECT category FROM campaign_entries WHERE campaign_id=?").all(cid)).toEqual([{category:'notes'}]);
+  expect((await auth(request(app).post(`${path}/campaign-notes`),other).send({campaign_id:cid,sheet_key:'day'})).status).toBe(404);
+ });
 });

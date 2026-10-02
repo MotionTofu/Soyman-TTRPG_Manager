@@ -1711,7 +1711,7 @@
 }
 .paper-fields-rows > div {
   display: grid;
-  grid-template-columns: 12rem minmax(0, 1fr);
+  grid-template-columns: minmax(6rem, 30%) minmax(0, 1fr);
   gap: var(--sp-5);
   padding: var(--sp-3) 0;
   border-bottom: 1px solid var(--paper-rule);
@@ -1735,4 +1735,56 @@
 }
 .campaign-passport__source {
   margin: 0;
+}
+
+/* «Сейчас» на «Обзоре» кампании (доска 41): сводка в рамке, три ячейки. */
+.campaign-now {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-5);
+  padding: var(--sp-4) var(--sp-6);
+  border: var(--card-border-width-strong) solid var(--paper-ink);
+  border-radius: 3px;
+  background: var(--paper-wash);
+}
+.campaign-now > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+.campaign-now__line {
+  color: var(--paper-muted);
+  font-size: var(--fs-meta);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.campaign-now .paper-more {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+@media (max-width: 640px) {
+  .campaign-now {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.campaign-overview__images {
+  margin: 0;
+  font-size: var(--fs-meta);
+}
+/* Ссылки-кнопки «Править …», «сменить» — текстом, не плашкой. */
+.campaign-overview button.paper-more {
+  align-self: flex-start;
+  width: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.campaign-overview__groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
 }
