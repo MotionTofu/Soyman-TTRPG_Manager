@@ -41,6 +41,7 @@ export interface SettingPlayerContentPayload {
   beings: Record<string, unknown>[];
   communities: Record<string, unknown>[];
   chronicleEvents: Record<string, unknown>[];
+  artifacts: Record<string, unknown>[];
 }
 
 const EMPTY_SETTING_CONTENT: SettingPlayerContentPayload = {
@@ -48,6 +49,7 @@ const EMPTY_SETTING_CONTENT: SettingPlayerContentPayload = {
   beings: [],
   communities: [],
   chronicleEvents: [],
+  artifacts: [],
 };
 
 // Мир кампании для игрока: выдача из сеттинга по грантам (campaign_id,
@@ -104,7 +106,23 @@ export function getSettingPlayerContent(campaignId: number, playerId: number): S
       .all(settingId, ...ev.mentioned) as Record<string, unknown>[]).map((r) => ({ ...r, access_level: "mentioned" as const })),
   ];
 
-  return { locations, beings, communities, chronicleEvents };
+  // Артефакты (спека campaign-paper, Q40): «открыт» — описание и сила,
+  // «упомянут» — имя и картинка. Мастерские заметки и история не уходят.
+  const art = splitGrantIds(grants, "setting_artifact");
+  const artifactUrls = (r: Record<string, unknown>) => ({
+    ...r,
+    avatar_image_url: r.avatar_image_path ? toFileUrl(r.avatar_image_path as string) : null,
+  });
+  const artifacts = [
+    ...(db
+      .prepare(`SELECT id, name, description, power, avatar_image_path FROM artifacts WHERE setting_id = ? AND archived_at IS NULL AND id IN (${inClause(art.open)})`)
+      .all(settingId, ...art.open) as Record<string, unknown>[]).map((r) => ({ ...artifactUrls(r), access_level: "open" as const })),
+    ...(db
+      .prepare(`SELECT id, name, avatar_image_path FROM artifacts WHERE setting_id = ? AND archived_at IS NULL AND id IN (${inClause(art.mentioned)})`)
+      .all(settingId, ...art.mentioned) as Record<string, unknown>[]).map((r) => ({ ...artifactUrls(r), access_level: "mentioned" as const })),
+  ];
+
+  return { locations, beings, communities, chronicleEvents, artifacts };
 }
 
 // Открытое старой галочкой «Видно игрокам» — главы локаций и существ и

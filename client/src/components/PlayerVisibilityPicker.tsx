@@ -25,6 +25,7 @@ const SETTING_TARGETS: ReadonlySet<string> = new Set([
   "setting_location",
   "setting_being",
   "setting_community",
+  "setting_artifact",
   "setting_calendar_event",
 ]);
 

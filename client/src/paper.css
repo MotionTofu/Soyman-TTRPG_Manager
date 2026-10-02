@@ -1878,3 +1878,50 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
+
+/* «Выдача», «Сводка» (доска 44). */
+.issuance-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+.issuance-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.issuance-drop {
+  padding: var(--sp-5);
+  border: var(--card-border-width-strong) dashed var(--paper-rule);
+  border-radius: 4px;
+  background: var(--paper-wash);
+  color: var(--paper-ink-soft);
+  text-align: center;
+}
+.issuance-drop.is-over {
+  border-color: var(--paper-ink);
+  background: var(--paper-acid);
+}
+.issuance-rows > li {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-4);
+}
+.issuance-rows .paper-rows__sub {
+  margin-left: auto;
+}
+button.player-visibility-fact {
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+
+/* Группа строк внутри раздела: заголовок на линейке и строки вплотную
+   (`paper-groups` разносит крупные разделы листа — тут это лишнее). */
+.paper-list-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}

@@ -613,6 +613,8 @@ const GRANT_TYPES: Record<string, { grant: string; table: string }> = {
   being: { grant: "setting_being", table: "setting_beings" },
   location: { grant: "setting_location", table: "setting_locations" },
   community: { grant: "setting_community", table: "setting_communities" },
+  // Артефакты выдаются с 2026-10-02 (спека campaign-paper, Q40).
+  artifact: { grant: "setting_artifact", table: "artifacts" },
 };
 
 function grantedIds(playerId: number, type: string): number[] {
@@ -786,6 +788,7 @@ const RELATION_GRANT_TYPES: Record<string, string> = {
   being: "setting_being",
   location: "setting_location",
   community: "setting_community",
+  artifact: "setting_artifact",
 };
 
 playerRouter.get("/characters/:id/relations", (req: AuthedRequest, res) => {

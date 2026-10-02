@@ -58,6 +58,7 @@ import type {
   SettingCommunity,
   SettingLocation,
 } from "../types";
+import { PlayerVisibilityFact } from "../components/PlayerVisibilityFact";
 
 // Профиль существа — пилот бумажного вида (разбор профилей 2026-10-01).
 // Вкладки (Q2): «Связи» собрала «Отношения» и «Места обитания», «Хроника» —
@@ -635,6 +636,8 @@ export function BeingDetailPage() {
                   <TagChips tags={being.tags} onChange={saveTags} />
                 </dd>
               </div>
+              {/* Кому открыто — выдача с профиля (спека campaign-paper, Q34). */}
+              <PlayerVisibilityFact targetType="setting_being" targetId={beingId} />
             </dl>
             <div className="dossier__search">
               <input

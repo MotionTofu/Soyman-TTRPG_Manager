@@ -106,6 +106,25 @@ export function buildSettingReaderGroups(
       ],
     });
   }
+  const artifacts = setting?.artifacts ?? [];
+  if (artifacts.length > 0) {
+    groups.push({
+      key: "setting-artifacts",
+      label: "Артефакты",
+      entries: artifacts.map((a) => ({
+        key: `setting-artifact-${a.id}`,
+        section: "Артефакты",
+        title: a.name,
+        body:
+          a.description || a.power ? (
+            <div className="muted" style={{ whiteSpace: "pre-wrap" }}>
+              {a.description && <MentionText text={a.description} />}
+              {a.power && <MentionText text={a.power} />}
+            </div>
+          ) : null,
+      })),
+    });
+  }
   if (events.length > 0) {
     groups.push({
       key: "setting-history",

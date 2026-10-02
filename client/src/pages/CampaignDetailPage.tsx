@@ -970,7 +970,7 @@ export function CampaignDetailPage() {
                         ["Сыграны", filtered.filter((x) => x.status === "held").sort((x, y) => y.date.localeCompare(x.date))],
                       ] as const).map(([title, list]) =>
                         list.length === 0 ? null : (
-                          <section key={title} className="paper-groups">
+                          <section key={title} className="paper-list-group">
                             <h3 className="paper-group__head">
                               {title} <span className="paper-group__count">· {list.length}</span>
                             </h3>

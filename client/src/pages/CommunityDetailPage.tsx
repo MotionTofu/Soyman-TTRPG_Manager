@@ -41,6 +41,7 @@ import type {
 import { NavIcon } from "../components/NavIcons";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import { useConfirm } from "../hooks/useConfirm";
+import { PlayerVisibilityFact } from "../components/PlayerVisibilityFact";
 
 // Вкладки по общему каркасу профилей (разбор 2026-10-02): представители,
 // места, вложенные и отношения — во «Связях», «Карточка фракции» стала шапкой
@@ -365,6 +366,8 @@ export function CommunityDetailPage() {
                   <TagChips tags={community.tags} onChange={saveTags} />
                 </dd>
               </div>
+              {/* Кому открыто — выдача с профиля (спека campaign-paper, Q34). */}
+              <PlayerVisibilityFact targetType="setting_community" targetId={communityId} />
             </dl>
             <div className="dossier__search">
               <Link className="paper-more" to={populationTo}>
