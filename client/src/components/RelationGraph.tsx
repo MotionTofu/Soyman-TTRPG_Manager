@@ -48,6 +48,7 @@ import {
 } from "../graphTypes";
 import { glyphName, onGlyphLoad, typeTint } from "../typeGlyphs";
 import { TypeGlyph } from "./TypeGlyph";
+import { concentricLayout, type ConcentricLayout } from "../concentricGraph";
 import {
   drawGraph,
   hitTestEdge,
@@ -60,6 +61,10 @@ import {
 const ARROW_PAN_STEP = 90;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 18;
+const WORLD_READING_SCALE = 1.2;
+function maxGraphZoom(fitScale: number, readableCards: boolean) {
+  return readableCards ? Math.max(MAX_ZOOM, 4 / fitScale) : MAX_ZOOM;
+}
 
 
 interface View {
@@ -122,6 +127,12 @@ interface Props {
 }
 
 const SIZE_MODE_STORE_PREFIX = "rpgManagerGraphSizeMode:";
+const WORLD_LAYOUT_MODE_KEY = "rpgManagerGraphLayoutMode:world";
+type WorldLayoutMode = "free" | "concentric";
+function loadWorldLayoutMode(): WorldLayoutMode {
+  try { if (localStorage.getItem(WORLD_LAYOUT_MODE_KEY) === "concentric") return "concentric"; } catch {}
+  return "free";
+}
 
 function loadSizeMode(view: GraphView): NodeSizeMode {
   try {
@@ -136,6 +147,7 @@ interface ManualLayout {
 }
 
 const LAYOUT_STORE_PREFIX = "rpgManagerGraphLayout:";
+const EMPTY_MANUAL: ManualLayout = {};
 
 function loadLayout(key: string | undefined): ManualLayout {
   if (!key) return {};
@@ -176,6 +188,9 @@ function GraphCanvas({
   onNodeDrag,
   fitAnchorX = null,
   bands = null,
+  concentric = null,
+  clipTitles = false,
+  focusRequest,
   selectedKeys,
   onSelect,
 }: {
@@ -200,11 +215,14 @@ function GraphCanvas({
   onNodeDoubleClick: (key: string) => void;
   onBackgroundClick: () => void;
   onNodeContextMenu: (e: ReactMouseEvent, node: GraphNode) => void;
-  /** Перетаскивание: один узел или всё выделенное разом. */
+  /** Зафиксировать завершённый перенос одного узла или всего выделенного. */
   onNodeDrag: (moves: [string, number, number][]) => void;
   /** Ярусы: вписать по высоте и встать так, чтобы эта точка мира была на 2/3 экрана. */
   fitAnchorX?: number | null;
   bands?: LayerBand[] | null;
+  concentric?: ConcentricLayout | null;
+  clipTitles?: boolean;
+  focusRequest: { key: string } | null;
   selectedKeys: Set<string>;
   onSelect: (keys: string[], mode: SelectMode) => void;
 }) {
@@ -214,6 +232,7 @@ function GraphCanvas({
   const viewRef = useRef<View>({ zoom: 1, panX: 0, panY: 0 });
   const dragState = useRef<{ keys: string[]; moved: boolean } | null>(null);
   const dragOrigin = useRef<{ starts: Map<string, { x: number; y: number }>; clientX: number; clientY: number } | null>(null);
+  const dragPositionsRef = useRef<NodePositions | null>(null);
   // Рамка выделения: протяжка левой кнопкой по пустому месту.
   const marquee = useRef<{ x0: number; y0: number; x1: number; y1: number; add: boolean; moved: boolean } | null>(null);
   const marqueeRef = useRef<HTMLDivElement>(null);
@@ -283,7 +302,7 @@ function GraphCanvas({
       fitScale,
       visibleEdges,
       visibleNodes,
-      positions,
+      positions: dragPositionsRef.current ?? positions,
       nodesByKey,
       groupedFolded,
       pairCounts,
@@ -295,16 +314,65 @@ function GraphCanvas({
       manual,
       showPins,
       bands,
+      concentric,
+      clipTitles,
       selectedKeys,
     };
     drawGraph(input);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleEdges, visibleNodes, positions, nodesByKey, groupedFolded, pairCounts, focusedKey, neighborKeys, nodeScales, manual, showPins, worldWidth, worldHeight, bands, selectedKeys]);
+  }, [visibleEdges, visibleNodes, positions, nodesByKey, groupedFolded, pairCounts, focusedKey, neighborKeys, nodeScales, manual, showPins, worldWidth, worldHeight, bands, concentric, clipTitles, selectedKeys]);
 
   // Redraw when props change
-  useEffect(() => { draw(); }, [draw]);
+  useEffect(() => {
+    // После фиксации родитель передаёт сохранённые позиции. До этого
+    // финальный кадр переноса остаётся на экране, без скачка назад.
+    if (!dragState.current) dragPositionsRef.current = null;
+    draw();
+  }, [draw]);
+  useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
   // Знаки типов грузятся картинками — догрузился знак, перерисовать.
   useEffect(() => onGlyphLoad(() => draw()), [draw]);
+
+  // После поиска найденную карточку показываем в читаемом масштабе.
+  // Сам клик на холсте не двигает камеру; перенос также не возвращает её назад.
+  const shownFocusRequest = useRef<typeof focusRequest>(null);
+  useEffect(() => {
+    if (!focusRequest || shownFocusRequest.current === focusRequest) return;
+    const pos = positions.get(focusRequest.key), el = wrapRef.current;
+    if (!pos || !el) return;
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    const fs = Math.min(r.width / worldWidth, r.height / worldHeight);
+    const zoom = Math.min(maxGraphZoom(fs, clipTitles), Math.max(viewRef.current.zoom, (clipTitles ? WORLD_READING_SCALE : 0.9) / fs));
+    const pan = centeredPan(zoom, pos.x, pos.y, r.width, r.height, worldWidth, worldHeight, fs);
+    viewRef.current = { zoom, panX: pan.x, panY: pan.y };
+    shownFocusRequest.current = focusRequest;
+    draw();
+  }, [focusRequest, positions, worldWidth, worldHeight, draw, clipTitles]);
+
+  // Открываем карточки в читаемом экранном размере, а не сжимаем весь
+  // растущий холст. Обзор всего графа доступен отдельной кнопкой.
+  useEffect(() => {
+    if (!concentric) return;
+    const el = wrapRef.current;
+    if (!el) return;
+    const fit = () => {
+      const r = el.getBoundingClientRect();
+      const fs = Math.min(r.width / worldWidth, r.height / worldHeight);
+      if (!fs) return;
+      const zoom = Math.max(MIN_ZOOM, WORLD_READING_SCALE / fs);
+      const firstKey = concentric.rings[0]?.keys[0];
+      const anchor = firstKey ? positions.get(firstKey) : null;
+      const pan = centeredPan(zoom, anchor?.x ?? concentric.centerX, anchor?.y ?? concentric.centerY, r.width, r.height, worldWidth, worldHeight, fs);
+      viewRef.current = { zoom, panX: pan.x, panY: pan.y };
+      draw();
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- перенос и фокус не меняют раскладку колец
+  }, [concentric]);
 
   // ResizeObserver
   useEffect(() => {
@@ -360,12 +428,12 @@ function GraphCanvas({
       e.preventDefault();
       const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
       const v = viewRef.current;
-      const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, v.zoom * factor));
-      if (newZoom === v.zoom) return;
       const c = canvasRef.current;
       if (!c) return;
       const r = c.getBoundingClientRect();
       const fs = Math.min(r.width / worldWidth, r.height / worldHeight);
+      const newZoom = Math.min(maxGraphZoom(fs, clipTitles), Math.max(MIN_ZOOM, v.zoom * factor));
+      if (newZoom === v.zoom) return;
       const cursorScreenX = e.clientX - r.left;
       const cursorScreenY = e.clientY - r.top;
       const worldX = (cursorScreenX - v.panX) / (v.zoom * fs);
@@ -379,7 +447,7 @@ function GraphCanvas({
     }
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, [draw]);
+  }, [draw, worldWidth, worldHeight, clipTitles]);
 
   // ── Keyboard pan ──────────────────────────────────────────────
   const handleKeyDown = useCallback((e: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -405,7 +473,7 @@ function GraphCanvas({
   }, [draw, worldWidth, worldHeight, onSelect]);
 
   // ── Pointer: world coordinates from event ─────────────────────
-  function worldCoords(e: { clientX: number; clientY: number }) {
+  const worldCoords = useCallback((e: { clientX: number; clientY: number }) => {
     const c = canvasRef.current;
     if (!c) return { x: 0, y: 0 };
     const r = c.getBoundingClientRect();
@@ -416,9 +484,35 @@ function GraphCanvas({
       x: (e.clientX - r.left - v.panX) / (v.zoom * fs),
       y: (e.clientY - r.top - v.panY) / (v.zoom * fs),
     };
-  }
+  }, [worldWidth, worldHeight]);
 
   // ── Pointer events ────────────────────────────────────────────
+  const updateDragPreview = useCallback((clientX: number, clientY: number) => {
+    const drag = dragState.current;
+    const origin = dragOrigin.current;
+    const c = canvasRef.current;
+    if (!drag || !origin || !c) return;
+    const r = c.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return;
+    const fs = Math.min(r.width / worldWidth, r.height / worldHeight);
+    const scale = viewRef.current.zoom * fs;
+    const dx = (clientX - origin.clientX) / scale;
+    const dy = (clientY - origin.clientY) / scale;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) drag.moved = true;
+    if (!drag.moved) return;
+    // Копируем карту один раз за жест. В последующих кадрах меняются
+    // только переносимые узлы, без React и записи в localStorage.
+    const preview = dragPositionsRef.current ?? new Map(positions);
+    for (const key of drag.keys) {
+      const start = origin.starts.get(key)!;
+      const x = Math.max(CANVAS_EDGE_PADDING, Math.min(width - CANVAS_EDGE_PADDING, start.x + dx));
+      const y = Math.max(CANVAS_EDGE_PADDING, Math.min(height - CANVAS_EDGE_PADDING, start.y + dy));
+      const type = nodesByKey.get(key)?.type;
+      preview.set(key, { x, y: bands && type ? clampToBand(bands, type, start.y, y) : y, vx: 0, vy: 0 });
+    }
+    dragPositionsRef.current = preview;
+  }, [positions, width, height, worldWidth, worldHeight, nodesByKey, bands]);
+
   const handlePointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
     wrapRef.current?.focus({ preventScroll: true });
     if (e.button === 1) {
@@ -433,6 +527,8 @@ function GraphCanvas({
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     if (hit) {
+      hideTooltip();
+      dragPositionsRef.current = null;
       // Схватили выделенный — едет всё выделенное.
       const keys = selectedKeys.has(hit.key) ? [...selectedKeys].filter((k) => positions.has(k)) : [hit.key];
       const starts = new Map(keys.map((k) => [k, { x: positions.get(k)!.x, y: positions.get(k)!.y }]));
@@ -441,7 +537,7 @@ function GraphCanvas({
     } else {
       marquee.current = { x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY, add: e.shiftKey, moved: false };
     }
-  }, [visibleNodes, positions, nodeScales, worldWidth, worldHeight, selectedKeys]);
+  }, [visibleNodes, positions, nodeScales, worldCoords, selectedKeys]);
 
   const handlePointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
     const c = canvasRef.current;
@@ -451,26 +547,10 @@ function GraphCanvas({
 
     // Node drag
     if (dragState.current && dragOrigin.current) {
-      const origin = dragOrigin.current;
-      const v = viewRef.current;
-      const fs = Math.min(r.width / worldWidth, r.height / worldHeight);
-      const scale = v.zoom * fs;
-      const dx = (e.clientX - origin.clientX) / scale;
-      const dy = (e.clientY - origin.clientY) / scale;
-      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragState.current.moved = true;
+      updateDragPreview(e.clientX, e.clientY);
       if (!dragState.current.moved) return;
-      const keys = dragState.current.keys;
       cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(() => {
-        onNodeDrag(keys.map((key) => {
-          const o = origin.starts.get(key)!;
-          return [
-            key,
-            Math.max(CANVAS_EDGE_PADDING, Math.min(width - CANVAS_EDGE_PADDING, o.x + dx)),
-            Math.max(CANVAS_EDGE_PADDING, Math.min(height - CANVAS_EDGE_PADDING, o.y + dy)),
-          ];
-        }));
-      });
+      rafRef.current = requestAnimationFrame(draw);
       return;
     }
 
@@ -502,9 +582,9 @@ function GraphCanvas({
     viewRef.current = { ...v, panX: clamped.x, panY: clamped.y };
     cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(draw);
-  }, [draw, width, height, worldWidth, worldHeight, onNodeDrag]);
+  }, [draw, worldWidth, worldHeight, updateDragPreview]);
 
-  const handlePointerUp = useCallback(() => {
+  const handlePointerUp = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
     const m = marquee.current;
     if (m) {
       marquee.current = null;
@@ -521,14 +601,41 @@ function GraphCanvas({
       return;
     }
     if (dragState.current) {
-      if (dragState.current.moved) justPannedRef.current = true;
+      // Учитываем отпускание до ближайшего animationFrame и его координаты:
+      // последний участок быстрого переноса не должен теряться.
+      updateDragPreview(e.clientX, e.clientY);
+      const drag = dragState.current;
+      const preview = dragPositionsRef.current;
+      cancelAnimationFrame(rafRef.current);
       dragState.current = null;
       dragOrigin.current = null;
+      if (drag.moved && preview) {
+        justPannedRef.current = true;
+        draw();
+        onNodeDrag(drag.keys.map((key) => {
+          const p = preview.get(key)!;
+          return [key, p.x, p.y];
+        }));
+      }
       return;
     }
     if (panState.current?.moved) justPannedRef.current = true;
     panState.current = null;
-  }, [visibleNodes, positions, onSelect, worldWidth, worldHeight]);
+  }, [visibleNodes, positions, onSelect, worldCoords, updateDragPreview, draw, onNodeDrag]);
+
+  const handlePointerCancel = useCallback(() => {
+    if (!dragState.current && !panState.current && !marquee.current) return;
+    cancelAnimationFrame(rafRef.current);
+    justPannedRef.current = true;
+    dragState.current = null;
+    dragOrigin.current = null;
+    dragPositionsRef.current = null;
+    panState.current = null;
+    marquee.current = null;
+    if (marqueeRef.current) marqueeRef.current.style.display = "none";
+    hideTooltip();
+    draw();
+  }, [draw]);
 
   const handleClick = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
     if (justPannedRef.current) { justPannedRef.current = false; return; }
@@ -543,22 +650,23 @@ function GraphCanvas({
     } else {
       onBackgroundClick();
     }
-  }, [visibleNodes, positions, nodeScales, groupedFolded, onNodeClick, onBackgroundClick, onSelect]);
+  }, [visibleNodes, positions, nodeScales, groupedFolded, onNodeClick, onBackgroundClick, onSelect, worldCoords]);
 
   const handleDoubleClick = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
     const w = worldCoords(e);
     const hit = hitTestNode(w.x, w.y, visibleNodes, positions, nodeScales);
     if (hit) { e.stopPropagation(); onNodeDoubleClick(hit.key); }
-  }, [visibleNodes, positions, nodeScales, onNodeDoubleClick]);
+  }, [visibleNodes, positions, nodeScales, onNodeDoubleClick, worldCoords]);
 
   const handleContextMenu = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
     e.preventDefault();
     const w = worldCoords(e);
     const hit = hitTestNode(w.x, w.y, visibleNodes, positions, nodeScales);
     if (hit) onNodeContextMenu(e, hit);
-  }, [visibleNodes, positions, nodeScales, onNodeContextMenu]);
+  }, [visibleNodes, positions, nodeScales, onNodeContextMenu, worldCoords]);
 
   const handleMouseMove = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
+    if (dragState.current || panState.current || marquee.current) return;
     const w = worldCoords(e);
     const hitN = hitTestNode(w.x, w.y, visibleNodes, positions, nodeScales);
     if (hitN) {
@@ -568,7 +676,7 @@ function GraphCanvas({
     const hitE = hitTestEdge(w.x, w.y, visibleEdges, positions);
     if (hitE) { showTooltip(edgeTooltip(hitE, nodesByKey), e.clientX, e.clientY); return; }
     hideTooltip();
-  }, [visibleNodes, visibleEdges, positions, nodeScales, groupedFolded, nodesByKey]);
+  }, [visibleNodes, visibleEdges, positions, nodeScales, groupedFolded, nodesByKey, worldCoords]);
 
   // Expose zoom/reset via custom events (parent toolbar buttons)
   useEffect(() => {
@@ -578,12 +686,12 @@ function GraphCanvas({
       const d = (e as CustomEvent).detail;
       if (d.type === "zoomBy") {
         const v = viewRef.current;
-        const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, v.zoom * d.factor));
-        if (newZoom === v.zoom) return;
         const c = canvasRef.current;
         if (!c) return;
         const r = c.getBoundingClientRect();
         const fs = Math.min(r.width / worldWidth, r.height / worldHeight);
+        const newZoom = Math.min(maxGraphZoom(fs, clipTitles), Math.max(MIN_ZOOM, v.zoom * d.factor));
+        if (newZoom === v.zoom) return;
         const centerX = r.width / 2;
         const centerY = r.height / 2;
         const worldX = (centerX - v.panX) / (v.zoom * fs);
@@ -594,7 +702,11 @@ function GraphCanvas({
         viewRef.current = { zoom: newZoom, panX: clamped.x, panY: clamped.y };
         draw();
       } else if (d.type === "resetView") {
-        viewRef.current = { zoom: 1, panX: 0, panY: 0 };
+        const r = canvasRef.current?.getBoundingClientRect();
+        if (!r?.width || !r.height) return;
+        const fs = Math.min(r.width / worldWidth, r.height / worldHeight);
+        const pan = centeredPan(1, worldWidth / 2, worldHeight / 2, r.width, r.height, worldWidth, worldHeight, fs);
+        viewRef.current = { zoom: 1, panX: pan.x, panY: pan.y };
         draw();
       }
     }
@@ -610,15 +722,14 @@ function GraphCanvas({
       style={{
         height: "100%",
         position: "relative",
-        backgroundImage: "radial-gradient(var(--line) 0.6px, transparent 0.6px)",
-        backgroundSize: "8px 8px",
-        backgroundPosition: "0 0",
       }}
       tabIndex={0}
       onKeyDown={handleKeyDown}
       onPointerDown={handlePointerDown}
       onPointerMove={(e) => { handlePointerMove(e); handleMouseMove(e); }}
       onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
+      onLostPointerCapture={handlePointerCancel}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
       onContextMenu={handleContextMenu}
@@ -654,7 +765,13 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
-  const [manual, setManual] = useState<ManualLayout>(() => loadLayout(layoutKey));
+  const [worldLayoutMode, setWorldLayoutMode] = useState<WorldLayoutMode>(() => loadWorldLayoutMode());
+  const ringsMode = view === "world" && !layeredMode && worldLayoutMode === "concentric";
+  const storageKey = ringsMode && layoutKey ? `${layoutKey}:concentric` : layoutKey;
+  const [manualKey, setManualKey] = useState(storageKey);
+  const [storedManual, setManual] = useState<ManualLayout>(() => loadLayout(storageKey));
+  const manual = manualKey === storageKey ? storedManual : EMPTY_MANUAL;
+  const [focusRequest, setFocusRequest] = useState<{ key: string } | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
   const [pathFrom, setPathFrom] = useState<string | null>(null);
   const [pathTo, setPathTo] = useState<string | null>(null);
@@ -689,11 +806,17 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
 
   const graphWrapRef = useRef<HTMLDivElement>(null);
 
+  // Координаты свободной раскладки и колец хранятся отдельно.
+  useEffect(() => {
+    setManual(loadLayout(storageKey));
+    setManualKey(storageKey);
+  }, [storageKey]);
+
   // Reset on layoutKey change
   useEffect(() => {
-    setManual(loadLayout(layoutKey));
     setFocusedKey(null);
     setIsolation(null);
+    setFocusRequest(null);
   }, [layoutKey]);
 
   // Debounce search
@@ -712,12 +835,12 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
 
   // Save layout
   useEffect(() => {
-    if (!layoutKey) return;
+    if (!storageKey || manualKey !== storageKey) return;
     try {
-      if (Object.keys(manual).length === 0) localStorage.removeItem(LAYOUT_STORE_PREFIX + layoutKey);
-      else localStorage.setItem(LAYOUT_STORE_PREFIX + layoutKey, JSON.stringify(manual));
+      if (Object.keys(manual).length === 0) localStorage.removeItem(LAYOUT_STORE_PREFIX + storageKey);
+      else localStorage.setItem(LAYOUT_STORE_PREFIX + storageKey, JSON.stringify(manual));
     } catch (e) { console.warn("Graph layout not saved:", e); }
-  }, [manual, layoutKey]);
+  }, [manual, storageKey, manualKey]);
 
   // Data change resets
   useEffect(() => {
@@ -734,61 +857,6 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     if (chain.length) setExpandedGroups((prev) => new Set([...prev, ...chain]));
     setFocusedKey(focusKey);
   }, [data, focusKey]);
-
-  // ── Layout computation ────────────────────────────────────────
-  const baseCanvas = data ? canvasSizeFor(data.nodes.length) : { width: GRAPH_WIDTH, height: GRAPH_HEIGHT };
-  const lastPositions = useRef<NodePositions | null>(null);
-  const [simulated, setSimulated] = useState<NodePositions>(() => new Map());
-
-  useEffect(() => {
-    if (!data || layeredMode) { setSimulated(new Map()); return; }
-    const nodes = data.nodes;
-    const edges = data.edges;
-    const wb = baseCanvas.width;
-    const hb = baseCanvas.height;
-    const useWorker = nodes.length > 50 && typeof Worker !== "undefined";
-    if (!useWorker) {
-      const seed: NodePositions = new Map(lastPositions.current ?? []);
-      for (const [key, p] of Object.entries(manual)) seed.set(key, { ...p, vx: 0, vy: 0 });
-      const next = simulateGraph(nodes, edges, wb, hb, seed.size > 0 ? seed : undefined, new Set(Object.keys(manual)));
-      lastPositions.current = next;
-      setSimulated(next);
-      return;
-    }
-    const seedArr: [string, { x: number; y: number; vx: number; vy: number }][] = (() => {
-      const m: [string, { x: number; y: number; vx: number; vy: number }][] = [];
-      if (lastPositions.current) for (const [k, v] of lastPositions.current) m.push([k, { x: v.x, y: v.y, vx: v.vx, vy: v.vy }]);
-      for (const [k, p] of Object.entries(manual)) {
-        const idx = m.findIndex(([kk]) => kk === k);
-        if (idx >= 0) m[idx] = [k, { x: p.x, y: p.y, vx: 0, vy: 0 }];
-        else m.push([k, { x: p.x, y: p.y, vx: 0, vy: 0 }]);
-      }
-      return m;
-    })();
-    const pinned = Object.keys(manual);
-    const worker = new Worker(new URL("../graphWorker.ts", import.meta.url), { type: "module" });
-    let cancelled = false;
-    worker.onmessage = (e: MessageEvent<{ positions: [string, { x: number; y: number; vx: number; vy: number }][] }>) => {
-      if (cancelled) return;
-      const next: NodePositions = new Map(e.data.positions.map(([k, v]) => [k, { x: v.x, y: v.y, vx: v.vx, vy: v.vy }]));
-      lastPositions.current = next;
-      setSimulated(next);
-      worker.terminate();
-    };
-    worker.onerror = () => { worker.terminate(); };
-    worker.postMessage({ nodes, edges, width: wb, height: hb, seed: seedArr.length > 0 ? seedArr : undefined, pinned: pinned.length > 0 ? pinned : undefined });
-    return () => { cancelled = true; worker.terminate(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, baseCanvas.width, baseCanvas.height, layeredMode]);
-
-  // Merge simulated + manual
-  const forcePositions = useMemo(() => {
-    const merged: NodePositions = new Map(simulated);
-    for (const [key, p] of Object.entries(manual)) {
-      if (merged.has(key)) merged.set(key, { ...p, vx: 0, vy: 0 });
-    }
-    return merged;
-  }, [simulated, manual]);
 
   // ── Pipeline: filter → group → isolate ────────────────────────
   const pipeline = useMemo(() => {
@@ -815,23 +883,84 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   const grouped = pipeline?.grouped;
   const visibleNodesList = isolationView ? isolationView.nodes : grouped?.nodes ?? [];
   const visibleEdgesList = isolationView ? isolationView.edges : grouped?.edges ?? [];
+
+  // ── Layout computation ────────────────────────────────────────
+  const baseCanvas = data ? canvasSizeFor(grouped?.nodes.length ?? 0) : { width: GRAPH_WIDTH, height: GRAPH_HEIGHT };
+  const [layoutRevision, setLayoutRevision] = useState(0);
+  const [simulated, setSimulated] = useState<NodePositions>(() => new Map());
+
+  useEffect(() => {
+    if (!data || layeredMode || ringsMode) { setSimulated(new Map()); return; }
+    const nodes = grouped?.nodes ?? [];
+    const edges = grouped?.edges ?? [];
+    const wb = baseCanvas.width;
+    const hb = baseCanvas.height;
+    const useWorker = nodes.length > 50 && typeof Worker !== "undefined";
+    if (!useWorker) {
+      const seed: NodePositions = new Map();
+      for (const [key, p] of Object.entries(manual)) seed.set(key, { ...p, vx: 0, vy: 0 });
+      const next = simulateGraph(nodes, edges, wb, hb, seed.size > 0 ? seed : undefined, new Set(Object.keys(manual)));
+      setSimulated(next);
+      return;
+    }
+    // Только ручные позиции закреплены. Автоматические пересчитываются
+    // по текущему видимому срезу, иначе выключенные связи удерживают узлы.
+    const seedArr: [string, { x: number; y: number; vx: number; vy: number }][] =
+      Object.entries(manual).map(([key, p]) => [key, { ...p, vx: 0, vy: 0 }]);
+    const pinned = Object.keys(manual);
+    const worker = new Worker(new URL("../graphWorker.ts", import.meta.url), { type: "module" });
+    let cancelled = false;
+    worker.onmessage = (e: MessageEvent<{ positions: [string, { x: number; y: number; vx: number; vy: number }][] }>) => {
+      if (cancelled) return;
+      const next: NodePositions = new Map(e.data.positions.map(([k, v]) => [k, { x: v.x, y: v.y, vx: v.vx, vy: v.vy }]));
+      setSimulated(next);
+      worker.terminate();
+    };
+    worker.onerror = () => { worker.terminate(); };
+    worker.postMessage({ nodes, edges, width: wb, height: hb, seed: seedArr.length > 0 ? seedArr : undefined, pinned: pinned.length > 0 ? pinned : undefined });
+    return () => { cancelled = true; worker.terminate(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [grouped, baseCanvas.width, baseCanvas.height, layeredMode, ringsMode, manualKey, layoutRevision]);
+
+  // Merge simulated + manual
+  const forcePositions = useMemo(() => {
+    const merged: NodePositions = new Map(simulated);
+    for (const [key, p] of Object.entries(manual)) {
+      if (merged.has(key)) merged.set(key, { ...p, vx: 0, vy: 0 });
+    }
+    return merged;
+  }, [simulated, manual]);
+
   const groupedFoldedCount = grouped?.folded.size ?? 0;
   const showPins = Object.keys(manual).length < visibleNodesList.length;
   // eslint-disable-next-line react-hooks/exhaustive-deps -- списки стабильны в пределах одного прохода pipeline
   const nodeScales = useMemo(() => {
     const scales = autoNodeScales(visibleNodesList, visibleEdgesList, sizeMode);
     for (const [key, m] of manualScales) scales.set(key, Math.min(3, (scales.get(key) ?? 1) * m));
+    if (view === "world") for (const [key, scale] of scales) scales.set(key, scale * 2);
     return scales;
-  }, [pipeline, sizeMode, manualScales]);
+  }, [pipeline, sizeMode, manualScales, view]);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- списки стабильны в пределах одного прохода pipeline
   const layered = useMemo(
     () => (layeredMode && !isolationView ? layeredLayout(visibleNodesList, visibleEdgesList, nodeScales) : null),
     [layeredMode, pipeline, nodeScales],
   );
+  const concentric = useMemo(
+    () => ringsMode ? concentricLayout(visibleNodesList, nodeScales, grouped?.folded) : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- списки стабильны в пределах pipeline
+    [ringsMode, pipeline, nodeScales],
+  );
   const nodesByKey = useMemo(() => data ? new Map(data.nodes.map((n) => [n.key, n])) : new Map<string, GraphNode>(), [data]);
   // В ярусах узел ходит только внутри своей полосы: ярус — это смысл, а не
   // место. Лента сессий — время, по y не двигается.
   const positions = useMemo(() => {
+    if (concentric) {
+      const merged = new Map(concentric.positions);
+      for (const [key, p] of Object.entries(manual)) {
+        if (merged.has(key)) merged.set(key, { ...p, vx: 0, vy: 0 });
+      }
+      return merged;
+    }
     if (!layered) return forcePositions;
     const merged: NodePositions = new Map(layered.positions);
     for (const [key, p] of Object.entries(manual)) {
@@ -840,8 +969,8 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
       if (at && type) merged.set(key, { ...at, x: p.x, y: clampToBand(layered.bands, type, at.y, p.y) });
     }
     return merged;
-  }, [layered, forcePositions, manual, nodesByKey]);
-  const canvasSize = layered ?? baseCanvas;
+  }, [concentric, layered, forcePositions, manual, nodesByKey]);
+  const canvasSize = concentric ?? layered ?? baseCanvas;
 
   // Precomputed lookups
   // eslint-disable-next-line react-hooks/exhaustive-deps -- visibleEdgesList is stable within a pipeline computation
@@ -874,7 +1003,16 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   const path = pathFrom && pathTo ? findPath(visibleEdgesList, pathFrom, pathTo) : null;
 
   // ── Handlers ──────────────────────────────────────────────────
-  function focusNode(key: string) { setFocusedKey(key); setQuery(""); }
+  function focusNode(key: string, reveal = false) {
+    setFocusedKey(key); setQuery("");
+    if (reveal) setFocusRequest({ key });
+  }
+  function changeWorldLayoutMode(next: WorldLayoutMode) {
+    setWorldLayoutMode(next);
+    setFocusRequest(null);
+    setSelected(new Set());
+    try { localStorage.setItem(WORLD_LAYOUT_MODE_KEY, next); } catch {}
+  }
   function isolate(key: string) {
     setIsolation({ key, depth: 1 });
     setFocusedKey(key);
@@ -891,11 +1029,12 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
     setManual(next);
   }
   function resetLayout() {
-    if (!layoutKey) return;
-    try { localStorage.removeItem(LAYOUT_STORE_PREFIX + layoutKey); } catch {}
+    if (storageKey) {
+      try { localStorage.removeItem(LAYOUT_STORE_PREFIX + storageKey); } catch {}
+    }
     setManual({});
     setHiddenKeys(new Set());
-    lastPositions.current = null;
+    setLayoutRevision((revision) => revision + 1);
   }
   function handleNodeClick(n: GraphNode, isFoldedGroup: boolean) {
     setMenu(null);
@@ -954,7 +1093,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
               if (shownMatches.length === 0) return;
               if (e.key === "ArrowDown") { e.preventDefault(); setHighlightIdx((v) => Math.min(shownMatches.length - 1, v + 1)); }
               else if (e.key === "ArrowUp") { e.preventDefault(); setHighlightIdx((v) => Math.max(0, v - 1)); }
-              else if (e.key === "Enter" && highlightIdx >= 0) { e.preventDefault(); const pick = shownMatches[highlightIdx]; if (pick) { if (pathFrom && !pathTo) pickPathTo(pick.key); else focusNode(pick.key); } }
+              else if (e.key === "Enter" && highlightIdx >= 0) { e.preventDefault(); const pick = shownMatches[highlightIdx]; if (pick) { if (pathFrom && !pathTo) pickPathTo(pick.key); else focusNode(pick.key, true); } }
               else if (e.key === "Escape") setQuery("");
             }}
           />
@@ -972,7 +1111,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
                 const after = pos >= 0 ? title.slice(pos + q.length) : "";
                 return (
                   <div key={n.key} className={`entity-search-item${idx === highlightIdx ? " highlighted" : ""}`}
-                    onClick={() => (pathFrom && !pathTo ? pickPathTo(n.key) : focusNode(n.key))}
+                    onClick={() => (pathFrom && !pathTo ? pickPathTo(n.key) : focusNode(n.key, true))}
                     onMouseEnter={() => setHighlightIdx(idx)}>
                     <span className={`entity-type-chip ${n.type}`}>{TYPE_LABELS[n.type] ?? n.type}</span>
                     <span>{before}{match && <mark style={{ background: "var(--accent-soft)", padding: 0 }}>{match}</mark>}{after}</span>
@@ -1078,6 +1217,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   ) : (
     <div ref={graphWrapRef} style={{ flex: 1, minHeight: fullscreen ? 0 : height, display: "flex", position: "relative" }}>
       <GraphCanvas
+        key={ringsMode ? "concentric" : "standard"}
         width={canvasSize.width}
         height={canvasSize.height}
         worldWidth={canvasSize.width}
@@ -1104,6 +1244,9 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
         onSelect={handleSelect}
         fitAnchorX={layered?.anchorX ?? null}
         bands={layered?.bands ?? null}
+        concentric={concentric}
+        clipTitles={view === "world"}
+        focusRequest={focusRequest}
       />
       {/* Stats — top right, below fullscreen button */}
       <span style={{ position: "absolute", top: 36, right: 8, zIndex: 5, fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--muted)", pointerEvents: "none" }}>
@@ -1111,6 +1254,13 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
       </span>
       {/* Canvas overlay controls */}
       <div style={{ position: "absolute", top: 8, left: 8, right: 130, display: "flex", flexWrap: "wrap", gap: 8, zIndex: 5 }}>
+        {view === "world" && !layeredMode && (
+          <select className="graph-tb-btn" aria-label="Раскладка графа миров"
+            value={worldLayoutMode} onChange={e => changeWorldLayoutMode(e.target.value as WorldLayoutMode)}>
+            <option value="free">Свободная раскладка</option>
+            <option value="concentric">Кольца по видам</option>
+          </select>
+        )}
         <div style={{ position: "relative" }}>
           <button type="button" className={`graph-tb-btn${edgeKindsOpen ? " active" : ""}`}
             onClick={() => { setEdgeKindsOpen((v) => !v); setEntityTypesOpen(false); }}>
@@ -1230,8 +1380,16 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
         <button type="button" className="graph-tb-btn" onClick={saveLayout} title="Сохранить раскладку: закрепить всё, что сейчас на экране">Закрепить</button>
         <button type="button" className="graph-tb-btn" onClick={resetLayout} title="Сбросить ручную раскладку">Сбросить</button>
       </div>
+      {concentric && concentric.rings.length > 0 && (
+        <div style={{ position: "absolute", bottom: 8, left: 8, right: 90, zIndex: 5, pointerEvents: "none", fontSize: "11px", color: "var(--muted)" }}>
+          <span style={{ background: "var(--paper)", padding: "3px 6px" }}>
+            От центра: {[...new Set(concentric.rings.map(r => r.type))].map(type => TYPE_LABELS[type] ?? type).join(" → ")}
+          </span>
+        </div>
+      )}
       {/* Масштаб — в углу холста, как на картах. */}
       <div style={{ position: "absolute", bottom: 8, right: 8, display: "flex", gap: 4, zIndex: 5 }}>
+        {view === "world" && <button type="button" className="graph-tb-btn" onClick={() => dispatchCommand("resetView")} title="Показать весь граф">Обзор</button>}
         <button type="button" className="graph-tb-btn" onClick={() => dispatchCommand("zoomBy", { factor: 1 / 1.3 })} title="Отдалить"><NavIcon name="minus" /></button>
         <button type="button" className="graph-tb-btn" onClick={() => dispatchCommand("zoomBy", { factor: 1.3 })} title="Приблизить"><NavIcon name="plus" /></button>
       </div>

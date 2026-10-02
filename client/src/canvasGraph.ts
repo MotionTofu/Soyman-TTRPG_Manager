@@ -11,10 +11,30 @@ import {
 import { RELATION_TONE_COLORS, RELATION_TONE_LABELS } from "./relations";
 import type { RelationTone } from "./types";
 import { tintedGlyph, typeTint } from "./typeGlyphs";
+import type { ConcentricLayout } from "./concentricGraph";
 
-const EDGE_LABEL_FONT_SIZE = 1.9;
+const EDGE_LABEL_FONT_SIZE = 16;
+const EDGE_LABEL_MAX_FONT_SIZE = 24;
 const RELATION_ARROW_OFFSET = 5;
 const ARROW_POSITIONS = [0.3, 0.5, 0.7];
+let fontFamilies = new WeakMap<CanvasRenderingContext2D, Map<string, string>>();
+
+function canvasFont(ctx: CanvasRenderingContext2D, weight: number, size: number, variable: string, fallback: string) {
+  let families = fontFamilies.get(ctx);
+  if (!families) { families = new Map(); fontFamilies.set(ctx, families); }
+  let family = families.get(variable);
+  if (!family) {
+    // Canvas font принимает готовую строку. var(...) здесь отвергается,
+    // сохраняя прежний размер шрифта (обычно стандартные 10 px).
+    try {
+      family = (ctx.canvas ? getComputedStyle(ctx.canvas).getPropertyValue(variable).trim() : "")
+        || getComputedStyle(document.documentElement).getPropertyValue(variable).trim();
+    } catch {}
+    family ||= fallback;
+    families.set(variable, family);
+  }
+  return `${weight} ${size}px ${family}`;
+}
 
 export type ShapeType = "rect" | "diamond" | "triangle" | "triangleInverted" | "triangleRight" | "star";
 
@@ -29,6 +49,19 @@ function labelScale(_zoom: number) {
 }
 
 // ── Shape drawing ────────────────────────────────────────────────
+
+/** Полное название остаётся в подсказке; на карточке оно помещается в её ширину. */
+export function fitGraphTitle(ctx: CanvasRenderingContext2D, title: string, maxWidth: number): string {
+  if (ctx.measureText(title).width <= maxWidth) return title;
+  const chars = Array.from(title);
+  let low = 0, high = chars.length;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (ctx.measureText(chars.slice(0, middle).join("") + "…").width <= maxWidth) low = middle;
+    else high = middle - 1;
+  }
+  return chars.slice(0, low).join("") + "…";
+}
 
 export function drawShape(
   ctx: CanvasRenderingContext2D,
@@ -183,13 +216,15 @@ export function drawEdge(
     ctx.globalAlpha = 1;
   }
 
-  // Label — только на фокусе/пути, на сером чипе чуть выше линии
+  // Label — только на фокусе/пути, вдоль линии на отдельном чипе
   if (options.showLabel) {
     if (!options.focused && !options.onPath) return;
     const relationLabel = e.section || (tone ? RELATION_TONE_LABELS[tone] : null);
     if (relationLabel) {
-      const labelAngle = angle > 90 || angle < -90 ? angle + 180 : angle;
+      const labelFlipped = angle > 90 || angle < -90;
+      const labelAngle = angle > 90 ? angle - 180 : angle < -90 ? angle + 180 : angle;
       const counterScale = 1 / (options.zoom * options.fitScale);
+      const fontSize = Math.min(EDGE_LABEL_MAX_FONT_SIZE, Math.max(EDGE_LABEL_FONT_SIZE, EDGE_LABEL_FONT_SIZE * Math.sqrt(options.zoom * options.fitScale)));
       const labelText = relationLabel.toUpperCase();
       const lx = (ax + bx) / 2;
       const ly = (ay + by) / 2;
@@ -198,26 +233,28 @@ export function drawEdge(
       ctx.translate(lx, ly);
       ctx.rotate((labelAngle * Math.PI) / 180);
       ctx.scale(counterScale, counterScale);
-      ctx.font = `500 ${EDGE_LABEL_FONT_SIZE}px var(--font-ui, sans-serif)`;
+      ctx.font = canvasFont(ctx, 600, fontSize, "--font-ui", "sans-serif");
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      const padX = 3;
-      const padY = 1.8;
+      const padX = 8;
+      const padY = 5;
       const textW = ctx.measureText(labelText).width;
       const chipW = textW + padX * 2;
-      const chipH = EDGE_LABEL_FONT_SIZE + padY * 2;
-      const GAP = 3; // зазор от линии до чипа в экранных px
-      const chipY = -GAP - chipH; // верх чипа над линией
+      const chipH = fontSize + padY * 2;
+      const GAP = 6; // зазор от линии до чипа в экранных px
+      // У встречных связей чипы снаружи пары линий. После разворота
+      // текста его локальная сторона меняется, поэтому учитываем переворот.
+      const chipY = bidirectional && !labelFlipped ? GAP : -GAP - chipH;
       const textY = chipY + chipH / 2;
-      // серый чип — как просил: чуть выше линии, не на ней
-      ctx.globalAlpha = options.onPath ? 0.96 : 0.92;
+      // Чип отстоит от своей линии и не закрывает её стрелки.
+      ctx.globalAlpha = 1;
       ctx.fillStyle = resolveColor("--paper", "#ececec");
       // лёгкая тень/граница чтобы чип отделялся от фона
       ctx.fillRect(-chipW / 2, chipY, chipW, chipH);
       ctx.strokeStyle = resolveColor("--line", "#d9d9d9");
-      ctx.lineWidth = 0.7;
+      ctx.lineWidth = 1;
       ctx.strokeRect(-chipW / 2, chipY, chipW, chipH);
-      ctx.globalAlpha = options.onPath ? 0.95 : 0.88;
+      ctx.globalAlpha = 1;
       ctx.fillStyle = resolveColor("--ink", "#1a1a1a");
       ctx.fillText(labelText, 0, textY);
       ctx.restore();
@@ -241,6 +278,7 @@ export function drawNode(
     focused: boolean;
     selected?: boolean;
     fitScale: number;
+    clipTitle?: boolean;
   },
 ) {
   const shape = TYPE_SHAPES[n.type] ?? "rect";
@@ -309,16 +347,20 @@ export function drawNode(
   }
 
   // Title text — Display voice (Anton, names)
-  ctx.font = `400 ${fontSize}px var(--font-display, sans-serif)`;
+  ctx.font = canvasFont(ctx, 400, fontSize, "--font-display", "sans-serif");
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
   ctx.fillStyle = inverse ? paper : ink;
   const textX = pos.x - chipW / 2 + padX + shapeIconSize * 2 + 4 * s;
-  ctx.fillText(n.title ?? "", textX, pos.y + 1);
+  const countText = options.foldedCount > 0 ? ` +${options.foldedCount}` : "";
+  const maxTitleWidth = Math.max(8 * s, pos.x + chipW / 2 - 4 * s - textX - countText.length * 6.6 * s);
+  const title = options.clipTitle ? fitGraphTitle(ctx, n.title ?? "", maxTitleWidth) : n.title ?? "";
+  ctx.fillText(title, textX, pos.y + 1);
   if (options.foldedCount > 0) {
-    ctx.font = `600 ${8 * s}px var(--font-mono, monospace)`;
+    const titleWidth = ctx.measureText(title).width;
+    ctx.font = canvasFont(ctx, 600, 8 * s, "--font-mono", "monospace");
     ctx.fillStyle = resolveColor("--muted", "#999");
-    ctx.fillText(` +${options.foldedCount}`, textX + ctx.measureText(n.title ?? "").width, pos.y + 1);
+    ctx.fillText(countText, textX + titleWidth, pos.y + 1);
   }
 
   // Pin indicator
@@ -337,6 +379,15 @@ export function drawNode(
 
 // ── Grid drawing ─────────────────────────────────────────────────
 
+const GRID_WORLD_STEP = 8;
+const GRID_MIN_SCREEN_STEP = 8;
+const GRID_TILE_SIZE = 16;
+const gridPatterns = new WeakMap<CanvasRenderingContext2D, {
+  color: string;
+  dpr: number;
+  pattern: CanvasPattern;
+}>();
+
 export function drawGrid(
   ctx: CanvasRenderingContext2D,
   cssWidth: number,
@@ -350,28 +401,41 @@ export function drawGrid(
   ctx.fillStyle = resolveColor("--paper-2", resolveColor("--paper", "#f8f8f8"));
   ctx.fillRect(0, 0, cssWidth, cssHeight);
 
-  // Dot pattern — world coordinates, transformed by pan/zoom/fitScale
-  const dotColor = resolveColor("--line", "#ddd");
-  ctx.fillStyle = dotColor;
-  const step = 8;
-  // Visible world range: screen px → world coords
-  const worldMinX = -panX / (zoom * fitScale);
-  const worldMaxX = (cssWidth - panX) / (zoom * fitScale);
-  const worldMinY = -panY / (zoom * fitScale);
-  const worldMaxY = (cssHeight - panY) / (zoom * fitScale);
-  const startX = Math.floor(worldMinX / step) * step - step;
-  const startY = Math.floor(worldMinY / step) * step - step;
-  const endX = Math.ceil(worldMaxX / step) * step + step;
-  const endY = Math.ceil(worldMaxY / step) * step + step;
+  const scale = zoom * fitScale;
+  if (!Number.isFinite(scale) || scale <= 0) return;
 
-  ctx.save();
-  ctx.translate(panX, panY);
-  ctx.scale(zoom * fitScale, zoom * fitScale);
-  for (let x = startX; x <= endX; x += step) {
-    for (let y = startY; y <= endY; y += step) {
-      ctx.fillRect(x - 0.3, y - 0.3, 0.6, 0.6);
-    }
+  // При отдалении оставляем каждую 2-ю, 4-ю и т. д. точку: решётка
+  // привязана к миру, но её экранный шаг никогда не мельче 8 px.
+  const stride = 2 ** Math.max(0, Math.ceil(Math.log2(GRID_MIN_SCREEN_STEP / (GRID_WORLD_STEP * scale))));
+  const screenStep = GRID_WORLD_STEP * stride * scale;
+  const dotColor = resolveColor("--line", "#ddd");
+  const dpr = window.devicePixelRatio || 1;
+  let cached = gridPatterns.get(ctx);
+  if (!cached || cached.color !== dotColor || cached.dpr !== dpr) {
+    const tile = document.createElement("canvas");
+    tile.width = tile.height = Math.ceil(GRID_TILE_SIZE * dpr);
+    const tileCtx = tile.getContext("2d");
+    if (!tileCtx) return;
+    tileCtx.fillStyle = dotColor;
+    const side = tile.width * 1.2 / GRID_TILE_SIZE;
+    tileCtx.fillRect((tile.width - side) / 2, (tile.height - side) / 2, side, side);
+    const pattern = ctx.createPattern(tile, "repeat");
+    if (!pattern) return;
+    cached = { color: dotColor, dpr, pattern };
+    gridPatterns.set(ctx, cached);
   }
+
+  // Одна заливка вместо сотен тысяч fillRect. Матрица меняется вместе
+  // с камерой; сама плитка остаётся в кэше при переносе и масштабировании.
+  const tileScale = screenStep / Math.ceil(GRID_TILE_SIZE * dpr);
+  cached.pattern.setTransform(new DOMMatrix([
+    tileScale, 0, 0, tileScale,
+    panX % screenStep - screenStep / 2,
+    panY % screenStep - screenStep / 2,
+  ]));
+  ctx.save();
+  ctx.fillStyle = cached.pattern;
+  ctx.fillRect(0, 0, cssWidth, cssHeight);
   ctx.restore();
 }
 
@@ -400,6 +464,8 @@ export interface DrawInput {
   showPins: boolean;
   /** Полосы ярусов графа приключений. */
   bands?: LayerBand[] | null;
+  concentric?: ConcentricLayout | null;
+  clipTitles?: boolean;
   selectedKeys?: Set<string>;
 }
 
@@ -453,7 +519,7 @@ export function drawGraph(input: DrawInput) {
     ctx.strokeStyle = resolveColor("--line", "#ccc");
     ctx.lineWidth = 1 / scale;
     ctx.setLineDash([6 / scale, 6 / scale]);
-    ctx.font = `600 ${10 / scale}px var(--font-mono, monospace)`;
+    ctx.font = canvasFont(ctx, 600, 10 / scale, "--font-mono", "monospace");
     ctx.fillStyle = resolveColor("--muted", "#999");
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
@@ -466,6 +532,31 @@ export function drawGraph(input: DrawInput) {
       }
       ctx.fillText(b.label.toUpperCase(), left + 8 / scale, b.top + 6 / scale);
     });
+    ctx.restore();
+  }
+
+  if (input.concentric) {
+    const { centerX, centerY, rings } = input.concentric;
+    ctx.save();
+    ctx.lineWidth = 1 / scale;
+    ctx.setLineDash([4 / scale, 6 / scale]);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "600 14px monospace";
+    for (const ring of rings) {
+      const tint = typeTint(ring.type);
+      const color = tint.kind === "color" ? tint.color : resolveColor("--muted", "#999");
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = 0.28;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, ring.radius, 0, Math.PI * 2);
+      ctx.stroke();
+      if (scale >= 0.35) {
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = color;
+        ctx.fillText(ring.label, centerX, centerY - ring.radius);
+      }
+    }
     ctx.restore();
   }
 
@@ -523,6 +614,7 @@ export function drawGraph(input: DrawInput) {
       focused: isFocused,
       selected: input.selectedKeys?.has(n.key) ?? false,
       fitScale,
+      clipTitle: input.clipTitles,
     });
   }
 
@@ -561,6 +653,7 @@ function resolveColorVar(color: string): string {
 // Clear the color cache when theme might have changed (e.g. dark mode toggle)
 export function clearColorCache() {
   colorCache.clear();
+  fontFamilies = new WeakMap();
 }
 
 // ── Hit testing ──────────────────────────────────────────────────

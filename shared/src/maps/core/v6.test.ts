@@ -38,7 +38,7 @@ describe("V6 player projection", () => {
 });
 describe("V6 boundary and tokens", () => {
   it("drawing styles survive canonical save/reload and token edits; unknown styles are rejected", () => {
-    for (const style of ["blueprint", "paper-ink"] as const) {
+    for (const style of ["blueprint", "paper-ink", "comic-punk"] as const) {
       const doc = { ...upgradeMapDocumentV5(oldDocument()), appearance: { style } };
       const edited = putGameplayToken(doc, "gp", createGameplayToken("test-style", ref, { x: 1, y: 1 }));
       expect(parseMapDocumentV6(serializeMapDocumentV6(edited))).toEqual({ ok: true, value: edited });

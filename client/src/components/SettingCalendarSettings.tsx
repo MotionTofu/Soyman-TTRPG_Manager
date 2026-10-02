@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAction, useResource, write } from "../data/hooks";
 import { chroniclePaths, timelineAffects } from "../data/settingPage";
 import { useConfirm } from "../hooks/useConfirm";
+import { RowDeleteButton } from "./RowIconButtons";
 import type { SettingCalendar, SettingCalendarEra, SettingCalendarTimeline } from "../types";
 
 interface Props {
@@ -69,7 +70,7 @@ export function SettingCalendarSettings({ settingId }: Props) {
   }
 
   return (
-    <div className="stack">
+    <div className="stack chronicle-panel">
       {/* === Календарь (месяцы/дни/эра текстом) === */}
       {!editing ? (
         <div className="card stack">
@@ -188,7 +189,7 @@ export function SettingCalendarSettings({ settingId }: Props) {
               return (
                 <div key={e.id} className="row" style={{ justifyContent: "space-between" }}>
                   <span><strong>{e.name}</strong> <span className="muted">({e.start_year}){tl ? ` — ${tl.name}` : ""}</span></span>
-                  <button className="comp-mini danger" onClick={() => deleteEra(e.id)} title="Удалить">✕</button>
+                  <RowDeleteButton label="Удалить эпоху" onClick={() => deleteEra(e.id)} />
                 </div>
               );
             })}

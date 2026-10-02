@@ -216,7 +216,7 @@ function Section({
 // Двигатель силы (разбор профилей Q3, Q12): в узкой колонке — хочет, боится,
 // нуждается и «ещё»; на странице — всё заполненное. Пустые поля не рисуются:
 // пустая графа за столом — шум, а приглашение заполнить живёт в правке.
-function ForceBlock({ force, wide }: { force: BeingForce; wide: boolean }) {
+export function ForceBlock({ force, wide }: { force: BeingForce; wide: boolean }) {
   const [all, setAll] = useState(false);
   const filled = FORCE_FIELDS.filter((f) => force[f.key]?.trim());
   const shown = wide || all ? filled : filled.filter((f) => NARROW_FORCE_KEYS.includes(f.key));
@@ -244,7 +244,7 @@ function ForceBlock({ force, wide }: { force: BeingForce; wide: boolean }) {
 
 // Секрет за сургучом (Q15): экран бывает виден игрокам — тайна не должна
 // стоять открытым текстом, пока Мастер не попросил.
-function SecretSeal({ text }: { text: string }) {
+export function SecretSeal({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="creature-card__secret-wrap">

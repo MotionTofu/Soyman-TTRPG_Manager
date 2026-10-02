@@ -17,6 +17,7 @@ function catalog(author:number, id?:number,q='',includeUnplaced=false): CatalogR
  const rows = db.prepare(`SELECT b.*,coalesce(m.title,r.name,w.title) title,c.cover_image article_cover,coalesce(c.reading_minutes,0) reading_minutes,
  coalesce(m.created_at,r.created_at,w.created_at) created_at,NULL archived_at,
  coalesce(m.category,'knowledge') category,r.category file_category,r.file_path,
+ r.setting_id resource_setting_id,(SELECT group_concat(rl.setting_id) FROM resource_setting_links rl WHERE rl.owner_type='resource' AND rl.owner_id=r.id) linked_settings,
  coalesce(m.system_id,r.system_id) system_id,sys.name system_name,d.name department_name,s.name section_name,
  coalesce(st.bookmarked,0) bookmarked,st.last_opened,st.position_json,st.mode,
  CASE WHEN b.source_type='mastering' THEN (SELECT count(*) FROM mastering_annotations n WHERE n.book_id=m.id AND n.author_user_id=@author)
@@ -107,6 +108,8 @@ bookLibraryRouter.get('/books',(req:AuthedRequest,res)=>{
  if(req.query.department!==undefined)rows=rows.filter(row=>req.query.department==='none'?row.department_id==null:row.department_id===Number(req.query.department));
  if(req.query.shelf!==undefined)rows=rows.filter(row=>req.query.shelf==='none'?row.shelf_id==null:row.shelf_id===Number(req.query.shelf));
  if(req.query.source_id!==undefined)rows=rows.filter(row=>row.source_id===Number(req.query.source_id)&&row.source_type===req.query.source_type);
+ // Книги сеттинга — его PDF и Markdown (профиль сеттинга, Q16): дом ресурса или привязка.
+ if(req.query.setting!==undefined){const sid=Number(req.query.setting);rows=rows.filter(row=>row.resource_setting_id===sid||String(row.linked_settings??'').split(',').map(Number).includes(sid));}
  if(req.query.system!==undefined)rows=rows.filter(row=>req.query.system==='none'?row.system_id==null:row.system_id===Number(req.query.system));
  if(req.query.notes==='1')rows=rows.filter(row=>row.note_count>0);
  if(req.query.bookmarked==='1')rows=rows.filter(row=>!!row.bookmarked);

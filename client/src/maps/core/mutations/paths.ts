@@ -31,11 +31,12 @@ export interface CellNetworkPathSpec {
 
 export interface SplinePathSpec {
   id: EntityId;
-  kind: "road" | "river";
+  kind: "road" | "river" | "wall";
   styleRef: StyleRef;
   width: number;
   nodes: SplineNode[];
   branchFrom?: { pathId: EntityId; nodeIndex: number };
+  properties?: MapPath["properties"];
 }
 
 function validSplineNodes(nodes: readonly SplineNode[]): boolean {
@@ -315,6 +316,7 @@ export function createSplinePath(doc: MapDocumentV5, layerId: string, spec: Spli
     id: spec.id, kind: spec.kind, styleRef: spec.styleRef, width: spec.width,
     geometry: { type: "spline", nodes: copySplineNodes(spec.nodes) },
     ...(spec.branchFrom ? { branchFrom: { ...spec.branchFrom } } : {}),
+    ...(spec.properties ? { properties: { ...spec.properties } } : {}),
   };
   return withPaths(doc, found.index, found.layer, [...found.layer.paths, path]);
 }
@@ -390,8 +392,8 @@ export function updateSplinePath(doc: MapDocumentV5, pathId: string,
   const found = resolvePath(doc, pathId);
   if ("error" in found) return found.error;
   if (found.path.geometry.type !== "spline" ||
-      (found.path.kind !== "road" && found.path.kind !== "river")) {
-    return mutationError("path.not-editable-free-line", "pathId", "expected a road or river spline");
+      (found.path.kind !== "road" && found.path.kind !== "river" && found.path.kind !== "wall")) {
+    return mutationError("path.not-editable-free-line", "pathId", "expected a road, river or wall spline");
   }
   const originalNodes = found.path.geometry.nodes;
   const width = patch.width ?? found.path.width;

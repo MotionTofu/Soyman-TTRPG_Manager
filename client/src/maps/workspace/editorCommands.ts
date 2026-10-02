@@ -1,4 +1,5 @@
 import { cartographySize } from "../assets/cartography";
+import { cryptObject } from "../assets/crypt";
 import { putGameplayToken, removeGameplayToken, type GameplayToken, type MapDocumentV6, type Vec2 } from "@shared/maps/core";
 import { applyTerrainCellEdits, builtinMaterial, createGameplayEntity, createLabel, deleteGameplayEntity,
   deleteLabel, moveGameplayEntity, moveLabel } from "../core";
@@ -12,8 +13,8 @@ export type WorkspaceTool = "surface" | "road" | "river" | "scatter" | "select" 
 export type WorkspaceSelection = { id: string; layerId: string; kind: "path" | "scatter" | "gameplay" | "token" | "label" | "object" };
 export const TOOL_LABELS: Record<WorkspaceTool, string> = { surface: "Поверхность", road: "Дорога", river: "Река", scatter: "Россыпь", select: "Выбор", brush: "Пол", eraser: "Ластик",
   shape: "Комната", wall: "Стена", door: "Дверь", label: "Подпись", asset: "Объект" };
-export const toolLayerKind = (tool: WorkspaceTool) => tool === "surface" || tool === "brush" || tool === "eraser" || tool === "wall"
-  ? "terrain" : tool === "road" || tool === "river" ? "path" : tool === "scatter" ? "scatter" : tool === "label" ? "label" : tool === "asset" ? "object" : "gameplay";
+export const toolLayerKind = (tool: WorkspaceTool) => tool === "surface" || tool === "brush" || tool === "eraser"
+  ? "terrain" : tool === "road" || tool === "river" || tool === "wall" ? "path" : tool === "scatter" ? "scatter" : tool === "label" ? "label" : tool === "asset" ? "object" : "gameplay";
 
 export function requireEditableLayer(document: MapDocumentV6, id: string, kind?: string) {
   const layer = document.layers.find((entry) => entry.id === id);
@@ -31,15 +32,27 @@ export function quantize(document: MapDocumentV6, point: Vec2, snap: boolean): V
 }
 
 /** Sample a segment at half-cell intervals so fast strokes do not leave gaps. */
-export function paintSegment(document: MapDocumentV6, layerId: string, a: Vec2, b: Vec2, material: string | null): MapDocumentV6 {
+export function cellBrushFootprint(document: MapDocumentV6, point: Vec2, size = 1) {
+  const grid = document.grid;
+  if (!grid) return [];
+  const cell = pixelToCell(grid.type, point.x, point.y, grid.columns, grid.rows);
+  if (!cell) return [];
+  const side = Math.max(1, Math.min(16, Math.round(size)));
+  const startX = grid.type === "square" && side % 2 === 0 ? Math.round(point.x) - side / 2 : cell.x - Math.floor(side / 2);
+  const startY = grid.type === "square" && side % 2 === 0 ? Math.round(point.y) - side / 2 : cell.y - Math.floor(side / 2);
+  const cells: { x: number; y: number }[] = [];
+  for (let y = Math.max(0, startY); y < Math.min(grid.rows, startY + side); y++)
+    for (let x = Math.max(0, startX); x < Math.min(grid.columns, startX + side); x++) cells.push({ x, y });
+  return cells;
+}
+export function paintSegment(document: MapDocumentV6, layerId: string, a: Vec2, b: Vec2, material: string | null, size = 1): MapDocumentV6 {
   const layer = requireEditableLayer(document, layerId, "terrain");
   if (layer.kind !== "terrain" || layer.representation !== "cells" || !document.grid) throw new Error("Для этой кисти нужен клеточный слой поверхности");
-  const grid = document.grid;
   const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) * 2));
   const cells = new Map<string, { x: number; y: number; material: ReturnType<typeof builtinMaterial> | null }>();
   for (let i = 0; i <= steps; i++) {
-    const cell = pixelToCell(grid.type, a.x + (b.x - a.x) * i / steps, a.y + (b.y - a.y) * i / steps, grid.columns, grid.rows);
-    if (cell) cells.set(`${cell.x},${cell.y}`, { ...cell, material: material === null ? null : builtinMaterial(material) });
+    const point = { x: a.x + (b.x - a.x) * i / steps, y: a.y + (b.y - a.y) * i / steps };
+    for (const cell of cellBrushFootprint(document, point, size)) cells.set(`${cell.x},${cell.y}`, { ...cell, material: material === null ? null : builtinMaterial(material) });
   }
   return editGeometry(document, (view) => applyTerrainCellEdits(view, layerId, [...cells.values()]));
 }
@@ -69,6 +82,11 @@ export function addLabel(document: MapDocumentV6, layerId: string, id: string, p
   requireEditableLayer(document, layerId, "label");
   return editGeometry(document, (view) => createLabel(view, layerId, { id, position, text }));
 }
+export function objectPlacementSize(assetId: string) {
+  const crypt = cryptObject(assetId);
+  return crypt ? Math.max(...crypt.cells) : cartographySize(assetId);
+}
+
 export function addSymbol(document: MapDocumentV6, layerId: string, id: string, position: Vec2, assetId: string) {
   requireEditableLayer(document, layerId, "object");
   const required = mapAssetPackForId(assetId);
@@ -77,8 +95,10 @@ export function addSymbol(document: MapDocumentV6, layerId: string, id: string, 
   if (installed && installed.version !== required.version) throw new Error("Эта карта использует другую версию набора символов");
   const base = document.assetPacks.some((pack) => pack.id === required.id) ? document
     : { ...document, assetPacks: [...document.assetPacks, required] };
+  // Картинка вписывается в квадрат со стороной size с сохранением пропорций — сторона = длинный размер в клетках.
+  const size = objectPlacementSize(assetId);
   return editGeometry(base, (view) => addMapObject(view, layerId, { id, visual: { type: "asset", assetId },
-    transform: { position, rotation: 0, scale: { x: cartographySize(assetId), y: cartographySize(assetId) } } }));
+    transform: { position, rotation: 0, scale: { x: size, y: size } } }));
 }
 export function moveSelection(document: MapDocumentV6, selection: WorkspaceSelection, delta: Vec2): MapDocumentV6 {
   const layer = requireEditableLayer(document, selection.layerId);

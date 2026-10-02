@@ -1,23 +1,413 @@
-.workbook { min-width: 0; }
-.workbook-toolbar { position: sticky; top: 0; z-index: 12; padding: var(--sp-5); background: var(--paper-2); border-bottom: var(--card-border-width, 1px) solid var(--line); display: flex; gap: var(--sp-5); flex-wrap: wrap; justify-content: space-between; }
-.workbook-toolbar strong,.workbook-toolbar span { display: block; }
-.workbook-layout { display: grid; grid-template-columns: 230px minmax(0,1fr); gap: var(--sp-8); margin-top: var(--sp-7); }
-.workbook-layout nav { position: sticky; top: 100px; max-height: calc(100dvh - 180px); overflow: auto; align-self: start; display: flex; flex-direction: column; gap: var(--sp-2); }
-.workbook-layout nav button { text-align: left; white-space: normal; }
-.workbook-layout nav [aria-current] { background: var(--accent-soft); border-color: var(--accent); }
-.workbook-sheet { min-width: 0; max-width: 1000px; }
-.workbook-field { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
-.workbook-field small { white-space: pre-wrap; }
-.workbook-check { display: flex; gap: var(--sp-4); align-items: start; }
-.workbook-check input { width: auto; }
-.workbook-field textarea { min-height: 96px; resize: vertical; width: 100%; }
-.workbook-repeat { min-width: 0; padding: var(--sp-6); border: var(--card-border-width, 1px) solid var(--line); }
-.workbook-repeat__row { padding: var(--sp-6) 0; border-bottom: var(--card-border-width, 1px) solid var(--line); }
-.workbook-repeat__actions { display: flex; gap: var(--sp-4); margin-bottom: var(--sp-5); }
-.workbook-table-row { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: var(--sp-5); }
-.workbook-instructions { margin: var(--sp-6) 0; padding: var(--sp-5); border: var(--card-border-width, 1px) solid var(--line); overflow-wrap: anywhere; }
-.workbook-error { padding: var(--sp-5); border: var(--card-border-width, 1px) solid var(--accent); }
-.workbook--popout { padding: var(--sp-7); height: 100dvh; overflow: auto; }
-@media(max-width:800px) { .workbook-layout { grid-template-columns: minmax(0,1fr); gap: var(--sp-6); } .workbook-layout nav { position: static; max-height: 200px; } .workbook--popout { padding: var(--sp-5); } }
+/* Рабочая тетрадь (холст «Тетрадь и читалка», страница «Разворот · лист 02»;
+   разбор Q12, Q16, Q20, Q31). Разворот на обложке: слева форма листа, справа
+   «Записи», язычки листов на кромке. У края читалки и на телефоне — одна
+   страница, язычки сверху, «Записи» последней закладкой.
+   Бумага говорит токенами paper.css (.paper-scope), ассеты — переменными skin. */
 
-.workbook-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+/* Тетрадь и в тёмной теме — обычная бумага, без приглушения профилей (решение владельца 2026-10-01).
+   Значения — светлые из paper.css; селектор сильнее [data-theme-mode="dark"] .paper-scope. */
+[data-theme-mode="dark"] .paper-scope:is(.wb-book, .wb-pages, .wb-card, .workbook-dock, .workbook-tile) {
+  --paper-base: #eee7d6;
+  --paper-ink-soft: #3a332a;
+  --paper-muted: #6b6253;
+  --paper-rule: rgb(31 26 20 / 0.22);
+  --paper-wash: rgb(255 253 245 / 0.42);
+  --on-surface-muted: #cfc6b0;
+}
+
+.workbook { min-width: 0; }
+.workbook--popout { padding: var(--sp-6); height: 100dvh; overflow: auto; }
+.wb-popout-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-5); flex-wrap: wrap; margin-bottom: var(--sp-5); }
+.wb-popout-head > strong { font-family: var(--font-ui); font-size: var(--fs-h2); font-weight: 500; }
+.workbook-error { padding: var(--sp-5); border: var(--card-border-width, 1px) solid var(--accent); }
+
+/* ── Шапка: состояние сохранения и действия ─────────────────────────── */
+.wb-toolbar { display: flex; align-items: center; gap: var(--sp-5); flex-wrap: wrap; }
+.wb-template { color: var(--muted); font-size: var(--fs-data); }
+.wb-status { display: inline-flex; align-items: center; gap: var(--sp-3); color: var(--muted); font-size: var(--fs-data); }
+.wb-status > span { width: 8px; height: 8px; border-radius: 50%; background: var(--paper-acid, #e2f25a); }
+.wb-status.is-pending > span { background: #e2b85a; }
+.wb-close { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; color: inherit; }
+.wb-menu { position: relative; }
+.wb-menu > summary { cursor: pointer; list-style: none; padding: var(--sp-3) var(--sp-5); }
+.wb-menu > summary::-webkit-details-marker { display: none; }
+.wb-menu__list { position: absolute; right: 0; top: 100%; z-index: 30; display: flex; flex-direction: column; gap: var(--sp-1); min-width: 220px; padding: var(--sp-4); background: var(--bg-elevated, var(--paper-2)); border: var(--card-border-width, 1px) solid var(--line); box-shadow: 0 12px 24px rgb(0 0 0 / 0.3); }
+.wb-menu__list > * { text-align: left; }
+.wb-upgrade { margin-bottom: var(--sp-6); }
+
+/* ── Разворот ───────────────────────────────────────────────────────── */
+.wb-spread { display: flex; flex-direction: column; gap: var(--sp-4); max-width: 1180px; }
+.wb-book {
+  position: relative;
+  /* шаг мимо шкалы намеренно — поля обложки по нарисованному ассету: справа место под язычки */
+  padding: 30px 66px 38px 30px;
+  background: var(--skin-wb-cover) center / 100% 100% no-repeat;
+  filter: drop-shadow(0 2px 1px rgb(20 14 6 / 0.55)) drop-shadow(0 12px 14px rgb(40 30 15 / 0.35)) drop-shadow(0 34px 44px rgb(40 30 15 / 0.3));
+}
+/* Язычки с названиями выходят из-под кромки на ~100 px (предел 180 минус
+   спрятанное под бумагой): справа от разворота держим под них место, иначе
+   их обрезает край страницы. В одной странице язычки сверху — места не надо. */
+.wb-book:not(.wb-book--single) { margin-right: calc(var(--sp-10) + var(--sp-9)); }
+.wb-pages {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  height: clamp(520px, calc(100dvh - 250px), 920px);
+  border-radius: 3px;
+  box-shadow: 0 2px 0 #d8ceb6, 0 3px 0 rgb(0 0 0 / 0.35), 0 5px 0 #cbbfa3, 0 6px 0 rgb(0 0 0 / 0.35), 0 8px 0 #bdb092, 0 12px 14px rgb(0 0 0 / 0.5);
+}
+.wb-page {
+  position: relative;
+  min-width: 0;
+  overflow: auto;
+  padding: var(--sp-7) var(--sp-8) var(--sp-8);
+  background: var(--paper-base) var(--skin-paper-panel) center / cover;
+  color: var(--paper-ink);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+}
+.wb-pages > .wb-page { width: 50%; }
+.wb-page--form { border-radius: 4px 0 0 4px; }
+.wb-page--notes { border-radius: 0 4px 4px 0; }
+.wb-spine { position: absolute; left: calc(50% - 24px); top: 0; bottom: 0; width: 48px; z-index: 2; pointer-events: none; background: var(--skin-wb-spine) center top / 100% auto repeat-y; }
+
+/* Язычки листов: из-под правой кромки бумаги, активный — кислотный. */
+.wb-tabs {
+  position: absolute;
+  z-index: 0;
+  left: calc(100% - 78px);
+  top: var(--sp-8);
+  bottom: var(--sp-8);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+/* Язычок по длине названия, не длиннее 180 px — дальше многоточие, полное имя
+   в подсказке (владелец, 2026-10-02). Сверху ассет целиком в своих пропорциях
+   у правого края — фигурный кончик не искажается; под ним растянутая копия.
+   border-image давал шов у кончика. */
+.wb-tab {
+  flex-shrink: 0;
+  min-width: 62px;
+  max-width: 180px;
+  height: 34px;
+  /* шаг мимо шкалы намеренно — подпись в видимой части язычка, остальное под бумагой */
+  padding: 0 22px 0 18px;
+  border: 0;
+  border-radius: 0;
+  background:
+    var(--skin-wb-tab-paper) right center / auto 100% no-repeat,
+    var(--skin-wb-tab-paper) left center / calc(100% - 40px) 100% no-repeat;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #4a4236;
+  font-family: var(--font-ui);
+  font-size: var(--fs-data);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.wb-tab.is-active { height: 38px; background-image: var(--skin-wb-tab-acid), var(--skin-wb-tab-acid); color: #141414; font-weight: 600; }
+.wb-tab:hover:not(.is-active) { color: #141414; }
+/* В развороте — название листа, в одной странице (узкие язычки сверху) — номер. */
+.wb-tab__num { display: none; }
+.wb-book--single .wb-tab__num { display: inline; }
+.wb-book--single .wb-tab__title { display: none; }
+
+.wb-contents {
+  position: absolute;
+  z-index: 5;
+  right: var(--sp-10);
+  top: var(--sp-8);
+  width: min(420px, 90%);
+  max-height: 70%;
+  overflow: auto;
+  padding: var(--sp-5);
+  background: var(--paper-base, #eee7d6) var(--skin-paper-panel) center / cover;
+  color: #1f1a14;
+  box-shadow: 0 12px 30px rgb(0 0 0 / 0.45);
+}
+.wb-contents ol { list-style: none; margin: 0; padding: 0; }
+.wb-contents button { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: var(--sp-4); width: 100%; padding: var(--sp-3) var(--sp-4); border: 0; background: transparent; color: inherit; text-align: left; }
+.wb-contents button[aria-current] { background: var(--paper-acid, #e2f25a); }
+.wb-contents small { color: #6b6253; }
+
+.wb-footer { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-5); }
+.wb-footer > button { border: 0; background: transparent; color: inherit; font-size: var(--fs-body); }
+.wb-footer__progress { display: inline-flex; align-items: center; gap: var(--sp-4); color: var(--muted); font-size: var(--fs-data); }
+.wb-num { width: 20px; height: 20px; background: center / contain no-repeat; }
+.wb-num--filled { background-image: var(--skin-wb-num-filled); }
+.wb-num--current { background-image: var(--skin-wb-num-current); }
+.wb-num--empty { background-image: var(--skin-wb-num-empty); }
+.wb-footer > .wb-next, .wb-next {
+  border: 0;
+  border-radius: 4px;
+  background: var(--paper-acid, #e2f25a);
+  color: #141414;
+  font-weight: 700;
+  padding: var(--sp-4) var(--sp-6);
+  box-shadow: 3px 3px 0 #141414;
+}
+
+/* ── Лист: заголовок, графы ─────────────────────────────────────────── */
+.wb-sheet-head h2, .wb-card__title h2 {
+  margin: var(--sp-1) 0 0;
+  font-family: "Rubik Dirt", var(--font-ui), sans-serif;
+  font-weight: 400;
+  font-size: var(--fs-h1);
+  line-height: 1.02;
+  text-transform: none;
+  color: #141414;
+}
+.wb-about { margin-top: var(--sp-2); color: var(--paper-muted); }
+.wb-about > summary { cursor: pointer; font-size: var(--fs-data); }
+.wb-about[open] { color: var(--paper-ink); }
+.wb-fields { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-6); }
+.wb-label { font-family: var(--font-ui); font-weight: 600; font-size: var(--fs-data); letter-spacing: 0.06em; text-transform: uppercase; color: var(--paper-ink); }
+.wb-hint { font-size: var(--fs-data); line-height: 1.35; color: var(--paper-muted); white-space: pre-wrap; }
+.wb-link { border: 0; background: transparent; padding: var(--sp-1) 0; color: var(--paper-ink-soft, inherit); cursor: pointer; font-size: var(--fs-data); text-decoration: none; }
+.wb-link:hover:not(:disabled) { text-decoration: underline; }
+.workbook-field { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; border: 0; padding: 0; margin: 0; }
+.wb-page .workbook-heading, .wb-card .workbook-heading { margin: var(--sp-4) 0 0; font-family: var(--font-ui); font-weight: 500; font-size: var(--fs-h2); text-transform: none; color: #141414; }
+.wb-page h4.workbook-heading, .wb-card h4.workbook-heading { font-size: var(--fs-h3); text-transform: uppercase; letter-spacing: 0.06em; }
+.workbook-note { margin: 0; font-size: var(--fs-data); white-space: pre-wrap; }
+.wb-page :is(.wb-ruled, .wb-line, .wb-cell) { border: 0; border-radius: 0; background-color: transparent; color: var(--paper-ink); font: inherit; font-size: var(--fs-body); box-shadow: none; }
+.wb-ruled {
+  width: 100%;
+  padding: 0;
+  resize: vertical;
+  line-height: 28px;
+  background-image: linear-gradient(to bottom, transparent 27px, var(--paper-rule) 27px, var(--paper-rule) 28px, transparent 28px);
+  background-size: 100% 28px;
+  background-attachment: local;
+}
+.wb-page .wb-line { padding: var(--sp-1) 0; }
+/* Под каждым полем — тонкая полоска: видно, что сюда пишут (просьба владельца 2026-10-01). */
+:is(.wb-page, .wb-card) :is(textarea, select, input:not([type="checkbox"], .sr-only)) { border-bottom: 1px solid rgb(31 26 20 / 0.45); }
+.wb-page :is(.wb-ruled, .wb-line, .wb-cell):focus { outline: none; background-color: rgb(226 242 90 / 0.35); box-shadow: inset 0 -2px 0 #141414; }
+.workbook-check { display: flex; gap: var(--sp-4); align-items: center; font-size: var(--fs-body); }
+.wb-check { appearance: none; margin: 0; width: 24px; height: 24px; flex-shrink: 0; border: 0; background: var(--skin-wb-num-empty) center / contain no-repeat; cursor: pointer; }
+.wb-check:checked { background-image: var(--skin-wb-num-filled); }
+.wb-check:focus-visible { outline: 2px solid #141414; outline-offset: 2px; }
+
+/* Таблица курса — настоящая таблица; клетки пишутся на месте. */
+.wb-table { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+.wb-table table { width: 100%; border-collapse: collapse; font-size: var(--fs-data); }
+.wb-table thead th { padding: var(--sp-1) var(--sp-3) var(--sp-2); color: var(--paper-muted); font-weight: 500; text-align: left; }
+.wb-table tbody tr { border-top: 1px solid var(--paper-rule); vertical-align: top; }
+.wb-table tbody tr:last-child { border-bottom: 1px solid var(--paper-rule); }
+.wb-table tbody th { padding: var(--sp-3) var(--sp-3) var(--sp-3) 0; text-align: left; font-weight: 700; }
+.wb-table td { padding: var(--sp-2) var(--sp-3); }
+.wb-cell { width: 100%; padding: var(--sp-1) 0; resize: none; field-sizing: content; min-height: 28px; }
+.wb-table select { width: 100%; }
+
+/* Повторяемые карточки: кнопка с именем и заполненностью. */
+.wb-cards { display: flex; flex-direction: column; gap: var(--sp-3); }
+.wb-cards__head { display: flex; align-items: center; justify-content: space-between; }
+.wb-cards__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--sp-4); }
+.wb-card-button, .wb-card-add {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-1);
+  min-height: 44px;
+  padding: var(--sp-4) var(--sp-5);
+  border-radius: 6px;
+  text-align: left;
+  color: var(--paper-ink);
+  cursor: pointer;
+}
+.wb-card-button { border: var(--card-border-width-strong) solid #141414; background: rgb(255 255 255 / 0.35); }
+.wb-card-button:hover { background: rgb(226 242 90 / 0.45); }
+.wb-card-button__name { font-family: var(--font-ui); font-size: var(--fs-h3); font-weight: 600; }
+.wb-card-button__meta { font-size: var(--fs-meta); color: var(--paper-ink-soft); }
+.wb-card-add { justify-content: center; border: var(--card-border-width) dashed rgb(31 26 20 / 0.45); background: transparent; color: var(--paper-ink-soft); }
+.wb-summary { overflow: auto; }
+.wb-summary table { border-collapse: collapse; font-size: var(--fs-data); }
+.wb-summary :is(th, td) { padding: var(--sp-2) var(--sp-4); border-bottom: 1px solid var(--paper-rule); text-align: left; vertical-align: top; min-width: 120px; }
+
+/* Карточка на весь разворот. */
+.wb-book--card .wb-card { height: clamp(520px, calc(100dvh - 250px), 920px); }
+.wb-card {
+  position: relative;
+  z-index: 1;
+  overflow: auto;
+  padding: var(--sp-6) var(--sp-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  border-radius: 3px;
+  background: var(--paper-base) var(--skin-paper-panel) center / cover;
+  color: var(--paper-ink);
+  box-shadow: 0 2px 0 #d8ceb6, 0 3px 0 rgb(0 0 0 / 0.35), 0 5px 0 #cbbfa3, 0 8px 0 #bdb092, 0 12px 14px rgb(0 0 0 / 0.5);
+}
+.wb-card__nav { display: flex; align-items: center; gap: var(--sp-5); flex-wrap: wrap; }
+.wb-card__siblings { margin-left: auto; display: flex; gap: var(--sp-6); }
+.wb-card__title { display: flex; align-items: baseline; gap: var(--sp-6); flex-wrap: wrap; }
+.wb-card__title input {
+  min-width: 0;
+  width: min(420px, 100%);
+  padding: 0;
+  border: 0;
+  border-bottom: 2px solid #141414;
+  border-radius: 0;
+  background: transparent;
+  font-family: "Rubik Dirt", var(--font-ui), sans-serif;
+  font-size: var(--fs-stat);
+  color: #141414;
+}
+.wb-card__title > span { color: var(--paper-ink-soft); font-size: var(--fs-data); }
+.wb-card__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-5) var(--sp-7); }
+.wb-card__actions { display: flex; gap: var(--sp-5); align-items: center; }
+
+/* ── Записи ─────────────────────────────────────────────────────────── */
+.wb-note { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-4) var(--sp-5); border-bottom: 1px solid rgb(31 26 20 / 0.16); font-size: var(--fs-body); line-height: 1.4; }
+.wb-note p { margin: 0; white-space: pre-wrap; }
+.wb-note--taped {
+  position: relative;
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-6);
+  border: 0;
+  background: #f7f2e6;
+  transform: rotate(-0.8deg);
+  box-shadow: 0 1px 0 rgb(31 26 20 / 0.12), 0 3px 6px rgb(31 26 20 / 0.18);
+}
+.wb-note--taped::before { content: ""; position: absolute; top: -11px; left: calc(50% - 48px); width: 96px; height: 22px; transform: rotate(-3deg); background: var(--skin-tape) center / 100% 100% no-repeat; opacity: 0.82; mix-blend-mode: multiply; }
+.wb-note__meta { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); font-size: var(--fs-meta); color: var(--paper-ink-soft); }
+.wb-note__meta a { color: inherit; }
+.wb-to-field { width: auto; max-width: 60%; padding: var(--sp-1) var(--sp-3); border: var(--card-border-width-strong) solid #141414; border-radius: 4px; background: var(--paper-acid, #e2f25a); color: #141414; font-size: var(--fs-meta); font-weight: 700; }
+.wb-notes-group { display: flex; flex-direction: column; gap: var(--sp-2); }
+.wb-empty-notes { display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); text-align: center; padding: var(--sp-6) 0; }
+.wb-empty-notes p { margin: 0; max-width: 340px; }
+.wb-empty-notes__art { width: 200px; height: 200px; background: var(--skin-wb-empty-notes) center / contain no-repeat; }
+.wb-new-note { display: block; }
+.wb-all-notes { margin-top: auto; align-self: flex-start; }
+.wb-page-preview { display: block; width: 100%; min-height: 84px; max-height: 240px; overflow: hidden; padding: var(--sp-4); border: var(--card-border-width) dashed rgb(31 26 20 / 0.45); border-radius: 4px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.wb-image img { max-width: 100%; max-height: 360px; display: block; }
+.wb-image__actions { display: flex; gap: var(--sp-5); }
+.workbook-former { padding: var(--sp-4) 0; border-top: 1px solid var(--paper-rule); }
+.workbook-former > summary { cursor: pointer; color: var(--paper-muted); }
+.workbook-repeat { min-width: 0; padding: var(--sp-5); border: var(--card-border-width) solid var(--paper-rule); }
+.workbook-repeat__row { padding: var(--sp-4) 0; border-bottom: 1px solid var(--paper-rule); }
+.workbook-repeat__actions { display: flex; gap: var(--sp-4); }
+
+/* ── Одна страница: у края читалки и на телефоне ────────────────────── */
+.wb-book--single { padding: 0; background: none; filter: none; display: flex; flex-direction: column; min-height: 0; }
+.wb-book--single > .wb-page { flex: 1; overflow: auto; border-radius: 0; }
+.wb-book--single .wb-tabs {
+  position: static;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--sp-1);
+  padding: 0 var(--sp-5);
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: var(--paper-base) var(--skin-paper-panel) center / cover;
+}
+.wb-book--single .wb-tab {
+  --tw: 34px;
+  --th: 40px;
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  max-width: none;
+  width: var(--tw);
+  height: var(--th);
+  padding: 0;
+  background: none;
+  text-align: center;
+}
+.wb-book--single .wb-tab::before { content: ""; position: absolute; z-index: -1; left: 50%; top: 50%; width: var(--th); height: var(--tw); transform: translate(-50%, -50%) rotate(90deg); background: var(--skin-wb-tab-paper) center / 100% 100% no-repeat; }
+.wb-book--single .wb-tab.is-active { --tw: 44px; --th: 46px; }
+.wb-book--single .wb-tab.is-active::before { background-image: var(--skin-wb-tab-acid); }
+.wb-book--single .wb-tab--notes { --tw: 90px; margin-left: auto; font-weight: 600; color: #1f1a14; }
+.wb-book--single .wb-contents { right: var(--sp-5); top: 48px; }
+.wb-book--single .wb-footer { padding: var(--sp-4) var(--sp-6); background: var(--paper-base) var(--skin-paper-panel) center / cover; color: var(--paper-ink); }
+.wb-book--single.wb-book--card .wb-card { height: auto; min-height: 0; flex: 1; border-radius: 0; box-shadow: none; }
+.wb-book--single .wb-card__grid { grid-template-columns: minmax(0, 1fr); }
+.workbook-page .wb-book--single { height: calc(100dvh - 160px); border: var(--card-border-width-strong) solid #1c1c1c; border-radius: 12px 12px 0 0; overflow: hidden; }
+
+/* Ширина страницы, а не окна: та же тетрадь бывает разворотом, у края читалки и на телефоне. */
+.wb-page, .wb-card { container-type: inline-size; }
+@container (max-width: 900px) { .wb-card__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (max-width: 520px) {
+  .wb-card__grid { grid-template-columns: minmax(0, 1fr); }
+  .wb-page .workbook-heading { font-size: var(--fs-h3); letter-spacing: 0.04em; }
+  /* На узкой странице таблица — блоками: строка, под ней ответы с подписями столбцов. */
+  .wb-table thead { display: none; }
+  .wb-table :is(tbody, tr, th, td) { display: block; width: 100%; }
+  .wb-table tbody tr { padding: var(--sp-3) 0; }
+  .wb-table td { padding: 0; }
+  .wb-table td[data-label]::before { content: attr(data-label); display: block; font-size: var(--fs-meta); color: var(--paper-muted); }
+  .wb-card__siblings { margin-left: 0; }
+}
+
+/* ── Раздел «Тетради» ───────────────────────────────────────────────── */
+.workbooks-tabs { display: flex; gap: var(--sp-3); }
+.workbooks-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--sp-6); }
+.workbook-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-6);
+  border-radius: 4px;
+  background: var(--paper-base) var(--skin-paper-panel) center / cover;
+  color: var(--paper-ink);
+  box-shadow: 0 2px 0 #cbbfa3, 0 10px 20px rgb(0 0 0 / 0.3);
+}
+.workbook-tile h3 { margin: 0; font-family: "Rubik Dirt", var(--font-ui), sans-serif; font-weight: 400; font-size: var(--fs-h2); text-transform: none; }
+.workbook-tile h3 a { color: #141414; text-decoration: none; }
+.workbook-tile__meta { font-size: var(--fs-data); color: var(--paper-ink-soft); }
+.workbook-tile__bar { appearance: none; width: 100%; height: 6px; border: 0; border-radius: 3px; background: rgb(31 26 20 / 0.15); overflow: hidden; }
+.workbook-tile__bar::-webkit-progress-bar { background: transparent; }
+.workbook-tile__bar::-webkit-progress-value { background: #141414; }
+.workbook-tile__bar::-moz-progress-bar { background: #141414; }
+.workbook-tile__actions { display: flex; flex-wrap: wrap; gap: var(--sp-5); margin-top: auto; }
+.workbooks-empty { display: flex; flex-direction: column; align-items: center; gap: var(--sp-5); padding: var(--sp-8) var(--sp-6); text-align: center; }
+.workbooks-empty__art { width: 260px; height: 260px; background: var(--skin-wb-empty-notebooks) center / contain no-repeat; }
+.workbooks-empty h2 { margin: 0; }
+.workbooks-empty p { margin: 0; max-width: 440px; }
+.workbooks-actions { display: flex; gap: var(--sp-4); flex-wrap: wrap; justify-content: center; align-items: center; }
+.workbooks-upload { cursor: pointer; text-decoration: underline; color: var(--muted); }
+
+/* ── Тетрадь у края читалки ─────────────────────────────────────────── */
+/* Класс удвоен намеренно: перебить оглавление и узкий режим читалки (mastering-library.css) без !important. */
+.mastering-reader .mastering-reader__layout.has-workbook.has-workbook { grid-template-columns: minmax(0, 1fr) clamp(340px, 45%, 620px); max-width: none; column-gap: var(--sp-8); }
+.mastering-reader__layout.has-workbook > .mastering-reader__toc { display: none; }
+.mastering-reader__layout.has-workbook.has-workbook > .mastering-reader__article { grid-column: 1; max-width: 76ch; justify-self: center; }
+.mastering-reader__layout.has-workbook > .workbook-dock { grid-column: 2; }
+.mastering-reader { container: reader / inline-size; }
+.mastering-reader__actions .mastering-reader__workbook { background: var(--paper-acid, #e2f25a); color: #141414; font-weight: 700; }
+/* 15 px под плавающей панелью читалки и над плеером (без него — над низом окна) — считает useMasteringReadingLayout. */
+.workbook-dock {
+  position: sticky;
+  top: var(--reader-dock-top, var(--reader-sticky-top));
+  height: var(--reader-dock-height, 70dvh);
+  margin-top: var(--reader-dock-shift, 0px);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  box-shadow: -10px 0 24px rgb(40 30 15 / 0.25);
+}
+.workbook-dock__head { display: flex; align-items: center; gap: var(--sp-4); min-height: 46px; padding: 0 var(--sp-2) 0 var(--sp-7); background: #141414 var(--skin-ink-surface) center / cover; color: #ede6d6; }
+.workbook-dock__head strong { font-family: var(--font-ui); font-weight: 500; font-size: var(--fs-h3); }
+.workbook-dock__head .wb-status { color: #a89f90; }
+.workbook-dock__head button, .workbook-dock__head a { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; height: 36px; border: 0; background: transparent; color: inherit; }
+.workbook-dock__head > span:first-of-type { flex: 1; }
+.workbook-dock .wb-book--single { flex: 1; }
+.reader-mode-switch { display: none; }
+/* Книга и тетрадь рядом не помещаются — по очереди, «Книга | Тетрадь» (макет телефона). */
+@container reader (max-width: 860px) {
+  .mastering-reader .mastering-reader__layout.has-workbook.has-workbook { grid-template-columns: minmax(0, 1fr); }
+  .mastering-reader__layout.has-workbook > .workbook-dock { grid-column: 1; }
+  .mastering-reader__layout.has-workbook.shows-workbook > :not(.workbook-dock) { display: none; }
+  .mastering-reader__layout.has-workbook:not(.shows-workbook) > .workbook-dock { display: none; }
+  .workbook-dock { box-shadow: none; }
+  .reader-mode-switch { display: inline-flex; }
+  .mastering-reader__actions .mastering-reader__workbook[aria-pressed="true"] { display: none; }
+}
+.reader-mode-switch [aria-pressed="true"] { background: var(--paper-acid, #e2f25a); color: #141414; font-weight: 600; }

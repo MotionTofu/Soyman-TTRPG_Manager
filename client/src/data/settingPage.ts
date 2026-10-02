@@ -12,7 +12,11 @@ import type { Affect } from "./entities";
 
 export const chroniclePaths = {
   events: (settingId: number) => `/settings/${settingId}/calendar-events`,
-  cycles: (settingId: number) => `/settings/${settingId}/cycles`,
+  // С кампанией — циклы и группы сеттинга плюс её собственные (Q10, Q12).
+  cycles: (settingId: number, campaignId?: number | null) =>
+    `/settings/${settingId}/cycles${campaignId ? `?campaign=${campaignId}` : ""}`,
+  cycleGroups: (settingId: number, campaignId?: number | null) =>
+    `/settings/${settingId}/cycle-groups${campaignId ? `?campaign=${campaignId}` : ""}`,
   importantDates: (settingId: number) => `/settings/${settingId}/important-dates`,
   eras: (settingId: number) => `/settings/${settingId}/calendar-eras`,
   timelines: (settingId: number) => `/settings/${settingId}/calendar-timelines`,

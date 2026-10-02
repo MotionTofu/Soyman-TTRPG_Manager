@@ -1,8 +1,4 @@
 import type Database from "better-sqlite3";
-import {shippedWorkbooks} from "../workbooks/shipped";
-export function seedWorkbookTemplates(db:Database.Database){
- for(const template of shippedWorkbooks)db.prepare('INSERT OR IGNORE INTO workbook_templates(template_key,version,title,definition_json) VALUES(?,?,?,?)').run(template.key,template.version,template.title,JSON.stringify(template));
-}
 export function migrateWorkbooks(db:Database.Database){db.exec(`
  CREATE TABLE IF NOT EXISTS workbook_templates (
   id INTEGER PRIMARY KEY, template_key TEXT NOT NULL, version INTEGER NOT NULL, definition_json TEXT NOT NULL,
@@ -29,5 +25,9 @@ export function migrateWorkbooks(db:Database.Database){db.exec(`
  const columns=db.prepare('PRAGMA table_info(workbook_book_selection)').all() as {name:string}[];
  if(!columns.some(c=>c.name==='sheet_key'))db.exec(`ALTER TABLE workbook_book_selection ADD COLUMN sheet_key TEXT;
  UPDATE workbook_book_selection SET sheet_key=(SELECT l.sheet_key FROM workbook_book_links l WHERE l.book_id=workbook_book_selection.book_id AND l.template_key=workbook_book_selection.template_key);`);
- seedWorkbookTemplates(db);
+ // Тетрадь полки: открывается у края читалки у книг полки без своей связи. Личная, как выбор у книги.
+ db.exec(`CREATE TABLE IF NOT EXISTS workbook_shelf_links (
+  shelf_id INTEGER NOT NULL REFERENCES library_shelves(id) ON DELETE CASCADE,author_user_id INTEGER NOT NULL REFERENCES users(id),
+  instance_id INTEGER NOT NULL REFERENCES workbook_instances(id) ON DELETE CASCADE,PRIMARY KEY(shelf_id,author_user_id)
+ );`);
 }

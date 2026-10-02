@@ -713,3 +713,24 @@ button.role-chip.is-on {
 .creature-card-editor__force-field {
   gap: var(--sp-2);
 }
+
+/* «Лица» карточки фракции: несколько представителей строкой под
+   двигателем, остальные — во «Связях». */
+.faction-card__faces {
+  margin: var(--sp-5) var(--sp-6) 0;
+  padding-top: var(--sp-4);
+  border-top: var(--card-border-width) dashed var(--line);
+  font-size: var(--fs-data);
+}
+.faction-card__faces .creature-card__more {
+  margin: 0 0 0 var(--sp-2);
+}
+
+/* Шапка предмета: сила/свойства — главный текст «за столом». */
+.artifact-head__power {
+  padding: var(--sp-4) var(--sp-6) 0;
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  line-height: 1.45;
+  white-space: pre-wrap;
+}

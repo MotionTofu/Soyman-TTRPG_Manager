@@ -1,10 +1,49 @@
 import { cartographyId } from "./cartography";
+import { CRYPT_DOORS, CRYPT_SURFACES, cryptId } from "./crypt";
 import { getMapImageAsset } from "./registry";
 import { buildTerrainMaskRaster } from "../terrainMaskRaster";
 import type { RenderTerrainView } from "../renderModel";
 
 type Mask = NonNullable<RenderTerrainView["mask"]>;
 const tiles = new WeakMap<HTMLImageElement, HTMLCanvasElement>();
+const paperTiles = new WeakMap<HTMLImageElement, HTMLCanvasElement>();
+
+/** Feather overlapping copies on both axes; complementary masks sum to opaque paper. */
+export function paperPattern(ctx: CanvasRenderingContext2D, scale: number, ox: number, oy: number) {
+  const image = artworkImage("paper-panel", "crypt");
+  if (!image || typeof document === "undefined") return null;
+  let tile = paperTiles.get(image);
+  if (!tile) {
+    const size = 1024, overlap = 128, period = size - overlap;
+    const feathered = document.createElement("canvas");
+    feathered.width = feathered.height = size;
+    const pen = feathered.getContext("2d");
+    if (!pen) return null;
+    pen.drawImage(image, 0, 0, size, size);
+    pen.globalCompositeOperation = "destination-in";
+    for (const vertical of [false, true]) {
+      const mask = pen.createLinearGradient(0, 0, vertical ? 0 : size, vertical ? size : 0);
+      mask.addColorStop(0, "transparent");
+      mask.addColorStop(overlap / size, "#fff");
+      mask.addColorStop(1 - overlap / size, "#fff");
+      mask.addColorStop(1, "transparent");
+      pen.fillStyle = mask;
+      pen.fillRect(0, 0, size, size);
+    }
+    tile = document.createElement("canvas");
+    tile.width = tile.height = period;
+    const merged = tile.getContext("2d");
+    if (!merged) return null;
+    // Add premultiplied colors, avoiding dark seams from source-over alpha blending.
+    merged.globalCompositeOperation = "lighter";
+    for (const x of [-period, 0]) for (const y of [-period, 0]) merged.drawImage(feathered, x, y);
+    paperTiles.set(image, tile);
+  }
+  const pattern = ctx.createPattern(tile, "repeat");
+  const k = scale * 16 / tile.width;
+  pattern?.setTransform(new DOMMatrix([k, 0, 0, k, ox, oy]));
+  return pattern;
+}
 interface MaskArtwork { image: HTMLImageElement; canvas: HTMLCanvasElement; x: number; y: number; w: number; h: number }
 const masked = new WeakMap<Mask, Map<string, MaskArtwork>>();
 // History retains old masks. Bound their derived canvas memory independently.
@@ -20,7 +59,8 @@ function retainMask(owner: Map<string, MaskArtwork>, key: string, result: MaskAr
     if (oldest[1].owner.get(oldest[1].key)?.canvas === oldest[0]) oldest[1].owner.delete(oldest[1].key);
   }
 }
-export function artworkImage(key: string) { return getMapImageAsset(cartographyId(key))?.image ?? null; }
+export type ArtPack = "cartography" | "crypt";
+export function artworkImage(key: string, pack: ArtPack = "cartography") { return getMapImageAsset(pack === "crypt" ? cryptId(key) : cartographyId(key))?.image ?? null; }
 function mirroredTile(image: HTMLImageElement) {
   let tile = tiles.get(image);
   if (tile) return tile;
@@ -33,18 +73,22 @@ function mirroredTile(image: HTMLImageElement) {
   }
   tiles.set(image, tile); return tile;
 }
-export function surfaceImage(code: string, dungeon = false) {
+export function surfaceImage(code: string, dungeon = false, pack: ArtPack = "cartography") {
+  if (pack === "crypt") return CRYPT_SURFACES[code] ? artworkImage(CRYPT_SURFACES[code], "crypt") : null;
   const key = code === "stone" || (code === "plain" && dungeon) ? "stone-floor" : ["earth", "forest", "hills", "desert"].includes(code) ? "earth" :
     ["shallow_water", "deep_water", "sea", "lake"].includes(code) ? "water" : null;
   return key ? artworkImage(key) : null;
 }
 /** World-anchored patterns: moving the camera never slides the artwork. */
-export function surfacePattern(ctx: CanvasRenderingContext2D, image: HTMLImageElement, scale: number, ox: number, oy: number) {
-  const pattern = ctx.createPattern(mirroredTile(image), "repeat");
-  pattern?.setTransform(new DOMMatrix([scale * 8 / 512, 0, 0, scale * 8 / 512, ox, oy]));
+export function surfacePattern(ctx: CanvasRenderingContext2D, image: HTMLImageElement, scale: number, ox: number, oy: number, pack: ArtPack = "cartography") {
+  if (pack === "crypt" && image === artworkImage("paper-panel", "crypt")) return paperPattern(ctx, scale, ox, oy);
+  // «Склеп» уже бесшовный, 2×2 клетки на файл; «Бумага и тушь» зеркалится в тайл на 8 клеток.
+  const pattern = pack === "crypt" ? ctx.createPattern(image, "repeat") : ctx.createPattern(mirroredTile(image), "repeat");
+  const k = pack === "crypt" ? scale * 2 / image.naturalWidth : scale * 8 / 512;
+  pattern?.setTransform(new DOMMatrix([k, 0, 0, k, ox, oy]));
   return pattern;
 }
-export function texturedMask(mask: Mask, codes: readonly string[], image: HTMLImageElement, width: number, height: number) {
+export function texturedMask(mask: Mask, codes: readonly string[], image: HTMLImageElement, width: number, height: number, pack: ArtPack = "cartography") {
   const key = `${[...codes].sort().join(",")}:${width}:${height}`;
   const cached = masked.get(mask)?.get(key);
   if (cached?.image === image) {
@@ -69,7 +113,7 @@ export function texturedMask(mask: Mask, codes: readonly string[], image: HTMLIm
   const ctx = canvas.getContext("2d")!;
   ctx.drawImage(alpha, 0, 0, canvas.width, canvas.height);
   ctx.globalCompositeOperation = "source-in";
-  const pattern = surfacePattern(ctx, image, pixelsPerUnit, -x * pixelsPerUnit, -y * pixelsPerUnit);
+  const pattern = surfacePattern(ctx, image, pixelsPerUnit, -x * pixelsPerUnit, -y * pixelsPerUnit, pack);
   if (!pattern) return null;
   ctx.fillStyle = pattern; ctx.fillRect(0, 0, canvas.width, canvas.height);
   const result = { image, canvas, x, y, w, h };
@@ -85,4 +129,10 @@ export function wallPattern(ctx: CanvasRenderingContext2D, scale: number, ox: nu
   }
   const pattern = ctx.createPattern(hatching, "repeat");
   pattern?.setTransform(new DOMMatrix([scale / 32, 0, 0, scale / 32, ox, oy])); return pattern;
+}
+
+/** Рисунок проёма в оформлении; у «Бумаги и туши» — только обычная дверь. */
+export function doorImage(kind: string, pack: ArtPack) {
+  if (pack === "crypt") return CRYPT_DOORS[kind] ? artworkImage(CRYPT_DOORS[kind], "crypt") : null;
+  return kind === "door" ? artworkImage("wood-door") : null;
 }

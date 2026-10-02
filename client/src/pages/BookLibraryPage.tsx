@@ -1,6 +1,6 @@
 import {useEffect,useMemo,useRef,useState} from "react";
 import {useQueries} from "@tanstack/react-query";
-import {Link,useLocation,useNavigate,useSearchParams} from "react-router-dom";
+import {Link,Navigate,useLocation,useNavigate,useParams,useSearchParams} from "react-router-dom";
 import {readOnce} from "../data/imperative";
 import {attemptWithNotice} from "../data/notices";
 import {resourceQuery,useAction,useResource,write} from "../data/hooks";
@@ -14,6 +14,9 @@ import {useConfirm} from "../hooks/useConfirm";
 import {MasteringShelf} from "../components/mastering/MasteringShelf";
 import {MasteringReader} from "../components/mastering/MasteringReader";
 import {MasteringBookForm} from "../components/mastering/MasteringBookForm";
+import {ShelfWorkbookSelect} from "../components/workbooks/ShelfWorkbookSelect";
+import {WORKBOOK_AFFECTS} from "../components/workbooks/model";
+import type {WorkbookDockState} from "../components/workbooks/WorkbookDock";
 import type {MasteringDraft} from "../components/mastering/masteringTypes";
 import {LIBRARY_AFFECTS,type LibraryBook,type LibraryCatalog,type LibraryDepartment,type LibraryShelf} from "../components/mastering/libraryTypes";
 import type {MasteringSection,System} from "../types";
@@ -31,7 +34,9 @@ export function BookLibraryPage(){
  const [query,setQuery]=useState(params.get("q")??"");
  const [format,setFormat]=useState(""),[system,setSystem]=useState(""),[notesOnly,setNotesOnly]=useState(false),[filtersOpen,setFiltersOpen]=useState(false);
  const [pages,setPages]=useState(1),[dragged,setDragged]=useState<number|null>(null);
- const [organization,setOrganization]=useState<{kind:"department"|"shelf";id:number|null;name:string;department:number|null;position:number}|null>(null);
+ // Тетрадь у края живёт здесь, а не в читалке: при переходе к другой книге она остаётся открытой на том же листе.
+ const [workbookDock,setWorkbookDock]=useState<WorkbookDockState|null>(null);
+ const [organization,setOrganization]=useState<{kind:"department"|"shelf";id:number|null;name:string;department:number|null;position:number;workbook?:number|null}|null>(null);
  const [draft,setDraft]=useState<MasteringDraft|null>(null),[draftDepartment,setDraftDepartment]=useState<number|null>(null);
  const [placement,setPlacement]=useState<LibraryBook|null>(null),[placementDepartment,setPlacementDepartment]=useState<number|null>(null),[placementShelf,setPlacementShelf]=useState<number|null>(null),[placementCover,setPlacementCover]=useState("");
  const upload=useRef<HTMLInputElement>(null),order=useRef<number[]>((location.state as {library?:{order:number[]}}|null)?.library?.order??[]),scroll=useRef(0);
@@ -44,6 +49,7 @@ export function BookLibraryPage(){
  const books=useMemo(()=>[...(first.data?.books??EMPTY_BOOKS),...additional.flatMap(page=>page.data?.books??EMPTY_BOOKS)],[first.data,additional]);
  const selection=useResource<LibraryBook>(selectedId?`/book-library/books/${selectedId}`:null);
  const selected=selection.data;
+ useEffect(()=>{if(!selectedId)setWorkbookDock(null);},[selectedId]);
  const neighbors=useResource<{previous:LibraryBook|null;next:LibraryBook|null}>(selectedId?`/book-library/books/${selectedId}/neighbors`:null).data;
  const recent=useResource<LibraryCatalog>(department==="room"&&!query?"/book-library/books?recent=1&limit=12":null).data?.books??EMPTY_BOOKS;
  const pins=useResource<LibraryCatalog>(department==="room"&&!query?"/book-library/books?bookmarked=1&limit=100":null).data?.books??EMPTY_BOOKS;
@@ -76,7 +82,8 @@ export function BookLibraryPage(){
  function changeDepartment(value:string){const next=new URLSearchParams();next.set("department",value);setParams(next);setQuery("");}
  function openBook(id:number,ids:number[],notes=false){scroll.current=document.querySelector<HTMLElement>(".app-content")?.scrollTop??0;order.current=ids;const next=new URLSearchParams(params);next.set("book",String(id));if(notes)next.set("notes","1");else next.delete("notes");if(query)next.set("q",query);setParams(next);}
  function closeBook(){selection.reload();const next=new URLSearchParams(params);next.delete("book");next.delete("notes");setParams(next);}
- async function saveOrganization(){if(!organization?.name.trim())return;const endpoint=organization.kind==="department"?"departments":"shelves";const body={name:organization.name.trim(),position:organization.position,...(organization.kind==="shelf"?{department_id:organization.department}:{})};const saved=await run(()=>organization.id?write.put(`/book-library/${endpoint}/${organization.id}`,body):write.post(`/book-library/${endpoint}`,body),{affects:LIBRARY_AFFECTS,retry:false});if(saved!==undefined)setOrganization(null);}
+ async function saveOrganization(){if(!organization?.name.trim())return;const endpoint=organization.kind==="department"?"departments":"shelves";const body={name:organization.name.trim(),position:organization.position,...(organization.kind==="shelf"?{department_id:organization.department}:{})};const saved=await run(()=>organization.id?write.put(`/book-library/${endpoint}/${organization.id}`,body):write.post<{id:number}>(`/book-library/${endpoint}`,body),{affects:LIBRARY_AFFECTS,retry:false});if(saved===undefined)return;
+ const shelfId=organization.id??(saved as {id?:number}|null)?.id;if(organization.kind==="shelf"&&organization.workbook!==undefined&&shelfId&&await run(()=>write.put(`/workbooks/shelves/${shelfId}`,{instance_id:organization.workbook}),{affects:WORKBOOK_AFFECTS,retry:false})===undefined)return;setOrganization(null);}
  async function deleteOrganization(){if(!organization?.id||!await confirm({message:`Удалить «${organization.name}»? Книги сохранятся в библиотеке.`,confirmLabel:"Удалить",danger:true}))return;const result=await run(()=>write.del(`/book-library/${organization.kind==="department"?"departments":"shelves"}/${organization.id}`),{affects:LIBRARY_AFFECTS});if(result!==undefined){if(organization.kind==="department")changeDepartment("room");setOrganization(null);}}
  async function moveBook(id:number,shelfId:number|null,departmentId?:number|null){const moved=await run(()=>write.put(`/book-library/books/${id}`,{shelf_id:shelfId,...(departmentId===undefined?{}:{department_id:departmentId})}),{affects:LIBRARY_AFFECTS});if(moved!==undefined)setDragged(null);}
  function newBook(shelf?:LibraryShelf){setDraftDepartment(shelf?.department_id??(department!=="room"&&department!=="none"?Number(department):null));setDraft({category:"prep",title:"",content:"",system_id:null,section_id:shelf?.id??null,cover_image:null});}
@@ -110,9 +117,20 @@ export function BookLibraryPage(){
  </>}
  {selection.error&&<LoadErrorCard message={selection.error} action={<button onClick={closeBook}>На полку</button>}/>}
  {selectedId&&!selected&&!selection.error&&<ListSkeleton variant="paragraph"/>}
- {selected&&!["pdf","workbook"].includes(selected.format)&&<MasteringReader key={selected.key} book={{...selected,id:selected.source_id}} previousBook={books.find(book=>book.id===effectiveOrder[index-1])??neighbors?.previous??undefined} nextBook={books.find(book=>book.id===effectiveOrder[index+1])??neighbors?.next??undefined} onNavigate={id=>openBook(id,effectiveOrder)} sections={legacySections} systems={systems} saved={selected.bookmarked} onBookmark={()=>{void run(()=>write.put(`/book-library/books/${selected.id}/state`,{bookmarked:!selected.bookmarked}),{affects:LIBRARY_AFFECTS});}} onClose={closeBook} onArchive={async()=>{if(!await confirm({message:`Отправить «${selected.title}» в архив?`,confirmLabel:"В архив",danger:true}))return;const archived=await run(()=>write.del(`/${selected.source_type==="mastering"?"mastering":"resources"}/${selected.source_id}`),{affects:LIBRARY_AFFECTS});if(archived!==undefined)closeBook();}} libraryBook={selected} openNotes={params.get("notes")==="1"} onPlacement={()=>showPlacement(selected)}/>}
+ {selected&&!["pdf","workbook"].includes(selected.format)&&<MasteringReader key={selected.key} book={{...selected,id:selected.source_id}} previousBook={books.find(book=>book.id===effectiveOrder[index-1])??neighbors?.previous??undefined} nextBook={books.find(book=>book.id===effectiveOrder[index+1])??neighbors?.next??undefined} onNavigate={id=>openBook(id,effectiveOrder)} sections={legacySections} systems={systems} onClose={closeBook} onArchive={async()=>{if(!await confirm({message:`Отправить «${selected.title}» в архив?`,confirmLabel:"В архив",danger:true}))return;const archived=await run(()=>write.del(`/${selected.source_type==="mastering"?"mastering":"resources"}/${selected.source_id}`),{affects:LIBRARY_AFFECTS});if(archived!==undefined)closeBook();}} libraryBook={selected} workbook={workbookDock} onWorkbook={setWorkbookDock} openNotes={params.get("notes")==="1"}/>}
  {draft&&<MasteringBookForm initial={draft} hideCategory placementOptions={{departments,department:draftDepartment,onChange:setDraftDepartment}} systems={systems} sections={sectionFormViews} onSubmit={saveBook} onClose={()=>setDraft(null)}/>}
- {organization&&<Modal ariaLabel={organization.kind==="department"?"Подраздел библиотеки":"Полка"} onClose={()=>setOrganization(null)}><form className="stack" onSubmit={e=>{e.preventDefault();void saveOrganization();}}><h2>{organization.kind==="department"?"Подраздел":"Полка"}</h2><label>Название<input required value={organization.name} onChange={e=>setOrganization({...organization,name:e.target.value})}/></label>{organization.kind==="shelf"&&<label>Подраздел<select value={organization.department??""} onChange={e=>setOrganization({...organization,department:e.target.value?Number(e.target.value):null})}><option value="">Без подраздела</option>{departments.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></label>}<label>Порядок<input type="number" min="0" value={organization.position} onChange={e=>setOrganization({...organization,position:Number(e.target.value)})}/></label><div className="mastering-form-actions">{organization.id&&<button type="button" onClick={()=>void deleteOrganization()}>Удалить</button>}<button type="button" onClick={()=>setOrganization(null)}>Отмена</button><button className="primary">Сохранить</button></div></form></Modal>}
+ {organization&&<Modal ariaLabel={organization.kind==="department"?"Подраздел библиотеки":"Полка"} onClose={()=>setOrganization(null)}><form className="stack library-org-form" onSubmit={e=>{e.preventDefault();void saveOrganization();}}><h2>{organization.kind==="department"?"Подраздел":"Полка"}</h2><label>Название<input required value={organization.name} onChange={e=>setOrganization({...organization,name:e.target.value})}/></label>{organization.kind==="shelf"&&<label>Подраздел<select value={organization.department??""} onChange={e=>setOrganization({...organization,department:e.target.value?Number(e.target.value):null})}><option value="">Без подраздела</option>{departments.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></label>}{organization.kind==="shelf"&&<ShelfWorkbookSelect shelfId={organization.id} value={organization.workbook} onChange={workbook=>setOrganization({...organization,workbook})}/>}<label>Порядок<input type="number" min="0" value={organization.position} onChange={e=>setOrganization({...organization,position:Number(e.target.value)})}/></label><div className="mastering-form-actions">{organization.id&&<button type="button" onClick={()=>void deleteOrganization()}>Удалить</button>}<button type="button" onClick={()=>setOrganization(null)}>Отмена</button><button className="primary">Сохранить</button></div></form></Modal>}
  {placement&&<Modal ariaLabel="Размещение и обложка" onClose={()=>setPlacement(null)}><form className="stack" onSubmit={e=>{e.preventDefault();void savePlacement();}}><h2>{placement.title}</h2><label>Подраздел<select value={placementDepartment??""} onChange={e=>{setPlacementDepartment(e.target.value?Number(e.target.value):null);setPlacementShelf(null);}}><option value="">Без подраздела</option>{departments.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></label><label>Полка<select value={placementShelf??""} onChange={e=>setPlacementShelf(e.target.value?Number(e.target.value):null)}><option value="">Без полки</option>{shelves.filter(s=>s.department_id===placementDepartment).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label>Обложка<input value={placementCover} placeholder="Ссылка на изображение" onChange={e=>setPlacementCover(e.target.value)}/></label><label>Загрузить обложку<input type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" onChange={e=>void uploadCover(e.target.files?.[0])}/></label><div className="mastering-form-actions"><button type="button" onClick={()=>setPlacement(null)}>Отмена</button><button className="primary">Сохранить</button></div></form></Modal>}
  </PageFrame>;
+}
+
+/** `/mastering/:id` — адрес статьи по её номеру (граф «Открыть страницу», старые
+ *  ссылки). Читалка открывает книгу по номеру книги, а не статьи: ищем книгу
+ *  по источнику и уходим на `/mastering?book=…`. */
+export function MasteringArticleRedirect(){
+ const {id}=useParams();
+ const found=useResource<LibraryCatalog>(`/book-library/books?source_type=mastering&source_id=${Number(id)}&include_unplaced=1`);
+ if(found.loading)return <ListSkeleton variant="paragraph" label="Открываем книгу"/>;
+ const book=found.data?.books[0];
+ return <Navigate to={book?`/mastering?book=${book.id}`:"/mastering"} replace/>;
 }

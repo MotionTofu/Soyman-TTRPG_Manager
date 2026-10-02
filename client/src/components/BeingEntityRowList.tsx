@@ -107,7 +107,7 @@ export function BeingEntityRowList<B extends SettingBeing>({
   return (
     <div className="entity-row-list">
       {beings.map((b) => {
-        const rawUrl = b.thumbnail_image_url || b.avatar_image_url;
+        const rawUrl = b.avatar_image_url || b.thumbnail_image_url;
         const safeUrl = rawUrl && isSafeImageUrl(rawUrl) ? rawUrl : null;
         const mode = thumbnailStyles.beings;
         const factions = getFactions?.(b);

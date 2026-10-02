@@ -91,7 +91,9 @@ export type NavIconName =
   | "flag"
   | "secret"
   | "loot"
-  | "twoWay";
+  | "twoWay"
+  | "lock"
+  | "unlock";
 
 const SHARED_PROPS: SVGProps<SVGSVGElement> = {
   viewBox: "0 0 24 24",
@@ -684,6 +686,18 @@ const PATHS: Record<NavIconName, ReactNode> = {
       <circle cx="12" cy="12" r="8.5" />
       <circle cx="12" cy="10" r="2" />
       <path d="M11 12 10.3 16h3.4L13 12" />
+    </>
+  ),
+  lock: (
+    <>
+      <rect x="5" y="11" width="14" height="9" rx="1.5" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </>
+  ),
+  unlock: (
+    <>
+      <rect x="5" y="11" width="14" height="9" rx="1.5" />
+      <path d="M8 11V8a4 4 0 0 1 7.5-2" />
     </>
   ),
   loot: (

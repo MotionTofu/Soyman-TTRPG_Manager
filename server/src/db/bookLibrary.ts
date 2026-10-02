@@ -79,16 +79,18 @@ export function registerLibrarySources(db: Database.Database): void {
   const department = new Map(departments.map(row => [row.legacy_key, row.id]));
   const shelves = db.prepare("SELECT id, legacy_section_id FROM library_shelves").all() as { id: number; legacy_section_id: number }[];
   const shelf = new Map(shelves.map(row => [row.legacy_section_id, row.id]));
-  const insert = db.prepare("INSERT OR IGNORE INTO library_books (key,source_type,source_id,department_id,shelf_id) VALUES (?,?,?,?,?)");
+  // Не OR IGNORE: при AUTOINCREMENT пропущенная вставка всё равно тратит номер,
+  // а регистрация идёт на каждом старте, и номера книг росли впустую.
+  const insert = db.prepare("INSERT INTO library_books (key,source_type,source_id,department_id,shelf_id) SELECT @key,@type,@id,@department,@shelf WHERE NOT EXISTS (SELECT 1 FROM library_books WHERE key=@key OR (source_type=@type AND source_id=@id))");
   for (const row of db.prepare("SELECT id,uid,category,section_id FROM mastering_notes").all() as Source[]) {
     const uid = row.uid || randomUUID();
     if (!row.uid) db.prepare("UPDATE mastering_notes SET uid=? WHERE id=?").run(uid,row.id);
-    insert.run(`mastering:${uid}`, "mastering", row.id, department.get(row.category!) ?? null, shelf.get(row.section_id!) ?? null);
+    insert.run({ key: `mastering:${uid}`, type: "mastering", id: row.id, department: department.get(row.category!) ?? null, shelf: shelf.get(row.section_id!) ?? null });
   }
   for (const row of db.prepare("SELECT id,uid FROM resources WHERE type <> 'pdf_notes' AND (category IN ('pdf','markdown') OR type='markdown' OR lower(file_path) LIKE '%.pdf' OR lower(file_path) LIKE '%.md')").all() as Source[]) {
     const uid = row.uid || randomUUID();
     if (!row.uid) db.prepare("UPDATE resources SET uid=? WHERE id=?").run(uid,row.id);
-    insert.run(`resource:${uid}`, "resource", row.id, department.get("resources") ?? null, null);
+    insert.run({ key: `resource:${uid}`, type: "resource", id: row.id, department: department.get("resources") ?? null, shelf: null });
   }
 }
 

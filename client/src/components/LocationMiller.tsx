@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { DragEvent } from "react";
+import type { DragEvent, ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
 import { settingPaths } from "../data/settingEntities";
@@ -11,11 +11,9 @@ import { Modal } from "./Modal";
 import { LocationCascadePicker } from "./LocationCascadePicker";
 import { EntityWizard } from "./entityWizard/EntityWizard";
 import { PlaceCard } from "./PlaceCard";
-import { plainMentions } from "../utils/plainMentions";
-import { LOCATION_ROLE_LABELS, locationRoleIcon, locationRoleOf } from "../locationRoles";
+import { LOCATION_ROLE_LABELS, locationRoleOf } from "../locationRoles";
 import { useAlert, useConfirm, usePrompt } from "../hooks/useConfirm";
 import { useUndoDelete } from "../hooks/useUndoDelete";
-import { isSafeImageUrl } from "../utils/safeUrl";
 import type { SettingLocation } from "../types";
 
 const NO_LOCATIONS: SettingLocation[] = [];
@@ -45,7 +43,8 @@ function plural(n: number, one: string, few: string, many: string): string {
 const COL_FULL = 240;
 const COL_MIN = 52;
 const COL_RAIL = 140;
-const COL_GAP = 20;
+// Совпадает с gap у .miller-cols и .miller-work (--sp-7).
+const COL_GAP = 24;
 // Карточка справа постоянной ширины и в аккордеон колонок не входит.
 const CARD_W = 320;
 // Уже этого — одна колонка (или карточка) на всю ширину с «Назад».
@@ -84,7 +83,7 @@ type MenuState =
 /** Проводник географии (решения 2026-09-11, §1): корни мира — чипами сверху,
  * колонки Миллера — от детей выбранного корня, справа — карточка места.
  * Аккордеон: места мало — дальние от активной колонки схлопываются первыми. */
-export function LocationMiller({ settingId }: { settingId: number }) {
+export function LocationMiller({ settingId, lead }: { settingId: number; lead?: ReactNode }) {
   // Список мест — тот же ключ кэша, что у карточек и соседних видов
   // географии (docs/adr/0001): правка в одном виде видна в остальных.
   const locationsState = useResource<SettingLocation[]>(settingPaths.inSetting("location", settingId));
@@ -97,6 +96,7 @@ export function LocationMiller({ settingId }: { settingId: number }) {
   const [creating, setCreating] = useState(false);
   const [wizardParentId, setWizardParentId] = useState<number | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const [query, setQuery] = useState("");
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
   const [dragOverRoots, setDragOverRoots] = useState(false);
@@ -110,6 +110,7 @@ export function LocationMiller({ settingId }: { settingId: number }) {
   const afterWrite = useAfterWrite();
   const navigate = useNavigate();
   const workRef = useRef<HTMLDivElement>(null);
+  const colsRef = useRef<HTMLDivElement>(null);
   // Флажки «Партия здесь»: путь до места партии каждой кампании сеттинга
   // (решения 2026-09-11, §3, п. 5).
   const { data: partyPlaces } = useResource<
@@ -138,6 +139,13 @@ export function LocationMiller({ settingId }: { settingId: number }) {
     setWorkW(el.clientWidth);
     return () => ro.disconnect();
   });
+
+  // Рельсы не влезли даже в минимум — ряд скроллится; активная колонка
+  // должна оставаться на виду, а не уезжать за край.
+  useEffect(() => {
+    const el = colsRef.current?.querySelector<HTMLElement>(".is-active-col");
+    el?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [path, activeCol, workW]);
 
   useEffect(() => {
     try {
@@ -186,7 +194,6 @@ export function LocationMiller({ settingId }: { settingId: number }) {
   // Вход в раздел — последний выбранный корень (он первым лежит в пути),
   // иначе первый по алфавиту.
   const rootId = cleanPath[0] ?? roots[0]?.id ?? null;
-  const root = rootId != null ? (byId.get(rootId) ?? null) : null;
   const effPath = useMemo(
     () => (cleanPath.length > 0 ? cleanPath : rootId != null ? [rootId] : []),
     [cleanPath, rootId]
@@ -204,30 +211,34 @@ export function LocationMiller({ settingId }: { settingId: number }) {
 
   const focus: SettingLocation | null = effPath.length > 0 ? (byId.get(effPath[effPath.length - 1]) ?? null) : null;
 
-  // Счёт корня: места и точки всей ветки.
-  const rootTotals = useMemo(() => {
-    const out = { places: 0, spots: 0 };
-    if (rootId == null) return out;
-    const stack = (kidsOf.get(rootId) ?? []).map((l) => l.id);
-    const seen = new Set<number>([rootId]);
-    while (stack.length) {
-      const id = stack.pop()!;
-      if (seen.has(id)) continue;
-      seen.add(id);
-      const loc = byId.get(id);
-      if (loc && !loc.archived_at) {
-        if (locationRoleOf(loc) === "spot") out.spots += 1;
-        else out.places += 1;
+  // Подпись чипа корня: тип и число мест всей ветки (точки не считаются).
+  const rootPlaces = useMemo(() => {
+    const out = new Map<number, number>();
+    for (const r of roots) {
+      let places = 0;
+      const stack = (kidsOf.get(r.id) ?? []).map((l) => l.id);
+      const seen = new Set<number>([r.id]);
+      while (stack.length) {
+        const id = stack.pop()!;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const loc = byId.get(id);
+        if (loc && locationRoleOf(loc) !== "spot") places += 1;
+        for (const k of kidsOf.get(id) ?? []) stack.push(k.id);
       }
-      for (const k of kidsOf.get(id) ?? []) stack.push(k.id);
+      out.set(r.id, places);
     }
     return out;
-  }, [rootId, kidsOf, byId]);
+  }, [roots, kidsOf, byId]);
 
-  const crumbs = useMemo(
-    () => effPath.map((id) => byId.get(id)).filter((l): l is SettingLocation => !!l),
-    [effPath, byId]
-  );
+  // Поиск по имени и типу во всём сеттинге; выбор ведёт колонки к месту.
+  const found = useMemo(() => {
+    const q = query.trim().toLocaleLowerCase("ru");
+    if (!q) return [];
+    return locations
+      .filter((l) => !l.archived_at && `${l.name} ${l.kind ?? ""}`.toLocaleLowerCase("ru").includes(q))
+      .slice(0, 8);
+  }, [query, locations]);
 
   // Строка чипов одной высоты при любом мире: выбранный корень виден всегда.
   const { shownRoots, hiddenRoots } = useMemo(() => {
@@ -451,21 +462,28 @@ export function LocationMiller({ settingId }: { settingId: number }) {
           setMenu({ x: e.clientX, y: e.clientY, id: l.id });
         }}
       >
-        <NavIcon name={locationRoleIcon(l)} className="miller-item__icon" />
-        <span className="miller-item__body">
-          <span className="miller-item__name">{l.name}</span>
-          <span className="miller-item__badge">
-            {badgeFor(l)}
-            {navKids > 0 ? ` · ${navKids}` : spotKids > 0 ? ` · ${plural(spotKids, "точка", "точки", "точек")}` : ""}
-            {hasMap ? " · карта" : ""}
-          </span>
-        </span>
+        {/* Строка доски 16: имя, справа тип у листа или число детей со стрелкой. */}
+        <span className="miller-item__name">{l.name}</span>
         {partyByPlace.has(l.id) && (
           <span className="miller-item__party" title={`Партия: ${partyByPlace.get(l.id)!.join(", ")}`}>
             <NavIcon name="flag" />
           </span>
         )}
-        {navKids > 0 && <NavIcon name="arrowRight" />}
+        {hasMap && (
+          <span className="miller-item__party" title="Есть карта">
+            <NavIcon name="map" />
+          </span>
+        )}
+        {navKids > 0 ? (
+          <span className="miller-item__badge" title={badgeFor(l)}>
+            {navKids}
+            <NavIcon name="chevron" />
+          </span>
+        ) : (
+          <span className="miller-item__badge">
+            {spotKids > 0 ? plural(spotKids, "точка", "точки", "точек") : badgeFor(l)}
+          </span>
+        )}
       </button>
     );
   }
@@ -517,137 +535,135 @@ export function LocationMiller({ settingId }: { settingId: number }) {
     );
   }
 
-  const rootThumb = root ? root.thumbnail_image_url || root.avatar_image_url : null;
-  const rootSafeThumb = rootThumb && isSafeImageUrl(rootThumb) ? rootThumb : null;
-  const rootSub = root
-    ? [root.kind?.trim(), plainMentions(root.description ?? "").replace(/\s+/g, " ").trim()].filter(Boolean).join(" · ")
-    : "";
+  const canNest = !!focus && locationRoleOf(focus) !== "spot";
 
   return (
     <div className="stack geography-miller">
-      <div className="row geography-miller__toolbar">
+      <div className="population__toolbar">
         {narrow && backLabel && (
-          <button onClick={goBack} aria-label="Назад">
+          <button type="button" onClick={goBack} aria-label="Назад">
             {backLabel}
           </button>
         )}
-        <span style={{ flex: 1 }} />
-        {focus && locationRoleOf(focus) !== "spot" && (
-          <span className="muted geography-miller__target" title="Новое место появится внутри выбранного">
-            внутрь: {focus.name}
-          </span>
-        )}
+        {lead}
+        <div className="miller-search">
+          <input
+            type="search"
+            className="population__search"
+            placeholder="Место или тип…"
+            aria-label="Найти место"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && found[0]) {
+                pick(found[0].id);
+                setQuery("");
+              }
+              if (e.key === "Escape") setQuery("");
+            }}
+          />
+          {query.trim() && (
+            <ul className="miller-search__list" role="listbox" aria-label="Найденные места">
+              {found.length === 0 && <li className="miller-search__none">Ничего не нашлось</li>}
+              {found.map((l) => (
+                <li key={l.id}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={false}
+                    onClick={() => {
+                      pick(l.id);
+                      setQuery("");
+                    }}
+                  >
+                    <span className="miller-item__name">{l.name}</span>
+                    <span className="miller-item__badge">{badgeFor(l)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <span className="population__spacer" />
         <button
-          className="primary"
-          onClick={() =>
-            focus && locationRoleOf(focus) !== "spot" ? setWizardParentId(focus.id) : setCreating(true)
-          }
+          type="button"
+          className="population__create"
+          title={canNest ? `Новое место внутри «${focus!.name}»` : "Новый корень мира"}
+          onClick={() => (canNest ? setWizardParentId(focus!.id) : setCreating(true))}
         >
-          <NavIcon name="plus" /> Создать
+          + Место
         </button>
       </div>
 
       {roots.length > 0 && !loadError && (
-        <>
-          <div
-            className={`miller-roots${dragOverRoots ? " drag-over" : ""}`}
-            role="toolbar"
-            aria-label="Корни мира"
-            onDragOver={(e) => {
-              e.preventDefault();
-              if (draggedId != null) setDragOverRoots(true);
-            }}
-            onDragLeave={(e) => {
-              const rt = e.relatedTarget as Node | null;
-              if (rt && e.currentTarget.contains(rt)) return;
-              setDragOverRoots(false);
-            }}
-            onDrop={(e) => handleAreaDrop(e, null)}
-            onContextMenu={(e) => {
-              if ((e.target as HTMLElement).closest(".miller-chip")) return;
-              e.preventDefault();
-              setMenu({ x: e.clientX, y: e.clientY, createParent: null });
-            }}
-            title="Бросьте сюда место, чтобы сделать его корнем мира"
-          >
-            <span className="miller-roots__label">Мир</span>
-            {shownRoots.map((k) => {
-              const isOver = dragOverId === k.id && draggedId !== k.id;
-              return (
-                <button
-                  key={k.id}
-                  className={`miller-chip${k.id === rootId ? " is-active" : ""}${isOver ? " drag-over" : ""}`}
-                  aria-pressed={k.id === rootId}
-                  onClick={() => pick(k.id)}
-                  title={k.name}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (draggedId == null || draggedId === k.id || isDescendantOf(draggedId, k.id)) return;
-                    setDragOverRoots(false);
-                    setDragOverId(k.id);
-                  }}
-                  onDragLeave={() => setDragOverId((prev) => (prev === k.id ? null : prev))}
-                  onDrop={(e) => handleItemDrop(e, k.id)}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setMenu({ x: e.clientX, y: e.clientY, id: k.id });
-                  }}
-                >
-                  <NavIcon name="globe" /> {k.name}
-                </button>
-              );
-            })}
-            {hiddenRoots.length > 0 && (
+        <div
+          className={`miller-roots${dragOverRoots ? " drag-over" : ""}`}
+          role="toolbar"
+          aria-label="Корни мира"
+          onDragOver={(e) => {
+            e.preventDefault();
+            if (draggedId != null) setDragOverRoots(true);
+          }}
+          onDragLeave={(e) => {
+            const rt = e.relatedTarget as Node | null;
+            if (rt && e.currentTarget.contains(rt)) return;
+            setDragOverRoots(false);
+          }}
+          onDrop={(e) => handleAreaDrop(e, null)}
+          onContextMenu={(e) => {
+            if ((e.target as HTMLElement).closest(".miller-chip")) return;
+            e.preventDefault();
+            setMenu({ x: e.clientX, y: e.clientY, createParent: null });
+          }}
+          title="Бросьте сюда место, чтобы сделать его корнем мира"
+        >
+          <span className="miller-roots__label">Корни мира</span>
+          {shownRoots.map((k) => {
+            const isOver = dragOverId === k.id && draggedId !== k.id;
+            const places = rootPlaces.get(k.id) ?? 0;
+            const sub = [k.kind?.trim(), plural(places, "место", "места", "мест")].filter(Boolean).join(" · ");
+            return (
               <button
-                className="miller-chip miller-chip--more"
-                onClick={(e) => {
-                  const r = e.currentTarget.getBoundingClientRect();
-                  setMenu({ x: r.left, y: r.bottom + 4, roots: true });
+                key={k.id}
+                className={`miller-chip${k.id === rootId ? " is-active" : ""}${isOver ? " drag-over" : ""}`}
+                aria-pressed={k.id === rootId}
+                onClick={() => pick(k.id)}
+                title={`${k.name} — ${sub}`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (draggedId == null || draggedId === k.id || isDescendantOf(draggedId, k.id)) return;
+                  setDragOverRoots(false);
+                  setDragOverId(k.id);
+                }}
+                onDragLeave={() => setDragOverId((prev) => (prev === k.id ? null : prev))}
+                onDrop={(e) => handleItemDrop(e, k.id)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setMenu({ x: e.clientX, y: e.clientY, id: k.id });
                 }}
               >
-                ещё {hiddenRoots.length} ▾
+                <span className="miller-chip__name">{k.name}</span>
+                <span className="miller-chip__sub">{sub}</span>
               </button>
-            )}
-          </div>
-
-          {root && (
-            <section className="miller-root" aria-label="Корень мира">
-              {rootSafeThumb && <img src={rootSafeThumb} alt="" className="miller-root__thumb" />}
-              <div className="miller-root__body">
-                <button className="miller-root__title" onClick={() => pick(root.id)} title="Карточка корня">
-                  {root.name}
-                </button>
-                {rootSub && <div className="muted miller-root__sub">{rootSub}</div>}
-              </div>
-              <div className="muted miller-root__count">
-                {plural(rootTotals.places, "локация", "локации", "локаций")}
-                {rootTotals.spots > 0 ? ` · ${plural(rootTotals.spots, "точка", "точки", "точек")}` : ""}
-              </div>
-            </section>
+            );
+          })}
+          {hiddenRoots.length > 0 && (
+            <button
+              className="miller-chip miller-chip--more"
+              onClick={(e) => {
+                const r = e.currentTarget.getBoundingClientRect();
+                setMenu({ x: r.left, y: r.bottom + 4, roots: true });
+              }}
+            >
+              ещё {hiddenRoots.length} ▾
+            </button>
           )}
-
-          {crumbs.length > 1 && (
-            <nav className="miller-crumbs" aria-label="Путь в мире">
-              {crumbs.map((c, idx) => {
-                const last = idx === crumbs.length - 1;
-                return (
-                  <span key={c.id} className="miller-crumb__seg">
-                    {idx > 0 && <span className="miller-crumb__sep" aria-hidden="true"> / </span>}
-                    {last ? (
-                      <span className="miller-crumb is-current" aria-current="page">{c.name}</span>
-                    ) : (
-                      <button className="miller-crumb" onClick={() => pick(c.id)} title={`Перейти: ${c.name}`}>
-                        {c.name}
-                      </button>
-                    )}
-                  </span>
-                );
-              })}
-            </nav>
-          )}
-        </>
+          <button type="button" className="miller-chip miller-chip--add" onClick={() => setCreating(true)}>
+            + корень
+          </button>
+        </div>
       )}
 
       {loadError && (
@@ -742,7 +758,7 @@ export function LocationMiller({ settingId }: { settingId: number }) {
       ) : (
         <div className={`miller-work${narrow ? " is-narrow" : ""}`} ref={workRef}>
           {colCount > 0 && (!narrow || active < colCount) && (
-            <div className="miller-cols" role="list" aria-label="Колонки локаций">
+            <div className="miller-cols" role="list" aria-label="Колонки локаций" ref={colsRef}>
               {columns.map((col, i) => {
                 if (narrow && i !== active) return null;
                 const parentIdx = effPath.indexOf(col.parent.id);
@@ -762,7 +778,12 @@ export function LocationMiller({ settingId }: { settingId: number }) {
                       title={`${col.parent.name} — развернуть колонку`}
                     >
                       <span>{col.parent.name}</span>
-                      <span className="miller-col__count">{plural(col.items.length, "локация", "локации", "локаций")}</span>
+                      {/* На рельсе остаётся выбранное в колонке звено пути (доска 16). */}
+                      {rail && activeId != null ? (
+                        <span className="miller-col__picked">{byId.get(activeId)?.name}</span>
+                      ) : (
+                        <span className="miller-col__count">{col.items.length}</span>
+                      )}
                     </button>
                     <div
                       className="miller-col__body"

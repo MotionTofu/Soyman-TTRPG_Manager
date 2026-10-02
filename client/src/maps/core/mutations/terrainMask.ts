@@ -1,6 +1,6 @@
 import { isMaterialRef, type MaterialRef } from "../refs";
 import { isPaletteIndexMaskPayload, maskChunkCoords, TERRAIN_MASK_CHUNK_AREA, TERRAIN_MASK_ENCODING } from "@shared/maps/core/terrainMask";
-import type { MapDocumentV5, TerrainMaskChunk } from "../types";
+import type { MapDocumentV5, TerrainMaskChunk, Vec2 } from "../types";
 import { changed, findLayer, mutationError, noChange, withReplacedLayer, type MutationResult } from "./helpers";
 
 const MAX_SAMPLES_PER_DAB = 4356; // Radius 8 at quarter-cell resolution, including edge samples.
@@ -94,9 +94,13 @@ export function paintTerrainMask(
 ): MutationResult {
   const found = maskLayer(doc, layerId);
   if (!found) return mutationError("terrain.mask.wrong-layer", "layerId", "expected a mask terrain layer");
+  const collected = dabSamples(doc, found.layer.mask, wx, wy, radius);
+  return Array.isArray(collected) ? applyMaskSamples(doc, found, collected, material, newChunkId) : collected;
+}
+
+function dabSamples(doc: MapDocumentV5, mask: NonNullable<ReturnType<typeof maskLayer>>["layer"]["mask"], wx: number, wy: number, radius: number): MaskSample[] | MutationResult {
   if (!Number.isFinite(wx) || !Number.isFinite(wy) || !Number.isFinite(radius) || radius < 0)
     return mutationError("terrain.mask.bad-dab", "position", "expected finite world point and non-negative radius");
-  const { mask } = found.layer;
   const step = mask.sampleSize;
   if (!Number.isFinite(step) || step <= 0) return mutationError("terrain.mask.bad-sample-size", "mask.sampleSize", "sample size must be positive");
   const minX = Math.floor((wx - radius - mask.origin.x) / step);
@@ -114,7 +118,30 @@ export function paintTerrainMask(
     if (Math.hypot(x - wx, y - wy) > radius + step * 0.5) continue;
     samples.push({ sx, sy });
   }
-  return applyMaskSamples(doc, found, samples, material, newChunkId);
+  return samples;
+}
+
+/** A frame's complete pointer path, sampled continuously and applied once. */
+export function paintTerrainMaskStroke(doc: MapDocumentV5, layerId: string, points: readonly Vec2[], radius: number,
+  material: MaterialRef | null, newChunkId: () => string): MutationResult {
+  const found = maskLayer(doc, layerId);
+  if (!found) return mutationError("terrain.mask.wrong-layer", "layerId", "expected a mask terrain layer");
+  const samples = new Map<string, MaskSample>();
+  for (let index = 0; index < points.length; index++) {
+    const b = points[index], a = points[Math.max(0, index - 1)];
+    if (![a.x, a.y, b.x, b.y, radius].every(Number.isFinite) || radius < 0)
+      return mutationError("terrain.mask.bad-dab", "position", "expected finite world point and non-negative radius");
+    const steps = index ? Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / Math.max(.125, radius / 2))) : 0;
+    if (steps > MAX_SAMPLES_PER_FILL) return mutationError("terrain.mask.stroke-too-large", "points", "stroke covers too many samples");
+    for (let i = index ? 1 : 0; i <= steps; i++) {
+      const t = steps ? i / steps : 0;
+      const collected = dabSamples(doc, found.layer.mask, a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, radius);
+      if (!Array.isArray(collected)) return collected;
+      for (const sample of collected) samples.set(`${sample.sx},${sample.sy}`, sample);
+      if (samples.size > MAX_SAMPLES_PER_FILL) return mutationError("terrain.mask.stroke-too-large", "points", "stroke covers too many samples");
+    }
+  }
+  return applyMaskSamples(doc, found, [...samples.values()], material, newChunkId);
 }
 
 /** Four-connected flood fill of one painted/transparent sample region. */

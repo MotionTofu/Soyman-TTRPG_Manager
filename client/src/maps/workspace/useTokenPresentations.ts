@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { tokensOf, type MapDocumentV6 } from "@shared/maps/core";
 import { onDataChangedElsewhere } from "../../dataSync";
 import { queryClient } from "../../data/queryClient";
@@ -6,11 +6,14 @@ import { getAuthToken } from "../../api/client";
 import { mapWorkspaceApi } from "./mapApi";
 import { tokenSourceKey, type TokenPresentation } from "./tokenPlacement";
 
-export type TokenDisplay = TokenPresentation & { portrait?: HTMLImageElement | null };
+export type TokenDisplay = TokenPresentation & { portrait?: HTMLImageElement | null; portraitSource?: string | null };
 export function useTokenPresentations(mapId: number, document: MapDocumentV6 | null) {
   const keys = JSON.stringify(document ? [...new Map(tokensOf(document).flatMap((token) => token.sourceRef ? [[tokenSourceKey(token.sourceRef), token.sourceRef] as const] : [])).values()] : []);
   const sources = useMemo(() => JSON.parse(keys) as TokenPresentation["sourceRef"][], [keys]);
   const [displays, setDisplays] = useState<ReadonlyMap<string, TokenDisplay>>(new Map());
+  const currentDisplays = useRef(displays);
+  currentDisplays.current = displays;
+  const currentMap = useRef(mapId);
   const [revision, setRevision] = useState(0);
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
@@ -27,22 +30,32 @@ export function useTokenPresentations(mapId: number, document: MapDocumentV6 | n
   useEffect(() => {
     let alive = true;
     const controller = new AbortController(), blobs: string[] = [];
-    setDisplays(new Map());
+    const previous = currentMap.current === mapId ? currentDisplays.current : new Map<string, TokenDisplay>();
+    currentMap.current = mapId;
+    setDisplays(new Map(sources.flatMap(ref => {
+      const key = tokenSourceKey(ref), cached = previous.get(key);
+      return cached ? [[key, cached] as const] : [];
+    })));
     if (sources.length) void mapWorkspaceApi.presentations(mapId, sources).then(async (rows) => {
       if (!alive) return;
-      setDisplays(new Map(rows.map((row) => [tokenSourceKey(row.sourceRef), row])));
+      setDisplays(new Map(rows.map(row => {
+        const cached = previous.get(tokenSourceKey(row.sourceRef));
+        return [tokenSourceKey(row.sourceRef), { ...row, ...(row.state === "active" && row.portrait_url && cached?.portrait ? { portrait: cached.portrait, portraitSource: cached.portraitSource ?? cached.portrait_url } : {}) }];
+      })));
       await Promise.allSettled(rows.map(async (row) => {
         if (!row.portrait_url?.startsWith("/files/") || !getAuthToken()) return;
+        const cached = previous.get(tokenSourceKey(row.sourceRef));
+        if (cached?.portrait && (cached.portraitSource ?? cached.portrait_url) === row.portrait_url) return;
         const response = await fetch(row.portrait_url, { signal: controller.signal, headers: { Authorization: `Bearer ${getAuthToken()}` } });
         if (!response.ok) return;
         const blob = await response.blob();
         if (!alive) return;
         const url = URL.createObjectURL(blob); blobs.push(url);
         const image = new Image(); image.src = url; await image.decode();
-        if (alive) setDisplays((before) => new Map(before).set(tokenSourceKey(row.sourceRef), { ...row, portrait: image }));
+        if (alive) setDisplays((before) => new Map(before).set(tokenSourceKey(row.sourceRef), { ...row, portrait: image, portraitSource: row.portrait_url }));
       }));
     }).catch(() => {
-      if (alive) setDisplays(new Map(sources.map((ref) => [tokenSourceKey(ref), { sourceRef: ref, id: null, name: "Источник не загружен", state: "missing", portrait_url: null }])));
+      if (alive) setDisplays(new Map(sources.map((ref) => [tokenSourceKey(ref), previous.get(tokenSourceKey(ref)) ?? { sourceRef: ref, id: null, name: "Источник не загружен", state: "missing", portrait_url: null }])));
     });
     return () => { alive = false; controller.abort(); blobs.forEach((url) => URL.revokeObjectURL(url)); };
   }, [mapId, sources, revision]);

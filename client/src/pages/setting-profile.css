@@ -1,0 +1,885 @@
+/* Профиль сеттинга на бумаге (разбор 2026-10-01 Q1–Q17, 2026-10-02 Q18–Q19;
+   макеты — холст «Профили», доски 11–25). Бумага, подписи, строки списков —
+   из paper.css; здесь только то, чего у существа нет: обложка с подписью,
+   паспорт, карточка записи «Мира», висящие картинки, каналы аудионабора. */
+
+/* ── Обзор ─────────────────────────────────────────────────────────── */
+.setting-cover {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.setting-cover > img,
+.setting-cover__empty {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  transform: rotate(-1.2deg);
+  box-shadow: 0 2px 0 rgb(0 0 0 / 0.08), 0 10px 18px rgb(60 40 20 / 0.18);
+}
+.setting-cover__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: var(--card-border-width) dashed var(--paper-rule);
+  color: var(--paper-muted);
+  font-size: var(--fs-data);
+}
+/* Описание — эпиграфом под обложкой, курсивом (владелец, 2026-10-01). */
+.setting-cover__caption {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--paper-ink-soft);
+  font: inherit;
+  font-size: var(--fs-data);
+  font-style: italic;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  cursor: text;
+}
+.setting-cover__edit { display: flex; flex-direction: column; gap: var(--sp-3); }
+
+.setting-passport { display: flex; flex-direction: column; gap: var(--sp-5); }
+.setting-passport__head { display: flex; align-items: baseline; gap: var(--sp-5); }
+.setting-passport__head > .paper-group__head { flex: 1; margin: 0; }
+.setting-passport__view { margin: 0; display: flex; flex-direction: column; gap: var(--sp-6); }
+.setting-passport__view dd { margin: var(--sp-1) 0 0; font-size: var(--fs-body); line-height: 1.5; }
+.setting-passport__form { display: flex; flex-direction: column; gap: var(--sp-5); }
+.setting-passport__form label,
+.setting-passport__form > div { display: flex; flex-direction: column; gap: var(--sp-2); }
+.setting-passport__signs { margin: 0; padding-left: var(--sp-7); display: flex; flex-direction: column; gap: var(--sp-2); }
+.setting-passport__chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); }
+.setting-passport__add { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+/* Пустая графа — приглашение заполнить, а не прочерк. */
+.setting-passport__empty,
+.setting-passport__inline {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--paper-muted);
+  font: inherit;
+  font-size: var(--fs-data);
+  text-align: left;
+  white-space: normal;
+  cursor: pointer;
+}
+.setting-passport__inline { color: var(--paper-ink); font-size: var(--fs-body); }
+.setting-passport__empty:hover,
+.setting-passport__inline:hover { color: var(--paper-ink); text-decoration: underline; }
+
+/* ── Мир ───────────────────────────────────────────────────────────── */
+.setting-world { display: flex; flex-direction: column; gap: var(--sp-6); }
+.setting-world .population__list { display: flex; flex-direction: column; gap: var(--sp-7); }
+.setting-world__row { grid-template-columns: 20px minmax(0, 0.9fr) minmax(0, 1.4fr) auto; }
+.setting-world__title { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.setting-world__line { white-space: nowrap; }
+.setting-world__private { margin-left: auto; color: var(--paper-muted); font-size: var(--fs-meta); }
+.setting-world__vis { display: inline-flex; color: var(--paper-ink); }
+.setting-world__vis svg { width: 16px; height: 16px; }
+/* Скрыто от игроков — по умолчанию (Q5): блёклый глаз, а не яркая метка. */
+.setting-world__vis.is-hidden { opacity: 0.35; }
+.setting-world__card { display: flex; flex-direction: column; gap: var(--sp-5); }
+.setting-world__card-head { display: flex; flex-direction: column; gap: var(--sp-2); }
+.setting-world__card-head h3 { margin: 0; font-family: var(--font-display); font-size: var(--fs-h2); line-height: 1.05; }
+.setting-world__title-input { font-size: var(--fs-h3); }
+.setting-world__card-actions { flex-wrap: wrap; gap: var(--sp-3); align-items: center; }
+.setting-world__toggle { display: inline-flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-data); }
+.setting-world__form { display: flex; flex-direction: column; gap: var(--sp-5); }
+.setting-world__form label { display: flex; flex-direction: column; gap: var(--sp-2); }
+.setting-world__form .setting-world__toggle { flex-direction: row; }
+
+/* ── Галерея: картинки висят на бумаге (макет, доска 19) ───────────── */
+.setting-gallery { display: flex; flex-direction: column; gap: var(--sp-7); }
+.setting-gallery__slots { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-7); }
+.setting-gallery__slot { display: flex; flex-direction: column; gap: var(--sp-2); width: 230px; }
+.setting-gallery__slot.is-wide { width: 420px; max-width: 100%; }
+.setting-gallery__slot-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 150px;
+  padding: 0 var(--sp-6);
+  border: var(--card-border-width-strong) dashed var(--paper-rule);
+  color: var(--paper-muted);
+  font-size: var(--fs-data);
+  text-align: center;
+  overflow: hidden;
+}
+.setting-gallery__slot-frame > img { width: 100%; height: 100%; object-fit: cover; }
+.setting-gallery__note { max-width: 360px; margin: 0 0 var(--sp-3); }
+.setting-gallery__wall {
+  margin: 0;
+  padding: var(--sp-4) var(--sp-2) 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr));
+  gap: var(--sp-7) var(--sp-6);
+}
+.setting-gallery__tile {
+  position: relative;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-4) var(--sp-5);
+  background: rgb(255 253 245 / 0.55);
+  box-shadow: 0 6px 14px rgb(40 30 15 / 0.25);
+  transform: rotate(var(--tilt, 0deg));
+}
+.setting-gallery__tape {
+  position: absolute;
+  top: -10px;
+  left: calc(50% - 45px);
+  width: 90px;
+  height: 20px;
+  background: var(--skin-tape) center / 100% 100% no-repeat;
+  opacity: 0.82;
+  mix-blend-mode: multiply;
+}
+.setting-gallery__photo {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+.setting-gallery__photo > img { display: block; width: 100%; height: 170px; object-fit: cover; }
+.setting-gallery__tile figcaption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  font-size: var(--fs-data);
+  font-weight: 600;
+}
+.setting-gallery__more { padding: 0 var(--sp-2); border: 0; background: none; color: var(--paper-muted); cursor: pointer; }
+
+/* Альбомы стопками (доска 19б, Q26): три последние картинки веером,
+   открытый — в рамке с кислотной подложкой; на стопку можно бросить
+   картинку, стопки переставляются перетаскиванием. */
+.setting-gallery__albums {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-7);
+  padding: var(--sp-5) var(--sp-3) var(--sp-6);
+  border-bottom: var(--card-border-width-strong) solid var(--paper-rule);
+}
+.setting-gallery__stack {
+  position: relative;
+  width: 190px;
+  height: 170px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--paper-ink);
+  cursor: pointer;
+}
+.setting-gallery__stack.is-current {
+  outline: 3px solid var(--paper-ink);
+  outline-offset: 4px;
+  background: rgb(226 242 90 / 0.35);
+}
+.setting-gallery__stack.is-over { outline: 3px dashed var(--paper-ink); outline-offset: 4px; }
+/* Пустой альбом — рамка с названием. */
+.setting-gallery__stack.is-empty::before {
+  content: "";
+  position: absolute;
+  inset: 8px 12px 30px;
+  border: var(--card-border-width-strong) dashed var(--paper-rule);
+}
+.setting-gallery__stack-layer {
+  position: absolute;
+  inset: calc(6px + var(--i) * 3px) calc(10px - var(--i) * 2px) calc(22px - var(--i) * 4px) calc(10px + var(--i) * 2px);
+  padding: 5px; /* шаг мимо шкалы намеренно — поле фотокарточки, как на макете */
+  background: #fffdf5;
+  box-shadow: 0 3px 8px rgb(40 30 15 / 0.28);
+  transform: rotate(var(--tilt));
+}
+.setting-gallery__stack-layer > img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.setting-gallery__stack-tape {
+  position: absolute;
+  z-index: 1;
+  top: -4px;
+  left: calc(50% - 35px);
+  width: 70px;
+  height: 16px;
+  background: var(--skin-tape) center / 100% 100% no-repeat;
+  opacity: 0.82;
+  mix-blend-mode: multiply;
+  transform: rotate(-3deg);
+}
+.setting-gallery__stack-name {
+  position: absolute;
+  inset: auto 0 0;
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: var(--sp-2);
+  font-size: var(--fs-data);
+  font-weight: 600;
+}
+.setting-gallery__stack-name > span { color: var(--paper-ink-soft); font-weight: 400; }
+.setting-gallery__new {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  width: 150px;
+  height: 150px;
+  align-self: flex-start;
+  border: var(--card-border-width-strong) dashed rgb(31 26 20 / 0.5);
+  background: transparent;
+  color: var(--paper-ink-soft);
+  font-size: var(--fs-data);
+}
+.setting-gallery__new-main,
+.setting-gallery__new-file {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.setting-gallery__new-main > span { font-size: var(--fs-h2); line-height: 1; }
+.setting-gallery__new-file { color: var(--paper-muted); font-size: var(--fs-meta); text-decoration: underline; }
+.setting-gallery__new-main:hover,
+.setting-gallery__new-file:hover { color: var(--paper-ink); }
+.setting-gallery__imported { display: flex; align-items: baseline; gap: var(--sp-3); margin: 0; }
+.setting-gallery__new.is-naming { padding: 0 var(--sp-4); cursor: default; }
+.setting-gallery__name-input { width: 100%; font-size: var(--fs-body); }
+.setting-gallery__head { display: flex; align-items: baseline; gap: var(--sp-5); }
+.setting-gallery__head h3 { margin: 0; font-family: var(--font-display); font-size: var(--fs-h2); }
+.setting-gallery__head .setting-gallery__name-input { width: auto; flex: 0 1 320px; font-size: var(--fs-h3); }
+.setting-gallery__tile[draggable="true"] { cursor: grab; }
+
+/* Окно экспорта: «Альбомы» вложены под «Ресурсы». */
+.setting-export__nested { padding-left: var(--sp-7); }
+
+/* ── Аудиотека: набор и его каналы ─────────────────────────────────── */
+.setting-audio,
+.setting-library { display: flex; flex-direction: column; gap: var(--sp-6); }
+.setting-audio__split { grid-template-columns: clamp(240px, 30%, 320px) minmax(0, 1fr); }
+.setting-audio__set { grid-template-columns: minmax(0, 1fr) auto; }
+.setting-audio__set-view { display: flex; flex-direction: column; gap: var(--sp-6); min-width: 0; }
+.setting-audio__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-5); }
+.setting-audio__head h3 { margin: 0; font-family: var(--font-display); font-size: var(--fs-h2); }
+.setting-audio__channels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: var(--sp-7); }
+.setting-audio__channels h4 { margin: 0 0 var(--sp-3); }
+.setting-audio__sounds { margin: 0; padding: 0; list-style: none; }
+.setting-audio__sounds li {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-2);
+  border-bottom: var(--card-border-width) solid var(--paper-rule);
+  font-size: var(--fs-data);
+}
+.setting-audio__play {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: var(--card-border-width-strong) solid var(--paper-ink);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--paper-ink);
+  font-size: var(--fs-meta);
+}
+.setting-audio__dot { flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; background: var(--paper-muted); }
+.setting-audio__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Панель циклов под осью Хроники (разбор 2026-10-02, Q23–Q25, Q29–Q31):
+   дорожка на цикл, масштаб и сдвиг — общие с осью. Пристыкована к оси
+   вплотную, поэтому гасит зазор колонки .tl. */
+.cycle-panel {
+  --cycle-cross: #b0236a;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin-top: calc(-1 * var(--sp-4));
+  padding-top: var(--sp-4);
+}
+.cycle-panel__head { display: flex; align-items: center; gap: var(--sp-4); flex-wrap: wrap; }
+.cycle-panel__title {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--paper-muted);
+}
+.cycle-panel__group { display: inline-flex; align-items: center; gap: var(--sp-1); }
+.cycle-panel__grow { flex: 1; }
+.cycle-panel__lanes {
+  position: relative;
+  overflow: hidden;
+  border: var(--card-border-width) solid var(--line);
+  background: var(--paper-wash);
+  cursor: grab;
+  touch-action: none;
+}
+.cycle-panel__lanes:active { cursor: grabbing; }
+.cycle-panel__empty { margin: 0; padding: var(--sp-4); }
+.cycle-lane {
+  position: relative;
+  height: 44px;
+  border-top: var(--card-border-width) solid var(--paper-rule);
+}
+.cycle-lane:first-child { border-top: 0; }
+.cycle-lane.is-off { height: 28px; }
+.cycle-lane.is-dense {
+  background: repeating-linear-gradient(135deg, transparent 0 6px, var(--paper-rule) 6px 7px);
+}
+.cycle-lane__dense {
+  position: absolute;
+  right: var(--sp-4);
+  top: var(--sp-2);
+  font-size: var(--fs-meta);
+  font-style: italic;
+  color: var(--paper-muted);
+}
+.cycle-lane__phase {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  overflow: hidden;
+  padding: var(--sp-1) var(--sp-2);
+  font-size: var(--fs-meta);
+  font-style: italic;
+  white-space: nowrap;
+  pointer-events: none;
+  /* Начало элемента — засечкой, конец — тонкой чертой: между отрезками
+     бывают пустые дни (Q3 Б). */
+  border-left: var(--card-border-width-strong) solid var(--paper-ink);
+  border-right: var(--card-border-width) solid var(--paper-rule);
+}
+.cycle-lane__phase.is-alt { background: rgb(31 26 20 / 0.08); }
+/* Едва заметная черта под подписью — от засечки до засечки, с зазором у
+   концов (просьба владельца 2026-10-02). */
+.cycle-lane__phase::after {
+  content: "";
+  position: absolute;
+  top: 18px;
+  left: var(--sp-2);
+  right: var(--sp-2);
+  border-top: var(--card-border-width) solid rgb(31 26 20 / 0.18);
+}
+.cycle-lane__mark {
+  position: absolute;
+  top: 0;
+  height: 18px;
+  border-left: var(--card-border-width-strong) solid var(--paper-ink);
+}
+.cycle-lane__mark {
+  padding-left: var(--sp-2);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.cycle-lane__label {
+  position: absolute;
+  left: 0;
+  bottom: var(--sp-1);
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  padding: var(--sp-0) var(--sp-4);
+  border: var(--card-border-width) solid var(--line);
+  background: var(--paper-base);
+  font-size: var(--fs-meta);
+}
+.cycle-lane__label label { display: flex; align-items: center; gap: var(--sp-2); font-weight: 700; cursor: pointer; }
+.cycle-lane__label input { margin: 0; accent-color: var(--paper-ink); }
+.cycle-lane__meta { color: var(--paper-muted); }
+.cycle-panel__cross {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 0;
+  border-left: var(--card-border-width-strong) dashed var(--cycle-cross);
+  cursor: context-menu;
+}
+/* Пунктир в 2px не поймать мышью — попадание шире линии. */
+.cycle-panel__cross::after {
+  content: "";
+  position: absolute;
+  inset: 0 calc(-1 * var(--sp-2));
+}
+.cycle-group-modal__list { max-height: 50vh; overflow-y: auto; }
+
+/* Хроника сеттинга списком (просьба владельца 2026-10-02): сетка — значок
+   описания | дата жирно и название ниже | действия одинаковыми столбцами. */
+.chronicle-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3) var(--sp-5);
+  padding: var(--sp-4) 0;
+  border-bottom: var(--card-border-width) solid var(--paper-rule);
+}
+/* Действия одинаковы у всех строк и прижаты вправо — столбцы совпадают;
+   узкой колонке они уходят под название, а не сжимают его. */
+.chronicle-item__toggle { flex: 0 0 16px; }
+.chronicle-item__main { display: flex; flex: 1 1 220px; flex-direction: column; gap: var(--sp-1); min-width: 0; }
+.chronicle-item__head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-4); }
+.chronicle-item__date { font-size: var(--fs-data); font-weight: 700; }
+.chronicle-item__title { font-size: var(--fs-body); font-weight: 600; color: var(--paper-ink); }
+.chronicle-item__actions { display: flex; align-items: center; gap: var(--sp-3); margin-left: auto; }
+.chronicle-item__visible { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-meta); white-space: nowrap; }
+/* Описание — как в «Повторяющихся»: кегль тела, мягкие чернила. */
+.chronicle-item__expanded { flex: 1 0 100%; padding-left: calc(16px + var(--sp-5)); white-space: pre-wrap; font-size: var(--fs-body); color: var(--paper-ink-soft); }
+
+/* Заголовок эпохи в хронологическом списке (разбор 2026-10-02, Q4). */
+.chronicle-era {
+  padding: var(--sp-5) 0 var(--sp-2);
+  border-bottom: var(--card-border-width-strong) solid var(--paper-ink);
+  font-size: var(--fs-h3);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.chronicle-era > span { font-size: var(--fs-data); font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--paper-muted); }
+
+/* «Повторяющиеся» — та же сетка: цвет | раскрыть | название и тип | когда | действия. */
+.important-dates__group { display: flex; flex-direction: column; }
+.important-dates__label {
+  padding-bottom: var(--sp-2);
+  font-size: var(--fs-meta);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.important-dates__row {
+  display: grid;
+  grid-template-columns: 12px 16px minmax(0, 3fr) minmax(0, 2fr) auto;
+  column-gap: var(--sp-5);
+  align-items: center;
+  padding: var(--sp-4) 0;
+  border-bottom: var(--card-border-width) solid var(--paper-rule);
+  font-size: var(--fs-body);
+}
+.important-dates__dot { width: 10px; height: 10px; border-radius: 50%; }
+/* Раскрыть описание — стрелка слева, в «Хронологии» и «Повторяющихся». */
+.desc-toggle { padding: 0; border: 0; background: none; color: var(--paper-ink); font-size: var(--fs-h2); font-weight: 700; line-height: 1; cursor: pointer; }
+.desc-toggle__chev { display: inline-block; transition: transform 0.12s; }
+.desc-toggle__chev.is-open { transform: rotate(90deg); }
+.important-dates__title { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; }
+.important-dates__title > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.important-dates__when { font-size: var(--fs-data); color: var(--paper-ink-soft); }
+.important-dates__actions { display: flex; gap: var(--sp-3); }
+.important-dates__desc { grid-column: 3 / -1; padding-top: var(--sp-3); white-space: pre-wrap; color: var(--paper-ink-soft); }
+
+/* «Циклы» и «Календарь» Хроники — тем же кеглем, что и списки (просьба
+   владельца 2026-10-02): мелкий текст за столом не читается. */
+.chronicle-panel { font-size: var(--fs-body); }
+
+/* Вкладка «Циклы» (разбор 2026-10-02, Q1–Q2, Q6): карточка цикла — полоса
+   одного оборота; в правке по полосе щёлкают начало и конец элемента. */
+.cycle-list__head { justify-content: space-between; }
+.cycle-list__head > h3 { margin: 0; }
+.cycle-form { flex-wrap: wrap; align-items: center; }
+.cycle-form__num { width: 76px; }
+.cycle-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-5) 0;
+  border-top: var(--card-border-width) solid var(--paper-rule);
+}
+.cycle-card.is-editing { padding: var(--sp-5); border: var(--card-border-width-strong) solid var(--paper-ink); background: var(--paper-wash); }
+.cycle-card__head { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--sp-4); }
+.cycle-card__actions { display: flex; gap: var(--sp-3); margin-left: auto; }
+.cycle-strip {
+  position: relative;
+  height: 64px;
+  border: var(--card-border-width) solid var(--line);
+  background: var(--paper-wash);
+  overflow: hidden;
+}
+.cycle-strip.is-editing { cursor: crosshair; }
+.cycle-strip__band {
+  position: absolute;
+  top: 0;
+  height: 40px;
+  overflow: hidden;
+  padding: var(--sp-1) var(--sp-3);
+  border-left: var(--card-border-width-strong) solid var(--paper-ink);
+  border-right: var(--card-border-width) solid var(--paper-rule);
+  font-size: var(--fs-data);
+  font-style: italic;
+  white-space: nowrap;
+}
+.cycle-strip__band.is-alt { background: rgb(31 26 20 / 0.08); }
+.cycle-strip__mark {
+  position: absolute;
+  top: 0;
+  height: 40px;
+  padding-left: var(--sp-2);
+  border-left: var(--card-border-width-strong) solid var(--paper-ink);
+  font-size: var(--fs-data);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.cycle-strip__pending {
+  position: absolute;
+  top: 0;
+  height: 40px;
+  min-width: 2px;
+  background: rgb(226 242 90 / 0.55);
+  outline: var(--card-border-width) dashed var(--paper-ink);
+  pointer-events: none;
+}
+.cycle-strip__now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: var(--card-border-width-strong) solid #b3261e;
+  pointer-events: none;
+}
+.cycle-strip__scale {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 22px;
+  border-top: var(--card-border-width) solid var(--paper-rule);
+  pointer-events: none;
+}
+.cycle-strip__scale > span {
+  position: absolute;
+  bottom: var(--sp-1);
+  padding-left: var(--sp-1);
+  border-left: var(--card-border-width) solid var(--paper-rule);
+  font-size: var(--fs-meta);
+  color: var(--paper-muted);
+}
+.cycle-elements { display: flex; flex-direction: column; gap: var(--sp-3); }
+.cycle-elements__row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-4); }
+.cycle-elements__row > input:first-child { flex: 1 1 180px; }
+.cycle-elements__row.is-new { padding-top: var(--sp-3); border-top: var(--card-border-width) dashed var(--paper-rule); }
+
+/* Править / удалить в строке — значками (RowIconButtons). */
+.row-icon {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: var(--card-border-width) solid var(--line);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--paper-ink);
+  cursor: pointer;
+}
+.row-icon:hover, .row-icon:focus-visible { background: var(--paper-ink); color: var(--paper-base); }
+.row-icon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  -webkit-mask: var(--row-icon) center / 20px no-repeat;
+  mask: var(--row-icon) center / 20px no-repeat;
+}
+.row-icon--edit { --row-icon: var(--skin-edit-pencil); }
+.row-icon--trash { --row-icon: var(--skin-trash); }
+.row-icon--cross { --row-icon: var(--skin-cross); }
+.row-icon--trash:hover, .row-icon--trash:focus-visible { background: #b3261e; border-color: #b3261e; color: var(--paper-base); }
+
+@media (max-width: 700px) {
+  .chronicle-item__actions { flex-wrap: wrap; }
+  .important-dates__row { grid-template-columns: 12px 16px minmax(0, 1fr) auto; }
+  .important-dates__when { grid-column: 3; grid-row: 2; }
+  .setting-world__row { grid-template-columns: 20px minmax(0, 1fr) auto; }
+  .setting-world__line { display: none; }
+  .setting-audio__split { grid-template-columns: minmax(0, 1fr); }
+  /* Стопки альбомов — лентой, а не столбиком на весь экран. */
+  .setting-gallery__albums { flex-wrap: nowrap; overflow-x: auto; }
+  .setting-gallery__stack { flex-shrink: 0; width: 140px; height: 130px; }
+  .setting-gallery__new { flex-shrink: 0; width: 110px; height: 110px; }
+}
+
+/* ── География: колонки на бумаге (доска 16) ───────────────────────── */
+/* Колонки и карточка те же, что раньше (LocationMiller), — перекрашены:
+   строки без подложек, выбранное — рамкой с кислотной обводкой, как в
+   «Населении»; разделители колонок — линии пером. */
+.miller-search {
+  position: relative;
+  display: flex;
+  flex: 0 1 340px;
+  min-width: 180px;
+}
+.miller-search .population__search { flex: 1; }
+.miller-search__list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  margin: var(--sp-2) 0 0;
+  padding: var(--sp-2);
+  list-style: none;
+  border: var(--card-border-width-strong) solid var(--paper-ink);
+  border-radius: 3px;
+  background: var(--paper-base);
+  box-shadow: 0 8px 18px rgb(60 40 20 / 0.25);
+}
+.miller-search__list button {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-4);
+  width: 100%;
+  padding: var(--sp-3) var(--sp-4);
+  border: 0;
+  background: transparent;
+  color: var(--paper-ink);
+  font-size: var(--fs-body);
+  text-align: left;
+  cursor: pointer;
+}
+.miller-search__list button:hover,
+.miller-search__list button:focus-visible { background: var(--paper-wash); }
+.miller-search__none { padding: var(--sp-3) var(--sp-4); color: var(--paper-muted); }
+
+.geography-miller .miller-roots { gap: var(--sp-5); flex-wrap: wrap; }
+.geography-miller .miller-roots__label {
+  font-size: var(--fs-meta);
+  letter-spacing: 0.08em;
+  color: var(--paper-muted);
+}
+.geography-miller .miller-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-6);
+  border: var(--card-border-width-strong) solid var(--paper-ink);
+  border-radius: 4px;
+  color: var(--paper-ink);
+}
+.geography-miller .miller-chip.is-active {
+  background: var(--paper-ink);
+  color: var(--paper-acid);
+}
+.miller-chip__name {
+  font-family: var(--font-ui);
+  font-size: var(--fs-h3);
+  font-weight: 600;
+}
+.miller-chip__sub { font-size: var(--fs-meta); opacity: 0.8; }
+.geography-miller .miller-chip--add {
+  border-style: dashed;
+  border-color: rgb(31 26 20 / 0.5);
+  color: var(--paper-ink-soft);
+  font-size: var(--fs-data);
+}
+
+.geography-miller .miller-cols { gap: var(--sp-7); }
+.geography-miller .miller-col,
+.geography-miller .miller-col.is-active-col,
+.geography-miller .miller-col:first-child.is-active-col {
+  border: 0;
+  border-right: var(--card-border-width) solid rgb(31 26 20 / 0.25);
+  background: transparent;
+  padding: 0 var(--sp-5) 0 0;
+  max-height: 70vh;
+}
+.geography-miller .miller-col__title {
+  color: var(--paper-muted);
+  font-size: var(--fs-meta);
+  letter-spacing: 0.08em;
+  padding: 0 var(--sp-4) var(--sp-3);
+}
+.geography-miller .miller-col__body { gap: 0; padding: var(--sp-2); }
+.geography-miller .miller-item {
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  border: 0;
+  border-bottom: var(--card-border-width) solid rgb(31 26 20 / 0.12);
+  border-radius: 3px;
+  color: var(--paper-ink);
+  font-size: var(--fs-body);
+}
+.geography-miller .miller-item:hover { background: var(--paper-wash); }
+.geography-miller .miller-item.is-active {
+  background: rgb(255 253 245 / 0.45);
+  color: var(--paper-ink);
+  box-shadow: 0 0 0 2px var(--paper-ink), 0 0 0 5px var(--paper-acid);
+  margin: var(--sp-2) 0;
+}
+.geography-miller .miller-item__name { flex: 1; min-width: 0; font-weight: 500; }
+.geography-miller .miller-item.is-active .miller-item__name { font-weight: 700; }
+.geography-miller .miller-item__badge,
+.geography-miller .miller-item.is-active .miller-item__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: none;
+  max-width: 45%;
+  font-family: inherit;
+  font-size: var(--fs-meta);
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--paper-ink-soft);
+}
+.geography-miller .miller-item .nav-icon { color: var(--paper-ink-soft); }
+.geography-miller .miller-sec { color: var(--paper-muted); font-size: var(--fs-meta); letter-spacing: 0.08em; }
+
+/* Рельса: подпись колонки мелко, под ней выбранное звено торчком. */
+.geography-miller .miller-col.is-rail .miller-col__title {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+  align-items: center;
+  padding: var(--sp-4) 0;
+}
+.miller-col__picked {
+  padding: var(--sp-5) var(--sp-2);
+  border-radius: 3px;
+  background: rgb(255 253 245 / 0.45);
+  box-shadow: 0 0 0 2px var(--paper-ink), 0 0 0 5px var(--paper-acid);
+  color: var(--paper-ink);
+  font-size: var(--fs-data);
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.geography-miller .miller-card {
+  align-self: flex-start;
+  border: var(--card-border-width-strong) solid var(--paper-ink);
+  border-radius: 3px;
+  background: var(--paper-wash);
+}
+.geography-miller .place-card__name {
+  font-family: "Rubik Dirt", var(--font-ui), sans-serif;
+  font-weight: 400;
+}
+
+.cycle-card__to-setting { margin-left: auto; }
+
+/* ── География: «Список»-реестр (доска 16б) ────────────────────────── */
+/* Долг — тёмно-красным: бумага светлая в обеих темах, а цвет «отменено»
+   тёмной темы (розовый) на ней не читается (замечание владельца). */
+.geo-reg { --geo-debt: #8a1c1c; }
+.geo-reg__chip b { font-weight: 700; }
+.geo-reg__chip.is-debt:not(.is-on) b { color: var(--geo-debt); }
+.geo-reg__split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--sp-7);
+  align-items: start;
+}
+.geo-reg__list { display: flex; flex-direction: column; gap: var(--sp-6); min-width: 0; }
+.geo-reg__row {
+  display: grid;
+  /* Узкий лист (окно ~1500 с боковыми панелями) оставляет списку ~400 px:
+     метки — узкими столбцами, остаток делят название и тип. */
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) 44px 72px 56px;
+  align-items: center;
+  gap: var(--sp-4);
+  width: 100%;
+  padding: var(--sp-3) var(--sp-4);
+  border: 0;
+  border-bottom: var(--card-border-width) solid rgb(31 26 20 / 0.12);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--paper-ink);
+  font: inherit;
+  font-size: var(--fs-data);
+  text-align: left;
+  cursor: pointer;
+}
+.geo-reg__row:hover { background: var(--paper-wash); }
+.geo-reg__row.is-selected {
+  background: rgb(255 253 245 / 0.45);
+  box-shadow: 0 0 0 2px var(--paper-ink), 0 0 0 5px var(--paper-acid);
+  margin: var(--sp-2) 0;
+}
+.geo-reg__cols {
+  padding-bottom: var(--sp-2);
+  border: 0;
+  cursor: default;
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.1;
+  color: var(--paper-muted);
+}
+.geo-reg__cols:hover { background: transparent; }
+.geo-reg__group { display: flex; flex-direction: column; }
+.geo-reg__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-4);
+  width: 100%;
+  padding: 0 0 var(--sp-2);
+  border: 0;
+  border-bottom: var(--card-border-width-strong) solid var(--paper-ink);
+  border-radius: 0;
+  background: transparent;
+  color: var(--paper-ink);
+  text-align: left;
+  cursor: pointer;
+}
+.geo-reg__chev { display: inline-block; width: 1em; font-weight: 700; transition: transform 0.12s; }
+.geo-reg__chev.is-open { transform: rotate(90deg); }
+.geo-reg__title {
+  font-family: var(--font-ui);
+  font-size: var(--fs-data);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.geo-reg__head.is-selected .geo-reg__title { text-decoration: underline; }
+.geo-reg__meta { font-size: var(--fs-meta); color: var(--paper-muted); }
+.geo-reg__debt,
+.geo-reg__no { font-size: var(--fs-meta); font-weight: 600; color: var(--geo-debt); }
+.geo-reg__name { display: flex; flex-direction: column; min-width: 0; }
+.geo-reg__name > span,
+.geo-reg__name > small,
+.geo-reg__kind { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.geo-reg__name > span { font-size: var(--fs-body); font-weight: 500; }
+.geo-reg__row.is-selected .geo-reg__name > span { font-weight: 700; }
+.geo-reg__name > small { font-size: var(--fs-meta); color: var(--paper-muted); }
+.geo-reg__kind { color: var(--paper-ink-soft); }
+.geo-reg__yes { font-weight: 700; }
+.geo-reg__none { color: var(--paper-muted); }
+.geo-reg__more {
+  align-self: flex-start;
+  padding: var(--sp-3) var(--sp-4);
+  border: 0;
+  background: transparent;
+  color: var(--paper-ink);
+  font-weight: 600;
+  cursor: pointer;
+}
+.geo-reg__aside {
+  position: sticky;
+  top: var(--sp-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.geo-reg__aside .miller-card { width: 100%; max-height: 75vh; }
+
+/* Жанры под именем сеттинга (владелец, 2026-10-02). */
+.setting-genres { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); }
+.setting-genres__add { border-style: dashed; cursor: pointer; }

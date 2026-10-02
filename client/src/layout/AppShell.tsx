@@ -369,7 +369,7 @@ const CRUMB_LABEL: Record<string, string> = {
   resources: "Другие материалы",
   gallery:"Галерея",
   "audio-library":"Аудиотека",
-  workbooks:"Рабочие тетради",
+  workbooks:"Тетради",
   read: "Читалка",
   canvas: "Узлы",
   graph: "Связи",

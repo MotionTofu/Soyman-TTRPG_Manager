@@ -44,7 +44,7 @@ export function MasteringPage() {
   const fileInput = useRef<HTMLInputElement>(null);
   const importing = useRef(false);
   const bookmarkKey = `masteringBookBookmarks:${getCachedUser()?.id ?? "gm"}`;
-  const [bookmarked, setBookmarked] = useState<Set<number>>(() => {
+  const [bookmarked] = useState<Set<number>>(() => {
     try { const saved: unknown = JSON.parse(localStorage.getItem(bookmarkKey) ?? "[]"); return new Set(Array.isArray(saved) ? saved.filter((id): id is number => typeof id === "number") : []); }
     catch { return new Set(); }
   });
@@ -198,7 +198,7 @@ export function MasteringPage() {
         {!filtered.length && (searchFiltered || !visibleSections.length) && !error && !busy && <EmptyState kind={searchFiltered ? "search" : "primary"} title={searchFiltered ? "Книг не найдено" : "Библиотека ждёт первую книгу"} hint={searchFiltered ? "Попробуйте другое название или снимите фильтр системы." : "Создайте полку или добавьте статью — она станет книгой в вашей библиотеке."} action={searchFiltered ? <button onClick={() => { setQuery(""); setSystemFilters(new Set()); }}>Сбросить фильтры</button> : <button className="primary" onClick={() => newBook()}>Добавить книгу</button>} />}
       </>}
     </div>
-    {readingBook && <MasteringReader key={readingBook.id} book={readingBook} previousBook={previousBook} nextBook={nextBook} onNavigate={setSelectedId} sections={sections} systems={systems} saved={bookmarked.has(readingBook.id)} onBookmark={() => setBookmarked(previous => { const next = new Set(previous); if (next.has(readingBook.id)) next.delete(readingBook.id); else next.add(readingBook.id); return next; })} onClose={closeReader} onArchive={() => archive(readingBook.id)} />}
+    {readingBook && <MasteringReader key={readingBook.id} book={readingBook} previousBook={previousBook} nextBook={nextBook} onNavigate={setSelectedId} sections={sections} systems={systems} onClose={closeReader} onArchive={() => archive(readingBook.id)} />}
     {form && <MasteringBookForm initial={form} systems={systems} sections={sections} onSubmit={create} onClose={() => setForm(null)} />}
     {sectionForm && <Modal ariaLabel={sectionForm.section ? "Настройки полки" : "Новая полка"} closeOnBackdropClick={false} onClose={() => { if (!sectionSaving) setSectionForm(null); }}><form className="mastering-book-form" onSubmit={event => { event.preventDefault(); void saveSection(); }}><h2>{sectionForm.section ? "Настройки полки" : "Новая полка"}</h2><label>Название полки<input required value={sectionForm.name} onChange={event => setSectionForm({ ...sectionForm, name: event.target.value })} placeholder="Например, Подготовка сессии" /></label><label>Система<select value={sectionForm.system_id ?? ""} onChange={event => setSectionForm({ ...sectionForm, system_id: event.target.value ? Number(event.target.value) : null })}><option value="">Без системы</option>{systems.map(system => <option key={system.id} value={system.id}>{system.name}</option>)}</select></label><div className="mastering-form-actions">{sectionForm.section && <button type="button" className="danger" disabled={sectionSaving} onClick={() => void deleteSection()}>Удалить полку</button>}<button type="button" disabled={sectionSaving} onClick={() => setSectionForm(null)}>Отмена</button><button type="submit" className="primary" disabled={sectionSaving || !sectionForm.name.trim()}>{sectionSaving ? "Сохраняем…" : sectionForm.section ? "Сохранить" : "Создать полку"}</button></div></form></Modal>}
   </PageFrame>;

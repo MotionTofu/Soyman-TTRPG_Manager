@@ -519,12 +519,44 @@ export function layeredLayout(nodes: GraphNode[], edges: GraphEdge[], scales: Ma
   }
   right = Math.max(right, cursor, 1200);
 
-  // Мир: под средним x уже расставленных соседей, жадно по рядам.
-  const world = nodes.filter((n) => !positions.has(n.key)).map((n) => {
-    const xs = (neighbours.get(n.key) ?? []).map((k) => positions.get(k)?.x).filter((x): x is number => x !== undefined);
-    // Без сюжетных соседей — NaN: такие встают в конец самого короткого ряда.
-    return { n, w: chipWidth(n, scale(n)), target: xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN };
-  }).sort((a, b) => (Number.isNaN(a.target) ? 1 : 0) - (Number.isNaN(b.target) ? 1 : 0) || (a.target - b.target || 0));
+  // Мир: среднее по всем видимым связям. Повторные связи дают соседу
+  // больший вес; позиции распространяются и через других узлов мира.
+  const worldNodes = nodes.filter((n) => !positions.has(n.key));
+  const targets = new Map<string, number>();
+  for (const [key, p] of positions) targets.set(key, p.x);
+  // Сначала распространяем координаты от сюжета по связанным компонентам.
+  // Компоненты без сюжетных соседей остаются без цели и пакуются отдельно.
+  for (let pass = 0; pass < worldNodes.length; pass++) {
+    const additions = new Map<string, number>();
+    for (const n of worldNodes) {
+      if (targets.has(n.key)) continue;
+      const xs = (neighbours.get(n.key) ?? []).map((k) => targets.get(k))
+        .filter((x): x is number => x !== undefined);
+      if (xs.length) additions.set(n.key, xs.reduce((a, b) => a + b, 0) / xs.length);
+    }
+    if (!additions.size) break;
+    for (const [key, x] of additions) targets.set(key, x);
+  }
+  // Синхронная релаксация: порядок узлов не влияет на результат.
+  for (let pass = 0; pass < 120; pass++) {
+    const next = new Map(targets);
+    let movement = 0;
+    for (const n of worldNodes) {
+      const old = targets.get(n.key);
+      if (old === undefined) continue;
+      const xs = (neighbours.get(n.key) ?? []).map((k) => targets.get(k))
+        .filter((x): x is number => x !== undefined);
+      if (!xs.length) continue;
+      const x = (old + xs.reduce((a, b) => a + b, 0) / xs.length) / 2;
+      next.set(n.key, x);
+      movement = Math.max(movement, Math.abs(x - old));
+    }
+    for (const [key, x] of next) targets.set(key, x);
+    if (movement < 0.1) break;
+  }
+  const world = worldNodes.map((n) => ({
+    n, w: chipWidth(n, scale(n)), target: targets.get(n.key) ?? NaN,
+  })).sort((a, b) => (Number.isNaN(a.target) ? 1 : 0) - (Number.isNaN(b.target) ? 1 : 0) || (a.target - b.target || 0));
   const totalW = world.reduce((sum, c) => sum + c.w + LAYER_GAP, 0);
   const rowCount = Math.max(3, Math.ceil((totalW / right) * 1.5));
   const rowEnds = new Array<number>(rowCount).fill(LAYER_PAD);
@@ -535,7 +567,11 @@ export function layeredLayout(nodes: GraphNode[], edges: GraphEdge[], scales: Ma
     const shortest = rowEnds.indexOf(Math.min(...rowEnds));
     const want = Number.isNaN(c.target) ? rowEnds[shortest] : c.target - c.w / 2;
     let row = Number.isNaN(c.target) ? shortest : rowEnds.findIndex((end) => Math.max(end, want) - want <= 120);
-    if (row < 0) row = shortest;
+    if (row < 0) {
+      // Дополнительный ряд сохраняет близость к связям при плотной группе.
+      row = rowEnds.length;
+      rowEnds.push(LAYER_PAD);
+    }
     const left = Math.max(rowEnds[row], want, LAYER_PAD);
     put(c.n.key, left + c.w / 2, worldY + row * rowH);
     rowEnds[row] = left + c.w + LAYER_GAP;
@@ -684,11 +720,11 @@ export function simulateGraph(
     const known = seed?.get(n.key);
     if (known) {
       seeded++;
-      const x = fit ? cx + (known.x - fit.midX) * fit.scale : known.x;
-      const y = fit ? cy + (known.y - fit.midY) * fit.scale : known.y;
+      const x = fit && !pinned?.has(n.key) ? cx + (known.x - fit.midX) * fit.scale : known.x;
+      const y = fit && !pinned?.has(n.key) ? cy + (known.y - fit.midY) * fit.scale : known.y;
       pos.set(n.key, {
-        x: Math.max(CANVAS_EDGE_PADDING, Math.min(width - CANVAS_EDGE_PADDING, x)),
-        y: Math.max(CANVAS_EDGE_PADDING, Math.min(height - CANVAS_EDGE_PADDING, y)),
+        x: pinned?.has(n.key) ? x : Math.max(CANVAS_EDGE_PADDING, Math.min(width - CANVAS_EDGE_PADDING, x)),
+        y: pinned?.has(n.key) ? y : Math.max(CANVAS_EDGE_PADDING, Math.min(height - CANVAS_EDGE_PADDING, y)),
         vx: 0,
         vy: 0,
       });
@@ -831,6 +867,41 @@ export function simulateGraph(
         p.x = Math.max(CANVAS_EDGE_PADDING, Math.min(width - CANVAS_EDGE_PADDING, cx + (p.x - midX) * scale));
         p.y = Math.max(CANVAS_EDGE_PADDING, Math.min(height - CANVAS_EDGE_PADDING, cy + (p.y - midY) * scale));
       }
+    }
+  }
+
+  // Затухающая симуляция может оставить узел далеко от всех соседей,
+  // особенно на большом холсте. После растяжки возвращаем такие выбросы
+  // к взвешенному центру связей; расталкивание ниже находит свободное место.
+  // Разброс соседей задаёт допустимую длину: мосты между группами сохраняются.
+  const adjacency = new Map<string, string[]>();
+  for (const e of edges) {
+    if (e.from === e.to || !pos.has(e.from) || !pos.has(e.to)) continue;
+    (adjacency.get(e.from) ?? adjacency.set(e.from, []).get(e.from)!).push(e.to);
+    (adjacency.get(e.to) ?? adjacency.set(e.to, []).get(e.to)!).push(e.from);
+  }
+  for (let pass = 0; pass < 12; pass++) {
+    const moves: [string, number, number][] = [];
+    for (const n of nodes) {
+      if (pinned?.has(n.key)) continue;
+      const neighbours = adjacency.get(n.key);
+      if (!neighbours?.length) continue;
+      const ps = neighbours.map((key) => pos.get(key)!);
+      const x = ps.reduce((sum, p) => sum + p.x, 0) / ps.length;
+      const y = ps.reduce((sum, p) => sum + p.y, 0) / ps.length;
+      const spread = ps.reduce((sum, p) => sum + Math.hypot(p.x - x, p.y - y), 0) / ps.length;
+      const p = pos.get(n.key)!;
+      const distance = Math.hypot(p.x - x, p.y - y);
+      const limit = IDEAL_EDGE_LENGTH + spread;
+      if (distance <= limit * 1.25) continue;
+      const ratio = limit / distance;
+      moves.push([n.key, x + (p.x - x) * ratio, y + (p.y - y) * ratio]);
+    }
+    if (!moves.length) break;
+    for (const [key, x, y] of moves) {
+      const p = pos.get(key)!;
+      p.x = Math.max(CANVAS_EDGE_PADDING, Math.min(width - CANVAS_EDGE_PADDING, x));
+      p.y = Math.max(CANVAS_EDGE_PADDING, Math.min(height - CANVAS_EDGE_PADDING, y));
     }
   }
 

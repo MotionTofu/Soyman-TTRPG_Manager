@@ -69,6 +69,14 @@ interface ResourceBody {
   tags?: string;
   notes?: string;
   content?: string;
+  album_id?: string;
+}
+
+/** Альбом галереи (routes/albums.ts): число существующего альбома или null. */
+function albumIdOrNull(value: unknown): number | null {
+  const id = Number(value);
+  if (!Number.isInteger(id) || id <= 0) return null;
+  return db.prepare("SELECT 1 FROM albums WHERE id = ?").get(id) ? id : null;
 }
 
 const MAX_MARKDOWN_BYTES = 2 * 1024 * 1024;
@@ -604,8 +612,8 @@ resourcesRouter.post("/", uploadResourceFile, async (req, res) => {
 
     const info = db
       .prepare(
-      `INSERT INTO resources (uid, name, type, scope, campaign_id, session_id, setting_id, system_id, template_kind, template_format, file_path, file_sha256, link_url, category, tags, notes, position)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO resources (uid, name, type, scope, campaign_id, session_id, setting_id, system_id, template_kind, template_format, file_path, file_sha256, link_url, category, tags, notes, position, album_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         crypto.randomUUID(),
@@ -624,7 +632,8 @@ resourcesRouter.post("/", uploadResourceFile, async (req, res) => {
         body.category ?? null,
         body.tags || "",
         body.notes || "",
-        maxPos.m + 1
+        maxPos.m + 1,
+        albumIdOrNull(body.album_id)
       );
     res.status(201).json(withFileUrl(
       db.prepare("SELECT * FROM resources WHERE id = ?").get(info.lastInsertRowid) as { file_path: string | null }
@@ -727,6 +736,9 @@ resourcesRouter.put("/:id", (req, res) => {
       .all(req.params.id) as { author_user_id: number }[];
     for (const author of authors) syncPdfNoteMarkdown(Number(req.params.id), author.author_user_id);
   }
+  // Перекладывание между альбомами (Q22): null — «Без альбома».
+  if ("album_id" in req.body)
+    db.prepare("UPDATE resources SET album_id = ? WHERE id = ?").run(albumIdOrNull(req.body.album_id), req.params.id);
   })();
   res.json(withFileUrl(db.prepare("SELECT * FROM resources WHERE id = ?").get(req.params.id) as { file_path: string | null }));
 });

@@ -35,7 +35,7 @@ export function PlayerMapStage({ mapId }: { mapId: number }) {
     if (!assetsState.data || !document) return;
     let active = true;
     registerMapImageResources(assetsState.data);
-    if (v6 && v6 !== "corrupt" && v6.appearance?.style !== "blueprint") void prepareCartographyStyle();
+    if (v6 && v6 !== "corrupt" && v6.appearance?.style !== "blueprint") void prepareCartographyStyle(v6.appearance?.style ?? "paper-ink");
     void prepareMapImageAssets(document).then(() => {
       if (active) setAssetLoadError(false);
     }).catch(() => {

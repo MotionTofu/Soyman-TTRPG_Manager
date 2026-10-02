@@ -1,11 +1,14 @@
 import { useMemo, useState } from "react";
 import type { Affect } from "../data/entities";
 import { useAction, useResource, write } from "../data/hooks";
-import { chroniclePaths } from "../data/settingPage";
+import { chronicleEventAffects, chroniclePaths } from "../data/settingPage";
+import { syncMentionLinks } from "../mentions";
 import { useConfirm } from "../hooks/useConfirm";
 import { Modal } from "./Modal";
-import { formatImportantDate, formatCustomRule } from "../inworldCalendar";
-import type { CalendarMonth, CalendarWeekday, CustomRule, ImportantDate, SettingCalendar } from "../types";
+import { MentionText } from "./mentions/MentionText";
+import { RowDeleteButton, RowEditButton } from "./RowIconButtons";
+import { dateFromElapsed, elapsedDays, formatImportantDate, formatCustomRule, weekdayIndexFor } from "../inworldCalendar";
+import type { CalendarMonth, CalendarWeekday, CustomRule, ImportantDate, SettingCalendar, SettingCalendarEvent } from "../types";
 
 interface OwnerOption { type: "being" | "community" | "location"; id: number; name: string; }
 interface DateTypeSuggestion { date_type: string; color: string; }
@@ -15,7 +18,8 @@ interface Draft {
   description: string;
   date_type: string;
   color: string;
-  recurrence: "annual" | "monthly" | "weekly" | "custom";
+  /** «none» — обычное событие хроники (разбор 2026-10-02, Q2): дата туда переедет. */
+  recurrence: "annual" | "monthly" | "weekly" | "custom" | "none";
   year: string;
   month: string;
   day: string;
@@ -80,13 +84,53 @@ function ordinalPreview(n: number, unit1: string, unit2: string): string {
   return `${n}-й ${unit1} ${unit2Gen}`;
 }
 
+type Now = { year: number | null; month: number | null };
+
+/**
+ * Дата события для повторяющейся даты (Q3): год — «сейчас» сеттинга (иначе
+ * 1-й), месяц и день — из даты; еженедельная — ближайший такой день недели от
+ * начала месяца «сейчас»; «особая» — 1-е число месяца «сейчас».
+ */
+function eventDateFor(draft: Draft, months: CalendarMonth[], weekdays: CalendarWeekday[], now: Now) {
+  const year = now.year ?? 1;
+  const nowMonth = now.month ?? 1;
+  let month = draft.recurrence === "annual" ? Number(draft.month) || 1 : nowMonth;
+  let day = draft.recurrence === "annual" || draft.recurrence === "monthly" ? Number(draft.day) || 1 : 1;
+  if (draft.recurrence === "weekly" && weekdays.length) {
+    const ordered = [...weekdays].sort((a, b) => a.position - b.position);
+    const start = elapsedDays(year, nowMonth, 1, months);
+    for (let i = 0; i < ordered.length; i++) {
+      const at = dateFromElapsed(start + i, months);
+      if (ordered[weekdayIndexFor(at.year, at.month, at.day, months, ordered.length)]?.position === Number(draft.day)) {
+        month = at.month;
+        day = at.day;
+        break;
+      }
+    }
+  }
+  // «30-е» в месяце из 28 дней — последний день месяца.
+  const length = months.find((m) => m.position === month)?.days;
+  return { year, month, day: length ? Math.min(day, length) : day };
+}
+
 const NO_DATES: ImportantDate[] = [];
 const NO_OWNERS = { beings: [] as OwnerOption[], communities: [] as OwnerOption[], locations: [] as OwnerOption[] };
 const NO_TYPES: DateTypeSuggestion[] = [];
 
 // Даты, владельцы и типы — из кэша слоя данных, теми же путями, что у оси
 // хроники и предпросмотра календаря: новая дата видна там сразу.
-export function ImportantDatesSection({ settingId, months = [], weekdays: weekdaysProp }: { settingId: number; months?: CalendarMonth[]; weekdays?: CalendarWeekday[] }) {
+export function ImportantDatesSection({
+  settingId,
+  months = [],
+  weekdays: weekdaysProp,
+  now = { year: null, month: null },
+}: {
+  settingId: number;
+  months?: CalendarMonth[];
+  weekdays?: CalendarWeekday[];
+  /** «Сейчас» сеттинга — от него считается дата, когда повтор снимают. */
+  now?: Now;
+}) {
   const datesPath = chroniclePaths.importantDates(settingId);
   const dates = useResource<ImportantDate[]>(datesPath).data ?? NO_DATES;
   const owners = useResource<typeof NO_OWNERS>(chroniclePaths.owners(settingId)).data ?? NO_OWNERS;
@@ -99,6 +143,7 @@ export function ImportantDatesSection({ settingId, months = [], weekdays: weekda
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [openIds, setOpenIds] = useState<Set<number>>(new Set());
   const [confirmDialog, confirm] = useConfirm();
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -153,6 +198,12 @@ export function ImportantDatesSection({ settingId, months = [], weekdays: weekda
 
   function validate(): boolean {
     const e: Record<string, string> = {};
+    if (draft.recurrence === "none") {
+      if (!draft.title.trim()) e.title = "Введите название";
+      if (!Number(draft.year) || !Number(draft.month) || !Number(draft.day)) e.day = "Укажите дату события";
+      setErrors(e);
+      return Object.keys(e).length === 0;
+    }
     if (!draft.title.trim()) e.title = "Введите название";
     if (!draft.day) e.day = "Укажите день";
     if (draft.recurrence === "annual" && !draft.month) e.month = "Для ежегодного повтора нужен месяц";
@@ -161,8 +212,40 @@ export function ImportantDatesSection({ settingId, months = [], weekdays: weekda
     return Object.keys(e).length === 0;
   }
 
+  // Повтор сняли (Q1): дата уезжает событием в хронику, с её страницей и копиями в кампаниях.
+  async function saveAsEvent() {
+    const date = { year: Number(draft.year), month: Number(draft.month), day: Number(draft.day) };
+    const original = editingId ? dates.find((d) => d.id === editingId) : undefined;
+    if (original) {
+      const lost = [original.date_type && `тип «${original.date_type}»`, original.color && "цвет"].filter(Boolean);
+      const ok = await confirm({
+        title: "Сделать обычным событием?",
+        message:
+          `«${draft.title.trim()}» станет событием хроники.` +
+          (original.owner_name ? ` ${original.owner_name} останется упоминанием в описании.` : "") +
+          (lost.length ? ` Уйдут: ${lost.join(", ")}.` : ""),
+        confirmLabel: "Перенести",
+      });
+      if (!ok) return;
+    }
+    const affects: Affect[] = [{ path: datesPath }, ...chronicleEventAffects(settingId), ...ownerAffects(original?.owner_type ?? "", original?.owner_id ?? null)];
+    const done = await run(
+      async () => {
+        const body = { title: draft.title.trim(), description: draft.description.trim() };
+        const created = original
+          ? await write.post<SettingCalendarEvent>(`/settings/${settingId}/important-dates/${original.id}/to-event`, { ...body, ...date })
+          : await write.post<SettingCalendarEvent>(chroniclePaths.events(settingId), { ...body, inworld_year: date.year, inworld_month: date.month, inworld_day: date.day });
+        await syncMentionLinks("setting_event", created.id, "", created.description);
+        return true;
+      },
+      { affects, retry: false }
+    );
+    if (done) setShowModal(false);
+  }
+
   async function save() {
     if (!validate()) return;
+    if (draft.recurrence === "none") return saveAsEvent();
     const payload = {
       title: draft.title.trim(),
       description: draft.description.trim(),
@@ -224,24 +307,42 @@ export function ImportantDatesSection({ settingId, months = [], weekdays: weekda
         const items = grouped[key];
         if (items.length === 0) return null;
         return (
-          <div key={key} className="stack" style={{ gap: 4 }}>
-            <strong style={{ fontSize: "var(--fs-meta)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{GROUP_LABELS[key]}</strong>
+          <div key={key} className="important-dates__group">
+            <strong className="important-dates__label">{GROUP_LABELS[key]}</strong>
             {items.map((d) => (
-              <div key={d.id} className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                <span className="row" style={{ gap: 6, alignItems: "center", minWidth: 0 }}>
-                  {d.color && <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: d.color, flexShrink: 0 }} />}
-                  <strong style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.title}</strong>
-                  {d.date_type && <span className="badge tag" style={{ fontSize: "var(--fs-micro)", flexShrink: 0 }}>{d.date_type}</span>}
-                  <span className="muted" style={{ fontSize: "var(--fs-meta)", whiteSpace: "nowrap" }}>
-                    {formatImportantDate(d, effectiveMonths, weekdays)}
-                    {d.owner_type === "setting" && <> · Для сеттинга</>}
-                    {d.owner_name && <> · {d.owner_name}</>}
-                  </span>
+              <div key={d.id} className="important-dates__row">
+                {/* инлайн-стиль намеренно — цвет даты задаёт Мастер */}
+                <span className="important-dates__dot" style={d.color ? { background: d.color } : undefined} />
+                {d.description?.trim() ? (
+                  <button
+                    type="button"
+                    className="desc-toggle"
+                    aria-expanded={openIds.has(d.id)}
+                    aria-label="Описание"
+                    onClick={() => setOpenIds((s) => { const n = new Set(s); if (!n.delete(d.id)) n.add(d.id); return n; })}
+                  >
+                    <span className={`desc-toggle__chev${openIds.has(d.id) ? " is-open" : ""}`} aria-hidden="true">›</span>
+                  </button>
+                ) : (
+                  <span />
+                )}
+                <span className="important-dates__title">
+                  <strong>{d.title}</strong>
+                  {d.date_type && <span className="badge tag">{d.date_type}</span>}
                 </span>
-                <div className="row" style={{ gap: 4, flexShrink: 0 }}>
-                  <button className="comp-mini" onClick={() => openEdit(d)}>✎</button>
-                  <button className="comp-mini danger" onClick={() => handleDelete(d.id, d.title)}>✕</button>
-                </div>
+                <span className="important-dates__when">
+                  {formatImportantDate(d, effectiveMonths, weekdays)}
+                  {d.owner_type === "setting" ? " · для сеттинга" : d.owner_name ? ` · ${d.owner_name}` : ""}
+                </span>
+                <span className="important-dates__actions">
+                  <RowEditButton onClick={() => openEdit(d)} />
+                  <RowDeleteButton onClick={() => handleDelete(d.id, d.title)} />
+                </span>
+                {openIds.has(d.id) && d.description?.trim() && (
+                  <div className="important-dates__desc">
+                    <MentionText text={d.description} />
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -277,12 +378,12 @@ export function ImportantDatesSection({ settingId, months = [], weekdays: weekda
                   style={{ width: 160 }}
                 />
                 <datalist id="date-type-suggestions">
-                  {dateTypes.map((t) => <option key={t.date_type} value={t.date_type} />)}
+                  {dateTypes.map((t) => <option key={`${t.date_type}-${t.color}`} value={t.date_type} />)}
                 </datalist>
                 {typeSuggestions.length > 0 && draft.date_type && (
                   <>
                     {typeSuggestions.slice(0, 4).map((s) => (
-                      <button key={s.date_type} className="comp-mini" onClick={() => selectTypeSuggestion(s)} title={s.date_type}>
+                      <button key={`${s.date_type}-${s.color}`} className="comp-mini" onClick={() => selectTypeSuggestion(s)} title={s.date_type}>
                         {s.color && <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: s.color, marginRight: 4 }} />}
                         {s.date_type}
                       </button>
@@ -300,12 +401,36 @@ export function ImportantDatesSection({ settingId, months = [], weekdays: weekda
             <div className="stack" style={{ gap: 4 }}>
               <strong style={{ fontSize: "var(--fs-meta)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Повтор</strong>
               <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-                <select value={draft.recurrence} onChange={(e) => setDraft((d) => ({ ...d, recurrence: e.target.value as Draft["recurrence"] }))}>
+                <select
+                  value={draft.recurrence}
+                  onChange={(e) => {
+                    const recurrence = e.target.value as Draft["recurrence"];
+                    setDraft((d) => {
+                      if (recurrence !== "none" || d.recurrence === "none") return { ...d, recurrence };
+                      // Дата события считается один раз, при снятии повтора, и дальше правится руками.
+                      const at = eventDateFor(d, effectiveMonths, weekdays ?? [], now);
+                      return { ...d, recurrence, year: String(at.year), month: String(at.month), day: String(at.day) };
+                    });
+                  }}
+                >
                   <option value="annual">ежегодно</option>
                   <option value="monthly">ежемесячно</option>
                   <option value="weekly">еженедельно</option>
                   <option value="custom">особое</option>
+                  <option value="none">нет — обычное событие</option>
                 </select>
+
+                {draft.recurrence === "none" && (
+                  <>
+                    <label className="row">
+                      Год
+                      <input type="number" style={{ width: 80 }} value={draft.year} onChange={(e) => setDraft((d) => ({ ...d, year: e.target.value }))} />
+                    </label>
+                    <select value={draft.month} onChange={(e) => setDraft((d) => ({ ...d, month: e.target.value }))}>
+                      {effectiveMonths.map((m) => <option key={m.position} value={m.position}>{m.name}</option>)}
+                    </select>
+                  </>
+                )}
 
                 {draft.recurrence === "weekly" && (
                   <select value={draft.day} onChange={(e) => setDraft((d) => ({ ...d, day: e.target.value }))}>
@@ -320,7 +445,7 @@ export function ImportantDatesSection({ settingId, months = [], weekdays: weekda
                   </select>
                 )}
 
-                {draft.recurrence !== "weekly" && draft.recurrence !== "custom" && (
+                {(draft.recurrence === "annual" || draft.recurrence === "monthly" || draft.recurrence === "none") && (
                   <label className="row" style={{ gap: 4 }}>
                     День
                     <input type="number" min={1} max={60} value={draft.day} onChange={(e) => setDraft((d) => ({ ...d, day: e.target.value }))} style={{ width: 60 }} />
@@ -328,6 +453,11 @@ export function ImportantDatesSection({ settingId, months = [], weekdays: weekda
                 )}
               </div>
               {errors.month && <span className="muted" style={{ fontSize: "var(--fs-meta)", color: "var(--danger-bg)" }}>{errors.month}</span>}
+              {draft.recurrence === "none" && (
+                <span className="muted">
+                  Уедет в хронику событием на эту дату{editingId ? "; тип и цвет у события не хранятся" : ""}.
+                </span>
+              )}
             </div>
 
             {/* Особое правило */}

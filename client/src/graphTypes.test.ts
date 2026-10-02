@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { TYPE_LABELS, TYPE_COLORS, TYPE_SHAPES, TYPE_ROUTES, EDGE_KINDS, EDGE_KIND_STYLE, foldAdventures, adventureOwners, layeredLayout, clampToBand, type GraphNode, type GraphEdge } from "./graphTypes";
+import { TYPE_LABELS, TYPE_COLORS, TYPE_SHAPES, TYPE_ROUTES, EDGE_KINDS, EDGE_KIND_STYLE, foldAdventures, adventureOwners, simulateGraph, layeredLayout, clampToBand, type GraphNode, type GraphEdge } from "./graphTypes";
 
 /**
  * Первый тест клиента. Раньше `vitest` в `client/` был установлен, но не имел
@@ -147,4 +147,60 @@ describe("ярусная раскладка графа приключений", 
   it("открывается на последней проведённой сессии", () => {
     expect(L.anchorX).toBe(p("session:2").x);
   });
+});
+
+
+describe("размещение по видимым связям", () => {
+  const n = (key: string): GraphNode => ({ key, type: key.split(":")[0], id: Number(key.split(":")[1]), title: key });
+  const e = (from: string, to: string): GraphEdge => ({ from, to, section: "scene_npcs", tone: null, kind: "scene" });
+
+  it("несколько связей тянут узел к более связанному приключению", () => {
+    const nodes = [n("adventure:1"), n("adventure:2"), n("being:1")];
+    const edges = [e("adventure:1", "being:1"), e("adventure:1", "being:1"), e("adventure:1", "being:1"), e("adventure:2", "being:1")];
+    const p = layeredLayout(nodes, edges, new Map()).positions;
+    const x = p.get("being:1")!.x;
+    expect(Math.abs(x - p.get("adventure:1")!.x)).toBeLessThan(Math.abs(x - p.get("adventure:2")!.x));
+  });
+
+  it("учитывает связи через других узлов мира", () => {
+    const nodes = [...Array.from({ length: 8 }, (_, i) => n(`adventure:${i + 1}`)), n("being:1"), n("location:1")];
+    const p = layeredLayout(nodes, [e("adventure:8", "being:1"), e("being:1", "location:1")], new Map()).positions;
+    expect(Math.abs(p.get("location:1")!.x - p.get("being:1")!.x)).toBeLessThan(120);
+    expect(p.get("location:1")!.x).toBeGreaterThan(p.get("adventure:7")!.x);
+  });
+
+  it("переполненные ряды не уносят связанных соседей вправо", () => {
+    const nodes = [n("adventure:1"), ...Array.from({ length: 30 }, (_, i) => n(`being:${i + 1}`))];
+    const p = layeredLayout(nodes, nodes.slice(1).map((node) => e("adventure:1", node.key)), new Map()).positions;
+    for (const node of nodes.slice(1)) expect(Math.abs(p.get(node.key)!.x - p.get("adventure:1")!.x)).toBeLessThan(200);
+  });
+
+  it("смена связей меняет автоматическое окружение узла мира", () => {
+    const nodes = Array.from({ length: 10 }, (_, i) => n(`being:${i + 1}`));
+    const left = simulateGraph(nodes, [e("being:1", "being:3")]);
+    const right = simulateGraph(nodes, [e("being:1", "being:8")]);
+    const distance = (p: ReturnType<typeof simulateGraph>, a: string, b: string) => Math.hypot(p.get(a)!.x - p.get(b)!.x, p.get(a)!.y - p.get(b)!.y);
+    expect(distance(left, "being:1", "being:3")).toBeLessThan(distance(left, "being:1", "being:8"));
+    expect(distance(right, "being:1", "being:8")).toBeLessThan(distance(right, "being:1", "being:3"));
+  });
+
+  it("ручные координаты не сжимаются вместе с холстом", () => {
+    const nodes = [n("being:1"), n("being:2")];
+    const seed = new Map([["being:1", { x: 1500, y: 1000, vx: 0, vy: 0 }]]);
+    const p = simulateGraph(nodes, [e("being:1", "being:2")], 900, 640, seed, new Set(["being:1"]));
+    expect(p.get("being:1")).toEqual(seed.get("being:1"));
+  });
+});
+
+
+it("возвращает далёкий узел к группе его соседей на большом графе", () => {
+  const nodes: GraphNode[] = Array.from({ length: 563 }, (_, id) => ({ key: `being:${id}`, type: "being", id, title: `Node ${id}` }));
+  const seed = new Map(nodes.map((n, i) => [n.key, { x: 1500 + (i % 24) * 110, y: 700 + Math.floor(i / 24) * 110, vx: 0, vy: 0 }]));
+  seed.set("being:0", { x: 100, y: 100, vx: 0, vy: 0 });
+  const edges: GraphEdge[] = [1, 2, 3].map((id) => ({ from: "being:0", to: `being:${id}`, kind: "relation", section: "", tone: null }));
+  const pinned = new Set(nodes.slice(1).map((n) => n.key));
+  const p = simulateGraph(nodes, edges, 4600, 3400, seed, pinned);
+  const centerX = (seed.get("being:1")!.x + seed.get("being:2")!.x + seed.get("being:3")!.x) / 3;
+  expect(Math.hypot(p.get("being:0")!.x - centerX, p.get("being:0")!.y - 700)).toBeLessThan(350);
+  expect(p.get("being:1")).toEqual(seed.get("being:1"));
 });

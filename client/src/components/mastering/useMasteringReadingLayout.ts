@@ -17,11 +17,25 @@ export function useMasteringReadingLayout(reader: RefObject<HTMLDivElement | nul
       root.style.setProperty("--reader-height", `${box.height}px`);
       const bottom = box.top + (compact ? 0 : 56) + controls.offsetHeight + 24;
       root.style.setProperty("--reader-sticky-top", `${bottom - box.top}px`);
+      // Тетрадь у края: 15 px под панелью и 15 px над плеером, без плеера — над низом окна (просьба владельца 2026-10-01).
+      // sticky отсчитывается от отступа .app-content, а не от её края.
+      const controlsBottom = controls.getBoundingClientRect().bottom, inset = content ? parseFloat(getComputedStyle(content).paddingTop) || 0 : 0;
+      const dockTop = controlsBottom - box.top - inset + 15;
+      root.style.setProperty("--reader-dock-top", `${dockTop}px`);
+      // Пока страница не прокручена, тетрадь стоит в потоке ниже — подтягиваем её к той же точке.
+      const layout = root.querySelector<HTMLElement>(".mastering-reader__layout");
+      if (layout) root.style.setProperty("--reader-dock-shift", `${Math.min(0, dockTop - (layout.getBoundingClientRect().top - box.top - inset + (content?.scrollTop ?? 0)))}px`);
+      const player = document.querySelector<HTMLElement>(".audio-player-bar")?.getBoundingClientRect();
+      const floor = player && player.height > 0 && player.top < innerHeight ? player.top : innerHeight;
+      root.style.setProperty("--reader-dock-height", `${Math.max(320, floor - 15 - controlsBottom - 15)}px`);
     };
     measure();
     const observer = new ResizeObserver(measure);
     if (content) observer.observe(content);
     observer.observe(controls);
+    observer.observe(root);
+    const player = document.querySelector(".audio-player-bar");
+    if (player) observer.observe(player);
     window.addEventListener("resize", measure);
     return () => { observer.disconnect(); window.removeEventListener("resize", measure); };
   }, [reader, toolbar]);
@@ -49,6 +63,8 @@ export function useMasteringReadingLayout(reader: RefObject<HTMLDivElement | nul
     update();
     const observer = new ResizeObserver(schedule);
     observer.observe(root);
+    const player = document.querySelector(".audio-player-bar");
+    if (player) observer.observe(player);
     source.addEventListener("scroll", schedule, { passive: true });
     window.addEventListener("resize", schedule);
     return () => { observer.disconnect(); cancelAnimationFrame(frame); source.removeEventListener("scroll", schedule); window.removeEventListener("resize", schedule); };

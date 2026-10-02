@@ -11,7 +11,7 @@ export function geometryView(document: MapDocumentV6): MapDocumentV5 {
 /** Apply a checked V5 operation without dropping tokens or their item order.
  * Layer removal with tokens is deliberately outside this adapter. */
 export function editGeometry(document: MapDocumentV6, operation: (view: MapDocumentV5) => MutationResult): MapDocumentV6 {
-  const result = operation(geometryView(document));
+  const view = geometryView(document), result = operation(view);
   if (!result.ok) throw new Error("Не удалось применить изменение к этому слою");
   if (!result.changed) return document;
   for (const layer of document.layers) {
@@ -23,6 +23,7 @@ export function editGeometry(document: MapDocumentV6, operation: (view: MapDocum
   const next: MapDocumentV6 = { ...result.document, v: 6, ...(document.appearance ? { appearance: document.appearance } : {}), layers: result.document.layers.map((layer) => {
     const original = document.layers.find((entry) => entry.id === layer.id);
     if (layer.kind !== "gameplay" || original?.kind !== "gameplay") return layer;
+    if (view.layers.find(entry => entry.id === layer.id) === layer) return original;
     const items = [...layer.items] as typeof original.items;
     // Insert before the next surviving old item. This also preserves consecutive
     // tokens when the item on their left was removed by the geometry operation.
@@ -43,5 +44,18 @@ export function editGeometry(document: MapDocumentV6, operation: (view: MapDocum
   const untouched = new Map(document.layers.map(layer => [layer.id, layer]));
   const canonical = canonicalizeMapDocumentV6({ ...next, layers: next.layers.filter(layer => untouched.get(layer.id) !== layer) });
   const changed = new Map(canonical.layers.map(layer => [layer.id, layer]));
-  return { ...canonical, layers: next.layers.map(layer => changed.get(layer.id) ?? layer) };
+  return { ...canonical, layers: next.layers.map(layer => {
+    const normalized = changed.get(layer.id) ?? layer;
+    const original = untouched.get(layer.id);
+    if (normalized.kind !== "terrain" || normalized.representation !== "mask" || layer.kind !== "terrain" || layer.representation !== "mask" ||
+      original?.kind !== "terrain" || original.representation !== "mask") return normalized;
+    // Validation/normalization still runs. Reuse already-canonical untouched
+    // chunks afterwards so a local brush edit does not invalidate every tile.
+    const oldChunks = new Map(original.mask.chunks.map(chunk => [chunk.id, chunk]));
+    const rawChunks = new Map(layer.mask.chunks.map(chunk => [chunk.id, chunk]));
+    return { ...normalized, mask: { ...normalized.mask, chunks: normalized.mask.chunks.map(chunk => {
+      const old = oldChunks.get(chunk.id);
+      return old && rawChunks.get(chunk.id) === old ? old : chunk;
+    }) } };
+  }) };
 }

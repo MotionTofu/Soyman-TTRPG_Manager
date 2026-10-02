@@ -110,7 +110,9 @@ function shortDate(date: string): string {
  * наполнения и выход; всё остальное — на полной странице локации. Удаление
  * выхода тоже здесь: другого места для него пока нет.
  *
- * `panel` — правая панель проводника: крупное имя, «Вложенная». `dock` —
+ * `panel` — правая панель проводника: крупное имя, «Вложенная». `page` —
+ * шапка досье на странице самого места: имя, путь и описание там уже есть,
+ * поэтому карточка начинается с «Кто здесь» и не ведёт сама на себя. `dock` —
  * докстанция пульта: заголовок — плашка дока (сворачивает), путь без корня,
  * «Мы здесь», история только кампании сессии.
  */
@@ -126,7 +128,7 @@ export function PlaceCard({
   onClose,
 }: {
   locationId: number;
-  variant?: "panel" | "dock";
+  variant?: "panel" | "dock" | "page";
   /** Переход к другому месту; без него — ссылки на страницы. */
   onPick?: (id: number) => void;
   onAddChild?: (id: number) => void;
@@ -139,6 +141,7 @@ export function PlaceCard({
   onClose?: () => void;
 }) {
   const dock = variant === "dock";
+  const page = variant === "page";
   const { data: d, loading, error, reload } = useResource<PlaceDetail>(`/setting-locations/${locationId}?nested=1`);
   const { data: session } = useResource<{ campaign_id: number }>(dock && sessionId ? `/sessions/${sessionId}` : null);
   const { data: party } = useResource<PartyPlaceView>(dock && sessionId ? `/sessions/${sessionId}/party-place` : null);
@@ -149,6 +152,7 @@ export function PlaceCard({
   const [spotsAll, setSpotsAll] = useState(false);
   const [adding, setAdding] = useState(false);
   const [kind, setKind] = useState("secret");
+  const [secretsOpen, setSecretsOpen] = useState(false);
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
   const [addingExit, setAddingExit] = useState(false);
@@ -238,6 +242,8 @@ export function PlaceCard({
     if (created !== undefined) {
       setText("");
       setAdding(false);
+      // Только что записанный секрет не должен пропасть с глаз.
+      if (kind === "secret") setSecretsOpen(true);
     }
   }
 
@@ -246,7 +252,7 @@ export function PlaceCard({
     .filter(Boolean)
     .join(" · ");
   const thumb = d.thumbnail_image_url || d.avatar_image_url;
-  const safeThumb = !dock && thumb && isSafeImageUrl(thumb) ? thumb : null;
+  const safeThumb = !dock && !page && thumb && isSafeImageUrl(thumb) ? thumb : null;
   const description = d.description?.trim() ?? "";
   const longDesc = description.length > DESC_CLAMP_CHARS;
   // В доке узко: корень мира в пути — лишний, он и так один на кампанию.
@@ -272,6 +278,7 @@ export function PlaceCard({
   const spots = d.children.filter((c) => locationRoleOf(c) === "spot");
   const shownSpots = spotsAll ? spots : spots.slice(0, SPOT_LIMIT);
   const showContent = d.content.length > 0 || adding;
+  const secretCount = d.content.filter((c) => c.kind === "secret").length;
   const showExits = d.exits.length > 0 || addingExit;
 
   const removeExit = async (e: PlaceExit) => {
@@ -336,12 +343,14 @@ export function PlaceCard({
   }
 
   return (
-    <div className={`place-card${dock ? " place-card--dock" : ""}`}>
+    <div className={`place-card${dock ? " place-card--dock" : ""}${page ? " place-card--page" : ""}`}>
       {confirmDialog}
       {plate}
       <div className="place-card__scroll">
         {safeThumb && <img src={safeThumb} alt="" className="place-card__hero" />}
-        {dock ? (
+        {page ? (
+          <span className="place-card__title">За столом</span>
+        ) : dock ? (
           (pathShown.length > 0 || d.kind?.trim()) && (
             <div className="place-card__path">
               {pathShown.map((a, i) => (
@@ -382,7 +391,7 @@ export function PlaceCard({
           </div>
         )}
 
-        {description && (
+        {description && !page && (
           <div className="stack" style={{ gap: 4 }}>
             <div className={`place-card__desc${longDesc && !descOpen ? " is-clamped" : ""}`}>
               <MentionText text={description} />
@@ -432,7 +441,20 @@ export function PlaceCard({
                 </button>
               )}
             </div>
-            {d.content.map((c) => {
+            {/* Секреты — за сургучом (владелец, 2026-10-02): экран бывает
+                виден игрокам. Открытие не запоминается. */}
+            {d.content.some((c) => c.kind === "secret") && (
+              <button
+                type="button"
+                className="creature-card__seal"
+                aria-expanded={secretsOpen}
+                onClick={() => setSecretsOpen((v) => !v)}
+              >
+                <span className="creature-card__seal-mark" aria-hidden="true" />
+                {secretsOpen ? "Секрет · спрятать" : `Секрет · показать${secretCount > 1 ? ` (${secretCount})` : ""}`}
+              </button>
+            )}
+            {d.content.filter((c) => secretsOpen || c.kind !== "secret").map((c) => {
               const k = CONTENT_KINDS.find((x) => x.key === c.kind) ?? CONTENT_KINDS[3];
               return (
                 <div key={c.id} className="place-card__row">
@@ -651,7 +673,7 @@ export function PlaceCard({
         )}
       </div>
 
-      {dock ? (
+      {page ? null : dock ? (
         <div className="place-card__foot">
           {sessionId != null && (
             <button

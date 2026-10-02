@@ -6,6 +6,17 @@ const origin = { x: 0, y: 0 };
 const sampleSize = 0.25;
 
 describe("terrain mask raster", () => {
+  it("preserves transparent stone underlay alongside opaque materials, including perimeter samples", () => {
+    const raster = buildTerrainMaskRaster({ origin, sampleSize, entries: new Map([["0,0", "stone"], ["1,0", "forest"]]) },
+      8, 8, { ...MAP_TERRAIN_FILL, stone: "#d8cfb600" }, true);
+    expect(raster).not.toBeNull();
+    if (!raster) return;
+    const alpha = (x: number, y: number) => raster.pixels[((y - raster.minSY) * raster.width + x - raster.minSX) * 4 + 3];
+    expect(alpha(0, 0)).toBe(0);
+    expect(alpha(-1, 0)).toBe(0);
+    expect(alpha(0, -1)).toBe(0);
+    expect(alpha(1, 0)).toBe(255);
+  });
   it("keeps painted sample colors and transparent samples separate for smoothing", () => {
     const raster = buildTerrainMaskRaster({
       origin, sampleSize,

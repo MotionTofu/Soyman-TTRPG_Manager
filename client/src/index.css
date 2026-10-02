@@ -583,7 +583,6 @@ h4 { font-size: var(--fs-h3); }
   padding: var(--sp-5);
   clip-path: none;
 }
-.geography-tree .card .card,
 .location-nested .card .card {
   border: var(--card-border-width) solid var(--line);
   background: var(--paper-2);
@@ -608,9 +607,6 @@ h4 { font-size: var(--fs-h3); }
 .overview-two-col__right {
   flex: 1;
   min-width: 0;
-}
-.geography-tree {
-  gap: var(--sp-7);
 }
 /* Обитатели локации: внешний gap щедрый (§1.9), как у Обзоров/Географии. D-P0-3 */
 .inhabitants-tab {
@@ -1172,16 +1168,6 @@ h4 { font-size: var(--fs-h3); }
   background: var(--surface);
   color: var(--on-surface);
 }
-/* Дети узла географии — визуальный рейл иерархии (U-P0-4, D-P1-4). */
-.geography-children {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-5);
-  margin-top: var(--sp-5);
-  padding-left: var(--sp-5);
-  border-left: 1px solid var(--line);
-  margin-left: var(--sp-2);
-}
 /* Шапка узла географии — плашка-инверсия §1.4 (D-P0-3).
    Тёмная полоса внутри светлой карточки, а не жирный текст на бумаге. */
 .geography-node-header {
@@ -1208,16 +1194,8 @@ h4 { font-size: var(--fs-h3); }
 .geography-node-header .muted {
   color: var(--on-surface-muted);
 }
-.geography-node-header .geography-kind {
-  font-weight: 400;
-  text-transform: none;
-  letter-spacing: 0;
-  font-family: var(--font-body);
-  font-size: var(--fs-meta);
-}
 /* Нейтрализуем generic details.card summary:hover для инверсии — иначе
    hover красит плашку в sb-paper микс, ломая контраст. */
-.geography-tree details.card > summary.geography-node-header:hover,
 .location-nested details.card > summary.geography-node-header:hover {
   background: var(--surface);
   color: var(--on-surface);
@@ -1271,27 +1249,6 @@ h4 { font-size: var(--fs-h3); }
    (§1.1), теней нет (§1.2), бордер var(--line) (§1.3), шапка-инверсия (§1.4),
    голоса Label/Data (§1.5). Всё XYFlow-чужеродное (круги, скругления, серый)
    перебивается в токены под скоупом .geography-root. */
-.geography-root__toolbar {
-  flex-wrap: wrap;
-  gap: var(--sp-4);
-  align-items: center;
-}
-.geography-root__stats {
-  flex-wrap: wrap;
-  gap: var(--sp-5);
-  font-size: var(--fs-meta);
-  font-family: var(--font-mono);
-}
-.geography-root__debt {
-  color: var(--status-cancelled-fg);
-}
-.geography-root__debt-btn {
-  font-size: var(--fs-meta);
-  padding: var(--sp-1) var(--sp-3);
-}
-.geography-root__hint {
-  font-size: var(--fs-meta);
-}
 .geography-root__undo {
   display: flex;
   align-items: center;
@@ -1302,7 +1259,8 @@ h4 { font-size: var(--fs-h3); }
   font-size: var(--fs-meta);
 }
 .geography-root__canvas {
-  height: clamp(380px, 60vh, 560px);
+  /* Без панели настроек холст — всё содержимое вкладки: высота почти на экран. */
+  height: clamp(420px, 72vh, 900px);
   border: var(--card-border-width) solid var(--line);
   border-radius: 0;
   overflow: hidden;
@@ -1399,91 +1357,7 @@ h4 { font-size: var(--fs-h3); }
   color: var(--status-cancelled-fg);
   white-space: nowrap;
 }
-.geography-root-node__gap {
-  font-family: var(--font-mono);
-  color: var(--muted);
-  white-space: nowrap;
-}
-.geography-root__stepper {
-  gap: var(--sp-2);
-  align-items: center;
-  border: var(--card-border-width) solid var(--line);
-  background: var(--paper-2);
-  padding: var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-4);
-}
-.geography-root__stepper-name {
-  font-size: var(--fs-meta);
-  max-width: 160px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.geography-root__stepper button {
-  min-width: 32px;
-  height: 32px;
-  font-family: var(--font-mono);
-  font-size: var(--fs-meta);
-}
-.geography-root__stepper-val {
-  font-family: var(--font-mono);
-  font-size: var(--fs-meta);
-  min-width: 16px;
-  text-align: center;
-}
-/* Тумблер вида: состояние — текстом «вкл/выкл» + инверсией, не одной заливкой. */
-.geography-root__toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-3);
-  border: var(--card-border-width) solid var(--line);
-  border-radius: 0;
-  background: transparent;
-  color: var(--muted);
-  font-family: var(--font-ui);
-  font-size: var(--fs-meta);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  padding: var(--sp-3) var(--sp-4);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.geography-root__toggle:hover {
-  color: var(--ink);
-}
-.geography-root__toggle.is-on {
-  background: var(--surface);
-  color: var(--on-surface);
-}
-.geography-root__toggle-state {
-  font-family: var(--font-mono);
-  font-size: var(--fs-micro);
-  font-weight: 400;
-  letter-spacing: 0;
-  color: var(--muted);
-}
-.geography-root__toggle.is-on .geography-root__toggle-state {
-  color: var(--on-surface-muted);
-}
-.geography-root__autolimit {
-  font-family: var(--font-mono);
-  font-size: var(--fs-meta);
-  color: var(--muted);
-  white-space: nowrap;
-}
 /* Колонки Миллера: один путь — братья | дети | внуки. */
-.geography-miller__toolbar {
-  flex-wrap: wrap;
-  gap: var(--sp-4);
-  align-items: center;
-}
-.geography-miller__target {
-  font-size: var(--fs-meta);
-  max-width: 40ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 /* Корни мира чипами: колонка «Мир» ушла сюда (решения 2026-09-11, §1). Строка
    одной высоты при любом числе корней — лишние под «ещё N». */
 .miller-roots {
@@ -1519,61 +1393,6 @@ h4 { font-size: var(--fs-h3); }
 .miller-chip--more {
   flex: none;
 }
-/* Шапка выбранного корня: имя, строка описания, счёт — компактно. */
-/* Узко счёт уходит под имя, а не наезжает на него: имя корня — часто одно
-   длинное слово, которое не переносится. */
-.miller-root {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-2) var(--sp-6);
-  min-width: 0;
-  padding: var(--sp-1) 0;
-}
-.miller-root__thumb {
-  width: 72px;
-  height: 44px;
-  flex: none;
-  object-fit: cover;
-  border: var(--card-border-width) solid var(--line);
-  background: var(--paper-2);
-}
-.miller-root__body {
-  flex: 1 1 200px;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-}
-.miller-root__title {
-  align-self: flex-start;
-  background: none;
-  border: none;
-  padding: 0;
-  color: var(--ink);
-  font-family: var(--font-display);
-  font-size: var(--fs-h2);
-  font-weight: 600;
-  line-height: 1.05;
-  text-align: left;
-  white-space: normal;
-  cursor: pointer;
-}
-.miller-root__title:hover {
-  text-decoration: underline;
-}
-.miller-root__sub {
-  font-size: var(--fs-meta);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.miller-root__count {
-  margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: var(--fs-meta);
-  white-space: nowrap;
-}
 .miller-chip {
   border: 1px solid var(--line);
   background: transparent;
@@ -1595,34 +1414,6 @@ h4 { font-size: var(--fs-h3); }
   color: var(--on-surface);
   border-color: var(--ink);
   font-weight: 700;
-}
-/* Второй breadcrumb: кликабельный путь внутри мира. */
-.miller-crumbs {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--sp-1);
-  padding: var(--sp-1);
-  font-size: var(--fs-meta);
-}
-.miller-crumb {
-  background: none;
-  border: none;
-  padding: var(--sp-1) var(--sp-2);
-  color: var(--muted);
-  cursor: pointer;
-  font-size: var(--fs-meta);
-}
-button.miller-crumb:hover {
-  color: var(--ink);
-  text-decoration: underline;
-}
-.miller-crumb.is-current {
-  color: var(--ink);
-  font-weight: 700;
-}
-.miller-crumb__sep {
-  color: var(--muted);
 }
 /* Рабочая область: колонки слева, карточка места справа вне аккордеона. */
 .miller-work {
@@ -1725,10 +1516,6 @@ button.miller-crumb:hover {
   flex-direction: column;
   gap: var(--sp-3);
 }
-.miller-col__empty {
-  font-size: var(--fs-meta);
-  padding: var(--sp-2) var(--sp-3);
-}
 /* Карточка проводника: глиф + имя + бейдж типа, рамка — только у выбранной. */
 .miller-item {
   display: flex;
@@ -1758,22 +1545,6 @@ button.miller-crumb:hover {
   border-left-color: var(--accent);
   outline: 2px solid var(--accent);
   outline-offset: -2px;
-}
-.miller-item__icon {
-  flex: none;
-  width: 14px;
-  height: 14px;
-  color: var(--muted);
-}
-.miller-item.is-active .miller-item__icon {
-  color: var(--accent);
-}
-.miller-item__body {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
 }
 .miller-item__name {
   overflow: hidden;
@@ -8647,6 +8418,30 @@ button.mention-link:focus-visible {
   color: var(--muted);
   border-bottom: 1px dashed var(--line);
   margin-bottom: var(--sp-1);
+}
+/* Поиск слева, зона сброса справа — одной строкой; на телефоне друг под другом. */
+.relation-add {
+  display: flex;
+  gap: var(--sp-5);
+  align-items: stretch;
+}
+.relation-add > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.relation-search {
+  position: relative;
+}
+.relation-add .relation-drop-zone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+@media (max-width: 760px) {
+  .relation-add {
+    flex-direction: column;
+  }
 }
 .relation-drop-zone-mobile-hint {
   display: none;

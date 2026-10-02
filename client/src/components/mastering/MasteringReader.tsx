@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAction, useResource, write } from "../../data/hooks";
 import { labelled } from "../../data/notices";
 import { syncMentionLinks } from "../../mentions";
-import {WorkbookLinks} from "../workbooks/WorkbookLinks";
+import {WorkbookDock,type WorkbookDockState} from "../workbooks/WorkbookDock";
 import {downloadWorkbook} from "../workbooks/model";
 import { NavIcon } from "../NavIcons";
 import { Loadable, ListSkeleton } from "../Loadable";
@@ -18,20 +18,20 @@ import type { MasteringBook, MasteringNote, MasteringSection, System } from "../
 import {LIBRARY_AFFECTS,type LibraryBook} from "./libraryTypes";
 import {useLibraryReadingPosition} from "./useLibraryReadingPosition";
 
-export function MasteringReader({ book, previousBook, nextBook, onNavigate, sections, systems, saved, onBookmark, onClose, onArchive, libraryBook, openNotes = false, onPlacement }: {
+export function MasteringReader({ book, previousBook, nextBook, onNavigate, sections, systems, onClose, onArchive, libraryBook, openNotes = false, workbook, onWorkbook }: {
   book: MasteringBook;
   previousBook?: MasteringBook;
   nextBook?: MasteringBook;
   onNavigate: (id: number) => void;
   sections: MasteringSection[];
   systems: System[];
-  saved: boolean;
-  onBookmark: () => void;
   onClose: () => void;
   onArchive: () => Promise<void>;
   libraryBook?: LibraryBook;
   openNotes?: boolean;
-  onPlacement?: () => void;
+  /** Открытая тетрадь у края — у библиотеки, чтобы пережить переход к другой книге. */
+  workbook?: WorkbookDockState | null;
+  onWorkbook?: (state: WorkbookDockState | null) => void;
 }) {
   const file=libraryBook?.source_type==="resource";
   const source = useResource<MasteringNote & {sha256?:string}>(file?`/resources/${book.id}/markdown-content`:`/mastering/${book.id}`);
@@ -51,6 +51,11 @@ export function MasteringReader({ book, previousBook, nextBook, onNavigate, sect
   useLibraryReadingPosition(libraryBook,!!note.data,prose);
   const setNotePreferences=annotations.setPreferences;
   useEffect(()=>{if(openNotes)setNotePreferences(previous=>({...previous,open:true}));},[openNotes,setNotePreferences]);
+  // Тетрадь у края (макет «Прикреплено к краю»); на телефоне — «Книга | Тетрадь».
+  const [localDock, setLocalDock] = useState<WorkbookDockState | null>(null), [showWorkbook, setShowWorkbook] = useState(true);
+  const dock = onWorkbook ? workbook ?? null : localDock, setDock = onWorkbook ?? setLocalDock, workbookOpen = !!dock;
+  // Открыта ли панель заметок, помнится по книге; тетрадь переходит между книгами — при ней заметки не показываем.
+  const notesOpen = annotations.preferences.open && !(workbookOpen && libraryBook);
   const [tocOpen, setTocOpen] = useState(false);
   const [headings, setHeadings] = useState<string[]>([]);
   const activeHeading = useMasteringReadingLayout(reader, toolbar, article, toc, headings);
@@ -88,10 +93,10 @@ export function MasteringReader({ book, previousBook, nextBook, onNavigate, sect
         <button type="button" onClick={onClose}><NavIcon name="arrowLeft" /> На полку</button>
         <div role="group" aria-label="Книги на этой полке"><button type="button" aria-label="Предыдущая книга" title={previousBook ? `Предыдущая: ${previousBook.title}` : "Первая книга на полке"} disabled={!previousBook} onClick={() => previousBook && onNavigate(previousBook.id)}><NavIcon name="arrowLeft" /></button><button type="button" aria-label="Следующая книга" title={nextBook ? `Следующая: ${nextBook.title}` : "Последняя книга на полке"} disabled={!nextBook} onClick={() => nextBook && onNavigate(nextBook.id)}><NavIcon name="arrowRight" /></button></div>
       </div>
-      <div className="mastering-reader__actions">{libraryBook&&<WorkbookLinks bookId={libraryBook.id}/> }<button onClick={()=>downloadWorkbook(`${book.title}-заметки.md`,annotations.notes.map(n=>`${n.quote?"> "+n.quote+"\n\n":""}${n.body}`).join("\n\n---\n\n"),"text/markdown")}>Экспорт заметок</button><button type="button" className="is-active" aria-label="Чтение" aria-pressed="true"><NavIcon name="book" /><span className="mastering-reader__mode-label">Чтение</span></button><button type="button" onClick={() => setSheetOpen(true)} disabled={!note.data}>A4</button><button type="button" aria-label="Заметки к книге" aria-pressed={annotations.preferences.open} onClick={() => annotations.setPreferences(previous => ({ ...previous, open: !previous.open }))}>Заметки{annotations.notes.length ? ` · ${annotations.notes.length}` : ""}</button><button type="button" aria-label={saved ? "Убрать закладку" : "Добавить закладку"} title={saved ? "Убрать закладку книги" : "Добавить книгу в закладки"} aria-pressed={saved} onClick={onBookmark}><NavIcon name="navPin" /></button>{onPlacement&&<button type="button" onClick={onPlacement}>Полка и обложка</button>}<button type="button" aria-label="Редактировать книгу" title="Редактировать книгу" onClick={() => setEditOpen(true)} disabled={!note.data}><NavIcon name="edit" /></button><button type="button" aria-label="Архивировать книгу" title="Архивировать книгу" onClick={() => void onArchive()} disabled={!note.data}><NavIcon name="archive" /></button></div>
+      <div className="mastering-reader__actions">{libraryBook&&<button type="button" className="mastering-reader__workbook" aria-pressed={workbookOpen} onClick={()=>{setDock(workbookOpen?null:{instanceId:null,sheet:null});setShowWorkbook(true);if(!workbookOpen)setNotePreferences(previous=>({...previous,open:false}));}}>Тетрадь</button>}{workbookOpen&&<div className="reader-mode-switch" role="group" aria-label="Что показать"><button type="button" aria-pressed={!showWorkbook} onClick={()=>setShowWorkbook(false)}>Книга</button><button type="button" aria-pressed={showWorkbook} onClick={()=>setShowWorkbook(true)}>Тетрадь</button></div>}<button type="button" onClick={() => setSheetOpen(true)} disabled={!note.data}>A4</button><button type="button" aria-label="Заметки к книге" aria-pressed={notesOpen} onClick={() => { setDock(null); annotations.setPreferences(previous => ({ ...previous, open: !notesOpen })); }}>Заметки{annotations.notes.length ? ` · ${annotations.notes.length}` : ""}</button><button type="button" aria-label="Редактировать книгу" title="Редактировать книгу" onClick={() => setEditOpen(true)} disabled={!note.data}><NavIcon name="edit" /></button><button type="button" aria-label="Архивировать книгу" title="Архивировать книгу" onClick={() => void onArchive()} disabled={!note.data}><NavIcon name="archive" /></button></div>
     </div>
     <Loadable loading={note.loading} error={note.error} errorTitle="Не удалось открыть книгу" onRetry={note.reload} skeleton={<ListSkeleton variant="paragraph" />}>
-      {note.data && <div className={`mastering-reader__layout${headings.length ? " has-toc" : ""}${annotations.preferences.open ? " has-notes" : ""}`}>
+      {note.data && <div className={`mastering-reader__layout${headings.length ? " has-toc" : ""}${notesOpen ? " has-notes" : ""}${workbookOpen && libraryBook ? ` has-workbook${showWorkbook ? " shows-workbook" : ""}` : ""}`}>
         {!!headings.length && <nav className={`mastering-reader__toc${tocOpen ? " is-open" : ""}`} aria-label="Оглавление">
           <span>Оглавление</span><button type="button" className="mastering-reader__toc-toggle" aria-expanded={tocOpen} aria-controls={`mastering-toc-${book.id}`} onClick={() => setTocOpen(!tocOpen)}>Оглавление · {activeHeading + 1} / {headings.length}</button>
           <div className="mastering-reader__toc-scroll" ref={toc} id={`mastering-toc-${book.id}`} tabIndex={0} aria-label="Прокрутка оглавления">
@@ -101,7 +106,8 @@ export function MasteringReader({ book, previousBook, nextBook, onNavigate, sect
         <article className="mastering-reader__article" ref={article}><header><span className="mastering-reader__eyebrow">{libraryBook?.section_name ?? libraryBook?.department_name ?? sections.find(section => section.id === note.data?.section_id)?.name ?? "Без полки"}</span><h2>{note.data.title}</h2><div className="mastering-reader__meta">{book.reading_minutes ? `${book.reading_minutes} мин чтения` : "Пустая книга"}{book.system_name && ` · ${book.system_name}`}</div></header>
           <div className="mastering-reader__prose reading-text" ref={prose}>{note.data.content.trim() ? <MentionText text={note.data.content} /> : <div className="mastering-shelf__empty"><NavIcon name="document" /><p>Добавьте текст, чтобы наполнить книгу.</p><button type="button" onClick={() => setEditOpen(true)}>Написать статью</button></div>}<div className="mastering-text-highlights" ref={highlights} aria-hidden="true" /></div>
         </article>
-        {annotations.preferences.open && <MasteringNotesPanel notes={annotations.notes} mode={annotations.preferences.mode} showHighlights={annotations.preferences.highlights} prose={prose.current} activeId={annotations.activeId} loading={annotations.query.loading} error={annotations.query.error} onRetry={annotations.query.reload} onMode={mode => annotations.setPreferences(previous => ({ ...previous, mode }))} onHighlights={highlights => annotations.setPreferences(previous => ({ ...previous, highlights }))} onClose={() => annotations.setPreferences(previous => ({ ...previous, open: false }))} onAdd={() => annotations.openComposer()} onOpen={annotations.setOpenedId} actions={annotations.actions} />}
+        {dock && libraryBook && <WorkbookDock bookId={libraryBook.id} shelfId={libraryBook.shelf_id} state={dock} onState={setDock} notesVersion={annotations.notes.length} onClose={() => setDock(null)} />}
+        {notesOpen && <MasteringNotesPanel notes={annotations.notes} mode={annotations.preferences.mode} showHighlights={annotations.preferences.highlights} prose={prose.current} activeId={annotations.activeId} loading={annotations.query.loading} error={annotations.query.error} onRetry={annotations.query.reload} onMode={mode => annotations.setPreferences(previous => ({ ...previous, mode }))} onHighlights={highlights => annotations.setPreferences(previous => ({ ...previous, highlights }))} onClose={() => annotations.setPreferences(previous => ({ ...previous, open: false }))} onAdd={() => annotations.openComposer()} onExport={() => downloadWorkbook(`${book.title}-заметки.md`, annotations.notes.map(n => `${n.quote ? "> " + n.quote + "\n\n" : ""}${n.body}`).join("\n\n---\n\n"), "text/markdown")} onOpen={annotations.setOpenedId} actions={annotations.actions} />}
       </div>}
     </Loadable>
     {annotations.selection && <button type="button" className="mastering-selection-action" ref={annotations.selectionButton} onMouseDown={event => event.preventDefault()} disabled={annotations.saving} onClick={() => void annotations.useSelection()}>{annotations.reattachId ? "Привязать к выделению" : "Добавить заметку"}</button>}

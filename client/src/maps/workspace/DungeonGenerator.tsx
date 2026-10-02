@@ -14,7 +14,7 @@ export function DungeonGenerator({ open, current, seed, disabled = false, onClos
   onApply: (document: MapDocumentV6, settings: DungeonSettings, target: "new" | "replace", name: string) => Promise<void>;
 }) {
   const [settings, setSettings] = useState<DungeonSettings>(() => ({ ...DUNGEON_PRESETS[0], seed: Math.max(0, seed ?? 1) }));
-  const [style, setStyle] = useState<MapDrawingStyle>("paper-ink");
+  const [style, setStyle] = useState<MapDrawingStyle>("comic-punk");
   const [target, setTarget] = useState<"new" | "replace">("new");
   const [name, setName] = useState("Подземелье"), [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null);
@@ -45,7 +45,8 @@ export function DungeonGenerator({ open, current, seed, disabled = false, onClos
     };
     const observer = new ResizeObserver(draw); observer.observe(canvas.current); draw();
     const unsubscribe = subscribeMapImageAssets(draw);
-    if (generated.document.appearance?.style === "paper-ink") void prepareCartographyStyle();
+    const style = generated.document.appearance?.style;
+    if (style === "paper-ink" || style === "comic-punk") void prepareCartographyStyle(style);
     return () => { observer.disconnect(); unsubscribe(); };
   }, [open, generated.document]);
   if (!open) return null;
@@ -73,7 +74,7 @@ export function DungeonGenerator({ open, current, seed, disabled = false, onClos
         <div className="workspace-generator-pair"><label>Ловушки<select value={settings.traps} onChange={(event) => update({ traps: event.target.value as DungeonSettings["traps"] })}><option value="none">Нет</option><option value="some">Немного</option><option value="many">Много</option></select></label><label className="workspace-generator-check"><input type="checkbox" checked={settings.secrets} onChange={(event) => update({ secrets: event.target.checked })} />Секретные двери</label></div>
         <label>Seed — номер варианта<input type="number" min={0} max={2147483647} value={settings.seed} onChange={(event) => update({ seed: Number(event.target.value) })} /></label>
         <button type="button" onClick={() => { const random = crypto.getRandomValues(new Uint32Array(1))[0] % 2147483648; update({ seed: random === settings.seed ? (random + 1) % 2147483648 : random }); }}>Новый вариант</button>
-        <label>Оформление<select value={style} onChange={(event) => setStyle(event.target.value as MapDrawingStyle)}><option value="blueprint">Чистый чертёж</option><option value="paper-ink">Бумага и чернила</option></select></label>
+        <label>Оформление<select value={style} onChange={(event) => setStyle(event.target.value as MapDrawingStyle)}><option value="comic-punk">Комикс-панк</option><option value="paper-ink">Бумага и чернила</option><option value="blueprint">Чистый чертёж</option></select></label>
       </fieldset>
       <div className="workspace-generator-preview"><canvas ref={canvas} aria-label="Предпросмотр подземелья" />
         <p aria-live="polite">{generated.error ?? `${items.filter((item) => item.kind === "room").length} из ${effective.rooms} комнат · ${items.filter((item) => item.kind === "door").length} дверей · ${items.filter((item) => item.kind === "trap").length} ловушек`}</p>

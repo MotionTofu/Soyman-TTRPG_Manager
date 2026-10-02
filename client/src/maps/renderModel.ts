@@ -124,7 +124,8 @@ export interface RenderTerrainLayer extends RenderLayerBase {
 /** Path-слой со своим paths[]; порядок paths[] = render order (§14). */
 /** Один рисуемый путь: legacy cell network или свободная мировая линия. */
 export interface RenderPath {
-  kind: "road" | "river";
+  kind: "road" | "river" | "wall";
+  closed?: boolean;
   cells: ReadonlySet<string>;
   nodes?: readonly SplineNode[];
   width?: number;
@@ -399,12 +400,12 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
     } else if (layer.kind === "path") {
       const paths: RenderPath[] = [];
       for (const p of layer.paths) {
-        if (p.kind !== "road" && p.kind !== "river") {
+        if ((p.kind !== "road" && p.kind !== "river" && p.kind !== "wall") || (p.kind === "wall" && p.geometry.type !== "spline")) {
           diag("unsupported-path-kind", `path ${p.id}: kind "${p.kind}" not rendered`);
           continue;
         }
         if (p.geometry.type === "spline") {
-          paths.push({ kind: p.kind, cells: new Set(), nodes: p.geometry.nodes, width: p.width });
+          paths.push({ kind: p.kind, cells: new Set(), nodes: p.geometry.nodes, width: p.width, closed: p.properties?.closed === true });
           continue;
         }
         const cells = new Set<string>();

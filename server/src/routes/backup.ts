@@ -17,7 +17,7 @@ export const backupRouter = Router();
 const nativeImport = new Function("specifier", "return import(specifier)") as (
   specifier: string
 ) => Promise<typeof import("archiver")>;
-const loadArchiver = () => {
+export const loadArchiver = () => {
   // Recent Node versions can require ESM directly. This also works inside
   // Vitest's VM, where a Function-created import has no dynamic-import hook.
   // Older Electron runtimes still use the native import fallback.

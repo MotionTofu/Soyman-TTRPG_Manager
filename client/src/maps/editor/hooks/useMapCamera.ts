@@ -28,6 +28,13 @@ interface UseMapCameraArgs {
   canvasRef: { current: HTMLCanvasElement | null };
 }
 
+function zoomCameraAt(camera: Camera, rx: number, ry: number, factor: number): Camera {
+  const scale = Math.min(MAP_CAM_MAX_SCALE, Math.max(MAP_CAM_MIN_SCALE, camera.scale * factor));
+  if (scale === camera.scale) return camera;
+  const k = scale / camera.scale;
+  return { scale, ox: rx - (rx - camera.ox) * k, oy: ry - (ry - camera.oy) * k };
+}
+
 export function useMapCamera({ mapId, geom, wrapRef, canvasRef }: UseMapCameraArgs) {
   const [cam, setCam] = useState<Camera>({ scale: 24, ox: 0, oy: 0 });
   const camRef = useRef(cam);
@@ -81,7 +88,7 @@ export function useMapCamera({ mapId, geom, wrapRef, canvasRef }: UseMapCameraAr
         oy: pad + (rect.height - pad * 2 - (b.maxY - b.minY) * scale) / 2 - b.minY * scale,
       });
     },
-    [mapId, grid, width, height]
+    [mapId, grid, width, height, wrapRef]
   );
 
   useEffect(() => {
@@ -116,25 +123,14 @@ export function useMapCamera({ mapId, geom, wrapRef, canvasRef }: UseMapCameraAr
     const rect = el.getBoundingClientRect();
     const cx = rect.width / 2;
     const cy = rect.height / 2;
-    setCam((c) => {
-      const scale = Math.min(240, Math.max(4, c.scale * factor));
-      const k = scale / c.scale;
-      return { scale, ox: cx - (cx - c.ox) * k, oy: cy - (cy - c.oy) * k };
-    });
+    zoomAt(cx, cy, factor);
   }
 
   // Зум к точке вьюпорта (wheel/pinch): та же математика clamp 4..240,
   // что раньше была инлайном в обработчиках.
   const zoomAt = useCallback(
     (rx: number, ry: number, factor: number) => {
-      setCam((c) => {
-        const scale = Math.min(
-          MAP_CAM_MAX_SCALE,
-          Math.max(MAP_CAM_MIN_SCALE, c.scale * factor)
-        );
-        const k = scale / c.scale;
-        return { scale, ox: rx - (rx - c.ox) * k, oy: ry - (ry - c.oy) * k };
-      });
+      setCam((c) => zoomCameraAt(c, rx, ry, factor));
     },
     []
   );
@@ -175,16 +171,29 @@ export function useMapCamera({ mapId, geom, wrapRef, canvasRef }: UseMapCameraAr
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    let frame: number | null = null;
+    let pending: { rx: number; ry: number; factor: number }[] = [];
     const onWheelNative = (e: WheelEvent) => {
       e.preventDefault();
       const rect = canvas.getBoundingClientRect();
       const rx = e.clientX - rect.left;
       const ry = e.clientY - rect.top;
-      zoomAt(rx, ry, Math.pow(MAP_CAM_WHEEL_BASE, -e.deltaY));
+      pending.push({ rx, ry, factor: Math.pow(MAP_CAM_WHEEL_BASE, -e.deltaY) });
+      if (frame === null) frame = requestAnimationFrame(() => {
+        frame = null;
+        const events = pending; pending = [];
+        // Preserve event order, each cursor anchor and clamping, with one
+        // camera update per display frame even on high-frequency trackpads.
+        setCam(camera => events.reduce((current, event) => zoomCameraAt(current, event.rx, event.ry, event.factor), camera));
+      });
     };
     canvas.addEventListener("wheel", onWheelNative, { passive: false });
-    return () => canvas.removeEventListener("wheel", onWheelNative);
-  }, [mapId, grid, width, height, zoomAt]);
+    return () => {
+      canvas.removeEventListener("wheel", onWheelNative);
+      if (frame !== null) cancelAnimationFrame(frame);
+      pending = [];
+    };
+  }, [mapId, grid, width, height, canvasRef]);
 
   return { cam, setCam, camRef, fitCamera, zoomBy, zoomAt, toWorld, touchToWorld, toScreen };
 }

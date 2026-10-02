@@ -1093,7 +1093,7 @@ export function StatblockList({
                       aria-label={`Удалить чарник: ${statblockTitle(sb)}`}
                       title="Удалить чарник"
                     >
-                      ✕
+                      <NavIcon name="delete" />
                     </button>
                   </div>
                 ))}

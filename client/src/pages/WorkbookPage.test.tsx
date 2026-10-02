@@ -11,7 +11,7 @@ vi.mock('../components/mentions/MentionText',()=>({MentionText:({text}:{text:str
 vi.mock('../api/currentUser',()=>({getCachedUser:()=>({id:1})}));
 let initial:WorkbookInstance;
 const mount=()=>render(<MemoryRouter initialEntries={['/workbooks/1']}><Routes><Route path="/workbooks/:id" element={<WorkbookPage popout/>}/></Routes></MemoryRouter>);
-beforeEach(()=>{vi.useFakeTimers();vi.clearAllMocks();localStorage.clear();sessionStorage.clear();initial={id:1,uid:'a-stable-instance',title:'Тетрадь',template_id:1,revision:1,project_type:null,project_id:null,archived_at:null,answers:{sheet:{goal:'Исходный',second:'Старый'}},template:{format:'soyman-workbook',schemaVersion:1,key:'generic',version:1,title:'Обычная тетрадь',sheets:[{key:'sheet',title:'Лист',fields:[{key:'goal',label:'Цель',type:'text'},{key:'second',label:'Второе поле',type:'text'}]}]}};mocks.data=initial;});
+beforeEach(()=>{window.ResizeObserver=class{observe(){}disconnect(){}unobserve(){}} as unknown as typeof ResizeObserver;vi.useFakeTimers();vi.clearAllMocks();localStorage.clear();sessionStorage.clear();initial={id:1,uid:'a-stable-instance',title:'Тетрадь',template_id:1,revision:1,project_type:null,project_id:null,archived_at:null,answers:{sheet:{goal:'Исходный',second:'Старый'}},template:{format:'soyman-workbook',schemaVersion:1,key:'generic',version:1,title:'Обычная тетрадь',sheets:[{key:'sheet',title:'Лист',fields:[{key:'goal',label:'Цель',type:'text'},{key:'second',label:'Второе поле',type:'text'}]}]}};mocks.data=initial;});
 afterEach(()=>{cleanup();vi.useRealTimers();});
 describe('редактор рабочей тетради',()=>{
  it('сохраняет ввод с ревизией и не заменяет его фоновым устаревшим ответом',async()=>{

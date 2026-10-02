@@ -59,6 +59,9 @@ interface Props {
   // Класс-маркер на заголовок (summary/h3) — ручка драга для сетки пульта.
   // Остальным не нужен: таскают только там.
   summaryClassName?: string;
+  // Пустое поле — пунктирная кнопка «+ …» вместо открытой правки (профиль
+  // события, доска 28): пустые тексты не разворачивают лист в три формы.
+  emptyLabel?: string;
 }
 
 export function EditableTextCard({
@@ -80,6 +83,7 @@ export function EditableTextCard({
   inlineFooter,
   draftKey,
   summaryClassName,
+  emptyLabel,
 }: Props) {
   const forceOpen = usePultGridForceOpen();
   // Черновик, оставшийся с прошлого захода: он и открывает карточку в правке,
@@ -90,7 +94,7 @@ export function EditableTextCard({
     return stored != null && stored !== value ? stored : null;
   });
   const [draftRestored, setDraftRestored] = useState(restored != null);
-  const [editMode, setEditMode] = useState(() => restored != null || !value);
+  const [editMode, setEditMode] = useState(() => restored != null || (!value && !emptyLabel));
   const [draftText, setDraftText] = useState(restored ?? value);
   const draft = draftText;
 
@@ -207,6 +211,10 @@ export function EditableTextCard({
             )}
           </div>
         </>
+      ) : !value && emptyLabel ? (
+        <button type="button" className="editable-card-add" onClick={startEdit}>
+          + {emptyLabel}
+        </button>
       ) : (
         <>
           {(() => {

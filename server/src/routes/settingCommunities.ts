@@ -5,6 +5,7 @@ import path from "path";
 import { db } from "../db/db";
 import { communityFolder, locationFolder, toFileUrl, writeReplacingOldFile } from "../services/filesystem";
 import { renameEntityFolder } from "../services/vaultPaths";
+import { parseForce, serializeForce } from "../services/beingForce";
 import {
   withAvatarUrl,
   getCreatureMetaByOwner,
@@ -204,7 +205,16 @@ settingCommunitiesRouter.get("/:id", (req, res) => {
     .prepare("SELECT * FROM important_dates WHERE owner_type = 'community' AND owner_id = ? ORDER BY created_at")
     .all(req.params.id);
 
-  res.json({ ...withThumbUrl(row), children, ancestors, members, chapters, locations, important_dates: importantDates });
+  res.json({
+    ...withThumbUrl(row),
+    force: parseForce((row as { force?: unknown }).force),
+    children,
+    ancestors,
+    members,
+    chapters,
+    locations,
+    important_dates: importantDates,
+  });
 });
 
 settingCommunitiesRouter.post("/:id/thumbnail", upload.single("file"), async (req, res) => {
@@ -321,7 +331,7 @@ settingCommunitiesRouter.put("/:id", (req, res) => {
   if (!existing) return res.status(404).json({ error: "not found" });
   const {
     name, description, player_text, history, current_situation, features, goals, tags, aliases, name_original,
-    parent_id,
+    parent_id, force, secret,
   } = req.body as {
     name?: string;
     // Перевешивание сообщества под другое (визард делает так, назначая
@@ -337,6 +347,9 @@ settingCommunitiesRouter.put("/:id", (req, res) => {
     tags?: string[];
     aliases?: string[];
     name_original?: string;
+    // «Карточка фракции»: двигатель силы и секрет.
+    force?: unknown;
+    secret?: string;
   };
   let folderPath = existing.folder_path;
   if (name && name !== existing.name) {
@@ -351,6 +364,8 @@ settingCommunitiesRouter.put("/:id", (req, res) => {
        tags = COALESCE(?, tags),
        aliases = COALESCE(?, aliases),
        name_original = COALESCE(?, name_original),
+       force = COALESCE(?, force),
+       secret = COALESCE(?, secret),
        parent_id = CASE WHEN ? THEN ? ELSE parent_id END,
        folder_path = ?
      WHERE id = ?`
@@ -365,6 +380,8 @@ settingCommunitiesRouter.put("/:id", (req, res) => {
     tags ? JSON.stringify(tags) : null,
     aliases ? JSON.stringify(aliases) : null,
     name_original ?? null,
+    force !== undefined ? serializeForce(force) : null,
+    typeof secret === "string" ? secret.trim() : null,
     parent_id !== undefined ? 1 : 0,
     parent_id ?? null,
     folderPath,

@@ -55,7 +55,7 @@ import { MentionText } from "../components/mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { useTabState } from "../hooks/useTabState";
-import { formatInworldDate, formatEventDate } from "../inworldCalendar";
+import { dateFromElapsed, formatInworldDate, formatEventDate } from "../inworldCalendar";
 import { InworldCalendar, type InworldDatedItem } from "../components/InworldCalendar";
 import { EntityPage } from "../components/EntityPage";
 import { LoadErrorCard } from "../components/Loadable";
@@ -84,6 +84,7 @@ import type {
   SessionStatus,
   SessionSummary,
   Setting,
+  SettingCalendarEra,
   SettingCycle,
   StorySecret,
   System,
@@ -91,6 +92,8 @@ import type {
   WorldExplorationEntry,
 } from "../types";
 import { Timeline } from "../components/Timeline";
+import { SettingCyclePanel } from "../components/setting/SettingCyclePanel";
+import { SettingCycles } from "../components/SettingCycles";
 import { PresentationEditor } from "../components/presentation/PresentationEditor";
 import { EntityTabWorkspace } from "../components/EntityTabWorkspace";
 import { sessionLabel } from "../sessionLabel";
@@ -124,6 +127,7 @@ const NO_SESSIONS: SessionSummary[] = [];
 const NO_PLAYERS: Player[] = [];
 const NO_DEBTS: CampaignDebt[] = [];
 const NO_CYCLES: SettingCycle[] = [];
+const NO_ERAS: SettingCalendarEra[] = [];
 const NO_SYSTEMS: System[] = [];
 const NO_SETTINGS: Setting[] = [];
 const NO_EVENTS: CampaignCalendarEvent[] = [];
@@ -203,7 +207,13 @@ export function CampaignDetailPage() {
   const [secSel, setSecSel] = useState<{ section: string; item?: string }>({ section: "all" });
   const [secStats, setSecStats] = useState<SecretsNavStats | null>(null);
   const { deleteWithUndo } = useUndoDelete();
-  const cycles = useResource<SettingCycle[]>(campaign?.setting_id ? chroniclePaths.cycles(campaign.setting_id) : null).data ?? NO_CYCLES;
+  // Ось кампании — частный случай оси сеттинга (разбор 2026-10-02, Q1–Q4):
+  // панель циклов (сеттинга и свои), эпохи общего таймлайна сеттинга.
+  const cycles = useResource<SettingCycle[]>(campaign?.setting_id ? chroniclePaths.cycles(campaign.setting_id, campaignId) : null).data ?? NO_CYCLES;
+  const allEras = useResource<SettingCalendarEra[]>(campaign?.setting_id ? chroniclePaths.eras(campaign.setting_id) : null).data ?? NO_ERAS;
+  const eras = useMemo(() => allEras.filter((e) => e.timeline_id == null).sort((a, b) => a.start_year - b.start_year), [allEras]);
+  const [worldEraId, setWorldEraId] = useState<number | null>(null);
+  const cyclesRef = useRef<HTMLDivElement>(null);
 
   const [creatingDate, setCreatingDate] = useState<string | null>(null);
   const [creatingSession, setCreatingSession] = useState(false);
@@ -256,9 +266,14 @@ export function CampaignDetailPage() {
     const q = worldFilter.trim().toLowerCase();
     let list = sortedCalendarEvents;
     if (q) list = list.filter((ev) => ev.title.toLowerCase().includes(q) || (ev.description ?? "").toLowerCase().includes(q));
+    const era = eras.find((e) => e.id === worldEraId);
+    if (era) {
+      const endYear = eras.find((e) => e.start_year > era.start_year)?.start_year ?? Infinity;
+      list = list.filter((ev) => ev.inworld_year >= era.start_year && ev.inworld_year < endYear);
+    }
     if (worldSort === "desc") list = [...list].reverse();
     return list;
-  }, [sortedCalendarEvents, worldFilter, worldSort]);
+  }, [sortedCalendarEvents, worldFilter, worldSort, eras, worldEraId]);
   const timelineNow = useMemo(() => {
     const held = sessions.filter((s) => s.status === "held" && s.inworld_year != null);
     if (held.length > 0) {
@@ -1066,8 +1081,27 @@ export function CampaignDetailPage() {
               ]}
               months={calendar?.months ?? []}
               era={calendar?.era ?? ""}
+              eras={eras}
               now={timelineNow}
-              cycles={cycles}
+              below={(view) =>
+                campaign.setting_id ? (
+                  <SettingCyclePanel
+                    settingId={campaign.setting_id}
+                    campaignId={campaignId}
+                    cycles={cycles}
+                    view={view}
+                    onAddCycle={() => cyclesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                    onDayMenu={(day, x, y) => {
+                      const date = dateFromElapsed(day, calendar?.months ?? []);
+                      setCalendarMenu({
+                        x,
+                        y,
+                        items: [{ label: "Событие на этот день", onClick: () => openCreateEventModal(date.year, date.month, date.day) }],
+                      });
+                    }}
+                  />
+                ) : null
+              }
               importantDates={settingImportantDates}
               onMoveEvent={moveCampaignEvent}
               onNowChange={(date) => pinCampaignCalendar(date)}
@@ -1087,6 +1121,16 @@ export function CampaignDetailPage() {
                   <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
                     <input placeholder="Поиск по хронике мира" value={worldFilter} onChange={(e) => setWorldFilter(e.target.value)} style={{ flex: "1 1 200px" }} />
                     <button onClick={() => setWorldSort((s) => (s === "asc" ? "desc" : "asc"))}>{worldSort === "asc" ? "↑ Старые → новые" : "↓ Новые → старые"}</button>
+                    {eras.length > 0 && (
+                      <select value={worldEraId ?? ""} onChange={(e) => setWorldEraId(e.target.value ? Number(e.target.value) : null)} aria-label="Эпоха">
+                        <option value="">Все эпохи</option>
+                        {eras.map((e) => (
+                          <option key={e.id} value={e.id}>
+                            {e.name} ({e.start_year})
+                          </option>
+                        ))}
+                      </select>
+                    )}
                     {worldFilter && <button onClick={() => setWorldFilter("")}>Сбросить</button>}
                   </div>
                   {worldFiltered.length === 0 && sortedCalendarEvents.length > 0 ? <p className="muted">Ничего не найдено.</p> : null}
@@ -1179,6 +1223,16 @@ export function CampaignDetailPage() {
               </details>
             </div>
           </div>
+          {campaign.setting_id && (
+            <div ref={cyclesRef}>
+              <SettingCycles
+                settingId={campaign.setting_id}
+                campaignId={campaignId}
+                months={calendar?.months ?? []}
+                now={{ year: campaign.pinned_calendar_year ?? null, month: campaign.pinned_calendar_month ?? null }}
+              />
+            </div>
+          )}
         </div>
       )}
 

@@ -1,4 +1,4 @@
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAction, useEntity, useSaveEntity, write } from "../data/hooks";
 import type { Affect } from "../data/entities";
 import { EditableTextCard } from "../components/EditableTextCard";
@@ -12,7 +12,8 @@ import { useConfirm } from "../hooks/useConfirm";
 
 // Профиль события хроники. Строка хроники показывает только дату и краткое
 // описание — всё остальное (развёрнутый текст, последствия, участники) живёт
-// здесь.
+// здесь. На бумаге и без вкладок (разбор 2026-10-02, доска 28): их нечем
+// наполнить; дата — меткой под именем, на месте мазка.
 export function EventDetailPage() {
   const [confirmDialog, confirm] = useConfirm();
   const { id } = useParams();
@@ -28,7 +29,7 @@ export function EventDetailPage() {
   const run = useAction();
 
   const chronicleUrl = event
-    ? `/settings/${event.setting_id}?tab=${encodeURIComponent("Хроника мира")}`
+    ? `/settings/${event.setting_id}?tab=${encodeURIComponent("Хроника")}`
     : "/settings";
 
   // Карточки полей держат правку открытой, пока сохранение не удалось.
@@ -52,18 +53,25 @@ export function EventDetailPage() {
     ? [
         { label: "Сеттинги", to: "/settings" },
         { label: event.setting_name ?? "Сеттинг", to: `/settings/${event.setting_id}` },
-        { label: "Хроника мира", to: chronicleUrl },
+        { label: "Хроника", to: chronicleUrl },
         { label: event.title },
       ]
     : [{ label: "Сеттинги", to: "/settings" }];
 
   return (
     <EntityPage
+      paper
       crumbs={crumbs}
       entityType="setting_event"
       title={event?.title ?? ""}
       meta={
-        event && formatEventDate(event.inworld_year, event.inworld_month, event.inworld_day, months)
+        event && (
+          <span className="paper-ident-tags">
+            <span className="badge tag">
+              {formatEventDate(event.inworld_year, event.inworld_month, event.inworld_day, months)}
+            </span>
+          </span>
+        )
       }
       // Единственное действие события — разрушительное, а разрушительное
       // главным не бывает: в шапке пусто, «Удалить» под «…».
@@ -74,72 +82,49 @@ export function EventDetailPage() {
       overlays={confirmDialog}
     >
       {event && (
-        <>
-          <EntityFieldsCard
-            fields={[
-              { key: "title", label: "Название", value: event.title, required: true },
-              { key: "inworld_year", label: "Год", value: String(event.inworld_year) },
-              {
-                key: "inworld_month",
-                label: "Месяц",
-                value: String(event.inworld_month),
-                // Календарь у сеттинга свой; пока месяцы не заведены — обычное поле
-                // с номером, как и в самой хронике.
-                options:
-                  months.length > 0
-                    ? months.map((m) => ({ value: String(m.position), label: m.name }))
-                    : undefined,
-              },
-              { key: "inworld_day", label: "День", value: String(event.inworld_day) },
-            ]}
-            onSave={(values) =>
-              save({
-                title: values.title,
-                inworld_year: Number(values.inworld_year),
-                inworld_month: Number(values.inworld_month),
-                inworld_day: Number(values.inworld_day),
-              })
-            }
-          />
-
+        <div className="event-sheet">
           {/* Флаги сервер принимает логическими (`important === true`), а
               отдаёт числами — отсюда приведение типа. */}
-          <div className="card row">
-            <label className="row">
-              <input
-                type="checkbox"
-                checked={!!event.important}
-                onChange={() => void saveEntity({ important: !event.important } as unknown as Partial<SettingCalendarEvent>)}
-              />
-              Важное
-            </label>
+          <div className="event-sheet__flags">
+            <button
+              type="button"
+              aria-pressed={!!event.important}
+              onClick={() => void saveEntity({ important: !event.important } as unknown as Partial<SettingCalendarEvent>)}
+            >
+              {event.important ? "★" : "☆"} важное
+            </button>
             <label className="row">
               <input
                 type="checkbox"
                 checked={!!event.visible_to_players}
                 onChange={() => void saveEntity({ visible_to_players: !event.visible_to_players } as unknown as Partial<SettingCalendarEvent>)}
               />
-              Видно игрокам
+              видно игрокам
             </label>
+            <Link className="paper-more event-sheet__to" to={chronicleUrl}>
+              В хронике ›
+            </Link>
           </div>
 
           <EditableTextCard
             key={`description-${event.id}`}
-            title="Краткое описание"
+            title="Кратко"
             help="Эта строка показывается в хронике мира."
             value={event.description}
             onSave={(v) => save({ description: v })}
             rows={3}
+            emptyLabel="одна строка для хроники"
             entityType="setting_event"
             entityId={eventId}
             defaultSettingId={event.setting_id}
           />
           <EditableTextCard
             key={`full-${event.id}`}
-            title="Полное описание"
+            title="Подробно"
             value={event.full_description}
             onSave={(v) => save({ full_description: v })}
             rows={8}
+            emptyLabel="полное описание"
             entityType="setting_event"
             entityId={eventId}
             defaultSettingId={event.setting_id}
@@ -151,15 +136,48 @@ export function EventDetailPage() {
             value={event.consequences}
             onSave={(v) => save({ consequences: v })}
             rows={6}
+            emptyLabel="что изменилось после"
             entityType="setting_event"
             entityId={eventId}
             defaultSettingId={event.setting_id}
           />
 
-          <div className="card stack">
-            <LinkDropZone entityType="setting_event" entityId={eventId} title="Участники и локации" />
-          </div>
-        </>
+          <LinkDropZone entityType="setting_event" entityId={eventId} title="Участники и места" />
+
+          {/* Название и дата правятся редко — свёрнуто, как справка у
+              остальных профилей. */}
+          <details className="paper-fold">
+            <summary>Название и дата</summary>
+            <div className="paper-fold__body">
+              <EntityFieldsCard
+                fields={[
+                  { key: "title", label: "Название", value: event.title, required: true },
+                  { key: "inworld_year", label: "Год", value: String(event.inworld_year) },
+                  {
+                    key: "inworld_month",
+                    label: "Месяц",
+                    value: String(event.inworld_month),
+                    // Календарь у сеттинга свой; пока месяцы не заведены — обычное поле
+                    // с номером, как и в самой хронике.
+                    options:
+                      months.length > 0
+                        ? months.map((m) => ({ value: String(m.position), label: m.name }))
+                        : undefined,
+                  },
+                  { key: "inworld_day", label: "День", value: String(event.inworld_day) },
+                ]}
+                onSave={(values) =>
+                  save({
+                    title: values.title,
+                    inworld_year: Number(values.inworld_year),
+                    inworld_month: Number(values.inworld_month),
+                    inworld_day: Number(values.inworld_day),
+                  })
+                }
+              />
+            </div>
+          </details>
+        </div>
       )}
     </EntityPage>
   );

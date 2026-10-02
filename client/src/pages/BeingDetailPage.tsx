@@ -599,7 +599,7 @@ export function BeingDetailPage() {
                   <dt className="paper-label">Сообщества</dt>
                   <dd>
                     {being.communities.map((c) => (
-                      <Link key={c.id} to={`/communities/${c.id}`}>
+                      <Link key={c.id} className="mention-link mention--com" to={`/communities/${c.id}`}>
                         {c.name}
                       </Link>
                     ))}
@@ -611,7 +611,7 @@ export function BeingDetailPage() {
                   <dt className="paper-label">Где обитает</dt>
                   <dd>
                     {being.locations.map((l) => (
-                      <Link key={l.id} to={`/locations/${l.id}`}>
+                      <Link key={l.id} className="mention-link mention--loc" to={`/locations/${l.id}`}>
                         {l.name}
                       </Link>
                     ))}
@@ -622,7 +622,7 @@ export function BeingDetailPage() {
                 <div>
                   <dt className="paper-label">На основе</dt>
                   <dd>
-                    <Link to={`/compendium/${being.base_monster_id}`}>
+                    <Link className="mention-link mention--cre" to={`/compendium/${being.base_monster_id}`}>
                       {being.base_monster_name}
                     </Link>
                   </dd>
@@ -921,7 +921,7 @@ export function BeingDetailPage() {
                 {being.locations.map((l) => (
                   <li key={l.id}>
                     <span className="paper-rows__main">
-                      <Link className="paper-link" to={`/locations/${l.id}`}>
+                      <Link className="mention-link mention--loc" to={`/locations/${l.id}`}>
                         {l.name}
                       </Link>
                     </span>
@@ -988,7 +988,7 @@ export function BeingDetailPage() {
                 {scenes.map((s) => (
                   <li key={s.id}>
                     <span className="paper-rows__main">
-                      <Link className="paper-link" to={`/scenes/${s.id}`}>
+                      <Link className="mention-link" to={`/scenes/${s.id}`}>
                         {s.name}
                       </Link>
                     </span>

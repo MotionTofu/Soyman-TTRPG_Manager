@@ -3,11 +3,11 @@ import { ReaderNoteCard, type ReaderNoteActions } from "../ReaderNoteCard";
 import type { TextNote } from "./textNotes";
 import type { LocatedTextNote } from "./useMasteringAnnotations";
 
-export function MasteringNotesPanel({ notes, mode, showHighlights, prose, activeId, loading, error, onRetry, onMode, onHighlights, onClose, onAdd, onOpen, actions }: {
+export function MasteringNotesPanel({ notes, mode, showHighlights, prose, activeId, loading, error, onRetry, onMode, onHighlights, onClose, onAdd, onExport, onOpen, actions }: {
   notes: LocatedTextNote[]; mode: "margins" | "list"; showHighlights: boolean; prose: HTMLDivElement | null;
   activeId: string | null; loading: boolean; error: string | null;
   onRetry: () => void; onMode: (mode: "margins" | "list") => void; onHighlights: (value: boolean) => void;
-  onClose: () => void; onAdd: () => void; onOpen: (id: string) => void; actions: ReaderNoteActions<TextNote>;
+  onClose: () => void; onAdd: () => void; onExport: () => void; onOpen: (id: string) => void; actions: ReaderNoteActions<TextNote>;
 }) {
   const scroll = useRef<HTMLDivElement>(null), canvas = useRef<HTMLDivElement>(null);
   const syncedTop = useRef(0);
@@ -51,6 +51,7 @@ export function MasteringNotesPanel({ notes, mode, showHighlights, prose, active
       <div role="group" aria-label="Режим заметок"><button type="button" aria-pressed={mode === "margins"} onClick={() => onMode("margins")}>У текста</button><button type="button" aria-pressed={mode === "list"} onClick={() => onMode("list")}>Список</button></div>
       <label><input type="checkbox" checked={showHighlights} onChange={event => onHighlights(event.target.checked)} /> Подсветка цитат</label>
       <button type="button" onClick={onAdd}>+ Общая заметка</button>
+      {!!notes.length && <button type="button" onClick={onExport}>Экспорт в Markdown</button>}
     </div>
     {mode === "margins" && !!general.length && <div className="mastering-notes__general">{general.map(card)}</div>}
     <div className="mastering-notes__scroll" ref={scroll} onScroll={event => {

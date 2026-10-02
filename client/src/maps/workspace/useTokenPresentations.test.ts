@@ -18,6 +18,32 @@ function fixture() {
 }
 beforeEach(() => { present.mockReset(); }); afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 describe("transient token presentations", () => {
+  it("keeps portraits visible during refresh and reuses unchanged images", async () => {
+    const decode = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("Image", class { src = ""; decode = decode; });
+    vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:portrait"), revokeObjectURL: vi.fn() });
+    const fetchImage = vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob(["portrait"]) });
+    vi.stubGlobal("fetch", fetchImage);
+    const portraitRow = { ...row, portrait_url: "/files/portrait.webp" };
+    present.mockResolvedValueOnce([portraitRow]);
+    const hook = renderHook(() => useTokenPresentations(1, fixture()));
+    const key = `being:${ref.uid}`;
+    await waitFor(() => expect(hook.result.current.get(key)?.portrait).toBeDefined());
+    const portrait = hook.result.current.get(key)!.portrait;
+    let finish!: (rows: TokenPresentation[]) => void;
+    present.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    act(() => window.dispatchEvent(new Event("focus")));
+    await waitFor(() => expect(present).toHaveBeenCalledTimes(2));
+    expect(hook.result.current.get(key)?.portrait).toBe(portrait);
+    await act(async () => finish([{ ...portraitRow, name: "Новое имя" }]));
+    expect(hook.result.current.get(key)).toMatchObject({ name: "Новое имя", portrait });
+    expect(fetchImage).toHaveBeenCalledOnce();
+    present.mockRejectedValueOnce(Error("offline"));
+    act(() => window.dispatchEvent(new Event("focus")));
+    await waitFor(() => expect(present).toHaveBeenCalledTimes(3));
+    expect(hook.result.current.get(key)).toMatchObject({ name: "Новое имя", portrait });
+  });
+
   it("requests unique source refs, geometry changes do not refetch or write display metadata", async () => {
     present.mockResolvedValue([row]); const doc = fixture();
     const hook = renderHook(({ doc }) => useTokenPresentations(1, doc), { initialProps: { doc } });

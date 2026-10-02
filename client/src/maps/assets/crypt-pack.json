@@ -1,0 +1,1168 @@
+{
+  "id": "soyman-crypt",
+  "version": "1",
+  "cell": 256,
+  "assets": [
+    {
+      "id": "sarcophagus",
+      "file": "sarcophagus.webp",
+      "width": 256,
+      "height": 512,
+      "bytes": 47910,
+      "sha256": "0fb15239d15013d31b4cd9efae5fca8e0fcc4a1240c300ce9c0b77295c5a93dd",
+      "kind": "object",
+      "cells": [
+        1,
+        2
+      ],
+      "source": "sheet-A-crypt-2.png"
+    },
+    {
+      "id": "coffin",
+      "file": "coffin.webp",
+      "width": 256,
+      "height": 512,
+      "bytes": 40222,
+      "sha256": "5d4dd96c5c7897f9e3084802a7242a8bd962be8fd286b50d488622d87b83c610",
+      "kind": "object",
+      "cells": [
+        1,
+        2
+      ],
+      "source": "sheet-A-crypt-2.png"
+    },
+    {
+      "id": "niche",
+      "file": "niche.webp",
+      "width": 256,
+      "height": 512,
+      "bytes": 43314,
+      "sha256": "f12c45b074c156911a2137da43451f8f570115f61cd16f86b3af496cd79ce867",
+      "kind": "object",
+      "cells": [
+        1,
+        2
+      ],
+      "source": "sheet-A-crypt-2.png"
+    },
+    {
+      "id": "pentagram",
+      "file": "pentagram.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 70512,
+      "sha256": "48f5fdccbcb35399f1b5a03119209b0993b7f4f833281b3d791a57c625d8fe63",
+      "kind": "object",
+      "cells": [
+        2,
+        2
+      ],
+      "source": "sheet-A-crypt-2.png"
+    },
+    {
+      "id": "urn",
+      "file": "urn.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 26942,
+      "sha256": "4b55e1961f6c920176eb811c74519526eb95d81f2e9274eedc8f0f6daab7c0ae",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-A-crypt-2.png"
+    },
+    {
+      "id": "candles",
+      "file": "candles.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 22396,
+      "sha256": "f6b3760f36d2de7f8b053bc9072911f9212a3052495e68f22f3898aff447eb7a",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-A-crypt-2.png"
+    },
+    {
+      "id": "table",
+      "file": "table.webp",
+      "width": 512,
+      "height": 256,
+      "bytes": 42094,
+      "sha256": "0aa6e57066faa34aa3a1649e994d7ae006347892e698509ccf5fa6fbaac29539",
+      "kind": "object",
+      "cells": [
+        2,
+        1
+      ],
+      "source": "sheet-E-furniture.png"
+    },
+    {
+      "id": "bench",
+      "file": "bench.webp",
+      "width": 512,
+      "height": 256,
+      "bytes": 43898,
+      "sha256": "9b6a1d0aed63d2288b77fea3239121704bfb244263b1c7fedd34fe430f4f70fd",
+      "kind": "object",
+      "cells": [
+        2,
+        1
+      ],
+      "source": "sheet-E-furniture.png"
+    },
+    {
+      "id": "chest",
+      "file": "chest.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 30920,
+      "sha256": "aa464fcd43eb253b9e2ec4daae29a65b2335142bf7ecc3d5d65ffd5c1c61cca1",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-E-furniture.png"
+    },
+    {
+      "id": "barrels",
+      "file": "barrels.webp",
+      "width": 512,
+      "height": 256,
+      "bytes": 29690,
+      "sha256": "e32c82479c5be71804e9b0a2a8965ade25942668dd0c2aaebf19ae03a84b5989",
+      "kind": "object",
+      "cells": [
+        2,
+        1
+      ],
+      "source": "sheet-E-furniture.png"
+    },
+    {
+      "id": "crates",
+      "file": "crates.webp",
+      "width": 512,
+      "height": 256,
+      "bytes": 33744,
+      "sha256": "758efdd0468cf3c80ee774d60ea3257364e76fbb9b8ce4de9b58435058f00296",
+      "kind": "object",
+      "cells": [
+        2,
+        1
+      ],
+      "source": "sheet-E-furniture.png"
+    },
+    {
+      "id": "rug",
+      "file": "rug.webp",
+      "width": 435,
+      "height": 653,
+      "bytes": 99036,
+      "sha256": "5eb66fa23447c1cfe017d900c568d8aef4ab8377b9b5da31136a3a5414eb30fc",
+      "kind": "object",
+      "cells": [
+        2,
+        3
+      ],
+      "source": "sheet-E-furniture.png",
+      "note": "уменьшен под лимит 100 КиБ"
+    },
+    {
+      "id": "brazier",
+      "file": "brazier.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 24384,
+      "sha256": "d24661b9cb550d8b1de3242efffb2e58bd912225bc6eb79d90bef604d3cd2d3d",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-F-debris-light.png"
+    },
+    {
+      "id": "well",
+      "file": "well.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 76292,
+      "sha256": "07129da7e7ff6b12a3b493256b042bb20ff4c2e9bfc50abcd4a427d61bc9e36d",
+      "kind": "object",
+      "cells": [
+        2,
+        2
+      ],
+      "source": "sheet-F-debris-light.png"
+    },
+    {
+      "id": "bones",
+      "file": "bones.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 27158,
+      "sha256": "96090d199508ffe7d9f9b037fa3bf0ad1a3a8242fa7fe0a3c7967d69c68570e9",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-F-debris-light.png"
+    },
+    {
+      "id": "rubble",
+      "file": "rubble.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 27914,
+      "sha256": "61eb6d606c91c0ac22863ceb2c69428c7ea3e057106d8588b14a46dbe2e01ec2",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-F-debris-light.png"
+    },
+    {
+      "id": "pillar-broken",
+      "file": "pillar-broken.webp",
+      "width": 256,
+      "height": 512,
+      "bytes": 48576,
+      "sha256": "e3980956b03e1ab7bb1e48f1adcc2983fe9f81b9c7a4e8fbfd858adb53b9c531",
+      "kind": "object",
+      "cells": [
+        1,
+        2
+      ],
+      "source": "sheet-F-debris-light.png"
+    },
+    {
+      "id": "pillar",
+      "file": "pillar.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 13590,
+      "sha256": "a4228222856b04717e4a24aded7f7e2cf58e038a1279ff31df072952ef2b708b",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-F-debris-light.png"
+    },
+    {
+      "id": "cobweb",
+      "file": "cobweb.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 20158,
+      "sha256": "58e2ab47de51545ad1340afa1cc26f1baacc54c8730b9c1ef6918a861ab439cb",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-F-debris-light.png"
+    },
+    {
+      "id": "blood",
+      "file": "blood.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 19272,
+      "sha256": "19cf51ae2b49aec70797278c49d864e315a74b8fbdb9c714a94c30742344fd7f",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-F-debris-light.png"
+    },
+    {
+      "id": "torch",
+      "file": "torch.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 14920,
+      "sha256": "050141d0c82de8df42811eb2436c2ab9c288af6520b76689e82dfadad807b5c4",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-F-debris-light.png"
+    },
+    {
+      "id": "stairs-down",
+      "file": "stairs-down.webp",
+      "width": 256,
+      "height": 512,
+      "bytes": 40246,
+      "sha256": "0a5c5d7716a6aa5357866a89a21fdc3390eed942bb7a317937a80ce704c81596",
+      "kind": "object",
+      "cells": [
+        1,
+        2
+      ],
+      "source": "sheet-G-transitions-gameplay.png"
+    },
+    {
+      "id": "stairs-up",
+      "file": "stairs-up.webp",
+      "width": 256,
+      "height": 512,
+      "bytes": 46466,
+      "sha256": "b4a58cf2bb0855118c9c8dd85fa3a1956f4713df5c9629ee24d5f2c76c96a039",
+      "kind": "object",
+      "cells": [
+        1,
+        2
+      ],
+      "source": "sheet-G-transitions-gameplay.png"
+    },
+    {
+      "id": "trapdoor",
+      "file": "trapdoor.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 34108,
+      "sha256": "820ea20bfdbb2aa9b618d9a8666582db8ead9548f93396e92547d0787ed958cb",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-G-transitions-gameplay.png"
+    },
+    {
+      "id": "pit",
+      "file": "pit.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 26262,
+      "sha256": "9c43fbdfbef25f3ad490df20a21dc017a9d2b821bc458c984627c0d48870c2c2",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-G-transitions-gameplay.png"
+    },
+    {
+      "id": "spikes",
+      "file": "spikes.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 34070,
+      "sha256": "7ef9e98cae3157a9f0e2c76f662c177343284556db87d0a8784900634918c2ce",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-G-transitions-gameplay.png"
+    },
+    {
+      "id": "lever",
+      "file": "lever.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 23222,
+      "sha256": "0f1c3c6feaf147da00aaadfb9dd3243a7f4987538874df2a39109dc67a7a6ad3",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-G-transitions-gameplay.png"
+    },
+    {
+      "id": "cage",
+      "file": "cage.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 29444,
+      "sha256": "1f19881b3b643c7a21dbb4e014f71ea26f1b46c16a855d1915fb15093c9fc34e",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-G-transitions-gameplay.png"
+    },
+    {
+      "id": "chains",
+      "file": "chains.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 30112,
+      "sha256": "0237269ec3f78717ddb7503133e5eee4239b8d79afcc7cf9b3b0da05febd1f63",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-G-transitions-gameplay.png"
+    },
+    {
+      "id": "treasure",
+      "file": "treasure.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 34022,
+      "sha256": "dd4c1653da34c7cea4abbbc8b27cc7aae210bf4316d750ce79f9afe3b65bd0a3",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-G-transitions-gameplay.png"
+    },
+    {
+      "id": "grime-splash",
+      "file": "grime-splash.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 30684,
+      "sha256": "248941e1a1f172c553ab0efe52031a75dace52156bd57c0756e7aa51742fc4cc",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-H-grime.png"
+    },
+    {
+      "id": "grime-splatter",
+      "file": "grime-splatter.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 27676,
+      "sha256": "ce854997bd8a3686214c88d33bf9eb7ac51bf4d105bc258794137da6ec7be401",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-H-grime.png"
+    },
+    {
+      "id": "grime-scribble",
+      "file": "grime-scribble.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 31442,
+      "sha256": "c50e57805e23f110dbea19fe63e8806f86311692651bd69f0bb8d04123d98f6f",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-H-grime.png"
+    },
+    {
+      "id": "grime-hatch",
+      "file": "grime-hatch.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 32980,
+      "sha256": "7e158f483956c1baa45fc47c2a26f8c59b88be86faba3790131162b68b81e8b0",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-H-grime.png"
+    },
+    {
+      "id": "grime-x-black",
+      "file": "grime-x-black.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 20960,
+      "sha256": "e949e3fa6537ccd62d77dc7f7cd17d8e4342609d5aedd7e08b319001ed77b7b5",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-H-grime.png"
+    },
+    {
+      "id": "grime-x-magenta",
+      "file": "grime-x-magenta.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 25510,
+      "sha256": "a794e2e8c952c9fe5eb0fddbaa8b6aa366abf6e6669653fc046e4bc119888355",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-H-grime.png"
+    },
+    {
+      "id": "grime-chunks",
+      "file": "grime-chunks.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 31458,
+      "sha256": "e19e1a60c30ef2c3b96d3f1095e877dfa0d2eda6b422282859e52b4a5ecec8b5",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-H-grime.png"
+    },
+    {
+      "id": "grime-toner",
+      "file": "grime-toner.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 28688,
+      "sha256": "ad23c7885237373d55a8f5cbbda1e1f2643ca421a33eb263a55f83617b9f3e45",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-H-grime.png"
+    },
+    {
+      "id": "grime-tape",
+      "file": "grime-tape.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 20688,
+      "sha256": "995b07276eeaf179a96146b22389ae1f1c0ebc63a9dd096299380e45c9b72791",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-H-grime.png"
+    },
+    {
+      "id": "door",
+      "file": "door.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 24130,
+      "sha256": "2741faff53c521de4e32bcbdb5cc56cb3b06922544c6cb09415b2834a1f7508d",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-D-openings.png"
+    },
+    {
+      "id": "door-double",
+      "file": "door-double.webp",
+      "width": 512,
+      "height": 256,
+      "bytes": 36758,
+      "sha256": "8213475e7ac0a30c74657c60a6ecff06e31340b94d56bfab9f3c86800dbf1a45",
+      "kind": "object",
+      "cells": [
+        2,
+        1
+      ],
+      "source": "sheet-D-openings.png"
+    },
+    {
+      "id": "portcullis",
+      "file": "portcullis.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 22624,
+      "sha256": "2c4927949d334e9192140762080ab4189498f8c65d8f7801d3578d2662167b00",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-D-openings.png"
+    },
+    {
+      "id": "arch",
+      "file": "arch.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 19142,
+      "sha256": "16f0d2685ec032fe1712daad154702da6e49a555c6710a62dc5b3dceec88d238",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-D-openings.png"
+    },
+    {
+      "id": "door-secret",
+      "file": "door-secret.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 19854,
+      "sha256": "ba5f96cbac7fffecc552f1398b0732422505cab89e33d78179dfe45d8ad5d26f",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-D-openings.png"
+    },
+    {
+      "id": "door-broken",
+      "file": "door-broken.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 20850,
+      "sha256": "dc1025b8bf2f3647df911090499abc80591c852e303d418ac01b64d926ef1933",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-D-openings.png"
+    },
+    {
+      "id": "wall-masonry",
+      "file": "wall-masonry.webp",
+      "width": 204,
+      "height": 128,
+      "bytes": 16458,
+      "sha256": "8493ac79ed79767b2c62af6e49c70868b374e3a01bc1a70e4311d10eb1663f0c",
+      "kind": "wall",
+      "cells": [
+        0.8,
+        0.5
+      ],
+      "source": "sheet-C-walls.png"
+    },
+    {
+      "id": "wall-masonry-end",
+      "file": "wall-masonry-end.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 15230,
+      "sha256": "6db9c8bfe28e7e3183980057eb850d2b90bc1f5f9f5be3b45d723f8024b2e76b",
+      "kind": "wall",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-C-walls.png"
+    },
+    {
+      "id": "wall-masonry-corner",
+      "file": "wall-masonry-corner.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 23428,
+      "sha256": "831f3b595839456ca7e4c81c74f792accfe3cb7578c83c161b82d2f534407d51",
+      "kind": "wall",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-C-walls.png"
+    },
+    {
+      "id": "wall-rock",
+      "file": "wall-rock.webp",
+      "width": 248,
+      "height": 128,
+      "bytes": 20308,
+      "sha256": "3e74c23ecedb5171d4a7887b7a8cc58a281827c387a93c887c197f05222cc85e",
+      "kind": "wall",
+      "cells": [
+        0.97,
+        0.5
+      ],
+      "source": "sheet-C-walls.png"
+    },
+    {
+      "id": "wall-rock-end",
+      "file": "wall-rock-end.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 13474,
+      "sha256": "fd5d5d14c0b1853b61b4ea5696621317836b0018508c94d19fc1b0aeb7e27b05",
+      "kind": "wall",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-C-walls.png"
+    },
+    {
+      "id": "wall-rock-corner",
+      "file": "wall-rock-corner.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 24082,
+      "sha256": "99624b5c4ab0f07e7b5764583e31ebba83b2dae8f7469f912bbbb638bdf588e9",
+      "kind": "wall",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "sheet-C-walls.png"
+    },
+    {
+      "id": "throne-s",
+      "file": "throne-s.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 24528,
+      "sha256": "4cb816a355b9cc2cfcee148ddacd8fa6d94edc9bc4aedc9076a39815bcaa15df",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "directional": "throne",
+      "facing": "s",
+      "source": "turnaround-throne-altar.png"
+    },
+    {
+      "id": "throne-w",
+      "file": "throne-w.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 19586,
+      "sha256": "8aa59b6660e85a4d946fe694f55a698f439067cb10a59073eac7c80b73da6434",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "directional": "throne",
+      "facing": "w",
+      "source": "turnaround-throne-altar.png"
+    },
+    {
+      "id": "throne-n",
+      "file": "throne-n.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 24872,
+      "sha256": "7e6e207c8b76db70b6a667c88c63a947fe1a249e667b879cf881f7b9b66f298e",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "directional": "throne",
+      "facing": "n",
+      "source": "turnaround-throne-altar.png"
+    },
+    {
+      "id": "throne-e",
+      "file": "throne-e.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 19524,
+      "sha256": "9d39ceba826b6468bf3b4aa3a1f1db70e73867faaffa79d7c9389d079abc8de9",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "directional": "throne",
+      "facing": "e",
+      "source": "turnaround-throne-altar.png"
+    },
+    {
+      "id": "altar-s",
+      "file": "altar-s.webp",
+      "width": 512,
+      "height": 256,
+      "bytes": 37142,
+      "sha256": "3c7cb1700c4771138fad177794d586ca409d591f8d4b8cffac5f5818b5223fe8",
+      "kind": "object",
+      "cells": [
+        2,
+        1
+      ],
+      "directional": "altar",
+      "facing": "s",
+      "source": "turnaround-throne-altar.png"
+    },
+    {
+      "id": "altar-w",
+      "file": "altar-w.webp",
+      "width": 256,
+      "height": 512,
+      "bytes": 39560,
+      "sha256": "5db9ff99acdc77a2cc7c660a9aace868565b7bbaa01a79f006a38522af9a2b60",
+      "kind": "object",
+      "cells": [
+        1,
+        2
+      ],
+      "directional": "altar",
+      "facing": "w",
+      "source": "turnaround-throne-altar.png"
+    },
+    {
+      "id": "altar-n",
+      "file": "altar-n.webp",
+      "width": 512,
+      "height": 256,
+      "bytes": 41964,
+      "sha256": "86ef9ee5aaef5ca903d75e16d86f21deeb25d1b654ff5e21721f49c49694bfd6",
+      "kind": "object",
+      "cells": [
+        2,
+        1
+      ],
+      "directional": "altar",
+      "facing": "n",
+      "source": "turnaround-throne-altar.png"
+    },
+    {
+      "id": "altar-e",
+      "file": "altar-e.webp",
+      "width": 256,
+      "height": 512,
+      "bytes": 39192,
+      "sha256": "2aaf3eb3dc10a19e845aabca590a53cb1442f3ac6e3277004fa8e289dd159293",
+      "kind": "object",
+      "cells": [
+        1,
+        2
+      ],
+      "directional": "altar",
+      "facing": "e",
+      "source": "turnaround-throne-altar.png"
+    },
+    {
+      "id": "statue-s",
+      "file": "statue-s.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 20216,
+      "sha256": "259c2bdd31c7c3e706fbeae4d900be31597a2addd5447662afc9f696ef55221d",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "directional": "statue",
+      "facing": "s",
+      "source": "turnaround-statue-chair.png"
+    },
+    {
+      "id": "statue-w",
+      "file": "statue-w.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 19972,
+      "sha256": "7a62d014d5cc0c88a99e747d82a4138d161185de3215d2598ca23a7dcd0a8691",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "directional": "statue",
+      "facing": "w",
+      "source": "turnaround-statue-chair.png"
+    },
+    {
+      "id": "statue-n",
+      "file": "statue-n.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 20444,
+      "sha256": "fdcc46e98aecb6a3863e50e8197ede2acfe1a3a3914b371caf3182ac9e38dab3",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "directional": "statue",
+      "facing": "n",
+      "source": "turnaround-statue-chair.png"
+    },
+    {
+      "id": "statue-e",
+      "file": "statue-e.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 19840,
+      "sha256": "0f936694968667e331cf820dc6b30fb0f25f62eca20133bd0f7803b431b211bb",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "directional": "statue",
+      "facing": "e",
+      "source": "turnaround-statue-chair.png"
+    },
+    {
+      "id": "chair-s",
+      "file": "chair-s.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 23804,
+      "sha256": "8b8ed6db2587aa8b0cd81374bf426cbf186307be51452f4e42df5cc764b17c75",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "directional": "chair",
+      "facing": "s",
+      "source": "turnaround-statue-chair.png"
+    },
+    {
+      "id": "chair-w",
+      "file": "chair-w.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 16972,
+      "sha256": "64163321ed9cbf6dac093bb17ba6bc51406d0b2ea5235073a487f4c671ed0437",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "directional": "chair",
+      "facing": "w",
+      "source": "turnaround-statue-chair.png"
+    },
+    {
+      "id": "chair-n",
+      "file": "chair-n.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 25144,
+      "sha256": "f4d7c46cc06fc3b5435d599165efcde06c00e1cfc5ca35611415ecb8ee6d7e90",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "directional": "chair",
+      "facing": "n",
+      "source": "turnaround-statue-chair.png"
+    },
+    {
+      "id": "chair-e",
+      "file": "chair-e.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 16844,
+      "sha256": "7d41a2bd4127a8a9e94db61f280901db7f0f0d358aa2adb2173e38599b0af096",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "directional": "chair",
+      "facing": "e",
+      "source": "turnaround-statue-chair.png"
+    },
+    {
+      "id": "wardrobe-s",
+      "file": "wardrobe-s.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 22338,
+      "sha256": "f6398d9f052c794277bf4cd6ab58f30fdb6da75b81c80c08dde6017ec554daae",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "directional": "wardrobe",
+      "facing": "s",
+      "source": "turnaround-wardrobe-bunk.png"
+    },
+    {
+      "id": "wardrobe-w",
+      "file": "wardrobe-w.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 14376,
+      "sha256": "b3f4bf23dbe0293146b97a4573eff2d76ac6c25f940f19d199d2c0dc47d452f5",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "directional": "wardrobe",
+      "facing": "w",
+      "source": "turnaround-wardrobe-bunk.png"
+    },
+    {
+      "id": "wardrobe-n",
+      "file": "wardrobe-n.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 20632,
+      "sha256": "14c8ebfe50a9cad10e5d599a65ee4c044844998092192d2bf021a10173aeee46",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "directional": "wardrobe",
+      "facing": "n",
+      "source": "turnaround-wardrobe-bunk.png"
+    },
+    {
+      "id": "wardrobe-e",
+      "file": "wardrobe-e.webp",
+      "width": 256,
+      "height": 256,
+      "bytes": 14380,
+      "sha256": "86a37ba2a99491e2659fe4d4a470ab9c33f550a3660dcec42d792c89de502e01",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "directional": "wardrobe",
+      "facing": "e",
+      "source": "turnaround-wardrobe-bunk.png"
+    },
+    {
+      "id": "bunk-s",
+      "file": "bunk-s.webp",
+      "width": 512,
+      "height": 256,
+      "bytes": 33798,
+      "sha256": "784c2c55f4687fde464c44dbf1ad8889a8e6e745a87a1d87afb92d8504e1e20a",
+      "kind": "object",
+      "cells": [
+        2,
+        1
+      ],
+      "directional": "bunk",
+      "facing": "s",
+      "source": "turnaround-wardrobe-bunk.png"
+    },
+    {
+      "id": "bunk-w",
+      "file": "bunk-w.webp",
+      "width": 256,
+      "height": 512,
+      "bytes": 46322,
+      "sha256": "c5812d1ed17800ce1917ad00ffaa8ac405e63b51776be37ceffcd52417f49caf",
+      "kind": "object",
+      "cells": [
+        1,
+        2
+      ],
+      "directional": "bunk",
+      "facing": "w",
+      "source": "turnaround-wardrobe-bunk.png"
+    },
+    {
+      "id": "bunk-n",
+      "file": "bunk-n.webp",
+      "width": 512,
+      "height": 256,
+      "bytes": 33338,
+      "sha256": "285998300b0d4aa8712ea1ae5392a41408326cf5b16c26f2566d646300765908",
+      "kind": "object",
+      "cells": [
+        2,
+        1
+      ],
+      "directional": "bunk",
+      "facing": "n",
+      "source": "turnaround-wardrobe-bunk.png"
+    },
+    {
+      "id": "bunk-e",
+      "file": "bunk-e.webp",
+      "width": 256,
+      "height": 512,
+      "bytes": 46584,
+      "sha256": "659697fcc5155936c2fb2a707a95fbca4bd0ba93db9be94734a3a979318edfa8",
+      "kind": "object",
+      "cells": [
+        1,
+        2
+      ],
+      "directional": "bunk",
+      "facing": "e",
+      "source": "turnaround-wardrobe-bunk.png"
+    },
+    {
+      "id": "floor-tiles",
+      "file": "floor-tiles.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 127546,
+      "sha256": "3b8f85c1397fbfe2da9d1ee0c6124d860d1320c3c0312ec5c8c1c0c53d4e1e44",
+      "kind": "surface",
+      "cells": [
+        2,
+        2
+      ],
+      "source": "mmm/mmmm2/stones2.png",
+      "note": "User supplied replacement; resized to the existing 2x2-cell 512px tile and encoded as WebP with original colors and alpha preserved."
+    },
+    {
+      "id": "floor-broken",
+      "file": "floor-broken.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 51788,
+      "sha256": "e415ad3d88dfa057dd0536b27b85d7272416ca6e16c64ced13975d057d47d21c",
+      "kind": "surface",
+      "cells": [
+        2,
+        2
+      ],
+      "source": "sheet-B-floors.png",
+      "note": "приглушён к кости: насыщенность и смешение с #E9E1C8"
+    },
+    {
+      "id": "floor-cave",
+      "file": "floor-cave.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 44618,
+      "sha256": "1034b736723e0b93baadaf59b7f4fff4b13fe0738331d7d1656c3ec705cdf06c",
+      "kind": "surface",
+      "cells": [
+        2,
+        2
+      ],
+      "source": "sheet-B-floors.png",
+      "note": "приглушён к кости: насыщенность и смешение с #E9E1C8"
+    },
+    {
+      "id": "floor-water",
+      "file": "floor-water.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 51656,
+      "sha256": "fc0eee369b93a0e69cf485ff241b84d467aa00e212617c4750018aeae91f2c1f",
+      "kind": "surface",
+      "cells": [
+        2,
+        2
+      ],
+      "source": "sheet-B-floors.png",
+      "note": "приглушён к кости: насыщенность и смешение с #E9E1C8"
+    }
+  ],
+  "generatedAt": "2026-10-01",
+  "source": "Codex image_gen по запросу владельца; эталон стиля — лист владельца (assets_02/style-owner.png); нарезка assets_02/slice.py"
+}

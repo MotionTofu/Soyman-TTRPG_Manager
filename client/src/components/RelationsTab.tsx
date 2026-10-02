@@ -413,7 +413,8 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
       {confirmDialog}
       {showAdd && (
       <>
-      <div className="row" style={{ position: "relative" }}>
+      <div className="relation-add">
+      <div className="row relation-search">
         <input
           placeholder="Найти существо, персонажа, фракцию, место или предмет…"
           value={query}
@@ -440,9 +441,10 @@ export function RelationsTab({ entityType, entityId, entityName, defaultSettingI
         onDrop={handleDrop}
       >
         <span className="muted">
-          Или перетащите сюда сущность из поиска — она добавится к выбранным
-          <span className="relation-drop-zone-mobile-hint"> · на телефоне — нажмите на результат поиска выше</span>
+          Или перетащите сюда сущность из поиска
+          <span className="relation-drop-zone-mobile-hint"> · на телефоне — нажмите на результат поиска</span>
         </span>
+      </div>
       </div>
 
       {defaultSettingId && (

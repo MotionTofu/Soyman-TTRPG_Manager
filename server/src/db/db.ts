@@ -7036,6 +7036,90 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
   if (!columnExists(database, "being_chapters", "participation")) {
     database.exec("ALTER TABLE being_chapters ADD COLUMN participation TEXT NOT NULL DEFAULT '{}'");
   }
+  // Профиль сеттинга (разбор 2026-10-01, Q8/Q10/Q11): паспорт на «Обзоре» и
+  // лёгкие записи «Мира». Словарь ключей — services/settingWorld.
+  if (!columnExists(database, "settings", "passport")) {
+    database.exec("ALTER TABLE settings ADD COLUMN passport TEXT NOT NULL DEFAULT '{}'");
+  }
+  if (!columnExists(database, "setting_entries", "fields")) {
+    database.exec("ALTER TABLE setting_entries ADD COLUMN fields TEXT NOT NULL DEFAULT '{}'");
+  }
+  if (!columnExists(database, "setting_entries", "visible_to_players")) {
+    database.exec("ALTER TABLE setting_entries ADD COLUMN visible_to_players INTEGER NOT NULL DEFAULT 0");
+  }
+  // Альбомы галереи (разбор 2026-10-02, Q20–Q22): владелец — сеттинг,
+  // кампания или никто (глобальный альбом). Внешние ключи, а не пара
+  // owner_type/owner_id: альбом уходит каскадом вместе с владельцем, а
+  // картинка удалённого альбома — в «Без альбома».
+  if (!tableExists(database, "albums")) {
+    database.exec(`CREATE TABLE albums (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      setting_id INTEGER REFERENCES settings(id) ON DELETE CASCADE,
+      campaign_id INTEGER REFERENCES campaigns(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+    database.exec("CREATE INDEX idx_albums_setting ON albums(setting_id)");
+    database.exec("CREATE INDEX idx_albums_campaign ON albums(campaign_id)");
+  }
+  if (!columnExists(database, "resources", "album_id")) {
+    database.exec("ALTER TABLE resources ADD COLUMN album_id INTEGER REFERENCES albums(id) ON DELETE SET NULL");
+  }
+  // Группы циклов (разбор 2026-10-02, Q23/Q29): набор циклов, который
+  // смотрят вместе в панели под осью. Цикл может быть в нескольких группах.
+  if (!tableExists(database, "setting_cycle_groups")) {
+    database.exec(`CREATE TABLE setting_cycle_groups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      setting_id INTEGER NOT NULL REFERENCES settings(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+    database.exec("CREATE INDEX idx_setting_cycle_groups_setting ON setting_cycle_groups(setting_id)");
+  }
+  if (!tableExists(database, "setting_cycle_group_members")) {
+    database.exec(`CREATE TABLE setting_cycle_group_members (
+      group_id INTEGER NOT NULL REFERENCES setting_cycle_groups(id) ON DELETE CASCADE,
+      cycle_id INTEGER NOT NULL REFERENCES setting_cycles(id) ON DELETE CASCADE,
+      PRIMARY KEY (group_id, cycle_id)
+    )`);
+  }
+  // Элемент цикла — отрезок с необязательным концом (разбор 2026-10-02, Q3 Б).
+  // Конец меньше начала — отрезок через конец оборота (Q7). Старые элементы
+  // один раз получают конец по прежнему правилу «до следующего минус день»
+  // (Q5), иначе «Сезоны» превратились бы в четыре засечки; одиночный элемент
+  // и раньше был засечкой и ею остаётся.
+  if (!columnExists(database, "setting_cycle_points", "day_end")) {
+    database.exec("ALTER TABLE setting_cycle_points ADD COLUMN day_end INTEGER");
+    const cycles = database.prepare("SELECT id, period_days FROM setting_cycles").all() as { id: number; period_days: number }[];
+    const points = database.prepare("SELECT id, day_offset FROM setting_cycle_points WHERE cycle_id = ? ORDER BY day_offset, position, id");
+    const setEnd = database.prepare("UPDATE setting_cycle_points SET day_end = ? WHERE id = ?");
+    for (const c of cycles) {
+      const list = points.all(c.id) as { id: number; day_offset: number }[];
+      if (list.length < 2 || c.period_days < 1) continue;
+      list.forEach((p, i) => {
+        const next = list[(i + 1) % list.length].day_offset;
+        setEnd.run((((next - 1) % c.period_days) + c.period_days) % c.period_days, p.id);
+      });
+    }
+  }
+  // Циклы и группы циклов кампании (разбор 2026-10-02, Q9, Q12): та же
+  // таблица, владелец — кампания; NULL — цикл сеттинга. Кампания видит
+  // циклы сеттинга и свои, сеттинг — только свои.
+  for (const table of ["setting_cycles", "setting_cycle_groups"]) {
+    if (!columnExists(database, table, "campaign_id")) {
+      database.exec(`ALTER TABLE ${table} ADD COLUMN campaign_id INTEGER REFERENCES campaigns(id) ON DELETE CASCADE`);
+    }
+  }
+  // Профиль сообщества (разбор 2026-10-02): «Карточка фракции» — тот же
+  // двигатель силы, что у существа (словарь — services/beingForce), и секрет.
+  if (!columnExists(database, "setting_communities", "force")) {
+    database.exec("ALTER TABLE setting_communities ADD COLUMN force TEXT NOT NULL DEFAULT '{}'");
+  }
+  if (!columnExists(database, "setting_communities", "secret")) {
+    database.exec("ALTER TABLE setting_communities ADD COLUMN secret TEXT NOT NULL DEFAULT ''");
+  }
 
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.

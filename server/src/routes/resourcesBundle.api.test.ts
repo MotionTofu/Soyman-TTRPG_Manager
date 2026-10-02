@@ -60,7 +60,7 @@ describe("Markdown ZIP bundles", () => {
     const again = await request(server.app).get(`/api/resources/${second.body.id}/markdown-content`).auth(gm, { type: "bearer" });
     expect(again.body.content).not.toContain(uid);
     expect(again.body.content).toContain("soyman:resource/");
-    const template=(await request(server.app).get('/api/workbooks/templates').auth(gm,{type:'bearer'})).body[0];
+    const template=(await request(server.app).post('/api/workbooks/templates').auth(gm,{type:'bearer'}).send({markdown:'# Тетрадь\n\n# Лист\n\n**Запись:** _[заполнить]_'})).body;
     const workbook=(await request(server.app).post('/api/workbooks/instances').auth(gm,{type:'bearer'}).send({template_id:template.id,title:'Тетрадь для восстановления'})).body;
     const book=(await request(server.app).get('/api/book-library/books').auth(gm,{type:'bearer'}).query({source_type:'resource',source_id:first.body.id})).body.books[0];
     await request(server.app).put(`/api/workbooks/books/${book.id}`).auth(gm,{type:'bearer'}).send({template_key:workbook.template.key,instance_id:workbook.id});

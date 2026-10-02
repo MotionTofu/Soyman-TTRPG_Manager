@@ -1,4 +1,9 @@
-import { artworkImage, surfaceImage, surfacePattern, texturedMask, wallPattern } from "./assets/artwork";
+import { CRYPT_GRIME, cryptSide } from "./assets/crypt";
+import { tokenTapeImage } from "./assets/tokenTape";
+import { drawCachedWalls } from "./assets/wallRasterCache";
+import { drawTerrainMaskTiles } from "./assets/terrainMaskDrawing";
+import { maskSampleCode } from "./terrainMaskTiles";
+import { artworkImage, doorImage, paperPattern, surfaceImage, surfacePattern, texturedMask, wallPattern, type ArtPack } from "./assets/artwork";
 // Рендер карты на canvas 2D. Цвета террейна — фиксированная спокойная
 // палитра (исключение как у Полотна §6 design_revision.md: бюджет акцента
 // на неё не тратится). Обрамление (фон, сетка, координаты, дороги) — из
@@ -664,6 +669,10 @@ export interface RenderOptions {
   ox: number;
   oy: number;
   showGrid: boolean;
+  gridColor?: string;
+  gridOpacity?: number;
+  gridLineWidth?: number;
+  gridLineStyle?: "solid" | "dashed";
   showCoords: boolean;
   // Подсветка клетки под курсором (мировые "x,y" или null).
   hover: string | null;
@@ -675,6 +684,8 @@ export interface RenderOptions {
   fonts?: CanvasFonts;
   /** Optional local artwork for the workspace; the classic renderer stays unchanged. */
   cartography?: boolean;
+  /** Чей рисунок у полов, стен и дверей: «Бумага и тушь» или «Склеп» (комикс-панк). */
+  artPack?: ArtPack;
   // Взгляд игрока (пакет A §6): секретное скрыто, trapped видна обычной дверью.
   playerView: boolean;
   /** Мастер видит полную карту под полупрозрачной подсказкой маски при редактировании. */
@@ -695,17 +706,33 @@ export function doorForView(
   return { kind: d.kind, hidden: false };
 }
 
+/** Половине предметов — пятно грязи рядом: вид, сдвиг, поворот и размер из хэша id, поэтому стабильны между кадрами. */
+function grimeFor(id: string): { key: string; dx: number; dy: number; angle: number; size: number } | null {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
+  const next = () => { h = Math.imul(h ^ (h >>> 15), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909); return ((h ^= h >>> 16) >>> 0) / 4294967296; };
+  if (next() < 0.5) return null;
+  const turn = next() * Math.PI * 2;
+  return { key: CRYPT_GRIME[Math.floor(next() * CRYPT_GRIME.length)], dx: Math.cos(turn) * 0.45, dy: Math.sin(turn) * 0.45, angle: next() * Math.PI * 2, size: 0.6 + next() * 0.5 };
+}
+
 export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvasH: number, o: RenderOptions): void {
   const { grid, width, height, model, scale, ox, oy, showGrid, showCoords, hover, chrome, playerView, selectedId } = o;
   const terrainFill = o.terrainFill ?? MAP_TERRAIN_FILL;
   const baseTransform = ctx.getTransform?.();
   const pixelRatio = baseTransform ? Math.max(Math.hypot(baseTransform.a, baseTransform.b), Math.hypot(baseTransform.c, baseTransform.d)) : 1;
   const fonts = o.fonts ?? readCanvasFonts();
+  const pack = o.artPack ?? "cartography";
   const dungeon = !!o.cartography && model.layers.some(layer => layer.visible && layer.kind === "terrain" && (layer.terrain.defaultCode === "wall" || (!layer.terrain.mask && [...layer.terrain.entries.values()].includes("wall"))));
   ctx.save();
   ctx.clearRect(0, 0, canvasW, canvasH);
   ctx.fillStyle = chrome.paper;
   ctx.fillRect(0, 0, canvasW, canvasH);
+
+  if (o.cartography && pack === "crypt" && ctx.canvas) {
+    const paper = paperPattern(ctx, scale, ox, oy);
+    if (paper) { ctx.fillStyle = paper; ctx.fillRect(0, 0, canvasW, canvasH); }
+  }
 
   const X = (wx: number) => ox + wx * scale;
   const Y = (wy: number) => oy + wy * scale;
@@ -775,7 +802,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
         const center = cellCenter(grid, x, y);
         const sx = Math.floor((center.cx - mask.origin.x) / mask.sampleSize);
         const sy = Math.floor((center.cy - mask.origin.y) / mask.sampleSize);
-        const painted = mask.entries.get(`${sx},${sy}`);
+        const painted = maskSampleCode(mask, sx, sy);
         if (painted) return painted;
       } else return terrain.entries.get(`${x},${y}`) ?? terrain.defaultCode;
     }
@@ -789,12 +816,13 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     if (!o.cartography || !ctx.canvas || typeof document === "undefined") return;
     let pattern = artworkPatterns.get(code);
     if (pattern === undefined) {
-      const image = surfaceImage(code, dungeon);
-      pattern = code === "wall" ? wallPattern(ctx, scale, ox, oy) : image ? surfacePattern(ctx, image, scale, ox, oy) : null;
+      const image = surfaceImage(code, dungeon, pack);
+      // В комикс-панке толща скалы — сплошная тушь, без штриховки.
+      pattern = code === "wall" ? (pack === "crypt" ? null : wallPattern(ctx, scale, ox, oy)) : image ? surfacePattern(ctx, image, scale, ox, oy, pack) : null;
       artworkPatterns.set(code, pattern);
     }
     if (!pattern) return;
-    ctx.save(); ctx.globalAlpha *= 0.65; ctx.fillStyle = pattern; fill(); ctx.restore();
+    ctx.save(); ctx.globalAlpha *= pack === "crypt" ? 1 : 0.65; ctx.fillStyle = pattern; fill(); ctx.restore();
   };
   const fillTerrainDefault = (defaultCode: string) => {
     ctx.fillStyle = terrainFill[defaultCode] ?? terrainFill.plain;
@@ -832,6 +860,10 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
 
   const fillTerrainMask = (mask: NonNullable<RenderTerrainLayer["terrain"]["mask"]>) => {
     if (mask.source ? mask.source.chunks.length === 0 : mask.entries.size === 0) return;
+    if (mask.source && ctx.canvas && typeof document !== "undefined") {
+      drawTerrainMaskTiles(ctx, mask, width, height, canvasW, canvasH, scale, ox, oy, pixelRatio, terrainFill, pack, !!o.cartography);
+      return;
+    }
     const bitmap = ctx.canvas && typeof document !== "undefined"
       ? terrainMaskBitmap(mask, width, height, o.terrainFill ?? MAP_TERRAIN_FILL) : null;
     if (bitmap) {
@@ -852,13 +884,13 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
         const codes = mask.source ? mask.source.codes.filter((code): code is string => !!code) : [...new Set(mask.entries.values())];
         const byImage = new Map<HTMLImageElement, string[]>();
         for (const code of new Set(codes)) {
-          const image = surfaceImage(code); if (!image) continue;
+          const image = surfaceImage(code, false, pack); if (!image) continue;
           const group = byImage.get(image) ?? []; group.push(code); byImage.set(image, group);
         }
         for (const [image, materials] of byImage) {
-          const texture = texturedMask(mask, materials, image, width, height);
+          const texture = texturedMask(mask, materials, image, width, height, pack);
           if (!texture) continue;
-          ctx.save(); ctx.globalAlpha *= 0.65;
+          ctx.save(); ctx.globalAlpha *= pack === "crypt" ? 1 : 0.65;
           ctx.drawImage(texture.canvas, X(texture.x), Y(texture.y), texture.w * scale, texture.h * scale); ctx.restore();
         }
       }
@@ -908,12 +940,26 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     if (!o.cartography || grid !== "square") return;
     const walls = terrain.entries;
     const at = (x: number, y: number) => walls.get(`${x},${y}`) ?? terrain.defaultCode;
-    const image = artworkImage("stone-wall");
+    const image = pack === "crypt" ? artworkImage("wall-masonry", "crypt") : artworkImage("stone-wall");
+    // Участок кладки повторяется вдоль ребра; толщина — 0.36 клетки, длина участка — по пропорции рисунка.
+    const masonry = pack === "crypt" && image ? ctx.createPattern(image, "repeat-x") : null;
     for (let y = vy0; y <= vy1; y++) for (let x = vx0; x <= vx1; x++) {
       if (at(x, y) !== "wall") continue;
       for (const [dx, dy, angle] of [[0, -1, 0], [1, 0, 90], [0, 1, 180], [-1, 0, 270]]) {
         const nx = x + dx, ny = y + dy;
         if (nx < 0 || ny < 0 || nx >= width || ny >= height || at(nx, ny) === "wall") continue;
+        if (pack === "crypt") {
+          const t = 0.36 * scale;
+          ctx.save(); ctx.translate(X(x + 0.5 + dx * 0.32), Y(y + 0.5 + dy * 0.32)); ctx.rotate(angle * Math.PI / 180);
+          if (masonry && image) {
+            const k = t / image.naturalHeight;
+            // Привязка к миру по длине ребра, иначе соседние участки начинаются одинаково.
+            masonry.setTransform(new DOMMatrix([k, 0, 0, k, -((angle % 180 ? y : x) * scale) % (image.naturalWidth * k), -t / 2]));
+            ctx.fillStyle = masonry; ctx.fillRect(-scale * 0.55, -t / 2, scale * 1.1, t);
+          } else { ctx.fillStyle = "#171717"; ctx.fillRect(-scale * 0.55, -t / 2, scale * 1.1, t); }
+          ctx.restore();
+          continue;
+        }
         ctx.save(); ctx.translate(X(x + 0.5 + dx * 0.36), Y(y + 0.5 + dy * 0.36)); ctx.rotate(angle * Math.PI / 180);
         ctx.fillStyle = "#a49678"; ctx.fillRect(-scale * 0.52, -scale * 0.15, scale * 1.04, scale * 0.3);
         if (image) ctx.drawImage(image, -scale * 0.52, -scale * 0.15, scale * 1.04, scale * 0.3);
@@ -1017,14 +1063,15 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
 
   const strokeFreePath = (path: RenderPath) => {
     if (!path.nodes || path.nodes.length < 2) return;
+    const nodes = path.closed ? [...path.nodes, path.nodes[0]] : path.nodes;
     const baseWidth = path.width ?? 0.22;
-    const firstWidth = path.nodes[0].width ?? baseWidth;
-    const varyingWidth = path.nodes.some((node) => (node.width ?? baseWidth) !== firstWidth);
+    const firstWidth = nodes[0].width ?? baseWidth;
+    const varyingWidth = nodes.some((node) => (node.width ?? baseWidth) !== firstWidth);
     ctx.save();
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     if (varyingWidth) {
-      const samples = flattenSplineWithWidths(path.nodes, baseWidth, 3 / scale);
+      const samples = flattenSplineWithWidths(nodes, baseWidth, 3 / scale);
       const strokeSamples = (color: string, multiplier: number) => {
         ctx.strokeStyle = color;
         for (let index = 1; index < samples.length; index++) {
@@ -1042,11 +1089,11 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       return;
     }
     ctx.beginPath();
-    path.nodes.forEach((node, index) => {
+    nodes.forEach((node, index) => {
       if (index === 0) {
         ctx.moveTo(X(node.position.x), Y(node.position.y));
       } else {
-        const previous = path.nodes![index - 1];
+        const previous = nodes[index - 1];
         if (previous.out && node.in) {
           const c1 = previous.out;
           const c2 = node.in;
@@ -1204,10 +1251,12 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       const ph = horizontal ? Math.max(3, scale * 0.34) : scale * 0.72;
       const qx = X(px) - pw / 2;
       const qy = Y(py) - ph / 2;
-      const doorArt = o.cartography && kind === "door" && !d.secret ? artworkImage("wood-door") : null;
+      const doorArt = o.cartography ? doorImage(d.secret ? "secret" : kind, pack) : null;
       if (doorArt) {
         ctx.save(); ctx.translate(X(px), Y(py)); if (!horizontal) ctx.rotate(Math.PI / 2);
-        ctx.drawImage(doorArt, -scale * 0.5, -scale * 0.14, scale, scale * 0.28); ctx.restore();
+        if (pack === "crypt") ctx.drawImage(doorArt, -scale * 0.5, -scale * 0.5, scale, scale); // проём нарисован с обрубками стены
+        else ctx.drawImage(doorArt, -scale * 0.5, -scale * 0.14, scale, scale * 0.28);
+        ctx.restore();
       }
       ctx.fillStyle = MAP_DOOR_FILL[kind];
       if (!doorArt) ctx.fillRect(qx, qy, pw, ph);
@@ -1443,14 +1492,11 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     ctx.restore();
   };
 
-  // --- 3A: композиция строго по document.layers[] (§2–3, §75).
-  // Первый слой — самый нижний, последний — самый верхний. Hidden — именно
-  // skip (§21). Opacity — умножением на весь content слоя (§22–23).
-  // Locked на изображение не влияет. Grid/coords — глобальный оверлей ПОСЛЕ
-  // всех document layers (§19, intentional delta), editor overlays — после.
+  // Keep layer order within each pass; grid separates terrain/paths from foreground artwork.
   let hasTerrainSurface = false;
-  for (const layer of model.layers) {
-    if (!layer.visible) continue;
+  const tokenDraws: (() => void)[] = [];
+  const drawLayer = (layer: MapRenderModel["layers"][number]) => {
+    if (!layer.visible) return;
     ctx.save();
     ctx.globalAlpha *= layer.opacity;
     if (layer.kind === "terrain") {
@@ -1468,8 +1514,14 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     } else if (layer.kind === "path") {
       // paths[] order = render order (§14): реки отдельно ниже дорог НЕ
       // фиксируются — порядок задают сами слои (migrated: river-слой ниже).
-      for (const p of layer.paths) {
-        if (p.nodes) strokeFreePath(p);
+      for (let i = 0; i < layer.paths.length; i++) {
+        const p = layer.paths[i];
+        if (p.kind === "wall" && p.nodes) {
+          let end = i + 1;
+          while (end < layer.paths.length && layer.paths[end].kind === "wall" && layer.paths[end].nodes) end++;
+          drawCachedWalls(ctx, layer.paths.slice(i, end), scale, ox, oy, canvasW, canvasH, pixelRatio); i = end - 1;
+        }
+        else if (p.nodes) strokeFreePath(p);
         else if (p.kind === "river") strokeRivers(p.cells);
         else strokeRoads(p.cells);
       }
@@ -1486,6 +1538,8 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
           else if (it.kind === "token" && (!playerView || it.token.sourceRef === null)) {
             // Only the GM receives transient source presentation data; the
             // player projection sends detached tokens with resolved labels.
+            tokenDraws.push(() => {
+            ctx.save(); ctx.globalAlpha *= layer.opacity;
             const token = it.token;
             const radius = token.size * scale / 2;
             const tx = X(token.position.x), ty = Y(token.position.y);
@@ -1514,10 +1568,33 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
             if (!portrait) ctx.fillText(it.display?.state === "missing" ? "?" : token.sourceRef?.kind === "location" || token.appearance.visual.type === "builtin" && token.appearance.visual.key === "location" ? "⌂" : "●", 0, 0);
             if (selectedId === token.id) { ctx.strokeStyle = "#ff3e91"; ctx.lineWidth = 3; ctx.strokeRect(-radius - 3, -radius - 3, radius * 2 + 6, radius * 2 + 6); }
             ctx.restore();
-            ctx.font = `12px ${fonts.label}`;
+            ctx.save();
+            ctx.translate(tx, ty + radius);
+            let tiltSeed = 2166136261;
+            for (const char of token.id) tiltSeed = Math.imul(tiltSeed ^ char.charCodeAt(0), 16777619);
+            ctx.rotate((((tiltSeed >>> 0) / 4294967295) * 12 - 6) * Math.PI / 180);
+            // Label artwork uses a 200px token reference; camera zoom and token size scale it together.
+            const labelScale = Math.max(0.75, Math.min(2, token.size)) * scale / 200;
+            ctx.scale(labelScale, labelScale);
+            ctx.font = `700 24px ${fonts.label}`;
             ctx.textAlign = "center";
-            ctx.fillStyle = chrome.ink;
-            ctx.fillText(token.label.mode === "custom" ? token.label.text : it.display?.name ?? "Загрузка источника…", tx, ty + radius + 14, Math.max(80, radius * 5));
+            const name = token.label.mode === "custom" ? token.label.text : it.display?.name ?? "Загрузка источника…";
+            const measured = ctx.measureText(name).width;
+            const labelWidth = Math.max(96, Math.min(Number.isFinite(measured) ? measured + 48 : 200, 240));
+            const tape = tokenTapeImage();
+            const labelHeight = 48, left = -labelWidth / 2, top = -labelHeight / 2;
+            if (tape) {
+              const cap = 32, slice = 24;
+              ctx.drawImage(tape, 0, 0, slice, tape.naturalHeight, left, top, cap, labelHeight);
+              ctx.drawImage(tape, slice, 0, tape.naturalWidth - slice * 2, tape.naturalHeight, left + cap, top, labelWidth - cap * 2, labelHeight);
+              ctx.drawImage(tape, tape.naturalWidth - slice, 0, slice, tape.naturalHeight, left + labelWidth - cap, top, cap, labelHeight);
+            } else { ctx.fillStyle = "#f54291"; ctx.fillRect(left, top, labelWidth, labelHeight); }
+            ctx.fillStyle = "#171219";
+            ctx.textBaseline = "middle";
+            ctx.fillText(name, 0, 0, labelWidth - 40);
+            ctx.restore();
+            ctx.restore();
+            });
           }
           else if (it.kind === "start") drawStartFinish("start", it.start);
           else if (it.kind === "finish") drawStartFinish("finish", it.finish);
@@ -1528,8 +1605,26 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
         for (const l of layer.labels) drawLabel(l);
       }
     } else if (layer.kind === "object" || layer.kind === "scatter") {
+      // Грязь «Склепа» под предметами: движок кладёт её сам, детерминированно по id (Q1 2026-10-01).
+      if (pack === "crypt" && layer.kind === "object" && scale >= 10) for (const { object } of layer.items) {
+        const grime = grimeFor(object.id);
+        const image = grime && artworkImage(grime.key, "crypt");
+        if (!grime || !image) continue;
+        const size = Math.max(Math.abs(object.transform.scale.x), Math.abs(object.transform.scale.y));
+        ctx.save();
+        ctx.translate(X(object.transform.position.x + grime.dx * size), Y(object.transform.position.y + grime.dy * size));
+        ctx.rotate(grime.angle); ctx.globalAlpha *= 0.85;
+        const g = grime.size * scale;
+        ctx.drawImage(image, -g / 2, -g / 2, g, g);
+        ctx.restore();
+      }
       for (const { object, asset } of layer.items) {
-        const { position, rotation, scale: objectScale } = object.transform;
+        const { position, scale: objectScale } = object.transform;
+        let { rotation } = object.transform;
+        // Поворотный предмет: вид по стороне, сама картинка не крутится.
+        const view = "views" in asset && asset.views ? asset.views[cryptSide(rotation)] : null;
+        if (view) rotation = 0;
+        const art = view ? view.image : "image" in asset ? asset.image : null;
         const margin = Math.max(Math.abs(objectScale.x), Math.abs(objectScale.y)) * scale * Math.SQRT2 / 2;
         const sx = X(position.x);
         const sy = Y(position.y);
@@ -1539,8 +1634,8 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
         ctx.rotate(rotation * Math.PI / 180);
         ctx.scale(scale * objectScale.x, scale * objectScale.y);
         if ("glyph" in asset) drawCachedMapSymbol(ctx, asset);
-        else if (asset.image) {
-          drawCachedMapImage(ctx, asset.image, Math.max(Math.abs(objectScale.x), Math.abs(objectScale.y)) * scale * pixelRatio);
+        else if (art) {
+          drawCachedMapImage(ctx, art, Math.max(Math.abs(objectScale.x), Math.abs(objectScale.y)) * scale * pixelRatio);
         }
         else {
           ctx.fillStyle = "#b9a68e";
@@ -1549,35 +1644,30 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
           ctx.lineWidth = 0.05;
           ctx.strokeRect(-0.5, -0.5, 1, 1);
         }
-        if (selectedId === object.id && !playerView) {
-          ctx.strokeStyle = chrome.ink;
-          ctx.lineWidth = 0.045;
-          ctx.strokeRect(-0.5, -0.5, 1, 1);
-        }
         ctx.restore();
+        if (selectedId === object.id && !playerView) {
+          ctx.save();
+          ctx.translate(sx, sy);
+          ctx.rotate(rotation * Math.PI / 180);
+          ctx.strokeStyle = chrome.ink;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(-scale * objectScale.x / 2, -scale * objectScale.y / 2, scale * objectScale.x, scale * objectScale.y);
+          ctx.restore();
+        }
       }
     }
     ctx.restore();
-  }
+  };
+  const belowGrid = (layer: MapRenderModel["layers"][number]) => layer.kind === "terrain" || layer.kind === "path";
+  for (const layer of model.layers) if (!showGrid || belowGrid(layer)) drawLayer(layer);
 
-  const exploration = model.exploration;
-  if (exploration?.enabled && (playerView || o.fogGuide)) {
-    ctx.save();
-    ctx.fillStyle = "#17252A";
-    ctx.globalAlpha = playerView ? 1 : 0.58;
-    for (let y = vy0; y <= vy1; y++) for (let x = vx0; x <= vx1; x++) {
-      if (exploration.revealedCells.has(`${x},${y}`)) continue;
-      traceCell(x, y);
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  // Сетка 1 px по инварианту.
+  // Grid thickness and dash lengths are in screen pixels, independent of zoom.
   if (showGrid) {
-    ctx.strokeStyle = chrome.line;
-    ctx.globalAlpha = 0.35;
-    ctx.lineWidth = 1;
+    ctx.save();
+    ctx.strokeStyle = o.gridColor ?? chrome.line;
+    ctx.globalAlpha = Math.max(0, Math.min(1, o.gridOpacity ?? 0.35));
+    ctx.lineWidth = Math.max(0.5, Math.min(4, o.gridLineWidth ?? 1));
+    ctx.setLineDash(o.gridLineStyle === "dashed" ? [6, 4] : []);
     ctx.beginPath();
     if (grid === "square") {
       for (let x = vx0; x <= vx1 + 1; x++) {
@@ -1598,8 +1688,10 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
         }
     }
     ctx.stroke();
-    ctx.globalAlpha = 1;
+    ctx.restore();
   }
+
+  if (showGrid) for (const layer of model.layers) if (!belowGrid(layer)) drawLayer(layer);
 
   // Координаты — голос Label (§1.5, P1-3): Oswald полужирным, капс по построению
   // (A1…), трекинг .08em; запасной стек — --font-ui. Только если клетка крупнее 18 px.
@@ -1620,6 +1712,21 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     if ("letterSpacing" in ctx) {
       (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = "0px";
     }
+  }
+
+  for (const drawToken of tokenDraws) drawToken();
+
+  const exploration = model.exploration;
+  if (exploration?.enabled && (playerView || o.fogGuide)) {
+    ctx.save();
+    ctx.fillStyle = "#17252A";
+    ctx.globalAlpha = playerView ? 1 : 0.58;
+    for (let y = vy0; y <= vy1; y++) for (let x = vx0; x <= vx1; x++) {
+      if (exploration.revealedCells.has(`${x},${y}`)) continue;
+      traceCell(x, y);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   // (drawLabel определён выше, рядом с остальными layer-проходами.)

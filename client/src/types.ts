@@ -148,6 +148,18 @@ export interface Setting {
   created_at: string;
   archived_at: string | null;
   imported_at: string | null;
+  /** Паспорт на «Обзоре» (разбор профиля сеттинга, Q2/Q8). Ключи — settingWorld.ts. */
+  passport?: SettingPassport;
+}
+
+export interface SettingPassport {
+  promise?: string;
+  premise?: string;
+  experience?: string;
+  tone?: string;
+  scale?: string;
+  not_this?: string;
+  signature?: string[];
 }
 
 /** Группа в списке — папка, которую владелец заводит сам. Таблицы у каждого
@@ -255,7 +267,19 @@ export interface SettingCycle {
   anchor_month: number;
   anchor_day: number;
   position: number;
+  /** Цикл кампании (разбор 2026-10-02, Q9); null — цикл сеттинга. */
+  campaign_id: number | null;
   points: SettingCyclePoint[];
+}
+
+/** Группа циклов — фильтр панели циклов в Хронике; цикл бывает в нескольких. */
+export interface SettingCycleGroup {
+  id: number;
+  name: string;
+  position: number;
+  /** Группа кампании (Q12); null — группа сеттинга. */
+  campaign_id: number | null;
+  cycle_ids: number[];
 }
 
 /** Именованная точка внутри оборота: «полнолуние» на 14-м дне. */
@@ -263,7 +287,10 @@ export interface SettingCyclePoint {
   id: number;
   cycle_id: number;
   name: string;
+  /** Начало — день внутри оборота, с нуля. */
   day_offset: number;
+  /** Конец включительно; null — отметка одного дня; меньше начала — через конец оборота. */
+  day_end: number | null;
   position: number;
 }
 
@@ -771,6 +798,19 @@ export interface Resource {
   // Only populated by GET /resources — computed on read via fs.stat, not
   // stored; null when there's no file_path or the file is missing.
   size_bytes?: number | null;
+  /** Альбом галереи (routes/albums.ts); null — «Без альбома». */
+  album_id?: number | null;
+}
+
+/** Альбом галереи: владелец — сеттинг, кампания или никто (глобальный). */
+export interface Album {
+  id: number;
+  setting_id: number | null;
+  campaign_id: number | null;
+  name: string;
+  position: number;
+  setting_name?: string | null;
+  campaign_name?: string | null;
 }
 
 export interface PlaylistItem {
@@ -1025,6 +1065,9 @@ export interface CommunityMemberBeing extends SettingBeing {
 }
 
 export interface SettingCommunityDetail extends SettingCommunity {
+  /** «Карточка фракции»: двигатель силы (словарь — beingForce) и секрет. */
+  force?: BeingForce;
+  secret?: string;
   members: CommunityMemberBeing[];
   children: SettingCommunity[];
   ancestors: { id: number; name: string }[];
@@ -1625,12 +1668,15 @@ export interface InitiativeEntry {
 
 export type InitiativeKind = "creature" | "lair" | "environment" | "custom";
 
+/** Лёгкая запись «Мира» (Q3/Q10). `notes` — «Задумки», только для Мастера. */
 export interface SettingEntry {
   id: number;
   setting_id: number;
-  category: "notes";
+  category: string;
   title: string;
   content: string;
+  fields: Record<string, string>;
+  visible_to_players: number;
   created_at: string;
 }
 

@@ -14,8 +14,15 @@ export interface TerrainMaskRaster {
 const MAX_RASTER_SIDE = 1024;
 const MAX_RASTER_SAMPLES = 1024 * 1024;
 
-function colorBytes(hex: string): [number, number, number] {
-  return [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
+function colorBytes(hex: string): [number, number, number, number] {
+  return [...[1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16)), hex.length === 9 ? Number.parseInt(hex.slice(7, 9), 16) : 255] as [number, number, number, number];
+}
+
+/** Shared by whole-mask export and incremental tiles, with world-anchored grain. */
+export function terrainMaskPixel(code: string, x: number, y: number, colors: Readonly<Record<string, string>>, textured = false) {
+  const [r, g, b, alpha] = colorBytes(colors[code] ?? colors.plain ?? "#ffffff");
+  const delta = textured ? textureDelta(code, x, y) : 0;
+  return [r + delta, g + delta, b + delta, alpha];
 }
 
 /** One pixel per painted sample. Canvas scaling softens the border between samples. */
@@ -57,7 +64,7 @@ export function buildTerrainMaskRaster(
   const height = maxSY - minSY + 2;
   if (width > MAX_RASTER_SIDE || height > MAX_RASTER_SIDE || width * height > MAX_RASTER_SAMPLES) return null;
   const pixels = new Uint8ClampedArray(width * height * 4);
-  const colorCache = new Map<string, [number, number, number]>();
+  const colorCache = new Map<string, [number, number, number, number]>();
   const write = (sx: number, sy: number, code: string, textureSX = sx, textureSY = sy) => {
     const offset = ((sy - minSY) * width + sx - minSX) * 4;
     let rgb = colorCache.get(code);
@@ -65,12 +72,12 @@ export function buildTerrainMaskRaster(
       rgb = colorBytes(colors[code] ?? colors.plain);
       colorCache.set(code, rgb);
     }
-    const [r, g, b] = rgb;
+    const [r, g, b, alpha] = rgb;
     const delta = textured ? textureDelta(code, textureSX, textureSY) : 0;
     pixels[offset] = r + delta;
     pixels[offset + 1] = g + delta;
     pixels[offset + 2] = b + delta;
-    pixels[offset + 3] = 255;
+    pixels[offset + 3] = alpha;
   };
   eachSample(write);
 

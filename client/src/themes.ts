@@ -44,7 +44,7 @@ function relLuminance(hex: string): number {
   const [r, g, b] = hexToRgb(hex).map((v) => v / 255);
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
-function pickTextOn(hex: string): string {
+export function pickTextOn(hex: string): string {
   return relLuminance(hex) > 0.55 ? "#181818" : "#ffffff";
 }
 // Capsule (calendar dot / status badge) colors: a light, desaturated

@@ -25,6 +25,8 @@ import { TOOL_LABELS, toolLayerKind, addLabel, quantize, removeSelection, type W
 import { CATALOG_TOOLS, TOOL_SETS, TOOL_SET_LABELS, initialToolSet, rememberToolSet, toolsOf, type ToolSet } from "../maps/workspace/toolSets";
 import { useWorkspaceDocument } from "../maps/workspace/useWorkspaceDocument";
 import { useWorkspaceGestures, type Gesture } from "../maps/workspace/useWorkspaceGestures";
+import { removeSelections } from "../maps/workspace/multiSelection";
+import { paintCellShapes, selectedRoomShapes } from "../maps/workspace/cellPainting";
 import { useWindowKeys } from "../maps/workspace/useWindowKeys";
 import { useMapCamera } from "../maps/editor/hooks/useMapCamera";
 import { createTerrainMaskLayer, createPathLayer, createScatterLayer, createTerrainLayer, createGameplayLayer, createLabelLayer, createObjectLayer, moveLayer } from "../maps/core/mutations/layers";
@@ -51,7 +53,11 @@ export function MapWorkspacePage() {
   const [toolSet, setToolSet] = useState<ToolSet>("dungeon");
   const [tool, setTool] = useState<WorkspaceTool>("select");
   const [activeLayer, setActiveLayer] = useState("");
-  const [selection, setSelection] = useState<WorkspaceSelection | null>(null);
+  const [selections, setSelections] = useState<WorkspaceSelection[]>([]);
+  const selection = selections.length === 1 ? selections[0] : null;
+  const setSelection = (entry: WorkspaceSelection | null) => setSelections(entry ? [entry] : []);
+  const [gridLineWidth, setGridLineWidth] = useState(1), [gridLineStyle, setGridLineStyle] = useState<"solid" | "dashed">("solid");
+  const [gridColor, setGridColor] = useState("#000000"), [gridOpacity, setGridOpacity] = useState(0.35);
   const [showGrid, setShowGrid] = useState(true), [snap, setSnap] = useState(true);
   const [settings, setSettings] = useState<BrushSettings>({ material: "stone", symbol: MAP_SYMBOL_ASSETS[0].id, orientation: 0, radius: 2, lineWidth: 0.3,
     scatterProfile: SCATTER_PROFILES[2].key, density: 0.8, scatterSize: 1, scatterSeed: 1742 });
@@ -84,7 +90,7 @@ export function MapWorkspacePage() {
     center: () => { const rect = wrapRef.current?.getBoundingClientRect(); return { x: ((rect?.width ?? 0) / 2 - camera.camRef.current.ox) / camera.camRef.current.scale,
       y: ((rect?.height ?? 0) / 2 - camera.camRef.current.oy) / camera.camRef.current.scale }; },
     commit, onPlaced: (tokenId, layerId) => { setTool("select"); setActiveLayer(layerId); setSelection({ id: tokenId, layerId, kind: "token" }); }, onError: showError });
-  const gestures = useWorkspaceGestures({ doc, gesture, space, camera, tool, activeLayer, setActiveLayer, snap, settings, selection, setSelection, placement,
+  const gestures = useWorkspaceGestures({ doc, gesture, space, camera, tool, activeLayer, setActiveLayer, snap, settings, selection, setSelection, selections, setSelections, placement,
     busy: leaving || !!label || generatorOpen, onLabel: (position, layerId) => setLabel({ position, layerId, text: "" }) });
   const { finishGesture } = gestures;
   const placementActions = useRef({ place: (_source: PlacementSource) => {}, preview: (_source: PlacementSource) => {} });
@@ -114,6 +120,7 @@ export function MapWorkspacePage() {
     const current = documentRef.current;
     if (!current || next === "select") return;
     const kind = toolLayerKind(next), matches = (entry: MapDocumentV6["layers"][number]) => entry.kind === kind &&
+      (next !== "wall" || entry.name === "Стены") &&
       (entry.kind !== "terrain" || next === "eraser" || entry.representation === (next === "surface" ? "mask" : "cells"));
     const layer = current.layers.find((entry) => entry.id === activeLayer);
     if (layer && matches(layer)) return;
@@ -123,17 +130,18 @@ export function MapWorkspacePage() {
     else if (next === "surface" || next === "road" || next === "river" || next === "scatter") {
       if (next === "surface" && current.grid?.type !== "square") { doc.setActionError("Плавные поверхности пока доступны для квадратной сетки"); return; }
       addLayer(next === "surface" ? "mask" : next === "scatter" ? "scatter" : "path");
-    } else if (next === "asset") addLayer("object");
+    } else if (next === "wall") addLayer("path", "Стены");
+    else if (next === "asset") addLayer("object");
     else setActiveLayer("");
   }
   function chooseToolSet(next: ToolSet) {
     setToolSet(next); rememberToolSet(mapId, next);
     if (!toolsOf(next).includes(tool)) chooseTool("select");
   }
-  function addLayer(kind: NewLayerKind) {
+  function addLayer(kind: NewLayerKind, name = NEW_LAYERS[kind]) {
     finishGesture(); const layerId = crypto.randomUUID();
     commit((before) => editGeometry(before, (view) => {
-      const result = LAYER_CREATORS[kind](view, { id: layerId, name: NEW_LAYERS[kind] });
+      const result = LAYER_CREATORS[kind](view, { id: layerId, name });
       if (!result.ok || kind !== "mask") return result;
       const lastTerrain = view.layers.findLastIndex((layer) => layer.kind === "terrain");
       return moveLayer(result.document, layerId, lastTerrain + 1);
@@ -156,6 +164,9 @@ export function MapWorkspacePage() {
     layerStroke.current = false; history.commitStroke(); autosave.schedule();
   }
   function remove(target: WorkspaceSelection) { finishGesture(); commit((before) => removeSelection(before, target)); setSelection(null); }
+  function paintRooms(clear: boolean) {
+    finishGesture(); commit(before => paintCellShapes(before, activeLayer, selectedRoomShapes(before, selections), clear ? null : settings.material));
+  }
 
   useWindowKeys({
     down: (event) => {
@@ -163,6 +174,7 @@ export function MapWorkspacePage() {
       if (event.code === "Space") { event.preventDefault(); space.current = true; }
       if (event.key === "Escape") { placement.cancel(); setDragGhost(null); finishGesture(true); setSelection(null); }
       if (disabled || leaving || autosave.status.kind === "conflict") return;
+      if (event.key === "Enter" && gestures.wallDraft) { event.preventDefault(); gestures.finishWall(); return; }
       if (placement.pending && ["Enter", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
         event.preventDefault();
         if (event.key === "Enter") placement.confirm();
@@ -173,7 +185,9 @@ export function MapWorkspacePage() {
       if ((event.ctrlKey || event.metaKey) && (event.key.toLowerCase() === "z" || event.key.toLowerCase() === "y")) {
         event.preventDefault(); placement.cancel(); finishGesture(); if (event.shiftKey || event.key.toLowerCase() === "y") history.redo(); else history.undo();
       }
-      if ((event.key === "Delete" || event.key === "Backspace") && selection) { event.preventDefault(); remove(selection); }
+      if ((event.key === "Delete" || event.key === "Backspace") && selections.length) {
+        event.preventDefault(); finishGesture(); commit(before => removeSelections(before, selections)); setSelections([]);
+      }
     },
     up: (event) => { if (event.code === "Space") space.current = false; },
     blur: () => { space.current = false; finishGesture(true); },
@@ -262,9 +276,20 @@ export function MapWorkspacePage() {
           <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M9 4 3 10l6 6M3 10h11c8 0 8 11 0 11" /></svg></button>
         <button type="button" className="workspace-icon-button" aria-label="Повторить" title="Повторить · Ctrl+Y" disabled={!history.canRedo || disabled || leaving} onClick={() => { finishGesture(); history.redo(); }}>
           <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="m15 4 6 6-6 6M21 10H10c-8 0-8 11 0 11" /></svg></button>
+        <WorkspaceMenu label="СЕТКА ▾" title="Сетка">
+          <label>Видимость · {Math.round(gridOpacity * 100)}%<input aria-label="Видимость сетки" type="range" min="0" max="100" value={Math.round(gridOpacity * 100)} onChange={event => setGridOpacity(Number(event.target.value) / 100)} /></label>
+          <label>Толщина · {gridLineWidth} px<input aria-label="Толщина линий сетки" type="range" min="0.5" max="4" step="0.5" value={gridLineWidth} onChange={event => setGridLineWidth(Number(event.target.value))} /></label>
+          <fieldset><legend>Линии сетки</legend>
+            <label><input type="radio" name="grid-line-style" checked={gridLineStyle === "solid"} onChange={() => setGridLineStyle("solid")} />Сплошная</label>
+            <label><input type="radio" name="grid-line-style" checked={gridLineStyle === "dashed"} onChange={() => setGridLineStyle("dashed")} />Пунктирная</label>
+          </fieldset>
+          <fieldset><legend>Цвет сетки</legend>
+            {([["#000000", "Чёрная"], ["#ffffff", "Белая"], ["#ff3e91", "Розовая"], ["#ffe14a", "Жёлтая"]] as const).map(([color, name]) => <label key={color}><input type="radio" name="grid-color" checked={gridColor === color} onChange={() => setGridColor(color)} />{name}</label>)}
+          </fieldset>
+        </WorkspaceMenu>
         <WorkspaceMenu label="Карта ▾" title="Карта" className="workspace-map-menu">
           <fieldset disabled={disabled || leaving}><legend>Оформление</legend>
-            {([["paper-ink", "Бумага и тушь"], ["blueprint", "Чертёж"]] as [MapDrawingStyle, string][]).map(([style, name]) => <label key={style}>
+            {([["comic-punk", "Комикс-панк"], ["paper-ink", "Бумага и тушь"], ["blueprint", "Чертёж"]] as [MapDrawingStyle, string][]).map(([style, name]) => <label key={style}>
               <input type="radio" name="workspace-style" checked={(document.appearance?.style ?? "paper-ink") === style}
                 onChange={() => commit((before) => ({ ...before, appearance: { style } }))} />{name}</label>)}
           </fieldset>
@@ -278,17 +303,17 @@ export function MapWorkspacePage() {
     </header>
 
     <div className="workspace-editor-body">
-      {CATALOG_TOOLS.includes(tool) && <CatalogPanel tool={tool} toolSet={toolSet} symbol={settings.symbol} material={settings.material} scatterProfile={settings.scatterProfile}
+      {CATALOG_TOOLS.includes(tool) && <CatalogPanel tool={tool} toolSet={toolSet} comicPunk={document.appearance?.style === "comic-punk"} symbol={settings.symbol} material={settings.material} scatterProfile={settings.scatterProfile}
         onSymbol={(symbol) => { setSettings((current) => ({ ...current, symbol })); canvasRef.current?.focus(); }}
         onMaterial={(material) => { finishGesture(); setSettings((current) => ({ ...current, material })); canvasRef.current?.focus(); }}
         onScatter={(scatterProfile) => { finishGesture(); setSettings((current) => ({ ...current, scatterProfile })); canvasRef.current?.focus(); }} />}
 
       <div className="workspace-editor-stage" ref={wrapRef}>
-        <WorkspaceCanvas map={map} document={document} camera={camera.cam} canvasRef={canvasRef} wrapRef={wrapRef} showGrid={showGrid} selectedId={selection?.id ?? null} preview={gestures.preview}
-          draftLine={gestures.draftLine} brush={gestures.brushCursor && (tool === "surface" || tool === "scatter" || maskEraser) ? { ...gestures.brushCursor, radius: settings.radius } : null}
+        <WorkspaceCanvas map={map} document={document} camera={camera.cam} canvasRef={canvasRef} wrapRef={wrapRef} showGrid={showGrid} gridColor={gridColor} gridOpacity={gridOpacity} gridLineWidth={gridLineWidth} gridLineStyle={gridLineStyle} selectedId={selection?.id ?? null} selectedNodes={gestures.selectedNodes} preview={gestures.preview}
+          cellBrush={gestures.cellBrush} wallDraft={gestures.wallDraft} onDoubleClick={() => gestures.finishWall()} selections={selections} marquee={gestures.marquee} assetPreview={gestures.assetPreview} draftLine={gestures.draftLine} brush={gestures.brushCursor && (tool === "surface" || tool === "scatter" || maskEraser) ? { ...gestures.brushCursor, radius: settings.radius } : null}
           onPointerLeave={gestures.leave} displays={displays} ghost={placement.pending?.position ?? dragGhost} onDragOver={dragOver} onDragLeave={() => setDragGhost(null)} onDrop={drop}
           onPointerDown={gestures.down} onPointerMove={gestures.move} onPointerUp={gestures.up} onPointerCancel={gestures.cancel} />
-        <div className="workspace-editor-hint" aria-hidden="true"><strong>{TOOL_LABELS[tool]}{active ? ` · ${layerName(active)}` : ""}</strong><span>Пробел — сдвиг</span><span>Esc — отмена</span></div>
+        <div className="workspace-editor-hint" aria-hidden="true"><strong>{TOOL_LABELS[tool]}{active ? ` · ${layerName(active)}` : ""}</strong>{tool === "select" && <span>{selections.length > 1 ? `Выбрано: ${selections.length} · ` : ""}Рамка · Shift — добавить</span>}<span>Пробел — сдвиг</span><span>Esc — отмена</span></div>
         <div className="workspace-editor-camera">
           <button type="button" aria-label="Уменьшить" onClick={() => camera.zoomBy(1 / 1.25)}>−</button>
           <button type="button" aria-label="Увеличить" onClick={() => camera.zoomBy(1.25)}>+</button>
@@ -297,6 +322,12 @@ export function MapWorkspacePage() {
         {placement.pending && <div className="workspace-editor-placement" role="status">
           <span>{placement.pending.source ? `${placement.pending.source.name}: выберите точку · стрелки и Enter` : "Загрузка источника…"}</span>
           <button disabled={!placement.pending.source} onClick={() => placement.confirm()}>Поставить здесь</button><button onClick={placement.cancel}>Отмена</button>
+        </div>}
+        {gestures.wallDraft && <div className="workspace-editor-placement" role="status">
+          <span>Клик — точка · Enter — закончить · Esc — отменить</span>
+          <button disabled={gestures.wallDraft.pointCount < 2} onClick={() => gestures.finishWall()}>{gestures.wallDraft.kind === "wall" ? "Завершить стену" : "Завершить линию"}</button>
+          <button disabled={!gestures.canCloseWall} onClick={() => gestures.finishWall(true)}>Замкнуть</button>
+          <button onClick={() => finishGesture(true)}>Отмена</button>
         </div>}
         {notice && <div className="workspace-editor-notice" role="alert">
           <p>{notice}</p>
@@ -309,12 +340,15 @@ export function MapWorkspacePage() {
       </div>
 
       <aside className="workspace-inspector" aria-label="Инспектор">
-        {selection && !disabled && (selection.kind === "path" || selection.kind === "scatter")
-          ? <ArtProperties document={document} selection={selection} commit={commit} onClose={() => setSelection(null)} onDelete={() => remove(selection)} />
-          : selection && !disabled
+        {selection && tool === "select" && !disabled && (selection.kind === "path" || selection.kind === "scatter")
+          ? <ArtProperties document={document} selection={selection} selectedNodes={gestures.selectedNodes} onSelectedNodes={gestures.setSelectedNodes} commit={commit} onClose={() => setSelection(null)} onDelete={() => remove(selection)} />
+          : selection && tool === "select" && !disabled
             ? <WorkspaceProperties document={document} selection={selection} commit={commit} onClose={() => setSelection(null)} onDelete={() => remove(selection)} display={selectedToken ?? undefined}
               onPreview={() => { if (selectedToken?.state === "active" && selectedToken.id) setEntityPreview({ type: selectedToken.sourceRef.kind, id: selectedToken.id }); }} />
-            : <ToolSettings tool={tool} settings={settings} maskEraser={maskEraser} onChange={(patch) => { finishGesture(); setSettings((current) => ({ ...current, ...patch })); }} />}
+            : <ToolSettings tool={tool} settings={settings} maskEraser={maskEraser}
+              selectedRoomCount={selectedRoomShapes(document, selections).length} roomActionsDisabled={disabled || leaving || active?.kind !== "terrain" || active.representation !== "cells" || active.locked || !active.visible || autosave.status.kind === "conflict"}
+              onPaintRooms={() => paintRooms(false)} onClearRooms={() => paintRooms(true)}
+              onChange={(patch) => { if (gesture.current?.type !== "wall-line" || patch.wallWidth === undefined && patch.lineWidth === undefined) finishGesture(); setSettings((current) => ({ ...current, ...patch })); }} />}
         <LayersPanel document={document} activeLayer={activeLayer} disabled={disabled || leaving} onActivate={(layerId) => { finishGesture(); setActiveLayer(layerId); }}
           commit={commit} live={liveEdit} settle={settleEdit} onAdd={addLayer} confirm={confirm} />
       </aside>
@@ -328,8 +362,8 @@ export function MapWorkspacePage() {
           {[...document.layers].reverse().map((layer) => <option key={layer.id} value={layer.id}>{layerName(layer)}{layer.locked ? " · заблокирован" : ""}</option>)}
         </select></label>
       <span className="workspace-status-cell">{gestures.cursorCell ? `Клетка ${gestures.cursorCell}` : ""}</span>
-      <label><input type="checkbox" checked={showGrid} onChange={(event) => setShowGrid(event.target.checked)} />Сетка</label>
-      <label><input type="checkbox" checked={snap} onChange={(event) => { finishGesture(); setSnap(event.target.checked); }} />Привязка</label>
+      <label><input type="checkbox" checked={showGrid} onChange={event => setShowGrid(event.target.checked)} />Показывать сетку</label>
+      <label><input type="checkbox" checked={snap} onChange={event => { finishGesture(); setSnap(event.target.checked); }} />Привязывать к сетке</label>
       <span className="workspace-status-hint">{renderWarning ? "Часть изображения пока недоступна" : "Пробел + мышь — сдвиг · колесо — масштаб · Ctrl+Z — отменить"}</span>
     </footer>
 

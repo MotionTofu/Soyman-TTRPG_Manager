@@ -198,6 +198,12 @@ export function useMapAutosave<T = MapDocumentV5>({
   useEffect(() => {
     if (!map || !value) return;
     if (loadingRef.current || blocked || disabled || conflictRef.current) return;
+    // During a live stroke the next snapshot is deliberately unsettled. Mark
+    // dirty cheaply; completion already schedules saveLatest with the final value.
+    if (liveRef.current.isEditing?.()) {
+      setStatus(s => s.kind === "saving" || s.kind === "dirty" ? s : { kind: "dirty", at: s.at });
+      return;
+    }
     const docStr = serialize(value);
     const paramsStr = JSON.stringify(params);
     if (keyOf(docStr, paramsStr) === etalonRef.current && !inFlightRef.current) {

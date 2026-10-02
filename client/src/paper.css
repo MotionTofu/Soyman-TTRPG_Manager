@@ -111,7 +111,17 @@
   line-height: 1;
   text-transform: none;
 }
+/* Мазок кистью под именем — две трети его ширины, как на макете.
+   Пока спрятан везде (владелец, 2026-10-02): под именем встают метки. */
+.entity-page--paper .entity-page__title-row h1::after {
+  --stroke-h: 14px;
+  width: max(6rem, 62%);
+  margin-top: var(--sp-2);
+}
+.entity-page.entity-page--paper .entity-page__title-row h1::after { display: none; }
 .entity-page--paper > .tabs {
+  /* Вкладка на всю высоту (карта) не должна сплющивать язычки. */
+  flex-shrink: 0;
   gap: var(--sp-2);
   margin: 0 0 calc(-1 * var(--stack-gap, var(--sp-6)));
   padding: 0 var(--sp-6);
@@ -284,12 +294,15 @@
   font-size: var(--fs-body);
 }
 
-/* Ссылка-упоминание на бумаге: пунктир, не синий. */
-.paper-scope a.paper-link,
-.paper-facts a {
+/* Упоминания на бумаге — тот же маркер, что в тексте (.mention-link), а не
+   пунктир (владелец, 2026-10-01). Тёмная тема светлит текст маркера под
+   тёмный фон; бумага светлая, поэтому чернила возвращаются. */
+[data-theme-mode="dark"] .paper-scope .mention-link {
+  --mention-a: 30%;
   color: var(--paper-ink);
-  text-decoration: underline dotted rgb(31 26 20 / 0.6);
-  text-underline-offset: 3px;
+}
+.paper-scope a.paper-more {
+  color: var(--paper-ink);
 }
 
 .dossier__figure {
@@ -496,11 +509,10 @@
   color: var(--paper-ink);
   font-weight: 600;
 }
+/* Линия пером во всю ширину подписи; сам мазок — «Мазки» в skin. */
 .population__subtab[aria-selected="true"]::after {
-  content: "";
-  display: block;
-  height: 10px;
-  background: var(--skin-tab-marker) left center / 100% 100% no-repeat;
+  --stroke-h: 6px;
+  background: var(--paper-ink);
 }
 .population__body {
   display: flex;
@@ -823,17 +835,6 @@
   flex-direction: column;
   gap: var(--sp-3);
 }
-.pop-recent button {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--paper-ink);
-  font: inherit;
-  text-align: left;
-  text-decoration: underline dotted rgb(31 26 20 / 0.6);
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
 
 /* Карточка сообщества справа — на той же бумаге, что и карточка существа. */
 .population__aside > .card {
@@ -1005,4 +1006,62 @@
   font-size: var(--fs-h3);
   font-weight: 500;
   letter-spacing: 0.04em;
+}
+
+/* ── Профиль места (разбор 2026-10-02, доска 26) ─────────────────────── */
+
+/* Метки под именем на месте мазка: тип, путь, жанры. */
+.paper-ident-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3) var(--sp-5);
+  color: var(--paper-ink-soft);
+}
+/* Превью карты — прямоугольник, а не квадрат портрета. */
+.dossier__map {
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+.dossier__map img,
+.dossier__map .dossier__portrait-empty {
+  aspect-ratio: 4 / 3;
+}
+/* Шапка досье места — карточка места в рамке «За столом». */
+.place-card--page {
+  border: var(--card-border-width-strong) solid var(--paper-ink);
+  border-radius: 3px;
+  background: var(--paper-wash);
+}
+
+/* Вкладка на всю высоту окна (карта места): лист растягивается вниз. */
+.entity-page--paper.page-fill > .paper-sheet {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Лист события (доска 28): без вкладок, флаги строкой над текстами. */
+.event-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+}
+.editable-card-add {
+  align-self: flex-start;
+  border-style: dashed;
+}
+.event-sheet__flags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-5);
+  padding-bottom: var(--sp-5);
+  border-bottom: var(--card-border-width) solid var(--line);
+}
+.event-sheet__to {
+  margin-left: auto;
 }

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMapCamera } from "./useMapCamera";
 
 // Фаза 2G: камера берёт геометрию из документа (mapId + geom), не MapFull.
@@ -32,6 +32,7 @@ beforeEach(() => {
   localStorage.clear();
   vi.useRealTimers();
 });
+afterEach(() => vi.restoreAllMocks());
 
 describe("useMapCamera (Этап 1, smoke)", () => {
   it("восстанавливает камеру из localStorage при монтировании", () => {
@@ -64,15 +65,16 @@ describe("useMapCamera (Этап 1, smoke)", () => {
     expect(result.current.cam.scale).toBeGreaterThanOrEqual(4);
   });
 
-  it("wheel zoom держит точку под курсором и clamp 4..240", () => {
+  it("wheel zoom держит точку под курсором и clamp 4..240", async () => {
     const { wrapRef, canvasRef, listeners } = makeRefs();
     const { result } = renderHook(() => useMapCamera({ ...CAM_ARGS, wrapRef, canvasRef }));
     const wheel = listeners.get("wheel")!;
     expect(wheel).toBeDefined();
     const sBefore = result.current.cam.scale;
     const before = result.current.toWorld({ clientX: 200, clientY: 150 });
-    act(() => {
+    await act(async () => {
       wheel({ preventDefault: () => {}, clientX: 200, clientY: 150, deltaY: -500 });
+      await new Promise(requestAnimationFrame);
     });
     const after = result.current.toWorld({ clientX: 200, clientY: 150 });
     expect(after.wx).toBeCloseTo(before.wx, 9);
@@ -86,6 +88,40 @@ describe("useMapCamera (Этап 1, smoke)", () => {
       result.current.zoomBy(0.000001);
     });
     expect(result.current.cam.scale).toBe(4);
+  });
+
+  it("объединяет wheel за кадр, сохраняя разные якоря и порядок ограничения масштаба", () => {
+    let callback: FrameRequestCallback | undefined;
+    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation(cb => { callback = cb; return 17; });
+    localStorage.setItem("maps.cam.7", JSON.stringify({ scale: 120, ox: 10, oy: 20 }));
+    const { wrapRef, canvasRef, listeners } = makeRefs();
+    const { result } = renderHook(() => useMapCamera({ ...CAM_ARGS, wrapRef, canvasRef }));
+    const wheel = listeners.get("wheel")!, delta = Math.log(2) / Math.log(1.0015);
+    act(() => {
+      wheel({ preventDefault: () => {}, clientX: 200, clientY: 150, deltaY: -delta * 2 });
+      wheel({ preventDefault: () => {}, clientX: 300, clientY: 250, deltaY: delta });
+    });
+    expect(raf).toHaveBeenCalledTimes(1);
+    expect(result.current.cam).toEqual({ scale: 120, ox: 10, oy: 20 });
+    act(() => callback!(0));
+    expect(result.current.cam.scale).toBeCloseTo(120, 9);
+    expect(result.current.cam.ox).toBeCloseTo(60, 9);
+    expect(result.current.cam.oy).toBeCloseTo(70, 9);
+  });
+
+  it("отменяет отложенный wheel при переключении карты и размонтировании", () => {
+    const raf = vi.spyOn(window, "requestAnimationFrame").mockReturnValue(17);
+    const cancel = vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+    const { wrapRef, canvasRef, listeners } = makeRefs();
+    const { rerender, unmount } = renderHook(({ mapId }) => useMapCamera({ ...CAM_ARGS, mapId, wrapRef, canvasRef }), { initialProps: { mapId: 7 } });
+    const wheelEvent = { preventDefault: () => {}, clientX: 200, clientY: 150, deltaY: -500 };
+    act(() => listeners.get("wheel")!(wheelEvent));
+    rerender({ mapId: 8 });
+    expect(cancel).toHaveBeenCalledWith(17);
+    act(() => listeners.get("wheel")!(wheelEvent));
+    expect(raf).toHaveBeenCalledTimes(2);
+    unmount();
+    expect(cancel).toHaveBeenCalledTimes(2);
   });
 
   it("zoomBy идёт к центру и +/- симметричны", () => {

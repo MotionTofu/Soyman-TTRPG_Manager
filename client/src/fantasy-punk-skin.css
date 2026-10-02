@@ -78,15 +78,31 @@
   --skin-crescent: url("/ui/fantasy-punk/decorative/frames/card-corner-crescent.webp");
   --skin-shard: url("/ui/fantasy-punk/decorative/frames/shard-corner-right.webp");
   --skin-tab-marker: url("/ui/fantasy-punk/decorative/dividers/underline-acid-magenta.webp");
+  /* Мазки без растяжения: левый кончик, правый кончик, повторяемая середина
+     (порядок слоёв маски — см. «Мазки» ниже). Цвет — фон элемента. */
+  --skin-stroke-brush: url("/ui/fantasy-punk/decorative/strokes/brush-l.webp"), url("/ui/fantasy-punk/decorative/strokes/brush-r.webp"), url("/ui/fantasy-punk/decorative/strokes/brush-m.webp");
+  --skin-stroke-pen: url("/ui/fantasy-punk/decorative/strokes/pen-l.webp"), url("/ui/fantasy-punk/decorative/strokes/pen-r.webp"), url("/ui/fantasy-punk/decorative/strokes/pen-m.webp");
   /* Профиль на бумаге (paper.css): скотч на портрете, сургуч секрета. */
   --skin-tape: url("/ui/fantasy-punk/decorative/profile/tape.webp");
   --skin-seal: url("/ui/fantasy-punk/decorative/profile/seal.webp");
+  /* Рабочая тетрадь (workbook.css): обложка разворота, корешок, язычки листов, кружки готовности. */
+  --skin-wb-cover: url("/ui/fantasy-punk/decorative/workbook/cover.webp");
+  --skin-wb-spine: url("/ui/fantasy-punk/decorative/workbook/spine.webp");
+  --skin-wb-tab-paper: url("/ui/fantasy-punk/decorative/workbook/tab-paper.webp");
+  --skin-wb-tab-acid: url("/ui/fantasy-punk/decorative/workbook/tab-acid.webp");
+  --skin-wb-num-filled: url("/ui/fantasy-punk/decorative/workbook/num-filled.webp");
+  --skin-wb-num-current: url("/ui/fantasy-punk/decorative/workbook/num-current.webp");
+  --skin-wb-num-empty: url("/ui/fantasy-punk/decorative/workbook/num-empty.webp");
+  --skin-wb-empty-notebooks: url("/ui/fantasy-punk/decorative/workbook/empty-notebooks.webp");
+  --skin-wb-empty-notes: url("/ui/fantasy-punk/decorative/workbook/empty-notes.webp");
   --skin-fan-paper: url("/ui/fantasy-punk/semantic/card-buttons/card-fan-paper.webp");
   --skin-fan-acid: url("/ui/fantasy-punk/semantic/card-buttons/card-fan-acid.webp");
   --skin-edit-paper: url("/ui/sheet/card-edit-paper.webp");
   --skin-edit-acid: url("/ui/sheet/card-edit-acid.webp");
   --skin-chevron-down: url("/ui/fantasy-punk/semantic/ui-icons/chevron-down.webp");
   --skin-trash: url("/ui/fantasy-punk/semantic/ui-icons/trash.webp");
+  --skin-edit-pencil: url("/ui/fantasy-punk/semantic/ui-icons/edit-pencil.webp");
+  --skin-cross: url("/ui/fantasy-punk/semantic/ui-icons/cross.webp");
 
   --skin-paper-base: #e8e4da;
   /* Вуаль над фоновой бумагой: текстура на 30 % тише (владелец, 2026-09-25). */
@@ -463,6 +479,39 @@ body.sheet-fullscreen {
   font-weight: 700;
   box-shadow: none;
 }
+/* ---- Мазки (2026-10-01). Один рисунок на любую длину без растяжения:
+ * кончики стоят по краям в своей ширине (высота × --stroke-cap, округлено
+ * до пикселя — иначе на стыке слоёв маски проступает волосок), середина
+ * повторяется между ними по content-box. Место задаёт --stroke-img,
+ * --stroke-cap, --stroke-h и цвет фона; ширина — ширина элемента. ---- */
+.entity-page--paper .entity-page__title-row h1::after,
+.population__subtab[aria-selected="true"]::after,
+.workspace-panel-title::after {
+  --stroke-c: round(calc(var(--stroke-h) * var(--stroke-cap)), 1px);
+  content: "";
+  display: block;
+  box-sizing: border-box;
+  height: var(--stroke-h);
+  padding-inline: var(--stroke-c);
+  mask-image: var(--stroke-img);
+  mask-position: left center, right center, left center;
+  mask-size: var(--stroke-c) 100%, var(--stroke-c) 100%, auto 100%;
+  mask-repeat: no-repeat, no-repeat, round no-repeat;
+  mask-origin: border-box, border-box, content-box;
+  mask-clip: border-box, border-box, content-box;
+}
+/* Кисть: кончик 420 из 128 px высоты. Перо: 220 из 24. */
+.entity-page--paper .entity-page__title-row h1::after,
+.workspace-panel-title::after {
+  --stroke-img: var(--skin-stroke-brush);
+  --stroke-cap: 3.28;
+  background: linear-gradient(90deg, var(--skin-acid), var(--skin-magenta));
+}
+.population__subtab[aria-selected="true"]::after {
+  --stroke-img: var(--skin-stroke-pen);
+  --stroke-cap: 9.17;
+}
+
 /* Pending-item dot: tiny magenta accent, nothing else magenta on the sheet. */
 .dnd-tab-dot {
   background: var(--skin-magenta);

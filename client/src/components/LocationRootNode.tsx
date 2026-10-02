@@ -11,12 +11,8 @@ export interface LocationRootNodeData extends Record<string, unknown> {
   childCount: number;
   collapsed: boolean;
   hasMap: boolean;
-  /** Совпадение с поисковым запросом — координатная отметка, не акцент. */
-  match: boolean;
   /** Нет описания — долг мастера, подсвечивается приглушённо-красным. */
   noDesc: boolean;
-  /** Шаг вложенности: сколько уровней вниз видно; null — всё. */
-  depthSteps: number | null;
   onToggle: (id: number) => void;
   onCreateChild: (id: number) => void;
 }
@@ -35,7 +31,6 @@ export const LocationRootNode = memo(function LocationRootNode({
       style={{
         width: ROOT_NODE_W,
         border: "var(--card-border-width) solid var(--line)",
-        borderTop: d.match ? "3px solid var(--accent)" : "var(--card-border-width) solid var(--line)",
         borderRadius: 0,
         background: "var(--paper-2)",
         backgroundImage: "var(--card-body-texture)",
@@ -90,7 +85,7 @@ export const LocationRootNode = memo(function LocationRootNode({
           <NavIcon name="plus" />
         </button>
       </div>
-      {(d.kind || d.hasMap || d.noDesc || d.depthSteps != null) && (
+      {(d.kind || d.hasMap || d.noDesc) && (
         <div className="geography-root-node__meta">
           <span className="geography-root-node__kind">{d.kind || "—"}</span>
           {d.hasMap && (
@@ -99,11 +94,6 @@ export const LocationRootNode = memo(function LocationRootNode({
             </span>
           )}
           {d.noDesc && <span className="geography-root-node__nodesc">без описания</span>}
-          {d.depthSteps != null && (
-            <span className="geography-root-node__gap" title="Видно уровней вниз">
-              {d.depthSteps} ур.
-            </span>
-          )}
         </div>
       )}
       <Handle

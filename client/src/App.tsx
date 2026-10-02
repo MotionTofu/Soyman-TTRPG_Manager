@@ -55,6 +55,7 @@ const PdfMarkdownPage = lazy(() => import("./pages/PdfMarkdownPage").then((m) =>
 const MarkdownResourcePage = lazy(() => import("./pages/MarkdownResourcePage").then((m) => ({ default: m.MarkdownResourcePage })));
 const ResourceLinkPage = lazy(() => import("./pages/ResourceLinkPage").then((m) => ({ default: m.ResourceLinkPage })));
 const MasteringPage = lazy(() => import("./pages/BookLibraryPage").then((m) => ({ default: m.BookLibraryPage })));
+const MasteringArticleRedirect = lazy(() => import("./pages/BookLibraryPage").then((m) => ({ default: m.MasteringArticleRedirect })));
 const CharacterDetailPage = lazy(() => import("./pages/CharacterDetailPage").then((m) => ({ default: m.CharacterDetailPage })));
 const CharacterSheetPage = lazy(() => import("./pages/CharacterSheetPage").then((m) => ({ default: m.CharacterSheetPage })));
 const ArchivePage = lazy(() => import("./pages/ArchivePage").then((m) => ({ default: m.ArchivePage })));
@@ -237,6 +238,7 @@ function App() {
               <Route path="/resources/:id/markdown-file" element={<MarkdownResourcePage />} />
               <Route path="/resources/link/:uid" element={<ResourceLinkPage />} />
               <Route path="/mastering" element={<MasteringPage />} />
+              <Route path="/mastering/:id" element={<MasteringArticleRedirect />} />
               <Route path="/workbooks" element={<WorkbooksPage />} />
               <Route path="/workbooks/:id" element={<WorkbookPage />} />
               <Route path="/characters/:id" element={<CharacterDetailPage />} />

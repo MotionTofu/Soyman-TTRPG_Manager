@@ -163,3 +163,8 @@
   .mastering-shelf__actions button, .mastering-reader__toolbar button { min-width: 44px; min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) { .mastering-book { transition: none; } }
+
+/* Окно подраздела/полки: подписи одной колонкой, поля на всю ширину (просьба владельца 2026-10-01). */
+.library-org-form { width: 26rem; max-width: 100%; }
+.library-org-form > label { display: grid; grid-template-columns: 8rem minmax(0, 1fr); align-items: center; gap: var(--sp-5); }
+.library-org-form > label > :is(input, select) { width: 100%; }

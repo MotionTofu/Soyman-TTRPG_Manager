@@ -14,13 +14,14 @@ import { NavIcon } from "../components/NavIcons";
 import { SectionBackground } from "../components/SectionBackground";
 import { RESOURCE_CATEGORIES, guessResourceCategory, type ResourceCategory } from "../resourceCategories";
 import { ListPage } from "../components/ListPage";
-import type { Campaign, Resource, Setting } from "../types";
+import type { Album, Campaign, Resource, Setting } from "../types";
 import "./book-library.css";
 import {useAuthenticatedFileUrl} from "../utils/fileUrl";
 
 const TEMPLATE_TYPE = "statblock_template";
 const NO_CAMPAIGNS: Campaign[] = [];
 const NO_SETTINGS: Setting[] = [];
+const NO_ALBUMS: Album[] = [];
 type SortMode = "az" | "size" | "date";
 
 function GalleryResourcePreview({resource,onOpen}:{resource:Resource;onOpen:()=>void}){
@@ -74,6 +75,9 @@ export function ResourcesListPage({mode="other"}:{mode?:"other"|"gallery"}) {
   const [sortMode, setSortMode] = useState<SortMode>("az");
   const [campaignFilter, setCampaignFilter] = useState<number | null>(null);
   const [settingFilter, setSettingFilter] = useState<number | null>(null);
+  // Альбомы заводятся в профиле сеттинга; здесь — только отбор (Q21).
+  const albums = useResource<Album[]>(gallery ? "/albums" : null).data ?? NO_ALBUMS;
+  const [albumFilter, setAlbumFilter] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
@@ -126,6 +130,7 @@ export function ResourcesListPage({mode="other"}:{mode?:"other"|"gallery"}) {
     if (settingFilter && r.setting_id !== settingFilter && !(r.also_in_settings ?? []).includes(settingFilter)) {
       return false;
     }
+    if (albumFilter && r.album_id !== albumFilter) return false;
     return true;
   });
   const groups = RESOURCE_CATEGORIES.filter((c) => c.key !== "audio").map((c) => ({
@@ -136,7 +141,7 @@ export function ResourcesListPage({mode="other"}:{mode?:"other"|"gallery"}) {
     ),
   })).filter((g) => g.items.length > 0);
 
-  const activeFilters = (campaignFilter ? 1 : 0) + (settingFilter ? 1 : 0);
+  const activeFilters = (campaignFilter ? 1 : 0) + (settingFilter ? 1 : 0) + (albumFilter ? 1 : 0);
 
   const sortToolbar = (
     <>
@@ -178,6 +183,20 @@ export function ResourcesListPage({mode="other"}:{mode?:"other"|"gallery"}) {
             ))}
           </select>
         </label>
+        {albums.length > 0 && (
+          <label>
+            <span className="res-toolbar__filter-label">Альбом</span>
+            <select value={albumFilter ?? ""} onChange={(e) => setAlbumFilter(e.target.value ? Number(e.target.value) : null)}>
+              <option value="">Все</option>
+              {albums.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                  {a.setting_name || a.campaign_name ? ` · ${a.setting_name ?? a.campaign_name}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
       <button
         type="button"
@@ -211,8 +230,8 @@ export function ResourcesListPage({mode="other"}:{mode?:"other"|"gallery"}) {
         searchLabel="Поиск по ресурсам"
         filteredCount={groups.reduce((n, g) => n + g.items.length, 0)}
         totalCount={shelfTotal}
-        onResetSearch={() => { setQuery(""); setCampaignFilter(null); setSettingFilter(null); }}
-        showReset={query.trim() !== "" || campaignFilter !== null || settingFilter !== null}
+        onResetSearch={() => { setQuery(""); setCampaignFilter(null); setSettingFilter(null); setAlbumFilter(null); }}
+        showReset={query.trim() !== "" || campaignFilter !== null || settingFilter !== null || albumFilter !== null}
         toolbarExtra={sortToolbar}
         // Тулбар — инструмент вкладки «Разное»: у Звука и наборов
         // поиск свой, а общий показывал там «0 / N».

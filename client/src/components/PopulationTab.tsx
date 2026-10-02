@@ -223,7 +223,7 @@ function RecentList({ settingId, onPick }: { settingId: number; onPick: (id: num
         <ul>
           {recent.map((r) => (
             <li key={r.id}>
-              <button type="button" onClick={() => onPick(r.id)}>
+              <button type="button" className="mention-link mention--pop" onClick={() => onPick(r.id)}>
                 {r.name}
               </button>
             </li>
@@ -1040,7 +1040,7 @@ function CommunityCard({ communityId }: { communityId: number }) {
             {detail.members.slice(0, MEMBERS_SHOWN).map((m) => (
               <li key={m.id}>
                 <Avatar name={m.name} url={m.avatar_image_url} size="s" />
-                <Link className="paper-link paper-rows__main" to={`/beings/${m.id}`}>
+                <Link className="mention-link mention--pop paper-rows__main" to={`/beings/${m.id}`}>
                   {m.name || "Без названия"}
                 </Link>
               </li>
@@ -1048,7 +1048,7 @@ function CommunityCard({ communityId }: { communityId: number }) {
           </ul>
         )}
         {detail.members.length > MEMBERS_SHOWN && (
-          <Link className="paper-link" to={`/communities/${communityId}`}>
+          <Link className="paper-more" to={`/communities/${communityId}`}>
             ещё {detail.members.length - MEMBERS_SHOWN} ›
           </Link>
         )}

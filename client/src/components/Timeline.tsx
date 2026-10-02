@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { daysInYear, dateFromElapsed, elapsedDays, formatByPrecision } from "../inworldCalendar";
-import type { CalendarMonth, DatePrecision, EventStatus, ImportantDate, SettingCalendarEra, SettingCycle } from "../types";
+import type { CalendarMonth, DatePrecision, EventStatus, ImportantDate, SettingCalendarEra } from "../types";
 import "../timeline.css";
 
 // Ось времени — общая для хроники мира и расписания кампании.
@@ -28,17 +28,24 @@ export interface TimelineEvent {
   kind?: "event" | "session";
 }
 
-// Пять масштабов. Ширина дня в пикселях на каждом подобрана так, чтобы
-// соседний масштаб отличался заметно, а не на глаз: век — обзор всей истории,
-// день — работа внутри одной недели.
-const ZOOMS: { key: DatePrecision; label: string; pxPerDay: number }[] = [
-  { key: "century", label: "Век", pxPerDay: 0.0022 },
-  { key: "decade", label: "Десятилетие", pxPerDay: 0.022 },
-  { key: "year", label: "Год", pxPerDay: 0.22 },
-  { key: "month", label: "Месяц", pxPerDay: 2.2 },
-  { key: "day", label: "День", pxPerDay: 14 },
-  { key: "day", label: "3 дня", pxPerDay: 280 },
+// Масштабы честные (просьба владельца 2026-10-02): «Век» — на всю ширину оси
+// сто лет, «День» — один день. Длина задаётся в годах или днях, а пиксели на
+// день считаются от ширины оси и длины года сеттинга; «Месяц» — средний месяц
+// календаря, а не земной.
+// Тысячелетия нет среди точностей даты — бросок события на нём ставит век.
+const ZOOMS: { key: DatePrecision; label: string; years?: number; days?: number }[] = [
+  { key: "century", label: "Тысячелетие", years: 1000 },
+  { key: "century", label: "Век", years: 100 },
+  { key: "decade", label: "Десятилетие", years: 10 },
+  { key: "year", label: "Год", years: 1 },
+  { key: "month", label: "Месяц" },
+  { key: "day", label: "3 дня", days: 3 },
+  { key: "day", label: "День", days: 1 },
 ];
+const YEAR_ZOOM = ZOOMS.findIndex((z) => z.key === "year");
+
+// Подписи засечек длинные («14 Март 1496») — ближе этого они слипаются.
+const TICK_PX = 110;
 
 // Ближе этого события считаются слипшимися и сворачиваются в одну метку.
 // Раскладывать их столбиком на пятидесяти событиях — стена высотой в экран, и
@@ -58,7 +65,6 @@ export function Timeline({
   eras,
   selectedTimelineId,
   now,
-  cycles = [],
   importantDates = [],
   onMoveEvent,
   onNowChange,
@@ -67,6 +73,7 @@ export function Timeline({
   action,
   leftAction,
   focusDate,
+  below,
 }: {
   events: TimelineEvent[];
   months: CalendarMonth[];
@@ -75,7 +82,6 @@ export function Timeline({
   selectedTimelineId?: number | null;
   /** «Сейчас» в мире. Рисуется красной стрелкой, её можно тянуть. */
   now: { year: number; month: number; day?: number } | null;
-  cycles?: SettingCycle[];
   importantDates?: ImportantDate[];
   onMoveEvent?: (id: number, date: { year: number; month: number; day: number; precision: DatePrecision }) => void;
   onNowChange?: (date: { year: number; month: number }) => void;
@@ -84,8 +90,10 @@ export function Timeline({
   action?: React.ReactNode;
   leftAction?: React.ReactNode;
   focusDate?: { year: number; month: number; day: number } | null;
+  /** Панель под осью с тем же масштабом и сдвигом — циклы сеттинга. */
+  below?: (view: TimelineView) => React.ReactNode;
 }) {
-  const [zoom, setZoom] = useState(2); // «Год» по умолчанию
+  const [zoom, setZoom] = useState(YEAR_ZOOM); // «Год» по умолчанию
   const [offsetDay, setOffsetDay] = useState(0);
   // Ширина с запасным значением, а не с нулём: замер приходит из
   // ResizeObserver, и пока его нет, ось всё равно должна что-то показывать.
@@ -94,13 +102,22 @@ export function Timeline({
 
   const perYear = daysInYear(months) || 365;
 
-  // Плавный зум: zoom — вещественное число, интерполируем pxPerDay между соседними уровнями
-  const pxPerDay = useMemo(() => {
-    const lo = Math.max(0, Math.floor(zoom));
-    const hi = Math.min(ZOOMS.length - 1, lo + 1);
-    const t = zoom - lo;
-    return ZOOMS[lo].pxPerDay * (1 - t) + ZOOMS[hi].pxPerDay * t;
-  }, [zoom]);
+  // Плавный зум: zoom — вещественное число; между соседними уровнями пиксели
+  // на день меняются в геометрической пропорции, чтобы каждый щелчок колеса
+  // увеличивал одинаково.
+  const pxAt = useCallback(
+    (z: number) => {
+      const level = (i: number) => {
+        const { days, years } = ZOOMS[i];
+        return width / (days ?? (years != null ? perYear * years : perYear / Math.max(1, months.length)));
+      };
+      const lo = Math.max(0, Math.min(ZOOMS.length - 1, Math.floor(z)));
+      const hi = Math.min(ZOOMS.length - 1, lo + 1);
+      return level(lo) * Math.pow(level(hi) / level(lo), z - lo);
+    },
+    [width, perYear, months.length]
+  );
+  const pxPerDay = pxAt(zoom);
   // precision берётся по ближайшему целевому уровню
   const precision = ZOOMS[Math.round(zoom)].key;
 
@@ -158,15 +175,10 @@ export function Timeline({
       touched.current = true;
       const x = holdX ?? width / 2;
       const day = dayAt(x);
-      // Интерпелируем pxPerDay для целевого уровня
-      const lo = Math.max(0, Math.floor(clamped));
-      const hi = Math.min(ZOOMS.length - 1, lo + 1);
-      const t = clamped - lo;
-      const targetPxPerDay = ZOOMS[lo].pxPerDay * (1 - t) + ZOOMS[hi].pxPerDay * t;
       setZoom(clamped);
-      setOffsetDay(day - x / targetPxPerDay);
+      setOffsetDay(day - x / pxAt(clamped));
     },
-    [zoom, width, dayAt]
+    [zoom, width, dayAt, pxAt]
   );
 
   // Размещение событий. Период — сплошная полоса от начала до конца;
@@ -220,7 +232,7 @@ export function Timeline({
     return out;
   }, [placed, width]);
 
-  function onWheel(e: React.WheelEvent) {
+  function onWheel(e: WheelEvent) {
     e.preventDefault();
     touched.current = true;
     if (e.ctrlKey || e.metaKey || Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
@@ -228,23 +240,36 @@ export function Timeline({
       const delta = e.deltaY > 0 ? -0.15 : 0.15;
       const holdX = e.clientX - (boxRef.current?.getBoundingClientRect().left ?? 0);
       const next = Math.max(0, Math.min(ZOOMS.length - 1, zoom + delta));
-      const lo = Math.max(0, Math.floor(next));
-      const hi = Math.min(ZOOMS.length - 1, lo + 1);
-      const t = next - lo;
-      const targetPxPerDay = ZOOMS[lo].pxPerDay * (1 - t) + ZOOMS[hi].pxPerDay * t;
-      touched.current = true;
       const day = dayAt(holdX);
       setZoom(next);
-      setOffsetDay(day - holdX / targetPxPerDay);
+      setOffsetDay(day - holdX / pxAt(next));
     } else {
       setOffsetDay((d) => d + e.deltaX / pxPerDay);
     }
   }
+  // Колесо — родным слушателем: React вешает onWheel пассивным, preventDefault
+  // не срабатывал, и вместе с зумом прокручивалась страница. Слушатель один на
+  // всю ось; ось и панели под ней помечены data-tl-pan.
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const wheelRef = useRef(onWheel);
+  useEffect(() => {
+    wheelRef.current = onWheel;
+  });
+  const hasCalendar = months.length > 0;
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const listener = (e: WheelEvent) => {
+      if ((e.target as HTMLElement).closest("[data-tl-pan]")) wheelRef.current(e);
+    };
+    root.addEventListener("wheel", listener, { passive: false });
+    return () => root.removeEventListener("wheel", listener);
+  }, [hasCalendar]);
 
   const drag = useRef<{ x: number; offset: number } | null>(null);
   const rafRef = useRef<number>(0);
   function onPointerDown(e: React.PointerEvent) {
-    if ((e.target as HTMLElement).closest(".tl-item, .tl-now")) return;
+    if ((e.target as HTMLElement).closest(".tl-item, .tl-now, label, button, input")) return;
     touched.current = true;
     drag.current = { x: e.clientX, offset: offsetDay };
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
@@ -262,50 +287,38 @@ export function Timeline({
     if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = 0; }
   }
 
-  // Засечки. Шаг выбирается по масштабу так, чтобы подписи не слипались: на
-  // веке подписываются столетия, на дне — дни.
+  // Засечки. Шаг — самый мелкий из круглых (дни, месяцы, годы), при котором
+  // подписи не слипаются. Месяцы и годы встают на настоящие начала, а не на
+  // кратные среднему месяцу: иначе «Март» стоял бы в конце февраля.
   const ticks = useMemo(() => {
-    const stepDays =
-      precision === "century" ? perYear * 100
-      : precision === "decade" ? perYear * 10
-      : precision === "year" ? perYear
-      : precision === "month" ? perYear / Math.max(1, months.length)
-      : 1;
-    const first = Math.floor(offsetDay / stepDays) * stepDays;
     const out: { x: number; label: string }[] = [];
-    for (let d = first; d < offsetDay + width / pxPerDay; d += stepDays) {
-      const date = dateFromElapsed(Math.round(d), months);
-      out.push({
-        x: xOf(d),
-        label: formatByPrecision(date.year, date.month, date.day, precision, months, ""),
-      });
-      if (out.length > 200) break;
-    }
-    return out;
-  }, [precision, perYear, months, offsetDay, width, pxPerDay, xOf]);
-
-  // Точки циклов — только на дне и месяце. Луна с периодом 28 дней на оси
-  // столетия это 1300 засечек в один пиксель, то есть серая полоса.
-  const cyclePoints = useMemo(() => {
-    if (precision !== "day" && precision !== "month") return [];
-    const from = Math.floor(offsetDay);
-    const to = Math.ceil(offsetDay + width / pxPerDay);
-    const out: { x: number; name: string; cycle: string }[] = [];
-    for (const cycle of cycles) {
-      if (cycle.period_days < 1) continue;
-      const anchor = dayOf(cycle.anchor_year, cycle.anchor_month, cycle.anchor_day);
-      for (const point of cycle.points) {
-        const firstTurn = Math.floor((from - anchor - point.day_offset) / cycle.period_days);
-        for (let k = firstTurn; ; k++) {
-          const day = anchor + point.day_offset + k * cycle.period_days;
-          if (day > to) break;
-          if (day >= from) out.push({ x: xOf(day), name: point.name, cycle: cycle.name });
-          if (out.length > 300) break;
-        }
+    const end = offsetDay + width / pxPerDay;
+    const fits = (days: number) => days * pxPerDay >= TICK_PX;
+    const push = (day: number, at: DatePrecision) => {
+      const date = dateFromElapsed(day, months);
+      out.push({ x: xOf(day), label: formatByPrecision(date.year, date.month, date.day, at, months, "") });
+    };
+    const ordered = [...months].sort((a, b) => a.position - b.position);
+    const dayStep = [1, 2, 5, 10].find(fits);
+    const monthStep = [1, 2, 3, 6].find((k) => k < ordered.length && fits((k * perYear) / ordered.length));
+    const firstYear = dateFromElapsed(Math.max(0, Math.floor(offsetDay)), months).year;
+    if (dayStep) {
+      for (let d = Math.floor(offsetDay / dayStep) * dayStep; d < end && out.length < 200; d += dayStep) push(d, "day");
+    } else if (monthStep) {
+      for (let y = firstYear; (y - 1) * perYear < end && out.length < 200; y++) {
+        ordered.forEach((m, i) => {
+          const d = dayOf(y, m.position, 1);
+          if (i % monthStep === 0 && d >= offsetDay - perYear && d < end) push(d, "month");
+        });
+      }
+    } else {
+      const yearStep = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000].find((k) => fits(k * perYear)) ?? 10000;
+      for (let y = Math.floor((firstYear - 1) / yearStep) * yearStep + 1; (y - 1) * perYear < end && out.length < 200; y += yearStep) {
+        push((y - 1) * perYear, "year");
       }
     }
     return out;
-  }, [cycles, precision, offsetDay, width, pxPerDay, dayOf, xOf]);
+  }, [perYear, months, offsetDay, width, pxPerDay, xOf, dayOf]);
 
   // Важные даты на оси — повторяющиеся события как маркеры.
   // Показываем при зуме год/месяц/3 дня/день.
@@ -352,7 +365,7 @@ export function Timeline({
 
   // Стрелку «сейчас» тянут только на годе и мельче: на столетии один пиксель
   // это несколько лет, и «сейчас» уехало бы от дрожания руки.
-  const nowDraggable = onNowChange != null && zoom >= 2;
+  const nowDraggable = onNowChange != null && zoom >= YEAR_ZOOM;
 
   const eraBands = useMemo(() => {
     if (!eras || eras.length === 0) return [];
@@ -398,7 +411,7 @@ export function Timeline({
   }
 
   return (
-    <div className="tl">
+    <div className="tl" ref={rootRef}>
       <div className="row tl-toolbar" style={{ justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <div className="row" style={{ gap: 8, alignItems: "center" }}>
           {title ? <h3 style={{ margin: 0 }}>{title}</h3> : <span />}
@@ -431,7 +444,7 @@ export function Timeline({
       <div
         ref={boxRef}
         className="tl-canvas"
-        onWheel={onWheel}
+        data-tl-pan=""
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -456,10 +469,6 @@ export function Timeline({
             </div>
           );
         })}
-
-        {cyclePoints.map((p, i) => (
-          <div key={i} className="tl-cycle" style={{ left: p.x }} title={`${p.cycle}: ${p.name}`} />
-        ))}
 
         {importantDatePoints.map((p, i) => (
           <div
@@ -515,8 +524,27 @@ export function Timeline({
           </div>
         )}
       </div>
+      {below?.({
+        from: Math.floor(offsetDay),
+        to: Math.ceil(offsetDay + width / pxPerDay),
+        pxPerDay,
+        xOf,
+        dayOf,
+        pan: { "data-tl-pan": "", onPointerDown, onPointerMove, onPointerUp, onPointerLeave: onPointerUp },
+      })}
     </div>
   );
+}
+
+export interface TimelineView {
+  /** Видимое окно оси в днях от начала летоисчисления. */
+  from: number;
+  to: number;
+  pxPerDay: number;
+  xOf: (day: number) => number;
+  dayOf: (year: number, month: number, day: number) => number;
+  /** Обработчики оси: тянешь панель — едет и ось. */
+  pan: Pick<React.DOMAttributes<HTMLElement>, "onPointerDown" | "onPointerMove" | "onPointerUp" | "onPointerLeave"> & { "data-tl-pan": "" };
 }
 
 function EventBar({

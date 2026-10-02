@@ -17,11 +17,13 @@ import {
   settingGeographyRoot,
   toFileUrl,
   VAULT_ROOT,
+  isVaultPath,
   vaultAbs,
   writeBase64File,
   writeReplacingOldFile,
 } from "../services/filesystem";
 import { renameEntityFolder } from "../services/vaultPaths";
+import { parsePassport, serializePassport } from "../services/settingWorld";
 import {
   CALENDAR_PRESETS,
   applyCalendarPreset,
@@ -64,10 +66,10 @@ function cleanupFile(file: Express.Multer.File | undefined) {
   if (p) try { fs.unlinkSync(p); } catch {}
 }
 
-function withBgUrl<T extends { background_image_path?: string | null; thumbnail_image_path?: string | null; genres?: string | null }>(
+function withBgUrl<T extends { background_image_path?: string | null; thumbnail_image_path?: string | null; genres?: string | null; passport?: unknown }>(
   row: T
 ) {
-  const { genres: rawGenres, ...rest } = row;
+  const { genres: rawGenres, passport: rawPassport, ...rest } = row;
   let genres: unknown = null;
   if (rawGenres) {
     try {
@@ -82,6 +84,9 @@ function withBgUrl<T extends { background_image_path?: string | null; thumbnail_
     background_image_url: row.background_image_path ? toFileUrl(row.background_image_path) : null,
     thumbnail_image_url: row.thumbnail_image_path ? toFileUrl(row.thumbnail_image_path) : null,
     genres,
+    // Ответ загрузки фона собран из одного пути — паспорта в нём нет, и
+    // пустой объект затёр бы настоящий в кэше.
+    ...("passport" in row ? { passport: parsePassport(rawPassport) } : {}),
   };
 }
 
@@ -385,6 +390,24 @@ settingsRouter.delete("/important-dates/:dateId", (req, res) => {
   res.json({ ok: true });
 });
 
+// Счётчики язычков профиля и блока «В мире» на «Обзоре» (макет, доски 11–25):
+// одним запросом, а не чтением каждой вкладки целиком.
+settingsRouter.get("/:id/counts", (req, res) => {
+  const id = Number(req.params.id);
+  const count = (sql: string, ...params: unknown[]) => (db.prepare(sql).get(...params) as { n: number }).n;
+  res.json({
+    places: count("SELECT COUNT(*) n FROM setting_locations WHERE setting_id = ? AND archived_at IS NULL", id),
+    beings: count("SELECT COUNT(*) n FROM setting_beings WHERE setting_id = ? AND archived_at IS NULL", id),
+    communities: count("SELECT COUNT(*) n FROM setting_communities WHERE setting_id = ? AND archived_at IS NULL", id),
+    events: count("SELECT COUNT(*) n FROM setting_calendar_events WHERE setting_id = ?", id),
+    adventures: count(
+      "SELECT COUNT(*) n FROM story_arcs WHERE setting_id = ? AND archived_at IS NULL AND parent_id IS NULL AND kind = 'adventure' AND is_default = 0",
+      id
+    ),
+    world: count("SELECT COUNT(*) n FROM setting_entries WHERE setting_id = ? AND category <> 'notes'", id),
+  });
+});
+
 settingsRouter.get("/:id/entities", (req, res) => {
   const beings = db.prepare("SELECT id, name FROM setting_beings WHERE setting_id = ? AND archived_at IS NULL ORDER BY name").all(req.params.id);
   const communities = db.prepare("SELECT id, name FROM setting_communities WHERE setting_id = ? AND archived_at IS NULL ORDER BY name").all(req.params.id);
@@ -501,48 +524,66 @@ settingsRouter.post("/:id/calendar-events", (req, res) => {
       return res.status(400).json({ error: `day ${d} exceeds ${monthDef.days} days in month ${monthDef.position}` });
     }
   }
-  const status = defaultStatus(y, m, settingNow(Number(req.params.id)));
-  // Транзакция: событие мира + копии в кампании + important_dates должны встать атомарно.
-  const run = db.transaction(() => {
-    const info = db
-      .prepare(
-        `INSERT INTO setting_calendar_events
-           (setting_id, title, description, full_description, consequences,
-            inworld_year, inworld_month, inworld_day, important, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-      .run(
-        req.params.id,
-        trimmedTitle,
-        description ?? "",
-        full_description ?? "",
-        consequences ?? "",
-        y,
-        m,
-        d,
-        important === true ? 1 : 0,
-        status
-      );
-    const newId = Number(info.lastInsertRowid);
-    const campaigns = db
-      .prepare("SELECT id FROM campaigns WHERE setting_id = ? AND archived_at IS NULL")
-      .all(req.params.id) as { id: number }[];
-    const insertIntoCampaign = db.prepare(
-      `INSERT INTO campaign_calendar_events
-         (campaign_id, title, description, inworld_year, inworld_month, inworld_day, important, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    );
-    for (const c of campaigns) {
-      insertIntoCampaign.run(c.id, trimmedTitle, description ?? "", y, m, d, important === true ? 1 : 0, status);
-    }
-    syncImportantDatesFromMentions(newId, trimmedTitle, description ?? "", y, m, d);
-    return newId;
-  });
-  const newId = run();
+  const newId = db.transaction(() =>
+    insertSettingEvent(Number(req.params.id), {
+      title: trimmedTitle,
+      description: description ?? "",
+      full_description: full_description ?? "",
+      consequences: consequences ?? "",
+      year: y,
+      month: m,
+      day: d,
+      important: important === true,
+    })
+  )();
   res
     .status(201)
     .json(db.prepare("SELECT * FROM setting_calendar_events WHERE id = ?").get(newId));
 });
+
+/**
+ * Событие мира с копиями в кампаниях сеттинга и важными датами упомянутых.
+ * Звать внутри транзакции: всё это должно встать атомарно.
+ */
+function insertSettingEvent(
+  settingId: number,
+  e: { title: string; description: string; full_description?: string; consequences?: string; year: number; month: number; day: number; important: boolean }
+): number {
+  const status = defaultStatus(e.year, e.month, settingNow(settingId));
+  const info = db
+    .prepare(
+      `INSERT INTO setting_calendar_events
+         (setting_id, title, description, full_description, consequences,
+          inworld_year, inworld_month, inworld_day, important, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      settingId,
+      e.title,
+      e.description,
+      e.full_description ?? "",
+      e.consequences ?? "",
+      e.year,
+      e.month,
+      e.day,
+      e.important ? 1 : 0,
+      status
+    );
+  const newId = Number(info.lastInsertRowid);
+  const campaigns = db
+    .prepare("SELECT id FROM campaigns WHERE setting_id = ? AND archived_at IS NULL")
+    .all(settingId) as { id: number }[];
+  const insertIntoCampaign = db.prepare(
+    `INSERT INTO campaign_calendar_events
+       (campaign_id, title, description, inworld_year, inworld_month, inworld_day, important, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  for (const c of campaigns) {
+    insertIntoCampaign.run(c.id, e.title, e.description, e.year, e.month, e.day, e.important ? 1 : 0, status);
+  }
+  syncImportantDatesFromMentions(newId, e.title, e.description, e.year, e.month, e.day);
+  return newId;
+}
 
 settingsRouter.put("/calendar-events/:eventId", (req, res) => {
   const {
@@ -660,10 +701,26 @@ settingsRouter.put("/calendar-events/:eventId", (req, res) => {
 // такое луна: ему нужно считать «каждые N дней» и подписывать точки — тогда
 // та же механика берёт приливы, ярмарку раз в десять дней и смену стражи.
 
+// Циклы кампании (разбор 2026-10-02, Q9–Q13): `?campaign=` добавляет к циклам
+// сеттинга циклы этой кампании; без него — только циклы сеттинга. Кампания,
+// переехавшая в другой сеттинг, своих циклов там не увидит.
+// ponytail: циклы кампании привязаны и к сеттингу; перенос кампании их не тащит.
+function campaignOf(raw: unknown, settingId: number): number | null | "foreign" {
+  if (raw == null || raw === "") return null;
+  const id = Number(raw);
+  const row = db.prepare("SELECT setting_id FROM campaigns WHERE id = ?").get(id) as { setting_id: number | null } | undefined;
+  return row && row.setting_id === settingId ? id : "foreign";
+}
+
+const CYCLE_SCOPE = "setting_id = ? AND (campaign_id IS NULL OR campaign_id = ?)";
+
 settingsRouter.get("/:id/cycles", (req, res) => {
+  const settingId = Number(req.params.id);
+  const campaignId = campaignOf(req.query.campaign, settingId);
+  if (campaignId === "foreign") return res.status(400).json({ error: "кампания не из этого сеттинга" });
   const cycles = db
-    .prepare("SELECT * FROM setting_cycles WHERE setting_id = ? ORDER BY position, id")
-    .all(req.params.id) as { id: number }[];
+    .prepare(`SELECT * FROM setting_cycles WHERE ${CYCLE_SCOPE} ORDER BY campaign_id IS NOT NULL, position, id`)
+    .all(settingId, campaignId) as { id: number }[];
   const points = db.prepare(
     "SELECT * FROM setting_cycle_points WHERE cycle_id = ? ORDER BY day_offset, position, id"
   );
@@ -671,24 +728,27 @@ settingsRouter.get("/:id/cycles", (req, res) => {
 });
 
 settingsRouter.post("/:id/cycles", (req, res) => {
-  const { name, period_days, anchor_year, anchor_month, anchor_day } = req.body as {
+  const { name, period_days, anchor_year, anchor_month, anchor_day, campaign_id } = req.body as {
     name?: string;
     period_days?: number;
     anchor_year?: number;
     anchor_month?: number;
     anchor_day?: number;
+    campaign_id?: number | null;
   };
   if (!name?.trim() || !period_days || period_days < 1) {
     return res.status(400).json({ error: "нужны название и период в днях" });
   }
+  const campaignId = campaignOf(campaign_id, Number(req.params.id));
+  if (campaignId === "foreign") return res.status(400).json({ error: "кампания не из этого сеттинга" });
   const position =
     ((db.prepare("SELECT MAX(position) m FROM setting_cycles WHERE setting_id = ?").get(req.params.id) as {
       m: number | null;
     }).m ?? -1) + 1;
   const info = db
     .prepare(
-      `INSERT INTO setting_cycles (setting_id, name, period_days, anchor_year, anchor_month, anchor_day, position)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO setting_cycles (setting_id, name, period_days, anchor_year, anchor_month, anchor_day, position, campaign_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       req.params.id,
@@ -697,7 +757,8 @@ settingsRouter.post("/:id/cycles", (req, res) => {
       anchor_year ?? 1,
       anchor_month ?? 1,
       anchor_day ?? 1,
-      position
+      position,
+      campaignId
     );
   res.status(201).json(db.prepare("SELECT * FROM setting_cycles WHERE id = ?").get(info.lastInsertRowid));
 });
@@ -726,13 +787,30 @@ settingsRouter.put("/cycles/:cycleId", (req, res) => {
   res.json(db.prepare("SELECT * FROM setting_cycles WHERE id = ?").get(req.params.cycleId));
 });
 
+// Q13: цикл, придуманный в игре, становится частью мира — его видят все
+// кампании сеттинга. Членство в группах кампании остаётся.
+settingsRouter.post("/cycles/:cycleId/to-setting", (req, res) => {
+  const info = db.prepare("UPDATE setting_cycles SET campaign_id = NULL WHERE id = ?").run(req.params.cycleId);
+  if (info.changes === 0) return res.status(404).json({ error: "not found" });
+  res.json(db.prepare("SELECT * FROM setting_cycles WHERE id = ?").get(req.params.cycleId));
+});
+
 settingsRouter.delete("/cycles/:cycleId", (req, res) => {
   db.prepare("DELETE FROM setting_cycles WHERE id = ?").run(req.params.cycleId);
   res.json({ ok: true });
 });
 
+// День за пределами оборота — почти наверняка опечатка, и молча свернуть его
+// по модулю значило бы поставить точку не туда, где Мастер её ждёт. Конец
+// необязателен (null — отметка одного дня); меньше начала — через конец оборота.
+function cycleDayError(day: unknown, period: number, optional: boolean): string | null {
+  if (optional && day === null) return null;
+  const n = Number(day);
+  return Number.isInteger(n) && n >= 0 && n < period ? null : `день должен быть от 0 до ${period - 1}`;
+}
+
 settingsRouter.post("/cycles/:cycleId/points", (req, res) => {
-  const { name, day_offset } = req.body as { name?: string; day_offset?: number };
+  const { name, day_offset, day_end = null } = req.body as { name?: string; day_offset?: number; day_end?: number | null };
   if (!name?.trim() || day_offset == null) {
     return res.status(400).json({ error: "нужны название и день внутри оборота" });
   }
@@ -740,15 +818,35 @@ settingsRouter.post("/cycles/:cycleId/points", (req, res) => {
     | { period_days: number }
     | undefined;
   if (!cycle) return res.status(404).json({ error: "not found" });
-  // День за пределами оборота — почти наверняка опечатка, и молча свернуть его
-  // по модулю значило бы поставить точку не туда, где Мастер её ждёт.
-  if (day_offset < 0 || day_offset >= cycle.period_days) {
-    return res.status(400).json({ error: `день должен быть от 0 до ${cycle.period_days - 1}` });
-  }
+  const error = cycleDayError(day_offset, cycle.period_days, false) ?? cycleDayError(day_end, cycle.period_days, true);
+  if (error) return res.status(400).json({ error });
   const info = db
-    .prepare("INSERT INTO setting_cycle_points (cycle_id, name, day_offset) VALUES (?, ?, ?)")
-    .run(req.params.cycleId, name.trim(), Math.round(day_offset));
+    .prepare("INSERT INTO setting_cycle_points (cycle_id, name, day_offset, day_end) VALUES (?, ?, ?, ?)")
+    .run(req.params.cycleId, name.trim(), Number(day_offset), day_end === null ? null : Number(day_end));
   res.status(201).json(db.prepare("SELECT * FROM setting_cycle_points WHERE id = ?").get(info.lastInsertRowid));
+});
+
+settingsRouter.put("/cycle-points/:pointId", (req, res) => {
+  const point = db
+    .prepare("SELECT p.*, c.period_days FROM setting_cycle_points p JOIN setting_cycles c ON c.id = p.cycle_id WHERE p.id = ?")
+    .get(req.params.pointId) as { name: string; day_offset: number; day_end: number | null; period_days: number } | undefined;
+  if (!point) return res.status(404).json({ error: "not found" });
+  const body = req.body as { name?: string; day_offset?: number; day_end?: number | null };
+  const next = {
+    name: body.name !== undefined ? String(body.name).trim() : point.name,
+    day_offset: body.day_offset !== undefined ? body.day_offset : point.day_offset,
+    day_end: body.day_end !== undefined ? body.day_end : point.day_end,
+  };
+  if (!next.name) return res.status(400).json({ error: "нужно название" });
+  const error = cycleDayError(next.day_offset, point.period_days, false) ?? cycleDayError(next.day_end, point.period_days, true);
+  if (error) return res.status(400).json({ error });
+  db.prepare("UPDATE setting_cycle_points SET name = ?, day_offset = ?, day_end = ? WHERE id = ?").run(
+    next.name,
+    Number(next.day_offset),
+    next.day_end === null ? null : Number(next.day_end),
+    req.params.pointId
+  );
+  res.json(db.prepare("SELECT * FROM setting_cycle_points WHERE id = ?").get(req.params.pointId));
 });
 
 settingsRouter.delete("/cycle-points/:pointId", (req, res) => {
@@ -756,20 +854,174 @@ settingsRouter.delete("/cycle-points/:pointId", (req, res) => {
   res.json({ ok: true });
 });
 
-settingsRouter.delete("/calendar-events/:eventId", (req, res) => {
-  const event = db.prepare("SELECT setting_id, title, inworld_year, inworld_month, inworld_day FROM setting_calendar_events WHERE id = ?").get(req.params.eventId) as { setting_id: number; title: string; inworld_year: number; inworld_month: number; inworld_day: number } | undefined;
-  const del = db.transaction(() => {
-    db.prepare("DELETE FROM setting_calendar_events WHERE id = ?").run(req.params.eventId);
-    db.prepare(`DELETE FROM generic_links WHERE (from_type = 'setting_event' AND from_id = ?) OR (to_type = 'setting_event' AND to_id = ?)`).run(req.params.eventId, req.params.eventId);
-    db.prepare("DELETE FROM important_dates WHERE source_event_id = ?").run(req.params.eventId);
-    // Каскад в кампании — копии, созданные при POST /:id/calendar-events, не имеют FK, но совпадают по титулу/дате и принадлежат кампаниям того же сеттинга.
-    // Удаляем только такие копии, чтобы «удалить из мира» не оставляло висячих дубликатов в кампаниях (C-P0-3). Ручные события кампаний с другим титулом/датой не трогаем.
-    if (event) {
-      db.prepare(`DELETE FROM campaign_calendar_events WHERE campaign_id IN (SELECT id FROM campaigns WHERE setting_id = ? AND archived_at IS NULL) AND title = ? AND inworld_year = ? AND inworld_month = ? AND inworld_day = ?`).run(event.setting_id, event.title, event.inworld_year, event.inworld_month, event.inworld_day);
-    }
-  });
-  del();
+// Группы циклов (разбор 2026-10-02, Q23): многие-ко-многим — луна может быть
+// и в «Небе», и в «Приливах». Группа — только фильтр панели циклов в Хронике.
+
+function cycleGroupOut(id: number | bigint) {
+  const group = db.prepare("SELECT id, name, position, campaign_id FROM setting_cycle_groups WHERE id = ?").get(id) as
+    | { id: number; name: string; position: number; campaign_id: number | null }
+    | undefined;
+  if (!group) return undefined;
+  const members = db.prepare("SELECT cycle_id FROM setting_cycle_group_members WHERE group_id = ? ORDER BY cycle_id").all(id) as { cycle_id: number }[];
+  return { ...group, cycle_ids: members.map((m) => m.cycle_id) };
+}
+
+// Чужие циклы молча отбрасываются: группа берёт только видимые её владельцу —
+// циклы сеттинга, а группа кампании ещё и циклы этой кампании (Q12).
+function setCycleGroupMembers(groupId: number | bigint, settingId: number, campaignId: number | null, cycleIds: unknown) {
+  if (!Array.isArray(cycleIds)) return;
+  const own = new Set(
+    (db.prepare(`SELECT id FROM setting_cycles WHERE ${CYCLE_SCOPE}`).all(settingId, campaignId) as { id: number }[]).map((c) => c.id)
+  );
+  db.prepare("DELETE FROM setting_cycle_group_members WHERE group_id = ?").run(groupId);
+  const insert = db.prepare("INSERT OR IGNORE INTO setting_cycle_group_members (group_id, cycle_id) VALUES (?, ?)");
+  for (const id of cycleIds.map(Number)) if (own.has(id)) insert.run(groupId, id);
+}
+
+settingsRouter.get("/:id/cycle-groups", (req, res) => {
+  const settingId = Number(req.params.id);
+  const campaignId = campaignOf(req.query.campaign, settingId);
+  if (campaignId === "foreign") return res.status(400).json({ error: "кампания не из этого сеттинга" });
+  const groups = db
+    .prepare(`SELECT id FROM setting_cycle_groups WHERE ${CYCLE_SCOPE} ORDER BY campaign_id IS NOT NULL, position, id`)
+    .all(settingId, campaignId) as { id: number }[];
+  res.json(groups.map((g) => cycleGroupOut(g.id)));
+});
+
+settingsRouter.post("/:id/cycle-groups", (req, res) => {
+  const { name, cycle_ids, campaign_id } = req.body as { name?: string; cycle_ids?: unknown; campaign_id?: number | null };
+  if (!name?.trim()) return res.status(400).json({ error: "нужно название группы" });
+  const settingId = Number(req.params.id);
+  if (!db.prepare("SELECT 1 FROM settings WHERE id = ?").get(settingId)) return res.status(404).json({ error: "not found" });
+  const campaignId = campaignOf(campaign_id, settingId);
+  if (campaignId === "foreign") return res.status(400).json({ error: "кампания не из этого сеттинга" });
+  const id = db.transaction(() => {
+    const position =
+      ((db.prepare("SELECT MAX(position) m FROM setting_cycle_groups WHERE setting_id = ?").get(settingId) as { m: number | null }).m ?? -1) + 1;
+    const groupId = db
+      .prepare("INSERT INTO setting_cycle_groups (setting_id, name, position, campaign_id) VALUES (?, ?, ?, ?)")
+      .run(settingId, name.trim(), position, campaignId).lastInsertRowid;
+    setCycleGroupMembers(groupId, settingId, campaignId, cycle_ids);
+    return groupId;
+  })();
+  res.status(201).json(cycleGroupOut(id));
+});
+
+settingsRouter.put("/cycle-groups/:groupId", (req, res) => {
+  const { name, cycle_ids } = req.body as { name?: unknown; cycle_ids?: unknown };
+  const group = db.prepare("SELECT setting_id, campaign_id FROM setting_cycle_groups WHERE id = ?").get(req.params.groupId) as
+    | { setting_id: number; campaign_id: number | null }
+    | undefined;
+  if (!group) return res.status(404).json({ error: "not found" });
+  if (name !== undefined && !String(name).trim()) return res.status(400).json({ error: "нужно название группы" });
+  db.transaction(() => {
+    if (name !== undefined) db.prepare("UPDATE setting_cycle_groups SET name = ? WHERE id = ?").run(String(name).trim(), req.params.groupId);
+    setCycleGroupMembers(Number(req.params.groupId), group.setting_id, group.campaign_id, cycle_ids);
+  })();
+  res.json(cycleGroupOut(Number(req.params.groupId)));
+});
+
+settingsRouter.delete("/cycle-groups/:groupId", (req, res) => {
+  db.prepare("DELETE FROM setting_cycle_groups WHERE id = ?").run(req.params.groupId);
   res.json({ ok: true });
+});
+
+settingsRouter.delete("/calendar-events/:eventId", (req, res) => {
+  db.transaction(() => deleteSettingEvent(Number(req.params.eventId)))();
+  res.json({ ok: true });
+});
+
+// Копии события в кампаниях: своего ключа у них нет, узнаются по титулу и дате.
+const CAMPAIGN_COPIES = `FROM campaign_calendar_events WHERE campaign_id IN (SELECT id FROM campaigns WHERE setting_id = ? AND archived_at IS NULL) AND title = ? AND inworld_year = ? AND inworld_month = ? AND inworld_day = ?`;
+type EventKey = { setting_id: number; title: string; inworld_year: number; inworld_month: number; inworld_day: number };
+const eventKey = (eventId: number) =>
+  db.prepare("SELECT setting_id, title, inworld_year, inworld_month, inworld_day FROM setting_calendar_events WHERE id = ?").get(eventId) as EventKey | undefined;
+const copyArgs = (e: EventKey) => [e.setting_id, e.title, e.inworld_year, e.inworld_month, e.inworld_day] as const;
+
+/** Снимает событие со всем, что на нём держится. Звать внутри транзакции. */
+function deleteSettingEvent(eventId: number) {
+  const event = eventKey(eventId);
+  db.prepare("DELETE FROM setting_calendar_events WHERE id = ?").run(eventId);
+  db.prepare(`DELETE FROM generic_links WHERE (from_type = 'setting_event' AND from_id = ?) OR (to_type = 'setting_event' AND to_id = ?)`).run(eventId, eventId);
+  db.prepare("DELETE FROM important_dates WHERE source_event_id = ?").run(eventId);
+  // Каскад в кампании — копии, созданные при POST /:id/calendar-events, не имеют FK, но совпадают по титулу/дате и принадлежат кампаниям того же сеттинга.
+  // Удаляем только такие копии, чтобы «удалить из мира» не оставляло висячих дубликатов в кампаниях (C-P0-3). Ручные события кампаний с другим титулом/датой не трогаем.
+  if (event) db.prepare(`DELETE ${CAMPAIGN_COPIES}`).run(...copyArgs(event));
+}
+
+// Повторяющееся ⇄ обычное событие (разбор 2026-10-02, Q1–Q7): перенос между
+// таблицами, модель не меняется. Что уйдёт — окно спрашивает заранее.
+
+/** Что держится на событии и уйдёт вместе с ним при переносе. */
+settingsRouter.get("/calendar-events/:eventId/footprint", (req, res) => {
+  const id = Number(req.params.eventId);
+  const event = eventKey(id);
+  if (!event) return res.status(404).json({ error: "not found" });
+  const n = (sql: string, ...args: unknown[]) => (db.prepare(sql).get(...args) as { n: number }).n;
+  res.json({
+    links: n(`SELECT COUNT(*) n FROM generic_links WHERE (from_type = 'setting_event' AND from_id = ?) OR (to_type = 'setting_event' AND to_id = ?)`, id, id),
+    campaign_copies: n(`SELECT COUNT(*) n ${CAMPAIGN_COPIES}`, ...copyArgs(event)),
+    mention_dates: n("SELECT COUNT(*) n FROM important_dates WHERE source_event_id = ?", id),
+  });
+});
+
+settingsRouter.post("/calendar-events/:eventId/to-recurring", (req, res) => {
+  const { recurrence, day } = req.body as { recurrence?: string; day?: number };
+  if (recurrence !== "annual" && recurrence !== "monthly" && recurrence !== "weekly") {
+    return res.status(400).json({ error: "повтор: annual, monthly или weekly" });
+  }
+  const event = db.prepare("SELECT * FROM setting_calendar_events WHERE id = ?").get(req.params.eventId) as
+    | { id: number; setting_id: number; title: string; description: string; inworld_month: number; inworld_day: number; date_precision: string | null; inworld_year_end: number | null }
+    | undefined;
+  if (!event) return res.status(404).json({ error: "not found" });
+  // Q7: повторять неточное или растянутое не по чему.
+  if ((event.date_precision ?? "day") !== "day") return res.status(400).json({ error: "уточните дату до дня" });
+  if (event.inworld_year_end != null) return res.status(400).json({ error: "уберите конец периода" });
+  // День недели знает клиент (дни недели и их порядок — его календарь).
+  const weekday = Number(day);
+  if (recurrence === "weekly" && !Number.isInteger(weekday)) return res.status(400).json({ error: "нужен день недели" });
+  const dateId = db.transaction(() => {
+    const info = db
+      .prepare(
+        `INSERT INTO important_dates (owner_type, owner_id, title, description, recurrence, year, month, day)
+         VALUES ('setting', ?, ?, ?, ?, NULL, ?, ?)`
+      )
+      .run(event.setting_id, event.title, event.description ?? "", recurrence, recurrence === "annual" ? event.inworld_month : null, recurrence === "weekly" ? weekday : event.inworld_day);
+    deleteSettingEvent(event.id);
+    return info.lastInsertRowid;
+  })();
+  res.status(201).json(db.prepare("SELECT * FROM important_dates WHERE id = ?").get(dateId));
+});
+
+const OWNER_TABLES: Record<string, string> = { being: "setting_beings", location: "setting_locations", community: "setting_communities" };
+
+settingsRouter.post("/:id/important-dates/:dateId/to-event", (req, res) => {
+  const settingId = Number(req.params.id);
+  // Название и описание — из окна, если их поправили перед переносом.
+  const { year, month, day, title, description: text } = req.body as { year?: number; month?: number; day?: number; title?: string; description?: string };
+  const y = Number(year), m = Number(month), d = Number(day);
+  if (![y, m, d].every(Number.isInteger) || m < 1 || d < 1) return res.status(400).json({ error: "нужна дата события" });
+  const date = db.prepare("SELECT * FROM important_dates WHERE id = ?").get(req.params.dateId) as
+    | { id: number; owner_type: string; owner_id: number; title: string; description: string | null }
+    | undefined;
+  if (!date) return res.status(404).json({ error: "not found" });
+  // Дата должна принадлежать этому сеттингу — самому или его сущности.
+  const owner =
+    date.owner_type === "setting"
+      ? { setting_id: date.owner_id, name: null as string | null }
+      : OWNER_TABLES[date.owner_type]
+        ? (db.prepare(`SELECT setting_id, name FROM ${OWNER_TABLES[date.owner_type]} WHERE id = ?`).get(date.owner_id) as { setting_id: number; name: string } | undefined)
+        : undefined;
+  if (!owner || owner.setting_id !== settingId) return res.status(404).json({ error: "not found" });
+  // Q5: владелец-сущность остаётся упоминанием в описании.
+  const mention = owner.name ? `[[${date.owner_type}:${date.owner_id}|${owner.name.replace(/[\]|]/g, "")}]]` : "";
+  const description = [(typeof text === "string" ? text : date.description)?.trim(), mention].filter(Boolean).join("\n\n");
+  const eventId = db.transaction(() => {
+    const id = insertSettingEvent(settingId, { title: title?.trim() || date.title, description, year: y, month: m, day: d, important: false });
+    db.prepare("DELETE FROM important_dates WHERE id = ?").run(date.id);
+    return id;
+  })();
+  res.status(201).json(db.prepare("SELECT * FROM setting_calendar_events WHERE id = ?").get(eventId));
 });
 
 // Эпохи for grouping the Хроника мира event list (Эпоха > Столетие >
@@ -891,6 +1143,30 @@ settingsRouter.post("/:id/thumbnail", upload.single("file"), async (req, res) =>
   res.json(withBgUrl({ thumbnail_image_path: target }));
 });
 
+// Слоты «Фон профиля» и «Обложка» берут картинку из галереи сеттинга
+// (разбор профиля сеттинга, Q12/Q28): файл копируется, ресурс остаётся в
+// галерее, как был.
+settingsRouter.post("/:id/:kind(background|thumbnail)/from-resource", async (req, res) => {
+  const kind = req.params.kind as "background" | "thumbnail";
+  const column = kind === "background" ? "background_image_path" : "thumbnail_image_path";
+  const setting = db
+    .prepare(`SELECT folder_path, ${column} AS current FROM settings WHERE id = ?`)
+    .get(req.params.id) as { folder_path: string; current: string | null } | undefined;
+  if (!setting) return res.status(404).json({ error: "not found" });
+  const resource = db
+    .prepare("SELECT file_path FROM resources WHERE id = ? AND archived_at IS NULL")
+    .get(Number((req.body as { resource_id?: unknown }).resource_id)) as { file_path: string | null } | undefined;
+  if (!resource?.file_path) return res.status(400).json({ error: "У ресурса нет файла" });
+  const source = vaultAbs(resource.file_path);
+  const ext = path.extname(source).toLowerCase();
+  if (!isVaultPath(source) || !fs.existsSync(source) || !ALLOWED_IMAGE_EXTS.has(ext))
+    return res.status(400).json({ error: "Файл ресурса недоступен или не картинка" });
+  const target = path.join(setting.folder_path, `${kind}${ext}`);
+  await writeReplacingOldFile(target, fs.readFileSync(source), setting.current, kind);
+  db.prepare(`UPDATE settings SET ${column} = ? WHERE id = ?`).run(target, req.params.id);
+  res.json(withBgUrl(kind === "background" ? { background_image_path: target } : { thumbnail_image_path: target }));
+});
+
 settingsRouter.delete("/:id/background", (req, res) => {
   const setting = db.prepare("SELECT background_image_path FROM settings WHERE id = ?").get(req.params.id) as
     | { background_image_path: string | null }
@@ -928,11 +1204,12 @@ settingsRouter.put("/:id", (req, res) => {
     .prepare("SELECT * FROM settings WHERE id = ?")
     .get(req.params.id) as { folder_path: string; name: string } | undefined;
   if (!existing) return res.status(404).json({ error: "not found" });
-  const { name, description, code, genres } = req.body as {
+  const { name, description, code, genres, passport } = req.body as {
     name?: string;
     description?: string;
     code?: string;
     genres?: { genre: string; subgenre?: string }[];
+    passport?: unknown;
   };
   let folderPath = existing.folder_path;
   if (name && name !== existing.name) {
@@ -957,8 +1234,8 @@ settingsRouter.put("/:id", (req, res) => {
     genresJson = JSON.stringify(cleaned);
   }
   db.prepare(
-    "UPDATE settings SET name = COALESCE(?, name), description = COALESCE(?, description), folder_path = ?, code = COALESCE(?, code), genres = COALESCE(?, genres) WHERE id = ?"
-  ).run(name ?? null, description ?? null, folderPath, code == null ? null : cleanCode(code), genresJson, req.params.id);
+    "UPDATE settings SET name = COALESCE(?, name), description = COALESCE(?, description), folder_path = ?, code = COALESCE(?, code), genres = COALESCE(?, genres), passport = COALESCE(?, passport) WHERE id = ?"
+  ).run(name ?? null, description ?? null, folderPath, code == null ? null : cleanCode(code), genresJson, passport === undefined ? null : serializePassport(passport), req.params.id);
   // Двойник кода не запрещается, только называется: код — подсказка человеку в
   // окне неработающей ссылки, а не ключ. Резолв идёт по uid цели, и совпадение
   // кодов ни на что не влияет, кроме понятности фразы «поставьте модуль wdh».
@@ -1028,6 +1305,8 @@ const NEVER_COPY = new Set([
   "community_id",
   "artifact_id",
   "base_monster_id",
+  // Альбом галереи — номер из базы-источника; альбомы с модулем не едут.
+  "album_id",
   // Пути к файлам пишутся при распаковке вложений, а не переносятся строкой.
   "avatar_image_path",
   "thumbnail_image_path",
@@ -1285,6 +1564,8 @@ function linkRelationsAndCalendar(
     insertRelation.run(r.from_type, from, r.to_type, to, r.tone, r.label, r.description);
   }
 
+  applyImportedCycles(body, newSettingId);
+
   // События хроники выгружались и раньше, но вставки для них не было вовсе —
   // календарь приезжал с месяцами и днями недели, но без единого события.
   if (body.calendarEvents?.length) {
@@ -1323,6 +1604,52 @@ function linkRelationsAndCalendar(
           return v === undefined || typeof v === "object" ? null : (v as string | number);
         })
       );
+    }
+  }
+}
+
+/**
+ * Циклы и группы из модуля. Сверка по имени, как у месяцев: недостающее
+ * заводится, своё у получателя не трогается — он мог переделать луну под себя,
+ * а «⟳ Обновить» зовут повторно.
+ */
+function applyImportedCycles(body: SettingExportData, settingId: number): void {
+  if (!body.cycles?.length) return;
+  const cycleId = new Map(
+    (db.prepare("SELECT id, name FROM setting_cycles WHERE setting_id = ? AND campaign_id IS NULL").all(settingId) as { id: number; name: string }[]).map((c) => [c.name, c.id])
+  );
+  const insertCycle = db.prepare(
+    "INSERT INTO setting_cycles (setting_id, name, period_days, anchor_year, anchor_month, anchor_day, position) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  );
+  const insertPoint = db.prepare("INSERT INTO setting_cycle_points (cycle_id, name, day_offset, day_end, position) VALUES (?, ?, ?, ?, ?)");
+  for (const c of body.cycles) {
+    const period = Math.round(Number(c.period_days));
+    if (!c.name || cycleId.has(c.name) || !(period >= 1)) continue;
+    const id = Number(
+      insertCycle.run(settingId, String(c.name), period, Number(c.anchor_year) || 1, Number(c.anchor_month) || 1, Number(c.anchor_day) || 1, Number(c.position) || 0).lastInsertRowid
+    );
+    cycleId.set(c.name, id);
+    for (const p of c.points ?? []) {
+      const offset = Math.round(Number(p.day_offset));
+      // Модуль старого формата конца не знает — тогда отметка одного дня.
+      const end = p.day_end == null ? null : Math.round(Number(p.day_end));
+      if (p.name && offset >= 0 && offset < period) {
+        insertPoint.run(id, String(p.name), offset, end !== null && end >= 0 && end < period ? end : null, Number(p.position) || 0);
+      }
+    }
+  }
+  const haveGroup = new Set(
+    (db.prepare("SELECT name FROM setting_cycle_groups WHERE setting_id = ? AND campaign_id IS NULL").all(settingId) as { name: string }[]).map((g) => g.name)
+  );
+  const insertGroup = db.prepare("INSERT INTO setting_cycle_groups (setting_id, name, position) VALUES (?, ?, ?)");
+  const insertMember = db.prepare("INSERT OR IGNORE INTO setting_cycle_group_members (group_id, cycle_id) VALUES (?, ?)");
+  for (const g of body.cycleGroups ?? []) {
+    if (!g.name || haveGroup.has(g.name)) continue;
+    const gid = insertGroup.run(settingId, String(g.name), Number(g.position) || 0).lastInsertRowid;
+    haveGroup.add(g.name);
+    for (const name of g.cycles ?? []) {
+      const id = cycleId.get(name);
+      if (id) insertMember.run(gid, id);
     }
   }
 }
@@ -1653,6 +1980,21 @@ export function buildSettingExportData(
       SELECT d.* FROM important_dates d WHERE (d.owner_type='community' AND d.owner_id IN (SELECT id FROM setting_communities WHERE setting_id=? AND archived_at IS NULL))
     `).all(settingId, settingId, settingId) as SettingExportData["importantDates"];
     if (importantRows?.length) payload.importantDates = importantRows;
+    // Циклы и их группы едут с календарём: без календаря циклу не от чего
+    // отсчитываться. Группа ссылается на циклы по имени — номера свои у каждой базы.
+    const cycles = db.prepare("SELECT * FROM setting_cycles WHERE setting_id = ? AND campaign_id IS NULL ORDER BY position, id").all(settingId) as {
+      id: number; name: string; period_days: number; anchor_year: number; anchor_month: number; anchor_day: number; position: number;
+    }[];
+    if (cycles.length) {
+      const points = db.prepare("SELECT name, day_offset, day_end, position FROM setting_cycle_points WHERE cycle_id = ? ORDER BY day_offset, position, id");
+      payload.cycles = cycles.map((c) => ({
+        name: c.name, period_days: c.period_days, anchor_year: c.anchor_year, anchor_month: c.anchor_month, anchor_day: c.anchor_day, position: c.position,
+        points: points.all(c.id) as { name: string; day_offset: number; day_end: number | null; position: number }[],
+      }));
+      const groups = db.prepare("SELECT id, name, position FROM setting_cycle_groups WHERE setting_id = ? AND campaign_id IS NULL ORDER BY position, id").all(settingId) as { id: number; name: string; position: number }[];
+      const members = db.prepare("SELECT c.name FROM setting_cycle_group_members m JOIN setting_cycles c ON c.id = m.cycle_id WHERE m.group_id = ? ORDER BY c.position, c.id");
+      if (groups.length) payload.cycleGroups = groups.map((g) => ({ name: g.name, position: g.position, cycles: (members.all(g.id) as { name: string }[]).map((m) => m.name) }));
+    }
   }
   if (include.includes("resources")) {
     payload.artifacts = db
@@ -1661,11 +2003,21 @@ export function buildSettingExportData(
     const resources = db.prepare("SELECT * FROM resources WHERE setting_id = ? AND archived_at IS NULL").all(settingId) as (NonNullable<
       SettingExportData["resources"]
     >[number] & { file_path?: string | null })[];
+    // Альбомы — отдельной галочкой (разбор 2026-10-02, Q1/Q8): картинка
+    // несёт имя альбома, а не номер из этой базы.
+    const albums = include.includes("albums")
+      ? (db.prepare("SELECT id, name, position FROM albums WHERE setting_id = ? ORDER BY position, id").all(settingId) as { id: number; name: string; position: number }[])
+      : [];
+    const albumName = new Map(albums.map((a) => [a.id, a.name]));
     for (const r of resources) {
       if (withImages) r.file_data = readFileAsBase64(r.file_path);
       delete r.file_path;
+      const row = r as typeof r & { album_id?: number | null };
+      if (row.album_id != null && albumName.has(row.album_id)) r.album_name = albumName.get(row.album_id);
+      delete row.album_id;
     }
     payload.resources = resources;
+    if (albums.length) payload.albums = albums.map(({ name, position }) => ({ name, position }));
   }
 
   if (include.includes("adventures")) {
@@ -1703,6 +2055,7 @@ settingsRouter.get("/:id/export", (req, res) => {
 });
 
 import { settingPartyPlaces } from "../services/partyPlace";
+import { applyImportedAlbums } from "./albums";
 
 // Флажки «Партия здесь» в Географии: где партии всех кампаний сеттинга
 // (решения 2026-09-11, §3, п. 5).
@@ -1828,6 +2181,11 @@ export interface SettingExportData {
   calendarWeekdays?: { position: number; name: string }[];
   calendarEvents?: { title: string; description: string; recurrence: string; day: number; month: number | null; year: number | null; important: number }[];
   importantDates?: { owner_type: string; owner_id: number; title: string; description: string; date_type: string; color: string; recurrence: string; year: number | null; month: number | null; day: number; custom_rule: string }[];
+  cycles?: {
+    name: string; period_days: number; anchor_year: number; anchor_month: number; anchor_day: number; position: number;
+    points: { name: string; day_offset: number; day_end?: number | null; position: number }[];
+  }[];
+  cycleGroups?: { name: string; position: number; cycles: string[] }[];
   artifacts?: {
     id: number;
     uid?: string;
@@ -1869,7 +2227,9 @@ export interface SettingExportData {
     notes: string;
     link_url: string | null;
     file_data?: FileData | null;
+    album_name?: string;
   }[];
+  albums?: { name: string; position: number }[];
   adventures?: {
     format: "adventure-export/1";
     adventure: Record<string, unknown>;
@@ -2192,6 +2552,7 @@ export async function importSettingExport(
       "INSERT INTO resources (name, type, scope, setting_id, tags, notes, link_url, category, file_path) VALUES (?, ?, 'setting', ?, ?, ?, ?, ?, ?)"
     );
     const resourcesRoot = ensureSubfolder(folder, "Resources");
+    const placed: { id: number; album?: string }[] = [];
     for (const r of body.resources) {
       let filePath: string | null = null;
       if (r.file_data) {
@@ -2211,7 +2572,9 @@ export async function importSettingExport(
       );
       imported.claim("resource", rr.lastInsertRowid as number, r.uid);
       copyPlainFields("resources", rr.lastInsertRowid as number, r as Record<string, unknown>);
+      placed.push({ id: Number(rr.lastInsertRowid), album: r.album_name });
     }
+    applyImportedAlbums(newSettingId, body.albums, placed);
   }
 
   const maps = { locationIdMap, beingIdMap, communityIdMap, newSettingId };
@@ -2637,6 +3000,9 @@ export async function updateSettingFromExport(
     );
     const update = db.prepare("UPDATE resources SET tags = ?, notes = ?, link_url = ? WHERE id = ?");
     const resourcesRoot = ensureSubfolder(targetSetting.folder_path, "Resources");
+    // Раскладку получателя не трогаем (Q2): в альбом из файла ложатся только
+    // новые картинки, недостающие альбомы заводятся по имени.
+    const placed: { id: number; album?: string }[] = [];
     for (const r of body.resources) {
       const existingId = byName.get(r.name);
       if (existingId) {
@@ -2648,7 +3014,7 @@ export async function updateSettingFromExport(
           const targetFolder = subdir ? ensureSubfolder(resourcesRoot, subdir) : resourcesRoot;
           filePath = await writeBase64File(targetFolder, r.file_data.filename, r.file_data.base64);
         }
-        insert.run(
+        const created = insert.run(
           r.name,
           r.type || "note",
           targetSettingId,
@@ -2658,8 +3024,10 @@ export async function updateSettingFromExport(
           r.category ?? null,
           filePath
         );
+        placed.push({ id: Number(created.lastInsertRowid), album: r.album_name });
       }
     }
+    applyImportedAlbums(targetSettingId, body.albums, placed);
   }
 
   const mergeMaps = { locationIdMap, beingIdMap, communityIdMap, newSettingId: targetSettingId };

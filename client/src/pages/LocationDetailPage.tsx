@@ -15,14 +15,13 @@ import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
 import { EntityPage } from "../components/EntityPage";
 import { PdfEntitySources } from "../components/PdfEntitySources";
 import { LoadErrorCard } from "../components/Loadable";
-import { RelationsTab, type RelationsSection, type RelationStats } from "../components/RelationsTab";
-import { RELATION_TONE_LABELS } from "../relations";
+import { RelationsTab } from "../components/RelationsTab";
 import { LocationInfoTab } from "../components/LocationInfoTab";
+import { toAliasesList } from "../utils/aliasesList";
 import { EntityTabWorkspace } from "../components/EntityTabWorkspace";
 import { BeingQuickCreate } from "../components/BeingQuickCreate";
 import { BeingEntityRowList } from "../components/BeingEntityRowList";
 import { LocationCascadePicker } from "../components/LocationCascadePicker";
-import { LocationNode } from "../components/LocationTree";
 import { useTabState } from "../hooks/useTabState";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { useImageCrop } from "../hooks/useImageCrop";
@@ -31,9 +30,13 @@ import { useUndoDelete } from "../hooks/useUndoDelete";
 import { useConfirm } from "../hooks/useConfirm";
 import { BEING_CATEGORIES } from "../beingCategories";
 import { LocationImportantDatesTab } from "../components/LocationImportantDatesTab";
-import { DATE_GROUP_ORDER, DATE_GROUP_LABELS } from "../locationDateGroups";
 import { LocationContent } from "../components/LocationContent";
 import { LOCATION_ROLE_LABELS, locationRoleOf } from "../locationRoles";
+import { PlaceCard } from "../components/PlaceCard";
+import { EditableTextCard } from "../components/EditableTextCard";
+import { ChapterList } from "../components/ChapterList";
+import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
+import { isSafeImageUrl } from "../utils/safeUrl";
 import type {
   SearchResult,
   SettingCommunity,
@@ -41,8 +44,6 @@ import type {
   SettingLocationDetail,
   LocationContentItem,
   LocationInhabitantBeing,
-  RelationTone,
-  ImportantDate,
 } from "../types";
 
 // Every location reachable from `id` by walking down parent_id links — used
@@ -64,20 +65,18 @@ function descendantIds(id: number, all: SettingLocation[]): Set<number> {
 }
 
 // Словарь вкладок (решение 6 каркаса карточки): у сущности первая — «Досье».
-// Вкладка звалась «Информация о локации» до 2026-09-18 (П3.4); сохранённые
-// ссылки на старое имя открывают её же.
-const TAB_ALIASES = { "Информация о локации": "Досье" } as const;
+// Общий каркас профилей (разбор 2026-10-02, Q4): «Вложенность», «Обитатели»
+// и «Отношения» — группы «Связей», «Важные даты» — «Хроника». Сохранённые
+// ссылки на прежние имена открывают новую вкладку.
+const TAB_ALIASES = {
+  "Информация о локации": "Досье",
+  Вложенность: "Связи",
+  Обитатели: "Связи",
+  Отношения: "Связи",
+  "Важные даты": "Хроника",
+} as const;
 
-const TABS = [
-  "Досье",
-  "Карта",
-  "Вложенность",
-  "Обитатели",
-  "Отношения",
-  "Важные даты",
-  "Галерея",
-  "Упоминания",
-] as const;
+const TABS = ["Досье", "Карта", "Связи", "Хроника", "Галерея", "Упоминания"] as const;
 
 export function LocationDetailPage() {
   const { id } = useParams();
@@ -100,16 +99,10 @@ export function LocationDetailPage() {
   // локации — и карточки, и списки.
   const allLocationsAffect: Affect[] = [{ kind: "location" }];
   const [tab, selectTab] = useTabState(TABS, "Досье", TAB_ALIASES);
-  // Навигация внутри таба «Вложенность» (Master–Detail): родитель,
-  // дерево, план точками, добавление. Верхний таб-бар не трогаем.
-  const [nestSel, setNestSel] = useState<{ section: string; item?: string }>({ section: "parent" });
-  // Навигация внутри таба «Обитатели»: все, фракции, без фракций.
+  // «Добавить вложенное место» в группе «Внутри» — по кнопке.
+  const [addingNested, setAddingNested] = useState(false);
+  // Навигация внутри группы «Кто здесь»: все, фракции, без фракций.
   const [inhSel, setInhSel] = useState<{ section: string; item?: string }>({ section: "all" });
-  // Навигация внутри таба «Отношения»: добавление, исходящие, входящие.
-  const [relSel, setRelSel] = useState<{ section: string; item?: string }>({ section: "out" });
-  const [relStats, setRelStats] = useState<RelationStats | null>(null);
-  // Навигация внутри таба «Важные даты»: все даты и группы периодичности.
-  const [dateSel, setDateSel] = useState<{ section: string; item?: string }>({ section: "all" });
   const [editingParent, setEditingParent] = useState(false);
   const [parentDraft, setParentDraft] = useState<number | null>(null);
   const [childName, setChildName] = useState("");
@@ -142,7 +135,7 @@ export function LocationDetailPage() {
   }
 
   // План родителя: его точки с наполнением и счётчиками — одним запросом.
-  // Грузится лениво при открытии «Вложенности», чтобы не утяжелять каждое
+  // Грузится лениво при раскрытии «Плана точками», чтобы не утяжелять каждое
   // открытие карточки (план «Зоны», этап 6).
   type PlanSpot = {
     id: number;
@@ -166,8 +159,8 @@ export function LocationDetailPage() {
     if (Number.isFinite(s) && s > 0) {
       setPlanExpanded(s);
       setSpotFlash(s);
-      // Глубокая ссылка на точку — открываем раздел «План» вложенности.
-      setNestSel({ section: "plan" });
+      // Глубокая ссылка на точку — раскрываем «План точками» в «Связях».
+      setPlanOpen(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- один раз на локацию
   }, [locationId]);
@@ -181,12 +174,6 @@ export function LocationDetailPage() {
     return () => clearTimeout(t);
   }, [spotFlash, planSpots]);
 
-  useEffect(() => {
-    if (tab === "Вложенность") {
-      setPlanExpanded(null);
-      setPlanOpen(true);
-    }
-  }, [tab, locationId]);
   const [inhabitantsDragOver, setInhabitantsDragOver] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
@@ -773,115 +760,215 @@ export function LocationDetailPage() {
     location.inhabitant_communities.length > 0 ||
     (location.nested_inhabitant_communities ?? []).length > 0;
 
-  // --- Таб «Отношения» как Master–Detail: добавление и связи по тонам. ---
-  const REL_TONE_ORDER: RelationTone[] = ["positive", "mixed", "neutral", "negative"];
+  const mapUrl = location.map_image_url && isSafeImageUrl(location.map_image_url) ? location.map_image_url : null;
+  const imageUrl = [location.thumbnail_image_url, location.avatar_image_url].find((u) => u && isSafeImageUrl(u)) ?? null;
+  const aliases = toAliasesList(location.aliases).filter((a) => a.trim());
+  const chapters = location.chapters ?? [];
+  const whoCount = allInhabitants.length + location.inhabitant_communities.length;
+  const linkCount = directKids.length + whoCount;
+  const geographyTo = `/settings/${location.setting_id}?tab=${encodeURIComponent("География")}`;
 
-  function relToneItems(tones: Partial<Record<RelationTone, number>> | undefined) {
-    return REL_TONE_ORDER.filter((t) => (tones?.[t] ?? 0) > 0).map((t) => ({
-      id: t,
-      label: `${RELATION_TONE_LABELS[t]} · ${tones![t]}`,
-    }));
+  async function saveDescription(value: string) {
+    const done = await run(() => write.put(`/setting-locations/${locationId}`, { description: value }).then(() => true), { affects: mine });
+    if (!done) throw new Error("Не сохранилось");
   }
-
-  const relSections = [
-    { id: "add", label: "Добавить" },
-    { id: "out", label: "Исходящие", count: relStats?.out ?? 0, items: relToneItems(relStats?.outTones) },
-    { id: "in", label: "Входящие", count: relStats?.in ?? 0, items: relToneItems(relStats?.inTones) },
-  ];
-
-  // --- Таб «Важные даты» как Master–Detail: группы периодичности слева. ---
-  function dateGroupKey(d: ImportantDate): string {
-    if (d.recurrence === "custom") return "custom";
-    if (d.recurrence === "weekly") return "weekly";
-    if (d.recurrence === "monthly") return "monthly";
-    if (d.recurrence === "annual") return "annual";
-    return "once";
-  }
-
-  const dateSections = [
-    { id: "all", label: "Все даты", count: location.important_dates.length },
-    ...DATE_GROUP_ORDER.map((k) => ({
-      id: k,
-      label: DATE_GROUP_LABELS[k],
-      count: location.important_dates.filter((d) => dateGroupKey(d) === k).length,
-    })),
-  ];
 
   return (
     <EntityPage
+      paper
       crumbs={[
         { label: "Сеттинг", to: `/settings/${location.setting_id}` },
-        { label: "География", to: `/settings/${location.setting_id}?tab=${encodeURIComponent("География")}` },
+        { label: "География", to: geographyTo },
         ...location.ancestors.map((a) => ({ label: a.name, to: `/locations/${a.id}` })),
         { label: location.name },
       ]}
       entityType="location"
       title={location.name}
-      badges={
-        <>
-          {location.kind && <span className="badge tag">{location.kind}</span>}
-          <GraphNeighbourhoodLink type="location" id={location.id} />
-        </>
+      // Под именем — тип и путь, на месте мазка (владелец, 2026-10-02).
+      meta={
+        <span className="paper-ident-tags">
+          <span className="badge tag">
+            {location.kind?.trim() || (location.parent_id == null ? "Корень мира" : LOCATION_ROLE_LABELS[locationRoleOf(location)])}
+          </span>
+          {location.ancestors.length > 0 && <span>{location.ancestors.map((a) => a.name).join(" › ")}</span>}
+        </span>
       }
-      // Имя, тип и короткое имя правятся карточкой «Основное» во вкладке
-      // «Досье», поэтому «Редактировать» в шапке нет.
-      // Главное действие одно — завести вложенную; архивация разрушительна
-      // и потому живёт под «…».
-      primaryAction={
-        <button
-          onClick={() => {
-            selectTab("Вложенность");
-            setNestSel({ section: "add" });
-            setTimeout(() => document.querySelector<HTMLInputElement>(".location-nested input")?.focus(), 50);
-          }}
-        >
-          <NavIcon name="plus" /> Вложенная
-        </button>
-      }
-      actions={[{ label: "Архивировать", danger: true, onClick: archiveLocation }]}
-      tabs={TABS}
+      actions={[
+        {
+          label: "Вложенное место…",
+          onClick: () => {
+            selectTab("Связи");
+            setAddingNested(true);
+          },
+        },
+        { label: "Архивировать", danger: true, onClick: archiveLocation },
+      ]}
+      tabs={[
+        "Досье",
+        "Карта",
+        { id: "Связи", label: linkCount ? `Связи · ${linkCount}` : "Связи" },
+        {
+          id: "Хроника",
+          label: location.important_dates.length ? `Хроника · ${location.important_dates.length}` : "Хроника",
+        },
+        "Галерея",
+        "Упоминания",
+      ]}
       tab={tab}
       onTab={(t) => selectTab(t as (typeof TABS)[number])}
       fill={tab === "Карта"}
-      overlays={confirmDialog}
+      overlays={
+        <>
+          {confirmDialog}
+          {thumbnailCrop.modal}
+        </>
+      }
     >
-
-      {tab === "Досье" && <PdfEntitySources kind="location" id={location.id} />}
       {tab === "Досье" && (
-        <LocationInfoTab
-          key={location.id}
-          location={location}
-          onChanged={() => afterWrite(mine)}
-          onSaveMain={saveMain}
-          thumbnail={{
-            title: "Тамбнейл — 16×10",
-            hint: "Карточка в списке Географии. Рекомендуем 900×562 (16×10), до 15 MB, JPG/PNG/GIF/WebP/AVIF.",
-            url: location.thumbnail_image_url,
-            uploading: uploadingThumbnail,
-            onSelect: thumbnailCrop.onSelect,
-            onDelete: location.thumbnail_image_url ? handleThumbnailDelete : undefined,
-            modal: thumbnailCrop.modal,
-          }}
-          avatar={{
-            title: "Аватар — квадрат 1:1",
-            hint: "Запасной вариант для списка, когда тамбнейл не задан. Рекомендуем 700×700, до 15 MB.",
-            url: location.avatar_image_url,
-            uploading: uploadingAvatar,
-            onSelect: avatarCrop.onSelect,
-            onDelete: location.avatar_image_url ? handleAvatarDelete : undefined,
-            modal: avatarCrop.modal,
-          }}
-          spot={
-            locationRoleOf(location) === "spot"
-              ? {
-                  content: location.content ?? [],
-                  promoted: location.promoted_locations ?? [],
-                  promoting,
-                  onPromote: promoteSpot,
-                }
-              : null
-          }
-        />
+        <div className="dossier">
+          <aside className="dossier__aside">
+            {mapUrl ? (
+              <button
+                type="button"
+                className="dossier__portrait dossier__map"
+                onClick={() => selectTab("Карта")}
+                title="Открыть карту"
+              >
+                <img src={mapUrl} alt={`Карта: ${location.name}`} />
+                <span className="dossier__portrait-hint">Открыть карту</span>
+              </button>
+            ) : (
+              <label className="dossier__portrait dossier__map" title={IMAGE_HINT}>
+                {imageUrl ? (
+                  <img src={imageUrl} alt={location.name} />
+                ) : (
+                  <span className="dossier__portrait-empty">Картинка места</span>
+                )}
+                <span className="dossier__portrait-hint">{uploadingThumbnail ? "Загрузка…" : "Сменить картинку"}</span>
+                <input
+                  type="file"
+                  accept={IMAGE_ACCEPT}
+                  hidden
+                  onChange={(e) => thumbnailCrop.onSelect(e.target.files?.[0] ?? null)}
+                />
+              </label>
+            )}
+            <dl className="paper-facts">
+              {location.ancestors.length > 0 && (
+                <div>
+                  <dt className="paper-label">Где</dt>
+                  <dd>
+                    {location.ancestors.map((a) => (
+                      <Link key={a.id} className="mention-link mention--loc" to={`/locations/${a.id}`}>
+                        {a.name}
+                      </Link>
+                    ))}
+                  </dd>
+                </div>
+              )}
+              {aliases.length > 0 && (
+                <div>
+                  <dt className="paper-label">По-другому</dt>
+                  <dd>{aliases.join(" · ")}</dd>
+                </div>
+              )}
+              {location.inhabitant_communities.length > 0 && (
+                <div>
+                  <dt className="paper-label">Сообщества здесь</dt>
+                  <dd>
+                    {location.inhabitant_communities.map((c) => (
+                      <Link key={c.id} className="mention-link mention--com" to={`/communities/${c.id}`}>
+                        {c.name}
+                      </Link>
+                    ))}
+                  </dd>
+                </div>
+              )}
+            </dl>
+            <div className="dossier__search">
+              <Link className="paper-more" to={geographyTo}>
+                В Географии ›
+              </Link>
+              <GraphNeighbourhoodLink type="location" id={location.id} />
+            </div>
+          </aside>
+
+          <div className="dossier__main">
+            {/* Шапка — та же карточка места, что справа в Географии (Q5). */}
+            <PlaceCard locationId={locationId} variant="page" />
+
+            <EditableTextCard
+              title="Описание"
+              value={location.description ?? ""}
+              onSave={saveDescription}
+              rows={4}
+              entityType="location"
+              entityId={locationId}
+              defaultSettingId={location.setting_id}
+              collapsible
+              defaultOpen
+            />
+
+            <details className="paper-fold" open={chapters.length > 0}>
+              <summary>
+                Статьи <span className="paper-fold__count">· {chapters.length}</span>
+              </summary>
+              <div className="paper-fold__body">
+                <ChapterList
+                  ownerId={locationId}
+                  ownerType="location"
+                  apiBase="/setting-locations"
+                  chapters={chapters}
+                  defaultSettingId={location.setting_id}
+                  visibilityToggle
+                />
+              </div>
+            </details>
+
+            {/* Справка: правится редко, за столом не нужна — свёрнута. */}
+            <details className="paper-fold">
+              <summary>Основное, изображения, источники</summary>
+              <div className="paper-fold__body">
+                <LocationInfoTab
+                  key={location.id}
+                  location={location}
+                  onChanged={() => afterWrite(mine)}
+                  onSaveMain={saveMain}
+                  hideArticles
+                  thumbnail={{
+                    title: "Тамбнейл — 16×10",
+                    hint: "Карточка в списке Географии. Рекомендуем 900×562 (16×10), до 15 MB, JPG/PNG/GIF/WebP/AVIF.",
+                    url: location.thumbnail_image_url,
+                    uploading: uploadingThumbnail,
+                    onSelect: thumbnailCrop.onSelect,
+                    onDelete: location.thumbnail_image_url ? handleThumbnailDelete : undefined,
+                    modal: null,
+                  }}
+                  avatar={{
+                    title: "Аватар — квадрат 1:1",
+                    hint: "Запасной вариант для списка, когда тамбнейл не задан. Рекомендуем 700×700, до 15 MB.",
+                    url: location.avatar_image_url,
+                    uploading: uploadingAvatar,
+                    onSelect: avatarCrop.onSelect,
+                    onDelete: location.avatar_image_url ? handleAvatarDelete : undefined,
+                    modal: avatarCrop.modal,
+                  }}
+                  spot={
+                    locationRoleOf(location) === "spot"
+                      ? {
+                          content: location.content ?? [],
+                          promoted: location.promoted_locations ?? [],
+                          promoting,
+                          onPromote: promoteSpot,
+                        }
+                      : null
+                  }
+                />
+                <PdfEntitySources kind="location" id={location.id} />
+              </div>
+            </details>
+          </div>
+        </div>
       )}
 
       {tab === "Карта" && (
@@ -899,499 +986,464 @@ export function LocationDetailPage() {
         />
       )}
 
-      {tab === "Галерея" && (
-        <GalleryTab
-          ownerType="location"
-          ownerId={locationId}
-        />
-      )}
+      {tab === "Галерея" && <GalleryTab ownerType="location" ownerId={locationId} />}
 
       {tab === "Упоминания" && <MentionsTab entityType="location" entityId={locationId} />}
 
-      {tab === "Вложенность" && (
-        <EntityTabWorkspace
-          sections={[
-            { id: "parent", label: "Родитель" },
-            { id: "tree", label: "Дерево", count: directKids.length },
-            { id: "plan", label: "План", count: (planSpots ?? []).length },
-            { id: "add", label: "Добавить" },
-          ]}
-          selection={nestSel}
-          onSelect={setNestSel}
-          workspaceKey={locationId}
-          navFooter={
-            nestSel.section === "add" ? undefined : (
-              <button onClick={() => setNestSel({ section: "add" })} style={{ alignSelf: "flex-start" }}>
-                + Добавить вложенную
-              </button>
-            )
-          }
-        >
-          {nestSel.section === "parent" && (
-          <div className="card stack">
-          <div className="card row" style={{ alignItems: "center", gap: 8, marginBottom: 8 }}>
-            <strong>Родительская локация</strong>
-            {editingParent ? (
-              <>
-                <LocationCascadePicker
-                  locations={allLocations.filter(
-                    (l) => l.id !== locationId && !excludedDescendants.has(l.id)
-                  )}
-                  value={parentDraft}
-                  onChange={setParentDraft}
-                />
-                <button className="primary" onClick={saveParent}>
-                  Сохранить
-                </button>
-                <button onClick={() => setEditingParent(false)}>Отмена</button>
-              </>
-            ) : (
-              <>
-                {location.parent_id ? (
-                  <Link to={`/locations/${location.parent_id}`}>
-                    {location.ancestors[location.ancestors.length - 1]?.name}
-                  </Link>
+      {tab === "Связи" && (
+        <div className="paper-groups">
+          <details className="paper-fold" open>
+            <summary>
+              Внутри <span className="paper-fold__count">{directKids.length}</span>
+            </summary>
+            <div className="paper-fold__body">
+              <div className="row" style={{ alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <span className="paper-label">Входит в</span>
+                {editingParent ? (
+                  <>
+                    <LocationCascadePicker
+                      locations={allLocations.filter((l) => l.id !== locationId && !excludedDescendants.has(l.id))}
+                      value={parentDraft}
+                      onChange={setParentDraft}
+                    />
+                    <button className="primary" onClick={saveParent}>
+                      Сохранить
+                    </button>
+                    <button onClick={() => setEditingParent(false)}>Отмена</button>
+                  </>
                 ) : (
-                  <span className="muted">— нет, верхний уровень —</span>
+                  <>
+                    {location.parent_id ? (
+                      <Link className="mention-link mention--loc" to={`/locations/${location.parent_id}`}>
+                        {location.ancestors[location.ancestors.length - 1]?.name}
+                      </Link>
+                    ) : (
+                      <span className="muted">— корень мира —</span>
+                    )}
+                    <button
+                      className="comp-mini"
+                      onClick={() => {
+                        setParentDraft(location.parent_id);
+                        setEditingParent(true);
+                      }}
+                    >
+                      Изменить
+                    </button>
+                  </>
                 )}
-                <button
-                  onClick={() => {
-                    setParentDraft(location.parent_id);
-                    setEditingParent(true);
-                  }}
-                >
-                  Изменить
-                </button>
-              </>
-            )}
-          </div>
-          </div>
-          )}
-          {nestSel.section === "add" && (
-          <div className="card stack location-nested">
-            <h3>Добавить вложенную</h3>
-          <div className="geography-node-header" style={{ margin: "-14px -14px 10px", padding: "8px 12px" }}>
-            Добавить: место или сектор
-          </div>
-          <div className="row">
-            <input
-              placeholder="Название"
-              value={childName}
-              onChange={(e) => setChildName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") addChild(childRole); }}
-              disabled={addingChild}
-            />
-            <input
-              placeholder="Тип (необязательно)"
-              value={childKind}
-              onChange={(e) => setChildKind(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") addChild(childRole); }}
-              disabled={addingChild}
-              list="loc-kind-nested"
-            />
-            <select
-              value={childRole}
-              onChange={(e) => setChildRole(e.target.value as "location" | "sector")}
-              disabled={addingChild}
-              title="Вес: локация — самостоятельное место, сектор — контейнер"
-            >
-              <option value="location">Локация</option>
-              <option value="sector">Сектор</option>
-            </select>
-            <button className="primary" onClick={() => addChild(childRole)} disabled={addingChild}>
-              {addingChild ? "…" : "Добавить"}
-            </button>
-          </div>
-          <datalist id="loc-kind-nested">
-            <option value="город" />
-            <option value="таверна" />
-            <option value="храм" />
-            <option value="район" />
-            <option value="этаж" />
-            <option value="крыло" />
-            <option value="квартал" />
-          </datalist>
-          <div className="geography-node-header" style={{ margin: "10px -14px", padding: "8px 12px" }}>
-            План точками — по строке на точку
-          </div>
-          <textarea
-            placeholder={"Караулка — пахнет псиной\nКоридор шёпота\nКелья 3 — заперта"}
-            value={planText}
-            onChange={(e) => setPlanText(e.target.value)}
-            rows={4}
-            disabled={planAdding}
-            style={{ width: "100%", resize: "vertical" }}
-          />
-          <div className="row">
-            <input
-              placeholder="Тип для всех"
-              value={planKind}
-              onChange={(e) => setPlanKind(e.target.value)}
-              disabled={planAdding}
-              list="loc-kind-spots"
-              style={{ maxWidth: 220 }}
-            />
-            <datalist id="loc-kind-spots">
-              <option value="комната" />
-              <option value="зал" />
-              <option value="коридор" />
-              <option value="келья" />
-              <option value="кладовая" />
-              <option value="лестница" />
-            </datalist>
-            <button className="primary" onClick={addPlan} disabled={planAdding || planFresh.length === 0}>
-              {planAdding ? "…" : `Добавить точками (${planFresh.length})`}
-            </button>
-            {planParsed.length > 0 && (
-              <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
-                Распознано: {planParsed.length}
-                {planDupes > 0 && ` · уже есть: ${planDupes} — пропустим`}
-              </span>
-            )}
-          </div>
-          </div>
-          )}
-          {nestSel.section === "tree" && (
-          <div className="stack">
-            <div className="card stack">
-              <h3>Дерево вложенности</h3>
-          {directKids.length > 0 && (
-            <>
-              <div className="geography-node-header" style={{ margin: "10px -14px", padding: "8px 12px" }}>
-                Сменить вес вложенным
               </div>
-              {!convertOpen ? (
-                <div className="row">
-                  <button onClick={() => setConvertOpen(true)}>
-                    Выбрать из {directKids.length}
-                  </button>
-                  <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
-                    Для перевода старых данжей в точки без открытия каждой карточки
-                  </span>
-                </div>
-              ) : (
-                <div className="stack">
+              {directKids.length > 0 ? (
+                <ul className="paper-rows">
                   {directKids.map((c) => {
-                    const hasKids = (childByParent.get(c.id)?.length ?? 0) > 0;
+                    const inside = childByParent.get(c.id)?.length ?? 0;
                     return (
-                      <label key={c.id} className="row" style={{ gap: 8, alignItems: "center" }}>
-                        <input
-                          type="checkbox"
-                          checked={convertSel.has(c.id)}
-                          onChange={() => toggleConvert(c.id)}
-                          disabled={converting}
-                        />
-                        <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {c.name}
-                          {c.kind && <span className="muted"> · {c.kind}</span>}
+                      <li key={c.id}>
+                        <span className="paper-rows__main">
+                          <Link className="mention-link mention--loc" to={`/locations/${c.id}`}>
+                            {c.name}
+                          </Link>
                         </span>
-                        <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
-                          {LOCATION_ROLE_LABELS[locationRoleOf(c)]}
-                          {hasKids && " · есть вложенные"}
+                        <span className="paper-rows__sub">
+                          {[c.kind?.trim() || LOCATION_ROLE_LABELS[locationRoleOf(c)], inside ? `внутри ${inside}` : ""]
+                            .filter(Boolean)
+                            .join(" · ")}
                         </span>
-                      </label>
+                      </li>
                     );
                   })}
-                  <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-                    <button
-                      onClick={() => {
-                        const all = new Set(directKids.map((c) => c.id));
-                        setConvertSel(convertSel.size === all.size ? new Set() : all);
-                      }}
-                      disabled={converting}
-                    >
-                      {convertSel.size === directKids.length ? "Снять все" : "Выбрать все"}
-                    </button>
-                    <button className="primary" onClick={() => convertSelected("spot")} disabled={converting || convertSel.size === 0}>
-                      {converting ? "…" : `В точки (${convertSel.size})`}
-                    </button>
-                    <button onClick={() => convertSelected("sector")} disabled={converting || convertSel.size === 0}>
-                      В секторы
-                    </button>
-                    <button onClick={() => convertSelected("location")} disabled={converting || convertSel.size === 0}>
-                      В локации
-                    </button>
-                    <button onClick={() => { setConvertOpen(false); setConvertSel(new Set()); }} disabled={converting}>
-                      Готово
-                    </button>
+                </ul>
+              ) : (
+                <span className="muted">Внутри пока ничего: комнаты в здании, районы города, области страны.</span>
+              )}
+              {archivedChildren.length > 0 && (
+                <ul className="paper-rows">
+                  {archivedChildren.map((c) => (
+                    <li key={c.id}>
+                      <span className="paper-rows__main muted">
+                        {c.name} · в архиве
+                      </span>
+                      <button className="comp-mini" onClick={() => restoreChild(c.id)}>
+                        Восстановить
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {addingNested ? (
+                <div className="stack location-nested">
+                <div className="row">
+                  <input
+                    placeholder="Название"
+                    value={childName}
+                    onChange={(e) => setChildName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") addChild(childRole); }}
+                    disabled={addingChild}
+                  />
+                  <input
+                    placeholder="Тип (необязательно)"
+                    value={childKind}
+                    onChange={(e) => setChildKind(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") addChild(childRole); }}
+                    disabled={addingChild}
+                    list="loc-kind-nested"
+                  />
+                  <select
+                    value={childRole}
+                    onChange={(e) => setChildRole(e.target.value as "location" | "sector")}
+                    disabled={addingChild}
+                    title="Вес: локация — самостоятельное место, сектор — контейнер"
+                  >
+                    <option value="location">Локация</option>
+                    <option value="sector">Сектор</option>
+                  </select>
+                  <button className="primary" onClick={() => addChild(childRole)} disabled={addingChild}>
+                    {addingChild ? "…" : "Добавить"}
+                  </button>
+                </div>
+                <datalist id="loc-kind-nested">
+                  <option value="город" />
+                  <option value="таверна" />
+                  <option value="храм" />
+                  <option value="район" />
+                  <option value="этаж" />
+                  <option value="крыло" />
+                  <option value="квартал" />
+                </datalist>
+                <span className="paper-label">Или план точками — по строке на точку</span>
+                <textarea
+                  placeholder={"Караулка — пахнет псиной\nКоридор шёпота\nКелья 3 — заперта"}
+                  value={planText}
+                  onChange={(e) => setPlanText(e.target.value)}
+                  rows={4}
+                  disabled={planAdding}
+                  style={{ width: "100%", resize: "vertical" }}
+                />
+                <div className="row">
+                  <input
+                    placeholder="Тип для всех"
+                    value={planKind}
+                    onChange={(e) => setPlanKind(e.target.value)}
+                    disabled={planAdding}
+                    list="loc-kind-spots"
+                    style={{ maxWidth: 220 }}
+                  />
+                  <datalist id="loc-kind-spots">
+                    <option value="комната" />
+                    <option value="зал" />
+                    <option value="коридор" />
+                    <option value="келья" />
+                    <option value="кладовая" />
+                    <option value="лестница" />
+                  </datalist>
+                  <button className="primary" onClick={addPlan} disabled={planAdding || planFresh.length === 0}>
+                    {planAdding ? "…" : `Добавить точками (${planFresh.length})`}
+                  </button>
+                  {planParsed.length > 0 && (
+                    <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+                      Распознано: {planParsed.length}
+                      {planDupes > 0 && ` · уже есть: ${planDupes} — пропустим`}
+                    </span>
+                  )}
+                </div>
+                  <button onClick={() => setAddingNested(false)} style={{ alignSelf: "flex-start" }}>
+                    Готово
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => setAddingNested(true)} style={{ alignSelf: "flex-start" }}>
+                  + Вложенное место
+                </button>
+              )}
+              {directKids.length > 0 && (
+                <details className="paper-fold">
+                  <summary>Сменить вес вложенным</summary>
+                  <div className="paper-fold__body">
+                  {directKids.length > 0 && (
+                    <>
+                      {!convertOpen ? (
+                        <div className="row">
+                          <button onClick={() => setConvertOpen(true)}>
+                            Выбрать из {directKids.length}
+                          </button>
+                          <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+                            Для перевода старых данжей в точки без открытия каждой карточки
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="stack">
+                          {directKids.map((c) => {
+                            const hasKids = (childByParent.get(c.id)?.length ?? 0) > 0;
+                            return (
+                              <label key={c.id} className="row" style={{ gap: 8, alignItems: "center" }}>
+                                <input
+                                  type="checkbox"
+                                  checked={convertSel.has(c.id)}
+                                  onChange={() => toggleConvert(c.id)}
+                                  disabled={converting}
+                                />
+                                <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                  {c.name}
+                                  {c.kind && <span className="muted"> · {c.kind}</span>}
+                                </span>
+                                <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+                                  {LOCATION_ROLE_LABELS[locationRoleOf(c)]}
+                                  {hasKids && " · есть вложенные"}
+                                </span>
+                              </label>
+                            );
+                          })}
+                          <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+                            <button
+                              onClick={() => {
+                                const all = new Set(directKids.map((c) => c.id));
+                                setConvertSel(convertSel.size === all.size ? new Set() : all);
+                              }}
+                              disabled={converting}
+                            >
+                              {convertSel.size === directKids.length ? "Снять все" : "Выбрать все"}
+                            </button>
+                            <button className="primary" onClick={() => convertSelected("spot")} disabled={converting || convertSel.size === 0}>
+                              {converting ? "…" : `В точки (${convertSel.size})`}
+                            </button>
+                            <button onClick={() => convertSelected("sector")} disabled={converting || convertSel.size === 0}>
+                              В секторы
+                            </button>
+                            <button onClick={() => convertSelected("location")} disabled={converting || convertSel.size === 0}>
+                              В локации
+                            </button>
+                            <button onClick={() => { setConvertOpen(false); setConvertSel(new Set()); }} disabled={converting}>
+                              Готово
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
                   </div>
+                </details>
+              )}
+              <details className="paper-fold" open={planOpen} onToggle={(e) => e.currentTarget.open && setPlanOpen(true)}>
+                <summary>
+                  План точками <span className="paper-fold__count">{planSpots ? planSpots.length : ""}</span>
+                </summary>
+                <div className="paper-fold__body">
+                {(planSpots ?? []).length > 0 && (
+                  <>
+                    <div className="stack">
+                      {(planSpots ?? []).map((s) => {
+                        const open = planExpanded === s.id;
+                        return (
+                          <div
+                            key={s.id}
+                            className="card"
+                            data-spot-row={s.id}
+                            style={{
+                              padding: 8,
+                              outline: spotFlash === s.id ? "2px solid var(--accent)" : undefined,
+                              outlineOffset: spotFlash === s.id ? 1 : undefined,
+                            }}
+                          >
+                            <div className="row" style={{ gap: 8, alignItems: "center" }}>
+                              <button
+                                onClick={() => setPlanExpanded(open ? null : s.id)}
+                                title={open ? "Свернуть" : "Развернуть"}
+                                aria-expanded={open}
+                                style={{ minWidth: 28 }}
+                              >
+                                {open ? "▾" : "▸"}
+                              </button>
+                              <Link to={`/locations/${s.id}`} style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                <strong>{s.name}</strong>
+                              </Link>
+                              {s.kind && <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>{s.kind}</span>}
+                              <span className="muted" style={{ fontSize: "var(--fs-meta)" }} title="Обитатели и наполнение">
+                                {s.beings_count > 0 && `👤${s.beings_count} `}
+                                {s.content.length > 0 && `✦${s.content.length}`}
+                              </span>
+                            </div>
+                            {s.description && !open && (
+                              <div className="muted" style={{ fontSize: "var(--fs-meta)", marginTop: 4 }}>
+                                {s.description.length > 140 ? s.description.slice(0, 140) + "…" : s.description}
+                              </div>
+                            )}
+                            {open && (
+                              <div className="stack" style={{ marginTop: 8, gap: 8 }}>
+                                {s.description && <p style={{ margin: 0 }}>{s.description}</p>}
+                                {(s.beings_count > 0 || s.communities_count > 0) && (
+                                  <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
+                                    Обитателей: {s.beings_count}{s.communities_count > 0 && ` · сообществ: ${s.communities_count}`} — <Link to={`/locations/${s.id}`}>подробно на карточке</Link>
+                                  </span>
+                                )}
+                                <LocationContent
+                                  locationId={s.id}
+                                  items={s.content.map((c) => ({
+                                    id: c.id,
+                                    location_id: s.id,
+                                    kind: c.kind as LocationContentItem["kind"],
+                                    text: c.text,
+                                    created_at: "",
+                                  }))}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+                  {planSpots && planSpots.length === 0 && <span className="muted">Точек пока нет.</span>}
+                </div>
+              </details>
+            </div>
+          </details>
+
+          <details className="paper-fold" open>
+            <summary>
+              Кто здесь <span className="paper-fold__count">{whoCount}</span>
+            </summary>
+            <div className="paper-fold__body">
+            <div className="stack">
+            <div className="card stack inhabitants-tab">
+              {successMessage && <div className="settings-toast" role="status" aria-live="polite">{successMessage}</div>}
+              <BeingQuickCreate
+                settingId={location.setting_id}
+                communities={communities}
+                fixedLocationId={locationId}
+                showCommunityPicker
+              />
+              <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <input
+                  placeholder="Имя новой общины"
+                  value={communityName}
+                  onChange={(e) => setCommunityName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && createCommunity()}
+                  style={{ flex: "1 1 180px", minWidth: 0 }}
+                />
+                <button className="primary" onClick={createCommunity} disabled={communitySaving || !communityName.trim()}>
+                  {communitySaving ? "…" : "Добавить общину"}
+                </button>
+                <span className="muted" style={{ fontSize: "var(--fs-meta)", maxWidth: "32ch" }}>или перетащите общину из поиска — она станет фракцией</span>
+              </div>
+              <div
+                className={`drop-zone inhabitants-drop${inhabitantsDragOver ? " drag-over" : ""}`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setInhabitantsDragOver(true);
+                }}
+                onDragLeave={() => setInhabitantsDragOver(false)}
+                onDrop={handleInhabitantDrop}
+              >
+                <NavIcon name="search" />
+                <span className="inhabitants-quick-label">Бросьте сюда</span>
+                <span className="muted">существо или сообщество из поиска — или «Мешок → Обитатели локации».</span>
+              </div>
+              <div className="row" style={{ flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+                <div style={{ flex: "1 1 200px", display: "flex", gap: 6, minWidth: 0 }}>
+                  <input
+                    placeholder="Поиск по имени, тегам, типу, фракции…"
+                    value={rawQuery}
+                    onChange={(e) => setRawQuery(e.target.value)}
+                    style={{ flex: 1, minWidth: 0 }}
+                  />
+                  {rawQuery && (
+                    <button onClick={() => setRawQuery("")} title="Сбросить поиск">✕</button>
+                  )}
+                </div>
+                <select className="inhabitants-filter" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+                  <option value="">Все категории ({allInhabitants.length})</option>
+                  {BEING_CATEGORIES.filter((c) => c.key !== "all").map((c) => (
+                    <option key={c.key} value={c.key}>{c.label} ({categoryCounts.get(c.key) ?? 0})</option>
+                  ))}
+                </select>
+                <select className="inhabitants-filter" value={sortMode} onChange={(e) => setSortMode(e.target.value as "name" | "category")} title="Сортировка">
+                  <option value="name">Сорт: по имени</option>
+                  <option value="category">Сорт: по категории</option>
+                </select>
+                {(rawQuery || categoryFilter || sortMode !== "name") && (
+                  <button onClick={() => { setRawQuery(""); setCategoryFilter(""); setSortMode("name"); }}>Сбросить</button>
+                )}
+              </div>
+              {locationState.error && (
+                <LoadErrorCard
+                  message={<>Не удалось обновить обитателей: {locationState.error}</>}
+                  onRetry={locationState.reload}
+                />
+              )}
+              {(allInhabitants.length > 0 || location.inhabitant_communities.length > 0) && (
+                <div className="row muted" style={{ flexWrap: "wrap", gap: 12, fontSize: "var(--fs-meta)", fontFamily: "var(--font-mono)" }} aria-live="polite">
+                  <span>Обитателей: {filteredCount}{filteredCount !== allInhabitants.length ? ` из ${allInhabitants.length}` : ""}</span>
+                  {location.nested_inhabitant_beings.length > 0 && (
+                    <span>(+{location.nested_inhabitant_beings.length} из вложенных: {(Array.from(new Set(location.nested_inhabitant_beings.flatMap((b)=> b.location_names ?? []))).join(", ") || "—")})</span>
+                  )}
+                  {filteredCount !== allInhabitants.length && (
+                    <span style={{ color: "var(--ink)" }}>Показано: {filteredCount}</span>
+                  )}
                 </div>
               )}
-            </>
-          )}
             </div>
-          </div>
-          )}
-          {nestSel.section === "plan" && (
-          <div className="stack">
-            <div className="card stack">
-              <h3>План · {(planSpots ?? []).length}</h3>
-          {(planSpots ?? []).length > 0 && (
-            <>
-              <div className="stack">
-                {(planSpots ?? []).map((s) => {
-                  const open = planExpanded === s.id;
-                  return (
-                    <div
-                      key={s.id}
-                      className="card"
-                      data-spot-row={s.id}
-                      style={{
-                        padding: 8,
-                        outline: spotFlash === s.id ? "2px solid var(--accent)" : undefined,
-                        outlineOffset: spotFlash === s.id ? 1 : undefined,
+              {!inhHasAny ? (
+                <EmptyState
+                  title="Здесь пока никто не живёт"
+                  hint="Добавьте личность через форму выше или перетащите существо / сообщество из поиска. Сообщества появятся как фракции."
+                  action={
+                    <button
+                      className="primary"
+                      onClick={() => {
+                        const el = document.querySelector<HTMLInputElement>('.inhabitants-tab input[placeholder*="Имя существа"]');
+                        el?.focus();
                       }}
                     >
-                      <div className="row" style={{ gap: 8, alignItems: "center" }}>
-                        <button
-                          onClick={() => setPlanExpanded(open ? null : s.id)}
-                          title={open ? "Свернуть" : "Развернуть"}
-                          aria-expanded={open}
-                          style={{ minWidth: 28 }}
-                        >
-                          {open ? "▾" : "▸"}
-                        </button>
-                        <Link to={`/locations/${s.id}`} style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          <strong>{s.name}</strong>
-                        </Link>
-                        {s.kind && <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>{s.kind}</span>}
-                        <span className="muted" style={{ fontSize: "var(--fs-meta)" }} title="Обитатели и наполнение">
-                          {s.beings_count > 0 && `👤${s.beings_count} `}
-                          {s.content.length > 0 && `✦${s.content.length}`}
-                        </span>
-                      </div>
-                      {s.description && !open && (
-                        <div className="muted" style={{ fontSize: "var(--fs-meta)", marginTop: 4 }}>
-                          {s.description.length > 140 ? s.description.slice(0, 140) + "…" : s.description}
-                        </div>
-                      )}
-                      {open && (
-                        <div className="stack" style={{ marginTop: 8, gap: 8 }}>
-                          {s.description && <p style={{ margin: 0 }}>{s.description}</p>}
-                          {(s.beings_count > 0 || s.communities_count > 0) && (
-                            <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
-                              Обитателей: {s.beings_count}{s.communities_count > 0 && ` · сообществ: ${s.communities_count}`} — <Link to={`/locations/${s.id}`}>подробно на карточке</Link>
-                            </span>
-                          )}
-                          <LocationContent
-                            locationId={s.id}
-                            items={s.content.map((c) => ({
-                              id: c.id,
-                              location_id: s.id,
-                              kind: c.kind as LocationContentItem["kind"],
-                              text: c.text,
-                              created_at: "",
-                            }))}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
-            </div>
-          </div>
-          )}
-          {/* Продолжение «Дерева»: узлы и архив — тот же раздел навигации. */}
-          {nestSel.section === "tree" && (
-          <div className="card stack">
-            {childByParent.get(locationId)?.map((c) => (
-              <LocationNode key={c.id} location={c} byParent={childByParent} />
-            ))}
-            {(childByParent.get(locationId)?.length ?? 0) === 0 && archivedChildren.length === 0 && (
-              <EmptyState
-                title="Вложенных локаций пока нет"
-                hint="Под-территории: комнаты в здании, районы города, области страны."
-                action={
-                  <button className="primary" onClick={() => { setNestSel({ section: "add" }); setTimeout(() => document.querySelector<HTMLInputElement>(".location-nested input")?.focus(), 50); }}>
-                    Добавить первую вложенную
-                  </button>
-                }
-              />
-            )}
-            {archivedChildren.length > 0 && (
-              <>
-                <span className="muted" style={{ fontSize: "var(--fs-micro)", fontFamily: "var(--font-ui)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                  Архивированные ({archivedChildren.length})
-                </span>
-                {archivedChildren.map((c) => (
-                  <div key={c.id} className="card row" style={{ justifyContent: "space-between", alignItems: "center", opacity: 0.65 }}>
-                    <span className="muted">
-                      {c.name} {c.kind && <span>· {c.kind}</span>}
-                    </span>
-                    <button onClick={() => restoreChild(c.id)}>Восстановить</button>
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
-          )}
-        </EntityTabWorkspace>
-      )}
-
-      {tab === "Отношения" && (
-        <EntityTabWorkspace
-          sections={relSections}
-          selection={relSel}
-          onSelect={setRelSel}
-          workspaceKey={locationId}
-          navFooter={
-            relSel.section === "add" ? undefined : (
-              <button onClick={() => setRelSel({ section: "add" })} style={{ alignSelf: "flex-start" }}>
-                + Добавить связь
-              </button>
-            )
-          }
-        >
-          <RelationsTab
-            entityType="location"
-            entityId={location.id}
-            entityName={location.name}
-            defaultSettingId={location.setting_id}
-            section={relSel.section as RelationsSection}
-            tone={(relSel.item as RelationTone | undefined) ?? null}
-            onStats={(s) => setRelStats((prev) => (JSON.stringify(prev) === JSON.stringify(s) ? prev : s))}
-          />
-        </EntityTabWorkspace>
-      )}
-
-      {tab === "Обитатели" && (
-        <div className="stack">
-        <div className="card stack inhabitants-tab">
-          {successMessage && <div className="settings-toast" role="status" aria-live="polite">{successMessage}</div>}
-          <BeingQuickCreate
-            settingId={location.setting_id}
-            communities={communities}
-            fixedLocationId={locationId}
-            showCommunityPicker
-          />
-          <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            <input
-              placeholder="Имя новой общины"
-              value={communityName}
-              onChange={(e) => setCommunityName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && createCommunity()}
-              style={{ flex: "1 1 180px", minWidth: 0 }}
-            />
-            <button className="primary" onClick={createCommunity} disabled={communitySaving || !communityName.trim()}>
-              {communitySaving ? "…" : "Добавить общину"}
-            </button>
-            <span className="muted" style={{ fontSize: "var(--fs-meta)", maxWidth: "32ch" }}>или перетащите общину из поиска — она станет фракцией</span>
-          </div>
-          <div
-            className={`drop-zone inhabitants-drop${inhabitantsDragOver ? " drag-over" : ""}`}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setInhabitantsDragOver(true);
-            }}
-            onDragLeave={() => setInhabitantsDragOver(false)}
-            onDrop={handleInhabitantDrop}
-          >
-            <NavIcon name="search" />
-            <span className="inhabitants-quick-label">Бросьте сюда</span>
-            <span className="muted">существо или сообщество из поиска — или «Мешок → Обитатели локации».</span>
-          </div>
-          <div className="row" style={{ flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-            <div style={{ flex: "1 1 200px", display: "flex", gap: 6, minWidth: 0 }}>
-              <input
-                placeholder="Поиск по имени, тегам, типу, фракции…"
-                value={rawQuery}
-                onChange={(e) => setRawQuery(e.target.value)}
-                style={{ flex: 1, minWidth: 0 }}
-              />
-              {rawQuery && (
-                <button onClick={() => setRawQuery("")} title="Сбросить поиск">✕</button>
-              )}
-            </div>
-            <select className="inhabitants-filter" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
-              <option value="">Все категории ({allInhabitants.length})</option>
-              {BEING_CATEGORIES.filter((c) => c.key !== "all").map((c) => (
-                <option key={c.key} value={c.key}>{c.label} ({categoryCounts.get(c.key) ?? 0})</option>
-              ))}
-            </select>
-            <select className="inhabitants-filter" value={sortMode} onChange={(e) => setSortMode(e.target.value as "name" | "category")} title="Сортировка">
-              <option value="name">Сорт: по имени</option>
-              <option value="category">Сорт: по категории</option>
-            </select>
-            {(rawQuery || categoryFilter || sortMode !== "name") && (
-              <button onClick={() => { setRawQuery(""); setCategoryFilter(""); setSortMode("name"); }}>Сбросить</button>
-            )}
-          </div>
-          {locationState.error && (
-            <LoadErrorCard
-              message={<>Не удалось обновить обитателей: {locationState.error}</>}
-              onRetry={locationState.reload}
-            />
-          )}
-          {(allInhabitants.length > 0 || location.inhabitant_communities.length > 0) && (
-            <div className="row muted" style={{ flexWrap: "wrap", gap: 12, fontSize: "var(--fs-meta)", fontFamily: "var(--font-mono)" }} aria-live="polite">
-              <span>Обитателей: {filteredCount}{filteredCount !== allInhabitants.length ? ` из ${allInhabitants.length}` : ""}</span>
-              {location.nested_inhabitant_beings.length > 0 && (
-                <span>(+{location.nested_inhabitant_beings.length} из вложенных: {(Array.from(new Set(location.nested_inhabitant_beings.flatMap((b)=> b.location_names ?? []))).join(", ") || "—")})</span>
-              )}
-              {filteredCount !== allInhabitants.length && (
-                <span style={{ color: "var(--ink)" }}>Показано: {filteredCount}</span>
-              )}
-            </div>
-          )}
-        </div>
-          {!inhHasAny ? (
-            <EmptyState
-              title="Здесь пока никто не живёт"
-              hint="Добавьте личность через форму выше или перетащите существо / сообщество из поиска. Сообщества появятся как фракции."
-              action={
-                <button
-                  className="primary"
-                  onClick={() => {
-                    const el = document.querySelector<HTMLInputElement>('.inhabitants-tab input[placeholder*="Имя существа"]');
-                    el?.focus();
-                  }}
+                      Создать обитателя
+                    </button>
+                  }
+                />
+              ) : filteredCount === 0 ? (
+                <EmptyState kind="search"
+                  title="Ничего не найдено"
+                  hint={`По запросу «${(debouncedQuery || categoryFilter).trim()}» обитателей нет.`}
+                  action={
+                    <button onClick={() => { setRawQuery(""); setCategoryFilter(""); }}>Сбросить фильтры</button>
+                  }
+                />
+              ) : (
+                <EntityTabWorkspace
+                  sections={inhSections}
+                  selection={inhSel}
+                  onSelect={handleInhSelect}
+                  workspaceKey={locationId}
                 >
-                  Создать обитателя
-                </button>
-              }
+                  {renderInhWorkspace()}
+                </EntityTabWorkspace>
+              )}
+            </div>
+            </div>
+          </details>
+
+          <details className="paper-fold" open>
+            <summary>С кем · что</summary>
+            <p className="muted">Отношения с существами, фракциями, другими местами и предметами.</p>
+            <RelationsTab
+              entityType="location"
+              entityId={location.id}
+              entityName={location.name}
+              defaultSettingId={location.setting_id}
             />
-          ) : filteredCount === 0 ? (
-            <EmptyState kind="search"
-              title="Ничего не найдено"
-              hint={`По запросу «${(debouncedQuery || categoryFilter).trim()}» обитателей нет.`}
-              action={
-                <button onClick={() => { setRawQuery(""); setCategoryFilter(""); }}>Сбросить фильтры</button>
-              }
-            />
-          ) : (
-            <EntityTabWorkspace
-              sections={inhSections}
-              selection={inhSel}
-              onSelect={handleInhSelect}
-              workspaceKey={locationId}
-            >
-              {renderInhWorkspace()}
-            </EntityTabWorkspace>
-          )}
+          </details>
         </div>
       )}
 
-      {tab === "Важные даты" && (
-        <EntityTabWorkspace
-          sections={dateSections}
-          selection={dateSel}
-          onSelect={setDateSel}
-          workspaceKey={locationId}
-        >
-          <LocationImportantDatesTab
-            locationId={locationId}
-            locationName={location.name}
-            settingId={location.setting_id}
-            dates={location.important_dates}
-            calendarMonths={calendar?.months}
-            calendarWeekdays={calendar?.weekdays}
-            onShowOnMap={() => selectTab("Карта")}
-            groupFilter={dateSel.section}
-          />
-        </EntityTabWorkspace>
+      {tab === "Хроника" && (
+        <LocationImportantDatesTab
+              locationId={locationId}
+              locationName={location.name}
+              settingId={location.setting_id}
+              dates={location.important_dates}
+              calendarMonths={calendar?.months}
+              calendarWeekdays={calendar?.weekdays}
+              onShowOnMap={() => selectTab("Карта")}
+          groupFilter="all"
+        />
       )}
     </EntityPage>
   );

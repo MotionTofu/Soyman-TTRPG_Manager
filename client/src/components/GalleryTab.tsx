@@ -240,11 +240,6 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }
           : ownerType === "artifact"
             ? "ИЗОБРАЖЕНИЯ ПРЕДМЕТА"
             : "ИЗОБРАЖЕНИЯ ЛОКАЦИИ";
-  const galleryHint =
-    ownerType === "being"
-      ? "Портреты, референсы и мудборд существа — изображения-содержимое не проходят дуотон и показываются как загружено."
-      : "Референсы, карты и мудборд локации — изображения-содержимое не проходят дуотон и показываются как загружено.";
-
   return (
     <div className="stack gallery-tab">
       <div className="gallery-tab-header">
@@ -252,7 +247,7 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }
         <span className="gallery-tab-count" aria-label={`Всего ${images.length} изображений`}>{images.length}</span>
       </div>
       <p className="muted gallery-tab-hint" style={{ fontSize: "var(--fs-meta)", lineHeight: 1.4, margin: 0 }}>
-        {galleryHint} {IMAGE_HINT} до 15MB. Перетащите файлы на сетку или нажмите «+ Добавить».
+        JPG, PNG, GIF, WebP или AVIF до 15MB.
       </p>
 
       {(thumbnailUpload || avatarUpload) && (

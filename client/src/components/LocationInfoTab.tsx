@@ -26,6 +26,7 @@ import { useConfirm } from "../hooks/useConfirm";
 import { locationRoleOf } from "../locationRoles";
 import { EntityTabWorkspace, type WorkspaceSelection } from "./EntityTabWorkspace";
 import type { LocationChapter, SettingLocationDetail } from "../types";
+import { toAliasesList } from "../utils/aliasesList";
 
 export interface InfoImageSlot {
   title: string;
@@ -37,16 +38,6 @@ export interface InfoImageSlot {
   modal: ReactNode;
 }
 
-function toAliasesList(value: string[] | string | null | undefined): string[] {
-  if (Array.isArray(value)) return value;
-  if (!value) return [];
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
-  } catch {
-    return [];
-  }
-}
 
 const MAIN_FIELDS: EntityField[] = [
   { key: "name", label: "Имя", value: "", required: true },
@@ -96,8 +87,11 @@ export function LocationInfoTab({
   thumbnail,
   avatar,
   spot,
+  hideArticles = false,
 }: {
   location: SettingLocationDetail;
+  /** Статьи уже показаны рядом своим разделом (досье на бумаге). */
+  hideArticles?: boolean;
   /** После записи: страница говорит слою, что карточка задета. */
   onChanged: () => void;
   onSaveMain: (values: {
@@ -128,12 +122,16 @@ export function LocationInfoTab({
   const sections = useMemo(
     () => [
       { id: "main", label: "Основное" },
-      {
-        id: "articles",
-        label: "Статьи",
-        count: chapters.length,
-        items: chapters.map((c) => ({ id: String(c.id), label: c.title || "Без названия" })),
-      },
+      ...(hideArticles
+        ? []
+        : [
+            {
+              id: "articles",
+              label: "Статьи",
+              count: chapters.length,
+              items: chapters.map((c) => ({ id: String(c.id), label: c.title || "Без названия" })),
+            },
+          ]),
       {
         id: "images",
         label: "Изображения",
@@ -147,7 +145,7 @@ export function LocationInfoTab({
     ],
     // chapters/isSpot — производные location: зависимость от location покрывает.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [location, thumbnail.url, avatar.url]
+    [location, thumbnail.url, avatar.url, hideArticles]
   );
 
   function handleSelect(next: WorkspaceSelection) {

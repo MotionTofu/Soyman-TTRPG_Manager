@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { CARTOGRAPHY_OBJECTS, CARTOGRAPHY_SURFACES, cartographyId, cartographyUrl } from "../assets/cartography";
+import { CRYPT_CATEGORIES, CRYPT_OBJECTS, CRYPT_SURFACES, cryptId, cryptUrl, type CryptCategory } from "../assets/crypt";
 import { MAP_SYMBOL_ASSETS } from "../assets/registry";
 import { SCATTER_PROFILES } from "../scatter";
 import type { WorkspaceTool } from "./editorCommands";
@@ -15,8 +16,8 @@ function Thumbnail({ url }: { url: string | null }) {
 }
 const cells = (size: number) => size >= 1 ? `${Math.round(size * 10) / 10} кл.` : undefined;
 
-export function CatalogPanel({ tool, toolSet, symbol, material, scatterProfile, onSymbol, onMaterial, onScatter }: {
-  tool: WorkspaceTool; toolSet: ToolSet; symbol: string; material: string; scatterProfile: string;
+export function CatalogPanel({ tool, toolSet, comicPunk, symbol, material, scatterProfile, onSymbol, onMaterial, onScatter }: {
+  tool: WorkspaceTool; toolSet: ToolSet; comicPunk: boolean; symbol: string; material: string; scatterProfile: string;
   onSymbol: (id: string) => void; onMaterial: (code: string) => void; onScatter: (key: string) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -25,8 +26,13 @@ export function CatalogPanel({ tool, toolSet, symbol, material, scatterProfile, 
     id: cartographyId(item.key), name: item.name, url: cartographyUrl(item.key), size: cells(item.size),
     chosen: symbol === cartographyId(item.key), choose: () => onSymbol(cartographyId(item.key)),
   }));
+  // «Склеп» заменил предметы «Бумаги и туши» в каталоге (Q23): старые карты их по-прежнему рисуют.
+  const crypt = (category: CryptCategory) => CRYPT_OBJECTS.filter((item) => item.category === category).map((item): Tile => ({
+    id: cryptId(item.key), name: item.name, url: cryptUrl(item.directional ? `${item.key}-s` : item.key), size: `${item.cells[0]}×${item.cells[1]}`,
+    chosen: symbol === cryptId(item.key), choose: () => onSymbol(cryptId(item.key)),
+  }));
   const categories: Category[] = tool === "asset" ? [
-    { key: "dungeon", name: "Подземелье", tiles: objects("dungeon") },
+    ...(Object.keys(CRYPT_CATEGORIES) as CryptCategory[]).map((key) => ({ key, name: CRYPT_CATEGORIES[key], tiles: crypt(key) })),
     { key: "region", name: "Местность", tiles: objects("region") },
     { key: "symbols", name: "Знаки", tiles: MAP_SYMBOL_ASSETS.map((item) => ({ id: item.id, name: item.name, url: null, chosen: symbol === item.id, choose: () => onSymbol(item.id) })) },
   ] : tool === "scatter" ? [
@@ -36,7 +42,8 @@ export function CatalogPanel({ tool, toolSet, symbol, material, scatterProfile, 
     }) },
   ] : [
     { key: "surfaces", name: "Поверхности", tiles: CARTOGRAPHY_SURFACES.map((item) => ({
-      id: item.code, name: item.name, url: item.key ? cartographyUrl(item.key) : null, chosen: material === item.code, choose: () => onMaterial(item.code),
+      id: item.code, name: item.name, url: comicPunk && CRYPT_SURFACES[item.code] ? cryptUrl(CRYPT_SURFACES[item.code]) : item.key ? cartographyUrl(item.key) : null,
+      chosen: material === item.code, choose: () => onMaterial(item.code),
     })) },
   ];
   const fallback = tool === "asset" && toolSet !== "dungeon" ? "region" : categories[0].key;

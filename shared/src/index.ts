@@ -13,4 +13,5 @@ export * from "./dnd/derive";
 export * from "./dnd/normalize";
 export * from "./portable/index";
 export * from "./workbooks";
+export * from "./workbookMarkdown";
 export * from "./maps/core/index";

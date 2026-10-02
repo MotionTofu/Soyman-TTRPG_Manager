@@ -180,6 +180,27 @@ settingLocationsRouter.get("/", (req, res) => {
   res.json(rows.map((r) => withMapUrl(withImageUrls(r))));
 });
 
+// Реестр «Географии» (доска 16б): «кто здесь» у всех мест сеттинга одним
+// запросом — сколько существ и сообществ живёт прямо в месте, без вложенных.
+settingLocationsRouter.get("/inhabitant-counts", (req, res) => {
+  const settingId = Number(req.query.setting_id);
+  if (!settingId) return res.status(400).json({ error: "setting_id is required" });
+  const rows = db
+    .prepare(
+      `SELECT location_id, COUNT(*) n FROM (
+         SELECT bl.location_id FROM being_locations bl
+           JOIN setting_beings b ON b.id = bl.being_id AND b.archived_at IS NULL
+           JOIN setting_locations l ON l.id = bl.location_id AND l.setting_id = ?
+         UNION ALL
+         SELECT cl.location_id FROM community_locations cl
+           JOIN setting_communities c ON c.id = cl.community_id AND c.archived_at IS NULL
+           JOIN setting_locations l ON l.id = cl.location_id AND l.setting_id = ?
+       ) GROUP BY location_id`
+    )
+    .all(settingId, settingId) as { location_id: number; n: number }[];
+  res.json(Object.fromEntries(rows.map((r) => [r.location_id, r.n])));
+});
+
 settingLocationsRouter.get("/:id", (req, res) => {
   const row = db
     .prepare("SELECT * FROM setting_locations WHERE id = ?")

@@ -29,6 +29,7 @@ function makeCtx(canvas: HTMLCanvasElement | null = null): { ctx: CanvasRenderin
     {
       get(_t, prop) {
         if (prop === "canvas") return canvas;
+        if (prop === "measureText") return (value: string) => ({ width: value.length * 7 });
         if (prop === "globalAlpha") return alpha;
         return (...args: unknown[]) => {
           if (prop === "save") stack.push(alpha);
@@ -348,7 +349,16 @@ describe("layer render order (§117)", () => {
     const calls = renderCalls(doc, { selectedId: "symbol-1" });
     expect(calls).toContain("rotate(0.785398163397)");
     expect(calls).toContain("scale(48,48)");
-    expect(calls.some((call) => call.includes("strokeRect(-0.500000000000,-0.500000000000,1,1)"))).toBe(true);
+    expect(calls).toContain("strokeRect(-24,-24,48,48)");
+    const outline = calls.indexOf("strokeRect(-24,-24,48,48)");
+    expect(calls.slice(outline - 5, outline)).toContain("set:lineWidth=2");
+    const enlarged: MapDocumentV5 = { ...doc, layers: doc.layers.map(layer => layer.kind === "object"
+      ? { ...layer, items: layer.items.map(item => ({ ...item, transform: { ...item.transform, scale: { x: 4, y: 8 } } })) } : layer) };
+    const largeCalls = renderCalls(enlarged, { selectedId: "symbol-1", scale: 48 });
+    const largeOutline = largeCalls.indexOf("strokeRect(-96,-192,192,384)");
+    expect(largeOutline).toBeGreaterThan(-1);
+    expect(largeCalls.slice(largeOutline - 5, largeOutline)).toContain("set:lineWidth=2");
+    expect(largeCalls.slice(largeOutline - 5, largeOutline).some(call => call.startsWith("scale("))).toBe(false);
   });
   it("Labels → Terrain → Gameplay → Roads → Terrain 2 рисуются именно так", () => {
     const calls = renderCalls(weirdDoc());
@@ -471,5 +481,62 @@ describe("gameplay items order (§16)", () => {
     expect(trapGlyph).toBeGreaterThan(-1);
     expect(room).toBeGreaterThan(-1);
     expect(trapGlyph).toBeLessThan(room);
+  });
+});
+
+
+describe("grid and token stacking", () => {
+  it("places the grid between terrain/paths and foreground artwork", () => {
+    const calls = renderCalls(weirdDoc(), { showGrid: true, gridColor: "#ffe14a" });
+    const grid = calls.indexOf('set:strokeStyle="#ffe14a"');
+    const room = calls.findIndex(call => call.includes('"ROOMX"'));
+    expect(grid).toBeGreaterThan(-1);
+    expect(room).toBeGreaterThan(grid);
+    const strokes = calls.slice(0, grid).filter(call => call === "stroke()");
+    expect(strokes.length).toBeGreaterThan(0);
+  });
+
+  it.each([[100, 1, .5], [200, 1, 1], [100, 2, 1], [50, 2, .5], [100, .5, .375], [100, .75, .375], [100, 3, 1], [200, 3, 2]])("scales the label with zoom %s and token size %s, bounded to 0.75–2 cells", (zoom, size, expectedScale) => {
+    const { model } = createV5RenderModel(baseDoc());
+    const token = { id: "sizing", kind: "token" as const, sourceRef: null, position: { x: 1, y: 1 }, size, rotation: 0,
+      appearance: { shape: "circle" as const, visual: { type: "builtin" as const, key: "being" as const } },
+      label: { mode: "custom" as const, text: "NAME" }, playerVisibility: "public" as const };
+    const { ctx, calls } = makeCtx();
+    renderMap(ctx, 400, 400, { grid: "square", width: 8, height: 8,
+      model: { ...model, layers: [{ id: "tokens", name: "Tokens", kind: "gameplay", visible: true, locked: false, opacity: 1, items: [{ kind: "token", token }] }] },
+      scale: zoom, ox: 0, oy: 0, showGrid: false, showCoords: false, hover: null, chrome: CHROME, playerView: false, selectedId: null });
+    const font = calls.findIndex(call => call.startsWith('set:font="700 24px'));
+    const transform = calls.slice(0, font).findLast(call => call.startsWith("scale("))!;
+    const factors = JSON.parse("[" + transform.slice(6, -1) + "]");
+    expect(factors[0]).toBeCloseTo(expectedScale);
+    expect(factors[1]).toBeCloseTo(expectedScale);
+    const anchorCall = calls.slice(0, font).findLast(call => call.startsWith("translate("))!;
+    const anchor = JSON.parse("[" + anchorCall.slice(10, -1) + "]");
+    expect(anchor[0]).toBeCloseTo(zoom);
+    expect(anchor[1]).toBeCloseTo(zoom + size * zoom / 2);
+    const angleCall = calls.slice(0, font).findLast(call => call.startsWith("rotate("))!;
+    expect(Math.abs(Number(angleCall.slice(7, -1)))).toBeLessThanOrEqual(6 * Math.PI / 180);
+  });
+
+  it("draws token portraits and tape labels after the grid, and fog above them", () => {
+    const { model } = createV5RenderModel(baseDoc());
+    const token = { id: "token-test", kind: "token" as const, sourceRef: null, position: { x: 3, y: 3 }, size: 1, rotation: 0,
+      appearance: { shape: "circle" as const, visual: { type: "builtin" as const, key: "being" as const } },
+      label: { mode: "custom" as const, text: "TOKEN_NAME" }, playerVisibility: "public" as const };
+    const { ctx, calls } = makeCtx();
+    renderMap(ctx, 400, 400, { grid: "square", width: 8, height: 8,
+      model: { ...model, layers: [...model.layers, { id: "tokens", name: "Tokens", kind: "gameplay", visible: true, locked: false, opacity: .5, items: [{ kind: "token", token }] }], exploration: { enabled: true, revealedCells: new Set() } },
+      scale: 24, ox: 10, oy: 10, showGrid: true, gridColor: "#ffe14a", gridOpacity: .7, showCoords: false, hover: null, chrome: CHROME, playerView: true, selectedId: null });
+    const grid = calls.indexOf('set:strokeStyle="#ffe14a"');
+    const name = calls.findIndex(call => call.startsWith('fillText("TOKEN_NAME"'));
+    const fog = calls.indexOf('set:fillStyle="#17252A"');
+    expect(grid).toBeGreaterThan(-1);
+    expect(Number(calls[grid + 1].split("=")[1])).toBeCloseTo(.7);
+    expect(name).toBeGreaterThan(grid);
+    expect(calls.slice(grid, name)).toContain('translate(82,94)');
+    expect(calls.slice(grid, name).some(call => call.startsWith('set:font="700 24px'))).toBe(true);
+    expect(calls[name]).toMatch(/^fillText\("TOKEN_NAME",0,0,/);
+    expect(fog).toBeGreaterThan(name);
+    expect(calls.slice(grid, name).filter(call => call.startsWith("set:globalAlpha=")).some(call => Number(call.split("=")[1]) === .5)).toBe(true);
   });
 });

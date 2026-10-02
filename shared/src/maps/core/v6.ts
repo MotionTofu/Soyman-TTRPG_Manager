@@ -25,7 +25,7 @@ export interface GameplayToken {
 export type GameplayEntityV6 = GameplayEntity | GameplayToken;
 export interface GameplayLayerV6 extends Omit<GameplayLayer, "items"> { items: GameplayEntityV6[] }
 export type MapLayerV6 = Exclude<MapLayer, GameplayLayer> | GameplayLayerV6;
-export type MapDrawingStyle = "blueprint" | "paper-ink";
+export type MapDrawingStyle = "blueprint" | "paper-ink" | "comic-punk";
 export interface MapDocumentV6 extends Omit<MapDocumentV5, "v" | "layers"> {
   v: 6; layers: MapLayerV6[];
   /** Map presentation is independent of generated geometry and app theme. */
@@ -82,7 +82,7 @@ export function validateMapDocumentV6(doc: unknown): ValidationIssue[] {
   if (!record(doc)) return [{ code: "root.not-object", path: "", message: "expected document" }];
   const errors = validateMapDocument(invariantView(doc));
   if (doc.v !== 6) errors.push({ code: "version.invalid", path: "v", message: "expected v === 6" });
-  if (doc.appearance !== undefined && (!record(doc.appearance) || !["blueprint", "paper-ink"].includes(doc.appearance.style as string))) {
+  if (doc.appearance !== undefined && (!record(doc.appearance) || !["blueprint", "paper-ink", "comic-punk"].includes(doc.appearance.style as string))) {
     errors.push({ code: "appearance.unsupported", path: "appearance.style", message: "unsupported drawing style" });
   }
   if (Array.isArray(doc.layers)) doc.layers.forEach((layer, li) => {

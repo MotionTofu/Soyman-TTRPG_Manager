@@ -1,34 +1,29 @@
+import { pathNodesFromAnchors } from "./pathAnchors";
 import { CARTOGRAPHY_PACK, CARTOGRAPHY_SCATTER } from "../assets/cartography";
 import type { MapDocumentV6, ScatterArea, SplineNode, Vec2 } from "@shared/maps/core";
 import { createSplinePath, updateSplinePath, deletePath } from "../core/mutations/paths";
-import { paintTerrainMask } from "../core/mutations/terrainMask";
-import { splineFromAnchors, flattenSplineNodes } from "../core/spline";
+import { paintTerrainMaskStroke } from "../core/mutations/terrainMask";
+import { flattenSplineNodes, flattenSplineWithWidths } from "../core/spline";
 import { builtinMaterial } from "../core";
 import { scatterInstances, SCATTER_LIMIT, translateShape } from "../scatter";
 import { editGeometry } from "./editDocument";
 import { requireEditableLayer, type WorkspaceSelection } from "./editorCommands";
 
 export function paintSurface(document: MapDocumentV6, layerId: string, a: Vec2, b: Vec2, radius: number, material: string | null) {
+  return paintSurfaceStroke(document, layerId, [a, b], radius, material);
+}
+export function paintSurfaceStroke(document: MapDocumentV6, layerId: string, points: readonly Vec2[], radius: number, material: string | null) {
   const layer = requireEditableLayer(document, layerId, "terrain");
   if (layer.kind !== "terrain" || layer.representation !== "mask") throw new Error("Выберите слой плавной поверхности");
   if (!(radius >= 0.25 && radius <= 8)) throw new Error("Размер кисти должен быть от 0,25 до 8");
-  const distance = Math.hypot(b.x - a.x, b.y - a.y), steps = Math.max(1, Math.ceil(distance / Math.max(0.125, radius / 2)));
-  return editGeometry(document, view => {
-    let next = view, changed = false;
-    for (let i = 0; i <= steps; i++) {
-      const result = paintTerrainMask(next, layerId, a.x + (b.x - a.x) * i / steps, a.y + (b.y - a.y) * i / steps,
-        radius, material === null ? null : builtinMaterial(material), () => crypto.randomUUID());
-      if (!result.ok) return result;
-      changed ||= result.changed; next = result.document;
-    }
-    return { ok: true, changed, document: next };
-  });
+  return editGeometry(document, view => paintTerrainMaskStroke(view, layerId, points, radius,
+    material === null ? null : builtinMaterial(material), () => crypto.randomUUID()));
 }
-export function addFreePath(document: MapDocumentV6, layerId: string, points: Vec2[], kind: "road" | "river", width: number) {
+export function addFreePath(document: MapDocumentV6, layerId: string, points: Vec2[], kind: "road" | "river", width: number, closed = false) {
   requireEditableLayer(document, layerId, "path");
   if (points.length < 2 || Math.hypot(points.at(-1)!.x - points[0].x, points.at(-1)!.y - points[0].y) < 0.1 && points.length === 2) return document;
   return editGeometry(document, view => createSplinePath(view, layerId, { id: crypto.randomUUID(), kind,
-    styleRef: { type: "builtin", key: `path/${kind}` }, width, nodes: splineFromAnchors(points) }));
+    styleRef: { type: "builtin", key: `path/${kind}` }, width, nodes: pathNodesFromAnchors(points, closed), properties: { closed } }));
 }
 export function selectedPath(document: MapDocumentV6, selection: WorkspaceSelection | null) {
   const layer = document.layers.find(layer => layer.id === selection?.layerId);
@@ -92,4 +87,14 @@ export function removeArtSelection(document: MapDocumentV6, selection: Workspace
   requireEditableLayer(document, selection.layerId);
   return editGeometry(document, view => selection.kind === "path" ? deletePath(view, selection.id) :
     { ok: true, changed: true, document: { ...view, layers: view.layers.map(l => l.id === selection.layerId && l.kind === "scatter" ? { ...l, areas: l.areas.filter(a => a.id !== selection.id) } : l) } });
+}
+
+export function freePathHit(nodes: readonly SplineNode[], point: Vec2, width: number, slack: number, closed = false) {
+  const samples = flattenSplineWithWidths(closed ? [...nodes, nodes[0]] : nodes, width, Math.max(.05, slack));
+  for (let i = 1; i < samples.length; i++) {
+    const a = samples[i - 1], b = samples[i], dx = b.x - a.x, dy = b.y - a.y;
+    const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / (dx * dx + dy * dy || 1)));
+    if (Math.hypot(point.x - a.x - t * dx, point.y - a.y - t * dy) <= (a.width + (b.width - a.width) * t) / 2 + slack) return true;
+  }
+  return false;
 }

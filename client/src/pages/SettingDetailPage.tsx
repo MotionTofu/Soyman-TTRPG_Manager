@@ -1,5 +1,4 @@
-import {ProjectWorkbooks} from "../components/workbooks/ProjectWorkbooks";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -14,39 +13,29 @@ import {
   settingPagePaths,
   timelineAffects,
 } from "../data/settingPage";
-import { EditableTextCard } from "../components/EditableTextCard";
 import { SettingChronicleEventRow } from "../components/SettingChronicleEventRow";
-import { ResourcesSection, type ResourceStats } from "../components/ResourcesSection";
-import { RESOURCE_CATEGORIES } from "../resourceCategories";
-import { LocationTree } from "../components/LocationTree";
+import { GeographyRegistry } from "../components/setting/GeographyRegistry";
 import { LocationRootGraph } from "../components/LocationRootGraph";
 import { LocationMiller } from "../components/LocationMiller";
 import { ContextMenu, type ContextMenuItem } from "../components/ContextMenu";
 import { SettingCalendarEditor } from "../components/SettingCalendarEditor";
 import { SettingCalendarSettings } from "../components/SettingCalendarSettings";
 import { ImportantDatesSection } from "../components/ImportantDatesSection";
-import { EntityTypeChip } from "../components/EntityTypeChip";
 import { EntityPage } from "../components/EntityPage";
 import { useTabState } from "../hooks/useTabState";
 import { Modal } from "../components/Modal";
 import { MentionTextarea } from "../components/mentions/MentionTextarea";
-import { MentionText } from "../components/mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import type { InworldDatedItem } from "../components/InworldCalendar";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { Timeline } from "../components/Timeline";
 import { SettingCycles } from "../components/SettingCycles";
-import { formatEventDate } from "../inworldCalendar";
-import { useImageCrop } from "../hooks/useImageCrop";
+import { SettingCyclePanel } from "../components/setting/SettingCyclePanel";
+import { dateFromElapsed, weekdayIndexFor } from "../inworldCalendar";
 import { downloadJson } from "../downloadJson";
 import { ExportProgress } from "../components/ExportProgress";
-import { loadThumbnailStyles } from "../thumbnailStyles";
-import { TagChips } from "../components/TagChips";
 import { GenrePicker } from "../components/GenrePicker";
-import { ZineGraphic } from "../components/ZineGraphics";
-import { GENRE_CATEGORIES, MAX_GENRES } from "../genreData";
 import type { SettingGenre } from "../types";
-import { SettingEntryList } from "../components/SettingEntryList";
 import { ArtifactTileGrid, ArtifactEditModal, ArtifactAssignModal } from "../components/ArtifactTileGrid";
 import { groupArtifacts, type ArtifactGrouping } from "../artifactGroups";
 import { EntityPreviewContent } from "../components/EntityPreviewModal";
@@ -58,24 +47,26 @@ import { RelationGraph } from "../components/RelationGraph";
 import { SETTING_SCOPED_TYPES } from "../components/GraphTypeFilters";
 
 import type { GraphData } from "../graphTypes";
-import { NavIcon } from "../components/NavIcons";
 import { EmptyState } from "../components/EmptyState";
 import { isSafeImageUrl, safeBackgroundImage } from "../utils/safeUrl";
-import { useAuthenticatedFileUrl } from "../utils/fileUrl";
 import { useAlert, useConfirm } from "../hooks/useConfirm";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import { CampaignWizard } from "../components/CampaignWizard";
-import { EntityImageSlot } from "../components/EntityImageSlot";
 import { EntityTabWorkspace } from "../components/EntityTabWorkspace";
 import { PopulationTab } from "../components/PopulationTab";
+import { SettingOverview, type SettingCounts } from "../components/setting/SettingOverview";
+import { SettingWorldTab } from "../components/setting/SettingWorldTab";
+import { SettingGalleryTab } from "../components/setting/SettingGalleryTab";
+import { SettingLibraryTab } from "../components/setting/SettingLibraryTab";
+import { SettingAudioTab } from "../components/setting/SettingAudioTab";
+import type { InstanceSummary } from "../components/workbooks/model";
+import "./setting-profile.css";
 
 import type { System } from "../types";
 import type {
   Artifact,
   Campaign,
-  Character,
   ImportantDate,
-  Resource,
   Setting,
   SettingCalendarEra,
   SettingCalendarEvent,
@@ -84,73 +75,31 @@ import type {
   SettingGroup,
 } from "../types";
 
-function SettingCampaignTile({ campaign: c }: { campaign: Campaign }) {
-  const rawUrl = c.thumbnail_image_url ?? c.background_image_url ?? null;
-  const imageUrl = rawUrl && isSafeImageUrl(rawUrl) ? rawUrl : null;
-  const authBlob = useAuthenticatedFileUrl(imageUrl);
-  const bg = imageUrl?.startsWith("/files/")
-    ? (authBlob ? `url("${authBlob}")` : undefined)
-    : safeBackgroundImage(imageUrl);
-
-  return (
-    <Link to={`/campaigns/${c.id}`} className="card campaign-tile">
-      <div className="campaign-tile-cover cover-halftone">
-        {bg ? (
-          <div className="cover-art cover-photo">
-            <div className="cover-art-image" style={{ backgroundImage: bg }} aria-hidden="true" />
-          </div>
-        ) : (
-          <div className="cover-art cover-art-fallback zine-grain" aria-hidden="true" />
-        )}
-        <div className="campaign-tile-scrim" />
-        <h3 className="campaign-tile-name">{c.name}</h3>
-      </div>
-      <div className="campaign-tile-meta">
-        <div className="campaign-tile-system">{c.system_name ?? "Система не указана"}</div>
-      </div>
-    </Link>
-  );
-}
-
-function SettingCharacterTile({ character: ch }: { character: Character }) {
-  const rawUrl = ch.thumbnail_image_url ?? ch.avatar_image_url ?? null;
-  const imageUrl = rawUrl && isSafeImageUrl(rawUrl) ? rawUrl : null;
-  const authBlob = useAuthenticatedFileUrl(imageUrl);
-  const bg = imageUrl?.startsWith("/files/")
-    ? (authBlob ? `url("${authBlob}")` : undefined)
-    : safeBackgroundImage(imageUrl);
-
-  return (
-    <Link to={`/characters/${ch.id}`} className="card campaign-tile">
-      <div className="campaign-tile-cover cover-halftone">
-        {bg ? (
-          <div className="cover-art cover-photo">
-            <div className="cover-art-image" style={{ backgroundImage: bg }} aria-hidden="true" />
-          </div>
-        ) : (
-          <div className="cover-art cover-art-fallback zine-grain" aria-hidden="true" />
-        )}
-        <div className="campaign-tile-scrim" />
-        <h3 className="campaign-tile-name">{ch.character_name}</h3>
-      </div>
-      <div className="campaign-tile-meta">
-        <div className="campaign-tile-system">{ch.player_name ?? "игрок"}</div>
-      </div>
-    </Link>
-  );
-}
-
+// Вкладки профиля сеттинга (разбор 2026-10-01, Q1; «Заметки» убраны
+// 2026-10-02, Q19). Под «…» — то, к чему ходят реже.
 const TABS = [
   "Обзор",
+  "Мир",
   "География",
   "Население",
+  "Хроника",
   "Приключения",
+  "Галерея",
+  "Тетрадь",
   "Сокровищница",
   "Граф связей",
-  "Хроника мира",
-  "Заметки",
-  "Ресурсы",
+  "Библиотека",
+  "Аудиотека",
 ] as const;
+type Tab = (typeof TABS)[number];
+const MORE_TABS: readonly Tab[] = ["Сокровищница", "Граф связей", "Библиотека", "Аудиотека"];
+// Пустой сеттинг (Q13): на виду четыре вкладки, остальные — под «…».
+const CORE_TABS: readonly Tab[] = ["Обзор", "Мир", "География", "Население"];
+const TAB_ALIASES: Readonly<Record<string, string>> = {
+  "Хроника мира": "Хроника",
+  Ресурсы: "Галерея",
+  Заметки: "Мир",
+};
 
 // Пустые списки — одни на все отрисовки: `?? []` давал бы новый массив
 // каждый раз и сбивал бы useMemo ниже.
@@ -160,10 +109,9 @@ const NO_DATES: ImportantDate[] = [];
 const NO_ERAS: SettingCalendarEra[] = [];
 const NO_TIMELINES: SettingCalendarTimeline[] = [];
 const NO_CAMPAIGNS: Campaign[] = [];
-const NO_CHARACTERS: Character[] = [];
-const NO_RESOURCES: Resource[] = [];
 const NO_GROUPS: SettingGroup[] = [];
 const NO_ARTIFACTS: Artifact[] = [];
+const NO_WORKBOOKS: InstanceSummary[] = [];
 
 export function SettingDetailPage() {
   const { id } = useParams();
@@ -181,30 +129,19 @@ export function SettingDetailPage() {
   // Фон и тамбнейл живут в карточке «Изображения сеттинга» внизу «Обзора» и
   // заливаются сразу по выбору файла — не откладываются до «Сохранить» рядом с
   // именем, как было раньше.
-  const [uploadingBg, setUploadingBg] = useState(false);
-  const [uploadingThumb, setUploadingThumb] = useState(false);
-  const bgCrop = useImageCrop("background", (file) => uploadImage("background", file));
-  const thumbCrop = useImageCrop("thumbnail", (file) => uploadImage("thumbnail", file));
-  const [tab, selectTab] = useTabState(TABS, "Обзор");
-  // Навигация внутри таба «Обзор» (Master–Detail): описание, теги,
-  // кампании, изображения, проверка связей. Онбординг — transient-баннер
-  // сверху, верхний таб-бар не трогаем.
-  const [ovSel, setOvSel] = useState<{ section: string; item?: string }>({ section: "desc" });
-  // Навигация внутри таба «Ресурсы»: все и категории со счётчиками.
-  const [resSel, setResSel] = useState<{ section: string; item?: string }>({ section: "all" });
-  const [resStats, setResStats] = useState<ResourceStats | null>(null);
+  const [tab, selectTab] = useTabState(TABS, "Обзор", TAB_ALIASES);
   const [showExport, setShowExport] = useState(false);
+  // Редкие действия «Обзора» переехали под «…» (Q2): окна по пунктам меню.
+  const [dialog, setDialog] = useState<"name" | "groups" | "links" | null>(null);
   const [creatingEvent, setCreatingEvent] = useState(false);
   const [savingName, setSavingName] = useState(false);
 
   // Каждый раздел читает своё, только пока открыт: «Обзор» не тянет хронику,
   // а хроника — персонажей кампаний.
-  const onChronicle = tab === "Хроника мира";
-  const resources = useResource<Resource[]>(tab === "Ресурсы" ? settingPagePaths.resources(settingId) : null).data ?? NO_RESOURCES;
-  const characters =
-    useResource<Character[]>(tab === "Обзор" && ovSel.section === "campaigns" ? settingPagePaths.characters(settingId) : null).data ??
-    NO_CHARACTERS;
-  const onTags = tab === "Обзор" && ovSel.section === "tags";
+  const onChronicle = tab === "Хроника";
+  const counts = useResource<SettingCounts>(`/settings/${settingId}/counts`).data ?? null;
+  const workbooks = useResource<InstanceSummary[]>(`/workbooks/instances?project_type=setting&project_id=${settingId}`).data ?? NO_WORKBOOKS;
+  const onTags = dialog === "groups";
   const allGroups = useResource<SettingGroup[]>(onTags ? settingPagePaths.groups() : null).data ?? NO_GROUPS;
   const settingGroups = useResource<SettingGroup[]>(onTags ? settingPagePaths.groupsOf(settingId) : null).data ?? NO_GROUPS;
   const settingGroupIds = settingGroups.map((g) => g.id);
@@ -218,6 +155,8 @@ export function SettingDetailPage() {
   const [chronicleTab, setChronicleTab] = useState<"Хронология" | "Повторяющиеся" | "Циклы" | "Календарь">("Хронология");
   const [chronicleFilter, setChronicleFilter] = useState<"all" | "important" | "upcoming" | "cancelled" | "visible">("all");
   const [chronicleSort, setChronicleSort] = useState<"chronological" | "important-first">("chronological");
+  // Порядок дат (просьба владельца 2026-10-02): старые сверху или новые сверху.
+  const [chronicleNewestFirst, setChronicleNewestFirst] = useState(false);
   const [expandedEvents, setExpandedEvents] = useState<Set<number>>(new Set());
   const [calendarMenu, setCalendarMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(
     null
@@ -236,6 +175,8 @@ export function SettingDetailPage() {
     month_end: string;
     day_end: string;
     cancel_note: string;
+    /** «Повторяется» (разбор 2026-10-02, Q2): не «нет» — запись уедет в «Повторяющиеся». */
+    recurrence: "none" | "annual" | "monthly" | "weekly";
   } | null>(null);
   const [genrePickerOpen, setGenrePickerOpen] = useState(false);
 
@@ -284,17 +225,26 @@ export function SettingDetailPage() {
         events = events.filter((e) => e.inworld_year >= era.start_year && e.inworld_year < endYear);
       }
     }
+    const dir = chronicleNewestFirst ? -1 : 1;
+    const byDate = (a: SettingCalendarEvent, b: SettingCalendarEvent) =>
+      dir * (a.inworld_year - b.inworld_year || a.inworld_month - b.inworld_month || a.inworld_day - b.inworld_day);
     const sorted = [...events];
-    if (chronicleSort === "important-first") sorted.sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0));
-    else sorted.sort((a, b) => a.inworld_year - b.inworld_year || a.inworld_month - b.inworld_month || a.inworld_day - b.inworld_day);
+    if (chronicleSort === "important-first") sorted.sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0) || byDate(a, b));
+    else sorted.sort(byDate);
     return sorted;
-  }, [filteredCalendarEvents, chronicleFilter, chronicleSort, selectedEraId, eras]);
+  }, [filteredCalendarEvents, chronicleFilter, chronicleSort, chronicleNewestFirst, selectedEraId, eras]);
+  // Эпохи текущего таймлайна (общий — timeline_id = null). Раньше фильтр по
+  // эпохам появлялся только у отдельного таймлайна, и эпохи общего было не выбрать.
+  const timelineEras = useMemo(
+    () => eras.filter((e) => (e.timeline_id ?? null) === selectedTimelineId).sort((a, b) => a.start_year - b.start_year),
+    [eras, selectedTimelineId]
+  );
+  const eraOfYear = (year: number) => timelineEras.filter((e) => e.start_year <= year).pop();
   const axisRef = useRef<HTMLDivElement>(null);
   // Скрытое файловое поле импорта — его щёлкает пункт «Импорт» из меню «…».
   const importInputRef = useRef<HTMLInputElement>(null);
   const calendarRef = useRef<HTMLDivElement>(null);
   const [timelineFocus, setTimelineFocus] = useState<{ year: number; month: number; day: number } | null>(null);
-  const [calendarFocus, setCalendarFocus] = useState<{ year: number; month: number } | null>(null);
 
   async function createTimeline() {
     const name = timelineName.trim();
@@ -351,10 +301,6 @@ export function SettingDetailPage() {
 
   // Карточки полей держат правку открытой, пока сохранение не удалось: для
   // этого им нужна ошибка, а плашку показывает слой.
-  async function saveDescription(value: string) {
-    if (!(await save({ description: value }))) throw new Error("Не сохранилось");
-  }
-
   async function saveName(name: string, code: string) {
     // Двойник кода не запрещается, а называется: код — подсказка человеку в
     // окне неработающей ссылки, а не ключ, по которому что-то ищется.
@@ -375,35 +321,6 @@ export function SettingDetailPage() {
 
   async function saveGenres(genres: SettingGenre[]) {
     if (await save({ genres })) setGenrePickerOpen(false);
-  }
-
-  async function uploadImage(kind: "background" | "thumbnail", file: File) {
-    const setUploading = kind === "background" ? setUploadingBg : setUploadingThumb;
-    setUploading(true);
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      await run(() => write.post(`/settings/${settingId}/${kind}`, form).then(() => true), { affects: settingAffects });
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  async function deleteImage(kind: "background" | "thumbnail") {
-    const ok = await confirm({
-      title: kind === "background" ? "Удалить фон?" : "Удалить тамбнейл?",
-      message: "Изображение будет удалено с диска.",
-      confirmLabel: "Удалить",
-      danger: true,
-    });
-    if (!ok) return;
-    const setUploading = kind === "background" ? setUploadingBg : setUploadingThumb;
-    setUploading(true);
-    try {
-      await run(() => write.del(`/settings/${settingId}/${kind}`).then(() => true), { affects: settingAffects });
-    } finally {
-      setUploading(false);
-    }
   }
 
   async function archiveSetting() {
@@ -518,7 +435,7 @@ export function SettingDetailPage() {
   }));
 
   function openCreateEventModal(year: number, month: number, day: number) {
-    setEventModal({ year, month, day, title: "", description: "", important: false, precision: "day", status: "happened", year_end: "", month_end: "", day_end: "", cancel_note: "" });
+    setEventModal({ year, month, day, title: "", description: "", important: false, precision: "day", status: "happened", year_end: "", month_end: "", day_end: "", cancel_note: "", recurrence: "none" });
     setCalendarMenu(null);
   }
 
@@ -537,6 +454,7 @@ export function SettingDetailPage() {
       month_end: ev.inworld_month_end != null ? String(ev.inworld_month_end) : "",
       day_end: ev.inworld_day_end != null ? String(ev.inworld_day_end) : "",
       cancel_note: ev.cancel_note ?? "",
+      recurrence: "none",
     });
     setCalendarMenu(null);
   }
@@ -563,8 +481,68 @@ export function SettingDetailPage() {
     void patchEvent(ev, { visible_to_players: !ev.visible_to_players }, { visible_to_players: ev.visible_to_players ? 0 : 1 } as Partial<SettingCalendarEvent>);
   }
 
+  /**
+   * Событие → повторяющаяся дата (разбор 2026-10-02, Q1, Q6): перенос, а не
+   * копия. Подтверждение перечисляет только то, что у события заполнено.
+   */
+  async function saveAsRecurring(modal: NonNullable<typeof eventModal>, recurrence: "annual" | "monthly" | "weekly") {
+    const weekdays = [...(calendar?.weekdays ?? [])].sort((a, b) => a.position - b.position);
+    const weekday = weekdays[weekdayIndexFor(modal.year, modal.month, modal.day, calendar?.months ?? [], weekdays.length)]?.position;
+    if (recurrence === "weekly" && weekday == null) {
+      showAlert("В календаре сеттинга нет дней недели.");
+      return false;
+    }
+    const day = recurrence === "weekly" ? weekday : modal.day;
+    const dateAffects: Affect[] = [{ path: chroniclePaths.importantDates(settingId) }];
+    if (!modal.id) {
+      return run(
+        () =>
+          write
+            .post(chroniclePaths.importantDates(settingId), {
+              owner_type: "setting", owner_id: settingId, title: modal.title.trim(), description: modal.description,
+              recurrence, year: null, month: recurrence === "annual" ? modal.month : null, day, custom_rule: "", date_type: "", color: "",
+            })
+            .then(() => true),
+        { affects: dateAffects, retry: false }
+      );
+    }
+    const id = modal.id;
+    const original = calendarEvents.find((e) => e.id === id);
+    const footprint = await readOnce<{ links: number; campaign_copies: number; mention_dates: number }>(`/settings/calendar-events/${id}/footprint`).catch(() => null);
+    const lost = [
+      original?.status === "upcoming" && "статус «предстоит»",
+      original?.status === "cancelled" && "статус «отменено»" + (original.cancel_note ? " и чем отменилось" : ""),
+      original?.important ? "отметка «важное»" : false,
+      original?.full_description?.trim() && "подробное описание",
+      original?.consequences?.trim() && "последствия",
+      original?.player_text?.trim() && "текст для игроков",
+      footprint?.links && `связи: ${footprint.links}`,
+      footprint?.campaign_copies && `копии в кампаниях: ${footprint.campaign_copies}`,
+      footprint?.mention_dates && `важные даты у упомянутых: ${footprint.mention_dates}`,
+    ].filter(Boolean);
+    const ok = await confirm({
+      title: "Сделать повторяющимся?",
+      message: `«${modal.title.trim()}» переедет в «Повторяющиеся»; страница события пропадёт.` + (lost.length ? ` Уйдут: ${lost.join(", ")}.` : ""),
+      confirmLabel: "Перенести",
+    });
+    if (!ok) return false;
+    return run(
+      async () => {
+        // Сначала правки окна (название, описание) — потом перенос.
+        await write.put(`/settings/calendar-events/${id}`, { title: modal.title.trim(), description: modal.description });
+        await write.post(`/settings/calendar-events/${id}/to-recurring`, { recurrence, day });
+        return true;
+      },
+      { affects: [...chronicleEventAffects(settingId, id), ...dateAffects], retry: false }
+    );
+  }
+
   async function saveEventModal() {
     if (!eventModal || !eventModal.title.trim()) return;
+    if (eventModal.recurrence !== "none") {
+      if (await saveAsRecurring(eventModal, eventModal.recurrence)) setEventModal(null);
+      return;
+    }
     const hasPeriod = eventModal.year_end.trim() !== "" || eventModal.month_end.trim() !== "" || eventModal.day_end.trim() !== "";
     // Валидация порядка start/end: конец периода не может быть раньше начала.
     if (hasPeriod) {
@@ -656,32 +634,56 @@ export function SettingDetailPage() {
   );
 
   const isNewSetting = campaigns.length === 0;
-  // Пустому сеттингу показываем четыре вкладки вместо десяти: остальные
-  // нечем наполнить, пока нет ни одной кампании.
-  const coreTabs = new Set(["Обзор", "География", "Население", "Хроника мира"]);
-  const visibleTabs = isNewSetting ? TABS.filter((t) => coreTabs.has(t)) : TABS;
-  const hiddenTabs = isNewSetting ? TABS.filter((t) => !coreTabs.has(t)) : [];
+  const tabCount = (n: number | undefined) => (n ? ` · ${n}` : "");
+  const label: Partial<Record<Tab, string>> = {
+    Мир: `Мир${tabCount(counts?.world)}`,
+    География: `География${tabCount(counts?.places)}`,
+    Население: `Население${tabCount(counts ? counts.beings + counts.communities : 0)}`,
+    Хроника: `Хроника${tabCount(counts?.events)}`,
+    Приключения: `Приключения${tabCount(counts?.adventures)}`,
+  };
+  // «Тетрадь» — только когда к сеттингу привязана тетрадь (Q1).
+  const available = TABS.filter((t) => t !== "Тетрадь" || workbooks.length > 0);
+  const shownTabs = available.filter((t) => (isNewSetting ? CORE_TABS.includes(t) : !MORE_TABS.includes(t)));
+  const hiddenTabs = available.filter((t) => !shownTabs.includes(t));
 
   return (
     <EntityPage
+      paper
       crumbs={[{ label: "Сеттинги", to: "/settings" }, { label: setting.name }]}
       entityType="setting"
       title={setting.name}
-      badges={(setting as any).archived_at && <span className="badge cancelled">Архивировано</span>}
-      meta={(savingFields || savingName) && <span aria-live="polite">Сохранение…</span>}
+      badges={setting.archived_at && <span className="badge cancelled">Архивировано</span>}
+      // Жанры — метками под именем, на месте мазка (владелец, 2026-10-02);
+      // щелчок открывает выбор жанров.
+      meta={
+        <span className="setting-genres">
+          {(setting.genres ?? []).map((g, i) => (
+            <button key={i} type="button" className="badge tag" onClick={() => setGenrePickerOpen(true)}>
+              {g.subgenre ?? g.genre}
+            </button>
+          ))}
+          {!setting.genres?.length && (
+            <button type="button" className="badge tag setting-genres__add" onClick={() => setGenrePickerOpen(true)}>
+              + жанр
+            </button>
+          )}
+          {(savingFields || savingName) && <span aria-live="polite">Сохранение…</span>}
+        </span>
+      }
       backdrop={safeBg}
-      // Имя правится в карточке «Описание» на «Обзоре» — вместе с самим
-      // описанием, одной кнопкой «Сохранить». Экспорт, импорт и архивация
-      // редки, и ни одно из них не заслуживает места в шапке: под «…» все.
       actions={[
+        { label: "Название и код…", onClick: () => setDialog("name") },
+        { label: "Группы сеттингов…", onClick: () => setDialog("groups") },
+        { label: "Проверка связей", onClick: () => setDialog("links") },
         { label: "Экспорт", onClick: () => setShowExport(true) },
         { label: "Импорт", onClick: () => importInputRef.current?.click() },
         { label: "Архивировать", danger: true, onClick: archiveSetting },
       ]}
-      tabs={visibleTabs}
+      tabs={shownTabs.map((t) => ({ id: t, label: label[t] ?? t }))}
       hiddenTabs={hiddenTabs}
       tab={tab}
-      onTab={(t) => selectTab(t as (typeof TABS)[number])}
+      onTab={(t) => selectTab(t as Tab)}
       overlays={
         <>
           {confirmDialog}
@@ -698,7 +700,6 @@ export function SettingDetailPage() {
         </>
       }
     >
-      <ProjectWorkbooks type="setting" id={settingId}/>
       {showExport && (
         <SettingExportModal settingId={settingId} settingName={setting.name} onClose={() => setShowExport(false)} />
       )}
@@ -709,6 +710,46 @@ export function SettingDetailPage() {
           onSave={saveGenres}
           onClose={() => setGenrePickerOpen(false)}
         />
+      )}
+
+      {dialog === "name" && (
+        <NameDialog
+          setting={setting}
+          onSave={async (name, code) => {
+            await saveName(name, code);
+            setDialog(null);
+          }}
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog === "groups" && (
+        <Modal ariaLabel="Группы сеттингов" onClose={() => setDialog(null)}>
+          <h3>Группы сеттингов</h3>
+          {allGroups.length === 0 ? (
+            <p className="muted">Групп пока нет — их заводят в списке сеттингов.</p>
+          ) : (
+            <div className="stack">
+              {allGroups.map((g) => {
+                const isIn = settingGroupIds.includes(g.id);
+                return (
+                  <label key={g.id} className="row">
+                    <input type="checkbox" checked={isIn} onChange={() => void toggleGroup(g, isIn)} />
+                    {g.name}
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </Modal>
+      )}
+      {dialog === "links" && (
+        <Modal ariaLabel="Проверка связей" wide onClose={() => setDialog(null)}>
+          <CrossLinksWizard
+            ownerKind="setting"
+            ownerId={settingId}
+            help="Ищет имена в описаниях локаций, историях личностей, полях сообществ, силе предметов и синопсисах приключений — и делает их кликабельными. Шаг за шагом, по одному типу цели: у каждого своя строгость. Сцены размечает такой же проход на странице приключения. Ничего не пишет, пока вы не подтвердите."
+          />
+        </Modal>
       )}
 
       {creatingEvent && (
@@ -731,265 +772,26 @@ export function SettingDetailPage() {
       )}
 
       {tab === "Обзор" && (
-        <div className="stack setting-overview">
-          {(() => {
-            const hasDesc = !!setting.description?.trim();
-            const hasGenres = !!(setting.genres && setting.genres.length > 0);
-            const hasCampaigns = campaigns.length > 0;
-            const done = (hasDesc ? 1 : 0) + (hasGenres ? 1 : 0) + (hasCampaigns ? 1 : 0);
-            if (done === 3) return null;
-            return (
-              <div className="card stack" style={{ borderLeft: "3px solid var(--accent)" }}>
-                <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-                  <h3 style={{ margin: 0 }}>Начните с этих 3 шагов</h3>
-                  <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
-                    {done}/3
-                  </span>
-                </div>
-                <span className="muted">Заполните базу, чтобы сеттинг ожил в списках и кампаниях.</span>
-                <div className="stack">
-                  <div className="row" style={{ justifyContent: "space-between", alignItems: "center", opacity: hasDesc ? 0.6 : 1 }}>
-                    <span className="row" style={{ gap: 6 }}>
-                      <span>{hasDesc ? "✓" : "○"}</span> Заполнить описание
-                    </span>
-                    {!hasDesc && (
-                      <button
-                        className="small"
-                        onClick={() => document.getElementById("section-overview-title")?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                      >
-                        Заполнить →
-                      </button>
-                    )}
-                  </div>
-                  <div className="row" style={{ justifyContent: "space-between", alignItems: "center", opacity: hasGenres ? 0.6 : 1 }}>
-                    <span className="row" style={{ gap: 6 }}>
-                      <span>{hasGenres ? "✓" : "○"}</span> Выбрать жанры {hasGenres ? `· ${setting.genres!.length}` : ""}
-                    </span>
-                    {!hasGenres && (
-                      <button className="small" onClick={() => setGenrePickerOpen(true)}>
-                        Выбрать →
-                      </button>
-                    )}
-                  </div>
-                  <div className="row" style={{ justifyContent: "space-between", alignItems: "center", opacity: hasCampaigns ? 0.6 : 1 }}>
-                    <span className="row" style={{ gap: 6 }}>
-                      <span>{hasCampaigns ? "✓" : "○"}</span> Привязать кампанию {hasCampaigns ? `· ${campaigns.length}` : ""}
-                    </span>
-                    {!hasCampaigns && (
-                      <button className="small" onClick={openCampaignWizard}>
-                        Создать →
-                      </button>
-                    )}
-        </div>
-      </div>
-              </div>
-            );
-          })()}
-          <EntityTabWorkspace
-            sections={[
-              { id: "desc", label: "Описание" },
-              { id: "tags", label: "Теги" },
-              { id: "campaigns", label: "Кампании", count: campaigns.length },
-              { id: "images", label: "Изображения" },
-              { id: "links", label: "Проверка связей" },
-            ]}
-            selection={ovSel}
-            onSelect={setOvSel}
-            workspaceKey={settingId}
-            navFooter={
-              ovSel.section === "campaigns" ? (
-                <button className="primary" onClick={openCampaignWizard} style={{ alignSelf: "flex-start" }}>
-                  + Новая кампания
-                </button>
-              ) : undefined
-            }
-          >
-          {ovSel.section === "desc" && (
-              <EditableTextCard
-                key={`description-${setting.id}`}
-                title="Описание"
-                value={setting.description}
-                onSave={saveDescription}
-                rows={6}
-                entityType="setting"
-                entityId={settingId}
-                defaultSettingId={settingId}
-                fields={[
-                  { key: "name", label: "Название", value: setting.name, required: true },
-                  {
-                    key: "code",
-                    label: "Код",
-                    value: setting.code ?? "",
-                    placeholder: "wdh",
-                    pattern: "^[a-z0-9-]{2,8}$",
-                    title: 'Пример: wdh → Waterdeep: Dragon Heist. Короткое сокращение для ссылок [[wdh:…]]. Латиница, 2–8 символов.',
-                  },
-                ]}
-                onSaveFields={(v) => saveName(v.name, v.code)}
-              />
-          )}
-          {ovSel.section === "tags" && (
-            <div className="card stack" style={{ flex: 1, minWidth: 0 }}>
-              <h3>Теги</h3>
-              <div className="genre-chips">
-                {setting.genres && setting.genres.length > 0 && setting.genres.map((g, i) => {
-                  const cat = GENRE_CATEGORIES.find((c) => c.name === g.genre);
-                  return (
-                    <button
-                      key={i}
-                      type="button"
-                      className="genre-chip genre-chip--selected"
-                      onClick={() => setGenrePickerOpen(true)}
-                    >
-                      {cat && <ZineGraphic name={cat.icon} className="genre-chip-icon" />}
-                      {g.subgenre ?? g.genre}
-                    </button>
-                  );
-                })}
-                {(!setting.genres || setting.genres.length < MAX_GENRES) && (
-                  <button
-                    type="button"
-                    className="genre-chip"
-                    onClick={() => setGenrePickerOpen(true)}
-                  >
-                    +жанр
-                  </button>
-                )}
-              </div>
-              {allGroups.length > 0 && (
-                <>
-                  <div style={{ borderTop: "1px solid var(--line)", margin: "4px 0" }} />
-                  <strong>Группы сеттингов</strong>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
-                    {allGroups.map((g) => {
-                      const isIn = settingGroupIds.includes(g.id);
-                      return (
-                        <label
-                          key={g.id}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 4,
-                            cursor: "pointer",
-                            padding: "4px 8px",
-                            borderRadius: 0,
-                            border: `1px solid ${isIn ? "var(--accent)" : "var(--line)"}`,
-                            background: isIn ? "var(--accent-bg, rgba(79, 140, 255, 0.08))" : "transparent",
-                            fontSize: "var(--fs-meta)",
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isIn}
-                            onChange={() => void toggleGroup(g, isIn)}
-                          />
-                          {g.name}
-                        </label>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-          {ovSel.section === "campaigns" && (
-          <div className="card res-group" id="section-campaigns">
-            <div className="res-group__band" style={{ cursor: "default" }}>
-              <span className="res-group__title">Кампании и персонажи</span>
-              <span className="res-group__count">{campaigns.length}</span>
-              <span style={{ marginLeft: "auto" }}>
-                <button className="primary small" onClick={openCampaignWizard}>
-                  + Новая кампания
-                </button>
-              </span>
-            </div>
-            <div className="res-group__body" style={{ padding: 12, display: "flex", flexDirection: "column", gap: 16 }}>
-            {campaigns.length === 0 ? (
-              <EmptyState
-                title="Кампаний нет"
-                hint="Привяжите кампанию к этому сеттингу — и она появится здесь."
-                action={
-                  <button onClick={openCampaignWizard}>
-                    + Новая кампания в этом сеттинге
-                  </button>
-                }
-              />
-            ) : (
-              campaigns.map((c) => {
-                const campChars = characters.filter((ch) => ch.campaign_id === c.id);
-                return (
-                  <div key={c.id} className="campaign-row">
-                    <div className="campaign-row-main">
-                      <SettingCampaignTile campaign={c} />
-                    </div>
-                    <div className="campaign-row-chars">
-                      {campChars.length > 0 ? (
-                        campChars.map((ch) => (
-                          <SettingCharacterTile key={ch.id} character={ch} />
-                        ))
-                      ) : (
-                        <div className="muted" style={{ fontSize: "var(--fs-micro)", padding: "12px 0" }}>
-                          Нет персонажей
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-            </div>
-          </div>
-          )}
-          {ovSel.section === "images" && (
-          <div className="card res-group" id="section-images">
-            <div className="res-group__band" style={{ cursor: "default" }}>
-              <span className="res-group__title">Изображения сеттинга</span>
-            </div>
-            <div className="res-group__body" style={{ padding: 12 }}>
-            <div className="entity-image-slots">
-              <EntityImageSlot
-                title="Фон профиля"
-                hint="Подложка на всех страницах сеттинга. Рекомендуем 1920×1080, до 15 MB, JPG/PNG/GIF/WebP/AVIF."
-                url={setting.background_image_url}
-                wide
-                uploading={uploadingBg}
-                onSelect={bgCrop.onSelect}
-                onDelete={() => deleteImage("background")}
-              />
-              <EntityImageSlot
-                title="Тамбнейл — 16×10"
-                hint="Карточка в списке сеттингов. Рекомендуем 900×562 (16×10), до 15 MB, JPG/PNG/GIF/WebP/AVIF."
-                url={setting.thumbnail_image_url}
-                uploading={uploadingThumb}
-                onSelect={thumbCrop.onSelect}
-                onDelete={() => deleteImage("thumbnail")}
-              />
-            </div>
-            </div>
-            {bgCrop.modal}
-            {thumbCrop.modal}
-          </div>
-          )}
-          {ovSel.section === "links" && (
-          <CrossLinksWizard
-            ownerKind="setting"
-            ownerId={settingId}
-            help="Ищет имена в описаниях локаций, историях личностей, полях сообществ, силе предметов и синопсисах приключений — и делает их кликабельными. Шаг за шагом, по одному типу цели: у каждого своя строгость. Сцены размечает такой же проход на странице приключения. Ничего не пишет, пока вы не подтвердите."
-          />
-          )}
-          </EntityTabWorkspace>
-          {campaignWizardOpen && (
-            <CampaignWizard
-              systems={wizardSystems}
-              settings={wizardSettings}
-              defaultSettingId={settingId}
-              onClose={() => setCampaignWizardOpen(false)}
-              onCreated={() => setCampaignWizardOpen(false)}
-            />
-          )}
-        </div>
+        <SettingOverview
+          setting={setting}
+          campaigns={campaigns}
+          counts={counts}
+          savePatch={save}
+          onNewCampaign={openCampaignWizard}
+          onGenres={() => setGenrePickerOpen(true)}
+          onWorld={() => selectTab("Мир")}
+        />
       )}
-
+      {campaignWizardOpen && (
+        <CampaignWizard
+          systems={wizardSystems}
+          settings={wizardSettings}
+          defaultSettingId={settingId}
+          onClose={() => setCampaignWizardOpen(false)}
+          onCreated={() => setCampaignWizardOpen(false)}
+        />
+      )}
+      {tab === "Мир" && <SettingWorldTab settingId={settingId} />}
       {tab === "География" && <GeographyTab settingId={settingId} />}
       {tab === "Население" && <PopulationTab settingId={settingId} />}
       {tab === "Приключения" && (
@@ -1000,7 +802,7 @@ export function SettingDetailPage() {
       {tab === "Сокровищница" && <ArtifactsTab settingId={settingId} />}
       {tab === "Граф связей" && <SettingGraphTab settingId={settingId} />}
 
-      {tab === "Хроника мира" && (
+      {tab === "Хроника" && (
         <div className="stack">
           {(calendarEvents.length > 0 || timelines.length > 0 || cycles.length > 0 || eras.length > 0 || importantDates.length > 0) ? (
             <div ref={axisRef} className="card stack">
@@ -1022,7 +824,22 @@ export function SettingDetailPage() {
                   ? { year: setting.pinned_calendar_year, month: setting.pinned_calendar_month }
                   : null
               }
-              cycles={cycles}
+              below={(view) => (
+                <SettingCyclePanel
+                  settingId={settingId}
+                  cycles={cycles}
+                  view={view}
+                  onAddCycle={() => setChronicleTab("Циклы")}
+                  onDayMenu={(day, x, y) => {
+                    const date = dateFromElapsed(day, calendar?.months ?? []);
+                    setCalendarMenu({
+                      x,
+                      y,
+                      items: [{ label: "Событие на этот день", onClick: () => openCreateEventModal(date.year, date.month, date.day) }],
+                    });
+                  }}
+                />
+              )}
               importantDates={importantDates}
               onMoveEvent={moveCalendarEvent}
               onNowChange={(date) => pinSettingCalendar(date)}
@@ -1089,7 +906,15 @@ export function SettingDetailPage() {
                     <span style={{ margin: "0 4px" }}>|</span>
                     <button className={`comp-mini ${chronicleSort === "chronological" ? "primary" : ""}`} onClick={() => setChronicleSort("chronological")}>Хронология</button>
                     <button className={`comp-mini ${chronicleSort === "important-first" ? "primary" : ""}`} onClick={() => setChronicleSort("important-first")}>Важные сверху</button>
-                    {selectedTimelineId != null && eras.some((e) => e.timeline_id === selectedTimelineId) && (
+                    <button
+                      className="comp-mini"
+                      aria-pressed={chronicleNewestFirst}
+                      title="Порядок дат"
+                      onClick={() => setChronicleNewestFirst((v) => !v)}
+                    >
+                      {chronicleNewestFirst ? "↓ Новые сверху" : "↑ Старые сверху"}
+                    </button>
+                    {timelineEras.length > 0 && (
                       <>
                         <span style={{ margin: "0 4px" }}>|</span>
                         <select
@@ -1099,7 +924,7 @@ export function SettingDetailPage() {
                           style={{ fontSize: "var(--fs-meta)" }}
                         >
                           <option value="">Все эпохи</option>
-                          {eras.filter((e) => e.timeline_id === selectedTimelineId).sort((a, b) => a.start_year - b.start_year).map((e) => (
+                          {timelineEras.map((e) => (
                             <option key={e.id} value={e.id}>{e.name} ({e.start_year})</option>
                           ))}
                         </select>
@@ -1107,9 +932,16 @@ export function SettingDetailPage() {
                     )}
                   </div>
                   <div className="stack">
-                    {sortedFilteredEvents.map((ev) => (
+                    {sortedFilteredEvents.map((ev, i) => {
+                      // Q4 (2026-10-02): в хронологическом порядке события
+                      // делятся заголовками эпох.
+                      const era = chronicleSort === "chronological" ? eraOfYear(ev.inworld_year) : undefined;
+                      const prev = i > 0 && chronicleSort === "chronological" ? eraOfYear(sortedFilteredEvents[i - 1].inworld_year) : undefined;
+                      return (
+                      <Fragment key={ev.id}>
+                      {era && era !== prev && <div className="chronicle-era">{era.name} <span>· с {era.start_year} года</span></div>}
                       <SettingChronicleEventRow
-                        key={ev.id} ev={ev}
+                        ev={ev}
                         expanded={expandedEvents.has(ev.id)} calendar={calendar}
                         onToggleExpand={toggleEventExpanded}
                         onToggleImportant={toggleEventImportant}
@@ -1118,18 +950,29 @@ export function SettingDetailPage() {
                         onShowOnAxis={(e) => { setTimelineFocus({ year: e.inworld_year, month: e.inworld_month, day: e.inworld_day }); setTimeout(() => axisRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 100); }}
                         onShowOnCalendar={() => { calendarRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }}
                       />
-                    ))}
+                      </Fragment>
+                      );
+                    })}
                     {sortedFilteredEvents.length === 0 && <p className="muted">{calendarEvents.length === 0 ? "Событий пока нет." : "Ничего не найдено."}</p>}
                   </div>
                 </div>
               )}
 
               {chronicleTab === "Повторяющиеся" && (
-                <ImportantDatesSection settingId={settingId} months={calendar?.months} weekdays={calendar?.weekdays} />
+                <ImportantDatesSection
+                  settingId={settingId}
+                  months={calendar?.months}
+                  weekdays={calendar?.weekdays}
+                  now={{ year: setting.pinned_calendar_year ?? null, month: setting.pinned_calendar_month ?? null }}
+                />
               )}
 
               {chronicleTab === "Циклы" && (
-                <SettingCycles settingId={settingId} />
+                <SettingCycles
+                  settingId={settingId}
+                  months={calendar?.months}
+                  now={{ year: setting.pinned_calendar_year ?? null, month: setting.pinned_calendar_month ?? null }}
+                />
               )}
 
               {chronicleTab === "Календарь" && (
@@ -1155,30 +998,26 @@ export function SettingDetailPage() {
         </div>
         )}
 
-      {tab === "Ресурсы" && (
-        <EntityTabWorkspace
-          sections={[
-            { id: "all", label: "Все", count: resStats?.total ?? resources.length },
-            ...RESOURCE_CATEGORIES.map((c) => ({
-              id: c.key,
-              label: c.label,
-              count: resStats?.byCategory[c.key] ?? 0,
-            })),
-          ]}
-          selection={resSel}
-          onSelect={setResSel}
-          workspaceKey={settingId}
-        >
-          <div className="card stack">
-            <ResourcesSection
-              scope="setting"
-              entityId={settingId}
-              resources={resources}
-              visibleCategories={resSel.section === "all" ? null : [resSel.section]}
-              onStats={(s) => setResStats((prev) => (JSON.stringify(prev) === JSON.stringify(s) ? prev : s))}
-            />
-          </div>
-        </EntityTabWorkspace>
+      {tab === "Галерея" && <SettingGalleryTab setting={setting} />}
+      {tab === "Библиотека" && <SettingLibraryTab settingId={settingId} />}
+      {tab === "Аудиотека" && <SettingAudioTab settingId={settingId} />}
+      {tab === "Тетрадь" && (
+        // Привязка тетради — шаг 4 тетрадей; пока вкладка ведёт в привязанные.
+        <section className="paper-groups" aria-label="Тетрадь сеттинга">
+          <ul className="paper-rows">
+            {workbooks.map((w) => (
+              <li key={w.id}>
+                <Link className="paper-rows__main" to={`/workbooks/${w.id}`}>
+                  {w.title} →
+                </Link>
+                <span className="paper-rows__sub">
+                  {w.template_title}
+                  {w.progress ? ` · заполнено ${w.progress.filled} из ${w.progress.total}` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {calendarMenu && (
@@ -1267,6 +1106,29 @@ export function SettingDetailPage() {
                 </select>
               </label>
             </div>
+            {(() => {
+              // Q7: повторять неточное или растянутое не по чему.
+              const blocked =
+                eventModal.precision !== "day" ? "уточните дату до дня"
+                : eventModal.year_end.trim() || eventModal.month_end.trim() || eventModal.day_end.trim() ? "уберите конец периода"
+                : null;
+              return (
+                <label className="row">
+                  Повторяется
+                  <select
+                    value={eventModal.recurrence}
+                    onChange={(e) => setEventModal({ ...eventModal, recurrence: e.target.value as NonNullable<typeof eventModal>["recurrence"] })}
+                  >
+                    <option value="none">нет</option>
+                    <option value="annual" disabled={!!blocked}>каждый год</option>
+                    <option value="monthly" disabled={!!blocked}>каждый месяц</option>
+                    <option value="weekly" disabled={!!blocked}>каждую неделю</option>
+                  </select>
+                  {blocked && <span className="muted">чтобы повторять — {blocked}</span>}
+                  {!blocked && eventModal.recurrence !== "none" && <span className="muted">уедет в «Повторяющиеся»</span>}
+                </label>
+              );
+            })()}
             {eventModal.status === "cancelled" && (
               <label className="stack" style={{ gap: 4 }}>
                 Чем отменилось
@@ -1292,15 +1154,49 @@ export function SettingDetailPage() {
         </Modal>
        )}
 
-      {tab === "Заметки" && (
-        <SettingEntryList
-          settingId={settingId}
-          category="notes"
-          addLabel="+ добавить заметку"
-          emptyLabel="Заметок пока нет."
-        />
-      )}
     </EntityPage>
+  );
+}
+
+// Имя и код — редкая правка, под «…» (Q2). Код — короткое сокращение для
+// ссылок [[wdh:…]]; двойник кода разрешён, его только называют.
+function NameDialog({ setting, onSave, onClose }: { setting: Setting; onSave: (name: string, code: string) => Promise<void>; onClose: () => void }) {
+  const [name, setName] = useState(setting.name);
+  const [code, setCode] = useState(setting.code ?? "");
+  return (
+    <Modal ariaLabel="Название и код" onClose={onClose}>
+      <form
+        className="stack"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (name.trim()) void onSave(name.trim(), code.trim());
+        }}
+      >
+        <h3>Название и код</h3>
+        <label className="stack">
+          Название
+          <input required value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
+        <label className="stack">
+          Код для ссылок
+          <input
+            value={code}
+            placeholder="wdh"
+            pattern="^[a-z0-9-]{2,8}$"
+            title="Пример: wdh → Waterdeep: Dragon Heist. Латиница, 2–8 символов."
+            onChange={(e) => setCode(e.target.value)}
+          />
+        </label>
+        <div className="row">
+          <button type="submit" className="primary">
+            Сохранить
+          </button>
+          <button type="button" onClick={onClose}>
+            Отмена
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -1369,30 +1265,37 @@ function GeographyTab({ settingId }: { settingId: number }) {
     }
   }
   const tab = (id: GeographyView, label: React.ReactNode) => (
-    <button
-      role="tab"
-      aria-selected={view === id}
-      className={view === id ? "active" : ""}
-      onClick={() => pick(id)}
-    >
+    <button type="button" aria-pressed={view === id} onClick={() => pick(id)}>
       {label}
     </button>
   );
+  // Переключатель вида — сегментом, как на остальных вкладках бумаги (доска 16).
+  const seg = (
+    <div className="population__seg" role="group" aria-label="Вид географии">
+      {tab("columns", "Колонки")}
+      {tab("list", "Список")}
+      {tab("tree", "Дерево")}
+    </div>
+  );
   return (
     <div className="stack">
-      {/* каркас в обход намеренно — переключатель внутри вкладки, а не вкладки страницы: полоса каркаса одна на карточку */}
-      <div className="tabs" role="tablist" aria-label="Режим просмотра географии">
-        {tab("columns", "Колонки")}
-        {tab("list", "Список")}
-        {tab("tree", <>Дерево <span className="badge tag">beta</span></>)}
-      </div>
-      {view === "columns" && <LocationMiller key={`m-${settingId}`} settingId={settingId} />}
+      {view === "columns" && <LocationMiller key={`m-${settingId}`} settingId={settingId} lead={seg} />}
       {view === "list" && (
-        <div className="card stack geography-tree">
-          <LocationTree settingId={settingId} flat selectOnClick />
-        </div>
+        <GeographyRegistry
+          settingId={settingId}
+          lead={seg}
+          onOpenInColumns={(chain) => {
+            // Колонки читают путь из того же ключа при монтировании.
+            try {
+              localStorage.setItem(`geography-millerpath-${settingId}`, JSON.stringify(chain));
+            } catch {
+              /* ignore */
+            }
+            pick("columns");
+          }}
+        />
       )}
-      {view === "tree" && <LocationRootGraph key={settingId} settingId={settingId} />}
+      {view === "tree" && <LocationRootGraph key={settingId} settingId={settingId} lead={seg} />}
     </div>
   );
 }
@@ -1703,6 +1606,7 @@ function SettingExportModal({
 }) {
   const [includeCalendar, setIncludeCalendar] = useState(false);
   const [includeResources, setIncludeResources] = useState(false);
+  const [includeAlbums, setIncludeAlbums] = useState(false);
   const [includeImages, setIncludeImages] = useState(false);
   const [includeAdventures, setIncludeAdventures] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1715,7 +1619,7 @@ function SettingExportModal({
     setBusy(true);
     setError(null);
     try {
-      const include = [includeCalendar && "calendar", includeResources && "resources", includeImages && "images", includeAdventures && "adventures"]
+      const include = [includeCalendar && "calendar", includeResources && "resources", includeResources && includeAlbums && "albums", includeImages && "images", includeAdventures && "adventures"]
         .filter(Boolean)
         .join(",");
       const data = await readOnce(`/settings/${settingId}/export?include=${include}`, {
@@ -1754,6 +1658,16 @@ function SettingExportModal({
             onChange={(e) => setIncludeResources(e.target.checked)}
           />
           Артефакты и ресурсы
+        </label>
+        {/* Альбомы — доп. контент поверх ресурсов (разбор 2026-10-02, Q1/Q8). */}
+        <label className="row setting-export__nested">
+          <input
+            type="checkbox"
+            checked={includeResources && includeAlbums}
+            disabled={busy || !includeResources}
+            onChange={(e) => setIncludeAlbums(e.target.checked)}
+          />
+          Альбомы галереи
         </label>
         <label className="row">
           <input

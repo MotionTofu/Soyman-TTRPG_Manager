@@ -1,4 +1,13 @@
 {
   "_": "Растровые ассеты, которым разрешено быть тяжелее 100 КБ. Барьер не запрещает, а требует причину: без непустого reason запись не считается. Правило целиком — в client/src/rasterAssets.ts.",
-  "exceptions": []
+  "exceptions": [
+    {
+      "file": "crypt/paper-panel.webp",
+      "reason": "Original paper texture supplied by the user; preserve its grain for the comic-punk map background, feathered into a repeating tile at render time."
+    },
+    {
+      "file": "crypt/floor-tiles.webp",
+      "reason": "User supplied stones2.png texture encoded losslessly after resizing to 512px; detailed transparency is preserved for the dungeon stone floor."
+    }
+  ]
 }

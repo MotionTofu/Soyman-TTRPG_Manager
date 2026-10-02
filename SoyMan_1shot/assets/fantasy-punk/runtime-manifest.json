@@ -11,6 +11,12 @@
     "decorative/dividers/divider-ink-long.webp",
     "decorative/dividers/divider-rough-medium.webp",
     "decorative/dividers/underline-acid-magenta.webp",
+    "decorative/strokes/brush-l.webp",
+    "decorative/strokes/brush-m.webp",
+    "decorative/strokes/brush-r.webp",
+    "decorative/strokes/pen-l.webp",
+    "decorative/strokes/pen-m.webp",
+    "decorative/strokes/pen-r.webp",
     "decorative/frames/card-corner-crescent.webp",
     "decorative/frames/frame-corner-bottom-left.webp",
     "decorative/frames/frame-corner-bottom-right.webp",
@@ -34,6 +40,8 @@
     "semantic/map-buttons/button-01.webp",
     "semantic/ui-icons/trash.webp",
     "semantic/ui-icons/chevron-down.webp",
+    "semantic/ui-icons/edit-pencil.webp",
+    "semantic/ui-icons/cross.webp",
     "semantic/type-glyphs/being.webp",
     "semantic/type-glyphs/community.webp",
     "semantic/type-glyphs/location.webp",
@@ -46,6 +54,15 @@
     "semantic/type-glyphs/scene.webp",
     "semantic/type-glyphs/session.webp",
     "decorative/profile/tape.webp",
-    "decorative/profile/seal.webp"
+    "decorative/profile/seal.webp",
+    "decorative/workbook/cover.webp",
+    "decorative/workbook/spine.webp",
+    "decorative/workbook/tab-paper.webp",
+    "decorative/workbook/tab-acid.webp",
+    "decorative/workbook/num-filled.webp",
+    "decorative/workbook/num-current.webp",
+    "decorative/workbook/num-empty.webp",
+    "decorative/workbook/empty-notebooks.webp",
+    "decorative/workbook/empty-notes.webp"
   ]
 }
