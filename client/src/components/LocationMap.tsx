@@ -43,6 +43,8 @@ interface Props {
 
 interface ResolvedPin extends LocationPin {
   label: string;
+  // Полное имя для списка пинов; подпись на карте может быть короткой.
+  fullLabel?: string;
 }
 
 interface View {
@@ -260,10 +262,12 @@ export function LocationMap({
       .then((results) => {
         if (cancelled) return;
         const labelMap = new Map(results.map((r) => [`${r.target_type}:${r.target_id}`, r.label]));
+        const fullMap = new Map(results.map((r) => [`${r.target_type}:${r.target_id}`, r.full_label]));
         setResolved(
           pins.map((p) => ({
             ...p,
             label: labelMap.get(`${p.target_type}:${p.target_id}`) ?? `${p.target_type} #${p.target_id}`,
+            fullLabel: fullMap.get(`${p.target_type}:${p.target_id}`),
           }))
         );
       })
@@ -849,10 +853,10 @@ export function LocationMap({
   );
 
   const selected = resolved.find((p) => p.id === selectedPinId) ?? null;
-  // В списке — полное имя места: подпись пина на карте бывает короткой
-  // («Вилла»), а в списке их несколько и их надо различать.
+  // В списке — полное имя: подпись пина на карте бывает короткой («Вилла»,
+  // «Мирт»), а в списке их несколько и их надо различать.
   const placeNames = new Map((otherLocations ?? []).map((l) => [l.id, l.name]));
-  const fullName = (p: ResolvedPin) => (p.target_type === "location" ? placeNames.get(p.target_id) : undefined) ?? p.label;
+  const fullName = (p: ResolvedPin) => (p.target_type === "location" ? placeNames.get(p.target_id) : undefined) ?? p.fullLabel ?? p.label;
   const q = pinQuery.trim().toLocaleLowerCase("ru");
   const shownPins = q
     ? resolved.filter((p) => `${p.label} ${fullName(p)}`.toLocaleLowerCase("ru").includes(q))
