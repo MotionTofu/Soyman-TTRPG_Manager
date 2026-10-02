@@ -25,6 +25,7 @@ import { FOLDER_MISSING_ERROR, folderMissing, repairCampaignFolder } from "../se
 import { campaignEarnings } from "../services/finance";
 import { requireAuth } from "../services/auth";
 import { broadcastCharacterUpdate, broadcastToCampaign } from "../services/realtime";
+import { parseCampaignPassport, serializeCampaignPassport } from "../services/settingWorld";
 
 export const campaignsRouter = Router();
 const ALLOWED_IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
@@ -124,7 +125,21 @@ campaignsRouter.get("/:id", (req, res) => {
     )
     .all(req.params.id) as { thumbnail_image_path: string | null }[];
   const finance = campaignEarnings(Number(req.params.id));
-  res.json({ ...withFolderState(withBgUrl(row)), roster: roster.map(withBgUrl), finance });
+  res.json({
+    ...withFolderState(withBgUrl(row)),
+    passport: parseCampaignPassport((row as { passport?: unknown }).passport),
+    roster: roster.map(withBgUrl),
+    finance,
+  });
+});
+
+// Паспорт кампании (спека campaign-paper, Q7/Q16): закрытый набор ключей,
+// приходит целиком — пустые поля отбрасываются.
+campaignsRouter.put("/:id/passport", (req, res) => {
+  if (!db.prepare("SELECT 1 FROM campaigns WHERE id = ?").get(req.params.id)) return res.status(404).json({ error: "not found" });
+  const passport = serializeCampaignPassport((req.body as { passport?: unknown })?.passport);
+  db.prepare("UPDATE campaigns SET passport = ? WHERE id = ?").run(passport, req.params.id);
+  res.json({ passport: parseCampaignPassport(passport) });
 });
 
 campaignsRouter.post("/:id/background", upload.single("file"), async (req, res) => {

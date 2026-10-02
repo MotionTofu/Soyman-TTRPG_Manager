@@ -30,13 +30,13 @@ export function isEntryCategory(category: unknown): category is string {
   return typeof category === "string" && Object.prototype.hasOwnProperty.call(ENTRY_FIELDS, category);
 }
 
-function pick(raw: unknown, keys: readonly string[]): Record<string, string> {
+function pick(raw: unknown, keys: readonly string[], maxLen = MAX_LEN): Record<string, string> {
   const out: Record<string, string> = {};
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
   for (const key of keys) {
     const value = (raw as Record<string, unknown>)[key];
     if (typeof value !== "string") continue;
-    const trimmed = value.trim().slice(0, MAX_LEN);
+    const trimmed = value.trim().slice(0, maxLen);
     if (trimmed) out[key] = trimmed;
   }
   return out;
@@ -104,6 +104,29 @@ export const ARC_PASSPORT_KEYS = [
 ] as const;
 export const parseArcPassport = (raw: unknown): Record<string, string> => pick(parseJson(raw), ARC_PASSPORT_KEYS);
 export const serializeArcPassport = (raw: unknown): string => JSON.stringify(pick(raw, ARC_PASSPORT_KEYS));
+
+// Паспорт кампании (спека campaign-paper, Q7/Q16; лист 1 тетради кампании).
+// Поля «Препродакшена» переехали сюда миграцией, поэтому потолок длиннее:
+// старые тексты бывали в несколько экранов, и обрезать их нельзя.
+export const CAMPAIGN_PASSPORT_KEYS = [
+  "premise",
+  "promise",
+  "activity",
+  "experience",
+  "genre",
+  "tone",
+  "scale",
+  "project_limits",
+  "not_this",
+  "background",
+  "tension",
+  "stakes",
+] as const;
+const CAMPAIGN_PASSPORT_MAX = 20000;
+export const parseCampaignPassport = (raw: unknown): Record<string, string> =>
+  pick(parseJson(raw), CAMPAIGN_PASSPORT_KEYS, CAMPAIGN_PASSPORT_MAX);
+export const serializeCampaignPassport = (raw: unknown): string =>
+  JSON.stringify(pick(raw, CAMPAIGN_PASSPORT_KEYS, CAMPAIGN_PASSPORT_MAX));
 
 // «Чем кончилось» — исходы по осям (словарь №40): цель · цена · отношения ·
 // угроза · мир · персонажи. Заполняется после игры.

@@ -1700,3 +1700,39 @@
 .player-vessel__stats {
   padding: 0;
 }
+
+/* ── Кампания на бумаге (спека campaign-paper; доски 41–48) ─────────── */
+
+/* Паспорт строками «подпись — значение» (доска 41): тексты длинные, с
+   абзацами и упоминаниями — сетка в две колонки их ломала. */
+.paper-fields-rows {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-6) 0;
+}
+.paper-fields-rows > div {
+  display: grid;
+  grid-template-columns: 12rem minmax(0, 1fr);
+  gap: var(--sp-5);
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--paper-rule);
+}
+.paper-fields-rows dd {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+@media (max-width: 640px) {
+  .paper-fields-rows > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-1);
+  }
+}
+.campaign-passport {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.campaign-passport__source {
+  margin: 0;
+}

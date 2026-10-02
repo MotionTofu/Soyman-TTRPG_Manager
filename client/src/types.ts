@@ -356,6 +356,8 @@ export interface RosterPlayer extends Player {
 }
 
 export interface CampaignDetail extends Campaign {
+  /** Паспорт кампании (спека campaign-paper, Q16) — ключи CAMPAIGN_PASSPORT_FIELDS. */
+  passport?: Record<string, string>;
   roster: RosterPlayer[];
   finance: { earned: number; heldSessions: number };
 }
