@@ -114,7 +114,7 @@ export function SessionOutcomeModal({ sessionId, onClose, onSaved }: Props) {
   async function persist(status: SessionDetail["status"] | null, wipeSums = false) {
     if (!session || saving) return;
     setSaving(true);
-    const affects = sessionMoneyAffects(sessionId, session.campaign_id);
+    const affects = [...sessionMoneyAffects(sessionId, session.campaign_id), ...(status === "cancelled" ? [{ path: "/archive" }] : [])];
     try {
       const rows = wipeSums
         ? session.attendance.map((a) => ({ ...a, amount_paid: 0, amount_forgiven: 0 }))
@@ -122,7 +122,10 @@ export function SessionOutcomeModal({ sessionId, onClose, onSaved }: Props) {
       await write.put(`/sessions/${sessionId}/attendance`, { attendance: attendanceBody(rows) });
       // Заметок здесь больше нет: лента сессии разбирается на её странице
       // (гриллинг 2026-09-28, Q16).
-      if (status) await write.put(`/sessions/${sessionId}`, { status });
+      // «Не состоялась» — в архив (спека campaign-paper, Q33): статуса
+      // «отменена» больше нет, вернуть сессию можно со страницы «Архив».
+      if (status === "cancelled") await write.del(`/sessions/${sessionId}`);
+      else if (status) await write.put(`/sessions/${sessionId}`, { status });
       afterWrite(affects);
       onSaved?.();
       onClose();
@@ -145,7 +148,7 @@ export function SessionOutcomeModal({ sessionId, onClose, onSaved }: Props) {
     }
     const ok = await confirm({
       title: "Игра не состоялась?",
-      message: "Сессия останется в календаре с пометкой «отменена» и получит свой номер в счёте отменённых. В архив она не уйдёт.",
+      message: "Сессия уйдёт в архив — вернуть её можно со страницы «Архив».",
       confirmLabel: "Не состоялась",
       cancelLabel: "Назад",
       danger: true,
@@ -291,14 +294,14 @@ export function SessionOutcomeModal({ sessionId, onClose, onSaved }: Props) {
               <div className="card stack" style={{ gap: 8, borderLeft: "1px solid var(--line)" }}>
                 <strong>В сессии уже есть внесённые суммы</strong>
                 <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>
-                  Отменённая игра в «заработано» не идёт в любом случае — статус не held. Суммы можно оставить: если вернёте «состоялась», они будут на месте.
+                  Сессия уйдёт в архив. Если есть какая-то оплата — она будет считаться до удаления из архива.
                 </span>
                 <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
                   <button className="danger" disabled={saving} onClick={() => persist("cancelled")}>
-                    Отменить, суммы оставить
+                    В архив, суммы оставить
                   </button>
                   <button disabled={saving} onClick={() => persist("cancelled", true)}>
-                    Отменить и обнулить
+                    В архив и обнулить
                   </button>
                   <button disabled={saving} onClick={() => setCancelChoice(false)}>Назад</button>
                 </div>

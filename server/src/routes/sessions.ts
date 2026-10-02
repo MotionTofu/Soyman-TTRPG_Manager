@@ -266,6 +266,37 @@ sessionsRouter.put("/:id/combat", (req, res) => {
   res.json(db.prepare("SELECT * FROM sessions WHERE id = ?").get(req.params.id));
 });
 
+// Перед удалением сессии из архива (спека campaign-paper, Q39): сколько за неё
+// внесено и перенос этих денег в «Сверх сессий» кампании — по строке на
+// игрока, с датой сессии. Внесённое у сессии обнуляется в той же транзакции,
+// чтобы перенос не посчитался дважды, если удаление потом не пройдёт.
+sessionsRouter.get("/:id/paid", (req, res) => {
+  const row = db
+    .prepare("SELECT COALESCE(SUM(amount_paid), 0) AS total FROM session_attendance WHERE session_id = ?")
+    .get(req.params.id) as { total: number };
+  res.json({ total: row.total });
+});
+
+sessionsRouter.post("/:id/paid-to-extra", (req, res) => {
+  const session = db.prepare("SELECT id, campaign_id, date FROM sessions WHERE id = ?").get(req.params.id) as
+    | { id: number; campaign_id: number; date: string }
+    | undefined;
+  if (!session) return res.status(404).json({ error: "not found" });
+  const rows = db
+    .prepare("SELECT player_id, amount_paid FROM session_attendance WHERE session_id = ? AND amount_paid > 0")
+    .all(session.id) as { player_id: number; amount_paid: number }[];
+  const [y, m, d] = session.date.split("-");
+  const comment = `из отменённой сессии от ${d}.${m}${y ? `.${y}` : ""}`;
+  db.transaction(() => {
+    const insert = db.prepare(
+      "INSERT INTO campaign_extra_payments (campaign_id, player_id, date, amount, comment) VALUES (?, ?, ?, ?, ?)"
+    );
+    for (const r of rows) insert.run(session.campaign_id, r.player_id, session.date, r.amount_paid, comment);
+    db.prepare("UPDATE session_attendance SET amount_paid = 0 WHERE session_id = ?").run(session.id);
+  })();
+  res.json({ moved: rows.reduce((n, r) => n + r.amount_paid, 0) });
+});
+
 sessionsRouter.delete("/:id", (req, res) => {
   db.prepare(
     "UPDATE sessions SET archived_at = datetime('now') WHERE id = ?"

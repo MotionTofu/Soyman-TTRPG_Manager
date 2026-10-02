@@ -223,6 +223,8 @@ export function ArchivePage() {
   const [busy, setBusy] = useState(false);
   const [clearOpen, setClearOpen] = useState<null | "entities" | "files">(null);
   const [purgeTarget, setPurgeTarget] = useState<{ item: ArchiveItem; impact: PurgeImpact | null } | null>(null);
+  // Сколько внесено за удаляемую сессию (спека campaign-paper, Q39).
+  const [purgePaid, setPurgePaid] = useState(0);
   const [purgeImpactLoading, setPurgeImpactLoading] = useState(false);
   const [filePurgeTarget, setFilePurgeTarget] = useState<ArchivedFile | null>(null);
   const [bulkConfirm, setBulkConfirm] = useState<null | { kind: "restore" | "purge-entities" | "purge-files" }>(null);
@@ -368,6 +370,12 @@ export function ArchivePage() {
 
   function openPurge(item: ArchiveItem) {
     setPurgeTarget({ item, impact: null });
+    setPurgePaid(0);
+    if (item.type === "session") {
+      readOnce<{ total: number }>(`/sessions/${item.id}/paid`)
+        .then((r) => setPurgePaid(r.total))
+        .catch(() => setPurgePaid(0));
+    }
     setPurgeImpactLoading(true);
     readOnce<PurgeImpact>(`/archive/${item.type}/${item.id}/impact`)
       .then((imp) => setPurgeTarget((prev) => (prev && prev.item === item ? { item, impact: imp } : prev)))
@@ -375,10 +383,12 @@ export function ArchivePage() {
       .finally(() => setPurgeImpactLoading(false));
   }
 
-  async function confirmPurge() {
+  async function confirmPurge(moveMoney = false) {
     if (!purgeTarget) return;
     setBusy(true);
     try {
+      // Деньги сессии — в «Сверх сессий» кампании, только по выбору Мастера.
+      if (moveMoney) await write.post(`/sessions/${purgeTarget.item.id}/paid-to-extra`, {});
       await write.del(`/archive/${purgeTarget.item.type}/${purgeTarget.item.id}`);
     } catch (e) {
       setErrorMsg(`Не удалось удалить: ${e instanceof Error ? e.message : String(e)}`);
@@ -801,12 +811,29 @@ export function ArchivePage() {
                 )}
               </div>
             ) : null}
-            <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
-              <button onClick={() => setPurgeTarget(null)}>Отмена</button>
-              <button className="danger" onClick={confirmPurge} disabled={busy || purgeImpactLoading}>
-                Да, удалить навсегда
-              </button>
-            </div>
+            {purgePaid > 0 ? (
+              <>
+                <p>
+                  За сессию внесено <b>{purgePaid}</b>. Перенести в «Сверх сессий» кампании?
+                </p>
+                <div className="row archive-purge-actions">
+                  <button className="primary" onClick={() => void confirmPurge(true)} disabled={busy || purgeImpactLoading}>
+                    Перенести и удалить
+                  </button>
+                  <button className="danger" onClick={() => void confirmPurge()} disabled={busy || purgeImpactLoading}>
+                    Удалить вместе с деньгами
+                  </button>
+                  <button onClick={() => setPurgeTarget(null)}>Отмена</button>
+                </div>
+              </>
+            ) : (
+              <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
+                <button onClick={() => setPurgeTarget(null)}>Отмена</button>
+                <button className="danger" onClick={() => void confirmPurge()} disabled={busy || purgeImpactLoading}>
+                  Да, удалить навсегда
+                </button>
+              </div>
+            )}
           </div>
         </Modal>
       )}

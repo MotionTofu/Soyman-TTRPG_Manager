@@ -133,6 +133,58 @@ campaignsRouter.get("/:id", (req, res) => {
   });
 });
 
+// «Сверх сессий» (спека campaign-paper, Q33/Q37): деньги кампании мимо
+// сессий. Входят в заработок, долг не гасят.
+const extraPaymentBody = (body: Record<string, unknown>) => {
+  const amount = typeof body.amount === "number" && Number.isFinite(body.amount) ? body.amount : null;
+  const date = typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : null;
+  const playerId = typeof body.player_id === "number" && Number.isInteger(body.player_id) ? body.player_id : null;
+  const comment = typeof body.comment === "string" ? body.comment.trim().slice(0, 500) : "";
+  return { amount, date, playerId, comment };
+};
+
+campaignsRouter.get("/:id/extra-payments", (req, res) => {
+  res.json(
+    db
+      .prepare(
+        `SELECT e.*, p.name AS player_name FROM campaign_extra_payments e
+           LEFT JOIN players p ON p.id = e.player_id
+          WHERE e.campaign_id = ? ORDER BY e.date DESC, e.id DESC`
+      )
+      .all(req.params.id)
+  );
+});
+
+campaignsRouter.post("/:id/extra-payments", (req, res) => {
+  if (!db.prepare("SELECT 1 FROM campaigns WHERE id = ?").get(req.params.id)) return res.status(404).json({ error: "not found" });
+  const b = extraPaymentBody((req.body ?? {}) as Record<string, unknown>);
+  if (b.amount == null || b.amount <= 0 || !b.date) return res.status(400).json({ error: "Нужны дата и сумма больше нуля" });
+  const info = db
+    .prepare("INSERT INTO campaign_extra_payments (campaign_id, player_id, date, amount, comment) VALUES (?, ?, ?, ?, ?)")
+    .run(req.params.id, b.playerId, b.date, b.amount, b.comment);
+  res.status(201).json(db.prepare("SELECT * FROM campaign_extra_payments WHERE id = ?").get(info.lastInsertRowid));
+});
+
+campaignsRouter.put("/extra-payments/:paymentId", (req, res) => {
+  const row = db.prepare("SELECT id FROM campaign_extra_payments WHERE id = ?").get(req.params.paymentId);
+  if (!row) return res.status(404).json({ error: "not found" });
+  const b = extraPaymentBody((req.body ?? {}) as Record<string, unknown>);
+  if (b.amount == null || b.amount <= 0 || !b.date) return res.status(400).json({ error: "Нужны дата и сумма больше нуля" });
+  db.prepare("UPDATE campaign_extra_payments SET player_id = ?, date = ?, amount = ?, comment = ? WHERE id = ?").run(
+    b.playerId,
+    b.date,
+    b.amount,
+    b.comment,
+    req.params.paymentId
+  );
+  res.json(db.prepare("SELECT * FROM campaign_extra_payments WHERE id = ?").get(req.params.paymentId));
+});
+
+campaignsRouter.delete("/extra-payments/:paymentId", (req, res) => {
+  db.prepare("DELETE FROM campaign_extra_payments WHERE id = ?").run(req.params.paymentId);
+  res.json({ ok: true });
+});
+
 // Паспорт кампании (спека campaign-paper, Q7/Q16): закрытый набор ключей,
 // приходит целиком — пустые поля отбрасываются.
 campaignsRouter.put("/:id/passport", (req, res) => {

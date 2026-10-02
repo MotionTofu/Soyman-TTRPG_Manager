@@ -7270,6 +7270,24 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     migrateCampaignEventCopies(database);
   }
 
+  // Деньги кампании (спека campaign-paper, Q27/Q33/Q37): «Сверх сессий» —
+  // записи мимо сессий. Вместе с таблицей один раз: отменённые сессии уходят
+  // в архив — статуса «отменена» в списках больше нет, а внесённое за них
+  // считается, пока сессия не удалена из архива.
+  if (!tableExists(database, "campaign_extra_payments")) {
+    database.exec(`CREATE TABLE campaign_extra_payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+      player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,
+      date TEXT NOT NULL,
+      amount REAL NOT NULL,
+      comment TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+    database.exec("CREATE INDEX idx_campaign_extra_payments_campaign ON campaign_extra_payments (campaign_id)");
+    database.exec("UPDATE sessions SET archived_at = COALESCE(archived_at, datetime('now')) WHERE status = 'cancelled'");
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);
