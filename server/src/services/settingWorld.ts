@@ -92,3 +92,24 @@ export function serializeEntryFields(category: string, raw: unknown): string {
   if (out.promised && out.promised !== "1") delete out.promised;
   return JSON.stringify(out);
 }
+
+// Паспорт приключения (гриллинг профилей 2026-10-02, Q14; словарь граф №1–8):
+// те же ключи, что у паспорта сеттинга, плюс вопросы ваншота и жанр — тетрадь
+// ваншота пишет в те же поля.
+export const ARC_PASSPORT_KEYS = [
+  "central_question",
+  "theme_question",
+  ...PASSPORT_KEYS,
+  "genre",
+] as const;
+export const parseArcPassport = (raw: unknown): Record<string, string> => pick(parseJson(raw), ARC_PASSPORT_KEYS);
+export const serializeArcPassport = (raw: unknown): string => JSON.stringify(pick(raw, ARC_PASSPORT_KEYS));
+
+// «Чем кончилось» — исходы по осям (словарь №40): цель · цена · отношения ·
+// угроза · мир · персонажи. Заполняется после игры.
+export const OUTCOME_KEYS = ["goal", "cost", "relations", "threat", "world", "pcs"] as const;
+export const parseOutcomes = (raw: unknown): Record<string, string> => pick(parseJson(raw), OUTCOME_KEYS);
+export const serializeOutcomes = (raw: unknown): string => JSON.stringify(pick(raw, OUTCOME_KEYS));
+
+// Достоверность тайны (словарь §1): известно · слух · спорно. Пусто — не указана.
+export const CERTAINTY = ["known", "rumor", "disputed"] as const;

@@ -1329,6 +1329,8 @@ export interface StorySecret {
   kind: "secret" | "clue" | "thread";
   title: string;
   content: string;
+  /** Достоверность (словарь граф §1): известно · слух · спорно; пусто — не указана. */
+  certainty?: "" | "known" | "rumor" | "disputed";
   position: number;
   state?: { revealed: number; note: string } | null;
 }
@@ -1342,6 +1344,9 @@ export interface CastMember {
 }
 
 export interface StoryArcDetail extends StoryArc {
+  /** Паспорт приключения и «Чем кончилось» (гриллинг 2026-10-02, Q14–Q15). */
+  passport: Record<string, string>;
+  outcomes: Record<string, string>;
   chapters: StoryArc[];
   scenes: StoryScene[];
   milestones: StoryMilestone[];

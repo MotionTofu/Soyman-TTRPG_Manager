@@ -1,4 +1,5 @@
 import {ProjectWorkbooks} from "../components/workbooks/ProjectWorkbooks";
+import { AdventureHead, AdventureParticipants, OutcomesCard, PassportCard } from "../components/adventure/AdventureDossier";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { RevealList } from "../components/RevealList";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -27,12 +28,17 @@ import { readOnce } from "../data/imperative";
 // работы с сокровищницей выглядели свалкой строк. Данные наград и связей
 // остались в базе нетронутыми — вернуть их будет чем.
 // «Выводы» — список узлового дизайна (Q6): что партия может знать и куда идти.
-const TABS = ["Обзор", "Главы и сцены", "Выводы", "Вехи", "Тайны и зацепки"] as const;
+// Досье · Главы и сцены · Тайны и вехи (гриллинг 2026-10-02, Q15, доска 36):
+// выводы, вехи и тайны — то, что партия узнаёт и чего достигает, — одной
+// вкладкой тремя разделами.
+const TABS = ["Досье", "Главы и сцены", "Тайны и вехи"] as const;
 
 // Правка приключения видна не только здесь: главы, сцены, вехи и тайны
 // читают полотно, дерево сцен и тайны кампании на пульте. Всё это лежит под
 // `/story`, `/sessions` и `/canvas`; перечитываются из них только открытые.
 const STORY_AFFECTS: Affect[] = [{ path: "/story" }, { path: "/sessions" }, { path: "/canvas" }];
+
+const CERTAINTY_LABEL: Record<string, string> = { known: "известно", rumor: "слух", disputed: "спорно" };
 
 const SECRET_KINDS = [
   { key: "secret", label: "Тайна" },
@@ -57,7 +63,12 @@ export function AdventureDetailPage() {
   const setting = useResource<Setting>(arc ? `/settings/${arc.setting_id}` : null).data ?? null;
   const arcCampaigns = useResource<{ id: number; name: string }[]>(`/story/arcs/${arcId}/campaigns`).data ?? [];
   const run = useAction();
-  const [tab, selectTab] = useTabState(TABS, "Обзор");
+  const [tab, selectTab] = useTabState(TABS, "Досье", {
+    Обзор: "Досье",
+    Выводы: "Тайны и вехи",
+    Вехи: "Тайны и вехи",
+    "Тайны и зацепки": "Тайны и вехи",
+  });
   const [exportBusy, setExportBusy] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
 
@@ -115,34 +126,27 @@ export function AdventureDetailPage() {
       ]}
       entityType="adventure"
       title={arc.name}
-      badges={
-        <>
-          <Link
-            to={`/canvas?setting=${arc.setting_id}&arc=${arc.id}`}
-            className="graph-neighbourhood-link"
-            title="Открыть схему на полотне"
-          >
-            <NavIcon name="canvas" /> На полотне
-          </Link>
-          {arc.is_default === 1 && <span className="badge tag">стандартное</span>}
-        </>
-      }
+      paper
+      badges={arc.is_default === 1 ? <span className="badge tag">стандартное</span> : undefined}
+      // Под именем — источник и теги метками, ниже логлайн строкой (доска 36).
       meta={
-        <div className="row">
-          {arc.recommended_level && <span>{arc.recommended_level}</span>}
-          {arc.duration && <span>{arc.duration}</span>}
-          {arcCampaigns.length > 0 && (
-            <span>
-              В кампаниях:{" "}
-              {arcCampaigns.map((c, i) => (
-                <span key={c.id}>
-                  {i > 0 && ", "}
-                  <Link to={`/campaigns/${c.id}`}>{c.name}</Link>
-                </span>
-              ))}
+        <span className="paper-ident-tags">
+          {arc.source && <span className="badge tag">{arc.source}</span>}
+          {arc.tags
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean)
+            .map((t) => (
+              <span key={t} className="badge tag">
+                {t}
+              </span>
+            ))}
+          {arc.description && (
+            <span className="adventure-logline">
+              <MentionText text={arc.description} />
             </span>
           )}
-        </div>
+        </span>
       }
       // Стандартное приключение не переименовывают и не архивируют: оно
       // приходит из книги, а не заводится руками.
@@ -180,38 +184,78 @@ export function AdventureDetailPage() {
     >
 
       <ProjectWorkbooks type="adventure" id={arcId}/>
-      {tab === "Обзор" && (
-        <div className="stack">
-          <div className="card stack">
-            <FieldRow label="Уровень персонажей" value={arc.recommended_level} onSave={(v) => saveQuietly({ recommended_level: v })} />
-            <FieldRow label="Число игроков" value={arc.player_count} onSave={(v) => saveQuietly({ player_count: v })} />
-            <FieldRow label="Длительность" value={arc.duration} onSave={(v) => saveQuietly({ duration: v })} />
-            <FieldRow label="Источник" value={arc.source} onSave={(v) => saveQuietly({ source: v })} />
-            <FieldRow label="Теги" value={arc.tags} onSave={(v) => saveQuietly({ tags: v })} />
+      {tab === "Досье" && (
+        <div className="dossier">
+          <aside className="dossier__aside">
+            <dl className="paper-facts">
+              {setting && (
+                <div>
+                  <dt className="paper-label">Сеттинг</dt>
+                  <dd>
+                    <Link className="mention-link mention--loc" to={`/settings/${arc.setting_id}`}>
+                      {setting.name}
+                    </Link>
+                  </dd>
+                </div>
+              )}
+              {arcCampaigns.length > 0 && (
+                <div>
+                  <dt className="paper-label">Кампании</dt>
+                  <dd>
+                    {arcCampaigns.map((c, i) => (
+                      <span key={c.id}>
+                        {i > 0 && ", "}
+                        <Link to={`/campaigns/${c.id}`}>{c.name}</Link>
+                      </span>
+                    ))}
+                  </dd>
+                </div>
+              )}
+            </dl>
+            <div className="dossier__search">
+              <Link className="paper-more" to={`/canvas?setting=${arc.setting_id}&arc=${arc.id}`}>
+                Схема на полотне ›
+              </Link>
+            </div>
+          </aside>
+
+          <div className="dossier__main">
+            <AdventureHead arc={arc} passport={arc.passport ?? {}} inCampaign={campaignId != null} onSave={save} />
+            <EditableTextCard
+              title="Завязка"
+              help="Как партия вообще попадает в это приключение."
+              value={arc.hook}
+              onSave={(v) => save({ hook: v })}
+              rows={4}
+              entityType="adventure"
+              entityId={arcId}
+              defaultSettingId={arc.setting_id}
+              emptyLabel="завязка"
+            />
+            <PassportCard passport={arc.passport ?? {}} onSave={save} />
+            <AdventureParticipants arcId={arcId} settingId={arc.setting_id} />
+            <OutcomesCard outcomes={arc.outcomes ?? {}} onSave={save} />
+
+            {/* Справка: логлайн, источник и теги правятся здесь — под именем
+                они только показываются. */}
+            <details className="paper-fold">
+              <summary>Справка</summary>
+              <div className="paper-fold__body stack">
+                <EditableTextCard
+                  title="Логлайн"
+                  value={arc.description}
+                  onSave={(v) => save({ description: v })}
+                  rows={4}
+                  entityType="adventure"
+                  entityId={arcId}
+                  defaultSettingId={arc.setting_id}
+                  emptyLabel="логлайн"
+                />
+                <FieldRow label="Источник" value={arc.source} onSave={(v) => saveQuietly({ source: v })} />
+                <FieldRow label="Теги" value={arc.tags} onSave={(v) => saveQuietly({ tags: v })} />
+              </div>
+            </details>
           </div>
-          <EditableTextCard
-            title="Логлайн"
-            value={arc.description}
-            onSave={(v) => save({ description: v })}
-            rows={5}
-            entityType="adventure"
-            entityId={arcId}
-            defaultSettingId={arc.setting_id}
-            collapsible
-            defaultOpen
-          />
-          <EditableTextCard
-            title="Завязка"
-            help="Как партия вообще попадает в это приключение."
-            value={arc.hook}
-            onSave={(v) => save({ hook: v })}
-            rows={4}
-            entityType="adventure"
-            entityId={arcId}
-            defaultSettingId={arc.setting_id}
-            collapsible
-            defaultOpen
-          />
         </div>
       )}
 
@@ -228,12 +272,25 @@ export function AdventureDetailPage() {
         </>
       )}
 
-      {tab === "Выводы" && <RevealList arcId={arc.id} campaignId={campaignId} />}
-
-      {tab === "Вехи" && <Milestones arc={arc} campaignId={campaignId} />}
-
-      {tab === "Тайны и зацепки" && (
-        <Secrets arc={arc} campaignId={campaignId} />
+      {tab === "Тайны и вехи" && (
+        <div className="paper-groups">
+          <section>
+            <h2 className="paper-group__head">
+              Тайны и зацепки <span className="paper-group__count">{arc.secrets.length}</span>
+            </h2>
+            <Secrets arc={arc} campaignId={campaignId} />
+          </section>
+          <section>
+            <h2 className="paper-group__head">
+              Вехи <span className="paper-group__count">{arc.milestones.length}</span>
+            </h2>
+            <Milestones arc={arc} campaignId={campaignId} />
+          </section>
+          <section>
+            <h2 className="paper-group__head">Выводы</h2>
+            <RevealList arcId={arc.id} campaignId={campaignId} />
+          </section>
+        </div>
       )}
     </EntityPage>
   );
@@ -717,7 +774,28 @@ function Secrets({ arc, campaignId }: { arc: StoryArcDetail; campaignId: number 
               />
             )}{" "}
             <strong>{s.title}</strong>
-            <span className="muted"> · {SECRET_KINDS.find((k) => k.key === s.kind)?.label}</span>
+            <span className="muted"> · {SECRET_KINDS.find((k) => k.key === s.kind)?.label}</span>{" "}
+            {/* Достоверность (Q15): известно · слух · спорно. Свойство самой
+                тайны, а не прогресса кампании — правится только в сеттинге. */}
+            {campaignId ? (
+              s.certainty && <span className="badge tag">{CERTAINTY_LABEL[s.certainty]}</span>
+            ) : (
+              <select
+                className="secret-certainty"
+                value={s.certainty ?? ""}
+                aria-label={`Достоверность: ${s.title}`}
+                onChange={(e) =>
+                  void run(() => write.put(`/story/secrets/${s.id}`, { certainty: e.target.value }), {
+                    affects: STORY_AFFECTS,
+                  })
+                }
+              >
+                <option value="">достоверность…</option>
+                <option value="known">известно</option>
+                <option value="rumor">слух</option>
+                <option value="disputed">спорно</option>
+              </select>
+            )}
             {s.content && (
               <div className="muted reading-text">
                 <MentionText text={s.content} />

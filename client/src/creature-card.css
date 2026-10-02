@@ -787,3 +787,24 @@ button.role-chip.is-on {
 .creature-card-editor .scene-head__grid {
   padding: 0;
 }
+
+/* Второстепенные карточки листа (паспорт, «Чем кончилось»): рамка тоньше,
+   чем у «За столом» — главный блок один (доска 36). */
+.creature-card.is-embedded.is-quiet {
+  border-width: var(--card-border-width);
+}
+/* Центральный вопрос приключения — крупно, его ловят взглядом. */
+.adventure-head__question {
+  padding: var(--sp-4) var(--sp-6) 0;
+}
+.adventure-head__question p {
+  margin: var(--sp-2) 0 0;
+  font-family: var(--font-ui);
+  font-size: var(--fs-h3);
+  font-weight: 500;
+  line-height: 1.3;
+}
+.adventure-head__stats {
+  margin-top: var(--sp-4);
+  border-top: var(--card-border-width) solid var(--line);
+}

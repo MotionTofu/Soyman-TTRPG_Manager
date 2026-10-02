@@ -1254,3 +1254,42 @@
 .cast-row + .cast-row {
   border-top: var(--card-border-width) solid var(--paper-rule);
 }
+
+/* Участники приключения (доска 36): строка — сила и её цель, под ней по
+   запросу ход событий. */
+.adventure-participants {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.adventure-participants__rows > li {
+  display: block;
+}
+.adventure-participants__line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-5);
+}
+.adventure-participants__flow {
+  margin-top: var(--sp-3);
+}
+.adventure-participants__add {
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+
+/* Логлайн под именем приключения — строкой, после меток (доска 36). */
+.adventure-logline {
+  flex-basis: 100%;
+  color: var(--paper-ink-soft);
+}
+.secret-certainty {
+  font-size: var(--fs-meta);
+}
+/* Удаление тайн и вех на листе — тихий крестик, краснеет под рукой (как
+   корзина у глав). */
+.paper-sheet .paper-groups button.danger:not(:hover):not(:focus-visible) {
+  background: none;
+  border-color: transparent;
+  color: var(--paper-muted);
+}
