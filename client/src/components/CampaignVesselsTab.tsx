@@ -24,7 +24,7 @@ export function CampaignVesselsTab({ campaignId }: { campaignId: number }) {
   const archived = (list.data ?? []).filter((v) => v.archived_at);
 
   return (
-    <section className="paper-scope paper-sheet vessels-tab">
+    <section className="vessels-tab">
       <h2 className="paper-group__head">
         Транспорт <span className="paper-group__count">· {active.length}</span>
       </h2>

@@ -1788,3 +1788,83 @@
   flex-wrap: wrap;
   gap: var(--sp-2);
 }
+
+/* Группы списков (`details.res-group`: вехи, тайны, сессии…) на листе —
+   заголовок группы на линейке, как `paper-group__head`, а не тёмная плашка:
+   лист уже рамка (доска 43). */
+.paper-sheet details.card.res-group {
+  border-top: 0;
+  padding: 0;
+  overflow: visible;
+}
+.paper-sheet details.card summary.res-group__band {
+  padding: var(--sp-2) 0;
+  background: none;
+  color: var(--paper-ink);
+  border-bottom: var(--card-border-width-strong) solid var(--paper-ink);
+}
+.paper-sheet details.card summary.res-group__band:hover {
+  background: none;
+}
+.paper-sheet .res-group__title {
+  font-size: var(--fs-body);
+}
+.paper-sheet .res-group__count {
+  color: var(--paper-muted);
+}
+
+/* «Состав» строками (доска — Q21): имя · персонажи · долг · действия. */
+.roster-rows > li {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-5);
+}
+.roster-rows > li.is-left {
+  opacity: 0.6;
+}
+.roster-rows .paper-rows__main {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+}
+.roster-rows__chars {
+  display: flex;
+  flex: 1 1 14rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-4);
+  min-width: 0;
+}
+.roster-rows__char,
+.roster-rows__add,
+.roster-rows__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.roster-rows__debt {
+  color: var(--paper-alarm);
+}
+
+/* Сессии строками: дата и имя, под ними — первая строка ленты. */
+.session-rows .paper-rows__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+.session-rows__line {
+  color: var(--paper-muted);
+  font-size: var(--fs-meta);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Шапка «Сводки отряда» и подобных карточек состава — тоже на линейке. */
+.paper-sheet .campaign-player-header {
+  margin: 0 0 var(--sp-3) !important; /* !important намеренно — у шапки инлайн-отступы вылета из карточки, на листе вылетать некуда */
+  padding: var(--sp-2) 0;
+  background: none;
+  color: var(--paper-ink);
+  border-bottom: var(--card-border-width-strong) solid var(--paper-ink);
+}
