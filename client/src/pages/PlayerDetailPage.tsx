@@ -1,9 +1,10 @@
 import { useParams } from "react-router-dom";
-import { PlayersWorkspace } from "./PlayersWorkspace";
+import { PlayerProfilePanel } from "../components/players/PlayerProfilePanel";
 
-// каркас в обход намеренно — это не страница, а перенаправление: весь вид
-// рисует PlayersWorkspace, и каркас, если понадобится, встанет там.
+// Профиль игрока — своя страница на бумаге (спека campaign-paper, Q47);
+// список игроков — плитками, щелчок ведёт сюда.
+// каркас в обход намеренно — EntityPage рисует сам PlayerProfilePanel, здесь только id из адреса.
 export function PlayerDetailPage() {
   const { id } = useParams();
-  return <PlayersWorkspace selectedId={id != null ? Number(id) : undefined} />;
+  return <PlayerProfilePanel key={id} playerId={Number(id)} />;
 }

@@ -248,14 +248,14 @@ playersRouter.put("/:id", (req, res) => {
     .prepare("SELECT * FROM players WHERE id = ?")
     .get(req.params.id) as { folder_path: string; name: string } | undefined;
   if (!existing) return res.status(404).json({ error: "not found" });
-  const { name, notes } = req.body as { name?: string; notes?: string };
+  const { name, notes, interest } = req.body as { name?: string; notes?: string; interest?: string };
   let folderPath = existing.folder_path;
   if (name && name !== existing.name) {
     folderPath = renameEntityFolder(existing.folder_path, name);
   }
   db.prepare(
-    "UPDATE players SET name = COALESCE(?, name), notes = COALESCE(?, notes), folder_path = ? WHERE id = ?"
-  ).run(name ?? null, notes ?? null, folderPath, req.params.id);
+    "UPDATE players SET name = COALESCE(?, name), notes = COALESCE(?, notes), interest = COALESCE(?, interest), folder_path = ? WHERE id = ?"
+  ).run(name ?? null, notes ?? null, typeof interest === "string" ? interest.slice(0, 5000) : null, folderPath, req.params.id);
   res.json(db.prepare("SELECT * FROM players WHERE id = ?").get(req.params.id));
 });
 

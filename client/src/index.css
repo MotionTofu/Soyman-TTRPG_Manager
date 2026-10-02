@@ -6686,9 +6686,10 @@ details.card[open] summary {
   gap: var(--sp-6);
   align-items: flex-start;
 }
+/* Профиль игрока — своя страница (спека campaign-paper, Q47): список
+   занимает всю ширину, панели справа нет. */
 .players-workspace__list {
-  flex: 0 0 400px;
-  max-width: 44%;
+  flex: 1 1 auto;
   min-width: 0;
 }
 .players-workspace__detail {
