@@ -9,6 +9,7 @@ import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { formatEventDate } from "../inworldCalendar";
 import type { SettingCalendarEvent } from "../types";
 import { useConfirm } from "../hooks/useConfirm";
+import { PlayerVisibilityFact } from "../components/PlayerVisibilityFact";
 
 // Профиль события хроники. Строка хроники показывает только дату и краткое
 // описание — всё остальное (развёрнутый текст, последствия, участники) живёт
@@ -105,6 +106,10 @@ export function EventDetailPage() {
               В хронике ›
             </Link>
           </div>
+          {/* Кому открыто по кампаниям (спека campaign-paper, Q34). */}
+          <dl className="paper-facts">
+            <PlayerVisibilityFact targetType="setting_calendar_event" targetId={eventId} />
+          </dl>
 
           <EditableTextCard
             key={`description-${event.id}`}

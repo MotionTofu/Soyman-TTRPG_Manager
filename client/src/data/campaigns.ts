@@ -35,6 +35,7 @@ export const campaignPaths = {
   characters: sessionPaths.campaignCharacters,
   playerJournals: (campaignId: number) => `/campaigns/${campaignId}/player-journals`,
   grants: (campaignId: number) => `/visibility-grants?campaign_id=${campaignId}`,
+  grantSummary: (campaignId: number) => `/visibility-grants/summary?campaign_id=${campaignId}`,
   settingEntities: (campaignId: number) => `/campaign-setting-entities/${campaignId}`,
   playerSections: (campaignId: number) => `/campaign-player-sections?campaign_id=${campaignId}`,
   sectionArticles: (sectionId: number) => `/campaign-player-sections/${sectionId}/articles`,
@@ -124,7 +125,8 @@ function playerViewAffects(): Affect[] {
  * этим префиксом и общий список, и доступы одной цели.
  */
 export function grantAffects(campaignId: number): Affect[] {
-  return [{ path: campaignPaths.grants(campaignId) }, ...playerViewAffects()];
+  // Сводка выдачи и строка «Игрокам» на профилях читают те же гранты.
+  return [{ path: campaignPaths.grants(campaignId) }, { path: "/visibility-grants" }, ...playerViewAffects()];
 }
 
 /** Включение сущности сеттинга в панель игроков; исключение снимает и её доступы. */

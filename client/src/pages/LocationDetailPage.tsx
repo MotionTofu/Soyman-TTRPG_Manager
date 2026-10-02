@@ -45,6 +45,7 @@ import type {
   LocationContentItem,
   LocationInhabitantBeing,
 } from "../types";
+import { PlayerVisibilityFact } from "../components/PlayerVisibilityFact";
 
 // Every location reachable from `id` by walking down parent_id links — used
 // to keep the parent picker from offering a cycle (nesting a location under
@@ -884,6 +885,8 @@ export function LocationDetailPage() {
                   </dd>
                 </div>
               )}
+              {/* Кому открыто — выдача с профиля (спека campaign-paper, Q34). */}
+              <PlayerVisibilityFact targetType="setting_location" targetId={locationId} />
             </dl>
             <div className="dossier__search">
               <Link className="paper-more" to={geographyTo}>

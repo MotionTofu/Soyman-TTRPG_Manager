@@ -18,7 +18,91 @@ const VALID_TARGET_TYPES = new Set([
   "setting_being",
   "setting_community",
   "setting_calendar_event",
+  // Артефакты (спека campaign-paper, Q40).
+  "setting_artifact",
 ]);
+
+// «Сводка» выдачи (спека campaign-paper, Q30/Q35): что открыто игрокам этой
+// кампании, по видам, с именами и списком игроков. Скрытого тут нет.
+const SUMMARY_NAMES: Record<string, string> = {
+  setting_location: "SELECT name FROM setting_locations WHERE id = ?",
+  setting_being: "SELECT name FROM setting_beings WHERE id = ?",
+  setting_community: "SELECT name FROM setting_communities WHERE id = ?",
+  setting_artifact: "SELECT name FROM artifacts WHERE id = ?",
+  setting_calendar_event: "SELECT title AS name FROM setting_calendar_events WHERE id = ?",
+  campaign_player_article: "SELECT title AS name FROM campaign_player_articles WHERE id = ?",
+  campaign_player_section: "SELECT name FROM campaign_player_sections WHERE id = ?",
+};
+
+// Строка «Игрокам: …» на профиле сущности сеттинга (спека campaign-paper,
+// Q34): кому она открыта в каждой кампании этого сеттинга.
+// «Текст игрокам» — у всех, кроме артефакта (у него своего нет).
+const TARGET_SETTING: Record<string, string> = {
+  setting_location: "SELECT setting_id, player_text FROM setting_locations WHERE id = ?",
+  setting_being: "SELECT setting_id, player_text FROM setting_beings WHERE id = ?",
+  setting_community: "SELECT setting_id, player_text FROM setting_communities WHERE id = ?",
+  setting_artifact: "SELECT setting_id, NULL AS player_text FROM artifacts WHERE id = ?",
+  setting_calendar_event: "SELECT setting_id, player_text FROM setting_calendar_events WHERE id = ?",
+};
+
+visibilityGrantsRouter.get("/target", (req, res) => {
+  const type = String(req.query.target_type ?? "");
+  const id = Number(req.query.target_id);
+  const sql = TARGET_SETTING[type];
+  if (!sql || !id) return res.status(400).json({ error: "target_type and target_id are required" });
+  const owner = db.prepare(sql).get(id) as { setting_id: number; player_text: string | null } | undefined;
+  if (!owner) return res.status(404).json({ error: "not found" });
+  const campaigns = db
+    .prepare("SELECT id, name FROM campaigns WHERE setting_id = ? AND archived_at IS NULL ORDER BY name COLLATE NOCASE")
+    .all(owner.setting_id) as { id: number; name: string }[];
+  const players = db.prepare(
+    `SELECT p.id, p.name FROM player_visibility_grants g JOIN players p ON p.id = g.player_id
+      WHERE g.campaign_id = ? AND g.target_type = ? AND g.target_id = ? ORDER BY p.name COLLATE NOCASE`
+  );
+  const rosterCount = db.prepare("SELECT COUNT(*) AS n FROM campaign_roster WHERE campaign_id = ? AND status != 'left'");
+  res.json({
+    player_text: owner.player_text,
+    campaigns: campaigns.map((c) => {
+      const seen = players.all(c.id, type, id) as { id: number; name: string }[];
+      const n = (rosterCount.get(c.id) as { n: number }).n;
+      return { campaign_id: c.id, campaign_name: c.name, players: seen, all: n > 0 && seen.length >= n };
+    }),
+  });
+});
+
+visibilityGrantsRouter.get("/summary", (req, res) => {
+  const campaignId = Number(req.query.campaign_id);
+  if (!campaignId) return res.status(400).json({ error: "campaign_id is required" });
+  const rows = db
+    .prepare(
+      `SELECT g.target_type, g.target_id, g.player_id, g.access_level, p.name AS player_name
+         FROM player_visibility_grants g JOIN players p ON p.id = g.player_id
+        WHERE g.campaign_id = ?
+        ORDER BY g.target_type, g.target_id, p.name COLLATE NOCASE`
+    )
+    .all(campaignId) as { target_type: string; target_id: number; player_id: number; access_level: string; player_name: string }[];
+  const roster = (
+    db.prepare("SELECT player_id FROM campaign_roster WHERE campaign_id = ? AND status != 'left'").all(campaignId) as { player_id: number }[]
+  ).map((r) => r.player_id);
+  const items = new Map<string, { target_type: string; target_id: number; name: string; players: { id: number; name: string; access_level: string }[] }>();
+  for (const r of rows) {
+    const key = `${r.target_type}:${r.target_id}`;
+    let item = items.get(key);
+    if (!item) {
+      const sql = SUMMARY_NAMES[r.target_type];
+      const named = sql ? (db.prepare(sql).get(r.target_id) as { name: string } | undefined) : undefined;
+      if (!named) continue; // цель удалена — висячий грант в сводку не идёт
+      item = { target_type: r.target_type, target_id: r.target_id, name: named.name, players: [] };
+      items.set(key, item);
+    }
+    item.players.push({ id: r.player_id, name: r.player_name, access_level: r.access_level });
+  }
+  res.json(
+    [...items.values()]
+      .map((i) => ({ ...i, all: roster.length > 0 && roster.every((id) => i.players.some((p) => p.id === id)) }))
+      .sort((a, b) => a.name.localeCompare(b.name, "ru"))
+  );
+});
 
 // Ступень выдачи — см. services/accessLevel.ts (там же normalizeAccessLevel:
 // неизвестное читается как 'open'). Локальный предикат для валидации тел.

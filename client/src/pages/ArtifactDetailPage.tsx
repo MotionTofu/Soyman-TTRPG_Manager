@@ -44,6 +44,7 @@ import { LocationCascadePicker } from "../components/LocationCascadePicker";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { toAliasesList } from "../utils/aliasesList";
 import { DETAIL_ROUTES } from "../entityTypes";
+import { PlayerVisibilityFact } from "../components/PlayerVisibilityFact";
 
 // Общий каркас профилей (разбор 2026-10-02, предмет Q1): «Отношения» и
 // владелец с местом — во «Связях», важные даты — в «Хронике», «Карточка
@@ -330,6 +331,8 @@ export function ArtifactDetailPage() {
                   <TagChips tags={artifact.tags ?? []} onChange={saveTags} />
                 </dd>
               </div>
+              {/* Кому открыто — выдача с профиля (спека campaign-paper, Q34). */}
+              <PlayerVisibilityFact targetType="setting_artifact" targetId={artifactId} />
             </dl>
             <div className="dossier__search">
               <Link className="paper-more" to={treasuryTo}>

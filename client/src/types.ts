@@ -1749,6 +1749,7 @@ export type VisibilityTargetType =
   | "setting_location"
   | "setting_being"
   | "setting_community"
+  | "setting_artifact"
   | "setting_calendar_event";
 
 export type AccessLevel = "mentioned" | "open";
@@ -1893,6 +1894,17 @@ export interface SettingPlayerContent {
   beings: SettingPlayerBeing[];
   communities: SettingPlayerCommunity[];
   chronicleEvents: SettingPlayerChronicleEvent[];
+  /** Артефакты (спека campaign-paper, Q40); у старого сервера поля нет. */
+  artifacts?: SettingPlayerArtifact[];
+}
+
+export interface SettingPlayerArtifact {
+  id: number;
+  name: string;
+  description?: string | null;
+  power?: string | null;
+  avatar_image_url: string | null;
+  access_level: AccessLevel;
 }
 
 export interface MyCampaignSummary {
