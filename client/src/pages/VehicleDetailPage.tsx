@@ -7,7 +7,7 @@ import { EditableTextCard } from "../components/EditableTextCard";
 import { EntityFieldsCard, type EntityField } from "../components/EntityFieldsCard";
 import { EntityPage } from "../components/EntityPage";
 import { useTabState } from "../hooks/useTabState";
-import { useAction, useResource, useSaveEntity, write } from "../data/hooks";
+import { useAction, useEntity, useResource, useSaveEntity, write } from "../data/hooks";
 import { compendiumAffects, compendiumPaths } from "../data/compendiumEntries";
 import { KIND_DEFS, extractEnglishName } from "../compendium";
 import type { CompendiumEntry, System, SystemSection } from "../types";
@@ -27,6 +27,8 @@ export function VehicleDetailPage({ entry, system }: { entry: CompendiumEntry; s
   const navigate = useNavigate();
   const [tab, selectTab] = useTabState(TABS, "Досье", { Статблок: "Статблоки", Изображения: "Галерея" });
   const isPost = entry.kind === "vehicle_post";
+  // Судно поста: у поста экипажа своя страница, и без него непонятно, чей он.
+  const ship = useEntity<CompendiumEntry>("compendium_entry", isPost ? entry.parent_id : null).data ?? null;
   const sectionEntries = useResource<CompendiumEntry[]>(
     isPost ? null : compendiumPaths.sectionEntries(entry.system_id, entry.section_id)
   ).data;
@@ -134,6 +136,7 @@ export function VehicleDetailPage({ entry, system }: { entry: CompendiumEntry; s
         ...(sectionName && system
           ? [{ label: sectionName, to: `/systems/${system.id}?section=${entry.section_id}` }]
           : []),
+        ...(ship ? [{ label: ship.name, to: `/compendium/${ship.id}` }] : []),
         { label: entry.name },
       ]}
       entityType="compendium_entry"
@@ -147,6 +150,11 @@ export function VehicleDetailPage({ entry, system }: { entry: CompendiumEntry; s
             </span>
           ))}
           <span>{def?.label ?? "Транспорт"}</span>
+          {ship && (
+            <Link className="paper-more" to={`/compendium/${ship.id}`}>
+              судна «{ship.name}» ›
+            </Link>
+          )}
         </span>
       }
       // Удаление разрушительно и потому живёт под «…», а не в шапке.
