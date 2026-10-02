@@ -275,6 +275,11 @@
   opacity: 0;
   transition: opacity 0.15s;
 }
+/* Обложка приключения — широкая, как миниатюра в списках (16:10). */
+.dossier__portrait--cover img,
+.dossier__portrait--cover .dossier__portrait-empty {
+  aspect-ratio: 16 / 10;
+}
 .dossier__portrait:hover .dossier__portrait-hint,
 .dossier__portrait:focus-within .dossier__portrait-hint {
   opacity: 1;

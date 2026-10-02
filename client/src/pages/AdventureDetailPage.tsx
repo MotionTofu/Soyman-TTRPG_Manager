@@ -22,6 +22,7 @@ import { ExportProgress } from "../components/ExportProgress";
 import { useLongPress } from "../hooks/useLongPress";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import { readOnce } from "../data/imperative";
+import { useImageCrop } from "../hooks/useImageCrop";
 
 // «Действующие лица» и «Награды» убраны с профиля: список действующих лиц
 // собирался из связей сцен и информационной пользы не нёс, а награды книги без
@@ -71,6 +72,17 @@ export function AdventureDetailPage() {
   });
   const [exportBusy, setExportBusy] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  // Обложка (доска 37): из кампании ложится в её копию приключения.
+  const coverCrop = useImageCrop("thumbnail", (file) => {
+    const form = new FormData();
+    form.append("file", file);
+    if (campaignId != null) form.append("campaign_id", String(campaignId));
+    setUploadingCover(true);
+    void run(() => write.post(`/story/arcs/${arcId}/thumbnail`, form, { timeoutMs: 60_000 }), {
+      affects: STORY_AFFECTS,
+    }).finally(() => setUploadingCover(false));
+  });
 
   if (arcState.error && !arc) {
     return <LoadErrorCard message={<>Не удалось загрузить приключение: {arcState.error}</>} onRetry={arcState.reload} />;
@@ -179,6 +191,7 @@ export function AdventureDetailPage() {
         <>
           {confirmDialog}
           {promptDialog}
+          {coverCrop.modal}
         </>
       }
     >
@@ -187,6 +200,23 @@ export function AdventureDetailPage() {
       {tab === "Досье" && (
         <div className="dossier">
           <aside className="dossier__aside">
+            <label className="dossier__portrait dossier__portrait--cover" title="Сменить обложку">
+              {arc.thumbnail_image_url ? (
+                <img src={arc.thumbnail_image_url} alt={`Обложка: ${arc.name}`} />
+              ) : (
+                <span className="dossier__portrait-empty">Обложка</span>
+              )}
+              <span className="dossier__portrait-hint">{uploadingCover ? "Загружается…" : "Сменить обложку"}</span>
+              <input
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={(e) => {
+                  coverCrop.onSelect(e.target.files?.[0] ?? null);
+                  e.target.value = "";
+                }}
+              />
+            </label>
             <dl className="paper-facts">
               {setting && (
                 <div>
