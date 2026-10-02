@@ -71,12 +71,27 @@ sessionsRouter.get("/:id", (req, res) => {
 
   res.json({
     ...session,
+    passport: parseSessionPassport(session.passport),
+    outcomes: parseOutcomes(session.outcomes),
     effective_payment_type:
       (session.payment_override as string) || (session.campaign_payment_type as string),
     attendance,
     resources,
     earned: sessionEarnings(Number(req.params.id)),
   });
+});
+
+// Паспорт вечера и «Что изменилось» (спека campaign-paper, Q42/Q45): закрытые
+// наборы ключей, приходят целиком.
+sessionsRouter.put("/:id/passport", (req, res) => {
+  if (!db.prepare("SELECT 1 FROM sessions WHERE id = ?").get(req.params.id)) return res.status(404).json({ error: "not found" });
+  const body = (req.body ?? {}) as { passport?: unknown; outcomes?: unknown };
+  if (body.passport !== undefined)
+    db.prepare("UPDATE sessions SET passport = ? WHERE id = ?").run(serializeSessionPassport(body.passport), req.params.id);
+  if (body.outcomes !== undefined)
+    db.prepare("UPDATE sessions SET outcomes = ? WHERE id = ?").run(serializeOutcomes(body.outcomes), req.params.id);
+  const row = db.prepare("SELECT passport, outcomes FROM sessions WHERE id = ?").get(req.params.id) as { passport: string; outcomes: string };
+  res.json({ passport: parseSessionPassport(row.passport), outcomes: parseOutcomes(row.outcomes) });
 });
 
 sessionsRouter.post("/", (req, res) => {
@@ -430,6 +445,7 @@ sessionsRouter.post("/:id/launch", (req, res) => {
 });
 
 import { partyPlace, setPartyPlace } from "../services/partyPlace";
+import { parseOutcomes, parseSessionPassport, serializeOutcomes, serializeSessionPassport } from "../services/settingWorld";
 
 /**
  * «Партия здесь» (решения 2026-09-11, §3). Точка кампании сессии: пульт знает

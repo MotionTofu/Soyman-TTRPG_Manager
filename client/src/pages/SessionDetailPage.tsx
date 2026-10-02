@@ -3,7 +3,6 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { PAYMENT_TYPE_LABELS, PAYMENT_TYPE_OPTIONS } from "../paymentTypes";
 import { ObstacleDropZone } from "../components/ObstacleDropZone";
-import { EditableTextCard } from "../components/EditableTextCard";
 import { SessionLiveControls } from "../components/SessionLiveControls";
 import { SessionNotesChat } from "../components/SessionNotesChat";
 import { SessionMentionsButton } from "../components/SessionMentionsButton";
@@ -41,6 +40,7 @@ import type {
 import "../session.css";
 import { sessionLabel } from "../sessionLabel";
 import { SessionOutcomeModal } from "../components/SessionOutcomeModal";
+import { SessionOutcomesCard, SessionPassportCard } from "../components/SessionPaperCards";
 
 // Module-level so SectionDropZone (React.memo'd) sees a stable reference —
 // an inline array literal in the JSX below would be a new object every
@@ -58,7 +58,10 @@ const NO_SECRETS: CampaignGrouped<StorySecret> = { groups: [], own: [] };
 
 // «Хроника» переименована в «Резюме»: в ней теперь не летопись, а итог
 // вечера — сколько прошло дней в мире, что раскрылось, кто пришёл и заплатил.
-const SESSION_TABS = ["Обзор", "Подготовка", "Резюме", "Ресурсы"] as const;
+// «Резюме» стало «Итогами» (спека campaign-paper, Q45): ось «Что изменилось»
+// рядом с лентой. Старые ссылки на «Резюме» открывают «Итоги».
+const SESSION_TABS = ["Обзор", "Подготовка", "Итоги", "Ресурсы"] as const;
+const SESSION_TAB_ALIASES = { Резюме: "Итоги" } as const;
 type SessionTab = (typeof SESSION_TABS)[number];
 
 const STATUS_LABELS: Record<string, string> = {
@@ -83,7 +86,7 @@ export function SessionDetailPage() {
   const { id } = useParams();
   const sessionId = Number(id);
   const navigate = useNavigate();
-  const [tab, selectTab] = useTabState<SessionTab>(SESSION_TABS, "Обзор");
+  const [tab, selectTab] = useTabState<SessionTab>(SESSION_TABS, "Обзор", SESSION_TAB_ALIASES);
   const [outcomeOpen, setOutcomeOpen] = useState(false);
 
   // Всё — из кэша слоя данных (docs/adr/0001): пульт в соседнем окне, игроки и
@@ -279,12 +282,6 @@ export function SessionDetailPage() {
         {!session && sessionState.error != null ? `Сессия не открылась: ${sessionState.error}` : "Загрузка…"}
       </p>
     );
-  }
-
-  // Текст из карточки: не сохранилось — карточка остаётся в правке с набранным,
-  // а плашка предлагает повтор.
-  async function saveText(patch: Partial<SessionDetail>) {
-    if (!(await save(patch))) throw new Error("Не сохранилось");
   }
 
   function setStatus(status: SessionStatus) {
@@ -664,6 +661,8 @@ export function SessionDetailPage() {
         { label: "Переименовать сессию", onClick: startTitleEdit },
         { label: "Архивировать", danger: true, onClick: archiveSession },
       ]}
+      // Бумага (спека campaign-paper, доски 46–47).
+      paper
       tabs={SESSION_TABS}
       tab={tab}
       onTab={(t) => selectTab(t as SessionTab)}
@@ -672,9 +671,12 @@ export function SessionDetailPage() {
 
 
       {tab === "Обзор" && (
-        <div className="stack">
-          {/* Три решения о вечере — тремя карточками в ряд, каждая подписана
-              капсом над значением (макет владельца, 2026-08-21). */}
+        // Досье (спека campaign-paper, Q43; доска 46): слева — когда, в мире,
+        // статус и ставка; справа — паспорт вечера и тайны к раскрытию.
+        <div className="dossier session-overview">
+          <aside className="dossier__aside">
+          {/* Решения о вечере — подписаны капсом над значением (макет
+              владельца, 2026-08-21). */}
           {!isPlayer && (
             <div className="sp-deal">
                   <label className="sp-deal__cell">
@@ -697,29 +699,6 @@ export function SessionDetailPage() {
                       <i className="sp-deal__caret" />
                     </span>
                   </label>
-                  {!hideFinance && (
-                    <label className="sp-deal__cell">
-                      <span className="sp-deal__label">Оплата</span>
-                      <span className="sp-deal__body">
-                        <select
-                          value={session.payment_override ?? ""}
-                          title={session.payment_override ? PAYMENT_TYPE_LABELS[session.payment_override as PaymentType] ?? "" : `Как в кампании (${PAYMENT_TYPE_LABELS[campaignPaymentLabel(session, campaign)]})`}
-                          onChange={(e) => setPaymentOverride(e.target.value as "" | PaymentType)}
-                        >
-                          <option value="">
-                            Как в кампании (
-                            {PAYMENT_TYPE_LABELS[campaignPaymentLabel(session, campaign)]})
-                          </option>
-                          {PAYMENT_TYPE_OPTIONS.map((o) => (
-                            <option key={o.value} value={o.value}>
-                              {o.label}
-                            </option>
-                          ))}
-                        </select>
-                        <i className="sp-deal__caret" />
-                      </span>
-                    </label>
-                  )}
                   {!hideFinance && isPaidEffective && (
                     <label className="sp-deal__cell">
                       <span className="sp-deal__label">Ставка</span>
@@ -908,6 +887,9 @@ export function SessionDetailPage() {
             </div>
           </div>
 
+          </aside>
+          <div className="dossier__main">
+          {!isPlayer && <SessionPassportCard session={session} settingId={campaign.setting_id} />}
           {/* Нераскрытые тайны переехали сюда из «Хроники»: это долг,
               перенесённый с прошлых вечеров, и смотреть на него надо, когда
               вечер только назначают, а не когда он кончился. */}
@@ -984,25 +966,16 @@ export function SessionDetailPage() {
               </div>
             </Modal>
           )}
+          </div>
         </div>
       )}
 
       {tab === "Подготовка" && (
         <div className="stack">
-          <EditableTextCard
-            key={`idea-${session.id}`}
-            title="Задумка на сессию"
-            value={session.idea_notes}
-            onSave={(value) => saveText({ idea_notes: value })}
-            entityType="session"
-            entityId={sessionId}
-            serverSyncsMentions
-            collapsible
-            defaultOpen
-          >
-            {/* Боевая тема задаётся здесь же, рядом с задумкой: её выбирают
-                на подготовке к конкретному вечеру, и она главнее темы
-                набора — набор заготовлен на всю кампанию. */}
+          {/* Задумка вечера переехала в паспорт на «Обзоре» (спека
+              campaign-paper, Q42); боевая тема — по-прежнему здесь, её
+              выбирают на подготовке к конкретному вечеру. */}
+          <div className="card sp-battle">
             <label className="sp-idea-battle">
               <span className="sp-idea-battle__label">Боевая тема</span>
               <select
@@ -1017,7 +990,7 @@ export function SessionDetailPage() {
                 ))}
               </select>
             </label>
-          </EditableTextCard>
+          </div>
 
           {!isPlayer && <SessionSceneTree sessionId={sessionId} />}
 
@@ -1094,7 +1067,7 @@ export function SessionDetailPage() {
         </div>
       )}
 
-      {tab === "Резюме" && (
+      {tab === "Итоги" && (
         <div className="stack">
           {/* Числа вечера появляются только у проведённой сессии: «прошло 0
               дней, раскрыто 0 тайн» на ещё не сыгранной выглядит как
@@ -1128,15 +1101,20 @@ export function SessionDetailPage() {
           {/* Лента сессии (гриллинг 2026-09-28): те же сообщения, что Мастер
               писал в правой панели по ходу игры, — дописать и поправить
               можно и здесь. Игрокам не показывается. */}
-          <div className="card stack sp-notes">
-            <div className="row sp-notes__head">
-              <span className="sp-title">Лента сессии</span>
-              <SessionMentionsButton
-                planUrl={`/cross-links/plan-all?ownerKind=session&ownerId=${sessionId}`}
-                applyUrl={`/cross-links/apply-all?ownerKind=session&ownerId=${sessionId}`}
-              />
+          {/* Лента слева, «Что изменилось» справа (спека campaign-paper,
+              Q45/Q50): оси заполняют после игры, глядя в ленту. */}
+          <div className="session-results">
+            <div className="card stack sp-notes">
+              <div className="row sp-notes__head">
+                <span className="sp-title">Лента сессии</span>
+                <SessionMentionsButton
+                  planUrl={`/cross-links/plan-all?ownerKind=session&ownerId=${sessionId}`}
+                  applyUrl={`/cross-links/apply-all?ownerKind=session&ownerId=${sessionId}`}
+                />
+              </div>
+              <SessionNotesChat sessionId={sessionId} settingId={campaign.setting_id} />
             </div>
-            <SessionNotesChat sessionId={sessionId} settingId={campaign.setting_id} />
+            {!isPlayer && <SessionOutcomesCard session={session} />}
           </div>
 
           {held && report && (
@@ -1171,10 +1149,35 @@ export function SessionDetailPage() {
           {/* Игроки переехали сюда из «Обзора»: состав кампании из сессии в
               сессию один и тот же, а «кто пришёл» и «кто заплатил» отмечают
               ПОСЛЕ вечера, вместе с остальным итогом. */}
-          <details className="card stack" open>
-            <summary>
-              <strong className="entry-title">Игроки</strong>
-            </summary>
+          <details className="paper-fold" open>
+            <summary>{!isPlayer && !hideFinance ? "Игроки и оплата" : "Игроки"}</summary>
+            {!isPlayer && (
+              <div className="sp-deal sp-deal--fold">
+                  {!hideFinance && (
+                    <label className="sp-deal__cell">
+                      <span className="sp-deal__label">Оплата</span>
+                      <span className="sp-deal__body">
+                        <select
+                          value={session.payment_override ?? ""}
+                          title={session.payment_override ? PAYMENT_TYPE_LABELS[session.payment_override as PaymentType] ?? "" : `Как в кампании (${PAYMENT_TYPE_LABELS[campaignPaymentLabel(session, campaign)]})`}
+                          onChange={(e) => setPaymentOverride(e.target.value as "" | PaymentType)}
+                        >
+                          <option value="">
+                            Как в кампании (
+                            {PAYMENT_TYPE_LABELS[campaignPaymentLabel(session, campaign)]})
+                          </option>
+                          {PAYMENT_TYPE_OPTIONS.map((o) => (
+                            <option key={o.value} value={o.value}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                        <i className="sp-deal__caret" />
+                      </span>
+                    </label>
+                  )}
+              </div>
+            )}
             <div className="session-attendance-table-wrap">
               <table className="session-attendance-table">
                 <thead>
