@@ -753,6 +753,10 @@ export interface CampaignDebt {
 }
 
 export interface SessionDetail extends SessionSummary {
+  /** Паспорт вечера кроме обещания (оно — idea_notes): спека campaign-paper, Q42. */
+  passport?: Record<string, string>;
+  /** «Что изменилось» по осям outcomes (Q45). */
+  outcomes?: Record<string, string>;
   stake_override: number | null;
   idea_notes: string;
   combat_active: number;

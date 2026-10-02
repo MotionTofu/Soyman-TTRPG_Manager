@@ -1936,3 +1936,53 @@ button.player-visibility-fact {
 .extra-payment-form > input:not([type="date"]):not([type="number"]) {
   flex: 1 1 12rem;
 }
+
+/* Сессия на бумаге (доски 46–47). Левая колонка досье узкая: решения о
+   вечере и два времени — столбиком. */
+.session-overview .dossier__aside .sp-deal {
+  grid-template-columns: minmax(0, 1fr);
+}
+.session-overview .dossier__aside .sp-time {
+  grid-template-columns: minmax(0, 1fr);
+}
+.session-overview .dossier__aside .sp-time__split {
+  display: none;
+}
+.session-results {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--sp-6);
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .session-results {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.sp-deal--fold {
+  margin-bottom: var(--sp-4);
+}
+
+/* Плашки сессии на листе — подписи, а не тёмные полосы: лист уже рамка. */
+.paper-sheet .sp-strip,
+.paper-sheet .sp-deal__label,
+.paper-sheet .sp-time__head,
+.paper-sheet .sp-secrets__head {
+  background: none;
+  color: var(--paper-ink);
+  border-color: var(--paper-rule);
+}
+.paper-sheet .sp-deal__label,
+.paper-sheet .sp-time__head,
+.paper-sheet .sp-secrets__head {
+  border-bottom: var(--card-border-width-strong) solid var(--paper-ink);
+}
+.paper-sheet .sp-strip .sp-label,
+.paper-sheet .sp-secrets__head .sp-count,
+.paper-sheet .sp-secrets__head .sp-note {
+  color: var(--paper-muted);
+}
+.paper-sheet .sp-strip .sp-value,
+.paper-sheet .sp-secrets__head .sp-title {
+  color: var(--paper-ink);
+}

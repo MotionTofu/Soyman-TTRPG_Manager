@@ -7288,6 +7288,16 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     database.exec("UPDATE sessions SET archived_at = COALESCE(archived_at, datetime('now')) WHERE status = 'cancelled'");
   }
 
+  // Сессия на бумаге (спека campaign-paper, Q42/Q45): паспорт вечера (лист 11
+  // тетради; «обещание» — прежняя колонка idea_notes, её читают пульт и
+  // копия подготовки) и «Что изменилось» по осям outcomes.
+  if (!columnExists(database, "sessions", "passport")) {
+    database.exec("ALTER TABLE sessions ADD COLUMN passport TEXT NOT NULL DEFAULT '{}'");
+  }
+  if (!columnExists(database, "sessions", "outcomes")) {
+    database.exec("ALTER TABLE sessions ADD COLUMN outcomes TEXT NOT NULL DEFAULT '{}'");
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);

@@ -128,6 +128,12 @@ export const parseCampaignPassport = (raw: unknown): Record<string, string> =>
 export const serializeCampaignPassport = (raw: unknown): string =>
   JSON.stringify(pick(raw, CAMPAIGN_PASSPORT_KEYS, CAMPAIGN_PASSPORT_MAX));
 
+// Паспорт сессии (спека campaign-paper, Q42; лист 11 тетради кампании).
+// Обещание вечера живёт в sessions.idea_notes — здесь остальное.
+export const SESSION_PASSPORT_KEYS = ["questions", "player_intent", "exit_state"] as const;
+export const parseSessionPassport = (raw: unknown): Record<string, string> => pick(parseJson(raw), SESSION_PASSPORT_KEYS);
+export const serializeSessionPassport = (raw: unknown): string => JSON.stringify(pick(raw, SESSION_PASSPORT_KEYS));
+
 // «Чем кончилось» — исходы по осям (словарь №40): цель · цена · отношения ·
 // угроза · мир · персонажи. Заполняется после игры.
 export const OUTCOME_KEYS = ["goal", "cost", "relations", "threat", "world", "pcs"] as const;
