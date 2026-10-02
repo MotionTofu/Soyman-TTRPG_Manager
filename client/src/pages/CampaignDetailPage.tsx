@@ -1546,6 +1546,14 @@ function PlayersAndCharactersTab({
     );
   }
 
+  async function archiveCharacter(characterId: number, name: string) {
+    const ok = await pcConfirm({ message: `Отправить «${name}» в архив? Вернуть можно из архива.`, confirmLabel: "В архив", danger: true });
+    if (!ok) return;
+    await run(labelled("Персонаж в архив", () => write.del(`/characters/${characterId}`)), {
+      affects: [{ kind: "character" }, { path: "/archive" }],
+    });
+  }
+
   async function addCharacter(playerId: number) {
     const name = (drafts[playerId] ?? "").trim();
     if (!name) return;
@@ -1587,66 +1595,79 @@ function PlayersAndCharactersTab({
           action={available.length > 0 ? <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Выберите игрока выше ↑</span> : <Link to="/players">Создать игрока →</Link>}
         />
       ) : (
-        // Состав строками (спека campaign-paper, Q21): игрок · персонажи ·
-        // статус · долг. Тамбнейл игрока правится на его профиле.
-        <ul className="paper-rows roster-rows">
+        // Состав (просьба владельца 2026-10-02): строка игрока — имя, долг и
+        // действия; под ней с отступом его персонажи — портрет, имя, глазик, ✕.
+        <ul className="roster-list">
           {roster.map((p) => {
             const playerCharacters = characters.filter((c) => c.player_id === p.id);
             const isLeft = p.roster_status === "left";
             const debt = debts.find((d) => d.player_id === p.id);
             return (
-              <li key={p.id} className={isLeft ? "is-left" : undefined}>
-                <span className="paper-rows__main">
-                  <Link to={`/players/${p.id}`}>{p.name}</Link>
-                  {isLeft && <span className="badge cancelled">покинул</span>}
-                </span>
-                <span className="roster-rows__chars">
-                  {playerCharacters.map((c) => (
-                    <span key={c.id} className="roster-rows__char">
-                      <Link to={`/characters/${c.id}`}>{c.character_name}</Link>
-                      <button className="comp-mini" onClick={() => setPeekCharId(c.id)} aria-label={`Быстрый просмотр ${c.character_name}`} title="Быстрый просмотр">
-                        <NavIcon name="eye" />
-                      </button>
-                    </span>
-                  ))}
-                  {addingFor === p.id ? (
-                    <span className="roster-rows__add">
-                      <input
-                        autoFocus
-                        placeholder="Имя персонажа"
-                        value={drafts[p.id] ?? ""}
-                        onChange={(e) => setDrafts((d) => ({ ...d, [p.id]: e.target.value }))}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") void addCharacter(p.id);
-                          if (e.key === "Escape") {
-                            setAddingFor(null);
-                            setDrafts((d) => ({ ...d, [p.id]: "" }));
-                          }
-                        }}
-                      />
-                      <button className="primary" onClick={() => void addCharacter(p.id)} disabled={!(drafts[p.id] ?? "").trim()}>
-                        ОК
-                      </button>
-                    </span>
-                  ) : (
+              <li key={p.id} className={`roster-list__player${isLeft ? " is-left" : ""}`}>
+                <div className="roster-list__head">
+                  <span className="roster-list__name">
+                    <Link to={`/players/${p.id}`}>{p.name}</Link>
+                    {isLeft && <span className="badge cancelled">покинул</span>}
+                    {debt && !hideFinance && (
+                      <span className="roster-rows__debt">
+                        долг {debt.owed} {currency} · {debt.sessions} {debt.sessions === 1 ? "игра" : debt.sessions < 5 ? "игры" : "игр"}
+                      </span>
+                    )}
+                  </span>
+                  <span className="roster-list__actions">
                     <button className="comp-mini" onClick={() => setAddingFor(p.id)}>
                       + персонаж
                     </button>
-                  )}
-                </span>
-                {debt && !hideFinance && (
-                  <span className="paper-rows__sub roster-rows__debt">
-                    долг {debt.owed} {currency} · {debt.sessions} {debt.sessions === 1 ? "игра" : debt.sessions < 5 ? "игры" : "игр"}
+                    <button className="comp-mini" onClick={() => void toggleLeft(p.id, p.roster_status)}>
+                      {isLeft ? "Вернуть" : "Покинул"}
+                    </button>
+                    <button className="comp-mini" title="Убрать из состава" aria-label={`Убрать ${p.name} из состава`} onClick={() => void removeFromRoster(p.id)}>
+                      ✕
+                    </button>
                   </span>
+                </div>
+                {(playerCharacters.length > 0 || addingFor === p.id) && (
+                  <ul className="roster-list__chars">
+                    {playerCharacters.map((c) => {
+                      const img = c.thumbnail_image_url ?? c.avatar_image_url;
+                      return (
+                        <li key={c.id} className="roster-list__char">
+                          <Link className="roster-list__portrait" to={`/characters/${c.id}`} tabIndex={-1} aria-hidden="true">
+                            {img && isSafeImageUrl(img) ? <img src={img} alt="" /> : <span>{c.character_name.slice(0, 1)}</span>}
+                          </Link>
+                          <Link to={`/characters/${c.id}`}>{c.character_name}</Link>
+                          <button className="comp-mini" onClick={() => setPeekCharId(c.id)} aria-label={`Быстрый просмотр ${c.character_name}`} title="Быстрый просмотр">
+                            <NavIcon name="eye" />
+                          </button>
+                          <button className="comp-mini" title="В архив" aria-label={`${c.character_name} в архив`} onClick={() => void archiveCharacter(c.id, c.character_name)}>
+                            ✕
+                          </button>
+                        </li>
+                      );
+                    })}
+                    {addingFor === p.id && (
+                      <li className="roster-list__char">
+                        <input
+                          autoFocus
+                          placeholder="Имя персонажа"
+                          value={drafts[p.id] ?? ""}
+                          onChange={(e) => setDrafts((d) => ({ ...d, [p.id]: e.target.value }))}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") void addCharacter(p.id);
+                            if (e.key === "Escape") {
+                              setAddingFor(null);
+                              setDrafts((d) => ({ ...d, [p.id]: "" }));
+                            }
+                          }}
+                        />
+                        <button className="primary" onClick={() => void addCharacter(p.id)} disabled={!(drafts[p.id] ?? "").trim()}>
+                          ОК
+                        </button>
+                        <button onClick={() => { setAddingFor(null); setDrafts((d) => ({ ...d, [p.id]: "" })); }}>Отмена</button>
+                      </li>
+                    )}
+                  </ul>
                 )}
-                <span className="roster-rows__actions">
-                  <button className="comp-mini" onClick={() => void toggleLeft(p.id, p.roster_status)}>
-                    {isLeft ? "Вернуть" : "Покинул"}
-                  </button>
-                  <button className="comp-mini" title="Убрать из состава" aria-label={`Убрать ${p.name} из состава`} onClick={() => void removeFromRoster(p.id)}>
-                    ✕
-                  </button>
-                </span>
               </li>
             );
           })}
@@ -1793,13 +1814,29 @@ function CampaignSquadSummary({ characters }: { characters: Character[] }) {
   const hasAny = rows.some((r) => r.ac !== "—" || r.hp !== "—");
   if (!hasAny) return null;
   return (
-    <div className="card stack" style={{ marginTop: 8, overflowX: "auto" }}>
-      <div className="campaign-player-header" style={{ margin: "-14px -14px 10px" }}><span>Сводка отряда</span><span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>{rows.length} ПК</span></div>
-      <table style={{ width: "100%", fontSize: "var(--fs-meta)", borderCollapse: "collapse" }}>
-        <thead><tr className="muted" style={{ fontFamily: "var(--font-ui)", fontSize: "var(--fs-micro)", textTransform: "uppercase", letterSpacing: "0.06em" }}><th style={{ textAlign: "left", padding: "4px 6px" }}>Персонаж</th><th style={{ padding: "4px 6px" }}>Ур.</th><th style={{ padding: "4px 6px" }}>КЗ</th><th style={{ padding: "4px 6px" }}>Хиты</th><th style={{ padding: "4px 6px" }}>Скорость</th><th></th></tr></thead>
-        <tbody>{rows.map((r) => (
-          <tr key={r.id} style={{ borderTop: "1px solid var(--line)" }}><td style={{ padding: "4px 6px" }}><Link to={`/characters/${r.id}`}>{r.name}</Link></td><td style={{ padding: "4px 6px", textAlign: "center", fontFamily: "var(--font-mono)" }}>{r.level}</td><td style={{ padding: "4px 6px", textAlign: "center", fontFamily: "var(--font-mono)" }}>{r.ac}</td><td style={{ padding: "4px 6px", textAlign: "center", fontFamily: "var(--font-mono)" }}>{r.hp}</td><td style={{ padding: "4px 6px", textAlign: "center", fontFamily: "var(--font-mono)" }}>{r.speed}</td><td style={{ padding: "4px 6px" }}><button className="comp-mini" onClick={() => { window.location.hash = `peek-${r.id}`; }} style={{ visibility: "hidden" }} aria-hidden="true">·</button></td></tr>
-        ))}</tbody>
+    <div className="card stack squad-summary">
+      <div className="campaign-player-header"><span>Сводка отряда</span><span className="muted">{rows.length} ПК</span></div>
+      <table className="squad-table">
+        <thead>
+          <tr>
+            <th>Персонаж</th>
+            <th>Ур.</th>
+            <th>КЗ</th>
+            <th>Хиты</th>
+            <th>Скорость</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id}>
+              <td><Link to={`/characters/${r.id}`}>{r.name}</Link></td>
+              <td>{r.level}</td>
+              <td>{r.ac}</td>
+              <td>{r.hp}</td>
+              <td>{r.speed}</td>
+            </tr>
+          ))}
+        </tbody>
       </table>
     </div>
   );
