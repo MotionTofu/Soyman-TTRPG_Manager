@@ -9,6 +9,8 @@ import { folderMissing, repairCampaignFolder } from "../services/folderRepair";
 import { queueStanding, setCharacterRoll } from "../services/initiativeSync";
 import { matchSystemId, parsePortableImport } from "../services/portableImport";
 import { sheetNotes } from "../services/sheetNotes";
+import { isGmOnlyChapterSection, PLAYER_CHAPTER_FILTER } from "../services/playerAccess";
+import type { AuthedRequest } from "../services/auth";
 
 export const charactersRouter = Router();
 const ALLOWED_IMAGE_MIMES = /^image\/(jpeg|png|gif|webp|avif)$/;
@@ -106,7 +108,7 @@ charactersRouter.get("/:id/notes", (req, res) => {
   res.json(sheetNotes(Number(req.params.id)));
 });
 
-charactersRouter.get("/:id", (req, res) => {
+charactersRouter.get("/:id", (req: AuthedRequest, res) => {
   const row = db
     .prepare(
       `SELECT c.*, p.name as player_name, ca.name as campaign_name, ca.setting_id as campaign_setting_id,
@@ -121,9 +123,11 @@ charactersRouter.get("/:id", (req, res) => {
     )
     .get(req.params.id) as { avatar_image_path: string | null } | undefined;
   if (!row) return res.status(404).json({ error: "not found" });
+  // Игрок читает свой лист тем же маршрутом — главы Мастера ему не отдаём.
+  const playerFilter = req.user?.role === "player" ? ` AND ${PLAYER_CHAPTER_FILTER}` : "";
   const chapters = (
     db
-      .prepare("SELECT * FROM character_chapters WHERE character_id = ? ORDER BY created_at")
+      .prepare(`SELECT * FROM character_chapters WHERE character_id = ?${playerFilter} ORDER BY created_at`)
       .all(req.params.id) as { image_path: string | null }[]
   ).map(withChapterImageUrl);
   const importantDates = db
@@ -228,13 +232,14 @@ charactersRouter.delete("/:id/reminders/:reminderId", (req, res) => {
   res.json({ ok: true });
 });
 
-charactersRouter.post("/:id/chapters", (req, res) => {
+charactersRouter.post("/:id/chapters", (req: AuthedRequest, res) => {
   const { section, title, content } = req.body as {
     section: string;
     title?: string;
     content?: string;
   };
   if (!section) return res.status(400).json({ error: "section is required" });
+  if (req.user?.role === "player" && isGmOnlyChapterSection(section)) return res.status(403).json({ error: "forbidden" });
   const info = db
     .prepare(
       "INSERT INTO character_chapters (character_id, section, title, content) VALUES (?, ?, ?, ?)"

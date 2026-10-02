@@ -5,6 +5,7 @@ import { randomUUID } from "crypto";
 import path from "path";
 import { db } from "../db/db";
 import { requireAuth, type AuthedRequest } from "../services/auth";
+import { PLAYER_CHAPTER_FILTER } from "../services/playerAccess";
 import {
   assertVaultPath,
   standaloneCharacterFolder,
@@ -848,7 +849,7 @@ playerRouter.get("/characters/:id", (req: AuthedRequest, res) => {
         ?.name ?? null
     : null;
   const chapters = db
-    .prepare("SELECT * FROM character_chapters WHERE character_id = ? ORDER BY created_at")
+    .prepare(`SELECT * FROM character_chapters WHERE character_id = ? AND ${PLAYER_CHAPTER_FILTER} ORDER BY created_at`)
     .all(character.id);
   const statblocks = db
     .prepare("SELECT * FROM statblocks WHERE owner_type = 'character' AND owner_id = ? ORDER BY created_at")

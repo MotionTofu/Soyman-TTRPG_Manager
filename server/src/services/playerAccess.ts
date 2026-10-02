@@ -23,11 +23,25 @@ function ownsCharacter(playerId: number, characterId: string | number): boolean 
     .get(characterId, playerId);
 }
 
+/**
+ * Разделы глав персонажа, которые видит и правит только Мастер. Зацепки
+ * (словарь граф №22) — его подготовка: как вовлечь персонажа в историю.
+ */
+export const GM_ONLY_CHAPTER_SECTIONS = ["hooks"] as const;
+const gmOnlySections: readonly string[] = GM_ONLY_CHAPTER_SECTIONS;
+
+export function isGmOnlyChapterSection(section: unknown): boolean {
+  return typeof section === "string" && gmOnlySections.includes(section);
+}
+
+/** SQL-условие «раздел виден игроку» — для выборок глав персонажа. */
+export const PLAYER_CHAPTER_FILTER = `section NOT IN (${GM_ONLY_CHAPTER_SECTIONS.map((s) => `'${s}'`).join(", ")})`;
+
 function chapterOwned(playerId: number, chapterId: string): boolean {
-  const row = db.prepare("SELECT character_id FROM character_chapters WHERE id = ?").get(chapterId) as
-    | { character_id: number }
+  const row = db.prepare("SELECT character_id, section FROM character_chapters WHERE id = ?").get(chapterId) as
+    | { character_id: number; section: string }
     | undefined;
-  return !!row && ownsCharacter(playerId, row.character_id);
+  return !!row && !isGmOnlyChapterSection(row.section) && ownsCharacter(playerId, row.character_id);
 }
 
 function importantDateOwned(playerId: number, dateId: string): boolean {
