@@ -360,6 +360,14 @@
   flex: none;
   display: inline-flex;
 }
+/* Пин без знака типа (метка-подпись чертежа) — точкой его цвета. */
+.location-map-row__dot {
+  width: 0.6em;
+  height: 0.6em;
+  margin: 0.2em;
+  border-radius: 50%;
+  background: currentColor;
+}
 /* Знак типа на круглой подложке: фон белый/чёрный под цвет знака,
    кольцо — цвет обводки пина. */
 .location-map-pin-disc {

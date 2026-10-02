@@ -1,30 +1,25 @@
-import { useEffect, useRef, useState, type DragEvent, type PointerEvent } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { deleteFileWithChoice } from "../api/client";
 import { useAfterWrite, write } from "../data/hooks";
 import { showSaveError } from "../data/notices";
 import { resolveEntityMapLabels } from "../api/resolveEntity";
-import { SEARCH_DRAG_MIME } from "./LinkDropZone";
-import { SearchPanel } from "../layout/SearchPanel";
 import { Modal } from "./Modal";
 import { DETAIL_ROUTES, ENTITY_TYPE_LABELS } from "../entityTypes";
-import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
 import { LocationCascadePicker } from "./LocationCascadePicker";
 import { SendMapToSessionModal } from "./SendMapToSessionModal";
 import { addToBag } from "../bag";
 import { NavIcon } from "./NavIcons";
-import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { PlaceCard } from "./PlaceCard";
 import { CreatureCardLoader } from "./CreatureCard";
-import { glyphName, typeTint } from "../typeGlyphs";
-import { TypeGlyph } from "./TypeGlyph";
-import { isSafeImageUrl } from "../utils/safeUrl";
-import { pickTextOn } from "../themes";
-import { useConfirm, useAlert } from "../hooks/useConfirm";
-import type { LocationPin, SearchResult, SettingLocation } from "../types";
+import { PinBoard, type BoardPin } from "./PinBoard";
+import { useMapToast } from "../hooks/useMapToast";
+import { useConfirm } from "../hooks/useConfirm";
+import type { LocationPin, SettingLocation } from "../types";
 
-const MAX_PINS = 100;
+// Карта места (доски 29–31): ядро «картинка + пины» (PinBoard) плюс то, что
+// знает только место — подписи сущностей, карточка выбранного пина, «В
+// сессию», перенос карты, настройки зума и вложенные места «Не на карте».
 
 interface Props {
   locationId: number;
@@ -41,139 +36,27 @@ interface Props {
   otherLocations?: SettingLocation[];
 }
 
-interface ResolvedPin extends LocationPin {
-  label: string;
-  // Полное имя для списка пинов; подпись на карте может быть короткой.
-  fullLabel?: string;
+interface MapPin extends BoardPin {
+  target_type: string;
+  target_id: number;
 }
 
-interface View {
-  zoom: number;
-  panX: number;
-  panY: number;
-}
-
-const DEFAULT_PIN_COLOR = "#b08968";
-const DEFAULT_PIN_BORDER = "#16141c";
-const DEFAULT_PIN_SIZE = 14;
-
-// Default fill/border per entity type, applied only when a pin has no manual
-// color override — once the user picks a color for a specific pin (the
-// "Отображение" toolbar), that override always wins, so these are just
-// sensible starting points, not an enforced convention.
-// Цвет пина по умолчанию — цвет типа в графах (палитра Полотна), обводка —
-// бумага: знак должен читаться поверх любой карты.
-const PIN_HALO = "#fffdf5";
-// Группы списка пинов справа от карты (разбор 2026-10-02, Q3).
-const PIN_GROUP_ORDER = ["location", "being", "character", "community", "artifact", "other"];
-const PIN_GROUP_LABELS: Record<string, string> = {
-  location: "Места",
-  being: "Существа",
-  character: "Персонажи",
-  community: "Сообщества",
-  artifact: "Предметы",
-  other: "Другое",
-};
-function pinDefaultsFor(targetType: string): { color: string; border: string } {
-  const tint = typeTint(targetType);
-  if (tint.kind === "color") return { color: tint.color, border: PIN_HALO };
-  if (glyphName(targetType)) return { color: DEFAULT_PIN_BORDER, border: PIN_HALO };
-  return { color: DEFAULT_PIN_COLOR, border: DEFAULT_PIN_BORDER };
-}
-
-// Tooltip background bucket by entity type — being and character share the
-// same red hue (both "living" pins), but character gets its own modifier
-// class (index.css) for a distinct border and a slightly larger label.
-function pinLabelBucket(targetType: string): "being" | "character" | "location" | "artifact" | "other" {
-  if (targetType === "being") return "being";
-  if (targetType === "character") return "character";
-  if (targetType === "location") return "location";
-  if (targetType === "artifact") return "artifact";
-  return "other";
-}
 const MIN_ZOOM = 1;
 const DEFAULT_MAX_ZOOM = 6;
 const DEFAULT_START_ZOOM = 1;
 const DEFAULT_GOTO_ZOOM = 3;
-// Pins stay a constant on-screen size regardless of zoom level (the
-// map image is what grows/shrinks, not the pins). MIN_ZOOM currently floors
-// zoom at 1, so the <1 branch is a small defensive shrink in case that floor
-// is ever relaxed — kept subtle so pins never look cramped when zoomed out.
-const PIN_HIT_PADDING = 2; // extends the circular hit-area beyond the visible dot, on every side
-function pinCounterScale(zoom: number) {
-  if (zoom >= MIN_ZOOM) return 1 / zoom;
-  return (1 - (1 - zoom) * 0.15) / zoom;
-}
 
-function clampPan(
-  zoom: number,
-  panX: number,
-  panY: number,
-  rect: { width: number; height: number },
-  imageBox?: { left: number; top: number; width: number; height: number } | null
-) {
-  if (imageBox) {
-    // Clamp so image edges never leave the viewport.
-    const imgLeft = imageBox.left;
-    const imgTop = imageBox.top;
-    const imgRight = imgLeft + imageBox.width;
-    const imgBottom = imgTop + imageBox.height;
-    const minX = rect.width - imgRight * zoom;
-    const maxX = -imgLeft * zoom;
-    const minY = rect.height - imgBottom * zoom;
-    const maxY = -imgTop * zoom;
-    return {
-      x: Math.min(maxX, Math.max(minX, panX)),
-      y: Math.min(maxY, Math.max(minY, panY)),
-    };
-  }
-  // Fallback: clamp to wrap edges (no imageBox available).
-  const scaledW = rect.width * zoom;
-  const scaledH = rect.height * zoom;
-  const minX = Math.min(0, rect.width - scaledW);
-  const minY = Math.min(0, rect.height - scaledH);
-  return {
-    x: Math.min(0, Math.max(minX, panX)),
-    y: Math.min(0, Math.max(minY, panY)),
-  };
-}
+// Группы списка пинов справа от карты (разбор 2026-10-02, Q3).
+const PIN_GROUPS = [
+  { key: "location", label: "Места" },
+  { key: "being", label: "Существа" },
+  { key: "character", label: "Персонажи" },
+  { key: "community", label: "Сообщества" },
+  { key: "artifact", label: "Предметы" },
+  { key: "other", label: "Другое" },
+];
 
-// Keeps the given content point (in unscaled px, relative to the map's own box)
-// fixed at the center of the current viewport rect while zooming to `zoom`.
-function centeredPan(
-  zoom: number,
-  contentX: number,
-  contentY: number,
-  rect: { width: number; height: number },
-  imageBox?: { left: number; top: number; width: number; height: number } | null
-) {
-  const panX = rect.width / 2 - zoom * contentX;
-  const panY = rect.height / 2 - zoom * contentY;
-  return clampPan(zoom, panX, panY, rect, imageBox);
-}
-
-// Pins are stored as a percentage of the *image's own* rendered box, not the
-// (possibly letterboxed) wrap box — object-fit:contain can leave empty strips
-// on the sides or top/bottom when the wrap's aspect ratio doesn't match the
-// image's, and that gap changes with window/viewport size (e.g. F11).
-function computeImageBox(
-  natural: { w: number; h: number } | null,
-  wrap: { w: number; h: number } | null
-): { left: number; top: number; width: number; height: number } {
-  if (!wrap || !wrap.w || !wrap.h) return { left: 0, top: 0, width: wrap?.w ?? 0, height: wrap?.h ?? 0 };
-  if (!natural || !natural.w || !natural.h) return { left: 0, top: 0, width: wrap.w, height: wrap.h };
-  const imgAspect = natural.w / natural.h;
-  const wrapAspect = wrap.w / wrap.h;
-  let width: number, height: number;
-  if (imgAspect > wrapAspect) {
-    width = wrap.w;
-    height = width / imgAspect;
-  } else {
-    height = wrap.h;
-    width = height * imgAspect;
-  }
-  return { left: (wrap.w - width) / 2, top: (wrap.h - height) / 2, width, height };
-}
+const WORDS = { title: "Карта", acc: "карту", on: "на карте", to: "на карту", away: "Карта открыта на весь экран." };
 
 export function LocationMap({
   locationId,
@@ -187,17 +70,9 @@ export function LocationMap({
   mapLabelsAlways,
   otherLocations,
 }: Props) {
-  const maxZoom = mapMaxZoom ?? DEFAULT_MAX_ZOOM;
-  const startZoom = Math.min(maxZoom, Math.max(MIN_ZOOM, mapStartZoom ?? DEFAULT_START_ZOOM));
-  const gotoZoom = Math.min(maxZoom, Math.max(MIN_ZOOM, mapGotoZoom ?? DEFAULT_GOTO_ZOOM));
-
-  const [resolved, setResolved] = useState<ResolvedPin[]>([]);
-  const [dragOver, setDragOver] = useState(false);
+  const [resolved, setResolved] = useState<MapPin[]>([]);
+  const [pinsLoading, setPinsLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [selectedPinId, setSelectedPinId] = useState<number | null>(null);
-  const [editingStyle, setEditingStyle] = useState(false);
-  const [view, setView] = useState<View>({ zoom: 1, panX: 0, panY: 0 });
-  const [fullscreen, setFullscreen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState({
     maxZoom: "",
@@ -210,52 +85,25 @@ export function LocationMap({
   const [transferKeepCopy, setTransferKeepCopy] = useState(false);
   const [transferring, setTransferring] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
-  const [pinQuery, setPinQuery] = useState("");
-  const [rawPinQuery, setRawPinQuery] = useState("");
-  // «Заблокировать пины» (Q1, Q10): по умолчанию пины двигаются, замок не
-  // запоминается.
-  const [locked, setLocked] = useState(false);
-  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
-  const [fileDragOver, setFileDragOver] = useState(false);
-  const moreRef = useRef<HTMLButtonElement>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
-  const [wrapSize, setWrapSize] = useState<{ w: number; h: number } | null>(null);
-  const [pinsLoading, setPinsLoading] = useState(false);
-  const [toast, setToast] = useState<{ msg: string; onUndo?: () => void } | null>(null);
-  const imgWrapRef = useRef<HTMLDivElement>(null);
-  const initializedForUrlRef = useRef<string | null>(null);
-  const dragState = useRef<{ pinId: number; moved: boolean; x: number; y: number } | null>(null);
-  const justDraggedRef = useRef(false);
-  const panState = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(
-    null
-  );
-  const justPannedRef = useRef(false);
   const navigate = useNavigate();
   const [confirmDialog, confirm] = useConfirm();
-  const [alertDialog, alertFn] = useAlert();
+  const [toastNode, showToast] = useMapToast();
   const afterWrite = useAfterWrite();
   // Карта и пины лежат в карточке локации. Перенос карты задевает и вторую
   // локацию, поэтому у него своё правило.
   function changed() {
     afterWrite([{ kind: "location", id: locationId }]);
   }
-  // Цвет и размер пина правятся ползунком и палитрой, а они шлют событие на
-  // каждое движение. На экране пин уже перекрашен, поэтому карточка
-  // перечитывается один раз, когда Мастер отпустил ползунок, а не на каждый шаг.
-  const styleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  function changedSoon() {
-    if (styleTimer.current) clearTimeout(styleTimer.current);
-    styleTimer.current = setTimeout(changed, 600);
-  }
 
-  function showToast(msg: string, onUndo?: () => void) {
-    setToast({ msg, onUndo });
-    window.setTimeout(() => setToast((t) => (t?.msg === msg ? null : t)), 5000);
-  }
+  // В списке — полное имя: подпись пина на карте бывает короткой («Вилла»,
+  // «Мирт»), а в списке их несколько и их надо различать.
+  const placeNames = new Map((otherLocations ?? []).map((l) => [l.id, l.name]));
 
   useEffect(() => {
-    if (pins.length === 0) { setResolved([]); return; }
+    if (pins.length === 0) {
+      setResolved([]);
+      return;
+    }
     let cancelled = false;
     setPinsLoading(true);
     resolveEntityMapLabels(pins.map((p) => ({ target_type: p.target_type, target_id: p.target_id })))
@@ -264,11 +112,24 @@ export function LocationMap({
         const labelMap = new Map(results.map((r) => [`${r.target_type}:${r.target_id}`, r.label]));
         const fullMap = new Map(results.map((r) => [`${r.target_type}:${r.target_id}`, r.full_label]));
         setResolved(
-          pins.map((p) => ({
-            ...p,
-            label: labelMap.get(`${p.target_type}:${p.target_id}`) ?? `${p.target_type} #${p.target_id}`,
-            fullLabel: fullMap.get(`${p.target_type}:${p.target_id}`),
-          }))
+          pins.map((p) => {
+            const key = `${p.target_type}:${p.target_id}`;
+            return {
+              id: p.id,
+              kind: p.target_type,
+              target_type: p.target_type,
+              target_id: p.target_id,
+              x: p.x,
+              y: p.y,
+              color: p.color,
+              size: p.size,
+              border_color: p.border_color,
+              label: labelMap.get(key) ?? `${p.target_type} #${p.target_id}`,
+              fullLabel:
+                (p.target_type === "location" ? placeNames.get(p.target_id) : undefined) ?? fullMap.get(key) ?? undefined,
+              typeLabel: ENTITY_TYPE_LABELS[p.target_type] ?? p.target_type,
+            };
+          })
         );
       })
       .catch((err) => {
@@ -280,143 +141,14 @@ export function LocationMap({
       .finally(() => {
         if (!cancelled) setPinsLoading(false);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
+    // Имена мест нужны только для списка; перечитывать подписи из-за них незачем.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pins]);
 
-  // Track the wrap's own box so pin/image math re-runs whenever it resizes
-  // (e.g. toggling browser fullscreen with F11), not just on zoom/pan changes.
-  // Re-runs on `fullscreen` too: the wrap is a *different* DOM node inline vs.
-  // in the portal, so switching modes needs a fresh observe() call or pins
-  // keep using the old node's stale (and eventually disconnected) size.
-  useEffect(() => {
-    const el = imgWrapRef.current;
-    if (!el || !mapImageUrl) return;
-    const ro = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (entry) setWrapSize({ w: entry.contentRect.width, h: entry.contentRect.height });
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [mapImageUrl, fullscreen]);
-
-  useEffect(() => {
-    initializedForUrlRef.current = null;
-    setNaturalSize(null);
-  }, [mapImageUrl]);
-
-  // Centers the view on the image's own box exactly once per loaded map,
-  // waiting for natural size / wrap size to be known so it isn't thrown off
-  // by any letterboxing from object-fit:contain.
-  useEffect(() => {
-    if (!mapImageUrl) return;
-    if (initializedForUrlRef.current === mapImageUrl) return;
-    const rect = imgWrapRef.current?.getBoundingClientRect();
-    if (!rect || !rect.width) return;
-    const box = computeImageBox(naturalSize, { w: rect.width, h: rect.height });
-    const contentX = box.left + box.width / 2;
-    const contentY = box.top + box.height / 2;
-    const clamped = centeredPan(startZoom, contentX, contentY, rect, box);
-    setView({ zoom: startZoom, panX: clamped.x, panY: clamped.y });
-    initializedForUrlRef.current = mapImageUrl;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapImageUrl, naturalSize, wrapSize]);
-
-  useEffect(() => {
-    if (!fullscreen) return;
-    // Re-clamp pan when fullscreen changes so the image doesn't appear offset
-    // in the new (larger) container.
-    const rect = imgWrapRef.current?.getBoundingClientRect();
-    if (!rect || !rect.width) return;
-    const box = computeImageBox(naturalSize, { w: rect.width, h: rect.height });
-    setView((v) => {
-      const clamped = clampPan(v.zoom, v.panX, v.panY, rect, box);
-      if (clamped.x === v.panX && clamped.y === v.panY) return v;
-      return { ...v, panX: clamped.x, panY: clamped.y };
-    });
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setFullscreen(false);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [fullscreen, naturalSize]);
-
-  // React makes onWheel passive by default, so preventDefault() there silently
-  // no-ops — attach a real listener to actually stop the page from scrolling.
-  useEffect(() => {
-    const el = imgWrapRef.current;
-    if (!el || !mapImageUrl) return;
-    function onWheel(e: WheelEvent) {
-      e.preventDefault();
-      const rect = el!.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-      setView((v) => {
-        const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
-        const newZoom = Math.min(maxZoom, Math.max(MIN_ZOOM, v.zoom * factor));
-        // Already at the zoom limit — leave pan untouched instead of
-        // re-centering on the cursor, or it "drives" around the map.
-        if (newZoom === v.zoom) return v;
-        const contentX = (mx - v.panX) / v.zoom;
-        const contentY = (my - v.panY) / v.zoom;
-        const box = computeImageBox(naturalSize, { w: rect.width, h: rect.height });
-        const clamped = centeredPan(newZoom, contentX, contentY, rect, box);
-        return { zoom: newZoom, panX: clamped.x, panY: clamped.y };
-      });
-    }
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-  }, [mapImageUrl, fullscreen, maxZoom]);
-
-  // Debounce pin query to avoid re-filtering on every keystroke
-  useEffect(() => {
-    const t = window.setTimeout(() => setPinQuery(rawPinQuery), 150);
-    return () => window.clearTimeout(t);
-  }, [rawPinQuery]);
-
-  // Cleanup pan/drag state on unmount to avoid stale refs
-  useEffect(() => {
-    return () => {
-      panState.current = null;
-      dragState.current = null;
-    };
-  }, []);
-
-  function zoomBy(factor: number) {
-    const rect = imgWrapRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const cx = rect.width / 2;
-    const cy = rect.height / 2;
-    setView((v) => {
-      const newZoom = Math.min(maxZoom, Math.max(MIN_ZOOM, v.zoom * factor));
-      if (newZoom === v.zoom) return v;
-      const contentX = (cx - v.panX) / v.zoom;
-      const contentY = (cy - v.panY) / v.zoom;
-      const box = computeImageBox(naturalSize, { w: rect.width, h: rect.height });
-      const clamped = centeredPan(newZoom, contentX, contentY, rect, box);
-      return { zoom: newZoom, panX: clamped.x, panY: clamped.y };
-    });
-  }
-
-  function centerMap() {
-    const rect = imgWrapRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const box = computeImageBox(naturalSize, { w: rect.width, h: rect.height });
-    const contentX = box.left + box.width / 2;
-    const contentY = box.top + box.height / 2;
-    setView((v) => {
-      const clamped = centeredPan(v.zoom, contentX, contentY, rect, box);
-      return { ...v, panX: clamped.x, panY: clamped.y };
-    });
-  }
-
-  function resetView() {
-    setView({ zoom: 1, panX: 0, panY: 0 });
-  }
-
-  async function uploadMap(file: File | null) {
-    if (!file) return;
-    if (file.size > 15 * 1024 * 1024) { alertFn("Файл слишком большой. Максимум — 15 МБ."); return; }
-    if (!/^image\/(jpeg|png|gif|webp|avif)/.test(file.type)) { alertFn("Недопустимый формат. Используйте JPG, PNG, GIF, WebP или AVIF."); return; }
+  async function uploadMap(file: File) {
     setUploading(true);
     try {
       const form = new FormData();
@@ -452,10 +184,6 @@ export function LocationMap({
     } catch (e) {
       showSaveError(`Карта не удалилась: ${e instanceof Error ? e.message : String(e)}`);
     }
-  }
-
-  function addMapToBag() {
-    addToBag({ type: "location_map", id: locationId, title: `Карта: ${locationName}` });
   }
 
   async function transferMap() {
@@ -510,624 +238,69 @@ export function LocationMap({
     }
   }
 
-  function toContentPercent(clientX: number, clientY: number) {
-    const el = imgWrapRef.current;
-    if (!el) return { x: 0, y: 0 };
-    const rect = el.getBoundingClientRect();
-    const localX = clientX - rect.left;
-    const localY = clientY - rect.top;
-    const contentX = (localX - view.panX) / view.zoom;
-    const contentY = (localY - view.panY) / view.zoom;
-    const box = computeImageBox(naturalSize, { w: rect.width, h: rect.height });
-    return {
-      x: box.width ? Math.max(0, Math.min(100, ((contentX - box.left) / box.width) * 100)) : 0,
-      y: box.height ? Math.max(0, Math.min(100, ((contentY - box.top) / box.height) * 100)) : 0,
-    };
-  }
-
-  function handleDrop(e: DragEvent<HTMLDivElement>) {
-    e.preventDefault();
-    setDragOver(false);
-    const raw = e.dataTransfer.getData(SEARCH_DRAG_MIME);
-    if (!raw || !imgWrapRef.current) return;
-    if (locked) {
-      showToast("Пины заблокированы — снимите замок, чтобы ставить новые");
-      return;
-    }
-    try {
-      const result: SearchResult = JSON.parse(raw);
-      const { x, y } = toContentPercent(e.clientX, e.clientY);
-      write
-        .post(`/setting-locations/${locationId}/pins`, {
-          target_type: result.type,
-          target_id: result.id,
-          x,
-          y,
-        })
-        .then(changed)
-        .catch((e) => showSaveError(`Пин не добавился: ${e instanceof Error ? e.message : String(e)}`));
-    } catch {
-      // Silently ignore invalid drag data
-    }
-  }
-
-  function deselect() {
-    setSelectedPinId(null);
-    setEditingStyle(false);
-  }
-
-  async function removePin(pinId: number) {
-    const ok = await confirm({ title: "Удалить пин?", message: "Удалить этот пин с карты?", confirmLabel: "Удалить", danger: true });
-    if (!ok) return;
-    try {
-      await write.del(`/setting-locations/pins/${pinId}`);
-      if (selectedPinId === pinId) deselect();
-      changed();
-    } catch (e) {
-      showSaveError(`Пин не удалился: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  }
-
-  async function duplicatePin(pin: ResolvedPin) {
-    if (resolved.length >= MAX_PINS) { alertFn(`Максимум ${MAX_PINS} пинов на одной карте.`); return; }
-    try {
-      const created = await write.post<LocationPin>(`/setting-locations/${locationId}/pins`, {
-        target_type: pin.target_type,
-        target_id: pin.target_id,
-        x: Math.min(100, pin.x + 4),
-        y: Math.min(100, pin.y + 4),
-        color: pin.color,
-        size: pin.size,
-        border_color: pin.border_color,
-      });
-      setSelectedPinId(created.id);
-      showToast("Пин скопирован");
-      changed();
-    } catch (e) {
-      showSaveError(`Пин не скопировался: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  }
-
-  function goToTarget(pin: ResolvedPin) {
-    const route = DETAIL_ROUTES[pin.target_type];
-    if (route) navigate(`${route}/${pin.target_id}`);
-  }
-
-  // Local state is updated optimistically for instant feedback while dragging
-  // color/size sliders, but if the save itself fails we must resync from the
-  // server rather than let the UI silently drift out of sync with what's
-  // actually persisted (that drift is what makes pins look like they "reset").
-  function revertPinEditOnFailure(err: unknown) {
-    console.error(err);
-    showSaveError(`Пин не сохранился, вернулось сохранённое: ${err instanceof Error ? err.message : String(err)}`);
-    changed();
-  }
-
-  function setPinColor(pin: ResolvedPin, color: string | null) {
-    setResolved((prev) => prev.map((p) => (p.id === pin.id ? { ...p, color } : p)));
-    write
-      .put(`/setting-locations/pins/${pin.id}`, color === null ? { clear_color: true } : { color })
-      .then(changedSoon, revertPinEditOnFailure);
-  }
-
-  function setPinBorderColor(pin: ResolvedPin, borderColor: string | null) {
-    setResolved((prev) => prev.map((p) => (p.id === pin.id ? { ...p, border_color: borderColor } : p)));
-    write
-      .put(
-        `/setting-locations/pins/${pin.id}`,
-        borderColor === null ? { clear_border_color: true } : { border_color: borderColor }
-      )
-      .then(changedSoon, revertPinEditOnFailure);
-  }
-
-  function setPinSize(pin: ResolvedPin, size: number) {
-    setResolved((prev) => prev.map((p) => (p.id === pin.id ? { ...p, size } : p)));
-    write.put(`/setting-locations/pins/${pin.id}`, { size }).then(changedSoon, revertPinEditOnFailure);
-  }
-
-  function handlePinPointerDown(e: PointerEvent<HTMLSpanElement>, pin: ResolvedPin) {
-    if (locked || !imgWrapRef.current) return;
-    e.stopPropagation();
-    dragState.current = { pinId: pin.id, moved: false, x: pin.x, y: pin.y };
-    e.currentTarget.setPointerCapture(e.pointerId);
-  }
-
-  function handlePinPointerMove(e: PointerEvent<HTMLSpanElement>, pin: ResolvedPin) {
-    if (!dragState.current || dragState.current.pinId !== pin.id || !imgWrapRef.current) return;
-    const { x, y } = toContentPercent(e.clientX, e.clientY);
-    dragState.current.moved = true;
-    dragState.current.x = x;
-    dragState.current.y = y;
-    setResolved((prev) => prev.map((p) => (p.id === pin.id ? { ...p, x, y } : p)));
-  }
-
-  // The pointer-up write is the highest-risk moment for losing a repositioned
-  // pin (e.g. a dev-server restart landing exactly here) since it's the one
-  // point where a dropped request silently discards real user input. Retry a
-  // couple of times before giving up, and if it still fails, resync from the
-  // server and tell the user instead of leaving the drag looking "saved" when
-  // it wasn't.
-  async function putPinPositionWithRetry(pinId: number, x: number, y: number, attempts = 3) {
-    for (let i = 0; i < attempts; i++) {
-      try {
-        await write.put(`/setting-locations/pins/${pinId}`, { x, y });
-        changed();
-        return;
-      } catch (err) {
-        if (i === attempts - 1) {
-          console.error(err);
-          showSaveError(
-            `Положение пина не сохранилось, он вернулся на прежнее место: ${err instanceof Error ? err.message : String(err)}`
-          );
-          changed();
-        } else {
-          await new Promise((r) => setTimeout(r, 300 * (i + 1)));
-        }
-      }
-    }
-  }
-
-  function handlePinPointerUp(pin: ResolvedPin) {
-    if (!dragState.current || dragState.current.pinId !== pin.id) return;
-    const { moved, x, y } = dragState.current;
-    dragState.current = null;
-    if (moved) {
-      justDraggedRef.current = true;
-      putPinPositionWithRetry(pin.id, x, y);
-    }
-  }
-
-  function handlePinClick(pin: ResolvedPin) {
-    if (justDraggedRef.current) {
-      justDraggedRef.current = false;
-      return;
-    }
-    if (selectedPinId !== pin.id) {
-      setSelectedPinId(pin.id);
-      setEditingStyle(false);
-    }
-  }
-
-  function handleWrapPointerDown(e: PointerEvent<HTMLDivElement>) {
-    if ((e.target as HTMLElement).closest(".location-map-pin")) return;
-    if (view.zoom <= 1) return;
-    panState.current = { startX: e.clientX, startY: e.clientY, originX: view.panX, originY: view.panY, moved: false };
-    e.currentTarget.setPointerCapture(e.pointerId);
-  }
-
-  function handleWrapPointerMove(e: PointerEvent<HTMLDivElement>) {
-    if (!panState.current || !imgWrapRef.current) return;
-    const dx = e.clientX - panState.current.startX;
-    const dy = e.clientY - panState.current.startY;
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) panState.current.moved = true;
-    const rect = imgWrapRef.current.getBoundingClientRect();
-    const box = computeImageBox(naturalSize, { w: rect.width, h: rect.height });
-    const clamped = clampPan(view.zoom, panState.current.originX + dx, panState.current.originY + dy, rect, box);
-    setView((v) => ({ ...v, panX: clamped.x, panY: clamped.y }));
-  }
-
-  function handleWrapPointerUp() {
-    if (panState.current?.moved) justPannedRef.current = true;
-    panState.current = null;
-  }
-
-  function handleWrapClick() {
-    if (justPannedRef.current) {
-      justPannedRef.current = false;
-      return;
-    }
-    deselect();
-  }
-
-  // Щелчок по строке списка: подлететь к пину и выбрать его.
-  function goToPin(pin: ResolvedPin) {
-    setSelectedPinId(pin.id);
-    setEditingStyle(false);
-    if (!imgWrapRef.current) return;
-    const rect = imgWrapRef.current.getBoundingClientRect();
-    const box = computeImageBox(naturalSize, { w: rect.width, h: rect.height });
-    const contentX = box.left + (pin.x / 100) * box.width;
-    const contentY = box.top + (pin.y / 100) * box.height;
-    const clamped = centeredPan(gotoZoom, contentX, contentY, rect, box);
-    setView({ zoom: gotoZoom, panX: clamped.x, panY: clamped.y });
-  }
-
-  const imageBox = computeImageBox(naturalSize, wrapSize);
-  const safeMapUrl = mapImageUrl && isSafeImageUrl(mapImageUrl) ? mapImageUrl : null;
-
-  const mapBody = safeMapUrl && (
-    <div
-      ref={imgWrapRef}
-      className={`location-map-wrap${dragOver ? " drag-over" : ""}`}
-      onDragOver={(e) => {
-        e.preventDefault();
-        setDragOver(true);
-      }}
-      onDragLeave={() => setDragOver(false)}
-      onDrop={handleDrop}
-      onClick={handleWrapClick}
-      onPointerDown={handleWrapPointerDown}
-      onPointerMove={handleWrapPointerMove}
-      onPointerUp={handleWrapPointerUp}
-    >
-      <div
-        className="location-map-inner"
-        style={{ transform: `translate(${view.panX}px, ${view.panY}px) scale(${view.zoom})` }}
-      >
-        <img
-          src={safeMapUrl}
-          alt=""
-          className="location-map-img"
-          draggable={false}
-          onLoad={(e) => {
-            const img = e.currentTarget;
-            if (img.naturalWidth && img.naturalHeight) {
-              setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
-            }
-          }}
-        />
-        {resolved.map((p) => {
-          const isSelected = p.id === selectedPinId;
-          const typeDefaults = pinDefaultsFor(p.target_type);
-          // Знак типа, как в графах (просьба владельца 2026-10-02), на круглой
-          // подложке: белой под тёмный знак, чёрной под светлый — на пёстрой
-          // карте прозрачный знак терялся. Обводка — кольцо подложки. Знак
-          // крупнее точки: рисунок на 14 px не читается.
-          const glyph = glyphName(p.target_type);
-          const pinSize = Math.round((p.size ?? DEFAULT_PIN_SIZE) * (glyph ? 1.6 : 1));
-          const hitSize = pinSize + PIN_HIT_PADDING * 2;
-          const halo = p.border_color ?? typeDefaults.border;
-          const glyphColor = p.color ?? typeDefaults.color;
-          const dotStyle = glyph
-            ? {
-                width: pinSize,
-                height: pinSize,
-                background: pickTextOn(glyphColor),
-                borderColor: p.border_color ?? "transparent",
-                color: glyphColor,
-                cursor: locked ? "pointer" : "grab",
-              }
-            : {
-                width: pinSize,
-                height: pinSize,
-                background: p.color ?? typeDefaults.color,
-                borderColor: halo,
-                cursor: locked ? "pointer" : "grab",
-              };
-          return (
-            <div
-              key={p.id}
-              className={`location-map-pin${isSelected ? " selected" : ""}`}
-              style={{
-                left: `${imageBox.left + (p.x / 100) * imageBox.width}px`,
-                top: `${imageBox.top + (p.y / 100) * imageBox.height}px`,
-                width: hitSize,
-                height: hitSize,
-                transform: `translate(-50%, -50%) scale(${pinCounterScale(view.zoom)})`,
-              }}
-            >
-              <span
-                className={glyph ? "location-map-pin-disc" : "location-map-pin-dot"}
-                style={dotStyle}
-                role="button"
-                tabIndex={0}
-                aria-label={`${p.label}, ${ENTITY_TYPE_LABELS[p.target_type] ?? p.target_type}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handlePinClick(p);
-                }}
-                onPointerDown={(e) => handlePinPointerDown(e, p)}
-                onPointerMove={(e) => handlePinPointerMove(e, p)}
-                onPointerUp={() => handlePinPointerUp(p)}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handlePinClick(p); } }}
-              >
-                {glyph && <span className={`location-map-pin-glyph type-glyph type-glyph--${glyph}`} aria-hidden="true" />}
-              </span>
-              <div
-                className={`location-map-pin-label pin-label-${pinLabelBucket(p.target_type)}${mapLabelsAlways || isSelected ? " always" : ""}`}
-              >
-                {p.label}
-              </div>
-            </div>
-          );
-        })}
+  function renderPicked(pin: BoardPin) {
+    const p = pin as MapPin;
+    if (p.target_type === "location") return <PlaceCard key={p.id} locationId={p.target_id} />;
+    if (p.target_type === "being" || p.target_type === "character")
+      return <CreatureCardLoader key={p.id} type={p.target_type} id={p.target_id} variant="column" />;
+    const route = DETAIL_ROUTES[p.target_type];
+    return (
+      <div className="location-map-picked__plain">
+        <span className="paper-label">{ENTITY_TYPE_LABELS[p.target_type] ?? p.target_type}</span>
+        <strong>{p.fullLabel ?? p.label}</strong>
+        {route && (
+          <button type="button" className="comp-mini" onClick={() => navigate(`${route}/${p.target_id}`)}>
+            Открыть ›
+          </button>
+        )}
       </div>
-      {pinsLoading && pins.length > 0 && (
-        <div className="location-map-pin-loading">Загружаю подписи…</div>
-      )}
-      <div className="location-map-zoom-controls">
-        <button type="button" onClick={() => zoomBy(1.3)} title="Приблизить">
-          <NavIcon name="plus" />
-        </button>
-        <button type="button" onClick={resetView} title="Сбросить масштаб">
-          {Math.round(view.zoom * 100)}%
-        </button>
-        <button type="button" onClick={() => zoomBy(1 / 1.3)} title="Отдалить">
-          <NavIcon name="minus" />
-        </button>
-        <button type="button" onClick={centerMap} title="Центрировать карту">
-          <NavIcon name="center" />
-        </button>
-      </div>
-    </div>
-  );
+    );
+  }
 
-  const selected = resolved.find((p) => p.id === selectedPinId) ?? null;
-  // В списке — полное имя: подпись пина на карте бывает короткой («Вилла»,
-  // «Мирт»), а в списке их несколько и их надо различать.
-  const placeNames = new Map((otherLocations ?? []).map((l) => [l.id, l.name]));
-  const fullName = (p: ResolvedPin) => (p.target_type === "location" ? placeNames.get(p.target_id) : undefined) ?? p.fullLabel ?? p.label;
-  const q = pinQuery.trim().toLocaleLowerCase("ru");
-  const shownPins = q
-    ? resolved.filter((p) => `${p.label} ${fullName(p)}`.toLocaleLowerCase("ru").includes(q))
-    : resolved;
-  const pinGroups = PIN_GROUP_ORDER.map((type) => ({
-    type,
-    pins: shownPins
-      .filter((p) => (PIN_GROUP_ORDER.includes(p.target_type) ? p.target_type === type : type === "other"))
-      .sort((a, b) => fullName(a).localeCompare(fullName(b), "ru", { numeric: true })),
-  })).filter((g) => g.pins.length > 0);
   // «Не на карте» (Q5): вложенные места этого места, у которых здесь нет пина.
   const pinnedPlaces = new Set(pins.filter((p) => p.target_type === "location").map((p) => p.target_id));
   const loose = (otherLocations ?? [])
     .filter((l) => l.parent_id === locationId && !l.archived_at && !pinnedPlaces.has(l.id))
-    .sort((a, b) => a.name.localeCompare(b.name, "ru", { numeric: true }));
-  const pinWord = pins.length === 1 ? "пин" : pins.length % 10 >= 2 && pins.length % 10 <= 4 && (pins.length < 10 || pins.length > 20) ? "пина" : "пинов";
-
-  function openMenu() {
-    const r = moreRef.current?.getBoundingClientRect();
-    if (r) setMenuAt({ x: r.right, y: r.bottom });
-  }
-
-  const menuItems: ContextMenuItem[] = [
-    { label: "Настройки карты…", onClick: openSettings },
-    { label: "Заменить карту…", onClick: () => fileRef.current?.click() },
-    { label: "В мешок", onClick: addMapToBag },
-    ...(otherLocations && otherLocations.length > 0 ? [{ label: "Перенести карту…", onClick: () => setTransferOpen(true) }] : []),
-    { label: "Убрать карту", danger: true, onClick: () => void removeMap() },
-  ];
+    .sort((a, b) => a.name.localeCompare(b.name, "ru", { numeric: true }))
+    .map((l) => ({ key: String(l.id), label: l.name, drag: { type: "location" as const, id: l.id, title: l.name } }));
 
   return (
     <>
-      <div className="location-map-sheet">
-        <div className="location-map-bar">
-          <h2 className="location-map-bar__title">
-            Карта {pins.length > 0 && <span className="location-map-bar__count">· {pins.length} {pinWord}</span>}
-          </h2>
-          <span className="location-map-bar__spacer" />
-          {safeMapUrl && (
-            <>
-              {/* Замок не запоминается: каждый раз карта открывается с
-                  подвижными пинами (Q1, Q10). */}
-              <button
-                type="button"
-                className={`location-map-lock${locked ? " is-on" : ""}`}
-                aria-pressed={locked}
-                onClick={() => {
-                  setLocked((v) => !v);
-                  setEditingStyle(false);
-                }}
-              >
-                <NavIcon name={locked ? "lock" : "unlock"} /> {locked ? "Пины заблокированы" : "Заблокировать пины"}
-              </button>
-              <button type="button" onClick={() => setSendOpen(true)}>
-                <NavIcon name="arrowRight" /> В сессию
-              </button>
-              <button type="button" onClick={() => setFullscreen(true)} title="Развернуть на весь экран">
-                <NavIcon name="fullscreen" /> На весь экран
-              </button>
-              <button ref={moreRef} type="button" aria-label="Ещё действия с картой" aria-haspopup="menu" onClick={openMenu}>
-                …
-              </button>
-            </>
-          )}
-          <input
-            ref={fileRef}
-            type="file"
-            accept={IMAGE_ACCEPT}
-            hidden
-            onChange={(e) => {
-              void uploadMap(e.target.files?.[0] ?? null);
-              e.target.value = "";
-            }}
-          />
-        </div>
-
-        {!safeMapUrl && (
-          <label
-            className={`location-map-empty${fileDragOver ? " drag-over" : ""}`}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setFileDragOver(true);
-            }}
-            onDragLeave={() => setFileDragOver(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setFileDragOver(false);
-              void uploadMap(e.dataTransfer.files?.[0] ?? null);
-            }}
-          >
-            <span className="location-map-empty__title">{uploading ? "Загрузка…" : "Перетащите сюда карту"}</span>
-            <span>
-              или <span className="location-map-empty__pick">выберите файл</span>
-            </span>
-            {mapImageUrl && <span className="muted">Прежняя карта повреждена или с небезопасным адресом — загрузите заново.</span>}
-            <span className="muted">{IMAGE_HINT}</span>
-            <span className="muted">На карте потом ставятся пины мест и существ.</span>
-            <input
-              type="file"
-              accept={IMAGE_ACCEPT}
-              hidden
-              onChange={(e) => void uploadMap(e.target.files?.[0] ?? null)}
-            />
-          </label>
-        )}
-
-        {safeMapUrl && (
-          <div className="location-map-split">
-            {fullscreen ? <div className="location-map-away muted">Карта открыта на весь экран.</div> : mapBody}
-            <aside className="location-map-side" aria-label="Пины карты">
-              <input
-                type="search"
-                className="location-map-side__search"
-                placeholder="Найти пин…"
-                aria-label="Найти пин"
-                value={rawPinQuery}
-                onChange={(e) => setRawPinQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && shownPins[0]) goToPin(shownPins[0]);
-                  if (e.key === "Escape") setRawPinQuery("");
-                }}
-              />
-
-              {selected && (
-                <div className="location-map-picked">
-                  {selected.target_type === "location" ? (
-                    <PlaceCard key={selected.id} locationId={selected.target_id} />
-                  ) : selected.target_type === "being" || selected.target_type === "character" ? (
-                    <CreatureCardLoader key={selected.id} type={selected.target_type} id={selected.target_id} variant="column" />
-                  ) : (
-                    <div className="location-map-picked__plain">
-                      <span className="paper-label">{ENTITY_TYPE_LABELS[selected.target_type] ?? selected.target_type}</span>
-                      <strong>{fullName(selected)}</strong>
-                      {DETAIL_ROUTES[selected.target_type] && (
-                        <button type="button" className="comp-mini" onClick={() => goToTarget(selected)}>
-                          Открыть ›
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  {!locked && (
-                    <div className="location-map-tools">
-                      <button type="button" aria-pressed={editingStyle} onClick={() => setEditingStyle((v) => !v)}>
-                        Отображение
-                      </button>
-                      <button type="button" onClick={() => void duplicatePin(selected)}>
-                        Дублировать
-                      </button>
-                      <button type="button" className="is-danger" onClick={() => void removePin(selected.id)}>
-                        Удалить
-                      </button>
-                    </div>
-                  )}
-                  {!locked && editingStyle && (
-                    <div className="location-map-style">
-                      <label>
-                        Цвет
-                        <input
-                          type="color"
-                          value={selected.color ?? pinDefaultsFor(selected.target_type).color}
-                          onChange={(e) => setPinColor(selected, e.target.value)}
-                        />
-                        <button type="button" className="comp-mini" onClick={() => setPinColor(selected, null)}>
-                          По умолчанию
-                        </button>
-                      </label>
-                      <label>
-                        Размер
-                        <input
-                          type="range"
-                          min={8}
-                          max={32}
-                          value={selected.size ?? DEFAULT_PIN_SIZE}
-                          onChange={(e) => setPinSize(selected, Number(e.target.value))}
-                        />
-                      </label>
-                      <label>
-                        Обводка
-                        <input
-                          type="color"
-                          value={selected.border_color ?? pinDefaultsFor(selected.target_type).border}
-                          onChange={(e) => setPinBorderColor(selected, e.target.value)}
-                        />
-                        <button type="button" className="comp-mini" onClick={() => setPinBorderColor(selected, null)}>
-                          По умолчанию
-                        </button>
-                      </label>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {pinGroups.map((g) => (
-                <div key={g.type} className="location-map-group">
-                  <span className="paper-label">
-                    {PIN_GROUP_LABELS[g.type]} · {g.pins.length}
-                  </span>
-                  {g.pins.map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      className={`location-map-row${p.id === selectedPinId ? " is-on" : ""}`}
-                      aria-current={p.id === selectedPinId ? "true" : undefined}
-                      onClick={() => goToPin(p)}
-                    >
-                      {/* инлайн-стиль намеренно — цвет пина задаёт Мастер */}
-                      <span
-                        className="location-map-row__mark"
-                        style={p.id === selectedPinId ? undefined : { color: p.color ?? pinDefaultsFor(p.target_type).color }}
-                      >
-                        <TypeGlyph type={p.target_type} />
-                      </span>
-                      <span className="location-map-row__name">{fullName(p)}</span>
-                    </button>
-                  ))}
-                </div>
-              ))}
-              {resolved.length > 0 && shownPins.length === 0 && <span className="muted">Таких пинов нет.</span>}
-              {pins.length === 0 && (
-                <span className="muted">Пинов пока нет: перетащите место или существо из поиска на карту.</span>
-              )}
-
-              {loose.length > 0 && (
-                <div className="location-map-loose">
-                  <span className="paper-label location-map-loose__head">
-                    Не на карте · {loose.length}
-                    <span className="location-map-loose__hint">{locked ? "сними замок, чтобы ставить" : "тяни на карту"}</span>
-                  </span>
-                  <div className="location-map-loose__items">
-                    {loose.map((l) => (
-                      <span
-                        key={l.id}
-                        className="location-map-loose__item"
-                        draggable={!locked}
-                        aria-disabled={locked || undefined}
-                        title={locked ? undefined : "Перетащите на карту"}
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData(SEARCH_DRAG_MIME, JSON.stringify({ type: "location", id: l.id, title: l.name }));
-                          e.dataTransfer.effectAllowed = "copy";
-                        }}
-                      >
-                        {l.name}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </aside>
-          </div>
-        )}
-      </div>
-      {menuAt && <ContextMenu x={menuAt.x} y={menuAt.y} items={menuItems} onClose={() => setMenuAt(null)} />}
-      {safeMapUrl &&
-        fullscreen &&
-        createPortal(
-          <div className="location-map-fullscreen" role="dialog" aria-modal="true" aria-label="Карта на весь экран" ref={(el) => { if (el) el.focus(); }}>
-            <div className="location-map-fullscreen-bar">
-              <SearchPanel horizontal />
-              <button
-                type="button"
-                className="location-map-fullscreen-close"
-                onClick={() => setFullscreen(false)}
-                title="Закрыть (Esc)"
-              >
-                <NavIcon name="close" />
-              </button>
-            </div>
-            <div className="location-map-card">{mapBody}</div>
-          </div>,
-          document.body
-        )}
+      <PinBoard
+        words={WORDS}
+        imageUrl={mapImageUrl}
+        pins={resolved}
+        pinsLoading={pinsLoading}
+        maxZoom={mapMaxZoom ?? DEFAULT_MAX_ZOOM}
+        startZoom={mapStartZoom ?? DEFAULT_START_ZOOM}
+        gotoZoom={mapGotoZoom ?? DEFAULT_GOTO_ZOOM}
+        labelsAlways={!!mapLabelsAlways}
+        api={{ create: `/setting-locations/${locationId}/pins`, pin: (id) => `/setting-locations/pins/${id}` }}
+        onChanged={changed}
+        onUpload={uploadMap}
+        uploading={uploading}
+        dropBody={(item) => ({ target_type: item.type, target_id: item.id })}
+        duplicateBody={(pin) => ({ target_type: (pin as MapPin).target_type, target_id: (pin as MapPin).target_id })}
+        groups={PIN_GROUPS}
+        renderPicked={renderPicked}
+        loose={{ items: loose }}
+        barActions={
+          <button type="button" onClick={() => setSendOpen(true)}>
+            <NavIcon name="arrowRight" /> В сессию
+          </button>
+        }
+        replaceAt={1}
+        menuItems={[
+          { label: "Настройки карты…", onClick: openSettings },
+          { label: "В мешок", onClick: () => addToBag({ type: "location_map", id: locationId, title: `Карта: ${locationName}` }) },
+          ...(otherLocations && otherLocations.length > 0 ? [{ label: "Перенести карту…", onClick: () => setTransferOpen(true) }] : []),
+          { label: "Убрать карту", danger: true, onClick: () => void removeMap() },
+        ]}
+        emptyPinsHint="Пинов пока нет: перетащите место или существо из поиска на карту."
+        emptyImageHint="На карте потом ставятся пины мест и существ."
+        brokenImageHint="Прежняя карта повреждена или с небезопасным адресом — загрузите заново."
+        showToast={showToast}
+      />
       {showSettings && (
         <Modal onClose={() => setShowSettings(false)}>
           <h3>Настройки карты</h3>
@@ -1216,14 +389,7 @@ export function LocationMap({
         <SendMapToSessionModal locationId={locationId} settingId={settingId} onClose={() => setSendOpen(false)} />
       )}
       {confirmDialog}
-      {alertDialog}
-      {toast && (
-        <div className="location-map-toast">
-          <span>{toast.msg}</span>
-          {toast.onUndo && <button type="button" className="location-map-toast-undo" onClick={() => { const cb = toast.onUndo; setToast(null); cb?.(); }}>Отменить</button>}
-          <button type="button" className="location-map-toast-close" onClick={() => setToast(null)} aria-label="Закрыть">×</button>
-        </div>
-      )}
+      {toastNode}
     </>
   );
 }
