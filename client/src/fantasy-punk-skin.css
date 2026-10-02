@@ -58,6 +58,7 @@
   --skin-glyph-adventure: url("/ui/fantasy-punk/semantic/type-glyphs/adventure.webp");
   --skin-glyph-scene: url("/ui/fantasy-punk/semantic/type-glyphs/scene.webp");
   --skin-glyph-session: url("/ui/fantasy-punk/semantic/type-glyphs/session.webp");
+  --skin-glyph-vehicle-post: url("/ui/fantasy-punk/semantic/type-glyphs/vehicle-post.webp");
   /* R3.1 decorative set (source_pack === "R3.1", .webp production).
    * R3.1D status: frame corners / halftone corner / edge fragment are
    * PARKED again (valid URLs, mirrored on both hosts, fetched by no rule).
