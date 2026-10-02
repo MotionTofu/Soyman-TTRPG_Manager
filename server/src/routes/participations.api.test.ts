@@ -114,3 +114,32 @@ describe("персонаж в кампании", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("«Участвует» у существа", () => {
+  it("приключение с целью, под ним сцены из его глав", async () => {
+    await request(app)
+      .put(`/api/participations/adventure/${arcId}/being/${xanathar}`)
+      .send({ data: { goal: "вернуть золото" } });
+    const res = await request(app).get(`/api/participations/entity/being/${xanathar}`);
+    expect(res.status).toBe(200);
+    expect(res.body.adventures).toEqual([
+      expect.objectContaining({
+        id: arcId,
+        name: "Ограбление дракона",
+        goal: "вернуть золото",
+        scenes: [expect.objectContaining({ name: "Тролль из колодца", section: "scene_plot_characters" })],
+      }),
+    ]);
+  });
+
+  it("лут участником не делает", async () => {
+    const res = await request(app).get(`/api/participations/entity/being/${lurker}`);
+    expect(res.body.adventures).toEqual([]);
+  });
+
+  it("закулисная сила видна без сцен", async () => {
+    await request(app).put(`/api/participations/adventure/${arcId}/community/${cult}`).send({ manual: true });
+    const res = await request(app).get(`/api/participations/entity/community/${cult}`);
+    expect(res.body.adventures).toEqual([expect.objectContaining({ id: arcId, manual: true, scenes: [] })]);
+  });
+});

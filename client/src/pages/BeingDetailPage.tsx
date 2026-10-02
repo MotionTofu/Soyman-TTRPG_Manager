@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type DragEvent } from "react";
+import { EntityParticipates } from "../components/EntityParticipates";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { PdfEntitySources } from "../components/PdfEntitySources";
 import {
@@ -977,6 +978,8 @@ export function BeingDetailPage() {
               defaultSettingId={being.setting_id}
             />
           </details>
+
+          <EntityParticipates entityType="being" entityId={beingId} />
 
           {scenes.length > 0 && (
             <details className="paper-fold" open>
