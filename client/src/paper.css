@@ -1813,34 +1813,65 @@
   color: var(--paper-muted);
 }
 
-/* «Состав» строками (доска — Q21): имя · персонажи · долг · действия. */
-.roster-rows > li {
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-2) var(--sp-5);
+/* «Состав» (просьба владельца 2026-10-02): строка игрока, под ней с
+   отступом его персонажи — портрет, имя, глазик, ✕. */
+.roster-list,
+.roster-list__chars {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
-.roster-rows > li.is-left {
+.roster-list__player {
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--paper-rule);
+}
+.roster-list__player.is-left {
   opacity: 0.6;
 }
-.roster-rows .paper-rows__main {
-  display: inline-flex;
-  align-items: baseline;
-  gap: var(--sp-3);
-}
-.roster-rows__chars {
+.roster-list__head {
   display: flex;
-  flex: 1 1 14rem;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-2) var(--sp-4);
-  min-width: 0;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-5);
 }
-.roster-rows__char,
-.roster-rows__add,
-.roster-rows__actions {
+.roster-list__name {
   display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-3);
+  font-weight: 600;
+}
+.roster-list__actions,
+.roster-list__char {
+  display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-1);
+  gap: var(--sp-2);
+}
+.roster-list__chars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+  padding-left: var(--sp-7);
+}
+.roster-list__portrait {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  overflow: hidden;
+  border: 1px solid var(--paper-rule);
+  background: var(--paper-2);
+  color: var(--paper-muted);
+  font-size: var(--fs-meta);
+  text-decoration: none;
+}
+.roster-list__portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .roster-rows__debt {
   color: var(--paper-alarm);
@@ -1867,6 +1898,54 @@
   background: none;
   color: var(--paper-ink);
   border-bottom: var(--card-border-width-strong) solid var(--paper-ink);
+}
+
+/* «Сводка отряда»: имя слева, числа — ровными столбцами по центру под
+   своими заголовками. */
+.squad-summary {
+  overflow-x: auto;
+}
+.squad-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: var(--fs-meta);
+}
+.squad-table th,
+.squad-table td {
+  padding: var(--sp-2) var(--sp-3);
+  text-align: center;
+}
+.squad-table th:first-child,
+.squad-table td:first-child {
+  width: 40%;
+  text-align: left;
+}
+.squad-table th {
+  color: var(--paper-muted);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.squad-table td {
+  border-top: 1px solid var(--paper-rule);
+  font-family: var(--font-mono);
+}
+.squad-table td:first-child {
+  font-family: inherit;
+}
+@media (max-width: 480px) {
+  .squad-table th,
+  .squad-table td {
+    padding: var(--sp-2) var(--sp-1);
+  }
+  .squad-table th {
+    letter-spacing: 0;
+  }
+  .squad-table th:first-child,
+  .squad-table td:first-child {
+    width: 34%;
+  }
 }
 
 /* Событие мира в хронике кампании (Q28): помечено, правится в сеттинге. */
