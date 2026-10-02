@@ -126,7 +126,12 @@ function playerViewAffects(): Affect[] {
  */
 export function grantAffects(campaignId: number): Affect[] {
   // Сводка выдачи и строка «Игрокам» на профилях читают те же гранты.
-  return [{ path: campaignPaths.grants(campaignId) }, { path: "/visibility-grants" }, ...playerViewAffects()];
+  return [
+    { path: campaignPaths.grants(campaignId) },
+    { path: "/visibility-grants/summary" },
+    { path: "/visibility-grants/target" },
+    ...playerViewAffects(),
+  ];
 }
 
 /** Включение сущности сеттинга в панель игроков; исключение снимает и её доступы. */
