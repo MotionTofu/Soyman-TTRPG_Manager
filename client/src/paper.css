@@ -1166,3 +1166,57 @@
   flex-direction: column;
   gap: var(--sp-4);
 }
+
+/* «Зачитать игрокам» на месте портрета (доска 35): вырезка, а не карточка. */
+.scene-read-aloud {
+  transform: rotate(-1deg);
+  padding: var(--sp-5);
+  background: var(--paper-wash);
+  border: var(--card-border-width) solid var(--paper-rule);
+  box-shadow: 0 10px 18px rgb(60 40 20 / 0.15);
+}
+.scene-read-aloud .reading-text {
+  font-style: italic;
+}
+/* Наполнение сцены — разделы листа, а не плитки по две в ряд. */
+.scene-cast .sp-prep-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+/* Шапки разъёмов состава на листе — строка на чернильной линейке, как
+   `.paper-group__head` (доска 35), а не цветная плашка пульта: на листе
+   плашка спорит с «За столом». Цвета разъёмов остаются на пульте и Полотне. */
+.paper-sheet .scene-cast details.lazy-details {
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  background: none;
+}
+.paper-sheet .scene-cast details.lazy-details > summary {
+  padding: 0 0 var(--sp-2);
+  background: none;
+  color: var(--paper-ink);
+  border-bottom: var(--card-border-width-strong) solid var(--paper-ink);
+}
+.paper-sheet .scene-cast details.lazy-details > summary::before {
+  border-left-color: var(--paper-ink);
+}
+.paper-sheet .scene-cast details.lazy-details .entry-title {
+  font-family: var(--font-ui);
+  font-size: var(--fs-data);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--paper-ink);
+}
+.paper-sheet .scene-cast details.lazy-details > .drop-zone {
+  margin-top: var(--sp-3);
+}
+/* Узко досье раскладывается в две колонки «портрет · факты»; текст для
+   чтения вслух в колонку портрета не влезает — он во всю ширину. */
+@media (max-width: 1100px) {
+  .dossier__aside > .scene-read-aloud {
+    grid-column: 1 / -1;
+  }
+}

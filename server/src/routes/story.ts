@@ -35,6 +35,7 @@ import {
   linkTargetName,
   setLinkQty,
 } from "../story/cast";
+import { SCENE_FRAME_FIELDS } from "../story/sceneFrame";
 
 export const storyRouter = Router();
 
@@ -59,7 +60,22 @@ const SCENE_FIELDS = [
   "node_trigger",
   "subject_type",
   "subject_id",
+  ...SCENE_FRAME_FIELDS,
 ] as const;
+
+/**
+ * Рамка и ход сцены идут за ней в каждую копию — слой кампании, полку,
+ * экспорт приключения. Отдельным UPDATE, а не столбцами в каждом INSERT:
+ * списков вставки у сцены пять, и шестое поле в одном из них забылось бы.
+ */
+function copySceneFrame(targetId: number, source: Record<string, unknown>): void {
+  const sets = SCENE_FRAME_FIELDS.filter((f) => typeof source[f] === "string" && source[f]);
+  if (sets.length === 0) return;
+  db.prepare(`UPDATE story_scenes SET ${sets.map((f) => `${f} = ?`).join(", ")} WHERE id = ?`).run(
+    ...sets.map((f) => source[f] as string),
+    targetId
+  );
+}
 
 // Допустимые значения осей узла. Проверяются на входе: неизвестная роль
 // молча выпала бы из правила трёх, и холст врал бы про связность.
@@ -194,6 +210,7 @@ function cloneSceneForCampaign(sceneId: number, campaignId: number): SceneRow {
         content.subject_id
       );
     const newId = Number(info.lastInsertRowid);
+    copySceneFrame(newId, content);
     copySceneChildren(contentId, newId);
     return db.prepare("SELECT * FROM story_scenes WHERE id = ?").get(newId) as SceneRow;
   });
@@ -1648,6 +1665,7 @@ export function buildAdventureExportData(arcId: number | string): Record<string,
       chapter: Number(s.arc_id) !== Number(arcId) ? arcKeyMap.get(s.arc_id as number) ?? undefined : undefined,
       summary: s.summary, read_aloud: s.read_aloud, whats_happening: s.whats_happening,
       entry_condition: s.entry_condition, outcomes: s.outcomes,
+      ...Object.fromEntries(SCENE_FRAME_FIELDS.filter((f) => s[f]).map((f) => [f, s[f]])),
       hidden_from_players: s.hidden_from_players, position: s.position ?? idx,
       node_type: s.node_type, node_role: s.node_role, node_trigger: s.node_trigger,
       subject_type: s.subject_type, subject_id: s.subject_id,
@@ -1888,6 +1906,7 @@ export async function importAdventureExport(
         subjectOk ? s.subject_type : null,
         subjectOk ? s.subject_id : null
       );
+      copySceneFrame(Number(r.lastInsertRowid), s);
       sceneIdMap.set(sceneKeys[i], Number(r.lastInsertRowid));
     }
 
@@ -2115,7 +2134,7 @@ export async function importAdventureExport(
 // местные связи ради чужих. Приходят они только с новым приключением
 // («Создать новое» и «Заменить»).
 const MERGE_ARC_FIELDS = ["description", "hook", "recommended_level", "player_count", "duration", "source", "tags"] as const;
-const MERGE_SCENE_FIELDS = ["summary", "read_aloud", "whats_happening", "entry_condition", "outcomes"] as const;
+const MERGE_SCENE_FIELDS = ["summary", "read_aloud", "whats_happening", "entry_condition", "outcomes", ...SCENE_FRAME_FIELDS] as const;
 
 export interface MergeSummary {
   added_chapters: number;
@@ -2216,6 +2235,7 @@ function mergeAdventureExport(
           sc.hidden_from_players ?? 1, sc.position ?? i
         );
       const newSceneId = Number(r.lastInsertRowid);
+      copySceneFrame(newSceneId, sc);
       sceneByKey.set(key, newSceneId);
       touched.add(newSceneId);
       summary.added_scenes++;
@@ -2598,6 +2618,7 @@ storyRouter.post("/scenes/:id/library", (req, res) => {
         content.subject_id
       );
     const newId = Number(info.lastInsertRowid);
+    copySceneFrame(newId, content);
     copySceneChildren(contentId, newId);
     return db.prepare("SELECT * FROM story_scenes WHERE id = ?").get(newId);
   });

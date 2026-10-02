@@ -11,6 +11,7 @@ import fs from "fs";
 import path from "path";
 import { db } from "../db/db";
 import { ensureSubfolder, vaultAbs, vaultRel } from "../services/filesystem";
+import { SCENE_FRAME_FIELDS } from "./sceneFrame";
 
 /** Минимум полей, который нужен здешним функциям. */
 export interface LibraryAwareScene {
@@ -23,6 +24,8 @@ export interface LibraryAwareScene {
 // собственность самой вставки: она стоит в этом приключении, а не в том, где
 // написана заготовка.
 export const INHERITED_SCENE_FIELDS = [
+  // Рамка и ход узла — содержимое, как и тексты.
+  ...SCENE_FRAME_FIELDS,
   "name",
   "kind",
   "summary",

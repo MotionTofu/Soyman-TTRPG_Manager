@@ -1378,6 +1378,14 @@ export interface StoryScene {
   whats_happening: string;
   entry_condition: string;
   outcomes: string;
+  // Рамка и ход узла (гриллинг профилей 2026-10-02, Q12; словарь граф №14).
+  frame_where: string;
+  frame_when: string;
+  frame_who: string;
+  frame_why_now: string;
+  pressure: string;
+  twists: string;
+  cut_when: string;
   hidden_from_players: number;
   position: number;
   created_at: string;

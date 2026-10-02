@@ -7144,6 +7144,14 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     database.exec("CREATE INDEX idx_participations_entity ON participations (entity_type, entity_id)");
   }
 
+  // Рамка и ход сцены-узла (гриллинг профилей 2026-10-02, Q12; словарь граф
+  // №14): где · когда · кто · почему сейчас, давление, повороты, когда резать.
+  for (const column of ["frame_where", "frame_when", "frame_who", "frame_why_now", "pressure", "twists", "cut_when"]) {
+    if (!columnExists(database, "story_scenes", column)) {
+      database.exec(`ALTER TABLE story_scenes ADD COLUMN ${column} TEXT NOT NULL DEFAULT ''`);
+    }
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);

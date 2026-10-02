@@ -22,6 +22,7 @@ import {
   formatRef,
 } from "../services/mentions";
 import { ENTITY_KINDS } from "../db/entityKinds";
+import { SCENE_FRAME_FIELDS } from "./sceneFrame";
 
 /**
  * Типы, у которых есть однозначный дом-сеттинг. Записи компендиума сюда не
@@ -51,6 +52,7 @@ const SCENE_TEXT_FIELDS = [
   "whats_happening",
   "entry_condition",
   "outcomes",
+  ...SCENE_FRAME_FIELDS,
 ] as const;
 
 export type MatchTier = "exact" | "likely" | "doubtful";
