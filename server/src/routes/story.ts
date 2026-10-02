@@ -34,8 +34,10 @@ import {
   CONSEQUENCE_SECTION,
   linkTargetName,
   setLinkQty,
+  PARTICIPATION_SECTIONS,
 } from "../story/cast";
 import { SCENE_FRAME_FIELDS } from "../story/sceneFrame";
+import { parseSceneParticipation, serializeSceneParticipation } from "../services/beingForce";
 
 export const storyRouter = Router();
 
@@ -2516,6 +2518,29 @@ storyRouter.put("/cast/:linkId", (req, res) => {
   const qty = String((req.body as { qty?: string }).qty ?? "");
   setLinkQty(Number(req.params.linkId), qty);
   res.json({ ok: true });
+});
+
+/**
+ * Участие на связи состава: роль в сцене и тактика (гриллинг 2026-10-02,
+ * Q18). Только у «Сюжетных персонажей» и «Препятствий» — у лута и локаций
+ * роли нет. Пустое участие убирает спутника.
+ */
+storyRouter.put("/cast/:linkId/participation", (req, res) => {
+  const linkId = Number(req.params.linkId);
+  const link = db.prepare("SELECT from_type, section FROM generic_links WHERE id = ?").get(linkId) as
+    | { from_type: string; section: string | null }
+    | undefined;
+  if (!link) return res.status(404).json({ error: "Связь не найдена" });
+  if (link.from_type !== "scene" || !link.section || !PARTICIPATION_SECTIONS.has(link.section))
+    return res.status(400).json({ error: "Роль и тактика — только у сюжетных персонажей и препятствий сцены" });
+  const data = serializeSceneParticipation((req.body ?? {}).data);
+  if (data === "{}") db.prepare("DELETE FROM link_participation WHERE link_id = ?").run(linkId);
+  else
+    db.prepare(
+      `INSERT INTO link_participation (link_id, data) VALUES (?, ?)
+       ON CONFLICT(link_id) DO UPDATE SET data = excluded.data`
+    ).run(linkId, data);
+  res.json({ ok: true, data: parseSceneParticipation(data) });
 });
 
 storyRouter.delete("/cast/:linkId", (req, res) => {

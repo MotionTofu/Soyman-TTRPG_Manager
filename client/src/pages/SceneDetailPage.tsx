@@ -276,6 +276,7 @@ export function SceneDetailPage() {
                     entityType="scene"
                     entityId={sceneId}
                     section="scene_plot_characters"
+            participation
                     acceptTypes={PLOT_TYPES}
                     placeholder="Перетащите сюда существо или персонажа из поиска"
                   />
@@ -300,6 +301,7 @@ export function SceneDetailPage() {
                     entityType="scene"
                     entityId={sceneId}
                     section="scene_obstacles"
+            participation
                     acceptTypes={OBSTACLE_TYPES}
                     placeholder="Перетащите сюда препятствие — существо, локацию, артефакт…"
                   />

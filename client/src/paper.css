@@ -1220,3 +1220,37 @@
     grid-column: 1 / -1;
   }
 }
+
+/* Роль и тактика под участником сцены (доска 35): строка-подпись, правка на
+   месте. Пустая — тихая, чтобы не шуметь в длинном составе. */
+.cast-role {
+  display: block;
+  width: 100%;
+  margin: 0 0 var(--sp-2);
+  padding: 0 0 0 var(--sp-4);
+  border: 0;
+  background: none;
+  color: var(--paper-ink-soft);
+  font: inherit;
+  font-size: var(--fs-meta);
+  text-align: left;
+  cursor: pointer;
+}
+.cast-role.is-empty {
+  color: var(--paper-muted);
+}
+.cast-role:hover {
+  color: var(--paper-ink);
+}
+.cast-role--edit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  cursor: default;
+}
+.cast-role--edit input {
+  flex: 1 1 180px;
+}
+.cast-row + .cast-row {
+  border-top: var(--card-border-width) solid var(--paper-rule);
+}
