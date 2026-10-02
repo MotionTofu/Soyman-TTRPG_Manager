@@ -118,7 +118,7 @@ export interface FlaggedSettingContent {
   chronicleEvents: Record<string, unknown>[];
 }
 
-export function getFlaggedSettingContent(settingId: number | null): FlaggedSettingContent {
+export function getFlaggedSettingContent(settingId: number | null, campaignId?: number): FlaggedSettingContent {
   if (!settingId) return { locationArticles: [], beingArticles: [], chronicleEvents: [] };
   const locationArticles = db
     .prepare(
@@ -141,9 +141,11 @@ export function getFlaggedSettingContent(settingId: number | null): FlaggedSetti
       `SELECT id, title, description, inworld_year, inworld_month, inworld_day
        FROM setting_calendar_events
        WHERE setting_id = ? AND visible_to_players = 1
+         -- Скрытое кампанией (спека campaign-paper, Q28) её игроки не видят.
+         AND id NOT IN (SELECT event_id FROM campaign_hidden_events WHERE campaign_id = ?)
        ORDER BY inworld_year DESC, inworld_month DESC, inworld_day DESC`
     )
-    .all(settingId) as Record<string, unknown>[];
+    .all(settingId, campaignId ?? -1) as Record<string, unknown>[];
   return { locationArticles, beingArticles, chronicleEvents };
 }
 
