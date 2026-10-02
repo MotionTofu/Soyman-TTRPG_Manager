@@ -293,6 +293,7 @@ export function MonsterDetailPage({ entry, system }: { entry: CompendiumEntry; s
               entityId={entryId}
               collapsible
               defaultOpen
+              emptyLabel="описание"
             />
 
             {(

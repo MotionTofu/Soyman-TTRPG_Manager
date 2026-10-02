@@ -734,3 +734,26 @@ button.role-chip.is-on {
   line-height: 1.45;
   white-space: pre-wrap;
 }
+
+/* Шапка транспорта (доска 33): цифры, о которых спрашивают в бою и в пути.
+   По две в ряд: колонка досье узкая, четыре в ряд ломают подписи. */
+.vehicle-head__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-5) var(--sp-6);
+  margin: 0;
+  padding: var(--sp-4) var(--sp-6) 0;
+}
+.vehicle-head__stats dd {
+  margin: 0;
+}
+.vehicle-head__value {
+  font-family: var(--font-ui);
+  font-size: var(--fs-h3);
+  font-weight: 500;
+  line-height: 1.15;
+}
+.vehicle-head__sub {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}

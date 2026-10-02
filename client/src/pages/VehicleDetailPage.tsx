@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { StatblockList } from "../components/StatblockList";
 import { EntryImagesTab } from "../components/EntryImagesTab";
@@ -42,6 +43,17 @@ export function VehicleDetailPage({ entry, system }: { entry: CompendiumEntry; s
   }
 
   const def = KIND_DEFS[entry.kind];
+  const str = (key: string) => (typeof entry.data[key] === "string" ? (entry.data[key] as string).trim() : "");
+  // Под именем — категория и размер метками (гриллинг 2026-10-02, Q7).
+  const identTags = [str("category"), str("size")].filter(Boolean);
+  // «Справка» — все поля записи; «Править» в шапке раскрывает её.
+  const referenceRef = useRef<HTMLDetailsElement>(null);
+  function openReference() {
+    if (referenceRef.current) {
+      referenceRef.current.open = true;
+      referenceRef.current.scrollIntoView({ block: "start", behavior: "smooth" });
+    }
+  }
 
   const fields: EntityField[] = [
     { key: "name", label: "Название", value: entry.name, required: true },
@@ -126,7 +138,17 @@ export function VehicleDetailPage({ entry, system }: { entry: CompendiumEntry; s
       ]}
       entityType="compendium_entry"
       title={entry.name}
-      meta={def?.label ?? "Транспорт"}
+      paper
+      meta={
+        <span className="paper-ident-tags">
+          {identTags.map((t) => (
+            <span key={t} className="badge tag">
+              {t}
+            </span>
+          ))}
+          <span>{def?.label ?? "Транспорт"}</span>
+        </span>
+      }
       // Удаление разрушительно и потому живёт под «…», а не в шапке.
       // У записи из книги правил его нет вовсе.
       actions={isPost ? [] : [{ label: "Удалить", danger: true, onClick: deleteShip }]}
@@ -137,45 +159,103 @@ export function VehicleDetailPage({ entry, system }: { entry: CompendiumEntry; s
     >
 
       {tab === "Досье" && (
-        <div className="stack">
-          <EntityFieldsCard
-            key={`summary-${entryId}`}
-            title="Сводка"
-            fields={fields}
-            hideEmptyInView
-            onSave={saveSummary}
-          />
-          <EditableTextCard
-            title="Описание"
-            value={entry.description}
-            onSave={saveDescription}
-            rows={6}
-            entityType="compendium_entry"
-            entityId={entryId}
-            collapsible
-            defaultOpen
-          />
-          {!isPost && (
-            <div className="card stack">
-              <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-                <h4 style={{ margin: 0 }}>Посты экипажа</h4>
-                <button className="primary" onClick={addPost}>
+        <div className="dossier">
+          <aside className="dossier__aside">
+            {/* Картинка меняется в «Галерее». Чертёж с пинами постов встанет
+                сюда превью (тикет 05). */}
+            <button
+              type="button"
+              className="dossier__portrait"
+              title="Сменить картинку — в «Галерее»"
+              onClick={() => selectTab("Галерея")}
+            >
+              {entry.avatar_image_url ? (
+                <img src={entry.avatar_image_url} alt={`Картинка: ${entry.name}`} />
+              ) : (
+                <span className="dossier__portrait-empty">Картинка</span>
+              )}
+              <span className="dossier__portrait-hint">Сменить в «Галерее»</span>
+            </button>
+            <dl className="paper-facts">
+              {system && (
+                <div>
+                  <dt className="paper-label">Система</dt>
+                  <dd>
+                    {system.name}
+                    {sectionName ? ` · ${sectionName}` : ""}
+                  </dd>
+                </div>
+              )}
+              {entry.name_original && (
+                <div>
+                  <dt className="paper-label">По-другому</dt>
+                  <dd>{entry.name_original}</dd>
+                </div>
+              )}
+            </dl>
+          </aside>
+
+          <div className="dossier__main">
+            <VehicleHead entry={entry} isPost={isPost} onEdit={openReference} />
+
+            {!isPost && (
+              <section className="vehicle-posts">
+                <h2 className="paper-group__head">
+                  Посты экипажа <span className="paper-group__count">· {posts.length}</span>
+                </h2>
+                {posts.length > 0 ? (
+                  <ul className="paper-rows">
+                    {posts.map((p) => (
+                      <li key={p.id}>
+                        <span className="paper-rows__main">
+                          <Link to={`/compendium/${p.id}`}>{p.name || "Без названия"}</Link>
+                        </span>
+                        <span className="paper-rows__sub">{postStats(p)}</span>
+                        <button className="comp-mini" title="Удалить пост" onClick={() => deletePost(p)}>
+                          ✕
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="muted">Постов экипажа пока нет.</p>
+                )}
+                <button type="button" className="editable-card-add" onClick={addPost}>
                   + Пост экипажа
                 </button>
+              </section>
+            )}
+
+            <EditableTextCard
+              title="Описание"
+              value={entry.description}
+              onSave={saveDescription}
+              rows={6}
+              entityType="compendium_entry"
+              entityId={entryId}
+              collapsible
+              defaultOpen
+              emptyLabel="описание"
+            />
+
+            {/* Справка: все поля записи, стоимость и пассажиры — тут, а не в
+                шапке: при покупке, а не в бою (Q7). */}
+            <details className="paper-fold" ref={referenceRef}>
+              <summary>
+                Справка
+                {!isPost && str("cost") && <span className="paper-fold__count"> · стоимость {str("cost")}</span>}
+              </summary>
+              <div className="paper-fold__body">
+                <EntityFieldsCard
+                  key={`summary-${entryId}`}
+                  title="Сводка"
+                  fields={fields}
+                  hideEmptyInView
+                  onSave={saveSummary}
+                />
               </div>
-              <div className="stack">
-                {posts.map((p) => (
-                  <div key={p.id} className="row" style={{ justifyContent: "space-between" }}>
-                    <Link to={`/compendium/${p.id}`}>{p.name}</Link>
-                    <button className="comp-mini" title="Удалить пост" onClick={() => deletePost(p)}>
-                      ✕
-                    </button>
-                  </div>
-                ))}
-                {posts.length === 0 && <p className="muted">Постов экипажа пока нет.</p>}
-              </div>
-            </div>
-          )}
+            </details>
+          </div>
         </div>
       )}
 
@@ -199,5 +279,66 @@ export function VehicleDetailPage({ entry, system }: { entry: CompendiumEntry; s
 
       {tab === "Упоминания" && <MentionsTab entityType="compendium_entry" entityId={entryId} />}
     </EntityPage>
+  );
+}
+
+/** «КЗ 15 · 500» — строка поста: его ломают в бою по одному (Q8). */
+function postStats(post: CompendiumEntry): string {
+  const ac = typeof post.data.ac === "string" ? post.data.ac.trim() : "";
+  const hp = typeof post.data.hp === "string" ? post.data.hp.trim() : "";
+  return [ac && `КЗ ${ac}`, hp].filter(Boolean).join(" · ");
+}
+
+/**
+ * «За столом» судна: то, о чём спрашивают в бою и в пути (гриллинг
+ * 2026-10-02, Q7, доска 33). У поста — только его КЗ, прочность и размер.
+ */
+function VehicleHead({ entry, isPost, onEdit }: { entry: CompendiumEntry; isPost: boolean; onEdit: () => void }) {
+  const str = (key: string) => (typeof entry.data[key] === "string" ? (entry.data[key] as string).trim() : "");
+  const durability = [str("ac"), str("hp")].filter(Boolean).join(" / ");
+  const stats: { label: string; value: string; sub?: string }[] = isPost
+    ? [
+        { label: "КЗ", value: str("ac") },
+        { label: "Прочность", value: str("hp") },
+        { label: "Размер", value: str("size") },
+      ]
+    : [
+        { label: "Скорость", value: str("speed") },
+        {
+          label: "КЗ / прочность",
+          value: durability,
+          sub: str("damage_threshold") && `порог урона ${str("damage_threshold")}`,
+        },
+        { label: "Экипаж", value: str("crew") },
+        { label: "Груз", value: str("cargo") },
+      ];
+  const empty = stats.every((st) => !st.value);
+  return (
+    <article className="creature-card paper-scope creature-card--page is-embedded">
+      <div className="creature-card__head">
+        <span className="creature-card__head-label">За столом</span>
+        <button type="button" className="creature-card__edit" onClick={onEdit}>
+          Править
+        </button>
+      </div>
+      {empty ? (
+        <div className="creature-card__empty">
+          Цифры пока не записаны.{" "}
+          <button type="button" className="creature-card__more" onClick={onEdit}>
+            Заполнить
+          </button>
+        </div>
+      ) : (
+        <dl className="vehicle-head__stats">
+          {stats.map((st) => (
+            <div key={st.label}>
+              <dt className="creature-card__head-label">{st.label}</dt>
+              <dd className="vehicle-head__value">{st.value || "—"}</dd>
+              {st.sub && <dd className="vehicle-head__sub">{st.sub}</dd>}
+            </div>
+          ))}
+        </dl>
+      )}
+    </article>
   );
 }
