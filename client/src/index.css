@@ -10805,3 +10805,10 @@ details[open] > .res-group__band .chevron-icon {
 .campaign-earned {
   font-family: var(--font-mono);
 }
+
+/* Удаление сессии с деньгами из архива: три кнопки переносятся строкой. */
+.archive-purge-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}

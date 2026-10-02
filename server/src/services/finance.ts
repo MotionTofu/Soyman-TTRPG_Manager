@@ -1,19 +1,26 @@
 import { db } from "../db/db";
 
+// Заработок (спека campaign-paper, Q38): внесённое за любую существующую
+// сессию — и в архиве тоже, отменённые уходят туда, — плюс «Сверх сессий».
+// Удалили сессию насовсем — её деньги ушли с ней (или перенесены в «Сверх
+// сессий» по выбору Мастера). Долг считается отдельно и только по сыгранным.
 export function campaignEarnings(campaignId: number): {
   earned: number;
   heldSessions: number;
 } {
-  const row = db
+  const paid = db
     .prepare(
-      `SELECT COALESCE(SUM(sa.amount_paid), 0) as earned,
-              COUNT(DISTINCT s.id) as heldSessions
-       FROM sessions s
-       LEFT JOIN session_attendance sa ON sa.session_id = s.id
-       WHERE s.campaign_id = ? AND s.status = 'held' AND s.archived_at IS NULL`
+      `SELECT COALESCE(SUM(sa.amount_paid), 0) AS earned FROM session_attendance sa
+         JOIN sessions s ON s.id = sa.session_id WHERE s.campaign_id = ?`
     )
-    .get(campaignId) as { earned: number; heldSessions: number };
-  return row;
+    .get(campaignId) as { earned: number };
+  const extra = db
+    .prepare("SELECT COALESCE(SUM(amount), 0) AS earned FROM campaign_extra_payments WHERE campaign_id = ?")
+    .get(campaignId) as { earned: number };
+  const held = db
+    .prepare("SELECT COUNT(*) AS n FROM sessions WHERE campaign_id = ? AND status = 'held' AND archived_at IS NULL")
+    .get(campaignId) as { n: number };
+  return { earned: paid.earned + extra.earned, heldSessions: held.n };
 }
 
 export function sessionEarnings(sessionId: number): number {
@@ -31,17 +38,30 @@ export function totalEarnings(): {
   playedSessions: number;
   campaigns: number;
 } {
-  const gm = db
+  const counts = db
     .prepare(
-      `SELECT COALESCE(SUM(sa.amount_paid), 0) as earned,
-              COUNT(DISTINCT s.id) as heldSessions,
+      `SELECT COUNT(DISTINCT s.id) as heldSessions,
               COUNT(DISTINCT c.id) as campaigns
        FROM sessions s
        JOIN campaigns c ON c.id = s.campaign_id
-       LEFT JOIN session_attendance sa ON sa.session_id = s.id
        WHERE s.status = 'held' AND s.archived_at IS NULL AND c.archived_at IS NULL AND c.role = 'gm'`
     )
-    .get() as { earned: number; heldSessions: number; campaigns: number };
+    .get() as { heldSessions: number; campaigns: number };
+  // Деньги — по правилу campaignEarnings: любая существующая сессия плюс «Сверх сессий».
+  const paid = db
+    .prepare(
+      `SELECT COALESCE(SUM(sa.amount_paid), 0) AS earned FROM session_attendance sa
+         JOIN sessions s ON s.id = sa.session_id JOIN campaigns c ON c.id = s.campaign_id
+        WHERE c.archived_at IS NULL AND c.role = 'gm'`
+    )
+    .get() as { earned: number };
+  const extra = db
+    .prepare(
+      `SELECT COALESCE(SUM(e.amount), 0) AS earned FROM campaign_extra_payments e
+         JOIN campaigns c ON c.id = e.campaign_id WHERE c.archived_at IS NULL AND c.role = 'gm'`
+    )
+    .get() as { earned: number };
+  const gm = { ...counts, earned: paid.earned + extra.earned };
 
   const player = db
     .prepare(

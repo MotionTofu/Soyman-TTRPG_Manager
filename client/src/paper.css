@@ -1925,3 +1925,14 @@ button.player-visibility-fact {
   flex-direction: column;
   gap: var(--sp-1);
 }
+
+/* «Сверх сессий»: строка записи (доска 45). */
+.extra-payment-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.extra-payment-form > input:not([type="date"]):not([type="number"]) {
+  flex: 1 1 12rem;
+}

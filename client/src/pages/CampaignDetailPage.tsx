@@ -97,6 +97,7 @@ import { CampaignVesselsTab } from "../components/CampaignVesselsTab";
 import { CampaignPassport } from "../components/campaign/CampaignPassport";
 import { CampaignNow } from "../components/campaign/CampaignNow";
 import { OldNotesFold } from "../components/campaign/OldNotesFold";
+import { ExtraPayments } from "../components/campaign/ExtraPayments";
 
 // Вкладки кампании (спека campaign-paper, Q19/Q20/Q26/Q31). «Сюжет» собрал
 // «Главы и сцены», «Вехи», «Тайны и зацепки» и «Выводы» разделами; «Заметок»
@@ -2438,6 +2439,7 @@ function OverviewTab({
                   <button type="button" className="paper-more" onClick={() => start("payment")}>
                     Править оплату ›
                   </button>
+                  <ExtraPayments campaignId={campaignId} roster={campaign.roster} currency={campaign.currency} />
                 </>
               )}
             </div>
