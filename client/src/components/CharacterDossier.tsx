@@ -1,9 +1,12 @@
 import { useState } from "react";
-import { useAfterWrite, useResource, write } from "../data/hooks";
+import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
+import { useCurrentUser } from "../api/currentUser";
+import { PC_PARTICIPATION_FIELDS } from "../beingForce";
+import { PaperFieldsCard } from "./PaperFieldsCard";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { formatImportantDate } from "../inworldCalendar";
-import type { Character, DateRecurrence, RelationTone } from "../types";
+import type { Character, CharacterChapter, DateRecurrence, RelationTone } from "../types";
 import { RELATION_TONE_COLORS, RELATION_TONE_LABELS } from "../relations";
 import { ChapterList } from "./ChapterList";
 import { GalleryTab } from "./GalleryTab";
@@ -18,6 +21,9 @@ import { Modal } from "./Modal";
  * пина и важные даты. У D&D встаёт под четыре поля «Характера» во вкладке
  * «Досье», у LitM и персонажа без листа — окном из «⋯». Данные остаются
  * там же, где жили в профиле: в OneShot уходят только поля листа.
+ *
+ * На бумаге (гриллинг профилей 2026-10-02, Q16; доска 37): сверху «В
+ * кампании» и «Зацепки» — оба только Мастеру, — ниже разделы сгибами.
  */
 const SECTIONS: { key: string; label: string; note?: string }[] = [
   { key: "personality", label: "Личность" },
@@ -32,6 +38,8 @@ const SECTIONS: { key: string; label: string; note?: string }[] = [
 
 export function CharacterDossier({ character }: { character: Character }) {
   const afterWrite = useAfterWrite();
+  const { user } = useCurrentUser();
+  const isGm = user?.role !== "player";
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const thumbnailCrop = useImageCrop("thumbnail", uploadThumbnail);
@@ -57,47 +65,191 @@ export function CharacterDossier({ character }: { character: Character }) {
   }
 
   const chapters = character.chapters ?? [];
+  const hooks = chapters.filter((c) => c.section === "hooks");
   return (
-    <div className="character-dossier-extra">
+    <div className="character-dossier-extra paper-scope paper-sheet">
+      {isGm && character.campaign_id != null && (
+        <CampaignParticipation
+          characterId={character.id}
+          campaignId={character.campaign_id}
+          campaignName={character.campaign_name ?? null}
+        />
+      )}
+      {isGm && (
+        <section className="character-dossier__hooks">
+          <h3 className="paper-group__head">
+            Зацепки <span className="paper-group__count">· {hooks.length}</span>
+          </h3>
+          <HookList characterId={character.id} hooks={hooks} />
+        </section>
+      )}
       {SECTIONS.map((s) => {
         const list = chapters.filter((c) => c.section === s.key);
         return (
-          <details key={s.key} className="dossier-section" open={list.length > 0}>
+          <details key={s.key} className="paper-fold" open={list.length > 0}>
             <summary>
-              {s.label}
-              <span className="dossier-count">{list.length}</span>
+              {s.label} <span className="paper-fold__count">· {list.length}</span>
               {s.note && character.system_code === "phb" && <span className="dossier-note">{s.note}</span>}
             </summary>
-            <ChapterList ownerId={character.id} ownerType="character" apiBase="/characters" section={s.key} chapters={list} />
+            <div className="paper-fold__body">
+              <ChapterList ownerId={character.id} ownerType="character" apiBase="/characters" section={s.key} chapters={list} />
+            </div>
           </details>
         );
       })}
-      <details className="dossier-section">
+      <details className="paper-fold">
         <summary>Галерея</summary>
-        {error && (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        )}
-        <GalleryTab
-          ownerType="character"
-          ownerId={character.id}
-          thumbnailUpload={{
-            previewUrl: character.thumbnail_image_url,
-            uploading,
-            onSelect: thumbnailCrop.onSelect,
-            modal: thumbnailCrop.modal,
-          }}
-        />
+        <div className="paper-fold__body">
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
+          <GalleryTab
+            ownerType="character"
+            ownerId={character.id}
+            thumbnailUpload={{
+              previewUrl: character.thumbnail_image_url,
+              uploading,
+              onSelect: thumbnailCrop.onSelect,
+              modal: thumbnailCrop.modal,
+            }}
+          />
+        </div>
       </details>
-      <details className="dossier-section">
+      <details className="paper-fold">
         <summary>
-          Важные даты
-          <span className="dossier-count">{character.important_dates?.length ?? 0}</span>
+          Важные даты <span className="paper-fold__count">· {character.important_dates?.length ?? 0}</span>
         </summary>
-        <ImportantDates character={character} />
+        <div className="paper-fold__body">
+          <ImportantDates character={character} />
+        </div>
       </details>
     </div>
+  );
+}
+
+/**
+ * Зацепки — строками, как на доске 37: одна фраза, правка по клику. Лежат
+ * главами раздела `hooks`; длинный текст главы им не нужен.
+ */
+function HookList({ characterId, hooks }: { characterId: number; hooks: CharacterChapter[] }) {
+  const run = useAction();
+  const affects = [{ kind: "character" as const, id: characterId }];
+  const [editing, setEditing] = useState<number | "new" | null>(null);
+  const [draft, setDraft] = useState("");
+
+  function start(id: number | "new", text: string) {
+    setDraft(text);
+    setEditing(id);
+  }
+  async function submit() {
+    const title = draft.trim();
+    if (!title) return setEditing(null);
+    const ok = await run(
+      () =>
+        (editing === "new"
+          ? write.post(`/characters/${characterId}/chapters`, { section: "hooks", title })
+          : write.put(`/characters/chapters/${editing}`, { title })
+        ).then(() => true),
+      { affects, retry: false }
+    );
+    if (ok) setEditing(null);
+  }
+  async function remove(id: number) {
+    await run(() => write.del(`/characters/chapters/${id}`), { affects });
+  }
+
+  const editor = (
+    <form
+      className="hook-list__edit"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit();
+      }}
+    >
+      <input
+        autoFocus
+        value={draft}
+        placeholder="Чем историю зацепить персонажа"
+        aria-label="Зацепка"
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => e.key === "Escape" && setEditing(null)}
+      />
+      <button type="submit" className="primary">
+        Сохранить
+      </button>
+      <button type="button" onClick={() => setEditing(null)}>
+        Отмена
+      </button>
+    </form>
+  );
+
+  return (
+    <>
+      {hooks.length > 0 && (
+        <ul className="paper-rows hook-list">
+          {hooks.map((h) => (
+            <li key={h.id}>
+              {editing === h.id ? (
+                editor
+              ) : (
+                <>
+                  <button type="button" className="hook-list__text paper-rows__main" onClick={() => start(h.id, h.title)}>
+                    {h.title || h.content}
+                  </button>
+                  <button type="button" className="comp-mini" title="Убрать зацепку" onClick={() => void remove(h.id)}>
+                    ✕
+                  </button>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {editing === "new" ? (
+        editor
+      ) : (
+        <button type="button" className="editable-card-add" onClick={() => start("new", "")}>
+          + Зацепка
+        </button>
+      )}
+    </>
+  );
+}
+
+/**
+ * «В кампании»: почему здесь · личная ставка · почему сейчас (словарь граф
+ * №21). Хранится в таблице участия (кампания + персонаж), не на персонаже:
+ * в другой кампании у того же героя другие причины. Пишет только Мастер.
+ */
+function CampaignParticipation({
+  characterId,
+  campaignId,
+  campaignName,
+}: {
+  characterId: number;
+  campaignId: number;
+  campaignName: string | null;
+}) {
+  const path = `/participations/campaign/${campaignId}/character/${characterId}`;
+  const state = useResource<{ data: Record<string, string> }>(path);
+  const run = useAction();
+
+  async function save(next: Record<string, string>) {
+    const done = await run(() => write.put(path, { data: next }).then(() => true), { affects: [{ path }] });
+    if (!done) throw new Error("Не сохранилось");
+  }
+
+  return (
+    <PaperFieldsCard
+      strong
+      label={campaignName ? `В кампании · ${campaignName}` : "В кампании"}
+      fields={PC_PARTICIPATION_FIELDS}
+      values={state.data?.data ?? {}}
+      onSave={save}
+      empty="Почему персонаж здесь и что для него на кону."
+    />
   );
 }
 

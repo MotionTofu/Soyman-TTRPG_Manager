@@ -376,7 +376,9 @@ export interface Player {
 export interface CharacterChapter {
   id: number;
   character_id: number;
-  section: "personality" | "backstory" | "personal_arc" | "current_situation" | "future_thoughts" | "inventory";
+  section: "personality" | "backstory" | "personal_arc" | "current_situation" | "future_thoughts" | "inventory"
+    // Зацепки — подготовка Мастера, игроку сервер их не отдаёт (Q16, №22).
+    | "hooks";
   title: string;
   content: string;
   image_path: string | null;

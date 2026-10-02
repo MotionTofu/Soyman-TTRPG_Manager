@@ -1298,3 +1298,35 @@
   border-color: transparent;
   color: var(--paper-muted);
 }
+
+/* Зацепки персонажа — строками (доска 37): фраза правится по клику. */
+.hook-list__text {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--paper-ink);
+  font: inherit;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+.hook-list .comp-mini {
+  flex: none;
+}
+.hook-list__edit {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin: var(--sp-3) 0;
+}
+.hook-list__edit input {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.hook-list .comp-mini:not(:hover):not(:focus-visible) {
+  background: none;
+  border-color: transparent;
+  color: var(--paper-muted);
+}
