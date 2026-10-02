@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { resourceQuery, useAction, useResource, write } from "../data/hooks";
 import { dataKeys } from "../data/entities";
@@ -44,7 +44,9 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
   const [filter, setFilter] = useState("");
   // Master–Detail: выбранный раздел и (для статей) статья. Пункты статей
   // в навигации — из кэша, который докладывает ArticlesList при загрузке.
-  const [sel, setSel] = useState<{ sectionId: number | null; articleId?: number }>({ sectionId: null });
+  // manage — вид подраздела целиком (порядок, имя, видимость, удаление); без
+  // него щелчок по подразделу статей сразу открывает первую статью.
+  const [sel, setSel] = useState<{ sectionId: number | null; articleId?: number; manage?: boolean }>({ sectionId: null });
   const [artCache, setArtCache] = useState<Record<number, CampaignPlayerArticle[]>>({});
 
   function load() {
@@ -241,18 +243,23 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
                 );
               }
               return (
-                <ArticlesList
-                  campaignId={campaignId}
-                  sectionId={selectedSection.id}
-                  roster={roster}
-                  defaultSettingId={defaultSettingId}
-                  focusedId={sel.articleId}
-                  onStats={(arts) => reportArticles(selectedSection.id, arts)}
-                />
+                <>
+                  <ArticlesList
+                    campaignId={campaignId}
+                    sectionId={selectedSection.id}
+                    roster={roster}
+                    defaultSettingId={defaultSettingId}
+                    focusedId={sel.articleId}
+                    onStats={(arts) => reportArticles(selectedSection.id, arts)}
+                  />
+                  <button type="button" className="ghost" style={{ alignSelf: "flex-start" }} onClick={() => setSel({ sectionId: selectedSection.id, manage: true })}>
+                    Настроить подраздел
+                  </button>
+                </>
               );
             }
             const idx = sections.findIndex((s) => s.id === selectedSection.id);
-            return (
+            const sectionCard = (
               <SectionCard
                 campaignId={campaignId}
                 section={selectedSection}
@@ -265,6 +272,16 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
                 onArticlesStats={(arts) => reportArticles(selectedSection.id, arts)}
               />
             );
+            // Подраздел статей целиком (просьба владельца 2026-10-02) — только
+            // по «Настроить подраздел» или пока в нём нет ни одной статьи.
+            if (selectedSection.kind === "gallery" || sel.manage) return sectionCard;
+            return (
+              <FirstArticle
+                sectionId={selectedSection.id}
+                onPick={(articleId) => setSel({ sectionId: selectedSection.id, articleId })}
+                empty={sectionCard}
+              />
+            );
           })()}
         </EntityTabWorkspace>
       )}
@@ -272,6 +289,18 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
       {confirmDialog}
     </div>
   );
+}
+
+// Подраздел статей открывается первой статьёй; пустой — видом подраздела,
+// где заводится первая.
+function FirstArticle({ sectionId, onPick, empty }: { sectionId: number; onPick: (articleId: number) => void; empty: ReactNode }) {
+  const articles = useResource<CampaignPlayerArticle[]>(campaignPaths.sectionArticles(sectionId)).data;
+  const first = articles?.[0]?.id;
+  useEffect(() => {
+    if (first != null) onPick(first);
+  }, [first, onPick]);
+  if (!articles || first != null) return null;
+  return <>{empty}</>;
 }
 
 function SectionCard({

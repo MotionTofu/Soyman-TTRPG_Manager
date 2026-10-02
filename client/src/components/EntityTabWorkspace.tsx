@@ -60,6 +60,14 @@ export function EntityTabWorkspace({
   // остальное свернуто, чтобы панель оставалась компактной при десятках
   // элементов.
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set([selection.section]));
+  // Элемент выбран снаружи (caller сам открыл, например, первую статью) —
+  // его категория раскрывается, как при выборе щелчком.
+  const selKey = selection.item != null ? `${selection.section}/${selection.item}` : null;
+  const [seenSelKey, setSeenSelKey] = useState(selKey);
+  if (selKey !== seenSelKey) {
+    setSeenSelKey(selKey);
+    if (selKey && !expanded.has(selection.section)) setExpanded(new Set(expanded).add(selection.section));
+  }
 
   function toggle(sectionId: string) {
     setExpanded((prev) => {
