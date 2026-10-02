@@ -5,6 +5,7 @@ import type { DndCharacterData, DndEquipmentSection } from "../../types";
 import { conditionIconSrc } from "./conditionIcons";
 import { type DndMechanicsOption, loadDndMechanicsGroup } from "./dndCompendium";
 import { Modal } from "../Modal";
+import { HpCalcPad } from "../HpCalcPad";
 import { pluralRu, SbQuickValue } from "./sheetShared";
 import { DndDie } from "./DndDie";
 import { formatModifier } from "./AbilityScores";
@@ -398,17 +399,6 @@ export function HpQuickBox({
   );
 }
 
-const HP_KEYS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
-
-function HpBackspaceIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-      <path d="M9 5h11v14H9L3 12z" />
-      <path d="M13 9.5l5 5M18 9.5l-5 5" />
-    </svg>
-  );
-}
-
 // Порядок блоков отвечает частоте: за столом окно открывают, чтобы записать
 // урон или лечение, а не чтобы поправить максимум — максимум меняет визард
 // повышения уровня. Поэтому пад и две кнопки стоят в середине, а четыре поля
@@ -491,16 +481,6 @@ function HpEditModal({
   const barTotal = Math.max(1, effMax + tempNum);
   const curPct = Math.max(0, Math.min(100, (curNum / barTotal) * 100));
   const tempPct = Math.max(0, Math.min(100 - curPct, (tempNum / barTotal) * 100));
-
-  // Пад вместо клавиатуры: на телефоне системная клавиатура закрывала
-  // половину окна, включая кнопки «Урон» и «Лечение», ради которых его и
-  // открывали. Три цифры — потолок в 999, больше одним ударом не наносят.
-  function pressKey(d: number) {
-    setAmount((a) => {
-      const next = (a + String(d)).replace(/^0+(?=\d)/, "");
-      return next.length > 3 ? a : next;
-    });
-  }
 
   function applyDamage() {
     const n = Number(amount) || 0;
@@ -637,43 +617,7 @@ function HpEditModal({
           </div>
         )}
 
-        <div className="dnd-hp-apply">
-          <div className="dnd-hp-amount">
-            <span className="dnd-hp-caps">Сколько</span>
-            <span className={amount === "" ? "dnd-hp-amount-value is-empty" : "dnd-hp-amount-value"}>
-              {amount === "" ? "0" : amount}
-            </span>
-          </div>
-          <div className="dnd-hp-pad">
-            {HP_KEYS.map((d) => (
-              <button type="button" key={d} className="dnd-hp-key" onClick={() => pressKey(d)}>
-                {d}
-              </button>
-            ))}
-            <button
-              type="button"
-              className="dnd-hp-key is-aux"
-              aria-label="Стереть цифру"
-              onClick={() => setAmount((a) => a.slice(0, -1))}
-            >
-              <HpBackspaceIcon />
-            </button>
-            <button type="button" className="dnd-hp-key" onClick={() => pressKey(0)}>
-              0
-            </button>
-            <button type="button" className="dnd-hp-key is-aux is-word" onClick={() => setAmount("")}>
-              Сброс
-            </button>
-          </div>
-          <div className="dnd-hp-actions">
-            <button type="button" className="danger" onClick={applyDamage} disabled={!Number(amount)}>
-              Урон
-            </button>
-            <button type="button" className="primary" onClick={applyHeal} disabled={!Number(amount)}>
-              Лечение
-            </button>
-          </div>
-        </div>
+        <HpCalcPad amount={amount} onAmount={setAmount} onDamage={applyDamage} onHeal={applyHeal} />
 
         <button
           type="button"

@@ -21,6 +21,8 @@
   --paper-rule: rgb(31 26 20 / 0.22);
   --paper-acid: #e2f25a;
   --paper-wash: rgb(255 253 245 / 0.42);
+  /* Красный тушью: разбитый пост корабля, корпус на нуле. */
+  --paper-alarm: #a3241b;
 
   --paper: var(--paper-base);
   --paper-2: var(--paper-base);
@@ -53,6 +55,7 @@
   --paper-base: #c4bca8;
   --paper-ink-soft: #2e2820;
   --paper-muted: #3f382e;
+  --paper-alarm: #8a1d15;
   --paper-rule: rgb(31 26 20 / 0.3);
   --paper-wash: rgb(255 253 245 / 0.22);
   --on-surface-muted: #b9b19d;
@@ -1381,4 +1384,319 @@
 .vehicle-plan-preview__dot.is-label {
   background: var(--paper-base);
   box-shadow: 0 0 0 2px var(--paper-ink);
+}
+
+/* ── Корабль кампании (спека profiles-paper-2, «Корабль кампании»; доски 38–40) ── */
+
+/* Чертёж с экипажем: картинка и пины — основы, под пином поста — кто стоит. */
+.vessel-plan {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+.vessel-plan > img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.vessel-plan__pin {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-1);
+  transform: translate(-50%, -5px);
+  width: max-content;
+  max-width: 12rem;
+  text-align: center;
+  pointer-events: none;
+}
+.vessel-plan.is-large .vessel-plan__pin {
+  pointer-events: auto;
+}
+.vessel-plan__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--paper-ink);
+  box-shadow: 0 0 0 2px var(--paper-base);
+}
+.vessel-plan__pin.is-label .vessel-plan__dot {
+  background: var(--paper-base);
+  box-shadow: 0 0 0 2px var(--paper-ink);
+}
+.vessel-plan__pin.is-broken .vessel-plan__dot {
+  background: var(--paper-alarm);
+}
+.vessel-plan__pin.is-over .vessel-plan__dot {
+  box-shadow: 0 0 0 4px var(--paper-acid);
+}
+.vessel-plan__post,
+.vessel-plan__crew {
+  padding: 0 var(--sp-1);
+  background: var(--paper-base);
+  color: var(--paper-ink);
+  font-size: var(--fs-micro);
+  line-height: 1.3;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.vessel-plan__post {
+  font-family: var(--font-ui);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.vessel-plan__pin.is-broken .vessel-plan__post {
+  color: var(--paper-alarm);
+}
+.vessel-plan.is-large .vessel-plan__post,
+.vessel-plan.is-large .vessel-plan__crew {
+  font-size: var(--fs-meta);
+}
+.vessel-plan-open {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+/* Хиты с кнопкой калькулятора. */
+.vessel-hp {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  font-variant-numeric: tabular-nums;
+}
+.vessel-hp.is-down {
+  color: var(--paper-alarm);
+}
+.vessel-calc {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--paper-rule);
+  background: var(--paper-wash);
+  color: var(--paper-ink);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  line-height: 1;
+}
+.vessel-calc:hover,
+.vessel-calc:focus-visible {
+  background: var(--paper-ink);
+  color: var(--paper-base);
+}
+
+/* Строка поста: имя, хиты и «+ на пост» первой строкой, экипаж — второй
+   во всю ширину: колонка досье узкая, имена в одну колонку не влезают. */
+.vessel-posts__rows > .vessel-post {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-5);
+}
+.vessel-post > .comp-mini {
+  grid-row: 1;
+  grid-column: 3;
+}
+.vessel-post.is-over {
+  background: var(--paper-wash);
+  outline: 2px dashed var(--paper-ink);
+}
+.vessel-post__broken {
+  display: block;
+  color: var(--paper-alarm);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.vessel-post__crew {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.vessel-crew-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--paper-rule);
+  background: var(--paper-wash);
+  cursor: grab;
+  max-width: 100%;
+  white-space: nowrap;
+}
+.vessel-crew-chip > a {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vessel-crew-chip__x,
+.vessel-crew-unnamed {
+  padding: 0 var(--sp-1);
+  border: 0;
+  background: none;
+  color: var(--paper-muted);
+  font-size: var(--fs-micro);
+}
+.vessel-crew-unnamed {
+  font-size: var(--fs-meta);
+  text-decoration: underline dotted;
+}
+.vessel-crew-chip__x:hover,
+.vessel-crew-unnamed:hover {
+  color: var(--paper-ink);
+}
+@media (max-width: 640px) {
+  /* Превью в досье на телефоне мелкое: имена под пинами налезали бы друг на
+     друга — экипаж виден строками постов и на вкладке «Чертёж». */
+  .vessel-plan:not(.is-large) .vessel-plan__crew {
+    display: none;
+  }
+}
+
+/* Груз: строка правки по месту. */
+.vessel-cargo__form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  width: 100%;
+}
+.vessel-cargo__form > :first-child {
+  flex: 1 1 14rem;
+}
+.vessel-cargo__amount {
+  width: 8rem;
+}
+
+/* Вкладка «Чертёж»: чертёж и «Не на борту» сбоку. */
+.vessel-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16rem;
+  gap: var(--sp-6);
+  align-items: start;
+}
+.vessel-board__hint {
+  font-size: var(--fs-meta);
+}
+.vessel-board__people {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+@media (max-width: 760px) {
+  .vessel-board {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.vessel-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.vessel-picker__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.vessel-picker__list button {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+/* Вкладка кампании «Транспорт» (доска 38). */
+.vessels-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+.vessels-tab__rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.vessels-tab__row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1.4fr) minmax(0, 1.4fr) auto auto;
+  align-items: center;
+  gap: var(--sp-5);
+  padding: var(--sp-4) 0;
+  border-bottom: 1px solid var(--paper-rule);
+}
+.vessels-tab__thumb {
+  display: block;
+  aspect-ratio: 4 / 3;
+  border: 1px solid var(--paper-rule);
+  background: var(--paper-wash);
+  overflow: hidden;
+}
+.vessels-tab__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.vessels-tab__name,
+.vessels-tab__stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+.vessels-tab__name > a {
+  font-family: var(--font-ui);
+  font-size: var(--fs-h3);
+}
+.vessels-tab__lead {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.vessels-tab__add {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  max-width: 32rem;
+}
+.vessels-tab__add label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+@media (max-width: 640px) {
+  .vessels-tab__row {
+    grid-template-columns: 72px minmax(0, 1fr) auto;
+  }
+  .vessels-tab__lead {
+    grid-column: 2 / -1;
+  }
+}
+
+/* Игрок, вкладка «Группа»: корабль только на чтение. */
+.player-vessel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.player-vessel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-4);
+}
+.player-vessel__head strong {
+  font-family: var(--font-ui);
+  font-size: var(--fs-h3);
+}
+.player-vessel__stats {
+  padding: 0;
 }
