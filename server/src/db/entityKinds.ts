@@ -418,6 +418,14 @@ export interface UnsweptPair {
 }
 
 export const UNSWEPT_PAIRS: Readonly<Record<string, UnsweptPair>> = {
+  "participations.context_type": {
+    vocabulary: "own",
+    why: "контекст участия — `adventure` или `campaign` (CHECK в db.ts), а не ссылка на запись реестра",
+  },
+  "participations.entity_type": {
+    vocabulary: "registry",
+    why: "участие на исчезнувшую сущность при чтении не показывается (routes/participations), а запись хода событий стирать за Мастера незачем: вернёт сущность из архива — вернётся и участие",
+  },
   "archived_files.original_owner_type": {
     vocabulary: "own",
     why: "виды ФАЙЛОВ (`location_map`, `gallery_image`), а не сущностей",

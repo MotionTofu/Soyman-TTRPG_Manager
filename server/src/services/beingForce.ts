@@ -24,7 +24,13 @@ export const FORCE_KEYS = [
   "pressure",
 ] as const;
 
-export const PARTICIPATION_KEYS = ["goal", "plan", "without", "if_help"] as const;
+// Ход событий (словарь §2): цель, план, без вмешательства, если помочь, если
+// лишить ресурса или рычага. Один набор на участие в кампании (глава
+// «Текущая ситуация») и в приключении (таблица participations).
+export const PARTICIPATION_KEYS = ["goal", "plan", "without", "if_help", "if_deprived"] as const;
+// Участие персонажа игрока в кампании (словарь №21; гриллинг 2026-10-02, Q16):
+// почему здесь, личная ставка, почему сейчас.
+export const PC_PARTICIPATION_KEYS = ["why_here", "stake", "why_now"] as const;
 
 const MAX_LEN = 600;
 
@@ -52,7 +58,9 @@ function parse(raw: unknown, keys: readonly string[]): Record<string, string> {
 /** Из колонки базы — в объект для клиента. Битый JSON — пустой двигатель. */
 export const parseForce = (raw: unknown) => parse(raw, FORCE_KEYS);
 export const parseParticipation = (raw: unknown) => parse(raw, PARTICIPATION_KEYS);
+export const parsePcParticipation = (raw: unknown) => parse(raw, PC_PARTICIPATION_KEYS);
 
 /** Из тела запроса — в колонку. Чужие ключи и пустые строки отбрасываются. */
 export const serializeForce = (raw: unknown) => JSON.stringify(pick(raw, FORCE_KEYS));
 export const serializeParticipation = (raw: unknown) => JSON.stringify(pick(raw, PARTICIPATION_KEYS));
+export const serializePcParticipation = (raw: unknown) => JSON.stringify(pick(raw, PC_PARTICIPATION_KEYS));

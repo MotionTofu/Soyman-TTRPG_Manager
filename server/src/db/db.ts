@@ -7121,6 +7121,29 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     database.exec("ALTER TABLE setting_communities ADD COLUMN secret TEXT NOT NULL DEFAULT ''");
   }
 
+  // Участие (гриллинг профилей 2026-10-02, Q16/Q19; словарь граф §2, №21):
+  // сущность в контексте — приключении (ход событий силы) или кампании
+  // (почему здесь персонаж игрока). Контекст — не свойство сущности, поэтому
+  // своя таблица, а не колонка. manual — добавлен руками (закулисная сила);
+  // остальные участники приключения берутся из составов его сцен, строка у
+  // них появляется, только когда записан ход событий. Ключи data — словарь
+  // services/beingForce.
+  if (!tableExists(database, "participations")) {
+    database.exec(`CREATE TABLE participations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      context_type TEXT NOT NULL CHECK (context_type IN ('adventure','campaign')),
+      context_id INTEGER NOT NULL,
+      entity_type TEXT NOT NULL,
+      entity_id INTEGER NOT NULL,
+      manual INTEGER NOT NULL DEFAULT 0,
+      data TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE (context_type, context_id, entity_type, entity_id)
+    )`);
+    database.exec("CREATE INDEX idx_participations_entity ON participations (entity_type, entity_id)");
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);
