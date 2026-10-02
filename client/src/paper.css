@@ -1065,3 +1065,97 @@
 .event-sheet__to {
   margin-left: auto;
 }
+
+/* ── Общие списки на листе (хвосты 2026-10-02) ───────────────────────── */
+
+/* Строки существ («Кто здесь», «Представители»): на линейке, как
+   `.paper-rows`, а не плашки со своим фоном и рамкой. Кнопки действий —
+   текстом, без заливки: Мастеру за столом нужна строка, а не панель. */
+.paper-sheet .entity-row-list {
+  gap: 0;
+}
+.paper-sheet .entity-row {
+  padding: var(--sp-3) var(--sp-2);
+  border-bottom: var(--card-border-width) solid var(--paper-rule);
+}
+.paper-sheet .entity-row:hover {
+  background: var(--accent-soft);
+}
+.paper-sheet .entity-row-name {
+  font-weight: 500;
+}
+.paper-sheet .entity-row-meta,
+.paper-sheet .entity-row .muted {
+  color: var(--paper-muted);
+}
+.paper-sheet .entity-row-actions a,
+.paper-sheet .entity-row-actions button {
+  background: none;
+  border-color: transparent;
+  color: var(--paper-ink-soft);
+  text-decoration: underline;
+  text-decoration-color: var(--paper-rule);
+  text-underline-offset: 3px;
+}
+.paper-sheet .entity-row-actions a:hover,
+.paper-sheet .entity-row-actions button:hover {
+  background: none;
+  border-color: transparent;
+  color: var(--paper-ink);
+  text-decoration-color: currentColor;
+}
+.paper-sheet .entity-row-expanded {
+  padding: var(--sp-3) var(--sp-2) var(--sp-5);
+  border-bottom: var(--card-border-width) solid var(--paper-rule);
+}
+
+/* Главы (ChapterList): заголовок — строка раздела, а не крупная плашка;
+   корзина — тихий значок, краснеет только под рукой. */
+.paper-sheet details.card:has(> summary.chevron-summary) {
+  padding: var(--sp-3) var(--sp-2);
+  border-top: 0;
+  border-bottom: var(--card-border-width) solid var(--paper-rule);
+}
+.paper-sheet summary.chevron-summary .entry-title {
+  font-size: var(--fs-data);
+  font-weight: 500;
+}
+.paper-sheet summary.chevron-summary > button.danger {
+  background: none;
+  border-color: transparent;
+  color: var(--paper-muted);
+}
+.paper-sheet summary.chevron-summary > button.danger:hover,
+.paper-sheet summary.chevron-summary > button.danger:focus-visible {
+  background: var(--danger-bg);
+  border-color: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+/* Шапки групп «Кто здесь»: чернильная плашка-инверсия общего вида на листе
+   спорит с «За столом» — здесь это заголовок на линейке, как `.paper-group__head`. */
+.paper-sheet .inhabitants-group-header {
+  padding: var(--sp-2) 0;
+  background: none;
+  color: var(--paper-ink);
+  border-bottom: var(--card-border-width-strong) solid var(--paper-ink);
+}
+.paper-sheet .inhabitants-group-header :is(strong, .entry-title) {
+  color: var(--paper-ink);
+}
+.paper-sheet .inhabitants-group-header span {
+  color: var(--paper-muted);
+}
+.paper-sheet .inhabitants-group-header .entity-group-actions :is(a, button) {
+  color: var(--paper-ink-soft);
+}
+.paper-sheet .inhabitants-group-header .entity-group-actions button:hover {
+  color: var(--paper-ink);
+}
+/* Узкая колонка листа: строка существа переносится, а не обрезает кнопки. */
+.paper-sheet .entity-row {
+  flex-wrap: wrap;
+}
+.paper-sheet .entity-row-actions {
+  flex-wrap: wrap;
+}

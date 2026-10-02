@@ -1176,7 +1176,7 @@ settingLocationsRouter.post("/resolve-labels", (req, res) => {
   const { pins } = req.body as { pins: { target_type: string; target_id: number }[] };
   if (!Array.isArray(pins) || pins.length === 0) return res.json({ labels: [] });
 
-  const results: { target_type: string; target_id: number; label: string }[] = [];
+  const results: { target_type: string; target_id: number; label: string; full_label?: string }[] = [];
 
   const grouped = new Map<string, { target_type: string; target_id: number }[]>();
   for (const pin of pins) {
@@ -1193,6 +1193,11 @@ settingLocationsRouter.post("/resolve-labels", (req, res) => {
     [...grouped].flatMap(([type, items]) => items.map((i) => ({ kind: type, id: i.target_id }))),
     { preferShort: true }
   );
+  // Полное имя — для списка пинов рядом с картой: подпись на карте короткая,
+  // а в списке пинов нескольких существ или мест их надо различать.
+  const fullMap = entityNames(
+    [...grouped].flatMap(([type, items]) => items.map((i) => ({ kind: type, id: i.target_id })))
+  );
   for (const [type, items] of grouped) {
     // Вид, которого нет в реестре, и живая запись без имени — разные беды, и
     // подписи у них разные: вторая говорит Мастеру, что метка указывает в
@@ -1204,6 +1209,7 @@ settingLocationsRouter.post("/resolve-labels", (req, res) => {
         target_type: type,
         target_id: item.target_id,
         label: label ?? `${type} #${item.target_id}${known ? " (не найдено)" : ""}`,
+        full_label: fullMap.get(refKey(type, item.target_id)) ?? label,
       });
     }
   }

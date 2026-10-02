@@ -46,7 +46,7 @@ export async function resolveEntityMapLabel(type: string, id: number): Promise<s
   }
 }
 
-export type ResolvedLabelResult = { target_type: string; target_id: number; label: string };
+export type ResolvedLabelResult = { target_type: string; target_id: number; label: string; full_label?: string };
 
 export async function resolveEntityMapLabels(
   pins: { target_type: string; target_id: number }[]
