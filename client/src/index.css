@@ -3873,6 +3873,10 @@ body.live-hide-search.live-hide-dock .app-content {
      Locking it down here removes that independent scroll axis entirely. */
   overflow-x: hidden;
   overscroll-behavior-x: none;
+  /* Место под полосу прокрутки занято всегда: иначе на длинной вкладке
+     полоса появляется и сдвигает всю страницу влево («скачет»). На
+     телефоне полоса накладная — там это правило ничего не меняет. */
+  scrollbar-gutter: stable;
   padding: var(--sp-7) var(--sp-8);
   display: flex;
   flex-direction: column;
