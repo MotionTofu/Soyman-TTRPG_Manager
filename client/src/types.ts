@@ -229,6 +229,10 @@ export interface ImportantDate {
 }
 
 export interface CampaignCalendarEvent extends EventTimeFields {
+  /** Хроника кампании (спека campaign-paper, Q28): своё или событие сеттинга живым. */
+  source?: "campaign" | "setting";
+  /** Событие сеттинга, скрытое у этой кампании. */
+  hidden?: number;
   id: number;
   campaign_id: number;
   title: string;

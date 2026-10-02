@@ -77,7 +77,7 @@ visibilityGrantsRouter.get("/preview", (req, res) => {
   res.json({
     setting: getSettingPlayerContent(campaignId, playerId),
     sections: getPlayerSectionsFor(campaignId, playerId),
-    flagged: getFlaggedSettingContent(campaign.setting_id),
+    flagged: getFlaggedSettingContent(campaign.setting_id, campaignId),
   });
 });
 

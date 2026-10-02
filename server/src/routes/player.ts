@@ -1077,7 +1077,7 @@ playerRouter.get("/campaigns/:id/visible", (req: AuthedRequest, res) => {
     )
     .all({ campaign: campaignId });
 
-  const { locationArticles, beingArticles, chronicleEvents } = getFlaggedSettingContent(campaign.setting_id);
+  const { locationArticles, beingArticles, chronicleEvents } = getFlaggedSettingContent(campaign.setting_id, campaignId);
 
   res.json({ campaign, schedule, secrets, locationArticles, beingArticles, chronicleEvents });
 });

@@ -525,10 +525,7 @@ settingLocationsRouter.post("/:id/important-dates", (req, res) => {
          VALUES (?, ?, ?, ?, ?, ?, ?)`
       ).run(loc.setting_id, trimmed, eventDesc, yNum, mNum, d, status);
       const newEventId = Number(info.lastInsertRowid);
-      // копия в кампании — как в settings.ts
-      const campaigns = db.prepare("SELECT id FROM campaigns WHERE setting_id = ? AND archived_at IS NULL").all(loc.setting_id) as { id: number }[];
-      const insCamp = db.prepare(`INSERT INTO campaign_calendar_events (campaign_id, title, description, inworld_year, inworld_month, inworld_day, status) VALUES (?, ?, ?, ?, ?, ?, ?)`);
-      for (const c of campaigns) insCamp.run(c.id, trimmed, eventDesc, yNum, mNum, d, status);
+      // Кампании видят событие сеттинга живым — копий нет (campaign-paper, Q28).
       // syncImportantDatesFromMentions — inline копия
       db.prepare("DELETE FROM important_dates WHERE source_event_id = ?").run(newEventId);
       db.prepare(`INSERT INTO important_dates (owner_type, owner_id, title, description, date_type, color, recurrence, year, month, day, custom_rule, source_event_id) VALUES ('location', ?, ?, ?, ?, ?, 'once', ?, ?, ?, ?, ?)`).run(req.params.id, trimmed, description ?? "", date_type ?? "", color ?? "", yNum, mNum, d, custom_rule ?? "", newEventId);

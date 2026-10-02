@@ -7258,6 +7258,18 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     if (tableExists(database, "preproduction")) migratePreproductionToPassport(database);
   }
 
+  // Хроника кампании — частный случай хроники сеттинга (спека campaign-paper,
+  // Q28): события сеттинга кампания видит живыми и может только скрыть у
+  // себя; копий больше нет. Миграция один раз склеивает прежние копии.
+  if (!tableExists(database, "campaign_hidden_events")) {
+    database.exec(`CREATE TABLE campaign_hidden_events (
+      campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+      event_id INTEGER NOT NULL REFERENCES setting_calendar_events(id) ON DELETE CASCADE,
+      PRIMARY KEY (campaign_id, event_id)
+    )`);
+    migrateCampaignEventCopies(database);
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);
@@ -7428,6 +7440,50 @@ export function migratePreproductionToPassport(database: Database.Database): voi
         changed = true;
       }
       if (changed) write.run(JSON.stringify(passport), row.campaign_id);
+    }
+  })();
+}
+
+/**
+ * Копии событий сеттинга в кампаниях → живая хроника (спека campaign-paper,
+ * Q28). Копия, которую кампания не трогала, удаляется — событие сеттинга
+ * видно и так. Правленая (или со связями) остаётся событием кампании, а
+ * оригинал у этой кампании скрывается, чтобы не задвоить. Копии нет, хотя
+ * кампания уже была, когда событие завели, — значит, кампания её удалила:
+ * событие у неё скрыто. События старше кампании ей и раньше не копировались —
+ * теперь она их видит.
+ */
+export function migrateCampaignEventCopies(database: Database.Database): void {
+  type Ev = Record<string, unknown> & { id: number; title: string; created_at: string };
+  const campaigns = database
+    .prepare("SELECT id, setting_id, created_at FROM campaigns WHERE setting_id IS NOT NULL")
+    .all() as { id: number; setting_id: number; created_at: string }[];
+  const eventsOf = database.prepare("SELECT * FROM setting_calendar_events WHERE setting_id = ?");
+  const copiesOf = database.prepare(
+    `SELECT * FROM campaign_calendar_events
+      WHERE campaign_id = ? AND title = ? AND inworld_year = ? AND inworld_month = ? AND inworld_day = ?`
+  );
+  const linked = database.prepare(
+    "SELECT 1 FROM generic_links WHERE (from_type = 'campaign_event' AND from_id = ?) OR (to_type = 'campaign_event' AND to_id = ?) LIMIT 1"
+  );
+  const dropCopy = database.prepare("DELETE FROM campaign_calendar_events WHERE id = ?");
+  const hide = database.prepare("INSERT OR IGNORE INTO campaign_hidden_events (campaign_id, event_id) VALUES (?, ?)");
+  const same = (a: unknown, b: unknown) => (a ?? "") === (b ?? "") || String(a ?? "") === String(b ?? "");
+  const FIELDS = ["description", "full_description", "consequences", "important", "status", "date_precision"];
+  database.transaction(() => {
+    for (const c of campaigns) {
+      for (const e of eventsOf.all(c.setting_id) as Ev[]) {
+        const copies = copiesOf.all(c.id, e.title, e.inworld_year, e.inworld_month, e.inworld_day) as Ev[];
+        if (copies.length === 0) {
+          if (c.created_at <= e.created_at) hide.run(c.id, e.id);
+          continue;
+        }
+        for (const copy of copies) {
+          const untouched = FIELDS.every((f) => !(f in copy) || same(copy[f], e[f])) && !linked.get(copy.id, copy.id);
+          if (untouched) dropCopy.run(copy.id);
+          else hide.run(c.id, e.id);
+        }
+      }
     }
   })();
 }

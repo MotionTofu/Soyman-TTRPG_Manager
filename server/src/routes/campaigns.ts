@@ -537,16 +537,45 @@ campaignsRouter.get("/:id/sessions", (req, res) => {
   res.json(withPaymentType);
 });
 
-// In-world calendar events for a campaign, created from its custom
-// calendar tab (right-click on a day) or the "События" list.
+// Хроника кампании — частный случай хроники сеттинга (спека campaign-paper,
+// Q28): свои события кампании (`source: "campaign"`) и события её сеттинга
+// живыми (`source: "setting"`). Скрытые кампанией приходят с `hidden: 1` —
+// их показывает только список «Скрытые», ось и календарь их не рисуют.
 campaignsRouter.get("/:id/calendar-events", (req, res) => {
-  const rows = db
+  const own = db
     .prepare(
-      `SELECT * FROM campaign_calendar_events WHERE campaign_id = ?
+      `SELECT *, 'campaign' AS source, 0 AS hidden FROM campaign_calendar_events WHERE campaign_id = ?
        ORDER BY important DESC, inworld_year, inworld_month, inworld_day`
     )
     .all(req.params.id);
-  res.json(rows);
+  const fromSetting = db
+    .prepare(
+      `SELECT e.*, 'setting' AS source,
+              CASE WHEN h.event_id IS NULL THEN 0 ELSE 1 END AS hidden
+         FROM setting_calendar_events e
+         JOIN campaigns c ON c.setting_id = e.setting_id AND c.id = ?
+         LEFT JOIN campaign_hidden_events h ON h.campaign_id = c.id AND h.event_id = e.id
+        ORDER BY e.important DESC, e.inworld_year, e.inworld_month, e.inworld_day`
+    )
+    .all(req.params.id);
+  res.json([...own, ...fromSetting]);
+});
+
+// Скрыть событие сеттинга у кампании и вернуть его (Q28). Удалить его отсюда
+// нельзя — оно принадлежит миру.
+campaignsRouter.put("/:id/hidden-events/:eventId", (req, res) => {
+  const ok = db
+    .prepare(
+      `SELECT 1 FROM setting_calendar_events e JOIN campaigns c ON c.setting_id = e.setting_id
+        WHERE c.id = ? AND e.id = ?`
+    )
+    .get(req.params.id, req.params.eventId);
+  if (!ok) return res.status(404).json({ error: "not found" });
+  const hidden = (req.body as { hidden?: unknown })?.hidden !== false;
+  if (hidden)
+    db.prepare("INSERT OR IGNORE INTO campaign_hidden_events (campaign_id, event_id) VALUES (?, ?)").run(req.params.id, req.params.eventId);
+  else db.prepare("DELETE FROM campaign_hidden_events WHERE campaign_id = ? AND event_id = ?").run(req.params.id, req.params.eventId);
+  res.json({ hidden });
 });
 
 campaignsRouter.post("/:id/calendar-events", (req, res) => {

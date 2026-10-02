@@ -256,8 +256,24 @@ export function CampaignDetailPage() {
     null
   );
 
-  const calendarEvents =
+  // Хроника кампании — свои события и события сеттинга живыми (спека
+  // campaign-paper, Q28). У событий сеттинга id из другой таблицы, поэтому в
+  // интерфейсе им дан сдвиг SETTING_EVENT_UID: ключи строк и оси не путаются
+  // со своими, а путь записи выбирает eventPath.
+  const rawEvents =
     useResource<CampaignCalendarEvent[]>(invalidCampaignId ? null : campaignPaths.calendarEvents(campaignId)).data ?? NO_EVENTS;
+  const calendarEvents = useMemo(
+    () =>
+      rawEvents
+        .filter((e) => !e.hidden)
+        .map((e) => (e.source === "setting" ? { ...e, id: SETTING_EVENT_UID + e.id } : e)),
+    [rawEvents]
+  );
+  const hiddenEvents = useMemo(() => rawEvents.filter((e) => e.hidden), [rawEvents]);
+  const eventAffects = (id?: number) => [
+    ...campaignEventAffects(campaignId, id),
+    ...(campaign?.setting_id && id != null && isSettingEvent(id) ? [{ path: chroniclePaths.events(campaign.setting_id) }] : []),
+  ];
   const [expandedEvents, setExpandedEvents] = useState<Set<number>>(new Set());
   const settingImportantDates =
     useResource<ImportantDate[]>(campaign?.setting_id ? chroniclePaths.importantDates(campaign.setting_id) : null).data ?? NO_DATES;
@@ -405,17 +421,30 @@ export function CampaignDetailPage() {
   }
 
   async function deleteCalendarEvent(eventId: number) {
+    // Событие мира принадлежит сеттингу: кампания только прячет его у себя (Q28).
+    if (isSettingEvent(eventId)) {
+      setCalendarMenu(null);
+      await setEventHidden(eventId - SETTING_EVENT_UID, true);
+      return;
+    }
     const ok = await confirm({ message: "Удалить событие?", confirmLabel: "Удалить", danger: true });
     if (!ok) return;
     setCalendarMenu(null);
-    await run(labelled("Событие хроники", () => write.del(`/campaigns/calendar-events/${eventId}`)), {
-      affects: campaignEventAffects(campaignId, eventId),
+    await run(labelled("Событие хроники", () => write.del(eventPath(eventId))), {
+      affects: eventAffects(eventId),
     });
   }
 
+  async function setEventHidden(settingEventId: number, hidden: boolean) {
+    await run(
+      labelled("Событие мира", () => write.put(`/campaigns/${campaignId}/hidden-events/${settingEventId}`, { hidden })),
+      { affects: [...campaignEventAffects(campaignId), { path: `/player` }] }
+    );
+  }
+
   async function toggleEventImportant(ev: CampaignCalendarEvent) {
-    await run(labelled("Событие хроники", () => write.put(`/campaigns/calendar-events/${ev.id}`, { important: !ev.important })), {
-      affects: campaignEventAffects(campaignId, ev.id),
+    await run(labelled("Событие хроники", () => write.put(eventPath(ev.id), { important: !ev.important })), {
+      affects: eventAffects(ev.id),
     });
   }
 
@@ -430,14 +459,14 @@ export function CampaignDetailPage() {
     if (id < 0) return;
     await run(
       labelled("Событие хроники", () =>
-        write.put(`/campaigns/calendar-events/${id}`, {
+        write.put(eventPath(id), {
           inworld_year: date.year,
           inworld_month: date.month,
           inworld_day: date.day,
           date_precision: date.precision,
         })
       ),
-      { affects: campaignEventAffects(campaignId, id) }
+      { affects: eventAffects(id) }
     );
   }
 
@@ -489,11 +518,13 @@ export function CampaignDetailPage() {
       const eventId = eventModal.id;
       const original = calendarEvents.find((e) => e.id === eventId);
       const saved = await run(
-        labelled("Событие хроники", () => write.put(`/campaigns/calendar-events/${eventId}`, payload).then(() => true)),
-        { affects: campaignEventAffects(campaignId, eventId) }
+        labelled("Событие хроники", () => write.put(eventPath(eventId), payload).then(() => true)),
+        { affects: eventAffects(eventId) }
       );
       if (!saved) return;
-      await syncMentionLinks("campaign_event", eventId, original?.description ?? "", eventModal.description);
+      if (isSettingEvent(eventId))
+        await syncMentionLinks("setting_event", eventId - SETTING_EVENT_UID, original?.description ?? "", eventModal.description);
+      else await syncMentionLinks("campaign_event", eventId, original?.description ?? "", eventModal.description);
     } else {
       const created = await run(
         labelled("Новое событие", () => write.post<CampaignCalendarEvent>(`/campaigns/${campaignId}/calendar-events`, payload)),
@@ -532,7 +563,9 @@ export function CampaignDetailPage() {
       y,
       items: [
         { label: "Редактировать", onClick: () => openEditEventModal(ev) },
-        { label: "Удалить", danger: true, onClick: () => deleteCalendarEvent(ev.id) },
+        isSettingEvent(ev.id)
+          ? { label: "Скрыть у кампании", onClick: () => deleteCalendarEvent(ev.id) }
+          : { label: "Удалить", danger: true, onClick: () => deleteCalendarEvent(ev.id) },
       ],
     });
   }
@@ -1156,6 +1189,7 @@ export function CampaignDetailPage() {
                                 <span className="chronicle-date">{calendar ? formatEventDate(ev.inworld_year, ev.inworld_month, ev.inworld_day, calendar.months) : `${ev.inworld_year}.${ev.inworld_month}.${ev.inworld_day}`}</span>
                                 <span className={`chronicle-status is-${ev.status}`}>{ev.status === "cancelled" ? "Отменено" : ev.status === "upcoming" ? "Предстоит" : "Случилось"}</span>
                                 <span className="chronicle-title">{ev.title}</span>
+                                {isSettingEvent(ev.id) && <span className="chronicle-source">мир</span>}
                               </span>
                             </span>
                             <div className="row" style={{ gap: "var(--sp-4)", alignItems: "center" }}>
@@ -1168,7 +1202,13 @@ export function CampaignDetailPage() {
                                 {ev.important ? "★" : "☆"}
                               </button>
                               <button className="comp-mini" onClick={() => openEditEventModal(ev)}>Редактировать</button>
-                              <button className="comp-mini danger" onClick={() => deleteCalendarEvent(ev.id)}>✕</button>
+                              {isSettingEvent(ev.id) ? (
+                                <button className="comp-mini" onClick={() => deleteCalendarEvent(ev.id)} title="Событие мира — скрыть у этой кампании">
+                                  Скрыть
+                                </button>
+                              ) : (
+                                <button className="comp-mini danger" onClick={() => deleteCalendarEvent(ev.id)}>✕</button>
+                              )}
                               <button className="comp-mini" onClick={() => { setTimelineFocus({ year: ev.inworld_year, month: ev.inworld_month, day: ev.inworld_day }); axisRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }} title="На оси">Ось</button>
                               <button className="comp-mini" onClick={() => { setCalendarFocus({ year: ev.inworld_year, month: ev.inworld_month }); calendarRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }} title="На календаре">Календарь</button>
                             </div>
@@ -1181,6 +1221,26 @@ export function CampaignDetailPage() {
                         </div>
                       );
                     })}
+                    {hiddenEvents.length > 0 && (
+                      <details className="paper-fold">
+                        <summary>
+                          Скрытые события мира <span className="paper-fold__count">· {hiddenEvents.length}</span>
+                        </summary>
+                        <ul className="paper-rows">
+                          {hiddenEvents.map((ev) => (
+                            <li key={ev.id}>
+                              <span className="paper-rows__main">{ev.title}</span>
+                              <span className="paper-rows__sub">
+                                {calendar ? formatEventDate(ev.inworld_year, ev.inworld_month, ev.inworld_day, calendar.months) : `${ev.inworld_year}.${ev.inworld_month}.${ev.inworld_day}`}
+                              </span>
+                              <button className="comp-mini" onClick={() => void setEventHidden(ev.id, false)}>
+                                Вернуть
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
                     {calendarEvents.length === 0 && <EmptyState title="Хроника пуста" hint="Первое событие задаёт летоисчисление мира" action={<button className="primary" onClick={() => openCreateEventModal(timelineNow?.year ?? 1, timelineNow?.month ?? 1, timelineNow?.day ?? 1)}>+ Создать событие</button>} />}
                   </div>
                 </div>
@@ -2484,5 +2544,11 @@ function useCampaignGroups(campaignId: number) {
 }
 
 const NO_GROUPS: CampaignGroup[] = [];
+
+/** Сдвиг id событий сеттинга в хронике кампании — см. calendarEvents. */
+const SETTING_EVENT_UID = 1_000_000_000;
+const isSettingEvent = (id: number) => id >= SETTING_EVENT_UID;
+const eventPath = (id: number) =>
+  isSettingEvent(id) ? `/settings/calendar-events/${id - SETTING_EVENT_UID}` : `/campaigns/calendar-events/${id}`;
 const NO_WORKBOOKS: InstanceSummary[] = [];
 const NO_CHARACTERS: Character[] = [];

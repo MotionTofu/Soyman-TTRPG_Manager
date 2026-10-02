@@ -423,10 +423,8 @@ settingsRouter.get("/:id/date-types", (req, res) => {
 });
 
 // In-world calendar events owned by the setting itself ("Хроника мира"),
-// created from the setting's calendar tab. On creation, a copy is inserted
-// into campaign_calendar_events for every campaign currently using this
-// setting, so campaigns can freely delete their own copy afterwards without
-// affecting this source row (deliberately no link back to the source).
+// created from the setting's calendar tab. Кампании этого сеттинга видят их
+// живыми и могут только скрыть у себя (campaign_hidden_events).
 settingsRouter.get("/:id/calendar-events", (req, res) => {
   const rows = db
     .prepare(
@@ -570,17 +568,7 @@ function insertSettingEvent(
       status
     );
   const newId = Number(info.lastInsertRowid);
-  const campaigns = db
-    .prepare("SELECT id FROM campaigns WHERE setting_id = ? AND archived_at IS NULL")
-    .all(settingId) as { id: number }[];
-  const insertIntoCampaign = db.prepare(
-    `INSERT INTO campaign_calendar_events
-       (campaign_id, title, description, inworld_year, inworld_month, inworld_day, important, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  );
-  for (const c of campaigns) {
-    insertIntoCampaign.run(c.id, e.title, e.description, e.year, e.month, e.day, e.important ? 1 : 0, status);
-  }
+  // Кампании видят событие живым (спека campaign-paper, Q28) — копий нет.
   syncImportantDatesFromMentions(newId, e.title, e.description, e.year, e.month, e.day);
   return newId;
 }
@@ -931,22 +919,17 @@ settingsRouter.delete("/calendar-events/:eventId", (req, res) => {
   res.json({ ok: true });
 });
 
-// Копии события в кампаниях: своего ключа у них нет, узнаются по титулу и дате.
-const CAMPAIGN_COPIES = `FROM campaign_calendar_events WHERE campaign_id IN (SELECT id FROM campaigns WHERE setting_id = ? AND archived_at IS NULL) AND title = ? AND inworld_year = ? AND inworld_month = ? AND inworld_day = ?`;
 type EventKey = { setting_id: number; title: string; inworld_year: number; inworld_month: number; inworld_day: number };
 const eventKey = (eventId: number) =>
   db.prepare("SELECT setting_id, title, inworld_year, inworld_month, inworld_day FROM setting_calendar_events WHERE id = ?").get(eventId) as EventKey | undefined;
-const copyArgs = (e: EventKey) => [e.setting_id, e.title, e.inworld_year, e.inworld_month, e.inworld_day] as const;
 
 /** Снимает событие со всем, что на нём держится. Звать внутри транзакции. */
 function deleteSettingEvent(eventId: number) {
-  const event = eventKey(eventId);
   db.prepare("DELETE FROM setting_calendar_events WHERE id = ?").run(eventId);
   db.prepare(`DELETE FROM generic_links WHERE (from_type = 'setting_event' AND from_id = ?) OR (to_type = 'setting_event' AND to_id = ?)`).run(eventId, eventId);
   db.prepare("DELETE FROM important_dates WHERE source_event_id = ?").run(eventId);
-  // Каскад в кампании — копии, созданные при POST /:id/calendar-events, не имеют FK, но совпадают по титулу/дате и принадлежат кампаниям того же сеттинга.
-  // Удаляем только такие копии, чтобы «удалить из мира» не оставляло висячих дубликатов в кампаниях (C-P0-3). Ручные события кампаний с другим титулом/датой не трогаем.
-  if (event) db.prepare(`DELETE ${CAMPAIGN_COPIES}`).run(...copyArgs(event));
+  // Копий в кампаниях больше нет (спека campaign-paper, Q28): скрытия у
+  // кампаний уходят каскадом.
 }
 
 // Повторяющееся ⇄ обычное событие (разбор 2026-10-02, Q1–Q7): перенос между
@@ -960,7 +943,8 @@ settingsRouter.get("/calendar-events/:eventId/footprint", (req, res) => {
   const n = (sql: string, ...args: unknown[]) => (db.prepare(sql).get(...args) as { n: number }).n;
   res.json({
     links: n(`SELECT COUNT(*) n FROM generic_links WHERE (from_type = 'setting_event' AND from_id = ?) OR (to_type = 'setting_event' AND to_id = ?)`, id, id),
-    campaign_copies: n(`SELECT COUNT(*) n ${CAMPAIGN_COPIES}`, ...copyArgs(event)),
+    // Копий в кампаниях больше нет (спека campaign-paper, Q28) — поле для старых клиентов.
+    campaign_copies: 0,
     mention_dates: n("SELECT COUNT(*) n FROM important_dates WHERE source_event_id = ?", id),
   });
 });
