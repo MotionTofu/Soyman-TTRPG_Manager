@@ -1,4 +1,6 @@
 import { useState, type ReactNode } from "react";
+import { MentionText } from "./mentions/MentionText";
+import { MentionTextarea } from "./mentions/MentionTextarea";
 
 // Карточка «подпись — значение» на бумаге: досье приключения (доска 36) и
 // «В кампании» досье персонажа (доска 37).
@@ -18,6 +20,8 @@ export function PaperFieldsCard({
   children,
   strong,
   showGrid = true,
+  rows,
+  mentionSettingId,
 }: {
   label: string;
   fields: readonly PaperField[];
@@ -29,7 +33,15 @@ export function PaperFieldsCard({
   strong?: boolean;
   /** Просмотр рисует сам вызывающий (children) — сетку полей не показывать. */
   showGrid?: boolean;
+  /**
+   * Паспорт кампании (доска 41): поля строками «подпись — значение», с
+   * упоминаниями и абзацами; незаполненные — одной строкой «Не заполнено».
+   */
+  rows?: boolean;
+  /** Упоминания в полях: «@» в правке открывает выбор, просмотр — ссылками. */
+  mentionSettingId?: number | null;
 }) {
+  const mentions = mentionSettingId !== undefined;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -60,12 +72,22 @@ export function PaperFieldsCard({
             {fields.map((f) => (
               <label key={f.key} className="stack editable-card-field">
                 <span>{f.label}</span>
-                <textarea
-                  rows={2}
-                  value={draft[f.key] ?? ""}
-                  placeholder={f.hint}
-                  onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
-                />
+                {mentions ? (
+                  <MentionTextarea
+                    rows={2}
+                    value={draft[f.key] ?? ""}
+                    placeholder={f.hint}
+                    defaultSettingId={mentionSettingId ?? undefined}
+                    onChange={(v) => setDraft((d) => ({ ...d, [f.key]: v }))}
+                  />
+                ) : (
+                  <textarea
+                    rows={2}
+                    value={draft[f.key] ?? ""}
+                    placeholder={f.hint}
+                    onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
+                  />
+                )}
               </label>
             ))}
           </div>
@@ -91,7 +113,33 @@ export function PaperFieldsCard({
         </button>
       </div>
       {children}
-      {!showGrid ? null : filled.length > 0 ? (
+      {rows && showGrid ? (
+        <>
+          {filled.length > 0 && (
+            <dl className="paper-fields-rows">
+              {filled.map((f) => (
+                <div key={f.key}>
+                  <dt className="creature-card__head-label">{f.label}</dt>
+                  <dd>{mentions ? <MentionText text={values[f.key]} /> : values[f.key]}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+          {filled.length < fields.length && (
+            <div className="creature-card__empty">
+              {filled.length === 0
+                ? empty
+                : `Не заполнено: ${fields
+                    .filter((f) => !values[f.key]?.trim())
+                    .map((f) => f.label.toLowerCase())
+                    .join(", ")}.`}{" "}
+              <button type="button" className="creature-card__more" onClick={start}>
+                Заполнить
+              </button>
+            </div>
+          )}
+        </>
+      ) : !showGrid ? null : filled.length > 0 ? (
         <dl className="scene-head__grid">
           {filled.map((f) => (
             <div key={f.key}>

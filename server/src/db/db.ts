@@ -7248,6 +7248,16 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     database.exec("CREATE INDEX idx_campaign_vessel_cargo_vessel ON campaign_vessel_cargo (vessel_id)");
   }
 
+  // Паспорт кампании (спека campaign-paper, Q7/Q16). «Препродакшен» уходит в
+  // него один раз, вместе с появлением колонки: вызов → обещание, стили игры →
+  // активность, предыстория, нити/лор → открытые напряжения, ставки и крючки.
+  // Ссылки «Крючки» (generic_links from_type 'preproduction') не трогаются —
+  // карточка «Ставки и крючки» читает их же.
+  if (!columnExists(database, "campaigns", "passport")) {
+    database.exec("ALTER TABLE campaigns ADD COLUMN passport TEXT NOT NULL DEFAULT '{}'");
+    if (tableExists(database, "preproduction")) migratePreproductionToPassport(database);
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);
@@ -7382,6 +7392,44 @@ export function compactIfBloated(database: Database.Database, force = false): bo
     console.error("VACUUM failed:", e);
     return false;
   }
+}
+
+/** Поле «Препродакшена» → ключ паспорта кампании. Текст дописывается ниже уже записанного. */
+const PREPRODUCTION_TO_PASSPORT: [string, string][] = [
+  ["adventure_challenge", "promise"],
+  ["gameplay_styles", "activity"],
+  ["background", "background"],
+  ["threads_clues_lore", "tension"],
+  ["adventure_stakes_hooks", "stakes"],
+];
+
+export function migratePreproductionToPassport(database: Database.Database): void {
+  const rows = database.prepare("SELECT * FROM preproduction").all() as Record<string, unknown>[];
+  const read = database.prepare("SELECT passport FROM campaigns WHERE id = ?");
+  const write = database.prepare("UPDATE campaigns SET passport = ? WHERE id = ?");
+  database.transaction(() => {
+    for (const row of rows) {
+      const current = read.get(row.campaign_id) as { passport: string } | undefined;
+      if (!current) continue;
+      let passport: Record<string, string> = {};
+      try {
+        const parsed = JSON.parse(current.passport || "{}") as unknown;
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) passport = parsed as Record<string, string>;
+      } catch {
+        // битый паспорт — начинаем с пустого
+      }
+      let changed = false;
+      for (const [from, to] of PREPRODUCTION_TO_PASSPORT) {
+        const text = typeof row[from] === "string" ? (row[from] as string).trim() : "";
+        if (!text) continue;
+        const before = typeof passport[to] === "string" ? passport[to].trim() : "";
+        if (before.includes(text)) continue;
+        passport[to] = before ? `${before}\n\n${text}` : text;
+        changed = true;
+      }
+      if (changed) write.run(JSON.stringify(passport), row.campaign_id);
+    }
+  })();
 }
 
 /** Каталог рабочей базы: заданный через DB_DIR (Electron, тесты) или дефолтный. */

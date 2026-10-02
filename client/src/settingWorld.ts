@@ -23,6 +23,26 @@ export const PASSPORT_NOT_THIS = { key: "not_this", label: "Чем не явля
 
 export const MAX_SIGNATURES = 5;
 
+/**
+ * Паспорт кампании (спека campaign-paper, Q16; лист 1 тетради кампании).
+ * Ключи — server/src/services/settingWorld.ts, CAMPAIGN_PASSPORT_KEYS.
+ * Последние три поля пришли из «Препродакшена».
+ */
+export const CAMPAIGN_PASSPORT_FIELDS = [
+  { key: "premise", label: "Премиса", hint: "Что происходит, когда герои входят в игру" },
+  { key: "promise", label: "Обещание", hint: "Что игроки получат от кампании — одной-двумя фразами" },
+  { key: "activity", label: "Активность", hint: "Чем герои заняты чаще всего: расследование, налёты…" },
+  { key: "experience", label: "Опыт", hint: "Какие чувства и решения должна давать игра" },
+  { key: "genre", label: "Жанр", hint: "Городское фэнтези, хоррор, интрига…" },
+  { key: "tone", label: "Тон", hint: "Мрачно, легко, нуар, сказка…" },
+  { key: "scale", label: "Масштаб", hint: "Квартал, город, континент…" },
+  { key: "project_limits", label: "Ограничения", hint: "Сколько сессий, как часто, что за столом не нужно" },
+  { key: "not_this", label: "Чем не является", hint: "Чего в этой кампании сознательно нет" },
+  { key: "background", label: "Предыстория", hint: "Что случилось до начала и привело к нему" },
+  { key: "tension", label: "Открытые напряжения", hint: "Нити, конфликты и лор, что связывают происходящее" },
+  { key: "stakes", label: "Ставки и крючки", hint: "Что на кону и чем кампания цепляет персонажей" },
+] as const;
+
 export interface EntryField {
   key: string;
   label: string;
