@@ -70,6 +70,7 @@ const PATH_TABLES: { table: string; column: string; idCol?: string }[] = [
   { table: "archived_files", column: "archive_path" },
   { table: "gallery_images", column: "image_path" },
   { table: "compendium_entries", column: "avatar_image_path" },
+  { table: "compendium_entries", column: "blueprint_image_path" },
   { table: "archived_files", column: "archive_path" },
 ];
 

@@ -690,11 +690,13 @@ systemsRouter.delete("/entries/:entryId", (req, res) => {
   const filesToArchive: { path: string; ownerType: string; ownerId: number; displayName: string }[] = [];
   const cleanupEntry = (id: number): void => {
     const me = db
-      .prepare("SELECT id, name, avatar_image_path FROM compendium_entries WHERE id = ?")
-      .get(id) as { id: number; name: string; avatar_image_path: string | null };
-    if (me.avatar_image_path) {
+      .prepare("SELECT id, name, avatar_image_path, blueprint_image_path FROM compendium_entries WHERE id = ?")
+      .get(id) as { id: number; name: string; avatar_image_path: string | null; blueprint_image_path: string | null };
+    // Картинка записи и чертёж судна (тикет 05); пины чертежа уходят каскадом.
+    for (const file of [me.avatar_image_path, me.blueprint_image_path]) {
+      if (!file) continue;
       filesToArchive.push({
-        path: me.avatar_image_path,
+        path: file,
         ownerType: "compendium_entry",
         ownerId: me.id,
         displayName: me.name,

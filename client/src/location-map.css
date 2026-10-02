@@ -145,6 +145,16 @@
   border-color: var(--on-surface-muted);
   color: var(--on-surface);
 }
+/* Прочие виды — тот же тёмный ярлык; без цвета текста тушь ложилась на
+   тушь. Метка чертежа (тикет 05) — сама надпись, поэтому бумажный ярлык. */
+.location-map-pin-label.pin-label-other {
+  color: var(--on-surface);
+}
+.location-map-pin-label.pin-label-label {
+  background: var(--paper-base, var(--paper));
+  border-color: var(--paper-ink, var(--ink));
+  color: var(--paper-ink, var(--ink));
+}
 .location-map-pin-label.pin-label-artifact {
   background: var(--surface);
   border-color: var(--on-surface-muted);
