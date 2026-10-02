@@ -1159,3 +1159,10 @@
 .paper-sheet .entity-row-actions {
   flex-wrap: wrap;
 }
+
+/* Посты экипажа на листе транспорта: строки на линейке (доска 33). */
+.vehicle-posts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
