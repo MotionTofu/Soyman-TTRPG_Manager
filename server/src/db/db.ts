@@ -7175,6 +7175,29 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     database.exec("ALTER TABLE story_secrets ADD COLUMN certainty TEXT NOT NULL DEFAULT ''");
   }
 
+  // Чертёж транспорта (гриллинг профилей 2026-10-02, Q9; тикет 05):
+  // картинка у записи судна и пины на ней — посты экипажа (дочерние записи)
+  // или метки-подписи без сущности («трюм», «баллиста»). Своя таблица, а не
+  // location_pins: у пина чертежа нет полиморфной цели, пост — внешний ключ.
+  if (!columnExists(database, "compendium_entries", "blueprint_image_path")) {
+    database.exec("ALTER TABLE compendium_entries ADD COLUMN blueprint_image_path TEXT");
+  }
+  if (!tableExists(database, "blueprint_pins")) {
+    database.exec(`CREATE TABLE blueprint_pins (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      entry_id INTEGER NOT NULL REFERENCES compendium_entries(id) ON DELETE CASCADE,
+      post_id INTEGER REFERENCES compendium_entries(id) ON DELETE CASCADE,
+      text TEXT NOT NULL DEFAULT '',
+      x REAL NOT NULL,
+      y REAL NOT NULL,
+      color TEXT,
+      size REAL,
+      border_color TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+    database.exec("CREATE INDEX idx_blueprint_pins_entry ON blueprint_pins (entry_id)");
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);

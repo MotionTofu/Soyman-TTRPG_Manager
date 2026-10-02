@@ -2852,6 +2852,7 @@ button.place-card__row-name {
 .type-glyph--player { --type-glyph: var(--skin-glyph-player); }
 .type-glyph--campaign { --type-glyph: var(--skin-glyph-campaign); }
 .type-glyph--adventure { --type-glyph: var(--skin-glyph-adventure); }
+.type-glyph--vehicle-post { --type-glyph: var(--skin-glyph-vehicle-post); }
 .type-glyph--scene { --type-glyph: var(--skin-glyph-scene); }
 .type-glyph--session { --type-glyph: var(--skin-glyph-session); }
 

@@ -18,6 +18,8 @@ const GLYPH_OF: Record<string, string> = {
   adventure: "adventure",
   scene: "scene",
   session: "session",
+  // Пост экипажа — пин на чертеже судна (тикет 05).
+  vehicle_post: "vehicle-post",
 };
 
 export function glyphName(type: string): string | null {

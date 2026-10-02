@@ -1358,3 +1358,27 @@
 .participates__scenes .mention-link {
   font-weight: 400;
 }
+
+/* Превью чертежа на месте портрета судна (тикет 05): картинка в своих
+   пропорциях, пины — точками; посты тушью, метки — кольцом. */
+.vehicle-plan-preview__frame {
+  position: relative;
+  display: block;
+}
+.vehicle-plan-preview .vehicle-plan-preview__frame img {
+  aspect-ratio: auto;
+  object-fit: contain;
+}
+.vehicle-plan-preview__dot {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--paper-ink);
+  box-shadow: 0 0 0 2px var(--paper-base);
+  transform: translate(-50%, -50%);
+}
+.vehicle-plan-preview__dot.is-label {
+  background: var(--paper-base);
+  box-shadow: 0 0 0 2px var(--paper-ink);
+}

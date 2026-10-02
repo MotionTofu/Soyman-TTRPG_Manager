@@ -12,10 +12,13 @@ import { compendiumAffects, compendiumPaths } from "../data/compendiumEntries";
 import { KIND_DEFS, extractEnglishName } from "../compendium";
 import type { CompendiumEntry, System, SystemSection } from "../types";
 import { useConfirm } from "../hooks/useConfirm";
+import { VehiclePlan, VehiclePlanPreview } from "../components/VehiclePlan";
 
 // «Галерея» — перед «Упоминаниями», как на странице существа: служебные
 // обратные ссылки везде замыкают ряд. Звалась «Изображения» до 2026-09-18.
-const TABS = ["Досье", "Статблоки", "Галерея", "Упоминания"] as const;
+// «Чертёж» — только у судна (гриллинг профилей 2026-10-02, Q9; тикет 05).
+const TABS = ["Досье", "Чертёж", "Статблоки", "Галерея", "Упоминания"] as const;
+const POST_TABS = TABS.filter((t) => t !== "Чертёж");
 
 // Страница записи транспорта — судна, повозки или поста экипажа. Записи
 // компендиума обычно раскрываются прямо в разделе, но у транспорта, как и у
@@ -128,6 +131,22 @@ export function VehicleDetailPage({ entry, system }: { entry: CompendiumEntry; s
     if (done) navigate(`/systems/${entry.system_id}`);
   }
 
+  const portrait = (
+    <button
+      type="button"
+      className="dossier__portrait"
+      title="Сменить картинку — в «Галерее»"
+      onClick={() => selectTab("Галерея")}
+    >
+      {entry.avatar_image_url ? (
+        <img src={entry.avatar_image_url} alt={`Картинка: ${entry.name}`} />
+      ) : (
+        <span className="dossier__portrait-empty">Картинка</span>
+      )}
+      <span className="dossier__portrait-hint">Сменить в «Галерее»</span>
+    </button>
+  );
+
   return (
     <EntityPage
       crumbs={[
@@ -160,7 +179,7 @@ export function VehicleDetailPage({ entry, system }: { entry: CompendiumEntry; s
       // Удаление разрушительно и потому живёт под «…», а не в шапке.
       // У записи из книги правил его нет вовсе.
       actions={isPost ? [] : [{ label: "Удалить", danger: true, onClick: deleteShip }]}
-      tabs={TABS}
+      tabs={isPost ? POST_TABS : TABS}
       tab={tab}
       onTab={(t) => selectTab(t as (typeof TABS)[number])}
       overlays={confirmDialog}
@@ -169,21 +188,13 @@ export function VehicleDetailPage({ entry, system }: { entry: CompendiumEntry; s
       {tab === "Досье" && (
         <div className="dossier">
           <aside className="dossier__aside">
-            {/* Картинка меняется в «Галерее». Чертёж с пинами постов встанет
-                сюда превью (тикет 05). */}
-            <button
-              type="button"
-              className="dossier__portrait"
-              title="Сменить картинку — в «Галерее»"
-              onClick={() => selectTab("Галерея")}
-            >
-              {entry.avatar_image_url ? (
-                <img src={entry.avatar_image_url} alt={`Картинка: ${entry.name}`} />
-              ) : (
-                <span className="dossier__portrait-empty">Картинка</span>
-              )}
-              <span className="dossier__portrait-hint">Сменить в «Галерее»</span>
-            </button>
+            {/* У судна с чертежом на месте портрета — превью чертежа (Q9);
+                картинка меняется в «Галерее». */}
+            {isPost ? (
+              portrait
+            ) : (
+              <VehiclePlanPreview entryId={entryId} onOpen={() => selectTab("Чертёж")} fallback={portrait} />
+            )}
             <dl className="paper-facts">
               {system && (
                 <div>
@@ -266,6 +277,8 @@ export function VehicleDetailPage({ entry, system }: { entry: CompendiumEntry; s
           </div>
         </div>
       )}
+
+      {tab === "Чертёж" && !isPost && <VehiclePlan ship={entry} posts={posts} />}
 
       {tab === "Статблоки" && (
         <StatblockList

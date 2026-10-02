@@ -36,6 +36,8 @@ export interface BoardPin {
   fullLabel?: string;
   /** Вид для экранного чтения: «Существо», «Пост». */
   typeLabel?: string;
+  /** Подпись видна всегда — метка-подпись чертежа сама и есть текст. */
+  alwaysLabel?: boolean;
 }
 
 /** То, что тянут на картинку из колонки «Не на …» или из поиска. */
@@ -107,8 +109,8 @@ function typeDefaults(kind: string): { color: string; border: string } {
 
 // Фон подписи по типу: существо и персонаж — общий «живой» красный, у
 // персонажа свой модификатор (index.css).
-function pinLabelBucket(kind: string): "being" | "character" | "location" | "artifact" | "other" {
-  if (kind === "being" || kind === "character" || kind === "location" || kind === "artifact") return kind;
+function pinLabelBucket(kind: string): "being" | "character" | "location" | "artifact" | "label" | "other" {
+  if (kind === "being" || kind === "character" || kind === "location" || kind === "artifact" || kind === "label") return kind;
   return "other";
 }
 const MIN_ZOOM = 1;
@@ -634,7 +636,7 @@ export function PinBoard({
               >
                 {glyph && <span className={`location-map-pin-glyph type-glyph type-glyph--${glyph}`} aria-hidden="true" />}
               </span>
-              <div className={`location-map-pin-label pin-label-${pinLabelBucket(p.kind)}${labelsAlways || isSelected ? " always" : ""}`}>
+              <div className={`location-map-pin-label pin-label-${pinLabelBucket(p.kind)}${labelsAlways || isSelected || p.alwaysLabel ? " always" : ""}`}>
                 {p.label}
               </div>
             </div>
