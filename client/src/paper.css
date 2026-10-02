@@ -1986,3 +1986,31 @@ button.player-visibility-fact {
 .paper-sheet .sp-secrets__head .sp-title {
   color: var(--paper-ink);
 }
+
+/* Профиль игрока (доска 48): ссылки-кнопки — текстом. */
+.player-profile button.paper-more {
+  width: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+.player-profile__account {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-1);
+}
+.player-profile__groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.player-profile__add {
+  flex-wrap: wrap;
+}
+.player-profile__debt-sessions {
+  display: block;
+  color: var(--paper-muted);
+  font-size: var(--fs-meta);
+}

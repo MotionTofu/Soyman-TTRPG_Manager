@@ -428,6 +428,8 @@ export interface Character {
 
 export interface PlayerDetail extends Player {
   characters: PlayerCharacter[];
+  /** «Чем увлечён» (спека campaign-paper, Q47; словарь — player_interest). */
+  interest?: string;
 }
 
 // Персонаж в профиле игрока (GET /players/:id): сервер прикладывает сводку

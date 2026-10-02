@@ -7298,6 +7298,11 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     database.exec("ALTER TABLE sessions ADD COLUMN outcomes TEXT NOT NULL DEFAULT '{}'");
   }
 
+  // «Чем увлечён» игрок (спека campaign-paper, Q47; словарь — player_interest).
+  if (!columnExists(database, "players", "interest")) {
+    database.exec("ALTER TABLE players ADD COLUMN interest TEXT NOT NULL DEFAULT ''");
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);

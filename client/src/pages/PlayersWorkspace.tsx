@@ -15,7 +15,6 @@ import { formatNearestDate } from "../nearestDate";
 import { safeBackgroundImage, isSafeImageUrl } from "../utils/safeUrl";
 import { useAuthenticatedFileUrl } from "../utils/fileUrl";
 import { SectionBackground } from "../components/SectionBackground";
-import { PlayerProfilePanel } from "../components/players/PlayerProfilePanel";
 import { ListPage } from "../components/ListPage";
 import type { Player, PlayerGroup } from "../types";
 
@@ -64,7 +63,7 @@ const NO_GROUPS: PlayerGroup[] = [];
 /** Группы игроков: список, составы и отметки в профиле — всё под одним префиксом. */
 const GROUP_AFFECTS = [{ path: "/player-groups" }];
 
-export function PlayersWorkspace({ selectedId }: { selectedId?: number }) {
+export function PlayersWorkspace() {
   const navigate = useNavigate();
   const client = useQueryClient();
   const run = useAction();
@@ -118,16 +117,8 @@ export function PlayersWorkspace({ selectedId }: { selectedId?: number }) {
     );
   })();
 
-  // Выбор — в адресе (`/players/:id`): «назад» и перезагрузка возвращают
-  // того же игрока. Без выбора справа первый из показанных — рабочий экран
-  // не пустует (Q59: как до 14 сентября).
-  const effectiveSelectedId = selectedId ?? filteredPlayers[0]?.id ?? null;
-
-  useEffect(() => {
-    if (selectedId == null) return;
-    if (!window.matchMedia("(max-width: 900px)").matches) return;
-    document.getElementById("player-detail")?.scrollIntoView({ block: "start" });
-  }, [selectedId]);
+  // Профиль игрока — своя страница (спека campaign-paper, Q47): плитка
+  // ведёт на /players/:id, панели справа больше нет.
 
   async function create() {
     if (!name.trim()) return;
@@ -204,7 +195,7 @@ export function PlayersWorkspace({ selectedId }: { selectedId?: number }) {
             <div className="players-workspace__list">
               <div className="players-tiles">
                 {filteredPlayers.map((p) => (
-                  <PlayerCoverTile key={p.id} player={p} active={p.id === effectiveSelectedId} />
+                  <PlayerCoverTile key={p.id} player={p} active={false} />
                 ))}
                 {activeTab !== null && activeTab !== "ungrouped" && (
                   <button
@@ -226,23 +217,17 @@ export function PlayersWorkspace({ selectedId }: { selectedId?: number }) {
                 )}
               </div>
             </div>
-            {players.length > 0 && (
-              <div className="players-workspace__detail" id="player-detail">
-                {effectiveSelectedId != null ? (
-                  <PlayerProfilePanel key={effectiveSelectedId} playerId={effectiveSelectedId} />
-                ) : (
-                  <EmptyState kind="search"
-                    title="Ничего не найдено"
-                    hint={q.trim() ? `По «${q.trim()}» ничего нет.` : "Нет игроков в этой группе."}
-                    action={
-                      <div className="row" style={{ gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
-                        {q.trim() && <button onClick={() => setQ("")}>Сбросить поиск</button>}
-                        {activeTab !== null && <button onClick={() => setActiveTab(null)}>Показать всех</button>}
-                      </div>
-                    }
-                  />
-                )}
-              </div>
+            {players.length > 0 && filteredPlayers.length === 0 && (
+              <EmptyState kind="search"
+                title="Ничего не найдено"
+                hint={q.trim() ? `По «${q.trim()}» ничего нет.` : "Нет игроков в этой группе."}
+                action={
+                  <div className="row" style={{ gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+                    {q.trim() && <button onClick={() => setQ("")}>Сбросить поиск</button>}
+                    {activeTab !== null && <button onClick={() => setActiveTab(null)}>Показать всех</button>}
+                  </div>
+                }
+              />
             )}
           </div>
         )}

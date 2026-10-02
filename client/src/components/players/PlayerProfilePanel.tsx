@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { labelled } from "../../data/notices";
 import { useAction, useAfterWrite, useEntity, useResource, write } from "../../data/hooks";
@@ -10,11 +10,14 @@ import { syncMentionLinks } from "../../mentions";
 import { RemindersWidget } from "../RemindersWidget";
 import { useCurrentUser } from "../../api/currentUser";
 import type { Campaign, PlayerDetail, PlayerGroup, UnpaidSession } from "../../types";
-import { NavIcon } from "../NavIcons";
 import { ConfirmModal } from "../ConfirmModal";
 import { loadHideFinance } from "../../financePrivacy";
 import { useConfirm } from "../../hooks/useConfirm";
 import { PlayerCharacterCards } from "./PlayerCharacterCards";
+import { EntityPage } from "../EntityPage";
+import { EditableTextCard } from "../EditableTextCard";
+import { useImageCrop } from "../../hooks/useImageCrop";
+import { IMAGE_ACCEPT } from "../../imageUpload";
 
 const NO_UNPAID: UnpaidSession[] = [];
 const NO_CAMPAIGNS: Campaign[] = [];
@@ -47,6 +50,8 @@ const ACCOUNTS_PATH = "/auth/players";
 export function PlayerProfilePanel({ playerId }: { playerId: number }) {
   const [confirmDialog, confirm] = useConfirm();
   const navigate = useNavigate();
+  const thumbnailCrop = useImageCrop("thumbnail", (file) => void uploadThumbnailRef.current(file));
+  const uploadThumbnailRef = useRef<(file: File | null) => Promise<void>>(async () => {});
   const run = useAction();
   const afterWrite = useAfterWrite();
   const { user: currentUser } = useCurrentUser();
@@ -193,177 +198,245 @@ export function PlayerProfilePanel({ playerId }: { playerId: number }) {
     if (!done) setPlayerGroupIds((prev) => (isIn ? [...prev, groupId] : prev.filter((gid) => gid !== groupId)));
   }
 
+  async function saveInterest(interest: string) {
+    const done = await run(labelled("Чем увлечён", () => write.put(`/players/${playerId}`, { interest }).then(() => true)), {
+      affects: playerFieldsAffects(playerId),
+    });
+    if (!done) throw new Error("Не сохранилось");
+  }
+
+  // Портрет: обложка игрока — та же, что на плитке списка; правится щелчком
+  // (раньше — значком на карточке состава кампании).
+  uploadThumbnailRef.current = uploadThumbnail;
+  async function uploadThumbnail(file: File | null) {
+    if (!file) return;
+    const form = new FormData();
+    form.append("file", file);
+    await run(labelled("Портрет игрока", () => write.post(`/players/${playerId}/thumbnail`, form, { timeoutMs: 120_000 })), {
+      affects: playerFieldsAffects(playerId),
+    });
+  }
+
+  // Долг по кампаниям: строка на кампанию, ссылки — на сессии с недоплатой.
+  const debtByCampaign = new Map<number, { name: string; owed: number; sessions: UnpaidSession[] }>();
+  for (const u of unpaid) {
+    const row = debtByCampaign.get(u.campaign_id) ?? { name: u.campaign_name, owed: 0, sessions: [] };
+    row.owed += u.expected - u.paid - u.forgiven;
+    row.sessions.push(u);
+    debtByCampaign.set(u.campaign_id, row);
+  }
+  const portrait = player.thumbnail_image_url ?? player.avatar_image_url;
+
   return (
-    <div className="stack" style={{ paddingBottom: "calc(var(--player-bar-height, 52px) + 16px)" }}>
-      {confirmDialog}
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-        <div className="player-profile-header">
-          <h1>{player.name}</h1>
-          {player.notes && (
-            <div className="player-profile-notes">
-              <MentionText text={player.notes} />
+    <EntityPage
+      crumbs={[{ label: "Игроки", to: "/players" }, { label: player.name }]}
+      entityType="player"
+      title={player.name}
+      paper
+      meta={
+        <span className="paper-ident-tags">
+          <span className="badge tag">Игрок</span>
+          {account?.role === "gm" && <span className="badge tag">Мастер</span>}
+        </span>
+      }
+      actions={[
+        { label: "Править имя и заметки", onClick: startEdit },
+        { label: "Архивировать", danger: true, onClick: () => setShowArchiveModal(true) },
+      ]}
+      overlays={confirmDialog}
+    >
+      {/* Профиль игрока на бумаге (спека campaign-paper, Q47; доска 48):
+          одно досье без вкладок. */}
+      <div className="dossier player-profile">
+        <aside className="dossier__aside">
+          <label className="dossier__portrait" title="Сменить портрет">
+            {portrait ? <img src={portrait} alt={`Портрет: ${player.name}`} /> : <span className="dossier__portrait-empty">Портрет</span>}
+            <span className="dossier__portrait-hint">Сменить портрет</span>
+            <input type="file" hidden accept={IMAGE_ACCEPT} onChange={(e) => thumbnailCrop.onSelect(e.target.files?.[0] ?? null)} />
+          </label>
+          {thumbnailCrop.modal}
+          <dl className="paper-facts">
+            <div>
+              <dt className="paper-label">Доступ к клиенту</dt>
+              <dd>
+                {!accountLoaded ? (
+                  "…"
+                ) : account ? (
+                  <>
+                    учётка <strong>{account.username}</strong>
+                  </>
+                ) : (
+                  <span className="muted">нет доступа</span>
+                )}
+              </dd>
+              <dd className="player-profile__account">
+                {accountLoaded && !accountEditing && (
+                  <button type="button" className="paper-more" onClick={() => setAccountEditing(true)}>
+                    {account ? "сменить логин или пароль ›" : "создать доступ ›"}
+                  </button>
+                )}
+                {accountLoaded && account && !accountEditing && currentUser?.isAdmin && (
+                  <button type="button" className="paper-more" onClick={() => setShowRoleModal(true)}>
+                    {account.role === "gm" ? "забрать метку «Мастер» ›" : "сделать мастером ›"}
+                  </button>
+                )}
+              </dd>
+              {accountEditing && (
+                <dd className="stack">
+                  <input
+                    placeholder={account ? "Новый логин (необязательно)" : "Логин"}
+                    value={loginDraft}
+                    onChange={(e) => setLoginDraft(e.target.value)}
+                  />
+                  <input
+                    type="password"
+                    placeholder={account ? "Новый пароль (необязательно)" : "Пароль"}
+                    value={passwordDraft}
+                    onChange={(e) => setPasswordDraft(e.target.value)}
+                    autoComplete={account ? "current-password" : "new-password"}
+                  />
+                  <div className="row">
+                    <button className="primary" onClick={account ? saveAccountEdit : createAccount}>
+                      Сохранить
+                    </button>
+                    <button
+                      onClick={() => {
+                        setAccountEditing(false);
+                        setLoginDraft("");
+                        setPasswordDraft("");
+                        setAccountError("");
+                      }}
+                    >
+                      Отмена
+                    </button>
+                  </div>
+                  {accountError && <p className="error">{accountError}</p>}
+                </dd>
+              )}
+            </div>
+            <div>
+              <dt className="paper-label">Группы</dt>
+              <dd className="player-profile__groups">
+                {allGroups.length === 0 ? (
+                  <span className="muted">групп пока нет</span>
+                ) : (
+                  allGroups.map((g) => {
+                    const isIn = playerGroupIds.includes(g.id);
+                    return (
+                      <label key={g.id} className={`player-group-chip${isIn ? " player-group-chip--active" : ""}`}>
+                        <input type="checkbox" checked={isIn} onChange={() => void toggleGroup(g.id, isIn)} />
+                        {g.name}
+                      </label>
+                    );
+                  })
+                )}
+              </dd>
+            </div>
+          </dl>
+        </aside>
+
+        <div className="dossier__main">
+          {editing && (
+            <div className="card stack">
+              <label>
+                Имя
+                <input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} />
+              </label>
+              <label>
+                Заметки
+                <MentionTextarea value={notesDraft} onChange={setNotesDraft} />
+              </label>
+              <div className="row">
+                <button className="primary" onClick={saveEdit} disabled={saving}>
+                  {saving ? "Сохранение…" : "Сохранить"}
+                </button>
+                <button onClick={() => setEditing(false)} disabled={saving}>
+                  Отмена
+                </button>
+              </div>
             </div>
           )}
-        </div>
-        <div className="entity-header-actions">
-          <button onClick={startEdit}>Редактировать</button>
-          <button className="danger" onClick={() => setShowArchiveModal(true)}>
-            <NavIcon name="archive" /> Архивировать
-          </button>
-        </div>
-      </div>
 
-      <div className="card stack">
-        <div className="player-section-header">Персонажи</div>
-        <PlayerCharacterCards characters={player.characters} onRemove={removeCharacter} />
-        <div className="row">
-          <select value={campaignId} onChange={(e) => setCampaignId(e.target.value)}>
-            <option value="">Кампания…</option>
-            {campaigns.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <input
-            placeholder="Имя персонажа"
-            value={characterName}
-            onChange={(e) => setCharacterName(e.target.value)}
+          <EditableTextCard
+            key={`interest-${playerId}`}
+            title="Чем увлечён"
+            help="Что игрок любит за столом и чего ждёт от игры — к этому цепляют крючки."
+            value={player.interest ?? ""}
+            onSave={saveInterest}
+            rows={3}
+            emptyLabel="что игрок любит за столом"
           />
-          <button className="primary" onClick={addCharacter} disabled={!campaignId || !characterName.trim()}>
-            Добавить
-          </button>
-        </div>
-      </div>
 
-      <div className="card stack">
-        <div className="player-section-header">Доступ к игрок-клиенту</div>
-        {!accountLoaded && <span className="muted">Загрузка…</span>}
-        {accountLoaded && account && !accountEditing && (
-          <div className="row" style={{ justifyContent: "space-between" }}>
-            <span>
-              Логин: <strong>{account.username}</strong>{" "}
-              {account.role === "gm" && <span className="badge held">Мастер</span>}
-            </span>
-            <div className="row">
-              {currentUser?.isAdmin && (
-                <button onClick={() => setShowRoleModal(true)}>
-                  {account.role === "gm" ? "Забрать метку «Мастер»" : "Сделать мастером"}
-                </button>
-              )}
-              <button onClick={() => setAccountEditing(true)}>Сменить логин/пароль</button>
-            </div>
-          </div>
-        )}
-        {accountLoaded && !account && !accountEditing && (
-          <div className="row" style={{ justifyContent: "space-between" }}>
-            <span className="muted">У игрока пока нет доступа.</span>
-            <button className="primary" onClick={() => setAccountEditing(true)}>
-              Создать доступ
-            </button>
-          </div>
-        )}
-        {accountEditing && (
-          <div className="stack">
-            <div className="row">
-              <input
-                placeholder={account ? "Новый логин (необязательно)" : "Логин"}
-                value={loginDraft}
-                onChange={(e) => setLoginDraft(e.target.value)}
-              />
-              <input
-                type="password"
-                placeholder={account ? "Новый пароль (необязательно)" : "Пароль"}
-                value={passwordDraft}
-                onChange={(e) => setPasswordDraft(e.target.value)}
-                autoComplete={account ? "current-password" : "new-password"}
-              />
-              <button className="primary" onClick={account ? saveAccountEdit : createAccount}>
-                Сохранить
-              </button>
-              <button
-                onClick={() => {
-                  setAccountEditing(false);
-                  setLoginDraft("");
-                  setPasswordDraft("");
-                  setAccountError("");
-                }}
-              >
-                Отмена
+          <section className="paper-list-group">
+            <h2 className="paper-group__head">
+              Персонажи <span className="paper-group__count">· {player.characters.length}</span>
+            </h2>
+            <PlayerCharacterCards characters={player.characters} onRemove={removeCharacter} />
+            <div className="row player-profile__add">
+              <select value={campaignId} onChange={(e) => setCampaignId(e.target.value)} aria-label="Кампания">
+                <option value="">Кампания…</option>
+                {campaigns.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <input placeholder="Имя персонажа" value={characterName} onChange={(e) => setCharacterName(e.target.value)} />
+              <button onClick={addCharacter} disabled={!campaignId || !characterName.trim()}>
+                + Персонаж
               </button>
             </div>
-            {accountError && <p className="error">{accountError}</p>}
-          </div>
-        )}
-      </div>
+          </section>
 
-      {/* Долг нигде не хранится — сервер считает его как «ожидалось − оплачено
-          − прощено» тем же кодом, что показывает игроку его собственный
-          список. Гасить и прощать отсюда нельзя намеренно: сумма принадлежит
-          конкретной игре, и «погасить вообще» заставило бы приложение выбрать
-          сессию за Мастера. Поэтому — ссылка в нужную сессию. */}
-      {unpaid.length > 0 && !loadHideFinance() && (
-        <div className="card stack">
-          <div className="player-section-header">Не оплачено</div>
-          {unpaid.map((u) => (
-            <div key={u.session_id} className="row" style={{ justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-              <Link to={`/sessions/${u.session_id}`}>
-                {u.campaign_name} · {u.title?.trim() || u.date}
-              </Link>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
-                {Math.round((u.expected - u.paid - u.forgiven) * 100) / 100}
-              </span>
+          {/* Долг нигде не хранится — сервер считает его как «ожидалось −
+              оплачено − прощено». Гасить отсюда нельзя намеренно: сумма
+              принадлежит конкретной игре — поэтому ссылки в сессии. */}
+          {debtByCampaign.size > 0 && !loadHideFinance() && (
+            <section className="paper-list-group">
+              <h2 className="paper-group__head">
+                Долг <span className="paper-group__count">· {debtByCampaign.size}</span>
+              </h2>
+              <ul className="paper-rows">
+                {[...debtByCampaign.entries()].map(([id, d]) => (
+                  <li key={id}>
+                    <span className="paper-rows__main">
+                      <Link to={`/campaigns/${id}`}>{d.name}</Link>
+                      <span className="player-profile__debt-sessions">
+                        {d.sessions.map((u, i) => (
+                          <span key={u.session_id}>
+                            {i > 0 && ", "}
+                            <Link to={`/sessions/${u.session_id}`}>{u.title?.trim() || u.date}</Link>
+                          </span>
+                        ))}
+                      </span>
+                    </span>
+                    <span className="paper-rows__sub">
+                      {Math.round(d.owed * 100) / 100} · {d.sessions.length}{" "}
+                      {d.sessions.length === 1 ? "игра" : d.sessions.length < 5 ? "игры" : "игр"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          <details className="paper-fold">
+            <summary>Напоминания</summary>
+            <div className="paper-fold__body">
+              <RemindersWidget targetType="player" targetId={playerId} />
             </div>
-          ))}
+          </details>
+          <details className="paper-fold" open={!!player.notes || undefined}>
+            <summary>Заметки</summary>
+            <div className="paper-fold__body">
+              {player.notes ? <MentionText text={player.notes} /> : <span className="muted">Заметок нет.</span>}{" "}
+              <button type="button" className="paper-more" onClick={startEdit}>
+                править ›
+              </button>
+            </div>
+          </details>
         </div>
-      )}
-
-      <RemindersWidget targetType="player" targetId={playerId} />
-
-      <div className="card stack">
-        <div className="player-section-header">Группы игроков</div>
-        {allGroups.length === 0 ? (
-          <span className="muted">Групп пока нет — создайте их на странице списка игроков.</span>
-        ) : (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
-            {allGroups.map((g) => {
-              const isIn = playerGroupIds.includes(g.id);
-              return (
-                <label
-                  key={g.id}
-                  className={`player-group-chip${isIn ? " player-group-chip--active" : ""}`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isIn}
-                    onChange={() => void toggleGroup(g.id, isIn)}
-                  />
-                  {g.name}
-                </label>
-              );
-            })}
-          </div>
-        )}
       </div>
-
-      {editing && (
-        <div className="card stack">
-          <label>
-            Имя
-            <input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} />
-          </label>
-          <label>
-            Заметки
-            <MentionTextarea value={notesDraft} onChange={setNotesDraft} />
-          </label>
-          <div className="row">
-            <button className="primary" onClick={saveEdit} disabled={saving}>
-              {saving ? "Сохранение…" : "Сохранить"}
-            </button>
-            <button onClick={() => setEditing(false)} disabled={saving}>Отмена</button>
-          </div>
-        </div>
-      )}
 
       {showArchiveModal && (
         <ConfirmModal
@@ -392,6 +465,6 @@ export function PlayerProfilePanel({ playerId }: { playerId: number }) {
           onConfirm={toggleAccountRole}
         />
       )}
-    </div>
+    </EntityPage>
   );
 }
