@@ -31,8 +31,10 @@ Thumbs.db
 .env
 .env.*
 
-# Claude Code local state (not project source)
-.claude/
+# Claude Code local state (not project source). Исключение — skills/: ссылки
+# на скиллы из .agents/skills, чтобы Claude Code (и облачная сессия) их видел.
+.claude/*
+!.claude/skills/
 .mcp.json
 
 # Сгенерированные артефакты инструментов, не исходники проекта
