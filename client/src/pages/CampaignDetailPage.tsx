@@ -1,7 +1,7 @@
-import {ProjectWorkbooks} from "../components/workbooks/ProjectWorkbooks";
+import type { InstanceSummary } from "../components/workbooks/model";
 import { useCompendiumEntries } from "../components/dnd/useCompendiumEntries";
 import { liveEffectEntryIds, withLiveEffects } from "../components/dnd/dndFeatures";
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { entityQuery, resourceQuery, useAction, useEntity, useResource, write } from "../data/hooks";
 import { afterWriteAnywhere } from "../data/imperative";
@@ -59,7 +59,6 @@ import { InworldCalendar, type InworldDatedItem } from "../components/InworldCal
 import { EntityPage } from "../components/EntityPage";
 import { LoadErrorCard } from "../components/Loadable";
 import { useImageCrop } from "../hooks/useImageCrop";
-import { cardThumbnailProps, loadThumbnailStyles, type ThumbnailStyle } from "../thumbnailStyles";
 import { loadHideFinance } from "../financePrivacy";
 import { safeBackgroundImage, isSafeImageUrl } from "../utils/safeUrl";
 import { useAuthenticatedFileUrl } from "../utils/fileUrl";
@@ -99,27 +98,43 @@ import { CampaignPassport } from "../components/campaign/CampaignPassport";
 import { CampaignNow } from "../components/campaign/CampaignNow";
 import { OldNotesFold } from "../components/campaign/OldNotesFold";
 
+// Вкладки кампании (спека campaign-paper, Q19/Q20/Q26/Q31). «Сюжет» собрал
+// «Главы и сцены», «Вехи», «Тайны и зацепки» и «Выводы» разделами; «Заметок»
+// нет — свободные записи живут в листах тетради. «Тетрадь» видна, когда она
+// привязана; у ваншота нет «Хроники мира».
 const GM_TABS = [
   "Обзор",
   "Игроки и персонажи",
   // Корабли партии — сразу за составом (спека profiles-paper-2, «Корабль кампании»).
   "Транспорт",
-  // Сюжет кампании стоит сразу за игроками: к игре готовятся по нему, а не
-  // по мастерским заметкам.
-  "Главы и сцены",
-  "Вехи",
-  "Тайны и зацепки",
-  // Узловой дизайн на уровне кампании (шаг 8): какие приключения партия уже может найти.
-  "Выводы",
-  "Заметки",
+  "Сюжет",
   "Сессии",
   "Хроника мира",
+  "Тетрадь",
   "Выдача",
 ] as const;
 
+// Разделы «Сюжета» и старые имена вкладок, которые теперь ведут в них.
+const STORY_SECTIONS = [
+  { id: "chapters", label: "Главы и сцены" },
+  { id: "milestones", label: "Вехи" },
+  { id: "secrets", label: "Тайны и зацепки" },
+  { id: "reveals", label: "Выводы" },
+] as const;
+const storySectionOf = (oldTab: string | null) => STORY_SECTIONS.find((x) => x.label === oldTab)?.id;
+
 // Сохранённые ссылки на прежнее имя вкладки не должны падать на «Обзор».
 // «Хроника игр» стала «Сессиями» (2026-09-18): «хроника» путалась с «Хроникой мира».
-const GM_TAB_ALIASES = { "Заметки по ведению": "Заметки", "Для игроков": "Выдача", "Хроника игр": "Сессии" } as const;
+const GM_TAB_ALIASES = {
+  "Заметки по ведению": "Обзор",
+  Заметки: "Обзор",
+  "Для игроков": "Выдача",
+  "Хроника игр": "Сессии",
+  "Главы и сцены": "Сюжет",
+  Вехи: "Сюжет",
+  "Тайны и зацепки": "Сюжет",
+  Выводы: "Сюжет",
+} as const;
 const PLAYER_TABS = ["Заметки", "Клёвые цитаты", "Трекер задач", "Сессии", "Исследование Мира"] as const;
 const PLAYER_TAB_ALIASES = { "Хроника игр": "Сессии" } as const;
 
@@ -190,7 +205,11 @@ export function CampaignDetailPage() {
   const sessions = useResource<SessionSummary[]>(invalidCampaignId ? null : campaignPaths.sessions(campaignId)).data ?? NO_SESSIONS;
   const allPlayers = useResource<Player[]>(campaignPaths.players()).data ?? NO_PLAYERS;
   const debts = useResource<CampaignDebt[]>(invalidCampaignId ? null : campaignPaths.debts(campaignId)).data ?? NO_DEBTS;
-  const tabs = campaign?.role === "player" ? PLAYER_TABS : GM_TABS;
+  const workbooks = useResource<InstanceSummary[]>(invalidCampaignId ? null : `/workbooks/instances?project_type=campaign&project_id=${campaignId}`).data ?? NO_WORKBOOKS;
+  const gmTabs = GM_TABS.filter(
+    (t) => (t !== "Хроника мира" || campaign?.type !== "oneshot") && (t !== "Тетрадь" || workbooks.length > 0)
+  );
+  const tabs = campaign?.role === "player" ? PLAYER_TABS : gmTabs;
   const [tab, selectTab] = useTabState(
     tabs,
     "Обзор",
@@ -200,13 +219,17 @@ export function CampaignDetailPage() {
   const [alertDialog, showAlert] = useAlert();
   // Навигация внутри таба «Игроки и персонажи» (Master–Detail).
   const [playersSel, setPlayersSel] = useState<{ section: string; item?: string }>({ section: "roster" });
-  // Навигация сюжетных табов: главы/сцены (приключение → глава),
-  // вехи и тайны (свои → приключения).
-  const [chapSel, setChapSel] = useState<{ section: string; item?: string }>({ section: "all" });
+  // «Сюжет»: раздел слева, под ним — фильтр по приключению. Старая ссылка на
+  // «Вехи» или «Тайны и зацепки» открывает свой раздел.
+  const [storySel, setStorySel] = useState<{ section: string; item?: string }>(() => ({
+    section: storySectionOf(new URLSearchParams(window.location.search).get("tab")) ?? "chapters",
+  }));
+  function openStory(section: string) {
+    setStorySel({ section });
+    selectTab("Сюжет");
+  }
   const [chapStats, setChapStats] = useState<ChaptersNavStats | null>(null);
-  const [mileSel, setMileSel] = useState<{ section: string; item?: string }>({ section: "all" });
   const [mileStats, setMileStats] = useState<MilestonesNavStats | null>(null);
-  const [secSel, setSecSel] = useState<{ section: string; item?: string }>({ section: "all" });
   const [secStats, setSecStats] = useState<SecretsNavStats | null>(null);
   const { deleteWithUndo } = useUndoDelete();
   // Ось кампании — частный случай оси сеттинга (разбор 2026-10-02, Q1–Q4):
@@ -308,16 +331,15 @@ export function CampaignDetailPage() {
     return "Сегодня: " + timelineNow.day + " " + monthName + " " + timelineNow.year + (calendar.era ? " " + calendar.era : "");
   }, [calendar, timelineNow]);
   const [chronicleFilter, setChronicleFilter] = useState("");
-  const [showCancelled, setShowCancelled] = useState(false);
   const [chronicleSort] = useState<"asc" | "desc">("desc");
   const chronicleFiltered = useMemo(() => {
-    let list = sessions.filter((s) => showCancelled || s.status !== "cancelled");
+    let list = sessions.filter((s) => s.status !== "cancelled");
     if (chronicleFilter.trim()) {
       const q = chronicleFilter.trim().toLowerCase();
       list = list.filter((s) => s.title?.toLowerCase().includes(q) || s.date.includes(q) || (s.notes_text ?? "").toLowerCase().includes(q));
     }
     return [...list].sort((a, b) => chronicleSort === "asc" ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date));
-  }, [sessions, chronicleFilter, showCancelled, chronicleSort]);
+  }, [sessions, chronicleFilter, chronicleSort]);
   const axisRef = useRef<HTMLDivElement>(null);
   const calendarRef = useRef<HTMLDivElement>(null);
   const [timelineFocus, setTimelineFocus] = useState<{ year: number; month: number; day: number } | null>(null);
@@ -683,7 +705,6 @@ export function CampaignDetailPage() {
       onTab={(t) => selectTab(t as (typeof tabs)[number])}
     >
       <CampaignFolderNotice campaign={campaign} />
-      {campaign.role!=="player"&&<ProjectWorkbooks type="campaign" id={campaignId}/>}
 
       {tab === "Обзор" && campaign.role === "player" && (
         <PlayerOverviewTab campaign={campaign} systems={systems} settingsList={settingsList} />
@@ -709,106 +730,89 @@ export function CampaignDetailPage() {
         />
       )}
 
-      {tab === "Заметки" && campaign.role !== "player" && (
-        <CampaignEntryList
-          campaignId={campaignId}
-          category="gm_notes"
-          addLabel="+ Добавить заметку"
-          emptyLabel="Заметок пока нет."
-          defaultSettingId={campaign.setting_id ?? undefined}
-          layout="master-detail"
-        />
-      )}
-
       {tab === "Трекер задач" && (
         <TaskTracker campaignId={campaignId} defaultSettingId={campaign.setting_id ?? undefined} />
       )}
 
-      {tab === "Главы и сцены" && (
+      {tab === "Сюжет" && (
         <EntityTabWorkspace
           sections={[
             {
-              id: "all",
-              label: "Все",
+              id: "chapters",
+              label: "Главы и сцены",
               count: (chapStats?.adventures ?? []).reduce((n, a) => n + a.scenes, 0),
+              items: (chapStats?.adventures ?? []).map((a) => ({ id: String(a.id), label: `${a.name} · ${a.scenes}` })),
             },
-            ...(chapStats?.adventures ?? []).map((a) => ({
-              id: String(a.id),
-              label: a.name,
-              count: a.scenes,
-              items: a.chapters.map((c) => ({ id: String(c.id), label: `${c.name} · ${c.scenes}` })),
-            })),
+            {
+              id: "milestones",
+              label: "Вехи",
+              count: (mileStats?.own.total ?? 0) + (mileStats?.groups ?? []).reduce((n, g) => n + g.total, 0),
+              items: [
+                { id: "own", label: `Свои · ${mileStats?.own.done ?? 0}/${mileStats?.own.total ?? 0}` },
+                ...(mileStats?.groups ?? []).map((g) => ({ id: String(g.id), label: `${g.name} · ${g.done}/${g.total}` })),
+              ],
+            },
+            {
+              id: "secrets",
+              label: "Тайны и зацепки",
+              count: (secStats?.own.total ?? 0) + (secStats?.groups ?? []).reduce((n, g) => n + g.total, 0),
+              items: [
+                { id: "own", label: `Свои · ${secStats?.own.done ?? 0}/${secStats?.own.total ?? 0}` },
+                ...(secStats?.groups ?? []).map((g) => ({ id: String(g.id), label: `${g.name} · ${g.done}/${g.total}` })),
+              ],
+            },
+            { id: "reveals", label: "Выводы" },
           ]}
-          selection={chapSel}
-          onSelect={setChapSel}
+          selection={storySel}
+          onSelect={setStorySel}
           workspaceKey={campaignId}
         >
-          <CampaignChaptersScenes
-            campaignId={campaignId}
-            settingId={campaign.setting_id}
-            adventureId={chapSel.section === "all" ? null : Number(chapSel.section)}
-            chapterId={chapSel.item != null ? Number(chapSel.item) : null}
-            onStats={(s) => setChapStats((prev) => (JSON.stringify(prev) === JSON.stringify(s) ? prev : s))}
-          />
+          {storySel.section === "chapters" && (
+            <CampaignChaptersScenes
+              campaignId={campaignId}
+              settingId={campaign.setting_id}
+              adventureId={storySel.item != null ? Number(storySel.item) : null}
+              chapterId={null}
+              onStats={(st) => setChapStats((prev) => (JSON.stringify(prev) === JSON.stringify(st) ? prev : st))}
+            />
+          )}
+          {storySel.section === "milestones" && (
+            <CampaignMilestones
+              campaignId={campaignId}
+              settingId={campaign.setting_id}
+              groupId={storySel.item ?? null}
+              onStats={(st) => setMileStats((prev) => (JSON.stringify(prev) === JSON.stringify(st) ? prev : st))}
+            />
+          )}
+          {storySel.section === "secrets" && (
+            <CampaignSecrets
+              campaignId={campaignId}
+              settingId={campaign.setting_id}
+              groupId={storySel.item ?? null}
+              onStats={(st) => setSecStats((prev) => (JSON.stringify(prev) === JSON.stringify(st) ? prev : st))}
+            />
+          )}
+          {storySel.section === "reveals" && <CampaignRevealList campaignId={campaignId} />}
         </EntityTabWorkspace>
       )}
 
-      {tab === "Вехи" && (
-        <EntityTabWorkspace
-          sections={[
-            { id: "all", label: "Все" },
-            {
-              id: "own",
-              label: `Вехи кампании · ${mileStats?.own.done ?? 0}/${mileStats?.own.total ?? 0}`,
-              count: mileStats?.own.total ?? 0,
-            },
-            ...(mileStats?.groups ?? []).map((g) => ({
-              id: String(g.id),
-              label: `${g.name} · ${g.done}/${g.total}`,
-              count: g.total,
-            })),
-          ]}
-          selection={mileSel}
-          onSelect={setMileSel}
-          workspaceKey={campaignId}
-        >
-          <CampaignMilestones
-            campaignId={campaignId}
-            settingId={campaign.setting_id}
-            groupId={mileSel.section === "all" ? null : mileSel.section}
-            onStats={(s) => setMileStats((prev) => (JSON.stringify(prev) === JSON.stringify(s) ? prev : s))}
-          />
-        </EntityTabWorkspace>
-      )}
-
-      {tab === "Выводы" && <CampaignRevealList campaignId={campaignId} />}
-
-      {tab === "Тайны и зацепки" && (
-        <EntityTabWorkspace
-          sections={[
-            { id: "all", label: "Все" },
-            {
-              id: "own",
-              label: `Тайны кампании · ${secStats?.own.done ?? 0}/${secStats?.own.total ?? 0}`,
-              count: secStats?.own.total ?? 0,
-            },
-            ...(secStats?.groups ?? []).map((g) => ({
-              id: String(g.id),
-              label: `${g.name} · ${g.done}/${g.total}`,
-              count: g.total,
-            })),
-          ]}
-          selection={secSel}
-          onSelect={setSecSel}
-          workspaceKey={campaignId}
-        >
-          <CampaignSecrets
-            campaignId={campaignId}
-            settingId={campaign.setting_id}
-            groupId={secSel.section === "all" ? null : secSel.section}
-            onStats={(s) => setSecStats((prev) => (JSON.stringify(prev) === JSON.stringify(s) ? prev : s))}
-          />
-        </EntityTabWorkspace>
+      {tab === "Тетрадь" && (
+        // Свободные записи кампании — в листах тетради (Q31), как у сеттинга.
+        <section className="paper-groups" aria-label="Тетрадь кампании">
+          <ul className="paper-rows">
+            {workbooks.map((w) => (
+              <li key={w.id}>
+                <Link className="paper-rows__main" to={`/workbooks/${w.id}`}>
+                  {w.title} →
+                </Link>
+                <span className="paper-rows__sub">
+                  {w.template_title}
+                  {w.progress ? ` · заполнено ${w.progress.filled} из ${w.progress.total}` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
         {tab === "Обзор" && campaign.role !== "player" && (
@@ -819,7 +823,7 @@ export function CampaignDetailPage() {
                settingsList={settingsList}
                sessions={sessions}
                onSchedule={() => setCreatingDate(toLocalDateKey(new Date()))}
-               onTab={(t) => selectTab(t as (typeof GM_TABS)[number])}
+               onSecrets={() => openStory("secrets")}
              />
            </>
         )}
@@ -854,23 +858,9 @@ export function CampaignDetailPage() {
               campaignId={campaignId}
               roster={campaign.roster}
               allPlayers={allPlayers}
+              debts={debts}
+              currency={campaign.currency}
             />
-            {/* Долг стоит рядом с составом, потому что перед игрой смотрят
-                именно сюда. Считается сервером, нигде не хранится; действия над
-                ним — в самой сессии, где видно, за какой вечер и какая ставка. */}
-            {debts.length > 0 && !loadHideFinance() && (
-              <div className="card stack" style={{ gap: 6 }}>
-                <div className="player-section-header">Не оплачено</div>
-                {debts.map((d) => (
-                  <div key={d.player_id} className="row" style={{ justifyContent: "space-between", gap: 8 }}>
-                    <Link to={`/players/${d.player_id}`}>{d.player_name}</Link>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>
-                      {d.owed} · {d.sessions} {d.sessions === 1 ? "игра" : d.sessions < 5 ? "игры" : "игр"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
           </section>
           )}
           {playersSel.section === "reminders" && (
@@ -900,7 +890,6 @@ export function CampaignDetailPage() {
         <div className="chronicle-split">
           <div className="chronicle-left">
             {(() => {
-              const STATUS_LABEL: Record<string, string> = { planned: "Запланировано", held: "Состоялась", cancelled: "Отменена" };
               const filtered = chronicleFiltered;
               return (
                 <details className="card res-group" open style={{ margin: 0 }}>
@@ -918,9 +907,6 @@ export function CampaignDetailPage() {
                         onChange={(e) => setChronicleFilter(e.target.value)}
                         style={{ flex: "1 1 220px", minWidth: 180 }}
                       />
-                      <label className="row" style={{ gap: 6, fontSize: "var(--fs-meta)", cursor: "pointer" }}>
-                        <input type="checkbox" checked={showCancelled} onChange={(e) => setShowCancelled(e.target.checked)} /> Показать отменённые
-                      </label>
                       {chronicleFilter && (
                         <button onClick={() => setChronicleFilter("")}>Сбросить</button>
                       )}
@@ -939,49 +925,57 @@ export function CampaignDetailPage() {
                     ) : filtered.length === 0 ? (
                       <p className="muted">
                         Ничего не найдено.{" "}
-                        <button
-                          onClick={() => {
-                            setChronicleFilter("");
-                            setShowCancelled(true);
-                          }}
-                        >
+                        <button onClick={() => setChronicleFilter("")}>
                           Сбросить фильтр
                         </button>
                       </p>
                     ) : (
-                      <div className="timeline">
-                        {filtered.map((s) => (
-                          <div key={s.id} className="timeline-entry">
-                            <div className="timeline-date">
-                              <Link to={`/sessions/${s.id}`}>
-                                {formatDateKeyRu(s.date)} — {sessionLabel(s)}
-                              </Link>
-                              <span className={`badge ${s.status}`}>{STATUS_LABEL[s.status] ?? s.status}</span>
-                              {calendar &&
-                                formatInworldDate(s.inworld_year, s.inworld_month, s.inworld_day, calendar.months, calendar.era) && (
-                                  <span className="muted">
-                                    {formatInworldDate(s.inworld_year, s.inworld_month, s.inworld_day, calendar.months, calendar.era)}
-                                  </span>
-                                )}
-                            </div>
-                            {s.notes_text ? (
-                              <p className="reading-text" style={{ whiteSpace: "pre-wrap" }}>
-                                <MentionText text={s.notes_text} />
-                              </p>
-                            ) : (
-                              <p className="muted">
-                                Лента пуста. <Link to={`/sessions/${s.id}`}>Дописать →</Link>
-                              </p>
-                            )}
-                            <div className="row" style={{ gap: 8, marginTop: 4, flexWrap: "wrap" }}>
-                              <Link to={`/sessions/${s.id}`}>Открыть →</Link>
-                              <button onClick={() => archiveSession(s.id)} aria-label="Архивировать сессию">
-                                ✕ в архив
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                      // Строками по группам (спека campaign-paper, Q23): впереди —
+                      // от ближайшей, сыгранные — от последней. Отменённых нет.
+                      ([
+                        ["Запланированы", filtered.filter((x) => x.status === "planned").sort((x, y) => x.date.localeCompare(y.date))],
+                        ["Сыграны", filtered.filter((x) => x.status === "held").sort((x, y) => y.date.localeCompare(x.date))],
+                      ] as const).map(([title, list]) =>
+                        list.length === 0 ? null : (
+                          <section key={title} className="paper-groups">
+                            <h3 className="paper-group__head">
+                              {title} <span className="paper-group__count">· {list.length}</span>
+                            </h3>
+                            <ul className="paper-rows session-rows">
+                              {list.map((x) => {
+                                const inworld = calendar
+                                  ? formatInworldDate(x.inworld_year, x.inworld_month, x.inworld_day, calendar.months, calendar.era)
+                                  : "";
+                                const first = x.notes_text?.split("\n").find((l) => l.trim())?.trim() ?? "";
+                                return (
+                                  <li key={x.id}>
+                                    <span className="paper-rows__main">
+                                      <Link to={`/sessions/${x.id}`}>
+                                        {formatDateKeyRu(x.date)} — {sessionLabel(x)}
+                                      </Link>
+                                      {first ? (
+                                        <span className="session-rows__line">
+                                          <MentionText text={first} />
+                                        </span>
+                                      ) : (
+                                        x.status === "held" && (
+                                          <span className="session-rows__line muted">
+                                            лента пуста · <Link to={`/sessions/${x.id}`}>дописать</Link>
+                                          </span>
+                                        )
+                                      )}
+                                    </span>
+                                    {inworld && <span className="paper-rows__sub">{inworld}</span>}
+                                    <button className="comp-mini" onClick={() => archiveSession(x.id)} title="В архив" aria-label="Архивировать сессию">
+                                      ✕
+                                    </button>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </section>
+                        )
+                      )
                     )}
                   </div>
                 </details>
@@ -1458,18 +1452,22 @@ function PlayersAndCharactersTab({
   campaignId,
   roster,
   allPlayers,
+  debts,
+  currency,
 }: {
   campaignId: number;
   roster: RosterPlayer[];
   allPlayers: Player[];
+  debts: CampaignDebt[];
+  currency: string;
 }) {
+  const hideFinance = loadHideFinance();
   const run = useAction();
   // Персонажи кампании — тот же ключ, что у пульта.
   const characters = useResource<Character[]>(campaignPaths.characters(campaignId)).data ?? NO_CHARACTERS;
   const [addingFor, setAddingFor] = useState<number | null>(null);
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   const [peekCharId, setPeekCharId] = useState<number | null>(null);
-  const thumbnailStyles = loadThumbnailStyles();
   const [pcConfirmDialog, pcConfirm] = useConfirm();
   const [pcAlertDialog, showPcAlert] = useAlert();
 
@@ -1537,40 +1535,70 @@ function PlayersAndCharactersTab({
           action={available.length > 0 ? <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Выберите игрока выше ↑</span> : <Link to="/players">Создать игрока →</Link>}
         />
       ) : (
-        <div className="grid-cards roster-grid">
+        // Состав строками (спека campaign-paper, Q21): игрок · персонажи ·
+        // статус · долг. Тамбнейл игрока правится на его профиле.
+        <ul className="paper-rows roster-rows">
           {roster.map((p) => {
             const playerCharacters = characters.filter((c) => c.player_id === p.id);
-            const firstAvatar = playerCharacters.find((c) => c.avatar_image_url)?.avatar_image_url;
+            const isLeft = p.roster_status === "left";
+            const debt = debts.find((d) => d.player_id === p.id);
             return (
-              <RosterCard
-                key={p.id}
-                player={p}
-                fallbackAvatar={firstAvatar ?? null}
-                thumbnailStyle={thumbnailStyles.roster}
-                addingCharacter={addingFor === p.id}
-                charNameDraft={drafts[p.id] ?? ""}
-                onCharNameDraftChange={(v) => setDrafts((d) => ({ ...d, [p.id]: v }))}
-                onStartAddCharacter={() => setAddingFor(p.id)}
-                onCancelAddCharacter={() => { setAddingFor(null); setDrafts((d) => ({ ...d, [p.id]: "" })); }}
-                onAddCharacter={() => addCharacter(p.id)}
-                onToggleLeft={() => toggleLeft(p.id, p.roster_status)}
-                onRemove={() => removeFromRoster(p.id)}
-                campaignId={campaignId}
-              >
-                {playerCharacters.map((c) => (
-                  <span key={c.id} className="row" style={{ gap: 4, flexWrap: "nowrap" }}>
-                    <Link to={`/characters/${c.id}`} className="badge tag">
-                      {c.character_name}
-                    </Link>
-                    <button className="comp-mini" onClick={() => setPeekCharId(c.id)} aria-label={`Быстрый просмотр ${c.character_name}`} title="Быстрый просмотр">
-                      <NavIcon name="eye" />
+              <li key={p.id} className={isLeft ? "is-left" : undefined}>
+                <span className="paper-rows__main">
+                  <Link to={`/players/${p.id}`}>{p.name}</Link>
+                  {isLeft && <span className="badge cancelled">покинул</span>}
+                </span>
+                <span className="roster-rows__chars">
+                  {playerCharacters.map((c) => (
+                    <span key={c.id} className="roster-rows__char">
+                      <Link to={`/characters/${c.id}`}>{c.character_name}</Link>
+                      <button className="comp-mini" onClick={() => setPeekCharId(c.id)} aria-label={`Быстрый просмотр ${c.character_name}`} title="Быстрый просмотр">
+                        <NavIcon name="eye" />
+                      </button>
+                    </span>
+                  ))}
+                  {addingFor === p.id ? (
+                    <span className="roster-rows__add">
+                      <input
+                        autoFocus
+                        placeholder="Имя персонажа"
+                        value={drafts[p.id] ?? ""}
+                        onChange={(e) => setDrafts((d) => ({ ...d, [p.id]: e.target.value }))}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") void addCharacter(p.id);
+                          if (e.key === "Escape") {
+                            setAddingFor(null);
+                            setDrafts((d) => ({ ...d, [p.id]: "" }));
+                          }
+                        }}
+                      />
+                      <button className="primary" onClick={() => void addCharacter(p.id)} disabled={!(drafts[p.id] ?? "").trim()}>
+                        ОК
+                      </button>
+                    </span>
+                  ) : (
+                    <button className="comp-mini" onClick={() => setAddingFor(p.id)}>
+                      + персонаж
                     </button>
+                  )}
+                </span>
+                {debt && !hideFinance && (
+                  <span className="paper-rows__sub roster-rows__debt">
+                    долг {debt.owed} {currency} · {debt.sessions} {debt.sessions === 1 ? "игра" : debt.sessions < 5 ? "игры" : "игр"}
                   </span>
-                ))}
-              </RosterCard>
+                )}
+                <span className="roster-rows__actions">
+                  <button className="comp-mini" onClick={() => void toggleLeft(p.id, p.roster_status)}>
+                    {isLeft ? "Вернуть" : "Покинул"}
+                  </button>
+                  <button className="comp-mini" title="Убрать из состава" aria-label={`Убрать ${p.name} из состава`} onClick={() => void removeFromRoster(p.id)}>
+                    ✕
+                  </button>
+                </span>
+              </li>
             );
           })}
-          </div>
+        </ul>
        )}
       {characters.length > 0 && <CampaignSquadSummary characters={characters} />}
       {characters.length > 0 && <CampaignSquadDates characters={characters} />}
@@ -1764,116 +1792,6 @@ function CharacterPeekModal({ characterId, onClose }: { characterId: number; onC
   );
 }
 
-function RosterCard({
-  player,
-  fallbackAvatar,
-  thumbnailStyle,
-  addingCharacter,
-  charNameDraft,
-  onCharNameDraftChange,
-  onStartAddCharacter,
-  onCancelAddCharacter,
-  onAddCharacter,
-  onToggleLeft,
-  onRemove,
-  campaignId,
-  children,
-}: {
-  player: RosterPlayer;
-  fallbackAvatar: string | null;
-  thumbnailStyle: ThumbnailStyle;
-  addingCharacter: boolean;
-  charNameDraft: string;
-  onCharNameDraftChange: (v: string) => void;
-  onStartAddCharacter: () => void;
-  onCancelAddCharacter: () => void;
-  onAddCharacter: () => void;
-  onToggleLeft: () => void;
-  onRemove: () => void;
-  campaignId: number;
-  children: ReactNode;
-}) {
-  const run = useAction();
-  // Окно обрезки закрывается сразу — отказ загрузки виден только плашкой.
-  async function handleThumbnailChange(file: File | null) {
-    if (!file) return;
-    const form = new FormData();
-    form.append("file", file);
-    await run(labelled("Тамбнейл игрока", () => write.post(`/players/${player.id}/thumbnail`, form, { timeoutMs: UPLOAD_TIMEOUT_MS })), {
-      affects: [{ kind: "player", id: player.id }, ...rosterAffects(campaignId)],
-    });
-  }
-  const thumbnailCrop = useImageCrop("thumbnail", handleThumbnailChange);
-
-  const thumb = cardThumbnailProps(thumbnailStyle, player.thumbnail_image_url ?? fallbackAvatar);
-
-  const isLeft = player.roster_status === "left";
-  return (
-    <div className={`card roster-card ${thumb.className}${isLeft ? " is-left" : ""}`} style={thumb.style}>
-      <label className="roster-card-thumb-btn" title="Изменить тамбнейл" aria-label="Изменить тамбнейл">
-        <NavIcon name="image" />
-        <input
-          type="file"
-          accept={IMAGE_ACCEPT}
-          style={{ display: "none" }}
-          onChange={(e) => thumbnailCrop.onSelect(e.target.files?.[0] ?? null)}
-        />
-      </label>
-      {thumbnailCrop.modal}
-      {thumb.showBanner && (
-        thumb.bannerUrl ? (
-          <div className="roster-card-cover cover-halftone">
-            <div className="cover-art cover-photo">
-              <div className="cover-art-image" style={{ backgroundImage: `url("${thumb.bannerUrl}")` }} aria-hidden="true" />
-            </div>
-          </div>
-        ) : (
-          <div className="roster-card-cover campaign-card-band zine-grain zine-torn-bottom-b" />
-        )
-      )}
-      <div className="roster-card-body stack">
-        <div className="row" style={{ flexWrap: "wrap", alignItems: "center", gap: 8 }}>
-          <Link to={`/players/${player.id}`} className="roster-card-name">
-            {player.name}
-          </Link>
-          {isLeft && <span className="badge cancelled">Покинул</span>}
-        </div>
-        <div className="row" style={{ flexWrap: "wrap", gap: 6, minHeight: 22 }}>
-          {children}
-          {addingCharacter ? (
-            <>
-              <input
-                autoFocus
-                placeholder="Имя персонажа"
-                value={charNameDraft}
-                onChange={(e) => onCharNameDraftChange(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") onAddCharacter();
-                  if (e.key === "Escape") onCancelAddCharacter();
-                }}
-                style={{ minWidth: 120, flex: "1 1 120px" }}
-              />
-              <button className="primary" onClick={onAddCharacter} disabled={!charNameDraft.trim()}>
-                ОК
-              </button>
-              <button onClick={onCancelAddCharacter} aria-label="Отмена">✕</button>
-            </>
-          ) : (
-            <button className="btn-capsule" onClick={onStartAddCharacter}>
-              + Персонаж
-            </button>
-          )}
-        </div>
-        <div className="row roster-card-actions" style={{ flexWrap: "wrap", gap: 6 }}>
-          <button className={isLeft ? "primary" : ""} onClick={onToggleLeft}>
-            {isLeft ? "Вернуть в состав" : "Покинул"}
-          </button>
-          <button className="danger" onClick={onRemove}>Убрать</button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function PlayerCharacterTab({ campaignId }: { campaignId: number }) {
   const run = useAction();
@@ -2153,14 +2071,14 @@ function OverviewTab({
   settingsList,
   sessions,
   onSchedule,
-  onTab,
+  onSecrets,
 }: {
   campaign: CampaignDetail;
   systems: System[];
   settingsList: Setting[];
   sessions: SessionSummary[];
   onSchedule: () => void;
-  onTab: (tab: string) => void;
+  onSecrets: () => void;
 }) {
   const campaignId = campaign.id;
   const oneshot = campaign.type === "oneshot";
@@ -2417,7 +2335,7 @@ function OverviewTab({
           oneshot={oneshot}
           sessions={sessions}
           onSchedule={onSchedule}
-          onSecrets={() => onTab("Тайны и зацепки")}
+          onSecrets={onSecrets}
         />
         <CampaignPassport campaign={campaign} />
         <section className="paper-groups">
@@ -2566,4 +2484,5 @@ function useCampaignGroups(campaignId: number) {
 }
 
 const NO_GROUPS: CampaignGroup[] = [];
+const NO_WORKBOOKS: InstanceSummary[] = [];
 const NO_CHARACTERS: Character[] = [];
