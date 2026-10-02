@@ -81,6 +81,7 @@ import { campaignSettingEntitiesRouter } from "./routes/campaignSettingEntities"
 import { storyRouter } from "./routes/story";
 import { participationsRouter } from "./routes/participations";
 import { vehiclePlansRouter } from "./routes/vehiclePlans";
+import { campaignVesselsRouter } from "./routes/campaignVessels";
 import { canvasRouter } from "./routes/canvas";
 import { adventureImportRouter } from "./routes/adventureImport";
 import { systemImportRouter } from "./routes/systemImport";
@@ -486,6 +487,7 @@ app.use("/api/campaign-setting-entities", campaignSettingEntitiesRouter);
 app.use("/api/story", storyRouter);
 app.use("/api/participations", participationsRouter);
 app.use("/api/vehicle-plans", vehiclePlansRouter);
+app.use("/api/campaign-vessels", campaignVesselsRouter);
 app.use("/api/canvas", canvasRouter);
 app.use("/api/import", adventureImportRouter);
 app.use("/api/system-import", systemImportRouter);

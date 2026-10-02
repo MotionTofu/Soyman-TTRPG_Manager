@@ -7198,6 +7198,56 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     database.exec("CREATE INDEX idx_blueprint_pins_entry ON blueprint_pins (entry_id)");
   }
 
+  // Корабль кампании (спека profiles-paper-2, «Корабль кампании»): запись на
+  // основе судна компендиума. Статы, посты и чертёж — живой ссылкой на основу;
+  // своё — имя, текущие хиты корпуса и постов, экипаж, груз, заметки.
+  // Хиты NULL — «целый»: максимум берётся из основы и может поменяться.
+  if (!tableExists(database, "campaign_vessels")) {
+    database.exec(`CREATE TABLE campaign_vessels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+      entry_id INTEGER REFERENCES compendium_entries(id) ON DELETE SET NULL,
+      name TEXT NOT NULL,
+      hull_hp INTEGER,
+      notes TEXT NOT NULL DEFAULT '',
+      position INTEGER NOT NULL DEFAULT 0,
+      archived_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+    database.exec("CREATE INDEX idx_campaign_vessels_campaign ON campaign_vessels (campaign_id)");
+  }
+  if (!tableExists(database, "campaign_vessel_posts")) {
+    database.exec(`CREATE TABLE campaign_vessel_posts (
+      vessel_id INTEGER NOT NULL REFERENCES campaign_vessels(id) ON DELETE CASCADE,
+      post_id INTEGER NOT NULL REFERENCES compendium_entries(id) ON DELETE CASCADE,
+      hp INTEGER,
+      unnamed INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (vessel_id, post_id)
+    )`);
+  }
+  if (!tableExists(database, "campaign_vessel_crew")) {
+    database.exec(`CREATE TABLE campaign_vessel_crew (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      vessel_id INTEGER NOT NULL REFERENCES campaign_vessels(id) ON DELETE CASCADE,
+      post_id INTEGER NOT NULL REFERENCES compendium_entries(id) ON DELETE CASCADE,
+      character_id INTEGER REFERENCES characters(id) ON DELETE CASCADE,
+      being_id INTEGER REFERENCES setting_beings(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      CHECK ((character_id IS NULL) != (being_id IS NULL))
+    )`);
+    database.exec("CREATE INDEX idx_campaign_vessel_crew_vessel ON campaign_vessel_crew (vessel_id)");
+  }
+  if (!tableExists(database, "campaign_vessel_cargo")) {
+    database.exec(`CREATE TABLE campaign_vessel_cargo (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      vessel_id INTEGER NOT NULL REFERENCES campaign_vessels(id) ON DELETE CASCADE,
+      text TEXT NOT NULL DEFAULT '',
+      amount TEXT NOT NULL DEFAULT '',
+      position INTEGER NOT NULL DEFAULT 0
+    )`);
+    database.exec("CREATE INDEX idx_campaign_vessel_cargo_vessel ON campaign_vessel_cargo (vessel_id)");
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);

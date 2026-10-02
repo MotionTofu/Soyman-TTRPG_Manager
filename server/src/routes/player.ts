@@ -24,6 +24,7 @@ import { normalizeDndCharacter, deriveSheet } from "@soyman/shared";
 import { matchSystemId, parsePortableImport, portableHttpError, type PortableImportData } from "../services/portableImport";
 import { setCharacterRoll, mirrorSheetRollToQueue } from "../services/initiativeSync";
 import { noteSessionFor } from "../services/sheetNotes";
+import { vesselView, type VesselRow } from "../services/campaignVessels";
 import { prefixOf, sourceCodeOf } from "../services/mentions";
 import {
   LINKABLE_TYPES,
@@ -1099,6 +1100,20 @@ playerRouter.get("/campaigns/:id/party", (req: AuthedRequest, res) => {
     )
     .all(campaignId, playerId) as { id: number; character_name: string; player_name: string; avatar_image_path: string | null }[];
   res.json(party.map((m) => ({ ...m, avatar_image_url: m.avatar_image_path ? toFileUrl(m.avatar_image_path) : null })));
+});
+
+// Корабли кампании (спека profiles-paper-2, «Корабль кампании»): вкладка
+// «Группа», только чтение — имя, чертёж с экипажем, прочность. Заметки
+// Мастера не уходят, архивные корабли тоже.
+playerRouter.get("/campaigns/:id/vessels", (req: AuthedRequest, res) => {
+  const campaignId = Number(req.params.id);
+  if (!myCampaignIds(req.user!.playerId!).includes(campaignId)) {
+    return res.status(404).json({ error: "not found" });
+  }
+  const rows = db
+    .prepare("SELECT * FROM campaign_vessels WHERE campaign_id = ? AND archived_at IS NULL ORDER BY position, id")
+    .all(campaignId) as VesselRow[];
+  res.json(rows.map((v) => vesselView(v, { gm: false })));
 });
 
 // GM-authored custom "Для игроков" sections/articles for one of the player's
