@@ -1948,6 +1948,15 @@
   }
 }
 
+/* Текст шапки на листе — чернилами: на тёмной теме прежний цвет плашки
+   (--on-surface) был светлым по светлой бумаге. */
+.paper-sheet .campaign-player-header :is(strong, .entry-title) {
+  color: var(--paper-ink);
+}
+.paper-sheet .campaign-player-header .muted {
+  color: var(--paper-muted);
+}
+
 /* Событие мира в хронике кампании (Q28): помечено, правится в сеттинге. */
 .chronicle-source {
   padding: 0 var(--sp-2);
