@@ -25,6 +25,14 @@ export const PARTICIPATION_FIELDS = [
   { key: "plan", label: "План" },
   { key: "without", label: "Без вмешательства" },
   { key: "if_help", label: "Если помочь" },
+  { key: "if_deprived", label: "Если лишить рычага" },
+] as const;
+
+/** Персонаж игрока в кампании (словарь №21, гриллинг 2026-10-02, Q16). */
+export const PC_PARTICIPATION_FIELDS = [
+  { key: "why_here", label: "Почему здесь" },
+  { key: "stake", label: "Личная ставка" },
+  { key: "why_now", label: "Почему сейчас" },
 ] as const;
 
 export type ParticipationKey = (typeof PARTICIPATION_FIELDS)[number]["key"];
