@@ -1,9 +1,19 @@
 import { Router } from "express";
+import multer from "multer";
 import path from "path";
 import { db } from "../db/db";
 import { kindOf } from "../db/entityKinds";
 import { entityName, entityNames, refKey } from "../services/entityNames";
-import { ensureSubfolder, readFileAsBase64, sanitizeName, toFileUrl, vaultAbs, vaultRel, writeBase64File } from "../services/filesystem";
+import {
+  ensureSubfolder,
+  readFileAsBase64,
+  sanitizeName,
+  toFileUrl,
+  vaultAbs,
+  vaultRel,
+  writeBase64File,
+  writeReplacingOldFile,
+} from "../services/filesystem";
 import { storeDeduped } from "../services/vaultDedup";
 import { pruneRoutesForKeys } from "./canvas";
 import {
@@ -288,6 +298,7 @@ interface ArcRow {
   campaign_id: number | null;
   source_arc_id: number | null;
   name: string;
+  thumbnail_image_path: string | null;
   is_default: number;
   position: number;
 }
@@ -315,6 +326,9 @@ function applyArcOverride(
   if (!override) return { ...arc, is_override: false, override_id: null };
   const patch: Record<string, unknown> = {};
   for (const f of ARC_OVERRIDE_FIELDS) patch[f] = override[f];
+  // Обложка — не поле правки (путь пишет только загрузка), но копия кампании
+  // может носить свою.
+  patch.thumbnail_image_path = override.thumbnail_image_path;
   return { ...arc, ...patch, is_override: true, override_id: override.id as number };
 }
 
@@ -565,8 +579,10 @@ storyRouter.get("/arcs/:id", (req, res) => {
           .all(arc.setting_id, ...beingIds) as unknown[])
       : [];
   const shown = applyArcOverride(arc as unknown as Record<string, unknown>, overrides?.get(arc.id));
+  const thumbPath = shown.thumbnail_image_path as string | null;
   res.json({
     ...shown,
+    thumbnail_image_url: thumbPath ? toFileUrl(thumbPath) : null,
     passport: parseArcPassport(shown.passport),
     outcomes: parseOutcomes(shown.outcomes),
     chapters: chapters.map((c) =>
@@ -733,6 +749,46 @@ storyRouter.put("/arcs/:id", (req, res) => {
   if (campaignId == null) return res.json(saved);
   const original = db.prepare("SELECT * FROM story_arcs WHERE id = ?").get(req.params.id) as Record<string, unknown>;
   res.json(applyArcOverride(original, saved));
+});
+
+const COVER_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
+const coverUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter(_req, file, cb) {
+    if (/^image\/(jpeg|png|gif|webp|avif)$/.test(file.mimetype)) cb(null, true);
+    else cb(new Error("Only image files are allowed"));
+  },
+});
+
+// Обложка приключения (гриллинг профилей 2026-10-02, доска 37). Из кампании
+// уходит в её копию приключения отдельным файлом: оригинал сеттинга и другие
+// кампании своей обложки не теряют.
+storyRouter.post("/arcs/:id/thumbnail", coverUpload.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "file is required" });
+  const ext = (path.extname(req.file.originalname) || ".jpg").toLowerCase();
+  if (!COVER_EXTS.has(ext)) return res.status(400).json({ error: "Unsupported image extension" });
+  const campaignId = req.body.campaign_id ? Number(req.body.campaign_id) : null;
+  const target = resolveWritableArc(Number(req.params.id), campaignId);
+  if (!target) return res.status(404).json({ error: "not found" });
+  const original = db.prepare("SELECT name FROM story_arcs WHERE id = ?").get(target.source_arc_id ?? target.id) as {
+    name: string;
+  };
+  const folder = adventureImageFolder(target.setting_id, original.name);
+  if (!folder) return res.status(400).json({ error: "У сеттинга нет папки" });
+  const file = path.join(folder, target.campaign_id ? `cover-campaign-${target.campaign_id}${ext}` : `cover${ext}`);
+  // Копия кампании до первой своей обложки носит путь оригинала — его не трогаем.
+  const old = target.thumbnail_image_path;
+  const shared =
+    old != null &&
+    !!db.prepare("SELECT 1 FROM story_arcs WHERE thumbnail_image_path = ? AND id != ?").get(old, target.id);
+  await writeReplacingOldFile(file, req.file.buffer, shared ? null : old, "thumbnail");
+  const stored = vaultRel(file);
+  db.prepare("UPDATE story_arcs SET thumbnail_image_path = ?, updated_at = datetime('now') WHERE id = ?").run(
+    stored,
+    target.id
+  );
+  res.json({ thumbnail_image_path: stored, thumbnail_image_url: toFileUrl(stored) });
 });
 
 // Отказ от собственной версии приключения: копия кампании удаляется, и

@@ -1267,6 +1267,8 @@ export interface StoryArc {
   source: string;
   tags: string;
   thumbnail_image_path: string | null;
+  /** Адрес обложки; отдаёт только карточка приключения (GET /story/arcs/:id). */
+  thumbnail_image_url?: string | null;
   // The setting's single auto-created "Сцены вне приключений" bucket: can't
   // be renamed or archived.
   is_default: number;
