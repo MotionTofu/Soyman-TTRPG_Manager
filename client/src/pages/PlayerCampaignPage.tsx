@@ -14,6 +14,7 @@ import { toLocalDateKey } from "../utils/date";
 import { useTabState } from "../hooks/useTabState";
 import { CampaignJournal } from "../components/player/CampaignJournal";
 import { buildSettingReaderGroups } from "../components/player/settingReaderEntries";
+import { PlayerVessels } from "../components/PlayerVessels";
 import type {
   JournalFolder,
   PartyMember,
@@ -406,6 +407,7 @@ export function PlayerCampaignPage() {
               </div>
             ))}
           </div>
+          <PlayerVessels campaignId={campaignId} />
         </div>
       )}
       {loreToast && (

@@ -98,10 +98,13 @@ import { PresentationEditor } from "../components/presentation/PresentationEdito
 import { EntityTabWorkspace } from "../components/EntityTabWorkspace";
 import { sessionLabel } from "../sessionLabel";
 import { CampaignRevealList } from "../components/RevealList";
+import { CampaignVesselsTab } from "../components/CampaignVesselsTab";
 
 const GM_TABS = [
   "Обзор",
   "Игроки и персонажи",
+  // Корабли партии — сразу за составом (спека profiles-paper-2, «Корабль кампании»).
+  "Транспорт",
   // Сюжет кампании стоит сразу за игроками: к игре готовятся по нему, а не
   // по мастерским заметкам.
   "Главы и сцены",
@@ -883,6 +886,8 @@ export function CampaignDetailPage() {
           )}
         </EntityTabWorkspace>
       )}
+
+      {tab === "Транспорт" && <CampaignVesselsTab campaignId={campaignId} />}
 
       {tab === "Сессии" && (
         <div className="chronicle-split">

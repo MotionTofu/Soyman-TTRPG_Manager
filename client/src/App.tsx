@@ -21,6 +21,7 @@ import { MentionPreviewRoot } from "./components/mentions/MentionPreviewRoot";
 // the { default } shape React.lazy expects.
 const HomeCalendarPage = lazy(() => import("./pages/HomeCalendarPage").then((m) => ({ default: m.HomeCalendarPage })));
 const PlayerHomePage = lazy(() => import("./pages/PlayerHomePage").then((m) => ({ default: m.PlayerHomePage })));
+const CampaignVesselPage = lazy(() => import("./pages/CampaignVesselPage").then((m) => ({ default: m.CampaignVesselPage })));
 const CampaignsListPage = lazy(() => import("./pages/CampaignsListPage").then((m) => ({ default: m.CampaignsListPage })));
 const LibraryPage = lazy(() => import("./pages/LibraryPage").then((m) => ({ default: m.LibraryPage })));
 const NowPlayingPage = lazy(() => import("./pages/NowPlayingPage").then((m) => ({ default: m.NowPlayingPage })));
@@ -214,6 +215,7 @@ function App() {
               <Route path="/now-playing" element={<NowPlayingPage />} />
               <Route path="/campaigns" element={<CampaignsRoute />} />
               <Route path="/campaigns/:id" element={<CampaignDetailRoute />} />
+              <Route path="/campaigns/:id/vessels/:vesselId" element={<CampaignVesselPage />} />
               <Route path="/sessions/:id" element={<SessionDetailPage />} />
               <Route path="/sessions/:id/live" element={<SessionLivePage />} />
               <Route path="/players" element={<PlayersListPage />} />
