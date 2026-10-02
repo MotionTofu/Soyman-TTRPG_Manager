@@ -7162,6 +7162,19 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     )`);
   }
 
+  // Приключение (гриллинг профилей 2026-10-02, Q14–Q15): паспорт ключами
+  // паспорта сеттинга и «Чем кончилось» по осям — JSON по закрытому набору
+  // ключей (services/settingWorld); достоверность тайны — известно · слух ·
+  // спорно (словарь граф §1), пусто — не указана.
+  for (const column of ["passport", "outcomes"]) {
+    if (!columnExists(database, "story_arcs", column)) {
+      database.exec(`ALTER TABLE story_arcs ADD COLUMN ${column} TEXT NOT NULL DEFAULT '{}'`);
+    }
+  }
+  if (!columnExists(database, "story_secrets", "certainty")) {
+    database.exec("ALTER TABLE story_secrets ADD COLUMN certainty TEXT NOT NULL DEFAULT ''");
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);

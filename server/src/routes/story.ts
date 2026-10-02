@@ -38,6 +38,7 @@ import {
 } from "../story/cast";
 import { SCENE_FRAME_FIELDS } from "../story/sceneFrame";
 import { parseSceneParticipation, serializeSceneParticipation } from "../services/beingForce";
+import { CERTAINTY, parseArcPassport, parseOutcomes, serializeArcPassport, serializeOutcomes } from "../services/settingWorld";
 
 export const storyRouter = Router();
 
@@ -271,6 +272,10 @@ const ARC_OVERRIDE_FIELDS = [
   "tags",
   "node_role",
   "node_trigger",
+  // Паспорт и «Чем кончилось» (гриллинг профилей 2026-10-02, Q14–Q15):
+  // JSON по закрытому набору ключей, приводится на входе в PUT.
+  "passport",
+  "outcomes",
 ] as const;
 
 // Роль приключения на карте кампании; тупика на этом уровне нет (Q36).
@@ -334,10 +339,10 @@ function resolveWritableArc(arcId: number, campaignId: number | null): ArcRow | 
       `INSERT INTO story_arcs
          (setting_id, parent_id, campaign_id, source_arc_id, name, kind, description, hook,
           recommended_level, player_count, duration, source, tags, thumbnail_image_path,
-          is_default, position, node_role, node_trigger)
+          is_default, position, node_role, node_trigger, passport, outcomes)
        SELECT setting_id, parent_id, ?, id, name, kind, description, hook,
               recommended_level, player_count, duration, source, tags, thumbnail_image_path,
-              0, position, node_role, node_trigger
+              0, position, node_role, node_trigger, passport, outcomes
        FROM story_arcs WHERE id = ?`
     )
     .run(campaignId, arcId);
@@ -358,6 +363,8 @@ const ARC_FIELDS = [
   "parent_id",
   "node_role",
   "node_trigger",
+  "passport",
+  "outcomes",
 ] as const;
 
 // Every setting owns exactly one "Сцены вне приключений" adventure so a scene
@@ -557,8 +564,11 @@ storyRouter.get("/arcs/:id", (req, res) => {
           )
           .all(arc.setting_id, ...beingIds) as unknown[])
       : [];
+  const shown = applyArcOverride(arc as unknown as Record<string, unknown>, overrides?.get(arc.id));
   res.json({
-    ...applyArcOverride(arc as unknown as Record<string, unknown>, overrides?.get(arc.id)),
+    ...shown,
+    passport: parseArcPassport(shown.passport),
+    outcomes: parseOutcomes(shown.outcomes),
     chapters: chapters.map((c) =>
       applyArcOverride(c as unknown as Record<string, unknown>, overrides?.get(c.id))
     ),
@@ -700,6 +710,8 @@ storyRouter.put("/arcs/:id", (req, res) => {
   const target = resolveWritableArc(Number(req.params.id), campaignId);
   if (!target) return res.status(404).json({ error: "not found" });
   const allowed: readonly string[] = campaignId != null ? ARC_OVERRIDE_FIELDS : ARC_FIELDS;
+  if (req.body.passport !== undefined) req.body.passport = serializeArcPassport(req.body.passport);
+  if (req.body.outcomes !== undefined) req.body.outcomes = serializeOutcomes(req.body.outcomes);
 
   const sets: string[] = [];
   const values: unknown[] = [];
@@ -1196,11 +1208,14 @@ storyRouter.post("/arcs/:id/secrets", (req, res) => {
 });
 
 storyRouter.put("/secrets/:secretId", (req, res) => {
-  const { title, content, kind } = req.body as Record<string, string | undefined>;
+  const { title, content, kind, certainty } = req.body as Record<string, string | undefined>;
+  // Достоверность (словарь §1): известно · слух · спорно; пустая — снять.
+  if (certainty !== undefined && certainty !== "" && !(CERTAINTY as readonly string[]).includes(certainty))
+    return res.status(400).json({ error: "invalid certainty" });
   db.prepare(
     `UPDATE story_secrets SET title = COALESCE(?, title), content = COALESCE(?, content),
-       kind = COALESCE(?, kind) WHERE id = ?`
-  ).run(title ?? null, content ?? null, kind ?? null, req.params.secretId);
+       kind = COALESCE(?, kind), certainty = COALESCE(?, certainty) WHERE id = ?`
+  ).run(title ?? null, content ?? null, kind ?? null, certainty ?? null, req.params.secretId);
   res.json(db.prepare("SELECT * FROM story_secrets WHERE id = ?").get(req.params.secretId));
 });
 
@@ -1686,6 +1701,7 @@ export function buildAdventureExportData(arcId: number | string): Record<string,
       recommended_level: arc.recommended_level, player_count: arc.player_count,
       duration: arc.duration, source: arc.source, tags: arc.tags,
       node_role: arc.node_role, node_trigger: arc.node_trigger,
+      passport: parseArcPassport(arc.passport),
       thumbnail_image_path: thumbData,
     },
     chapters: chapters.map((ch) => ({ name: ch.name, description: ch.description, position: ch.position })),
@@ -1863,6 +1879,9 @@ export async function importAdventureExport(
       adv.tags ?? "", thumbnail, 0
     );
     const newArcId = Number(arcResult.lastInsertRowid);
+    if (adv.passport !== undefined) {
+      db.prepare("UPDATE story_arcs SET passport = ? WHERE id = ?").run(serializeArcPassport(adv.passport), newArcId);
+    }
     // Роль узла карты кампании (шаг 8); незнакомая — обычная.
     if (adv.node_role && ARC_ROLES.has(String(adv.node_role))) {
       db.prepare("UPDATE story_arcs SET node_role = ?, node_trigger = ? WHERE id = ?").run(
