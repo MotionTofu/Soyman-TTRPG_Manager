@@ -3,6 +3,7 @@ import { useSearch } from "../data/search";
 import { resolveEntityLabel } from "../api/resolveEntity";
 import { useAction, useResource, write } from "../data/hooks";
 import { linkAffects, linksPath } from "../data/sessions";
+import type { Affect } from "../data/entities";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { EntityPreviewModal } from "./EntityPreviewModal";
 import { DETAIL_ROUTES } from "../entityTypes";
@@ -19,6 +20,8 @@ interface GenericLink {
   to_id: number;
   origin: string;
   qty: string | null;
+  /** Роль в сцене и тактика (Q18) — только у сюжетных персонажей и препятствий. */
+  participation?: { role?: string; tactic?: string } | null;
 }
 
 interface Entry {
@@ -28,6 +31,7 @@ interface Entry {
   label: string;
   origin: string;
   qty: string | null;
+  participation?: { role?: string; tactic?: string } | null;
   /** Пришёл объединением по сценам сессии, а не связью. */
   fromScenes?: string[];
   inScene?: boolean;
@@ -66,6 +70,10 @@ interface Props {
   // Пульт кладёт место в докстанцию (решения 2026-09-11, §2). Ссылка должна
   // быть стабильной — компонент мемоизирован.
   onEntityClick?: (type: string, id: number, event: React.MouseEvent) => boolean;
+  // Роль в сцене и тактика под каждым (гриллинг 2026-10-02, Q18): кто он
+  // здесь и как действует. Только на странице сцены, у «Сюжетных
+  // персонажей» и «Препятствий».
+  participation?: boolean;
 }
 
 // Memoized — see ObstacleDropZone's comment. acceptTypes/mentionTypes are
@@ -85,6 +93,7 @@ export const SectionDropZone = memo(function SectionDropZone({
   acceptCompendiumKinds,
   unionRows,
   toInitiative,
+  participation,
 }: Props) {
   // Связи секции — из кэша слоя данных. Запуск сцены подменяет состав панели на
   // сервере и задевает связи сессии (data/sessions.ts): зона перечитывается
@@ -108,7 +117,15 @@ export const SectionDropZone = memo(function SectionDropZone({
             : { type: l.from_type, id: l.from_id };
         try {
           const label = await resolveEntityLabel(other.type, other.id);
-          return { linkId: l.id, type: other.type, id: other.id, label, origin: l.origin, qty: l.qty ?? null } as Entry;
+          return {
+            linkId: l.id,
+            type: other.type,
+            id: other.id,
+            label,
+            origin: l.origin,
+            qty: l.qty ?? null,
+            participation: l.participation ?? null,
+          } as Entry;
         } catch {
           return null;
         }
@@ -251,8 +268,8 @@ export const SectionDropZone = memo(function SectionDropZone({
       {entries.length > 0 && filteredEntries.length === 0 && <span className="muted">Ничего не найдено по фильтру.</span>}
       <div className="stack" style={{ gap: 0 }}>
         {filteredEntries.map((entry) => (
+          <div key={`${entry.type}-${entry.id}`} className={participation ? "cast-row" : undefined}>
           <div
-            key={`${entry.type}-${entry.id}`}
             className="resource-row row"
             style={{
               justifyContent: "space-between",
@@ -320,6 +337,14 @@ export const SectionDropZone = memo(function SectionDropZone({
                 ✕
               </button>
             )}
+          </div>
+          {participation && entry.linkId !== null && (
+            <CastRole
+              linkId={entry.linkId}
+              value={entry.participation ?? null}
+              affects={linkAffects(entityType, entityId)}
+            />
+          )}
           </div>
         ))}
       </div>
@@ -395,5 +420,58 @@ function DropZonePicker({
         <div className="row"><button type="button" onClick={onClose}>Закрыть</button></div>
       </div>
     </Modal>
+  );
+}
+
+/**
+ * Роль и тактика участника сцены (гриллинг 2026-10-02, Q18; доска 35):
+ * строкой под именем, правка на месте. Пустое — тихое «+ роль и тактика».
+ */
+function CastRole({
+  linkId,
+  value,
+  affects,
+}: {
+  linkId: number;
+  value: { role?: string; tactic?: string } | null;
+  affects: Affect[];
+}) {
+  const run = useAction();
+  const [editing, setEditing] = useState(false);
+  const [role, setRole] = useState("");
+  const [tactic, setTactic] = useState("");
+  const filled = !!(value?.role?.trim() || value?.tactic?.trim());
+
+  function start() {
+    setRole(value?.role ?? "");
+    setTactic(value?.tactic ?? "");
+    setEditing(true);
+  }
+  async function save() {
+    const ok = await run(
+      () => write.put(`/story/cast/${linkId}/participation`, { data: { role, tactic } }).then(() => true),
+      { affects }
+    );
+    if (ok) setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div className="cast-role cast-role--edit">
+        <input value={role} placeholder="Роль в сцене" aria-label="Роль в сцене" onChange={(e) => setRole(e.target.value)} />
+        <input value={tactic} placeholder="Тактика: как действует здесь" aria-label="Тактика" onChange={(e) => setTactic(e.target.value)} />
+        <button type="button" className="primary" onClick={save}>
+          Сохранить
+        </button>
+        <button type="button" onClick={() => setEditing(false)}>
+          Отмена
+        </button>
+      </div>
+    );
+  }
+  return (
+    <button type="button" className={`cast-role${filled ? "" : " is-empty"}`} onClick={start} title="Роль в сцене и тактика">
+      {filled ? [value?.role, value?.tactic].filter((t) => t?.trim()).join(" — ") : "+ роль и тактика"}
+    </button>
   );
 }

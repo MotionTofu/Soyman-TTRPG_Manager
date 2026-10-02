@@ -163,6 +163,21 @@ export function copySceneChildren(fromId: number, toId: number): void {
      SELECT 'scene', ?, to_type, to_id, section, origin
      FROM generic_links WHERE from_type = 'scene' AND from_id = ?`
   ).run(toId, fromId);
+  // Спутники связей состава — количество и роль с тактикой (Q18) — едут за
+  // своими связями: без них правка сцены в кампании молча стирала бы «1к6» и
+  // роли. Связь копии находится по тому же адресу: цель и разъём.
+  for (const satellite of ["link_cast", "link_participation"]) {
+    const cols = satellite === "link_cast" ? "qty" : "data";
+    db.prepare(
+      `INSERT OR IGNORE INTO ${satellite} (link_id, ${cols})
+       SELECT n.id, s.${cols}
+       FROM generic_links o
+       JOIN ${satellite} s ON s.link_id = o.id
+       JOIN generic_links n ON n.from_type = 'scene' AND n.from_id = ?
+            AND n.to_type = o.to_type AND n.to_id = o.to_id AND IFNULL(n.section, '') = IFNULL(o.section, '')
+       WHERE o.from_type = 'scene' AND o.from_id = ?`
+    ).run(toId, fromId);
+  }
   // Слои представления едут тем же image_path (байты общие через дедуп
   // vault) — удалять файл при удалении строки слоя нельзя, иначе копия
   // потеряет свой слой. Это безопасно: файлы слоёв неизменяемы (создание +

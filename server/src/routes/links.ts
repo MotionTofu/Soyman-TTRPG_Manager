@@ -10,6 +10,7 @@ import {
   rewriteAllMentions,
   scanMentions,
 } from "../services/mentions";
+import { parseSceneParticipation } from "../services/beingForce";
 
 export const linksRouter = Router();
 
@@ -617,17 +618,27 @@ linksRouter.get("/", (req, res) => {
   const rows = section
     ? db
         .prepare(
-          `SELECT gl.*, lc.qty FROM generic_links gl LEFT JOIN link_cast lc ON lc.link_id = gl.id
+          `SELECT gl.*, lc.qty, lp.data AS participation FROM generic_links gl
+           LEFT JOIN link_cast lc ON lc.link_id = gl.id
+           LEFT JOIN link_participation lp ON lp.link_id = gl.id
            WHERE ((gl.from_type = ? AND gl.from_id = ?) OR (gl.to_type = ? AND gl.to_id = ?)) AND gl.section = ?`
         )
         .all(type, id, type, id, section)
     : db
         .prepare(
-          `SELECT gl.*, lc.qty FROM generic_links gl LEFT JOIN link_cast lc ON lc.link_id = gl.id
+          `SELECT gl.*, lc.qty, lp.data AS participation FROM generic_links gl
+           LEFT JOIN link_cast lc ON lc.link_id = gl.id
+           LEFT JOIN link_participation lp ON lp.link_id = gl.id
            WHERE (gl.from_type = ? AND gl.from_id = ?) OR (gl.to_type = ? AND gl.to_id = ?)`
         )
         .all(type, id, type, id);
-  res.json(rows);
+  // Роль и тактика в сцене (Q18) — объектом, а не строкой JSON.
+  res.json(
+    (rows as { participation?: string | null }[]).map((r) => ({
+      ...r,
+      participation: r.participation ? parseSceneParticipation(r.participation) : null,
+    }))
+  );
 });
 
 linksRouter.post("/", (req, res) => {

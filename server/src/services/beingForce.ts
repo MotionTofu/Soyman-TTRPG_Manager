@@ -31,6 +31,9 @@ export const PARTICIPATION_KEYS = ["goal", "plan", "without", "if_help", "if_dep
 // Участие персонажа игрока в кампании (словарь №21; гриллинг 2026-10-02, Q16):
 // почему здесь, личная ставка, почему сейчас.
 export const PC_PARTICIPATION_KEYS = ["why_here", "stake", "why_now"] as const;
+// Участие в сцене (гриллинг 2026-10-02, Q18): кто он здесь и как действует.
+// Лежит на связи состава — уходит вместе с ней.
+export const SCENE_PARTICIPATION_KEYS = ["role", "tactic"] as const;
 
 const MAX_LEN = 600;
 
@@ -59,8 +62,10 @@ function parse(raw: unknown, keys: readonly string[]): Record<string, string> {
 export const parseForce = (raw: unknown) => parse(raw, FORCE_KEYS);
 export const parseParticipation = (raw: unknown) => parse(raw, PARTICIPATION_KEYS);
 export const parsePcParticipation = (raw: unknown) => parse(raw, PC_PARTICIPATION_KEYS);
+export const parseSceneParticipation = (raw: unknown) => parse(raw, SCENE_PARTICIPATION_KEYS);
 
 /** Из тела запроса — в колонку. Чужие ключи и пустые строки отбрасываются. */
 export const serializeForce = (raw: unknown) => JSON.stringify(pick(raw, FORCE_KEYS));
 export const serializeParticipation = (raw: unknown) => JSON.stringify(pick(raw, PARTICIPATION_KEYS));
 export const serializePcParticipation = (raw: unknown) => JSON.stringify(pick(raw, PC_PARTICIPATION_KEYS));
+export const serializeSceneParticipation = (raw: unknown) => JSON.stringify(pick(raw, SCENE_PARTICIPATION_KEYS));

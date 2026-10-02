@@ -88,3 +88,9 @@ export function linkTargetName(type: string, id: number): string {
   if (!kindOf(type)?.sceneLinkTarget) return `#${id}`;
   return entityName(type, id) ?? `#${id}`;
 }
+
+/** Разъёмы, у связей которых есть участие: роль в сцене и тактика (Q18). */
+export const PARTICIPATION_SECTIONS: ReadonlySet<string> = new Set([
+  CAST_SECTIONS.plot_characters,
+  CAST_SECTIONS.obstacles,
+]);

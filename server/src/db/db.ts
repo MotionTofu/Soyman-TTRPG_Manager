@@ -7152,6 +7152,16 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     }
   }
 
+  // Участие в сцене (гриллинг профилей 2026-10-02, Q18): роль и тактика на
+  // связи состава. Спутник связи, как link_cast с количеством: уходит вместе
+  // со связью, и убранный из сцены не оставляет висящей роли.
+  if (!tableExists(database, "link_participation")) {
+    database.exec(`CREATE TABLE link_participation (
+      link_id INTEGER PRIMARY KEY REFERENCES generic_links(id) ON DELETE CASCADE,
+      data TEXT NOT NULL DEFAULT '{}'
+    )`);
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);
