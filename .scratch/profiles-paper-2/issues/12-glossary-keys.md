@@ -8,4 +8,4 @@
 
 ## Acceptance criteria
 
-- [ ] Словарь и `server/src/services/beingForce.ts` называют поля одинаково
+- [x] Словарь и `server/src/services/beingForce.ts` называют поля одинаково
