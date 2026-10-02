@@ -6374,6 +6374,16 @@ details.card[open] summary {
     order: 1;
   }
 }
+/* Изображения записи компендиума одной строкой: ячейки не тянутся на всю
+   ширину, «Убрать» — по ширине превью. */
+.entry-images__row .entity-image-slot {
+  flex: 0 1 288px;
+  order: 0;
+}
+.entry-images__row .entity-image-slot > button {
+  align-self: flex-start;
+}
+
 .entity-image-frame img {
   width: 100%;
   height: 100%;

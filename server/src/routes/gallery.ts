@@ -7,7 +7,7 @@ import crypto from "crypto";
 import sharp from "sharp";
 import { db } from "../db/db";
 import { SATELLITE_OWNERS, requireKind } from "../db/entityKinds";
-import { ensureSubfolder, toFileUrl } from "../services/filesystem";
+import { ensureSubfolder, entryImageFolder, toFileUrl } from "../services/filesystem";
 import { resizeImageBuffer } from "../services/imageResize";
 import { storeDeduped, removeOrArchive } from "../services/vaultDedup";
 import { vaultAbs, vaultRel, VAULT_ROOT } from "../services/filesystem";
@@ -56,6 +56,18 @@ function withUrl<T extends { image_path: string }>(row: T) {
 // ensureCharacterFolder); setting_beings always get one at creation time.
 function resolveOwnerFolder(ownerType: string, ownerId: string | number): string {
   if (ownerType === "character") return ensureCharacterFolder(ownerId);
+  // У записи компендиума нет своей папки и архива: галерея — в папке её
+  // раздела системы, подпапкой на запись.
+  if (ownerType === "compendium_entry") {
+    const entry = db
+      .prepare(
+        `SELECT ce.id, ce.kind, sy.folder_path AS system_folder_path
+           FROM compendium_entries ce JOIN systems sy ON sy.id = ce.system_id WHERE ce.id = ?`
+      )
+      .get(ownerId) as { id: number; kind: string; system_folder_path: string | null } | undefined;
+    if (!entry || !entry.system_folder_path) throw new Error("owner not found");
+    return ensureSubfolder(entryImageFolder(entry.system_folder_path, entry.kind), `entry-${entry.id}`);
+  }
   const table = OWNER_TABLES[ownerType];
   if (!table) throw new Error("invalid owner_type");
   const row = db.prepare(`SELECT folder_path, archived_at FROM ${table} WHERE id = ?`).get(ownerId) as

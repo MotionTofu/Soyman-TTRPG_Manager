@@ -718,6 +718,14 @@ systemsRouter.delete("/entries/:entryId", (req, res) => {
       }
     }
     db.prepare("DELETE FROM statblocks WHERE owner_type = 'compendium_entry' AND owner_id = ?").run(id);
+    // Галерея записи уходит вместе с ней: файлы — в архив хранилища.
+    const gallery = db
+      .prepare("SELECT id, image_path FROM gallery_images WHERE owner_type = 'compendium_entry' AND owner_id = ?")
+      .all(id) as { id: number; image_path: string }[];
+    for (const g of gallery) {
+      filesToArchive.push({ path: g.image_path, ownerType: "gallery_image", ownerId: g.id, displayName: me.name });
+    }
+    db.prepare("DELETE FROM gallery_images WHERE owner_type = 'compendium_entry' AND owner_id = ?").run(id);
     db.prepare(
       `DELETE FROM generic_links
        WHERE (from_type = 'compendium_entry' AND from_id = ?) OR (to_type = 'compendium_entry' AND to_id = ?)`

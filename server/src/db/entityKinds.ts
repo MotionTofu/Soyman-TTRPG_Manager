@@ -281,7 +281,9 @@ const RAW_KINDS: EntityKindBase[] = [
     hasArchivedAt: false, archivable: false, archiveKey: "id",
     mentionable: true, transferable: true, searchable: true,
     linkEndpoint: true, relationEndpoint: true,
-    owns: ["statblocks"], detailPrefix: "/compendium",
+    // Галерея записи (просьба владельца 2026-10-02): картинки лежат в папке
+    // раздела системы, см. routes/gallery.ts.
+    owns: ["statblocks", "gallery_images"], detailPrefix: "/compendium",
   }),
   K({
     kind: "setting_event", table: "setting_calendar_events", nameCol: "title", belongsTo: "world",

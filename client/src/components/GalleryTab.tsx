@@ -28,7 +28,7 @@ interface ThumbnailUploadProps {
 }
 
 interface Props {
-  ownerType: "character" | "being" | "location" | "community" | "campaign_player_section" | "artifact";
+  ownerType: "character" | "being" | "location" | "community" | "campaign_player_section" | "artifact" | "compendium_entry";
   ownerId: number;
   thumbnailUpload?: ThumbnailUploadProps;
   // Same shape as thumbnailUpload — used for entities (locations) whose
@@ -239,7 +239,9 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }
           ? "ИЗОБРАЖЕНИЯ ПЕРСОНАЖА"
           : ownerType === "artifact"
             ? "ИЗОБРАЖЕНИЯ ПРЕДМЕТА"
-            : "ИЗОБРАЖЕНИЯ ЛОКАЦИИ";
+            : ownerType === "compendium_entry"
+              ? "ГАЛЕРЕЯ"
+              : "ИЗОБРАЖЕНИЯ ЛОКАЦИИ";
   return (
     <div className="stack gallery-tab">
       <div className="gallery-tab-header">
