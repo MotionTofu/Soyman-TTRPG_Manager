@@ -6,6 +6,7 @@ import { EditableTextCard } from "../components/EditableTextCard";
 import { EntityFieldsCard, type EntityField } from "../components/EntityFieldsCard";
 import { EntityPage } from "../components/EntityPage";
 import { CreatureCardEditor } from "../components/CreatureCardEditor";
+import { CreatureCardLoader } from "../components/CreatureCard";
 import { EntryImagesTab } from "../components/EntryImagesTab";
 import { useTabState } from "../hooks/useTabState";
 import { useResource, useSaveEntity } from "../data/hooks";
@@ -22,7 +23,9 @@ import type { CompendiumEntry, System, SystemSection } from "../types";
 // служебные обратные ссылки, а не содержимое записи; «Галерея» встаёт
 // перед ними, последней среди содержательных. До 2026-09-18 она звалась
 // «Изображения» (словарь вкладок, П3.4) — старые ссылки ведут сюда же.
-const TABS = ["Статблоки", "Досье", "Карточка существа", "Галерея", "Упоминания"] as const;
+// Досье первым, как у всех профилей на бумаге (гриллинг 2026-10-02, Q5–Q6):
+// карточка «В бою» стала шапкой досье, отдельной вкладки у неё больше нет.
+const TABS = ["Досье", "Статблоки", "Галерея", "Упоминания"] as const;
 
 interface MechanicsOption {
   id: number;
@@ -59,10 +62,14 @@ function creatureLists(entries: CompendiumEntry[]): { types: MechanicsOption[]; 
 // кем-то связать — связывают его версию в сеттинге.
 export function MonsterDetailPage({ entry, system }: { entry: CompendiumEntry; system: System | null }) {
   const entryId = entry.id;
-  // Сохранённая ссылка на «Статблок» должна открывать «Статблоки», а не
-  // молча падать на вкладку по умолчанию — здесь это одна и та же вкладка.
-  // каркас в обход намеренно — первым стоит статблок: монстра открывают, чтобы им играть (решение 6)
-  const [tab, selectTab] = useTabState(TABS, "Статблоки", { Статблок: "Статблоки", Изображения: "Галерея" });
+  // Старые ссылки: «Статблок» — на «Статблоки», «Карточка существа» — в «Досье»,
+  // где карточка теперь шапкой.
+  const [tab, selectTab] = useTabState(TABS, "Досье", {
+    Статблок: "Статблоки",
+    Изображения: "Галерея",
+    "Карточка существа": "Досье",
+  });
+  const [editingCard, setEditingCard] = useState(false);
   const sections = useResource<SystemSection[]>(system ? compendiumPaths.sections(system.id) : null).data;
   const mechSection = sections?.find((s) => s.kind === "mechanics");
   const mechanics = useResource<CompendiumEntry[]>(
@@ -173,6 +180,8 @@ export function MonsterDetailPage({ entry, system }: { entry: CompendiumEntry; s
   }
 
   const chapters = entry.chapters ?? [];
+  const cr = typeof entry.data?.cr === "string" ? entry.data.cr : "";
+  const identTags = [creatureType?.name, size, cr && `Опасность ${cr}`].filter((t): t is string => !!t);
 
   return (
     <EntityPage
@@ -186,11 +195,23 @@ export function MonsterDetailPage({ entry, system }: { entry: CompendiumEntry; s
       ]}
       entityType="compendium_entry"
       title={entry.name}
+      paper
+      // Под именем — тип, размер, опасность метками, на месте мазка (доска 32).
+      meta={
+        identTags.length > 0 && (
+          <span className="paper-ident-tags">
+            {identTags.map((t) => (
+              <span key={t} className="badge tag">
+                {t}
+              </span>
+            ))}
+          </span>
+        )
+      }
       tabs={TABS}
       tab={tab}
       onTab={(t) => selectTab(t as (typeof TABS)[number])}
     >
-
       {tab === "Статблоки" && (
         <StatblockList
           ownerType="compendium_entry"
@@ -206,72 +227,133 @@ export function MonsterDetailPage({ entry, system }: { entry: CompendiumEntry; s
       )}
 
       {tab === "Досье" && (
-        <div className="stack">
-          <EntityFieldsCard
-            key={`summary-${entryId}`}
-            title="Сводка"
-            fields={fields}
-            hideEmptyInView
-            onEditStart={() => setAliasDraft(aliases.join(", "))}
-            onSave={saveSummary}
-            editExtras={
-              <label className="stack editable-card-field">
-                <span>Другие названия</span>
-                <input
-                  value={aliasDraft}
-                  placeholder="через запятую"
-                  onChange={(e) => setAliasDraft(e.target.value)}
-                />
-              </label>
-            }
-            viewExtras={
-              aliases.length > 0 ? (
-                <div className="entity-field-row">
-                  <span className="muted">Другие названия</span>
-                  <span>{aliases.join(", ")}</span>
+        <div className="dossier">
+          <aside className="dossier__aside">
+            {/* Портрет меняется в «Галерее» — там у записи компендиума живут
+                все её картинки. */}
+            <button
+              type="button"
+              className="dossier__portrait"
+              title="Сменить портрет — в «Галерее»"
+              onClick={() => selectTab("Галерея")}
+            >
+              {entry.avatar_image_url ? (
+                <img src={entry.avatar_image_url} alt={`Портрет: ${entry.name}`} />
+              ) : (
+                <span className="dossier__portrait-empty">Портрет</span>
+              )}
+              <span className="dossier__portrait-hint">Сменить в «Галерее»</span>
+            </button>
+            <dl className="paper-facts">
+              {system && (
+                <div>
+                  <dt className="paper-label">Система</dt>
+                  <dd>
+                    {system.name}
+                    {sectionName ? ` · ${sectionName}` : ""}
+                  </dd>
                 </div>
-              ) : null
-            }
-          />
-          <EditableTextCard
-            title="Описание"
-            value={entry.description}
-            onSave={saveDescription}
-            rows={6}
-            entityType="compendium_entry"
-            entityId={entryId}
-            collapsible
-            defaultOpen
-          />
-          <details className="card">
-            <summary className="sb-section" style={{ margin: 0 }}>
-              История
-            </summary>
-            <ChapterList
-              ownerId={entryId}
-              ownerType="compendium_entry"
-              apiBase="/systems/entries"
-              section="history"
-              chapters={chapters.filter((c) => c.section === "history")}
-            />
-          </details>
-          <details className="card">
-            <summary className="sb-section" style={{ margin: 0 }}>
-              Поведение
-            </summary>
-            <ChapterList
-              ownerId={entryId}
-              ownerType="compendium_entry"
-              apiBase="/systems/entries"
-              section="behavior"
-              chapters={chapters.filter((c) => c.section === "behavior")}
-            />
-          </details>
-        </div>
-      )}
+              )}
+              {(creatureType?.name || alignment) && (
+                <div>
+                  <dt className="paper-label">Тип</dt>
+                  <dd>{[creatureType?.name, alignment].filter(Boolean).join(", ")}</dd>
+                </div>
+              )}
+              {entry.name_original && (
+                <div>
+                  <dt className="paper-label">По-другому</dt>
+                  <dd>{[entry.name_original, ...aliases].join(" · ")}</dd>
+                </div>
+              )}
+            </dl>
+          </aside>
 
-      {tab === "Карточка существа" && (
-        <CreatureCardEditor type="compendium_entry" id={entryId} />
+          <div className="dossier__main">
+            {editingCard ? (
+              <CreatureCardEditor type="compendium_entry" id={entryId} inline onDone={() => setEditingCard(false)} />
+            ) : (
+              <CreatureCardLoader
+                type="compendium_entry"
+                id={entryId}
+                variant="page"
+                embedded
+                hideProfileButton
+                onShowStatblock={() => selectTab("Статблоки")}
+                onEdit={() => setEditingCard(true)}
+              />
+            )}
+
+            <EditableTextCard
+              title="Описание"
+              value={entry.description}
+              onSave={saveDescription}
+              rows={6}
+              entityType="compendium_entry"
+              entityId={entryId}
+              collapsible
+              defaultOpen
+            />
+
+            {(
+              [
+                ["history", "История"],
+                ["behavior", "Поведение"],
+              ] as const
+            ).map(([section, title]) => {
+              const list = chapters.filter((c) => c.section === section);
+              return (
+                <details key={section} className="paper-fold" open={list.length > 0}>
+                  <summary>
+                    {title} <span className="paper-fold__count">· {list.length}</span>
+                  </summary>
+                  <div className="paper-fold__body">
+                    <ChapterList
+                      ownerId={entryId}
+                      ownerType="compendium_entry"
+                      apiBase="/systems/entries"
+                      section={section}
+                      chapters={list}
+                    />
+                  </div>
+                </details>
+              );
+            })}
+
+            {/* Справка: имя, оригинал, тип, размер, КЗ… — правится редко. */}
+            <details className="paper-fold">
+              <summary>Сводка</summary>
+              <div className="paper-fold__body">
+                <EntityFieldsCard
+                  key={`summary-${entryId}`}
+                  title="Сводка"
+                  fields={fields}
+                  hideEmptyInView
+                  onEditStart={() => setAliasDraft(aliases.join(", "))}
+                  onSave={saveSummary}
+                  editExtras={
+                    <label className="stack editable-card-field">
+                      <span>Другие названия</span>
+                      <input
+                        value={aliasDraft}
+                        placeholder="через запятую"
+                        onChange={(e) => setAliasDraft(e.target.value)}
+                      />
+                    </label>
+                  }
+                  viewExtras={
+                    aliases.length > 0 ? (
+                      <div className="entity-field-row">
+                        <span className="muted">Другие названия</span>
+                        <span>{aliases.join(", ")}</span>
+                      </div>
+                    ) : null
+                  }
+                />
+              </div>
+            </details>
+          </div>
+        </div>
       )}
 
       {tab === "Галерея" && (
