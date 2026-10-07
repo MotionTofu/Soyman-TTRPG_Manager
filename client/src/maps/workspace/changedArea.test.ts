@@ -1,0 +1,30 @@
+import { expect, it } from "vitest";
+import { loadStoredWorkspaceDocument } from "../editor/loadDocument";
+import { addFreePath, moveArtSelection, paintSurface } from "./artisticCommands";
+import { changedArea } from "./changedArea";
+import { editGeometry } from "./editDocument";
+import { createTerrainMaskLayer } from "../core/mutations/layers";
+
+it("перетаскивание линии задевает только её старое и новое место; смена слоёв и оформления — всё", () => {
+  const loaded = loadStoredWorkspaceDocument({ grid: "square", width: 60, height: 40, cells: '{"v":1,"cells":{},"roads":[]}' });
+  if (loaded.status !== "supported") throw Error("fixture");
+  const base = { ...loaded.document, layers: [...loaded.document.layers, { id: "paths", name: "Линии", kind: "path" as const, visible: true, locked: false, opacity: 1, paths: [] }] };
+  const far = addFreePath(base, "paths", [{ x: 40, y: 30 }, { x: 50, y: 30 }], "road", 1);
+  const doc = addFreePath(far, "paths", [{ x: 2, y: 2 }, { x: 4, y: 2 }], "road", 1);
+  const layer = doc.layers.find(l => l.id === "paths");
+  if (layer?.kind !== "path") throw Error("fixture");
+  const moved = moveArtSelection(doc, { id: layer.paths[1].id, layerId: "paths", kind: "path" }, { x: 3, y: 1 });
+  const area = changedArea(doc, moved)!;
+  expect(area.x).toBeLessThanOrEqual(1.5); expect(area.y).toBeLessThanOrEqual(1.5);
+  expect(area.x + area.w).toBeGreaterThanOrEqual(7.5); expect(area.x + area.w).toBeLessThan(12);
+  expect(area.y + area.h).toBeGreaterThanOrEqual(3.5); expect(area.y + area.h).toBeLessThan(8);
+  expect(changedArea(far, doc)!.x + changedArea(far, doc)!.w).toBeLessThan(10);
+  expect(changedArea(doc, doc)).toEqual({ x: 0, y: 0, w: 0, h: 0 });
+  expect(changedArea(doc, { ...moved, appearance: { style: "comic-punk" } })).toBeNull();
+  expect(changedArea(doc, { ...moved, layers: moved.layers.map(l => l.id === "paths" ? { ...l, opacity: .5 } : l) })).toBeNull();
+  const masked = editGeometry(base, view => createTerrainMaskLayer(view, { id: "mask", name: "Surface" }));
+  const painted = paintSurface(paintSurface(paintSurface(masked, "mask", { x: 30, y: 20 }, { x: 30, y: 20 }, 1, "stone"), "mask", { x: 5, y: 5 }, { x: 5, y: 5 }, 1, "stone"), "mask", { x: 50, y: 30 }, { x: 50, y: 30 }, 1, "earth");
+  const stroke = changedArea(painted, paintSurface(painted, "mask", { x: 30, y: 20 }, { x: 31, y: 20 }, 1, "earth"))!;
+  expect(stroke.x).toBeGreaterThan(20); expect(stroke.w).toBeLessThan(14); expect(stroke.x).toBeLessThanOrEqual(29); expect(stroke.x + stroke.w).toBeGreaterThanOrEqual(32);
+  expect(changedArea(base, { ...base, layers: base.layers.slice(1) })).toBeNull();
+});

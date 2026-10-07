@@ -7,7 +7,11 @@ import { anyWeather, createWeatherFilter, type MapWeather } from "./weatherFilte
 /** Всё, что рисует карта, кроме камеры. Новый объект — новое содержимое плиток. */
 export type MapStageContent = Omit<RenderOptions, "scale" | "ox" | "oy">;
 type Frame = { content: MapStageContent; scale: number; ox: number; oy: number; cssW: number; cssH: number; dpr: number };
-type Tile = { scale: number; tx: number; ty: number; content: MapStageContent; canvas: HTMLCanvasElement; sprite: Sprite };
+type Tile = { scale: number; tx: number; ty: number; content: MapStageContent; canvas: HTMLCanvasElement; sprite: Sprite;
+  /** Правка прошла мимо плитки, и её не перерисовали. Сцена дорисует её, когда правки стихнут. */
+  stale?: boolean };
+/** Область мира в клетках. */
+export type MapArea = { x: number; y: number; w: number; h: number };
 
 // Пока масштаб меняется, новые плитки не рисуем: старые растягивает видеокарта.
 const SETTLE_MS = 120;
@@ -40,6 +44,7 @@ export class MapStage {
   private settleAt = 0;
   private timer = 0;
   private raf = 0;
+  private refreshTimer = 0;
   private readonly onFail: () => void;
   private readonly onWork: (ms: number) => void;
 
@@ -58,8 +63,24 @@ export class MapStage {
       .catch(() => { if (!this.dead) this.onFail(); });
   }
 
-  draw(content: MapStageContent, camera: { scale: number; ox: number; oy: number }, cssW: number, cssH: number, dpr: number): void {
+  /**
+   * `dirty` — область, которой новое содержимое отличается от прошлого вызова; без неё перерисовываются
+   * все видимые плитки. Замер 2026-10-08, перетаскивание предмета: 20 плиток на каждый шаг мыши.
+   */
+  draw(content: MapStageContent, camera: { scale: number; ox: number; oy: number }, cssW: number, cssH: number, dpr: number, dirty?: MapArea | null): void {
     const previous = this.frame;
+    if (dirty && previous && previous.content !== content) {
+      const side = tileSide(previous.dpr) / previous.dpr;
+      for (const tile of this.tiles.values()) {
+        if (tile.content !== previous.content) continue;
+        const cells = side / tile.scale, x = tile.tx * cells, y = tile.ty * cells;
+        if (x < dirty.x + dirty.w && x + cells > dirty.x && y < dirty.y + dirty.h && y + cells > dirty.y) continue;
+        tile.content = content; tile.stale = true;
+      }
+      // Рамка правки — оценка: тень или длинная подпись могут выйти за неё. Пауза в правках — и всё дорисовано точно.
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = window.setTimeout(() => this.refresh(), SETTLE_MS);
+    }
     this.frame = { content, scale: camera.scale, ox: camera.ox, oy: camera.oy, cssW, cssH, dpr };
     const renderer = this.renderer;
     if (!renderer) return;
@@ -99,7 +120,7 @@ export class MapStage {
 
   destroy(): void {
     this.dead = true;
-    clearTimeout(this.timer); cancelAnimationFrame(this.raf); cancelAnimationFrame(this.anim);
+    clearTimeout(this.timer); clearTimeout(this.refreshTimer); cancelAnimationFrame(this.raf); cancelAnimationFrame(this.anim);
     this.drop(() => true);
     this.renderer?.destroy();
     this.canvas.remove();
@@ -137,7 +158,7 @@ export class MapStage {
     const side = tileSide(frame.dpr) / frame.dpr;
     ctx.setTransform(frame.dpr, 0, 0, frame.dpr, 0, 0);
     renderMap(ctx, side, side, { ...frame.content, scale: this.target, ox: -tx * side, oy: -ty * side });
-    tile.content = frame.content;
+    tile.content = frame.content; tile.stale = false;
     tile.sprite.texture.source.update();
   }
 
@@ -159,6 +180,22 @@ export class MapStage {
     if (todo.length) this.schedule();
     else { this.filling = false; this.trim(); }
     this.present();
+  }
+
+  /** Дорисовка плиток, мимо которых прошла правка: по бюджету за кадр, пока не кончатся. */
+  private refresh(): void {
+    this.refreshTimer = 0;
+    if (this.dead || !this.frame || !this.renderer) return;
+    const started = performance.now();
+    let left = false;
+    for (const tile of this.tiles.values()) {
+      if (!tile.stale || tile.scale !== this.target || tile.content !== this.frame.content) continue;
+      if (performance.now() - started >= BUDGET_MS) { left = true; break; }
+      this.paint(tile.tx, tile.ty);
+    }
+    this.onWork(performance.now() - started);
+    this.present();
+    if (left) this.refreshTimer = window.setTimeout(() => this.refresh(), 16);
   }
 
   /** Снимает плитки чужих масштабов и те, что ушли дальше одной плитки от экрана. */

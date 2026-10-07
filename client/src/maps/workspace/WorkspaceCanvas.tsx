@@ -23,6 +23,7 @@ import { prepareTokenTape, subscribeTokenTape } from "../assets/tokenTape";
 import { cellCorners } from "../grid";
 import { WorkspacePerformance } from "./WorkspacePerformance";
 import { WorkspacePerformanceMeter } from "./performanceMeter";
+import { changedArea } from "./changedArea";
 
 export function WorkspaceCanvas({ gl, onGlFail, effects, map, document, camera, canvasRef, wrapRef, showGrid, gridColor, gridOpacity, gridLineWidth, gridLineStyle, selectedId, selectedNodes, selections, marquee, preview, assetPreview, displays, ghost, draftLine, wallDraft, onDoubleClick, cellBrush, brush, onPointerLeave, onDragOver, onDragLeave, onDrop, onPointerDown, onPointerMove, onPointerUp, onPointerCancel }: {
   map: MapFull; document: MapDocumentV6; camera: Camera;
@@ -94,11 +95,19 @@ export function WorkspaceCanvas({ gl, onGlFail, effects, map, document, camera, 
     return { grid: map.grid, width: map.width, height: map.height, model: rendered.model,
       showGrid, gridColor, gridOpacity, gridLineWidth, gridLineStyle, showCoords: false, hover: null, ...workspaceDrawingStyle(document), playerView: false, selectedId };
   }, [map.grid, map.width, map.height, document, rendered, showGrid, gridColor, gridOpacity, gridLineWidth, gridLineStyle, selectedId, revision]);
+  // Что было нарисовано в прошлый раз: если с тех пор изменился только документ, сцене хватит области правки.
+  const drawn = useRef<{ document: MapDocumentV6; rest: readonly unknown[] } | null>(null);
   useEffect(() => {
     const wrap = wrapRef.current;
     if (!wrap) return;
     const rect = wrap.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
-    if (gl) { stageRef.current?.draw(content, camera, rect.width, rect.height, dpr); return; }
+    if (gl) {
+      const rest = [stageRef.current, map.grid, map.width, map.height, displays, showGrid, gridColor, gridOpacity, gridLineWidth, gridLineStyle, selectedId, revision];
+      const last = drawn.current;
+      drawn.current = { document, rest };
+      stageRef.current?.draw(content, camera, rect.width, rect.height, dpr, last && last.rest.every((value, i) => value === rest[i]) ? changedArea(last.document, document) : null);
+      return;
+    }
     const canvas = baseRef.current;
     if (!canvas) return;
     const width = Math.round(rect.width * dpr), height = Math.round(rect.height * dpr);
@@ -110,7 +119,7 @@ export function WorkspaceCanvas({ gl, onGlFail, effects, map, document, camera, 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     renderMap(ctx, rect.width, rect.height, { ...content, scale: camera.scale, ox: camera.ox, oy: camera.oy });
     meter.recordDraw(performance.now() - drawStarted);
-  }, [gl, content, camera, wrapRef, meter]);
+  }, [gl, content, camera, wrapRef, meter, document, displays, map.grid, map.width, map.height, showGrid, gridColor, gridOpacity, gridLineWidth, gridLineStyle, selectedId, revision]);
   useEffect(() => {
     const canvas = canvasRef.current, wrap = wrapRef.current;
     if (!canvas || !wrap) return;

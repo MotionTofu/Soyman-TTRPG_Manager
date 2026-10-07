@@ -47,6 +47,7 @@ export function editGeometry(document: MapDocumentV6, operation: (view: MapDocum
   return { ...canonical, layers: next.layers.map(layer => {
     const normalized = changed.get(layer.id) ?? layer;
     const original = untouched.get(layer.id);
+    if (original === layer) return layer; // нетронутый слой остаётся тем же объектом: по этому сцена узнаёт, что его не перерисовывать
     if (normalized.kind !== "terrain" || normalized.representation !== "mask" || layer.kind !== "terrain" || layer.representation !== "mask" ||
       original?.kind !== "terrain" || original.representation !== "mask") return normalized;
     // Validation/normalization still runs. Reuse already-canonical untouched
