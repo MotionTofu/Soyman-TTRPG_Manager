@@ -1,4 +1,5 @@
-import { insertPathNodes, setPathNodeWidth, pathNodeIntervals, setPathClosed } from "./pathNodes";
+import { useState } from "react";
+import { insertPathNodes, setPathNodeWidth, pathNodeIntervals, setPathClosed, simplifyPathNodes } from "./pathNodes";
 import { pathNodesFromAnchors } from "./pathAnchors";
 import type { MapDocumentV6 } from "@shared/maps/core";
 import { updateSplinePath } from "../core/mutations/paths";
@@ -12,6 +13,7 @@ export function ArtProperties({ document, selection, selectedNodes = [], onSelec
   selectedNodes?: readonly number[]; onSelectedNodes?: (indices: number[]) => void;
   onClose: () => void; onDelete: () => void;
 }) {
+  const [tolerance, setTolerance] = useState(0.1);
   const layer = document.layers.find(l => l.id === selection.layerId), path = selectedPath(document, selection);
   const area = layer?.kind === "scatter" ? layer.areas.find(a => a.id === selection.id) : undefined;
   if (!path && !area) return null;
@@ -22,6 +24,8 @@ export function ArtProperties({ document, selection, selectedNodes = [], onSelec
   const intervals = pathNodeIntervals(nodes.length, selectedNodes, closed);
   const nodeWidths = selectedNodes.map(i => nodes[i]?.width ?? path?.width);
   const commonWidth = nodeWidths.length && nodeWidths.every(width => width === nodeWidths[0]) ? nodeWidths[0] : "";
+  const branched = !!path && document.layers.some(l => l.kind === "path" && l.paths.some(p => p.branchFrom?.pathId === path.id));
+  const simplified = simplifyPathNodes(nodes, closed, tolerance);
   const update = (patch: Parameters<typeof updateSplinePath>[2]) => commit(doc => { requireEditableLayer(doc, selection.layerId, "path"); return editGeometry(doc, view => updateSplinePath(view, selection.id, patch)); });
   const scatter = (patch: Partial<NonNullable<typeof area>>) => commit(doc => putScatter(doc, selection.layerId, { ...area!, ...patch }));
   return <aside className="workspace-editor-properties" aria-label="Свойства объекта">
@@ -43,7 +47,9 @@ export function ArtProperties({ document, selection, selectedNodes = [], onSelec
       </>
       {!wall && <><button disabled={locked} onClick={() => update({ nodes: pathNodesFromAnchors(nodes.map(n => n.position), closed).map((node, i) => ({ ...node, ...(nodes[i].width === undefined ? {} : { width: nodes[i].width }) })) })}>Сгладить линию</button>
       <button disabled={locked} onClick={() => update({ nodes: nodes.map(n => ({ position: n.position, ...(n.width === undefined ? {} : { width: n.width }) })) })}>Выпрямить сегменты</button></>}
-      <button title="Для связанной линии удаление точек пока недоступно" disabled={locked || !selectedNodes.length || nodes.length - selectedNodes.length < (closed ? 3 : 2) || document.layers.some(l => l.kind === "path" && l.paths.some(p => p.branchFrom?.pathId === path.id))} onClick={() => { update({ nodes: nodes.filter((_, i) => !selectedNodes.includes(i)) }); onSelectedNodes?.([]); }}>Удалить точки</button>
+      <button title="Для связанной линии удаление точек пока недоступно" disabled={locked || !selectedNodes.length || nodes.length - selectedNodes.length < (closed ? 3 : 2) || branched} onClick={() => { update({ nodes: nodes.filter((_, i) => !selectedNodes.includes(i)) }); onSelectedNodes?.([]); }}>Удалить точки</button>
+      <label>Упрощение: допуск {tolerance.toFixed(2)} кл.<input aria-label="Допуск упрощения линии" type="range" min={0.02} max={1} step={0.02} value={tolerance} onChange={e => setTolerance(Number(e.target.value))} /></label>
+      <button title={branched ? "Для связанной линии упрощение пока недоступно" : "Убрать точки, без которых форма почти не меняется"} disabled={locked || branched || simplified.length === nodes.length} onClick={() => { update({ nodes: simplified }); onSelectedNodes?.([]); }}>Упростить: {nodes.length} → {simplified.length} точек</button>
     </>}
     {area && <>
       <p>Перетащите область целиком. Вариант сохраняет расположение символов.</p>

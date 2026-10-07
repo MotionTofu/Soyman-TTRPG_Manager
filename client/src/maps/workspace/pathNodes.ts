@@ -10,6 +10,34 @@ export function pathNodeIntervals(count: number, selected: readonly number[], cl
   return Array.from({ length: closed ? count : count - 1 }, (_, i) => i)
     .filter(i => indices.has(i) && indices.has((i + 1) % count));
 }
+/** Прореживание Дугласом–Пекером: уходят точки, без которых ломаная отклоняется не больше `tolerance` клеток.
+ * Остаются исходные точки (концы и точки со своей толщиной — всегда); у плавной линии изгибы пересчитываются. */
+export function simplifyPathNodes(nodes: readonly SplineNode[], closed: boolean, tolerance: number): SplineNode[] {
+  const count = nodes.length;
+  if (count < 3) return [...nodes];
+  const at = (i: number) => nodes[i % count].position;
+  const keep = new Set<number>([0, ...nodes.flatMap((node, i) => node.width === undefined ? [] : [i])]);
+  if (closed) keep.add(nodes.reduce((far, _, i) => Math.hypot(at(i).x - at(0).x, at(i).y - at(0).y) > Math.hypot(at(far).x - at(0).x, at(far).y - at(0).y) ? i : far, 0));
+  else keep.add(count - 1);
+  const reduce = (from: number, to: number) => {
+    const a = at(from), b = at(to), dx = b.x - a.x, dy = b.y - a.y;
+    let worst = -1, far = tolerance;
+    for (let i = from + 1; i < to; i++) {
+      const p = at(i), t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy || 1)));
+      const distance = Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
+      if (distance > far) { far = distance; worst = i; }
+    }
+    if (worst < 0) return;
+    keep.add(worst); reduce(from, worst); reduce(worst, to);
+  };
+  const pins = [...keep].sort((a, b) => a - b);
+  pins.forEach((pin, i) => { if (i + 1 < pins.length) reduce(pin, pins[i + 1]); else if (closed) reduce(pin, count); });
+  const kept = nodes.filter((_, i) => keep.has(i));
+  if (kept.length === count || closed && kept.length < 3) return [...nodes];
+  // ponytail: ручные изгибы Безье не сохраняются — плавная линия сглаживается заново; подгонка кривых, если понадобится точнее.
+  const smooth = nodes.some(node => node.in || node.out) ? pathNodesFromAnchors(kept.map(node => node.position), closed) : null;
+  return kept.map((node, i) => ({ ...(smooth ? smooth[i] : { position: node.position }), ...(node.width === undefined ? {} : { width: node.width }) }));
+}
 export function setPathNodeWidth(doc: MapDocumentV6, selection: WorkspaceSelection, indices: readonly number[], width?: number) {
   requireEditableLayer(doc, selection.layerId, "path");
   const path = selectedPath(doc, selection);

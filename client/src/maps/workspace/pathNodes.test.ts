@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseMapDocumentV6, serializeMapDocumentV6, type SplineNode, type Vec2 } from "@shared/maps/core";
 import { loadStoredWorkspaceDocument } from "../editor/loadDocument";
 import { addFreePath, selectedPath, freePathHit } from "./artisticCommands";
-import { insertPathNodes, setPathNodeWidth, setPathClosed } from "./pathNodes";
+import { insertPathNodes, setPathNodeWidth, setPathClosed, simplifyPathNodes } from "./pathNodes";
 import { createWorkspaceRenderModel } from "./renderV6";
 
 function fixture(kind: "road" | "river", closed = false) {
@@ -61,6 +61,20 @@ describe("Bezier node editing", () => {
     expect(after.geometry.nodes[3].position).toEqual(expected);
     expect(after.geometry.nodes[0].out).toEqual(before.geometry.nodes[0].out);
     expect(createWorkspaceRenderModel(inserted.document).model.layers.find(l => l.id === "paths")).toMatchObject({ paths: [{ closed: true }] });
+  });
+  it("упрощение убирает лишние точки, но держит изломы, концы и точки со своей толщиной", () => {
+    const wavy: SplineNode[] = Array.from({ length: 41 }, (_, i) => ({ position: { x: i * .5, y: i < 20 ? Math.sin(i) * .02 : (i - 20) * .5 } }));
+    const kept = simplifyPathNodes(wavy, false, .1);
+    expect(kept.map(node => node.position)).toEqual([wavy[0].position, wavy[20].position, wavy[40].position]);
+    expect(kept[1].in).toBeUndefined();
+    const sized = wavy.map((node, i) => i === 7 ? { ...node, width: 1.5, out: { x: 4, y: 0 } } : node);
+    const smooth = simplifyPathNodes(sized, false, .1);
+    expect(smooth.map(node => node.width)).toEqual([undefined, 1.5, undefined, undefined]);
+    expect(smooth[1].in).toBeDefined();
+    const ring: SplineNode[] = Array.from({ length: 40 }, (_, i) => ({ position: { x: Math.cos(i * Math.PI / 20) * 5, y: Math.sin(i * Math.PI / 20) * 5 } }));
+    const loop = simplifyPathNodes(ring, true, .2).length;
+    expect(loop).toBeGreaterThanOrEqual(6); expect(loop).toBeLessThan(20);
+    expect(simplifyPathNodes(ring, true, 0)).toHaveLength(40);
   });
   it("uses local thickness when picking a tapered Bezier curve", () => {
     const nodes: SplineNode[] = [{ position: { x: 1, y: 1 }, out: { x: 2, y: 1 }, width: .2 }, { position: { x: 5, y: 1 }, in: { x: 4, y: 1 }, width: 2 }];
