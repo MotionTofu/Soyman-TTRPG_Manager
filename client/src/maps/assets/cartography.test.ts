@@ -39,8 +39,10 @@ describe("installed cartography", () => {
       const doc = fixture(), layer = doc.layers.find(l => l.kind === "object")!;
       const added = addSymbol(doc, layer.id, "bones", { x: 4, y: 4 }, cartographyId("bone-pile"));
       await expect(prepareMapImageAssets(added)).rejects.toThrow("missing local image");
+      // Сгенерированное подземелье грузит ещё и кладку стен, поэтому считаем от первой попытки.
+      const attempts = decode.mock.calls.length;
       await expect(loadMapImageAsset(cartographyId("bone-pile"))).rejects.toThrow();
-      expect(decode).toHaveBeenCalledOnce();
+      expect(decode).toHaveBeenCalledTimes(attempts);
       expect(resolveMapSymbol({ type: "asset", assetId: cartographyId("bone-pile") })).toMatchObject({ kind: "image", image: null });
       expect(assessCurrentEditorCompatibility(geometryView(added)).compatible).toBe(true);
       expect(createWorkspaceRenderModel(added).model.layers.find(l => l.kind === "object")).toMatchObject({ items: [{ object: { id: "bones" } }] });

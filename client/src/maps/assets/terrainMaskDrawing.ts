@@ -1,6 +1,7 @@
 import type { RenderTerrainView } from "../renderModel";
 import { terrainMaskTiles, type MaskTile } from "../terrainMaskTiles";
 import { artworkImage, surfaceImage, surfacePattern, type ArtPack } from "./artwork";
+import { rasterDensity } from "./rasterDensity";
 
 const images = new WeakMap<MaskTile, HTMLCanvasElement>();
 const opaqueTiles = new WeakMap<MaskTile, boolean>();
@@ -98,7 +99,7 @@ export function drawTerrainMaskTiles(ctx: CanvasRenderingContext2D, mask: NonNul
   const tileSize = 18 * density <= 256 ? 16 : 10 * density <= 256 ? 8 : 4;
   const paintTiles = (pen: CanvasRenderingContext2D, accepted?: readonly string[], artwork?: HTMLImageElement) => {
     for (const tile of terrainMaskTiles(mask, width, height, colors, viewport, accepted, tileSize)) {
-      const image = artwork ? texturedTile(tile, artwork, mask, scale * pixelRatio, pack, accepted!) : tileImage(tile); if (!image) continue;
+      const image = artwork ? texturedTile(tile, artwork, mask, rasterDensity(scale * pixelRatio), pack, accepted!) : tileImage(tile); if (!image) continue;
       const x = ox + (mask.origin.x + tile.cx * tile.size * mask.sampleSize) * scale;
       const y = oy + (mask.origin.y + tile.cy * tile.size * mask.sampleSize) * scale, sample = mask.sampleSize * scale;
       pen.save(); pen.beginPath(); pen.rect(x, y, tile.size * sample, tile.size * sample); pen.clip();

@@ -1,6 +1,6 @@
 import { autoDetectRenderer, Container, Sprite, Texture, type Renderer } from "pixi.js";
 import { renderMap, type RenderOptions } from "../render";
-import { TILE, inRange, visibleTiles, type TileRange } from "./tiles";
+import { inRange, tileSide, visibleTiles, type TileRange } from "./tiles";
 
 /** Всё, что рисует карта, кроме камеры. Новый объект — новое содержимое плиток. */
 export type MapStageContent = Omit<RenderOptions, "scale" | "ox" | "oy">;
@@ -106,7 +106,7 @@ export class MapStage {
     let tile = this.tiles.get(key);
     if (!tile) {
       const canvas = document.createElement("canvas");
-      canvas.width = canvas.height = TILE;
+      canvas.width = canvas.height = tileSide(frame.dpr);
       const sprite = new Sprite(Texture.from(canvas, true));
       tile = { scale: this.target, tx, ty, content: frame.content, canvas, sprite };
       this.tiles.set(key, tile);
@@ -114,7 +114,7 @@ export class MapStage {
     }
     const ctx = tile.canvas.getContext("2d");
     if (!ctx) return;
-    const side = TILE / frame.dpr;
+    const side = tileSide(frame.dpr) / frame.dpr;
     ctx.setTransform(frame.dpr, 0, 0, frame.dpr, 0, 0);
     renderMap(ctx, side, side, { ...frame.content, scale: this.target, ox: -tx * side, oy: -ty * side });
     tile.content = frame.content;
@@ -160,10 +160,10 @@ export class MapStage {
     if (!frame || !renderer) return;
     renderer.background.color = frame.content.chrome.paper;
     // Целые пиксели устройства: при своём масштабе плитка ложится точка в точку.
-    const x = Math.round(frame.ox * frame.dpr), y = Math.round(frame.oy * frame.dpr);
+    const x = Math.round(frame.ox * frame.dpr), y = Math.round(frame.oy * frame.dpr), side = tileSide(frame.dpr);
     for (const tile of this.tiles.values()) {
       const k = frame.scale / tile.scale;
-      tile.sprite.position.set(x + tile.tx * TILE * k, y + tile.ty * TILE * k);
+      tile.sprite.position.set(x + tile.tx * side * k, y + tile.ty * side * k);
       tile.sprite.scale.set(k);
       // Плитки текущего масштаба — поверх растянутых запасных.
       tile.sprite.zIndex = tile.scale === this.target ? 1 : 0;

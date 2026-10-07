@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { drawWallPolyline } from "./wallArtwork";
 
-vi.mock("./artwork", () => ({ artworkImage: (key: string) => ({ naturalWidth: key === "wall-masonry" ? 204 : 256, naturalHeight: key === "wall-masonry" ? 128 : 256, key }) }));
+vi.mock("./artwork", () => ({ artworkImage: (key: string) => ({ naturalWidth: key === "wall-masonry" ? 204 : 256, naturalHeight: key === "wall-masonry" ? 128 : 256, key }),
+  // Копии узора — забота artwork.ts; здесь проверяется геометрия стены.
+  patternSource: (image: unknown) => ({ source: image, factor: 1 }) }));
 afterEach(() => vi.unstubAllGlobals());
 function context() {
   vi.stubGlobal("DOMMatrix", class { values: number[]; constructor(values: number[]) { this.values = values; } });

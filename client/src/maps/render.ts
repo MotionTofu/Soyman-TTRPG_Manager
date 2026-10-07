@@ -3,7 +3,7 @@ import { tokenTapeImage } from "./assets/tokenTape";
 import { drawCachedWalls } from "./assets/wallRasterCache";
 import { drawTerrainMaskTiles } from "./assets/terrainMaskDrawing";
 import { maskSampleCode } from "./terrainMaskTiles";
-import { artworkImage, doorImage, paperPattern, surfaceImage, surfacePattern, texturedMask, wallPattern, type ArtPack } from "./assets/artwork";
+import { artworkImage, doorImage, paperPattern, patternSource, surfaceImage, surfacePattern, texturedMask, wallPattern, type ArtPack } from "./assets/artwork";
 // Рендер карты на canvas 2D. Цвета террейна — фиксированная спокойная
 // палитра (исключение как у Полотна §6 design_revision.md: бюджет акцента
 // на неё не тратится). Обрамление (фон, сетка, координаты, дороги) — из
@@ -942,7 +942,8 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     const at = (x: number, y: number) => walls.get(`${x},${y}`) ?? terrain.defaultCode;
     const image = pack === "crypt" ? artworkImage("wall-masonry", "crypt") : artworkImage("stone-wall");
     // Участок кладки повторяется вдоль ребра; толщина — 0.36 клетки, длина участка — по пропорции рисунка.
-    const masonry = pack === "crypt" && image ? ctx.createPattern(image, "repeat-x") : null;
+    const brick = pack === "crypt" && image ? patternSource(image, 0.36 * scale / image.naturalHeight) : null;
+    const masonry = brick ? ctx.createPattern(brick.source, "repeat-x") : null;
     for (let y = vy0; y <= vy1; y++) for (let x = vx0; x <= vx1; x++) {
       if (at(x, y) !== "wall") continue;
       for (const [dx, dy, angle] of [[0, -1, 0], [1, 0, 90], [0, 1, 180], [-1, 0, 270]]) {
@@ -954,7 +955,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
           if (masonry && image) {
             const k = t / image.naturalHeight;
             // Привязка к миру по длине ребра, иначе соседние участки начинаются одинаково.
-            masonry.setTransform(new DOMMatrix([k, 0, 0, k, -((angle % 180 ? y : x) * scale) % (image.naturalWidth * k), -t / 2]));
+            masonry.setTransform(new DOMMatrix([k * brick!.factor, 0, 0, k * brick!.factor, -((angle % 180 ? y : x) * scale) % (image.naturalWidth * k), -t / 2]));
             ctx.fillStyle = masonry; ctx.fillRect(-scale * 0.55, -t / 2, scale * 1.1, t);
           } else { ctx.fillStyle = "#171717"; ctx.fillRect(-scale * 0.55, -t / 2, scale * 1.1, t); }
           ctx.restore();
