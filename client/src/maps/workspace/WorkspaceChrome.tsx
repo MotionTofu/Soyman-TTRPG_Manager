@@ -7,7 +7,7 @@ import { WorkspaceMenu } from "./WorkspaceMenu";
 import { layerName } from "./layerNames";
 import { TOOL_LABELS, type WorkspaceTool } from "./editorCommands";
 import { TOOL_SETS, TOOL_SET_LABELS, type ToolSet } from "./toolSets";
-import { PRINT_EFFECTS, WEATHER_EFFECTS, type MapEffect, type MapEffects } from "../gl/effects";
+import { EFFECTS, type EffectState, type MapEffect, type MapEffects } from "../gl/effects";
 
 // Обвязка редактора: рейка, шапка и строка статуса. Вынесены из страницы и
 // обёрнуты в memo, потому что страница рендерится на каждое движение мыши и
@@ -17,6 +17,7 @@ import { PRINT_EFFECTS, WEATHER_EFFECTS, type MapEffect, type MapEffects } from 
 
 export type GridLook = { opacity: number; lineWidth: number; lineStyle: "solid" | "dashed"; color: string };
 const GRID_COLORS = [["#000000", "Чёрная"], ["#ffffff", "Белая"], ["#ff3e91", "Розовая"], ["#ffe14a", "Жёлтая"]] as const;
+const EFFECT_NAMES = Object.keys(EFFECTS) as MapEffect[];
 const STYLES: [MapDrawingStyle, string][] = [["comic-punk", "Комикс-панк"], ["paper-ink", "Бумага и тушь"], ["blueprint", "Чертёж"]];
 
 export const WorkspaceToolRail = memo(function WorkspaceToolRail({ toolSet, tool, locked, onChoose }: {
@@ -32,7 +33,7 @@ export const WorkspaceToolRail = memo(function WorkspaceToolRail({ toolSet, tool
 });
 
 export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, toolSet, onToolSet, canUndo, canRedo, onUndo, onRedo, grid, onGrid,
-  style, onStyle, styleLocked, generatorLocked, saveLocked, onGenerator, onSave, onBackup, gl, onGl, effects, onEffect, classicLink }: {
+  style, onStyle, styleLocked, generatorLocked, saveLocked, onGenerator, onSave, onBackup, gl, onGl, effects, onEffect, onEffectsReset, classicLink }: {
   mapName: string; status: string; toolSet: ToolSet; onToolSet: (set: ToolSet) => void;
   canUndo: boolean; canRedo: boolean; onUndo: () => void; onRedo: () => void;
   grid: GridLook; onGrid: (patch: Partial<GridLook>) => void;
@@ -40,7 +41,7 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, 
   generatorLocked: boolean; saveLocked: boolean; onGenerator: () => void; onSave: () => void; onBackup: () => void;
   /** Отрисовка плитками через WebGL вместо обычного холста. */
   gl: boolean; onGl: (value: boolean) => void;
-  effects: MapEffects; onEffect: (name: MapEffect, value: boolean) => void;
+  effects: MapEffects; onEffect: (name: MapEffect, next: EffectState) => void; onEffectsReset: () => void;
   /** Старый редактор — только для карт, ещё не переведённых в новый формат. */
   classicLink: string | null;
 }) {
@@ -67,11 +68,16 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, 
         </fieldset>
       </WorkspaceMenu>
       <WorkspaceMenu label="Эффекты ▾" title="Эффекты" className="workspace-effects-menu">
-        {[["Печать", PRINT_EFFECTS], ["Погода", WEATHER_EFFECTS]].map(([legend, group]) => <fieldset key={legend as string} disabled={!gl}><legend>{legend as string}</legend>
-          {(Object.entries(group) as [MapEffect, string][]).map(([name, label]) => <label key={name}>
-            <input type="checkbox" checked={effects[name]} onChange={event => onEffect(name, event.target.checked)} />{label}</label>)}
-        </fieldset>)}
         {!gl && <p>Эффекты работают в новой отрисовке: «Карта ▾ → Новая отрисовка».</p>}
+        {["Печать", "Погода"].map((group) => <fieldset key={group} disabled={!gl}><legend>{group}</legend>
+          {EFFECT_NAMES.filter((name) => EFFECTS[name].group === group).map((name) => { const state = effects[name]; return <Fragment key={name}>
+            <label><input type="checkbox" checked={state.on} onChange={event => onEffect(name, { ...state, on: event.target.checked })} />{EFFECTS[name].label}</label>
+            {state.on && EFFECTS[name].params.map((param) => <label key={param.key} className="workspace-effect-knob">{param.label} · {state.values[param.key]}
+              <input type="range" aria-label={`${EFFECTS[name].label}: ${param.label}`} min={param.min} max={param.max} step={param.step} value={state.values[param.key]}
+                onChange={event => onEffect(name, { ...state, values: { ...state.values, [param.key]: Number(event.target.value) } })} /></label>)}
+          </Fragment>; })}
+        </fieldset>)}
+        <button type="button" disabled={!gl} onClick={onEffectsReset}>Вернуть как было</button>
       </WorkspaceMenu>
       <WorkspaceMenu label="Карта ▾" title="Карта" className="workspace-map-menu">
         <fieldset disabled={styleLocked}><legend>Оформление</legend>

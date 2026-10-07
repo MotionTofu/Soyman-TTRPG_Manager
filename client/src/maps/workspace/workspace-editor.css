@@ -31,6 +31,9 @@
 .workspace-menu-popup legend { padding: 0; color: var(--muted); font-size: var(--fs-meta); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .workspace-menu-popup label { display: flex; align-items: center; gap: 8px; padding: 2px 8px; }
 .workspace-menu-popup label:has(input[type="range"]) { display: grid; gap: 4px; }
+.workspace-effects-menu .workspace-menu-popup { width: 280px; max-height: min(70vh, 640px); overflow-y: auto; }
+.workspace-effects-menu .workspace-menu-popup p { margin: 0; padding: 2px 8px; color: var(--muted); }
+.workspace-menu-popup label.workspace-effect-knob { padding-left: 32px; color: var(--muted); font-size: var(--fs-meta); }
 
 /* Тело */
 .workspace-editor-body { display: flex; min-height: 0; }

@@ -40,13 +40,13 @@ void main() {
   vec2 px = vTextureCoord * uInputSize.xy;
   // Мировые координаты: рисунок шума привязан к карте и не плывёт при сдвиге.
   vec2 world = (px - uOrigin) / uScale;
-  // Дрожание не больше трёх пикселей: на сильном приближении линия не должна ломаться.
-  float amp = min(uWobble * uScale, 3.0);
+  // Дрожание не больше шести пикселей: на сильном приближении линия не должна ломаться.
+  float amp = min(uWobble * uScale, 6.0);
   px += (vec2(noise(world * 1.7), noise(world * 1.7 + 31.7)) - 0.5) * 2.0 * amp;
   vec3 line = at(px);
   vec2 shift = uShift * uScale;
   float len = length(shift);
-  if (len > 4.0) shift *= 4.0 / len;
+  if (len > 8.0) shift *= 8.0 / len;
   vec3 tint = at(px + shift);
   tint = mix(tint, line, ink(tint));
   vec3 color = mix(tint, line, ink(line));
