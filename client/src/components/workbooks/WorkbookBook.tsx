@@ -4,8 +4,8 @@ import {useResource} from "../../data/hooks";
 import {useConfirm} from "../../hooks/useConfirm";
 import {MentionText} from "../mentions/MentionText";
 import {WorkbookFieldInput} from "./WorkbookFieldInput";
-import {WorkbookScope,type WorkbookInstance} from "./model";
-import {formerAnswers,sheetNotes,sheetProgress,WORKBOOK_NOTES,type WorkbookAnswers,type WorkbookField,type WorkbookNote,type WorkbookSheet} from "@shared/workbooks";
+import {WorkbookScope,WorkbookContext,WorkbookRow,type WorkbookInstance} from "./model";
+import {formerAnswers,sheetNotes,sheetProgress,workbookAnswerless,WORKBOOK_NOTES,type WorkbookAnswers,type WorkbookField,type WorkbookNote,type WorkbookSheet} from "@shared/workbooks";
 
 /** Заметка в связанной книге — тетрадь читает её по ссылке. */
 interface BookNote {id:string;sheet_key:string|null;book_id:number;book_title:string;quote:string;body:string;created_at:string}
@@ -18,14 +18,22 @@ const writable=(f:WorkbookField)=>f.type==="text"||f.type==="line"||f.type==="pa
 /** Имя карточки — её первая строка или текст. */
 const nameField=(group:WorkbookField)=>(group.fields??[]).find(f=>f.type==="line"||f.type==="text");
 const cardName=(group:WorkbookField,row:Row,i:number)=>{const f=nameField(group),v=f&&row[f.key];return typeof v==="string"&&v.trim()?v.trim().split("\n")[0]:`${group.label} ${i+1}`;};
-const cardProgress=(group:WorkbookField,row:Row)=>{const fields=(group.fields??[]).filter(f=>f.type!=="heading"&&f.type!=="note");return {filled:fields.filter(f=>filled(row[f.key])).length,total:fields.length};};
+const cardProgress=(group:WorkbookField,row:Row)=>{const fields=(group.fields??[]).filter(f=>!workbookAnswerless(f)&&!f.optional);return {filled:fields.filter(f=>filled(row[f.key])).length,total:fields.length};};
+const summaryText=(field:WorkbookField,row:Row)=>{
+ const value=row[field.key];
+ if(field.type==="state"){const rows=row[field.source!];return (Array.isArray(rows)?rows:[]).find(r=>r._id===value)?.name??(value?"Состояние удалено":"—");}
+ if(Array.isArray(value))return value.some(v=>v&&typeof v==="object")?`${value.length} записей`:value.join(", ");
+ return value==null||value===""?"—":String(value);
+};
 
 /**
  * Тетрадь по макету «Разворот · лист 02»: слева форма листа, справа «Записи к этому листу»,
  * язычки листов на кромке. `single` — одна страница (у края читалки и на телефоне):
  * язычки сверху, «Записи» — последней закладкой.
  */
-export function WorkbookBook({doc,answers,change,sheetKey,onSheet,single,disabled,notesVersion=0}:{doc:WorkbookInstance;answers:WorkbookAnswers;change:Change;sheetKey:string|null;onSheet:(key:string)=>void;single:boolean;disabled:boolean;notesVersion?:number}){
+type BookProps={doc:WorkbookInstance;answers:WorkbookAnswers;change:Change;sheetKey:string|null;onSheet:(key:string)=>void;single:boolean;disabled:boolean;notesVersion?:number};
+export function WorkbookBook(props:BookProps){return <WorkbookContext.Provider value={{document:props.doc,answers:props.answers,onSheet:props.onSheet,disabled:props.disabled}}><WorkbookBookView {...props}/></WorkbookContext.Provider>;}
+function WorkbookBookView({doc,answers,change,sheetKey,onSheet,single,disabled,notesVersion=0}:BookProps){
  const template=doc.template,index=Math.max(0,template.sheets.findIndex(s=>s.key===sheetKey)),sheet=template.sheets[index];
  const [page,setPage]=useState<"form"|"notes">("form"),[card,setCard]=useState<{field:string;row:string}|null>(null),[contents,setContents]=useState(false);
  const bookNotes=useResource<BookNote[]>(`/workbooks/instances/${doc.id}/notes`);
@@ -37,14 +45,14 @@ export function WorkbookBook({doc,answers,change,sheetKey,onSheet,single,disable
  const group=card&&sheet.fields.find(f=>f.key===card.field);
  const tabs=<nav className="wb-tabs" aria-label="Листы тетради">
   <button type="button" className="wb-tab" aria-label="Все листы" aria-expanded={contents} onClick={()=>setContents(!contents)}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
-  {template.sheets.map((s,i)=>{const p=sheetProgress(s,answers[s.key]),done=p.total>0&&p.filled===p.total,active=i===index&&(!single||page==="form");return <button type="button" key={s.key} className={`wb-tab${active?" is-active":""}`} aria-current={active?"page":undefined} title={`${number(i)} · ${s.title}`} aria-label={`Лист ${number(i)}: ${s.title}${done?", готов":""}`} onClick={()=>go(s.key)}><span className="wb-tab__num">{number(i)}</span><span className="wb-tab__title">{s.title||number(i)}</span>{done&&<span aria-hidden="true"> ✓</span>}</button>;})}
+  {template.sheets.map((s,i)=>{const p=sheetProgress(s,answers[s.key]),done=!template.practical&&p.total>0&&p.filled===p.total,active=i===index&&(!single||page==="form");return <button type="button" key={s.key} className={`wb-tab${active?" is-active":""}`} aria-current={active?"page":undefined} title={`${number(i)} · ${s.title}`} aria-label={`Лист ${number(i)}: ${s.title}${done?", готов":""}`} onClick={()=>go(s.key)}><span className="wb-tab__num">{number(i)}</span><span className="wb-tab__title">{s.title||number(i)}</span>{done&&<span aria-hidden="true"> ✓</span>}</button>;})}
   {single&&<button type="button" className={`wb-tab wb-tab--notes${page==="notes"?" is-active":""}`} aria-pressed={page==="notes"} onClick={()=>setPage(page==="notes"?"form":"notes")}>Записи{notesHere?` · ${notesHere}`:""}</button>}
  </nav>;
  const progress=sheetProgress(sheet,answers[sheet.key]),ready=sheet.fields.some(f=>f.readiness);
  const prev=template.sheets[index-1],next=template.sheets[index+1];
  const footer=<footer className="wb-footer">
   {prev?<button type="button" onClick={()=>go(prev.key)}>← {number(index-1)}{single?"":` · ${prev.title}`}</button>:<span/>}
-  <span className="wb-footer__progress"><span className={`wb-num ${progress.total&&progress.filled===progress.total?"wb-num--filled":progress.filled?"wb-num--current":"wb-num--empty"}`} aria-hidden="true"/>{ready?"Готовность":"Заполнено"} {progress.filled} из {progress.total}</span>
+  {template.practical?<span className="wb-footer__progress">{number(index)} / {template.sheets.length}</span>:<span className="wb-footer__progress"><span className={`wb-num ${progress.total&&progress.filled===progress.total?"wb-num--filled":progress.filled?"wb-num--current":"wb-num--empty"}`} aria-hidden="true"/>{ready?"Готовность":"Заполнено"} {progress.filled} из {progress.total}</span>}
   {next?<button type="button" className="wb-next" onClick={()=>go(next.key)}>{number(index+1)}{single?"":` · ${next.title}`} →</button>:<span/>}
  </footer>;
  const contentsList=contents&&<div className="wb-contents" role="dialog" aria-label="Все листы"><ol>{template.sheets.map((s,i)=>{const p=sheetProgress(s,answers[s.key]);return <li key={s.key}><button type="button" aria-current={i===index?"page":undefined} onClick={()=>go(s.key)}><b>{number(i)}</b><span>{s.title}</span><small>{p.filled} / {p.total}</small></button></li>;})}</ol></div>;
@@ -82,11 +90,11 @@ function SheetForm({sheet,index,template,answers,change,disabled,onCard}:{sheet:
 
 /** Повторяемая карточка на листе — кнопка с именем и заполненностью; открывается на весь разворот. */
 function CardList({field,rows,disabled,onOpen,onAdd}:{field:WorkbookField;rows:Row[];disabled:boolean;onOpen:(row:string)=>void;onAdd:()=>void}){
- const [summary,setSummary]=useState(false),children=(field.fields??[]).filter(f=>f.type!=="heading"&&f.type!=="note");
+ const [summary,setSummary]=useState(false),children=(field.fields??[]).filter(f=>!workbookAnswerless(f));
  return <section className="wb-cards">
   <div className="wb-cards__head"><span className="wb-label">{field.label}</span>{rows.length>0&&<button type="button" className="wb-link" aria-pressed={summary} onClick={()=>setSummary(!summary)}>Сводка ⤢</button>}</div>
   {field.hint&&<small className="wb-hint">{field.hint.replace(/\*+/g,"")}</small>}
-  {summary?<div className="wb-summary"><table><thead><tr>{children.map(c=><th key={c.key} scope="col">{c.label}</th>)}</tr></thead><tbody>{rows.map(r=><tr key={r._id}>{children.map(c=>{const v=r[c.key];return <td key={c.key}>{Array.isArray(v)?v.join(", "):v==null||v===""?"—":String(v)}</td>;})}</tr>)}</tbody></table></div>
+  {summary?<div className="wb-summary"><table><thead><tr>{children.map(c=><th key={c.key} scope="col">{c.label}</th>)}</tr></thead><tbody>{rows.map(r=><tr key={r._id}>{children.map(c=><td key={c.key}><MentionText text={summaryText(c,r)}/></td>)}</tr>)}</tbody></table></div>
   :<div className="wb-cards__grid">{rows.map((r,i)=>{const p=cardProgress(field,r);return <button type="button" key={r._id} className="wb-card-button" onClick={()=>onOpen(r._id)}><span className="wb-card-button__name">{cardName(field,r,i)}</span><span className="wb-card-button__meta">{p.filled} из {p.total} граф</span></button>;})}
    <button type="button" className="wb-card-add" disabled={disabled||rows.length>=500} onClick={onAdd}>+ {field.entity?field.entity[0].toUpperCase()+field.entity.slice(1):"Карточка"}</button></div>}
  </section>;
@@ -109,7 +117,7 @@ function CardSheet({sheet,group,rowId,answers,change,disabled,onRow}:{sheet:Work
   </div>
   <fieldset className="wb-fields" disabled={disabled}>
    <div className="wb-card__title">{name?<input aria-label={name.label} placeholder={name.label} value={typeof row[name.key]==="string"?String(row[name.key]):""} onChange={e=>set(name.key,e.target.value)}/>:<h2>{cardName(group,row,i)}</h2>}<span>{p.filled} из {p.total} граф</span></div>
-   <div className="wb-card__grid">{(group.fields??[]).filter(f=>f!==name).map(f=><WorkbookFieldInput key={f.key} field={f} value={row[f.key]} onChange={v=>set(f.key,v)}/>)}</div>
+   <WorkbookRow.Provider value={row}><div className="wb-card__grid">{(group.fields??[]).filter(f=>f!==name).map(f=><WorkbookFieldInput key={f.key} field={f} value={row[f.key]} onChange={v=>set(f.key,v)}/>)}</div></WorkbookRow.Provider>
    <div className="wb-card__actions">
     <button type="button" className="wb-card-add" onClick={()=>{const id=crypto.randomUUID();change(sheet.key,group.key,[...rows,{_id:id}]);onRow(id);}}>+ {group.entity?group.entity[0].toUpperCase()+group.entity.slice(1):"Карточка"}</button>
     <button type="button" className="wb-link" onClick={async()=>{if(!await confirm({message:`Удалить карточку «${cardName(group,row,i)}»?`,confirmLabel:"Удалить",danger:true}))return;change(sheet.key,group.key,rows.filter(r=>r._id!==rowId));onRow(next?._id??prev?._id??null);}}>Удалить карточку</button>

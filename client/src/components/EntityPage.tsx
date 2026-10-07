@@ -215,6 +215,7 @@ export function EntityPage({
   return (
     <div
       className={`stack entity-page${fill ? " page-fill" : ""}${paper ? " entity-page--paper" : ""}`}
+      data-entity-type={entityType}
     >
       {overlays}
 

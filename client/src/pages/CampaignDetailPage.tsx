@@ -1,9 +1,9 @@
 import type { InstanceSummary } from "../components/workbooks/model";
-import { useCompendiumEntries } from "../components/dnd/useCompendiumEntries";
-import { liveEffectEntryIds, withLiveEffects } from "../components/dnd/dndFeatures";
+import {ProjectWorkbooks} from "../components/workbooks/ProjectWorkbooks";
+import {EmbeddedWorkbook} from "./WorkbookPage";
 import { Fragment, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { entityQuery, resourceQuery, useAction, useEntity, useResource, write } from "../data/hooks";
+import { entityQuery, useAction, useEntity, useResource, write } from "../data/hooks";
 import { afterWriteAnywhere } from "../data/imperative";
 import {
   campaignEventAffects,
@@ -13,12 +13,10 @@ import {
   rosterAffects,
 } from "../data/campaigns";
 import { useQueries } from "@tanstack/react-query";
-import { statblockListPath } from "../data/statblocks";
 import { chroniclePaths } from "../data/settingPage";
 import { sessionMoneyAffects } from "../data/sessions";
+import { vesselPaths, type VesselSummary } from "../data/campaignVessels";
 import { labelled } from "../data/notices";
-import { deriveSheet } from "@shared/dnd/derive";
-import { normalizeDndCharacter } from "@shared/dnd/normalize";
 import { toLocalDateKey, formatDateKeyRu, parseDateKey } from "../utils/date";
 import { copySessionPrep } from "../sessionCopy";
 import { Modal } from "../components/Modal";
@@ -31,13 +29,12 @@ import { TaskTracker } from "../components/TaskTracker";
 import { CampaignSecrets, type SecretsNavStats } from "../components/CampaignSecrets";
 import { CampaignMilestones, type MilestonesNavStats } from "../components/CampaignMilestones";
 import { CampaignChaptersScenes, type ChaptersNavStats } from "../components/CampaignChaptersScenes";
-import { CampaignAdventuresCard } from "../components/CampaignAdventuresCard";
 import { CrossLinksWizard } from "../components/CrossLinksWizard";
 import { EmptyState } from "../components/EmptyState";
+import { RowDeleteButton } from "../components/RowIconButtons";
 import { RemindersWidget } from "../components/RemindersWidget";
 import { CharacterRequestsBlock } from "../components/CharacterRequestsBlock";
-import { NavIcon } from "../components/NavIcons";
-import { IMAGE_ACCEPT, IMAGE_HINT } from "../imageUpload";
+import { IMAGE_ACCEPT } from "../imageUpload";
 import {
   PAYMENT_TYPE_LABELS,
   PAYMENT_TYPE_OPTIONS,
@@ -60,12 +57,13 @@ import { EntityPage } from "../components/EntityPage";
 import { LoadErrorCard } from "../components/Loadable";
 import { useImageCrop } from "../hooks/useImageCrop";
 import { loadHideFinance } from "../financePrivacy";
-import { safeBackgroundImage, isSafeImageUrl } from "../utils/safeUrl";
+import { isSafeImageUrl } from "../utils/safeUrl";
 import { useAuthenticatedFileUrl } from "../utils/fileUrl";
 import { useConfirm, useAlert } from "../hooks/useConfirm";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import type {
   CampaignCalendarEvent,
+  CampaignAdventureTree,
   CampaignDetail,
   CampaignEntry,
   CampaignGroup,
@@ -96,6 +94,7 @@ import { sessionLabel } from "../sessionLabel";
 import { CampaignRevealList } from "../components/RevealList";
 import { CampaignVesselsTab } from "../components/CampaignVesselsTab";
 import { CampaignPassport } from "../components/campaign/CampaignPassport";
+import { CampaignDossierFiles } from "../components/campaign/CampaignDossierFiles";
 import { CampaignNow } from "../components/campaign/CampaignNow";
 import { OldNotesFold } from "../components/campaign/OldNotesFold";
 import { ExtraPayments } from "../components/campaign/ExtraPayments";
@@ -106,15 +105,19 @@ import { ExtraPayments } from "../components/campaign/ExtraPayments";
 // привязана; у ваншота нет «Хроники мира».
 const GM_TABS = [
   "Обзор",
-  "Игроки и персонажи",
-  // Корабли партии — сразу за составом (спека profiles-paper-2, «Корабль кампании»).
-  "Транспорт",
+  "Персонажи игроков",
   "Сюжет",
   "Сессии",
   "Хроника мира",
   "Тетрадь",
   "Выдача",
+  "Оплата",
+  "Представление",
+  "Транспорт",
+  "Итоги",
 ] as const;
+
+const CAMPAIGN_MORE_TABS = ["Оплата", "Представление", "Транспорт", "Итоги"] as const;
 
 // Разделы «Сюжета» и старые имена вкладок, которые теперь ведут в них.
 const STORY_SECTIONS = [
@@ -128,6 +131,7 @@ const storySectionOf = (oldTab: string | null) => STORY_SECTIONS.find((x) => x.l
 // Сохранённые ссылки на прежнее имя вкладки не должны падать на «Обзор».
 // «Хроника игр» стала «Сессиями» (2026-09-18): «хроника» путалась с «Хроникой мира».
 const GM_TAB_ALIASES = {
+  "Игроки и персонажи": "Персонажи игроков",
   "Заметки по ведению": "Обзор",
   Заметки: "Обзор",
   "Для игроков": "Выдача",
@@ -208,8 +212,11 @@ export function CampaignDetailPage() {
   const allPlayers = useResource<Player[]>(campaignPaths.players()).data ?? NO_PLAYERS;
   const debts = useResource<CampaignDebt[]>(invalidCampaignId ? null : campaignPaths.debts(campaignId)).data ?? NO_DEBTS;
   const workbooks = useResource<InstanceSummary[]>(invalidCampaignId ? null : `/workbooks/instances?project_type=campaign&project_id=${campaignId}`).data ?? NO_WORKBOOKS;
+  const gmCampaignId = !invalidCampaignId && campaign?.role !== "player" && campaign ? campaignId : null;
+  const vessels = useResource<VesselSummary[]>(gmCampaignId == null ? null : vesselPaths.list(gmCampaignId)).data;
+  const storyTree = useResource<CampaignAdventureTree[]>(gmCampaignId == null ? null : campaignPaths.tree(gmCampaignId)).data;
   const gmTabs = GM_TABS.filter(
-    (t) => (t !== "Хроника мира" || campaign?.type !== "oneshot") && (t !== "Тетрадь" || workbooks.length > 0)
+    (t) => (t !== "Хроника мира" || campaign?.type !== "oneshot")
   );
   const tabs = campaign?.role === "player" ? PLAYER_TABS : gmTabs;
   const [tab, selectTab] = useTabState(
@@ -219,7 +226,7 @@ export function CampaignDetailPage() {
   );
   const [confirmDialog, confirm] = useConfirm();
   const [alertDialog, showAlert] = useAlert();
-  // Навигация внутри таба «Игроки и персонажи» (Master–Detail).
+  // Навигация внутри таба «Персонажи игроков» (Master–Detail).
   const [playersSel, setPlayersSel] = useState<{ section: string; item?: string }>({ section: "roster" });
   // «Сюжет»: раздел слева, под ним — фильтр по приключению. Старая ссылка на
   // «Вехи» или «Тайны и зацепки» открывает свой раздел.
@@ -707,14 +714,22 @@ export function CampaignDetailPage() {
     });
   }
 
-  const safeBgLayer = safeBackgroundImage(campaign.background_image_url && isSafeImageUrl(campaign.background_image_url) ? campaign.background_image_url : null);
+  const tabCounts: Partial<Record<(typeof tabs)[number], number>> = {
+    "Персонажи игроков": campaign.roster.length,
+    "Транспорт": vessels?.filter(v => !v.archived_at).length,
+    "Сюжет": storyTree?.reduce((total, adventure) => total + adventure.scenes.length + adventure.chapters.reduce((n, chapter) => n + chapter.scenes.length, 0), 0),
+    "Сессии": sessions.length,
+    "Хроника мира": calendarEvents.length,
+    "Тетрадь": workbooks.length,
+  };
   return (
     <EntityPage
       crumbs={[{ label: "Кампании", to: "/campaigns" }, { label: campaign.name }]}
       entityType="campaign"
       title={campaign.name}
       badges={
-        campaign.role === "player" ? (
+        <>
+        {campaign.role === "player" ? (
           <span className="badge role-player-badge zine-rotate">Я игрок</span>
         ) : (
           !loadHideFinance() && (
@@ -722,7 +737,9 @@ export function CampaignDetailPage() {
               <span className="campaign-earned">{campaign.finance.earned}</span> {campaign.currency}
             </span>
           )
-        )
+        )}
+        {campaign.role !== "player" && <CampaignNow oneshot={campaign.type === "oneshot"} sessions={sessions} onSchedule={() => setCreatingDate(toLocalDateKey(new Date()))} />}
+        </>
       }
       // Бумага (спека campaign-paper, доски 41–42): под именем — метки типа
       // и системы; статус — в фактах «Обзора».
@@ -733,9 +750,9 @@ export function CampaignDetailPage() {
           {campaign.system_name && <span className="badge tag">{campaign.system_name}</span>}
         </span>
       }
-      backdrop={safeBgLayer}
       actions={[{ label: "Архивировать", danger: true, onClick: archiveCampaign }]}
-      tabs={tabs}
+      tabs={tabs.filter(id => !CAMPAIGN_MORE_TABS.some(t => t === id)).map(id => ({ id, label: tabCounts[id] ? `${id} · ${tabCounts[id]}` : id }))}
+      hiddenTabs={CAMPAIGN_MORE_TABS.filter(id => tabs.some(t => t === id))}
       tab={tab}
       onTab={(t) => selectTab(t as (typeof tabs)[number])}
     >
@@ -834,7 +851,8 @@ export function CampaignDetailPage() {
       {tab === "Тетрадь" && (
         // Свободные записи кампании — в листах тетради (Q31), как у сеттинга.
         <section className="paper-groups" aria-label="Тетрадь кампании">
-          <ul className="paper-rows">
+          {!workbooks.length&&<ProjectWorkbooks type="campaign" id={campaignId} inline/>}
+          {workbooks.length === 1 ? <EmbeddedWorkbook id={workbooks[0].id}/> : <ul className="paper-rows">
             {workbooks.map((w) => (
               <li key={w.id}>
                 <Link className="paper-rows__main" to={`/workbooks/${w.id}`}>
@@ -846,19 +864,19 @@ export function CampaignDetailPage() {
                 </span>
               </li>
             ))}
-          </ul>
+          </ul>}
         </section>
       )}
 
-        {tab === "Обзор" && campaign.role !== "player" && (
+        {(tab === "Обзор" || tab === "Оплата") && campaign.role !== "player" && (
            <>
              <OverviewTab
+               key={tab}
+               section={tab === "Оплата" ? "payment" : "overview"}
                campaign={campaign}
                systems={systems}
                settingsList={settingsList}
                sessions={sessions}
-               onSchedule={() => setCreatingDate(toLocalDateKey(new Date()))}
-               onSecrets={() => openStory("secrets")}
              />
            </>
         )}
@@ -871,7 +889,8 @@ export function CampaignDetailPage() {
         />
       )}
 
-      {tab === "Игроки и персонажи" && (
+      {tab === "Персонажи игроков" && (
+        <div className="campaign-players-workspace">
         <EntityTabWorkspace
           sections={[
             { id: "roster", label: "Состав", count: campaign.roster.length },
@@ -884,10 +903,6 @@ export function CampaignDetailPage() {
         >
           {playersSel.section === "roster" && (
           <section className="stack">
-            <div className="section-heading-sub">
-              <h3 className="section-heading-sub-title"><span className="section-heading-sub-icon" aria-hidden="true">◆</span> Состав</h3>
-              <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>{campaign.roster.length} в игре</span>
-            </div>
             <CharacterRequestsBlock campaignId={campaignId} />
             <PlayersAndCharactersTab
               campaignId={campaignId}
@@ -917,8 +932,16 @@ export function CampaignDetailPage() {
           </section>
           )}
         </EntityTabWorkspace>
+        </div>
       )}
 
+      {tab === "Представление" && (
+        <section className="stack">
+          <p className="muted">Заглавное представление показывается на втором экране до первого представления сцены и по кнопке из пульта.</p>
+          <PresentationEditor owner={{ kind: "campaign", campaignId, campaignName: campaign.name }} />
+        </section>
+      )}
+      {tab === "Итоги" && <ResultsTab campaign={campaign} />}
       {tab === "Транспорт" && <CampaignVesselsTab campaignId={campaignId} />}
 
       {tab === "Сессии" && (
@@ -1001,9 +1024,7 @@ export function CampaignDetailPage() {
                                       )}
                                     </span>
                                     {inworld && <span className="paper-rows__sub">{inworld}</span>}
-                                    <button className="comp-mini" onClick={() => archiveSession(x.id)} title="В архив" aria-label="Архивировать сессию">
-                                      ✕
-                                    </button>
+                                    <RowDeleteButton onClick={() => archiveSession(x.id)} label="Архивировать сессию" />
                                   </li>
                                 );
                               })}
@@ -1031,7 +1052,7 @@ export function CampaignDetailPage() {
                     <span className="res-group__count" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>
                       {nextPlanned ? (
                         <span>
-                          след. <span style={{ color: "var(--on-surface)" }}>{formatDateKeyRu(nextPlanned.date)}</span>
+                          след. <span className="session-calendar__next-date">{formatDateKeyRu(nextPlanned.date)}</span>
                           {nextPlanned.start_time ? ` ${nextPlanned.start_time}` : ""} · {sessionLabel(nextPlanned)}
                           {diffLabel ? ` · ${diffLabel}` : ""}
                         </span>
@@ -1576,18 +1597,20 @@ function PlayersAndCharactersTab({
   const available = allPlayers.filter((p) => !roster.some((r) => r.id === p.id));
 
   return (
-    <div className="stack" style={{ gap: 16 }}>
-      <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-        <select value="" onChange={(e) => addToRoster(e.target.value, e)} disabled={available.length === 0}>
-          <option value="">{available.length === 0 ? "Все игроки уже в составе" : "Добавить игрока в состав…"}</option>
-          {available.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-        <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>{roster.length} в составе{available.length ? ` · ещё ${available.length} вне` : ""}</span>
-      </div>
+    <div className="campaign-dossier">
+      <header className="campaign-dossier__header">
+        <div>
+          <p className="campaign-dossier__meta">Состав кампании</p>
+          <h3>Личные дела</h3>
+        </div>
+        <div className="campaign-dossier__add">
+          <span className="campaign-dossier__meta">{roster.length} в составе · {characters.filter((c) => roster.some((p) => p.id === c.player_id)).length} персонажей</span>
+          <select value="" aria-label="Добавить игрока в состав" onChange={(e) => void addToRoster(e.target.value, e)} disabled={available.length === 0}>
+            <option value="">{available.length === 0 ? "Все игроки уже в составе" : "+ Добавить игрока…"}</option>
+            {available.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+      </header>
       {roster.length === 0 ? (
         <EmptyState
           title="Команда ещё не собрана"
@@ -1595,85 +1618,23 @@ function PlayersAndCharactersTab({
           action={available.length > 0 ? <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Выберите игрока выше ↑</span> : <Link to="/players">Создать игрока →</Link>}
         />
       ) : (
-        // Состав (просьба владельца 2026-10-02): строка игрока — имя, долг и
-        // действия; под ней с отступом его персонажи — портрет, имя, глазик, ✕.
-        <ul className="roster-list">
-          {roster.map((p) => {
-            const playerCharacters = characters.filter((c) => c.player_id === p.id);
-            const isLeft = p.roster_status === "left";
-            const debt = debts.find((d) => d.player_id === p.id);
-            return (
-              <li key={p.id} className={`roster-list__player${isLeft ? " is-left" : ""}`}>
-                <div className="roster-list__head">
-                  <span className="roster-list__name">
-                    <Link to={`/players/${p.id}`}>{p.name}</Link>
-                    {isLeft && <span className="badge cancelled">покинул</span>}
-                    {debt && !hideFinance && (
-                      <span className="roster-rows__debt">
-                        долг {debt.owed} {currency} · {debt.sessions} {debt.sessions === 1 ? "игра" : debt.sessions < 5 ? "игры" : "игр"}
-                      </span>
-                    )}
-                  </span>
-                  <span className="roster-list__actions">
-                    <button className="comp-mini" onClick={() => setAddingFor(p.id)}>
-                      + персонаж
-                    </button>
-                    <button className="comp-mini" onClick={() => void toggleLeft(p.id, p.roster_status)}>
-                      {isLeft ? "Вернуть" : "Покинул"}
-                    </button>
-                    <button className="comp-mini" title="Убрать из состава" aria-label={`Убрать ${p.name} из состава`} onClick={() => void removeFromRoster(p.id)}>
-                      ✕
-                    </button>
-                  </span>
-                </div>
-                {(playerCharacters.length > 0 || addingFor === p.id) && (
-                  <ul className="roster-list__chars">
-                    {playerCharacters.map((c) => {
-                      const img = c.thumbnail_image_url ?? c.avatar_image_url;
-                      return (
-                        <li key={c.id} className="roster-list__char">
-                          <Link className="roster-list__portrait" to={`/characters/${c.id}`} tabIndex={-1} aria-hidden="true">
-                            {img && isSafeImageUrl(img) ? <img src={img} alt="" /> : <span>{c.character_name.slice(0, 1)}</span>}
-                          </Link>
-                          <Link to={`/characters/${c.id}`}>{c.character_name}</Link>
-                          <button className="comp-mini" onClick={() => setPeekCharId(c.id)} aria-label={`Быстрый просмотр ${c.character_name}`} title="Быстрый просмотр">
-                            <NavIcon name="eye" />
-                          </button>
-                          <button className="comp-mini" title="В архив" aria-label={`${c.character_name} в архив`} onClick={() => void archiveCharacter(c.id, c.character_name)}>
-                            ✕
-                          </button>
-                        </li>
-                      );
-                    })}
-                    {addingFor === p.id && (
-                      <li className="roster-list__char">
-                        <input
-                          autoFocus
-                          placeholder="Имя персонажа"
-                          value={drafts[p.id] ?? ""}
-                          onChange={(e) => setDrafts((d) => ({ ...d, [p.id]: e.target.value }))}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") void addCharacter(p.id);
-                            if (e.key === "Escape") {
-                              setAddingFor(null);
-                              setDrafts((d) => ({ ...d, [p.id]: "" }));
-                            }
-                          }}
-                        />
-                        <button className="primary" onClick={() => void addCharacter(p.id)} disabled={!(drafts[p.id] ?? "").trim()}>
-                          ОК
-                        </button>
-                        <button onClick={() => { setAddingFor(null); setDrafts((d) => ({ ...d, [p.id]: "" })); }}>Отмена</button>
-                      </li>
-                    )}
-                  </ul>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-       )}
-      {characters.length > 0 && <CampaignSquadSummary characters={characters} />}
+        <CampaignDossierFiles
+          roster={roster} characters={characters} debts={debts} currency={currency} hideFinance={hideFinance}
+          addingFor={addingFor} drafts={drafts}
+          onDraft={(playerId, name) => setDrafts((d) => ({ ...d, [playerId]: name }))}
+          onStartAdding={setAddingFor}
+          onCancelAdding={() => {
+            if (addingFor != null) setDrafts((d) => ({ ...d, [addingFor]: "" }));
+            setAddingFor(null);
+          }}
+          onAddCharacter={(playerId) => void addCharacter(playerId)}
+          onPeek={setPeekCharId}
+          onArchive={(id, name) => void archiveCharacter(id, name)}
+          onToggleLeft={(id, status) => void toggleLeft(id, status)}
+          onRemovePlayer={(id) => void removeFromRoster(id)}
+        />
+      )}
+      {roster.length > 0 && <p className="campaign-dossier__legend">«—» — нет данных в листе персонажа.</p>}
       {characters.length > 0 && <CampaignSquadDates characters={characters} />}
       {pcConfirmDialog}
       {pcAlertDialog}
@@ -1762,82 +1723,6 @@ function PlayerJournalsSection({ campaignId }: { campaignId: number }) {
           </div>
         ))
       )}
-    </div>
-  );
-}
-
-function CampaignSquadSummary({ characters }: { characters: Character[] }) {
-  // Статблоки — под тем же ключом, что у листа: правка листа в соседнем окне
-  // меняет сводку без перечитывания всего отряда.
-  const statblocks = useQueries({
-    queries: characters.map((c) =>
-      resourceQuery<{ content: string; format: string }[]>(statblockListPath("character", c.id))
-    ),
-  });
-  // Эффекты умений и вещей — из справочника, как в самом листе: «Оборона» и
-  // «Защита без доспехов» живут в записях, а не в сохранённом листе.
-  const parsedSheets = statblocks.map((q) => {
-    const dnd = q.data?.find((s) => s.format === "dnd_character");
-    try {
-      return dnd ? normalizeDndCharacter(JSON.parse(dnd.content || "{}")) : null;
-    } catch {
-      return null;
-    }
-  });
-  const getEntry = useCompendiumEntries(parsedSheets.flatMap((d) => (d ? liveEffectEntryIds(d) : [])));
-  if (statblocks.some((q) => q.isPending)) return null;
-  const rows = characters.map((c, i) => {
-    const empty = { id: c.id, name: c.character_name, level: "—", ac: "—", hp: "—", speed: "—" };
-    const dnd = statblocks[i]?.data?.find((s) => s.format === "dnd_character");
-    if (!dnd) return empty;
-    try {
-      // «Сводка отряда» читала сохранённые поля листа как есть — а они
-      // свободный текст, который пишет импорт и который устаревает при
-      // любой правке класса или снаряжения. Теперь числа те же, что на
-      // самом чарнике: один модуль на оба экрана.
-      const parsed = parsedSheets[i];
-      if (!parsed) return empty;
-      const sheet = deriveSheet(withLiveEffects(parsed, getEntry));
-      return {
-        id: c.id,
-        name: c.character_name,
-        level: String(sheet.level.value || "—"),
-        ac: String(sheet.armorClass.value),
-        hp: sheet.maxHitPoints.value ? String(sheet.maxHitPoints.value) : "—",
-        speed: sheet.walkSpeed.value ? String(sheet.walkSpeed.value) : "—",
-      };
-    } catch {
-      return empty;
-    }
-  });
-  if (rows.length === 0) return null;
-  const hasAny = rows.some((r) => r.ac !== "—" || r.hp !== "—");
-  if (!hasAny) return null;
-  return (
-    <div className="card stack squad-summary">
-      <div className="campaign-player-header"><span>Сводка отряда</span><span className="muted">{rows.length} ПК</span></div>
-      <table className="squad-table">
-        <thead>
-          <tr>
-            <th>Персонаж</th>
-            <th>Ур.</th>
-            <th>КЗ</th>
-            <th>Хиты</th>
-            <th>Скорость</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.id}>
-              <td><Link to={`/characters/${r.id}`}>{r.name}</Link></td>
-              <td>{r.level}</td>
-              <td>{r.ac}</td>
-              <td>{r.hp}</td>
-              <td>{r.speed}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 }
@@ -2155,19 +2040,17 @@ function PlayerOverviewTab({
 // реже нужное — свёртками внизу. «Препродакшен» уехал в паспорт, «Продакшен» —
 // в «Сейчас», «Изображения» — в щелчок по обложке, «Пост-продакшен» — в «Итоги».
 function OverviewTab({
+  section,
   campaign,
   systems,
   settingsList,
   sessions,
-  onSchedule,
-  onSecrets,
 }: {
+  section: "overview" | "payment";
   campaign: CampaignDetail;
   systems: System[];
   settingsList: Setting[];
   sessions: SessionSummary[];
-  onSchedule: () => void;
-  onSecrets: () => void;
 }) {
   const campaignId = campaign.id;
   const oneshot = campaign.type === "oneshot";
@@ -2175,7 +2058,6 @@ function OverviewTab({
   const { save, saving } = useCampaignFieldsSave(campaignId);
   const run = useAction();
   const { allGroups, campaignGroupIds, toggleGroup } = useCampaignGroups(campaignId);
-  const [adventuresCount, setAdventuresCount] = useState<number | null>(null);
   const hideFinance = loadHideFinance();
   const formFrom = (c: CampaignDetail) => ({
     name: c.name,
@@ -2192,26 +2074,15 @@ function OverviewTab({
   const [form, setForm] = useState(() => formFrom(campaign));
   // Загрузка изображения: окно обрезки закрывается сразу, поэтому отказ виден
   // только плашкой.
-  function upload(kind: "background" | "thumbnail", label: string, file: File) {
+  function upload(kind: "thumbnail", label: string, file: File) {
     const fd = new FormData();
     fd.append("file", file);
     void run(labelled(label, () => write.post(`/campaigns/${campaignId}/${kind}`, fd, { timeoutMs: UPLOAD_TIMEOUT_MS })), {
       affects: campaignFieldsAffects(campaignId),
     });
   }
-  const bgCrop = useImageCrop("background", (file) => upload("background", "Фон кампании", file));
   const thumbCrop = useImageCrop("thumbnail", (file) => upload("thumbnail", "Обложка кампании", file));
   const thumbInput = useRef<HTMLInputElement>(null);
-  const bgInput = useRef<HTMLInputElement>(null);
-  const [ovConfirmDialog, ovConfirm] = useConfirm();
-  async function removeImage(kind: "background" | "thumbnail") {
-    const what = kind === "background" ? "фон страницы" : "обложку";
-    const ok = await ovConfirm({ message: `Убрать ${what}?`, confirmLabel: "Убрать", danger: true });
-    if (!ok) return;
-    await run(labelled(kind === "background" ? "Фон кампании" : "Обложка кампании", () => write.del(`/campaigns/${campaignId}/${kind}`)), {
-      affects: campaignFieldsAffects(campaignId),
-    });
-  }
 
   function start(which: "main" | "payment") {
     setForm(formFrom(campaign));
@@ -2335,10 +2206,54 @@ function OverviewTab({
     </div>
   );
 
+  if (section === "payment") return (
+    <section className="stack">
+        {!hideFinance && (
+          <section className="stack">
+            <h3>
+              Оплата <span className="paper-fold__count">· {paymentSummary}</span>
+            </h3>
+
+              {editing === "payment" ? (
+                paymentForm
+              ) : (
+                <>
+                  <dl className="paper-facts">
+                    <div>
+                      <dt className="paper-label">Оплата</dt>
+                      <dd>{PAYMENT_TYPE_LABELS[campaign.payment_type] ?? campaign.payment_type}</dd>
+                    </div>
+                    {campaign.payment_type === "paid" && (
+                      <>
+                        <div>
+                          <dt className="paper-label">Периодичность</dt>
+                          <dd>{PAYMENT_FREQUENCY_LABELS[campaign.payment_frequency] ?? campaign.payment_frequency}</dd>
+                        </div>
+                        <div>
+                          <dt className="paper-label">Ставка</dt>
+                          <dd>
+                            {campaign.session_rate ?? 0} {campaign.currency} · {RATE_SPLIT_LABELS[campaign.rate_split] ?? campaign.rate_split}
+                          </dd>
+                        </div>
+                      </>
+                    )}
+                  </dl>
+                  <button type="button" className="paper-more" onClick={() => start("payment")}>
+                    Править оплату ›
+                  </button>
+                  <ExtraPayments campaignId={campaignId} roster={campaign.roster} currency={campaign.currency} />
+                </>
+              )}
+          </section>
+        )}
+
+    </section>
+  );
+
   return (
     <div className="dossier campaign-overview">
       <aside className="dossier__aside">
-        {/* Обложка — щелчком; фон страницы — строкой под ней (Q10). */}
+        {/* Обложка меняется щелчком по изображению. */}
         <button
           type="button"
           className="dossier__portrait dossier__portrait--cover"
@@ -2349,27 +2264,7 @@ function OverviewTab({
           <span className="dossier__portrait-hint">Сменить обложку</span>
         </button>
         <input ref={thumbInput} hidden type="file" accept={IMAGE_ACCEPT} onChange={(e) => thumbCrop.onSelect(e.target.files?.[0] ?? null)} />
-        <input ref={bgInput} hidden type="file" accept={IMAGE_ACCEPT} onChange={(e) => bgCrop.onSelect(e.target.files?.[0] ?? null)} />
-        <p className="campaign-overview__images muted">
-          {campaign.thumbnail_image_url && (
-            <>
-              <button type="button" className="paper-more" onClick={() => void removeImage("thumbnail")}>убрать обложку</button>
-              {" · "}
-            </>
-          )}
-          фон страницы:{" "}
-          <button type="button" className="paper-more" onClick={() => bgInput.current?.click()} title={IMAGE_HINT}>
-            {campaign.background_image_url ? "сменить" : "задать"}
-          </button>
-          {campaign.background_image_url && (
-            <>
-              {" · "}
-              <button type="button" className="paper-more" onClick={() => void removeImage("background")}>убрать</button>
-            </>
-          )}
-        </p>
         {thumbCrop.modal}
-        {bgCrop.modal}
         <dl className="paper-facts">
           <div>
             <dt className="paper-label">Тип</dt>
@@ -2419,73 +2314,11 @@ function OverviewTab({
 
       <div className="dossier__main">
         {editing === "main" && mainForm}
-        <CampaignNow
-          campaignId={campaignId}
-          oneshot={oneshot}
-          sessions={sessions}
-          onSchedule={onSchedule}
-          onSecrets={onSecrets}
-        />
         <CampaignPassport campaign={campaign} />
-        <section className="paper-groups">
-          <h2 className="paper-group__head">
-            Приключения {adventuresCount != null && <span className="paper-group__count">· {adventuresCount}</span>}
-          </h2>
-          <CampaignAdventuresCard campaignId={campaign.id} settingId={campaign.setting_id} onCount={setAdventuresCount} />
-        </section>
 
-        {!hideFinance && (
-          <details className="paper-fold" open={editing === "payment" || undefined}>
-            <summary>
-              Оплата <span className="paper-fold__count">· {paymentSummary}</span>
-            </summary>
-            <div className="paper-fold__body">
-              {editing === "payment" ? (
-                paymentForm
-              ) : (
-                <>
-                  <dl className="paper-facts">
-                    <div>
-                      <dt className="paper-label">Оплата</dt>
-                      <dd>{PAYMENT_TYPE_LABELS[campaign.payment_type] ?? campaign.payment_type}</dd>
-                    </div>
-                    {campaign.payment_type === "paid" && (
-                      <>
-                        <div>
-                          <dt className="paper-label">Периодичность</dt>
-                          <dd>{PAYMENT_FREQUENCY_LABELS[campaign.payment_frequency] ?? campaign.payment_frequency}</dd>
-                        </div>
-                        <div>
-                          <dt className="paper-label">Ставка</dt>
-                          <dd>
-                            {campaign.session_rate ?? 0} {campaign.currency} · {RATE_SPLIT_LABELS[campaign.rate_split] ?? campaign.rate_split}
-                          </dd>
-                        </div>
-                      </>
-                    )}
-                  </dl>
-                  <button type="button" className="paper-more" onClick={() => start("payment")}>
-                    Править оплату ›
-                  </button>
-                  <ExtraPayments campaignId={campaignId} roster={campaign.roster} currency={campaign.currency} />
-                </>
-              )}
-            </div>
-          </details>
-        )}
 
-        <ResultsFold campaign={campaign} sessions={sessions} />
         <OldNotesFold campaignId={campaignId} settingId={campaign.setting_id} />
 
-        <details className="paper-fold">
-          <summary>Заглавное представление</summary>
-          <div className="paper-fold__body">
-            <p className="muted">
-              Заглушка на второй экран: показывается до первого представления сцены и по кнопке из пульта.
-            </p>
-            <PresentationEditor owner={{ kind: "campaign", campaignId: campaign.id, campaignName: campaign.name }} />
-          </div>
-        </details>
         <details className="paper-fold">
           <summary>Связать имена</summary>
           <div className="paper-fold__body">
@@ -2497,23 +2330,14 @@ function OverviewTab({
           </div>
         </details>
       </div>
-      {ovConfirmDialog}
     </div>
   );
 }
 
 // «Итоги» (бывший «Пост-продакшен», Q15): свободные записи итогов кампании.
-// Видны после первой сыгранной сессии или когда записи уже есть.
-function ResultsFold({ campaign, sessions }: { campaign: CampaignDetail; sessions: SessionSummary[] }) {
-  const post = useResource<CampaignEntry[]>(campaignPaths.entries(campaign.id, "post_production")).data;
-  if (!post) return null;
-  if (!sessions.some((s) => s.status === "held") && post.length === 0) return null;
+function ResultsTab({ campaign }: { campaign: CampaignDetail }) {
   return (
-    <details className="paper-fold">
-      <summary>
-        Итоги <span className="paper-fold__count">· {post.length}</span>
-      </summary>
-      <div className="paper-fold__body">
+    <section className="stack">
         <p className="muted">Что получилось, что нет, эпилоги персонажей, несбывшиеся линии, идеи для сиквела.</p>
         <CampaignEntryList
           campaignId={campaign.id}
@@ -2522,8 +2346,7 @@ function ResultsFold({ campaign, sessions }: { campaign: CampaignDetail; session
           emptyLabel="Итогов пока нет."
           defaultSettingId={campaign.setting_id ?? undefined}
         />
-      </div>
-    </details>
+    </section>
   );
 }
 

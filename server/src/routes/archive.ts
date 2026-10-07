@@ -266,6 +266,24 @@ archiveRouter.get("/", (_req, res) => {
     ...maps.map((r) => ({ type: "map", id: r.id, title: r.name || "Без имени", archived_at: r.archived_at }))
   );
 
+  const handouts = db.prepare(`
+    SELECT 'campaign_player_section' AS type, s.id, s.name AS title,
+           c.name AS subtitle, s.archived_at
+      FROM campaign_player_sections s JOIN campaigns c ON c.id = s.campaign_id
+     WHERE s.archived_at IS NOT NULL
+    UNION ALL
+    SELECT 'campaign_player_article', a.id, a.title, c.name || ' · ' || s.name, a.archived_at
+      FROM campaign_player_articles a JOIN campaign_player_sections s ON s.id = a.section_id
+      JOIN campaigns c ON c.id = s.campaign_id WHERE a.archived_at IS NOT NULL
+    UNION ALL
+    SELECT 'gallery_image', g.id, COALESCE(NULLIF(g.caption, ''), 'Без названия'),
+           c.name || ' · ' || s.name, g.archived_at
+      FROM gallery_images g JOIN campaign_player_sections s ON s.id = g.owner_id
+      JOIN campaigns c ON c.id = s.campaign_id
+     WHERE g.owner_type = 'campaign_player_section' AND g.archived_at IS NOT NULL
+  `).all() as ArchiveItem[];
+  items.push(...handouts);
+
   items.sort((a, b) => (a.archived_at < b.archived_at ? 1 : -1));
   res.json(items);
 });
@@ -385,6 +403,24 @@ archiveRouter.get("/:type/:id/impact", (req, res) => {
 // (никогда из запроса), поэтому `${table}` безопасен для подстановки.
 const ARCHIVE_TABLES = REGISTRY_ARCHIVE_TABLES;
 const ARCHIVE_KEYS = REGISTRY_ARCHIVE_KEYS;
+
+// Handouts retain their original row, position, file and visibility grants.
+const HANDOUT_TYPES = new Set(["campaign_player_section", "campaign_player_article", "gallery_image"]);
+archiveRouter.put("/:type/:id/:action", (req, res) => {
+  const { type, action } = req.params;
+  if (!HANDOUT_TYPES.has(type) || !["restore", "archive"].includes(action)) return res.status(400).json({ error: "unknown type or action" });
+  const table = ARCHIVE_TABLES[type];
+  const row = db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(req.params.id) as
+    { id: number; section_id?: number; owner_id?: number; owner_type?: string } | undefined;
+  if (!row || (type === "gallery_image" && row.owner_type !== "campaign_player_section")) return res.status(404).json({ error: "not found" });
+  db.transaction(() => {
+    db.prepare(`UPDATE ${table} SET archived_at = ? WHERE id = ?`).run(action === "restore" ? null : new Date().toISOString(), row.id);
+    if (action === "restore" && type !== "campaign_player_section") {
+      db.prepare("UPDATE campaign_player_sections SET archived_at = NULL WHERE id = ?").run(row.section_id ?? row.owner_id);
+    }
+  })();
+  res.json({ ok: true });
+});
 
 archiveRouter.delete("/:type/:id", (req, res) => {
   const table = ARCHIVE_TABLES[req.params.type];

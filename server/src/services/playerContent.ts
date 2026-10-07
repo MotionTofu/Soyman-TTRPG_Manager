@@ -182,22 +182,25 @@ export function getPlayerSectionsFor(campaignId: number, playerId: number): Reco
   const grantedArticleIds = new Set(
     grantRows.filter((g) => g.target_type === "campaign_player_article").map((g) => g.target_id)
   );
+  const grantedImageIds = new Set(
+    grantRows.filter((g) => g.target_type === "campaign_player_image").map((g) => g.target_id)
+  );
 
   const allSections = db
-    .prepare("SELECT * FROM campaign_player_sections WHERE campaign_id = ? ORDER BY position, id")
+    .prepare("SELECT * FROM campaign_player_sections WHERE campaign_id = ? AND archived_at IS NULL ORDER BY position, id")
     .all(campaignId) as { id: number; kind: string; name: string }[];
 
-  const gallerySectionIds = allSections.filter((s) => s.kind === "gallery" && grantedSectionIds.has(s.id)).map((s) => s.id);
-  const galleryImagesBySection = new Map<number, { image_path: string; image_url: string }[]>();
+  const gallerySectionIds = allSections.filter((s) => s.kind === "gallery").map((s) => s.id);
+  const galleryImagesBySection = new Map<number, { id: number; image_path: string; image_url: string }[]>();
   if (gallerySectionIds.length) {
     const galleryRows = db
       .prepare(
-        `SELECT * FROM gallery_images WHERE owner_type = 'campaign_player_section' AND owner_id IN (${inClause(gallerySectionIds)}) ORDER BY position, id`
+        `SELECT * FROM gallery_images WHERE owner_type = 'campaign_player_section' AND owner_id IN (${inClause(gallerySectionIds)}) AND archived_at IS NULL ORDER BY position, id`
       )
-      .all(...gallerySectionIds) as ({ owner_id: number; image_path: string } & Record<string, unknown>)[];
+      .all(...gallerySectionIds) as ({ id: number; owner_id: number; image_path: string } & Record<string, unknown>)[];
     for (const r of galleryRows) {
       const arr = galleryImagesBySection.get(r.owner_id) ?? [];
-      arr.push({ ...(r as object), image_url: toFileUrl(r.image_path) } as { image_path: string; image_url: string });
+      arr.push({ ...r, image_url: toFileUrl(r.image_path) });
       galleryImagesBySection.set(r.owner_id, arr);
     }
   }
@@ -206,7 +209,7 @@ export function getPlayerSectionsFor(campaignId: number, playerId: number): Reco
   const articlesBySection = new Map<number, { id: number }[]>();
   if (articleSectionIds.length) {
     const articleRows = db
-      .prepare(`SELECT * FROM campaign_player_articles WHERE section_id IN (${inClause(articleSectionIds)}) ORDER BY position, id`)
+      .prepare(`SELECT * FROM campaign_player_articles WHERE section_id IN (${inClause(articleSectionIds)}) AND archived_at IS NULL ORDER BY position, id`)
       .all(...articleSectionIds) as { id: number; section_id: number }[];
     for (const r of articleRows) {
       const arr = articlesBySection.get(r.section_id) ?? [];
@@ -219,8 +222,9 @@ export function getPlayerSectionsFor(campaignId: number, playerId: number): Reco
   for (const section of allSections) {
     const sectionGranted = grantedSectionIds.has(section.id);
     if (section.kind === "gallery") {
-      if (!sectionGranted) continue;
-      const images = galleryImagesBySection.get(section.id) ?? [];
+      const own = galleryImagesBySection.get(section.id) ?? [];
+      const images = sectionGranted ? own : own.filter(i => grantedImageIds.has(i.id));
+      if (!sectionGranted && images.length === 0) continue;
       result.push({ ...section, images });
     } else {
       const own = (articlesBySection.get(section.id) ?? []) as { id: number }[];

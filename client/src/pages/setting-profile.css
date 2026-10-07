@@ -46,6 +46,8 @@
 .setting-cover__edit { display: flex; flex-direction: column; gap: var(--sp-3); }
 
 .setting-passport { display: flex; flex-direction: column; gap: var(--sp-5); }
+.setting-overview__campaigns { gap: var(--sp-5); }
+.setting-overview__campaigns > .paper-group__head { margin: 0; }
 .setting-passport__head { display: flex; align-items: baseline; gap: var(--sp-5); }
 .setting-passport__head > .paper-group__head { flex: 1; margin: 0; }
 .setting-passport__view { margin: 0; display: flex; flex-direction: column; gap: var(--sp-6); }
@@ -53,6 +55,7 @@
 .setting-passport__form { display: flex; flex-direction: column; gap: var(--sp-5); }
 .setting-passport__form label,
 .setting-passport__form > div { display: flex; flex-direction: column; gap: var(--sp-2); }
+.setting-passport__form > .setting-passport__actions { flex-direction: row; justify-content: flex-start; align-items: center; }
 .setting-passport__signs { margin: 0; padding-left: var(--sp-7); display: flex; flex-direction: column; gap: var(--sp-2); }
 .setting-passport__chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); }
 .setting-passport__add { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
@@ -573,33 +576,7 @@
 .cycle-elements__row > input:first-child { flex: 1 1 180px; }
 .cycle-elements__row.is-new { padding-top: var(--sp-3); border-top: var(--card-border-width) dashed var(--paper-rule); }
 
-/* Править / удалить в строке — значками (RowIconButtons). */
-.row-icon {
-  position: relative;
-  display: inline-grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: var(--card-border-width) solid var(--line);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--paper-ink);
-  cursor: pointer;
-}
-.row-icon:hover, .row-icon:focus-visible { background: var(--paper-ink); color: var(--paper-base); }
-.row-icon::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: currentColor;
-  -webkit-mask: var(--row-icon) center / 20px no-repeat;
-  mask: var(--row-icon) center / 20px no-repeat;
-}
-.row-icon--edit { --row-icon: var(--skin-edit-pencil); }
-.row-icon--trash { --row-icon: var(--skin-trash); }
-.row-icon--cross { --row-icon: var(--skin-cross); }
-.row-icon--trash:hover, .row-icon--trash:focus-visible { background: #b3261e; border-color: #b3261e; color: var(--paper-base); }
+/* Рисованные действия строки подключаются через RowIconButtons. */
 
 @media (max-width: 700px) {
   .chronicle-item__actions { flex-wrap: wrap; }

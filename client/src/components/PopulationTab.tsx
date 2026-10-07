@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAction, useAfterWrite, useEntity, useResource, write } from "../data/hooks";
 import { settingPaths } from "../data/settingEntities";
 import { populationPaths } from "../data/settingPage";
 import { useConfirm, usePrompt } from "../hooks/useConfirm";
+import { useTabState } from "../hooks/useTabState";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import { CreatureCardLoader } from "./CreatureCard";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
@@ -237,10 +238,7 @@ function RecentList({ settingId, onPick }: { settingId: number; onPick: (id: num
 // ── Подразделы ────────────────────────────────────────────────────────────
 
 export function PopulationTab({ settingId }: { settingId: number }) {
-  const [section, setSection] = useState<Section>(() => {
-    const p = new URLSearchParams(window.location.search).get("population");
-    return (SECTIONS as readonly string[]).includes(p ?? "") ? (p as Section) : "Личности";
-  });
+  const [section, setSection] = useTabState(SECTIONS, "Личности", undefined, "population");
   // Счётчики — те же списки, что читают разделы без фильтров: открытый раздел
   // берёт их из кэша, а правка в разделе обновляет и число на вкладке.
   const counts: Record<Section, number | null> = {
@@ -248,11 +246,6 @@ export function PopulationTab({ settingId }: { settingId: number }) {
     Бестиарий: useResource<SettingBeing[]>(populationPaths.bestiary(settingId)).data?.length ?? null,
     Сообщества: useResource<SettingCommunity[]>(populationPaths.communities(settingId)).data?.length ?? null,
   };
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    url.searchParams.set("population", section);
-    window.history.replaceState(null, "", url.toString());
-  }, [section]);
 
   return (
     <div className="paper-sheet paper-scope population" id="population">
@@ -329,10 +322,11 @@ function useBeingActions(beings: SettingBeing[], noun: string) {
 function PeopleSection({ settingId }: { settingId: number }) {
   const navigate = useNavigate();
   const run = useAction();
-  const [query, setQuery] = useState("");
+  const [params, setParams] = useSearchParams();
+  const [query, setQuery] = useState(() => params.get("q") ?? "");
   const debouncedQuery = useDebounced(query);
-  const [locationFilter, setLocationFilter] = useState("");
-  const [communityFilter, setCommunityFilter] = useState("");
+  const [locationFilter, setLocationFilter] = useState(() => params.get("location_id") ?? "");
+  const [communityFilter, setCommunityFilter] = useState(() => params.get("community_id") ?? "");
   const [openFilter, setOpenFilter] = useState<"location" | "community" | null>(null);
   const [sort, setSort] = useState<"name" | "recent">("name");
   const [grouping, setGrouping] = useState<"weight" | "community">("weight");
@@ -340,6 +334,20 @@ function PeopleSection({ settingId }: { settingId: number }) {
   const [selecting, setSelecting] = useState(false);
   const [checked, setChecked] = useState<Set<number>>(new Set());
   const [bulkFaction, setBulkFaction] = useState("");
+
+  // Preserve the filtered list when a profile is opened and the user returns.
+  useEffect(() => {
+    if ((params.get("q") ?? "") === debouncedQuery.trim() &&
+        (params.get("location_id") ?? "") === locationFilter &&
+        (params.get("community_id") ?? "") === communityFilter) return;
+    setParams((previous) => {
+      const next = new URLSearchParams(previous);
+      for (const [key, value] of [["q", debouncedQuery.trim()], ["location_id", locationFilter], ["community_id", communityFilter]]) {
+        if (value) next.set(key, value); else next.delete(key);
+      }
+      return next;
+    }, { replace: true });
+  }, [params, setParams, debouncedQuery, locationFilter, communityFilter]);
 
   // Последние фильтры — для крошки «Население» в профиле: назад к тому же списку.
   useEffect(() => {

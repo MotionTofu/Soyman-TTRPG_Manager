@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { ensurePopulationFolder } from "../services/populationFolders";
 import multer from "multer";
 import fs from "fs";
 import path from "path";
@@ -217,44 +218,52 @@ settingCommunitiesRouter.get("/:id", (req, res) => {
   });
 });
 
-settingCommunitiesRouter.post("/:id/thumbnail", upload.single("file"), async (req, res) => {
-  const community = db
-    .prepare("SELECT folder_path, thumbnail_image_path FROM setting_communities WHERE id = ?")
-    .get(req.params.id) as { folder_path: string; thumbnail_image_path: string | null } | undefined;
-  if (!community) return res.status(404).json({ error: "not found" });
-  if (!req.file) return res.status(400).json({ error: "file is required" });
+settingCommunitiesRouter.post("/:id/thumbnail", upload.single("file"), async (req, res, next) => {
+  try {
+    const community = db
+      .prepare("SELECT folder_path, thumbnail_image_path FROM setting_communities WHERE id = ?")
+      .get(req.params.id) as { folder_path: string | null; thumbnail_image_path: string | null } | undefined;
+    if (!community) return res.status(404).json({ error: "not found" });
+    if (!req.file) return res.status(400).json({ error: "file is required" });
 
-  const rawExt = (path.extname(req.file.originalname) || ".jpg").toLowerCase();
-  if (!ALLOWED_IMAGE_EXTS.has(rawExt)) return res.status(400).json({ error: "Unsupported image extension" });
-  const ext = rawExt;
-  const target = path.join(community.folder_path, `thumbnail${ext}`);
-  await writeReplacingOldFile(target, req.file.buffer, community.thumbnail_image_path, "thumbnail");
+    const rawExt = (path.extname(req.file.originalname) || ".jpg").toLowerCase();
+    if (!ALLOWED_IMAGE_EXTS.has(rawExt)) return res.status(400).json({ error: "Unsupported image extension" });
+    const ext = rawExt;
+    const target = path.join(ensurePopulationFolder("setting_communities", req.params.id), `thumbnail${ext}`);
+    await writeReplacingOldFile(target, req.file.buffer, community.thumbnail_image_path, "thumbnail");
 
-  db.prepare("UPDATE setting_communities SET thumbnail_image_path = ? WHERE id = ?").run(
-    target,
-    req.params.id
-  );
-  res.json(withThumbUrl({ thumbnail_image_path: target }));
+    db.prepare("UPDATE setting_communities SET thumbnail_image_path = ? WHERE id = ?").run(
+      target,
+      req.params.id
+    );
+    res.json(withThumbUrl({ thumbnail_image_path: target }));
+  } catch (error) {
+    next(error);
+  }
 });
 
-settingCommunitiesRouter.post("/:id/avatar", upload.single("file"), async (req, res) => {
-  const community = db
-    .prepare("SELECT folder_path, avatar_image_path FROM setting_communities WHERE id = ?")
-    .get(req.params.id) as { folder_path: string; avatar_image_path: string | null } | undefined;
-  if (!community) return res.status(404).json({ error: "not found" });
-  if (!req.file) return res.status(400).json({ error: "file is required" });
+settingCommunitiesRouter.post("/:id/avatar", upload.single("file"), async (req, res, next) => {
+  try {
+    const community = db
+      .prepare("SELECT folder_path, avatar_image_path FROM setting_communities WHERE id = ?")
+      .get(req.params.id) as { folder_path: string | null; avatar_image_path: string | null } | undefined;
+    if (!community) return res.status(404).json({ error: "not found" });
+    if (!req.file) return res.status(400).json({ error: "file is required" });
 
-  const rawExt = (path.extname(req.file.originalname) || ".jpg").toLowerCase();
-  if (!ALLOWED_IMAGE_EXTS.has(rawExt)) return res.status(400).json({ error: "Unsupported image extension" });
-  const ext = rawExt;
-  const target = path.join(community.folder_path, `avatar${ext}`);
-  await writeReplacingOldFile(target, req.file.buffer, community.avatar_image_path, "avatar");
+    const rawExt = (path.extname(req.file.originalname) || ".jpg").toLowerCase();
+    if (!ALLOWED_IMAGE_EXTS.has(rawExt)) return res.status(400).json({ error: "Unsupported image extension" });
+    const ext = rawExt;
+    const target = path.join(ensurePopulationFolder("setting_communities", req.params.id), `avatar${ext}`);
+    await writeReplacingOldFile(target, req.file.buffer, community.avatar_image_path, "avatar");
 
-  db.prepare("UPDATE setting_communities SET avatar_image_path = ? WHERE id = ?").run(
-    target,
-    req.params.id
-  );
-  res.json(withThumbUrl({ avatar_image_path: target }));
+    db.prepare("UPDATE setting_communities SET avatar_image_path = ? WHERE id = ?").run(
+      target,
+      req.params.id
+    );
+    res.json(withThumbUrl({ avatar_image_path: target }));
+  } catch (error) {
+    next(error);
+  }
 });
 
 settingCommunitiesRouter.post("/:id/chapters", (req, res) => {

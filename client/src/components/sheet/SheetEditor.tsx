@@ -8,7 +8,7 @@ import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tags as t } from "@lezer/highlight";
-import { LEGACY_MENTION_RE, MENTION_RE, buildMentionToken, mentionTone, resolveMention, useMentionIndex } from "../../mentions";
+import { LEGACY_MENTION_RE, MENTION_RE, buildMentionToken, isMentionIndexReady, mentionTone, resolveMention, useMentionIndex } from "../../mentions";
 import { FONT_OPTIONS, ensureFontLoaded } from "../../fonts";
 import { SEARCH_DRAG_MIME } from "../LinkDropZone";
 import { MentionPickerModal } from "../mentions/MentionPickerModal";
@@ -33,7 +33,7 @@ const refreshMentions = StateEffect.define<null>();
 function mentionClass(m: RegExpExecArray): string {
   if (m[1]) {
     const id = resolveMention(m[1], m[2]);
-    return id == null ? "cm-mention cm-mention--dead" : `cm-mention mention--${mentionTone(m[1], id)}`;
+    return id == null ? (isMentionIndexReady() ? "cm-mention cm-mention--dead" : "cm-mention") : `cm-mention mention--${mentionTone(m[1], id)}`;
   }
   return `cm-mention mention--${mentionTone(m[5], Number(m[6]))}`;
 }
@@ -157,9 +157,11 @@ interface Props {
   menuRequest?: number;
   /** «Гибрид»: вне курсора разметка нарисована, как в чтении (Q9). */
   hybrid?: boolean;
+  /** Видимые действия для записей тетради и развёрнутого редактора. */
+  toolbar?: boolean;
 }
 
-export function SheetEditor({ value, onChange, insertRequest, onInsertHandled, defaultSettingId, placeholder, menuRequest, hybrid = false }: Props) {
+export function SheetEditor({ value, onChange, insertRequest, onInsertHandled, defaultSettingId, placeholder, menuRequest, hybrid = false, toolbar = false }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
@@ -298,7 +300,18 @@ export function SheetEditor({ value, onChange, insertRequest, onInsertHandled, d
   }
 
   return (
-    <div className="sheet-editor" ref={hostRef} onContextMenu={onContextMenu}>
+    <div className="sheet-editor" onContextMenu={onContextMenu}>
+      {toolbar && <div className="document-format-toolbar" role="toolbar" aria-label="Форматирование записи" onMouseDown={event => event.preventDefault()}>
+        <button type="button" title="Жирный (Ctrl+B)" aria-label="Жирный" onClick={() => { if (viewRef.current) wrapSelection(viewRef.current, "**", "**", "жирный текст"); }}><b>Ж</b></button>
+        <button type="button" title="Курсив (Ctrl+I)" aria-label="Курсив" onClick={() => { if (viewRef.current) wrapSelection(viewRef.current, "*", "*", "курсив"); }}><i>К</i></button>
+        <button type="button" title="Заголовок" aria-label="Заголовок" onClick={() => { if (viewRef.current) toggleHeading(viewRef.current, 2); }}>Заголовок</button>
+        <button type="button" title="Список" aria-label="Список" onClick={() => { if (viewRef.current) toggleBulletList(viewRef.current); }}>Список</button>
+        <button type="button" title="Цитата" aria-label="Цитата" onClick={() => { if (viewRef.current) wrapSelection(viewRef.current, "{quote}", "{/quote}", "цитата"); }}>Цитата</button>
+        <button type="button" title="Ссылка на профиль" aria-label="Ссылка на профиль" onClick={() => { if (viewRef.current) openMentionPicker(viewRef.current); }}>@ Профиль</button>
+        <button type="button" title="Вставить таблицу" aria-label="Вставить таблицу" onClick={() => setTableOpen(true)}>Таблица</button>
+        <button type="button" title="Дополнительное форматирование и ссылки" aria-label="Дополнительное форматирование и ссылки" onClick={() => openMenuAtCursor()}>Ещё</button>
+      </div>}
+      <div ref={hostRef} />
       {mention && (
         <MentionPickerModal initialQuery={mention.query} defaultSettingId={defaultSettingId}
           onPick={pickMention} onClose={() => { setMention(null); viewRef.current?.focus(); }} />

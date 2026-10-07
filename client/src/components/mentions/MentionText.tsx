@@ -1,11 +1,12 @@
 import { useMemo, type CSSProperties, type ReactNode } from "react";
 import { Lexer, marked, type Token, type Tokens } from "marked";
-import { ANY_MENTION_RE, mentionTone, resolveMention, useMentionIndex } from "../../mentions";
+import { ANY_MENTION_RE, isMentionIndexReady, mentionTone, resolveMention, useMentionIndex } from "../../mentions";
 import { DeadMention } from "./DeadMention";
 import { SIDE_LABEL, parseImageLayout } from "./imageLayout";
 import { openMentionPreview } from "./mentionPreviewStore";
 import { getCachedUser } from "../../api/currentUser";
 import { useResource } from "../../data/hooks";
+import { findTextTables, tableCellStyle } from "./tableDocument";
 
 type LinkedResource = { uid: string; id: number; name: string; type: string; category: string | null; file_url: string | null };
 const RESOURCE_URL_RE = /^soyman:resource\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
@@ -127,7 +128,7 @@ function parseInline(text: string, keyPrefix: string, mentionsAsBold: boolean): 
       nodes.push(
         mentionsAsBold ? (
           <strong key={`${keyPrefix}-${key++}`}>{refLabel}</strong>
-        ) : inert ? (
+        ) : inert || !isMentionIndexReady() ? (
           <span key={`${keyPrefix}-${key++}`}>{refLabel}</span>
         ) : target != null ? (
           <button
@@ -250,7 +251,27 @@ function isRelativeAttachment(value: string): boolean {
   return !value.startsWith("/") && !value.startsWith("\\") && !/^[a-z][a-z0-9+.-]*:/i.test(value) && !value.startsWith("#");
 }
 
-function renderMarkdown(text: string, mentionsAsBold: boolean, resources: Map<string, LinkedResource> = new Map()): ReactNode {
+function renderMarkdown(text: string, mentionsAsBold: boolean, resources: Map<string, LinkedResource> = new Map(), allowTables = true): ReactNode {
+  const tables = allowTables ? findTextTables(text, false) : [];
+  if (tables.length) {
+    const parts: ReactNode[] = [];
+    let from = 0;
+    for (const block of tables) {
+      parts.push(<span key={`prose-${from}`}>{renderMarkdown(text.slice(from, block.from), mentionsAsBold, resources, false)}</span>);
+      const { table } = block;
+      const renderRow = (row: typeof table.cells[number], r: number, header: boolean) => <tr key={r}>{row.map((cell, c) => {
+        const Cell = header ? "th" : "td";
+        return <Cell key={c} style={tableCellStyle(cell)}>{renderMarkdown(cell.text, mentionsAsBold, resources, false)}</Cell>;
+      })}</tr>;
+      parts.push(<div key={`table-${block.from}`} className="rt-table-wrap"><table className="rt-table">
+        {table.header && <thead>{renderRow(table.cells[0], 0, true)}</thead>}
+        <tbody>{table.cells.slice(table.header ? 1 : 0).map((row, r) => renderRow(row, r, false))}</tbody>
+      </table></div>);
+      from = block.to;
+    }
+    parts.push(<span key={`prose-${from}`}>{renderMarkdown(text.slice(from), mentionsAsBold, resources, false)}</span>);
+    return <>{parts}</>;
+  }
   const prepared = protectLegacy(text);
   const options = { gfm: true, breaks: false };
   const inline = (tokens: Token[], prefix: string): ReactNode[] => tokens.map((token, index) => {

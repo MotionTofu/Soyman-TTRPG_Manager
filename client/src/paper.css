@@ -13,7 +13,10 @@
 
    Ассеты — только переменными из fantasy-punk-skin.css. */
 
-.paper-scope {
+/* Меню каркаса («…», «Ещё») стоят вне листа, но получают ту же палитру.
+   Не переносим paper-scope на весь профиль: стол и диалоги живут в теме. */
+.paper-scope,
+.entity-page--paper .context-menu {
   --paper-base: #eee7d6;
   --paper-ink: #1f1a14;
   --paper-ink-soft: #3a332a;
@@ -27,7 +30,9 @@
   --paper: var(--paper-base);
   --paper-2: var(--paper-base);
   --bg: var(--paper-base);
-  --bg-elevated: var(--paper-wash);
+  /* Поднятые поверхности (меню, списки, диалоги) перекрывают содержимое.
+     Полупрозрачный paper-wash применяется только к полям и подсветке. */
+  --bg-elevated: var(--paper-base);
   --ink: var(--paper-ink);
   --ink-2: var(--paper-ink-soft);
   --text: var(--paper-ink);
@@ -51,7 +56,8 @@
   color: var(--paper-ink);
 }
 
-[data-theme-mode="dark"] .paper-scope {
+[data-theme-mode="dark"] .paper-scope,
+[data-theme-mode="dark"] .entity-page--paper .context-menu {
   --paper-base: #c4bca8;
   --paper-ink-soft: #2e2820;
   --paper-muted: #3f382e;
@@ -59,6 +65,28 @@
   --paper-rule: rgb(31 26 20 / 0.3);
   --paper-wash: rgb(255 253 245 / 0.22);
   --on-surface-muted: #b9b19d;
+}
+
+/* Один вид меню для папочного профиля и любых отдельных бумажных карточек.
+   paper-wash — прозрачная заливка полей, для всплывающего листка не годится. */
+:is(.paper-scope, .entity-page--paper) :is(.context-menu, .wb-menu__list) {
+  background: var(--paper-base) var(--skin-paper-tile) repeat;
+  background-blend-mode: multiply;
+  border-color: var(--paper-rule);
+  border-radius: 4px;
+  box-shadow: 0 1px 0 rgb(0 0 0 / 0.12), 0 6px 14px rgb(0 0 0 / 0.3);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+}
+:is(.paper-scope, .entity-page--paper) :is(.context-menu, .wb-menu__list) :is(button, a) {
+  color: var(--paper-ink);
+  border-radius: 3px;
+}
+:is(.paper-scope, .entity-page--paper) :is(.context-menu, .wb-menu__list) button.danger {
+  color: var(--paper-alarm);
+}
+:is(.paper-scope, .entity-page--paper) :is(.context-menu, .wb-menu__list) :is(button, a):hover {
+  background: var(--paper-acid);
 }
 
 .paper-scope :is(input, select, textarea) {
@@ -141,6 +169,7 @@
   font-size: var(--fs-data);
   letter-spacing: 0.04em;
   text-transform: none;
+  text-align: center;
   filter: brightness(0.9);
 }
 [data-theme-mode="dark"] .entity-page--paper > .tabs button {
@@ -1736,16 +1765,27 @@
 .campaign-passport__source {
   margin: 0;
 }
+.campaign-passport__head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); }
+.campaign-passport__heading { margin: 0; font-family: var(--font-ui); font-size: var(--fs-h2); text-transform: uppercase; }
+.campaign-passport__head .creature-card__edit { font-size: var(--fs-data); }
+.campaign-passport .editable-card-field { gap: var(--sp-1); }
+.campaign-passport > .creature-card:has(> .paper-fields-rows) { padding-block: 0; }
+.campaign-passport .paper-fields-rows { padding-block: var(--sp-4); }
+.campaign-passport .paper-fields-rows > div:first-child { padding-top: 0; }
+.campaign-passport .paper-fields-rows > div:last-child { padding-bottom: 0; }
+.campaign-passport .paper-fields-rows > div { grid-template-columns: minmax(6rem, 25%) minmax(0, 1fr); gap: var(--sp-3); }
+.campaign-passport .paper-fields-rows > div:last-child { border-bottom: 0; }
+.campaign-passport .paper-fields-rows dt { font-size: var(--fs-data); line-height: 1.5; }
+.campaign-passport .paper-fields-rows dd { font-size: var(--fs-body); }
+@media (max-width: 640px) {
+  .campaign-passport .paper-fields-rows > div { grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
+}
 
-/* «Сейчас» на «Обзоре» кампании (доска 41): сводка в рамке, три ячейки. */
+/* Ближайшая сессия справа от названия кампании. */
 .campaign-now {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--sp-5);
-  padding: var(--sp-4) var(--sp-6);
-  border: var(--card-border-width-strong) solid var(--paper-ink);
-  border-radius: 3px;
-  background: var(--paper-wash);
+  margin-left: auto;
+  font-size: var(--fs-meta);
+  text-align: right;
 }
 .campaign-now > div {
   display: flex;
@@ -1753,23 +1793,11 @@
   gap: var(--sp-1);
   min-width: 0;
 }
-.campaign-now__line {
-  color: var(--paper-muted);
-  font-size: var(--fs-meta);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .campaign-now .paper-more {
-  align-self: flex-start;
+  align-self: flex-end;
   padding: 0;
   border: 0;
   background: none;
-}
-@media (max-width: 640px) {
-  .campaign-now {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 .campaign-overview__images {
   margin: 0;
@@ -1813,70 +1841,6 @@
   color: var(--paper-muted);
 }
 
-/* «Состав» (просьба владельца 2026-10-02): строка игрока, под ней с
-   отступом его персонажи — портрет, имя, глазик, ✕. */
-.roster-list,
-.roster-list__chars {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.roster-list__player {
-  padding: var(--sp-3) 0;
-  border-bottom: 1px solid var(--paper-rule);
-}
-.roster-list__player.is-left {
-  opacity: 0.6;
-}
-.roster-list__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-2) var(--sp-5);
-}
-.roster-list__name {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--sp-3);
-  font-weight: 600;
-}
-.roster-list__actions,
-.roster-list__char {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-2);
-}
-.roster-list__chars {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  margin-top: var(--sp-2);
-  padding-left: var(--sp-7);
-}
-.roster-list__portrait {
-  display: inline-grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  overflow: hidden;
-  border: 1px solid var(--paper-rule);
-  background: var(--paper-2);
-  color: var(--paper-muted);
-  font-size: var(--fs-meta);
-  text-decoration: none;
-}
-.roster-list__portrait img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.roster-rows__debt {
-  color: var(--paper-alarm);
-}
-
 /* Сессии строками: дата и имя, под ними — первая строка ленты. */
 .session-rows .paper-rows__main {
   display: flex;
@@ -1891,61 +1855,25 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Шапка «Сводки отряда» и подобных карточек состава — тоже на линейке. */
+.session-rows .paper-rows__main > a {
+  font-size: var(--fs-data);
+}
+.session-rows .paper-rows__sub {
+  font-size: var(--fs-meta);
+}
+.session-rows .row-icon {
+  flex-shrink: 0;
+}
+.session-calendar__next-date {
+  color: var(--paper-ink);
+}
+/* Шапка важных дат отряда и подобных разделов — тоже на линейке. */
 .paper-sheet .campaign-player-header {
   margin: 0 0 var(--sp-3) !important; /* !important намеренно — у шапки инлайн-отступы вылета из карточки, на листе вылетать некуда */
   padding: var(--sp-2) 0;
   background: none;
   color: var(--paper-ink);
   border-bottom: var(--card-border-width-strong) solid var(--paper-ink);
-}
-
-/* «Сводка отряда»: имя слева, числа — ровными столбцами по центру под
-   своими заголовками. */
-.squad-summary {
-  overflow-x: auto;
-}
-.squad-table {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-  font-size: var(--fs-meta);
-}
-.squad-table th,
-.squad-table td {
-  padding: var(--sp-2) var(--sp-3);
-  text-align: center;
-}
-.squad-table th:first-child,
-.squad-table td:first-child {
-  width: 40%;
-  text-align: left;
-}
-.squad-table th {
-  color: var(--paper-muted);
-  font-size: var(--fs-micro);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.squad-table td {
-  border-top: 1px solid var(--paper-rule);
-  font-family: var(--font-mono);
-}
-.squad-table td:first-child {
-  font-family: inherit;
-}
-@media (max-width: 480px) {
-  .squad-table th,
-  .squad-table td {
-    padding: var(--sp-2) var(--sp-1);
-  }
-  .squad-table th {
-    letter-spacing: 0;
-  }
-  .squad-table th:first-child,
-  .squad-table td:first-child {
-    width: 34%;
-  }
 }
 
 /* Текст шапки на листе — чернилами: на тёмной теме прежний цвет плашки

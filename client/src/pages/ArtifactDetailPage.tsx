@@ -1,3 +1,4 @@
+import { useSettingCrumbs } from "../layout/useSettingCrumbs";
 import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAction, useAfterWrite, useEntity, useResource, useSaveEntity, write } from "../data/hooks";
@@ -65,6 +66,7 @@ export function ArtifactDetailPage() {
   const artifactState = useEntity<Artifact>("artifact", artifactId);
   const artifact = artifactState.data ?? null;
   const settingId = artifact?.setting_id ?? null;
+  const settingCrumbs = useSettingCrumbs(settingId);
   const { save } = useSaveEntity<Artifact>("artifact", artifactId);
   const run = useAction();
   const afterWrite = useAfterWrite();
@@ -232,7 +234,7 @@ export function ArtifactDetailPage() {
   return (
     <EntityPage
       paper
-      crumbs={[{ label: "Сокровищница", to: treasuryTo }, { label: artifact.name }]}
+      crumbs={[...settingCrumbs, { label: "Сокровищница", to: treasuryTo }, { label: artifact.name }]}
       entityType="artifact"
       title={artifact.name}
       // Под именем — род, тип, редкость метками, на месте мазка (Q3).

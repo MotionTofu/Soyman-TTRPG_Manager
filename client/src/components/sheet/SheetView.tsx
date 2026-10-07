@@ -260,26 +260,26 @@ export function SheetView({ docKey, back, actions, modes, mode, onMode, contentK
         )}
         <div className="sheet-col" style={{ width: BASE_WIDTH * z }}>
           {notice}
-          <div className="sheet-bar">
-            <div className="sheet-plate sheet-plate--left">
+          <div className="document-sheet-bar">
+            <div className="document-sheet-plate document-sheet-plate--left">
               {/* При колонке оглавления «Назад» стоит в ней; на узком окне,
                   где колонка свёрнута в корешок, — здесь. */}
               <span className={showToc ? "sheet-back--narrow" : "sheet-back"}>{backLink}</span>
               {actions}
             </div>
-            <div className="sheet-plate sheet-plate--right" role="group" aria-label="Вид документа">
+            <div className="document-sheet-plate document-sheet-plate--right" role="group" aria-label="Вид документа">
               {modes.map(m => (
                 <button key={m} type="button" className={`sheet-btn${m === mode ? " is-on" : ""}`}
                   aria-pressed={m === mode} title={MODE_LABEL[m].title} aria-label={MODE_LABEL[m].title}
                   onClick={() => pickMode(m)}>{MODE_LABEL[m].short}</button>
               ))}
-              <span className="sheet-plate__sep" />
+              <span className="document-sheet-plate__sep" />
               <button type="button" className="sheet-btn" title="Мельче (Ctrl+колесо)" aria-label="Мельче" onClick={() => stepZoom(-1)}>−</button>
-              <span className="sheet-plate__zoom">{Math.round(z * 100)}%</span>
+              <span className="document-sheet-plate__zoom">{Math.round(z * 100)}%</span>
               <button type="button" className="sheet-btn" title="Крупнее (Ctrl+колесо)" aria-label="Крупнее" onClick={() => stepZoom(1)}>+</button>
               <button type="button" className={`sheet-btn${zoom === "fit" ? " is-on" : ""}`} aria-pressed={zoom === "fit"}
                 title="По ширине" aria-label="По ширине" onClick={() => setZoom("fit")}>↔</button>
-              <span className="sheet-plate__sep" />
+              <span className="document-sheet-plate__sep" />
               <button type="button" className={`sheet-btn${breaks ? " is-on" : ""}`} aria-pressed={breaks}
                 title="Разрывы страниц" aria-label="Разрывы страниц" onClick={toggleBreaks}>⋯</button>
             </div>

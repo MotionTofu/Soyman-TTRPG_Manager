@@ -25,6 +25,7 @@ interface Props {
   onClose: () => void;
   initialMode: SheetMode;
   defaultSettingId?: number;
+  editorToolbar?: boolean;
 }
 
 function useContentBounds(): CSSProperties {
@@ -45,7 +46,7 @@ function useContentBounds(): CSSProperties {
   return bounds;
 }
 
-export function SheetOverlay({ docKey, caption, value, onSave, onClose, initialMode, defaultSettingId }: Props) {
+export function SheetOverlay({ docKey, caption, value, onSave, onClose, initialMode, defaultSettingId, editorToolbar = false }: Props) {
   const draftKey = `sheet:${docKey}`;
   const [saved, setSaved] = useState(value);
   const [draft, setDraftState] = useState(() => loadFieldDraft(draftKey) ?? value);
@@ -53,7 +54,6 @@ export function SheetOverlay({ docKey, caption, value, onSave, onClose, initialM
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [menuRequest, setMenuRequest] = useState(0);
-  const [coarsePointer] = useState(() => window.matchMedia("(pointer: coarse)").matches);
   const [confirmDialog, confirm] = useConfirm();
   const bounds = useContentBounds();
   const dirty = draft !== saved;
@@ -114,11 +114,12 @@ export function SheetOverlay({ docKey, caption, value, onSave, onClose, initialM
         onMode={next => { if (next === "reading" && dirty) void save(); setMode(next); }}
         back={{ label: "Назад", onClick: () => { void save().then(ok => { if (ok) onClose(); }); } }}
         actions={<>
+          {!editing && <button type="button" className="sheet-btn document-sheet-edit" title="Править" aria-label="Править" onClick={() => setMode("hybrid")}>Править</button>}
           {editing && <button type="button" className="sheet-btn sheet-btn--primary" title={saveTitle} aria-label={saveTitle}
             onClick={() => void save()} disabled={!dirty || saving}>✓{dirty && <span className="sheet-btn__dot" />}</button>}
           {editing && <button type="button" className="sheet-btn" title="Отменить правку" aria-label="Отменить правку"
             onClick={() => void discard()}>✕</button>}
-          {editing && coarsePointer && <button type="button" className="sheet-btn" title="Форматирование" aria-label="Форматирование"
+          {editing && !editorToolbar && <button type="button" className="sheet-btn" title="Форматирование" aria-label="Форматирование"
             onClick={() => setMenuRequest(n => n + 1)}>Aa</button>}
         </>}
         notice={<>
@@ -127,7 +128,7 @@ export function SheetOverlay({ docKey, caption, value, onSave, onClose, initialM
           {error && <p role="alert" className="sheet-caption">{error}</p>}
         </>}>
         {editing
-          ? <SheetEditor hybrid={mode === "hybrid"} value={draft} onChange={setDraft} menuRequest={menuRequest} defaultSettingId={defaultSettingId} />
+          ? <SheetEditor hybrid={mode === "hybrid"} value={draft} onChange={setDraft} menuRequest={menuRequest} defaultSettingId={defaultSettingId} toolbar={editorToolbar} />
           : draft.trim() ? <MentionText text={draft} /> : <p className="muted">Пусто — переключитесь в «Гибрид», чтобы писать.</p>}
       </SheetView>
       {confirmDialog}

@@ -18,11 +18,13 @@ interface Props {
    *  действия ниже. Нужна там, где по самой цели щелчка этого не видно —
    *  например, клетка мини-календаря показывает только число. */
   title?: string;
+  /** Opt-in menu semantics for keyboard-operated action triggers. */
+  ariaLabel?: string;
   items: ContextMenuItem[];
   onClose: () => void;
 }
 
-export function ContextMenu({ x, y, title, items, onClose }: Props) {
+export function ContextMenu({ x, y, title, ariaLabel, items, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState<number | null>(null);
   // Меню открывается там, где щёлкнули, и у правого-нижнего края уезжало за
@@ -59,6 +61,8 @@ export function ContextMenu({ x, y, title, items, onClose }: Props) {
     <div
       ref={ref}
       className="context-menu"
+      role={ariaLabel ? "menu" : undefined}
+      aria-label={ariaLabel}
       style={{ position: "fixed", left: at.x, top: at.y }}
     >
       {title && <div className="context-menu-title">{title}</div>}
@@ -66,6 +70,7 @@ export function ContextMenu({ x, y, title, items, onClose }: Props) {
         item.children ? (
           <div key={i} className="context-menu-group">
             <button
+              role={ariaLabel ? "menuitem" : undefined}
               className={`context-menu-group-toggle${expanded === i ? " open" : ""}`}
               onClick={() => setExpanded(expanded === i ? null : i)}
             >
@@ -75,6 +80,7 @@ export function ContextMenu({ x, y, title, items, onClose }: Props) {
               <div className="context-menu-submenu">
                 {item.children.map((child, j) => (
                   <button
+                    role={ariaLabel ? "menuitem" : undefined}
                     key={j}
                     className={child.danger ? "danger" : ""}
                     onClick={() => {
@@ -90,6 +96,7 @@ export function ContextMenu({ x, y, title, items, onClose }: Props) {
           </div>
         ) : (
           <button
+            role={ariaLabel ? "menuitem" : undefined}
             key={i}
             className={item.danger ? "danger" : ""}
             onClick={() => {

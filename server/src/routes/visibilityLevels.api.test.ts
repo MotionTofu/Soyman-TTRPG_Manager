@@ -216,6 +216,25 @@ describe("«Глазами игрока»: превью идёт тем же р�
     expect(preview.body.sections).toEqual(playerRes.body);
   });
 
+  it("выдаёт отдельное изображение, сохраняя выдачу всей галереи и изоляцию кампаний", async () => {
+    const sectionId = Number(db.prepare("INSERT INTO campaign_player_sections (campaign_id, name, kind) VALUES (?, 'Портреты', 'gallery')").run(campaignId).lastInsertRowid);
+    const addImage = (caption: string) => Number(db.prepare("INSERT INTO gallery_images (owner_type, owner_id, image_path, caption) VALUES ('campaign_player_section', ?, 'vault/test.webp', ?)").run(sectionId, caption).lastInsertRowid);
+    const first = addImage("Открытое");
+    const second = addImage("Скрытое");
+    const body = { campaign_id: campaignId, player_id: playerId, target_type: "campaign_player_image", target_id: first };
+    expect((await request(app).post("/api/visibility-grants").send(body)).status).toBe(201);
+    const read = async () => (await request(app).get(`/api/player/campaigns/${campaignId}/player-sections`)).body.find((s: { id: number }) => s.id === sectionId);
+    expect((await read()).images.map((i: { id: number }) => i.id)).toEqual([first]);
+    const preview = await request(app).get(`/api/visibility-grants/preview?campaign_id=${campaignId}&player_id=${playerId}`);
+    expect(preview.body.sections.find((s: { id: number }) => s.id === sectionId).images.map((i: { id: number }) => i.id)).toEqual([first]);
+    expect((await request(app).post("/api/visibility-grants").send({ ...body, campaign_id: campaign2Id })).status).toBe(400);
+    await request(app).post("/api/visibility-grants").send({ ...body, target_type: "campaign_player_section", target_id: sectionId });
+    expect((await read()).images.map((i: { id: number }) => i.id)).toEqual([first, second]);
+    await request(app).delete("/api/visibility-grants").query({ ...body, target_type: "campaign_player_section", target_id: sectionId });
+    await request(app).delete("/api/visibility-grants").query(body);
+    expect(await read()).toBeUndefined();
+  });
+
   it("превью знает и открытое старой галочкой — как /visible у игрока", async () => {
     const { setting_id: settingId } = db.prepare("SELECT setting_id FROM campaigns WHERE id = ?").get(campaignId) as {
       setting_id: number;

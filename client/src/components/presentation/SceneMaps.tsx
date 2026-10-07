@@ -31,8 +31,7 @@ export function SceneMaps({ sceneId, campaignId }: { sceneId: number; campaignId
     }
   }
 
-  return <div className="card stack">
-    <div className="campaign-overview-header">Карты сцены</div>
+  return <div className="stack">
     <p className="muted" style={{ margin: 0 }}>Привязанные карты доступны на пульте сессии для показа на втором экране.</p>
     {linked.error && <p role="alert">Не удалось загрузить карты: {linked.error}</p>}
     {(linked.data?.maps ?? []).map((map) => <div key={map.id} className="row" style={{ gap: 8, alignItems: "center" }}>

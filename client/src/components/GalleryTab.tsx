@@ -14,6 +14,7 @@ import { useUndoDelete } from "../hooks/useUndoDelete";
 import { ContextMenu } from "./ContextMenu";
 import { isSafeImageUrl } from "../utils/safeUrl";
 import { EntityImageSlot } from "./EntityImageSlot";
+import { RowDeleteButton } from "./RowIconButtons";
 
 // Lets the owning detail page (Character/Being) keep its own useImageCrop
 // state/handler but render the thumbnail-upload control inside the Gallery
@@ -30,6 +31,8 @@ interface ThumbnailUploadProps {
 interface Props {
   ownerType: "character" | "being" | "location" | "community" | "campaign_player_section" | "artifact" | "compendium_entry";
   ownerId: number;
+  focusedId?: number;
+  hideDelete?: boolean;
   thumbnailUpload?: ThumbnailUploadProps;
   // Same shape as thumbnailUpload — used for entities (locations) whose
   // avatar isn't shown on the profile itself, only as the list-thumbnail
@@ -37,7 +40,7 @@ interface Props {
   avatarUpload?: ThumbnailUploadProps;
 }
 
-export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }: Props) {
+export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload, focusedId, hideDelete = false }: Props) {
   const { offerUndo } = useUndoDelete();
   const galleryPath = settingPaths.gallery(ownerType, ownerId);
   const gallery = useResource<GalleryImage[]>(galleryPath);
@@ -243,7 +246,7 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }
               ? "ГАЛЕРЕЯ"
               : "ИЗОБРАЖЕНИЯ ЛОКАЦИИ";
   return (
-    <div className="stack gallery-tab">
+    <div className={`stack gallery-tab${focusedId != null ? " gallery-tab--focused" : ""}`}>
       <div className="gallery-tab-header">
         <span className="gallery-tab-title">{galleryTitle}</span>
         <span className="gallery-tab-count" aria-label={`Всего ${images.length} изображений`}>{images.length}</span>
@@ -312,6 +315,7 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }
         }}
       >
         {images.map((img, i) => {
+          if (focusedId != null && img.id !== focusedId) return null;
           const safeUrl = safeImageUrl(img.image_url);
           const label = labelFor(img);
           return (
@@ -350,7 +354,7 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }
             ) : (
               <div className="gallery-thumb gallery-thumb-broken" aria-label="Битый URL изображения">×</div>
             )}
-            <button
+            {!hideDelete && (focusedId != null ? <RowDeleteButton onClick={() => removeImage(img.id)} label={`Удалить ${label || "изображение"}`} /> : <button
               type="button"
               className="gallery-thumb-delete"
               aria-label={`Удалить ${label || `изображение ${i + 1}`}`}
@@ -358,11 +362,11 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }
               onClick={(e) => { e.stopPropagation(); removeImage(img.id); }}
             >
               ×
-            </button>
+            </button>)}
             {label && <span className="gallery-thumb-caption" aria-hidden="true">{label}</span>}
           </div>
         );})}
-        <label className="gallery-upload-tile" title="Нажмите или перетащите файлы сюда">
+        {focusedId == null && <label className="gallery-upload-tile" title="Нажмите или перетащите файлы сюда">
           {uploading && uploadProgress ? `Загрузка ${uploadProgress.done}/${uploadProgress.total}…` : uploading ? "Загрузка…" : "+ Добавить"}
           <input
             type="file"
@@ -373,7 +377,7 @@ export function GalleryTab({ ownerType, ownerId, thumbnailUpload, avatarUpload }
             aria-hidden="true"
             onChange={(e) => uploadFiles(e.target.files, e.target as HTMLInputElement)}
           />
-        </label>
+        </label>}
       </div>
       ) : null}
       {images.length === 0 && !loading && !error && <span className="muted image-hint" style={{ display: "none" }} aria-hidden="true">{IMAGE_HINT}</span>}

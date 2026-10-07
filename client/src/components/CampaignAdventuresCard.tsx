@@ -90,11 +90,6 @@ export function CampaignAdventuresCard({
   return (
     <div className="stack">
       {confirmDialog}
-      <p className="muted">
-        Приключения этой кампании. Тексты правятся прямо здесь: правка создаёт версию для кампании,
-        оригинал в сеттинге не меняется.
-      </p>
-
       {adventures.map((arc) => (
         <AdventureBlock key={arc.id} arc={arc} campaignId={campaignId} onDetach={detach} />
       ))}
@@ -144,14 +139,24 @@ export function CampaignAdventuresCard({
   );
 }
 
+export function CampaignAdventureOverview({ campaignId, adventureId }: { campaignId: number; adventureId: number }) {
+  const state = useResource<StoryArc[]>(campaignPaths.adventures(campaignId));
+  const arc = state.data?.find(a => a.id === adventureId);
+  if (state.error) return <p role="alert">Не удалось загрузить обзор. <button type="button" onClick={state.reload}>Повторить</button></p>;
+  if (!arc) return state.loading ? <p className="muted">Загрузка обзора…</p> : null;
+  return <AdventureBlock key={arc.id} arc={arc} campaignId={campaignId} title="ОБЗОР" />;
+}
+
 function AdventureBlock({
   arc,
   campaignId,
   onDetach,
+  title,
 }: {
   arc: StoryArc;
   campaignId: number;
-  onDetach: (arc: StoryArc) => void;
+  onDetach?: (arc: StoryArc) => void;
+  title?: string;
 }) {
   const [confirmDialog, confirm] = useConfirm();
   const run = useAction();
@@ -199,10 +204,10 @@ function AdventureBlock({
   const filledTexts = TEXT_FIELDS.filter((f) => (arc as unknown as Record<string, string>)[f.key]);
 
   return (
-    <details className="card">
+    <details className={title ? "card res-group campaign-chapters__overview" : "card"}>
       {confirmDialog}
-      <summary style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <strong className="entry-title" style={{ fontSize: "var(--fs-h3)", fontWeight: 600 }}>{arc.name}</strong>
+      <summary className={title ? "res-group__band" : undefined} style={title ? undefined : { display: "flex", alignItems: "center", gap: 8 }}>
+        {title ? <span className="res-group__title">{title}</span> : <strong className="entry-title" style={{ fontSize: "var(--fs-h3)", fontWeight: 600 }}>{arc.name}</strong>}
         {arc.is_override && <span className="badge tag">правка кампании</span>}
       </summary>
       <div className="stack" style={{ marginTop: 8 }}>
@@ -242,9 +247,9 @@ function AdventureBlock({
                 Открыть полностью →
               </Link>
               {arc.is_override && <button onClick={revert}>Вернуть как в сеттинге</button>}
-              <button onClick={() => onDetach(arc)}>
+              {onDetach && <button onClick={() => onDetach(arc)}>
                 Убрать из кампании
-              </button>
+              </button>}
             </div>
           </>
         ) : (

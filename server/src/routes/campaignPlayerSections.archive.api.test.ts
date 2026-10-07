@@ -1,0 +1,101 @@
+import fs from "fs";
+import { archiveRouter } from "./archive";
+import { vaultAbs } from "../services/filesystem";
+import { galleryRouter } from "./gallery";
+import { describe, it, expect } from "vitest";
+import express from "express";
+import request from "supertest";
+import { db } from "../db/db";
+import { campaignPlayerSectionsRouter } from "./campaignPlayerSections";
+import { getPlayerSectionsFor } from "../services/playerContent";
+const app = express();
+app.use(express.json());
+app.use("/sections", campaignPlayerSectionsRouter);
+app.use("/gallery", galleryRouter);
+app.use("/archive", archiveRouter);
+describe("архив разделов раздатки", () => {
+  it("lists handouts in the shared archive and restores their original section and content", async () => {
+    const campaignId = Number(db.prepare("INSERT INTO campaigns (name) VALUES ('Archive campaign')").run().lastInsertRowid);
+    const sectionId = Number(db.prepare("INSERT INTO campaign_player_sections (campaign_id, name) VALUES (?, 'Handouts')").run(campaignId).lastInsertRowid);
+    const articleId = Number(db.prepare("INSERT INTO campaign_player_articles (section_id, title, content, position) VALUES (?, 'Article', 'Preserved text', 7)").run(sectionId).lastInsertRowid);
+    const imageId = Number(db.prepare("INSERT INTO gallery_images (owner_type, owner_id, image_path, caption, position) VALUES ('campaign_player_section', ?, 'shared-test.webp', 'Image', 4)").run(sectionId).lastInsertRowid);
+    await request(app).put(`/sections/articles/${articleId}/archive`).send({ archived: true }).expect(200);
+    await request(app).put(`/gallery/${imageId}/archive`).send({ archived: true }).expect(200);
+    await request(app).put(`/sections/${sectionId}/archive`).send({ archived: true }).expect(200);
+    const list = await request(app).get('/archive').expect(200);
+    for (const [type, id] of [['campaign_player_article', articleId], ['gallery_image', imageId], ['campaign_player_section', sectionId]]) {
+      expect(list.body).toEqual(expect.arrayContaining([expect.objectContaining({ type, id })]));
+    }
+    await request(app).put(`/archive/campaign_player_article/${articleId}/restore`).expect(200);
+    await request(app).put(`/archive/gallery_image/${imageId}/restore`).expect(200);
+    expect(db.prepare('SELECT section_id, content, position, archived_at FROM campaign_player_articles WHERE id = ?').get(articleId)).toEqual({ section_id: sectionId, content: 'Preserved text', position: 7, archived_at: null });
+    expect(db.prepare('SELECT owner_id, image_path, position, archived_at FROM gallery_images WHERE id = ?').get(imageId)).toEqual({ owner_id: sectionId, image_path: 'shared-test.webp', position: 4, archived_at: null });
+    expect(db.prepare('SELECT archived_at FROM campaign_player_sections WHERE id = ?').get(sectionId)).toEqual({ archived_at: null });
+    await request(app).put(`/archive/gallery_image/${imageId}/archive`).expect(200);
+    await request(app).delete(`/archive/gallery_image/${imageId}`).expect(200);
+    expect(db.prepare('SELECT id FROM gallery_images WHERE id = ?').get(imageId)).toBeUndefined();
+  });
+  it("сохраняет содержимое и скрывает у игрока до восстановления", async () => {
+    const campaignId = Number(db.prepare("INSERT INTO campaigns (name) VALUES ('Тест архива')").run().lastInsertRowid);
+    const playerId = Number(db.prepare("INSERT INTO players (name) VALUES ('Тестовый игрок')").run().lastInsertRowid);
+    const sectionId = Number(db.prepare("INSERT INTO campaign_player_sections (campaign_id, name, kind) VALUES (?, 'Тестовый раздел', 'articles')").run(campaignId).lastInsertRowid);
+    db.prepare("INSERT INTO campaign_player_articles (section_id, title, content) VALUES (?, 'Статья', 'Сохранённый текст')").run(sectionId);
+    db.prepare("INSERT INTO player_visibility_grants (campaign_id, player_id, target_type, target_id) VALUES (?, ?, 'campaign_player_section', ?)").run(campaignId, playerId, sectionId);
+    expect(getPlayerSectionsFor(campaignId, playerId)).toHaveLength(1);
+    await request(app).put(`/sections/${sectionId}/archive`).send({ archived: true }).expect(200);
+    expect(getPlayerSectionsFor(campaignId, playerId)).toHaveLength(0);
+    expect(db.prepare("SELECT content FROM campaign_player_articles WHERE section_id = ?").get(sectionId)).toEqual({ content: 'Сохранённый текст' });
+    const list = await request(app).get(`/sections?campaign_id=${campaignId}`).expect(200);
+    expect(list.body[0].archived_at).toBeTruthy();
+    await request(app).put(`/sections/${sectionId}/archive`).send({ archived: false }).expect(200);
+    expect(getPlayerSectionsFor(campaignId, playerId)).toHaveLength(1);
+  });
+  it("архивирует и восстанавливает статью без потери текста и доступа", async () => {
+    const campaignId = Number(db.prepare("INSERT INTO campaigns (name) VALUES ('Тест архива статей')").run().lastInsertRowid);
+    const playerId = Number(db.prepare("INSERT INTO players (name) VALUES ('Игрок архива статей')").run().lastInsertRowid);
+    const sectionId = Number(db.prepare("INSERT INTO campaign_player_sections (campaign_id, name) VALUES (?, 'Статьи')").run(campaignId).lastInsertRowid);
+    const articleId = Number(db.prepare("INSERT INTO campaign_player_articles (section_id, title, content) VALUES (?, 'Название', 'Текст')").run(sectionId).lastInsertRowid);
+    db.prepare("INSERT INTO player_visibility_grants (campaign_id, player_id, target_type, target_id) VALUES (?, ?, 'campaign_player_section', ?)").run(campaignId, playerId, sectionId);
+    await request(app).put(`/sections/articles/${articleId}`).send({ title: 'Переименованная' }).expect(200);
+    expect((getPlayerSectionsFor(campaignId, playerId)[0].articles as unknown[])).toHaveLength(1);
+    await request(app).put(`/sections/articles/${articleId}/archive`).send({ archived: true }).expect(200);
+    expect((getPlayerSectionsFor(campaignId, playerId)[0].articles as unknown[])).toHaveLength(0);
+    expect(db.prepare("SELECT title, content FROM campaign_player_articles WHERE id = ?").get(articleId)).toEqual({ title: 'Переименованная', content: 'Текст' });
+    await request(app).put(`/sections/articles/${articleId}/archive`).send({ archived: false }).expect(200);
+    expect((getPlayerSectionsFor(campaignId, playerId)[0].articles as unknown[])).toHaveLength(1);
+  });
+  it("меняет порядок статей без изменения их содержимого", async () => {
+    const campaignId = Number(db.prepare("INSERT INTO campaigns (name) VALUES ('Тест порядка')").run().lastInsertRowid);
+    const sectionId = Number(db.prepare("INSERT INTO campaign_player_sections (campaign_id, name) VALUES (?, 'Порядок')").run(campaignId).lastInsertRowid);
+    const first = Number(db.prepare("INSERT INTO campaign_player_articles (section_id, title, content, position) VALUES (?, 'Первая', 'А', 0)").run(sectionId).lastInsertRowid);
+    const second = Number(db.prepare("INSERT INTO campaign_player_articles (section_id, title, content, position) VALUES (?, 'Вторая', 'Б', 1)").run(sectionId).lastInsertRowid);
+    await request(app).put('/sections/articles/reorder').send({ order: [second, first] }).expect(200);
+    const list = await request(app).get(`/sections/${sectionId}/articles`).expect(200);
+    expect(list.body.map((article: { id: number; content: string }) => [article.id, article.content])).toEqual([[second, 'Б'], [first, 'А']]);
+  });
+  it("переименовывает, упорядочивает и архивирует изображения без потери файла", async () => {
+    const campaignId = Number(db.prepare("INSERT INTO campaigns (name) VALUES ('Тест изображений')").run().lastInsertRowid);
+    const playerId = Number(db.prepare("INSERT INTO players (name) VALUES ('Игрок изображений')").run().lastInsertRowid);
+    const sectionId = Number(db.prepare("INSERT INTO campaign_player_sections (campaign_id, name, kind) VALUES (?, 'Изображения', 'gallery')").run(campaignId).lastInsertRowid);
+    const file = vaultAbs('archive-test.webp');
+    fs.writeFileSync(file, 'image-bytes');
+    const imageId = Number(db.prepare("INSERT INTO gallery_images (owner_type, owner_id, image_path, caption, position) VALUES ('campaign_player_section', ?, ?, 'Первое', 0)").run(sectionId, file).lastInsertRowid);
+    const secondId = Number(db.prepare("INSERT INTO gallery_images (owner_type, owner_id, image_path, caption, position) VALUES ('campaign_player_section', ?, ?, 'Второе', 1)").run(sectionId, file).lastInsertRowid);
+    db.prepare("INSERT INTO player_visibility_grants (campaign_id, player_id, target_type, target_id) VALUES (?, ?, 'campaign_player_section', ?)").run(campaignId, playerId, sectionId);
+    await request(app).put(`/gallery/${imageId}`).send({ caption: 'Новое название' }).expect(200);
+    await request(app).put('/gallery/reorder').send({ order: [secondId, imageId] }).expect(200);
+    const list = await request(app).get(`/gallery?owner_type=campaign_player_section&owner_id=${sectionId}`).expect(200);
+    expect(list.body.map((image: { id: number }) => image.id)).toEqual([secondId, imageId]);
+    await request(app).put(`/gallery/${imageId}/archive`).send({ archived: true }).expect(200);
+    expect((getPlayerSectionsFor(campaignId, playerId)[0].images as unknown[])).toHaveLength(1);
+    expect(fs.readFileSync(file, 'utf8')).toBe('image-bytes');
+    const archive = await request(app).get(`/gallery?owner_type=campaign_player_section&owner_id=${sectionId}&include_archived=true`).expect(200);
+    expect(archive.body.find((image: { id: number }) => image.id === imageId).archived_at).toBeTruthy();
+    await request(app).put(`/gallery/${imageId}/archive`).send({ archived: false }).expect(200);
+    expect((getPlayerSectionsFor(campaignId, playerId)[0].images as unknown[])).toHaveLength(2);
+  });
+  it("проверяет запрос и существование раздела", async () => {
+    await request(app).put('/sections/999999/archive').send({ archived: 'yes' }).expect(400);
+    await request(app).put('/sections/999999/archive').send({ archived: true }).expect(404);
+  });
+});

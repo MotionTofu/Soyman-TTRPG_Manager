@@ -45,6 +45,7 @@ export function EntityTabWorkspace({
   children,
   navFooter,
   workspaceKey,
+  sectionOverview = false,
 }: {
   sections: WorkspaceSection[];
   selection: WorkspaceSelection;
@@ -55,6 +56,8 @@ export function EntityTabWorkspace({
   navFooter?: ReactNode;
   /** Ключ для сброса скролла/состояния при смене сущности. */
   workspaceKey?: string | number;
+  /** Заглавие категории открывает её сводку, включая уже выбранную категорию. */
+  sectionOverview?: boolean;
 }) {
   // Раскрытые категории. По умолчанию раскрыта та, где лежит выбор, —
   // остальное свернуто, чтобы панель оставалась компактной при десятках
@@ -88,7 +91,7 @@ export function EntityTabWorkspace({
       <nav className="entity-tab-workspace__nav card" aria-label="Навигация внутри таба">
         <div className="etw-nav-list">
           {sections.map((s) => {
-            const isActiveSection = selection.section === s.id && !s.items;
+            const isActiveSection = selection.section === s.id && (!s.items || (sectionOverview && !selection.item));
             const isOpen = s.items ? expanded.has(s.id) : false;
             return (
               <div key={s.id} className="etw-nav-section">
@@ -96,7 +99,7 @@ export function EntityTabWorkspace({
                   type="button"
                   className={`etw-nav-header${isActiveSection ? " is-selected" : ""}`}
                   onClick={() =>
-                    s.items ? (toggle(s.id), selection.section !== s.id && pick(s.id)) : pick(s.id)
+                    s.items ? (toggle(s.id), (sectionOverview || selection.section !== s.id) && pick(s.id)) : pick(s.id)
                   }
                   aria-expanded={s.items ? isOpen : undefined}
                 >

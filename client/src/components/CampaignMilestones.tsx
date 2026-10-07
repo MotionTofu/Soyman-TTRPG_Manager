@@ -5,6 +5,7 @@ import { dataKeys } from "../data/entities";
 import { campaignPaths, milestoneAffects } from "../data/campaigns";
 import { labelled } from "../data/notices";
 import { MentionText } from "./mentions/MentionText";
+import "./campaign-secrets.css";
 import type { CampaignGrouped, StoryMilestone } from "../types";
 import { useConfirm } from "../hooks/useConfirm";
 
@@ -90,11 +91,6 @@ export function CampaignMilestones({
 
   return (
     <div className="stack">
-      <p className="muted">
-        Отметки достижения относятся только к этой кампании. Тексты вех приключения правятся в
-        сеттинге; свои вехи можно завести здесь.
-      </p>
-
       {showOwn && (
         <MilestoneGroup
           title="Вехи кампании"
@@ -159,12 +155,12 @@ const MilestoneGroup = memo(function MilestoneGroup({
   const achieved = items.filter((m) => m.state?.achieved === 1).length;
 
   return (
-    <details className="card res-group">
+    <section className="card res-group campaign-milestone-group">
       {confirmDialog}
-      <summary className="res-group__band">
+      <header className="res-group__band">
         <span className="res-group__title">{title}</span>
         <span className="res-group__count">{achieved} из {items.length}</span>
-      </summary>
+      </header>
       <div className="res-group__body" style={{ padding: 12, gap: 8, display: "flex", flexDirection: "column" }}>
         {items.map((m) => (
           <MilestoneRow key={m.id} milestone={m} onToggle={toggle} onRemove={remove} />
@@ -175,7 +171,7 @@ const MilestoneGroup = memo(function MilestoneGroup({
             рядом с первым, а приглушённая строка не звала вовсе. */}
         <AddMilestoneForm arcId={arcId} campaignId={campaignId} />
       </div>
-    </details>
+    </section>
   );
 });
 

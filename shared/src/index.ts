@@ -15,3 +15,6 @@ export * from "./portable/index";
 export * from "./workbooks";
 export * from "./workbookMarkdown";
 export * from "./maps/core/index";
+export * from "./practicalWorkbooks";
+export * from "./workbookActivity";
+export * from "./textTables";

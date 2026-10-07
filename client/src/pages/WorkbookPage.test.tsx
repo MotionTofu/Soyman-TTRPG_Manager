@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import {afterEach,beforeEach,describe,expect,it,vi} from "vitest";
 import {act,cleanup,fireEvent,render,screen} from "@testing-library/react";
-import {MemoryRouter,Route,Routes} from "react-router-dom";
-import {WorkbookPage} from "./WorkbookPage";
+import {MemoryRouter,Route,Routes,useLocation} from "react-router-dom";
+import {EmbeddedWorkbook,WorkbookPage} from "./WorkbookPage";
 import type {WorkbookInstance} from "../components/workbooks/model";
 const mocks=vi.hoisted(()=>({data:null as unknown,put:vi.fn(),after:vi.fn(),reload:vi.fn()}));
 vi.mock('../data/hooks',()=>({useResource:()=>({data:mocks.data,reload:mocks.reload,error:null}),useAfterWrite:()=>mocks.after,write:{put:mocks.put}}));
@@ -14,6 +14,23 @@ const mount=()=>render(<MemoryRouter initialEntries={['/workbooks/1']}><Routes><
 beforeEach(()=>{window.ResizeObserver=class{observe(){}disconnect(){}unobserve(){}} as unknown as typeof ResizeObserver;vi.useFakeTimers();vi.clearAllMocks();localStorage.clear();sessionStorage.clear();initial={id:1,uid:'a-stable-instance',title:'Тетрадь',template_id:1,revision:1,project_type:null,project_id:null,archived_at:null,answers:{sheet:{goal:'Исходный',second:'Старый'}},template:{format:'soyman-workbook',schemaVersion:1,key:'generic',version:1,title:'Обычная тетрадь',sheets:[{key:'sheet',title:'Лист',fields:[{key:'goal',label:'Цель',type:'text'},{key:'second',label:'Второе поле',type:'text'}]}]}};mocks.data=initial;});
 afterEach(()=>{cleanup();vi.useRealTimers();});
 describe('редактор рабочей тетради',()=>{
+ it('редактирует тетрадь внутри кампании и листает её, сохраняя вкладку в адресе',async()=>{
+  initial.template.sheets.push({key:'plans',title:'Планы',fields:[{key:'next',label:'Следующий шаг',type:'text'}]});
+  mocks.put.mockImplementation(async(_path:string,body:{answers:WorkbookInstance['answers']})=>({...initial,answers:body.answers,revision:2}));
+  function Campaign(){const location=useLocation();return <><EmbeddedWorkbook id={1}/><output data-testid="address">{location.pathname}{location.search}</output></>;}
+  render(<MemoryRouter initialEntries={['/campaigns/42?tab=Тетрадь&other=keep']}><Campaign/></MemoryRouter>);
+  expect(screen.queryByRole('link',{name:'Закрыть тетрадь'})).toBeNull();
+  expect(screen.getByRole('button',{name:'Отдельное окно'})).toBeTruthy();
+  fireEvent.change(screen.getByRole('textbox',{name:'Цель'}),{target:{value:'Цель кампании'}});
+  await act(async()=>{await vi.advanceTimersByTimeAsync(800);});
+  expect(mocks.put).toHaveBeenCalledWith('/workbooks/instances/1',{revision:1,answers:{sheet:{goal:'Цель кампании',second:'Старый'}}});
+  fireEvent.click(screen.getByRole('button',{name:'Лист 02: Планы'}));
+  const address=screen.getByTestId('address').textContent!;
+  expect(address.split('?')[0]).toBe('/campaigns/42');
+  const params=new URLSearchParams(address.split('?')[1]);
+  expect(params.get('tab')).toBe('Тетрадь');expect(params.get('other')).toBe('keep');expect(params.get('sheet')).toBe('plans');
+  expect(screen.getByRole('textbox',{name:'Следующий шаг'})).toBeTruthy();
+ });
  it('сохраняет ввод с ревизией и не заменяет его фоновым устаревшим ответом',async()=>{
   mocks.put.mockImplementation(async(_path:string,body:{answers:WorkbookInstance['answers']})=>({...initial,answers:body.answers,revision:2}));const ui=mount();fireEvent.change(screen.getByRole('textbox',{name:'Цель'}),{target:{value:'Моя цель'}});
   mocks.data={...initial,answers:{sheet:{goal:'Фоновый ответ'}}};ui.rerender(<MemoryRouter initialEntries={['/workbooks/1']}><Routes><Route path="/workbooks/:id" element={<WorkbookPage popout/>}/></Routes></MemoryRouter>);expect((screen.getByRole('textbox',{name:'Цель'}) as HTMLTextAreaElement).value).toBe('Моя цель');

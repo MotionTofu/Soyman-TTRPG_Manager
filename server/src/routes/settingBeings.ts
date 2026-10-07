@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { ensurePopulationFolder } from "../services/populationFolders";
 import multer from "multer";
 import fs from "fs";
 import path from "path";
@@ -395,46 +396,54 @@ settingBeingsRouter.get("/:id", (req, res) => {
   });
 });
 
-settingBeingsRouter.post("/:id/avatar", upload.single("file"), async (req, res) => {
-  const being = db
-    .prepare("SELECT folder_path, avatar_image_path FROM setting_beings WHERE id = ?")
-    .get(req.params.id) as { folder_path: string; avatar_image_path: string | null } | undefined;
-  if (!being) return res.status(404).json({ error: "not found" });
-  if (!req.file) return res.status(400).json({ error: "file is required" });
+settingBeingsRouter.post("/:id/avatar", upload.single("file"), async (req, res, next) => {
+  try {
+    const being = db
+      .prepare("SELECT folder_path, avatar_image_path FROM setting_beings WHERE id = ?")
+      .get(req.params.id) as { folder_path: string | null; avatar_image_path: string | null } | undefined;
+    if (!being) return res.status(404).json({ error: "not found" });
+    if (!req.file) return res.status(400).json({ error: "file is required" });
 
-  const rawExt = (path.extname(req.file.originalname) || ".jpg").toLowerCase();
-  if (!ALLOWED_IMAGE_EXTS.has(rawExt)) return res.status(400).json({ error: "Unsupported image extension" });
-  const ext = rawExt;
-  const target = path.join(being.folder_path, `avatar${ext}`);
-  await writeReplacingOldFile(target, req.file.buffer, being.avatar_image_path, "avatar");
+    const rawExt = (path.extname(req.file.originalname) || ".jpg").toLowerCase();
+    if (!ALLOWED_IMAGE_EXTS.has(rawExt)) return res.status(400).json({ error: "Unsupported image extension" });
+    const ext = rawExt;
+    const target = path.join(ensurePopulationFolder("setting_beings", req.params.id), `avatar${ext}`);
+    await writeReplacingOldFile(target, req.file.buffer, being.avatar_image_path, "avatar");
 
-  db.prepare("UPDATE setting_beings SET avatar_image_path = ? WHERE id = ?").run(
-    target,
-    req.params.id
-  );
-  res.json(withAvatarUrl({ avatar_image_path: target }));
+    db.prepare("UPDATE setting_beings SET avatar_image_path = ? WHERE id = ?").run(
+      target,
+      req.params.id
+    );
+    res.json(withAvatarUrl({ avatar_image_path: target }));
+  } catch (error) {
+    next(error);
+  }
 });
 
 // Wide thumbnail shown in the Setting's Население list — cropped
 // independently from the square avatar, since the list card isn't square.
-settingBeingsRouter.post("/:id/thumbnail", upload.single("file"), async (req, res) => {
-  const being = db
-    .prepare("SELECT folder_path, thumbnail_image_path FROM setting_beings WHERE id = ?")
-    .get(req.params.id) as { folder_path: string; thumbnail_image_path: string | null } | undefined;
-  if (!being) return res.status(404).json({ error: "not found" });
-  if (!req.file) return res.status(400).json({ error: "file is required" });
+settingBeingsRouter.post("/:id/thumbnail", upload.single("file"), async (req, res, next) => {
+  try {
+    const being = db
+      .prepare("SELECT folder_path, thumbnail_image_path FROM setting_beings WHERE id = ?")
+      .get(req.params.id) as { folder_path: string | null; thumbnail_image_path: string | null } | undefined;
+    if (!being) return res.status(404).json({ error: "not found" });
+    if (!req.file) return res.status(400).json({ error: "file is required" });
 
-  const rawExt = (path.extname(req.file.originalname) || ".jpg").toLowerCase();
-  if (!ALLOWED_IMAGE_EXTS.has(rawExt)) return res.status(400).json({ error: "Unsupported image extension" });
-  const ext = rawExt;
-  const target = path.join(being.folder_path, `thumbnail${ext}`);
-  await writeReplacingOldFile(target, req.file.buffer, being.thumbnail_image_path, "thumbnail");
+    const rawExt = (path.extname(req.file.originalname) || ".jpg").toLowerCase();
+    if (!ALLOWED_IMAGE_EXTS.has(rawExt)) return res.status(400).json({ error: "Unsupported image extension" });
+    const ext = rawExt;
+    const target = path.join(ensurePopulationFolder("setting_beings", req.params.id), `thumbnail${ext}`);
+    await writeReplacingOldFile(target, req.file.buffer, being.thumbnail_image_path, "thumbnail");
 
-  db.prepare("UPDATE setting_beings SET thumbnail_image_path = ? WHERE id = ?").run(
-    target,
-    req.params.id
-  );
-  res.json(withAvatarUrl({ thumbnail_image_path: target }));
+    db.prepare("UPDATE setting_beings SET thumbnail_image_path = ? WHERE id = ?").run(
+      target,
+      req.params.id
+    );
+    res.json(withAvatarUrl({ thumbnail_image_path: target }));
+  } catch (error) {
+    next(error);
+  }
 });
 
 /**

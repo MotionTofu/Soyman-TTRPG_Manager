@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import path from "path";
 import { db } from "../db/db";
+import {ensureProjectWorkbook,placeProjectWorkbooks} from "../services/projectWorkbooks";
 import { kindOf } from "../db/entityKinds";
 import { entityName, entityNames, refKey } from "../services/entityNames";
 import {
@@ -682,11 +683,14 @@ storyRouter.post("/arcs", (req, res) => {
         "SELECT MAX(position) as m FROM story_arcs WHERE setting_id = ? AND IFNULL(parent_id, 0) = IFNULL(?, 0)"
       )
       .get(setting_id, parent_id ?? null) as { m: number | null }).m ?? -1;
-  const info = db
+  const info = db.transaction(()=>{const created = db
     .prepare(
       "INSERT INTO story_arcs (setting_id, parent_id, name, description, position, campaign_id) VALUES (?, ?, ?, ?, ?, ?)"
     )
     .run(setting_id, parent_id ?? null, name.trim(), description ?? "", position + 1, campaignId);
+  const author=(req as import("../services/auth").AuthedRequest).user;
+  if(author?.role==="gm")ensureProjectWorkbook(db,author.id,"adventure",Number(created.lastInsertRowid));
+  return created;})();
   res.status(201).json(db.prepare("SELECT * FROM story_arcs WHERE id = ?").get(info.lastInsertRowid));
 });
 
@@ -746,6 +750,7 @@ storyRouter.put("/arcs/:id", (req, res) => {
     );
   }
   const saved = db.prepare("SELECT * FROM story_arcs WHERE id = ?").get(target.id) as Record<string, unknown>;
+  if(campaignId==null&&!saved.is_default)placeProjectWorkbooks(db,"adventure",target.id);
   if (campaignId == null) return res.json(saved);
   const original = db.prepare("SELECT * FROM story_arcs WHERE id = ?").get(req.params.id) as Record<string, unknown>;
   res.json(applyArcOverride(original, saved));

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Проверка всплывающих поверхностей</title>
+<style>
+body { margin: 24px; } .audit-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:24px; }
+.audit-slot { position:relative; min-height:180px; padding:12px; background:repeating-linear-gradient(45deg,#153b41 0 10px,#ec7899 10px 20px); }
+.audit-slot > strong { display:block; background:#fff; color:#111; margin-bottom:12px; }
+.audit-slot [data-popup] { position:relative !important; inset:auto !important; margin:0 !important; min-width:0 !important; width:100% !important; max-width:100% !important; transform:none !important; }
+.audit-slot [data-popup] button { display:block; width:100%; text-align:left; }
+</style></head><body><h1>Всплывающие поверхности</h1><p id="result">Проверяем…</p><label>Тема <select id="theme"></select></label><div id="samples" class="audit-grid"></div>
+<script type="module">
+import './src/index.css'; import './src/dnd-sheet.css'; import './src/paper.css'; import './src/audio-player.css'; import './src/rich-text.css'; import './src/fantasy-punk-skin.css';
+import './src/components/sheet/sheet.css'; import './src/pages/workbook.css'; import './src/pages/map-editor-layout.css'; import './src/maps/workspace/workspace-editor.css'; import './src/pages/pdf-reader.css'; import './src/pages/setting-profile.css';
+import { BUILTIN_THEMES, applyTheme } from './src/themes.ts';
+const surfaces = [
+ ['context-menu','Общее меню'],['wb-menu__list','Меню тетради'],['sheet-menu','Меню листа'],['dnd-row-menu-list','Меню строки D&D'],
+ ['bag-verstak-context-menu','Меню сумки'],['setting-links-popover','Связи сеттингов'],['playlist-nav-menu','Меню плейлиста'],
+ ['visibility-picker-panel','Доступ игрокам'],['mini-calendar-popover','Календарь'],['entity-search-results','Поиск сущностей'],
+ ['mention-dropdown','Подсказки упоминаний'],['rt-format-menu','Форматирование'],['rt-link-menu','Вставка ссылок'],
+ ['map-editor-menu-popup','Меню редактора карт'],['workspace-menu-popup','Меню рабочего пространства карт'],
+ ['pdf-reader__selection-menu','Меню выделения PDF'],['pdf-reader__composer','Заметка PDF'],['miller-search__list','Поиск в профиле'],['wb-contents','Оглавление тетради']
+];
+const samples=document.querySelector('#samples');
+for(const scope of ['theme','paper','folder']) for(const [cls,label] of surfaces){
+ const slot=document.createElement('section');slot.className='audit-slot'+(scope==='paper'?' paper-scope':scope==='folder'?' entity-page--paper':'');
+ slot.innerHTML=`<strong>${label} · ${scope}</strong><div class="${cls}" data-popup="${cls}" data-scope="${scope}"><button type="button">Действие</button><button type="button">Второй пункт</button><a href="#">Связанный проект</a></div>`;samples.append(slot);
+}
+const results=[];
+for(const theme of BUILTIN_THEMES){
+ applyTheme(theme);
+ for(const el of document.querySelectorAll('[data-popup]')){
+  const style=getComputedStyle(el),color=style.backgroundColor;
+  const alpha=color==='transparent'?0:color.startsWith('rgba')?Number(color.split(',').at(-1).replace(')','').trim()):color.includes('/')?parseFloat(color.split('/').at(-1)):1;
+  const ancestors=[];for(let parent=el;parent;parent=parent.parentElement)if(Number(getComputedStyle(parent).opacity)<1)ancestors.push(parent.className);
+  results.push({theme:theme.id,scope:el.dataset.scope,surface:el.dataset.popup,background:color,alpha,opacity:style.opacity,pass:alpha===1&&ancestors.length===0});
+ }
+}
+const failures=results.filter(r=>!r.pass);
+document.querySelector('#result').textContent=JSON.stringify({checks:results.length,failures});
+document.querySelector('#result').dataset.results=JSON.stringify(results);
+const select=document.querySelector('#theme');for(const theme of BUILTIN_THEMES){const option=new Option(theme.name,theme.id);select.add(option);}
+select.addEventListener('change',()=>applyTheme(BUILTIN_THEMES.find(t=>t.id===select.value)));
+select.value='noir';applyTheme(BUILTIN_THEMES.find(t=>t.id==='noir'));
+</script></body></html>

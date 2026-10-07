@@ -37,6 +37,7 @@
 import crypto from "crypto";
 import { db } from "../db/db";
 import { MENTIONABLE_TABLE, TRANSFERABLE_KINDS } from "../db/entityKinds";
+import { decodeTableJsonText, findStoredTableBlocks, mapTextTableContent } from "@soyman/shared";
 
 /**
  * Всё, на что можно сослаться из текста, и где оно лежит. Список ведёт себя
@@ -126,17 +127,19 @@ export const formatRef = (type: string, uid: string, source: string, label: stri
 export function scanMentions(text: string): Mention[] {
   const found: Mention[] = [];
   if (!text || !text.includes("[[")) return found;
+  const tables = findStoredTableBlocks(text);
   MENTION_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = MENTION_RE.exec(text))) {
     const [raw, refType, uid, source, refLabel, oldType, oldId, oldLabel] = m;
+    const decode = tables.some(block => m!.index >= block.from && m!.index < block.to) ? decodeTableJsonText : (value: string) => value;
     if (refType) {
       found.push({
         kind: "ref",
         type: refType,
         uid,
-        source: source ?? "",
-        label: refLabel ?? "",
+        source: decode(source ?? ""),
+        label: decode(refLabel ?? ""),
         raw,
         start: m.index,
         end: m.index + raw.length,
@@ -146,7 +149,7 @@ export function scanMentions(text: string): Mention[] {
         kind: "legacy",
         type: oldType,
         id: Number(oldId),
-        label: oldLabel ?? "",
+        label: decode(oldLabel ?? ""),
         raw,
         start: m.index,
         end: m.index + raw.length,
@@ -164,6 +167,7 @@ export function scanMentions(text: string): Mention[] {
  * Замены собираются справа налево, чтобы смещения не поехали.
  */
 export function rewriteMentions(text: string, fn: (m: Mention) => string | null): string {
+  if (findStoredTableBlocks(text).length) return mapTextTableContent(text, cellText => rewriteMentions(cellText, fn));
   const found = scanMentions(text);
   if (!found.length) return text;
   let out = text;

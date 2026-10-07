@@ -1,10 +1,11 @@
-import { useState, type DragEvent } from "react";
+import { useRef, useState, type DragEvent } from "react";
 import { Link } from "react-router-dom";
 import { useAction, useResource, write } from "../data/hooks";
 import { labelled } from "../data/notices";
 import { readResource } from "../data/imperative";
 import { campaignPaths, grantAffects } from "../data/campaigns";
-import { EntityTabWorkspace } from "./EntityTabWorkspace";
+import { IssuanceColumns } from "./IssuanceColumns";
+import { MentionText } from "./mentions/MentionText";
 import { PlayerVisibilityPicker } from "./PlayerVisibilityPicker";
 import { Modal } from "./Modal";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
@@ -13,9 +14,9 @@ import { CampaignPlayerSectionsTab } from "./CampaignPlayerSectionsTab";
 import type { PlayerPreview, PlayerSection, RosterPlayer, SearchResult, VisibilityTargetType } from "../types";
 
 // «Выдача» кампании (спека campaign-paper, Q30/Q34/Q35/Q40/Q41; доска 44):
-// два раздела. «Сводка» — всё, что игроки уже видят, по видам; скрытого тут
+// два раздела. «Сущности мира» — всё, что игроки уже видят, по видам; скрытого тут
 // нет, дерева сеттинга тоже — открывают с профиля сущности или броском из
-// поиска. «От мастера» — статьи для игроков, как были.
+// поиска. «Раздатка» — разделы со статьями и изображениями.
 interface Props {
   campaignId: number;
   settingId: number | null;
@@ -36,8 +37,6 @@ const GROUPS: { type: VisibilityTargetType; label: string; to?: (id: number) => 
   { type: "setting_community", label: "Сообщества", to: (id) => `/communities/${id}` },
   { type: "setting_artifact", label: "Артефакты", to: (id) => `/artifacts/${id}` },
   { type: "setting_calendar_event", label: "События", to: (id) => `/events/${id}` },
-  { type: "campaign_player_section", label: "Разделы «От мастера»" },
-  { type: "campaign_player_article", label: "Статьи «От мастера»" },
 ];
 
 /** Вид результата поиска → цель выдачи. Чего тут нет, игрокам пока не открыть. */
@@ -51,27 +50,29 @@ const DROP_TARGETS: Record<string, VisibilityTargetType> = {
 
 export function CampaignIssuanceTab({ campaignId, settingId, roster }: Props) {
   const [sel, setSel] = useState<{ section: string; item?: string }>({ section: "summary" });
-  const summary = useResource<SummaryItem[]>(campaignPaths.grantSummary(campaignId)).data;
+  const [creatingSection, setCreatingSection] = useState(false);
+  const summaryState = useResource<SummaryItem[]>(campaignPaths.grantSummary(campaignId));
+  const summary = summaryState.data;
   return (
-    <EntityTabWorkspace
-      sections={[
-        { id: "summary", label: "Сводка", count: summary?.length ?? 0 },
-        { id: "gm", label: "От мастера" },
-      ]}
-      selection={sel}
-      onSelect={setSel}
-      workspaceKey={campaignId}
-    >
+    <div className="stack">
+      <div className="issuance-roots" aria-label="Разделы выдачи">
+        <button type="button" className={sel.section === "summary" ? "is-selected" : ""} aria-pressed={sel.section === "summary"} onClick={() => setSel({ section: "summary" })}>Сущности мира</button>
+        <button type="button" className={sel.section === "gm" ? "is-selected" : ""} aria-pressed={sel.section === "gm"} onClick={() => setSel({ section: "gm" })}>Раздатка</button>
+        {sel.section === "summary" && <PlayerPreviewBar campaignId={campaignId} roster={roster} />}
+        {sel.section === "gm" && <button type="button" className="issuance-roots__add" onClick={() => setCreatingSection(v => !v)} aria-expanded={creatingSection}>+ Раздел</button>}
+      </div>
       {sel.section === "summary" ? (
-        <IssuanceSummary campaignId={campaignId} roster={roster} items={summary} />
+        summaryState.error ? <p role="alert">Не удалось загрузить выдачу. <button onClick={summaryState.reload}>Повторить</button></p> : <IssuanceSummary campaignId={campaignId} roster={roster} items={summary} />
       ) : (
-        <CampaignPlayerSectionsTab campaignId={campaignId} roster={roster} defaultSettingId={settingId ?? undefined} />
+        <CampaignPlayerSectionsTab campaignId={campaignId} roster={roster} defaultSettingId={settingId ?? undefined} showCreation={creatingSection} onCreateSection={() => setCreatingSection(true)} onCreated={() => setCreatingSection(false)} />
       )}
-    </EntityTabWorkspace>
+    </div>
   );
 }
 
 function IssuanceSummary({ campaignId, roster, items }: { campaignId: number; roster: RosterPlayer[]; items: SummaryItem[] | undefined }) {
+  const [category, setCategory] = useState<VisibilityTargetType>("setting_location");
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const run = useAction();
   const [over, setOver] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -101,9 +102,8 @@ function IssuanceSummary({ campaignId, roster, items }: { campaignId: number; ro
       setNote("В составе кампании нет игроков — открывать некому.");
       return;
     }
-    if (await batch([{ target_type: target, target_id: item.id }], "grant", active, "Открыть игрокам")) {
-      setNote(`«${item.title}» открыто всему составу.`);
-    }
+    setNote(null);
+    await batch([{ target_type: target, target_id: item.id }], "grant", active, "Открыть игрокам");
   }
 
   const byType = new Map<VisibilityTargetType, SummaryItem[]>();
@@ -111,7 +111,6 @@ function IssuanceSummary({ campaignId, roster, items }: { campaignId: number; ro
 
   return (
     <div className="issuance-summary">
-      <PlayerPreviewBar campaignId={campaignId} roster={roster} />
       <div
         className={`issuance-drop${over ? " is-over" : ""}`}
         onDragOver={(e) => {
@@ -129,82 +128,97 @@ function IssuanceSummary({ campaignId, roster, items }: { campaignId: number; ro
           {note}
         </p>
       )}
-      {items && items.length === 0 && <p className="muted">Игрокам пока ничего не открыто.</p>}
-      {GROUPS.map((g) => {
-        const list = byType.get(g.type);
-        if (!list?.length) return null;
-        return (
-          <section key={g.type} className="paper-list-group">
-            <h3 className="paper-group__head">
-              {g.label} <span className="paper-group__count">· {list.length}</span>
-            </h3>
-            <ul className="paper-rows issuance-rows">
-              {list.map((i) => (
-                <li key={`${i.target_type}:${i.target_id}`}>
-                  <span className="paper-rows__main">{g.to ? <Link to={g.to(i.target_id)}>{i.name}</Link> : i.name}</span>
-                  <span className="paper-rows__sub">
-                    {i.all ? "всем" : i.players.map((p) => p.name).join(", ")}
-                    {i.players.some((p) => p.access_level === "mentioned") ? " · есть «упомянут»" : ""}
-                  </span>
-                  <PlayerVisibilityPicker campaignId={campaignId} targetType={i.target_type} targetId={i.target_id} roster={roster} />
-                  <button
-                    type="button"
-                    className="comp-mini"
-                    onClick={() =>
-                      void batch(
-                        [{ target_type: i.target_type, target_id: i.target_id }],
-                        "revoke",
-                        i.players.map((p) => p.id),
-                        "Скрыть от игроков"
-                      )
-                    }
-                  >
-                    Скрыть
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        );
-      })}
+      <IssuanceColumns
+        sections={GROUPS.map(g => ({ id: g.type, label: g.label, count: byType.get(g.type)?.length ?? 0 }))}
+        selectedSection={category}
+        onSection={id => { setCategory(id as VisibilityTargetType); setSelectedId(null); }}
+        items={(byType.get(category) ?? []).map(i => ({ id: String(i.target_id), label: i.name }))}
+        selectedItem={selectedId == null ? undefined : String(selectedId)}
+        onItem={id => setSelectedId(Number(id))}
+        title={GROUPS.find(g => g.type === category)?.label ?? "Сущности"}
+        loading={!items}
+      >
+        {selectedId != null && byType.get(category)?.some(i => i.target_id === selectedId) ? (
+          <WorldEntityPreview key={`${category}:${selectedId}`} item={byType.get(category)!.find(i => i.target_id === selectedId)!} campaignId={campaignId} roster={roster} />
+        ) : <div className="stack">
+          <h2 className="paper-group__head">{GROUPS.find(g => g.type === category)?.label}</h2>
+          <p className="muted">Сущностей: {byType.get(category)?.length ?? 0}</p>
+          <ul className="paper-rows">{(byType.get(category) ?? []).map(i => <li key={i.target_id}>
+            <div className="paper-rows__main"><button className="ghost" onClick={() => setSelectedId(i.target_id)}>{i.name}</button><span className="issuance-added">{i.all ? "Всем игрокам" : i.players.map(p => p.name).join(", ")}</span></div>
+            <PlayerVisibilityPicker campaignId={campaignId} targetType={i.target_type} targetId={i.target_id} roster={roster} />
+          </li>)}</ul>
+        </div>}
+      </IssuanceColumns>
     </div>
   );
+}
+
+const WORLD_PATHS: Partial<Record<VisibilityTargetType, string>> = {
+  setting_location: "/setting-locations", setting_being: "/setting-beings", setting_community: "/setting-communities",
+  setting_artifact: "/artifacts", setting_calendar_event: "/settings/calendar-events",
+};
+function WorldEntityPreview({ item, campaignId, roster }: { item: SummaryItem; campaignId: number; roster: RosterPlayer[] }) {
+  const detail = useResource<Record<string, unknown>>(`${WORLD_PATHS[item.target_type]}/${item.target_id}`);
+  const value = detail.data;
+  const body = value ? [value.description, value.history, value.player_text].filter((v): v is string => typeof v === "string" && !!v).join("\n\n") : "";
+  const to = GROUPS.find(g => g.type === item.target_type)?.to?.(item.target_id);
+  return <div className="stack">
+    <h2 className="paper-group__head">{item.name}</h2>
+    <PlayerVisibilityPicker campaignId={campaignId} targetType={item.target_type} targetId={item.target_id} roster={roster} />
+    {detail.loading ? <p className="muted">Загрузка…</p> : detail.error ? <p role="alert">Не удалось загрузить сущность. <button onClick={detail.reload}>Повторить</button></p> : <div className="reading-text"><MentionText text={body || "Описание пока не заполнено."} /></div>}
+    {to && <Link className="primary" to={to}>Открыть сущность →</Link>}
+  </div>;
 }
 
 // «Глазами игрока»: превью считается ТЕМ ЖЕ кодом, что выдача игроку
 // (GET /visibility-grants/preview → services/playerContent.ts), а не своим
 // способом на клиенте.
 function PlayerPreviewBar({ campaignId, roster }: { campaignId: number; roster: RosterPlayer[] }) {
+  const latestRequest = useRef(0);
   const [playerId, setPlayerId] = useState<number | "">("");
   const [preview, setPreview] = useState<PlayerPreview | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const player = roster.find((p) => p.id === playerId);
 
-  async function load() {
-    if (!playerId) return;
+  async function load(selectedId: number) {
+    const requestId = ++latestRequest.current;
     setLoading(true);
     setError(null);
     try {
       // Свежее: превью открывают, чтобы сверить только что выданное.
-      setPreview(await readResource<PlayerPreview>(`/visibility-grants/preview?campaign_id=${campaignId}&player_id=${playerId}`, { fresh: true }));
+      const result = await readResource<PlayerPreview>(`/visibility-grants/preview?campaign_id=${campaignId}&player_id=${selectedId}`, { fresh: true });
+      if (requestId === latestRequest.current) setPreview(result);
     } catch (e: unknown) {
-      setError(String(e instanceof Error ? e.message : e));
-      setPreview(null);
+      if (requestId === latestRequest.current) {
+        setError(String(e instanceof Error ? e.message : e));
+        setPreview(null);
+      }
     } finally {
-      setLoading(false);
+      if (requestId === latestRequest.current) setLoading(false);
     }
   }
 
   const groups = preview ? buildSettingReaderGroups(preview.setting, preview.flagged) : [];
+  function close() {
+    latestRequest.current++;
+    setPreview(null);
+    setPlayerId("");
+    setLoading(false);
+    setError(null);
+  }
   return (
     <div className="issuance-preview">
       <span className="paper-label">Глазами игрока</span>
       <select
         value={playerId}
         onChange={(e) => {
-          setPlayerId(e.target.value ? Number(e.target.value) : "");
+          const id = e.target.value ? Number(e.target.value) : "";
+          setPlayerId(id);
           setPreview(null);
+          setError(null);
+          if (id) void load(id);
+          else { latestRequest.current++; setLoading(false); }
         }}
         aria-label="Игрок для предпросмотра"
       >
@@ -215,12 +229,10 @@ function PlayerPreviewBar({ campaignId, roster }: { campaignId: number; roster: 
           </option>
         ))}
       </select>
-      <button type="button" onClick={() => void load()} disabled={!playerId || loading}>
-        {loading ? "Смотрю…" : "Показать"}
-      </button>
+      {loading && <span className="muted" role="status">Загрузка…</span>}
       {error && <span className="muted">Не удалось загрузить превью: {error}</span>}
       {preview && (
-        <Modal onClose={() => setPreview(null)}>
+        <Modal onClose={close}>
           <div className="stack">
             <h3>Глазами игрока — {player?.name}</h3>
             <p className="muted">Так видит игрок: только выданное ему. Данные — ответ сервера, тот же, что уходит игроку.</p>
@@ -238,7 +250,7 @@ function PlayerPreviewBar({ campaignId, roster }: { campaignId: number; roster: 
               </div>
             ))}
             <div className="row">
-              <button className="primary" onClick={() => setPreview(null)}>
+              <button className="primary" onClick={close}>
                 Закрыть
               </button>
             </div>
@@ -253,7 +265,7 @@ function PreviewSections({ sections }: { sections: PlayerSection[] }) {
   if (sections.length === 0) return null;
   return (
     <div className="stack">
-      <span className="paper-label">От мастера</span>
+      <span className="paper-label">Раздатка</span>
       {sections.map((s) => (
         <div key={s.id} className="card">
           <strong>

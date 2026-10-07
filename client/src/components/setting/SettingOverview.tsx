@@ -4,6 +4,7 @@ import { useAction, useResource, write } from "../../data/hooks";
 import { syncMentionLinks } from "../../mentions";
 import { MentionText } from "../mentions/MentionText";
 import { MentionTextarea } from "../mentions/MentionTextarea";
+import { RowEditButton } from "../RowIconButtons";
 import { isSafeImageUrl } from "../../utils/safeUrl";
 import { useAuthenticatedFileUrl } from "../../utils/fileUrl";
 import { MAX_SIGNATURES, PASSPORT_FIELDS, PASSPORT_NOT_THIS, worldAffects, worldPath } from "../../settingWorld";
@@ -153,9 +154,7 @@ export function SettingOverview({
           <header className="setting-passport__head">
             <h2 className="paper-group__head">Паспорт</h2>
             {!draft && (
-              <button type="button" onClick={() => setDraft({ ...passport, signature: [...signature] })}>
-                Править
-              </button>
+              <RowEditButton label="Править паспорт" onClick={() => setDraft({ ...passport, signature: [...signature] })} />
             )}
           </header>
 
@@ -164,43 +163,41 @@ export function SettingOverview({
               {PASSPORT_FIELDS.map((f) => (
                 <label key={f.key}>
                   <span className="paper-label">{f.label}</span>
-                  <MentionTextarea
+                  <input
+                    type="text"
                     value={draft[f.key] ?? ""}
-                    onChange={(v) => setDraft({ ...draft, [f.key]: v })}
-                    rows={f.key === "tone" || f.key === "scale" ? 1 : 2}
+                    onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
                     placeholder={f.hint}
-                    defaultSettingId={setting.id}
                   />
                 </label>
               ))}
               <div>
-                <span className="paper-label">Отличительные признаки · 3–5, можно с @</span>
+                <span className="paper-label">Отличительные признаки · 3–5</span>
                 {Array.from({ length: Math.min(MAX_SIGNATURES, (draft.signature?.length ?? 0) + 1) }, (_, i) => (
-                  <MentionTextarea
+                  <input
+                    type="text"
                     key={i}
+                    aria-label={`Признак ${i + 1}`}
                     value={draft.signature?.[i] ?? ""}
-                    onChange={(v) => {
+                    onChange={(e) => {
                       const list = [...(draft.signature ?? [])];
-                      list[i] = v;
+                      list[i] = e.target.value;
                       setDraft({ ...draft, signature: list });
                     }}
-                    rows={1}
                     placeholder={`Признак ${i + 1}`}
-                    defaultSettingId={setting.id}
                   />
                 ))}
               </div>
               <label>
                 <span className="paper-label">{PASSPORT_NOT_THIS.label}</span>
-                <MentionTextarea
+                <input
+                  type="text"
                   value={draft.not_this ?? ""}
-                  onChange={(v) => setDraft({ ...draft, not_this: v })}
-                  rows={2}
+                  onChange={(e) => setDraft({ ...draft, not_this: e.target.value })}
                   placeholder={PASSPORT_NOT_THIS.hint}
-                  defaultSettingId={setting.id}
                 />
               </label>
-              <div className="row">
+              <div className="row setting-passport__actions">
                 <button type="button" className="primary" onClick={savePassport}>
                   Сохранить
                 </button>
@@ -283,7 +280,7 @@ export function SettingOverview({
           )}
         </section>
 
-        <section className="paper-groups" aria-label="Кампании">
+        <section className="paper-groups setting-overview__campaigns" aria-label="Кампании">
           <h2 className="paper-group__head">
             Кампании <span className="paper-group__count">· {campaigns.length}</span>
             <button type="button" className="setting-passport__empty" onClick={onNewCampaign}>

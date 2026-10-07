@@ -4,6 +4,8 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { db } from "../db/db";
+import {ensureProjectWorkbook,placeProjectWorkbooks} from "../services/projectWorkbooks";
+import type {AuthedRequest} from "../services/auth";
 import { defaultStatus, settingNow, timePatch } from "../services/eventTime";
 import { buildAdventureExportData, importAdventureExport } from "./story";
 import {
@@ -141,11 +143,14 @@ settingsRouter.post("/", (req, res) => {
   };
   if (!name) return res.status(400).json({ error: "name is required" });
   const folder = settingFolder(name);
-  const info = db
+  const info = db.transaction(()=>{const created = db
     .prepare(
       "INSERT INTO settings (name, description, folder_path, code) VALUES (?, ?, ?, ?)"
     )
     .run(name, description || "", folder, suggestCode("settings", name));
+  const author=(req as AuthedRequest).user;
+  if(author?.role==="gm")ensureProjectWorkbook(db,author.id,"setting",Number(created.lastInsertRowid));
+  return created;})();
   const newId = info.lastInsertRowid as number;
   const preset = calendar ? resolvePreset(calendar) : null;
   if (preset) applyCalendarPreset(newId, preset, calendar?.withEra === true);
@@ -271,6 +276,8 @@ settingsRouter.post("/wizard", (req, res) => {
         }
       }
 
+      const author=(req as AuthedRequest).user;
+      if(author?.role==="gm")ensureProjectWorkbook(db,author.id,"setting",newId);
       return newId;
     })();
     res.status(201).json(db.prepare("SELECT * FROM settings WHERE id = ?").get(settingId));
@@ -1220,6 +1227,7 @@ settingsRouter.put("/:id", (req, res) => {
   db.prepare(
     "UPDATE settings SET name = COALESCE(?, name), description = COALESCE(?, description), folder_path = ?, code = COALESCE(?, code), genres = COALESCE(?, genres), passport = COALESCE(?, passport) WHERE id = ?"
   ).run(name ?? null, description ?? null, folderPath, code == null ? null : cleanCode(code), genresJson, passport === undefined ? null : serializePassport(passport), req.params.id);
+  placeProjectWorkbooks(db,"setting",Number(req.params.id));
   // Двойник кода не запрещается, только называется: код — подсказка человеку в
   // окне неработающей ссылки, а не ключ. Резолв идёт по uid цели, и совпадение
   // кодов ни на что не влияет, кроме понятности фразы «поставьте модуль wdh».

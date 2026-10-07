@@ -79,10 +79,10 @@ function resolveOwnerFolder(ownerType: string, ownerId: string | number): string
 }
 
 galleryRouter.get("/", (req, res) => {
-  const { owner_type, owner_id } = req.query as { owner_type?: string; owner_id?: string };
+  const { owner_type, owner_id, include_archived } = req.query as { owner_type?: string; owner_id?: string; include_archived?: string };
   if (!owner_type || !owner_id) return res.status(400).json({ error: "owner_type and owner_id are required" });
   const rows = db
-    .prepare("SELECT * FROM gallery_images WHERE owner_type = ? AND owner_id = ? ORDER BY position, id")
+    .prepare(`SELECT * FROM gallery_images WHERE owner_type = ? AND owner_id = ? ${include_archived === "true" ? "" : "AND archived_at IS NULL"} ORDER BY position, id`)
     .all(owner_type, owner_id) as { image_path: string }[];
   res.json(rows.map(withUrl));
 });
@@ -160,6 +160,16 @@ galleryRouter.put("/reorder", (req, res) => {
   res.json({ ok: true });
 });
 
+// Обратимый архив раздатки сохраняет файл и выданные права.
+galleryRouter.put("/:id/archive", (req, res) => {
+  const { archived } = req.body as { archived?: boolean };
+  if (typeof archived !== "boolean") return res.status(400).json({ error: "archived must be boolean" });
+  const row = db.prepare("SELECT * FROM gallery_images WHERE id = ? AND owner_type = 'campaign_player_section'").get(req.params.id) as { image_path: string } | undefined;
+  if (!row) return res.status(404).json({ error: "not found" });
+  db.prepare("UPDATE gallery_images SET archived_at = ? WHERE id = ?").run(archived ? new Date().toISOString() : null, req.params.id);
+  res.json(withUrl(db.prepare("SELECT * FROM gallery_images WHERE id = ?").get(req.params.id) as { image_path: string }));
+});
+
 galleryRouter.put("/:id", (req, res) => {
   const { caption } = req.body as { caption?: string };
   if (typeof caption === "string" && caption.length > 500) return res.status(400).json({ error: "caption too long (max 500)" });
@@ -202,6 +212,7 @@ galleryRouter.delete("/:id", (req, res) => {
   if ("needsChoice" in result) return res.status(409).json({ needsChoice: true });
 
   db.prepare("DELETE FROM gallery_images WHERE id = ?").run(req.params.id);
+  db.prepare("DELETE FROM player_visibility_grants WHERE target_type = 'campaign_player_image' AND target_id = ?").run(req.params.id);
 
   // Отмена возможна ровно тогда, когда файл уцелел. Просроченные записи
   // подчищаются здесь же: отдельного расписания ради восьмисекундного тоста

@@ -1,4 +1,16 @@
 import type Database from "better-sqlite3";
+import { PRACTICAL_WORKBOOKS, validateWorkbookTemplate, type WorkbookTemplate } from "@soyman/shared";
+/** Reuse an identical definition. A reserved version collision creates a new version, never overwrites one. */
+export function registerPracticalTemplate(db:Database.Database,template:WorkbookTemplate):number {
+ validateWorkbookTemplate(template);
+ const rows=db.prepare('SELECT id,version,definition_json FROM workbook_templates WHERE template_key=? ORDER BY version DESC').all(template.key) as {id:number;version:number;definition_json:string}[];
+ const shape=JSON.stringify({...template,version:0});
+ const same=rows.find(row=>JSON.stringify({...JSON.parse(row.definition_json),version:0})===shape);
+ if(same)return same.id;
+ const version=rows.some(row=>row.version===template.version)?Math.max(template.version,...rows.map(row=>row.version))+1:template.version;
+ const next={...template,version};
+ return Number(db.prepare('INSERT INTO workbook_templates(template_key,version,title,definition_json) VALUES(?,?,?,?)').run(next.key,version,next.title,JSON.stringify(next)).lastInsertRowid);
+}
 export function migrateWorkbooks(db:Database.Database){db.exec(`
  CREATE TABLE IF NOT EXISTS workbook_templates (
   id INTEGER PRIMARY KEY, template_key TEXT NOT NULL, version INTEGER NOT NULL, definition_json TEXT NOT NULL,
@@ -30,4 +42,12 @@ export function migrateWorkbooks(db:Database.Database){db.exec(`
   shelf_id INTEGER NOT NULL REFERENCES library_shelves(id) ON DELETE CASCADE,author_user_id INTEGER NOT NULL REFERENCES users(id),
   instance_id INTEGER NOT NULL REFERENCES workbook_instances(id) ON DELETE CASCADE,PRIMARY KEY(shelf_id,author_user_id)
  );`);
+ for (const template of PRACTICAL_WORKBOOKS) {
+  // Новые версии доступны для выбора; заполненные экземпляры не меняются.
+  registerPracticalTemplate(db,template);
+ }
+ const shelfColumns=db.prepare('PRAGMA table_info(library_shelves)').all() as {name:string}[];
+ if(!shelfColumns.some(c=>c.name==='setting_id'))db.exec('ALTER TABLE library_shelves ADD COLUMN setting_id INTEGER REFERENCES settings(id) ON DELETE SET NULL');
+ if(!shelfColumns.some(c=>c.name==='workbook_role'))db.exec('ALTER TABLE library_shelves ADD COLUMN workbook_role TEXT');
+ db.exec("CREATE UNIQUE INDEX IF NOT EXISTS workbook_setting_shelf ON library_shelves(setting_id,workbook_role) WHERE setting_id IS NOT NULL AND workbook_role IS NOT NULL");
 }

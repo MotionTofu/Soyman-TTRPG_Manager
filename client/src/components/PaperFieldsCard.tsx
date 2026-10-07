@@ -22,6 +22,7 @@ export function PaperFieldsCard({
   showGrid = true,
   rows,
   mentionSettingId,
+  externalHeading = false,
 }: {
   label: string;
   fields: readonly PaperField[];
@@ -40,6 +41,7 @@ export function PaperFieldsCard({
   rows?: boolean;
   /** Упоминания в полях: «@» в правке открывает выбор, просмотр — ссылками. */
   mentionSettingId?: number | null;
+  externalHeading?: boolean;
 }) {
   const mentions = mentionSettingId !== undefined;
   const [editing, setEditing] = useState(false);
@@ -65,13 +67,15 @@ export function PaperFieldsCard({
 
   if (editing) {
     return (
+      <>
+      {externalHeading && <h2 className="campaign-passport__heading">{label}</h2>}
       <div className="creature-card-editor is-inline">
         <div className="card stack">
-          <span className="editable-card-field-label">{label}</span>
+          {!externalHeading && <span className="editable-card-field-label">{label}</span>}
           <div className="scene-head__grid">
             {fields.map((f) => (
               <label key={f.key} className="stack editable-card-field">
-                <span>{f.label}</span>
+                <span>{f.label}{externalHeading ? ":" : ""}</span>
                 {mentions ? (
                   <MentionTextarea
                     rows={2}
@@ -101,17 +105,25 @@ export function PaperFieldsCard({
           </div>
         </div>
       </div>
+      </>
     );
   }
 
   return (
+    <>
+    {externalHeading && (
+      <header className="campaign-passport__head">
+        <h2 className="campaign-passport__heading">{label}</h2>
+        <button type="button" className="creature-card__edit" onClick={start}>Править</button>
+      </header>
+    )}
     <article className={`creature-card paper-scope creature-card--page is-embedded${strong ? "" : " is-quiet"}`}>
-      <div className="creature-card__head">
+      {!externalHeading && <div className="creature-card__head">
         <span className="creature-card__head-label">{label}</span>
         <button type="button" className="creature-card__edit" onClick={start}>
           Править
         </button>
-      </div>
+      </div>}
       {children}
       {rows && showGrid ? (
         <>
@@ -119,7 +131,7 @@ export function PaperFieldsCard({
             <dl className="paper-fields-rows">
               {filled.map((f) => (
                 <div key={f.key}>
-                  <dt className="creature-card__head-label">{f.label}</dt>
+                  <dt className="creature-card__head-label">{f.label}{externalHeading ? ":" : ""}</dt>
                   <dd>{mentions ? <MentionText text={values[f.key]} /> : values[f.key]}</dd>
                 </div>
               ))}
@@ -159,5 +171,6 @@ export function PaperFieldsCard({
         )
       )}
     </article>
+    </>
   );
 }

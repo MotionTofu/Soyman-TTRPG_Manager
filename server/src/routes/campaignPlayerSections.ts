@@ -61,6 +61,14 @@ campaignPlayerSectionsRouter.put("/reorder", (req, res) => {
   res.json({ ok: true });
 });
 
+campaignPlayerSectionsRouter.put("/:id/archive", (req, res) => {
+  const { archived } = req.body as { archived?: boolean };
+  if (typeof archived !== "boolean") return res.status(400).json({ error: "archived must be boolean" });
+  const result = db.prepare("UPDATE campaign_player_sections SET archived_at = ? WHERE id = ?").run(archived ? new Date().toISOString() : null, req.params.id);
+  if (!result.changes) return res.status(404).json({ error: "not found" });
+  res.json(db.prepare("SELECT * FROM campaign_player_sections WHERE id = ?").get(req.params.id));
+});
+
 campaignPlayerSectionsRouter.put("/:id", (req, res) => {
   const { name } = req.body as { name?: string };
   if (name !== undefined) {
@@ -99,6 +107,7 @@ campaignPlayerSectionsRouter.delete("/:id", (req, res) => {
     "DELETE FROM player_visibility_grants WHERE target_type = 'campaign_player_article' AND target_id = ?"
   );
   for (const a of articleIds) delArticleGrant.run(a.id);
+  db.prepare("DELETE FROM player_visibility_grants WHERE target_type = 'campaign_player_image' AND target_id IN (SELECT id FROM gallery_images WHERE owner_type = 'campaign_player_section' AND owner_id = ?)").run(req.params.id);
   db.prepare("DELETE FROM campaign_player_sections WHERE id = ?").run(req.params.id);
   db.prepare("DELETE FROM player_visibility_grants WHERE target_type = 'campaign_player_section' AND target_id = ?").run(
     req.params.id
@@ -138,6 +147,14 @@ campaignPlayerSectionsRouter.put("/articles/reorder", (req, res) => {
   const tx = db.transaction((ids: number[]) => ids.forEach((id, i) => upd.run(i, id)));
   tx(order ?? []);
   res.json({ ok: true });
+});
+
+campaignPlayerSectionsRouter.put("/articles/:id/archive", (req, res) => {
+  const { archived } = req.body as { archived?: boolean };
+  if (typeof archived !== "boolean") return res.status(400).json({ error: "archived must be boolean" });
+  const result = db.prepare("UPDATE campaign_player_articles SET archived_at = ? WHERE id = ?").run(archived ? new Date().toISOString() : null, req.params.id);
+  if (!result.changes) return res.status(404).json({ error: "not found" });
+  res.json(db.prepare("SELECT * FROM campaign_player_articles WHERE id = ?").get(req.params.id));
 });
 
 campaignPlayerSectionsRouter.put("/articles/:id", (req, res) => {

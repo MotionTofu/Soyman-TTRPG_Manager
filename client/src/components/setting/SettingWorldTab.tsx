@@ -23,10 +23,12 @@ function mentionText(e: Pick<SettingEntry, "content" | "fields">): string {
   return [e.content, ...Object.values(e.fields ?? {})].join("\n");
 }
 
-export function SettingWorldTab({ settingId }: { settingId: number }) {
+export function SettingWorldTab({ settingId, categories }: { settingId: number; categories?: readonly string[] }) {
   const run = useAction();
   const [confirmDialog, confirm] = useConfirm();
-  const entries = useResource<SettingEntry[]>(worldPath(settingId)).data ?? NO_ENTRIES;
+  const allEntries = useResource<SettingEntry[]>(worldPath(settingId)).data ?? NO_ENTRIES;
+  const entries = useMemo(() => categories ? allEntries.filter(e => categories.includes(e.category)) : allEntries, [allEntries, categories]);
+  const firstType = ENTRY_TYPES.find(t => !categories || categories.includes(t.key)) ?? ENTRY_TYPE.get("world_truth")!;
   const [onlyVisible, setOnlyVisible] = useState(false);
   const [selId, setSelId] = useState<number | null>(null);
   const [addMenu, setAddMenu] = useState<{ x: number; y: number } | null>(null);
@@ -118,15 +120,15 @@ export function SettingWorldTab({ settingId }: { settingId: number }) {
           + Запись
         </button>
       </div>
-      {addMenu && <ContextMenu x={addMenu.x} y={addMenu.y} items={ENTRY_TYPES.map((t) => ({ label: t.one, onClick: () => void create(t) }))} onClose={() => setAddMenu(null)} />}
+      {addMenu && <ContextMenu x={addMenu.x} y={addMenu.y} items={ENTRY_TYPES.filter(t => !categories || categories.includes(t.key)).map((t) => ({ label: t.one, onClick: () => void create(t) }))} onClose={() => setAddMenu(null)} />}
 
       {entries.length === 0 ? (
         <EmptyState
-          title="Мир пока пуст"
-          hint="Правила мира, традиции, нормы, напряжения, деятельность — короткие записи, из которых складывается мир."
+          title={categories ? "Записей пока нет" : "Мир пока пуст"}
+          hint={categories ? "Создайте запись — она появится и в разделе «Мир» сеттинга." : "Правила мира, традиции, нормы, напряжения, деятельность — короткие записи, из которых складывается мир."}
           action={
-            <button type="button" className="primary" onClick={() => void create(ENTRY_TYPE.get("world_truth")!)}>
-              + Первое правило мира
+            <button type="button" className="primary" onClick={() => void create(firstType)}>
+              + {categories ? firstType.one : "Первое правило мира"}
             </button>
           }
         />

@@ -1,4 +1,5 @@
 import {ProjectWorkbooks} from "../components/workbooks/ProjectWorkbooks";
+import { settingAdventuresPath } from "../layout/useSettingCrumbs";
 import { AdventureHead, AdventureParticipants, OutcomesCard, PassportCard } from "../components/adventure/AdventureDossier";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { RevealList } from "../components/RevealList";
@@ -128,11 +129,17 @@ export function AdventureDetailPage() {
 
   return (
     <EntityPage
-      crumbs={[
+      crumbs={campaignId ? [
+        { label: "Кампании", to: "/campaigns" },
+        { label: arcCampaigns.find((c) => c.id === campaignId)?.name ?? "Кампания", to: `/campaigns/${campaignId}` },
+        { label: "Главы и сцены", to: `/campaigns/${campaignId}?tab=${encodeURIComponent("Главы и сцены")}` },
+        { label: arc.name },
+      ] : [
+        { label: "Сеттинги", to: "/settings" },
         { label: setting?.name ?? "Сеттинг", to: `/settings/${arc.setting_id}` },
         {
           label: "Приключения",
-          to: `/settings/${arc.setting_id}?tab=${encodeURIComponent("Приключения")}`,
+          to: settingAdventuresPath(arc.setting_id, arc.id),
         },
         { label: arc.name },
       ]}

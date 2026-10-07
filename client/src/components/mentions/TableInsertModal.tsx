@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Modal } from "../Modal";
+import { createTextTable, type TextTable } from "./tableDocument";
 
 // Окно «Новая таблица»: строки × столбцы с живой сеткой ячеек. Markdown с
 // вертикальными чертами собирается один раз, по «Создать». Общее для
@@ -20,7 +21,7 @@ function tableMarkdown(cells: string[][], cols: number): string {
   return rowLine(cells[0] ?? []) + sepLine + cells.slice(1).map(rowLine).join("");
 }
 
-export function TableInsertModal({ onInsert, onClose }: { onInsert: (markdown: string) => void; onClose: () => void }) {
+export function TableInsertModal({ onInsert, onInsertTable, onClose }: { onInsert?: (markdown: string) => void; onInsertTable?: (table: TextTable) => void; onClose: () => void }) {
   const [rows, setRows] = useState(2);
   const [cols, setCols] = useState(2);
   const [cells, setCells] = useState<string[][]>(() => resizeGrid([], 2, 2));
@@ -64,7 +65,7 @@ export function TableInsertModal({ onInsert, onClose }: { onInsert: (markdown: s
           ))}
         </div>
         <div className="row">
-          <button className="primary" onClick={() => onInsert(tableMarkdown(cells, cols))}>Создать</button>
+          <button className="primary" onClick={() => onInsertTable ? onInsertTable(createTextTable(rows, cols, cells)) : onInsert?.(tableMarkdown(cells, cols))}>Создать</button>
           <button onClick={onClose}>Отмена</button>
         </div>
       </div>

@@ -1,3 +1,4 @@
+import { useSettingCrumbs } from "../layout/useSettingCrumbs";
 import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { EntityParticipates } from "../components/EntityParticipates";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -100,6 +101,7 @@ export function BeingDetailPage() {
   const beingState = useEntity<SettingBeingDetail>("being", beingId);
   const being = beingState.data ?? null;
   const settingId = being?.setting_id ?? null;
+  const settingCrumbs = useSettingCrumbs(settingId);
   const [tab, selectTab] = useTabState(TABS, "Досье", TAB_ALIASES);
   const communities =
     useResource<SettingCommunity[]>(
@@ -458,6 +460,7 @@ export function BeingDetailPage() {
     <EntityPage
       paper
       crumbs={[
+        ...settingCrumbs,
         {
           label: "Население",
           to: (() => {

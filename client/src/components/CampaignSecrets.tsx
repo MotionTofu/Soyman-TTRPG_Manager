@@ -5,6 +5,8 @@ import { dataKeys } from "../data/entities";
 import { campaignPaths, secretAffects } from "../data/campaigns";
 import { labelled } from "../data/notices";
 import { MentionText } from "./mentions/MentionText";
+import { RowDeleteButton } from "./RowIconButtons";
+import "./campaign-secrets.css";
 import type { CampaignGrouped, StorySecret } from "../types";
 import { useConfirm } from "../hooks/useConfirm";
 
@@ -94,11 +96,6 @@ export function CampaignSecrets({
 
   return (
     <div className="stack">
-      <p className="muted">
-        Отметка «раскрыто» относится только к этой кампании — и открывает запись игрокам. Тексты
-        тайн приключения правятся в сеттинге; свои можно завести здесь.
-      </p>
-
       {showOwn && (
         <SecretGroup
           title="Тайны кампании"
@@ -165,12 +162,12 @@ const SecretGroup = memo(function SecretGroup({
   const revealed = items.filter((s) => s.state?.revealed === 1).length;
 
   return (
-    <details className="card res-group">
+    <section className="card res-group campaign-secret-group">
       {confirmDialog}
-      <summary className="res-group__band">
+      <header className="res-group__band">
         <span className="res-group__title">{title}</span>
         <span className="res-group__count">раскрыто {revealed} из {items.length}</span>
-      </summary>
+      </header>
       <div className="res-group__body" style={{ padding: 12, gap: 8, display: "flex", flexDirection: "column" }}>
         {items.map((s) => (
           <SecretRow key={s.id} secret={s} onToggle={toggle} onRemove={remove} />
@@ -178,7 +175,7 @@ const SecretGroup = memo(function SecretGroup({
         {/* §1.11a — как и у вех: приглашение здесь уже есть, это форма ниже. */}
         <AddSecretForm arcId={arcId} campaignId={campaignId} />
       </div>
-    </details>
+    </section>
   );
 });
 
@@ -194,8 +191,8 @@ const SecretRow = memo(function SecretRow({
   onRemove: (s: StorySecret) => void;
 }) {
   return (
-    <div className="row" style={{ justifyContent: "space-between" }}>
-      <span>
+    <div className="campaign-secret-row">
+      <div>
         <input
           type="checkbox"
           checked={secret.state?.revealed === 1}
@@ -209,13 +206,11 @@ const SecretRow = memo(function SecretRow({
             <MentionText text={secret.content} />
           </div>
         )}
-      </span>
+      </div>
       {/* Тайна приключения принадлежит сеттингу — её видят все его кампании,
           поэтому удалять её отсюда нельзя. */}
       {!!secret.campaign_id && (
-        <button className="danger" onClick={() => onRemove(secret)}>
-          ✕
-        </button>
+        <RowDeleteButton label={`Удалить «${secret.title}»`} onClick={() => onRemove(secret)} />
       )}
     </div>
   );

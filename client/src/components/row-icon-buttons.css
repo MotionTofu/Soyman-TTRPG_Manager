@@ -1,0 +1,40 @@
+/* Общие рисованные действия строки; компонент подключает свой вид сам. */
+.row-icon {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: var(--card-border-width) solid var(--line);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--paper-ink);
+  cursor: pointer;
+}
+.row-icon:hover, .row-icon:focus-visible { background: var(--paper-ink); color: var(--paper-base); }
+.row-icon::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  -webkit-mask: var(--row-icon) center / 20px no-repeat;
+  mask: var(--row-icon) center / 20px no-repeat;
+}
+.row-icon--edit { --row-icon: var(--skin-edit-pencil); }
+.row-icon--trash { --row-icon: var(--skin-trash); }
+.row-icon--cross { --row-icon: var(--skin-cross); }
+.row-icon--eye { --row-icon: var(--skin-eye); }
+.row-icon__count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  z-index: 1;
+  padding: 0 var(--sp-1);
+  border: var(--card-border-width) solid var(--line);
+  border-radius: 4px;
+  background: var(--paper-base);
+  color: var(--paper-ink);
+  font-size: var(--fs-micro);
+}
+.row-icon--trash:hover, .row-icon--trash:focus-visible { background: #b3261e; border-color: #b3261e; color: var(--paper-base); }

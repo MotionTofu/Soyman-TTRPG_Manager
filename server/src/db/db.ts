@@ -1334,6 +1334,10 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     )`);
   }
 
+  if (!columnExists(database, "gallery_images", "archived_at")) {
+    database.exec("ALTER TABLE gallery_images ADD COLUMN archived_at TEXT");
+  }
+
   if (!tableExists(database, "gallery_image_undo")) {
     database.exec(`CREATE TABLE gallery_image_undo (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1558,6 +1562,9 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`);
   }
+  if (!columnExists(database, "campaign_player_sections", "archived_at")) {
+    database.exec("ALTER TABLE campaign_player_sections ADD COLUMN archived_at TEXT");
+  }
   if (!tableExists(database, "campaign_player_articles")) {
     database.exec(`CREATE TABLE campaign_player_articles (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1633,6 +1640,9 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     );
   }
 
+  if (!columnExists(database, "campaign_player_articles", "archived_at")) {
+    database.exec("ALTER TABLE campaign_player_articles ADD COLUMN archived_at TEXT");
+  }
   if (!tableExists(database, "player_visibility_grants")) {
     database.exec(`CREATE TABLE player_visibility_grants (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

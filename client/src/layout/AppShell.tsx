@@ -23,6 +23,8 @@ import { RehearsalStrip } from "../components/SessionLiveControls";
 import { brandLogo } from "../brandLogo";
 import { ExternalLinkConfirmModal, BOOSTY_URL } from "../components/ExternalLinkConfirmModal";
 import { Breadcrumbs } from "../components/Breadcrumbs";
+import { useWorkbookCrumbs } from "./useWorkbookCrumbs";
+import { NavigationHistoryProvider } from "./NavigationHistory";
 import { useConfirm } from "../hooks/useConfirm";
 import { requestPultGridReset } from "../pultGridReset";
 import { sessionLabel } from "../sessionLabel";
@@ -418,20 +420,23 @@ function buildCrumbs(pathname: string, isPlayer: boolean, live?: LiveCrumbNames 
   }
   const parts = pathname.split("/").filter(Boolean);
   const crumbs: { label: string; to?: string }[] = [{ label: "Главная", to: "/" }];
+  // These profiles have no standalone collection route. While loading, keep
+  // a valid exit; their EntityPage supplies the setting and section afterward.
+  if (["beings", "communities", "locations", "artifacts", "adventures", "scenes", "events"].includes(parts[0]) && parts.length === 2) {
+    return [...crumbs, { label: "Сеттинги", to: "/settings" }, { label: "…" }];
+  }
   let acc = "";
   for (let i = 0; i < parts.length; i++) {
     const seg = parts[i];
-    // id segments (numeric) — show as "…" but still linkable via parent? skip label, just keep parent
+    acc += `/${seg}`;
+    // Keep both the collection and the entity in the path, including its id.
     if (/^\d+$/.test(seg) && i > 0) {
-      // attach id to previous crumb's to
-      const prev = crumbs[crumbs.length - 1];
-      if (prev.to) prev.to += `/${seg}`;
+      crumbs.push({ label: "…", to: i === parts.length - 1 ? undefined : parts[0] === "resources" ? "/resources" : acc });
       continue;
     }
-    acc += `/${seg}`;
     // У игрока /campaigns — это Дневники, а не Кампании мастера.
     const label = seg === "campaigns" && isPlayer ? "Дневники" : (CRUMB_LABEL[seg] ?? seg);
-    const isLast = i === parts.length - 1 || (i + 1 < parts.length && /^\d+$/.test(parts[i + 1]) && i + 1 === parts.length - 1);
+    const isLast = i === parts.length - 1;
     crumbs.push({ label, to: isLast ? undefined : acc });
   }
   return crumbs;
@@ -482,6 +487,7 @@ export function AppShell() {
   // place to keep creature/location previews visible instead of the app
   // nav they're not using mid-session.
   const { pathname, search } = useLocation();
+  const workbookCrumbs = useWorkbookCrumbs(pathname);
   const mode = workspaceMode(pathname, user?.role);
   const isLivePult = mode === "session";
   const isMapWorkspace = mode === "maps";
@@ -683,6 +689,7 @@ export function AppShell() {
     // Движок пульта звука живёт здесь, а не в main.tsx: окно самого пульта
     // рендерится ВНЕ AppShell, и звук в нём заводиться не должен — иначе
     // каналы играли бы в двух окнах сразу (см. sound/engine.tsx).
+    <NavigationHistoryProvider>
     <SoundEngineProvider>
     {/* Провайдер обнимает и страницу, и панель поиска с мешком: зоны приёма
         живут на странице, а кнопка «Выгрузить» — в мешке. */}
@@ -825,7 +832,7 @@ export function AppShell() {
           // (`.shell-crumbs`), иначе крошек две (F-50, решение 2026-09-18).
           <div className="shell-crumbs" style={{ marginBottom: pathname === "/" ? 8 : 16, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
             <div className="shell-crumbs__trail">
-              <Breadcrumbs items={buildCrumbs(pathname, !!isPlayer, liveCrumbs)} />
+              <Breadcrumbs items={workbookCrumbs ?? buildCrumbs(pathname, !!isPlayer, liveCrumbs)} />
             </div>
             {!isPlayer && activeStorageName && !isLivePult && (
               <span className="muted shell-crumbs__storage" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)", border: "1px solid var(--line)", padding: "2px 6px", background: "var(--paper-2)" }} title="Активное хранилище">
@@ -898,5 +905,6 @@ export function AppShell() {
     </UndoDeleteProvider>
     </UnloadTargetsProvider>
     </SoundEngineProvider>
+    </NavigationHistoryProvider>
   );
 }

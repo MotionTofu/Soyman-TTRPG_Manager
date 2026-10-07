@@ -103,6 +103,19 @@ let loaded: Loaded | null = null;
 let inFlight: Promise<void> | null = null;
 let version = 0;
 const listeners = new Set<() => void>();
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+let retryDelay = 1500;
+
+export function isMentionIndexReady(): boolean { return loaded !== null; }
+
+function retryMentionIndex() {
+  if (retryTimer || listeners.size === 0 || getCachedUser()?.role !== "gm") return;
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    if (listeners.size > 0 && getCachedUser()?.role === "gm") void loadMentionIndex();
+  }, retryDelay);
+  retryDelay = Math.min(retryDelay * 2, 30000);
+}
 
 function announce() {
   version++;
@@ -133,12 +146,15 @@ export function loadMentionIndex(): Promise<void> {
   inFlight = readResource<IndexPayload>("/mentions/index", { fresh: true })
     .then((payload) => {
       loaded = build(payload);
-      missed.clear();
+      if (retryTimer) clearTimeout(retryTimer);
+      retryTimer = null;
+      retryDelay = 1500;
       announce();
     })
     .catch(() => {
-      // Ссылки покажутся зачёркнутыми, и это честно: без карты мы про них
-      // ничего не знаем. Повторная попытка приедет со следующим обновлением.
+      // A failed request says nothing about whether the targets exist.
+      // Keep the last good index and retry while mentions are on screen.
+      retryMentionIndex();
     })
     .finally(() => {
       inFlight = null;
@@ -151,6 +167,7 @@ export function loadMentionIndex(): Promise<void> {
  * пачками: импорт, установка и удаление модуля, удаление из Архива.
  */
 export function refreshMentionIndex(): Promise<void> {
+  missed.clear();
   if (inFlight) return inFlight;
   return loadMentionIndex();
 }
@@ -159,7 +176,14 @@ export function useMentionIndex(): number {
   return useSyncExternalStore(
     (fn) => {
       listeners.add(fn);
-      return () => listeners.delete(fn);
+      if (!loaded && getCachedUser()?.role === "gm") void loadMentionIndex();
+      return () => {
+        listeners.delete(fn);
+        if (listeners.size === 0 && retryTimer) {
+          clearTimeout(retryTimer);
+          retryTimer = null;
+        }
+      };
     },
     () => version
   );

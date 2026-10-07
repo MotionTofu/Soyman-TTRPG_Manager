@@ -26,6 +26,9 @@ const RESTORE_ENDPOINTS: Record<string, string> = {
   community: "/setting-communities",
   canvas_board: "/canvas/free-boards",
   map: "/maps",
+  campaign_player_section: "/archive/campaign_player_section",
+  campaign_player_article: "/archive/campaign_player_article",
+  gallery_image: "/archive/gallery_image",
 };
 
 // Тип в строке архива подписан по-русски. До этого печатался идентификатор
@@ -51,7 +54,9 @@ const TYPE_LABELS: Record<string, string> = {
   orphan: "без владельца",
   // Владельцы архивных файлов (server/src/services/vaultDedup.ts): в столбце
   // типа стояли сырые `gallery_image` и `location_map`.
-  gallery_image: "галерея",
+  gallery_image: "изображение",
+  campaign_player_section: "раздел раздатки",
+  campaign_player_article: "статья",
   location_map: "карта локации",
   location_avatar: "аватар локации",
   location_thumbnail: "миниатюра локации",
@@ -346,7 +351,8 @@ export function ArchivePage() {
     const base = RESTORE_ENDPOINTS[item.type];
     if (!base) return;
     try {
-      await write.del(`${base}/${item.id}`, item.type === "map" ? { headers: { [MAP_VERSION_HEADER]: "6" } } : undefined);
+      if (base.startsWith("/archive/")) await write.put(`${base}/${item.id}/archive`);
+      else await write.del(`${base}/${item.id}`, item.type === "map" ? { headers: { [MAP_VERSION_HEADER]: "6" } } : undefined);
     } catch (e) {
       setErrorMsg(`Не удалось вернуть в архив: ${e instanceof Error ? e.message : String(e)}`);
       return;
@@ -440,6 +446,7 @@ export function ArchivePage() {
       void Promise.allSettled(snapshot.map((it) => {
         const base = RESTORE_ENDPOINTS[it.type];
         if (!base) return Promise.resolve();
+        if (base.startsWith("/archive/")) return write.put(`${base}/${it.id}/archive`).catch(() => {});
         return write.del(`${base}/${it.id}`, it.type === "map" ? { headers: { [MAP_VERSION_HEADER]: "6" } } : undefined).catch(() => {});
       })).then(() => refresh());
     });

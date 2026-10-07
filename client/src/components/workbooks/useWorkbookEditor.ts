@@ -49,6 +49,9 @@ export function useWorkbookEditor(id:string|number){
  async function retry(){state.current.paused=false;const latest=await readOnce<WorkbookInstance>(`/workbooks/instances/${id}`);if(latest.revision!==state.current.doc?.revision){state.current.paused=true;setConflict({server:latest,merge:mergeWorkbookAnswers(state.current.base,state.current.answers,latest.answers)});return;}void save();}
  function resolve(){if(!conflict)return;const current=state.current;current.doc=conflict.server;current.base=conflict.server.answers;current.answers=conflict.merge.answers;current.generation++;current.dirty=true;current.paused=false;setAnswers(current.answers);setDocument(current.doc);setConflict(null);setError("");remember();void save();}
  /** После обновления версии документ приходит заново целиком. */
- function replace(saved:WorkbookInstance){state.current.doc=null;setDocument(saved);afterWrite(WORKBOOK_AFFECTS);query.reload();}
+ function replace(saved:WorkbookInstance){
+  const current=state.current;current.doc=saved;current.answers=saved.answers;current.base=saved.answers;current.dirty=false;current.paused=false;current.generation++;
+  localStorage.removeItem(recoveryKey.current);setDocument(saved);setAnswers(saved.answers);setError("");setConflict(null);setStatus("Сохранено");afterWrite(WORKBOOK_AFFECTS);query.reload();
+ }
  return {query,document,answers,status,error,setError,conflict,setConflict,change,retry,resolve,replace,dirty:()=>state.current.dirty||state.current.saving,current:()=>state.current.answers};
 }

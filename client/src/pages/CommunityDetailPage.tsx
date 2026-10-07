@@ -1,3 +1,4 @@
+import { useSettingCrumbs } from "../layout/useSettingCrumbs";
 import { useState, type DragEvent } from "react";
 import { EntityParticipates } from "../components/EntityParticipates";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -71,6 +72,7 @@ export function CommunityDetailPage() {
 
   const communityState = useEntity<SettingCommunityDetail>("community", communityId);
   const community = communityState.data ?? null;
+  const settingCrumbs = useSettingCrumbs(community?.setting_id);
   const locations =
     useResource<SettingLocation[]>(community ? settingPaths.inSetting("location", community.setting_id) : null).data ?? [];
   const { save } = useSaveEntity<SettingCommunityDetail>("community", communityId);
@@ -264,7 +266,7 @@ export function CommunityDetailPage() {
     (r, i) => allRelations.findIndex((o) => o.other_type === r.other_type && o.other_id === r.other_id) === i,
   );
   const linkCount = community.members.length + community.children.length + community.locations.length + allRelations.length;
-  const populationTo = `/settings/${community.setting_id}?tab=${encodeURIComponent("Население")}`;
+  const populationTo = `/settings/${community.setting_id}?tab=${encodeURIComponent("Население")}&population=${encodeURIComponent("Сообщества")}`;
 
   async function saveDescription(value: string) {
     await saveOrThrow({ description: value });
@@ -274,6 +276,7 @@ export function CommunityDetailPage() {
     <EntityPage
       paper
       crumbs={[
+        ...settingCrumbs,
         { label: "Население", to: populationTo },
         ...community.ancestors.map((a) => ({ label: a.name, to: `/communities/${a.id}` })),
         { label: community.name },

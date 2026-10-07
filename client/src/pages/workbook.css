@@ -196,6 +196,8 @@
 
 /* Таблица курса — настоящая таблица; клетки пишутся на месте. */
 .wb-table { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+.wb-table--wide { overflow-x: auto; }
+.wb-table--wide table { min-width: 960px; }
 .wb-table table { width: 100%; border-collapse: collapse; font-size: var(--fs-data); }
 .wb-table thead th { padding: var(--sp-1) var(--sp-3) var(--sp-2); color: var(--paper-muted); font-weight: 500; text-align: left; }
 .wb-table tbody tr { border-top: 1px solid var(--paper-rule); vertical-align: top; }
@@ -262,6 +264,10 @@
 }
 .wb-card__title > span { color: var(--paper-ink-soft); font-size: var(--fs-data); }
 .wb-card__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-5) var(--sp-7); }
+.wb-card__grid > :is(.wb-table, .workbook-repeat, .wb-profile) { grid-column: 1 / -1; }
+.wb-profile { min-width: 0; }
+.wb-profile .population__split { display: flex; flex-direction: column; }
+.wb-profile .population__aside { display: flex; position: static; width: 100%; }
 .wb-card__actions { display: flex; gap: var(--sp-5); align-items: center; }
 
 /* ── Записи ─────────────────────────────────────────────────────────── */
@@ -286,7 +292,17 @@
 .wb-empty-notes__art { width: 200px; height: 200px; background: var(--skin-wb-empty-notes) center / contain no-repeat; }
 .wb-new-note { display: block; }
 .wb-all-notes { margin-top: auto; align-self: flex-start; }
-.wb-page-preview { display: block; width: 100%; min-height: 84px; max-height: 240px; overflow: hidden; padding: var(--sp-4); border: var(--card-border-width) dashed rgb(31 26 20 / 0.45); border-radius: 4px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.wb-page-entry { border-bottom: var(--card-border-width) solid var(--paper-rule); padding-bottom: var(--sp-5); }
+.wb-page-entry__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3); flex-wrap: wrap; }
+.wb-page-entry__actions { display: flex; gap: var(--sp-4); }
+.wb-page-entry__text { font-family: var(--font-body); font-size: var(--fs-body); line-height: 1.6; overflow-wrap: anywhere; }
+.wb-page-entry__text > :first-child { margin-top: 0; }
+.wb-page-entry__text :is(.rt-h, .rt-h1, .rt-h2, .rt-h3) { color: var(--paper-ink); }
+.wb-page-entry__text table { display: block; max-width: 100%; overflow-x: auto; }
+.wb-page-entry__text img { max-width: 100%; height: auto; }
+.wb-page-entry__empty { display: block; width: 100%; padding: var(--sp-3) 0; border: 0; background: transparent; color: var(--paper-muted); font: inherit; font-size: var(--fs-body); text-align: left; cursor: text; }
+.wb-page-entry .sheet-editor { --ink: var(--paper-ink); --muted: var(--paper-muted); --line: var(--paper-rule); --accent-soft: rgb(226 242 90 / 0.35); color: var(--paper-ink); font-family: var(--font-body); font-size: var(--fs-body); line-height: 1.6; }
+.wb-page-entry .sheet-editor .cm-content { min-height: 100px; }
 .wb-image img { max-width: 100%; max-height: 360px; display: block; }
 .wb-image__actions { display: flex; gap: var(--sp-5); }
 .workbook-former { padding: var(--sp-4) 0; border-top: 1px solid var(--paper-rule); }
@@ -330,11 +346,13 @@
 .wb-book--single.wb-book--card .wb-card { height: auto; min-height: 0; flex: 1; border-radius: 0; box-shadow: none; }
 .wb-book--single .wb-card__grid { grid-template-columns: minmax(0, 1fr); }
 .workbook-page .wb-book--single { height: calc(100dvh - 160px); border: var(--card-border-width-strong) solid #1c1c1c; border-radius: 12px 12px 0 0; overflow: hidden; }
+.workbook--embedded .wb-book--single { height: clamp(520px, calc(100dvh - 270px), 920px); border: var(--card-border-width-strong) solid #1c1c1c; border-radius: 12px 12px 0 0; overflow: hidden; }
 
 /* Ширина страницы, а не окна: та же тетрадь бывает разворотом, у края читалки и на телефоне. */
 .wb-page, .wb-card { container-type: inline-size; }
 @container (max-width: 900px) { .wb-card__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @container (max-width: 520px) {
+  .wb-table--wide table { min-width: 0; }
   .wb-card__grid { grid-template-columns: minmax(0, 1fr); }
   .wb-page .workbook-heading { font-size: var(--fs-h3); letter-spacing: 0.04em; }
   /* На узкой странице таблица — блоками: строка, под ней ответы с подписями столбцов. */

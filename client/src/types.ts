@@ -79,6 +79,7 @@ export interface StorageProfile {
 }
 
 export interface GalleryImage {
+  archived_at?: string | null;
   id: number;
   owner_type: "character" | "being" | "location" | "community" | "campaign_player_section";
   owner_id: number;
@@ -1729,6 +1730,7 @@ export interface SettingCalendarTimeline {
 export type CampaignPlayerSectionKind = "gallery" | "articles";
 
 export interface CampaignPlayerSection {
+  archived_at?: string | null;
   id: number;
   campaign_id: number;
   name: string;
@@ -1739,6 +1741,7 @@ export interface CampaignPlayerSection {
 }
 
 export interface CampaignPlayerArticle {
+  archived_at?: string | null;
   id: number;
   section_id: number;
   title: string;
@@ -1752,6 +1755,7 @@ export interface CampaignPlayerArticle {
 export type VisibilityTargetType =
   | "campaign_player_section"
   | "campaign_player_article"
+  | "campaign_player_image"
   | "setting_location"
   | "setting_being"
   | "setting_community"

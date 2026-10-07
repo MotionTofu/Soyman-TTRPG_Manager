@@ -1,29 +1,38 @@
 /** Переносимый формат тетради. Ключи полей не зависят от названий и порядка. */
+import {activityOverview} from "./workbookActivity";
 /** «number» и «link» остались от первых шаблонов: разбор Markdown их не порождает, число пишется строкой. */
-export type WorkbookPrimitive = "text"|"line"|"page"|"image"|"number"|"choice"|"checklist"|"link";
+export type WorkbookPrimitive = "text"|"line"|"page"|"image"|"number"|"choice"|"checklist"|"link"|"reference"|"state";
 /** heading и note — текст листа без ответа. */
-export type WorkbookStatic = "heading"|"note";
+export type WorkbookStatic = "heading"|"note"|"profile"|"summary";
 export interface WorkbookField {key:string;label:string;type:WorkbookPrimitive|WorkbookStatic|"table"|"group";hint?:string;options?:string[];columns?:WorkbookField[];fields?:WorkbookField[];required?:boolean;
  /** Заголовок раздела: 2 — «##», 3 — «###». */ level?:2|3;
  /** Строки таблицы, заданные автором (первая колонка); ответ строки хранится с `_id` = ключ строки. */ rows?:{key:string;label:string}[];rowHeader?:string;
  /** Сколько пустых строк или карточек показать сразу. */ minRows?:number;
  /** Чек-лист «Готовность»: по нему считается прогресс листа. */ readiness?:boolean;
- /** Поле канонической модели (`force.want`) и тип сущности карточки — для привязанной тетради. */ bind?:string;entity?:string}
+ /** Поле канонической модели (`force.want`) и тип сущности карточки — для привязанной тетради. */ bind?:string;entity?:string;
+ /** Источник сводки (`sheet/field`) или соседняя таблица состояний. */ source?:string;
+ /** Практические проверки не участвуют в заполненности. */ optional?:boolean}
 export interface WorkbookSheet {key:string;title:string;instructions?:string;fields:WorkbookField[]}
-export interface WorkbookTemplate {format:"soyman-workbook";schemaVersion:1;key:string;version:number;title:string;description?:string;source?:string;sheets:WorkbookSheet[]}
+export interface WorkbookTemplate {format:"soyman-workbook";schemaVersion:1;key:string;version:number;title:string;description?:string;source?:string;practical?:boolean;sheets:WorkbookSheet[]}
 export type WorkbookAnswers=Record<string,Record<string,unknown>>;
 const keyPattern=/^[a-z][a-z0-9_-]{0,79}$/;
 const dangerous=new Set(["__proto__","prototype","constructor"]);
+export const WORKBOOK_PROFILE_KINDS = ["passport","participants","information","world_truth","tradition","norm","tension","activity","capability","flow","claim","diegetic_doc","negative_space","notes"] as const;
 function object(value:unknown):value is Record<string,unknown>{return !!value&&typeof value==="object"&&!Array.isArray(value);}
 function key(value:unknown){return typeof value==="string"&&keyPattern.test(value)&&!dangerous.has(value);}
 function text(value:unknown,max=500){return typeof value==="string"&&value.trim().length>0&&value.length<=max;}
 export function validateWorkbookTemplate(value:unknown):asserts value is WorkbookTemplate {
  if(!object(value)||value.format!=="soyman-workbook"||value.schemaVersion!==1||!key(value.key)||!Number.isInteger(value.version)||Number(value.version)<1||!text(value.title)||!Array.isArray(value.sheets)||!value.sheets.length||value.sheets.length>200)throw new Error("Некорректный шаблон тетради");
+ if(value.practical!==undefined&&typeof value.practical!=="boolean")throw new Error("Некорректный вид тетради");
  const sheets=new Set<string>();let count=0;
  const fields=(values:unknown,depth:number)=>{
   if(!Array.isArray(values)||values.length>200||depth>2)throw new Error("Слишком много полей или уровней вложенности");const keys=new Set<string>();
   for(const field of values){if(!object(field)||!key(field.key)||!(field.type==="note"?typeof field.label==="string":text(field.label))||keys.has(String(field.key))||++count>4000)throw new Error("Названия и ключи полей должны быть уникальными");keys.add(String(field.key));
-   if(!["text","line","page","image","number","choice","checklist","link","table","group","heading","note"].includes(String(field.type)))throw new Error("Неизвестный тип поля");
+   if(!["text","line","page","image","number","choice","checklist","link","reference","state","profile","summary","table","group","heading","note"].includes(String(field.type)))throw new Error("Неизвестный тип поля");
+   if(field.source!==undefined&&(typeof field.source!=="string"||!/^([a-z][a-z0-9_-]{0,79}\/)?[a-z][a-z0-9_-]{0,79}$/.test(field.source)))throw new Error("Некорректный источник графы");
+   if(field.optional!==undefined&&typeof field.optional!=="boolean")throw new Error("Некорректная необязательная графа");
+   if(field.type==="profile"&&!(WORKBOOK_PROFILE_KINDS as readonly unknown[]).includes(field.entity))throw new Error("Неизвестный профиль тетради");
+   if((field.type==="state"||field.type==="summary")&&!field.source)throw new Error("Укажите источник состояний или сводки");
    if(field.hint!==undefined&&(typeof field.hint!=="string"||field.hint.length>20000))throw new Error("Слишком длинная подсказка");
    if(field.rows!==undefined){if(field.type!=="table"||!Array.isArray(field.rows)||!field.rows.length||field.rows.length>200)throw new Error("Некорректные строки таблицы");const rows=new Set<string>();for(const row of field.rows){if(!object(row)||!key(row.key)||!text(row.label)||rows.has(String(row.key)))throw new Error("Строки таблицы должны быть уникальными");rows.add(String(row.key));}}
    if(field.minRows!==undefined&&(!Number.isInteger(field.minRows)||Number(field.minRows)<0||Number(field.minRows)>50))throw new Error("Некорректное число строк");
@@ -42,7 +51,7 @@ export function validateWorkbookAnswers(template:WorkbookTemplate,answers:unknow
  const safe=(value:unknown,depth=0)=>{if(depth>20)throw new Error("Слишком много уровней ответов");if(Array.isArray(value))value.forEach(v=>safe(v,depth+1));else if(object(value))for(const [k,v] of Object.entries(value)){if(dangerous.has(k))throw new Error("Недопустимый ключ ответа");safe(v,depth+1);}};safe(answers);
  function check(field:WorkbookField,value:unknown){
   if(value===undefined||value===null||value==="")return;
-  if(field.type==="heading"||field.type==="note")return;
+  if(field.type==="heading"||field.type==="note"||field.type==="profile"||field.type==="summary")return;
   if(field.type==="number"){if(typeof value!=="number"||!Number.isFinite(value))throw new Error(`Нужно число: ${field.label}`);}
   else if(field.type==="choice"){if(typeof value!=="string"||!field.options?.includes(value))throw new Error(`Выберите вариант: ${field.label}`);}
   else if(field.type==="checklist"){if(!Array.isArray(value)||value.some(v=>typeof v!=="string"||!field.options?.includes(v))||new Set(value).size!==value.length)throw new Error(`Некорректный список: ${field.label}`);}
@@ -53,12 +62,13 @@ export function validateWorkbookAnswers(template:WorkbookTemplate,answers:unknow
  // Неизвестные ключи сохраняются: ответы исчезнувших полей доступны при экспорте.
 }
 const filledValue=(v:unknown)=>v!==undefined&&v!==null&&v!==""&&(!Array.isArray(v)||v.length>0);
-const answerless=(field:WorkbookField)=>field.type==="heading"||field.type==="note";
+export const workbookAnswerless=(field:WorkbookField)=>["heading","note","profile","summary"].includes(field.type);
+const answerless=workbookAnswerless;
 /** Прогресс листа — по чек-листу «Готовность», без него — по заполненным графам. */
 export function sheetProgress(sheet:WorkbookSheet,values:Record<string,unknown>={}){
  const ready=sheet.fields.find(f=>f.readiness&&f.type==="checklist");
  if(ready){const v=values[ready.key];return {total:ready.options?.length??0,filled:Array.isArray(v)?v.length:0};}
- let total=0,filled=0;for(const field of sheet.fields)if(!answerless(field)){total++;if(filledValue(values[field.key]))filled++;}return {total,filled};
+ let total=0,filled=0;for(const field of sheet.fields)if(!answerless(field)&&!field.optional){total++;if(filledValue(values[field.key]))filled++;}return {total,filled};
 }
 export function workbookProgress(template:WorkbookTemplate,answers:WorkbookAnswers){let total=0,filled=0;for(const sheet of template.sheets){const p=sheetProgress(sheet,answers[sheet.key]);total+=p.total;filled+=p.filled;}return {total,filled};}
 
@@ -82,7 +92,7 @@ export function formerAnswers(template:WorkbookTemplate,answers:WorkbookAnswers)
 const norm=(s:string)=>s.toLowerCase().replace(/ё/g,"е").replace(/[^\p{L}\p{N}]+/gu," ").trim();
 /** Значение старой графы в новой, если тип позволяет; число становится строкой. */
 export function convertAnswer(field:WorkbookField,value:unknown):unknown{
- if(["text","line","page","image","link"].includes(field.type))return typeof value==="string"?value:typeof value==="number"?String(value):undefined;
+ if(["text","line","page","image","link","reference","state"].includes(field.type))return typeof value==="string"?value:typeof value==="number"?String(value):undefined;
  if(field.type==="number")return typeof value==="number"?value:undefined;
  if(field.type==="choice")return typeof value==="string"&&field.options?.includes(value)?value:undefined;
  if(field.type==="checklist")return Array.isArray(value)&&value.every(v=>typeof v==="string"&&field.options?.includes(v))?value:undefined;
@@ -104,9 +114,14 @@ export function suggestWorkbookMapping(from:WorkbookTemplate,to:WorkbookTemplate
  return mapping;
 }
 const notesMarkdown=(notes:WorkbookNote[])=>notes.length?"\n\n### Записи\n\n"+notes.map(n=>`- ${n.body.replace(/\s*\n\s*/g," ")}`).join("\n"):"";
-export function workbookMarkdown(template:WorkbookTemplate,title:string,answers:WorkbookAnswers){
- const format=(field:WorkbookField,value:unknown):string=>{if(value==null)return "";if(Array.isArray(value)&&["table","group"].includes(field.type))return value.map((row,i)=>`\n#### ${field.label} ${i+1}\n`+(field.columns??field.fields??[]).map(c=>`**${c.label}:** ${format(c,(row as Record<string,unknown>)[c.key])}`).join("\n\n")).join("\n");return Array.isArray(value)?value.join(", "):String(value);};
- const known=new Set(template.sheets.flatMap(s=>s.fields.map(f=>`${s.key}/${f.key}`)));
+export function workbookMarkdown(template:WorkbookTemplate,title:string,answers:WorkbookAnswers,project?:{type:string|null;id:number|null}){
+ const format=(field:WorkbookField,value:unknown,parent?:Record<string,unknown>):string=>{
+  if(value==null)return "";
+  if(field.type==="state"){const rows=parent?.[field.source!];return String((Array.isArray(rows)?rows:[]).find(row=>row._id===value)?.name??(value?"Состояние удалено":""));}
+  if(Array.isArray(value)&&["table","group"].includes(field.type))return value.map((row,i)=>`\n#### ${field.label} ${i+1}\n`+(field.columns??field.fields??[]).map(c=>`**${c.label}:** ${format(c,(row as Record<string,unknown>)[c.key],row as Record<string,unknown>)}`).join("\n\n")).join("\n");
+  return Array.isArray(value)?value.join(", "):String(value);
+ };
+ const known=new Set(template.sheets.flatMap(s=>s.fields.filter(f=>!answerless(f)).map(f=>`${s.key}/${f.key}`)));
  const old=Object.entries(answers).filter(([sheet])=>!reserved(sheet)).flatMap(([sheet,values])=>Object.entries(values).filter(([field])=>!known.has(`${sheet}/${field}`)).map(([field,value])=>`- ${sheet}/${field}: ${JSON.stringify(value)}`));
  const nested=(fields:WorkbookField[],values:Record<string,unknown>,path:string)=>{
   for(const field of fields){const rows=values[field.key],children=field.columns??field.fields;if(!children||!Array.isArray(rows))continue;
@@ -117,5 +132,17 @@ export function workbookMarkdown(template:WorkbookTemplate,title:string,answers:
   }
  };
  for(const sheet of template.sheets)nested(sheet.fields,answers[sheet.key]??{},sheet.key);
- return `# ${title}\n\nШаблон: ${template.title}, версия ${template.version}\n\n`+template.sheets.map(s=>`## ${s.title}\n\n${s.instructions??""}\n\n`+s.fields.map(f=>f.type==="note"?f.hint??"":f.type==="heading"?`${f.level===3?"####":"###"} ${f.label}`:`**${f.label}:** ${format(f,answers[s.key]?.[f.key])}`).join("\n\n")+notesMarkdown(sheetNotes(answers,s.key))).join("\n\n")+(old.length?`\n\n## Сохранённые ответы прежних полей\n\n${old.join("\n")}`:"");
+ const fieldMarkdown=(s:WorkbookSheet,f:WorkbookField)=>{
+  if(f.type==="note")return f.hint??"";
+  if(f.type==="heading")return `${f.level===3?"####":"###"} ${f.label}`;
+  if(f.type==="profile")return `### ${f.label}\n\nОбщие данные связанного проекта (${f.entity}); в ответах тетради отдельной копии нет.`;
+  if(f.type==="summary"){
+   const [sheet,key]=f.source!.split('/'),rows=activityOverview(answers[sheet]?.[key]);
+   return `### ${f.label}\n\n`+rows.map(r=>`- ${r.actor||r.name}: ${r.state||"состояние не выбрано"}. Цель: ${r.goal}. Следующий ход: ${r.action}. Условие: ${r.trigger}. Следы: ${r.traces}.`).join('\n');
+  }
+  return `**${f.label}:** ${format(f,answers[s.key]?.[f.key])}`;
+ };
+ const paths:Record<string,string>={setting:"settings",campaign:"campaigns",adventure:"adventures"};
+ const source=project?.type&&project.id&&paths[project.type]?`Источник общих данных: [профиль проекта](/${paths[project.type]}/${project.id}).\n\n`:"";
+ return `# ${title}\n\nШаблон: ${template.title}, версия ${template.version}\n\n${source}`+template.sheets.map(s=>`## ${s.title}\n\n${s.instructions??""}\n\n`+s.fields.map(f=>fieldMarkdown(s,f)).join("\n\n")+notesMarkdown(sheetNotes(answers,s.key))).join("\n\n")+(old.length?`\n\n## Сохранённые ответы прежних полей\n\n${old.join("\n")}`:"");
 }

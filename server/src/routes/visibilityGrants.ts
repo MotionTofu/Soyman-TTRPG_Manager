@@ -14,6 +14,7 @@ export const visibilityGrantsRouter = Router();
 const VALID_TARGET_TYPES = new Set([
   "campaign_player_section",
   "campaign_player_article",
+  "campaign_player_image",
   "setting_location",
   "setting_being",
   "setting_community",
@@ -31,6 +32,7 @@ const SUMMARY_NAMES: Record<string, string> = {
   setting_artifact: "SELECT name FROM artifacts WHERE id = ?",
   setting_calendar_event: "SELECT title AS name FROM setting_calendar_events WHERE id = ?",
   campaign_player_article: "SELECT title AS name FROM campaign_player_articles WHERE id = ?",
+  campaign_player_image: "SELECT COALESCE(NULLIF(caption, ''), 'Изображение') AS name FROM gallery_images WHERE id = ? AND owner_type = 'campaign_player_section'",
   campaign_player_section: "SELECT name FROM campaign_player_sections WHERE id = ?",
 };
 
@@ -109,6 +111,11 @@ visibilityGrantsRouter.get("/summary", (req, res) => {
 function validAccessLevel(value: unknown): boolean {
   return isAccessLevel(value);
 }
+function validHandoutImage(campaignId: number, targetType: string, targetId: number): boolean {
+  return targetType !== "campaign_player_image" || !!db.prepare(
+    "SELECT 1 FROM gallery_images i JOIN campaign_player_sections s ON s.id = i.owner_id WHERE i.id = ? AND i.owner_type = 'campaign_player_section' AND s.kind = 'gallery' AND s.campaign_id = ?"
+  ).get(targetId, campaignId);
+}
 
 // List grants for a campaign, optionally narrowed to one target (used by the
 // GM UI to render which players currently see a given piece of content) or
@@ -183,6 +190,7 @@ visibilityGrantsRouter.post("/", (req, res) => {
     return res.status(400).json({ error: "campaign_id, player_id, target_type and target_id are required" });
   }
   if (!VALID_TARGET_TYPES.has(target_type)) return res.status(400).json({ error: "invalid target_type" });
+  if (!validHandoutImage(campaign_id, target_type, target_id)) return res.status(400).json({ error: "image does not belong to this campaign" });
   if (access_level === undefined) {
     db.prepare(
       "INSERT OR IGNORE INTO player_visibility_grants (campaign_id, player_id, target_type, target_id) VALUES (?, ?, ?, ?)"
@@ -257,6 +265,7 @@ visibilityGrantsRouter.post("/batch", (req, res) => {
     return res.status(400).json({ error: "action must be 'grant' or 'revoke'" });
   }
   for (const t of targets) {
+    if (action === "grant" && !validHandoutImage(campaign_id, t.target_type, t.target_id)) return res.status(400).json({ error: "image does not belong to this campaign" });
     if (!VALID_TARGET_TYPES.has(t.target_type)) {
       return res.status(400).json({ error: `invalid target_type: ${t.target_type}` });
     }

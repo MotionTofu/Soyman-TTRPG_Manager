@@ -1,0 +1,189 @@
+@import "../caveat.css";
+
+/* Выбранный макет: прозрачные строки на линованной бумаге и небольшие
+   чернильные штампы. Только сюжет кампании; общие списки не меняются. */
+.entity-tab-workspace__detail:has(> .campaign-chapters) {
+  width: 100%;
+}
+.campaign-chapters {
+  width: 100%;
+  min-width: 0;
+  container-type: inline-size;
+}
+.campaign-chapters .res-group__band {
+  flex-wrap: wrap;
+  column-gap: var(--sp-5);
+  row-gap: var(--sp-2);
+}
+.campaign-chapters .res-group__title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.campaign-chapters .res-group__count {
+  margin-left: auto;
+  white-space: normal;
+}
+.paper-sheet .campaign-chapters details.card summary.res-group__band:hover :is(.res-group__title, .res-group__count) {
+  color: var(--paper-ink);
+}
+.campaign-chapters .campaign-chapters__adventure > .res-group__band .res-group__title {
+  font-size: var(--fs-h2);
+}
+.paper-sheet .campaign-chapters section.campaign-chapters__adventure { border-top: 0; padding: 0; }
+.campaign-chapters__adventure > header.res-group__band {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: var(--sp-2) 0;
+  background: none;
+  color: var(--paper-ink);
+  border-bottom: var(--card-border-width-strong) solid var(--paper-ink);
+}
+.paper-sheet .campaign-chapters .campaign-chapters__chapter > summary.res-group__band { padding-top: var(--sp-1); }
+.campaign-chapters .campaign-chapters__chapter > .res-group__band .res-group__title,
+.campaign-chapters .campaign-chapters__overview > .res-group__band .res-group__title {
+  font-size: var(--fs-h3);
+}
+.campaign-chapters__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  padding: var(--sp-6) 0;
+}
+.campaign-chapters__scenes {
+  padding: var(--sp-4) 0 0;
+}
+.campaign-scene-list {
+  border-left: var(--card-border-width) solid var(--line);
+  padding-left: var(--sp-5);
+  margin-left: var(--sp-2);
+}
+.campaign-scene-list__title {
+  display: block;
+  font-size: var(--fs-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding-bottom: var(--sp-4);
+}
+.campaign-scene {
+  position: relative;
+  border-bottom: var(--card-border-width) solid var(--line);
+}
+.campaign-scene::before {
+  content: "";
+  position: absolute;
+  left: calc(-1 * var(--sp-6));
+  top: var(--sp-7);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--paper-ink, var(--ink));
+}
+.campaign-chapters .campaign-scene > .campaign-scene__summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-5);
+  min-height: 58px;
+  margin: 0;
+  padding: var(--sp-4) var(--sp-2) var(--sp-4) 0;
+  background: transparent;
+  cursor: pointer;
+  list-style: none;
+}
+.campaign-scene__summary::-webkit-details-marker {
+  display: none;
+}
+.campaign-scene__summary:hover .campaign-scene__name,
+.campaign-scene[open] .campaign-scene__name {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.campaign-scene__summary:focus-visible {
+  outline: var(--card-border-width-strong) solid currentColor;
+  outline-offset: var(--sp-2);
+}
+.campaign-scene__kind {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 64px;
+  min-height: 30px;
+  max-width: 9rem;
+  padding: var(--sp-1) var(--sp-4);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 130%;
+  font: 600 var(--fs-h2)/1.1 "Caveat", cursive;
+  color: var(--paper-ink, var(--ink));
+  text-align: center;
+  overflow-wrap: anywhere;
+  text-transform: lowercase;
+}
+.campaign-scene__kind--long {
+  font-size: var(--fs-body);
+}
+.campaign-scene__name {
+  min-width: 0;
+  font: 700 var(--fs-body)/1.35 Georgia, "Times New Roman", serif;
+  overflow-wrap: anywhere;
+}
+.campaign-scene__tags {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  max-width: 15rem;
+}
+.campaign-scene__note {
+  font-size: var(--fs-meta);
+  color: var(--paper-muted, var(--muted));
+  border-bottom: var(--card-border-width) dotted currentColor;
+}
+.campaign-scene__stamp {
+  flex: 0 0 auto;
+  width: 104px;
+  height: 32px;
+  max-width: 100%;
+  object-fit: contain;
+  transform: rotate(-5deg);
+}
+.campaign-scene__expanded {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  padding: 0 var(--sp-4) var(--sp-6);
+}
+.campaign-scene__actions {
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+}
+.campaign-scene__actions select {
+  min-width: 0;
+  max-width: 100%;
+}
+.campaign-scene__actions :is(select, a) {
+  font-size: var(--fs-meta);
+}
+@container (max-width: 640px) {
+  .campaign-scene__tags { max-width: 104px; }
+}
+@container (max-width: 390px) {
+  .campaign-chapters .campaign-scene > .campaign-scene__summary {
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: var(--sp-4);
+    row-gap: var(--sp-2);
+  }
+  .campaign-scene__tags {
+    grid-column: 1 / -1;
+    max-width: 100%;
+  }
+  .campaign-scene__kind--long {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+  .campaign-scene__kind--long + .campaign-scene__name {
+    grid-column: 1 / -1;
+  }
+}

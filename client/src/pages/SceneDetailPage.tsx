@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { settingAdventuresPath } from "../layout/useSettingCrumbs";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAction, useResource, write } from "../data/hooks";
 import type { Affect } from "../data/entities";
@@ -8,7 +9,7 @@ import { EditableTextCard } from "../components/EditableTextCard";
 import { SectionDropZone } from "../components/SectionDropZone";
 import { LazyDetails } from "../components/LazyDetails";
 import { NODE_ROLES, NODE_TYPES, SCENE_STATUSES, nodeLabel } from "../sceneKinds";
-import type { Setting, StoryScene, StorySceneDetail } from "../types";
+import type { Setting, StoryArc, StoryScene, StorySceneDetail } from "../types";
 import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
 import { LoadErrorCard } from "../components/Loadable";
 import { PresentationEditor } from "../components/presentation/PresentationEditor";
@@ -17,9 +18,9 @@ import { useTabState } from "../hooks/useTabState";
 import "../session.css";
 import { useConfirm } from "../hooks/useConfirm";
 
-// Лист — всё, что нужно за столом, одним листом; «Представление» — подготовка;
+// Лист — всё, что нужно за столом; фон, карты и звук готовятся отдельно.
 // «Связи» — откуда сюда приходят (гриллинг 2026-10-02, Q13, доска 35).
-const SCENE_TABS = ["Лист", "Представление", "Связи"] as const;
+const SCENE_TABS = ["Лист", "Представление", "Карта", "Аудионабор", "Связи"] as const;
 
 // Stable references — SectionDropZone is memoized and would re-render on
 // every parent render if these were inline literals.
@@ -42,6 +43,7 @@ export function SceneDetailPage() {
 
   const sceneState = useResource<StorySceneDetail>(`/story/scenes/${sceneId}${campaignId ? `?campaign_id=${campaignId}` : ""}`);
   const scene = sceneState.data ?? null;
+  const adventure = useResource<StoryArc>(scene?.arc_id ? `/story/arcs/${scene.arc_id}` : null).data;
   const setting = useResource<Setting>(scene ? `/settings/${scene.setting_id}` : null).data ?? null;
   // Нужна только ради имени в «хлебных крошках», когда сцену открыли из кампании.
   const campaignName = useResource<{ name: string }>(campaignId ? `/campaigns/${campaignId}` : null).data?.name ?? "";
@@ -149,19 +151,23 @@ export function SceneDetailPage() {
         // в сеттинг: мастер пришёл сюда оттуда и туда же возвращается.
         campaignId
           ? [
+              { label: "Кампании", to: "/campaigns" },
               { label: campaignName || "Кампания", to: `/campaigns/${campaignId}` },
               {
                 label: "Главы и сцены",
                 to: `/campaigns/${campaignId}?tab=${encodeURIComponent("Главы и сцены")}`,
               },
+              ...(scene.arc_id ? [{ label: adventure?.name ?? "Приключение", to: `/adventures/${scene.arc_id}?campaign=${campaignId}&tab=${encodeURIComponent("Главы и сцены")}` }] : []),
               { label: scene.name },
             ]
           : [
-              { label: setting?.name ?? "Сеттинг", to: `/settings/${scene.setting_id}` },
+              { label: "Сеттинги", to: "/settings" },
+              ...(scene.setting_id ? [{ label: setting?.name ?? "Сеттинг", to: `/settings/${scene.setting_id}` },
               {
                 label: "Приключения",
-                to: `/settings/${scene.setting_id}?tab=${encodeURIComponent("Приключения")}`,
-              },
+                to: settingAdventuresPath(scene.setting_id, adventure?.parent_id ?? scene.arc_id ?? undefined),
+              }] : []),
+              ...(scene.arc_id ? [{ label: adventure?.name ?? "Приключение", to: `/adventures/${scene.arc_id}?tab=${encodeURIComponent("Главы и сцены")}` }] : []),
               { label: scene.name },
             ]
       }
@@ -566,16 +572,11 @@ export function SceneDetailPage() {
       )}
 
       {tab === "Представление" && (
-        <>
-          <div className="card">
-            <div className="campaign-overview-header" style={{ marginBottom: 8 }}>Представление</div>
-            <PresentationEditor owner={{ kind: "scene", sceneId, sceneName: scene.name, campaignId }} />
-          </div>
-          <SceneMaps sceneId={sceneId} campaignId={campaignId} />
-          <SceneAudioCard sceneId={sceneId} />
-        </>
+        <PresentationEditor owner={{ kind: "scene", sceneId, sceneName: scene.name, campaignId }} />
       )}
 
+      {tab === "Карта" && <SceneMaps sceneId={sceneId} campaignId={campaignId} />}
+      {tab === "Аудионабор" && <SceneAudioCard sceneId={sceneId} />}
       {tab === "Связи" && <SceneIncomingCard sceneId={sceneId} campaignId={campaignId} />}
     </EntityPage>
   );
@@ -592,21 +593,18 @@ function SceneAudioCard({ sceneId }: { sceneId: number }) {
     });
   }
   return (
-    <details className="card" open>
-      <summary className="campaign-overview-header">Аудионабор</summary>
-      <div className="stack" style={{ marginTop: 8 }}>
-        <div className="row" style={{ alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <select value={current?.id ?? ""} onChange={(e) => setSound(e.target.value ? Number(e.target.value) : null)} style={{ flex: "1 1 160px" }}>
-            <option value="">— без звука —</option>
-            {sets.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-          {current && <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>{current.name}</span>}
-        </div>
-        <p className="muted" style={{ fontSize: "var(--fs-meta)", maxWidth: "62ch" }}>На полотне — тёмно-зелёный ○· вход «Аудио», боевой — бардовый ○· «Бой». Перетащи аудионабор/плейлист на сцену.</p>
-      </div>
-    </details>
+    <div className="stack scene-audio">
+      <label className="stack">
+        <span className="campaign-field-label">Звук сцены</span>
+        <select value={current?.id ?? ""} onChange={(e) => setSound(e.target.value ? Number(e.target.value) : null)}>
+          <option value="">— без звука —</option>
+          {sets.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
+      </label>
+      <p className="muted" style={{ fontSize: "var(--fs-meta)", maxWidth: "62ch" }}>На полотне — тёмно-зелёный ○· вход «Аудио», боевой — бардовый ○· «Бой». Перетащи аудионабор/плейлист на сцену.</p>
+    </div>
   );
 }
 

@@ -3,7 +3,12 @@ import type {WorkbookField} from "@shared/workbooks";
 import {useAction,write} from "../../data/hooks";
 import {MentionText} from "../mentions/MentionText";
 import {SheetOverlay} from "../sheet/SheetOverlay";
-import {WorkbookScope} from "./model";
+import {SheetEditor} from "../sheet/SheetEditor";
+import {MentionPickerModal} from "../mentions/MentionPickerModal";
+import {buildMentionToken} from "../../mentions";
+import {WorkbookScope,WorkbookRow,WorkbookContext} from "./model";
+import {WorkbookProfile} from "./WorkbookProfile";
+import {WorkbookState,WorkbookActivitySummary} from "./WorkbookActivity";
 /** Подсказка курса — Markdown; на форме показываем её простым текстом. */
 const plain=(hint:string)=>hint.replace(/\*\*Запись:\*\*\s*_?\[заполнить\]_?/gi,"").replace(/\*\*([^*]+)\*\*/g,"$1").replace(/\*([^*]+)\*/g,"$1").replace(/^>\s?/gm,"").trim();
 type Row=Record<string,unknown>&{_id:string};
@@ -12,6 +17,8 @@ const cellText=(v:unknown)=>typeof v==="string"?v:typeof v==="number"?String(v):
 
 /** Клетка таблицы: строка или выбор, без подписи — подпись в шапке столбца. */
 function Cell({field,value,label,onChange}:{field:WorkbookField;value:unknown;label:string;onChange:(v:unknown)=>void}){
+ if(field.type==="reference")return <ReferenceField field={{...field,label}} value={cellText(value)} onChange={onChange}/>;
+ if(field.type==="page")return <PageField field={{...field,label}} value={cellText(value)} onChange={onChange}/>;
  if(field.type==="choice")return <select aria-label={label} value={cellText(value)} onChange={e=>onChange(e.target.value)}><option value="">—</option>{field.options?.map(o=><option key={o}>{o}</option>)}</select>;
  if(field.type==="checklist")return <WorkbookFieldInput field={field} value={value} onChange={onChange}/>;
  return <textarea className="wb-cell" aria-label={label} rows={1} placeholder="—" maxLength={100000} value={cellText(value)} onChange={e=>onChange(e.target.value)}/>;
@@ -19,6 +26,10 @@ function Cell({field,value,label,onChange}:{field:WorkbookField;value:unknown;la
 
 export function WorkbookFieldInput({field,value,onChange}:{field:WorkbookField;value:unknown;onChange:(v:unknown)=>void}){
  const id=useId();
+ if(field.type==="profile")return <WorkbookProfile field={field}/>;
+ if(field.type==="summary")return <WorkbookActivitySummary field={field}/>;
+ if(field.type==="state")return <WorkbookState field={field} value={value} onChange={onChange}/>;
+ if(field.type==="reference")return <ReferenceField field={field} value={cellText(value)} onChange={onChange}/>;
  if(field.type==="heading")return field.level===3?<h4 className="workbook-heading">{field.label}</h4>:<h3 className="workbook-heading">{field.label}</h3>;
  if(field.type==="note")return <p className="workbook-note muted">{plain(field.hint??"")}</p>;
  if(field.type==="table"&&field.columns){
@@ -33,7 +44,7 @@ export function WorkbookFieldInput({field,value,onChange}:{field:WorkbookField;v
   // Пустые строки из курса видны сразу; запись строки появляется при первом вводе.
   const shown:Row[]=[...rows];while(shown.length<(field.minRows??0))shown.push({_id:`blank-${shown.length}`});
   const change=(index:number,key:string,v:unknown)=>onChange(index<rows.length?rows.map((r,i)=>i===index?{...r,[key]:v}:r):[...rows,{_id:crypto.randomUUID(),[key]:v}]);
-  return <div className="wb-table"><span className="wb-label">{field.label}</span>{hint}<table><thead><tr><th scope="col"><span className="sr-only">Номер</span></th>{columns.map(c=><th key={c.key} scope="col">{c.label}</th>)}<th scope="col"><span className="sr-only">Действия</span></th></tr></thead>
+  return <div className={`wb-table${columns.length>6?" wb-table--wide":""}`}><span className="wb-label">{field.label}</span>{hint}<table><thead><tr><th scope="col"><span className="sr-only">Номер</span></th>{columns.map(c=><th key={c.key} scope="col">{c.label}</th>)}<th scope="col"><span className="sr-only">Действия</span></th></tr></thead>
    <tbody>{shown.map((row,index)=>{const saved=index<rows.length;return <tr key={row._id}><th scope="row">{index+1}</th>{columns.map(c=><td key={c.key} data-label={c.label}><Cell field={c} value={row[c.key]} label={`${c.label}, строка ${index+1}`} onChange={v=>change(saved?index:rows.length,c.key,v)}/></td>)}<td>{saved&&<button type="button" className="wb-link" aria-label={`Убрать строку ${index+1}: ${field.label}`} onClick={()=>onChange(rows.filter((_,i)=>i!==index))}>×</button>}</td></tr>;})}</tbody></table>
    <button type="button" className="wb-link" disabled={rows.length>=500} onClick={()=>onChange([...rows,{_id:crypto.randomUUID()}])}>+ Строка</button></div>;
  }
@@ -41,7 +52,7 @@ export function WorkbookFieldInput({field,value,onChange}:{field:WorkbookField;v
   // Вложенная карточка внутри карточки — редкость; простая форма вместо разворота.
   const rows=(Array.isArray(value)?value:[]) as Row[],fields=field.columns??field.fields??[];
   const change=(index:number,key:string,v:unknown)=>onChange(rows.map((r,i)=>i===index?{...r,[key]:v}:r));
-  return <fieldset className="workbook-repeat"><legend>{field.label}</legend>{rows.map((row,index)=><div key={row._id} className="workbook-repeat__row"><div className="workbook-repeat__actions"><strong>{index+1}</strong><button type="button" className="wb-link" onClick={()=>onChange(rows.filter((_,i)=>i!==index))}>Убрать</button></div>{fields.map(child=><WorkbookFieldInput key={child.key} field={child} value={row[child.key]} onChange={v=>change(index,child.key,v)}/>)}</div>)}<button type="button" className="wb-link" disabled={rows.length>=500} onClick={()=>onChange([...rows,{_id:crypto.randomUUID()}])}>+ Карточка</button></fieldset>;
+  return <fieldset className="workbook-repeat"><legend>{field.label}</legend>{rows.map((row,index)=><WorkbookRow.Provider key={row._id} value={row}><div className="workbook-repeat__row"><div className="workbook-repeat__actions"><strong>{index+1}</strong><button type="button" className="wb-link" onClick={()=>onChange(rows.filter((_,i)=>i!==index))}>Убрать</button></div>{fields.map(child=><WorkbookFieldInput key={child.key} field={child} value={row[child.key]} onChange={v=>change(index,child.key,v)}/>)}</div></WorkbookRow.Provider>)}<button type="button" className="wb-link" disabled={rows.length>=500} onClick={()=>onChange([...rows,{_id:crypto.randomUUID()}])}>+ Карточка</button></fieldset>;
  }
  if(field.type==="checklist")return <fieldset className="workbook-field"><legend className="wb-label">{field.label}</legend>{field.options?.map(option=><label className="workbook-check" key={option}><input type="checkbox" className="wb-check" checked={Array.isArray(value)&&value.includes(option)} onChange={e=>{const selected=Array.isArray(value)?value:[];onChange(e.target.checked?[...selected,option]:selected.filter(v=>v!==option));}}/>{option}</label>)}</fieldset>;
  if(field.type==="page")return <PageField field={field} value={cellText(value)} onChange={onChange}/>;
@@ -56,12 +67,32 @@ export function WorkbookFieldInput({field,value,onChange}:{field:WorkbookField;v
  </label>;
 }
 
-/** Свободная страница — лист «Листа» (CM6), на форме — начало текста. */
+function ReferenceField({field,value,onChange}:{field:WorkbookField;value:string;onChange:(value:unknown)=>void}) {
+ const [open,setOpen]=useState(false),[error,setError]=useState("");
+ const context=useContext(WorkbookContext);
+ return <div className="workbook-field"><span className="wb-label">{field.label}</span>{field.hint&&<small className="wb-hint">{field.hint}</small>}
+  {value&&<MentionText text={value}/>}<div className="wb-image__actions"><button type="button" className="wb-link" onClick={()=>setOpen(true)}>{value?"Заменить профиль":"Выбрать или создать"}</button>
+  {value&&<button type="button" className="wb-link" onClick={()=>onChange("")}>Убрать ссылку</button>}</div>
+  {error&&<p role="alert">{error}</p>}
+  {open&&<MentionPickerModal initialQuery="" defaultSettingId={context?.document.project_setting_id??undefined} heading={field.label} direct onClose={()=>setOpen(false)} onPick={async result=>{
+    const token=await buildMentionToken(result.type,result.id,result.title);
+    if(!token){setError("Не удалось связать профиль. Повторите выбор.");return;}
+    onChange(token);setError("");setOpen(false);
+  }}/>}
+ </div>;
+}
+
+/** Запись читается и редактируется на листе тетради; длинный текст можно развернуть. */
 function PageField({field,value,onChange}:{field:WorkbookField;value:string;onChange:(v:unknown)=>void}){
- const [open,setOpen]=useState(false),scope=useContext(WorkbookScope);
- return <div className="workbook-field"><span className="wb-label">{field.label}</span>{field.hint&&<small className="wb-hint">{plain(field.hint)}</small>}
-  <button type="button" className="wb-page-preview" onClick={()=>setOpen(true)}>{value.trim()?<MentionText text={value.length>600?value.slice(0,600)+"…":value}/>:<span className="muted">Открыть страницу и писать</span>}</button>
-  {open&&<SheetOverlay docKey={`workbook:${scope}/${field.key}`} caption={field.label} value={value} initialMode={value.trim()?"reading":"hybrid"} onSave={async v=>onChange(v)} onClose={()=>setOpen(false)}/>}
+ const [open,setOpen]=useState(false),[editing,setEditing]=useState(false),scope=useContext(WorkbookScope),context=useContext(WorkbookContext);
+ const settingId=context?.document.project_setting_id??undefined;
+ return <div className="workbook-field wb-page-entry"><div className="wb-page-entry__head"><span className="wb-label">{field.label}</span>
+  <div className="wb-page-entry__actions"><button type="button" className="wb-link" onClick={()=>setEditing(!editing)}>{editing?"Готово":value.trim()?"Править":"Написать"}</button>
+   <button type="button" className="wb-link" onClick={()=>{setEditing(false);setOpen(true);}}>Развернуть</button></div></div>
+  {field.hint&&<small className="wb-hint">{plain(field.hint)}</small>}
+  {editing&&!context?.disabled?<SheetEditor value={value} onChange={onChange} hybrid toolbar defaultSettingId={settingId} placeholder="Запишите ответ…"/>
+   :value.trim()?<div className="wb-page-entry__text"><MentionText text={value}/></div>:<button type="button" className="wb-page-entry__empty" onClick={()=>setEditing(true)}>Написать здесь…</button>}
+  {open&&<SheetOverlay docKey={`workbook:${scope}/${field.key}`} caption={field.label} value={value} initialMode="hybrid" editorToolbar defaultSettingId={settingId} onSave={async v=>onChange(v)} onClose={()=>setOpen(false)}/>}
  </div>;
 }
 

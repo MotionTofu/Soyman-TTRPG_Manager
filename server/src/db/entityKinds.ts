@@ -350,10 +350,22 @@ const RAW_KINDS: EntityKindBase[] = [
   }),
   K({
     kind: "campaign_player_section", table: "campaign_player_sections", nameCol: "name", belongsTo: "campaign",
-    hasArchivedAt: false, archivable: false, archiveKey: "id",
+    hasArchivedAt: true, archivable: true, archiveKey: "id",
     mentionable: false, transferable: false, searchable: false,
     linkEndpoint: false, relationEndpoint: false,
     owns: ["gallery_images"], detailPrefix: null,
+  }),
+  K({
+    kind: "campaign_player_article", table: "campaign_player_articles", nameCol: "title", belongsTo: "campaign",
+    hasArchivedAt: true, archivable: true, archiveKey: "id",
+    mentionable: false, transferable: false, searchable: false,
+    linkEndpoint: false, relationEndpoint: false, owns: [], detailPrefix: null,
+  }),
+  K({
+    kind: "gallery_image", table: "gallery_images", nameCol: "caption", belongsTo: "campaign",
+    hasArchivedAt: true, archivable: true, archiveKey: "id",
+    mentionable: false, transferable: false, searchable: false,
+    linkEndpoint: false, relationEndpoint: false, owns: [], detailPrefix: null,
   }),
   K({
     kind: "system", table: "systems", nameCol: "name", belongsTo: "system",

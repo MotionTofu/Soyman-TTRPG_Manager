@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { setUnauthorizedHandler } from "../api/client";
 import { loadMentionIndex } from "../mentions";
 import { LoginScreen } from "./LoginScreen";
-import { clearCachedUser, fetchCurrentUser } from "../api/currentUser";
+import { clearCachedUser, fetchCurrentUser, getCachedUser } from "../api/currentUser";
 
 // Wraps the whole routed app. Auth is always on: any 401 (no token yet, or
 // an expired/invalid one) flips this into a full-screen login form — which
@@ -30,6 +30,17 @@ export function LoginGate({ children }: { children: ReactNode }) {
     void fetchCurrentUser().then((u) => {
       if (u && u.role !== "player") void loadMentionIndex();
     });
+  }, [needsLogin]);
+
+  useEffect(() => {
+    if (needsLogin) return;
+    const recover = () => {
+      if (getCachedUser()?.role === "gm") void loadMentionIndex();
+    };
+    for (const event of ["focus", "online", "realtime-reconnected"]) window.addEventListener(event, recover);
+    return () => {
+      for (const event of ["focus", "online", "realtime-reconnected"]) window.removeEventListener(event, recover);
+    };
   }, [needsLogin]);
 
   if (needsLogin) return <LoginScreen onAuthenticated={() => setNeedsLogin(false)} />;

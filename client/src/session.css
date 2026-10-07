@@ -1356,3 +1356,8 @@ details.sp-card--loot .entry-title {
   text-transform: uppercase;
   letter-spacing: 0.12em;
 }
+
+/* Выбор звука на отдельной вкладке сцены — компактная строка на бумаге. */
+.scene-audio {
+  max-width: 44rem;
+}

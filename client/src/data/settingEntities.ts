@@ -46,5 +46,6 @@ export function beingAffects(beingId: number): Affect[] {
 
 /** Галерея владельца: сами изображения и карточка владельца (обложка). */
 export function galleryAffects(ownerType: string, ownerId: number): Affect[] {
-  return [{ path: `/gallery?owner_type=${ownerType}&owner_id=${ownerId}` }];
+  const path = `/gallery?owner_type=${ownerType}&owner_id=${ownerId}`;
+  return [{ path }, { path: `${path}&include_archived=true` }];
 }

@@ -4,6 +4,7 @@ import { chapterWord, sceneWord } from "../sceneKinds";
 import { MentionText } from "./mentions/MentionText";
 import { BEING_CATEGORIES } from "../beingCategories";
 import type { StoryArc, StoryArcDetail } from "../types";
+import { OpenProjectWorkbook } from "./workbooks/OpenProjectWorkbook";
 
 // Превью приключения в правой колонке списка сеттинга: всё со страницы
 // «Обзор» плюс то, что отвечает на вопросы планирования — в каких кампаниях
@@ -178,6 +179,7 @@ export function AdventurePreview({
             </button>
           </>
         )}
+        <OpenProjectWorkbook type="adventure" id={arc.id} />
       </div>
     </div>
   );

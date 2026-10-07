@@ -36,6 +36,10 @@
 
 /* ---- §0. Asset URLs (canonical bundle paths). ---- */
 :root {
+  /* Campaign personal files: approved paper cards, photo mounts and labels. */
+  --skin-dossier-card: url("/ui/campaign-dossier/v1/card-paper.webp");
+  --skin-dossier-frame: url("/ui/campaign-dossier/v1/portrait-frame.webp");
+  --skin-dossier-view: url("/ui/campaign-dossier/v1/view-label.webp");
   /* Repeating grain tile (640px, 38KB): clean center crop of paper-bg,
    * no halftone, no spots, no vignette — verified to repeat invisibly.
    * Defects (halftone, spots) stay OUT of the tile; they arrive later as
@@ -102,6 +106,7 @@
   --skin-edit-acid: url("/ui/sheet/card-edit-acid.webp");
   --skin-chevron-down: url("/ui/fantasy-punk/semantic/ui-icons/chevron-down.webp");
   --skin-trash: url("/ui/fantasy-punk/semantic/ui-icons/trash.webp");
+  --skin-eye: url("/ui/fantasy-punk/semantic/ui-icons/eye.webp");
   --skin-edit-pencil: url("/ui/fantasy-punk/semantic/ui-icons/edit-pencil.webp");
   --skin-cross: url("/ui/fantasy-punk/semantic/ui-icons/cross.webp");
 

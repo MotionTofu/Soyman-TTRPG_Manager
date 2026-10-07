@@ -9,6 +9,9 @@ import { MentionText } from "./mentions/MentionText";
 import { EmptyState } from "./EmptyState";
 import { SCENE_STATUSES, chapterWord, nodeLabel, sceneWord } from "../sceneKinds";
 import type { CampaignAdventureTree, SceneStatus, StoryScene } from "../types";
+import { rasterAsset } from "../rasterAssets";
+import "./campaign-chapters.css";
+import { CampaignAdventureOverview } from "./CampaignAdventuresCard";
 
 // Раздел «Главы и сцены» кампании: приключение → главы → сцены. Базово
 // свёрнуто всё, включая сами приключения: у книжной кампании тут сотни строк,
@@ -121,9 +124,6 @@ export function CampaignChaptersScenes({
 
   return (
     <div className="stack campaign-chapters">
-      <p className="muted" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>
-        Приключения кампании со своими главами и сценами. Правка сцены создаёт её версию для этой кампании, оригинал в сеттинге не меняется.
-      </p>
       {adventureId != null && visibleTree.length === 0 && (
         <p className="muted">Приключение не найдено — возможно, его открепили.</p>
       )}
@@ -136,16 +136,17 @@ export function CampaignChaptersScenes({
         ]);
         const advChapters = chapterId == null ? adv.chapters : adv.chapters.filter((c) => c.id === chapterId);
         return (
-          <details key={adv.id} className="card res-group" open={adventureId === adv.id ? true : undefined}>
-            <summary className="res-group__band">
-              <span className="res-group__title" style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{adv.name}</span>
+          <section key={adv.id} className="card res-group campaign-chapters__adventure">
+            <header className="res-group__band">
+              <span className="res-group__title">{adv.name}</span>
               <span className="res-group__count">
                 {adv.chapters.length ? `${adv.chapters.length} ${chapterWord(adv.chapters.length)} · ` : ""}{total} {sceneWord(total)}
                 {total > 0 && ` · ✓${done} · ○${pending} · ✕${skipped}`}
               </span>
-              {adv.is_override && <span className="badge tag" style={{ marginLeft: 6 }}>правка кампании</span>}
-            </summary>
-            <div className="res-group__body" style={{ padding: 12, gap: 12, display: "flex", flexDirection: "column" }}>
+              {adv.is_override && <span className="campaign-scene__note">правка кампании</span>}
+            </header>
+            <div className="res-group__body campaign-chapters__body">
+              {adventureId === adv.id && !adv.is_default && <CampaignAdventureOverview campaignId={campaignId} adventureId={adv.id} />}
               {/* Сцены, лежащие прямо на приключении: у книжного импорта их
                   почти не бывает, у самодельного — наоборот, все. */}
               {adv.scenes.length > 0 && chapterId == null && (
@@ -161,16 +162,16 @@ export function CampaignChaptersScenes({
                 const chSkipped = c.scenes.filter((s) => s.state?.status === "skipped").length;
                 const chPending = c.scenes.length - chDone - chSkipped;
                 return (
-                  <details key={c.id} className="card res-group" open>
+                  <details key={c.id} className="card res-group campaign-chapters__chapter" open>
                     <summary className="res-group__band">
-                      <span className="res-group__title" style={{ fontSize: "var(--fs-h3)" }}>{c.name}</span>
+                      <span className="res-group__title">{c.name}</span>
                       <span className="res-group__count">
                         {c.scenes.length} {sceneWord(c.scenes.length)}
                         {c.scenes.length > 0 && ` · ✓${chDone} ○${chPending} ✕${chSkipped}`}
                       </span>
-                      {c.is_override && <span className="badge tag" style={{ marginLeft: 6 }}>правка кампании</span>}
+                      {c.is_override && <span className="campaign-scene__note">правка кампании</span>}
                     </summary>
-                    <div className="res-group__body" style={{ padding: 12 }}>
+                    <div className="res-group__body campaign-chapters__scenes">
                       <SceneList scenes={c.scenes} campaignId={campaignId} onStatus={applyStatus} title={null} />
                     </div>
                   </details>
@@ -182,7 +183,7 @@ export function CampaignChaptersScenes({
                 </div>
               )}
             </div>
-          </details>
+          </section>
         );
       })}
     </div>
@@ -228,8 +229,8 @@ const SceneList = memo(function SceneList({
   );
 
   return (
-    <div className="stack" style={{ gap: 4 }}>
-      {title && <span className="muted" style={{ fontSize: "var(--fs-micro)", letterSpacing: "0.06em", textTransform: "uppercase" }}>{title}</span>}
+    <div className="campaign-scene-list">
+      {title && <span className="campaign-scene-list__title muted">{title}</span>}
       {scenes.map((s) => (
         <SceneRow key={s.id} scene={s} campaignId={campaignId} onStatus={setStatus} />
       ))}
@@ -247,19 +248,31 @@ const SceneRow = memo(function SceneRow({
   campaignId: number;
   onStatus: (scene: StoryScene, status: string) => void;
 }) {
-  const statusBadge =
-    s.state?.status === "done" ? <span className="badge held">пройдена</span> :
-    s.state?.status === "skipped" ? <span className="badge cancelled">пропущена</span> : null;
+  const status = s.state?.status ?? "pending";
+  const stamp = status === "pending" ? null : rasterAsset("ui/plot-restyle/v1", `stamp-${status}`);
+  const kind = nodeLabel(s);
+  const kindFrame = rasterAsset("ui/plot-restyle/v1", "kind-window");
   return (
-    <details className="entity-row" style={{ display: "block", padding: 0, borderBottom: "1px solid var(--line)" }}>
-      <summary className="entity-row" style={{ cursor: "pointer", listStyle: "none", margin: 0, borderBottom: "none" }}>
-        <span className="entity-type-chip" style={{ fontSize: "var(--fs-micro)" }}>{nodeLabel(s)}</span>
-        <span className="entity-row-name" style={{ fontFamily: "var(--font-display)", fontSize: "var(--fs-meta)", fontWeight: 600 }}>{s.name}</span>
-        {statusBadge}
-        {s.is_override && <span className="badge tag">правка</span>}
-        {s.campaign_only && <span className="badge tag">только в кампании</span>}
+    <details className="campaign-scene">
+      <summary className="campaign-scene__summary">
+        <span
+          className={`campaign-scene__kind${kind.length > 10 ? " campaign-scene__kind--long" : ""}`}
+          style={{ backgroundImage: kindFrame ? `url("${kindFrame}")` : undefined }}
+        >{kind}</span>
+        <span className="campaign-scene__name">{s.name}</span>
+        {(status !== "pending" || s.is_override || s.campaign_only) && (
+          <span className="campaign-scene__tags">
+            {s.is_override && <span className="campaign-scene__note">правка</span>}
+            {s.campaign_only && <span className="campaign-scene__note">только в кампании</span>}
+            {stamp ? (
+              <img className="campaign-scene__stamp" src={stamp} alt={status === "done" ? "ПРОЙДЕНО" : "ПРОПУЩЕНО"} width={104} height={32} />
+            ) : status !== "pending" ? (
+              <span className="campaign-scene__note">{SCENE_STATUSES.find((st) => st.key === status)?.label}</span>
+            ) : null}
+          </span>
+        )}
       </summary>
-      <div className="entity-row-expanded" style={{ marginTop: 0 }}>
+      <div className="campaign-scene__expanded">
         {s.summary ? (
           <div className="reading-text" style={{ whiteSpace: "pre-wrap" }}>
             <MentionText text={s.summary} />
@@ -267,15 +280,15 @@ const SceneRow = memo(function SceneRow({
         ) : (
           <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Сводки нет — откройте сцену, чтобы добавить.</span>
         )}
-        <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-          <select value={s.state?.status ?? "pending"} onChange={(e) => onStatus(s, e.target.value)} style={{ fontSize: "var(--fs-meta)" }}>
+        <div className="row campaign-scene__actions">
+          <select aria-label={`Статус сцены «${s.name}»`} value={status} onChange={(e) => onStatus(s, e.target.value)}>
             {SCENE_STATUSES.map((st) => (
               <option key={st.key} value={st.key}>
                 {st.label}
               </option>
             ))}
           </select>
-          <Link to={`/scenes/${s.id}?campaign=${campaignId}`} style={{ fontSize: "var(--fs-meta)" }}>Открыть сцену →</Link>
+          <Link to={`/scenes/${s.id}?campaign=${campaignId}`}>Открыть сцену →</Link>
         </div>
       </div>
     </details>

@@ -37,6 +37,17 @@ export function ImageCropModal({ file, shape, preview, onCancel, onSkip, onConfi
     return () => URL.revokeObjectURL(objectUrl);
   }, [file]);
 
+  useEffect(() => {
+    const viewport = containerRef.current;
+    if (!viewport) return;
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      setZoom((z) => Math.min(4, Math.max(1, z - event.deltaY * 0.001)));
+    };
+    viewport.addEventListener("wheel", handleWheel, { passive: false });
+    return () => viewport.removeEventListener("wheel", handleWheel);
+  }, []);
+
   const baseScale = natural ? Math.max(box.w / natural.w, box.h / natural.h) : 1;
   const dispScale = baseScale * zoom;
   const dispW = natural ? natural.w * dispScale : 0;
@@ -67,10 +78,6 @@ export function ImageCropModal({ file, shape, preview, onCancel, onSkip, onConfi
   }
   function handlePointerUp() {
     dragRef.current = null;
-  }
-  function handleWheel(e: React.WheelEvent) {
-    e.preventDefault();
-    setZoom((z) => Math.min(4, Math.max(1, z - e.deltaY * 0.001)));
   }
   function handleZoomSlider(v: number) {
     setZoom(v);
@@ -127,7 +134,6 @@ export function ImageCropModal({ file, shape, preview, onCancel, onSkip, onConfi
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        onWheel={handleWheel}
       >
         {url && (
           <img

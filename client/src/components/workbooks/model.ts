@@ -1,6 +1,6 @@
 import {createContext} from "react";
 import type {WorkbookTemplate,WorkbookAnswers} from "@shared/workbooks";
-export interface WorkbookInstance {id:number;uid:string;title:string;template_id:number;template:WorkbookTemplate;answers:WorkbookAnswers;revision:number;project_type:string|null;project_id:number|null;archived_at:string|null}
+export interface WorkbookInstance {id:number;uid:string;title:string;template_id:number;template:WorkbookTemplate;answers:WorkbookAnswers;revision:number;project_type:string|null;project_id:number|null;archived_at:string|null;project_setting_id?:number|null}
 export interface TemplateSummary {id:number;template_key:string;version:number;title:string;archived_at:string|null}
 export interface InstanceSummary {id:number;uid:string;title:string;template_id:number;revision:number;template_title:string;template_version:number;archived_at:string|null;sheets?:number;progress?:{total:number;filled:number}}
 export const WORKBOOK_AFFECTS=[{path:"/workbooks"},{path:"/book-library"}] as const;
@@ -13,3 +13,5 @@ export function mergeWorkbookAnswers(base:WorkbookAnswers,mine:WorkbookAnswers,t
 }
 /** Где лежит графа (тетрадь/лист/карточка) — ключ черновика свободной страницы. */
 export const WorkbookScope=createContext("workbook");
+export const WorkbookContext=createContext<{document:WorkbookInstance;answers:WorkbookAnswers;onSheet:(key:string)=>void;disabled?:boolean}|null>(null);
+export const WorkbookRow=createContext<Record<string,unknown>|null>(null);

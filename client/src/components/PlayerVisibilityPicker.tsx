@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { write } from "../data/hooks";
 import { grantRow, useCampaignGrantList, useGrantWriter } from "../hooks/useCampaignGrants";
-import { NavIcon } from "./NavIcons";
+import "./row-icon-buttons.css";
 import type { AccessLevel, PlayerVisibilityGrant, RosterPlayer, VisibilityTargetType } from "../types";
 
 // Small "глаз / Кому видно" toggle used by both the campaign and setting "Для
@@ -100,8 +100,8 @@ export function PlayerVisibilityPicker({ campaignId, targetType, targetId, roste
 
   return (
     <div className="visibility-picker">
-      <button className="btn-capsule" onClick={() => setOpen((v) => !v)} title="Кому видно" aria-label={`Кому видно — ${grantedCount} игроков`}>
-        <NavIcon name="eye" /> <span className="btn-capsule-count">{grantedCount > 0 ? grantedCount : ""}</span>
+      <button className="row-icon row-icon--eye" onClick={() => setOpen((v) => !v)} title="Кому видно" aria-label={`Кому видно — ${grantedCount} игроков`} aria-expanded={open}>
+        {grantedCount > 0 && <span className="row-icon__count">{grantedCount}</span>}
       </button>
       {open && (
         <div className="visibility-picker-panel card stack">

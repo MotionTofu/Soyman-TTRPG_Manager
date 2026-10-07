@@ -1,3 +1,4 @@
+import { useSettingCrumbs } from "../layout/useSettingCrumbs";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
@@ -89,6 +90,7 @@ export function LocationDetailPage() {
   const locationState = useResource<SettingLocationDetail>(locationPaths.detail(locationId));
   const location = locationState.data ?? null;
   const settingId = location?.setting_id ?? null;
+  const settingCrumbs = useSettingCrumbs(settingId);
   const communities = useResource<SettingCommunity[]>(settingId ? settingPaths.inSetting("community", settingId) : null).data ?? [];
   // Все локации сеттинга вместе с архивом: дерево, выбор родителя, архив детей.
   const allLocationsData = useResource<SettingLocation[]>(settingId ? locationPaths.allInSetting(settingId) : null).data;
@@ -778,7 +780,7 @@ export function LocationDetailPage() {
     <EntityPage
       paper
       crumbs={[
-        { label: "Сеттинг", to: `/settings/${location.setting_id}` },
+        ...settingCrumbs,
         { label: "География", to: geographyTo },
         ...location.ancestors.map((a) => ({ label: a.name, to: `/locations/${a.id}` })),
         { label: location.name },

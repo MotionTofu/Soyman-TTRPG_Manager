@@ -6,7 +6,6 @@ import { CAMPAIGN_PASSPORT_FIELDS } from "../../settingWorld";
 import type { CampaignDetail, StoryArc, StoryArcDetail } from "../../types";
 import { PaperFieldsCard } from "../PaperFieldsCard";
 import { PassportCard } from "../adventure/AdventureDossier";
-import { LinkDropZone } from "../LinkDropZone";
 
 // Паспорт на «Обзоре» кампании (спека campaign-paper, Q7/Q8/Q16–Q18; доски
 // 41–42). У кампании — свой, ключами листа 1 тетради. У ваншота своего нет:
@@ -35,16 +34,15 @@ function OwnPassport({ campaign }: { campaign: CampaignDetail }) {
   return (
     <section className="campaign-passport">
       <PaperFieldsCard
-        label="Паспорт"
+        label="Паспорт кампании"
         fields={CAMPAIGN_PASSPORT_FIELDS}
         values={passport}
         rows
+        externalHeading
         mentionSettingId={campaign.setting_id}
-        empty="Паспорт пуст: премиса, обещание, чем заняты герои…"
+        empty="Паспорт пуст: премис, обещание, чем заняты герои…"
         onSave={save}
       />
-      {/* Ссылки «Крючки» живут с «Препродакшена» — та же связь, что и была. */}
-      <LinkDropZone entityType="preproduction" entityId={campaign.id} title="Крючки (персонажи)" />
     </section>
   );
 }
@@ -60,7 +58,7 @@ function OneshotPassport({ campaign }: { campaign: CampaignDetail }) {
   if (!first) {
     return (
       <p className="creature-card__empty">
-        Паспорт ваншота — паспорт его приключения. Выберите приключение ваншота в «Приключениях» ниже.
+        Паспорт ваншота — паспорт его приключения. Выберите приключение ваншота во вкладке «Сюжет».
       </p>
     );
   }

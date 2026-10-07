@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { resourceQuery, useAction, useResource, write } from "../data/hooks";
 import { dataKeys } from "../data/entities";
 import { campaignPaths, playerArticleAffects, playerSectionAffects } from "../data/campaigns";
-import { settingPaths } from "../data/settingEntities";
+import { galleryAffects, settingPaths } from "../data/settingEntities";
 import { labelled } from "../data/notices";
 import { GalleryTab } from "./GalleryTab";
 import { PlayerVisibilityPicker } from "./PlayerVisibilityPicker";
@@ -12,9 +12,12 @@ import { MentionText } from "./mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import { EmptyState } from "./EmptyState";
 import { NavIcon } from "./NavIcons";
+import { RowDeleteButton } from "./RowIconButtons";
 import { useConfirm } from "../hooks/useConfirm";
-import { EntityTabWorkspace } from "./EntityTabWorkspace";
-import type { CampaignPlayerArticle, CampaignPlayerSection, CampaignPlayerSectionKind, RosterPlayer } from "../types";
+import { IssuanceColumns } from "./IssuanceColumns";
+import { Modal } from "./Modal";
+import { isSafeImageUrl } from "../utils/safeUrl";
+import type { CampaignPlayerArticle, CampaignPlayerSection, CampaignPlayerSectionKind, GalleryImage, RosterPlayer } from "../types";
 
 const SECTION_NAME_MAX = 80;
 const NO_SECTIONS: CampaignPlayerSection[] = [];
@@ -24,14 +27,18 @@ interface Props {
   campaignId: number;
   roster: RosterPlayer[];
   defaultSettingId?: number;
+  showCreation?: boolean;
+  onCreateSection?: () => void;
+  onCreated?: () => void;
 }
 
-export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId }: Props) {
+export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId, showCreation = true, onCreateSection, onCreated }: Props) {
   const client = useQueryClient();
   const run = useAction();
   const sectionsPath = campaignPaths.playerSections(campaignId);
   const sectionsState = useResource<CampaignPlayerSection[]>(sectionsPath);
-  const sections = sectionsState.data ?? NO_SECTIONS;
+  const allSections = sectionsState.data ?? NO_SECTIONS;
+  const sections = useMemo(() => allSections.filter(section => !section.archived_at), [allSections]);
   const loading = sectionsState.loading;
   const [newName, setNewName] = useState("");
   const [newKind, setNewKind] = useState<CampaignPlayerSectionKind>("articles");
@@ -39,14 +46,12 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
   const [validationError, setError] = useState<string | null>(null);
   const error = validationError ?? sectionsState.error;
   const [saving, setSaving] = useState(false);
-  const [confirmDialog, confirm] = useConfirm();
   const nameInputRef = useRef<HTMLInputElement>(null);
   const [filter, setFilter] = useState("");
   // Master–Detail: выбранный раздел и (для статей) статья. Пункты статей
   // в навигации — из кэша, который докладывает ArticlesList при загрузке.
-  // manage — вид подраздела целиком (порядок, имя, видимость, удаление); без
-  // него щелчок по подразделу статей сразу открывает первую статью.
-  const [sel, setSel] = useState<{ sectionId: number | null; articleId?: number; manage?: boolean }>({ sectionId: null });
+  const [sel, setSel] = useState<{ sectionId: number | null; articleId?: number; imageId?: number }>({ sectionId: null });
+  const [uploadGallery, setUploadGallery] = useState(false);
   const [artCache, setArtCache] = useState<Record<number, CampaignPlayerArticle[]>>({});
 
   function load() {
@@ -71,24 +76,19 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
         ),
         { affects: playerSectionAffects(campaignId), retry: false }
       );
-      if (created) setNewName("");
+      if (created) { setNewName(""); onCreated?.(); }
     } finally {
       setSaving(false);
     }
   }
 
-  async function removeSection(id: number) {
-    const ok = await confirm({
-      title: "Удалить подраздел?",
-      message: "Все статьи и изображения внутри будут удалены безвозвратно.",
-      confirmLabel: "Удалить",
-      danger: true,
-    });
-    if (!ok) return;
-    // Статьи удалённого подраздела не перечитываются: их карточка уже уходит с экрана.
-    await run(labelled("Удаление подраздела", () => write.del(`/campaign-player-sections/${id}`)), {
-      affects: playerSectionAffects(campaignId),
-    });
+  async function archiveFocusedImage(id: number, sectionId: number) {
+    const saved = await run(labelled("Архивация изображения", () => write.put(`/gallery/${id}/archive`, { archived: true }).then(() => true)), { affects: [...galleryAffects("campaign_player_section", sectionId), ...playerSectionAffects(campaignId), { path: "/archive" }] });
+    if (saved) setSel({ sectionId });
+  }
+
+  async function archiveSection(id: number, archived: boolean) {
+    await run(labelled(archived ? "Архивация раздела" : "Восстановление раздела", () => write.put(`/campaign-player-sections/${id}/archive`, { archived })), { affects: [...playerSectionAffects(campaignId, id), { path: "/archive" }] });
   }
 
   async function reorderSections(draggedId: number, targetId: number) {
@@ -124,7 +124,7 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
   // под тем же ключом, что читает сама галерея подраздела.
   const galleries = useMemo(() => sections.filter((s) => s.kind === "gallery"), [sections]);
   const galleryQueries = useQueries({
-    queries: galleries.map((g) => resourceQuery<unknown[]>(settingPaths.gallery("campaign_player_section", g.id))),
+    queries: galleries.map((g) => resourceQuery<GalleryImage[]>(settingPaths.gallery("campaign_player_section", g.id))),
   });
   const galCounts: Record<number, number> = {};
   galleries.forEach((g, i) => {
@@ -154,7 +154,7 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
     const arts = artCache[s.id];
     return {
       id: String(s.id),
-      label: `${s.name} · ${isGallery ? "Галерея" : "Статьи"}`,
+      label: s.name,
       count: isGallery ? galCounts[s.id] : arts?.length,
       items: !isGallery && arts ? arts.map((a) => ({ id: String(a.id), label: a.title || "Без названия" })) : undefined,
     };
@@ -166,17 +166,13 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
 
   return (
     <div className="stack campaign-player-overview">
-      <p className="muted" style={{ maxWidth: "62ch" }}>
-        Подразделы этого раздела не видны игрокам, пока вы явно не откроете их (или отдельные
-        статьи внутри) конкретным игрокам кнопкой-глазом.
-      </p>
       {sections.length > 1 && (
         <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
           <input placeholder="Поиск по подразделам" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ flex: "1 1 200px" }} />
           {filter && <button onClick={() => setFilter("")}>Сбросить</button>}
         </div>
       )}
-      <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+      {showCreation && <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
         <input ref={nameInputRef} placeholder="Название подраздела" value={newName} onChange={(e) => setNewName(e.target.value)} maxLength={SECTION_NAME_MAX} style={{ flex: "1 1 200px", minWidth: 0 }} />
         <select value={newKind} onChange={(e) => setNewKind(e.target.value as CampaignPlayerSectionKind)}>
           <option value="articles">Статьи</option>
@@ -185,7 +181,7 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
         <button className="primary" onClick={addSection} disabled={!newName.trim() || newName.trim().length > SECTION_NAME_MAX || saving}>
           {saving ? "Создание…" : "+ Добавить подраздел"}
         </button>
-      </div>
+      </div>}
       {newName.trim().length > SECTION_NAME_MAX && <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>До {SECTION_NAME_MAX} символов</span>}
       {loading && <p className="muted">Загрузка…</p>}
       {error && (
@@ -199,38 +195,39 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
           title="Игрокам пока нечего открыть"
           hint="Создайте первый — статьи или галерею — и откройте игрокам глазом «Кому видно»."
           action={
-            <button className="primary" onClick={() => nameInputRef.current?.focus()}>
+            <button className="primary" onClick={() => { onCreateSection?.(); nameInputRef.current?.focus(); }}>
               Создать подраздел
             </button>
           }
         />
       )}
       {filtered.length > 0 && selectedSection && (
-        <EntityTabWorkspace
+        <IssuanceColumns
           sections={navSections}
-          selection={{
-            section: String(selectedSection.id),
-            item: sel.articleId != null ? String(sel.articleId) : undefined,
-          }}
-          onSelect={(next) =>
-            setSel(
-              next.item != null
-                ? { sectionId: Number(next.section), articleId: Number(next.item) }
-                : { sectionId: Number(next.section) }
-            )
-          }
-          workspaceKey={campaignId}
-          navFooter={
-            <button
-              className="primary"
-              onClick={() => nameInputRef.current?.focus()}
-              style={{ alignSelf: "flex-start" }}
-            >
-              + Добавить подраздел
-            </button>
-          }
+          selectedSection={String(selectedSection.id)}
+          onSection={(id) => { setSel({ sectionId: Number(id) }); setUploadGallery(false); }}
+          items={selectedSection.kind === "gallery"
+            ? (galleryQueries[galleries.findIndex(g => g.id === selectedSection.id)]?.data ?? []).map((img, i) => ({ id: String(img.id), label: img.caption || `Изображение ${i + 1}` }))
+            : (artCache[selectedSection.id] ?? []).map(a => ({ id: String(a.id), label: a.title || "Без названия" }))}
+          selectedItem={sel.articleId != null ? String(sel.articleId) : sel.imageId != null ? String(sel.imageId) : undefined}
+          onItem={(id) => setSel(selectedSection.kind === "gallery" ? { sectionId: selectedSection.id, imageId: Number(id) } : { sectionId: selectedSection.id, articleId: Number(id) })}
+          title={selectedSection.name}
         >
           {(() => {
+            if (sel.imageId != null) {
+              const image = galleryQueries[galleries.findIndex(g => g.id === selectedSection.id)]?.data?.find(i => i.id === sel.imageId);
+              return image ? <div className="stack">
+                <div className="issuance-section__header issuance-image-header paper-group__head">
+                  <h2>{image.caption || "Изображение"}</h2>
+                  <span className="issuance-added">Добавлено {new Date(image.created_at).toLocaleDateString("ru-RU")}</span>
+                  <div className="issuance-section__actions">
+                    <PlayerVisibilityPicker campaignId={campaignId} targetType="campaign_player_image" targetId={image.id} roster={roster} />
+                    <button type="button" className="row-icon row-icon--trash" title="Архивировать изображение" aria-label="Архивировать изображение" onClick={() => void archiveFocusedImage(image.id, selectedSection.id)} />
+                  </div>
+                </div>
+                <GalleryTab ownerType="campaign_player_section" ownerId={selectedSection.id} focusedId={image.id} hideDelete />
+              </div> : <p className="muted">Изображение удалено.</p>;
+            }
             if (sel.articleId != null) {
               if (focusedKnown && !focusedFound) {
                 return (
@@ -252,173 +249,132 @@ export function CampaignPlayerSectionsTab({ campaignId, roster, defaultSettingId
                     focusedId={sel.articleId}
                     onStats={(arts) => reportArticles(selectedSection.id, arts)}
                   />
-                  <button type="button" className="ghost" style={{ alignSelf: "flex-start" }} onClick={() => setSel({ sectionId: selectedSection.id, manage: true })}>
-                    Настроить подраздел
-                  </button>
                 </>
               );
             }
-            const idx = sections.findIndex((s) => s.id === selectedSection.id);
-            const sectionCard = (
-              <SectionCard
-                campaignId={campaignId}
-                section={selectedSection}
-                roster={roster}
-                defaultSettingId={defaultSettingId}
-                forceExpanded
-                onMoveUp={idx > 0 ? () => moveSection(selectedSection.id, -1) : undefined}
-                onMoveDown={idx >= 0 && idx < sections.length - 1 ? () => moveSection(selectedSection.id, 1) : undefined}
-                onRemove={() => removeSection(selectedSection.id)}
-                onArticlesStats={(arts) => reportArticles(selectedSection.id, arts)}
-              />
-            );
-            // Подраздел статей целиком (просьба владельца 2026-10-02) — только
-            // по «Настроить подраздел» или пока в нём нет ни одной статьи.
-            if (selectedSection.kind === "gallery" || sel.manage) return sectionCard;
+            if (selectedSection.kind === "gallery") {
+              return <div className="stack">
+                <SectionSummaryHeader key={selectedSection.id} campaignId={campaignId} section={selectedSection} roster={roster}
+                  count={galCounts[selectedSection.id] ?? 0}
+                  onArchive={() => void archiveSection(selectedSection.id, true)}
+                  onMoveUp={sections.indexOf(selectedSection) > 0 ? () => moveSection(selectedSection.id, -1) : undefined}
+                  onMoveDown={sections.indexOf(selectedSection) < sections.length - 1 ? () => moveSection(selectedSection.id, 1) : undefined} />
+                <GallerySummary key={`gallery-${selectedSection.id}`} campaignId={campaignId} sectionId={selectedSection.id} roster={roster}
+                  onPick={(imageId) => setSel({ sectionId: selectedSection.id, imageId })} />
+                <div className="row"><button className="issuance-frame-button" onClick={() => setUploadGallery(true)}>+ Изображение</button></div>
+                {uploadGallery && <Modal onClose={() => setUploadGallery(false)}><GalleryTab ownerType="campaign_player_section" ownerId={selectedSection.id} /></Modal>}
+              </div>;
+            }
             return (
-              <FirstArticle
-                sectionId={selectedSection.id}
-                onPick={(articleId) => setSel({ sectionId: selectedSection.id, articleId })}
-                empty={sectionCard}
-              />
+              <div className="stack">
+                <SectionSummaryHeader key={selectedSection.id} campaignId={campaignId} section={selectedSection} roster={roster}
+                  count={selectedSection.kind === "articles" ? (artCache[selectedSection.id] ?? []).length : galCounts[selectedSection.id] ?? 0}
+                  onArchive={() => void archiveSection(selectedSection.id, true)}
+                  onMoveUp={sections.indexOf(selectedSection) > 0 ? () => moveSection(selectedSection.id, -1) : undefined}
+                  onMoveDown={sections.indexOf(selectedSection) < sections.length - 1 ? () => moveSection(selectedSection.id, 1) : undefined} />
+                <ArticlesList campaignId={campaignId} sectionId={selectedSection.id} roster={roster}
+                  defaultSettingId={defaultSettingId}
+                  onPick={(articleId) => setSel({ sectionId: selectedSection.id, articleId })}
+                  onStats={(arts) => reportArticles(selectedSection.id, arts)} />
+              </div>
             );
           })()}
-        </EntityTabWorkspace>
+        </IssuanceColumns>
       )}
       {filter && filtered.length === 0 && <p className="muted">Ничего не найдено.</p>}
-      {confirmDialog}
+
     </div>
   );
 }
 
-// Подраздел статей открывается первой статьёй; пустой — видом подраздела,
-// где заводится первая.
-function FirstArticle({ sectionId, onPick, empty }: { sectionId: number; onPick: (articleId: number) => void; empty: ReactNode }) {
-  const articles = useResource<CampaignPlayerArticle[]>(campaignPaths.sectionArticles(sectionId)).data;
-  const first = articles?.[0]?.id;
-  useEffect(() => {
-    if (first != null) onPick(first);
-  }, [first, onPick]);
-  if (!articles || first != null) return null;
-  return <>{empty}</>;
-}
 
-function SectionCard({
-  campaignId,
-  section,
-  roster,
-  defaultSettingId,
-  onRemove,
-  forceExpanded = false,
-  onMoveUp,
-  onMoveDown,
-  onArticlesStats,
-}: {
-  campaignId: number;
-  section: CampaignPlayerSection;
-  roster: RosterPlayer[];
-  defaultSettingId?: number;
-  onRemove: () => void;
-  /** Внутри Master–Detail карточка всегда раскрыта, сворачивать нечего. */
-  forceExpanded?: boolean;
-  /** Порядок разделов — стрелками вместо drag (в навигации drag нет). */
-  onMoveUp?: () => void;
-  onMoveDown?: () => void;
-  onArticlesStats?: (articles: CampaignPlayerArticle[]) => void;
+function GallerySummary({ campaignId, sectionId, roster, onPick }: {
+  campaignId: number; sectionId: number; roster: RosterPlayer[]; onPick: (id: number) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const [renaming, setRenaming] = useState(false);
-  const [nameDraft, setNameDraft] = useState(section.name);
-  const [savingName, setSavingName] = useState(false);
   const run = useAction();
-  // Число изображений или статей — те же ключи, что у галереи и списка статей.
-  const isGallery = section.kind === "gallery";
-  const galleryRows = useResource<unknown[]>(isGallery ? settingPaths.gallery("campaign_player_section", section.id) : null).data;
-  const articleRows = useResource<unknown[]>(isGallery ? null : campaignPaths.sectionArticles(section.id)).data;
-  const countLabel = isGallery
-    ? galleryRows ? `${galleryRows.length} изо` : null
-    : articleRows ? `${articleRows.length} ст` : null;
-
-  async function saveName() {
-    const trimmed = nameDraft.trim();
-    if (!trimmed || trimmed.length > SECTION_NAME_MAX) return;
-    setSavingName(true);
-    try {
-      // Поле закрывается только после записи: при отказе набранное остаётся.
-      const saved = await run(
-        labelled("Название подраздела", () => write.put(`/campaign-player-sections/${section.id}`, { name: trimmed }).then(() => true)),
-        { affects: playerSectionAffects(campaignId, section.id) }
-      );
-      if (saved) setRenaming(false);
-    } finally {
-      setSavingName(false);
-    }
+  const path = `${settingPaths.gallery("campaign_player_section", sectionId)}&include_archived=true`;
+  const state = useResource<GalleryImage[]>(path);
+  const allImages = state.data ?? [];
+  const images = allImages.filter(image => !image.archived_at);
+  const [editing, setEditing] = useState<GalleryImage | null>(null);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const affects = [...galleryAffects("campaign_player_section", sectionId), ...playerSectionAffects(campaignId), { path: "/archive" }];
+  async function move(index: number, direction: -1 | 1) {
+    const order = images.map(image => image.id);
+    const target = index + direction;
+    if (target < 0 || target >= order.length) return;
+    [order[index], order[target]] = [order[target], order[index]];
+    await run(labelled("Порядок изображений", () => write.put("/gallery/reorder", { order })), { affects });
   }
+  async function archive(id: number, archived: boolean) {
+    await run(labelled(archived ? "Архивация изображения" : "Восстановление изображения", () => write.put(`/gallery/${id}/archive`, { archived })), { affects });
+  }
+  async function saveName() {
+    if (!editing || !draft.trim() || saving) return;
+    setSaving(true);
+    try {
+      const saved = await run(labelled("Название изображения", () => write.put(`/gallery/${editing.id}`, { caption: draft.trim() }).then(() => true)), { affects });
+      if (saved) setEditing(null);
+    } finally { setSaving(false); }
+  }
+  return <div className="stack">
+    {state.loading ? <p className="muted">Загрузка…</p> : state.error ? <p role="alert">Не удалось загрузить изображения. <button onClick={state.reload}>Повторить</button></p> : images.map((image, index) => {
+      const title = image.caption || `Изображение ${index + 1}`;
+      return <div className="issuance-image-row" key={image.id}>
+        <button className="issuance-image-thumb" aria-label={`Открыть изображение — ${title}`} onClick={() => onPick(image.id)}><img src={isSafeImageUrl(image.image_url) ? image.image_url : undefined} alt="" loading="lazy" /></button>
+        <div className="issuance-image-info"><button className="issuance-article-title" onClick={() => onPick(image.id)}>{title}</button><span className="issuance-added">Добавлено {new Date(image.created_at).toLocaleDateString("ru-RU")}</span></div>
+        <div className="issuance-section__actions">
+          <div className="issuance-section__moves">
+            <button type="button" className="row-icon" aria-label={`Переместить выше — ${title}`} title="Вверх" disabled={index === 0} onClick={() => void move(index, -1)}>↑</button>
+            <button type="button" className="row-icon" aria-label={`Переместить ниже — ${title}`} title="Вниз" disabled={index === images.length - 1} onClick={() => void move(index, 1)}>↓</button>
+          </div>
+          <PlayerVisibilityPicker campaignId={campaignId} targetType="campaign_player_image" targetId={image.id} roster={roster} />
+          <button className="row-icon row-icon--edit" title="Редактировать название" aria-label={`Редактировать название — ${title}`} onClick={() => { setEditing(image); setDraft(image.caption); }} />
+          <button className="row-icon row-icon--trash" title="Архивировать изображение" aria-label={`Архивировать изображение — ${title}`} onClick={() => void archive(image.id, true)} />
+        </div>
+      </div>;
+    })}
+    {editing && <Modal onClose={() => setEditing(null)} ariaLabel="Название изображения"><form className="stack" onSubmit={(event) => { event.preventDefault(); void saveName(); }}><h2>Название изображения</h2><input autoFocus aria-label="Название изображения" maxLength={500} value={draft} onChange={(event) => setDraft(event.target.value)} /><div className="row"><button type="submit" disabled={saving || !draft.trim()}>Сохранить</button><button type="button" onClick={() => setEditing(null)}>Отмена</button></div></form></Modal>}
+  </div>;
+}
 
-  return (
-    <div className="card stack">
-      <div
-        className="row collapsible-header campaign-player-header"
-        style={{ justifyContent: "space-between", cursor: renaming || forceExpanded ? "default" : "pointer" }}
-        onClick={() => !renaming && !forceExpanded && setExpanded((v) => !v)}
-      >
-        <span className="row" style={{ alignItems: "center" }}>
-          {!forceExpanded && <NavIcon name="chevron" className={`chevron-icon${expanded ? " is-open" : ""}`} />}
-          {renaming ? (
-            <input
-              value={nameDraft}
-              onChange={(e) => setNameDraft(e.target.value)}
-              maxLength={SECTION_NAME_MAX}
-              onClick={(e) => e.stopPropagation()}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") saveName();
-                if (e.key === "Escape") setRenaming(false);
-              }}
-              autoFocus
-            />
-          ) : (
-            <strong className="entry-title">{section.name}</strong>
-          )}
-          <span className="badge tag">{section.kind === "gallery" ? "Галерея" : "Статьи"}</span>
-          {countLabel && <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }}>· {countLabel}</span>}
-        </span>
-        <span className="row" onClick={(e) => e.stopPropagation()}>
-          {(onMoveUp || onMoveDown) && (
-            <span className="row" style={{ gap: 2 }}>
-              <button onClick={onMoveUp} disabled={!onMoveUp} title="Выше" aria-label="Переместить выше" style={{ width: 26, height: 26, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-                ↑
-              </button>
-              <button onClick={onMoveDown} disabled={!onMoveDown} title="Ниже" aria-label="Переместить ниже" style={{ width: 26, height: 26, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-                ↓
-              </button>
-            </span>
-          )}
-          {renaming ? (
-            <>
-              <button className="primary" onClick={saveName} disabled={!nameDraft.trim() || nameDraft.trim().length > SECTION_NAME_MAX || savingName}>
-                {savingName ? "…" : "ОК"}
-              </button>
-              <button onClick={() => { setNameDraft(section.name); setRenaming(false); }}>Отмена</button>
-            </>
-          ) : (
-            <button onClick={() => setRenaming(true)} title="Переименовать" aria-label="Переименовать" style={{ width: 26, height: 26, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-              <NavIcon name="edit" />
-            </button>
-          )}
-          <PlayerVisibilityPicker campaignId={campaignId} targetType="campaign_player_section" targetId={section.id} roster={roster} />
-          <button className="danger" onClick={onRemove} aria-label="Удалить подраздел" style={{ width: 26, height: 26, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-            <NavIcon name="delete" />
-          </button>
-        </span>
+
+function SectionSummaryHeader({ campaignId, section, roster, count, onMoveUp, onMoveDown, onArchive }: {
+  campaignId: number; section: CampaignPlayerSection; roster: RosterPlayer[]; count: number;
+  onMoveUp?: () => void; onMoveDown?: () => void; onArchive: () => void;
+}) {
+  const run = useAction();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(section.name);
+  const [saving, setSaving] = useState(false);
+  async function saveName() {
+    if (!draft.trim() || saving) return;
+    setSaving(true);
+    try {
+      const saved = await run(labelled("Название подраздела", () => write.put(`/campaign-player-sections/${section.id}`, { name: draft.trim() }).then(() => true)), { affects: playerSectionAffects(campaignId, section.id) });
+      if (saved) setEditing(false);
+    } finally { setSaving(false); }
+  }
+  return <div className="issuance-section__header paper-group__head">
+    <h2>{section.name}<span className="issuance-section__count" aria-label={`${section.kind === "articles" ? "Статей" : "Изображений"}: ${count}`}>{count}</span></h2>
+    <div className="issuance-section__actions">
+      <div className="issuance-section__moves">
+        <button type="button" className="row-icon" title="Вверх" aria-label="Переместить выше" disabled={!onMoveUp} onClick={onMoveUp}>↑</button>
+        <button type="button" className="row-icon" title="Вниз" aria-label="Переместить ниже" disabled={!onMoveDown} onClick={onMoveDown}>↓</button>
       </div>
-      {(expanded || forceExpanded) &&
-        (section.kind === "gallery" ? (
-          <GalleryTab ownerType="campaign_player_section" ownerId={section.id} />
-        ) : (
-          <ArticlesList campaignId={campaignId} sectionId={section.id} roster={roster} defaultSettingId={defaultSettingId} onStats={onArticlesStats} />
-        ))}
+      <PlayerVisibilityPicker campaignId={campaignId} targetType="campaign_player_section" targetId={section.id} roster={roster} />
+      <button type="button" className="row-icon row-icon--edit" title="Редактировать название" aria-label="Редактировать название" onClick={() => { setDraft(section.name); setEditing(true); }} />
+      <button type="button" className="row-icon row-icon--trash" title="Архивировать раздел" aria-label="Архивировать раздел" onClick={onArchive} />
     </div>
-  );
+    {editing && <Modal onClose={() => setEditing(false)}>
+      <form className="stack" onSubmit={(event) => { event.preventDefault(); void saveName(); }}>
+        <h2>Название раздела</h2>
+        <input aria-label="Название раздела" autoFocus maxLength={SECTION_NAME_MAX} value={draft} onChange={(event) => setDraft(event.target.value)} />
+        <div className="row"><button type="submit" disabled={saving || !draft.trim()}>Сохранить</button><button type="button" onClick={() => setEditing(false)}>Отмена</button></div>
+      </form>
+    </Modal>}
+  </div>;
 }
 
 function ArticlesList({
@@ -428,6 +384,7 @@ function ArticlesList({
   defaultSettingId,
   focusedId,
   onStats,
+  onPick,
 }: {
   campaignId: number;
   sectionId: number;
@@ -437,16 +394,20 @@ function ArticlesList({
   focusedId?: number | null;
   /** Статьи для пунктов навигации (id + заголовки). */
   onStats?: (articles: CampaignPlayerArticle[]) => void;
+  onPick?: (articleId: number) => void;
 }) {
   const client = useQueryClient();
   const run = useAction();
   const articlesPath = campaignPaths.sectionArticles(sectionId);
   const articlesState = useResource<CampaignPlayerArticle[]>(articlesPath);
-  const articles = articlesState.data ?? NO_ARTICLES;
+  const allArticles = articlesState.data ?? NO_ARTICLES;
+  const articles = useMemo(() => allArticles.filter(article => !article.archived_at), [allArticles]);
+  const [renaming, setRenaming] = useState<CampaignPlayerArticle | null>(null);
+  const [titleDraft, setTitleDraft] = useState("");
+  const [savingTitle, setSavingTitle] = useState(false);
   const loading = articlesState.loading;
   const error = articlesState.error;
   const [saving, setSaving] = useState(false);
-  const [confirmDialog, confirm] = useConfirm();
   const [dragId, setDragId] = useState<number | null>(null);
 
   function load() {
@@ -463,28 +424,33 @@ function ArticlesList({
     if (saving) return;
     setSaving(true);
     try {
-      await run(
+      const created = await run(
         labelled("Новая статья", () =>
-          write.post(`/campaign-player-sections/${sectionId}/articles`, { title: `Статья ${articles.length + 1}`, content: "" })
+          write.post<CampaignPlayerArticle>(`/campaign-player-sections/${sectionId}/articles`, { title: `Статья ${articles.length + 1}`, content: "" })
         ),
         { affects: playerArticleAffects(sectionId), retry: false }
       );
+      if (created) onPick?.(created.id);
     } finally {
       setSaving(false);
     }
   }
 
+  async function archiveArticle(id: number, archived: boolean) {
+    await run(labelled(archived ? "Архивация статьи" : "Восстановление статьи", () => write.put(`/campaign-player-sections/articles/${id}/archive`, { archived })), { affects: [...playerArticleAffects(sectionId), { path: "/archive" }] });
+  }
+
+  async function saveTitle() {
+    if (!renaming || !titleDraft.trim() || savingTitle) return;
+    setSavingTitle(true);
+    try {
+      const saved = await run(labelled("Название статьи", () => write.put(`/campaign-player-sections/articles/${renaming.id}`, { title: titleDraft.trim() }).then(() => true)), { affects: [...playerArticleAffects(sectionId), { path: "/archive" }] });
+      if (saved) setRenaming(null);
+    } finally { setSavingTitle(false); }
+  }
+
   async function removeArticle(id: number) {
-    const ok = await confirm({
-      title: "Удалить статью?",
-      message: "Статья будет удалена безвозвратно.",
-      confirmLabel: "Удалить",
-      danger: true,
-    });
-    if (!ok) return;
-    await run(labelled("Удаление статьи", () => write.del(`/campaign-player-sections/articles/${id}`)), {
-      affects: playerArticleAffects(sectionId),
-    });
+    await archiveArticle(id, true);
   }
 
   async function reorderArticles(draggedId: number, targetId: number) {
@@ -520,15 +486,16 @@ function ArticlesList({
           title="Чистый лист"
           hint="Добавьте первую статью — она откроется сразу в режиме редактирования."
           action={
-            <button className="primary" onClick={addArticle} disabled={saving}>
-              + Добавить статью
+            <button className="issuance-frame-button" onClick={addArticle} disabled={saving}>
+              + Статья
             </button>
           }
         />
       )}
-      {visible.map((a) => (
+      {visible.map((a, index) => (
         <div
           key={a.id}
+          className={onPick ? "issuance-article-row" : undefined}
           draggable={focusedId == null}
           onDragStart={() => focusedId == null && setDragId(a.id)}
           onDragEnd={() => setDragId(null)}
@@ -541,7 +508,20 @@ function ArticlesList({
           }}
           style={{ opacity: dragId === a.id ? 0.6 : 1 }}
         >
-          <ArticleCard
+          {onPick ? (
+            <div className="row" style={{ justifyContent: "space-between" }}>
+              <div><button className="issuance-article-title" onClick={() => onPick(a.id)}>{a.title || "Без названия"}</button><span className="issuance-added">Добавлено {new Date(a.created_at).toLocaleDateString("ru-RU")}</span></div>
+              <div className="issuance-section__actions">
+                <div className="issuance-section__moves">
+                  <button type="button" className="row-icon" title="Вверх" aria-label={`Переместить выше — ${a.title}`} disabled={index === 0} onClick={() => void reorderArticles(a.id, articles[index - 1].id)}>↑</button>
+                  <button type="button" className="row-icon" title="Вниз" aria-label={`Переместить ниже — ${a.title}`} disabled={index === articles.length - 1} onClick={() => void reorderArticles(a.id, articles[index + 1].id)}>↓</button>
+                </div>
+                <PlayerVisibilityPicker campaignId={campaignId} targetType="campaign_player_article" targetId={a.id} roster={roster} />
+                <button type="button" className="row-icon row-icon--edit" title="Редактировать название" aria-label={`Редактировать название — ${a.title}`} onClick={() => { setTitleDraft(a.title); setRenaming(a); }} />
+                <button type="button" className="row-icon row-icon--trash" title="Архивировать статью" aria-label={`Архивировать статью — ${a.title}`} onClick={() => void archiveArticle(a.id, true)} />
+              </div>
+            </div>
+          ) : <ArticleCard
             campaignId={campaignId}
             sectionId={sectionId}
             article={a}
@@ -549,15 +529,21 @@ function ArticlesList({
             defaultSettingId={defaultSettingId}
             forceOpen={focusedId != null}
             onRemove={() => removeArticle(a.id)}
-          />
+          />}
         </div>
       ))}
-      {!loading && !error && articles.length > 0 && (
-        <button onClick={addArticle} style={{ alignSelf: "flex-start" }} disabled={saving}>
-          {saving ? "Создание…" : "+ Добавить статью"}
+      {!loading && !error && articles.length > 0 && focusedId == null && (
+        <button className="issuance-frame-button" onClick={addArticle} style={{ alignSelf: "flex-start" }} disabled={saving}>
+          {saving ? "Создание…" : "+ Статья"}
         </button>
       )}
-      {confirmDialog}
+      {renaming && <Modal onClose={() => setRenaming(null)} ariaLabel="Название статьи">
+        <form className="stack" onSubmit={(event) => { event.preventDefault(); void saveTitle(); }}>
+          <h2>Название статьи</h2>
+          <input aria-label="Название статьи" autoFocus maxLength={SECTION_NAME_MAX} value={titleDraft} onChange={(event) => setTitleDraft(event.target.value)} />
+          <div className="row"><button type="submit" disabled={savingTitle || !titleDraft.trim()}>Сохранить</button><button type="button" onClick={() => setRenaming(null)}>Отмена</button></div>
+        </form>
+      </Modal>}
     </div>
   );
 }
@@ -639,11 +625,9 @@ function ArticleCard({
             <strong className="entry-title">{article.title}</strong>
           )}
         </span>
-        <span className="row" onClick={(e) => e.stopPropagation()}>
+        <span className="issuance-section__actions" onClick={(e) => e.stopPropagation()}>
           <PlayerVisibilityPicker campaignId={campaignId} targetType="campaign_player_article" targetId={article.id} roster={roster} />
-          <button className="danger" onClick={onRemove} aria-label="Удалить статью">
-            <NavIcon name="delete" />
-          </button>
+          <RowDeleteButton onClick={onRemove} label="Архивировать статью" />
         </span>
       </div>
       {open &&
@@ -662,7 +646,6 @@ function ArticleCard({
                 {saving ? "Сохранение…" : "Сохранить"}
               </button>
               <button onClick={handleCancel} disabled={saving}>Отмена</button>
-              <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Ctrl+S</span>
             </div>
           </div>
         ) : (

@@ -4,6 +4,8 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { db } from "../db/db";
+import {ensureProjectWorkbook,placeProjectWorkbooks} from "../services/projectWorkbooks";
+import type {AuthedRequest} from "../services/auth";
 import { SESSION_NUMBER_SQL } from "../services/sessionNumber";
 import { debtsForCampaign } from "../services/finance";
 import { campaignNow, defaultStatus, timePatch } from "../services/eventTime";
@@ -288,7 +290,7 @@ campaignsRouter.post("/", (req, res) => {
     };
   if (!name) return res.status(400).json({ error: "name is required" });
   const folder = campaignFolder(name);
-  const info = db
+  const info = db.transaction(()=>{const created = db
     .prepare(
       `INSERT INTO campaigns (name, role, system_id, setting_id, type, payment_type, payment_frequency, rate_split, session_rate, currency, folder_path)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -306,9 +308,10 @@ campaignsRouter.post("/", (req, res) => {
       currency ?? "RUB",
       folder
     );
-  res
-    .status(201)
-    .json(db.prepare("SELECT * FROM campaigns WHERE id = ?").get(info.lastInsertRowid));
+  const author=(req as AuthedRequest).user;
+  if(author?.role==="gm")ensureProjectWorkbook(db,author.id,"campaign",Number(created.lastInsertRowid));
+  return created;})();
+  res.status(201).json(db.prepare("SELECT * FROM campaigns WHERE id = ?").get(info.lastInsertRowid));
 });
 
 campaignsRouter.put("/:id", (req, res) => {
@@ -379,6 +382,7 @@ campaignsRouter.put("/:id", (req, res) => {
   } else {
     db.prepare(`UPDATE campaigns SET folder_path = ? WHERE id = ?`).run(folderPath, req.params.id);
   }
+  placeProjectWorkbooks(db,"campaign",Number(req.params.id));
   res.json(db.prepare("SELECT * FROM campaigns WHERE id = ?").get(req.params.id));
 });
 

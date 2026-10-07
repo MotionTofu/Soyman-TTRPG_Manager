@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { getAuthToken } from "../api/client";
 import { readOnce } from "../data/imperative";
@@ -58,7 +58,15 @@ export function AdventuresTab({
   const run = useAction();
   const afterWrite = useAfterWrite();
   const [wizardOpen, setWizardOpen] = useState(false);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [params, setParams] = useSearchParams();
+  const selectedId = params.get("adventure") ? Number(params.get("adventure")) : null;
+  function setSelectedId(id: number) {
+    setParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set("adventure", String(id));
+      return next;
+    }, { replace: true });
+  }
   const [menu, setMenu] = useState<{ x: number; y: number; arc: StoryArc } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   // Картинки книги весят больше всего остального вместе взятого, и раскладывать
@@ -218,18 +226,16 @@ export function AdventuresTab({
         (b.is_favorite ?? 0) - (a.is_favorite ?? 0) || a.name.localeCompare(b.name, "ru")
     );
 
+  const selected = adventures.find((a) => a.id === selectedId) ?? adventures[0] ?? null;
+  const activeId = selected?.id;
   useEffect(() => {
-    if (adventures.length === 0) {
-      setSelectedId(null);
-      return;
-    }
-    if (selectedId == null || !adventures.some((a) => a.id === selectedId)) {
-      setSelectedId(adventures[0].id);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [arcs]);
-
-  const selected = adventures.find((a) => a.id === selectedId) ?? null;
+    if (activeId == null || selectedId === activeId) return;
+    setParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set("adventure", String(activeId));
+      return next;
+    }, { replace: true });
+  }, [activeId, selectedId, setParams]);
 
   // Внутри кампании список показывает приключения сеттинга только для чтения:
   // переименование и архивация отсюда тронули бы оригинал и все остальные
