@@ -4,16 +4,20 @@ import { artworkImage, patternSource } from "./artwork";
 
 /** Each segment owns a polygon; adjacent textures share the same joint boundary. */
 export function drawWallPolyline(ctx: CanvasRenderingContext2D, points: readonly (Vec2 & { width?: number })[], width: number, closed: boolean,
-  scale: number, ox: number, oy: number, selected = false, viewport?: { width: number; height: number }) {
+  scale: number, ox: number, oy: number, selected = false, viewport?: { width: number; height: number }, strip?: HTMLImageElement) {
   const segments = wallSegments(points, width, closed);
   if (!segments.length) return;
-  const image = artworkImage("wall-masonry", "crypt"), end = artworkImage("wall-masonry-end", "crypt");
+  // `strip` — своя полоса вместо кладки (дорога): без торцов, рисунок идёт вдоль всей линии без сброса на изломах.
+  const image = strip ?? artworkImage("wall-masonry", "crypt"), end = strip ? null : artworkImage("wall-masonry-end", "crypt");
+  let run = 0;
   // Узор берётся из готовой уменьшенной копии; `factor` возвращает ему прежний размер.
   const { source, factor } = image ? patternSource(image, width * scale / image.naturalHeight) : { source: null, factor: 1 };
   const pattern = source ? ctx.createPattern(source, "repeat-x") : null;
   const textureScale = width * scale / (image?.naturalHeight ?? 128) * factor;
   const X = (x: number) => ox + x * scale, Y = (y: number) => oy + y * scale;
   for (const segment of segments) {
+    const phase = strip ? -run * scale : 0;
+    run += segment.length;
     if (viewport && (segment.polygon.every(p => X(p.x) < 0) || segment.polygon.every(p => X(p.x) > viewport.width) ||
       segment.polygon.every(p => Y(p.y) < 0) || segment.polygon.every(p => Y(p.y) > viewport.height))) continue;
     ctx.save(); ctx.beginPath();
@@ -24,7 +28,7 @@ export function drawWallPolyline(ctx: CanvasRenderingContext2D, points: readonly
     if (pattern && image) {
       if (segment.startWidth === segment.endWidth) {
         const k = segment.startWidth * scale / image.naturalHeight * factor;
-        pattern.setTransform(new DOMMatrix([textureScale, 0, 0, k, 0, -segment.startWidth * scale / 2])); ctx.fillStyle = pattern;
+        pattern.setTransform(new DOMMatrix([textureScale, 0, 0, k, phase, -segment.startWidth * scale / 2])); ctx.fillStyle = pattern;
         ctx.fillRect(-thickness * 2, -thickness * 2, segment.length * scale + thickness * 4, thickness * 4);
       } else {
         // Narrow screen-space strips stretch the raster vertically across the taper; X phase stays continuous.
@@ -45,7 +49,7 @@ export function drawWallPolyline(ctx: CanvasRenderingContext2D, points: readonly
         for (let i = firstStrip; i < lastStrip; i++) {
           const x = left + i * step, t = Math.max(0, Math.min(1, (x + step / 2) / (segment.length * scale)));
           const h = (segment.startWidth + (segment.endWidth - segment.startWidth) * t) * scale;
-          pattern.setTransform(new DOMMatrix([textureScale, 0, 0, h / image.naturalHeight * factor, 0, -h / 2])); ctx.fillStyle = pattern;
+          pattern.setTransform(new DOMMatrix([textureScale, 0, 0, h / image.naturalHeight * factor, phase, -h / 2])); ctx.fillStyle = pattern;
           ctx.fillRect(x, -thickness * 2, step + .25, thickness * 4);
         }
       }

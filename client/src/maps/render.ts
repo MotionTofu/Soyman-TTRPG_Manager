@@ -3,7 +3,8 @@ import { tokenTapeImage } from "./assets/tokenTape";
 import { drawCachedWalls } from "./assets/wallRasterCache";
 import { drawTerrainMaskTiles } from "./assets/terrainMaskDrawing";
 import { maskSampleCode } from "./terrainMaskTiles";
-import { artworkImage, doorImage, paperPattern, patternSource, surfaceImage, surfacePattern, texturedMask, wallPattern, type ArtPack } from "./assets/artwork";
+import { artworkImage, doorImage, paperPattern, patternSource, stripImage, surfaceImage, surfacePattern, texturedMask, wallPattern, type ArtPack } from "./assets/artwork";
+import { drawWallPolyline } from "./assets/wallArtwork";
 // Рендер карты на canvas 2D. Цвета террейна — фиксированная спокойная
 // палитра (исключение как у Полотна §6 design_revision.md: бюджет акцента
 // на неё не тратится). Обрамление (фон, сетка, координаты, дороги) — из
@@ -1066,6 +1067,13 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     if (!path.nodes || path.nodes.length < 2) return;
     const nodes = path.closed ? [...path.nodes, path.nodes[0]] : path.nodes;
     const baseWidth = path.width ?? 0.22;
+    const strip = path.style ? stripImage(path.style) : null;
+    if (strip) {
+      // Шаг крупнее, чем у линии тушью: каждый отрезок — своя заливка узором с обрезкой.
+      const samples = flattenSplineWithWidths(nodes, baseWidth, 10 / scale);
+      drawWallPolyline(ctx, samples, baseWidth, false, scale, ox, oy, false, { width: canvasW, height: canvasH }, strip);
+      return;
+    }
     const firstWidth = nodes[0].width ?? baseWidth;
     const varyingWidth = nodes.some((node) => (node.width ?? baseWidth) !== firstWidth);
     ctx.save();

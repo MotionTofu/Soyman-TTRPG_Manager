@@ -8,6 +8,8 @@ export type BrushSettings = {
   cellSize?: number;
   cellMode?: "brush" | "area";
   scatterProfile: string; density: number; scatterSize: number; scatterSeed: number;
+  /** Id ассета-полосы для дороги; пусто — линия тушью. */
+  roadStyle?: string;
 };
 
 const HINTS: Record<WorkspaceTool, string> = {

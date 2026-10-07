@@ -14,7 +14,7 @@ export const TOOL_SETS: Record<ToolSet, WorkspaceTool[][]> = {
 };
 export const toolsOf = (set: ToolSet) => TOOL_SETS[set].flat();
 /** Tools that pick what they place from the catalog. */
-export const CATALOG_TOOLS: WorkspaceTool[] = ["asset", "brush", "surface", "scatter"];
+export const CATALOG_TOOLS: WorkspaceTool[] = ["asset", "brush", "surface", "scatter", "road"];
 
 const WORLD_SCALES: MapScale[] = ["planet", "continent", "country", "region"];
 const storageKey = (mapId: number) => `soyman.map-tool-set.${mapId}`;

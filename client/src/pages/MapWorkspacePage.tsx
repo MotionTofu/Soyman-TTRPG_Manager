@@ -260,6 +260,8 @@ export function MapWorkspacePage() {
   const onSave = useEvent(() => { finishGesture(); void autosave.flush(); }), onBackup = useEvent(backup);
   const onSymbol = useEvent((symbol: string) => { setSettings((current) => ({ ...current, symbol })); canvasRef.current?.focus(); });
   const onMaterial = useEvent((material: string) => { finishGesture(); setSettings((current) => ({ ...current, material })); canvasRef.current?.focus(); });
+  // Полоса дороги приходит со своей шириной: рисунок рассчитан на неё, ползунок потом меняет.
+  const onRoad = useEvent((roadStyle: string, lineWidth: number) => { finishGesture(); setSettings((current) => ({ ...current, roadStyle, lineWidth })); canvasRef.current?.focus(); });
   const onScatter = useEvent((scatterProfile: string) => { finishGesture(); setSettings((current) => ({ ...current, scatterProfile })); canvasRef.current?.focus(); });
   const onToolChange = useEvent((patch: Partial<BrushSettings>) => { if (gesture.current?.type !== "wall-line" || patch.wallWidth === undefined && patch.lineWidth === undefined) finishGesture(); setSettings((current) => ({ ...current, ...patch })); });
   const onPaintRooms = useEvent(() => paintRooms(false)), onClearRooms = useEvent(() => paintRooms(true));
@@ -295,8 +297,8 @@ export function MapWorkspacePage() {
       onGenerator={onGenerator} onSave={onSave} onBackup={onBackup} gl={gl} onGl={onGl} effects={effects} onEffect={onEffect} onEffectsReset={onEffectsReset} classicLink={map.document_version !== 6 ? `/maps/${map.id}` : null} />
 
     <div className="workspace-editor-body">
-      {CATALOG_TOOLS.includes(tool) && <CatalogPanel tool={tool} toolSet={toolSet} comicPunk={document.appearance?.style === "comic-punk"} symbol={settings.symbol} material={settings.material} scatterProfile={settings.scatterProfile}
-        onSymbol={onSymbol} onMaterial={onMaterial} onScatter={onScatter} />}
+      {CATALOG_TOOLS.includes(tool) && <CatalogPanel tool={tool} toolSet={toolSet} comicPunk={document.appearance?.style === "comic-punk"} symbol={settings.symbol} material={settings.material} scatterProfile={settings.scatterProfile} roadStyle={settings.roadStyle ?? ""}
+        onSymbol={onSymbol} onMaterial={onMaterial} onScatter={onScatter} onRoad={onRoad} />}
 
       <div className="workspace-editor-stage" ref={wrapRef}>
         <WorkspaceCanvas gl={gl} onGlFail={onGlFail} effects={effects} map={map} document={document} camera={camera.cam} canvasRef={canvasRef} wrapRef={wrapRef} showGrid={showGrid} gridColor={gridColor} gridOpacity={gridOpacity} gridLineWidth={gridLineWidth} gridLineStyle={gridLineStyle} selectedId={selection?.id ?? null} selectedNodes={gestures.selectedNodes} preview={gestures.preview}

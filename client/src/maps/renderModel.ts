@@ -128,6 +128,8 @@ export interface RenderPath {
   cells: ReadonlySet<string>;
   nodes?: readonly SplineNode[];
   width?: number;
+  /** Id ассета-полосы, если линия рисуется картинкой, а не тушью. */
+  style?: string;
 }
 
 export interface RenderPathLayer extends RenderLayerBase {
@@ -404,7 +406,8 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
           continue;
         }
         if (p.geometry.type === "spline") {
-          paths.push({ kind: p.kind, cells: new Set(), nodes: p.geometry.nodes, width: p.width, closed: p.properties?.closed === true });
+          paths.push({ kind: p.kind, cells: new Set(), nodes: p.geometry.nodes, width: p.width, closed: p.properties?.closed === true,
+            ...(p.styleRef.type === "asset" ? { style: p.styleRef.assetId } : {}) });
           continue;
         }
         const cells = new Set<string>();

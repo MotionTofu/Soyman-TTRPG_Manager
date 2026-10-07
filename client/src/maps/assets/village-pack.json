@@ -228,96 +228,6 @@
       "source": "B-wet_2.png"
     },
     {
-      "id": "road-dirt",
-      "file": "road-dirt.webp",
-      "width": 768,
-      "height": 211,
-      "bytes": 79284,
-      "sha256": "44315efc649980d7615117472c4bfc56e40a6e0761cc0873a61ec91b94ed510b",
-      "kind": "path",
-      "cells": [
-        5.1,
-        1.4
-      ],
-      "road": 2,
-      "source": "C-roads.png"
-    },
-    {
-      "id": "road-path",
-      "file": "road-path.webp",
-      "width": 768,
-      "height": 301,
-      "bytes": 101584,
-      "sha256": "1ff72e6400ef39747418f9474b644f979c3556e42ff4bbe544f25430c4770e61",
-      "kind": "path",
-      "cells": [
-        5.1,
-        2.0
-      ],
-      "road": 1,
-      "source": "C-roads.png"
-    },
-    {
-      "id": "road-cobbles",
-      "file": "road-cobbles.webp",
-      "width": 768,
-      "height": 264,
-      "bytes": 95286,
-      "sha256": "8656abca36bf0fcf497cead690330e6cab78e3f4a60590f1364dc5d312c73feb",
-      "kind": "path",
-      "cells": [
-        5.1,
-        1.75
-      ],
-      "road": 2,
-      "source": "C-roads.png"
-    },
-    {
-      "id": "road-dirt-2",
-      "file": "road-dirt-2.webp",
-      "width": 768,
-      "height": 226,
-      "bytes": 78176,
-      "sha256": "cb8266c5ca69e56cb9cb40b26de2c94a76be9e1d768f38b7b7181b005f4fda81",
-      "kind": "path",
-      "cells": [
-        5.1,
-        1.5
-      ],
-      "road": 2,
-      "source": "C-roads_2.png"
-    },
-    {
-      "id": "road-path-2",
-      "file": "road-path-2.webp",
-      "width": 768,
-      "height": 301,
-      "bytes": 102138,
-      "sha256": "516be9cf990322ee98d6a30beb97c992627f0459210fc3e4fca55600c9f6f43c",
-      "kind": "path",
-      "cells": [
-        5.1,
-        2.0
-      ],
-      "road": 1,
-      "source": "C-roads_2.png"
-    },
-    {
-      "id": "road-cobbles-2",
-      "file": "road-cobbles-2.webp",
-      "width": 768,
-      "height": 262,
-      "bytes": 97764,
-      "sha256": "ba294100a8e486cc671ff4b743465724ca0674ea0a74c57e9dcd077cc18607e8",
-      "kind": "path",
-      "cells": [
-        5.1,
-        1.74
-      ],
-      "road": 2,
-      "source": "C-roads_2.png"
-    },
-    {
       "id": "hut",
       "file": "hut.webp",
       "width": 532,
@@ -1160,24 +1070,24 @@
     {
       "id": "fence-wattle",
       "file": "fence-wattle.webp",
-      "width": 244,
-      "height": 136,
-      "bytes": 17424,
-      "sha256": "98ad67753252fefe34077657aae2fb9799f1dd18a6a1d69a3da549748812de92",
+      "width": 648,
+      "height": 71,
+      "bytes": 21262,
+      "sha256": "146a1445dc8b6d29c3bd720c5eb531b379f0997441212aa0c8505f775ea2992b",
       "kind": "path",
       "cells": [
         4,
-        2.23
+        0.44
       ],
       "source": "D-fences.png"
     },
     {
       "id": "fence-wattle-post",
       "file": "fence-wattle-post.webp",
-      "width": 256,
-      "height": 256,
-      "bytes": 10012,
-      "sha256": "b69b0c2ccc11c28b4340fa8a161596aa4453019b692c39b86076e9c8c703cbf5",
+      "width": 198,
+      "height": 198,
+      "bytes": 6500,
+      "sha256": "c780ebaea394ae413d2580883a478da933033e63b3a4abf6c4aff2de1a3d968c",
       "kind": "object",
       "cells": [
         1,
@@ -1188,10 +1098,10 @@
     {
       "id": "fence-wattle-gate",
       "file": "fence-wattle-gate.webp",
-      "width": 460,
-      "height": 230,
-      "bytes": 29068,
-      "sha256": "1c55fe01fc3f43841a99ed79f2e9bd2a86b2f95df5467fc6e444e7042b4a1351",
+      "width": 412,
+      "height": 206,
+      "bytes": 16010,
+      "sha256": "993864706ca225af9a40b1874e2ebdad5379a6e26f10098d2125ecff6004dfac",
       "kind": "object",
       "cells": [
         2,
@@ -1202,24 +1112,24 @@
     {
       "id": "fence-pole",
       "file": "fence-pole.webp",
-      "width": 244,
-      "height": 135,
-      "bytes": 15960,
-      "sha256": "dc8600d81f67c0f416f427bb23f3dcfc0a397c1329ceef16e13b3ff2010b17f9",
+      "width": 645,
+      "height": 72,
+      "bytes": 16588,
+      "sha256": "49543035fb15fc8e78ea32e4085e7502eb49c64d3a05b48b9024f9cb80c2f1a5",
       "kind": "path",
       "cells": [
         4,
-        2.21
+        0.45
       ],
       "source": "D-fences.png"
     },
     {
       "id": "fence-pole-post",
       "file": "fence-pole-post.webp",
-      "width": 256,
-      "height": 256,
-      "bytes": 8764,
-      "sha256": "526e9000bb3fbf9b9c3e4c4b1b240a02153b4a40a9da79455b81173d4d459d89",
+      "width": 191,
+      "height": 191,
+      "bytes": 5674,
+      "sha256": "1b5f4237c766e4fccefc086376996177b9c269b1a4bd0ba5242f325cc97b920a",
       "kind": "object",
       "cells": [
         1,
@@ -1230,10 +1140,10 @@
     {
       "id": "fence-pole-gate",
       "file": "fence-pole-gate.webp",
-      "width": 460,
-      "height": 230,
-      "bytes": 28698,
-      "sha256": "d228ab6f082de9e6876564c1640c31cb8e86a5f2c2c6b5bd3ac81a9da5f476bf",
+      "width": 404,
+      "height": 202,
+      "bytes": 15376,
+      "sha256": "e582432db5bfab4a7525ac2593befafab15d842d9497e0233a91067ae3aa7487",
       "kind": "object",
       "cells": [
         2,
@@ -1244,24 +1154,24 @@
     {
       "id": "fence-wattle-2",
       "file": "fence-wattle-2.webp",
-      "width": 567,
-      "height": 164,
-      "bytes": 39638,
-      "sha256": "01c261d880781c416b52ee12fc4371f62681c5cd805276a9d5bb587f5751c6a5",
+      "width": 653,
+      "height": 101,
+      "bytes": 32416,
+      "sha256": "62a5f943ab66afccaf0744e31cdfb2dee24dbf5bc9ca51714d26d1dab7a780a0",
       "kind": "path",
       "cells": [
         4,
-        1.16
+        0.62
       ],
       "source": "D-fences_2.png"
     },
     {
       "id": "fence-wattle-post-2",
       "file": "fence-wattle-post-2.webp",
-      "width": 178,
-      "height": 178,
-      "bytes": 10442,
-      "sha256": "5ae798f1d21fe9728427415baffbb2e2e71febcc11a368b2560004c327189b4b",
+      "width": 202,
+      "height": 202,
+      "bytes": 10042,
+      "sha256": "268ecb04b5af468d83ed60986f06b5f39bc3fc245d0765e96b78c83e79e8148a",
       "kind": "object",
       "cells": [
         1,
@@ -1272,10 +1182,10 @@
     {
       "id": "fence-wattle-gate-2",
       "file": "fence-wattle-gate-2.webp",
-      "width": 512,
-      "height": 256,
-      "bytes": 36878,
-      "sha256": "0cdb4777cc5b032a34fd53ffb7a2c41f869a11097db7dca27ead088f351e8c6c",
+      "width": 436,
+      "height": 218,
+      "bytes": 23780,
+      "sha256": "f0cbddb51fbd8fd25184bcf389f77b4e827e1495a9cf1bb68f3e97925dfc7218",
       "kind": "object",
       "cells": [
         2,
@@ -1286,24 +1196,24 @@
     {
       "id": "fence-pole-2",
       "file": "fence-pole-2.webp",
-      "width": 571,
-      "height": 167,
-      "bytes": 33840,
-      "sha256": "959528afbc4add90f690467a456b781644fda708fcd01f280ddb2e39a21c3442",
+      "width": 642,
+      "height": 109,
+      "bytes": 26788,
+      "sha256": "f4fa71d8f9a6fefa301777ddf9b68c3d81826e9c17fc5df724b263872285cc37",
       "kind": "path",
       "cells": [
         4,
-        1.17
+        0.68
       ],
       "source": "D-fences_2.png"
     },
     {
       "id": "fence-pole-post-2",
       "file": "fence-pole-post-2.webp",
-      "width": 187,
-      "height": 187,
-      "bytes": 8000,
-      "sha256": "e0b28c0d5f1dce8409ce23c5bdb8e6bf08fab2d16def5c08d602ce42a2cf6d74",
+      "width": 199,
+      "height": 199,
+      "bytes": 9496,
+      "sha256": "7f18bad39c407d8afe84e507b1493884e03863c8d1fb5eddcadbbb7394b28573",
       "kind": "object",
       "cells": [
         1,
@@ -1314,16 +1224,106 @@
     {
       "id": "fence-pole-gate-2",
       "file": "fence-pole-gate-2.webp",
-      "width": 512,
-      "height": 256,
-      "bytes": 36224,
-      "sha256": "76256536908df5805df5fc4d80f68f07e5754dfb4e97ab36ffe7d2e56ee0f078",
+      "width": 434,
+      "height": 217,
+      "bytes": 23408,
+      "sha256": "80c9911d6f9269a32dba1d8d4781a0b285cdfa325fde7db708b129155f509829",
       "kind": "object",
       "cells": [
         2,
         1
       ],
       "source": "D-fences_2.png"
+    },
+    {
+      "id": "road-dirt",
+      "file": "road-dirt.webp",
+      "width": 768,
+      "height": 303,
+      "bytes": 98628,
+      "sha256": "6ba25b7ab70c6225f447949f1e8d3d3a74db5b0ddc262ca028eba962ebff0bc6",
+      "kind": "path",
+      "cells": [
+        5.1,
+        2.01
+      ],
+      "road": 2,
+      "source": "C-roads.png"
+    },
+    {
+      "id": "road-path",
+      "file": "road-path.webp",
+      "width": 768,
+      "height": 122,
+      "bytes": 61442,
+      "sha256": "6dc0837e3a5eba268ec5c19d7d33df275fb4c9e43b54ed89fadd5fc9c3f6c342",
+      "kind": "path",
+      "cells": [
+        5.1,
+        0.81
+      ],
+      "road": 1,
+      "source": "C-roads.png"
+    },
+    {
+      "id": "road-cobbles",
+      "file": "road-cobbles.webp",
+      "width": 768,
+      "height": 272,
+      "bytes": 100782,
+      "sha256": "f74b5f291116da5e3c39e7d3e49a659d8533a9db735adeaa34e81c6215937832",
+      "kind": "path",
+      "cells": [
+        5.1,
+        1.81
+      ],
+      "road": 2,
+      "source": "C-roads.png"
+    },
+    {
+      "id": "road-dirt-2",
+      "file": "road-dirt-2.webp",
+      "width": 768,
+      "height": 273,
+      "bytes": 94078,
+      "sha256": "8b7d4dc1f841b71545cb000c6315fa0cc1e5aaaf3b86f6ca1c272209431e3cd9",
+      "kind": "path",
+      "cells": [
+        5.1,
+        1.81
+      ],
+      "road": 2,
+      "source": "C-roads_2.png"
+    },
+    {
+      "id": "road-path-2",
+      "file": "road-path-2.webp",
+      "width": 768,
+      "height": 143,
+      "bytes": 77204,
+      "sha256": "89413618b27a618748caa0f2316aaf63d3277e74e56fa956f1ca236778f48db5",
+      "kind": "path",
+      "cells": [
+        5.1,
+        0.95
+      ],
+      "road": 1,
+      "source": "C-roads_2.png"
+    },
+    {
+      "id": "road-cobbles-2",
+      "file": "road-cobbles-2.webp",
+      "width": 768,
+      "height": 267,
+      "bytes": 97746,
+      "sha256": "1743107af25a043e7927b1db93875d88ccaa6660aa27a4e021e9254a9ba5c9ad",
+      "kind": "path",
+      "cells": [
+        5.1,
+        1.78
+      ],
+      "road": 2,
+      "source": "C-roads_2.png"
     }
   ]
 }

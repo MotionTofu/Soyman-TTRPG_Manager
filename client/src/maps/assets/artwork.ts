@@ -93,6 +93,12 @@ export function surfaceImage(code: string, dungeon = false, pack: ArtPack = "car
     ["shallow_water", "deep_water", "sea", "lake"].includes(code) ? "water" : null;
   return key ? artworkImage(key) : null;
 }
+/** Полоса дороги по id ассета; пока картинка грузится — `null`, линия рисуется тушью. */
+export function stripImage(assetId: string) {
+  const asset = getMapImageAsset(assetId);
+  if (asset && !asset.image && !asset.failed) void loadMapImageAsset(asset.id).catch(() => undefined);
+  return asset?.image ?? null;
+}
 const mips = new WeakMap<HTMLImageElement, HTMLCanvasElement[]>();
 /** Источник узора под масштаб `k` (экранных пикселей на пиксель картинки). Узор прямо
  * из картинки браузер готовит заново на каждый новый масштаб: замер 2026-10-07 — до

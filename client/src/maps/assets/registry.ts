@@ -1,7 +1,7 @@
 import { subscribeTokenTape, prepareTokenTape } from "./tokenTape";
 import { CARTOGRAPHY_OBJECTS, CARTOGRAPHY_SCATTER, CARTOGRAPHY_PACK, cartographyId, cartographyUrl } from "./cartography";
 import { CRYPT_OBJECTS, CRYPT_PACK, CRYPT_SIDES, CRYPT_STYLE_KEYS, cryptId, cryptUrl, type CryptSide } from "./crypt";
-import { VILLAGE_OBJECTS, VILLAGE_PACK, VILLAGE_SCATTER, VILLAGE_SURFACE_KEYS, variantKeys, villageId, villageSurfaceKey, villageUrl } from "./village";
+import { VILLAGE_OBJECTS, VILLAGE_PACK, VILLAGE_ROAD_KEYS, VILLAGE_SCATTER, VILLAGE_SURFACE_KEYS, variantKeys, villageId, villageSurfaceKey, villageUrl } from "./village";
 import type { MapDocumentV6 } from "@shared/maps/core";
 import type { VisualRef } from "../core/refs";
 import type { MapDocumentV5 } from "../core/types";
@@ -66,7 +66,7 @@ export const ARTWORK_SCATTER: readonly { key: string; name: string; assetId: str
 const localImages = new Map<string, MapImageAsset>([...MAP_CARTOGRAPHY_ASSETS, ...["stone-floor", "earth", "water"].map(key => localAsset(cartographyId(key), key)),
   ...MAP_CRYPT_ASSETS, ...MAP_CRYPT_ASSETS.flatMap(asset => asset.views ? Object.values(asset.views) : []),
   ...CRYPT_STYLE_KEYS.map(key => localAsset(cryptId(key), key)),
-  ...MAP_VILLAGE_ASSETS, ...VILLAGE_SURFACE_KEYS.map(key => localAsset(villageId(key), key))].map(asset => [asset.id, asset]));
+  ...MAP_VILLAGE_ASSETS, ...[...VILLAGE_SURFACE_KEYS, ...VILLAGE_ROAD_KEYS].map(key => localAsset(villageId(key), key))].map(asset => [asset.id, asset]));
 const cryptPrefix = `${CRYPT_PACK.id}:`, villagePrefix = `${VILLAGE_PACK.id}:`;
 const localUrl = (id: string) => id.startsWith(cryptPrefix) ? cryptUrl(id.slice(cryptPrefix.length))
   : id.startsWith(villagePrefix) ? villageUrl(id.slice(villagePrefix.length)) : cartographyUrl(id.slice(CARTOGRAPHY_PACK.id.length + 1));
@@ -196,6 +196,9 @@ export async function prepareMapImageAssets(doc: MapDocumentV5 | MapDocumentV6):
   for (const layer of doc.layers) if (layer.kind === "scatter") for (const area of layer.areas) {
     const profile = area.profileRef.type === "builtin" ? ARTWORK_SCATTER.find(item => item.key === (area.profileRef.type === "builtin" ? area.profileRef.key : null)) : null;
     for (const id of profile?.assetIds ?? []) ids.add(id);
+  }
+  for (const layer of doc.layers) if (layer.kind === "path") for (const path of layer.paths) {
+    if (path.styleRef.type === "asset" && localImages.has(path.styleRef.assetId)) ids.add(path.styleRef.assetId);
   }
   // Поверхности «Местности» — материалы слоя, а не оформление: грузятся по тому, что накрашено.
   for (const layer of doc.layers) if (layer.kind === "terrain") {

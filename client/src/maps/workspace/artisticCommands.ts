@@ -1,5 +1,5 @@
 import { pathNodesFromAnchors } from "./pathAnchors";
-import { ARTWORK_SCATTER } from "../assets/registry";
+import { ARTWORK_SCATTER, mapAssetPackForId } from "../assets/registry";
 import type { MapDocumentV6, ScatterArea, SplineNode, Vec2 } from "@shared/maps/core";
 import { createSplinePath, updateSplinePath, deletePath } from "../core/mutations/paths";
 import { paintTerrainMaskStroke } from "../core/mutations/terrainMask";
@@ -19,11 +19,15 @@ export function paintSurfaceStroke(document: MapDocumentV6, layerId: string, poi
   return editGeometry(document, view => paintTerrainMaskStroke(view, layerId, points, radius,
     material === null ? null : builtinMaterial(material), () => crypto.randomUUID()));
 }
-export function addFreePath(document: MapDocumentV6, layerId: string, points: Vec2[], kind: "road" | "river", width: number, closed = false) {
+/** `style` — id ассета-полосы (дорога картинкой); без него линия рисуется тушью. */
+export function addFreePath(document: MapDocumentV6, layerId: string, points: Vec2[], kind: "road" | "river", width: number, closed = false, style?: string) {
   requireEditableLayer(document, layerId, "path");
   if (points.length < 2 || Math.hypot(points.at(-1)!.x - points[0].x, points.at(-1)!.y - points[0].y) < 0.1 && points.length === 2) return document;
-  return editGeometry(document, view => createSplinePath(view, layerId, { id: crypto.randomUUID(), kind,
-    styleRef: { type: "builtin", key: `path/${kind}` }, width, nodes: pathNodesFromAnchors(points, closed), properties: { closed } }));
+  const required = style ? mapAssetPackForId(style) : null;
+  if (style && !required) throw new Error("Эта дорога отсутствует в библиотеке");
+  const base = required && !document.assetPacks.some(pack => pack.id === required.id) ? { ...document, assetPacks: [...document.assetPacks, required] } : document;
+  return editGeometry(base, view => createSplinePath(view, layerId, { id: crypto.randomUUID(), kind,
+    styleRef: style ? { type: "asset", assetId: style } : { type: "builtin", key: `path/${kind}` }, width, nodes: pathNodesFromAnchors(points, closed), properties: { closed } }));
 }
 export function selectedPath(document: MapDocumentV6, selection: WorkspaceSelection | null) {
   const layer = document.layers.find(layer => layer.id === selection?.layerId);

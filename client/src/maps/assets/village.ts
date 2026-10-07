@@ -7,9 +7,9 @@ import { rasterAsset } from "../../rasterAssets";
  * Ассет — семейство с вариантами (решение владельца 2026-10-08): первый вариант лежит под
  * ключом семейства, остальные — `key-2`, `key-3`. В каталоге выбирают вариант или «случайный». */
 export const VILLAGE_PACK = { id: "soyman-village", version: "1" } as const;
-export type VillageCategory = "buildings" | "plants" | "yard" | "crossings";
+export type VillageCategory = "buildings" | "plants" | "yard" | "crossings" | "fences";
 export const VILLAGE_CATEGORIES: Record<VillageCategory, string> = {
-  buildings: "Постройки", plants: "Растения", yard: "Двор", crossings: "Переправы и лагерь",
+  buildings: "Постройки", plants: "Растения", yard: "Двор", crossings: "Переправы и лагерь", fences: "Ограды",
 };
 /** cells — размер в клетках, как нарисовано. Здание — крыша-штамп: объект, внутрь не заходят. */
 export const VILLAGE_OBJECTS: readonly { key: string; name: string; category: VillageCategory; cells: readonly [number, number]; variants: number }[] = [
@@ -46,6 +46,11 @@ export const VILLAGE_OBJECTS: readonly { key: string; name: string; category: Vi
   { key: "scarecrow", name: "Пугало", category: "crossings", cells: [1, 1], variants: 2 },
   { key: "graves", name: "Могилы", category: "crossings", cells: [1, 1], variants: 2 },
   { key: "idol", name: "Идол", category: "crossings", cells: [1, 1], variants: 2 },
+  // Сама ограда — полоса в инструменте «Дорога»; здесь то, что ставят поштучно.
+  { key: "fence-wattle-post", name: "Кол плетня", category: "fences", cells: [1, 1], variants: 2 },
+  { key: "fence-wattle-gate", name: "Калитка плетня", category: "fences", cells: [2, 1], variants: 2 },
+  { key: "fence-pole-post", name: "Столб ограды", category: "fences", cells: [1, 1], variants: 2 },
+  { key: "fence-pole-gate", name: "Калитка ограды", category: "fences", cells: [2, 1], variants: 2 },
 ];
 /** Ключи вариантов семейства: `well`, `well-2`. */
 export const variantKeys = (key: string, variants: number) => Array.from({ length: variants }, (_, i) => i ? `${key}-${i + 1}` : key);
@@ -62,6 +67,16 @@ export const VILLAGE_SURFACES: readonly { key: string; name: string; fill: strin
   { key: "bog", name: "Топь", fill: "#4f5a22", variants: 2 },
   { key: "field", name: "Пашня", fill: "#8a5a34", variants: 2 },
 ];
+/** Дороги и ограды — полоса, которую движок тянет вдоль линии. `width` — ширина по умолчанию, клеток.
+ * Ограда хранится как линия вида «дорога» со своей полосой: отдельного вида пути у неё пока нет. */
+export const VILLAGE_ROADS: readonly { key: string; name: string; group: "road" | "fence"; width: number; variants: number }[] = [
+  { key: "road-dirt", name: "Грунтовая дорога", group: "road", width: 2, variants: 2 },
+  { key: "road-path", name: "Тропа", group: "road", width: 1, variants: 2 },
+  { key: "road-cobbles", name: "Мощёная дорога", group: "road", width: 2, variants: 2 },
+  { key: "fence-wattle", name: "Плетень", group: "fence", width: 0.45, variants: 2 },
+  { key: "fence-pole", name: "Жердяная ограда", group: "fence", width: 0.45, variants: 2 },
+];
+export const VILLAGE_ROAD_KEYS = VILLAGE_ROADS.flatMap(item => variantKeys(item.key, item.variants));
 const SURFACE_PREFIX = "village-";
 export const villageSurfaceCode = (key: string) => `${SURFACE_PREFIX}${key}`;
 /** Ключ картинки по коду материала; `null` — код не из этого набора. */

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { hasRasterAsset } from "../../rasterAssets";
-import { VILLAGE_OBJECTS, VILLAGE_SCATTER, VILLAGE_SURFACE_KEYS, pickVariant, randomVariantId, variantKeys, villageObject, villageSurfaceKey } from "./village";
+import { VILLAGE_OBJECTS, VILLAGE_ROAD_KEYS, VILLAGE_SCATTER, VILLAGE_SURFACE_KEYS, pickVariant, randomVariantId, variantKeys, villageObject, villageSurfaceKey } from "./village";
 import { mapAssetPackForId } from "./registry";
 
 describe("набор «Местность»", () => {
   it("у каждого варианта предмета, поверхности и россыпи есть файл", () => {
-    const keys = [...VILLAGE_OBJECTS.flatMap((item) => variantKeys(item.key, item.variants)), ...VILLAGE_SURFACE_KEYS,
+    const keys = [...VILLAGE_OBJECTS.flatMap((item) => variantKeys(item.key, item.variants)), ...VILLAGE_SURFACE_KEYS, ...VILLAGE_ROAD_KEYS,
       ...VILLAGE_SCATTER.flatMap((item) => item.assetIds.map((id) => id.split(":")[1]))];
     for (const key of keys) expect(hasRasterAsset("village", key), key).toBe(true);
   });
