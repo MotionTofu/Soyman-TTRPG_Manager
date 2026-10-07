@@ -1,6 +1,9 @@
 import { canonicalizeMapDocumentV6, upgradeMapDocumentV5, validateMapDocumentV6, type MapDocumentV6, type MapDrawingStyle } from "@shared/maps/core";
 import { generateDungeon, type DungeonParams } from "../dungeon";
-import { migrateLegacyMap } from "../core";
+import { builtinMaterial, migrateLegacyMap } from "../core";
+import { createSplinePath } from "../core/mutations/paths";
+import { CRYPT_PACK } from "../assets/crypt";
+import { editGeometry } from "./editDocument";
 import { MAP_MIN_SIDE, MAP_MAX_SIDE } from "../mapTypes";
 
 export interface DungeonSettings extends DungeonParams { width: number; height: number }
@@ -18,9 +21,58 @@ export function buildDungeonDocument(settings: DungeonSettings, style: MapDrawin
     !["none", "some", "many"].includes(traps) || typeof secrets !== "boolean") throw new Error("Проверьте размеры и параметры подземелья");
   const legacy = generateDungeon(width, height, settings);
   if (!legacy.rooms.length) throw new Error("Комнаты не поместились. Увеличьте поле или выберите другой вариант");
-  const document = { ...upgradeMapDocumentV5(migrateLegacyMap({ grid: "square", width, height, cells: legacy }).document), appearance: { style } };
+  const document = withWallLines({ ...upgradeMapDocumentV5(migrateLegacyMap({ grid: "square", width, height, cells: legacy }).document), appearance: { style } }, width, height);
   if (validateMapDocumentV6(document).length) throw new Error("Генератор дал некорректную карту. Текущая карта не изменена");
   return canonicalizeMapDocumentV6(document);
+}
+
+/** Контуры пола: замкнутые ломаные по границе «пол — не пол», пол справа по ходу. */
+export function floorOutlines(floor: (x: number, y: number) => boolean, width: number, height: number): { x: number; y: number }[][] {
+  // Из вершины выходит до двух рёбер (клетки касаются углом); ключ — «x,y».
+  const out = new Map<string, [number, number][]>();
+  const edge = (ax: number, ay: number, bx: number, by: number) => { const key = `${ax},${ay}`; out.set(key, [...out.get(key) ?? [], [bx, by]]); };
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) if (floor(x, y)) {
+    if (!floor(x, y - 1)) edge(x, y, x + 1, y);
+    if (!floor(x + 1, y)) edge(x + 1, y, x + 1, y + 1);
+    if (!floor(x, y + 1)) edge(x + 1, y + 1, x, y + 1);
+    if (!floor(x - 1, y)) edge(x, y + 1, x, y);
+  }
+  const loops: { x: number; y: number }[][] = [];
+  for (const [start, ends] of out) while (ends.length) {
+    const [sx, sy] = start.split(",").map(Number), loop: [number, number][] = [[sx, sy]];
+    let [px, py] = [sx, sy], [cx, cy] = ends.shift()!;
+    while (cx !== sx || cy !== sy) {
+      loop.push([cx, cy]);
+      const next = out.get(`${cx},${cy}`)!, dx = cx - px, dy = cy - py;
+      // На касании углом поворачиваем направо — остаёмся у своей клетки.
+      const pick = next.length > 1 ? Math.max(0, next.findIndex(([nx, ny]) => nx - cx === -dy && ny - cy === dx)) : 0;
+      [px, py] = [cx, cy]; [cx, cy] = next.splice(pick, 1)[0];
+    }
+    // Точки на прямой не нужны: у стены остаются только углы.
+    loops.push(loop.filter(([x, y], i) => { const [ax, ay] = loop.at(i - 1)!, [bx, by] = loop[(i + 1) % loop.length]; return (x - ax) * (by - y) !== (y - ay) * (bx - x); })
+      .map(([x, y]) => ({ x, y })));
+  }
+  return loops;
+}
+
+/** Генератор отдаёт стены клетками «скалы». В редакторе стена — линия кладки на
+ * слое «Стены», а пол — клетки материала, поэтому приводим результат к этому виду. */
+function withWallLines(document: MapDocumentV6, width: number, height: number): MapDocumentV6 {
+  const terrain = document.layers.find((layer) => layer.kind === "terrain");
+  if (terrain?.kind !== "terrain" || terrain.representation !== "cells") return document;
+  const rock = new Set(terrain.cells.filter((cell) => cell.material.type === "builtin" && cell.material.key === "terrain/wall").map((cell) => `${cell.x},${cell.y}`));
+  const floor = (x: number, y: number) => x >= 0 && y >= 0 && x < width && y < height && !rock.has(`${x},${y}`);
+  const painted = new Set(terrain.cells.map((cell) => `${cell.x},${cell.y}`)), stone = builtinMaterial("stone");
+  const cells = terrain.cells.filter((cell) => !rock.has(`${cell.x},${cell.y}`));
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) if (!painted.has(`${x},${y}`)) cells.push({ x, y, material: stone });
+  const layers = document.layers.flatMap((layer): MapDocumentV6["layers"] => layer === terrain ? [{ ...terrain, cells }]
+    : layer.id === "lyr-road" ? [layer, { id: "lyr-walls", name: "Стены", visible: true, locked: false, opacity: 1, kind: "path", paths: [] }] : [layer]);
+  let next: MapDocumentV6 = { ...document, layers, assetPacks: [...document.assetPacks.filter((pack) => pack.id !== CRYPT_PACK.id), CRYPT_PACK] };
+  floorOutlines(floor, width, height).forEach((points, index) => {
+    next = editGeometry(next, (view) => createSplinePath(view, "lyr-walls", { id: `wall-${index + 1}`, kind: "wall", width: 0.36,
+      styleRef: { type: "builtin", key: "path/wall" }, nodes: points.map((position) => ({ position })), properties: { closed: true } }));
+  });
+  return next;
 }
 
 /** Whole geometry replacement is explicit. Token layers retain identity,
@@ -44,7 +96,9 @@ export function replaceWithDungeon(before: MapDocumentV6, generated: MapDocument
   const layers = generated.layers.map((layer) => ({ ...layer, id: renamed.get(layer.id)!,
     ...(layer.kind === "gameplay" ? { items: layer.items.map((item) => ({ ...item, id: renamed.get(item.id)!,
       ...(item.kind === "door" && item.pairedDoorId ? { pairedDoorId: renamed.get(item.pairedDoorId)! } : {}) })) } : {}) })) as MapDocumentV6["layers"];
-  const next: MapDocumentV6 = { ...generated, layers: [...layers, ...tokens], assetPacks: before.assetPacks,
+  // Наборы карты остаются, набор кладки от новых стен добавляется.
+  const packs = [...before.assetPacks, ...generated.assetPacks.filter((pack) => !before.assetPacks.some((own) => own.id === pack.id))];
+  const next: MapDocumentV6 = { ...generated, layers: [...layers, ...tokens], assetPacks: packs,
     ...(before.exploration ? { exploration: { enabled: before.exploration.enabled, revealedCells: [] } } : {}) };
   if (validateMapDocumentV6(next).length) throw new Error("Не удалось сохранить токены при замене карты");
   return canonicalizeMapDocumentV6(next);
