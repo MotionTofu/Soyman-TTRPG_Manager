@@ -31,6 +31,7 @@ is also recorded at the top of `REDESIGN_RULES.md`.
 
 | Concern | File |
 |---|---|
+| Shared production asset masters, manifest and searchable catalog | `assets/library/`, `assets/manifest.json`, `assets/README.md`; ADR-0005. Public and bundled paths are synchronized copies. |
 | Theme tokens (`--paper`/`--ink`/`--accent`/etc, all five app themes) | `client/src/themes.ts` — `buildTheme()`/`skinTheme()`; `noir` is the default (`DEFAULT_THEME_ID = "noir"`, see `loadThemePrefs` fallback) |
 | Global token defaults / pre-JS FOUC guard | `client/src/index.css` `:root` block (mirrors the "Соевый нуар"/`noir` theme byte-for-byte to avoid FOUC) |
 | Statblock theme tokens (zine/noir/aberrant) | `client/src/statblockThemes.ts` (theme list) + `client/src/statblockThemes.css` (`.sb-scope`-local `--paper`/`--ink`/`--muted`/`--line` bridge variables — an independent namespace from the app theme, deliberately not aliased to it) |
