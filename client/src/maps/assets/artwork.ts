@@ -1,6 +1,7 @@
 import { cartographyId } from "./cartography";
 import { CRYPT_DOORS, CRYPT_SURFACES, cryptId } from "./crypt";
-import { getMapImageAsset } from "./registry";
+import { getMapImageAsset, loadMapImageAsset } from "./registry";
+import { villageId, villageSurfaceKey } from "./village";
 import { buildTerrainMaskRaster } from "../terrainMaskRaster";
 import type { RenderTerrainView } from "../renderModel";
 
@@ -73,7 +74,20 @@ function mirroredTile(image: HTMLImageElement) {
   }
   tiles.set(image, tile); return tile;
 }
+/** Поверхности «Местности»: образец на 4×4 клетки, уже бесшовный. */
+const villageImages = new WeakSet<HTMLImageElement>();
+/** Сколько клеток покрывает один повтор картинки поверхности. */
+export const surfaceCells = (image: HTMLImageElement, pack: ArtPack) =>
+  villageImages.has(image) ? 4 : pack !== "crypt" ? 8 : image === artworkImage("paper-panel", "crypt") ? 16 : 2;
 export function surfaceImage(code: string, dungeon = false, pack: ArtPack = "cartography") {
+  const village = villageSurfaceKey(code);
+  if (village) {
+    // Материал, а не оформление: рисуется при любом стиле и грузится по первому обращению.
+    const asset = getMapImageAsset(villageId(village));
+    if (asset && !asset.image && !asset.failed) void loadMapImageAsset(asset.id).catch(() => undefined);
+    if (asset?.image) villageImages.add(asset.image);
+    return asset?.image ?? null;
+  }
   if (pack === "crypt") return CRYPT_SURFACES[code] ? artworkImage(CRYPT_SURFACES[code], "crypt") : null;
   const key = code === "stone" || (code === "plain" && dungeon) ? "stone-floor" : ["earth", "forest", "hills", "desert"].includes(code) ? "earth" :
     ["shallow_water", "deep_water", "sea", "lake"].includes(code) ? "water" : null;
@@ -107,9 +121,10 @@ export function patternSource(image: HTMLImageElement, k: number): { source: HTM
 /** World-anchored patterns: moving the camera never slides the artwork. */
 export function surfacePattern(ctx: CanvasRenderingContext2D, image: HTMLImageElement, scale: number, ox: number, oy: number, pack: ArtPack = "cartography") {
   if (pack === "crypt" && image === artworkImage("paper-panel", "crypt")) return paperPattern(ctx, scale, ox, oy);
-  // «Склеп» уже бесшовный, 2×2 клетки на файл; «Бумага и тушь» зеркалится в тайл на 8 клеток.
-  const size = pack === "crypt" ? scale * 2 / image.naturalWidth : scale * 8 / 512;
-  const { source, factor } = pack === "crypt" ? patternSource(image, size) : { source: mirroredTile(image), factor: 1 };
+  // «Склеп» и «Местность» уже бесшовные; «Бумага и тушь» зеркалится в тайл на 8 клеток.
+  const seamless = pack === "crypt" || villageImages.has(image);
+  const size = seamless ? scale * surfaceCells(image, pack) / image.naturalWidth : scale * 8 / 512;
+  const { source, factor } = seamless ? patternSource(image, size) : { source: mirroredTile(image), factor: 1 };
   const pattern = ctx.createPattern(source, "repeat"), k = size * factor;
   pattern?.setTransform(new DOMMatrix([k, 0, 0, k, ox, oy]));
   return pattern;

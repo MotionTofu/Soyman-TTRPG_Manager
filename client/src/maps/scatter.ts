@@ -1,13 +1,12 @@
-import { CARTOGRAPHY_SCATTER } from "./assets/cartography";
 import type { ScatterArea, ShapeGeometry, Vec2, MapObject } from "./core/types";
-import { resolveMapSymbol, type MapVisualAsset } from "./assets/registry";
+import { ARTWORK_SCATTER, resolveMapSymbol, type MapVisualAsset } from "./assets/registry";
 
 export const SCATTER_LIMIT = 5000;
-export const SCATTER_PROFILES = [
-  { key: "scatter/forest", name: "Лес", assetId: "soyman-symbols:tree" },
-  { key: "scatter/mountains", name: "Горы", assetId: "soyman-symbols:mountain" },
-  ...CARTOGRAPHY_SCATTER,
-] as const;
+export const SCATTER_PROFILES: readonly { key: string; name: string; assetId: string; assetIds: readonly string[]; size: number }[] = [
+  { key: "scatter/forest", name: "Лес", assetId: "soyman-symbols:tree", assetIds: ["soyman-symbols:tree"], size: 1 },
+  { key: "scatter/mountains", name: "Горы", assetId: "soyman-symbols:mountain", assetIds: ["soyman-symbols:mountain"], size: 1 },
+  ...ARTWORK_SCATTER,
+];
 export function shapeBounds(shape: ShapeGeometry) {
   if (shape.type === "rect") return { x: shape.x, y: shape.y, w: shape.w, h: shape.h };
   if (shape.type === "ellipse") return { x: shape.center.x - shape.rx, y: shape.center.y - shape.ry, w: shape.rx * 2, h: shape.ry * 2 };
@@ -44,11 +43,13 @@ export function scatterInstances(area: ScatterArea): ScatterInstances {
   if (!Number.isSafeInteger(candidates) || candidates > SCATTER_LIMIT) return { items: [], error: "Россыпь слишком велика: уменьшите плотность или область" };
   let state = area.seed >>> 0;
   const random = () => { state += 0x6d2b79f5; let t = state; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; };
-  const asset = resolveMapSymbol({ type: "asset", assetId: profile.assetId })!;
+  const assets = profile.assetIds.map(assetId => resolveMapSymbol({ type: "asset", assetId })!);
   const items: ScatterInstances["items"][number][] = [];
   for (let i = 0; i < candidates; i++) {
     const position = { x: bounds.x + random() * bounds.w, y: bounds.y + random() * bounds.h };
-    const scale = size * (0.75 + random() * 0.5), rotation = (random() - 0.5) * 16;
+    const jitter = random(), scale = size * profile.size * (0.75 + jitter * 0.5), rotation = (random() - 0.5) * 16;
+    // Вариант — из уже вытянутого числа, без лишнего шага генератора: старые россыпи не меняются.
+    const asset = assets[Math.floor(jitter * 7919) % assets.length];
     if (!shapeContains(area.shape, position)) continue;
     items.push({ asset, object: { id: `${area.id}:instance:${i}`, visual: { type: "asset", assetId: asset.id },
       transform: { position, rotation, scale: { x: scale, y: scale } } } });

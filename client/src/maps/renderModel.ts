@@ -1,4 +1,3 @@
-import { CARTOGRAPHY_SCATTER, CARTOGRAPHY_PACK } from "./assets/cartography";
 // MapRenderModel — read-only runtime view для Canvas renderer (Фазы 2D/3A).
 // НЕ формат хранения и НЕ source of truth: не сериализуется, не сохраняется,
 // не мутируется, не входит в History/Autosave.
@@ -24,7 +23,7 @@ import {
 } from "./core/ids";
 import type { MaterialRef } from "./core/refs";
 import type { LayerId, MapDocumentV5, MapObject, SplineNode } from "./core/types";
-import { mapAssetPackForId, resolveMapSymbol, type MapVisualAsset } from "./assets/registry";
+import { ARTWORK_SCATTER, mapAssetPackForId, resolveMapSymbol, type MapVisualAsset } from "./assets/registry";
 import { isPaletteIndexMaskPayload, TERRAIN_MASK_CHUNK_SIDE } from "@shared/maps/core/terrainMask";
 import { scatterInstances, SCATTER_LIMIT } from "./scatter";
 import { cellCenter } from "./grid";
@@ -497,8 +496,8 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
       const items: RenderMapObject[] = [];
       for (const area of layer.areas) {
         const instances = scatterInstances(area);
-        const required = area.profileRef.type === "builtin" ? CARTOGRAPHY_SCATTER.find(profile => profile.key === (area.profileRef.type === "builtin" ? area.profileRef.key : null)) : null;
-        if (required && !doc.assetPacks.some(pack => pack.id === CARTOGRAPHY_PACK.id && pack.version === CARTOGRAPHY_PACK.version)) {
+        const required = area.profileRef.type === "builtin" ? ARTWORK_SCATTER.find(profile => profile.key === (area.profileRef.type === "builtin" ? area.profileRef.key : null))?.pack : null;
+        if (required && !doc.assetPacks.some(pack => pack.id === required.id && pack.version === required.version)) {
           diag("unsupported-scatter-layer", `area ${area.id}: cartography pack unavailable`); continue;
         }
         if (instances.error || items.length + instances.items.length > SCATTER_LIMIT) {

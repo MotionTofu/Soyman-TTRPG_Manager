@@ -38,7 +38,7 @@
  * и `Archive/2026-09-12/raster-png/`.
  */
 
-export type RasterCategory = "conditions" | "schools" | "coins" | "inventory" | "tokens" | "textures" | "mascot" | "cartography" | "crypt" | "ui/fantasy-punk/decorative/profile" | "ui/campaign-dossier/v1" | "ui/plot-restyle/v1";
+export type RasterCategory = "conditions" | "schools" | "coins" | "inventory" | "tokens" | "textures" | "mascot" | "cartography" | "crypt" | "village" | "ui/fantasy-punk/decorative/profile" | "ui/campaign-dossier/v1" | "ui/plot-restyle/v1";
 
 /** Что реально лежит в раздаче. Ключ — имя файла без расширения. */
 export const RASTER_ASSETS: Record<RasterCategory, readonly string[]> = {
@@ -48,6 +48,8 @@ export const RASTER_ASSETS: Record<RasterCategory, readonly string[]> = {
   // Local map artwork; provenance and crop/encoding manifest in maps/assets/cartography-pack.json.
   // «Подземелье · Склеп» (комикс-панк): provenance и хэши — maps/assets/crypt-pack.json.
   crypt: ["paper-panel", "sarcophagus", "coffin", "niche", "pentagram", "urn", "candles", "table", "bench", "chest", "barrels", "crates", "rug", "brazier", "well", "bones", "rubble", "pillar-broken", "pillar", "cobweb", "blood", "torch", "stairs-down", "stairs-up", "trapdoor", "pit", "spikes", "lever", "cage", "chains", "treasure", "grime-splash", "grime-splatter", "grime-scribble", "grime-hatch", "grime-x-black", "grime-x-magenta", "grime-chunks", "grime-toner", "grime-tape", "door", "door-double", "portcullis", "arch", "door-secret", "door-broken", "wall-masonry", "wall-masonry-end", "wall-masonry-corner", "wall-rock", "wall-rock-end", "wall-rock-corner", "throne-s", "throne-w", "throne-n", "throne-e", "altar-s", "altar-w", "altar-n", "altar-e", "statue-s", "statue-w", "statue-n", "statue-e", "chair-s", "chair-w", "chair-n", "chair-e", "wardrobe-s", "wardrobe-w", "wardrobe-n", "wardrobe-e", "bunk-s", "bunk-w", "bunk-n", "bunk-e", "floor-tiles", "floor-broken", "floor-cave", "floor-water"],
+  // «Местность · Деревня у реки»: семейства с вариантами (`key`, `key-2`); provenance — maps/assets/village-pack.json.
+  village: ["grass", "mud", "sand", "cobbles", "grass-2", "mud-2", "sand-2", "cobbles-2", "shallow", "deep", "bog", "field", "shallow-2", "deep-2", "bog-2", "field-2", "road-dirt", "road-path", "road-cobbles", "road-dirt-2", "road-path-2", "road-cobbles-2", "hut", "hut-small", "shed", "barn", "mill", "smithy", "willow", "tree", "spruce", "bush", "reeds", "grass-tuft", "stump", "log", "boulders", "willow-2", "tree-2", "spruce-2", "bush-2", "reeds-2", "grass-tuft-2", "stump-2", "log-2", "boulders-2", "well", "cart", "haystack", "woodpile", "sacks", "campfire", "beds", "boat", "signpost", "well-2", "cart-2", "haystack-2", "woodpile-2", "sacks-2", "campfire-2", "beds-2", "boat-2", "signpost-2", "bridge", "ford", "jetty", "tent", "stall", "barricade", "scarecrow", "graves", "idol", "bridge-2", "ford-2", "jetty-2", "tent-2", "stall-2", "barricade-2", "scarecrow-2", "graves-2", "idol-2", "fence-wattle", "fence-wattle-post", "fence-wattle-gate", "fence-pole", "fence-pole-post", "fence-pole-gate", "fence-wattle-2", "fence-wattle-post-2", "fence-wattle-gate-2", "fence-pole-2", "fence-pole-post-2", "fence-pole-gate-2"],
   cartography: ["stone-floor", "earth", "water", "stone-wall", "wood-door", "sarcophagus", "altar", "storage-cluster", "bone-pile", "rock-cluster", "stone-pillar", "torch", "pine", "mountain-ridge", "ruins", "outpost", "crypt-guard"],
   conditions: [
     "blinded",

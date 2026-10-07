@@ -1,5 +1,6 @@
 import { wallHit } from "../wallGeometry";
 import { imageHit } from "./imageHit";
+import { pickVariant } from "../assets/village";
 import { getMapImageAsset } from "../assets/registry";
 import { useEffect, useRef, useState, type MutableRefObject, type PointerEvent } from "react";
 import type { MapDocumentV6, Vec2 } from "@shared/maps/core";
@@ -271,7 +272,7 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
       try { requireEditableLayer(document, activeLayer, "label"); onLabel(quantize(document, point, snap), activeLayer); }
       catch (error) { showError(error); }
     }
-    else if (tool === "asset") commit((before) => addSymbol(before, activeLayer, crypto.randomUUID(), quantize(before, point, snap), settings.symbol));
+    else if (tool === "asset") commit((before) => addSymbol(before, activeLayer, crypto.randomUUID(), quantize(before, point, snap), pickVariant(settings.symbol)));
   }
   function track(point: Vec2) {
     const grid = documentRef.current?.grid;
@@ -358,7 +359,7 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
   const layer = documentRef.current?.layers.find(entry => entry.id === activeLayer);
   const assetPreview = tool === "asset" && brushCursor && !busy && !doc.disabled && autosave.status.kind !== "conflict" && !placement.pending &&
     !gesture.current && layer?.kind === "object" && layer.visible && !layer.locked
-    ? { position: quantize(documentRef.current!, brushCursor, snap), assetId: settings.symbol } : null;
+    ? { position: quantize(documentRef.current!, brushCursor, snap), assetId: pickVariant(settings.symbol, () => 0) } : null;
   const cellBrush = brushCursor && documentRef.current && (tool === "brush" || tool === "eraser") && layer?.kind === "terrain" && layer.representation === "cells" &&
     settings.cellMode !== "area" && !busy && !doc.disabled && !placement.pending
     ? cellBrushFootprint(documentRef.current, brushCursor, settings.cellSize ?? 1) : null;

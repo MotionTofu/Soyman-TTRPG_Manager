@@ -1,5 +1,5 @@
 import { pathNodesFromAnchors } from "./pathAnchors";
-import { CARTOGRAPHY_PACK, CARTOGRAPHY_SCATTER } from "../assets/cartography";
+import { ARTWORK_SCATTER } from "../assets/registry";
 import type { MapDocumentV6, ScatterArea, SplineNode, Vec2 } from "@shared/maps/core";
 import { createSplinePath, updateSplinePath, deletePath } from "../core/mutations/paths";
 import { paintTerrainMaskStroke } from "../core/mutations/terrainMask";
@@ -65,10 +65,14 @@ export function putScatter(document: MapDocumentV6, layerId: string, area: Scatt
     count += instances.items.length;
   }
   if (count > SCATTER_LIMIT) throw new Error("На слое уже 5000 символов. Уменьшите плотность или создайте другой слой");
-  const usesArtwork = areas.some(entry => entry.profileRef.type === "builtin" && CARTOGRAPHY_SCATTER.some(profile => profile.key === (entry.profileRef.type === "builtin" ? entry.profileRef.key : null)));
-  const installed = document.assetPacks.find(pack => pack.id === CARTOGRAPHY_PACK.id);
-  if (usesArtwork && installed && installed.version !== CARTOGRAPHY_PACK.version) throw new Error("Эта карта использует другую версию картографии");
-  const base = usesArtwork && !installed ? { ...document, assetPacks: [...document.assetPacks, CARTOGRAPHY_PACK] } : document;
+  let base = document;
+  for (const entry of areas) {
+    const required = entry.profileRef.type === "builtin" ? ARTWORK_SCATTER.find(profile => profile.key === (entry.profileRef.type === "builtin" ? entry.profileRef.key : null))?.pack : null;
+    if (!required) continue;
+    const installed = base.assetPacks.find(pack => pack.id === required.id);
+    if (installed && installed.version !== required.version) throw new Error("Эта карта использует другую версию набора россыпи");
+    if (!installed) base = { ...base, assetPacks: [...base.assetPacks, required] };
+  }
   return editGeometry(base, view => ({ ok: true, changed: true, document: { ...view, layers: view.layers.map(l => l.id === layerId && l.kind === "scatter" ? { ...l, areas } : l) } }));
 }
 export function moveArtSelection(document: MapDocumentV6, selection: WorkspaceSelection, delta: Vec2) {

@@ -5193,6 +5193,946 @@
         "client/public/ui/wizard/torn-edge-mask.png"
       ],
       "baselineSha256": "0c8309a183c6eb4aa97f3bff71fc44e0e8917126dc748882fa7260ce37b3ab04"
+    },
+    {
+      "id": "village/barn.webp",
+      "title": "barn",
+      "category": "other",
+      "source": "assets/library/village/barn.webp",
+      "outputs": [
+        "client/public/village/barn.webp"
+      ],
+      "baselineSha256": "886565bde8134ee7e4c1c0b4d1381372032c94d9b03668f57f98023395cc0daf"
+    },
+    {
+      "id": "village/barricade-2.webp",
+      "title": "barricade-2",
+      "category": "other",
+      "source": "assets/library/village/barricade-2.webp",
+      "outputs": [
+        "client/public/village/barricade-2.webp"
+      ],
+      "baselineSha256": "5b64f2066d5c32a7e03adb7173f4c6e53a2b6c00fa77151e7055c05a8dc8dd60"
+    },
+    {
+      "id": "village/barricade.webp",
+      "title": "barricade",
+      "category": "other",
+      "source": "assets/library/village/barricade.webp",
+      "outputs": [
+        "client/public/village/barricade.webp"
+      ],
+      "baselineSha256": "8e6d27748ad8b8381e0fc7e9d5e1c5d89281e2dac00d7e12b21cc0a5ea23907f"
+    },
+    {
+      "id": "village/beds-2.webp",
+      "title": "beds-2",
+      "category": "other",
+      "source": "assets/library/village/beds-2.webp",
+      "outputs": [
+        "client/public/village/beds-2.webp"
+      ],
+      "baselineSha256": "aa85473a7af37da551278767961661933818949b3dfd4d8df65364b22d3a1f04"
+    },
+    {
+      "id": "village/beds.webp",
+      "title": "beds",
+      "category": "other",
+      "source": "assets/library/village/beds.webp",
+      "outputs": [
+        "client/public/village/beds.webp"
+      ],
+      "baselineSha256": "761e2f47b83c159400272f7b72bd642fbb35d4aca8960efbebe50c52154ef5ce"
+    },
+    {
+      "id": "village/boat-2.webp",
+      "title": "boat-2",
+      "category": "other",
+      "source": "assets/library/village/boat-2.webp",
+      "outputs": [
+        "client/public/village/boat-2.webp"
+      ],
+      "baselineSha256": "bfbf75e7ce29c55e97b8816e596d303cf16eb943c3ac88fa589bf3f1d54bb11c"
+    },
+    {
+      "id": "village/boat.webp",
+      "title": "boat",
+      "category": "other",
+      "source": "assets/library/village/boat.webp",
+      "outputs": [
+        "client/public/village/boat.webp"
+      ],
+      "baselineSha256": "d74a9cf47c52a69bc10d3b45e858dcb106fdf0a715ddde8f7ac2e49d018072fb"
+    },
+    {
+      "id": "village/bog-2.webp",
+      "title": "bog-2",
+      "category": "other",
+      "source": "assets/library/village/bog-2.webp",
+      "outputs": [
+        "client/public/village/bog-2.webp"
+      ],
+      "baselineSha256": "f4e95391cb40ec6b61d542ef9235fc0e1a4124ca9eebb2bf827ebe6d96efc1da"
+    },
+    {
+      "id": "village/bog.webp",
+      "title": "bog",
+      "category": "other",
+      "source": "assets/library/village/bog.webp",
+      "outputs": [
+        "client/public/village/bog.webp"
+      ],
+      "baselineSha256": "2eadb56cd68c7036f826f78d2630e0a5362a7faa4508dea75e1222cac5ba8b0f"
+    },
+    {
+      "id": "village/boulders-2.webp",
+      "title": "boulders-2",
+      "category": "other",
+      "source": "assets/library/village/boulders-2.webp",
+      "outputs": [
+        "client/public/village/boulders-2.webp"
+      ],
+      "baselineSha256": "c0f2d834e8cdc044c61e9aafddf83555b3c5e9a1017aad4f8a77b55244e393ce"
+    },
+    {
+      "id": "village/boulders.webp",
+      "title": "boulders",
+      "category": "other",
+      "source": "assets/library/village/boulders.webp",
+      "outputs": [
+        "client/public/village/boulders.webp"
+      ],
+      "baselineSha256": "d32c8112b2e781a89e4bdd046505db5b70c2a26559d5bda9f738ff4092860440"
+    },
+    {
+      "id": "village/bridge-2.webp",
+      "title": "bridge-2",
+      "category": "other",
+      "source": "assets/library/village/bridge-2.webp",
+      "outputs": [
+        "client/public/village/bridge-2.webp"
+      ],
+      "baselineSha256": "0853f1625e97a404c9b37aad5290d4a744f7632b43f3d426584a84bf31217292"
+    },
+    {
+      "id": "village/bridge.webp",
+      "title": "bridge",
+      "category": "other",
+      "source": "assets/library/village/bridge.webp",
+      "outputs": [
+        "client/public/village/bridge.webp"
+      ],
+      "baselineSha256": "206659f6ad81198304467d8dded9aaf6674f9e2a9607c82313db6f5b4b0cc34c"
+    },
+    {
+      "id": "village/bush-2.webp",
+      "title": "bush-2",
+      "category": "other",
+      "source": "assets/library/village/bush-2.webp",
+      "outputs": [
+        "client/public/village/bush-2.webp"
+      ],
+      "baselineSha256": "71137704c1c79f79ed220bd77a3cb1bed54661d87601342f1c4f63e64a6ea0ed"
+    },
+    {
+      "id": "village/bush.webp",
+      "title": "bush",
+      "category": "other",
+      "source": "assets/library/village/bush.webp",
+      "outputs": [
+        "client/public/village/bush.webp"
+      ],
+      "baselineSha256": "124c0c7d878ed61b5ab22d7b0281652a8886c6e3006cd872ff063e6aa3fd4e88"
+    },
+    {
+      "id": "village/campfire-2.webp",
+      "title": "campfire-2",
+      "category": "other",
+      "source": "assets/library/village/campfire-2.webp",
+      "outputs": [
+        "client/public/village/campfire-2.webp"
+      ],
+      "baselineSha256": "18a2bb624ce855dab8c422c64709661e3e5d7b4bfe6f5a4d16988eea617c6935"
+    },
+    {
+      "id": "village/campfire.webp",
+      "title": "campfire",
+      "category": "other",
+      "source": "assets/library/village/campfire.webp",
+      "outputs": [
+        "client/public/village/campfire.webp"
+      ],
+      "baselineSha256": "92bf35378c1be1a38e10cc2fcadf6ff2151d112950e5d2c6394dc7e3913e7be0"
+    },
+    {
+      "id": "village/cart-2.webp",
+      "title": "cart-2",
+      "category": "other",
+      "source": "assets/library/village/cart-2.webp",
+      "outputs": [
+        "client/public/village/cart-2.webp"
+      ],
+      "baselineSha256": "09d3dffc39afcd0a6522878302487866e7566c8cef1ee7f9b14e4b1bea91ede8"
+    },
+    {
+      "id": "village/cart.webp",
+      "title": "cart",
+      "category": "other",
+      "source": "assets/library/village/cart.webp",
+      "outputs": [
+        "client/public/village/cart.webp"
+      ],
+      "baselineSha256": "0e5ee3ea83585ec6e92e8700985015b4f2bdc2bf492b94445b561991c580720f"
+    },
+    {
+      "id": "village/cobbles-2.webp",
+      "title": "cobbles-2",
+      "category": "other",
+      "source": "assets/library/village/cobbles-2.webp",
+      "outputs": [
+        "client/public/village/cobbles-2.webp"
+      ],
+      "baselineSha256": "63f05c53474cedfae04dbeb839de3035ffb7dbd97103079bfc8b54f2e292b13a"
+    },
+    {
+      "id": "village/cobbles.webp",
+      "title": "cobbles",
+      "category": "other",
+      "source": "assets/library/village/cobbles.webp",
+      "outputs": [
+        "client/public/village/cobbles.webp"
+      ],
+      "baselineSha256": "7c42067cb174bc9409769e04081e23dbcbd893b3dbfc7bda80de293ae0a74e7b"
+    },
+    {
+      "id": "village/deep-2.webp",
+      "title": "deep-2",
+      "category": "other",
+      "source": "assets/library/village/deep-2.webp",
+      "outputs": [
+        "client/public/village/deep-2.webp"
+      ],
+      "baselineSha256": "5891b1198bfa4645e262834e26409cd63a2e785ec1aa4fcd7bf54877dee8b45c"
+    },
+    {
+      "id": "village/deep.webp",
+      "title": "deep",
+      "category": "other",
+      "source": "assets/library/village/deep.webp",
+      "outputs": [
+        "client/public/village/deep.webp"
+      ],
+      "baselineSha256": "8c6d4f0def46ea7e0b09db8dee3827116e61efed7ba3f602e53e5b9ca7735178"
+    },
+    {
+      "id": "village/fence-pole-2.webp",
+      "title": "fence-pole-2",
+      "category": "other",
+      "source": "assets/library/village/fence-pole-2.webp",
+      "outputs": [
+        "client/public/village/fence-pole-2.webp"
+      ],
+      "baselineSha256": "959528afbc4add90f690467a456b781644fda708fcd01f280ddb2e39a21c3442"
+    },
+    {
+      "id": "village/fence-pole-gate-2.webp",
+      "title": "fence-pole-gate-2",
+      "category": "other",
+      "source": "assets/library/village/fence-pole-gate-2.webp",
+      "outputs": [
+        "client/public/village/fence-pole-gate-2.webp"
+      ],
+      "baselineSha256": "76256536908df5805df5fc4d80f68f07e5754dfb4e97ab36ffe7d2e56ee0f078"
+    },
+    {
+      "id": "village/fence-pole-gate.webp",
+      "title": "fence-pole-gate",
+      "category": "other",
+      "source": "assets/library/village/fence-pole-gate.webp",
+      "outputs": [
+        "client/public/village/fence-pole-gate.webp"
+      ],
+      "baselineSha256": "d228ab6f082de9e6876564c1640c31cb8e86a5f2c2c6b5bd3ac81a9da5f476bf"
+    },
+    {
+      "id": "village/fence-pole-post-2.webp",
+      "title": "fence-pole-post-2",
+      "category": "other",
+      "source": "assets/library/village/fence-pole-post-2.webp",
+      "outputs": [
+        "client/public/village/fence-pole-post-2.webp"
+      ],
+      "baselineSha256": "e0b28c0d5f1dce8409ce23c5bdb8e6bf08fab2d16def5c08d602ce42a2cf6d74"
+    },
+    {
+      "id": "village/fence-pole-post.webp",
+      "title": "fence-pole-post",
+      "category": "other",
+      "source": "assets/library/village/fence-pole-post.webp",
+      "outputs": [
+        "client/public/village/fence-pole-post.webp"
+      ],
+      "baselineSha256": "526e9000bb3fbf9b9c3e4c4b1b240a02153b4a40a9da79455b81173d4d459d89"
+    },
+    {
+      "id": "village/fence-pole.webp",
+      "title": "fence-pole",
+      "category": "other",
+      "source": "assets/library/village/fence-pole.webp",
+      "outputs": [
+        "client/public/village/fence-pole.webp"
+      ],
+      "baselineSha256": "dc8600d81f67c0f416f427bb23f3dcfc0a397c1329ceef16e13b3ff2010b17f9"
+    },
+    {
+      "id": "village/fence-wattle-2.webp",
+      "title": "fence-wattle-2",
+      "category": "other",
+      "source": "assets/library/village/fence-wattle-2.webp",
+      "outputs": [
+        "client/public/village/fence-wattle-2.webp"
+      ],
+      "baselineSha256": "01c261d880781c416b52ee12fc4371f62681c5cd805276a9d5bb587f5751c6a5"
+    },
+    {
+      "id": "village/fence-wattle-gate-2.webp",
+      "title": "fence-wattle-gate-2",
+      "category": "other",
+      "source": "assets/library/village/fence-wattle-gate-2.webp",
+      "outputs": [
+        "client/public/village/fence-wattle-gate-2.webp"
+      ],
+      "baselineSha256": "0cdb4777cc5b032a34fd53ffb7a2c41f869a11097db7dca27ead088f351e8c6c"
+    },
+    {
+      "id": "village/fence-wattle-gate.webp",
+      "title": "fence-wattle-gate",
+      "category": "other",
+      "source": "assets/library/village/fence-wattle-gate.webp",
+      "outputs": [
+        "client/public/village/fence-wattle-gate.webp"
+      ],
+      "baselineSha256": "1c55fe01fc3f43841a99ed79f2e9bd2a86b2f95df5467fc6e444e7042b4a1351"
+    },
+    {
+      "id": "village/fence-wattle-post-2.webp",
+      "title": "fence-wattle-post-2",
+      "category": "other",
+      "source": "assets/library/village/fence-wattle-post-2.webp",
+      "outputs": [
+        "client/public/village/fence-wattle-post-2.webp"
+      ],
+      "baselineSha256": "5ae798f1d21fe9728427415baffbb2e2e71febcc11a368b2560004c327189b4b"
+    },
+    {
+      "id": "village/fence-wattle-post.webp",
+      "title": "fence-wattle-post",
+      "category": "other",
+      "source": "assets/library/village/fence-wattle-post.webp",
+      "outputs": [
+        "client/public/village/fence-wattle-post.webp"
+      ],
+      "baselineSha256": "b69b0c2ccc11c28b4340fa8a161596aa4453019b692c39b86076e9c8c703cbf5"
+    },
+    {
+      "id": "village/fence-wattle.webp",
+      "title": "fence-wattle",
+      "category": "other",
+      "source": "assets/library/village/fence-wattle.webp",
+      "outputs": [
+        "client/public/village/fence-wattle.webp"
+      ],
+      "baselineSha256": "98ad67753252fefe34077657aae2fb9799f1dd18a6a1d69a3da549748812de92"
+    },
+    {
+      "id": "village/field-2.webp",
+      "title": "field-2",
+      "category": "other",
+      "source": "assets/library/village/field-2.webp",
+      "outputs": [
+        "client/public/village/field-2.webp"
+      ],
+      "baselineSha256": "cbc939c47d0ca2111c43ebaf991852f1df12af348f4fe5c3ebbd4508d781edbb"
+    },
+    {
+      "id": "village/field.webp",
+      "title": "field",
+      "category": "other",
+      "source": "assets/library/village/field.webp",
+      "outputs": [
+        "client/public/village/field.webp"
+      ],
+      "baselineSha256": "3f7372695d5abc373f41531b4d8a13fa5d845164e7034a36b4c88f69986e7111"
+    },
+    {
+      "id": "village/ford-2.webp",
+      "title": "ford-2",
+      "category": "other",
+      "source": "assets/library/village/ford-2.webp",
+      "outputs": [
+        "client/public/village/ford-2.webp"
+      ],
+      "baselineSha256": "6aed743d2ad93107bc039e173e4e65928a9bd69b54214607a7a432cbf3d90d4c"
+    },
+    {
+      "id": "village/ford.webp",
+      "title": "ford",
+      "category": "other",
+      "source": "assets/library/village/ford.webp",
+      "outputs": [
+        "client/public/village/ford.webp"
+      ],
+      "baselineSha256": "426e963c720f0a6bda922ff7c45096f136bce86dfbd497ad2b6430e02cd8d091"
+    },
+    {
+      "id": "village/grass-2.webp",
+      "title": "grass-2",
+      "category": "other",
+      "source": "assets/library/village/grass-2.webp",
+      "outputs": [
+        "client/public/village/grass-2.webp"
+      ],
+      "baselineSha256": "f0cabe17ff03d2b81886f8f8be325275e957e1ebdc95d860ef7bcdaf45a5e46b"
+    },
+    {
+      "id": "village/grass-tuft-2.webp",
+      "title": "grass-tuft-2",
+      "category": "other",
+      "source": "assets/library/village/grass-tuft-2.webp",
+      "outputs": [
+        "client/public/village/grass-tuft-2.webp"
+      ],
+      "baselineSha256": "b05b56f223efc56dc3fd7e443bd975cdbfabcb649a5a9f21ca4a2b6a44d23ab1"
+    },
+    {
+      "id": "village/grass-tuft.webp",
+      "title": "grass-tuft",
+      "category": "other",
+      "source": "assets/library/village/grass-tuft.webp",
+      "outputs": [
+        "client/public/village/grass-tuft.webp"
+      ],
+      "baselineSha256": "a61fc63391084bf3ff07238b1adaeaf9c0f9c7d8b7e622bbfc4f01ba3dac5dc0"
+    },
+    {
+      "id": "village/grass.webp",
+      "title": "grass",
+      "category": "other",
+      "source": "assets/library/village/grass.webp",
+      "outputs": [
+        "client/public/village/grass.webp"
+      ],
+      "baselineSha256": "70d911486342532f7bf25d1f5e7ef06c5d12b5355372fd16a10add59563fe835"
+    },
+    {
+      "id": "village/graves-2.webp",
+      "title": "graves-2",
+      "category": "other",
+      "source": "assets/library/village/graves-2.webp",
+      "outputs": [
+        "client/public/village/graves-2.webp"
+      ],
+      "baselineSha256": "4e1f4c0fe73fb15a0fb31a0296e75232c6a72e44f4b4383ff945a5b9cbfaf120"
+    },
+    {
+      "id": "village/graves.webp",
+      "title": "graves",
+      "category": "other",
+      "source": "assets/library/village/graves.webp",
+      "outputs": [
+        "client/public/village/graves.webp"
+      ],
+      "baselineSha256": "9832ec099847122f64662712a1efa65d4929f9cd6b67bc042bf4df263a770082"
+    },
+    {
+      "id": "village/haystack-2.webp",
+      "title": "haystack-2",
+      "category": "other",
+      "source": "assets/library/village/haystack-2.webp",
+      "outputs": [
+        "client/public/village/haystack-2.webp"
+      ],
+      "baselineSha256": "f99577e557a8eb2eb8b3b78bf53034a6900c03c80dfd0f86af1b9b077f639a56"
+    },
+    {
+      "id": "village/haystack.webp",
+      "title": "haystack",
+      "category": "other",
+      "source": "assets/library/village/haystack.webp",
+      "outputs": [
+        "client/public/village/haystack.webp"
+      ],
+      "baselineSha256": "cdec5e830a35265f7bd951978c651328fc97949523fd12362a27961ce98caa7a"
+    },
+    {
+      "id": "village/hut-small.webp",
+      "title": "hut-small",
+      "category": "other",
+      "source": "assets/library/village/hut-small.webp",
+      "outputs": [
+        "client/public/village/hut-small.webp"
+      ],
+      "baselineSha256": "afe84c0fdfc78c5a3484f0d06a3e65f7b1c855f34fe38f5c1bad88e6f3107767"
+    },
+    {
+      "id": "village/hut.webp",
+      "title": "hut",
+      "category": "other",
+      "source": "assets/library/village/hut.webp",
+      "outputs": [
+        "client/public/village/hut.webp"
+      ],
+      "baselineSha256": "a9be42edc02e91d816724aafa9ba0ac80ce7b227012ba903b7c52d671b739e52"
+    },
+    {
+      "id": "village/idol-2.webp",
+      "title": "idol-2",
+      "category": "other",
+      "source": "assets/library/village/idol-2.webp",
+      "outputs": [
+        "client/public/village/idol-2.webp"
+      ],
+      "baselineSha256": "b3361b7431cf8fdf23175b80459923ae23eb9166ef5703a6d4eca22333fef749"
+    },
+    {
+      "id": "village/idol.webp",
+      "title": "idol",
+      "category": "other",
+      "source": "assets/library/village/idol.webp",
+      "outputs": [
+        "client/public/village/idol.webp"
+      ],
+      "baselineSha256": "b371a6636e793cf3d683846f338f9954f6b8d261b4aeabf48fdb9cfa4307f585"
+    },
+    {
+      "id": "village/jetty-2.webp",
+      "title": "jetty-2",
+      "category": "other",
+      "source": "assets/library/village/jetty-2.webp",
+      "outputs": [
+        "client/public/village/jetty-2.webp"
+      ],
+      "baselineSha256": "68043e2dd6e268ae762adbf4f1826a371ac1fea86c1b2b0e7db545e219d8d6bd"
+    },
+    {
+      "id": "village/jetty.webp",
+      "title": "jetty",
+      "category": "other",
+      "source": "assets/library/village/jetty.webp",
+      "outputs": [
+        "client/public/village/jetty.webp"
+      ],
+      "baselineSha256": "88ec2518351dba53cd89dd047eff5a8431fbec3592c87e1a38ee9540f049db1a"
+    },
+    {
+      "id": "village/log-2.webp",
+      "title": "log-2",
+      "category": "other",
+      "source": "assets/library/village/log-2.webp",
+      "outputs": [
+        "client/public/village/log-2.webp"
+      ],
+      "baselineSha256": "99bbdd8b9800e469119d5edb3a1ca08b0c4aad75ebb86ca3dfe19b0332f873c9"
+    },
+    {
+      "id": "village/log.webp",
+      "title": "log",
+      "category": "other",
+      "source": "assets/library/village/log.webp",
+      "outputs": [
+        "client/public/village/log.webp"
+      ],
+      "baselineSha256": "5a4ef81d684d4e5960bd03eb420edf036626967a8b47bc7967ddf50810df1c21"
+    },
+    {
+      "id": "village/mill.webp",
+      "title": "mill",
+      "category": "other",
+      "source": "assets/library/village/mill.webp",
+      "outputs": [
+        "client/public/village/mill.webp"
+      ],
+      "baselineSha256": "5eaca88748349fb011857934f4f53222d3023a5de9eb21c2b917aa98bce16ab5"
+    },
+    {
+      "id": "village/mud-2.webp",
+      "title": "mud-2",
+      "category": "other",
+      "source": "assets/library/village/mud-2.webp",
+      "outputs": [
+        "client/public/village/mud-2.webp"
+      ],
+      "baselineSha256": "03c7b576b44f8cf0e71dd20d7b07adcdfaf501d32816f5d298bd9524187739c7"
+    },
+    {
+      "id": "village/mud.webp",
+      "title": "mud",
+      "category": "other",
+      "source": "assets/library/village/mud.webp",
+      "outputs": [
+        "client/public/village/mud.webp"
+      ],
+      "baselineSha256": "29eb4d2e0d0f8e6ce93b59889ffc407adbf0a1434ee2685f4335b1e28087cd45"
+    },
+    {
+      "id": "village/reeds-2.webp",
+      "title": "reeds-2",
+      "category": "other",
+      "source": "assets/library/village/reeds-2.webp",
+      "outputs": [
+        "client/public/village/reeds-2.webp"
+      ],
+      "baselineSha256": "1447fde22933d422e21659d6c365c09c5a0705afa1c759a2fe73bda18686340e"
+    },
+    {
+      "id": "village/reeds.webp",
+      "title": "reeds",
+      "category": "other",
+      "source": "assets/library/village/reeds.webp",
+      "outputs": [
+        "client/public/village/reeds.webp"
+      ],
+      "baselineSha256": "b2ab5ffca32dcf45cd960dbf2d9c1fc181a5d36724df7ed383bc833e8fc22893"
+    },
+    {
+      "id": "village/road-cobbles-2.webp",
+      "title": "road-cobbles-2",
+      "category": "other",
+      "source": "assets/library/village/road-cobbles-2.webp",
+      "outputs": [
+        "client/public/village/road-cobbles-2.webp"
+      ],
+      "baselineSha256": "ba294100a8e486cc671ff4b743465724ca0674ea0a74c57e9dcd077cc18607e8"
+    },
+    {
+      "id": "village/road-cobbles.webp",
+      "title": "road-cobbles",
+      "category": "other",
+      "source": "assets/library/village/road-cobbles.webp",
+      "outputs": [
+        "client/public/village/road-cobbles.webp"
+      ],
+      "baselineSha256": "8656abca36bf0fcf497cead690330e6cab78e3f4a60590f1364dc5d312c73feb"
+    },
+    {
+      "id": "village/road-dirt-2.webp",
+      "title": "road-dirt-2",
+      "category": "other",
+      "source": "assets/library/village/road-dirt-2.webp",
+      "outputs": [
+        "client/public/village/road-dirt-2.webp"
+      ],
+      "baselineSha256": "cb8266c5ca69e56cb9cb40b26de2c94a76be9e1d768f38b7b7181b005f4fda81"
+    },
+    {
+      "id": "village/road-dirt.webp",
+      "title": "road-dirt",
+      "category": "other",
+      "source": "assets/library/village/road-dirt.webp",
+      "outputs": [
+        "client/public/village/road-dirt.webp"
+      ],
+      "baselineSha256": "44315efc649980d7615117472c4bfc56e40a6e0761cc0873a61ec91b94ed510b"
+    },
+    {
+      "id": "village/road-path-2.webp",
+      "title": "road-path-2",
+      "category": "other",
+      "source": "assets/library/village/road-path-2.webp",
+      "outputs": [
+        "client/public/village/road-path-2.webp"
+      ],
+      "baselineSha256": "516be9cf990322ee98d6a30beb97c992627f0459210fc3e4fca55600c9f6f43c"
+    },
+    {
+      "id": "village/road-path.webp",
+      "title": "road-path",
+      "category": "other",
+      "source": "assets/library/village/road-path.webp",
+      "outputs": [
+        "client/public/village/road-path.webp"
+      ],
+      "baselineSha256": "1ff72e6400ef39747418f9474b644f979c3556e42ff4bbe544f25430c4770e61"
+    },
+    {
+      "id": "village/sacks-2.webp",
+      "title": "sacks-2",
+      "category": "other",
+      "source": "assets/library/village/sacks-2.webp",
+      "outputs": [
+        "client/public/village/sacks-2.webp"
+      ],
+      "baselineSha256": "2d67b35f3ac98354feb848274b96bee28fa1fbb82bce9d007b6c4eb32041aec2"
+    },
+    {
+      "id": "village/sacks.webp",
+      "title": "sacks",
+      "category": "other",
+      "source": "assets/library/village/sacks.webp",
+      "outputs": [
+        "client/public/village/sacks.webp"
+      ],
+      "baselineSha256": "eea4e809b12c0b414cb9ed30d4cd57f5cd6006cc69af5d2be316a9a991532a3a"
+    },
+    {
+      "id": "village/sand-2.webp",
+      "title": "sand-2",
+      "category": "other",
+      "source": "assets/library/village/sand-2.webp",
+      "outputs": [
+        "client/public/village/sand-2.webp"
+      ],
+      "baselineSha256": "031fa4a1d9b824a45f54838f9a7183e4fe5555b51d44cad2f0f7201415cbbc75"
+    },
+    {
+      "id": "village/sand.webp",
+      "title": "sand",
+      "category": "other",
+      "source": "assets/library/village/sand.webp",
+      "outputs": [
+        "client/public/village/sand.webp"
+      ],
+      "baselineSha256": "d935bdadccf12f6dfbd643d6d0dab37a647cb18a1676ac1bc5ed868cbd7bc989"
+    },
+    {
+      "id": "village/scarecrow-2.webp",
+      "title": "scarecrow-2",
+      "category": "other",
+      "source": "assets/library/village/scarecrow-2.webp",
+      "outputs": [
+        "client/public/village/scarecrow-2.webp"
+      ],
+      "baselineSha256": "efae23f2987e3e764674c077d739677f88b20dffb76430ee9ade71776eafc2ba"
+    },
+    {
+      "id": "village/scarecrow.webp",
+      "title": "scarecrow",
+      "category": "other",
+      "source": "assets/library/village/scarecrow.webp",
+      "outputs": [
+        "client/public/village/scarecrow.webp"
+      ],
+      "baselineSha256": "704a6bd6dae263a5171d697fdbba1652350baba7241dbf290777d67b8cd15176"
+    },
+    {
+      "id": "village/shallow-2.webp",
+      "title": "shallow-2",
+      "category": "other",
+      "source": "assets/library/village/shallow-2.webp",
+      "outputs": [
+        "client/public/village/shallow-2.webp"
+      ],
+      "baselineSha256": "e9e3e0caddfcae0f7bb45a7ea188cee385c652ba1e69bbd6a19249de348ca427"
+    },
+    {
+      "id": "village/shallow.webp",
+      "title": "shallow",
+      "category": "other",
+      "source": "assets/library/village/shallow.webp",
+      "outputs": [
+        "client/public/village/shallow.webp"
+      ],
+      "baselineSha256": "6fa1e3b0f223cf5b313a99e00f490eadcb19d068e06652827a17adde3f353c75"
+    },
+    {
+      "id": "village/shed.webp",
+      "title": "shed",
+      "category": "other",
+      "source": "assets/library/village/shed.webp",
+      "outputs": [
+        "client/public/village/shed.webp"
+      ],
+      "baselineSha256": "3e86351d52113a42beacc23063daa74d546a13e49155aa2bcd7f271b34e834a3"
+    },
+    {
+      "id": "village/signpost-2.webp",
+      "title": "signpost-2",
+      "category": "other",
+      "source": "assets/library/village/signpost-2.webp",
+      "outputs": [
+        "client/public/village/signpost-2.webp"
+      ],
+      "baselineSha256": "14e4295bd536d99a230a71134e8c954be41f82207b3ba153af5f062c00960fce"
+    },
+    {
+      "id": "village/signpost.webp",
+      "title": "signpost",
+      "category": "other",
+      "source": "assets/library/village/signpost.webp",
+      "outputs": [
+        "client/public/village/signpost.webp"
+      ],
+      "baselineSha256": "515bc278039d1e165ea1ad7dbe7e81f1154baa9d3eab64ad81bafb327f0d2dec"
+    },
+    {
+      "id": "village/smithy.webp",
+      "title": "smithy",
+      "category": "other",
+      "source": "assets/library/village/smithy.webp",
+      "outputs": [
+        "client/public/village/smithy.webp"
+      ],
+      "baselineSha256": "aea87482332598fe3dd711f46e271d3f381111ac00161703bbf12729c07df51d"
+    },
+    {
+      "id": "village/spruce-2.webp",
+      "title": "spruce-2",
+      "category": "other",
+      "source": "assets/library/village/spruce-2.webp",
+      "outputs": [
+        "client/public/village/spruce-2.webp"
+      ],
+      "baselineSha256": "e880fa50ed94c3261cf027a3336ca96ebc66528926ef8fbb035d9f4805864a64"
+    },
+    {
+      "id": "village/spruce.webp",
+      "title": "spruce",
+      "category": "other",
+      "source": "assets/library/village/spruce.webp",
+      "outputs": [
+        "client/public/village/spruce.webp"
+      ],
+      "baselineSha256": "576c9c38456e6904ac99fb0c4328476a868baf3230ac96a4f03450d0ee8bd5e2"
+    },
+    {
+      "id": "village/stall-2.webp",
+      "title": "stall-2",
+      "category": "other",
+      "source": "assets/library/village/stall-2.webp",
+      "outputs": [
+        "client/public/village/stall-2.webp"
+      ],
+      "baselineSha256": "591edb6c7f747a99089795005473b96bffcf0c8556914bb7e687b66f39ff87e8"
+    },
+    {
+      "id": "village/stall.webp",
+      "title": "stall",
+      "category": "other",
+      "source": "assets/library/village/stall.webp",
+      "outputs": [
+        "client/public/village/stall.webp"
+      ],
+      "baselineSha256": "7a4e267bc7b6fad417ab2986d523c9771c7c051fa9cb8c44087454c80c472f5e"
+    },
+    {
+      "id": "village/stump-2.webp",
+      "title": "stump-2",
+      "category": "other",
+      "source": "assets/library/village/stump-2.webp",
+      "outputs": [
+        "client/public/village/stump-2.webp"
+      ],
+      "baselineSha256": "16c2282277e2557e7c67ba6aa75d4deb6a158d1d05b22c55da5a8347182bec18"
+    },
+    {
+      "id": "village/stump.webp",
+      "title": "stump",
+      "category": "other",
+      "source": "assets/library/village/stump.webp",
+      "outputs": [
+        "client/public/village/stump.webp"
+      ],
+      "baselineSha256": "2281e9a89e82e79d795ad52b08d624c982e9244ddca789b3a2a719244d9677ce"
+    },
+    {
+      "id": "village/tent-2.webp",
+      "title": "tent-2",
+      "category": "other",
+      "source": "assets/library/village/tent-2.webp",
+      "outputs": [
+        "client/public/village/tent-2.webp"
+      ],
+      "baselineSha256": "1103aaf62d2a9cfe80c26e1ddd2c48f669d4d55c0055a3c27fcbcbd5316030ec"
+    },
+    {
+      "id": "village/tent.webp",
+      "title": "tent",
+      "category": "other",
+      "source": "assets/library/village/tent.webp",
+      "outputs": [
+        "client/public/village/tent.webp"
+      ],
+      "baselineSha256": "56ad048a449bdbcbc3ddf3fe7f447c593c4d09091b5ba909541c6816e45237e0"
+    },
+    {
+      "id": "village/tree-2.webp",
+      "title": "tree-2",
+      "category": "other",
+      "source": "assets/library/village/tree-2.webp",
+      "outputs": [
+        "client/public/village/tree-2.webp"
+      ],
+      "baselineSha256": "6c53ef134e4a3a387489ce66386601cdff8dc55d8d3464fa580dec016b4f419b"
+    },
+    {
+      "id": "village/tree.webp",
+      "title": "tree",
+      "category": "other",
+      "source": "assets/library/village/tree.webp",
+      "outputs": [
+        "client/public/village/tree.webp"
+      ],
+      "baselineSha256": "e200656ae5009c1f58e6599009004b1e96554157aa46b9eaf12eac01ba5870b2"
+    },
+    {
+      "id": "village/well-2.webp",
+      "title": "well-2",
+      "category": "other",
+      "source": "assets/library/village/well-2.webp",
+      "outputs": [
+        "client/public/village/well-2.webp"
+      ],
+      "baselineSha256": "e8bcfad516f4934bd1ec12d6a6ef44bf5dc9eb8c76e9c7df7322d0b8bce73583"
+    },
+    {
+      "id": "village/well.webp",
+      "title": "well",
+      "category": "other",
+      "source": "assets/library/village/well.webp",
+      "outputs": [
+        "client/public/village/well.webp"
+      ],
+      "baselineSha256": "a4e3412a358c936511d46113d45dc9dd36948988af916f06828d91bed32151b6"
+    },
+    {
+      "id": "village/willow-2.webp",
+      "title": "willow-2",
+      "category": "other",
+      "source": "assets/library/village/willow-2.webp",
+      "outputs": [
+        "client/public/village/willow-2.webp"
+      ],
+      "baselineSha256": "51676f4565252178afb27375773dcf50d201f15fca84233c5b0cb88ea344d882"
+    },
+    {
+      "id": "village/willow.webp",
+      "title": "willow",
+      "category": "other",
+      "source": "assets/library/village/willow.webp",
+      "outputs": [
+        "client/public/village/willow.webp"
+      ],
+      "baselineSha256": "ae41342154675ed5e73d9d408bdd16401ff63721dcb988b5623fc63d1685ea05"
+    },
+    {
+      "id": "village/woodpile-2.webp",
+      "title": "woodpile-2",
+      "category": "other",
+      "source": "assets/library/village/woodpile-2.webp",
+      "outputs": [
+        "client/public/village/woodpile-2.webp"
+      ],
+      "baselineSha256": "42374e7398fe0b2098c8426e92c87f2aca8e4a646e9d98fd0ec014fccc17a3c8"
+    },
+    {
+      "id": "village/woodpile.webp",
+      "title": "woodpile",
+      "category": "other",
+      "source": "assets/library/village/woodpile.webp",
+      "outputs": [
+        "client/public/village/woodpile.webp"
+      ],
+      "baselineSha256": "a16b083cca7e7ac82c38bd6915a4e6605e6008e38cafcec8a21aa769621a1d60"
     }
   ]
 }

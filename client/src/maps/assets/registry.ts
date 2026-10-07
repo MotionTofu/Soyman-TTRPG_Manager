@@ -1,6 +1,7 @@
 import { subscribeTokenTape, prepareTokenTape } from "./tokenTape";
 import { CARTOGRAPHY_OBJECTS, CARTOGRAPHY_SCATTER, CARTOGRAPHY_PACK, cartographyId, cartographyUrl } from "./cartography";
 import { CRYPT_OBJECTS, CRYPT_PACK, CRYPT_SIDES, CRYPT_STYLE_KEYS, cryptId, cryptUrl, type CryptSide } from "./crypt";
+import { VILLAGE_OBJECTS, VILLAGE_PACK, VILLAGE_SCATTER, VILLAGE_SURFACE_KEYS, variantKeys, villageId, villageSurfaceKey, villageUrl } from "./village";
 import type { MapDocumentV6 } from "@shared/maps/core";
 import type { VisualRef } from "../core/refs";
 import type { MapDocumentV5 } from "../core/types";
@@ -54,11 +55,21 @@ export const MAP_CRYPT_ASSETS: readonly MapImageAsset[] = CRYPT_OBJECTS.map(item
   if (item.directional) asset.views = Object.fromEntries(CRYPT_SIDES.map(side => [side, localAsset(cryptId(`${item.key}-${side}`), item.name)])) as Record<CryptSide, MapImageAsset>;
   return asset;
 });
+/** Все варианты каждого семейства «Местности»: на карте лежит конкретный вариант. */
+export const MAP_VILLAGE_ASSETS: readonly MapImageAsset[] = VILLAGE_OBJECTS.flatMap(item =>
+  variantKeys(item.key, item.variants).map(key => localAsset(villageId(key), item.name, [item.category, "местность"])));
+/** Россыпи с рисованными картинками: каким набором они требуют владеть и из каких вариантов берутся. */
+export const ARTWORK_SCATTER: readonly { key: string; name: string; assetId: string; assetIds: readonly string[]; size: number; pack: { id: string; version: string } }[] = [
+  ...CARTOGRAPHY_SCATTER.map(item => ({ ...item, assetIds: [item.assetId], size: 1, pack: CARTOGRAPHY_PACK })),
+  ...VILLAGE_SCATTER.map(item => ({ ...item, pack: VILLAGE_PACK })),
+];
 const localImages = new Map<string, MapImageAsset>([...MAP_CARTOGRAPHY_ASSETS, ...["stone-floor", "earth", "water"].map(key => localAsset(cartographyId(key), key)),
   ...MAP_CRYPT_ASSETS, ...MAP_CRYPT_ASSETS.flatMap(asset => asset.views ? Object.values(asset.views) : []),
-  ...CRYPT_STYLE_KEYS.map(key => localAsset(cryptId(key), key))].map(asset => [asset.id, asset]));
-const cryptPrefix = `${CRYPT_PACK.id}:`;
-const localUrl = (id: string) => id.startsWith(cryptPrefix) ? cryptUrl(id.slice(cryptPrefix.length)) : cartographyUrl(id.slice(CARTOGRAPHY_PACK.id.length + 1));
+  ...CRYPT_STYLE_KEYS.map(key => localAsset(cryptId(key), key)),
+  ...MAP_VILLAGE_ASSETS, ...VILLAGE_SURFACE_KEYS.map(key => localAsset(villageId(key), key))].map(asset => [asset.id, asset]));
+const cryptPrefix = `${CRYPT_PACK.id}:`, villagePrefix = `${VILLAGE_PACK.id}:`;
+const localUrl = (id: string) => id.startsWith(cryptPrefix) ? cryptUrl(id.slice(cryptPrefix.length))
+  : id.startsWith(villagePrefix) ? villageUrl(id.slice(villagePrefix.length)) : cartographyUrl(id.slice(CARTOGRAPHY_PACK.id.length + 1));
 const localLoads = new Map<string, Promise<void>>();
 
 const byId = new Map(MAP_SYMBOL_ASSETS.map((asset) => [asset.id, asset]));
@@ -74,7 +85,7 @@ export function resourceImageAssetId(uid: string): string {
 }
 
 export function mapAssetPackForId(assetId: string): { id: string; version: string } | null {
-  if (localImages.has(assetId)) return assetId.startsWith(cryptPrefix) ? CRYPT_PACK : CARTOGRAPHY_PACK;
+  if (localImages.has(assetId)) return assetId.startsWith(cryptPrefix) ? CRYPT_PACK : assetId.startsWith(villagePrefix) ? VILLAGE_PACK : CARTOGRAPHY_PACK;
   if (byId.has(assetId)) return MAP_SYMBOL_PACK;
   if (imageAssets.has(assetId)) return MAP_RESOURCE_IMAGE_PACK;
   return null;
@@ -183,8 +194,15 @@ export async function prepareMapImageAssets(doc: MapDocumentV5 | MapDocumentV6):
     ? layer.items.flatMap((item) => item.visual.type === "asset" && (item.visual.assetId.startsWith(`${MAP_RESOURCE_IMAGE_PACK.id}:`) || localImages.has(item.visual.assetId))
       ? [item.visual.assetId] : []) : []));
   for (const layer of doc.layers) if (layer.kind === "scatter") for (const area of layer.areas) {
-    const profile = area.profileRef.type === "builtin" ? CARTOGRAPHY_SCATTER.find(item => item.key === (area.profileRef.type === "builtin" ? area.profileRef.key : null)) : null;
-    if (profile) ids.add(profile.assetId);
+    const profile = area.profileRef.type === "builtin" ? ARTWORK_SCATTER.find(item => item.key === (area.profileRef.type === "builtin" ? area.profileRef.key : null)) : null;
+    for (const id of profile?.assetIds ?? []) ids.add(id);
+  }
+  // Поверхности «Местности» — материалы слоя, а не оформление: грузятся по тому, что накрашено.
+  for (const layer of doc.layers) if (layer.kind === "terrain") {
+    for (const material of [layer.defaultMaterial, ...(layer.representation === "mask" ? layer.mask.materials : layer.cells.map(cell => cell.material))]) {
+      const key = material.type === "builtin" ? villageSurfaceKey(material.key.replace(/^terrain\//, "")) : null;
+      if (key && localImages.has(villageId(key))) ids.add(villageId(key));
+    }
   }
   if (doc.layers.some(layer => layer.kind === "path" && layer.paths.some(path => path.kind === "wall"))) {
     for (const key of ["wall-masonry", "wall-masonry-end"]) ids.add(cryptId(key));

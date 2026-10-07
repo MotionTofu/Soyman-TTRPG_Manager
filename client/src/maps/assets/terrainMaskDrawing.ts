@@ -1,6 +1,6 @@
 import type { RenderTerrainView } from "../renderModel";
 import { terrainMaskTiles, type MaskTile } from "../terrainMaskTiles";
-import { artworkImage, surfaceImage, surfacePattern, type ArtPack } from "./artwork";
+import { surfaceCells, surfaceImage, surfacePattern, type ArtPack } from "./artwork";
 import { rasterDensity } from "./rasterDensity";
 
 const images = new WeakMap<MaskTile, HTMLCanvasElement>();
@@ -16,8 +16,7 @@ const recentPatterns = new Map<HTMLCanvasElement, { owner: Map<string, HTMLCanva
 let patternBytes = 0;
 
 function patternTile(image: HTMLImageElement, side: number, extent: number, x: number, y: number, pack: ArtPack) {
-  const paper = pack === "crypt" && image === artworkImage("paper-panel", "crypt");
-  const period = pack === "crypt" ? paper ? 16 : 2 : 8;
+  const period = surfaceCells(image, pack);
   const phaseX = ((x % period) + period) % period, phaseY = ((y % period) + period) % period;
   const key = `${pack}:${side}:${extent}:${phaseX}:${phaseY}`;
   let owner = patterns.get(image); if (!owner) { owner = new Map(); patterns.set(image, owner); }
