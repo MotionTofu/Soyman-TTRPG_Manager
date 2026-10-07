@@ -32,15 +32,19 @@
  * самостоятельный хостинг предусмотрен (`deploy/nginx.conf`), и на Linux
  * `Invisible.webp` рядом с `blinded.webp` давал бы 404 через раз.
  *
- * Исходники — в `res/` (в репозиторий не входит, 63 МБ). Исходные png после
- * перевода в webp лежат в `Archive/2026-09-12/raster-png/`.
+ * Основные рабочие файлы — в `assets/library/`, учёт и пути копий — в
+ * `assets/manifest.json` (см. assets/README.md). Этот реестр задаёт ключи
+ * для клиентского кода. Исторические оригиналы остаются в локальных `res/`
+ * и `Archive/2026-09-12/raster-png/`.
  */
 
-export type RasterCategory = "conditions" | "schools" | "coins" | "inventory" | "tokens" | "textures" | "mascot" | "cartography" | "crypt" | "ui/fantasy-punk/decorative/profile";
+export type RasterCategory = "conditions" | "schools" | "coins" | "inventory" | "tokens" | "textures" | "mascot" | "cartography" | "crypt" | "ui/fantasy-punk/decorative/profile" | "ui/campaign-dossier/v1" | "ui/plot-restyle/v1";
 
 /** Что реально лежит в раздаче. Ключ — имя файла без расширения. */
 export const RASTER_ASSETS: Record<RasterCategory, readonly string[]> = {
-  "ui/fantasy-punk/decorative/profile": ["tape"],
+  "ui/plot-restyle/v1": ["stamp-done", "stamp-skipped", "kind-window"],
+  "ui/campaign-dossier/v1": ["card-paper", "portrait-frame", "view-label"],
+  "ui/fantasy-punk/decorative/profile": ["tape", "seal"],
   // Local map artwork; provenance and crop/encoding manifest in maps/assets/cartography-pack.json.
   // «Подземелье · Склеп» (комикс-панк): provenance и хэши — maps/assets/crypt-pack.json.
   crypt: ["paper-panel", "sarcophagus", "coffin", "niche", "pentagram", "urn", "candles", "table", "bench", "chest", "barrels", "crates", "rug", "brazier", "well", "bones", "rubble", "pillar-broken", "pillar", "cobweb", "blood", "torch", "stairs-down", "stairs-up", "trapdoor", "pit", "spikes", "lever", "cage", "chains", "treasure", "grime-splash", "grime-splatter", "grime-scribble", "grime-hatch", "grime-x-black", "grime-x-magenta", "grime-chunks", "grime-toner", "grime-tape", "door", "door-double", "portcullis", "arch", "door-secret", "door-broken", "wall-masonry", "wall-masonry-end", "wall-masonry-corner", "wall-rock", "wall-rock-end", "wall-rock-corner", "throne-s", "throne-w", "throne-n", "throne-e", "altar-s", "altar-w", "altar-n", "altar-e", "statue-s", "statue-w", "statue-n", "statue-e", "chair-s", "chair-w", "chair-n", "chair-e", "wardrobe-s", "wardrobe-w", "wardrobe-n", "wardrobe-e", "bunk-s", "bunk-w", "bunk-n", "bunk-e", "floor-tiles", "floor-broken", "floor-cave", "floor-water"],

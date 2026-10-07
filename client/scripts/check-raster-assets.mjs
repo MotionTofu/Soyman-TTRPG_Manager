@@ -42,11 +42,11 @@ function readRegistry() {
     process.exit(2);
   }
   const out = new Map();
-  const re = /(\w+):\s*\[([^\]]*)\]/g;
+  const re = /(?:"([^"]+)"|(\w+)):\s*\[([^\]]*)\]/g;
   let m;
   while ((m = re.exec(block[1]))) {
-    const keys = [...m[2].matchAll(/"([^"]+)"/g)].map((k) => k[1]);
-    out.set(m[1], keys);
+    const keys = [...m[3].matchAll(/"([^"]+)"/g)].map((k) => k[1]);
+    out.set(m[1] ?? m[2], keys);
   }
   return out;
 }

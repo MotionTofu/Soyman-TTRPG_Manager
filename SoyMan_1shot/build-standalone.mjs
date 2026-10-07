@@ -3,8 +3,10 @@ import config from './vite.config.mjs';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { syncUiAssets } from './sync-ui-assets.mjs';
 const root = path.dirname(fileURLToPath(import.meta.url));
 export async function buildStandalone() {
+  await syncUiAssets();
   const transport = path.resolve(root, '../client/src/api/client.ts').replaceAll('\\', '/');
   const result = await build({ ...config, configFile: false, publicDir: false,
     define: { 'process.env.NODE_ENV': JSON.stringify('production') },

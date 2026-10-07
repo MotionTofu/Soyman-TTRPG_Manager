@@ -1,0 +1,5198 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "id": "bundled/cards/back-evil.webp",
+      "title": "back-evil",
+      "category": "cards",
+      "source": "assets/library/bundled/cards/back-evil.webp",
+      "outputs": [
+        "client/src/assets/cards/back-evil.webp"
+      ],
+      "baselineSha256": "a28687e590055ebe22a5c6be229502ec0bf9bd2c353c6e215e3c94987a0e08b2"
+    },
+    {
+      "id": "bundled/hero.png",
+      "title": "hero",
+      "category": "other",
+      "source": "assets/library/bundled/hero.png",
+      "outputs": [
+        "client/src/assets/hero.png"
+      ],
+      "baselineSha256": "881ffbcaafc212e49addad08846a5b82761355fa20624253af3477ba33262c5c"
+    },
+    {
+      "id": "bundled/logos/Quart_01_00000.webp",
+      "title": "Quart_01_00000",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_01_00000.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_01_00000.webp"
+      ],
+      "baselineSha256": "d5b3b642b70583bab83fbd2ae609b2e48f1c72d12ae724d5210e685b04756e76"
+    },
+    {
+      "id": "bundled/logos/Quart_01_00001.webp",
+      "title": "Quart_01_00001",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_01_00001.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_01_00001.webp"
+      ],
+      "baselineSha256": "336871e04773509c8013a360819ff3dd3476ac0d464843d623c579d8221d23ec"
+    },
+    {
+      "id": "bundled/logos/Quart_01_00002.webp",
+      "title": "Quart_01_00002",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_01_00002.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_01_00002.webp"
+      ],
+      "baselineSha256": "5747168aa1e99aa08cad5f955144ef9233fd8802ba591bd77a948ddf676a3ef1"
+    },
+    {
+      "id": "bundled/logos/Quart_01_00003.webp",
+      "title": "Quart_01_00003",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_01_00003.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_01_00003.webp"
+      ],
+      "baselineSha256": "40a8ba90fcd14ebcc786d2cac75f307e921994fee5b728789cd10d759207790c"
+    },
+    {
+      "id": "bundled/logos/Quart_01_00004.webp",
+      "title": "Quart_01_00004",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_01_00004.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_01_00004.webp"
+      ],
+      "baselineSha256": "f8fc8679f0402b6b2f04bbb264937d7b5cbb2d80e61a58d044f4ab74b2fd8a99"
+    },
+    {
+      "id": "bundled/logos/Quart_01_00005.webp",
+      "title": "Quart_01_00005",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_01_00005.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_01_00005.webp"
+      ],
+      "baselineSha256": "c8b6703f31d1f25da2012c5559cd6ef6eeafbf54b352f1a00d7fbd57bb44fc64"
+    },
+    {
+      "id": "bundled/logos/Quart_01_00006.webp",
+      "title": "Quart_01_00006",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_01_00006.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_01_00006.webp"
+      ],
+      "baselineSha256": "7edcacdf77f880137dba9f68e89728c48961a245dc3ddc34baac9edbe37f93aa"
+    },
+    {
+      "id": "bundled/logos/Quart_01_00007.webp",
+      "title": "Quart_01_00007",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_01_00007.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_01_00007.webp"
+      ],
+      "baselineSha256": "9b1bd061daa0d1fd0e442320b9ab4fc5e0bf9e671f7b9e785508bddb01b5ba73"
+    },
+    {
+      "id": "bundled/logos/Quart_01_00008.webp",
+      "title": "Quart_01_00008",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_01_00008.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_01_00008.webp"
+      ],
+      "baselineSha256": "3ec6193d1a10bfc5ae6d04aedbc36f422478b56ea0ba5f6113a8912e99c3bfea"
+    },
+    {
+      "id": "bundled/logos/Quart_01_00009.webp",
+      "title": "Quart_01_00009",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_01_00009.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_01_00009.webp"
+      ],
+      "baselineSha256": "bf4ce6dd680453c9f433dfdd40760f8ddc3868034757bcc72dea3d1463cee94e"
+    },
+    {
+      "id": "bundled/logos/Quart_01_00010.webp",
+      "title": "Quart_01_00010",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_01_00010.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_01_00010.webp"
+      ],
+      "baselineSha256": "49efd308938e661f9e56340c2bc35f89453d2910095f95ea6029b7da6cc55b8e"
+    },
+    {
+      "id": "bundled/logos/Quart_01_00011.webp",
+      "title": "Quart_01_00011",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_01_00011.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_01_00011.webp"
+      ],
+      "baselineSha256": "0194e093999aedc03e2b1f4fb73839d8dbd1c0e1f0688046fcd1ca05770795e9"
+    },
+    {
+      "id": "bundled/logos/Quart_01_00012.webp",
+      "title": "Quart_01_00012",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_01_00012.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_01_00012.webp"
+      ],
+      "baselineSha256": "f900eda69f8f6f5646a00ffe77e9f2378d5b2f2a4de634dd7e0cb679939e1b93"
+    },
+    {
+      "id": "bundled/logos/Quart_01_00013.webp",
+      "title": "Quart_01_00013",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_01_00013.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_01_00013.webp"
+      ],
+      "baselineSha256": "bca951970458862836aea59e60f65875338c08528e2bda1401b6d9faf1fa715d"
+    },
+    {
+      "id": "bundled/logos/Quart_01_00014.webp",
+      "title": "Quart_01_00014",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_01_00014.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_01_00014.webp"
+      ],
+      "baselineSha256": "5d103c52686f4cf893688743ad3cc4c9818fdffb6d61478fbf347cca5acdf23c"
+    },
+    {
+      "id": "bundled/logos/Quart_01_00015.webp",
+      "title": "Quart_01_00015",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_01_00015.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_01_00015.webp"
+      ],
+      "baselineSha256": "760cdb47b06cb9736b0ff2ca04adc14b8257333a0d1337a3fa118af0f6760ab2"
+    },
+    {
+      "id": "bundled/logos/Quart_01_00016.webp",
+      "title": "Quart_01_00016",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_01_00016.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_01_00016.webp"
+      ],
+      "baselineSha256": "7e6f2e549d80a64b52bd7eb0a382a6d5ba496bba47bb379b2a4156e6ee4200b4"
+    },
+    {
+      "id": "bundled/logos/Quart_01_00017.webp",
+      "title": "Quart_01_00017",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_01_00017.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_01_00017.webp"
+      ],
+      "baselineSha256": "b926b381f784d562f13b8447291f026929069003a1e5fbc1e76c327dcaa80aad"
+    },
+    {
+      "id": "bundled/logos/Quart_01_00018.webp",
+      "title": "Quart_01_00018",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_01_00018.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_01_00018.webp"
+      ],
+      "baselineSha256": "bfa4a5ec8aae30a1028e707fb88a50556723687224a4a7c2317e5f74ebd32431"
+    },
+    {
+      "id": "bundled/logos/Quart_01_00019.webp",
+      "title": "Quart_01_00019",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_01_00019.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_01_00019.webp"
+      ],
+      "baselineSha256": "83ac4e0e969a5ae2a9393756dab8a9f2a2bc9a539d4881f72fccbfc124d8fb28"
+    },
+    {
+      "id": "bundled/logos/Quart_01_00020.webp",
+      "title": "Quart_01_00020",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_01_00020.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_01_00020.webp"
+      ],
+      "baselineSha256": "6c78bf6507cae87c91081f1b7e307f272b06b1e0e7122d84c1a2bc31b14843e2"
+    },
+    {
+      "id": "bundled/logos/Quart_01_00021.webp",
+      "title": "Quart_01_00021",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_01_00021.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_01_00021.webp"
+      ],
+      "baselineSha256": "74e21b02f8b3711c9f21c4c01e2f8b6624eb9d6d4cb5b1df57471f64e178a3d1"
+    },
+    {
+      "id": "bundled/logos/Quart_01_00022.webp",
+      "title": "Quart_01_00022",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_01_00022.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_01_00022.webp"
+      ],
+      "baselineSha256": "b4c7c451ef73031ac45703a84aa5dc129fb5882db243a542e71a230b327d3c43"
+    },
+    {
+      "id": "bundled/logos/Quart_01_00023.webp",
+      "title": "Quart_01_00023",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_01_00023.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_01_00023.webp"
+      ],
+      "baselineSha256": "81b6607582e95bd2b4b2be4ac5ebeab228065bdf1d5bd54a4f0440b064025bd7"
+    },
+    {
+      "id": "bundled/logos/Quart_02_00000.webp",
+      "title": "Quart_02_00000",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_02_00000.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_02_00000.webp"
+      ],
+      "baselineSha256": "fad272562a2fdf2fd85dcb112ad7663af79b98b67fe8a430e9338578c6807272"
+    },
+    {
+      "id": "bundled/logos/Quart_02_00001.webp",
+      "title": "Quart_02_00001",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_02_00001.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_02_00001.webp"
+      ],
+      "baselineSha256": "430862359bc7605ee5f8f6be029759392014ae7959e7e4a1162585a4478a3600"
+    },
+    {
+      "id": "bundled/logos/Quart_02_00002.webp",
+      "title": "Quart_02_00002",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_02_00002.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_02_00002.webp"
+      ],
+      "baselineSha256": "836b5266231cf816b929cf143092a7bc365797a2d4b4b229ad5c6412873b5b76"
+    },
+    {
+      "id": "bundled/logos/Quart_02_00003.webp",
+      "title": "Quart_02_00003",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_02_00003.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_02_00003.webp"
+      ],
+      "baselineSha256": "972d0ef015b3bbaaf7c9fc57687dd24017eafcce8bee268efb3f29d9983690a2"
+    },
+    {
+      "id": "bundled/logos/Quart_02_00004.webp",
+      "title": "Quart_02_00004",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_02_00004.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_02_00004.webp"
+      ],
+      "baselineSha256": "0c7666d34ee5a25fa7e5a66ebfd3307b2ae6b1e082cebf7df159f0e9b8c3087a"
+    },
+    {
+      "id": "bundled/logos/Quart_02_00005.webp",
+      "title": "Quart_02_00005",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_02_00005.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_02_00005.webp"
+      ],
+      "baselineSha256": "9b586690b4d9139401af60047d754c090dd3250029631a45009b0109a9d006da"
+    },
+    {
+      "id": "bundled/logos/Quart_02_00006.webp",
+      "title": "Quart_02_00006",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_02_00006.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_02_00006.webp"
+      ],
+      "baselineSha256": "fb43c8d398e8c48ecc3f3dcfb001795bb43bd8df3f4461c2a8bc3ea68131a6b6"
+    },
+    {
+      "id": "bundled/logos/Quart_02_00007.webp",
+      "title": "Quart_02_00007",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_02_00007.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_02_00007.webp"
+      ],
+      "baselineSha256": "8974372eb2432b5a634e2a8612ac4ca811b466860be603461ced2fa0116a1b51"
+    },
+    {
+      "id": "bundled/logos/Quart_02_00008.webp",
+      "title": "Quart_02_00008",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_02_00008.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_02_00008.webp"
+      ],
+      "baselineSha256": "05c81bf6a6d2cb1352fa29023a7f10367be137150e4c80ee694add59c549953f"
+    },
+    {
+      "id": "bundled/logos/Quart_02_00009.webp",
+      "title": "Quart_02_00009",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_02_00009.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_02_00009.webp"
+      ],
+      "baselineSha256": "f6bad293dafc5aa3bae3be91863f4a3b774e509ad5cec046f6979abaa531830a"
+    },
+    {
+      "id": "bundled/logos/Quart_02_00010.webp",
+      "title": "Quart_02_00010",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_02_00010.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_02_00010.webp"
+      ],
+      "baselineSha256": "8f4fe26da325cf575a07444bb850f3138c7775a9378a8763524b79f1f84609cb"
+    },
+    {
+      "id": "bundled/logos/Quart_02_00011.webp",
+      "title": "Quart_02_00011",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_02_00011.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_02_00011.webp"
+      ],
+      "baselineSha256": "a87608bc4063b3d8fc11d880bb83a1098d90dcdece672614cff60305158c69d3"
+    },
+    {
+      "id": "bundled/logos/Quart_02_00012.webp",
+      "title": "Quart_02_00012",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_02_00012.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_02_00012.webp"
+      ],
+      "baselineSha256": "49278d851015cb45e9bb7f6db8152a9568c05eac598036a8f1c2f83f36277d12"
+    },
+    {
+      "id": "bundled/logos/Quart_02_00013.webp",
+      "title": "Quart_02_00013",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_02_00013.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_02_00013.webp"
+      ],
+      "baselineSha256": "be5960d4941f425a0eaf0b4ec79208c170c156dc62dfba337d70feb702333450"
+    },
+    {
+      "id": "bundled/logos/Quart_02_00014.webp",
+      "title": "Quart_02_00014",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_02_00014.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_02_00014.webp"
+      ],
+      "baselineSha256": "6ec706bfd099266254730083fd263cc032aebffe7894a4104a7a2de2082cee86"
+    },
+    {
+      "id": "bundled/logos/Quart_02_00015.webp",
+      "title": "Quart_02_00015",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_02_00015.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_02_00015.webp"
+      ],
+      "baselineSha256": "3cafdb458f300f4903c14f0074f798ea598d976e5f1450a235eed4798746ff8d"
+    },
+    {
+      "id": "bundled/logos/Quart_02_00016.webp",
+      "title": "Quart_02_00016",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_02_00016.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_02_00016.webp"
+      ],
+      "baselineSha256": "a2bc166df7a27d625b743682fa5759edfbab7b9691273aec33b3b32548319eb0"
+    },
+    {
+      "id": "bundled/logos/Quart_02_00017.webp",
+      "title": "Quart_02_00017",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_02_00017.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_02_00017.webp"
+      ],
+      "baselineSha256": "38a5853c38f76c9a1face24051ec9a6dd04f7f66ef3b9769102dad4d4d8df65b"
+    },
+    {
+      "id": "bundled/logos/Quart_02_00018.webp",
+      "title": "Quart_02_00018",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_02_00018.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_02_00018.webp"
+      ],
+      "baselineSha256": "5a295c50679414ab0d1966a3faf56f2544ce11d6a738256e41975c47725558a1"
+    },
+    {
+      "id": "bundled/logos/Quart_02_00019.webp",
+      "title": "Quart_02_00019",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_02_00019.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_02_00019.webp"
+      ],
+      "baselineSha256": "f9d5113c74b5f073eb58a13cfccc5d33469aa2c12be7ed779703ee0a1aa788f0"
+    },
+    {
+      "id": "bundled/logos/Quart_02_00020.webp",
+      "title": "Quart_02_00020",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_02_00020.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_02_00020.webp"
+      ],
+      "baselineSha256": "1b3a0e0c0729802945fc331b76d6ebd84982ce262939fc32da09b958cdd48212"
+    },
+    {
+      "id": "bundled/logos/Quart_02_00021.webp",
+      "title": "Quart_02_00021",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_02_00021.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_02_00021.webp"
+      ],
+      "baselineSha256": "886a62708f43706086eb7f81acf8b354c88cf0eba3c514bfec76eb609b8f1486"
+    },
+    {
+      "id": "bundled/logos/Quart_02_00022.webp",
+      "title": "Quart_02_00022",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_02_00022.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_02_00022.webp"
+      ],
+      "baselineSha256": "f96a2ee67898c706aee662c5902453080006297f7927103d5c7a10c111af8cfd"
+    },
+    {
+      "id": "bundled/logos/Quart_02_00023.webp",
+      "title": "Quart_02_00023",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_02_00023.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_02_00023.webp"
+      ],
+      "baselineSha256": "0be6d4b929f0f5e4a94069b9119b5c0538225146fb99fb8ee8480fe4fe9cabdd"
+    },
+    {
+      "id": "bundled/logos/Quart_03_00000.webp",
+      "title": "Quart_03_00000",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_03_00000.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_03_00000.webp"
+      ],
+      "baselineSha256": "9ca586bcb063b58eadd81edb0bb59754ac06adbc82a53afe36df1daf40a13678"
+    },
+    {
+      "id": "bundled/logos/Quart_03_00001.webp",
+      "title": "Quart_03_00001",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_03_00001.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_03_00001.webp"
+      ],
+      "baselineSha256": "99248621478de489fa07e8ed88333e5beda317c4734ceb791eb3d48442537161"
+    },
+    {
+      "id": "bundled/logos/Quart_03_00002.webp",
+      "title": "Quart_03_00002",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_03_00002.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_03_00002.webp"
+      ],
+      "baselineSha256": "4e5f8be77de5e3e6dd3df153f8d9b433006449ad4ad771773fb972fd49ff1b8b"
+    },
+    {
+      "id": "bundled/logos/Quart_03_00003.webp",
+      "title": "Quart_03_00003",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_03_00003.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_03_00003.webp"
+      ],
+      "baselineSha256": "0059a92e44e37bc72ff7d275c1475581823d84f19a6f917a954790a2ecd3a63a"
+    },
+    {
+      "id": "bundled/logos/Quart_03_00004.webp",
+      "title": "Quart_03_00004",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_03_00004.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_03_00004.webp"
+      ],
+      "baselineSha256": "4c49d11a01221e6e245d48751d8e0802679263a9933e0fe1f1d77781b4677abe"
+    },
+    {
+      "id": "bundled/logos/Quart_03_00005.webp",
+      "title": "Quart_03_00005",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_03_00005.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_03_00005.webp"
+      ],
+      "baselineSha256": "9a991cc436114ebc76aa0e816cd5d3e5f03e4970bab29f3073d53b68210f0304"
+    },
+    {
+      "id": "bundled/logos/Quart_03_00006.webp",
+      "title": "Quart_03_00006",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_03_00006.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_03_00006.webp"
+      ],
+      "baselineSha256": "fb98810db61ecd7a555e5fe2fe364ac58b533d89422005c9d910e2b0a3f882bc"
+    },
+    {
+      "id": "bundled/logos/Quart_03_00007.webp",
+      "title": "Quart_03_00007",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_03_00007.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_03_00007.webp"
+      ],
+      "baselineSha256": "829f35f60763cb5bbefdd905d4ec2742af2a8a1993772cb4cf93df31ca61597f"
+    },
+    {
+      "id": "bundled/logos/Quart_03_00008.webp",
+      "title": "Quart_03_00008",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_03_00008.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_03_00008.webp"
+      ],
+      "baselineSha256": "f02be60c0d51a06f22e8c06e85f829da9121c4bb0d9abc1799db463ce5116b1b"
+    },
+    {
+      "id": "bundled/logos/Quart_03_00009.webp",
+      "title": "Quart_03_00009",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_03_00009.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_03_00009.webp"
+      ],
+      "baselineSha256": "349b8117a181c75e0a72fe48e65f0326dcc762fbadd2baadae405c9078602726"
+    },
+    {
+      "id": "bundled/logos/Quart_03_00010.webp",
+      "title": "Quart_03_00010",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_03_00010.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_03_00010.webp"
+      ],
+      "baselineSha256": "23cac5da1d070a4a041cc77fb64d2a0975fcbf4221a5d32994b44d6b61dcfc92"
+    },
+    {
+      "id": "bundled/logos/Quart_03_00011.webp",
+      "title": "Quart_03_00011",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_03_00011.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_03_00011.webp"
+      ],
+      "baselineSha256": "18402f454bc21df7dc1b4af328862d906bf69bdc0436bf5b81fd4175e2180d2e"
+    },
+    {
+      "id": "bundled/logos/Quart_03_00012.webp",
+      "title": "Quart_03_00012",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_03_00012.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_03_00012.webp"
+      ],
+      "baselineSha256": "46f4145640ca82f429972914e9c94393610ca0eaf63e41aa47ca26da63fd95ed"
+    },
+    {
+      "id": "bundled/logos/Quart_03_00013.webp",
+      "title": "Quart_03_00013",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_03_00013.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_03_00013.webp"
+      ],
+      "baselineSha256": "50c4cf80b34e4b5d8cd879a171a3a196d1667da8ac207cec166865d7bb7b04b4"
+    },
+    {
+      "id": "bundled/logos/Quart_03_00014.webp",
+      "title": "Quart_03_00014",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_03_00014.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_03_00014.webp"
+      ],
+      "baselineSha256": "5d463b52d347e539de35e743a3ea9e9740103865bf19d585848e0d71c323083a"
+    },
+    {
+      "id": "bundled/logos/Quart_03_00015.webp",
+      "title": "Quart_03_00015",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_03_00015.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_03_00015.webp"
+      ],
+      "baselineSha256": "302c54824f61331508c8bbd271e911c2e24791ce1c4657b06df0faf253416bf8"
+    },
+    {
+      "id": "bundled/logos/Quart_03_00016.webp",
+      "title": "Quart_03_00016",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_03_00016.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_03_00016.webp"
+      ],
+      "baselineSha256": "4856c1d5cfd9d768463a85bd0ec0b4d46415e421f224f7208673cad4a555b095"
+    },
+    {
+      "id": "bundled/logos/Quart_03_00017.webp",
+      "title": "Quart_03_00017",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_03_00017.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_03_00017.webp"
+      ],
+      "baselineSha256": "4bc908cb349c2dcf05c260996362edc07e6822feebf322a2a7e0115fc844468c"
+    },
+    {
+      "id": "bundled/logos/Quart_03_00018.webp",
+      "title": "Quart_03_00018",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_03_00018.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_03_00018.webp"
+      ],
+      "baselineSha256": "2a253aef61ac8212e9be17c0ab27f7264ead84d715278f73722b05aa579e818a"
+    },
+    {
+      "id": "bundled/logos/Quart_03_00019.webp",
+      "title": "Quart_03_00019",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_03_00019.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_03_00019.webp"
+      ],
+      "baselineSha256": "f32e43190b373cc5ec4bd41eee143d84527839df86d283bf926f8d3d6a26ddd7"
+    },
+    {
+      "id": "bundled/logos/Quart_03_00020.webp",
+      "title": "Quart_03_00020",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_03_00020.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_03_00020.webp"
+      ],
+      "baselineSha256": "108db313ad34c68f976d4c66654a6de993639c2904bc2d33abb7b7a23386fba5"
+    },
+    {
+      "id": "bundled/logos/Quart_03_00021.webp",
+      "title": "Quart_03_00021",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_03_00021.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_03_00021.webp"
+      ],
+      "baselineSha256": "c1aaf8908d2a77fba8113e2db3d76bcfcf9be04e3c3f5424a06fe0891ca273ad"
+    },
+    {
+      "id": "bundled/logos/Quart_03_00022.webp",
+      "title": "Quart_03_00022",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_03_00022.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_03_00022.webp"
+      ],
+      "baselineSha256": "e2e8b9c0aa32e630cdc738be4dc5cdafcd40889dbbc124f81af05cff867ef260"
+    },
+    {
+      "id": "bundled/logos/Quart_03_00023.webp",
+      "title": "Quart_03_00023",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_03_00023.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_03_00023.webp"
+      ],
+      "baselineSha256": "b97bd584aa64b5c635e96e0d5c918f2c83da60c39e9d5ef128e616a54beb7184"
+    },
+    {
+      "id": "bundled/logos/Quart_04_00000.webp",
+      "title": "Quart_04_00000",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_04_00000.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_04_00000.webp"
+      ],
+      "baselineSha256": "7819a12e4176235b272a9fc8e48fc26f36ce8714c8218acd92b600abeef3b4ee"
+    },
+    {
+      "id": "bundled/logos/Quart_04_00001.webp",
+      "title": "Quart_04_00001",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_04_00001.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_04_00001.webp"
+      ],
+      "baselineSha256": "c91c91da0354e26236d351ba7102c22f5f63ea9b6853729566480e13c087cb44"
+    },
+    {
+      "id": "bundled/logos/Quart_04_00002.webp",
+      "title": "Quart_04_00002",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_04_00002.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_04_00002.webp"
+      ],
+      "baselineSha256": "983906b51f62592440bf63c18937d2f933a8f11b17ea848fd542adf8d7bf8754"
+    },
+    {
+      "id": "bundled/logos/Quart_04_00003.webp",
+      "title": "Quart_04_00003",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_04_00003.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_04_00003.webp"
+      ],
+      "baselineSha256": "89c20a68807a6abd4130361bcf54f3c491115602d738405f94482fbbec8bdbfc"
+    },
+    {
+      "id": "bundled/logos/Quart_04_00004.webp",
+      "title": "Quart_04_00004",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_04_00004.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_04_00004.webp"
+      ],
+      "baselineSha256": "3eea6e8d1fbea3b764ea3f4985c8b4de2b1d5f61bdace70e94ed1bb6a8dca96a"
+    },
+    {
+      "id": "bundled/logos/Quart_04_00005.webp",
+      "title": "Quart_04_00005",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_04_00005.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_04_00005.webp"
+      ],
+      "baselineSha256": "041694f6f59d136001a83a22d805699ee17d20055b1e4716ed39903991698e28"
+    },
+    {
+      "id": "bundled/logos/Quart_04_00006.webp",
+      "title": "Quart_04_00006",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_04_00006.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_04_00006.webp"
+      ],
+      "baselineSha256": "f58683ffe2abc04213c73aa3f4109675a0affef23fc9666094f4614f8d3a2b02"
+    },
+    {
+      "id": "bundled/logos/Quart_04_00007.webp",
+      "title": "Quart_04_00007",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_04_00007.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_04_00007.webp"
+      ],
+      "baselineSha256": "b79c4677ca0b655b95350fe367016e6e9348d4b54ba6d6b7eab0b53323f899cd"
+    },
+    {
+      "id": "bundled/logos/Quart_04_00008.webp",
+      "title": "Quart_04_00008",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_04_00008.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_04_00008.webp"
+      ],
+      "baselineSha256": "fc6e367c812f1e1bf09088df7cf141484990ac712f01b6bf46ec550367408a32"
+    },
+    {
+      "id": "bundled/logos/Quart_04_00009.webp",
+      "title": "Quart_04_00009",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_04_00009.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_04_00009.webp"
+      ],
+      "baselineSha256": "06a68d9a5e53d6571b5bfe4c8101c7da6d7f755c93d3554efd8b54bc3cfde299"
+    },
+    {
+      "id": "bundled/logos/Quart_04_00010.webp",
+      "title": "Quart_04_00010",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_04_00010.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_04_00010.webp"
+      ],
+      "baselineSha256": "3d6e58ba3a0d1366f5296df0ec5a148570edd3538308ea33d6117eb2dbf078d8"
+    },
+    {
+      "id": "bundled/logos/Quart_04_00011.webp",
+      "title": "Quart_04_00011",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_04_00011.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_04_00011.webp"
+      ],
+      "baselineSha256": "0af7a7bb73c501b097554cd9026f5e924e97f1fdf0ae8ba45ae141848ef27217"
+    },
+    {
+      "id": "bundled/logos/Quart_04_00012.webp",
+      "title": "Quart_04_00012",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_04_00012.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_04_00012.webp"
+      ],
+      "baselineSha256": "4372d7be5113556637f43c9349265d1fb9bd9fd4b0c5bc936a3165d094ff382a"
+    },
+    {
+      "id": "bundled/logos/Quart_04_00013.webp",
+      "title": "Quart_04_00013",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_04_00013.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_04_00013.webp"
+      ],
+      "baselineSha256": "39cf134c6134c93edf92d10ec0826473468a6c2869373489ad74a12fc9a9846f"
+    },
+    {
+      "id": "bundled/logos/Quart_04_00014.webp",
+      "title": "Quart_04_00014",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_04_00014.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_04_00014.webp"
+      ],
+      "baselineSha256": "1cd615a1551f70f1a9fe37d3cb4c755dc172864a1f9661eaec063587c2109a9e"
+    },
+    {
+      "id": "bundled/logos/Quart_04_00015.webp",
+      "title": "Quart_04_00015",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_04_00015.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_04_00015.webp"
+      ],
+      "baselineSha256": "1f8313d46d585144589df211d4790f85d778f4f835b782fe6a9d35fc00a8bf63"
+    },
+    {
+      "id": "bundled/logos/Quart_04_00016.webp",
+      "title": "Quart_04_00016",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_04_00016.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_04_00016.webp"
+      ],
+      "baselineSha256": "217196b2fe0955f3ad73d659cb3e28bf66479fd5e59beadde32bfcc1a6635d10"
+    },
+    {
+      "id": "bundled/logos/Quart_04_00017.webp",
+      "title": "Quart_04_00017",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_04_00017.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_04_00017.webp"
+      ],
+      "baselineSha256": "b186c2bc0d7f1b1f18eb31b9cc745a9a303d6d5572198d8c903cf9ebb1db8616"
+    },
+    {
+      "id": "bundled/logos/Quart_04_00018.webp",
+      "title": "Quart_04_00018",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_04_00018.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_04_00018.webp"
+      ],
+      "baselineSha256": "a4afa88e388a85b4b6e41b687bd00778de81f74685310c443217873cb3fab170"
+    },
+    {
+      "id": "bundled/logos/Quart_04_00019.webp",
+      "title": "Quart_04_00019",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_04_00019.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_04_00019.webp"
+      ],
+      "baselineSha256": "e373b54b085d33d78be4b4a2eabfd7a7cb9e837ea883cb57e203631f03e0f92d"
+    },
+    {
+      "id": "bundled/logos/Quart_04_00020.webp",
+      "title": "Quart_04_00020",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_04_00020.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_04_00020.webp"
+      ],
+      "baselineSha256": "cbce9e7f01f736d34b6357682c5a3463ee42ef39fb94c609f23883b4eaa2dcad"
+    },
+    {
+      "id": "bundled/logos/Quart_04_00021.webp",
+      "title": "Quart_04_00021",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_04_00021.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_04_00021.webp"
+      ],
+      "baselineSha256": "0706e8dae45063bd028173def51e8cd149bbdc7e995dfed11960999edbc99bbd"
+    },
+    {
+      "id": "bundled/logos/Quart_04_00022.webp",
+      "title": "Quart_04_00022",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_04_00022.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_04_00022.webp"
+      ],
+      "baselineSha256": "cf5a2ebf50a52e36c094ba87d50c195d618bb6b45b95a64652066f7b1e607de7"
+    },
+    {
+      "id": "bundled/logos/Quart_04_00023.webp",
+      "title": "Quart_04_00023",
+      "category": "branding",
+      "source": "assets/library/bundled/logos/Quart_04_00023.webp",
+      "outputs": [
+        "client/src/assets/logos/Quart_04_00023.webp"
+      ],
+      "baselineSha256": "8549cd37e0d34b189a3b2b4385521278fba53c7daf18b0447980cedc073bd894"
+    },
+    {
+      "id": "bundled/react.svg",
+      "title": "react",
+      "category": "other",
+      "source": "assets/library/bundled/react.svg",
+      "outputs": [
+        "client/src/assets/react.svg"
+      ],
+      "baselineSha256": "35ef61ed53b323ae94a16a8ec659b3d0af3880698791133f23b084085ab1c2e5"
+    },
+    {
+      "id": "bundled/vite.svg",
+      "title": "vite",
+      "category": "other",
+      "source": "assets/library/bundled/vite.svg",
+      "outputs": [
+        "client/src/assets/vite.svg"
+      ],
+      "baselineSha256": "5be21acd42eb7b896e517f4e0f0f11eb5c5d9e54fbbcebe9453f033008fcca6f"
+    },
+    {
+      "id": "cartography/altar.webp",
+      "title": "altar",
+      "category": "cartography",
+      "source": "assets/library/cartography/altar.webp",
+      "outputs": [
+        "client/public/cartography/altar.webp"
+      ],
+      "baselineSha256": "f1d2c2c780dc416182334d6600c010873511ec0dd496cd67a8d2586b7afff72c"
+    },
+    {
+      "id": "cartography/bone-pile.webp",
+      "title": "bone-pile",
+      "category": "cartography",
+      "source": "assets/library/cartography/bone-pile.webp",
+      "outputs": [
+        "client/public/cartography/bone-pile.webp"
+      ],
+      "baselineSha256": "b911fe99488b0716e96e7f56fe025b1bc51e8e53478e793a8fc3fa0e3639bf15"
+    },
+    {
+      "id": "cartography/crypt-guard.webp",
+      "title": "crypt-guard",
+      "category": "cartography",
+      "source": "assets/library/cartography/crypt-guard.webp",
+      "outputs": [
+        "client/public/cartography/crypt-guard.webp"
+      ],
+      "baselineSha256": "f99b6d9765f34f4f113c72f9babc2ad6bd7204a2445fb2d28656a837c19c8d96"
+    },
+    {
+      "id": "cartography/earth.webp",
+      "title": "earth",
+      "category": "cartography",
+      "source": "assets/library/cartography/earth.webp",
+      "outputs": [
+        "client/public/cartography/earth.webp"
+      ],
+      "baselineSha256": "6698b83fa832c0d1a7fdc3cc45d4c35088a1f3bc7dca611d48d0b33011e34f8d"
+    },
+    {
+      "id": "cartography/mountain-ridge.webp",
+      "title": "mountain-ridge",
+      "category": "cartography",
+      "source": "assets/library/cartography/mountain-ridge.webp",
+      "outputs": [
+        "client/public/cartography/mountain-ridge.webp"
+      ],
+      "baselineSha256": "a95a9877d6e892cc9c819a48a2f991c977240234262ecc4dde6f4721e1cb5723"
+    },
+    {
+      "id": "cartography/outpost.webp",
+      "title": "outpost",
+      "category": "cartography",
+      "source": "assets/library/cartography/outpost.webp",
+      "outputs": [
+        "client/public/cartography/outpost.webp"
+      ],
+      "baselineSha256": "e5f18fb57de02420f0b67443587a269690795f7aba58a390907c888bdac32ee7"
+    },
+    {
+      "id": "cartography/pine.webp",
+      "title": "pine",
+      "category": "cartography",
+      "source": "assets/library/cartography/pine.webp",
+      "outputs": [
+        "client/public/cartography/pine.webp"
+      ],
+      "baselineSha256": "a6f1e2cb11dd725791c5ea2b286a80391b48ad5fedf50cf0cd222117fdc06d87"
+    },
+    {
+      "id": "cartography/rock-cluster.webp",
+      "title": "rock-cluster",
+      "category": "cartography",
+      "source": "assets/library/cartography/rock-cluster.webp",
+      "outputs": [
+        "client/public/cartography/rock-cluster.webp"
+      ],
+      "baselineSha256": "19dbfb99d675b6b21a793e8a21a465d4d8a7e1cebb00001f18b15722868bf43b"
+    },
+    {
+      "id": "cartography/ruins.webp",
+      "title": "ruins",
+      "category": "cartography",
+      "source": "assets/library/cartography/ruins.webp",
+      "outputs": [
+        "client/public/cartography/ruins.webp"
+      ],
+      "baselineSha256": "1baff439afe3fb1f905091eea8229fda2255ae79d8237a406632cdbe154ab9c5"
+    },
+    {
+      "id": "cartography/sarcophagus.webp",
+      "title": "sarcophagus",
+      "category": "cartography",
+      "source": "assets/library/cartography/sarcophagus.webp",
+      "outputs": [
+        "client/public/cartography/sarcophagus.webp"
+      ],
+      "baselineSha256": "b4676db11ec37d2381bf64bfc0aefef90356c6d1979be0746de30b5a23fa695c"
+    },
+    {
+      "id": "cartography/stone-floor.webp",
+      "title": "stone-floor",
+      "category": "cartography",
+      "source": "assets/library/cartography/stone-floor.webp",
+      "outputs": [
+        "client/public/cartography/stone-floor.webp"
+      ],
+      "baselineSha256": "7014182c00a9395b0a787a3e3f38cd729b210f27af3daaabf20b2d134339716d"
+    },
+    {
+      "id": "cartography/stone-pillar.webp",
+      "title": "stone-pillar",
+      "category": "cartography",
+      "source": "assets/library/cartography/stone-pillar.webp",
+      "outputs": [
+        "client/public/cartography/stone-pillar.webp"
+      ],
+      "baselineSha256": "f5c147d3287b786a885df5bf0bf2bc64026c98fc3929c1b01c22bea67cb157cb"
+    },
+    {
+      "id": "cartography/stone-wall.webp",
+      "title": "stone-wall",
+      "category": "cartography",
+      "source": "assets/library/cartography/stone-wall.webp",
+      "outputs": [
+        "client/public/cartography/stone-wall.webp"
+      ],
+      "baselineSha256": "4d2d7e504c00c4879ff993c1da871e15f53088b7da18c520897340719d0b5066"
+    },
+    {
+      "id": "cartography/storage-cluster.webp",
+      "title": "storage-cluster",
+      "category": "cartography",
+      "source": "assets/library/cartography/storage-cluster.webp",
+      "outputs": [
+        "client/public/cartography/storage-cluster.webp"
+      ],
+      "baselineSha256": "e3168f90d725b264704428ad7e1bbd22f75e146fadd4c41ff643975e534a84bd"
+    },
+    {
+      "id": "cartography/torch.webp",
+      "title": "torch",
+      "category": "cartography",
+      "source": "assets/library/cartography/torch.webp",
+      "outputs": [
+        "client/public/cartography/torch.webp"
+      ],
+      "baselineSha256": "e251a8f8b1003d12c26e412ccee3180826bd00d67e04e692bf63aeaaaeaf71e4"
+    },
+    {
+      "id": "cartography/water.webp",
+      "title": "water",
+      "category": "cartography",
+      "source": "assets/library/cartography/water.webp",
+      "outputs": [
+        "client/public/cartography/water.webp"
+      ],
+      "baselineSha256": "04f0ae31cca01c7ae4f29df061a27e28b72a4edfe9888266ae6242d18405fe54"
+    },
+    {
+      "id": "cartography/wood-door.webp",
+      "title": "wood-door",
+      "category": "cartography",
+      "source": "assets/library/cartography/wood-door.webp",
+      "outputs": [
+        "client/public/cartography/wood-door.webp"
+      ],
+      "baselineSha256": "66542ace720033fe9866e479a737c176310d7cacc6a21eea9500bc539cfd5b12"
+    },
+    {
+      "id": "coins/cp.webp",
+      "title": "cp",
+      "category": "coins",
+      "source": "assets/library/coins/cp.webp",
+      "outputs": [
+        "client/public/coins/cp.webp"
+      ],
+      "baselineSha256": "2501b6d9ba5bd063945d56a1d52423d88641e69c226be459dda8ecb191ae20f2"
+    },
+    {
+      "id": "coins/ep.webp",
+      "title": "ep",
+      "category": "coins",
+      "source": "assets/library/coins/ep.webp",
+      "outputs": [
+        "client/public/coins/ep.webp"
+      ],
+      "baselineSha256": "a8e05b7fc17eea3520a1567bec585108029e505b7f66da8d49307f7a6c6941e8"
+    },
+    {
+      "id": "coins/gp.webp",
+      "title": "gp",
+      "category": "coins",
+      "source": "assets/library/coins/gp.webp",
+      "outputs": [
+        "client/public/coins/gp.webp"
+      ],
+      "baselineSha256": "2244cd57a6a662ed7d32cddc310051e4801ca2dc256d2736af22bca1ab164fbe"
+    },
+    {
+      "id": "coins/pp.webp",
+      "title": "pp",
+      "category": "coins",
+      "source": "assets/library/coins/pp.webp",
+      "outputs": [
+        "client/public/coins/pp.webp"
+      ],
+      "baselineSha256": "7d83ffd016c8c4579ea3d72a7450a493deb41dd4c44fb08127e1c5c067138212"
+    },
+    {
+      "id": "coins/sp.webp",
+      "title": "sp",
+      "category": "coins",
+      "source": "assets/library/coins/sp.webp",
+      "outputs": [
+        "client/public/coins/sp.webp"
+      ],
+      "baselineSha256": "b257a0db0d9352796df6660604e1a3aa12985447cb640193a173a5f92522255d"
+    },
+    {
+      "id": "conditions/blinded.webp",
+      "title": "blinded",
+      "category": "conditions",
+      "source": "assets/library/conditions/blinded.webp",
+      "outputs": [
+        "client/public/conditions/blinded.webp"
+      ],
+      "baselineSha256": "1c9680a6217d83386a6c3ce6bd05a003aea996649f0dc5c9d3623c79b1dfae23"
+    },
+    {
+      "id": "conditions/charmed.webp",
+      "title": "charmed",
+      "category": "conditions",
+      "source": "assets/library/conditions/charmed.webp",
+      "outputs": [
+        "client/public/conditions/charmed.webp"
+      ],
+      "baselineSha256": "698d2bf06184df2578cd5945260b9017faf7907beaf7cc06c06763aef123bfbd"
+    },
+    {
+      "id": "conditions/deafened.webp",
+      "title": "deafened",
+      "category": "conditions",
+      "source": "assets/library/conditions/deafened.webp",
+      "outputs": [
+        "client/public/conditions/deafened.webp"
+      ],
+      "baselineSha256": "982fdb6918dc907c055bbdc89d8f6aeb79bf1b9ef595d191111f9db2fde68faf"
+    },
+    {
+      "id": "conditions/exhaustion.webp",
+      "title": "exhaustion",
+      "category": "conditions",
+      "source": "assets/library/conditions/exhaustion.webp",
+      "outputs": [
+        "client/public/conditions/exhaustion.webp"
+      ],
+      "baselineSha256": "c17ffcc7c4ea77e2a3a2251258a3629fe044969ab87e231eb084a007bc069e1e"
+    },
+    {
+      "id": "conditions/frightened.webp",
+      "title": "frightened",
+      "category": "conditions",
+      "source": "assets/library/conditions/frightened.webp",
+      "outputs": [
+        "client/public/conditions/frightened.webp"
+      ],
+      "baselineSha256": "cb92a084ba6b8633cec92aad6a2da82470bdeaf76b7e52de47c934a0ac83f09a"
+    },
+    {
+      "id": "conditions/grappled.webp",
+      "title": "grappled",
+      "category": "conditions",
+      "source": "assets/library/conditions/grappled.webp",
+      "outputs": [
+        "client/public/conditions/grappled.webp"
+      ],
+      "baselineSha256": "652b212e21af99e1eb92c1e17024db676a04541f2ba3662305988672eb6e5937"
+    },
+    {
+      "id": "conditions/incapacitated.webp",
+      "title": "incapacitated",
+      "category": "conditions",
+      "source": "assets/library/conditions/incapacitated.webp",
+      "outputs": [
+        "client/public/conditions/incapacitated.webp"
+      ],
+      "baselineSha256": "ae82a10a221e101945c11d3f9fbc3779475187be47e09c271221a6c9c92739be"
+    },
+    {
+      "id": "conditions/invisible.webp",
+      "title": "invisible",
+      "category": "conditions",
+      "source": "assets/library/conditions/invisible.webp",
+      "outputs": [
+        "client/public/conditions/invisible.webp"
+      ],
+      "baselineSha256": "ce236c01f3a03555ecd32416d9c9f936204868a024f3c5c61ca3984214d05d0f"
+    },
+    {
+      "id": "conditions/paralyzed.webp",
+      "title": "paralyzed",
+      "category": "conditions",
+      "source": "assets/library/conditions/paralyzed.webp",
+      "outputs": [
+        "client/public/conditions/paralyzed.webp"
+      ],
+      "baselineSha256": "80e270cd5bd5c753557f19f074bc417223ba4b5a44b94c48c94da75821b12441"
+    },
+    {
+      "id": "conditions/petrified.webp",
+      "title": "petrified",
+      "category": "conditions",
+      "source": "assets/library/conditions/petrified.webp",
+      "outputs": [
+        "client/public/conditions/petrified.webp"
+      ],
+      "baselineSha256": "5180b24cdc2aee3a00c372a9ddc7771c0e9807ae29cfb8cf452677e110608e41"
+    },
+    {
+      "id": "conditions/poisoned.webp",
+      "title": "poisoned",
+      "category": "conditions",
+      "source": "assets/library/conditions/poisoned.webp",
+      "outputs": [
+        "client/public/conditions/poisoned.webp"
+      ],
+      "baselineSha256": "30c206f32a8784cf4f2b3bdb848fc797eeda2ffc4d59f821db97058ab68ce89d"
+    },
+    {
+      "id": "conditions/prone.webp",
+      "title": "prone",
+      "category": "conditions",
+      "source": "assets/library/conditions/prone.webp",
+      "outputs": [
+        "client/public/conditions/prone.webp"
+      ],
+      "baselineSha256": "e57849df321b4dbb7fb873b789da74c587823e6cefe5a203c462fc356ea82e2d"
+    },
+    {
+      "id": "conditions/restrained.webp",
+      "title": "restrained",
+      "category": "conditions",
+      "source": "assets/library/conditions/restrained.webp",
+      "outputs": [
+        "client/public/conditions/restrained.webp"
+      ],
+      "baselineSha256": "852326e760b3e8ae32cff3b5a61f719e87d80b829f2865878cdffb414d1bda90"
+    },
+    {
+      "id": "conditions/stunned.webp",
+      "title": "stunned",
+      "category": "conditions",
+      "source": "assets/library/conditions/stunned.webp",
+      "outputs": [
+        "client/public/conditions/stunned.webp"
+      ],
+      "baselineSha256": "6da800fd6591825c1002144fc4dd10084403270403a224fd2e14650d4ed3038b"
+    },
+    {
+      "id": "conditions/unconscious.webp",
+      "title": "unconscious",
+      "category": "conditions",
+      "source": "assets/library/conditions/unconscious.webp",
+      "outputs": [
+        "client/public/conditions/unconscious.webp"
+      ],
+      "baselineSha256": "f3bbf63e63dc06e33de6590d08ff29448d66ad52f78a49e164686d11b7f03289"
+    },
+    {
+      "id": "crypt/altar-e.webp",
+      "title": "altar-e",
+      "category": "crypt",
+      "source": "assets/library/crypt/altar-e.webp",
+      "outputs": [
+        "client/public/crypt/altar-e.webp"
+      ],
+      "baselineSha256": "2aaf3eb3dc10a19e845aabca590a53cb1442f3ac6e3277004fa8e289dd159293"
+    },
+    {
+      "id": "crypt/altar-n.webp",
+      "title": "altar-n",
+      "category": "crypt",
+      "source": "assets/library/crypt/altar-n.webp",
+      "outputs": [
+        "client/public/crypt/altar-n.webp"
+      ],
+      "baselineSha256": "86ef9ee5aaef5ca903d75e16d86f21deeb25d1b654ff5e21721f49c49694bfd6"
+    },
+    {
+      "id": "crypt/altar-s.webp",
+      "title": "altar-s",
+      "category": "crypt",
+      "source": "assets/library/crypt/altar-s.webp",
+      "outputs": [
+        "client/public/crypt/altar-s.webp"
+      ],
+      "baselineSha256": "3c7cb1700c4771138fad177794d586ca409d591f8d4b8cffac5f5818b5223fe8"
+    },
+    {
+      "id": "crypt/altar-w.webp",
+      "title": "altar-w",
+      "category": "crypt",
+      "source": "assets/library/crypt/altar-w.webp",
+      "outputs": [
+        "client/public/crypt/altar-w.webp"
+      ],
+      "baselineSha256": "5db9ff99acdc77a2cc7c660a9aace868565b7bbaa01a79f006a38522af9a2b60"
+    },
+    {
+      "id": "crypt/arch.webp",
+      "title": "arch",
+      "category": "crypt",
+      "source": "assets/library/crypt/arch.webp",
+      "outputs": [
+        "client/public/crypt/arch.webp"
+      ],
+      "baselineSha256": "16f0d2685ec032fe1712daad154702da6e49a555c6710a62dc5b3dceec88d238"
+    },
+    {
+      "id": "crypt/barrels.webp",
+      "title": "barrels",
+      "category": "crypt",
+      "source": "assets/library/crypt/barrels.webp",
+      "outputs": [
+        "client/public/crypt/barrels.webp"
+      ],
+      "baselineSha256": "e32c82479c5be71804e9b0a2a8965ade25942668dd0c2aaebf19ae03a84b5989"
+    },
+    {
+      "id": "crypt/bench.webp",
+      "title": "bench",
+      "category": "crypt",
+      "source": "assets/library/crypt/bench.webp",
+      "outputs": [
+        "client/public/crypt/bench.webp"
+      ],
+      "baselineSha256": "9b6a1d0aed63d2288b77fea3239121704bfb244263b1c7fedd34fe430f4f70fd"
+    },
+    {
+      "id": "crypt/blood.webp",
+      "title": "blood",
+      "category": "crypt",
+      "source": "assets/library/crypt/blood.webp",
+      "outputs": [
+        "client/public/crypt/blood.webp"
+      ],
+      "baselineSha256": "19cf51ae2b49aec70797278c49d864e315a74b8fbdb9c714a94c30742344fd7f"
+    },
+    {
+      "id": "crypt/bones.webp",
+      "title": "bones",
+      "category": "crypt",
+      "source": "assets/library/crypt/bones.webp",
+      "outputs": [
+        "client/public/crypt/bones.webp"
+      ],
+      "baselineSha256": "96090d199508ffe7d9f9b037fa3bf0ad1a3a8242fa7fe0a3c7967d69c68570e9"
+    },
+    {
+      "id": "crypt/brazier.webp",
+      "title": "brazier",
+      "category": "crypt",
+      "source": "assets/library/crypt/brazier.webp",
+      "outputs": [
+        "client/public/crypt/brazier.webp"
+      ],
+      "baselineSha256": "d24661b9cb550d8b1de3242efffb2e58bd912225bc6eb79d90bef604d3cd2d3d"
+    },
+    {
+      "id": "crypt/bunk-e.webp",
+      "title": "bunk-e",
+      "category": "crypt",
+      "source": "assets/library/crypt/bunk-e.webp",
+      "outputs": [
+        "client/public/crypt/bunk-e.webp"
+      ],
+      "baselineSha256": "659697fcc5155936c2fb2a707a95fbca4bd0ba93db9be94734a3a979318edfa8"
+    },
+    {
+      "id": "crypt/bunk-n.webp",
+      "title": "bunk-n",
+      "category": "crypt",
+      "source": "assets/library/crypt/bunk-n.webp",
+      "outputs": [
+        "client/public/crypt/bunk-n.webp"
+      ],
+      "baselineSha256": "285998300b0d4aa8712ea1ae5392a41408326cf5b16c26f2566d646300765908"
+    },
+    {
+      "id": "crypt/bunk-s.webp",
+      "title": "bunk-s",
+      "category": "crypt",
+      "source": "assets/library/crypt/bunk-s.webp",
+      "outputs": [
+        "client/public/crypt/bunk-s.webp"
+      ],
+      "baselineSha256": "784c2c55f4687fde464c44dbf1ad8889a8e6e745a87a1d87afb92d8504e1e20a"
+    },
+    {
+      "id": "crypt/bunk-w.webp",
+      "title": "bunk-w",
+      "category": "crypt",
+      "source": "assets/library/crypt/bunk-w.webp",
+      "outputs": [
+        "client/public/crypt/bunk-w.webp"
+      ],
+      "baselineSha256": "c5812d1ed17800ce1917ad00ffaa8ac405e63b51776be37ceffcd52417f49caf"
+    },
+    {
+      "id": "crypt/cage.webp",
+      "title": "cage",
+      "category": "crypt",
+      "source": "assets/library/crypt/cage.webp",
+      "outputs": [
+        "client/public/crypt/cage.webp"
+      ],
+      "baselineSha256": "1f19881b3b643c7a21dbb4e014f71ea26f1b46c16a855d1915fb15093c9fc34e"
+    },
+    {
+      "id": "crypt/candles.webp",
+      "title": "candles",
+      "category": "crypt",
+      "source": "assets/library/crypt/candles.webp",
+      "outputs": [
+        "client/public/crypt/candles.webp"
+      ],
+      "baselineSha256": "f6b3760f36d2de7f8b053bc9072911f9212a3052495e68f22f3898aff447eb7a"
+    },
+    {
+      "id": "crypt/chains.webp",
+      "title": "chains",
+      "category": "crypt",
+      "source": "assets/library/crypt/chains.webp",
+      "outputs": [
+        "client/public/crypt/chains.webp"
+      ],
+      "baselineSha256": "0237269ec3f78717ddb7503133e5eee4239b8d79afcc7cf9b3b0da05febd1f63"
+    },
+    {
+      "id": "crypt/chair-e.webp",
+      "title": "chair-e",
+      "category": "crypt",
+      "source": "assets/library/crypt/chair-e.webp",
+      "outputs": [
+        "client/public/crypt/chair-e.webp"
+      ],
+      "baselineSha256": "7d41a2bd4127a8a9e94db61f280901db7f0f0d358aa2adb2173e38599b0af096"
+    },
+    {
+      "id": "crypt/chair-n.webp",
+      "title": "chair-n",
+      "category": "crypt",
+      "source": "assets/library/crypt/chair-n.webp",
+      "outputs": [
+        "client/public/crypt/chair-n.webp"
+      ],
+      "baselineSha256": "f4d7c46cc06fc3b5435d599165efcde06c00e1cfc5ca35611415ecb8ee6d7e90"
+    },
+    {
+      "id": "crypt/chair-s.webp",
+      "title": "chair-s",
+      "category": "crypt",
+      "source": "assets/library/crypt/chair-s.webp",
+      "outputs": [
+        "client/public/crypt/chair-s.webp"
+      ],
+      "baselineSha256": "8b8ed6db2587aa8b0cd81374bf426cbf186307be51452f4e42df5cc764b17c75"
+    },
+    {
+      "id": "crypt/chair-w.webp",
+      "title": "chair-w",
+      "category": "crypt",
+      "source": "assets/library/crypt/chair-w.webp",
+      "outputs": [
+        "client/public/crypt/chair-w.webp"
+      ],
+      "baselineSha256": "64163321ed9cbf6dac093bb17ba6bc51406d0b2ea5235073a487f4c671ed0437"
+    },
+    {
+      "id": "crypt/chest.webp",
+      "title": "chest",
+      "category": "crypt",
+      "source": "assets/library/crypt/chest.webp",
+      "outputs": [
+        "client/public/crypt/chest.webp"
+      ],
+      "baselineSha256": "aa464fcd43eb253b9e2ec4daae29a65b2335142bf7ecc3d5d65ffd5c1c61cca1"
+    },
+    {
+      "id": "crypt/cobweb.webp",
+      "title": "cobweb",
+      "category": "crypt",
+      "source": "assets/library/crypt/cobweb.webp",
+      "outputs": [
+        "client/public/crypt/cobweb.webp"
+      ],
+      "baselineSha256": "58e2ab47de51545ad1340afa1cc26f1baacc54c8730b9c1ef6918a861ab439cb"
+    },
+    {
+      "id": "crypt/coffin.webp",
+      "title": "coffin",
+      "category": "crypt",
+      "source": "assets/library/crypt/coffin.webp",
+      "outputs": [
+        "client/public/crypt/coffin.webp"
+      ],
+      "baselineSha256": "5d4dd96c5c7897f9e3084802a7242a8bd962be8fd286b50d488622d87b83c610"
+    },
+    {
+      "id": "crypt/crates.webp",
+      "title": "crates",
+      "category": "crypt",
+      "source": "assets/library/crypt/crates.webp",
+      "outputs": [
+        "client/public/crypt/crates.webp"
+      ],
+      "baselineSha256": "758efdd0468cf3c80ee774d60ea3257364e76fbb9b8ce4de9b58435058f00296"
+    },
+    {
+      "id": "crypt/door-broken.webp",
+      "title": "door-broken",
+      "category": "crypt",
+      "source": "assets/library/crypt/door-broken.webp",
+      "outputs": [
+        "client/public/crypt/door-broken.webp"
+      ],
+      "baselineSha256": "dc1025b8bf2f3647df911090499abc80591c852e303d418ac01b64d926ef1933"
+    },
+    {
+      "id": "crypt/door-double.webp",
+      "title": "door-double",
+      "category": "crypt",
+      "source": "assets/library/crypt/door-double.webp",
+      "outputs": [
+        "client/public/crypt/door-double.webp"
+      ],
+      "baselineSha256": "8213475e7ac0a30c74657c60a6ecff06e31340b94d56bfab9f3c86800dbf1a45"
+    },
+    {
+      "id": "crypt/door-secret.webp",
+      "title": "door-secret",
+      "category": "crypt",
+      "source": "assets/library/crypt/door-secret.webp",
+      "outputs": [
+        "client/public/crypt/door-secret.webp"
+      ],
+      "baselineSha256": "ba5f96cbac7fffecc552f1398b0732422505cab89e33d78179dfe45d8ad5d26f"
+    },
+    {
+      "id": "crypt/door.webp",
+      "title": "door",
+      "category": "crypt",
+      "source": "assets/library/crypt/door.webp",
+      "outputs": [
+        "client/public/crypt/door.webp"
+      ],
+      "baselineSha256": "2741faff53c521de4e32bcbdb5cc56cb3b06922544c6cb09415b2834a1f7508d"
+    },
+    {
+      "id": "crypt/floor-broken.webp",
+      "title": "floor-broken",
+      "category": "crypt",
+      "source": "assets/library/crypt/floor-broken.webp",
+      "outputs": [
+        "client/public/crypt/floor-broken.webp"
+      ],
+      "baselineSha256": "e415ad3d88dfa057dd0536b27b85d7272416ca6e16c64ced13975d057d47d21c"
+    },
+    {
+      "id": "crypt/floor-cave.webp",
+      "title": "floor-cave",
+      "category": "crypt",
+      "source": "assets/library/crypt/floor-cave.webp",
+      "outputs": [
+        "client/public/crypt/floor-cave.webp"
+      ],
+      "baselineSha256": "1034b736723e0b93baadaf59b7f4fff4b13fe0738331d7d1656c3ec705cdf06c"
+    },
+    {
+      "id": "crypt/floor-tiles.webp",
+      "title": "floor-tiles",
+      "category": "crypt",
+      "source": "assets/library/crypt/floor-tiles.webp",
+      "outputs": [
+        "client/public/crypt/floor-tiles.webp"
+      ],
+      "baselineSha256": "3b8f85c1397fbfe2da9d1ee0c6124d860d1320c3c0312ec5c8c1c0c53d4e1e44"
+    },
+    {
+      "id": "crypt/floor-water.webp",
+      "title": "floor-water",
+      "category": "crypt",
+      "source": "assets/library/crypt/floor-water.webp",
+      "outputs": [
+        "client/public/crypt/floor-water.webp"
+      ],
+      "baselineSha256": "fc0eee369b93a0e69cf485ff241b84d467aa00e212617c4750018aeae91f2c1f"
+    },
+    {
+      "id": "crypt/grime-chunks.webp",
+      "title": "grime-chunks",
+      "category": "crypt",
+      "source": "assets/library/crypt/grime-chunks.webp",
+      "outputs": [
+        "client/public/crypt/grime-chunks.webp"
+      ],
+      "baselineSha256": "e19e1a60c30ef2c3b96d3f1095e877dfa0d2eda6b422282859e52b4a5ecec8b5"
+    },
+    {
+      "id": "crypt/grime-hatch.webp",
+      "title": "grime-hatch",
+      "category": "crypt",
+      "source": "assets/library/crypt/grime-hatch.webp",
+      "outputs": [
+        "client/public/crypt/grime-hatch.webp"
+      ],
+      "baselineSha256": "7e158f483956c1baa45fc47c2a26f8c59b88be86faba3790131162b68b81e8b0"
+    },
+    {
+      "id": "crypt/grime-scribble.webp",
+      "title": "grime-scribble",
+      "category": "crypt",
+      "source": "assets/library/crypt/grime-scribble.webp",
+      "outputs": [
+        "client/public/crypt/grime-scribble.webp"
+      ],
+      "baselineSha256": "c50e57805e23f110dbea19fe63e8806f86311692651bd69f0bb8d04123d98f6f"
+    },
+    {
+      "id": "crypt/grime-splash.webp",
+      "title": "grime-splash",
+      "category": "crypt",
+      "source": "assets/library/crypt/grime-splash.webp",
+      "outputs": [
+        "client/public/crypt/grime-splash.webp"
+      ],
+      "baselineSha256": "248941e1a1f172c553ab0efe52031a75dace52156bd57c0756e7aa51742fc4cc"
+    },
+    {
+      "id": "crypt/grime-splatter.webp",
+      "title": "grime-splatter",
+      "category": "crypt",
+      "source": "assets/library/crypt/grime-splatter.webp",
+      "outputs": [
+        "client/public/crypt/grime-splatter.webp"
+      ],
+      "baselineSha256": "ce854997bd8a3686214c88d33bf9eb7ac51bf4d105bc258794137da6ec7be401"
+    },
+    {
+      "id": "crypt/grime-tape.webp",
+      "title": "grime-tape",
+      "category": "crypt",
+      "source": "assets/library/crypt/grime-tape.webp",
+      "outputs": [
+        "client/public/crypt/grime-tape.webp"
+      ],
+      "baselineSha256": "995b07276eeaf179a96146b22389ae1f1c0ebc63a9dd096299380e45c9b72791"
+    },
+    {
+      "id": "crypt/grime-toner.webp",
+      "title": "grime-toner",
+      "category": "crypt",
+      "source": "assets/library/crypt/grime-toner.webp",
+      "outputs": [
+        "client/public/crypt/grime-toner.webp"
+      ],
+      "baselineSha256": "ad23c7885237373d55a8f5cbbda1e1f2643ca421a33eb263a55f83617b9f3e45"
+    },
+    {
+      "id": "crypt/grime-x-black.webp",
+      "title": "grime-x-black",
+      "category": "crypt",
+      "source": "assets/library/crypt/grime-x-black.webp",
+      "outputs": [
+        "client/public/crypt/grime-x-black.webp"
+      ],
+      "baselineSha256": "e949e3fa6537ccd62d77dc7f7cd17d8e4342609d5aedd7e08b319001ed77b7b5"
+    },
+    {
+      "id": "crypt/grime-x-magenta.webp",
+      "title": "grime-x-magenta",
+      "category": "crypt",
+      "source": "assets/library/crypt/grime-x-magenta.webp",
+      "outputs": [
+        "client/public/crypt/grime-x-magenta.webp"
+      ],
+      "baselineSha256": "a794e2e8c952c9fe5eb0fddbaa8b6aa366abf6e6669653fc046e4bc119888355"
+    },
+    {
+      "id": "crypt/lever.webp",
+      "title": "lever",
+      "category": "crypt",
+      "source": "assets/library/crypt/lever.webp",
+      "outputs": [
+        "client/public/crypt/lever.webp"
+      ],
+      "baselineSha256": "0f1c3c6feaf147da00aaadfb9dd3243a7f4987538874df2a39109dc67a7a6ad3"
+    },
+    {
+      "id": "crypt/niche.webp",
+      "title": "niche",
+      "category": "crypt",
+      "source": "assets/library/crypt/niche.webp",
+      "outputs": [
+        "client/public/crypt/niche.webp"
+      ],
+      "baselineSha256": "f12c45b074c156911a2137da43451f8f570115f61cd16f86b3af496cd79ce867"
+    },
+    {
+      "id": "crypt/paper-panel.webp",
+      "title": "paper-panel",
+      "category": "crypt",
+      "source": "assets/library/crypt/paper-panel.webp",
+      "outputs": [
+        "client/public/crypt/paper-panel.webp",
+        "client/public/ui/fantasy-punk/textures/paper-panel.webp"
+      ],
+      "baselineSha256": "20b8f231348347adad9e5b78d5cddad6919969e4ebd388d613e8613bfaaa2439"
+    },
+    {
+      "id": "crypt/pentagram.webp",
+      "title": "pentagram",
+      "category": "crypt",
+      "source": "assets/library/crypt/pentagram.webp",
+      "outputs": [
+        "client/public/crypt/pentagram.webp"
+      ],
+      "baselineSha256": "48f5fdccbcb35399f1b5a03119209b0993b7f4f833281b3d791a57c625d8fe63"
+    },
+    {
+      "id": "crypt/pillar-broken.webp",
+      "title": "pillar-broken",
+      "category": "crypt",
+      "source": "assets/library/crypt/pillar-broken.webp",
+      "outputs": [
+        "client/public/crypt/pillar-broken.webp"
+      ],
+      "baselineSha256": "e3980956b03e1ab7bb1e48f1adcc2983fe9f81b9c7a4e8fbfd858adb53b9c531"
+    },
+    {
+      "id": "crypt/pillar.webp",
+      "title": "pillar",
+      "category": "crypt",
+      "source": "assets/library/crypt/pillar.webp",
+      "outputs": [
+        "client/public/crypt/pillar.webp"
+      ],
+      "baselineSha256": "a4228222856b04717e4a24aded7f7e2cf58e038a1279ff31df072952ef2b708b"
+    },
+    {
+      "id": "crypt/pit.webp",
+      "title": "pit",
+      "category": "crypt",
+      "source": "assets/library/crypt/pit.webp",
+      "outputs": [
+        "client/public/crypt/pit.webp"
+      ],
+      "baselineSha256": "9c43fbdfbef25f3ad490df20a21dc017a9d2b821bc458c984627c0d48870c2c2"
+    },
+    {
+      "id": "crypt/portcullis.webp",
+      "title": "portcullis",
+      "category": "crypt",
+      "source": "assets/library/crypt/portcullis.webp",
+      "outputs": [
+        "client/public/crypt/portcullis.webp"
+      ],
+      "baselineSha256": "2c4927949d334e9192140762080ab4189498f8c65d8f7801d3578d2662167b00"
+    },
+    {
+      "id": "crypt/rubble.webp",
+      "title": "rubble",
+      "category": "crypt",
+      "source": "assets/library/crypt/rubble.webp",
+      "outputs": [
+        "client/public/crypt/rubble.webp"
+      ],
+      "baselineSha256": "61eb6d606c91c0ac22863ceb2c69428c7ea3e057106d8588b14a46dbe2e01ec2"
+    },
+    {
+      "id": "crypt/rug.webp",
+      "title": "rug",
+      "category": "crypt",
+      "source": "assets/library/crypt/rug.webp",
+      "outputs": [
+        "client/public/crypt/rug.webp"
+      ],
+      "baselineSha256": "5eb66fa23447c1cfe017d900c568d8aef4ab8377b9b5da31136a3a5414eb30fc"
+    },
+    {
+      "id": "crypt/sarcophagus.webp",
+      "title": "sarcophagus",
+      "category": "crypt",
+      "source": "assets/library/crypt/sarcophagus.webp",
+      "outputs": [
+        "client/public/crypt/sarcophagus.webp"
+      ],
+      "baselineSha256": "0fb15239d15013d31b4cd9efae5fca8e0fcc4a1240c300ce9c0b77295c5a93dd"
+    },
+    {
+      "id": "crypt/spikes.webp",
+      "title": "spikes",
+      "category": "crypt",
+      "source": "assets/library/crypt/spikes.webp",
+      "outputs": [
+        "client/public/crypt/spikes.webp"
+      ],
+      "baselineSha256": "7ef9e98cae3157a9f0e2c76f662c177343284556db87d0a8784900634918c2ce"
+    },
+    {
+      "id": "crypt/stairs-down.webp",
+      "title": "stairs-down",
+      "category": "crypt",
+      "source": "assets/library/crypt/stairs-down.webp",
+      "outputs": [
+        "client/public/crypt/stairs-down.webp"
+      ],
+      "baselineSha256": "0a5c5d7716a6aa5357866a89a21fdc3390eed942bb7a317937a80ce704c81596"
+    },
+    {
+      "id": "crypt/stairs-up.webp",
+      "title": "stairs-up",
+      "category": "crypt",
+      "source": "assets/library/crypt/stairs-up.webp",
+      "outputs": [
+        "client/public/crypt/stairs-up.webp"
+      ],
+      "baselineSha256": "b4a58cf2bb0855118c9c8dd85fa3a1956f4713df5c9629ee24d5f2c76c96a039"
+    },
+    {
+      "id": "crypt/statue-e.webp",
+      "title": "statue-e",
+      "category": "crypt",
+      "source": "assets/library/crypt/statue-e.webp",
+      "outputs": [
+        "client/public/crypt/statue-e.webp"
+      ],
+      "baselineSha256": "0f936694968667e331cf820dc6b30fb0f25f62eca20133bd0f7803b431b211bb"
+    },
+    {
+      "id": "crypt/statue-n.webp",
+      "title": "statue-n",
+      "category": "crypt",
+      "source": "assets/library/crypt/statue-n.webp",
+      "outputs": [
+        "client/public/crypt/statue-n.webp"
+      ],
+      "baselineSha256": "fdcc46e98aecb6a3863e50e8197ede2acfe1a3a3914b371caf3182ac9e38dab3"
+    },
+    {
+      "id": "crypt/statue-s.webp",
+      "title": "statue-s",
+      "category": "crypt",
+      "source": "assets/library/crypt/statue-s.webp",
+      "outputs": [
+        "client/public/crypt/statue-s.webp"
+      ],
+      "baselineSha256": "259c2bdd31c7c3e706fbeae4d900be31597a2addd5447662afc9f696ef55221d"
+    },
+    {
+      "id": "crypt/statue-w.webp",
+      "title": "statue-w",
+      "category": "crypt",
+      "source": "assets/library/crypt/statue-w.webp",
+      "outputs": [
+        "client/public/crypt/statue-w.webp"
+      ],
+      "baselineSha256": "7a62d014d5cc0c88a99e747d82a4138d161185de3215d2598ca23a7dcd0a8691"
+    },
+    {
+      "id": "crypt/table.webp",
+      "title": "table",
+      "category": "crypt",
+      "source": "assets/library/crypt/table.webp",
+      "outputs": [
+        "client/public/crypt/table.webp"
+      ],
+      "baselineSha256": "0aa6e57066faa34aa3a1649e994d7ae006347892e698509ccf5fa6fbaac29539"
+    },
+    {
+      "id": "crypt/throne-e.webp",
+      "title": "throne-e",
+      "category": "crypt",
+      "source": "assets/library/crypt/throne-e.webp",
+      "outputs": [
+        "client/public/crypt/throne-e.webp"
+      ],
+      "baselineSha256": "9d39ceba826b6468bf3b4aa3a1f1db70e73867faaffa79d7c9389d079abc8de9"
+    },
+    {
+      "id": "crypt/throne-n.webp",
+      "title": "throne-n",
+      "category": "crypt",
+      "source": "assets/library/crypt/throne-n.webp",
+      "outputs": [
+        "client/public/crypt/throne-n.webp"
+      ],
+      "baselineSha256": "7e6e207c8b76db70b6a667c88c63a947fe1a249e667b879cf881f7b9b66f298e"
+    },
+    {
+      "id": "crypt/throne-s.webp",
+      "title": "throne-s",
+      "category": "crypt",
+      "source": "assets/library/crypt/throne-s.webp",
+      "outputs": [
+        "client/public/crypt/throne-s.webp"
+      ],
+      "baselineSha256": "4cb816a355b9cc2cfcee148ddacd8fa6d94edc9bc4aedc9076a39815bcaa15df"
+    },
+    {
+      "id": "crypt/throne-w.webp",
+      "title": "throne-w",
+      "category": "crypt",
+      "source": "assets/library/crypt/throne-w.webp",
+      "outputs": [
+        "client/public/crypt/throne-w.webp"
+      ],
+      "baselineSha256": "8aa59b6660e85a4d946fe694f55a698f439067cb10a59073eac7c80b73da6434"
+    },
+    {
+      "id": "crypt/torch.webp",
+      "title": "torch",
+      "category": "crypt",
+      "source": "assets/library/crypt/torch.webp",
+      "outputs": [
+        "client/public/crypt/torch.webp"
+      ],
+      "baselineSha256": "050141d0c82de8df42811eb2436c2ab9c288af6520b76689e82dfadad807b5c4"
+    },
+    {
+      "id": "crypt/trapdoor.webp",
+      "title": "trapdoor",
+      "category": "crypt",
+      "source": "assets/library/crypt/trapdoor.webp",
+      "outputs": [
+        "client/public/crypt/trapdoor.webp"
+      ],
+      "baselineSha256": "820ea20bfdbb2aa9b618d9a8666582db8ead9548f93396e92547d0787ed958cb"
+    },
+    {
+      "id": "crypt/treasure.webp",
+      "title": "treasure",
+      "category": "crypt",
+      "source": "assets/library/crypt/treasure.webp",
+      "outputs": [
+        "client/public/crypt/treasure.webp"
+      ],
+      "baselineSha256": "dd4c1653da34c7cea4abbbc8b27cc7aae210bf4316d750ce79f9afe3b65bd0a3"
+    },
+    {
+      "id": "crypt/urn.webp",
+      "title": "urn",
+      "category": "crypt",
+      "source": "assets/library/crypt/urn.webp",
+      "outputs": [
+        "client/public/crypt/urn.webp"
+      ],
+      "baselineSha256": "4b55e1961f6c920176eb811c74519526eb95d81f2e9274eedc8f0f6daab7c0ae"
+    },
+    {
+      "id": "crypt/wall-masonry-corner.webp",
+      "title": "wall-masonry-corner",
+      "category": "crypt",
+      "source": "assets/library/crypt/wall-masonry-corner.webp",
+      "outputs": [
+        "client/public/crypt/wall-masonry-corner.webp"
+      ],
+      "baselineSha256": "831f3b595839456ca7e4c81c74f792accfe3cb7578c83c161b82d2f534407d51"
+    },
+    {
+      "id": "crypt/wall-masonry-end.webp",
+      "title": "wall-masonry-end",
+      "category": "crypt",
+      "source": "assets/library/crypt/wall-masonry-end.webp",
+      "outputs": [
+        "client/public/crypt/wall-masonry-end.webp"
+      ],
+      "baselineSha256": "6db9c8bfe28e7e3183980057eb850d2b90bc1f5f9f5be3b45d723f8024b2e76b"
+    },
+    {
+      "id": "crypt/wall-masonry.webp",
+      "title": "wall-masonry",
+      "category": "crypt",
+      "source": "assets/library/crypt/wall-masonry.webp",
+      "outputs": [
+        "client/public/crypt/wall-masonry.webp"
+      ],
+      "baselineSha256": "8493ac79ed79767b2c62af6e49c70868b374e3a01bc1a70e4311d10eb1663f0c"
+    },
+    {
+      "id": "crypt/wall-rock-corner.webp",
+      "title": "wall-rock-corner",
+      "category": "crypt",
+      "source": "assets/library/crypt/wall-rock-corner.webp",
+      "outputs": [
+        "client/public/crypt/wall-rock-corner.webp"
+      ],
+      "baselineSha256": "99624b5c4ab0f07e7b5764583e31ebba83b2dae8f7469f912bbbb638bdf588e9"
+    },
+    {
+      "id": "crypt/wall-rock-end.webp",
+      "title": "wall-rock-end",
+      "category": "crypt",
+      "source": "assets/library/crypt/wall-rock-end.webp",
+      "outputs": [
+        "client/public/crypt/wall-rock-end.webp"
+      ],
+      "baselineSha256": "fd5d5d14c0b1853b61b4ea5696621317836b0018508c94d19fc1b0aeb7e27b05"
+    },
+    {
+      "id": "crypt/wall-rock.webp",
+      "title": "wall-rock",
+      "category": "crypt",
+      "source": "assets/library/crypt/wall-rock.webp",
+      "outputs": [
+        "client/public/crypt/wall-rock.webp"
+      ],
+      "baselineSha256": "3e74c23ecedb5171d4a7887b7a8cc58a281827c387a93c887c197f05222cc85e"
+    },
+    {
+      "id": "crypt/wardrobe-e.webp",
+      "title": "wardrobe-e",
+      "category": "crypt",
+      "source": "assets/library/crypt/wardrobe-e.webp",
+      "outputs": [
+        "client/public/crypt/wardrobe-e.webp"
+      ],
+      "baselineSha256": "86a37ba2a99491e2659fe4d4a470ab9c33f550a3660dcec42d792c89de502e01"
+    },
+    {
+      "id": "crypt/wardrobe-n.webp",
+      "title": "wardrobe-n",
+      "category": "crypt",
+      "source": "assets/library/crypt/wardrobe-n.webp",
+      "outputs": [
+        "client/public/crypt/wardrobe-n.webp"
+      ],
+      "baselineSha256": "14c8ebfe50a9cad10e5d599a65ee4c044844998092192d2bf021a10173aeee46"
+    },
+    {
+      "id": "crypt/wardrobe-s.webp",
+      "title": "wardrobe-s",
+      "category": "crypt",
+      "source": "assets/library/crypt/wardrobe-s.webp",
+      "outputs": [
+        "client/public/crypt/wardrobe-s.webp"
+      ],
+      "baselineSha256": "f6398d9f052c794277bf4cd6ab58f30fdb6da75b81c80c08dde6017ec554daae"
+    },
+    {
+      "id": "crypt/wardrobe-w.webp",
+      "title": "wardrobe-w",
+      "category": "crypt",
+      "source": "assets/library/crypt/wardrobe-w.webp",
+      "outputs": [
+        "client/public/crypt/wardrobe-w.webp"
+      ],
+      "baselineSha256": "b3f4bf23dbe0293146b97a4573eff2d76ac6c25f940f19d199d2c0dc47d452f5"
+    },
+    {
+      "id": "crypt/well.webp",
+      "title": "well",
+      "category": "crypt",
+      "source": "assets/library/crypt/well.webp",
+      "outputs": [
+        "client/public/crypt/well.webp"
+      ],
+      "baselineSha256": "07129da7e7ff6b12a3b493256b042bb20ff4c2e9bfc50abcd4a427d61bc9e36d"
+    },
+    {
+      "id": "cursors/chaotic-evil-01-arrow.png",
+      "title": "chaotic-evil-01-arrow",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-evil-01-arrow.png",
+      "outputs": [
+        "client/public/cursors/chaotic-evil-01-arrow.png"
+      ],
+      "baselineSha256": "a1f226d2a10ba648a36513f063a1eb441fbde1f2660bb89bb88b84890014bfd9"
+    },
+    {
+      "id": "cursors/chaotic-evil-02-hand.png",
+      "title": "chaotic-evil-02-hand",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-evil-02-hand.png",
+      "outputs": [
+        "client/public/cursors/chaotic-evil-02-hand.png"
+      ],
+      "baselineSha256": "5404938c30bba958f2d3f8d319bf27fc51c25a2af7033bb4f21135b9a7b48e8d"
+    },
+    {
+      "id": "cursors/chaotic-evil-03-hourglass.png",
+      "title": "chaotic-evil-03-hourglass",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-evil-03-hourglass.png",
+      "outputs": [
+        "client/public/cursors/chaotic-evil-03-hourglass.png"
+      ],
+      "baselineSha256": "d03947b5b4ff37d20bbac6bcc2412607fd98d7363fea54ec8ae94bf1a2ff96f4"
+    },
+    {
+      "id": "cursors/chaotic-evil-04-weapon.png",
+      "title": "chaotic-evil-04-weapon",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-evil-04-weapon.png",
+      "outputs": [
+        "client/public/cursors/chaotic-evil-04-weapon.png"
+      ],
+      "baselineSha256": "6fe82e089f0479be89c9e6b54668c94393d57a514e46e0d832166650bba39a07"
+    },
+    {
+      "id": "cursors/chaotic-evil-06-d1.png",
+      "title": "chaotic-evil-06-d1",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-evil-06-d1.png",
+      "outputs": [
+        "client/public/cursors/chaotic-evil-06-d1.png"
+      ],
+      "baselineSha256": "ac912b2997d31ffa27f288186628f47acf6cb6e1b06a94cb2fa626f0608df28b"
+    },
+    {
+      "id": "cursors/chaotic-evil-08-help.png",
+      "title": "chaotic-evil-08-help",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-evil-08-help.png",
+      "outputs": [
+        "client/public/cursors/chaotic-evil-08-help.png"
+      ],
+      "baselineSha256": "aeda126edea6b1a0b91d959988f46915e9c86cbbc5d92239b309f07da35f813a"
+    },
+    {
+      "id": "cursors/chaotic-evil-09-move.png",
+      "title": "chaotic-evil-09-move",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-evil-09-move.png",
+      "outputs": [
+        "client/public/cursors/chaotic-evil-09-move.png"
+      ],
+      "baselineSha256": "08f29955af1ad021087eb3cc2739489143de1022c17e5b8b82a2ee92541fb951"
+    },
+    {
+      "id": "cursors/chaotic-evil-10-text.png",
+      "title": "chaotic-evil-10-text",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-evil-10-text.png",
+      "outputs": [
+        "client/public/cursors/chaotic-evil-10-text.png"
+      ],
+      "baselineSha256": "d96f2222a0c310bf8746cf635d2121cfd4f6b5a054a280ce93a10eccf516d62a"
+    },
+    {
+      "id": "cursors/chaotic-evil-11-ew.png",
+      "title": "chaotic-evil-11-ew",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-evil-11-ew.png",
+      "outputs": [
+        "client/public/cursors/chaotic-evil-11-ew.png"
+      ],
+      "baselineSha256": "fc80179f96be45599b46efd76b0ae8267b2ca786f8bf446efeb774b4f7095027"
+    },
+    {
+      "id": "cursors/chaotic-evil-12-ns.png",
+      "title": "chaotic-evil-12-ns",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-evil-12-ns.png",
+      "outputs": [
+        "client/public/cursors/chaotic-evil-12-ns.png"
+      ],
+      "baselineSha256": "c06792cbf2c57a3cee8b55df94a9d90cddfb7127af2f7b37cdc39fc1b4076642"
+    },
+    {
+      "id": "cursors/chaotic-evil-13-nesw.png",
+      "title": "chaotic-evil-13-nesw",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-evil-13-nesw.png",
+      "outputs": [
+        "client/public/cursors/chaotic-evil-13-nesw.png"
+      ],
+      "baselineSha256": "1217520e82668ce4e4ed1ee0fab1e3a4b6aeb1f691c873826ff0f592334d0acd"
+    },
+    {
+      "id": "cursors/chaotic-evil-14-nwse.png",
+      "title": "chaotic-evil-14-nwse",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-evil-14-nwse.png",
+      "outputs": [
+        "client/public/cursors/chaotic-evil-14-nwse.png"
+      ],
+      "baselineSha256": "b8373209e909db2e0c7ca089e7ae76f5f5ee4f0ed37d67ce7267695a555708c2"
+    },
+    {
+      "id": "cursors/chaotic-good-01-arrow.png",
+      "title": "chaotic-good-01-arrow",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-good-01-arrow.png",
+      "outputs": [
+        "client/public/cursors/chaotic-good-01-arrow.png"
+      ],
+      "baselineSha256": "0e3b1035b0ee3331cef3537e84da3eb2a3edef898c138c2d470e27a21d6b134d"
+    },
+    {
+      "id": "cursors/chaotic-good-02-hand.png",
+      "title": "chaotic-good-02-hand",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-good-02-hand.png",
+      "outputs": [
+        "client/public/cursors/chaotic-good-02-hand.png"
+      ],
+      "baselineSha256": "ed35f61db52145d7731abb71a35e52ef13842f1801773c0bc29123cf251a4131"
+    },
+    {
+      "id": "cursors/chaotic-good-03-hourglass.png",
+      "title": "chaotic-good-03-hourglass",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-good-03-hourglass.png",
+      "outputs": [
+        "client/public/cursors/chaotic-good-03-hourglass.png"
+      ],
+      "baselineSha256": "7849b9dcc8bbd328a28d60cdba81fc8518328344f92ed91ebb1ff84d02ca7723"
+    },
+    {
+      "id": "cursors/chaotic-good-04-weapon.png",
+      "title": "chaotic-good-04-weapon",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-good-04-weapon.png",
+      "outputs": [
+        "client/public/cursors/chaotic-good-04-weapon.png"
+      ],
+      "baselineSha256": "2f34c501b8a863ebf5a2000bb5fe7a2ea7370282d8ea176b3d9f537573eac557"
+    },
+    {
+      "id": "cursors/chaotic-good-06-d1.png",
+      "title": "chaotic-good-06-d1",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-good-06-d1.png",
+      "outputs": [
+        "client/public/cursors/chaotic-good-06-d1.png"
+      ],
+      "baselineSha256": "185d84b6a6b606a441485ad28126c62292f817f6ff5da8190ff033ee65dc7936"
+    },
+    {
+      "id": "cursors/chaotic-good-08-help.png",
+      "title": "chaotic-good-08-help",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-good-08-help.png",
+      "outputs": [
+        "client/public/cursors/chaotic-good-08-help.png"
+      ],
+      "baselineSha256": "5140e410c7f13439688ed04d012823b09297be838d8652a867136d9a93cebb4b"
+    },
+    {
+      "id": "cursors/chaotic-good-09-move.png",
+      "title": "chaotic-good-09-move",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-good-09-move.png",
+      "outputs": [
+        "client/public/cursors/chaotic-good-09-move.png"
+      ],
+      "baselineSha256": "12684ec0122ec2eb09871313c6d0a9767d19c3e2d5de9015d065f97ccf6ffc5a"
+    },
+    {
+      "id": "cursors/chaotic-good-10-text.png",
+      "title": "chaotic-good-10-text",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-good-10-text.png",
+      "outputs": [
+        "client/public/cursors/chaotic-good-10-text.png"
+      ],
+      "baselineSha256": "7111fa45f425366bce7baf84b3c4cf91ddaec157fb1d305e1285cd6e72d9c5ef"
+    },
+    {
+      "id": "cursors/chaotic-good-11-ew.png",
+      "title": "chaotic-good-11-ew",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-good-11-ew.png",
+      "outputs": [
+        "client/public/cursors/chaotic-good-11-ew.png"
+      ],
+      "baselineSha256": "5415c6e9ca71673bcee4fb964abbd5bd156b436b5f6aca01fc2d919b2cd3c35e"
+    },
+    {
+      "id": "cursors/chaotic-good-12-ns.png",
+      "title": "chaotic-good-12-ns",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-good-12-ns.png",
+      "outputs": [
+        "client/public/cursors/chaotic-good-12-ns.png"
+      ],
+      "baselineSha256": "5e73d03bfd453ff2e2447f32f1d1641461c8bfcb7f1a90503410787939f40937"
+    },
+    {
+      "id": "cursors/chaotic-good-13-nesw.png",
+      "title": "chaotic-good-13-nesw",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-good-13-nesw.png",
+      "outputs": [
+        "client/public/cursors/chaotic-good-13-nesw.png"
+      ],
+      "baselineSha256": "95024451b265a33f2aa3a03422bb541f5fab113ddee0cb6d0c24dbb077a696a7"
+    },
+    {
+      "id": "cursors/chaotic-good-14-nwse.png",
+      "title": "chaotic-good-14-nwse",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-good-14-nwse.png",
+      "outputs": [
+        "client/public/cursors/chaotic-good-14-nwse.png"
+      ],
+      "baselineSha256": "4b24243393403625ab6ed2c11f02fd417b9aa72257226154078d835d0982553e"
+    },
+    {
+      "id": "cursors/chaotic-neutral-01-arrow.png",
+      "title": "chaotic-neutral-01-arrow",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-neutral-01-arrow.png",
+      "outputs": [
+        "client/public/cursors/chaotic-neutral-01-arrow.png"
+      ],
+      "baselineSha256": "832c29d50231b09f94720b84304f803f0f3910f8864d98eeab87d01edf46fee1"
+    },
+    {
+      "id": "cursors/chaotic-neutral-02-hand.png",
+      "title": "chaotic-neutral-02-hand",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-neutral-02-hand.png",
+      "outputs": [
+        "client/public/cursors/chaotic-neutral-02-hand.png"
+      ],
+      "baselineSha256": "bfdae6e4f73ac39aa06e2aabce844e68a7ae71b13df023c1f2ece14d1a2b71c4"
+    },
+    {
+      "id": "cursors/chaotic-neutral-03-hourglass.png",
+      "title": "chaotic-neutral-03-hourglass",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-neutral-03-hourglass.png",
+      "outputs": [
+        "client/public/cursors/chaotic-neutral-03-hourglass.png"
+      ],
+      "baselineSha256": "b7a9a53e8f681aa1ae02befc886c6c5b9eeb69095ed813194ccf1959f2e717b1"
+    },
+    {
+      "id": "cursors/chaotic-neutral-04-weapon.png",
+      "title": "chaotic-neutral-04-weapon",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-neutral-04-weapon.png",
+      "outputs": [
+        "client/public/cursors/chaotic-neutral-04-weapon.png"
+      ],
+      "baselineSha256": "df1d06f96b97dad50725a8d846fb64d3e80f88369e6647aab631e5caabc19146"
+    },
+    {
+      "id": "cursors/chaotic-neutral-06-d1.png",
+      "title": "chaotic-neutral-06-d1",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-neutral-06-d1.png",
+      "outputs": [
+        "client/public/cursors/chaotic-neutral-06-d1.png"
+      ],
+      "baselineSha256": "521c89fb833e3f11dc8ee20545242d7b1a6ecd2138d8759d8b156ab7acc5915c"
+    },
+    {
+      "id": "cursors/chaotic-neutral-08-help.png",
+      "title": "chaotic-neutral-08-help",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-neutral-08-help.png",
+      "outputs": [
+        "client/public/cursors/chaotic-neutral-08-help.png"
+      ],
+      "baselineSha256": "2ba515175eb387186f446c86645c67203ba33e0e863d267acc972b06c614aeb0"
+    },
+    {
+      "id": "cursors/chaotic-neutral-09-move.png",
+      "title": "chaotic-neutral-09-move",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-neutral-09-move.png",
+      "outputs": [
+        "client/public/cursors/chaotic-neutral-09-move.png"
+      ],
+      "baselineSha256": "360c13970cd596d50b5ddcf6a44abf95f7f6eba8f3b5e7b765124a802532d3bc"
+    },
+    {
+      "id": "cursors/chaotic-neutral-10-text.png",
+      "title": "chaotic-neutral-10-text",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-neutral-10-text.png",
+      "outputs": [
+        "client/public/cursors/chaotic-neutral-10-text.png"
+      ],
+      "baselineSha256": "2ea945119ffa76806440bfb67dec114c294f00170a99143955d28e998661b2a1"
+    },
+    {
+      "id": "cursors/chaotic-neutral-11-ew.png",
+      "title": "chaotic-neutral-11-ew",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-neutral-11-ew.png",
+      "outputs": [
+        "client/public/cursors/chaotic-neutral-11-ew.png"
+      ],
+      "baselineSha256": "4098c501a36e0a2eb6906f10f859b0c56c23e232ae9e1a3ddfeb77ed5e84ef50"
+    },
+    {
+      "id": "cursors/chaotic-neutral-12-ns.png",
+      "title": "chaotic-neutral-12-ns",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-neutral-12-ns.png",
+      "outputs": [
+        "client/public/cursors/chaotic-neutral-12-ns.png"
+      ],
+      "baselineSha256": "57b4164c1ed8ec0b4e679ed9c6085394cddffe83079822ca83949d1d66b4865c"
+    },
+    {
+      "id": "cursors/chaotic-neutral-13-nesw.png",
+      "title": "chaotic-neutral-13-nesw",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-neutral-13-nesw.png",
+      "outputs": [
+        "client/public/cursors/chaotic-neutral-13-nesw.png"
+      ],
+      "baselineSha256": "bd1930349b2b86df0468ea2933296e57a83ee8e2a02b7ae2c5ee99039505e952"
+    },
+    {
+      "id": "cursors/chaotic-neutral-14-nwse.png",
+      "title": "chaotic-neutral-14-nwse",
+      "category": "cursors",
+      "source": "assets/library/cursors/chaotic-neutral-14-nwse.png",
+      "outputs": [
+        "client/public/cursors/chaotic-neutral-14-nwse.png"
+      ],
+      "baselineSha256": "f23708d9ae4e12a0b3e1df0f94acf324e7bd6d0e3b96f8ad112b59c5fe2431b3"
+    },
+    {
+      "id": "cursors/lawfull-evil-01-arrow.png",
+      "title": "lawfull-evil-01-arrow",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-evil-01-arrow.png",
+      "outputs": [
+        "client/public/cursors/lawfull-evil-01-arrow.png"
+      ],
+      "baselineSha256": "a1be68578bbe5e105e555cc443ef859fbfbb22e085d289cf5b835cd39409873d"
+    },
+    {
+      "id": "cursors/lawfull-evil-02-hand.png",
+      "title": "lawfull-evil-02-hand",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-evil-02-hand.png",
+      "outputs": [
+        "client/public/cursors/lawfull-evil-02-hand.png"
+      ],
+      "baselineSha256": "b012e3fd7162152546b7b3f20f830e476916f13e37831d64c0b7452e48f983ed"
+    },
+    {
+      "id": "cursors/lawfull-evil-03-hourglass.png",
+      "title": "lawfull-evil-03-hourglass",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-evil-03-hourglass.png",
+      "outputs": [
+        "client/public/cursors/lawfull-evil-03-hourglass.png"
+      ],
+      "baselineSha256": "c01cf9211202f17f300c00f33bd36161fd6913a4638d11c7b8cebc3aa17c1ff5"
+    },
+    {
+      "id": "cursors/lawfull-evil-04-weapon.png",
+      "title": "lawfull-evil-04-weapon",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-evil-04-weapon.png",
+      "outputs": [
+        "client/public/cursors/lawfull-evil-04-weapon.png"
+      ],
+      "baselineSha256": "c2545109ff2ff1dc2a8f6e940ead8e0c1084bb0d93d6b8a38122d2b4ffe4e469"
+    },
+    {
+      "id": "cursors/lawfull-evil-06-d1.png",
+      "title": "lawfull-evil-06-d1",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-evil-06-d1.png",
+      "outputs": [
+        "client/public/cursors/lawfull-evil-06-d1.png"
+      ],
+      "baselineSha256": "0d8cb0749c6912efe9592200f824172c5c802152c7a3a4d3882cbe3caeeab915"
+    },
+    {
+      "id": "cursors/lawfull-evil-08-help.png",
+      "title": "lawfull-evil-08-help",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-evil-08-help.png",
+      "outputs": [
+        "client/public/cursors/lawfull-evil-08-help.png"
+      ],
+      "baselineSha256": "81a7f0986eefc0c8bb2e517d20f54d9027a95a1c77cf16c9a04aa818c17707c7"
+    },
+    {
+      "id": "cursors/lawfull-evil-09-move.png",
+      "title": "lawfull-evil-09-move",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-evil-09-move.png",
+      "outputs": [
+        "client/public/cursors/lawfull-evil-09-move.png"
+      ],
+      "baselineSha256": "007bcc123949086f79160954823a3a219244056c998e61e855a350ab26f96e41"
+    },
+    {
+      "id": "cursors/lawfull-evil-10-text.png",
+      "title": "lawfull-evil-10-text",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-evil-10-text.png",
+      "outputs": [
+        "client/public/cursors/lawfull-evil-10-text.png"
+      ],
+      "baselineSha256": "e1e3f6a23c8e0ae6a3524442465ddf627480d6aea2badd5ce12ef6a5fa61798b"
+    },
+    {
+      "id": "cursors/lawfull-evil-11-ew.png",
+      "title": "lawfull-evil-11-ew",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-evil-11-ew.png",
+      "outputs": [
+        "client/public/cursors/lawfull-evil-11-ew.png"
+      ],
+      "baselineSha256": "7f0da07aaf871fbcb250724f48064f951ee38d51333cdffb8261745268f086c1"
+    },
+    {
+      "id": "cursors/lawfull-evil-12-ns.png",
+      "title": "lawfull-evil-12-ns",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-evil-12-ns.png",
+      "outputs": [
+        "client/public/cursors/lawfull-evil-12-ns.png"
+      ],
+      "baselineSha256": "0bfdf363b7fd8de2b6166266763bb81fdb042231166fa39cc6fe064c0d969077"
+    },
+    {
+      "id": "cursors/lawfull-evil-13-nesw.png",
+      "title": "lawfull-evil-13-nesw",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-evil-13-nesw.png",
+      "outputs": [
+        "client/public/cursors/lawfull-evil-13-nesw.png"
+      ],
+      "baselineSha256": "7e3927512550ebaa912b0bc02bc0c702d197eaa8095b6ec1dd08fd8b8c880cbe"
+    },
+    {
+      "id": "cursors/lawfull-evil-14-nwse.png",
+      "title": "lawfull-evil-14-nwse",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-evil-14-nwse.png",
+      "outputs": [
+        "client/public/cursors/lawfull-evil-14-nwse.png"
+      ],
+      "baselineSha256": "b9c8b48aadcec4dfba7fac6dea35db22bd04db149091e890b373ec43a16d5903"
+    },
+    {
+      "id": "cursors/lawfull-good-01-arrow.png",
+      "title": "lawfull-good-01-arrow",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-good-01-arrow.png",
+      "outputs": [
+        "client/public/cursors/lawfull-good-01-arrow.png"
+      ],
+      "baselineSha256": "7da769563a6e03fa803d9271eb4da01b6cb2a0b2dabb031d1a91201469244431"
+    },
+    {
+      "id": "cursors/lawfull-good-02-hand.png",
+      "title": "lawfull-good-02-hand",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-good-02-hand.png",
+      "outputs": [
+        "client/public/cursors/lawfull-good-02-hand.png"
+      ],
+      "baselineSha256": "779d013dc46cb059593886fa3165a88b0d317ee21356ff2a109f5e7835488e67"
+    },
+    {
+      "id": "cursors/lawfull-good-03-hourglass.png",
+      "title": "lawfull-good-03-hourglass",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-good-03-hourglass.png",
+      "outputs": [
+        "client/public/cursors/lawfull-good-03-hourglass.png"
+      ],
+      "baselineSha256": "d43dd6dc5f0643d5eb1a51087ae8c30bf555d4c454af0e26562beeac6d80fbfc"
+    },
+    {
+      "id": "cursors/lawfull-good-04-weapon.png",
+      "title": "lawfull-good-04-weapon",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-good-04-weapon.png",
+      "outputs": [
+        "client/public/cursors/lawfull-good-04-weapon.png"
+      ],
+      "baselineSha256": "3edb562b5f03d8ac7779a4a9f2f6151b998f8dbf7c1afed5ec9242da9ea62d8f"
+    },
+    {
+      "id": "cursors/lawfull-good-06-d1.png",
+      "title": "lawfull-good-06-d1",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-good-06-d1.png",
+      "outputs": [
+        "client/public/cursors/lawfull-good-06-d1.png"
+      ],
+      "baselineSha256": "c2aaef119e8e5104f6b9cae9909a548411e7abfbeb93ccd2d56a2cbed4bd9cb5"
+    },
+    {
+      "id": "cursors/lawfull-good-08-help.png",
+      "title": "lawfull-good-08-help",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-good-08-help.png",
+      "outputs": [
+        "client/public/cursors/lawfull-good-08-help.png"
+      ],
+      "baselineSha256": "2c315d42e8e569767eefaace4e95e818c21234f6625e3b38eed5eb4753d4a573"
+    },
+    {
+      "id": "cursors/lawfull-good-09-move.png",
+      "title": "lawfull-good-09-move",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-good-09-move.png",
+      "outputs": [
+        "client/public/cursors/lawfull-good-09-move.png"
+      ],
+      "baselineSha256": "cb49e3d27f60bd8f6bdbdcf8963e2778c9a931dad18118ad2c5e3767367375c9"
+    },
+    {
+      "id": "cursors/lawfull-good-10-text.png",
+      "title": "lawfull-good-10-text",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-good-10-text.png",
+      "outputs": [
+        "client/public/cursors/lawfull-good-10-text.png"
+      ],
+      "baselineSha256": "f9d032529deb09799d2c04c39f22a51c0dc440f3377993078d547cfd4c6b81f0"
+    },
+    {
+      "id": "cursors/lawfull-good-11-ew.png",
+      "title": "lawfull-good-11-ew",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-good-11-ew.png",
+      "outputs": [
+        "client/public/cursors/lawfull-good-11-ew.png"
+      ],
+      "baselineSha256": "bd4a3e58a23b9431152fad7cd81fbdca2ea208596a344ea09592a5a8db4da2fd"
+    },
+    {
+      "id": "cursors/lawfull-good-12-ns.png",
+      "title": "lawfull-good-12-ns",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-good-12-ns.png",
+      "outputs": [
+        "client/public/cursors/lawfull-good-12-ns.png"
+      ],
+      "baselineSha256": "ca2f26f3ab98b5c5eeccb16e11dcd46a6d96b2c774c96d14d2f8ff0fefa32f6e"
+    },
+    {
+      "id": "cursors/lawfull-good-13-nesw.png",
+      "title": "lawfull-good-13-nesw",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-good-13-nesw.png",
+      "outputs": [
+        "client/public/cursors/lawfull-good-13-nesw.png"
+      ],
+      "baselineSha256": "245a588fc26eece55b35ce74b6c30cc184c22ee8ca8cbe6507e0176901a160da"
+    },
+    {
+      "id": "cursors/lawfull-good-14-nwse.png",
+      "title": "lawfull-good-14-nwse",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-good-14-nwse.png",
+      "outputs": [
+        "client/public/cursors/lawfull-good-14-nwse.png"
+      ],
+      "baselineSha256": "323b339bea1ec12fa825224c15ae3540d8f42da90eeb35a183e74c57d789416b"
+    },
+    {
+      "id": "cursors/lawfull-neutral-01-arrow.png",
+      "title": "lawfull-neutral-01-arrow",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-neutral-01-arrow.png",
+      "outputs": [
+        "client/public/cursors/lawfull-neutral-01-arrow.png"
+      ],
+      "baselineSha256": "db855853a7f161974944a5a3e15c3fd7857bdde54e744f4008475484580d498c"
+    },
+    {
+      "id": "cursors/lawfull-neutral-02-hand.png",
+      "title": "lawfull-neutral-02-hand",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-neutral-02-hand.png",
+      "outputs": [
+        "client/public/cursors/lawfull-neutral-02-hand.png"
+      ],
+      "baselineSha256": "6fef4d1c1c7e53f7849c4daef014b8c3e494024822d0ec35b64c87692011f3b4"
+    },
+    {
+      "id": "cursors/lawfull-neutral-03-hourglass.png",
+      "title": "lawfull-neutral-03-hourglass",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-neutral-03-hourglass.png",
+      "outputs": [
+        "client/public/cursors/lawfull-neutral-03-hourglass.png"
+      ],
+      "baselineSha256": "bb9e121c7d2a285640a76798877daf1abdce0c80643dc98b5d63f6a0c5c3dc51"
+    },
+    {
+      "id": "cursors/lawfull-neutral-04-weapon.png",
+      "title": "lawfull-neutral-04-weapon",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-neutral-04-weapon.png",
+      "outputs": [
+        "client/public/cursors/lawfull-neutral-04-weapon.png"
+      ],
+      "baselineSha256": "f056b9540ec4f7749296148c3a041eebac96bbc0b5035551d5955c225918922f"
+    },
+    {
+      "id": "cursors/lawfull-neutral-06-d1.png",
+      "title": "lawfull-neutral-06-d1",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-neutral-06-d1.png",
+      "outputs": [
+        "client/public/cursors/lawfull-neutral-06-d1.png"
+      ],
+      "baselineSha256": "abd09a4075d56004899d0ce41fbe9682e161e93a69555dfbb594e32ffa8cc2d1"
+    },
+    {
+      "id": "cursors/lawfull-neutral-08-help.png",
+      "title": "lawfull-neutral-08-help",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-neutral-08-help.png",
+      "outputs": [
+        "client/public/cursors/lawfull-neutral-08-help.png"
+      ],
+      "baselineSha256": "914423308d30d60d1c8f5931dbdda48b880b881f22d873585354829dbb228eb0"
+    },
+    {
+      "id": "cursors/lawfull-neutral-09-move.png",
+      "title": "lawfull-neutral-09-move",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-neutral-09-move.png",
+      "outputs": [
+        "client/public/cursors/lawfull-neutral-09-move.png"
+      ],
+      "baselineSha256": "f2968f18efd22622578771036f12527b0bddd3e5106f90142f290d1de5216f08"
+    },
+    {
+      "id": "cursors/lawfull-neutral-10-text.png",
+      "title": "lawfull-neutral-10-text",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-neutral-10-text.png",
+      "outputs": [
+        "client/public/cursors/lawfull-neutral-10-text.png"
+      ],
+      "baselineSha256": "205619df9d07706a28bf07601f036fe332722a56aed446afc1b94444322c0ccd"
+    },
+    {
+      "id": "cursors/lawfull-neutral-11-ew.png",
+      "title": "lawfull-neutral-11-ew",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-neutral-11-ew.png",
+      "outputs": [
+        "client/public/cursors/lawfull-neutral-11-ew.png"
+      ],
+      "baselineSha256": "2400ac9fc8ceb49e4b9e6fa02b2382f105c0b20108f5250cf3bc62a6771d64ff"
+    },
+    {
+      "id": "cursors/lawfull-neutral-12-ns.png",
+      "title": "lawfull-neutral-12-ns",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-neutral-12-ns.png",
+      "outputs": [
+        "client/public/cursors/lawfull-neutral-12-ns.png"
+      ],
+      "baselineSha256": "2ebab118ab82d46b82e17b25f5795348288477b9cfc6f439c86c60a359160234"
+    },
+    {
+      "id": "cursors/lawfull-neutral-13-nesw.png",
+      "title": "lawfull-neutral-13-nesw",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-neutral-13-nesw.png",
+      "outputs": [
+        "client/public/cursors/lawfull-neutral-13-nesw.png"
+      ],
+      "baselineSha256": "b885e3b5469f87184400d466f153778de8114da19c95e70949bdd36628df45b1"
+    },
+    {
+      "id": "cursors/lawfull-neutral-14-nwse.png",
+      "title": "lawfull-neutral-14-nwse",
+      "category": "cursors",
+      "source": "assets/library/cursors/lawfull-neutral-14-nwse.png",
+      "outputs": [
+        "client/public/cursors/lawfull-neutral-14-nwse.png"
+      ],
+      "baselineSha256": "95dec8dc1498deb38677203b988d914e73fc9b822e4c813a9ff4b53b5a393780"
+    },
+    {
+      "id": "cursors/neutral-evil-01-arrow.png",
+      "title": "neutral-evil-01-arrow",
+      "category": "cursors",
+      "source": "assets/library/cursors/neutral-evil-01-arrow.png",
+      "outputs": [
+        "client/public/cursors/neutral-evil-01-arrow.png"
+      ],
+      "baselineSha256": "528dee67961a94b2d2be2b1c29f90125d56f8b775b0d11a36781198f3cf928c1"
+    },
+    {
+      "id": "cursors/neutral-evil-02-hand.png",
+      "title": "neutral-evil-02-hand",
+      "category": "cursors",
+      "source": "assets/library/cursors/neutral-evil-02-hand.png",
+      "outputs": [
+        "client/public/cursors/neutral-evil-02-hand.png"
+      ],
+      "baselineSha256": "8697a8052c964ec94aa235f5e22e16a662ebc7287b095924f003de45bdbd2007"
+    },
+    {
+      "id": "cursors/neutral-evil-03-hourglass.png",
+      "title": "neutral-evil-03-hourglass",
+      "category": "cursors",
+      "source": "assets/library/cursors/neutral-evil-03-hourglass.png",
+      "outputs": [
+        "client/public/cursors/neutral-evil-03-hourglass.png"
+      ],
+      "baselineSha256": "af9b0e17378fc3898f001c7dfebb98caaee78461f94d8751683042dafe84ea19"
+    },
+    {
+      "id": "cursors/neutral-evil-04-weapon.png",
+      "title": "neutral-evil-04-weapon",
+      "category": "cursors",
+      "source": "assets/library/cursors/neutral-evil-04-weapon.png",
+      "outputs": [
+        "client/public/cursors/neutral-evil-04-weapon.png"
+      ],
+      "baselineSha256": "8a08c47f4d09c03783c5bd854a5946ae80554a87fa908ab994caa0facd5fb549"
+    },
+    {
+      "id": "cursors/neutral-evil-06-d1.png",
+      "title": "neutral-evil-06-d1",
+      "category": "cursors",
+      "source": "assets/library/cursors/neutral-evil-06-d1.png",
+      "outputs": [
+        "client/public/cursors/neutral-evil-06-d1.png"
+      ],
+      "baselineSha256": "bca94365ec21559f24e1ac4198006c87f1f8dd283b936feef33a059b01f42a16"
+    },
+    {
+      "id": "cursors/neutral-evil-08-help.png",
+      "title": "neutral-evil-08-help",
+      "category": "cursors",
+      "source": "assets/library/cursors/neutral-evil-08-help.png",
+      "outputs": [
+        "client/public/cursors/neutral-evil-08-help.png"
+      ],
+      "baselineSha256": "8da8f0f1a5b5eb60683a129942ee6f4b90892a7c75265b1e6fd44cc2bd21552c"
+    },
+    {
+      "id": "cursors/neutral-evil-09-move.png",
+      "title": "neutral-evil-09-move",
+      "category": "cursors",
+      "source": "assets/library/cursors/neutral-evil-09-move.png",
+      "outputs": [
+        "client/public/cursors/neutral-evil-09-move.png"
+      ],
+      "baselineSha256": "6251f7f9bf2613a480d355007e5f03a0c31b4f7eb606cf07eb620cca85ccdc89"
+    },
+    {
+      "id": "cursors/neutral-evil-10-text.png",
+      "title": "neutral-evil-10-text",
+      "category": "cursors",
+      "source": "assets/library/cursors/neutral-evil-10-text.png",
+      "outputs": [
+        "client/public/cursors/neutral-evil-10-text.png"
+      ],
+      "baselineSha256": "0151e8911e921b584b870a5fd865ec9b500932a5cd4a6ad73685c5ba2cfd32fd"
+    },
+    {
+      "id": "cursors/neutral-evil-11-ew.png",
+      "title": "neutral-evil-11-ew",
+      "category": "cursors",
+      "source": "assets/library/cursors/neutral-evil-11-ew.png",
+      "outputs": [
+        "client/public/cursors/neutral-evil-11-ew.png"
+      ],
+      "baselineSha256": "93b17d681b937b9faef8586af2b18c51157f7a44b7cfae8b924a28e3a3d87182"
+    },
+    {
+      "id": "cursors/neutral-evil-12-ns.png",
+      "title": "neutral-evil-12-ns",
+      "category": "cursors",
+      "source": "assets/library/cursors/neutral-evil-12-ns.png",
+      "outputs": [
+        "client/public/cursors/neutral-evil-12-ns.png"
+      ],
+      "baselineSha256": "dccbe1d1acef6a2fe3f9dbe66b3ae01144d9a55f055070a37323d4762cb63453"
+    },
+    {
+      "id": "cursors/neutral-evil-13-nesw.png",
+      "title": "neutral-evil-13-nesw",
+      "category": "cursors",
+      "source": "assets/library/cursors/neutral-evil-13-nesw.png",
+      "outputs": [
+        "client/public/cursors/neutral-evil-13-nesw.png"
+      ],
+      "baselineSha256": "e4753cb1be1cfe7d2293154e5ae7fc7b1dbaf43e9f1ee55f6a9613fa3093e02a"
+    },
+    {
+      "id": "cursors/neutral-evil-14-nwse.png",
+      "title": "neutral-evil-14-nwse",
+      "category": "cursors",
+      "source": "assets/library/cursors/neutral-evil-14-nwse.png",
+      "outputs": [
+        "client/public/cursors/neutral-evil-14-nwse.png"
+      ],
+      "baselineSha256": "b08eb542aa62d20d57fd1386ee2c7840a5b8e54994c87be0e4cac5b7a5800729"
+    },
+    {
+      "id": "cursors/neutral-good-01-arrow.png",
+      "title": "neutral-good-01-arrow",
+      "category": "cursors",
+      "source": "assets/library/cursors/neutral-good-01-arrow.png",
+      "outputs": [
+        "client/public/cursors/neutral-good-01-arrow.png"
+      ],
+      "baselineSha256": "09758b84ae0806dc6163529a7548aef44e7ea27c5d2a23c46ffa19038f2812cc"
+    },
+    {
+      "id": "cursors/neutral-good-02-hand.png",
+      "title": "neutral-good-02-hand",
+      "category": "cursors",
+      "source": "assets/library/cursors/neutral-good-02-hand.png",
+      "outputs": [
+        "client/public/cursors/neutral-good-02-hand.png"
+      ],
+      "baselineSha256": "a49c5faae2c1948f73bfe5deec412ff57148eb0cdd1624a0c4cedc46fb1a9fb8"
+    },
+    {
+      "id": "cursors/neutral-good-03-hourglass.png",
+      "title": "neutral-good-03-hourglass",
+      "category": "cursors",
+      "source": "assets/library/cursors/neutral-good-03-hourglass.png",
+      "outputs": [
+        "client/public/cursors/neutral-good-03-hourglass.png"
+      ],
+      "baselineSha256": "64d1e68dc2b3f260abbe9cb03af507f9dc9b6e9c81a51dfb2a8eea81ef4382a7"
+    },
+    {
+      "id": "cursors/neutral-good-04-weapon.png",
+      "title": "neutral-good-04-weapon",
+      "category": "cursors",
+      "source": "assets/library/cursors/neutral-good-04-weapon.png",
+      "outputs": [
+        "client/public/cursors/neutral-good-04-weapon.png"
+      ],
+      "baselineSha256": "78c4cdad39776c87c5c7dd2bc788442ae97fe04ac9ced977dd8bb7a49385f69a"
+    },
+    {
+      "id": "cursors/neutral-good-06-d1.png",
+      "title": "neutral-good-06-d1",
+      "category": "cursors",
+      "source": "assets/library/cursors/neutral-good-06-d1.png",
+      "outputs": [
+        "client/public/cursors/neutral-good-06-d1.png"
+      ],
+      "baselineSha256": "4c186f90d9c9dc0852272fd24e91fe25c7829aefd3447579ec00ec6be2c26ca3"
+    },
+    {
+      "id": "cursors/neutral-good-08-help.png",
+      "title": "neutral-good-08-help",
+      "category": "cursors",
+      "source": "assets/library/cursors/neutral-good-08-help.png",
+      "outputs": [
+        "client/public/cursors/neutral-good-08-help.png"
+      ],
+      "baselineSha256": "f1f8ff68f441cc9c0294fac87fb0f3eaa156767fff3701d7349c8f16956a9966"
+    },
+    {
+      "id": "cursors/neutral-good-09-move.png",
+      "title": "neutral-good-09-move",
+      "category": "cursors",
+      "source": "assets/library/cursors/neutral-good-09-move.png",
+      "outputs": [
+        "client/public/cursors/neutral-good-09-move.png"
+      ],
+      "baselineSha256": "771d3470c32ea862a5eed25a30d31ea546e3084c9c42df3ad3536a7c35bf7505"
+    },
+    {
+      "id": "cursors/neutral-good-10-text.png",
+      "title": "neutral-good-10-text",
+      "category": "cursors",
+      "source": "assets/library/cursors/neutral-good-10-text.png",
+      "outputs": [
+        "client/public/cursors/neutral-good-10-text.png"
+      ],
+      "baselineSha256": "55936210fbe54f2767b265841b238b7e6992d8a8da428e7a21791d965281660b"
+    },
+    {
+      "id": "cursors/neutral-good-11-ew.png",
+      "title": "neutral-good-11-ew",
+      "category": "cursors",
+      "source": "assets/library/cursors/neutral-good-11-ew.png",
+      "outputs": [
+        "client/public/cursors/neutral-good-11-ew.png"
+      ],
+      "baselineSha256": "6b33e4598646e644a109bdc9f02fbfb9cc29ae3d588c5819352c17e99adb2550"
+    },
+    {
+      "id": "cursors/neutral-good-12-ns.png",
+      "title": "neutral-good-12-ns",
+      "category": "cursors",
+      "source": "assets/library/cursors/neutral-good-12-ns.png",
+      "outputs": [
+        "client/public/cursors/neutral-good-12-ns.png"
+      ],
+      "baselineSha256": "ce3ec10ba6d056514ed2f64107b74116340245e8f7c476396953840b991ec8ca"
+    },
+    {
+      "id": "cursors/neutral-good-13-nesw.png",
+      "title": "neutral-good-13-nesw",
+      "category": "cursors",
+      "source": "assets/library/cursors/neutral-good-13-nesw.png",
+      "outputs": [
+        "client/public/cursors/neutral-good-13-nesw.png"
+      ],
+      "baselineSha256": "ceb82d80b1bbaf926aae4e099e4f3647dcedae705d12d2f0cf9ba0ca027d0c4b"
+    },
+    {
+      "id": "cursors/neutral-good-14-nwse.png",
+      "title": "neutral-good-14-nwse",
+      "category": "cursors",
+      "source": "assets/library/cursors/neutral-good-14-nwse.png",
+      "outputs": [
+        "client/public/cursors/neutral-good-14-nwse.png"
+      ],
+      "baselineSha256": "e277dd0f37770dab13aa6767641448fa3fdda63f41a9f0efe6ed13c819f0ad7b"
+    },
+    {
+      "id": "cursors/true-neutral-01-arrow.png",
+      "title": "true-neutral-01-arrow",
+      "category": "cursors",
+      "source": "assets/library/cursors/true-neutral-01-arrow.png",
+      "outputs": [
+        "client/public/cursors/true-neutral-01-arrow.png"
+      ],
+      "baselineSha256": "7e9476831c51b852985c6e79fc9031292b694b64def467e970d6b50b1adc478c"
+    },
+    {
+      "id": "cursors/true-neutral-02-hand.png",
+      "title": "true-neutral-02-hand",
+      "category": "cursors",
+      "source": "assets/library/cursors/true-neutral-02-hand.png",
+      "outputs": [
+        "client/public/cursors/true-neutral-02-hand.png"
+      ],
+      "baselineSha256": "5acfed32674923e164225c4041614d4dca216bdafa2076675dddce14ea577d6a"
+    },
+    {
+      "id": "cursors/true-neutral-03-hourglass.png",
+      "title": "true-neutral-03-hourglass",
+      "category": "cursors",
+      "source": "assets/library/cursors/true-neutral-03-hourglass.png",
+      "outputs": [
+        "client/public/cursors/true-neutral-03-hourglass.png"
+      ],
+      "baselineSha256": "be12f07ad095639928e34f9e0fbc7673d46bc18b57e7ff088685b7b49cfbebeb"
+    },
+    {
+      "id": "cursors/true-neutral-04-weapon.png",
+      "title": "true-neutral-04-weapon",
+      "category": "cursors",
+      "source": "assets/library/cursors/true-neutral-04-weapon.png",
+      "outputs": [
+        "client/public/cursors/true-neutral-04-weapon.png"
+      ],
+      "baselineSha256": "cebc9761e0842bbd8ad246f5cc40d20ce0e9221105af9a6c3ebd1098682ba386"
+    },
+    {
+      "id": "cursors/true-neutral-06-d1.png",
+      "title": "true-neutral-06-d1",
+      "category": "cursors",
+      "source": "assets/library/cursors/true-neutral-06-d1.png",
+      "outputs": [
+        "client/public/cursors/true-neutral-06-d1.png"
+      ],
+      "baselineSha256": "39a5c80d98a05b2411b88bd6a1b580d8f3603643ebd1f8beb58828ba8b585c85"
+    },
+    {
+      "id": "cursors/true-neutral-08-help.png",
+      "title": "true-neutral-08-help",
+      "category": "cursors",
+      "source": "assets/library/cursors/true-neutral-08-help.png",
+      "outputs": [
+        "client/public/cursors/true-neutral-08-help.png"
+      ],
+      "baselineSha256": "2b9a23982690f21ab73043c54802ec5858712c092346341c0e6348d86a9c9624"
+    },
+    {
+      "id": "cursors/true-neutral-09-move.png",
+      "title": "true-neutral-09-move",
+      "category": "cursors",
+      "source": "assets/library/cursors/true-neutral-09-move.png",
+      "outputs": [
+        "client/public/cursors/true-neutral-09-move.png"
+      ],
+      "baselineSha256": "4eecdeff0927948a5e863d68ba810ab4c759b1c6e7a81a1774225e53ae012e72"
+    },
+    {
+      "id": "cursors/true-neutral-10-text.png",
+      "title": "true-neutral-10-text",
+      "category": "cursors",
+      "source": "assets/library/cursors/true-neutral-10-text.png",
+      "outputs": [
+        "client/public/cursors/true-neutral-10-text.png"
+      ],
+      "baselineSha256": "1b8f85dc147a5b88b2a038eabef00c0e4bff3953bf5ae99875b700d9c6bf2d93"
+    },
+    {
+      "id": "cursors/true-neutral-11-ew.png",
+      "title": "true-neutral-11-ew",
+      "category": "cursors",
+      "source": "assets/library/cursors/true-neutral-11-ew.png",
+      "outputs": [
+        "client/public/cursors/true-neutral-11-ew.png"
+      ],
+      "baselineSha256": "99d983058d24f68b16059f1b1a2bd3d67f0e933b1905567e0ff7bd9a394905ad"
+    },
+    {
+      "id": "cursors/true-neutral-12-ns.png",
+      "title": "true-neutral-12-ns",
+      "category": "cursors",
+      "source": "assets/library/cursors/true-neutral-12-ns.png",
+      "outputs": [
+        "client/public/cursors/true-neutral-12-ns.png"
+      ],
+      "baselineSha256": "5bec8e011791001829ab8df452ecb064a40b0388f606e3c193a9fe9c3643ba9e"
+    },
+    {
+      "id": "cursors/true-neutral-13-nesw.png",
+      "title": "true-neutral-13-nesw",
+      "category": "cursors",
+      "source": "assets/library/cursors/true-neutral-13-nesw.png",
+      "outputs": [
+        "client/public/cursors/true-neutral-13-nesw.png"
+      ],
+      "baselineSha256": "da5a6e546b55ad368f7118c6da4ed663952b222d99a33d7a2edf9a837c4a839a"
+    },
+    {
+      "id": "cursors/true-neutral-14-nwse.png",
+      "title": "true-neutral-14-nwse",
+      "category": "cursors",
+      "source": "assets/library/cursors/true-neutral-14-nwse.png",
+      "outputs": [
+        "client/public/cursors/true-neutral-14-nwse.png"
+      ],
+      "baselineSha256": "4564b9b5c398d5ef772685230b0631a536fd09c81684569263126dc14925778c"
+    },
+    {
+      "id": "desktop/icon.png",
+      "title": "icon",
+      "category": "branding",
+      "source": "assets/library/desktop/icon.png",
+      "outputs": [
+        "build/icon.png",
+        "client/public/app-icon.png"
+      ],
+      "baselineSha256": "457404410aef14469884f8987c3286456ad3d557e50b3f4be1812edd8666c977"
+    },
+    {
+      "id": "fonts/BubbleGum.ttf",
+      "title": "BubbleGum",
+      "category": "fonts",
+      "source": "assets/library/fonts/BubbleGum.ttf",
+      "outputs": [
+        "client/public/fonts/BubbleGum.ttf"
+      ],
+      "baselineSha256": "b3c59584f07c8b2da5fc336b3d52586cb39dc82a93702f400817d2bfc6e9200d"
+    },
+    {
+      "id": "fonts/Bulgariamodernav3-00R9.otf",
+      "title": "Bulgariamodernav3-00R9",
+      "category": "fonts",
+      "source": "assets/library/fonts/Bulgariamodernav3-00R9.otf",
+      "outputs": [
+        "client/public/fonts/Bulgariamodernav3-00R9.otf"
+      ],
+      "baselineSha256": "fdca1cc638a04ee987a8783fea724e3db2dbc039b4189a56ff65a74a872e02d1"
+    },
+    {
+      "id": "fonts/campaign-dossier/badscript-cyrillic.woff2",
+      "title": "badscript-cyrillic",
+      "category": "fonts",
+      "source": "assets/library/fonts/campaign-dossier/badscript-cyrillic.woff2",
+      "outputs": [
+        "client/public/fonts/campaign-dossier/badscript-cyrillic.woff2"
+      ],
+      "baselineSha256": "c839bd44e6793f2ba20603ee9bf1ef34d23c04cd7d452cd53a3171cecf241d24"
+    },
+    {
+      "id": "fonts/campaign-dossier/badscript-latin.woff2",
+      "title": "badscript-latin",
+      "category": "fonts",
+      "source": "assets/library/fonts/campaign-dossier/badscript-latin.woff2",
+      "outputs": [
+        "client/public/fonts/campaign-dossier/badscript-latin.woff2"
+      ],
+      "baselineSha256": "01c47bfe80281d0a2f2554f1226de5e75fca6655751c287bf1590ce350c23971"
+    },
+    {
+      "id": "fonts/campaign-dossier/badscript-OFL.txt",
+      "title": "badscript-OFL",
+      "category": "fonts",
+      "source": "assets/library/fonts/campaign-dossier/badscript-OFL.txt",
+      "outputs": [
+        "client/public/fonts/campaign-dossier/badscript-OFL.txt"
+      ],
+      "baselineSha256": "0b742ad45c246502b6d56c62146011e37098978b8feb5970d7da313553dedd91"
+    },
+    {
+      "id": "fonts/campaign-dossier/caveat-cyrillic.woff2",
+      "title": "caveat-cyrillic",
+      "category": "fonts",
+      "source": "assets/library/fonts/campaign-dossier/caveat-cyrillic.woff2",
+      "outputs": [
+        "client/public/fonts/campaign-dossier/caveat-cyrillic.woff2"
+      ],
+      "baselineSha256": "f8d027f997b171cd9fc31f8aa5ce3ebe23ba0d0dc58000cd2e635d1d4b4ea4cb"
+    },
+    {
+      "id": "fonts/campaign-dossier/caveat-latin.woff2",
+      "title": "caveat-latin",
+      "category": "fonts",
+      "source": "assets/library/fonts/campaign-dossier/caveat-latin.woff2",
+      "outputs": [
+        "client/public/fonts/campaign-dossier/caveat-latin.woff2"
+      ],
+      "baselineSha256": "d51e2283010e661d9f3dafdc9ff4b82b2ebcb2f7aa43ca48a105f5f68d46cc32"
+    },
+    {
+      "id": "fonts/campaign-dossier/caveat-OFL.txt",
+      "title": "caveat-OFL",
+      "category": "fonts",
+      "source": "assets/library/fonts/campaign-dossier/caveat-OFL.txt",
+      "outputs": [
+        "client/public/fonts/campaign-dossier/caveat-OFL.txt"
+      ],
+      "baselineSha256": "1f9d81d094273d82f3898a1ee8b598a717d050ecbf5ff7bede105b704880157b"
+    },
+    {
+      "id": "fonts/campaign-dossier/fonts.css",
+      "title": "fonts",
+      "category": "fonts",
+      "source": "assets/library/fonts/campaign-dossier/fonts.css",
+      "outputs": [
+        "client/public/fonts/campaign-dossier/fonts.css"
+      ],
+      "baselineSha256": "600bc9e6023c4824738d3cbcb1eb5257751bc7b487f37140c1ef43bc2577a2c9"
+    },
+    {
+      "id": "fonts/campaign-dossier/marckscript-cyrillic.woff2",
+      "title": "marckscript-cyrillic",
+      "category": "fonts",
+      "source": "assets/library/fonts/campaign-dossier/marckscript-cyrillic.woff2",
+      "outputs": [
+        "client/public/fonts/campaign-dossier/marckscript-cyrillic.woff2"
+      ],
+      "baselineSha256": "457f5ae9dd211fb276e605a4ce3ecb35cbe1aee8bb1a54698c81d7834873ed06"
+    },
+    {
+      "id": "fonts/campaign-dossier/marckscript-latin.woff2",
+      "title": "marckscript-latin",
+      "category": "fonts",
+      "source": "assets/library/fonts/campaign-dossier/marckscript-latin.woff2",
+      "outputs": [
+        "client/public/fonts/campaign-dossier/marckscript-latin.woff2"
+      ],
+      "baselineSha256": "b32acf77642711e18c14d57aabeefa02ee25664a7f40929ee5f72396557b6e76"
+    },
+    {
+      "id": "fonts/campaign-dossier/marckscript-OFL.txt",
+      "title": "marckscript-OFL",
+      "category": "fonts",
+      "source": "assets/library/fonts/campaign-dossier/marckscript-OFL.txt",
+      "outputs": [
+        "client/public/fonts/campaign-dossier/marckscript-OFL.txt"
+      ],
+      "baselineSha256": "f22a2beea88d631a620b15683fd03e79f13ad3297ad97fa5e42283c0b1a3a038"
+    },
+    {
+      "id": "fonts/Cyberpunk_RUS_BY_LYAJKA.ttf",
+      "title": "Cyberpunk_RUS_BY_LYAJKA",
+      "category": "fonts",
+      "source": "assets/library/fonts/Cyberpunk_RUS_BY_LYAJKA.ttf",
+      "outputs": [
+        "client/public/fonts/Cyberpunk_RUS_BY_LYAJKA.ttf"
+      ],
+      "baselineSha256": "2723496e92fa6ece527d85b8ba0be77b3897cb5a8179b99befa63a7ceb080d4c"
+    },
+    {
+      "id": "fonts/DOSFont.ttf",
+      "title": "DOSFont",
+      "category": "fonts",
+      "source": "assets/library/fonts/DOSFont.ttf",
+      "outputs": [
+        "client/public/fonts/DOSFont.ttf"
+      ],
+      "baselineSha256": "a9b43dda8a43acb85c07582cdbebfd2fbae779b22f159aee3404f55f3017bbe1"
+    },
+    {
+      "id": "fonts/GOTHIC_Greengoth.ttf",
+      "title": "GOTHIC_Greengoth",
+      "category": "fonts",
+      "source": "assets/library/fonts/GOTHIC_Greengoth.ttf",
+      "outputs": [
+        "client/public/fonts/GOTHIC_Greengoth.ttf"
+      ],
+      "baselineSha256": "2fdc808bbc5d1a8e4472e08100b095f38c741b4005b559f86623eabf5fced70a"
+    },
+    {
+      "id": "fonts/New_Zelek.ttf",
+      "title": "New_Zelek",
+      "category": "fonts",
+      "source": "assets/library/fonts/New_Zelek.ttf",
+      "outputs": [
+        "client/public/fonts/New_Zelek.ttf"
+      ],
+      "baselineSha256": "564bb76d06eb02f9acb264835c7c64e651d10856ae6f8e6ec556a3efe1e4cb8a"
+    },
+    {
+      "id": "fonts/RookiePunk.ttf",
+      "title": "RookiePunk",
+      "category": "fonts",
+      "source": "assets/library/fonts/RookiePunk.ttf",
+      "outputs": [
+        "client/public/fonts/RookiePunk.ttf"
+      ],
+      "baselineSha256": "95989c8793079f6b75d2c0a9648cbf8b14d7efcf8def74d3248a67fc90e22fd0"
+    },
+    {
+      "id": "fonts/rubik-dirt/cyrillic-ext.woff2",
+      "title": "cyrillic-ext",
+      "category": "fonts",
+      "source": "assets/library/fonts/rubik-dirt/cyrillic-ext.woff2",
+      "outputs": [
+        "client/public/fonts/rubik-dirt/cyrillic-ext.woff2"
+      ],
+      "baselineSha256": "dd19714e52195e6c62184fef919a7361519e0bed408a0ca03cd37c52f869c32d"
+    },
+    {
+      "id": "fonts/rubik-dirt/cyrillic.woff2",
+      "title": "cyrillic",
+      "category": "fonts",
+      "source": "assets/library/fonts/rubik-dirt/cyrillic.woff2",
+      "outputs": [
+        "client/public/fonts/rubik-dirt/cyrillic.woff2"
+      ],
+      "baselineSha256": "a80fdba1aa7ea9178ede565aec4602179f50b731a536da6e504446fa9a084de4"
+    },
+    {
+      "id": "fonts/rubik-dirt/latin-ext.woff2",
+      "title": "latin-ext",
+      "category": "fonts",
+      "source": "assets/library/fonts/rubik-dirt/latin-ext.woff2",
+      "outputs": [
+        "client/public/fonts/rubik-dirt/latin-ext.woff2"
+      ],
+      "baselineSha256": "9186f2be83ed4a46b0aa9f921c0cd5324419c07a52bdd8383f99288df2f805b7"
+    },
+    {
+      "id": "fonts/rubik-dirt/latin.woff2",
+      "title": "latin",
+      "category": "fonts",
+      "source": "assets/library/fonts/rubik-dirt/latin.woff2",
+      "outputs": [
+        "client/public/fonts/rubik-dirt/latin.woff2"
+      ],
+      "baselineSha256": "a07c6f5aeac1488edd22d90c9f84767621acaec476aaf8983dd76e6b8539f09a"
+    },
+    {
+      "id": "fonts/rubik-dirt/OFL.txt",
+      "title": "OFL",
+      "category": "fonts",
+      "source": "assets/library/fonts/rubik-dirt/OFL.txt",
+      "outputs": [
+        "client/public/fonts/rubik-dirt/OFL.txt"
+      ],
+      "baselineSha256": "f9e2d4498ea80d38bac7b8841d68af68c132fa67e1552e7c05717e6987de1d74"
+    },
+    {
+      "id": "fonts/RussianPunk.ttf",
+      "title": "RussianPunk",
+      "category": "fonts",
+      "source": "assets/library/fonts/RussianPunk.ttf",
+      "outputs": [
+        "client/public/fonts/RussianPunk.ttf"
+      ],
+      "baselineSha256": "861282330c15affc062472251714e49f9d2998d71b4e5c3ea20c3de4c4f34411"
+    },
+    {
+      "id": "fonts/sofia-sans-semi-condensed/cyrillic-ext-italic.woff2",
+      "title": "cyrillic-ext-italic",
+      "category": "fonts",
+      "source": "assets/library/fonts/sofia-sans-semi-condensed/cyrillic-ext-italic.woff2",
+      "outputs": [
+        "client/public/fonts/sofia-sans-semi-condensed/cyrillic-ext-italic.woff2"
+      ],
+      "baselineSha256": "099571d94c1ec5a77881eaac122465f7af3ebf91377fcc6a4b07411ad7e9c99e"
+    },
+    {
+      "id": "fonts/sofia-sans-semi-condensed/cyrillic-ext-normal.woff2",
+      "title": "cyrillic-ext-normal",
+      "category": "fonts",
+      "source": "assets/library/fonts/sofia-sans-semi-condensed/cyrillic-ext-normal.woff2",
+      "outputs": [
+        "client/public/fonts/sofia-sans-semi-condensed/cyrillic-ext-normal.woff2"
+      ],
+      "baselineSha256": "eaf15076aaabc17e9a16a5a448d911764b8151f81ed58a3cc93ade3351d8e085"
+    },
+    {
+      "id": "fonts/sofia-sans-semi-condensed/cyrillic-italic.woff2",
+      "title": "cyrillic-italic",
+      "category": "fonts",
+      "source": "assets/library/fonts/sofia-sans-semi-condensed/cyrillic-italic.woff2",
+      "outputs": [
+        "client/public/fonts/sofia-sans-semi-condensed/cyrillic-italic.woff2"
+      ],
+      "baselineSha256": "716fff03809674f9a0bbd03adf4886d05408e23e1a7e874c471259a20a9ae72e"
+    },
+    {
+      "id": "fonts/sofia-sans-semi-condensed/cyrillic-normal.woff2",
+      "title": "cyrillic-normal",
+      "category": "fonts",
+      "source": "assets/library/fonts/sofia-sans-semi-condensed/cyrillic-normal.woff2",
+      "outputs": [
+        "client/public/fonts/sofia-sans-semi-condensed/cyrillic-normal.woff2"
+      ],
+      "baselineSha256": "591a45f39f8b53e0bc84279d5c5a13f1ec01305f284922a1ba7a6439906010c3"
+    },
+    {
+      "id": "fonts/sofia-sans-semi-condensed/latin-ext-italic.woff2",
+      "title": "latin-ext-italic",
+      "category": "fonts",
+      "source": "assets/library/fonts/sofia-sans-semi-condensed/latin-ext-italic.woff2",
+      "outputs": [
+        "client/public/fonts/sofia-sans-semi-condensed/latin-ext-italic.woff2"
+      ],
+      "baselineSha256": "5ef7e139d6bb1bacde5c5ba4004c632588da98f054b47fe809d3e71f9a0f733b"
+    },
+    {
+      "id": "fonts/sofia-sans-semi-condensed/latin-ext-normal.woff2",
+      "title": "latin-ext-normal",
+      "category": "fonts",
+      "source": "assets/library/fonts/sofia-sans-semi-condensed/latin-ext-normal.woff2",
+      "outputs": [
+        "client/public/fonts/sofia-sans-semi-condensed/latin-ext-normal.woff2"
+      ],
+      "baselineSha256": "162936f1d1a40bf5c63b31dd53d7d9a6a4403589ddba13b706edfbc469950509"
+    },
+    {
+      "id": "fonts/sofia-sans-semi-condensed/latin-italic.woff2",
+      "title": "latin-italic",
+      "category": "fonts",
+      "source": "assets/library/fonts/sofia-sans-semi-condensed/latin-italic.woff2",
+      "outputs": [
+        "client/public/fonts/sofia-sans-semi-condensed/latin-italic.woff2"
+      ],
+      "baselineSha256": "15d337ccc0e2d289d8792f15052ee8a3a08cbb3aa6df9ea9a2de9ae6507b89ff"
+    },
+    {
+      "id": "fonts/sofia-sans-semi-condensed/latin-normal.woff2",
+      "title": "latin-normal",
+      "category": "fonts",
+      "source": "assets/library/fonts/sofia-sans-semi-condensed/latin-normal.woff2",
+      "outputs": [
+        "client/public/fonts/sofia-sans-semi-condensed/latin-normal.woff2"
+      ],
+      "baselineSha256": "f00d908c2a2d0ecfa1f02b1bb1f6b14c68b6d63468876bb0432b731652371d4a"
+    },
+    {
+      "id": "fonts/sofia-sans-semi-condensed/OFL.txt",
+      "title": "OFL",
+      "category": "fonts",
+      "source": "assets/library/fonts/sofia-sans-semi-condensed/OFL.txt",
+      "outputs": [
+        "client/public/fonts/sofia-sans-semi-condensed/OFL.txt"
+      ],
+      "baselineSha256": "3e824d5099202de2c98cbd8e5ecba54da7d220c1ad851330726e65f3e60842d1"
+    },
+    {
+      "id": "fonts/Steamy.otf",
+      "title": "Steamy",
+      "category": "fonts",
+      "source": "assets/library/fonts/Steamy.otf",
+      "outputs": [
+        "client/public/fonts/Steamy.otf"
+      ],
+      "baselineSha256": "ffd7f3684cab6d2cabfc7bd366ca8ab96114c4943de8ce859f3683e715b60e68"
+    },
+    {
+      "id": "icons.svg",
+      "title": "icons",
+      "category": "icons",
+      "source": "assets/library/icons.svg",
+      "outputs": [
+        "client/public/icons.svg"
+      ],
+      "baselineSha256": "b45fa506195cfcdef406ba9f0c77b36ddc1a7c224040926ec70abc2fdea7b93a"
+    },
+    {
+      "id": "icons/Aim.svg",
+      "title": "Aim",
+      "category": "icons",
+      "source": "assets/library/icons/Aim.svg",
+      "outputs": [
+        "client/public/icons/Aim.svg"
+      ],
+      "baselineSha256": "ab641a901d66244c3d3e09f53499fe3c7d11ec6d42954615b37ccd2f477d2be3"
+    },
+    {
+      "id": "icons/anarchy.svg",
+      "title": "anarchy",
+      "category": "icons",
+      "source": "assets/library/icons/anarchy.svg",
+      "outputs": [
+        "client/public/icons/anarchy.svg"
+      ],
+      "baselineSha256": "4447699b787e00762a0160ad4956e213941b721b86283d68144b5e110e480ab2"
+    },
+    {
+      "id": "icons/Shot.svg",
+      "title": "Shot",
+      "category": "icons",
+      "source": "assets/library/icons/Shot.svg",
+      "outputs": [
+        "client/public/icons/Shot.svg"
+      ],
+      "baselineSha256": "67e84d8224f8724e8bc7ef77f9425e140fee771ab54d8d1bfdecc8178d2d8711"
+    },
+    {
+      "id": "inventory/amulet.webp",
+      "title": "amulet",
+      "category": "inventory",
+      "source": "assets/library/inventory/amulet.webp",
+      "outputs": [
+        "client/public/inventory/amulet.webp"
+      ],
+      "baselineSha256": "c283cd068f6ca7c4dbac9983dbc08ddf8000f2c31a9fbe18c41ed954d8652347"
+    },
+    {
+      "id": "inventory/key.webp",
+      "title": "key",
+      "category": "inventory",
+      "source": "assets/library/inventory/key.webp",
+      "outputs": [
+        "client/public/inventory/key.webp"
+      ],
+      "baselineSha256": "04ea6f8bbe1551c534efa337e44a5f36c36073870a61c579e89489a28f25e842"
+    },
+    {
+      "id": "inventory/pack.webp",
+      "title": "pack",
+      "category": "inventory",
+      "source": "assets/library/inventory/pack.webp",
+      "outputs": [
+        "client/public/inventory/pack.webp"
+      ],
+      "baselineSha256": "88012229704dcb78e68c93938019529fb32567855f04144b1aae7a080aeadec2"
+    },
+    {
+      "id": "inventory/potion.webp",
+      "title": "potion",
+      "category": "inventory",
+      "source": "assets/library/inventory/potion.webp",
+      "outputs": [
+        "client/public/inventory/potion.webp"
+      ],
+      "baselineSha256": "350b3c599c0e56bc8027f8c4ea1154d0ffcc63117a1c5a43ba4cd7db30246984"
+    },
+    {
+      "id": "inventory/pouch.webp",
+      "title": "pouch",
+      "category": "inventory",
+      "source": "assets/library/inventory/pouch.webp",
+      "outputs": [
+        "client/public/inventory/pouch.webp"
+      ],
+      "baselineSha256": "e1fb636f7446dbc695797d7a60fd638baab8b833244d8716b3b93de886c05c1e"
+    },
+    {
+      "id": "inventory/shield.webp",
+      "title": "shield",
+      "category": "inventory",
+      "source": "assets/library/inventory/shield.webp",
+      "outputs": [
+        "client/public/inventory/shield.webp"
+      ],
+      "baselineSha256": "fd1b8dc26a486ff540d3fc7ca2a8bab505ae6e2a6a8cac3f749cef6009122608"
+    },
+    {
+      "id": "inventory/sword.webp",
+      "title": "sword",
+      "category": "inventory",
+      "source": "assets/library/inventory/sword.webp",
+      "outputs": [
+        "client/public/inventory/sword.webp"
+      ],
+      "baselineSha256": "6b5283f86d9724379d2eef0a1f7c9e564370cb9880d28dade561cf201afa65ff"
+    },
+    {
+      "id": "inventory/wand.webp",
+      "title": "wand",
+      "category": "inventory",
+      "source": "assets/library/inventory/wand.webp",
+      "outputs": [
+        "client/public/inventory/wand.webp"
+      ],
+      "baselineSha256": "0e2bc89f6bf0d4d4be1b2c5f51762d30d213f8d677ff15cdbb14799abdd4fe2e"
+    },
+    {
+      "id": "logo.png",
+      "title": "logo",
+      "category": "branding",
+      "source": "assets/library/logo.png",
+      "outputs": [
+        "client/public/logo.png"
+      ],
+      "baselineSha256": "44c83c88419cfbe5058eca2384b663344de7fb24afc815382df825f18abbf7a5"
+    },
+    {
+      "id": "mascot/agent-error.webp",
+      "title": "agent-error",
+      "category": "mascot",
+      "source": "assets/library/mascot/agent-error.webp",
+      "outputs": [
+        "client/public/mascot/agent-error.webp"
+      ],
+      "baselineSha256": "f3809baf8e7bdb5702665ff43f6de0080591392180d9db5d09c30c9cee66a664"
+    },
+    {
+      "id": "mascot/agent-idle.webp",
+      "title": "agent-idle",
+      "category": "mascot",
+      "source": "assets/library/mascot/agent-idle.webp",
+      "outputs": [
+        "client/public/mascot/agent-idle.webp"
+      ],
+      "baselineSha256": "125b1c55f9faffaf571946beea4429d724d6dbe195426ae9fb2ed8b96c6cc7a1"
+    },
+    {
+      "id": "mascot/agent-waiting.webp",
+      "title": "agent-waiting",
+      "category": "mascot",
+      "source": "assets/library/mascot/agent-waiting.webp",
+      "outputs": [
+        "client/public/mascot/agent-waiting.webp"
+      ],
+      "baselineSha256": "f60615703118cd6b9e17e38f4965a445b608fe6fab5cb681acc7427efafc8480"
+    },
+    {
+      "id": "mascot/agent-working.webp",
+      "title": "agent-working",
+      "category": "mascot",
+      "source": "assets/library/mascot/agent-working.webp",
+      "outputs": [
+        "client/public/mascot/agent-working.webp"
+      ],
+      "baselineSha256": "cd3766120a6d92d0d3bf8945be77db83de146c21b31a67ca7aaa8310db73df0b"
+    },
+    {
+      "id": "mascot/detective-error.webp",
+      "title": "detective-error",
+      "category": "mascot",
+      "source": "assets/library/mascot/detective-error.webp",
+      "outputs": [
+        "client/public/mascot/detective-error.webp"
+      ],
+      "baselineSha256": "271606c2263a83aa2be89065ecdd7d1f1a0d567b1963db029b9da1d96939040e"
+    },
+    {
+      "id": "mascot/detective-idle.webp",
+      "title": "detective-idle",
+      "category": "mascot",
+      "source": "assets/library/mascot/detective-idle.webp",
+      "outputs": [
+        "client/public/mascot/detective-idle.webp"
+      ],
+      "baselineSha256": "0b292eab07b7e66680fdc629b8c30795c09ba5a2d80a124d5398dd88943d90a7"
+    },
+    {
+      "id": "mascot/detective-waiting.webp",
+      "title": "detective-waiting",
+      "category": "mascot",
+      "source": "assets/library/mascot/detective-waiting.webp",
+      "outputs": [
+        "client/public/mascot/detective-waiting.webp"
+      ],
+      "baselineSha256": "915b2aa174364151992f939b57cab4bdc35f4c68b2abe9495c18f5fd341367bc"
+    },
+    {
+      "id": "mascot/detective-working.webp",
+      "title": "detective-working",
+      "category": "mascot",
+      "source": "assets/library/mascot/detective-working.webp",
+      "outputs": [
+        "client/public/mascot/detective-working.webp"
+      ],
+      "baselineSha256": "445b4f73297dd8342f5dfef7fe9d1f770bab2f99b98a3b89df6a50370d455aab"
+    },
+    {
+      "id": "mascot/hero-error.webp",
+      "title": "hero-error",
+      "category": "mascot",
+      "source": "assets/library/mascot/hero-error.webp",
+      "outputs": [
+        "client/public/mascot/hero-error.webp"
+      ],
+      "baselineSha256": "960b4c4059a7299a3253c67e5c1980b9b584dcc5f918cf589c868b171eac8c4f"
+    },
+    {
+      "id": "mascot/hero-idle.webp",
+      "title": "hero-idle",
+      "category": "mascot",
+      "source": "assets/library/mascot/hero-idle.webp",
+      "outputs": [
+        "client/public/mascot/hero-idle.webp"
+      ],
+      "baselineSha256": "16bdae5864f57e37ad27200d8f81c26eae1f5e8038f06501f0ab645c844c9ef9"
+    },
+    {
+      "id": "mascot/hero-waiting.webp",
+      "title": "hero-waiting",
+      "category": "mascot",
+      "source": "assets/library/mascot/hero-waiting.webp",
+      "outputs": [
+        "client/public/mascot/hero-waiting.webp"
+      ],
+      "baselineSha256": "f23771fd2c471e4eb4a6db69016f162a45641bd67a4c7a49b2f77a4e3cbfad7b"
+    },
+    {
+      "id": "mascot/hero-working.webp",
+      "title": "hero-working",
+      "category": "mascot",
+      "source": "assets/library/mascot/hero-working.webp",
+      "outputs": [
+        "client/public/mascot/hero-working.webp"
+      ],
+      "baselineSha256": "db627c2bec8f1e328d5064ceb1a1923591f2248d317094521288f01ff2b9f466"
+    },
+    {
+      "id": "mascot/mage-error.webp",
+      "title": "mage-error",
+      "category": "mascot",
+      "source": "assets/library/mascot/mage-error.webp",
+      "outputs": [
+        "client/public/mascot/mage-error.webp"
+      ],
+      "baselineSha256": "907bdf5f4d35ed3ab218bfff7b635571d7cf2864bbc4d71a3ae8404508298cf6"
+    },
+    {
+      "id": "mascot/mage-idle.webp",
+      "title": "mage-idle",
+      "category": "mascot",
+      "source": "assets/library/mascot/mage-idle.webp",
+      "outputs": [
+        "client/public/mascot/mage-idle.webp"
+      ],
+      "baselineSha256": "65813648cbdbd48330a93255ee685669d2c9cd50dbfdc17c594abd4f8fcfe69a"
+    },
+    {
+      "id": "mascot/mage-waiting.webp",
+      "title": "mage-waiting",
+      "category": "mascot",
+      "source": "assets/library/mascot/mage-waiting.webp",
+      "outputs": [
+        "client/public/mascot/mage-waiting.webp"
+      ],
+      "baselineSha256": "b64a0a8f949bbac199222838652867fa95218c533d02064bdb8f24bbb2ca60ea"
+    },
+    {
+      "id": "mascot/mage-working.webp",
+      "title": "mage-working",
+      "category": "mascot",
+      "source": "assets/library/mascot/mage-working.webp",
+      "outputs": [
+        "client/public/mascot/mage-working.webp"
+      ],
+      "baselineSha256": "11b0eb32092f1b81068a3ee5d8106f9af1a7a4457f450a0b9aa00c61e3f18011"
+    },
+    {
+      "id": "mascot/pirate-error.webp",
+      "title": "pirate-error",
+      "category": "mascot",
+      "source": "assets/library/mascot/pirate-error.webp",
+      "outputs": [
+        "client/public/mascot/pirate-error.webp"
+      ],
+      "baselineSha256": "cbd83a585184dafd507d2ee48dcec26b4434bc1f42bed81b3a6d7d89bd239067"
+    },
+    {
+      "id": "mascot/pirate-idle.webp",
+      "title": "pirate-idle",
+      "category": "mascot",
+      "source": "assets/library/mascot/pirate-idle.webp",
+      "outputs": [
+        "client/public/mascot/pirate-idle.webp"
+      ],
+      "baselineSha256": "07482545c05cc32ffe64bf74ab9f76be8e88c5a05d43b2cfc70efd88901b03b8"
+    },
+    {
+      "id": "mascot/pirate-waiting.webp",
+      "title": "pirate-waiting",
+      "category": "mascot",
+      "source": "assets/library/mascot/pirate-waiting.webp",
+      "outputs": [
+        "client/public/mascot/pirate-waiting.webp"
+      ],
+      "baselineSha256": "dbb92b9d9409691b72fdf76cc48444d07eb5236a452a2bc2878ae2648565fbe9"
+    },
+    {
+      "id": "mascot/pirate-working.webp",
+      "title": "pirate-working",
+      "category": "mascot",
+      "source": "assets/library/mascot/pirate-working.webp",
+      "outputs": [
+        "client/public/mascot/pirate-working.webp"
+      ],
+      "baselineSha256": "66c2e08e05391488e8e3deeb355aaf749f84abca2b903d87eda66ad5aab07461"
+    },
+    {
+      "id": "mascot/runner-error.webp",
+      "title": "runner-error",
+      "category": "mascot",
+      "source": "assets/library/mascot/runner-error.webp",
+      "outputs": [
+        "client/public/mascot/runner-error.webp"
+      ],
+      "baselineSha256": "ec5638712574b971408b766eaf3f50aa96c37e1abbc6ebf3fb74ac8d66b12aa5"
+    },
+    {
+      "id": "mascot/runner-idle.webp",
+      "title": "runner-idle",
+      "category": "mascot",
+      "source": "assets/library/mascot/runner-idle.webp",
+      "outputs": [
+        "client/public/mascot/runner-idle.webp"
+      ],
+      "baselineSha256": "bfe7e7c19357ad671d5b2f24ce1a70ce3b9603a4b4fd8bd89849ebbeeb806825"
+    },
+    {
+      "id": "mascot/runner-waiting.webp",
+      "title": "runner-waiting",
+      "category": "mascot",
+      "source": "assets/library/mascot/runner-waiting.webp",
+      "outputs": [
+        "client/public/mascot/runner-waiting.webp"
+      ],
+      "baselineSha256": "a44f9be72ce0c0d94bf8c2b9e696f0ddf86cc1c55502f3aa118b3e151da1f94d"
+    },
+    {
+      "id": "mascot/runner-working.webp",
+      "title": "runner-working",
+      "category": "mascot",
+      "source": "assets/library/mascot/runner-working.webp",
+      "outputs": [
+        "client/public/mascot/runner-working.webp"
+      ],
+      "baselineSha256": "6761f5df5d9eee5b68a987a05cfd7cd5f331b6457a05c3e02a9a93c6584b680e"
+    },
+    {
+      "id": "mascot/taoist-error.webp",
+      "title": "taoist-error",
+      "category": "mascot",
+      "source": "assets/library/mascot/taoist-error.webp",
+      "outputs": [
+        "client/public/mascot/taoist-error.webp"
+      ],
+      "baselineSha256": "4b621324b60d5666af42f9e7cb03c9f7252b1eca8e38c526c1ba0b8f36d365ae"
+    },
+    {
+      "id": "mascot/taoist-idle.webp",
+      "title": "taoist-idle",
+      "category": "mascot",
+      "source": "assets/library/mascot/taoist-idle.webp",
+      "outputs": [
+        "client/public/mascot/taoist-idle.webp"
+      ],
+      "baselineSha256": "9069fcb5909568731cf14cce6612a63df4ace4609d38d7c25a651cc5f1a7bf54"
+    },
+    {
+      "id": "mascot/taoist-waiting.webp",
+      "title": "taoist-waiting",
+      "category": "mascot",
+      "source": "assets/library/mascot/taoist-waiting.webp",
+      "outputs": [
+        "client/public/mascot/taoist-waiting.webp"
+      ],
+      "baselineSha256": "4fa4621aeeecb88fbfebc95fd0480e18a3246b2896165d4549bef1ec45fd26e2"
+    },
+    {
+      "id": "mascot/taoist-working.webp",
+      "title": "taoist-working",
+      "category": "mascot",
+      "source": "assets/library/mascot/taoist-working.webp",
+      "outputs": [
+        "client/public/mascot/taoist-working.webp"
+      ],
+      "baselineSha256": "69d8275bdceb0f6dba7b340edc64a08986a89ae2e42a28c180b32f48bcd62944"
+    },
+    {
+      "id": "mascot/vampire-error.webp",
+      "title": "vampire-error",
+      "category": "mascot",
+      "source": "assets/library/mascot/vampire-error.webp",
+      "outputs": [
+        "client/public/mascot/vampire-error.webp"
+      ],
+      "baselineSha256": "e99f1c348bd84ce4f59b60396413d941e78904ec5043c624754aed2ee49114d7"
+    },
+    {
+      "id": "mascot/vampire-idle.webp",
+      "title": "vampire-idle",
+      "category": "mascot",
+      "source": "assets/library/mascot/vampire-idle.webp",
+      "outputs": [
+        "client/public/mascot/vampire-idle.webp"
+      ],
+      "baselineSha256": "e0ebc332a2c145204e44a2efc80afef1b6230984bf52a06e0a47ae61fbccebbc"
+    },
+    {
+      "id": "mascot/vampire-waiting.webp",
+      "title": "vampire-waiting",
+      "category": "mascot",
+      "source": "assets/library/mascot/vampire-waiting.webp",
+      "outputs": [
+        "client/public/mascot/vampire-waiting.webp"
+      ],
+      "baselineSha256": "2f30acc44edcff7e847738728faf104763c31ba9801153efbc5bf53ad6fddd68"
+    },
+    {
+      "id": "mascot/vampire-working.webp",
+      "title": "vampire-working",
+      "category": "mascot",
+      "source": "assets/library/mascot/vampire-working.webp",
+      "outputs": [
+        "client/public/mascot/vampire-working.webp"
+      ],
+      "baselineSha256": "d7d9eda91faa1552dd4069844bb141efe77bb351f9650e24cfd30722f02915a8"
+    },
+    {
+      "id": "mascot/walker-error.webp",
+      "title": "walker-error",
+      "category": "mascot",
+      "source": "assets/library/mascot/walker-error.webp",
+      "outputs": [
+        "client/public/mascot/walker-error.webp"
+      ],
+      "baselineSha256": "16566ce7461d8f4daf1ade2027f98f67706f305003af0a8e891325f6d295ec92"
+    },
+    {
+      "id": "mascot/walker-idle.webp",
+      "title": "walker-idle",
+      "category": "mascot",
+      "source": "assets/library/mascot/walker-idle.webp",
+      "outputs": [
+        "client/public/mascot/walker-idle.webp"
+      ],
+      "baselineSha256": "6fef8696bb9e2ebfc2526d942cc0182fc69296032d9fecdc2847d827d0ef8d0f"
+    },
+    {
+      "id": "mascot/walker-waiting.webp",
+      "title": "walker-waiting",
+      "category": "mascot",
+      "source": "assets/library/mascot/walker-waiting.webp",
+      "outputs": [
+        "client/public/mascot/walker-waiting.webp"
+      ],
+      "baselineSha256": "374eec26f86685999020b7c584876f7a32b1a5dc0bd8361c51bf4457e2e0989c"
+    },
+    {
+      "id": "mascot/walker-working.webp",
+      "title": "walker-working",
+      "category": "mascot",
+      "source": "assets/library/mascot/walker-working.webp",
+      "outputs": [
+        "client/public/mascot/walker-working.webp"
+      ],
+      "baselineSha256": "2198708c83d44ae130234361ca9360c59aa6eb941a454d375fd0848995413e8a"
+    },
+    {
+      "id": "schools/abjuration.webp",
+      "title": "abjuration",
+      "category": "schools",
+      "source": "assets/library/schools/abjuration.webp",
+      "outputs": [
+        "client/public/schools/abjuration.webp"
+      ],
+      "baselineSha256": "3dc40cb1cbb6ef694f8353a00c6c55918e69bda889d4d4768edc7b13c2e61a5d"
+    },
+    {
+      "id": "schools/conjuration.webp",
+      "title": "conjuration",
+      "category": "schools",
+      "source": "assets/library/schools/conjuration.webp",
+      "outputs": [
+        "client/public/schools/conjuration.webp"
+      ],
+      "baselineSha256": "719b581c2a8569da91551b8cf1108c6429d48dad9d6ebfeabe72ee533525c5f1"
+    },
+    {
+      "id": "schools/divination.webp",
+      "title": "divination",
+      "category": "schools",
+      "source": "assets/library/schools/divination.webp",
+      "outputs": [
+        "client/public/schools/divination.webp"
+      ],
+      "baselineSha256": "b672033fdc97780f90ef2652b52dfd2cae663d42c9f02f64b564e1032aa3f220"
+    },
+    {
+      "id": "schools/enchantment.webp",
+      "title": "enchantment",
+      "category": "schools",
+      "source": "assets/library/schools/enchantment.webp",
+      "outputs": [
+        "client/public/schools/enchantment.webp"
+      ],
+      "baselineSha256": "8a2953938e13eb199f1f67b268017121221201517d88adf74727dd457aad29b4"
+    },
+    {
+      "id": "schools/evocation.webp",
+      "title": "evocation",
+      "category": "schools",
+      "source": "assets/library/schools/evocation.webp",
+      "outputs": [
+        "client/public/schools/evocation.webp"
+      ],
+      "baselineSha256": "bbf52ec1a8484cf3c1bf21b5fd45861b7407242e3a3568e1bb458628be3c5d79"
+    },
+    {
+      "id": "schools/illusion.webp",
+      "title": "illusion",
+      "category": "schools",
+      "source": "assets/library/schools/illusion.webp",
+      "outputs": [
+        "client/public/schools/illusion.webp"
+      ],
+      "baselineSha256": "c37726fff47e1129a76db6a137758234d486647b70979876b1dd37ebe837cccc"
+    },
+    {
+      "id": "schools/necromancy.webp",
+      "title": "necromancy",
+      "category": "schools",
+      "source": "assets/library/schools/necromancy.webp",
+      "outputs": [
+        "client/public/schools/necromancy.webp"
+      ],
+      "baselineSha256": "718d39bb7dc9b11fd2bf0d04fcff6b5c22795c52e4d512a51c79202cb81aba92"
+    },
+    {
+      "id": "schools/transmutation.webp",
+      "title": "transmutation",
+      "category": "schools",
+      "source": "assets/library/schools/transmutation.webp",
+      "outputs": [
+        "client/public/schools/transmutation.webp"
+      ],
+      "baselineSha256": "8baab22a2f873ba8f6668a7346693f966401f4153c2d673892daf8e0bf3d0f17"
+    },
+    {
+      "id": "textures/dice-d20-dark.webp",
+      "title": "dice-d20-dark",
+      "category": "textures",
+      "source": "assets/library/textures/dice-d20-dark.webp",
+      "outputs": [
+        "client/public/textures/dice-d20-dark.webp"
+      ],
+      "baselineSha256": "17273cdbf6c6631f31601b58e8e0c24098e27739b40efc0539274e0d5ef8823a"
+    },
+    {
+      "id": "textures/dice-d20.webp",
+      "title": "dice-d20",
+      "category": "textures",
+      "source": "assets/library/textures/dice-d20.webp",
+      "outputs": [
+        "client/public/textures/dice-d20.webp"
+      ],
+      "baselineSha256": "b0a18b60ce6486b75c4ea66fa78021e5e397d44c88a426b57041c354774b84c4"
+    },
+    {
+      "id": "textures/image-treatment-f7uba5.svg",
+      "title": "image-treatment-f7uba5",
+      "category": "textures",
+      "source": "assets/library/textures/image-treatment-f7uba5.svg",
+      "outputs": [
+        "client/public/textures/image-treatment-f7uba5.svg"
+      ],
+      "baselineSha256": "c919367a36b10d11d9f114f87c9ca244c10a62c32b3236a3fe01db63cf03538a"
+    },
+    {
+      "id": "textures/mastering-book-cloth.webp",
+      "title": "mastering-book-cloth",
+      "category": "textures",
+      "source": "assets/library/textures/mastering-book-cloth.webp",
+      "outputs": [
+        "client/public/textures/mastering-book-cloth.webp"
+      ],
+      "baselineSha256": "c31bf3aa0b891d91d3278444018e7a5a66007a35ec7311626e9438925df15006"
+    },
+    {
+      "id": "textures/mastering-shelf-wood.webp",
+      "title": "mastering-shelf-wood",
+      "category": "textures",
+      "source": "assets/library/textures/mastering-shelf-wood.webp",
+      "outputs": [
+        "client/public/textures/mastering-shelf-wood.webp"
+      ],
+      "baselineSha256": "583bf733d3f8a540135052c53fb8a451accd0e217fba61151b6ec5422074054e"
+    },
+    {
+      "id": "tokens/familiar.webp",
+      "title": "familiar",
+      "category": "tokens",
+      "source": "assets/library/tokens/familiar.webp",
+      "outputs": [
+        "client/public/tokens/familiar.webp"
+      ],
+      "baselineSha256": "a22943c27ec8aa11a510eaad70c6a90cf31e9514040a5d30eb3a8c149d3bb23a"
+    },
+    {
+      "id": "tokens/inspiration.webp",
+      "title": "inspiration",
+      "category": "tokens",
+      "source": "assets/library/tokens/inspiration.webp",
+      "outputs": [
+        "client/public/tokens/inspiration.webp",
+        "client/public/ui/fantasy-punk/semantic/map-buttons/button-01.webp"
+      ],
+      "baselineSha256": "77e2b3a7c3f351a6459f5341ccd698d88d8f4aff1d9db2c532d75c2ba86cca4c"
+    },
+    {
+      "id": "tokens/rest.webp",
+      "title": "rest",
+      "category": "tokens",
+      "source": "assets/library/tokens/rest.webp",
+      "outputs": [
+        "client/public/tokens/rest.webp"
+      ],
+      "baselineSha256": "b8225b1f0d8c26c3d335c22705d9b7c5547c335af0fab51fdbab3f247083f4ff"
+    },
+    {
+      "id": "ui/campaign-dossier/v1/card-paper.webp",
+      "title": "card-paper",
+      "category": "ui/campaign-dossier",
+      "source": "assets/library/ui/campaign-dossier/v1/card-paper.webp",
+      "outputs": [
+        "client/public/ui/campaign-dossier/v1/card-paper.webp"
+      ],
+      "baselineSha256": "99316c6db0cd9a7e9a64c4b456feb7023ac34db7abf10f26b05fa3136f9395a7"
+    },
+    {
+      "id": "ui/campaign-dossier/v1/portrait-frame.webp",
+      "title": "portrait-frame",
+      "category": "ui/campaign-dossier",
+      "source": "assets/library/ui/campaign-dossier/v1/portrait-frame.webp",
+      "outputs": [
+        "client/public/ui/campaign-dossier/v1/portrait-frame.webp"
+      ],
+      "baselineSha256": "674167d390caa490a8894c78800c2ea18ba6cfe1097928629864b919fa0195d8"
+    },
+    {
+      "id": "ui/campaign-dossier/v1/view-label.webp",
+      "title": "view-label",
+      "category": "ui/campaign-dossier",
+      "source": "assets/library/ui/campaign-dossier/v1/view-label.webp",
+      "outputs": [
+        "client/public/ui/campaign-dossier/v1/view-label.webp"
+      ],
+      "baselineSha256": "386ad7da7d935fd8f61cd547c795216d8286ab413077364f73e6e826fe29ed77"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/accents/edge-fragment-vertical.webp",
+      "title": "edge-fragment-vertical",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/accents/edge-fragment-vertical.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/accents/edge-fragment-vertical.webp"
+      ],
+      "baselineSha256": "9f77793dcd4da009eef6d09db314fecb4b10e1bb6fd60f94596168954fc616d3"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/dividers/divider-ink-long.webp",
+      "title": "divider-ink-long",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/dividers/divider-ink-long.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/dividers/divider-ink-long.webp"
+      ],
+      "baselineSha256": "ac92b7b5af4c40645b4deeaf632957b663f7849214a5e342a1a1344207a9cfa8"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/dividers/divider-rough-medium.webp",
+      "title": "divider-rough-medium",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/dividers/divider-rough-medium.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/dividers/divider-rough-medium.webp"
+      ],
+      "baselineSha256": "c11507f173ca9194aa0a3234f9325c0549f46e914baebdf7a5e185cb58fd92df"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/dividers/underline-acid-magenta.webp",
+      "title": "underline-acid-magenta",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/dividers/underline-acid-magenta.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/dividers/underline-acid-magenta.webp"
+      ],
+      "baselineSha256": "8f1964d710746c1383a1d7def22e285ea76c61a52726456bfe0e41607c2430fc"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/frames/card-corner-crescent.webp",
+      "title": "card-corner-crescent",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/frames/card-corner-crescent.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/frames/card-corner-crescent.webp"
+      ],
+      "baselineSha256": "5a80a804704adf918557461a9222517258f3fa659408099b639cbe6502087651"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/frames/frame-corner-bottom-left.webp",
+      "title": "frame-corner-bottom-left",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/frames/frame-corner-bottom-left.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/frames/frame-corner-bottom-left.webp"
+      ],
+      "baselineSha256": "720176c54e8d91ed4f2135e23ab42bc45036d1bb5fa4eea66dcbbab5ed09d2aa"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/frames/frame-corner-bottom-right.webp",
+      "title": "frame-corner-bottom-right",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/frames/frame-corner-bottom-right.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/frames/frame-corner-bottom-right.webp"
+      ],
+      "baselineSha256": "fad3e24d21cdc0679d56979f336e645b436aa8b0332e8ca0d98bbf8747db6eb2"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/frames/frame-corner-top-left.webp",
+      "title": "frame-corner-top-left",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/frames/frame-corner-top-left.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/frames/frame-corner-top-left.webp"
+      ],
+      "baselineSha256": "0e67f3c079fc368e62f37e391819b3d8a9b05de7036fa3f9d845df9d8ed4db43"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/frames/frame-corner-top-right.webp",
+      "title": "frame-corner-top-right",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/frames/frame-corner-top-right.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/frames/frame-corner-top-right.webp"
+      ],
+      "baselineSha256": "f5dc25caef112664ab7497b4aaef8503a3bd43b2e6d9adce455ed2b4bfe18373"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/frames/halftone-corner-large.webp",
+      "title": "halftone-corner-large",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/frames/halftone-corner-large.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/frames/halftone-corner-large.webp"
+      ],
+      "baselineSha256": "fc617c4851460c9c85c025c1134af12aa649ad0f2f6afe4975f457fab802775d"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/frames/shard-corner-right.webp",
+      "title": "shard-corner-right",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/frames/shard-corner-right.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/frames/shard-corner-right.webp"
+      ],
+      "baselineSha256": "c06094ed2cd3ac79cca8f22586c029adca84163bd48bc0b190e0892d4a7c6ad5"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/portrait/portrait-breakup-top.webp",
+      "title": "portrait-breakup-top",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/portrait/portrait-breakup-top.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/portrait/portrait-breakup-top.webp"
+      ],
+      "baselineSha256": "21fa079ef98d6e5fb76a7317eaa6aa46b432ab0946b3f9e2a352541505363d94"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/profile/seal.webp",
+      "title": "seal",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/profile/seal.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/profile/seal.webp"
+      ],
+      "baselineSha256": "f06b717ca29425317f4c67fe9e13f0e2dc39e6ac27ce3b08966b87f73c463b36"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/profile/tape.webp",
+      "title": "tape",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/profile/tape.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/profile/tape.webp"
+      ],
+      "baselineSha256": "ccbf283330f243295a0d6f6cc099654f696cee57243f264c998378bb8b81b78e"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/strokes/brush-l.webp",
+      "title": "brush-l",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/strokes/brush-l.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/strokes/brush-l.webp"
+      ],
+      "baselineSha256": "21758758a95458b032b94506363e7e84731c94b04f6dfdb939791adb9d3b0cb8"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/strokes/brush-m.webp",
+      "title": "brush-m",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/strokes/brush-m.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/strokes/brush-m.webp"
+      ],
+      "baselineSha256": "834fd909064f7a366e8b4eb64ae30ec2eb16a7897c07090c1e90212717954d6b"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/strokes/brush-r.webp",
+      "title": "brush-r",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/strokes/brush-r.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/strokes/brush-r.webp"
+      ],
+      "baselineSha256": "144eb087e27849a424a1db0de534fbd388b78d5b5d7139273578d6116dc84774"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/strokes/pen-l.webp",
+      "title": "pen-l",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/strokes/pen-l.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/strokes/pen-l.webp"
+      ],
+      "baselineSha256": "514e73db2aaaf0c3b78e2b37bdb761ebb6f75536947e8b047d3aeaf549b98edc"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/strokes/pen-m.webp",
+      "title": "pen-m",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/strokes/pen-m.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/strokes/pen-m.webp"
+      ],
+      "baselineSha256": "8877bb2c8c6e3e570de997243e49e3f7c3e51dbba82526fc05fe03120c20bc24"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/strokes/pen-r.webp",
+      "title": "pen-r",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/strokes/pen-r.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/strokes/pen-r.webp"
+      ],
+      "baselineSha256": "10c137cad8348d80fccd053c5f88bc0ed09c49c7bac7abed18add6b31bfc5936"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/workbook/cover.webp",
+      "title": "cover",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/workbook/cover.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/workbook/cover.webp"
+      ],
+      "baselineSha256": "74c6ae6083b94b58e9285c7d83a3f88944182e321b4316fe2428aea012672750"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/workbook/empty-notebooks.webp",
+      "title": "empty-notebooks",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/workbook/empty-notebooks.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/workbook/empty-notebooks.webp"
+      ],
+      "baselineSha256": "d1d22690f85b18d42e8dde85248592a946b913f6f91a4770b9054f6011d39443"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/workbook/empty-notes.webp",
+      "title": "empty-notes",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/workbook/empty-notes.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/workbook/empty-notes.webp"
+      ],
+      "baselineSha256": "bfccf59bd4dec362d99962530467229d8c219e62aabdb4b3019b5135a6a9b4fd"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/workbook/num-current.webp",
+      "title": "num-current",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/workbook/num-current.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/workbook/num-current.webp"
+      ],
+      "baselineSha256": "87a91ee0f3c2970c447a8e468dd6415c54f6bf910b0338381444c6c1a708dcd7"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/workbook/num-empty.webp",
+      "title": "num-empty",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/workbook/num-empty.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/workbook/num-empty.webp"
+      ],
+      "baselineSha256": "f37687e4e76c2bc5a8e2cf513ec79d0b9694f1e227e4da29fabeb5b3d37bf31e"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/workbook/num-filled.webp",
+      "title": "num-filled",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/workbook/num-filled.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/workbook/num-filled.webp"
+      ],
+      "baselineSha256": "73761b2dbeb70e80b073dad1c341507bb876d933a65c04fe9f8bc96080bdf2c9"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/workbook/spine.webp",
+      "title": "spine",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/workbook/spine.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/workbook/spine.webp"
+      ],
+      "baselineSha256": "d429012dd44d5dc9ca2f7197e1abaff84c890a5e3d568174d590c84ea4be02fe"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/workbook/tab-acid.webp",
+      "title": "tab-acid",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/workbook/tab-acid.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/workbook/tab-acid.webp"
+      ],
+      "baselineSha256": "b449ac7ea952c7252dc90dff06ef25611d8c2d43659cc2fb8f1e594ab8321ec0"
+    },
+    {
+      "id": "ui/fantasy-punk/decorative/workbook/tab-paper.webp",
+      "title": "tab-paper",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/decorative/workbook/tab-paper.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/decorative/workbook/tab-paper.webp"
+      ],
+      "baselineSha256": "03353c50209636c3c29366c71ab8e08f95ab6ac901e048ad1753c6d4c4529f93"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/card-buttons/card-fan-acid.webp",
+      "title": "card-fan-acid",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/card-buttons/card-fan-acid.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/card-buttons/card-fan-acid.webp"
+      ],
+      "baselineSha256": "d9c06dded3def9d1d92dcd1548139a56f7518b6e5b4012581afdda121ceff3a1"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/card-buttons/card-fan-paper.webp",
+      "title": "card-fan-paper",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/card-buttons/card-fan-paper.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/card-buttons/card-fan-paper.webp"
+      ],
+      "baselineSha256": "f981986d9dd3317fa3a66d5f770364f64c3d8eb4f1615c56a0c168f91b785d3b"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/spell-prep/diamond-always.webp",
+      "title": "diamond-always",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/spell-prep/diamond-always.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/spell-prep/diamond-always.webp"
+      ],
+      "baselineSha256": "a6e528e625318f96aff9e97ba9a813d49fa0733046635a1b13b2ce72851d2aad"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/spell-prep/diamond-empty.webp",
+      "title": "diamond-empty",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/spell-prep/diamond-empty.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/spell-prep/diamond-empty.webp"
+      ],
+      "baselineSha256": "55048882734d03cea7bcd16eeca241d0101b2954a1e9ddd53ca2052ae24ddf69"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/spell-prep/diamond-full.webp",
+      "title": "diamond-full",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/spell-prep/diamond-full.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/spell-prep/diamond-full.webp"
+      ],
+      "baselineSha256": "fd363046a13db31d138448016a136a4efa9bb3aac5eb0c649cffded62a26743e"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/spell-prep/glyph-cha.webp",
+      "title": "glyph-cha",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/spell-prep/glyph-cha.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/spell-prep/glyph-cha.webp"
+      ],
+      "baselineSha256": "882046bab5fa821722bc748a5eb6a8b6a5a72cb09c10f107b4b609541c09614b"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/spell-prep/glyph-cl.webp",
+      "title": "glyph-cl",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/spell-prep/glyph-cl.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/spell-prep/glyph-cl.webp"
+      ],
+      "baselineSha256": "b6883920ec6cac4442f8d2f66b07e06b1359fbde399b0d0f584a6f885c8a592d"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/spell-prep/glyph-inf-off.webp",
+      "title": "glyph-inf-off",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/spell-prep/glyph-inf-off.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/spell-prep/glyph-inf-off.webp"
+      ],
+      "baselineSha256": "5075896160ebb9c225b5389584ed6843b08da6b403db50a790efccec7149119d"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/spell-prep/glyph-inf-on.webp",
+      "title": "glyph-inf-on",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/spell-prep/glyph-inf-on.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/spell-prep/glyph-inf-on.webp"
+      ],
+      "baselineSha256": "1f3ba1c0cf8ad58d7952dab561f3840d391d0487c96a74b74415d2ed578df8ea"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/spell-prep/glyph-int.webp",
+      "title": "glyph-int",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/spell-prep/glyph-int.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/spell-prep/glyph-int.webp"
+      ],
+      "baselineSha256": "a0a9cfcb3fe919f35bdcb75e966ed353ea8c29fe369fae8288192d68b0e42fa3"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/spell-prep/glyph-wis.webp",
+      "title": "glyph-wis",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/spell-prep/glyph-wis.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/spell-prep/glyph-wis.webp"
+      ],
+      "baselineSha256": "c76fc44ecf9bbdb3f36fd0aab3c930aaa9821239038dfa823b9d97927b293242"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/spell-prep/plate-x.webp",
+      "title": "plate-x",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/spell-prep/plate-x.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/spell-prep/plate-x.webp"
+      ],
+      "baselineSha256": "643cef5e299411793c17e65bcdc1ef1bc8b7e6809dde1f584d5f0b540f791d09"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/type-glyphs/adventure.webp",
+      "title": "adventure",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/type-glyphs/adventure.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/type-glyphs/adventure.webp"
+      ],
+      "baselineSha256": "74fcd5abfe42d8d83481230c850bf70f6e5af38608915ac88856c2c0714260d9"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/type-glyphs/artifact.webp",
+      "title": "artifact",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/type-glyphs/artifact.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/type-glyphs/artifact.webp"
+      ],
+      "baselineSha256": "7f37940a544bd6984e489ecb1edd98564d68eca1100e724a0324b22c8da902f2"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/type-glyphs/being.webp",
+      "title": "being",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/type-glyphs/being.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/type-glyphs/being.webp"
+      ],
+      "baselineSha256": "e5f5fd9566c0b2b6fe1cfa6d56684b45f4910daa14df36baff95df8de6b93a03"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/type-glyphs/campaign.webp",
+      "title": "campaign",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/type-glyphs/campaign.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/type-glyphs/campaign.webp"
+      ],
+      "baselineSha256": "d91803965e7d1df326befca86171de8af8a8631a245bddd38949f2409006fa83"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/type-glyphs/character.webp",
+      "title": "character",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/type-glyphs/character.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/type-glyphs/character.webp"
+      ],
+      "baselineSha256": "782e08ebb2c4767931f53ad49ef817f1ed877084d5a9d9624fd4b6aec3237f46"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/type-glyphs/community.webp",
+      "title": "community",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/type-glyphs/community.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/type-glyphs/community.webp"
+      ],
+      "baselineSha256": "6ea2c9f0ab98196a7f0623892ac85c9db2c29f5af069013ce176148e6eec5da4"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/type-glyphs/event.webp",
+      "title": "event",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/type-glyphs/event.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/type-glyphs/event.webp"
+      ],
+      "baselineSha256": "c917e2f43880cfe9b7a8d62c4bac5a520fc8b7e8f10442f70396c73504a72ba3"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/type-glyphs/location.webp",
+      "title": "location",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/type-glyphs/location.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/type-glyphs/location.webp"
+      ],
+      "baselineSha256": "88b61e12810f70ab45f1214bbe3a57a5e77ccfb0a41b9fcfa662f5e21f9aa85e"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/type-glyphs/player.webp",
+      "title": "player",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/type-glyphs/player.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/type-glyphs/player.webp"
+      ],
+      "baselineSha256": "f298837f873ced72b03106163f15851521b0c32148eebe96b2d1de863c58e8fb"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/type-glyphs/scene.webp",
+      "title": "scene",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/type-glyphs/scene.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/type-glyphs/scene.webp"
+      ],
+      "baselineSha256": "3fc525e3c0fa592482f825de211ad7c1bc2200d96b30cac8c83df82d75eef95e"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/type-glyphs/session.webp",
+      "title": "session",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/type-glyphs/session.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/type-glyphs/session.webp"
+      ],
+      "baselineSha256": "4a0abc97a2d0ba4ddaae87a0f37e2748b314d53379a1df054e07d8ecf6e03996"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/type-glyphs/vehicle-post.webp",
+      "title": "vehicle-post",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/type-glyphs/vehicle-post.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/type-glyphs/vehicle-post.webp"
+      ],
+      "baselineSha256": "b8462c55ac381929d5c5f84821d5ab4c311f93b25ad635772983c9495b554bce"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/ui-icons/chevron-down.webp",
+      "title": "chevron-down",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/ui-icons/chevron-down.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/ui-icons/chevron-down.webp"
+      ],
+      "baselineSha256": "927dc01652ed940b433cb9919a3bfdb697b9b451a2e6eec1a53b366c70ed5f4f"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/ui-icons/cross.webp",
+      "title": "cross",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/ui-icons/cross.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/ui-icons/cross.webp"
+      ],
+      "baselineSha256": "f9d6234d2d536efcac88f411b0c284d0d1df349ab1268f92c3b5fd390f60b2a6"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/ui-icons/edit-pencil.webp",
+      "title": "edit-pencil",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/ui-icons/edit-pencil.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/ui-icons/edit-pencil.webp"
+      ],
+      "baselineSha256": "7129790c7d8cfe7102e8cb14080204a001b9217385d16a3880ac3325c2fbf289"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/ui-icons/eye.webp",
+      "title": "eye",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/ui-icons/eye.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/ui-icons/eye.webp"
+      ],
+      "baselineSha256": "704033272025dc13939e468f4d9264dca978c96fe3ae953c1790cf5930f60fa7"
+    },
+    {
+      "id": "ui/fantasy-punk/semantic/ui-icons/trash.webp",
+      "title": "trash",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/semantic/ui-icons/trash.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/semantic/ui-icons/trash.webp"
+      ],
+      "baselineSha256": "d2c9d3978f6c42691d35b753d0bf38b9940a56ae6c1f543337bc49b1c1f8e1b7"
+    },
+    {
+      "id": "ui/fantasy-punk/textures/acid-yellow.webp",
+      "title": "acid-yellow",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/textures/acid-yellow.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/textures/acid-yellow.webp"
+      ],
+      "baselineSha256": "2dcaa1205abc3aba7714a02b48b083ffe396355f7fc109df8be34cb0dd3f4044"
+    },
+    {
+      "id": "ui/fantasy-punk/textures/ink-surface.webp",
+      "title": "ink-surface",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/textures/ink-surface.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/textures/ink-surface.webp"
+      ],
+      "baselineSha256": "279606be10ce59603b22fea5466e9d4745d13213b1a82a4d07d20b32c2a7b839"
+    },
+    {
+      "id": "ui/fantasy-punk/textures/paper-tile.webp",
+      "title": "paper-tile",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/textures/paper-tile.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/textures/paper-tile.webp"
+      ],
+      "baselineSha256": "f0c27704b8b6c30eadbe020db3c7d27e7c624470007f9f960f2e99244f32318e"
+    },
+    {
+      "id": "ui/fantasy-punk/textures/punk-magenta.webp",
+      "title": "punk-magenta",
+      "category": "ui/fantasy-punk",
+      "source": "assets/library/ui/fantasy-punk/textures/punk-magenta.webp",
+      "outputs": [
+        "client/public/ui/fantasy-punk/textures/punk-magenta.webp"
+      ],
+      "baselineSha256": "904613808943bec7700059ffd46e28accb4c00a85420cc852f250b0964b40d57"
+    },
+    {
+      "id": "ui/oneshot/branding/logo-soyman-1shot.webp",
+      "title": "logo-soyman-1shot",
+      "category": "ui/oneshot",
+      "source": "assets/library/ui/oneshot/branding/logo-soyman-1shot.webp",
+      "outputs": [
+        "client/public/ui/oneshot/branding/logo-soyman-1shot.webp"
+      ],
+      "baselineSha256": "0325f8909af761c1c39ddcc09b5edf5639ba2511c4223731909647d68a44f800"
+    },
+    {
+      "id": "ui/oneshot/decorative/d20-paper.webp",
+      "title": "d20-paper",
+      "category": "ui/oneshot",
+      "source": "assets/library/ui/oneshot/decorative/d20-paper.webp",
+      "outputs": [
+        "client/public/ui/oneshot/decorative/d20-paper.webp"
+      ],
+      "baselineSha256": "219e1345de114e1f44415a3d21bf8f920419cbf761dd89416aad9212e1868df3"
+    },
+    {
+      "id": "ui/oneshot/decorative/marker-magenta-wide.webp",
+      "title": "marker-magenta-wide",
+      "category": "ui/oneshot",
+      "source": "assets/library/ui/oneshot/decorative/marker-magenta-wide.webp",
+      "outputs": [
+        "client/public/ui/oneshot/decorative/marker-magenta-wide.webp"
+      ],
+      "baselineSha256": "5fa19a27cccc84a3f422e3d9d941e4770a674e4bcf8a8bc9bf05008f36ddc931"
+    },
+    {
+      "id": "ui/oneshot/masks/create-panel-mask.svg",
+      "title": "create-panel-mask",
+      "category": "ui/oneshot",
+      "source": "assets/library/ui/oneshot/masks/create-panel-mask.svg",
+      "outputs": [
+        "client/public/ui/oneshot/masks/create-panel-mask.svg"
+      ],
+      "baselineSha256": "52dc892ae125847f61c5b50c938768b1cce01c083ad6f5c6bd20ff037c33867d"
+    },
+    {
+      "id": "ui/oneshot/masks/form-control-mask.svg",
+      "title": "form-control-mask",
+      "category": "ui/oneshot",
+      "source": "assets/library/ui/oneshot/masks/form-control-mask.svg",
+      "outputs": [
+        "client/public/ui/oneshot/masks/form-control-mask.svg"
+      ],
+      "baselineSha256": "a2fd72fefc0dc48d3f7c25bb5fec8e5a3cfcade0f6cb9a8aee94d0adba5664a5"
+    },
+    {
+      "id": "ui/plot-restyle/v1/kind-window.webp",
+      "title": "kind-window",
+      "category": "ui/plot-restyle",
+      "source": "assets/library/ui/plot-restyle/v1/kind-window.webp",
+      "outputs": [
+        "client/public/ui/plot-restyle/v1/kind-window.webp"
+      ],
+      "baselineSha256": "89e74ea0e5cc8894c019f718552bd953b70640b5c8e71a55f5ebeef1212efde5"
+    },
+    {
+      "id": "ui/plot-restyle/v1/stamp-done.webp",
+      "title": "stamp-done",
+      "category": "ui/plot-restyle",
+      "source": "assets/library/ui/plot-restyle/v1/stamp-done.webp",
+      "outputs": [
+        "client/public/ui/plot-restyle/v1/stamp-done.webp"
+      ],
+      "baselineSha256": "b6d9777f40c6c3704fa821595aa954e0150355de402c750a93cfb76691428fb9"
+    },
+    {
+      "id": "ui/plot-restyle/v1/stamp-skipped.webp",
+      "title": "stamp-skipped",
+      "category": "ui/plot-restyle",
+      "source": "assets/library/ui/plot-restyle/v1/stamp-skipped.webp",
+      "outputs": [
+        "client/public/ui/plot-restyle/v1/stamp-skipped.webp"
+      ],
+      "baselineSha256": "11d47a785d98093efc6bd3287e0d752199b9e6c406666e5075da555b2fa57e39"
+    },
+    {
+      "id": "ui/sheet/card-border1.webp",
+      "title": "card-border1",
+      "category": "ui/sheet",
+      "source": "assets/library/ui/sheet/card-border1.webp",
+      "outputs": [
+        "client/public/ui/sheet/card-border1.webp"
+      ],
+      "baselineSha256": "56a6bdd9a7b293e80aaff9b5c7a6392112f97ca630614dafb8ebec6eff4fb18e"
+    },
+    {
+      "id": "ui/sheet/card-edit-acid.webp",
+      "title": "card-edit-acid",
+      "category": "ui/sheet",
+      "source": "assets/library/ui/sheet/card-edit-acid.webp",
+      "outputs": [
+        "client/public/ui/sheet/card-edit-acid.webp"
+      ],
+      "baselineSha256": "dc530d28c050507c719c48f06045295a08d11988b1aa302bff4d4fc6d6fcdeb1"
+    },
+    {
+      "id": "ui/sheet/card-edit-paper.webp",
+      "title": "card-edit-paper",
+      "category": "ui/sheet",
+      "source": "assets/library/ui/sheet/card-edit-paper.webp",
+      "outputs": [
+        "client/public/ui/sheet/card-edit-paper.webp"
+      ],
+      "baselineSha256": "ffe2e7ce6e2d06394ce929974bfa72542c632dd418c689426361dbcb25076099"
+    },
+    {
+      "id": "ui/sheet/save-bad.webp",
+      "title": "save-bad",
+      "category": "ui/sheet",
+      "source": "assets/library/ui/sheet/save-bad.webp",
+      "outputs": [
+        "client/public/ui/sheet/save-bad.webp"
+      ],
+      "baselineSha256": "85f984932a48273db7691a2657d53c973abc298a0dd36f98af2d83cf0f2af132"
+    },
+    {
+      "id": "ui/sheet/save-ok.webp",
+      "title": "save-ok",
+      "category": "ui/sheet",
+      "source": "assets/library/ui/sheet/save-ok.webp",
+      "outputs": [
+        "client/public/ui/sheet/save-ok.webp"
+      ],
+      "baselineSha256": "0c01a841dfec6633e3904476e39e081fa67b8d502c95544318bb67cb10bc9585"
+    },
+    {
+      "id": "ui/wizard/acid-yellow.webp",
+      "title": "acid-yellow",
+      "category": "ui/wizard",
+      "source": "assets/library/ui/wizard/acid-yellow.webp",
+      "outputs": [
+        "client/public/ui/wizard/acid-yellow.webp"
+      ],
+      "baselineSha256": "e258869d3a52e948a77cc937c0d05262f139ece2953ed200467dce105d91e9ae"
+    },
+    {
+      "id": "ui/wizard/corner-tl.webp",
+      "title": "corner-tl",
+      "category": "ui/wizard",
+      "source": "assets/library/ui/wizard/corner-tl.webp",
+      "outputs": [
+        "client/public/ui/wizard/corner-tl.webp"
+      ],
+      "baselineSha256": "46250077187bb17ca89816d5da438b7932b5b78ce7c4d8596cef46ded8bb530b"
+    },
+    {
+      "id": "ui/wizard/crown.webp",
+      "title": "crown",
+      "category": "ui/wizard",
+      "source": "assets/library/ui/wizard/crown.webp",
+      "outputs": [
+        "client/public/ui/wizard/crown.webp"
+      ],
+      "baselineSha256": "c66be2b512ea164e7c537bb3838995f91b1536a2b58aa70fa23e6d4908c82d7b"
+    },
+    {
+      "id": "ui/wizard/dots-btn.webp",
+      "title": "dots-btn",
+      "category": "ui/wizard",
+      "source": "assets/library/ui/wizard/dots-btn.webp",
+      "outputs": [
+        "client/public/ui/wizard/dots-btn.webp"
+      ],
+      "baselineSha256": "ed29d60bc98915f85e4dba269588dd1bbf9970a742e1d271b438a91ac75dce2c"
+    },
+    {
+      "id": "ui/wizard/ink-surface.webp",
+      "title": "ink-surface",
+      "category": "ui/wizard",
+      "source": "assets/library/ui/wizard/ink-surface.webp",
+      "outputs": [
+        "client/public/ui/wizard/ink-surface.webp"
+      ],
+      "baselineSha256": "357b2d3df0dd88dfced74bf631bc86b428462fdb3b94b43b71e0a42a1778939c"
+    },
+    {
+      "id": "ui/wizard/paper-edge.webp",
+      "title": "paper-edge",
+      "category": "ui/wizard",
+      "source": "assets/library/ui/wizard/paper-edge.webp",
+      "outputs": [
+        "client/public/ui/wizard/paper-edge.webp"
+      ],
+      "baselineSha256": "21c4c021772755dcba96e319b18143cf65008b149aae845fbb061396ba98664e"
+    },
+    {
+      "id": "ui/wizard/paper-panel.webp",
+      "title": "paper-panel",
+      "category": "ui/wizard",
+      "source": "assets/library/ui/wizard/paper-panel.webp",
+      "outputs": [
+        "client/public/ui/wizard/paper-panel.webp"
+      ],
+      "baselineSha256": "ea66aca3ff99129d69c6488aefbf06e0a90336513c23517db488d65cddb0ffe6"
+    },
+    {
+      "id": "ui/wizard/paper-tile.webp",
+      "title": "paper-tile",
+      "category": "ui/wizard",
+      "source": "assets/library/ui/wizard/paper-tile.webp",
+      "outputs": [
+        "client/public/ui/wizard/paper-tile.webp"
+      ],
+      "baselineSha256": "87f65d10f97c74731ecf60d6551ab2533ea35c5a95af733d26f3727081d1702a"
+    },
+    {
+      "id": "ui/wizard/punk-magenta.webp",
+      "title": "punk-magenta",
+      "category": "ui/wizard",
+      "source": "assets/library/ui/wizard/punk-magenta.webp",
+      "outputs": [
+        "client/public/ui/wizard/punk-magenta.webp"
+      ],
+      "baselineSha256": "ddef6e2ce8bc48ad4fd169fb6d195e10f6dcf635fe5425fea39228fbe736bb61"
+    },
+    {
+      "id": "ui/wizard/rail-edge.webp",
+      "title": "rail-edge",
+      "category": "ui/wizard",
+      "source": "assets/library/ui/wizard/rail-edge.webp",
+      "outputs": [
+        "client/public/ui/wizard/rail-edge.webp"
+      ],
+      "baselineSha256": "1198db00ba0094462bae5bcd27cce5d998a18a0d1a3d16b2134e6065048b98b4"
+    },
+    {
+      "id": "ui/wizard/rough-border-ink.png",
+      "title": "rough-border-ink",
+      "category": "ui/wizard",
+      "source": "assets/library/ui/wizard/rough-border-ink.png",
+      "outputs": [
+        "client/public/ui/wizard/rough-border-ink.png"
+      ],
+      "baselineSha256": "ed3ab50bcff8f99285b55ba0226e6bceb968a1d671b156d6f1f18b2e172a1402"
+    },
+    {
+      "id": "ui/wizard/rough-border-paper.png",
+      "title": "rough-border-paper",
+      "category": "ui/wizard",
+      "source": "assets/library/ui/wizard/rough-border-paper.png",
+      "outputs": [
+        "client/public/ui/wizard/rough-border-paper.png"
+      ],
+      "baselineSha256": "7b3891c71e93e8e42828841a5146e042595a464147e422e309bf0f0b507b735c"
+    },
+    {
+      "id": "ui/wizard/set-chest.webp",
+      "title": "set-chest",
+      "category": "ui/wizard",
+      "source": "assets/library/ui/wizard/set-chest.webp",
+      "outputs": [
+        "client/public/ui/wizard/set-chest.webp"
+      ],
+      "baselineSha256": "7d75539ba5f20d32574c4f869b7292cc60faa28735537d964295fe214daead72"
+    },
+    {
+      "id": "ui/wizard/set-pack.webp",
+      "title": "set-pack",
+      "category": "ui/wizard",
+      "source": "assets/library/ui/wizard/set-pack.webp",
+      "outputs": [
+        "client/public/ui/wizard/set-pack.webp"
+      ],
+      "baselineSha256": "1553d5069946d39229c31d110d050f30a28a3810bb309fa026586f87d82ca8ae"
+    },
+    {
+      "id": "ui/wizard/staff.webp",
+      "title": "staff",
+      "category": "ui/wizard",
+      "source": "assets/library/ui/wizard/staff.webp",
+      "outputs": [
+        "client/public/ui/wizard/staff.webp"
+      ],
+      "baselineSha256": "04b3245197596fe5ba8252e74b0092dc15ba6ca4c2cebac84d97577ad5186468"
+    },
+    {
+      "id": "ui/wizard/stripe-wire.webp",
+      "title": "stripe-wire",
+      "category": "ui/wizard",
+      "source": "assets/library/ui/wizard/stripe-wire.webp",
+      "outputs": [
+        "client/public/ui/wizard/stripe-wire.webp"
+      ],
+      "baselineSha256": "fbdb4f3818993db685de3aee971839347edfe9cd9a69f1534cf01d3420014cdb"
+    },
+    {
+      "id": "ui/wizard/torn-edge-mask.png",
+      "title": "torn-edge-mask",
+      "category": "ui/wizard",
+      "source": "assets/library/ui/wizard/torn-edge-mask.png",
+      "outputs": [
+        "client/public/ui/wizard/torn-edge-mask.png"
+      ],
+      "baselineSha256": "0c8309a183c6eb4aa97f3bff71fc44e0e8917126dc748882fa7260ce37b3ab04"
+    }
+  ]
+}

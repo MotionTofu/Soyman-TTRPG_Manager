@@ -1,15 +1,15 @@
-// The archive is the sole editable source; client/public contains only the
-// manifest-selected runtime mirror shared by the main client and OneShot.
+// Runtime masters live in the shared assets/library. The Fantasy Punk archive
+// retains concepts/originals; client/public is a generated deployment mirror.
 import { createHash } from 'node:crypto';
 import { copyFile, mkdir, readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ROOT, loadManifest, syncAssets } from '../scripts/asset-library.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
-const sourceRoot = path.join(root, 'assets/fantasy-punk');
 const runtimeRoot = path.resolve(root, '../client/public/ui/fantasy-punk');
 const skinPath = path.resolve(root, '../client/src/fantasy-punk-skin.css');
-const manifestPath = path.join(sourceRoot, 'runtime-manifest.json');
+const manifestPath = path.join(root, 'assets/fantasy-punk/runtime-manifest.json');
 
 function safeRelative(value) {
   if (typeof value !== 'string' || !/^[a-z0-9][a-z0-9/.-]*\.webp$/.test(value)
@@ -34,6 +34,9 @@ function digest(bytes) {
 }
 
 export async function syncUiAssets({ check = false } = {}) {
+  await syncAssets({ check });
+  const sourceByOutput = new Map((await loadManifest()).assets.flatMap(asset =>
+    asset.outputs.map(output => [output, path.join(ROOT, asset.source)])));
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
   if (manifest.version !== 1 || !Number.isSafeInteger(manifest.maxBytes)
       || !Array.isArray(manifest.files)) throw Error('Invalid Fantasy Punk runtime manifest');
@@ -52,7 +55,8 @@ export async function syncUiAssets({ check = false } = {}) {
 
   let bytesTotal = 0;
   for (const file of files) {
-    const source = path.join(sourceRoot, file);
+    const source = sourceByOutput.get(`client/public/ui/fantasy-punk/${file}`);
+    if (!source) throw Error(`Fantasy Punk asset absent from shared library: ${file}`);
     const output = path.join(runtimeRoot, file);
     const sourceBytes = await readFile(source);
     bytesTotal += sourceBytes.length;

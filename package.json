@@ -6,6 +6,12 @@
   "license": "SEE LICENSE IN LICENSE",
   "main": "electron/main.js",
   "scripts": {
+    "assets:adopt": "node scripts/asset-library.mjs adopt",
+    "assets:sync": "node scripts/asset-library.mjs sync",
+    "assets:check": "node scripts/asset-library.mjs check && node SoyMan_1shot/sync-ui-assets.mjs --check && node client/scripts/check-raster-assets.mjs",
+    "assets:catalog": "node scripts/asset-library.mjs catalog",
+    "assets:serve": "node scripts/serve-asset-catalog.mjs",
+    "assets:test": "node --test scripts/asset-library.test.mjs",
     "build:server": "cd server && npm install && npm run build",
     "build:client": "cd client && npm install && cd .. && npm run build:standalone && cd client && npm run build",
     "build:standalone": "node SoyMan_1shot/build-standalone.mjs && node -e \"require('fs').copyFileSync('SoyMan_1shot/generated/standalone-template.html', 'client/public/standalone-template.html')\"",

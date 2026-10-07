@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Картотека ассетов — SoyMan</title>
+  <style>
+    :root{color-scheme:dark;--bg:#101a1d;--panel:#18272c;--ink:#edf1e9;--muted:#aab8b9;--line:#34474b;--accent:#d9ed6c;--preview:#d8d4c8}
+    *{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,sans-serif}
+    main{max-width:1500px;margin:auto;padding:40px 32px}header{display:flex;justify-content:space-between;gap:24px;align-items:flex-start}
+    h1{font-size:clamp(28px,4vw,44px);line-height:1.1;margin:8px 0 16px;letter-spacing:-.04em}h2{font-size:24px;overflow-wrap:anywhere}
+    p{margin:0 0 16px}.eyebrow{color:var(--accent);font-size:12px;letter-spacing:.12em;text-transform:uppercase}
+    .intro{max-width:780px;color:var(--muted)}.stats{display:flex;gap:32px;flex-wrap:wrap;margin:24px 0 28px}.stat strong{display:block;font-size:28px;color:var(--accent)}.stat span{font-size:14px;color:var(--muted)}
+    .controls{position:sticky;top:0;z-index:2;background:var(--bg);padding:16px 0;display:grid;grid-template-columns:minmax(240px,1fr) 220px 220px;gap:12px;border-bottom:1px solid var(--line)}
+    label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}input,select,button{font:inherit;border:1px solid var(--line);border-radius:6px;color:var(--ink);background:var(--panel)}input,select{width:100%;min-height:44px;padding:10px 12px}
+    button{padding:10px 16px;cursor:pointer}button:hover{border-color:var(--accent)}:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+    .resultline{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:20px 0;color:var(--muted);font-size:14px}.resultline button{font-size:14px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(235px,1fr));gap:16px}.asset{padding:0;text-align:left;overflow:hidden;display:flex;flex-direction:column;min-width:0}
+    .preview{height:180px;width:100%;display:flex;align-items:center;justify-content:center;background-color:var(--preview);background-image:linear-gradient(45deg,#0000000c 25%,transparent 25%,transparent 75%,#0000000c 75%),linear-gradient(45deg,#0000000c 25%,transparent 25%,transparent 75%,#0000000c 75%);background-size:20px 20px;background-position:0 0,10px 10px;padding:16px;color:#233337}
+    body.dark-preview{--preview:#243239}.dark-preview .preview{color:var(--ink)}.preview img{display:block;max-width:100%;max-height:100%;object-fit:contain}.format{font-size:28px;font-weight:700;opacity:.65}
+    .info{padding:14px;width:100%}.name{display:block;font-size:15px;font-weight:600;overflow-wrap:anywhere}.category{display:block;font-size:12px;color:var(--accent);margin-top:6px}.meta{display:block;font-size:12px;color:var(--muted);margin-top:6px}.copy{margin-left:8px;color:var(--muted)}
+    .more{display:block;margin:28px auto;min-width:220px}.empty{color:var(--muted);padding:40px 0}.note{font-size:13px;color:var(--muted);margin-top:24px;max-width:900px}
+    dialog{color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:24px;max-width:800px;width:calc(100% - 32px);max-height:90vh;overflow:auto}dialog::backdrop{background:#000a}.detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}.detail-head h2{margin:0 0 12px}.detail-preview{height:280px;margin:12px 0 24px;border-radius:6px}.detail-preview .font-sample{font-size:36px;text-align:center;overflow-wrap:anywhere;max-width:100%}
+    dl{display:grid;grid-template-columns:140px 1fr;gap:12px;font-size:14px}dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere}a{color:var(--accent);text-underline-offset:3px}.file-link{display:block;margin-bottom:6px;font:13px/1.5 ui-monospace,monospace}details{margin-top:20px;font-size:14px}summary{cursor:pointer;color:var(--muted)}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}.ref{font-size:13px;color:var(--muted);margin-bottom:8px}
+    @media(max-width:760px){main{padding:24px 16px}.controls{grid-template-columns:1fr 1fr;position:static}.search-control{grid-column:1/-1}.stats{gap:20px}.grid{grid-template-columns:repeat(auto-fill,minmax(155px,1fr))}.preview{height:145px}.resultline{align-items:flex-start}dl{grid-template-columns:1fr;gap:6px}dd{margin-bottom:12px}.detail-preview{height:210px}}
+  </style>
+</head>
+<body>
+<main>
+  <header><div><span class="eyebrow">SoyMan · библиотека материалов</span><h1>Картотека ассетов</h1><p class="intro">Графика, шрифты и оформление приложения в одном месте. У каждого рабочего ассета — основной файл и список копий для приложения.</p></div></header>
+  <div class="stats" id="stats"></div>
+  <div class="controls">
+    <div class="search-control"><label for="search">Поиск по названию, пути или месту использования</label><input id="search" type="search" placeholder="Например: бумага, paper, campaign, coins" autocomplete="off"></div>
+    <div><label for="category">Набор</label><select id="category"><option value="">Все наборы</option></select></div>
+    <div><label for="status">Показать</label><select id="status"><option value="runtime">Рабочие ассеты</option><option value="archive">Исходники и концепты Fantasy Punk</option><option value="all">Всё</option><option value="shared">Несколько рабочих копий</option><option value="unresolved">Без найденных ссылок</option><option value="font">Шрифты</option></select></div>
+  </div>
+  <div class="resultline"><span id="results" role="status" aria-live="polite"></span><button id="background" type="button" aria-pressed="false">Тёмный фон превью</button></div>
+  <div class="grid" id="grid"></div><p id="empty" class="empty" hidden>Ничего не найдено. Попробуйте другое название или набор.</p>
+  <button class="more" id="more" type="button">Показать ещё</button>
+  <p class="note">Отсутствие найденных ссылок не означает, что файл не используется: часть ассетов подключается по вычисляемым путям. В карточке указано, найдена ли прямая ссылка или подключение через реестр. Исторические материалы вне архива Fantasy Punk пока описаны в assets/README.md.</p>
+</main>
+<dialog id="detail" aria-labelledby="detail-title"><div class="detail-head"><h2 id="detail-title"></h2><button id="close" type="button" aria-label="Закрыть карточку">Закрыть</button></div><div id="detail-body"></div></dialog>
+<script type="application/json" id="catalog-data">/* CATALOG_DATA */</script>
+<script>
+const catalog = JSON.parse(document.getElementById('catalog-data').textContent);
+const $ = id => document.getElementById(id);
+const formatBytes = value => value < 1024 ? value+' Б' : value < 1048576 ? (value/1024).toFixed(1)+' КБ' : (value/1048576).toFixed(1)+' МБ';
+const relativeUrl = file => '../../'+file.split('/').map(encodeURIComponent).join('/');
+const kindLabels = { image:'Изображение',font:'Шрифт',license:'Лицензия',stylesheet:'Стили',audio:'Звук' };
+const evidenceLabels = {direct:'прямая ссылка',registry:'ключ в реестре',category:'подключение набора; конкретный файл вычисляется',collection:'подключение коллекции',packaging:'иконка сборки'};
+function element(tag, text, className){const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(className)el.className=className;return el;}
+function fileLink(file){const link=element('a',file,'file-link');link.href=relativeUrl(file);link.target='_blank';link.rel='noopener';return link;}
+for(const [value,label] of Object.entries(catalog.categories)){const option=element('option',label);option.value=value;$('category').append(option);}
+for(const [value,label] of [[catalog.summary.runtime,'основных рабочих файлов'],[catalog.summary.copies,'копий для приложения'],[catalog.summary.archives,'исходников и концептов'],[formatBytes(catalog.summary.bytes),'в общем хранилище']]){const stat=element('div',undefined,'stat');stat.append(element('strong',String(value)),element('span',label));$('stats').append(stat);}
+let visible=[],limit=48;
+function preview(asset,large=false){const box=element('div',undefined,'preview'+(large?' detail-preview':''));if(asset.kind==='image'){const img=document.createElement('img');img.src=relativeUrl(asset.source);img.alt=large?asset.title:'';img.loading='lazy';img.addEventListener('error',()=>{img.remove();box.append(element('span','Превью недоступно','meta'));});box.append(img);}else{box.append(element('span',asset.kind==='font'?'Аа / Aa':asset.source.split('.').pop().toUpperCase(),'format'));}return box;}
+function matches(asset){const status=$('status').value;const category=$('category').value;const query=$('search').value.toLocaleLowerCase('ru').trim();
+if(category&&asset.category!==category)return false;
+if(status==='runtime'&&asset.status!=='runtime'||status==='archive'&&asset.status!=='archive'||status==='shared'&&(asset.status!=='runtime'||asset.outputs.length<2)||status==='unresolved'&&(asset.status!=='runtime'||asset.references.length)||status==='font'&&asset.kind!=='font')return false;
+return !query||[asset.title,asset.source,catalog.categories[asset.category],...asset.outputs,...asset.references.map(ref=>ref.file)].join(' ').toLocaleLowerCase('ru').includes(query);}
+function render(){visible=catalog.assets.filter(matches);$('grid').replaceChildren();for(const asset of visible.slice(0,limit)){const button=element('button',undefined,'asset');button.type='button';button.setAttribute('aria-label','Открыть: '+asset.title);button.append(preview(asset));const info=element('span',undefined,'info');info.append(element('span',asset.title,'name'),element('span',catalog.categories[asset.category],'category'));const dimensions=asset.dimensions?asset.dimensions.width+' × '+asset.dimensions.height+' · ':'';info.append(element('span',dimensions+formatBytes(asset.bytes)+(asset.outputs.length>1?' · '+asset.outputs.length+' копии':''),'meta'));button.append(info);button.addEventListener('click',()=>showDetail(asset));$('grid').append(button);}$('results').textContent='Найдено '+visible.length+' · показано '+Math.min(limit,visible.length);$('empty').hidden=visible.length>0;$('more').hidden=limit>=visible.length;}
+function addRow(list,label,content){list.append(element('dt',label));const value=element('dd');if(typeof content==='string')value.textContent=content;else value.append(content);list.append(value);}
+function showDetail(asset){$('detail-title').textContent=asset.title;const body=$('detail-body');body.replaceChildren();const box=preview(asset,true);body.append(box);
+if(asset.kind==='font'){const button=element('button','Посмотреть шрифт');button.type='button';button.addEventListener('click',async()=>{button.disabled=true;try{const family='asset-preview-'+Math.random().toString(36).slice(2);const face=new FontFace(family,'url("'+relativeUrl(asset.source)+'")');await face.load();document.fonts.add(face);const sample=element('div','Приключение начинается / Adventure 012345','font-sample');sample.style.fontFamily='"'+family+'", system-ui';box.replaceChildren(sample);button.remove();}catch{button.textContent='Этот шрифт не удалось показать';}});body.append(button);}
+const list=element('dl');addRow(list,'Набор',catalog.categories[asset.category]);addRow(list,'Тип',kindLabels[asset.kind]);addRow(list,'Назначение',asset.status==='runtime'?'Рабочий ассет приложения':'Исторический исходник, концепт или вариант');addRow(list,'Размер',formatBytes(asset.bytes)+(asset.dimensions?' · '+asset.dimensions.width+' × '+asset.dimensions.height:''));addRow(list,asset.status==='runtime'?'Основной файл':'Файл архива',fileLink(asset.source));if(asset.outputs.length){const links=element('div');asset.outputs.forEach(file=>links.append(fileLink(file)));addRow(list,'Рабочие копии',links);}if(asset.runtimeAssetId)addRow(list,'Совпадает с',asset.runtimeAssetId);const refs=element('div');if(!asset.references.length)refs.textContent=asset.status==='runtime'?'Ссылки не определены автоматически. Это не подтверждение неиспользования.':'Архив не подключается к приложению напрямую.';for(const ref of asset.references){refs.append(fileLink(ref.file),element('p',evidenceLabels[ref.evidence]||ref.evidence,'ref'));}addRow(list,'Где используется',refs);body.append(list);const details=element('details');details.append(element('summary','Технические сведения и происхождение'),element('pre',JSON.stringify({id:asset.id,sha256:asset.sha256,provenance:asset.provenance||[]},null,2)));body.append(details);$('detail').showModal();}
+for(const id of ['search','category','status'])$(id).addEventListener(id==='search'?'input':'change',()=>{limit=48;render();});$('more').addEventListener('click',()=>{limit+=48;render();});$('background').addEventListener('click',()=>{const dark=document.body.classList.toggle('dark-preview');$('background').setAttribute('aria-pressed',String(dark));$('background').textContent=dark?'Светлый фон превью':'Тёмный фон превью';});$('close').addEventListener('click',()=>$('detail').close());render();
+</script>
+</body>
+</html>
