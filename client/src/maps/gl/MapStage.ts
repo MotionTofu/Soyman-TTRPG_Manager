@@ -1,9 +1,13 @@
-import { autoDetectRenderer, Container, Sprite, Texture, type Renderer } from "pixi.js";
+import { autoDetectRenderer, Container, Rectangle, Sprite, Texture, type Renderer } from "pixi.js";
 import { renderMap, type RenderOptions } from "../render";
 import { inRange, tileSide, visibleTiles, type TileRange } from "./tiles";
+import { createStyleFilter, type MapLook } from "./styleFilter";
 
 /** Всё, что рисует карта, кроме камеры. Новый объект — новое содержимое плиток. */
-export type MapStageContent = Omit<RenderOptions, "scale" | "ox" | "oy">;
+export type MapStageContent = Omit<RenderOptions, "scale" | "ox" | "oy"> & {
+  /** Вид печати поверх карты; без него карта выводится как нарисована. */
+  look?: MapLook | null;
+};
 type Frame = { content: MapStageContent; scale: number; ox: number; oy: number; cssW: number; cssH: number; dpr: number };
 type Tile = { scale: number; tx: number; ty: number; content: MapStageContent; canvas: HTMLCanvasElement; sprite: Sprite };
 
@@ -23,6 +27,7 @@ export class MapStage {
   private readonly canvas = document.createElement("canvas");
   private readonly root = new Container();
   private readonly tiles = new Map<string, Tile>();
+  private readonly style = createStyleFilter();
   private renderer: Renderer | null = null;
   private frame: Frame | null = null;
   private dead = false;
@@ -168,6 +173,13 @@ export class MapStage {
       // Плитки текущего масштаба — поверх растянутых запасных.
       tile.sprite.zIndex = tile.scale === this.target ? 1 : 0;
     }
+    const look = frame.content.look;
+    if (look) {
+      // Проход идёт по всему экрану, а не по границам плиток: они шире экрана.
+      this.root.filterArea = new Rectangle(0, 0, renderer.width, renderer.height);
+      this.style.aim(look, x, y, frame.scale * frame.dpr);
+    }
+    if (!look !== !this.root.filters?.length) this.root.filters = look ? [this.style.filter] : null;
     renderer.render(this.root);
   }
 }

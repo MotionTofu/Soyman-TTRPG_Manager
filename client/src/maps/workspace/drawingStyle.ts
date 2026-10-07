@@ -1,4 +1,5 @@
-import type { MapDocumentV6 } from "@shared/maps/core";
+import type { MapDocumentV6, MapDrawingStyle } from "@shared/maps/core";
+import type { MapLook } from "../gl/styleFilter";
 import { MAP_TERRAIN_FILL, readChrome } from "../render";
 
 // Stable identities let Canvas reuse the surface bitmap while panning.
@@ -9,12 +10,20 @@ const PALETTES = {
   "comic-punk": { ...MAP_TERRAIN_FILL, plain: "#d8cfb6", wall: "#1b1a18", stone: "#d8cfb600" },
 };
 
+/** Вид печати по оформлению: сдвиг цвета, дрожание линии, зерно. Работает только
+ * в отрисовке через WebGL; у «Чертежа» линии должны оставаться ровными. */
+const LOOKS: Record<MapDrawingStyle, MapLook | null> = {
+  "comic-punk": { shift: [0.05, 0.035], wobble: 0.03, grain: 0.1 },
+  "paper-ink": { shift: [0, 0], wobble: 0.015, grain: 0.08 },
+  blueprint: null,
+};
 export function workspaceDrawingStyle(document: MapDocumentV6) {
   const style = document.appearance?.style ?? "paper-ink";
   const paper = style === "blueprint" ? "#ffffff" : style === "comic-punk" ? "#e9e1c8" : "#f1eedf";
   return {
     chrome: { ...readChrome(), paper, ink: "#171717", line: style === "blueprint" ? "#8494a4" : "#867e69", muted: "#625f54" },
     terrainFill: PALETTES[style],
+    look: LOOKS[style],
     fonts: { label: '"Sofia Sans Semi Condensed", sans-serif', mono: '"Sofia Sans Semi Condensed", sans-serif' },
     cartography: style !== "blueprint",
     artPack: style === "comic-punk" ? "crypt" as const : "cartography" as const,
