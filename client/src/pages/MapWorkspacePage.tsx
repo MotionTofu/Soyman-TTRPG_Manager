@@ -58,6 +58,10 @@ export function MapWorkspacePage() {
   const [gridLineWidth, setGridLineWidth] = useState(1), [gridLineStyle, setGridLineStyle] = useState<"solid" | "dashed">("solid");
   const [gridColor, setGridColor] = useState("#000000"), [gridOpacity, setGridOpacity] = useState(0.35);
   const [showGrid, setShowGrid] = useState(true), [snap, setSnap] = useState(true);
+  // Новая отрисовка (плитки + WebGL) — по выбору, пока не проверена на всех картах.
+  const [gl, setGl] = useState(() => { try { return localStorage.getItem("soyman.mapRenderer") === "gl"; } catch { return false; } });
+  const onGl = useEvent((value: boolean) => { setGl(value); try { if (value) localStorage.setItem("soyman.mapRenderer", "gl"); else localStorage.removeItem("soyman.mapRenderer"); } catch { /* выбор живёт до перезагрузки */ } });
+  const onGlFail = useEvent(() => setGl(false));
   const [settings, setSettings] = useState<BrushSettings>({ material: "stone", symbol: MAP_SYMBOL_ASSETS[0].id, orientation: 0, radius: 2, lineWidth: 0.3,
     scatterProfile: SCATTER_PROFILES[2].key, density: 0.8, scatterSize: 1, scatterSeed: 1742 });
   const [generatorOpen, setGeneratorOpen] = useState(false);
@@ -284,14 +288,14 @@ export function MapWorkspacePage() {
       toolSet={toolSet} onToolSet={onChooseToolSet} canUndo={history.canUndo && !disabled && !leaving} canRedo={history.canRedo && !disabled && !leaving} onUndo={onUndo} onRedo={onRedo}
       grid={grid} onGrid={onGrid} style={document.appearance?.style ?? "paper-ink"} onStyle={onStyle} styleLocked={disabled || leaving}
       generatorLocked={leaving || !!doc.compatibilityError || autosave.blocked || autosave.status.kind === "conflict"} saveLocked={saveBlocked}
-      onGenerator={onGenerator} onSave={onSave} onBackup={onBackup} classicLink={map.document_version !== 6 ? `/maps/${map.id}` : null} />
+      onGenerator={onGenerator} onSave={onSave} onBackup={onBackup} gl={gl} onGl={onGl} classicLink={map.document_version !== 6 ? `/maps/${map.id}` : null} />
 
     <div className="workspace-editor-body">
       {CATALOG_TOOLS.includes(tool) && <CatalogPanel tool={tool} toolSet={toolSet} comicPunk={document.appearance?.style === "comic-punk"} symbol={settings.symbol} material={settings.material} scatterProfile={settings.scatterProfile}
         onSymbol={onSymbol} onMaterial={onMaterial} onScatter={onScatter} />}
 
       <div className="workspace-editor-stage" ref={wrapRef}>
-        <WorkspaceCanvas map={map} document={document} camera={camera.cam} canvasRef={canvasRef} wrapRef={wrapRef} showGrid={showGrid} gridColor={gridColor} gridOpacity={gridOpacity} gridLineWidth={gridLineWidth} gridLineStyle={gridLineStyle} selectedId={selection?.id ?? null} selectedNodes={gestures.selectedNodes} preview={gestures.preview}
+        <WorkspaceCanvas gl={gl} onGlFail={onGlFail} map={map} document={document} camera={camera.cam} canvasRef={canvasRef} wrapRef={wrapRef} showGrid={showGrid} gridColor={gridColor} gridOpacity={gridOpacity} gridLineWidth={gridLineWidth} gridLineStyle={gridLineStyle} selectedId={selection?.id ?? null} selectedNodes={gestures.selectedNodes} preview={gestures.preview}
           cellBrush={gestures.cellBrush} wallDraft={gestures.wallDraft} onDoubleClick={() => gestures.finishWall()} selections={selections} marquee={gestures.marquee} assetPreview={gestures.assetPreview} draftLine={gestures.draftLine} brush={gestures.brushCursor && (tool === "surface" || tool === "scatter" || maskEraser) ? { ...gestures.brushCursor, radius: settings.radius } : null}
           onPointerLeave={gestures.leave} displays={displays} ghost={placement.pending?.position ?? dragGhost} onDragOver={dragOver} onDragLeave={() => setDragGhost(null)} onDrop={drop}
           onPointerDown={gestures.down} onPointerMove={gestures.move} onPointerUp={gestures.up} onPointerCancel={gestures.cancel} />

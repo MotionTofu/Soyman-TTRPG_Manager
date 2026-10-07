@@ -24,7 +24,7 @@ describe("PNG for players", () => {
         return key in target ? target[key as keyof typeof target] : () => undefined;
       },
     }) as unknown as CanvasRenderingContext2D;
-    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(ctx);
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(ctx as never);
     vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((callback) => callback(null));
     const document = migrateLegacyMap({
       grid: "square", width: 8, height: 8, cells: parseFixture(FIXTURES.fullV4Square),

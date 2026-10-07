@@ -8,7 +8,7 @@ describe("image selection", () => {
     const data = new Uint8ClampedArray(3 * 3 * 4);
     for (let i = 0; i < 9; i++) data[i * 4 + 3] = i === 4 ? 0 : 255;
     const getImageData = vi.fn(() => ({ width: 3, height: 3, data }));
-    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ drawImage: vi.fn(), getImageData } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ drawImage: vi.fn(), getImageData } as never);
     const image = { complete: true, naturalWidth: 3, naturalHeight: 3 } as HTMLImageElement;
     expect(imageHit(image, .5, .5)).toBe(false);
     expect(imageHit(image, 0, .5)).toBe(true);

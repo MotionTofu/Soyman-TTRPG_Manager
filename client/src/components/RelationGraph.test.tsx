@@ -65,7 +65,7 @@ describe("перетаскивание в графе связей", () => {
     vi.stubGlobal("PointerEvent", MouseEvent);
     vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(rect);
-    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ setTransform() {} } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ setTransform() {} } as never);
     HTMLElement.prototype.setPointerCapture = vi.fn();
   });
   afterEach(() => {

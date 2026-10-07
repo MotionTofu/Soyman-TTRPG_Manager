@@ -6,6 +6,7 @@ import type { MapDocumentV6 } from "@shared/maps/core";
 import type { MapFull } from "../mapTypes";
 import type { Camera } from "../editor/hooks/useMapCamera";
 import { renderMap } from "../render";
+import { MapStage, type MapStageContent } from "../gl/MapStage";
 import { workspaceDrawingStyle } from "./drawingStyle";
 import { createWorkspaceRenderModel } from "./renderV6";
 import { retryMapArtwork, cartographyStyleUnavailable, prepareMapImageAssets, prepareCartographyStyle, subscribeMapImageAssets } from "../assets/registry";
@@ -22,8 +23,10 @@ import { cellCorners } from "../grid";
 import { WorkspacePerformance } from "./WorkspacePerformance";
 import { WorkspacePerformanceMeter } from "./performanceMeter";
 
-export function WorkspaceCanvas({ map, document, camera, canvasRef, wrapRef, showGrid, gridColor, gridOpacity, gridLineWidth, gridLineStyle, selectedId, selectedNodes, selections, marquee, preview, assetPreview, displays, ghost, draftLine, wallDraft, onDoubleClick, cellBrush, brush, onPointerLeave, onDragOver, onDragLeave, onDrop, onPointerDown, onPointerMove, onPointerUp, onPointerCancel }: {
+export function WorkspaceCanvas({ gl, onGlFail, map, document, camera, canvasRef, wrapRef, showGrid, gridColor, gridOpacity, gridLineWidth, gridLineStyle, selectedId, selectedNodes, selections, marquee, preview, assetPreview, displays, ghost, draftLine, wallDraft, onDoubleClick, cellBrush, brush, onPointerLeave, onDragOver, onDragLeave, onDrop, onPointerDown, onPointerMove, onPointerUp, onPointerCancel }: {
   map: MapFull; document: MapDocumentV6; camera: Camera;
+  /** Отрисовка плитками через WebGL; при отказе WebGL холст просит вернуть обычную. */
+  gl: boolean; onGlFail: () => void;
   canvasRef: { current: HTMLCanvasElement | null }; wrapRef: { current: HTMLDivElement | null };
   gridColor?: string; gridOpacity?: number; gridLineWidth?: number; gridLineStyle?: "solid" | "dashed";
   showGrid: boolean; selectedId: string | null; preview: { x: number; y: number; w: number; h: number } | null;
@@ -75,10 +78,24 @@ export function WorkspaceCanvas({ map, document, camera, canvasRef, wrapRef, sho
     const unsubscribe = subscribeMapImageAssets(resize);
     return () => { observer.disconnect(); window.removeEventListener("resize", resize); unsubscribe(); };
   }, [wrapRef]);
+  const stageRef = useRef<MapStage | null>(null);
   useEffect(() => {
-    const canvas = baseRef.current, wrap = wrapRef.current;
-    if (!canvas || !wrap) return;
+    if (!gl || !wrapRef.current) return;
+    const stage = stageRef.current = new MapStage(wrapRef.current, onGlFail, (ms) => meter.recordDraw(ms));
+    return () => { stage.destroy(); stageRef.current = null; };
+  }, [gl, onGlFail, wrapRef, meter]);
+  const content = useMemo<MapStageContent>(() => {
+    void revision;
+    return { grid: map.grid, width: map.width, height: map.height, model: rendered.model,
+      showGrid, gridColor, gridOpacity, gridLineWidth, gridLineStyle, showCoords: false, hover: null, ...workspaceDrawingStyle(document), playerView: false, selectedId };
+  }, [map.grid, map.width, map.height, document, rendered, showGrid, gridColor, gridOpacity, gridLineWidth, gridLineStyle, selectedId, revision]);
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
     const rect = wrap.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+    if (gl) { stageRef.current?.draw(content, camera, rect.width, rect.height, dpr); return; }
+    const canvas = baseRef.current;
+    if (!canvas) return;
     const width = Math.round(rect.width * dpr), height = Math.round(rect.height * dpr);
     if (canvas.width !== width) canvas.width = width;
     if (canvas.height !== height) canvas.height = height;
@@ -86,11 +103,9 @@ export function WorkspaceCanvas({ map, document, camera, canvasRef, wrapRef, sho
     if (!ctx) return;
     const drawStarted = performance.now();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    renderMap(ctx, rect.width, rect.height, { grid: map.grid, width: map.width, height: map.height,
-      model: rendered.model, scale: camera.scale, ox: camera.ox, oy: camera.oy,
-      showGrid, gridColor, gridOpacity, gridLineWidth, gridLineStyle, showCoords: false, hover: null, ...workspaceDrawingStyle(document), playerView: false, selectedId });
+    renderMap(ctx, rect.width, rect.height, { ...content, scale: camera.scale, ox: camera.ox, oy: camera.oy });
     meter.recordDraw(performance.now() - drawStarted);
-  }, [map.grid, map.width, map.height, document, rendered, camera, showGrid, gridColor, gridOpacity, gridLineWidth, gridLineStyle, selectedId, revision, wrapRef, meter]);
+  }, [gl, content, camera, wrapRef, meter]);
   useEffect(() => {
     const canvas = canvasRef.current, wrap = wrapRef.current;
     if (!canvas || !wrap) return;
@@ -207,7 +222,7 @@ export function WorkspaceCanvas({ map, document, camera, canvasRef, wrapRef, sho
   }, [map.grid, document, camera, selectedId, selectedNodes, selections, marquee, preview, assetPreview, ghost, draftLine, wallDraft, cellBrush, brush, revision, canvasRef, wrapRef]);
   const unavailable = document.appearance?.style !== "blueprint" && cartographyStyleUnavailable(document.appearance?.style ?? "paper-ink") || rendered.model.layers.some(layer =>
     (layer.kind === "object" || layer.kind === "scatter") && layer.visible && layer.items.some(item => "failed" in item.asset && item.asset.failed));
-  return <><canvas ref={baseRef} className="workspace-canvas-base" aria-hidden="true" />
+  return <>{!gl && <canvas ref={baseRef} className="workspace-canvas-base" aria-hidden="true" />}
     <canvas ref={canvasRef} className="workspace-canvas-overlay" aria-label="Холст новой карты" tabIndex={0}
     onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
     onDoubleClick={onDoubleClick} onPointerLeave={onPointerLeave} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel}
