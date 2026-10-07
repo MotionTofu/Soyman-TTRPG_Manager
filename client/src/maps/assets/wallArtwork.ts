@@ -2,10 +2,14 @@ import type { Vec2 } from "@shared/maps/core";
 import { wallSegments } from "../wallGeometry";
 import { artworkImage, patternSource } from "./artwork";
 
+const segmentCache = new WeakMap<readonly Vec2[], { width: number; closed: boolean; count: number; segments: ReturnType<typeof wallSegments> }>();
 /** Each segment owns a polygon; adjacent textures share the same joint boundary. */
 export function drawWallPolyline(ctx: CanvasRenderingContext2D, points: readonly (Vec2 & { width?: number })[], width: number, closed: boolean,
   scale: number, ox: number, oy: number, selected = false, viewport?: { width: number; height: number }, strip?: HTMLImageElement) {
-  const segments = wallSegments(points, width, closed);
+  // Один и тот же массив точек приходит для каждой плитки карты: геометрию отрезков считаем один раз.
+  let known = segmentCache.get(points);
+  if (!known || known.width !== width || known.closed !== closed || known.count !== points.length) segmentCache.set(points, known = { width, closed, count: points.length, segments: wallSegments(points, width, closed) });
+  const segments = known.segments;
   if (!segments.length) return;
   // `strip` — своя полоса вместо кладки (дорога): без торцов, рисунок идёт вдоль всей линии без сброса на изломах.
   const image = strip ?? artworkImage("wall-masonry", "crypt"), end = strip ? null : artworkImage("wall-masonry-end", "crypt");
@@ -26,9 +30,11 @@ export function drawWallPolyline(ctx: CanvasRenderingContext2D, points: readonly
     ctx.translate(X(segment.a.x), Y(segment.a.y)); ctx.rotate(segment.angle);
     const thickness = Math.max(segment.startWidth, segment.endWidth) * scale;
     if (pattern && image) {
-      if (segment.startWidth === segment.endWidth) {
-        const k = segment.startWidth * scale / image.naturalHeight * factor;
-        pattern.setTransform(new DOMMatrix([textureScale, 0, 0, k, phase, -segment.startWidth * scale / 2])); ctx.fillStyle = pattern;
+      // Полоса дороги уже разбита на отрезки по ~10 px: сужение внутри отрезка незаметно, а его край задаёт обрезка.
+      // Рисовать её тонкими полосками, как клин стены, — тысячи заливок на плитку (замер 2026-10-08: 3 мс).
+      if (segment.startWidth === segment.endWidth || strip) {
+        const mean = (segment.startWidth + segment.endWidth) / 2, k = mean * scale / image.naturalHeight * factor;
+        pattern.setTransform(new DOMMatrix([textureScale, 0, 0, k, phase, -mean * scale / 2])); ctx.fillStyle = pattern;
         ctx.fillRect(-thickness * 2, -thickness * 2, segment.length * scale + thickness * 4, thickness * 4);
       } else {
         // Narrow screen-space strips stretch the raster vertically across the taper; X phase stays continuous.

@@ -717,6 +717,19 @@ function grimeFor(id: string): { key: string; dx: number; dy: number; angle: num
   return { key: CRYPT_GRIME[Math.floor(next() * CRYPT_GRIME.length)], dx: Math.cos(turn) * 0.45, dy: Math.sin(turn) * 0.45, angle: next() * Math.PI * 2, size: 0.6 + next() * 0.5 };
 }
 
+type StripSamples = { key: string; samples: ReturnType<typeof flattenSplineWithWidths>; minX: number; minY: number; maxX: number; maxY: number };
+const stripCache = new WeakMap<readonly SplineNode[], StripSamples>();
+/** Точки полосы-картинки и её рамка. Карта рисуется плитками, и без запаса длинная дорога
+ * раскладывалась заново для каждой плитки, даже той, где её нет (замер 2026-10-08: 5 мс на плитку). */
+function stripSamples(nodes: readonly SplineNode[], closed: boolean, width: number, step: number): StripSamples {
+  const key = `${closed}:${width}:${step}`, cached = stripCache.get(nodes);
+  if (cached?.key === key) return cached;
+  const samples = flattenSplineWithWidths(closed ? [...nodes, nodes[0]] : nodes, width, step);
+  const reach = Math.max(width, ...samples.map(sample => sample.width)) * 2;
+  const xs = samples.map(sample => sample.x), ys = samples.map(sample => sample.y);
+  const result = { key, samples, minX: Math.min(...xs) - reach, minY: Math.min(...ys) - reach, maxX: Math.max(...xs) + reach, maxY: Math.max(...ys) + reach };
+  stripCache.set(nodes, result); return result;
+}
 export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvasH: number, o: RenderOptions): void {
   const { grid, width, height, model, scale, ox, oy, showGrid, showCoords, hover, chrome, playerView, selectedId } = o;
   const terrainFill = o.terrainFill ?? MAP_TERRAIN_FILL;
@@ -1070,7 +1083,8 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     const strip = path.style ? stripImage(path.style) : null;
     if (strip) {
       // Шаг крупнее, чем у линии тушью: каждый отрезок — своя заливка узором с обрезкой.
-      const samples = flattenSplineWithWidths(nodes, baseWidth, 10 / scale);
+      const { samples, minX, minY, maxX, maxY } = stripSamples(path.nodes, path.closed === true, baseWidth, 10 / scale);
+      if (X(maxX) < 0 || Y(maxY) < 0 || X(minX) > canvasW || Y(minY) > canvasH) return;
       drawWallPolyline(ctx, samples, baseWidth, false, scale, ox, oy, false, { width: canvasW, height: canvasH }, strip);
       return;
     }
