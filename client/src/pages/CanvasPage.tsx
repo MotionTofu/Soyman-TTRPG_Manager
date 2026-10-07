@@ -57,6 +57,7 @@ import { syncMentionLinks } from "../mentions";
 import { LOCATION_ROLE_LABELS, type LocationRole } from "../locationRoles";
 import { useSoundEngineOptional } from "../sound/engine";
 import { useAlert, useConfirm, usePrompt } from "../hooks/useConfirm";
+import { useEvent } from "../hooks/useEvent";
 import "../canvas.css";
 import {
   NODE_COLORS,
@@ -1182,6 +1183,11 @@ function ChapterNode({ data, selected }: NodeProps<Node<ChapterNodeData>>) {
     </div>
   );
 }
+
+// Постоянные пропсы React Flow: литерал в JSX — новый объект на каждый рендер.
+const PRO_OPTIONS = { hideAttribution: true };
+const PAN_ON_DRAG = [1];
+const preventDragDefault = (e: React.DragEvent) => e.preventDefault();
 
 // Module-level: React Flow сравнивает nodeTypes по ссылке и перестраивает всё
 // дерево нод, если объект новый на каждый рендер.
@@ -5475,6 +5481,80 @@ export function CanvasPage() {
     }
   }
 
+  // Обработчики React Flow — стабильными ссылками. Любой новый проп-функция
+  // перерисовывает слой узлов целиком, а страница рендерится на каждый кадр
+  // перетаскивания: замер 2026-10-07 на доске в 64 узла показал перерисовку
+  // всех 64 на каждом кадре. Свежесть замыканий даёт `useEvent`.
+  const flowHandlers = {
+    onInit: useEvent((inst: ReactFlowInstance<Node<CanvasNodeData>, Edge>) => {
+      flowRef.current = inst;
+    }),
+    onNodeClick: useEvent((event: React.MouseEvent, node: Node<CanvasNodeData>) => {
+      const [type, id] = splitKey(node.id);
+      // Щелчок по портрету ноды раскрывает карточку существа: это
+      // единственный элемент ноды без своей роли (шаг 4 ревизии).
+      // Второй вход — пункт меню по двойному щелчку: цель 26×26 мелкая,
+      // дублирующий вход обязателен.
+      if (
+        (type === "being" || type === "compendium_entry") &&
+        (event.target as HTMLElement).closest(".canvas-node__portrait")
+      ) {
+        const rect = (event.target as HTMLElement).getBoundingClientRect();
+        openCreatureCard(type, id, rect);
+        return;
+      }
+      // П1.2: Ctrl/Cmd-щелчок — добавить узел к выделению, а не заменить
+      // его. React Flow сам переключает выделение (onNodesChange ->
+      // applyNodeChanges пропускает select-изменения, и в базу оно не
+      // пишется), так что при зажатом модификаторе не схлопываем выборку
+      // в selectOnly и не пишем focus в адрес: эффект по focusParam ниже
+      // иначе снова свёл бы набор выделенных к одному узлу.
+      if (event.ctrlKey || event.metaKey) return;
+      selectOnly(type, id);
+      // focus в адресе — чтобы ссылку на узел можно было сохранить.
+      const next: Record<string, string> = {};
+      if (freeId) next.free_id = String(freeId);
+      else {
+        next.setting = String(settingId);
+        if (arcId) next.arc = String(arcId);
+        // Без этого щелчок по узлу на схеме сеттинга терял `view=map` и
+        // выбрасывал обратно в список — то есть выделить узел было
+        // нельзя вовсе.
+        if (settingMapId) next.view = "map";
+        if (campaignIdParam) next.campaign = String(campaignIdParam);
+        if (campaignMapId) {
+          next.campaign = String(campaignMapId);
+          next.view = "map";
+          delete next.setting;
+        }
+      }
+      next.focus = node.id;
+      setSearchParams(next);
+    }),
+    onPaneClick: useEvent(() => selectOnly("", 0)),
+    onEdgeClick: useEvent((_: unknown, edge: Edge) => {
+      // Стрелка улики «×N» — щелчок открывает её улики (Q19).
+      const link = parseClueEdgeId(edge.id);
+      if (link) setClueEdge(link);
+      const adv = parseAdventureClueEdgeId(edge.id);
+      if (adv) setAdventureClue(adv);
+    }),
+    onNodeDragStart: useEvent(onNodeDragStart),
+    onNodeDrag: useEvent(onNodeDrag),
+    onNodeDragStop: useEvent(onNodeDragStop),
+    onNodesChange: useEvent(onNodesChange),
+    onEdgesChange: useEvent(onEdgesChange),
+    onConnect: useEvent(onConnect),
+    onEdgesDelete: useEvent(onEdgesDelete),
+    onNodesDelete: useEvent(onNodesDelete),
+    onNodeContextMenu: useEvent(handleNodeContextMenu),
+    onPaneContextMenu: useEvent(handlePaneContextMenu),
+    onSelectionContextMenu: useEvent(handleSelectionContextMenu),
+    onEdgeContextMenu: useEvent(handleEdgeContextMenu),
+    onNodeDoubleClick: useEvent(handleNodeDoubleClick),
+    onDrop: useEvent(handleDrop),
+  };
+
   /**
    * Полотно — одно на все виды доски.
    *
@@ -5497,78 +5577,29 @@ export function CanvasPage() {
           nodes={nodes}
           edges={edges}
           nodeTypes={NODE_TYPES}
-          onInit={(inst) => {
-            flowRef.current = inst;
-          }}
+          onInit={flowHandlers.onInit}
           snapToGrid
-          snapGrid={[GRID, GRID]}
-          onNodeDragStart={onNodeDragStart}
-          onNodeDrag={onNodeDrag}
-          onNodeDragStop={onNodeDragStop}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onEdgesDelete={onEdgesDelete}
-          onNodesDelete={onNodesDelete}
-          onNodeClick={(event, node) => {
-            const [type, id] = splitKey(node.id);
-            // Щелчок по портрету ноды раскрывает карточку существа: это
-            // единственный элемент ноды без своей роли (шаг 4 ревизии).
-            // Второй вход — пункт меню по двойному щелчку: цель 26×26 мелкая,
-            // дублирующий вход обязателен.
-            if (
-              (type === "being" || type === "compendium_entry") &&
-              (event.target as HTMLElement).closest(".canvas-node__portrait")
-            ) {
-              const rect = (event.target as HTMLElement).getBoundingClientRect();
-              openCreatureCard(type, id, rect);
-              return;
-            }
-            // П1.2: Ctrl/Cmd-щелчок — добавить узел к выделению, а не заменить
-            // его. React Flow сам переключает выделение (onNodesChange ->
-            // applyNodeChanges пропускает select-изменения, и в базу оно не
-            // пишется), так что при зажатом модификаторе не схлопываем выборку
-            // в selectOnly и не пишем focus в адрес: эффект по focusParam ниже
-            // иначе снова свёл бы набор выделенных к одному узлу.
-            if (event.ctrlKey || event.metaKey) return;
-            selectOnly(type, id);
-            // focus в адресе — чтобы ссылку на узел можно было сохранить.
-            const next: Record<string, string> = {};
-            if (freeId) next.free_id = String(freeId);
-            else {
-              next.setting = String(settingId);
-              if (arcId) next.arc = String(arcId);
-              // Без этого щелчок по узлу на схеме сеттинга терял `view=map` и
-              // выбрасывал обратно в список — то есть выделить узел было
-              // нельзя вовсе.
-              if (settingMapId) next.view = "map";
-              if (campaignIdParam) next.campaign = String(campaignIdParam);
-              if (campaignMapId) {
-                next.campaign = String(campaignMapId);
-                next.view = "map";
-                delete next.setting;
-              }
-            }
-            next.focus = node.id;
-            setSearchParams(next);
-          }}
-          onPaneClick={() => selectOnly("", 0)}
-          onNodeContextMenu={handleNodeContextMenu}
-          onPaneContextMenu={handlePaneContextMenu}
-          onSelectionContextMenu={handleSelectionContextMenu}
-          onEdgeContextMenu={handleEdgeContextMenu}
-          onEdgeClick={(_, edge) => {
-            // Стрелка улики «×N» — щелчок открывает её улики (Q19).
-            const link = parseClueEdgeId(edge.id);
-            if (link) setClueEdge(link);
-            const adv = parseAdventureClueEdgeId(edge.id);
-            if (adv) setAdventureClue(adv);
-          }}
-          onNodeDoubleClick={handleNodeDoubleClick}
-          onDrop={handleDrop}
-          onDragOver={(e) => e.preventDefault()}
-          proOptions={{ hideAttribution: true }}
-          panOnDrag={[1]}
+          snapGrid={SNAP_GRID}
+          onNodeDragStart={flowHandlers.onNodeDragStart}
+          onNodeDrag={flowHandlers.onNodeDrag}
+          onNodeDragStop={flowHandlers.onNodeDragStop}
+          onNodesChange={flowHandlers.onNodesChange}
+          onEdgesChange={flowHandlers.onEdgesChange}
+          onConnect={flowHandlers.onConnect}
+          onEdgesDelete={flowHandlers.onEdgesDelete}
+          onNodesDelete={flowHandlers.onNodesDelete}
+          onNodeClick={flowHandlers.onNodeClick}
+          onPaneClick={flowHandlers.onPaneClick}
+          onNodeContextMenu={flowHandlers.onNodeContextMenu}
+          onPaneContextMenu={flowHandlers.onPaneContextMenu}
+          onSelectionContextMenu={flowHandlers.onSelectionContextMenu}
+          onEdgeContextMenu={flowHandlers.onEdgeContextMenu}
+          onEdgeClick={flowHandlers.onEdgeClick}
+          onNodeDoubleClick={flowHandlers.onNodeDoubleClick}
+          onDrop={flowHandlers.onDrop}
+          onDragOver={preventDragDefault}
+          proOptions={PRO_OPTIONS}
+          panOnDrag={PAN_ON_DRAG}
           // В прогоне пробел — «вперёд», и вторая роль ему не нужна: по
           // умолчанию @xyflow отдаёт зажатый пробел под панораму.
           panActivationKeyCode={rehearsalOn ? null : undefined}
@@ -8262,6 +8293,7 @@ function CanvasPalette({
  * с видимой сеткой видно сразу.
  */
 const GRID = 26;
+const SNAP_GRID: [number, number] = [GRID, GRID];
 /** Округление до сетки — для тех мест, где позицию ставит не перетаскивание. */
 function toGrid(v: number): number {
   return Math.round(v / GRID) * GRID;
