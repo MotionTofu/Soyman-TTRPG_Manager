@@ -17,13 +17,13 @@ const LOOKS: Record<MapDrawingStyle, MapLook | null> = {
   "paper-ink": { shift: [0, 0], wobble: 0.015, grain: 0.08 },
   blueprint: null,
 };
+export const styleLook = (document: MapDocumentV6) => LOOKS[document.appearance?.style ?? "paper-ink"];
 export function workspaceDrawingStyle(document: MapDocumentV6) {
   const style = document.appearance?.style ?? "paper-ink";
   const paper = style === "blueprint" ? "#ffffff" : style === "comic-punk" ? "#e9e1c8" : "#f1eedf";
   return {
     chrome: { ...readChrome(), paper, ink: "#171717", line: style === "blueprint" ? "#8494a4" : "#867e69", muted: "#625f54" },
     terrainFill: PALETTES[style],
-    look: LOOKS[style],
     fonts: { label: '"Sofia Sans Semi Condensed", sans-serif', mono: '"Sofia Sans Semi Condensed", sans-serif' },
     cartography: style !== "blueprint",
     artPack: style === "comic-punk" ? "crypt" as const : "cartography" as const,

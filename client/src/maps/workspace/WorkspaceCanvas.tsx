@@ -7,7 +7,8 @@ import type { MapFull } from "../mapTypes";
 import type { Camera } from "../editor/hooks/useMapCamera";
 import { renderMap } from "../render";
 import { MapStage, type MapStageContent } from "../gl/MapStage";
-import { workspaceDrawingStyle } from "./drawingStyle";
+import { styleLook, workspaceDrawingStyle } from "./drawingStyle";
+import { chosenLook, chosenWeather, type MapEffects } from "../gl/effects";
 import { createWorkspaceRenderModel } from "./renderV6";
 import { retryMapArtwork, cartographyStyleUnavailable, prepareMapImageAssets, prepareCartographyStyle, subscribeMapImageAssets } from "../assets/registry";
 import type { TokenDisplay } from "./useTokenPresentations";
@@ -23,10 +24,12 @@ import { cellCorners } from "../grid";
 import { WorkspacePerformance } from "./WorkspacePerformance";
 import { WorkspacePerformanceMeter } from "./performanceMeter";
 
-export function WorkspaceCanvas({ gl, onGlFail, map, document, camera, canvasRef, wrapRef, showGrid, gridColor, gridOpacity, gridLineWidth, gridLineStyle, selectedId, selectedNodes, selections, marquee, preview, assetPreview, displays, ghost, draftLine, wallDraft, onDoubleClick, cellBrush, brush, onPointerLeave, onDragOver, onDragLeave, onDrop, onPointerDown, onPointerMove, onPointerUp, onPointerCancel }: {
+export function WorkspaceCanvas({ gl, onGlFail, effects, map, document, camera, canvasRef, wrapRef, showGrid, gridColor, gridOpacity, gridLineWidth, gridLineStyle, selectedId, selectedNodes, selections, marquee, preview, assetPreview, displays, ghost, draftLine, wallDraft, onDoubleClick, cellBrush, brush, onPointerLeave, onDragOver, onDragLeave, onDrop, onPointerDown, onPointerMove, onPointerUp, onPointerCancel }: {
   map: MapFull; document: MapDocumentV6; camera: Camera;
   /** Отрисовка плитками через WebGL; при отказе WebGL холст просит вернуть обычную. */
   gl: boolean; onGlFail: () => void;
+  /** Эффекты печати и погода; работают только при `gl`. */
+  effects: MapEffects;
   canvasRef: { current: HTMLCanvasElement | null }; wrapRef: { current: HTMLDivElement | null };
   gridColor?: string; gridOpacity?: number; gridLineWidth?: number; gridLineStyle?: "solid" | "dashed";
   showGrid: boolean; selectedId: string | null; preview: { x: number; y: number; w: number; h: number } | null;
@@ -84,6 +87,8 @@ export function WorkspaceCanvas({ gl, onGlFail, map, document, camera, canvasRef
     const stage = stageRef.current = new MapStage(wrapRef.current, onGlFail, (ms) => meter.recordDraw(ms));
     return () => { stage.destroy(); stageRef.current = null; };
   }, [gl, onGlFail, wrapRef, meter]);
+  const look = styleLook(document);
+  useEffect(() => { if (gl) stageRef.current?.effects(chosenLook(look, effects), chosenWeather(effects)); }, [gl, look, effects]);
   const content = useMemo<MapStageContent>(() => {
     void revision;
     return { grid: map.grid, width: map.width, height: map.height, model: rendered.model,

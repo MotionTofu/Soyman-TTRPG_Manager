@@ -1,13 +1,11 @@
-import { autoDetectRenderer, Container, Rectangle, Sprite, Texture, type Renderer } from "pixi.js";
+import { autoDetectRenderer, Container, Rectangle, Sprite, Texture, type Filter, type Renderer } from "pixi.js";
 import { renderMap, type RenderOptions } from "../render";
 import { inRange, tileSide, visibleTiles, type TileRange } from "./tiles";
 import { createStyleFilter, type MapLook } from "./styleFilter";
+import { anyWeather, createWeatherFilter, type MapWeather } from "./weatherFilter";
 
 /** Всё, что рисует карта, кроме камеры. Новый объект — новое содержимое плиток. */
-export type MapStageContent = Omit<RenderOptions, "scale" | "ox" | "oy"> & {
-  /** Вид печати поверх карты; без него карта выводится как нарисована. */
-  look?: MapLook | null;
-};
+export type MapStageContent = Omit<RenderOptions, "scale" | "ox" | "oy">;
 type Frame = { content: MapStageContent; scale: number; ox: number; oy: number; cssW: number; cssH: number; dpr: number };
 type Tile = { scale: number; tx: number; ty: number; content: MapStageContent; canvas: HTMLCanvasElement; sprite: Sprite };
 
@@ -28,6 +26,10 @@ export class MapStage {
   private readonly root = new Container();
   private readonly tiles = new Map<string, Tile>();
   private readonly style = createStyleFilter();
+  private readonly weatherPass = createWeatherFilter();
+  private look: MapLook | null = null;
+  private weather: MapWeather | null = null;
+  private anim = 0;
   private renderer: Renderer | null = null;
   private frame: Frame | null = null;
   private dead = false;
@@ -82,9 +84,22 @@ export class MapStage {
     this.present();
   }
 
+  /** Проходы поверх карты: вид печати и погода. Плитки от них не зависят и не перерисовываются. */
+  effects(look: MapLook | null, weather: MapWeather): void {
+    this.look = look; this.weather = anyWeather(weather) ? weather : null;
+    this.present();
+    this.animate();
+  }
+
+  /** Погода движется сама: пока она включена, сцена перерисовывается каждый кадр. */
+  private animate(): void {
+    if (this.anim || !this.weather || this.dead) return;
+    this.anim = requestAnimationFrame(() => { this.anim = 0; this.present(); this.animate(); });
+  }
+
   destroy(): void {
     this.dead = true;
-    clearTimeout(this.timer); cancelAnimationFrame(this.raf);
+    clearTimeout(this.timer); cancelAnimationFrame(this.raf); cancelAnimationFrame(this.anim);
     this.drop(() => true);
     this.renderer?.destroy();
     this.canvas.remove();
@@ -173,13 +188,13 @@ export class MapStage {
       // Плитки текущего масштаба — поверх растянутых запасных.
       tile.sprite.zIndex = tile.scale === this.target ? 1 : 0;
     }
-    const look = frame.content.look;
-    if (look) {
-      // Проход идёт по всему экрану, а не по границам плиток: они шире экрана.
-      this.root.filterArea = new Rectangle(0, 0, renderer.width, renderer.height);
-      this.style.aim(look, x, y, frame.scale * frame.dpr);
-    }
-    if (!look !== !this.root.filters?.length) this.root.filters = look ? [this.style.filter] : null;
+    const density = frame.scale * frame.dpr, passes: Filter[] = [];
+    if (this.look) { this.style.aim(this.look, x, y, density); passes.push(this.style.filter); }
+    if (this.weather) { this.weatherPass.aim(this.weather, x, y, density, performance.now() / 1000); passes.push(this.weatherPass.filter); }
+    // Проходы идут по всему экрану, а не по границам плиток: они шире экрана.
+    if (passes.length) this.root.filterArea = new Rectangle(0, 0, renderer.width, renderer.height);
+    const current = this.root.filters ?? [];
+    if (current.length !== passes.length || passes.some((pass, i) => pass !== current[i])) this.root.filters = passes.length ? passes : null;
     renderer.render(this.root);
   }
 }

@@ -7,6 +7,7 @@ import { WorkspaceMenu } from "./WorkspaceMenu";
 import { layerName } from "./layerNames";
 import { TOOL_LABELS, type WorkspaceTool } from "./editorCommands";
 import { TOOL_SETS, TOOL_SET_LABELS, type ToolSet } from "./toolSets";
+import { PRINT_EFFECTS, WEATHER_EFFECTS, type MapEffect, type MapEffects } from "../gl/effects";
 
 // Обвязка редактора: рейка, шапка и строка статуса. Вынесены из страницы и
 // обёрнуты в memo, потому что страница рендерится на каждое движение мыши и
@@ -31,7 +32,7 @@ export const WorkspaceToolRail = memo(function WorkspaceToolRail({ toolSet, tool
 });
 
 export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, toolSet, onToolSet, canUndo, canRedo, onUndo, onRedo, grid, onGrid,
-  style, onStyle, styleLocked, generatorLocked, saveLocked, onGenerator, onSave, onBackup, gl, onGl, classicLink }: {
+  style, onStyle, styleLocked, generatorLocked, saveLocked, onGenerator, onSave, onBackup, gl, onGl, effects, onEffect, classicLink }: {
   mapName: string; status: string; toolSet: ToolSet; onToolSet: (set: ToolSet) => void;
   canUndo: boolean; canRedo: boolean; onUndo: () => void; onRedo: () => void;
   grid: GridLook; onGrid: (patch: Partial<GridLook>) => void;
@@ -39,6 +40,7 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, 
   generatorLocked: boolean; saveLocked: boolean; onGenerator: () => void; onSave: () => void; onBackup: () => void;
   /** Отрисовка плитками через WebGL вместо обычного холста. */
   gl: boolean; onGl: (value: boolean) => void;
+  effects: MapEffects; onEffect: (name: MapEffect, value: boolean) => void;
   /** Старый редактор — только для карт, ещё не переведённых в новый формат. */
   classicLink: string | null;
 }) {
@@ -63,6 +65,13 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, 
         <fieldset><legend>Цвет сетки</legend>
           {GRID_COLORS.map(([color, name]) => <label key={color}><input type="radio" name="grid-color" checked={grid.color === color} onChange={() => onGrid({ color })} />{name}</label>)}
         </fieldset>
+      </WorkspaceMenu>
+      <WorkspaceMenu label="Эффекты ▾" title="Эффекты" className="workspace-effects-menu">
+        {[["Печать", PRINT_EFFECTS], ["Погода", WEATHER_EFFECTS]].map(([legend, group]) => <fieldset key={legend as string} disabled={!gl}><legend>{legend as string}</legend>
+          {(Object.entries(group) as [MapEffect, string][]).map(([name, label]) => <label key={name}>
+            <input type="checkbox" checked={effects[name]} onChange={event => onEffect(name, event.target.checked)} />{label}</label>)}
+        </fieldset>)}
+        {!gl && <p>Эффекты работают в новой отрисовке: «Карта ▾ → Новая отрисовка».</p>}
       </WorkspaceMenu>
       <WorkspaceMenu label="Карта ▾" title="Карта" className="workspace-map-menu">
         <fieldset disabled={styleLocked}><legend>Оформление</legend>
