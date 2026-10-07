@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, memo } from "react";
 import { CARTOGRAPHY_OBJECTS, CARTOGRAPHY_SURFACES, cartographyId, cartographyUrl } from "../assets/cartography";
 import { CRYPT_CATEGORIES, CRYPT_OBJECTS, CRYPT_SURFACES, cryptId, cryptUrl, type CryptCategory } from "../assets/crypt";
 import { MAP_SYMBOL_ASSETS } from "../assets/registry";
@@ -16,7 +16,8 @@ function Thumbnail({ url }: { url: string | null }) {
 }
 const cells = (size: number) => size >= 1 ? `${Math.round(size * 10) / 10} кл.` : undefined;
 
-export function CatalogPanel({ tool, toolSet, comicPunk, symbol, material, scatterProfile, onSymbol, onMaterial, onScatter }: {
+// memo: страница редактора рендерится на каждое движение мыши и камеры.
+export const CatalogPanel = memo(function CatalogPanel({ tool, toolSet, comicPunk, symbol, material, scatterProfile, onSymbol, onMaterial, onScatter }: {
   tool: WorkspaceTool; toolSet: ToolSet; comicPunk: boolean; symbol: string; material: string; scatterProfile: string;
   onSymbol: (id: string) => void; onMaterial: (code: string) => void; onScatter: (key: string) => void;
 }) {
@@ -66,4 +67,4 @@ export function CatalogPanel({ tool, toolSet, comicPunk, symbol, material, scatt
     </div>
     <p className="workspace-catalog-pack">Набор: SoyMan · Бумага и тушь</p>
   </aside>;
-}
+});

@@ -79,12 +79,38 @@ export function surfaceImage(code: string, dungeon = false, pack: ArtPack = "car
     ["shallow_water", "deep_water", "sea", "lake"].includes(code) ? "water" : null;
   return key ? artworkImage(key) : null;
 }
+const mips = new WeakMap<HTMLImageElement, HTMLCanvasElement[]>();
+/** Источник узора под масштаб `k` (экранных пикселей на пиксель картинки). Узор прямо
+ * из картинки браузер готовит заново на каждый новый масштаб: замер 2026-10-07 — до
+ * 330 мс на плитку 256 px, с готовыми копиями — до 90. Копии уменьшаются вдвое, пока
+ * стороны чётные, чтобы шов узора не сдвигался; берётся ближайшая не меньше нужной.
+ * `factor` — во сколько раз копия меньше картинки: на него умножается масштаб узора. */
+export function patternSource(image: HTMLImageElement, k: number): { source: HTMLImageElement | HTMLCanvasElement; factor: number } {
+  let chain = mips.get(image);
+  if (!chain) {
+    const full = document.createElement("canvas"); full.width = image.naturalWidth; full.height = image.naturalHeight;
+    const pen = full.getContext("2d");
+    if (!pen || !full.width || !full.height) return { source: image, factor: 1 };
+    pen.drawImage(image, 0, 0); chain = [full]; mips.set(image, chain);
+  }
+  const level = k > 0 && k < 1 ? Math.floor(Math.log2(1 / k)) : 0;
+  while (chain.length <= level) {
+    const last = chain.at(-1)!;
+    if (last.width % 2 || last.height % 2 || last.width <= 16 || last.height <= 16) break;
+    const half = document.createElement("canvas"); half.width = last.width / 2; half.height = last.height / 2;
+    const pen = half.getContext("2d")!; pen.imageSmoothingEnabled = true; pen.imageSmoothingQuality = "high";
+    pen.drawImage(last, 0, 0, half.width, half.height); chain.push(half);
+  }
+  const source = chain[Math.min(level, chain.length - 1)];
+  return { source, factor: image.naturalWidth / source.width };
+}
 /** World-anchored patterns: moving the camera never slides the artwork. */
 export function surfacePattern(ctx: CanvasRenderingContext2D, image: HTMLImageElement, scale: number, ox: number, oy: number, pack: ArtPack = "cartography") {
   if (pack === "crypt" && image === artworkImage("paper-panel", "crypt")) return paperPattern(ctx, scale, ox, oy);
   // «Склеп» уже бесшовный, 2×2 клетки на файл; «Бумага и тушь» зеркалится в тайл на 8 клеток.
-  const pattern = pack === "crypt" ? ctx.createPattern(image, "repeat") : ctx.createPattern(mirroredTile(image), "repeat");
-  const k = pack === "crypt" ? scale * 2 / image.naturalWidth : scale * 8 / 512;
+  const size = pack === "crypt" ? scale * 2 / image.naturalWidth : scale * 8 / 512;
+  const { source, factor } = pack === "crypt" ? patternSource(image, size) : { source: mirroredTile(image), factor: 1 };
+  const pattern = ctx.createPattern(source, "repeat"), k = size * factor;
   pattern?.setTransform(new DOMMatrix([k, 0, 0, k, ox, oy]));
   return pattern;
 }

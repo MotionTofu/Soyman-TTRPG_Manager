@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { TOOL_LABELS, type WorkspaceTool } from "./editorCommands";
 
 export type BrushSettings = {
@@ -31,7 +32,8 @@ function Slider({ name, value, min, max, step, onChange }: { name: string; value
   </label>;
 }
 
-export function ToolSettings({ tool, settings, maskEraser, onChange, selectedRoomCount = 0, roomActionsDisabled, onPaintRooms, onClearRooms }: {
+// memo: страница редактора рендерится на каждое движение мыши и камеры.
+export const ToolSettings = memo(function ToolSettings({ tool, settings, maskEraser, onChange, selectedRoomCount = 0, roomActionsDisabled, onPaintRooms, onClearRooms }: {
   tool: WorkspaceTool; settings: BrushSettings; maskEraser: boolean; onChange: (patch: Partial<BrushSettings>) => void;
   selectedRoomCount?: number; roomActionsDisabled?: boolean; onPaintRooms?: () => void; onClearRooms?: () => void;
 }) {
@@ -63,4 +65,4 @@ export function ToolSettings({ tool, settings, maskEraser, onChange, selectedRoo
       </select></label>}
     <p className="workspace-hint">{(tool === "road" || tool === "river") && settings.pathMode === "points" ? "Клик — точка кривой. Enter или двойной клик — закончить. Клик по первой точке — замкнуть. Esc — отменить." : HINTS[tool]}</p>
   </section>;
-}
+});

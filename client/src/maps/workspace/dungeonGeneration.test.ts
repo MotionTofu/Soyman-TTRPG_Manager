@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { createGameplayToken, parseMapDocumentV6, putGameplayToken, serializeMapDocumentV6, tokensOf, validateMapDocumentV6 } from "@shared/maps/core";
 import { dungeonReachable, generateDungeon } from "../dungeon";
 import { createDoor, paintSegment } from "./editorCommands";
-import { buildDungeonDocument, DUNGEON_PRESETS, replaceWithDungeon } from "./dungeonGeneration";
+import { buildDungeonDocument, DUNGEON_PRESETS, floorOutlines, replaceWithDungeon } from "./dungeonGeneration";
+import { CRYPT_PACK } from "../assets/crypt";
 
 const settings = { ...DUNGEON_PRESETS[1], seed: 1742 };
 describe("workspace dungeon generation", () => {
@@ -43,11 +44,29 @@ describe("workspace dungeon generation", () => {
     expect(tokensOf(next)).toEqual(tokensOf(before));
     expect(next.layers.at(-1)).toEqual(before.layers.find((layer) => layer.id === gp.id));
     expect(next.exploration).toEqual({ enabled: true, revealedCells: [] });
-    expect(next.assetPacks).toEqual(before.assetPacks);
+    expect(next.assetPacks).toEqual([...before.assetPacks, CRYPT_PACK]);
     expect(validateMapDocumentV6(next)).toEqual([]);
     const ids = next.layers.flatMap((layer) => [layer.id, ...(layer.kind === "gameplay" ? layer.items.map((item) => item.id) : [])]);
     expect(new Set(ids).size).toBe(ids.length);
     expect(parseMapDocumentV6(serializeMapDocumentV6(next))).toEqual({ ok: true, value: next });
+  });
+  it("draws walls as masonry lines around the floor, not as rock cells", () => {
+    // Г-образный пол и отдельная клетка, касающаяся его углом: два контура, только углы.
+    const cells = new Set(["0,0", "1,0", "0,1", "2,1"]);
+    const loops = floorOutlines((x, y) => cells.has(`${x},${y}`), 4, 3);
+    expect(loops).toEqual([
+      [{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 2, y: 1 }, { x: 1, y: 1 }, { x: 1, y: 2 }, { x: 0, y: 2 }],
+      [{ x: 2, y: 1 }, { x: 3, y: 1 }, { x: 3, y: 2 }, { x: 2, y: 2 }],
+    ]);
+    const doc = buildDungeonDocument(settings, "comic-punk");
+    const terrain = doc.layers.find((layer) => layer.kind === "terrain")!, walls = doc.layers.find((layer) => layer.name === "Стены")!;
+    const legacy = generateDungeon(settings.width, settings.height, settings);
+    if (terrain.kind !== "terrain" || terrain.representation !== "cells" || walls.kind !== "path") throw new Error("unexpected layers");
+    expect(terrain.cells.some((cell) => cell.material.type === "builtin" && cell.material.key === "terrain/wall")).toBe(false);
+    expect(terrain.cells.length).toBe(settings.width * settings.height - legacy.terrain.size);
+    expect(walls.paths.length).toBeGreaterThan(0);
+    expect(walls.paths.every((path) => path.kind === "wall" && path.properties?.closed === true)).toBe(true);
+    expect(doc.assetPacks).toContainEqual(CRYPT_PACK);
   });
   it("refuses replacement with a different grid or size, and generated rooms/doors remain editable", () => {
     const doc = buildDungeonDocument(settings, "paper-ink"), gp = doc.layers.find((layer) => layer.kind === "gameplay")!;

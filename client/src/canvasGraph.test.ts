@@ -23,7 +23,7 @@ describe("фон графа", () => {
 
   function setup() {
     const tileCtx = { fillRect: vi.fn(), fillStyle: "" };
-    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(tileCtx as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(tileCtx as never);
     const pattern = { setTransform: vi.fn() };
     const ctx = {
       fillRect: vi.fn(), save: vi.fn(), restore: vi.fn(),

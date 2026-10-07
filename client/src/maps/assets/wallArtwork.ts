@@ -1,6 +1,6 @@
 import type { Vec2 } from "@shared/maps/core";
 import { wallSegments } from "../wallGeometry";
-import { artworkImage } from "./artwork";
+import { artworkImage, patternSource } from "./artwork";
 
 /** Each segment owns a polygon; adjacent textures share the same joint boundary. */
 export function drawWallPolyline(ctx: CanvasRenderingContext2D, points: readonly (Vec2 & { width?: number })[], width: number, closed: boolean,
@@ -8,8 +8,10 @@ export function drawWallPolyline(ctx: CanvasRenderingContext2D, points: readonly
   const segments = wallSegments(points, width, closed);
   if (!segments.length) return;
   const image = artworkImage("wall-masonry", "crypt"), end = artworkImage("wall-masonry-end", "crypt");
-  const pattern = image ? ctx.createPattern(image, "repeat-x") : null;
-  const textureScale = width * scale / (image?.naturalHeight ?? 128);
+  // Узор берётся из готовой уменьшенной копии; `factor` возвращает ему прежний размер.
+  const { source, factor } = image ? patternSource(image, width * scale / image.naturalHeight) : { source: null, factor: 1 };
+  const pattern = source ? ctx.createPattern(source, "repeat-x") : null;
+  const textureScale = width * scale / (image?.naturalHeight ?? 128) * factor;
   const X = (x: number) => ox + x * scale, Y = (y: number) => oy + y * scale;
   for (const segment of segments) {
     if (viewport && (segment.polygon.every(p => X(p.x) < 0) || segment.polygon.every(p => X(p.x) > viewport.width) ||
@@ -21,7 +23,7 @@ export function drawWallPolyline(ctx: CanvasRenderingContext2D, points: readonly
     const thickness = Math.max(segment.startWidth, segment.endWidth) * scale;
     if (pattern && image) {
       if (segment.startWidth === segment.endWidth) {
-        const k = segment.startWidth * scale / image.naturalHeight;
+        const k = segment.startWidth * scale / image.naturalHeight * factor;
         pattern.setTransform(new DOMMatrix([textureScale, 0, 0, k, 0, -segment.startWidth * scale / 2])); ctx.fillStyle = pattern;
         ctx.fillRect(-thickness * 2, -thickness * 2, segment.length * scale + thickness * 4, thickness * 4);
       } else {
@@ -43,7 +45,7 @@ export function drawWallPolyline(ctx: CanvasRenderingContext2D, points: readonly
         for (let i = firstStrip; i < lastStrip; i++) {
           const x = left + i * step, t = Math.max(0, Math.min(1, (x + step / 2) / (segment.length * scale)));
           const h = (segment.startWidth + (segment.endWidth - segment.startWidth) * t) * scale;
-          pattern.setTransform(new DOMMatrix([textureScale, 0, 0, h / image.naturalHeight, 0, -h / 2])); ctx.fillStyle = pattern;
+          pattern.setTransform(new DOMMatrix([textureScale, 0, 0, h / image.naturalHeight * factor, 0, -h / 2])); ctx.fillStyle = pattern;
           ctx.fillRect(x, -thickness * 2, step + .25, thickness * 4);
         }
       }
