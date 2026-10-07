@@ -1,14 +1,13 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { MapDocumentV6, MapDrawingStyle, Vec2 } from "@shared/maps/core";
 import { useCurrentUser } from "../api/currentUser";
 import { useAfterWrite } from "../data/hooks";
 import { useConfirm } from "../hooks/useConfirm";
+import { useEvent } from "../hooks/useEvent";
 import { Modal } from "../components/Modal";
 import { EntityPreviewContent } from "../components/EntityPreviewModal";
 import { SEARCH_DRAG_MIME } from "../components/LinkDropZone";
-import { MapWorkspaceTools } from "../maps/workspace/MapWorkspace";
-import { MapToolIcon } from "../maps/workspace/MapToolIcon";
 import { mapWorkspaceApi, downloadMapJson, downloadStoredMapOriginal } from "../maps/workspace/mapApi";
 import { editGeometry } from "../maps/workspace/editDocument";
 import { useMapNavigationGuard } from "../maps/workspace/useMapNavigationGuard";
@@ -19,10 +18,10 @@ import { CatalogPanel } from "../maps/workspace/CatalogPanel";
 import { LayersPanel } from "../maps/workspace/LayersPanel";
 import { layerName, NEW_LAYERS, type NewLayerKind } from "../maps/workspace/layerNames";
 import { ToolSettings, type BrushSettings } from "../maps/workspace/ToolSettings";
-import { WorkspaceMenu } from "../maps/workspace/WorkspaceMenu";
+import { WorkspaceHeader, WorkspaceStatus, WorkspaceToolRail, type GridLook } from "../maps/workspace/WorkspaceChrome";
 import { createWorkspaceRenderModel } from "../maps/workspace/renderV6";
 import { TOOL_LABELS, toolLayerKind, addLabel, quantize, removeSelection, type WorkspaceTool, type WorkspaceSelection } from "../maps/workspace/editorCommands";
-import { CATALOG_TOOLS, TOOL_SETS, TOOL_SET_LABELS, initialToolSet, rememberToolSet, toolsOf, type ToolSet } from "../maps/workspace/toolSets";
+import { CATALOG_TOOLS, initialToolSet, rememberToolSet, toolsOf, type ToolSet } from "../maps/workspace/toolSets";
 import { useWorkspaceDocument } from "../maps/workspace/useWorkspaceDocument";
 import { useWorkspaceGestures, type Gesture } from "../maps/workspace/useWorkspaceGestures";
 import { removeSelections } from "../maps/workspace/multiSelection";
@@ -237,6 +236,29 @@ export function MapWorkspacePage() {
     } finally { generationBusy.current = false; }
   }
 
+  // Стабильные ссылки для частей под memo: страница рендерится на каждое
+  // движение мыши и камеры, и новый обработчик в пропсах отменял бы пропуск.
+  const onChooseTool = useEvent(chooseTool), onChooseToolSet = useEvent(chooseToolSet);
+  const onUndo = useEvent(() => { finishGesture(); history.undo(); }), onRedo = useEvent(() => { finishGesture(); history.redo(); });
+  const grid = useMemo<GridLook>(() => ({ opacity: gridOpacity, lineWidth: gridLineWidth, lineStyle: gridLineStyle, color: gridColor }), [gridOpacity, gridLineWidth, gridLineStyle, gridColor]);
+  const onGrid = useEvent((patch: Partial<GridLook>) => {
+    if (patch.opacity !== undefined) setGridOpacity(patch.opacity);
+    if (patch.lineWidth !== undefined) setGridLineWidth(patch.lineWidth);
+    if (patch.lineStyle !== undefined) setGridLineStyle(patch.lineStyle);
+    if (patch.color !== undefined) setGridColor(patch.color);
+  });
+  const onStyle = useEvent((style: MapDrawingStyle) => commit((before) => ({ ...before, appearance: { style } })));
+  const onGenerator = useEvent(() => { finishGesture(); placement.cancel(); setSelection(null); setGeneratorOpen(true); });
+  const onSave = useEvent(() => { finishGesture(); void autosave.flush(); }), onBackup = useEvent(backup);
+  const onSymbol = useEvent((symbol: string) => { setSettings((current) => ({ ...current, symbol })); canvasRef.current?.focus(); });
+  const onMaterial = useEvent((material: string) => { finishGesture(); setSettings((current) => ({ ...current, material })); canvasRef.current?.focus(); });
+  const onScatter = useEvent((scatterProfile: string) => { finishGesture(); setSettings((current) => ({ ...current, scatterProfile })); canvasRef.current?.focus(); });
+  const onToolChange = useEvent((patch: Partial<BrushSettings>) => { if (gesture.current?.type !== "wall-line" || patch.wallWidth === undefined && patch.lineWidth === undefined) finishGesture(); setSettings((current) => ({ ...current, ...patch })); });
+  const onPaintRooms = useEvent(() => paintRooms(false)), onClearRooms = useEvent(() => paintRooms(true));
+  const onActivateLayer = useEvent((layerId: string) => { finishGesture(); setActiveLayer(layerId); });
+  const onCommit = useEvent(commit), onLiveEdit = useEvent(liveEdit), onSettleEdit = useEvent(settleEdit), onAddLayer = useEvent(addLayer), onConfirm = useEvent(confirm);
+  const onSnap = useEvent((value: boolean) => { finishGesture(); setSnap(value); });
+
   if (user?.role === "player") return <p>Новый редактор доступен мастеру.</p>;
   if (doc.loadError) return <div className="workspace-editor-message"><p role="alert">{doc.loadError}</p>{doc.actionError && <p role="alert">{doc.actionError}</p>}<button onClick={() => void downloadStoredMapOriginal(mapId).catch(showError)}>Скачать исходный документ</button><Link to="/maps">Мои карты</Link></div>;
   if (!map || !document) return <p className="workspace-editor-message">Загрузка карты…</p>;
@@ -256,57 +278,17 @@ export function MapWorkspacePage() {
       : autosave.status.kind === "error" ? "Не удалось сохранить карту. Правки остаются в редакторе." : null);
 
   return <div className="workspace-editor" aria-busy={leaving} data-catalog={CATALOG_TOOLS.includes(tool) || undefined}>
-    <MapWorkspaceTools><div className="map-workspace-tool-list" role="toolbar" aria-label="Инструменты нового редактора">
-      {TOOL_SETS[toolSet].map((group, index) => <Fragment key={index}>
-        {index > 0 && <hr className="map-workspace-tool-sep" />}
-        {group.map((name) => <button key={name} title={TOOL_LABELS[name]} aria-label={TOOL_LABELS[name]} aria-pressed={tool === name}
-          disabled={toolsLocked} onClick={() => chooseTool(name)}><MapToolIcon tool={name} /><span>{TOOL_LABELS[name]}</span></button>)}
-      </Fragment>)}
-    </div></MapWorkspaceTools>
+    <WorkspaceToolRail toolSet={toolSet} tool={tool} locked={toolsLocked} onChoose={onChooseTool} />
 
-    <header className="workspace-editor-header">
-      <Link to="/maps" className="workspace-back">← Все карты</Link>
-      <div className="workspace-title"><h1 title={map.name}>{map.name}</h1>
-        <span aria-live="polite">{leaving ? "Сохраняем перед выходом…" : SAVE_STATE[autosave.status.kind]}{document.grid ? ` · ${document.grid.columns} × ${document.grid.rows} клеток` : ""}</span></div>
-      <nav className="workspace-seg" aria-label="Набор инструментов">
-        {(Object.keys(TOOL_SET_LABELS) as ToolSet[]).map((set) => <button key={set} type="button" aria-pressed={toolSet === set} onClick={() => chooseToolSet(set)}>{TOOL_SET_LABELS[set]}</button>)}
-      </nav>
-      <div className="workspace-header-actions">
-        <button type="button" className="workspace-icon-button" aria-label="Отменить" title="Отменить · Ctrl+Z" disabled={!history.canUndo || disabled || leaving} onClick={() => { finishGesture(); history.undo(); }}>
-          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M9 4 3 10l6 6M3 10h11c8 0 8 11 0 11" /></svg></button>
-        <button type="button" className="workspace-icon-button" aria-label="Повторить" title="Повторить · Ctrl+Y" disabled={!history.canRedo || disabled || leaving} onClick={() => { finishGesture(); history.redo(); }}>
-          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="m15 4 6 6-6 6M21 10H10c-8 0-8 11 0 11" /></svg></button>
-        <WorkspaceMenu label="СЕТКА ▾" title="Сетка">
-          <label>Видимость · {Math.round(gridOpacity * 100)}%<input aria-label="Видимость сетки" type="range" min="0" max="100" value={Math.round(gridOpacity * 100)} onChange={event => setGridOpacity(Number(event.target.value) / 100)} /></label>
-          <label>Толщина · {gridLineWidth} px<input aria-label="Толщина линий сетки" type="range" min="0.5" max="4" step="0.5" value={gridLineWidth} onChange={event => setGridLineWidth(Number(event.target.value))} /></label>
-          <fieldset><legend>Линии сетки</legend>
-            <label><input type="radio" name="grid-line-style" checked={gridLineStyle === "solid"} onChange={() => setGridLineStyle("solid")} />Сплошная</label>
-            <label><input type="radio" name="grid-line-style" checked={gridLineStyle === "dashed"} onChange={() => setGridLineStyle("dashed")} />Пунктирная</label>
-          </fieldset>
-          <fieldset><legend>Цвет сетки</legend>
-            {([["#000000", "Чёрная"], ["#ffffff", "Белая"], ["#ff3e91", "Розовая"], ["#ffe14a", "Жёлтая"]] as const).map(([color, name]) => <label key={color}><input type="radio" name="grid-color" checked={gridColor === color} onChange={() => setGridColor(color)} />{name}</label>)}
-          </fieldset>
-        </WorkspaceMenu>
-        <WorkspaceMenu label="Карта ▾" title="Карта" className="workspace-map-menu">
-          <fieldset disabled={disabled || leaving}><legend>Оформление</legend>
-            {([["comic-punk", "Комикс-панк"], ["paper-ink", "Бумага и тушь"], ["blueprint", "Чертёж"]] as [MapDrawingStyle, string][]).map(([style, name]) => <label key={style}>
-              <input type="radio" name="workspace-style" checked={(document.appearance?.style ?? "paper-ink") === style}
-                onChange={() => commit((before) => ({ ...before, appearance: { style } }))} />{name}</label>)}
-          </fieldset>
-          <button type="button" data-close disabled={leaving || !!doc.compatibilityError || autosave.blocked || autosave.status.kind === "conflict"}
-            onClick={() => { finishGesture(); placement.cancel(); setSelection(null); setGeneratorOpen(true); }}>Быстрое подземелье…</button>
-          <button type="button" data-close disabled={saveBlocked} onClick={() => { finishGesture(); void autosave.flush(); }}>Сохранить сейчас</button>
-          <button type="button" data-close onClick={backup}>Скачать копию</button>
-          {map.document_version !== 6 && <Link to={`/maps/${map.id}`} data-close>Классический редактор</Link>}
-        </WorkspaceMenu>
-      </div>
-    </header>
+    <WorkspaceHeader mapName={map.name} status={`${leaving ? "Сохраняем перед выходом…" : SAVE_STATE[autosave.status.kind]}${document.grid ? ` · ${document.grid.columns} × ${document.grid.rows} клеток` : ""}`}
+      toolSet={toolSet} onToolSet={onChooseToolSet} canUndo={history.canUndo && !disabled && !leaving} canRedo={history.canRedo && !disabled && !leaving} onUndo={onUndo} onRedo={onRedo}
+      grid={grid} onGrid={onGrid} style={document.appearance?.style ?? "paper-ink"} onStyle={onStyle} styleLocked={disabled || leaving}
+      generatorLocked={leaving || !!doc.compatibilityError || autosave.blocked || autosave.status.kind === "conflict"} saveLocked={saveBlocked}
+      onGenerator={onGenerator} onSave={onSave} onBackup={onBackup} classicLink={map.document_version !== 6 ? `/maps/${map.id}` : null} />
 
     <div className="workspace-editor-body">
       {CATALOG_TOOLS.includes(tool) && <CatalogPanel tool={tool} toolSet={toolSet} comicPunk={document.appearance?.style === "comic-punk"} symbol={settings.symbol} material={settings.material} scatterProfile={settings.scatterProfile}
-        onSymbol={(symbol) => { setSettings((current) => ({ ...current, symbol })); canvasRef.current?.focus(); }}
-        onMaterial={(material) => { finishGesture(); setSettings((current) => ({ ...current, material })); canvasRef.current?.focus(); }}
-        onScatter={(scatterProfile) => { finishGesture(); setSettings((current) => ({ ...current, scatterProfile })); canvasRef.current?.focus(); }} />}
+        onSymbol={onSymbol} onMaterial={onMaterial} onScatter={onScatter} />}
 
       <div className="workspace-editor-stage" ref={wrapRef}>
         <WorkspaceCanvas map={map} document={document} camera={camera.cam} canvasRef={canvasRef} wrapRef={wrapRef} showGrid={showGrid} gridColor={gridColor} gridOpacity={gridOpacity} gridLineWidth={gridLineWidth} gridLineStyle={gridLineStyle} selectedId={selection?.id ?? null} selectedNodes={gestures.selectedNodes} preview={gestures.preview}
@@ -347,25 +329,14 @@ export function MapWorkspacePage() {
               onPreview={() => { if (selectedToken?.state === "active" && selectedToken.id) setEntityPreview({ type: selectedToken.sourceRef.kind, id: selectedToken.id }); }} />
             : <ToolSettings tool={tool} settings={settings} maskEraser={maskEraser}
               selectedRoomCount={selectedRoomShapes(document, selections).length} roomActionsDisabled={disabled || leaving || active?.kind !== "terrain" || active.representation !== "cells" || active.locked || !active.visible || autosave.status.kind === "conflict"}
-              onPaintRooms={() => paintRooms(false)} onClearRooms={() => paintRooms(true)}
-              onChange={(patch) => { if (gesture.current?.type !== "wall-line" || patch.wallWidth === undefined && patch.lineWidth === undefined) finishGesture(); setSettings((current) => ({ ...current, ...patch })); }} />}
-        <LayersPanel document={document} activeLayer={activeLayer} disabled={disabled || leaving} onActivate={(layerId) => { finishGesture(); setActiveLayer(layerId); }}
-          commit={commit} live={liveEdit} settle={settleEdit} onAdd={addLayer} confirm={confirm} />
+              onPaintRooms={onPaintRooms} onClearRooms={onClearRooms} onChange={onToolChange} />}
+        <LayersPanel document={document} activeLayer={activeLayer} disabled={disabled || leaving} onActivate={onActivateLayer}
+          commit={onCommit} live={onLiveEdit} settle={onSettleEdit} onAdd={onAddLayer} confirm={onConfirm} />
       </aside>
     </div>
 
-    <footer className="workspace-editor-status">
-      {map.cell_lore && document.grid && <span>1 клетка = {map.cell_lore}</span>}
-      <label className="workspace-status-layer">Слой:
-        <select value={activeLayer} onChange={(event) => { finishGesture(); setActiveLayer(event.target.value); }}>
-          {!active && <option value="">не выбран</option>}
-          {[...document.layers].reverse().map((layer) => <option key={layer.id} value={layer.id}>{layerName(layer)}{layer.locked ? " · заблокирован" : ""}</option>)}
-        </select></label>
-      <span className="workspace-status-cell">{gestures.cursorCell ? `Клетка ${gestures.cursorCell}` : ""}</span>
-      <label><input type="checkbox" checked={showGrid} onChange={event => setShowGrid(event.target.checked)} />Показывать сетку</label>
-      <label><input type="checkbox" checked={snap} onChange={event => { finishGesture(); setSnap(event.target.checked); }} />Привязывать к сетке</label>
-      <span className="workspace-status-hint">{renderWarning ? "Часть изображения пока недоступна" : "Пробел + мышь — сдвиг · колесо — масштаб · Ctrl+Z — отменить"}</span>
-    </footer>
+    <WorkspaceStatus cellLore={document.grid ? map.cell_lore || null : null} layers={document.layers} activeLayer={activeLayer} onLayer={onActivateLayer} cursorCell={gestures.cursorCell}
+      showGrid={showGrid} onShowGrid={setShowGrid} snap={snap} onSnap={onSnap} renderWarning={renderWarning} />
 
     <DungeonGenerator key={map.id} open={generatorOpen} current={disabled ? undefined : document} seed={map.seed} disabled={leaving || !!doc.compatibilityError || autosave.blocked || autosave.status.kind === "conflict"}
       onClose={() => setGeneratorOpen(false)} onApply={applyDungeon} />
