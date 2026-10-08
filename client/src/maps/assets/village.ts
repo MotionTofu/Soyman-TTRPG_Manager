@@ -12,6 +12,8 @@ export const VILLAGE_CATEGORIES: Record<VillageCategory, string> = {
   buildings: "Постройки", plants: "Растения", yard: "Двор", crossings: "Переправы и лагерь", fences: "Ограды",
 };
 /** cells — размер в клетках, как нарисовано. Здание — крыша-штамп: объект, внутрь не заходят. */
+/** Размеры — по таблице настоящих размеров: клетка тактической карты — 1,5 м (решение 2026-10-08).
+ * Здания, лодка и грядки ждут новых листов (E1/E2-buildings, G2-yard) и пока в прежних размерах. */
 export const VILLAGE_OBJECTS: readonly { key: string; name: string; category: VillageCategory; cells: readonly [number, number]; variants: number }[] = [
   { key: "hut", name: "Изба", category: "buildings", cells: [4, 3], variants: 1 },
   { key: "hut-small", name: "Малая изба", category: "buildings", cells: [3, 3], variants: 1 },
@@ -19,8 +21,8 @@ export const VILLAGE_OBJECTS: readonly { key: string; name: string; category: Vi
   { key: "barn", name: "Амбар", category: "buildings", cells: [5, 3], variants: 1 },
   { key: "mill", name: "Мельница", category: "buildings", cells: [4, 4], variants: 1 },
   { key: "smithy", name: "Кузня", category: "buildings", cells: [3, 2], variants: 1 },
-  { key: "willow", name: "Ива", category: "plants", cells: [2, 2], variants: 2 },
-  { key: "tree", name: "Дерево", category: "plants", cells: [2, 2], variants: 2 },
+  { key: "willow", name: "Ива", category: "plants", cells: [4, 4], variants: 2 },
+  { key: "tree", name: "Дерево", category: "plants", cells: [3, 3], variants: 2 },
   { key: "spruce", name: "Ель", category: "plants", cells: [2, 2], variants: 2 },
   { key: "bush", name: "Куст", category: "plants", cells: [1, 1], variants: 2 },
   { key: "reeds", name: "Камыш", category: "plants", cells: [1, 1], variants: 2 },
@@ -28,7 +30,7 @@ export const VILLAGE_OBJECTS: readonly { key: string; name: string; category: Vi
   { key: "stump", name: "Пень", category: "plants", cells: [1, 1], variants: 2 },
   { key: "log", name: "Бревно", category: "plants", cells: [2, 1], variants: 2 },
   { key: "boulders", name: "Валуны", category: "plants", cells: [1, 1], variants: 2 },
-  { key: "well", name: "Колодец", category: "yard", cells: [2, 2], variants: 2 },
+  { key: "well", name: "Колодец", category: "yard", cells: [1, 1], variants: 2 },
   { key: "cart", name: "Телега", category: "yard", cells: [1, 2], variants: 2 },
   { key: "haystack", name: "Стог", category: "yard", cells: [1, 1], variants: 2 },
   { key: "woodpile", name: "Поленница", category: "yard", cells: [2, 1], variants: 2 },
@@ -48,9 +50,9 @@ export const VILLAGE_OBJECTS: readonly { key: string; name: string; category: Vi
   { key: "idol", name: "Идол", category: "crossings", cells: [1, 1], variants: 2 },
   // Сама ограда — полоса в инструменте «Дорога»; здесь то, что ставят поштучно.
   { key: "fence-wattle-post", name: "Кол плетня", category: "fences", cells: [1, 1], variants: 2 },
-  { key: "fence-wattle-gate", name: "Калитка плетня", category: "fences", cells: [2, 1], variants: 2 },
+  { key: "fence-wattle-gate", name: "Калитка плетня", category: "fences", cells: [1, 1], variants: 2 },
   { key: "fence-pole-post", name: "Столб ограды", category: "fences", cells: [1, 1], variants: 2 },
-  { key: "fence-pole-gate", name: "Калитка ограды", category: "fences", cells: [2, 1], variants: 2 },
+  { key: "fence-pole-gate", name: "Калитка ограды", category: "fences", cells: [1, 1], variants: 2 },
 ];
 /** Ключи вариантов семейства: `well`, `well-2`. */
 export const variantKeys = (key: string, variants: number) => Array.from({ length: variants }, (_, i) => i ? `${key}-${i + 1}` : key);
@@ -72,14 +74,14 @@ export const VILLAGE_SURFACES: readonly { key: string; name: string; fill: strin
 export const VILLAGE_ROADS: readonly { key: string; name: string; group: "road" | "fence"; width: number; variants: number }[] = [
   { key: "road-dirt", name: "Грунтовая дорога", group: "road", width: 2, variants: 2 },
   { key: "road-path", name: "Тропа", group: "road", width: 1, variants: 2 },
-  { key: "road-cobbles", name: "Мощёная дорога", group: "road", width: 2, variants: 2 },
+  { key: "road-cobbles", name: "Мощёная дорога", group: "road", width: 3, variants: 2 },
   { key: "fence-wattle", name: "Плетень", group: "fence", width: 0.45, variants: 2 },
   { key: "fence-pole", name: "Жердяная ограда", group: "fence", width: 0.45, variants: 2 },
 ];
 /** Реки: линия, залитая поверхностью воды. Картинка та же, что у поверхности, поэтому привязана к карте, а не к руслу. */
 export const VILLAGE_RIVERS: readonly { key: string; name: string; width: number; variants: number }[] = [
   { key: "shallow", name: "Мелкая вода", width: 2, variants: 2 },
-  { key: "deep", name: "Глубокая вода", width: 3, variants: 2 },
+  { key: "deep", name: "Глубокая вода", width: 4, variants: 2 },
 ];
 /** Столб ограды по id её полосы: `fence-wattle-2` → `fence-wattle-post-2`. */
 export const fencePostId = (style: string) => /:fence-[a-z]+(-\d+)?$/.test(style) ? style.replace(/(-\d+)?$/, (tail) => `-post${tail}`) : null;
@@ -111,7 +113,7 @@ export function pickVariant(assetId: string, random: () => number = Math.random)
 const scatter = (slug: string, name: string, key: string, size: number) =>
   ({ key: `scatter/village-${slug}-v1`, name, assetId: villageId(key), assetIds: variantKeys(key, 2).map(villageId), size });
 export const VILLAGE_SCATTER = [
-  scatter("willows", "Ивы", "willow", 2.4), scatter("trees", "Лиственный лес", "tree", 2.4), scatter("spruces", "Ельник", "spruce", 2.4),
+  scatter("willows", "Ивы", "willow", 4), scatter("trees", "Лиственный лес", "tree", 3), scatter("spruces", "Ельник", "spruce", 2.4),
   scatter("bushes", "Кусты", "bush", 1.2), scatter("reeds", "Камыш", "reeds", 1.2), scatter("grass", "Трава", "grass-tuft", 1),
   scatter("boulders", "Валуны", "boulders", 1),
 ];
