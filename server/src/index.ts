@@ -238,7 +238,11 @@ app.use((req, res, next) => {
         ? "2mb"
         : isImport
           ? "50mb"
-          : "1mb";
+          : // Карта сохраняется целиком: плавные слои городской карты 200×200 — это мегабайты.
+            // ponytail: потолок вместо сжатия маски; если сохранение станет заметным — плотная запись кусков маски.
+            p.startsWith("/api/maps")
+            ? "16mb"
+            : "1mb";
   return (express.json({ limit }) as unknown as express.RequestHandler)(req, res, next);
 });
 app.use(attachUser);

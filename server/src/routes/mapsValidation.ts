@@ -45,7 +45,7 @@ export const MAP_SCALE_PRESETS: Record<MapScale, { width: number; height: number
 };
 
 export const MAP_MIN_SIDE = 8;
-export const MAP_MAX_SIDE = 100;
+export const MAP_MAX_SIDE = 200;
 export const MAP_MAX_THUMBNAIL_CHARS = 300_000;
 export const MAP_MAX_LABELS = 200;
 export const MAP_MAX_LABEL_TEXT = 64;

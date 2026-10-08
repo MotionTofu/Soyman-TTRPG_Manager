@@ -43,7 +43,7 @@ describe("maps create validation", () => {
       validateMapCreate({ name: "x", grid: "hex", scale: "planet", width: 7, height: 18 }, noParents)
     ).toMatchObject({ error: expect.stringContaining("width") });
     expect(
-      validateMapCreate({ name: "x", grid: "hex", scale: "planet", width: 24, height: 101 }, noParents)
+      validateMapCreate({ name: "x", grid: "hex", scale: "planet", width: 24, height: 201 }, noParents)
     ).toMatchObject({ error: expect.stringContaining("height") });
   });
 

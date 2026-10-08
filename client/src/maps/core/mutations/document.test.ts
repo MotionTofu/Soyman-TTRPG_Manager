@@ -152,7 +152,7 @@ describe("resizeGridDocument", () => {
     expect(r.ok && !r.changed && r.document === doc).toBe(true);
     expectErr(resizeGridDocument(doc, 7.5, 8), "bad-dims");
     expectErr(resizeGridDocument(doc, 4, 4), "out-of-range");
-    expectErr(resizeGridDocument(doc, 200, 8), "out-of-range");
+    expectErr(resizeGridDocument(doc, 201, 8), "out-of-range");
     expectErr(resizeGridDocument({ ...doc, grid: null }, 10, 10), "no-grid");
     expect(doc).toEqual(before);
   });

@@ -33,7 +33,7 @@ describe("map entry points", () => {
   });
   it("quick draft opens the main editor", async () => {
     show(); fireEvent.click(screen.getByRole("button", { name: "+ Черновик" }));
-    expect(await screen.findByText("Основной редактор")).toBeTruthy(); expect(mocks.post).toHaveBeenCalledWith("/maps", expect.objectContaining({ grid: "hex" }));
+    expect(await screen.findByText("Основной редактор")).toBeTruthy(); expect(mocks.post).toHaveBeenCalledWith("/maps", expect.objectContaining({ grid: "square", scale: "locality", width: 50, height: 40 }));
   });
   it("create-and-open uses the same main editor", async () => {
     show(); fireEvent.click(screen.getByRole("button", { name: "+ Новая карта" }));

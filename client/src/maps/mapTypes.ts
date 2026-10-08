@@ -56,7 +56,9 @@ export const overviewScale = (km: number): MapScale =>
 export const cellLoreOf = (km: number) => formatMeters(km * 1000);
 
 export const MAP_MIN_SIDE = 8;
-export const MAP_MAX_SIDE = 100;
+// Замер 2026-10-08: городская карта 200×200 с двумя сплошь закрашенными плавными слоями —
+// шаг мазка около 10 мс, сохранение (3 МБ) около секунды.
+export const MAP_MAX_SIDE = 200;
 
 // Разбор подписи «1 клетка = …» в метры (P2-1): «20 м», «2 км», «5 футов».
 // Не распарсилось — null, линейка показывает только клетки.
@@ -98,7 +100,7 @@ export function translateMapError(raw: unknown): string {
     [/name too long/i, "Название слишком длинное (максимум 200 символов)."],
     [/grid must be/i, "Неизвестный тип сетки."],
     [/scale must be one of/i, "Неизвестный масштаб."],
-    [/width\/height must be integers|width must be an integer/i, "Ширина и высота — целые числа 8–100."],
+    [/width\/height must be integers|width must be an integer/i, "Ширина и высота — целые числа 8–200."],
     [/cell_lore must be/i, "Подпись клетки — строка до 64 символов."],
     [/changing grid requires clearCells/i, "Смена сетки требует очистки клеток."],
     [/parent map not found/i, "Родительская карта не найдена."],

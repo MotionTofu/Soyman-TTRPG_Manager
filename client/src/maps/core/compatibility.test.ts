@@ -174,7 +174,7 @@ describe("assessCurrentEditorCompatibility", () => {
     expect(
       assessCurrentEditorCompatibility({ ...doc, grid: null }).reasons.some((r) => r.code === "grid-missing"),
     ).toBe(true);
-    const bigGrid = doc.grid && { ...doc.grid, columns: 200, rows: 200 };
+    const bigGrid = doc.grid && { ...doc.grid, columns: 201, rows: 201 };
     expect(
       assessCurrentEditorCompatibility({ ...doc, grid: bigGrid }).reasons.some((r) => r.code === "grid-dims"),
     ).toBe(true);

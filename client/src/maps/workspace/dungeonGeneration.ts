@@ -4,7 +4,9 @@ import { builtinMaterial, migrateLegacyMap } from "../core";
 import { createSplinePath } from "../core/mutations/paths";
 import { CRYPT_PACK } from "../assets/crypt";
 import { editGeometry } from "./editDocument";
-import { MAP_MIN_SIDE, MAP_MAX_SIDE } from "../mapTypes";
+import { MAP_MIN_SIDE } from "../mapTypes";
+/** Подземелье остаётся в прежних 100 клетках: предел карты подняли для города, генератор на большем не мерили. */
+const MAP_MAX_SIDE = 100;
 
 export interface DungeonSettings extends DungeonParams { width: number; height: number }
 export const DUNGEON_PRESETS = [
