@@ -5,12 +5,14 @@ import { VILLAGE_CATEGORIES, VILLAGE_OBJECTS, VILLAGE_PACK, VILLAGE_RIVERS, VILL
 import { MAP_SYMBOL_ASSETS } from "../assets/registry";
 import { SCATTER_PROFILES } from "../scatter";
 import { packName, packsFor } from "../assets/packs";
+import { liveImages, ownImageId, ownImageSrc, ownRandomId, useMapImageRevision, type OwnPack } from "../assets/ownPacks";
+import { Link } from "react-router-dom";
 import type { MapKind } from "../mapTypes";
 import type { WorkspaceTool } from "./editorCommands";
 
 /** Плитка — семейство. `variants` — что именно ставить: конкретный вариант или «случайный» (без картинки). */
 type Variant = { id: string; name: string; url: string | null };
-type Tile = { id: string; name: string; url: string | null; fill?: string; size?: string; chosen: boolean; choose: () => void; variants?: Variant[] };
+type Tile = { id: string; name: string; /** Теги: поиск ищет и по ним. */ tags?: string; url: string | null; fill?: string; size?: string; chosen: boolean; choose: () => void; variants?: Variant[] };
 /** `pack` — набор из библиотеки (`MAP_PACKS`): каталог показывает разделы только подключённых к карте наборов. */
 type Category = { key: string; name: string; pack: string; tiles: Tile[] };
 
@@ -23,10 +25,10 @@ function Thumbnail({ url, fill }: { url: string | null; fill?: string }) {
 const cells = (size: number) => size >= 1 ? `${Math.round(size * 10) / 10} кл.` : undefined;
 
 // memo: страница редактора рендерится на каждое движение мыши и камеры.
-export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, packs, onPacks, comicPunk, symbol, material, scatterProfile, lineStyle, onSymbol, onMaterial, onScatter, onLine }: {
+export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, packs, onPacks, ownPacks, comicPunk, symbol, material, scatterProfile, lineStyle, onSymbol, onMaterial, onScatter, onLine }: {
   tool: WorkspaceTool; /** Подборка «Местности» первой; иначе первым идёт «Склеп». */ local: boolean; comicPunk: boolean;
   /** Вид карты и подключённые к ней наборы; `onPacks` — новый список подключённых. */
-  kind: MapKind; packs: readonly string[]; onPacks: (packs: string[]) => void; symbol: string; material: string; scatterProfile: string;
+  kind: MapKind; packs: readonly string[]; onPacks: (packs: string[]) => void; /** Свои наборы Мастера с сервера. */ ownPacks: readonly OwnPack[]; symbol: string; material: string; scatterProfile: string;
   /** Рисунок линии текущего инструмента: дороги, реки или стены. Пусто — обычная линия или кладка. */
   lineStyle: string;
   onSymbol: (id: string) => void; onMaterial: (code: string) => void; onScatter: (key: string) => void; onLine: (style: string, width: number) => void;
@@ -34,6 +36,18 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, pack
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
   const [only, setOnly] = useState<string | null>(null), [choosing, setChoosing] = useState(false);
+  useMapImageRevision();
+  // Объекты своих наборов: раздел набора — раздел каталога. Плитка с вариантами ставит случайный, как у «Деревни».
+  const own: Category[] = ownPacks.filter((pack) => !pack.archived).flatMap((pack) => {
+    const items = pack.items.filter((item) => !item.archived && item.kind === "object" && liveImages(item).length);
+    return [...new Set(items.map((item) => item.section))].sort((a, b) => a.localeCompare(b, "ru")).map((section): Category => ({ key: `own:${pack.uid}:${section}`, name: section || "Объекты", pack: pack.uid,
+      tiles: items.filter((item) => item.section === section).map((item): Tile => {
+        const images = liveImages(item), ids = images.map(ownImageId), random = ownRandomId(item);
+        const variants: Variant[] | undefined = ids.length > 1 ? [{ id: random, name: "Случайный", url: null }, ...ids.map((id, i) => ({ id, name: `Вариант ${i + 1}`, url: ownImageSrc(id) }))] : undefined;
+        return { id: `own:${item.uid}`, name: item.name, tags: item.tags, url: ownImageSrc(ids[0]), size: `${item.w}×${item.h}`, variants,
+          chosen: symbol === random || ids.includes(symbol), choose: () => onSymbol(variants ? random : ids[0]) };
+      }) }));
+  });
   const objects = (group: "dungeon" | "region") => CARTOGRAPHY_OBJECTS.filter((item) => item.group === group).map((item): Tile => ({
     id: cartographyId(item.key), name: item.name, url: cartographyUrl(item.key), size: cells(item.size),
     chosen: symbol === cartographyId(item.key), choose: () => onSymbol(cartographyId(item.key)),
@@ -88,7 +102,7 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, pack
   // Подборка по карте — первой: где есть комнаты, это склеп, иначе деревня. Вторая остаётся рядом.
   const line = tool === "road" || tool === "river" || tool === "wall";
   const library: Category[] = tool === "road" ? roads : tool === "river" ? rivers : tool === "wall" ? (local ? [fences, masonry] : [masonry, fences]) : tool === "asset" ? [
-    ...(local ? [...villageObjects, ...cryptObjects] : [...cryptObjects, ...villageObjects]),
+    ...own, ...(local ? [...villageObjects, ...cryptObjects] : [...cryptObjects, ...villageObjects]),
     { key: "region", name: "Мир", pack: "ink", tiles: objects("region") },
     { key: "symbols", name: "Знаки", pack: "ink", tiles: MAP_SYMBOL_ASSETS.map((item) => ({ id: item.id, name: item.name, url: null, chosen: symbol === item.id, choose: () => onSymbol(item.id) })) },
   ] : tool === "scatter" ? [
@@ -96,11 +110,11 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, pack
     { key: "scatter", name: "Мир", pack: "ink", tiles: scatter(false) },
   ] : local ? [villageSurfaces, baseSurfaces] : [baseSurfaces, villageSurfaces];
   // Каталог — только подключённые наборы; `only` сужает до одного. Остальная библиотека видна через поиск.
-  const fit = packsFor(kind), mine = library.filter((entry) => packs.includes(entry.pack)), ownPacks = fit.filter((pack) => mine.some((entry) => entry.pack === pack.id));
-  const filter = only && ownPacks.some((pack) => pack.id === only) ? only : null;
+  const fit = packsFor(kind), mine = library.filter((entry) => packs.includes(entry.pack)), shown = fit.filter((pack) => mine.some((entry) => entry.pack === pack.id));
+  const filter = only && shown.some((pack) => pack.id === only) ? only : null;
   const categories = filter ? mine.filter((entry) => entry.pack === filter) : mine;
   const category = categories.find((entry) => entry.key === picked) ?? categories[0];
-  const needle = query.trim().toLocaleLowerCase("ru"), hit = (tile: Tile) => tile.name.toLocaleLowerCase("ru").includes(needle);
+  const needle = query.trim().toLocaleLowerCase("ru"), hit = (tile: Tile) => `${tile.name} ${tile.tags ?? ""}`.toLocaleLowerCase("ru").includes(needle);
   // Search looks through every category of the tool, not only the open one.
   const tiles = needle ? categories.flatMap((entry) => entry.tiles).filter(hit) : category?.tiles ?? [];
   // Найденное в неподключённых наборах: щелчок подключает набор и берёт вещь.
@@ -115,13 +129,14 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, pack
     <input type="search" aria-label="Найти в каталоге" placeholder="Найти во всех наборах…" value={query} onChange={(event) => setQuery(event.target.value)} />
     <div className="workspace-catalog-packs" role="group" aria-label="Наборы карты">
       <button type="button" aria-pressed={!filter} onClick={() => setOnly(null)}>Все</button>
-      {ownPacks.map((pack) => <button key={pack.id} type="button" aria-pressed={filter === pack.id} onClick={() => setOnly(pack.id)}>{pack.name}</button>)}
+      {shown.map((pack) => <button key={pack.id} type="button" aria-pressed={filter === pack.id} onClick={() => setOnly(pack.id)}>{pack.name}</button>)}
       <button type="button" aria-expanded={choosing} title="Подключить или отключить наборы этой карты" onClick={() => setChoosing(!choosing)}>＋ Набор</button>
     </div>
     {choosing && <div className="workspace-catalog-library" role="group" aria-label="Библиотека наборов">
       {fit.map((pack) => <label key={pack.id}><input type="checkbox" checked={packs.includes(pack.id)} disabled={packs.length === 1 && packs.includes(pack.id)} onChange={() => toggle(pack.id)} />
         <span><strong>{pack.name}</strong><small>{pack.genre} · {pack.place}</small></span></label>)}
       <small>Каталог показывает только подключённые наборы. Уже нарисованное с карты не пропадает.</small>
+      <Link to="/maps/packs">Свои наборы ассетов →</Link>
     </div>}
     {categories.length > 1 && !needle && <div className="workspace-catalog-chips" role="group" aria-label="Разделы каталога">
       {categories.map((entry) => <button key={entry.key} type="button" aria-pressed={entry.key === category?.key} onClick={() => setPicked(entry.key)}>{entry.name}</button>)}

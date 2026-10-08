@@ -325,7 +325,8 @@ export function MapsListPage() {
         actions={canEdit ? (
           <>
           <button type="button" onClick={() => setGeneratorOpen(true)}>Быстрое подземелье</button>
-          <button type="button" title="Пустая карта с дефолтами: гексы, континент 40×30. Имя — потом" onClick={quickDraft}>
+          <Link to="/maps/packs" className="button">Наборы ассетов</Link>
+          <button type="button" title="Пустая тактическая карта 50×40. Имя — потом" onClick={quickDraft}>
             + Черновик
           </button>
           </>

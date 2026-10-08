@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { MapDocumentV6, MapDrawingStyle, MapLiquidRecipe, MapWaterLook, Vec2 } from "@shared/maps/core";
 import { useCurrentUser } from "../api/currentUser";
-import { useAfterWrite } from "../data/hooks";
+import { useAfterWrite, useResource } from "../data/hooks";
 import { useConfirm } from "../hooks/useConfirm";
 import { useEvent } from "../hooks/useEvent";
 import { Modal } from "../components/Modal";
@@ -26,6 +26,7 @@ import { CATALOG_TOOLS, toolLabel } from "../maps/workspace/toolSets";
 import { updateGameplayEntity } from "../maps/core";
 import { mapKind } from "../maps/mapTypes";
 import { connectedPacks } from "../maps/assets/packs";
+import { registerOwnPacks, type OwnPack } from "../maps/assets/ownPacks";
 import { useWorkspaceDocument } from "../maps/workspace/useWorkspaceDocument";
 import { useWorkspaceGestures, type Gesture } from "../maps/workspace/useWorkspaceGestures";
 import { removeSelections } from "../maps/workspace/multiSelection";
@@ -48,6 +49,7 @@ import { LIQUID_LAYER, isLiquidLayer, moveLiquidsToLayer, replaceLiquid, usedLiq
 import "../maps/workspace/workspace-editor.css";
 
 const NO_LIQUIDS: readonly MapLiquidRecipe[] = [];
+const NO_OWN_PACKS: readonly OwnPack[] = [];
 const SAVE_STATE = { saved: "Сохранено", dirty: "Есть правки", saving: "Сохраняем…", error: "Ошибка сохранения", conflict: "Карта изменена в другом окне" } as const;
 const LAYER_CREATORS = { mask: createTerrainMaskLayer, path: createPathLayer, scatter: createScatterLayer, terrain: createTerrainLayer,
   gameplay: createGameplayLayer, label: createLabelLayer, object: createObjectLayer };
@@ -300,7 +302,9 @@ export function MapWorkspacePage() {
   const onStyle = useEvent((style: MapDrawingStyle) => commit((before) => ({ ...before, appearance: { ...before.appearance, style } })));
   const onWater = useEvent((water: MapWaterLook | undefined) => commit((before) => { const { water: _old, ...rest } = before.appearance ?? { style: "paper-ink" as const }; return { ...before, appearance: water === undefined ? rest : { ...rest, water } }; }));
   const storedPacks = document?.appearance?.packs, scale = map?.scale;
-  const packs = useMemo(() => connectedPacks(storedPacks, mapKind(scale ?? "locality")), [storedPacks, scale]);
+  // Свои наборы Мастера: их картинки заводятся в реестр до того, как каталог и карта спросят о них.
+  const ownPacks = useResource<OwnPack[]>("/map-packs").data ?? NO_OWN_PACKS;
+  const packs = useMemo(() => { registerOwnPacks(ownPacks); return connectedPacks(storedPacks, mapKind(scale ?? "locality")); }, [storedPacks, scale, ownPacks]);
   const onPacks = useEvent((next: string[]) => commit((before) => ({ ...before, appearance: { ...(before.appearance ?? { style: "paper-ink" as const }), packs: next } })));
   const onLiveWater = useEvent(() => onWater(documentRef.current?.appearance?.style === "comic-punk" ? "comic" : "soft"));
   const onWaterTune = useEvent((patch: { waterSpeed?: number; waterPixels?: number; waterShoal?: number }) => commit((before) => ({ ...before, appearance: { ...(before.appearance ?? { style: "paper-ink" as const }), ...patch } })));
@@ -371,7 +375,7 @@ export function MapWorkspacePage() {
       onGenerator={onGenerator} onSave={onSave} onBackup={onBackup} onPicture={onPicture} gl={gl} onGl={onGl} effects={effects} onEffect={onEffect} onEffectsReset={onEffectsReset} classicLink={map.document_version !== 6 ? `/maps/${map.id}` : null} />
 
     <div className="workspace-editor-body">
-      {CATALOG_TOOLS.includes(tool) && <CatalogPanel tool={tool} local={!hasRooms} kind={mapKind(map.scale)} packs={packs} onPacks={onPacks} comicPunk={document.appearance?.style === "comic-punk"} symbol={settings.symbol} material={settings.material} scatterProfile={settings.scatterProfile} lineStyle={(tool === "wall" ? settings.wallStyle : tool === "river" ? settings.riverStyle : settings.roadStyle) ?? ""}
+      {CATALOG_TOOLS.includes(tool) && <CatalogPanel tool={tool} local={!hasRooms} kind={mapKind(map.scale)} packs={packs} onPacks={onPacks} ownPacks={ownPacks} comicPunk={document.appearance?.style === "comic-punk"} symbol={settings.symbol} material={settings.material} scatterProfile={settings.scatterProfile} lineStyle={(tool === "wall" ? settings.wallStyle : tool === "river" ? settings.riverStyle : settings.roadStyle) ?? ""}
         onSymbol={onSymbol} onMaterial={onMaterial} onScatter={onScatter} onLine={onLine} />}
 
       <div className="workspace-editor-stage" ref={wrapRef}>

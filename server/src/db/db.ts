@@ -7313,6 +7313,49 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     database.exec("ALTER TABLE players ADD COLUMN interest TEXT NOT NULL DEFAULT ''");
   }
 
+  // Наборы ассетов карт (гриллинг 2026-10-08): общая библиотека Мастера. Объекты и варианты убираются
+  // пометкой archived_at, а не удалением: они могут стоять на картах.
+  if (!tableExists(database, "map_asset_packs")) {
+    database.exec(`CREATE TABLE map_asset_packs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uid TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      kinds TEXT NOT NULL DEFAULT '["tactical"]',
+      genres TEXT NOT NULL DEFAULT '[]',
+      native_style TEXT NOT NULL DEFAULT 'comic-punk',
+      archived_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+    database.exec(`CREATE TABLE map_asset_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uid TEXT NOT NULL UNIQUE,
+      pack_id INTEGER NOT NULL REFERENCES map_asset_packs(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL DEFAULT 'object',
+      name TEXT NOT NULL,
+      section TEXT NOT NULL DEFAULT '',
+      tags TEXT NOT NULL DEFAULT '',
+      data TEXT NOT NULL DEFAULT '{}',
+      archived_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+    database.exec("CREATE INDEX idx_map_asset_items_pack ON map_asset_items(pack_id)");
+    database.exec(`CREATE TABLE map_asset_images (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      uid TEXT NOT NULL UNIQUE,
+      item_id INTEGER NOT NULL REFERENCES map_asset_items(id) ON DELETE CASCADE,
+      role TEXT NOT NULL DEFAULT 'variant',
+      position INTEGER NOT NULL DEFAULT 0,
+      file_path TEXT NOT NULL,
+      width INTEGER NOT NULL,
+      height INTEGER NOT NULL,
+      archived_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+    database.exec("CREATE INDEX idx_map_asset_images_item ON map_asset_images(item_id)");
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);

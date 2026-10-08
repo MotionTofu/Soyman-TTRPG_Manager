@@ -74,6 +74,7 @@ const CompendiumEntryRedirectPage = lazy(() =>
 );
 const GraphPage = lazy(() => import("./pages/GraphPage").then((m) => ({ default: m.GraphPage })));
 const MapsListPage = lazy(() => import("./pages/MapsListPage").then((m) => ({ default: m.MapsListPage })));
+const MapPacksPage = lazy(() => import("./pages/MapPacksPage").then((m) => ({ default: m.MapPacksPage })));
 const MapEditorPage = lazy(() => import("./pages/MapEditorPage").then((m) => ({ default: m.MapEditorPage })));
 const MapWorkspacePage = lazy(() => import("./pages/MapWorkspacePage").then((m) => ({ default: m.MapWorkspacePage })));
 // Полотно тянет за собой @xyflow/react — единственную тяжёлую внешнюю
@@ -257,6 +258,7 @@ function App() {
               <Route path="/graph" element={<Navigate to="/graph/world" replace />} />
               <Route path="/graph/:view" element={<GraphPage />} />
               <Route path="/maps" element={<MapsListPage />} />
+              <Route path="/maps/packs" element={<MapPacksPage />} />
               <Route path="/maps/:id" element={<MapEditorPage />} />
               <Route path="/maps/:id/workspace" element={<MapWorkspacePage />} />
               <Route path="/storages" element={<StoragesSettingsPage />} />

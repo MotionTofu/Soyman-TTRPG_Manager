@@ -69,6 +69,7 @@ import { galleryRouter } from "./routes/gallery";
 import { entityRelationsRouter } from "./routes/entityRelations";
 import { playlistsRouter } from "./routes/playlists";
 import { soundsRouter, soundSetsRouter } from "./routes/sounds";
+import { mapPacksRouter } from "./routes/mapPacks";
 import { filesRouter } from "./routes/files";
 import { authRouter } from "./routes/auth";
 import { playerRouter } from "./routes/player";
@@ -497,6 +498,7 @@ app.use("/api/import", adventureImportRouter);
 app.use("/api/system-import", systemImportRouter);
 app.use("/api/health", healthRouter);
 app.use("/api/maps", mapsRouter);
+app.use("/api/map-packs", mapPacksRouter);
 
 // In the packaged app (and when a built client exists next to the server),
 // serve the compiled React app and fall back to it for any non-API route

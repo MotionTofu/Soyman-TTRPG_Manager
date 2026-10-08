@@ -1,4 +1,5 @@
 import type { MapKind } from "../mapTypes";
+import { ownPacks } from "./ownPacks";
 
 /** Набор — тема места: что можно поставить на карту. Оформление (как карта нарисована) — отдельная настройка.
  * Метки нужны, чтобы находить набор в библиотеке, когда их станут десятки: жанр, место, вид карты. */
@@ -11,9 +12,12 @@ export const MAP_PACKS: readonly MapPack[] = [
   { id: "crypt", name: "Склеп", genre: "Фэнтези", place: "Подземелье", kinds: ["tactical"] },
   { id: "ink", name: "Бумага и тушь", genre: "Любой жанр", place: "Знаки и мир", kinds: ["tactical", "city", "overview"] },
 ];
-export const packName = (id: string) => MAP_PACKS.find((pack) => pack.id === id)?.name ?? id;
+/** Встроенные наборы и свои наборы Мастера (не из архива) одним списком. Свой набор зовётся по uid. */
+export const allPacks = (): MapPack[] => [...MAP_PACKS, ...ownPacks().filter((pack) => !pack.archived).map((pack): MapPack =>
+  ({ id: pack.uid, name: pack.name, genre: "Свой набор", place: `вещей: ${pack.items.filter((item) => !item.archived).length}`, kinds: pack.kinds }))];
+export const packName = (id: string) => allPacks().find((pack) => pack.id === id)?.name ?? ownPacks().find((pack) => pack.uid === id)?.name ?? id;
 /** Наборы, которые подходят виду карты: обзорные на тактической не предлагаются, и наоборот. */
-export const packsFor = (kind: MapKind) => MAP_PACKS.filter((pack) => pack.kinds.includes(kind));
+export const packsFor = (kind: MapKind) => allPacks().filter((pack) => pack.kinds.includes(kind));
 /** Подключённые наборы карты. У карты без списка подключено всё подходящее — так старые карты ничего не теряют. */
 export function connectedPacks(stored: readonly string[] | undefined, kind: MapKind): string[] {
   const fit = packsFor(kind).map((pack) => pack.id), mine = stored?.filter((id) => fit.includes(id));

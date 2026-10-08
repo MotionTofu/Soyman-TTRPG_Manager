@@ -4,6 +4,7 @@ import { labelBox } from "../labelStyle";
 const bigLabel = (item: Parameters<typeof labelBox>[0], point: Vec2) => { if (!item.style?.size) return false; const box = labelBox(item); return point.x >= box.x && point.x <= box.x + box.w && point.y >= box.y && point.y <= box.y + box.h; };
 import { imageHit } from "./imageHit";
 import { pickVariant } from "../assets/village";
+import { pickOwnVariant } from "../assets/ownPacks";
 import { getMapImageAsset } from "../assets/registry";
 import { useEffect, useRef, useState, type MutableRefObject, type PointerEvent } from "react";
 import type { MapDocumentV6, Vec2 } from "@shared/maps/core";
@@ -289,7 +290,7 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
       try { requireEditableLayer(document, activeLayer, "label"); onLabel(quantize(document, point, snap), activeLayer); }
       catch (error) { showError(error); }
     }
-    else if (tool === "asset") commit((before) => addSymbol(before, activeLayer, crypto.randomUUID(), quantize(before, point, snap), pickVariant(settings.symbol)));
+    else if (tool === "asset") commit((before) => addSymbol(before, activeLayer, crypto.randomUUID(), quantize(before, point, snap), pickVariant(pickOwnVariant(settings.symbol))));
   }
   function track(point: Vec2) {
     const grid = documentRef.current?.grid;
@@ -376,7 +377,7 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
   const layer = documentRef.current?.layers.find(entry => entry.id === activeLayer);
   const assetPreview = tool === "asset" && brushCursor && !busy && !doc.disabled && autosave.status.kind !== "conflict" && !placement.pending &&
     !gesture.current && layer?.kind === "object" && layer.visible && !layer.locked
-    ? { position: quantize(documentRef.current!, brushCursor, snap), assetId: pickVariant(settings.symbol, () => 0) } : null;
+    ? { position: quantize(documentRef.current!, brushCursor, snap), assetId: pickVariant(pickOwnVariant(settings.symbol, () => 0), () => 0) } : null;
   const cellBrush = brushCursor && documentRef.current && (tool === "brush" || tool === "eraser") && layer?.kind === "terrain" && layer.representation === "cells" &&
     settings.cellMode !== "area" && !busy && !doc.disabled && !placement.pending
     ? cellBrushFootprint(documentRef.current, brushCursor, settings.cellSize ?? 1) : null;
