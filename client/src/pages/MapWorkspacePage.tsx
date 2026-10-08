@@ -24,6 +24,7 @@ import { TOOL_LABELS, toolLayerKind, addLabel, quantize, removeSelection, type W
 import { downloadMapPicture } from "../maps/workspace/pictureExport";
 import { CATALOG_TOOLS, toolsOf } from "../maps/workspace/toolSets";
 import { mapKind } from "../maps/mapTypes";
+import { connectedPacks } from "../maps/assets/packs";
 import { useWorkspaceDocument } from "../maps/workspace/useWorkspaceDocument";
 import { useWorkspaceGestures, type Gesture } from "../maps/workspace/useWorkspaceGestures";
 import { removeSelections } from "../maps/workspace/multiSelection";
@@ -285,6 +286,9 @@ export function MapWorkspacePage() {
   });
   const onStyle = useEvent((style: MapDrawingStyle) => commit((before) => ({ ...before, appearance: { ...before.appearance, style } })));
   const onWater = useEvent((water: MapWaterLook | undefined) => commit((before) => { const { water: _old, ...rest } = before.appearance ?? { style: "paper-ink" as const }; return { ...before, appearance: water === undefined ? rest : { ...rest, water } }; }));
+  const storedPacks = document?.appearance?.packs, scale = map?.scale;
+  const packs = useMemo(() => connectedPacks(storedPacks, mapKind(scale ?? "locality")), [storedPacks, scale]);
+  const onPacks = useEvent((next: string[]) => commit((before) => ({ ...before, appearance: { ...(before.appearance ?? { style: "paper-ink" as const }), packs: next } })));
   const onLiveWater = useEvent(() => onWater(documentRef.current?.appearance?.style === "comic-punk" ? "comic" : "soft"));
   const onWaterTune = useEvent((patch: { waterSpeed?: number; waterPixels?: number; waterShoal?: number }) => commit((before) => ({ ...before, appearance: { ...(before.appearance ?? { style: "paper-ink" as const }), ...patch } })));
   const onFrame = useEvent((frame: number | undefined) => commit((before) => { const { frame: _old, ...rest } = before.appearance ?? { style: "paper-ink" as const }; return { ...before, appearance: frame === undefined ? rest : { ...rest, frame } }; }));
@@ -353,7 +357,7 @@ export function MapWorkspacePage() {
       onGenerator={onGenerator} onSave={onSave} onBackup={onBackup} onPicture={onPicture} gl={gl} onGl={onGl} effects={effects} onEffect={onEffect} onEffectsReset={onEffectsReset} classicLink={map.document_version !== 6 ? `/maps/${map.id}` : null} />
 
     <div className="workspace-editor-body">
-      {CATALOG_TOOLS.includes(tool) && <CatalogPanel tool={tool} local={!hasRooms} comicPunk={document.appearance?.style === "comic-punk"} symbol={settings.symbol} material={settings.material} scatterProfile={settings.scatterProfile} lineStyle={(tool === "wall" ? settings.wallStyle : tool === "river" ? settings.riverStyle : settings.roadStyle) ?? ""}
+      {CATALOG_TOOLS.includes(tool) && <CatalogPanel tool={tool} local={!hasRooms} kind={mapKind(map.scale)} packs={packs} onPacks={onPacks} comicPunk={document.appearance?.style === "comic-punk"} symbol={settings.symbol} material={settings.material} scatterProfile={settings.scatterProfile} lineStyle={(tool === "wall" ? settings.wallStyle : tool === "river" ? settings.riverStyle : settings.roadStyle) ?? ""}
         onSymbol={onSymbol} onMaterial={onMaterial} onScatter={onScatter} onLine={onLine} />}
 
       <div className="workspace-editor-stage" ref={wrapRef}>

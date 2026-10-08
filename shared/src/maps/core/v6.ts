@@ -64,6 +64,8 @@ export interface MapDocumentV6 extends Omit<MapDocumentV5, "v" | "layers"> {
     waterSpeed?: number; waterPixels?: number;
     /** Отмель: на скольких клетках от берега вода набирает свою глубину, 0…6 (без поля — 0, отмели нет). */
     waterShoal?: number;
+    /** Подключённые наборы карты: каталог редактора показывает только их. Нет списка — подключено всё подходящее. */
+    packs?: string[];
     /** Свои жидкости карты, до семи. */
     liquids?: MapLiquidRecipe[] };
 }
@@ -134,6 +136,10 @@ export function validateMapDocumentV6(doc: unknown): ValidationIssue[] {
     if (value !== undefined && (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max))
       errors.push({ code: "appearance.bad-water", path: `appearance.${key}`, message: `expected ${min}..${max}` });
   }
+  const packs = record(doc.appearance) ? doc.appearance.packs : undefined;
+  if (packs !== undefined && (!Array.isArray(packs) || !packs.length || packs.length > 32 || new Set(packs).size !== packs.length
+    || packs.some((id) => typeof id !== "string" || !/^[a-z0-9][a-z0-9:_-]{0,63}$/.test(id))))
+    errors.push({ code: "appearance.bad-packs", path: "appearance.packs", message: "expected 1..32 unique pack ids" });
   const liquids = record(doc.appearance) ? doc.appearance.liquids : undefined;
   if (liquids !== undefined) {
     if (!Array.isArray(liquids) || liquids.length > 7) errors.push({ code: "appearance.bad-liquid", path: "appearance.liquids", message: "expected up to 7 recipes" });
@@ -167,6 +173,7 @@ const canonAppearance = (doc: MapDocumentV6) => doc.appearance
     ...(doc.appearance.waterSpeed !== undefined ? { waterSpeed: doc.appearance.waterSpeed } : {}),
     ...(doc.appearance.waterPixels !== undefined ? { waterPixels: doc.appearance.waterPixels } : {}),
     ...(doc.appearance.waterShoal !== undefined ? { waterShoal: doc.appearance.waterShoal } : {}),
+    ...(doc.appearance.packs ? { packs: [...doc.appearance.packs] } : {}),
     ...(doc.appearance.liquids?.length ? { liquids: [...doc.appearance.liquids].sort((a, b) => a.key < b.key ? -1 : 1).map(item => ({ key: item.key, name: item.name,
       tones: [...item.tones] as [string, string, string], pace: item.pace, size: item.size, bed: item.bed, glow: item.glow, pattern: item.pattern, rim: item.rim, solid: item.solid })) } : {}) } } : {};
 export function canonicalizeMapDocumentV6(doc: MapDocumentV6): MapDocumentV6 {

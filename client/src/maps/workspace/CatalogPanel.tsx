@@ -4,13 +4,15 @@ import { CRYPT_CATEGORIES, CRYPT_OBJECTS, CRYPT_SURFACES, cryptId, cryptUrl, typ
 import { VILLAGE_CATEGORIES, VILLAGE_OBJECTS, VILLAGE_PACK, VILLAGE_RIVERS, VILLAGE_ROADS, VILLAGE_SURFACES, randomVariantId, variantKeys, villageId, villageSurfaceCode, villageUrl, type VillageCategory } from "../assets/village";
 import { MAP_SYMBOL_ASSETS } from "../assets/registry";
 import { SCATTER_PROFILES } from "../scatter";
+import { packName, packsFor } from "../assets/packs";
+import type { MapKind } from "../mapTypes";
 import type { WorkspaceTool } from "./editorCommands";
 
 /** Плитка — семейство. `variants` — что именно ставить: конкретный вариант или «случайный» (без картинки). */
 type Variant = { id: string; name: string; url: string | null };
 type Tile = { id: string; name: string; url: string | null; fill?: string; size?: string; chosen: boolean; choose: () => void; variants?: Variant[] };
+/** `pack` — набор из библиотеки (`MAP_PACKS`): каталог показывает разделы только подключённых к карте наборов. */
 type Category = { key: string; name: string; pack: string; tiles: Tile[] };
-const PAPER = "Бумага и тушь", CRYPT = "Подземелье · Склеп", VILLAGE = "Местность · Деревня у реки";
 
 function Thumbnail({ url, fill }: { url: string | null; fill?: string }) {
   const [failed, setFailed] = useState(false);
@@ -21,14 +23,17 @@ function Thumbnail({ url, fill }: { url: string | null; fill?: string }) {
 const cells = (size: number) => size >= 1 ? `${Math.round(size * 10) / 10} кл.` : undefined;
 
 // memo: страница редактора рендерится на каждое движение мыши и камеры.
-export const CatalogPanel = memo(function CatalogPanel({ tool, local, comicPunk, symbol, material, scatterProfile, lineStyle, onSymbol, onMaterial, onScatter, onLine }: {
-  tool: WorkspaceTool; /** Подборка «Местности» первой; иначе первым идёт «Склеп». */ local: boolean; comicPunk: boolean; symbol: string; material: string; scatterProfile: string;
+export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, packs, onPacks, comicPunk, symbol, material, scatterProfile, lineStyle, onSymbol, onMaterial, onScatter, onLine }: {
+  tool: WorkspaceTool; /** Подборка «Местности» первой; иначе первым идёт «Склеп». */ local: boolean; comicPunk: boolean;
+  /** Вид карты и подключённые к ней наборы; `onPacks` — новый список подключённых. */
+  kind: MapKind; packs: readonly string[]; onPacks: (packs: string[]) => void; symbol: string; material: string; scatterProfile: string;
   /** Рисунок линии текущего инструмента: дороги, реки или стены. Пусто — обычная линия или кладка. */
   lineStyle: string;
   onSymbol: (id: string) => void; onMaterial: (code: string) => void; onScatter: (key: string) => void; onLine: (style: string, width: number) => void;
 }) {
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
+  const [only, setOnly] = useState<string | null>(null), [choosing, setChoosing] = useState(false);
   const objects = (group: "dungeon" | "region") => CARTOGRAPHY_OBJECTS.filter((item) => item.group === group).map((item): Tile => ({
     id: cartographyId(item.key), name: item.name, url: cartographyUrl(item.key), size: cells(item.size),
     chosen: symbol === cartographyId(item.key), choose: () => onSymbol(cartographyId(item.key)),
@@ -50,16 +55,16 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, comicPunk,
     : assetId.startsWith(cartographyId("")) ? cartographyUrl(assetId.slice(cartographyId("").length)) : null;
   const scatter = (own: boolean) => SCATTER_PROFILES.filter((item) => item.assetId.startsWith(`${VILLAGE_PACK.id}:`) === own).map((item): Tile =>
     ({ id: item.key, name: item.name, url: scatterUrl(item.assetId), chosen: scatterProfile === item.key, choose: () => onScatter(item.key) }));
-  const villageObjects = (Object.keys(VILLAGE_CATEGORIES) as VillageCategory[]).map((key) => ({ key, name: VILLAGE_CATEGORIES[key], pack: VILLAGE, tiles: village(key) }));
-  const cryptObjects = (Object.keys(CRYPT_CATEGORIES) as CryptCategory[]).map((key) => ({ key, name: CRYPT_CATEGORIES[key], pack: CRYPT, tiles: crypt(key) }));
+  const villageObjects = (Object.keys(VILLAGE_CATEGORIES) as VillageCategory[]).map((key) => ({ key, name: VILLAGE_CATEGORIES[key], pack: "village", tiles: village(key) }));
+  const cryptObjects = (Object.keys(CRYPT_CATEGORIES) as CryptCategory[]).map((key) => ({ key, name: CRYPT_CATEGORIES[key], pack: "crypt", tiles: crypt(key) }));
   // Воды и других жидкостей здесь нет: у них свой инструмент со слотами.
-  const villageSurfaces: Category = { key: "village-surfaces", name: "Местность", pack: VILLAGE, tiles: [...VILLAGE_SURFACES.filter((item) => item.key !== "shallow" && item.key !== "deep").map((item): Tile => {
+  const villageSurfaces: Category = { key: "village-surfaces", name: "Местность", pack: "village", tiles: [...VILLAGE_SURFACES.filter((item) => item.key !== "shallow" && item.key !== "deep").map((item): Tile => {
     const keys = variantKeys(item.key, item.variants);
     return { id: villageSurfaceCode(item.key), name: item.name, url: villageUrl(item.key), chosen: keys.some((key) => material === villageSurfaceCode(key)),
       choose: () => onMaterial(villageSurfaceCode(item.key)),
       variants: keys.map((key, i) => ({ id: villageSurfaceCode(key), name: `Вариант ${i + 1}`, url: villageUrl(key) })) };
   })] };
-  const baseSurfaces: Category = { key: "surfaces", name: local ? "Основные" : "Подземелье", pack: comicPunk ? CRYPT : PAPER, tiles: CARTOGRAPHY_SURFACES.map((item) => ({
+  const baseSurfaces: Category = { key: "surfaces", name: local ? "Основные" : "Подземелье", pack: comicPunk ? "crypt" : "ink", tiles: CARTOGRAPHY_SURFACES.map((item) => ({
     id: item.code, name: item.name, url: comicPunk && CRYPT_SURFACES[item.code] ? cryptUrl(CRYPT_SURFACES[item.code]) : item.key ? cartographyUrl(item.key) : null,
     chosen: material === item.code, choose: () => onMaterial(item.code),
   })) };
@@ -72,33 +77,54 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, comicPunk,
       variants: keys.map((key, i) => ({ id: villageId(key), name: `Вариант ${i + 1}`, url: villageUrl(key) })) };
   });
   const plain = (id: string, name: string, width: number, url: string | null = null): Tile => ({ id, name, url, chosen: !lineStyle, choose: () => onLine("", width) });
-  const roads: Category[] = [{ key: "roads", name: "Дороги", pack: VILLAGE, tiles: [plain("road-ink", "Линия тушью", 0.3), ...strips(VILLAGE_ROADS.filter((item) => item.group === "road"))] }];
-  const rivers: Category[] = [{ key: "rivers", name: "Реки", pack: VILLAGE, tiles: [plain("river-ink", "Линия", 0.3), ...strips(VILLAGE_RIVERS)] }];
+  // Простая линия — из «Бумаги и туши»: она остаётся, даже если «Деревня» не подключена.
+  const roads: Category[] = [{ key: "roads", name: "Дороги", pack: "village", tiles: strips(VILLAGE_ROADS.filter((item) => item.group === "road")) },
+    { key: "roads-ink", name: "Простые", pack: "ink", tiles: [plain("road-ink", "Линия тушью", 0.3)] }];
+  const rivers: Category[] = [{ key: "rivers", name: "Реки", pack: "village", tiles: strips(VILLAGE_RIVERS) },
+    { key: "rivers-ink", name: "Простые", pack: "ink", tiles: [plain("river-ink", "Линия", 0.3)] }];
   // Ограда — стена: её не перешагнуть, и на «Столе» она будет считаться преградой, в отличие от дороги.
-  const fences: Category = { key: "fences", name: "Ограды", pack: VILLAGE, tiles: strips(VILLAGE_ROADS.filter((item) => item.group === "fence")) };
-  const masonry: Category = { key: "walls", name: "Стены", pack: CRYPT, tiles: [plain("wall-masonry", "Каменная кладка", 0.36, cryptUrl("wall-masonry"))] };
+  const fences: Category = { key: "fences", name: "Ограды", pack: "village", tiles: strips(VILLAGE_ROADS.filter((item) => item.group === "fence")) };
+  const masonry: Category = { key: "walls", name: "Стены", pack: "crypt", tiles: [plain("wall-masonry", "Каменная кладка", 0.36, cryptUrl("wall-masonry"))] };
   // Подборка по карте — первой: где есть комнаты, это склеп, иначе деревня. Вторая остаётся рядом.
   const line = tool === "road" || tool === "river" || tool === "wall";
-  const categories: Category[] = tool === "road" ? roads : tool === "river" ? rivers : tool === "wall" ? (local ? [fences, masonry] : [masonry, fences]) : tool === "asset" ? [
+  const library: Category[] = tool === "road" ? roads : tool === "river" ? rivers : tool === "wall" ? (local ? [fences, masonry] : [masonry, fences]) : tool === "asset" ? [
     ...(local ? [...villageObjects, ...cryptObjects] : [...cryptObjects, ...villageObjects]),
-    { key: "region", name: "Мир", pack: PAPER, tiles: objects("region") },
-    { key: "symbols", name: "Знаки", pack: PAPER, tiles: MAP_SYMBOL_ASSETS.map((item) => ({ id: item.id, name: item.name, url: null, chosen: symbol === item.id, choose: () => onSymbol(item.id) })) },
+    { key: "region", name: "Мир", pack: "ink", tiles: objects("region") },
+    { key: "symbols", name: "Знаки", pack: "ink", tiles: MAP_SYMBOL_ASSETS.map((item) => ({ id: item.id, name: item.name, url: null, chosen: symbol === item.id, choose: () => onSymbol(item.id) })) },
   ] : tool === "scatter" ? [
-    { key: "village-scatter", name: "Местность", pack: VILLAGE, tiles: scatter(true) },
-    { key: "scatter", name: "Мир", pack: PAPER, tiles: scatter(false) },
+    { key: "village-scatter", name: "Местность", pack: "village", tiles: scatter(true) },
+    { key: "scatter", name: "Мир", pack: "ink", tiles: scatter(false) },
   ] : local ? [villageSurfaces, baseSurfaces] : [baseSurfaces, villageSurfaces];
+  // Каталог — только подключённые наборы; `only` сужает до одного. Остальная библиотека видна через поиск.
+  const fit = packsFor(kind), mine = library.filter((entry) => packs.includes(entry.pack)), ownPacks = fit.filter((pack) => mine.some((entry) => entry.pack === pack.id));
+  const filter = only && ownPacks.some((pack) => pack.id === only) ? only : null;
+  const categories = filter ? mine.filter((entry) => entry.pack === filter) : mine;
   const category = categories.find((entry) => entry.key === picked) ?? categories[0];
-  const needle = query.trim().toLocaleLowerCase("ru");
+  const needle = query.trim().toLocaleLowerCase("ru"), hit = (tile: Tile) => tile.name.toLocaleLowerCase("ru").includes(needle);
   // Search looks through every category of the tool, not only the open one.
-  const tiles = needle ? categories.flatMap((entry) => entry.tiles).filter((tile) => tile.name.toLocaleLowerCase("ru").includes(needle)) : category.tiles;
-  const chosen = categories.flatMap((entry) => entry.tiles).find((tile) => tile.chosen);
+  const tiles = needle ? categories.flatMap((entry) => entry.tiles).filter(hit) : category?.tiles ?? [];
+  // Найденное в неподключённых наборах: щелчок подключает набор и берёт вещь.
+  const foreign = needle ? library.filter((entry) => !packs.includes(entry.pack) && fit.some((pack) => pack.id === entry.pack))
+    .flatMap((entry) => entry.tiles.filter(hit).map((tile) => ({ tile, pack: entry.pack }))) : [];
+  const chosen = library.flatMap((entry) => entry.tiles).find((tile) => tile.chosen);
   const current = line ? lineStyle : tool === "asset" ? symbol : material;
   const pick = line ? (id: string) => onLine(id, lineWidth(id)) : tool === "asset" ? onSymbol : onMaterial;
+  const toggle = (id: string) => { const next = packs.includes(id) ? packs.filter((entry) => entry !== id) : [...packs, id]; if (next.length) onPacks(next); };
   return <aside className="workspace-catalog" aria-label="Каталог">
     <h2 className="workspace-panel-title">Каталог</h2>
-    <input type="search" aria-label="Найти в каталоге" placeholder="Найти…" value={query} onChange={(event) => setQuery(event.target.value)} />
+    <input type="search" aria-label="Найти в каталоге" placeholder="Найти во всех наборах…" value={query} onChange={(event) => setQuery(event.target.value)} />
+    <div className="workspace-catalog-packs" role="group" aria-label="Наборы карты">
+      <button type="button" aria-pressed={!filter} onClick={() => setOnly(null)}>Все</button>
+      {ownPacks.map((pack) => <button key={pack.id} type="button" aria-pressed={filter === pack.id} onClick={() => setOnly(pack.id)}>{pack.name}</button>)}
+      <button type="button" aria-expanded={choosing} title="Подключить или отключить наборы этой карты" onClick={() => setChoosing(!choosing)}>＋ Набор</button>
+    </div>
+    {choosing && <div className="workspace-catalog-library" role="group" aria-label="Библиотека наборов">
+      {fit.map((pack) => <label key={pack.id}><input type="checkbox" checked={packs.includes(pack.id)} disabled={packs.length === 1 && packs.includes(pack.id)} onChange={() => toggle(pack.id)} />
+        <span><strong>{pack.name}</strong><small>{pack.genre} · {pack.place}</small></span></label>)}
+      <small>Каталог показывает только подключённые наборы. Уже нарисованное с карты не пропадает.</small>
+    </div>}
     {categories.length > 1 && !needle && <div className="workspace-catalog-chips" role="group" aria-label="Разделы каталога">
-      {categories.map((entry) => <button key={entry.key} type="button" aria-pressed={entry.key === category.key} onClick={() => setPicked(entry.key)}>{entry.name}</button>)}
+      {categories.map((entry) => <button key={entry.key} type="button" aria-pressed={entry.key === category?.key} onClick={() => setPicked(entry.key)}>{entry.name}</button>)}
     </div>}
     {chosen?.variants && <div className="workspace-catalog-variants" role="group" aria-label={`${chosen.name}: вариант`}>
       <strong>{chosen.name}</strong>
@@ -111,8 +137,13 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, comicPunk,
         <Thumbnail url={tile.url} fill={tile.fill} />
         <span><strong>{tile.name}</strong>{tile.size && <small>{tile.size}</small>}</span>
       </button>)}
-      {!tiles.length && <p>Ничего не найдено. Попробуйте другое название.</p>}
+      {!tiles.length && !foreign.length && <p>{needle ? "Ничего не найдено. Попробуйте другое название." : "В подключённых наборах для этого инструмента ничего нет. Подключите набор: «＋ Набор»."}</p>}
+      {foreign.length > 0 && <p className="workspace-catalog-foreign">В неподключённых наборах — щелчок подключит набор:</p>}
+      {foreign.map(({ tile, pack }) => <button key={`${pack}:${tile.id}`} type="button" title={`Подключить набор «${packName(pack)}» и взять`} onClick={() => { onPacks([...packs, pack]); tile.choose(); }}>
+        <Thumbnail url={tile.url} fill={tile.fill} />
+        <span><strong>{tile.name}</strong><small>{packName(pack)}</small></span>
+      </button>)}
     </div>
-    <p className="workspace-catalog-pack">Набор: SoyMan · {category.pack}</p>
+    {category && <p className="workspace-catalog-pack">Набор: {packName(category.pack)}</p>}
   </aside>;
 });

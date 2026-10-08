@@ -53,6 +53,11 @@ describe("V6 boundary and tokens", () => {
     for (const bad of [{ key: "lava" }, { pace: 9 }, { tones: ["red", "#000000", "#ffffff"] }, { pattern: "waves" }])
       expect(parseMapDocumentV6({ ...wet, appearance: { style: "paper-ink", liquids: [{ ...liquid, ...bad }] } }).ok).toBe(false);
     expect(parseMapDocumentV6({ ...wet, appearance: { style: "paper-ink", liquids: [liquid, liquid] } }).ok).toBe(false);
+    // Подключённые наборы карты: непустой список уникальных идентификаторов.
+    const packed = parseMapDocumentV6({ ...wet, appearance: { style: "paper-ink", packs: ["village", "ink"] } });
+    expect(packed.ok && packed.value.appearance?.packs).toEqual(["village", "ink"]);
+    for (const packs of [[], ["village", "village"], ["Деревня"], "village"])
+      expect(parseMapDocumentV6({ ...wet, appearance: { style: "paper-ink", packs } }).ok).toBe(false);
   });
   it("bestiary refs remain independent and portable; creatures use the being silhouette", () => {
     const source = { kind: "compendium_entry" as const, uid: ref.uid };
