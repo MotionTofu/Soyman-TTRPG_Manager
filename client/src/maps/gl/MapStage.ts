@@ -3,11 +3,14 @@ import { renderMap, type RenderOptions } from "../render";
 import { inRange, tileSide, visibleTiles, type TileRange } from "./tiles";
 import { createStyleFilter, type MapLook } from "./styleFilter";
 import { anyWeather, createWeatherFilter, type MapWeather } from "./weatherFilter";
+import { createWaterFilter, drawWaterMask, type MapWater } from "./waterFilter";
 
 /** Всё, что рисует карта, кроме камеры. Новый объект — новое содержимое плиток. */
 export type MapStageContent = Omit<RenderOptions, "scale" | "ox" | "oy">;
 type Frame = { content: MapStageContent; scale: number; ox: number; oy: number; cssW: number; cssH: number; dpr: number };
 type Tile = { scale: number; tx: number; ty: number; content: MapStageContent; canvas: HTMLCanvasElement; sprite: Sprite;
+  /** Вторая половина плитки — всё, что над землёй; есть, только пока вода рисуется шейдером. */
+  over?: { canvas: HTMLCanvasElement; sprite: Sprite };
   /** Правка прошла мимо плитки, и её не перерисовали. Сцена дорисует её, когда правки стихнут. */
   stale?: boolean };
 /** Область мира в клетках. */
@@ -28,6 +31,14 @@ const BUDGET_MS = 8;
 export class MapStage {
   private readonly canvas = document.createElement("canvas");
   private readonly root = new Container();
+  /** Земля и то, что над ней. Вода-шейдер идёт по земле, поэтому мосты и лодки остаются поверх неё. */
+  private readonly ground = new Container();
+  private readonly over = new Container();
+  private readonly maskCanvas = document.createElement("canvas");
+  private readonly maskRaw = document.createElement("canvas");
+  private readonly waterPass = createWaterFilter(this.maskCanvas);
+  private water: MapWater | null = null;
+  private maskOf: MapStageContent | null = null;
   private readonly tiles = new Map<string, Tile>();
   private readonly style = createStyleFilter();
   private readonly weatherPass = createWeatherFilter();
@@ -53,7 +64,8 @@ export class MapStage {
     this.canvas.className = "workspace-canvas-base";
     this.canvas.setAttribute("aria-hidden", "true");
     host.prepend(this.canvas);
-    this.root.sortableChildren = true;
+    this.ground.sortableChildren = this.over.sortableChildren = true;
+    this.root.addChild(this.ground, this.over);
     autoDetectRenderer({ preference: "webgl", canvas: this.canvas, width: 1, height: 1, resolution: 1, autoDensity: false, antialias: false })
       .then((renderer) => {
         if (this.dead) { renderer.destroy(); return; }
@@ -106,15 +118,22 @@ export class MapStage {
   }
 
   /** Проходы поверх карты: вид печати и погода. Плитки от них не зависят и не перерисовываются. */
-  effects(look: MapLook | null, weather: MapWeather): void {
+  effects(look: MapLook | null, weather: MapWeather, water: MapWater | null = null): void {
     this.look = look; this.weather = anyWeather(weather) ? weather : null;
+    // Плитка с водой-шейдером состоит из двух половин: при переключении все плитки рисуются заново.
+    if (!water !== !this.water) {
+      this.drop(() => true);
+      this.water = water;
+      if (this.frame && this.renderer) { this.draw(this.frame.content, this.frame, this.frame.cssW, this.frame.cssH, this.frame.dpr); this.animate(); return; }
+    }
+    this.water = water;
     this.present();
     this.animate();
   }
 
   /** Погода движется сама: пока она включена, сцена перерисовывается каждый кадр. */
   private animate(): void {
-    if (this.anim || !this.weather || this.dead) return;
+    if (this.anim || !this.weather && !this.water || this.dead) return;
     this.anim = requestAnimationFrame(() => { this.anim = 0; this.present(); this.animate(); });
   }
 
@@ -122,6 +141,7 @@ export class MapStage {
     this.dead = true;
     clearTimeout(this.timer); clearTimeout(this.refreshTimer); cancelAnimationFrame(this.raf); cancelAnimationFrame(this.anim);
     this.drop(() => true);
+    this.waterPass.destroy();
     this.renderer?.destroy();
     this.canvas.remove();
   }
@@ -151,13 +171,24 @@ export class MapStage {
       const sprite = new Sprite(Texture.from(canvas, true));
       tile = { scale: this.target, tx, ty, content: frame.content, canvas, sprite };
       this.tiles.set(key, tile);
-      this.root.addChild(sprite);
+      this.ground.addChild(sprite);
+      if (this.water) {
+        const top = document.createElement("canvas");
+        top.width = top.height = tileSide(frame.dpr);
+        tile.over = { canvas: top, sprite: new Sprite(Texture.from(top, true)) };
+        this.over.addChild(tile.over.sprite);
+      }
     }
-    const ctx = tile.canvas.getContext("2d");
+    const ctx = tile.canvas.getContext("2d"), top = tile.over?.canvas.getContext("2d");
     if (!ctx) return;
-    const side = tileSide(frame.dpr) / frame.dpr;
+    const side = tileSide(frame.dpr) / frame.dpr, camera = { scale: this.target, ox: -tx * side, oy: -ty * side };
     ctx.setTransform(frame.dpr, 0, 0, frame.dpr, 0, 0);
-    renderMap(ctx, side, side, { ...frame.content, scale: this.target, ox: -tx * side, oy: -ty * side });
+    renderMap(ctx, side, side, { ...frame.content, ...camera, ...(top ? { part: "ground" as const } : {}) });
+    if (top && tile.over) {
+      top.setTransform(frame.dpr, 0, 0, frame.dpr, 0, 0);
+      renderMap(top, side, side, { ...frame.content, ...camera, part: "over" });
+      tile.over.sprite.texture.source.update();
+    }
     tile.content = frame.content; tile.stale = false;
     tile.sprite.texture.source.update();
   }
@@ -207,8 +238,9 @@ export class MapStage {
   private drop(test: (tile: Tile) => boolean): void {
     for (const [key, tile] of this.tiles) if (test(tile)) {
       this.tiles.delete(key);
-      this.root.removeChild(tile.sprite);
+      this.ground.removeChild(tile.sprite);
       tile.sprite.destroy({ texture: true, textureSource: true });
+      if (tile.over) { this.over.removeChild(tile.over.sprite); tile.over.sprite.destroy({ texture: true, textureSource: true }); }
     }
   }
 
@@ -224,12 +256,24 @@ export class MapStage {
       tile.sprite.scale.set(k);
       // Плитки текущего масштаба — поверх растянутых запасных.
       tile.sprite.zIndex = tile.scale === this.target ? 1 : 0;
+      if (tile.over) { tile.over.sprite.position.copyFrom(tile.sprite.position); tile.over.sprite.scale.set(k); tile.over.sprite.zIndex = tile.sprite.zIndex; }
     }
+    const screen = new Rectangle(0, 0, renderer.width, renderer.height);
+    if (this.water) {
+      if (this.maskOf !== frame.content) {
+        drawWaterMask(this.maskCanvas, this.maskRaw, frame.content.model, frame.content.width, frame.content.height);
+        this.waterPass.refresh(); this.maskOf = frame.content;
+      }
+      this.waterPass.aim(this.water, x, y, frame.scale * frame.dpr, performance.now() / 1000, frame.content.width, frame.content.height);
+      this.ground.filterArea = screen;
+    }
+    const wet = this.ground.filters as readonly Filter[] | null | undefined;
+    if (this.water ? wet?.[0] !== this.waterPass.filter : wet?.length) this.ground.filters = this.water ? [this.waterPass.filter] : null;
     const density = frame.scale * frame.dpr, passes: Filter[] = [];
     if (this.look) { this.style.aim(this.look, x, y, density); passes.push(this.style.filter); }
     if (this.weather) { this.weatherPass.aim(this.weather, x, y, density, performance.now() / 1000); passes.push(this.weatherPass.filter); }
     // Проходы идут по всему экрану, а не по границам плиток: они шире экрана.
-    if (passes.length) this.root.filterArea = new Rectangle(0, 0, renderer.width, renderer.height);
+    if (passes.length) this.root.filterArea = screen;
     const current = this.root.filters ?? [];
     if (current.length !== passes.length || passes.some((pass, i) => pass !== current[i])) this.root.filters = passes.length ? passes : null;
     renderer.render(this.root);

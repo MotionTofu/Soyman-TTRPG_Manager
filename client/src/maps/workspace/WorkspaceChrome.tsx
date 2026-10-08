@@ -69,7 +69,7 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, 
       </WorkspaceMenu>
       <WorkspaceMenu label="Эффекты ▾" title="Эффекты" className="workspace-effects-menu">
         {!gl && <p>Эффекты работают в новой отрисовке: «Карта ▾ → Новая отрисовка».</p>}
-        {["Печать", "Погода"].map((group) => <fieldset key={group} disabled={!gl}><legend>{group}</legend>
+        {["Печать", "Погода", "Вода (проба)"].map((group) => <fieldset key={group} disabled={!gl}><legend>{group}</legend>
           {EFFECT_NAMES.filter((name) => EFFECTS[name].group === group).map((name) => { const state = effects[name]; return <Fragment key={name}>
             <label><input type="checkbox" checked={state.on} onChange={event => onEffect(name, { ...state, on: event.target.checked })} />{EFFECTS[name].label}</label>
             {state.on && EFFECTS[name].params.map((param) => <label key={param.key} className="workspace-effect-knob">{param.label} · {state.values[param.key]}

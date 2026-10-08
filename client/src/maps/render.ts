@@ -688,6 +688,9 @@ export interface RenderOptions {
   cartography?: boolean;
   /** Чей рисунок у полов, стен и дверей: «Бумага и тушь» или «Склеп» (комикс-панк). */
   artPack?: ArtPack;
+  /** Половина карты для сцены с водой-шейдером: «земля» — бумага, поверхности и реки с водой;
+   * «над землёй» — всё остальное на прозрачном фоне. Без поля карта рисуется целиком. */
+  part?: "ground" | "over";
   // Взгляд игрока (пакет A §6): секретное скрыто, trapped видна обычной дверью.
   playerView: boolean;
   /** Мастер видит полную карту под полупрозрачной подсказкой маски при редактировании. */
@@ -739,12 +742,12 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
   const fonts = o.fonts ?? readCanvasFonts();
   const pack = o.artPack ?? "cartography";
   const dungeon = !!o.cartography && model.layers.some(layer => layer.visible && layer.kind === "terrain" && (layer.terrain.defaultCode === "wall" || (!layer.terrain.mask && [...layer.terrain.entries.values()].includes("wall"))));
+  const part = o.part, waterRiver = (path: RenderPath) => path.kind === "river" && !!path.style && !!path.nodes;
   ctx.save();
   ctx.clearRect(0, 0, canvasW, canvasH);
-  ctx.fillStyle = chrome.paper;
-  ctx.fillRect(0, 0, canvasW, canvasH);
+  if (part !== "over") { ctx.fillStyle = chrome.paper; ctx.fillRect(0, 0, canvasW, canvasH); }
 
-  if (o.cartography && pack === "crypt" && ctx.canvas) {
+  if (part !== "over" && o.cartography && pack === "crypt" && ctx.canvas) {
     const paper = paperPattern(ctx, scale, ox, oy);
     if (paper) { ctx.fillStyle = paper; ctx.fillRect(0, 0, canvasW, canvasH); }
   }
@@ -1531,6 +1534,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
   const tokenDraws: (() => void)[] = [];
   const drawLayer = (layer: MapRenderModel["layers"][number]) => {
     if (!layer.visible) return;
+    if (part === "over" && layer.kind === "terrain" || part === "ground" && layer.kind !== "terrain" && layer.kind !== "path") return;
     ctx.save();
     ctx.globalAlpha *= layer.opacity;
     if (layer.kind === "terrain") {
@@ -1550,6 +1554,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       // фиксируются — порядок задают сами слои (migrated: river-слой ниже).
       for (let i = 0; i < layer.paths.length; i++) {
         const p = layer.paths[i];
+        if (part && (part === "ground") !== waterRiver(p)) continue;
         // Стена со своей полосой (ограда) рисуется как линия-полоса, а не кладкой.
         if (p.kind === "wall" && p.nodes && !p.style) {
           let end = i + 1;
@@ -1695,6 +1700,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
   };
   const belowGrid = (layer: MapRenderModel["layers"][number]) => layer.kind === "terrain" || layer.kind === "path";
   for (const layer of model.layers) if (!showGrid || belowGrid(layer)) drawLayer(layer);
+  if (part === "ground") { ctx.restore(); return; }
 
   // Grid thickness and dash lengths are in screen pixels, independent of zoom.
   if (showGrid) {
