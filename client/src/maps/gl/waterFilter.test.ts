@@ -6,14 +6,16 @@ import { editGeometry } from "../workspace/editDocument";
 import { createWorkspaceRenderModel } from "../workspace/renderV6";
 import { waterSources } from "./waterFilter";
 import type { MapRenderModel, RenderPath } from "../renderModel";
-import { LIQUIDS, liquidKind, villageSurfaceKey, waterCode, waterLevel, VILLAGE_FILL } from "../assets/village";
+import { hasRasterAsset } from "../../rasterAssets";
+import { LIQUID_PICTURES, LIQUIDS, liquidKind, villageSurfaceKey, waterCode, waterLevel, VILLAGE_FILL } from "../assets/village";
 
 it("жидкости: код хранит вид и глубину, старая вода остаётся водой", () => {
   expect(waterCode(3)).toBe("village-water-3");
   expect([waterLevel("village-lava-4"), liquidKind("village-lava-4")]).toEqual([4, LIQUIDS.findIndex(item => item.key === "lava")]);
   expect([waterLevel("village-water-2"), liquidKind("village-water-2"), liquidKind("village-deep"), liquidKind("village-grass")]).toEqual([2, 0, 0, 0]);
   expect(waterLevel("village-grass")).toBe(0);
-  expect(villageSurfaceKey("village-lava-4")).toBe("lava");
+  expect([villageSurfaceKey("village-lava-4"), villageSurfaceKey("village-lava-1"), villageSurfaceKey("village-ice-5"), villageSurfaceKey("village-tar-5")]).toEqual(["lava", "lava-2", "ice-2", "tar"]);
+  for (const key of LIQUID_PICTURES) expect(hasRasterAsset("village", key), key).toBe(true);
   expect(villageSurfaceKey("village-water-4")).toBe("deep");
   expect(VILLAGE_FILL[waterCode(1, "chasm")]).toBe("#232a36");
 });

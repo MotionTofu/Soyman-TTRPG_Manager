@@ -228,90 +228,6 @@
       "source": "B-wet_2.png"
     },
     {
-      "id": "hut",
-      "file": "hut.webp",
-      "width": 532,
-      "height": 399,
-      "bytes": 74006,
-      "sha256": "a9be42edc02e91d816724aafa9ba0ac80ce7b227012ba903b7c52d671b739e52",
-      "kind": "object",
-      "cells": [
-        4,
-        3
-      ],
-      "source": "E-buildings.png"
-    },
-    {
-      "id": "hut-small",
-      "file": "hut-small.webp",
-      "width": 342,
-      "height": 342,
-      "bytes": 48270,
-      "sha256": "afe84c0fdfc78c5a3484f0d06a3e65f7b1c855f34fe38f5c1bad88e6f3107767",
-      "kind": "object",
-      "cells": [
-        3,
-        3
-      ],
-      "source": "E-buildings.png"
-    },
-    {
-      "id": "shed",
-      "file": "shed.webp",
-      "width": 306,
-      "height": 306,
-      "bytes": 29102,
-      "sha256": "3e86351d52113a42beacc23063daa74d546a13e49155aa2bcd7f271b34e834a3",
-      "kind": "object",
-      "cells": [
-        2,
-        2
-      ],
-      "source": "E-buildings.png"
-    },
-    {
-      "id": "barn",
-      "file": "barn.webp",
-      "width": 595,
-      "height": 357,
-      "bytes": 73792,
-      "sha256": "886565bde8134ee7e4c1c0b4d1381372032c94d9b03668f57f98023395cc0daf",
-      "kind": "object",
-      "cells": [
-        5,
-        3
-      ],
-      "source": "E-buildings.png"
-    },
-    {
-      "id": "mill",
-      "file": "mill.webp",
-      "width": 436,
-      "height": 436,
-      "bytes": 60090,
-      "sha256": "5eaca88748349fb011857934f4f53222d3023a5de9eb21c2b917aa98bce16ab5",
-      "kind": "object",
-      "cells": [
-        4,
-        4
-      ],
-      "source": "E-buildings.png"
-    },
-    {
-      "id": "smithy",
-      "file": "smithy.webp",
-      "width": 525,
-      "height": 350,
-      "bytes": 43924,
-      "sha256": "aea87482332598fe3dd711f46e271d3f381111ac00161703bbf12729c07df51d",
-      "kind": "object",
-      "cells": [
-        3,
-        2
-      ],
-      "source": "E-buildings.png"
-    },
-    {
       "id": "willow",
       "file": "willow.webp",
       "width": 512,
@@ -1324,6 +1240,958 @@
       ],
       "road": 2,
       "source": "C-roads_2.png"
+    },
+    {
+      "id": "lilies",
+      "file": "lilies.webp",
+      "width": 429,
+      "height": 429,
+      "bytes": 92340,
+      "sha256": "ab7e5dd0ac47de45a35c4a9a7dc2f4a6596b8a29a00123dc762fe0339e0a49ff",
+      "kind": "object",
+      "cells": [
+        2,
+        2
+      ],
+      "source": "W1-water-plants.png"
+    },
+    {
+      "id": "lilies-small",
+      "file": "lilies-small.webp",
+      "width": 280,
+      "height": 280,
+      "bytes": 44742,
+      "sha256": "047e35f2035f02869477c22a02ed658f3e8096efd113ce42ab13c881ce5e3d2b",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "W1-water-plants.png"
+    },
+    {
+      "id": "lily-flower",
+      "file": "lily-flower.webp",
+      "width": 236,
+      "height": 236,
+      "bytes": 27816,
+      "sha256": "f6c9eddb665d3f558fd8f1e2019b2527d98ffa02262963e4adfaa4ae298e7c5d",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "W1-water-plants.png"
+    },
+    {
+      "id": "cattail",
+      "file": "cattail.webp",
+      "width": 344,
+      "height": 344,
+      "bytes": 62782,
+      "sha256": "b2905af0dec759b65ac38095a787945fc7e811facdcc58b84c4d8edc38b59cfd",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "W1-water-plants.png"
+    },
+    {
+      "id": "cattail-bed",
+      "file": "cattail-bed.webp",
+      "width": 592,
+      "height": 296,
+      "bytes": 95140,
+      "sha256": "29470973e675a6a2636ffaf1c87ab28010bd87d0fb1f2ef7dbb0b10cbad62f19",
+      "kind": "object",
+      "cells": [
+        2,
+        1
+      ],
+      "source": "W1-water-plants.png"
+    },
+    {
+      "id": "cattail-tufts",
+      "file": "cattail-tufts.webp",
+      "width": 311,
+      "height": 311,
+      "bytes": 55170,
+      "sha256": "8713fb12f7a0e28c92216687c8f51fc1b2d54e80f4641baaa8fa29beaf0a293f",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "W1-water-plants.png"
+    },
+    {
+      "id": "duckweed",
+      "file": "duckweed.webp",
+      "width": 404,
+      "height": 404,
+      "bytes": 94706,
+      "sha256": "0708986d7e162c24309aee345e6fd65a53bc6c68507b51d9add611d7b6267f58",
+      "kind": "object",
+      "cells": [
+        2,
+        2
+      ],
+      "source": "W1-water-plants.png"
+    },
+    {
+      "id": "algae",
+      "file": "algae.webp",
+      "width": 496,
+      "height": 248,
+      "bytes": 80904,
+      "sha256": "25eefe178daaa0bae2d86f56b76c666c53255d586006789583b65fcb89add95d",
+      "kind": "object",
+      "cells": [
+        2,
+        1
+      ],
+      "source": "W1-water-plants.png"
+    },
+    {
+      "id": "leaves",
+      "file": "leaves.webp",
+      "width": 276,
+      "height": 276,
+      "bytes": 46668,
+      "sha256": "c3c24b277ba7618d7ef85be5a546387687ccbe23c0aea65e5fa3a33507879af6",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "W1-water-plants.png"
+    },
+    {
+      "id": "snag",
+      "file": "snag.webp",
+      "width": 350,
+      "height": 350,
+      "bytes": 36490,
+      "sha256": "6a05d4fb94635ea638bda2a6989a7937aaa5e88fe48998634176af19d6e6c90c",
+      "kind": "object",
+      "cells": [
+        2,
+        2
+      ],
+      "source": "W2-water-debris.png"
+    },
+    {
+      "id": "log-sunk",
+      "file": "log-sunk.webp",
+      "width": 438,
+      "height": 219,
+      "bytes": 49332,
+      "sha256": "dfc9366fb9210f825f576856ce78f42c01e6b3b8afd99e495fb99fd41a188a00",
+      "kind": "object",
+      "cells": [
+        2,
+        1
+      ],
+      "source": "W2-water-debris.png"
+    },
+    {
+      "id": "driftwood",
+      "file": "driftwood.webp",
+      "width": 356,
+      "height": 356,
+      "bytes": 71308,
+      "sha256": "9eb268a93597469cba2215459d34be04f55ccbad9f1075b02a14d539b7f5b21a",
+      "kind": "object",
+      "cells": [
+        2,
+        2
+      ],
+      "source": "W2-water-debris.png"
+    },
+    {
+      "id": "rocks-wet",
+      "file": "rocks-wet.webp",
+      "width": 276,
+      "height": 276,
+      "bytes": 47574,
+      "sha256": "cebafdc867e7eab6d20a5124773bfc25899294a7572e5973bc68f12c36dc210c",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "W2-water-debris.png"
+    },
+    {
+      "id": "rock-flat",
+      "file": "rock-flat.webp",
+      "width": 341,
+      "height": 341,
+      "bytes": 62570,
+      "sha256": "39d6df0ab89a73e974d5277bb97b66dd3083288ff2f8a9589db8f23df00db27f",
+      "kind": "object",
+      "cells": [
+        2,
+        2
+      ],
+      "source": "W2-water-debris.png"
+    },
+    {
+      "id": "stepping-stones",
+      "file": "stepping-stones.webp",
+      "width": 439,
+      "height": 146,
+      "bytes": 42746,
+      "sha256": "e8f2e9acdb37288fa728ac058cfb244d8475a2c28dd59d5ab328c6bb568c5bf5",
+      "kind": "object",
+      "cells": [
+        3,
+        1
+      ],
+      "source": "W2-water-debris.png"
+    },
+    {
+      "id": "fish",
+      "file": "fish.webp",
+      "width": 252,
+      "height": 252,
+      "bytes": 13568,
+      "sha256": "45a996f3b7e02ae71b569675a3bef1ac453c39c9ec2117a42cf2fb5cba1670a0",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "W2-water-debris.png"
+    },
+    {
+      "id": "ripples",
+      "file": "ripples.webp",
+      "width": 206,
+      "height": 206,
+      "bytes": 18318,
+      "sha256": "c7e1585966f72cdb355a83864935574e078a1d263d38f467ecb9e971988a31c6",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "W2-water-debris.png"
+    },
+    {
+      "id": "wreckage",
+      "file": "wreckage.webp",
+      "width": 409,
+      "height": 409,
+      "bytes": 95806,
+      "sha256": "b4d20bc6541d71351b9424d3c864a2d007c197baa239d3d0aa4430c73a129e58",
+      "kind": "object",
+      "cells": [
+        2,
+        2
+      ],
+      "source": "W2-water-debris.png"
+    },
+    {
+      "id": "tussock",
+      "file": "tussock.webp",
+      "width": 301,
+      "height": 301,
+      "bytes": 45790,
+      "sha256": "4613d0f56033d9a5a3295c2268e0aa58b881cf418195e3a7502f7c38c774fbb5",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "L3-liquid-things.png"
+    },
+    {
+      "id": "dead-tree",
+      "file": "dead-tree.webp",
+      "width": 483,
+      "height": 483,
+      "bytes": 96192,
+      "sha256": "187631b26df50f3a089b598fc1c3df60f24b112a3078ae990d217d526293ee87",
+      "kind": "object",
+      "cells": [
+        2,
+        2
+      ],
+      "source": "L3-liquid-things.png"
+    },
+    {
+      "id": "gas-bubbles",
+      "file": "gas-bubbles.webp",
+      "width": 254,
+      "height": 254,
+      "bytes": 49090,
+      "sha256": "bcd13efd19fc389c97e349b0f8474f17116874e70b0ae30dd0c11d388b87d256",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "L3-liquid-things.png"
+    },
+    {
+      "id": "basalt",
+      "file": "basalt.webp",
+      "width": 274,
+      "height": 274,
+      "bytes": 35046,
+      "sha256": "5068cdb069352673f06208d411f329ffb6e3104f168e3ed9c3586e4c91f5c734",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "L3-liquid-things.png"
+    },
+    {
+      "id": "lava-crust",
+      "file": "lava-crust.webp",
+      "width": 403,
+      "height": 403,
+      "bytes": 81300,
+      "sha256": "73d144f5c83af406ca1c5dfe0df6265c54669a3b8185bbde01cacd2a55218c97",
+      "kind": "object",
+      "cells": [
+        2,
+        2
+      ],
+      "source": "L3-liquid-things.png"
+    },
+    {
+      "id": "lava-stones",
+      "file": "lava-stones.webp",
+      "width": 366,
+      "height": 122,
+      "bytes": 24628,
+      "sha256": "bfe205fc1cebaab137de66e57351302647c3bfed6728652b36f42297e55150e3",
+      "kind": "object",
+      "cells": [
+        3,
+        1
+      ],
+      "source": "L3-liquid-things.png"
+    },
+    {
+      "id": "ice-floe",
+      "file": "ice-floe.webp",
+      "width": 414,
+      "height": 414,
+      "bytes": 88468,
+      "sha256": "464e1efc91d7306fe18851b7093c16349c4719780905964b9acfa2c6d74cec26",
+      "kind": "object",
+      "cells": [
+        2,
+        2
+      ],
+      "source": "L3-liquid-things.png"
+    },
+    {
+      "id": "ice-hole",
+      "file": "ice-hole.webp",
+      "width": 258,
+      "height": 258,
+      "bytes": 39236,
+      "sha256": "124979d60ff6ac5a80bd9f095c58e8f93052ecb1e0de59ec802cdce8020e614e",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "L3-liquid-things.png"
+    },
+    {
+      "id": "skeleton",
+      "file": "skeleton.webp",
+      "width": 427,
+      "height": 214,
+      "bytes": 60830,
+      "sha256": "cd137d01a417faf6ea281ec5d521793d0442641e56d4080a64e201defc938530",
+      "kind": "object",
+      "cells": [
+        2,
+        1
+      ],
+      "source": "L3-liquid-things.png"
+    },
+    {
+      "id": "swamp",
+      "file": "swamp.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 88160,
+      "sha256": "6c24ba343232762c54a17931af65bb1069d0367b13553dd1fc1b7760e2de55cc",
+      "kind": "surface",
+      "cells": [
+        4,
+        4
+      ],
+      "source": "L1-liquids.png"
+    },
+    {
+      "id": "lava",
+      "file": "lava.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 87714,
+      "sha256": "ceb06105f0c025bc72e0d47cda5f3e7000b1dc5b1cbfcd27b8e1cb3660abe9e1",
+      "kind": "surface",
+      "cells": [
+        4,
+        4
+      ],
+      "source": "L1-liquids.png"
+    },
+    {
+      "id": "ice",
+      "file": "ice.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 83164,
+      "sha256": "f148ed0040e0f930ead6afd01586cde4640d38a2ef3c61d3385a8598734aea17",
+      "kind": "surface",
+      "cells": [
+        4,
+        4
+      ],
+      "source": "L1-liquids.png"
+    },
+    {
+      "id": "acid",
+      "file": "acid.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 97328,
+      "sha256": "54e4183d18b17e8ca9f82c5d798ba3c789494db79a893014052e1bfe694c6641",
+      "kind": "surface",
+      "cells": [
+        4,
+        4
+      ],
+      "source": "L1-liquids.png"
+    },
+    {
+      "id": "chasm",
+      "file": "chasm.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 86748,
+      "sha256": "ded713604029eb8c52695f404562762e5bb1697c833b252d068459a8472cfec2",
+      "kind": "surface",
+      "cells": [
+        4,
+        4
+      ],
+      "source": "L2-liquids.png"
+    },
+    {
+      "id": "tar",
+      "file": "tar.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 78466,
+      "sha256": "37b8a77ef61808d39c1faccf06a577e1213e8d19d3204e11cb4068b95725f921",
+      "kind": "surface",
+      "cells": [
+        4,
+        4
+      ],
+      "source": "L2-liquids.png"
+    },
+    {
+      "id": "lava-2",
+      "file": "lava-2.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 90432,
+      "sha256": "59d1936a09ae8c58578c18b2cdd30a4f130478f00aa1e4e1c17f3a1d6a9463d1",
+      "kind": "surface",
+      "cells": [
+        4,
+        4
+      ],
+      "source": "L2-liquids.png"
+    },
+    {
+      "id": "ice-2",
+      "file": "ice-2.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 96130,
+      "sha256": "29c2df08e51c2c34764820b8cd5874aa7563a46667ad203f755e4c7097734f85",
+      "kind": "surface",
+      "cells": [
+        4,
+        4
+      ],
+      "source": "L2-liquids.png"
+    },
+    {
+      "id": "barn",
+      "file": "barn.webp",
+      "width": 1097,
+      "height": 686,
+      "bytes": 376108,
+      "sha256": "0646d8284246b6aacdc008b83064dc7ae0adb41f4df765e5b986ae1fb6c1d81c",
+      "kind": "object",
+      "cells": [
+        8,
+        5
+      ],
+      "source": "E1-buildings.png"
+    },
+    {
+      "id": "mill",
+      "file": "mill.webp",
+      "width": 1026,
+      "height": 733,
+      "bytes": 304812,
+      "sha256": "9202472d6c58fe90b7f5829b0d2142cba65b4d6c812689b03714c0a35da4ead0",
+      "kind": "object",
+      "cells": [
+        7,
+        5
+      ],
+      "source": "E1-buildings.png"
+    },
+    {
+      "id": "hut",
+      "file": "hut.webp",
+      "width": 697,
+      "height": 558,
+      "bytes": 213232,
+      "sha256": "b00ab0455877e8653e5cff96105195f7b00fa96340546c068fae29ab21d1816c",
+      "kind": "object",
+      "cells": [
+        5,
+        4
+      ],
+      "source": "E2-buildings.png"
+    },
+    {
+      "id": "hut-small",
+      "file": "hut-small.webp",
+      "width": 498,
+      "height": 498,
+      "bytes": 146956,
+      "sha256": "92cf682e7865ebcfcfbca7ffcb9e4cfb51bd46085d287dc9f3126dae9730466f",
+      "kind": "object",
+      "cells": [
+        4,
+        4
+      ],
+      "source": "E2-buildings.png"
+    },
+    {
+      "id": "shed",
+      "file": "shed.webp",
+      "width": 618,
+      "height": 412,
+      "bytes": 105988,
+      "sha256": "eea825c693c00d1d5099104ea0bd44e7db29bbb4f3e00984d1893ea4446a14fd",
+      "kind": "object",
+      "cells": [
+        3,
+        2
+      ],
+      "source": "E2-buildings.png"
+    },
+    {
+      "id": "smithy",
+      "file": "smithy.webp",
+      "width": 656,
+      "height": 492,
+      "bytes": 169726,
+      "sha256": "27de377c6cca64615d0ca8e8ad869dd156dd319ebafdfd513f5f97414ed56151",
+      "kind": "object",
+      "cells": [
+        4,
+        3
+      ],
+      "source": "E2-buildings.png"
+    },
+    {
+      "id": "tussock-2",
+      "file": "tussock-2.webp",
+      "width": 300,
+      "height": 300,
+      "bytes": 45292,
+      "sha256": "fc8d23cf62e0b77d2814aee947e9d1e2059a6dfdc9b4a6671b865c12661a8b39",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "L3-liquid-things_2.png"
+    },
+    {
+      "id": "dead-tree-2",
+      "file": "dead-tree-2.webp",
+      "width": 536,
+      "height": 536,
+      "bytes": 96602,
+      "sha256": "d821b1db7faa3b5b9888eb008a3c3f718d547f654c450196102c9b22b50d096a",
+      "kind": "object",
+      "cells": [
+        2,
+        2
+      ],
+      "source": "L3-liquid-things_2.png"
+    },
+    {
+      "id": "gas-bubbles-2",
+      "file": "gas-bubbles-2.webp",
+      "width": 250,
+      "height": 250,
+      "bytes": 41158,
+      "sha256": "1bc30448ced2d9b6ea4e8b47f38a7fcb25250e04ea87ca1b976a4b2e6b0d4f73",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "L3-liquid-things_2.png"
+    },
+    {
+      "id": "basalt-2",
+      "file": "basalt-2.webp",
+      "width": 279,
+      "height": 279,
+      "bytes": 35346,
+      "sha256": "df0413483b4b6f29f35647725709e9f4607e0b63e533a33d6f01b2be35f670df",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "L3-liquid-things_2.png"
+    },
+    {
+      "id": "lava-crust-2",
+      "file": "lava-crust-2.webp",
+      "width": 395,
+      "height": 395,
+      "bytes": 70108,
+      "sha256": "24b46120dd206ca928ed0f6396bcfa27c1e81383a4a82b74c5de7d3b014cad73",
+      "kind": "object",
+      "cells": [
+        2,
+        2
+      ],
+      "source": "L3-liquid-things_2.png"
+    },
+    {
+      "id": "lava-stones-2",
+      "file": "lava-stones-2.webp",
+      "width": 438,
+      "height": 146,
+      "bytes": 28730,
+      "sha256": "df04fdfe855dfd41f3d73ae492feca7cc2e645fb1659cd6ac84335aaa26fc278",
+      "kind": "object",
+      "cells": [
+        3,
+        1
+      ],
+      "source": "L3-liquid-things_2.png"
+    },
+    {
+      "id": "ice-floe-2",
+      "file": "ice-floe-2.webp",
+      "width": 428,
+      "height": 428,
+      "bytes": 85656,
+      "sha256": "2eae5d91f8322eed8e68ff605f918d0811d0e4659205c898c94f714aa8b11741",
+      "kind": "object",
+      "cells": [
+        2,
+        2
+      ],
+      "source": "L3-liquid-things_2.png"
+    },
+    {
+      "id": "ice-hole-2",
+      "file": "ice-hole-2.webp",
+      "width": 247,
+      "height": 247,
+      "bytes": 36268,
+      "sha256": "d11679cce1801aee4524835eda3c9223bfc838c87265ac721075a646a91606f4",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "L3-liquid-things_2.png"
+    },
+    {
+      "id": "skeleton-2",
+      "file": "skeleton-2.webp",
+      "width": 468,
+      "height": 234,
+      "bytes": 60250,
+      "sha256": "1e1a86d58e89ac72f9f633c96c6ec2ef9115566b456b9d7488e31f54f18999dd",
+      "kind": "object",
+      "cells": [
+        2,
+        1
+      ],
+      "source": "L3-liquid-things_2.png"
+    },
+    {
+      "id": "tussock-3",
+      "file": "tussock-3.webp",
+      "width": 323,
+      "height": 323,
+      "bytes": 49552,
+      "sha256": "b7a599b7f905d5d06b786ca214f412443cbcdfdfcf03b4e63f806e0a4dd00e68",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "L3-liquid-things_3.png"
+    },
+    {
+      "id": "dead-tree-3",
+      "file": "dead-tree-3.webp",
+      "width": 531,
+      "height": 531,
+      "bytes": 91630,
+      "sha256": "aece6e79fdf945e0db79f7e5dddb262a08eb06fbc97d9587bf79d00b304b21e2",
+      "kind": "object",
+      "cells": [
+        2,
+        2
+      ],
+      "source": "L3-liquid-things_3.png"
+    },
+    {
+      "id": "gas-bubbles-3",
+      "file": "gas-bubbles-3.webp",
+      "width": 263,
+      "height": 263,
+      "bytes": 57226,
+      "sha256": "442650808325b762121e8ec73486ad6c8344e4e9c1b8bea0920b805fad0f66df",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "L3-liquid-things_3.png"
+    },
+    {
+      "id": "basalt-3",
+      "file": "basalt-3.webp",
+      "width": 249,
+      "height": 249,
+      "bytes": 29060,
+      "sha256": "0e4adbed3da8b1b9b2720459eda890141416f7891d4dd7883a2fa394b8af6bb7",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "L3-liquid-things_3.png"
+    },
+    {
+      "id": "lava-crust-3",
+      "file": "lava-crust-3.webp",
+      "width": 408,
+      "height": 408,
+      "bytes": 73968,
+      "sha256": "7cf0c33468e0853e3ab7e452d42a2d7b08834820448d06269e63452e07cdc32d",
+      "kind": "object",
+      "cells": [
+        2,
+        2
+      ],
+      "source": "L3-liquid-things_3.png"
+    },
+    {
+      "id": "lava-stones-3",
+      "file": "lava-stones-3.webp",
+      "width": 406,
+      "height": 135,
+      "bytes": 23948,
+      "sha256": "956db43ddca0820214d05935b5599bcea8cf4585908ecd941f1d1f1bfdef7cf2",
+      "kind": "object",
+      "cells": [
+        3,
+        1
+      ],
+      "source": "L3-liquid-things_3.png"
+    },
+    {
+      "id": "ice-floe-3",
+      "file": "ice-floe-3.webp",
+      "width": 372,
+      "height": 372,
+      "bytes": 71336,
+      "sha256": "815e2413884acc33a60bef93e7a09dd5cad3ccb7fda12b386102f5d15faac47d",
+      "kind": "object",
+      "cells": [
+        2,
+        2
+      ],
+      "source": "L3-liquid-things_3.png"
+    },
+    {
+      "id": "ice-hole-3",
+      "file": "ice-hole-3.webp",
+      "width": 243,
+      "height": 243,
+      "bytes": 32740,
+      "sha256": "8325ee79a933bd350aecbd66f788ca7fb0cb0b2eb11bf8499438ed4354cd40ba",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "L3-liquid-things_3.png"
+    },
+    {
+      "id": "skeleton-3",
+      "file": "skeleton-3.webp",
+      "width": 482,
+      "height": 241,
+      "bytes": 68938,
+      "sha256": "9522fa5dfdbe241ea69c23f768bb841fe309a8caa0c41e46fcbd607662347ab3",
+      "kind": "object",
+      "cells": [
+        2,
+        1
+      ],
+      "source": "L3-liquid-things_3.png"
+    },
+    {
+      "id": "tussock-4",
+      "file": "tussock-4.webp",
+      "width": 325,
+      "height": 325,
+      "bytes": 49752,
+      "sha256": "78b6f2f335d0b4a91c9a52f106af047d92d69282dd08e8e9968bbad62fed26df",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "L3-liquid-things_4.png"
+    },
+    {
+      "id": "gas-bubbles-4",
+      "file": "gas-bubbles-4.webp",
+      "width": 266,
+      "height": 266,
+      "bytes": 44684,
+      "sha256": "e8dc2f5c951c270598542d3380e7b000cbf048ff305b1dd0ad7ecc582eb8ef61",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "L3-liquid-things_4.png"
+    },
+    {
+      "id": "basalt-4",
+      "file": "basalt-4.webp",
+      "width": 245,
+      "height": 245,
+      "bytes": 30318,
+      "sha256": "0c0ed36609fd1dfe4f9bd7490e527d7b31d31c5c441cc277b822a3d005d95d80",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "L3-liquid-things_4.png"
+    },
+    {
+      "id": "lava-crust-4",
+      "file": "lava-crust-4.webp",
+      "width": 438,
+      "height": 438,
+      "bytes": 96874,
+      "sha256": "56f15f761f1c0ff1a8d484fa789aa24b392e88565459a09c0aa7d888b2f5ff08",
+      "kind": "object",
+      "cells": [
+        2,
+        2
+      ],
+      "source": "L3-liquid-things_4.png"
+    },
+    {
+      "id": "lava-stones-4",
+      "file": "lava-stones-4.webp",
+      "width": 495,
+      "height": 165,
+      "bytes": 24688,
+      "sha256": "e29f26333f2538b22b03622e982e2bfa32a2031db0fc62b56ee9c1df6ce617ce",
+      "kind": "object",
+      "cells": [
+        3,
+        1
+      ],
+      "source": "L3-liquid-things_4.png"
+    },
+    {
+      "id": "ice-floe-4",
+      "file": "ice-floe-4.webp",
+      "width": 399,
+      "height": 399,
+      "bytes": 84264,
+      "sha256": "eb32fbed0cc8a799399fbfbee7fc8d1438d628c96fbefae02b02e740d1bf2ee0",
+      "kind": "object",
+      "cells": [
+        2,
+        2
+      ],
+      "source": "L3-liquid-things_4.png"
+    },
+    {
+      "id": "ice-hole-4",
+      "file": "ice-hole-4.webp",
+      "width": 238,
+      "height": 238,
+      "bytes": 35262,
+      "sha256": "18a829e6304c813af1cd84fd1d653fe25c38b9a61511fecea52a290a24992b08",
+      "kind": "object",
+      "cells": [
+        1,
+        1
+      ],
+      "source": "L3-liquid-things_4.png"
+    },
+    {
+      "id": "skeleton-4",
+      "file": "skeleton-4.webp",
+      "width": 494,
+      "height": 247,
+      "bytes": 76020,
+      "sha256": "b4894a288ba527251e36683bcced9a94b0847e2d00f5373a6dc9688d62049f5c",
+      "kind": "object",
+      "cells": [
+        2,
+        1
+      ],
+      "source": "L3-liquid-things_4.png"
+    },
+    {
+      "id": "dead-tree-4",
+      "file": "dead-tree-4.webp",
+      "width": 518,
+      "height": 518,
+      "bytes": 86354,
+      "sha256": "0cdee8f31bebd9f5e5a46514702fb39f9c7449a44f6852388125d78359525790",
+      "kind": "object",
+      "cells": [
+        2,
+        2
+      ],
+      "source": "L3-liquid-things_4.png"
     }
   ]
 }

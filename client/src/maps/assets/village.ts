@@ -7,20 +7,22 @@ import { rasterAsset } from "../../rasterAssets";
  * Ассет — семейство с вариантами (решение владельца 2026-10-08): первый вариант лежит под
  * ключом семейства, остальные — `key-2`, `key-3`. В каталоге выбирают вариант или «случайный». */
 export const VILLAGE_PACK = { id: "soyman-village", version: "1" } as const;
-export type VillageCategory = "buildings" | "plants" | "yard" | "crossings" | "fences";
+export type VillageCategory = "buildings" | "plants" | "yard" | "crossings" | "fences" | "water" | "liquids";
 export const VILLAGE_CATEGORIES: Record<VillageCategory, string> = {
   buildings: "Постройки", plants: "Растения", yard: "Двор", crossings: "Переправы и лагерь", fences: "Ограды",
+  water: "На воде", liquids: "Болото, лава, лёд",
 };
 /** cells — размер в клетках, как нарисовано. Здание — крыша-штамп: объект, внутрь не заходят. */
 /** Размеры — по таблице настоящих размеров: клетка тактической карты — 1,5 м (решение 2026-10-08).
- * Здания, лодка и грядки ждут новых листов (E1/E2-buildings, G2-yard) и пока в прежних размерах. */
+ * Здания — с листов E1/E2-buildings; малая изба нарисована квадратной (4×4 вместо 4×3), мельница — с колесом и
+ * мостками (7×5 вместо 5×5). Лодка и грядки ждут листа G2-yard и пока в прежних размерах. */
 export const VILLAGE_OBJECTS: readonly { key: string; name: string; category: VillageCategory; cells: readonly [number, number]; variants: number }[] = [
-  { key: "hut", name: "Изба", category: "buildings", cells: [4, 3], variants: 1 },
-  { key: "hut-small", name: "Малая изба", category: "buildings", cells: [3, 3], variants: 1 },
-  { key: "shed", name: "Сарай", category: "buildings", cells: [2, 2], variants: 1 },
-  { key: "barn", name: "Амбар", category: "buildings", cells: [5, 3], variants: 1 },
-  { key: "mill", name: "Мельница", category: "buildings", cells: [4, 4], variants: 1 },
-  { key: "smithy", name: "Кузня", category: "buildings", cells: [3, 2], variants: 1 },
+  { key: "hut", name: "Изба", category: "buildings", cells: [5, 4], variants: 1 },
+  { key: "hut-small", name: "Малая изба", category: "buildings", cells: [4, 4], variants: 1 },
+  { key: "shed", name: "Сарай", category: "buildings", cells: [3, 2], variants: 1 },
+  { key: "barn", name: "Амбар", category: "buildings", cells: [8, 5], variants: 1 },
+  { key: "mill", name: "Мельница", category: "buildings", cells: [7, 5], variants: 1 },
+  { key: "smithy", name: "Кузня", category: "buildings", cells: [4, 3], variants: 1 },
   { key: "willow", name: "Ива", category: "plants", cells: [4, 4], variants: 2 },
   { key: "tree", name: "Дерево", category: "plants", cells: [3, 3], variants: 2 },
   { key: "spruce", name: "Ель", category: "plants", cells: [2, 2], variants: 2 },
@@ -53,6 +55,35 @@ export const VILLAGE_OBJECTS: readonly { key: string; name: string; category: Vi
   { key: "fence-wattle-gate", name: "Калитка плетня", category: "fences", cells: [1, 1], variants: 2 },
   { key: "fence-pole-post", name: "Столб ограды", category: "fences", cells: [1, 1], variants: 2 },
   { key: "fence-pole-gate", name: "Калитка ограды", category: "fences", cells: [1, 1], variants: 2 },
+  // Листы W1/W2 (`.scratch/map-water`): нарисованы без воды, она просвечивает между листьями и камнями.
+  { key: "lilies", name: "Кувшинки", category: "water", cells: [2, 2], variants: 1 },
+  { key: "lilies-small", name: "Кувшинки, горсть", category: "water", cells: [1, 1], variants: 1 },
+  { key: "lily-flower", name: "Кувшинка в цвету", category: "water", cells: [1, 1], variants: 1 },
+  { key: "cattail", name: "Рогоз", category: "water", cells: [1, 1], variants: 1 },
+  { key: "cattail-bed", name: "Заросли рогоза", category: "water", cells: [2, 1], variants: 1 },
+  { key: "cattail-tufts", name: "Осока", category: "water", cells: [1, 1], variants: 1 },
+  { key: "duckweed", name: "Ряска", category: "water", cells: [2, 2], variants: 1 },
+  { key: "algae", name: "Тина", category: "water", cells: [2, 1], variants: 1 },
+  { key: "leaves", name: "Листья на воде", category: "water", cells: [1, 1], variants: 1 },
+  { key: "snag", name: "Коряга", category: "water", cells: [2, 2], variants: 1 },
+  { key: "log-sunk", name: "Топляк", category: "water", cells: [2, 1], variants: 1 },
+  { key: "driftwood", name: "Плавник", category: "water", cells: [2, 2], variants: 1 },
+  { key: "rocks-wet", name: "Камни в воде", category: "water", cells: [1, 1], variants: 1 },
+  { key: "rock-flat", name: "Плоский камень", category: "water", cells: [2, 2], variants: 1 },
+  { key: "stepping-stones", name: "Камни-переход", category: "water", cells: [3, 1], variants: 1 },
+  { key: "fish", name: "Тени рыб", category: "water", cells: [1, 1], variants: 1 },
+  { key: "ripples", name: "Круги на воде", category: "water", cells: [1, 1], variants: 1 },
+  { key: "wreckage", name: "Обломки", category: "water", cells: [2, 2], variants: 1 },
+  // Лист L3.
+  { key: "tussock", name: "Кочка", category: "liquids", cells: [1, 1], variants: 4 },
+  { key: "dead-tree", name: "Утонувшее дерево", category: "liquids", cells: [2, 2], variants: 4 },
+  { key: "gas-bubbles", name: "Пузыри газа", category: "liquids", cells: [1, 1], variants: 4 },
+  { key: "basalt", name: "Базальтовый островок", category: "liquids", cells: [1, 1], variants: 4 },
+  { key: "lava-crust", name: "Плита корки", category: "liquids", cells: [2, 2], variants: 4 },
+  { key: "lava-stones", name: "Камни в лаве", category: "liquids", cells: [3, 1], variants: 4 },
+  { key: "ice-floe", name: "Льдина", category: "liquids", cells: [2, 2], variants: 4 },
+  { key: "ice-hole", name: "Лунка", category: "liquids", cells: [1, 1], variants: 4 },
+  { key: "skeleton", name: "Скелет в кислоте", category: "liquids", cells: [2, 1], variants: 4 },
 ];
 /** Ключи вариантов семейства: `well`, `well-2`. */
 export const variantKeys = (key: string, variants: number) => Array.from({ length: variants }, (_, i) => i ? `${key}-${i + 1}` : key);
@@ -96,7 +127,8 @@ export const riverDepth = (path: { style?: string; depth?: number }) => path.dep
 export const WATER_DEPTHS = [1, 2, 3, 4, 5] as const;
 /** Жидкости: вода и её родня. Красятся той же кистью с той же глубиной, код — `village-lava-3`. Номер в списке —
  * номер жидкости в маске и в шейдере (вода — 0); шейдер рисует их как воду, перекрашенную в свою шкалу тонов.
- * Картинок у них пока нет: без «живой воды» это ровная заливка цветом `fill`. */
+ * Картинки (листы L1/L2) — для вида «Картинкой» и под шейдером; у лавы на мели остывшая корка (`lava-2`),
+ * у льда на глубине тонкий тёмный лёд (`ice-2`). */
 export const LIQUIDS = [
   { key: "water", name: "Вода", fill: "#2f9c8c" },
   { key: "swamp", name: "Болото", fill: "#4a5226" },
@@ -117,7 +149,11 @@ export const liquidKind = (code: string | null | undefined) => Math.max(0, LIQUI
 const WATER_PICTURE = ["shallow", "shallow", "shallow-2", "deep", "deep-2"], WATER_FILL = ["#58b9a6", "#2f9c8c", "#27808a", "#1d5a6c", "#143f55"];
 /** Ключ картинки по коду материала; `null` — код не из этого набора. */
 export const villageSurfaceKey = (code: string) => !code.startsWith(SURFACE_PREFIX) ? null
-  : !WATER.test(code) ? code.slice(SURFACE_PREFIX.length) : liquidKind(code) ? LIQUIDS[liquidKind(code)].key : WATER_PICTURE[waterLevel(code) - 1];
+  : !WATER.test(code) ? code.slice(SURFACE_PREFIX.length) : liquidPicture(LIQUIDS[liquidKind(code)].key, waterLevel(code));
+const liquidPicture = (kind: LiquidKey, level: number) => kind === "water" ? WATER_PICTURE[level - 1]
+  : kind === "lava" && level <= 2 ? "lava-2" : kind === "ice" && level >= 4 ? "ice-2" : kind;
+/** Все картинки жидкостей: набор грузит их по тому, что накрашено. */
+export const LIQUID_PICTURES = ["swamp", "lava", "lava-2", "ice", "ice-2", "acid", "tar", "chasm"] as const;
 /** Цвет, пока картинка грузится, и в «Чертеже». */
 export const VILLAGE_FILL: Readonly<Record<string, string>> = Object.fromEntries([...VILLAGE_SURFACES.flatMap(item =>
   variantKeys(item.key, item.variants).map(key => [villageSurfaceCode(key), item.fill])), ...WATER_DEPTHS.map(depth => [waterCode(depth), WATER_FILL[depth - 1]]),
@@ -139,10 +175,11 @@ export function pickVariant(assetId: string, random: () => number = Math.random)
 }
 
 /** Россыпи: экземпляры берутся из вариантов семейства вразнобой. `size` — клеток на экземпляр при размере 1. */
-const scatter = (slug: string, name: string, key: string, size: number) =>
-  ({ key: `scatter/village-${slug}-v1`, name, assetId: villageId(key), assetIds: variantKeys(key, 2).map(villageId), size });
+const scatter = (slug: string, name: string, key: string, size: number, variants = 2) =>
+  ({ key: `scatter/village-${slug}-v1`, name, assetId: villageId(key), assetIds: variantKeys(key, variants).map(villageId), size });
 export const VILLAGE_SCATTER = [
   scatter("willows", "Ивы", "willow", 4), scatter("trees", "Лиственный лес", "tree", 3), scatter("spruces", "Ельник", "spruce", 2.4),
   scatter("bushes", "Кусты", "bush", 1.2), scatter("reeds", "Камыш", "reeds", 1.2), scatter("grass", "Трава", "grass-tuft", 1),
   scatter("boulders", "Валуны", "boulders", 1),
+  scatter("lilies", "Кувшинки", "lilies-small", 1.2, 1), scatter("cattails", "Рогоз", "cattail", 1.2, 1), scatter("leaves", "Листья на воде", "leaves", 1, 1),
 ];

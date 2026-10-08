@@ -61,7 +61,7 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, toolSet, comicPun
     return { id: villageSurfaceCode(item.key), name: item.name, url: villageUrl(item.key), chosen: keys.some((key) => material === villageSurfaceCode(key)),
       choose: () => onMaterial(villageSurfaceCode(item.key)),
       variants: keys.map((key, i) => ({ id: villageSurfaceCode(key), name: `Вариант ${i + 1}`, url: villageUrl(key) })) };
-  }), ...LIQUIDS.map((item, kind): Tile => ({ id: waterCode(2, item.key), name: item.name, url: kind ? null : villageUrl("shallow"), fill: item.fill,
+  }), ...LIQUIDS.map((item, kind): Tile => ({ id: waterCode(2, item.key), name: item.name, url: villageUrl(kind ? item.key : "shallow"), fill: item.fill,
     chosen: villageWater > 0 && villageLiquid === kind, choose: () => onMaterial(waterCode(kind === 2 || kind === 6 ? 4 : 2, item.key)) }))] };
   const baseSurfaces: Category = { key: "surfaces", name: local ? "Основные" : "Подземелье", pack: comicPunk ? CRYPT : PAPER, tiles: CARTOGRAPHY_SURFACES.map((item) => ({
     id: item.code, name: item.name, url: comicPunk && CRYPT_SURFACES[item.code] ? cryptUrl(CRYPT_SURFACES[item.code]) : item.key ? cartographyUrl(item.key) : null,
@@ -112,7 +112,7 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, toolSet, comicPun
     </div>}
     {!line && villageWater > 0 && <label className="workspace-catalog-depth">Глубина · {villageWater} из {WATER_DEPTHS.length}
       <input aria-label="Глубина воды" type="range" min={1} max={WATER_DEPTHS.length} step={1} value={villageWater} onChange={(event) => onMaterial(waterCode(Number(event.target.value), LIQUIDS[villageLiquid].key))} />
-      <small>1 — по щиколотку, 3 и глубже — вброд не перейти. Переход между глубинами плавный в «живой воде».{villageLiquid > 0 && " Эта жидкость оживает только с «живой водой» (Карта ▾ → Вода); без неё — ровная заливка."}</small>
+      <small>1 — по щиколотку, 3 и глубже — вброд не перейти. Переход между глубинами плавный в «живой воде».{villageLiquid > 0 && " Жидкость движется только с «живой водой» (Карта ▾ → Вода); без неё — неподвижная картинка."}</small>
     </label>}
     <div className="workspace-catalog-tiles">
       {tiles.map((tile) => <button key={tile.id} type="button" aria-pressed={tile.chosen} onClick={tile.choose}>
