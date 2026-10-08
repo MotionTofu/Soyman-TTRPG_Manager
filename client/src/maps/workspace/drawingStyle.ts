@@ -20,10 +20,10 @@ const LOOKS: Record<MapDrawingStyle, MapLook | null> = {
   blueprint: null,
 };
 export const styleLook = (document: MapDocumentV6) => LOOKS[document.appearance?.style ?? "paper-ink"];
-/** Живая вода карты; null — вода остаётся картинкой. Скорость и размер пикселя пока общие для всех карт. */
+/** Живая вода карты; null — вода остаётся картинкой. */
 export function mapWater(document: MapDocumentV6): MapWater | null {
   const look = document.appearance?.water;
-  return look ? { mode: MAP_WATER_LOOKS.indexOf(look) as MapWater["mode"], speed: 1, size: 8 } : null;
+  return look ? { mode: MAP_WATER_LOOKS.indexOf(look) as MapWater["mode"], speed: document.appearance?.waterSpeed ?? 1, size: document.appearance?.waterPixels ?? 8 } : null;
 }
 export function workspaceDrawingStyle(document: MapDocumentV6) {
   const water = mapWater(document);

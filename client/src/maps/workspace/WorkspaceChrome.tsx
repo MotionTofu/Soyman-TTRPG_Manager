@@ -34,7 +34,7 @@ export const WorkspaceToolRail = memo(function WorkspaceToolRail({ toolSet, tool
 });
 
 export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, toolSet, onToolSet, canUndo, canRedo, onUndo, onRedo, grid, onGrid,
-  style, onStyle, styleLocked, frame, onFrame, water, onWater, generatorLocked, saveLocked, onGenerator, onSave, onBackup, onPicture, gl, onGl, effects, onEffect, onEffectsReset, classicLink }: {
+  style, onStyle, styleLocked, frame, onFrame, water, onWater, waterSpeed, waterPixels, onWaterTune, generatorLocked, saveLocked, onGenerator, onSave, onBackup, onPicture, gl, onGl, effects, onEffect, onEffectsReset, classicLink }: {
   mapName: string; status: string; toolSet: ToolSet; onToolSet: (set: ToolSet) => void;
   canUndo: boolean; canRedo: boolean; onUndo: () => void; onRedo: () => void;
   grid: GridLook; onGrid: (patch: Partial<GridLook>) => void;
@@ -43,6 +43,7 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, 
   frame: number | undefined; onFrame: (frame: number | undefined) => void;
   /** Вид живой воды; undefined — вода картинкой. */
   water: MapWaterLook | undefined; onWater: (water: MapWaterLook | undefined) => void;
+  waterSpeed: number; waterPixels: number; onWaterTune: (patch: { waterSpeed?: number; waterPixels?: number }) => void;
   generatorLocked: boolean; saveLocked: boolean; onGenerator: () => void; onSave: () => void; onBackup: () => void; onPicture: () => void;
   /** Отрисовка плитками через WebGL вместо обычного холста. */
   gl: boolean; onGl: (value: boolean) => void;
@@ -94,6 +95,8 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, 
             <option value="">Картинкой, без движения</option>
             {WATER_LOOKS.map(([value, name]) => <option key={value} value={value}>{name}</option>)}
           </select></label>
+          {water && <label>Скорость · {waterSpeed.toFixed(1)}<input aria-label="Скорость воды" type="range" min={0} max={3} step={0.1} value={waterSpeed} onChange={(event) => onWaterTune({ waterSpeed: Number(event.target.value) })} /></label>}
+          {(water === "pond" || water === "sea") && <label>Пикселей на клетку · {waterPixels}<input aria-label="Пикселей воды на клетку" type="range" min={4} max={16} step={1} value={waterPixels} onChange={(event) => onWaterTune({ waterPixels: Number(event.target.value) })} /></label>}
           <small>Живая вода плавно меняет глубину. Движется она в новой отрисовке, в остальных местах стоит одним кадром.</small>
         </fieldset>
         <fieldset disabled={styleLocked}><legend>Рамка</legend>

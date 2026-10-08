@@ -35,7 +35,9 @@ export interface MapDocumentV6 extends Omit<MapDocumentV5, "v" | "layers"> {
     /** Поля вокруг карты, клеток: докуда доходит камера и что попадает в картинку. Без поля камера свободна. */
     frame?: number;
     /** Живая вода вместо воды-картинки и её вид. Без поля вода остаётся картинкой. */
-    water?: MapWaterLook };
+    water?: MapWaterLook;
+    /** Скорость живой воды, 0…3 (без поля — 1) и крупность пиксельных видов, точек на клетку 4…16 (без поля — 8). */
+    waterSpeed?: number; waterPixels?: number };
 }
 export interface MapRecordV6 extends Omit<MapRecordV5, "document"> { revision: number; document: MapDocumentV6 }
 
@@ -99,6 +101,11 @@ export function validateMapDocumentV6(doc: unknown): ValidationIssue[] {
   if (water !== undefined && !(MAP_WATER_LOOKS as readonly unknown[]).includes(water)) {
     errors.push({ code: "appearance.bad-water", path: "appearance.water", message: "unknown water look" });
   }
+  for (const [key, min, max] of [["waterSpeed", 0, 3], ["waterPixels", 4, 16]] as const) {
+    const value = record(doc.appearance) ? doc.appearance[key] : undefined;
+    if (value !== undefined && (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max))
+      errors.push({ code: "appearance.bad-water", path: `appearance.${key}`, message: `expected ${min}..${max}` });
+  }
   if (Array.isArray(doc.layers)) doc.layers.forEach((layer, li) => {
     if (record(layer) && layer.kind === "gameplay" && Array.isArray(layer.items)) layer.items.forEach((item, ei) => {
       if (record(item) && item.kind === "token") errors.push(...validateGameplayToken(item, `layers[${li}].items[${ei}]`));
@@ -123,7 +130,9 @@ export function upgradeMapDocumentV5(doc: MapDocumentV5): MapDocumentV6 {
 }
 const canonAppearance = (doc: MapDocumentV6) => doc.appearance
   ? { appearance: { style: doc.appearance.style, ...(doc.appearance.frame !== undefined ? { frame: doc.appearance.frame } : {}),
-    ...(doc.appearance.water !== undefined ? { water: doc.appearance.water } : {}) } } : {};
+    ...(doc.appearance.water !== undefined ? { water: doc.appearance.water } : {}),
+    ...(doc.appearance.waterSpeed !== undefined ? { waterSpeed: doc.appearance.waterSpeed } : {}),
+    ...(doc.appearance.waterPixels !== undefined ? { waterPixels: doc.appearance.waterPixels } : {}) } } : {};
 export function canonicalizeMapDocumentV6(doc: MapDocumentV6): MapDocumentV6 {
   const base = canonicalizeMapDocument(invariantView(doc as unknown as Record<string, unknown>) as MapDocumentV5);
   return { ...base, v: 6, ...canonAppearance(doc), layers: base.layers.map((layer, i) => {
