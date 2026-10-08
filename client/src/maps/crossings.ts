@@ -1,5 +1,5 @@
 import { flattenSplineWithWidths } from "./core/spline";
-import { waterLevel } from "./assets/village";
+import { riverDepth, waterLevel } from "./assets/village";
 import type { MapRenderModel, RenderPath } from "./renderModel";
 
 /** Переправы (решение 2026-10-08): там, где дорога «Местности» идёт над водой, движок сам кладёт мост или брод.
@@ -41,7 +41,7 @@ function waterAt(model: MapRenderModel) {
       if (path.kind !== "river" || !path.nodes || path.nodes.length < 2) continue;
       const samples = flattenSplineWithWidths(path.closed ? [...path.nodes, path.nodes[0]] : path.nodes, path.width ?? 0.22, STEP);
       const reach = Math.max(...samples.map(sample => sample.width)) / 2, xs = samples.map(sample => sample.x), ys = samples.map(sample => sample.y);
-      rivers.push({ depth: /deep/.test(path.style ?? "") ? 2 : 1, samples, box: [Math.min(...xs) - reach, Math.min(...ys) - reach, Math.max(...xs) + reach, Math.max(...ys) + reach] });
+      rivers.push({ depth: riverDepth(path) >= 3 ? 2 : 1, samples, box: [Math.min(...xs) - reach, Math.min(...ys) - reach, Math.max(...xs) + reach, Math.max(...ys) + reach] });
     }
   }
   known = (x, y) => {

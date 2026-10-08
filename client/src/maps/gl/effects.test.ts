@@ -8,10 +8,10 @@ it("вид воды хранится в карте: без него вода о�
   if (loaded.status !== "supported") throw Error("fixture");
   expect(mapWater(loaded.document)).toBeNull();
   const soft = { ...loaded.document, appearance: { style: "paper-ink" as const, water: "soft" as const } };
-  expect(mapWater(soft)).toEqual({ mode: 3, speed: 1, size: 8 });
-  const tuned = { ...soft, appearance: { ...soft.appearance, water: "sea" as const, waterSpeed: 0.5, waterPixels: 12 } };
-  expect(mapWater(tuned)).toEqual({ mode: 2, speed: 0.5, size: 12 });
+  expect(mapWater(soft)).toEqual({ mode: 3, speed: 1, size: 8, shoal: 0 });
+  const tuned = { ...soft, appearance: { ...soft.appearance, water: "sea" as const, waterSpeed: 0.5, waterPixels: 12, waterShoal: 2.5 } };
+  expect(mapWater(tuned)).toEqual({ mode: 2, speed: 0.5, size: 12, shoal: 2.5 });
   const saved = parseMapDocumentV6(serializeMapDocumentV6(tuned));
-  expect(saved.ok && saved.value.appearance).toEqual({ style: "paper-ink", water: "sea", waterSpeed: 0.5, waterPixels: 12 });
+  expect(saved.ok && saved.value.appearance).toEqual({ style: "paper-ink", water: "sea", waterSpeed: 0.5, waterPixels: 12, waterShoal: 2.5 });
   expect(parseMapDocumentV6(JSON.stringify({ ...JSON.parse(serializeMapDocumentV6(tuned)), appearance: { style: "paper-ink", waterPixels: 99 } })).ok).toBe(false);
 });

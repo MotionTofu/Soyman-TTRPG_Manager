@@ -19,14 +19,14 @@ export function setCrossing(doc: MapDocumentV6, selection: WorkspaceSelection, a
     ? { ...layer, paths: layer.paths.map(p => p.id === path.id ? { ...p, properties } : p) } : layer) } }));
 }
 
-/** Течение реки: `null` — по линии, от первой точки к последней. */
-export function setPathFlow(doc: MapDocumentV6, selection: WorkspaceSelection, flow: "back" | "still" | null) {
+/** Свойство реки. Течение: `null` — по линии, от первой точки к последней. Глубина: `null` — по виду реки. */
+export function setRiverProperty(doc: MapDocumentV6, selection: WorkspaceSelection, key: "flow" | "depth", value: string | number | null) {
   requireEditableLayer(doc, selection.layerId, "path");
   const path = selectedPath(doc, selection);
   if (!path) return doc;
-  const { flow: old, ...rest } = path.properties ?? {};
+  const { [key]: old, ...rest } = path.properties ?? {};
   void old;
-  const properties = flow ? { ...rest, flow } : rest;
+  const properties = value === null ? rest : { ...rest, [key]: value };
   return editGeometry(doc, view => ({ ok: true, changed: true, document: { ...view, layers: view.layers.map(layer => layer.id === selection.layerId && layer.kind === "path"
     ? { ...layer, paths: layer.paths.map(p => p.id === path.id ? { ...p, properties } : p) } : layer) } }));
 }

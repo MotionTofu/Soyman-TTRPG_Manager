@@ -136,6 +136,8 @@ export interface RenderPath {
   crossings?: readonly CrossingChoice[];
   /** Течение реки: без поля — от первой точки к последней, `back` — обратно, `still` — стоячая вода. */
   flow?: "back" | "still";
+  /** Глубина реки 1–5; без поля — по виду реки: мелкая 2, глубокая 4. */
+  depth?: number;
 }
 
 export interface RenderPathLayer extends RenderLayerBase {
@@ -415,7 +417,8 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
           paths.push({ kind: p.kind, cells: new Set(), nodes: p.geometry.nodes, width: p.width, closed: p.properties?.closed === true,
             ...(p.styleRef.type === "asset" ? { style: p.styleRef.assetId } : {}),
             ...(p.properties?.crossings ? { crossings: crossingChoices(p.properties.crossings) } : {}),
-            ...(p.properties?.flow === "back" || p.properties?.flow === "still" ? { flow: p.properties.flow } : {}) });
+            ...(p.properties?.flow === "back" || p.properties?.flow === "still" ? { flow: p.properties.flow } : {}),
+            ...(typeof p.properties?.depth === "number" ? { depth: Math.max(1, Math.min(5, Math.round(p.properties.depth))) } : {}) });
           continue;
         }
         const cells = new Set<string>();

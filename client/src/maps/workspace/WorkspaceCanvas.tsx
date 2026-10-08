@@ -91,7 +91,7 @@ export function WorkspaceCanvas({ gl, onGlFail, effects, map, document, camera, 
     return () => { stage.destroy(); stageRef.current = null; };
   }, [gl, onGlFail, wrapRef, meter]);
   const look = styleLook(document);
-  const waterLook = `${document.appearance?.water}:${document.appearance?.waterSpeed}:${document.appearance?.waterPixels}`;
+  const waterLook = `${document.appearance?.water}:${document.appearance?.waterSpeed}:${document.appearance?.waterPixels}:${document.appearance?.waterShoal}`;
   useEffect(() => { if (gl) stageRef.current?.effects(chosenLook(look, effects), chosenWeather(effects), mapWater(document)); },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- вода зависит только от своих настроек, а не от каждой правки карты
     [gl, look, effects, waterLook]);

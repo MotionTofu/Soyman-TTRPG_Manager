@@ -261,9 +261,9 @@ export class MapStage {
     }
     const screen = new Rectangle(0, 0, renderer.width, renderer.height);
     if (this.water) {
-      const sources = waterSources(frame.content.model, frame.content.width, frame.content.height);
+      const sources = waterSources(frame.content.model, frame.content.width, frame.content.height, this.water.shoal);
       if (sources.length !== this.maskOf.length || sources.some((source, i) => source !== this.maskOf[i])) {
-        drawWaterMask(this.maskCanvas, this.maskRaw, this.flowCanvas, frame.content.model, frame.content.width, frame.content.height);
+        drawWaterMask(this.maskCanvas, this.maskRaw, this.flowCanvas, frame.content.model, frame.content.width, frame.content.height, this.water.shoal);
         this.waterPass.refresh(); this.maskOf = sources;
       }
       this.waterPass.aim(this.water, x, y, frame.scale * frame.dpr, performance.now() / 1000, frame.content.width, frame.content.height);

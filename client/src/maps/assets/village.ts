@@ -91,6 +91,8 @@ export const villageSurfaceCode = (key: string) => `${SURFACE_PREFIX}${key}`;
 /** Вода с глубиной (решение владельца 2026-10-08): одна поверхность «Вода», глубину 1–5 задаёт кисть.
  * Глубина живёт в коде материала — `village-water-3`, — поэтому формат карты не меняется. Вода-шейдер
  * рисует плавный переход между глубинами; вода-картинка знает только два рисунка и делит шкалу пополам. */
+/** Глубина реки-линии 1–5: своя, а без неё — по виду реки (мелкая 2, глубокая 4). */
+export const riverDepth = (path: { style?: string; depth?: number }) => path.depth ?? (/deep/.test(path.style ?? "") ? 4 : 2);
 export const WATER_DEPTHS = [1, 2, 3, 4, 5] as const;
 export const waterCode = (depth: number) => villageSurfaceCode(`water-${depth}`);
 const WATER = /^village-water-([1-5])$/;

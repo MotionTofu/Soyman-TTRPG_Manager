@@ -14,6 +14,8 @@ it("смена течения реки пересобирает маску во�
   const forward = sources();
   expect(sources().every((source, i) => source === forward[i])).toBe(true);
   expect(sources("back").some((source, i) => source !== forward[i])).toBe(true);
+  const model = { layers: [] } as unknown as MapRenderModel;
+  expect(waterSources(model, 10, 10, 2)).not.toEqual(waterSources(model, 10, 10));
 });
 
 it("маска воды не пересобирается, пока двигают подпись, и пересобирается после мазка по поверхности", () => {

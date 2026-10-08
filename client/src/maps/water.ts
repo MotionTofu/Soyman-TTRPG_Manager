@@ -1,22 +1,22 @@
 import { flattenSplineWithWidths } from "./core/spline";
 import type { MapRenderModel } from "./renderModel";
-import { waterLevel } from "./assets/village";
+import { riverDepth, waterLevel } from "./assets/village";
 
 /** Вода шейдером (проба 2026-10-08). `mode`: 0 — комикс-панк, 1 — пиксельный пруд, 2 — пиксельное море, 3 — мягкая с дном;
  * `size` — пикселей на клетку у пиксельных. */
-export interface MapWater { mode: 0 | 1 | 2 | 3; speed: number; size: number }
+export interface MapWater { mode: 0 | 1 | 2 | 3; speed: number; size: number; shoal: number }
 
 /** Точек маски на клетку. Маска — вся карта одной картинкой: красный канал — «здесь вода», зелёный — глубина (1–5 пятыми долями). */
 const K = 4;
 
 /** Из чего собрана маска воды. Пока список тот же, маску не пересобирают: перетаскивание фишки или подписи воду не меняет,
  * а пересборка — это вся карта заново и отправка картинки видеокарте на каждый шаг руки. */
-export function waterSources(model: MapRenderModel, width: number, height: number): readonly unknown[] {
-  const out: unknown[] = [width, height];
+export function waterSources(model: MapRenderModel, width: number, height: number, shoal = 0): readonly unknown[] {
+  const out: unknown[] = [width, height, shoal];
   for (const layer of model.layers) {
     if (!layer.visible) continue;
     if (layer.kind === "terrain" && layer.terrain.mask?.source) out.push(layer.terrain.mask.source);
-    if (layer.kind === "path") for (const path of layer.paths) if (path.kind === "river" && path.style && path.nodes) out.push(path.nodes, path.width, path.style, path.closed, path.flow);
+    if (layer.kind === "path") for (const path of layer.paths) if (path.kind === "river" && path.style && path.nodes) out.push(path.nodes, path.width, path.style, path.closed, path.flow, path.depth);
   }
   return out;
 }
@@ -24,8 +24,9 @@ export function waterSources(model: MapRenderModel, width: number, height: numbe
 /**
  * Где на карте вода: поверхности воды из плавных слоёв и реки, залитые водой.
  * Края размыты на полклетки — по этому градиенту шейдер рисует берег и пену.
+ * `shoal` — отмель в клетках: у берега глубина 1 и набирает свою на этом расстоянии, так вода глубже к середине.
  */
-export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement, flow: HTMLCanvasElement, model: MapRenderModel, width: number, height: number): boolean {
+export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement, flow: HTMLCanvasElement, model: MapRenderModel, width: number, height: number, shoal = 0): boolean {
   const w = Math.max(1, Math.ceil(width * K)), h = Math.max(1, Math.ceil(height * K));
   for (const target of [canvas, raw, flow]) if (target.width !== w || target.height !== h) { target.width = w; target.height = h; }
   const pen = raw.getContext("2d"), out = canvas.getContext("2d"), stream = flow.getContext("2d");
@@ -63,9 +64,21 @@ export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement,
     }
   };
   for (const { path, samples } of rivers) {
-    pen.strokeStyle = /deep/.test(path.style!) ? "#ffcc00" : "#ff6600";
+    pen.strokeStyle = `rgb(255,${riverDepth(path) * 51},0)`;
     stroke(samples, 0);
     any = true;
+  }
+  if (shoal > 0 && any) {
+    // Расстояние до суши двумя проходами (шаг по прямой 1, по диагонали 1,4). Край карты сушей не считается: море уходит за него.
+    const wet = pen.getImageData(0, 0, w, h), px = wet.data, far = new Float32Array(w * h);
+    for (let i = 0; i < far.length; i++) far[i] = px[i * 4] > 127 ? 1e6 : 0;
+    const near = (i: number, x: number, y: number, dx: number, dy: number, cost: number) => {
+      if (x + dx >= 0 && x + dx < w && y + dy >= 0 && y + dy < h) far[i] = Math.min(far[i], far[i + dy * w + dx] + cost);
+    };
+    for (let y = 0, i = 0; y < h; y++) for (let x = 0; x < w; x++, i++) { near(i, x, y, -1, 0, 1); near(i, x, y, 0, -1, 1); near(i, x, y, -1, -1, 1.4); near(i, x, y, 1, -1, 1.4); }
+    for (let y = h - 1, i = w * h - 1; y >= 0; y--) for (let x = w - 1; x >= 0; x--, i--) { near(i, x, y, 1, 0, 1); near(i, x, y, 0, 1, 1); near(i, x, y, 1, 1, 1.4); near(i, x, y, -1, 1, 1.4); }
+    for (let i = 0; i < far.length; i++) if (px[i * 4 + 1] > 51) px[i * 4 + 1] = Math.round(51 + (px[i * 4 + 1] - 51) * Math.min(1, far[i] / (shoal * K)));
+    pen.putImageData(wet, 0, 0);
   }
   out.filter = `blur(${K * 0.4}px)`; out.drawImage(raw, 0, 0); out.filter = "none";
   // Течение — вторая картинка: красный — снос вправо, зелёный — вниз, ровный серый — стоячая вода.
@@ -290,9 +303,9 @@ export function drawWaterStill(ctx: CanvasRenderingContext2D, model: MapRenderMo
   cssW: number, cssH: number, scale: number, ox: number, oy: number, ratio: number): boolean {
   const stage = stillStage();
   if (!stage) return false;
-  const { gl, canvas } = stage, sources = waterSources(model, width, height);
+  const { gl, canvas } = stage, sources = waterSources(model, width, height, water.shoal);
   if (sources.length !== stage.sources.length || sources.some((source, i) => source !== stage.sources[i])) {
-    stage.any = drawWaterMask(stage.mask, stage.raw, stage.flow, model, width, height); stage.sources = sources;
+    stage.any = drawWaterMask(stage.mask, stage.raw, stage.flow, model, width, height, water.shoal); stage.sources = sources;
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.activeTexture(gl.TEXTURE1); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, stage.flow);
     gl.activeTexture(gl.TEXTURE0); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, stage.mask);
