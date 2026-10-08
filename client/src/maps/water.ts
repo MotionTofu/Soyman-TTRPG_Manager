@@ -1,13 +1,14 @@
 import { flattenSplineWithWidths } from "./core/spline";
 import type { MapRenderModel } from "./renderModel";
-import { riverDepth, waterLevel } from "./assets/village";
+import { liquidKind, riverDepth, waterLevel } from "./assets/village";
 
 /** Вода шейдером (проба 2026-10-08). `mode`: 0 — комикс-панк, 1 — пиксельный пруд, 2 — пиксельное море, 3 — мягкая с дном;
  * `size` — пикселей на клетку у пиксельных. */
 export interface MapWater { mode: 0 | 1 | 2 | 3; speed: number; size: number; shoal: number }
 
 /** Точек маски на клетку. Маска — вся карта одной картинкой: красный канал — «здесь вода», зелёный — глубина (1–5 пятыми долями),
- * синий — «ближайший берег песчаный»: у пляжа пена шире, у травы и камня берег резче. */
+ * синий — «ближайший берег песчаный»: у пляжа пена шире, у травы и камня берег резче.
+ * В синем канале картинки течения — номер жидкости ×32 (вода — 0), без размытия. */
 const K = 4;
 
 /** Из чего собрана маска воды. Пока список тот же, маску не пересобирают: перетаскивание фишки или подписи воду не меняет,
@@ -32,7 +33,7 @@ export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement,
   for (const target of [canvas, raw, flow]) if (target.width !== w || target.height !== h) { target.width = w; target.height = h; }
   const pen = raw.getContext("2d"), out = canvas.getContext("2d"), stream = flow.getContext("2d");
   if (!pen || !out || !stream) return false;
-  const image = pen.createImageData(w, h), data = image.data;
+  const image = pen.createImageData(w, h), data = image.data, kinds = new Uint8Array(w * h);
   let any = false;
   for (let i = 3; i < data.length; i += 4) data[i] = 255;
   for (const layer of model.layers) {
@@ -45,7 +46,7 @@ export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement,
       const code = mask.source.codes[chunk.values[i] - 1], depth = waterLevel(code), beach = /^village-sand/.test(code ?? "") ? 255 : 0;
       const x0 = Math.round((mask.origin.x + (chunk.cx * 16 + i % 16) * mask.sampleSize) * K), y0 = Math.round((mask.origin.y + (chunk.cy * 16 + Math.floor(i / 16)) * mask.sampleSize) * K);
       for (let y = Math.max(0, y0); y < Math.min(h, y0 + Math.max(1, Math.round(step))); y++) for (let x = Math.max(0, x0); x < Math.min(w, x0 + Math.max(1, Math.round(step))); x++) {
-        const at = (y * w + x) * 4; data[at] = depth ? 255 : 0; data[at + 1] = depth * 51; data[at + 2] = beach;
+        const at = (y * w + x) * 4; data[at] = depth ? 255 : 0; data[at + 1] = depth * 51; data[at + 2] = beach; kinds[at / 4] = liquidKind(code);
       }
       any ||= depth > 0;
     }
@@ -83,6 +84,12 @@ export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement,
     for (let y = h - 1, i = w * h - 1; y >= 0; y--) for (let x = w - 1; x >= 0; x--, i--) { near(i, x, y, 1, 0, 1); near(i, x, y, 0, 1, 1); near(i, x, y, 1, 1, 1.4); near(i, x, y, -1, 1, 1.4); }
     if (shoal > 0) for (let i = 0; i < far.length; i++) if (px[i * 4 + 1] > 51) px[i * 4 + 1] = Math.round(51 + (px[i * 4 + 1] - 51) * Math.min(1, far[i] / (shoal * K)));
     pen.putImageData(wet, 0, 0);
+    // Номер жидкости заходит на полклетки на сушу: размытый край маски шире закрашенного, и без этого у лавы была бы водяная кайма.
+    for (let pass = 0; pass < 2; pass++) {
+      const was = kinds.slice();
+      for (let y = 0, i = 0; y < h; y++) for (let x = 0; x < w; x++, i++) if (!far[i] && !was[i])
+        kinds[i] = Math.max(x ? was[i - 1] : 0, x < w - 1 ? was[i + 1] : 0, y ? was[i - w] : 0, y < h - 1 ? was[i + w] : 0);
+    }
   }
   out.filter = `blur(${K * 0.4}px)`; out.drawImage(raw, 0, 0); out.filter = "none";
   // Течение — вторая картинка: красный — снос вправо, зелёный — вниз, ровный серый — стоячая вода.
@@ -96,6 +103,11 @@ export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement,
   }
   stream.fillStyle = calm; stream.fillRect(0, 0, w, h);
   stream.filter = `blur(${K * 0.5}px)`; stream.drawImage(raw, 0, 0); stream.filter = "none";
+  if (any) {
+    const kinded = stream.getImageData(0, 0, w, h);
+    for (let i = 0; i < kinds.length; i++) kinded.data[i * 4 + 2] = kinds[i] * 32;
+    stream.putImageData(kinded, 0, 0);
+  }
   return any;
 }
 
@@ -103,6 +115,7 @@ export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement,
 // Пиксельные виды двигаются рывками, а не плавно: покадровая анимация ближе к рисованной карте.
 /** Общая часть шейдера: по точке карты и времени отдаёт цвет воды. Ею рисуют и сцена WebGL, и обычный холст. */
 export const WATER_GLSL = `
+const float MASK_K = ${K}.0;
 uniform sampler2D uMask;
 uniform sampler2D uFlow;
 uniform vec2 uMap;
@@ -230,6 +243,23 @@ vec4 soft(vec2 w, vec2 s, float t) {
   return vec4(col, a);
 }
 
+// Другие жидкости — та же вода, перекрашенная по яркости в свою шкалу: тёмное, среднее, светлое. Рисунок вида
+// (пиксели, дуги, блики) остаётся, поэтому лава в пиксельной карте пиксельная, а блики на ней — раскалённые трещины.
+vec3 ramp(vec3 c, vec3 lo, vec3 mid, vec3 hi) {
+  float x = clamp((dot(c, vec3(0.3, 0.59, 0.11)) - 0.25) / 0.7, 0.0, 1.0);
+  return x < 0.5 ? mix(lo, mid, x * 2.0) : mix(mid, hi, x * 2.0 - 1.0);
+}
+vec3 liquid(vec3 c, float kind) {
+  if (kind < 0.5) return c;
+  if (kind < 1.5) return ramp(c, vec3(0.13, 0.15, 0.07), vec3(0.3, 0.34, 0.14), vec3(0.62, 0.68, 0.36));
+  if (kind < 2.5) return ramp(c, vec3(0.16, 0.05, 0.04), vec3(0.72, 0.18, 0.04), vec3(1.0, 0.9, 0.4));
+  if (kind < 3.5) return ramp(c, vec3(0.55, 0.72, 0.82), vec3(0.8, 0.9, 0.94), vec3(1.0));
+  if (kind < 4.5) return ramp(c, vec3(0.2, 0.33, 0.05), vec3(0.6, 0.78, 0.1), vec3(0.93, 1.0, 0.6));
+  if (kind < 5.5) return ramp(c, vec3(0.03, 0.03, 0.04), vec3(0.12, 0.1, 0.09), vec3(0.42, 0.36, 0.3));
+  return ramp(c, vec3(0.02, 0.03, 0.06), vec3(0.1, 0.13, 0.2), vec3(0.55, 0.6, 0.68));
+}
+// Во сколько раз жидкость медленнее воды: лёд стоит, лава и смола ползут.
+float pace(float kind) { return kind < 0.5 ? 1.0 : kind < 1.5 ? 0.5 : kind < 2.5 ? 0.35 : kind < 3.5 ? 0.0 : kind < 4.5 ? 1.2 : kind < 5.5 ? 0.25 : 0.5; }
 vec4 look(vec2 w, vec2 s, float t) { return uWater.x > 2.5 ? soft(w, s, t) : uWater.x > 0.5 ? pixel(w, s, t, uWater.x > 1.5) : comic(w, s, t); }
 // Мокрая полоса на суше у самой воды, 0…1: земля там темнее.
 float wetAt(vec2 world) {
@@ -242,15 +272,19 @@ vec4 waterAt(vec2 world, float t) {
   // Пиксельные виды считают течение по целому «пикселю» карты, иначе клетки рисунка рвутся.
   bool blocky = uWater.x > 0.5 && uWater.x < 2.5;
   vec2 w = blocky ? (floor(world * uWater.z) + 0.5) / uWater.z : world;
+  // Номер жидкости берётся из середины точки маски, без сглаживания: между номерами нет «промежуточной» жидкости.
+  float kind = floor(texture(uFlow, (floor(w * MASK_K) + 0.5) / MASK_K / uMap).b * 7.97 + 0.5);
+  t *= pace(kind);
   vec2 f = texture(uFlow, w / uMap).rg * 2.0 - 1.0;
-  if (dot(f, f) < 0.01) return look(w, w, t);
+  if (dot(f, f) < 0.01) { vec4 calm = look(w, w, t); return vec4(liquid(calm.rgb, kind), calm.a); }
   // Рисунок сносит вдоль реки. Если сносить бесконечно, на излучинах он растянется в кашу, поэтому идут два
   // круга сноса со сдвигом в полкруга: пока один возвращается к началу, виден другой.
   float ph = (blocky ? floor(t * 6.0) / 6.0 : t) * 0.4 + noise(w * 0.12);
   float a = fract(ph), b = fract(ph + 0.5), share = 1.0 - abs(2.0 * a - 1.0);
   vec4 one = look(w, w - f * (a - 0.5) * 2.4, t), two = look(w, w - f * (b - 0.5) * 2.4, t);
   // Мягкая вода смешивает круги плавно; у остальных своя палитра, поэтому круги меняются пятнами.
-  return mix(two, one, uWater.x > 2.5 ? share : step(noise(w * 1.7 + 20.0), share));
+  vec4 moved = mix(two, one, uWater.x > 2.5 ? share : step(noise(w * 1.7 + 20.0), share));
+  return vec4(liquid(moved.rgb, kind), moved.a);
 }
 `;
 

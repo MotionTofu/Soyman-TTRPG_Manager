@@ -1,7 +1,7 @@
 import { useState, memo } from "react";
 import { CARTOGRAPHY_OBJECTS, CARTOGRAPHY_SURFACES, cartographyId, cartographyUrl } from "../assets/cartography";
 import { CRYPT_CATEGORIES, CRYPT_OBJECTS, CRYPT_SURFACES, cryptId, cryptUrl, type CryptCategory } from "../assets/crypt";
-import { VILLAGE_CATEGORIES, VILLAGE_OBJECTS, VILLAGE_PACK, VILLAGE_RIVERS, VILLAGE_ROADS, VILLAGE_SURFACES, WATER_DEPTHS, randomVariantId, variantKeys, villageId, villageSurfaceCode, villageUrl, waterCode, waterLevel, type VillageCategory } from "../assets/village";
+import { VILLAGE_CATEGORIES, VILLAGE_OBJECTS, VILLAGE_PACK, VILLAGE_RIVERS, VILLAGE_ROADS, VILLAGE_SURFACES, WATER_DEPTHS, LIQUIDS, liquidKind, randomVariantId, variantKeys, villageId, villageSurfaceCode, villageUrl, waterCode, waterLevel, type VillageCategory } from "../assets/village";
 import { MAP_SYMBOL_ASSETS } from "../assets/registry";
 import { SCATTER_PROFILES } from "../scatter";
 import type { WorkspaceTool } from "./editorCommands";
@@ -9,13 +9,14 @@ import type { ToolSet } from "./toolSets";
 
 /** Плитка — семейство. `variants` — что именно ставить: конкретный вариант или «случайный» (без картинки). */
 type Variant = { id: string; name: string; url: string | null };
-type Tile = { id: string; name: string; url: string | null; size?: string; chosen: boolean; choose: () => void; variants?: Variant[] };
+type Tile = { id: string; name: string; url: string | null; fill?: string; size?: string; chosen: boolean; choose: () => void; variants?: Variant[] };
 type Category = { key: string; name: string; pack: string; tiles: Tile[] };
 const PAPER = "Бумага и тушь", CRYPT = "Подземелье · Склеп", VILLAGE = "Местность · Деревня у реки";
 
-function Thumbnail({ url }: { url: string | null }) {
+function Thumbnail({ url, fill }: { url: string | null; fill?: string }) {
   const [failed, setFailed] = useState(false);
   return url && !failed ? <img src={url} alt="" onError={() => setFailed(true)} />
+    : fill ? <span className="workspace-catalog-glyph" style={{ background: fill }} aria-hidden="true" />
     : <span className="workspace-catalog-glyph" title={failed ? "Изображение недоступно" : undefined} aria-hidden="true">✦</span>;
 }
 const cells = (size: number) => size >= 1 ? `${Math.round(size * 10) / 10} кл.` : undefined;
@@ -54,13 +55,14 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, toolSet, comicPun
   const villageObjects = (Object.keys(VILLAGE_CATEGORIES) as VillageCategory[]).map((key) => ({ key, name: VILLAGE_CATEGORIES[key], pack: VILLAGE, tiles: village(key) }));
   const cryptObjects = (Object.keys(CRYPT_CATEGORIES) as CryptCategory[]).map((key) => ({ key, name: CRYPT_CATEGORIES[key], pack: CRYPT, tiles: crypt(key) }));
   // Вода — одна плитка: мелко или глубоко, решает ползунок глубины, а не выбор из двух поверхностей.
-  const villageWater = material.startsWith("village-") ? waterLevel(material) : 0;
+  const villageWater = material.startsWith("village-") ? waterLevel(material) : 0, villageLiquid = liquidKind(material);
   const villageSurfaces: Category = { key: "village-surfaces", name: "Местность", pack: VILLAGE, tiles: [...VILLAGE_SURFACES.filter((item) => item.key !== "shallow" && item.key !== "deep").map((item): Tile => {
     const keys = variantKeys(item.key, item.variants);
     return { id: villageSurfaceCode(item.key), name: item.name, url: villageUrl(item.key), chosen: keys.some((key) => material === villageSurfaceCode(key)),
       choose: () => onMaterial(villageSurfaceCode(item.key)),
       variants: keys.map((key, i) => ({ id: villageSurfaceCode(key), name: `Вариант ${i + 1}`, url: villageUrl(key) })) };
-  }), { id: waterCode(2), name: "Вода", url: villageUrl("shallow"), chosen: villageWater > 0, choose: () => onMaterial(waterCode(2)) }] };
+  }), ...LIQUIDS.map((item, kind): Tile => ({ id: waterCode(2, item.key), name: item.name, url: kind ? null : villageUrl("shallow"), fill: item.fill,
+    chosen: villageWater > 0 && villageLiquid === kind, choose: () => onMaterial(waterCode(kind === 2 || kind === 6 ? 4 : 2, item.key)) }))] };
   const baseSurfaces: Category = { key: "surfaces", name: local ? "Основные" : "Подземелье", pack: comicPunk ? CRYPT : PAPER, tiles: CARTOGRAPHY_SURFACES.map((item) => ({
     id: item.code, name: item.name, url: comicPunk && CRYPT_SURFACES[item.code] ? cryptUrl(CRYPT_SURFACES[item.code]) : item.key ? cartographyUrl(item.key) : null,
     chosen: material === item.code, choose: () => onMaterial(item.code),
@@ -109,12 +111,12 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, toolSet, comicPun
       </button>)}
     </div>}
     {!line && villageWater > 0 && <label className="workspace-catalog-depth">Глубина · {villageWater} из {WATER_DEPTHS.length}
-      <input aria-label="Глубина воды" type="range" min={1} max={WATER_DEPTHS.length} step={1} value={villageWater} onChange={(event) => onMaterial(waterCode(Number(event.target.value)))} />
-      <small>1 — по щиколотку, 3 и глубже — вброд не перейти. Переход между глубинами плавный в «живой воде».</small>
+      <input aria-label="Глубина воды" type="range" min={1} max={WATER_DEPTHS.length} step={1} value={villageWater} onChange={(event) => onMaterial(waterCode(Number(event.target.value), LIQUIDS[villageLiquid].key))} />
+      <small>1 — по щиколотку, 3 и глубже — вброд не перейти. Переход между глубинами плавный в «живой воде».{villageLiquid > 0 && " Эта жидкость оживает только с «живой водой» (Карта ▾ → Вода); без неё — ровная заливка."}</small>
     </label>}
     <div className="workspace-catalog-tiles">
       {tiles.map((tile) => <button key={tile.id} type="button" aria-pressed={tile.chosen} onClick={tile.choose}>
-        <Thumbnail url={tile.url} />
+        <Thumbnail url={tile.url} fill={tile.fill} />
         <span><strong>{tile.name}</strong>{tile.size && <small>{tile.size}</small>}</span>
       </button>)}
       {!tiles.length && <p>Ничего не найдено. Попробуйте другое название.</p>}

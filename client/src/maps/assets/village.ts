@@ -94,18 +94,34 @@ export const villageSurfaceCode = (key: string) => `${SURFACE_PREFIX}${key}`;
 /** Глубина реки-линии 1–5: своя, а без неё — по виду реки (мелкая 2, глубокая 4). */
 export const riverDepth = (path: { style?: string; depth?: number }) => path.depth ?? (/deep/.test(path.style ?? "") ? 4 : 2);
 export const WATER_DEPTHS = [1, 2, 3, 4, 5] as const;
-export const waterCode = (depth: number) => villageSurfaceCode(`water-${depth}`);
-const WATER = /^village-water-([1-5])$/;
-/** Глубина воды по коду материала: 0 — не вода. Прежние «мелководье» и «глубокая вода» — глубины 2 и 4. */
-export const waterLevel = (code: string | null | undefined) => !code ? 0 : WATER.test(code) ? Number(WATER.exec(code)![1])
+/** Жидкости: вода и её родня. Красятся той же кистью с той же глубиной, код — `village-lava-3`. Номер в списке —
+ * номер жидкости в маске и в шейдере (вода — 0); шейдер рисует их как воду, перекрашенную в свою шкалу тонов.
+ * Картинок у них пока нет: без «живой воды» это ровная заливка цветом `fill`. */
+export const LIQUIDS = [
+  { key: "water", name: "Вода", fill: "#2f9c8c" },
+  { key: "swamp", name: "Болото", fill: "#4a5226" },
+  { key: "lava", name: "Лава", fill: "#c8421a" },
+  { key: "ice", name: "Лёд", fill: "#cfe6ee" },
+  { key: "acid", name: "Кислота", fill: "#a4c21f" },
+  { key: "tar", name: "Смола", fill: "#1c1a1a" },
+  { key: "chasm", name: "Пропасть с туманом", fill: "#232a36" },
+] as const;
+export type LiquidKey = typeof LIQUIDS[number]["key"];
+export const waterCode = (depth: number, kind: LiquidKey = "water") => villageSurfaceCode(`${kind}-${depth}`);
+const WATER = new RegExp(`^village-(${LIQUIDS.map(item => item.key).join("|")})-([1-5])$`);
+/** Глубина жидкости по коду материала: 0 — не жидкость. Прежние «мелководье» и «глубокая вода» — глубины 2 и 4. */
+export const waterLevel = (code: string | null | undefined) => !code ? 0 : WATER.test(code) ? Number(WATER.exec(code)![2])
   : /deep|sea|lake/.test(code) ? 4 : /shallow|water/.test(code) ? 2 : 0;
+/** Номер жидкости в `LIQUIDS`; вода и всё, что не жидкость, — 0. */
+export const liquidKind = (code: string | null | undefined) => Math.max(0, LIQUIDS.findIndex(item => item.key === WATER.exec(code ?? "")?.[1]));
 const WATER_PICTURE = ["shallow", "shallow", "shallow-2", "deep", "deep-2"], WATER_FILL = ["#58b9a6", "#2f9c8c", "#27808a", "#1d5a6c", "#143f55"];
 /** Ключ картинки по коду материала; `null` — код не из этого набора. */
 export const villageSurfaceKey = (code: string) => !code.startsWith(SURFACE_PREFIX) ? null
-  : WATER.test(code) ? WATER_PICTURE[waterLevel(code) - 1] : code.slice(SURFACE_PREFIX.length);
+  : !WATER.test(code) ? code.slice(SURFACE_PREFIX.length) : liquidKind(code) ? LIQUIDS[liquidKind(code)].key : WATER_PICTURE[waterLevel(code) - 1];
 /** Цвет, пока картинка грузится, и в «Чертеже». */
 export const VILLAGE_FILL: Readonly<Record<string, string>> = Object.fromEntries([...VILLAGE_SURFACES.flatMap(item =>
-  variantKeys(item.key, item.variants).map(key => [villageSurfaceCode(key), item.fill])), ...WATER_DEPTHS.map(depth => [waterCode(depth), WATER_FILL[depth - 1]])]);
+  variantKeys(item.key, item.variants).map(key => [villageSurfaceCode(key), item.fill])), ...WATER_DEPTHS.map(depth => [waterCode(depth), WATER_FILL[depth - 1]]),
+  ...LIQUIDS.slice(1).flatMap(item => WATER_DEPTHS.map(depth => [waterCode(depth, item.key), item.fill]))]);
 export const VILLAGE_SURFACE_KEYS = VILLAGE_SURFACES.flatMap(item => variantKeys(item.key, item.variants));
 
 export const villageId = (key: string) => `${VILLAGE_PACK.id}:${key}`;
