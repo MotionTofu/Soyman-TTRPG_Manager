@@ -110,7 +110,7 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, toolSet, comicPun
         {variant.url ? <img src={variant.url} alt="" /> : <span aria-hidden="true">?</span>}
       </button>)}
     </div>}
-    {!line && villageWater > 0 && <label className="workspace-catalog-depth">Глубина · {villageWater} из {WATER_DEPTHS.length}
+    {!line && tool !== "asset" && tool !== "scatter" && villageWater > 0 && <label className="workspace-catalog-depth">Глубина · {villageWater} из {WATER_DEPTHS.length}
       <input aria-label="Глубина воды" type="range" min={1} max={WATER_DEPTHS.length} step={1} value={villageWater} onChange={(event) => onMaterial(waterCode(Number(event.target.value), LIQUIDS[villageLiquid].key))} />
       <small>1 — по щиколотку, 3 и глубже — вброд не перейти. Переход между глубинами плавный в «живой воде».{villageLiquid > 0 && " Жидкость движется только с «живой водой» (Карта ▾ → Вода); без неё — неподвижная картинка."}</small>
     </label>}
