@@ -40,7 +40,7 @@ export function WorkspaceCanvas({ gl, liquidDraft, onGlFail, effects, map, docum
   onPointerDown: PointerEventHandler<HTMLCanvasElement>; onPointerMove: PointerEventHandler<HTMLCanvasElement>;
   onPointerUp: PointerEventHandler<HTMLCanvasElement>; onPointerCancel: PointerEventHandler<HTMLCanvasElement>;
   draftLine?: readonly Vec2[] | null;
-  wallDraft?: { kind?: "wall" | "road" | "river"; points: readonly Vec2[]; pointCount: number; width: number; canClose: boolean; closing: boolean } | null;
+  wallDraft?: { kind?: "wall" | "road" | "river" | "quarter"; points: readonly Vec2[]; pointCount: number; width: number; canClose: boolean; closing: boolean } | null;
   onDoubleClick?: () => void;
   cellBrush?: readonly { x: number; y: number }[] | null;
   selectedNodes?: readonly number[];
@@ -180,7 +180,7 @@ export function WorkspaceCanvas({ gl, liquidDraft, onGlFail, effects, map, docum
     }
     if (wallDraft) {
       ctx.save(); ctx.globalAlpha = 0.5;
-      if (!wallDraft.kind || wallDraft.kind === "wall") drawWallPolyline(ctx, wallDraft.points, wallDraft.width, wallDraft.closing, camera.scale, camera.ox, camera.oy);
+      if (!wallDraft.kind || wallDraft.kind === "wall" || wallDraft.kind === "quarter") drawWallPolyline(ctx, wallDraft.points, wallDraft.width, wallDraft.closing, camera.scale, camera.ox, camera.oy);
       else {
         const points = wallDraft.closing ? wallDraft.points.slice(0, -1) : wallDraft.points;
         const nodes = pathNodesFromAnchors(points, wallDraft.closing);
@@ -194,7 +194,7 @@ export function WorkspaceCanvas({ gl, liquidDraft, onGlFail, effects, map, docum
       ctx.restore();
       ctx.save(); ctx.strokeStyle = "#ff3e91"; ctx.lineWidth = 2; ctx.fillStyle = "#faf8ef";
       wallDraft.points.forEach((p, i) => { ctx.beginPath(); ctx.arc(X(p.x), Y(p.y), i === 0 && wallDraft.canClose ? 7 : 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); });
-      if (wallDraft.closing) { ctx.fillStyle = "#171717"; ctx.font = '14px "Sofia Sans Semi Condensed", sans-serif'; ctx.fillText(wallDraft.kind && wallDraft.kind !== "wall" ? "Замкнуть линию" : "Замкнуть стену", X(wallDraft.points[0].x) + 12, Y(wallDraft.points[0].y) - 12); }
+      if (wallDraft.closing) { ctx.fillStyle = "#171717"; ctx.font = '14px "Sofia Sans Semi Condensed", sans-serif'; ctx.fillText(wallDraft.kind === "quarter" ? "Замкнуть квартал" : wallDraft.kind && wallDraft.kind !== "wall" ? "Замкнуть линию" : "Замкнуть стену", X(wallDraft.points[0].x) + 12, Y(wallDraft.points[0].y) - 12); }
       ctx.restore();
     }
     if (draftLine?.length && !wallDraft) {

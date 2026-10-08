@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createGameplayToken, putGameplayToken, serializeMapDocumentV6, parseMapDocumentV6 } from "@shared/maps/core";
 import { loadStoredWorkspaceDocument } from "../editor/loadDocument";
-import { addLabel, addSymbol, createDoor, createRoom, moveSelection, paintSegment, removeSelection } from "./editorCommands";
+import { addLabel, addSymbol, createDoor, createQuarter, createRoom, moveSelection, paintSegment, removeSelection } from "./editorCommands";
 import { editGeometry, geometryView } from "./editDocument";
 import { createGameplayLayer, deleteLayer } from "../core/mutations/layers";
 import { createWorkspaceRenderModel } from "./renderV6";
@@ -42,6 +42,23 @@ describe("workspace document operations", () => {
     expect(geometryView(deleted).layers.find((entry) => entry.id === layerId)).toMatchObject({ items: [] });
     expect(() => editGeometry(deleted, (view) => deleteLayer(view, layerId))).toThrow(/токены/);
     expect(() => createRoom(deleted, layerId, "token", { x: 1, y: 1 }, { x: 3, y: 3 }, true)).toThrow(/целостность/);
+  });
+  it("квартал по точкам: контур с именем и заливкой рисуется, двигается и переживает сохранение", () => {
+    let doc = fixture();
+    const layerId = doc.layers.find((layer) => layer.kind === "gameplay")!.id;
+    // Повтор точки и замыкание на первую не добавляют углов; двух точек мало для контура.
+    expect(createQuarter(doc, layerId, "none", [{ x: 1, y: 1 }, { x: 4, y: 1 }, { x: 4, y: 1 }])).toBe(doc);
+    expect(createQuarter(doc, layerId, "flat", [{ x: 12, y: 1 }, { x: 12, y: 4 }, { x: 12, y: 9 }])).toBe(doc);
+    doc = createQuarter(doc, layerId, "port", [{ x: 1, y: 1 }, { x: 6, y: 2 }, { x: 6, y: 2 }, { x: 4.5, y: 7 }, { x: 1, y: 1 }]);
+    const quarter = () => { const layer = doc.layers.find((entry) => entry.id === layerId); return layer?.kind === "gameplay" ? layer.items.find((item) => item.id === "port") : undefined; };
+    expect(quarter()).toMatchObject({ kind: "room", name: "Квартал 1", fill: "#c9772e", geometry: { type: "polygon", points: [{ x: 1, y: 1 }, { x: 6, y: 2 }, { x: 4.5, y: 7 }] } });
+    const view = createWorkspaceRenderModel(doc);
+    expect(view.diagnostics).toEqual([]);
+    expect(view.model.layers.flatMap((layer) => layer.kind === "gameplay" ? layer.items : []).find((item) => item.kind === "room")).toMatchObject({ room: { rect: { x: 1, y: 1, w: 5, h: 6 }, points: [{ x: 1, y: 1 }, { x: 6, y: 2 }, { x: 4.5, y: 7 }] } });
+    doc = moveSelection(doc, { id: "port", layerId, kind: "gameplay" }, { x: 2, y: 0 });
+    expect(quarter()).toMatchObject({ geometry: { points: [{ x: 3, y: 1 }, { x: 8, y: 2 }, { x: 6.5, y: 7 }] } });
+    const saved = parseMapDocumentV6(serializeMapDocumentV6(doc));
+    expect(saved.ok && saved.value).toEqual(doc);
   });
   it("honors hidden and locked targets without painting another layer", () => {
     const doc = fixture(), terrain = doc.layers.find((layer) => layer.kind === "terrain")!;

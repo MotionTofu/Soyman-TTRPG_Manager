@@ -13,7 +13,7 @@ import { shapeContains } from "../scatter";
 import type { useMapCamera } from "../editor/hooks/useMapCamera";
 import { addFreePath, addScatter, editPathNode, paintSurface, paintSurfaceStroke, freePathHit, selectedPath } from "./artisticCommands";
 import { geometryView } from "./editDocument";
-import { cellBrushFootprint, createDoor, createRoom, paintSegment, quantize, requireEditableLayer, roomRect, addSymbol,
+import { cellBrushFootprint, createDoor, createQuarter, createRoom, paintSegment, quantize, requireEditableLayer, roomRect, addSymbol,
   type WorkspaceSelection, type WorkspaceTool } from "./editorCommands";
 import type { BrushSettings } from "./ToolSettings";
 import type { WorkspaceDocument } from "./useWorkspaceDocument";
@@ -22,7 +22,7 @@ import { mergeSelections, moveSelections, selectInRect, selectionRect, type Sele
 import { addWall, wallPoint } from "./walls";
 import { paintCellShapes } from "./cellPainting";
 
-type WallGesture = { type: "wall-line"; kind?: "wall" | "road" | "river"; before: MapDocumentV6; points: Vec2[]; layerId: string; pointerId: number };
+type WallGesture = { type: "wall-line"; kind?: "wall" | "road" | "river" | "quarter"; before: MapDocumentV6; points: Vec2[]; layerId: string; pointerId: number };
 
 export type Gesture = { type: "paint" | "room" | "move" | "line" | "node"; before: MapDocumentV6; start: Vec2; last: Vec2; pointerId: number; points?: Vec2[]; node?: { index: number; handle: "position" | "in" | "out"; indices?: number[] }; stamps?: number }
   | { type: "pan"; start: Vec2; ox: number; oy: number; pointerId: number; resume?: WallGesture }
@@ -76,7 +76,9 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
       return;
     }
     if (current.type === "wall-line") {
-      if (!cancel) commit(before => current.kind && current.kind !== "wall" ? addFreePath(before, current.layerId, current.points, current.kind, settings.lineWidth, closed, (current.kind === "road" ? settings.roadStyle : settings.riverStyle) || undefined) : addWall(before, current.layerId, current.points, settings.wallWidth ?? 0.36, closed, settings.wallStyle || undefined));
+      const line = current.kind;
+      if (line === "quarter") { if (!cancel) commit(before => createQuarter(before, current.layerId, crypto.randomUUID(), current.points)); return; }
+      if (!cancel) commit(before => line && line !== "wall" ? addFreePath(before, current.layerId, current.points, line, settings.lineWidth, closed, (line === "road" ? settings.roadStyle : settings.riverStyle) || undefined) : addWall(before, current.layerId, current.points, settings.wallWidth ?? 0.36, closed, settings.wallStyle || undefined));
       return;
     }
     if (current.type === "cell-area") {
@@ -195,8 +197,8 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
       event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId);
       gesture.current = { type: "pan", start: { x: event.clientX, y: event.clientY }, ox: camera.cam.ox, oy: camera.cam.oy, pointerId: event.pointerId, resume: current }; return;
     }
-    if (current?.type === "wall-line" && tool === (current.kind ?? "wall") && event.button === 0 && !doc.disabled && autosave.status.kind !== "conflict") {
-      const anchor = current.kind && current.kind !== "wall" ? quantize(current.before, point, snap) : wallPoint(current.before, point, snap);
+    if (current?.type === "wall-line" && tool === (current.kind === "quarter" ? "shape" : current.kind ?? "wall") && event.button === 0 && !doc.disabled && autosave.status.kind !== "conflict") {
+      const anchor = current.kind === "road" || current.kind === "river" ? quantize(current.before, point, snap) : wallPoint(current.before, point, snap);
       const atFirst = Math.hypot(anchor.x - current.points[0].x, anchor.y - current.points[0].y) <= Math.max(0.1, 8 / camera.cam.scale);
       if (current.points.length >= 3 && atFirst) { finishGesture(false, true); return; }
       if (current.points.length === 2 && atFirst) return;
@@ -212,11 +214,13 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
     if (placement.pending) { placement.confirm(point); return; }
     const document = documentRef.current;
     if (!document) return;
-    if (tool === "wall" || (tool === "road" || tool === "river") && settings.pathMode === "points") {
+    const corners = tool === "shape" && !!quarter && settings.quarterMode !== "rect";
+    if (corners || tool === "wall" || (tool === "road" || tool === "river") && settings.pathMode === "points") {
       try {
-        requireEditableLayer(document, activeLayer, "path");
-        const anchor = tool === "wall" ? wallPoint(document, point, snap) : quantize(document, point, snap);
-        gesture.current = { type: "wall-line", kind: tool, before: document, points: [anchor], layerId: activeLayer, pointerId: event.pointerId };
+        requireEditableLayer(document, activeLayer, corners ? "gameplay" : "path");
+        // Углы квартала, как и стена, встают в узлы сетки, а не в середины клеток.
+        const anchor = tool === "wall" || corners ? wallPoint(document, point, snap) : quantize(document, point, snap);
+        gesture.current = { type: "wall-line", kind: tool === "shape" ? "quarter" : tool, before: document, points: [anchor], layerId: activeLayer, pointerId: event.pointerId };
         setDraftLine([anchor]); setBrushCursor(point);
       } catch (error) { showError(error); }
       return;
@@ -300,7 +304,7 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
     if (placement.pending && !gesture.current) { placement.move(point); return; }
     const current = gesture.current;
     if (current?.type === "wall-line") {
-      const anchor = current.kind && current.kind !== "wall" ? quantize(current.before, point, snap) : wallPoint(current.before, point, snap);
+      const anchor = current.kind === "road" || current.kind === "river" ? quantize(current.before, point, snap) : wallPoint(current.before, point, snap);
       setDraftLine([...current.points, anchor]); return;
     }
     if (!current || current.pointerId !== event.pointerId) return;
@@ -378,7 +382,7 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
     ? cellBrushFootprint(documentRef.current, brushCursor, settings.cellSize ?? 1) : null;
   const wallGesture = gesture.current?.type === "wall-line" ? gesture.current : null;
   const canCloseWall = !!wallGesture && wallGesture.points.length >= 3;
-  const wallDraft = wallGesture ? { points: draftLine ?? wallGesture.points, kind: wallGesture.kind ?? "wall", width: wallGesture.kind && wallGesture.kind !== "wall" ? settings.lineWidth : settings.wallWidth ?? 0.36,
+  const wallDraft = wallGesture ? { points: draftLine ?? wallGesture.points, kind: wallGesture.kind ?? "wall", width: wallGesture.kind === "quarter" ? 0.12 : wallGesture.kind && wallGesture.kind !== "wall" ? settings.lineWidth : settings.wallWidth ?? 0.36,
     pointCount: wallGesture.points.length,
     canClose: canCloseWall, closing: canCloseWall && !!draftLine && Math.hypot(draftLine.at(-1)!.x - wallGesture.points[0].x, draftLine.at(-1)!.y - wallGesture.points[0].y) <= Math.max(0.1, 8 / camera.cam.scale) } : null;
   const finishWall = (closed = false) => { if (gesture.current?.type === "wall-line") finishGesture(false, closed); };

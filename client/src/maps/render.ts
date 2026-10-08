@@ -1215,25 +1215,31 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
   // Комнаты: тинт типа + номер + имя. idx — номер среди комнат слоя.
   const drawRoomTint = (r: RenderRoom, idx: number) => {
     const rc = r.rect;
-    if (!Number.isInteger(rc.x) || !Number.isInteger(rc.y) || !Number.isInteger(rc.w) || !Number.isInteger(rc.h)) return;
-    if (rc.w < 1 || rc.h < 1 || rc.x < 0 || rc.y < 0 || rc.x + rc.w > width || rc.y + rc.h > height) return;
     // Квартал: заливка, контур и имя, которое видно на любом приближении — по нему читают город целиком.
+    // Раньше проверок комнаты: контур квартала не обязан идти по клеткам.
     if (r.fill) {
-      const w = rc.w * scale, h = rc.h * scale;
+      const w = rc.w * scale, h = rc.h * scale, corners = r.points ?? [{ x: rc.x, y: rc.y }, { x: rc.x + rc.w, y: rc.y }, { x: rc.x + rc.w, y: rc.y + rc.h }, { x: rc.x, y: rc.y + rc.h }];
+      // Имя — в центре тяжести контура: у вытянутого или угловатого квартала середина габаритов может лежать снаружи.
+      let area = 0, cx = 0, cy = 0;
+      corners.forEach((a, i) => { const b = corners[(i + 1) % corners.length], cross = a.x * b.y - b.x * a.y; area += cross; cx += (a.x + b.x) * cross; cy += (a.y + b.y) * cross; });
+      const at = Math.abs(area) > 1e-9 ? { x: cx / (3 * area), y: cy / (3 * area) } : { x: rc.x + rc.w / 2, y: rc.y + rc.h / 2 };
       ctx.save();
-      ctx.fillStyle = r.fill; ctx.globalAlpha *= 0.28; ctx.fillRect(X(rc.x), Y(rc.y), w, h);
-      ctx.globalAlpha /= 0.28; ctx.strokeStyle = r.fill; ctx.lineWidth = Math.max(1.5, scale * 0.08);
-      ctx.setLineDash([scale * 0.4, scale * 0.25]); ctx.strokeRect(X(rc.x), Y(rc.y), w, h);
+      ctx.beginPath(); corners.forEach((point, i) => i ? ctx.lineTo(X(point.x), Y(point.y)) : ctx.moveTo(X(point.x), Y(point.y))); ctx.closePath();
+      ctx.fillStyle = r.fill; ctx.globalAlpha *= 0.28; ctx.fill();
+      ctx.globalAlpha /= 0.28; ctx.strokeStyle = r.fill; ctx.lineWidth = Math.max(1.5, scale * 0.08); ctx.lineJoin = "round";
+      ctx.setLineDash([scale * 0.4, scale * 0.25]); ctx.stroke();
       const size = Math.min(h * 0.4, w / Math.max(4, r.name.length) * 1.5, 48);
       if (r.name && size >= 7) {
         ctx.font = `700 ${size}px ${fonts.label}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.lineJoin = "round"; ctx.setLineDash([]); ctx.lineWidth = size * 0.22; ctx.strokeStyle = chrome.paper;
-        ctx.strokeText(r.name, X(rc.x) + w / 2, Y(rc.y) + h / 2, w * 0.94);
-        ctx.fillStyle = chrome.ink; ctx.fillText(r.name, X(rc.x) + w / 2, Y(rc.y) + h / 2, w * 0.94);
+        ctx.setLineDash([]); ctx.lineWidth = size * 0.22; ctx.strokeStyle = chrome.paper;
+        ctx.strokeText(r.name, X(at.x), Y(at.y), w * 0.94);
+        ctx.fillStyle = chrome.ink; ctx.fillText(r.name, X(at.x), Y(at.y), w * 0.94);
       }
       ctx.restore();
       return;
     }
+    if (!Number.isInteger(rc.x) || !Number.isInteger(rc.y) || !Number.isInteger(rc.w) || !Number.isInteger(rc.h)) return;
+    if (rc.w < 1 || rc.h < 1 || rc.x < 0 || rc.y < 0 || rc.x + rc.w > width || rc.y + rc.h > height) return;
       const tint = MAP_ROOM_TINT[r.type];
       if (scale >= 14) {
         const cxp = X(rc.x) + (rc.w * scale) / 2;

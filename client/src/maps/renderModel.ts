@@ -59,6 +59,8 @@ export interface RenderRoom {
   name: string;
   /** Заливка квартала. */
   fill?: string;
+  /** Углы квартала-контура; `rect` тогда — его габариты. */
+  points?: RenderPoint[];
 }
 
 export interface RenderDoor {
@@ -444,7 +446,12 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
       let startTaken = false;
       let finishTaken = false;
       for (const e of layer.items) {
-        if (e.kind === "room") {
+        if (e.kind === "room" && e.geometry.type === "polygon" && e.fill && e.geometry.points.length >= 3) {
+          const xs = e.geometry.points.map((point) => point.x), ys = e.geometry.points.map((point) => point.y);
+          const x = Math.min(...xs), y = Math.min(...ys);
+          items.push({ kind: "room", room: { id: e.id, rect: { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y }, type: e.roomType, name: e.name, fill: e.fill,
+            points: e.geometry.points.map((point) => ({ x: point.x, y: point.y })) } });
+        } else if (e.kind === "room") {
           if (e.geometry.type !== "rect") {
             diag("unsupported-room-geometry", `room ${e.id}: ${e.geometry.type} not rendered`);
             continue;

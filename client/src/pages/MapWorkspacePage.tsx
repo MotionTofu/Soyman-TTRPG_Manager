@@ -395,8 +395,8 @@ export function MapWorkspacePage() {
         </div>}
         {gestures.wallDraft && <div className="workspace-editor-placement" role="status">
           <span>Клик — точка · Enter — закончить · Esc — отменить</span>
-          <button disabled={gestures.wallDraft.pointCount < 2} onClick={() => gestures.finishWall()}>{gestures.wallDraft.kind === "wall" ? "Завершить стену" : "Завершить линию"}</button>
-          <button disabled={!gestures.canCloseWall} onClick={() => gestures.finishWall(true)}>Замкнуть</button>
+          {gestures.wallDraft.kind !== "quarter" && <button disabled={gestures.wallDraft.pointCount < 2} onClick={() => gestures.finishWall()}>{gestures.wallDraft.kind === "wall" ? "Завершить стену" : "Завершить линию"}</button>}
+          <button disabled={!gestures.canCloseWall} onClick={() => gestures.finishWall(true)}>{gestures.wallDraft.kind === "quarter" ? "Замкнуть квартал" : "Замкнуть"}</button>
           <button onClick={() => finishGesture(true)}>Отмена</button>
         </div>}
         {notice && <div className="workspace-editor-notice" role="alert">

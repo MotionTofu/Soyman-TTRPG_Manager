@@ -5,6 +5,8 @@ export type BrushSettings = {
   material: string; /** Код жидкости инструмента «Жидкость»: `village-lava-3`. */ liquid?: string; symbol: string; orientation: number; radius: number; lineWidth: number;
   wallWidth?: number;
   pathMode?: "brush" | "points";
+  /** Квартал: контур по точкам (по умолчанию) или прямоугольник рамкой. */
+  quarterMode?: "points" | "rect";
   cellSize?: number;
   cellMode?: "brush" | "area";
   scatterProfile: string; density: number; scatterSize: number; scatterSeed: number;
@@ -47,6 +49,7 @@ export const ToolSettings = memo(function ToolSettings({ tool, settings, maskEra
   label?: string;
   selectedRoomCount?: number; roomActionsDisabled?: boolean; onPaintRooms?: () => void; onClearRooms?: () => void;
 }) {
+  const quarter = tool === "shape" && label === "Квартал";
   const brushSized = tool === "surface" || tool === "liquid" || tool === "scatter" || (tool === "eraser" && maskEraser);
   return <section className="workspace-tool-settings" aria-label="Параметры инструмента">
     <div className="workspace-panel-heading"><h2 className="workspace-panel-title">Инструмент</h2><strong>{label ?? TOOL_LABELS[tool === "brush" ? "surface" : tool]}</strong></div>
@@ -77,6 +80,11 @@ export const ToolSettings = memo(function ToolSettings({ tool, settings, maskEra
       <select value={settings.orientation} onChange={(event) => onChange({ orientation: Number(event.target.value) })}>
         <option value={0}>Вдоль стены →</option><option value={90}>Вдоль стены ↓</option>
       </select></label>}
-    <p className="workspace-hint">{(tool === "road" || tool === "river") && settings.pathMode === "points" ? "Клик — точка кривой. Enter или двойной клик — закончить. Клик по первой точке — замкнуть. Esc — отменить." : HINTS[tool]}</p>
+    {quarter && <div className="workspace-seg workspace-seg-paper" role="group" aria-label="Способ рисования квартала">
+      <button type="button" aria-pressed={settings.quarterMode !== "rect"} onClick={() => onChange({ quarterMode: "points" })}>По точкам</button>
+      <button type="button" aria-pressed={settings.quarterMode === "rect"} onClick={() => onChange({ quarterMode: "rect" })}>Рамкой</button>
+    </div>}
+    <p className="workspace-hint">{(tool === "road" || tool === "river") && settings.pathMode === "points" ? "Клик — точка кривой. Enter или двойной клик — закончить. Клик по первой точке — замкнуть. Esc — отменить."
+      : quarter && settings.quarterMode !== "rect" ? "Клик — угол квартала. Enter, двойной клик или клик по первой точке — замкнуть. Esc — отменить." : HINTS[tool]}</p>
   </section>;
 });

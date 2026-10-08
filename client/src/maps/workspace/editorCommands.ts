@@ -1,7 +1,7 @@
 import { cartographySize } from "../assets/cartography";
 import { cryptObject } from "../assets/crypt";
 import { villageObject } from "../assets/village";
-import { putGameplayToken, removeGameplayToken, type GameplayToken, type MapDocumentV6, type Vec2 } from "@shared/maps/core";
+import { putGameplayToken, removeGameplayToken, type GameplayToken, type MapDocumentV6, type ShapeGeometry, type Vec2 } from "@shared/maps/core";
 import { applyTerrainCellEdits, builtinMaterial, createGameplayEntity, createLabel, deleteGameplayEntity,
   deleteLabel, moveGameplayEntity, moveLabel } from "../core";
 import { addMapObject, deleteMapObject, moveMapObject } from "../core/mutations/mapObjects";
@@ -69,11 +69,21 @@ export function roomRect(a: Vec2, b: Vec2, snap: boolean) {
 export const QUARTER_FILLS = ["#c9772e", "#4f8a5b", "#3f6fa3", "#a34a6b", "#8a7a2e", "#6a56a0", "#3f8f8f", "#a3563f"];
 /** `quarter` — квартал городской карты: та же фигура, но с именем и заливкой. */
 export function createRoom(document: MapDocumentV6, layerId: string, id: string, a: Vec2, b: Vec2, snap: boolean, quarter = false) {
+  return putRoom(document, layerId, id, { type: "rect", ...roomRect(a, b, snap) }, quarter);
+}
+/** Квартал контуром по точкам: улицы и стены редко идут под прямым углом. Меньше трёх точек — не контур. */
+export function createQuarter(document: MapDocumentV6, layerId: string, id: string, points: readonly Vec2[]) {
+  const corners = points.filter((point, index) => index === 0 || Math.hypot(point.x - points[index - 1].x, point.y - points[index - 1].y) > 1e-6);
+  if (corners.length > 1 && Math.hypot(corners[0].x - corners.at(-1)!.x, corners[0].y - corners.at(-1)!.y) <= 1e-6) corners.pop();
+  // Точки на одной прямой (например, прижатые к краю карты) — не квартал.
+  const area = corners.reduce((sum, point, index) => { const next = corners[(index + 1) % corners.length]; return sum + point.x * next.y - next.x * point.y; }, 0);
+  return corners.length < 3 || Math.abs(area) < 1e-6 ? document : putRoom(document, layerId, id, { type: "polygon", points: corners.map((point) => ({ ...point })) }, true);
+}
+function putRoom(document: MapDocumentV6, layerId: string, id: string, geometry: ShapeGeometry, quarter: boolean) {
   const layer = requireEditableLayer(document, layerId, "gameplay");
   const count = layer.kind === "gameplay" ? layer.items.filter((item) => item.kind === "room").length : 0;
   return editGeometry(document, (view) => createGameplayEntity(view, layerId, { id, kind: "room", roomType: "empty",
-    name: quarter ? `Квартал ${count + 1}` : "", ...(quarter ? { fill: QUARTER_FILLS[count % QUARTER_FILLS.length] } : {}),
-    geometry: { type: "rect", ...roomRect(a, b, snap) } }));
+    name: quarter ? `Квартал ${count + 1}` : "", ...(quarter ? { fill: QUARTER_FILLS[count % QUARTER_FILLS.length] } : {}), geometry }));
 }
 export function createDoor(document: MapDocumentV6, layerId: string, id: string, point: Vec2, snap: boolean, orientation: number) {
   requireEditableLayer(document, layerId, "gameplay");
