@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cellLoreOf, formatMeters, mapKind, overviewScale, parseCellLore, TACTICAL_CELL } from "./mapTypes";
+import { OVERVIEW_PRESETS, cellLoreOf, formatMeters, mapKind, overviewScale, parseCellLore, TACTICAL_CELL } from "./mapTypes";
 import { scaleMarks } from "./ScalePreview";
 import { setsOf } from "./workspace/toolSets";
 
@@ -23,7 +23,12 @@ describe("два вида карт", () => {
     expect(parseCellLore(cellLoreOf(2.5))).toBe(2500);
   });
   it("в предпросмотре на любой заготовке есть знакомые вещи", () => {
-    for (const metres of [1.5, 20, 2000, 20_000, 100_000, 500_000]) expect(scaleMarks(metres).length).toBeGreaterThanOrEqual(2);
+    // Клетка — единица измерения: у каждой заготовки самая мелкая вещь занимает ровно клетку.
+    for (const metres of [1.5, ...OVERVIEW_PRESETS.map((item) => item.km * 1000)]) {
+      const marks = scaleMarks(metres);
+      expect(marks.length).toBeGreaterThanOrEqual(2);
+      expect(marks[0].cells).toBe(1);
+    }
     // Фишка занимает ровно клетку: человек на тактической карте — одна клетка.
     expect(scaleMarks(1.5)).toEqual([{ name: "человек", cells: 1 }, { name: "лошадь", cells: 2 }, { name: "телега", cells: 3 }]);
   });
