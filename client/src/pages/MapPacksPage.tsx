@@ -16,6 +16,7 @@ import { MAP_SYMBOL_ASSETS, getMapImageAsset } from "../maps/assets/registry";
 import { edgeAlpha, edgeField, edgeRamp, edgeWindow, type SurfaceEdge } from "../maps/assets/surfaceEdge";
 import { edgeNoiseOf } from "../maps/assets/terrainMaskDrawing";
 import { seamlessTile } from "../maps/assets/seamless";
+import { MapSheetDialog } from "./MapSheetDialog";
 
 const KINDS: MapKind[] = ["tactical", "city", "overview"];
 const AFFECTS = [{ path: "/map-packs" }];
@@ -467,7 +468,7 @@ export function MapPacksPage() {
   useMemo(() => registerOwnPacks(packs), [packs]);
   useMapImageRevision();
   const [picked, setPicked] = useState<number | null>(null), [archive, setArchive] = useState(false), [builtin, setBuiltin] = useState<string | null>(null);
-  const [packDialog, setPackDialog] = useState<OwnPack | "new" | null>(null), [objectDialog, setObjectDialog] = useState<OwnPackItem | "new" | "new-surface" | "new-line" | "new-scatter" | "new-door" | null>(null);
+  const [packDialog, setPackDialog] = useState<OwnPack | "new" | null>(null), [objectDialog, setObjectDialog] = useState<OwnPackItem | "new" | "new-surface" | "new-line" | "new-scatter" | "new-door" | null>(null), [sheetDialog, setSheetDialog] = useState(false);
   const live = packs.filter((pack) => !pack.archived), archived = packs.filter((pack) => pack.archived);
   const pack = live.find((entry) => entry.id === picked) ?? live[0] ?? null;
   // Диалог держит объект по id: после добавления варианта список перечитан, и окно показывает свежие картинки.
@@ -521,6 +522,7 @@ export function MapPacksPage() {
           <div className="row" style={{ gap: 8 }}>
             <button onClick={() => setPackDialog(pack)}>Название и виды карт</button>
             <button onClick={() => void setArchived(pack, true)}>В архив</button>
+            <button title="Лист с несколькими вещами: разрезать и добавить разом" onClick={() => setSheetDialog(true)}>+ Лист</button>
             <button className="primary" onClick={() => setObjectDialog("new-door")}>+ Проём</button>
             <button className="primary" onClick={() => setObjectDialog("new-scatter")}>+ Россыпь</button>
             <button className="primary" onClick={() => setObjectDialog("new-line")}>+ Линия</button>
@@ -528,7 +530,7 @@ export function MapPacksPage() {
             <button className="primary" onClick={() => setObjectDialog("new")}>+ Объект</button>
           </div>
         </div>
-        {!items.length && <p className="muted">В наборе пока пусто. «+ Объект» — картинка и сколько клеток она занимает. «+ Поверхность» — образец, которым красят землю и полы. «+ Линия» — дорога, река, ограда или переправа. «+ Россыпь» — кусты, камни, трава. «+ Проём» — дверь, арка, ворота.</p>}
+        {!items.length && <p className="muted">В наборе пока пусто. «+ Объект» — картинка и сколько клеток она занимает. «+ Поверхность» — образец, которым красят землю и полы. «+ Линия» — дорога, река, ограда или переправа. «+ Россыпь» — кусты, камни, трава. «+ Проём» — дверь, арка, ворота. «+ Лист» — картинка с несколькими вещами: разрезать и добавить разом.</p>}
         {sections.map((section) => <div key={section} className="stack">
           <strong>{section || "Без раздела"}</strong>
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
@@ -542,6 +544,8 @@ export function MapPacksPage() {
       </section>}
     </div>
     {packDialog && <PackDialog pack={packDialog === "new" ? null : packDialog} onClose={(saved) => { setPackDialog(null); if (saved) { setPicked(saved.id); setBuiltin(null); } }} />}
+    {sheetDialog && pack && <MapSheetDialog pack={pack} reference={REFERENCE[pack.kinds[0] ?? "tactical"]} onClose={() => setSheetDialog(false)}
+      sizeGrid={(src, w, h, reference) => <SizeGrid src={src} w={w} h={h} reference={reference} />} />}
     {objectDialog && pack && (objectDialog === "new-surface" || editing?.kind === "surface"
       ? <SurfaceDialog key={editing?.id ?? "new-surface"} pack={pack} item={editing} onClose={() => setObjectDialog(null)} />
       : typeof objectDialog === "string" && objectDialog !== "new" || editing && editing.kind !== "object"
