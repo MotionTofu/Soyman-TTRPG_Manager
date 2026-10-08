@@ -1,7 +1,8 @@
 import { cartographyId } from "./cartography";
 import { CRYPT_DOORS, CRYPT_SURFACES, cryptId } from "./crypt";
 import { getMapImageAsset, loadMapImageAsset } from "./registry";
-import { villageId, villageSurfaceKey } from "./village";
+import { villageId, villageSurfaceKey, waterLevel } from "./village";
+import { PLAIN_EDGE, type SurfaceEdge } from "./surfaceEdge";
 import { ownSurface } from "./ownPacks";
 import { buildTerrainMaskRaster } from "../terrainMaskRaster";
 import type { RenderTerrainView } from "../renderModel";
@@ -102,6 +103,23 @@ export function surfaceImage(code: string, dungeon = false, pack: ArtPack = "car
   const key = code === "stone" || (code === "plain" && dungeon) ? "stone-floor" : ["earth", "forest", "hills", "desert"].includes(code) ? "earth" :
     ["shallow_water", "deep_water", "sea", "lake"].includes(code) ? "water" : null;
   return key ? artworkImage(key) : null;
+}
+/** Кромки встроенных поверхностей «Деревни» (подобраны 2026-10-08): трава и брусчатка лежат клочьями, земля под ними — ровно. */
+const VILLAGE_EDGES: Readonly<Record<string, SurfaceEdge>> = {
+  grass: { width: 0.6, rough: 0.7, tier: 1 }, field: { width: 0.35, rough: 0.35, tier: 1 }, cobbles: { width: 0.35, rough: 0.6, tier: 2 },
+  mud: { width: 0.5, rough: 0.45, tier: 0 }, sand: { width: 0.5, rough: 0.4, tier: 0 }, bog: { width: 0.5, rough: 0.5, tier: 0 },
+};
+/** Ярусы общих материалов: вода и голая земля внизу, растительность посередине, камень, дерево и дорога сверху. */
+const TIERS: Readonly<Record<string, SurfaceEdge>> = Object.fromEntries([[0, ["plain", "earth", "desert", "swamp", "lava", "acid", "poison", "ice"]], [2, ["stone", "wood", "road", "mountains"]]]
+  .flatMap(([tier, codes]) => (codes as string[]).map(code => [code, { ...PLAIN_EDGE, tier: tier as number }])));
+const LIQUID_EDGE: SurfaceEdge = { ...PLAIN_EDGE, tier: 0 };
+/** Кромка и ярус поверхности по коду материала. Жидкости — всегда внизу: их край рисует сама вода. */
+export function surfaceEdge(code: string): SurfaceEdge {
+  const own = ownSurface(code);
+  if (own) return own.edge;
+  if (waterLevel(code)) return LIQUID_EDGE;
+  const village = villageSurfaceKey(code);
+  return village ? VILLAGE_EDGES[village.replace(/-\d+$/, "")] ?? LIQUID_EDGE : TIERS[code] ?? PLAIN_EDGE;
 }
 /** Полоса дороги по id ассета; пока картинка грузится — `null`, линия рисуется тушью. */
 export function stripImage(assetId: string) {

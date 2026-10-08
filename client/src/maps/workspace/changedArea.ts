@@ -31,8 +31,8 @@ function entries(layer: Layer): Entry[] | null {
     return out;
   }
   if (layer.kind === "terrain" && layer.representation === "mask") {
-    // Край мазка растушёван на соседние куски поверхности, отсюда запас в полторы клетки.
-    const { origin, sampleSize } = layer.mask, pad = 1.5 - PAD;
+    // Край мазка растушёван на соседние куски поверхности, а нижняя поверхность заходит под кромку верхней: запас в две с половиной клетки.
+    const { origin, sampleSize } = layer.mask, pad = 2.5 - PAD;
     return layer.mask.chunks.map(item => ({ side: Math.sqrt((item.payload.values as unknown[]).length) * sampleSize, item })).map(({ side, item }) => ({ id: `${item.cx}:${item.cy}`, item: item.payload, bounds: { x: origin.x + item.cx * side - pad, y: origin.y + item.cy * side - pad, w: side + pad * 2, h: side + pad * 2 } }));
   }
   if (layer.kind === "gameplay") return layer.items.map(item => item.kind === "token"

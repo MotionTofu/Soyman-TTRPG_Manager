@@ -53,7 +53,7 @@ describe("свои наборы ассетов", () => {
     own.items.push({ ...own.items[0], id: 2, uid: "33333333-3333-4333-8333-333333333333", kind: "surface", name: "Плитка", cells: 2, fill: "#445566", images: [image(7)] });
     registerOwnPacks([own]);
     const code = ownSurfaceCode(image(7).uid);
-    expect(ownSurface(code)).toEqual({ assetId: ownImageId(image(7)), cells: 2 });
+    expect(ownSurface(code)).toMatchObject({ edge: { width: 0.25, rough: 0, tier: 1 }, assetId: ownImageId(image(7)), cells: 2 });
     expect(ownSurfaceFills()[code]).toBe("#445566");
     // Карта, закрашенная этой поверхностью и травой «Деревни», числит за собой оба набора; вода набором не считается.
     const layer = (keys: string[]) => ({ kind: "terrain", defaultMaterial: { type: "builtin", key: "terrain/plain" }, representation: "mask", mask: { materials: keys.map((key) => ({ type: "builtin", key: `terrain/${key}` })) } });

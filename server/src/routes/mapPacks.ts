@@ -51,7 +51,9 @@ function objectData(raw: Record<string, unknown>) {
 /** Данные поверхности: сколько клеток покрывает один повтор образца и средний цвет — им красится «Чертёж» и то, что ещё грузится. */
 function surfaceData(raw: Record<string, unknown>) {
   const cells = typeof raw.cells === "number" && Number.isFinite(raw.cells) ? Math.max(1, Math.min(MAX_CELLS, Math.round(raw.cells))) : 4;
-  return { cells, fill: typeof raw.fill === "string" && /^#[0-9a-f]{6}$/.test(raw.fill) ? raw.fill : "#8a8a80" };
+  // Кромка: ширина перехода в клетках, рваность 0–1 и ярус (0 — низ, 2 — верх); по умолчанию край как у встроенных.
+  return { cells, fill: typeof raw.fill === "string" && /^#[0-9a-f]{6}$/.test(raw.fill) ? raw.fill : "#8a8a80",
+    edge_width: between(raw.edge_width, 0, 1, 0.25), edge_rough: between(raw.edge_rough, 0, 1, 0), tier: Math.round(between(raw.tier, 0, 2, 1)) };
 }
 const ITEM_KINDS = ["object", "surface", "line", "crossing", "scatter", "door"];
 const LINE_USES = ["road", "river", "wall"];
@@ -70,7 +72,7 @@ function kindData(kind: string, raw: Record<string, unknown>): Record<string, un
 }
 const itemData = (kind: string, raw: Record<string, unknown>) => kind === "object" ? objectData(raw) : { w: 1, h: 1, blocks_sight: false, light: null, ...kindData(kind, raw) };
 /** Поля формы приходят строками. */
-const numbers = (body: Record<string, unknown>) => ({ ...body, ...Object.fromEntries(["w", "h", "cells", "width", "size", "density", "span"].map((key) => [key, Number(body[key])])) });
+const numbers = (body: Record<string, unknown>) => ({ ...body, ...Object.fromEntries(["w", "h", "cells", "width", "size", "density", "edge_width", "edge_rough", "tier", "span"].map((key) => [key, Number(body[key])])) });
 /** Во что вписывается картинка, клеток. `strip` — полоса: высота равна ширине линии, длина — по пропорциям картинки. */
 type Box = { w: number; h: number } | { strip: number };
 function imageBox(kind: string, data: Record<string, unknown>, role: string): Box {
@@ -183,7 +185,7 @@ mapPacksRouter.post("/items/:itemId/images", withUpload(async (req, res) => {
     WHERE i.id = ? AND i.archived_at IS NULL AND p.archived_at IS NULL`).get(req.params.itemId) as (ItemRow & { pack_uid: string }) | undefined;
   if (!item) return res.status(404).json({ error: "Объект не найден" });
   const raw = json<Record<string, unknown>>(item.data, {});
-  const role = item.kind === "object" && SIDES.includes(req.body.role) || item.kind === "line" && req.body.role === "post" ? req.body.role as string : "variant";
+  const role = item.kind === "object" && SIDES.includes(req.body.role) || item.kind === "line" && req.body.role === "post" || item.kind === "surface" && req.body.role === "edge" ? req.body.role as string : "variant";
   const count = (db.prepare("SELECT COUNT(*) AS n FROM map_asset_images WHERE item_id = ? AND role = 'variant' AND archived_at IS NULL").get(item.id) as { n: number }).n;
   if (role === "variant" && count >= 12) return res.status(400).json({ error: "У вещи не больше 12 вариантов" });
   const image = await storeImage(item.pack_uid, req.file!.buffer, imageBox(item.kind, kindData(item.kind, raw), role), item.kind === "surface");

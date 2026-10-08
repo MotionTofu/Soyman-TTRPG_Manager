@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAction, useResource, write } from "../data/hooks";
 import { labelled } from "../data/notices";
@@ -8,11 +8,13 @@ import { SectionBackground } from "../components/SectionBackground";
 import { useConfirm } from "../hooks/useConfirm";
 import { MAP_KIND_LABELS, type MapKind } from "../maps/mapTypes";
 import { MAP_PACKS } from "../maps/assets/packs";
-import { OWN_SIDES, PACK_CELL_PX, liveImages, ownImageId, ownImageSrc, registerOwnPacks, sideImage, useMapImageRevision, type OwnPack, type OwnPackItem } from "../maps/assets/ownPacks";
+import { OWN_SIDES, PACK_CELL_PX, liveImages, ownEdge, ownImageId, ownImageSrc, registerOwnPacks, sideImage, useMapImageRevision, type OwnPack, type OwnPackItem } from "../maps/assets/ownPacks";
 import { CARTOGRAPHY_OBJECTS, CARTOGRAPHY_SURFACES, cartographyUrl } from "../maps/assets/cartography";
 import { CRYPT_CATEGORIES, CRYPT_OBJECTS, cryptUrl, type CryptCategory } from "../maps/assets/crypt";
 import { VILLAGE_CATEGORIES, VILLAGE_OBJECTS, VILLAGE_RIVERS, VILLAGE_ROADS, VILLAGE_SURFACES, villageUrl, type VillageCategory } from "../maps/assets/village";
-import { MAP_SYMBOL_ASSETS } from "../maps/assets/registry";
+import { MAP_SYMBOL_ASSETS, getMapImageAsset } from "../maps/assets/registry";
+import { edgeAlpha, edgeField, edgeRamp, edgeWindow, type SurfaceEdge } from "../maps/assets/surfaceEdge";
+import { edgeNoiseOf } from "../maps/assets/terrainMaskDrawing";
 import { seamlessTile } from "../maps/assets/seamless";
 
 const KINDS: MapKind[] = ["tactical", "city", "overview"];
@@ -204,6 +206,34 @@ function ObjectDialog({ pack, item, onClose }: { pack: OwnPack; item: OwnPackIte
 
 /** Поверхность набора: бесшовный образец. Картинка обрезается до квадрата, края склеиваются подмесом —
  * предпросмотр 3×3 показывает ровно то, что уйдёт в набор. */
+const TIERS = ["Низ — земля, вода", "Середина — трава, посевы", "Верх — камень, настил"];
+/** Пятно поверхности на нейтральной земле: край считается тем же кодом, что и на карте. Сетка — клетки. */
+function EdgePreview({ art, cells, fill, edge }: { art: HTMLImageElement | HTMLCanvasElement | null; cells: number; fill: string; edge: SurfaceEdge }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const pen = ref.current?.getContext("2d");
+    if (!pen) return;
+    const side = 280, samples = 28, sample = 0.25, perUnit = side / (samples * sample);
+    const inside = (sx: number, sy: number) => {
+      const dx = sx + 0.5 - samples / 2, dy = sy + 0.5 - samples / 2, angle = Math.atan2(dy, dx);
+      return Math.hypot(dx, dy) < samples * 0.3 * (1 + 0.18 * Math.sin(angle * 3) + 0.1 * Math.cos(angle * 5));
+    };
+    const field = edgeField(samples, 0, 0, (sx, sy) => inside(sx, sy) ? 0 : -Infinity, 0, edgeWindow(edge, sample));
+    const layer = document.createElement("canvas"); layer.width = layer.height = side;
+    const paint = layer.getContext("2d")!, pixels = paint.createImageData(side, side);
+    edgeAlpha(field, samples, pixels.data, side, { ramp: edgeRamp(edge, sample), rough: edge.rough, noise: edgeNoiseOf(edge), x: 0, y: 0, perUnit });
+    paint.putImageData(pixels, 0, 0); paint.globalCompositeOperation = "source-in";
+    const pattern = art ? paint.createPattern(art, "repeat") : null, k = cells * perUnit / (art?.width || 1);
+    pattern?.setTransform(new DOMMatrix([k, 0, 0, k, 0, 0]));
+    paint.fillStyle = pattern ?? fill; paint.fillRect(0, 0, side, side);
+    pen.fillStyle = "#8d7b5a"; pen.fillRect(0, 0, side, side); pen.drawImage(layer, 0, 0);
+    pen.strokeStyle = "rgba(0,0,0,.25)"; pen.lineWidth = 1; pen.beginPath();
+    for (let line = perUnit; line < side; line += perUnit) { pen.moveTo(line + 0.5, 0); pen.lineTo(line + 0.5, side); pen.moveTo(0, line + 0.5); pen.lineTo(side, line + 0.5); }
+    pen.stroke();
+  });
+  return <canvas ref={ref} width={280} height={280} role="img" aria-label="Пятно поверхности на земле: так выглядит её край на карте" style={{ width: "100%", maxWidth: 280, border: "2px solid currentColor" }} />;
+}
+
 function SurfaceDialog({ pack, item, onClose }: { pack: OwnPack; item: OwnPackItem | null; onClose: () => void }) {
   const run = useAction();
   const [dialog, confirm] = useConfirm();
@@ -211,6 +241,9 @@ function SurfaceDialog({ pack, item, onClose }: { pack: OwnPack; item: OwnPackIt
   const [source, setSource] = useState<HTMLImageElement | null>(null), [blend, setBlend] = useState(15);
   const [name, setName] = useState(item?.name ?? ""), [section, setSection] = useState(item?.section ?? ""), [tags, setTags] = useState(item?.tags ?? "");
   const [cells, setCells] = useState(item?.cells ?? 4);
+  const [edgeWidth, setEdgeWidth] = useState(item?.edge_width ?? 0.25), [rough, setRough] = useState(Math.round((item?.edge_rough ?? 0) * 100)), [tier, setTier] = useState(item?.tier ?? 1);
+  const mask = item ? sideImage(item, "edge") : null;
+  const edge = ownEdge({ edge_width: edgeWidth, edge_rough: rough / 100, tier, cells, images: item?.images ?? [] });
   const tile = useMemo(() => source ? seamlessTile(source, blend / 100) : null, [source, blend]);
   const preview = useMemo(() => tile?.toDataURL("image/png") ?? null, [tile]);
   const variants = item ? liveImages(item) : [];
@@ -235,13 +268,18 @@ function SurfaceDialog({ pack, item, onClose }: { pack: OwnPack; item: OwnPackIt
   };
   async function save() {
     const saved = item
-      ? await run(labelled("Поверхность не сохранена", () => write.put(`/map-packs/items/${item.id}`, { name, section, tags, cells })), { affects: AFFECTS })
-      : tile && await run(labelled("Поверхность не добавлена", async () => write.post(`/map-packs/${pack.id}/items`, await form({ kind: "surface", name, section, tags, cells: String(cells) }))), { affects: AFFECTS });
+      ? await run(labelled("Поверхность не сохранена", () => write.put(`/map-packs/items/${item.id}`, { name, section, tags, cells, edge_width: edgeWidth, edge_rough: rough / 100, tier })), { affects: AFFECTS })
+      : tile && await run(labelled("Поверхность не добавлена", async () => write.post(`/map-packs/${pack.id}/items`, await form({ kind: "surface", name, section, tags, cells: String(cells), edge_width: String(edgeWidth), edge_rough: String(rough / 100), tier: String(tier) }))), { affects: AFFECTS });
     if (saved) onClose();
   }
   async function addVariant() {
     if (!item || !tile) return;
     if (await run(labelled("Вариант не добавлен", async () => write.post(`/map-packs/items/${item.id}/images`, await form({}))), { affects: AFFECTS })) setSource(null);
+  }
+  async function addMask(next: File | null) {
+    if (!item || !next) return;
+    const body = new FormData(); body.append("file", next); body.append("role", "edge");
+    await run(labelled("Маска кромки не загружена", () => write.post(`/map-packs/items/${item.id}/images`, body)), { affects: AFFECTS });
   }
   async function remove() {
     if (!item || !await confirm({ title: `Убрать «${item.name}» из набора?`, message: "В каталоге поверхности не будет. На картах, где ею уже красили, она останется.", confirmLabel: "Убрать", cancelLabel: "Оставить", danger: true })) return;
@@ -283,6 +321,20 @@ function SurfaceDialog({ pack, item, onClose }: { pack: OwnPack; item: OwnPackIt
           {source && <button type="button" className="primary" onClick={() => void addVariant()}>Добавить вариант в набор</button>}
           <small className="muted">Каждый вариант красится отдельно: в каталоге они стоят полосой под плиткой, на карте их можно смешивать.</small>
         </div>}
+      </div>
+      <div className="stack" style={{ flex: "1 1 280px", minWidth: 240 }}>
+        <strong>Край на карте</strong>
+        <EdgePreview art={tile ?? (variants[0] ? getMapImageAsset(ownImageId(variants[0]))?.image ?? null : null)} cells={cells} fill={item?.fill ?? "#8a8a80"} edge={edge} />
+        <label>Ширина кромки: {edgeWidth ? `${edgeWidth} кл.` : "чёткий край"}<input type="range" aria-label="Ширина кромки" min={0} max={1} step={0.05} value={edgeWidth} onChange={(event) => setEdgeWidth(Number(event.target.value))} /></label>
+        <label>Рваность: {rough}%<input type="range" aria-label="Рваность кромки" min={0} max={100} step={5} value={rough} onChange={(event) => setRough(Number(event.target.value))} />
+          <small className="muted">Чем шире кромка, тем крупнее клочья. При нулевой ширине рваность почти не видна.</small></label>
+        <label>Ярус<select aria-label="Ярус поверхности" value={tier} onChange={(event) => setTier(Number(event.target.value))}>{TIERS.map((label, value) => <option key={value} value={value}>{label}</option>)}</select>
+          <small className="muted">Верхняя поверхность лежит на нижней: под её рваным краем видна нижняя.</small></label>
+        {item ? <div className="stack">
+          <label>{mask ? "Заменить маску кромки" : "Своя маска кромки"}<input type="file" aria-label="Маска кромки" accept="image/png,image/jpeg,image/webp,image/avif,image/gif" onChange={(event) => { void addMask(event.target.files?.[0] ?? null); event.target.value = ""; }} /></label>
+          {mask && <button type="button" onClick={() => void run(labelled("Маска не убрана", () => write.del(`/map-packs/images/${mask.id}`).then(() => true)), { affects: AFFECTS })}>Убрать маску — вернуть шум движка</button>}
+          <small className="muted">Серая бесшовная картинка: где темнее, край отступает раньше. Повторяется с тем же шагом, что и поверхность.</small>
+        </div> : <small className="muted">Свою маску кромки можно загрузить после добавления поверхности.</small>}
       </div>
     </div>
     <div className="modal-footer row">

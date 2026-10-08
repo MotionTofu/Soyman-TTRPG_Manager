@@ -67,6 +67,13 @@ describe("наборы ассетов карт", () => {
     expect(variant.body.pack.items[0].images.map((image: { role: string }) => image.role)).toEqual(["variant", "variant"]);
     const edited = await api().put(`/api/map-packs/items/${item.id}`).auth(gm, { type: "bearer" }).send({ cells: 99 });
     expect(edited.body.items[0]).toMatchObject({ cells: 16, fill: item.fill });
+    // Кромка: по умолчанию край как у встроенных; значения зажимаются; маска кромки — отдельная картинка, новая заменяет прежнюю.
+    expect(item).toMatchObject({ edge_width: 0.25, edge_rough: 0, tier: 1 });
+    const edged = await api().put(`/api/map-packs/items/${item.id}`).auth(gm, { type: "bearer" }).send({ edge_width: 5, edge_rough: 0.6, tier: 2 });
+    expect(edged.body.items[0]).toMatchObject({ cells: 16, edge_width: 1, edge_rough: 0.6, tier: 2 });
+    await upload(`/api/map-packs/items/${item.id}/images`, { role: "edge" });
+    const masks = (await upload(`/api/map-packs/items/${item.id}/images`, { role: "edge" })).body.pack.items[0].images.filter((image: { role: string }) => image.role === "edge");
+    expect(masks.filter((image: { archived: boolean }) => !image.archived)).toHaveLength(1);
   });
 
   it("игроку наборы закрыты", async () => {

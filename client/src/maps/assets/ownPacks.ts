@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { MapKind } from "../mapTypes";
+import type { SurfaceEdge } from "./surfaceEdge";
 import { getMapImageAsset, loadMapImageAsset, markMapImageMissing, ownSurfaceCode, registerMapImageResources, resourceImageAssetId, setMapImageViews, subscribeMapImageAssets } from "./registry";
 
 /** Наборы ассетов Мастера с сервера (`/map-packs`). Картинки идут в общий реестр изображений карты:
@@ -8,6 +9,8 @@ export interface OwnPackImage { id: number; uid: string; role: string; width: nu
 export interface OwnPackItem { id: number; uid: string; kind: string; name: string; section: string; tags: string; archived: boolean;
   /** Размер в клетках. */ w: number; h: number; blocks_sight: boolean; /** Радиус света в клетках. */ light: number | null;
   /** Поверхность: сколько клеток покрывает один повтор образца и средний цвет. */ cells?: number; fill?: string;
+  /** Кромка поверхности: ширина в клетках, рваность 0–1 и ярус (0 — низ, 2 — верх). Своя маска кромки — картинка с ролью `edge`. */
+  edge_width?: number; edge_rough?: number; tier?: number;
   /** Линия: чем тянется (`road`, `river` — течёт, `wall` — преграждает путь) и ширина в клетках. Переправа: какой настил заменяет. */
   use?: string; width?: number; deck?: string;
   /** Россыпь: размер знака и густота по умолчанию. */ size?: number; density?: number;
@@ -21,7 +24,7 @@ let current: readonly OwnPack[] = [];
 const sizes = new Map<string, number>();
 const variants = new Map<string, string[]>();
 const owners = new Map<string, string>();
-const surfaces = new Map<string, { assetId: string; cells: number }>();
+const surfaces = new Map<string, { assetId: string; cells: number; edge: SurfaceEdge }>();
 let surfaceFills: Readonly<Record<string, string>> = {};
 const posts = new Map<string, string>(), decks = new Map<string, string>();
 const scatters = new Map<string, { assetIds: string[]; size: number }>(), scatterOwners = new Map<string, string>();
@@ -40,9 +43,14 @@ export const ownScatterPack = (key: string) => scatterOwners.get(key) ?? null;
 export const ownSurface = (code: string) => surfaces.get(code) ?? null;
 /** Цвет поверхностей своих наборов по коду материала: «Чертёж» и то, что ещё грузится или лежит в архиве. Объект меняется только с наборами. */
 export const ownSurfaceFills = () => surfaceFills;
+/** Кромка поверхности набора; маска повторяется с шагом самой поверхности. */
+export function ownEdge(item: Pick<OwnPackItem, "edge_width" | "edge_rough" | "tier" | "cells" | "images">): SurfaceEdge {
+  const mask = sideImage(item, "edge");
+  return { width: item.edge_width ?? 0.25, rough: item.edge_rough ?? 0, tier: item.tier ?? 1, ...(mask ? { mask: ownImageId(mask), cells: item.cells ?? 4 } : {}) };
+}
 /** Стороны поворотного предмета сверх основной: каким он виден, повёрнутый на 90°, 180° и 270°. */
 export const OWN_SIDES = [["w", "Повёрнут на 90°"], ["n", "Повёрнут на 180°"], ["e", "Повёрнут на 270°"]] as const;
-export const sideImage = (item: OwnPackItem, side: string) => item.images.find((image) => !image.archived && image.role === side) ?? null;
+export const sideImage = (item: Pick<OwnPackItem, "images">, side: string) => item.images.find((image) => !image.archived && image.role === side) ?? null;
 /** uid своего набора, которому принадлежит картинка, — и для набора в архиве. */
 export const ownPackOf = (assetId: string) => owners.get(assetId) ?? null;
 
@@ -61,9 +69,9 @@ export function registerOwnPacks(packs: readonly OwnPack[]): void {
   surfaceFills = fills;
   for (const pack of packs) for (const item of pack.items) for (const image of item.images) {
     owners.set(ownImageId(image), pack.uid);
-    if (item.kind === "surface") {
+    if (item.kind === "surface" && image.role === "variant") {
       fills[ownSurfaceCode(image.uid)] = item.fill ?? "#8a8a80";
-      if (!pack.archived) surfaces.set(ownSurfaceCode(image.uid), { assetId: ownImageId(image), cells: item.cells ?? 4 });
+      if (!pack.archived) surfaces.set(ownSurfaceCode(image.uid), { assetId: ownImageId(image), cells: item.cells ?? 4, edge: ownEdge(item) });
     }
     if (pack.archived) markMapImageMissing(image.uid, `«${pack.name}» в архиве`);
   }
