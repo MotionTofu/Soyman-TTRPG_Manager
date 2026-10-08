@@ -20,7 +20,7 @@ const WATER_LOOKS: readonly [MapWaterLook, string][] = [["soft", "Мягкая, 
 export type GridLook = { opacity: number; lineWidth: number; lineStyle: "solid" | "dashed"; color: string };
 const GRID_COLORS = [["#000000", "Чёрная"], ["#ffffff", "Белая"], ["#ff3e91", "Розовая"], ["#ffe14a", "Жёлтая"]] as const;
 const EFFECT_NAMES = Object.keys(EFFECTS) as MapEffect[];
-const STYLES: [MapDrawingStyle, string][] = [["comic-punk", "Комикс-панк"], ["paper-ink", "Бумага и тушь"], ["blueprint", "Чертёж"]];
+const STYLES: [MapDrawingStyle, string][] = [["comic-punk", "Комикс-панк"], ["paper-ink", "Скетч"], ["blueprint", "Чертёж"]];
 
 export const WorkspaceToolRail = memo(function WorkspaceToolRail({ kind, tool, locked, onChoose }: {
   kind: MapKind; tool: WorkspaceTool; locked: boolean; onChoose: (tool: WorkspaceTool) => void;
@@ -55,6 +55,10 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, 
   return <header className="workspace-editor-header">
     <Link to="/maps" className="workspace-back">← Все карты</Link>
     <div className="workspace-title"><h1 title={mapName}>{mapName}</h1><span aria-live="polite">{status}</span></div>
+    {/* Оформление — как карта нарисована; что на неё можно поставить, решают наборы в каталоге. */}
+    <nav className="workspace-seg" aria-label="Оформление карты">
+      {STYLES.map(([value, name]) => <button key={value} type="button" aria-pressed={style === value} disabled={styleLocked} onClick={() => onStyle(value)}>{name}</button>)}
+    </nav>
     <div className="workspace-header-actions">
       <button type="button" className="workspace-icon-button" aria-label="Отменить" title="Отменить · Ctrl+Z" disabled={!canUndo} onClick={onUndo}>
         <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M9 4 3 10l6 6M3 10h11c8 0 8 11 0 11" /></svg></button>
@@ -84,10 +88,6 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, 
         <button type="button" disabled={!gl} onClick={onEffectsReset}>Вернуть как было</button>
       </WorkspaceMenu>
       <WorkspaceMenu label="Карта ▾" title="Карта" className="workspace-map-menu">
-        <fieldset disabled={styleLocked}><legend>Оформление</legend>
-          {STYLES.map(([value, name]) => <label key={value}>
-            <input type="radio" name="workspace-style" checked={style === value} onChange={() => onStyle(value)} />{name}</label>)}
-        </fieldset>
         <fieldset disabled={styleLocked}><legend>Вода</legend>
           <label>Вид воды<select aria-label="Вид воды" value={water ?? ""} onChange={(event) => onWater((event.target.value || undefined) as MapWaterLook | undefined)}>
             <option value="">Картинкой, без движения</option>
