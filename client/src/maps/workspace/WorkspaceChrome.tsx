@@ -5,8 +5,8 @@ import { MapWorkspaceTools } from "./MapWorkspace";
 import { MapToolIcon } from "./MapToolIcon";
 import { WorkspaceMenu } from "./WorkspaceMenu";
 import { layerName } from "./layerNames";
-import { TOOL_LABELS, type WorkspaceTool } from "./editorCommands";
-import { TOOL_GROUPS } from "./toolSets";
+import type { WorkspaceTool } from "./editorCommands";
+import { TOOL_GROUPS, toolLabel } from "./toolSets";
 import type { MapKind } from "../mapTypes";
 import { EFFECTS, type EffectState, type MapEffect, type MapEffects } from "../gl/effects";
 
@@ -28,8 +28,8 @@ export const WorkspaceToolRail = memo(function WorkspaceToolRail({ kind, tool, l
   return <MapWorkspaceTools><div className="map-workspace-tool-list" role="toolbar" aria-label="Инструменты нового редактора">
     {TOOL_GROUPS[kind].map((group, index) => <Fragment key={index}>
       {index > 0 && <hr className="map-workspace-tool-sep" />}
-      {group.map((name) => <button key={name} title={TOOL_LABELS[name]} aria-label={TOOL_LABELS[name]} aria-pressed={tool === name || name === "surface" && tool === "brush"}
-        disabled={locked} onClick={() => onChoose(name)}><MapToolIcon tool={name} /><span>{TOOL_LABELS[name]}</span></button>)}
+      {group.map((name) => <button key={name} title={toolLabel(kind, name)} aria-label={toolLabel(kind, name)} aria-pressed={tool === name || name === "surface" && tool === "brush"}
+        disabled={locked} onClick={() => onChoose(name)}><MapToolIcon tool={name} /><span>{toolLabel(kind, name)}</span></button>)}
     </Fragment>)}
   </div></MapWorkspaceTools>;
 });

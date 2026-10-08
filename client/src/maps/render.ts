@@ -1217,6 +1217,23 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     const rc = r.rect;
     if (!Number.isInteger(rc.x) || !Number.isInteger(rc.y) || !Number.isInteger(rc.w) || !Number.isInteger(rc.h)) return;
     if (rc.w < 1 || rc.h < 1 || rc.x < 0 || rc.y < 0 || rc.x + rc.w > width || rc.y + rc.h > height) return;
+    // Квартал: заливка, контур и имя, которое видно на любом приближении — по нему читают город целиком.
+    if (r.fill) {
+      const w = rc.w * scale, h = rc.h * scale;
+      ctx.save();
+      ctx.fillStyle = r.fill; ctx.globalAlpha *= 0.28; ctx.fillRect(X(rc.x), Y(rc.y), w, h);
+      ctx.globalAlpha /= 0.28; ctx.strokeStyle = r.fill; ctx.lineWidth = Math.max(1.5, scale * 0.08);
+      ctx.setLineDash([scale * 0.4, scale * 0.25]); ctx.strokeRect(X(rc.x), Y(rc.y), w, h);
+      const size = Math.min(h * 0.4, w / Math.max(4, r.name.length) * 1.5, 48);
+      if (r.name && size >= 7) {
+        ctx.font = `700 ${size}px ${fonts.label}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.lineJoin = "round"; ctx.setLineDash([]); ctx.lineWidth = size * 0.22; ctx.strokeStyle = chrome.paper;
+        ctx.strokeText(r.name, X(rc.x) + w / 2, Y(rc.y) + h / 2, w * 0.94);
+        ctx.fillStyle = chrome.ink; ctx.fillText(r.name, X(rc.x) + w / 2, Y(rc.y) + h / 2, w * 0.94);
+      }
+      ctx.restore();
+      return;
+    }
       const tint = MAP_ROOM_TINT[r.type];
       if (scale >= 14) {
         const cxp = X(rc.x) + (rc.w * scale) / 2;

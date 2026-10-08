@@ -73,7 +73,8 @@ function projectGameplay(items: GameplayEntity[], visible?: (x: number, y: numbe
       continue;
     }
     if (e.kind === "room") {
-      kept.push({ ...e, roomType: "empty" }); // имя сохраняется
+      const { location: _private, ...shown } = e; // связь с локацией — знание Мастера
+      kept.push({ ...shown, roomType: "empty" }); // имя сохраняется
       continue;
     }
     kept.push({ ...e });

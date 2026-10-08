@@ -59,6 +59,20 @@ describe("V6 boundary and tokens", () => {
     for (const packs of [[], ["village", "village"], ["Деревня"], "village"])
       expect(parseMapDocumentV6({ ...wet, appearance: { style: "paper-ink", packs } }).ok).toBe(false);
   });
+  it("квартал: заливка и локация комнаты переживают сохранение, локация игрокам не уходит", () => {
+    const base = upgradeMapDocumentV5(oldDocument());
+    const room = { id: "q1", kind: "room" as const, roomType: "empty" as const, name: "Порт", fill: "#3F6FA3", location: ref.uid.toUpperCase(),
+      geometry: { type: "rect" as const, x: 1, y: 1, w: 3, h: 2 } };
+    const doc: MapDocumentV6 = { ...base, exploration: { enabled: false, revealedCells: [] }, layers: base.layers.map((layer) => layer.id === "gp" ? { ...layer, items: [room] } : layer) as MapDocumentV6["layers"] };
+    const stored = parseMapDocumentV6(serializeMapDocumentV6(doc));
+    const kept = stored.ok && stored.value.layers.flatMap((layer) => layer.kind === "gameplay" ? layer.items : [])[0];
+    expect(kept).toMatchObject({ fill: "#3f6fa3", location: ref.uid });
+    const shown = projectMapDocumentV6ForPlayer(doc, () => null).layers.flatMap((layer) => layer.kind === "gameplay" ? layer.items : [])[0];
+    expect(shown).toMatchObject({ name: "Порт", fill: "#3f6fa3" });
+    expect(shown).not.toHaveProperty("location");
+    for (const bad of [{ fill: "red" }, { location: "порт" }])
+      expect(validateMapDocumentV6({ ...doc, layers: doc.layers.map((layer) => layer.id === "gp" ? { ...layer, items: [{ ...room, ...bad }] } : layer) }).length).toBeGreaterThan(0);
+  });
   it("bestiary refs remain independent and portable; creatures use the being silhouette", () => {
     const source = { kind: "compendium_entry" as const, uid: ref.uid };
     const token = { ...createGameplayToken("bestiary-token", source, { x: 2, y: 3 }), appearance: { shape: "circle" as const, visual: { type: "entity-avatar" as const, source } } };

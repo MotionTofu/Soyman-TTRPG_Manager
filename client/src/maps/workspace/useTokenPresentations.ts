@@ -8,7 +8,10 @@ import { tokenSourceKey, type TokenPresentation } from "./tokenPlacement";
 
 export type TokenDisplay = TokenPresentation & { portrait?: HTMLImageElement | null; portraitSource?: string | null };
 export function useTokenPresentations(mapId: number, document: MapDocumentV6 | null) {
-  const keys = JSON.stringify(document ? [...new Map(tokensOf(document).flatMap((token) => token.sourceRef ? [[tokenSourceKey(token.sourceRef), token.sourceRef] as const] : [])).values()] : []);
+  // Источники фишек и локации, к которым привязаны комнаты и кварталы.
+  const refs = document ? [...tokensOf(document).flatMap((token) => token.sourceRef ? [token.sourceRef] : []),
+    ...document.layers.flatMap((layer) => layer.kind === "gameplay" ? layer.items.flatMap((item) => item.kind === "room" && item.location ? [{ kind: "location" as const, uid: item.location }] : []) : [])] : [];
+  const keys = JSON.stringify([...new Map(refs.map((ref) => [tokenSourceKey(ref), ref] as const)).values()]);
   const sources = useMemo(() => JSON.parse(keys) as TokenPresentation["sourceRef"][], [keys]);
   const [displays, setDisplays] = useState<ReadonlyMap<string, TokenDisplay>>(new Map());
   const currentDisplays = useRef(displays);

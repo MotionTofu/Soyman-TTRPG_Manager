@@ -255,6 +255,10 @@ export interface GameplayRoom {
   geometry: ShapeGeometry;
   roomType: MapRoomType;
   name: string;
+  /** Заливка контура, #rrggbb. Есть у квартала городской карты; у комнаты подземелья её нет. */
+  fill?: string;
+  /** UID локации мира, которую изображает комната или квартал. Игрокам не уходит. */
+  location?: string;
 }
 
 export interface GameplayDoor {

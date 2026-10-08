@@ -40,8 +40,8 @@ export const MAP_SCALE_PRESETS: Record<MapScale, { width: number; height: number
   continent: { width: 40, height: 30, cellLore: "100 км" },
   country: { width: 50, height: 36, cellLore: "20 км" },
   region: { width: 60, height: 44, cellLore: "2 км" },
-  settlement: { width: 40, height: 30, cellLore: "20 м" },
-  locality: { width: 50, height: 36, cellLore: "5 м" },
+  settlement: { width: 80, height: 60, cellLore: "10 м" },
+  locality: { width: 50, height: 36, cellLore: "1,5 м" },
 };
 
 export const MAP_MIN_SIDE = 8;

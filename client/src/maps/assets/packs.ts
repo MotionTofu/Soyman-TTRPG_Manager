@@ -6,10 +6,10 @@ export interface MapPack { id: string; name: string; genre: string; place: strin
 
 /** Библиотека встроенных наборов. Свои наборы придут сюда же с экрана «Наборы». */
 export const MAP_PACKS: readonly MapPack[] = [
-  // ponytail: «Деревня» значится и обзорной, пока нет набора «Мир» — иначе обзорной карте нечем красить землю.
-  { id: "village", name: "Деревня у реки", genre: "Фэнтези", place: "Поселение", kinds: ["tactical", "overview"] },
+  // ponytail: «Деревня» значится городской и обзорной, пока нет своих наборов «Город» и «Мир» — иначе этим картам нечем красить землю.
+  { id: "village", name: "Деревня у реки", genre: "Фэнтези", place: "Поселение", kinds: ["tactical", "city", "overview"] },
   { id: "crypt", name: "Склеп", genre: "Фэнтези", place: "Подземелье", kinds: ["tactical"] },
-  { id: "ink", name: "Бумага и тушь", genre: "Любой жанр", place: "Знаки и мир", kinds: ["tactical", "overview"] },
+  { id: "ink", name: "Бумага и тушь", genre: "Любой жанр", place: "Знаки и мир", kinds: ["tactical", "city", "overview"] },
 ];
 export const packName = (id: string) => MAP_PACKS.find((pack) => pack.id === id)?.name ?? id;
 /** Наборы, которые подходят виду карты: обзорные на тактической не предлагаются, и наоборот. */

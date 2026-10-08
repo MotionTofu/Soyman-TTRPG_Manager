@@ -34,7 +34,7 @@ const NO_SELECTED_NODES: number[] = [];
 
 /** Pointer work on the canvas: strokes, drags, picking and the brush cursor. */
 export function useWorkspaceGestures({ doc, gesture, space, camera, tool, activeLayer, setActiveLayer, snap, settings, selection, setSelection,
-  selections, setSelections, placement, busy, onLabel }: {
+  selections, setSelections, placement, busy, onLabel, quarter }: {
   doc: WorkspaceDocument; gesture: MutableRefObject<Gesture | null>; space: MutableRefObject<boolean>;
   camera: ReturnType<typeof useMapCamera>; tool: WorkspaceTool; activeLayer: string; setActiveLayer: (id: string) => void;
   snap: boolean; settings: BrushSettings; selection: WorkspaceSelection | null; setSelection: (selection: WorkspaceSelection | null) => void;
@@ -42,6 +42,8 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
   placement: ReturnType<typeof useTokenPlacement>;
   /** Leaving, a dialog open: the canvas ignores presses. */
   busy: boolean; onLabel: (position: Vec2, layerId: string) => void;
+  /** Городская карта: «Комната» рисует квартал. */
+  quarter?: boolean;
 }) {
   const { documentRef, setDocument, history, autosave, commit, showError } = doc;
   const [preview, setPreview] = useState<ReturnType<typeof roomRect> | null>(null);
@@ -94,7 +96,7 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
     } else {
       try {
         const next = current.type === "line" ? addFreePath(current.before, activeLayer, current.points ?? [], tool === "river" ? "river" : "road", settings.lineWidth, false, (tool === "road" ? settings.roadStyle : settings.riverStyle) || undefined)
-          : createRoom(current.before, activeLayer, crypto.randomUUID(), current.start, current.last, snap);
+          : createRoom(current.before, activeLayer, crypto.randomUUID(), current.start, current.last, snap, quarter);
         if (next !== current.before) { history.push(current.before); setDocument(next); }
       } catch (error) { showError(error); }
     }

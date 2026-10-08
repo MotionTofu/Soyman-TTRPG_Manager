@@ -529,6 +529,12 @@ function checkGameplayLayer(
       if (typeof e.name !== "string") {
         out.push(issue("gameplay.bad-room-name", `${ep}.name`, "name must be a string"));
       }
+      if (e.fill !== undefined && (typeof e.fill !== "string" || !/^#[0-9a-f]{6}$/i.test(e.fill))) {
+        out.push(issue("gameplay.bad-room-fill", `${ep}.fill`, "fill must be #rrggbb"));
+      }
+      if (e.location !== undefined && (typeof e.location !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(e.location))) {
+        out.push(issue("gameplay.bad-room-location", `${ep}.location`, "location must be a UID"));
+      }
       return;
     }
     if (kind === "door") {

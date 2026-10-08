@@ -65,9 +65,14 @@ export function roomRect(a: Vec2, b: Vec2, snap: boolean) {
     h: Math.max(snap ? 1 : 0.1, (snap ? Math.ceil(Math.max(a.y, b.y)) : Math.max(a.y, b.y)) - y) };
 }
 
-export function createRoom(document: MapDocumentV6, layerId: string, id: string, a: Vec2, b: Vec2, snap: boolean) {
-  requireEditableLayer(document, layerId, "gameplay");
-  return editGeometry(document, (view) => createGameplayEntity(view, layerId, { id, kind: "room", roomType: "empty", name: "",
+/** Цвета кварталов по очереди: соседние отличаются без выбора руками. */
+export const QUARTER_FILLS = ["#c9772e", "#4f8a5b", "#3f6fa3", "#a34a6b", "#8a7a2e", "#6a56a0", "#3f8f8f", "#a3563f"];
+/** `quarter` — квартал городской карты: та же фигура, но с именем и заливкой. */
+export function createRoom(document: MapDocumentV6, layerId: string, id: string, a: Vec2, b: Vec2, snap: boolean, quarter = false) {
+  const layer = requireEditableLayer(document, layerId, "gameplay");
+  const count = layer.kind === "gameplay" ? layer.items.filter((item) => item.kind === "room").length : 0;
+  return editGeometry(document, (view) => createGameplayEntity(view, layerId, { id, kind: "room", roomType: "empty",
+    name: quarter ? `Квартал ${count + 1}` : "", ...(quarter ? { fill: QUARTER_FILLS[count % QUARTER_FILLS.length] } : {}),
     geometry: { type: "rect", ...roomRect(a, b, snap) } }));
 }
 export function createDoor(document: MapDocumentV6, layerId: string, id: string, point: Vec2, snap: boolean, orientation: number) {

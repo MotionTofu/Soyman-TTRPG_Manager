@@ -220,6 +220,8 @@ function canonGameplay(e: GameplayEntity): GameplayEntity {
       geometry: canonShape(e.geometry),
       roomType: e.roomType,
       name: e.name,
+      ...(e.fill ? { fill: e.fill.toLowerCase() } : {}),
+      ...(e.location ? { location: e.location.toLowerCase() } : {}),
     };
   }
   if (e.kind === "door") {

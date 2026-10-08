@@ -57,6 +57,8 @@ export interface RenderRoom {
   rect: { x: number; y: number; w: number; h: number };
   type: MapRoomType;
   name: string;
+  /** Заливка квартала. */
+  fill?: string;
 }
 
 export interface RenderDoor {
@@ -454,6 +456,7 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
               rect: { x: e.geometry.x, y: e.geometry.y, w: e.geometry.w, h: e.geometry.h },
               type: e.roomType,
               name: e.name,
+              ...(e.fill ? { fill: e.fill } : {}),
             },
           });
         } else if (e.kind === "door") {

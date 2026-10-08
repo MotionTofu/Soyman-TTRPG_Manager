@@ -33,19 +33,21 @@ export const MAP_SCALE_PRESETS: Record<MapScale, { width: number; height: number
   continent: { width: 40, height: 30, cellLore: "100 км" },
   country: { width: 50, height: 36, cellLore: "20 км" },
   region: { width: 60, height: 44, cellLore: "2 км" },
-  settlement: { width: 40, height: 30, cellLore: "20 м" },
-  locality: { width: 50, height: 36, cellLore: "5 м" },
+  settlement: { width: 80, height: 60, cellLore: "10 м" },
+  locality: { width: 50, height: 36, cellLore: "1,5 м" },
 };
 
-/** Два вида карт вместо шести масштабов. В базе тактическая — `locality`, обзорная — любой другой масштаб:
- * старые названия остались заготовками числа «км в клетке». */
-export type MapKind = "tactical" | "overview";
-export const MAP_KIND_LABELS: Record<MapKind, string> = { tactical: "Тактическая", overview: "Обзорная" };
-export const mapKind = (scale: MapScale): MapKind => scale === "locality" ? "tactical" : "overview";
+/** Три вида карт вместо шести масштабов. В базе тактическая — `locality`, город — `settlement`, обзорная — любой
+ * другой масштаб: старые названия остались заготовками числа «км в клетке». */
+export type MapKind = "tactical" | "city" | "overview";
+export const MAP_KIND_LABELS: Record<MapKind, string> = { tactical: "Тактическая", city: "Город", overview: "Обзорная" };
+export const mapKind = (scale: MapScale): MapKind => scale === "locality" ? "tactical" : scale === "settlement" ? "city" : "overview";
 /** Клетка тактической карты — 5 футов. */
 export const TACTICAL_CELL = "1,5 м";
+/** Клетка городской карты: дом равен клетке. */
+export const CITY_CELL = "10 м";
 export const OVERVIEW_PRESETS: { scale: MapScale; name: string; km: number }[] = [
-  { scale: "settlement", name: "Город", km: 0.02 }, { scale: "region", name: "Регион", km: 2 }, { scale: "country", name: "Страна", km: 20 },
+  { scale: "region", name: "Регион", km: 2 }, { scale: "country", name: "Страна", km: 20 },
   { scale: "continent", name: "Континент", km: 100 }, { scale: "planet", name: "Планета", km: 500 },
 ];
 /** Масштаб для базы: заготовка, ближайшая по порядку величины. */

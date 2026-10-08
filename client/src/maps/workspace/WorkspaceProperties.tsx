@@ -4,17 +4,18 @@ import { updateGameplayEntity, updateLabelText } from "../core";
 import { transformMapObject } from "../core/mutations/mapObjects";
 import { updateLabelStyle } from "../core/mutations/labels";
 import { LABEL_FONTS } from "../labelStyle";
-import type { MapLabelStyle } from "@shared/maps/core";
+import type { GameplayRoom, MapLabelStyle } from "@shared/maps/core";
 import { editGeometry } from "./editDocument";
 import { requireEditableLayer, type WorkspaceSelection } from "./editorCommands";
 import { TokenProperties } from "./TokenProperties";
 import type { TokenDisplay } from "./useTokenPresentations";
 
-export function WorkspaceProperties({ document, selection, commit, onClose, onDelete, display, onPreview }: {
+export function WorkspaceProperties({ document, selection, commit, onClose, onDelete, display, onPreview, onLink }: {
   document: MapDocumentV6; selection: WorkspaceSelection;
   commit: (operation: (before: MapDocumentV6) => MapDocumentV6) => void;
   onClose: () => void; onDelete: () => void;
-  display?: TokenDisplay; onPreview?: () => void;
+  /** Источник фишки или локация комнаты и квартала; `onLink` — начать привязку к локации. */
+  display?: TokenDisplay; onPreview?: () => void; onLink?: () => void;
 }) {
   const layer = document.layers.find((entry) => entry.id === selection.layerId);
   const item = layer && "items" in layer ? layer.items.find((entry) => entry.id === selection.id) : null;
@@ -22,6 +23,8 @@ export function WorkspaceProperties({ document, selection, commit, onClose, onDe
   const [text, setText] = useState(originalText);
   useEffect(() => setText(originalText), [selection.id, originalText]);
   if (!item) return null;
+  const room = "kind" in item && item.kind === "room" ? item : null;
+  const patchRoom = (patch: Partial<GameplayRoom>) => edit((view) => updateGameplayEntity(view, item.id, (entity) => entity.kind === "room" ? { ...entity, ...patch } : entity));
   const protectedLayer = !!layer?.locked || !layer?.visible;
   function edit(operation: Parameters<typeof editGeometry>[1]) {
     commit((before) => { requireEditableLayer(before, selection.layerId); return editGeometry(before, operation); });
@@ -30,7 +33,7 @@ export function WorkspaceProperties({ document, selection, commit, onClose, onDe
     <button aria-label="Закрыть свойства" onClick={onClose}>×</button><strong>Свойства</strong>
     <p>Перетащите на карте. Привязка управляется отдельно от сетки.</p>
     {"kind" in item && item.kind === "token" && <TokenProperties token={item} selection={selection} display={display} protectedLayer={protectedLayer} commit={commit} onPreview={() => onPreview?.()} />}
-    {("text" in item || "name" in item) && <label>{"text" in item ? "Текст подписи" : "Название комнаты"}
+    {("text" in item || "name" in item) && <label>{"text" in item ? "Текст подписи" : room?.fill ? "Название квартала" : "Название комнаты"}
       <input value={text} disabled={protectedLayer} maxLength={200} onChange={(event) => setText(event.target.value)} onBlur={() => {
         if (text === originalText) return;
         if ("text" in item && text.trim()) edit((view) => updateLabelText(view, item.id, text.trim()));
@@ -38,6 +41,13 @@ export function WorkspaceProperties({ document, selection, commit, onClose, onDe
         else if ("name" in item) edit((view) => updateGameplayEntity(view, item.id, (entity) => entity.kind === "room" ? { ...entity, name: text } : entity));
       }} />
     </label>}
+    {room?.fill && <label>Заливка<input aria-label="Заливка квартала" type="color" value={room.fill} disabled={protectedLayer} onChange={(event) => patchRoom({ fill: event.target.value })} /></label>}
+    {room && (room.location ? <>
+      <p>Локация: {display?.name ?? "загрузка…"}</p>
+      {display?.state === "missing" && <p role="status">Локация удалена, в архиве или недоступна. Связь остаётся.</p>}
+      <button disabled={display?.state !== "active" || !display.id} onClick={() => onPreview?.()}>Открыть карточку</button>
+      <button disabled={protectedLayer} onClick={() => patchRoom({ location: undefined })}>Отвязать от локации</button>
+    </> : <button disabled={protectedLayer || !onLink} onClick={() => onLink?.()}>Привязать к локации</button>)}
     {"text" in item && (() => {
       const look = item.style ?? {}, put = (patch: MapLabelStyle) => edit((view) => updateLabelStyle(view, item.id, { ...look, ...patch }));
       return <>

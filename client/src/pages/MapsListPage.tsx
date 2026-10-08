@@ -20,6 +20,8 @@ import {
   MAP_SCALE_PRESETS,
   OVERVIEW_PRESETS,
   TACTICAL_CELL,
+  CITY_CELL,
+  parseCellLore,
   cellLoreOf,
   mapKind,
   overviewScale,
@@ -181,8 +183,8 @@ export function MapsListPage() {
   }, [maps, q, scaleFilter, gridFilter, visFilter, sort]);
 
   /** Вид карты или заготовка обзорной: размер поля подставляется из неё. */
-  function pickKind(next: MapKind, preset = OVERVIEW_PRESETS[1]) {
-    const size = MAP_SCALE_PRESETS[next === "tactical" ? "locality" : preset.scale];
+  function pickKind(next: MapKind, preset = OVERVIEW_PRESETS[0]) {
+    const size = MAP_SCALE_PRESETS[next === "tactical" ? "locality" : next === "city" ? "settlement" : preset.scale];
     setKind(next); setKm(preset.km); setWidth(size.width); setHeight(size.height);
   }
 
@@ -207,13 +209,14 @@ export function MapsListPage() {
   async function quickDraft() {
     setCreateError(null);
     try {
-      const preset = MAP_SCALE_PRESETS.continent;
+      // Черновик — тактическая карта: с неё начинают чаще всего.
       const created = await write.post<{ id: number }>("/maps", {
         name: `Карта ${maps.length + 1}`,
-        grid: "hex",
-        scale: "continent",
-        width: preset.width,
-        height: preset.height,
+        grid: "square",
+        scale: "locality",
+        cell_lore: TACTICAL_CELL,
+        width: 50,
+        height: 40,
       });
       // Новая карта — только список: миниатюры остальных не задеты.
       afterWrite([{ kind: "map", card: true }]);
@@ -242,9 +245,9 @@ export function MapsListPage() {
     try {
       const created = await write.post<{ id: number }>("/maps", {
         name: name.trim(),
-        grid: kind === "tactical" ? "square" : grid,
-        scale: kind === "tactical" ? "locality" : overviewScale(km),
-        cell_lore: kind === "tactical" ? TACTICAL_CELL : cellLoreOf(km),
+        grid: kind === "overview" ? grid : "square",
+        scale: kind === "tactical" ? "locality" : kind === "city" ? "settlement" : overviewScale(km),
+        cell_lore: kind === "tactical" ? TACTICAL_CELL : kind === "city" ? CITY_CELL : cellLoreOf(km),
         width: w,
         height: h,
       });
@@ -269,6 +272,7 @@ export function MapsListPage() {
       >
         <option value="all">Любой вид</option>
         <option value="tactical">Тактические</option>
+        <option value="city">Города</option>
         <option value="overview">Обзорные</option>
       </select>
       <select
@@ -421,8 +425,12 @@ export function MapsListPage() {
                 Тактическая — подземелье, дом, двор, улица; клетка {TACTICAL_CELL}
               </label>
               <label className="row" style={{ gap: 6 }}>
+                <input type="radio" checked={kind === "city"} onChange={() => pickKind("city")} />
+                Город — улицы, кварталы, стены; клетка {CITY_CELL}, дом равен клетке
+              </label>
+              <label className="row" style={{ gap: 6 }}>
                 <input type="radio" checked={kind === "overview"} onChange={() => pickKind("overview")} />
-                Обзорная — город, край, страна, мир; клетку задаёте вы
+                Обзорная — край, страна, мир; клетку задаёте вы
               </label>
             </fieldset>
             {kind === "overview" && (
@@ -451,7 +459,7 @@ export function MapsListPage() {
                 </fieldset>
               </>
             )}
-            <ScalePreview metres={kind === "tactical" ? 1.5 : km * 1000} width={width} height={height} />
+            <ScalePreview metres={kind === "overview" ? km * 1000 : parseCellLore(kind === "city" ? CITY_CELL : TACTICAL_CELL)!} width={width} height={height} />
             <div className="row" style={{ gap: 8 }}>
               <label>
                 Ширина

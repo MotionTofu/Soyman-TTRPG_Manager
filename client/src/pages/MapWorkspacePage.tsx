@@ -20,9 +20,10 @@ import { layerName, NEW_LAYERS, type NewLayerKind } from "../maps/workspace/laye
 import { ToolSettings, type BrushSettings } from "../maps/workspace/ToolSettings";
 import { WorkspaceHeader, WorkspaceStatus, WorkspaceToolRail, type GridLook } from "../maps/workspace/WorkspaceChrome";
 import { createWorkspaceRenderModel } from "../maps/workspace/renderV6";
-import { TOOL_LABELS, toolLayerKind, addLabel, quantize, removeSelection, type WorkspaceTool, type WorkspaceSelection } from "../maps/workspace/editorCommands";
+import { toolLayerKind, addLabel, quantize, removeSelection, type WorkspaceTool, type WorkspaceSelection } from "../maps/workspace/editorCommands";
 import { downloadMapPicture } from "../maps/workspace/pictureExport";
-import { CATALOG_TOOLS, toolsOf } from "../maps/workspace/toolSets";
+import { CATALOG_TOOLS, toolLabel } from "../maps/workspace/toolSets";
+import { updateGameplayEntity } from "../maps/core";
 import { mapKind } from "../maps/mapTypes";
 import { connectedPacks } from "../maps/assets/packs";
 import { useWorkspaceDocument } from "../maps/workspace/useWorkspaceDocument";
@@ -80,6 +81,8 @@ export function MapWorkspacePage() {
   const generationBusy = useRef(false);
   const [label, setLabel] = useState<{ position: Vec2; layerId: string; text: string } | null>(null);
   const [entityPreview, setEntityPreview] = useState<PlacementSource | null>(null);
+  // Комната или квартал, которые ждут локацию: следующая локация из поиска или мешка не ставится фишкой, а привязывается.
+  const [linking, setLinking] = useState<WorkspaceSelection | null>(null);
   const [dragGhost, setDragGhost] = useState<Vec2 | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null), wrapRef = useRef<HTMLDivElement | null>(null);
   const gesture = useRef<Gesture | null>(null), space = useRef(false), layerStroke = useRef(false);
@@ -108,10 +111,20 @@ export function MapWorkspacePage() {
   const liquidMaterial = settings.liquid ?? "village-water-2";
   const paintSettings = useMemo(() => tool === "liquid" ? { ...settings, material: liquidMaterial } : settings, [tool, settings, liquidMaterial]);
   const gestures = useWorkspaceGestures({ doc, gesture, space, camera, tool: tool === "liquid" ? "surface" : tool, activeLayer, setActiveLayer, snap, settings: paintSettings, selection, setSelection, selections, setSelections, placement,
-    busy: leaving || !!label || generatorOpen, onLabel: (position, layerId) => setLabel({ position, layerId, text: "" }) });
+    busy: leaving || !!label || generatorOpen, quarter: map?.scale === "settlement", onLabel: (position, layerId) => setLabel({ position, layerId, text: "" }) });
   const { finishGesture } = gestures;
   const placementActions = useRef({ place: (_source: PlacementSource) => {}, preview: (_source: PlacementSource) => {} });
-  placementActions.current = { place: (source) => { finishGesture(); setEntityPreview(null); void placement.begin(source); canvasRef.current?.focus(); },
+  async function linkLocation(target: WorkspaceSelection, source: PlacementSource) {
+    setLinking(null);
+    try {
+      if (source.type !== "location") throw new Error("Привязать можно только локацию");
+      const found = await mapWorkspaceApi.resolveSource(mapId, "location", source.id);
+      // Название по умолчанию берётся из локации; своё название не затирается.
+      commit((before) => editGeometry(before, (view) => updateGameplayEntity(view, target.id, (entity) => entity.kind !== "room" ? entity
+        : { ...entity, location: found.sourceRef.uid, name: !entity.name || /^Квартал \d+$/.test(entity.name) ? found.name.slice(0, 200) : entity.name })));
+    } catch (error) { showError(error); }
+  }
+  placementActions.current = { place: (source) => { finishGesture(); setEntityPreview(null); if (linking) { void linkLocation(linking, source); return; } void placement.begin(source); canvasRef.current?.focus(); },
     preview: (source) => { finishGesture(); placement.cancel(); setEntityPreview(source); } };
   const registerPlacement = workspace?.setPlacement;
   useEffect(() => {
@@ -341,6 +354,7 @@ export function MapWorkspacePage() {
     if (!selection) return null;
     const layer = document.layers.find((entry) => entry.id === selection.layerId);
     const token = layer?.kind === "gameplay" ? layer.items.find((item) => item.id === selection.id) : null;
+    if (token?.kind === "room" && token.location) return displays.get(tokenSourceKey({ kind: "location", uid: token.location }));
     return token?.kind === "token" && token.sourceRef ? displays.get(tokenSourceKey(token.sourceRef)) : undefined;
   })();
   const notice = doc.actionError || doc.compatibilityError || (doc.publishedOldMap ? "Эта карта доступна игрокам. Пока готовится новый показ, редактируйте скрытую копию — текущий показ сохранится."
@@ -365,7 +379,7 @@ export function MapWorkspacePage() {
           cellBrush={gestures.cellBrush} wallDraft={gestures.wallDraft} onDoubleClick={() => gestures.finishWall()} selections={selections} marquee={gestures.marquee} assetPreview={gestures.assetPreview} draftLine={gestures.draftLine} brush={gestures.brushCursor && (tool === "surface" || tool === "liquid" || tool === "scatter" || maskEraser) ? { ...gestures.brushCursor, radius: settings.radius } : null}
           onPointerLeave={gestures.leave} displays={displays} ghost={placement.pending?.position ?? dragGhost} onDragOver={dragOver} onDragLeave={() => setDragGhost(null)} onDrop={drop}
           onPointerDown={gestures.down} onPointerMove={gestures.move} onPointerUp={gestures.up} onPointerCancel={gestures.cancel} />
-        <div className="workspace-editor-hint" aria-hidden="true"><strong>{TOOL_LABELS[tool]}{active ? ` · ${layerName(active)}` : ""}</strong>{tool === "select" && <span>{selections.length > 1 ? `Выбрано: ${selections.length} · ` : ""}Рамка · Shift — добавить</span>}<span>Пробел — сдвиг</span><span>Esc — отмена</span></div>
+        <div className="workspace-editor-hint" aria-hidden="true"><strong>{toolLabel(mapKind(map.scale), tool)}{active ? ` · ${layerName(active)}` : ""}</strong>{tool === "select" && <span>{selections.length > 1 ? `Выбрано: ${selections.length} · ` : ""}Рамка · Shift — добавить</span>}<span>Пробел — сдвиг</span><span>Esc — отмена</span></div>
         {tool === "liquid" && <LiquidSlots used={liquids} own={liquidDraft ?? document.appearance?.liquids ?? NO_LIQUIDS} material={liquidMaterial} live={!!document.appearance?.water} onLive={onLiveWater} onMaterial={onLiquid} onOwn={onOwnLiquids} onSettle={onSettleLiquid} onRelease={onReleaseLiquid} />}
         <div className="workspace-editor-camera">
           <button type="button" aria-label="Уменьшить" onClick={() => camera.zoomBy(1 / 1.25)}>−</button>
@@ -375,6 +389,9 @@ export function MapWorkspacePage() {
         {placement.pending && <div className="workspace-editor-placement" role="status">
           <span>{placement.pending.source ? `${placement.pending.source.name}: выберите точку · стрелки и Enter` : "Загрузка источника…"}</span>
           <button disabled={!placement.pending.source} onClick={() => placement.confirm()}>Поставить здесь</button><button onClick={placement.cancel}>Отмена</button>
+        </div>}
+        {linking && <div className="workspace-editor-placement" role="status">
+          <span>Откройте «Поиск и мешок» и нажмите ＋ у нужной локации</span><button onClick={() => setLinking(null)}>Отмена</button>
         </div>}
         {gestures.wallDraft && <div className="workspace-editor-placement" role="status">
           <span>Клик — точка · Enter — закончить · Esc — отменить</span>
@@ -397,8 +414,9 @@ export function MapWorkspacePage() {
           ? <ArtProperties document={document} selection={selection} pickedAt={gestures.pickedAt} selectedNodes={gestures.selectedNodes} onSelectedNodes={gestures.setSelectedNodes} commit={commit} onClose={() => setSelection(null)} onDelete={() => remove(selection)} />
           : selection && tool === "select" && !disabled
             ? <WorkspaceProperties document={document} selection={selection} commit={commit} onClose={() => setSelection(null)} onDelete={() => remove(selection)} display={selectedToken ?? undefined}
+              onLink={canPlace ? () => setLinking(selection) : undefined}
               onPreview={() => { if (selectedToken?.state === "active" && selectedToken.id) setEntityPreview({ type: selectedToken.sourceRef.kind, id: selectedToken.id }); }} />
-            : <ToolSettings tool={tool} settings={settings} maskEraser={maskEraser} onTool={onSurfaceTool}
+            : <ToolSettings tool={tool} settings={settings} maskEraser={maskEraser} onTool={onSurfaceTool} label={toolLabel(mapKind(map.scale), tool === "brush" ? "surface" : tool)}
               selectedRoomCount={selectedRoomShapes(document, selections).length} roomActionsDisabled={disabled || leaving || active?.kind !== "terrain" || active.representation !== "cells" || active.locked || !active.visible || autosave.status.kind === "conflict"}
               onPaintRooms={onPaintRooms} onClearRooms={onClearRooms} onChange={onToolChange} />}
         <LayersPanel document={document} activeLayer={activeLayer} disabled={disabled || leaving} onActivate={onActivateLayer}
