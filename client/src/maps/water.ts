@@ -4,7 +4,9 @@ import { LIQUID_PATTERNS, LIQUID_RIMS, liquidKey, liquidRecipe, type LiquidRecip
 
 /** Вода шейдером (проба 2026-10-08). `mode`: 0 — комикс-панк, 1 — пиксельный пруд, 2 — пиксельное море, 3 — мягкая с дном;
  * `size` — пикселей на клетку у пиксельных. */
-export interface MapWater { mode: 0 | 1 | 2 | 3; speed: number; size: number; shoal: number }
+export interface MapWater { mode: 0 | 1 | 2 | 3; speed: number; size: number; shoal: number;
+  /** Свои рецепты на время правки: пока тянут ползунок или выбирают цвет, карта не меняется — меняется только таблица рецептов. */
+  liquids?: readonly LiquidRecipe[] }
 
 /** Точек маски на клетку. Маска — вся карта одной картинкой: красный канал — «здесь вода», зелёный — глубина (1–5 пятыми долями),
  * синий — «ближайший берег песчаный»: у пляжа пена шире, у травы и камня берег резче.
@@ -14,7 +16,8 @@ const K = 4;
 /** Из чего собрана маска воды. Пока список тот же, маску не пересобирают: перетаскивание фишки или подписи воду не меняет,
  * а пересборка — это вся карта заново и отправка картинки видеокарте на каждый шаг руки. */
 export function waterSources(model: MapRenderModel, width: number, height: number, shoal = 0): readonly unknown[] {
-  const out: unknown[] = [width, height, shoal, model.liquids];
+  // Рецептов здесь нет: от них зависит только таблица 5×8, её обновляет `drawLiquidRecipes`.
+  const out: unknown[] = [width, height, shoal];
   for (const layer of model.layers) {
     if (!layer.visible) continue;
     if (layer.kind === "terrain" && layer.terrain.mask?.source) out.push(layer.terrain.mask.source);
@@ -57,7 +60,7 @@ export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement,
     }
   }
   pen.putImageData(image, 0, 0);
-  drawRecipes(recipes, rows.map(key => liquidRecipe(key, model.liquids)));
+  rowsOf.set(recipes, rows); drawLiquidRecipes(recipes, model.liquids);
   pen.lineCap = pen.lineJoin = "round";
   const rivers = model.layers.flatMap(layer => layer.kind === "path" && layer.visible ? layer.paths : [])
     .flatMap(path => path.kind === "river" && path.style && path.nodes && path.nodes.length > 1
@@ -118,6 +121,11 @@ export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement,
   return any;
 }
 
+const rowsOf = new WeakMap<HTMLCanvasElement, readonly string[]>();
+/** Перерисовать таблицу рецептов, не трогая маску: строки остаются теми, что раздала последняя сборка маски. */
+export function drawLiquidRecipes(recipes: HTMLCanvasElement, liquids?: readonly LiquidRecipe[]) {
+  drawRecipes(recipes, (rowsOf.get(recipes) ?? ["water"]).map(key => liquidRecipe(key, liquids)));
+}
 const tone = (hex: string) => [1, 3, 5].map(at => parseInt(hex.slice(at, at + 2), 16));
 /** Рецепты жидкостей картинкой 5×8: строка — номер жидкости в маске, столбцы читает `recipe()` шейдера.
  * Картинка, а не массив чисел: так рецепт одинаково доходит и до сцены WebGL, и до обычного холста. */
@@ -359,7 +367,7 @@ void main() {
   vec4 shore = shoreAt(world);
   finalColor = vec4(water.rgb * water.a + (1.0 - water.a) * (shore.rgb * shore.a + gGlow), water.a + (1.0 - water.a) * shore.a);
 }`;
-type Still = { canvas: HTMLCanvasElement; gl: WebGL2RenderingContext; at: (name: string) => WebGLUniformLocation | null; mask: HTMLCanvasElement; raw: HTMLCanvasElement; flow: HTMLCanvasElement; recipes: HTMLCanvasElement; sources: readonly unknown[]; any: boolean };
+type Still = { canvas: HTMLCanvasElement; gl: WebGL2RenderingContext; at: (name: string) => WebGLUniformLocation | null; mask: HTMLCanvasElement; raw: HTMLCanvasElement; flow: HTMLCanvasElement; recipes: HTMLCanvasElement; sources: readonly unknown[]; liquids: unknown; any: boolean };
 let still: Still | null | undefined;
 function stillStage(): Still | null {
   if (still !== undefined) return still;
@@ -389,7 +397,7 @@ function stillStage(): Still | null {
       for (const [key, value] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, key, value);
     }
     const blank = () => document.createElement("canvas");
-    still = { canvas, gl, at: (name) => gl.getUniformLocation(program, name), mask: blank(), raw: blank(), flow: blank(), recipes: blank(), sources: [], any: false };
+    still = { canvas, gl, at: (name) => gl.getUniformLocation(program, name), mask: blank(), raw: blank(), flow: blank(), recipes: blank(), sources: [], liquids: null, any: false };
   } catch (error) { console.warn("Живая вода на обычном холсте недоступна", error); }
   return still;
 }
@@ -406,10 +414,16 @@ export function drawWaterStill(ctx: CanvasRenderingContext2D, model: MapRenderMo
   const { gl, canvas } = stage, sources = waterSources(model, width, height, water.shoal);
   if (sources.length !== stage.sources.length || sources.some((source, i) => source !== stage.sources[i])) {
     stage.any = drawWaterMask(stage.mask, stage.raw, stage.flow, stage.recipes, model, width, height, water.shoal); stage.sources = sources;
+    stage.liquids = null;
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-    gl.activeTexture(gl.TEXTURE2); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, stage.recipes);
     gl.activeTexture(gl.TEXTURE1); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, stage.flow);
     gl.activeTexture(gl.TEXTURE0); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, stage.mask);
+  }
+  const liquids = water.liquids ?? model.liquids;
+  if (liquids !== stage.liquids) {
+    drawLiquidRecipes(stage.recipes, liquids); stage.liquids = liquids;
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.activeTexture(gl.TEXTURE2); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, stage.recipes);
   }
   if (!stage.any) return false;
   const W = Math.round(cssW * ratio), H = Math.round(cssH * ratio);

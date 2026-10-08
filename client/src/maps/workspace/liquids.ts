@@ -98,3 +98,16 @@ export function replaceLiquid(doc: MapDocumentV5, from: string, to: string | nul
   layers[layers.indexOf(target)] = { ...target, mask: { ...target.mask, materials, chunks } };
   return changed({ ...doc, layers });
 }
+
+/** «Глубина» и «Блик» по «Середине»: тот же оттенок, темнее и насыщеннее вглубь, светлее и бледнее к блику. */
+export function liquidShades(mid: string): [string, string] {
+  const [r, g, b] = [1, 3, 5].map(at => parseInt(mid.slice(at, at + 2), 16) / 255);
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min;
+  const s = d ? d / (1 - Math.abs(2 * l - 1)) : 0;
+  const h = !d ? 0 : max === r ? ((g - b) / d + 6) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  const hex = (light: number, sat: number) => {
+    const c = (1 - Math.abs(2 * light - 1)) * sat, x = c * (1 - Math.abs(h % 2 - 1)), m = light - c / 2;
+    return "#" + [[c, x, 0], [x, c, 0], [0, c, x], [0, x, c], [x, 0, c], [c, 0, x]][Math.floor(h) % 6].map(v => Math.round((v + m) * 255).toString(16).padStart(2, "0")).join("");
+  };
+  return [hex(l * 0.45, Math.min(1, s * 1.1)), hex(l + (1 - l) * 0.78, s * 0.6)];
+}

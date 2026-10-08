@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { TERRAIN_MASK_ENCODING } from "@shared/maps/core/terrainMask";
 import type { MapDocumentV5 } from "../core/types";
-import { LIQUID_LAYER, moveLiquidsToLayer, replaceLiquid, usedLiquids } from "./liquids";
+import { LIQUID_LAYER, liquidShades, moveLiquidsToLayer, replaceLiquid, usedLiquids } from "./liquids";
 
 const mat = (code: string) => ({ type: "builtin" as const, key: `terrain/${code}` });
 const chunk = (id: string, set: Record<number, number>) => ({ id, cx: 0, cy: 0, payload: { encoding: TERRAIN_MASK_ENCODING, values: Array.from({ length: 256 }, (_, i) => set[i] ?? 0) } });
@@ -32,4 +32,14 @@ it("освобождение слота: жидкость стирается и�
   expect(values(swapped.document, "wet")[0].slice(0, 2)).toEqual([1, 3]);
   expect(values(erased.document, "wet")[0].slice(0, 2)).toEqual([1, 0]);
   expect(replaceLiquid(doc, "tar", null)).toMatchObject({ changed: false });
+});
+
+it("глубина и блик подбираются по середине: темнее и светлее того же оттенка", () => {
+  const sum = (hex: string) => [1, 3, 5].reduce((total, at) => total + parseInt(hex.slice(at, at + 2), 16), 0);
+  for (const mid of ["#15937f", "#c8402a", "#808080", "#f0e68c", "#101030"]) {
+    const [deep, light] = liquidShades(mid);
+    expect(deep).toMatch(/^#[0-9a-f]{6}$/); expect(light).toMatch(/^#[0-9a-f]{6}$/);
+    expect(sum(deep)).toBeLessThan(sum(mid)); expect(sum(light)).toBeGreaterThan(sum(mid));
+  }
+  expect(liquidShades("#808080")).toEqual(["#3a3a3a", "#e3e3e3"]);
 });

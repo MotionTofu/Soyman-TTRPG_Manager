@@ -2,7 +2,7 @@ import { memo, useState } from "react";
 import type { MapLiquidRecipe } from "@shared/maps/core";
 import { LIQUIDS, LIQUID_PATTERNS, LIQUID_RIMS, OWN_LIQUID_KEYS, WATER_DEPTHS, liquidKey, liquidRecipe, villageUrl, waterCode, waterLevel,
   type LiquidPattern, type LiquidRecipe, type LiquidRim } from "../assets/village";
-import { LIQUID_SLOTS } from "./liquids";
+import { LIQUID_SLOTS, liquidShades } from "./liquids";
 
 const builtin = (key: string) => LIQUIDS.some(item => item.key === key);
 function Swatch({ recipe }: { recipe: LiquidRecipe }) {
@@ -17,7 +17,9 @@ function Range({ name, value, min, max, step, onChange, onSettle }: { name: stri
  * карте или только что взята; пустой предлагает готовый рецепт или свою жидкость. Свой рецепт правится тут же, и карта
  * перекрашивается сразу: в слое лежит ключ рецепта, а не его цвета.
  * `onOwn` — новая таблица своих рецептов; `live` — ползунок ещё тянут, шаг истории закроет `onSettle`. */
-export const LiquidSlots = memo(function LiquidSlots({ used, own, material, onMaterial, onOwn, onSettle, onRelease }: {
+export const LiquidSlots = memo(function LiquidSlots({ used, own, material, live, onLive, onMaterial, onOwn, onSettle, onRelease }: {
+  /** Включена ли «живая вода»: без неё жидкость — ровная заливка, и рецепт не на чем показать. */
+  live: boolean; onLive: () => void;
   used: readonly string[]; own: readonly MapLiquidRecipe[]; material: string; onMaterial: (code: string) => void;
   onOwn: (next: MapLiquidRecipe[], live: boolean) => void; onSettle: () => void; onRelease: (key: string, to: string | null) => void;
 }) {
@@ -68,6 +70,8 @@ export const LiquidSlots = memo(function LiquidSlots({ used, own, material, onMa
       <label>Название<input type="text" maxLength={40} value={recipe.name} onChange={event => edit({ name: event.target.value || "Своя жидкость" })} /></label>
       <fieldset><legend>Цвета</legend>{(["Глубина", "Середина", "Блик"] as const).map((name, i) => <label key={name}>{name}
         <input type="color" aria-label={`Цвет: ${name}`} value={recipe.tones[i]} onChange={event => edit({ tones: recipe.tones.map((tone, n) => n === i ? event.target.value : tone) as [string, string, string] }, true)} onBlur={onSettle} /></label>)}</fieldset>
+      <button type="button" title="Подобрать «Глубину» и «Блик» по яркости «Середины»"
+        onClick={() => { const [deep, light] = liquidShades(recipe.tones[1]); edit({ tones: [deep, recipe.tones[1], light] }); }}>Рассчитать глубины</button>
       <Range name="Подвижность" value={recipe.pace} min={0} max={2} step={0.05} onChange={pace => edit({ pace }, true)} onSettle={onSettle} />
       <Range name="Крупность рисунка" value={recipe.size} min={0.25} max={4} step={0.05} onChange={size => edit({ size }, true)} onSettle={onSettle} />
       <Range name="Дно видно" value={recipe.bed} min={0} max={1} step={0.05} onChange={bed => edit({ bed }, true)} onSettle={onSettle} />
@@ -77,7 +81,8 @@ export const LiquidSlots = memo(function LiquidSlots({ used, own, material, onMa
       <label>Кромка<select value={recipe.rim} onChange={event => edit({ rim: event.target.value as LiquidRim })}>
         {Object.entries(LIQUID_RIMS).map(([key, name]) => <option key={key} value={key}>{name}</option>)}</select></label>
       <label className="workspace-liquid-check"><input type="checkbox" checked={recipe.solid} onChange={event => edit({ solid: event.target.checked })} />Твёрдая: по ней ходят, мост не нужен</label>
-      <small>Рисунок, кромка и свечение видны с «живой водой» (Карта ▾ → Вода); без неё жидкость — ровная заливка средним тоном.</small>
+      {!live && <p className="workspace-liquid-warning">Сейчас жидкость — ровная заливка средним тоном: рисунок, глубину, кромку и свечение рисует «живая вода».
+        <button type="button" onClick={onLive}>Включить живую воду</button></p>}
       <button type="button" onClick={() => setPanel(null)}>Готово</button>
     </div>}
   </div>;

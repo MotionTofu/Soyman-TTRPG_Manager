@@ -2,7 +2,7 @@ import { pathNodesFromAnchors } from "./pathAnchors";
 import { useEffect, useMemo, useRef, useState, type DragEventHandler, type PointerEventHandler } from "react";
 import { shapeBounds } from "../scatter";
 import type { Vec2 } from "@shared/maps/core";
-import type { MapDocumentV6 } from "@shared/maps/core";
+import type { MapDocumentV6, MapLiquidRecipe } from "@shared/maps/core";
 import type { MapFull } from "../mapTypes";
 import type { Camera } from "../editor/hooks/useMapCamera";
 import { renderMap } from "../render";
@@ -26,10 +26,12 @@ import { WorkspacePerformance } from "./WorkspacePerformance";
 import { WorkspacePerformanceMeter } from "./performanceMeter";
 import { changedArea } from "./changedArea";
 
-export function WorkspaceCanvas({ gl, onGlFail, effects, map, document, camera, canvasRef, wrapRef, showGrid, gridColor, gridOpacity, gridLineWidth, gridLineStyle, selectedId, selectedNodes, selections, marquee, preview, assetPreview, displays, ghost, draftLine, wallDraft, onDoubleClick, cellBrush, brush, onPointerLeave, onDragOver, onDragLeave, onDrop, onPointerDown, onPointerMove, onPointerUp, onPointerCancel }: {
+export function WorkspaceCanvas({ gl, liquidDraft, onGlFail, effects, map, document, camera, canvasRef, wrapRef, showGrid, gridColor, gridOpacity, gridLineWidth, gridLineStyle, selectedId, selectedNodes, selections, marquee, preview, assetPreview, displays, ghost, draftLine, wallDraft, onDoubleClick, cellBrush, brush, onPointerLeave, onDragOver, onDragLeave, onDrop, onPointerDown, onPointerMove, onPointerUp, onPointerCancel }: {
   map: MapFull; document: MapDocumentV6; camera: Camera;
   /** Отрисовка плитками через WebGL; при отказе WebGL холст просит вернуть обычную. */
   gl: boolean; onGlFail: () => void;
+  /** Свои рецепты жидкостей, пока их правят: идут в шейдер мимо карты. */
+  liquidDraft?: readonly MapLiquidRecipe[] | null;
   /** Эффекты печати и погода; работают только при `gl`. */
   effects: MapEffects;
   canvasRef: { current: HTMLCanvasElement | null }; wrapRef: { current: HTMLDivElement | null };
@@ -92,9 +94,12 @@ export function WorkspaceCanvas({ gl, onGlFail, effects, map, document, camera, 
   }, [gl, onGlFail, wrapRef, meter]);
   const look = styleLook(document);
   const waterLook = `${document.appearance?.water}:${document.appearance?.waterSpeed}:${document.appearance?.waterPixels}:${document.appearance?.waterShoal}`;
-  useEffect(() => { if (gl) stageRef.current?.effects(chosenLook(look, effects), chosenWeather(effects), mapWater(document)); },
+  useEffect(() => {
+    const water = mapWater(document);
+    if (gl) stageRef.current?.effects(chosenLook(look, effects), chosenWeather(effects), water && liquidDraft ? { ...water, liquids: liquidDraft } : water);
+  },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- вода зависит только от своих настроек, а не от каждой правки карты
-    [gl, look, effects, waterLook]);
+    [gl, look, effects, waterLook, liquidDraft]);
   const content = useMemo<MapStageContent>(() => {
     void revision;
     return { grid: map.grid, width: map.width, height: map.height, model: rendered.model,

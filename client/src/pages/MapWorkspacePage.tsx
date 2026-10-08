@@ -55,6 +55,7 @@ export function MapWorkspacePage() {
   const navigate = useNavigate(), afterWrite = useAfterWrite();
   const [leaving, setLeaving] = useState(false), [copying, setCopying] = useState(false);
   const [toolSet, setToolSet] = useState<ToolSet>("dungeon");
+  const [liquidDraft, setLiquidDraft] = useState<MapLiquidRecipe[] | null>(null);
   const [tool, setTool] = useState<WorkspaceTool>("select");
   const [activeLayer, setActiveLayer] = useState("");
   const [selections, setSelections] = useState<WorkspaceSelection[]>([]);
@@ -283,6 +284,7 @@ export function MapWorkspacePage() {
   });
   const onStyle = useEvent((style: MapDrawingStyle) => commit((before) => ({ ...before, appearance: { ...before.appearance, style } })));
   const onWater = useEvent((water: MapWaterLook | undefined) => commit((before) => { const { water: _old, ...rest } = before.appearance ?? { style: "paper-ink" as const }; return { ...before, appearance: water === undefined ? rest : { ...rest, water } }; }));
+  const onLiveWater = useEvent(() => onWater(documentRef.current?.appearance?.style === "comic-punk" ? "comic" : "soft"));
   const onWaterTune = useEvent((patch: { waterSpeed?: number; waterPixels?: number; waterShoal?: number }) => commit((before) => ({ ...before, appearance: { ...(before.appearance ?? { style: "paper-ink" as const }), ...patch } })));
   const onFrame = useEvent((frame: number | undefined) => commit((before) => { const { frame: _old, ...rest } = before.appearance ?? { style: "paper-ink" as const }; return { ...before, appearance: frame === undefined ? rest : { ...rest, frame } }; }));
   const onGenerator = useEvent(() => { finishGesture(); placement.cancel(); setSelection(null); setGeneratorOpen(true); });
@@ -292,7 +294,16 @@ export function MapWorkspacePage() {
   const onLiquid = useEvent((liquid: string) => { finishGesture(); setSettings((current) => ({ ...current, liquid })); canvasRef.current?.focus(); });
   const onOwnLiquids = useEvent((liquids: MapLiquidRecipe[], live: boolean) => {
     const apply = (before: MapDocumentV6): MapDocumentV6 => ({ ...before, appearance: { ...(before.appearance ?? { style: "paper-ink" as const }), liquids } });
+    // Правка на ходу идёт мимо карты: с живой водой меняется только таблица рецептов, без неё заливка обновится,
+    // когда отпустят. Карта меняется один раз — иначе каждый шаг выбора цвета перерисовывает все плитки.
+    if (live) { setLiquidDraft(liquids); return; }
+    setLiquidDraft(null);
     if (live) liveEdit(apply); else commit(apply);
+  });
+  const onSettleLiquid = useEvent(() => {
+    if (!liquidDraft) { settleEdit(); return; }
+    const liquids = liquidDraft; setLiquidDraft(null);
+    commit((before) => ({ ...before, appearance: { ...(before.appearance ?? { style: "paper-ink" as const }), liquids } }));
   });
   // Освободить слот: жидкость стирается с карты или заменяется другой, свой рецепт удаляется.
   const onReleaseLiquid = useEvent((key: string, to: string | null) => commit((before) => {
@@ -343,12 +354,12 @@ export function MapWorkspacePage() {
         onSymbol={onSymbol} onMaterial={onMaterial} onScatter={onScatter} onLine={onLine} />}
 
       <div className="workspace-editor-stage" ref={wrapRef}>
-        <WorkspaceCanvas gl={gl} onGlFail={onGlFail} effects={effects} map={map} document={document} camera={camera.cam} canvasRef={canvasRef} wrapRef={wrapRef} showGrid={showGrid} gridColor={gridColor} gridOpacity={gridOpacity} gridLineWidth={gridLineWidth} gridLineStyle={gridLineStyle} selectedId={selection?.id ?? null} selectedNodes={gestures.selectedNodes} preview={gestures.preview}
+        <WorkspaceCanvas gl={gl} liquidDraft={liquidDraft} onGlFail={onGlFail} effects={effects} map={map} document={document} camera={camera.cam} canvasRef={canvasRef} wrapRef={wrapRef} showGrid={showGrid} gridColor={gridColor} gridOpacity={gridOpacity} gridLineWidth={gridLineWidth} gridLineStyle={gridLineStyle} selectedId={selection?.id ?? null} selectedNodes={gestures.selectedNodes} preview={gestures.preview}
           cellBrush={gestures.cellBrush} wallDraft={gestures.wallDraft} onDoubleClick={() => gestures.finishWall()} selections={selections} marquee={gestures.marquee} assetPreview={gestures.assetPreview} draftLine={gestures.draftLine} brush={gestures.brushCursor && (tool === "surface" || tool === "liquid" || tool === "scatter" || maskEraser) ? { ...gestures.brushCursor, radius: settings.radius } : null}
           onPointerLeave={gestures.leave} displays={displays} ghost={placement.pending?.position ?? dragGhost} onDragOver={dragOver} onDragLeave={() => setDragGhost(null)} onDrop={drop}
           onPointerDown={gestures.down} onPointerMove={gestures.move} onPointerUp={gestures.up} onPointerCancel={gestures.cancel} />
         <div className="workspace-editor-hint" aria-hidden="true"><strong>{TOOL_LABELS[tool]}{active ? ` · ${layerName(active)}` : ""}</strong>{tool === "select" && <span>{selections.length > 1 ? `Выбрано: ${selections.length} · ` : ""}Рамка · Shift — добавить</span>}<span>Пробел — сдвиг</span><span>Esc — отмена</span></div>
-        {tool === "liquid" && <LiquidSlots used={liquids} own={document.appearance?.liquids ?? NO_LIQUIDS} material={liquidMaterial} onMaterial={onLiquid} onOwn={onOwnLiquids} onSettle={onSettleEdit} onRelease={onReleaseLiquid} />}
+        {tool === "liquid" && <LiquidSlots used={liquids} own={liquidDraft ?? document.appearance?.liquids ?? NO_LIQUIDS} material={liquidMaterial} live={!!document.appearance?.water} onLive={onLiveWater} onMaterial={onLiquid} onOwn={onOwnLiquids} onSettle={onSettleLiquid} onRelease={onReleaseLiquid} />}
         <div className="workspace-editor-camera">
           <button type="button" aria-label="Уменьшить" onClick={() => camera.zoomBy(1 / 1.25)}>−</button>
           <button type="button" aria-label="Увеличить" onClick={() => camera.zoomBy(1.25)}>+</button>

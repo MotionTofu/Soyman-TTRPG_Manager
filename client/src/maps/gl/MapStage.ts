@@ -3,7 +3,7 @@ import { renderMap, type RenderOptions } from "../render";
 import { inRange, tileSide, visibleTiles, type TileRange } from "./tiles";
 import { createStyleFilter, type MapLook } from "./styleFilter";
 import { anyWeather, createWeatherFilter, type MapWeather } from "./weatherFilter";
-import { createWaterFilter, drawWaterMask, waterSources, type MapWater } from "./waterFilter";
+import { createWaterFilter, drawLiquidRecipes, drawWaterMask, waterSources, type MapWater } from "./waterFilter";
 
 /** Всё, что рисует карта, кроме камеры. Новый объект — новое содержимое плиток. */
 export type MapStageContent = Omit<RenderOptions, "scale" | "ox" | "oy">;
@@ -40,6 +40,7 @@ export class MapStage {
   private readonly recipeCanvas = Object.assign(document.createElement("canvas"), { width: 5, height: 8 });
   private readonly waterPass = createWaterFilter(this.maskCanvas, this.flowCanvas, this.recipeCanvas);
   private water: MapWater | null = null;
+  private recipesOf: unknown = null;
   private maskOf: readonly unknown[] = [];
   private readonly tiles = new Map<string, Tile>();
   private readonly style = createStyleFilter();
@@ -265,8 +266,11 @@ export class MapStage {
       const sources = waterSources(frame.content.model, frame.content.width, frame.content.height, this.water.shoal);
       if (sources.length !== this.maskOf.length || sources.some((source, i) => source !== this.maskOf[i])) {
         drawWaterMask(this.maskCanvas, this.maskRaw, this.flowCanvas, this.recipeCanvas, frame.content.model, frame.content.width, frame.content.height, this.water.shoal);
-        this.waterPass.refresh(); this.maskOf = sources;
+        this.waterPass.refresh(); this.maskOf = sources; this.recipesOf = null;
       }
+      // Рецепты — отдельно от маски: правка цвета своей жидкости не пересобирает карту.
+      const liquids = this.water.liquids ?? frame.content.model.liquids;
+      if (liquids !== this.recipesOf) { drawLiquidRecipes(this.recipeCanvas, liquids); this.waterPass.refresh(); this.recipesOf = liquids; }
       this.waterPass.aim(this.water, x, y, frame.scale * frame.dpr, performance.now() / 1000, frame.content.width, frame.content.height);
       this.ground.filterArea = screen;
     }
