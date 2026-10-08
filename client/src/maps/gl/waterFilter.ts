@@ -20,25 +20,25 @@ void main() {
 
 
 /** Проход по слою земли: рисует воду там, где её показывает маска. */
-export function createWaterFilter(mask: HTMLCanvasElement) {
-  const texture = Texture.from(mask, true);
-  texture.source.scaleMode = "linear";
+export function createWaterFilter(mask: HTMLCanvasElement, flow: HTMLCanvasElement) {
+  const texture = Texture.from(mask, true), stream = Texture.from(flow, true);
+  texture.source.scaleMode = stream.source.scaleMode = "linear";
   const filter = new Filter({
     glProgram: GlProgram.from({ vertex: defaultFilterVert, fragment, name: "map-water" }),
     resources: { water: { uOrigin: { value: new Float32Array(2), type: "vec2<f32>" }, uScale: { value: 1, type: "f32" }, uTime: { value: 0, type: "f32" },
-      uMap: { value: new Float32Array(2), type: "vec2<f32>" }, uWater: { value: new Float32Array(3), type: "vec3<f32>" } }, uMask: texture.source },
+      uMap: { value: new Float32Array(2), type: "vec2<f32>" }, uWater: { value: new Float32Array(3), type: "vec3<f32>" } }, uMask: texture.source, uFlow: stream.source },
     resolution: 1, antialias: "off", padding: 0,
   });
   const uniforms = filter.resources.water.uniforms as { uOrigin: Float32Array; uScale: number; uTime: number; uMap: Float32Array; uWater: Float32Array };
   return {
     filter,
     /** Маску перерисовали — отдать её видеокарте. */
-    refresh() { texture.source.update(); },
+    refresh() { texture.source.update(); stream.source.update(); },
     aim(water: MapWater, x: number, y: number, scale: number, seconds: number, width: number, height: number) {
       uniforms.uOrigin[0] = x; uniforms.uOrigin[1] = y; uniforms.uScale = scale; uniforms.uTime = seconds % 3600;
       uniforms.uMap[0] = width; uniforms.uMap[1] = height;
       uniforms.uWater[0] = water.mode; uniforms.uWater[1] = water.speed; uniforms.uWater[2] = water.size;
     },
-    destroy() { filter.destroy(); texture.destroy(true); },
+    destroy() { filter.destroy(); texture.destroy(true); stream.destroy(true); },
   };
 }

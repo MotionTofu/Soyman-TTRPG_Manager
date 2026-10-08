@@ -134,6 +134,8 @@ export interface RenderPath {
   style?: string;
   /** Выбор Мастера для переправ дороги; без него мост или брод подбирается по воде. */
   crossings?: readonly CrossingChoice[];
+  /** Течение реки: без поля — от первой точки к последней, `back` — обратно, `still` — стоячая вода. */
+  flow?: "back" | "still";
 }
 
 export interface RenderPathLayer extends RenderLayerBase {
@@ -412,7 +414,8 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
         if (p.geometry.type === "spline") {
           paths.push({ kind: p.kind, cells: new Set(), nodes: p.geometry.nodes, width: p.width, closed: p.properties?.closed === true,
             ...(p.styleRef.type === "asset" ? { style: p.styleRef.assetId } : {}),
-            ...(p.properties?.crossings ? { crossings: crossingChoices(p.properties.crossings) } : {}) });
+            ...(p.properties?.crossings ? { crossings: crossingChoices(p.properties.crossings) } : {}),
+            ...(p.properties?.flow === "back" || p.properties?.flow === "still" ? { flow: p.properties.flow } : {}) });
           continue;
         }
         const cells = new Set<string>();

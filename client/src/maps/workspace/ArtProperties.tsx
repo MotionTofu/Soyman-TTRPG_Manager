@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { insertPathNodes, setPathNodeWidth, pathNodeIntervals, setPathClosed, setCrossing, simplifyPathNodes } from "./pathNodes";
+import { insertPathNodes, setPathNodeWidth, pathNodeIntervals, setPathClosed, setCrossing, setPathFlow, simplifyPathNodes } from "./pathNodes";
 import { CROSSING_KINDS, choiceFits, crossingChoices, roadCrossings, type CrossingKind } from "../crossings";
 import { coordLabel } from "../grid";
 import { createWorkspaceRenderModel } from "./renderV6";
@@ -39,6 +39,10 @@ export function ArtProperties({ document, selection, pickedAt, selectedNodes = [
     {path && <>
       <p>{wall ? "ЛКМ — выбрать точку, Shift+ЛКМ — добавить или снять выбор. Выбранные точки можно двигать вместе." : "ЛКМ — выбрать точку, Shift+ЛКМ — выбрать несколько. Круглые ручки задают изгиб Безье. Выбранные точки можно двигать вместе."}</p>
       <label><input aria-label={wall ? "Замкнутая стена" : "Замкнутая линия"} type="checkbox" checked={closed} disabled={locked || nodes.length < 3} onChange={e => commit(doc => setPathClosed(doc, selection, e.target.checked))} />{wall ? "Замкнуть стену" : "Замкнуть линию"}</label>
+      {path.kind === "river" && !closed && <label>Течение<select aria-label="Течение реки" value={path.properties?.flow === "back" || path.properties?.flow === "still" ? path.properties.flow : ""} disabled={locked}
+        onChange={e => commit(doc => setPathFlow(doc, selection, (e.target.value || null) as "back" | "still" | null))}>
+        <option value="">От первой точки к последней</option><option value="back">От последней точки к первой</option><option value="still">Стоячая вода</option>
+      </select></label>}
       <label>Ширина<input aria-label="Ширина выбранной линии" type="number" min={0.05} max={4} step={0.05} value={path.width} disabled={locked} onChange={e => update({ width: Math.max(0.05, Math.min(4, Number(e.target.value))) })} /></label>
       <label>Точка<select aria-label="Опорная точка" value={index} onChange={e => onSelectedNodes?.([Number(e.target.value)])}>{nodes.map((_, i) => <option key={i} value={i}>{i + 1}</option>)}</select></label>
       <>

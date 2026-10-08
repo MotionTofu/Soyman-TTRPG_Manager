@@ -16,7 +16,7 @@ export function waterSources(model: MapRenderModel, width: number, height: numbe
   for (const layer of model.layers) {
     if (!layer.visible) continue;
     if (layer.kind === "terrain" && layer.terrain.mask?.source) out.push(layer.terrain.mask.source);
-    if (layer.kind === "path") for (const path of layer.paths) if (path.kind === "river" && path.style && path.nodes) out.push(path.nodes, path.width, path.style, path.closed);
+    if (layer.kind === "path") for (const path of layer.paths) if (path.kind === "river" && path.style && path.nodes) out.push(path.nodes, path.width, path.style, path.closed, path.flow);
   }
   return out;
 }
@@ -25,11 +25,11 @@ export function waterSources(model: MapRenderModel, width: number, height: numbe
  * Где на карте вода: поверхности воды из плавных слоёв и реки, залитые водой.
  * Края размыты на полклетки — по этому градиенту шейдер рисует берег и пену.
  */
-export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement, model: MapRenderModel, width: number, height: number): boolean {
+export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement, flow: HTMLCanvasElement, model: MapRenderModel, width: number, height: number): boolean {
   const w = Math.max(1, Math.ceil(width * K)), h = Math.max(1, Math.ceil(height * K));
-  for (const target of [canvas, raw]) if (target.width !== w || target.height !== h) { target.width = w; target.height = h; }
-  const pen = raw.getContext("2d"), out = canvas.getContext("2d");
-  if (!pen || !out) return false;
+  for (const target of [canvas, raw, flow]) if (target.width !== w || target.height !== h) { target.width = w; target.height = h; }
+  const pen = raw.getContext("2d"), out = canvas.getContext("2d"), stream = flow.getContext("2d");
+  if (!pen || !out || !stream) return false;
   const image = pen.createImageData(w, h), data = image.data;
   let any = false;
   for (let i = 3; i < data.length; i += 4) data[i] = 255;
@@ -50,20 +50,35 @@ export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement,
   }
   pen.putImageData(image, 0, 0);
   pen.lineCap = pen.lineJoin = "round";
-  for (const layer of model.layers) {
-    if (layer.kind !== "path" || !layer.visible) continue;
-    for (const path of layer.paths) {
-      if (path.kind !== "river" || !path.style || !path.nodes || path.nodes.length < 2) continue;
-      const samples = flattenSplineWithWidths(path.closed ? [...path.nodes, path.nodes[0]] : path.nodes, path.width ?? 0.22, 0.25);
-      pen.strokeStyle = /deep/.test(path.style) ? "#ffcc00" : "#ff6600";
-      for (let i = 1; i < samples.length; i++) {
-        pen.lineWidth = (samples[i - 1].width + samples[i].width) / 2 * K;
-        pen.beginPath(); pen.moveTo(samples[i - 1].x * K, samples[i - 1].y * K); pen.lineTo(samples[i].x * K, samples[i].y * K); pen.stroke();
-      }
-      any = true;
+  const rivers = model.layers.flatMap(layer => layer.kind === "path" && layer.visible ? layer.paths : [])
+    .flatMap(path => path.kind === "river" && path.style && path.nodes && path.nodes.length > 1
+      ? [{ path, samples: flattenSplineWithWidths(path.closed ? [...path.nodes, path.nodes[0]] : path.nodes, path.width ?? 0.22, 0.25) }] : []);
+  /** Обводит реку по отрезкам; `extra` — прибавка к ширине в клетках, `ink` — цвет отрезка по его направлению. */
+  const stroke = (samples: typeof rivers[number]["samples"], extra: number, ink?: (dx: number, dy: number) => string) => {
+    for (let i = 1; i < samples.length; i++) {
+      const a = samples[i - 1], b = samples[i], length = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      if (ink) pen.strokeStyle = ink((b.x - a.x) / length, (b.y - a.y) / length);
+      pen.lineWidth = ((a.width + b.width) / 2 + extra) * K;
+      pen.beginPath(); pen.moveTo(a.x * K, a.y * K); pen.lineTo(b.x * K, b.y * K); pen.stroke();
     }
+  };
+  for (const { path, samples } of rivers) {
+    pen.strokeStyle = /deep/.test(path.style!) ? "#ffcc00" : "#ff6600";
+    stroke(samples, 0);
+    any = true;
   }
   out.filter = `blur(${K * 0.4}px)`; out.drawImage(raw, 0, 0); out.filter = "none";
+  // Течение — вторая картинка: красный — снос вправо, зелёный — вниз, ровный серый — стоячая вода.
+  // Полоса на клетку шире реки: воду всё равно ограничивает маска, зато узкая река после размытия не теряет течение.
+  const calm = "rgb(128,128,0)";
+  pen.fillStyle = calm; pen.fillRect(0, 0, w, h);
+  for (const { path, samples } of rivers) {
+    if (path.closed || path.flow === "still") continue;
+    const sign = path.flow === "back" ? -127 : 127;
+    stroke(samples, 1, (dx, dy) => `rgb(${Math.round(128 + sign * dx)},${Math.round(128 + sign * dy)},0)`);
+  }
+  stream.fillStyle = calm; stream.fillRect(0, 0, w, h);
+  stream.filter = `blur(${K * 0.5}px)`; stream.drawImage(raw, 0, 0); stream.filter = "none";
   return any;
 }
 
@@ -72,6 +87,7 @@ export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement,
 /** Общая часть шейдера: по точке карты и времени отдаёт цвет воды. Ею рисуют и сцена WebGL, и обычный холст. */
 export const WATER_GLSL = `
 uniform sampler2D uMask;
+uniform sampler2D uFlow;
 uniform vec2 uMap;
 uniform vec3 uWater;
 
@@ -106,8 +122,10 @@ float cellEdge(vec2 p, float t) {
   return md;
 }
 
+// У каждого вида две точки: w — место на карте (берег, глубина, дно), s — откуда брать рисунок волн.
+// В стоячей воде они совпадают, в реке рисунок сносит течением.
 // Комикс-панк: плоская заливка, пятна, толстые дуги волн, тушевый берег и рваная пена.
-vec4 comic(vec2 w, float t) {
+vec4 comic(vec2 w, vec2 s, float t) {
   vec2 mk = texture(uMask, w / uMap).rg;
   float edge = mk.r + (noise(w * 2.7) - 0.5) * 0.14;
   // Порог ниже середины: шейдер закрывает и размытый край картинки воды под собой.
@@ -116,10 +134,10 @@ vec4 comic(vec2 w, float t) {
   float tick = floor(t * 5.0);
   float deep = smoothstep(0.25, 0.8, depthAt(w));
   vec3 col = mix(vec3(0.19, 0.62, 0.56), vec3(0.11, 0.36, 0.44), deep);
-  col *= 1.0 - 0.13 * step(0.6, noise(w * 0.8 + vec2(tick * 0.07, 3.0)));
+  col *= 1.0 - 0.13 * step(0.6, noise(s * 0.8 + vec2(tick * 0.07, 3.0)));
   vec3 ink = vec3(0.09, 0.09, 0.1);
   // Ряды дуг: в каждом ряду свой сдвиг, часть дуг пропущена, редкие — белые блики.
-  vec2 q = vec2(w.x * 1.5 - tick * 0.12, w.y * 2.4 + 0.5 * sin(w.x * 0.9));
+  vec2 q = vec2(s.x * 1.5 - tick * 0.12, s.y * 2.4 + 0.5 * sin(s.x * 0.9));
   float row = floor(q.y), x = q.x + hash(vec2(row, 3.0)) * 9.0, seg = floor(x), fx = fract(x), fy = fract(q.y) - 0.5;
   float arc = abs(fy - 0.2 * sin(fx * 3.14159) + 0.1);
   float body = step(0.14, fx) * step(fx, 0.86) * step(arc, 0.075 + 0.03 * hash(vec2(seg, row + 5.0)));
@@ -128,7 +146,7 @@ vec4 comic(vec2 w, float t) {
   col = mix(col, vec3(0.93, 0.98, 0.95), body * step(0.9, kind));
   // Берег: внутри воды полоска пены, по самой кромке — тушь.
   float shore = smoothstep(0.45, 1.0, mk.r);
-  float foam = step(shore, 0.3 + 0.12 * noise(vec2(w.x * 3.0 + tick * 0.4, w.y * 3.0))) * step(0.35, noise(w * 5.0 + tick));
+  float foam = step(shore, 0.3 + 0.12 * noise(vec2(s.x * 3.0 + tick * 0.4, s.y * 3.0))) * step(0.35, noise(s * 5.0 + tick));
   col = mix(col, vec3(0.93, 0.98, 0.95), foam);
   col = mix(col, ink, 1.0 - smoothstep(0.43, 0.5, edge));
   return vec4(col, a);
@@ -159,15 +177,15 @@ vec3 sea(vec2 p, float tick, float depth) {
   float tone = clamp(floor((1.0 - v) * 3.2 + depth * 4.4 - 1.1), 0.0, 6.0);
   return dash > 0.95 && swell > 0.45 ? mix(seaTone(max(tone - 3.0, 0.0)), vec3(1.0), 0.25) : seaTone(tone);
 }
-vec4 pixel(vec2 w, float t, bool isSea) {
+vec4 pixel(vec2 w, vec2 s, float t, bool isSea) {
   float P = uWater.z;
-  vec2 p = floor(w * P), c = (p + 0.5) / P;
+  vec2 p = floor(w * P), c = (p + 0.5) / P, ps = floor(s * P);
   vec2 mk = texture(uMask, c / uMap).rg;
   if (mk.r < 0.4) return vec4(0.0);
   float tick = floor(t * 6.0);
   // Ступени тонов на границе глубин ломаются шахматным смешением.
   float depth = depthAt(c) + (mod(p.x + p.y, 2.0) - 0.5) * 0.07;
-  vec3 col = isSea ? sea(p, tick, depth) : pond(c, tick / 6.0, depth);
+  vec3 col = isSea ? sea(ps, tick, depth) : pond((ps + 0.5) / P, tick / 6.0, depth);
   // Пена у берега: сплошная кромка в один пиксель и рваная полоса за ней.
   float shore = smoothstep(0.4, 1.0, mk.r);
   col = mix(col, vec3(0.9, 0.98, 0.95), min(1.0, step(shore, 0.1) + step(shore, 0.3) * step(0.6, hash(p + tick))));
@@ -176,7 +194,7 @@ vec4 pixel(vec2 w, float t, bool isSea) {
 
 // Мягкая: без пикселей и без туши. Цвет плавно темнеет с глубиной, на мели просвечивает песчаное дно с камешками,
 // по воде плывут тонкие светлые кольца бликов.
-vec4 soft(vec2 w, float t) {
+vec4 soft(vec2 w, vec2 s, float t) {
   vec2 mk = texture(uMask, w / uMap).rg;
   float a = smoothstep(0.36, 0.5, mk.r);
   if (a <= 0.0) return vec4(0.0);
@@ -185,8 +203,8 @@ vec4 soft(vec2 w, float t) {
   float bed = noise(w * 3.0) * 0.5 + noise(w * 7.0 + 4.0) * 0.5;
   vec3 bottom = mix(vec3(0.87, 0.8, 0.58), vec3(0.6, 0.56, 0.44), smoothstep(0.58, 0.66, bed));
   col = mix(bottom, col, 0.3 + 0.7 * smoothstep(0.04, 0.42, depth));
-  vec2 q = w * 0.9 + 0.2 * vec2(noise(w * 1.1 + t * 0.2), noise(w * 1.1 + 5.0 - t * 0.2));
-  float line = (1.0 - smoothstep(0.0, 0.05, cellEdge(q, t * 0.6))) * (0.6 - 0.35 * depth) * smoothstep(0.25, 0.6, noise(w * 0.6 + t * 0.1 + 3.0));
+  vec2 q = s * 0.9 + 0.2 * vec2(noise(s * 1.1 + t * 0.2), noise(s * 1.1 + 5.0 - t * 0.2));
+  float line = (1.0 - smoothstep(0.0, 0.05, cellEdge(q, t * 0.6))) * (0.6 - 0.35 * depth) * smoothstep(0.25, 0.6, noise(s * 0.6 + t * 0.1 + 3.0));
   col = mix(col, vec3(0.94, 1.0, 0.97), line);
   // Прибой: светлая полоска у самой кромки, дышит.
   float rim = 1.0 - smoothstep(0.5, 0.6 + 0.04 * sin(t * 1.5 + w.x * 2.0 + w.y), mk.r);
@@ -194,9 +212,21 @@ vec4 soft(vec2 w, float t) {
   return vec4(col, a);
 }
 
+vec4 look(vec2 w, vec2 s, float t) { return uWater.x > 2.5 ? soft(w, s, t) : uWater.x > 0.5 ? pixel(w, s, t, uWater.x > 1.5) : comic(w, s, t); }
 vec4 waterAt(vec2 world, float t) {
   if (world.x <= 0.0 || world.y <= 0.0 || world.x >= uMap.x || world.y >= uMap.y) return vec4(0.0);
-  return uWater.x > 2.5 ? soft(world, t) : uWater.x > 0.5 ? pixel(world, t, uWater.x > 1.5) : comic(world, t);
+  // Пиксельные виды считают течение по целому «пикселю» карты, иначе клетки рисунка рвутся.
+  bool blocky = uWater.x > 0.5 && uWater.x < 2.5;
+  vec2 w = blocky ? (floor(world * uWater.z) + 0.5) / uWater.z : world;
+  vec2 f = texture(uFlow, w / uMap).rg * 2.0 - 1.0;
+  if (dot(f, f) < 0.01) return look(w, w, t);
+  // Рисунок сносит вдоль реки. Если сносить бесконечно, на излучинах он растянется в кашу, поэтому идут два
+  // круга сноса со сдвигом в полкруга: пока один возвращается к началу, виден другой.
+  float ph = (blocky ? floor(t * 6.0) / 6.0 : t) * 0.4 + noise(w * 0.12);
+  float a = fract(ph), b = fract(ph + 0.5), share = 1.0 - abs(2.0 * a - 1.0);
+  vec4 one = look(w, w - f * (a - 0.5) * 2.4, t), two = look(w, w - f * (b - 0.5) * 2.4, t);
+  // Мягкая вода смешивает круги плавно; у остальных своя палитра, поэтому круги меняются пятнами.
+  return mix(two, one, uWater.x > 2.5 ? share : step(noise(w * 1.7 + 20.0), share));
 }
 `;
 
@@ -217,7 +247,7 @@ void main() {
   vec4 water = waterAt((vec2(gl_FragCoord.x, uHeight - gl_FragCoord.y) - uOrigin) / uScale, uTime * uWater.y);
   finalColor = vec4(water.rgb * water.a, water.a);
 }`;
-type Still = { canvas: HTMLCanvasElement; gl: WebGL2RenderingContext; at: (name: string) => WebGLUniformLocation | null; mask: HTMLCanvasElement; raw: HTMLCanvasElement; sources: readonly unknown[]; any: boolean };
+type Still = { canvas: HTMLCanvasElement; gl: WebGL2RenderingContext; at: (name: string) => WebGLUniformLocation | null; mask: HTMLCanvasElement; raw: HTMLCanvasElement; flow: HTMLCanvasElement; sources: readonly unknown[]; any: boolean };
 let still: Still | null | undefined;
 function stillStage(): Still | null {
   if (still !== undefined) return still;
@@ -240,9 +270,13 @@ function stillStage(): Still | null {
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     const point = gl.getAttribLocation(program, "aPoint");
     gl.enableVertexAttribArray(point); gl.vertexAttribPointer(point, 2, gl.FLOAT, false, 0, 0);
-    gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
-    for (const [key, value] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, key, value);
-    still = { canvas, gl, at: (name) => gl.getUniformLocation(program, name), mask: document.createElement("canvas"), raw: document.createElement("canvas"), sources: [], any: false };
+    // Две картинки: в ячейке 0 — маска воды, в ячейке 1 — течение.
+    for (const unit of [gl.TEXTURE1, gl.TEXTURE0]) {
+      gl.activeTexture(unit); gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+      for (const [key, value] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, key, value);
+    }
+    const blank = () => document.createElement("canvas");
+    still = { canvas, gl, at: (name) => gl.getUniformLocation(program, name), mask: blank(), raw: blank(), flow: blank(), sources: [], any: false };
   } catch (error) { console.warn("Живая вода на обычном холсте недоступна", error); }
   return still;
 }
@@ -258,13 +292,14 @@ export function drawWaterStill(ctx: CanvasRenderingContext2D, model: MapRenderMo
   if (!stage) return false;
   const { gl, canvas } = stage, sources = waterSources(model, width, height);
   if (sources.length !== stage.sources.length || sources.some((source, i) => source !== stage.sources[i])) {
-    stage.any = drawWaterMask(stage.mask, stage.raw, model, width, height); stage.sources = sources;
+    stage.any = drawWaterMask(stage.mask, stage.raw, stage.flow, model, width, height); stage.sources = sources;
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, stage.mask);
+    gl.activeTexture(gl.TEXTURE1); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, stage.flow);
+    gl.activeTexture(gl.TEXTURE0); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, stage.mask);
   }
   if (!stage.any) return false;
   const W = Math.round(cssW * ratio), H = Math.round(cssH * ratio);
-  gl.uniform1i(stage.at("uMask"), 0); gl.uniform2f(stage.at("uMap"), width, height); gl.uniform3f(stage.at("uWater"), water.mode, water.speed, water.size);
+  gl.uniform1i(stage.at("uMask"), 0); gl.uniform1i(stage.at("uFlow"), 1); gl.uniform2f(stage.at("uMap"), width, height); gl.uniform3f(stage.at("uWater"), water.mode, water.speed, water.size);
   gl.uniform1f(stage.at("uScale"), scale * ratio); gl.uniform1f(stage.at("uTime"), 0);
   for (let y = 0; y < H; y += STILL_SIDE) for (let x = 0; x < W; x += STILL_SIDE) {
     const w = Math.min(STILL_SIDE, W - x), h = Math.min(STILL_SIDE, H - y);

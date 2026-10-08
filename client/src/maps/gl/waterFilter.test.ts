@@ -5,6 +5,16 @@ import { paintSurface } from "../workspace/artisticCommands";
 import { editGeometry } from "../workspace/editDocument";
 import { createWorkspaceRenderModel } from "../workspace/renderV6";
 import { waterSources } from "./waterFilter";
+import type { MapRenderModel, RenderPath } from "../renderModel";
+
+it("смена течения реки пересобирает маску воды", () => {
+  const nodes = [{ position: { x: 1, y: 1 } }, { position: { x: 9, y: 1 } }];
+  const sources = (flow?: RenderPath["flow"]) => waterSources({ layers: [{ kind: "path", visible: true,
+    paths: [{ kind: "river", cells: new Set(), nodes, width: 1, style: "village-river", ...(flow ? { flow } : {}) }] }] } as unknown as MapRenderModel, 10, 10);
+  const forward = sources();
+  expect(sources().every((source, i) => source === forward[i])).toBe(true);
+  expect(sources("back").some((source, i) => source !== forward[i])).toBe(true);
+});
 
 it("маска воды не пересобирается, пока двигают подпись, и пересобирается после мазка по поверхности", () => {
   const loaded = loadStoredWorkspaceDocument({ grid: "square", width: 60, height: 40, cells: '{"v":1,"cells":{},"roads":[]}' });

@@ -19,6 +19,18 @@ export function setCrossing(doc: MapDocumentV6, selection: WorkspaceSelection, a
     ? { ...layer, paths: layer.paths.map(p => p.id === path.id ? { ...p, properties } : p) } : layer) } }));
 }
 
+/** Течение реки: `null` — по линии, от первой точки к последней. */
+export function setPathFlow(doc: MapDocumentV6, selection: WorkspaceSelection, flow: "back" | "still" | null) {
+  requireEditableLayer(doc, selection.layerId, "path");
+  const path = selectedPath(doc, selection);
+  if (!path) return doc;
+  const { flow: old, ...rest } = path.properties ?? {};
+  void old;
+  const properties = flow ? { ...rest, flow } : rest;
+  return editGeometry(doc, view => ({ ok: true, changed: true, document: { ...view, layers: view.layers.map(layer => layer.id === selection.layerId && layer.kind === "path"
+    ? { ...layer, paths: layer.paths.map(p => p.id === path.id ? { ...p, properties } : p) } : layer) } }));
+}
+
 export function pathNodeIntervals(count: number, selected: readonly number[], closed: boolean) {
   const indices = new Set(selected);
   return Array.from({ length: closed ? count : count - 1 }, (_, i) => i)
