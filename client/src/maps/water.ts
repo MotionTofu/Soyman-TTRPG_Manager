@@ -33,7 +33,7 @@ export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement,
   for (const target of [canvas, raw, flow]) if (target.width !== w || target.height !== h) { target.width = w; target.height = h; }
   const pen = raw.getContext("2d"), out = canvas.getContext("2d"), stream = flow.getContext("2d");
   if (!pen || !out || !stream) return false;
-  const image = pen.createImageData(w, h), data = image.data, kinds = new Uint8Array(w * h);
+  const image = pen.createImageData(w, h), data = image.data, kinds = new Uint8Array(w * h), floor = new Uint8Array(w * h);
   let any = false;
   for (let i = 3; i < data.length; i += 4) data[i] = 255;
   for (const layer of model.layers) {
@@ -46,7 +46,9 @@ export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement,
       const code = mask.source.codes[chunk.values[i] - 1], depth = waterLevel(code), beach = /^village-sand/.test(code ?? "") ? 255 : 0;
       const x0 = Math.round((mask.origin.x + (chunk.cx * 16 + i % 16) * mask.sampleSize) * K), y0 = Math.round((mask.origin.y + (chunk.cy * 16 + Math.floor(i / 16)) * mask.sampleSize) * K);
       for (let y = Math.max(0, y0); y < Math.min(h, y0 + Math.max(1, Math.round(step))); y++) for (let x = Math.max(0, x0); x < Math.min(w, x0 + Math.max(1, Math.round(step))); x++) {
-        const at = (y * w + x) * 4; data[at] = depth ? 255 : 0; data[at + 1] = depth * 51; data[at + 2] = beach; kinds[at / 4] = liquidKind(code);
+        const at = (y * w + x) * 4; data[at] = depth ? 255 : 0; data[at + 1] = depth * 51; kinds[at / 4] = liquidKind(code);
+        // Жидкость дно не стирает: под ней остаётся то, что накрашено слоем ниже.
+        if (!depth) { data[at + 2] = beach; floor[at / 4] = 1; }
       }
       any ||= depth > 0;
     }
@@ -78,7 +80,8 @@ export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement,
     const near = (i: number, x: number, y: number, dx: number, dy: number, cost: number) => {
       if (x + dx < 0 || x + dx >= w || y + dy < 0 || y + dy >= h) return;
       const from = i + dy * w + dx;
-      if (far[from] + cost < far[i]) { far[i] = far[from] + cost; px[i * 4 + 2] = px[from * 4 + 2]; }
+      // Где дно накрашено, вода знает его сама; иначе судит по ближайшему берегу.
+      if (far[from] + cost < far[i]) { far[i] = far[from] + cost; if (!floor[i]) px[i * 4 + 2] = px[from * 4 + 2]; }
     };
     for (let y = 0, i = 0; y < h; y++) for (let x = 0; x < w; x++, i++) { near(i, x, y, -1, 0, 1); near(i, x, y, 0, -1, 1); near(i, x, y, -1, -1, 1.4); near(i, x, y, 1, -1, 1.4); }
     for (let y = h - 1, i = w * h - 1; y >= 0; y--) for (let x = w - 1; x >= 0; x--, i--) { near(i, x, y, 1, 0, 1); near(i, x, y, 0, 1, 1); near(i, x, y, 1, 1, 1.4); near(i, x, y, -1, 1, 1.4); }

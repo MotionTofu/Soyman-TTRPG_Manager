@@ -75,6 +75,18 @@
 .workspace-editor-stage > .workspace-canvas-overlay { position: absolute; inset: 0; }
 .workspace-editor-hint { position: absolute; top: 12px; left: 12px; display: flex; gap: 12px; max-width: calc(100% - 24px); padding: 6px 10px; overflow: hidden; background: #171717; color: #f1eedf; font-size: var(--fs-data); font-weight: 600; pointer-events: none; white-space: nowrap; }
 .workspace-editor-hint strong { overflow: hidden; color: var(--accent); text-overflow: ellipsis; }
+/* Слоты жидкостей: полоска поверх карты, пока активен инструмент «Жидкость» */
+.workspace-liquid-slots { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; align-items: stretch; gap: var(--sp-2); max-width: calc(100% - 260px); padding: var(--sp-2); border: 2px solid #171717; background: var(--paper); box-shadow: 3px 3px 0 #171717; }
+.workspace-liquid-slots > button { display: grid; justify-items: center; gap: 2px; width: 64px; padding: 4px 2px; border: 2px solid transparent; border-radius: 0; background: transparent; box-shadow: none; font-size: var(--fs-meta); font-weight: 600; }
+.workspace-liquid-slots > button[aria-pressed="true"] { border-color: #171717; background: var(--accent); }
+.workspace-liquid-slots > button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-liquid-slots img { width: 36px; height: 36px; border: 2px solid #171717; border-radius: 50%; object-fit: cover; }
+.workspace-liquid-slots > .workspace-liquid-slot-empty { align-content: center; border: 2px dashed #8a8778; color: #8a8778; font-size: 20px; }
+.workspace-liquid-menu { position: absolute; bottom: calc(100% + 6px); left: 0; display: grid; min-width: 180px; border: 2px solid #171717; background: var(--paper); box-shadow: 3px 3px 0 #171717; }
+.workspace-liquid-menu button { display: flex; align-items: center; gap: var(--sp-2); padding: 4px 8px; border: 0; border-radius: 0; background: transparent; box-shadow: none; text-align: left; }
+.workspace-liquid-menu button:hover { background: var(--accent); }
+.workspace-liquid-menu img { width: 24px; height: 24px; }
+.workspace-liquid-slots label { display: grid; align-content: center; gap: 2px; padding-left: var(--sp-2); border-left: 2px solid #171717; font-size: var(--fs-meta); font-weight: 600; white-space: nowrap; }
 .workspace-editor-camera { position: absolute; right: 12px; bottom: 12px; display: flex; border: 2px solid #171717; background: var(--paper); box-shadow: 3px 3px 0 #171717; }
 .workspace-editor-camera button { min-width: 36px; height: 34px; padding: 0 10px; border: 0; border-radius: 0; background: transparent; box-shadow: none; font-weight: 700; }
 .workspace-editor-camera button + button { border-left: 2px solid #171717; }

@@ -10,11 +10,11 @@ import { mapAssetPackForId } from "../assets/registry";
 import { cellCenter, pixelToCell } from "../grid";
 import { editGeometry } from "./editDocument";
 
-export type WorkspaceTool = "surface" | "road" | "river" | "scatter" | "select" | "brush" | "eraser" | "shape" | "wall" | "door" | "label" | "asset";
+export type WorkspaceTool = "surface" | "liquid" | "road" | "river" | "scatter" | "select" | "brush" | "eraser" | "shape" | "wall" | "door" | "label" | "asset";
 export type WorkspaceSelection = { id: string; layerId: string; kind: "path" | "scatter" | "gameplay" | "token" | "label" | "object" };
-export const TOOL_LABELS: Record<WorkspaceTool, string> = { surface: "Поверхность", road: "Дорога", river: "Река", scatter: "Россыпь", select: "Выбор", brush: "Пол", eraser: "Ластик",
+export const TOOL_LABELS: Record<WorkspaceTool, string> = { surface: "Поверхность", liquid: "Жидкость", road: "Дорога", river: "Река", scatter: "Россыпь", select: "Выбор", brush: "Пол", eraser: "Ластик",
   shape: "Комната", wall: "Стена", door: "Дверь", label: "Подпись", asset: "Объект" };
-export const toolLayerKind = (tool: WorkspaceTool) => tool === "surface" || tool === "brush" || tool === "eraser"
+export const toolLayerKind = (tool: WorkspaceTool) => tool === "surface" || tool === "liquid" || tool === "brush" || tool === "eraser"
   ? "terrain" : tool === "road" || tool === "river" || tool === "wall" ? "path" : tool === "scatter" ? "scatter" : tool === "label" ? "label" : tool === "asset" ? "object" : "gameplay";
 
 export function requireEditableLayer(document: MapDocumentV6, id: string, kind?: string) {

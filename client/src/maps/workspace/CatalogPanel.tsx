@@ -1,7 +1,7 @@
 import { useState, memo } from "react";
 import { CARTOGRAPHY_OBJECTS, CARTOGRAPHY_SURFACES, cartographyId, cartographyUrl } from "../assets/cartography";
 import { CRYPT_CATEGORIES, CRYPT_OBJECTS, CRYPT_SURFACES, cryptId, cryptUrl, type CryptCategory } from "../assets/crypt";
-import { VILLAGE_CATEGORIES, VILLAGE_OBJECTS, VILLAGE_PACK, VILLAGE_RIVERS, VILLAGE_ROADS, VILLAGE_SURFACES, WATER_DEPTHS, LIQUIDS, liquidKind, randomVariantId, variantKeys, villageId, villageSurfaceCode, villageUrl, waterCode, waterLevel, type VillageCategory } from "../assets/village";
+import { VILLAGE_CATEGORIES, VILLAGE_OBJECTS, VILLAGE_PACK, VILLAGE_RIVERS, VILLAGE_ROADS, VILLAGE_SURFACES, randomVariantId, variantKeys, villageId, villageSurfaceCode, villageUrl, type VillageCategory } from "../assets/village";
 import { MAP_SYMBOL_ASSETS } from "../assets/registry";
 import { SCATTER_PROFILES } from "../scatter";
 import type { WorkspaceTool } from "./editorCommands";
@@ -54,15 +54,13 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, toolSet, comicPun
   const local = toolSet !== "dungeon";
   const villageObjects = (Object.keys(VILLAGE_CATEGORIES) as VillageCategory[]).map((key) => ({ key, name: VILLAGE_CATEGORIES[key], pack: VILLAGE, tiles: village(key) }));
   const cryptObjects = (Object.keys(CRYPT_CATEGORIES) as CryptCategory[]).map((key) => ({ key, name: CRYPT_CATEGORIES[key], pack: CRYPT, tiles: crypt(key) }));
-  // Вода — одна плитка: мелко или глубоко, решает ползунок глубины, а не выбор из двух поверхностей.
-  const villageWater = material.startsWith("village-") ? waterLevel(material) : 0, villageLiquid = liquidKind(material);
+  // Воды и других жидкостей здесь нет: у них свой инструмент со слотами.
   const villageSurfaces: Category = { key: "village-surfaces", name: "Местность", pack: VILLAGE, tiles: [...VILLAGE_SURFACES.filter((item) => item.key !== "shallow" && item.key !== "deep").map((item): Tile => {
     const keys = variantKeys(item.key, item.variants);
     return { id: villageSurfaceCode(item.key), name: item.name, url: villageUrl(item.key), chosen: keys.some((key) => material === villageSurfaceCode(key)),
       choose: () => onMaterial(villageSurfaceCode(item.key)),
       variants: keys.map((key, i) => ({ id: villageSurfaceCode(key), name: `Вариант ${i + 1}`, url: villageUrl(key) })) };
-  }), ...LIQUIDS.map((item, kind): Tile => ({ id: waterCode(2, item.key), name: item.name, url: villageUrl(kind ? item.key : "shallow"), fill: item.fill,
-    chosen: villageWater > 0 && villageLiquid === kind, choose: () => onMaterial(waterCode(kind === 2 || kind === 6 ? 4 : 2, item.key)) }))] };
+  })] };
   const baseSurfaces: Category = { key: "surfaces", name: local ? "Основные" : "Подземелье", pack: comicPunk ? CRYPT : PAPER, tiles: CARTOGRAPHY_SURFACES.map((item) => ({
     id: item.code, name: item.name, url: comicPunk && CRYPT_SURFACES[item.code] ? cryptUrl(CRYPT_SURFACES[item.code]) : item.key ? cartographyUrl(item.key) : null,
     chosen: material === item.code, choose: () => onMaterial(item.code),
@@ -110,10 +108,6 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, toolSet, comicPun
         {variant.url ? <img src={variant.url} alt="" /> : <span aria-hidden="true">?</span>}
       </button>)}
     </div>}
-    {!line && tool !== "asset" && tool !== "scatter" && villageWater > 0 && <label className="workspace-catalog-depth">Глубина · {villageWater} из {WATER_DEPTHS.length}
-      <input aria-label="Глубина воды" type="range" min={1} max={WATER_DEPTHS.length} step={1} value={villageWater} onChange={(event) => onMaterial(waterCode(Number(event.target.value), LIQUIDS[villageLiquid].key))} />
-      <small>1 — по щиколотку, 3 и глубже — вброд не перейти. Переход между глубинами плавный в «живой воде».{villageLiquid > 0 && " Жидкость движется только с «живой водой» (Карта ▾ → Вода); без неё — неподвижная картинка."}</small>
-    </label>}
     <div className="workspace-catalog-tiles">
       {tiles.map((tile) => <button key={tile.id} type="button" aria-pressed={tile.chosen} onClick={tile.choose}>
         <Thumbnail url={tile.url} fill={tile.fill} />

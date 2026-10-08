@@ -40,6 +40,8 @@ import { parsePlacementPayload, tokenSourceKey, tokenTarget, type PlacementSourc
 import { DungeonGenerator } from "../maps/workspace/DungeonGenerator";
 import { defaultMapEffects, loadMapEffects, saveMapEffects, type EffectState, type MapEffect } from "../maps/gl/effects";
 import { replaceWithDungeon, type DungeonSettings } from "../maps/workspace/dungeonGeneration";
+import { LiquidSlots } from "../maps/workspace/LiquidSlots";
+import { LIQUID_LAYER, isLiquidLayer, moveLiquidsToLayer, usedLiquids } from "../maps/workspace/liquids";
 import "../maps/workspace/workspace-editor.css";
 
 const SAVE_STATE = { saved: "Сохранено", dirty: "Есть правки", saving: "Сохраняем…", error: "Ошибка сохранения", conflict: "Карта изменена в другом окне" } as const;
@@ -67,7 +69,7 @@ export function MapWorkspacePage() {
   const [effects, setEffects] = useState(loadMapEffects);
   const onEffect = useEvent((name: MapEffect, state: EffectState) => { const next = { ...effects, [name]: state }; setEffects(next); saveMapEffects(next); });
   const onEffectsReset = useEvent(() => { const next = defaultMapEffects(); setEffects(next); saveMapEffects(next); });
-  const [settings, setSettings] = useState<BrushSettings>({ material: "stone", symbol: MAP_SYMBOL_ASSETS[0].id, orientation: 0, radius: 2, lineWidth: 0.3,
+  const [settings, setSettings] = useState<BrushSettings>({ material: "stone", liquid: "village-water-2", symbol: MAP_SYMBOL_ASSETS[0].id, orientation: 0, radius: 2, lineWidth: 0.3,
     scatterProfile: SCATTER_PROFILES[2].key, density: 0.8, scatterSize: 1, scatterSeed: 1742 });
   const [generatorOpen, setGeneratorOpen] = useState(false);
   const generationBusy = useRef(false);
@@ -85,7 +87,7 @@ export function MapWorkspacePage() {
     onLoaded: (record, loaded) => {
       const set = initialToolSet(record.id, record.scale, loaded);
       const surface = loaded.layers.find((layer) => layer.kind === "terrain" && layer.representation === "cells" && layer.visible && !layer.locked)
-        ?? loaded.layers.find((layer) => layer.kind === "terrain" && layer.visible && !layer.locked);
+        ?? loaded.layers.find((layer) => layer.kind === "terrain" && layer.visible && !layer.locked && !isLiquidLayer(layer));
       const preferred: WorkspaceTool = surface?.kind === "terrain" && surface.representation === "mask" ? "surface" : "brush";
       setToolSet(set); setActiveLayer(surface?.id ?? ""); setTool(toolsOf(set).includes(preferred) ? preferred : "select");
     } });
@@ -98,7 +100,10 @@ export function MapWorkspacePage() {
     center: () => { const rect = wrapRef.current?.getBoundingClientRect(); return { x: ((rect?.width ?? 0) / 2 - camera.camRef.current.ox) / camera.camRef.current.scale,
       y: ((rect?.height ?? 0) / 2 - camera.camRef.current.oy) / camera.camRef.current.scale }; },
     commit, onPlaced: (tokenId, layerId) => { setTool("select"); setActiveLayer(layerId); setSelection({ id: tokenId, layerId, kind: "token" }); }, onError: showError });
-  const gestures = useWorkspaceGestures({ doc, gesture, space, camera, tool, activeLayer, setActiveLayer, snap, settings, selection, setSelection, selections, setSelections, placement,
+  // «Жидкость» — та же плавная кисть, что у поверхности, только в слой жидкостей и своим материалом.
+  const liquidMaterial = settings.liquid ?? "village-water-2";
+  const paintSettings = useMemo(() => tool === "liquid" ? { ...settings, material: liquidMaterial } : settings, [tool, settings, liquidMaterial]);
+  const gestures = useWorkspaceGestures({ doc, gesture, space, camera, tool: tool === "liquid" ? "surface" : tool, activeLayer, setActiveLayer, snap, settings: paintSettings, selection, setSelection, selections, setSelections, placement,
     busy: leaving || !!label || generatorOpen, onLabel: (position, layerId) => setLabel({ position, layerId, text: "" }) });
   const { finishGesture } = gestures;
   const placementActions = useRef({ place: (_source: PlacementSource) => {}, preview: (_source: PlacementSource) => {} });
@@ -129,7 +134,25 @@ export function MapWorkspacePage() {
     if (!current || next === "select") return;
     const kind = toolLayerKind(next), matches = (entry: MapDocumentV6["layers"][number]) => entry.kind === kind &&
       (next !== "wall" || entry.name === "Стены") &&
-      (entry.kind !== "terrain" || next === "eraser" || entry.representation === (next === "surface" ? "mask" : "cells"));
+      (entry.kind !== "terrain" || next === "eraser" || (next === "liquid" ? isLiquidLayer(entry)
+        : entry.representation === (next === "surface" ? "mask" : "cells") && !isLiquidLayer(entry)));
+    if (next === "liquid") {
+      if (current.grid?.type !== "square") { doc.setActionError("Жидкости пока доступны для квадратной сетки"); return; }
+      // Слой жидкостей заводится сам, и в него переезжает вода, накрашенная раньше кистью поверхности.
+      const layerId = current.layers.find(isLiquidLayer)?.id ?? crypto.randomUUID();
+      commit((before) => editGeometry(before, (view) => {
+        let base = view;
+        if (!view.layers.some((entry) => entry.id === layerId)) {
+          const created = createTerrainMaskLayer(view, { id: layerId, name: LIQUID_LAYER });
+          const placed = created.ok ? moveLayer(created.document, layerId, view.layers.findLastIndex((entry) => entry.kind === "terrain") + 1) : created;
+          if (!placed.ok) return placed;
+          base = placed.document;
+        }
+        const moved = moveLiquidsToLayer(base, layerId, () => crypto.randomUUID());
+        return moved.ok && !moved.changed && base !== view ? { ok: true, changed: true, document: base } : moved;
+      }));
+      setActiveLayer(layerId); return;
+    }
     const layer = current.layers.find((entry) => entry.id === activeLayer);
     if (layer && matches(layer)) return;
     const matching = [...current.layers].reverse().filter(matches);
@@ -151,7 +174,8 @@ export function MapWorkspacePage() {
     commit((before) => editGeometry(before, (view) => {
       const result = LAYER_CREATORS[kind](view, { id: layerId, name });
       if (!result.ok || kind !== "mask") return result;
-      const lastTerrain = view.layers.findLastIndex((layer) => layer.kind === "terrain");
+      // Новая поверхность ложится под слой жидкостей: земля поверх воды её бы закрыла.
+      const lastTerrain = view.layers.findLastIndex((layer) => layer.kind === "terrain" && !isLiquidLayer(layer));
       return moveLayer(result.document, layerId, lastTerrain + 1);
     }));
     setActiveLayer(layerId);
@@ -264,6 +288,8 @@ export function MapWorkspacePage() {
   const onSave = useEvent(() => { finishGesture(); void autosave.flush(); }), onBackup = useEvent(backup);
   const onPicture = useEvent(() => { finishGesture(); if (map && documentRef.current) void downloadMapPicture(map, documentRef.current, displays, { showGrid, gridColor, gridOpacity, gridLineWidth, gridLineStyle }).catch(showError); });
   const onSymbol = useEvent((symbol: string) => { setSettings((current) => ({ ...current, symbol })); canvasRef.current?.focus(); });
+  const onLiquid = useEvent((liquid: string) => { finishGesture(); setSettings((current) => ({ ...current, liquid })); canvasRef.current?.focus(); });
+  const liquidLayers = document?.layers, liquids = useMemo(() => liquidLayers ? usedLiquids(liquidLayers) : [], [liquidLayers]);
   const onMaterial = useEvent((material: string) => { finishGesture(); setSettings((current) => ({ ...current, material })); canvasRef.current?.focus(); });
   // Полоса дороги приходит со своей шириной: рисунок рассчитан на неё, ползунок потом меняет.
   const onLine = useEvent((style: string, width: number) => { finishGesture(); setSettings((current) => ({ ...current,
@@ -308,10 +334,11 @@ export function MapWorkspacePage() {
 
       <div className="workspace-editor-stage" ref={wrapRef}>
         <WorkspaceCanvas gl={gl} onGlFail={onGlFail} effects={effects} map={map} document={document} camera={camera.cam} canvasRef={canvasRef} wrapRef={wrapRef} showGrid={showGrid} gridColor={gridColor} gridOpacity={gridOpacity} gridLineWidth={gridLineWidth} gridLineStyle={gridLineStyle} selectedId={selection?.id ?? null} selectedNodes={gestures.selectedNodes} preview={gestures.preview}
-          cellBrush={gestures.cellBrush} wallDraft={gestures.wallDraft} onDoubleClick={() => gestures.finishWall()} selections={selections} marquee={gestures.marquee} assetPreview={gestures.assetPreview} draftLine={gestures.draftLine} brush={gestures.brushCursor && (tool === "surface" || tool === "scatter" || maskEraser) ? { ...gestures.brushCursor, radius: settings.radius } : null}
+          cellBrush={gestures.cellBrush} wallDraft={gestures.wallDraft} onDoubleClick={() => gestures.finishWall()} selections={selections} marquee={gestures.marquee} assetPreview={gestures.assetPreview} draftLine={gestures.draftLine} brush={gestures.brushCursor && (tool === "surface" || tool === "liquid" || tool === "scatter" || maskEraser) ? { ...gestures.brushCursor, radius: settings.radius } : null}
           onPointerLeave={gestures.leave} displays={displays} ghost={placement.pending?.position ?? dragGhost} onDragOver={dragOver} onDragLeave={() => setDragGhost(null)} onDrop={drop}
           onPointerDown={gestures.down} onPointerMove={gestures.move} onPointerUp={gestures.up} onPointerCancel={gestures.cancel} />
         <div className="workspace-editor-hint" aria-hidden="true"><strong>{TOOL_LABELS[tool]}{active ? ` · ${layerName(active)}` : ""}</strong>{tool === "select" && <span>{selections.length > 1 ? `Выбрано: ${selections.length} · ` : ""}Рамка · Shift — добавить</span>}<span>Пробел — сдвиг</span><span>Esc — отмена</span></div>
+        {tool === "liquid" && <LiquidSlots used={liquids} material={liquidMaterial} onMaterial={onLiquid} />}
         <div className="workspace-editor-camera">
           <button type="button" aria-label="Уменьшить" onClick={() => camera.zoomBy(1 / 1.25)}>−</button>
           <button type="button" aria-label="Увеличить" onClick={() => camera.zoomBy(1.25)}>+</button>

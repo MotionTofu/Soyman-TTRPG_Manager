@@ -2,7 +2,7 @@ import { memo } from "react";
 import { TOOL_LABELS, type WorkspaceTool } from "./editorCommands";
 
 export type BrushSettings = {
-  material: string; symbol: string; orientation: number; radius: number; lineWidth: number;
+  material: string; /** Код жидкости инструмента «Жидкость»: `village-lava-3`. */ liquid?: string; symbol: string; orientation: number; radius: number; lineWidth: number;
   wallWidth?: number;
   pathMode?: "brush" | "points";
   cellSize?: number;
@@ -25,6 +25,7 @@ const HINTS: Record<WorkspaceTool, string> = {
   asset: "Выберите объект в каталоге и щёлкните по карте.",
   label: "Щёлкните по карте, чтобы добавить подпись.",
   surface: "Проведите кистью. Материал — в каталоге.",
+  liquid: "Проведите кистью. Жидкость и глубина — в полоске под картой. Ластик открывает землю под жидкостью.",
   scatter: "Проведите кистью — знаки лягут россыпью.",
   road: "Проведите линию мышью. Точки потом двигает «Выбор».",
   river: "Проведите линию мышью. Точки потом двигает «Выбор».",
@@ -42,7 +43,7 @@ export const ToolSettings = memo(function ToolSettings({ tool, settings, maskEra
   tool: WorkspaceTool; settings: BrushSettings; maskEraser: boolean; onChange: (patch: Partial<BrushSettings>) => void;
   selectedRoomCount?: number; roomActionsDisabled?: boolean; onPaintRooms?: () => void; onClearRooms?: () => void;
 }) {
-  const brushSized = tool === "surface" || tool === "scatter" || (tool === "eraser" && maskEraser);
+  const brushSized = tool === "surface" || tool === "liquid" || tool === "scatter" || (tool === "eraser" && maskEraser);
   return <section className="workspace-tool-settings" aria-label="Параметры инструмента">
     <div className="workspace-panel-heading"><h2 className="workspace-panel-title">Инструмент</h2><strong>{TOOL_LABELS[tool]}</strong></div>
     {brushSized && <Slider name="Размер кисти" value={settings.radius} min={0.25} max={8} step={0.25} onChange={(radius) => onChange({ radius })} />}
