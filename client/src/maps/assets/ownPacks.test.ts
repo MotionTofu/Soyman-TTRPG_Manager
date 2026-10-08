@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { ownImageId, ownObjectSize, ownRandomId, pickOwnVariant, registerOwnPacks, type OwnPack, type OwnPackImage } from "./ownPacks";
 import { allPacks, connectedPacks, packName, packOfAsset } from "./packs";
 import { getMapImageAsset, ownSurfaceCode } from "./registry";
-import { ownSurface, ownSurfaceFills } from "./ownPacks";
+import { ownDeck, ownLinePost, ownScatterKey, ownSurface, ownSurfaceFills } from "./ownPacks";
+import { scatterInstances } from "../scatter";
+import type { ScatterArea } from "../core/types";
 import { usedPacks } from "./packs";
 import type { MapDocumentV6 } from "@shared/maps/core";
 
@@ -60,6 +62,23 @@ describe("свои наборы ассетов", () => {
     registerOwnPacks([{ ...own, archived: true }]);
     expect(ownSurface(code)).toBeNull();
     expect(ownSurfaceFills()[code]).toBe("#445566");
+  });
+  it("линия знает свой столб, дорога берёт переправу своего набора, россыпь раскидывает свои картинки", () => {
+    const own = pack(), base = own.items[0];
+    own.items.push({ ...base, id: 3, uid: "44444444-4444-4444-8444-444444444444", kind: "line", name: "Плетень", use: "wall", width: 1, images: [image(4), { ...image(5), role: "post" }] },
+      { ...base, id: 4, uid: "55555555-5555-4555-8555-555555555555", kind: "crossing", name: "Мост", deck: "ford", images: [image(6)] },
+      { ...base, id: 5, uid: "66666666-6666-4666-8666-666666666666", kind: "scatter", name: "Кусты", size: 2, density: 1, images: [image(8), image(9)] });
+    registerOwnPacks([own]);
+    expect(ownLinePost(ownImageId(image(4)))).toBe(ownImageId(image(5)));
+    expect(ownDeck(ownImageId(image(4)), "ford")).toBe(ownImageId(image(6)));
+    expect(ownDeck(ownImageId(image(4)), "bridge-wood")).toBeNull();
+    expect(ownDeck("soyman-village:road-dirt", "ford")).toBeNull();
+    const area = { id: "a", shape: { type: "rect", x: 0, y: 0, w: 6, h: 6 }, profileRef: { type: "builtin", key: ownScatterKey(own.items[3]) }, density: 1, seed: 7 } as unknown as ScatterArea;
+    const made = scatterInstances(area);
+    expect(made.error).toBeUndefined();
+    expect(made.items.length).toBeGreaterThan(10);
+    expect(new Set(made.items.map((entry) => entry.asset.id))).toEqual(new Set([ownImageId(image(8)), ownImageId(image(9))]));
+    expect(usedPacks({ layers: [{ kind: "scatter", areas: [area] }, { kind: "scatter", areas: [{ ...area, profileRef: { type: "builtin", key: "scatter/forest" } }] }] } as unknown as MapDocumentV6).sort()).toEqual([own.uid, "ink"].sort());
   });
   it("набор в архиве уходит из библиотеки, его размеры забываются — на карте заглушка", () => {
     const archived = pack({ archived: true });

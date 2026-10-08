@@ -7,7 +7,10 @@ import { getMapImageAsset, loadMapImageAsset, markMapImageMissing, ownSurfaceCod
 export interface OwnPackImage { id: number; uid: string; role: string; width: number; height: number; archived: boolean; file_url: string }
 export interface OwnPackItem { id: number; uid: string; kind: string; name: string; section: string; tags: string; archived: boolean;
   /** Размер в клетках. */ w: number; h: number; blocks_sight: boolean; /** Радиус света в клетках. */ light: number | null;
-  /** Поверхность: сколько клеток покрывает один повтор образца и средний цвет. */ cells?: number; fill?: string; images: OwnPackImage[] }
+  /** Поверхность: сколько клеток покрывает один повтор образца и средний цвет. */ cells?: number; fill?: string;
+  /** Линия: чем тянется (`road`, `river` — течёт, `wall` — преграждает путь) и ширина в клетках. Переправа: какой настил заменяет. */
+  use?: string; width?: number; deck?: string;
+  /** Россыпь: размер знака и густота по умолчанию. */ size?: number; density?: number; images: OwnPackImage[] }
 export interface OwnPack { id: number; uid: string; name: string; kinds: MapKind[]; genres: unknown[]; native_style: string; archived: boolean; updated_at: string; items: OwnPackItem[] }
 
 /** Точек на клетку у картинок набора; мельче — предупреждаем. */
@@ -19,6 +22,16 @@ const variants = new Map<string, string[]>();
 const owners = new Map<string, string>();
 const surfaces = new Map<string, { assetId: string; cells: number }>();
 let surfaceFills: Readonly<Record<string, string>> = {};
+const posts = new Map<string, string>(), decks = new Map<string, string>();
+const scatters = new Map<string, { assetIds: string[]; size: number }>(), scatterOwners = new Map<string, string>();
+/** Столб ограды своего набора по id её полосы. */
+export const ownLinePost = (style: string) => posts.get(style) ?? null;
+/** Настил переправы из того же набора, что и дорога; нет своего — рисуется общий. */
+export const ownDeck = (style: string, deck: string) => decks.get(`${owners.get(style)}:${deck}`) ?? null;
+/** Россыпь своего набора: на карте лежит ключ `scatter/own-<uid вещи>`. */
+export const ownScatterKey = (item: OwnPackItem) => `scatter/own-${item.uid}`;
+export const ownScatter = (key: string) => scatters.get(key) ?? null;
+export const ownScatterPack = (key: string) => scatterOwners.get(key) ?? null;
 /** Поверхность своего набора по коду материала: какая картинка и на сколько клеток её повтор. */
 export const ownSurface = (code: string) => surfaces.get(code) ?? null;
 /** Цвет поверхностей своих наборов по коду материала: «Чертёж» и то, что ещё грузится или лежит в архиве. Объект меняется только с наборами. */
@@ -38,7 +51,8 @@ export const ownPacks = () => current;
 /** Запомнить наборы и завести их картинки в реестр. У набора в архиве вместо картинок — заглушки с его названием.
  * Убранные объекты и варианты заводятся: карта, где они стоят, рисуется как раньше. */
 export function registerOwnPacks(packs: readonly OwnPack[]): void {
-  current = packs; sizes.clear(); variants.clear(); owners.clear(); surfaces.clear();
+  current = packs; sizes.clear(); variants.clear(); owners.clear(); surfaces.clear(); posts.clear(); decks.clear(); scatters.clear(); scatterOwners.clear();
+  for (const pack of packs) for (const item of pack.items) if (item.kind === "scatter") scatterOwners.set(ownScatterKey(item), pack.uid);
   const fills: Record<string, string> = {};
   surfaceFills = fills;
   for (const pack of packs) for (const item of pack.items) for (const image of item.images) {
@@ -51,6 +65,11 @@ export function registerOwnPacks(packs: readonly OwnPack[]): void {
   }
   for (const pack of packs) if (!pack.archived) for (const item of pack.items) {
     registerMapImageResources(item.images.map((image) => ({ uid: image.uid, name: item.name, file_url: image.file_url, tags: item.tags })));
+    const live = liveImages(item), post = sideImage(item, "post");
+    if (item.kind === "line" && post) for (const image of item.images) if (image.role === "variant") posts.set(ownImageId(image), ownImageId(post));
+    if (item.kind === "crossing" && !item.archived && live[0]) decks.set(`${pack.uid}:${item.deck}`, ownImageId(live[0]));
+    // Россыпь, убранная из набора, на картах остаётся: берём её картинки, какие есть.
+    if (item.kind === "scatter") scatters.set(ownScatterKey(item), { assetIds: (live.length ? live : item.images).map(ownImageId), size: item.size ?? 1 });
     const views = Object.fromEntries(OWN_SIDES.flatMap(([side]) => { const image = sideImage(item, side); return image ? [[side, ownImageId(image)]] : []; }));
     for (const image of item.images) {
       sizes.set(ownImageId(image), Math.max(item.w, item.h));

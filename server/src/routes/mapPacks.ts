@@ -53,9 +53,33 @@ function surfaceData(raw: Record<string, unknown>) {
   const cells = typeof raw.cells === "number" && Number.isFinite(raw.cells) ? Math.max(1, Math.min(MAX_CELLS, Math.round(raw.cells))) : 4;
   return { cells, fill: typeof raw.fill === "string" && /^#[0-9a-f]{6}$/.test(raw.fill) ? raw.fill : "#8a8a80" };
 }
-const itemData = (kind: string, raw: Record<string, unknown>) => kind === "surface" ? { w: 1, h: 1, blocks_sight: false, light: null, ...surfaceData(raw) } : objectData(raw);
-/** Образец поверхности хранится квадратом не крупнее 1024 точек: на 4 клетки это стандарт, на большее — мельче. */
-const surfaceSide = (cells: number) => Math.min(cells, 4);
+const ITEM_KINDS = ["object", "surface", "line", "crossing", "scatter"];
+const LINE_USES = ["road", "river", "wall"];
+const DECKS = ["bridge-wood", "bridge-stone", "ford"];
+const between = (value: unknown, min: number, max: number, fallback: number) => typeof value === "number" && Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
+/** Данные вещи по её виду. Линия: каким инструментом тянется (дорога, река — «течёт», ограда — «преграждает путь») и ширина.
+ * Переправа: какой настил заменяет. Россыпь: размер знака и густота по умолчанию. */
+function kindData(kind: string, raw: Record<string, unknown>): Record<string, unknown> {
+  if (kind === "surface") return surfaceData(raw);
+  if (kind === "line") return { use: LINE_USES.includes(raw.use as string) ? raw.use : "road", width: between(raw.width, 0.25, 8, 1) };
+  if (kind === "crossing") return { deck: DECKS.includes(raw.deck as string) ? raw.deck : "bridge-wood", width: between(raw.width, 0.25, 8, 2) };
+  if (kind === "scatter") return { size: between(raw.size, 0.25, 8, 1), density: between(raw.density, 0.05, 4, 0.8) };
+  return objectData(raw);
+}
+const itemData = (kind: string, raw: Record<string, unknown>) => kind === "object" ? objectData(raw) : { w: 1, h: 1, blocks_sight: false, light: null, ...kindData(kind, raw) };
+/** Поля формы приходят строками. */
+const numbers = (body: Record<string, unknown>) => ({ ...body, ...Object.fromEntries(["w", "h", "cells", "width", "size", "density"].map((key) => [key, Number(body[key])])) });
+/** Во что вписывается картинка, клеток. `strip` — полоса: высота равна ширине линии, длина — по пропорциям картинки. */
+type Box = { w: number; h: number } | { strip: number };
+function imageBox(kind: string, data: Record<string, unknown>, role: string): Box {
+  // Образец поверхности хранится квадратом не крупнее 1024 точек: на 4 клетки это стандарт, на большее — мельче.
+  if (kind === "surface") { const side = Math.min(data.cells as number, 4); return { w: side, h: side }; }
+  if (kind === "line" || kind === "crossing") { const width = data.width as number; return role === "post" ? { w: Math.min(MAX_CELLS, width * 2), h: Math.min(MAX_CELLS, width * 2) } : { strip: width }; }
+  if (kind === "scatter") { const side = Math.max(1, data.size as number); return { w: side, h: side }; }
+  // Сбоку предмет занимает те же клетки, но лежит поперёк.
+  const across = role === "w" || role === "e";
+  return { w: (across ? data.h : data.w) as number, h: (across ? data.w : data.h) as number };
+}
 function allPacks() {
   const packs = db.prepare("SELECT * FROM map_asset_packs ORDER BY name COLLATE NOCASE").all() as PackRow[];
   const items = db.prepare("SELECT * FROM map_asset_items ORDER BY name COLLATE NOCASE").all() as ItemRow[];
@@ -100,10 +124,11 @@ mapPacksRouter.put("/:id/archive", (req, res) => {
 });
 
 /** Картинка в стандарт набора: WebP, прозрачные поля вместо обрезки, не крупнее 256 точек на клетку. */
-async function storeImage(packUid: string, buffer: Buffer, w: number, h: number, surface = false) {
+async function storeImage(packUid: string, buffer: Buffer, box: Box, surface = false) {
   const uid = crypto.randomUUID();
   const meta = await sharp(buffer).metadata();
   if (!meta.width || !meta.height) throw new Error("Файл не читается как изображение");
+  const w = "strip" in box ? Math.min(MAX_CELLS, Math.max(box.strip, box.strip * meta.width / meta.height)) : box.w, h = "strip" in box ? box.strip : box.h;
   const full = { width: Math.round(w * MAP_PACK_CELL_PX), height: Math.round(h * MAP_PACK_CELL_PX) };
   // Мелкая картинка не растягивается до стандарта и не тонет в прозрачных полях: холст сжимается под неё, пропорции клеток те же.
   // У поверхности лишнее обрезается, поэтому меряется короткая сторона.
@@ -134,11 +159,10 @@ mapPacksRouter.post("/:id/items", withUpload(async (req, res) => {
   if (!pack) return res.status(404).json({ error: "Набор не найден" });
   const name = text(req.body.name, 80);
   if (!name) return res.status(400).json({ error: "Название обязательно" });
-  const kind = req.body.kind === "surface" ? "surface" : "object";
-  const surface = kind === "surface" ? surfaceData({ cells: Number(req.body.cells) }) : null;
-  const size = surface ? { w: surfaceSide(surface.cells), h: surfaceSide(surface.cells) } : objectData({ w: Number(req.body.w), h: Number(req.body.h) });
-  const image = await storeImage(pack.uid, req.file!.buffer, size.w, size.h, !!surface);
-  const data = surface ? { ...surface, fill: image.fill } : size;
+  const kind = ITEM_KINDS.includes(req.body.kind) ? req.body.kind as string : "object";
+  const parsed = kindData(kind, numbers(req.body));
+  const image = await storeImage(pack.uid, req.file!.buffer, imageBox(kind, parsed, "variant"), kind === "surface");
+  const data = kind === "surface" ? { ...parsed, fill: image.fill } : parsed;
   db.transaction(() => {
     const itemId = db.prepare("INSERT INTO map_asset_items (uid, pack_id, kind, name, section, tags, data) VALUES (?, ?, ?, ?, ?, ?, ?)")
       .run(crypto.randomUUID(), pack.id, kind, name, text(req.body.section, 40), text(req.body.tags, 200), JSON.stringify(data)).lastInsertRowid;
@@ -148,21 +172,17 @@ mapPacksRouter.post("/:id/items", withUpload(async (req, res) => {
   res.status(201).json({ pack: onePack(pack.id), small: image.small });
 }));
 
-// Ещё один вариант того же объекта (каталог берёт случайный при постановке) или вид поворотного предмета со стороны:
-// `role` w / n / e — как предмет выглядит, повёрнутый на 90°, 180° и 270°. Новый вид стороны заменяет прежний.
+// Ещё один вариант той же вещи (каталог берёт случайный при постановке) или её особая картинка — новая заменяет прежнюю:
+// у объекта `role` w / n / e — как предмет выглядит, повёрнутый на 90°, 180° и 270°; у линии `post` — столб на изломах и концах.
 mapPacksRouter.post("/items/:itemId/images", withUpload(async (req, res) => {
   const item = db.prepare(`SELECT i.*, p.uid AS pack_uid FROM map_asset_items i JOIN map_asset_packs p ON p.id = i.pack_id
     WHERE i.id = ? AND i.archived_at IS NULL AND p.archived_at IS NULL`).get(req.params.itemId) as (ItemRow & { pack_uid: string }) | undefined;
   if (!item) return res.status(404).json({ error: "Объект не найден" });
   const raw = json<Record<string, unknown>>(item.data, {});
-  const role = item.kind === "object" && SIDES.includes(req.body.role) ? req.body.role as string : "variant";
+  const role = item.kind === "object" && SIDES.includes(req.body.role) || item.kind === "line" && req.body.role === "post" ? req.body.role as string : "variant";
   const count = (db.prepare("SELECT COUNT(*) AS n FROM map_asset_images WHERE item_id = ? AND role = 'variant' AND archived_at IS NULL").get(item.id) as { n: number }).n;
-  if (role === "variant" && count >= 12) return res.status(400).json({ error: "У объекта не больше 12 вариантов" });
-  const side = item.kind === "surface" ? surfaceSide(surfaceData(raw).cells) : 0;
-  const data = side ? { w: side, h: side } : objectData(raw);
-  // Сбоку предмет занимает те же клетки, но лежит поперёк.
-  const across = role === "w" || role === "e";
-  const image = await storeImage(item.pack_uid, req.file!.buffer, across ? data.h : data.w, across ? data.w : data.h, !!side);
+  if (role === "variant" && count >= 12) return res.status(400).json({ error: "У вещи не больше 12 вариантов" });
+  const image = await storeImage(item.pack_uid, req.file!.buffer, imageBox(item.kind, kindData(item.kind, raw), role), item.kind === "surface");
   db.transaction(() => {
     if (role !== "variant") db.prepare("UPDATE map_asset_images SET archived_at = datetime('now') WHERE item_id = ? AND role = ? AND archived_at IS NULL").run(item.id, role);
     db.prepare("INSERT INTO map_asset_images (uid, item_id, role, position, file_path, width, height) VALUES (?, ?, ?, ?, ?, ?, ?)").run(image.uid, item.id, role, Date.now() % 2147483647, image.file, image.width, image.height);
@@ -177,7 +197,7 @@ mapPacksRouter.put("/items/:itemId", (req, res) => {
   const name = body.name === undefined ? item.name : text(body.name, 80);
   if (!name) return res.status(400).json({ error: "Название объекта обязательно" });
   const merged = { ...json<Record<string, unknown>>(item.data, {}), ...body };
-  const data = item.kind === "surface" ? surfaceData(merged) : objectData(merged);
+  const data = kindData(item.kind, merged);
   db.prepare("UPDATE map_asset_items SET name = ?, section = ?, tags = ?, data = ?, updated_at = datetime('now') WHERE id = ?")
     .run(name, body.section === undefined ? item.section : text(body.section, 40), body.tags === undefined ? item.tags : text(body.tags, 200), JSON.stringify(data), item.id);
   res.json(onePack(item.pack_id));

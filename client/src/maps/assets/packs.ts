@@ -2,8 +2,8 @@ import type { MapKind } from "../mapTypes";
 import type { MapDocumentV6 } from "@shared/maps/core";
 import { CARTOGRAPHY_PACK } from "./cartography";
 import { CRYPT_PACK } from "./crypt";
-import { ownPackOf, ownPacks } from "./ownPacks";
-import { MAP_SYMBOL_PACK, ownSurfaceAssetId } from "./registry";
+import { ownPackOf, ownPacks, ownScatterPack } from "./ownPacks";
+import { ARTWORK_SCATTER, MAP_SYMBOL_PACK, ownSurfaceAssetId } from "./registry";
 import { VILLAGE_PACK, VILLAGE_SURFACE_KEYS } from "./village";
 
 /** Набор — тема места: что можно поставить на карту. Оформление (как карта нарисована) — отдельная настройка.
@@ -34,7 +34,6 @@ export function packOfAsset(assetId: string): string | null {
   return prefix === VILLAGE_PACK.id ? "village" : prefix === CRYPT_PACK.id ? "crypt" : prefix === CARTOGRAPHY_PACK.id || prefix === MAP_SYMBOL_PACK.id ? "ink" : ownPackOf(assetId);
 }
 /** Наборы, вещи которых стоят на карте.
- * ponytail: смотрим объекты, рисованные линии и поверхности; россыпи добавятся вместе со своими в наборах (срез 3).
  * Жидкости набором не считаются: у них свой инструмент, и от подключения «Деревни» они не зависят. */
 export function usedPacks(document: MapDocumentV6): string[] {
   const ids = new Set<string>();
@@ -42,6 +41,10 @@ export function usedPacks(document: MapDocumentV6): string[] {
   for (const layer of document.layers) {
     if (layer.kind === "object") for (const item of layer.items) if (item.visual.type === "asset") add(item.visual.assetId);
     if (layer.kind === "path") for (const path of layer.paths) if (path.styleRef.type === "asset") add(path.styleRef.assetId);
+    if (layer.kind === "scatter") for (const area of layer.areas) {
+      const key = area.profileRef.type === "builtin" ? area.profileRef.key : "", own = ownScatterPack(key);
+      if (own) ids.add(own); else if (key) ids.add(ARTWORK_SCATTER.find((profile) => profile.key === key)?.pack.id === VILLAGE_PACK.id ? "village" : "ink");
+    }
     if (layer.kind === "terrain") for (const material of [layer.defaultMaterial, ...(layer.representation === "mask" ? layer.mask.materials : layer.cells.map((cell) => cell.material))]) {
       const code = material.type === "builtin" ? material.key.replace(/^terrain\//, "") : "", own = ownSurfaceAssetId(code);
       if (own) add(own); else if (code.startsWith("village-") && VILLAGE_SURFACE_KEYS.includes(code.slice(8))) ids.add("village");

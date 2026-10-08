@@ -342,7 +342,7 @@ export function MapWorkspacePage() {
   // Полоса дороги приходит со своей шириной: рисунок рассчитан на неё, ползунок потом меняет.
   const onLine = useEvent((style: string, width: number) => { finishGesture(); setSettings((current) => ({ ...current,
     ...(tool === "wall" ? { wallStyle: style, wallWidth: width } : tool === "river" ? { riverStyle: style, lineWidth: width } : { roadStyle: style, lineWidth: width }) })); canvasRef.current?.focus(); });
-  const onScatter = useEvent((scatterProfile: string) => { finishGesture(); setSettings((current) => ({ ...current, scatterProfile })); canvasRef.current?.focus(); });
+  const onScatter = useEvent((scatterProfile: string, density?: number) => { finishGesture(); setSettings((current) => ({ ...current, scatterProfile, ...(density ? { density } : {}) })); canvasRef.current?.focus(); });
   const onToolChange = useEvent((patch: Partial<BrushSettings>) => { if (gesture.current?.type !== "wall-line" || patch.wallWidth === undefined && patch.lineWidth === undefined) finishGesture(); setSettings((current) => ({ ...current, ...patch })); });
   const onPaintRooms = useEvent(() => paintRooms(false)), onClearRooms = useEvent(() => paintRooms(true));
   const onActivateLayer = useEvent((layerId: string) => { finishGesture(); setActiveLayer(layerId); });

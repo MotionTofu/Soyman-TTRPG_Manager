@@ -35,6 +35,24 @@ const upload = (url: string, fields: Record<string, string>) => {
 };
 
 describe("наборы ассетов карт", () => {
+  it("линия, столб, переправа и россыпь: у каждой свои данные и свой размер картинки", async () => {
+    const pack = (await api().post("/api/map-packs").auth(gm, { type: "bearer" }).send({ name: "Тракт" })).body;
+    // Полоса 600×300 при ширине 1 клетка: высота 256 точек, длина по пропорциям — 2 клетки.
+    const line = (await upload(`/api/map-packs/${pack.id}/items`, { kind: "line", name: "Плетень", use: "wall", width: "1" })).body.pack.items[0];
+    expect(line).toMatchObject({ kind: "line", use: "wall", width: 1, images: [{ role: "variant", width: 512, height: 256 }] });
+    // Столб — квадрат в две ширины линии; второй заменяет первый.
+    await upload(`/api/map-packs/items/${line.id}/images`, { role: "post" });
+    const posts = (await upload(`/api/map-packs/items/${line.id}/images`, { role: "post" })).body.pack.items[0].images.filter((image: { role: string }) => image.role === "post");
+    expect(posts.filter((image: { archived: boolean }) => !image.archived)).toHaveLength(1);
+    expect(posts[0]).toMatchObject({ width: 512, height: 512 });
+    const made = (await upload(`/api/map-packs/${pack.id}/items`, { kind: "crossing", name: "Мост", deck: "ford", width: "чушь" })).body.pack.items;
+    expect(made.find((item: { kind: string }) => item.kind === "crossing")).toMatchObject({ deck: "ford", width: 2 });
+    const scatter = (await upload(`/api/map-packs/${pack.id}/items`, { kind: "scatter", name: "Кусты", size: "2", density: "99" })).body.pack.items.find((item: { kind: string }) => item.kind === "scatter");
+    expect(scatter).toMatchObject({ size: 2, density: 4, images: [{ width: 512, height: 512 }] });
+    const edited = await api().put(`/api/map-packs/items/${line.id}`).auth(gm, { type: "bearer" }).send({ use: "мимо", width: 3 });
+    expect(edited.body.items.find((item: { id: number }) => item.id === line.id)).toMatchObject({ use: "road", width: 3 });
+  });
+
   it("поверхность: квадратный образец без полей, число клеток и средний цвет", async () => {
     const pack = (await api().post("/api/map-packs").auth(gm, { type: "bearer" }).send({ name: "Пол" })).body;
     const made = await upload(`/api/map-packs/${pack.id}/items`, { kind: "surface", name: "Плитка", cells: "2" });

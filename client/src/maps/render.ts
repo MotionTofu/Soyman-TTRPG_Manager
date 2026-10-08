@@ -6,6 +6,7 @@ import { maskSampleCode } from "./terrainMaskTiles";
 import { artworkImage, doorImage, paperPattern, patternSource, stripImage, surfaceImage, surfacePattern, texturedMask, wallPattern, type ArtPack } from "./assets/artwork";
 import { drawWallPolyline } from "./assets/wallArtwork";
 import { deckKey, fencePostId, villageId } from "./assets/village";
+import { ownDeck, ownLinePost, ownPackOf } from "./assets/ownPacks";
 import { labelBox, labelFamily } from "./labelStyle";
 import { drawWaterStill, type MapWater } from "./water";
 import { cutKey, cutRoad, drawCrossingDraft, roadCrossings, type RoadCut } from "./crossings";
@@ -1126,7 +1127,8 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     const water = path.kind === "river" && path.style ? surfaceImage(`village-${path.style.slice(path.style.indexOf(":") + 1)}`, false, pack) : null;
     const riverFill = (water && ctx.canvas ? surfacePattern(ctx, water, scale, ox, oy, pack) : null) ?? RIVER_FILL;
     const bank = water ? { color: chrome.ink, k: 1.1 } : { color: chrome.paper, k: 1.55 };
-    const strip = path.style && path.kind !== "river" ? stripImage(path.style) : null;
+    // Река своего набора — полоса, как дорога; встроенная — заливка поверхностью воды.
+    const strip = path.style && (path.kind !== "river" || ownPackOf(path.style)) ? stripImage(path.style) : null;
     if (strip) {
       // Шаг крупнее, чем у линии тушью: каждый отрезок — своя заливка узором с обрезкой.
       const road = path.kind === "road";
@@ -1143,14 +1145,14 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
         if (cut?.key !== cutKey(crossings)) roadCuts.set(samples, cut = cutRoad(samples, crossings));
         for (const piece of cut.road) lay(piece);
         for (const deck of cut.decks) decks.push(() => {
-          const art = deck.kind === "none" ? null : stripImage(villageId(deckKey(deck.kind, path.style!)));
+          const art = deck.kind === "none" ? null : stripImage(ownDeck(path.style!, deck.kind) ?? villageId(deckKey(deck.kind, path.style!)));
           if (art) drawWallPolyline(ctx, deck.samples, baseWidth, false, scale, ox, oy, false, view, art);
           else drawCrossingDraft(ctx, deck.kind, deck.samples, scale, ox, oy, chrome.ink);
         });
       }
       else lay(samples);
       // Ограда: столб на каждой опорной точке — закрывает обрез полосы на концах и стык на изломе.
-      const postId = path.kind === "wall" ? fencePostId(path.style!) : null, post = postId ? stripImage(postId) : null;
+      const postId = path.kind === "wall" ? fencePostId(path.style!) ?? ownLinePost(path.style!) : null, post = postId ? stripImage(postId) : null;
       if (post) for (const node of path.nodes) {
         const side = (node.width ?? baseWidth) * 2 * scale;
         ctx.drawImage(post, X(node.position.x) - side / 2, Y(node.position.y) - side / 2, side, side);

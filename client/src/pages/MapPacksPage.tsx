@@ -294,6 +294,113 @@ function SurfaceDialog({ pack, item, onClose }: { pack: OwnPack; item: OwnPackIt
   </Modal>;
 }
 
+const STRIP_KINDS = [["line:road", "Дорога"], ["line:river", "Река — течёт"], ["line:wall", "Ограда — преграждает путь"],
+  ["crossing:bridge-wood", "Переправа: деревянный мост"], ["crossing:bridge-stone", "Переправа: каменный мост"], ["crossing:ford", "Переправа: брод"]] as const;
+const IMAGES = "image/png,image/jpeg,image/webp,image/avif,image/gif";
+
+/** Линия, переправа или россыпь. Линия — полоса, которую движок тянет вдоль пути: высота картинки — ширина линии.
+ * Переправа заменяет дорогу своего набора над водой. Россыпь — несколько картинок, которые движок раскидывает по области. */
+function ThingDialog({ pack, item, mode, onClose }: { pack: OwnPack; item: OwnPackItem | null; mode: "line" | "scatter"; onClose: () => void }) {
+  const run = useAction();
+  const [dialog, confirm] = useConfirm();
+  useMapImageRevision();
+  const [file, setFile] = useState<File | null>(null);
+  const [name, setName] = useState(item?.name ?? ""), [section, setSection] = useState(item?.section ?? ""), [tags, setTags] = useState(item?.tags ?? "");
+  const [what, setWhat] = useState<string>(item?.kind === "crossing" ? `crossing:${item.deck}` : `line:${item?.use ?? "road"}`);
+  const [width, setWidth] = useState(item?.width ?? 1), [size, setSize] = useState(item?.size ?? 1), [density, setDensity] = useState(item?.density ?? 0.8);
+  const preview = useMemo(() => file ? URL.createObjectURL(file) : null, [file]);
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+  const variants = item ? liveImages(item) : [], post = item ? sideImage(item, "post") : null;
+  const shown = preview ?? (variants[0] ? ownImageSrc(ownImageId(variants[0])) : null);
+  const [kind, sub] = what.split(":"), scatter = mode === "scatter", title = scatter ? "Россыпь" : kind === "crossing" ? "Переправа" : "Линия";
+  const sections = [...new Set(pack.items.map((entry) => entry.section).filter(Boolean))];
+  const number = (set: (value: number) => void, min: number, max: number) => (event: { target: { value: string } }) => set(Math.max(min, Math.min(max, Number(event.target.value) || min)));
+
+  function choose(next: File | null) {
+    setFile(next);
+    if (next && !name) setName(next.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").slice(0, 80));
+  }
+  async function save() {
+    const fields = { name, section, tags, width, size, density, ...(scatter ? {} : kind === "line" ? { use: sub } : { deck: sub }) };
+    let saved: unknown;
+    if (item) saved = await run(labelled(`${title} не сохранена`, () => write.put(`/map-packs/items/${item.id}`, fields)), { affects: AFFECTS });
+    else if (file) {
+      const form = new FormData();
+      form.append("file", file); form.append("kind", scatter ? "scatter" : kind);
+      for (const [key, value] of Object.entries(fields)) form.append(key, String(value));
+      saved = await run(labelled(`${title} не добавлена`, () => write.post(`/map-packs/${pack.id}/items`, form)), { affects: AFFECTS });
+    }
+    if (saved) onClose();
+  }
+  async function addImage(role: string, next: File | null) {
+    if (!item || !next) return;
+    const form = new FormData(); form.append("file", next); form.append("role", role);
+    await run(labelled("Картинка не добавлена", () => write.post(`/map-packs/items/${item.id}/images`, form)), { affects: AFFECTS });
+  }
+  const removeImage = (id: number) => void run(labelled("Картинка не убрана", () => write.del(`/map-packs/images/${id}`).then(() => true)), { affects: AFFECTS });
+  async function remove() {
+    if (!item || !await confirm({ title: `Убрать «${item.name}» из набора?`, message: "В каталоге её не будет. На картах, где она уже есть, она останется.", confirmLabel: "Убрать", cancelLabel: "Оставить", danger: true })) return;
+    if (await run(labelled("Не убрано", () => write.del(`/map-packs/items/${item.id}`).then(() => true)), { affects: AFFECTS })) onClose();
+  }
+  const thumb = (image: { id: number }, url: string | null, label: string, removable: boolean) => <span key={image.id} style={{ position: "relative", width: 64, height: 64, border: "2px solid currentColor" }}>
+    {url && <img src={url} alt={label} style={{ width: "100%", height: "100%", objectFit: "contain" }} />}
+    <button type="button" disabled={!removable} title="Убрать" aria-label={`Убрать: ${label}`} style={{ position: "absolute", top: 0, right: 0, padding: "0 5px", height: 20 }} onClick={() => removeImage(image.id)}>×</button>
+  </span>;
+
+  return <Modal onClose={onClose} wide ariaLabel={item ? `${title} «${item.name}»` : `Новая ${title.toLocaleLowerCase("ru")}`}>
+    <h2>{item ? `${title} набора` : scatter ? "Новая россыпь" : "Новая линия или переправа"}</h2>
+    <div className="row" style={{ gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+      <div className="stack" style={{ flex: "1 1 300px", minWidth: 260 }}>
+        {scatter
+          ? <div style={{ height: 140, border: "2px solid currentColor", background: "var(--paper, #f4efe2)" }}>{shown && <img src={shown} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />}</div>
+          : <div role="img" aria-label="Полоса, повторённая вдоль линии" style={{ height: 64, border: "2px solid currentColor", backgroundColor: "var(--paper, #f4efe2)", backgroundImage: shown ? `url(${shown})` : undefined, backgroundSize: "auto 100%", backgroundRepeat: "repeat-x" }} />}
+        {scatter ? <>
+          <label>Размер знака, клеток<input type="number" min={0.25} max={8} step={0.25} value={size} onChange={number(setSize, 0.25, 8)} /></label>
+          <label>Густота по умолчанию, знаков на клетку<input type="number" min={0.05} max={4} step={0.05} value={density} onChange={number(setDensity, 0.05, 4)} /></label>
+          <small className="muted">Густоту и размер Мастер может поменять на карте, в настройках инструмента «Россыпь».</small>
+        </> : <>
+          <small className="muted">Полоса тянется слева направо и повторяется встык: левый и правый край картинки должны сходиться. Высота картинки — ширина линии.</small>
+          <label>Что это<select value={what} onChange={(event) => setWhat(event.target.value)}>{STRIP_KINDS.filter(([value]) => !item || value.startsWith(`${item.kind}:`)).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          <label>Ширина, клеток<input type="number" min={0.25} max={8} step={0.25} value={width} onChange={number(setWidth, 0.25, 8)} /></label>
+          {kind === "crossing" && <small className="muted">Дорога из этого набора над водой сменится этой переправой. У дорог других наборов переправы свои или общие.</small>}
+        </>}
+      </div>
+      <div className="stack" style={{ flex: "1 1 280px", minWidth: 240 }}>
+        {!item && <label>Картинка<input type="file" aria-label="Картинка" accept={IMAGES} onChange={(event) => choose(event.target.files?.[0] ?? null)} /></label>}
+        <label>Название<input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} /></label>
+        <label>Раздел<input value={section} maxLength={40} list="map-pack-sections" onChange={(event) => setSection(event.target.value)} /></label>
+        <datalist id="map-pack-sections">{sections.map((entry) => <option key={entry} value={entry} />)}</datalist>
+        <label>Теги через запятую<input value={tags} maxLength={200} onChange={(event) => setTags(event.target.value)} /></label>
+        {item && <div className="stack">
+          <strong>{scatter ? "Картинки россыпи" : "Варианты"}</strong>
+          <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>{variants.map((image, index) => thumb(image, ownImageSrc(ownImageId(image)), `вариант ${index + 1}`, variants.length > 1))}</div>
+          <label>Добавить картинку<input type="file" aria-label="Добавить картинку" accept={IMAGES} onChange={(event) => { void addImage("variant", event.target.files?.[0] ?? null); event.target.value = ""; }} /></label>
+          {scatter && <small className="muted">Движок раскидывает по области все картинки вперемешку.</small>}
+        </div>}
+        {item?.kind === "line" && <div className="stack">
+          <strong>Столб</strong>
+          <small className="muted">Ставится на каждом изломе и на концах линии: закрывает стык полосы. Нужен оградам; дороге и реке не обязателен.</small>
+          <div className="row" style={{ gap: 6 }}>{post && thumb(post, ownImageSrc(ownImageId(post)), "столб", true)}</div>
+          <label>{post ? "Заменить столб" : "Добавить столб"}<input type="file" aria-label="Картинка столба" accept={IMAGES} onChange={(event) => { void addImage("post", event.target.files?.[0] ?? null); event.target.value = ""; }} /></label>
+        </div>}
+      </div>
+    </div>
+    <div className="modal-footer row">
+      {item && <button onClick={remove}>Убрать из набора</button>}
+      <button onClick={onClose}>{item ? "Закрыть" : "Отмена"}</button>
+      <button className="primary" disabled={!name.trim() || (!item && !file)} onClick={() => void save()}>{item ? "Сохранить" : "Добавить"}</button>
+    </div>
+    {dialog}
+  </Modal>;
+}
+
+/** Подпись плитки вещи на экране набора. */
+function itemNote(item: OwnPackItem) {
+  return item.kind === "surface" ? `поверхность · повтор ${item.cells ?? 4} кл.` : item.kind === "scatter" ? "россыпь"
+    : item.kind === "crossing" ? `${STRIP_KINDS.find(([value]) => value === `crossing:${item.deck}`)?.[1].toLocaleLowerCase("ru") ?? "переправа"}`
+    : item.kind === "line" ? `${{ road: "дорога", river: "река", wall: "ограда" }[item.use ?? "road"] ?? "линия"} · ${item.width ?? 1} кл.` : `${item.w}×${item.h} кл.`;
+}
+
 export function MapPacksPage() {
   const { user } = useCurrentUser();
   const run = useAction();
@@ -303,7 +410,7 @@ export function MapPacksPage() {
   useMemo(() => registerOwnPacks(packs), [packs]);
   useMapImageRevision();
   const [picked, setPicked] = useState<number | null>(null), [archive, setArchive] = useState(false), [builtin, setBuiltin] = useState<string | null>(null);
-  const [packDialog, setPackDialog] = useState<OwnPack | "new" | null>(null), [objectDialog, setObjectDialog] = useState<OwnPackItem | "new" | "new-surface" | null>(null);
+  const [packDialog, setPackDialog] = useState<OwnPack | "new" | null>(null), [objectDialog, setObjectDialog] = useState<OwnPackItem | "new" | "new-surface" | "new-line" | "new-scatter" | null>(null);
   const live = packs.filter((pack) => !pack.archived), archived = packs.filter((pack) => pack.archived);
   const pack = live.find((entry) => entry.id === picked) ?? live[0] ?? null;
   // Диалог держит объект по id: после добавления варианта список перечитан, и окно показывает свежие картинки.
@@ -357,18 +464,20 @@ export function MapPacksPage() {
           <div className="row" style={{ gap: 8 }}>
             <button onClick={() => setPackDialog(pack)}>Название и виды карт</button>
             <button onClick={() => void setArchived(pack, true)}>В архив</button>
+            <button className="primary" onClick={() => setObjectDialog("new-scatter")}>+ Россыпь</button>
+            <button className="primary" onClick={() => setObjectDialog("new-line")}>+ Линия</button>
             <button className="primary" onClick={() => setObjectDialog("new-surface")}>+ Поверхность</button>
             <button className="primary" onClick={() => setObjectDialog("new")}>+ Объект</button>
           </div>
         </div>
-        {!items.length && <p className="muted">В наборе пока пусто. «+ Объект» — картинка и сколько клеток она занимает. «+ Поверхность» — образец, которым красят землю и полы.</p>}
+        {!items.length && <p className="muted">В наборе пока пусто. «+ Объект» — картинка и сколько клеток она занимает. «+ Поверхность» — образец, которым красят землю и полы. «+ Линия» — дорога, река, ограда или переправа. «+ Россыпь» — кусты, камни, трава.</p>}
         {sections.map((section) => <div key={section} className="stack">
           <strong>{section || "Без раздела"}</strong>
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
             {items.filter((item) => item.section === section).map((item) => { const images = liveImages(item), url = images[0] ? ownImageSrc(ownImageId(images[0])) : null;
               return <button key={item.id} type="button" className="card" onClick={() => setObjectDialog(item)} style={{ width: 132, height: "auto", padding: 8, textAlign: "center" }}>
                 <span style={{ display: "block", height: 96, background: item.kind === "surface" ? item.fill : undefined }}>{url && <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: item.kind === "surface" ? "cover" : "contain" }} />}</span>
-                <strong>{item.name}</strong><br /><small>{item.kind === "surface" ? `поверхность · повтор ${item.cells ?? 4} кл.` : `${item.w}×${item.h} кл.`}{images.length > 1 ? ` · вариантов: ${images.length}` : ""}</small>
+                <strong>{item.name}</strong><br /><small>{itemNote(item)}{images.length > 1 ? ` · вариантов: ${images.length}` : ""}</small>
               </button>; })}
           </div>
         </div>)}
@@ -377,6 +486,8 @@ export function MapPacksPage() {
     {packDialog && <PackDialog pack={packDialog === "new" ? null : packDialog} onClose={(saved) => { setPackDialog(null); if (saved) { setPicked(saved.id); setBuiltin(null); } }} />}
     {objectDialog && pack && (objectDialog === "new-surface" || editing?.kind === "surface"
       ? <SurfaceDialog key={editing?.id ?? "new-surface"} pack={pack} item={editing} onClose={() => setObjectDialog(null)} />
+      : objectDialog === "new-line" || objectDialog === "new-scatter" || editing && editing.kind !== "object"
+      ? <ThingDialog key={editing?.id ?? objectDialog as string} pack={pack} item={editing} mode={objectDialog === "new-scatter" || editing?.kind === "scatter" ? "scatter" : "line"} onClose={() => setObjectDialog(null)} />
       : (objectDialog === "new" || editing) && <ObjectDialog key={editing?.id ?? "new"} pack={pack} item={editing} onClose={() => setObjectDialog(null)} />)}
     {dialog}
   </div>;

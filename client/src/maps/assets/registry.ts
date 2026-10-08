@@ -127,6 +127,7 @@ export function registerMapImageResources(resources: readonly MapImageResource[]
     };
     asset.name = resource.name;
     asset.missing = undefined;
+    asset.failed = false;
     asset.tags = resource.tags?.split(",").map((tag) => tag.trim()).filter(Boolean) ?? [];
     asset.image = null;
     asset.ready = settledReady;
@@ -203,6 +204,7 @@ export function loadMapImageAsset(id: string): Promise<void> {
         await image.decode();
         if (imageUrls.get(id) !== url) return;
         asset.image = image;
+        asset.failed = false;
         blobUrls.set(id, blobUrl);
         announceImageChange();
       } finally {
@@ -210,7 +212,8 @@ export function loadMapImageAsset(id: string): Promise<void> {
       }
     })
     .catch((error) => {
-      if (imageUrls.get(id) === url) asset.ready = settledReady;
+      // Пометка останавливает тех, кто просит картинку на каждом кадре (полосы линий); карта и каталог попробуют снова.
+      if (imageUrls.get(id) === url) { asset.ready = settledReady; asset.failed = true; }
       announceImageChange();
       throw error;
     });

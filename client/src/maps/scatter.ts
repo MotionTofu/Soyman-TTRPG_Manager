@@ -1,5 +1,6 @@
 import type { ScatterArea, ShapeGeometry, Vec2, MapObject } from "./core/types";
-import { ARTWORK_SCATTER, resolveMapSymbol, type MapVisualAsset } from "./assets/registry";
+import { ARTWORK_SCATTER, loadMapImageAsset, resolveMapSymbol, type MapVisualAsset } from "./assets/registry";
+import { ownScatter } from "./assets/ownPacks";
 
 export const SCATTER_LIMIT = 5000;
 export const SCATTER_PROFILES: readonly { key: string; name: string; assetId: string; assetIds: readonly string[]; size: number }[] = [
@@ -35,7 +36,8 @@ const cache = new WeakMap<ScatterArea, ScatterInstances>();
 export function scatterInstances(area: ScatterArea): ScatterInstances {
   const cached = cache.get(area); if (cached) return cached;
   const key = area.profileRef.type === "builtin" ? area.profileRef.key : null;
-  const profile = SCATTER_PROFILES.find(p => p.key === key);
+  // Россыпь своего набора: её картинки грузятся по первому обращению.
+  const profile = SCATTER_PROFILES.find(p => p.key === key) ?? ownScatter(key ?? "");
   const size = area.overrides?.size ?? 1;
   if (!profile || typeof size !== "number" || !Number.isFinite(size) || size < 0.25 || size > 8 ||
       Object.keys(area.overrides ?? {}).some(key => key !== "size")) return { items: [], error: "Неизвестная россыпь или её параметры" };
@@ -43,7 +45,9 @@ export function scatterInstances(area: ScatterArea): ScatterInstances {
   if (!Number.isSafeInteger(candidates) || candidates > SCATTER_LIMIT) return { items: [], error: "Россыпь слишком велика: уменьшите плотность или область" };
   let state = area.seed >>> 0;
   const random = () => { state += 0x6d2b79f5; let t = state; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; };
-  const assets = profile.assetIds.map(assetId => resolveMapSymbol({ type: "asset", assetId })!);
+  const assets = profile.assetIds.flatMap(assetId => resolveMapSymbol({ type: "asset", assetId }) ?? []);
+  if (!assets.length) return { items: [], error: "У россыпи нет картинок" };
+  for (const asset of assets) if ("image" in asset && !asset.image && !asset.failed && asset.id.startsWith("soyman-resource-images:")) void loadMapImageAsset(asset.id).catch(() => undefined);
   const items: ScatterInstances["items"][number][] = [];
   for (let i = 0; i < candidates; i++) {
     const position = { x: bounds.x + random() * bounds.w, y: bounds.y + random() * bounds.h };

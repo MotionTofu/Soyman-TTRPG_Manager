@@ -5,7 +5,7 @@ import { VILLAGE_CATEGORIES, VILLAGE_OBJECTS, VILLAGE_PACK, VILLAGE_RIVERS, VILL
 import { MAP_SYMBOL_ASSETS, ownSurfaceCode } from "../assets/registry";
 import { SCATTER_PROFILES } from "../scatter";
 import { packName, packsFor } from "../assets/packs";
-import { liveImages, ownImageId, ownImageSrc, ownRandomId, useMapImageRevision, type OwnPack } from "../assets/ownPacks";
+import { liveImages, ownImageId, ownImageSrc, ownRandomId, ownScatterKey, useMapImageRevision, type OwnPack } from "../assets/ownPacks";
 import { Link } from "react-router-dom";
 import type { MapKind } from "../mapTypes";
 import type { WorkspaceTool } from "./editorCommands";
@@ -32,7 +32,7 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, pack
   /** Наборы, вещи которых уже стоят на карте, через «|»: строкой, чтобы панель не перерисовывалась на каждую правку. */ used: string; symbol: string; material: string; scatterProfile: string;
   /** Рисунок линии текущего инструмента: дороги, реки или стены. Пусто — обычная линия или кладка. */
   lineStyle: string;
-  onSymbol: (id: string) => void; onMaterial: (code: string) => void; onScatter: (key: string) => void; onLine: (style: string, width: number) => void;
+  onSymbol: (id: string) => void; onMaterial: (code: string) => void; onScatter: (key: string, /** Густота россыпи по умолчанию. */ density?: number) => void; onLine: (style: string, width: number) => void;
 }) {
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
@@ -40,9 +40,11 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, pack
   useMapImageRevision();
   // Вещи своих наборов: раздел набора — раздел каталога. Объект с вариантами ставит случайный, как у «Деревни»;
   // у поверхности каждый вариант — свой материал, они красятся по отдельности.
-  const ownTiles = (kind: "object" | "surface"): Category[] => ownPacks.filter((pack) => !pack.archived).flatMap((pack) => {
-    const items = pack.items.filter((item) => !item.archived && item.kind === kind && liveImages(item).length);
-    return [...new Set(items.map((item) => item.section))].sort((a, b) => a.localeCompare(b, "ru")).map((section): Category => ({ key: `own:${pack.uid}:${kind}:${section}`, name: section || (kind === "object" ? "Объекты" : "Поверхности"), pack: pack.uid,
+  // Линия стоит в каталоге того инструмента, которым тянется (`use`); россыпь несёт свои размер и густоту.
+  const OWN_SECTION = { object: "Объекты", surface: "Поверхности", line: "Линии", scatter: "Россыпи" };
+  const ownTiles = (kind: keyof typeof OWN_SECTION, use?: string): Category[] => ownPacks.filter((pack) => !pack.archived).flatMap((pack) => {
+    const items = pack.items.filter((item) => !item.archived && item.kind === kind && (!use || item.use === use) && liveImages(item).length);
+    return [...new Set(items.map((item) => item.section))].sort((a, b) => a.localeCompare(b, "ru")).map((section): Category => ({ key: `own:${pack.uid}:${kind}:${section}`, name: section || OWN_SECTION[kind], pack: pack.uid,
       tiles: items.filter((item) => item.section === section).map((item): Tile => {
         const images = liveImages(item), ids = images.map(ownImageId), random = ownRandomId(item);
         if (kind === "surface") {
@@ -50,6 +52,9 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, pack
           return { id: `own:${item.uid}`, name: item.name, tags: item.tags, url: ownImageSrc(ids[0]), fill: item.fill, chosen: codes.includes(material), choose: () => onMaterial(codes[0]),
             variants: codes.length > 1 ? codes.map((code, i) => ({ id: code, name: `Вариант ${i + 1}`, url: ownImageSrc(ids[i]) })) : undefined };
         }
+        if (kind === "line") return { id: `own:${item.uid}`, name: item.name, tags: item.tags, url: ownImageSrc(ids[0]), size: `${item.width ?? 1} кл.`, chosen: ids.includes(lineStyle), choose: () => onLine(ids[0], item.width ?? 1),
+          variants: ids.length > 1 ? ids.map((id, i) => ({ id, name: `Вариант ${i + 1}`, url: ownImageSrc(id) })) : undefined };
+        if (kind === "scatter") return { id: `own:${item.uid}`, name: item.name, tags: item.tags, url: ownImageSrc(ids[0]), chosen: scatterProfile === ownScatterKey(item), choose: () => onScatter(ownScatterKey(item), item.density) };
         const variants: Variant[] | undefined = ids.length > 1 ? [{ id: random, name: "Случайный", url: null }, ...ids.map((id, i) => ({ id, name: `Вариант ${i + 1}`, url: ownImageSrc(id) }))] : undefined;
         return { id: `own:${item.uid}`, name: item.name, tags: item.tags, url: ownImageSrc(ids[0]), size: `${item.w}×${item.h}`, variants,
           chosen: symbol === random || ids.includes(symbol), choose: () => onSymbol(variants ? random : ids[0]) };
@@ -90,7 +95,8 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, pack
     chosen: material === item.code, choose: () => onMaterial(item.code),
   })) };
   const lines = [...VILLAGE_ROADS, ...VILLAGE_RIVERS];
-  const lineWidth = (style: string) => lines.find((item) => variantKeys(item.key, item.variants).some((key) => villageId(key) === style))?.width ?? 0.3;
+  const ownLine = (style: string) => ownPacks.flatMap((pack) => pack.items).find((item) => item.kind === "line" && item.images.some((image) => ownImageId(image) === style));
+  const lineWidth = (style: string) => lines.find((item) => variantKeys(item.key, item.variants).some((key) => villageId(key) === style))?.width ?? ownLine(style)?.width ?? 0.3;
   const strips = (items: readonly { key: string; name: string; width: number; variants: number }[]) => items.map((item): Tile => {
     const keys = variantKeys(item.key, item.variants);
     return { id: villageId(item.key), name: item.name, url: villageUrl(item.key), size: `${item.width} кл.`, chosen: keys.some((key) => lineStyle === villageId(key)),
@@ -108,11 +114,13 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, pack
   const masonry: Category = { key: "walls", name: "Стены", pack: "crypt", tiles: [plain("wall-masonry", "Каменная кладка", 0.36, cryptUrl("wall-masonry"))] };
   // Подборка по карте — первой: где есть комнаты, это склеп, иначе деревня. Вторая остаётся рядом.
   const line = tool === "road" || tool === "river" || tool === "wall";
-  const library: Category[] = tool === "road" ? roads : tool === "river" ? rivers : tool === "wall" ? (local ? [fences, masonry] : [masonry, fences]) : tool === "asset" ? [
+  const library: Category[] = tool === "road" ? [...ownTiles("line", "road"), ...roads] : tool === "river" ? [...ownTiles("line", "river"), ...rivers]
+    : tool === "wall" ? [...ownTiles("line", "wall"), ...(local ? [fences, masonry] : [masonry, fences])] : tool === "asset" ? [
     ...ownTiles("object"), ...(local ? [...villageObjects, ...cryptObjects] : [...cryptObjects, ...villageObjects]),
     { key: "region", name: "Мир", pack: "ink", tiles: objects("region") },
     { key: "symbols", name: "Знаки", pack: "ink", tiles: MAP_SYMBOL_ASSETS.map((item) => ({ id: item.id, name: item.name, url: null, chosen: symbol === item.id, choose: () => onSymbol(item.id) })) },
   ] : tool === "scatter" ? [
+    ...ownTiles("scatter"),
     { key: "village-scatter", name: "Местность", pack: "village", tiles: scatter(true) },
     { key: "scatter", name: "Мир", pack: "ink", tiles: scatter(false) },
   ] : [...ownTiles("surface"), ...(local ? [villageSurfaces, baseSurfaces] : [baseSurfaces, villageSurfaces])];
