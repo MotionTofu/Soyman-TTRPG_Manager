@@ -7,9 +7,10 @@ import type { MapRenderModel, RenderPath } from "./renderModel";
  * «здесь другое»: точка и вид в `properties.crossings` дороги. */
 export const CROSSING_KINDS = { "bridge-wood": "Деревянный мост", "bridge-stone": "Каменный мост", ford: "Брод", none: "Без переправы" } as const;
 export type CrossingKind = keyof typeof CROSSING_KINDS;
-export type CrossingChoice = { x: number; y: number; kind: CrossingKind };
+/** `art` — картинка переправы своего набора, если Мастер выбрал именно её; `kind` при этом — какой настил она заменяет. */
+export type CrossingChoice = { x: number; y: number; kind: CrossingKind; art?: string };
 /** `from`/`to` — расстояние от начала дороги, клеток; `x`/`y` — середина. */
-export interface Crossing { from: number; to: number; x: number; y: number; deep: boolean; kind: CrossingKind; chosen: boolean }
+export interface Crossing { from: number; to: number; x: number; y: number; deep: boolean; kind: CrossingKind; chosen: boolean; art?: string }
 type Sample = { x: number; y: number; width: number };
 
 /** Вода для переправы по коду материала (твёрдая жидкость, лёд, — та же суша): 0 — суша, 1 — мелко (брод), 2 — глубоко (мост). Граница — глубина 3 из 5. */
@@ -18,7 +19,7 @@ export const waterDepth = (code: string | null | undefined, own?: readonly Liqui
 /** Выбор Мастера из свойств линии; чужое и битое отбрасывается. */
 export function crossingChoices(value: unknown): CrossingChoice[] {
   return Array.isArray(value) ? value.filter((item): item is CrossingChoice => !!item && typeof item === "object" &&
-    Number.isFinite(item.x) && Number.isFinite(item.y) && typeof item.kind === "string" && item.kind in CROSSING_KINDS) : [];
+    Number.isFinite(item.x) && Number.isFinite(item.y) && typeof item.kind === "string" && item.kind in CROSSING_KINDS && (item.art === undefined || typeof item.art === "string")) : [];
 }
 /** Выбор относится к переправе, если его точка лежит на ней или в клетке от неё: переправа съезжает вместе с дорогой и рекой. */
 export const choiceFits = (choice: { x: number; y: number }, at: Pick<Crossing, "from" | "to" | "x" | "y">) =>
@@ -95,7 +96,7 @@ export function roadCrossings(model: MapRenderModel, path: RenderPath): readonly
     const crossing = { from, to, x: middle.x, y: middle.y, deep: run.deep };
     const choice = choices.filter(item => choiceFits(item, crossing)).sort((a, b) => Math.hypot(a.x - middle.x, a.y - middle.y) - Math.hypot(b.x - middle.x, b.y - middle.y))[0];
     const auto: CrossingKind = !run.deep ? "ford" : /cobbles/.test(path.style!) ? "bridge-stone" : "bridge-wood";
-    return { ...crossing, kind: choice?.kind ?? auto, chosen: !!choice };
+    return { ...crossing, kind: choice?.kind ?? auto, chosen: !!choice, ...(choice?.art ? { art: choice.art } : {}) };
   });
   byPath.set(path, result);
   return result;
@@ -113,7 +114,7 @@ function slice(samples: readonly Sample[], length: readonly number[], a: number,
   return [point(a), ...samples.filter((_, i) => length[i] > a + 1e-6 && length[i] < b - 1e-6), ...(b > a ? [point(b)] : [])];
 }
 
-export interface RoadCut { key: string; road: Sample[][]; decks: { kind: CrossingKind; samples: Sample[] }[] }
+export interface RoadCut { key: string; road: Sample[][]; decks: { kind: CrossingKind; art?: string; samples: Sample[] }[] }
 /** Дорога, разрезанная переправами: куски самой дороги и настилы между ними. «Без переправы» дорогу не режет. */
 export function cutRoad(samples: readonly Sample[], crossings: readonly Crossing[]): RoadCut {
   const spans = crossings.filter(crossing => crossing.kind !== "none"), length = arcs(samples), total = length.at(-1) ?? 0;
@@ -123,9 +124,9 @@ export function cutRoad(samples: readonly Sample[], crossings: readonly Crossing
     if (edge[0] - start > 1e-3) road.push(slice(samples, length, start, edge[0]));
     start = Math.max(start, edge[1]);
   }
-  return { key: cutKey(crossings), road, decks: spans.map(span => ({ kind: span.kind, samples: slice(samples, length, span.from, Math.min(total, span.to)) })) };
+  return { key: cutKey(crossings), road, decks: spans.map(span => ({ kind: span.kind, art: span.art, samples: slice(samples, length, span.from, Math.min(total, span.to)) })) };
 }
-export const cutKey = (crossings: readonly Crossing[]) => crossings.map(crossing => `${crossing.from.toFixed(3)}:${crossing.to.toFixed(3)}:${crossing.kind}`).join("|");
+export const cutKey = (crossings: readonly Crossing[]) => crossings.map(crossing => `${crossing.from.toFixed(3)}:${crossing.to.toFixed(3)}:${crossing.kind}:${crossing.art ?? ""}`).join("|");
 
 const chance = (n: number) => { const v = Math.sin(n * 12.9898) * 43758.5453; return v - Math.floor(v); };
 /** Заглушка настила, пока грузится его полоса: мост — доски или камень с перилами, брод — россыпь камней. */

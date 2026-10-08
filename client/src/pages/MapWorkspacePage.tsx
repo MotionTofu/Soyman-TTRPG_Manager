@@ -419,7 +419,7 @@ export function MapWorkspacePage() {
 
       <aside className="workspace-inspector" aria-label="Инспектор">
         {selection && tool === "select" && !disabled && (selection.kind === "path" || selection.kind === "scatter")
-          ? <ArtProperties document={document} selection={selection} pickedAt={gestures.pickedAt} selectedNodes={gestures.selectedNodes} onSelectedNodes={gestures.setSelectedNodes} commit={commit} onClose={() => setSelection(null)} onDelete={() => remove(selection)} />
+          ? <ArtProperties document={document} selection={selection} packs={packs} pickedAt={gestures.pickedAt} selectedNodes={gestures.selectedNodes} onSelectedNodes={gestures.setSelectedNodes} commit={commit} onClose={() => setSelection(null)} onDelete={() => remove(selection)} />
           : selection && tool === "select" && !disabled
             ? <WorkspaceProperties document={document} selection={selection} commit={commit} onClose={() => setSelection(null)} onDelete={() => remove(selection)} display={selectedToken ?? undefined}
               onLink={canPlace ? () => setLinking(selection) : undefined}

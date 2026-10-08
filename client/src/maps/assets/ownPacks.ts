@@ -29,6 +29,9 @@ const scatters = new Map<string, { assetIds: string[]; size: number }>(), scatte
 export const ownLinePost = (style: string) => posts.get(style) ?? null;
 /** Настил переправы из того же набора, что и дорога; нет своего — рисуется общий. */
 export const ownDeck = (style: string, deck: string) => decks.get(`${owners.get(style)}:${deck}`) ?? null;
+/** Переправы наборов из списка — на выбор в свойствах дороги. */
+export const ownCrossings = (packIds: readonly string[]) => current.filter((pack) => !pack.archived && packIds.includes(pack.uid)).flatMap((pack) =>
+  pack.items.flatMap((item) => { const image = item.kind === "crossing" && !item.archived && liveImages(item)[0]; return image ? [{ art: ownImageId(image), kind: item.deck ?? "bridge-wood", name: `${item.name} · ${pack.name}` }] : []; }));
 /** Россыпь своего набора: на карте лежит ключ `scatter/own-<uid вещи>`. */
 export const ownScatterKey = (item: OwnPackItem) => `scatter/own-${item.uid}`;
 export const ownScatter = (key: string) => scatters.get(key) ?? null;

@@ -1145,7 +1145,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
         if (cut?.key !== cutKey(crossings)) roadCuts.set(samples, cut = cutRoad(samples, crossings));
         for (const piece of cut.road) lay(piece);
         for (const deck of cut.decks) decks.push(() => {
-          const art = deck.kind === "none" ? null : stripImage(ownDeck(path.style!, deck.kind) ?? villageId(deckKey(deck.kind, path.style!)));
+          const art = deck.kind === "none" ? null : stripImage(deck.art ?? ownDeck(path.style!, deck.kind) ?? villageId(deckKey(deck.kind, path.style!)));
           if (art) drawWallPolyline(ctx, deck.samples, baseWidth, false, scale, ox, oy, false, view, art);
           else drawCrossingDraft(ctx, deck.kind, deck.samples, scale, ox, oy, chrome.ink);
         });

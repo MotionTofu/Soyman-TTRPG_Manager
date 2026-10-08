@@ -2,6 +2,7 @@ import type { MapKind } from "../mapTypes";
 import type { MapDocumentV6 } from "@shared/maps/core";
 import { CARTOGRAPHY_PACK } from "./cartography";
 import { CRYPT_PACK } from "./crypt";
+import { crossingChoices } from "../crossings";
 import { ownPackOf, ownPacks, ownScatterPack } from "./ownPacks";
 import { ARTWORK_SCATTER, MAP_SYMBOL_PACK, ownSurfaceAssetId } from "./registry";
 import { VILLAGE_PACK, VILLAGE_SURFACE_KEYS } from "./village";
@@ -40,7 +41,10 @@ export function usedPacks(document: MapDocumentV6): string[] {
   const add = (assetId: string) => { const pack = packOfAsset(assetId); if (pack) ids.add(pack); };
   for (const layer of document.layers) {
     if (layer.kind === "object") for (const item of layer.items) if (item.visual.type === "asset") add(item.visual.assetId);
-    if (layer.kind === "path") for (const path of layer.paths) if (path.styleRef.type === "asset") add(path.styleRef.assetId);
+    if (layer.kind === "path") for (const path of layer.paths) {
+      if (path.styleRef.type === "asset") add(path.styleRef.assetId);
+      for (const choice of crossingChoices(path.properties?.crossings)) if (choice.art) add(choice.art);
+    }
     if (layer.kind === "gameplay") for (const item of layer.items) if (item.kind === "door" && item.style) add(item.style);
     if (layer.kind === "scatter") for (const area of layer.areas) {
       const key = area.profileRef.type === "builtin" ? area.profileRef.key : "", own = ownScatterPack(key);

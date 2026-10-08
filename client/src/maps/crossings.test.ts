@@ -31,6 +31,12 @@ describe("переправы", () => {
     expect(roadCrossings(model(shallow, deep, road), road).map(c => [c.kind, c.chosen])).toEqual([["none", true], ["bridge-wood", false]]);
   });
 
+  it("выбранная переправа своего набора доходит до настила", () => {
+    const road = line("road", "soyman-village:road-dirt", 2, [[0, 5], [20, 5]], [{ x: 14, y: 5, kind: "bridge-stone", art: "soyman-resource-images:x" }]);
+    const cut = cutRoad([{ x: 0, y: 5, width: 2 }, { x: 20, y: 5, width: 2 }], roadCrossings(model(shallow, deep, road), road));
+    expect(cut.decks.map(d => [d.kind, d.art])).toEqual([["ford", undefined], ["bridge-stone", "soyman-resource-images:x"]]);
+  });
+
   it("настил вырезает дорогу, «без переправы» — нет", () => {
     const road = line("road", "soyman-village:road-dirt", 2, [[0, 5], [20, 5]], [{ x: 6, y: 5, kind: "none" }]);
     const samples = [{ x: 0, y: 5, width: 2 }, { x: 10, y: 5, width: 2 }, { x: 20, y: 5, width: 2 }];

@@ -7,13 +7,13 @@ import { requireEditableLayer, type WorkspaceSelection } from "./editorCommands"
 import { choiceFits, crossingChoices, type Crossing, type CrossingKind } from "../crossings";
 
 /** Выбор Мастера для переправы дороги; `null` — вернуть «как решит карта». */
-export function setCrossing(doc: MapDocumentV6, selection: WorkspaceSelection, at: Pick<Crossing, "from" | "to" | "x" | "y">, kind: CrossingKind | null) {
+export function setCrossing(doc: MapDocumentV6, selection: WorkspaceSelection, at: Pick<Crossing, "from" | "to" | "x" | "y">, kind: CrossingKind | null, art?: string) {
   requireEditableLayer(doc, selection.layerId, "path");
   const path = selectedPath(doc, selection);
   if (!path) return doc;
   const { crossings: old, ...rest } = path.properties ?? {};
   const kept = crossingChoices(old).filter(choice => !choiceFits(choice, at));
-  const crossings = kind ? [...kept, { x: Math.round(at.x * 100) / 100, y: Math.round(at.y * 100) / 100, kind }] : kept;
+  const crossings = kind ? [...kept, { x: Math.round(at.x * 100) / 100, y: Math.round(at.y * 100) / 100, kind, ...(art ? { art } : {}) }] : kept;
   const properties = crossings.length ? { ...rest, crossings } : rest;
   return editGeometry(doc, view => ({ ok: true, changed: true, document: { ...view, layers: view.layers.map(layer => layer.id === selection.layerId && layer.kind === "path"
     ? { ...layer, paths: layer.paths.map(p => p.id === path.id ? { ...p, properties } : p) } : layer) } }));
