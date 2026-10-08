@@ -207,6 +207,8 @@ function canonScatter(a: ScatterArea): ScatterArea {
 function canonLabel(l: MapLabel): MapLabel {
   const out: MapLabel = { id: l.id, position: canonVec2(l.position), text: l.text };
   if (l.styleRef !== undefined) out.styleRef = l.styleRef;
+  const style = canonOptJson(l.style);
+  if (style !== undefined && Object.keys(style).length) out.style = style;
   return out;
 }
 

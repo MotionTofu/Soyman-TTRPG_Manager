@@ -6,6 +6,7 @@ import { maskSampleCode } from "./terrainMaskTiles";
 import { artworkImage, doorImage, paperPattern, patternSource, stripImage, surfaceImage, surfacePattern, texturedMask, wallPattern, type ArtPack } from "./assets/artwork";
 import { drawWallPolyline } from "./assets/wallArtwork";
 import { fencePostId, villageId } from "./assets/village";
+import { labelBox, labelFamily } from "./labelStyle";
 import { cutKey, cutRoad, drawCrossingDraft, roadCrossings, type RoadCut } from "./crossings";
 // Рендер карты на canvas 2D. Цвета террейна — фиксированная спокойная
 // палитра (исключение как у Полотна §6 design_revision.md: бюджет акцента
@@ -689,6 +690,8 @@ export interface RenderOptions {
   cartography?: boolean;
   /** Чей рисунок у полов, стен и дверей: «Бумага и тушь» или «Склеп» (комикс-панк). */
   artPack?: ArtPack;
+  /** Поля вокруг карты, клеток; за ними холст закрыт. Без поля карта не ограничена. */
+  frame?: number;
   /** Половина карты для сцены с водой-шейдером: «земля» — бумага, поверхности и реки с водой;
    * «над землёй» — всё остальное на прозрачном фоне. Без поля карта рисуется целиком. */
   part?: "ground" | "over";
@@ -1549,23 +1552,32 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     if (!Number.isFinite(l.position.x) || !Number.isFinite(l.position.y)) return;
     const px = X(l.position.x);
     const py = Y(l.position.y);
+    // Своя высота букв задана в клетках и растёт вместе с картой; без неё подпись держит размер на экране
+    // и на мелком масштабе прячется, иначе каша.
+    const style = l.style, size = style?.size, fontPx = size ? size * scale : Math.max(11, Math.min(16, Math.round(scale * 0.36)));
+    if (size ? fontPx < 5 : scale < 12) return;
     // Текст шире клетки: подпись у края плитки рисуется и на соседней, иначе её режет граница.
-    if (px < -scale * 4 || px > canvasW + scale * 4 || py < -scale || py > canvasH + 24 + scale) return;
+    const box = labelBox(l);
+    if (X(box.x + box.w) < -24 || X(box.x) > canvasW + 24 || Y(box.y + box.h) < -24 || Y(box.y) > canvasH + 24) return;
     ctx.save();
-    ctx.font = `500 ${Math.max(11, Math.min(16, Math.round(scale * 0.36)))}px ${fonts.label}`;
+    ctx.font = `${style?.italic ? "italic " : ""}${style?.bold ? 700 : 500} ${fontPx}px ${labelFamily(style?.font) ?? fonts.label}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "bottom";
-    // Точка-маркер в центре клетки.
-    ctx.beginPath();
-    ctx.arc(px, py, Math.max(2, scale * 0.09), 0, Math.PI * 2);
-    ctx.fillStyle = chrome.ink;
-    ctx.fill();
+    const color = style?.color ?? chrome.ink, limit = size ? [] : [scale * 8];
+    if (style?.dot !== false) {
+      // Точка-маркер в центре клетки.
+      ctx.beginPath();
+      ctx.arc(px, py, Math.max(2, scale * 0.09), 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
     // Текст с бумажной подложкой-обводкой, чтобы читался на любом террейне.
-    ctx.lineWidth = 3;
+    ctx.lineWidth = Math.max(3, fontPx * 0.2);
+    ctx.lineJoin = "round";
     ctx.strokeStyle = chrome.paper;
-    ctx.strokeText(l.text, px, py - scale * 0.12, scale * 8);
-    ctx.fillStyle = chrome.ink;
-    ctx.fillText(l.text, px, py - scale * 0.12, scale * 8);
+    ctx.strokeText(l.text, px, py - scale * 0.12, ...limit);
+    ctx.fillStyle = color;
+    ctx.fillText(l.text, px, py - scale * 0.12, ...limit);
     ctx.restore();
   };
 
@@ -1684,9 +1696,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
         }
       }
     } else if (layer.kind === "label") {
-      if (scale >= 12) {
-        for (const l of layer.labels) drawLabel(l);
-      }
+      for (const l of layer.labels) drawLabel(l);
     } else if (layer.kind === "object" || layer.kind === "scatter") {
       // Грязь «Склепа» под предметами: движок кладёт её сам, детерминированно по id (Q1 2026-10-01).
       if (pack === "crypt" && layer.kind === "object" && scale >= 10) for (const { object } of layer.items) {
@@ -1827,6 +1837,14 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       ctx.fill();
       ctx.globalAlpha = 1;
     }
+  }
+
+  if (o.frame !== undefined) {
+    // Рамка карты: поля в клетках вокруг неё. Всё, что дальше, — уже не карта.
+    const b = worldBounds(grid, width, height), x0 = X(b.minX - o.frame), y0 = Y(b.minY - o.frame), w = (b.maxX - b.minX + o.frame * 2) * scale, h = (b.maxY - b.minY + o.frame * 2) * scale;
+    ctx.beginPath(); ctx.rect(-1, -1, canvasW + 2, canvasH + 2); ctx.rect(x0, y0, w, h);
+    ctx.fillStyle = "#24211d"; ctx.fill("evenodd");
+    ctx.strokeStyle = chrome.ink; ctx.lineWidth = 2; ctx.strokeRect(x0, y0, w, h);
   }
 
   ctx.restore();

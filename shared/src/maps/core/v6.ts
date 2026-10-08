@@ -29,7 +29,9 @@ export type MapDrawingStyle = "blueprint" | "paper-ink" | "comic-punk";
 export interface MapDocumentV6 extends Omit<MapDocumentV5, "v" | "layers"> {
   v: 6; layers: MapLayerV6[];
   /** Map presentation is independent of generated geometry and app theme. */
-  appearance?: { style: MapDrawingStyle };
+  appearance?: { style: MapDrawingStyle;
+    /** Поля вокруг карты, клеток: докуда доходит камера и что попадает в картинку. Без поля камера свободна. */
+    frame?: number };
 }
 export interface MapRecordV6 extends Omit<MapRecordV5, "document"> { revision: number; document: MapDocumentV6 }
 
@@ -85,6 +87,10 @@ export function validateMapDocumentV6(doc: unknown): ValidationIssue[] {
   if (doc.appearance !== undefined && (!record(doc.appearance) || !["blueprint", "paper-ink", "comic-punk"].includes(doc.appearance.style as string))) {
     errors.push({ code: "appearance.unsupported", path: "appearance.style", message: "unsupported drawing style" });
   }
+  const frame = record(doc.appearance) ? doc.appearance.frame : undefined;
+  if (frame !== undefined && (typeof frame !== "number" || !Number.isFinite(frame) || frame < 0 || frame > 100)) {
+    errors.push({ code: "appearance.bad-frame", path: "appearance.frame", message: "frame must be 0..100 cells" });
+  }
   if (Array.isArray(doc.layers)) doc.layers.forEach((layer, li) => {
     if (record(layer) && layer.kind === "gameplay" && Array.isArray(layer.items)) layer.items.forEach((item, ei) => {
       if (record(item) && item.kind === "token") errors.push(...validateGameplayToken(item, `layers[${li}].items[${ei}]`));
@@ -107,9 +113,11 @@ export function canonicalizeGameplayToken(t: GameplayToken): GameplayToken {
 export function upgradeMapDocumentV5(doc: MapDocumentV5): MapDocumentV6 {
   return { ...canonicalizeMapDocument(doc), v: 6 };
 }
+const canonAppearance = (doc: MapDocumentV6) => doc.appearance
+  ? { appearance: { style: doc.appearance.style, ...(doc.appearance.frame !== undefined ? { frame: doc.appearance.frame } : {}) } } : {};
 export function canonicalizeMapDocumentV6(doc: MapDocumentV6): MapDocumentV6 {
   const base = canonicalizeMapDocument(invariantView(doc as unknown as Record<string, unknown>) as MapDocumentV5);
-  return { ...base, v: 6, ...(doc.appearance ? { appearance: { style: doc.appearance.style } } : {}), layers: base.layers.map((layer, i) => {
+  return { ...base, v: 6, ...canonAppearance(doc), layers: base.layers.map((layer, i) => {
     const original = doc.layers[i];
     if (layer.kind !== "gameplay" || original.kind !== "gameplay") return layer;
     return { ...layer, items: layer.items.map((item, j) => original.items[j].kind === "token"
@@ -165,7 +173,7 @@ export function projectMapDocumentV6ForPlayer(doc: MapDocumentV6, sourceName: (r
     ? { ...l, items: l.items.filter((e) => e.kind !== "token" || shown.has(e.id)) } : l) };
   // Tokens pass the fog as point entities, the same substitution as validation.
   const projected = projectMapDocumentForPlayer(invariantView(withoutPrivate as unknown as Record<string, unknown>) as MapDocumentV5);
-  const next: MapDocumentV6 = { ...projected, v: 6, ...(doc.appearance ? { appearance: { style: doc.appearance.style } } : {}),
+  const next: MapDocumentV6 = { ...projected, v: 6, ...canonAppearance(doc),
     layers: projected.layers.map((layer) => layer.kind !== "gameplay" ? layer : { ...layer, items: layer.items.map((item) => {
       const token = item.kind === "start" ? shown.get(item.id) : undefined;
       return token ? playerToken(token, sourceName) : item;

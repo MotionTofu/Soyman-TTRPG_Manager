@@ -90,7 +90,7 @@ export function MapWorkspacePage() {
       setToolSet(set); setActiveLayer(surface?.id ?? ""); setTool(toolsOf(set).includes(preferred) ? preferred : "select");
     } });
   const { map, document, documentRef, setDocument, history, autosave, commit, showError, disabled } = doc;
-  const camera = useMapCamera({ mapId: map?.id ?? null, geom: map, wrapRef, canvasRef });
+  const camera = useMapCamera({ mapId: map?.id ?? null, geom: map, wrapRef, canvasRef, frame: document?.appearance?.frame });
   const displays = useTokenPresentations(mapId, document);
   const renderWarning = useMemo(() => !!document && createWorkspaceRenderModel(document).diagnostics.length > 0, [document]);
   const canPlace = !!document && !disabled && !leaving && !label && !generatorOpen && !autosave.blocked && autosave.status.kind !== "conflict";
@@ -256,7 +256,8 @@ export function MapWorkspacePage() {
     if (patch.lineStyle !== undefined) setGridLineStyle(patch.lineStyle);
     if (patch.color !== undefined) setGridColor(patch.color);
   });
-  const onStyle = useEvent((style: MapDrawingStyle) => commit((before) => ({ ...before, appearance: { style } })));
+  const onStyle = useEvent((style: MapDrawingStyle) => commit((before) => ({ ...before, appearance: { ...before.appearance, style } })));
+  const onFrame = useEvent((frame: number | undefined) => commit((before) => { const { frame: _old, ...rest } = before.appearance ?? { style: "paper-ink" as const }; return { ...before, appearance: frame === undefined ? rest : { ...rest, frame } }; }));
   const onGenerator = useEvent(() => { finishGesture(); placement.cancel(); setSelection(null); setGeneratorOpen(true); });
   const onSave = useEvent(() => { finishGesture(); void autosave.flush(); }), onBackup = useEvent(backup);
   const onPicture = useEvent(() => { finishGesture(); if (map && documentRef.current) void downloadMapPicture(map, documentRef.current, displays, { showGrid, gridColor, gridOpacity, gridLineWidth, gridLineStyle }).catch(showError); });
@@ -295,7 +296,7 @@ export function MapWorkspacePage() {
 
     <WorkspaceHeader mapName={map.name} status={`${leaving ? "Сохраняем перед выходом…" : SAVE_STATE[autosave.status.kind]}${document.grid ? ` · ${document.grid.columns} × ${document.grid.rows} клеток` : ""}`}
       toolSet={toolSet} onToolSet={onChooseToolSet} canUndo={history.canUndo && !disabled && !leaving} canRedo={history.canRedo && !disabled && !leaving} onUndo={onUndo} onRedo={onRedo}
-      grid={grid} onGrid={onGrid} style={document.appearance?.style ?? "paper-ink"} onStyle={onStyle} styleLocked={disabled || leaving}
+      grid={grid} onGrid={onGrid} style={document.appearance?.style ?? "paper-ink"} onStyle={onStyle} styleLocked={disabled || leaving} frame={document.appearance?.frame} onFrame={onFrame}
       generatorLocked={leaving || !!doc.compatibilityError || autosave.blocked || autosave.status.kind === "conflict"} saveLocked={saveBlocked}
       onGenerator={onGenerator} onSave={onSave} onBackup={onBackup} onPicture={onPicture} gl={gl} onGl={onGl} effects={effects} onEffect={onEffect} onEffectsReset={onEffectsReset} classicLink={map.document_version !== 6 ? `/maps/${map.id}` : null} />
 

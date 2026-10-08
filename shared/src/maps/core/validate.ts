@@ -486,6 +486,14 @@ function checkLabelLayer(
     if (l.styleRef !== undefined && typeof l.styleRef !== "string") {
       out.push(issue("label.bad-style-ref", `${lp}.styleRef`, "styleRef must be a string"));
     }
+    const st = l.style;
+    if (st !== undefined && (!isRecord(st) ||
+        (st.font !== undefined && (typeof st.font !== "string" || st.font.length > 40)) ||
+        (st.size !== undefined && (!isFiniteNumber(st.size) || (st.size as number) < 0.1 || (st.size as number) > 20)) ||
+        (st.color !== undefined && (typeof st.color !== "string" || !/^#[0-9a-f]{6}$/i.test(st.color))) ||
+        [st.bold, st.italic, st.dot].some((flag) => flag !== undefined && typeof flag !== "boolean"))) {
+      out.push(issue("label.bad-style", `${lp}.style`, "expected font, size 0.1..20, #rrggbb color and boolean flags"));
+    }
   });
 }
 

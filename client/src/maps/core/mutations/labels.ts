@@ -1,7 +1,7 @@
 // Label CRUD по stable EntityId: create / update text / move / delete.
 // Position — всегда world coordinate, без возврата к cell x/y.
 
-import type { EntityId, LabelLayer, MapDocumentV5, MapLabel, Vec2 } from "../types";
+import type { EntityId, LabelLayer, MapDocumentV5, MapLabel, MapLabelStyle, Vec2 } from "../types";
 import {
   changed,
   collectIds,
@@ -104,6 +104,18 @@ export function updateLabelText(doc: MapDocumentV5, id: string, text: string): M
   if (resolved.label.text === text) return noChange(doc);
   const items = [...resolved.layer.items];
   items[resolved.itemIndex] = { ...resolved.label, text };
+  return changed(withReplacedLayer(doc, resolved.layerIndex, { ...resolved.layer, items }));
+}
+
+/** Свой вид подписи; пустые поля убираются, совсем пустой вид — тоже. */
+export function updateLabelStyle(doc: MapDocumentV5, id: string, style: MapLabelStyle): MutationResult {
+  const resolved = resolveLabel(doc, id);
+  if ("error" in resolved) return resolved.error;
+  const clean = Object.fromEntries(Object.entries(style).filter(([, value]) => value !== undefined)) as MapLabelStyle;
+  if (JSON.stringify(clean) === JSON.stringify(resolved.label.style ?? {})) return noChange(doc);
+  const { style: _old, ...rest } = resolved.label;
+  const items = [...resolved.layer.items];
+  items[resolved.itemIndex] = Object.keys(clean).length ? { ...rest, style: clean } : rest;
   return changed(withReplacedLayer(doc, resolved.layerIndex, { ...resolved.layer, items }));
 }
 

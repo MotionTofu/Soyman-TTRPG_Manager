@@ -1,5 +1,6 @@
 import type { MapDocumentV6 } from "@shared/maps/core";
 import { shapeBounds } from "../scatter";
+import { labelBox } from "../labelStyle";
 import type { SelectionRect } from "./multiSelection";
 
 type Layer = MapDocumentV6["layers"][number];
@@ -37,12 +38,7 @@ function entries(layer: Layer): Entry[] | null {
   if (layer.kind === "gameplay") return layer.items.map(item => item.kind === "token"
     ? { id: item.id, item, bounds: { x: item.position.x - item.size / 2, y: item.position.y - item.size / 2, w: item.size, h: item.size } }
     : { id: item.id, item, bounds: { x: NaN, y: 0, w: 0, h: 0 } }); // комната или дверь меняет стены вокруг: рамки нет
-  // Подпись: буквы в экранных точках, поэтому рамка — по самому мелкому масштабу, где подписи ещё видны (12 точек на клетку);
-  // шире восьми клеток текст не рисуется.
-  if (layer.kind === "label") return layer.items.map(item => {
-    const w = Math.min(8, item.text.length * 0.6 + 0.5);
-    return { id: item.id, item, bounds: { x: item.position.x - w / 2, y: item.position.y - 1.2, w, h: 1.5 } };
-  });
+  if (layer.kind === "label") return layer.items.map(item => ({ id: item.id, item, bounds: labelBox(item) }));
   return null;
 }
 const rest = (value: object, skip: readonly string[]) => JSON.stringify(value, (key, inner) => skip.includes(key) ? undefined : inner);

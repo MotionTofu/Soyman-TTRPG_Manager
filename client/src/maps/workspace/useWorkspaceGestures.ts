@@ -1,4 +1,7 @@
 import { wallHit } from "../wallGeometry";
+import { labelBox } from "../labelStyle";
+/** Подпись со своим размером выбирается кликом по буквам, а не только по точке привязки. */
+const bigLabel = (item: Parameters<typeof labelBox>[0], point: Vec2) => { if (!item.style?.size) return false; const box = labelBox(item); return point.x >= box.x && point.x <= box.x + box.w && point.y >= box.y && point.y <= box.y + box.h; };
 import { imageHit } from "./imageHit";
 import { pickVariant } from "../assets/village";
 import { getMapImageAsset } from "../assets/registry";
@@ -158,7 +161,7 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
           const angle = "transform" in item ? -item.transform.rotation * Math.PI / 180 : 0;
           const dx = point.x - position.x, dy = point.y - position.y;
           const hit = "transform" in item ? Math.abs(dx * Math.cos(angle) - dy * Math.sin(angle)) <= Math.abs(item.transform.scale.x) / 2 + slack &&
-            Math.abs(dx * Math.sin(angle) + dy * Math.cos(angle)) <= Math.abs(item.transform.scale.y) / 2 + slack : Math.hypot(dx, dy) <= Math.max(0.5, 12 / camera.cam.scale);
+            Math.abs(dx * Math.sin(angle) + dy * Math.cos(angle)) <= Math.abs(item.transform.scale.y) / 2 + slack : Math.hypot(dx, dy) <= Math.max(0.5, 12 / camera.cam.scale) || bigLabel(item, point);
           if (hit) {
             if ("transform" in item && item.visual.type === "asset") {
               const localX = dx * Math.cos(angle) - dy * Math.sin(angle);

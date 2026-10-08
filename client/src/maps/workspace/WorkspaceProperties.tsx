@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import type { MapDocumentV6 } from "@shared/maps/core";
 import { updateGameplayEntity, updateLabelText } from "../core";
 import { transformMapObject } from "../core/mutations/mapObjects";
+import { updateLabelStyle } from "../core/mutations/labels";
+import { LABEL_FONTS } from "../labelStyle";
+import type { MapLabelStyle } from "@shared/maps/core";
 import { editGeometry } from "./editDocument";
 import { requireEditableLayer, type WorkspaceSelection } from "./editorCommands";
 import { TokenProperties } from "./TokenProperties";
@@ -35,6 +38,21 @@ export function WorkspaceProperties({ document, selection, commit, onClose, onDe
         else if ("name" in item) edit((view) => updateGameplayEntity(view, item.id, (entity) => entity.kind === "room" ? { ...entity, name: text } : entity));
       }} />
     </label>}
+    {"text" in item && (() => {
+      const look = item.style ?? {}, put = (patch: MapLabelStyle) => edit((view) => updateLabelStyle(view, item.id, { ...look, ...patch }));
+      return <>
+        <label>Шрифт<select aria-label="Шрифт подписи" value={look.font ?? ""} disabled={protectedLayer} onChange={(event) => put({ font: event.target.value || undefined })}>
+          <option value="">Обычный</option>{Object.entries(LABEL_FONTS).map(([key, font]) => <option key={key} value={key}>{font.name}</option>)}
+        </select></label>
+        <label>Высота букв, клеток<input aria-label="Высота букв подписи" type="number" min={0.1} max={20} step={0.1} value={look.size ?? ""} placeholder="как на экране" disabled={protectedLayer}
+          onChange={(event) => put({ size: event.target.value === "" ? undefined : Math.max(0.1, Math.min(20, Number(event.target.value))) })} /></label>
+        <label><input type="checkbox" checked={!!look.bold} disabled={protectedLayer} onChange={(event) => put({ bold: event.target.checked || undefined })} />Жирный</label>
+        <label><input type="checkbox" checked={!!look.italic} disabled={protectedLayer} onChange={(event) => put({ italic: event.target.checked || undefined })} />Курсив</label>
+        <label>Цвет<input aria-label="Цвет подписи" type="color" value={look.color ?? "#171717"} disabled={protectedLayer} onChange={(event) => put({ color: event.target.value })} /></label>
+        <button disabled={protectedLayer || !look.color} onClick={() => put({ color: undefined })}>Цвет как у туши</button>
+        <label><input type="checkbox" checked={look.dot !== false} disabled={protectedLayer} onChange={(event) => put({ dot: event.target.checked ? undefined : false })} />Точка-метка</label>
+      </>;
+    })()}
     {"kind" in item && item.kind === "door" && <label>Поворот<select value={item.orientation} disabled={protectedLayer} onChange={(event) => edit((view) => updateGameplayEntity(view, item.id, (entity) => entity.kind === "door" ? { ...entity, orientation: Number(event.target.value) } : entity))}>
       <option value={0}>Вдоль стены →</option><option value={90}>Вдоль стены ↓</option><option value={180}>Вдоль стены ←</option><option value={270}>Вдоль стены ↑</option>
     </select></label>}

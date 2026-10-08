@@ -28,5 +28,6 @@ export function workspaceDrawingStyle(document: MapDocumentV6) {
     fonts: { label: '"Sofia Sans Semi Condensed", sans-serif', mono: '"Sofia Sans Semi Condensed", sans-serif' },
     cartography: style !== "blueprint",
     artPack: style === "comic-punk" ? "crypt" as const : "cartography" as const,
+    ...(document.appearance?.frame !== undefined ? { frame: document.appearance.frame } : {}),
   };
 }

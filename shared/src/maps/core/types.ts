@@ -222,11 +222,26 @@ export type ShapeGeometry =
   | { type: "polygon"; points: Vec2[] }
   | { type: "ellipse"; center: Vec2; rx: number; ry: number };
 
+/** Свой вид подписи. Пустое поле — как у карты по умолчанию. */
+export interface MapLabelStyle {
+  /** Ключ шрифта из набора редактора. */
+  font?: string;
+  /** Высота букв в клетках; без неё подпись держит размер на экране. */
+  size?: number;
+  bold?: boolean;
+  italic?: boolean;
+  /** #rrggbb */
+  color?: string;
+  /** false — без точки-метки под текстом. */
+  dot?: boolean;
+}
+
 export interface MapLabel {
   id: EntityId;
   position: Vec2;
   text: string;
   styleRef?: string;
+  style?: MapLabelStyle;
 }
 
 export interface LabelLayer extends MapLayerBase {

@@ -22,7 +22,7 @@ import {
   legacyTrapId,
 } from "./core/ids";
 import type { MaterialRef } from "./core/refs";
-import type { LayerId, MapDocumentV5, MapObject, SplineNode } from "./core/types";
+import type { LayerId, MapDocumentV5, MapLabelStyle, MapObject, SplineNode } from "./core/types";
 import { ARTWORK_SCATTER, mapAssetPackForId, resolveMapSymbol, type MapVisualAsset } from "./assets/registry";
 import { isPaletteIndexMaskPayload, TERRAIN_MASK_CHUNK_SIDE } from "@shared/maps/core/terrainMask";
 import { scatterInstances, SCATTER_LIMIT } from "./scatter";
@@ -48,6 +48,7 @@ export interface RenderLabel {
   id: string;
   position: RenderPoint;
   text: string;
+  style?: MapLabelStyle;
 }
 
 export interface RenderRoom {
@@ -422,7 +423,7 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
     } else if (layer.kind === "label") {
       const labels: RenderLabel[] = [];
       for (const l of layer.items) {
-        labels.push({ id: l.id, position: { x: l.position.x, y: l.position.y }, text: l.text });
+        labels.push({ id: l.id, position: { x: l.position.x, y: l.position.y }, text: l.text, ...(l.style ? { style: l.style } : {}) });
       }
       layers.push({ ...baseOf(layer), kind: "label", labels });
     } else if (layer.kind === "gameplay") {

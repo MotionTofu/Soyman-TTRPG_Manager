@@ -8,6 +8,7 @@ import type { Camera } from "../editor/hooks/useMapCamera";
 import { renderMap } from "../render";
 import { MapStage, type MapStageContent } from "../gl/MapStage";
 import { styleLook, workspaceDrawingStyle } from "./drawingStyle";
+import { prepareLabelFonts } from "../labelStyle";
 import { chosenLook, chosenWater, chosenWeather, type MapEffects } from "../gl/effects";
 import { createWorkspaceRenderModel } from "./renderV6";
 import { retryMapArtwork, cartographyStyleUnavailable, prepareMapImageAssets, prepareCartographyStyle, subscribeMapImageAssets } from "../assets/registry";
@@ -72,6 +73,7 @@ export function WorkspaceCanvas({ gl, onGlFail, effects, map, document, camera, 
   }, [document, displays, revision, meter]);
   useEffect(() => {
     void prepareMapImageAssets(document).catch(() => undefined);
+    void prepareLabelFonts(document).then((loaded) => { if (loaded) setRevision((value) => value + 1); });
     if (document.appearance?.style !== "blueprint") void prepareCartographyStyle(document.appearance?.style ?? "paper-ink");
   }, [document]);
   useEffect(() => {

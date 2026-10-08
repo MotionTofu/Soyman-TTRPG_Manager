@@ -1,5 +1,6 @@
 import type { MapDocumentV6 } from "@shared/maps/core";
 import { prepareMapImageAssets } from "../assets/registry";
+import { prepareLabelFonts } from "../labelStyle";
 import { worldBounds } from "../grid";
 import { downloadCanvas } from "../mapExport";
 import type { MapFull } from "../mapTypes";
@@ -15,8 +16,10 @@ export const picturePixels = (cells: number) => Math.max(8, Math.min(64, Math.fl
  * Эффекты печати и погода в картинку не попадают — они живут только в новой отрисовке. */
 export async function downloadMapPicture(map: MapFull, document: MapDocumentV6, displays: ReadonlyMap<string, TokenDisplay> | undefined,
   grid: Pick<RenderOptions, "showGrid" | "gridColor" | "gridOpacity" | "gridLineWidth" | "gridLineStyle">) {
-  await prepareMapImageAssets(document);
-  const bounds = worldBounds(map.grid, map.width, map.height), w = bounds.maxX - bounds.minX, h = bounds.maxY - bounds.minY;
+  await Promise.all([prepareMapImageAssets(document), prepareLabelFonts(document)]);
+  // Рамка карты уходит в картинку вместе с полями.
+  const frame = document.appearance?.frame ?? 0, inner = worldBounds(map.grid, map.width, map.height);
+  const bounds = { minX: inner.minX - frame, minY: inner.minY - frame, maxX: inner.maxX + frame, maxY: inner.maxY + frame }, w = bounds.maxX - bounds.minX, h = bounds.maxY - bounds.minY;
   const px = picturePixels(Math.max(w, h));
   const canvas = window.document.createElement("canvas");
   canvas.width = Math.round(w * px); canvas.height = Math.round(h * px);

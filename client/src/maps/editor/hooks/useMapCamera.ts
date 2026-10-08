@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type SetStateAction } from "react";
 import { worldBounds } from "../../grid";
 import type { MapGrid } from "../../mapTypes";
 
@@ -26,6 +26,8 @@ interface UseMapCameraArgs {
   geom: CameraMapGeometry | null;
   wrapRef: { current: HTMLDivElement | null };
   canvasRef: { current: HTMLCanvasElement | null };
+  /** Рамка карты, клеток: середина экрана не уходит дальше неё. Без неё камера свободна. */
+  frame?: number;
 }
 
 function zoomCameraAt(camera: Camera, rx: number, ry: number, factor: number): Camera {
@@ -35,13 +37,23 @@ function zoomCameraAt(camera: Camera, rx: number, ry: number, factor: number): C
   return { scale, ox: rx - (rx - camera.ox) * k, oy: ry - (ry - camera.oy) * k };
 }
 
-export function useMapCamera({ mapId, geom, wrapRef, canvasRef }: UseMapCameraArgs) {
-  const [cam, setCam] = useState<Camera>({ scale: 24, ox: 0, oy: 0 });
+export function useMapCamera({ mapId, geom, wrapRef, canvasRef, frame }: UseMapCameraArgs) {
+  const [cam, setCamRaw] = useState<Camera>({ scale: 24, ox: 0, oy: 0 });
   const camRef = useRef(cam);
   camRef.current = cam;
   const grid = geom?.grid;
   const width = geom?.width;
   const height = geom?.height;
+  const clamp = useCallback((c: Camera): Camera => {
+    const wrap = wrapRef.current;
+    if (frame === undefined || !wrap || grid === undefined || width === undefined || height === undefined) return c;
+    const w = wrap.clientWidth, h = wrap.clientHeight, b = worldBounds(grid, width, height);
+    const cx = (w / 2 - c.ox) / c.scale, cy = (h / 2 - c.oy) / c.scale;
+    const x = Math.min(b.maxX + frame, Math.max(b.minX - frame, cx)), y = Math.min(b.maxY + frame, Math.max(b.minY - frame, cy));
+    return x === cx && y === cy ? c : { ...c, ox: w / 2 - x * c.scale, oy: h / 2 - y * c.scale };
+  }, [frame, grid, width, height, wrapRef]);
+  const setCam = useCallback((next: SetStateAction<Camera>) => setCamRaw((c) => clamp(typeof next === "function" ? next(c) : next)), [clamp]);
+  useEffect(() => setCamRaw(clamp), [clamp]);
 
   // Автомасштаб под окно при открытии карты. Д-16: позиция камеры — по карте
   // (localStorage `maps.cam.<id>`): за столом зумнул на B12 — после перезахода
@@ -76,7 +88,8 @@ export function useMapCamera({ mapId, geom, wrapRef, canvasRef }: UseMapCameraAr
       }
       const rect = wrap.getBoundingClientRect();
       if (rect.width < 10 || rect.height < 10) return;
-      const b = worldBounds(grid, width, height);
+      const inner = worldBounds(grid, width, height), f = frame ?? 0;
+      const b = { minX: inner.minX - f, minY: inner.minY - f, maxX: inner.maxX + f, maxY: inner.maxY + f };
       const pad = 24;
       const scale = Math.max(
         4,
@@ -88,7 +101,7 @@ export function useMapCamera({ mapId, geom, wrapRef, canvasRef }: UseMapCameraAr
         oy: pad + (rect.height - pad * 2 - (b.maxY - b.minY) * scale) / 2 - b.minY * scale,
       });
     },
-    [mapId, grid, width, height, wrapRef]
+    [mapId, grid, width, height, wrapRef, frame, setCam]
   );
 
   useEffect(() => {
@@ -132,7 +145,7 @@ export function useMapCamera({ mapId, geom, wrapRef, canvasRef }: UseMapCameraAr
     (rx: number, ry: number, factor: number) => {
       setCam((c) => zoomCameraAt(c, rx, ry, factor));
     },
-    []
+    [setCam]
   );
 
   // screen → world для мыши/пера.
@@ -193,7 +206,7 @@ export function useMapCamera({ mapId, geom, wrapRef, canvasRef }: UseMapCameraAr
       if (frame !== null) cancelAnimationFrame(frame);
       pending = [];
     };
-  }, [mapId, grid, width, height, canvasRef]);
+  }, [mapId, grid, width, height, canvasRef, setCam]);
 
   return { cam, setCam, camRef, fitCamera, zoomBy, zoomAt, toWorld, touchToWorld, toScreen };
 }

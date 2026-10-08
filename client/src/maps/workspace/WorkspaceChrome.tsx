@@ -33,11 +33,13 @@ export const WorkspaceToolRail = memo(function WorkspaceToolRail({ toolSet, tool
 });
 
 export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, toolSet, onToolSet, canUndo, canRedo, onUndo, onRedo, grid, onGrid,
-  style, onStyle, styleLocked, generatorLocked, saveLocked, onGenerator, onSave, onBackup, onPicture, gl, onGl, effects, onEffect, onEffectsReset, classicLink }: {
+  style, onStyle, styleLocked, frame, onFrame, generatorLocked, saveLocked, onGenerator, onSave, onBackup, onPicture, gl, onGl, effects, onEffect, onEffectsReset, classicLink }: {
   mapName: string; status: string; toolSet: ToolSet; onToolSet: (set: ToolSet) => void;
   canUndo: boolean; canRedo: boolean; onUndo: () => void; onRedo: () => void;
   grid: GridLook; onGrid: (patch: Partial<GridLook>) => void;
   style: MapDrawingStyle; onStyle: (style: MapDrawingStyle) => void; styleLocked: boolean;
+  /** Поля вокруг карты, клеток; undefined — рамки нет. */
+  frame: number | undefined; onFrame: (frame: number | undefined) => void;
   generatorLocked: boolean; saveLocked: boolean; onGenerator: () => void; onSave: () => void; onBackup: () => void; onPicture: () => void;
   /** Отрисовка плитками через WebGL вместо обычного холста. */
   gl: boolean; onGl: (value: boolean) => void;
@@ -83,6 +85,12 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, 
         <fieldset disabled={styleLocked}><legend>Оформление</legend>
           {STYLES.map(([value, name]) => <label key={value}>
             <input type="radio" name="workspace-style" checked={style === value} onChange={() => onStyle(value)} />{name}</label>)}
+        </fieldset>
+        <fieldset disabled={styleLocked}><legend>Рамка</legend>
+          <label><input type="checkbox" checked={frame !== undefined} onChange={(event) => onFrame(event.target.checked ? 2 : undefined)} />Рамка вокруг карты</label>
+          <label>Поля, клеток<input aria-label="Поля рамки в клетках" type="number" min={0} max={100} step={1} value={frame ?? ""} disabled={frame === undefined}
+            onChange={(event) => onFrame(Math.max(0, Math.min(100, Number(event.target.value) || 0)))} /></label>
+          <small>Камера не уходит дальше рамки, поля попадают в «Скачать картинку».</small>
         </fieldset>
         <button type="button" data-close disabled={generatorLocked} onClick={onGenerator}>Быстрое подземелье…</button>
         <button type="button" data-close disabled={saveLocked} onClick={onSave}>Сохранить сейчас</button>
