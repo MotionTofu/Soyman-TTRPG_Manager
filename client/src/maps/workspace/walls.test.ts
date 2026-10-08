@@ -89,4 +89,14 @@ describe("polyline walls", () => {
     expect(addWall(doc, "walls", [square[0], square[0]], 0.4)).toBe(doc);
     expect(() => addWall({ ...doc, layers: doc.layers.map(l => l.id === "walls" ? { ...l, locked: true } : l) }, "walls", square, 0.4)).toThrow();
   });
+  it("ограда — стена со своей полосой: хранит ассет и набор «Местности», кладку «Склепа» не подключает", () => {
+    const doc = addWall(fixture(), "walls", square, .45, false, "soyman-village:fence-wattle-2");
+    const layer = doc.layers.find(l => l.id === "walls");
+    if (layer?.kind !== "path") throw Error("fixture");
+    expect(layer.paths[0]).toMatchObject({ kind: "wall", styleRef: { type: "asset", assetId: "soyman-village:fence-wattle-2" } });
+    expect(doc.assetPacks.map(pack => pack.id)).toEqual(["soyman-village"]);
+    expect(createWorkspaceRenderModel(doc).model.layers.find(l => l.id === "walls")).toMatchObject({ paths: [{ kind: "wall", style: "soyman-village:fence-wattle-2" }] });
+    expect(parseMapDocumentV6(serializeMapDocumentV6(doc))).toMatchObject({ ok: true });
+    expect(() => addWall(fixture(), "walls", square, .45, false, "unknown:thing")).toThrow();
+  });
 });

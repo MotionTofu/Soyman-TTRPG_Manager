@@ -10,6 +10,9 @@ export type BrushSettings = {
   scatterProfile: string; density: number; scatterSize: number; scatterSeed: number;
   /** Id ассета-полосы для дороги; пусто — линия тушью. */
   roadStyle?: string;
+  /** Полоса стены (ограда) и заливка реки; пусто — кладка и линия. */
+  wallStyle?: string;
+  riverStyle?: string;
 };
 
 const HINTS: Record<WorkspaceTool, string> = {

@@ -21,6 +21,7 @@ import { ToolSettings, type BrushSettings } from "../maps/workspace/ToolSettings
 import { WorkspaceHeader, WorkspaceStatus, WorkspaceToolRail, type GridLook } from "../maps/workspace/WorkspaceChrome";
 import { createWorkspaceRenderModel } from "../maps/workspace/renderV6";
 import { TOOL_LABELS, toolLayerKind, addLabel, quantize, removeSelection, type WorkspaceTool, type WorkspaceSelection } from "../maps/workspace/editorCommands";
+import { downloadMapPicture } from "../maps/workspace/pictureExport";
 import { CATALOG_TOOLS, initialToolSet, rememberToolSet, toolsOf, type ToolSet } from "../maps/workspace/toolSets";
 import { useWorkspaceDocument } from "../maps/workspace/useWorkspaceDocument";
 import { useWorkspaceGestures, type Gesture } from "../maps/workspace/useWorkspaceGestures";
@@ -258,10 +259,12 @@ export function MapWorkspacePage() {
   const onStyle = useEvent((style: MapDrawingStyle) => commit((before) => ({ ...before, appearance: { style } })));
   const onGenerator = useEvent(() => { finishGesture(); placement.cancel(); setSelection(null); setGeneratorOpen(true); });
   const onSave = useEvent(() => { finishGesture(); void autosave.flush(); }), onBackup = useEvent(backup);
+  const onPicture = useEvent(() => { finishGesture(); if (map && documentRef.current) void downloadMapPicture(map, documentRef.current, displays, { showGrid, gridColor, gridOpacity, gridLineWidth, gridLineStyle }).catch(showError); });
   const onSymbol = useEvent((symbol: string) => { setSettings((current) => ({ ...current, symbol })); canvasRef.current?.focus(); });
   const onMaterial = useEvent((material: string) => { finishGesture(); setSettings((current) => ({ ...current, material })); canvasRef.current?.focus(); });
   // Полоса дороги приходит со своей шириной: рисунок рассчитан на неё, ползунок потом меняет.
-  const onRoad = useEvent((roadStyle: string, lineWidth: number) => { finishGesture(); setSettings((current) => ({ ...current, roadStyle, lineWidth })); canvasRef.current?.focus(); });
+  const onLine = useEvent((style: string, width: number) => { finishGesture(); setSettings((current) => ({ ...current,
+    ...(tool === "wall" ? { wallStyle: style, wallWidth: width } : tool === "river" ? { riverStyle: style, lineWidth: width } : { roadStyle: style, lineWidth: width }) })); canvasRef.current?.focus(); });
   const onScatter = useEvent((scatterProfile: string) => { finishGesture(); setSettings((current) => ({ ...current, scatterProfile })); canvasRef.current?.focus(); });
   const onToolChange = useEvent((patch: Partial<BrushSettings>) => { if (gesture.current?.type !== "wall-line" || patch.wallWidth === undefined && patch.lineWidth === undefined) finishGesture(); setSettings((current) => ({ ...current, ...patch })); });
   const onPaintRooms = useEvent(() => paintRooms(false)), onClearRooms = useEvent(() => paintRooms(true));
@@ -294,11 +297,11 @@ export function MapWorkspacePage() {
       toolSet={toolSet} onToolSet={onChooseToolSet} canUndo={history.canUndo && !disabled && !leaving} canRedo={history.canRedo && !disabled && !leaving} onUndo={onUndo} onRedo={onRedo}
       grid={grid} onGrid={onGrid} style={document.appearance?.style ?? "paper-ink"} onStyle={onStyle} styleLocked={disabled || leaving}
       generatorLocked={leaving || !!doc.compatibilityError || autosave.blocked || autosave.status.kind === "conflict"} saveLocked={saveBlocked}
-      onGenerator={onGenerator} onSave={onSave} onBackup={onBackup} gl={gl} onGl={onGl} effects={effects} onEffect={onEffect} onEffectsReset={onEffectsReset} classicLink={map.document_version !== 6 ? `/maps/${map.id}` : null} />
+      onGenerator={onGenerator} onSave={onSave} onBackup={onBackup} onPicture={onPicture} gl={gl} onGl={onGl} effects={effects} onEffect={onEffect} onEffectsReset={onEffectsReset} classicLink={map.document_version !== 6 ? `/maps/${map.id}` : null} />
 
     <div className="workspace-editor-body">
-      {CATALOG_TOOLS.includes(tool) && <CatalogPanel tool={tool} toolSet={toolSet} comicPunk={document.appearance?.style === "comic-punk"} symbol={settings.symbol} material={settings.material} scatterProfile={settings.scatterProfile} roadStyle={settings.roadStyle ?? ""}
-        onSymbol={onSymbol} onMaterial={onMaterial} onScatter={onScatter} onRoad={onRoad} />}
+      {CATALOG_TOOLS.includes(tool) && <CatalogPanel tool={tool} toolSet={toolSet} comicPunk={document.appearance?.style === "comic-punk"} symbol={settings.symbol} material={settings.material} scatterProfile={settings.scatterProfile} lineStyle={(tool === "wall" ? settings.wallStyle : tool === "river" ? settings.riverStyle : settings.roadStyle) ?? ""}
+        onSymbol={onSymbol} onMaterial={onMaterial} onScatter={onScatter} onLine={onLine} />}
 
       <div className="workspace-editor-stage" ref={wrapRef}>
         <WorkspaceCanvas gl={gl} onGlFail={onGlFail} effects={effects} map={map} document={document} camera={camera.cam} canvasRef={canvasRef} wrapRef={wrapRef} showGrid={showGrid} gridColor={gridColor} gridOpacity={gridOpacity} gridLineWidth={gridLineWidth} gridLineStyle={gridLineStyle} selectedId={selection?.id ?? null} selectedNodes={gestures.selectedNodes} preview={gestures.preview}

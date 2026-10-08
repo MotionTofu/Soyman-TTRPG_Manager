@@ -1,7 +1,7 @@
 import { useState, memo } from "react";
 import { CARTOGRAPHY_OBJECTS, CARTOGRAPHY_SURFACES, cartographyId, cartographyUrl } from "../assets/cartography";
 import { CRYPT_CATEGORIES, CRYPT_OBJECTS, CRYPT_SURFACES, cryptId, cryptUrl, type CryptCategory } from "../assets/crypt";
-import { VILLAGE_CATEGORIES, VILLAGE_OBJECTS, VILLAGE_PACK, VILLAGE_ROADS, VILLAGE_SURFACES, randomVariantId, variantKeys, villageId, villageSurfaceCode, villageUrl, type VillageCategory } from "../assets/village";
+import { VILLAGE_CATEGORIES, VILLAGE_OBJECTS, VILLAGE_PACK, VILLAGE_RIVERS, VILLAGE_ROADS, VILLAGE_SURFACES, randomVariantId, variantKeys, villageId, villageSurfaceCode, villageUrl, type VillageCategory } from "../assets/village";
 import { MAP_SYMBOL_ASSETS } from "../assets/registry";
 import { SCATTER_PROFILES } from "../scatter";
 import type { WorkspaceTool } from "./editorCommands";
@@ -21,9 +21,11 @@ function Thumbnail({ url }: { url: string | null }) {
 const cells = (size: number) => size >= 1 ? `${Math.round(size * 10) / 10} кл.` : undefined;
 
 // memo: страница редактора рендерится на каждое движение мыши и камеры.
-export const CatalogPanel = memo(function CatalogPanel({ tool, toolSet, comicPunk, symbol, material, scatterProfile, roadStyle, onSymbol, onMaterial, onScatter, onRoad }: {
-  tool: WorkspaceTool; toolSet: ToolSet; comicPunk: boolean; symbol: string; material: string; scatterProfile: string; roadStyle: string;
-  onSymbol: (id: string) => void; onMaterial: (code: string) => void; onScatter: (key: string) => void; onRoad: (style: string, width: number) => void;
+export const CatalogPanel = memo(function CatalogPanel({ tool, toolSet, comicPunk, symbol, material, scatterProfile, lineStyle, onSymbol, onMaterial, onScatter, onLine }: {
+  tool: WorkspaceTool; toolSet: ToolSet; comicPunk: boolean; symbol: string; material: string; scatterProfile: string;
+  /** Рисунок линии текущего инструмента: дороги, реки или стены. Пусто — обычная линия или кладка. */
+  lineStyle: string;
+  onSymbol: (id: string) => void; onMaterial: (code: string) => void; onScatter: (key: string) => void; onLine: (style: string, width: number) => void;
 }) {
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
@@ -61,19 +63,23 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, toolSet, comicPun
     id: item.code, name: item.name, url: comicPunk && CRYPT_SURFACES[item.code] ? cryptUrl(CRYPT_SURFACES[item.code]) : item.key ? cartographyUrl(item.key) : null,
     chosen: material === item.code, choose: () => onMaterial(item.code),
   })) };
-  const roadWidth = (style: string) => VILLAGE_ROADS.find((item) => variantKeys(item.key, item.variants).some((key) => villageId(key) === style))?.width ?? 0.3;
-  const strips = (group: "road" | "fence") => VILLAGE_ROADS.filter((item) => item.group === group).map((item): Tile => {
+  const lines = [...VILLAGE_ROADS, ...VILLAGE_RIVERS];
+  const lineWidth = (style: string) => lines.find((item) => variantKeys(item.key, item.variants).some((key) => villageId(key) === style))?.width ?? 0.3;
+  const strips = (items: readonly { key: string; name: string; width: number; variants: number }[]) => items.map((item): Tile => {
     const keys = variantKeys(item.key, item.variants);
-    return { id: villageId(item.key), name: item.name, url: villageUrl(item.key), size: `${item.width} кл.`, chosen: keys.some((key) => roadStyle === villageId(key)),
-      choose: () => onRoad(villageId(item.key), item.width),
+    return { id: villageId(item.key), name: item.name, url: villageUrl(item.key), size: `${item.width} кл.`, chosen: keys.some((key) => lineStyle === villageId(key)),
+      choose: () => onLine(villageId(item.key), item.width),
       variants: keys.map((key, i) => ({ id: villageId(key), name: `Вариант ${i + 1}`, url: villageUrl(key) })) };
   });
-  const roads: Category[] = [
-    { key: "roads", name: "Дороги", pack: VILLAGE, tiles: [{ id: "road-ink", name: "Линия тушью", url: null, chosen: !roadStyle, choose: () => onRoad("", 0.3) }, ...strips("road")] },
-    { key: "fences", name: "Ограды", pack: VILLAGE, tiles: strips("fence") },
-  ];
+  const plain = (id: string, name: string, width: number, url: string | null = null): Tile => ({ id, name, url, chosen: !lineStyle, choose: () => onLine("", width) });
+  const roads: Category[] = [{ key: "roads", name: "Дороги", pack: VILLAGE, tiles: [plain("road-ink", "Линия тушью", 0.3), ...strips(VILLAGE_ROADS.filter((item) => item.group === "road"))] }];
+  const rivers: Category[] = [{ key: "rivers", name: "Реки", pack: VILLAGE, tiles: [plain("river-ink", "Линия", 0.3), ...strips(VILLAGE_RIVERS)] }];
+  // Ограда — стена: её не перешагнуть, и на «Столе» она будет считаться преградой, в отличие от дороги.
+  const fences: Category = { key: "fences", name: "Ограды", pack: VILLAGE, tiles: strips(VILLAGE_ROADS.filter((item) => item.group === "fence")) };
+  const masonry: Category = { key: "walls", name: "Стены", pack: CRYPT, tiles: [plain("wall-masonry", "Каменная кладка", 0.36, cryptUrl("wall-masonry"))] };
   // Свой набор — первым: в «Местности» деревня, в «Подземелье» склеп. Чужой остаётся рядом.
-  const categories: Category[] = tool === "road" ? roads : tool === "asset" ? [
+  const line = tool === "road" || tool === "river" || tool === "wall";
+  const categories: Category[] = tool === "road" ? roads : tool === "river" ? rivers : tool === "wall" ? (local ? [fences, masonry] : [masonry, fences]) : tool === "asset" ? [
     ...(local ? [...villageObjects, ...cryptObjects] : [...cryptObjects, ...villageObjects]),
     { key: "region", name: "Мир", pack: PAPER, tiles: objects("region") },
     { key: "symbols", name: "Знаки", pack: PAPER, tiles: MAP_SYMBOL_ASSETS.map((item) => ({ id: item.id, name: item.name, url: null, chosen: symbol === item.id, choose: () => onSymbol(item.id) })) },
@@ -86,8 +92,8 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, toolSet, comicPun
   // Search looks through every category of the tool, not only the open one.
   const tiles = needle ? categories.flatMap((entry) => entry.tiles).filter((tile) => tile.name.toLocaleLowerCase("ru").includes(needle)) : category.tiles;
   const chosen = categories.flatMap((entry) => entry.tiles).find((tile) => tile.chosen);
-  const current = tool === "road" ? roadStyle : tool === "asset" ? symbol : material;
-  const pick = tool === "road" ? (id: string) => onRoad(id, roadWidth(id)) : tool === "asset" ? onSymbol : onMaterial;
+  const current = line ? lineStyle : tool === "asset" ? symbol : material;
+  const pick = line ? (id: string) => onLine(id, lineWidth(id)) : tool === "asset" ? onSymbol : onMaterial;
   return <aside className="workspace-catalog" aria-label="Каталог">
     <h2 className="workspace-panel-title">Каталог</h2>
     <input type="search" aria-label="Найти в каталоге" placeholder="Найти…" value={query} onChange={(event) => setQuery(event.target.value)} />

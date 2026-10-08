@@ -68,7 +68,7 @@ export const VILLAGE_SURFACES: readonly { key: string; name: string; fill: strin
   { key: "field", name: "Пашня", fill: "#8a5a34", variants: 2 },
 ];
 /** Дороги и ограды — полоса, которую движок тянет вдоль линии. `width` — ширина по умолчанию, клеток.
- * Ограда хранится как линия вида «дорога» со своей полосой: отдельного вида пути у неё пока нет. */
+ * Ограда — стена со своей полосой (инструмент «Стена»); на изломах и концах движок ставит её столб. */
 export const VILLAGE_ROADS: readonly { key: string; name: string; group: "road" | "fence"; width: number; variants: number }[] = [
   { key: "road-dirt", name: "Грунтовая дорога", group: "road", width: 2, variants: 2 },
   { key: "road-path", name: "Тропа", group: "road", width: 1, variants: 2 },
@@ -76,6 +76,13 @@ export const VILLAGE_ROADS: readonly { key: string; name: string; group: "road" 
   { key: "fence-wattle", name: "Плетень", group: "fence", width: 0.45, variants: 2 },
   { key: "fence-pole", name: "Жердяная ограда", group: "fence", width: 0.45, variants: 2 },
 ];
+/** Реки: линия, залитая поверхностью воды. Картинка та же, что у поверхности, поэтому привязана к карте, а не к руслу. */
+export const VILLAGE_RIVERS: readonly { key: string; name: string; width: number; variants: number }[] = [
+  { key: "shallow", name: "Мелкая вода", width: 2, variants: 2 },
+  { key: "deep", name: "Глубокая вода", width: 3, variants: 2 },
+];
+/** Столб ограды по id её полосы: `fence-wattle-2` → `fence-wattle-post-2`. */
+export const fencePostId = (style: string) => /:fence-[a-z]+(-\d+)?$/.test(style) ? style.replace(/(-\d+)?$/, (tail) => `-post${tail}`) : null;
 export const VILLAGE_ROAD_KEYS = VILLAGE_ROADS.flatMap(item => variantKeys(item.key, item.variants));
 const SURFACE_PREFIX = "village-";
 export const villageSurfaceCode = (key: string) => `${SURFACE_PREFIX}${key}`;

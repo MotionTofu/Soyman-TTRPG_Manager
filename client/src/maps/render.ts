@@ -5,6 +5,7 @@ import { drawTerrainMaskTiles } from "./assets/terrainMaskDrawing";
 import { maskSampleCode } from "./terrainMaskTiles";
 import { artworkImage, doorImage, paperPattern, patternSource, stripImage, surfaceImage, surfacePattern, texturedMask, wallPattern, type ArtPack } from "./assets/artwork";
 import { drawWallPolyline } from "./assets/wallArtwork";
+import { fencePostId } from "./assets/village";
 // Рендер карты на canvas 2D. Цвета террейна — фиксированная спокойная
 // палитра (исключение как у Полотна §6 design_revision.md: бюджет акцента
 // на неё не тратится). Обрамление (фон, сетка, координаты, дороги) — из
@@ -1080,12 +1081,22 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     if (!path.nodes || path.nodes.length < 2) return;
     const nodes = path.closed ? [...path.nodes, path.nodes[0]] : path.nodes;
     const baseWidth = path.width ?? 0.22;
-    const strip = path.style ? stripImage(path.style) : null;
+    // Река с материалом: линия, залитая поверхностью воды (узор привязан к карте, как у кисти поверхности).
+    const water = path.kind === "river" && path.style ? surfaceImage(`village-${path.style.slice(path.style.indexOf(":") + 1)}`, false, pack) : null;
+    const riverFill = (water && ctx.canvas ? surfacePattern(ctx, water, scale, ox, oy, pack) : null) ?? RIVER_FILL;
+    const bank = water ? { color: chrome.ink, k: 1.1 } : { color: chrome.paper, k: 1.55 };
+    const strip = path.style && path.kind !== "river" ? stripImage(path.style) : null;
     if (strip) {
       // Шаг крупнее, чем у линии тушью: каждый отрезок — своя заливка узором с обрезкой.
       const { samples, minX, minY, maxX, maxY } = stripSamples(path.nodes, path.closed === true, baseWidth, 10 / scale);
       if (X(maxX) < 0 || Y(maxY) < 0 || X(minX) > canvasW || Y(minY) > canvasH) return;
       drawWallPolyline(ctx, samples, baseWidth, false, scale, ox, oy, false, { width: canvasW, height: canvasH }, strip);
+      // Ограда: столб на каждой опорной точке — закрывает обрез полосы на концах и стык на изломе.
+      const postId = path.kind === "wall" ? fencePostId(path.style!) : null, post = postId ? stripImage(postId) : null;
+      if (post) for (const node of path.nodes) {
+        const side = (node.width ?? baseWidth) * 2 * scale;
+        ctx.drawImage(post, X(node.position.x) - side / 2, Y(node.position.y) - side / 2, side, side);
+      }
       return;
     }
     const firstWidth = nodes[0].width ?? baseWidth;
@@ -1095,7 +1106,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     ctx.lineJoin = "round";
     if (varyingWidth) {
       const samples = flattenSplineWithWidths(nodes, baseWidth, 3 / scale);
-      const strokeSamples = (color: string, multiplier: number) => {
+      const strokeSamples = (color: string | CanvasPattern, multiplier: number) => {
         ctx.strokeStyle = color;
         for (let index = 1; index < samples.length; index++) {
           const from = samples[index - 1], to = samples[index];
@@ -1106,8 +1117,8 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
           ctx.stroke();
         }
       };
-      if (path.kind === "river") strokeSamples(chrome.paper, 1.55);
-      strokeSamples(path.kind === "river" ? RIVER_FILL : chrome.ink, 1);
+      if (path.kind === "river") strokeSamples(bank.color, bank.k);
+      strokeSamples(path.kind === "river" ? riverFill : chrome.ink, 1);
       ctx.restore();
       return;
     }
@@ -1129,10 +1140,10 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     });
     const inner = Math.max(1.5, firstWidth * scale);
     if (path.kind === "river") {
-      ctx.strokeStyle = chrome.paper;
-      ctx.lineWidth = inner * 1.55;
+      ctx.strokeStyle = bank.color;
+      ctx.lineWidth = inner * bank.k;
       ctx.stroke();
-      ctx.strokeStyle = RIVER_FILL;
+      ctx.strokeStyle = riverFill;
     } else {
       ctx.strokeStyle = chrome.ink;
     }
@@ -1539,9 +1550,10 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       // фиксируются — порядок задают сами слои (migrated: river-слой ниже).
       for (let i = 0; i < layer.paths.length; i++) {
         const p = layer.paths[i];
-        if (p.kind === "wall" && p.nodes) {
+        // Стена со своей полосой (ограда) рисуется как линия-полоса, а не кладкой.
+        if (p.kind === "wall" && p.nodes && !p.style) {
           let end = i + 1;
-          while (end < layer.paths.length && layer.paths[end].kind === "wall" && layer.paths[end].nodes) end++;
+          while (end < layer.paths.length && layer.paths[end].kind === "wall" && layer.paths[end].nodes && !layer.paths[end].style) end++;
           drawCachedWalls(ctx, layer.paths.slice(i, end), scale, ox, oy, canvasW, canvasH, pixelRatio); i = end - 1;
         }
         else if (p.nodes) strokeFreePath(p);

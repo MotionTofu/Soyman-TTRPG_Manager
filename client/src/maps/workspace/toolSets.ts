@@ -9,12 +9,12 @@ export const TOOL_SET_LABELS: Record<ToolSet, string> = { dungeon: "Подзем
  * Горы…) on its redesign step; until then it arranges the existing ones. */
 export const TOOL_SETS: Record<ToolSet, WorkspaceTool[][]> = {
   dungeon: [["select"], ["shape", "wall", "door"], ["brush", "asset", "eraser"], ["label"]],
-  locality: [["select"], ["surface", "river", "road"], ["scatter", "asset", "eraser"], ["label"]],
+  locality: [["select"], ["surface", "river", "road", "wall"], ["scatter", "asset", "eraser"], ["label"]],
   world: [["select"], ["surface", "river", "road"], ["scatter", "asset", "eraser"], ["label"]],
 };
 export const toolsOf = (set: ToolSet) => TOOL_SETS[set].flat();
 /** Tools that pick what they place from the catalog. */
-export const CATALOG_TOOLS: WorkspaceTool[] = ["asset", "brush", "surface", "scatter", "road"];
+export const CATALOG_TOOLS: WorkspaceTool[] = ["asset", "brush", "surface", "scatter", "road", "river", "wall"];
 
 const WORLD_SCALES: MapScale[] = ["planet", "continent", "country", "region"];
 const storageKey = (mapId: number) => `soyman.map-tool-set.${mapId}`;

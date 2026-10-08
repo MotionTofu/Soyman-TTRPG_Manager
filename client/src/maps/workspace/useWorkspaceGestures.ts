@@ -69,7 +69,7 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
       return;
     }
     if (current.type === "wall-line") {
-      if (!cancel) commit(before => current.kind && current.kind !== "wall" ? addFreePath(before, current.layerId, current.points, current.kind, settings.lineWidth, closed, current.kind === "road" ? settings.roadStyle || undefined : undefined) : addWall(before, current.layerId, current.points, settings.wallWidth ?? 0.36, closed));
+      if (!cancel) commit(before => current.kind && current.kind !== "wall" ? addFreePath(before, current.layerId, current.points, current.kind, settings.lineWidth, closed, (current.kind === "road" ? settings.roadStyle : settings.riverStyle) || undefined) : addWall(before, current.layerId, current.points, settings.wallWidth ?? 0.36, closed, settings.wallStyle || undefined));
       return;
     }
     if (current.type === "cell-area") {
@@ -88,7 +88,7 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
       if (documentRef.current !== current.before) history.push(current.before);
     } else {
       try {
-        const next = current.type === "line" ? addFreePath(current.before, activeLayer, current.points ?? [], tool === "river" ? "river" : "road", settings.lineWidth, false, tool === "road" ? settings.roadStyle || undefined : undefined)
+        const next = current.type === "line" ? addFreePath(current.before, activeLayer, current.points ?? [], tool === "river" ? "river" : "road", settings.lineWidth, false, (tool === "road" ? settings.roadStyle : settings.riverStyle) || undefined)
           : createRoom(current.before, activeLayer, crypto.randomUUID(), current.start, current.last, snap);
         if (next !== current.before) { history.push(current.before); setDocument(next); }
       } catch (error) { showError(error); }

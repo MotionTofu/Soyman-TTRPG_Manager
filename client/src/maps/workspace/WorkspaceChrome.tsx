@@ -33,12 +33,12 @@ export const WorkspaceToolRail = memo(function WorkspaceToolRail({ toolSet, tool
 });
 
 export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, toolSet, onToolSet, canUndo, canRedo, onUndo, onRedo, grid, onGrid,
-  style, onStyle, styleLocked, generatorLocked, saveLocked, onGenerator, onSave, onBackup, gl, onGl, effects, onEffect, onEffectsReset, classicLink }: {
+  style, onStyle, styleLocked, generatorLocked, saveLocked, onGenerator, onSave, onBackup, onPicture, gl, onGl, effects, onEffect, onEffectsReset, classicLink }: {
   mapName: string; status: string; toolSet: ToolSet; onToolSet: (set: ToolSet) => void;
   canUndo: boolean; canRedo: boolean; onUndo: () => void; onRedo: () => void;
   grid: GridLook; onGrid: (patch: Partial<GridLook>) => void;
   style: MapDrawingStyle; onStyle: (style: MapDrawingStyle) => void; styleLocked: boolean;
-  generatorLocked: boolean; saveLocked: boolean; onGenerator: () => void; onSave: () => void; onBackup: () => void;
+  generatorLocked: boolean; saveLocked: boolean; onGenerator: () => void; onSave: () => void; onBackup: () => void; onPicture: () => void;
   /** Отрисовка плитками через WebGL вместо обычного холста. */
   gl: boolean; onGl: (value: boolean) => void;
   effects: MapEffects; onEffect: (name: MapEffect, next: EffectState) => void; onEffectsReset: () => void;
@@ -87,6 +87,7 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, 
         <button type="button" data-close disabled={generatorLocked} onClick={onGenerator}>Быстрое подземелье…</button>
         <button type="button" data-close disabled={saveLocked} onClick={onSave}>Сохранить сейчас</button>
         <button type="button" data-close onClick={onBackup}>Скачать копию</button>
+        <button type="button" data-close onClick={onPicture}>Скачать картинку</button>
         <label><input type="checkbox" checked={gl} onChange={event => onGl(event.target.checked)} />Новая отрисовка (проба)</label>
         {classicLink && <Link to={classicLink} data-close>Классический редактор</Link>}
       </WorkspaceMenu>

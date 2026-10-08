@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { hasRasterAsset } from "../../rasterAssets";
-import { VILLAGE_OBJECTS, VILLAGE_ROAD_KEYS, VILLAGE_SCATTER, VILLAGE_SURFACE_KEYS, pickVariant, randomVariantId, variantKeys, villageObject, villageSurfaceKey } from "./village";
+import { VILLAGE_OBJECTS, VILLAGE_ROADS, VILLAGE_RIVERS, fencePostId, villageId, VILLAGE_ROAD_KEYS, VILLAGE_SCATTER, VILLAGE_SURFACE_KEYS, pickVariant, randomVariantId, variantKeys, villageObject, villageSurfaceKey } from "./village";
 import { mapAssetPackForId } from "./registry";
 
 describe("набор «Местность»", () => {
@@ -16,6 +16,15 @@ describe("набор «Местность»", () => {
     expect(pickVariant(randomVariantId("hut"), () => 0.99)).toBe("soyman-village:hut");
     expect(pickVariant("soyman-village:well-2")).toBe("soyman-village:well-2");
     expect(pickVariant("soyman-crypt:throne")).toBe("soyman-crypt:throne");
+  });
+
+  it("у каждой ограды есть столб, у дороги — нет; вода реки — существующая поверхность", () => {
+    expect(fencePostId("soyman-village:fence-wattle")).toBe("soyman-village:fence-wattle-post");
+    expect(fencePostId("soyman-village:fence-pole-2")).toBe("soyman-village:fence-pole-post-2");
+    expect(fencePostId("soyman-village:road-dirt-2")).toBeNull();
+    for (const item of VILLAGE_ROADS.filter((entry) => entry.group === "fence")) for (const key of variantKeys(item.key, item.variants))
+      expect(hasRasterAsset("village", fencePostId(villageId(key))!.split(":")[1]), key).toBe(true);
+    for (const item of VILLAGE_RIVERS) for (const key of variantKeys(item.key, item.variants)) expect(villageSurfaceKey(`village-${key}`), key).toBe(key);
   });
 
   it("вариант знает своё семейство и набор; код поверхности не путается с общими", () => {
