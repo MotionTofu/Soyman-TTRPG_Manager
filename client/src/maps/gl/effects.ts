@@ -7,6 +7,7 @@ import type { MapWater } from "./waterFilter";
 interface Param { key: string; label: string; min: number; max: number; step: number; value: number }
 const amount: Param = { key: "amount", label: "Сила", min: 0, max: 3, step: 0.1, value: 1 };
 const speed: Param = { key: "speed", label: "Скорость", min: 0, max: 3, step: 0.1, value: 1 };
+const pixels: Param = { key: "size", label: "Пикселей на клетку", min: 4, max: 16, step: 1, value: 8 };
 const cloud: Param[] = [{ key: "density", label: "Плотность", min: 0.1, max: 1, step: 0.05, value: 0.7 }, speed,
   { key: "size", label: "Размер клочьев", min: 0.3, max: 3, step: 0.1, value: 1 }];
 export const EFFECTS = {
@@ -21,9 +22,11 @@ export const EFFECTS = {
     { key: "size", label: "Размер хлопьев", min: 0.4, max: 2.5, step: 0.1, value: 1 }] },
   stars: { label: "Звездопад", group: "Погода", params: [{ key: "night", label: "Темнота ночи", min: 0, max: 1, step: 0.05, value: 0.7 },
     { key: "rate", label: "Падающие звёзды", min: 0, max: 1, step: 0.05, value: 0.3 }] },
-  // Проба: вода шейдером вместо картинки. Включены обе — рисуется пиксельная.
+  // Проба: вода шейдером вместо картинки. Каждый вид рисует всю шкалу глубины сам. Включено несколько — рисуется нижний в списке.
   water: { label: "Живая вода — комикс", group: "Вода (проба)", params: [speed] },
-  waterPixel: { label: "Живая вода — пиксель-арт: пруд и море", group: "Вода (проба)", params: [speed, { key: "size", label: "Пикселей на клетку", min: 4, max: 16, step: 1, value: 8 }] },
+  waterPond: { label: "Живая вода — пиксель-арт: пруд", group: "Вода (проба)", params: [speed, pixels] },
+  waterSea: { label: "Живая вода — пиксель-арт: море", group: "Вода (проба)", params: [speed, pixels] },
+  waterSoft: { label: "Живая вода — мягкая, с дном", group: "Вода (проба)", params: [speed] },
 } satisfies Record<string, { label: string; group: string; params: Param[] }>;
 export type MapEffect = keyof typeof EFFECTS;
 export interface EffectState { on: boolean; values: Record<string, number> }
@@ -61,7 +64,9 @@ export function chosenLook(look: MapLook | null, effects: MapEffects): MapLook |
 }
 /** Вода шейдером; `null` — вода остаётся картинкой. */
 export function chosenWater(effects: MapEffects): MapWater | null {
-  if (effects.waterPixel.on) return { mode: 1, speed: effects.waterPixel.values.speed, size: effects.waterPixel.values.size };
+  if (effects.waterSoft.on) return { mode: 3, speed: effects.waterSoft.values.speed, size: 8 };
+  if (effects.waterSea.on) return { mode: 2, speed: effects.waterSea.values.speed, size: effects.waterSea.values.size };
+  if (effects.waterPond.on) return { mode: 1, speed: effects.waterPond.values.speed, size: effects.waterPond.values.size };
   return effects.water.on ? { mode: 0, speed: effects.water.values.speed, size: 8 } : null;
 }
 /** Погода для шейдера: первым числом сила (0 — выключено), дальше ползунки по порядку. */

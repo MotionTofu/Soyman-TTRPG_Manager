@@ -18,6 +18,7 @@ import { createV5RenderModel } from "./renderModel";
 import { drawCachedMapSymbol, drawCachedMapImage } from "./assets/draw";
 import { buildTerrainMaskRaster } from "./terrainMaskRaster";
 import { flattenSplineWithWidths } from "./core/spline";
+import type { SplineNode } from "./core/types";
 import type {
   MapRenderModel,
   RenderDoor,

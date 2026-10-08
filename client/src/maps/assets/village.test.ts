@@ -34,3 +34,15 @@ describe("набор «Местность»", () => {
     expect(villageSurfaceKey("plain")).toBeNull();
   });
 });
+
+describe("глубина воды", () => {
+  it("живёт в коде материала; прежние мелководье и глубокая вода — глубины 2 и 4; картинка и цвет есть у каждой", async () => {
+    const { waterCode, waterLevel, WATER_DEPTHS, VILLAGE_FILL } = await import("./village");
+    expect(WATER_DEPTHS.map(depth => waterLevel(waterCode(depth)))).toEqual([1, 2, 3, 4, 5]);
+    expect([waterLevel("village-shallow-2"), waterLevel("village-deep"), waterLevel("village-grass"), waterLevel(null)]).toEqual([2, 4, 0, 0]);
+    for (const depth of WATER_DEPTHS) {
+      expect(hasRasterAsset("village", villageSurfaceKey(waterCode(depth))!), String(depth)).toBe(true);
+      expect(VILLAGE_FILL[waterCode(depth)]).toMatch(/^#/);
+    }
+  });
+});

@@ -1,12 +1,13 @@
 import { defaultFilterVert, Filter, GlProgram, Texture } from "pixi.js";
 import { flattenSplineWithWidths } from "../core/spline";
 import type { MapRenderModel } from "../renderModel";
-import { waterDepth as depthOf } from "../crossings";
+import { waterLevel } from "../assets/village";
 
-/** Вода шейдером (проба 2026-10-08). `mode`: 0 — комикс-панк, 1 — пиксель-арт; `size` — пикселей на клетку во втором. */
-export interface MapWater { mode: 0 | 1; speed: number; size: number }
+/** Вода шейдером (проба 2026-10-08). `mode`: 0 — комикс-панк, 1 — пиксельный пруд, 2 — пиксельное море, 3 — мягкая с дном;
+ * `size` — пикселей на клетку у пиксельных. */
+export interface MapWater { mode: 0 | 1 | 2 | 3; speed: number; size: number }
 
-/** Точек маски на клетку. Маска — вся карта одной картинкой: красный канал — «здесь вода», зелёный — «глубоко». */
+/** Точек маски на клетку. Маска — вся карта одной картинкой: красный канал — «здесь вода», зелёный — глубина (1–5 пятыми долями). */
 const K = 4;
 
 /** Из чего собрана маска воды. Пока список тот же, маску не пересобирают: перетаскивание фишки или подписи воду не меняет,
@@ -40,10 +41,10 @@ export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement,
     for (const chunk of mask.source.chunks) for (let i = 0; i < chunk.values.length; i++) {
       if (!chunk.values[i]) continue;
       // Закрашенный отсчёт верхнего слоя перекрывает воду нижнего, даже если сам не вода.
-      const depth = depthOf(mask.source.codes[chunk.values[i] - 1]);
+      const depth = waterLevel(mask.source.codes[chunk.values[i] - 1]);
       const x0 = Math.round((mask.origin.x + (chunk.cx * 16 + i % 16) * mask.sampleSize) * K), y0 = Math.round((mask.origin.y + (chunk.cy * 16 + Math.floor(i / 16)) * mask.sampleSize) * K);
       for (let y = Math.max(0, y0); y < Math.min(h, y0 + Math.max(1, Math.round(step))); y++) for (let x = Math.max(0, x0); x < Math.min(w, x0 + Math.max(1, Math.round(step))); x++) {
-        const at = (y * w + x) * 4; data[at] = depth ? 255 : 0; data[at + 1] = depth === 2 ? 255 : 0;
+        const at = (y * w + x) * 4; data[at] = depth ? 255 : 0; data[at + 1] = depth * 51;
       }
       any ||= depth > 0;
     }
@@ -55,7 +56,7 @@ export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement,
     for (const path of layer.paths) {
       if (path.kind !== "river" || !path.style || !path.nodes || path.nodes.length < 2) continue;
       const samples = flattenSplineWithWidths(path.closed ? [...path.nodes, path.nodes[0]] : path.nodes, path.width ?? 0.22, 0.25);
-      pen.strokeStyle = /deep/.test(path.style) ? "#ffff00" : "#ff0000";
+      pen.strokeStyle = /deep/.test(path.style) ? "#ffcc00" : "#ff6600";
       for (let i = 1; i < samples.length; i++) {
         pen.lineWidth = (samples[i - 1].width + samples[i].width) / 2 * K;
         pen.beginPath(); pen.moveTo(samples[i - 1].x * K, samples[i - 1].y * K); pen.lineTo(samples[i].x * K, samples[i].y * K); pen.stroke();
@@ -88,6 +89,31 @@ float noise(vec2 p) {
   return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
 }
 
+// Глубина в точке, 0…1: среднее по кругу в полторы клетки. Так граница между глубинами расплывается в плавный
+// переход, а у берега вода сама мелеет — вокруг суша с нулевой глубиной.
+float depthAt(vec2 c) {
+  float sum = texture(uMask, c / uMap).g * 2.0;
+  for (int i = 0; i < 8; i++) { float a = float(i) * 0.7854; sum += texture(uMask, (c + 1.5 * vec2(cos(a), sin(a))) / uMap).g; }
+  return sum / 10.0;
+}
+vec2 hash2(vec2 p) { return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.5453); }
+// Расстояние до границы ячейки: по нему рисуется сетка бликов.
+float cellEdge(vec2 p, float t) {
+  vec2 n = floor(p), f = fract(p), mg = vec2(0.0), mr = vec2(0.0);
+  float md = 8.0;
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+    vec2 g = vec2(float(i), float(j)), r = g + 0.5 + 0.4 * sin(t + 6.2831 * hash2(n + g)) - f;
+    float d = dot(r, r);
+    if (d < md) { md = d; mr = r; mg = g; }
+  }
+  md = 8.0;
+  for (int j = -2; j <= 2; j++) for (int i = -2; i <= 2; i++) {
+    vec2 g = mg + vec2(float(i), float(j)), r = g + 0.5 + 0.4 * sin(t + 6.2831 * hash2(n + g)) - f;
+    if (dot(mr - r, mr - r) > 0.00001) md = min(md, dot(0.5 * (mr + r), normalize(r - mr)));
+  }
+  return md;
+}
+
 // Комикс-панк: плоская заливка, пятна, толстые дуги волн, тушевый берег и рваная пена.
 vec4 comic(vec2 w, float t) {
   vec2 mk = texture(uMask, w / uMap).rg;
@@ -96,7 +122,7 @@ vec4 comic(vec2 w, float t) {
   float a = smoothstep(0.38, 0.44, edge);
   if (a <= 0.0) return vec4(0.0);
   float tick = floor(t * 5.0);
-  float deep = smoothstep(0.35, 0.7, mk.g);
+  float deep = smoothstep(0.25, 0.8, depthAt(w));
   vec3 col = mix(vec3(0.19, 0.62, 0.56), vec3(0.11, 0.36, 0.44), deep);
   col *= 1.0 - 0.13 * step(0.6, noise(w * 0.8 + vec2(tick * 0.07, 3.0)));
   vec3 ink = vec3(0.09, 0.09, 0.1);
@@ -116,56 +142,64 @@ vec4 comic(vec2 w, float t) {
   return vec4(col, a);
 }
 
-// Пиксель-арт: всё считается по целым «пикселям» карты. Мелкая вода — пруд: плоские пятна дна и светлая сетка
-// бликов, которая медленно перестраивается. Глубокая — море: короткие горизонтальные штрихи нескольких тонов.
-vec2 hash2(vec2 p) { return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.5453); }
-// Расстояние до границы ячейки: по нему рисуется сетка бликов.
-float cellEdge(vec2 p, float t) {
-  vec2 n = floor(p), f = fract(p), mg = vec2(0.0), mr = vec2(0.0);
-  float md = 8.0;
-  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
-    vec2 g = vec2(float(i), float(j)), r = g + 0.5 + 0.4 * sin(t + 6.2831 * hash2(n + g)) - f;
-    float d = dot(r, r);
-    if (d < md) { md = d; mr = r; mg = g; }
-  }
-  md = 8.0;
-  for (int j = -2; j <= 2; j++) for (int i = -2; i <= 2; i++) {
-    vec2 g = mg + vec2(float(i), float(j)), r = g + 0.5 + 0.4 * sin(t + 6.2831 * hash2(n + g)) - f;
-    if (dot(mr - r, mr - r) > 0.00001) md = min(md, dot(0.5 * (mr + r), normalize(r - mr)));
-  }
-  return md;
-}
-vec3 pond(vec2 c, float t) {
+// Пиксель-арт: всё считается по целым «пикселям» карты. Два вида, у каждого своя шкала тонов от мели до омута.
+// Пруд — плоские пятна дна и светлая сетка бликов, которая с глубиной редеет.
+// Шейдер собирается как GLSL ES 1.00: массивов-констант там нет, шкала тонов — лесенкой условий.
+vec3 pondTone(float i) { return i < 0.5 ? vec3(0.45, 0.78, 0.66) : i < 1.5 ? vec3(0.35, 0.68, 0.6) : i < 2.5 ? vec3(0.25, 0.56, 0.51) : i < 3.5 ? vec3(0.18, 0.44, 0.41) : i < 4.5 ? vec3(0.13, 0.34, 0.36) : vec3(0.09, 0.25, 0.3); }
+vec3 pond(vec2 c, float t, float depth) {
   float n = noise(c * 0.9 + vec2(t * 0.05, 0.0)) * 0.65 + noise(c * 2.3 - vec2(0.0, t * 0.04)) * 0.35;
-  vec3 col = n < 0.4 ? vec3(0.18, 0.44, 0.41) : n < 0.58 ? vec3(0.25, 0.56, 0.51) : vec3(0.35, 0.68, 0.6);
+  float tone = clamp(floor((1.0 - n) * 1.8 + depth * 5.2 - 1.1), 0.0, 5.0);
+  vec3 col = pondTone(tone);
   vec2 q = c * 0.6 + 0.18 * vec2(noise(c * 1.3 + t * 0.15), noise(c * 1.3 + 7.0 - t * 0.15));
   float edge = cellEdge(q, t * 0.5);
   // Линия бликов местами рвётся и местами белеет — как на рисованной воде.
   float lit = noise(c * 0.7 + 11.0 + t * 0.1);
-  if (edge < 0.035 && lit > 0.3) col = lit > 0.72 ? vec3(0.86, 0.96, 0.92) : vec3(0.56, 0.84, 0.76);
+  if (edge < 0.035 && lit > 0.25 + depth * 0.3) col = lit > 0.72 && depth < 0.6 ? vec3(0.86, 0.96, 0.92) : pondTone(max(tone - 2.0, 0.0)) + 0.1;
   return col;
 }
-vec3 sea(vec2 p, float tick) {
+// Море — короткие горизонтальные штрихи, бегущие рядами; на мели бирюза, на глубине густой синий.
+vec3 seaTone(float i) { return i < 0.5 ? vec3(0.62, 0.88, 0.85) : i < 1.5 ? vec3(0.45, 0.79, 0.81) : i < 2.5 ? vec3(0.31, 0.68, 0.79) : i < 3.5 ? vec3(0.23, 0.57, 0.75) : i < 4.5 ? vec3(0.17, 0.46, 0.69) : i < 5.5 ? vec3(0.13, 0.36, 0.6) : vec3(0.1, 0.27, 0.5); }
+vec3 sea(vec2 p, float tick, float depth) {
   float row = p.y, speed = 0.4 + hash(vec2(row, 9.0));
   float dash = hash(vec2(floor((p.x + hash(vec2(row, 3.0)) * 40.0 + tick * speed) / (3.0 + floor(hash(vec2(row, 5.0)) * 5.0))), row));
   float swell = noise(vec2(p.x * 0.04, p.y * 0.22) + vec2(tick * 0.03, 0.0));
   float v = swell * 0.65 + dash * 0.35;
-  vec3 col = v < 0.36 ? vec3(0.13, 0.36, 0.6) : v < 0.5 ? vec3(0.17, 0.46, 0.69) : v < 0.63 ? vec3(0.24, 0.57, 0.75) : vec3(0.38, 0.71, 0.81);
-  return dash > 0.95 && swell > 0.45 ? vec3(0.62, 0.86, 0.88) : col;
+  float tone = clamp(floor((1.0 - v) * 3.2 + depth * 4.4 - 1.1), 0.0, 6.0);
+  return dash > 0.95 && swell > 0.45 ? mix(seaTone(max(tone - 3.0, 0.0)), vec3(1.0), 0.25) : seaTone(tone);
 }
-vec4 pixel(vec2 w, float t) {
+vec4 pixel(vec2 w, float t, bool isSea) {
   float P = uWater.z;
   vec2 p = floor(w * P), c = (p + 0.5) / P;
   vec2 mk = texture(uMask, c / uMap).rg;
   if (mk.r < 0.4) return vec4(0.0);
   float tick = floor(t * 6.0);
-  // Граница мелкой и глубокой воды — шахматным смешением, без плавного перехода.
-  float deep = smoothstep(0.35, 0.7, mk.g) + (mod(p.x + p.y, 2.0) - 0.5) * 0.25;
-  vec3 col = deep > 0.5 ? sea(p, tick) : pond(c, tick / 6.0);
+  // Ступени тонов на границе глубин ломаются шахматным смешением.
+  float depth = depthAt(c) + (mod(p.x + p.y, 2.0) - 0.5) * 0.07;
+  vec3 col = isSea ? sea(p, tick, depth) : pond(c, tick / 6.0, depth);
   // Пена у берега: сплошная кромка в один пиксель и рваная полоса за ней.
   float shore = smoothstep(0.4, 1.0, mk.r);
   col = mix(col, vec3(0.9, 0.98, 0.95), min(1.0, step(shore, 0.1) + step(shore, 0.3) * step(0.6, hash(p + tick))));
   return vec4(col, 1.0);
+}
+
+// Мягкая: без пикселей и без туши. Цвет плавно темнеет с глубиной, на мели просвечивает песчаное дно с камешками,
+// по воде плывут тонкие светлые кольца бликов.
+vec4 soft(vec2 w, float t) {
+  vec2 mk = texture(uMask, w / uMap).rg;
+  float a = smoothstep(0.36, 0.5, mk.r);
+  if (a <= 0.0) return vec4(0.0);
+  float depth = depthAt(w);
+  vec3 col = mix(vec3(0.56, 0.84, 0.8), vec3(0.2, 0.47, 0.7), smoothstep(0.08, 0.85, depth));
+  float bed = noise(w * 3.0) * 0.5 + noise(w * 7.0 + 4.0) * 0.5;
+  vec3 bottom = mix(vec3(0.87, 0.8, 0.58), vec3(0.6, 0.56, 0.44), smoothstep(0.58, 0.66, bed));
+  col = mix(bottom, col, 0.3 + 0.7 * smoothstep(0.04, 0.42, depth));
+  vec2 q = w * 0.9 + 0.2 * vec2(noise(w * 1.1 + t * 0.2), noise(w * 1.1 + 5.0 - t * 0.2));
+  float line = (1.0 - smoothstep(0.0, 0.05, cellEdge(q, t * 0.6))) * (0.6 - 0.35 * depth) * smoothstep(0.25, 0.6, noise(w * 0.6 + t * 0.1 + 3.0));
+  col = mix(col, vec3(0.94, 1.0, 0.97), line);
+  // Прибой: светлая полоска у самой кромки, дышит.
+  float rim = 1.0 - smoothstep(0.5, 0.6 + 0.04 * sin(t * 1.5 + w.x * 2.0 + w.y), mk.r);
+  col = mix(col, vec3(0.96, 0.98, 0.9), rim * 0.75);
+  return vec4(col, a);
 }
 
 void main() {
@@ -174,7 +208,7 @@ void main() {
   vec4 water = vec4(0.0);
   if (world.x > 0.0 && world.y > 0.0 && world.x < uMap.x && world.y < uMap.y) {
     float t = uTime * uWater.y;
-    water = uWater.x > 0.5 ? pixel(world, t) : comic(world, t);
+    water = uWater.x > 2.5 ? soft(world, t) : uWater.x > 0.5 ? pixel(world, t, uWater.x > 1.5) : comic(world, t);
   }
   finalColor = vec4(mix(base.rgb, water.rgb * base.a, water.a), base.a);
 }`;

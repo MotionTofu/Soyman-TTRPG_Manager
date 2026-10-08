@@ -88,11 +88,22 @@ export const fencePostId = (style: string) => /:fence-[a-z]+(-\d+)?$/.test(style
 export const VILLAGE_ROAD_KEYS = VILLAGE_ROADS.flatMap(item => variantKeys(item.key, item.variants));
 const SURFACE_PREFIX = "village-";
 export const villageSurfaceCode = (key: string) => `${SURFACE_PREFIX}${key}`;
+/** Вода с глубиной (решение владельца 2026-10-08): одна поверхность «Вода», глубину 1–5 задаёт кисть.
+ * Глубина живёт в коде материала — `village-water-3`, — поэтому формат карты не меняется. Вода-шейдер
+ * рисует плавный переход между глубинами; вода-картинка знает только два рисунка и делит шкалу пополам. */
+export const WATER_DEPTHS = [1, 2, 3, 4, 5] as const;
+export const waterCode = (depth: number) => villageSurfaceCode(`water-${depth}`);
+const WATER = /^village-water-([1-5])$/;
+/** Глубина воды по коду материала: 0 — не вода. Прежние «мелководье» и «глубокая вода» — глубины 2 и 4. */
+export const waterLevel = (code: string | null | undefined) => !code ? 0 : WATER.test(code) ? Number(WATER.exec(code)![1])
+  : /deep|sea|lake/.test(code) ? 4 : /shallow|water/.test(code) ? 2 : 0;
+const WATER_PICTURE = ["shallow", "shallow", "shallow-2", "deep", "deep-2"], WATER_FILL = ["#58b9a6", "#2f9c8c", "#27808a", "#1d5a6c", "#143f55"];
 /** Ключ картинки по коду материала; `null` — код не из этого набора. */
-export const villageSurfaceKey = (code: string) => code.startsWith(SURFACE_PREFIX) ? code.slice(SURFACE_PREFIX.length) : null;
+export const villageSurfaceKey = (code: string) => !code.startsWith(SURFACE_PREFIX) ? null
+  : WATER.test(code) ? WATER_PICTURE[waterLevel(code) - 1] : code.slice(SURFACE_PREFIX.length);
 /** Цвет, пока картинка грузится, и в «Чертеже». */
-export const VILLAGE_FILL: Readonly<Record<string, string>> = Object.fromEntries(VILLAGE_SURFACES.flatMap(item =>
-  variantKeys(item.key, item.variants).map(key => [villageSurfaceCode(key), item.fill])));
+export const VILLAGE_FILL: Readonly<Record<string, string>> = Object.fromEntries([...VILLAGE_SURFACES.flatMap(item =>
+  variantKeys(item.key, item.variants).map(key => [villageSurfaceCode(key), item.fill])), ...WATER_DEPTHS.map(depth => [waterCode(depth), WATER_FILL[depth - 1]])]);
 export const VILLAGE_SURFACE_KEYS = VILLAGE_SURFACES.flatMap(item => variantKeys(item.key, item.variants));
 
 export const villageId = (key: string) => `${VILLAGE_PACK.id}:${key}`;
