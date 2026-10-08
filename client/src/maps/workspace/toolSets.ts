@@ -1,5 +1,5 @@
 import type { MapDocumentV6 } from "@shared/maps/core";
-import type { MapScale } from "../mapTypes";
+import { mapKind, type MapScale } from "../mapTypes";
 import type { WorkspaceTool } from "./editorCommands";
 
 export type ToolSet = "dungeon" | "locality" | "world";
@@ -16,16 +16,19 @@ export const toolsOf = (set: ToolSet) => TOOL_SETS[set].flat();
 /** Tools that pick what they place from the catalog. */
 export const CATALOG_TOOLS: WorkspaceTool[] = ["asset", "brush", "surface", "scatter", "road", "river", "wall"];
 
-const WORLD_SCALES: MapScale[] = ["planet", "continent", "country", "region"];
+/** Наборы по виду карты: у тактической выбор из двух, у обзорной — один. */
+const TACTICAL_SETS: readonly ToolSet[] = ["dungeon", "locality"], OVERVIEW_SETS: readonly ToolSet[] = ["world"];
+export const setsOf = (scale: MapScale) => mapKind(scale) === "tactical" ? TACTICAL_SETS : OVERVIEW_SETS;
 const storageKey = (mapId: number) => `soyman.map-tool-set.${mapId}`;
 
-/** Last choice for this map, else by scale; a local map with rooms is a dungeon. */
+/** Last choice for this map among the sets of its kind; a tactical map with rooms is a dungeon. */
 export function initialToolSet(mapId: number, scale: MapScale, document: MapDocumentV6): ToolSet {
+  const sets = setsOf(scale);
   try {
     const stored = localStorage.getItem(storageKey(mapId));
-    if (stored === "dungeon" || stored === "locality" || stored === "world") return stored;
+    if (sets.includes(stored as ToolSet)) return stored as ToolSet;
   } catch { /* storage unavailable: fall back to the map itself */ }
-  if (WORLD_SCALES.includes(scale)) return "world";
+  if (sets.length === 1) return sets[0];
   return document.layers.some((layer) => layer.kind === "gameplay" && layer.items.some((item) => item.kind === "room")) ? "dungeon" : "locality";
 }
 export function rememberToolSet(mapId: number, set: ToolSet) {

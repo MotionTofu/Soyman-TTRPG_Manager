@@ -16,16 +16,21 @@ import { DungeonGenerator } from "../maps/workspace/DungeonGenerator";
 import { mapWorkspaceApi } from "../maps/workspace/mapApi";
 import {
   MAP_GRID_LABELS,
-  MAP_SCALE_LABELS,
-  MAP_SCALE_ORDER,
+  MAP_KIND_LABELS,
   MAP_SCALE_PRESETS,
+  OVERVIEW_PRESETS,
+  TACTICAL_CELL,
+  cellLoreOf,
+  mapKind,
+  overviewScale,
   MAP_MIN_SIDE,
   MAP_MAX_SIDE,
   translateMapError,
   type MapGrid,
-  type MapScale,
+  type MapKind,
   type MapSummary,
 } from "../maps/mapTypes";
+import { ScalePreview } from "../maps/ScalePreview";
 
 function formatUpdated(value: string): string {
   const d = new Date(value.replace(" ", "T"));
@@ -86,7 +91,7 @@ function MapTile({ map, canEdit }: { map: MapSummary; canEdit: boolean }) {
         {canEdit && map.document_version !== 6 && <Link to={`/maps/${map.id}`}>Классический редактор</Link>}
         <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
           <span className="badge tag">{MAP_GRID_LABELS[map.grid]}</span>
-          <span className="badge tag">{MAP_SCALE_LABELS[map.scale]}</span>
+          <span className="badge tag">{MAP_KIND_LABELS[mapKind(map.scale)]}{map.cell_lore && ` · клетка ${map.cell_lore}`}</span>
           {map.player_visible === 1 && <span className="badge tag">видят игроки</span>}
           {map.document_unsupported && <span className="badge tag">{canEdit && map.document_version === 6 ? "новый редактор" : "формат пока не поддерживается"}</span>}
         </div>
@@ -133,7 +138,7 @@ export function MapsListPage() {
   const loading = mapsState.loading;
   const loadError = mapsState.error ? translateMapError(new Error(mapsState.error)) : null;
   const [q, setQ] = useState("");
-  const [scaleFilter, setScaleFilter] = useState<"all" | MapScale>("all");
+  const [scaleFilter, setScaleFilter] = useState<"all" | MapKind>("all");
   const [gridFilter, setGridFilter] = useState<"all" | MapGrid>("all");
   const [visFilter, setVisFilter] = useState<"all" | "visible" | "hidden">("all");
   const [sort, setSort] = useState<"recent" | "az">("recent");
@@ -142,9 +147,10 @@ export function MapsListPage() {
   const [generatorOpen, setGeneratorOpen] = useState(false);
   const [name, setName] = useState("");
   const [grid, setGrid] = useState<MapGrid>("hex");
-  const [scale, setScale] = useState<MapScale>("continent");
-  const [width, setWidth] = useState<number>(MAP_SCALE_PRESETS.continent.width);
-  const [height, setHeight] = useState<number>(MAP_SCALE_PRESETS.continent.height);
+  const [kind, setKind] = useState<MapKind>("tactical");
+  const [km, setKm] = useState(2);
+  const [width, setWidth] = useState<number>(MAP_SCALE_PRESETS.locality.width);
+  const [height, setHeight] = useState<number>(MAP_SCALE_PRESETS.locality.height);
   const [createError, setCreateError] = useState<string | null>(null);
 
   // Миниатюры — отдельными запросами (в списке их нет: тяжёлые), под путём с
@@ -163,7 +169,7 @@ export function MapsListPage() {
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
     let list = maps;
-    if (scaleFilter !== "all") list = list.filter((m) => m.scale === scaleFilter);
+    if (scaleFilter !== "all") list = list.filter((m) => mapKind(m.scale) === scaleFilter);
     if (gridFilter !== "all") list = list.filter((m) => m.grid === gridFilter);
     if (visFilter === "visible") list = list.filter((m) => m.player_visible === 1);
     if (visFilter === "hidden") list = list.filter((m) => m.player_visible !== 1);
@@ -174,16 +180,16 @@ export function MapsListPage() {
     return list;
   }, [maps, q, scaleFilter, gridFilter, visFilter, sort]);
 
-  function pickScale(s: MapScale) {
-    setScale(s);
-    setWidth(MAP_SCALE_PRESETS[s].width);
-    setHeight(MAP_SCALE_PRESETS[s].height);
+  /** Вид карты или заготовка обзорной: размер поля подставляется из неё. */
+  function pickKind(next: MapKind, preset = OVERVIEW_PRESETS[1]) {
+    const size = MAP_SCALE_PRESETS[next === "tactical" ? "locality" : preset.scale];
+    setKind(next); setKm(preset.km); setWidth(size.width); setHeight(size.height);
   }
 
   function openCreate() {
     setName("");
     setGrid("hex");
-    pickScale("continent");
+    pickKind("tactical");
     setCreateError(null);
     setCreating(true);
   }
@@ -228,12 +234,17 @@ export function MapsListPage() {
       setCreateError(`Ширина и высота — целые числа ${MAP_MIN_SIDE}–${MAP_MAX_SIDE}.`);
       return;
     }
+    if (kind === "overview" && !(km > 0 && km <= 10000)) {
+      setCreateError("В клетке — от нуля до 10 000 км.");
+      return;
+    }
     setCreateError(null);
     try {
       const created = await write.post<{ id: number }>("/maps", {
         name: name.trim(),
-        grid,
-        scale,
+        grid: kind === "tactical" ? "square" : grid,
+        scale: kind === "tactical" ? "locality" : overviewScale(km),
+        cell_lore: kind === "tactical" ? TACTICAL_CELL : cellLoreOf(km),
         width: w,
         height: h,
       });
@@ -252,16 +263,13 @@ export function MapsListPage() {
     <>
       <select
         value={scaleFilter}
-        onChange={(e) => setScaleFilter(e.target.value as "all" | MapScale)}
-        aria-label="Фильтр по масштабу"
-        title="Фильтр по масштабу"
+        onChange={(e) => setScaleFilter(e.target.value as "all" | MapKind)}
+        aria-label="Фильтр по виду карты"
+        title="Фильтр по виду карты"
       >
-        <option value="all">Все масштабы</option>
-        {MAP_SCALE_ORDER.map((s) => (
-          <option key={s} value={s}>
-            {MAP_SCALE_LABELS[s]}
-          </option>
-        ))}
+        <option value="all">Любой вид</option>
+        <option value="tactical">Тактические</option>
+        <option value="overview">Обзорные</option>
       </select>
       <select
         value={gridFilter}
@@ -407,27 +415,43 @@ export function MapsListPage() {
               <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Например, Эстария" />
             </label>
             <fieldset style={{ border: "1px solid var(--line)", padding: "8px 10px" }}>
-              <legend>Сетка — навсегда</legend>
+              <legend>Вид карты — навсегда</legend>
               <label className="row" style={{ gap: 6 }}>
-                <input type="radio" checked={grid === "hex"} onChange={() => setGrid("hex")} />
-                Гексы — для земель и континентов
+                <input type="radio" checked={kind === "tactical"} onChange={() => pickKind("tactical")} />
+                Тактическая — подземелье, дом, двор, улица; клетка {TACTICAL_CELL}
               </label>
               <label className="row" style={{ gap: 6 }}>
-                <input type="radio" checked={grid === "square"} onChange={() => setGrid("square")} />
-                Квадраты — для данжей и строений
+                <input type="radio" checked={kind === "overview"} onChange={() => pickKind("overview")} />
+                Обзорная — город, край, страна, мир; клетку задаёте вы
               </label>
             </fieldset>
-            <label>
-              Масштаб
-              <select value={scale} onChange={(e) => pickScale(e.target.value as MapScale)}>
-                {MAP_SCALE_ORDER.map((s) => (
-                  <option key={s} value={s}>
-                    {MAP_SCALE_LABELS[s]} — {MAP_SCALE_PRESETS[s].width}×{MAP_SCALE_PRESETS[s].height},{" "}
-                    клетка {MAP_SCALE_PRESETS[s].cellLore}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {kind === "overview" && (
+              <>
+                <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                  {OVERVIEW_PRESETS.map((preset) => (
+                    <button key={preset.scale} type="button" aria-pressed={km === preset.km} onClick={() => pickKind("overview", preset)}>
+                      {preset.name} · {cellLoreOf(preset.km)}
+                    </button>
+                  ))}
+                </div>
+                <label>
+                  В одной клетке, км
+                  <input type="number" min={0.001} max={10000} step="any" value={km} onChange={(e) => setKm(Number(e.target.value))} />
+                </label>
+                <fieldset style={{ border: "1px solid var(--line)", padding: "8px 10px" }}>
+                  <legend>Сетка — навсегда</legend>
+                  <label className="row" style={{ gap: 6 }}>
+                    <input type="radio" checked={grid === "hex"} onChange={() => setGrid("hex")} />
+                    Гексы
+                  </label>
+                  <label className="row" style={{ gap: 6 }}>
+                    <input type="radio" checked={grid === "square"} onChange={() => setGrid("square")} />
+                    Квадраты
+                  </label>
+                </fieldset>
+              </>
+            )}
+            <ScalePreview metres={kind === "tactical" ? 1.5 : km * 1000} width={width} height={height} />
             <div className="row" style={{ gap: 8 }}>
               <label>
                 Ширина

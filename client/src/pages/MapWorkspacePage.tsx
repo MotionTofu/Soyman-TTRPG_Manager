@@ -22,7 +22,7 @@ import { WorkspaceHeader, WorkspaceStatus, WorkspaceToolRail, type GridLook } fr
 import { createWorkspaceRenderModel } from "../maps/workspace/renderV6";
 import { TOOL_LABELS, toolLayerKind, addLabel, quantize, removeSelection, type WorkspaceTool, type WorkspaceSelection } from "../maps/workspace/editorCommands";
 import { downloadMapPicture } from "../maps/workspace/pictureExport";
-import { CATALOG_TOOLS, initialToolSet, rememberToolSet, toolsOf, type ToolSet } from "../maps/workspace/toolSets";
+import { CATALOG_TOOLS, initialToolSet, rememberToolSet, setsOf, toolsOf, type ToolSet } from "../maps/workspace/toolSets";
 import { useWorkspaceDocument } from "../maps/workspace/useWorkspaceDocument";
 import { useWorkspaceGestures, type Gesture } from "../maps/workspace/useWorkspaceGestures";
 import { removeSelections } from "../maps/workspace/multiSelection";
@@ -333,7 +333,7 @@ export function MapWorkspacePage() {
     <WorkspaceToolRail toolSet={toolSet} tool={tool} locked={toolsLocked} onChoose={onChooseTool} />
 
     <WorkspaceHeader mapName={map.name} status={`${leaving ? "Сохраняем перед выходом…" : SAVE_STATE[autosave.status.kind]}${document.grid ? ` · ${document.grid.columns} × ${document.grid.rows} клеток` : ""}`}
-      toolSet={toolSet} onToolSet={onChooseToolSet} canUndo={history.canUndo && !disabled && !leaving} canRedo={history.canRedo && !disabled && !leaving} onUndo={onUndo} onRedo={onRedo}
+      toolSet={toolSet} toolSets={setsOf(map.scale)} onToolSet={onChooseToolSet} canUndo={history.canUndo && !disabled && !leaving} canRedo={history.canRedo && !disabled && !leaving} onUndo={onUndo} onRedo={onRedo}
       grid={grid} onGrid={onGrid} style={document.appearance?.style ?? "paper-ink"} onStyle={onStyle} styleLocked={disabled || leaving} frame={document.appearance?.frame} onFrame={onFrame} water={document.appearance?.water} onWater={onWater} waterSpeed={document.appearance?.waterSpeed ?? 1} waterPixels={document.appearance?.waterPixels ?? 8} waterShoal={document.appearance?.waterShoal ?? 0} onWaterTune={onWaterTune}
       generatorLocked={leaving || !!doc.compatibilityError || autosave.blocked || autosave.status.kind === "conflict"} saveLocked={saveBlocked}
       onGenerator={onGenerator} onSave={onSave} onBackup={onBackup} onPicture={onPicture} gl={gl} onGl={onGl} effects={effects} onEffect={onEffect} onEffectsReset={onEffectsReset} classicLink={map.document_version !== 6 ? `/maps/${map.id}` : null} />

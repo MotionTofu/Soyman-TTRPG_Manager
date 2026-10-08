@@ -37,6 +37,22 @@ export const MAP_SCALE_PRESETS: Record<MapScale, { width: number; height: number
   locality: { width: 50, height: 36, cellLore: "5 м" },
 };
 
+/** Два вида карт вместо шести масштабов. В базе тактическая — `locality`, обзорная — любой другой масштаб:
+ * старые названия остались заготовками числа «км в клетке». */
+export type MapKind = "tactical" | "overview";
+export const MAP_KIND_LABELS: Record<MapKind, string> = { tactical: "Тактическая", overview: "Обзорная" };
+export const mapKind = (scale: MapScale): MapKind => scale === "locality" ? "tactical" : "overview";
+/** Клетка тактической карты — 5 футов. */
+export const TACTICAL_CELL = "1,5 м";
+export const OVERVIEW_PRESETS: { scale: MapScale; name: string; km: number }[] = [
+  { scale: "settlement", name: "Город", km: 0.02 }, { scale: "region", name: "Регион", km: 2 }, { scale: "country", name: "Страна", km: 20 },
+  { scale: "continent", name: "Континент", km: 100 }, { scale: "planet", name: "Планета", km: 500 },
+];
+/** Масштаб для базы: заготовка, ближайшая по порядку величины. */
+export const overviewScale = (km: number): MapScale =>
+  OVERVIEW_PRESETS.reduce((best, item) => Math.abs(Math.log(item.km / km)) < Math.abs(Math.log(best.km / km)) ? item : best).scale;
+export const cellLoreOf = (km: number) => formatMeters(km * 1000);
+
 export const MAP_MIN_SIDE = 8;
 export const MAP_MAX_SIDE = 100;
 
@@ -57,6 +73,8 @@ export function parseCellLore(lore: string): number | null {
 
 // Человечий формат метров для линейки: «800 м», «2,5 км».
 export function formatMeters(meters: number): string {
+  // До десяти метров — с десятыми: клетка тактической карты 1,5 м.
+  if (meters < 10) return `${String(Math.round(meters * 10) / 10).replace(".", ",")} м`;
   if (meters < 1000) return `${Math.round(meters)} м`;
   const km = meters / 1000;
   const str = km >= 10 ? String(Math.round(km)) : String(Math.round(km * 10) / 10).replace(".", ",");

@@ -33,9 +33,9 @@ export const WorkspaceToolRail = memo(function WorkspaceToolRail({ toolSet, tool
   </div></MapWorkspaceTools>;
 });
 
-export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, toolSet, onToolSet, canUndo, canRedo, onUndo, onRedo, grid, onGrid,
+export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, toolSet, toolSets, onToolSet, canUndo, canRedo, onUndo, onRedo, grid, onGrid,
   style, onStyle, styleLocked, frame, onFrame, water, onWater, waterSpeed, waterPixels, waterShoal, onWaterTune, generatorLocked, saveLocked, onGenerator, onSave, onBackup, onPicture, gl, onGl, effects, onEffect, onEffectsReset, classicLink }: {
-  mapName: string; status: string; toolSet: ToolSet; onToolSet: (set: ToolSet) => void;
+  mapName: string; status: string; toolSet: ToolSet; /** Наборы вида карты; один — переключателя нет. */ toolSets: readonly ToolSet[]; onToolSet: (set: ToolSet) => void;
   canUndo: boolean; canRedo: boolean; onUndo: () => void; onRedo: () => void;
   grid: GridLook; onGrid: (patch: Partial<GridLook>) => void;
   style: MapDrawingStyle; onStyle: (style: MapDrawingStyle) => void; styleLocked: boolean;
@@ -54,9 +54,9 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, 
   return <header className="workspace-editor-header">
     <Link to="/maps" className="workspace-back">← Все карты</Link>
     <div className="workspace-title"><h1 title={mapName}>{mapName}</h1><span aria-live="polite">{status}</span></div>
-    <nav className="workspace-seg" aria-label="Набор инструментов">
-      {(Object.keys(TOOL_SET_LABELS) as ToolSet[]).map((set) => <button key={set} type="button" aria-pressed={toolSet === set} onClick={() => onToolSet(set)}>{TOOL_SET_LABELS[set]}</button>)}
-    </nav>
+    {toolSets.length > 1 && <nav className="workspace-seg" aria-label="Набор инструментов">
+      {toolSets.map((set) => <button key={set} type="button" aria-pressed={toolSet === set} onClick={() => onToolSet(set)}>{TOOL_SET_LABELS[set]}</button>)}
+    </nav>}
     <div className="workspace-header-actions">
       <button type="button" className="workspace-icon-button" aria-label="Отменить" title="Отменить · Ctrl+Z" disabled={!canUndo} onClick={onUndo}>
         <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M9 4 3 10l6 6M3 10h11c8 0 8 11 0 11" /></svg></button>
