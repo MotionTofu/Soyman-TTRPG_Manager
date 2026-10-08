@@ -24,6 +24,7 @@ describe("два вида карт", () => {
   });
   it("в предпросмотре на любой заготовке есть знакомые вещи", () => {
     for (const metres of [1.5, 20, 2000, 20_000, 100_000, 500_000]) expect(scaleMarks(metres).length).toBeGreaterThanOrEqual(2);
-    expect(scaleMarks(1.5).map((item) => item.name)).toContain("человек");
+    // Фишка занимает ровно клетку: человек на тактической карте — одна клетка.
+    expect(scaleMarks(1.5)).toEqual([{ name: "человек", cells: 1 }, { name: "лошадь", cells: 2 }, { name: "телега", cells: 3 }]);
   });
 });
