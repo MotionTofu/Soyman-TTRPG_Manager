@@ -7,7 +7,7 @@ import { Modal } from "../components/Modal";
 import { SectionBackground } from "../components/SectionBackground";
 import { useConfirm } from "../hooks/useConfirm";
 import { MAP_KIND_LABELS, type MapKind } from "../maps/mapTypes";
-import { MAP_PACKS } from "../maps/assets/packs";
+import { MAP_PACKS, genreLabel } from "../maps/assets/packs";
 import { OWN_SIDES, PACK_CELL_PX, liveImages, ownEdge, ownImageId, ownImageSrc, registerOwnPacks, sideImage, useMapImageRevision, type OwnPack, type OwnPackItem } from "../maps/assets/ownPacks";
 import { CARTOGRAPHY_OBJECTS, CARTOGRAPHY_SURFACES, cartographyUrl } from "../maps/assets/cartography";
 import { CRYPT_CATEGORIES, CRYPT_OBJECTS, cryptUrl, type CryptCategory } from "../maps/assets/crypt";
@@ -17,6 +17,8 @@ import { edgeAlpha, edgeField, edgeRamp, edgeWindow, type SurfaceEdge } from "..
 import { edgeNoiseOf } from "../maps/assets/terrainMaskDrawing";
 import { seamlessTile } from "../maps/assets/seamless";
 import { MapSheetDialog } from "./MapSheetDialog";
+import { GenrePicker } from "../components/GenrePicker";
+import type { SettingGenre } from "../types";
 
 const KINDS: MapKind[] = ["tactical", "city", "overview"];
 const AFFECTS = [{ path: "/map-packs" }];
@@ -63,11 +65,14 @@ function SizeGrid({ src, w, h, reference }: { src: string | null; w: number; h: 
 function PackDialog({ pack, onClose }: { pack: OwnPack | null; onClose: (saved?: OwnPack) => void }) {
   const run = useAction();
   const [name, setName] = useState(pack?.name ?? ""), [kinds, setKinds] = useState<MapKind[]>(pack?.kinds ?? ["tactical"]);
+  const [genres, setGenres] = useState<SettingGenre[]>(pack?.genres ?? []), [picking, setPicking] = useState(false);
   async function save() {
-    const body = { name, kinds };
+    const body = { name, kinds, genres };
     const saved = await run(labelled("Набор не сохранён", () => pack ? write.put<OwnPack>(`/map-packs/${pack.id}`, body) : write.post<OwnPack>("/map-packs", body)), { affects: AFFECTS });
     if (saved) onClose(saved);
   }
+  if (picking) return <GenrePicker selected={genres} title="Жанры набора" hint="До трёх жанров: по ним набор находится при создании карты и в каталоге."
+    onSave={(next) => { setGenres(next); setPicking(false); }} onClose={() => setPicking(false)} />;
   return <Modal onClose={() => onClose()} ariaLabel={pack ? "Набор ассетов" : "Новый набор ассетов"}>
     <h2>{pack ? "Набор ассетов" : "Новый набор ассетов"}</h2>
     <div className="stack">
@@ -79,6 +84,10 @@ function PackDialog({ pack, onClose }: { pack: OwnPack | null; onClose: (saved?:
         </label>)}
         <small className="muted">Размеры вещей задаются под первый отмеченный вид. На других видах карты набор тоже будет в каталоге.</small>
       </fieldset>
+      <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <span>Жанры: {genreLabel(genres) || "не заданы — набор предлагается любой карте"}</span>
+        <button type="button" onClick={() => setPicking(true)}>Выбрать жанры…</button>
+      </div>
       <div className="modal-footer row"><button onClick={() => onClose()}>Отмена</button><button className="primary" disabled={!name.trim() || !kinds.length} onClick={save}>Сохранить</button></div>
     </div>
   </Modal>;
@@ -493,7 +502,7 @@ export function MapPacksPage() {
       <nav className="stack" aria-label="Наборы" style={{ flex: "0 0 260px" }}>
         <strong>Свои</strong>
         {live.map((entry) => <button key={entry.id} type="button" aria-pressed={!builtin && entry.id === pack?.id} onClick={() => { setPicked(entry.id); setBuiltin(null); }} style={{ textAlign: "left", height: "auto", padding: "6px 10px" }}>
-          <strong>{entry.name}</strong><br /><small>{entry.kinds.map((kind) => MAP_KIND_LABELS[kind]).join(", ")} · вещей: {entry.items.filter((item) => !item.archived).length}</small>
+          <strong>{entry.name}</strong><br /><small>{entry.kinds.map((kind) => MAP_KIND_LABELS[kind]).join(", ")} · {genreLabel(entry.genres) || "без жанра"} · вещей: {entry.items.filter((item) => !item.archived).length}</small>
         </button>)}
         {!live.length && !state.loading && <p className="muted">Своих наборов пока нет. Создайте первый и добавьте в него картинки.</p>}
         <strong>Встроенные — только чтение</strong>
@@ -520,7 +529,7 @@ export function MapPacksPage() {
         <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
           <h2 style={{ margin: 0 }}>{pack.name}</h2>
           <div className="row" style={{ gap: 8 }}>
-            <button onClick={() => setPackDialog(pack)}>Название и виды карт</button>
+            <button onClick={() => setPackDialog(pack)}>Название, жанры и виды карт</button>
             <button onClick={() => void setArchived(pack, true)}>В архив</button>
             <button title="Лист с несколькими вещами: разрезать и добавить разом" onClick={() => setSheetDialog(true)}>+ Лист</button>
             <button className="primary" onClick={() => setObjectDialog("new-door")}>+ Проём</button>

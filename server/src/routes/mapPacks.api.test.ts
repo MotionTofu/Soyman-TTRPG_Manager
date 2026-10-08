@@ -76,6 +76,13 @@ describe("наборы ассетов карт", () => {
     expect(masks.filter((image: { archived: boolean }) => !image.archived)).toHaveLength(1);
   });
 
+  it("жанры набора: до трёх пар, мусор отбрасывается", async () => {
+    const genres = [{ genre: "Фэнтези", subgenre: "Тёмное фэнтези" }, { genre: "Хоррор" }, { subgenre: "без жанра" }, "строка", { genre: "Реализм" }, { genre: "Странное" }];
+    const made = await api().post("/api/map-packs").auth(gm, { type: "bearer" }).send({ name: "Жанровый", kinds: ["city"], genres });
+    expect(made.body.genres).toEqual([{ genre: "Фэнтези", subgenre: "Тёмное фэнтези" }, { genre: "Хоррор" }, { genre: "Реализм" }]);
+    const cleared = await api().put(`/api/map-packs/${made.body.id}`).auth(gm, { type: "bearer" }).send({ name: "Жанровый", kinds: ["city"] });
+    expect(cleared.body.genres).toEqual([]);
+  });
   it("игроку наборы закрыты", async () => {
     expect((await api().get("/api/map-packs").auth(player, { type: "bearer" })).status).toBe(403);
   });

@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({ role: "gm", version: 1, post: vi.fn() }));
 vi.mock("../api/currentUser", () => ({ useCurrentUser: () => ({ user: { role: mocks.role } }) }));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({ ...await importOriginal<typeof import("@tanstack/react-query")>(), useQueries: () => [] }));
 vi.mock("../data/hooks", () => ({ useAction: () => vi.fn(), useAfterWrite: () => vi.fn(), resourceQuery: () => ({}), write: { post: mocks.post },
-  useResource: () => ({ loading: false, data: [{ id: 7, name: "Тестовая карта", grid: "hex", scale: "continent", width: 40, height: 30, updated_at: "2026-09-30", document_version: mocks.version, player_visible: 0 }] }) }));
+  useResource: (path: string | null) => path !== "/maps" ? { loading: false, data: undefined } : ({ loading: false, data: [{ id: 7, name: "Тестовая карта", grid: "hex", scale: "continent", width: 40, height: 30, updated_at: "2026-09-30", document_version: mocks.version, player_visible: 0 }] }) }));
 vi.mock("../hooks/useConfirm", () => ({ useConfirm: () => [null, vi.fn()], useAlert: () => [null, vi.fn()] }));
 vi.mock("../components/SectionBackground", () => ({ SectionBackground: () => null }));
 beforeEach(() => { mocks.role = "gm"; mocks.version = 1; mocks.post.mockReset().mockResolvedValue({ id: 9 }); });

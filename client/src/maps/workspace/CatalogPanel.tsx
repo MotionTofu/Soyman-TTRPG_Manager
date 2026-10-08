@@ -4,7 +4,8 @@ import { CRYPT_CATEGORIES, CRYPT_OBJECTS, CRYPT_SURFACES, cryptId, cryptUrl, typ
 import { VILLAGE_CATEGORIES, VILLAGE_OBJECTS, VILLAGE_PACK, VILLAGE_RIVERS, VILLAGE_ROADS, VILLAGE_SURFACES, randomVariantId, variantKeys, villageId, villageSurfaceCode, villageUrl, type VillageCategory } from "../assets/village";
 import { MAP_SYMBOL_ASSETS, ownSurfaceCode } from "../assets/registry";
 import { SCATTER_PROFILES } from "../scatter";
-import { packName, packsFor } from "../assets/packs";
+import { genreLabel, packName, packsFor, rankPacks } from "../assets/packs";
+import type { SettingGenre } from "../../types";
 import { liveImages, ownImageId, ownImageSrc, ownRandomId, ownScatterKey, useMapImageRevision, type OwnPack } from "../assets/ownPacks";
 import { Link } from "react-router-dom";
 import type { MapKind } from "../mapTypes";
@@ -25,10 +26,10 @@ function Thumbnail({ url, fill }: { url: string | null; fill?: string }) {
 const cells = (size: number) => size >= 1 ? `${Math.round(size * 10) / 10} кл.` : undefined;
 
 // memo: страница редактора рендерится на каждое движение мыши и камеры.
-export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, packs, onPacks, ownPacks, used, comicPunk, symbol, material, scatterProfile, lineStyle, doorStyle, onSymbol, onMaterial, onScatter, onLine, onDoor }: {
+export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, packs, onPacks, ownPacks, used, genres, comicPunk, symbol, material, scatterProfile, lineStyle, doorStyle, onSymbol, onMaterial, onScatter, onLine, onDoor }: {
   tool: WorkspaceTool; /** Подборка «Местности» первой; иначе первым идёт «Склеп». */ local: boolean; comicPunk: boolean;
   /** Вид карты и подключённые к ней наборы; `onPacks` — новый список подключённых. */
-  kind: MapKind; packs: readonly string[]; onPacks: (packs: string[]) => void; /** Свои наборы Мастера с сервера. */ ownPacks: readonly OwnPack[];
+  kind: MapKind; packs: readonly string[]; onPacks: (packs: string[]) => void; /** Свои наборы Мастера с сервера. */ ownPacks: readonly OwnPack[]; /** Жанры сеттинга карты; пусто — в библиотеке все наборы. */ genres: readonly SettingGenre[];
   /** Наборы, вещи которых уже стоят на карте, через «|»: строкой, чтобы панель не перерисовывалась на каждую правку. */ used: string; symbol: string; material: string; scatterProfile: string;
   /** Рисунок линии текущего инструмента: дороги, реки или стены. Пусто — обычная линия или кладка. */
   lineStyle: string;
@@ -38,7 +39,7 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, pack
 }) {
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
-  const [only, setOnly] = useState<string | null>(null), [choosing, setChoosing] = useState(false);
+  const [only, setOnly] = useState<string | null>(null), [choosing, setChoosing] = useState(false), [wide, setWide] = useState(false);
   useMapImageRevision();
   // Вещи своих наборов: раздел набора — раздел каталога. Объект с вариантами ставит случайный, как у «Деревни»;
   // у поверхности каждый вариант — свой материал, они красятся по отдельности.
@@ -149,6 +150,8 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, pack
   const off = stray.filter((id) => fit.some((pack) => pack.id === id));
   const alien = stray.filter((id) => !gone.includes(id) && !off.includes(id));
   const names = (ids: string[]) => ids.map((id) => `«${packName(id)}»`).join(", ");
+  // Библиотека карты с сеттингом — по близости к его жанрам (гриллинг Q45); подключённое видно всегда.
+  const near = wide ? fit : rankPacks(fit, genres), listed = [...near, ...fit.filter((pack) => packs.includes(pack.id) && !near.includes(pack))];
   const toggle = (id: string) => { const next = packs.includes(id) ? packs.filter((entry) => entry !== id) : [...packs, id]; if (next.length) onPacks(next); };
   return <aside className="workspace-catalog" aria-label="Каталог">
     <h2 className="workspace-panel-title">Каталог</h2>
@@ -159,7 +162,9 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, pack
       <button type="button" aria-expanded={choosing} title="Подключить или отключить наборы этой карты" onClick={() => setChoosing(!choosing)}>＋ Набор</button>
     </div>
     {choosing && <div className="workspace-catalog-library" role="group" aria-label="Библиотека наборов">
-      {fit.map((pack) => <label key={pack.id}><input type="checkbox" checked={packs.includes(pack.id)} disabled={packs.length === 1 && packs.includes(pack.id)} onChange={() => toggle(pack.id)} />
+      {genres.length > 0 && <label><input type="checkbox" checked={!wide} onChange={() => setWide(!wide)} />
+        <span><strong>Только близкие по жанру</strong><small>{genreLabel(genres)} — жанры сеттинга карты</small></span></label>}
+      {listed.map((pack) => <label key={pack.id}><input type="checkbox" checked={packs.includes(pack.id)} disabled={packs.length === 1 && packs.includes(pack.id)} onChange={() => toggle(pack.id)} />
         <span><strong>{pack.name}</strong><small>{pack.genre} · {pack.place}</small></span></label>)}
       <small>Каталог показывает только подключённые наборы. Уже нарисованное с карты не пропадает.</small>
       <Link to="/maps/packs">Свои наборы ассетов →</Link>

@@ -33,6 +33,10 @@ import {
   type MapSummary,
 } from "../maps/mapTypes";
 import { ScalePreview } from "../maps/ScalePreview";
+import { genreLabel, packsFor, rankPacks } from "../maps/assets/packs";
+import { registerOwnPacks, type OwnPack } from "../maps/assets/ownPacks";
+import { GenrePicker } from "../components/GenrePicker";
+import type { Setting, SettingGenre } from "../types";
 
 function formatUpdated(value: string): string {
   const d = new Date(value.replace(" ", "T"));
@@ -154,6 +158,12 @@ export function MapsListPage() {
   const [width, setWidth] = useState<number>(MAP_SCALE_PRESETS.locality.width);
   const [height, setHeight] = useState<number>(MAP_SCALE_PRESETS.locality.height);
   const [createError, setCreateError] = useState<string | null>(null);
+  // Подбор наборов новой карты (гриллинг Q26, Q32, Q45): сеттинг проставляет жанры, жанры выстраивают наборы по близости.
+  const [settingId, setSettingId] = useState<number | null>(null), [genres, setGenres] = useState<SettingGenre[]>([]);
+  const [offPacks, setOffPacks] = useState<string[]>([]), [pickingGenres, setPickingGenres] = useState(false);
+  const settingList = useResource<Setting[]>(canEdit && creating ? "/settings" : null).data;
+  const ownPackList = useResource<OwnPack[]>(canEdit && creating ? "/map-packs" : null).data;
+  const offered = useMemo(() => { if (ownPackList) registerOwnPacks(ownPackList); return rankPacks(packsFor(kind), genres); }, [ownPackList, kind, genres]);
 
   // Миниатюры — отдельными запросами (в списке их нет: тяжёлые), под путём с
   // датой правки: не изменившаяся карта берёт миниатюру из кэша.
@@ -251,10 +261,13 @@ export function MapsListPage() {
         width: w,
         height: h,
       });
+      // Привязка к сеттингу — не повод терять созданную карту: её можно поставить позже.
+      if (settingId) await write.post(`/maps/${created.id}/bindings`, { target_type: "setting", target_id: settingId }, { headers: { [MAP_VERSION_HEADER]: "6" } }).catch(() => undefined);
       // Новая карта — только список: миниатюры остальных не задеты.
       afterWrite([{ kind: "map", card: true }]);
       setCreating(false);
-      navigate(`/maps/${created.id}/workspace`);
+      const packs = offered.filter((pack) => !offPacks.includes(pack.id)).map((pack) => pack.id);
+      navigate(`/maps/${created.id}/workspace`, { state: packs.length && packs.length < packsFor(kind).length ? { packs } : null });
     } catch (e) {
       setCreateError(translateMapError(e));
     }
@@ -411,7 +424,9 @@ export function MapsListPage() {
         )}
       </ListPage>
 
-      {creating && (
+      {creating && pickingGenres && <GenrePicker selected={genres} title="Жанры карты" hint="До трёх жанров: наборы ассетов выстроятся по близости к ним."
+        onSave={(next) => { setGenres(next); setPickingGenres(false); }} onClose={() => setPickingGenres(false)} />}
+      {creating && !pickingGenres && (
         <Modal onClose={() => setCreating(false)}>
           <h2>Новая карта</h2>
           <div className="stack">
@@ -460,6 +475,27 @@ export function MapsListPage() {
                 </fieldset>
               </>
             )}
+            <fieldset style={{ border: "1px solid var(--line)", padding: "8px 10px" }}>
+              <legend>Наборы ассетов</legend>
+              <label>
+                Сеттинг
+                <select value={settingId ?? ""} onChange={(e) => { const next = Number(e.target.value) || null; setSettingId(next); setGenres(settingList?.find((entry) => entry.id === next)?.genres ?? []); }}>
+                  <option value="">Без сеттинга</option>
+                  {settingList?.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+                </select>
+              </label>
+              <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <span>Жанры: {genreLabel(genres) || "не выбраны — показаны все наборы"}</span>
+                <button type="button" onClick={() => setPickingGenres(true)}>Выбрать жанры…</button>
+              </div>
+              {offered.map((pack) => (
+                <label key={pack.id} className="row" style={{ gap: 6 }}>
+                  <input type="checkbox" checked={!offPacks.includes(pack.id)} onChange={() => setOffPacks(offPacks.includes(pack.id) ? offPacks.filter((id) => id !== pack.id) : [...offPacks, pack.id])} />
+                  {pack.name} <small className="muted">{pack.genre} · {pack.place}</small>
+                </label>
+              ))}
+              <small className="muted">Отмеченные наборы попадут в каталог карты. Подключить или отключить набор можно и потом.</small>
+            </fieldset>
             <ScalePreview metres={kind === "overview" ? km * 1000 : parseCellLore(kind === "city" ? CITY_CELL : TACTICAL_CELL)!} width={width} height={height} />
             <div className="row" style={{ gap: 8 }}>
               <label>

@@ -8,10 +8,14 @@ export function GenrePicker({
   selected,
   onSave,
   onClose,
+  title = "Жанры сеттинга",
+  hint = "Выберите до трёх основных жанров вашего сеттинга.",
 }: {
   selected: SettingGenre[];
   onSave: (genres: SettingGenre[]) => void;
   onClose: () => void;
+  title?: string;
+  hint?: string;
 }) {
   const [draft, setDraft] = useState<SettingGenre[]>(selected);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -55,9 +59,9 @@ export function GenrePicker({
   return (
     <Modal onClose={onClose}>
       <div className="genre-picker">
-        <h2>Жанры сеттинга</h2>
+        <h2>{title}</h2>
         <p className="muted genre-picker-hint">
-          Выберите до трёх основных жанров вашего сеттинга.
+          {hint}
         </p>
 
         {GENRE_CATEGORIES.map((cat) => {

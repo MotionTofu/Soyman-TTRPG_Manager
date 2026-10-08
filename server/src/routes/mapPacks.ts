@@ -99,7 +99,12 @@ function packInput(body: Record<string, unknown>, res: Response) {
   if (!name) { res.status(400).json({ error: "Название набора обязательно" }); return null; }
   const kinds = Array.isArray(body.kinds) ? [...new Set(body.kinds.filter((kind): kind is string => KINDS.includes(kind as string)))] : ["tactical"];
   if (!kinds.length) { res.status(400).json({ error: "Отметьте хотя бы один вид карты" }); return null; }
-  return { name, kinds: JSON.stringify(kinds) };
+  // Жанры — как у сеттинга: до трёх пар «жанр, поджанр».
+  const genres = (Array.isArray(body.genres) ? body.genres : []).flatMap((entry): { genre: string; subgenre?: string }[] => {
+    const genre = text((entry as { genre?: unknown } | null)?.genre, 60), subgenre = text((entry as { subgenre?: unknown } | null)?.subgenre, 60);
+    return genre ? [subgenre ? { genre, subgenre } : { genre }] : [];
+  }).slice(0, 3);
+  return { name, kinds: JSON.stringify(kinds), genres: JSON.stringify(genres) };
 }
 
 mapPacksRouter.use((req: AuthedRequest, res, next) => req.user?.role === "player" ? res.status(403).json({ error: "forbidden" }) : next());
@@ -109,14 +114,14 @@ mapPacksRouter.get("/", (_req, res) => res.json(allPacks()));
 mapPacksRouter.post("/", (req, res) => {
   const input = packInput(req.body ?? {}, res);
   if (!input) return;
-  const id = Number(db.prepare("INSERT INTO map_asset_packs (uid, name, kinds) VALUES (?, ?, ?)").run(crypto.randomUUID(), input.name, input.kinds).lastInsertRowid);
+  const id = Number(db.prepare("INSERT INTO map_asset_packs (uid, name, kinds, genres) VALUES (?, ?, ?, ?)").run(crypto.randomUUID(), input.name, input.kinds, input.genres).lastInsertRowid);
   res.status(201).json(onePack(id));
 });
 
 mapPacksRouter.put("/:id", (req, res) => {
   const input = packInput(req.body ?? {}, res);
   if (!input) return;
-  const done = db.prepare("UPDATE map_asset_packs SET name = ?, kinds = ?, updated_at = datetime('now') WHERE id = ?").run(input.name, input.kinds, req.params.id);
+  const done = db.prepare("UPDATE map_asset_packs SET name = ?, kinds = ?, genres = ?, updated_at = datetime('now') WHERE id = ?").run(input.name, input.kinds, input.genres, req.params.id);
   if (!done.changes) return res.status(404).json({ error: "Набор не найден" });
   res.json(onePack(Number(req.params.id)));
 });

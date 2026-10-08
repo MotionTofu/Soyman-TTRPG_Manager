@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import type { Setting, SettingGenre } from "../types";
 import type { MapDocumentV6, MapDrawingStyle, MapLiquidRecipe, MapWaterLook, Vec2 } from "@shared/maps/core";
 import { useCurrentUser } from "../api/currentUser";
 import { useAfterWrite, useResource } from "../data/hooks";
@@ -25,6 +26,7 @@ import { downloadMapPicture } from "../maps/workspace/pictureExport";
 import { CATALOG_TOOLS, toolLabel } from "../maps/workspace/toolSets";
 import { updateGameplayEntity } from "../maps/core";
 import { mapKind } from "../maps/mapTypes";
+import { MAP_VERSION_HEADER } from "@shared/maps/core";
 import { connectedPacks, usedPacks } from "../maps/assets/packs";
 import { registerOwnPacks, type OwnPack } from "../maps/assets/ownPacks";
 import { useWorkspaceDocument } from "../maps/workspace/useWorkspaceDocument";
@@ -49,6 +51,8 @@ import { LIQUID_LAYER, isLiquidLayer, moveLiquidsToLayer, replaceLiquid, usedLiq
 import "../maps/workspace/workspace-editor.css";
 
 const NO_LIQUIDS: readonly MapLiquidRecipe[] = [];
+// Привязки карты шестой версии сервер отдаёт только клиенту, который её понимает.
+const BINDING_OPTIONS = { headers: { [MAP_VERSION_HEADER]: "6" } };
 const NO_OWN_PACKS: readonly OwnPack[] = [];
 const SAVE_STATE = { saved: "Сохранено", dirty: "Есть правки", saving: "Сохраняем…", error: "Ошибка сохранения", conflict: "Карта изменена в другом окне" } as const;
 const LAYER_CREATORS = { mask: createTerrainMaskLayer, path: createPathLayer, scatter: createScatterLayer, terrain: createTerrainLayer,
@@ -309,6 +313,18 @@ export function MapWorkspacePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const used = useMemo(() => document ? usedPacks(document).join("|") : "", [document, packs, ownPacks]);
   const onPacks = useEvent((next: string[]) => commit((before) => ({ ...before, appearance: { ...(before.appearance ?? { style: "paper-ink" as const }), packs: next } })));
+  // Наборы, отмеченные при создании карты, приходят с переходом и записываются один раз.
+  const location = useLocation(), chosenPacks = (location.state as { packs?: string[] } | null)?.packs, loaded = !!document;
+  useEffect(() => {
+    if (!chosenPacks || !loaded) return;
+    if (!documentRef.current?.appearance?.packs) onPacks(chosenPacks);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [chosenPacks, loaded, documentRef, onPacks, navigate, location.pathname]);
+  // Жанры сеттингов, к которым привязана карта: по ним библиотека каталога подбирает наборы.
+  const bindings = useResource<{ target_type: string; target_id: number }[]>(Number.isFinite(mapId) ? `/maps/${mapId}/bindings` : null, BINDING_OPTIONS).data;
+  const boundSettings = useMemo(() => (bindings ?? []).filter((entry) => entry.target_type === "setting").map((entry) => entry.target_id), [bindings]);
+  const settingList = useResource<Setting[]>(boundSettings.length ? "/settings" : null).data;
+  const genres = useMemo((): SettingGenre[] => (settingList ?? []).filter((entry) => boundSettings.includes(entry.id)).flatMap((entry) => entry.genres ?? []), [settingList, boundSettings]);
   const onLiveWater = useEvent(() => onWater(documentRef.current?.appearance?.style === "comic-punk" ? "comic" : "soft"));
   const onWaterTune = useEvent((patch: { waterSpeed?: number; waterPixels?: number; waterShoal?: number }) => commit((before) => ({ ...before, appearance: { ...(before.appearance ?? { style: "paper-ink" as const }), ...patch } })));
   const onFrame = useEvent((frame: number | undefined) => commit((before) => { const { frame: _old, ...rest } = before.appearance ?? { style: "paper-ink" as const }; return { ...before, appearance: frame === undefined ? rest : { ...rest, frame } }; }));
@@ -379,7 +395,7 @@ export function MapWorkspacePage() {
       onGenerator={onGenerator} onSave={onSave} onBackup={onBackup} onPicture={onPicture} gl={gl} onGl={onGl} effects={effects} onEffect={onEffect} onEffectsReset={onEffectsReset} classicLink={map.document_version !== 6 ? `/maps/${map.id}` : null} />
 
     <div className="workspace-editor-body">
-      {CATALOG_TOOLS.includes(tool) && <CatalogPanel tool={tool} local={!hasRooms} kind={mapKind(map.scale)} packs={packs} onPacks={onPacks} ownPacks={ownPacks} used={used} comicPunk={document.appearance?.style === "comic-punk"} symbol={settings.symbol} material={settings.material} scatterProfile={settings.scatterProfile} lineStyle={(tool === "wall" ? settings.wallStyle : tool === "river" ? settings.riverStyle : settings.roadStyle) ?? ""}
+      {CATALOG_TOOLS.includes(tool) && <CatalogPanel tool={tool} local={!hasRooms} kind={mapKind(map.scale)} packs={packs} onPacks={onPacks} ownPacks={ownPacks} used={used} genres={genres} comicPunk={document.appearance?.style === "comic-punk"} symbol={settings.symbol} material={settings.material} scatterProfile={settings.scatterProfile} lineStyle={(tool === "wall" ? settings.wallStyle : tool === "river" ? settings.riverStyle : settings.roadStyle) ?? ""}
         onSymbol={onSymbol} onMaterial={onMaterial} onScatter={onScatter} onLine={onLine} doorStyle={settings.door?.style ?? ""} onDoor={onDoor} />}
 
       <div className="workspace-editor-stage" ref={wrapRef}>

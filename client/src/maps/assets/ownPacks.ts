@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { MapKind } from "../mapTypes";
+import type { SettingGenre } from "../../types";
 import type { SurfaceEdge } from "./surfaceEdge";
 import { getMapImageAsset, loadMapImageAsset, markMapImageMissing, ownSurfaceCode, registerMapImageResources, resourceImageAssetId, setMapImageViews, subscribeMapImageAssets } from "./registry";
 
@@ -15,7 +16,7 @@ export interface OwnPackItem { id: number; uid: string; kind: string; name: stri
   use?: string; width?: number; deck?: string;
   /** Россыпь: размер знака и густота по умолчанию. */ size?: number; density?: number;
   /** Проём: ширина в клетках и «потайной». */ span?: number; secret?: boolean; images: OwnPackImage[] }
-export interface OwnPack { id: number; uid: string; name: string; kinds: MapKind[]; genres: unknown[]; native_style: string; archived: boolean; updated_at: string; items: OwnPackItem[] }
+export interface OwnPack { id: number; uid: string; name: string; kinds: MapKind[]; genres: SettingGenre[]; native_style: string; archived: boolean; updated_at: string; items: OwnPackItem[] }
 
 /** Точек на клетку у картинок набора; мельче — предупреждаем. */
 export const PACK_CELL_PX = 256;
