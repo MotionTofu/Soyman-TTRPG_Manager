@@ -726,15 +726,27 @@ type StripSamples = { key: string; samples: ReturnType<typeof flattenSplineWithW
 const stripCache = new WeakMap<readonly SplineNode[], StripSamples>();
 /** Точки полосы-картинки и её рамка. Карта рисуется плитками, и без запаса длинная дорога
  * раскладывалась заново для каждой плитки, даже той, где её нет (замер 2026-10-08: 5 мс на плитку). */
-function stripSamples(nodes: readonly SplineNode[], closed: boolean, width: number, step: number): StripSamples {
-  const key = `${closed}:${width}:${step}`, cached = stripCache.get(nodes);
+function stripSamples(nodes: readonly SplineNode[], closed: boolean, width: number, step: number, soft = false): StripSamples {
+  const key = `${closed}:${width}:${step}:${soft}`, cached = stripCache.get(nodes);
   if (cached?.key === key) return cached;
   const samples = flattenSplineWithWidths(closed ? [...nodes, nodes[0]] : nodes, width, step);
+  if (soft && !closed && samples.length > 1) {
+    // Дорога не обрывается ровным срезом: к концу сходит на нет скруглённым языком длиной в свою ширину.
+    const arc = [0];
+    for (let i = 1; i < samples.length; i++) arc.push(arc[i - 1] + Math.hypot(samples[i].x - samples[i - 1].x, samples[i].y - samples[i - 1].y));
+    const total = arc[arc.length - 1], ends = [samples[0].width, samples[samples.length - 1].width];
+    samples.forEach((sample, i) => {
+      const t = Math.min(arc[i] / ends[0], (total - arc[i]) / ends[1], 1);
+      if (t < 1) sample.width *= Math.max(0.08, Math.sqrt(t * (2 - t)));
+    });
+  }
   const reach = Math.max(width, ...samples.map(sample => sample.width)) * 2;
   const xs = samples.map(sample => sample.x), ys = samples.map(sample => sample.y);
   const result = { key, samples, minX: Math.min(...xs) - reach, minY: Math.min(...ys) - reach, maxX: Math.max(...xs) + reach, maxY: Math.max(...ys) + reach };
   stripCache.set(nodes, result); return result;
 }
+/** Доля ширины полосы дороги без рваных краёв. */
+const ROAD_CORE = 0.7;
 const roadCuts = new WeakMap<StripSamples["samples"], RoadCut>();
 export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvasH: number, o: RenderOptions): void {
   const { grid, width, height, model, scale, ox, oy, showGrid, showCoords, hover, chrome, playerView, selectedId } = o;
@@ -1085,6 +1097,10 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
   // Настилы переправ ждут, пока не нарисуется самый верхний слой с рекой: мост лежит над водой,
   // даже если слой рек у Мастера выше слоя дорог.
   const decks: (() => void)[] = [];
+  // Перекрёсток: дороги, идущие в слое подряд, сначала ложатся целиком, потом ещё раз одной серединой.
+  // Рваный край одной дороги не остаётся лежать поперёк другой — они сливаются в одно пятно.
+  const cores: (() => void)[] = [];
+  const mergeRoads = () => { for (const draw of cores) draw(); cores.length = 0; };
   const lastRivers = model.layers.findLastIndex(layer => layer.visible && layer.kind === "path" && layer.paths.some(path => path.kind === "river"));
   const strokeFreePath = (path: RenderPath) => {
     if (!path.nodes || path.nodes.length < 2) return;
@@ -1097,21 +1113,26 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     const strip = path.style && path.kind !== "river" ? stripImage(path.style) : null;
     if (strip) {
       // Шаг крупнее, чем у линии тушью: каждый отрезок — своя заливка узором с обрезкой.
-      const { samples, minX, minY, maxX, maxY } = stripSamples(path.nodes, path.closed === true, baseWidth, 10 / scale);
+      const road = path.kind === "road";
+      const { samples, minX, minY, maxX, maxY } = stripSamples(path.nodes, path.closed === true, baseWidth, 10 / scale, road);
       if (X(maxX) < 0 || Y(maxY) < 0 || X(minX) > canvasW || Y(minY) > canvasH) return;
       const view = { width: canvasW, height: canvasH }, crossings = roadCrossings(model, path);
+      const lay = (points: typeof samples) => {
+        drawWallPolyline(ctx, points, baseWidth, false, scale, ox, oy, false, view, strip);
+        if (road) cores.push(() => drawWallPolyline(ctx, points, baseWidth, false, scale, ox, oy, false, view, strip, ROAD_CORE));
+      };
       if (crossings.some(crossing => crossing.kind !== "none")) {
         // Над водой дорогу сменяет настил: мост или брод. Картинка настила — полоса набора, пока её нет — заглушка.
         let cut = roadCuts.get(samples);
         if (cut?.key !== cutKey(crossings)) roadCuts.set(samples, cut = cutRoad(samples, crossings));
-        for (const piece of cut.road) drawWallPolyline(ctx, piece, baseWidth, false, scale, ox, oy, false, view, strip);
+        for (const piece of cut.road) lay(piece);
         for (const deck of cut.decks) decks.push(() => {
           const art = stripImage(villageId(deck.kind));
           if (art) drawWallPolyline(ctx, deck.samples, baseWidth, false, scale, ox, oy, false, view, art);
           else drawCrossingDraft(ctx, deck.kind, deck.samples, scale, ox, oy, chrome.ink);
         });
       }
-      else drawWallPolyline(ctx, samples, baseWidth, false, scale, ox, oy, false, view, strip);
+      else lay(samples);
       // Ограда: столб на каждой опорной точке — закрывает обрез полосы на концах и стык на изломе.
       const postId = path.kind === "wall" ? fencePostId(path.style!) : null, post = postId ? stripImage(postId) : null;
       if (post) for (const node of path.nodes) {
@@ -1573,6 +1594,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       for (let i = 0; i < layer.paths.length; i++) {
         const p = layer.paths[i];
         if (part && (part === "ground") !== waterRiver(p)) continue;
+        if (p.kind !== "road") mergeRoads();
         // Стена со своей полосой (ограда) рисуется как линия-полоса, а не кладкой.
         if (p.kind === "wall" && p.nodes && !p.style) {
           let end = i + 1;
@@ -1583,6 +1605,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
         else if (p.kind === "river") strokeRivers(p.cells);
         else strokeRoads(p.cells);
       }
+      mergeRoads();
       if (decks.length && model.layers.indexOf(layer) >= lastRivers) { for (const draw of decks) draw(); decks.length = 0; }
     } else if (layer.kind === "gameplay") {
       if (scale >= 10) {

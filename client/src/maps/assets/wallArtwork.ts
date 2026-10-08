@@ -5,7 +5,7 @@ import { artworkImage, patternSource } from "./artwork";
 const segmentCache = new WeakMap<readonly Vec2[], { width: number; closed: boolean; count: number; segments: ReturnType<typeof wallSegments> }>();
 /** Each segment owns a polygon; adjacent textures share the same joint boundary. */
 export function drawWallPolyline(ctx: CanvasRenderingContext2D, points: readonly (Vec2 & { width?: number })[], width: number, closed: boolean,
-  scale: number, ox: number, oy: number, selected = false, viewport?: { width: number; height: number }, strip?: HTMLImageElement) {
+  scale: number, ox: number, oy: number, selected = false, viewport?: { width: number; height: number }, strip?: HTMLImageElement, core = 0) {
   // Один и тот же массив точек приходит для каждой плитки карты: геометрию отрезков считаем один раз.
   let known = segmentCache.get(points);
   if (!known || known.width !== width || known.closed !== closed || known.count !== points.length) segmentCache.set(points, known = { width, closed, count: points.length, segments: wallSegments(points, width, closed) });
@@ -35,7 +35,9 @@ export function drawWallPolyline(ctx: CanvasRenderingContext2D, points: readonly
       if (segment.startWidth === segment.endWidth || strip) {
         const mean = (segment.startWidth + segment.endWidth) / 2, k = mean * scale / image.naturalHeight * factor;
         pattern.setTransform(new DOMMatrix([textureScale, 0, 0, k, phase, -mean * scale / 2])); ctx.fillStyle = pattern;
-        ctx.fillRect(-thickness * 2, -thickness * 2, segment.length * scale + thickness * 4, thickness * 4);
+        // `core` — только середина полосы, без рваных краёв: ею дороги закрывают края друг друга на перекрёстке.
+        if (core) ctx.fillRect(-thickness * 2, -mean * scale * core / 2, segment.length * scale + thickness * 4, mean * scale * core);
+        else ctx.fillRect(-thickness * 2, -thickness * 2, segment.length * scale + thickness * 4, thickness * 4);
       } else {
         // Narrow screen-space strips stretch the raster vertically across the taper; X phase stays continuous.
         const left = -thickness * 2, right = segment.length * scale + thickness * 2;
