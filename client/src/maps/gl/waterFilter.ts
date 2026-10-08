@@ -14,8 +14,9 @@ uniform float uTime;
 ${WATER_GLSL}
 void main() {
   vec4 base = texture(uTexture, vTextureCoord);
-  vec4 water = waterAt((vTextureCoord * uInputSize.xy - uOrigin) / uScale, uTime * uWater.y);
-  finalColor = vec4(mix(base.rgb, water.rgb * base.a, water.a), base.a);
+  vec2 world = (vTextureCoord * uInputSize.xy - uOrigin) / uScale;
+  vec4 water = waterAt(world, uTime * uWater.y);
+  finalColor = vec4(mix(base.rgb * (1.0 - wetAt(world) * 0.22), water.rgb * base.a, water.a), base.a);
 }`;
 
 

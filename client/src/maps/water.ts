@@ -6,7 +6,8 @@ import { riverDepth, waterLevel } from "./assets/village";
  * `size` — пикселей на клетку у пиксельных. */
 export interface MapWater { mode: 0 | 1 | 2 | 3; speed: number; size: number; shoal: number }
 
-/** Точек маски на клетку. Маска — вся карта одной картинкой: красный канал — «здесь вода», зелёный — глубина (1–5 пятыми долями). */
+/** Точек маски на клетку. Маска — вся карта одной картинкой: красный канал — «здесь вода», зелёный — глубина (1–5 пятыми долями),
+ * синий — «ближайший берег песчаный»: у пляжа пена шире, у травы и камня берег резче. */
 const K = 4;
 
 /** Из чего собрана маска воды. Пока список тот же, маску не пересобирают: перетаскивание фишки или подписи воду не меняет,
@@ -41,10 +42,10 @@ export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement,
     for (const chunk of mask.source.chunks) for (let i = 0; i < chunk.values.length; i++) {
       if (!chunk.values[i]) continue;
       // Закрашенный отсчёт верхнего слоя перекрывает воду нижнего, даже если сам не вода.
-      const depth = waterLevel(mask.source.codes[chunk.values[i] - 1]);
+      const code = mask.source.codes[chunk.values[i] - 1], depth = waterLevel(code), beach = /^village-sand/.test(code ?? "") ? 255 : 0;
       const x0 = Math.round((mask.origin.x + (chunk.cx * 16 + i % 16) * mask.sampleSize) * K), y0 = Math.round((mask.origin.y + (chunk.cy * 16 + Math.floor(i / 16)) * mask.sampleSize) * K);
       for (let y = Math.max(0, y0); y < Math.min(h, y0 + Math.max(1, Math.round(step))); y++) for (let x = Math.max(0, x0); x < Math.min(w, x0 + Math.max(1, Math.round(step))); x++) {
-        const at = (y * w + x) * 4; data[at] = depth ? 255 : 0; data[at + 1] = depth * 51;
+        const at = (y * w + x) * 4; data[at] = depth ? 255 : 0; data[at + 1] = depth * 51; data[at + 2] = beach;
       }
       any ||= depth > 0;
     }
@@ -68,16 +69,19 @@ export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement,
     stroke(samples, 0);
     any = true;
   }
-  if (shoal > 0 && any) {
+  if (any) {
     // Расстояние до суши двумя проходами (шаг по прямой 1, по диагонали 1,4). Край карты сушей не считается: море уходит за него.
+    // Вместе с расстоянием вода узнаёт, какой у неё ближайший берег.
     const wet = pen.getImageData(0, 0, w, h), px = wet.data, far = new Float32Array(w * h);
     for (let i = 0; i < far.length; i++) far[i] = px[i * 4] > 127 ? 1e6 : 0;
     const near = (i: number, x: number, y: number, dx: number, dy: number, cost: number) => {
-      if (x + dx >= 0 && x + dx < w && y + dy >= 0 && y + dy < h) far[i] = Math.min(far[i], far[i + dy * w + dx] + cost);
+      if (x + dx < 0 || x + dx >= w || y + dy < 0 || y + dy >= h) return;
+      const from = i + dy * w + dx;
+      if (far[from] + cost < far[i]) { far[i] = far[from] + cost; px[i * 4 + 2] = px[from * 4 + 2]; }
     };
     for (let y = 0, i = 0; y < h; y++) for (let x = 0; x < w; x++, i++) { near(i, x, y, -1, 0, 1); near(i, x, y, 0, -1, 1); near(i, x, y, -1, -1, 1.4); near(i, x, y, 1, -1, 1.4); }
     for (let y = h - 1, i = w * h - 1; y >= 0; y--) for (let x = w - 1; x >= 0; x--, i--) { near(i, x, y, 1, 0, 1); near(i, x, y, 0, 1, 1); near(i, x, y, 1, 1, 1.4); near(i, x, y, -1, 1, 1.4); }
-    for (let i = 0; i < far.length; i++) if (px[i * 4 + 1] > 51) px[i * 4 + 1] = Math.round(51 + (px[i * 4 + 1] - 51) * Math.min(1, far[i] / (shoal * K)));
+    if (shoal > 0) for (let i = 0; i < far.length; i++) if (px[i * 4 + 1] > 51) px[i * 4 + 1] = Math.round(51 + (px[i * 4 + 1] - 51) * Math.min(1, far[i] / (shoal * K)));
     pen.putImageData(wet, 0, 0);
   }
   out.filter = `blur(${K * 0.4}px)`; out.drawImage(raw, 0, 0); out.filter = "none";
@@ -139,7 +143,7 @@ float cellEdge(vec2 p, float t) {
 // В стоячей воде они совпадают, в реке рисунок сносит течением.
 // Комикс-панк: плоская заливка, пятна, толстые дуги волн, тушевый берег и рваная пена.
 vec4 comic(vec2 w, vec2 s, float t) {
-  vec2 mk = texture(uMask, w / uMap).rg;
+  vec3 mk = texture(uMask, w / uMap).rgb;
   float edge = mk.r + (noise(w * 2.7) - 0.5) * 0.14;
   // Порог ниже середины: шейдер закрывает и размытый край картинки воды под собой.
   float a = smoothstep(0.38, 0.44, edge);
@@ -159,7 +163,7 @@ vec4 comic(vec2 w, vec2 s, float t) {
   col = mix(col, vec3(0.93, 0.98, 0.95), body * step(0.9, kind));
   // Берег: внутри воды полоска пены, по самой кромке — тушь.
   float shore = smoothstep(0.45, 1.0, mk.r);
-  float foam = step(shore, 0.3 + 0.12 * noise(vec2(s.x * 3.0 + tick * 0.4, s.y * 3.0))) * step(0.35, noise(s * 5.0 + tick));
+  float foam = step(shore, 0.14 + 0.24 * mk.b + 0.12 * noise(vec2(s.x * 3.0 + tick * 0.4, s.y * 3.0))) * step(0.35, noise(s * 5.0 + tick));
   col = mix(col, vec3(0.93, 0.98, 0.95), foam);
   col = mix(col, ink, 1.0 - smoothstep(0.43, 0.5, edge));
   return vec4(col, a);
@@ -193,22 +197,22 @@ vec3 sea(vec2 p, float tick, float depth) {
 vec4 pixel(vec2 w, vec2 s, float t, bool isSea) {
   float P = uWater.z;
   vec2 p = floor(w * P), c = (p + 0.5) / P, ps = floor(s * P);
-  vec2 mk = texture(uMask, c / uMap).rg;
+  vec3 mk = texture(uMask, c / uMap).rgb;
   if (mk.r < 0.4) return vec4(0.0);
   float tick = floor(t * 6.0);
   // Ступени тонов на границе глубин ломаются шахматным смешением.
   float depth = depthAt(c) + (mod(p.x + p.y, 2.0) - 0.5) * 0.07;
   vec3 col = isSea ? sea(ps, tick, depth) : pond((ps + 0.5) / P, tick / 6.0, depth);
-  // Пена у берега: сплошная кромка в один пиксель и рваная полоса за ней.
-  float shore = smoothstep(0.4, 1.0, mk.r);
-  col = mix(col, vec3(0.9, 0.98, 0.95), min(1.0, step(shore, 0.1) + step(shore, 0.3) * step(0.6, hash(p + tick))));
+  // Пена у берега: сплошная кромка в один пиксель и рваная полоса за ней — у пляжа широкая, у травы узкая.
+  float shore = smoothstep(0.4, 1.0, mk.r), reach = 0.14 + 0.3 * step(0.5, mk.b);
+  col = mix(col, vec3(0.9, 0.98, 0.95), min(1.0, step(shore, 0.1) + step(shore, reach) * step(0.6, hash(p + tick))));
   return vec4(col, 1.0);
 }
 
 // Мягкая: без пикселей и без туши. Цвет плавно темнеет с глубиной, на мели просвечивает песчаное дно с камешками,
 // по воде плывут тонкие светлые кольца бликов.
 vec4 soft(vec2 w, vec2 s, float t) {
-  vec2 mk = texture(uMask, w / uMap).rg;
+  vec3 mk = texture(uMask, w / uMap).rgb;
   float a = smoothstep(0.36, 0.5, mk.r);
   if (a <= 0.0) return vec4(0.0);
   float depth = depthAt(w);
@@ -219,13 +223,20 @@ vec4 soft(vec2 w, vec2 s, float t) {
   vec2 q = s * 0.9 + 0.2 * vec2(noise(s * 1.1 + t * 0.2), noise(s * 1.1 + 5.0 - t * 0.2));
   float line = (1.0 - smoothstep(0.0, 0.05, cellEdge(q, t * 0.6))) * (0.6 - 0.35 * depth) * smoothstep(0.25, 0.6, noise(s * 0.6 + t * 0.1 + 3.0));
   col = mix(col, vec3(0.94, 1.0, 0.97), line);
-  // Прибой: светлая полоска у самой кромки, дышит.
-  float rim = 1.0 - smoothstep(0.5, 0.6 + 0.04 * sin(t * 1.5 + w.x * 2.0 + w.y), mk.r);
-  col = mix(col, vec3(0.96, 0.98, 0.9), rim * 0.75);
+  // Прибой: светлая полоска у самой кромки, дышит. У пляжа она широкая, у травы и камня — тонкая, а под ней тень берега.
+  float rim = 1.0 - smoothstep(0.5, 0.56 + 0.16 * mk.b + 0.04 * sin(t * 1.5 + w.x * 2.0 + w.y), mk.r);
+  col *= 1.0 - 0.3 * (1.0 - mk.b) * (1.0 - smoothstep(0.5, 0.8, mk.r));
+  col = mix(col, vec3(0.96, 0.98, 0.9), rim * (0.45 + 0.3 * mk.b));
   return vec4(col, a);
 }
 
 vec4 look(vec2 w, vec2 s, float t) { return uWater.x > 2.5 ? soft(w, s, t) : uWater.x > 0.5 ? pixel(w, s, t, uWater.x > 1.5) : comic(w, s, t); }
+// Мокрая полоса на суше у самой воды, 0…1: земля там темнее.
+float wetAt(vec2 world) {
+  if (world.x <= 0.0 || world.y <= 0.0 || world.x >= uMap.x || world.y >= uMap.y) return 0.0;
+  bool blocky = uWater.x > 0.5 && uWater.x < 2.5;
+  return smoothstep(0.03, 0.36, texture(uMask, (blocky ? (floor(world * uWater.z) + 0.5) / uWater.z : world) / uMap).r);
+}
 vec4 waterAt(vec2 world, float t) {
   if (world.x <= 0.0 || world.y <= 0.0 || world.x >= uMap.x || world.y >= uMap.y) return vec4(0.0);
   // Пиксельные виды считают течение по целому «пикселю» карты, иначе клетки рисунка рвутся.
@@ -257,8 +268,10 @@ uniform float uTime;
 uniform float uHeight;
 ${WATER_GLSL}
 void main() {
-  vec4 water = waterAt((vec2(gl_FragCoord.x, uHeight - gl_FragCoord.y) - uOrigin) / uScale, uTime * uWater.y);
-  finalColor = vec4(water.rgb * water.a, water.a);
+  vec2 world = (vec2(gl_FragCoord.x, uHeight - gl_FragCoord.y) - uOrigin) / uScale;
+  vec4 water = waterAt(world, uTime * uWater.y);
+  // Вне воды — полупрозрачная тень мокрой полосы.
+  finalColor = vec4(water.rgb * water.a, water.a + (1.0 - water.a) * wetAt(world) * 0.22);
 }`;
 type Still = { canvas: HTMLCanvasElement; gl: WebGL2RenderingContext; at: (name: string) => WebGLUniformLocation | null; mask: HTMLCanvasElement; raw: HTMLCanvasElement; flow: HTMLCanvasElement; sources: readonly unknown[]; any: boolean };
 let still: Still | null | undefined;
