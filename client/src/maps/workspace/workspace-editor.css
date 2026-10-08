@@ -164,5 +164,15 @@
 .workspace-editor-entity-dialog { width: min(560px, 100%); }
 .workspace-editor-label-dialog { --paper: #faf8ef; --paper-2: #f1eedf; --ink: #171717; --line: #171717; --muted: #625f54; --accent: #f3ff3a; --primary-bg: #f3ff3a; --primary-text: #171717; --font-ui: "Sofia Sans Semi Condensed", sans-serif; --font-body: "Sofia Sans Semi Condensed", sans-serif; --font-display: "Rubik Dirt", sans-serif; border-radius: 0; background: var(--paper); color: var(--ink); }
 .modal-backdrop:has(.workspace-editor-label-dialog) { left: 72px; right: 0; top: 56px; bottom: 32px; }
+/* Окно новой подписи: одно поле и две кнопки, без лишнего воздуха и без слипшихся краёв. */
+.modal.workspace-label-form { width: 360px; padding: 20px; border: 2px solid var(--ink); }
+.workspace-label-form h2 { margin: 0 0 14px; font-size: 22px; line-height: 1.1; }
+.workspace-label-form label { display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
+.workspace-label-form input { width: 100%; min-width: 0; padding: 8px 10px; border: 2px solid var(--ink); border-radius: 0; background: #fff; color: var(--ink); font: 500 var(--fs-body, 16px) var(--font-ui); }
+.workspace-label-form input:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+.workspace-label-form .modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.workspace-label-form .modal-footer button { min-width: 96px; padding: 8px 16px; border: 2px solid var(--ink); border-radius: 0; background: transparent; color: var(--ink); font: 600 var(--fs-data, 14px) var(--font-ui); }
+.workspace-label-form .modal-footer button.primary { background: var(--accent); }
+.workspace-label-form .modal-footer button:disabled { opacity: .45; }
 .map-workspace-source-bag .bag-cell-filled { position: relative; padding-bottom: var(--sp-6); }
 .map-workspace-source-bag .bag-cell-place { position: absolute; bottom: var(--sp-1); left: var(--sp-1); right: var(--sp-1); padding: var(--sp-1); font-size: var(--fs-meta); }
