@@ -26,12 +26,16 @@ export type GameplayEntityV6 = GameplayEntity | GameplayToken;
 export interface GameplayLayerV6 extends Omit<GameplayLayer, "items"> { items: GameplayEntityV6[] }
 export type MapLayerV6 = Exclude<MapLayer, GameplayLayer> | GameplayLayerV6;
 export type MapDrawingStyle = "blueprint" | "paper-ink" | "comic-punk";
+export const MAP_WATER_LOOKS = ["comic", "pond", "sea", "soft"] as const;
+export type MapWaterLook = typeof MAP_WATER_LOOKS[number];
 export interface MapDocumentV6 extends Omit<MapDocumentV5, "v" | "layers"> {
   v: 6; layers: MapLayerV6[];
   /** Map presentation is independent of generated geometry and app theme. */
   appearance?: { style: MapDrawingStyle;
     /** Поля вокруг карты, клеток: докуда доходит камера и что попадает в картинку. Без поля камера свободна. */
-    frame?: number };
+    frame?: number;
+    /** Живая вода вместо воды-картинки и её вид. Без поля вода остаётся картинкой. */
+    water?: MapWaterLook };
 }
 export interface MapRecordV6 extends Omit<MapRecordV5, "document"> { revision: number; document: MapDocumentV6 }
 
@@ -91,6 +95,10 @@ export function validateMapDocumentV6(doc: unknown): ValidationIssue[] {
   if (frame !== undefined && (typeof frame !== "number" || !Number.isFinite(frame) || frame < 0 || frame > 100)) {
     errors.push({ code: "appearance.bad-frame", path: "appearance.frame", message: "frame must be 0..100 cells" });
   }
+  const water = record(doc.appearance) ? doc.appearance.water : undefined;
+  if (water !== undefined && !(MAP_WATER_LOOKS as readonly unknown[]).includes(water)) {
+    errors.push({ code: "appearance.bad-water", path: "appearance.water", message: "unknown water look" });
+  }
   if (Array.isArray(doc.layers)) doc.layers.forEach((layer, li) => {
     if (record(layer) && layer.kind === "gameplay" && Array.isArray(layer.items)) layer.items.forEach((item, ei) => {
       if (record(item) && item.kind === "token") errors.push(...validateGameplayToken(item, `layers[${li}].items[${ei}]`));
@@ -114,7 +122,8 @@ export function upgradeMapDocumentV5(doc: MapDocumentV5): MapDocumentV6 {
   return { ...canonicalizeMapDocument(doc), v: 6 };
 }
 const canonAppearance = (doc: MapDocumentV6) => doc.appearance
-  ? { appearance: { style: doc.appearance.style, ...(doc.appearance.frame !== undefined ? { frame: doc.appearance.frame } : {}) } } : {};
+  ? { appearance: { style: doc.appearance.style, ...(doc.appearance.frame !== undefined ? { frame: doc.appearance.frame } : {}),
+    ...(doc.appearance.water !== undefined ? { water: doc.appearance.water } : {}) } } : {};
 export function canonicalizeMapDocumentV6(doc: MapDocumentV6): MapDocumentV6 {
   const base = canonicalizeMapDocument(invariantView(doc as unknown as Record<string, unknown>) as MapDocumentV5);
   return { ...base, v: 6, ...canonAppearance(doc), layers: base.layers.map((layer, i) => {

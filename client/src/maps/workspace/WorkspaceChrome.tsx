@@ -1,6 +1,6 @@
 import { Fragment, memo } from "react";
 import { Link } from "react-router-dom";
-import type { MapDocumentV6, MapDrawingStyle } from "@shared/maps/core";
+import type { MapDocumentV6, MapDrawingStyle, MapWaterLook } from "@shared/maps/core";
 import { MapWorkspaceTools } from "./MapWorkspace";
 import { MapToolIcon } from "./MapToolIcon";
 import { WorkspaceMenu } from "./WorkspaceMenu";
@@ -15,6 +15,7 @@ import { EFFECTS, type EffectState, type MapEffect, type MapEffects } from "../g
 // шаг наведения 16 мс, из них холст — меньшая часть. Обработчики сюда
 // приходят стабильными ссылками (`useEvent` в странице), иначе memo не держит.
 
+const WATER_LOOKS: readonly [MapWaterLook, string][] = [["soft", "Мягкая, с дном"], ["pond", "Пиксель-арт: пруд"], ["sea", "Пиксель-арт: море"], ["comic", "Комикс"]];
 export type GridLook = { opacity: number; lineWidth: number; lineStyle: "solid" | "dashed"; color: string };
 const GRID_COLORS = [["#000000", "Чёрная"], ["#ffffff", "Белая"], ["#ff3e91", "Розовая"], ["#ffe14a", "Жёлтая"]] as const;
 const EFFECT_NAMES = Object.keys(EFFECTS) as MapEffect[];
@@ -33,13 +34,15 @@ export const WorkspaceToolRail = memo(function WorkspaceToolRail({ toolSet, tool
 });
 
 export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, toolSet, onToolSet, canUndo, canRedo, onUndo, onRedo, grid, onGrid,
-  style, onStyle, styleLocked, frame, onFrame, generatorLocked, saveLocked, onGenerator, onSave, onBackup, onPicture, gl, onGl, effects, onEffect, onEffectsReset, classicLink }: {
+  style, onStyle, styleLocked, frame, onFrame, water, onWater, generatorLocked, saveLocked, onGenerator, onSave, onBackup, onPicture, gl, onGl, effects, onEffect, onEffectsReset, classicLink }: {
   mapName: string; status: string; toolSet: ToolSet; onToolSet: (set: ToolSet) => void;
   canUndo: boolean; canRedo: boolean; onUndo: () => void; onRedo: () => void;
   grid: GridLook; onGrid: (patch: Partial<GridLook>) => void;
   style: MapDrawingStyle; onStyle: (style: MapDrawingStyle) => void; styleLocked: boolean;
   /** Поля вокруг карты, клеток; undefined — рамки нет. */
   frame: number | undefined; onFrame: (frame: number | undefined) => void;
+  /** Вид живой воды; undefined — вода картинкой. */
+  water: MapWaterLook | undefined; onWater: (water: MapWaterLook | undefined) => void;
   generatorLocked: boolean; saveLocked: boolean; onGenerator: () => void; onSave: () => void; onBackup: () => void; onPicture: () => void;
   /** Отрисовка плитками через WebGL вместо обычного холста. */
   gl: boolean; onGl: (value: boolean) => void;
@@ -71,7 +74,7 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, 
       </WorkspaceMenu>
       <WorkspaceMenu label="Эффекты ▾" title="Эффекты" className="workspace-effects-menu">
         {!gl && <p>Эффекты работают в новой отрисовке: «Карта ▾ → Новая отрисовка».</p>}
-        {["Печать", "Погода", "Вода (проба)"].map((group) => <fieldset key={group} disabled={!gl}><legend>{group}</legend>
+        {["Печать", "Погода"].map((group) => <fieldset key={group} disabled={!gl}><legend>{group}</legend>
           {EFFECT_NAMES.filter((name) => EFFECTS[name].group === group).map((name) => { const state = effects[name]; return <Fragment key={name}>
             <label><input type="checkbox" checked={state.on} onChange={event => onEffect(name, { ...state, on: event.target.checked })} />{EFFECTS[name].label}</label>
             {state.on && EFFECTS[name].params.map((param) => <label key={param.key} className="workspace-effect-knob">{param.label} · {state.values[param.key]}
@@ -85,6 +88,13 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, 
         <fieldset disabled={styleLocked}><legend>Оформление</legend>
           {STYLES.map(([value, name]) => <label key={value}>
             <input type="radio" name="workspace-style" checked={style === value} onChange={() => onStyle(value)} />{name}</label>)}
+        </fieldset>
+        <fieldset disabled={styleLocked}><legend>Вода</legend>
+          <label>Вид воды<select aria-label="Вид воды" value={water ?? ""} onChange={(event) => onWater((event.target.value || undefined) as MapWaterLook | undefined)}>
+            <option value="">Картинкой, без движения</option>
+            {WATER_LOOKS.map(([value, name]) => <option key={value} value={value}>{name}</option>)}
+          </select></label>
+          <small>Живая вода плавно меняет глубину. Движется она в новой отрисовке, в остальных местах стоит одним кадром.</small>
         </fieldset>
         <fieldset disabled={styleLocked}><legend>Рамка</legend>
           <label><input type="checkbox" checked={frame !== undefined} onChange={(event) => onFrame(event.target.checked ? 2 : undefined)} />Рамка вокруг карты</label>

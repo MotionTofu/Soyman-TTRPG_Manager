@@ -7,6 +7,7 @@ import { artworkImage, doorImage, paperPattern, patternSource, stripImage, surfa
 import { drawWallPolyline } from "./assets/wallArtwork";
 import { fencePostId, villageId } from "./assets/village";
 import { labelBox, labelFamily } from "./labelStyle";
+import { drawWaterStill, type MapWater } from "./water";
 import { cutKey, cutRoad, drawCrossingDraft, roadCrossings, type RoadCut } from "./crossings";
 // Рендер карты на canvas 2D. Цвета террейна — фиксированная спокойная
 // палитра (исключение как у Полотна §6 design_revision.md: бюджет акцента
@@ -691,6 +692,10 @@ export interface RenderOptions {
   cartography?: boolean;
   /** Чей рисунок у полов, стен и дверей: «Бумага и тушь» или «Склеп» (комикс-панк). */
   artPack?: ArtPack;
+  /** Живая вода. На обычном холсте рисуется одним кадром поверх земли; сцена WebGL кладёт её сама и просит карту по частям. */
+  water?: MapWater;
+  /** Не стирать холст перед отрисовкой: вторая половина карты ложится поверх первой. */
+  keep?: boolean;
   /** Поля вокруг карты, клеток; за ними холст закрыт. Без поля карта не ограничена. */
   frame?: number;
   /** Половина карты для сцены с водой-шейдером: «земля» — бумага, поверхности и реки с водой;
@@ -760,9 +765,16 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
   const fonts = o.fonts ?? readCanvasFonts();
   const pack = o.artPack ?? "cartography";
   const dungeon = !!o.cartography && model.layers.some(layer => layer.visible && layer.kind === "terrain" && (layer.terrain.defaultCode === "wall" || (!layer.terrain.mask && [...layer.terrain.entries.values()].includes("wall"))));
+  if (o.water && !o.part) {
+    // Земля, на неё вода, потом всё остальное — мосты, дороги и фишки остаются над водой.
+    renderMap(ctx, canvasW, canvasH, { ...o, part: "ground" });
+    drawWaterStill(ctx, model, width, height, o.water, canvasW, canvasH, scale, ox, oy, pixelRatio);
+    renderMap(ctx, canvasW, canvasH, { ...o, part: "over", keep: true });
+    return;
+  }
   const part = o.part, waterRiver = (path: RenderPath) => path.kind === "river" && !!path.style && !!path.nodes;
   ctx.save();
-  ctx.clearRect(0, 0, canvasW, canvasH);
+  if (!o.keep) ctx.clearRect(0, 0, canvasW, canvasH);
   if (part !== "over") { ctx.fillStyle = chrome.paper; ctx.fillRect(0, 0, canvasW, canvasH); }
 
   if (part !== "over" && o.cartography && pack === "crypt" && ctx.canvas) {

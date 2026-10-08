@@ -7,9 +7,9 @@ import type { MapFull } from "../mapTypes";
 import type { Camera } from "../editor/hooks/useMapCamera";
 import { renderMap } from "../render";
 import { MapStage, type MapStageContent } from "../gl/MapStage";
-import { styleLook, workspaceDrawingStyle } from "./drawingStyle";
+import { mapWater, styleLook, workspaceDrawingStyle } from "./drawingStyle";
 import { prepareLabelFonts } from "../labelStyle";
-import { chosenLook, chosenWater, chosenWeather, type MapEffects } from "../gl/effects";
+import { chosenLook, chosenWeather, type MapEffects } from "../gl/effects";
 import { createWorkspaceRenderModel } from "./renderV6";
 import { retryMapArtwork, cartographyStyleUnavailable, prepareMapImageAssets, prepareCartographyStyle, subscribeMapImageAssets } from "../assets/registry";
 import type { TokenDisplay } from "./useTokenPresentations";
@@ -91,7 +91,10 @@ export function WorkspaceCanvas({ gl, onGlFail, effects, map, document, camera, 
     return () => { stage.destroy(); stageRef.current = null; };
   }, [gl, onGlFail, wrapRef, meter]);
   const look = styleLook(document);
-  useEffect(() => { if (gl) stageRef.current?.effects(chosenLook(look, effects), chosenWeather(effects), chosenWater(effects)); }, [gl, look, effects]);
+  const waterLook = document.appearance?.water;
+  useEffect(() => { if (gl) stageRef.current?.effects(chosenLook(look, effects), chosenWeather(effects), mapWater(document)); },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- вода зависит только от своего вида, а не от каждой правки карты
+    [gl, look, effects, waterLook]);
   const content = useMemo<MapStageContent>(() => {
     void revision;
     return { grid: map.grid, width: map.width, height: map.height, model: rendered.model,

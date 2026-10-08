@@ -1,4 +1,5 @@
-import type { MapDocumentV6, MapDrawingStyle } from "@shared/maps/core";
+import { MAP_WATER_LOOKS, type MapDocumentV6, type MapDrawingStyle } from "@shared/maps/core";
+import type { MapWater } from "../water";
 import type { MapLook } from "../gl/styleFilter";
 import { MAP_TERRAIN_FILL, readChrome } from "../render";
 import { VILLAGE_FILL } from "../assets/village";
@@ -19,7 +20,13 @@ const LOOKS: Record<MapDrawingStyle, MapLook | null> = {
   blueprint: null,
 };
 export const styleLook = (document: MapDocumentV6) => LOOKS[document.appearance?.style ?? "paper-ink"];
+/** Живая вода карты; null — вода остаётся картинкой. Скорость и размер пикселя пока общие для всех карт. */
+export function mapWater(document: MapDocumentV6): MapWater | null {
+  const look = document.appearance?.water;
+  return look ? { mode: MAP_WATER_LOOKS.indexOf(look) as MapWater["mode"], speed: 1, size: 8 } : null;
+}
 export function workspaceDrawingStyle(document: MapDocumentV6) {
+  const water = mapWater(document);
   const style = document.appearance?.style ?? "paper-ink";
   const paper = style === "blueprint" ? "#ffffff" : style === "comic-punk" ? "#e9e1c8" : "#f1eedf";
   return {
@@ -29,5 +36,6 @@ export function workspaceDrawingStyle(document: MapDocumentV6) {
     cartography: style !== "blueprint",
     artPack: style === "comic-punk" ? "crypt" as const : "cartography" as const,
     ...(document.appearance?.frame !== undefined ? { frame: document.appearance.frame } : {}),
+    ...(water ? { water } : {}),
   };
 }

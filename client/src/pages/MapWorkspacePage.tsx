@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import type { MapDocumentV6, MapDrawingStyle, Vec2 } from "@shared/maps/core";
+import type { MapDocumentV6, MapDrawingStyle, MapWaterLook, Vec2 } from "@shared/maps/core";
 import { useCurrentUser } from "../api/currentUser";
 import { useAfterWrite } from "../data/hooks";
 import { useConfirm } from "../hooks/useConfirm";
@@ -257,6 +257,7 @@ export function MapWorkspacePage() {
     if (patch.color !== undefined) setGridColor(patch.color);
   });
   const onStyle = useEvent((style: MapDrawingStyle) => commit((before) => ({ ...before, appearance: { ...before.appearance, style } })));
+  const onWater = useEvent((water: MapWaterLook | undefined) => commit((before) => { const { water: _old, ...rest } = before.appearance ?? { style: "paper-ink" as const }; return { ...before, appearance: water === undefined ? rest : { ...rest, water } }; }));
   const onFrame = useEvent((frame: number | undefined) => commit((before) => { const { frame: _old, ...rest } = before.appearance ?? { style: "paper-ink" as const }; return { ...before, appearance: frame === undefined ? rest : { ...rest, frame } }; }));
   const onGenerator = useEvent(() => { finishGesture(); placement.cancel(); setSelection(null); setGeneratorOpen(true); });
   const onSave = useEvent(() => { finishGesture(); void autosave.flush(); }), onBackup = useEvent(backup);
@@ -296,7 +297,7 @@ export function MapWorkspacePage() {
 
     <WorkspaceHeader mapName={map.name} status={`${leaving ? "Сохраняем перед выходом…" : SAVE_STATE[autosave.status.kind]}${document.grid ? ` · ${document.grid.columns} × ${document.grid.rows} клеток` : ""}`}
       toolSet={toolSet} onToolSet={onChooseToolSet} canUndo={history.canUndo && !disabled && !leaving} canRedo={history.canRedo && !disabled && !leaving} onUndo={onUndo} onRedo={onRedo}
-      grid={grid} onGrid={onGrid} style={document.appearance?.style ?? "paper-ink"} onStyle={onStyle} styleLocked={disabled || leaving} frame={document.appearance?.frame} onFrame={onFrame}
+      grid={grid} onGrid={onGrid} style={document.appearance?.style ?? "paper-ink"} onStyle={onStyle} styleLocked={disabled || leaving} frame={document.appearance?.frame} onFrame={onFrame} water={document.appearance?.water} onWater={onWater}
       generatorLocked={leaving || !!doc.compatibilityError || autosave.blocked || autosave.status.kind === "conflict"} saveLocked={saveBlocked}
       onGenerator={onGenerator} onSave={onSave} onBackup={onBackup} onPicture={onPicture} gl={gl} onGl={onGl} effects={effects} onEffect={onEffect} onEffectsReset={onEffectsReset} classicLink={map.document_version !== 6 ? `/maps/${map.id}` : null} />
 

@@ -1,13 +1,11 @@
 import { expect, it } from "vitest";
-import { chosenWater, defaultMapEffects } from "./effects";
+import { loadStoredWorkspaceDocument } from "../editor/loadDocument";
+import { mapWater } from "../workspace/drawingStyle";
 
-it("вода шейдером выключена, пока не выбрана; из нескольких видов рисуется нижний в списке", () => {
-  const effects = defaultMapEffects();
-  expect(chosenWater(effects)).toBeNull();
-  effects.water.on = true;
-  expect(chosenWater(effects)).toMatchObject({ mode: 0, speed: 1 });
-  effects.waterPond.on = true; effects.waterPond.values.size = 12;
-  expect(chosenWater(effects)).toEqual({ mode: 1, speed: 1, size: 12 });
-  effects.waterSoft.on = true;
-  expect(chosenWater(effects)).toMatchObject({ mode: 3 });
+it("вид воды хранится в карте: без него вода остаётся картинкой", () => {
+  const loaded = loadStoredWorkspaceDocument({ grid: "square", width: 20, height: 10, cells: '{"v":1,"cells":{},"roads":[]}' });
+  if (loaded.status !== "supported") throw Error("fixture");
+  expect(mapWater(loaded.document)).toBeNull();
+  const soft = { ...loaded.document, appearance: { style: "paper-ink" as const, water: "soft" as const } };
+  expect(mapWater(soft)).toEqual({ mode: 3, speed: 1, size: 8 });
 });
