@@ -19,6 +19,7 @@ export const mapPacksRouter = Router();
 export const MAP_PACK_CELL_PX = 256;
 const MAX_CELLS = 16;
 const KINDS = ["tactical", "city", "overview"];
+const SIDES = ["w", "n", "e"];
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 1, fields: 12 },
   fileFilter(_req, file, cb) {
     if (["image/png", "image/jpeg", "image/webp", "image/avif", "image/gif"].includes(file.mimetype)) cb(null, true);
@@ -131,16 +132,23 @@ mapPacksRouter.post("/:id/items", withUpload(async (req, res) => {
   res.status(201).json({ pack: onePack(pack.id), small: image.small });
 }));
 
-// Ещё один вариант того же объекта: каталог берёт случайный при постановке.
+// Ещё один вариант того же объекта (каталог берёт случайный при постановке) или вид поворотного предмета со стороны:
+// `role` w / n / e — как предмет выглядит, повёрнутый на 90°, 180° и 270°. Новый вид стороны заменяет прежний.
 mapPacksRouter.post("/items/:itemId/images", withUpload(async (req, res) => {
   const item = db.prepare(`SELECT i.*, p.uid AS pack_uid FROM map_asset_items i JOIN map_asset_packs p ON p.id = i.pack_id
     WHERE i.id = ? AND i.archived_at IS NULL AND p.archived_at IS NULL`).get(req.params.itemId) as (ItemRow & { pack_uid: string }) | undefined;
   if (!item) return res.status(404).json({ error: "Объект не найден" });
-  const count = (db.prepare("SELECT COUNT(*) AS n FROM map_asset_images WHERE item_id = ? AND archived_at IS NULL").get(item.id) as { n: number }).n;
-  if (count >= 12) return res.status(400).json({ error: "У объекта не больше 12 вариантов" });
+  const role = SIDES.includes(req.body.role) ? req.body.role as string : "variant";
+  const count = (db.prepare("SELECT COUNT(*) AS n FROM map_asset_images WHERE item_id = ? AND role = 'variant' AND archived_at IS NULL").get(item.id) as { n: number }).n;
+  if (role === "variant" && count >= 12) return res.status(400).json({ error: "У объекта не больше 12 вариантов" });
   const data = objectData(json<Record<string, unknown>>(item.data, {}));
-  const image = await storeImage(item.pack_uid, req.file!.buffer, data.w, data.h);
-  db.prepare("INSERT INTO map_asset_images (uid, item_id, role, position, file_path, width, height) VALUES (?, ?, 'variant', ?, ?, ?, ?)").run(image.uid, item.id, Date.now() % 2147483647, image.file, image.width, image.height);
+  // Сбоку предмет занимает те же клетки, но лежит поперёк.
+  const across = role === "w" || role === "e";
+  const image = await storeImage(item.pack_uid, req.file!.buffer, across ? data.h : data.w, across ? data.w : data.h);
+  db.transaction(() => {
+    if (role !== "variant") db.prepare("UPDATE map_asset_images SET archived_at = datetime('now') WHERE item_id = ? AND role = ? AND archived_at IS NULL").run(item.id, role);
+    db.prepare("INSERT INTO map_asset_images (uid, item_id, role, position, file_path, width, height) VALUES (?, ?, ?, ?, ?, ?, ?)").run(image.uid, item.id, role, Date.now() % 2147483647, image.file, image.width, image.height);
+  })();
   res.status(201).json({ pack: onePack(item.pack_id), small: image.small });
 }));
 
@@ -168,8 +176,8 @@ mapPacksRouter.delete("/items/:itemId", (req, res) => {
 mapPacksRouter.delete("/images/:imageId", (req, res) => {
   const image = db.prepare("SELECT * FROM map_asset_images WHERE id = ? AND archived_at IS NULL").get(req.params.imageId) as ImageRow | undefined;
   if (!image) return res.status(404).json({ error: "Картинка не найдена" });
-  const count = (db.prepare("SELECT COUNT(*) AS n FROM map_asset_images WHERE item_id = ? AND archived_at IS NULL").get(image.item_id) as { n: number }).n;
-  if (count <= 1) return res.status(400).json({ error: "Последний вариант удалить нельзя — уберите объект целиком" });
+  const count = (db.prepare("SELECT COUNT(*) AS n FROM map_asset_images WHERE item_id = ? AND role = 'variant' AND archived_at IS NULL").get(image.item_id) as { n: number }).n;
+  if (image.role === "variant" && count <= 1) return res.status(400).json({ error: "Последний вариант удалить нельзя — уберите объект целиком" });
   db.prepare("UPDATE map_asset_images SET archived_at = datetime('now') WHERE id = ?").run(image.id);
   const item = db.prepare("SELECT pack_id FROM map_asset_items WHERE id = ?").get(image.item_id) as { pack_id: number };
   res.json(onePack(item.pack_id));

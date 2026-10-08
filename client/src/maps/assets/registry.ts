@@ -27,7 +27,9 @@ export interface MapImageAsset {
   ready: Promise<void>;
   failed?: boolean;
   /** Поворотный предмет: свой рисунок на каждую сторону вместо поворота картинки. */
-  views?: Readonly<Record<CryptSide, MapImageAsset>>;
+  views?: Readonly<Partial<Record<CryptSide, MapImageAsset>>>;
+  /** Картинки нет, пока набор в архиве: на карте заглушка с этой подписью. */
+  missing?: string;
 }
 
 export interface MapSymbolAsset {
@@ -119,6 +121,7 @@ export function registerMapImageResources(resources: readonly MapImageResource[]
       id, name: resource.name, tags: [], kind: "image", image: null, ready: settledReady,
     };
     asset.name = resource.name;
+    asset.missing = undefined;
     asset.tags = resource.tags?.split(",").map((tag) => tag.trim()).filter(Boolean) ?? [];
     asset.image = null;
     asset.ready = settledReady;
@@ -126,6 +129,25 @@ export function registerMapImageResources(resources: readonly MapImageResource[]
     imageUrls.set(id, url);
     announceImageChange();
   }
+}
+
+/** Виды поворотного предмета из своего набора: рисунок на сторону вместо поворота картинки. Стороны без вида рисуются поворотом. */
+export function setMapImageViews(id: string, views: Partial<Record<CryptSide, string>>): void {
+  const asset = imageAssets.get(id);
+  if (!asset) return;
+  const entries = Object.entries(views).flatMap(([side, viewId]) => { const view = imageAssets.get(viewId); return view ? [[side, view] as const] : []; });
+  asset.views = entries.length ? Object.fromEntries(entries) : undefined;
+}
+
+/** Картинка набора из архива: на карте вместо неё заглушка с подписью, пока набор не вернут. */
+export function markMapImageMissing(uid: string, label: string): void {
+  const id = resourceImageAssetId(uid), existing = imageAssets.get(id);
+  if (existing?.missing === label) return;
+  const blobUrl = blobUrls.get(id);
+  if (blobUrl) URL.revokeObjectURL(blobUrl);
+  blobUrls.delete(id); imageUrls.delete(id);
+  imageAssets.set(id, Object.assign(existing ?? { id, name: label, tags: [], kind: "image" as const }, { image: null, ready: settledReady, missing: label, views: undefined }));
+  announceImageChange();
 }
 
 export function getMapImageAsset(id: string): MapImageAsset | null {
@@ -138,7 +160,7 @@ export function loadMapImageAsset(id: string): Promise<void> {
     const existing = localLoads.get(id);
     if (existing) return existing;
     const load = local.views
-      ? Promise.all(Object.values(local.views).map(view => loadMapImageAsset(view.id))).then(() => { local.image = local.views!.s.image; local.failed = false; announceImageChange(); })
+      ? Promise.all(Object.values(local.views).map(view => loadMapImageAsset(view.id))).then(() => { local.image = local.views!.s!.image; local.failed = false; announceImageChange(); })
       : (async () => {
         const image = new Image();
         image.src = localUrl(id);
@@ -156,6 +178,8 @@ export function loadMapImageAsset(id: string): Promise<void> {
   }
   const asset = imageAssets.get(id);
   const url = imageUrls.get(id);
+  if (asset?.missing) return Promise.resolve();
+  if (asset?.views) for (const view of Object.values(asset.views)) if (view && !view.image) void loadMapImageAsset(view.id).catch(() => undefined);
   if (!asset || !url) return Promise.reject(new Error(`Ресурс карты ${id} не найден`));
   if (asset.image) return Promise.resolve();
   if (asset.ready !== settledReady) return asset.ready;

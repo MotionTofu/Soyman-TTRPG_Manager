@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ownImageId, ownObjectSize, ownRandomId, pickOwnVariant, registerOwnPacks, type OwnPack, type OwnPackImage } from "./ownPacks";
-import { allPacks, connectedPacks, packName } from "./packs";
+import { allPacks, connectedPacks, packName, packOfAsset } from "./packs";
 import { getMapImageAsset } from "./registry";
 
 const image = (n: number, archived = false): OwnPackImage => ({ id: n, uid: `00000000-0000-4000-8000-00000000000${n}`, role: "variant", width: 768, height: 512, archived, file_url: `/files/MapPacks/p/${n}.webp?sig=x&exp=1` });
@@ -29,11 +29,31 @@ describe("свои наборы ассетов", () => {
     expect(connectedPacks(undefined, "tactical")).not.toContain("11111111-1111-4111-8111-111111111111");
     expect(packName("11111111-1111-4111-8111-111111111111")).toBe("Порт");
   });
+  it("вид по стороне подменяет поворот картинки; убранный вид не используется", () => {
+    const side = (n: number, role: string, archived = false): OwnPackImage => ({ ...image(n, archived), role });
+    const own = pack();
+    own.items[0].images.push(side(4, "w"), side(5, "e", true));
+    registerOwnPacks([own]);
+    const views = getMapImageAsset(ownImageId(own.items[0].images[0]))?.views;
+    expect(views?.w?.id).toBe(ownImageId(own.items[0].images[3]));
+    expect(views?.e).toBeUndefined();
+    // Вид стороны — не вариант: случайный выбор его не берёт.
+    expect(pickOwnVariant(ownRandomId(own.items[0]), () => 0.99)).toBe(ownImageId(own.items[0].images[1]));
+    expect(packOfAsset("soyman-village:hut")).toBe("village");
+    expect(packOfAsset("soyman-symbols:tree")).toBe("ink");
+    expect(packOfAsset("soyman-resource-images:99999999-9999-4999-8999-999999999999")).toBeNull();
+  });
   it("набор в архиве уходит из библиотеки, его размеры забываются — на карте заглушка", () => {
     const archived = pack({ archived: true });
     registerOwnPacks([archived]);
     expect(allPacks().map((entry) => entry.name)).not.toContain("Порт");
     expect(ownObjectSize(ownImageId(archived.items[0].images[0]))).toBeNull();
+    // Картинка остаётся в реестре заглушкой с названием набора и помнит свой набор; вернули набор — заглушка снята.
+    expect(getMapImageAsset(ownImageId(archived.items[0].images[0]))).toMatchObject({ missing: "«Порт» в архиве", image: null });
+    expect(packOfAsset(ownImageId(archived.items[0].images[0]))).toBe(archived.uid);
+    registerOwnPacks([pack()]);
+    expect(getMapImageAsset(ownImageId(archived.items[0].images[0]))?.missing).toBeUndefined();
+    registerOwnPacks([archived]);
     // Имя набора остаётся известным: по нему подписывается заглушка.
     expect(packName(archived.uid)).toBe("Порт");
   });

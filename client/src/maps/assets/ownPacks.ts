@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { MapKind } from "../mapTypes";
-import { getMapImageAsset, loadMapImageAsset, registerMapImageResources, resourceImageAssetId, subscribeMapImageAssets } from "./registry";
+import { getMapImageAsset, loadMapImageAsset, markMapImageMissing, registerMapImageResources, resourceImageAssetId, setMapImageViews, subscribeMapImageAssets } from "./registry";
 
 /** Наборы ассетов Мастера с сервера (`/map-packs`). Картинки идут в общий реестр изображений карты:
  * на карте лежит id картинки, как у вещей из галереи, поэтому формат карты не меняется. */
@@ -15,6 +15,12 @@ const RANDOM = "soyman-pack-item:";
 let current: readonly OwnPack[] = [];
 const sizes = new Map<string, number>();
 const variants = new Map<string, string[]>();
+const owners = new Map<string, string>();
+/** Стороны поворотного предмета сверх основной: каким он виден, повёрнутый на 90°, 180° и 270°. */
+export const OWN_SIDES = [["w", "Повёрнут на 90°"], ["n", "Повёрнут на 180°"], ["e", "Повёрнут на 270°"]] as const;
+export const sideImage = (item: OwnPackItem, side: string) => item.images.find((image) => !image.archived && image.role === side) ?? null;
+/** uid своего набора, которому принадлежит картинка, — и для набора в архиве. */
+export const ownPackOf = (assetId: string) => owners.get(assetId) ?? null;
 
 export const ownImageId = (image: OwnPackImage) => resourceImageAssetId(image.uid);
 /** «Случайный вариант» объекта своего набора: на карту всегда попадает конкретная картинка. */
@@ -22,14 +28,21 @@ export const ownRandomId = (item: OwnPackItem) => `${RANDOM}${item.uid}*`;
 export const liveImages = (item: OwnPackItem) => item.images.filter((image) => !image.archived && image.role === "variant");
 export const ownPacks = () => current;
 
-/** Запомнить наборы и завести их картинки в реестр. Набор в архиве не заводится: на картах его вещи — заглушки.
- * Убранные объекты и варианты заводятся: карта, где они стоят, рисуется как раньше.
- * ponytail: картинка набора, отправленного в архив в этом же окне, остаётся в реестре до перезагрузки страницы. */
+/** Запомнить наборы и завести их картинки в реестр. У набора в архиве вместо картинок — заглушки с его названием.
+ * Убранные объекты и варианты заводятся: карта, где они стоят, рисуется как раньше. */
 export function registerOwnPacks(packs: readonly OwnPack[]): void {
-  current = packs; sizes.clear(); variants.clear();
+  current = packs; sizes.clear(); variants.clear(); owners.clear();
+  for (const pack of packs) for (const item of pack.items) for (const image of item.images) {
+    owners.set(ownImageId(image), pack.uid);
+    if (pack.archived) markMapImageMissing(image.uid, `«${pack.name}» в архиве`);
+  }
   for (const pack of packs) if (!pack.archived) for (const item of pack.items) {
     registerMapImageResources(item.images.map((image) => ({ uid: image.uid, name: item.name, file_url: image.file_url, tags: item.tags })));
-    for (const image of item.images) sizes.set(ownImageId(image), Math.max(item.w, item.h));
+    const views = Object.fromEntries(OWN_SIDES.flatMap(([side]) => { const image = sideImage(item, side); return image ? [[side, ownImageId(image)]] : []; }));
+    for (const image of item.images) {
+      sizes.set(ownImageId(image), Math.max(item.w, item.h));
+      if (image.role === "variant") setMapImageViews(ownImageId(image), views);
+    }
     if (!item.archived) variants.set(ownRandomId(item), liveImages(item).map(ownImageId));
   }
 }

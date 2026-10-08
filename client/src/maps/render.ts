@@ -1751,7 +1751,9 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
         const { position, scale: objectScale } = object.transform;
         let { rotation } = object.transform;
         // Поворотный предмет: вид по стороне, сама картинка не крутится.
-        const view = "views" in asset && asset.views ? asset.views[cryptSide(rotation)] : null;
+        // У своих наборов вид стороны может быть не задан или ещё грузиться — тогда картинка просто поворачивается.
+        const base = "image" in asset ? asset : null, side = base?.views?.[cryptSide(rotation)] ?? null;
+        const view = side && (side.image || !base?.image) ? side : null;
         if (view) rotation = 0;
         const art = view ? view.image : "image" in asset ? asset.image : null;
         const margin = Math.max(Math.abs(objectScale.x), Math.abs(objectScale.y)) * scale * Math.SQRT2 / 2;
@@ -1774,6 +1776,14 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
           ctx.strokeRect(-0.5, -0.5, 1, 1);
         }
         ctx.restore();
+        // Заглушка вещи из набора в архиве подписана: Мастер видит, какой набор вернуть.
+        if ("missing" in asset && asset.missing && !playerView && scale >= 12) {
+          ctx.save();
+          ctx.font = `700 ${Math.max(9, Math.min(12, Math.round(scale * 0.22)))}px ${fonts.mono}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillStyle = "#282922";
+          ctx.fillText(asset.missing, sx, sy, Math.max(Math.abs(objectScale.x), Math.abs(objectScale.y)) * scale - 4);
+          ctx.restore();
+        }
         if (selectedId === object.id && !playerView) {
           ctx.save();
           ctx.translate(sx, sy);

@@ -8,7 +8,11 @@ import { SectionBackground } from "../components/SectionBackground";
 import { useConfirm } from "../hooks/useConfirm";
 import { MAP_KIND_LABELS, type MapKind } from "../maps/mapTypes";
 import { MAP_PACKS } from "../maps/assets/packs";
-import { PACK_CELL_PX, liveImages, ownImageId, ownImageSrc, registerOwnPacks, useMapImageRevision, type OwnPack, type OwnPackItem } from "../maps/assets/ownPacks";
+import { OWN_SIDES, PACK_CELL_PX, liveImages, ownImageId, ownImageSrc, registerOwnPacks, sideImage, useMapImageRevision, type OwnPack, type OwnPackItem } from "../maps/assets/ownPacks";
+import { CARTOGRAPHY_OBJECTS, CARTOGRAPHY_SURFACES, cartographyUrl } from "../maps/assets/cartography";
+import { CRYPT_CATEGORIES, CRYPT_OBJECTS, cryptUrl, type CryptCategory } from "../maps/assets/crypt";
+import { VILLAGE_CATEGORIES, VILLAGE_OBJECTS, VILLAGE_RIVERS, VILLAGE_ROADS, VILLAGE_SURFACES, villageUrl, type VillageCategory } from "../maps/assets/village";
+import { MAP_SYMBOL_ASSETS } from "../maps/assets/registry";
 
 const KINDS: MapKind[] = ["tactical", "city", "overview"];
 const AFFECTS = [{ path: "/map-packs" }];
@@ -16,6 +20,27 @@ const NO_PACKS: OwnPack[] = [];
 /** Что стоит рядом с объектом для сравнения: вещь ровно в одну клетку на этом виде карты. */
 const REFERENCE: Record<MapKind, string> = { tactical: "человек", city: "дом", overview: "клетка" };
 const cellsOf = (value: number) => Math.max(0.5, Math.min(16, Math.round(value * 2) / 2));
+
+/** Что лежит во встроенном наборе — только посмотреть: править и копировать встроенные нельзя. */
+type BuiltinTile = { name: string; url: string | null; note?: string };
+function builtinSections(id: string): { name: string; tiles: BuiltinTile[] }[] {
+  const size = (cells: readonly [number, number]) => `${cells[0]}×${cells[1]} кл.`;
+  if (id === "village") return [
+    ...(Object.keys(VILLAGE_CATEGORIES) as VillageCategory[]).map((key) => ({ name: VILLAGE_CATEGORIES[key],
+      tiles: VILLAGE_OBJECTS.filter((item) => item.category === key).map((item) => ({ name: item.name, url: villageUrl(item.key), note: `${size(item.cells)}${item.variants > 1 ? ` · вариантов: ${item.variants}` : ""}` })) })),
+    { name: "Поверхности", tiles: VILLAGE_SURFACES.map((item) => ({ name: item.name, url: villageUrl(item.key) })) },
+    { name: "Дороги и ограды", tiles: VILLAGE_ROADS.map((item) => ({ name: item.name, url: villageUrl(item.key), note: `ширина ${item.width} кл.` })) },
+    { name: "Реки", tiles: VILLAGE_RIVERS.map((item) => ({ name: item.name, url: villageUrl(item.key), note: `ширина ${item.width} кл.` })) },
+  ].filter((section) => section.tiles.length);
+  if (id === "crypt") return (Object.keys(CRYPT_CATEGORIES) as CryptCategory[]).map((key) => ({ name: CRYPT_CATEGORIES[key],
+    tiles: CRYPT_OBJECTS.filter((item) => item.category === key).map((item) => ({ name: item.name, url: cryptUrl(item.directional ? `${item.key}-s` : item.key), note: `${size(item.cells)}${item.directional ? " · виды по сторонам" : ""}` })) }));
+  return [
+    { name: "Подземелье", tiles: CARTOGRAPHY_OBJECTS.filter((item) => item.group === "dungeon").map((item) => ({ name: item.name, url: cartographyUrl(item.key) })) },
+    { name: "Мир", tiles: CARTOGRAPHY_OBJECTS.filter((item) => item.group === "region").map((item) => ({ name: item.name, url: cartographyUrl(item.key) })) },
+    { name: "Знаки", tiles: MAP_SYMBOL_ASSETS.map((item) => ({ name: item.name, url: null })) },
+    { name: "Поверхности", tiles: CARTOGRAPHY_SURFACES.map((item) => ({ name: item.name, url: "key" in item && item.key ? cartographyUrl(item.key) : null })) },
+  ];
+}
 
 /** Объект на сетке: сколько клеток он занимает, рядом — вещь в одну клетку. */
 function SizeGrid({ src, w, h, reference }: { src: string | null; w: number; h: number; reference: string }) {
@@ -105,6 +130,12 @@ function ObjectDialog({ pack, item, onClose }: { pack: OwnPack; item: OwnPackIte
     const saved = await run(labelled("Вариант не добавлен", () => write.post<{ small: boolean }>(`/map-packs/items/${item.id}/images`, form)), { affects: AFFECTS });
     if (saved?.small) setNote("Вариант мельче стандарта: на крупном приближении он будет мягким.");
   }
+  async function addSide(side: string, next: File | null) {
+    if (!item || !next) return;
+    const form = new FormData(); form.append("file", next); form.append("role", side);
+    await run(labelled("Вид не добавлен", () => write.post<{ small: boolean }>(`/map-packs/items/${item.id}/images`, form)), { affects: AFFECTS });
+  }
+  const removeImage = (id: number, label: string) => void run(labelled(label, () => write.del(`/map-packs/images/${id}`).then(() => true)), { affects: AFFECTS });
   async function remove() {
     if (!item || !await confirm({ title: `Убрать «${item.name}» из набора?`, message: "В каталоге объекта не будет. На картах, где он уже стоит, он останется.", confirmLabel: "Убрать", cancelLabel: "Оставить", danger: true })) return;
     if (await run(labelled("Объект не убран", () => write.del(`/map-packs/items/${item.id}`).then(() => true)), { affects: AFFECTS })) onClose();
@@ -138,11 +169,24 @@ function ObjectDialog({ pack, item, onClose }: { pack: OwnPack; item: OwnPackIte
               {variants.map((image, index) => { const url = ownImageSrc(ownImageId(image)); return <span key={image.id} style={{ position: "relative", width: 64, height: 64, border: "2px solid currentColor" }}>
                 {url && <img src={url} alt={`Вариант ${index + 1}`} style={{ width: "100%", height: "100%", objectFit: "contain" }} />}
                 <button type="button" disabled={variants.length < 2} title="Убрать вариант" aria-label={`Убрать вариант ${index + 1}`} style={{ position: "absolute", top: 0, right: 0, padding: "0 5px", height: 20 }}
-                  onClick={() => void run(labelled("Вариант не убран", () => write.del(`/map-packs/images/${image.id}`).then(() => true)), { affects: AFFECTS })}>×</button>
+                  onClick={() => removeImage(image.id, "Вариант не убран")}>×</button>
               </span>; })}
             </div>
             <label>Добавить вариант<input type="file" accept="image/png,image/jpeg,image/webp,image/avif,image/gif" onChange={(event) => { void addVariant(event.target.files?.[0] ?? null); event.target.value = ""; }} /></label>
             <small className="muted">Каталог ставит случайный вариант; конкретный можно выбрать в полосе вариантов.</small>
+          </div>
+          <div className="stack">
+            <strong>Виды по сторонам</strong>
+            <small className="muted">Для предметов, нарисованных «с лица»: трон, шкаф, стул. Основная картинка — предмет без поворота. Добавьте, каким он виден после поворота, — и вместо кручения картинки карта возьмёт нужный вид. Без вида картинка просто поворачивается.</small>
+            <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "flex-start" }}>
+              {OWN_SIDES.map(([side, label]) => { const image = sideImage(item, side), url = image ? ownImageSrc(ownImageId(image)) : null; return <div key={side} className="stack" style={{ width: 96, gap: 4 }}>
+                <span style={{ position: "relative", width: 64, height: 64, border: "2px dashed currentColor", display: "block" }}>
+                  {url && <img src={url} alt={label} style={{ width: "100%", height: "100%", objectFit: "contain" }} />}
+                  {image && <button type="button" title="Убрать вид" aria-label={`Убрать вид «${label}»`} style={{ position: "absolute", top: 0, right: 0, padding: "0 5px", height: 20 }} onClick={() => removeImage(image.id, "Вид не убран")}>×</button>}
+                </span>
+                <label style={{ fontSize: "var(--fs-meta)" }}>{label}<input type="file" aria-label={`Вид: ${label.toLocaleLowerCase("ru")}`} accept="image/png,image/jpeg,image/webp,image/avif,image/gif" onChange={(event) => { void addSide(side, event.target.files?.[0] ?? null); event.target.value = ""; }} /></label>
+              </div>; })}
+            </div>
           </div>
         </>}
         {note && <p className="muted" role="status">{note}</p>}
@@ -165,7 +209,7 @@ export function MapPacksPage() {
   const packs = state.data ?? NO_PACKS;
   useMemo(() => registerOwnPacks(packs), [packs]);
   useMapImageRevision();
-  const [picked, setPicked] = useState<number | null>(null), [archive, setArchive] = useState(false);
+  const [picked, setPicked] = useState<number | null>(null), [archive, setArchive] = useState(false), [builtin, setBuiltin] = useState<string | null>(null);
   const [packDialog, setPackDialog] = useState<OwnPack | "new" | null>(null), [objectDialog, setObjectDialog] = useState<OwnPackItem | "new" | null>(null);
   const live = packs.filter((pack) => !pack.archived), archived = packs.filter((pack) => pack.archived);
   const pack = live.find((entry) => entry.id === picked) ?? live[0] ?? null;
@@ -190,17 +234,31 @@ export function MapPacksPage() {
     <div className="row" style={{ gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
       <nav className="stack" aria-label="Наборы" style={{ flex: "0 0 260px" }}>
         <strong>Свои</strong>
-        {live.map((entry) => <button key={entry.id} type="button" aria-pressed={entry.id === pack?.id} onClick={() => setPicked(entry.id)} style={{ textAlign: "left", height: "auto", padding: "6px 10px" }}>
+        {live.map((entry) => <button key={entry.id} type="button" aria-pressed={!builtin && entry.id === pack?.id} onClick={() => { setPicked(entry.id); setBuiltin(null); }} style={{ textAlign: "left", height: "auto", padding: "6px 10px" }}>
           <strong>{entry.name}</strong><br /><small>{entry.kinds.map((kind) => MAP_KIND_LABELS[kind]).join(", ")} · вещей: {entry.items.filter((item) => !item.archived).length}</small>
         </button>)}
         {!live.length && !state.loading && <p className="muted">Своих наборов пока нет. Создайте первый и добавьте в него картинки.</p>}
         <strong>Встроенные — только чтение</strong>
-        {MAP_PACKS.map((entry) => <div key={entry.id} className="card" style={{ padding: "6px 10px" }}><strong>{entry.name}</strong><br /><small className="muted">{entry.genre} · {entry.place}</small></div>)}
+        {MAP_PACKS.map((entry) => <button key={entry.id} type="button" aria-pressed={builtin === entry.id} onClick={() => setBuiltin(entry.id)} style={{ textAlign: "left", height: "auto", padding: "6px 10px" }}>
+          <strong>{entry.name}</strong><br /><small>{entry.genre} · {entry.place}</small></button>)}
         {archived.length > 0 && <button type="button" aria-expanded={archive} onClick={() => setArchive(!archive)}>Архив наборов: {archived.length}</button>}
         {archive && archived.map((entry) => <div key={entry.id} className="card row" style={{ padding: "6px 10px", justifyContent: "space-between" }}>
           <span>{entry.name}</span><button type="button" onClick={() => void setArchived(entry, false)}>Вернуть</button></div>)}
       </nav>
-      {pack && <section className="stack" style={{ flex: "1 1 520px", minWidth: 300 }} aria-label={`Набор «${pack.name}»`}>
+      {builtin && <section className="stack" style={{ flex: "1 1 520px", minWidth: 300 }} aria-label={`Встроенный набор «${MAP_PACKS.find((entry) => entry.id === builtin)?.name}»`}>
+        <h2 style={{ margin: 0 }}>{MAP_PACKS.find((entry) => entry.id === builtin)?.name}</h2>
+        <p className="muted">Встроенный набор: только посмотреть. Для карт: {MAP_PACKS.find((entry) => entry.id === builtin)?.kinds.map((kind) => MAP_KIND_LABELS[kind]).join(", ")}.</p>
+        {builtinSections(builtin).map((section) => <div key={section.name} className="stack">
+          <strong>{section.name}</strong>
+          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+            {section.tiles.map((tile) => <div key={tile.name} className="card" style={{ width: 132, padding: 8, textAlign: "center" }}>
+              <span style={{ display: "block", height: 96 }}>{tile.url && <img src={tile.url} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "contain" }} />}</span>
+              <strong>{tile.name}</strong>{tile.note && <><br /><small>{tile.note}</small></>}
+            </div>)}
+          </div>
+        </div>)}
+      </section>}
+      {pack && !builtin && <section className="stack" style={{ flex: "1 1 520px", minWidth: 300 }} aria-label={`Набор «${pack.name}»`}>
         <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
           <h2 style={{ margin: 0 }}>{pack.name}</h2>
           <div className="row" style={{ gap: 8 }}>
@@ -222,7 +280,7 @@ export function MapPacksPage() {
         </div>)}
       </section>}
     </div>
-    {packDialog && <PackDialog pack={packDialog === "new" ? null : packDialog} onClose={(saved) => { setPackDialog(null); if (saved) setPicked(saved.id); }} />}
+    {packDialog && <PackDialog pack={packDialog === "new" ? null : packDialog} onClose={(saved) => { setPackDialog(null); if (saved) { setPicked(saved.id); setBuiltin(null); } }} />}
     {objectDialog && pack && (objectDialog === "new" || editing) && <ObjectDialog key={objectDialog === "new" ? "new" : objectDialog.id} pack={pack} item={editing} onClose={() => setObjectDialog(null)} />}
     {dialog}
   </div>;

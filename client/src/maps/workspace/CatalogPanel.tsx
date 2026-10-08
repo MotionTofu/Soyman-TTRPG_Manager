@@ -25,10 +25,11 @@ function Thumbnail({ url, fill }: { url: string | null; fill?: string }) {
 const cells = (size: number) => size >= 1 ? `${Math.round(size * 10) / 10} кл.` : undefined;
 
 // memo: страница редактора рендерится на каждое движение мыши и камеры.
-export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, packs, onPacks, ownPacks, comicPunk, symbol, material, scatterProfile, lineStyle, onSymbol, onMaterial, onScatter, onLine }: {
+export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, packs, onPacks, ownPacks, used, comicPunk, symbol, material, scatterProfile, lineStyle, onSymbol, onMaterial, onScatter, onLine }: {
   tool: WorkspaceTool; /** Подборка «Местности» первой; иначе первым идёт «Склеп». */ local: boolean; comicPunk: boolean;
   /** Вид карты и подключённые к ней наборы; `onPacks` — новый список подключённых. */
-  kind: MapKind; packs: readonly string[]; onPacks: (packs: string[]) => void; /** Свои наборы Мастера с сервера. */ ownPacks: readonly OwnPack[]; symbol: string; material: string; scatterProfile: string;
+  kind: MapKind; packs: readonly string[]; onPacks: (packs: string[]) => void; /** Свои наборы Мастера с сервера. */ ownPacks: readonly OwnPack[];
+  /** Наборы, вещи которых уже стоят на карте, через «|»: строкой, чтобы панель не перерисовывалась на каждую правку. */ used: string; symbol: string; material: string; scatterProfile: string;
   /** Рисунок линии текущего инструмента: дороги, реки или стены. Пусто — обычная линия или кладка. */
   lineStyle: string;
   onSymbol: (id: string) => void; onMaterial: (code: string) => void; onScatter: (key: string) => void; onLine: (style: string, width: number) => void;
@@ -123,6 +124,12 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, pack
   const chosen = library.flatMap((entry) => entry.tiles).find((tile) => tile.chosen);
   const current = line ? lineStyle : tool === "asset" ? symbol : material;
   const pick = line ? (id: string) => onLine(id, lineWidth(id)) : tool === "asset" ? onSymbol : onMaterial;
+  // Вещи на карте из наборов, которых нет в её каталоге: отключён, не для этого вида карт или в архиве.
+  const stray = used ? used.split("|").filter((id) => !packs.includes(id)) : [];
+  const gone = stray.filter((id) => ownPacks.some((pack) => pack.uid === id && pack.archived));
+  const off = stray.filter((id) => fit.some((pack) => pack.id === id));
+  const alien = stray.filter((id) => !gone.includes(id) && !off.includes(id));
+  const names = (ids: string[]) => ids.map((id) => `«${packName(id)}»`).join(", ");
   const toggle = (id: string) => { const next = packs.includes(id) ? packs.filter((entry) => entry !== id) : [...packs, id]; if (next.length) onPacks(next); };
   return <aside className="workspace-catalog" aria-label="Каталог">
     <h2 className="workspace-panel-title">Каталог</h2>
@@ -137,6 +144,11 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, pack
         <span><strong>{pack.name}</strong><small>{pack.genre} · {pack.place}</small></span></label>)}
       <small>Каталог показывает только подключённые наборы. Уже нарисованное с карты не пропадает.</small>
       <Link to="/maps/packs">Свои наборы ассетов →</Link>
+    </div>}
+    {stray.length > 0 && <div className="workspace-catalog-stray" role="status">
+      {off.length > 0 && <p>На карте есть вещи из отключённых наборов: {names(off)}. Они остаются на карте. <button type="button" onClick={() => onPacks([...packs, ...off])}>Подключить</button></p>}
+      {alien.length > 0 && <p>На карте есть вещи из наборов для другого вида карт: {names(alien)}. Они остаются на карте, но в каталоге этой карты их нет.</p>}
+      {gone.length > 0 && <p>Наборы в архиве: {names(gone)}. Вместо их вещей на карте заглушки. <Link to="/maps/packs">Вернуть набор →</Link></p>}
     </div>}
     {categories.length > 1 && !needle && <div className="workspace-catalog-chips" role="group" aria-label="Разделы каталога">
       {categories.map((entry) => <button key={entry.key} type="button" aria-pressed={entry.key === category?.key} onClick={() => setPicked(entry.key)}>{entry.name}</button>)}
