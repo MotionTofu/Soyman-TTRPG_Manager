@@ -128,7 +128,7 @@ export function cutRoad(samples: readonly Sample[], crossings: readonly Crossing
 export const cutKey = (crossings: readonly Crossing[]) => crossings.map(crossing => `${crossing.from.toFixed(3)}:${crossing.to.toFixed(3)}:${crossing.kind}`).join("|");
 
 const chance = (n: number) => { const v = Math.sin(n * 12.9898) * 43758.5453; return v - Math.floor(v); };
-/** Заглушка настила, пока нет листа C2-crossings: мост — доски или камень с перилами, брод — россыпь камней. */
+/** Заглушка настила, пока грузится его полоса: мост — доски или камень с перилами, брод — россыпь камней. */
 export function drawCrossingDraft(ctx: CanvasRenderingContext2D, kind: CrossingKind, samples: readonly Sample[], scale: number, ox: number, oy: number, ink: string) {
   if (samples.length < 2) return;
   const X = (x: number) => ox + x * scale, Y = (y: number) => oy + y * scale;

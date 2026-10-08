@@ -5232,7 +5232,7 @@
       "outputs": [
         "client/public/village/beds-2.webp"
       ],
-      "baselineSha256": "aa85473a7af37da551278767961661933818949b3dfd4d8df65364b22d3a1f04"
+      "baselineSha256": "7119280df174199365300b3b073124821d12ac2830b29d62728f2fc919a10b28"
     },
     {
       "id": "village/beds.webp",
@@ -5242,7 +5242,7 @@
       "outputs": [
         "client/public/village/beds.webp"
       ],
-      "baselineSha256": "761e2f47b83c159400272f7b72bd642fbb35d4aca8960efbebe50c52154ef5ce"
+      "baselineSha256": "f50122c6fd078e12e02f90f7f7b2e83009a168ba65ac5a4dbd3ce65615d9a952"
     },
     {
       "id": "village/boat-2.webp",
@@ -5252,7 +5252,7 @@
       "outputs": [
         "client/public/village/boat-2.webp"
       ],
-      "baselineSha256": "bfbf75e7ce29c55e97b8816e596d303cf16eb943c3ac88fa589bf3f1d54bb11c"
+      "baselineSha256": "d01d6059fce72ffadbe607daa708e66e65525482ee3abb3c0b2d7b9baa25af23"
     },
     {
       "id": "village/boat.webp",
@@ -5262,7 +5262,7 @@
       "outputs": [
         "client/public/village/boat.webp"
       ],
-      "baselineSha256": "d74a9cf47c52a69bc10d3b45e858dcb106fdf0a715ddde8f7ac2e49d018072fb"
+      "baselineSha256": "25fb25f35a159c7fa99fb7154930486692f5fb5d8d70244fcf2fb931e1ddb033"
     },
     {
       "id": "village/bog-2.webp",
@@ -6753,6 +6753,66 @@
         "client/public/village/skeleton-4.webp"
       ],
       "baselineSha256": "b4894a288ba527251e36683bcced9a94b0847e2d00f5373a6dc9688d62049f5c"
+    },
+    {
+      "id": "village/deck-bridge-wood.webp",
+      "title": "deck-bridge-wood",
+      "category": "other",
+      "source": "assets/library/village/deck-bridge-wood.webp",
+      "outputs": [
+        "client/public/village/deck-bridge-wood.webp"
+      ],
+      "baselineSha256": "501d4335410ba43fa5fccfbd93e515dad4201181a38c46b33d2e13ec7fa032d7"
+    },
+    {
+      "id": "village/deck-bridge-stone.webp",
+      "title": "deck-bridge-stone",
+      "category": "other",
+      "source": "assets/library/village/deck-bridge-stone.webp",
+      "outputs": [
+        "client/public/village/deck-bridge-stone.webp"
+      ],
+      "baselineSha256": "023b1d784690f70bdfc87dfc303785e7c78eab9f5a783ba02d59aa0d7c7b96e4"
+    },
+    {
+      "id": "village/deck-ford.webp",
+      "title": "deck-ford",
+      "category": "other",
+      "source": "assets/library/village/deck-ford.webp",
+      "outputs": [
+        "client/public/village/deck-ford.webp"
+      ],
+      "baselineSha256": "00f4d8cc2e71f9f6337b6d86fcb16f2172b2008069f93738d2d949331f483b6f"
+    },
+    {
+      "id": "village/deck-bridge-wood-2.webp",
+      "title": "deck-bridge-wood-2",
+      "category": "other",
+      "source": "assets/library/village/deck-bridge-wood-2.webp",
+      "outputs": [
+        "client/public/village/deck-bridge-wood-2.webp"
+      ],
+      "baselineSha256": "5eec7f123e76dda324f44d39222e2762b69773348ea0563a3a4a1b62656efb46"
+    },
+    {
+      "id": "village/deck-bridge-stone-2.webp",
+      "title": "deck-bridge-stone-2",
+      "category": "other",
+      "source": "assets/library/village/deck-bridge-stone-2.webp",
+      "outputs": [
+        "client/public/village/deck-bridge-stone-2.webp"
+      ],
+      "baselineSha256": "adee750328a5201ddd7559e0ba96707377623e926f69c968ce204ab7cea2ab8c"
+    },
+    {
+      "id": "village/deck-ford-2.webp",
+      "title": "deck-ford-2",
+      "category": "other",
+      "source": "assets/library/village/deck-ford-2.webp",
+      "outputs": [
+        "client/public/village/deck-ford-2.webp"
+      ],
+      "baselineSha256": "f45478a1948d857854b70ad5df4370cf748e014b947d783f8597f9203fd88333"
     }
   ]
 }

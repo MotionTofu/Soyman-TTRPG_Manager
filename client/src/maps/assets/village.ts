@@ -15,7 +15,7 @@ export const VILLAGE_CATEGORIES: Record<VillageCategory, string> = {
 /** cells — размер в клетках, как нарисовано. Здание — крыша-штамп: объект, внутрь не заходят. */
 /** Размеры — по таблице настоящих размеров: клетка тактической карты — 1,5 м (решение 2026-10-08).
  * Здания — с листов E1/E2-buildings; малая изба нарисована квадратной (4×4 вместо 4×3), мельница — с колесом и
- * мостками (7×5 вместо 5×5). Лодка и грядки ждут листа G2-yard и пока в прежних размерах. */
+ * мостками (7×5 вместо 5×5). Лодка и грядки — с листов G2-yard. */
 export const VILLAGE_OBJECTS: readonly { key: string; name: string; category: VillageCategory; cells: readonly [number, number]; variants: number }[] = [
   { key: "hut", name: "Изба", category: "buildings", cells: [5, 4], variants: 1 },
   { key: "hut-small", name: "Малая изба", category: "buildings", cells: [4, 4], variants: 1 },
@@ -38,8 +38,8 @@ export const VILLAGE_OBJECTS: readonly { key: string; name: string; category: Vi
   { key: "woodpile", name: "Поленница", category: "yard", cells: [2, 1], variants: 2 },
   { key: "sacks", name: "Мешки и бочки", category: "yard", cells: [1, 1], variants: 2 },
   { key: "campfire", name: "Костёр", category: "yard", cells: [1, 1], variants: 2 },
-  { key: "beds", name: "Грядки", category: "yard", cells: [2, 2], variants: 2 },
-  { key: "boat", name: "Лодка", category: "yard", cells: [1, 2], variants: 2 },
+  { key: "beds", name: "Грядки", category: "yard", cells: [2, 3], variants: 2 },
+  { key: "boat", name: "Лодка", category: "yard", cells: [1, 3], variants: 2 },
   { key: "signpost", name: "Указатель", category: "yard", cells: [1, 1], variants: 2 },
   { key: "bridge", name: "Мост", category: "crossings", cells: [2, 4], variants: 2 },
   { key: "ford", name: "Брод", category: "crossings", cells: [2, 3], variants: 2 },
@@ -116,7 +116,9 @@ export const VILLAGE_RIVERS: readonly { key: string; name: string; width: number
 ];
 /** Столб ограды по id её полосы: `fence-wattle-2` → `fence-wattle-post-2`. */
 export const fencePostId = (style: string) => /:fence-[a-z]+(-\d+)?$/.test(style) ? style.replace(/(-\d+)?$/, (tail) => `-post${tail}`) : null;
-export const VILLAGE_ROAD_KEYS = VILLAGE_ROADS.flatMap(item => variantKeys(item.key, item.variants));
+/** Настил переправы (листы C2-crossings) — полоса вместо дороги над водой. Вариант — тот же, что у дороги. */
+export const deckKey = (kind: "bridge-wood" | "bridge-stone" | "ford", road: string) => `deck-${kind}${/-2$/.test(road) ? "-2" : ""}`;
+export const VILLAGE_ROAD_KEYS = [...VILLAGE_ROADS.map(item => item.key), "deck-bridge-wood", "deck-bridge-stone", "deck-ford"].flatMap(key => variantKeys(key, 2));
 const SURFACE_PREFIX = "village-";
 export const villageSurfaceCode = (key: string) => `${SURFACE_PREFIX}${key}`;
 /** Вода с глубиной (решение владельца 2026-10-08): одна поверхность «Вода», глубину 1–5 задаёт кисть.

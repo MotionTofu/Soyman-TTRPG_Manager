@@ -564,34 +564,6 @@
       "source": "9cc2135d-cbe9-4ee6-aa7e-6773d0fcde16.png"
     },
     {
-      "id": "beds",
-      "file": "beds.webp",
-      "width": 444,
-      "height": 444,
-      "bytes": 84424,
-      "sha256": "761e2f47b83c159400272f7b72bd642fbb35d4aca8960efbebe50c52154ef5ce",
-      "kind": "object",
-      "cells": [
-        2,
-        2
-      ],
-      "source": "9cc2135d-cbe9-4ee6-aa7e-6773d0fcde16.png"
-    },
-    {
-      "id": "boat",
-      "file": "boat.webp",
-      "width": 256,
-      "height": 512,
-      "bytes": 22146,
-      "sha256": "d74a9cf47c52a69bc10d3b45e858dcb106fdf0a715ddde8f7ac2e49d018072fb",
-      "kind": "object",
-      "cells": [
-        1,
-        2
-      ],
-      "source": "9cc2135d-cbe9-4ee6-aa7e-6773d0fcde16.png"
-    },
-    {
       "id": "signpost",
       "file": "signpost.webp",
       "width": 256,
@@ -686,34 +658,6 @@
       "cells": [
         1,
         1
-      ],
-      "source": "G-yard_2.png"
-    },
-    {
-      "id": "beds-2",
-      "file": "beds-2.webp",
-      "width": 442,
-      "height": 442,
-      "bytes": 80520,
-      "sha256": "aa85473a7af37da551278767961661933818949b3dfd4d8df65364b22d3a1f04",
-      "kind": "object",
-      "cells": [
-        2,
-        2
-      ],
-      "source": "G-yard_2.png"
-    },
-    {
-      "id": "boat-2",
-      "file": "boat-2.webp",
-      "width": 256,
-      "height": 512,
-      "bytes": 24334,
-      "sha256": "bfbf75e7ce29c55e97b8816e596d303cf16eb943c3ac88fa589bf3f1d54bb11c",
-      "kind": "object",
-      "cells": [
-        1,
-        2
       ],
       "source": "G-yard_2.png"
     },
@@ -2192,6 +2136,146 @@
         2
       ],
       "source": "L3-liquid-things_4.png"
+    },
+    {
+      "id": "deck-bridge-wood",
+      "file": "deck-bridge-wood.webp",
+      "width": 986,
+      "height": 256,
+      "bytes": 90046,
+      "sha256": "501d4335410ba43fa5fccfbd93e515dad4201181a38c46b33d2e13ec7fa032d7",
+      "kind": "path",
+      "cells": [
+        7.7,
+        2
+      ],
+      "source": "C2-crossings_1.png"
+    },
+    {
+      "id": "deck-bridge-wood-2",
+      "file": "deck-bridge-wood-2.webp",
+      "width": 889,
+      "height": 256,
+      "bytes": 97928,
+      "sha256": "5eec7f123e76dda324f44d39222e2762b69773348ea0563a3a4a1b62656efb46",
+      "kind": "path",
+      "cells": [
+        6.95,
+        2
+      ],
+      "source": "C2-crossings_2.png"
+    },
+    {
+      "id": "boat",
+      "file": "boat.webp",
+      "width": 290,
+      "height": 869,
+      "bytes": 80174,
+      "sha256": "25fb25f35a159c7fa99fb7154930486692f5fb5d8d70244fcf2fb931e1ddb033",
+      "kind": "object",
+      "cells": [
+        1,
+        3
+      ],
+      "source": "G2-yard_1.png"
+    },
+    {
+      "id": "boat-2",
+      "file": "boat-2.webp",
+      "width": 346,
+      "height": 1037,
+      "bytes": 92654,
+      "sha256": "d01d6059fce72ffadbe607daa708e66e65525482ee3abb3c0b2d7b9baa25af23",
+      "kind": "object",
+      "cells": [
+        1,
+        3
+      ],
+      "source": "G2-yard_2.png"
+    },
+    {
+      "id": "beds-2",
+      "file": "beds-2.webp",
+      "width": 358,
+      "height": 537,
+      "bytes": 84718,
+      "sha256": "7119280df174199365300b3b073124821d12ac2830b29d62728f2fc919a10b28",
+      "kind": "object",
+      "cells": [
+        2,
+        3
+      ],
+      "source": "G2-yard_2.png"
+    },
+    {
+      "id": "deck-bridge-stone",
+      "file": "deck-bridge-stone.webp",
+      "width": 865,
+      "height": 225,
+      "bytes": 93314,
+      "sha256": "023b1d784690f70bdfc87dfc303785e7c78eab9f5a783ba02d59aa0d7c7b96e4",
+      "kind": "path",
+      "cells": [
+        7.68,
+        2
+      ],
+      "source": "C2-crossings_1.png"
+    },
+    {
+      "id": "deck-ford",
+      "file": "deck-ford.webp",
+      "width": 884,
+      "height": 174,
+      "bytes": 91124,
+      "sha256": "00f4d8cc2e71f9f6337b6d86fcb16f2172b2008069f93738d2d949331f483b6f",
+      "kind": "path",
+      "cells": [
+        10.16,
+        2
+      ],
+      "source": "C2-crossings_1.png"
+    },
+    {
+      "id": "deck-bridge-stone-2",
+      "file": "deck-bridge-stone-2.webp",
+      "width": 895,
+      "height": 256,
+      "bytes": 94096,
+      "sha256": "adee750328a5201ddd7559e0ba96707377623e926f69c968ce204ab7cea2ab8c",
+      "kind": "path",
+      "cells": [
+        6.99,
+        2
+      ],
+      "source": "C2-crossings_2.png"
+    },
+    {
+      "id": "deck-ford-2",
+      "file": "deck-ford-2.webp",
+      "width": 962,
+      "height": 174,
+      "bytes": 87080,
+      "sha256": "f45478a1948d857854b70ad5df4370cf748e014b947d783f8597f9203fd88333",
+      "kind": "path",
+      "cells": [
+        11.05,
+        2
+      ],
+      "source": "C2-crossings_2.png"
+    },
+    {
+      "id": "beds",
+      "file": "beds.webp",
+      "width": 390,
+      "height": 585,
+      "bytes": 92390,
+      "sha256": "f50122c6fd078e12e02f90f7f7b2e83009a168ba65ac5a4dbd3ce65615d9a952",
+      "kind": "object",
+      "cells": [
+        2,
+        3
+      ],
+      "source": "G2-yard_1.png"
     }
   ]
 }

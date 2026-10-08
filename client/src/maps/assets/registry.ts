@@ -1,7 +1,7 @@
 import { subscribeTokenTape, prepareTokenTape } from "./tokenTape";
 import { CARTOGRAPHY_OBJECTS, CARTOGRAPHY_SCATTER, CARTOGRAPHY_PACK, cartographyId, cartographyUrl } from "./cartography";
 import { CRYPT_OBJECTS, CRYPT_PACK, CRYPT_SIDES, CRYPT_STYLE_KEYS, cryptId, cryptUrl, type CryptSide } from "./crypt";
-import { VILLAGE_OBJECTS, VILLAGE_PACK, VILLAGE_ROAD_KEYS, VILLAGE_SCATTER, VILLAGE_SURFACE_KEYS, variantKeys, villageId, villageSurfaceKey, villageUrl } from "./village";
+import { deckKey, VILLAGE_OBJECTS, VILLAGE_PACK, VILLAGE_ROAD_KEYS, VILLAGE_SCATTER, VILLAGE_SURFACE_KEYS, variantKeys, villageId, villageSurfaceKey, villageUrl } from "./village";
 import type { MapDocumentV6 } from "@shared/maps/core";
 import type { VisualRef } from "../core/refs";
 import type { MapDocumentV5 } from "../core/types";
@@ -199,6 +199,9 @@ export async function prepareMapImageAssets(doc: MapDocumentV5 | MapDocumentV6):
   }
   for (const layer of doc.layers) if (layer.kind === "path") for (const path of layer.paths) {
     if (path.styleRef.type === "asset" && localImages.has(path.styleRef.assetId)) ids.add(path.styleRef.assetId);
+    // Настилы переправ этой дороги: какой понадобится, решает вода под ней, поэтому берутся все три.
+    if (path.kind === "road" && path.styleRef.type === "asset" && path.styleRef.assetId.startsWith(villagePrefix))
+      for (const kind of ["bridge-wood", "bridge-stone", "ford"] as const) ids.add(villageId(deckKey(kind, path.styleRef.assetId)));
   }
   // Поверхности «Местности» — материалы слоя, а не оформление: грузятся по тому, что накрашено.
   for (const layer of doc.layers) if (layer.kind === "terrain") {

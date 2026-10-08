@@ -5,7 +5,7 @@ import { drawTerrainMaskTiles } from "./assets/terrainMaskDrawing";
 import { maskSampleCode } from "./terrainMaskTiles";
 import { artworkImage, doorImage, paperPattern, patternSource, stripImage, surfaceImage, surfacePattern, texturedMask, wallPattern, type ArtPack } from "./assets/artwork";
 import { drawWallPolyline } from "./assets/wallArtwork";
-import { fencePostId, villageId } from "./assets/village";
+import { deckKey, fencePostId, villageId } from "./assets/village";
 import { labelBox, labelFamily } from "./labelStyle";
 import { drawWaterStill, type MapWater } from "./water";
 import { cutKey, cutRoad, drawCrossingDraft, roadCrossings, type RoadCut } from "./crossings";
@@ -1138,12 +1138,12 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
         if (road) cores.push(() => drawWallPolyline(ctx, points, baseWidth, false, scale, ox, oy, false, view, strip, ROAD_CORE));
       };
       if (crossings.some(crossing => crossing.kind !== "none")) {
-        // Над водой дорогу сменяет настил: мост или брод. Картинка настила — полоса набора, пока её нет — заглушка.
+        // Над водой дорогу сменяет настил: мост или брод. Картинка настила — полоса набора; пока она грузится — заглушка.
         let cut = roadCuts.get(samples);
         if (cut?.key !== cutKey(crossings)) roadCuts.set(samples, cut = cutRoad(samples, crossings));
         for (const piece of cut.road) lay(piece);
         for (const deck of cut.decks) decks.push(() => {
-          const art = stripImage(villageId(deck.kind));
+          const art = deck.kind === "none" ? null : stripImage(villageId(deckKey(deck.kind, path.style!)));
           if (art) drawWallPolyline(ctx, deck.samples, baseWidth, false, scale, ox, oy, false, view, art);
           else drawCrossingDraft(ctx, deck.kind, deck.samples, scale, ox, oy, chrome.ink);
         });
