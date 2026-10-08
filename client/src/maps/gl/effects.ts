@@ -23,7 +23,7 @@ export const EFFECTS = {
     { key: "rate", label: "Падающие звёзды", min: 0, max: 1, step: 0.05, value: 0.3 }] },
   // Проба: вода шейдером вместо картинки. Включены обе — рисуется пиксельная.
   water: { label: "Живая вода — комикс", group: "Вода (проба)", params: [speed] },
-  waterPixel: { label: "Живая вода — пиксель-арт", group: "Вода (проба)", params: [speed, { key: "size", label: "Пикселей на клетку", min: 4, max: 16, step: 1, value: 8 }] },
+  waterPixel: { label: "Живая вода — пиксель-арт: пруд и море", group: "Вода (проба)", params: [speed, { key: "size", label: "Пикселей на клетку", min: 4, max: 16, step: 1, value: 8 }] },
 } satisfies Record<string, { label: string; group: string; params: Param[] }>;
 export type MapEffect = keyof typeof EFFECTS;
 export interface EffectState { on: boolean; values: Record<string, number> }

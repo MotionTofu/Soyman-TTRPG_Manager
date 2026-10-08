@@ -116,22 +116,55 @@ vec4 comic(vec2 w, float t) {
   return vec4(col, a);
 }
 
-// Пиксель-арт: всё считается по целым «пикселям» карты, четыре тона с шахматным смешением.
+// Пиксель-арт: всё считается по целым «пикселям» карты. Мелкая вода — пруд: плоские пятна дна и светлая сетка
+// бликов, которая медленно перестраивается. Глубокая — море: короткие горизонтальные штрихи нескольких тонов.
+vec2 hash2(vec2 p) { return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.5453); }
+// Расстояние до границы ячейки: по нему рисуется сетка бликов.
+float cellEdge(vec2 p, float t) {
+  vec2 n = floor(p), f = fract(p), mg = vec2(0.0), mr = vec2(0.0);
+  float md = 8.0;
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+    vec2 g = vec2(float(i), float(j)), r = g + 0.5 + 0.4 * sin(t + 6.2831 * hash2(n + g)) - f;
+    float d = dot(r, r);
+    if (d < md) { md = d; mr = r; mg = g; }
+  }
+  md = 8.0;
+  for (int j = -2; j <= 2; j++) for (int i = -2; i <= 2; i++) {
+    vec2 g = mg + vec2(float(i), float(j)), r = g + 0.5 + 0.4 * sin(t + 6.2831 * hash2(n + g)) - f;
+    if (dot(mr - r, mr - r) > 0.00001) md = min(md, dot(0.5 * (mr + r), normalize(r - mr)));
+  }
+  return md;
+}
+vec3 pond(vec2 c, float t) {
+  float n = noise(c * 0.9 + vec2(t * 0.05, 0.0)) * 0.65 + noise(c * 2.3 - vec2(0.0, t * 0.04)) * 0.35;
+  vec3 col = n < 0.4 ? vec3(0.18, 0.44, 0.41) : n < 0.58 ? vec3(0.25, 0.56, 0.51) : vec3(0.35, 0.68, 0.6);
+  vec2 q = c * 0.6 + 0.18 * vec2(noise(c * 1.3 + t * 0.15), noise(c * 1.3 + 7.0 - t * 0.15));
+  float edge = cellEdge(q, t * 0.5);
+  // Линия бликов местами рвётся и местами белеет — как на рисованной воде.
+  float lit = noise(c * 0.7 + 11.0 + t * 0.1);
+  if (edge < 0.035 && lit > 0.3) col = lit > 0.72 ? vec3(0.86, 0.96, 0.92) : vec3(0.56, 0.84, 0.76);
+  return col;
+}
+vec3 sea(vec2 p, float tick) {
+  float row = p.y, speed = 0.4 + hash(vec2(row, 9.0));
+  float dash = hash(vec2(floor((p.x + hash(vec2(row, 3.0)) * 40.0 + tick * speed) / (3.0 + floor(hash(vec2(row, 5.0)) * 5.0))), row));
+  float swell = noise(vec2(p.x * 0.04, p.y * 0.22) + vec2(tick * 0.03, 0.0));
+  float v = swell * 0.65 + dash * 0.35;
+  vec3 col = v < 0.36 ? vec3(0.13, 0.36, 0.6) : v < 0.5 ? vec3(0.17, 0.46, 0.69) : v < 0.63 ? vec3(0.24, 0.57, 0.75) : vec3(0.38, 0.71, 0.81);
+  return dash > 0.95 && swell > 0.45 ? vec3(0.62, 0.86, 0.88) : col;
+}
 vec4 pixel(vec2 w, float t) {
   float P = uWater.z;
-  vec2 p = floor(w * P);
-  vec2 mk = texture(uMask, (p + 0.5) / P / uMap).rg;
+  vec2 p = floor(w * P), c = (p + 0.5) / P;
+  vec2 mk = texture(uMask, c / uMap).rg;
   if (mk.r < 0.4) return vec4(0.0);
   float tick = floor(t * 6.0);
-  float n = noise(p * vec2(0.16, 0.33) + vec2(tick * 0.09, tick * 0.04)) * 0.6 + noise(p * vec2(0.06, 0.11) - vec2(tick * 0.03, 0.0)) * 0.4;
-  float v = n + mod(p.x + p.y, 2.0) * 0.07 - 0.3 * smoothstep(0.35, 0.7, mk.g);
-  vec3 col = v < 0.3 ? vec3(0.09, 0.2, 0.31) : v < 0.47 ? vec3(0.12, 0.37, 0.55) : v < 0.62 ? vec3(0.18, 0.56, 0.69) : vec3(0.36, 0.76, 0.79);
-  // Блики: короткие горизонтальные чёрточки, бегущие по течению.
-  float gx = floor((p.x + tick + hash(vec2(p.y, 1.0)) * 40.0) / 3.0);
-  col = mix(col, vec3(0.85, 0.96, 0.94), step(0.93, hash(vec2(gx, p.y))) * step(0.45, n));
+  // Граница мелкой и глубокой воды — шахматным смешением, без плавного перехода.
+  float deep = smoothstep(0.35, 0.7, mk.g) + (mod(p.x + p.y, 2.0) - 0.5) * 0.25;
+  vec3 col = deep > 0.5 ? sea(p, tick) : pond(c, tick / 6.0);
   // Пена у берега: сплошная кромка в один пиксель и рваная полоса за ней.
   float shore = smoothstep(0.4, 1.0, mk.r);
-  col = mix(col, vec3(0.93, 0.98, 0.96), min(1.0, step(shore, 0.12) + step(shore, 0.4) * step(0.55, hash(p + tick))));
+  col = mix(col, vec3(0.9, 0.98, 0.95), min(1.0, step(shore, 0.1) + step(shore, 0.3) * step(0.6, hash(p + tick))));
   return vec4(col, 1.0);
 }
 
