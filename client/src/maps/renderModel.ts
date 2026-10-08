@@ -27,6 +27,7 @@ import { ARTWORK_SCATTER, mapAssetPackForId, resolveMapSymbol, type MapVisualAss
 import { isPaletteIndexMaskPayload, TERRAIN_MASK_CHUNK_SIDE } from "@shared/maps/core/terrainMask";
 import { scatterInstances, SCATTER_LIMIT } from "./scatter";
 import { cellCenter } from "./grid";
+import { crossingChoices, type CrossingChoice } from "./crossings";
 import type { GameplayToken } from "@shared/maps/core";
 import type { MapGrid } from "./mapTypes";
 import type {
@@ -130,6 +131,8 @@ export interface RenderPath {
   width?: number;
   /** Id ассета-полосы, если линия рисуется картинкой, а не тушью. */
   style?: string;
+  /** Выбор Мастера для переправ дороги; без него мост или брод подбирается по воде. */
+  crossings?: readonly CrossingChoice[];
 }
 
 export interface RenderPathLayer extends RenderLayerBase {
@@ -407,7 +410,8 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
         }
         if (p.geometry.type === "spline") {
           paths.push({ kind: p.kind, cells: new Set(), nodes: p.geometry.nodes, width: p.width, closed: p.properties?.closed === true,
-            ...(p.styleRef.type === "asset" ? { style: p.styleRef.assetId } : {}) });
+            ...(p.styleRef.type === "asset" ? { style: p.styleRef.assetId } : {}),
+            ...(p.properties?.crossings ? { crossings: crossingChoices(p.properties.crossings) } : {}) });
           continue;
         }
         const cells = new Set<string>();

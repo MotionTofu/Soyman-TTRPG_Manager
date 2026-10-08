@@ -52,6 +52,8 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
     paintFrame.current = null; pendingPaint.current = null;
   }, []);
   const [nodeSelection, setNodeSelection] = useState<{ pathId: string; indices: number[] } | null>(null);
+  /** Куда пришёлся клик выбора: по нему панель свойств узнаёт, какую переправу дороги имели в виду. */
+  const [pickedAt, setPickedAt] = useState<Vec2 | null>(null);
   const selectedNodes = nodeSelection?.pathId === selection?.id ? nodeSelection?.indices ?? NO_SELECTED_NODES : NO_SELECTED_NODES;
   const setSelectedNodes = (indices: number[]) => setNodeSelection(selection ? { pathId: selection.id, indices } : null);
   const [marquee, setMarquee] = useState<SelectionRect | null>(null);
@@ -141,7 +143,12 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
         }
       } else if (layer.kind === "path") {
         for (const path of [...layer.paths].reverse()) {
-          if (path.geometry.type === "spline" && (path.kind === "wall" ? wallHit(path.geometry.nodes.map(node => ({ ...node.position, width: node.width })), path.width, path.properties?.closed === true, point, slack) : freePathHit(path.geometry.nodes, point, path.width, slack, path.properties?.closed === true))) return { id: path.id, layerId: layer.id, kind: "path" };
+          if (path.geometry.type === "spline" && (path.kind === "wall" ? wallHit(path.geometry.nodes.map(node => ({ ...node.position, width: node.width })), path.width, path.properties?.closed === true, point, slack) : freePathHit(path.geometry.nodes, point, path.width, slack, path.properties?.closed === true))) {
+            // Переправа лежит над водой: клик по мосту выбирает дорогу, даже если слой рек выше слоя дорог.
+            if (path.kind === "river") for (const other of document.layers) if (other.kind === "path" && other.visible && !other.locked) for (const road of other.paths)
+              if (road.kind === "road" && road.styleRef.type === "asset" && road.geometry.type === "spline" && freePathHit(road.geometry.nodes, point, road.width, slack, road.properties?.closed === true)) return { id: road.id, layerId: other.id, kind: "path" };
+            return { id: path.id, layerId: layer.id, kind: "path" };
+          }
         }
       } else if (layer.kind === "scatter") {
         for (const area of [...layer.areas].reverse()) if (shapeContains(area.shape, point)) return { id: area.id, layerId: layer.id, kind: "scatter" };
@@ -231,6 +238,7 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
         }
       }
       const found = pick(point);
+      setPickedAt(found ? point : null);
       if (found) {
         const already = selections.some(entry => entry.id === found.id && entry.layerId === found.layerId);
         if (event.shiftKey) {
@@ -369,5 +377,5 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
     pointCount: wallGesture.points.length,
     canClose: canCloseWall, closing: canCloseWall && !!draftLine && Math.hypot(draftLine.at(-1)!.x - wallGesture.points[0].x, draftLine.at(-1)!.y - wallGesture.points[0].y) <= Math.max(0.1, 8 / camera.cam.scale) } : null;
   const finishWall = (closed = false) => { if (gesture.current?.type === "wall-line") finishGesture(false, closed); };
-  return { selectedNodes, setSelectedNodes, down, move, up, cancel, leave, finishGesture, finishWall, wallDraft, canCloseWall, cellBrush, preview, marquee, draftLine, brushCursor, cursorCell, assetPreview };
+  return { pickedAt, selectedNodes, setSelectedNodes, down, move, up, cancel, leave, finishGesture, finishWall, wallDraft, canCloseWall, cellBrush, preview, marquee, draftLine, brushCursor, cursorCell, assetPreview };
 }

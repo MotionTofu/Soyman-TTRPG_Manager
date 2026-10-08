@@ -4,6 +4,20 @@ import { updateSplinePath } from "../core/mutations/paths";
 import { selectedPath } from "./artisticCommands";
 import { editGeometry } from "./editDocument";
 import { requireEditableLayer, type WorkspaceSelection } from "./editorCommands";
+import { choiceFits, crossingChoices, type Crossing, type CrossingKind } from "../crossings";
+
+/** Выбор Мастера для переправы дороги; `null` — вернуть «как решит карта». */
+export function setCrossing(doc: MapDocumentV6, selection: WorkspaceSelection, at: Pick<Crossing, "from" | "to" | "x" | "y">, kind: CrossingKind | null) {
+  requireEditableLayer(doc, selection.layerId, "path");
+  const path = selectedPath(doc, selection);
+  if (!path) return doc;
+  const { crossings: old, ...rest } = path.properties ?? {};
+  const kept = crossingChoices(old).filter(choice => !choiceFits(choice, at));
+  const crossings = kind ? [...kept, { x: Math.round(at.x * 100) / 100, y: Math.round(at.y * 100) / 100, kind }] : kept;
+  const properties = crossings.length ? { ...rest, crossings } : rest;
+  return editGeometry(doc, view => ({ ok: true, changed: true, document: { ...view, layers: view.layers.map(layer => layer.id === selection.layerId && layer.kind === "path"
+    ? { ...layer, paths: layer.paths.map(p => p.id === path.id ? { ...p, properties } : p) } : layer) } }));
+}
 
 export function pathNodeIntervals(count: number, selected: readonly number[], closed: boolean) {
   const indices = new Set(selected);

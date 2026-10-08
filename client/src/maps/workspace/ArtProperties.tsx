@@ -1,20 +1,26 @@
-import { useState } from "react";
-import { insertPathNodes, setPathNodeWidth, pathNodeIntervals, setPathClosed, simplifyPathNodes } from "./pathNodes";
+import { useMemo, useState } from "react";
+import { insertPathNodes, setPathNodeWidth, pathNodeIntervals, setPathClosed, setCrossing, simplifyPathNodes } from "./pathNodes";
+import { CROSSING_KINDS, choiceFits, crossingChoices, roadCrossings, type CrossingKind } from "../crossings";
+import { coordLabel } from "../grid";
+import { createWorkspaceRenderModel } from "./renderV6";
 import { pathNodesFromAnchors } from "./pathAnchors";
-import type { MapDocumentV6 } from "@shared/maps/core";
+import type { MapDocumentV6, Vec2 } from "@shared/maps/core";
 import { updateSplinePath } from "../core/mutations/paths";
 import { SCATTER_PROFILES } from "../scatter";
 import { editGeometry } from "./editDocument";
 import { selectedPath, putScatter } from "./artisticCommands";
 import { requireEditableLayer, type WorkspaceSelection } from "./editorCommands";
 
-export function ArtProperties({ document, selection, selectedNodes = [], onSelectedNodes, commit, onClose, onDelete }: {
+export function ArtProperties({ document, selection, pickedAt, selectedNodes = [], onSelectedNodes, commit, onClose, onDelete }: {
   document: MapDocumentV6; selection: WorkspaceSelection; commit: (edit: (doc: MapDocumentV6) => MapDocumentV6) => void;
-  selectedNodes?: readonly number[]; onSelectedNodes?: (indices: number[]) => void;
+  pickedAt?: Vec2 | null; selectedNodes?: readonly number[]; onSelectedNodes?: (indices: number[]) => void;
   onClose: () => void; onDelete: () => void;
 }) {
   const [tolerance, setTolerance] = useState(0.1);
   const layer = document.layers.find(l => l.id === selection.layerId), path = selectedPath(document, selection);
+  const crossings = useMemo(() => path?.kind === "road" && path.geometry.type === "spline" && path.styleRef.type === "asset"
+    ? roadCrossings(createWorkspaceRenderModel(document).model, { kind: "road", cells: new Set(), nodes: path.geometry.nodes, width: path.width,
+      closed: path.properties?.closed === true, style: path.styleRef.assetId, crossings: crossingChoices(path.properties?.crossings) }) : [], [document, path]);
   const area = layer?.kind === "scatter" ? layer.areas.find(a => a.id === selection.id) : undefined;
   if (!path && !area) return null;
   const locked = !layer?.visible || layer.locked;
@@ -50,6 +56,14 @@ export function ArtProperties({ document, selection, selectedNodes = [], onSelec
       <button title="Для связанной линии удаление точек пока недоступно" disabled={locked || !selectedNodes.length || nodes.length - selectedNodes.length < (closed ? 3 : 2) || branched} onClick={() => { update({ nodes: nodes.filter((_, i) => !selectedNodes.includes(i)) }); onSelectedNodes?.([]); }}>Удалить точки</button>
       <label>Упрощение: допуск {tolerance.toFixed(2)} кл.<input aria-label="Допуск упрощения линии" type="range" min={0.02} max={1} step={0.02} value={tolerance} onChange={e => setTolerance(Number(e.target.value))} /></label>
       <button title={branched ? "Для связанной линии упрощение пока недоступно" : "Убрать точки, без которых форма почти не меняется"} disabled={locked || branched || simplified.length === nodes.length} onClick={() => { update({ nodes: simplified }); onSelectedNodes?.([]); }}>Упростить: {nodes.length} → {simplified.length} точек</button>
+      {crossings.length > 0 && <>
+        <p>Переправы: где дорога идёт над водой, карта сама кладёт мост или брод. Здесь можно выбрать другое.</p>
+        {crossings.map((crossing, i) => <label key={i}>{pickedAt && choiceFits(pickedAt, crossing) ? "▸ " : ""}У клетки {coordLabel(Math.floor(crossing.x), Math.floor(crossing.y))}, {crossing.deep ? "глубоко" : "мелко"}
+          <select aria-label={`Переправа ${i + 1}`} value={crossing.chosen ? crossing.kind : ""} disabled={locked} onChange={e => commit(doc => setCrossing(doc, selection, crossing, (e.target.value || null) as CrossingKind | null))}>
+            <option value="">Как решит карта</option>
+            {Object.entries(CROSSING_KINDS).map(([kind, name]) => <option key={kind} value={kind}>{name}</option>)}
+          </select></label>)}
+      </>}
     </>}
     {area && <>
       <p>Перетащите область целиком. Вариант сохраняет расположение символов.</p>

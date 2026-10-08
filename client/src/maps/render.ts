@@ -5,7 +5,8 @@ import { drawTerrainMaskTiles } from "./assets/terrainMaskDrawing";
 import { maskSampleCode } from "./terrainMaskTiles";
 import { artworkImage, doorImage, paperPattern, patternSource, stripImage, surfaceImage, surfacePattern, texturedMask, wallPattern, type ArtPack } from "./assets/artwork";
 import { drawWallPolyline } from "./assets/wallArtwork";
-import { fencePostId } from "./assets/village";
+import { fencePostId, villageId } from "./assets/village";
+import { cutKey, cutRoad, drawCrossingDraft, roadCrossings, type RoadCut } from "./crossings";
 // Рендер карты на canvas 2D. Цвета террейна — фиксированная спокойная
 // палитра (исключение как у Полотна §6 design_revision.md: бюджет акцента
 // на неё не тратится). Обрамление (фон, сетка, координаты, дороги) — из
@@ -734,6 +735,7 @@ function stripSamples(nodes: readonly SplineNode[], closed: boolean, width: numb
   const result = { key, samples, minX: Math.min(...xs) - reach, minY: Math.min(...ys) - reach, maxX: Math.max(...xs) + reach, maxY: Math.max(...ys) + reach };
   stripCache.set(nodes, result); return result;
 }
+const roadCuts = new WeakMap<StripSamples["samples"], RoadCut>();
 export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvasH: number, o: RenderOptions): void {
   const { grid, width, height, model, scale, ox, oy, showGrid, showCoords, hover, chrome, playerView, selectedId } = o;
   const terrainFill = o.terrainFill ?? MAP_TERRAIN_FILL;
@@ -1080,6 +1082,10 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     ctx.stroke();
   };
 
+  // Настилы переправ ждут, пока не нарисуется самый верхний слой с рекой: мост лежит над водой,
+  // даже если слой рек у Мастера выше слоя дорог.
+  const decks: (() => void)[] = [];
+  const lastRivers = model.layers.findLastIndex(layer => layer.visible && layer.kind === "path" && layer.paths.some(path => path.kind === "river"));
   const strokeFreePath = (path: RenderPath) => {
     if (!path.nodes || path.nodes.length < 2) return;
     const nodes = path.closed ? [...path.nodes, path.nodes[0]] : path.nodes;
@@ -1093,7 +1099,19 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       // Шаг крупнее, чем у линии тушью: каждый отрезок — своя заливка узором с обрезкой.
       const { samples, minX, minY, maxX, maxY } = stripSamples(path.nodes, path.closed === true, baseWidth, 10 / scale);
       if (X(maxX) < 0 || Y(maxY) < 0 || X(minX) > canvasW || Y(minY) > canvasH) return;
-      drawWallPolyline(ctx, samples, baseWidth, false, scale, ox, oy, false, { width: canvasW, height: canvasH }, strip);
+      const view = { width: canvasW, height: canvasH }, crossings = roadCrossings(model, path);
+      if (crossings.some(crossing => crossing.kind !== "none")) {
+        // Над водой дорогу сменяет настил: мост или брод. Картинка настила — полоса набора, пока её нет — заглушка.
+        let cut = roadCuts.get(samples);
+        if (cut?.key !== cutKey(crossings)) roadCuts.set(samples, cut = cutRoad(samples, crossings));
+        for (const piece of cut.road) drawWallPolyline(ctx, piece, baseWidth, false, scale, ox, oy, false, view, strip);
+        for (const deck of cut.decks) decks.push(() => {
+          const art = stripImage(villageId(deck.kind));
+          if (art) drawWallPolyline(ctx, deck.samples, baseWidth, false, scale, ox, oy, false, view, art);
+          else drawCrossingDraft(ctx, deck.kind, deck.samples, scale, ox, oy, chrome.ink);
+        });
+      }
+      else drawWallPolyline(ctx, samples, baseWidth, false, scale, ox, oy, false, view, strip);
       // Ограда: столб на каждой опорной точке — закрывает обрез полосы на концах и стык на изломе.
       const postId = path.kind === "wall" ? fencePostId(path.style!) : null, post = postId ? stripImage(postId) : null;
       if (post) for (const node of path.nodes) {
@@ -1565,6 +1583,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
         else if (p.kind === "river") strokeRivers(p.cells);
         else strokeRoads(p.cells);
       }
+      if (decks.length && model.layers.indexOf(layer) >= lastRivers) { for (const draw of decks) draw(); decks.length = 0; }
     } else if (layer.kind === "gameplay") {
       if (scale >= 10) {
         let roomIdx = 0;

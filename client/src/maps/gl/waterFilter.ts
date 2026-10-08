@@ -1,13 +1,13 @@
 import { defaultFilterVert, Filter, GlProgram, Texture } from "pixi.js";
 import { flattenSplineWithWidths } from "../core/spline";
 import type { MapRenderModel } from "../renderModel";
+import { waterDepth as depthOf } from "../crossings";
 
 /** Вода шейдером (проба 2026-10-08). `mode`: 0 — комикс-панк, 1 — пиксель-арт; `size` — пикселей на клетку во втором. */
 export interface MapWater { mode: 0 | 1; speed: number; size: number }
 
 /** Точек маски на клетку. Маска — вся карта одной картинкой: красный канал — «здесь вода», зелёный — «глубоко». */
 const K = 4;
-const depthOf = (code: string | null | undefined) => !code ? 0 : /deep|sea|lake/.test(code) ? 2 : /shallow|water/.test(code) ? 1 : 0;
 
 /**
  * Где на карте вода: поверхности воды из плавных слоёв и реки, залитые водой.
