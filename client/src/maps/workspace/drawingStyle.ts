@@ -3,6 +3,7 @@ import type { MapWater } from "../water";
 import type { MapLook } from "../gl/styleFilter";
 import { MAP_TERRAIN_FILL, readChrome } from "../render";
 import { VILLAGE_FILL, WATER_DEPTHS, waterCode } from "../assets/village";
+import { ownSurfaceFills } from "../assets/ownPacks";
 
 // Stable identities let Canvas reuse the surface bitmap while panning.
 const PALETTES = {
@@ -32,6 +33,15 @@ function ownFills(palette: Record<string, string>, liquids: readonly { key: stri
   if (!fills) known.set(palette, fills = { ...palette, ...Object.fromEntries(liquids.flatMap(item => WATER_DEPTHS.map(depth => [waterCode(depth, item.key), item.tones[1]]))) });
   return fills;
 }
+const surfaced = new WeakMap<object, WeakMap<object, Record<string, string>>>();
+/** Цвета поверхностей своих наборов поверх палитры; объект тот же, пока не сменились наборы. */
+function withOwnSurfaces(base: Record<string, string>) {
+  const own = ownSurfaceFills();
+  if (!Object.keys(own).length) return base;
+  let known = surfaced.get(base); if (!known) surfaced.set(base, known = new WeakMap());
+  let fills = known.get(own); if (!fills) known.set(own, fills = { ...base, ...own });
+  return fills;
+}
 export function workspaceDrawingStyle(document: MapDocumentV6) {
   const water = mapWater(document);
   const style = document.appearance?.style ?? "paper-ink";
@@ -39,7 +49,7 @@ export function workspaceDrawingStyle(document: MapDocumentV6) {
   return {
     chrome: { ...readChrome(), paper, ink: "#171717", line: style === "blueprint" ? "#8494a4" : "#867e69", muted: "#625f54" },
     // Свои жидкости без «живой воды» — ровная заливка средним тоном.
-    terrainFill: document.appearance?.liquids?.length ? ownFills(PALETTES[style], document.appearance.liquids) : PALETTES[style],
+    terrainFill: withOwnSurfaces(document.appearance?.liquids?.length ? ownFills(PALETTES[style], document.appearance.liquids) : PALETTES[style]),
     fonts: { label: '"Sofia Sans Semi Condensed", sans-serif', mono: '"Sofia Sans Semi Condensed", sans-serif' },
     cartography: style !== "blueprint",
     artPack: style === "comic-punk" ? "crypt" as const : "cartography" as const,

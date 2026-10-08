@@ -13,6 +13,7 @@ import { CARTOGRAPHY_OBJECTS, CARTOGRAPHY_SURFACES, cartographyUrl } from "../ma
 import { CRYPT_CATEGORIES, CRYPT_OBJECTS, cryptUrl, type CryptCategory } from "../maps/assets/crypt";
 import { VILLAGE_CATEGORIES, VILLAGE_OBJECTS, VILLAGE_RIVERS, VILLAGE_ROADS, VILLAGE_SURFACES, villageUrl, type VillageCategory } from "../maps/assets/village";
 import { MAP_SYMBOL_ASSETS } from "../maps/assets/registry";
+import { seamlessTile } from "../maps/assets/seamless";
 
 const KINDS: MapKind[] = ["tactical", "city", "overview"];
 const AFFECTS = [{ path: "/map-packs" }];
@@ -201,6 +202,98 @@ function ObjectDialog({ pack, item, onClose }: { pack: OwnPack; item: OwnPackIte
   </Modal>;
 }
 
+/** Поверхность набора: бесшовный образец. Картинка обрезается до квадрата, края склеиваются подмесом —
+ * предпросмотр 3×3 показывает ровно то, что уйдёт в набор. */
+function SurfaceDialog({ pack, item, onClose }: { pack: OwnPack; item: OwnPackItem | null; onClose: () => void }) {
+  const run = useAction();
+  const [dialog, confirm] = useConfirm();
+  useMapImageRevision();
+  const [source, setSource] = useState<HTMLImageElement | null>(null), [blend, setBlend] = useState(15);
+  const [name, setName] = useState(item?.name ?? ""), [section, setSection] = useState(item?.section ?? ""), [tags, setTags] = useState(item?.tags ?? "");
+  const [cells, setCells] = useState(item?.cells ?? 4);
+  const tile = useMemo(() => source ? seamlessTile(source, blend / 100) : null, [source, blend]);
+  const preview = useMemo(() => tile?.toDataURL("image/png") ?? null, [tile]);
+  const variants = item ? liveImages(item) : [];
+  const shown = preview ?? (variants[0] ? ownImageSrc(ownImageId(variants[0])) : null);
+  const sections = [...new Set(pack.items.map((entry) => entry.section).filter(Boolean))];
+  const lines = 100 / (3 * cells);
+
+  function choose(next: File | null) {
+    setSource(null);
+    if (!next) return;
+    if (!name) setName(next.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").slice(0, 80));
+    const image = new Image(), url = URL.createObjectURL(next);
+    image.onload = () => { setSource(image); URL.revokeObjectURL(url); };
+    image.onerror = () => URL.revokeObjectURL(url);
+    image.src = url;
+  }
+  const form = async (fields: Record<string, string>) => {
+    const body = new FormData(), blob = await new Promise<Blob | null>((resolve) => tile!.toBlob(resolve, "image/png"));
+    body.append("file", blob!, "surface.png");
+    for (const [key, value] of Object.entries(fields)) body.append(key, value);
+    return body;
+  };
+  async function save() {
+    const saved = item
+      ? await run(labelled("Поверхность не сохранена", () => write.put(`/map-packs/items/${item.id}`, { name, section, tags, cells })), { affects: AFFECTS })
+      : tile && await run(labelled("Поверхность не добавлена", async () => write.post(`/map-packs/${pack.id}/items`, await form({ kind: "surface", name, section, tags, cells: String(cells) }))), { affects: AFFECTS });
+    if (saved) onClose();
+  }
+  async function addVariant() {
+    if (!item || !tile) return;
+    if (await run(labelled("Вариант не добавлен", async () => write.post(`/map-packs/items/${item.id}/images`, await form({}))), { affects: AFFECTS })) setSource(null);
+  }
+  async function remove() {
+    if (!item || !await confirm({ title: `Убрать «${item.name}» из набора?`, message: "В каталоге поверхности не будет. На картах, где ею уже красили, она останется.", confirmLabel: "Убрать", cancelLabel: "Оставить", danger: true })) return;
+    if (await run(labelled("Поверхность не убрана", () => write.del(`/map-packs/items/${item.id}`).then(() => true)), { affects: AFFECTS })) onClose();
+  }
+  const picker = <label>{item ? "Добавить вариант" : "Картинка"}<input type="file" aria-label={item ? "Картинка варианта" : "Картинка поверхности"} accept="image/png,image/jpeg,image/webp,image/avif,image/gif" onChange={(event) => { choose(event.target.files?.[0] ?? null); event.target.value = ""; }} /></label>;
+
+  return <Modal onClose={onClose} wide ariaLabel={item ? `Поверхность «${item.name}»` : "Новая поверхность"}>
+    <h2>{item ? "Поверхность набора" : "Новая поверхность"}</h2>
+    <div className="row" style={{ gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+      <div className="stack" style={{ flex: "1 1 300px", minWidth: 260 }}>
+        <div role="img" aria-label={`Образец повторён три на три, сетка — клетки карты: один повтор на ${cells} клеток`}
+          style={{ position: "relative", width: "100%", maxWidth: 360, aspectRatio: "1", border: "2px solid currentColor", backgroundColor: item?.fill ?? "var(--paper, #f4efe2)",
+            backgroundImage: shown ? `url(${shown})` : undefined, backgroundSize: "33.334% 33.334%" }}>
+          <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(to right, rgba(0,0,0,.4) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,.4) 1px, transparent 1px)", backgroundSize: `${lines}% ${lines}%` }} />
+        </div>
+        <small className="muted">Образец повторён 3×3 — швов быть не должно. Сетка поверх — клетки карты.</small>
+        <label>Один повтор покрывает, клеток<input type="number" min={1} max={16} step={1} value={cells} onChange={(event) => setCells(Math.max(1, Math.min(16, Math.round(Number(event.target.value)) || 1)))} /></label>
+        {source && <label>Подмес шва: {blend}%<input type="range" min={0} max={40} step={1} value={blend} onChange={(event) => setBlend(Number(event.target.value))} />
+          <small className="muted">0 — если образец уже бесшовный. Для травы, камня, песка хватает 10–20%; крупный рисунок в полосе подмеса двоится.</small></label>}
+        {source && Math.min(source.naturalWidth, source.naturalHeight) < Math.min(cells, 4) * PACK_CELL_PX && <p className="muted" role="status">Картинка мельче стандарта ({PACK_CELL_PX} точек на клетку): на крупном приближении будет мягкой.</p>}
+      </div>
+      <div className="stack" style={{ flex: "1 1 280px", minWidth: 240 }}>
+        {!item && picker}
+        <label>Название<input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} /></label>
+        <label>Раздел<input value={section} maxLength={40} list="map-pack-sections" placeholder="Например, Полы" onChange={(event) => setSection(event.target.value)} /></label>
+        <datalist id="map-pack-sections">{sections.map((entry) => <option key={entry} value={entry} />)}</datalist>
+        <label>Теги через запятую<input value={tags} maxLength={200} onChange={(event) => setTags(event.target.value)} /></label>
+        {item && <div className="stack">
+          <strong>Варианты</strong>
+          <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+            {variants.map((image, index) => { const url = ownImageSrc(ownImageId(image)); return <span key={image.id} style={{ position: "relative", width: 64, height: 64, border: "2px solid currentColor" }}>
+              {url && <img src={url} alt={`Вариант ${index + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+              <button type="button" disabled={variants.length < 2} title="Убрать вариант" aria-label={`Убрать вариант ${index + 1}`} style={{ position: "absolute", top: 0, right: 0, padding: "0 5px", height: 20 }}
+                onClick={() => void run(labelled("Вариант не убран", () => write.del(`/map-packs/images/${image.id}`).then(() => true)), { affects: AFFECTS })}>×</button>
+            </span>; })}
+          </div>
+          {picker}
+          {source && <button type="button" className="primary" onClick={() => void addVariant()}>Добавить вариант в набор</button>}
+          <small className="muted">Каждый вариант красится отдельно: в каталоге они стоят полосой под плиткой, на карте их можно смешивать.</small>
+        </div>}
+      </div>
+    </div>
+    <div className="modal-footer row">
+      {item && <button onClick={remove}>Убрать из набора</button>}
+      <button onClick={onClose}>{item ? "Закрыть" : "Отмена"}</button>
+      <button className="primary" disabled={!name.trim() || (!item && !tile)} onClick={() => void save()}>{item ? "Сохранить" : "Добавить"}</button>
+    </div>
+    {dialog}
+  </Modal>;
+}
+
 export function MapPacksPage() {
   const { user } = useCurrentUser();
   const run = useAction();
@@ -210,11 +303,11 @@ export function MapPacksPage() {
   useMemo(() => registerOwnPacks(packs), [packs]);
   useMapImageRevision();
   const [picked, setPicked] = useState<number | null>(null), [archive, setArchive] = useState(false), [builtin, setBuiltin] = useState<string | null>(null);
-  const [packDialog, setPackDialog] = useState<OwnPack | "new" | null>(null), [objectDialog, setObjectDialog] = useState<OwnPackItem | "new" | null>(null);
+  const [packDialog, setPackDialog] = useState<OwnPack | "new" | null>(null), [objectDialog, setObjectDialog] = useState<OwnPackItem | "new" | "new-surface" | null>(null);
   const live = packs.filter((pack) => !pack.archived), archived = packs.filter((pack) => pack.archived);
   const pack = live.find((entry) => entry.id === picked) ?? live[0] ?? null;
   // Диалог держит объект по id: после добавления варианта список перечитан, и окно показывает свежие картинки.
-  const editing = objectDialog && objectDialog !== "new" ? pack?.items.find((entry) => entry.id === objectDialog.id) ?? null : null;
+  const editing = objectDialog && typeof objectDialog === "object" ? pack?.items.find((entry) => entry.id === objectDialog.id) ?? null : null;
   const items = pack?.items.filter((item) => !item.archived) ?? [];
   const sections = [...new Set(items.map((item) => item.section))].sort((a, b) => a.localeCompare(b, "ru"));
 
@@ -264,24 +357,27 @@ export function MapPacksPage() {
           <div className="row" style={{ gap: 8 }}>
             <button onClick={() => setPackDialog(pack)}>Название и виды карт</button>
             <button onClick={() => void setArchived(pack, true)}>В архив</button>
+            <button className="primary" onClick={() => setObjectDialog("new-surface")}>+ Поверхность</button>
             <button className="primary" onClick={() => setObjectDialog("new")}>+ Объект</button>
           </div>
         </div>
-        {!items.length && <p className="muted">В наборе пока пусто. «+ Объект» — выбрать картинку и задать, сколько клеток она занимает.</p>}
+        {!items.length && <p className="muted">В наборе пока пусто. «+ Объект» — картинка и сколько клеток она занимает. «+ Поверхность» — образец, которым красят землю и полы.</p>}
         {sections.map((section) => <div key={section} className="stack">
           <strong>{section || "Без раздела"}</strong>
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
             {items.filter((item) => item.section === section).map((item) => { const images = liveImages(item), url = images[0] ? ownImageSrc(ownImageId(images[0])) : null;
               return <button key={item.id} type="button" className="card" onClick={() => setObjectDialog(item)} style={{ width: 132, height: "auto", padding: 8, textAlign: "center" }}>
-                <span style={{ display: "block", height: 96 }}>{url && <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />}</span>
-                <strong>{item.name}</strong><br /><small>{item.w}×{item.h} кл.{images.length > 1 ? ` · вариантов: ${images.length}` : ""}</small>
+                <span style={{ display: "block", height: 96, background: item.kind === "surface" ? item.fill : undefined }}>{url && <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: item.kind === "surface" ? "cover" : "contain" }} />}</span>
+                <strong>{item.name}</strong><br /><small>{item.kind === "surface" ? `поверхность · повтор ${item.cells ?? 4} кл.` : `${item.w}×${item.h} кл.`}{images.length > 1 ? ` · вариантов: ${images.length}` : ""}</small>
               </button>; })}
           </div>
         </div>)}
       </section>}
     </div>
     {packDialog && <PackDialog pack={packDialog === "new" ? null : packDialog} onClose={(saved) => { setPackDialog(null); if (saved) { setPicked(saved.id); setBuiltin(null); } }} />}
-    {objectDialog && pack && (objectDialog === "new" || editing) && <ObjectDialog key={objectDialog === "new" ? "new" : objectDialog.id} pack={pack} item={editing} onClose={() => setObjectDialog(null)} />}
+    {objectDialog && pack && (objectDialog === "new-surface" || editing?.kind === "surface"
+      ? <SurfaceDialog key={editing?.id ?? "new-surface"} pack={pack} item={editing} onClose={() => setObjectDialog(null)} />
+      : (objectDialog === "new" || editing) && <ObjectDialog key={editing?.id ?? "new"} pack={pack} item={editing} onClose={() => setObjectDialog(null)} />)}
     {dialog}
   </div>;
 }

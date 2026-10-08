@@ -86,6 +86,11 @@ export function resourceImageAssetId(uid: string): string {
   return `soyman-resource-images:${uid.toLowerCase()}`;
 }
 
+const OWN_SURFACE = "own-";
+/** Код материала поверхности своего набора — `own-<uid картинки>`: обычный код террейна, формат карты не меняется. */
+export const ownSurfaceCode = (uid: string) => `${OWN_SURFACE}${uid.toLowerCase()}`;
+export const ownSurfaceAssetId = (code: string) => code.startsWith(OWN_SURFACE) ? resourceImageAssetId(code.slice(OWN_SURFACE.length)) : null;
+
 export function mapAssetPackForId(assetId: string): { id: string; version: string } | null {
   if (localImages.has(assetId)) return assetId.startsWith(cryptPrefix) ? CRYPT_PACK : assetId.startsWith(villagePrefix) ? VILLAGE_PACK : CARTOGRAPHY_PACK;
   if (byId.has(assetId)) return MAP_SYMBOL_PACK;
@@ -232,6 +237,8 @@ export async function prepareMapImageAssets(doc: MapDocumentV5 | MapDocumentV6):
     for (const material of [layer.defaultMaterial, ...(layer.representation === "mask" ? layer.mask.materials : layer.cells.map(cell => cell.material))]) {
       const key = material.type === "builtin" ? villageSurfaceKey(material.key.replace(/^terrain\//, "")) : null;
       if (key && localImages.has(villageId(key))) ids.add(villageId(key));
+      const own = material.type === "builtin" ? ownSurfaceAssetId(material.key.replace(/^terrain\//, "")) : null;
+      if (own && imageAssets.has(own)) ids.add(own);
     }
   }
   if (doc.layers.some(layer => layer.kind === "path" && layer.paths.some(path => path.kind === "wall"))) {

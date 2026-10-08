@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import type { MapKind } from "../mapTypes";
-import { getMapImageAsset, loadMapImageAsset, markMapImageMissing, registerMapImageResources, resourceImageAssetId, setMapImageViews, subscribeMapImageAssets } from "./registry";
+import { getMapImageAsset, loadMapImageAsset, markMapImageMissing, ownSurfaceCode, registerMapImageResources, resourceImageAssetId, setMapImageViews, subscribeMapImageAssets } from "./registry";
 
 /** Наборы ассетов Мастера с сервера (`/map-packs`). Картинки идут в общий реестр изображений карты:
  * на карте лежит id картинки, как у вещей из галереи, поэтому формат карты не меняется. */
 export interface OwnPackImage { id: number; uid: string; role: string; width: number; height: number; archived: boolean; file_url: string }
 export interface OwnPackItem { id: number; uid: string; kind: string; name: string; section: string; tags: string; archived: boolean;
-  /** Размер в клетках. */ w: number; h: number; blocks_sight: boolean; /** Радиус света в клетках. */ light: number | null; images: OwnPackImage[] }
+  /** Размер в клетках. */ w: number; h: number; blocks_sight: boolean; /** Радиус света в клетках. */ light: number | null;
+  /** Поверхность: сколько клеток покрывает один повтор образца и средний цвет. */ cells?: number; fill?: string; images: OwnPackImage[] }
 export interface OwnPack { id: number; uid: string; name: string; kinds: MapKind[]; genres: unknown[]; native_style: string; archived: boolean; updated_at: string; items: OwnPackItem[] }
 
 /** Точек на клетку у картинок набора; мельче — предупреждаем. */
@@ -16,6 +17,12 @@ let current: readonly OwnPack[] = [];
 const sizes = new Map<string, number>();
 const variants = new Map<string, string[]>();
 const owners = new Map<string, string>();
+const surfaces = new Map<string, { assetId: string; cells: number }>();
+let surfaceFills: Readonly<Record<string, string>> = {};
+/** Поверхность своего набора по коду материала: какая картинка и на сколько клеток её повтор. */
+export const ownSurface = (code: string) => surfaces.get(code) ?? null;
+/** Цвет поверхностей своих наборов по коду материала: «Чертёж» и то, что ещё грузится или лежит в архиве. Объект меняется только с наборами. */
+export const ownSurfaceFills = () => surfaceFills;
 /** Стороны поворотного предмета сверх основной: каким он виден, повёрнутый на 90°, 180° и 270°. */
 export const OWN_SIDES = [["w", "Повёрнут на 90°"], ["n", "Повёрнут на 180°"], ["e", "Повёрнут на 270°"]] as const;
 export const sideImage = (item: OwnPackItem, side: string) => item.images.find((image) => !image.archived && image.role === side) ?? null;
@@ -31,9 +38,15 @@ export const ownPacks = () => current;
 /** Запомнить наборы и завести их картинки в реестр. У набора в архиве вместо картинок — заглушки с его названием.
  * Убранные объекты и варианты заводятся: карта, где они стоят, рисуется как раньше. */
 export function registerOwnPacks(packs: readonly OwnPack[]): void {
-  current = packs; sizes.clear(); variants.clear(); owners.clear();
+  current = packs; sizes.clear(); variants.clear(); owners.clear(); surfaces.clear();
+  const fills: Record<string, string> = {};
+  surfaceFills = fills;
   for (const pack of packs) for (const item of pack.items) for (const image of item.images) {
     owners.set(ownImageId(image), pack.uid);
+    if (item.kind === "surface") {
+      fills[ownSurfaceCode(image.uid)] = item.fill ?? "#8a8a80";
+      if (!pack.archived) surfaces.set(ownSurfaceCode(image.uid), { assetId: ownImageId(image), cells: item.cells ?? 4 });
+    }
     if (pack.archived) markMapImageMissing(image.uid, `«${pack.name}» в архиве`);
   }
   for (const pack of packs) if (!pack.archived) for (const item of pack.items) {

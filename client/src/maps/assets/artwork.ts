@@ -2,6 +2,7 @@ import { cartographyId } from "./cartography";
 import { CRYPT_DOORS, CRYPT_SURFACES, cryptId } from "./crypt";
 import { getMapImageAsset, loadMapImageAsset } from "./registry";
 import { villageId, villageSurfaceKey } from "./village";
+import { ownSurface } from "./ownPacks";
 import { buildTerrainMaskRaster } from "../terrainMaskRaster";
 import type { RenderTerrainView } from "../renderModel";
 
@@ -76,10 +77,19 @@ function mirroredTile(image: HTMLImageElement) {
 }
 /** Поверхности «Местности»: образец на 4×4 клетки, уже бесшовный. */
 const villageImages = new WeakSet<HTMLImageElement>();
+/** Образцы поверхностей своих наборов: бесшовные, период — сколько клеток задал Мастер. */
+const ownImages = new WeakMap<HTMLImageElement, number>();
 /** Сколько клеток покрывает один повтор картинки поверхности. */
 export const surfaceCells = (image: HTMLImageElement, pack: ArtPack) =>
-  villageImages.has(image) ? 4 : pack !== "crypt" ? 8 : image === artworkImage("paper-panel", "crypt") ? 16 : 2;
+  ownImages.get(image) ?? (villageImages.has(image) ? 4 : pack !== "crypt" ? 8 : image === artworkImage("paper-panel", "crypt") ? 16 : 2);
 export function surfaceImage(code: string, dungeon = false, pack: ArtPack = "cartography") {
+  const own = ownSurface(code);
+  if (own) {
+    // Грузит карта (`prepareMapImageAssets`) и каталог; здесь только читаем готовое.
+    const image = getMapImageAsset(own.assetId)?.image ?? null;
+    if (image) ownImages.set(image, own.cells);
+    return image;
+  }
   const village = villageSurfaceKey(code);
   if (village) {
     // Материал, а не оформление: рисуется при любом стиле и грузится по первому обращению.
@@ -128,7 +138,7 @@ export function patternSource(image: HTMLImageElement, k: number): { source: HTM
 export function surfacePattern(ctx: CanvasRenderingContext2D, image: HTMLImageElement, scale: number, ox: number, oy: number, pack: ArtPack = "cartography") {
   if (pack === "crypt" && image === artworkImage("paper-panel", "crypt")) return paperPattern(ctx, scale, ox, oy);
   // «Склеп» и «Местность» уже бесшовные; «Бумага и тушь» зеркалится в тайл на 8 клеток.
-  const seamless = pack === "crypt" || villageImages.has(image);
+  const seamless = pack === "crypt" || villageImages.has(image) || ownImages.has(image);
   const size = seamless ? scale * surfaceCells(image, pack) / image.naturalWidth : scale * 8 / 512;
   const { source, factor } = seamless ? patternSource(image, size) : { source: mirroredTile(image), factor: 1 };
   const pattern = ctx.createPattern(source, "repeat"), k = size * factor;

@@ -35,6 +35,20 @@ const upload = (url: string, fields: Record<string, string>) => {
 };
 
 describe("наборы ассетов карт", () => {
+  it("поверхность: квадратный образец без полей, число клеток и средний цвет", async () => {
+    const pack = (await api().post("/api/map-packs").auth(gm, { type: "bearer" }).send({ name: "Пол" })).body;
+    const made = await upload(`/api/map-packs/${pack.id}/items`, { kind: "surface", name: "Плитка", cells: "2" });
+    expect(made.status).toBe(201);
+    const item = made.body.pack.items[0];
+    // 600×300 обрезается до квадрата; образец на 2 клетки — 512 точек, исходник мельче не растягивается.
+    expect(item).toMatchObject({ kind: "surface", cells: 2, fill: expect.stringMatching(/^#a[9ab]335[456]$/), images: [{ role: "variant", width: 300, height: 300 }] });
+    // Вид «со стороны» поверхности не положен: приходит обычным вариантом.
+    const variant = await upload(`/api/map-packs/items/${item.id}/images`, { role: "w" });
+    expect(variant.body.pack.items[0].images.map((image: { role: string }) => image.role)).toEqual(["variant", "variant"]);
+    const edited = await api().put(`/api/map-packs/items/${item.id}`).auth(gm, { type: "bearer" }).send({ cells: 99 });
+    expect(edited.body.items[0]).toMatchObject({ cells: 16, fill: item.fill });
+  });
+
   it("игроку наборы закрыты", async () => {
     expect((await api().get("/api/map-packs").auth(player, { type: "bearer" })).status).toBe(403);
   });

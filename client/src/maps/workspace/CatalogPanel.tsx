@@ -2,7 +2,7 @@ import { useState, memo } from "react";
 import { CARTOGRAPHY_OBJECTS, CARTOGRAPHY_SURFACES, cartographyId, cartographyUrl } from "../assets/cartography";
 import { CRYPT_CATEGORIES, CRYPT_OBJECTS, CRYPT_SURFACES, cryptId, cryptUrl, type CryptCategory } from "../assets/crypt";
 import { VILLAGE_CATEGORIES, VILLAGE_OBJECTS, VILLAGE_PACK, VILLAGE_RIVERS, VILLAGE_ROADS, VILLAGE_SURFACES, randomVariantId, variantKeys, villageId, villageSurfaceCode, villageUrl, type VillageCategory } from "../assets/village";
-import { MAP_SYMBOL_ASSETS } from "../assets/registry";
+import { MAP_SYMBOL_ASSETS, ownSurfaceCode } from "../assets/registry";
 import { SCATTER_PROFILES } from "../scatter";
 import { packName, packsFor } from "../assets/packs";
 import { liveImages, ownImageId, ownImageSrc, ownRandomId, useMapImageRevision, type OwnPack } from "../assets/ownPacks";
@@ -38,12 +38,18 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, pack
   const [picked, setPicked] = useState<string | null>(null);
   const [only, setOnly] = useState<string | null>(null), [choosing, setChoosing] = useState(false);
   useMapImageRevision();
-  // Объекты своих наборов: раздел набора — раздел каталога. Плитка с вариантами ставит случайный, как у «Деревни».
-  const own: Category[] = ownPacks.filter((pack) => !pack.archived).flatMap((pack) => {
-    const items = pack.items.filter((item) => !item.archived && item.kind === "object" && liveImages(item).length);
-    return [...new Set(items.map((item) => item.section))].sort((a, b) => a.localeCompare(b, "ru")).map((section): Category => ({ key: `own:${pack.uid}:${section}`, name: section || "Объекты", pack: pack.uid,
+  // Вещи своих наборов: раздел набора — раздел каталога. Объект с вариантами ставит случайный, как у «Деревни»;
+  // у поверхности каждый вариант — свой материал, они красятся по отдельности.
+  const ownTiles = (kind: "object" | "surface"): Category[] => ownPacks.filter((pack) => !pack.archived).flatMap((pack) => {
+    const items = pack.items.filter((item) => !item.archived && item.kind === kind && liveImages(item).length);
+    return [...new Set(items.map((item) => item.section))].sort((a, b) => a.localeCompare(b, "ru")).map((section): Category => ({ key: `own:${pack.uid}:${kind}:${section}`, name: section || (kind === "object" ? "Объекты" : "Поверхности"), pack: pack.uid,
       tiles: items.filter((item) => item.section === section).map((item): Tile => {
         const images = liveImages(item), ids = images.map(ownImageId), random = ownRandomId(item);
+        if (kind === "surface") {
+          const codes = images.map((image) => ownSurfaceCode(image.uid));
+          return { id: `own:${item.uid}`, name: item.name, tags: item.tags, url: ownImageSrc(ids[0]), fill: item.fill, chosen: codes.includes(material), choose: () => onMaterial(codes[0]),
+            variants: codes.length > 1 ? codes.map((code, i) => ({ id: code, name: `Вариант ${i + 1}`, url: ownImageSrc(ids[i]) })) : undefined };
+        }
         const variants: Variant[] | undefined = ids.length > 1 ? [{ id: random, name: "Случайный", url: null }, ...ids.map((id, i) => ({ id, name: `Вариант ${i + 1}`, url: ownImageSrc(id) }))] : undefined;
         return { id: `own:${item.uid}`, name: item.name, tags: item.tags, url: ownImageSrc(ids[0]), size: `${item.w}×${item.h}`, variants,
           chosen: symbol === random || ids.includes(symbol), choose: () => onSymbol(variants ? random : ids[0]) };
@@ -103,13 +109,13 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, pack
   // Подборка по карте — первой: где есть комнаты, это склеп, иначе деревня. Вторая остаётся рядом.
   const line = tool === "road" || tool === "river" || tool === "wall";
   const library: Category[] = tool === "road" ? roads : tool === "river" ? rivers : tool === "wall" ? (local ? [fences, masonry] : [masonry, fences]) : tool === "asset" ? [
-    ...own, ...(local ? [...villageObjects, ...cryptObjects] : [...cryptObjects, ...villageObjects]),
+    ...ownTiles("object"), ...(local ? [...villageObjects, ...cryptObjects] : [...cryptObjects, ...villageObjects]),
     { key: "region", name: "Мир", pack: "ink", tiles: objects("region") },
     { key: "symbols", name: "Знаки", pack: "ink", tiles: MAP_SYMBOL_ASSETS.map((item) => ({ id: item.id, name: item.name, url: null, chosen: symbol === item.id, choose: () => onSymbol(item.id) })) },
   ] : tool === "scatter" ? [
     { key: "village-scatter", name: "Местность", pack: "village", tiles: scatter(true) },
     { key: "scatter", name: "Мир", pack: "ink", tiles: scatter(false) },
-  ] : local ? [villageSurfaces, baseSurfaces] : [baseSurfaces, villageSurfaces];
+  ] : [...ownTiles("surface"), ...(local ? [villageSurfaces, baseSurfaces] : [baseSurfaces, villageSurfaces])];
   // Каталог — только подключённые наборы; `only` сужает до одного. Остальная библиотека видна через поиск.
   const fit = packsFor(kind), mine = library.filter((entry) => packs.includes(entry.pack)), shown = fit.filter((pack) => mine.some((entry) => entry.pack === pack.id));
   const filter = only && shown.some((pack) => pack.id === only) ? only : null;

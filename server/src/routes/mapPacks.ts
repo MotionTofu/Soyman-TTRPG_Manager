@@ -20,7 +20,7 @@ export const MAP_PACK_CELL_PX = 256;
 const MAX_CELLS = 16;
 const KINDS = ["tactical", "city", "overview"];
 const SIDES = ["w", "n", "e"];
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 1, fields: 12 },
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 1, fields: 14 },
   fileFilter(_req, file, cb) {
     if (["image/png", "image/jpeg", "image/webp", "image/avif", "image/gif"].includes(file.mimetype)) cb(null, true);
     else cb(new Error("Поддерживаются только изображения PNG/JPG/WebP/AVIF/GIF"));
@@ -38,7 +38,7 @@ function present(pack: PackRow, items: ItemRow[], images: ImageRow[]) {
     native_style: pack.native_style, archived: !!pack.archived_at, updated_at: pack.updated_at,
     // Убранные объекты и варианты отдаются с пометкой: в каталоге их нет, но карты, где они стоят, рисуются как раньше.
     items: items.filter((item) => item.pack_id === pack.id).map((item) => ({ id: item.id, uid: item.uid, kind: item.kind, name: item.name, section: item.section, tags: item.tags,
-      archived: !!item.archived_at, ...objectData(json<Record<string, unknown>>(item.data, {})),
+      archived: !!item.archived_at, ...itemData(item.kind, json<Record<string, unknown>>(item.data, {})),
       images: images.filter((image) => image.item_id === item.id).map((image) => ({ id: image.id, uid: image.uid, role: image.role, width: image.width, height: image.height,
         archived: !!image.archived_at, file_url: toFileUrl(image.file_path) })) })) };
 }
@@ -48,6 +48,14 @@ function objectData(raw: Record<string, unknown>) {
   const light = typeof raw.light === "number" && Number.isFinite(raw.light) && raw.light > 0 ? Math.min(60, raw.light) : null;
   return { w: cells(raw.w), h: cells(raw.h), blocks_sight: raw.blocks_sight === true, light };
 }
+/** Данные поверхности: сколько клеток покрывает один повтор образца и средний цвет — им красится «Чертёж» и то, что ещё грузится. */
+function surfaceData(raw: Record<string, unknown>) {
+  const cells = typeof raw.cells === "number" && Number.isFinite(raw.cells) ? Math.max(1, Math.min(MAX_CELLS, Math.round(raw.cells))) : 4;
+  return { cells, fill: typeof raw.fill === "string" && /^#[0-9a-f]{6}$/.test(raw.fill) ? raw.fill : "#8a8a80" };
+}
+const itemData = (kind: string, raw: Record<string, unknown>) => kind === "surface" ? { w: 1, h: 1, blocks_sight: false, light: null, ...surfaceData(raw) } : objectData(raw);
+/** Образец поверхности хранится квадратом не крупнее 1024 точек: на 4 клетки это стандарт, на большее — мельче. */
+const surfaceSide = (cells: number) => Math.min(cells, 4);
 function allPacks() {
   const packs = db.prepare("SELECT * FROM map_asset_packs ORDER BY name COLLATE NOCASE").all() as PackRow[];
   const items = db.prepare("SELECT * FROM map_asset_items ORDER BY name COLLATE NOCASE").all() as ItemRow[];
@@ -92,21 +100,25 @@ mapPacksRouter.put("/:id/archive", (req, res) => {
 });
 
 /** Картинка в стандарт набора: WebP, прозрачные поля вместо обрезки, не крупнее 256 точек на клетку. */
-async function storeImage(packUid: string, buffer: Buffer, w: number, h: number) {
+async function storeImage(packUid: string, buffer: Buffer, w: number, h: number, surface = false) {
   const uid = crypto.randomUUID();
   const meta = await sharp(buffer).metadata();
   if (!meta.width || !meta.height) throw new Error("Файл не читается как изображение");
   const full = { width: Math.round(w * MAP_PACK_CELL_PX), height: Math.round(h * MAP_PACK_CELL_PX) };
   // Мелкая картинка не растягивается до стандарта и не тонет в прозрачных полях: холст сжимается под неё, пропорции клеток те же.
-  const fit = Math.min(1, Math.max(meta.width / full.width, meta.height / full.height));
+  // У поверхности лишнее обрезается, поэтому меряется короткая сторона.
+  const ratios = [meta.width / full.width, meta.height / full.height];
+  const fit = Math.min(1, surface ? Math.min(...ratios) : Math.max(...ratios));
   const target = { width: Math.max(1, Math.round(full.width * fit)), height: Math.max(1, Math.round(full.height * fit)) };
   const out = await sharp(buffer, { animated: false }).rotate()
-    .resize({ ...target, fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    // Поверхность заполняет квадрат целиком: прозрачные поля дали бы дыры в узоре.
+    .resize({ ...target, fit: surface ? "cover" : "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .webp({ quality: 90, alphaQuality: 100 }).toBuffer({ resolveWithObject: true });
+  const mean = (await sharp(out.data).removeAlpha().stats()).channels.slice(0, 3).map((channel) => Math.round(channel.mean).toString(16).padStart(2, "0"));
   const folder = ensureSubfolder(ensureSubfolder(VAULT_ROOT, "MapPacks"), packUid);
   const file = path.join(folder, `${uid}.webp`);
   await fs.promises.writeFile(vaultAbs(file), out.data);
-  return { uid, file, width: out.info.width, height: out.info.height, small: fit < 1 };
+  return { uid, file, width: out.info.width, height: out.info.height, small: fit < 1, fill: `#${mean.join("")}` };
 }
 const withUpload = (handler: (req: AuthedRequest, res: Response) => Promise<unknown>) => (req: AuthedRequest, res: Response) =>
   upload(req, res, (error: unknown) => {
@@ -115,17 +127,21 @@ const withUpload = (handler: (req: AuthedRequest, res: Response) => Promise<unkn
     handler(req, res).catch((failure: unknown) => res.status(400).json({ error: failure instanceof Error ? failure.message : "Не удалось сохранить изображение" }));
   });
 
-// Новый объект: картинка, имя, раздел и размер в клетках, заданный на сетке.
+// Новая вещь набора. Объект: картинка, имя, раздел и размер в клетках, заданный на сетке.
+// Поверхность (`kind=surface`): бесшовный квадратный образец и число клеток, которое он покрывает.
 mapPacksRouter.post("/:id/items", withUpload(async (req, res) => {
   const pack = db.prepare("SELECT * FROM map_asset_packs WHERE id = ? AND archived_at IS NULL").get(req.params.id) as PackRow | undefined;
   if (!pack) return res.status(404).json({ error: "Набор не найден" });
   const name = text(req.body.name, 80);
-  if (!name) return res.status(400).json({ error: "Название объекта обязательно" });
-  const data = objectData({ w: Number(req.body.w), h: Number(req.body.h) });
-  const image = await storeImage(pack.uid, req.file!.buffer, data.w, data.h);
+  if (!name) return res.status(400).json({ error: "Название обязательно" });
+  const kind = req.body.kind === "surface" ? "surface" : "object";
+  const surface = kind === "surface" ? surfaceData({ cells: Number(req.body.cells) }) : null;
+  const size = surface ? { w: surfaceSide(surface.cells), h: surfaceSide(surface.cells) } : objectData({ w: Number(req.body.w), h: Number(req.body.h) });
+  const image = await storeImage(pack.uid, req.file!.buffer, size.w, size.h, !!surface);
+  const data = surface ? { ...surface, fill: image.fill } : size;
   db.transaction(() => {
-    const itemId = db.prepare("INSERT INTO map_asset_items (uid, pack_id, kind, name, section, tags, data) VALUES (?, ?, 'object', ?, ?, ?, ?)")
-      .run(crypto.randomUUID(), pack.id, name, text(req.body.section, 40), text(req.body.tags, 200), JSON.stringify(data)).lastInsertRowid;
+    const itemId = db.prepare("INSERT INTO map_asset_items (uid, pack_id, kind, name, section, tags, data) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(crypto.randomUUID(), pack.id, kind, name, text(req.body.section, 40), text(req.body.tags, 200), JSON.stringify(data)).lastInsertRowid;
     db.prepare("INSERT INTO map_asset_images (uid, item_id, role, position, file_path, width, height) VALUES (?, ?, 'variant', 0, ?, ?, ?)").run(image.uid, itemId, image.file, image.width, image.height);
     db.prepare("UPDATE map_asset_packs SET updated_at = datetime('now') WHERE id = ?").run(pack.id);
   })();
@@ -138,13 +154,15 @@ mapPacksRouter.post("/items/:itemId/images", withUpload(async (req, res) => {
   const item = db.prepare(`SELECT i.*, p.uid AS pack_uid FROM map_asset_items i JOIN map_asset_packs p ON p.id = i.pack_id
     WHERE i.id = ? AND i.archived_at IS NULL AND p.archived_at IS NULL`).get(req.params.itemId) as (ItemRow & { pack_uid: string }) | undefined;
   if (!item) return res.status(404).json({ error: "Объект не найден" });
-  const role = SIDES.includes(req.body.role) ? req.body.role as string : "variant";
+  const raw = json<Record<string, unknown>>(item.data, {});
+  const role = item.kind === "object" && SIDES.includes(req.body.role) ? req.body.role as string : "variant";
   const count = (db.prepare("SELECT COUNT(*) AS n FROM map_asset_images WHERE item_id = ? AND role = 'variant' AND archived_at IS NULL").get(item.id) as { n: number }).n;
   if (role === "variant" && count >= 12) return res.status(400).json({ error: "У объекта не больше 12 вариантов" });
-  const data = objectData(json<Record<string, unknown>>(item.data, {}));
+  const side = item.kind === "surface" ? surfaceSide(surfaceData(raw).cells) : 0;
+  const data = side ? { w: side, h: side } : objectData(raw);
   // Сбоку предмет занимает те же клетки, но лежит поперёк.
   const across = role === "w" || role === "e";
-  const image = await storeImage(item.pack_uid, req.file!.buffer, across ? data.h : data.w, across ? data.w : data.h);
+  const image = await storeImage(item.pack_uid, req.file!.buffer, across ? data.h : data.w, across ? data.w : data.h, !!side);
   db.transaction(() => {
     if (role !== "variant") db.prepare("UPDATE map_asset_images SET archived_at = datetime('now') WHERE item_id = ? AND role = ? AND archived_at IS NULL").run(item.id, role);
     db.prepare("INSERT INTO map_asset_images (uid, item_id, role, position, file_path, width, height) VALUES (?, ?, ?, ?, ?, ?, ?)").run(image.uid, item.id, role, Date.now() % 2147483647, image.file, image.width, image.height);
@@ -158,7 +176,8 @@ mapPacksRouter.put("/items/:itemId", (req, res) => {
   const body = (req.body ?? {}) as Record<string, unknown>;
   const name = body.name === undefined ? item.name : text(body.name, 80);
   if (!name) return res.status(400).json({ error: "Название объекта обязательно" });
-  const data = objectData({ ...json<Record<string, unknown>>(item.data, {}), ...body });
+  const merged = { ...json<Record<string, unknown>>(item.data, {}), ...body };
+  const data = item.kind === "surface" ? surfaceData(merged) : objectData(merged);
   db.prepare("UPDATE map_asset_items SET name = ?, section = ?, tags = ?, data = ?, updated_at = datetime('now') WHERE id = ?")
     .run(name, body.section === undefined ? item.section : text(body.section, 40), body.tags === undefined ? item.tags : text(body.tags, 200), JSON.stringify(data), item.id);
   res.json(onePack(item.pack_id));
