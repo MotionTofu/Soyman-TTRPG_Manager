@@ -28,3 +28,13 @@ it("перетаскивание линии задевает только её �
   expect(stroke.x).toBeGreaterThan(20); expect(stroke.w).toBeLessThan(14); expect(stroke.x).toBeLessThanOrEqual(29); expect(stroke.x + stroke.w).toBeGreaterThanOrEqual(32);
   expect(changedArea(base, { ...base, layers: base.layers.slice(1) })).toBeNull();
 });
+
+it("перетаскивание подписи задевает только её старое и новое место", () => {
+  const loaded = loadStoredWorkspaceDocument({ grid: "square", width: 60, height: 40, cells: '{"v":1,"cells":{},"roads":[]}' });
+  if (loaded.status !== "supported") throw Error("fixture");
+  const at = (x: number) => ({ ...loaded.document, layers: [...loaded.document.layers, { id: "labels2", name: "Подписи", kind: "label" as const, visible: true, locked: false, opacity: 1,
+    items: [{ id: "a", position: { x, y: 10 }, text: "ТРАТАТАТА" }, { id: "b", position: { x: 50, y: 30 }, text: "Далеко" }] }] });
+  const area = changedArea(at(10), at(12))!;
+  expect(area.x).toBeLessThanOrEqual(7.5); expect(area.x + area.w).toBeGreaterThanOrEqual(14.5); expect(area.x + area.w).toBeLessThan(20);
+  expect(area.y).toBeLessThanOrEqual(9); expect(area.y + area.h).toBeLessThan(12);
+});

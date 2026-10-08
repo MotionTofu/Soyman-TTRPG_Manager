@@ -7,7 +7,7 @@ type Entry = { id: string; item: unknown; bounds: SelectionRect };
 // Запас вокруг предмета, клеток: тень, обводка выбора, подпись фишки. Что не влезло — дорисует сцена, когда рука остановится.
 const PAD = 0.25;
 
-/** Предметы слоя с рамкой того, что они рисуют. null — по слою нельзя сказать, где он изменился (клетки, комнаты, подписи). */
+/** Предметы слоя с рамкой того, что они рисуют. null — по слою нельзя сказать, где он изменился (клетки, комнаты). */
 function entries(layer: Layer): Entry[] | null {
   if (layer.kind === "object") return layer.items.map(item => {
     const { position, scale, rotation } = item.transform, angle = rotation * Math.PI / 180;
@@ -37,6 +37,12 @@ function entries(layer: Layer): Entry[] | null {
   if (layer.kind === "gameplay") return layer.items.map(item => item.kind === "token"
     ? { id: item.id, item, bounds: { x: item.position.x - item.size / 2, y: item.position.y - item.size / 2, w: item.size, h: item.size } }
     : { id: item.id, item, bounds: { x: NaN, y: 0, w: 0, h: 0 } }); // комната или дверь меняет стены вокруг: рамки нет
+  // Подпись: буквы в экранных точках, поэтому рамка — по самому мелкому масштабу, где подписи ещё видны (12 точек на клетку);
+  // шире восьми клеток текст не рисуется.
+  if (layer.kind === "label") return layer.items.map(item => {
+    const w = Math.min(8, item.text.length * 0.6 + 0.5);
+    return { id: item.id, item, bounds: { x: item.position.x - w / 2, y: item.position.y - 1.2, w, h: 1.5 } };
+  });
   return null;
 }
 const rest = (value: object, skip: readonly string[]) => JSON.stringify(value, (key, inner) => skip.includes(key) ? undefined : inner);

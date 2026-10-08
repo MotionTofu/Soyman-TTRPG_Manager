@@ -9,6 +9,18 @@ export interface MapWater { mode: 0 | 1; speed: number; size: number }
 /** Точек маски на клетку. Маска — вся карта одной картинкой: красный канал — «здесь вода», зелёный — «глубоко». */
 const K = 4;
 
+/** Из чего собрана маска воды. Пока список тот же, маску не пересобирают: перетаскивание фишки или подписи воду не меняет,
+ * а пересборка — это вся карта заново и отправка картинки видеокарте на каждый шаг руки. */
+export function waterSources(model: MapRenderModel, width: number, height: number): readonly unknown[] {
+  const out: unknown[] = [width, height];
+  for (const layer of model.layers) {
+    if (!layer.visible) continue;
+    if (layer.kind === "terrain" && layer.terrain.mask?.source) out.push(layer.terrain.mask.source);
+    if (layer.kind === "path") for (const path of layer.paths) if (path.kind === "river" && path.style && path.nodes) out.push(path.nodes, path.width, path.style, path.closed);
+  }
+  return out;
+}
+
 /**
  * Где на карте вода: поверхности воды из плавных слоёв и реки, залитые водой.
  * Края размыты на полклетки — по этому градиенту шейдер рисует берег и пену.

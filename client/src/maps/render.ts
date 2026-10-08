@@ -1547,9 +1547,10 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
   // специальным "всегда сверху" проходом. Только на крупном зуме, иначе каша.
   const drawLabel = (l: RenderLabel) => {
     if (!Number.isFinite(l.position.x) || !Number.isFinite(l.position.y)) return;
-    if (!inViewWorld(l.position.x, l.position.y)) return;
     const px = X(l.position.x);
     const py = Y(l.position.y);
+    // Текст шире клетки: подпись у края плитки рисуется и на соседней, иначе её режет граница.
+    if (px < -scale * 4 || px > canvasW + scale * 4 || py < -scale || py > canvasH + 24 + scale) return;
     ctx.save();
     ctx.font = `500 ${Math.max(11, Math.min(16, Math.round(scale * 0.36)))}px ${fonts.label}`;
     ctx.textAlign = "center";

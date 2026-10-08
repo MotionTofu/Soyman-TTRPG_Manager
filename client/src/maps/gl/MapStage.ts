@@ -3,7 +3,7 @@ import { renderMap, type RenderOptions } from "../render";
 import { inRange, tileSide, visibleTiles, type TileRange } from "./tiles";
 import { createStyleFilter, type MapLook } from "./styleFilter";
 import { anyWeather, createWeatherFilter, type MapWeather } from "./weatherFilter";
-import { createWaterFilter, drawWaterMask, type MapWater } from "./waterFilter";
+import { createWaterFilter, drawWaterMask, waterSources, type MapWater } from "./waterFilter";
 
 /** Всё, что рисует карта, кроме камеры. Новый объект — новое содержимое плиток. */
 export type MapStageContent = Omit<RenderOptions, "scale" | "ox" | "oy">;
@@ -38,7 +38,7 @@ export class MapStage {
   private readonly maskRaw = document.createElement("canvas");
   private readonly waterPass = createWaterFilter(this.maskCanvas);
   private water: MapWater | null = null;
-  private maskOf: MapStageContent | null = null;
+  private maskOf: readonly unknown[] = [];
   private readonly tiles = new Map<string, Tile>();
   private readonly style = createStyleFilter();
   private readonly weatherPass = createWeatherFilter();
@@ -260,9 +260,10 @@ export class MapStage {
     }
     const screen = new Rectangle(0, 0, renderer.width, renderer.height);
     if (this.water) {
-      if (this.maskOf !== frame.content) {
+      const sources = waterSources(frame.content.model, frame.content.width, frame.content.height);
+      if (sources.length !== this.maskOf.length || sources.some((source, i) => source !== this.maskOf[i])) {
         drawWaterMask(this.maskCanvas, this.maskRaw, frame.content.model, frame.content.width, frame.content.height);
-        this.waterPass.refresh(); this.maskOf = frame.content;
+        this.waterPass.refresh(); this.maskOf = sources;
       }
       this.waterPass.aim(this.water, x, y, frame.scale * frame.dpr, performance.now() / 1000, frame.content.width, frame.content.height);
       this.ground.filterArea = screen;
