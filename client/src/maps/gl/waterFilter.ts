@@ -1,5 +1,5 @@
 import { defaultFilterVert, Filter, GlProgram, Texture } from "pixi.js";
-import { liquidRecipes, WATER_GLSL, type MapWater } from "../water";
+import { WATER_GLSL, type MapWater } from "../water";
 export { drawWaterMask, waterSources, type MapWater } from "../water";
 
 const fragment = `
@@ -22,8 +22,8 @@ void main() {
 
 
 /** Проход по слою земли: рисует воду там, где её показывает маска. */
-export function createWaterFilter(mask: HTMLCanvasElement, flow: HTMLCanvasElement) {
-  const texture = Texture.from(mask, true), stream = Texture.from(flow, true), recipe = Texture.from(liquidRecipes(), true);
+export function createWaterFilter(mask: HTMLCanvasElement, flow: HTMLCanvasElement, recipes: HTMLCanvasElement) {
+  const texture = Texture.from(mask, true), stream = Texture.from(flow, true), recipe = Texture.from(recipes, true);
   texture.source.scaleMode = stream.source.scaleMode = "linear"; recipe.source.scaleMode = "nearest";
   const filter = new Filter({
     glProgram: GlProgram.from({ vertex: defaultFilterVert, fragment, name: "map-water" }),
@@ -35,7 +35,7 @@ export function createWaterFilter(mask: HTMLCanvasElement, flow: HTMLCanvasEleme
   return {
     filter,
     /** Маску перерисовали — отдать её видеокарте. */
-    refresh() { texture.source.update(); stream.source.update(); },
+    refresh() { texture.source.update(); stream.source.update(); recipe.source.update(); },
     aim(water: MapWater, x: number, y: number, scale: number, seconds: number, width: number, height: number) {
       uniforms.uOrigin[0] = x; uniforms.uOrigin[1] = y; uniforms.uScale = scale; uniforms.uTime = seconds % 3600;
       uniforms.uMap[0] = width; uniforms.uMap[1] = height;

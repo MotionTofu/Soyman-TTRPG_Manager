@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import type { MapDocumentV6, MapDrawingStyle, MapWaterLook, Vec2 } from "@shared/maps/core";
+import type { MapDocumentV6, MapDrawingStyle, MapLiquidRecipe, MapWaterLook, Vec2 } from "@shared/maps/core";
 import { useCurrentUser } from "../api/currentUser";
 import { useAfterWrite } from "../data/hooks";
 import { useConfirm } from "../hooks/useConfirm";
@@ -41,9 +41,10 @@ import { DungeonGenerator } from "../maps/workspace/DungeonGenerator";
 import { defaultMapEffects, loadMapEffects, saveMapEffects, type EffectState, type MapEffect } from "../maps/gl/effects";
 import { replaceWithDungeon, type DungeonSettings } from "../maps/workspace/dungeonGeneration";
 import { LiquidSlots } from "../maps/workspace/LiquidSlots";
-import { LIQUID_LAYER, isLiquidLayer, moveLiquidsToLayer, usedLiquids } from "../maps/workspace/liquids";
+import { LIQUID_LAYER, isLiquidLayer, moveLiquidsToLayer, replaceLiquid, usedLiquids } from "../maps/workspace/liquids";
 import "../maps/workspace/workspace-editor.css";
 
+const NO_LIQUIDS: readonly MapLiquidRecipe[] = [];
 const SAVE_STATE = { saved: "Сохранено", dirty: "Есть правки", saving: "Сохраняем…", error: "Ошибка сохранения", conflict: "Карта изменена в другом окне" } as const;
 const LAYER_CREATORS = { mask: createTerrainMaskLayer, path: createPathLayer, scatter: createScatterLayer, terrain: createTerrainLayer,
   gameplay: createGameplayLayer, label: createLabelLayer, object: createObjectLayer };
@@ -289,6 +290,15 @@ export function MapWorkspacePage() {
   const onPicture = useEvent(() => { finishGesture(); if (map && documentRef.current) void downloadMapPicture(map, documentRef.current, displays, { showGrid, gridColor, gridOpacity, gridLineWidth, gridLineStyle }).catch(showError); });
   const onSymbol = useEvent((symbol: string) => { setSettings((current) => ({ ...current, symbol })); canvasRef.current?.focus(); });
   const onLiquid = useEvent((liquid: string) => { finishGesture(); setSettings((current) => ({ ...current, liquid })); canvasRef.current?.focus(); });
+  const onOwnLiquids = useEvent((liquids: MapLiquidRecipe[], live: boolean) => {
+    const apply = (before: MapDocumentV6): MapDocumentV6 => ({ ...before, appearance: { ...(before.appearance ?? { style: "paper-ink" as const }), liquids } });
+    if (live) liveEdit(apply); else commit(apply);
+  });
+  // Освободить слот: жидкость стирается с карты или заменяется другой, свой рецепт удаляется.
+  const onReleaseLiquid = useEvent((key: string, to: string | null) => commit((before) => {
+    const next = editGeometry(before, (view) => replaceLiquid(view, key, to)), own = before.appearance?.liquids;
+    return own?.some((item) => item.key === key) ? { ...next, appearance: { ...before.appearance!, liquids: own.filter((item) => item.key !== key) } } : next;
+  }));
   const liquidLayers = document?.layers, liquids = useMemo(() => liquidLayers ? usedLiquids(liquidLayers) : [], [liquidLayers]);
   const onMaterial = useEvent((material: string) => { finishGesture(); setSettings((current) => ({ ...current, material })); canvasRef.current?.focus(); });
   // Полоса дороги приходит со своей шириной: рисунок рассчитан на неё, ползунок потом меняет.
@@ -338,7 +348,7 @@ export function MapWorkspacePage() {
           onPointerLeave={gestures.leave} displays={displays} ghost={placement.pending?.position ?? dragGhost} onDragOver={dragOver} onDragLeave={() => setDragGhost(null)} onDrop={drop}
           onPointerDown={gestures.down} onPointerMove={gestures.move} onPointerUp={gestures.up} onPointerCancel={gestures.cancel} />
         <div className="workspace-editor-hint" aria-hidden="true"><strong>{TOOL_LABELS[tool]}{active ? ` · ${layerName(active)}` : ""}</strong>{tool === "select" && <span>{selections.length > 1 ? `Выбрано: ${selections.length} · ` : ""}Рамка · Shift — добавить</span>}<span>Пробел — сдвиг</span><span>Esc — отмена</span></div>
-        {tool === "liquid" && <LiquidSlots used={liquids} material={liquidMaterial} onMaterial={onLiquid} />}
+        {tool === "liquid" && <LiquidSlots used={liquids} own={document.appearance?.liquids ?? NO_LIQUIDS} material={liquidMaterial} onMaterial={onLiquid} onOwn={onOwnLiquids} onSettle={onSettleEdit} onRelease={onReleaseLiquid} />}
         <div className="workspace-editor-camera">
           <button type="button" aria-label="Уменьшить" onClick={() => camera.zoomBy(1 / 1.25)}>−</button>
           <button type="button" aria-label="Увеличить" onClick={() => camera.zoomBy(1.25)}>+</button>

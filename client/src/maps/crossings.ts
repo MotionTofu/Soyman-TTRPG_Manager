@@ -1,5 +1,5 @@
 import { flattenSplineWithWidths } from "./core/spline";
-import { LIQUIDS, liquidKind, riverDepth, waterLevel } from "./assets/village";
+import { liquidKey, liquidRecipe, riverDepth, waterLevel, type LiquidRecipe } from "./assets/village";
 import type { MapRenderModel, RenderPath } from "./renderModel";
 
 /** Переправы (решение 2026-10-08): там, где дорога «Местности» идёт над водой, движок сам кладёт мост или брод.
@@ -13,7 +13,7 @@ export interface Crossing { from: number; to: number; x: number; y: number; deep
 type Sample = { x: number; y: number; width: number };
 
 /** Вода для переправы по коду материала (твёрдая жидкость, лёд, — та же суша): 0 — суша, 1 — мелко (брод), 2 — глубоко (мост). Граница — глубина 3 из 5. */
-export const waterDepth = (code: string | null | undefined) => { const level = LIQUIDS[liquidKind(code)].solid ? 0 : waterLevel(code); return level >= 3 ? 2 : level ? 1 : 0; };
+export const waterDepth = (code: string | null | undefined, own?: readonly LiquidRecipe[]) => { const level = liquidRecipe(liquidKey(code), own).solid ? 0 : waterLevel(code); return level >= 3 ? 2 : level ? 1 : 0; };
 
 /** Выбор Мастера из свойств линии; чужое и битое отбрасывается. */
 export function crossingChoices(value: unknown): CrossingChoice[] {
@@ -49,7 +49,7 @@ function waterAt(model: MapRenderModel) {
     for (const mask of masks) {
       const sx = Math.floor((x - mask.ox) / mask.size), sy = Math.floor((y - mask.oy) / mask.size), cx = Math.floor(sx / mask.side), cy = Math.floor(sy / mask.side);
       const value = mask.chunks.get(`${cx}:${cy}`)?.[(sy - cy * mask.side) * mask.side + sx - cx * mask.side];
-      if (value) depth = waterDepth(mask.codes[value - 1]);
+      if (value) depth = waterDepth(mask.codes[value - 1], model.liquids);
     }
     for (const river of rivers) {
       if (river.depth <= depth || x < river.box[0] || y < river.box[1] || x > river.box[2] || y > river.box[3]) continue;

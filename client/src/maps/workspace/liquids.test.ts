@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { TERRAIN_MASK_ENCODING } from "@shared/maps/core/terrainMask";
 import type { MapDocumentV5 } from "../core/types";
-import { LIQUID_LAYER, moveLiquidsToLayer, usedLiquids } from "./liquids";
+import { LIQUID_LAYER, moveLiquidsToLayer, replaceLiquid, usedLiquids } from "./liquids";
 
 const mat = (code: string) => ({ type: "builtin" as const, key: `terrain/${code}` });
 const chunk = (id: string, set: Record<number, number>) => ({ id, cx: 0, cy: 0, payload: { encoding: TERRAIN_MASK_ENCODING, values: Array.from({ length: 256 }, (_, i) => set[i] ?? 0) } });
@@ -22,4 +22,14 @@ it("старая вода переезжает в слой жидкостей, �
   expect(values(result.document, "wet")[0].slice(0, 4)).toEqual([0, 2, 3, 0]);
   expect(usedLiquids(result.document.layers)).toEqual(["water", "lava"]);
   expect(moveLiquidsToLayer(result.document, "wet", () => "x")).toMatchObject({ ok: true, changed: false });
+});
+
+it("освобождение слота: жидкость стирается или становится другой той же глубины", () => {
+  const doc = { layers: [layer("wet", LIQUID_LAYER, ["village-water-3", "village-own1-5"], [chunk("a", { 0: 1, 1: 2 })])] } as unknown as MapDocumentV5;
+  const swapped = replaceLiquid(doc, "own1", "lava"), erased = replaceLiquid(doc, "own1", null);
+  if (!swapped.ok || !erased.ok) throw new Error("не применилось");
+  expect(usedLiquids(swapped.document.layers)).toContain("lava");
+  expect(values(swapped.document, "wet")[0].slice(0, 2)).toEqual([1, 3]);
+  expect(values(erased.document, "wet")[0].slice(0, 2)).toEqual([1, 0]);
+  expect(replaceLiquid(doc, "tar", null)).toMatchObject({ changed: false });
 });

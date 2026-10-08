@@ -45,6 +45,14 @@ describe("V6 boundary and tokens", () => {
       expect(edited.appearance).toEqual({ style });
     }
     expect(parseMapDocumentV6({ ...upgradeMapDocumentV5(oldDocument()), appearance: { style: "unknown" } }).ok).toBe(false);
+    // Свои жидкости карты: рецепт проходит целиком, битый — отклоняется.
+    const liquid = { key: "own1", name: "Ртуть", tones: ["#202428", "#8a9199", "#ffffff"], pace: 0.3, size: 2, bed: 0, glow: 0.2, pattern: "smooth", rim: "none", solid: false };
+    const wet = { ...upgradeMapDocumentV5(oldDocument()), appearance: { style: "paper-ink", liquids: [liquid] } };
+    const read = parseMapDocumentV6(serializeMapDocumentV6(wet as MapDocumentV6));
+    expect(read.ok && read.value.appearance?.liquids).toEqual([liquid]);
+    for (const bad of [{ key: "lava" }, { pace: 9 }, { tones: ["red", "#000000", "#ffffff"] }, { pattern: "waves" }])
+      expect(parseMapDocumentV6({ ...wet, appearance: { style: "paper-ink", liquids: [{ ...liquid, ...bad }] } }).ok).toBe(false);
+    expect(parseMapDocumentV6({ ...wet, appearance: { style: "paper-ink", liquids: [liquid, liquid] } }).ok).toBe(false);
   });
   it("bestiary refs remain independent and portable; creatures use the being silhouette", () => {
     const source = { kind: "compendium_entry" as const, uid: ref.uid };

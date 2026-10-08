@@ -133,7 +133,7 @@ export const WATER_DEPTHS = [1, 2, 3, 4, 5] as const;
  * `pace` — подвижность (0 — застыла, 1 — вода); `size` — крупность рисунка; `bed` — насколько видно дно на мели;
  * `glow` — свечение: подсвечивает берег; `solid` — по ней ходят, переправа не нужна. */
 export interface LiquidRecipe {
-  key: string; name: string; fill: string; tones: readonly [string, string, string];
+  key: string; name: string; /** Цвет плитки, пока нет картинки; у своих жидкостей — средний тон. */ fill?: string; tones: readonly [string, string, string];
   pace: number; size: number; pattern: LiquidPattern; bed: number; rim: LiquidRim; glow: number; solid: boolean;
 }
 /** Рисунок поверхности: рябь — родной рисунок вида воды, остальные ложатся поверх приглушённого. */
@@ -156,8 +156,14 @@ export const LIQUIDS = [
   { key: "chasm", name: "Пропасть с туманом", fill: "#232a36", tones: ["#05080f", "#1a2133", "#8c99ad"], pace: 0.5, size: 1.5, pattern: "mist", bed: 0, rim: "none", glow: 0, solid: false },
 ] as const satisfies readonly LiquidRecipe[];
 export type LiquidKey = typeof LIQUIDS[number]["key"];
-export const waterCode = (depth: number, kind: LiquidKey = "water") => villageSurfaceCode(`${kind}-${depth}`);
-const WATER = new RegExp(`^village-(${LIQUIDS.map(item => item.key).join("|")})-([1-5])$`);
+/** Ключи своих жидкостей карты: рецепты лежат в `appearance.liquids`. */
+export const OWN_LIQUID_KEYS = ["own1", "own2", "own3", "own4", "own5", "own6", "own7"] as const;
+export const waterCode = (depth: number, kind: string = "water") => villageSurfaceCode(`${kind}-${depth}`);
+const WATER = new RegExp(`^village-(${[...LIQUIDS.map(item => item.key), ...OWN_LIQUID_KEYS].join("|")})-([1-5])$`);
+/** Ключ жидкости по коду материала; вода и всё, что не жидкость, — `water`. */
+export const liquidKey = (code: string | null | undefined) => WATER.exec(code ?? "")?.[1] ?? "water";
+/** Рецепт по ключу: готовый или свой из карты. Незнакомый ключ (рецепт удалён) рисуется водой. */
+export const liquidRecipe = (key: string, own?: readonly LiquidRecipe[]): LiquidRecipe => LIQUIDS.find(item => item.key === key) ?? own?.find(item => item.key === key) ?? LIQUIDS[0];
 /** Глубина жидкости по коду материала: 0 — не жидкость. Прежние «мелководье» и «глубокая вода» — глубины 2 и 4. */
 export const waterLevel = (code: string | null | undefined) => !code ? 0 : WATER.test(code) ? Number(WATER.exec(code)![2])
   : /deep|sea|lake/.test(code) ? 4 : /shallow|water/.test(code) ? 2 : 0;
@@ -166,8 +172,8 @@ export const liquidKind = (code: string | null | undefined) => Math.max(0, LIQUI
 const WATER_PICTURE = ["shallow", "shallow", "shallow-2", "deep", "deep-2"], WATER_FILL = ["#58b9a6", "#2f9c8c", "#27808a", "#1d5a6c", "#143f55"];
 /** Ключ картинки по коду материала; `null` — код не из этого набора. */
 export const villageSurfaceKey = (code: string) => !code.startsWith(SURFACE_PREFIX) ? null
-  : !WATER.test(code) ? code.slice(SURFACE_PREFIX.length) : liquidPicture(LIQUIDS[liquidKind(code)].key, waterLevel(code));
-const liquidPicture = (kind: LiquidKey, level: number) => kind === "water" ? WATER_PICTURE[level - 1]
+  : !WATER.test(code) ? code.slice(SURFACE_PREFIX.length) : liquidPicture(liquidKey(code), waterLevel(code));
+const liquidPicture = (kind: string, level: number) => kind === "water" ? WATER_PICTURE[level - 1]
   : kind === "lava" && level <= 2 ? "lava-2" : kind === "ice" && level >= 4 ? "ice-2" : kind;
 /** Все картинки жидкостей: набор грузит их по тому, что накрашено. */
 export const LIQUID_PICTURES = ["swamp", "lava", "lava-2", "ice", "ice-2", "acid", "tar", "chasm"] as const;

@@ -1,5 +1,5 @@
 import { isPaletteIndexMaskPayload, maskChunkCoords, TERRAIN_MASK_CHUNK_AREA, TERRAIN_MASK_ENCODING } from "@shared/maps/core/terrainMask";
-import { LIQUIDS, liquidKind, waterLevel, type LiquidKey } from "../assets/village";
+import { liquidKey, waterCode, waterLevel } from "../assets/village";
 import type { MapDocumentV5, MapLayer, TerrainMaskLayer } from "../core/types";
 import { changed, mutationError, noChange } from "../core/mutations/helpers";
 import type { MutationResult } from "../core/mutations/types";
@@ -13,10 +13,13 @@ export const isLiquidLayer = (layer: { kind: string; name: string; representatio
   layer.kind === "terrain" && layer.representation === "mask" && layer.name === LIQUID_LAYER;
 
 const code = (material: { type: string; key?: string }) => material.type === "builtin" ? material.key!.replace(/^terrain\//, "") : "";
-/** Занятые слоты — жидкости, которыми на карте уже красили. */
-export function usedLiquids(layers: readonly { kind: string; name: string }[]): LiquidKey[] {
+/** Занятые слоты — жидкости, которые сейчас накрашены на карте (стёртая целиком слот освобождает). */
+export function usedLiquids(layers: readonly { kind: string; name: string }[]): string[] {
   const layer = (layers as readonly MapLayer[]).find(isLiquidLayer);
-  return [...new Set((layer?.mask.materials ?? []).map(code).filter(item => waterLevel(item) > 0).map(item => LIQUIDS[liquidKind(item)].key))];
+  if (!layer) return [];
+  const live = new Set<number>();
+  for (const chunk of layer.mask.chunks) if (isPaletteIndexMaskPayload(chunk.payload, layer.mask.materials.length)) for (const value of chunk.payload.values) if (value) live.add(value);
+  return [...new Set(layer.mask.materials.map(code).filter((item, i) => live.has(i + 1) && waterLevel(item) > 0).map(liquidKey))];
 }
 
 /** Вода, накрашенная кистью поверхности до появления слоя жидкостей, переезжает в него. Землю, накрашенную поверх
@@ -69,6 +72,29 @@ export function moveLiquidsToLayer(doc: MapDocumentV5, layerId: string, newChunk
   }
   const chunks = [...values.values()].sort((a, b) => a.cy - b.cy || a.cx - b.cx)
     .map(chunk => ({ id: chunk.id, cx: chunk.cx, cy: chunk.cy, payload: { encoding: TERRAIN_MASK_ENCODING, values: chunk.values } }));
+  layers[layers.indexOf(target)] = { ...target, mask: { ...target.mask, materials, chunks } };
+  return changed({ ...doc, layers });
+}
+
+/** Освободить слот: всё, что накрашено жидкостью `from`, стирается (`to === null`) или становится жидкостью `to` той же глубины. */
+export function replaceLiquid(doc: MapDocumentV5, from: string, to: string | null): MutationResult {
+  const target = doc.layers.find(isLiquidLayer);
+  if (!target) return noChange(doc);
+  const materials = [...target.mask.materials];
+  const swap = target.mask.materials.map((material, i) => {
+    const old = code(material);
+    if (!waterLevel(old) || liquidKey(old) !== from) return i + 1;
+    if (to === null) return 0;
+    const next = `terrain/${waterCode(waterLevel(old), to)}`;
+    return materials.findIndex(entry => entry.type === "builtin" && entry.key === next) + 1 || materials.push({ type: "builtin", key: next });
+  });
+  if (swap.every((index, i) => index === i + 1)) return noChange(doc);
+  const chunks = target.mask.chunks.flatMap(chunk => {
+    if (!isPaletteIndexMaskPayload(chunk.payload, target.mask.materials.length)) return [chunk];
+    const values = chunk.payload.values.map(value => value ? swap[value - 1] : 0);
+    return values.some(Boolean) ? [{ ...chunk, payload: { encoding: TERRAIN_MASK_ENCODING, values } }] : [];
+  });
+  const layers = [...doc.layers];
   layers[layers.indexOf(target)] = { ...target, mask: { ...target.mask, materials, chunks } };
   return changed({ ...doc, layers });
 }

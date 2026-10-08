@@ -12,6 +12,7 @@
 //
 // Production использует только V5-ветку; legacy-адаптер — для тестов/parity.
 
+import type { LiquidRecipe } from "./assets/village";
 import {
   LEGACY_FINISH_ID,
   LEGACY_START_ID,
@@ -183,6 +184,8 @@ export interface MapRenderModel {
   /** Canonical composition order документа: первый = самый нижний (§3). */
   readonly layers: readonly MapRenderLayer[];
   readonly exploration?: { enabled: boolean; revealedCells: ReadonlySet<string> };
+  /** Свои жидкости карты (`appearance.liquids`): по ним вода рисует рецепт, а дорога решает, нужна ли переправа. */
+  readonly liquids?: readonly LiquidRecipe[];
 }
 
 // ADR §D.1 (независимая копия правила, см. migrateLegacy/comparator):
@@ -528,8 +531,9 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
     diag("unsupported-material", `${nonTerrainMaterials} cell(s) use non-terrain materials: rendered as default`);
   }
 
+  const liquids = (doc as { appearance?: { liquids?: readonly LiquidRecipe[] } }).appearance?.liquids;
   return { model: {
-    layers,
+    layers, ...(liquids?.length ? { liquids } : {}),
     ...(doc.exploration === undefined ? {} : { exploration: {
       enabled: doc.exploration.enabled,
       revealedCells: new Set(doc.exploration.revealedCells.map((cell) => `${cell.x},${cell.y}`)),

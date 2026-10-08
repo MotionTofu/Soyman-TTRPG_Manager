@@ -37,7 +37,8 @@ export class MapStage {
   private readonly maskCanvas = document.createElement("canvas");
   private readonly maskRaw = document.createElement("canvas");
   private readonly flowCanvas = document.createElement("canvas");
-  private readonly waterPass = createWaterFilter(this.maskCanvas, this.flowCanvas);
+  private readonly recipeCanvas = Object.assign(document.createElement("canvas"), { width: 5, height: 8 });
+  private readonly waterPass = createWaterFilter(this.maskCanvas, this.flowCanvas, this.recipeCanvas);
   private water: MapWater | null = null;
   private maskOf: readonly unknown[] = [];
   private readonly tiles = new Map<string, Tile>();
@@ -263,7 +264,7 @@ export class MapStage {
     if (this.water) {
       const sources = waterSources(frame.content.model, frame.content.width, frame.content.height, this.water.shoal);
       if (sources.length !== this.maskOf.length || sources.some((source, i) => source !== this.maskOf[i])) {
-        drawWaterMask(this.maskCanvas, this.maskRaw, this.flowCanvas, frame.content.model, frame.content.width, frame.content.height, this.water.shoal);
+        drawWaterMask(this.maskCanvas, this.maskRaw, this.flowCanvas, this.recipeCanvas, frame.content.model, frame.content.width, frame.content.height, this.water.shoal);
         this.waterPass.refresh(); this.maskOf = sources;
       }
       this.waterPass.aim(this.water, x, y, frame.scale * frame.dpr, performance.now() / 1000, frame.content.width, frame.content.height);

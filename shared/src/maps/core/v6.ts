@@ -28,6 +28,30 @@ export type MapLayerV6 = Exclude<MapLayer, GameplayLayer> | GameplayLayerV6;
 export type MapDrawingStyle = "blueprint" | "paper-ink" | "comic-punk";
 export const MAP_WATER_LOOKS = ["comic", "pond", "sea", "soft"] as const;
 export type MapWaterLook = typeof MAP_WATER_LOOKS[number];
+/** Рецепт жидкости, заведённый Мастером на этой карте. Материал в слое — `village-<key>-<глубина>`; правка рецепта
+ * перекрашивает всё, что им накрашено. Готовые рецепты (вода, лава…) живут в клиенте и здесь не хранятся. */
+export const MAP_LIQUID_PATTERNS = ["ripple", "cracks", "bubbles", "mist", "smooth"] as const;
+export const MAP_LIQUID_RIMS = ["foam", "none", "scorch", "wet"] as const;
+export interface MapLiquidRecipe {
+  /** own1…own7 */ key: string; name: string;
+  /** Глубина, середина, блик: #rrggbb. */ tones: [string, string, string];
+  /** Подвижность 0…2, крупность рисунка 0,25…4, видимость дна 0…1, свечение 0…1. */
+  pace: number; size: number; bed: number; glow: number;
+  pattern: typeof MAP_LIQUID_PATTERNS[number]; rim: typeof MAP_LIQUID_RIMS[number];
+  /** По жидкости ходят: переправа не нужна. */ solid: boolean;
+}
+const LIQUID_RANGES = [["pace", 0, 2], ["size", 0.25, 4], ["bed", 0, 1], ["glow", 0, 1]] as const;
+function liquidIssue(value: unknown, taken: Set<unknown>): string | null {
+  if (!record(value)) return "expected a recipe";
+  if (typeof value.key !== "string" || !/^own[1-7]$/.test(value.key) || taken.has(value.key)) return "key must be a unique own1..own7";
+  taken.add(value.key);
+  if (typeof value.name !== "string" || !value.name.trim() || value.name.length > 40) return "name must be 1..40 characters";
+  if (!Array.isArray(value.tones) || value.tones.length !== 3 || value.tones.some(tone => typeof tone !== "string" || !/^#[0-9a-f]{6}$/i.test(tone))) return "tones must be three #rrggbb";
+  for (const [key, min, max] of LIQUID_RANGES) { const n = value[key]; if (typeof n !== "number" || !Number.isFinite(n) || n < min || n > max) return `${key} must be ${min}..${max}`; }
+  if (!(MAP_LIQUID_PATTERNS as readonly unknown[]).includes(value.pattern)) return "unknown pattern";
+  if (!(MAP_LIQUID_RIMS as readonly unknown[]).includes(value.rim)) return "unknown rim";
+  return typeof value.solid === "boolean" ? null : "solid must be boolean";
+}
 export interface MapDocumentV6 extends Omit<MapDocumentV5, "v" | "layers"> {
   v: 6; layers: MapLayerV6[];
   /** Map presentation is independent of generated geometry and app theme. */
@@ -39,7 +63,9 @@ export interface MapDocumentV6 extends Omit<MapDocumentV5, "v" | "layers"> {
     /** Скорость живой воды, 0…3 (без поля — 1) и крупность пиксельных видов, точек на клетку 4…16 (без поля — 8). */
     waterSpeed?: number; waterPixels?: number;
     /** Отмель: на скольких клетках от берега вода набирает свою глубину, 0…6 (без поля — 0, отмели нет). */
-    waterShoal?: number };
+    waterShoal?: number;
+    /** Свои жидкости карты, до семи. */
+    liquids?: MapLiquidRecipe[] };
 }
 export interface MapRecordV6 extends Omit<MapRecordV5, "document"> { revision: number; document: MapDocumentV6 }
 
@@ -108,6 +134,11 @@ export function validateMapDocumentV6(doc: unknown): ValidationIssue[] {
     if (value !== undefined && (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max))
       errors.push({ code: "appearance.bad-water", path: `appearance.${key}`, message: `expected ${min}..${max}` });
   }
+  const liquids = record(doc.appearance) ? doc.appearance.liquids : undefined;
+  if (liquids !== undefined) {
+    if (!Array.isArray(liquids) || liquids.length > 7) errors.push({ code: "appearance.bad-liquid", path: "appearance.liquids", message: "expected up to 7 recipes" });
+    else { const taken = new Set<unknown>(); liquids.forEach((item, i) => { const issue = liquidIssue(item, taken); if (issue) errors.push({ code: "appearance.bad-liquid", path: `appearance.liquids[${i}]`, message: issue }); }); }
+  }
   if (Array.isArray(doc.layers)) doc.layers.forEach((layer, li) => {
     if (record(layer) && layer.kind === "gameplay" && Array.isArray(layer.items)) layer.items.forEach((item, ei) => {
       if (record(item) && item.kind === "token") errors.push(...validateGameplayToken(item, `layers[${li}].items[${ei}]`));
@@ -135,7 +166,9 @@ const canonAppearance = (doc: MapDocumentV6) => doc.appearance
     ...(doc.appearance.water !== undefined ? { water: doc.appearance.water } : {}),
     ...(doc.appearance.waterSpeed !== undefined ? { waterSpeed: doc.appearance.waterSpeed } : {}),
     ...(doc.appearance.waterPixels !== undefined ? { waterPixels: doc.appearance.waterPixels } : {}),
-    ...(doc.appearance.waterShoal !== undefined ? { waterShoal: doc.appearance.waterShoal } : {}) } } : {};
+    ...(doc.appearance.waterShoal !== undefined ? { waterShoal: doc.appearance.waterShoal } : {}),
+    ...(doc.appearance.liquids?.length ? { liquids: [...doc.appearance.liquids].sort((a, b) => a.key < b.key ? -1 : 1).map(item => ({ key: item.key, name: item.name,
+      tones: [...item.tones] as [string, string, string], pace: item.pace, size: item.size, bed: item.bed, glow: item.glow, pattern: item.pattern, rim: item.rim, solid: item.solid })) } : {}) } } : {};
 export function canonicalizeMapDocumentV6(doc: MapDocumentV6): MapDocumentV6 {
   const base = canonicalizeMapDocument(invariantView(doc as unknown as Record<string, unknown>) as MapDocumentV5);
   return { ...base, v: 6, ...canonAppearance(doc), layers: base.layers.map((layer, i) => {
