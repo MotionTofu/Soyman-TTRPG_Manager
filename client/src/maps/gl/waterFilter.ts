@@ -1,5 +1,5 @@
 import { defaultFilterVert, Filter, GlProgram, Texture } from "pixi.js";
-import { WATER_GLSL, type MapWater } from "../water";
+import { liquidRecipes, WATER_GLSL, type MapWater } from "../water";
 export { drawWaterMask, waterSources, type MapWater } from "../water";
 
 const fragment = `
@@ -16,18 +16,19 @@ void main() {
   vec4 base = texture(uTexture, vTextureCoord);
   vec2 world = (vTextureCoord * uInputSize.xy - uOrigin) / uScale;
   vec4 water = waterAt(world, uTime * uWater.y);
-  finalColor = vec4(mix(base.rgb * (1.0 - wetAt(world) * 0.22), water.rgb * base.a, water.a), base.a);
+  vec4 shore = shoreAt(world);
+  finalColor = vec4(mix(mix(base.rgb, shore.rgb * base.a, shore.a) + gGlow * base.a, water.rgb * base.a, water.a), base.a);
 }`;
 
 
 /** Проход по слою земли: рисует воду там, где её показывает маска. */
 export function createWaterFilter(mask: HTMLCanvasElement, flow: HTMLCanvasElement) {
-  const texture = Texture.from(mask, true), stream = Texture.from(flow, true);
-  texture.source.scaleMode = stream.source.scaleMode = "linear";
+  const texture = Texture.from(mask, true), stream = Texture.from(flow, true), recipe = Texture.from(liquidRecipes(), true);
+  texture.source.scaleMode = stream.source.scaleMode = "linear"; recipe.source.scaleMode = "nearest";
   const filter = new Filter({
     glProgram: GlProgram.from({ vertex: defaultFilterVert, fragment, name: "map-water" }),
     resources: { water: { uOrigin: { value: new Float32Array(2), type: "vec2<f32>" }, uScale: { value: 1, type: "f32" }, uTime: { value: 0, type: "f32" },
-      uMap: { value: new Float32Array(2), type: "vec2<f32>" }, uWater: { value: new Float32Array(3), type: "vec3<f32>" } }, uMask: texture.source, uFlow: stream.source },
+      uMap: { value: new Float32Array(2), type: "vec2<f32>" }, uWater: { value: new Float32Array(3), type: "vec3<f32>" } }, uMask: texture.source, uFlow: stream.source, uRecipe: recipe.source },
     resolution: 1, antialias: "off", padding: 0,
   });
   const uniforms = filter.resources.water.uniforms as { uOrigin: Float32Array; uScale: number; uTime: number; uMap: Float32Array; uWater: Float32Array };
@@ -40,6 +41,6 @@ export function createWaterFilter(mask: HTMLCanvasElement, flow: HTMLCanvasEleme
       uniforms.uMap[0] = width; uniforms.uMap[1] = height;
       uniforms.uWater[0] = water.mode; uniforms.uWater[1] = water.speed; uniforms.uWater[2] = water.size;
     },
-    destroy() { filter.destroy(); texture.destroy(true); stream.destroy(true); },
+    destroy() { filter.destroy(); texture.destroy(true); stream.destroy(true); recipe.destroy(true); },
   };
 }

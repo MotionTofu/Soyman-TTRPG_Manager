@@ -7,6 +7,7 @@ import { createWorkspaceRenderModel } from "../workspace/renderV6";
 import { waterSources } from "./waterFilter";
 import type { MapRenderModel, RenderPath } from "../renderModel";
 import { hasRasterAsset } from "../../rasterAssets";
+import { waterDepth } from "../crossings";
 import { LIQUID_PICTURES, LIQUIDS, liquidKind, villageSurfaceKey, waterCode, waterLevel, VILLAGE_FILL } from "../assets/village";
 
 it("жидкости: код хранит вид и глубину, старая вода остаётся водой", () => {
@@ -16,6 +17,8 @@ it("жидкости: код хранит вид и глубину, старая
   expect(waterLevel("village-grass")).toBe(0);
   expect([villageSurfaceKey("village-lava-4"), villageSurfaceKey("village-lava-1"), villageSurfaceKey("village-ice-5"), villageSurfaceKey("village-tar-5")]).toEqual(["lava", "lava-2", "ice-2", "tar"]);
   for (const key of LIQUID_PICTURES) expect(hasRasterAsset("village", key), key).toBe(true);
+  // Лёд твёрдый: дороге по нему переправа не нужна; лава той же глубины — преграда.
+  expect([waterDepth("village-ice-4"), waterDepth("village-lava-4"), waterDepth("village-water-2")]).toEqual([0, 2, 1]);
   expect(villageSurfaceKey("village-water-4")).toBe("deep");
   expect(VILLAGE_FILL[waterCode(1, "chasm")]).toBe("#232a36");
 });

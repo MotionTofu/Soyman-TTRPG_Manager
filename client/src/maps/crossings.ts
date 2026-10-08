@@ -1,5 +1,5 @@
 import { flattenSplineWithWidths } from "./core/spline";
-import { riverDepth, waterLevel } from "./assets/village";
+import { LIQUIDS, liquidKind, riverDepth, waterLevel } from "./assets/village";
 import type { MapRenderModel, RenderPath } from "./renderModel";
 
 /** Переправы (решение 2026-10-08): там, где дорога «Местности» идёт над водой, движок сам кладёт мост или брод.
@@ -12,8 +12,8 @@ export type CrossingChoice = { x: number; y: number; kind: CrossingKind };
 export interface Crossing { from: number; to: number; x: number; y: number; deep: boolean; kind: CrossingKind; chosen: boolean }
 type Sample = { x: number; y: number; width: number };
 
-/** Вода для переправы по коду материала: 0 — суша, 1 — мелко (брод), 2 — глубоко (мост). Граница — глубина 3 из 5. */
-export const waterDepth = (code: string | null | undefined) => { const level = waterLevel(code); return level >= 3 ? 2 : level ? 1 : 0; };
+/** Вода для переправы по коду материала (твёрдая жидкость, лёд, — та же суша): 0 — суша, 1 — мелко (брод), 2 — глубоко (мост). Граница — глубина 3 из 5. */
+export const waterDepth = (code: string | null | undefined) => { const level = LIQUIDS[liquidKind(code)].solid ? 0 : waterLevel(code); return level >= 3 ? 2 : level ? 1 : 0; };
 
 /** Выбор Мастера из свойств линии; чужое и битое отбрасывается. */
 export function crossingChoices(value: unknown): CrossingChoice[] {

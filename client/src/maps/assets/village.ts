@@ -127,19 +127,34 @@ export const villageSurfaceCode = (key: string) => `${SURFACE_PREFIX}${key}`;
 /** Глубина реки-линии 1–5: своя, а без неё — по виду реки (мелкая 2, глубокая 4). */
 export const riverDepth = (path: { style?: string; depth?: number }) => path.depth ?? (/deep/.test(path.style ?? "") ? 4 : 2);
 export const WATER_DEPTHS = [1, 2, 3, 4, 5] as const;
+/** Рецепт жидкости — всё, чем одна жидкость отличается от другой (решение владельца 2026-10-08). Шейдер рисует любую
+ * как воду выбранного вида, а рецепт её перекрашивает и перенастраивает.
+ * `tones` — глубина, середина, блик; у воды они не применяются: у каждого вида воды своя палитра.
+ * `pace` — подвижность (0 — застыла, 1 — вода); `size` — крупность рисунка; `bed` — насколько видно дно на мели;
+ * `glow` — свечение: подсвечивает берег; `solid` — по ней ходят, переправа не нужна. */
+export interface LiquidRecipe {
+  key: string; name: string; fill: string; tones: readonly [string, string, string];
+  pace: number; size: number; pattern: LiquidPattern; bed: number; rim: LiquidRim; glow: number; solid: boolean;
+}
+/** Рисунок поверхности: рябь — родной рисунок вида воды, остальные ложатся поверх приглушённого. */
+export const LIQUID_PATTERNS = { ripple: "Рябь", cracks: "Трещины", bubbles: "Пузыри", mist: "Туман", smooth: "Гладь" } as const;
+export type LiquidPattern = keyof typeof LIQUID_PATTERNS;
+/** Кромка: пена и мокрая полоса, только мокрая полоса, обугленный край или ничего. */
+export const LIQUID_RIMS = { foam: "Пена и мокрый берег", none: "Ничего", scorch: "Обугленный край", wet: "Мокрый берег" } as const;
+export type LiquidRim = keyof typeof LIQUID_RIMS;
 /** Жидкости: вода и её родня. Красятся той же кистью с той же глубиной, код — `village-lava-3`. Номер в списке —
  * номер жидкости в маске и в шейдере (вода — 0); шейдер рисует их как воду, перекрашенную в свою шкалу тонов.
  * Картинки (листы L1/L2) — для вида «Картинкой» и под шейдером; у лавы на мели остывшая корка (`lava-2`),
  * у льда на глубине тонкий тёмный лёд (`ice-2`). */
 export const LIQUIDS = [
-  { key: "water", name: "Вода", fill: "#2f9c8c" },
-  { key: "swamp", name: "Болото", fill: "#4a5226" },
-  { key: "lava", name: "Лава", fill: "#c8421a" },
-  { key: "ice", name: "Лёд", fill: "#cfe6ee" },
-  { key: "acid", name: "Кислота", fill: "#a4c21f" },
-  { key: "tar", name: "Смола", fill: "#1c1a1a" },
-  { key: "chasm", name: "Пропасть с туманом", fill: "#232a36" },
-] as const;
+  { key: "water", name: "Вода", fill: "#2f9c8c", tones: ["#213e5c", "#2f9c8c", "#eefaf2"], pace: 1, size: 1, pattern: "ripple", bed: 1, rim: "foam", glow: 0, solid: false },
+  { key: "swamp", name: "Болото", fill: "#4a5226", tones: ["#212612", "#4d5724", "#9ead5c"], pace: 0.5, size: 1.2, pattern: "bubbles", bed: 0.4, rim: "foam", glow: 0, solid: false },
+  { key: "lava", name: "Лава", fill: "#c8421a", tones: ["#290d0a", "#b82e0a", "#ffe666"], pace: 0.35, size: 1.5, pattern: "ripple", bed: 0, rim: "scorch", glow: 0.8, solid: false },
+  { key: "ice", name: "Лёд", fill: "#cfe6ee", tones: ["#8cb8d1", "#cce6f0", "#ffffff"], pace: 0, size: 1, pattern: "cracks", bed: 0.3, rim: "none", glow: 0, solid: true },
+  { key: "acid", name: "Кислота", fill: "#a4c21f", tones: ["#33540d", "#99c71a", "#edff99"], pace: 1.2, size: 1, pattern: "bubbles", bed: 0.5, rim: "scorch", glow: 0.4, solid: false },
+  { key: "tar", name: "Смола", fill: "#1c1a1a", tones: ["#08080a", "#1f1a17", "#6b5c4d"], pace: 0.25, size: 1.8, pattern: "smooth", bed: 0, rim: "wet", glow: 0, solid: false },
+  { key: "chasm", name: "Пропасть с туманом", fill: "#232a36", tones: ["#05080f", "#1a2133", "#8c99ad"], pace: 0.5, size: 1.5, pattern: "mist", bed: 0, rim: "none", glow: 0, solid: false },
+] as const satisfies readonly LiquidRecipe[];
 export type LiquidKey = typeof LIQUIDS[number]["key"];
 export const waterCode = (depth: number, kind: LiquidKey = "water") => villageSurfaceCode(`${kind}-${depth}`);
 const WATER = new RegExp(`^village-(${LIQUIDS.map(item => item.key).join("|")})-([1-5])$`);
