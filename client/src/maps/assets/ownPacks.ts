@@ -10,7 +10,8 @@ export interface OwnPackItem { id: number; uid: string; kind: string; name: stri
   /** Поверхность: сколько клеток покрывает один повтор образца и средний цвет. */ cells?: number; fill?: string;
   /** Линия: чем тянется (`road`, `river` — течёт, `wall` — преграждает путь) и ширина в клетках. Переправа: какой настил заменяет. */
   use?: string; width?: number; deck?: string;
-  /** Россыпь: размер знака и густота по умолчанию. */ size?: number; density?: number; images: OwnPackImage[] }
+  /** Россыпь: размер знака и густота по умолчанию. */ size?: number; density?: number;
+  /** Проём: ширина в клетках и «потайной». */ span?: number; secret?: boolean; images: OwnPackImage[] }
 export interface OwnPack { id: number; uid: string; name: string; kinds: MapKind[]; genres: unknown[]; native_style: string; archived: boolean; updated_at: string; items: OwnPackItem[] }
 
 /** Точек на клетку у картинок набора; мельче — предупреждаем. */

@@ -342,6 +342,7 @@ export function MapWorkspacePage() {
   // Полоса дороги приходит со своей шириной: рисунок рассчитан на неё, ползунок потом меняет.
   const onLine = useEvent((style: string, width: number) => { finishGesture(); setSettings((current) => ({ ...current,
     ...(tool === "wall" ? { wallStyle: style, wallWidth: width } : tool === "river" ? { riverStyle: style, lineWidth: width } : { roadStyle: style, lineWidth: width }) })); canvasRef.current?.focus(); });
+  const onDoor = useEvent((door: BrushSettings["door"]) => { finishGesture(); setSettings((current) => ({ ...current, door })); canvasRef.current?.focus(); });
   const onScatter = useEvent((scatterProfile: string, density?: number) => { finishGesture(); setSettings((current) => ({ ...current, scatterProfile, ...(density ? { density } : {}) })); canvasRef.current?.focus(); });
   const onToolChange = useEvent((patch: Partial<BrushSettings>) => { if (gesture.current?.type !== "wall-line" || patch.wallWidth === undefined && patch.lineWidth === undefined) finishGesture(); setSettings((current) => ({ ...current, ...patch })); });
   const onPaintRooms = useEvent(() => paintRooms(false)), onClearRooms = useEvent(() => paintRooms(true));
@@ -379,7 +380,7 @@ export function MapWorkspacePage() {
 
     <div className="workspace-editor-body">
       {CATALOG_TOOLS.includes(tool) && <CatalogPanel tool={tool} local={!hasRooms} kind={mapKind(map.scale)} packs={packs} onPacks={onPacks} ownPacks={ownPacks} used={used} comicPunk={document.appearance?.style === "comic-punk"} symbol={settings.symbol} material={settings.material} scatterProfile={settings.scatterProfile} lineStyle={(tool === "wall" ? settings.wallStyle : tool === "river" ? settings.riverStyle : settings.roadStyle) ?? ""}
-        onSymbol={onSymbol} onMaterial={onMaterial} onScatter={onScatter} onLine={onLine} />}
+        onSymbol={onSymbol} onMaterial={onMaterial} onScatter={onScatter} onLine={onLine} doorStyle={settings.door?.style ?? ""} onDoor={onDoor} />}
 
       <div className="workspace-editor-stage" ref={wrapRef}>
         <WorkspaceCanvas gl={gl} liquidDraft={liquidDraft} onGlFail={onGlFail} effects={effects} map={map} document={document} camera={camera.cam} canvasRef={canvasRef} wrapRef={wrapRef} showGrid={showGrid} gridColor={gridColor} gridOpacity={gridOpacity} gridLineWidth={gridLineWidth} gridLineStyle={gridLineStyle} selectedId={selection?.id ?? null} selectedNodes={gestures.selectedNodes} preview={gestures.preview}

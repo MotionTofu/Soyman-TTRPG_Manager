@@ -549,6 +549,12 @@ function checkGameplayLayer(
       if (typeof e.secret !== "boolean") {
         out.push(issue("gameplay.bad-secret", `${ep}.secret`, "secret must be a boolean"));
       }
+      if (e.style !== undefined && (typeof e.style !== "string" || !e.style || e.style.length > 120)) {
+        out.push(issue("gameplay.bad-door-style", `${ep}.style`, "style must be a non-empty asset id"));
+      }
+      if (e.span !== undefined && (!Number.isInteger(e.span) || (e.span as number) < 1 || (e.span as number) > 4)) {
+        out.push(issue("gameplay.bad-door-span", `${ep}.span`, "span must be an integer 1..4"));
+      }
       if (e.pairedDoorId !== null && (typeof e.pairedDoorId !== "string" || e.pairedDoorId.length === 0)) {
         out.push(issue("gameplay.bad-pair", `${ep}.pairedDoorId`, "pairedDoorId must be null or a non-empty string"));
       } else if (typeof e.id === "string") {

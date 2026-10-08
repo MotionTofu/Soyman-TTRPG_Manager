@@ -86,14 +86,16 @@ function putRoom(document: MapDocumentV6, layerId: string, id: string, geometry:
   return editGeometry(document, (view) => createGameplayEntity(view, layerId, { id, kind: "room", roomType: "empty",
     name: quarter ? `Квартал ${count + 1}` : "", ...(quarter ? { fill: QUARTER_FILLS[count % QUARTER_FILLS.length] } : {}), geometry }));
 }
-export function createDoor(document: MapDocumentV6, layerId: string, id: string, point: Vec2, snap: boolean, orientation: number) {
+/** `look` — проём из набора ассетов: рисунок, ширина в клетках, потайной. */
+export function createDoor(document: MapDocumentV6, layerId: string, id: string, point: Vec2, snap: boolean, orientation: number, look?: { style: string; span: number; secret: boolean }) {
   requireEditableLayer(document, layerId, "gameplay");
   const position = snap && document.grid?.type === "square"
     ? orientation === 0 ? { x: Math.floor(point.x) + 0.5, y: Math.round(point.y) }
       : { x: Math.round(point.x), y: Math.floor(point.y) + 0.5 }
     : quantize(document, point, snap);
   return editGeometry(document, (view) => createGameplayEntity(view, layerId,
-    { id, kind: "door", position, orientation, doorKind: "door", secret: false, pairedDoorId: null }));
+    { id, kind: "door", position, orientation, doorKind: "door", secret: look?.secret ?? false, pairedDoorId: null,
+      ...(look?.style ? { style: look.style, ...(look.span > 1 ? { span: look.span } : {}) } : {}) }));
 }
 export function addLabel(document: MapDocumentV6, layerId: string, id: string, position: Vec2, text: string) {
   requireEditableLayer(document, layerId, "label");

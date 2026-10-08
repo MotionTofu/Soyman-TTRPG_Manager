@@ -41,6 +41,7 @@ export function usedPacks(document: MapDocumentV6): string[] {
   for (const layer of document.layers) {
     if (layer.kind === "object") for (const item of layer.items) if (item.visual.type === "asset") add(item.visual.assetId);
     if (layer.kind === "path") for (const path of layer.paths) if (path.styleRef.type === "asset") add(path.styleRef.assetId);
+    if (layer.kind === "gameplay") for (const item of layer.items) if (item.kind === "door" && item.style) add(item.style);
     if (layer.kind === "scatter") for (const area of layer.areas) {
       const key = area.profileRef.type === "builtin" ? area.profileRef.key : "", own = ownScatterPack(key);
       if (own) ids.add(own); else if (key) ids.add(ARTWORK_SCATTER.find((profile) => profile.key === key)?.pack.id === VILLAGE_PACK.id ? "village" : "ink");

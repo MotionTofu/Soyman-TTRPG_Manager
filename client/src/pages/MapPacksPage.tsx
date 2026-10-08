@@ -300,7 +300,7 @@ const IMAGES = "image/png,image/jpeg,image/webp,image/avif,image/gif";
 
 /** Линия, переправа или россыпь. Линия — полоса, которую движок тянет вдоль пути: высота картинки — ширина линии.
  * Переправа заменяет дорогу своего набора над водой. Россыпь — несколько картинок, которые движок раскидывает по области. */
-function ThingDialog({ pack, item, mode, onClose }: { pack: OwnPack; item: OwnPackItem | null; mode: "line" | "scatter"; onClose: () => void }) {
+function ThingDialog({ pack, item, mode, onClose }: { pack: OwnPack; item: OwnPackItem | null; mode: "line" | "scatter" | "door"; onClose: () => void }) {
   const run = useAction();
   const [dialog, confirm] = useConfirm();
   useMapImageRevision();
@@ -308,11 +308,12 @@ function ThingDialog({ pack, item, mode, onClose }: { pack: OwnPack; item: OwnPa
   const [name, setName] = useState(item?.name ?? ""), [section, setSection] = useState(item?.section ?? ""), [tags, setTags] = useState(item?.tags ?? "");
   const [what, setWhat] = useState<string>(item?.kind === "crossing" ? `crossing:${item.deck}` : `line:${item?.use ?? "road"}`);
   const [width, setWidth] = useState(item?.width ?? 1), [size, setSize] = useState(item?.size ?? 1), [density, setDensity] = useState(item?.density ?? 0.8);
+  const [span, setSpan] = useState(item?.span ?? 1), [secret, setSecret] = useState(item?.secret ?? false), door = mode === "door";
   const preview = useMemo(() => file ? URL.createObjectURL(file) : null, [file]);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
   const variants = item ? liveImages(item) : [], post = item ? sideImage(item, "post") : null;
   const shown = preview ?? (variants[0] ? ownImageSrc(ownImageId(variants[0])) : null);
-  const [kind, sub] = what.split(":"), scatter = mode === "scatter", title = scatter ? "Россыпь" : kind === "crossing" ? "Переправа" : "Линия";
+  const [kind, sub] = what.split(":"), scatter = mode === "scatter", title = door ? "Проём" : scatter ? "Россыпь" : kind === "crossing" ? "Переправа" : "Линия";
   const sections = [...new Set(pack.items.map((entry) => entry.section).filter(Boolean))];
   const number = (set: (value: number) => void, min: number, max: number) => (event: { target: { value: string } }) => set(Math.max(min, Math.min(max, Number(event.target.value) || min)));
 
@@ -321,12 +322,12 @@ function ThingDialog({ pack, item, mode, onClose }: { pack: OwnPack; item: OwnPa
     if (next && !name) setName(next.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").slice(0, 80));
   }
   async function save() {
-    const fields = { name, section, tags, width, size, density, ...(scatter ? {} : kind === "line" ? { use: sub } : { deck: sub }) };
+    const fields = { name, section, tags, width, size, density, span, secret, ...(scatter || door ? {} : kind === "line" ? { use: sub } : { deck: sub }) };
     let saved: unknown;
     if (item) saved = await run(labelled(`${title} не сохранена`, () => write.put(`/map-packs/items/${item.id}`, fields)), { affects: AFFECTS });
     else if (file) {
       const form = new FormData();
-      form.append("file", file); form.append("kind", scatter ? "scatter" : kind);
+      form.append("file", file); form.append("kind", door ? "door" : scatter ? "scatter" : kind);
       for (const [key, value] of Object.entries(fields)) form.append(key, String(value));
       saved = await run(labelled(`${title} не добавлена`, () => write.post(`/map-packs/${pack.id}/items`, form)), { affects: AFFECTS });
     }
@@ -348,13 +349,17 @@ function ThingDialog({ pack, item, mode, onClose }: { pack: OwnPack; item: OwnPa
   </span>;
 
   return <Modal onClose={onClose} wide ariaLabel={item ? `${title} «${item.name}»` : `Новая ${title.toLocaleLowerCase("ru")}`}>
-    <h2>{item ? `${title} набора` : scatter ? "Новая россыпь" : "Новая линия или переправа"}</h2>
+    <h2>{item ? `${title} набора` : door ? "Новый проём" : scatter ? "Новая россыпь" : "Новая линия или переправа"}</h2>
     <div className="row" style={{ gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
       <div className="stack" style={{ flex: "1 1 300px", minWidth: 260 }}>
-        {scatter
+        {scatter || door
           ? <div style={{ height: 140, border: "2px solid currentColor", background: "var(--paper, #f4efe2)" }}>{shown && <img src={shown} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />}</div>
           : <div role="img" aria-label="Полоса, повторённая вдоль линии" style={{ height: 64, border: "2px solid currentColor", backgroundColor: "var(--paper, #f4efe2)", backgroundImage: shown ? `url(${shown})` : undefined, backgroundSize: "auto 100%", backgroundRepeat: "repeat-x" }} />}
-        {scatter ? <>
+        {door ? <>
+          <small className="muted">Проём нарисован сверху: стена идёт слева направо, картинка занимает ширину проёма. На карте он встаёт на ребро клетки и поворачивается вдоль стены.</small>
+          <label>Ширина, клеток<input type="number" min={1} max={4} step={1} value={span} onChange={number(setSpan, 1, 4)} /></label>
+          <label className="row" style={{ gap: 6 }}><input type="checkbox" checked={secret} onChange={(event) => setSecret(event.target.checked)} />Потайной: игрокам не виден</label>
+        </> : scatter ? <>
           <label>Размер знака, клеток<input type="number" min={0.25} max={8} step={0.25} value={size} onChange={number(setSize, 0.25, 8)} /></label>
           <label>Густота по умолчанию, знаков на клетку<input type="number" min={0.05} max={4} step={0.05} value={density} onChange={number(setDensity, 0.05, 4)} /></label>
           <small className="muted">Густоту и размер Мастер может поменять на карте, в настройках инструмента «Россыпь».</small>
@@ -396,7 +401,7 @@ function ThingDialog({ pack, item, mode, onClose }: { pack: OwnPack; item: OwnPa
 
 /** Подпись плитки вещи на экране набора. */
 function itemNote(item: OwnPackItem) {
-  return item.kind === "surface" ? `поверхность · повтор ${item.cells ?? 4} кл.` : item.kind === "scatter" ? "россыпь"
+  return item.kind === "surface" ? `поверхность · повтор ${item.cells ?? 4} кл.` : item.kind === "scatter" ? "россыпь" : item.kind === "door" ? `проём · ${item.span ?? 1} кл.${item.secret ? " · потайной" : ""}`
     : item.kind === "crossing" ? `${STRIP_KINDS.find(([value]) => value === `crossing:${item.deck}`)?.[1].toLocaleLowerCase("ru") ?? "переправа"}`
     : item.kind === "line" ? `${{ road: "дорога", river: "река", wall: "ограда" }[item.use ?? "road"] ?? "линия"} · ${item.width ?? 1} кл.` : `${item.w}×${item.h} кл.`;
 }
@@ -410,7 +415,7 @@ export function MapPacksPage() {
   useMemo(() => registerOwnPacks(packs), [packs]);
   useMapImageRevision();
   const [picked, setPicked] = useState<number | null>(null), [archive, setArchive] = useState(false), [builtin, setBuiltin] = useState<string | null>(null);
-  const [packDialog, setPackDialog] = useState<OwnPack | "new" | null>(null), [objectDialog, setObjectDialog] = useState<OwnPackItem | "new" | "new-surface" | "new-line" | "new-scatter" | null>(null);
+  const [packDialog, setPackDialog] = useState<OwnPack | "new" | null>(null), [objectDialog, setObjectDialog] = useState<OwnPackItem | "new" | "new-surface" | "new-line" | "new-scatter" | "new-door" | null>(null);
   const live = packs.filter((pack) => !pack.archived), archived = packs.filter((pack) => pack.archived);
   const pack = live.find((entry) => entry.id === picked) ?? live[0] ?? null;
   // Диалог держит объект по id: после добавления варианта список перечитан, и окно показывает свежие картинки.
@@ -464,13 +469,14 @@ export function MapPacksPage() {
           <div className="row" style={{ gap: 8 }}>
             <button onClick={() => setPackDialog(pack)}>Название и виды карт</button>
             <button onClick={() => void setArchived(pack, true)}>В архив</button>
+            <button className="primary" onClick={() => setObjectDialog("new-door")}>+ Проём</button>
             <button className="primary" onClick={() => setObjectDialog("new-scatter")}>+ Россыпь</button>
             <button className="primary" onClick={() => setObjectDialog("new-line")}>+ Линия</button>
             <button className="primary" onClick={() => setObjectDialog("new-surface")}>+ Поверхность</button>
             <button className="primary" onClick={() => setObjectDialog("new")}>+ Объект</button>
           </div>
         </div>
-        {!items.length && <p className="muted">В наборе пока пусто. «+ Объект» — картинка и сколько клеток она занимает. «+ Поверхность» — образец, которым красят землю и полы. «+ Линия» — дорога, река, ограда или переправа. «+ Россыпь» — кусты, камни, трава.</p>}
+        {!items.length && <p className="muted">В наборе пока пусто. «+ Объект» — картинка и сколько клеток она занимает. «+ Поверхность» — образец, которым красят землю и полы. «+ Линия» — дорога, река, ограда или переправа. «+ Россыпь» — кусты, камни, трава. «+ Проём» — дверь, арка, ворота.</p>}
         {sections.map((section) => <div key={section} className="stack">
           <strong>{section || "Без раздела"}</strong>
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
@@ -486,8 +492,9 @@ export function MapPacksPage() {
     {packDialog && <PackDialog pack={packDialog === "new" ? null : packDialog} onClose={(saved) => { setPackDialog(null); if (saved) { setPicked(saved.id); setBuiltin(null); } }} />}
     {objectDialog && pack && (objectDialog === "new-surface" || editing?.kind === "surface"
       ? <SurfaceDialog key={editing?.id ?? "new-surface"} pack={pack} item={editing} onClose={() => setObjectDialog(null)} />
-      : objectDialog === "new-line" || objectDialog === "new-scatter" || editing && editing.kind !== "object"
-      ? <ThingDialog key={editing?.id ?? objectDialog as string} pack={pack} item={editing} mode={objectDialog === "new-scatter" || editing?.kind === "scatter" ? "scatter" : "line"} onClose={() => setObjectDialog(null)} />
+      : typeof objectDialog === "string" && objectDialog !== "new" || editing && editing.kind !== "object"
+      ? <ThingDialog key={editing?.id ?? objectDialog as string} pack={pack} item={editing} onClose={() => setObjectDialog(null)}
+        mode={objectDialog === "new-door" || editing?.kind === "door" ? "door" : objectDialog === "new-scatter" || editing?.kind === "scatter" ? "scatter" : "line"} />
       : (objectDialog === "new" || editing) && <ObjectDialog key={editing?.id ?? "new"} pack={pack} item={editing} onClose={() => setObjectDialog(null)} />)}
     {dialog}
   </div>;

@@ -270,6 +270,10 @@ export interface GameplayDoor {
   doorKind: MapDoorKind;
   secret: boolean;
   pairedDoorId: EntityId | null;
+  /** Рисунок проёма из набора ассетов (id картинки); без него — рисунок оформления. */
+  style?: string;
+  /** Ширина проёма в клетках, 1–4; без поля — одна клетка. */
+  span?: number;
 }
 
 export interface GameplayTrap {

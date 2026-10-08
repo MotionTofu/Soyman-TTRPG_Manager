@@ -49,6 +49,8 @@ describe("наборы ассетов карт", () => {
     expect(made.find((item: { kind: string }) => item.kind === "crossing")).toMatchObject({ deck: "ford", width: 2 });
     const scatter = (await upload(`/api/map-packs/${pack.id}/items`, { kind: "scatter", name: "Кусты", size: "2", density: "99" })).body.pack.items.find((item: { kind: string }) => item.kind === "scatter");
     expect(scatter).toMatchObject({ size: 2, density: 4, images: [{ width: 512, height: 512 }] });
+    const door = (await upload(`/api/map-packs/${pack.id}/items`, { kind: "door", name: "Ворота", span: "2", secret: "true" })).body.pack.items.find((item: { kind: string }) => item.kind === "door");
+    expect(door).toMatchObject({ span: 2, secret: true, images: [{ width: 512, height: 256 }] });
     const edited = await api().put(`/api/map-packs/items/${line.id}`).auth(gm, { type: "bearer" }).send({ use: "мимо", width: 3 });
     expect(edited.body.items.find((item: { id: number }) => item.id === line.id)).toMatchObject({ use: "road", width: 3 });
   });

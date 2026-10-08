@@ -21,6 +21,12 @@ describe("workspace document operations", () => {
     doc = paintSegment(doc, terrain, { x: 3.5, y: 3.5 }, { x: 8.5, y: 3.5 }, "stone");
     doc = createRoom(doc, gameplay, "room", { x: 2.2, y: 2.2 }, { x: 8.8, y: 8.8 }, true);
     doc = createDoor(doc, gameplay, "door", { x: 4.3, y: 2.1 }, true, 0);
+    // Проём из набора несёт рисунок, ширину и «потайной»; ширина в одну клетку в карту не пишется.
+    doc = createDoor(doc, gameplay, "gate", { x: 6.3, y: 2.1 }, true, 0, { style: "soyman-resource-images:11111111-1111-4111-8111-111111111111", span: 2, secret: true });
+    doc = createDoor(doc, gameplay, "arch", { x: 3.3, y: 8.9 }, true, 0, { style: "soyman-resource-images:11111111-1111-4111-8111-111111111111", span: 1, secret: false });
+    const doors = doc.layers.flatMap((layer) => layer.kind === "gameplay" ? layer.items : []).filter((item) => item.kind === "door");
+    expect(doors.find((item) => item.id === "gate")).toMatchObject({ span: 2, secret: true, style: expect.stringContaining("soyman-resource-images:") });
+    expect(doors.find((item) => item.id === "arch")).not.toHaveProperty("span");
     doc = addLabel(doc, labels, "label", { x: 5, y: 5 }, "Тестовый зал");
     const saved = parseMapDocumentV6(serializeMapDocumentV6(doc));
     expect(saved.ok && saved.value).toEqual(doc);

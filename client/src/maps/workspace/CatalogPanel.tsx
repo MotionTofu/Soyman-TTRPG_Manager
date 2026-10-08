@@ -25,13 +25,15 @@ function Thumbnail({ url, fill }: { url: string | null; fill?: string }) {
 const cells = (size: number) => size >= 1 ? `${Math.round(size * 10) / 10} кл.` : undefined;
 
 // memo: страница редактора рендерится на каждое движение мыши и камеры.
-export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, packs, onPacks, ownPacks, used, comicPunk, symbol, material, scatterProfile, lineStyle, onSymbol, onMaterial, onScatter, onLine }: {
+export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, packs, onPacks, ownPacks, used, comicPunk, symbol, material, scatterProfile, lineStyle, doorStyle, onSymbol, onMaterial, onScatter, onLine, onDoor }: {
   tool: WorkspaceTool; /** Подборка «Местности» первой; иначе первым идёт «Склеп». */ local: boolean; comicPunk: boolean;
   /** Вид карты и подключённые к ней наборы; `onPacks` — новый список подключённых. */
   kind: MapKind; packs: readonly string[]; onPacks: (packs: string[]) => void; /** Свои наборы Мастера с сервера. */ ownPacks: readonly OwnPack[];
   /** Наборы, вещи которых уже стоят на карте, через «|»: строкой, чтобы панель не перерисовывалась на каждую правку. */ used: string; symbol: string; material: string; scatterProfile: string;
   /** Рисунок линии текущего инструмента: дороги, реки или стены. Пусто — обычная линия или кладка. */
   lineStyle: string;
+  /** Рисунок проёма инструмента «Дверь»; пусто — обычная дверь оформления. */
+  doorStyle: string; onDoor: (door: { style: string; span: number; secret: boolean } | undefined) => void;
   onSymbol: (id: string) => void; onMaterial: (code: string) => void; onScatter: (key: string, /** Густота россыпи по умолчанию. */ density?: number) => void; onLine: (style: string, width: number) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -41,7 +43,7 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, pack
   // Вещи своих наборов: раздел набора — раздел каталога. Объект с вариантами ставит случайный, как у «Деревни»;
   // у поверхности каждый вариант — свой материал, они красятся по отдельности.
   // Линия стоит в каталоге того инструмента, которым тянется (`use`); россыпь несёт свои размер и густоту.
-  const OWN_SECTION = { object: "Объекты", surface: "Поверхности", line: "Линии", scatter: "Россыпи" };
+  const OWN_SECTION = { object: "Объекты", surface: "Поверхности", line: "Линии", scatter: "Россыпи", door: "Проёмы" };
   const ownTiles = (kind: keyof typeof OWN_SECTION, use?: string): Category[] => ownPacks.filter((pack) => !pack.archived).flatMap((pack) => {
     const items = pack.items.filter((item) => !item.archived && item.kind === kind && (!use || item.use === use) && liveImages(item).length);
     return [...new Set(items.map((item) => item.section))].sort((a, b) => a.localeCompare(b, "ru")).map((section): Category => ({ key: `own:${pack.uid}:${kind}:${section}`, name: section || OWN_SECTION[kind], pack: pack.uid,
@@ -54,6 +56,8 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, pack
         }
         if (kind === "line") return { id: `own:${item.uid}`, name: item.name, tags: item.tags, url: ownImageSrc(ids[0]), size: `${item.width ?? 1} кл.`, chosen: ids.includes(lineStyle), choose: () => onLine(ids[0], item.width ?? 1),
           variants: ids.length > 1 ? ids.map((id, i) => ({ id, name: `Вариант ${i + 1}`, url: ownImageSrc(id) })) : undefined };
+        if (kind === "door") return { id: `own:${item.uid}`, name: item.name, tags: item.tags, url: ownImageSrc(ids[0]), size: `${item.span ?? 1} кл.${item.secret ? " · потайной" : ""}`, chosen: ids.includes(doorStyle),
+          choose: () => onDoor({ style: ids[0], span: item.span ?? 1, secret: item.secret === true }) };
         if (kind === "scatter") return { id: `own:${item.uid}`, name: item.name, tags: item.tags, url: ownImageSrc(ids[0]), chosen: scatterProfile === ownScatterKey(item), choose: () => onScatter(ownScatterKey(item), item.density) };
         const variants: Variant[] | undefined = ids.length > 1 ? [{ id: random, name: "Случайный", url: null }, ...ids.map((id, i) => ({ id, name: `Вариант ${i + 1}`, url: ownImageSrc(id) }))] : undefined;
         return { id: `own:${item.uid}`, name: item.name, tags: item.tags, url: ownImageSrc(ids[0]), size: `${item.w}×${item.h}`, variants,
@@ -114,7 +118,8 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, pack
   const masonry: Category = { key: "walls", name: "Стены", pack: "crypt", tiles: [plain("wall-masonry", "Каменная кладка", 0.36, cryptUrl("wall-masonry"))] };
   // Подборка по карте — первой: где есть комнаты, это склеп, иначе деревня. Вторая остаётся рядом.
   const line = tool === "road" || tool === "river" || tool === "wall";
-  const library: Category[] = tool === "road" ? [...ownTiles("line", "road"), ...roads] : tool === "river" ? [...ownTiles("line", "river"), ...rivers]
+  const library: Category[] = tool === "door" ? [...ownTiles("door"),
+    { key: "doors-ink", name: "Обычные", pack: "ink", tiles: [{ id: "door-plain", name: "Дверь оформления", url: null, chosen: !doorStyle, choose: () => onDoor(undefined) }] }] : tool === "road" ? [...ownTiles("line", "road"), ...roads] : tool === "river" ? [...ownTiles("line", "river"), ...rivers]
     : tool === "wall" ? [...ownTiles("line", "wall"), ...(local ? [fences, masonry] : [masonry, fences])] : tool === "asset" ? [
     ...ownTiles("object"), ...(local ? [...villageObjects, ...cryptObjects] : [...cryptObjects, ...villageObjects]),
     { key: "region", name: "Мир", pack: "ink", tiles: objects("region") },

@@ -71,6 +71,9 @@ export interface RenderDoor {
   horizontal: boolean;
   kind: MapDoorKind;
   secret: boolean;
+  /** Рисунок проёма из набора и его ширина в клетках. */
+  style?: string;
+  span?: number;
 }
 
 export interface RenderTrap {
@@ -478,6 +481,8 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
               horizontal: e.orientation % 180 === 0,
               kind: e.doorKind,
               secret: e.secret,
+              ...(e.style ? { style: e.style } : {}),
+              ...(e.span ? { span: e.span } : {}),
             },
           });
         } else if (e.kind === "trap") {

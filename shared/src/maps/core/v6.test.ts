@@ -73,6 +73,15 @@ describe("V6 boundary and tokens", () => {
     for (const bad of [{ fill: "red" }, { location: "порт" }])
       expect(validateMapDocumentV6({ ...doc, layers: doc.layers.map((layer) => layer.id === "gp" ? { ...layer, items: [{ ...room, ...bad }] } : layer) }).length).toBeGreaterThan(0);
   });
+  it("проём из набора: рисунок и ширина двери переживают сохранение и уходят игрокам; ширина — целые 1–4", () => {
+    const base = upgradeMapDocumentV5(oldDocument());
+    const door = { id: "d1", kind: "door" as const, position: { x: 2.5, y: 1 }, orientation: 0, doorKind: "door" as const, secret: false, pairedDoorId: null, style: "soyman-resource-images:" + ref.uid, span: 2 };
+    const withDoor = (item: object): MapDocumentV6 => ({ ...base, exploration: { enabled: false, revealedCells: [] }, layers: base.layers.map((layer) => layer.id === "gp" ? { ...layer, items: [item] } : layer) as MapDocumentV6["layers"] });
+    const doc = withDoor(door), stored = parseMapDocumentV6(serializeMapDocumentV6(doc));
+    expect(stored.ok && stored.value.layers.flatMap((layer) => layer.kind === "gameplay" ? layer.items : [])[0]).toMatchObject({ style: door.style, span: 2 });
+    expect(projectMapDocumentV6ForPlayer(doc, () => null).layers.flatMap((layer) => layer.kind === "gameplay" ? layer.items : [])[0]).toMatchObject({ style: door.style, span: 2 });
+    for (const bad of [{ span: 5 }, { span: 1.5 }, { style: "" }]) expect(validateMapDocumentV6(withDoor({ ...door, ...bad })).length).toBeGreaterThan(0);
+  });
   it("bestiary refs remain independent and portable; creatures use the being silhouette", () => {
     const source = { kind: "compendium_entry" as const, uid: ref.uid };
     const token = { ...createGameplayToken("bestiary-token", source, { x: 2, y: 3 }), appearance: { shape: "circle" as const, visual: { type: "entity-avatar" as const, source } } };

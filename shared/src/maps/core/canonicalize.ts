@@ -233,6 +233,8 @@ function canonGameplay(e: GameplayEntity): GameplayEntity {
       doorKind: e.doorKind,
       secret: e.secret,
       pairedDoorId: e.pairedDoorId,
+      ...(e.style ? { style: e.style } : {}),
+      ...(e.span && e.span > 1 ? { span: e.span } : {}),
     };
   }
   if (e.kind === "trap") {

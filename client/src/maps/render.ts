@@ -1355,12 +1355,13 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       ctx.lineWidth = Math.max(2, scale * 0.2);
       ctx.lineCap = "butt";
       ctx.beginPath();
+      const half = (d.span ?? 1) / 2;
       if (horizontal) {
-        ctx.moveTo(X(px - 0.5), Y(py));
-        ctx.lineTo(X(px + 0.5), Y(py));
+        ctx.moveTo(X(px - half), Y(py));
+        ctx.lineTo(X(px + half), Y(py));
       } else {
-        ctx.moveTo(X(px), Y(py - 0.5));
-        ctx.lineTo(X(px), Y(py + 0.5));
+        ctx.moveTo(X(px), Y(py - half));
+        ctx.lineTo(X(px), Y(py + half));
       }
       ctx.stroke();
       // Плашка вида по центру ребра.
@@ -1368,10 +1369,13 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       const ph = horizontal ? Math.max(3, scale * 0.34) : scale * 0.72;
       const qx = X(px) - pw / 2;
       const qy = Y(py) - ph / 2;
-      const doorArt = o.cartography ? doorImage(d.secret ? "secret" : kind, pack) : null;
+      // Проём из набора рисуется при любом оформлении; пока картинка грузится — обычный знак двери.
+      const ownArt = d.style ? stripImage(d.style) : null;
+      const doorArt = ownArt ?? (o.cartography ? doorImage(d.secret ? "secret" : kind, pack) : null);
       if (doorArt) {
         ctx.save(); ctx.translate(X(px), Y(py)); if (!horizontal) ctx.rotate(Math.PI / 2);
-        if (pack === "crypt") ctx.drawImage(doorArt, -scale * 0.5, -scale * 0.5, scale, scale); // проём нарисован с обрубками стены
+        if (ownArt) { const along = (d.span ?? 1) * scale, across = along * ownArt.naturalHeight / ownArt.naturalWidth; ctx.drawImage(ownArt, -along / 2, -across / 2, along, across); }
+        else if (pack === "crypt") ctx.drawImage(doorArt, -scale * 0.5, -scale * 0.5, scale, scale); // проём нарисован с обрубками стены
         else ctx.drawImage(doorArt, -scale * 0.5, -scale * 0.14, scale, scale * 0.28);
         ctx.restore();
       }

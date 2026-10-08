@@ -285,7 +285,7 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
     } else if (tool === "road" || tool === "river") {
       try { requireEditableLayer(document, activeLayer, "path"); gesture.current = { type: "line", before: document, start: point, last: point, pointerId: event.pointerId, points: [point] }; setDraftLine([point]); } catch (error) { showError(error); }
     } else if (tool === "shape") gesture.current = { type: "room", before: document, start: point, last: point, pointerId: event.pointerId };
-    else if (tool === "door") commit((before) => createDoor(before, activeLayer, crypto.randomUUID(), point, snap, settings.orientation));
+    else if (tool === "door") commit((before) => createDoor(before, activeLayer, crypto.randomUUID(), point, snap, settings.orientation, settings.door));
     else if (tool === "label") {
       try { requireEditableLayer(document, activeLayer, "label"); onLabel(quantize(document, point, snap), activeLayer); }
       catch (error) { showError(error); }

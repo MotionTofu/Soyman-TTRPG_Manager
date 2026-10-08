@@ -15,6 +15,8 @@ export type BrushSettings = {
   /** Полоса стены (ограда) и заливка реки; пусто — кладка и линия. */
   wallStyle?: string;
   riverStyle?: string;
+  /** Проём из набора ассетов, которым ставится дверь; без него — обычная дверь оформления. */
+  door?: { style: string; span: number; secret: boolean };
 };
 
 const HINTS: Record<WorkspaceTool, string> = {

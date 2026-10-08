@@ -13,4 +13,4 @@ export const TOOL_GROUPS: Record<MapKind, WorkspaceTool[][]> = {
 export const toolsOf = (kind: MapKind): WorkspaceTool[] => [...TOOL_GROUPS[kind].flat(), "brush"];
 export const toolLabel = (kind: MapKind, tool: WorkspaceTool) => kind === "city" && tool === "shape" ? "Квартал" : TOOL_LABELS[tool];
 /** Tools that pick what they place from the catalog. */
-export const CATALOG_TOOLS: WorkspaceTool[] = ["asset", "brush", "surface", "scatter", "road", "river", "wall"];
+export const CATALOG_TOOLS: WorkspaceTool[] = ["asset", "brush", "surface", "scatter", "road", "river", "wall", "door"];

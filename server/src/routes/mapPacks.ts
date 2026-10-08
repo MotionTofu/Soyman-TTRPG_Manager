@@ -53,7 +53,7 @@ function surfaceData(raw: Record<string, unknown>) {
   const cells = typeof raw.cells === "number" && Number.isFinite(raw.cells) ? Math.max(1, Math.min(MAX_CELLS, Math.round(raw.cells))) : 4;
   return { cells, fill: typeof raw.fill === "string" && /^#[0-9a-f]{6}$/.test(raw.fill) ? raw.fill : "#8a8a80" };
 }
-const ITEM_KINDS = ["object", "surface", "line", "crossing", "scatter"];
+const ITEM_KINDS = ["object", "surface", "line", "crossing", "scatter", "door"];
 const LINE_USES = ["road", "river", "wall"];
 const DECKS = ["bridge-wood", "bridge-stone", "ford"];
 const between = (value: unknown, min: number, max: number, fallback: number) => typeof value === "number" && Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
@@ -64,11 +64,13 @@ function kindData(kind: string, raw: Record<string, unknown>): Record<string, un
   if (kind === "line") return { use: LINE_USES.includes(raw.use as string) ? raw.use : "road", width: between(raw.width, 0.25, 8, 1) };
   if (kind === "crossing") return { deck: DECKS.includes(raw.deck as string) ? raw.deck : "bridge-wood", width: between(raw.width, 0.25, 8, 2) };
   if (kind === "scatter") return { size: between(raw.size, 0.25, 8, 1), density: between(raw.density, 0.05, 4, 0.8) };
+  // Проём: ширина в клетках и «потайной» — таким он встаёт на карту.
+  if (kind === "door") return { span: Math.round(between(raw.span, 1, 4, 1)), secret: raw.secret === true || raw.secret === "true" };
   return objectData(raw);
 }
 const itemData = (kind: string, raw: Record<string, unknown>) => kind === "object" ? objectData(raw) : { w: 1, h: 1, blocks_sight: false, light: null, ...kindData(kind, raw) };
 /** Поля формы приходят строками. */
-const numbers = (body: Record<string, unknown>) => ({ ...body, ...Object.fromEntries(["w", "h", "cells", "width", "size", "density"].map((key) => [key, Number(body[key])])) });
+const numbers = (body: Record<string, unknown>) => ({ ...body, ...Object.fromEntries(["w", "h", "cells", "width", "size", "density", "span"].map((key) => [key, Number(body[key])])) });
 /** Во что вписывается картинка, клеток. `strip` — полоса: высота равна ширине линии, длина — по пропорциям картинки. */
 type Box = { w: number; h: number } | { strip: number };
 function imageBox(kind: string, data: Record<string, unknown>, role: string): Box {
@@ -76,6 +78,8 @@ function imageBox(kind: string, data: Record<string, unknown>, role: string): Bo
   if (kind === "surface") { const side = Math.min(data.cells as number, 4); return { w: side, h: side }; }
   if (kind === "line" || kind === "crossing") { const width = data.width as number; return role === "post" ? { w: Math.min(MAX_CELLS, width * 2), h: Math.min(MAX_CELLS, width * 2) } : { strip: width }; }
   if (kind === "scatter") { const side = Math.max(1, data.size as number); return { w: side, h: side }; }
+  // Проём нарисован сверху: вдоль стены — его ширина, поперёк — одна клетка.
+  if (kind === "door") return { w: data.span as number, h: 1 };
   // Сбоку предмет занимает те же клетки, но лежит поперёк.
   const across = role === "w" || role === "e";
   return { w: (across ? data.h : data.w) as number, h: (across ? data.w : data.h) as number };
