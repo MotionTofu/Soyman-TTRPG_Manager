@@ -6,7 +6,8 @@ import { MapToolIcon } from "./MapToolIcon";
 import { WorkspaceMenu } from "./WorkspaceMenu";
 import { layerName } from "./layerNames";
 import { TOOL_LABELS, type WorkspaceTool } from "./editorCommands";
-import { TOOL_SETS, TOOL_SET_LABELS, type ToolSet } from "./toolSets";
+import { TOOL_GROUPS } from "./toolSets";
+import type { MapKind } from "../mapTypes";
 import { EFFECTS, type EffectState, type MapEffect, type MapEffects } from "../gl/effects";
 
 // Обвязка редактора: рейка, шапка и строка статуса. Вынесены из страницы и
@@ -21,21 +22,21 @@ const GRID_COLORS = [["#000000", "Чёрная"], ["#ffffff", "Белая"], ["#
 const EFFECT_NAMES = Object.keys(EFFECTS) as MapEffect[];
 const STYLES: [MapDrawingStyle, string][] = [["comic-punk", "Комикс-панк"], ["paper-ink", "Бумага и тушь"], ["blueprint", "Чертёж"]];
 
-export const WorkspaceToolRail = memo(function WorkspaceToolRail({ toolSet, tool, locked, onChoose }: {
-  toolSet: ToolSet; tool: WorkspaceTool; locked: boolean; onChoose: (tool: WorkspaceTool) => void;
+export const WorkspaceToolRail = memo(function WorkspaceToolRail({ kind, tool, locked, onChoose }: {
+  kind: MapKind; tool: WorkspaceTool; locked: boolean; onChoose: (tool: WorkspaceTool) => void;
 }) {
   return <MapWorkspaceTools><div className="map-workspace-tool-list" role="toolbar" aria-label="Инструменты нового редактора">
-    {TOOL_SETS[toolSet].map((group, index) => <Fragment key={index}>
+    {TOOL_GROUPS[kind].map((group, index) => <Fragment key={index}>
       {index > 0 && <hr className="map-workspace-tool-sep" />}
-      {group.map((name) => <button key={name} title={TOOL_LABELS[name]} aria-label={TOOL_LABELS[name]} aria-pressed={tool === name}
+      {group.map((name) => <button key={name} title={TOOL_LABELS[name]} aria-label={TOOL_LABELS[name]} aria-pressed={tool === name || name === "surface" && tool === "brush"}
         disabled={locked} onClick={() => onChoose(name)}><MapToolIcon tool={name} /><span>{TOOL_LABELS[name]}</span></button>)}
     </Fragment>)}
   </div></MapWorkspaceTools>;
 });
 
-export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, toolSet, toolSets, onToolSet, canUndo, canRedo, onUndo, onRedo, grid, onGrid,
+export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, canUndo, canRedo, onUndo, onRedo, grid, onGrid,
   style, onStyle, styleLocked, frame, onFrame, water, onWater, waterSpeed, waterPixels, waterShoal, onWaterTune, generatorLocked, saveLocked, onGenerator, onSave, onBackup, onPicture, gl, onGl, effects, onEffect, onEffectsReset, classicLink }: {
-  mapName: string; status: string; toolSet: ToolSet; /** Наборы вида карты; один — переключателя нет. */ toolSets: readonly ToolSet[]; onToolSet: (set: ToolSet) => void;
+  mapName: string; status: string;
   canUndo: boolean; canRedo: boolean; onUndo: () => void; onRedo: () => void;
   grid: GridLook; onGrid: (patch: Partial<GridLook>) => void;
   style: MapDrawingStyle; onStyle: (style: MapDrawingStyle) => void; styleLocked: boolean;
@@ -54,9 +55,6 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, 
   return <header className="workspace-editor-header">
     <Link to="/maps" className="workspace-back">← Все карты</Link>
     <div className="workspace-title"><h1 title={mapName}>{mapName}</h1><span aria-live="polite">{status}</span></div>
-    {toolSets.length > 1 && <nav className="workspace-seg" aria-label="Набор инструментов">
-      {toolSets.map((set) => <button key={set} type="button" aria-pressed={toolSet === set} onClick={() => onToolSet(set)}>{TOOL_SET_LABELS[set]}</button>)}
-    </nav>}
     <div className="workspace-header-actions">
       <button type="button" className="workspace-icon-button" aria-label="Отменить" title="Отменить · Ctrl+Z" disabled={!canUndo} onClick={onUndo}>
         <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M9 4 3 10l6 6M3 10h11c8 0 8 11 0 11" /></svg></button>

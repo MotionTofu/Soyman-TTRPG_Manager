@@ -22,7 +22,8 @@ import { WorkspaceHeader, WorkspaceStatus, WorkspaceToolRail, type GridLook } fr
 import { createWorkspaceRenderModel } from "../maps/workspace/renderV6";
 import { TOOL_LABELS, toolLayerKind, addLabel, quantize, removeSelection, type WorkspaceTool, type WorkspaceSelection } from "../maps/workspace/editorCommands";
 import { downloadMapPicture } from "../maps/workspace/pictureExport";
-import { CATALOG_TOOLS, initialToolSet, rememberToolSet, setsOf, toolsOf, type ToolSet } from "../maps/workspace/toolSets";
+import { CATALOG_TOOLS, toolsOf } from "../maps/workspace/toolSets";
+import { mapKind } from "../maps/mapTypes";
 import { useWorkspaceDocument } from "../maps/workspace/useWorkspaceDocument";
 import { useWorkspaceGestures, type Gesture } from "../maps/workspace/useWorkspaceGestures";
 import { removeSelections } from "../maps/workspace/multiSelection";
@@ -54,7 +55,8 @@ export function MapWorkspacePage() {
   const { user } = useCurrentUser();
   const navigate = useNavigate(), afterWrite = useAfterWrite();
   const [leaving, setLeaving] = useState(false), [copying, setCopying] = useState(false);
-  const [toolSet, setToolSet] = useState<ToolSet>("dungeon");
+  // Каким способом «Поверхность» рисовала в последний раз: плавно или по клеткам.
+  const surfaceTool = useRef<"surface" | "brush">("surface");
   const [liquidDraft, setLiquidDraft] = useState<MapLiquidRecipe[] | null>(null);
   const [tool, setTool] = useState<WorkspaceTool>("select");
   const [activeLayer, setActiveLayer] = useState("");
@@ -87,11 +89,10 @@ export function MapWorkspacePage() {
     isEditing: () => !!gesture.current && gesture.current.type !== "pan",
     onReset: () => { gesture.current = null; setSelection(null); setLabel(null); setEntityPreview(null); setDragGhost(null); setGeneratorOpen(false); },
     onLoaded: (record, loaded) => {
-      const set = initialToolSet(record.id, record.scale, loaded);
       const surface = loaded.layers.find((layer) => layer.kind === "terrain" && layer.representation === "cells" && layer.visible && !layer.locked)
         ?? loaded.layers.find((layer) => layer.kind === "terrain" && layer.visible && !layer.locked && !isLiquidLayer(layer));
       const preferred: WorkspaceTool = surface?.kind === "terrain" && surface.representation === "mask" ? "surface" : "brush";
-      setToolSet(set); setActiveLayer(surface?.id ?? ""); setTool(toolsOf(set).includes(preferred) ? preferred : "select");
+      surfaceTool.current = preferred; setActiveLayer(surface?.id ?? ""); setTool(preferred);
     } });
   const { map, document, documentRef, setDocument, history, autosave, commit, showError, disabled } = doc;
   const camera = useMapCamera({ mapId: map?.id ?? null, geom: map, wrapRef, canvasRef, frame: document?.appearance?.frame });
@@ -129,7 +130,10 @@ export function MapWorkspacePage() {
   }
   useMapNavigationGuard(() => generationBusy.current || !!gesture.current || autosave.hasPendingChanges(), leave);
 
-  function chooseTool(next: WorkspaceTool) {
+  function chooseTool(next: WorkspaceTool, fromRail = false) {
+    // «Поверхность» на панели — оба способа рисования: открывается тот, каким рисовали в последний раз.
+    if (next === "surface" && fromRail) next = surfaceTool.current;
+    if (next === "surface" || next === "brush") surfaceTool.current = next;
     placement.cancel(); finishGesture(); setTool(next); doc.setActionError(null);
     if (next === "asset") setSelection(null);
     const current = documentRef.current;
@@ -165,11 +169,8 @@ export function MapWorkspacePage() {
       addLayer(next === "surface" ? "mask" : next === "scatter" ? "scatter" : "path");
     } else if (next === "wall") addLayer("path", "Стены");
     else if (next === "asset") addLayer("object");
+    else if (next === "brush") addLayer("terrain");
     else setActiveLayer("");
-  }
-  function chooseToolSet(next: ToolSet) {
-    setToolSet(next); rememberToolSet(mapId, next);
-    if (!toolsOf(next).includes(tool)) chooseTool("select");
   }
   function addLayer(kind: NewLayerKind, name = NEW_LAYERS[kind]) {
     finishGesture(); const layerId = crypto.randomUUID();
@@ -273,7 +274,7 @@ export function MapWorkspacePage() {
 
   // Стабильные ссылки для частей под memo: страница рендерится на каждое
   // движение мыши и камеры, и новый обработчик в пропсах отменял бы пропуск.
-  const onChooseTool = useEvent(chooseTool), onChooseToolSet = useEvent(chooseToolSet);
+  const onChooseTool = useEvent((next: WorkspaceTool) => chooseTool(next, true)), onSurfaceTool = useEvent((next: "surface" | "brush") => chooseTool(next));
   const onUndo = useEvent(() => { finishGesture(); history.undo(); }), onRedo = useEvent(() => { finishGesture(); history.redo(); });
   const grid = useMemo<GridLook>(() => ({ opacity: gridOpacity, lineWidth: gridLineWidth, lineStyle: gridLineStyle, color: gridColor }), [gridOpacity, gridLineWidth, gridLineStyle, gridColor]);
   const onGrid = useEvent((patch: Partial<GridLook>) => {
@@ -311,6 +312,8 @@ export function MapWorkspacePage() {
     return own?.some((item) => item.key === key) ? { ...next, appearance: { ...before.appearance!, liquids: own.filter((item) => item.key !== key) } } : next;
   }));
   const liquidLayers = document?.layers, liquids = useMemo(() => liquidLayers ? usedLiquids(liquidLayers) : [], [liquidLayers]);
+  // Карта с комнатами — подземелье: в каталоге первым идёт «Склеп».
+  const hasRooms = useMemo(() => !!liquidLayers?.some((layer) => layer.kind === "gameplay" && layer.items.some((item) => item.kind === "room")), [liquidLayers]);
   const onMaterial = useEvent((material: string) => { finishGesture(); setSettings((current) => ({ ...current, material })); canvasRef.current?.focus(); });
   // Полоса дороги приходит со своей шириной: рисунок рассчитан на неё, ползунок потом меняет.
   const onLine = useEvent((style: string, width: number) => { finishGesture(); setSettings((current) => ({ ...current,
@@ -341,16 +344,16 @@ export function MapWorkspacePage() {
       : autosave.status.kind === "error" ? "Не удалось сохранить карту. Правки остаются в редакторе." : null);
 
   return <div className="workspace-editor" aria-busy={leaving} data-catalog={CATALOG_TOOLS.includes(tool) || undefined}>
-    <WorkspaceToolRail toolSet={toolSet} tool={tool} locked={toolsLocked} onChoose={onChooseTool} />
+    <WorkspaceToolRail kind={mapKind(map.scale)} tool={tool} locked={toolsLocked} onChoose={onChooseTool} />
 
     <WorkspaceHeader mapName={map.name} status={`${leaving ? "Сохраняем перед выходом…" : SAVE_STATE[autosave.status.kind]}${document.grid ? ` · ${document.grid.columns} × ${document.grid.rows} клеток` : ""}`}
-      toolSet={toolSet} toolSets={setsOf(map.scale)} onToolSet={onChooseToolSet} canUndo={history.canUndo && !disabled && !leaving} canRedo={history.canRedo && !disabled && !leaving} onUndo={onUndo} onRedo={onRedo}
+      canUndo={history.canUndo && !disabled && !leaving} canRedo={history.canRedo && !disabled && !leaving} onUndo={onUndo} onRedo={onRedo}
       grid={grid} onGrid={onGrid} style={document.appearance?.style ?? "paper-ink"} onStyle={onStyle} styleLocked={disabled || leaving} frame={document.appearance?.frame} onFrame={onFrame} water={document.appearance?.water} onWater={onWater} waterSpeed={document.appearance?.waterSpeed ?? 1} waterPixels={document.appearance?.waterPixels ?? 8} waterShoal={document.appearance?.waterShoal ?? 0} onWaterTune={onWaterTune}
       generatorLocked={leaving || !!doc.compatibilityError || autosave.blocked || autosave.status.kind === "conflict"} saveLocked={saveBlocked}
       onGenerator={onGenerator} onSave={onSave} onBackup={onBackup} onPicture={onPicture} gl={gl} onGl={onGl} effects={effects} onEffect={onEffect} onEffectsReset={onEffectsReset} classicLink={map.document_version !== 6 ? `/maps/${map.id}` : null} />
 
     <div className="workspace-editor-body">
-      {CATALOG_TOOLS.includes(tool) && <CatalogPanel tool={tool} toolSet={toolSet} comicPunk={document.appearance?.style === "comic-punk"} symbol={settings.symbol} material={settings.material} scatterProfile={settings.scatterProfile} lineStyle={(tool === "wall" ? settings.wallStyle : tool === "river" ? settings.riverStyle : settings.roadStyle) ?? ""}
+      {CATALOG_TOOLS.includes(tool) && <CatalogPanel tool={tool} local={!hasRooms} comicPunk={document.appearance?.style === "comic-punk"} symbol={settings.symbol} material={settings.material} scatterProfile={settings.scatterProfile} lineStyle={(tool === "wall" ? settings.wallStyle : tool === "river" ? settings.riverStyle : settings.roadStyle) ?? ""}
         onSymbol={onSymbol} onMaterial={onMaterial} onScatter={onScatter} onLine={onLine} />}
 
       <div className="workspace-editor-stage" ref={wrapRef}>
@@ -391,7 +394,7 @@ export function MapWorkspacePage() {
           : selection && tool === "select" && !disabled
             ? <WorkspaceProperties document={document} selection={selection} commit={commit} onClose={() => setSelection(null)} onDelete={() => remove(selection)} display={selectedToken ?? undefined}
               onPreview={() => { if (selectedToken?.state === "active" && selectedToken.id) setEntityPreview({ type: selectedToken.sourceRef.kind, id: selectedToken.id }); }} />
-            : <ToolSettings tool={tool} settings={settings} maskEraser={maskEraser}
+            : <ToolSettings tool={tool} settings={settings} maskEraser={maskEraser} onTool={onSurfaceTool}
               selectedRoomCount={selectedRoomShapes(document, selections).length} roomActionsDisabled={disabled || leaving || active?.kind !== "terrain" || active.representation !== "cells" || active.locked || !active.visible || autosave.status.kind === "conflict"}
               onPaintRooms={onPaintRooms} onClearRooms={onClearRooms} onChange={onToolChange} />}
         <LayersPanel document={document} activeLayer={activeLayer} disabled={disabled || leaving} onActivate={onActivateLayer}

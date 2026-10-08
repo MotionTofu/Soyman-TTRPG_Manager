@@ -39,13 +39,19 @@ function Slider({ name, value, min, max, step, onChange }: { name: string; value
 }
 
 // memo: страница редактора рендерится на каждое движение мыши и камеры.
-export const ToolSettings = memo(function ToolSettings({ tool, settings, maskEraser, onChange, selectedRoomCount = 0, roomActionsDisabled, onPaintRooms, onClearRooms }: {
+export const ToolSettings = memo(function ToolSettings({ tool, settings, maskEraser, onChange, onTool, selectedRoomCount = 0, roomActionsDisabled, onPaintRooms, onClearRooms }: {
   tool: WorkspaceTool; settings: BrushSettings; maskEraser: boolean; onChange: (patch: Partial<BrushSettings>) => void;
+  /** Сменить способ рисования поверхности: плавная кисть или пол по клеткам. */
+  onTool?: (tool: "surface" | "brush") => void;
   selectedRoomCount?: number; roomActionsDisabled?: boolean; onPaintRooms?: () => void; onClearRooms?: () => void;
 }) {
   const brushSized = tool === "surface" || tool === "liquid" || tool === "scatter" || (tool === "eraser" && maskEraser);
   return <section className="workspace-tool-settings" aria-label="Параметры инструмента">
-    <div className="workspace-panel-heading"><h2 className="workspace-panel-title">Инструмент</h2><strong>{TOOL_LABELS[tool]}</strong></div>
+    <div className="workspace-panel-heading"><h2 className="workspace-panel-title">Инструмент</h2><strong>{TOOL_LABELS[tool === "brush" ? "surface" : tool]}</strong></div>
+    {(tool === "surface" || tool === "brush") && onTool && <div className="workspace-seg workspace-seg-paper" role="group" aria-label="Способ рисования">
+      <button type="button" aria-pressed={tool === "surface"} onClick={() => onTool("surface")}>Свободно</button>
+      <button type="button" aria-pressed={tool === "brush"} onClick={() => onTool("brush")}>По клеткам</button>
+    </div>}
     {brushSized && <Slider name="Размер кисти" value={settings.radius} min={0.25} max={8} step={0.25} onChange={(radius) => onChange({ radius })} />}
     {(tool === "brush" || tool === "eraser" && !maskEraser) && <>
       <label>Режим<select aria-label="Режим клеточной кисти" value={settings.cellMode ?? "brush"} onChange={event => onChange({ cellMode: event.target.value as "brush" | "area" })}>

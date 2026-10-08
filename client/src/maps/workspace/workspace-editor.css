@@ -13,6 +13,9 @@
 .workspace-seg { display: flex; flex-shrink: 0; border: 2px solid #f1eedf; }
 .workspace-seg button { height: 34px; padding: 0 14px; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: #f1eedf; font-size: var(--fs-data); font-weight: 700; }
 .workspace-seg button + button { border-left: 2px solid #f1eedf; }
+.workspace-seg-paper { border-color: #171717; }
+.workspace-seg-paper button { flex: 1; color: #171717; }
+.workspace-seg-paper button + button { border-left-color: #171717; }
 .workspace-seg button[aria-pressed="true"] { background: var(--accent) var(--skin-acid-wash) center / cover; color: #171717; }
 .workspace-header-actions { display: flex; flex: 1; align-items: center; justify-content: flex-end; gap: var(--sp-2); min-width: 0; }
 .workspace-editor-header .workspace-icon-button { width: 36px; height: 36px; border: 2px solid rgba(241, 238, 223, .35); color: #f1eedf; }

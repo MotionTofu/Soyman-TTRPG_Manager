@@ -5,7 +5,6 @@ import { VILLAGE_CATEGORIES, VILLAGE_OBJECTS, VILLAGE_PACK, VILLAGE_RIVERS, VILL
 import { MAP_SYMBOL_ASSETS } from "../assets/registry";
 import { SCATTER_PROFILES } from "../scatter";
 import type { WorkspaceTool } from "./editorCommands";
-import type { ToolSet } from "./toolSets";
 
 /** Плитка — семейство. `variants` — что именно ставить: конкретный вариант или «случайный» (без картинки). */
 type Variant = { id: string; name: string; url: string | null };
@@ -22,8 +21,8 @@ function Thumbnail({ url, fill }: { url: string | null; fill?: string }) {
 const cells = (size: number) => size >= 1 ? `${Math.round(size * 10) / 10} кл.` : undefined;
 
 // memo: страница редактора рендерится на каждое движение мыши и камеры.
-export const CatalogPanel = memo(function CatalogPanel({ tool, toolSet, comicPunk, symbol, material, scatterProfile, lineStyle, onSymbol, onMaterial, onScatter, onLine }: {
-  tool: WorkspaceTool; toolSet: ToolSet; comicPunk: boolean; symbol: string; material: string; scatterProfile: string;
+export const CatalogPanel = memo(function CatalogPanel({ tool, local, comicPunk, symbol, material, scatterProfile, lineStyle, onSymbol, onMaterial, onScatter, onLine }: {
+  tool: WorkspaceTool; /** Подборка «Местности» первой; иначе первым идёт «Склеп». */ local: boolean; comicPunk: boolean; symbol: string; material: string; scatterProfile: string;
   /** Рисунок линии текущего инструмента: дороги, реки или стены. Пусто — обычная линия или кладка. */
   lineStyle: string;
   onSymbol: (id: string) => void; onMaterial: (code: string) => void; onScatter: (key: string) => void; onLine: (style: string, width: number) => void;
@@ -51,7 +50,6 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, toolSet, comicPun
     : assetId.startsWith(cartographyId("")) ? cartographyUrl(assetId.slice(cartographyId("").length)) : null;
   const scatter = (own: boolean) => SCATTER_PROFILES.filter((item) => item.assetId.startsWith(`${VILLAGE_PACK.id}:`) === own).map((item): Tile =>
     ({ id: item.key, name: item.name, url: scatterUrl(item.assetId), chosen: scatterProfile === item.key, choose: () => onScatter(item.key) }));
-  const local = toolSet !== "dungeon";
   const villageObjects = (Object.keys(VILLAGE_CATEGORIES) as VillageCategory[]).map((key) => ({ key, name: VILLAGE_CATEGORIES[key], pack: VILLAGE, tiles: village(key) }));
   const cryptObjects = (Object.keys(CRYPT_CATEGORIES) as CryptCategory[]).map((key) => ({ key, name: CRYPT_CATEGORIES[key], pack: CRYPT, tiles: crypt(key) }));
   // Воды и других жидкостей здесь нет: у них свой инструмент со слотами.
@@ -79,7 +77,7 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, toolSet, comicPun
   // Ограда — стена: её не перешагнуть, и на «Столе» она будет считаться преградой, в отличие от дороги.
   const fences: Category = { key: "fences", name: "Ограды", pack: VILLAGE, tiles: strips(VILLAGE_ROADS.filter((item) => item.group === "fence")) };
   const masonry: Category = { key: "walls", name: "Стены", pack: CRYPT, tiles: [plain("wall-masonry", "Каменная кладка", 0.36, cryptUrl("wall-masonry"))] };
-  // Свой набор — первым: в «Местности» деревня, в «Подземелье» склеп. Чужой остаётся рядом.
+  // Подборка по карте — первой: где есть комнаты, это склеп, иначе деревня. Вторая остаётся рядом.
   const line = tool === "road" || tool === "river" || tool === "wall";
   const categories: Category[] = tool === "road" ? roads : tool === "river" ? rivers : tool === "wall" ? (local ? [fences, masonry] : [masonry, fences]) : tool === "asset" ? [
     ...(local ? [...villageObjects, ...cryptObjects] : [...cryptObjects, ...villageObjects]),
