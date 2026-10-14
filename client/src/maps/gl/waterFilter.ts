@@ -12,6 +12,7 @@ uniform vec2 uOrigin;
 uniform float uScale;
 uniform float uTime;
 ${WATER_GLSL}
+vec4 groundAt(vec2 world) { return texture(uTexture, (world * uScale + uOrigin) / uInputSize.xy); }
 void main() {
   vec4 base = texture(uTexture, vTextureCoord);
   vec2 world = (vTextureCoord * uInputSize.xy - uOrigin) / uScale;

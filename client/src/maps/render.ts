@@ -8,7 +8,8 @@ import { drawWallPolyline } from "./assets/wallArtwork";
 import { deckKey, fencePostId, villageId } from "./assets/village";
 import { ownDeck, ownLinePost, ownPackOf } from "./assets/ownPacks";
 import { labelBox, labelFamily } from "./labelStyle";
-import { drawWaterStill, type MapWater } from "./water";
+import { drawWaterStill, waterStillReady, type MapWater } from "./water";
+import { LIQUID_LAYER } from "./workspace/liquids";
 import { cutKey, cutRoad, drawCrossingDraft, roadCrossings, type RoadCut } from "./crossings";
 // Рендер карты на canvas 2D. Цвета террейна — фиксированная спокойная
 // палитра (исключение как у Полотна §6 design_revision.md: бюджет акцента
@@ -766,7 +767,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
   const fonts = o.fonts ?? readCanvasFonts();
   const pack = o.artPack ?? "cartography";
   const dungeon = !!o.cartography && model.layers.some(layer => layer.visible && layer.kind === "terrain" && (layer.terrain.defaultCode === "wall" || (!layer.terrain.mask && [...layer.terrain.entries.values()].includes("wall"))));
-  if (o.water && !o.part) {
+  if (o.water && !o.part && waterStillReady()) {
     // Земля, на неё вода, потом всё остальное — мосты, дороги и фишки остаются над водой.
     renderMap(ctx, canvasW, canvasH, { ...o, part: "ground" });
     drawWaterStill(ctx, model, width, height, o.water, canvasW, canvasH, scale, ox, oy, pixelRatio);
@@ -1629,6 +1630,8 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
   const drawLayer = (layer: MapRenderModel["layers"][number]) => {
     if (!layer.visible) return;
     if (part === "over" && layer.kind === "terrain" || part === "ground" && layer.kind !== "terrain" && layer.kind !== "path") return;
+    // Под живой водой — земля, а не картинка жидкости: шейдер сам решает, сколько дна видно (гриллинг 2026-10-15, В2).
+    if (part === "ground" && layer.kind === "terrain" && layer.name === LIQUID_LAYER && layer.terrain.mask) return;
     ctx.save();
     ctx.globalAlpha *= layer.opacity;
     if (layer.kind === "terrain") {
