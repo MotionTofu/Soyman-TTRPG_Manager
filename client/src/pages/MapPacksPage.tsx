@@ -566,7 +566,7 @@ export function MapPacksPage() {
           <h2 style={{ margin: 0 }}>{pack.name}</h2>
           <div className="row" style={{ gap: 8 }}>
             <button onClick={() => setPackDialog(pack)}>Название, жанры и виды карт</button>
-            <button title="Набор одним файлом — передать другому Мастеру" onClick={() => void run(labelled("Набор не выгружен", () => exportPack(pack)))}>Выгрузить</button>
+            <button title="Набор одним файлом — передать другому Мастеру" onClick={() => void run(labelled("Набор не выгружен", () => exportPack(pack)), { affects: [] })}>Выгрузить</button>
             <button onClick={() => void setArchived(pack, true)}>В архив</button>
             <button title="Лист с несколькими вещами: разрезать и добавить разом" onClick={() => setSheetDialog(true)}>+ Лист</button>
             <button className="primary" onClick={() => setObjectDialog("new-door")}>+ Проём</button>
