@@ -75,6 +75,8 @@ export const LiquidSlots = memo(function LiquidSlots({ used, own, material, live
       <Range name="Подвижность" value={recipe.pace} min={0} max={2} step={0.05} onChange={pace => edit({ pace }, true)} onSettle={onSettle} />
       <Range name="Крупность рисунка" value={recipe.size} min={0.25} max={4} step={0.05} onChange={size => edit({ size }, true)} onSettle={onSettle} />
       <Range name="Дно видно" value={recipe.bed} min={0} max={1} step={0.05} onChange={bed => edit({ bed }, true)} onSettle={onSettle} />
+      <Range name="Ширина берега" value={recipe.shore ?? 0.4} min={0} max={1} step={0.05} onChange={shore => edit({ shore }, true)} onSettle={onSettle} />
+      <Range name="Рваность берега" value={recipe.ragged ?? 0.4} min={0} max={1} step={0.05} onChange={ragged => edit({ ragged }, true)} onSettle={onSettle} />
       <Range name="Свечение" value={recipe.glow} min={0} max={1} step={0.05} onChange={glow => edit({ glow }, true)} onSettle={onSettle} />
       <label>Рисунок<select value={recipe.pattern} onChange={event => edit({ pattern: event.target.value as LiquidPattern })}>
         {Object.entries(LIQUID_PATTERNS).map(([key, name]) => <option key={key} value={key}>{name}</option>)}</select></label>

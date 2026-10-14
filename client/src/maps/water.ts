@@ -94,8 +94,8 @@ export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement,
     for (let y = h - 1, i = w * h - 1; y >= 0; y--) for (let x = w - 1; x >= 0; x--, i--) { near(i, x, y, 1, 0, 1); near(i, x, y, 0, 1, 1); near(i, x, y, 1, 1, 1.4); near(i, x, y, -1, 1, 1.4); }
     if (shoal > 0) for (let i = 0; i < far.length; i++) if (px[i * 4 + 1] > 51) px[i * 4 + 1] = Math.round(51 + (px[i * 4 + 1] - 51) * Math.min(1, far[i] / (shoal * K)));
     pen.putImageData(wet, 0, 0);
-    // Номер жидкости заходит на полклетки на сушу: размытый край маски шире закрашенного, и без этого у лавы была бы водяная кайма.
-    for (let pass = 0; pass < 2; pass++) {
+    // Номер жидкости заходит на клетку на сушу: размытый и рваный край шире закрашенного, и без этого у лавы была бы водяная кайма.
+    for (let pass = 0; pass < K; pass++) {
       const was = kinds.slice();
       for (let y = 0, i = 0; y < h; y++) for (let x = 0; x < w; x++, i++) if (!far[i] && !was[i])
         kinds[i] = Math.max(x ? was[i - 1] : 0, x < w - 1 ? was[i + 1] : 0, y ? was[i - w] : 0, y < h - 1 ? was[i + w] : 0);
@@ -127,18 +127,18 @@ export function drawLiquidRecipes(recipes: HTMLCanvasElement, liquids?: readonly
   drawRecipes(recipes, (rowsOf.get(recipes) ?? ["water"]).map(key => liquidRecipe(key, liquids)));
 }
 const tone = (hex: string) => [1, 3, 5].map(at => parseInt(hex.slice(at, at + 2), 16));
-/** Рецепты жидкостей картинкой 5×8: строка — номер жидкости в маске, столбцы читает `recipe()` шейдера.
+/** Рецепты жидкостей картинкой 6×8: строка — номер жидкости в маске, столбцы читает `recipe()` шейдера.
  * Картинка, а не массив чисел: так рецепт одинаково доходит и до сцены WebGL, и до обычного холста. */
 function drawRecipes(recipes: HTMLCanvasElement, rows: readonly LiquidRecipe[]) {
-  recipes.width = 5; recipes.height = 8;
+  recipes.width = 6; recipes.height = 8;
   const pen = recipes.getContext("2d");
   if (!pen) return;
-  const image = pen.createImageData(5, 8);
+  const image = pen.createImageData(6, 8);
   const patterns = Object.keys(LIQUID_PATTERNS), rims = Object.keys(LIQUID_RIMS);
   rows.forEach((item, row) => {
     const cells = [...item.tones.map(tone), [item.pace / 2 * 255, item.size / 4 * 255, item.bed * 255],
-      [patterns.indexOf(item.pattern) / 8 * 255, rims.indexOf(item.rim) / 8 * 255, item.glow * 255]];
-    cells.forEach((cell, column) => image.data.set([...cell.map(Math.round), 255], (row * 5 + column) * 4));
+      [patterns.indexOf(item.pattern) / 8 * 255, rims.indexOf(item.rim) / 8 * 255, item.glow * 255], [(item.shore ?? 0.4) * 255, (item.ragged ?? 0.4) * 255, 0]];
+    cells.forEach((cell, column) => image.data.set([...cell.map(Math.round), 255], (row * 6 + column) * 4));
   });
   pen.putImageData(image, 0, 0);
 }
@@ -162,8 +162,9 @@ vec3 gUnder = vec3(0.0);
 float gClear = 0.0, gTop = 0.0;
 bool gGround = false;
 vec3 gGlow = vec3(0.0);
-// Рецепт жидкости — строка картинки: три тона, потом (подвижность/2, крупность/4, дно) и (рисунок/8, кромка/8, свечение).
-vec3 recipe(float kind, float column) { return texture(uRecipe, vec2((column + 0.5) / 5.0, (kind + 0.5) / 8.0)).rgb; }
+// Рецепт жидкости — строка картинки: три тона, потом (подвижность/2, крупность/4, дно), (рисунок/8, кромка/8, свечение)
+// и (ширина берега, рваность берега).
+vec3 recipe(float kind, float column) { return texture(uRecipe, vec2((column + 0.5) / 6.0, (kind + 0.5) / 8.0)).rgb; }
 uniform vec3 uWater;
 
 float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
@@ -180,6 +181,18 @@ float depthAt(vec2 c) {
   return sum / 10.0;
 }
 vec2 hash2(vec2 p) { return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.5453); }
+// Берег (гриллинг 2026-10-15, В6): ширина перехода и рваность из рецепта. Рваность — сдвиг точки, в которой читается
+// маска воды, шумом в три октавы до клетки: береговая линия рвётся, а глубина и номер жидкости остаются на месте.
+// Клетка — столько номер жидкости заходит на сушу, дальше лава получила бы водяные зубцы.
+float gShore = 0.4, gRagged = 0.4;
+void shoreOf(float kind) { vec3 s = recipe(kind, 5.0); gShore = s.r; gRagged = s.g; }
+vec3 shoreMask(vec2 w) {
+  vec2 d = vec2(noise(w * 1.1) * 0.55 + noise(w * 3.3 + 3.0) * 0.3 + noise(w * 8.7 + 5.0) * 0.15,
+    noise(w * 1.1 + 7.0) * 0.55 + noise(w * 3.3 + 11.0) * 0.3 + noise(w * 8.7 + 13.0) * 0.15) - 0.5;
+  return texture(uMask, (w + d * 2.0 * gRagged) / uMap).rgb;
+}
+// Ширина берега растягивает полосы у кромки: пену, прибой, мягкий переход. 0,4 — как было до ручки.
+float reachK() { return 0.6 + gShore; }
 // Сколько дна видно: ручка рецепта «Дно» и глубина. На мели почти всё, к глубине 5 — ничего; всегда с подкраской водой.
 float clarity(float depth) { return gBed * (1.0 - smoothstep(0.1, 0.9, depth)); }
 // Земля в точке, подкрашенная водой; false — земли нет, и дно рисуется видом.
@@ -211,7 +224,7 @@ float cellEdge(vec2 p, float t) {
 // В стоячей воде они совпадают, в реке рисунок сносит течением.
 // Комикс-панк: плоская заливка, пятна, толстые дуги волн, тушевый берег и рваная пена.
 vec4 comic(vec2 w, vec2 s, float t) {
-  vec3 mk = texture(uMask, w / uMap).rgb;
+  vec3 mk = shoreMask(w);
   float edge = mk.r + (noise(w * 2.7) - 0.5) * 0.14;
   // Порог ниже середины: шейдер закрывает и размытый край картинки воды под собой.
   float a = smoothstep(0.38, 0.44, edge);
@@ -234,7 +247,7 @@ vec4 comic(vec2 w, vec2 s, float t) {
   gTop = max(gTop, body * step(0.55, kind));
   // Берег: внутри воды полоска пены, по самой кромке — тушь.
   float shore = smoothstep(0.45, 1.0, mk.r);
-  float foam = step(shore, 0.14 + 0.24 * mk.b + 0.12 * noise(vec2(s.x * 3.0 + tick * 0.4, s.y * 3.0))) * step(0.35, noise(s * 5.0 + tick));
+  float foam = step(shore, (0.14 + 0.24 * mk.b + 0.12 * noise(vec2(s.x * 3.0 + tick * 0.4, s.y * 3.0))) * reachK()) * step(0.35, noise(s * 5.0 + tick));
   col = mix(col, vec3(0.93, 0.98, 0.95), foam * gFoam);
   col = mix(col, ink, 1.0 - smoothstep(0.43, 0.5, edge));
   gTop = max(gTop, max(foam * gFoam, 1.0 - smoothstep(0.43, 0.5, edge)));
@@ -269,7 +282,7 @@ vec3 sea(vec2 p, float tick, float depth) {
 vec4 pixel(vec2 w, vec2 s, float t, bool isSea) {
   float P = uWater.z;
   vec2 p = floor(w * P), c = (p + 0.5) / P, ps = floor(s * P);
-  vec3 mk = texture(uMask, c / uMap).rgb;
+  vec3 mk = shoreMask(c);
   if (mk.r < 0.4) return vec4(0.0);
   float tick = floor(t * 6.0);
   // Ступени тонов на границе глубин ломаются шахматным смешением.
@@ -277,7 +290,7 @@ vec4 pixel(vec2 w, vec2 s, float t, bool isSea) {
   vec3 col = isSea ? sea(ps, tick, depth) : pond((ps + 0.5) / P, tick / 6.0, depth);
   if (under(c, isSea ? vec3(0.78, 0.92, 0.95) : vec3(0.75, 0.92, 0.86))) gClear = clarity(depth) * 0.85;
   // Пена у берега: сплошная кромка в один пиксель и рваная полоса за ней — у пляжа широкая, у травы узкая.
-  float shore = smoothstep(0.4, 1.0, mk.r), reach = 0.14 + 0.3 * step(0.5, mk.b);
+  float shore = smoothstep(0.4, 1.0, mk.r), reach = (0.14 + 0.3 * step(0.5, mk.b)) * reachK();
   float foam = gFoam * min(1.0, step(shore, 0.1) + step(shore, reach) * step(0.6, hash(p + tick)));
   col = mix(col, vec3(0.9, 0.98, 0.95), foam);
   gTop = max(gTop, foam);
@@ -287,8 +300,8 @@ vec4 pixel(vec2 w, vec2 s, float t, bool isSea) {
 // Мягкая: без пикселей и без туши. Цвет плавно темнеет с глубиной, на мели просвечивает песчаное дно с камешками,
 // по воде плывут тонкие светлые кольца бликов.
 vec4 soft(vec2 w, vec2 s, float t) {
-  vec3 mk = texture(uMask, w / uMap).rgb;
-  float a = smoothstep(0.36, 0.5, mk.r);
+  vec3 mk = shoreMask(w);
+  float a = smoothstep(0.4 - 0.1 * gShore, 0.46 + 0.1 * gShore, mk.r);
   if (a <= 0.0) return vec4(0.0);
   float depth = depthAt(w);
   vec3 col = mix(vec3(0.56, 0.84, 0.8), vec3(0.2, 0.47, 0.7), smoothstep(0.08, 0.85, depth));
@@ -304,7 +317,7 @@ vec4 soft(vec2 w, vec2 s, float t) {
   col = mix(col, vec3(0.94, 1.0, 0.97), line);
   gTop = max(gTop, line);
   // Прибой: светлая полоска у самой кромки, дышит. У пляжа она широкая, у травы и камня — тонкая, а под ней тень берега.
-  float rim = 1.0 - smoothstep(0.5, 0.56 + 0.16 * mk.b + 0.04 * sin(t * 1.5 + w.x * 2.0 + w.y), mk.r);
+  float rim = 1.0 - smoothstep(0.5, 0.5 + (0.06 + 0.16 * mk.b + 0.04 * sin(t * 1.5 + w.x * 2.0 + w.y)) * reachK(), mk.r);
   col *= 1.0 - 0.3 * (1.0 - mk.b) * (1.0 - smoothstep(0.5, 0.8, mk.r));
   col = mix(col, vec3(0.96, 0.98, 0.9), gFoam * rim * (0.45 + 0.3 * mk.b));
   gTop = max(gTop, gFoam * rim * (0.45 + 0.3 * mk.b));
@@ -356,7 +369,9 @@ vec4 shoreAt(vec2 world) {
   if (world.x <= 0.0 || world.y <= 0.0 || world.x >= uMap.x || world.y >= uMap.y) return vec4(0.0);
   bool blocky = uWater.x > 0.5 && uWater.x < 2.5;
   vec2 w = blocky ? (floor(world * uWater.z) + 0.5) / uWater.z : world;
-  float strip = smoothstep(0.03, 0.36, texture(uMask, w / uMap).r), kind = kindAt(w);
+  float kind = kindAt(w);
+  shoreOf(kind);
+  float strip = smoothstep(0.03, 0.36, shoreMask(w).r);
   vec3 last = recipe(kind, 4.0);
   float rim = floor(last.g * 8.0 + 0.5);
   gGlow = recipe(kind, 1.0) * last.b * strip * 0.7;
@@ -370,6 +385,7 @@ vec4 waterAt(vec2 world, float t) {
   // Номер жидкости берётся из середины точки маски, без сглаживания: между номерами нет «промежуточной» жидкости.
   float kind = kindAt(w);
   gGround = fract(kindCode(w)) > 0.25; gClear = 0.0; gTop = 0.0;
+  shoreOf(kind);
   vec3 set = recipe(kind, 3.0);
   float size = max(0.25, set.g * 4.0);
   t *= set.r * 2.0; gBed = set.b; gFoam = recipe(kind, 4.0).g < 0.06 ? 1.0 : 0.0;

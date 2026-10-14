@@ -46,7 +46,7 @@ describe("V6 boundary and tokens", () => {
     }
     expect(parseMapDocumentV6({ ...upgradeMapDocumentV5(oldDocument()), appearance: { style: "unknown" } }).ok).toBe(false);
     // Свои жидкости карты: рецепт проходит целиком, битый — отклоняется.
-    const liquid = { key: "own1", name: "Ртуть", tones: ["#202428", "#8a9199", "#ffffff"], pace: 0.3, size: 2, bed: 0, glow: 0.2, pattern: "smooth", rim: "none", solid: false };
+    const liquid = { key: "own1", name: "Ртуть", tones: ["#202428", "#8a9199", "#ffffff"], pace: 0.3, size: 2, bed: 0, glow: 0.2, pattern: "smooth", rim: "none", solid: false, shore: 0.3, ragged: 0.9 };
     const wet = { ...upgradeMapDocumentV5(oldDocument()), appearance: { style: "paper-ink", liquids: [liquid] } };
     const read = parseMapDocumentV6(serializeMapDocumentV6(wet as MapDocumentV6));
     expect(read.ok && read.value.appearance?.liquids).toEqual([liquid]);

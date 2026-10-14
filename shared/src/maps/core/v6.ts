@@ -39,6 +39,7 @@ export interface MapLiquidRecipe {
   pace: number; size: number; bed: number; glow: number;
   pattern: typeof MAP_LIQUID_PATTERNS[number]; rim: typeof MAP_LIQUID_RIMS[number];
   /** По жидкости ходят: переправа не нужна. */ solid: boolean;
+  /** Берег (гриллинг 2026-10-15, В6): ширина перехода 0…1 и рваность 0…1. Нет — как у воды. */ shore?: number; ragged?: number;
 }
 const LIQUID_RANGES = [["pace", 0, 2], ["size", 0.25, 4], ["bed", 0, 1], ["glow", 0, 1]] as const;
 function liquidIssue(value: unknown, taken: Set<unknown>): string | null {
@@ -50,6 +51,7 @@ function liquidIssue(value: unknown, taken: Set<unknown>): string | null {
   for (const [key, min, max] of LIQUID_RANGES) { const n = value[key]; if (typeof n !== "number" || !Number.isFinite(n) || n < min || n > max) return `${key} must be ${min}..${max}`; }
   if (!(MAP_LIQUID_PATTERNS as readonly unknown[]).includes(value.pattern)) return "unknown pattern";
   if (!(MAP_LIQUID_RIMS as readonly unknown[]).includes(value.rim)) return "unknown rim";
+  for (const key of ["shore", "ragged"] as const) { const n = value[key]; if (n !== undefined && (typeof n !== "number" || !Number.isFinite(n) || n < 0 || n > 1)) return `${key} must be 0..1`; }
   return typeof value.solid === "boolean" ? null : "solid must be boolean";
 }
 export interface MapDocumentV6 extends Omit<MapDocumentV5, "v" | "layers"> {
@@ -175,7 +177,8 @@ const canonAppearance = (doc: MapDocumentV6) => doc.appearance
     ...(doc.appearance.waterShoal !== undefined ? { waterShoal: doc.appearance.waterShoal } : {}),
     ...(doc.appearance.packs ? { packs: [...doc.appearance.packs] } : {}),
     ...(doc.appearance.liquids?.length ? { liquids: [...doc.appearance.liquids].sort((a, b) => a.key < b.key ? -1 : 1).map(item => ({ key: item.key, name: item.name,
-      tones: [...item.tones] as [string, string, string], pace: item.pace, size: item.size, bed: item.bed, glow: item.glow, pattern: item.pattern, rim: item.rim, solid: item.solid })) } : {}) } } : {};
+      tones: [...item.tones] as [string, string, string], pace: item.pace, size: item.size, bed: item.bed, glow: item.glow, pattern: item.pattern, rim: item.rim, solid: item.solid,
+      ...(item.shore !== undefined ? { shore: item.shore } : {}), ...(item.ragged !== undefined ? { ragged: item.ragged } : {}) })) } : {}) } } : {};
 export function canonicalizeMapDocumentV6(doc: MapDocumentV6): MapDocumentV6 {
   const base = canonicalizeMapDocument(invariantView(doc as unknown as Record<string, unknown>) as MapDocumentV5);
   return { ...base, v: 6, ...canonAppearance(doc), layers: base.layers.map((layer, i) => {
