@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAction, useResource, write } from "../data/hooks";
 import { labelled } from "../data/notices";
 import { useCurrentUser } from "../api/currentUser";
+import { getAuthToken } from "../api/client";
 import { Modal } from "../components/Modal";
 import { SectionBackground } from "../components/SectionBackground";
 import { useConfirm } from "../hooks/useConfirm";
@@ -26,6 +27,19 @@ const NO_PACKS: OwnPack[] = [];
 /** Что стоит рядом с объектом для сравнения: вещь ровно в одну клетку на этом виде карты. */
 const REFERENCE: Record<MapKind, string> = { tactical: "человек", city: "дом", overview: "клетка" };
 const cellsOf = (value: number) => Math.max(0.5, Math.min(16, Math.round(value * 2) / 2));
+
+/** Набор одним файлом для обмена (гриллинг Q19): zip с описанием и картинками. */
+async function exportPack(pack: OwnPack) {
+  const token = getAuthToken();
+  const res = await fetch(`/api/map-packs/${pack.id}/export`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
+  if (!res.ok) throw new Error(`сервер ответил ${res.status}`);
+  const url = URL.createObjectURL(await res.blob()), link = document.createElement("a");
+  link.href = url;
+  link.download = `${pack.name.replace(/[\\/:*?"<>|]+/g, "_")}.zip`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  return true;
+}
 
 /** Что лежит во встроенном наборе — только посмотреть: править и копировать встроенные нельзя. */
 type BuiltinTile = { name: string; url: string | null; note?: string };
@@ -478,6 +492,8 @@ export function MapPacksPage() {
   useMapImageRevision();
   const [picked, setPicked] = useState<number | null>(null), [archive, setArchive] = useState(false), [builtin, setBuiltin] = useState<string | null>(null);
   const [packDialog, setPackDialog] = useState<OwnPack | "new" | null>(null), [objectDialog, setObjectDialog] = useState<OwnPackItem | "new" | "new-surface" | "new-line" | "new-scatter" | "new-door" | null>(null), [sheetDialog, setSheetDialog] = useState(false);
+  // Загрузка набора из файла: при совпадении с уже имеющимся сервер ждёт выбора — заменить или копией.
+  const [clash, setClash] = useState<{ file: File; name: string; archived: boolean } | null>(null), [importing, setImporting] = useState(false);
   const live = packs.filter((pack) => !pack.archived), archived = packs.filter((pack) => pack.archived);
   const pack = live.find((entry) => entry.id === picked) ?? live[0] ?? null;
   // Диалог держит объект по id: после добавления варианта список перечитан, и окно показывает свежие картинки.
@@ -491,11 +507,31 @@ export function MapPacksPage() {
     await run(labelled(value ? "Набор не убран в архив" : "Набор не восстановлен", () => write.put(`/map-packs/${target.id}/archive`, { archived: value })), { affects: AFFECTS });
   }
 
+  async function importPack(file: File, mode?: "replace" | "copy") {
+    setClash(null); setImporting(true);
+    const form = new FormData();
+    form.append("file", file);
+    if (mode) form.append("mode", mode);
+    const saved = await run(labelled("Набор не загружен", async () => {
+      try { return await write.post<OwnPack>("/map-packs/import", form, { timeoutMs: 300000 }); } catch (failure) {
+        const payload = (failure as { payload?: { code?: string; name?: string; archived?: boolean } }).payload;
+        if (payload?.code !== "pack-exists") throw failure;
+        setClash({ file, name: payload.name ?? "", archived: !!payload.archived });
+        return null;
+      }
+    }), { affects: AFFECTS });
+    setImporting(false);
+    if (saved) { setPicked(saved.id); setBuiltin(null); setArchive(false); }
+  }
+
   return <div className="stack" style={{ position: "relative" }}>
     <SectionBackground />
     <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
       <h1 style={{ margin: 0 }}>Наборы ассетов</h1>
-      <div className="row" style={{ gap: 8 }}><Link to="/maps">← К картам</Link><button className="primary" onClick={() => setPackDialog("new")}>+ Набор</button></div>
+      <div className="row" style={{ gap: 8 }}><Link to="/maps">← К картам</Link>
+        <label className="button" title="Набор из файла, выгруженного в SoyMan" aria-disabled={importing}>{importing ? "Загружаю…" : "Загрузить набор…"}
+          <input type="file" accept=".zip,application/zip" hidden disabled={importing} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void importPack(file); }} /></label>
+        <button className="primary" onClick={() => setPackDialog("new")}>+ Набор</button></div>
     </div>
     {state.error && <p role="alert">Не удалось загрузить наборы: {state.error}</p>}
     <div className="row" style={{ gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
@@ -530,6 +566,7 @@ export function MapPacksPage() {
           <h2 style={{ margin: 0 }}>{pack.name}</h2>
           <div className="row" style={{ gap: 8 }}>
             <button onClick={() => setPackDialog(pack)}>Название, жанры и виды карт</button>
+            <button title="Набор одним файлом — передать другому Мастеру" onClick={() => void run(labelled("Набор не выгружен", () => exportPack(pack)))}>Выгрузить</button>
             <button onClick={() => void setArchived(pack, true)}>В архив</button>
             <button title="Лист с несколькими вещами: разрезать и добавить разом" onClick={() => setSheetDialog(true)}>+ Лист</button>
             <button className="primary" onClick={() => setObjectDialog("new-door")}>+ Проём</button>
@@ -553,6 +590,16 @@ export function MapPacksPage() {
       </section>}
     </div>
     {packDialog && <PackDialog pack={packDialog === "new" ? null : packDialog} onClose={(saved) => { setPackDialog(null); if (saved) { setPicked(saved.id); setBuiltin(null); } }} />}
+    {clash && <Modal onClose={() => setClash(null)} ariaLabel="Набор уже есть">
+      <h2>Набор «{clash.name}» уже есть{clash.archived ? " в архиве" : ""}</h2>
+      <div className="stack">
+        <p><strong>Заменить</strong> — вещи из файла обновятся, карты продолжат их показывать; вещи, которых в файле нет, уйдут в архив{clash.archived ? ", а сам набор вернётся из архива" : ""}.</p>
+        <p><strong>Добавить копией</strong> — рядом появится отдельный набор, прежний не изменится. Карты, сделанные с файлом, будут смотреть на прежний.</p>
+        <div className="modal-footer row"><button onClick={() => setClash(null)}>Отмена</button>
+          <button onClick={() => void importPack(clash.file, "copy")}>Добавить копией</button>
+          <button className="primary" onClick={() => void importPack(clash.file, "replace")}>Заменить</button></div>
+      </div>
+    </Modal>}
     {sheetDialog && pack && <MapSheetDialog pack={pack} reference={REFERENCE[pack.kinds[0] ?? "tactical"]} onClose={() => setSheetDialog(false)}
       sizeGrid={(src, w, h, reference) => <SizeGrid src={src} w={w} h={h} reference={reference} />} />}
     {objectDialog && pack && (objectDialog === "new-surface" || editing?.kind === "surface"

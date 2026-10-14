@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
 import sharp from "sharp";
+import AdmZip from "adm-zip";
 import { db } from "../db/db";
 import { signToken } from "../services/auth";
 
@@ -115,5 +116,60 @@ describe("наборы ассетов карт", () => {
     expect((await api().put(`/api/map-packs/${pack.id}/archive`).auth(gm, { type: "bearer" }).send({ archived: false })).body.archived).toBe(false);
     const removed = await api().delete(`/api/map-packs/items/${item.id}`).auth(gm, { type: "bearer" });
     expect(removed.body.items[0]).toMatchObject({ archived: true, images: expect.arrayContaining([expect.objectContaining({ role: "variant" })]) });
+  });
+
+  it("архив для обмена: выгрузка, совпадение, копия, замена с теми же кодами, чужой файл", async () => {
+    const auth = { type: "bearer" } as const;
+    const pack = (await api().post("/api/map-packs").auth(gm, auth).send({ name: "Пристань", kinds: ["tactical"], genres: [{ genre: "Фэнтези" }] })).body;
+    await upload(`/api/map-packs/${pack.id}/items`, { name: "Бочка" });
+    const surface = (await upload(`/api/map-packs/${pack.id}/items`, { name: "Доски", kind: "surface", cells: "2", tier: "2" })).body.pack;
+    const exported = await api().get(`/api/map-packs/${pack.id}/export`).auth(gm, auth).buffer(true).parse((res, done) => {
+      const chunks: Buffer[] = []; res.on("data", (chunk: Buffer) => chunks.push(chunk)); res.on("end", () => done(null, Buffer.concat(chunks)));
+    });
+    expect(exported.status).toBe(200);
+    const file = exported.body as Buffer, zip = new AdmZip(file);
+    const manifest = JSON.parse(zip.readAsText("pack.json"));
+    expect(manifest).toMatchObject({ format: "soyman-map-pack", version: 1, pack: { uid: pack.uid, name: "Пристань", genres: [{ genre: "Фэнтези" }] } });
+    expect(zip.getEntries().filter((entry) => entry.entryName.startsWith("images/"))).toHaveLength(2);
+    const send = (body: Buffer, mode?: string) => {
+      const call = api().post("/api/map-packs/import").auth(gm, auth);
+      if (mode) call.field("mode", mode);
+      return call.attach("file", body, { filename: "pack.zip", contentType: "application/zip" });
+    };
+
+    const clash = await send(file);
+    expect(clash.status).toBe(409);
+    expect(clash.body).toMatchObject({ code: "pack-exists", name: "Пристань" });
+
+    const copy = (await send(file, "copy")).body;
+    expect(copy).toMatchObject({ name: "Пристань (копия)", genres: [{ genre: "Фэнтези" }] });
+    expect(copy.uid).not.toBe(pack.uid);
+    expect(copy.items.map((item: { name: string }) => item.name).sort()).toEqual(["Бочка", "Доски"]);
+    expect(copy.items.find((item: { kind: string }) => item.kind === "surface")).toMatchObject({ cells: 2, tier: 2 });
+    expect(copy.items.some((item: { uid: string }) => surface.items.some((own: { uid: string }) => own.uid === item.uid))).toBe(false);
+
+    // Замена: вещь, добавленная после выгрузки, уходит в архив; вещи и картинки из файла сохраняют коды и id.
+    await upload(`/api/map-packs/${pack.id}/items`, { name: "Лишнее" });
+    await api().put(`/api/map-packs/${pack.id}`).auth(gm, auth).send({ name: "Переименовано", kinds: ["city"] });
+    const replaced = await send(file, "replace");
+    expect(replaced.status).toBe(201);
+    expect(replaced.body).toMatchObject({ id: pack.id, uid: pack.uid, name: "Пристань", kinds: ["tactical"] });
+    const live = replaced.body.items.filter((item: { archived: boolean }) => !item.archived);
+    expect(live.map((item: { name: string }) => item.name).sort()).toEqual(["Бочка", "Доски"]);
+    expect(replaced.body.items.find((item: { name: string }) => item.name === "Лишнее").archived).toBe(true);
+    const images = (body: { items: { images: { uid: string; id: number }[] }[] }) => body.items.flatMap((item) => item.images.map((image) => `${image.id}:${image.uid}`)).sort();
+    expect(images({ items: live })).toEqual(images({ items: surface.items }));
+
+    // Набор с новым кодом, но с чужими кодами вещей: вещи получают новые коды, чужое не трогается.
+    manifest.pack.uid = "11111111-2222-4333-8444-555555555555";
+    zip.updateFile("pack.json", Buffer.from(JSON.stringify(manifest)));
+    const fresh = (await send(zip.toBuffer())).body;
+    expect(fresh.uid).toBe("11111111-2222-4333-8444-555555555555");
+    expect(fresh.items.some((item: { uid: string }) => surface.items.some((own: { uid: string }) => own.uid === item.uid))).toBe(false);
+
+    expect((await send(Buffer.from("не архив"))).body.error).toBe("Файл не похож на архив набора");
+    manifest.version = 99; zip.updateFile("pack.json", Buffer.from(JSON.stringify(manifest)));
+    expect((await send(zip.toBuffer())).body.error).toMatch(/более новой версией/);
+    expect((await api().post("/api/map-packs/import").auth(player, auth).attach("file", file, "pack.zip")).status).toBe(403);
   });
 });

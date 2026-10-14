@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import sharp from "sharp";
+import AdmZip from "adm-zip";
 import { db } from "../db/db";
 import { ensureSubfolder, toFileUrl, vaultAbs, VAULT_ROOT } from "../services/filesystem";
 import type { AuthedRequest } from "../services/auth";
@@ -94,17 +95,17 @@ function allPacks() {
 }
 const onePack = (id: number) => allPacks().find((pack) => pack.id === id);
 
+/** Жанры — как у сеттинга: до трёх пар «жанр, поджанр». */
+const genresOf = (value: unknown) => (Array.isArray(value) ? value : []).flatMap((entry): { genre: string; subgenre?: string }[] => {
+  const genre = text((entry as { genre?: unknown } | null)?.genre, 60), subgenre = text((entry as { subgenre?: unknown } | null)?.subgenre, 60);
+  return genre ? [subgenre ? { genre, subgenre } : { genre }] : [];
+}).slice(0, 3);
 function packInput(body: Record<string, unknown>, res: Response) {
   const name = text(body.name, 80);
   if (!name) { res.status(400).json({ error: "Название набора обязательно" }); return null; }
   const kinds = Array.isArray(body.kinds) ? [...new Set(body.kinds.filter((kind): kind is string => KINDS.includes(kind as string)))] : ["tactical"];
   if (!kinds.length) { res.status(400).json({ error: "Отметьте хотя бы один вид карты" }); return null; }
-  // Жанры — как у сеттинга: до трёх пар «жанр, поджанр».
-  const genres = (Array.isArray(body.genres) ? body.genres : []).flatMap((entry): { genre: string; subgenre?: string }[] => {
-    const genre = text((entry as { genre?: unknown } | null)?.genre, 60), subgenre = text((entry as { subgenre?: unknown } | null)?.subgenre, 60);
-    return genre ? [subgenre ? { genre, subgenre } : { genre }] : [];
-  }).slice(0, 3);
-  return { name, kinds: JSON.stringify(kinds), genres: JSON.stringify(genres) };
+  return { name, kinds: JSON.stringify(kinds), genres: JSON.stringify(genresOf(body.genres)) };
 }
 
 mapPacksRouter.use((req: AuthedRequest, res, next) => req.user?.role === "player" ? res.status(403).json({ error: "forbidden" }) : next());
@@ -133,6 +134,172 @@ mapPacksRouter.put("/:id/archive", (req, res) => {
   if (!done.changes) return res.status(404).json({ error: "Набор не найден" });
   res.json(onePack(Number(req.params.id)));
 });
+
+/* Архив для обмена (гриллинг Q19): один zip — `pack.json` и картинки `images/<uid>.webp` как есть, без пересжатия.
+ * Коды набора, вещей и картинок сохраняются: карты, где стоят вещи набора, у получателя рисуются теми же картинками. */
+const PACK_FORMAT = "soyman-map-pack", PACK_VERSION = 1;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ARCHIVE_MAX_BYTES = 1024 ** 3, ARCHIVE_MAX_FILES = 5000, IMAGE_MAX_SIDE = MAX_CELLS * MAP_PACK_CELL_PX;
+const importUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 300 * 1024 * 1024, files: 1, fields: 2 } }).single("file");
+/** Какие картинки бывают у вещи, кроме вариантов: виды по сторонам у объекта, столб у линии, маска кромки у поверхности. */
+const roleOf = (kind: string, role: unknown) => kind === "object" && SIDES.includes(role as string) || kind === "line" && role === "post" || kind === "surface" && role === "edge" ? role as string : "variant";
+
+mapPacksRouter.get("/:id/export", (req, res) => {
+  const pack = db.prepare("SELECT * FROM map_asset_packs WHERE id = ?").get(req.params.id) as PackRow | undefined;
+  if (!pack) return res.status(404).json({ error: "Набор не найден" });
+  const items = db.prepare("SELECT * FROM map_asset_items WHERE pack_id = ? ORDER BY id").all(pack.id) as ItemRow[];
+  const images = db.prepare("SELECT im.* FROM map_asset_images im JOIN map_asset_items it ON it.id = im.item_id WHERE it.pack_id = ? ORDER BY im.position, im.id")
+    .all(pack.id) as (ImageRow & { position: number })[];
+  const zip = new AdmZip(), packed = new Set<string>();
+  for (const image of images) {
+    // Пропавший файл не роняет выгрузку: такой картинки не было и на картах.
+    try { zip.addFile(`images/${image.uid}.webp`, fs.readFileSync(vaultAbs(image.file_path))); packed.add(image.uid); } catch { /* файла нет */ }
+  }
+  // Убранное в архив тоже едет: оно может стоять на картах, которые Мастер передаст вместе с набором.
+  const manifest = { format: PACK_FORMAT, version: PACK_VERSION,
+    pack: { uid: pack.uid, name: pack.name, kinds: json(pack.kinds, ["tactical"]), genres: json(pack.genres, []), native_style: pack.native_style },
+    items: items.map((item) => ({ uid: item.uid, kind: item.kind, name: item.name, section: item.section, tags: item.tags, data: json(item.data, {}), archived: !!item.archived_at,
+      images: images.filter((image) => image.item_id === item.id && packed.has(image.uid)).map((image) => ({ uid: image.uid, role: image.role, position: image.position, archived: !!image.archived_at })) })) };
+  zip.addFile("pack.json", Buffer.from(JSON.stringify(manifest, null, 2), "utf8"));
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", `attachment; filename="map-pack.zip"; filename*=UTF-8''${encodeURIComponent(pack.name)}.zip`);
+  res.send(zip.toBuffer());
+});
+
+interface ArchiveImage { uid: string; role: string; position: number; archived: boolean; data: Buffer; width: number; height: number }
+interface ArchiveItem { uid: string; kind: string; name: string; section: string; tags: string; data: Record<string, unknown>; archived: boolean; images: ArchiveImage[] }
+interface Archive { pack: { uid: string; name: string; kinds: string[]; genres: ReturnType<typeof genresOf>; native_style: string }; items: ArchiveItem[] }
+type Raw = Record<string, unknown>;
+const record = (value: unknown): Raw => value && typeof value === "object" && !Array.isArray(value) ? value as Raw : {};
+
+/** Чужой файл: пути из zip на диск не выкладываются, читаются только `pack.json` и картинки с кодом-uid; картинка проверяется как WebP разумного размера. */
+async function readArchive(buffer: Buffer): Promise<Archive> {
+  let zip: AdmZip;
+  try { zip = new AdmZip(buffer); } catch { throw new Error("Файл не похож на архив набора"); }
+  const entries = zip.getEntries();
+  if (entries.length > ARCHIVE_MAX_FILES) throw new Error("В архиве слишком много файлов");
+  const files = new Map<string, AdmZip.IZipEntry>();
+  let total = 0;
+  for (const entry of entries) {
+    if (entry.isDirectory) continue;
+    total += entry.header.size;
+    if (total > ARCHIVE_MAX_BYTES) throw new Error("Архив слишком большой");
+    files.set(entry.entryName, entry);
+  }
+  const read = (name: string) => {
+    const entry = files.get(name);
+    if (!entry) return null;
+    const data = entry.getData();
+    if (data.length !== entry.header.size) throw new Error("Архив повреждён");
+    return data;
+  };
+  const manifest = record(json<unknown>(read("pack.json")?.toString("utf8") ?? "", null));
+  if (manifest.format !== PACK_FORMAT) throw new Error("В файле нет набора ассетов SoyMan");
+  if (typeof manifest.version !== "number" || manifest.version > PACK_VERSION) throw new Error("Набор выгружен более новой версией SoyMan — обновите приложение");
+  const pack = record(manifest.pack);
+  if (typeof pack.uid !== "string" || !UUID.test(pack.uid)) throw new Error("Архив повреждён: у набора нет кода");
+  const kinds = Array.isArray(pack.kinds) ? [...new Set(pack.kinds.filter((kind): kind is string => KINDS.includes(kind as string)))] : [];
+  const items: ArchiveItem[] = [];
+  for (const raw of (Array.isArray(manifest.items) ? manifest.items : []).slice(0, ARCHIVE_MAX_FILES).map(record)) {
+    const kind = ITEM_KINDS.includes(raw.kind as string) ? raw.kind as string : null;
+    if (!kind) continue;
+    const images: ArchiveImage[] = [];
+    for (const image of (Array.isArray(raw.images) ? raw.images : []).map(record)) {
+      const data = typeof image.uid === "string" && UUID.test(image.uid) ? read(`images/${image.uid}.webp`) : null;
+      if (!data) continue;
+      const meta = await sharp(data).metadata().catch(() => null);
+      if (meta?.format !== "webp" || !meta.width || !meta.height || meta.width > IMAGE_MAX_SIDE || meta.height > IMAGE_MAX_SIDE) throw new Error(`Картинка вещи «${text(raw.name, 80)}» повреждена`);
+      images.push({ uid: image.uid as string, role: roleOf(kind, image.role), position: Number.isInteger(image.position) ? image.position as number : 0,
+        archived: image.archived === true, data, width: meta.width, height: meta.height });
+    }
+    // Вещь без картинок на карту не поставить.
+    if (!images.length) continue;
+    items.push({ uid: typeof raw.uid === "string" && UUID.test(raw.uid) ? raw.uid : crypto.randomUUID(), kind, name: text(raw.name, 80) || "Без названия",
+      section: text(raw.section, 40), tags: text(raw.tags, 200), data: kindData(kind, record(raw.data)), archived: raw.archived === true, images });
+  }
+  return { pack: { uid: pack.uid, name: text(pack.name, 80) || "Набор без названия", kinds: kinds.length ? kinds : ["tactical"], genres: genresOf(pack.genres),
+    native_style: text(pack.native_style, 40) || "comic-punk" }, items };
+}
+
+/** Запись набора из архива. `target` — свой набор, который заменяется; `copy` — всё под новыми кодами рядом с прежним.
+ * Замена обновляет вещи и картинки с теми же кодами (карты продолжают их показывать), а вещи, которых в файле нет, уходят в архив, а не удаляются. */
+async function savePack(archive: Archive, target: PackRow | null, copy: boolean): Promise<number> {
+  const keep = !copy, packUid = target?.uid ?? (copy ? crypto.randomUUID() : archive.pack.uid);
+  const folder = ensureSubfolder(ensureSubfolder(VAULT_ROOT, "MapPacks"), packUid);
+  const files = new Map<ArchiveImage, string>(), replaced: string[] = [];
+  try {
+    for (const item of archive.items) for (const image of item.images) {
+      const file = path.join(folder, `${crypto.randomUUID()}.webp`);
+      await fs.promises.writeFile(vaultAbs(file), image.data);
+      files.set(image, file);
+    }
+    const id = db.transaction(() => {
+      const { name, kinds, genres, native_style } = archive.pack, title = copy ? `${name} (копия)`.slice(0, 80) : name;
+      const packId = target ? target.id : Number(db.prepare("INSERT INTO map_asset_packs (uid, name, kinds, genres, native_style) VALUES (?, ?, ?, ?, ?)")
+        .run(packUid, title, JSON.stringify(kinds), JSON.stringify(genres), native_style).lastInsertRowid);
+      if (target) db.prepare("UPDATE map_asset_packs SET name = ?, kinds = ?, genres = ?, native_style = ?, archived_at = NULL, updated_at = datetime('now') WHERE id = ?")
+        .run(name, JSON.stringify(kinds), JSON.stringify(genres), native_style, packId);
+      const seenItems: number[] = [], seenImages: number[] = [];
+      const stamp = (archived: boolean) => archived ? "COALESCE(archived_at, datetime('now'))" : "NULL";
+      for (const item of archive.items) {
+        let uid = keep ? item.uid : crypto.randomUUID();
+        const row = db.prepare("SELECT id, pack_id FROM map_asset_items WHERE uid = ?").get(uid) as { id: number; pack_id: number } | undefined;
+        let itemId: number;
+        if (row && row.pack_id === packId) {
+          db.prepare(`UPDATE map_asset_items SET kind = ?, name = ?, section = ?, tags = ?, data = ?, archived_at = ${stamp(item.archived)}, updated_at = datetime('now') WHERE id = ?`)
+            .run(item.kind, item.name, item.section, item.tags, JSON.stringify(item.data), row.id);
+          itemId = row.id;
+        } else {
+          // Код занят вещью другого набора — эта получает новый.
+          if (row) uid = crypto.randomUUID();
+          itemId = Number(db.prepare(`INSERT INTO map_asset_items (uid, pack_id, kind, name, section, tags, data, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?, ${item.archived ? "datetime('now')" : "NULL"})`)
+            .run(uid, packId, item.kind, item.name, item.section, item.tags, JSON.stringify(item.data)).lastInsertRowid);
+        }
+        seenItems.push(itemId);
+        for (const image of item.images) {
+          let imageUid = keep ? image.uid : crypto.randomUUID();
+          const old = db.prepare("SELECT im.id, im.file_path, it.pack_id FROM map_asset_images im JOIN map_asset_items it ON it.id = im.item_id WHERE im.uid = ?")
+            .get(imageUid) as { id: number; file_path: string; pack_id: number } | undefined;
+          if (old && old.pack_id === packId) {
+            db.prepare(`UPDATE map_asset_images SET item_id = ?, role = ?, position = ?, file_path = ?, width = ?, height = ?, archived_at = ${stamp(image.archived)} WHERE id = ?`)
+              .run(itemId, image.role, image.position, files.get(image), image.width, image.height, old.id);
+            replaced.push(old.file_path);
+            seenImages.push(old.id);
+          } else {
+            if (old) imageUid = crypto.randomUUID();
+            seenImages.push(Number(db.prepare(`INSERT INTO map_asset_images (uid, item_id, role, position, file_path, width, height, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?, ${image.archived ? "datetime('now')" : "NULL"})`)
+              .run(imageUid, itemId, image.role, image.position, files.get(image), image.width, image.height).lastInsertRowid));
+          }
+        }
+      }
+      if (target) {
+        db.prepare("UPDATE map_asset_items SET archived_at = datetime('now') WHERE pack_id = ? AND archived_at IS NULL AND id NOT IN (SELECT value FROM json_each(?))").run(packId, JSON.stringify(seenItems));
+        db.prepare(`UPDATE map_asset_images SET archived_at = datetime('now') WHERE archived_at IS NULL AND id NOT IN (SELECT value FROM json_each(?))
+          AND item_id IN (SELECT id FROM map_asset_items WHERE pack_id = ?)`).run(JSON.stringify(seenImages), packId);
+      }
+      return packId;
+    })();
+    for (const file of replaced) await fs.promises.unlink(vaultAbs(file)).catch(() => undefined);
+    return id;
+  } catch (failure) {
+    for (const file of files.values()) await fs.promises.unlink(vaultAbs(file)).catch(() => undefined);
+    throw failure;
+  }
+}
+
+// Набор из файла. Если такой набор уже есть, сервер отвечает 409 и ждёт выбора: `mode=replace` или `mode=copy`.
+mapPacksRouter.post("/import", (req: AuthedRequest, res) => importUpload(req, res, (error: unknown) => {
+  if (error) return res.status(400).json({ error: error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE" ? "Файл больше 300 МБ" : (error as Error).message });
+  if (!req.file) return res.status(400).json({ error: "Нужен файл набора" });
+  const mode = req.body?.mode === "replace" || req.body?.mode === "copy" ? req.body.mode as string : null;
+  (async () => {
+    const archive = await readArchive(req.file!.buffer);
+    const existing = db.prepare("SELECT * FROM map_asset_packs WHERE uid = ?").get(archive.pack.uid) as PackRow | undefined;
+    if (existing && !mode) return res.status(409).json({ error: `Набор «${existing.name}» уже есть`, code: "pack-exists", name: existing.name, archived: !!existing.archived_at });
+    const id = await savePack(archive, existing && mode === "replace" ? existing : null, !!existing && mode === "copy");
+    res.status(201).json(onePack(id));
+  })().catch((failure: unknown) => res.status(400).json({ error: failure instanceof Error ? failure.message : "Набор не загружен" }));
+}));
 
 /** Картинка в стандарт набора: WebP, прозрачные поля вместо обрезки, не крупнее 256 точек на клетку. */
 async function storeImage(packUid: string, buffer: Buffer, box: Box, surface = false) {
@@ -190,7 +357,7 @@ mapPacksRouter.post("/items/:itemId/images", withUpload(async (req, res) => {
     WHERE i.id = ? AND i.archived_at IS NULL AND p.archived_at IS NULL`).get(req.params.itemId) as (ItemRow & { pack_uid: string }) | undefined;
   if (!item) return res.status(404).json({ error: "Объект не найден" });
   const raw = json<Record<string, unknown>>(item.data, {});
-  const role = item.kind === "object" && SIDES.includes(req.body.role) || item.kind === "line" && req.body.role === "post" || item.kind === "surface" && req.body.role === "edge" ? req.body.role as string : "variant";
+  const role = roleOf(item.kind, req.body.role);
   const count = (db.prepare("SELECT COUNT(*) AS n FROM map_asset_images WHERE item_id = ? AND role = 'variant' AND archived_at IS NULL").get(item.id) as { n: number }).n;
   if (role === "variant" && count >= 12) return res.status(400).json({ error: "У вещи не больше 12 вариантов" });
   const image = await storeImage(item.pack_uid, req.file!.buffer, imageBox(item.kind, kindData(item.kind, raw), role), item.kind === "surface");
