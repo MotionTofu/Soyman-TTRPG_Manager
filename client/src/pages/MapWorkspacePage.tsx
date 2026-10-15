@@ -75,7 +75,8 @@ export function MapWorkspacePage() {
   const setSelection = (entry: WorkspaceSelection | null) => setSelections(entry ? [entry] : []);
   const [gridLineWidth, setGridLineWidth] = useState(1), [gridLineStyle, setGridLineStyle] = useState<"solid" | "dashed">("solid");
   const [gridColor, setGridColor] = useState("#000000"), [gridOpacity, setGridOpacity] = useState(0.35);
-  const [showGrid, setShowGrid] = useState(true), [snap, setSnap] = useState(true);
+  // Привязка к сетке: пока не трогали — по виду карты; на обзорной знаки и подписи ставятся свободно (М14).
+  const [showGrid, setShowGrid] = useState(true), [snapChoice, setSnap] = useState<boolean | null>(null);
   // Новая отрисовка (плитки + WebGL) — по выбору, пока не проверена на всех картах.
   const [gl, setGl] = useState(() => { try { return localStorage.getItem("soyman.mapRenderer") === "gl"; } catch { return false; } });
   const onGl = useEvent((value: boolean) => { setGl(value); try { if (value) localStorage.setItem("soyman.mapRenderer", "gl"); else localStorage.removeItem("soyman.mapRenderer"); } catch { /* выбор живёт до перезагрузки */ } });
@@ -107,6 +108,7 @@ export function MapWorkspacePage() {
       surfaceTool.current = preferred; setActiveLayer(surface?.id ?? ""); setTool(preferred);
     } });
   const { map, document, documentRef, setDocument, history, autosave, commit, showError, disabled } = doc;
+  const snap = snapChoice ?? (map ? mapKind(map.scale) !== "overview" : true);
   const camera = useMapCamera({ mapId: map?.id ?? null, geom: map, wrapRef, canvasRef, frame: document?.appearance?.frame });
   const displays = useTokenPresentations(mapId, document);
   const renderWarning = useMemo(() => !!document && createWorkspaceRenderModel(document).diagnostics.length > 0, [document]);
@@ -442,7 +444,7 @@ export function MapWorkspacePage() {
           cellBrush={gestures.cellBrush} wallDraft={gestures.wallDraft} onDoubleClick={() => gestures.finishWall()} selections={selections} marquee={gestures.marquee} assetPreview={gestures.assetPreview} draftLine={gestures.draftLine} brush={gestures.brushCursor && (tool === "surface" || tool === "liquid" || tool === "scatter" || maskEraser) ? { ...gestures.brushCursor, radius: settings.radius } : null}
           onPointerLeave={gestures.leave} displays={displays} ghost={placement.pending?.position ?? dragGhost} onDragOver={dragOver} onDragLeave={() => setDragGhost(null)} onDrop={drop}
           onPointerDown={gestures.down} onPointerMove={gestures.move} onPointerUp={gestures.up} onPointerCancel={gestures.cancel} />
-        <div className="workspace-editor-hint" aria-hidden="true"><strong>{toolLabel(mapKind(map.scale), tool)}{active ? ` · ${layerName(active)}` : ""}</strong>{tool === "select" && <span>{selections.length > 1 ? `Выбрано: ${selections.length} · ` : ""}Рамка · Shift — добавить</span>}<span>Пробел — сдвиг</span><span>Esc — отмена</span></div>
+        <div className="workspace-editor-hint" aria-hidden="true"><strong>{toolLabel(mapKind(map.scale), tool)}{active ? ` · ${layerName(active)}` : ""}</strong>{tool === "select" && <span>{selections.length > 1 ? `Выбрано: ${selections.length} · ` : ""}Рамка · Shift — добавить</span>}{(tool === "asset" || tool === "label") && <span>{snap ? "Shift — свободно" : "Shift — к клетке"}</span>}<span>Пробел — сдвиг</span><span>Esc — отмена</span></div>
         {tool === "liquid" && <LiquidSlots used={liquids} own={liquidDraft ?? document.appearance?.liquids ?? NO_LIQUIDS} material={liquidMaterial} live={!!document.appearance?.water} onLive={onLiveWater} onMaterial={onLiquid} onOwn={onOwnLiquids} onSettle={onSettleLiquid} onRelease={onReleaseLiquid}
           offered={offeredLiquids} packs={saveTargets} onSaveToPack={onSaveLiquid} />}
         <div className="workspace-editor-camera">

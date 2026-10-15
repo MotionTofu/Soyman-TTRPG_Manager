@@ -190,8 +190,11 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
     return tool === "surface" || layer?.kind === "terrain" && layer.representation === "mask" && tool === "eraser"
       ? paintSurface(document, activeLayer, a, b, settings.radius, color) : paintSegment(document, activeLayer, a, b, color, settings.cellSize ?? 1);
   }
+  // Shift меняет привязку на противоположную для объектов и подписей (М14): на обзорной они ставятся свободно, Shift — к клетке.
+  const shift = useRef(false), place = () => snap !== shift.current;
   function down(event: PointerEvent<HTMLCanvasElement>) {
     if (busy) return;
+    shift.current = event.shiftKey;
     const world = camera.toWorld(event), point = { x: world.wx, y: world.wy };
     event.currentTarget.focus();
     const current = gesture.current;
@@ -288,10 +291,10 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
     } else if (tool === "shape") gesture.current = { type: "room", before: document, start: point, last: point, pointerId: event.pointerId };
     else if (tool === "door") commit((before) => createDoor(before, activeLayer, crypto.randomUUID(), point, snap, settings.orientation, settings.door));
     else if (tool === "label") {
-      try { requireEditableLayer(document, activeLayer, "label"); onLabel(quantize(document, point, snap), activeLayer); }
+      try { requireEditableLayer(document, activeLayer, "label"); onLabel(quantize(document, point, place()), activeLayer); }
       catch (error) { showError(error); }
     }
-    else if (tool === "asset") commit((before) => addSymbol(before, activeLayer, crypto.randomUUID(), quantize(before, point, snap), pickVariant(pickOwnVariant(settings.symbol))));
+    else if (tool === "asset") commit((before) => addSymbol(before, activeLayer, crypto.randomUUID(), quantize(before, point, place()), pickVariant(pickOwnVariant(settings.symbol))));
   }
   function track(point: Vec2) {
     const grid = documentRef.current?.grid;
@@ -300,6 +303,7 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
     if (text !== cursorCell) setCursorCell(text);
   }
   function move(event: PointerEvent<HTMLCanvasElement>) {
+    shift.current = event.shiftKey;
     const world = camera.toWorld(event), point = { x: world.wx, y: world.wy };
     track(point);
     if (tool === "surface" || tool === "scatter" || tool === "eraser" || tool === "brush" || tool === "asset" || tool === "wall") setBrushCursor(point);
@@ -352,7 +356,7 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
         const next = applyBrush(documentRef.current, current.last, point, current.stamps = (current.stamps ?? 0) + 1);
         if (next !== documentRef.current) { history.markStrokeChanged(); setDocument(next); }
       } else if (current.type === "move" && selections.length) {
-        const origin = quantize(current.before, current.start, snap), end = quantize(current.before, point, snap);
+        const origin = quantize(current.before, current.start, place()), end = quantize(current.before, point, place());
         setDocument(moveSelections(current.before, selections, { x: end.x - origin.x, y: end.y - origin.y }));
       }
       current.last = point;
@@ -378,7 +382,7 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
   const layer = documentRef.current?.layers.find(entry => entry.id === activeLayer);
   const assetPreview = tool === "asset" && brushCursor && !busy && !doc.disabled && autosave.status.kind !== "conflict" && !placement.pending &&
     !gesture.current && layer?.kind === "object" && layer.visible && !layer.locked
-    ? { position: quantize(documentRef.current!, brushCursor, snap), assetId: pickVariant(pickOwnVariant(settings.symbol, () => 0), () => 0) } : null;
+    ? { position: quantize(documentRef.current!, brushCursor, place()), assetId: pickVariant(pickOwnVariant(settings.symbol, () => 0), () => 0) } : null;
   const cellBrush = brushCursor && documentRef.current && (tool === "brush" || tool === "eraser") && layer?.kind === "terrain" && layer.representation === "cells" &&
     settings.cellMode !== "area" && !busy && !doc.disabled && !placement.pending
     ? cellBrushFootprint(documentRef.current, brushCursor, settings.cellSize ?? 1) : null;
