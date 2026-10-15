@@ -138,6 +138,23 @@ describe("shared kernel", () => {
     expect(raw).not.toContain("hidden-marker");
   });
 
+  it("fog: свободная земля на гексах остаётся в раскрытом гексе и пропадает в закрытых", () => {
+    const doc = gmDoc();
+    doc.grid = { type: "hex", cellSize: 1, columns: 4, rows: 3, origin: { x: 0, y: 0 },
+      hex: { orientation: "pointy", offset: "odd-q" } };
+    doc.exploration = { enabled: true, revealedCells: [{ x: 1, y: 1 }] };
+    const forest = { type: "builtin", key: "terrain/forest" } as const;
+    doc.layers.push({ id: "land", kind: "terrain", name: "Land", visible: true, locked: false, opacity: 1, representation: "mask",
+      defaultMaterial: { type: "builtin", key: "terrain/plain" }, mask: { origin: { x: 0, y: 0 }, sampleSize: 0.25, materials: [forest],
+        chunks: [{ id: "c", cx: 0, cy: 0, payload: { encoding: "palette-index-v1", values: Array(256).fill(1) } }] } });
+    const land = projectMapDocumentForPlayer(doc).layers.find((layer) => layer.id === "land");
+    if (land?.kind !== "terrain" || land.representation !== "mask") throw new Error("fixture");
+    const kept = (land.mask.chunks[0]?.payload.values as number[] ?? []).flatMap((value, i) => value ? [{ x: (i % 16 + 0.5) * 0.25, y: (Math.floor(i / 16) + 0.5) * 0.25 }] : []);
+    expect(land.mask.materials).toEqual([forest]);
+    expect(kept.length).toBeGreaterThan(20);
+    for (const point of kept) expect(Math.hypot(point.x - Math.sqrt(3) * 1.5, point.y - 1.5)).toBeLessThan(1);
+  });
+
   it("fog: повторные и внекартные клетки отвергаются", () => {
     const doc = gmDoc();
     doc.exploration = { enabled: true, revealedCells: [{ x: 1, y: 1 }, { x: 1, y: 1 }, { x: 9, y: 0 }] };

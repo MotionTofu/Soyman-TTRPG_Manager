@@ -155,6 +155,8 @@ export interface RenderPath {
   /** Название вдоль линии (М9) и его середина в долях длины, 0–1. */
   name?: string;
   nameAt?: number;
+  /** Кусок линии под туманом у игрока: какую долю исходной линии он покрывает. */
+  span?: readonly [number, number];
 }
 
 export interface RenderPathLayer extends RenderLayerBase {
@@ -431,13 +433,22 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
           continue;
         }
         if (p.geometry.type === "spline") {
-          paths.push({ kind: p.kind, cells: new Set(), nodes: p.geometry.nodes, width: p.width, closed: p.properties?.closed === true,
+          const piece: RenderPath = { kind: p.kind, cells: new Set(), nodes: p.geometry.nodes, width: p.width, closed: p.properties?.closed === true,
             ...(p.styleRef.type === "asset" ? { style: p.styleRef.assetId } : atlasOf(p.styleRef.key) ? { atlas: atlasOf(p.styleRef.key) } : {}),
             ...(p.properties?.crossings ? { crossings: crossingChoices(p.properties.crossings) } : {}),
             ...(p.properties?.flow === "back" || p.properties?.flow === "still" ? { flow: p.properties.flow } : {}),
             ...(typeof p.properties?.depth === "number" ? { depth: Math.max(1, Math.min(5, Math.round(p.properties.depth))) } : {}),
+            ...(Array.isArray(p.properties?.span) && p.properties.span.length === 2 && p.properties.span.every((value) => typeof value === "number")
+              ? { span: p.properties.span as unknown as [number, number] } : {}),
             ...(typeof p.properties?.name === "string" && p.properties.name ? { name: p.properties.name,
-              nameAt: typeof p.properties.nameAt === "number" ? Math.max(0, Math.min(1, p.properties.nameAt)) : 0.5 } : {}) });
+              nameAt: typeof p.properties.nameAt === "number" ? Math.max(0, Math.min(1, p.properties.nameAt)) : 0.5 } : {}) };
+          // Туман у игрока режет линию по клеткам; соседние куски одной линии сшиваются обратно — без шва и обводки
+          // на каждой границе клетки. Скрытые участки между кусками не сшиваются: доли не сходятся.
+          const last = paths.at(-1);
+          if (piece.span && last?.span && last.nodes && Math.abs(last.span[1] - piece.span[0]) < 1e-5 && last.kind === piece.kind
+            && last.atlas === piece.atlas && last.style === piece.style && last.width === piece.width && last.name === piece.name)
+            paths[paths.length - 1] = { ...last, nodes: [...last.nodes, ...piece.nodes!.slice(1)], span: [last.span[0], piece.span[1]] };
+          else paths.push(piece);
           continue;
         }
         const cells = new Set<string>();

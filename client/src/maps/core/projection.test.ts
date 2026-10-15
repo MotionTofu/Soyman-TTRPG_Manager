@@ -9,6 +9,7 @@ import { createSplinePath } from "./mutations/paths";
 import { splineFromAnchors } from "./spline";
 import { paintTerrainMask, readTerrainMaskAt } from "./mutations/terrainMask";
 import { serializeMapDocument } from "./serialize";
+import { createV5RenderModel } from "../renderModel";
 import type { GameplayDoor, GameplayLayer, GameplayRoom, MapDocumentV5 } from "./types";
 import { validateMapDocument } from "./validate";
 
@@ -102,6 +103,10 @@ describe("projectMapDocumentForPlayer", () => {
     const leftEnd = fragments[0].geometry.nodes.at(-1)!.position.x;
     const rightStart = fragments[1].geometry.nodes[0].position.x;
     expect(Math.abs(leftEnd - rightStart)).toBeLessThan(0.00001);
+    // Отрисовка сшивает соседние куски обратно в одну линию по их долям.
+    const drawn = createV5RenderModel(adjacent).model.layers.flatMap((layer) => layer.kind === "path" ? layer.paths : []);
+    expect(drawn).toHaveLength(1);
+    expect(drawn[0].span).toEqual([0, expect.closeTo(1.8 / 2.6, 4)]);
     const fullyVisible = projectMapDocumentForPlayer({ ...created.document, exploration: { enabled: false, revealedCells: [] } });
     expect(fullyVisible.layers.flatMap((layer) => layer.kind === "path" ? layer.paths : [])
       .find((path) => path.id === "free-road-projection")?.geometry).toEqual(

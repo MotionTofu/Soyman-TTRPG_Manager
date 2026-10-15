@@ -98,14 +98,17 @@ function hideObjectLocation(item: MapObject): MapObject {
   return { ...item, properties: shown };
 }
 
-/** Keep only painted samples wholly inside revealed square cells. */
+/** Keep only painted samples wholly inside revealed cells. Square: inside one revealed cell. Hex: all four corners of the
+ *  sample (pulled in by 1%, so a corner on a cell border is not ambiguous) fall into revealed hexes. */
 function projectTerrainMask(layer: TerrainMaskLayer, grid: MapGridConfig,
   visible: (x: number, y: number) => boolean): TerrainMaskLayer {
   const { mask } = layer;
   const plain = { type: "builtin" as const, key: "terrain/plain" };
-  if (grid.type !== "square") {
-    return { ...layer, defaultMaterial: plain, mask: { ...mask, materials: [plain], chunks: [] } };
-  }
+  const inset = mask.sampleSize * 0.01, far = mask.sampleSize - inset;
+  const hexVisible = (left: number, top: number) => [[inset, inset], [far, inset], [inset, far], [far, far]].every(([dx, dy]) => {
+    const cell = containingCell(grid, left + dx, top + dy);
+    return cell !== null && visible(cell.x, cell.y);
+  });
   const used = new Set<number>();
   const clipped: Array<{ chunk: typeof mask.chunks[number]; values: number[] }> = [];
   for (const chunk of mask.chunks) {
@@ -116,6 +119,11 @@ function projectTerrainMask(layer: TerrainMaskLayer, grid: MapGridConfig,
       const sy = chunk.cy * TERRAIN_MASK_CHUNK_SIDE + Math.floor(index / TERRAIN_MASK_CHUNK_SIDE);
       const left = mask.origin.x + sx * mask.sampleSize;
       const top = mask.origin.y + sy * mask.sampleSize;
+      if (grid.type !== "square") {
+        if (!hexVisible(left, top)) return 0;
+        used.add(paletteIndex);
+        return paletteIndex;
+      }
       const x = Math.floor((left - grid.origin.x) / grid.cellSize);
       const y = Math.floor((top - grid.origin.y) / grid.cellSize);
       if (x < 0 || y < 0 || x >= grid.columns || y >= grid.rows || !visible(x, y)) return 0;
@@ -143,11 +151,20 @@ function projectFreePath(path: MapPath, grid: MapGridConfig,
   visible: (x: number, y: number) => boolean, usedIds: Set<string>): MapPath[] {
   if (path.geometry.type !== "spline") return [];
   const hasNodeWidths = path.geometry.nodes.some((node) => node.width !== undefined);
-  const pathPoints: SplineWidthSample[] = hasNodeWidths
+  // `d` — пройденная длина исходной линии: по ней кусок знает свою долю `span` (река атласа растёт по всей длине, а не
+  // от каждой границы тумана; название стоит на своём месте).
+  type Sample = SplineWidthSample & { d: number };
+  const flat: SplineWidthSample[] = hasNodeWidths
     ? flattenSplineWithWidths(path.geometry.nodes, path.width, grid.cellSize / 48)
     : flattenSplineNodes(path.geometry.nodes, grid.cellSize / 48)
       .map((point) => ({ ...point, width: path.width }));
-  const border = (from: SplineWidthSample, to: SplineWidthSample,
+  let walked = 0;
+  const pathPoints: Sample[] = flat.map((point, i) => {
+    if (i) walked += Math.hypot(point.x - flat[i - 1].x, point.y - flat[i - 1].y);
+    return { ...point, d: walked };
+  });
+  const total = walked || 1;
+  const border = (from: Sample, to: Sample,
     cell: { x: number; y: number }, startsInside: boolean) => {
     let low = 0, high = 1;
     for (let iteration = 0; iteration < 20; iteration++) {
@@ -162,12 +179,12 @@ function projectFreePath(path: MapPath, grid: MapGridConfig,
     }
     const t = startsInside ? low : high;
     return { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t,
-      width: from.width + (to.width - from.width) * t };
+      width: from.width + (to.width - from.width) * t, d: from.d + (to.d - from.d) * t };
   };
-  const pieces: SplineWidthSample[][] = [];
-  let active: SplineWidthSample[] = [];
+  const pieces: Sample[][] = [];
+  let active: Sample[] = [];
   let activeCell = "";
-  let previous: SplineWidthSample | null = null;
+  let previous: Sample | null = null;
   let previousCell: { x: number; y: number } | null = null;
   let budget = 20_000;
   const flush = () => {
@@ -182,7 +199,7 @@ function projectFreePath(path: MapPath, grid: MapGridConfig,
     for (let j = i === 1 ? 0 : 1; j <= steps && budget > 0; j++, budget--) {
       const t = j / steps;
       const point = { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t,
-        width: from.width + (to.width - from.width) * t };
+        width: from.width + (to.width - from.width) * t, d: from.d + (to.d - from.d) * t };
       const cell = containingCell(grid, point.x, point.y);
       const key = cell ? `${cell.x},${cell.y}` : "";
       const previousKey = previousCell ? `${previousCell.x},${previousCell.y}` : "";
@@ -214,7 +231,8 @@ function projectFreePath(path: MapPath, grid: MapGridConfig,
     while (usedIds.has(id)) id += ":";
     usedIds.add(id);
     const { branchFrom: _branchFrom, ...visiblePath } = path;
-    return { ...visiblePath, id, geometry: { type: "spline" as const,
+    const span = [points[0].d / total, points[points.length - 1].d / total].map((value) => Math.round(value * 1e6) / 1e6);
+    return { ...visiblePath, id, properties: { ...visiblePath.properties, span }, geometry: { type: "spline" as const,
       nodes: points.map(({ x, y, width }) => ({ position: { x, y },
         ...(hasNodeWidths ? { width } : {}) })) } };
   });

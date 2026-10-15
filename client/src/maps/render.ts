@@ -1139,12 +1139,13 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     const total = along.at(-1) || 1, wetAt = samples.map((point) => wet(point.x, point.y) > 0);
     const mouths = samples.flatMap((_, i) => i && wetAt[i] !== wetAt[i - 1] ? [(along[i] + along[i - 1]) / 2] : []);
     const toMouth = (i: number) => Math.min(Infinity, ...mouths.map((at) => Math.abs(along[i] - at)));
-    const under = o.water ? 1 : 0, source = path.flow === "back" ? samples.at(-1)! : samples[0];
+    const under = o.water ? 1 : 0, source = path.flow === "back" ? samples.at(-1)! : samples[0], [s0, s1] = path.span ?? [0, 1];
+    const fraction = (i: number) => s0 + (s1 - s0) * along[i] / total;
     // Рукав дельты или протока начинается на другой реке атласа — сразу в полную ширину, а не из нуля, как у истока.
     const branch = atlasRivers.some((other) => other !== path && flattenSplineWithWidths(other.nodes!, other.width ?? 0.22, 0.1)
       .some((point) => Math.hypot(point.x - source.x, point.y - source.y) <= point.width / 2 + 0.15));
     shape = samples.map((point, i) => ({ x: point.x, y: point.y, dry: !wetAt[i] || toMouth(i) < under,
-      size: (branch ? 1 : Math.pow(path.flow === "back" ? 1 - along[i] / total : along[i] / total, 0.7)) * (1 + 1.6 * Math.max(0, 1 - toMouth(i) / 1.5) ** 2) * Math.max(point.width, 2 / scale) }));
+      size: (branch ? 1 : Math.pow(path.flow === "back" ? 1 - fraction(i) : fraction(i), 0.7)) * (1 + 1.6 * Math.max(0, 1 - toMouth(i) / 1.5) ** 2) * Math.max(point.width, 2 / scale) }));
     riverShapes.set(path, shape);
     return shape;
   };
@@ -2068,14 +2069,26 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
   }
 
   // Названия рек и дорог (М9) — вдоль линии над ней, поверх всех слоёв; реки курсивом, как в атласе. Отдельным проходом:
-  // река под живой водой рисуется в нижнем проходе, а подписи нужны сверху.
-  if (scale * 0.3 >= 6) for (const layer of model.layers) if (layer.visible && layer.kind === "path") for (const path of layer.paths) {
-    if (!path.name || !path.nodes || path.nodes.length < 2) continue;
-    const line = flattenSplineWithWidths(path.closed ? [...path.nodes, path.nodes[0]] : path.nodes, path.width ?? 0.22, 0.1), fontPx = scale * 0.3;
-    ctx.save(); ctx.font = `${path.kind === "river" ? "italic " : ""}600 ${fontPx}px ${fonts.label}`;
-    textAlong(line.map((point) => ({ x: X(point.x), y: Y(point.y) })), path.name, path.nameAt ?? 0.5,
-      Math.max(...line.map((point) => point.width)) * scale / 2 + fontPx * 0.7, 0, chrome.ink);
-    ctx.restore();
+  // река под живой водой рисуется в нижнем проходе, а подписи нужны сверху. У игрока туман режет линию на куски по клеткам:
+  // соседние куски снова сшиваются по своим долям, и название встаёт один раз — на открытом участке, где оно стоит у Мастера.
+  if (scale * 0.3 >= 6) for (const layer of model.layers) if (layer.visible && layer.kind === "path") {
+    const runs = new Map<string, { kind: RenderPath["kind"]; name: string; at: number; from: number; to: number; line: { x: number; y: number; width: number }[] }[]>();
+    for (const path of [...layer.paths].sort((a, b) => (a.span?.[0] ?? 0) - (b.span?.[0] ?? 0))) {
+      if (!path.name || !path.nodes || path.nodes.length < 2) continue;
+      const line = flattenSplineWithWidths(path.closed ? [...path.nodes, path.nodes[0]] : path.nodes, path.width ?? 0.22, 0.1);
+      const key = `${path.kind}|${path.name}|${path.nameAt}`, list = runs.get(key) ?? [], [from, to] = path.span ?? [0, 1], last = list.at(-1);
+      if (path.span && last && Math.abs(last.to - from) < 1e-4) { last.line.push(...line); last.to = to; }
+      else list.push({ kind: path.kind, name: path.name, at: path.nameAt ?? 0.5, from, to, line });
+      runs.set(key, list);
+    }
+    const fontPx = scale * 0.3;
+    for (const run of [...runs.values()].flat()) {
+      if (run.at < run.from || run.at > run.to) continue;
+      ctx.save(); ctx.font = `${run.kind === "river" ? "italic " : ""}600 ${fontPx}px ${fonts.label}`;
+      textAlong(run.line.map((point) => ({ x: X(point.x), y: Y(point.y) })), run.name, (run.at - run.from) / ((run.to - run.from) || 1),
+        Math.max(...run.line.map((point) => point.width)) * scale / 2 + fontPx * 0.7, 0, chrome.ink);
+      ctx.restore();
+    }
   }
   for (const drawTitle of titleDraws) drawTitle();
   for (const drawToken of tokenDraws) drawToken();
