@@ -762,6 +762,8 @@ const ROAD_CORE = 0.7;
 const roadCuts = new WeakMap<StripSamples["samples"], RoadCut>();
 export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvasH: number, o: RenderOptions): void {
   const { grid, width, height, model, scale, ox, oy, showGrid, showCoords, hover, chrome, playerView, selectedId } = o;
+  // Свободная земля и вода лежат в мировых координатах: у гексов карта шире и выше числа клеток (шаг √3 и 1,5).
+  const maskExtent = worldBounds(grid, width, height), maskW = maskExtent.maxX, maskH = maskExtent.maxY;
   const terrainFill = o.terrainFill ?? MAP_TERRAIN_FILL;
   const baseTransform = ctx.getTransform?.();
   const pixelRatio = baseTransform ? Math.max(Math.hypot(baseTransform.a, baseTransform.b), Math.hypot(baseTransform.c, baseTransform.d)) : 1;
@@ -771,7 +773,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
   if (o.water && !o.part && waterStillReady()) {
     // Земля, на неё вода, потом всё остальное — мосты, дороги и фишки остаются над водой.
     renderMap(ctx, canvasW, canvasH, { ...o, part: "ground" });
-    drawWaterStill(ctx, model, width, height, o.water, canvasW, canvasH, scale, ox, oy, pixelRatio);
+    drawWaterStill(ctx, model, maskW, maskH, o.water, canvasW, canvasH, scale, ox, oy, pixelRatio);
     renderMap(ctx, canvasW, canvasH, { ...o, part: "over", keep: true });
     return;
   }
@@ -913,11 +915,11 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
   const fillTerrainMask = (mask: NonNullable<RenderTerrainLayer["terrain"]["mask"]>) => {
     if (mask.source ? mask.source.chunks.length === 0 : mask.entries.size === 0) return;
     if (mask.source && ctx.canvas && typeof document !== "undefined") {
-      drawTerrainMaskTiles(ctx, mask, width, height, canvasW, canvasH, scale, ox, oy, pixelRatio, terrainFill, pack, !!o.cartography);
+      drawTerrainMaskTiles(ctx, mask, maskW, maskH, canvasW, canvasH, scale, ox, oy, pixelRatio, terrainFill, pack, !!o.cartography);
       return;
     }
     const bitmap = ctx.canvas && typeof document !== "undefined"
-      ? terrainMaskBitmap(mask, width, height, o.terrainFill ?? MAP_TERRAIN_FILL) : null;
+      ? terrainMaskBitmap(mask, maskW, maskH, o.terrainFill ?? MAP_TERRAIN_FILL) : null;
     if (bitmap) {
       ctx.save();
       ctx.beginPath();
@@ -940,7 +942,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
           const group = byImage.get(image) ?? []; group.push(code); byImage.set(image, group);
         }
         for (const [image, materials] of byImage) {
-          const texture = texturedMask(mask, materials, image, width, height, pack);
+          const texture = texturedMask(mask, materials, image, maskW, maskH, pack);
           if (!texture) continue;
           ctx.save(); ctx.globalAlpha *= pack === "crypt" ? 1 : 0.65;
           ctx.drawImage(texture.canvas, X(texture.x), Y(texture.y), texture.w * scale, texture.h * scale); ctx.restore();
@@ -1338,6 +1340,8 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
   // Gameplay-сущности рисуются в порядке items[] слоя (§16), без сортировки
   // по kind. Объекты при scale < 10 не рисуются, глифы/текст — при < 14.
   // Комнаты: тинт типа + номер + имя. idx — номер среди комнат слоя.
+  // Имя квартала и области — поверх всех слоёв: горы и знаки обзорной карты его не закрывают.
+  const titleDraws: (() => void)[] = [];
   const drawRoomTint = (r: RenderRoom, idx: number) => {
     const rc = r.rect;
     // Квартал: заливка, контур и имя, которое видно на любом приближении — по нему читают город целиком.
@@ -1354,13 +1358,15 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       ctx.globalAlpha /= 0.28; ctx.strokeStyle = r.fill; ctx.lineWidth = Math.max(1.5, scale * 0.08); ctx.lineJoin = "round";
       ctx.setLineDash([scale * 0.4, scale * 0.25]); ctx.stroke();
       const size = Math.min(h * 0.4, w / Math.max(4, r.name.length) * 1.5, 48);
-      if (r.name && size >= 7) {
+      ctx.restore();
+      if (r.name && size >= 7) titleDraws.push(() => {
+        ctx.save();
         ctx.font = `700 ${size}px ${fonts.label}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.setLineDash([]); ctx.lineWidth = size * 0.22; ctx.strokeStyle = chrome.paper;
+        ctx.lineWidth = size * 0.22; ctx.lineJoin = "round"; ctx.strokeStyle = chrome.paper;
         ctx.strokeText(r.name, X(at.x), Y(at.y), w * 0.94);
         ctx.fillStyle = chrome.ink; ctx.fillText(r.name, X(at.x), Y(at.y), w * 0.94);
-      }
-      ctx.restore();
+        ctx.restore();
+      });
       return;
     }
     if (!Number.isInteger(rc.x) || !Number.isInteger(rc.y) || !Number.isInteger(rc.w) || !Number.isInteger(rc.h)) return;
@@ -2003,6 +2009,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     }
   }
 
+  for (const drawTitle of titleDraws) drawTitle();
   for (const drawToken of tokenDraws) drawToken();
 
   const exploration = model.exploration;

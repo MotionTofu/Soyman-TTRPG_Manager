@@ -377,8 +377,6 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
         diag("unsupported-material", "terrain defaultMaterial is not a builtin terrain: rendered as plain");
       }
       if (layer.representation === "mask") {
-        if (doc.grid?.type !== "square")
-          diag("unsupported-terrain-mask", `layer ${layer.id}: dense terrain currently requires a square grid`);
         const cachedMask = maskViews.get(layer.mask);
         if (cachedMask) {
           layers.push({ ...baseOf(layer), kind: "terrain", terrain: { defaultCode, entries: new Map(), mask: cachedMask } });

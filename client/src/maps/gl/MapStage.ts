@@ -1,5 +1,6 @@
 import { autoDetectRenderer, Container, Rectangle, Sprite, Texture, type Filter, type Renderer } from "pixi.js";
 import { renderMap, type RenderOptions } from "../render";
+import { worldBounds } from "../grid";
 import { inRange, tileSide, visibleTiles, type TileRange } from "./tiles";
 import { createStyleFilter, type MapLook } from "./styleFilter";
 import { anyWeather, createWeatherFilter, type MapWeather } from "./weatherFilter";
@@ -265,21 +266,23 @@ export class MapStage {
     }
     const screen = new Rectangle(0, 0, renderer.width, renderer.height);
     if (this.water) {
-      const sources = waterSources(frame.content.model, frame.content.width, frame.content.height, this.water.shoal);
+      // Вода лежит в мировых координатах: у гексов карта шире и выше числа клеток.
+      const { maxX: ww, maxY: wh } = worldBounds(frame.content.grid, frame.content.width, frame.content.height);
+      const sources = waterSources(frame.content.model, ww, wh, this.water.shoal);
       if (sources.length !== this.maskOf.length || sources.some((source, i) => source !== this.maskOf[i])) {
-        drawWaterMask(this.maskCanvas, this.maskRaw, this.flowCanvas, this.recipeCanvas, frame.content.model, frame.content.width, frame.content.height, this.water.shoal);
+        drawWaterMask(this.maskCanvas, this.maskRaw, this.flowCanvas, this.recipeCanvas, frame.content.model, ww, wh, this.water.shoal);
         this.waterPass.refresh(); this.maskOf = sources; this.recipesOf = null;
       }
       // Что стоит в воде — своя картинка: передвинутая лодка не пересобирает маску воды всей карты.
-      const things = waterThingSources(frame.content.model, frame.content.width, frame.content.height);
+      const things = waterThingSources(frame.content.model, ww, wh);
       if (things.length !== this.thingsOf.length || things.some((source, i) => source !== this.thingsOf[i])) {
-        drawWaterThings(this.thingsCanvas, frame.content.model, frame.content.width, frame.content.height);
+        drawWaterThings(this.thingsCanvas, frame.content.model, ww, wh);
         this.waterPass.refreshThings(); this.thingsOf = things;
       }
       // Рецепты — отдельно от маски: правка цвета своей жидкости не пересобирает карту.
       const liquids = this.water.liquids ?? frame.content.model.liquids;
       if (liquids !== this.recipesOf) { drawLiquidRecipes(this.recipeCanvas, liquids); this.waterPass.refresh(); this.recipesOf = liquids; }
-      this.waterPass.aim(this.water, x, y, frame.scale * frame.dpr, performance.now() / 1000, frame.content.width, frame.content.height);
+      this.waterPass.aim(this.water, x, y, frame.scale * frame.dpr, performance.now() / 1000, ww, wh);
       this.ground.filterArea = screen;
     }
     const wet = this.ground.filters as readonly Filter[] | null | undefined;
