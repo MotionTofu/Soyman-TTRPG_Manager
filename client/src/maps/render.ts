@@ -774,7 +774,8 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     renderMap(ctx, canvasW, canvasH, { ...o, part: "over", keep: true });
     return;
   }
-  const part = o.part, waterRiver = (path: RenderPath) => path.kind === "river" && !!path.style && !!path.nodes;
+  // Реки, которые лежат под живой водой: река-поверхность и река атласа — её устье накрывает море, как берег.
+  const part = o.part, waterRiver = (path: RenderPath) => path.kind === "river" && (!!path.style || path.atlas === "river") && !!path.nodes;
   ctx.save();
   if (!o.keep) ctx.clearRect(0, 0, canvasW, canvasH);
   if (part !== "over") { ctx.fillStyle = chrome.paper; ctx.fillRect(0, 0, canvasW, canvasH); }
@@ -1132,12 +1133,18 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       const along = [0], wet = paintedWaterAt(model);
       for (let i = 1; i < samples.length; i++) along.push(along[i - 1] + Math.hypot(samples[i].x - samples[i - 1].x, samples[i].y - samples[i - 1].y));
       const total = along.at(-1) || 1, grow = (i: number) => Math.pow(path.flow === "back" ? 1 - along[i] / total : along[i] / total, 0.7);
-      const dry = samples.map((point) => !wet(point.x, point.y));
+      const wetAt = samples.map((point) => wet(point.x, point.y) > 0);
+      // Устье: последние полторы клетки перед водой река раскрывается воронкой. Под живую воду она уходит ещё на клетку —
+      // рваный берег рисуется не точно по накрашенному, и без запаса между рекой и морем осталась бы полоска суши.
+      const mouths = samples.flatMap((_, i) => i && wetAt[i] !== wetAt[i - 1] ? [(along[i] + along[i - 1]) / 2] : []);
+      const toMouth = (i: number) => Math.min(Infinity, ...mouths.map((at) => Math.abs(along[i] - at)));
+      const under = o.water ? 1 : 0, dry = samples.map((_, i) => !wetAt[i] || toMouth(i) < under);
+      const flare = (i: number) => 1 + 1.6 * Math.max(0, 1 - toMouth(i) / 1.5) ** 2;
       for (const [color, extra] of [[chrome.ink, 2], [RIVER_FILL, 0]] as const) {
         ctx.strokeStyle = color;
         for (let i = 1; i < samples.length; i++) {
           if (!dry[i - 1] || !dry[i]) continue;
-          const size = (grow(i - 1) + grow(i)) / 2 * width;
+          const size = (grow(i - 1) * flare(i - 1) + grow(i) * flare(i)) / 2 * width;
           ctx.lineWidth = size + Math.min(extra, size);
           ctx.beginPath(); ctx.moveTo(X(samples[i - 1].x), Y(samples[i - 1].y)); ctx.lineTo(X(samples[i].x), Y(samples[i].y)); ctx.stroke();
         }
