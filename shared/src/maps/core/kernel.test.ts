@@ -69,6 +69,17 @@ function gmDoc(): MapDocumentV5 {
 }
 
 describe("shared kernel", () => {
+  it("подпись дугой: изгиб, поворот и разрядка проходят проверку только в своих пределах", () => {
+    const withStyle = (style: Record<string, unknown>) => {
+      const doc = gmDoc();
+      doc.layers.push({ id: "labels", kind: "label", name: "Labels", visible: true, locked: false, opacity: 1,
+        items: [{ id: "l", position: { x: 1, y: 1 }, text: "Хребет", style }] });
+      return validateMapDocument(doc).map((item) => item.code);
+    };
+    expect(withStyle({ bend: -0.5, rotation: 170, spacing: 0.3 })).toEqual([]);
+    for (const bad of [{ bend: 1.5 }, { rotation: 200 }, { spacing: -0.1 }, { bend: "1" }]) expect(withStyle(bad)).toContain("label.bad-style");
+  });
+
   it("parse → validate → serialize roundtrip", () => {
     const doc = gmDoc();
     const s = serializeMapDocument(doc);

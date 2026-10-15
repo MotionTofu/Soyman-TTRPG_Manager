@@ -152,6 +152,9 @@ export interface RenderPath {
   flow?: "back" | "still";
   /** Глубина реки 1–5; без поля — по виду реки: мелкая 2, глубокая 4. */
   depth?: number;
+  /** Название вдоль линии (М9) и его середина в долях длины, 0–1. */
+  name?: string;
+  nameAt?: number;
 }
 
 export interface RenderPathLayer extends RenderLayerBase {
@@ -432,7 +435,9 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
             ...(p.styleRef.type === "asset" ? { style: p.styleRef.assetId } : atlasOf(p.styleRef.key) ? { atlas: atlasOf(p.styleRef.key) } : {}),
             ...(p.properties?.crossings ? { crossings: crossingChoices(p.properties.crossings) } : {}),
             ...(p.properties?.flow === "back" || p.properties?.flow === "still" ? { flow: p.properties.flow } : {}),
-            ...(typeof p.properties?.depth === "number" ? { depth: Math.max(1, Math.min(5, Math.round(p.properties.depth))) } : {}) });
+            ...(typeof p.properties?.depth === "number" ? { depth: Math.max(1, Math.min(5, Math.round(p.properties.depth))) } : {}),
+            ...(typeof p.properties?.name === "string" && p.properties.name ? { name: p.properties.name,
+              nameAt: typeof p.properties.nameAt === "number" ? Math.max(0, Math.min(1, p.properties.nameAt)) : 0.5 } : {}) });
           continue;
         }
         const cells = new Set<string>();

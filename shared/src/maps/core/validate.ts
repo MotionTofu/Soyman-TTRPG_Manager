@@ -491,8 +491,9 @@ function checkLabelLayer(
         (st.font !== undefined && (typeof st.font !== "string" || st.font.length > 40)) ||
         (st.size !== undefined && (!isFiniteNumber(st.size) || (st.size as number) < 0.1 || (st.size as number) > 20)) ||
         (st.color !== undefined && (typeof st.color !== "string" || !/^#[0-9a-f]{6}$/i.test(st.color))) ||
+        ([["bend", 1], ["rotation", 180], ["spacing", 2]] as const).some(([key, limit]) => st[key] !== undefined && (!isFiniteNumber(st[key]) || Math.abs(st[key] as number) > limit || key === "spacing" && (st[key] as number) < 0)) ||
         [st.bold, st.italic, st.dot].some((flag) => flag !== undefined && typeof flag !== "boolean"))) {
-      out.push(issue("label.bad-style", `${lp}.style`, "expected font, size 0.1..20, #rrggbb color and boolean flags"));
+      out.push(issue("label.bad-style", `${lp}.style`, "expected font, size 0.1..20, #rrggbb color, bend -1..1, rotation -180..180, spacing 0..2 and boolean flags"));
     }
   });
 }

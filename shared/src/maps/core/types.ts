@@ -234,6 +234,12 @@ export interface MapLabelStyle {
   color?: string;
   /** false — без точки-метки под текстом. */
   dot?: boolean;
+  /** Изгиб дугой −1…1: 1 — полукруг горбом вверх, −1 — чашей вниз. */
+  bend?: number;
+  /** Поворот, градусы −180…180. */
+  rotation?: number;
+  /** Разрядка в долях высоты букв, 0…2. */
+  spacing?: number;
 }
 
 export interface MapLabel {

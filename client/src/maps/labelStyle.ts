@@ -16,8 +16,10 @@ type Sized = Pick<MapLabel, "position" | "text" | "style">;
  * Без своего размера буквы заданы в экранных точках — берём самый мелкий масштаб, где подпись ещё видна
  * (12 точек на клетку); шире восьми клеток такой текст не рисуется. */
 export function labelBox(label: Sized) {
-  const size = label.style?.size;
-  const w = size ? label.text.length * size * 0.7 + size : Math.min(8, label.text.length * 0.6 + 0.5), up = size ? size * 1.3 + 0.2 : 1.2;
+  const size = label.style?.size, spread = 1 + (label.style?.spacing ?? 0);
+  const w = size ? label.text.length * size * 0.7 * spread + size : Math.min(8, label.text.length * 0.6 * spread + 0.5), up = size ? size * 1.3 + 0.2 : 1.2;
+  // Изогнутая или повёрнутая подпись может уйти в любую сторону от точки — рамка квадратом вокруг неё.
+  if (label.style?.bend || label.style?.rotation) return { x: label.position.x - w / 2, y: label.position.y - w / 2 - up, w, h: w + up + 0.3 };
   return { x: label.position.x - w / 2, y: label.position.y - up, w, h: up + 0.3 };
 }
 

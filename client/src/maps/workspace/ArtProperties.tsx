@@ -50,6 +50,11 @@ export function ArtProperties({ document, selection, packs = [], pickedAt, selec
       </select></label>}
       {path.kind === "river" && path.styleRef.type === "asset" && <label>Глубина · {depth} из 5<input aria-label="Глубина реки" type="range" min={1} max={5} step={1} value={depth} disabled={locked}
         onChange={e => commit(doc => setRiverProperty(doc, selection, "depth", Number(e.target.value)))} /></label>}
+      {!wall && <label>Название<input aria-label="Название линии" maxLength={200} value={typeof path.properties?.name === "string" ? path.properties.name : ""} disabled={locked}
+        onChange={e => commit(doc => setRiverProperty(doc, selection, "name", e.target.value || null))} /></label>}
+      {!wall && typeof path.properties?.name === "string" && <label>Положение названия · {Math.round((typeof path.properties.nameAt === "number" ? path.properties.nameAt : 0.5) * 100)}%
+        <input aria-label="Положение названия" type="range" min={0} max={100} step={1} value={Math.round((typeof path.properties.nameAt === "number" ? path.properties.nameAt : 0.5) * 100)} disabled={locked}
+          onChange={e => commit(doc => setRiverProperty(doc, selection, "nameAt", Number(e.target.value) / 100))} /></label>}
       <label>Ширина<input aria-label="Ширина выбранной линии" type="number" min={0.05} max={4} step={0.05} value={path.width} disabled={locked} onChange={e => update({ width: Math.max(0.05, Math.min(4, Number(e.target.value))) })} /></label>
       <label>Точка<select aria-label="Опорная точка" value={index} onChange={e => onSelectedNodes?.([Number(e.target.value)])}>{nodes.map((_, i) => <option key={i} value={i}>{i + 1}</option>)}</select></label>
       <>

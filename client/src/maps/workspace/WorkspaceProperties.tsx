@@ -71,6 +71,12 @@ export function WorkspaceProperties({ document, selection, commit, onClose, onDe
         <label>Цвет<input aria-label="Цвет подписи" type="color" value={look.color ?? "#171717"} disabled={protectedLayer} onChange={(event) => put({ color: event.target.value })} /></label>
         <button disabled={protectedLayer || !look.color} onClick={() => put({ color: undefined })}>Цвет как у туши</button>
         <label><input type="checkbox" checked={look.dot !== false} disabled={protectedLayer} onChange={(event) => put({ dot: event.target.checked ? undefined : false })} />Точка-метка</label>
+        <label>Изгиб · {Math.round((look.bend ?? 0) * 100)}<input aria-label="Изгиб подписи" type="range" min={-100} max={100} step={5} value={Math.round((look.bend ?? 0) * 100)} disabled={protectedLayer}
+          onChange={(event) => put({ bend: Number(event.target.value) / 100 || undefined })} /></label>
+        <label>Поворот, °<input aria-label="Поворот подписи" type="number" min={-180} max={180} step={5} value={look.rotation ?? 0} disabled={protectedLayer}
+          onChange={(event) => put({ rotation: Math.max(-180, Math.min(180, Number(event.target.value))) || undefined })} /></label>
+        <label>Разрядка · {Math.round((look.spacing ?? 0) * 100)}%<input aria-label="Разрядка подписи" type="range" min={0} max={100} step={5} value={Math.round((look.spacing ?? 0) * 100)} disabled={protectedLayer}
+          onChange={(event) => put({ spacing: Number(event.target.value) / 100 || undefined })} /></label>
       </>;
     })()}
     {"kind" in item && item.kind === "door" && <label>Поворот<select value={item.orientation} disabled={protectedLayer} onChange={(event) => edit((view) => updateGameplayEntity(view, item.id, (entity) => entity.kind === "door" ? { ...entity, orientation: Number(event.target.value) } : entity))}>

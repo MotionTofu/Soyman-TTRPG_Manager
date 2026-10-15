@@ -1139,9 +1139,12 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     const total = along.at(-1) || 1, wetAt = samples.map((point) => wet(point.x, point.y) > 0);
     const mouths = samples.flatMap((_, i) => i && wetAt[i] !== wetAt[i - 1] ? [(along[i] + along[i - 1]) / 2] : []);
     const toMouth = (i: number) => Math.min(Infinity, ...mouths.map((at) => Math.abs(along[i] - at)));
-    const width = Math.max(path.width ?? 0.22, 2 / scale), under = o.water ? 1 : 0;
+    const under = o.water ? 1 : 0, source = path.flow === "back" ? samples.at(-1)! : samples[0];
+    // Рукав дельты или протока начинается на другой реке атласа — сразу в полную ширину, а не из нуля, как у истока.
+    const branch = atlasRivers.some((other) => other !== path && flattenSplineWithWidths(other.nodes!, other.width ?? 0.22, 0.1)
+      .some((point) => Math.hypot(point.x - source.x, point.y - source.y) <= point.width / 2 + 0.15));
     shape = samples.map((point, i) => ({ x: point.x, y: point.y, dry: !wetAt[i] || toMouth(i) < under,
-      size: Math.pow(path.flow === "back" ? 1 - along[i] / total : along[i] / total, 0.7) * (1 + 1.6 * Math.max(0, 1 - toMouth(i) / 1.5) ** 2) * width }));
+      size: (branch ? 1 : Math.pow(path.flow === "back" ? 1 - along[i] / total : along[i] / total, 0.7)) * (1 + 1.6 * Math.max(0, 1 - toMouth(i) / 1.5) ** 2) * Math.max(point.width, 2 / scale) }));
     riverShapes.set(path, shape);
     return shape;
   };
@@ -1157,10 +1160,12 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     }
     return false;
   });
-  /** Мост атласа — самостоятельный знак: светлый настил шире дороги с досками поперёк и бортами тушью, у берегов — усы
-   * наружу, как на топокарте, и тень на воду. */
-  const atlasBridges = (samples: readonly { x: number; y: number }[], half: number) => {
-    const wet = samples.map((point) => overWater(point.x, point.y)), deck = Math.max(5, half * 1.7), line = Math.max(1.5, deck * 0.28);
+  /** Мост атласа — самостоятельный знак: светлый настил шире дороги, борта тушью, у берегов — усы наружу, как на топокарте.
+   * Вид — по дороге: у тракта каменный (толстые борта, без досок), у дороги деревянный (доски поперёк), у тропы пешеходный
+   * мостик (узкий, тонкие перила со стойками, без тени). */
+  const atlasBridges = (samples: readonly { x: number; y: number }[], half: number, kind: "stone" | "wood" | "foot") => {
+    const wet = samples.map((point) => overWater(point.x, point.y)), foot = kind === "foot";
+    const deck = foot ? Math.max(3, half * 1.3) : Math.max(5, half * 1.7), line = foot ? Math.max(1, deck * 0.2) : Math.max(1.5, deck * (kind === "stone" ? 0.42 : 0.28));
     ctx.save(); ctx.setLineDash([]); ctx.lineCap = "round"; ctx.lineJoin = "round";
     for (let i = 0; i < samples.length; i++) {
       if (!wet[i] || (i && wet[i - 1])) continue;
@@ -1179,9 +1184,9 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       const side = (s: number) => run.map((point, k) => { const t = tangent(k); return { x: point.x - t.y * deck * s, y: point.y + t.x * deck * s }; });
       const left = side(-1), right = side(1), outline = () => { ctx.beginPath(); [...left, ...right.reverse()].forEach((point, k) => k ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y)); right.reverse(); ctx.closePath(); };
       // Тень на воду, настил закрывает дорогу, поперёк — доски, по бортам — тушь.
-      ctx.save(); ctx.translate(line, line); outline(); ctx.fillStyle = "rgba(0,0,0,0.3)"; ctx.fill(); ctx.restore();
+      if (!foot) { ctx.save(); ctx.translate(line, line); outline(); ctx.fillStyle = "rgba(0,0,0,0.3)"; ctx.fill(); ctx.restore(); }
       outline(); ctx.fillStyle = chrome.paper; ctx.fill();
-      ctx.save(); outline(); ctx.clip(); ctx.strokeStyle = chrome.ink; ctx.globalAlpha *= 0.45; ctx.lineWidth = Math.max(1, line * 0.5); ctx.beginPath();
+      if (kind === "wood") { ctx.save(); outline(); ctx.clip(); ctx.strokeStyle = chrome.ink; ctx.globalAlpha *= 0.45; ctx.lineWidth = Math.max(1, line * 0.5); ctx.beginPath();
       let walked = 0;
       for (let k = 1; k < run.length; k++) {
         const a = run[k - 1], b = run[k], length = Math.hypot(b.x - a.x, b.y - a.y), t = tangent(k);
@@ -1191,16 +1196,25 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
         }
         walked += length;
       }
-      ctx.stroke(); ctx.restore();
+      ctx.stroke(); ctx.restore(); }
       ctx.strokeStyle = chrome.ink; ctx.lineWidth = line;
       for (const [rail, s] of [[left, -1], [right, 1]] as const) {
         ctx.beginPath(); rail.forEach((point, k) => k ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
         // Усы: с концов борта наружу и назад, под 45°.
         for (const [k, back] of [[0, 1], [rail.length - 1, -1]] as const) {
-          const t = tangent(k), ear = deck * 0.9;
+          const t = tangent(k), ear = deck * (foot ? 0.6 : 0.9);
           ctx.moveTo(rail[k].x, rail[k].y); ctx.lineTo(rail[k].x + (-t.y * s - t.x * back) * ear, rail[k].y + (t.x * s - t.y * back) * ear);
         }
         ctx.stroke();
+        // Пешеходный мостик: вместо досок — стойки перил.
+        if (foot) {
+          ctx.fillStyle = chrome.ink;
+          for (let k = 0, walked = 0, next = 0; k < rail.length; k++) {
+            if (k) walked += Math.hypot(rail[k].x - rail[k - 1].x, rail[k].y - rail[k - 1].y);
+            if (walked < next) continue;
+            ctx.beginPath(); ctx.arc(rail[k].x, rail[k].y, line * 1.3, 0, Math.PI * 2); ctx.fill(); next = walked + deck * 1.4;
+          }
+        }
       }
     }
     ctx.restore();
@@ -1243,7 +1257,8 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     else { ctx.lineWidth = width; ctx.stroke(); }
     ctx.restore();
     // Мост — после туши и середины всех дорог подряд: настил закрывает дорогу, а не она его.
-    if (path.atlas !== "sea") cores.push(() => atlasBridges(samples, (path.atlas === "highway" ? casing : path.atlas === "trail" ? width * 0.8 : width) / 2));
+    if (path.atlas !== "sea") cores.push(() => atlasBridges(samples, (path.atlas === "highway" ? casing : path.atlas === "trail" ? width * 0.8 : width) / 2,
+      path.atlas === "highway" ? "stone" : path.atlas === "trail" ? "foot" : "wood"));
   };
   const strokeFreePath = (path: RenderPath) => {
     if (!path.nodes || path.nodes.length < 2) return;
@@ -1721,6 +1736,34 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
 
   // Подписи рисуются в позиции своего label-слоя в стеке (3A §17), а не
   // специальным "всегда сверху" проходом. Только на крупном зуме, иначе каша.
+  /** Текст вдоль ломаной в точках экрана: `at` — середина текста в долях длины (0–1), `lift` — подъём над линией,
+   * `gap` — разрядка. Линия, идущая справа налево, читается от другого конца, чтобы буквы не встали вверх ногами.
+   * Шрифт уже задан в контексте. */
+  function textAlong(points: readonly { x: number; y: number }[], text: string, at: number, lift: number, gap: number, color: string) {
+    if (points.length < 2) return;
+    if (points[points.length - 1].x < points[0].x) { points = [...points].reverse(); at = 1 - at; }
+    const along = [0];
+    for (let i = 1; i < points.length; i++) along.push(along[i - 1] + Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y));
+    const chars = [...text], widths = chars.map((ch) => ctx.measureText(ch).width), length = along[along.length - 1];
+    const total = widths.reduce((sum, w) => sum + w + gap, -gap);
+    let start = Math.max(0, Math.min(length - total, at * length - total / 2)), i = 1;
+    const placed = chars.map((ch, k) => {
+      const mid = start + widths[k] / 2;
+      start += widths[k] + gap;
+      while (i < points.length - 1 && along[i] < mid) i++;
+      const a = points[i - 1], b = points[i], t = (mid - along[i - 1]) / ((along[i] - along[i - 1]) || 1), angle = Math.atan2(b.y - a.y, b.x - a.x);
+      return { ch, angle, x: a.x + (b.x - a.x) * t + Math.sin(angle) * lift, y: a.y + (b.y - a.y) * t - Math.cos(angle) * lift };
+    });
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
+    const fontPx = parseFloat(/(\d+(?:\.\d+)?)px/.exec(ctx.font)?.[1] ?? "12");
+    // Сначала бумажная обводка всех букв, потом тушь: обводка соседней буквы не наползает на уже нарисованную.
+    for (const pass of ["stroke", "fill"] as const) for (const { ch, angle, x, y } of placed) {
+      ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
+      if (pass === "stroke") { ctx.lineWidth = Math.max(3, fontPx * 0.2); ctx.strokeStyle = chrome.paper; ctx.strokeText(ch, 0, 0); }
+      else { ctx.fillStyle = color; ctx.fillText(ch, 0, 0); }
+      ctx.restore();
+    }
+  }
   const drawLabel = (l: RenderLabel) => {
     if (!Number.isFinite(l.position.x) || !Number.isFinite(l.position.y)) return;
     const px = X(l.position.x);
@@ -1743,6 +1786,19 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       ctx.arc(px, py, Math.max(2, scale * 0.09), 0, Math.PI * 2);
       ctx.fillStyle = color;
       ctx.fill();
+    }
+    // Изгиб, поворот и разрядка (М9): буквы встают по дуге с серединой над точкой. Изгиб 1 — полукруг горбом вверх.
+    if (style?.bend || style?.rotation || style?.spacing) {
+      const gap = (style.spacing ?? 0) * fontPx, span = [...l.text].reduce((sum, ch) => sum + ctx.measureText(ch).width + gap, -gap);
+      const sweep = (style.bend ?? 0) * Math.PI, turn = (style.rotation ?? 0) * Math.PI / 180, cy = py - scale * 0.12 - fontPx / 2;
+      const arc = Array.from({ length: 33 }, (_, i) => {
+        const f = (i / 32 - 0.5) * 1.04, local = Math.abs(sweep) < 1e-3 ? { x: f * span, y: 0 }
+          : { x: Math.sin(f * sweep) * span / sweep, y: (1 - Math.cos(f * sweep)) * span / sweep };
+        return { x: px + local.x * Math.cos(turn) - local.y * Math.sin(turn), y: cy + local.x * Math.sin(turn) + local.y * Math.cos(turn) };
+      });
+      textAlong(arc, l.text, 0.5, 0, gap, color);
+      ctx.restore();
+      return;
     }
     // Текст с бумажной подложкой-обводкой, чтобы читался на любом террейне.
     ctx.lineWidth = Math.max(3, fontPx * 0.2);
@@ -2011,6 +2067,16 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     }
   }
 
+  // Названия рек и дорог (М9) — вдоль линии над ней, поверх всех слоёв; реки курсивом, как в атласе. Отдельным проходом:
+  // река под живой водой рисуется в нижнем проходе, а подписи нужны сверху.
+  if (scale * 0.3 >= 6) for (const layer of model.layers) if (layer.visible && layer.kind === "path") for (const path of layer.paths) {
+    if (!path.name || !path.nodes || path.nodes.length < 2) continue;
+    const line = flattenSplineWithWidths(path.closed ? [...path.nodes, path.nodes[0]] : path.nodes, path.width ?? 0.22, 0.1), fontPx = scale * 0.3;
+    ctx.save(); ctx.font = `${path.kind === "river" ? "italic " : ""}600 ${fontPx}px ${fonts.label}`;
+    textAlong(line.map((point) => ({ x: X(point.x), y: Y(point.y) })), path.name, path.nameAt ?? 0.5,
+      Math.max(...line.map((point) => point.width)) * scale / 2 + fontPx * 0.7, 0, chrome.ink);
+    ctx.restore();
+  }
   for (const drawTitle of titleDraws) drawTitle();
   for (const drawToken of tokenDraws) drawToken();
 
