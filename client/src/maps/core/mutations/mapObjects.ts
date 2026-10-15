@@ -68,6 +68,23 @@ export function setMapObjectDry(doc: MapDocumentV5, id: string, dry: boolean): M
   return mutationError("object.not-found", "id", "object not found");
 }
 
+/** Знак «Мира» (М13): название, своя высота букв подписи и локация мира — в `properties`. Пустое значение убирает поле. */
+export function setMapObjectSign(doc: MapDocumentV5, id: string, patch: { name?: string; labelSize?: number; location?: string }): MutationResult {
+  for (let i = 0; i < doc.layers.length; i++) {
+    const layer = doc.layers[i];
+    if (layer.kind !== "object") continue;
+    const index = layer.items.findIndex((item) => item.id === id);
+    if (index < 0) continue;
+    const { properties: before, ...item } = layer.items[index], properties = { ...before };
+    for (const [key, value] of Object.entries(patch)) if (value === undefined || value === "") delete properties[key]; else properties[key] = value;
+    if (JSON.stringify(properties) === JSON.stringify(before ?? {})) return noChange(doc);
+    const items = [...layer.items];
+    items[index] = Object.keys(properties).length ? { ...item, properties } : item;
+    return changed(withReplacedLayer(doc, i, { ...layer, items }));
+  }
+  return mutationError("object.not-found", "id", "object not found");
+}
+
 export function deleteMapObject(doc: MapDocumentV5, id: string): MutationResult {
   for (let i = 0; i < doc.layers.length; i++) {
     const layer = doc.layers[i];

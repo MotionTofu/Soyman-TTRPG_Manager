@@ -26,6 +26,7 @@ import { toolLayerKind, addLabel, quantize, removeSelection, type WorkspaceTool,
 import { downloadMapPicture } from "../maps/workspace/pictureExport";
 import { CATALOG_TOOLS, toolLabel } from "../maps/workspace/toolSets";
 import { updateGameplayEntity } from "../maps/core";
+import { setMapObjectSign } from "../maps/core/mutations/mapObjects";
 import { mapKind } from "../maps/mapTypes";
 import { MAP_VERSION_HEADER } from "@shared/maps/core";
 import { connectedPacks, usedPacks } from "../maps/assets/packs";
@@ -127,7 +128,12 @@ export function MapWorkspacePage() {
       if (source.type !== "location") throw new Error("Привязать можно только локацию");
       const found = await mapWorkspaceApi.resolveSource(mapId, "location", source.id);
       // Название по умолчанию берётся из локации; своё название не затирается.
-      commit((before) => editGeometry(before, (view) => updateGameplayEntity(view, target.id, (entity) => entity.kind !== "room" ? entity
+      if (target.kind === "object") commit((before) => {
+        // Знак «Мира» (М13): без своего названия берёт название локации.
+        const sign = before.layers.flatMap((layer) => layer.kind === "object" ? layer.items : []).find((item) => item.id === target.id);
+        return editGeometry(before, (view) => setMapObjectSign(view, target.id, { location: found.sourceRef.uid, ...(sign?.properties?.name ? {} : { name: found.name.slice(0, 200) }) }));
+      });
+      else commit((before) => editGeometry(before, (view) => updateGameplayEntity(view, target.id, (entity) => entity.kind !== "room" ? entity
         : { ...entity, location: found.sourceRef.uid, name: !entity.name || /^Квартал \d+$/.test(entity.name) ? found.name.slice(0, 200) : entity.name })));
     } catch (error) { showError(error); }
   }
@@ -410,6 +416,8 @@ export function MapWorkspacePage() {
     const layer = document.layers.find((entry) => entry.id === selection.layerId);
     const token = layer?.kind === "gameplay" ? layer.items.find((item) => item.id === selection.id) : null;
     if (token?.kind === "room" && token.location) return displays.get(tokenSourceKey({ kind: "location", uid: token.location }));
+    const sign = layer?.kind === "object" ? layer.items.find((item) => item.id === selection.id)?.properties?.location : null;
+    if (typeof sign === "string") return displays.get(tokenSourceKey({ kind: "location", uid: sign }));
     return token?.kind === "token" && token.sourceRef ? displays.get(tokenSourceKey(token.sourceRef)) : undefined;
   })();
   const notice = doc.actionError || doc.compatibilityError || (doc.publishedOldMap ? "Эта карта доступна игрокам. Пока готовится новый показ, редактируйте скрытую копию — текущий показ сохранится."

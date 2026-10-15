@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import type { MapDocumentV6 } from "@shared/maps/core";
 import { updateGameplayEntity, updateLabelText } from "../core";
-import { setMapObjectDry, transformMapObject } from "../core/mutations/mapObjects";
+import { setMapObjectDry, setMapObjectSign, transformMapObject } from "../core/mutations/mapObjects";
+import { worldSignLabel } from "../assets/world";
 import { ignoresWater } from "../water";
 import { updateLabelStyle } from "../core/mutations/labels";
 import { LABEL_FONTS } from "../labelStyle";
@@ -15,16 +16,20 @@ export function WorkspaceProperties({ document, selection, commit, onClose, onDe
   document: MapDocumentV6; selection: WorkspaceSelection;
   commit: (operation: (before: MapDocumentV6) => MapDocumentV6) => void;
   onClose: () => void; onDelete: () => void;
-  /** Источник фишки или локация комнаты и квартала; `onLink` — начать привязку к локации. */
+  /** Источник фишки или локация комнаты, квартала и знака «Мира»; `onLink` — начать привязку к локации. */
   display?: TokenDisplay; onPreview?: () => void; onLink?: () => void;
 }) {
   const layer = document.layers.find((entry) => entry.id === selection.layerId);
   const item = layer && "items" in layer ? layer.items.find((entry) => entry.id === selection.id) : null;
-  const originalText = item && "text" in item ? item.text : item && "name" in item ? item.name : "";
+  const sign = item && "transform" in item && item.visual.type === "asset" ? worldSignLabel(item.visual.assetId) : null;
+  const signText = (key: string) => item && "transform" in item && typeof item.properties?.[key] === "string" ? item.properties[key] as string : "";
+  const originalText = item && "text" in item ? item.text : item && "name" in item ? item.name : signText("name");
   const [text, setText] = useState(originalText);
   useEffect(() => setText(originalText), [selection.id, originalText]);
   if (!item) return null;
   const room = "kind" in item && item.kind === "room" ? item : null;
+  const location = room ? room.location : sign !== null ? signText("location") : "";
+  const patchSign = (patch: Parameters<typeof setMapObjectSign>[2]) => edit((view) => setMapObjectSign(view, item.id, patch));
   const patchRoom = (patch: Partial<GameplayRoom>) => edit((view) => updateGameplayEntity(view, item.id, (entity) => entity.kind === "room" ? { ...entity, ...patch } : entity));
   const protectedLayer = !!layer?.locked || !layer?.visible;
   function edit(operation: Parameters<typeof editGeometry>[1]) {
@@ -34,20 +39,24 @@ export function WorkspaceProperties({ document, selection, commit, onClose, onDe
     <button aria-label="Закрыть свойства" onClick={onClose}>×</button><strong>Свойства</strong>
     <p>Перетащите на карте. Привязка управляется отдельно от сетки.</p>
     {"kind" in item && item.kind === "token" && <TokenProperties token={item} selection={selection} display={display} protectedLayer={protectedLayer} commit={commit} onPreview={() => onPreview?.()} />}
-    {("text" in item || "name" in item) && <label>{"text" in item ? "Текст подписи" : room?.fill ? "Название квартала" : "Название комнаты"}
+    {("text" in item || "name" in item || sign !== null) && <label>{"text" in item ? "Текст подписи" : sign !== null ? "Название" : room?.fill ? "Название квартала" : "Название комнаты"}
       <input value={text} disabled={protectedLayer} maxLength={200} onChange={(event) => setText(event.target.value)} onBlur={() => {
         if (text === originalText) return;
         if ("text" in item && text.trim()) edit((view) => updateLabelText(view, item.id, text.trim()));
         else if ("text" in item) setText(originalText);
         else if ("name" in item) edit((view) => updateGameplayEntity(view, item.id, (entity) => entity.kind === "room" ? { ...entity, name: text } : entity));
+        else patchSign({ name: text.trim() || undefined });
       }} />
     </label>}
+    {sign !== null && "transform" in item && <label>Высота букв, клеток<input aria-label="Высота букв названия" type="number" min={0.1} max={4} step={0.05} placeholder={`по рангу: ${sign}`} disabled={protectedLayer}
+      value={typeof item.properties?.labelSize === "number" ? item.properties.labelSize : ""}
+      onChange={(event) => patchSign({ labelSize: event.target.value === "" ? undefined : Math.max(0.1, Math.min(4, Number(event.target.value))) })} /></label>}
     {room?.fill && <label>Заливка<input aria-label="Заливка квартала" type="color" value={room.fill} disabled={protectedLayer} onChange={(event) => patchRoom({ fill: event.target.value })} /></label>}
-    {room && (room.location ? <>
+    {(room || sign !== null) && (location ? <>
       <p>Локация: {display?.name ?? "загрузка…"}</p>
       {display?.state === "missing" && <p role="status">Локация удалена, в архиве или недоступна. Связь остаётся.</p>}
       <button disabled={display?.state !== "active" || !display.id} onClick={() => onPreview?.()}>Открыть карточку</button>
-      <button disabled={protectedLayer} onClick={() => patchRoom({ location: undefined })}>Отвязать от локации</button>
+      <button disabled={protectedLayer} onClick={() => room ? patchRoom({ location: undefined }) : patchSign({ location: undefined })}>Отвязать от локации</button>
     </> : <button disabled={protectedLayer || !onLink} onClick={() => onLink?.()}>Привязать к локации</button>)}
     {"text" in item && (() => {
       const look = item.style ?? {}, put = (patch: MapLabelStyle) => edit((view) => updateLabelStyle(view, item.id, { ...look, ...patch }));

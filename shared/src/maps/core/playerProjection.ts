@@ -14,6 +14,7 @@ import type {
   MapDocumentV5,
   MapGridConfig,
   MapLayer,
+  MapObject,
   MapPath,
   TerrainMaskLayer,
   TerrainCellEntry,
@@ -88,6 +89,13 @@ function projectGameplay(items: GameplayEntity[], visible?: (x: number, y: numbe
     }
     return e;
   });
+}
+
+/** Связь знака с локацией мира — знание Мастера; название на карте игрок видит. */
+function hideObjectLocation(item: MapObject): MapObject {
+  if (!item.properties || !("location" in item.properties)) return item;
+  const { location: _private, ...shown } = item.properties;
+  return { ...item, properties: shown };
 }
 
 /** Keep only painted samples wholly inside revealed square cells. */
@@ -220,6 +228,7 @@ function projectLayer(layer: MapLayer, grid: MapGridConfig | null, visible?: (x:
       const { branchFrom: _branchFrom, ...visiblePath } = path;
       return visiblePath;
     }) };
+    if (layer.kind === "object") return { ...layer, items: layer.items.map(hideObjectLocation) };
     return layer;
   }
   const pointVisible = (px: number, py: number) => {
@@ -250,7 +259,7 @@ function projectLayer(layer: MapLayer, grid: MapGridConfig | null, visible?: (x:
       return cells.length ? [{ ...visiblePath, geometry: { type: "cell-network" as const, cells } }] : [];
     }) };
   }
-  if (layer.kind === "object") return { ...layer, items: layer.items.filter((item) => pointVisible(item.transform.position.x, item.transform.position.y)) };
+  if (layer.kind === "object") return { ...layer, items: layer.items.filter((item) => pointVisible(item.transform.position.x, item.transform.position.y)).map(hideObjectLocation) };
   if (layer.kind === "label") return { ...layer, items: layer.items.filter((item) => pointVisible(item.position.x, item.position.y)) };
   if (layer.kind === "scatter") return { ...layer, areas: [] };
   return { ...layer, items: projectGameplay(layer.items, visible, pointVisible) };

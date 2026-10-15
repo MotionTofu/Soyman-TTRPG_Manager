@@ -6,6 +6,7 @@ import { maskSampleCode } from "./terrainMaskTiles";
 import { artworkImage, doorImage, paperPattern, patternSource, stripImage, surfaceImage, surfacePattern, texturedMask, wallPattern, type ArtPack } from "./assets/artwork";
 import { drawWallPolyline } from "./assets/wallArtwork";
 import { deckKey, fencePostId, villageId } from "./assets/village";
+import { worldSignLabel } from "./assets/world";
 import { ownDeck, ownLinePost, ownPackOf } from "./assets/ownPacks";
 import { labelBox, labelFamily } from "./labelStyle";
 import { drawWaterStill, waterStillReady, type MapWater } from "./water";
@@ -1925,6 +1926,22 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
           ctx.strokeRect(-scale * objectScale.x / 2, -scale * objectScale.y / 2, scale * objectScale.x, scale * objectScale.y);
           ctx.restore();
         }
+      }
+      // Название знака «Мира» (М13) — под рисунком, высота букв по рангу или своя; растёт вместе с картой.
+      if (layer.kind === "object") for (const { object, asset } of layer.items) {
+        const name = object.properties?.name, own = object.properties?.labelSize;
+        if (typeof name !== "string" || !name) continue;
+        const fontPx = (typeof own === "number" ? own : worldSignLabel(asset.id) ?? 0.32) * scale;
+        if (fontPx < 5) continue;
+        const image = "image" in asset ? asset.image : null, size = Math.max(Math.abs(object.transform.scale.x), Math.abs(object.transform.scale.y));
+        const tall = image ? image.naturalHeight / Math.max(1, image.naturalWidth, image.naturalHeight) : 1;
+        const x = X(object.transform.position.x), y = Y(object.transform.position.y + size * tall / 2) + fontPx * 0.05;
+        if (x < -canvasW || x > canvasW * 2 || y < -fontPx * 2 || y > canvasH + fontPx) continue;
+        ctx.save();
+        ctx.font = `700 ${fontPx}px ${fonts.label}`; ctx.textAlign = "center"; ctx.textBaseline = "top";
+        ctx.lineWidth = Math.max(3, fontPx * 0.22); ctx.lineJoin = "round"; ctx.strokeStyle = chrome.paper; ctx.strokeText(name, x, y);
+        ctx.fillStyle = chrome.ink; ctx.fillText(name, x, y);
+        ctx.restore();
       }
     }
     ctx.restore();

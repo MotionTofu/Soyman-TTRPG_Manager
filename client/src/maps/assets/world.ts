@@ -69,3 +69,6 @@ export function pickVariant(assetId: string, random: () => number = Math.random)
   const item = assetId.endsWith("*") ? worldObject(assetId.slice(0, -1)) : null;
   return item ? worldId(variantKeys(item.key, item.variants)[Math.floor(random() * item.variants)]) : pickVillageVariant(assetId, random);
 }
+/** Высота букв подписи знака по рангу (М9, М13), клеток. У рельефа подписи и привязки нет — `null`. */
+const LABEL_SIZE: Readonly<Record<string, number>> = { capital: 0.55, town: 0.45, village: 0.36, hamlet: 0.3 };
+export const worldSignLabel = (assetId: string) => { const item = worldObject(assetId); return !item || item.category === "relief" ? null : LABEL_SIZE[item.key] ?? 0.32; };
