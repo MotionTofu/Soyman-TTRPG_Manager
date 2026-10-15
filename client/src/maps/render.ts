@@ -1224,10 +1224,12 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     const width = Math.max(2, (path.width ?? 0.22) * scale);
     ctx.beginPath(); samples.forEach((point, i) => i ? ctx.lineTo(X(point.x), Y(point.y)) : ctx.moveTo(X(point.x), Y(point.y)));
     ctx.strokeStyle = chrome.ink;
+    // Тракт — не шире дороги заметно (как на атласах): светлая середина в тонкой обводке тушью.
+    const casing = width * 0.7;
     if (path.atlas === "highway") {
-      ctx.lineWidth = width * 1.5; ctx.stroke();
+      ctx.lineWidth = casing; ctx.stroke();
       cores.push(() => {
-        ctx.save(); ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = chrome.paper; ctx.lineWidth = Math.max(1, width * 0.6);
+        ctx.save(); ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = chrome.paper; ctx.lineWidth = Math.max(1, casing - 2 * Math.max(1, casing * 0.2));
         ctx.beginPath(); samples.forEach((point, i) => i ? ctx.lineTo(X(point.x), Y(point.y)) : ctx.moveTo(X(point.x), Y(point.y))); ctx.stroke(); ctx.restore();
       });
     } else if (path.atlas === "trail") { ctx.setLineDash([width * 2.4, width * 1.6]); ctx.lineWidth = width * 0.8; ctx.stroke(); }
@@ -1235,7 +1237,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     else { ctx.lineWidth = width; ctx.stroke(); }
     ctx.restore();
     // Мост — после туши и середины всех дорог подряд: настил закрывает дорогу, а не она его.
-    if (path.atlas !== "sea") cores.push(() => atlasBridges(samples, (path.atlas === "highway" ? width * 1.5 : path.atlas === "trail" ? width * 0.8 : width) / 2));
+    if (path.atlas !== "sea") cores.push(() => atlasBridges(samples, (path.atlas === "highway" ? casing : path.atlas === "trail" ? width * 0.8 : width) / 2));
   };
   const strokeFreePath = (path: RenderPath) => {
     if (!path.nodes || path.nodes.length < 2) return;
