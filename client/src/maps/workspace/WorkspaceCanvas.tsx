@@ -21,7 +21,7 @@ import { selectableBounds, type SelectionRect } from "./multiSelection";
 import { drawWallPolyline } from "../assets/wallArtwork";
 import { cryptId } from "../assets/crypt";
 import { prepareTokenTape, subscribeTokenTape } from "../assets/tokenTape";
-import { cellCorners } from "../grid";
+import { cellCorners, cellWidth } from "../grid";
 import { WorkspacePerformance } from "./WorkspacePerformance";
 import { WorkspacePerformanceMeter } from "./performanceMeter";
 import { changedArea } from "./changedArea";
@@ -167,7 +167,7 @@ export function WorkspaceCanvas({ gl, liquidDraft, onGlFail, effects, map, docum
     if (assetPreview) {
       const asset = resolveMapSymbol({ type: "asset", assetId: assetPreview.assetId });
       if (asset) {
-        const size = objectPlacementSize(assetPreview.assetId) * camera.scale;
+        const size = objectPlacementSize(assetPreview.assetId) * cellWidth(document.grid.type) * camera.scale;
         ctx.save();
         ctx.translate(X(assetPreview.position.x), Y(assetPreview.position.y));
         ctx.scale(size, size);

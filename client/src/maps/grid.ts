@@ -38,6 +38,9 @@ export function coordLabel(x: number, y: number): string {
 }
 
 // Центр клетки в мировых единицах.
+/** Ширина клетки в мировых единицах: размер знака и подписи «в клетках» считается от неё. Гекс шире своего радиуса — √3. */
+export const cellWidth = (grid: MapGrid) => grid === "hex" ? Math.sqrt(3) : 1;
+
 export function cellCenter(grid: MapGrid, x: number, y: number): { cx: number; cy: number } {
   if (grid === "square") return { cx: x + 0.5, cy: y + 0.5 };
   const SQRT3 = Math.sqrt(3);

@@ -1,6 +1,6 @@
 import { defaultFilterVert, Filter, GlProgram, Texture } from "pixi.js";
 import { WATER_GLSL, type MapWater } from "../water";
-export { drawLiquidRecipes, drawWaterMask, drawWaterThings, waterSources, waterThingSources, type MapWater } from "../water";
+export { drawLiquidRecipes, drawWaterMask, drawWaterThings, waterFog, waterSources, waterThingSources, type MapWater } from "../water";
 
 const fragment = `
 precision highp float;

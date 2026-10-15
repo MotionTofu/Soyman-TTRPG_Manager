@@ -9,7 +9,7 @@ import { applyTerrainCellEdits, builtinMaterial, createGameplayEntity, createLab
 import { addMapObject, deleteMapObject, moveMapObject } from "../core/mutations/mapObjects";
 import { moveArtSelection, removeArtSelection } from "./artisticCommands";
 import { mapAssetPackForId } from "../assets/registry";
-import { cellCenter, pixelToCell } from "../grid";
+import { cellCenter, cellWidth, pixelToCell } from "../grid";
 import { editGeometry } from "./editDocument";
 
 export type WorkspaceTool = "surface" | "liquid" | "road" | "river" | "scatter" | "select" | "brush" | "eraser" | "shape" | "wall" | "door" | "label" | "asset";
@@ -116,7 +116,7 @@ export function addSymbol(document: MapDocumentV6, layerId: string, id: string, 
   const base = document.assetPacks.some((pack) => pack.id === required.id) ? document
     : { ...document, assetPacks: [...document.assetPacks, required] };
   // Картинка вписывается в квадрат со стороной size с сохранением пропорций — сторона = длинный размер в клетках.
-  const size = objectPlacementSize(assetId);
+  const size = objectPlacementSize(assetId) * cellWidth(document.grid.type);
   return editGeometry(base, (view) => addMapObject(view, layerId, { id, visual: { type: "asset", assetId },
     transform: { position, rotation: 0, scale: { x: size, y: size } } }));
 }

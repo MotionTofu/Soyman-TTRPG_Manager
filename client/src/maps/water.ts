@@ -5,6 +5,8 @@ import { LIQUID_PATTERNS, LIQUID_RIMS, liquidKey, liquidRecipe, type LiquidRecip
 import { cryptSide } from "./assets/crypt";
 import { drawCachedMapImage, drawCachedMapSymbol } from "./assets/draw";
 import { cutRoad, roadCrossings } from "./crossings";
+import { pixelToCell } from "./grid";
+import type { MapGrid } from "./mapTypes";
 
 /** Вода шейдером (проба 2026-10-08). `mode`: 0 — комикс-панк, 1 — пиксельный пруд, 2 — пиксельное море, 3 — мягкая с дном;
  * `size` — пикселей на клетку у пиксельных. */
@@ -21,11 +23,16 @@ const K = 4;
  * координатах — сдвиг уходит в начало отсчёта экрана, сам шейдер о нём не знает. */
 const ZERO = { x: 0, y: 0 } as const;
 
+/** Туман у игрока: закрытые клетки пришли с сервера пустыми — это не берег. Без тумана или у Мастера — `null`. */
+export type WaterFog = { grid: MapGrid; width: number; height: number; revealed: ReadonlySet<string> } | null;
+export const waterFog = (o: { playerView?: boolean; grid: MapGrid; width: number; height: number }, model: MapRenderModel): WaterFog =>
+  o.playerView && model.exploration?.enabled ? { grid: o.grid, width: o.width, height: o.height, revealed: model.exploration.revealedCells } : null;
+
 /** Из чего собрана маска воды. Пока список тот же, маску не пересобирают: перетаскивание фишки или подписи воду не меняет,
  * а пересборка — это вся карта заново и отправка картинки видеокарте на каждый шаг руки. */
-export function waterSources(model: MapRenderModel, width: number, height: number, shoal = 0, lo = ZERO): readonly unknown[] {
+export function waterSources(model: MapRenderModel, width: number, height: number, shoal = 0, lo = ZERO, fog: WaterFog = null): readonly unknown[] {
   // Рецептов здесь нет: от них зависит только таблица 5×8, её обновляет `drawLiquidRecipes`.
-  const out: unknown[] = [width, height, shoal, lo.x, lo.y];
+  const out: unknown[] = [width, height, shoal, lo.x, lo.y, fog?.revealed];
   for (const layer of model.layers) {
     if (!layer.visible) continue;
     if (layer.kind === "terrain" && layer.terrain.mask?.source) out.push(layer.terrain.mask.source);
@@ -39,7 +46,7 @@ export function waterSources(model: MapRenderModel, width: number, height: numbe
  * Края размыты на полклетки — по этому градиенту шейдер рисует берег и пену.
  * `shoal` — отмель в клетках: у берега глубина 1 и набирает свою на этом расстоянии, так вода глубже к середине.
  */
-export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement, flow: HTMLCanvasElement, recipes: HTMLCanvasElement, model: MapRenderModel, width: number, height: number, shoal = 0, lo: { x: number; y: number } = ZERO): boolean {
+export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement, flow: HTMLCanvasElement, recipes: HTMLCanvasElement, model: MapRenderModel, width: number, height: number, shoal = 0, lo: { x: number; y: number } = ZERO, fog: WaterFog = null): boolean {
   const w = Math.max(1, Math.ceil((width - lo.x) * K)), h = Math.max(1, Math.ceil((height - lo.y) * K));
   for (const target of [canvas, raw, flow]) if (target.width !== w || target.height !== h) { target.width = w; target.height = h; }
   const pen = raw.getContext("2d"), out = canvas.getContext("2d"), stream = flow.getContext("2d");
@@ -65,6 +72,26 @@ export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement,
         if (!depth) { data[at + 2] = beach; floor[at / 4] = 1; }
       }
       any ||= depth > 0;
+    }
+  }
+  // У игрока вода продолжается в пустоту закрытых клеток (и за край карты) на полторы клетки: иначе край тумана стал бы берегом
+  // с мелководьем и штриховкой. Данных это не добавляет — под туманом вода выдумана и закрыта.
+  if (fog && any) {
+    const reach = new Float32Array(w * h).fill(1e6), from = new Int32Array(w * h).fill(-1), open = new Uint8Array(w * h);
+    for (let y = 0, i = 0; y < h; y++) for (let x = 0; x < w; x++, i++) {
+      if (data[i * 4]) { reach[i] = 0; from[i] = i; continue; }
+      const cell = floor[i] ? null : pixelToCell(fog.grid, lo.x + (x + 0.5) / K, lo.y + (y + 0.5) / K, fog.width, fog.height);
+      open[i] = floor[i] || cell && fog.revealed.has(`${cell.x},${cell.y}`) ? 0 : 1;
+    }
+    const spread = (i: number, j: number, cost: number) => { if (open[i] && reach[j] + cost < reach[i]) { reach[i] = reach[j] + cost; from[i] = from[j]; } };
+    for (let y = 0, i = 0; y < h; y++) for (let x = 0; x < w; x++, i++) {
+      if (x) spread(i, i - 1, 1); if (y) spread(i, i - w, 1); if (x && y) spread(i, i - w - 1, 1.4); if (y && x < w - 1) spread(i, i - w + 1, 1.4);
+    }
+    for (let y = h - 1, i = w * h - 1; y >= 0; y--) for (let x = w - 1; x >= 0; x--, i--) {
+      if (x < w - 1) spread(i, i + 1, 1); if (y < h - 1) spread(i, i + w, 1); if (x < w - 1 && y < h - 1) spread(i, i + w + 1, 1.4); if (y < h - 1 && x) spread(i, i + w - 1, 1.4);
+    }
+    for (let i = 0; i < reach.length; i++) if (open[i] && from[i] >= 0 && reach[i] <= K * 1.5) {
+      data[i * 4] = data[from[i] * 4]; data[i * 4 + 1] = data[from[i] * 4 + 1]; kinds[i] = kinds[from[i]];
     }
   }
   pen.putImageData(image, 0, 0);
@@ -596,12 +623,12 @@ const STILL_SIDE = 2048;
  * недоступен: на холсте остаётся вода-картинка.
  */
 export function drawWaterStill(ctx: CanvasRenderingContext2D, model: MapRenderModel, width: number, height: number, water: MapWater,
-  cssW: number, cssH: number, scale: number, ox: number, oy: number, ratio: number, lo: { x: number; y: number } = ZERO): boolean {
+  cssW: number, cssH: number, scale: number, ox: number, oy: number, ratio: number, lo: { x: number; y: number } = ZERO, fog: WaterFog = null): boolean {
   const stage = stillStage();
   if (!stage) return false;
-  const { gl, canvas } = stage, sources = waterSources(model, width, height, water.shoal, lo);
+  const { gl, canvas } = stage, sources = waterSources(model, width, height, water.shoal, lo, fog);
   if (sources.length !== stage.sources.length || sources.some((source, i) => source !== stage.sources[i])) {
-    stage.any = drawWaterMask(stage.mask, stage.raw, stage.flow, stage.recipes, model, width, height, water.shoal, lo); stage.sources = sources;
+    stage.any = drawWaterMask(stage.mask, stage.raw, stage.flow, stage.recipes, model, width, height, water.shoal, lo, fog); stage.sources = sources;
     stage.liquids = null;
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.activeTexture(gl.TEXTURE1); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, stage.flow);

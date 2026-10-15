@@ -9,7 +9,7 @@ import { deckKey, fencePostId, villageId } from "./assets/village";
 import { worldSignLabel } from "./assets/world";
 import { ownDeck, ownLinePost, ownPackOf } from "./assets/ownPacks";
 import { labelBox, labelFamily } from "./labelStyle";
-import { drawWaterStill, waterStillReady, type MapWater } from "./water";
+import { drawWaterStill, waterFog, waterStillReady, type MapWater } from "./water";
 import { LIQUID_LAYER } from "./workspace/liquids";
 import { cutKey, cutRoad, drawCrossingDraft, paintedWaterAt, roadCrossings, type RoadCut } from "./crossings";
 // Рендер карты на canvas 2D. Цвета террейна — фиксированная спокойная
@@ -775,7 +775,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
   if (o.water && !o.part && waterStillReady()) {
     // Земля, на неё вода, потом всё остальное — мосты, дороги и фишки остаются над водой.
     renderMap(ctx, canvasW, canvasH, { ...o, part: "ground" });
-    drawWaterStill(ctx, model, maskW, maskH, o.water, canvasW, canvasH, scale, ox, oy, pixelRatio, maskLo);
+    drawWaterStill(ctx, model, maskW, maskH, o.water, canvasW, canvasH, scale, ox, oy, pixelRatio, maskLo, waterFog(o, model));
     renderMap(ctx, canvasW, canvasH, { ...o, part: "over", keep: true });
     return;
   }
@@ -2003,7 +2003,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       if (layer.kind === "object") for (const { object, asset } of layer.items) {
         const name = object.properties?.name, own = object.properties?.labelSize;
         if (typeof name !== "string" || !name) continue;
-        const fontPx = (typeof own === "number" ? own : worldSignLabel(asset.id) ?? 0.32) * scale;
+        const fontPx = (typeof own === "number" ? own : worldSignLabel(asset.id) ?? 0.32) * scale * (grid === "hex" ? Math.sqrt(3) : 1);
         if (fontPx < 5) continue;
         const image = "image" in asset ? asset.image : null, size = Math.max(Math.abs(object.transform.scale.x), Math.abs(object.transform.scale.y));
         const tall = image ? image.naturalHeight / Math.max(1, image.naturalWidth, image.naturalHeight) : 1;
@@ -2078,7 +2078,8 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
   // Названия рек и дорог (М9) — вдоль линии над ней, поверх всех слоёв; реки курсивом, как в атласе. Отдельным проходом:
   // река под живой водой рисуется в нижнем проходе, а подписи нужны сверху. У игрока туман режет линию на куски по клеткам:
   // соседние куски снова сшиваются по своим долям, и название встаёт один раз — на открытом участке, где оно стоит у Мастера.
-  if (scale * 0.3 >= 6) for (const layer of model.layers) if (layer.visible && layer.kind === "path") {
+  const nameFont = scale * 0.3 * (grid === "hex" ? Math.sqrt(3) : 1);
+  if (nameFont >= 6) for (const layer of model.layers) if (layer.visible && layer.kind === "path") {
     const runs = new Map<string, { kind: RenderPath["kind"]; name: string; at: number; from: number; to: number; line: { x: number; y: number; width: number }[] }[]>();
     for (const path of [...layer.paths].sort((a, b) => (a.span?.[0] ?? 0) - (b.span?.[0] ?? 0))) {
       if (!path.name || !path.nodes || path.nodes.length < 2) continue;
@@ -2088,7 +2089,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       else list.push({ kind: path.kind, name: path.name, at: path.nameAt ?? 0.5, from, to, line });
       runs.set(key, list);
     }
-    const fontPx = scale * 0.3;
+    const fontPx = nameFont;
     for (const run of [...runs.values()].flat()) {
       if (run.at < run.from || run.at > run.to) continue;
       ctx.save(); ctx.font = `${run.kind === "river" ? "italic " : ""}600 ${fontPx}px ${fonts.label}`;

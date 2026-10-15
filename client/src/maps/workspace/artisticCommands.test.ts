@@ -100,4 +100,11 @@ describe("artistic workspace", () => {
     expect(objects.items[0].transform.scale).toEqual({ x: -3, y: 3 });
     expect(objects.items[0].transform.rotation).toBe(60); expect(validateMapDocumentV6(doc)).toEqual([]);
   });
+  it("на гексах знак в одну клетку шириной во весь гекс", () => {
+    const square = fixture(), layer = square.layers.find(l => l.kind === "object")!;
+    const hex = { ...square, grid: { ...square.grid, type: "hex", hex: { orientation: "pointy", offset: "odd-q" } } } as typeof square;
+    const size = (doc: typeof square) => { const objects = addSymbol(doc, layer.id, "m", { x: 5, y: 5 }, "soyman-symbols:mountain").layers.find(l => l.id === layer.id)!;
+      if (objects.kind !== "object") throw Error(); return objects.items.at(-1)!.transform.scale.x; };
+    expect(size(hex) / size(square)).toBeCloseTo(Math.sqrt(3), 6);
+  });
 });

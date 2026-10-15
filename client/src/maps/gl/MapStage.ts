@@ -4,7 +4,7 @@ import { worldBounds } from "../grid";
 import { inRange, tileSide, visibleTiles, type TileRange } from "./tiles";
 import { createStyleFilter, type MapLook } from "./styleFilter";
 import { anyWeather, createWeatherFilter, type MapWeather } from "./weatherFilter";
-import { createWaterFilter, drawLiquidRecipes, drawWaterMask, drawWaterThings, waterSources, waterThingSources, type MapWater } from "./waterFilter";
+import { createWaterFilter, drawLiquidRecipes, drawWaterMask, drawWaterThings, waterFog, waterSources, waterThingSources, type MapWater } from "./waterFilter";
 
 /** Всё, что рисует карта, кроме камеры. Новый объект — новое содержимое плиток. */
 export type MapStageContent = Omit<RenderOptions, "scale" | "ox" | "oy">;
@@ -268,9 +268,9 @@ export class MapStage {
     if (this.water) {
       // Вода лежит в мировых координатах: у гексов карта шире и выше числа клеток.
       const { minX, minY, maxX: ww, maxY: wh } = worldBounds(frame.content.grid, frame.content.width, frame.content.height), lo = { x: minX, y: minY };
-      const sources = waterSources(frame.content.model, ww, wh, this.water.shoal, lo);
+      const fog = waterFog(frame.content, frame.content.model), sources = waterSources(frame.content.model, ww, wh, this.water.shoal, lo, fog);
       if (sources.length !== this.maskOf.length || sources.some((source, i) => source !== this.maskOf[i])) {
-        drawWaterMask(this.maskCanvas, this.maskRaw, this.flowCanvas, this.recipeCanvas, frame.content.model, ww, wh, this.water.shoal, lo);
+        drawWaterMask(this.maskCanvas, this.maskRaw, this.flowCanvas, this.recipeCanvas, frame.content.model, ww, wh, this.water.shoal, lo, fog);
         this.waterPass.refresh(); this.maskOf = sources; this.recipesOf = null;
       }
       // Что стоит в воде — своя картинка: передвинутая лодка не пересобирает маску воды всей карты.
