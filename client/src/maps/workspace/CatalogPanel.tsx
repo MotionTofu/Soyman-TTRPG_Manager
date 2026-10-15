@@ -1,10 +1,11 @@
 import { useState, memo } from "react";
 import { CARTOGRAPHY_OBJECTS, CARTOGRAPHY_SURFACES, cartographyId, cartographyUrl } from "../assets/cartography";
 import { CRYPT_CATEGORIES, CRYPT_OBJECTS, CRYPT_SURFACES, cryptId, cryptUrl, type CryptCategory } from "../assets/crypt";
-import { VILLAGE_CATEGORIES, VILLAGE_OBJECTS, VILLAGE_PACK, VILLAGE_RIVERS, VILLAGE_ROADS, VILLAGE_SURFACES, randomVariantId, variantKeys, villageId, villageSurfaceCode, villageUrl, type VillageCategory } from "../assets/village";
+import { VILLAGE_CATEGORIES, VILLAGE_OBJECTS, VILLAGE_PACK, VILLAGE_RIVERS, VILLAGE_ROADS, VILLAGE_SURFACES, variantKeys, villageId, villageSurfaceCode, villageUrl, type VillageCategory } from "../assets/village";
+import { WORLD_CATEGORIES, WORLD_OBJECTS, WORLD_SURFACES, worldId, worldSurfaceCode, worldUrl, type WorldCategory } from "../assets/world";
 import { MAP_SYMBOL_ASSETS, ownSurfaceCode } from "../assets/registry";
 import { SCATTER_PROFILES } from "../scatter";
-import { genreLabel, packName, packsFor, rankPacks } from "../assets/packs";
+import { genreLabel, packName, packOfAsset, packsFor, rankPacks } from "../assets/packs";
 import type { SettingGenre } from "../../types";
 import { liveImages, ownImageId, ownImageSrc, ownRandomId, ownScatterKey, useMapImageRevision, type OwnPack } from "../assets/ownPacks";
 import { Link } from "react-router-dom";
@@ -77,18 +78,25 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, pack
     chosen: symbol === cryptId(item.key), choose: () => onSymbol(cryptId(item.key)),
   }));
   // Семейство с вариантами: щелчок по плитке выбирает «случайный», конкретный — в полосе вариантов.
-  const village = (category: VillageCategory) => VILLAGE_OBJECTS.filter((item) => item.category === category).map((item): Tile => {
-    const keys = variantKeys(item.key, item.variants), random = randomVariantId(item.key);
+  const families = (items: readonly { key: string; name: string; cells: readonly [number, number]; variants: number }[], id: (key: string) => string, url: (key: string) => string,
+    size: (cells: readonly [number, number]) => string) => items.map((item): Tile => {
+    const keys = variantKeys(item.key, item.variants), random = `${id(item.key)}*`;
     const variants: Variant[] | undefined = keys.length > 1 ? [{ id: random, name: "Случайный", url: null },
-      ...keys.map((key, i) => ({ id: villageId(key), name: `Вариант ${i + 1}`, url: villageUrl(key) }))] : undefined;
-    return { id: villageId(item.key), name: item.name, url: villageUrl(item.key), size: `${item.cells[0]}×${item.cells[1]}`, variants,
-      chosen: symbol === random || keys.some((key) => symbol === villageId(key)), choose: () => onSymbol(variants ? random : villageId(item.key)) };
+      ...keys.map((key, i) => ({ id: id(key), name: `Вариант ${i + 1}`, url: url(key) }))] : undefined;
+    return { id: id(item.key), name: item.name, url: url(item.key), size: size(item.cells), variants,
+      chosen: symbol === random || keys.some((key) => symbol === id(key)), choose: () => onSymbol(variants ? random : id(item.key)) };
   });
+  const village = (category: VillageCategory) => families(VILLAGE_OBJECTS.filter((item) => item.category === category), villageId, villageUrl, (size) => `${size[0]}×${size[1]}`);
+  const world = (category: WorldCategory) => families(WORLD_OBJECTS.filter((item) => item.category === category), worldId, worldUrl, (size) => `${size[0]} кл.`);
   const scatterUrl = (assetId: string) => assetId.startsWith(`${VILLAGE_PACK.id}:`) ? villageUrl(assetId.slice(VILLAGE_PACK.id.length + 1))
+    : assetId.startsWith(worldId("")) ? worldUrl(assetId.slice(worldId("").length))
     : assetId.startsWith(cartographyId("")) ? cartographyUrl(assetId.slice(cartographyId("").length)) : null;
-  const scatter = (own: boolean) => SCATTER_PROFILES.filter((item) => item.assetId.startsWith(`${VILLAGE_PACK.id}:`) === own).map((item): Tile =>
+  const scatter = (pack: string) => SCATTER_PROFILES.filter((item) => (packOfAsset(item.assetId) ?? "ink") === pack).map((item): Tile =>
     ({ id: item.key, name: item.name, url: scatterUrl(item.assetId), chosen: scatterProfile === item.key, choose: () => onScatter(item.key) }));
   const villageObjects = (Object.keys(VILLAGE_CATEGORIES) as VillageCategory[]).map((key) => ({ key, name: VILLAGE_CATEGORIES[key], pack: "village", tiles: village(key) }));
+  const worldObjects = (Object.keys(WORLD_CATEGORIES) as WorldCategory[]).map((key) => ({ key: `world-${key}`, name: WORLD_CATEGORIES[key], pack: "world", tiles: world(key) }));
+  const worldSurfaces: Category = { key: "world-surfaces", name: "Земля", pack: "world", tiles: WORLD_SURFACES.map((item): Tile => ({ id: worldSurfaceCode(item.key), name: item.name,
+    url: worldUrl(item.key), chosen: material === worldSurfaceCode(item.key), choose: () => onMaterial(worldSurfaceCode(item.key)) })) };
   const cryptObjects = (Object.keys(CRYPT_CATEGORIES) as CryptCategory[]).map((key) => ({ key, name: CRYPT_CATEGORIES[key], pack: "crypt", tiles: crypt(key) }));
   // Воды и других жидкостей здесь нет: у них свой инструмент со слотами.
   const villageSurfaces: Category = { key: "village-surfaces", name: "Местность", pack: "village", tiles: [...VILLAGE_SURFACES.filter((item) => item.key !== "shallow" && item.key !== "deep").map((item): Tile => {
@@ -128,14 +136,15 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, pack
   const library: Category[] = tool === "door" ? [...ownTiles("door"),
     { key: "doors-ink", name: "Обычные", pack: "ink", tiles: [{ id: "door-plain", name: "Дверь оформления", url: null, chosen: !doorStyle, choose: () => onDoor(undefined) }] }] : tool === "road" ? [...ownTiles("line", "road"), ...roads] : tool === "river" ? [...ownTiles("line", "river"), ...rivers]
     : tool === "wall" ? [...ownTiles("line", "wall"), ...(local ? [fences, masonry] : [masonry, fences])] : tool === "asset" ? [
-    ...ownTiles("object"), ...(local ? [...villageObjects, ...cryptObjects] : [...cryptObjects, ...villageObjects]),
-    { key: "region", name: "Мир", pack: "ink", tiles: objects("region") },
+    ...ownTiles("object"), ...worldObjects, ...(local ? [...villageObjects, ...cryptObjects] : [...cryptObjects, ...villageObjects]),
+    { key: "region", name: "Обзор", pack: "ink", tiles: objects("region") },
     { key: "symbols", name: "Знаки", pack: "ink", tiles: MAP_SYMBOL_ASSETS.map((item) => ({ id: item.id, name: item.name, url: null, chosen: symbol === item.id, choose: () => onSymbol(item.id) })) },
   ] : tool === "scatter" ? [
     ...ownTiles("scatter"),
-    { key: "village-scatter", name: "Местность", pack: "village", tiles: scatter(true) },
-    { key: "scatter", name: "Мир", pack: "ink", tiles: scatter(false) },
-  ] : [...ownTiles("surface"), ...(local ? [villageSurfaces, baseSurfaces] : [baseSurfaces, villageSurfaces])];
+    { key: "world-scatter", name: "Рельеф и лес", pack: "world", tiles: scatter("world") },
+    { key: "village-scatter", name: "Местность", pack: "village", tiles: scatter("village") },
+    { key: "scatter", name: "Обзор", pack: "ink", tiles: scatter("ink") },
+  ] : [...ownTiles("surface"), worldSurfaces, ...(local ? [villageSurfaces, baseSurfaces] : [baseSurfaces, villageSurfaces])];
   // Каталог — только подключённые наборы; `only` сужает до одного. Остальная библиотека видна через поиск.
   const fit = packsFor(kind), mine = library.filter((entry) => packs.includes(entry.pack)), shown = fit.filter((pack) => mine.some((entry) => entry.pack === pack.id));
   const filter = only && shown.some((pack) => pack.id === only) ? only : null;

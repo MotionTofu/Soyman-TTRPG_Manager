@@ -2,6 +2,7 @@ import { cartographyId } from "./cartography";
 import { CRYPT_DOORS, CRYPT_SURFACES, cryptId } from "./crypt";
 import { getMapImageAsset, loadMapImageAsset } from "./registry";
 import { villageId, villageSurfaceKey, waterLevel } from "./village";
+import { worldId, worldSurfaceEdge, worldSurfaceKey } from "./world";
 import { PLAIN_EDGE, type SurfaceEdge } from "./surfaceEdge";
 import { ownSurface } from "./ownPacks";
 import { buildTerrainMaskRaster } from "../terrainMaskRaster";
@@ -91,10 +92,10 @@ export function surfaceImage(code: string, dungeon = false, pack: ArtPack = "car
     if (image) ownImages.set(image, own.cells);
     return image;
   }
-  const village = villageSurfaceKey(code);
-  if (village) {
+  const world = worldSurfaceKey(code), village = world ? null : villageSurfaceKey(code);
+  if (village || world) {
     // Материал, а не оформление: рисуется при любом стиле и грузится по первому обращению.
-    const asset = getMapImageAsset(villageId(village));
+    const asset = getMapImageAsset(world ? worldId(world) : villageId(village!));
     if (asset && !asset.image && !asset.failed) void loadMapImageAsset(asset.id).catch(() => undefined);
     if (asset?.image) villageImages.add(asset.image);
     return asset?.image ?? null;
@@ -118,6 +119,8 @@ export function surfaceEdge(code: string): SurfaceEdge {
   const own = ownSurface(code);
   if (own) return own.edge;
   if (waterLevel(code)) return LIQUID_EDGE;
+  const world = worldSurfaceKey(code);
+  if (world) return worldSurfaceEdge(world)!;
   const village = villageSurfaceKey(code);
   return village ? VILLAGE_EDGES[village.replace(/-\d+$/, "")] ?? LIQUID_EDGE : TIERS[code] ?? PLAIN_EDGE;
 }

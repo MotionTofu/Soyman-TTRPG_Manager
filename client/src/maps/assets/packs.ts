@@ -7,6 +7,7 @@ import { crossingChoices } from "../crossings";
 import { liquidPackOf, ownPackOf, ownPacks, ownScatterPack } from "./ownPacks";
 import { ARTWORK_SCATTER, MAP_SYMBOL_PACK, ownSurfaceAssetId } from "./registry";
 import { VILLAGE_PACK, VILLAGE_SURFACE_KEYS } from "./village";
+import { WORLD_PACK, worldSurfaceKey } from "./world";
 
 /** Набор — тема места: что можно поставить на карту. Оформление (как карта нарисована) — отдельная настройка.
  * Метки нужны, чтобы находить набор в библиотеке, когда их станут десятки: жанр, место, вид карты. */
@@ -29,8 +30,8 @@ export function rankPacks<T extends { genres: readonly SettingGenre[] }>(packs: 
 
 /** Библиотека встроенных наборов. Свои наборы придут сюда же с экрана «Наборы». */
 export const MAP_PACKS: readonly MapPack[] = [
-  // ponytail: «Деревня» значится городской и обзорной, пока нет своих наборов «Город» и «Мир» — иначе этим картам нечем красить землю.
-  { id: "village", name: "Деревня у реки", genre: "Фэнтези", place: "Поселение", kinds: ["tactical", "city", "overview"], genres: FANTASY },
+  // ponytail: «Деревня» значится и городской, пока нет своего набора «Город» — иначе городу нечем красить землю. С обзорной снята (М15).
+  { id: "village", name: "Деревня у реки", genre: "Фэнтези", place: "Поселение", kinds: ["tactical", "city"], genres: FANTASY },
   { id: "crypt", name: "Склеп", genre: "Фэнтези", place: "Подземелье", kinds: ["tactical"], genres: FANTASY },
   { id: "world", name: "Мир", genre: "Фэнтези", place: "Обзорная карта", kinds: ["overview"], genres: FANTASY },
   { id: "ink", name: "Бумага и тушь", genre: "Любой жанр", place: "Знаки и мир", kinds: ["tactical", "city", "overview"], genres: [] },
@@ -49,7 +50,7 @@ export function connectedPacks(stored: readonly string[] | undefined, kind: MapK
 /** Набор библиотеки, из которого взята вещь; картинка из галереи ни к какому набору не относится. */
 export function packOfAsset(assetId: string): string | null {
   const prefix = assetId.slice(0, assetId.indexOf(":"));
-  return prefix === VILLAGE_PACK.id ? "village" : prefix === CRYPT_PACK.id ? "crypt" : prefix === CARTOGRAPHY_PACK.id || prefix === MAP_SYMBOL_PACK.id ? "ink" : ownPackOf(assetId);
+  return prefix === VILLAGE_PACK.id ? "village" : prefix === WORLD_PACK.id ? "world" : prefix === CRYPT_PACK.id ? "crypt" : prefix === CARTOGRAPHY_PACK.id || prefix === MAP_SYMBOL_PACK.id ? "ink" : ownPackOf(assetId);
 }
 /** Наборы, вещи которых стоят на карте.
  * Готовые жидкости набором не считаются: у них свой инструмент, и от подключения «Деревни» они не зависят. Жидкость своего набора — считается. */
@@ -66,11 +67,11 @@ export function usedPacks(document: MapDocumentV6): string[] {
     if (layer.kind === "gameplay") for (const item of layer.items) if (item.kind === "door" && item.style) add(item.style);
     if (layer.kind === "scatter") for (const area of layer.areas) {
       const key = area.profileRef.type === "builtin" ? area.profileRef.key : "", own = ownScatterPack(key);
-      if (own) ids.add(own); else if (key) ids.add(ARTWORK_SCATTER.find((profile) => profile.key === key)?.pack.id === VILLAGE_PACK.id ? "village" : "ink");
+      if (own) ids.add(own); else if (key) { const pack = ARTWORK_SCATTER.find((profile) => profile.key === key)?.pack.id; ids.add(pack === VILLAGE_PACK.id ? "village" : pack === WORLD_PACK.id ? "world" : "ink"); }
     }
     if (layer.kind === "terrain") for (const material of [layer.defaultMaterial, ...(layer.representation === "mask" ? layer.mask.materials : layer.cells.map((cell) => cell.material))]) {
       const code = material.type === "builtin" ? material.key.replace(/^terrain\//, "") : "", own = ownSurfaceAssetId(code);
-      if (own) add(own); else if (code.startsWith("village-") && VILLAGE_SURFACE_KEYS.includes(code.slice(8))) ids.add("village");
+      if (own) add(own); else if (worldSurfaceKey(code)) ids.add("world"); else if (code.startsWith("village-") && VILLAGE_SURFACE_KEYS.includes(code.slice(8))) ids.add("village");
     }
   }
   return [...ids];

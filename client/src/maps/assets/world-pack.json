@@ -1,0 +1,446 @@
+{
+  "id": "soyman-world",
+  "version": "1",
+  "assets": [
+    {
+      "id": "capital",
+      "file": "capital.webp",
+      "width": 423,
+      "height": 425,
+      "bytes": 48104,
+      "sha256": "b043a289af1e81be633fbb320d6f641e5f8b31ba5cb7b859df09ddec40a4f374",
+      "kind": "object",
+      "source": ".scratch/map-world/concept-world-signs.png"
+    },
+    {
+      "id": "town",
+      "file": "town.webp",
+      "width": 358,
+      "height": 425,
+      "bytes": 30414,
+      "sha256": "b8462a811bb43ec52b3d3a91fbeeb5d96a299b6ad5f0d78f5c17ef446cec9ebf",
+      "kind": "object",
+      "source": ".scratch/map-world/concept-world-signs.png"
+    },
+    {
+      "id": "village",
+      "file": "village.webp",
+      "width": 303,
+      "height": 425,
+      "bytes": 19820,
+      "sha256": "2d10f84b332793a52c46376d706cfc401bbc461942bd5e8f4c83627ff3f54919",
+      "kind": "object",
+      "source": ".scratch/map-world/concept-world-signs.png"
+    },
+    {
+      "id": "hamlet",
+      "file": "hamlet.webp",
+      "width": 327,
+      "height": 371,
+      "bytes": 15836,
+      "sha256": "74a056e460aa0abdfcf31800bcc0136a902db06d747557b9cdc22ffd7eba0790",
+      "kind": "object",
+      "source": ".scratch/map-world/concept-world-signs.png"
+    },
+    {
+      "id": "castle",
+      "file": "castle.webp",
+      "width": 353,
+      "height": 371,
+      "bytes": 33724,
+      "sha256": "bea5fe68fd500db0a47094c3548863cad284bfcedde68c4be084b95d185b8b3e",
+      "kind": "object",
+      "source": ".scratch/map-world/concept-world-signs.png"
+    },
+    {
+      "id": "ruins",
+      "file": "ruins.webp",
+      "width": 354,
+      "height": 371,
+      "bytes": 30158,
+      "sha256": "8e7b50b203b4b600ede255a2dfa58dc4f5b2e2e1410bdd208fbe1086f3313b78",
+      "kind": "object",
+      "source": ".scratch/map-world/concept-world-signs.png"
+    },
+    {
+      "id": "mountains",
+      "file": "mountains.webp",
+      "width": 425,
+      "height": 322,
+      "bytes": 34412,
+      "sha256": "0f8509546cc1850f81186527015388a77a6ff30ce8a1caf59d5215f58ce8f2ad",
+      "kind": "object",
+      "source": ".scratch/map-world/concept-world-signs.png"
+    },
+    {
+      "id": "pines",
+      "file": "pines.webp",
+      "width": 330,
+      "height": 322,
+      "bytes": 28686,
+      "sha256": "3e56b714b773df84fe5f03f06ffffb3e78c946c8491d8d7c89f95a7ca65e15ea",
+      "kind": "object",
+      "source": ".scratch/map-world/concept-world-signs.png"
+    },
+    {
+      "id": "hills",
+      "file": "hills.webp",
+      "width": 381,
+      "height": 322,
+      "bytes": 20978,
+      "sha256": "73c1c98adc68c32cda4c5031d82ded2ce8b457691283903b1f760d367e43f507",
+      "kind": "object",
+      "source": ".scratch/map-world/concept-world-signs.png"
+    },
+    {
+      "id": "fortress",
+      "file": "fortress.webp",
+      "width": 429,
+      "height": 421,
+      "bytes": 30230,
+      "sha256": "de163db36c3e33502ec363cf5189e3b0baf13d6b00b0d45a2189bd40b60e32a3",
+      "kind": "object",
+      "source": ".scratch/map-world/world-signs.png"
+    },
+    {
+      "id": "tower",
+      "file": "tower.webp",
+      "width": 258,
+      "height": 421,
+      "bytes": 22094,
+      "sha256": "7449d34893a79743d6789c5e8c7820ea8af07ae93d96515ffcef894301391ee8",
+      "kind": "object",
+      "source": ".scratch/map-world/world-signs.png"
+    },
+    {
+      "id": "temple",
+      "file": "temple.webp",
+      "width": 386,
+      "height": 421,
+      "bytes": 27766,
+      "sha256": "bcf9baf25abcd516fbcff4ad6c075e2b3da3724905aff97b73f3ec13ef5d8142",
+      "kind": "object",
+      "source": ".scratch/map-world/world-signs.png"
+    },
+    {
+      "id": "cave",
+      "file": "cave.webp",
+      "width": 410,
+      "height": 333,
+      "bytes": 31044,
+      "sha256": "d16eac6f7261ea28439e82a33918b12dfa40e0de1fd73169da5cc36b138afdef",
+      "kind": "object",
+      "source": ".scratch/map-world/world-signs.png"
+    },
+    {
+      "id": "mine",
+      "file": "mine.webp",
+      "width": 379,
+      "height": 333,
+      "bytes": 29046,
+      "sha256": "6178585e0d64bd9ea1d0a0087e0aa4f2851f1a6622d240a1c48b29700c5e190d",
+      "kind": "object",
+      "source": ".scratch/map-world/world-signs.png"
+    },
+    {
+      "id": "port",
+      "file": "port.webp",
+      "width": 388,
+      "height": 333,
+      "bytes": 31960,
+      "sha256": "395f09e8a1af0465899ceaddbb53cee4912c90bae6c169b488ff14010bbe29f3",
+      "kind": "object",
+      "source": ".scratch/map-world/world-signs.png"
+    },
+    {
+      "id": "lighthouse",
+      "file": "lighthouse.webp",
+      "width": 366,
+      "height": 377,
+      "bytes": 28456,
+      "sha256": "78cae866ab80cae11a55b7000433cbef257ab75119205d80ef90fb77e7d291ad",
+      "kind": "object",
+      "source": ".scratch/map-world/world-signs.png"
+    },
+    {
+      "id": "pass",
+      "file": "pass.webp",
+      "width": 403,
+      "height": 377,
+      "bytes": 35758,
+      "sha256": "02ca68375c9c1f0ddbd9a753830d93fb456185d5801546f975ebe5e44ae3310d",
+      "kind": "object",
+      "source": ".scratch/map-world/world-signs.png"
+    },
+    {
+      "id": "landmark",
+      "file": "landmark.webp",
+      "width": 356,
+      "height": 377,
+      "bytes": 32262,
+      "sha256": "50fb8b2585d90dd38cc88335fe636b43ce052e75d10f94844e887bd3e59d0aa2",
+      "kind": "object",
+      "source": ".scratch/map-world/world-signs.png"
+    },
+    {
+      "id": "camp",
+      "file": "camp.webp",
+      "width": 361,
+      "height": 367,
+      "bytes": 25566,
+      "sha256": "bcf9cc44fcb2cfc9f248099ec094dba6e8602e7b22c171dcd0c0bae8535386c1",
+      "kind": "object",
+      "source": ".scratch/map-world/world-stamps-1.png"
+    },
+    {
+      "id": "snowy",
+      "file": "snowy.webp",
+      "width": 423,
+      "height": 367,
+      "bytes": 36862,
+      "sha256": "f7015619c47a4c63c595dd8a9fd2623cd7cda4da7cbf5834f710b05fd88799eb",
+      "kind": "object",
+      "source": ".scratch/map-world/world-stamps-1.png"
+    },
+    {
+      "id": "woods",
+      "file": "woods.webp",
+      "width": 371,
+      "height": 367,
+      "bytes": 33986,
+      "sha256": "dd6e62b1b266ea365345e8f9b0cee8e957ed2f88aef8a53e26198f864239dcc0",
+      "kind": "object",
+      "source": ".scratch/map-world/world-stamps-1.png"
+    },
+    {
+      "id": "scrub",
+      "file": "scrub.webp",
+      "width": 404,
+      "height": 291,
+      "bytes": 26990,
+      "sha256": "2c54a98c32aaa915e288f0985fcb1969ad500e26e9cd433cc673bef804b15dde",
+      "kind": "object",
+      "source": ".scratch/map-world/world-stamps-1.png"
+    },
+    {
+      "id": "reeds",
+      "file": "reeds.webp",
+      "width": 367,
+      "height": 291,
+      "bytes": 37058,
+      "sha256": "094a4c5d9a1d8f38b4f72cdfddc650998e8071ffe6421db84a360c8b26b5350e",
+      "kind": "object",
+      "source": ".scratch/map-world/world-stamps-1.png"
+    },
+    {
+      "id": "dunes",
+      "file": "dunes.webp",
+      "width": 380,
+      "height": 291,
+      "bytes": 33416,
+      "sha256": "f2f5a4ffe5188264ce936db8889b3fc11095f9d9b986dfe2cbfde8dcb558991e",
+      "kind": "object",
+      "source": ".scratch/map-world/world-stamps-1.png"
+    },
+    {
+      "id": "mountains-2",
+      "file": "mountains-2.webp",
+      "width": 444,
+      "height": 335,
+      "bytes": 36556,
+      "sha256": "46985a04c1d15110e0115ca2e290c148a9f864aa95846e7b203271776eed8335",
+      "kind": "object",
+      "source": ".scratch/map-world/world-stamps-1.png"
+    },
+    {
+      "id": "pines-2",
+      "file": "pines-2.webp",
+      "width": 350,
+      "height": 335,
+      "bytes": 31736,
+      "sha256": "6a785715a8351b8497d7880eedd683131488faf59db5853d2e25425b7be6aab6",
+      "kind": "object",
+      "source": ".scratch/map-world/world-stamps-1.png"
+    },
+    {
+      "id": "hills-2",
+      "file": "hills-2.webp",
+      "width": 398,
+      "height": 335,
+      "bytes": 26934,
+      "sha256": "b420950d8cb4801a246f826f3f5ff629cf1804bba5c626310b6626b0c5bf379e",
+      "kind": "object",
+      "source": ".scratch/map-world/world-stamps-1.png"
+    },
+    {
+      "id": "snowy-2",
+      "file": "snowy-2.webp",
+      "width": 449,
+      "height": 368,
+      "bytes": 43908,
+      "sha256": "a215f945fdc891fec38de3c5d68a861ed06501f2ca837dce30c8d775fa1c39ae",
+      "kind": "object",
+      "source": ".scratch/map-world/world-stamps-2.png"
+    },
+    {
+      "id": "woods-2",
+      "file": "woods-2.webp",
+      "width": 353,
+      "height": 368,
+      "bytes": 42082,
+      "sha256": "7ffd19063957f5ca8e57fcfb89bb11fb8329eddbc21e9b76ebccc428e3bfe36f",
+      "kind": "object",
+      "source": ".scratch/map-world/world-stamps-2.png"
+    },
+    {
+      "id": "scrub-2",
+      "file": "scrub-2.webp",
+      "width": 399,
+      "height": 368,
+      "bytes": 33162,
+      "sha256": "f49e3026ca18d187bb041dd2600c94b59529a3ce84dde5c6c799e4162d09fb98",
+      "kind": "object",
+      "source": ".scratch/map-world/world-stamps-2.png"
+    },
+    {
+      "id": "reeds-2",
+      "file": "reeds-2.webp",
+      "width": 380,
+      "height": 323,
+      "bytes": 37540,
+      "sha256": "189462d3fc45e0484864ef467f54aa8db0d998410ac184fff4e67156da331eca",
+      "kind": "object",
+      "source": ".scratch/map-world/world-stamps-2.png"
+    },
+    {
+      "id": "dunes-2",
+      "file": "dunes-2.webp",
+      "width": 398,
+      "height": 323,
+      "bytes": 29842,
+      "sha256": "64819b30e034143f6661f08123288658f632348b4c7c1ce129c720473b934180",
+      "kind": "object",
+      "source": ".scratch/map-world/world-stamps-2.png"
+    },
+    {
+      "id": "mountains-3",
+      "file": "mountains-3.webp",
+      "width": 390,
+      "height": 323,
+      "bytes": 33714,
+      "sha256": "afdb6cc550c57507eab3e469ce0a59f89efcd70e4e66eed60b86d3c4da47d54d",
+      "kind": "object",
+      "source": ".scratch/map-world/world-stamps-2.png"
+    },
+    {
+      "id": "pines-3",
+      "file": "pines-3.webp",
+      "width": 395,
+      "height": 361,
+      "bytes": 35630,
+      "sha256": "8d7f5bbf6e1f92b3faee0114ba606b17b984fd0ddd15b2b0ed82c57aa665e831",
+      "kind": "object",
+      "source": ".scratch/map-world/world-stamps-2.png"
+    },
+    {
+      "id": "woods-3",
+      "file": "woods-3.webp",
+      "width": 393,
+      "height": 361,
+      "bytes": 43602,
+      "sha256": "36a05063796d8a4e309a2b1d07d77ad6b6f55c6f9a9f58d061dbd08f44e6246c",
+      "kind": "object",
+      "source": ".scratch/map-world/world-stamps-2.png"
+    },
+    {
+      "id": "hills-3",
+      "file": "hills-3.webp",
+      "width": 418,
+      "height": 361,
+      "bytes": 26040,
+      "sha256": "b1bb33f14e532ed28c38b16802d90c0f57129c0ad34866b21b419e0afa1df15a",
+      "kind": "object",
+      "source": ".scratch/map-world/world-stamps-2.png"
+    },
+    {
+      "id": "meadow",
+      "file": "meadow.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 36434,
+      "sha256": "b354b14ab0d28ff6e38dd12448ebd3670f6bdd615e42da231a3e479ec9061af0",
+      "kind": "surface",
+      "source": ".scratch/map-world/world-surfaces-1.png"
+    },
+    {
+      "id": "steppe",
+      "file": "steppe.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 44540,
+      "sha256": "4a6d0dcfc7a4edaeb19d716e211e719e40bc7c80a86850ee6caeaebe25a7fdf6",
+      "kind": "surface",
+      "source": ".scratch/map-world/world-surfaces-1.png"
+    },
+    {
+      "id": "forest-floor",
+      "file": "forest-floor.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 31674,
+      "sha256": "ef4615072950830c98afdeee17acb481127b9691d97ae4c2ce99dd0e591388f8",
+      "kind": "surface",
+      "source": ".scratch/map-world/world-surfaces-1.png"
+    },
+    {
+      "id": "desert",
+      "file": "desert.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 44814,
+      "sha256": "23c0a47f0bc9580664e8ccf1fe74d5c47a721dfad8e5e911ab17589c6d30e3c6",
+      "kind": "surface",
+      "source": ".scratch/map-world/world-surfaces-1.png"
+    },
+    {
+      "id": "snow",
+      "file": "snow.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 40528,
+      "sha256": "2c2b9e745f797e303172620af900fa452d5c3320cc586b39ce2891694761a7ca",
+      "kind": "surface",
+      "source": ".scratch/map-world/world-surfaces-2.png"
+    },
+    {
+      "id": "rock",
+      "file": "rock.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 39408,
+      "sha256": "c3ebf0abbc8ac02bed0a7a7e2281f2989d211831936fb88204e2ae8884d3fbd4",
+      "kind": "surface",
+      "source": ".scratch/map-world/world-surfaces-2.png"
+    },
+    {
+      "id": "swamp",
+      "file": "swamp.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 29348,
+      "sha256": "a448760edc0174d88ba0f48d4f72bab8d6426709c68f5d5a9084113c7fd78a1a",
+      "kind": "surface",
+      "source": ".scratch/map-world/world-surfaces-2.png"
+    },
+    {
+      "id": "heath",
+      "file": "heath.webp",
+      "width": 512,
+      "height": 512,
+      "bytes": 32786,
+      "sha256": "7b332700ffc795e387218b8b1d9a4e16300ae499cb1a65ecdcd6f0f1c3401c17",
+      "kind": "surface",
+      "source": ".scratch/map-world/world-surfaces-2.png"
+    }
+  ]
+}

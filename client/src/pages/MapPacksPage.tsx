@@ -15,6 +15,7 @@ import { LiquidPond } from "../maps/workspace/LiquidPond";
 import { LIQUIDS } from "../maps/assets/village";
 import { CARTOGRAPHY_OBJECTS, CARTOGRAPHY_SURFACES, cartographyUrl } from "../maps/assets/cartography";
 import { CRYPT_CATEGORIES, CRYPT_OBJECTS, cryptUrl, type CryptCategory } from "../maps/assets/crypt";
+import { WORLD_CATEGORIES, WORLD_OBJECTS, WORLD_SURFACES, worldUrl, type WorldCategory } from "../maps/assets/world";
 import { VILLAGE_CATEGORIES, VILLAGE_OBJECTS, VILLAGE_RIVERS, VILLAGE_ROADS, VILLAGE_SURFACES, villageUrl, type VillageCategory } from "../maps/assets/village";
 import { MAP_SYMBOL_ASSETS, getMapImageAsset } from "../maps/assets/registry";
 import { edgeAlpha, edgeField, edgeRamp, edgeWindow, type SurfaceEdge } from "../maps/assets/surfaceEdge";
@@ -55,6 +56,12 @@ function builtinSections(id: string): { name: string; tiles: BuiltinTile[] }[] {
     { name: "Дороги и ограды", tiles: VILLAGE_ROADS.map((item) => ({ name: item.name, url: villageUrl(item.key), note: `ширина ${item.width} кл.` })) },
     { name: "Реки", tiles: VILLAGE_RIVERS.map((item) => ({ name: item.name, url: villageUrl(item.key), note: `ширина ${item.width} кл.` })) },
   ].filter((section) => section.tiles.length);
+  if (id === "world") return [
+    ...(Object.keys(WORLD_CATEGORIES) as WorldCategory[]).map((key) => ({ name: WORLD_CATEGORIES[key],
+      tiles: WORLD_OBJECTS.filter((item) => item.category === key).map((item) => ({ name: item.name, url: worldUrl(item.key), note: `${item.cells[0]} кл.${item.variants > 1 ? ` · вариантов: ${item.variants}` : ""}` })) })),
+    { name: "Земля", tiles: WORLD_SURFACES.map((item) => ({ name: item.name, url: worldUrl(item.key) })) },
+    { name: "Линии атласа", tiles: ["Тракт", "Дорога", "Тропа", "Морской путь", "Река"].map((name) => ({ name, url: null, note: "рисует редактор" })) },
+  ];
   if (id === "crypt") return (Object.keys(CRYPT_CATEGORIES) as CryptCategory[]).map((key) => ({ name: CRYPT_CATEGORIES[key],
     tiles: CRYPT_OBJECTS.filter((item) => item.category === key).map((item) => ({ name: item.name, url: cryptUrl(item.directional ? `${item.key}-s` : item.key), note: `${size(item.cells)}${item.directional ? " · виды по сторонам" : ""}` })) }));
   return [

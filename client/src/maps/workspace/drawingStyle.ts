@@ -3,14 +3,15 @@ import type { MapWater } from "../water";
 import type { MapLook } from "../gl/styleFilter";
 import { MAP_TERRAIN_FILL, readChrome } from "../render";
 import { VILLAGE_FILL, WATER_DEPTHS, waterCode } from "../assets/village";
+import { WORLD_FILL } from "../assets/world";
 import { ownSurfaceFills } from "../assets/ownPacks";
 
 // Stable identities let Canvas reuse the surface bitmap while panning.
 const PALETTES = {
-  blueprint: { ...MAP_TERRAIN_FILL, ...VILLAGE_FILL, plain: "#ffffff", wall: "#293541", stone: "#e9edf0" },
-  "paper-ink": { ...MAP_TERRAIN_FILL, ...VILLAGE_FILL, plain: "#eee5ce", wall: "#ddd2b5", stone: "#cbbf9e" },
+  blueprint: { ...MAP_TERRAIN_FILL, ...VILLAGE_FILL, ...WORLD_FILL, plain: "#ffffff", wall: "#293541", stone: "#e9edf0" },
+  "paper-ink": { ...MAP_TERRAIN_FILL, ...VILLAGE_FILL, ...WORLD_FILL, plain: "#eee5ce", wall: "#ddd2b5", stone: "#cbbf9e" },
   // Прозрачный камень накладывает рисунок на бумагу; толща скалы — чёрная тушь.
-  "comic-punk": { ...MAP_TERRAIN_FILL, ...VILLAGE_FILL, plain: "#d8cfb6", wall: "#1b1a18", stone: "#d8cfb600" },
+  "comic-punk": { ...MAP_TERRAIN_FILL, ...VILLAGE_FILL, ...WORLD_FILL, plain: "#d8cfb6", wall: "#1b1a18", stone: "#d8cfb600" },
 };
 
 /** Вид печати по оформлению: сдвиг цвета, дрожание линии, зерно. Работает только

@@ -3,7 +3,7 @@ import { labelBox } from "../labelStyle";
 /** Подпись со своим размером выбирается кликом по буквам, а не только по точке привязки. */
 const bigLabel = (item: Parameters<typeof labelBox>[0], point: Vec2) => { if (!item.style?.size) return false; const box = labelBox(item); return point.x >= box.x && point.x <= box.x + box.w && point.y >= box.y && point.y <= box.y + box.h; };
 import { imageHit } from "./imageHit";
-import { pickVariant } from "../assets/village";
+import { pickVariant } from "../assets/world";
 import { pickOwnVariant } from "../assets/ownPacks";
 import { getMapImageAsset } from "../assets/registry";
 import { useEffect, useRef, useState, type MutableRefObject, type PointerEvent } from "react";

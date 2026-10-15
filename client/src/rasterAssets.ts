@@ -38,7 +38,7 @@
  * и `Archive/2026-09-12/raster-png/`.
  */
 
-export type RasterCategory = "conditions" | "schools" | "coins" | "inventory" | "tokens" | "textures" | "mascot" | "cartography" | "crypt" | "village" | "ui/fantasy-punk/decorative/profile" | "ui/campaign-dossier/v1" | "ui/plot-restyle/v1";
+export type RasterCategory = "conditions" | "schools" | "coins" | "inventory" | "tokens" | "textures" | "mascot" | "cartography" | "crypt" | "village" | "world" | "ui/fantasy-punk/decorative/profile" | "ui/campaign-dossier/v1" | "ui/plot-restyle/v1";
 
 /** Что реально лежит в раздаче. Ключ — имя файла без расширения. */
 export const RASTER_ASSETS: Record<RasterCategory, readonly string[]> = {
@@ -53,6 +53,8 @@ export const RASTER_ASSETS: Record<RasterCategory, readonly string[]> = {
     "lilies", "lilies-small", "lily-flower", "cattail", "cattail-bed", "cattail-tufts", "duckweed", "algae", "leaves", "snag", "log-sunk", "driftwood", "rocks-wet", "rock-flat", "stepping-stones", "fish", "ripples", "wreckage",
     "tussock", "dead-tree", "gas-bubbles", "basalt", "lava-crust", "lava-stones", "ice-floe", "ice-hole", "skeleton", "swamp", "lava", "lava-2", "ice", "ice-2", "acid", "tar", "chasm",
     "tussock-2", "dead-tree-2", "gas-bubbles-2", "basalt-2", "lava-crust-2", "lava-stones-2", "ice-floe-2", "ice-hole-2", "skeleton-2", "tussock-3", "dead-tree-3", "gas-bubbles-3", "basalt-3", "lava-crust-3", "lava-stones-3", "ice-floe-3", "ice-hole-3", "skeleton-3", "tussock-4", "dead-tree-4", "gas-bubbles-4", "basalt-4", "lava-crust-4", "lava-stones-4", "ice-floe-4", "ice-hole-4", "skeleton-4", "deck-bridge-wood", "deck-bridge-stone", "deck-ford", "deck-bridge-wood-2", "deck-bridge-stone-2", "deck-ford-2"],
+  // «Мир» — набор обзорной карты; provenance — maps/assets/world-pack.json.
+  world: ["capital", "town", "village", "hamlet", "castle", "fortress", "tower", "temple", "ruins", "cave", "mine", "port", "lighthouse", "pass", "camp", "landmark", "mountains", "mountains-2", "mountains-3", "snowy", "snowy-2", "hills", "hills-2", "hills-3", "woods", "woods-2", "woods-3", "pines", "pines-2", "pines-3", "scrub", "scrub-2", "reeds", "reeds-2", "dunes", "dunes-2", "meadow", "steppe", "forest-floor", "desert", "snow", "rock", "swamp", "heath"],
   cartography: ["stone-floor", "earth", "water", "stone-wall", "wood-door", "sarcophagus", "altar", "storage-cluster", "bone-pile", "rock-cluster", "stone-pillar", "torch", "pine", "mountain-ridge", "ruins", "outpost", "crypt-guard"],
   conditions: [
     "blinded",

@@ -1,6 +1,7 @@
 import { cartographySize } from "../assets/cartography";
 import { cryptObject } from "../assets/crypt";
 import { villageObject } from "../assets/village";
+import { worldObject } from "../assets/world";
 import { ownObjectSize } from "../assets/ownPacks";
 import { putGameplayToken, removeGameplayToken, type GameplayToken, type MapDocumentV6, type ShapeGeometry, type Vec2 } from "@shared/maps/core";
 import { applyTerrainCellEdits, builtinMaterial, createGameplayEntity, createLabel, deleteGameplayEntity,
@@ -102,7 +103,7 @@ export function addLabel(document: MapDocumentV6, layerId: string, id: string, p
   return editGeometry(document, (view) => createLabel(view, layerId, { id, position, text }));
 }
 export function objectPlacementSize(assetId: string) {
-  const item = cryptObject(assetId) ?? villageObject(assetId);
+  const item = cryptObject(assetId) ?? villageObject(assetId) ?? worldObject(assetId);
   return item ? Math.max(...item.cells) : ownObjectSize(assetId) ?? cartographySize(assetId);
 }
 
