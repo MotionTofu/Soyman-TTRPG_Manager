@@ -1120,9 +1120,40 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
   const cores: (() => void)[] = [];
   const mergeRoads = () => { for (const draw of cores) draw(); cores.length = 0; };
   const lastRivers = model.layers.findLastIndex(layer => layer.visible && layer.kind === "path" && layer.paths.some(path => path.kind === "river"));
+  /** Линия атласа (М6, М16): толщина в клетках, но не тоньше пары точек экрана. Река тоньше у истока и толще к устью. */
+  const strokeAtlas = (path: RenderPath, nodes: readonly SplineNode[]) => {
+    const samples = flattenSplineWithWidths(nodes, path.width ?? 0.22, 2 / scale);
+    if (samples.length < 2) return;
+    const width = Math.max(2, (path.width ?? 0.22) * scale);
+    ctx.save(); ctx.lineCap = "round"; ctx.lineJoin = "round";
+    if (path.atlas === "river") {
+      const along = [0];
+      for (let i = 1; i < samples.length; i++) along.push(along[i - 1] + Math.hypot(samples[i].x - samples[i - 1].x, samples[i].y - samples[i - 1].y));
+      const total = along.at(-1) || 1;
+      for (const [color, extra] of [[chrome.ink, 2], [RIVER_FILL, 0]] as const) {
+        ctx.strokeStyle = color;
+        for (let i = 1; i < samples.length; i++) {
+          ctx.lineWidth = Math.max(1.5, (0.3 + 0.7 * along[i] / total) * width) + extra;
+          ctx.beginPath(); ctx.moveTo(X(samples[i - 1].x), Y(samples[i - 1].y)); ctx.lineTo(X(samples[i].x), Y(samples[i].y)); ctx.stroke();
+        }
+      }
+    } else {
+      ctx.beginPath(); samples.forEach((point, i) => i ? ctx.lineTo(X(point.x), Y(point.y)) : ctx.moveTo(X(point.x), Y(point.y)));
+      ctx.strokeStyle = chrome.ink;
+      if (path.atlas === "highway") {
+        // Тракт — двойная линия: широкая тушь, внутри полоса бумаги.
+        ctx.lineWidth = width * 1.5; ctx.stroke();
+        ctx.strokeStyle = chrome.paper; ctx.lineWidth = Math.max(1, width * 0.6); ctx.stroke();
+      } else if (path.atlas === "trail") { ctx.setLineDash([width * 2.4, width * 1.6]); ctx.lineWidth = width * 0.8; ctx.stroke(); }
+      else if (path.atlas === "sea") { ctx.setLineDash([0.1, width * 2.2]); ctx.lineWidth = width * 1.1; ctx.stroke(); }
+      else { ctx.lineWidth = width; ctx.stroke(); }
+    }
+    ctx.restore();
+  };
   const strokeFreePath = (path: RenderPath) => {
     if (!path.nodes || path.nodes.length < 2) return;
     const nodes = path.closed ? [...path.nodes, path.nodes[0]] : path.nodes;
+    if (path.atlas) { strokeAtlas(path, nodes); return; }
     const baseWidth = path.width ?? 0.22;
     // Река с материалом: линия, залитая поверхностью воды (узор привязан к карте, как у кисти поверхности).
     const water = path.kind === "river" && path.style ? surfaceImage(`village-${path.style.slice(path.style.indexOf(":") + 1)}`, false, pack) : null;

@@ -7,10 +7,11 @@ export const TOOL_GROUPS: Record<MapKind, WorkspaceTool[][]> = {
   tactical: [["select"], ["surface", "liquid", "river", "road"], ["shape", "wall", "door"], ["scatter", "asset"], ["eraser", "label"]],
   // В городе комнат и дверей нет: дом — одна клетка. «Комната» здесь рисует квартал.
   city: [["select"], ["surface", "liquid", "river", "road"], ["wall", "shape"], ["scatter", "asset"], ["eraser", "label"]],
-  overview: [["select"], ["surface", "liquid", "river", "road"], ["scatter", "asset"], ["eraser", "label"]],
+  // На обзорной «Комната» рисует область: королевство, провинцию (М7).
+  overview: [["select"], ["surface", "liquid", "river", "road"], ["shape"], ["scatter", "asset"], ["eraser", "label"]],
 };
 /** «Пол» по клеткам на панели не стоит: это второй способ рисования «Поверхности», его включают в её настройках. */
 export const toolsOf = (kind: MapKind): WorkspaceTool[] => [...TOOL_GROUPS[kind].flat(), "brush"];
-export const toolLabel = (kind: MapKind, tool: WorkspaceTool) => kind === "city" && tool === "shape" ? "Квартал" : TOOL_LABELS[tool];
+export const toolLabel = (kind: MapKind, tool: WorkspaceTool) => tool !== "shape" || kind === "tactical" ? TOOL_LABELS[tool] : kind === "city" ? "Квартал" : "Область";
 /** Tools that pick what they place from the catalog. */
 export const CATALOG_TOOLS: WorkspaceTool[] = ["asset", "brush", "surface", "scatter", "road", "river", "wall", "door"];

@@ -132,6 +132,10 @@ export interface RenderTerrainLayer extends RenderLayerBase {
 
 /** Path-слой со своим paths[]; порядок paths[] = render order (§14). */
 /** Один рисуемый путь: legacy cell network или свободная мировая линия. */
+/** Линии атласа: тракт, дорога, тропа, морской путь и река. */
+export const ATLAS_LINES = ["highway", "road", "trail", "sea", "river"] as const;
+export type AtlasLine = typeof ATLAS_LINES[number];
+const atlasOf = (key: string) => (ATLAS_LINES as readonly string[]).find((line) => key === `path/atlas-${line}`) as AtlasLine | undefined;
 export interface RenderPath {
   kind: "road" | "river" | "wall";
   closed?: boolean;
@@ -140,6 +144,8 @@ export interface RenderPath {
   width?: number;
   /** Id ассета-полосы, если линия рисуется картинкой, а не тушью. */
   style?: string;
+  /** Линия атласа обзорной карты (М6, М16): рисует код. Встроенный стиль `path/atlas-<вид>`. */
+  atlas?: AtlasLine;
   /** Выбор Мастера для переправ дороги; без него мост или брод подбирается по воде. */
   crossings?: readonly CrossingChoice[];
   /** Течение реки: без поля — от первой точки к последней, `back` — обратно, `still` — стоячая вода. */
@@ -425,7 +431,7 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
         }
         if (p.geometry.type === "spline") {
           paths.push({ kind: p.kind, cells: new Set(), nodes: p.geometry.nodes, width: p.width, closed: p.properties?.closed === true,
-            ...(p.styleRef.type === "asset" ? { style: p.styleRef.assetId } : {}),
+            ...(p.styleRef.type === "asset" ? { style: p.styleRef.assetId } : atlasOf(p.styleRef.key) ? { atlas: atlasOf(p.styleRef.key) } : {}),
             ...(p.properties?.crossings ? { crossings: crossingChoices(p.properties.crossings) } : {}),
             ...(p.properties?.flow === "back" || p.properties?.flow === "still" ? { flow: p.properties.flow } : {}),
             ...(typeof p.properties?.depth === "number" ? { depth: Math.max(1, Math.min(5, Math.round(p.properties.depth))) } : {}) });

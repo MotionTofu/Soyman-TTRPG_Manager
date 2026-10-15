@@ -194,7 +194,7 @@ export function WorkspaceCanvas({ gl, liquidDraft, onGlFail, effects, map, docum
       ctx.restore();
       ctx.save(); ctx.strokeStyle = "#ff3e91"; ctx.lineWidth = 2; ctx.fillStyle = "#faf8ef";
       wallDraft.points.forEach((p, i) => { ctx.beginPath(); ctx.arc(X(p.x), Y(p.y), i === 0 && wallDraft.canClose ? 7 : 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); });
-      if (wallDraft.closing) { ctx.fillStyle = "#171717"; ctx.font = '14px "Sofia Sans Semi Condensed", sans-serif'; ctx.fillText(wallDraft.kind === "quarter" ? "Замкнуть квартал" : wallDraft.kind && wallDraft.kind !== "wall" ? "Замкнуть линию" : "Замкнуть стену", X(wallDraft.points[0].x) + 12, Y(wallDraft.points[0].y) - 12); }
+      if (wallDraft.closing) { ctx.fillStyle = "#171717"; ctx.font = '14px "Sofia Sans Semi Condensed", sans-serif'; ctx.fillText(wallDraft.kind === "quarter" ? "Замкнуть контур" : wallDraft.kind && wallDraft.kind !== "wall" ? "Замкнуть линию" : "Замкнуть стену", X(wallDraft.points[0].x) + 12, Y(wallDraft.points[0].y) - 12); }
       ctx.restore();
     }
     if (draftLine?.length && !wallDraft) {

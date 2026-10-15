@@ -16,6 +16,8 @@ type Variant = { id: string; name: string; url: string | null };
 type Tile = { id: string; name: string; /** Теги: поиск ищет и по ним. */ tags?: string; url: string | null; fill?: string; size?: string; chosen: boolean; choose: () => void; variants?: Variant[] };
 /** `pack` — набор из библиотеки (`MAP_PACKS`): каталог показывает разделы только подключённых к карте наборов. */
 type Category = { key: string; name: string; pack: string; tiles: Tile[] };
+/** Линии атласа набора «Мир»: id стиля, название, ширина по умолчанию в клетках. */
+const ATLAS: readonly (readonly [string, string, number])[] = [["atlas-highway", "Тракт", 0.3], ["atlas-road", "Дорога", 0.2], ["atlas-trail", "Тропа", 0.15], ["atlas-sea", "Морской путь", 0.2], ["atlas-river", "Река атласа", 0.4]];
 
 function Thumbnail({ url, fill }: { url: string | null; fill?: string }) {
   const [failed, setFailed] = useState(false);
@@ -101,7 +103,7 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, pack
   })) };
   const lines = [...VILLAGE_ROADS, ...VILLAGE_RIVERS];
   const ownLine = (style: string) => ownPacks.flatMap((pack) => pack.items).find((item) => item.kind === "line" && item.images.some((image) => ownImageId(image) === style));
-  const lineWidth = (style: string) => lines.find((item) => variantKeys(item.key, item.variants).some((key) => villageId(key) === style))?.width ?? ownLine(style)?.width ?? 0.3;
+  const lineWidth = (style: string) => ATLAS.find((item) => item[0] === style)?.[2] ?? lines.find((item) => variantKeys(item.key, item.variants).some((key) => villageId(key) === style))?.width ?? ownLine(style)?.width ?? 0.3;
   const strips = (items: readonly { key: string; name: string; width: number; variants: number }[]) => items.map((item): Tile => {
     const keys = variantKeys(item.key, item.variants);
     return { id: villageId(item.key), name: item.name, url: villageUrl(item.key), size: `${item.width} кл.`, chosen: keys.some((key) => lineStyle === villageId(key)),
@@ -109,10 +111,14 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, pack
       variants: keys.map((key, i) => ({ id: villageId(key), name: `Вариант ${i + 1}`, url: villageUrl(key) })) };
   });
   const plain = (id: string, name: string, width: number, url: string | null = null): Tile => ({ id, name, url, chosen: !lineStyle, choose: () => onLine("", width) });
+  // Линии атласа — у обзорной карты первыми (М6, М16): их рисует код, картинок нет.
+  const atlas = (ids: readonly string[]): Tile[] => ATLAS.filter((item) => ids.includes(item[0])).map(([id, name, width]) => ({ id, name, url: null, size: `${width} кл.`,
+    chosen: lineStyle === id, choose: () => onLine(id, width) }));
+  const overview = kind === "overview";
   // Простая линия — из «Бумаги и туши»: она остаётся, даже если «Деревня» не подключена.
-  const roads: Category[] = [{ key: "roads", name: "Дороги", pack: "village", tiles: strips(VILLAGE_ROADS.filter((item) => item.group === "road")) },
+  const roads: Category[] = [...overview ? [{ key: "roads-atlas", name: "Атлас", pack: "world", tiles: atlas(["atlas-highway", "atlas-road", "atlas-trail", "atlas-sea"]) }] : [],{ key: "roads", name: "Дороги", pack: "village", tiles: strips(VILLAGE_ROADS.filter((item) => item.group === "road")) },
     { key: "roads-ink", name: "Простые", pack: "ink", tiles: [plain("road-ink", "Линия тушью", 0.3)] }];
-  const rivers: Category[] = [{ key: "rivers", name: "Реки", pack: "village", tiles: strips(VILLAGE_RIVERS) },
+  const rivers: Category[] = [...overview ? [{ key: "rivers-atlas", name: "Атлас", pack: "world", tiles: atlas(["atlas-river"]) }] : [],{ key: "rivers", name: "Реки", pack: "village", tiles: strips(VILLAGE_RIVERS) },
     { key: "rivers-ink", name: "Простые", pack: "ink", tiles: [plain("river-ink", "Линия", 0.3)] }];
   // Ограда — стена: её не перешагнуть, и на «Столе» она будет считаться преградой, в отличие от дороги.
   const fences: Category = { key: "fences", name: "Ограды", pack: "village", tiles: strips(VILLAGE_ROADS.filter((item) => item.group === "fence")) };

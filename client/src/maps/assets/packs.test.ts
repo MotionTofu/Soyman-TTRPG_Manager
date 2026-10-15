@@ -10,7 +10,8 @@ it("подбор по жанрам: больше совпадений выше, 
 });
 
 it("у карты без списка подключено всё подходящее её виду, чужое виду отбрасывается", () => {
-  expect(connectedPacks(undefined, "tactical")).toEqual(MAP_PACKS.map((pack) => pack.id));
+  expect(connectedPacks(undefined, "tactical")).toEqual(MAP_PACKS.filter((pack) => pack.id !== "world").map((pack) => pack.id));
+  expect(packsFor("tactical").map((pack) => pack.id)).not.toContain("world");
   expect(packsFor("overview").map((pack) => pack.id)).not.toContain("crypt");
   expect(connectedPacks(["crypt", "ink"], "overview")).toEqual(["ink"]);
   expect(connectedPacks(["crypt"], "tactical")).toEqual(["crypt"]);

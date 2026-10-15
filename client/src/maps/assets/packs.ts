@@ -32,6 +32,7 @@ export const MAP_PACKS: readonly MapPack[] = [
   // ponytail: «Деревня» значится городской и обзорной, пока нет своих наборов «Город» и «Мир» — иначе этим картам нечем красить землю.
   { id: "village", name: "Деревня у реки", genre: "Фэнтези", place: "Поселение", kinds: ["tactical", "city", "overview"], genres: FANTASY },
   { id: "crypt", name: "Склеп", genre: "Фэнтези", place: "Подземелье", kinds: ["tactical"], genres: FANTASY },
+  { id: "world", name: "Мир", genre: "Фэнтези", place: "Обзорная карта", kinds: ["overview"], genres: FANTASY },
   { id: "ink", name: "Бумага и тушь", genre: "Любой жанр", place: "Знаки и мир", kinds: ["tactical", "city", "overview"], genres: [] },
 ];
 /** Встроенные наборы и свои наборы Мастера (не из архива) одним списком. Свой набор зовётся по uid. */

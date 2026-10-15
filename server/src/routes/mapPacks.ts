@@ -62,7 +62,7 @@ const DECKS = ["bridge-wood", "bridge-stone", "ford"];
 const between = (value: unknown, min: number, max: number, fallback: number) => typeof value === "number" && Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
 /** Рецепт жидкости (гриллинг 2026-10-15, В12–В16) — те же ручки, что у своей жидкости карты; картинок у неё нет.
  * Списки рисунков и кромок — как в общем формате карты (`shared/src/maps/core/v6.ts`). */
-const LIQUID_PATTERNS = ["ripple", "cracks", "bubbles", "mist", "smooth"], LIQUID_RIMS = ["foam", "none", "scorch", "wet"];
+const LIQUID_PATTERNS = ["ripple", "cracks", "bubbles", "mist", "smooth"], LIQUID_RIMS = ["foam", "none", "scorch", "wet", "hatch"];
 const WATER_TONES = ["#213e5c", "#2f9c8c", "#eefaf2"];
 function liquidData(raw: Record<string, unknown>) {
   const tones = Array.isArray(raw.tones) && raw.tones.length === 3 && raw.tones.every((tone) => typeof tone === "string" && /^#[0-9a-f]{6}$/i.test(tone))

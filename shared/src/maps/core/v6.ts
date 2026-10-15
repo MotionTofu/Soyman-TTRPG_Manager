@@ -31,7 +31,7 @@ export type MapWaterLook = typeof MAP_WATER_LOOKS[number];
 /** Рецепт жидкости, заведённый Мастером на этой карте. Материал в слое — `village-<key>-<глубина>`; правка рецепта
  * перекрашивает всё, что им накрашено. Готовые рецепты (вода, лава…) живут в клиенте и здесь не хранятся. */
 export const MAP_LIQUID_PATTERNS = ["ripple", "cracks", "bubbles", "mist", "smooth"] as const;
-export const MAP_LIQUID_RIMS = ["foam", "none", "scorch", "wet"] as const;
+export const MAP_LIQUID_RIMS = ["foam", "none", "scorch", "wet", "hatch"] as const;
 export interface MapLiquidRecipe {
   /** own1…own7 */ key: string; name: string;
   /** Глубина, середина, блик: #rrggbb. */ tones: [string, string, string];

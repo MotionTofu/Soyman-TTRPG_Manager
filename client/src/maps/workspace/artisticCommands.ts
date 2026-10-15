@@ -23,11 +23,13 @@ export function paintSurfaceStroke(document: MapDocumentV6, layerId: string, poi
 export function addFreePath(document: MapDocumentV6, layerId: string, points: Vec2[], kind: "road" | "river", width: number, closed = false, style?: string) {
   requireEditableLayer(document, layerId, "path");
   if (points.length < 2 || Math.hypot(points.at(-1)!.x - points[0].x, points.at(-1)!.y - points[0].y) < 0.1 && points.length === 2) return document;
-  const required = style ? mapAssetPackForId(style) : null;
-  if (style && !required) throw new Error("Этот рисунок линии отсутствует в библиотеке");
+  // Линия атласа (М6) — встроенный стиль, картинки у неё нет.
+  const atlas = style?.startsWith("atlas-") ? style : null;
+  const required = style && !atlas ? mapAssetPackForId(style) : null;
+  if (style && !atlas && !required) throw new Error("Этот рисунок линии отсутствует в библиотеке");
   const base = required && !document.assetPacks.some(pack => pack.id === required.id) ? { ...document, assetPacks: [...document.assetPacks, required] } : document;
   return editGeometry(base, view => createSplinePath(view, layerId, { id: crypto.randomUUID(), kind,
-    styleRef: style ? { type: "asset", assetId: style } : { type: "builtin", key: `path/${kind}` }, width, nodes: pathNodesFromAnchors(points, closed), properties: { closed } }));
+    styleRef: atlas ? { type: "builtin", key: `path/${atlas}` } : style ? { type: "asset", assetId: style } : { type: "builtin", key: `path/${kind}` }, width, nodes: pathNodesFromAnchors(points, closed), properties: { closed } }));
 }
 export function selectedPath(document: MapDocumentV6, selection: WorkspaceSelection | null) {
   const layer = document.layers.find(layer => layer.id === selection?.layerId);

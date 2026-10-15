@@ -44,7 +44,8 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
   /** Leaving, a dialog open: the canvas ignores presses. */
   busy: boolean; onLabel: (position: Vec2, layerId: string) => void;
   /** Городская карта: «Комната» рисует квартал. */
-  quarter?: boolean;
+  /** Имя фигуры с заливкой: «Квартал» в городе, «Область» на обзорной; нет — обычная комната. */
+  quarter?: string;
 }) {
   const { documentRef, setDocument, history, autosave, commit, showError } = doc;
   const [preview, setPreview] = useState<ReturnType<typeof roomRect> | null>(null);
@@ -78,7 +79,7 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
     }
     if (current.type === "wall-line") {
       const line = current.kind;
-      if (line === "quarter") { if (!cancel) commit(before => createQuarter(before, current.layerId, crypto.randomUUID(), current.points)); return; }
+      if (line === "quarter") { if (!cancel) commit(before => createQuarter(before, current.layerId, crypto.randomUUID(), current.points, quarter)); return; }
       if (!cancel) commit(before => line && line !== "wall" ? addFreePath(before, current.layerId, current.points, line, settings.lineWidth, closed, (line === "road" ? settings.roadStyle : settings.riverStyle) || undefined) : addWall(before, current.layerId, current.points, settings.wallWidth ?? 0.36, closed, settings.wallStyle || undefined));
       return;
     }
@@ -99,7 +100,7 @@ export function useWorkspaceGestures({ doc, gesture, space, camera, tool, active
     } else {
       try {
         const next = current.type === "line" ? addFreePath(current.before, activeLayer, current.points ?? [], tool === "river" ? "river" : "road", settings.lineWidth, false, (tool === "road" ? settings.roadStyle : settings.riverStyle) || undefined)
-          : createRoom(current.before, activeLayer, crypto.randomUUID(), current.start, current.last, snap, quarter);
+          : createRoom(current.before, activeLayer, crypto.randomUUID(), current.start, current.last, snap, quarter ?? false);
         if (next !== current.before) { history.push(current.before); setDocument(next); }
       } catch (error) { showError(error); }
     }

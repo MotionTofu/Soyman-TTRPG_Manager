@@ -118,7 +118,7 @@ export function MapWorkspacePage() {
   const liquidMaterial = settings.liquid ?? "village-water-2";
   const paintSettings = useMemo(() => tool === "liquid" ? { ...settings, material: liquidMaterial } : settings, [tool, settings, liquidMaterial]);
   const gestures = useWorkspaceGestures({ doc, gesture, space, camera, tool: tool === "liquid" ? "surface" : tool, activeLayer, setActiveLayer, snap, settings: paintSettings, selection, setSelection, selections, setSelections, placement,
-    busy: leaving || !!label || generatorOpen, quarter: map?.scale === "settlement", onLabel: (position, layerId) => setLabel({ position, layerId, text: "" }) });
+    busy: leaving || !!label || generatorOpen, quarter: map && mapKind(map.scale) !== "tactical" ? toolLabel(mapKind(map.scale), "shape") : undefined, onLabel: (position, layerId) => setLabel({ position, layerId, text: "" }) });
   const { finishGesture } = gestures;
   const placementActions = useRef({ place: (_source: PlacementSource) => {}, preview: (_source: PlacementSource) => {} });
   async function linkLocation(target: WorkspaceSelection, source: PlacementSource) {
@@ -452,7 +452,7 @@ export function MapWorkspacePage() {
         {gestures.wallDraft && <div className="workspace-editor-placement" role="status">
           <span>Клик — точка · Enter — закончить · Esc — отменить</span>
           {gestures.wallDraft.kind !== "quarter" && <button disabled={gestures.wallDraft.pointCount < 2} onClick={() => gestures.finishWall()}>{gestures.wallDraft.kind === "wall" ? "Завершить стену" : "Завершить линию"}</button>}
-          <button disabled={!gestures.canCloseWall} onClick={() => gestures.finishWall(true)}>{gestures.wallDraft.kind === "quarter" ? "Замкнуть квартал" : "Замкнуть"}</button>
+          <button disabled={!gestures.canCloseWall} onClick={() => gestures.finishWall(true)}>{gestures.wallDraft.kind === "quarter" ? `Замкнуть: ${toolLabel(mapKind(map.scale), "shape").toLocaleLowerCase("ru")}` : "Замкнуть"}</button>
           <button onClick={() => finishGesture(true)}>Отмена</button>
         </div>}
         {notice && <div className="workspace-editor-notice" role="alert">

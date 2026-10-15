@@ -485,7 +485,18 @@ vec4 shoreAt(vec2 world) {
   vec3 last = recipe(kind, 4.0);
   float rim = floor(last.g * 8.0 + 0.5);
   gGlow = recipe(kind, 1.0) * last.b * strip * 0.7;
-  return rim > 0.5 && rim < 1.5 ? vec4(0.0) : rim > 1.5 && rim < 2.5 ? vec4(0.06, 0.04, 0.03, strip * 0.55) : vec4(0.0, 0.0, 0.0, strip * 0.22);
+  return rim > 0.5 && rim < 1.5 || rim > 3.5 ? vec4(0.0) : rim > 1.5 && rim < 2.5 ? vec4(0.06, 0.04, 0.03, strip * 0.55) : vec4(0.0, 0.0, 0.0, strip * 0.22);
+}
+// Атласная штриховка (М5): три тонкие линии вдоль кромки. Размытая маска растёт от берега вглубь, поэтому её уровни
+// идут параллельно берегу; толщина — в точках экрана, линии рвутся шумом, как от руки.
+float hatchAt(vec2 w) {
+  float r = shoreMask(w).r, k = max(fwidth(r), 1e-4), line = 0.0;
+  for (int i = 0; i < 3; i++) line = max(line, 1.0 - smoothstep(0.6, 1.4, abs(r - (0.6 + 0.14 * float(i))) / k));
+  return line * step(0.3, noise(w * 2.3));
+}
+vec4 atlasRim(vec4 c, vec2 w, float kind) {
+  if (c.a <= 0.0 || floor(recipe(kind, 4.0).g * 8.0 + 0.5) < 3.5) return c;
+  return vec4(mix(c.rgb, vec3(0.09, 0.09, 0.1), hatchAt(w) * 0.85), c.a);
 }
 vec4 waterAt(vec2 world, float t) {
   if (world.x <= 0.0 || world.y <= 0.0 || world.x >= uMap.x || world.y >= uMap.y) return vec4(0.0);
@@ -501,7 +512,7 @@ vec4 waterAt(vec2 world, float t) {
   t *= set.r * 2.0; gBed = set.b; gFoam = recipe(kind, 4.0).g < 0.06 ? 1.0 : 0.0;
   if (blocky) t = floor(t * 6.0) / 6.0;
   vec2 f = texture(uFlow, w / uMap).rg * 2.0 - 1.0;
-  if (dot(f, f) < 0.01) { vec4 calm = look(w, w / size, t); return withBed(things(liquid(calm.rgb, kind, w / size, t), w, f, t, blocky), calm.a, blocky); }
+  if (dot(f, f) < 0.01) { vec4 calm = look(w, w / size, t); return atlasRim(withBed(things(liquid(calm.rgb, kind, w / size, t), w, f, t, blocky), calm.a, blocky), w, kind); }
   // Рисунок сносит вдоль реки. Если сносить бесконечно, на излучинах он растянется в кашу, поэтому идут два
   // круга сноса со сдвигом в полкруга: пока один возвращается к началу, виден другой.
   float ph = t * 0.4 + noise(w * 0.12);
@@ -509,7 +520,7 @@ vec4 waterAt(vec2 world, float t) {
   vec4 one = look(w, (w - f * (a - 0.5) * 2.4) / size, t), two = look(w, (w - f * (b - 0.5) * 2.4) / size, t);
   // Мягкая вода смешивает круги плавно; у остальных своя палитра, поэтому круги меняются пятнами.
   vec4 moved = mix(two, one, uWater.x > 2.5 ? share : step(noise(w * 1.7 + 20.0), share));
-  return withBed(things(liquid(moved.rgb, kind, w / size, t), w, f, t, blocky), moved.a, blocky);
+  return atlasRim(withBed(things(liquid(moved.rgb, kind, w / size, t), w, f, t, blocky), moved.a, blocky), w, kind);
 }
 `;
 

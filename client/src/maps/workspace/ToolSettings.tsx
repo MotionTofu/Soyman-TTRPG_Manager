@@ -51,7 +51,7 @@ export const ToolSettings = memo(function ToolSettings({ tool, settings, maskEra
   label?: string;
   selectedRoomCount?: number; roomActionsDisabled?: boolean; onPaintRooms?: () => void; onClearRooms?: () => void;
 }) {
-  const quarter = tool === "shape" && label === "Квартал";
+  const quarter = tool === "shape" && (label === "Квартал" || label === "Область");
   const brushSized = tool === "surface" || tool === "liquid" || tool === "scatter" || (tool === "eraser" && maskEraser);
   return <section className="workspace-tool-settings" aria-label="Параметры инструмента">
     <div className="workspace-panel-heading"><h2 className="workspace-panel-title">Инструмент</h2><strong>{label ?? TOOL_LABELS[tool === "brush" ? "surface" : tool]}</strong></div>
@@ -82,11 +82,11 @@ export const ToolSettings = memo(function ToolSettings({ tool, settings, maskEra
       <select value={settings.orientation} onChange={(event) => onChange({ orientation: Number(event.target.value) })}>
         <option value={0}>Вдоль стены →</option><option value={90}>Вдоль стены ↓</option>
       </select></label>}
-    {quarter && <div className="workspace-seg workspace-seg-paper" role="group" aria-label="Способ рисования квартала">
+    {quarter && <div className="workspace-seg workspace-seg-paper" role="group" aria-label={`Способ рисования: ${label?.toLocaleLowerCase("ru")}`}>
       <button type="button" aria-pressed={settings.quarterMode !== "rect"} onClick={() => onChange({ quarterMode: "points" })}>По точкам</button>
       <button type="button" aria-pressed={settings.quarterMode === "rect"} onClick={() => onChange({ quarterMode: "rect" })}>Рамкой</button>
     </div>}
     <p className="workspace-hint">{(tool === "road" || tool === "river") && settings.pathMode === "points" ? "Клик — точка кривой. Enter или двойной клик — закончить. Клик по первой точке — замкнуть. Esc — отменить."
-      : quarter && settings.quarterMode !== "rect" ? "Клик — угол квартала. Enter, двойной клик или клик по первой точке — замкнуть. Esc — отменить." : HINTS[tool]}</p>
+      : quarter && settings.quarterMode !== "rect" ? "Клик — угол контура. Enter, двойной клик или клик по первой точке — замкнуть. Esc — отменить." : HINTS[tool]}</p>
   </section>;
 });

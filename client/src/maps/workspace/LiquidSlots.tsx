@@ -8,7 +8,7 @@ import "./workspace-editor.css";
 
 const builtin = (key: string) => LIQUIDS.some(item => item.key === key);
 export function Swatch({ recipe }: { recipe: Pick<LiquidRecipe, "key" | "fill" | "tones"> }) {
-  return builtin(recipe.key) ? <img src={villageUrl(recipe.key === "water" ? "shallow" : recipe.key)} alt="" style={{ background: recipe.fill }} />
+  return builtin(recipe.key) ? <img src={villageUrl(recipe.key === "water" ? "shallow" : recipe.key === "sea" ? "deep" : recipe.key)} alt="" style={{ background: recipe.fill }} />
     : <i aria-hidden="true" style={{ background: `linear-gradient(135deg, ${recipe.tones[2]} 0 18%, ${recipe.tones[1]} 18% 62%, ${recipe.tones[0]} 62%)` }} />;
 }
 function Range({ name, value, min, max, step, onChange, onSettle }: { name: string; value: number; min: number; max: number; step: number; onChange: (value: number) => void; onSettle: () => void }) {

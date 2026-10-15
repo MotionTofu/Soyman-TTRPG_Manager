@@ -140,8 +140,8 @@ export interface LiquidRecipe {
 /** Рисунок поверхности: рябь — родной рисунок вида воды, остальные ложатся поверх приглушённого. */
 export const LIQUID_PATTERNS = { ripple: "Рябь", cracks: "Трещины", bubbles: "Пузыри", mist: "Туман", smooth: "Гладь" } as const;
 export type LiquidPattern = keyof typeof LIQUID_PATTERNS;
-/** Кромка: пена и мокрая полоса, только мокрая полоса, обугленный край или ничего. */
-export const LIQUID_RIMS = { foam: "Пена и мокрый берег", none: "Ничего", scorch: "Обугленный край", wet: "Мокрый берег" } as const;
+/** Кромка: пена и мокрая полоса, только мокрая полоса, обугленный край, линии вдоль берега, как в атласе (М5), или ничего. */
+export const LIQUID_RIMS = { foam: "Пена и мокрый берег", none: "Ничего", scorch: "Обугленный край", wet: "Мокрый берег", hatch: "Атласная штриховка" } as const;
 export type LiquidRim = keyof typeof LIQUID_RIMS;
 /** Жидкости: вода и её родня. Красятся той же кистью с той же глубиной, код — `village-lava-3`. Номер в списке —
  * номер жидкости в маске и в шейдере (вода — 0); шейдер рисует их как воду, перекрашенную в свою шкалу тонов.
@@ -155,6 +155,8 @@ export const LIQUIDS = [
   { key: "acid", name: "Кислота", fill: "#a4c21f", tones: ["#33540d", "#99c71a", "#edff99"], pace: 1.2, size: 1, pattern: "bubbles", bed: 0.5, rim: "scorch", glow: 0.4, solid: false, shore: 0.4, ragged: 0.4 },
   { key: "tar", name: "Смола", fill: "#1c1a1a", tones: ["#08080a", "#1f1a17", "#6b5c4d"], pace: 0.25, size: 1.8, pattern: "smooth", bed: 0, rim: "wet", glow: 0, solid: false, shore: 0.5, ragged: 0 },
   { key: "chasm", name: "Пропасть с туманом", fill: "#232a36", tones: ["#05080f", "#1a2133", "#8c99ad"], pace: 0.5, size: 1.5, pattern: "mist", bed: 0, rim: "none", glow: 0, solid: false, shore: 0.3, ragged: 0.8 },
+  // Море обзорной карты (М5): берег обведён линиями, как в атласе; картинкой — та же вода.
+  { key: "sea", name: "Море", fill: "#1d5a6c", tones: ["#1d3f55", "#3f7f99", "#d9efe9"], pace: 0.6, size: 1.6, pattern: "ripple", bed: 0.2, rim: "hatch", glow: 0, solid: false, shore: 0.4, ragged: 0.3 },
 ] as const satisfies readonly LiquidRecipe[];
 export type LiquidKey = typeof LIQUIDS[number]["key"];
 /** Ключи своих жидкостей карты: рецепты лежат в `appearance.liquids`. */
@@ -174,7 +176,7 @@ const WATER_PICTURE = ["shallow", "shallow", "shallow-2", "deep", "deep-2"], WAT
 /** Ключ картинки по коду материала; `null` — код не из этого набора. */
 export const villageSurfaceKey = (code: string) => !code.startsWith(SURFACE_PREFIX) ? null
   : !WATER.test(code) ? code.slice(SURFACE_PREFIX.length) : liquidPicture(liquidKey(code), waterLevel(code));
-const liquidPicture = (kind: string, level: number) => kind === "water" ? WATER_PICTURE[level - 1]
+const liquidPicture = (kind: string, level: number) => kind === "water" || kind === "sea" ? WATER_PICTURE[level - 1]
   : kind === "lava" && level <= 2 ? "lava-2" : kind === "ice" && level >= 4 ? "ice-2" : kind;
 /** Все картинки жидкостей: набор грузит их по тому, что накрашено. */
 export const LIQUID_PICTURES = ["swamp", "lava", "lava-2", "ice", "ice-2", "acid", "tar", "chasm"] as const;
