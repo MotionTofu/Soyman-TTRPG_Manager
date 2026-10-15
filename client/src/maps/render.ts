@@ -1152,36 +1152,51 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     }
     return false;
   });
-  /** Мост атласа, как условный знак топокарты: по обе стороны дороги линия на всю ширину воды, у берегов — усы наружу. */
+  /** Мост атласа — самостоятельный знак: светлый настил шире дороги с досками поперёк и бортами тушью, у берегов — усы
+   * наружу, как на топокарте, и тень на воду. */
   const atlasBridges = (samples: readonly { x: number; y: number }[], half: number) => {
-    const wet = samples.map((point) => overWater(point.x, point.y)), gap = Math.max(2, half * 0.6), rail = half + gap;
-    ctx.save(); ctx.setLineDash([]); ctx.strokeStyle = chrome.ink; ctx.lineWidth = Math.max(1.5, half * 0.45); ctx.lineCap = "round";
+    const wet = samples.map((point) => overWater(point.x, point.y)), deck = Math.max(5, half * 1.7), line = Math.max(1.5, deck * 0.28);
+    ctx.save(); ctx.setLineDash([]); ctx.lineCap = "round"; ctx.lineJoin = "round";
     for (let i = 0; i < samples.length; i++) {
       if (!wet[i] || (i && wet[i - 1])) continue;
       let j = i; while (j + 1 < samples.length && wet[j + 1]) j++;
-      // Пролёт — от последней точки на суше до первой на суше за водой.
+      // Пролёт — от последней точки на суше до первой на суше за водой, и ещё немного на берег: на узкой реке мост иначе
+      // короче собственных усов.
       const run = samples.slice(Math.max(0, i - 1), Math.min(samples.length, j + 2)).map((point) => ({ x: X(point.x), y: Y(point.y) }));
+      i = j;
       if (run.length < 2) continue;
-      // Перила заходят на берег: на узкой реке мост иначе короче собственных усов.
-      const reach = Math.max(4, rail * 0.8);
+      const reach = Math.max(4, deck * 0.7);
       for (const [end, next] of [[0, 1], [run.length - 1, run.length - 2]]) {
         const a = run[end], b = run[next], length = Math.hypot(a.x - b.x, a.y - b.y) || 1;
         run[end] = { x: a.x + (a.x - b.x) / length * reach, y: a.y + (a.y - b.y) / length * reach };
       }
-      for (const side of [-1, 1]) {
-        const shifted = run.map((point, k) => {
-          const a = run[Math.max(0, k - 1)], b = run[Math.min(run.length - 1, k + 1)], length = Math.hypot(b.x - a.x, b.y - a.y) || 1;
-          return { x: point.x - (b.y - a.y) / length * rail * side, y: point.y + (b.x - a.x) / length * rail * side, tx: (b.x - a.x) / length, ty: (b.y - a.y) / length };
-        });
-        ctx.beginPath(); shifted.forEach((point, k) => k ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
-        // Усы: от концов перил наружу и назад, под 45°.
-        for (const [point, back] of [[shifted[0], 1], [shifted.at(-1)!, -1]] as const) {
-          const nx = -point.ty * side, ny = point.tx * side, ear = Math.max(9, rail * 1.1) * 0.7;
-          ctx.moveTo(point.x, point.y); ctx.lineTo(point.x + (nx - point.tx * back) * ear, point.y + (ny - point.ty * back) * ear);
+      const tangent = (k: number) => { const a = run[Math.max(0, k - 1)], b = run[Math.min(run.length - 1, k + 1)], length = Math.hypot(b.x - a.x, b.y - a.y) || 1; return { x: (b.x - a.x) / length, y: (b.y - a.y) / length }; };
+      const side = (s: number) => run.map((point, k) => { const t = tangent(k); return { x: point.x - t.y * deck * s, y: point.y + t.x * deck * s }; });
+      const left = side(-1), right = side(1), outline = () => { ctx.beginPath(); [...left, ...right.reverse()].forEach((point, k) => k ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y)); right.reverse(); ctx.closePath(); };
+      // Тень на воду, настил закрывает дорогу, поперёк — доски, по бортам — тушь.
+      ctx.save(); ctx.translate(line, line); outline(); ctx.fillStyle = "rgba(0,0,0,0.3)"; ctx.fill(); ctx.restore();
+      outline(); ctx.fillStyle = chrome.paper; ctx.fill();
+      ctx.save(); outline(); ctx.clip(); ctx.strokeStyle = chrome.ink; ctx.globalAlpha *= 0.45; ctx.lineWidth = Math.max(1, line * 0.5); ctx.beginPath();
+      let walked = 0;
+      for (let k = 1; k < run.length; k++) {
+        const a = run[k - 1], b = run[k], length = Math.hypot(b.x - a.x, b.y - a.y), t = tangent(k);
+        for (let at = Math.ceil(walked / (deck * 0.9)) * deck * 0.9 - walked; at < length; at += deck * 0.9) {
+          const x = a.x + (b.x - a.x) * at / (length || 1), y = a.y + (b.y - a.y) * at / (length || 1);
+          ctx.moveTo(x - t.y * deck, y + t.x * deck); ctx.lineTo(x + t.y * deck, y - t.x * deck);
+        }
+        walked += length;
+      }
+      ctx.stroke(); ctx.restore();
+      ctx.strokeStyle = chrome.ink; ctx.lineWidth = line;
+      for (const [rail, s] of [[left, -1], [right, 1]] as const) {
+        ctx.beginPath(); rail.forEach((point, k) => k ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
+        // Усы: с концов борта наружу и назад, под 45°.
+        for (const [k, back] of [[0, 1], [rail.length - 1, -1]] as const) {
+          const t = tangent(k), ear = deck * 0.9;
+          ctx.moveTo(rail[k].x, rail[k].y); ctx.lineTo(rail[k].x + (-t.y * s - t.x * back) * ear, rail[k].y + (t.x * s - t.y * back) * ear);
         }
         ctx.stroke();
       }
-      i = j;
     }
     ctx.restore();
   };
@@ -1219,7 +1234,8 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     else if (path.atlas === "sea") { ctx.setLineDash([0.1, width * 2.2]); ctx.lineWidth = width * 1.1; ctx.stroke(); }
     else { ctx.lineWidth = width; ctx.stroke(); }
     ctx.restore();
-    if (path.atlas !== "sea") atlasBridges(samples, (path.atlas === "highway" ? width * 1.5 : path.atlas === "trail" ? width * 0.8 : width) / 2);
+    // Мост — после туши и середины всех дорог подряд: настил закрывает дорогу, а не она его.
+    if (path.atlas !== "sea") cores.push(() => atlasBridges(samples, (path.atlas === "highway" ? width * 1.5 : path.atlas === "trail" ? width * 0.8 : width) / 2));
   };
   const strokeFreePath = (path: RenderPath) => {
     if (!path.nodes || path.nodes.length < 2) return;
