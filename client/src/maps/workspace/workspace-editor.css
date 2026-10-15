@@ -220,3 +220,10 @@
 .workspace-label-form .modal-footer button:disabled { opacity: .45; }
 .map-workspace-source-bag .bag-cell-filled { position: relative; padding-bottom: var(--sp-6); }
 .map-workspace-source-bag .bag-cell-place { position: absolute; bottom: var(--sp-1); left: var(--sp-1); right: var(--sp-1); padding: var(--sp-1); font-size: var(--fs-meta); }
+.workspace-liquid-menu { max-height: 60vh; overflow: auto; }
+.workspace-liquid-menu input[type="search"] { margin: 4px; }
+.workspace-liquid-menu-group { display: grid; border-top: 2px solid #171717; }
+.workspace-liquid-menu-group small, .workspace-liquid-menu > small { padding: 4px 8px 0; color: var(--muted); font-weight: 600; }
+.workspace-liquid-editor p { margin: 0; }
+.workspace-liquid-editor.liquid-recipe-inline { position: static; width: auto; max-height: none; padding: 0; overflow: visible; border: 0; background: transparent; box-shadow: none; }
+.liquid-swatch i { display: block; width: 64px; height: 64px; border: 2px solid #171717; border-radius: 50%; }

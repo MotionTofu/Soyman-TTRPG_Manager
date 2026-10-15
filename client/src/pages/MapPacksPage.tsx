@@ -9,7 +9,10 @@ import { SectionBackground } from "../components/SectionBackground";
 import { useConfirm } from "../hooks/useConfirm";
 import { MAP_KIND_LABELS, type MapKind } from "../maps/mapTypes";
 import { MAP_PACKS, genreLabel } from "../maps/assets/packs";
-import { OWN_SIDES, PACK_CELL_PX, liveImages, ownEdge, ownImageId, ownImageSrc, registerOwnPacks, sideImage, useMapImageRevision, type OwnPack, type OwnPackItem } from "../maps/assets/ownPacks";
+import { OWN_SIDES, PACK_CELL_PX, liveImages, ownEdge, ownImageId, ownImageSrc, packLiquidRecipe, registerOwnPacks, sideImage, useMapImageRevision, type OwnPack, type OwnPackItem } from "../maps/assets/ownPacks";
+import { LiquidRecipeFields, Swatch } from "../maps/workspace/LiquidSlots";
+import { LiquidPond } from "../maps/workspace/LiquidPond";
+import { LIQUIDS } from "../maps/assets/village";
 import { CARTOGRAPHY_OBJECTS, CARTOGRAPHY_SURFACES, cartographyUrl } from "../maps/assets/cartography";
 import { CRYPT_CATEGORIES, CRYPT_OBJECTS, cryptUrl, type CryptCategory } from "../maps/assets/crypt";
 import { VILLAGE_CATEGORIES, VILLAGE_OBJECTS, VILLAGE_RIVERS, VILLAGE_ROADS, VILLAGE_SURFACES, villageUrl, type VillageCategory } from "../maps/assets/village";
@@ -476,8 +479,49 @@ function ThingDialog({ pack, item, mode, onClose }: { pack: OwnPack; item: OwnPa
 }
 
 /** Подпись плитки вещи на экране набора. */
+/** Жидкость набора (В16): рецепт без картинок, проверяется на пруду в четырёх видах воды. Новая — на основе воды. */
+function LiquidDialog({ pack, item, onClose }: { pack: OwnPack; item: OwnPackItem | null; onClose: () => void }) {
+  const run = useAction();
+  const [dialog, confirm] = useConfirm();
+  const [name, setName] = useState(item?.name ?? ""), [section, setSection] = useState(item?.section ?? ""), [tags, setTags] = useState(item?.tags ?? "");
+  const [recipe, setRecipe] = useState(() => { const { key: _key, name: _name, ref: _ref, ...fields } = item ? packLiquidRecipe(item, "") : { ...LIQUIDS[0], ref: undefined }; const { fill: _fill, ...rest } = fields as typeof fields & { fill?: string }; return { ...rest, tones: [...rest.tones] as [string, string, string] }; });
+  const sections = [...new Set(pack.items.map((entry) => entry.section).filter(Boolean))];
+  async function save() {
+    const fields = { name, section, tags, ...recipe };
+    const saved = item ? await run(labelled("Жидкость не сохранена", () => write.put(`/map-packs/items/${item.id}`, fields)), { affects: AFFECTS })
+      : await run(labelled("Жидкость не добавлена", () => write.post(`/map-packs/${pack.id}/liquids`, fields)), { affects: AFFECTS });
+    if (saved) onClose();
+  }
+  async function remove() {
+    if (!item || !await confirm({ title: `Убрать «${item.name}» из набора?`, message: "В меню жидкостей её не будет. На картах, где она уже есть, она останется — такой, какой была.", confirmLabel: "Убрать", cancelLabel: "Оставить", danger: true })) return;
+    if (await run(labelled("Не убрано", () => write.del(`/map-packs/items/${item.id}`).then(() => true)), { affects: AFFECTS })) onClose();
+  }
+  return <Modal onClose={onClose} wide ariaLabel={item ? `Жидкость «${item.name}»` : "Новая жидкость"}>
+    <h2>{item ? "Жидкость набора" : "Новая жидкость"}</h2>
+    <div className="row" style={{ gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+      <div className="stack" style={{ flex: "1 1 260px", minWidth: 240 }}>
+        <label>Название<input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} /></label>
+        <label>Раздел<input value={section} maxLength={40} list="liquid-sections" onChange={(event) => setSection(event.target.value)} /></label>
+        <datalist id="liquid-sections">{sections.map((entry) => <option key={entry} value={entry} />)}</datalist>
+        <label>Метки<input value={tags} maxLength={200} onChange={(event) => setTags(event.target.value)} /></label>
+        <div className="workspace-liquid-editor liquid-recipe-inline"><LiquidRecipeFields recipe={recipe} edit={(patch) => setRecipe((current) => ({ ...current, ...patch }))} onSettle={() => {}} /></div>
+      </div>
+      <div className="stack" style={{ flex: "1 1 360px", minWidth: 300 }}>
+        <LiquidPond recipe={recipe} />
+        {item && <small className="muted">Карты, где стоит эта жидкость, перекрасятся, когда их откроют в редакторе.</small>}
+      </div>
+    </div>
+    <div className="modal-footer row">
+      {item && <button type="button" onClick={() => void remove()}>Убрать из набора</button>}
+      <button type="button" onClick={onClose}>Отмена</button>
+      <button className="primary" disabled={!name.trim()} onClick={() => void save()}>{item ? "Сохранить" : "Добавить"}</button>
+    </div>
+    {dialog}
+  </Modal>;
+}
+
 function itemNote(item: OwnPackItem) {
-  return item.kind === "surface" ? `поверхность · повтор ${item.cells ?? 4} кл.` : item.kind === "scatter" ? "россыпь" : item.kind === "door" ? `проём · ${item.span ?? 1} кл.${item.secret ? " · потайной" : ""}`
+  return item.kind === "liquid" ? "жидкость" : item.kind === "surface" ? `поверхность · повтор ${item.cells ?? 4} кл.` : item.kind === "scatter" ? "россыпь" : item.kind === "door" ? `проём · ${item.span ?? 1} кл.${item.secret ? " · потайной" : ""}`
     : item.kind === "crossing" ? `${STRIP_KINDS.find(([value]) => value === `crossing:${item.deck}`)?.[1].toLocaleLowerCase("ru") ?? "переправа"}`
     : item.kind === "line" ? `${{ road: "дорога", river: "река", wall: "ограда" }[item.use ?? "road"] ?? "линия"} · ${item.width ?? 1} кл.` : `${item.w}×${item.h} кл.`;
 }
@@ -491,7 +535,7 @@ export function MapPacksPage() {
   useMemo(() => registerOwnPacks(packs), [packs]);
   useMapImageRevision();
   const [picked, setPicked] = useState<number | null>(null), [archive, setArchive] = useState(false), [builtin, setBuiltin] = useState<string | null>(null);
-  const [packDialog, setPackDialog] = useState<OwnPack | "new" | null>(null), [objectDialog, setObjectDialog] = useState<OwnPackItem | "new" | "new-surface" | "new-line" | "new-scatter" | "new-door" | null>(null), [sheetDialog, setSheetDialog] = useState(false);
+  const [packDialog, setPackDialog] = useState<OwnPack | "new" | null>(null), [objectDialog, setObjectDialog] = useState<OwnPackItem | "new" | "new-surface" | "new-line" | "new-scatter" | "new-door" | "new-liquid" | null>(null), [sheetDialog, setSheetDialog] = useState(false);
   // Загрузка набора из файла: при совпадении с уже имеющимся сервер ждёт выбора — заменить или копией.
   const [clash, setClash] = useState<{ file: File; name: string; archived: boolean } | null>(null), [importing, setImporting] = useState(false);
   const live = packs.filter((pack) => !pack.archived), archived = packs.filter((pack) => pack.archived);
@@ -569,6 +613,7 @@ export function MapPacksPage() {
             <button title="Набор одним файлом — передать другому Мастеру" onClick={() => void run(labelled("Набор не выгружен", () => exportPack(pack)), { affects: [] })}>Выгрузить</button>
             <button onClick={() => void setArchived(pack, true)}>В архив</button>
             <button title="Лист с несколькими вещами: разрезать и добавить разом" onClick={() => setSheetDialog(true)}>+ Лист</button>
+            <button className="primary" title="Рецепт жидкости: цвета, рисунок, кромка — берётся в слот жидкостей на картах" onClick={() => setObjectDialog("new-liquid")}>+ Жидкость</button>
             <button className="primary" onClick={() => setObjectDialog("new-door")}>+ Проём</button>
             <button className="primary" onClick={() => setObjectDialog("new-scatter")}>+ Россыпь</button>
             <button className="primary" onClick={() => setObjectDialog("new-line")}>+ Линия</button>
@@ -576,13 +621,14 @@ export function MapPacksPage() {
             <button className="primary" onClick={() => setObjectDialog("new")}>+ Объект</button>
           </div>
         </div>
-        {!items.length && <p className="muted">В наборе пока пусто. «+ Объект» — картинка и сколько клеток она занимает. «+ Поверхность» — образец, которым красят землю и полы. «+ Линия» — дорога, река, ограда или переправа. «+ Россыпь» — кусты, камни, трава. «+ Проём» — дверь, арка, ворота. «+ Лист» — картинка с несколькими вещами: разрезать и добавить разом.</p>}
+        {!items.length && <p className="muted">В наборе пока пусто. «+ Объект» — картинка и сколько клеток она занимает. «+ Поверхность» — образец, которым красят землю и полы. «+ Линия» — дорога, река, ограда или переправа. «+ Россыпь» — кусты, камни, трава. «+ Проём» — дверь, арка, ворота. «+ Жидкость» — рецепт воды, лавы, болота для слота жидкостей. «+ Лист» — картинка с несколькими вещами: разрезать и добавить разом.</p>}
         {sections.map((section) => <div key={section} className="stack">
           <strong>{section || "Без раздела"}</strong>
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
             {items.filter((item) => item.section === section).map((item) => { const images = liveImages(item), url = images[0] ? ownImageSrc(ownImageId(images[0])) : null;
               return <button key={item.id} type="button" className="card" onClick={() => setObjectDialog(item)} style={{ width: 132, height: "auto", padding: 8, textAlign: "center" }}>
-                <span style={{ display: "block", height: 96, background: item.kind === "surface" ? item.fill : undefined }}>{url && <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: item.kind === "surface" ? "cover" : "contain" }} />}</span>
+                <span style={{ display: "grid", placeItems: "center", height: 96, background: item.kind === "surface" ? item.fill : undefined }}>
+                  {item.kind === "liquid" && <span className="liquid-swatch"><Swatch recipe={packLiquidRecipe(item, "")} /></span>}{url && <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: item.kind === "surface" ? "cover" : "contain" }} />}</span>
                 <strong>{item.name}</strong><br /><small>{itemNote(item)}{images.length > 1 ? ` · вариантов: ${images.length}` : ""}</small>
               </button>; })}
           </div>
@@ -602,7 +648,9 @@ export function MapPacksPage() {
     </Modal>}
     {sheetDialog && pack && <MapSheetDialog pack={pack} reference={REFERENCE[pack.kinds[0] ?? "tactical"]} onClose={() => setSheetDialog(false)}
       sizeGrid={(src, w, h, reference) => <SizeGrid src={src} w={w} h={h} reference={reference} />} />}
-    {objectDialog && pack && (objectDialog === "new-surface" || editing?.kind === "surface"
+    {objectDialog && pack && (objectDialog === "new-liquid" || editing?.kind === "liquid"
+      ? <LiquidDialog key={editing?.id ?? "new-liquid"} pack={pack} item={editing} onClose={() => setObjectDialog(null)} />
+      : objectDialog === "new-surface" || editing?.kind === "surface"
       ? <SurfaceDialog key={editing?.id ?? "new-surface"} pack={pack} item={editing} onClose={() => setObjectDialog(null)} />
       : typeof objectDialog === "string" && objectDialog !== "new" || editing && editing.kind !== "object"
       ? <ThingDialog key={editing?.id ?? objectDialog as string} pack={pack} item={editing} onClose={() => setObjectDialog(null)}

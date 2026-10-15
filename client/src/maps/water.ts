@@ -10,7 +10,8 @@ import { cutRoad, roadCrossings } from "./crossings";
  * `size` — пикселей на клетку у пиксельных. */
 export interface MapWater { mode: 0 | 1 | 2 | 3; speed: number; size: number; shoal: number;
   /** Свои рецепты на время правки: пока тянут ползунок или выбирают цвет, карта не меняется — меняется только таблица рецептов. */
-  liquids?: readonly LiquidRecipe[] }
+  liquids?: readonly LiquidRecipe[];
+  /** Время для неподвижного кадра, секунд; без него — 0. Пруд-превью на экране набора крутит его сам. */ time?: number }
 
 /** Точек маски на клетку. Маска — вся карта одной картинкой: красный канал — «здесь вода», зелёный — глубина (1–5 пятыми долями),
  * синий — «ближайший берег песчаный»: у пляжа пена шире, у травы и камня берег резче.
@@ -605,7 +606,7 @@ export function drawWaterStill(ctx: CanvasRenderingContext2D, model: MapRenderMo
   if (!stage.any) return false;
   const W = Math.round(cssW * ratio), H = Math.round(cssH * ratio);
   gl.uniform1i(stage.at("uMask"), 0); gl.uniform1i(stage.at("uFlow"), 1); gl.uniform1i(stage.at("uRecipe"), 2); gl.uniform1i(stage.at("uGround"), 3); gl.uniform1i(stage.at("uThings"), 4); gl.uniform2f(stage.at("uMap"), width, height); gl.uniform3f(stage.at("uWater"), water.mode, water.speed, water.size);
-  gl.uniform1f(stage.at("uScale"), scale * ratio); gl.uniform1f(stage.at("uTime"), 0);
+  gl.uniform1f(stage.at("uScale"), scale * ratio); gl.uniform1f(stage.at("uTime"), water.time ?? 0);
   for (let y = 0; y < H; y += STILL_SIDE) for (let x = 0; x < W; x += STILL_SIDE) {
     const w = Math.min(STILL_SIDE, W - x), h = Math.min(STILL_SIDE, H - y);
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }

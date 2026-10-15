@@ -5,6 +5,7 @@ import { MapWorkspaceTools } from "./MapWorkspace";
 import { MapToolIcon } from "./MapToolIcon";
 import { WorkspaceMenu } from "./WorkspaceMenu";
 import { layerName } from "./layerNames";
+import { WATER_LOOKS } from "./drawingStyle";
 import type { WorkspaceTool } from "./editorCommands";
 import { TOOL_GROUPS, toolLabel } from "./toolSets";
 import type { MapKind } from "../mapTypes";
@@ -16,7 +17,6 @@ import { EFFECTS, type EffectState, type MapEffect, type MapEffects } from "../g
 // шаг наведения 16 мс, из них холст — меньшая часть. Обработчики сюда
 // приходят стабильными ссылками (`useEvent` в странице), иначе memo не держит.
 
-const WATER_LOOKS: readonly [MapWaterLook, string][] = [["soft", "Мягкая, с дном"], ["pond", "Пиксель-арт: пруд"], ["sea", "Пиксель-арт: море"], ["comic", "Комикс"]];
 export type GridLook = { opacity: number; lineWidth: number; lineStyle: "solid" | "dashed"; color: string };
 const GRID_COLORS = [["#000000", "Чёрная"], ["#ffffff", "Белая"], ["#ff3e91", "Розовая"], ["#ffe14a", "Жёлтая"]] as const;
 const EFFECT_NAMES = Object.keys(EFFECTS) as MapEffect[];

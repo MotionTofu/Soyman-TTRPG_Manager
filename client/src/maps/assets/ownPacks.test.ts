@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ownImageId, ownObjectSize, ownRandomId, pickOwnVariant, registerOwnPacks, type OwnPack, type OwnPackImage } from "./ownPacks";
 import { allPacks, connectedPacks, packName, packOfAsset } from "./packs";
 import { getMapImageAsset, ownSurfaceCode } from "./registry";
-import { ownDeck, ownLinePost, ownScatterKey, ownSurface, ownSurfaceFills } from "./ownPacks";
+import { freshLiquids, ownDeck, ownLinePost, ownScatterKey, ownSurface, ownSurfaceFills, packLiquidRecipe, packLiquids } from "./ownPacks";
 import { scatterInstances } from "../scatter";
 import type { ScatterArea } from "../core/types";
 import { usedPacks } from "./packs";
@@ -93,5 +93,24 @@ describe("свои наборы ассетов", () => {
     registerOwnPacks([archived]);
     // Имя набора остаётся известным: по нему подписывается заглушка.
     expect(packName(archived.uid)).toBe("Порт");
+  });
+});
+
+describe("жидкости наборов", () => {
+  it("на карте — ссылка со снимком: правка набора подтягивается, без набора остаётся снимок, набор считается использованным", () => {
+    const liquid = { id: 5, uid: "33333333-3333-4333-8333-333333333333", kind: "liquid", name: "Ртуть", section: "", tags: "", archived: false, w: 1, h: 1, blocks_sight: false, light: null,
+      tones: ["#202428", "#8a9199", "#ffffff"] as [string, string, string], pace: 0.3, size: 2, bed: 0, glow: 0.2, pattern: "smooth" as const, rim: "none" as const, solid: false, shore: 0.3, ragged: 0.9, images: [] };
+    const own = pack({ items: [liquid] });
+    registerOwnPacks([own]);
+    expect(packLiquids([own.uid])).toEqual([{ pack: own, items: [liquid] }]);
+    const stored = [packLiquidRecipe(liquid, "own2")];
+    expect(stored[0]).toMatchObject({ key: "own2", ref: liquid.uid, name: "Ртуть", glow: 0.2 });
+    expect(freshLiquids(stored)).toBe(stored);
+    registerOwnPacks([{ ...own, items: [{ ...liquid, glow: 0.7, name: "Живое серебро" }] }]);
+    expect(freshLiquids(stored)).toEqual([{ ...stored[0], glow: 0.7, name: "Живое серебро" }]);
+    const doc = { layers: [], appearance: { style: "paper-ink", liquids: stored } } as unknown as MapDocumentV6;
+    expect(usedPacks(doc)).toEqual([own.uid]);
+    registerOwnPacks([{ ...own, archived: true }]);
+    expect(freshLiquids(stored)).toBe(stored);
   });
 });

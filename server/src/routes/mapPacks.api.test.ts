@@ -118,6 +118,25 @@ describe("наборы ассетов карт", () => {
     expect(removed.body.items[0]).toMatchObject({ archived: true, images: expect.arrayContaining([expect.objectContaining({ role: "variant" })]) });
   });
 
+  it("жидкость набора — рецепт без картинок: значения в пределах, правка, едет в архиве", async () => {
+    const auth = { type: "bearer" } as const;
+    const pack = (await api().post("/api/map-packs").auth(gm, auth).send({ name: "Топи", kinds: ["tactical"] })).body;
+    expect((await api().post(`/api/map-packs/${pack.id}/liquids`).auth(gm, auth).send({ name: " " })).status).toBe(400);
+    const made = await api().post(`/api/map-packs/${pack.id}/liquids`).auth(gm, auth)
+      .send({ name: "Ртуть", tones: ["#202428", "#8A9199", "#ffffff"], pace: 9, size: 2, pattern: "waves", rim: "none", solid: true, ragged: 0.9 });
+    expect(made.status).toBe(201);
+    const liquid = made.body.pack.items.find((item: { uid: string }) => item.uid === made.body.uid);
+    expect(liquid).toMatchObject({ kind: "liquid", name: "Ртуть", tones: ["#202428", "#8a9199", "#ffffff"], pace: 2, size: 2, bed: 1, glow: 0,
+      pattern: "ripple", rim: "none", solid: true, shore: 0.4, ragged: 0.9, images: [] });
+    const edited = (await api().put(`/api/map-packs/items/${liquid.id}`).auth(gm, auth).send({ glow: 0.5, name: "Ртуть живая" })).body;
+    expect(edited.items[0]).toMatchObject({ name: "Ртуть живая", glow: 0.5, pace: 2, ragged: 0.9 });
+    const file = (await api().get(`/api/map-packs/${pack.id}/export`).auth(gm, auth).buffer(true).parse((res, done) => {
+      const chunks: Buffer[] = []; res.on("data", (chunk: Buffer) => chunks.push(chunk)); res.on("end", () => done(null, Buffer.concat(chunks)));
+    })).body as Buffer;
+    const copy = (await api().post("/api/map-packs/import").auth(gm, auth).field("mode", "copy").attach("file", file, { filename: "pack.zip", contentType: "application/zip" })).body;
+    expect(copy.items).toEqual([expect.objectContaining({ kind: "liquid", name: "Ртуть живая", glow: 0.5, tones: ["#202428", "#8a9199", "#ffffff"] })]);
+  });
+
   it("архив для обмена: выгрузка, совпадение, копия, замена с теми же кодами, чужой файл", async () => {
     const auth = { type: "bearer" } as const;
     const pack = (await api().post("/api/map-packs").auth(gm, auth).send({ name: "Пристань", kinds: ["tactical"], genres: [{ genre: "Фэнтези" }] })).body;

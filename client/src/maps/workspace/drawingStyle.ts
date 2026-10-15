@@ -1,4 +1,4 @@
-import { MAP_WATER_LOOKS, type MapDocumentV6, type MapDrawingStyle } from "@shared/maps/core";
+import { MAP_WATER_LOOKS, type MapDocumentV6, type MapDrawingStyle, type MapWaterLook } from "@shared/maps/core";
 import type { MapWater } from "../water";
 import type { MapLook } from "../gl/styleFilter";
 import { MAP_TERRAIN_FILL, readChrome } from "../render";
@@ -22,6 +22,8 @@ const LOOKS: Record<MapDrawingStyle, MapLook | null> = {
 };
 export const styleLook = (document: MapDocumentV6) => LOOKS[document.appearance?.style ?? "paper-ink"];
 /** Живая вода карты; null — вода остаётся картинкой. */
+/** Виды живой воды с подписями — для выбора в шапке редактора и на пруду набора. */
+export const WATER_LOOKS: readonly [MapWaterLook, string][] = [["soft", "Мягкая, с дном"], ["pond", "Пиксель-арт: пруд"], ["sea", "Пиксель-арт: море"], ["comic", "Комикс"]];
 export function mapWater(document: MapDocumentV6): MapWater | null {
   const look = document.appearance?.water;
   return look ? { mode: MAP_WATER_LOOKS.indexOf(look) as MapWater["mode"], speed: document.appearance?.waterSpeed ?? 1, size: document.appearance?.waterPixels ?? 8, shoal: document.appearance?.waterShoal ?? 0 } : null;

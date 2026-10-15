@@ -3,7 +3,8 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import type { Setting, SettingGenre } from "../types";
 import type { MapDocumentV6, MapDrawingStyle, MapLiquidRecipe, MapWaterLook, Vec2 } from "@shared/maps/core";
 import { useCurrentUser } from "../api/currentUser";
-import { useAfterWrite, useResource } from "../data/hooks";
+import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
+import { labelled } from "../data/notices";
 import { useConfirm } from "../hooks/useConfirm";
 import { useEvent } from "../hooks/useEvent";
 import { Modal } from "../components/Modal";
@@ -28,7 +29,7 @@ import { updateGameplayEntity } from "../maps/core";
 import { mapKind } from "../maps/mapTypes";
 import { MAP_VERSION_HEADER } from "@shared/maps/core";
 import { connectedPacks, usedPacks } from "../maps/assets/packs";
-import { registerOwnPacks, type OwnPack } from "../maps/assets/ownPacks";
+import { freshLiquids, packLiquidRecipe, packLiquids, registerOwnPacks, type OwnPack } from "../maps/assets/ownPacks";
 import { useWorkspaceDocument } from "../maps/workspace/useWorkspaceDocument";
 import { useWorkspaceGestures, type Gesture } from "../maps/workspace/useWorkspaceGestures";
 import { removeSelections } from "../maps/workspace/multiSelection";
@@ -313,6 +314,36 @@ export function MapWorkspacePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const used = useMemo(() => document ? usedPacks(document).join("|") : "", [document, packs, ownPacks]);
   const onPacks = useEvent((next: string[]) => commit((before) => ({ ...before, appearance: { ...(before.appearance ?? { style: "paper-ink" as const }), packs: next } })));
+  // Жидкости из наборов — ссылки (В12): правка набора подтягивается в карту без шага истории, снимок уходит с сохранением.
+  // Отмена может вернуть старый снимок — он тут же подтянется снова.
+  const writable = !disabled && !leaving;
+  useEffect(() => {
+    const own = document?.appearance?.liquids;
+    if (!document || !own || !writable) return;
+    const fresh = freshLiquids(own);
+    if (fresh === own) return;
+    setDocument({ ...document, appearance: { ...document.appearance!, liquids: [...fresh] } }); autosave.schedule();
+  }, [document, packs, writable, setDocument, autosave]);
+  const offeredLiquids = useMemo(() => packLiquids(packs), [packs]);
+  // Куда сохранить свою жидкость: свои наборы, подключённые к карте — первыми.
+  const saveTargets = useMemo(() => ownPacks.filter((pack) => !pack.archived).sort((a, b) => Number(packs.includes(b.uid)) - Number(packs.includes(a.uid))), [ownPacks, packs]);
+  const run = useAction();
+  // «Сохранить в набор» (В15): рецепт уходит в набор, слот того же ключа становится ссылкой — накрашенное не меняется.
+  // Набор подключается к карте, если у неё свой список.
+  const onSaveLiquid = useEvent(async (key: string, pack: OwnPack, name: string) => {
+    const recipe = documentRef.current?.appearance?.liquids?.find((item) => item.key === key);
+    if (!recipe) return false;
+    const { key: _key, name: _name, ref: _ref, ...fields } = recipe;
+    const saved = await run(labelled("Жидкость не сохранена в набор", () => write.post<{ pack: OwnPack; uid: string }>(`/map-packs/${pack.id}/liquids`, { name, ...fields })), { affects: [{ path: "/map-packs" }] });
+    const item = saved?.pack.items.find((entry) => entry.uid === saved.uid);
+    if (!item) return false;
+    commit((before) => {
+      const appearance = before.appearance ?? { style: "paper-ink" as const }, stored = appearance.packs;
+      return { ...before, appearance: { ...appearance, liquids: (appearance.liquids ?? []).map((entry) => entry.key === key ? packLiquidRecipe(item, key) : entry),
+        ...(stored && !stored.includes(pack.uid) ? { packs: [...stored, pack.uid] } : {}) } };
+    });
+    return true;
+  });
   // Наборы, отмеченные при создании карты, приходят с переходом и записываются один раз.
   const location = useLocation(), chosenPacks = (location.state as { packs?: string[] } | null)?.packs, loaded = !!document;
   useEffect(() => {
@@ -404,7 +435,8 @@ export function MapWorkspacePage() {
           onPointerLeave={gestures.leave} displays={displays} ghost={placement.pending?.position ?? dragGhost} onDragOver={dragOver} onDragLeave={() => setDragGhost(null)} onDrop={drop}
           onPointerDown={gestures.down} onPointerMove={gestures.move} onPointerUp={gestures.up} onPointerCancel={gestures.cancel} />
         <div className="workspace-editor-hint" aria-hidden="true"><strong>{toolLabel(mapKind(map.scale), tool)}{active ? ` · ${layerName(active)}` : ""}</strong>{tool === "select" && <span>{selections.length > 1 ? `Выбрано: ${selections.length} · ` : ""}Рамка · Shift — добавить</span>}<span>Пробел — сдвиг</span><span>Esc — отмена</span></div>
-        {tool === "liquid" && <LiquidSlots used={liquids} own={liquidDraft ?? document.appearance?.liquids ?? NO_LIQUIDS} material={liquidMaterial} live={!!document.appearance?.water} onLive={onLiveWater} onMaterial={onLiquid} onOwn={onOwnLiquids} onSettle={onSettleLiquid} onRelease={onReleaseLiquid} />}
+        {tool === "liquid" && <LiquidSlots used={liquids} own={liquidDraft ?? document.appearance?.liquids ?? NO_LIQUIDS} material={liquidMaterial} live={!!document.appearance?.water} onLive={onLiveWater} onMaterial={onLiquid} onOwn={onOwnLiquids} onSettle={onSettleLiquid} onRelease={onReleaseLiquid}
+          offered={offeredLiquids} packs={saveTargets} onSaveToPack={onSaveLiquid} />}
         <div className="workspace-editor-camera">
           <button type="button" aria-label="Уменьшить" onClick={() => camera.zoomBy(1 / 1.25)}>−</button>
           <button type="button" aria-label="Увеличить" onClick={() => camera.zoomBy(1.25)}>+</button>

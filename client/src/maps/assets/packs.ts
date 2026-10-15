@@ -4,7 +4,7 @@ import type { MapDocumentV6 } from "@shared/maps/core";
 import { CARTOGRAPHY_PACK } from "./cartography";
 import { CRYPT_PACK } from "./crypt";
 import { crossingChoices } from "../crossings";
-import { ownPackOf, ownPacks, ownScatterPack } from "./ownPacks";
+import { liquidPackOf, ownPackOf, ownPacks, ownScatterPack } from "./ownPacks";
 import { ARTWORK_SCATTER, MAP_SYMBOL_PACK, ownSurfaceAssetId } from "./registry";
 import { VILLAGE_PACK, VILLAGE_SURFACE_KEYS } from "./village";
 
@@ -51,10 +51,11 @@ export function packOfAsset(assetId: string): string | null {
   return prefix === VILLAGE_PACK.id ? "village" : prefix === CRYPT_PACK.id ? "crypt" : prefix === CARTOGRAPHY_PACK.id || prefix === MAP_SYMBOL_PACK.id ? "ink" : ownPackOf(assetId);
 }
 /** Наборы, вещи которых стоят на карте.
- * Жидкости набором не считаются: у них свой инструмент, и от подключения «Деревни» они не зависят. */
+ * Готовые жидкости набором не считаются: у них свой инструмент, и от подключения «Деревни» они не зависят. Жидкость своего набора — считается. */
 export function usedPacks(document: MapDocumentV6): string[] {
   const ids = new Set<string>();
   const add = (assetId: string) => { const pack = packOfAsset(assetId); if (pack) ids.add(pack); };
+  for (const recipe of document.appearance?.liquids ?? []) { const pack = recipe.ref ? liquidPackOf(recipe.ref) : null; if (pack) ids.add(pack.uid); }
   for (const layer of document.layers) {
     if (layer.kind === "object") for (const item of layer.items) if (item.visual.type === "asset") add(item.visual.assetId);
     if (layer.kind === "path") for (const path of layer.paths) {

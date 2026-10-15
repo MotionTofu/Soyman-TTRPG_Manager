@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { MapLiquidRecipe } from "@shared/maps/core";
 import type { MapKind } from "../mapTypes";
 import type { SettingGenre } from "../../types";
 import type { SurfaceEdge } from "./surfaceEdge";
@@ -15,7 +16,10 @@ export interface OwnPackItem { id: number; uid: string; kind: string; name: stri
   /** Линия: чем тянется (`road`, `river` — течёт, `wall` — преграждает путь) и ширина в клетках. Переправа: какой настил заменяет. */
   use?: string; width?: number; deck?: string;
   /** Россыпь: размер знака и густота по умолчанию. */ size?: number; density?: number;
-  /** Проём: ширина в клетках и «потайной». */ span?: number; secret?: boolean; images: OwnPackImage[] }
+  /** Проём: ширина в клетках и «потайной». */ span?: number; secret?: boolean;
+  /** Жидкость — рецепт без картинок, те же ручки, что у своей жидкости карты (`size` — крупность рисунка). */
+  tones?: [string, string, string]; pace?: number; bed?: number; glow?: number; pattern?: MapLiquidRecipe["pattern"]; rim?: MapLiquidRecipe["rim"];
+  solid?: boolean; shore?: number; ragged?: number; images: OwnPackImage[] }
 export interface OwnPack { id: number; uid: string; name: string; kinds: MapKind[]; genres: SettingGenre[]; native_style: string; archived: boolean; updated_at: string; items: OwnPackItem[] }
 
 /** Точек на клетку у картинок набора; мельче — предупреждаем. */
@@ -91,6 +95,29 @@ export function registerOwnPacks(packs: readonly OwnPack[]): void {
     if (!item.archived) variants.set(ownRandomId(item), liveImages(item).map(ownImageId));
   }
 }
+/** Рецепт жидкости набора в слот карты `key`: ссылка на вещь и снимок её значений (В12). Имя на карте — до 40 знаков. */
+export const packLiquidRecipe = (item: OwnPackItem, key: string): MapLiquidRecipe => ({ key, name: item.name.slice(0, 40), ref: item.uid,
+  tones: [...(item.tones ?? ["#213e5c", "#2f9c8c", "#eefaf2"])] as [string, string, string], pace: item.pace ?? 1, size: item.size ?? 1, bed: item.bed ?? 1,
+  glow: item.glow ?? 0, pattern: item.pattern ?? "ripple", rim: item.rim ?? "foam", solid: !!item.solid, shore: item.shore ?? 0.4, ragged: item.ragged ?? 0.4 });
+/** Жидкости наборов из списка — для меню слота; набор в архиве и убранные жидкости не предлагаются. */
+export const packLiquids = (packIds: readonly string[]) => current.filter((pack) => !pack.archived && packIds.includes(pack.uid))
+  .map((pack) => ({ pack, items: pack.items.filter((item) => item.kind === "liquid" && !item.archived) })).filter((entry) => entry.items.length);
+/** Свежие значения жидкостей карты, взятых из наборов: правка набора перекрашивает карту (В12). Набор в архиве или
+ * жидкость, которой больше нет, — остаётся снимок. Тот же массив, если подтягивать нечего. */
+export function freshLiquids(liquids: readonly MapLiquidRecipe[]): readonly MapLiquidRecipe[] {
+  let changed = false;
+  const next = liquids.map((recipe) => {
+    const item = recipe.ref ? current.find((pack) => !pack.archived && pack.items.some((entry) => entry.uid === recipe.ref))?.items.find((entry) => entry.uid === recipe.ref) : null;
+    if (!item || item.kind !== "liquid") return recipe;
+    const fresh = packLiquidRecipe(item, recipe.key);
+    const keys = Object.keys(fresh) as (keyof MapLiquidRecipe)[];
+    if (keys.length === Object.keys(recipe).length && keys.every((field) => JSON.stringify(fresh[field]) === JSON.stringify(recipe[field]))) return recipe;
+    changed = true; return fresh;
+  });
+  return changed ? next : liquids;
+}
+/** Набор, из которого взята жидкость карты. */
+export const liquidPackOf = (ref: string) => current.find((pack) => pack.items.some((item) => item.uid === ref)) ?? null;
 /** Сторона квадрата, в который вписывается объект своего набора, клеток. */
 export const ownObjectSize = (assetId: string) => sizes.get(assetId) ?? null;
 export function pickOwnVariant(assetId: string, random: () => number = Math.random): string {

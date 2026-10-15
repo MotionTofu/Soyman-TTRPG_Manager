@@ -56,14 +56,26 @@ function surfaceData(raw: Record<string, unknown>) {
   return { cells, fill: typeof raw.fill === "string" && /^#[0-9a-f]{6}$/.test(raw.fill) ? raw.fill : "#8a8a80",
     edge_width: between(raw.edge_width, 0, 1, 0.25), edge_rough: between(raw.edge_rough, 0, 1, 0), tier: Math.round(between(raw.tier, 0, 2, 1)) };
 }
-const ITEM_KINDS = ["object", "surface", "line", "crossing", "scatter", "door"];
+const ITEM_KINDS = ["object", "surface", "line", "crossing", "scatter", "door", "liquid"];
 const LINE_USES = ["road", "river", "wall"];
 const DECKS = ["bridge-wood", "bridge-stone", "ford"];
 const between = (value: unknown, min: number, max: number, fallback: number) => typeof value === "number" && Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
+/** Рецепт жидкости (гриллинг 2026-10-15, В12–В16) — те же ручки, что у своей жидкости карты; картинок у неё нет.
+ * Списки рисунков и кромок — как в общем формате карты (`shared/src/maps/core/v6.ts`). */
+const LIQUID_PATTERNS = ["ripple", "cracks", "bubbles", "mist", "smooth"], LIQUID_RIMS = ["foam", "none", "scorch", "wet"];
+const WATER_TONES = ["#213e5c", "#2f9c8c", "#eefaf2"];
+function liquidData(raw: Record<string, unknown>) {
+  const tones = Array.isArray(raw.tones) && raw.tones.length === 3 && raw.tones.every((tone) => typeof tone === "string" && /^#[0-9a-f]{6}$/i.test(tone))
+    ? (raw.tones as string[]).map((tone) => tone.toLowerCase()) : WATER_TONES;
+  return { tones, pace: between(raw.pace, 0, 2, 1), size: between(raw.size, 0.25, 4, 1), bed: between(raw.bed, 0, 1, 1), glow: between(raw.glow, 0, 1, 0),
+    pattern: LIQUID_PATTERNS.includes(raw.pattern as string) ? raw.pattern : "ripple", rim: LIQUID_RIMS.includes(raw.rim as string) ? raw.rim : "foam",
+    solid: raw.solid === true, shore: between(raw.shore, 0, 1, 0.4), ragged: between(raw.ragged, 0, 1, 0.4) };
+}
 /** Данные вещи по её виду. Линия: каким инструментом тянется (дорога, река — «течёт», ограда — «преграждает путь») и ширина.
  * Переправа: какой настил заменяет. Россыпь: размер знака и густота по умолчанию. */
 function kindData(kind: string, raw: Record<string, unknown>): Record<string, unknown> {
   if (kind === "surface") return surfaceData(raw);
+  if (kind === "liquid") return liquidData(raw);
   if (kind === "line") return { use: LINE_USES.includes(raw.use as string) ? raw.use : "road", width: between(raw.width, 0.25, 8, 1) };
   if (kind === "crossing") return { deck: DECKS.includes(raw.deck as string) ? raw.deck : "bridge-wood", width: between(raw.width, 0.25, 8, 2) };
   if (kind === "scatter") return { size: between(raw.size, 0.25, 8, 1), density: between(raw.density, 0.05, 4, 0.8) };
@@ -212,8 +224,8 @@ async function readArchive(buffer: Buffer): Promise<Archive> {
       images.push({ uid: image.uid as string, role: roleOf(kind, image.role), position: Number.isInteger(image.position) ? image.position as number : 0,
         archived: image.archived === true, data, width: meta.width, height: meta.height });
     }
-    // Вещь без картинок на карту не поставить.
-    if (!images.length) continue;
+    // Вещь без картинок на карту не поставить; жидкость — рецепт, картинок у неё и нет.
+    if (!images.length && kind !== "liquid") continue;
     items.push({ uid: typeof raw.uid === "string" && UUID.test(raw.uid) ? raw.uid : crypto.randomUUID(), kind, name: text(raw.name, 80) || "Без названия",
       section: text(raw.section, 40), tags: text(raw.tags, 200), data: kindData(kind, record(raw.data)), archived: raw.archived === true, images });
   }
@@ -349,6 +361,21 @@ mapPacksRouter.post("/:id/items", withUpload(async (req, res) => {
   })();
   res.status(201).json({ pack: onePack(pack.id), small: image.small });
 }));
+
+// Новая жидкость набора: только рецепт, без картинки.
+mapPacksRouter.post("/:id/liquids", (req, res) => {
+  const pack = db.prepare("SELECT * FROM map_asset_packs WHERE id = ? AND archived_at IS NULL").get(req.params.id) as PackRow | undefined;
+  if (!pack) return res.status(404).json({ error: "Набор не найден" });
+  const body = (req.body ?? {}) as Record<string, unknown>, name = text(body.name, 80);
+  if (!name) return res.status(400).json({ error: "Название обязательно" });
+  const uid = crypto.randomUUID();
+  db.transaction(() => {
+    db.prepare("INSERT INTO map_asset_items (uid, pack_id, kind, name, section, tags, data) VALUES (?, ?, 'liquid', ?, ?, ?, ?)")
+      .run(uid, pack.id, name, text(body.section, 40), text(body.tags, 200), JSON.stringify(liquidData(body)));
+    db.prepare("UPDATE map_asset_packs SET updated_at = datetime('now') WHERE id = ?").run(pack.id);
+  })();
+  res.status(201).json({ pack: onePack(pack.id), uid });
+});
 
 // Ещё один вариант той же вещи (каталог берёт случайный при постановке) или её особая картинка — новая заменяет прежнюю:
 // у объекта `role` w / n / e — как предмет выглядит, повёрнутый на 90°, 180° и 270°; у линии `post` — столб на изломах и концах.
