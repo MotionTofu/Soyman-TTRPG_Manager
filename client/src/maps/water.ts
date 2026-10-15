@@ -1,6 +1,10 @@
 import { flattenSplineWithWidths } from "./core/spline";
 import type { MapRenderModel } from "./renderModel";
+import type { MapObject } from "./core/types";
 import { LIQUID_PATTERNS, LIQUID_RIMS, liquidKey, liquidRecipe, type LiquidRecipe, riverDepth, waterLevel } from "./assets/village";
+import { cryptSide } from "./assets/crypt";
+import { drawCachedMapImage, drawCachedMapSymbol } from "./assets/draw";
+import { cutRoad, roadCrossings } from "./crossings";
 
 /** Вода шейдером (проба 2026-10-08). `mode`: 0 — комикс-панк, 1 — пиксельный пруд, 2 — пиксельное море, 3 — мягкая с дном;
  * `size` — пикселей на клетку у пиксельных. */
@@ -121,6 +125,89 @@ export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement,
   return any;
 }
 
+/** Точек на клетку у картинки «что стоит в воде»: пена идёт по контуру рисунка, а не по клеткам. */
+const THINGS_K = 8;
+/** Вещи «Деревни», которые лежат на самой воде: пены вокруг них нет, пока Мастер не снимет «не трогать воду». */
+const FLOATERS = new Set(["lilies", "lilies-small", "lily-flower", "duckweed", "algae", "leaves", "fish", "ripples", "gas-bubbles", "lava-crust", "ice-hole"]
+  .map(key => `soyman-village:${key}`));
+/** Вода не замечает объект: так отмечено у него или это вещь, лежащая на воде. */
+export const ignoresWater = (object: MapObject) => typeof object.properties?.dry === "boolean" ? object.properties.dry
+  : object.visual.type === "asset" && FLOATERS.has(object.visual.assetId);
+/** Объекты, которые вода замечает (гриллинг 2026-10-15, В7, В9): все, кроме отмеченных «не трогать воду», и мосты дорог.
+ * Брод — мелководье, у него пены нет. Фишки не входят (В10): они двигаются постоянно. */
+function* waterThings(model: MapRenderModel) {
+  for (const layer of model.layers) {
+    if (!layer.visible) continue;
+    if (layer.kind === "object") for (const item of layer.items) if (!ignoresWater(item.object)) yield { kind: "object", item } as const;
+    if (layer.kind === "path") for (const path of layer.paths) {
+      const crossings = roadCrossings(model, path);
+      if (crossings.some(crossing => crossing.kind === "bridge-wood" || crossing.kind === "bridge-stone")) yield { kind: "bridge", path, crossings } as const;
+    }
+  }
+}
+/** Из чего собрана картинка «что стоит в воде». Объект неизменен, пока его не правили; картинка учитывается, когда догрузилась. */
+export function waterThingSources(model: MapRenderModel, width: number, height: number): readonly unknown[] {
+  const out: unknown[] = [width, height];
+  for (const thing of waterThings(model)) {
+    if (thing.kind === "object") out.push(thing.item.object, "image" in thing.item.asset ? thing.item.asset.image : thing.item.asset);
+    else out.push(thing.path.nodes, thing.path.width, thing.crossings.map(crossing => `${crossing.from}:${crossing.to}:${crossing.kind}`).join("|"));
+  }
+  return out;
+}
+let thingScratch: HTMLCanvasElement | null = null;
+/**
+ * Картинка «что стоит в воде»: красный — контур, размытый на треть клетки (кольцо пены), зелёный — размытый
+ * на клетку (рябь), синий — сам контур. Шейдер читает её только там, где вода, поэтому объекты на суше ничего не меняют.
+ */
+export function drawWaterThings(canvas: HTMLCanvasElement, model: MapRenderModel, width: number, height: number): void {
+  const w = Math.max(1, Math.ceil(width * THINGS_K)), h = Math.max(1, Math.ceil(height * THINGS_K));
+  const shape = thingScratch ??= document.createElement("canvas");
+  for (const target of [canvas, shape]) if (target.width !== w || target.height !== h) { target.width = w; target.height = h; }
+  const pen = shape.getContext("2d"), out = canvas.getContext("2d");
+  if (!pen || !out) return;
+  pen.setTransform(1, 0, 0, 1, 0, 0); pen.clearRect(0, 0, w, h);
+  pen.setTransform(THINGS_K, 0, 0, THINGS_K, 0, 0);
+  pen.lineCap = pen.lineJoin = "round"; pen.strokeStyle = "#fff";
+  for (const thing of waterThings(model)) {
+    if (thing.kind === "object") {
+      const { object, asset } = thing.item, { position, scale } = object.transform;
+      let { rotation } = object.transform;
+      // Как на карте: вид по стороне не крутится.
+      const base = "image" in asset ? asset : null, side = base?.views?.[cryptSide(rotation)] ?? null, view = side && (side.image || !base?.image) ? side : null;
+      if (view) rotation = 0;
+      const art = view ? view.image : base?.image ?? null;
+      pen.save(); pen.translate(position.x, position.y); pen.rotate(rotation * Math.PI / 180); pen.scale(scale.x, scale.y);
+      if ("glyph" in asset) drawCachedMapSymbol(pen, asset);
+      else if (art) drawCachedMapImage(pen, art, Math.max(Math.abs(scale.x), Math.abs(scale.y)) * THINGS_K);
+      else pen.fillRect(-0.5, -0.5, 1, 1);
+      pen.restore();
+    } else {
+      const { path, crossings } = thing, nodes = path.nodes!;
+      const samples = flattenSplineWithWidths(path.closed ? [...nodes, nodes[0]] : nodes, path.width ?? 0.22, 0.25);
+      for (const deck of cutRoad(samples, crossings).decks) {
+        if (deck.kind !== "bridge-wood" && deck.kind !== "bridge-stone") continue;
+        for (let i = 1; i < deck.samples.length; i++) {
+          const a = deck.samples[i - 1], b = deck.samples[i];
+          pen.lineWidth = (a.width + b.width) / 2; pen.beginPath(); pen.moveTo(a.x, a.y); pen.lineTo(b.x, b.y); pen.stroke();
+        }
+      }
+    }
+  }
+  // Цвет рисунка не важен — только где он есть.
+  pen.setTransform(1, 0, 0, 1, 0, 0); pen.globalCompositeOperation = "source-in"; pen.fillStyle = "#fff"; pen.fillRect(0, 0, w, h); pen.globalCompositeOperation = "source-over";
+  const alpha = (blur: number) => {
+    out.setTransform(1, 0, 0, 1, 0, 0); out.clearRect(0, 0, w, h);
+    out.filter = blur ? `blur(${blur}px)` : "none"; out.drawImage(shape, 0, 0); out.filter = "none";
+    const data = out.getImageData(0, 0, w, h).data, values = new Uint8Array(w * h);
+    for (let i = 0; i < values.length; i++) values[i] = data[i * 4 + 3];
+    return values;
+  };
+  const near = alpha(THINGS_K * 0.33), wide = alpha(THINGS_K), body = alpha(0);
+  const image = out.createImageData(w, h);
+  for (let i = 0; i < near.length; i++) image.data.set([near[i], wide[i], body[i], 255], i * 4);
+  out.putImageData(image, 0, 0);
+}
+
 const rowsOf = new WeakMap<HTMLCanvasElement, readonly string[]>();
 /** Перерисовать таблицу рецептов, не трогая маску: строки остаются теми, что раздала последняя сборка маски. */
 export function drawLiquidRecipes(recipes: HTMLCanvasElement, liquids?: readonly LiquidRecipe[]) {
@@ -151,6 +238,7 @@ const float MASK_K = ${K}.0;
 uniform sampler2D uMask;
 uniform sampler2D uFlow;
 uniform sampler2D uRecipe;
+uniform sampler2D uThings;
 uniform vec2 uMap;
 // Настройки жидкости, которую сейчас рисует вид: насколько видно дно и есть ли пена у кромки.
 float gBed = 1.0, gFoam = 1.0;
@@ -355,6 +443,27 @@ float kindCode(vec2 w) { return texture(uFlow, (floor(w * MASK_K) + 0.5) / MASK_
 float kindAt(vec2 w) { return floor(kindCode(w) + 0.01); }
 // Дно поверх жидкости, уже перекрашенной рецептом: так земля под болотом остаётся землёй, а не болотом. В пиксельных
 // видах смесь огрубляется до ступеней тона, чтобы гладкая земля не выпадала из пиксель-арта.
+// Вода вокруг того, что в ней стоит (В8): кольцо пены по контуру, рябь, которая расходится кругами, а в реке — след
+// вниз по течению. Пена — только у жидкостей с пеной на кромке (у лавы и смолы её нет). f — течение, t — время жидкости.
+vec3 things(vec3 col, vec2 w, vec2 f, float t, bool blocky) {
+  vec3 th = texture(uThings, w / uMap).rgb;
+  float wake = 0.0;
+  if (dot(f, f) > 0.01) {
+    vec2 dir = normalize(f);
+    for (int i = 1; i <= 5; i++) {
+      float s = float(i) * 0.45;
+      wake = max(wake, texture(uThings, (w - dir * s) / uMap).r * (1.0 - s / 2.6));
+    }
+    // След рвётся струйками поперёк течения и мерцает.
+    wake *= smoothstep(0.35, 0.7, noise(vec2(dot(w, vec2(-dir.y, dir.x)) * 5.0, dot(w, dir) * 1.5 - t * 3.0)));
+  }
+  if (th.r + th.g + wake < 0.01) return col;
+  float ring = smoothstep(0.08, 0.35, th.r) * (1.0 - th.b);
+  float ripple = step(0.8, sin(th.g * 30.0 - t * 2.6)) * smoothstep(0.03, 0.15, th.g) * (1.0 - smoothstep(0.25, 0.5, th.r));
+  float foam = gFoam * max(max(ring * (blocky ? step(0.5, ring) : 0.9), wake * (blocky ? step(0.35, wake) : 0.75)), ripple * (blocky ? 0.6 : 0.45));
+  gTop = max(gTop, foam);
+  return mix(col, vec3(0.93, 0.98, 0.95), foam);
+}
 vec4 withBed(vec3 col, float a, bool blocky) {
   float show = gClear * (1.0 - gTop);
   if (show <= 0.0) return vec4(col, a);
@@ -391,7 +500,7 @@ vec4 waterAt(vec2 world, float t) {
   t *= set.r * 2.0; gBed = set.b; gFoam = recipe(kind, 4.0).g < 0.06 ? 1.0 : 0.0;
   if (blocky) t = floor(t * 6.0) / 6.0;
   vec2 f = texture(uFlow, w / uMap).rg * 2.0 - 1.0;
-  if (dot(f, f) < 0.01) { vec4 calm = look(w, w / size, t); return withBed(liquid(calm.rgb, kind, w / size, t), calm.a, blocky); }
+  if (dot(f, f) < 0.01) { vec4 calm = look(w, w / size, t); return withBed(things(liquid(calm.rgb, kind, w / size, t), w, f, t, blocky), calm.a, blocky); }
   // Рисунок сносит вдоль реки. Если сносить бесконечно, на излучинах он растянется в кашу, поэтому идут два
   // круга сноса со сдвигом в полкруга: пока один возвращается к началу, виден другой.
   float ph = t * 0.4 + noise(w * 0.12);
@@ -399,7 +508,7 @@ vec4 waterAt(vec2 world, float t) {
   vec4 one = look(w, (w - f * (a - 0.5) * 2.4) / size, t), two = look(w, (w - f * (b - 0.5) * 2.4) / size, t);
   // Мягкая вода смешивает круги плавно; у остальных своя палитра, поэтому круги меняются пятнами.
   vec4 moved = mix(two, one, uWater.x > 2.5 ? share : step(noise(w * 1.7 + 20.0), share));
-  return withBed(liquid(moved.rgb, kind, w / size, t), moved.a, blocky);
+  return withBed(things(liquid(moved.rgb, kind, w / size, t), w, f, t, blocky), moved.a, blocky);
 }
 `;
 
@@ -426,7 +535,7 @@ void main() {
   vec4 shore = shoreAt(world);
   finalColor = vec4(water.rgb * water.a + (1.0 - water.a) * (shore.rgb * shore.a + gGlow), water.a + (1.0 - water.a) * shore.a);
 }`;
-type Still = { canvas: HTMLCanvasElement; gl: WebGL2RenderingContext; at: (name: string) => WebGLUniformLocation | null; mask: HTMLCanvasElement; raw: HTMLCanvasElement; flow: HTMLCanvasElement; recipes: HTMLCanvasElement; sources: readonly unknown[]; liquids: unknown; any: boolean };
+type Still = { canvas: HTMLCanvasElement; gl: WebGL2RenderingContext; at: (name: string) => WebGLUniformLocation | null; mask: HTMLCanvasElement; raw: HTMLCanvasElement; flow: HTMLCanvasElement; recipes: HTMLCanvasElement; things: HTMLCanvasElement; sources: readonly unknown[]; thingsOf: readonly unknown[]; liquids: unknown; any: boolean };
 let still: Still | null | undefined;
 function stillStage(): Still | null {
   if (still !== undefined) return still;
@@ -449,14 +558,15 @@ function stillStage(): Still | null {
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     const point = gl.getAttribLocation(program, "aPoint");
     gl.enableVertexAttribArray(point); gl.vertexAttribPointer(point, 2, gl.FLOAT, false, 0, 0);
-    // Четыре картинки: в ячейке 0 — маска воды, в ячейке 1 — течение, в ячейке 2 — рецепты жидкостей, в ячейке 3 — земля куска.
+    // Пять картинок: в ячейке 0 — маска воды, в ячейке 1 — течение, в ячейке 2 — рецепты жидкостей, в ячейке 3 — земля куска,
+    // в ячейке 4 — что стоит в воде.
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-    for (const unit of [gl.TEXTURE3, gl.TEXTURE2, gl.TEXTURE1, gl.TEXTURE0]) {
+    for (const unit of [gl.TEXTURE4, gl.TEXTURE3, gl.TEXTURE2, gl.TEXTURE1, gl.TEXTURE0]) {
       gl.activeTexture(unit); gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
       for (const [key, value] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, key, value);
     }
     const blank = () => document.createElement("canvas");
-    still = { canvas, gl, at: (name) => gl.getUniformLocation(program, name), mask: blank(), raw: blank(), flow: blank(), recipes: blank(), sources: [], liquids: null, any: false };
+    still = { canvas, gl, at: (name) => gl.getUniformLocation(program, name), mask: blank(), raw: blank(), flow: blank(), recipes: blank(), things: blank(), sources: [], thingsOf: [], liquids: null, any: false };
   } catch (error) { console.warn("Живая вода на обычном холсте недоступна", error); }
   return still;
 }
@@ -480,6 +590,12 @@ export function drawWaterStill(ctx: CanvasRenderingContext2D, model: MapRenderMo
     gl.activeTexture(gl.TEXTURE1); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, stage.flow);
     gl.activeTexture(gl.TEXTURE0); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, stage.mask);
   }
+  const thingSources = waterThingSources(model, width, height);
+  if (thingSources.length !== stage.thingsOf.length || thingSources.some((source, i) => source !== stage.thingsOf[i])) {
+    drawWaterThings(stage.things, model, width, height); stage.thingsOf = thingSources;
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.activeTexture(gl.TEXTURE4); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, stage.things);
+  }
   const liquids = water.liquids ?? model.liquids;
   if (liquids !== stage.liquids) {
     drawLiquidRecipes(stage.recipes, liquids); stage.liquids = liquids;
@@ -488,7 +604,7 @@ export function drawWaterStill(ctx: CanvasRenderingContext2D, model: MapRenderMo
   }
   if (!stage.any) return false;
   const W = Math.round(cssW * ratio), H = Math.round(cssH * ratio);
-  gl.uniform1i(stage.at("uMask"), 0); gl.uniform1i(stage.at("uFlow"), 1); gl.uniform1i(stage.at("uRecipe"), 2); gl.uniform1i(stage.at("uGround"), 3); gl.uniform2f(stage.at("uMap"), width, height); gl.uniform3f(stage.at("uWater"), water.mode, water.speed, water.size);
+  gl.uniform1i(stage.at("uMask"), 0); gl.uniform1i(stage.at("uFlow"), 1); gl.uniform1i(stage.at("uRecipe"), 2); gl.uniform1i(stage.at("uGround"), 3); gl.uniform1i(stage.at("uThings"), 4); gl.uniform2f(stage.at("uMap"), width, height); gl.uniform3f(stage.at("uWater"), water.mode, water.speed, water.size);
   gl.uniform1f(stage.at("uScale"), scale * ratio); gl.uniform1f(stage.at("uTime"), 0);
   for (let y = 0; y < H; y += STILL_SIDE) for (let x = 0; x < W; x += STILL_SIDE) {
     const w = Math.min(STILL_SIDE, W - x), h = Math.min(STILL_SIDE, H - y);

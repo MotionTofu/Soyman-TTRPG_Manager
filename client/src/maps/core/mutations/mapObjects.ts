@@ -51,6 +51,23 @@ export function transformMapObject(doc: MapDocumentV5, id: string, rotation: num
   return mutationError("object.not-found", "id", "object not found");
 }
 
+/** «Не трогать воду» (гриллинг 2026-10-15, В7): вода не рисует вокруг объекта пену и след — навес, мост-объект, кувшинка. */
+export function setMapObjectDry(doc: MapDocumentV5, id: string, dry: boolean): MutationResult {
+  for (let i = 0; i < doc.layers.length; i++) {
+    const layer = doc.layers[i];
+    if (layer.kind !== "object") continue;
+    const index = layer.items.findIndex((item) => item.id === id);
+    if (index < 0) continue;
+    const item = layer.items[index];
+    if (item.properties?.dry === dry) return noChange(doc);
+    // Значение хранится явно: у вещей, лежащих на воде, «не трогать» стоит по умолчанию, и снять его — тоже выбор.
+    const items = [...layer.items];
+    items[index] = { ...item, properties: { ...item.properties, dry } };
+    return changed(withReplacedLayer(doc, i, { ...layer, items }));
+  }
+  return mutationError("object.not-found", "id", "object not found");
+}
+
 export function deleteMapObject(doc: MapDocumentV5, id: string): MutationResult {
   for (let i = 0; i < doc.layers.length; i++) {
     const layer = doc.layers[i];

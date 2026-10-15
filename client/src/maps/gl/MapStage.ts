@@ -3,7 +3,7 @@ import { renderMap, type RenderOptions } from "../render";
 import { inRange, tileSide, visibleTiles, type TileRange } from "./tiles";
 import { createStyleFilter, type MapLook } from "./styleFilter";
 import { anyWeather, createWeatherFilter, type MapWeather } from "./weatherFilter";
-import { createWaterFilter, drawLiquidRecipes, drawWaterMask, waterSources, type MapWater } from "./waterFilter";
+import { createWaterFilter, drawLiquidRecipes, drawWaterMask, drawWaterThings, waterSources, waterThingSources, type MapWater } from "./waterFilter";
 
 /** Всё, что рисует карта, кроме камеры. Новый объект — новое содержимое плиток. */
 export type MapStageContent = Omit<RenderOptions, "scale" | "ox" | "oy">;
@@ -37,8 +37,10 @@ export class MapStage {
   private readonly maskCanvas = document.createElement("canvas");
   private readonly maskRaw = document.createElement("canvas");
   private readonly flowCanvas = document.createElement("canvas");
-  private readonly recipeCanvas = Object.assign(document.createElement("canvas"), { width: 5, height: 8 });
-  private readonly waterPass = createWaterFilter(this.maskCanvas, this.flowCanvas, this.recipeCanvas);
+  private readonly recipeCanvas = Object.assign(document.createElement("canvas"), { width: 6, height: 8 });
+  private readonly thingsCanvas = document.createElement("canvas");
+  private readonly waterPass = createWaterFilter(this.maskCanvas, this.flowCanvas, this.recipeCanvas, this.thingsCanvas);
+  private thingsOf: readonly unknown[] = [];
   private water: MapWater | null = null;
   private recipesOf: unknown = null;
   private maskOf: readonly unknown[] = [];
@@ -267,6 +269,12 @@ export class MapStage {
       if (sources.length !== this.maskOf.length || sources.some((source, i) => source !== this.maskOf[i])) {
         drawWaterMask(this.maskCanvas, this.maskRaw, this.flowCanvas, this.recipeCanvas, frame.content.model, frame.content.width, frame.content.height, this.water.shoal);
         this.waterPass.refresh(); this.maskOf = sources; this.recipesOf = null;
+      }
+      // Что стоит в воде — своя картинка: передвинутая лодка не пересобирает маску воды всей карты.
+      const things = waterThingSources(frame.content.model, frame.content.width, frame.content.height);
+      if (things.length !== this.thingsOf.length || things.some((source, i) => source !== this.thingsOf[i])) {
+        drawWaterThings(this.thingsCanvas, frame.content.model, frame.content.width, frame.content.height);
+        this.waterPass.refreshThings(); this.thingsOf = things;
       }
       // Рецепты — отдельно от маски: правка цвета своей жидкости не пересобирает карту.
       const liquids = this.water.liquids ?? frame.content.model.liquids;
