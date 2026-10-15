@@ -10,7 +10,7 @@ import { ownDeck, ownLinePost, ownPackOf } from "./assets/ownPacks";
 import { labelBox, labelFamily } from "./labelStyle";
 import { drawWaterStill, waterStillReady, type MapWater } from "./water";
 import { LIQUID_LAYER } from "./workspace/liquids";
-import { cutKey, cutRoad, drawCrossingDraft, roadCrossings, type RoadCut } from "./crossings";
+import { cutKey, cutRoad, drawCrossingDraft, paintedWaterAt, roadCrossings, type RoadCut } from "./crossings";
 // Рендер карты на canvas 2D. Цвета террейна — фиксированная спокойная
 // палитра (исключение как у Полотна §6 design_revision.md: бюджет акцента
 // на неё не тратится). Обрамление (фон, сетка, координаты, дороги) — из
@@ -1120,20 +1120,25 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
   const cores: (() => void)[] = [];
   const mergeRoads = () => { for (const draw of cores) draw(); cores.length = 0; };
   const lastRivers = model.layers.findLastIndex(layer => layer.visible && layer.kind === "path" && layer.paths.some(path => path.kind === "river"));
-  /** Линия атласа (М6, М16): толщина в клетках, но не тоньше пары точек экрана. Река тоньше у истока и толще к устью. */
+  /** Линия атласа (М6, М16): толщина в клетках, но не тоньше пары точек экрана. Река от истока растёт из нуля и уходит
+   * под накрашенную воду — впадает в море или озеро. Тракт — двойная линия: светлая середина ложится после туши всех
+   * дорог подряд, и дорога выходит из тракта, а не перечёркивает его. */
   const strokeAtlas = (path: RenderPath, nodes: readonly SplineNode[]) => {
     const samples = flattenSplineWithWidths(nodes, path.width ?? 0.22, 2 / scale);
     if (samples.length < 2) return;
     const width = Math.max(2, (path.width ?? 0.22) * scale);
     ctx.save(); ctx.lineCap = "round"; ctx.lineJoin = "round";
     if (path.atlas === "river") {
-      const along = [0];
+      const along = [0], wet = paintedWaterAt(model);
       for (let i = 1; i < samples.length; i++) along.push(along[i - 1] + Math.hypot(samples[i].x - samples[i - 1].x, samples[i].y - samples[i - 1].y));
-      const total = along.at(-1) || 1;
+      const total = along.at(-1) || 1, grow = (i: number) => Math.pow(path.flow === "back" ? 1 - along[i] / total : along[i] / total, 0.7);
+      const dry = samples.map((point) => !wet(point.x, point.y));
       for (const [color, extra] of [[chrome.ink, 2], [RIVER_FILL, 0]] as const) {
         ctx.strokeStyle = color;
         for (let i = 1; i < samples.length; i++) {
-          ctx.lineWidth = Math.max(1.5, (0.3 + 0.7 * along[i] / total) * width) + extra;
+          if (!dry[i - 1] || !dry[i]) continue;
+          const size = (grow(i - 1) + grow(i)) / 2 * width;
+          ctx.lineWidth = size + Math.min(extra, size);
           ctx.beginPath(); ctx.moveTo(X(samples[i - 1].x), Y(samples[i - 1].y)); ctx.lineTo(X(samples[i].x), Y(samples[i].y)); ctx.stroke();
         }
       }
@@ -1143,7 +1148,10 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       if (path.atlas === "highway") {
         // Тракт — двойная линия: широкая тушь, внутри полоса бумаги.
         ctx.lineWidth = width * 1.5; ctx.stroke();
-        ctx.strokeStyle = chrome.paper; ctx.lineWidth = Math.max(1, width * 0.6); ctx.stroke();
+        cores.push(() => {
+          ctx.save(); ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = chrome.paper; ctx.lineWidth = Math.max(1, width * 0.6);
+          ctx.beginPath(); samples.forEach((point, i) => i ? ctx.lineTo(X(point.x), Y(point.y)) : ctx.moveTo(X(point.x), Y(point.y))); ctx.stroke(); ctx.restore();
+        });
       } else if (path.atlas === "trail") { ctx.setLineDash([width * 2.4, width * 1.6]); ctx.lineWidth = width * 0.8; ctx.stroke(); }
       else if (path.atlas === "sea") { ctx.setLineDash([0.1, width * 2.2]); ctx.lineWidth = width * 1.1; ctx.stroke(); }
       else { ctx.lineWidth = width; ctx.stroke(); }
@@ -1680,15 +1688,17 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     } else if (layer.kind === "path") {
       // paths[] order = render order (§14): реки отдельно ниже дорог НЕ
       // фиксируются — порядок задают сами слои (migrated: river-слой ниже).
-      for (let i = 0; i < layer.paths.length; i++) {
-        const p = layer.paths[i];
+      // Реки атласа — под дорогами того же слоя: в атласе дорога переходит реку поверху.
+      const paths = layer.paths.some(path => path.atlas === "river") ? [...layer.paths.filter(path => path.atlas === "river"), ...layer.paths.filter(path => path.atlas !== "river")] : layer.paths;
+      for (let i = 0; i < paths.length; i++) {
+        const p = paths[i];
         if (part && (part === "ground") !== waterRiver(p)) continue;
         if (p.kind !== "road") mergeRoads();
         // Стена со своей полосой (ограда) рисуется как линия-полоса, а не кладкой.
         if (p.kind === "wall" && p.nodes && !p.style) {
           let end = i + 1;
-          while (end < layer.paths.length && layer.paths[end].kind === "wall" && layer.paths[end].nodes && !layer.paths[end].style) end++;
-          drawCachedWalls(ctx, layer.paths.slice(i, end), scale, ox, oy, canvasW, canvasH, pixelRatio); i = end - 1;
+          while (end < paths.length && paths[end].kind === "wall" && paths[end].nodes && !paths[end].style) end++;
+          drawCachedWalls(ctx, paths.slice(i, end), scale, ox, oy, canvasW, canvasH, pixelRatio); i = end - 1;
         }
         else if (p.nodes) strokeFreePath(p);
         else if (p.kind === "river") strokeRivers(p.cells);

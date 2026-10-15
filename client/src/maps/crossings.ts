@@ -27,23 +27,16 @@ export const choiceFits = (choice: { x: number; y: number }, at: Pick<Crossing, 
 
 const STEP = 0.25, PAD = 0.5, GAP = 1;
 const waters = new WeakMap<MapRenderModel, (x: number, y: number) => number>();
-/** Вода в точке карты: закрашенная кистью (верхний слой перекрывает нижний) и реки-линии. */
-function waterAt(model: MapRenderModel) {
-  let known = waters.get(model);
+const painted = new WeakMap<MapRenderModel, (x: number, y: number) => number>();
+/** Глубина воды, накрашенной кистью, в точке карты (верхний слой перекрывает нижний); реки-линии не в счёт. */
+export function paintedWaterAt(model: MapRenderModel) {
+  let known = painted.get(model);
   if (known) return known;
   const masks: { ox: number; oy: number; size: number; side: number; codes: readonly (string | null)[]; chunks: Map<string, readonly number[]> }[] = [];
-  const rivers: { depth: number; samples: Sample[]; box: [number, number, number, number] }[] = [];
   for (const layer of model.layers) {
-    if (!layer.visible) continue;
-    const mask = layer.kind === "terrain" ? layer.terrain.mask : undefined;
+    const mask = layer.visible && layer.kind === "terrain" ? layer.terrain.mask : undefined;
     if (mask?.source?.chunks.length) masks.push({ ox: mask.origin.x, oy: mask.origin.y, size: mask.sampleSize, side: Math.round(Math.sqrt(mask.source.chunks[0].values.length)),
       codes: mask.source.codes, chunks: new Map(mask.source.chunks.map(chunk => [`${chunk.cx}:${chunk.cy}`, chunk.values])) });
-    if (layer.kind === "path") for (const path of layer.paths) {
-      if (path.kind !== "river" || !path.nodes || path.nodes.length < 2) continue;
-      const samples = flattenSplineWithWidths(path.closed ? [...path.nodes, path.nodes[0]] : path.nodes, path.width ?? 0.22, STEP);
-      const reach = Math.max(...samples.map(sample => sample.width)) / 2, xs = samples.map(sample => sample.x), ys = samples.map(sample => sample.y);
-      rivers.push({ depth: riverDepth(path) >= 3 ? 2 : 1, samples, box: [Math.min(...xs) - reach, Math.min(...ys) - reach, Math.max(...xs) + reach, Math.max(...ys) + reach] });
-    }
   }
   known = (x, y) => {
     let depth = 0;
@@ -52,6 +45,28 @@ function waterAt(model: MapRenderModel) {
       const value = mask.chunks.get(`${cx}:${cy}`)?.[(sy - cy * mask.side) * mask.side + sx - cx * mask.side];
       if (value) depth = waterDepth(mask.codes[value - 1], model.liquids);
     }
+    return depth;
+  };
+  painted.set(model, known);
+  return known;
+}
+/** Вода в точке карты: закрашенная кистью и реки-линии. */
+function waterAt(model: MapRenderModel) {
+  let known = waters.get(model);
+  if (known) return known;
+  const brushed = paintedWaterAt(model);
+  const rivers: { depth: number; samples: Sample[]; box: [number, number, number, number] }[] = [];
+  for (const layer of model.layers) {
+    if (!layer.visible) continue;
+    if (layer.kind === "path") for (const path of layer.paths) {
+      if (path.kind !== "river" || !path.nodes || path.nodes.length < 2) continue;
+      const samples = flattenSplineWithWidths(path.closed ? [...path.nodes, path.nodes[0]] : path.nodes, path.width ?? 0.22, STEP);
+      const reach = Math.max(...samples.map(sample => sample.width)) / 2, xs = samples.map(sample => sample.x), ys = samples.map(sample => sample.y);
+      rivers.push({ depth: riverDepth(path) >= 3 ? 2 : 1, samples, box: [Math.min(...xs) - reach, Math.min(...ys) - reach, Math.max(...xs) + reach, Math.max(...ys) + reach] });
+    }
+  }
+  known = (x, y) => {
+    let depth = brushed(x, y);
     for (const river of rivers) {
       if (river.depth <= depth || x < river.box[0] || y < river.box[1] || x > river.box[2] || y > river.box[3]) continue;
       for (let i = 1; i < river.samples.length; i++) {
