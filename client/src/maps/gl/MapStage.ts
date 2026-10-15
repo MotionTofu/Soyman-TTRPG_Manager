@@ -267,22 +267,22 @@ export class MapStage {
     const screen = new Rectangle(0, 0, renderer.width, renderer.height);
     if (this.water) {
       // Вода лежит в мировых координатах: у гексов карта шире и выше числа клеток.
-      const { maxX: ww, maxY: wh } = worldBounds(frame.content.grid, frame.content.width, frame.content.height);
-      const sources = waterSources(frame.content.model, ww, wh, this.water.shoal);
+      const { minX, minY, maxX: ww, maxY: wh } = worldBounds(frame.content.grid, frame.content.width, frame.content.height), lo = { x: minX, y: minY };
+      const sources = waterSources(frame.content.model, ww, wh, this.water.shoal, lo);
       if (sources.length !== this.maskOf.length || sources.some((source, i) => source !== this.maskOf[i])) {
-        drawWaterMask(this.maskCanvas, this.maskRaw, this.flowCanvas, this.recipeCanvas, frame.content.model, ww, wh, this.water.shoal);
+        drawWaterMask(this.maskCanvas, this.maskRaw, this.flowCanvas, this.recipeCanvas, frame.content.model, ww, wh, this.water.shoal, lo);
         this.waterPass.refresh(); this.maskOf = sources; this.recipesOf = null;
       }
       // Что стоит в воде — своя картинка: передвинутая лодка не пересобирает маску воды всей карты.
-      const things = waterThingSources(frame.content.model, ww, wh);
+      const things = waterThingSources(frame.content.model, ww, wh, lo);
       if (things.length !== this.thingsOf.length || things.some((source, i) => source !== this.thingsOf[i])) {
-        drawWaterThings(this.thingsCanvas, frame.content.model, ww, wh);
+        drawWaterThings(this.thingsCanvas, frame.content.model, ww, wh, lo);
         this.waterPass.refreshThings(); this.thingsOf = things;
       }
       // Рецепты — отдельно от маски: правка цвета своей жидкости не пересобирает карту.
       const liquids = this.water.liquids ?? frame.content.model.liquids;
       if (liquids !== this.recipesOf) { drawLiquidRecipes(this.recipeCanvas, liquids); this.waterPass.refresh(); this.recipesOf = liquids; }
-      this.waterPass.aim(this.water, x, y, frame.scale * frame.dpr, performance.now() / 1000, ww, wh);
+      this.waterPass.aim(this.water, x, y, frame.scale * frame.dpr, performance.now() / 1000, ww, wh, lo);
       this.ground.filterArea = screen;
     }
     const wet = this.ground.filters as readonly Filter[] | null | undefined;

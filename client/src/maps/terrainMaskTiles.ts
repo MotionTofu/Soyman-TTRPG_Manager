@@ -32,7 +32,10 @@ function materialsIn(values: readonly number[]) {
 /** Плитки, которых касаются куски маски с материалами `allowed`, с запасом `margin` отсчётов.
  * Карта рисуется плитками, и для каждой сюда приходят по разу на каждый материал. Перебор всех кусков маски —
  * один раз на маску и материал, дальше только отсев по экрану (замер 2026-10-08: 2,4 мс на плитку карты уходило на этот перебор). */
-function candidatesFor(mask: Mask, signature: string, allowed: () => ReadonlySet<number>, margin: number, tileSize: number, width: number, height: number) {
+/** Левый верхний угол карты. У гексов он в −1: крайние гексы торчат за ноль на полклетки. */
+export type MapCorner = { readonly x: number; readonly y: number };
+export const MAP_ZERO: MapCorner = { x: 0, y: 0 };
+function candidatesFor(mask: Mask, signature: string, allowed: () => ReadonlySet<number>, margin: number, tileSize: number, width: number, height: number, lo: MapCorner) {
   let known = candidateCache.get(mask); if (!known) candidateCache.set(mask, known = new Map());
   let candidates = known.get(signature);
   if (!candidates) {
@@ -44,7 +47,7 @@ function candidatesFor(mask: Mask, signature: string, allowed: () => ReadonlySet
       for (let cy = Math.floor((chunk.cy * 16 - margin) / tileSize); cy <= Math.floor((chunk.cy * 16 + 15 + margin) / tileSize); cy++)
         for (let cx = Math.floor((chunk.cx * 16 - margin) / tileSize); cx <= Math.floor((chunk.cx * 16 + 15 + margin) / tileSize); cx++) {
           const x = mask.origin.x + cx * tileSize * size, y = mask.origin.y + cy * tileSize * size;
-          if (x >= width || y >= height || x + tileSize * size <= 0 || y + tileSize * size <= 0) continue;
+          if (x >= width || y >= height || x + tileSize * size <= lo.x || y + tileSize * size <= lo.y) continue;
           cells.set(`${cx},${cy}`, { cell: `${cx},${cy}`, cx, cy, x, y });
         }
     }
@@ -59,12 +62,12 @@ const edgeCached = new Map<string, { neighbors: (readonly number[] | undefined)[
 /** Плитки материала номер `index` из палитры маски. `ranks` — порядок наложения материалов палитры (−∞ — не рисуется):
  * под теми, что выше, поверхность продолжается. `window` — окно размытия края в отсчётах. */
 export function terrainEdgeTiles(mask: Mask, width: number, height: number, viewport: { minX: number; minY: number; maxX: number; maxY: number },
-  index: number, ranks: readonly number[], window: number, tileSize: 4 | 8 | 16 = 16): EdgeTile[] {
+  index: number, ranks: readonly number[], window: number, tileSize: 4 | 8 | 16 = 16, lo: MapCorner = MAP_ZERO): EdgeTile[] {
   if (!mask.source || !(mask.sampleSize > 0)) return [];
   const size = mask.sampleSize, chunks = indexOf(mask), tiles: EdgeTile[] = [], margin = edgeMargin(window) + 1, rank = ranks[index];
-  const signature = `${tileSize}:${width}:${height}:${size}:${mask.origin.x}:${mask.origin.y}:edge:${index}:${window}:${ranks.join(",")}`;
-  const minSX = Math.ceil(-mask.origin.x / size - .5), maxSX = Math.ceil((width - mask.origin.x) / size - .5) - 1;
-  const minSY = Math.ceil(-mask.origin.y / size - .5), maxSY = Math.ceil((height - mask.origin.y) / size - .5) - 1;
+  const signature = `${tileSize}:${lo.x}:${lo.y}:${width}:${height}:${size}:${mask.origin.x}:${mask.origin.y}:edge:${index}:${window}:${ranks.join(",")}`;
+  const minSX = Math.ceil((lo.x - mask.origin.x) / size - .5), maxSX = Math.ceil((width - mask.origin.x) / size - .5) - 1;
+  const minSY = Math.ceil((lo.y - mask.origin.y) / size - .5), maxSY = Math.ceil((height - mask.origin.y) / size - .5) - 1;
   const clampX = (sx: number) => Math.max(minSX, Math.min(maxSX, sx)), clampY = (sy: number) => Math.max(minSY, Math.min(maxSY, sy));
   let lastKey = "", last: Chunk | undefined;
   const rankAt = (sx: number, sy: number) => {
@@ -73,7 +76,7 @@ export function terrainEdgeTiles(mask: Mask, width: number, height: number, view
     const value = last?.values[(y - cy * 16) * 16 + x - cx * 16];
     return value ? ranks[value - 1] : -Infinity;
   };
-  for (const { cell, cx, cy, x, y } of candidatesFor(mask, signature, () => new Set([index + 1]), margin, tileSize, width, height)) {
+  for (const { cell, cx, cy, x, y } of candidatesFor(mask, signature, () => new Set([index + 1]), margin, tileSize, width, height, lo)) {
     if (x >= viewport.maxX || y >= viewport.maxY || x + tileSize * size <= viewport.minX || y + tileSize * size <= viewport.minY) continue;
     const neighbors: (readonly number[] | undefined)[] = [];
     for (let ny = Math.floor(clampY(cy * tileSize - margin) / 16); ny <= Math.floor(clampY((cy + 1) * tileSize + margin) / 16); ny++)
@@ -96,14 +99,14 @@ export function terrainEdgeTiles(mask: Mask, width: number, height: number, view
  * Cache depends on immutable chunk values, including the needed halo neighbors.
  * Empty neighbor tiles allow a painted edge to fade across a chunk boundary. */
 export function terrainMaskTiles(mask: Mask, width: number, height: number, colors: Readonly<Record<string, string>>,
-  viewport: { minX: number; minY: number; maxX: number; maxY: number }, tileSize: 4 | 8 | 16 = 16): MaskTile[] {
+  viewport: { minX: number; minY: number; maxX: number; maxY: number }, tileSize: 4 | 8 | 16 = 16, lo: MapCorner = MAP_ZERO): MaskTile[] {
   if (!mask.source || !(mask.sampleSize > 0)) return [];
   const size = mask.sampleSize, index = indexOf(mask), tiles: MaskTile[] = [];
   const palette = colors;
-  const signature = `${tileSize}:${width}:${height}:${size}:${mask.origin.x}:${mask.origin.y}:${JSON.stringify(mask.source.codes)}:${JSON.stringify(palette)}:color`;
-  const minSX = Math.ceil(-mask.origin.x / size - .5), maxSX = Math.ceil((width - mask.origin.x) / size - .5) - 1;
-  const minSY = Math.ceil(-mask.origin.y / size - .5), maxSY = Math.ceil((height - mask.origin.y) / size - .5) - 1;
-  const candidates = candidatesFor(mask, signature, () => new Set(mask.source!.codes.flatMap((code, i) => code && terrainMaskPixel(code, 0, 0, palette, true)[3] > 0 ? [i + 1] : [])), 1, tileSize, width, height);
+  const signature = `${tileSize}:${lo.x}:${lo.y}:${width}:${height}:${size}:${mask.origin.x}:${mask.origin.y}:${JSON.stringify(mask.source.codes)}:${JSON.stringify(palette)}:color`;
+  const minSX = Math.ceil((lo.x - mask.origin.x) / size - .5), maxSX = Math.ceil((width - mask.origin.x) / size - .5) - 1;
+  const minSY = Math.ceil((lo.y - mask.origin.y) / size - .5), maxSY = Math.ceil((height - mask.origin.y) / size - .5) - 1;
+  const candidates = candidatesFor(mask, signature, () => new Set(mask.source!.codes.flatMap((code, i) => code && terrainMaskPixel(code, 0, 0, palette, true)[3] > 0 ? [i + 1] : [])), 1, tileSize, width, height, lo);
   for (const { cell, cx, cy, x, y } of candidates) {
     if (x >= viewport.maxX || y >= viewport.maxY || x + tileSize * size <= viewport.minX || y + tileSize * size <= viewport.minY) continue;
     const neighbors: CachedTile["neighbors"] = [];

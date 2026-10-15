@@ -85,16 +85,17 @@ type TerrainMaskView = NonNullable<RenderTerrainLayer["terrain"]["mask"]>;
 interface TerrainMaskBitmap {
   mapWidth: number;
   mapHeight: number;
+  lo: { x: number; y: number };
   minSX: number;
   minSY: number;
   canvas: HTMLCanvasElement;
 }
 const terrainMaskBitmaps = new WeakMap<object, WeakMap<object, TerrainMaskBitmap>>();
 
-function terrainMaskBitmap(mask: TerrainMaskView, mapWidth: number, mapHeight: number, palette: Readonly<Record<string, string>>): TerrainMaskBitmap | null {
+function terrainMaskBitmap(mask: TerrainMaskView, mapWidth: number, mapHeight: number, palette: Readonly<Record<string, string>>, lo: { x: number; y: number }): TerrainMaskBitmap | null {
   const cached = terrainMaskBitmaps.get(mask)?.get(palette);
-  if (cached && cached.mapWidth === mapWidth && cached.mapHeight === mapHeight) return cached;
-  const raster = buildTerrainMaskRaster(mask, mapWidth, mapHeight, palette, true);
+  if (cached && cached.mapWidth === mapWidth && cached.mapHeight === mapHeight && cached.lo.x === lo.x && cached.lo.y === lo.y) return cached;
+  const raster = buildTerrainMaskRaster(mask, mapWidth, mapHeight, palette, true, lo);
   if (!raster) return null;
   const canvas = document.createElement("canvas");
   canvas.width = raster.width;
@@ -104,7 +105,7 @@ function terrainMaskBitmap(mask: TerrainMaskView, mapWidth: number, mapHeight: n
   const image = context.createImageData(raster.width, raster.height);
   image.data.set(raster.pixels);
   context.putImageData(image, 0, 0);
-  const bitmap = { mapWidth, mapHeight, minSX: raster.minSX, minSY: raster.minSY, canvas };
+  const bitmap = { mapWidth, mapHeight, lo, minSX: raster.minSX, minSY: raster.minSY, canvas };
   let palettes = terrainMaskBitmaps.get(mask);
   if (!palettes) { palettes = new WeakMap(); terrainMaskBitmaps.set(mask, palettes); }
   palettes.set(palette, bitmap);
@@ -762,8 +763,9 @@ const ROAD_CORE = 0.7;
 const roadCuts = new WeakMap<StripSamples["samples"], RoadCut>();
 export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvasH: number, o: RenderOptions): void {
   const { grid, width, height, model, scale, ox, oy, showGrid, showCoords, hover, chrome, playerView, selectedId } = o;
-  // Свободная земля и вода лежат в мировых координатах: у гексов карта шире и выше числа клеток (шаг √3 и 1,5).
-  const maskExtent = worldBounds(grid, width, height), maskW = maskExtent.maxX, maskH = maskExtent.maxY;
+  // Свободная земля и вода лежат в мировых координатах: у гексов карта шире и выше числа клеток (шаг √3 и 1,5)
+  // и начинается с −1 — крайние гексы торчат за ноль на полклетки.
+  const maskExtent = worldBounds(grid, width, height), maskW = maskExtent.maxX, maskH = maskExtent.maxY, maskLo = { x: maskExtent.minX, y: maskExtent.minY };
   const terrainFill = o.terrainFill ?? MAP_TERRAIN_FILL;
   const baseTransform = ctx.getTransform?.();
   const pixelRatio = baseTransform ? Math.max(Math.hypot(baseTransform.a, baseTransform.b), Math.hypot(baseTransform.c, baseTransform.d)) : 1;
@@ -773,7 +775,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
   if (o.water && !o.part && waterStillReady()) {
     // Земля, на неё вода, потом всё остальное — мосты, дороги и фишки остаются над водой.
     renderMap(ctx, canvasW, canvasH, { ...o, part: "ground" });
-    drawWaterStill(ctx, model, maskW, maskH, o.water, canvasW, canvasH, scale, ox, oy, pixelRatio);
+    drawWaterStill(ctx, model, maskW, maskH, o.water, canvasW, canvasH, scale, ox, oy, pixelRatio, maskLo);
     renderMap(ctx, canvasW, canvasH, { ...o, part: "over", keep: true });
     return;
   }
@@ -915,11 +917,11 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
   const fillTerrainMask = (mask: NonNullable<RenderTerrainLayer["terrain"]["mask"]>) => {
     if (mask.source ? mask.source.chunks.length === 0 : mask.entries.size === 0) return;
     if (mask.source && ctx.canvas && typeof document !== "undefined") {
-      drawTerrainMaskTiles(ctx, mask, maskW, maskH, canvasW, canvasH, scale, ox, oy, pixelRatio, terrainFill, pack, !!o.cartography);
+      drawTerrainMaskTiles(ctx, mask, maskW, maskH, canvasW, canvasH, scale, ox, oy, pixelRatio, terrainFill, pack, !!o.cartography, maskLo);
       return;
     }
     const bitmap = ctx.canvas && typeof document !== "undefined"
-      ? terrainMaskBitmap(mask, maskW, maskH, o.terrainFill ?? MAP_TERRAIN_FILL) : null;
+      ? terrainMaskBitmap(mask, maskW, maskH, o.terrainFill ?? MAP_TERRAIN_FILL, maskLo) : null;
     if (bitmap) {
       ctx.save();
       ctx.beginPath();
@@ -942,7 +944,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
           const group = byImage.get(image) ?? []; group.push(code); byImage.set(image, group);
         }
         for (const [image, materials] of byImage) {
-          const texture = texturedMask(mask, materials, image, maskW, maskH, pack);
+          const texture = texturedMask(mask, materials, image, maskW, maskH, pack, maskLo);
           if (!texture) continue;
           ctx.save(); ctx.globalAlpha *= pack === "crypt" ? 1 : 0.65;
           ctx.drawImage(texture.canvas, X(texture.x), Y(texture.y), texture.w * scale, texture.h * scale); ctx.restore();

@@ -39,9 +39,10 @@ export function createWaterFilter(mask: HTMLCanvasElement, flow: HTMLCanvasEleme
     refresh() { texture.source.update(); stream.source.update(); recipe.source.update(); },
     /** Перерисовали «что стоит в воде». */
     refreshThings() { around.source.update(); },
-    aim(water: MapWater, x: number, y: number, scale: number, seconds: number, width: number, height: number) {
-      uniforms.uOrigin[0] = x; uniforms.uOrigin[1] = y; uniforms.uScale = scale; uniforms.uTime = seconds % 3600;
-      uniforms.uMap[0] = width; uniforms.uMap[1] = height;
+    /** `lo` — левый верхний угол карты: шейдер считает от него, как и маски воды. */
+    aim(water: MapWater, x: number, y: number, scale: number, seconds: number, width: number, height: number, lo = { x: 0, y: 0 }) {
+      uniforms.uOrigin[0] = x + lo.x * scale; uniforms.uOrigin[1] = y + lo.y * scale; uniforms.uScale = scale; uniforms.uTime = seconds % 3600;
+      uniforms.uMap[0] = width - lo.x; uniforms.uMap[1] = height - lo.y;
       uniforms.uWater[0] = water.mode; uniforms.uWater[1] = water.speed; uniforms.uWater[2] = water.size;
     },
     destroy() { filter.destroy(); texture.destroy(true); stream.destroy(true); recipe.destroy(true); around.destroy(true); },

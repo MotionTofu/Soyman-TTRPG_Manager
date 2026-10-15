@@ -166,8 +166,8 @@ export function surfacePattern(ctx: CanvasRenderingContext2D, image: HTMLImageEl
   pattern?.setTransform(new DOMMatrix([k, 0, 0, k, ox, oy]));
   return pattern;
 }
-export function texturedMask(mask: Mask, codes: readonly string[], image: HTMLImageElement, width: number, height: number, pack: ArtPack = "cartography") {
-  const key = `${[...codes].sort().join(",")}:${width}:${height}`;
+export function texturedMask(mask: Mask, codes: readonly string[], image: HTMLImageElement, width: number, height: number, pack: ArtPack = "cartography", lo = { x: 0, y: 0 }) {
+  const key = `${[...codes].sort().join(",")}:${lo.x}:${lo.y}:${width}:${height}`;
   const cached = masked.get(mask)?.get(key);
   if (cached?.image === image) {
     const entry = recentMasks.get(cached.canvas);
@@ -179,7 +179,7 @@ export function texturedMask(mask: Mask, codes: readonly string[], image: HTMLIm
   // Keep the sparse chunk traversal; never expand the mask into cell objects.
   const filtered: Mask = mask.source ? { sampleSize: mask.sampleSize, origin: mask.origin, entries: new Map(), source: { ...mask.source, codes: mask.source.codes.map(value => value && accepted.has(value) ? value : null) } } :
     { ...mask, entries: new Map([...mask.entries].filter(([, value]) => accepted.has(value))) };
-  const raster = buildTerrainMaskRaster(filtered, width, height, colors);
+  const raster = buildTerrainMaskRaster(filtered, width, height, colors, false, lo);
   if (!raster) return null;
   const alpha = document.createElement("canvas"); alpha.width = raster.width; alpha.height = raster.height;
   const alphaCtx = alpha.getContext("2d")!;

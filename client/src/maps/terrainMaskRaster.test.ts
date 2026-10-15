@@ -6,6 +6,12 @@ const origin = { x: 0, y: 0 };
 const sampleSize = 0.25;
 
 describe("terrain mask raster", () => {
+  it("гексовая карта начинается с −1: земля левее и выше нуля рисуется, у квадратной — обрезается", () => {
+    const mask = { origin, sampleSize, entries: new Map([["-3,-2", "forest"], ["0,0", "forest"]]) };
+    expect(buildTerrainMaskRaster(mask, 8, 8, MAP_TERRAIN_FILL)!.minSX).toBeGreaterThan(-3);
+    const hex = buildTerrainMaskRaster(mask, 8, 8, MAP_TERRAIN_FILL, false, { x: -1, y: -1 });
+    expect(hex!.minSX).toBeLessThanOrEqual(-3); expect(hex!.minSY).toBeLessThanOrEqual(-2);
+  });
   it("preserves transparent stone underlay alongside opaque materials, including perimeter samples", () => {
     const raster = buildTerrainMaskRaster({ origin, sampleSize, entries: new Map([["0,0", "stone"], ["1,0", "forest"]]) },
       8, 8, { ...MAP_TERRAIN_FILL, stone: "#d8cfb600" }, true);

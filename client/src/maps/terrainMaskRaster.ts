@@ -32,12 +32,14 @@ export function buildTerrainMaskRaster(
   mapHeight: number,
   colors: Readonly<Record<string, string>>,
   textured = false,
+  /** Левый верхний угол карты (у гексов −1). */
+  lo: { x: number; y: number } = { x: 0, y: 0 },
 ): TerrainMaskRaster | null {
   const { sampleSize: size, origin } = mask;
   if (!Number.isFinite(size) || size <= 0) return null;
-  const mapMinSX = Math.ceil((0 - origin.x) / size - 0.5);
+  const mapMinSX = Math.ceil((lo.x - origin.x) / size - 0.5);
   const mapMaxSX = Math.ceil((mapWidth - origin.x) / size - 0.5) - 1;
-  const mapMinSY = Math.ceil((0 - origin.y) / size - 0.5);
+  const mapMinSY = Math.ceil((lo.y - origin.y) / size - 0.5);
   const mapMaxSY = Math.ceil((mapHeight - origin.y) / size - 0.5) - 1;
   let minSX = Infinity;
   let minSY = Infinity;

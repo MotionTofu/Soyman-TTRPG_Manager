@@ -1,5 +1,5 @@
 import type { RenderTerrainView } from "../renderModel";
-import { terrainEdgeTiles, terrainMaskTiles, type EdgeTile, type MaskTile } from "../terrainMaskTiles";
+import { MAP_ZERO, terrainEdgeTiles, terrainMaskTiles, type EdgeTile, type MapCorner, type MaskTile } from "../terrainMaskTiles";
 import { terrainMaskPixel } from "../terrainMaskRaster";
 import { stripImage, surfaceCells, surfaceEdge, surfaceImage, surfacePattern, type ArtPack } from "./artwork";
 import { rasterDensity } from "./rasterDensity";
@@ -151,7 +151,7 @@ function surfaceTile(tile: EdgeTile, surface: Surface, mask: Mask, pixelsPerUnit
  * С рисунками каждая поверхность кладётся отдельно, снизу вверх по ярусу, со своей кромкой; «Чертёж» — одним цветным слоем. */
 export function drawTerrainMaskTiles(ctx: CanvasRenderingContext2D, mask: Mask,
   width: number, height: number, canvasW: number, canvasH: number, scale: number, ox: number, oy: number,
-  pixelRatio: number, colors: Readonly<Record<string, string>>, pack: ArtPack, textured: boolean) {
+  pixelRatio: number, colors: Readonly<Record<string, string>>, pack: ArtPack, textured: boolean, lo: MapCorner = MAP_ZERO) {
   const viewport = { minX: -ox / scale, minY: -oy / scale, maxX: (canvasW - ox) / scale, maxY: (canvasH - oy) / scale };
   const density = mask.sampleSize * scale * pixelRatio;
   // Smaller chunks at higher screen density avoid baking large offscreen areas
@@ -163,7 +163,7 @@ export function drawTerrainMaskTiles(ctx: CanvasRenderingContext2D, mask: Mask,
     ctx.save(); ctx.beginPath(); ctx.rect(x, y, tile.size * sample, tile.size * sample); ctx.clip();
     ctx.drawImage(image, x - sample, y - sample, (tile.size + 2) * sample, (tile.size + 2) * sample); ctx.restore();
   };
-  ctx.save(); ctx.beginPath(); ctx.rect(ox, oy, width * scale, height * scale); ctx.clip();
+  ctx.save(); ctx.beginPath(); ctx.rect(ox + lo.x * scale, oy + lo.y * scale, (width - lo.x) * scale, (height - lo.y) * scale); ctx.clip();
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
   if (textured && mask.source) {
     const surfaces = mask.source.codes.flatMap((code, index): Surface[] => {
@@ -178,11 +178,11 @@ export function drawTerrainMaskTiles(ctx: CanvasRenderingContext2D, mask: Mask,
     for (const surface of surfaces) ranks[surface.index] = surface.rank;
     const perUnit = rasterDensity(scale * pixelRatio), strength = pack === "crypt" ? 1 : .65;
     for (const surface of surfaces.sort((a, b) => a.rank - b.rank))
-      for (const tile of terrainEdgeTiles(mask, width, height, viewport, surface.index, ranks, edgeWindow(surface.edge, mask.sampleSize), tileSize)) {
+      for (const tile of terrainEdgeTiles(mask, width, height, viewport, surface.index, ranks, edgeWindow(surface.edge, mask.sampleSize), tileSize, lo)) {
         const image = surfaceTile(tile, surface, mask, perUnit, pack, colors, strength);
         if (image) place(image, tile);
       }
-  } else for (const tile of terrainMaskTiles(mask, width, height, colors, viewport, tileSize)) {
+  } else for (const tile of terrainMaskTiles(mask, width, height, colors, viewport, tileSize, lo)) {
     const image = tileImage(tile);
     if (image) place(image, tile);
   }
