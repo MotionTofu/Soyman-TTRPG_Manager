@@ -1121,49 +1121,105 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
   const cores: (() => void)[] = [];
   const mergeRoads = () => { for (const draw of cores) draw(); cores.length = 0; };
   const lastRivers = model.layers.findLastIndex(layer => layer.visible && layer.kind === "path" && layer.paths.some(path => path.kind === "river"));
-  /** Линия атласа (М6, М16): толщина в клетках, но не тоньше пары точек экрана. Река от истока растёт из нуля и уходит
-   * под накрашенную воду — впадает в море или озеро. Тракт — двойная линия: светлая середина ложится после туши всех
-   * дорог подряд, и дорога выходит из тракта, а не перечёркивает его. */
-  const strokeAtlas = (path: RenderPath, nodes: readonly SplineNode[]) => {
-    const samples = flattenSplineWithWidths(nodes, path.width ?? 0.22, 2 / scale);
-    if (samples.length < 2) return;
-    const width = Math.max(2, (path.width ?? 0.22) * scale);
-    ctx.save(); ctx.lineCap = "round"; ctx.lineJoin = "round";
-    if (path.atlas === "river") {
-      const along = [0], wet = paintedWaterAt(model);
-      for (let i = 1; i < samples.length; i++) along.push(along[i - 1] + Math.hypot(samples[i].x - samples[i - 1].x, samples[i].y - samples[i - 1].y));
-      const total = along.at(-1) || 1, grow = (i: number) => Math.pow(path.flow === "back" ? 1 - along[i] / total : along[i] / total, 0.7);
-      const wetAt = samples.map((point) => wet(point.x, point.y) > 0);
-      // Устье: последние полторы клетки перед водой река раскрывается воронкой. Под живую воду она уходит ещё на клетку —
-      // рваный берег рисуется не точно по накрашенному, и без запаса между рекой и морем осталась бы полоска суши.
-      const mouths = samples.flatMap((_, i) => i && wetAt[i] !== wetAt[i - 1] ? [(along[i] + along[i - 1]) / 2] : []);
-      const toMouth = (i: number) => Math.min(Infinity, ...mouths.map((at) => Math.abs(along[i] - at)));
-      const under = o.water ? 1 : 0, dry = samples.map((_, i) => !wetAt[i] || toMouth(i) < under);
-      const flare = (i: number) => 1 + 1.6 * Math.max(0, 1 - toMouth(i) / 1.5) ** 2;
-      for (const [color, extra] of [[chrome.ink, 2], [RIVER_FILL, 0]] as const) {
-        ctx.strokeStyle = color;
-        for (let i = 1; i < samples.length; i++) {
-          if (!dry[i - 1] || !dry[i]) continue;
-          const size = (grow(i - 1) * flare(i - 1) + grow(i) * flare(i)) / 2 * width;
-          ctx.lineWidth = size + Math.min(extra, size);
-          ctx.beginPath(); ctx.moveTo(X(samples[i - 1].x), Y(samples[i - 1].y)); ctx.lineTo(X(samples[i].x), Y(samples[i].y)); ctx.stroke();
-        }
+  /** Форма реки атласа: точки с толщиной в клетках и признаком «на суше». Река от истока растёт из нуля; последние
+   * полторы клетки перед водой раскрывается воронкой; под живую воду уходит ещё на клетку — рваный берег рисуется не
+   * точно по накрашенному, и без запаса между рекой и морем осталась бы полоска суши. */
+  const riverShapes = new Map<RenderPath, { x: number; y: number; size: number; dry: boolean }[]>();
+  const atlasRiver = (path: RenderPath) => {
+    let shape = riverShapes.get(path);
+    if (shape) return shape;
+    const nodes = path.closed ? [...path.nodes!, path.nodes![0]] : path.nodes!;
+    const samples = flattenSplineWithWidths(nodes, path.width ?? 0.22, Math.min(0.1, 2 / scale)), wet = paintedWaterAt(model), along = [0];
+    for (let i = 1; i < samples.length; i++) along.push(along[i - 1] + Math.hypot(samples[i].x - samples[i - 1].x, samples[i].y - samples[i - 1].y));
+    const total = along.at(-1) || 1, wetAt = samples.map((point) => wet(point.x, point.y) > 0);
+    const mouths = samples.flatMap((_, i) => i && wetAt[i] !== wetAt[i - 1] ? [(along[i] + along[i - 1]) / 2] : []);
+    const toMouth = (i: number) => Math.min(Infinity, ...mouths.map((at) => Math.abs(along[i] - at)));
+    const width = Math.max(path.width ?? 0.22, 2 / scale), under = o.water ? 1 : 0;
+    shape = samples.map((point, i) => ({ x: point.x, y: point.y, dry: !wetAt[i] || toMouth(i) < under,
+      size: Math.pow(path.flow === "back" ? 1 - along[i] / total : along[i] / total, 0.7) * (1 + 1.6 * Math.max(0, 1 - toMouth(i) / 1.5) ** 2) * width }));
+    riverShapes.set(path, shape);
+    return shape;
+  };
+  const atlasRivers = model.layers.flatMap((layer) => layer.visible && layer.kind === "path" ? layer.paths.filter((path) => path.atlas === "river" && path.nodes && path.nodes.length > 1) : []);
+  /** Вода под точкой дороги: накрашенная или река атласа. */
+  const overWater = (x: number, y: number) => paintedWaterAt(model)(x, y) > 0 || atlasRivers.some((river) => {
+    const shape = atlasRiver(river);
+    for (let i = 1; i < shape.length; i++) {
+      const a = shape[i - 1], b = shape[i];
+      if (!a.dry || !b.dry) continue;
+      const dx = b.x - a.x, dy = b.y - a.y, t = Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / (dx * dx + dy * dy || 1)));
+      if (Math.hypot(x - a.x - dx * t, y - a.y - dy * t) <= (a.size + (b.size - a.size) * t) / 2) return true;
+    }
+    return false;
+  });
+  /** Мост атласа, как условный знак топокарты: по обе стороны дороги линия на всю ширину воды, у берегов — усы наружу. */
+  const atlasBridges = (samples: readonly { x: number; y: number }[], half: number) => {
+    const wet = samples.map((point) => overWater(point.x, point.y)), gap = Math.max(2, half * 0.6), rail = half + gap;
+    ctx.save(); ctx.setLineDash([]); ctx.strokeStyle = chrome.ink; ctx.lineWidth = Math.max(1.5, half * 0.45); ctx.lineCap = "round";
+    for (let i = 0; i < samples.length; i++) {
+      if (!wet[i] || (i && wet[i - 1])) continue;
+      let j = i; while (j + 1 < samples.length && wet[j + 1]) j++;
+      // Пролёт — от последней точки на суше до первой на суше за водой.
+      const run = samples.slice(Math.max(0, i - 1), Math.min(samples.length, j + 2)).map((point) => ({ x: X(point.x), y: Y(point.y) }));
+      if (run.length < 2) continue;
+      // Перила заходят на берег: на узкой реке мост иначе короче собственных усов.
+      const reach = Math.max(4, rail * 0.8);
+      for (const [end, next] of [[0, 1], [run.length - 1, run.length - 2]]) {
+        const a = run[end], b = run[next], length = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+        run[end] = { x: a.x + (a.x - b.x) / length * reach, y: a.y + (a.y - b.y) / length * reach };
       }
-    } else {
-      ctx.beginPath(); samples.forEach((point, i) => i ? ctx.lineTo(X(point.x), Y(point.y)) : ctx.moveTo(X(point.x), Y(point.y)));
-      ctx.strokeStyle = chrome.ink;
-      if (path.atlas === "highway") {
-        // Тракт — двойная линия: широкая тушь, внутри полоса бумаги.
-        ctx.lineWidth = width * 1.5; ctx.stroke();
-        cores.push(() => {
-          ctx.save(); ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = chrome.paper; ctx.lineWidth = Math.max(1, width * 0.6);
-          ctx.beginPath(); samples.forEach((point, i) => i ? ctx.lineTo(X(point.x), Y(point.y)) : ctx.moveTo(X(point.x), Y(point.y))); ctx.stroke(); ctx.restore();
+      for (const side of [-1, 1]) {
+        const shifted = run.map((point, k) => {
+          const a = run[Math.max(0, k - 1)], b = run[Math.min(run.length - 1, k + 1)], length = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+          return { x: point.x - (b.y - a.y) / length * rail * side, y: point.y + (b.x - a.x) / length * rail * side, tx: (b.x - a.x) / length, ty: (b.y - a.y) / length };
         });
-      } else if (path.atlas === "trail") { ctx.setLineDash([width * 2.4, width * 1.6]); ctx.lineWidth = width * 0.8; ctx.stroke(); }
-      else if (path.atlas === "sea") { ctx.setLineDash([0.1, width * 2.2]); ctx.lineWidth = width * 1.1; ctx.stroke(); }
-      else { ctx.lineWidth = width; ctx.stroke(); }
+        ctx.beginPath(); shifted.forEach((point, k) => k ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
+        // Усы: от концов перил наружу и назад, под 45°.
+        for (const [point, back] of [[shifted[0], 1], [shifted.at(-1)!, -1]] as const) {
+          const nx = -point.ty * side, ny = point.tx * side, ear = Math.max(9, rail * 1.1) * 0.7;
+          ctx.moveTo(point.x, point.y); ctx.lineTo(point.x + (nx - point.tx * back) * ear, point.y + (ny - point.ty * back) * ear);
+        }
+        ctx.stroke();
+      }
+      i = j;
     }
     ctx.restore();
+  };
+  /** Линия атласа (М6, М16): толщина в клетках, но не тоньше пары точек экрана. Река лежит под живой водой. Тракт — двойная
+   * линия: светлая середина ложится после туши всех дорог подряд, и дорога выходит из тракта, а не перечёркивает его.
+   * Дорога над водой получает знак моста; морской путь — нет. */
+  const strokeAtlas = (path: RenderPath, nodes: readonly SplineNode[]) => {
+    ctx.save(); ctx.lineCap = "round"; ctx.lineJoin = "round";
+    if (path.atlas === "river") {
+      const shape = atlasRiver(path);
+      for (const [color, extra] of [[chrome.ink, 2], [RIVER_FILL, 0]] as const) {
+        ctx.strokeStyle = color;
+        for (let i = 1; i < shape.length; i++) {
+          if (!shape[i - 1].dry || !shape[i].dry) continue;
+          const size = (shape[i - 1].size + shape[i].size) / 2 * scale;
+          ctx.lineWidth = size + Math.min(extra, size);
+          ctx.beginPath(); ctx.moveTo(X(shape[i - 1].x), Y(shape[i - 1].y)); ctx.lineTo(X(shape[i].x), Y(shape[i].y)); ctx.stroke();
+        }
+      }
+      ctx.restore();
+      return;
+    }
+    const samples = flattenSplineWithWidths(nodes, path.width ?? 0.22, Math.min(0.1, 2 / scale));
+    if (samples.length < 2) { ctx.restore(); return; }
+    const width = Math.max(2, (path.width ?? 0.22) * scale);
+    ctx.beginPath(); samples.forEach((point, i) => i ? ctx.lineTo(X(point.x), Y(point.y)) : ctx.moveTo(X(point.x), Y(point.y)));
+    ctx.strokeStyle = chrome.ink;
+    if (path.atlas === "highway") {
+      ctx.lineWidth = width * 1.5; ctx.stroke();
+      cores.push(() => {
+        ctx.save(); ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = chrome.paper; ctx.lineWidth = Math.max(1, width * 0.6);
+        ctx.beginPath(); samples.forEach((point, i) => i ? ctx.lineTo(X(point.x), Y(point.y)) : ctx.moveTo(X(point.x), Y(point.y))); ctx.stroke(); ctx.restore();
+      });
+    } else if (path.atlas === "trail") { ctx.setLineDash([width * 2.4, width * 1.6]); ctx.lineWidth = width * 0.8; ctx.stroke(); }
+    else if (path.atlas === "sea") { ctx.setLineDash([0.1, width * 2.2]); ctx.lineWidth = width * 1.1; ctx.stroke(); }
+    else { ctx.lineWidth = width; ctx.stroke(); }
+    ctx.restore();
+    if (path.atlas !== "sea") atlasBridges(samples, (path.atlas === "highway" ? width * 1.5 : path.atlas === "trail" ? width * 0.8 : width) / 2);
   };
   const strokeFreePath = (path: RenderPath) => {
     if (!path.nodes || path.nodes.length < 2) return;
