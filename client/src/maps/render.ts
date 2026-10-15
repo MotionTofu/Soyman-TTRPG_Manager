@@ -1125,6 +1125,9 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
   // Рваный край одной дороги не остаётся лежать поперёк другой — они сливаются в одно пятно.
   const cores: (() => void)[] = [];
   const mergeRoads = () => { for (const draw of cores) draw(); cores.length = 0; };
+  // Реки атласа так же: сначала тушь всех рек слоя, потом вода — у слияния и рукавов вода сливается, а не перечёркивается берегом.
+  const riverFills: (() => void)[] = [];
+  const mergeRivers = () => { for (const draw of riverFills) draw(); riverFills.length = 0; };
   const lastRivers = model.layers.findLastIndex(layer => layer.visible && layer.kind === "path" && layer.paths.some(path => path.kind === "river"));
   /** Форма реки атласа: точки с толщиной в клетках и признаком «на суше». Река от истока растёт из нуля; последние
    * полторы клетки перед водой раскрывается воронкой; под живую воду уходит ещё на клетку — рваный берег рисуется не
@@ -1227,7 +1230,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     ctx.save(); ctx.lineCap = "round"; ctx.lineJoin = "round";
     if (path.atlas === "river") {
       const shape = atlasRiver(path);
-      for (const [color, extra] of [[chrome.ink, 2], [RIVER_FILL, 0]] as const) {
+      const pass = (color: string, extra: number) => {
         ctx.strokeStyle = color;
         for (let i = 1; i < shape.length; i++) {
           if (!shape[i - 1].dry || !shape[i].dry) continue;
@@ -1235,8 +1238,10 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
           ctx.lineWidth = size + Math.min(extra, size);
           ctx.beginPath(); ctx.moveTo(X(shape[i - 1].x), Y(shape[i - 1].y)); ctx.lineTo(X(shape[i].x), Y(shape[i].y)); ctx.stroke();
         }
-      }
+      };
+      pass(chrome.ink, 2);
       ctx.restore();
+      riverFills.push(() => { ctx.save(); ctx.lineCap = "round"; ctx.lineJoin = "round"; pass(RIVER_FILL, 0); ctx.restore(); });
       return;
     }
     const samples = flattenSplineWithWidths(nodes, path.width ?? 0.22, Math.min(0.1, 2 / scale));
@@ -1841,6 +1846,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       for (let i = 0; i < paths.length; i++) {
         const p = paths[i];
         if (part && (part === "ground") !== waterRiver(p)) continue;
+        if (p.atlas !== "river") mergeRivers();
         if (p.kind !== "road") mergeRoads();
         // Стена со своей полосой (ограда) рисуется как линия-полоса, а не кладкой.
         if (p.kind === "wall" && p.nodes && !p.style) {
@@ -1852,6 +1858,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
         else if (p.kind === "river") strokeRivers(p.cells);
         else strokeRoads(p.cells);
       }
+      mergeRivers();
       mergeRoads();
       if (decks.length && model.layers.indexOf(layer) >= lastRivers) { for (const draw of decks) draw(); decks.length = 0; }
     } else if (layer.kind === "gameplay") {
