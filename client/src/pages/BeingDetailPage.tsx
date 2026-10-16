@@ -27,7 +27,6 @@ import { CreatureCardLoader } from "../components/CreatureCard";
 import { SEARCH_DRAG_MIME } from "../components/LinkDropZone";
 import { RelationsTab } from "../components/RelationsTab";
 import { MentionText } from "../components/mentions/MentionText";
-import { MentionTextarea } from "../components/mentions/MentionTextarea";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { formatImportantDate } from "../inworldCalendar";
 import { EntityPage } from "../components/EntityPage";
@@ -45,11 +44,10 @@ import { EmptyState } from "../components/EmptyState";
 import { NavIcon } from "../components/NavIcons";
 import { useConfirm } from "../hooks/useConfirm";
 import { useUndoDelete } from "../hooks/useUndoDelete";
-import { PARTICIPATION_FIELDS } from "../beingForce";
+import { CampaignMove } from "../components/campaign/CampaignMove";
 import { rememberOpenedBeing } from "../populationRecent";
 import type {
   BeingChapter,
-  BeingParticipation,
   CompendiumLink,
   Campaign,
   DateRecurrence,
@@ -366,19 +364,6 @@ export function BeingDetailPage() {
     if (done) setAddLocationId(null);
   }
 
-  // «Ход в кампании» (бывшее участие, Q7): глава «Текущая ситуация» с
-  // кампанией. Нет главы — «Править» её заводит; поля пишутся на неё же.
-  async function addParticipation(campaignId: number) {
-    await run(
-      () =>
-        write.post(`/setting-beings/${beingId}/chapters`, {
-          section: "current_situation",
-          campaign_id: campaignId,
-          title: "",
-        }),
-      { affects: mine, retry: false },
-    );
-  }
 
   // Важные даты попадают в календарь сеттинга и кампаний.
   const dateAffects: Affect[] = [...mine, { path: "/calendar" }];
@@ -443,13 +428,6 @@ export function BeingDetailPage() {
     being.chapters.filter(
       (c) => c.section === section && matches(dossierQuery, c.title, c.content),
     );
-  // «Ход в кампании» — глава «Текущая ситуация» этой кампании.
-  const campaignChapter = inCampaign
-    ? being.chapters.find(
-        (c) =>
-          c.section === "current_situation" && c.campaign_id === inCampaign.id,
-      )
-    : undefined;
   const scenes = being.scenes ?? [];
   const relationCount = relations
     ? relations.outgoing.length + relations.incoming.length
@@ -688,31 +666,12 @@ export function BeingDetailPage() {
               hideProfileButton
               forceExtras={forceExtras(records, being.setting_id)}
             />
-            {campaignChapter ? (
-              <Participation
-                chapter={campaignChapter}
-                live={live?.campaign_id === inCampaign.id}
-                settingId={being.setting_id}
-                affects={mine}
-                title="Ход в кампании"
-              />
-            ) : (
-              <section className="participation">
-                <h3 className="paper-group__head">Ход в кампании</h3>
-                <span className="muted">
-                  Цель, план, что будет без вмешательства — пока не записаны.
-                </span>
-                <div className="participation__actions">
-                  <button
-                    type="button"
-                    className="comp-mini"
-                    onClick={() => void addParticipation(inCampaign.id)}
-                  >
-                    Править
-                  </button>
-                </div>
-              </section>
-            )}
+            <CampaignMove
+              being={being}
+              campaignId={inCampaign.id}
+              live={live?.campaign_id === inCampaign.id}
+              affects={mine}
+            />
             <CampaignRecords
               campaignId={inCampaign.id}
               settingId={being.setting_id}
@@ -1216,123 +1175,6 @@ export function BeingDetailPage() {
         <MentionsTab entityType="being" entityId={beingId} />
       )}
     </EntityPage>
-  );
-}
-
-// «В кампании X» (Q7, Q14): участие существа — поля контекста на главе
-// «Текущая ситуация» этой кампании плюс её текст. У идущей сессии раскрыто,
-// у остальных кампаний свёрнуто.
-function Participation({
-  chapter,
-  live,
-  settingId,
-  affects,
-  title,
-}: {
-  chapter: BeingChapter;
-  live: boolean;
-  settingId: number;
-  affects: Affect[];
-  /** В контексте кампании — «Ход в кампании», раскрыт всегда. */
-  title?: string;
-}) {
-  const run = useAction();
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<BeingParticipation>({});
-  const [content, setContent] = useState("");
-  const fields = chapter.participation ?? {};
-  const filled = PARTICIPATION_FIELDS.filter((f) => fields[f.key]?.trim());
-
-  function startEdit() {
-    setDraft(fields);
-    setContent(chapter.content);
-    setEditing(true);
-  }
-
-  async function save() {
-    const done = await run(
-      () =>
-        write
-          .put(`/setting-beings/chapters/${chapter.id}`, {
-            participation: draft,
-            content,
-          })
-          .then(() => true),
-      { affects },
-    );
-    if (done) setEditing(false);
-  }
-
-  return (
-    <details className="paper-fold participation" open={live || !!title || undefined}>
-      <summary>
-        {title ?? `В кампании «${chapter.campaign_name}»`}
-        {live && <span className="participation__live">идёт сессия</span>}
-      </summary>
-      <div className="paper-fold__body">
-        {editing ? (
-          <div className="stack">
-            {PARTICIPATION_FIELDS.map((f) => (
-              <label key={f.key} className="stack">
-                <span className="editable-card-field-label">{f.label}</span>
-                <MentionTextarea
-                  value={draft[f.key] ?? ""}
-                  onChange={(v) =>
-                    setDraft((prev) => ({ ...prev, [f.key]: v }))
-                  }
-                  rows={2}
-                  autoGrow
-                  defaultSettingId={settingId}
-                />
-              </label>
-            ))}
-            <label className="stack">
-              <span className="editable-card-field-label">Заметка</span>
-              <MentionTextarea
-                value={content}
-                onChange={setContent}
-                rows={3}
-                autoGrow
-                defaultSettingId={settingId}
-              />
-            </label>
-            <div className="participation__actions">
-              <button type="button" className="primary" onClick={save}>
-                Сохранить
-              </button>
-              <button type="button" onClick={() => setEditing(false)}>
-                Отмена
-              </button>
-            </div>
-          </div>
-        ) : (
-          <>
-            {filled.length > 0 ? (
-              <dl className="participation__grid">
-                {filled.map((f) => (
-                  <div key={f.key}>
-                    <dt className="paper-label">{f.label}</dt>
-                    <dd>
-                      <MentionText text={fields[f.key] ?? ""} />
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            ) : (
-              <span className="muted">
-                Цель, план, что будет без вмешательства — пока не записаны.
-              </span>
-            )}
-            {chapter.content.trim() && <MentionText text={chapter.content} />}
-            <div className="participation__actions">
-              <button type="button" className="comp-mini" onClick={startEdit}>
-                Править участие
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-    </details>
   );
 }
 

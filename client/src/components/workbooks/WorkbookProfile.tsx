@@ -1,4 +1,4 @@
-import { useContext, useMemo, useState } from "react";
+import { useContext, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useAction, useResource, write } from "../../data/hooks";
 import { readOnce } from "../../data/imperative";
@@ -12,16 +12,22 @@ import { SettingWorldTab } from "../setting/SettingWorldTab";
 import {CampaignSecrets} from "../CampaignSecrets";
 import {MentionText} from "../mentions/MentionText";
 import { WorkbookContext } from "./model";
+import { CampaignEntitiesView } from "./WorkbookCampaignViews";
 import type { WorkbookField } from "@shared/workbooks";
 import "../../pages/setting-profile.css";
 
-const CAMPAIGN_VIEWS=new Set(["heroes","group_grounds","places","sides","knowledge","world_moment","session_review"]);
+
+const CAMPAIGN_VIEWS=new Set(["heroes","group_grounds","knowledge","world_moment","session_review"]);
 
 /** The notebook opens the existing model editors; it never copies profile data into answers. */
 export function WorkbookProfile({field}:{field:WorkbookField}) {
   const context=useContext(WorkbookContext),doc=context?.document;
   const categories=useMemo(()=>[field.entity!],[field.entity]);
+  // У вида тетради кампании подсказка листа — над живыми данными (например, как отмечать интерес игрока).
+  const withHint=(view:ReactNode)=><>{field.hint&&<small className="wb-hint">{field.hint}</small>}{view}</>;
   if(!doc?.project_type||!doc.project_id)return <p className="muted">Свяжите тетрадь с проектом, чтобы открыть {field.label.toLowerCase()}.</p>;
+  // Виды тетради кампании v4 (спека workbook-rework): живые данные кампании, копии в ответах нет.
+  if(field.entity==="places"||field.entity==="sides")return doc.project_type==="campaign"?withHint(<CampaignEntitiesView campaignId={doc.project_id} view={field.entity} title={field.label}/>):<p className="muted">Этот раздел — в тетради кампании.</p>;
   // Виды листов тетради кампании v4: заглушка, пока задачи 04–07 не сделают каждый вид.
   if(CAMPAIGN_VIEWS.has(field.entity!))return <section className="wb-profile"><h3>{field.label}</h3><p className="muted">Этот раздел покажет данные кампании.</p></section>;
   if(field.entity==="passport")return <ProjectPassport type={doc.project_type} id={doc.project_id}/>;
