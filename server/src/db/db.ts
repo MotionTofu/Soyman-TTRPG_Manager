@@ -7387,6 +7387,21 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     // «Кем заменена» ищется по replaces_id в каждом списке записей.
     database.exec("CREATE INDEX idx_entity_records_replaces ON entity_records (replaces_id)");
   }
+  // Задействованная сущность (ADR-0006) — строка participations с контекстом
+  // кампании. Нынешнее «Участие в кампании» — глава «Текущая ситуация»
+  // существа с campaign_id — становится ссылкой, поставленной руками. Один
+  // раз: ссылку, которую Мастер потом снял, повторный прогон не вернёт.
+  if (!appSettingFlag(database, "participations_from_current_situation_v1")) {
+    const added = database
+      .prepare(
+        `INSERT OR IGNORE INTO participations (context_type, context_id, entity_type, entity_id, manual)
+         SELECT DISTINCT 'campaign', campaign_id, 'being', being_id, 1 FROM being_chapters
+         WHERE section = 'current_situation' AND campaign_id IS NOT NULL`
+      )
+      .run().changes;
+    if (added) console.log(`[migrate] participations_from_current_situation_v1: ${added}`);
+    setAppSettingFlag(database, "participations_from_current_situation_v1");
+  }
 
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.

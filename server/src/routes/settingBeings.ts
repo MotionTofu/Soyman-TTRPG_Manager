@@ -7,6 +7,7 @@ import { db } from "../db/db";
 import { beingFolder, toFileUrl, writeReplacingOldFile } from "../services/filesystem";
 import { renameEntityFolder } from "../services/vaultPaths";
 import { parseForce, parseParticipation, serializeForce, serializeParticipation } from "../services/beingForce";
+import { campaignsOfEntity } from "../services/entityRecords";
 
 export const settingBeingsRouter = Router();
 const ALLOWED_IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
@@ -393,6 +394,8 @@ settingBeingsRouter.get("/:id", (req, res) => {
       getStatblockCountsByOwner("being", [Number(req.params.id)]).get(Number(req.params.id)) ?? 0,
     important_dates: importantDates,
     chapters,
+    // «Задействована в кампаниях» (ADR-0006).
+    campaigns: campaignsOfEntity("being", Number(req.params.id)),
   });
 });
 

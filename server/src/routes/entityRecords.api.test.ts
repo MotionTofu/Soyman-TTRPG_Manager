@@ -9,6 +9,7 @@ import request from "supertest";
 import { db } from "../db/db";
 import { entityRecordsRouter } from "./entityRecords";
 import { collectOrphans, sweepOrphans } from "../services/orphans";
+import { campaignsOfEntity } from "../services/entityRecords";
 
 let app: express.Express;
 let campaignId = 0;
@@ -203,5 +204,73 @@ describe("уборка сирот", () => {
     expect(collectOrphans()["entity_records:being"]).toEqual([expect.objectContaining({ id: rec.id })]);
     sweepOrphans();
     expect(db.prepare("SELECT 1 FROM entity_records WHERE id = ?").get(rec.id)).toBeUndefined();
+  });
+});
+
+describe("«Мир кампании»", () => {
+  const world = async () => (await request(app).get(`/api/campaigns/${campaignId}/world`)).body;
+
+  it("отдаёт задействованные сущности со сводкой записей", async () => {
+    const lock = Number(
+      db.prepare("INSERT INTO setting_locations (setting_id, name, kind) SELECT setting_id, 'Шлюз', 'шлюз' FROM campaigns WHERE id = ?")
+        .run(campaignId).lastInsertRowid
+    );
+    await create({ owner_type: "location", owner_id: lock, text: "Шлюз открыт", session_id: sessionId });
+    await create({ owner_type: "location", owner_id: lock, text: "Говорят, его чинили", certainty: "rumor" });
+    await create({ owner_type: "location", owner_id: lock, text: "Кто-то был внутри", status: "draft" });
+    const old = (await create({ owner_type: "location", owner_id: lock, text: "Шлюз ржавый" })).body;
+    await request(app).post(`/api/records/${old.id}/replace`).send({ text: "Шлюз смазан" });
+    await create({ owner_type: "location", owner_id: lock, text: "Мимо", status: "discarded" });
+
+    const body = await world();
+    expect(body.entities.find((e: { entity_id: number; entity_type: string }) => e.entity_type === "location" && e.entity_id === lock)).toEqual({
+      entity_type: "location",
+      entity_id: lock,
+      name: "Шлюз",
+      category: "шлюз",
+      manual: false,
+      // Действующие: «открыт», «чинили» (слух), «смазан»; заменённая и отброшенная не в счёт.
+      records: 3,
+      drafts: 1,
+      rumors: 1,
+      last_session: expect.objectContaining({ id: sessionId, date: "2026-10-01" }),
+    });
+    // Существа, затем сообщества, затем места.
+    const types = body.entities.map((e: { entity_type: string }) => e.entity_type);
+    expect(types).toEqual([...types].sort((a: string, b: string) => ["being", "community", "location"].indexOf(a) - ["being", "community", "location"].indexOf(b)));
+  });
+
+  it("задействовать руками можно только сущность сеттинга кампании", async () => {
+    const quiet = Number(
+      db.prepare("INSERT INTO setting_beings (setting_id, name, category) SELECT setting_id, 'Тихоня', 'key_figure' FROM campaigns WHERE id = ?")
+        .run(campaignId).lastInsertRowid
+    );
+    expect((await request(app).post(`/api/campaigns/${campaignId}/world`).send({ entity_type: "being", entity_id: stranger })).status).toBe(400);
+    expect((await request(app).post(`/api/campaigns/${campaignId}/world`).send({ entity_type: "character", entity_id: characterId })).status).toBe(400);
+    const res = await request(app).post(`/api/campaigns/${campaignId}/world`).send({ entity_type: "being", entity_id: quiet });
+    expect(res.status).toBe(201);
+    expect(participation("being", quiet)).toEqual({ manual: 1 });
+    expect((await world()).entities).toContainEqual(
+      expect.objectContaining({ entity_type: "being", entity_id: quiet, name: "Тихоня", category: "key_figure", manual: true, records: 0, last_session: null })
+    );
+
+    // Без записей — убирается.
+    const del = await request(app).delete(`/api/campaigns/${campaignId}/world/being/${quiet}`);
+    expect(del.status).toBe(200);
+    expect(participation("being", quiet)).toBeUndefined();
+  });
+
+  it("сущность с записями не убрать — 409 с объяснением", async () => {
+    const res = await request(app).delete(`/api/campaigns/${campaignId}/world/location/${canal}`);
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/записи/);
+    expect(participation("location", canal)).toEqual({ manual: 0 });
+  });
+
+  it("профиль сущности знает, в каких кампаниях она задействована", () => {
+    expect(campaignsOfEntity("location", canal)).toEqual([
+      expect.objectContaining({ id: campaignId, name: "Мёртвый канал", records: expect.any(Number), last_session: expect.objectContaining({ id: sessionId }) }),
+    ]);
+    expect(campaignsOfEntity("being", stranger)).toEqual([]);
   });
 });

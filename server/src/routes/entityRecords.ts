@@ -16,6 +16,7 @@ import {
   RECORD_ASPECTS,
   RECORD_STATUSES,
   SETTING_OWNER_TYPES,
+  engagements,
   isAspectOf,
 } from "../services/entityRecords";
 
@@ -200,6 +201,88 @@ function handle(fn: (req: Request, res: Response) => void) {
     }
   };
 }
+
+/**
+ * Колонка «категории» вида для строки «Мира кампании»: у существа — роль в
+ * мире (ключевая фигура, влиятельное…), у места — вывеска. У сообщества нет.
+ */
+const CATEGORY_COLUMN: Record<string, string | undefined> = { being: "category", location: "kind" };
+
+/** Имя и категория задействованных сущностей; архивные и исчезнувшие — мимо. */
+function worldEntities(refs: { type: string; id: number }[]) {
+  const out = new Map<string, { name: string; category: string | null }>();
+  for (const type of SETTING_OWNER_TYPES) {
+    const ids = refs.filter((r) => r.type === type).map((r) => r.id);
+    if (!ids.length) continue;
+    const { table, nameCol } = requireKind(type);
+    const cat = CATEGORY_COLUMN[type];
+    const rows = db
+      .prepare(
+        `SELECT id, ${nameCol} AS name, ${cat ? cat : "NULL"} AS category FROM ${table}
+         WHERE archived_at IS NULL AND id IN (${ids.map(() => "?").join(",")})`
+      )
+      .all(...ids) as { id: number; name: string; category: string | null }[];
+    for (const r of rows) out.set(refKey(type, r.id), { name: r.name, category: r.category || null });
+  }
+  return out;
+}
+
+// «Мир кампании»: задействованные сущности со сводкой записей.
+entityRecordsRouter.get("/campaigns/:id/world", handle((req, res) => {
+  const campaign = campaignById(req.params.id);
+  if (!campaign) return res.status(404).json({ error: "Кампания не найдена" });
+  const list = engagements("p.context_id = ?", campaign.id);
+  const entities = worldEntities(list.map((e) => ({ type: e.entity_type, id: e.entity_id })));
+  const typeOrder = [...SETTING_OWNER_TYPES];
+  const items = list
+    .flatMap((e) => {
+      const entity = entities.get(refKey(e.entity_type, e.entity_id));
+      if (!entity) return [];
+      const { campaign_id: _c, ...rest } = e;
+      return [{ ...rest, ...entity }];
+    })
+    .sort((a, b) => typeOrder.indexOf(a.entity_type) - typeOrder.indexOf(b.entity_type) || a.name.localeCompare(b.name, "ru"));
+  res.json({ setting_id: campaign.setting_id, entities: items });
+}));
+
+// Задействовать руками («+ Задействовать из сеттинга»).
+entityRecordsRouter.post("/campaigns/:id/world", handle((req, res) => {
+  const campaign = campaignById(req.params.id);
+  if (!campaign) return res.status(404).json({ error: "Кампания не найдена" });
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  if (typeof body.entity_type !== "string" || !SETTING_OWNER_TYPES.has(body.entity_type))
+    throw new BadRequest("Задействовать можно существо, сообщество или место сеттинга");
+  const { ownerType, ownerId } = checkOwner(campaign, body.entity_type, body.entity_id);
+  db.prepare(
+    `INSERT INTO participations (context_type, context_id, entity_type, entity_id, manual)
+     VALUES ('campaign', ?, ?, ?, 1)
+     ON CONFLICT (context_type, context_id, entity_type, entity_id) DO NOTHING`
+  ).run(campaign.id, ownerType, ownerId);
+  res.status(201).json({ ok: true });
+}));
+
+// Убрать из «Мира кампании». Пока о сущности есть записи, ссылку держат
+// они: снять её значило бы спрятать записи из списка кампании.
+entityRecordsRouter.delete("/campaigns/:id/world/:type/:entityId", handle((req, res) => {
+  const campaign = campaignById(req.params.id);
+  if (!campaign) return res.status(404).json({ error: "Кампания не найдена" });
+  const entityId = positiveId(req.params.entityId);
+  if (!entityId || !SETTING_OWNER_TYPES.has(req.params.type)) throw new BadRequest("Неверный адрес");
+  const { n } = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM entity_records
+       WHERE campaign_id = ? AND owner_type = ? AND owner_id = ? AND status <> 'discarded'`
+    )
+    .get(campaign.id, req.params.type, entityId) as { n: number };
+  if (n > 0)
+    return res.status(409).json({
+      error: `О ней в кампании есть записи (${n}). Убрать из «Мира кампании» можно, когда записей не останется — отбросьте их или оставьте сущность.`,
+    });
+  db.prepare(
+    "DELETE FROM participations WHERE context_type = 'campaign' AND context_id = ? AND entity_type = ? AND entity_id = ?"
+  ).run(campaign.id, req.params.type, entityId);
+  res.json({ ok: true });
+}));
 
 // Записи кампании. Отброшенные — только если спросили status=discarded.
 entityRecordsRouter.get("/campaigns/:id/records", handle((req, res) => {

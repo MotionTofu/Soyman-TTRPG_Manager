@@ -13,6 +13,7 @@ import {
   getStatblockCountsByOwner,
   getLocations,
 } from "./settingBeings";
+import { campaignsOfEntity } from "../services/entityRecords";
 
 export const settingCommunitiesRouter = Router();
 const ALLOWED_IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
@@ -215,6 +216,8 @@ settingCommunitiesRouter.get("/:id", (req, res) => {
     chapters,
     locations,
     important_dates: importantDates,
+    // «Задействована в кампаниях» (ADR-0006).
+    campaigns: campaignsOfEntity("community", Number(req.params.id)),
   });
 });
 
