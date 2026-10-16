@@ -1,3 +1,4 @@
+import { BEING_CATEGORY_LABELS } from "../beingCategories";
 import { useSettingCrumbs } from "../layout/useSettingCrumbs";
 import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { EntityParticipates } from "../components/EntityParticipates";
@@ -80,13 +81,6 @@ function chunkFours<T>(items: T[]): T[][] {
   for (let i = 0; i < items.length; i += 4) rows.push(items.slice(i, i + 4));
   return rows;
 }
-
-const CATEGORY_LABELS: Record<string, string> = {
-  bestiary: "Бестиарий",
-  key_figure: "Ключевая фигура",
-  influential: "Влиятельная личность",
-  notable: "Занимательная личность",
-};
 
 function matches(query: string, ...texts: string[]): boolean {
   const q = query.trim().toLowerCase();
@@ -595,7 +589,7 @@ export function BeingDetailPage() {
               </label>
               {/* Статус — под портретом (владелец, 2026-10-01). */}
               <span className="badge tag being-category-badge">
-                {CATEGORY_LABELS[being.category]}
+                {BEING_CATEGORY_LABELS[being.category]}
               </span>
             </div>
             <dl className="paper-facts">
@@ -791,7 +785,7 @@ export function BeingDetailPage() {
                       key: "category",
                       label: "Категория",
                       value: being.category,
-                      options: Object.entries(CATEGORY_LABELS).map(
+                      options: Object.entries(BEING_CATEGORY_LABELS).map(
                         ([value, label]) => ({ value, label }),
                       ),
                     },

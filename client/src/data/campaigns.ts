@@ -37,6 +37,8 @@ export const campaignPaths = {
   grants: (campaignId: number) => `/visibility-grants?campaign_id=${campaignId}`,
   grantSummary: (campaignId: number) => `/visibility-grants/summary?campaign_id=${campaignId}`,
   settingEntities: (campaignId: number) => `/campaign-setting-entities/${campaignId}`,
+  /** «Мир кампании»: задействованные сущности сеттинга (ADR-0006). */
+  world: (campaignId: number) => `/campaigns/${campaignId}/world`,
   playerSections: (campaignId: number) => `/campaign-player-sections?campaign_id=${campaignId}`,
   sectionArticles: (sectionId: number) => `/campaign-player-sections/${sectionId}/articles`,
   systems: () => "/systems",

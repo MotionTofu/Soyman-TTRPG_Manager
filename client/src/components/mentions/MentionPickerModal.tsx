@@ -54,6 +54,9 @@ export function MentionPickerModal({
   onClose,
   heading = "Упоминание",
   direct = false,
+  onlyTypes,
+  allow,
+  lockSetting = false,
 }: {
   initialQuery: string;
   defaultSettingId?: number;
@@ -62,10 +65,18 @@ export function MentionPickerModal({
   heading?: string;
   /** Выбор сразу, без шага «Как отображается»: подпись нужна только упоминанию в тексте. */
   direct?: boolean;
+  /** Только эти виды — и в поиске, и в создании («Мир кампании»: сущности сеттинга). */
+  onlyTypes?: readonly string[];
+  /** Что из найденного можно выбрать, например «из сеттинга кампании и ещё не задействовано». */
+  allow?: (result: PickResult) => boolean;
+  /** Новая сущность — только в `defaultSettingId`. */
+  lockSetting?: boolean;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState(initialQuery);
-  const [activeTypes, setActiveTypes] = useState<Set<string>>(() => new Set(ENTITY_TYPES.map((t) => t.key)));
+  const typeOptions = onlyTypes ? ENTITY_TYPES.filter((t) => onlyTypes.includes(t.key)) : ENTITY_TYPES;
+  const createTypes = onlyTypes ? CREATE_TYPES.filter((t) => onlyTypes.includes(t.key)) : CREATE_TYPES;
+  const [activeTypes, setActiveTypes] = useState<Set<string>>(() => new Set(typeOptions.map((t) => t.key)));
   const [filtersOpen, setFiltersOpen] = useState(false);
   const types = Array.from(activeTypes).join(",");
   // Игрок ищет только открытое ему (гриллинг 2026-09-28, Q27): выданное
@@ -79,7 +90,7 @@ export function MentionPickerModal({
         : `/search?q=${encodeURIComponent(query)}&types=${types}`
       : null
   ).results;
-  const results = isPlayer ? found.filter((r) => PLAYER_MENTION_TYPES.includes(r.type)) : found;
+  const results = (isPlayer ? found.filter((r) => PLAYER_MENTION_TYPES.includes(r.type)) : found).filter((r) => !allow || allow(r));
   const [selected, setSelected] = useState<PickResult | null>(null);
   const [label, setLabel] = useState("");
 
@@ -217,7 +228,7 @@ export function MentionPickerModal({
                 <div className="row">
                   <button
                     type="button"
-                    onClick={() => setActiveTypes(new Set(ENTITY_TYPES.map((t) => t.key)))}
+                    onClick={() => setActiveTypes(new Set(typeOptions.map((t) => t.key)))}
                   >
                     Выбрать всё
                   </button>
@@ -226,7 +237,7 @@ export function MentionPickerModal({
                   </button>
                 </div>
                 <div className="filters">
-                  {ENTITY_TYPES.map((t) => (
+                  {typeOptions.map((t) => (
                     <label key={t.key}>
                       <input
                         type="checkbox"
@@ -289,6 +300,7 @@ export function MentionPickerModal({
               Сеттинг
               <select
                 value={createSettingId}
+                disabled={lockSetting}
                 onChange={(e) => setCreateSettingId(e.target.value ? Number(e.target.value) : "")}
               >
                 <option value="">— выберите сеттинг —</option>
@@ -302,7 +314,7 @@ export function MentionPickerModal({
             <label>
               Тип
               <select value={createType} onChange={(e) => setCreateType(e.target.value as typeof createType)}>
-                {CREATE_TYPES.map((t) => (
+                {createTypes.map((t) => (
                   <option key={t.key} value={t.key}>
                     {t.label}
                   </option>

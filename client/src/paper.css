@@ -615,6 +615,31 @@
   border-color: var(--paper-ink);
   font-weight: 700;
 }
+/* «Мир кампании» (ADR-0006): фильтры — чипы «Населения», кнопка — его же. */
+.campaign-world {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+}
+.campaign-world__bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  align-items: center;
+}
+.campaign-world__add {
+  margin-left: auto;
+  background: var(--paper-ink);
+  color: var(--paper-acid);
+  border-color: var(--paper-ink);
+  font-weight: 700;
+}
+.campaign-world__summary {
+  font-size: var(--fs-data);
+}
+.campaign-world .paper-rows > li {
+  align-items: baseline;
+}
 .population__filters {
   display: flex;
   gap: var(--sp-5);
