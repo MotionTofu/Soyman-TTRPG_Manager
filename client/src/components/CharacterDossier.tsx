@@ -223,7 +223,7 @@ function HookList({ characterId, hooks }: { characterId: number; hooks: Characte
  * №21). Хранится в таблице участия (кампания + персонаж), не на персонаже:
  * в другой кампании у того же героя другие причины. Пишет только Мастер.
  */
-function CampaignParticipation({
+export function CampaignParticipation({
   characterId,
   campaignId,
   campaignName,
