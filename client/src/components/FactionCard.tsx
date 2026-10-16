@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ForceBlock, SecretSeal } from "./CreatureCard";
+import { ForceBlock, SecretSeal, type ForceExtras } from "./CreatureCard";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { FORCE_FIELDS, hasForce } from "../beingForce";
 import { mentionTone } from "../mentions";
@@ -19,13 +19,16 @@ export function FactionCard({
   settingId,
   onSave,
   onAllMembers,
+  forceExtras,
 }: {
   force: BeingForce;
   secret: string;
   members: { id: number; name: string }[];
   settingId: number;
-  onSave: (patch: { force: BeingForce; secret: string }) => Promise<boolean>;
+  /** Нет — карточка только читается (сообщество в контексте кампании). */
+  onSave?: (patch: { force: BeingForce; secret: string }) => Promise<boolean>;
   onAllMembers: () => void;
+  forceExtras?: ForceExtras;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<BeingForce>({});
@@ -43,7 +46,7 @@ export function FactionCard({
   async function save() {
     setSaving(true);
     try {
-      if (await onSave({ force: draft, secret: secretDraft })) setEditing(false);
+      if (await onSave?.({ force: draft, secret: secretDraft })) setEditing(false);
     } finally {
       setSaving(false);
     }
@@ -93,18 +96,22 @@ export function FactionCard({
     <article className="creature-card paper-scope creature-card--page is-embedded">
       <div className="creature-card__head">
         <span className="creature-card__head-label">За столом</span>
-        <button type="button" className="creature-card__edit" onClick={startEdit}>
-          Править
-        </button>
+        {onSave && (
+          <button type="button" className="creature-card__edit" onClick={startEdit}>
+            Править
+          </button>
+        )}
       </div>
-      {hasForce(force) ? (
-        <ForceBlock force={force} wide />
+      {hasForce(force) || (forceExtras && Object.values(forceExtras).some(Boolean)) ? (
+        <ForceBlock force={force} wide extras={forceExtras} />
       ) : (
         <div className="creature-card__empty">
           Чего хотят, чего боятся — пока не записано.{" "}
-          <button type="button" className="creature-card__more" onClick={startEdit}>
-            Заполнить
-          </button>
+          {onSave && (
+            <button type="button" className="creature-card__more" onClick={startEdit}>
+              Заполнить
+            </button>
+          )}
         </div>
       )}
       {members.length > 0 && (

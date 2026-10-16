@@ -31,6 +31,7 @@ export function NotesFeed({
   onSend,
   onEdit,
   onDelete,
+  onToDraft,
   plain = false,
 }: {
   items: FeedItem[];
@@ -44,6 +45,8 @@ export function NotesFeed({
   onEdit: (id: number, text: string) => Promise<boolean>;
   /** label — начало текста без разметки, для тоста «удалено». */
   onDelete: (id: number, label: string) => void;
+  /** «→ в черновик» — только во «Итогах» (слой кампании, задача 07); в пульте нет. */
+  onToDraft?: (id: number, text: string) => void;
   /** Простое поле без «@» — там, где нет базы мира (OneShot, Q33). */
   plain?: boolean;
 }) {
@@ -140,6 +143,11 @@ export function NotesFeed({
               </div>
               {!readOnly && (
                 <span className="session-chat__actions">
+                  {onToDraft && (
+                    <button type="button" className="session-chat__to-draft" title="В черновик записи" onClick={() => onToDraft(it.id, it.text)}>
+                      → в черновик
+                    </button>
+                  )}
                   <button
                     type="button"
                     title="Править"

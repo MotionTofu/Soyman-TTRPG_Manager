@@ -7356,6 +7356,53 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     database.exec("CREATE INDEX idx_map_asset_images_item ON map_asset_images(item_id)");
   }
 
+  // Слой кампании (ADR-0006, спека .scratch/campaign-layer): запись о
+  // сущности в кампании — спутник с владельцем (owner_type, owner_id),
+  // уборка сирот берёт его из реестра видов. Графа (aspect) — ключ словаря
+  // services/entityRecords, не колонка. campaign_id NULL оставлен под
+  // значимые факты основы. Запись не переписывают: замена — новая строка с
+  // replaces_id, «заменена» не хранится.
+  if (!tableExists(database, "entity_records")) {
+    database.exec(`CREATE TABLE entity_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      campaign_id INTEGER REFERENCES campaigns(id) ON DELETE CASCADE,
+      owner_type TEXT NOT NULL CHECK (owner_type IN ('being','community','location','character','campaign')),
+      owner_id INTEGER NOT NULL,
+      aspect TEXT NOT NULL DEFAULT 'note',
+      text TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'established' CHECK (status IN ('established','assumption','draft','discarded')),
+      certainty TEXT NOT NULL DEFAULT 'known',
+      known_to TEXT NOT NULL DEFAULT 'gm' CHECK (known_to IN ('gm','table','public','some')),
+      known_note TEXT NOT NULL DEFAULT '',
+      basis TEXT NOT NULL DEFAULT '',
+      session_id INTEGER REFERENCES sessions(id) ON DELETE SET NULL,
+      replaces_id INTEGER REFERENCES entity_records(id) ON DELETE SET NULL,
+      source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual','quick','feed','player')),
+      source_note_id INTEGER REFERENCES session_notes(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+    database.exec("CREATE INDEX idx_entity_records_owner ON entity_records (campaign_id, owner_type, owner_id)");
+    database.exec("CREATE INDEX idx_entity_records_session ON entity_records (session_id)");
+    // «Кем заменена» ищется по replaces_id в каждом списке записей.
+    database.exec("CREATE INDEX idx_entity_records_replaces ON entity_records (replaces_id)");
+  }
+  // Задействованная сущность (ADR-0006) — строка participations с контекстом
+  // кампании. Нынешнее «Участие в кампании» — глава «Текущая ситуация»
+  // существа с campaign_id — становится ссылкой, поставленной руками. Один
+  // раз: ссылку, которую Мастер потом снял, повторный прогон не вернёт.
+  if (!appSettingFlag(database, "participations_from_current_situation_v1")) {
+    const added = database
+      .prepare(
+        `INSERT OR IGNORE INTO participations (context_type, context_id, entity_type, entity_id, manual)
+         SELECT DISTINCT 'campaign', campaign_id, 'being', being_id, 1 FROM being_chapters
+         WHERE section = 'current_situation' AND campaign_id IS NOT NULL`
+      )
+      .run().changes;
+    if (added) console.log(`[migrate] participations_from_current_situation_v1: ${added}`);
+    setAppSettingFlag(database, "participations_from_current_situation_v1");
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);

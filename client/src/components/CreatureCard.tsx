@@ -213,12 +213,15 @@ function Section({
   );
 }
 
+/** Под ячейкой двигателя — добавленное кампанией (записи той же графы, ADR-0006). */
+export type ForceExtras = Partial<Record<string, ReactNode>>;
+
 // Двигатель силы (разбор профилей Q3, Q12): в узкой колонке — хочет, боится,
 // нуждается и «ещё»; на странице — всё заполненное. Пустые поля не рисуются:
 // пустая графа за столом — шум, а приглашение заполнить живёт в правке.
-export function ForceBlock({ force, wide }: { force: BeingForce; wide: boolean }) {
+export function ForceBlock({ force, wide, extras }: { force: BeingForce; wide: boolean; extras?: ForceExtras }) {
   const [all, setAll] = useState(false);
-  const filled = FORCE_FIELDS.filter((f) => force[f.key]?.trim());
+  const filled = FORCE_FIELDS.filter((f) => force[f.key]?.trim() || extras?.[f.key]);
   const shown = wide || all ? filled : filled.filter((f) => NARROW_FORCE_KEYS.includes(f.key));
   const rest = filled.length - shown.length;
   return (
@@ -228,7 +231,8 @@ export function ForceBlock({ force, wide }: { force: BeingForce; wide: boolean }
           <div key={f.key} className={f.core ? undefined : "is-extra"}>
             <dt>{f.label}</dt>
             <dd>
-              <MentionText text={force[f.key] ?? ""} />
+              {force[f.key]?.trim() && <MentionText text={force[f.key] ?? ""} />}
+              {extras?.[f.key]}
             </dd>
           </div>
         ))}
@@ -290,6 +294,7 @@ export function CreatureCard({
   onToggleCollapse,
   embedded,
   onEdit,
+  forceExtras,
 }: {
   data: CreatureCardPayload;
   // Показ игрокам: секрет и тактика НЕ рендерятся вовсе — свёрнутый блок
@@ -314,6 +319,7 @@ export function CreatureCard({
   embedded?: boolean;
   // Правка по месту — только в профиле (Q8); в трекере и на Полотне её нет.
   onEdit?: () => void;
+  forceExtras?: ForceExtras;
 }) {
   const [statblockOpen, setStatblockOpen] = useState(false);
   const [sectionsOpen, setSectionsOpen] = useState({ mechanics: true, description: true });
@@ -364,7 +370,8 @@ export function CreatureCard({
   const force = data.force ?? {};
   // Личность — двигатель всегда (Q5); бестиарий — только если его завели.
   const isPersonality = data.type === "being" && data.category !== "bestiary";
-  const showForce = !playerSafe && hasForce(force);
+  const hasExtras = !!forceExtras && Object.values(forceExtras).some(Boolean);
+  const showForce = !playerSafe && (hasForce(force) || hasExtras);
   const showSecret = !playerSafe && !!data.secret.trim();
   const hasMechanics = !!creature || (!playerSafe && tactics.length > 0);
   const hasDescription = !embedded && !!prose;
@@ -464,7 +471,7 @@ export function CreatureCard({
         </div>
       )}
 
-      {!collapsed && showForce && <ForceBlock force={force} wide={variant === "page"} />}
+      {!collapsed && showForce && <ForceBlock force={force} wide={variant === "page"} extras={forceExtras} />}
       {/* Пустой двигатель у личности — приглашение (Q5), но только там, где
           его можно заполнить: в трекере и на Полотне правки нет. */}
       {!collapsed && isPersonality && !showForce && !isEmpty && onEdit && (
@@ -596,6 +603,7 @@ export function CreatureCardLoader({
   variant,
   embedded,
   onEdit,
+  forceExtras,
 }: {
   type: string;
   id: number;
@@ -612,6 +620,7 @@ export function CreatureCardLoader({
   variant?: "column" | "page";
   embedded?: boolean;
   onEdit?: () => void;
+  forceExtras?: ForceExtras;
 }) {
   const query = useQuery(creatureCardQuery(type, id, statblockId));
   const data = query.isPending ? undefined : (query.data ?? null);
@@ -634,6 +643,7 @@ export function CreatureCardLoader({
       variant={variant}
       embedded={embedded}
       onEdit={onEdit}
+      forceExtras={forceExtras}
     />
   );
 }

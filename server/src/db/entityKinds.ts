@@ -35,12 +35,15 @@
  */
 
 /** Полиморфный спутник: живёт, пока жив владелец, каскадом не уходит. */
-export type Satellite = "statblocks" | "gallery_images" | "important_dates";
+export type Satellite = "statblocks" | "gallery_images" | "important_dates" | "entity_records";
 
 export const SATELLITE_TABLES: readonly Satellite[] = [
   "statblocks",
   "gallery_images",
   "important_dates",
+  // Записи слоя кампании (ADR-0006). Кампанию уносит каскад по campaign_id,
+  // а удалённое существо — только эта уборка.
+  "entity_records",
 ];
 
 /**
@@ -195,7 +198,9 @@ const RAW_KINDS: EntityKindBase[] = [
     kind: "campaign", table: "campaigns", nameCol: "name", belongsTo: "campaign",
     hasArchivedAt: true, archivable: true, archiveKey: "id",
     mentionable: true, transferable: false, searchable: true,
-    linkEndpoint: true, relationEndpoint: true, owns: [], detailPrefix: "/campaigns",
+    linkEndpoint: true, relationEndpoint: true,
+    // Черновик без адреса и записи о кампании в целом (ADR-0006).
+    owns: ["entity_records"], detailPrefix: "/campaigns",
   }),
   K({
     kind: "setting", table: "settings", nameCol: "name", belongsTo: "world",
@@ -221,28 +226,28 @@ const RAW_KINDS: EntityKindBase[] = [
     hasArchivedAt: true, archivable: true, archiveKey: "id",
     mentionable: true, transferable: false, searchable: true,
     linkEndpoint: true, relationEndpoint: true,
-    owns: ["statblocks", "gallery_images", "important_dates"], detailPrefix: "/characters",
+    owns: ["statblocks", "gallery_images", "important_dates", "entity_records"], detailPrefix: "/characters",
   }),
   K({
     kind: "location", table: "setting_locations", nameCol: "name", belongsTo: "world",
     hasArchivedAt: true, archivable: true, archiveKey: "id",
     mentionable: true, transferable: true, searchable: true,
     linkEndpoint: true, relationEndpoint: true,
-    owns: ["gallery_images", "important_dates"], detailPrefix: "/locations",
+    owns: ["gallery_images", "important_dates", "entity_records"], detailPrefix: "/locations",
   }),
   K({
     kind: "being", table: "setting_beings", nameCol: "name", belongsTo: "world",
     hasArchivedAt: true, archivable: true, archiveKey: "id",
     mentionable: true, transferable: true, searchable: true,
     linkEndpoint: true, relationEndpoint: true,
-    owns: ["statblocks", "gallery_images", "important_dates"], detailPrefix: "/beings",
+    owns: ["statblocks", "gallery_images", "important_dates", "entity_records"], detailPrefix: "/beings",
   }),
   K({
     kind: "community", table: "setting_communities", nameCol: "name", belongsTo: "world",
     hasArchivedAt: true, archivable: true, archiveKey: "id",
     mentionable: true, transferable: true, searchable: true,
     linkEndpoint: true, relationEndpoint: true,
-    owns: ["gallery_images", "important_dates"], detailPrefix: "/communities",
+    owns: ["gallery_images", "important_dates", "entity_records"], detailPrefix: "/communities",
   }),
   K({
     kind: "artifact", table: "artifacts", nameCol: "name", belongsTo: "world",

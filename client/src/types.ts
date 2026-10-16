@@ -981,7 +981,18 @@ export interface LocationContentItem {
   created_at: string;
 }
 
+/** «Задействована в кампаниях» (ADR-0006): кампания и сводка записей о сущности в ней. */
+export interface EngagedCampaign {
+  id: number;
+  name: string;
+  records: number;
+  drafts: number;
+  rumors: number;
+  last_session: { id: number; title: string | null; date: string } | null;
+}
+
 export interface SettingLocationDetail extends SettingLocation {
+  campaigns?: EngagedCampaign[];
   children: SettingLocation[];
   ancestors: { id: number; name: string }[];
   pins: LocationPin[];
@@ -1080,6 +1091,7 @@ export interface CommunityMemberBeing extends SettingBeing {
 }
 
 export interface SettingCommunityDetail extends SettingCommunity {
+  campaigns?: EngagedCampaign[];
   /** «Карточка фракции»: двигатель силы (словарь — beingForce) и секрет. */
   force?: BeingForce;
   secret?: string;
@@ -1171,6 +1183,7 @@ export interface CompendiumLink {
 }
 
 export interface SettingBeingDetail extends SettingBeing {
+  campaigns?: EngagedCampaign[];
   events: BeingEvent[];
   relations: BeingRelation[];
   communities: { id: number; name: string }[];

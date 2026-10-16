@@ -81,6 +81,47 @@ describe("база старого релиза открывается текущ
 });
 
 describe("точечные шаги для старых баз", () => {
+  it("«Участие в кампании» существа становится ссылкой «задействована», один раз и без правки старых строк", () => {
+    // Старая база: участия в кампании живут только на главе «Текущая
+    // ситуация» существа с campaign_id; таблиц participations и
+    // entity_records ещё нет.
+    const dir = databaseFromOldSchema("schema-2026-08-22.sql");
+    const old = new Database(path.join(dir, "app.db"));
+    const settingId = Number(old.prepare("INSERT INTO settings (name) VALUES ('Город каналов')").run().lastInsertRowid);
+    const campaignId = Number(old.prepare("INSERT INTO campaigns (name, setting_id) VALUES ('Мёртвый канал', ?)").run(settingId).lastInsertRowid);
+    const being = (name: string) =>
+      Number(old.prepare("INSERT INTO setting_beings (setting_id, name) VALUES (?, ?)").run(settingId, name).lastInsertRowid);
+    const mia = being("Мия Тарн");
+    const oris = being("Орис");
+    const chapter = old.prepare("INSERT INTO being_chapters (being_id, section, title, campaign_id) VALUES (?, ?, ?, ?)");
+    chapter.run(mia, "current_situation", "Ищет брата", campaignId);
+    chapter.run(mia, "current_situation", "Вторая глава той же кампании", campaignId);
+    // Без кампании и не «Текущая ситуация» — ссылки не дают.
+    chapter.run(oris, "current_situation", "Вне кампаний", null);
+    chapter.run(oris, "history", "Давно", campaignId);
+    const snapshot = (db: Database.Database) => ({
+      chapters: db.prepare("SELECT id, being_id, section, title, content, campaign_id, important, created_at FROM being_chapters ORDER BY id").all(),
+      beings: db.prepare("SELECT id, setting_id, name FROM setting_beings ORDER BY id").all(),
+      campaigns: db.prepare("SELECT id, name, setting_id FROM campaigns ORDER BY id").all(),
+    });
+    const before = snapshot(old);
+    old.close();
+
+    const links = (db: Database.Database) =>
+      db.prepare("SELECT context_type, context_id, entity_type, entity_id, manual FROM participations ORDER BY id").all();
+    let db = openDatabase(dir);
+    expect(links(db)).toEqual([{ context_type: "campaign", context_id: campaignId, entity_type: "being", entity_id: mia, manual: 1 }]);
+    expect(snapshot(db)).toEqual(before);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM entity_records").get()).toEqual({ n: 0 });
+
+    // Мастер снял ссылку — повторный запуск её не возвращает и ничего не дублирует.
+    db.prepare("DELETE FROM participations").run();
+    db.close();
+    db = openDatabase(dir);
+    expect(links(db)).toEqual([]);
+    db.close();
+  }, 60_000);
+
   it("старые привязки карт сохраняются, а сцены становятся допустимой целью", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "soyman-old-map-bindings-"));
     const initial = openDatabase(dir);

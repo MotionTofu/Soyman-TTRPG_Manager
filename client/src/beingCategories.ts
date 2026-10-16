@@ -22,3 +22,11 @@ export const NAMED_BEING_CATEGORIES = BEING_CATEGORIES.filter(
 export const CREATABLE_BEING_CATEGORIES = BEING_CATEGORIES.filter(
   (c) => c.key !== "all" && c.key !== "bestiary"
 );
+
+/** Категория одного существа — в строке профиля и «Мира кампании». */
+export const BEING_CATEGORY_LABELS: Record<string, string> = {
+  bestiary: "Бестиарий",
+  key_figure: "Ключевая фигура",
+  influential: "Влиятельная личность",
+  notable: "Занимательная личность",
+};

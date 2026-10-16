@@ -181,10 +181,13 @@ export function HomeCalendarPage() {
   }
 
   // Обложка кампании ближайшей игры: из списка, а если кампании в нём нет
-  // (игра в чужой кампании) — её карточкой.
+  // (игра в чужой кампании) — её карточкой. Широкий фон загрузить больше
+  // негде (с досье кампании осталась одна «Обложка» — thumbnail), поэтому
+  // у новых кампаний герой берёт её; старый фон, где он есть, в приоритете.
   const nearestInList = nearestSession ? campaigns.find((c) => c.id === nearestSession.campaign_id) : undefined;
   const nearestCard = useEntity<Campaign>("campaign", nearestSession && !nearestInList ? nearestSession.campaign_id : null).data;
-  const bgUrl = nearestSession ? ((nearestInList ?? nearestCard)?.background_image_url ?? null) : null;
+  const nearestCampaign = nearestInList ?? nearestCard;
+  const bgUrl = nearestSession ? (nearestCampaign?.background_image_url ?? nearestCampaign?.thumbnail_image_url ?? null) : null;
   const authBgBlob = useAuthenticatedFileUrl(bgUrl);
 
   function openCreateModal(date: string) {

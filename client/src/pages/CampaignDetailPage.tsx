@@ -98,16 +98,19 @@ import { CampaignDossierFiles } from "../components/campaign/CampaignDossierFile
 import { CampaignNow } from "../components/campaign/CampaignNow";
 import { OldNotesFold } from "../components/campaign/OldNotesFold";
 import { ExtraPayments } from "../components/campaign/ExtraPayments";
+import { CampaignWorldTab, type CampaignWorld } from "../components/campaign/CampaignWorldTab";
 
 // Вкладки кампании (спека campaign-paper, Q19/Q20/Q26/Q31). «Сюжет» собрал
 // «Главы и сцены», «Вехи», «Тайны и зацепки» и «Выводы» разделами; «Заметок»
 // нет — свободные записи живут в листах тетради. «Тетрадь» видна, когда она
-// привязана; у ваншота нет «Хроники мира».
+// привязана; у ваншота нет «Хроники мира». «Мир кампании» — задействованные
+// сущности сеттинга (ADR-0006), есть и у ваншота.
 const GM_TABS = [
   "Обзор",
   "Персонажи игроков",
   "Сюжет",
   "Сессии",
+  "Мир кампании",
   "Хроника мира",
   "Тетрадь",
   "Выдача",
@@ -215,6 +218,7 @@ export function CampaignDetailPage() {
   const gmCampaignId = !invalidCampaignId && campaign?.role !== "player" && campaign ? campaignId : null;
   const vessels = useResource<VesselSummary[]>(gmCampaignId == null ? null : vesselPaths.list(gmCampaignId)).data;
   const storyTree = useResource<CampaignAdventureTree[]>(gmCampaignId == null ? null : campaignPaths.tree(gmCampaignId)).data;
+  const world = useResource<CampaignWorld>(gmCampaignId != null && campaign?.setting_id ? campaignPaths.world(gmCampaignId) : null).data;
   const gmTabs = GM_TABS.filter(
     (t) => (t !== "Хроника мира" || campaign?.type !== "oneshot")
   );
@@ -719,6 +723,7 @@ export function CampaignDetailPage() {
     "Транспорт": vessels?.filter(v => !v.archived_at).length,
     "Сюжет": storyTree?.reduce((total, adventure) => total + adventure.scenes.length + adventure.chapters.reduce((n, chapter) => n + chapter.scenes.length, 0), 0),
     "Сессии": sessions.length,
+    "Мир кампании": world?.entities.length,
     "Хроника мира": calendarEvents.length,
     "Тетрадь": workbooks.length,
   };
@@ -738,7 +743,7 @@ export function CampaignDetailPage() {
             </span>
           )
         )}
-        {campaign.role !== "player" && <CampaignNow oneshot={campaign.type === "oneshot"} sessions={sessions} onSchedule={() => setCreatingDate(toLocalDateKey(new Date()))} />}
+        {campaign.role !== "player" && <CampaignNow campaignId={campaign.id} oneshot={campaign.type === "oneshot"} sessions={sessions} onSchedule={() => setCreatingDate(toLocalDateKey(new Date()))} />}
         </>
       }
       // Бумага (спека campaign-paper, доски 41–42): под именем — метки типа
@@ -943,6 +948,9 @@ export function CampaignDetailPage() {
       )}
       {tab === "Итоги" && <ResultsTab campaign={campaign} />}
       {tab === "Транспорт" && <CampaignVesselsTab campaignId={campaignId} />}
+      {tab === "Мир кампании" && (
+        <CampaignWorldTab campaignId={campaignId} settingId={campaign.setting_id} sessions={sessions} />
+      )}
 
       {tab === "Сессии" && (
         <div className="chronicle-split">

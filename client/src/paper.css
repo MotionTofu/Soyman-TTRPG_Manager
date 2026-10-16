@@ -615,6 +615,173 @@
   border-color: var(--paper-ink);
   font-weight: 700;
 }
+/* «Мир кампании» (ADR-0006): фильтры — чипы «Населения», кнопка — его же. */
+.campaign-world {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+}
+.campaign-world__bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  align-items: center;
+}
+.campaign-world__add {
+  margin-left: auto;
+  background: var(--paper-ink);
+  color: var(--paper-acid);
+  border-color: var(--paper-ink);
+  font-weight: 700;
+}
+.campaign-world__summary {
+  font-size: var(--fs-data);
+}
+.campaign-world .paper-rows > li {
+  align-items: baseline;
+}
+/* Запись слоя кампании: текст, под ним метки — только отличия от обычного. */
+.entity-record {
+  padding: var(--sp-3) 0;
+  border-bottom: 1px dashed var(--line);
+}
+.entity-record:last-child {
+  border-bottom: 0;
+}
+.entity-record__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-3);
+  align-items: center;
+  margin-top: var(--sp-2);
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+/* .badge.tag — общая метка; здесь только отличия записи. */
+.badge.entity-record__status--draft {
+  background: var(--paper-ink);
+  color: var(--paper-acid);
+  box-shadow: none;
+}
+.badge.entity-record__status--assumption {
+  background: transparent;
+  box-shadow: none;
+  outline: 1px dashed var(--muted);
+  outline-offset: -1px;
+}
+/* Слух и спорное — маркером: это то, на что Мастер смотрит прежде всего. */
+.badge.entity-record__certainty {
+  background: color-mix(in srgb, var(--paper-acid) 55%, transparent);
+  color: var(--paper-ink);
+}
+.entity-record__acts {
+  margin-left: auto;
+  display: flex;
+  gap: var(--sp-3);
+}
+.entity-record__acts > button {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.entity-record__acts > button:hover {
+  color: var(--paper-ink);
+}
+.entity-record__history {
+  list-style: none;
+  margin: var(--sp-3) 0 0;
+  padding-left: var(--sp-5);
+  border-left: 2px solid var(--line);
+}
+.entity-record__was {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+.record-form .seg {
+  flex-wrap: wrap;
+}
+/* Профиль в контексте кампании (ADR-0006): переключатель над листом — те же
+   чипы, что у фильтров «Населения» и «Мира кампании». */
+.context-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: center;
+  margin-bottom: var(--sp-6);
+}
+.engaged-campaigns__open,
+.campaign-records__unfilled > button {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.engaged-campaigns__open {
+  font-weight: 600;
+}
+.campaign-records {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.campaign-records > .paper-group__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+}
+.campaign-records__add {
+  margin-left: auto;
+}
+.campaign-records__group {
+  display: flex;
+  flex-direction: column;
+}
+/* Разбор встречи во «Итогах»: записи встречи и очередь черновиков. */
+.session-review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-7);
+  margin-top: var(--sp-6);
+}
+.session-review__drafts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.session-review__owner select {
+  width: auto;
+  max-width: 100%;
+  padding: 1px 4px;
+  font-size: var(--fs-meta);
+}
+.session-review__acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+.session-review__discard {
+  margin-left: auto;
+}
+/* Под ячейкой «За столом» — добавленное кампанией, маркером. */
+.campaign-cell .entity-record {
+  padding: var(--sp-2) 0 0;
+  border-bottom: 0;
+}
+.campaign-cell .entity-record__text {
+  background: color-mix(in srgb, var(--paper-acid) 45%, transparent);
+  padding: 0.1em 0.3em;
+  border-radius: 2px;
+}
 .population__filters {
   display: flex;
   gap: var(--sp-5);

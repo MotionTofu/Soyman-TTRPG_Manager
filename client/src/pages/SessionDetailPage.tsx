@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { PAYMENT_TYPE_LABELS, PAYMENT_TYPE_OPTIONS } from "../paymentTypes";
 import { ObstacleDropZone } from "../components/ObstacleDropZone";
 import { SessionLiveControls } from "../components/SessionLiveControls";
+import { SessionRecordsReview } from "../components/records/SessionRecordsReview";
 import { SessionNotesChat } from "../components/SessionNotesChat";
 import { SessionMentionsButton } from "../components/SessionMentionsButton";
 import { EntityPage } from "../components/EntityPage";
@@ -1112,10 +1113,14 @@ export function SessionDetailPage() {
                   applyUrl={`/cross-links/apply-all?ownerKind=session&ownerId=${sessionId}`}
                 />
               </div>
-              <SessionNotesChat sessionId={sessionId} settingId={campaign.setting_id} />
+              <SessionNotesChat sessionId={sessionId} settingId={campaign.setting_id} draftCampaignId={isPlayer ? undefined : campaign.id} />
             </div>
             {!isPlayer && <SessionOutcomesCard session={session} />}
           </div>
+
+          {/* Разбор встречи (ADR-0006, слой кампании): записи этой встречи и
+              очередь черновиков. Оси «Что изменилось» выше остаются сводкой. */}
+          {!isPlayer && <SessionRecordsReview campaignId={campaign.id} sessionId={sessionId} settingId={campaign.setting_id} />}
 
           {held && report && (
             <div className="card sp-revealed">
