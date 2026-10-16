@@ -5,7 +5,8 @@ import { drawTerrainMaskTiles } from "./assets/terrainMaskDrawing";
 import { maskSampleCode } from "./terrainMaskTiles";
 import { artworkImage, doorImage, paperPattern, patternSource, stripImage, surfaceImage, surfacePattern, texturedMask, wallPattern, type ArtPack } from "./assets/artwork";
 import { drawWallPolyline } from "./assets/wallArtwork";
-import { deckKey, fencePostId, villageId } from "./assets/village";
+import { deckKey, fencePostId, liquidKey, liquidRecipe, villageId, waterLevel } from "./assets/village";
+import { ATLAS_BLOCK, atlasBlocks, type AtlasBlock, type AtlasLine, type AtlasWaterLook } from "./atlasWater";
 import { worldSignLabel } from "./assets/world";
 import { ownDeck, ownLinePost, ownPackOf } from "./assets/ownPacks";
 import { labelBox, labelFamily } from "./labelStyle";
@@ -698,6 +699,8 @@ export interface RenderOptions {
   artPack?: ArtPack;
   /** Живая вода. На обычном холсте рисуется одним кадром поверх земли; сцена WebGL кладёт её сама и просит карту по частям. */
   water?: MapWater;
+  /** Атласная вода (А1–А10): заливка, тушевой берег, штриховка и тоны линиями. Не вместе с `water`. */
+  atlasWater?: AtlasWaterLook;
   /** Не стирать холст перед отрисовкой: вторая половина карты ложится поверх первой. */
   keep?: boolean;
   /** Поля вокруг карты, клеток; за ними холст закрыт. Без поля карта не ограничена. */
@@ -761,6 +764,47 @@ function stripSamples(nodes: readonly SplineNode[], closed: boolean, width: numb
 /** Доля ширины полосы дороги без рваных краёв. */
 const ROAD_CORE = 0.7;
 const roadCuts = new WeakMap<StripSamples["samples"], RoadCut>();
+const dryMasks = new WeakMap<TerrainMaskView, TerrainMaskView>();
+/** Маска без жидкостей: в атласном виде воду рисуют линии, а не картинка поверхности. Объект тот же, пока маска та же. */
+function dryMask(mask: TerrainMaskView): TerrainMaskView {
+  if (!mask.source) return mask;
+  let dry = dryMasks.get(mask);
+  if (!dry) dryMasks.set(mask, dry = { ...mask, source: { ...mask.source, codes: mask.source.codes.map(code => waterLevel(code) ? null : code) } });
+  return dry;
+}
+const mixHex = (a: string, b: string, t: number) => {
+  const ca = [1, 3, 5].map(i => parseInt(a.slice(i, i + 2), 16)), cb = [1, 3, 5].map(i => parseInt(b.slice(i, i + 2), 16));
+  return `#${ca.map((v, i) => Math.round(v + (cb[i] - v) * t).toString(16).padStart(2, "0")).join("")}`;
+};
+const toneCache = new Map<string, [string, string, string]>();
+/** Три тона атласной воды — мель, середина, глубина — из тонов рецепта, приглушённые к бумаге (А8). */
+export function atlasTones(recipe: readonly [string, string, string], paper: string): [string, string, string] {
+  const key = `${recipe.join()}|${paper}`;
+  let out = toneCache.get(key);
+  if (!out) toneCache.set(key, out = [mixHex(recipe[1], paper, 0.6), mixHex(recipe[1], paper, 0.4), mixHex(mixHex(recipe[1], recipe[0], 0.45), paper, 0.36)]);
+  return out;
+}
+const toneImages = new WeakMap<AtlasBlock, { key: string; images: [HTMLCanvasElement, HTMLCanvasElement, HTMLCanvasElement] }>();
+/** Картинки тонов блока, когда жидкостей несколько: цвет переходит градиентом на клетку, без линии (А10). */
+function atlasToneImages(block: AtlasBlock, liquids: MapRenderModel["liquids"], paper: string) {
+  const key = `${paper}|${block.keys.map(item => liquidRecipe(item, liquids).tones.join()).join("|")}`, known = toneImages.get(block);
+  if (known?.key === key) return known.images;
+  const { data, size } = block.kinds!, palette = block.keys.map(item => atlasTones(liquidRecipe(item, liquids).tones, paper));
+  const images = [0, 1, 2].map((tone) => {
+    const flat = document.createElement("canvas"), soft = document.createElement("canvas");
+    flat.width = soft.width = flat.height = soft.height = size;
+    const pen = flat.getContext("2d")!, image = pen.createImageData(size, size);
+    for (let i = 0; i < data.length; i++) {
+      const hex = palette[data[i]][tone];
+      image.data.set([parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16), 255], i * 4);
+    }
+    pen.putImageData(image, 0, 0);
+    const out = soft.getContext("2d")!; out.filter = "blur(1px)"; out.drawImage(flat, 0, 0);
+    return soft;
+  }) as [HTMLCanvasElement, HTMLCanvasElement, HTMLCanvasElement];
+  toneImages.set(block, { key, images });
+  return images;
+}
 export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvasH: number, o: RenderOptions): void {
   const { grid, width, height, model, scale, ox, oy, showGrid, showCoords, hover, chrome, playerView, selectedId } = o;
   // Свободная земля и вода лежат в мировых координатах: у гексов карта шире и выше числа клеток (шаг √3 и 1,5)
@@ -781,6 +825,8 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
   }
   // Реки, которые лежат под живой водой: река-поверхность и река атласа — её устье накрывает море, как берег.
   const part = o.part, waterRiver = (path: RenderPath) => path.kind === "river" && (!!path.style || path.atlas === "river") && !!path.nodes;
+  /** В атласной воде все реки линией — одного материала с морем, какой бы вид у них ни был (А4). */
+  const atlasWaterRiver = (path: RenderPath) => path.kind === "river" && !!path.nodes && path.nodes.length > 1;
   ctx.save();
   if (!o.keep) ctx.clearRect(0, 0, canvasW, canvasH);
   if (part !== "over") { ctx.fillStyle = chrome.paper; ctx.fillRect(0, 0, canvasW, canvasH); }
@@ -917,7 +963,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
   const fillTerrainMask = (mask: NonNullable<RenderTerrainLayer["terrain"]["mask"]>) => {
     if (mask.source ? mask.source.chunks.length === 0 : mask.entries.size === 0) return;
     if (mask.source && ctx.canvas && typeof document !== "undefined") {
-      drawTerrainMaskTiles(ctx, mask, maskW, maskH, canvasW, canvasH, scale, ox, oy, pixelRatio, terrainFill, pack, !!o.cartography, maskLo);
+      drawTerrainMaskTiles(ctx, o.atlasWater ? dryMask(mask) : mask, maskW, maskH, canvasW, canvasH, scale, ox, oy, pixelRatio, terrainFill, pack, !!o.cartography, maskLo);
       return;
     }
     const bitmap = ctx.canvas && typeof document !== "undefined"
@@ -1142,13 +1188,13 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     const total = along.at(-1) || 1, wetAt = samples.map((point) => wet(point.x, point.y) > 0);
     const mouths = samples.flatMap((_, i) => i && wetAt[i] !== wetAt[i - 1] ? [(along[i] + along[i - 1]) / 2] : []);
     const toMouth = (i: number) => Math.min(Infinity, ...mouths.map((at) => Math.abs(along[i] - at)));
-    const under = o.water ? 1 : 0, source = path.flow === "back" ? samples.at(-1)! : samples[0], [s0, s1] = path.span ?? [0, 1];
+    const under = o.water || o.atlasWater ? 1 : 0, source = path.flow === "back" ? samples.at(-1)! : samples[0], [s0, s1] = path.span ?? [0, 1];
     const fraction = (i: number) => s0 + (s1 - s0) * along[i] / total;
     // Рукав дельты или протока начинается на другой реке атласа — сразу в полную ширину, а не из нуля, как у истока.
     const branch = atlasRivers.some((other) => other !== path && flattenSplineWithWidths(other.nodes!, other.width ?? 0.22, 0.1)
       .some((point) => Math.hypot(point.x - source.x, point.y - source.y) <= point.width / 2 + 0.15));
     shape = samples.map((point, i) => ({ x: point.x, y: point.y, dry: !wetAt[i] || toMouth(i) < under,
-      size: (branch ? 1 : Math.pow(path.flow === "back" ? 1 - fraction(i) : fraction(i), 0.7)) * (1 + 1.6 * Math.max(0, 1 - toMouth(i) / 1.5) ** 2) * Math.max(point.width, 2 / scale) }));
+      size: (branch || path.atlas !== "river" ? 1 : Math.pow(path.flow === "back" ? 1 - fraction(i) : fraction(i), 0.7)) * (1 + 1.6 * Math.max(0, 1 - toMouth(i) / 1.5) ** 2) * Math.max(point.width, 2 / scale) }));
     riverShapes.set(path, shape);
     return shape;
   };
@@ -1816,6 +1862,89 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     ctx.restore();
   };
 
+  /** Атласная вода: сначала тушь берега и всех рек, потом вода всего — устье и слияния без шва (А4); затем тоны глубины,
+   * штриховка у берега и волны. Цвет — из рецепта жидкости, приглушённый к бумаге (А8). */
+  function drawAtlasWater() {
+    const look = o.atlasWater!, rivers = model.layers.flatMap(layer => layer.visible && layer.kind === "path" ? layer.paths.filter(atlasWaterRiver) : []);
+    const wx0 = -ox / scale - 1, wy0 = -oy / scale - 1, wx1 = (canvasW - ox) / scale + 1, wy1 = (canvasH - oy) / scale + 1;
+    const blocks = atlasBlocks(model, maskW, maskH, maskLo, look.shoal, waterFog(o, model), { x0: wx0, y0: wy0, x1: wx1, y1: wy1 });
+    if (!blocks.length && !rivers.length) return;
+    const seen = (line: AtlasLine) => line.maxX >= wx0 && line.minX <= wx1 && line.maxY >= wy0 && line.minY <= wy1;
+    const trace = (lines: readonly AtlasLine[]) => {
+      ctx.beginPath();
+      for (const line of lines) {
+        if (!seen(line)) continue;
+        const p = line.points;
+        ctx.moveTo(X(p[0]), Y(p[1]));
+        for (let i = 2; i < p.length; i += 2) ctx.lineTo(X(p[i]), Y(p[i + 1]));
+        if (line.closed) ctx.closePath();
+      }
+    };
+    // Рамка блока — по целым точкам экрана и одной формулой для соседей: на стыке блоков не светит бумага.
+    const k = ctx.getTransform?.()?.a || 1, snap = (value: number) => Math.round(value * k) / k;
+    const edgeX = (i: number) => snap(X(maskLo.x + i * ATLAS_BLOCK)), edgeY = (i: number) => snap(Y(maskLo.y + i * ATLAS_BLOCK));
+    const inBlock = (block: AtlasBlock, draw: () => void) => {
+      const bx = Math.round((block.rect.x0 - maskLo.x) / ATLAS_BLOCK), by = Math.round((block.rect.y0 - maskLo.y) / ATLAS_BLOCK);
+      ctx.save(); ctx.beginPath(); ctx.rect(edgeX(bx), edgeY(by), edgeX(bx + 1) - edgeX(bx), edgeY(by + 1) - edgeY(by)); ctx.clip(); draw(); ctx.restore();
+    };
+    const ink = Math.max(0.8, Math.min(2.2, scale * 0.03)), tones = (key: string) => atlasTones(liquidRecipe(key, model.liquids).tones, chrome.paper);
+    const riverKey = (path: RenderPath) => path.atlas === "river" || !path.style ? "water" : liquidKey(`village-${path.style.slice(path.style.indexOf(":") + 1)}`);
+    const riverPass = (path: RenderPath, color: string, extra: number) => {
+      const shape = atlasRiver(path);
+      ctx.strokeStyle = color;
+      for (let i = 1; i < shape.length; i++) {
+        if (!shape[i - 1].dry || !shape[i].dry) continue;
+        const size = (shape[i - 1].size + shape[i].size) / 2 * scale;
+        ctx.lineWidth = size + Math.min(extra, size);
+        ctx.beginPath(); ctx.moveTo(X(shape[i - 1].x), Y(shape[i - 1].y)); ctx.lineTo(X(shape[i].x), Y(shape[i].y)); ctx.stroke();
+      }
+    };
+    /** Заливает обведённое ступенью тона: одним цветом или картинкой перехода, если жидкостей в блоке несколько. */
+    const fillTone = (block: AtlasBlock, tone: 0 | 1 | 2) => {
+      if (!block.kinds) { ctx.fillStyle = tones(block.keys[0])[tone]; ctx.fill("evenodd"); return; }
+      const image = atlasToneImages(block, model.liquids, chrome.paper)[tone];
+      ctx.save(); ctx.clip("evenodd"); ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(image, X(block.kinds.x), Y(block.kinds.y), image.width / 2 * scale, image.height / 2 * scale);
+      ctx.restore();
+    };
+    ctx.save();
+    ctx.beginPath(); ctx.rect(X(maskLo.x), Y(maskLo.y), (maskW - maskLo.x) * scale, (maskH - maskLo.y) * scale); ctx.clip();
+    ctx.lineCap = ctx.lineJoin = "round"; ctx.setLineDash([]);
+    // Тушь всего, потом вода всего: заливка моря закрывает тушь реки в устье, вода реки — тушь берега.
+    ctx.strokeStyle = chrome.ink; ctx.lineWidth = ink * 2;
+    for (const block of blocks) inBlock(block, () => { trace(block.coast); ctx.stroke(); });
+    for (const path of rivers) riverPass(path, chrome.ink, ink * 2);
+    for (const block of blocks) inBlock(block, () => { trace(block.coast); fillTone(block, 0); });
+    for (const path of rivers) riverPass(path, tones(riverKey(path))[0], 0);
+    const size = 0.42 * scale;
+    for (const block of blocks) inBlock(block, () => {
+      for (const tone of [1, 2] as const) {
+        if (!block.tones[tone - 1].length) continue;
+        ctx.save(); trace(block.coast); ctx.clip("evenodd"); trace(block.tones[tone - 1]); fillTone(block, tone); ctx.restore();
+      }
+      ctx.strokeStyle = chrome.ink; ctx.globalAlpha *= 0.7; ctx.lineWidth = Math.max(0.6, ink * 0.6);
+      trace(block.hatch); ctx.stroke();
+      ctx.globalAlpha /= 0.7;
+      if (look.density <= 0 || size < 4) return;
+      ctx.lineWidth = Math.max(0.7, ink * 0.8); ctx.beginPath();
+      for (const wave of block.waves) {
+        if (wave.chance >= look.density) continue;
+        const x = X(wave.x), y = Y(wave.y), c = Math.cos(wave.turn), s = Math.sin(wave.turn);
+        const at = (u: number, v: number): [number, number] => [x + (u * c - v * s) * size, y + (u * s + v * c) * size];
+        if (look.waves === "caps") {
+          // Барашек: волна с загнутым гребнем.
+          ctx.moveTo(...at(-0.5, 0.12)); ctx.bezierCurveTo(...at(-0.25, -0.28), ...at(0.12, -0.34), ...at(0.28, -0.06));
+          ctx.quadraticCurveTo(...at(0.34, 0.12), ...at(0.12, 0.06));
+        } else {
+          // Дужки: две арки подряд, как на старой карте.
+          ctx.moveTo(...at(-0.5, 0)); ctx.quadraticCurveTo(...at(-0.25, -0.36), ...at(0, 0)); ctx.quadraticCurveTo(...at(0.25, -0.36), ...at(0.5, 0));
+        }
+      }
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
   // Keep layer order within each pass; grid separates terrain/paths from foreground artwork.
   let hasTerrainSurface = false;
   const tokenDraws: (() => void)[] = [];
@@ -1846,6 +1975,8 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       for (let i = 0; i < paths.length; i++) {
         const p = paths[i];
         if (part && (part === "ground") !== waterRiver(p)) continue;
+        // Атласные реки и реки с водой рисует проход атласной воды вместе с морем.
+        if (o.atlasWater && atlasWaterRiver(p)) continue;
         if (p.atlas !== "river") mergeRivers();
         if (p.kind !== "road") mergeRoads();
         // Стена со своей полосой (ограда) рисуется как линия-полоса, а не кладкой.
@@ -2019,7 +2150,12 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     ctx.restore();
   };
   const belowGrid = (layer: MapRenderModel["layers"][number]) => layer.kind === "terrain" || layer.kind === "path";
-  for (const layer of model.layers) if (!showGrid || belowGrid(layer)) drawLayer(layer);
+  const lastTerrain = o.atlasWater ? model.layers.findLastIndex(layer => layer.visible && layer.kind === "terrain") : -1;
+  if (lastTerrain < 0 && o.atlasWater) drawAtlasWater();
+  model.layers.forEach((layer, index) => {
+    if (!showGrid || belowGrid(layer)) drawLayer(layer);
+    if (index === lastTerrain) drawAtlasWater();
+  });
   if (part === "ground") { ctx.restore(); return; }
 
   // Grid thickness and dash lengths are in screen pixels, independent of zoom. Мельче 8 точек на клетку сетка гаснет,

@@ -1,5 +1,6 @@
 import { MAP_WATER_LOOKS, type MapDocumentV6, type MapDrawingStyle, type MapWaterLook } from "@shared/maps/core";
 import type { MapWater } from "../water";
+import type { AtlasWaterLook } from "../atlasWater";
 import type { MapLook } from "../gl/styleFilter";
 import { MAP_TERRAIN_FILL, readChrome } from "../render";
 import { VILLAGE_FILL, WATER_DEPTHS, waterCode } from "../assets/village";
@@ -27,7 +28,12 @@ export const styleLook = (document: MapDocumentV6) => LOOKS[document.appearance?
 export const WATER_LOOKS: readonly [MapWaterLook, string][] = [["soft", "Мягкая, с дном"], ["pond", "Пиксель-арт: пруд"], ["sea", "Пиксель-арт: море"], ["comic", "Комикс"]];
 export function mapWater(document: MapDocumentV6): MapWater | null {
   const look = document.appearance?.water;
-  return look ? { mode: MAP_WATER_LOOKS.indexOf(look) as MapWater["mode"], speed: document.appearance?.waterSpeed ?? 1, size: document.appearance?.waterPixels ?? 8, shoal: document.appearance?.waterShoal ?? 0 } : null;
+  return look && look !== "atlas" ? { mode: MAP_WATER_LOOKS.indexOf(look) as MapWater["mode"], speed: document.appearance?.waterSpeed ?? 1, size: document.appearance?.waterPixels ?? 8, shoal: document.appearance?.waterShoal ?? 0 } : null;
+}
+/** Атласная вода карты (А1–А10); null — вода живая или картинкой. */
+export function mapAtlasWater(document: MapDocumentV6): AtlasWaterLook | null {
+  const a = document.appearance;
+  return a?.water === "atlas" ? { shoal: a.waterShoal ?? 0, waves: a.waves ?? "arcs", density: a.waveDensity ?? 0 } : null;
 }
 const filled = new WeakMap<object, Map<object, Record<string, string>>>();
 function ownFills(palette: Record<string, string>, liquids: readonly { key: string; tones: readonly string[] }[]) {
@@ -46,7 +52,7 @@ function withOwnSurfaces(base: Record<string, string>) {
   return fills;
 }
 export function workspaceDrawingStyle(document: MapDocumentV6) {
-  const water = mapWater(document);
+  const water = mapWater(document), atlasWater = mapAtlasWater(document);
   const style = document.appearance?.style ?? "paper-ink";
   const paper = style === "blueprint" ? "#ffffff" : style === "comic-punk" ? "#e9e1c8" : "#f1eedf";
   return {
@@ -58,5 +64,6 @@ export function workspaceDrawingStyle(document: MapDocumentV6) {
     artPack: style === "comic-punk" ? "crypt" as const : "cartography" as const,
     ...(document.appearance?.frame !== undefined ? { frame: document.appearance.frame } : {}),
     ...(water ? { water } : {}),
+    ...(atlasWater ? { atlasWater } : {}),
   };
 }

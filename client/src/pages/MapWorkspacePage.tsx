@@ -20,7 +20,7 @@ import { CatalogPanel } from "../maps/workspace/CatalogPanel";
 import { LayersPanel } from "../maps/workspace/LayersPanel";
 import { layerName, NEW_LAYERS, type NewLayerKind } from "../maps/workspace/layerNames";
 import { ToolSettings, type BrushSettings } from "../maps/workspace/ToolSettings";
-import { WorkspaceHeader, WorkspaceStatus, WorkspaceToolRail, type GridLook } from "../maps/workspace/WorkspaceChrome";
+import { WorkspaceHeader, WorkspaceStatus, WorkspaceToolRail, type GridLook, type WaterTune } from "../maps/workspace/WorkspaceChrome";
 import { createWorkspaceRenderModel } from "../maps/workspace/renderV6";
 import { toolLayerKind, addLabel, quantize, removeSelection, type WorkspaceTool, type WorkspaceSelection } from "../maps/workspace/editorCommands";
 import { downloadMapPicture } from "../maps/workspace/pictureExport";
@@ -365,7 +365,7 @@ export function MapWorkspacePage() {
   const settingList = useResource<Setting[]>(boundSettings.length ? "/settings" : null).data;
   const genres = useMemo((): SettingGenre[] => (settingList ?? []).filter((entry) => boundSettings.includes(entry.id)).flatMap((entry) => entry.genres ?? []), [settingList, boundSettings]);
   const onLiveWater = useEvent(() => onWater(documentRef.current?.appearance?.style === "comic-punk" ? "comic" : "soft"));
-  const onWaterTune = useEvent((patch: { waterSpeed?: number; waterPixels?: number; waterShoal?: number }) => commit((before) => ({ ...before, appearance: { ...(before.appearance ?? { style: "paper-ink" as const }), ...patch } })));
+  const onWaterTune = useEvent((patch: WaterTune) => commit((before) => ({ ...before, appearance: { ...(before.appearance ?? { style: "paper-ink" as const }), ...patch } })));
   const onFrame = useEvent((frame: number | undefined) => commit((before) => { const { frame: _old, ...rest } = before.appearance ?? { style: "paper-ink" as const }; return { ...before, appearance: frame === undefined ? rest : { ...rest, frame } }; }));
   const onGenerator = useEvent(() => { finishGesture(); placement.cancel(); setSelection(null); setGeneratorOpen(true); });
   const onSave = useEvent(() => { finishGesture(); void autosave.flush(); }), onBackup = useEvent(backup);
@@ -431,7 +431,7 @@ export function MapWorkspacePage() {
 
     <WorkspaceHeader mapName={map.name} status={`${leaving ? "Сохраняем перед выходом…" : SAVE_STATE[autosave.status.kind]}${document.grid ? ` · ${document.grid.columns} × ${document.grid.rows} клеток` : ""}`}
       canUndo={history.canUndo && !disabled && !leaving} canRedo={history.canRedo && !disabled && !leaving} onUndo={onUndo} onRedo={onRedo}
-      grid={grid} onGrid={onGrid} style={document.appearance?.style ?? "paper-ink"} onStyle={onStyle} styleLocked={disabled || leaving} frame={document.appearance?.frame} onFrame={onFrame} water={document.appearance?.water} onWater={onWater} waterSpeed={document.appearance?.waterSpeed ?? 1} waterPixels={document.appearance?.waterPixels ?? 8} waterShoal={document.appearance?.waterShoal ?? 0} onWaterTune={onWaterTune}
+      grid={grid} onGrid={onGrid} style={document.appearance?.style ?? "paper-ink"} onStyle={onStyle} styleLocked={disabled || leaving} frame={document.appearance?.frame} onFrame={onFrame} water={document.appearance?.water} onWater={onWater} waterSpeed={document.appearance?.waterSpeed ?? 1} waterPixels={document.appearance?.waterPixels ?? 8} waterShoal={document.appearance?.waterShoal ?? 0} waves={document.appearance?.waves ?? "arcs"} waveDensity={document.appearance?.waveDensity ?? 0} onWaterTune={onWaterTune}
       generatorLocked={leaving || !!doc.compatibilityError || autosave.blocked || autosave.status.kind === "conflict"} saveLocked={saveBlocked}
       onGenerator={onGenerator} onSave={onSave} onBackup={onBackup} onPicture={onPicture} gl={gl} onGl={onGl} effects={effects} onEffect={onEffect} onEffectsReset={onEffectsReset} classicLink={map.document_version !== 6 ? `/maps/${map.id}` : null} />
 

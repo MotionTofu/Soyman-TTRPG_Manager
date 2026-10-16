@@ -5,7 +5,7 @@ import { assessCurrentEditorCompatibility } from "../core";
 import { loadStoredWorkspaceDocument } from "../editor/loadDocument";
 import { useMapAutosave } from "../editor/hooks/useMapAutosave";
 import { useMapHistory } from "../editor/hooks/useMapHistory";
-import type { MapFull } from "../mapTypes";
+import { mapKind, type MapFull } from "../mapTypes";
 import { geometryView } from "./editDocument";
 import { mapWorkspaceApi } from "./mapApi";
 
@@ -58,9 +58,13 @@ export function useWorkspaceDocument({ mapId, isGm, leaving, isEditing, onReset,
         : missingRevision ? "Сервер ещё не поддерживает безопасное сохранение. Обновите приложение перед редактированием." : null);
       const full = { ...record, document_version: loaded.sourceFormat === "v6" ? 6 : record.document_version };
       setMap(full);
-      setDocument(loaded.document);
-      callbacks.current.onLoaded(full, loaded.document);
-      autosave.markLoaded(serializeMapDocumentV6(loaded.document), JSON.stringify({ seed: record.seed, sea: record.sea, mountains: record.mountains, forest: record.forest }), false, record.revision);
+      // Обзорная карта, впервые открытая в этом редакторе, получает атласную воду (гриллинг 2026-10-16, А1);
+      // карта, уже сохранённая здесь, остаётся со своей водой.
+      const document = loaded.sourceFormat !== "v6" && mapKind(record.scale) === "overview" && !loaded.document.appearance?.water
+        ? { ...loaded.document, appearance: { ...(loaded.document.appearance ?? { style: "paper-ink" as const }), water: "atlas" as const } } : loaded.document;
+      setDocument(document);
+      callbacks.current.onLoaded(full, document);
+      autosave.markLoaded(serializeMapDocumentV6(document), JSON.stringify({ seed: record.seed, sea: record.sea, mountains: record.mountains, forest: record.forest }), false, record.revision);
     }).catch((error) => { if (alive) setLoadError(error instanceof Error ? error.message : "Не удалось открыть карту"); });
     return () => { alive = false; };
     // Lifecycle belongs to map identity/role, not to hook return objects.

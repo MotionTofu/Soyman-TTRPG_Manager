@@ -26,7 +26,11 @@ export type GameplayEntityV6 = GameplayEntity | GameplayToken;
 export interface GameplayLayerV6 extends Omit<GameplayLayer, "items"> { items: GameplayEntityV6[] }
 export type MapLayerV6 = Exclude<MapLayer, GameplayLayer> | GameplayLayerV6;
 export type MapDrawingStyle = "blueprint" | "paper-ink" | "comic-punk";
-export const MAP_WATER_LOOKS = ["comic", "pond", "sea", "soft"] as const;
+/** Порядок первых четырёх — номер вида живой воды в шейдере. «atlas» — не шейдер: заливка, тушевой берег, штриховка
+ * и тоны глубины линиями (гриллинг 2026-10-16, А1–А10). */
+export const MAP_WATER_LOOKS = ["comic", "pond", "sea", "soft", "atlas"] as const;
+/** Волны атласной воды: дужки или барашки. */
+export const MAP_WAVE_LOOKS = ["arcs", "caps"] as const;
 export type MapWaterLook = typeof MAP_WATER_LOOKS[number];
 /** Рецепт жидкости, заведённый Мастером на этой карте. Материал в слое — `village-<key>-<глубина>`; правка рецепта
  * перекрашивает всё, что им накрашено. Готовые рецепты (вода, лава…) живут в клиенте и здесь не хранятся. */
@@ -69,6 +73,8 @@ export interface MapDocumentV6 extends Omit<MapDocumentV5, "v" | "layers"> {
     waterSpeed?: number; waterPixels?: number;
     /** Отмель: на скольких клетках от берега вода набирает свою глубину, 0…6 (без поля — 0, отмели нет). */
     waterShoal?: number;
+    /** Атласная вода: вид волн (без поля — дужки) и их густота 0…1 (без поля — 0, волн нет). */
+    waves?: typeof MAP_WAVE_LOOKS[number]; waveDensity?: number;
     /** Подключённые наборы карты: каталог редактора показывает только их. Нет списка — подключено всё подходящее. */
     packs?: string[];
     /** Свои жидкости карты, до семи. */
@@ -136,7 +142,11 @@ export function validateMapDocumentV6(doc: unknown): ValidationIssue[] {
   if (water !== undefined && !(MAP_WATER_LOOKS as readonly unknown[]).includes(water)) {
     errors.push({ code: "appearance.bad-water", path: "appearance.water", message: "unknown water look" });
   }
-  for (const [key, min, max] of [["waterSpeed", 0, 3], ["waterPixels", 4, 16], ["waterShoal", 0, 6]] as const) {
+  const waves = record(doc.appearance) ? doc.appearance.waves : undefined;
+  if (waves !== undefined && !(MAP_WAVE_LOOKS as readonly unknown[]).includes(waves)) {
+    errors.push({ code: "appearance.bad-water", path: "appearance.waves", message: "unknown wave look" });
+  }
+  for (const [key, min, max] of [["waterSpeed", 0, 3], ["waterPixels", 4, 16], ["waterShoal", 0, 6], ["waveDensity", 0, 1]] as const) {
     const value = record(doc.appearance) ? doc.appearance[key] : undefined;
     if (value !== undefined && (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max))
       errors.push({ code: "appearance.bad-water", path: `appearance.${key}`, message: `expected ${min}..${max}` });
@@ -178,6 +188,8 @@ const canonAppearance = (doc: MapDocumentV6) => doc.appearance
     ...(doc.appearance.waterSpeed !== undefined ? { waterSpeed: doc.appearance.waterSpeed } : {}),
     ...(doc.appearance.waterPixels !== undefined ? { waterPixels: doc.appearance.waterPixels } : {}),
     ...(doc.appearance.waterShoal !== undefined ? { waterShoal: doc.appearance.waterShoal } : {}),
+    ...(doc.appearance.waves !== undefined ? { waves: doc.appearance.waves } : {}),
+    ...(doc.appearance.waveDensity !== undefined ? { waveDensity: doc.appearance.waveDensity } : {}),
     ...(doc.appearance.packs ? { packs: [...doc.appearance.packs] } : {}),
     ...(doc.appearance.liquids?.length ? { liquids: [...doc.appearance.liquids].sort((a, b) => a.key < b.key ? -1 : 1).map(item => ({ key: item.key, name: item.name,
       tones: [...item.tones] as [string, string, string], pace: item.pace, size: item.size, bed: item.bed, glow: item.glow, pattern: item.pattern, rim: item.rim, solid: item.solid,

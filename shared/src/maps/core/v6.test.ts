@@ -58,6 +58,12 @@ describe("V6 boundary and tokens", () => {
     expect(packed.ok && packed.value.appearance?.packs).toEqual(["village", "ink"]);
     for (const packs of [[], ["village", "village"], ["Деревня"], "village"])
       expect(parseMapDocumentV6({ ...wet, appearance: { style: "paper-ink", packs } }).ok).toBe(false);
+    // Атласная вода и её волны переживают сохранение; чужой вид волн и густота вне 0…1 — нет.
+    const atlas = { ...upgradeMapDocumentV5(oldDocument()), appearance: { style: "paper-ink", water: "atlas", waves: "caps", waveDensity: 0.4 } };
+    const kept = parseMapDocumentV6(serializeMapDocumentV6(atlas as MapDocumentV6));
+    expect(kept.ok && kept.value.appearance).toMatchObject({ water: "atlas", waves: "caps", waveDensity: 0.4 });
+    for (const bad of [{ waves: "foam" }, { waveDensity: 1.5 }, { waveDensity: -0.1 }])
+      expect(parseMapDocumentV6({ ...atlas, appearance: { ...atlas.appearance, ...bad } }).ok).toBe(false);
   });
   it("квартал: заливка и локация комнаты переживают сохранение, локация игрокам не уходит", () => {
     const base = upgradeMapDocumentV5(oldDocument());

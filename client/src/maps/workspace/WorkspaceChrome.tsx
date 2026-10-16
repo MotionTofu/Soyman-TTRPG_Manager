@@ -17,6 +17,8 @@ import { EFFECTS, type EffectState, type MapEffect, type MapEffects } from "../g
 // шаг наведения 16 мс, из них холст — меньшая часть. Обработчики сюда
 // приходят стабильными ссылками (`useEvent` в странице), иначе memo не держит.
 
+export type WaveLook = NonNullable<NonNullable<MapDocumentV6["appearance"]>["waves"]>;
+export type WaterTune = { waterSpeed?: number; waterPixels?: number; waterShoal?: number; waves?: WaveLook; waveDensity?: number };
 export type GridLook = { opacity: number; lineWidth: number; lineStyle: "solid" | "dashed"; color: string };
 const GRID_COLORS = [["#000000", "Чёрная"], ["#ffffff", "Белая"], ["#ff3e91", "Розовая"], ["#ffe14a", "Жёлтая"]] as const;
 const EFFECT_NAMES = Object.keys(EFFECTS) as MapEffect[];
@@ -35,7 +37,7 @@ export const WorkspaceToolRail = memo(function WorkspaceToolRail({ kind, tool, l
 });
 
 export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, canUndo, canRedo, onUndo, onRedo, grid, onGrid,
-  style, onStyle, styleLocked, frame, onFrame, water, onWater, waterSpeed, waterPixels, waterShoal, onWaterTune, generatorLocked, saveLocked, onGenerator, onSave, onBackup, onPicture, gl, onGl, effects, onEffect, onEffectsReset, classicLink }: {
+  style, onStyle, styleLocked, frame, onFrame, water, onWater, waterSpeed, waterPixels, waterShoal, waves, waveDensity, onWaterTune, generatorLocked, saveLocked, onGenerator, onSave, onBackup, onPicture, gl, onGl, effects, onEffect, onEffectsReset, classicLink }: {
   mapName: string; status: string;
   canUndo: boolean; canRedo: boolean; onUndo: () => void; onRedo: () => void;
   grid: GridLook; onGrid: (patch: Partial<GridLook>) => void;
@@ -44,7 +46,7 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, 
   frame: number | undefined; onFrame: (frame: number | undefined) => void;
   /** Вид живой воды; undefined — вода картинкой. */
   water: MapWaterLook | undefined; onWater: (water: MapWaterLook | undefined) => void;
-  waterSpeed: number; waterPixels: number; waterShoal: number; onWaterTune: (patch: { waterSpeed?: number; waterPixels?: number; waterShoal?: number }) => void;
+  waterSpeed: number; waterPixels: number; waterShoal: number; waves: WaveLook; waveDensity: number; onWaterTune: (patch: WaterTune) => void;
   generatorLocked: boolean; saveLocked: boolean; onGenerator: () => void; onSave: () => void; onBackup: () => void; onPicture: () => void;
   /** Отрисовка плитками через WebGL вместо обычного холста. */
   gl: boolean; onGl: (value: boolean) => void;
@@ -92,11 +94,18 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, 
           <label>Вид воды<select aria-label="Вид воды" value={water ?? ""} onChange={(event) => onWater((event.target.value || undefined) as MapWaterLook | undefined)}>
             <option value="">Картинкой, без движения</option>
             {WATER_LOOKS.map(([value, name]) => <option key={value} value={value}>{name}</option>)}
+            <option value="atlas">Атласная: заливка и штриховка</option>
           </select></label>
-          {water && <label>Скорость · {waterSpeed.toFixed(1)}<input aria-label="Скорость воды" type="range" min={0} max={3} step={0.1} value={waterSpeed} onChange={(event) => onWaterTune({ waterSpeed: Number(event.target.value) })} /></label>}
+          {water && water !== "atlas" && <label>Скорость · {waterSpeed.toFixed(1)}<input aria-label="Скорость воды" type="range" min={0} max={3} step={0.1} value={waterSpeed} onChange={(event) => onWaterTune({ waterSpeed: Number(event.target.value) })} /></label>}
           {(water === "pond" || water === "sea") && <label>Пикселей на клетку · {waterPixels}<input aria-label="Пикселей воды на клетку" type="range" min={4} max={16} step={1} value={waterPixels} onChange={(event) => onWaterTune({ waterPixels: Number(event.target.value) })} /></label>}
           {water && <label>Отмель у берега · {waterShoal ? `${waterShoal} кл.` : "нет"}<input aria-label="Отмель у берега, клеток" type="range" min={0} max={6} step={0.5} value={waterShoal} onChange={(event) => onWaterTune({ waterShoal: Number(event.target.value) })} /></label>}
-          <small>Живая вода плавно меняет глубину. Движется она в новой отрисовке, в остальных местах стоит одним кадром.</small>
+          {water === "atlas" && <>
+            <label>Волны<select aria-label="Вид волн" value={waves} onChange={(event) => onWaterTune({ waves: event.target.value as WaveLook })}>
+              <option value="arcs">Дужки</option><option value="caps">Барашки</option>
+            </select></label>
+            <label>Густота волн · {waveDensity ? `${Math.round(waveDensity * 100)} %` : "нет"}<input aria-label="Густота волн" type="range" min={0} max={1} step={0.05} value={waveDensity} onChange={(event) => onWaterTune({ waveDensity: Number(event.target.value) })} /></label>
+          </>}
+          {water === "atlas" ? <small>Атласная вода — заливка, берег тушью и штриховка. Тоны глубины — по накрашенной глубине и отмели, реки — тем же материалом.</small> : <small>Живая вода плавно меняет глубину. Движется она в новой отрисовке, в остальных местах стоит одним кадром.</small>}
         </fieldset>
         <fieldset disabled={styleLocked}><legend>Рамка</legend>
           <label><input type="checkbox" checked={frame !== undefined} onChange={(event) => onFrame(event.target.checked ? 2 : undefined)} />Рамка вокруг карты</label>
