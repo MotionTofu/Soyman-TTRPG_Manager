@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useContext, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useEntity, useResource } from "../../data/hooks";
 import { campaignPaths } from "../../data/campaigns";
@@ -17,14 +17,14 @@ import {
   type RecordKnownTo,
   type RecordOwnerType,
 } from "../../entityRecords";
-import { mentionTone } from "../../mentions";
+import { mentionTone, parseMentions, resolveMention } from "../../mentions";
 import type { CampaignDetail, Character, LiveSession, SessionDetail, SessionSummary, SettingBeingDetail } from "../../types";
 import { SessionResults } from "../SessionResults";
 import { sessionLabel } from "../../sessionLabel";
 import { formatDateKeyRu } from "../../utils/date";
 import { formatInworldDate } from "../../inworldCalendar";
 import { useSettingCalendar } from "../../hooks/useSettingCalendar";
-import { type InstanceSummary } from "./model";
+import { WorkbookContext, type InstanceSummary } from "./model";
 import { CampaignParticipation } from "../CharacterDossier";
 import { CampaignWorldTab, type WorldEntity, type WorldType } from "../campaign/CampaignWorldTab";
 import { CampaignRecords } from "../campaign/CampaignProfileParts";
@@ -358,3 +358,67 @@ export function PrepSheetLink({ campaignId }: { campaignId: number }) {
   );
 }
 
+const FORMER_OWNERS: ReadonlySet<string> = new Set(["being", "community", "location", "character"]);
+
+/** Ответ «Прежних граф» строками: текст — одна строка, таблица — строка на строку таблицы. */
+function formerTexts(value: unknown): string[] {
+  const one = (v: unknown): string =>
+    v == null ? "" : typeof v === "object" ? Object.entries(v).filter(([k]) => k !== "_id").map(([, x]) => one(x)).filter(Boolean).join(" · ") : String(v).trim();
+  return (Array.isArray(value) ? value.map(one) : [one(value)]).filter(Boolean);
+}
+
+/**
+ * «→ в запись» у ответа из «Прежних граф» тетради кампании (спека
+ * workbook-rework, Q18): окно записи с текстом ответа. Владелец — первое
+ * упоминание, если это сущность сеттинга или персонаж (сервер проверит, что
+ * они из этой кампании), иначе выбор. Сам ответ не меняется и не удаляется.
+ */
+export function FormerToRecord({ value }: { value: unknown }) {
+  const doc = useContext(WorkbookContext)?.document;
+  const campaignId = doc?.project_type === "campaign" ? doc.project_id : null;
+  const campaign = useResource<CampaignDetail>(campaignId ? campaignPaths.detail(campaignId) : null).data;
+  const [choosing, setChoosing] = useState<string | null>(null);
+  const [draft, setDraft] = useState<(NewRecord & { text: string }) | null>(null);
+  if (!campaignId || !campaign) return null;
+  const texts = formerTexts(value);
+  function start(text: string) {
+    const first = parseMentions(text)[0];
+    const id = first && FORMER_OWNERS.has(first.type) ? resolveMention(first.type, first.uid) : null;
+    if (first && id) setDraft({ owner_type: first.type as RecordOwnerType, owner_id: id, aspect: "note", text });
+    else setChoosing(text);
+  }
+  return (
+    <>
+      {texts.map((t, i) => (
+        <div key={i} className="workbook-former__row">
+          {texts.length > 1 && <span className="muted">{t}</span>}
+          <button type="button" className="wb-link" onClick={() => start(t)}>
+            → в запись
+          </button>
+        </div>
+      ))}
+      {choosing != null && (
+        <OwnerSelect
+          campaignId={campaignId}
+          placeholder="о ком запись…"
+          settingId={campaign.setting_id}
+          onPick={(o) => {
+            setDraft({ ...o, text: choosing });
+            setChoosing(null);
+          }}
+        />
+      )}
+      {draft && (
+        <RecordFormModal
+          campaignId={campaignId}
+          settingId={campaign.setting_id}
+          ownerType={draft.owner_type}
+          ownerId={draft.owner_id}
+          aspect={draft.aspect}
+          text={draft.text}
+          onClose={() => setDraft(null)}
+        />
+      )}
+    </>
+  );
+}

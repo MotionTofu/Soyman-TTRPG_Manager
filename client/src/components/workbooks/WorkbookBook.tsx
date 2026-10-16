@@ -5,6 +5,7 @@ import {useConfirm} from "../../hooks/useConfirm";
 import {MentionText} from "../mentions/MentionText";
 import {parseMentions} from "../../mentions";
 import {WorkbookFieldInput} from "./WorkbookFieldInput";
+import {FormerToRecord} from "./WorkbookCampaignViews";
 import {WorkbookScope,WorkbookContext,WorkbookRow,type WorkbookInstance} from "./model";
 import {formerAnswers,sheetNotes,sheetNumber,sheetParts,sheetProgress,workbookAnswerless,WORKBOOK_NOTES,type WorkbookAnswers,type WorkbookField,type WorkbookNote,type WorkbookSheet} from "@shared/workbooks";
 
@@ -93,7 +94,7 @@ function SheetForm({sheet,index,template,answers,change,disabled,onCard}:{sheet:
   <fieldset className="wb-fields" disabled={disabled}>{sheet.fields.map(field=>field.type==="group"
    ?<CardList key={field.key} field={field} rows={(Array.isArray(values[field.key])?values[field.key]:[]) as Row[]} disabled={disabled} onOpen={row=>onCard(field.key,row)} onAdd={()=>{const id=crypto.randomUUID(),rows=(Array.isArray(values[field.key])?values[field.key]:[]) as Row[];change(sheet.key,field.key,[...rows,{_id:id}]);onCard(field.key,id);}}/>
    :<WorkbookFieldInput key={field.key} field={field} value={values[field.key]} onChange={v=>change(sheet.key,field.key,v)}/>)}</fieldset>
-  {here.length>0&&<details className="workbook-former"><summary>Прежние графы · {here.length}</summary>{here.map(f=><div key={f.path}><strong>{f.label}</strong><p className="muted">{typeof f.value==="string"?f.value:JSON.stringify(f.value)}</p></div>)}</details>}
+  {here.length>0&&<details className="workbook-former"><summary>Прежние графы · {here.length}</summary>{here.map(f=><div key={f.path}><strong>{f.label}</strong><p className="muted">{typeof f.value==="string"?f.value:JSON.stringify(f.value)}</p><FormerToRecord value={f.value}/></div>)}</details>}
  </>;
 }
 

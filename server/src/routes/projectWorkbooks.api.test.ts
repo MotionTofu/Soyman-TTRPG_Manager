@@ -29,7 +29,7 @@ describe('тетради проектов и полки',()=>{
   const setting=await auth(request(app).post('/settings')).send({name:'Мир тетрадей'});expect(setting.status).toBe(201);
   const sid=setting.body.id;
   const adventure=await auth(request(app).post('/story/arcs')).send({name:'Ваншот',setting_id:sid});expect(adventure.status).toBe(201);
-  const campaign=await auth(request(app).post('/campaigns')).send({name:'Проведение',setting_id:sid,type:'oneshot'});expect(campaign.status).toBe(201);
+  const campaign=await auth(request(app).post('/campaigns')).send({name:'Проведение',setting_id:sid,type:'campaign'});expect(campaign.status).toBe(201);
   const rows=db.prepare('SELECT * FROM workbook_instances WHERE author_user_id=? ORDER BY id').all(author) as {id:number;project_type:string;project_id:number;revision:number;answers_json:string;template_id:number}[];
   expect(rows.map(r=>r.project_type)).toEqual(['setting','adventure','campaign']);
   expect(new Set(rows.map(r=>r.id)).size).toBe(3);
@@ -42,6 +42,12 @@ describe('тетради проектов и полки',()=>{
   const again=await auth(request(app).post(`/workbooks/projects/adventure/${adventure.body.id}/notebook`)).send({});
   expect(again.body.id).toBe(rows[1].id);expect(again.body.revision).toBe(1);
   expect(db.prepare('SELECT count(*) n FROM workbook_instances WHERE author_user_id=?').get(author)).toEqual({n:3});
+ });
+ it('ваншот не заводит тетрадь кампании: его тетрадь — приключения',async()=>{
+  const before=(db.prepare('SELECT count(*) n FROM workbook_instances WHERE author_user_id=?').get(author) as {n:number}).n;
+  const oneshot=await auth(request(app).post('/campaigns')).send({name:'Один вечер',type:'oneshot'});expect(oneshot.status).toBe(201);
+  expect(db.prepare("SELECT count(*) n FROM workbook_instances WHERE project_type='campaign' AND project_id=?").get(oneshot.body.id)).toEqual({n:0});
+  expect(db.prepare('SELECT count(*) n FROM workbook_instances WHERE author_user_id=?').get(author)).toEqual({n:before});
  });
  it('переносит полку при смене сеттинга и оставляет ответы и идентификатор',()=>{
   const sid=Number(db.prepare("INSERT INTO settings(name) VALUES('Другой мир')").run().lastInsertRowid);
