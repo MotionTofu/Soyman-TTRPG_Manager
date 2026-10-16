@@ -18,7 +18,7 @@ export interface WorkbookTemplate {format:"soyman-workbook";schemaVersion:1;key:
 export type WorkbookAnswers=Record<string,Record<string,unknown>>;
 const keyPattern=/^[a-z][a-z0-9_-]{0,79}$/;
 const dangerous=new Set(["__proto__","prototype","constructor"]);
-export const WORKBOOK_PROFILE_KINDS = ["passport","participants","information","world_truth","tradition","norm","tension","activity","capability","flow","claim","diegetic_doc","negative_space","notes"] as const;
+export const WORKBOOK_PROFILE_KINDS = ["passport","participants","information","world_truth","tradition","norm","tension","activity","capability","flow","claim","diegetic_doc","negative_space","notes","heroes","group_grounds","places","sides","knowledge","world_moment","session_review"] as const;
 function object(value:unknown):value is Record<string,unknown>{return !!value&&typeof value==="object"&&!Array.isArray(value);}
 function key(value:unknown){return typeof value==="string"&&keyPattern.test(value)&&!dangerous.has(value);}
 function text(value:unknown,max=500){return typeof value==="string"&&value.trim().length>0&&value.length<=max;}
@@ -104,9 +104,9 @@ export function convertAnswer(field:WorkbookField,value:unknown):unknown{
  if(field.type==="table"||field.type==="group")return Array.isArray(value)?value:undefined;
  return undefined;
 }
-/** Сопоставление ответов старой версии с новой: тот же ключ, иначе тот же лист по названию и графа по названию. */
+/** Сопоставление ответов старой версии с новой: тот же ключ, иначе тот же лист по названию и графа по названию. В одну графу — не больше одного ответа. */
 export function suggestWorkbookMapping(from:WorkbookTemplate,to:WorkbookTemplate,answers:WorkbookAnswers){
- const mapping:Record<string,string>={};
+ const mapping:Record<string,string>={},taken=new Set<string>();
  for(const sheet of from.sheets)for(const field of sheet.fields){
   const value=answers[sheet.key]?.[field.key];if(!filledValue(value))continue;
   const target=to.sheets.find(s=>s.key===sheet.key&&norm(s.title)===norm(sheet.title))??to.sheets.find(s=>norm(s.title)===norm(sheet.title));
@@ -114,7 +114,7 @@ export function suggestWorkbookMapping(from:WorkbookTemplate,to:WorkbookTemplate
   let match=target?.fields.find(f=>f.key===field.key&&norm(f.label)===norm(field.label)&&fits(f))??target?.fields.find(f=>norm(f.label)===norm(field.label)&&fits(f));
   let sheetKey=target?.key;
   if(!match){const all=to.sheets.flatMap(s=>s.fields.filter(f=>norm(f.label)===norm(field.label)&&fits(f)).map(f=>({s,f})));if(all.length===1){match=all[0].f;sheetKey=all[0].s.key;}}
-  if(match&&sheetKey)mapping[`${sheet.key}/${field.key}`]=`${sheetKey}/${match.key}`;
+  if(match&&sheetKey&&!taken.has(`${sheetKey}/${match.key}`)){taken.add(`${sheetKey}/${match.key}`);mapping[`${sheet.key}/${field.key}`]=`${sheetKey}/${match.key}`;}
  }
  return mapping;
 }

@@ -363,6 +363,8 @@
   .wb-table tbody tr { padding: var(--sp-3) 0; }
   .wb-table td { padding: 0; }
   .wb-table td[data-label]::before { content: attr(data-label); display: block; font-size: var(--fs-meta); color: var(--paper-muted); }
+  /* Строка-вопрос с единственной графой ответа: подпись графы над ячейкой лишняя. */
+  .wb-table th[scope="row"] + td:last-child::before { content: none; }
   .wb-card__siblings { margin-left: 0; }
 }
 

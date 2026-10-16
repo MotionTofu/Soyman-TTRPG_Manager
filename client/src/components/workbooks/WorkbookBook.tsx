@@ -3,6 +3,7 @@ import {Link} from "react-router-dom";
 import {useResource} from "../../data/hooks";
 import {useConfirm} from "../../hooks/useConfirm";
 import {MentionText} from "../mentions/MentionText";
+import {parseMentions} from "../../mentions";
 import {WorkbookFieldInput} from "./WorkbookFieldInput";
 import {WorkbookScope,WorkbookContext,WorkbookRow,type WorkbookInstance} from "./model";
 import {formerAnswers,sheetNotes,sheetNumber,sheetParts,sheetProgress,workbookAnswerless,WORKBOOK_NOTES,type WorkbookAnswers,type WorkbookField,type WorkbookNote,type WorkbookSheet} from "@shared/workbooks";
@@ -16,9 +17,10 @@ type Change=(sheet:string,field:string,value:unknown)=>void;
 const sheetLabel=(n:string,title:string)=>n?`${n} · ${title}`:title;
 const filled=(v:unknown)=>v!==undefined&&v!==null&&v!==""&&(!Array.isArray(v)||v.length>0);
 const writable=(f:WorkbookField)=>f.type==="text"||f.type==="line"||f.type==="page";
-/** Имя карточки — её первая строка или текст. */
-const nameField=(group:WorkbookField)=>(group.fields??[]).find(f=>f.type==="line"||f.type==="text");
-const cardName=(group:WorkbookField,row:Row,i:number)=>{const f=nameField(group),v=f&&row[f.key];return typeof v==="string"&&v.trim()?v.trim().split("\n")[0]:`${group.label} ${i+1}`;};
+/** Имя карточки — её первая строка или текст; карточка, начатая ссылкой (на сессию, на героя), названа упомянутым и своей строки-имени не имеет. */
+const nameField=(group:WorkbookField)=>group.fields?.[0]?.type==="reference"?undefined:(group.fields??[]).find(f=>f.type==="line"||f.type==="text");
+const cardName=(group:WorkbookField,row:Row,i:number)=>{const first=group.fields?.[0],f=first?.type==="reference"?first:nameField(group),v=f&&row[f.key];
+ const text=typeof v==="string"?(first?.type==="reference"?parseMentions(v)[0]?.label??v:v).trim():"";return text?text.split("\n")[0]:`${group.label} ${i+1}`;};
 const cardProgress=(group:WorkbookField,row:Row)=>{const fields=(group.fields??[]).filter(f=>!workbookAnswerless(f)&&!f.optional);return {filled:fields.filter(f=>filled(row[f.key])).length,total:fields.length};};
 const summaryText=(field:WorkbookField,row:Row)=>{
  const value=row[field.key];
