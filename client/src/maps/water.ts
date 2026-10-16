@@ -282,11 +282,11 @@ uniform vec2 uMap;
 float gBed = 1.0, gFoam = 1.0;
 // Дно (гриллинг 2026-10-15, В2–В4): земля под жидкостью — её отдаёт тот, кто рисует (сцена WebGL или обычный холст).
 // gUnder — земля, уже обработанная видом воды; gClear — насколько она видна; gTop — сколько поверх лежит пены, туши и бликов:
-// они остаются над дном. gGround — под жидкостью что-то накрашено; иначе вид рисует дно сам, как раньше.
+// они остаются над дном. gGround — какая доля точки накрашена под жидкостью (0…1): где 0, вид рисует дно сам, как раньше.
 vec4 groundAt(vec2 world);
 vec3 gUnder = vec3(0.0);
 float gClear = 0.0, gTop = 0.0;
-bool gGround = false;
+float gGround = 0.0;
 vec3 gGlow = vec3(0.0);
 // Рецепт жидкости — строка картинки: три тона, потом (подвижность/2, крупность/4, дно), (рисунок/8, кромка/8, свечение)
 // и (ширина берега, рваность берега).
@@ -323,7 +323,7 @@ float reachK() { return 0.6 + gShore; }
 float clarity(float depth) { return gBed * (1.0 - smoothstep(0.1, 0.9, depth)); }
 // Земля в точке, подкрашенная водой; false — земли нет, и дно рисуется видом.
 bool under(vec2 at, vec3 tint) {
-  if (!gGround) return false;
+  if (gGround <= 0.0) return false;
   vec4 g = groundAt(at);
   if (g.a < 0.5) return false;
   gUnder = g.rgb * tint;
@@ -432,11 +432,14 @@ vec4 soft(vec2 w, vec2 s, float t) {
   float depth = depthAt(w);
   vec3 col = mix(vec3(0.56, 0.84, 0.8), vec3(0.2, 0.47, 0.7), smoothstep(0.08, 0.85, depth));
   vec2 sway = 0.05 * vec2(noise(w * 1.7 + t * 0.5) - 0.5, noise(w * 1.7 + 9.0 - t * 0.5) - 0.5);
-  if (under(w + sway, vec3(0.72, 0.9, 0.92))) gClear = clarity(depth) * 0.78;
-  else {
+  // Своё дно и нарисованное песчаное сменяют друг друга по доле накрашенного (gGround), а не скачком: иначе граница шла
+  // ступенями по точкам маски вдоль всего берега.
+  float own = under(w + sway, vec3(0.72, 0.9, 0.92)) ? gGround : 0.0;
+  if (own > 0.0) gClear = clarity(depth) * 0.78;
+  if (own < 1.0) {
     float bed = noise(w * 3.0) * 0.5 + noise(w * 7.0 + 4.0) * 0.5;
     vec3 bottom = mix(vec3(0.87, 0.8, 0.58), vec3(0.6, 0.56, 0.44), smoothstep(0.58, 0.66, bed));
-    col = mix(bottom, col, mix(1.0, 0.3 + 0.7 * smoothstep(0.04, 0.42, depth), gBed));
+    col = mix(mix(bottom, col, mix(1.0, 0.3 + 0.7 * smoothstep(0.04, 0.42, depth), gBed)), col, own);
   }
   vec2 q = s * 0.9 + 0.2 * vec2(noise(s * 1.1 + t * 0.2), noise(s * 1.1 + 5.0 - t * 0.2));
   float line = (1.0 - smoothstep(0.0, 0.05, cellEdge(q, t * 0.6))) * (0.6 - 0.35 * depth) * smoothstep(0.25, 0.6, noise(s * 0.6 + t * 0.1 + 3.0));
@@ -479,6 +482,13 @@ vec3 liquid(vec3 c, float kind, vec2 p, float t) {
 }
 float kindCode(vec2 w) { return texture(uFlow, (floor(w * MASK_K) + 0.5) / MASK_K / uMap).b * 255.0 / 32.0; }
 float kindAt(vec2 w) { return floor(kindCode(w) + 0.01); }
+// Накрашено ли под жидкостью — сглаженно между точками маски: по ближайшей точке граница «своё дно / нарисованное» шла
+// ступенями в четверть клетки вдоль всего берега (снимок владельца 2026-10-16).
+float groundFlag(vec2 i) { return step(0.25, fract(texture(uFlow, (i + 0.5) / MASK_K / uMap).b * 255.0 / 32.0)); }
+float groundShare(vec2 w) {
+  vec2 p = w * MASK_K - 0.5, i = floor(p), f = fract(p);
+  return mix(mix(groundFlag(i), groundFlag(i + vec2(1.0, 0.0)), f.x), mix(groundFlag(i + vec2(0.0, 1.0)), groundFlag(i + vec2(1.0, 1.0)), f.x), f.y);
+}
 // Дно поверх жидкости, уже перекрашенной рецептом: так земля под болотом остаётся землёй, а не болотом. В пиксельных
 // видах смесь огрубляется до ступеней тона, чтобы гладкая земля не выпадала из пиксель-арта.
 // Вода вокруг того, что в ней стоит (В8): кольцо пены по контуру, рябь, которая расходится кругами, а в реке — след
@@ -503,7 +513,7 @@ vec3 things(vec3 col, vec2 w, vec2 f, float t, bool blocky) {
   return mix(col, vec3(0.93, 0.98, 0.95), foam);
 }
 vec4 withBed(vec3 col, float a, bool blocky) {
-  float show = gClear * (1.0 - gTop);
+  float show = gClear * gGround * (1.0 - gTop);
   if (show <= 0.0) return vec4(col, a);
   vec3 mixed = mix(col, gUnder, show);
   return vec4(blocky ? floor(mixed * 6.0 + 0.5) / 6.0 : mixed, a);
@@ -546,7 +556,7 @@ vec4 waterAt(vec2 world, float t) {
   vec2 w = blocky ? (floor(world * uWater.z) + 0.5) / uWater.z : world;
   // Номер жидкости берётся из середины точки маски, без сглаживания: между номерами нет «промежуточной» жидкости.
   float kind = kindAt(w);
-  gGround = fract(kindCode(w)) > 0.25; gClear = 0.0; gTop = 0.0;
+  gGround = blocky ? step(0.5, groundShare(w)) : groundShare(w); gClear = 0.0; gTop = 0.0;
   shoreOf(kind);
   vec3 set = recipe(kind, 3.0);
   float size = max(0.25, set.g * 4.0);
