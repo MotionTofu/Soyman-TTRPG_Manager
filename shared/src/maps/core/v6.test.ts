@@ -21,6 +21,17 @@ function oldDocument(): MapDocumentV5 {
         mask: { origin: { x: 0, y: 0 }, sampleSize: 1, materials: [{ type: "builtin", key: "terrain/stone" }], chunks: [{ id: "chunk", cx: 0, cy: 0, payload: { encoding: "palette-index-v1", values: Array(256).fill(1) } }] } } ] };
 }
 describe("V6 player projection", () => {
+  it("подложка переживает сохранение, кривая отклоняется, игрокам не уходит", () => {
+    const image = { id: "ref-1", image: "0b7c1d9e-1111-4222-8333-944455556666", pixels: { w: 4000, h: 3000 }, position: { x: 4, y: 4 },
+      width: 8, rotation: 15, opacity: 0.5, crop: { x0: 0.1, y0: 0, x1: 0.9, y1: 1 } };
+    const layer = { id: "under", kind: "reference" as const, name: "Подложка", visible: true, locked: true, opacity: 0.6, items: [image] };
+    const doc = { ...upgradeMapDocumentV5(oldDocument()), layers: [...upgradeMapDocumentV5(oldDocument()).layers, layer] };
+    const read = parseMapDocumentV6(serializeMapDocumentV6(doc));
+    expect(read.ok && read.value.layers.at(-1)).toEqual(layer);
+    for (const bad of [{ image: "../x" }, { pixels: { w: 0, h: 3 } }, { width: 0 }, { opacity: 2 }, { crop: { x0: 0.5, y0: 0, x1: 0.4, y1: 1 } }])
+      expect(validateMapDocumentV6({ ...doc, layers: [...doc.layers.slice(0, -1), { ...layer, items: [{ ...image, ...bad }] }] }).length).toBeGreaterThan(0);
+    expect(projectMapDocumentV6ForPlayer(doc, () => null).layers.some((entry) => entry.kind === "reference")).toBe(false);
+  });
   it("shows only public tokens in revealed cells, detached, with resolved names and no source data", () => {
     const place = (id: string, x: number, y: number, publicToken: boolean) => ({ ...createGameplayToken(id, ref, { x, y }),
       playerVisibility: publicToken ? "public" as const : "private" as const,

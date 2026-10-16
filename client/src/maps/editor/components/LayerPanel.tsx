@@ -29,6 +29,7 @@ const KIND_LABEL: Record<MapLayer["kind"], string> = {
   label: "Подписи",
   object: "Свободные объекты",
   scatter: "Россыпь",
+  reference: "Подложка",
 };
 
 const NEW_KINDS: Array<{ kind: NewLayerKind; label: string }> = [
@@ -72,6 +73,8 @@ function layerNonEmpty(layer: MapLayer): boolean {
       return layer.items.length > 0;
     case "scatter":
       return layer.areas.length > 0;
+    case "reference":
+      return layer.items.length > 0;
   }
 }
 

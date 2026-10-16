@@ -7,7 +7,7 @@ import type { MapFull } from "../maps/mapTypes";
 const mocks = vi.hoisted(() => ({ read: vi.fn(), save: vi.fn(), raw: vi.fn(), role: "gm" }));
 vi.mock("../api/currentUser", () => ({ useCurrentUser: () => ({ user: { role: mocks.role } }) }));
 vi.mock("../data/hooks", () => ({ useAfterWrite: () => () => {}, useAction: () => vi.fn(), write: {}, useResource: () => ({ data: undefined, loading: false, error: null, reload: () => {} }) }));
-vi.mock("../maps/workspace/mapApi", () => ({ mapWorkspaceApi: { read: mocks.read, saveBody: mocks.save }, downloadStoredMapOriginal: mocks.raw, downloadMapJson: vi.fn() }));
+vi.mock("../maps/workspace/mapApi", () => ({ mapWorkspaceApi: { read: mocks.read, saveBody: mocks.save, references: () => Promise.resolve([]) }, downloadStoredMapOriginal: mocks.raw, downloadMapJson: vi.fn() }));
 vi.mock("../maps/workspace/WorkspaceCanvas", () => ({ WorkspaceCanvas: () => <div>Тестовый холст</div> }));
 afterEach(cleanup);
 beforeEach(() => { mocks.role = "gm"; mocks.read.mockReset(); mocks.save.mockReset(); localStorage.clear(); });

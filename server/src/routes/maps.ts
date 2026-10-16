@@ -1,6 +1,9 @@
 import { Router } from "express";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
+import multer from "multer";
+import sharp from "sharp";
 import {
   parseMapDocument,
   parseStoredMapDocument,
@@ -18,7 +21,7 @@ import {
 } from "@soyman/shared";
 import { resolveMapTokenSource, presentMapTokenSources, validateMapTokenSources, playerTokenName } from "../services/mapTokenSources";
 import { db } from "../db/db";
-import { isVaultPath, toFileUrl, vaultAbs } from "../services/filesystem";
+import { ensureSubfolder, isVaultPath, toFileUrl, vaultAbs, VAULT_ROOT } from "../services/filesystem";
 import type { AuthedRequest } from "../services/auth";
 import {
   emptyCellsBlob,
@@ -130,6 +133,64 @@ mapsRouter.get("/:id/assets", (req: AuthedRequest, res) => {
       ? [item.visual.assetId.slice(prefix.length).toLowerCase()] : []) : []))]
     .filter((uid) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(uid));
   res.json(imageAssets(uids));
+});
+
+// Подложка для обрисовки (гриллинг 2026-10-16, П5): файл почти без пересжатия — WebP, длинная сторона не больше
+// 8192 точек; в Галерею и наборы не попадает. Папка общая: копия карты ссылается на те же файлы. Файл уходит, когда
+// окончательно удалена последняя карта, которая на него ссылается.
+// ponytail: картинка, убранная из карты в редакторе, лежит до удаления карты — чистить по документам, если папка распухнет.
+const REFERENCE_FOLDER = "MapReferences";
+const REFERENCE_MAX_SIDE = 8192;
+const referenceFile = (uid: string) => path.join(REFERENCE_FOLDER, `${uid}.webp`);
+/** Файлы подложки, на которые ссылается сохранённый документ карты. */
+function referenceUids(cells: string): string[] {
+  const stored = parseStoredMapDocument(cells);
+  if (stored.format !== "v6") return [];
+  const parsed = parseMapDocumentV6(stored.raw);
+  if (!parsed.ok) return [];
+  // Слои читаются по форме, а не по типам: сервер может стоять на сборке shared, где подложки ещё нет.
+  const layers = parsed.value.layers as readonly { kind: string; items?: readonly { image?: unknown }[] }[];
+  return [...new Set(layers.flatMap((layer) => layer.kind === "reference" ? (layer.items ?? []).map((item) => item.image) : []))]
+    .filter((uid): uid is string => typeof uid === "string" && /^[0-9a-f-]{36}$/.test(uid));
+}
+/** После окончательного удаления карты: убрать файлы подложки, на которые больше никто не ссылается. */
+export function dropMapReferences(cells: string): void {
+  for (const uid of referenceUids(cells)) {
+    if (db.prepare("SELECT 1 FROM maps WHERE instr(cells, ?) > 0 LIMIT 1").get(uid)) continue;
+    fs.rm(vaultAbs(referenceFile(uid)), { force: true }, () => undefined);
+  }
+}
+const referenceUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 1, fields: 2 },
+  fileFilter(_req, file, cb) {
+    if (["image/png", "image/jpeg", "image/webp", "image/avif", "image/gif"].includes(file.mimetype)) cb(null, true);
+    else cb(new Error("Поддерживаются только изображения PNG/JPG/WebP/AVIF/GIF"));
+  } }).single("file");
+const liveMap = (id: string) => !!db.prepare("SELECT id FROM maps WHERE id = ? AND archived_at IS NULL").get(id);
+
+mapsRouter.post("/:id/references", (req: AuthedRequest, res) => {
+  if (isPlayer(req)) return res.status(403).json({ error: "forbidden" });
+  if (!liveMap(req.params.id)) return res.status(404).json({ error: "not found" });
+  referenceUpload(req, res, (error: unknown) => {
+    if (error) return res.status(400).json({ error: error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE" ? "Файл больше 20 МБ" : (error as Error).message });
+    if (!req.file) return res.status(400).json({ error: "Нужен файл изображения" });
+    (async () => {
+      const out = await sharp(req.file!.buffer, { animated: false }).rotate()
+        .resize({ width: REFERENCE_MAX_SIDE, height: REFERENCE_MAX_SIDE, fit: "inside", withoutEnlargement: true })
+        .webp({ quality: 92 }).toBuffer({ resolveWithObject: true });
+      const uid = crypto.randomUUID(), file = path.join(ensureSubfolder(VAULT_ROOT, REFERENCE_FOLDER), `${uid}.webp`);
+      await fs.promises.writeFile(vaultAbs(file), out.data);
+      res.status(201).json({ uid, url: toFileUrl(file), width: out.info.width, height: out.info.height });
+    })().catch(() => res.status(400).json({ error: "Файл не читается как изображение" }));
+  });
+});
+
+// Файлы подложки этой карты (по сохранённому документу): uid → адрес. Только Мастеру.
+mapsRouter.get("/:id/references", (req: AuthedRequest, res) => {
+  if (isPlayer(req)) return res.status(403).json({ error: "forbidden" });
+  const row = db.prepare("SELECT cells FROM maps WHERE id = ? AND archived_at IS NULL").get(req.params.id) as { cells: string } | undefined;
+  if (!row) return res.status(404).json({ error: "not found" });
+  res.json(referenceUids(row.cells).filter((uid) => fs.existsSync(vaultAbs(referenceFile(uid))))
+    .map((uid) => ({ uid, url: toFileUrl(referenceFile(uid)) })));
 });
 
 function isPlayer(req: AuthedRequest): boolean {

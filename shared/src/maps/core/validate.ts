@@ -462,6 +462,39 @@ function checkScatterLayer(
   });
 }
 
+const REFERENCE_FILE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+function checkReferenceLayer(
+  layer: Record<string, unknown>,
+  path: string,
+  ids: Set<string>,
+  out: ValidationIssue[],
+): void {
+  if (!Array.isArray(layer.items)) {
+    out.push(issue("reference.not-array", `${path}.items`, "expected items array"));
+    return;
+  }
+  layer.items.forEach((r, i) => {
+    const rp = `${path}.items[${i}]`;
+    if (!isRecord(r)) {
+      out.push(issue("reference.not-object", rp, "expected reference image"));
+      return;
+    }
+    claimId(ids, r.id, `${rp}.id`, "reference", out);
+    if (typeof r.image !== "string" || !REFERENCE_FILE.test(r.image)) out.push(issue("reference.bad-image", `${rp}.image`, "expected lowercase file UUID"));
+    const px = r.pixels;
+    if (!isRecord(px) || !Number.isInteger(px.w) || !Number.isInteger(px.h) || (px.w as number) < 1 || (px.h as number) < 1)
+      out.push(issue("reference.bad-pixels", `${rp}.pixels`, "expected positive integer { w, h }"));
+    checkVec2(r.position, `${rp}.position`, out);
+    if (!isFiniteNumber(r.width) || (r.width as number) <= 0) out.push(issue("reference.bad-width", `${rp}.width`, "width must be positive"));
+    if (!isFiniteNumber(r.rotation)) out.push(issue("reference.bad-rotation", `${rp}.rotation`, "rotation must be finite"));
+    if (!isFiniteNumber(r.opacity) || (r.opacity as number) < 0 || (r.opacity as number) > 1) out.push(issue("reference.bad-opacity", `${rp}.opacity`, "opacity must be 0..1"));
+    const c = r.crop;
+    if (c !== undefined && (!isRecord(c) || ![c.x0, c.y0, c.x1, c.y1].every((v) => isFiniteNumber(v) && v >= 0 && v <= 1)
+      || (c.x0 as number) >= (c.x1 as number) || (c.y0 as number) >= (c.y1 as number)))
+      out.push(issue("reference.bad-crop", `${rp}.crop`, "crop must be 0..1 with x0 < x1, y0 < y1"));
+  });
+}
+
 function checkLabelLayer(
   layer: Record<string, unknown>,
   path: string,
@@ -722,8 +755,10 @@ export function validateMapDocument(doc: unknown): ValidationIssue[] {
       checkLabelLayer(l, lp, ids, out);
     } else if (kind === "gameplay") {
       checkGameplayLayer(l, lp, ids, out, doors);
+    } else if (kind === "reference") {
+      checkReferenceLayer(l, lp, ids, out);
     } else {
-      out.push(issue("layer.unknown-kind", `${lp}.kind`, "expected terrain | path | object | scatter | label | gameplay"));
+      out.push(issue("layer.unknown-kind", `${lp}.kind`, "expected terrain | path | object | scatter | label | gameplay | reference"));
     }
   });
 

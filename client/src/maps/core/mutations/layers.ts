@@ -275,7 +275,7 @@ export function findEntityLayer(doc: MapDocumentV5, entityId: EntityId): EntityO
       owns = l.areas.some((a) => a.id === entityId);
     } else if (l.kind === "label") {
       owns = l.items.some((x) => x.id === entityId);
-    } else if (l.kind === "gameplay") {
+    } else if (l.kind === "gameplay" || l.kind === "reference") {
       owns = l.items.some((e) => e.id === entityId);
     }
     if (owns) return { layerId: l.id, layerIndex: i, kind: l.kind };

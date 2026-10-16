@@ -10,6 +10,7 @@ import { floodTerrainMask, paintTerrainMask } from "./core/mutations/terrainMask
 import { projectMapDocumentForPlayer } from "./core/playerProjection";
 import { createV5RenderModel } from "./renderModel";
 import { MAP_TERRAIN_FILL, renderMap, type MapChrome, type RenderOptions } from "./render";
+import { getMapImageAsset, registerMapImageResources, resourceImageAssetId } from "./assets/registry";
 
 const CHROME: MapChrome = { paper: "#fff", line: "#000", muted: "#666", ink: "#111" };
 
@@ -538,5 +539,24 @@ describe("grid and token stacking", () => {
     expect(calls[name]).toMatch(/^fillText\("TOKEN_NAME",0,0,/);
     expect(fog).toBeGreaterThan(name);
     expect(calls.slice(grid, name).filter(call => call.startsWith("set:globalAlpha=")).some(call => Number(call.split("=")[1]) === .5)).toBe(true);
+  });
+  it("подложка: над поверхностью — после сетки, под ней — до сетки, игроку не рисуется (П4, П10)", () => {
+    const uid = "0b7c1d9e-1111-4222-8333-944455556666";
+    registerMapImageResources([{ uid, name: "Подложка", file_url: "/files/MapReferences/x.webp" }]);
+    getMapImageAsset(resourceImageAssetId(uid))!.image = new Image();
+    const reference = { id: "under", name: "Подложка", kind: "reference" as const, visible: true, locked: false, opacity: 0.5,
+      items: [{ id: "ref", image: uid, pixels: { w: 400, h: 200 }, position: { x: 4, y: 4 }, width: 4, rotation: 0, opacity: 1 }] };
+    const terrain = createV5RenderModel(weirdDoc()).model.layers.filter((layer) => layer.kind === "terrain");
+    const draw = (layers: RenderOptions["model"]["layers"], playerView = false) => {
+      const { ctx, calls } = makeCtx();
+      renderMap(ctx, 400, 400, { grid: "square", width: 8, height: 8, model: { layers }, scale: 24, ox: 0, oy: 0, showGrid: true, gridColor: "#ffe14a",
+        showCoords: false, hover: null, chrome: CHROME, playerView, selectedId: null });
+      return { picture: calls.indexOf("drawImage({},0,0,400,200,-48,-24,96,48)"), grid: calls.indexOf('set:strokeStyle="#ffe14a"') };
+    };
+    const above = draw([...terrain, reference]), below = draw([reference, ...terrain]);
+    expect(above.picture).toBeGreaterThan(above.grid);
+    expect(below.picture).toBeGreaterThan(-1);
+    expect(below.picture).toBeLessThan(below.grid);
+    expect(draw([...terrain, reference], true).picture).toBe(-1);
   });
 });

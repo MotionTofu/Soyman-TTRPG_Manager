@@ -25,8 +25,10 @@ import { cellCorners, cellWidth } from "../grid";
 import { WorkspacePerformance } from "./WorkspacePerformance";
 import { WorkspacePerformanceMeter } from "./performanceMeter";
 import { changedArea } from "./changedArea";
+import type { ReferenceImage } from "@shared/maps/core";
+import { fromLocal, referenceHandles, referenceSize } from "./referenceImages";
 
-export function WorkspaceCanvas({ gl, liquidDraft, onGlFail, effects, map, document, camera, canvasRef, wrapRef, showGrid, gridColor, gridOpacity, gridLineWidth, gridLineStyle, selectedId, selectedNodes, selections, marquee, preview, assetPreview, displays, ghost, draftLine, wallDraft, onDoubleClick, cellBrush, brush, onPointerLeave, onDragOver, onDragLeave, onDrop, onPointerDown, onPointerMove, onPointerUp, onPointerCancel }: {
+export function WorkspaceCanvas({ gl, liquidDraft, onGlFail, effects, map, document, camera, canvasRef, wrapRef, reference, objectKnob, showGrid, gridColor, gridOpacity, gridLineWidth, gridLineStyle, selectedId, selectedNodes, selections, marquee, preview, assetPreview, displays, ghost, draftLine, wallDraft, onDoubleClick, cellBrush, brush, onPointerLeave, onDragOver, onDragLeave, onDrop, onPointerDown, onPointerMove, onPointerUp, onPointerCancel }: {
   map: MapFull; document: MapDocumentV6; camera: Camera;
   /** Отрисовка плитками через WebGL; при отказе WebGL холст просит вернуть обычную. */
   gl: boolean; onGlFail: () => void;
@@ -49,6 +51,10 @@ export function WorkspaceCanvas({ gl, liquidDraft, onGlFail, effects, map, docum
   brush?: { x: number; y: number; radius: number } | null; onPointerLeave?: PointerEventHandler<HTMLCanvasElement>;
   displays?: ReadonlyMap<string, TokenDisplay>; ghost?: { x: number; y: number } | null;
   onDragOver?: DragEventHandler<HTMLCanvasElement>; onDragLeave?: DragEventHandler<HTMLCanvasElement>; onDrop?: DragEventHandler<HTMLCanvasElement>;
+  /** Выбранная картинка подложки: рамка и ручки (без ручек — слой заперт). */
+  reference?: { item: ReferenceImage; cropping: boolean; handles: boolean } | null;
+  /** Кружок поворота выбранного предмета и верх предмета, к которому он привязан. */
+  objectKnob?: { knob: Vec2; top: Vec2 } | null;
 }) {
   const [revision, setRevision] = useState(0);
   const [meter] = useState(() => new WorkspacePerformanceMeter());
@@ -230,6 +236,38 @@ export function WorkspaceCanvas({ gl, liquidDraft, onGlFail, effects, map, docum
         ctx.strokeRect(X(b.x), Y(b.y), b.w * camera.scale, b.h * camera.scale);
       }
     }
+    if (reference) {
+      const { item, cropping, handles } = reference, { w, h, vw, vh } = referenceSize(item), c = item.crop ?? { x0: 0, y0: 0, x1: 1, y1: 1 };
+      const outline = (x0: number, y0: number, x1: number, y1: number) => {
+        ctx.beginPath();
+        [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].forEach(([x, y], i) => { const p = fromLocal(item, { x, y }); if (i) ctx.lineTo(X(p.x), Y(p.y)); else ctx.moveTo(X(p.x), Y(p.y)); });
+        ctx.closePath(); ctx.stroke();
+      };
+      ctx.save(); ctx.strokeStyle = "#ff3e91"; ctx.lineWidth = 1.5;
+      // При обрезке видна и вся картинка: куда можно вернуть край.
+      if (cropping) { ctx.setLineDash([3, 4]); ctx.globalAlpha = 0.6; outline(-vw / 2 - c.x0 * w, -vh / 2 - c.y0 * h, -vw / 2 + (1 - c.x0) * w, -vh / 2 + (1 - c.y0) * h); ctx.globalAlpha = 1; }
+      ctx.setLineDash([6, 4]); outline(-vw / 2, -vh / 2, vw / 2, vh / 2); ctx.setLineDash([]);
+      if (handles) {
+        const knobs = referenceHandles(item, camera.scale, cropping);
+        const knob = knobs.find(({ handle }) => handle.kind === "rotate"), top = fromLocal(item, { x: 0, y: -vh / 2 });
+        if (knob) { ctx.beginPath(); ctx.moveTo(X(top.x), Y(top.y)); ctx.lineTo(X(knob.at.x), Y(knob.at.y)); ctx.stroke(); }
+        ctx.fillStyle = "#faf8ef";
+        for (const { handle, at } of knobs) {
+          ctx.beginPath();
+          if (handle.kind === "rotate") ctx.arc(X(at.x), Y(at.y), 6, 0, Math.PI * 2);
+          else if (handle.kind === "edge") ctx.rect(X(at.x) - 6, Y(at.y) - 6, 12, 12);
+          else ctx.rect(X(at.x) - 5, Y(at.y) - 5, 10, 10);
+          ctx.fill(); ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+    if (objectKnob) {
+      ctx.save(); ctx.strokeStyle = "#ff3e91"; ctx.fillStyle = "#faf8ef"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(X(objectKnob.top.x), Y(objectKnob.top.y)); ctx.lineTo(X(objectKnob.knob.x), Y(objectKnob.knob.y)); ctx.stroke();
+      ctx.beginPath(); ctx.arc(X(objectKnob.knob.x), Y(objectKnob.knob.y), 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
     if (brush) {
       ctx.strokeStyle = "#ff3e91"; ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]); ctx.beginPath();
       ctx.arc(X(brush.x), Y(brush.y), brush.radius * camera.scale, 0, Math.PI * 2); ctx.stroke();
@@ -243,7 +281,7 @@ export function WorkspaceCanvas({ gl, liquidDraft, onGlFail, effects, map, docum
       ctx.beginPath(); ctx.setLineDash([5, 4]); ctx.strokeStyle = "#ff3e91"; ctx.fillStyle = "#ff3e9120"; ctx.lineWidth = 2;
       ctx.arc(camera.ox + ghost.x * camera.scale, camera.oy + ghost.y * camera.scale, camera.scale / 2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     }
-  }, [map.grid, document, camera, selectedId, selectedNodes, selections, marquee, preview, assetPreview, ghost, draftLine, wallDraft, cellBrush, brush, revision, canvasRef, wrapRef]);
+  }, [map.grid, document, camera, selectedId, selectedNodes, selections, marquee, preview, assetPreview, ghost, draftLine, wallDraft, cellBrush, brush, reference, objectKnob, revision, canvasRef, wrapRef]);
   const unavailable = document.appearance?.style !== "blueprint" && cartographyStyleUnavailable(document.appearance?.style ?? "paper-ink") || rendered.model.layers.some(layer =>
     (layer.kind === "object" || layer.kind === "scatter") && layer.visible && layer.items.some(item => "failed" in item.asset && item.asset.failed));
   return <>{!gl && <canvas ref={baseRef} className="workspace-canvas-base" aria-hidden="true" />}

@@ -19,6 +19,7 @@ import type {
   MapLayer,
   MapObject,
   MapPath,
+  ReferenceImage,
   ScatterArea,
   ShapeGeometry,
   TerrainCellEntry,
@@ -191,6 +192,14 @@ function canonObject(o: MapObject): MapObject {
   return out;
 }
 
+function canonReference(r: ReferenceImage): ReferenceImage {
+  return {
+    id: r.id, image: r.image, pixels: { w: r.pixels.w, h: r.pixels.h }, position: canonVec2(r.position),
+    width: r.width, rotation: r.rotation, opacity: r.opacity,
+    ...(r.crop ? { crop: { x0: r.crop.x0, y0: r.crop.y0, x1: r.crop.x1, y1: r.crop.y1 } } : {}),
+  };
+}
+
 function canonScatter(a: ScatterArea): ScatterArea {
   const out: ScatterArea = {
     id: a.id,
@@ -271,6 +280,9 @@ function canonLayer(l: MapLayer): MapLayer {
   }
   if (l.kind === "label") {
     return { ...base, kind: "label", items: l.items.map(canonLabel) };
+  }
+  if (l.kind === "reference") {
+    return { ...base, kind: "reference", items: l.items.map(canonReference) };
   }
   return { ...base, kind: "gameplay", items: l.items.map(canonGameplay) };
 }

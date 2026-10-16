@@ -251,6 +251,11 @@ export async function prepareMapImageAssets(doc: MapDocumentV5 | MapDocumentV6):
       if (own && imageAssets.has(own)) ids.add(own);
     }
   }
+  // Подложка: только файлы, адрес которых уже известен (список файлов карты пришёл).
+  for (const layer of doc.layers) if (layer.kind === "reference" && layer.visible) for (const item of layer.items) {
+    const id = resourceImageAssetId(item.image);
+    if (imageAssets.has(id)) ids.add(id);
+  }
   if (doc.layers.some(layer => layer.kind === "path" && layer.paths.some(path => path.kind === "wall"))) {
     for (const key of ["wall-masonry", "wall-masonry-end"]) ids.add(cryptId(key));
   }

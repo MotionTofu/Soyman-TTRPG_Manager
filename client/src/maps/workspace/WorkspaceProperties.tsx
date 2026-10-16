@@ -2,7 +2,8 @@ import { cellWidth } from "../grid";
 import { useEffect, useState } from "react";
 import type { MapDocumentV6 } from "@shared/maps/core";
 import { updateGameplayEntity, updateLabelText } from "../core";
-import { setMapObjectDry, setMapObjectSign, transformMapObject } from "../core/mutations/mapObjects";
+import { maxObjectSize, setMapObjectDry, setMapObjectSign, transformMapObject } from "../core/mutations/mapObjects";
+import { resolveMapSymbol } from "../assets/registry";
 import { worldSignLabel } from "../assets/world";
 import { ignoresWater } from "../water";
 import { updateLabelStyle } from "../core/mutations/labels";
@@ -13,8 +14,10 @@ import { requireEditableLayer, type WorkspaceSelection } from "./editorCommands"
 import { TokenProperties } from "./TokenProperties";
 import type { TokenDisplay } from "./useTokenPresentations";
 
-export function WorkspaceProperties({ document, selection, commit, onClose, onDelete, display, onPreview, onLink }: {
+export function WorkspaceProperties({ document, selection, commit, onClose, onDelete, display, onPreview, onLink, screenScale = 1 }: {
   document: MapDocumentV6; selection: WorkspaceSelection;
+  /** Точек экрана на единицу мира: «Исходный размер» картинки. */
+  screenScale?: number;
   commit: (operation: (before: MapDocumentV6) => MapDocumentV6) => void;
   onClose: () => void; onDelete: () => void;
   /** Источник фишки или локация комнаты, квартала и знака «Мира»; `onLink` — начать привязку к локации. */
@@ -84,9 +87,20 @@ export function WorkspaceProperties({ document, selection, commit, onClose, onDe
     {"kind" in item && item.kind === "door" && <label>Поворот<select value={item.orientation} disabled={protectedLayer} onChange={(event) => edit((view) => updateGameplayEntity(view, item.id, (entity) => entity.kind === "door" ? { ...entity, orientation: Number(event.target.value) } : entity))}>
       <option value={0}>Вдоль стены →</option><option value={90}>Вдоль стены ↓</option><option value={180}>Вдоль стены ←</option><option value={270}>Вдоль стены ↑</option>
     </select></label>}
+    {"transform" in item && (() => {
+      // Своя картинка (П15): размер можно задать её точками — сколько их на клетку или точка в точку экрана.
+      const asset = item.visual.type === "asset" ? resolveMapSymbol(item.visual) : null, picture = asset && "image" in asset ? asset.image : null;
+      const long = picture ? Math.max(picture.naturalWidth, picture.naturalHeight) : 0, size = Math.abs(item.transform.scale.x), limit = maxObjectSize(document);
+      const resize = (next: number) => { if (next > 0) edit((view) => transformMapObject(view, item.id, item.transform.rotation, Math.max(0.25, Math.min(limit, next)))); };
+      return <>
+        <label>Поворот<input type="number" value={item.transform.rotation} step={15} disabled={protectedLayer} onChange={(event) => edit((view) => transformMapObject(view, item.id, Number(event.target.value), size))} /></label>
+        <label>Размер, клеток<input type="number" value={Math.round(size / unit * 100) / 100} min={0.25} max={Math.floor(limit / unit * 4) / 4} step={0.25} disabled={protectedLayer} onChange={(event) => resize(Number(event.target.value) * unit)} /></label>
+        {long > 0 && <label title="Сколько точек картинки приходится на клетку">Точек на клетку<input type="number" min={1} step={1} disabled={protectedLayer}
+          value={Math.round(long * unit / size * 10) / 10} onChange={(event) => { const ppc = Number(event.target.value); if (ppc >= 1) resize(long * unit / ppc); }} /></label>}
+        {long > 0 && <button disabled={protectedLayer} title="Точка картинки — точка экрана при нынешнем приближении" onClick={() => resize(long / screenScale)}>Исходный размер</button>}
+      </>;
+    })()}
     {"transform" in item && <>
-      <label>Поворот<input type="number" value={item.transform.rotation} step={15} disabled={protectedLayer} onChange={(event) => edit((view) => transformMapObject(view, item.id, Number(event.target.value), Math.abs(item.transform.scale.x)))} /></label>
-      <label>Размер, клеток<input type="number" value={Math.round(Math.abs(item.transform.scale.x) / unit * 100) / 100} min={0.25} max={Math.floor(8 / unit * 4) / 4} step={0.25} disabled={protectedLayer} onChange={(event) => edit((view) => transformMapObject(view, item.id, item.transform.rotation, Number(event.target.value) * unit))} /></label>
       <label><input aria-label="Отразить по горизонтали" type="checkbox" checked={item.transform.scale.x < 0} disabled={protectedLayer} onChange={e => edit(view => transformMapObject(view, item.id, item.transform.rotation, Math.abs(item.transform.scale.x), e.target.checked))} />Отразить по горизонтали</label>
       <label title="Вода не рисует вокруг объекта пену и след — для навеса или моста-объекта"><input type="checkbox" checked={ignoresWater(item)} disabled={protectedLayer} onChange={e => edit(view => setMapObjectDry(view, item.id, e.target.checked))} />Не трогать воду</label>
       <label><input aria-label="Отразить по вертикали" type="checkbox" checked={item.transform.scale.y < 0} disabled={protectedLayer} onChange={e => edit(view => transformMapObject(view, item.id, item.transform.rotation, Math.abs(item.transform.scale.x), undefined, e.target.checked))} />Отразить по вертикали</label>

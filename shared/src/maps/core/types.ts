@@ -110,7 +110,8 @@ export type MapLayer =
   | ObjectLayer
   | ScatterLayer
   | LabelLayer
-  | GameplayLayer;
+  | GameplayLayer
+  | ReferenceLayer;
 
 export interface TerrainLayerBase extends MapLayerBase {
   kind: "terrain";
@@ -201,6 +202,31 @@ export interface MapObject {
 export interface ObjectLayer extends MapLayerBase {
   kind: "object";
   items: MapObject[];
+}
+
+/** Картинка подложки (гриллинг 2026-10-16, П1–П16): служебная, для обрисовки; игрокам не уходит. */
+export interface ReferenceImage {
+  id: EntityId;
+  /** Файл подложки карты на сервере (UUID). */
+  image: string;
+  /** Размер исходной картинки в точках: пропорции и «точек на клетку» без загрузки файла. */
+  pixels: { w: number; h: number };
+  /** Центр видимой (обрезанной) части, мир. */
+  position: Vec2;
+  /** Ширина всей картинки до обрезки, мир. */
+  width: number;
+  /** Градусы, по часовой. */
+  rotation: number;
+  /** 0..1. */
+  opacity: number;
+  /** Видимая часть в долях картинки, x0 < x1 и y0 < y1 в 0..1. Нет — вся картинка. */
+  crop?: { x0: number; y0: number; x1: number; y1: number };
+}
+
+/** Подложка: картинки для обрисовки. Место в списке слоёв решает, над картой она или под ней. */
+export interface ReferenceLayer extends MapLayerBase {
+  kind: "reference";
+  items: ReferenceImage[];
 }
 
 export interface ScatterLayer extends MapLayerBase {

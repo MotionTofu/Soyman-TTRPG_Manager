@@ -44,7 +44,7 @@ export function collectIds(doc: MapDocumentV5): Set<string> {
       for (const a of layer.areas) add(a.id);
     } else if (layer.kind === "label") {
       for (const l of layer.items) add(l.id);
-    } else if (layer.kind === "gameplay") {
+    } else if (layer.kind === "gameplay" || layer.kind === "reference") {
       for (const e of layer.items) add(e.id);
     }
   }

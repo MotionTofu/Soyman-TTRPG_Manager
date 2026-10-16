@@ -227,3 +227,9 @@
 .workspace-liquid-editor p { margin: 0; }
 .workspace-liquid-editor.liquid-recipe-inline { position: static; width: auto; max-height: none; padding: 0; overflow: visible; border: 0; background: transparent; box-shadow: none; }
 .liquid-swatch i { display: block; width: 64px; height: 64px; border: 2px solid #171717; border-radius: 50%; }
+
+/* Подложка для обрисовки (П6–П8): список картинок и кнопки размера. */
+.workspace-reference-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); }
+.workspace-reference-list button { width: 100%; display: flex; justify-content: space-between; gap: var(--sp-4); }
+.workspace-reference-item { display: grid; gap: var(--sp-4); }
+.workspace-reference-fit { display: flex; flex-wrap: wrap; gap: var(--sp-2); }

@@ -39,6 +39,11 @@ import { useWindowKeys } from "../maps/workspace/useWindowKeys";
 import { useMapCamera } from "../maps/editor/hooks/useMapCamera";
 import { createTerrainMaskLayer, createPathLayer, createScatterLayer, createTerrainLayer, createGameplayLayer, createLabelLayer, createObjectLayer, moveLayer } from "../maps/core/mutations/layers";
 import { SCATTER_PROFILES } from "../maps/scatter";
+import { createReferenceLayer, deleteReferenceImage } from "../maps/core/mutations/references";
+import { ReferencePanel } from "../maps/workspace/ReferencePanel";
+import { useReferenceImages, withoutReferences } from "../maps/workspace/useReferenceImages";
+import { cellWidth, worldBounds } from "../maps/grid";
+import { objectKnob, selectedObject, useObjectRotation } from "../maps/workspace/useObjectRotation";
 import { MAP_SYMBOL_ASSETS } from "../maps/assets/registry";
 import { buildMasterSoyMapV3 } from "../maps/core/exchangeV3";
 import { useMapWorkspace } from "../maps/workspace/workspaceContext";
@@ -58,7 +63,7 @@ const BINDING_OPTIONS = { headers: { [MAP_VERSION_HEADER]: "6" } };
 const NO_OWN_PACKS: readonly OwnPack[] = [];
 const SAVE_STATE = { saved: "Сохранено", dirty: "Есть правки", saving: "Сохраняем…", error: "Ошибка сохранения", conflict: "Карта изменена в другом окне" } as const;
 const LAYER_CREATORS = { mask: createTerrainMaskLayer, path: createPathLayer, scatter: createScatterLayer, terrain: createTerrainLayer,
-  gameplay: createGameplayLayer, label: createLabelLayer, object: createObjectLayer };
+  gameplay: createGameplayLayer, label: createLabelLayer, object: createObjectLayer, reference: createReferenceLayer };
 
 export function MapWorkspacePage() {
   const { id } = useParams(), mapId = Number(id);
@@ -113,9 +118,10 @@ export function MapWorkspacePage() {
   const displays = useTokenPresentations(mapId, document);
   const renderWarning = useMemo(() => !!document && createWorkspaceRenderModel(document).diagnostics.length > 0, [document]);
   const canPlace = !!document && !disabled && !leaving && !label && !generatorOpen && !autosave.blocked && autosave.status.kind !== "conflict";
+  const screenCenter = () => { const rect = wrapRef.current?.getBoundingClientRect(); return { x: ((rect?.width ?? 0) / 2 - camera.camRef.current.ox) / camera.camRef.current.scale,
+    y: ((rect?.height ?? 0) / 2 - camera.camRef.current.oy) / camera.camRef.current.scale }; };
   const placement = useTokenPlacement({ mapId, enabled: canPlace, getDocument: () => documentRef.current, activeLayer, snap,
-    center: () => { const rect = wrapRef.current?.getBoundingClientRect(); return { x: ((rect?.width ?? 0) / 2 - camera.camRef.current.ox) / camera.camRef.current.scale,
-      y: ((rect?.height ?? 0) / 2 - camera.camRef.current.oy) / camera.camRef.current.scale }; },
+    center: screenCenter,
     commit, onPlaced: (tokenId, layerId) => { setTool("select"); setActiveLayer(layerId); setSelection({ id: tokenId, layerId, kind: "token" }); }, onError: showError });
   // «Жидкость» — та же плавная кисть, что у поверхности, только в слой жидкостей и своим материалом.
   const liquidMaterial = settings.liquid ?? "village-water-2";
@@ -123,6 +129,16 @@ export function MapWorkspacePage() {
   const gestures = useWorkspaceGestures({ doc, gesture, space, camera, tool: tool === "liquid" ? "surface" : tool, activeLayer, setActiveLayer, snap, settings: paintSettings, selection, setSelection, selections, setSelections, placement,
     busy: leaving || !!label || generatorOpen, quarter: map && mapKind(map.scale) !== "tactical" ? toolLabel(mapKind(map.scale), "shape") : undefined, onLabel: (position, layerId) => setLabel({ position, layerId, text: "" }) });
   const { finishGesture } = gestures;
+  // Подложка (П1–П16): пока открыт её слой, нажатия на холсте двигают картинки, а не рисуют.
+  const refs = useReferenceImages({ map, document, documentRef, activeLayer, setActiveLayer, commit, live: liveEdit, settle: settleEdit, camera, center: screenCenter, space,
+    writable: !disabled && !leaving && autosave.status.kind !== "conflict", onError: showError });
+  const canvasDocument = useMemo(() => document && refs.peek ? withoutReferences(document) : document, [document, refs.peek]);
+  // Выбранный предмет поворачивают кружком над ним (П15).
+  const knobObject = tool === "select" && !disabled && !leaving ? selectedObject(document, selection) : null;
+  const turning = useObjectRotation({ object: knobObject, camera, live: liveEdit, settle: settleEdit, space });
+  const referenceFrame = useMemo(() => refs.item && !refs.peek ? { item: refs.item, cropping: refs.cropping, handles: refs.movable } : null,
+    [refs.item, refs.peek, refs.cropping, refs.movable]);
+  const knob = useMemo(() => knobObject ? objectKnob(knobObject, camera.cam.scale) : null, [knobObject, camera.cam.scale]);
   const placementActions = useRef({ place: (_source: PlacementSource) => {}, preview: (_source: PlacementSource) => {} });
   async function linkLocation(target: WorkspaceSelection, source: PlacementSource) {
     setLinking(null);
@@ -236,8 +252,12 @@ export function MapWorkspacePage() {
     down: (event) => {
       if ((event.target as HTMLElement)?.closest("input, textarea, select, [contenteditable=true], [role=dialog]")) return;
       if (event.code === "Space") { event.preventDefault(); space.current = true; }
-      if (event.key === "Escape") { placement.cancel(); setDragGhost(null); finishGesture(true); setSelection(null); }
+      if (event.key === "Escape") { placement.cancel(); setDragGhost(null); finishGesture(true); setSelection(null); refs.setSelected(null); }
       if (disabled || leaving || autosave.status.kind === "conflict") return;
+      if (!placement.pending && refs.nudge(event)) return;
+      if ((event.key === "Delete" || event.key === "Backspace") && refs.item && refs.movable) {
+        const target = refs.item.id; event.preventDefault(); commit((before) => editGeometry(before, (view) => deleteReferenceImage(view, target))); refs.setSelected(null); return;
+      }
       if (event.key === "Enter" && gestures.wallDraft) { event.preventDefault(); gestures.finishWall(); return; }
       if (placement.pending && ["Enter", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
         event.preventDefault();
@@ -263,6 +283,8 @@ export function MapWorkspacePage() {
     downloadMapJson(JSON.stringify(envelope, null, 2), `map-${map.id}-my-changes.json`);
   }
   function dragOver(event: DragEvent<HTMLCanvasElement>) {
+    // Файл картинки на карту — в подложку (П12).
+    if (canPlace && event.dataTransfer.types.includes("Files")) { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; return; }
     if (!canPlace || gesture.current || !event.dataTransfer.types.includes(SEARCH_DRAG_MIME)) return;
     try { if (documentRef.current) tokenTarget(documentRef.current, activeLayer); else return; } catch { event.dataTransfer.dropEffect = "none"; return; }
     event.preventDefault(); event.dataTransfer.dropEffect = "link";
@@ -272,6 +294,9 @@ export function MapWorkspacePage() {
   function drop(event: DragEvent<HTMLCanvasElement>) {
     event.preventDefault(); setDragGhost(null);
     if (!canPlace || gesture.current) return;
+    const image = [...event.dataTransfer.files].find((file) => file.type.startsWith("image/"));
+    if (image) { const point = camera.toWorld(event); void refs.upload(image, { x: point.wx, y: point.wy }); return; }
+    if (event.dataTransfer.files.length) { doc.setActionError("На карту можно перенести картинку: PNG, JPG, WebP, AVIF или GIF"); return; }
     const source = parsePlacementPayload(event.dataTransfer.getData(SEARCH_DRAG_MIME));
     if (!source) { doc.setActionError("На карту можно перенести локацию, существо сеттинга или существо из бестиария"); return; }
     const point = camera.toWorld(event); void placement.begin(source, { x: point.wx, y: point.wy });
@@ -440,10 +465,14 @@ export function MapWorkspacePage() {
         onSymbol={onSymbol} onMaterial={onMaterial} onScatter={onScatter} onLine={onLine} doorStyle={settings.door?.style ?? ""} onDoor={onDoor} />}
 
       <div className="workspace-editor-stage" ref={wrapRef}>
-        <WorkspaceCanvas gl={gl} liquidDraft={liquidDraft} onGlFail={onGlFail} effects={effects} map={map} document={document} camera={camera.cam} canvasRef={canvasRef} wrapRef={wrapRef} showGrid={showGrid} gridColor={gridColor} gridOpacity={gridOpacity} gridLineWidth={gridLineWidth} gridLineStyle={gridLineStyle} selectedId={selection?.id ?? null} selectedNodes={gestures.selectedNodes} preview={gestures.preview}
+        <WorkspaceCanvas gl={gl} liquidDraft={liquidDraft} onGlFail={onGlFail} effects={effects} map={map} document={canvasDocument ?? document} camera={camera.cam}
+          reference={referenceFrame}
+          objectKnob={knob} canvasRef={canvasRef} wrapRef={wrapRef} showGrid={showGrid} gridColor={gridColor} gridOpacity={gridOpacity} gridLineWidth={gridLineWidth} gridLineStyle={gridLineStyle} selectedId={selection?.id ?? null} selectedNodes={gestures.selectedNodes} preview={gestures.preview}
           cellBrush={gestures.cellBrush} wallDraft={gestures.wallDraft} onDoubleClick={() => gestures.finishWall()} selections={selections} marquee={gestures.marquee} assetPreview={gestures.assetPreview} draftLine={gestures.draftLine} brush={gestures.brushCursor && (tool === "surface" || tool === "liquid" || tool === "scatter" || maskEraser) ? { ...gestures.brushCursor, radius: settings.radius } : null}
           onPointerLeave={gestures.leave} displays={displays} ghost={placement.pending?.position ?? dragGhost} onDragOver={dragOver} onDragLeave={() => setDragGhost(null)} onDrop={drop}
-          onPointerDown={gestures.down} onPointerMove={gestures.move} onPointerUp={gestures.up} onPointerCancel={gestures.cancel} />
+          onPointerDown={(event) => { if (!refs.down(event) && !turning.down(event)) gestures.down(event); }}
+          onPointerMove={(event) => { if (!refs.move(event) && !turning.move(event)) gestures.move(event); }}
+          onPointerUp={(event) => { if (!refs.up() && !turning.up()) gestures.up(event); }} onPointerCancel={(event) => { if (!refs.up() && !turning.up()) gestures.cancel(event); }} />
         <div className="workspace-editor-hint" aria-hidden="true"><strong>{toolLabel(mapKind(map.scale), tool)}{active ? ` · ${layerName(active)}` : ""}</strong>{tool === "select" && <span>{selections.length > 1 ? `Выбрано: ${selections.length} · ` : ""}Рамка · Shift — добавить</span>}{(tool === "asset" || tool === "label") && <span>{snap ? "Shift — свободно" : "Shift — к клетке"}</span>}<span>Пробел — сдвиг</span><span>Esc — отмена</span></div>
         {tool === "liquid" && <LiquidSlots used={liquids} own={liquidDraft ?? document.appearance?.liquids ?? NO_LIQUIDS} material={liquidMaterial} live={!!document.appearance?.water} onLive={onLiveWater} onMaterial={onLiquid} onOwn={onOwnLiquids} onSettle={onSettleLiquid} onRelease={onReleaseLiquid}
           offered={offeredLiquids} packs={saveTargets} onSaveToPack={onSaveLiquid} />}
@@ -476,10 +505,13 @@ export function MapWorkspacePage() {
       </div>
 
       <aside className="workspace-inspector" aria-label="Инспектор">
-        {selection && tool === "select" && !disabled && (selection.kind === "path" || selection.kind === "scatter")
+        {refs.open ? <ReferencePanel document={document} layerId={refs.open.id} selectedId={refs.selected} onSelect={refs.setSelected} cropping={refs.cropping} onCropping={refs.setCropping}
+          commit={onCommit} live={onLiveEdit} settle={onSettleEdit} onUpload={(file) => void refs.upload(file)} uploading={refs.uploading} cell={cellWidth(document.grid?.type ?? "square")}
+          bounds={worldBounds(map.grid, map.width, map.height)} screenScale={camera.cam.scale} disabled={disabled || leaving || autosave.status.kind === "conflict"} />
+        : selection && tool === "select" && !disabled && (selection.kind === "path" || selection.kind === "scatter")
           ? <ArtProperties document={document} selection={selection} packs={packs} pickedAt={gestures.pickedAt} selectedNodes={gestures.selectedNodes} onSelectedNodes={gestures.setSelectedNodes} commit={commit} onClose={() => setSelection(null)} onDelete={() => remove(selection)} />
           : selection && tool === "select" && !disabled
-            ? <WorkspaceProperties document={document} selection={selection} commit={commit} onClose={() => setSelection(null)} onDelete={() => remove(selection)} display={selectedToken ?? undefined}
+            ? <WorkspaceProperties document={document} selection={selection} commit={commit} screenScale={camera.cam.scale} onClose={() => setSelection(null)} onDelete={() => remove(selection)} display={selectedToken ?? undefined}
               onLink={canPlace ? () => setLinking(selection) : undefined}
               onPreview={() => { if (selectedToken?.state === "active" && selectedToken.id) setEntityPreview({ type: selectedToken.sourceRef.kind, id: selectedToken.id }); }} />
             : <ToolSettings tool={tool} settings={settings} maskEraser={maskEraser} onTool={onSurfaceTool} label={toolLabel(mapKind(map.scale), tool === "brush" ? "surface" : tool)}

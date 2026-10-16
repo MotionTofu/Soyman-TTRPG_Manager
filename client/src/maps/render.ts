@@ -9,6 +9,7 @@ import { deckKey, fencePostId, liquidKey, liquidRecipe, villageId, waterLevel } 
 import { ATLAS_BLOCK, atlasBlocks, type AtlasBlock, type AtlasLine, type AtlasWaterLook } from "./atlasWater";
 import { worldSignLabel } from "./assets/world";
 import { ownDeck, ownLinePost, ownPackOf } from "./assets/ownPacks";
+import { getMapImageAsset, resourceImageAssetId } from "./assets/registry";
 import { labelBox, labelFamily } from "./labelStyle";
 import { drawWaterStill, waterFog, waterStillReady, type MapWater } from "./water";
 import { LIQUID_LAYER } from "./workspace/liquids";
@@ -30,6 +31,7 @@ import type {
   RenderLabel,
   RenderMarker,
   RenderPath,
+  RenderReferenceLayer,
   RenderRoom,
   RenderStartFinish,
   RenderTerrainLayer,
@@ -1948,14 +1950,20 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
   // Keep layer order within each pass; grid separates terrain/paths from foreground artwork.
   let hasTerrainSurface = false;
   const tokenDraws: (() => void)[] = [];
-  const drawLayer = (layer: MapRenderModel["layers"][number]) => {
+  // Подложка под поверхностями (П10) — часть земли: рисуется до сетки и в «земле» сцены с живой водой.
+  const groundLike = (index: number) => {
+    const layer = model.layers[index];
+    return layer.kind === "terrain" || layer.kind === "path" || layer.kind === "reference" && model.layers.slice(index + 1).some(next => next.kind === "terrain" || next.kind === "path");
+  };
+  const drawLayer = (layer: MapRenderModel["layers"][number], index: number) => {
     if (!layer.visible) return;
-    if (part === "over" && layer.kind === "terrain" || part === "ground" && layer.kind !== "terrain" && layer.kind !== "path") return;
+    if (part === "over" && (layer.kind === "terrain" || layer.kind === "reference" && groundLike(index)) || part === "ground" && !groundLike(index)) return;
     // Под живой водой — земля, а не картинка жидкости: шейдер сам решает, сколько дна видно (гриллинг 2026-10-15, В2).
     if (part === "ground" && layer.kind === "terrain" && layer.name === LIQUID_LAYER && layer.terrain.mask) return;
     ctx.save();
     ctx.globalAlpha *= layer.opacity;
-    if (layer.kind === "terrain") {
+    if (layer.kind === "reference") { if (!o.playerView) drawReference(layer); } // подложка — только Мастеру (П4)
+    else if (layer.kind === "terrain") {
       if (layer.terrain.mask) {
         if (!hasTerrainSurface) fillTerrainDefault(layer.terrain.defaultCode);
         fillTerrainMask(layer.terrain.mask);
@@ -2149,11 +2157,26 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     }
     ctx.restore();
   };
-  const belowGrid = (layer: MapRenderModel["layers"][number]) => layer.kind === "terrain" || layer.kind === "path";
+  /** Картинки подложки: обрезанная часть вокруг своего центра, с поворотом; файл ещё грузится — пропуск. */
+  function drawReference(layer: RenderReferenceLayer) {
+    for (const item of layer.items) {
+      const image = getMapImageAsset(resourceImageAssetId(item.image))?.image;
+      if (!image) continue;
+      const c = item.crop ?? { x0: 0, y0: 0, x1: 1, y1: 1 }, w = item.width * scale, h = w * item.pixels.h / item.pixels.w;
+      const vw = (c.x1 - c.x0) * w, vh = (c.y1 - c.y0) * h, x = X(item.position.x), y = Y(item.position.y), r = Math.hypot(vw, vh) / 2;
+      if (x + r < 0 || y + r < 0 || x - r > canvasW || y - r > canvasH) continue;
+      ctx.save();
+      ctx.globalAlpha *= item.opacity;
+      ctx.translate(x, y); ctx.rotate(item.rotation * Math.PI / 180);
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(image, c.x0 * item.pixels.w, c.y0 * item.pixels.h, (c.x1 - c.x0) * item.pixels.w, (c.y1 - c.y0) * item.pixels.h, -vw / 2, -vh / 2, vw, vh);
+      ctx.restore();
+    }
+  }
   const lastTerrain = o.atlasWater ? model.layers.findLastIndex(layer => layer.visible && layer.kind === "terrain") : -1;
   if (lastTerrain < 0 && o.atlasWater) drawAtlasWater();
   model.layers.forEach((layer, index) => {
-    if (!showGrid || belowGrid(layer)) drawLayer(layer);
+    if (!showGrid || groundLike(index)) drawLayer(layer, index);
     if (index === lastTerrain) drawAtlasWater();
   });
   if (part === "ground") { ctx.restore(); return; }
@@ -2198,7 +2221,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     ctx.restore();
   }
 
-  if (showGrid) for (const layer of model.layers) if (!belowGrid(layer)) drawLayer(layer);
+  if (showGrid) model.layers.forEach((layer, index) => { if (!groundLike(index)) drawLayer(layer, index); });
 
   // Координаты — голос Label (§1.5, P1-3): Oswald полужирным, капс по построению
   // (A1…), трекинг .08em; запасной стек — --font-ui. Только если клетка крупнее 18 px.

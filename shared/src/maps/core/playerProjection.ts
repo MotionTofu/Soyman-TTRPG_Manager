@@ -280,6 +280,7 @@ function projectLayer(layer: MapLayer, grid: MapGridConfig | null, visible?: (x:
   if (layer.kind === "object") return { ...layer, items: layer.items.filter((item) => pointVisible(item.transform.position.x, item.transform.position.y)).map(hideObjectLocation) };
   if (layer.kind === "label") return { ...layer, items: layer.items.filter((item) => pointVisible(item.position.x, item.position.y)) };
   if (layer.kind === "scatter") return { ...layer, areas: [] };
+  if (layer.kind === "reference") return { ...layer, items: [] };
   return { ...layer, items: projectGameplay(layer.items, visible, pointVisible) };
 }
 
@@ -307,7 +308,8 @@ export function projectMapDocumentForPlayer(doc: MapDocumentV5): MapDocumentV5 {
     grid: doc.grid === null ? null : { ...doc.grid, origin: { ...doc.grid.origin } },
     ...(doc.exploration === undefined ? {} : { exploration: doc.exploration }),
     assetPacks: doc.assetPacks.map((p) => ({ ...p })),
-    layers: doc.layers.map((layer) => projectLayer(layer, doc.grid, visible, usedIds)),
+    // Подложка — только для Мастера в редакторе (П4).
+    layers: doc.layers.filter((layer) => layer.kind !== "reference").map((layer) => projectLayer(layer, doc.grid, visible, usedIds)),
   };
   // Возвращаем canonical doc: стабильный порядок ключей + сортировки.
   return canonicalizeMapDocument(projected);

@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import express from "express";
 import request from "supertest";
 import fs from "fs";
+import sharp from "sharp";
 import os from "os";
 import path from "path";
 import type { Database } from "better-sqlite3";
@@ -286,5 +287,32 @@ describe("V6 map persistence and gates", () => {
     expect((await request(app).put(url).set(gm).send({ document: fixture(), expectedRevision: 0 })).body.code).toBe("map-revision-conflict");
     expect((await request(app).put(url).set(gm).send({ document: fixture(), expectedRevision: 1 })).status).toBe(200);
     expect((await request(app).get(url)).status).toBe(409);
+  });
+});
+
+describe("подложка карты (П5)", () => {
+  it("файл ужимается до 8192, список — по сохранённой карте, файл живёт, пока на него ссылается хоть одна карта", async () => {
+    const { archiveRouter } = await import("./archive");
+    app.use("/api/archive", archiveRouter);
+    const id = (await create()).body.id, url = `/api/maps/${id}/references`;
+    const big = await sharp({ create: { width: 9000, height: 3000, channels: 3, background: "#336699" } }).png().toBuffer();
+    const sent = await request(app).post(url).set(gm).attach("file", big, { filename: "x.png", contentType: "image/png" });
+    expect(sent.status).toBe(201);
+    expect(sent.body).toMatchObject({ width: 8192, height: 2731 });
+    expect((await request(app).get(url).set(gm)).body).toEqual([]);
+    const doc = { ...fixture(), layers: [...fixture().layers, { id: "under", kind: "reference", name: "Подложка", visible: true, locked: false, opacity: 0.5,
+      items: [{ id: "ref-1", image: sent.body.uid, pixels: { w: 8192, h: 2731 }, position: { x: 4, y: 4 }, width: 8, rotation: 0, opacity: 1 }] }] };
+    expect((await request(app).put(`/api/maps/${id}`).set(gm).send({ document: doc, expectedRevision: 0 })).status).toBe(200);
+    expect((await request(app).get(url).set(gm)).body).toEqual([{ uid: sent.body.uid, url: expect.stringContaining(`${sent.body.uid}.webp`) }]);
+    expect([403, 409]).toContain((await request(app).get(url).set(player)).status);
+    expect((await request(app).post(url).set(gm).attach("file", Buffer.from("not an image"), { filename: "x.png", contentType: "image/png" })).status).toBe(400);
+    // Копия ссылается на тот же файл: удаление первой карты его не трогает, удаление второй — убирает.
+    const copy = (await create(doc)).body.id, file = path.join(process.env.VAULT_ROOT!, "MapReferences", `${sent.body.uid}.webp`);
+    for (const [map, left] of [[id, true], [copy, false]] as const) {
+      await request(app).delete(`/api/maps/${map}`).set(gm);
+      expect((await request(app).delete(`/api/archive/map/${map}`).set(gm)).status).toBe(200);
+      await new Promise((done) => setTimeout(done, 50));
+      expect(fs.existsSync(file)).toBe(left);
+    }
   });
 });

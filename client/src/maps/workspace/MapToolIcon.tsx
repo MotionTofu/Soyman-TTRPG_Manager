@@ -1,7 +1,8 @@
 import type { PaintTool } from "../editor/editorTypes";
 
 // Компактные пиктограммы карты: одна чернильная линия, смысл без подписи.
-const PATHS: Record<PaintTool | "surface" | "liquid" | "scatter", string> = {
+const PATHS: Record<PaintTool | "surface" | "liquid" | "scatter" | "reference", string> = {
+  reference: "M3 4h18v16H3z M3 16l5-5 4 4 3-3 6 6 M15 8h1",
   liquid: "M12 3c4 6 7 9 7 12a7 7 0 0 1-14 0c0-3 3-6 7-12z M9 15a3 3 0 0 0 3 3",
   surface: "M3 18c-2-5 2-9 6-7s4-9 10-6c6 3 2 11-3 10s-8 10-13 3z M7 16l2-2 M14 9l2-2",
   scatter: "M5 3l4 7H1z M5 10v3 M16 6l6 10H10z M16 16v5 M4 19h1 M9 22h1 M21 3h1",
@@ -27,7 +28,7 @@ const PATHS: Record<PaintTool | "surface" | "liquid" | "scatter", string> = {
   fog: "M3 16c-5-6 2-10 5-7-1-8 12-8 12 0 6-1 6 8 1 8H3 M4 21h16 M8 13h8",
 };
 
-export function MapToolIcon({ tool }: { tool: PaintTool | "surface" | "liquid" | "scatter" }) {
+export function MapToolIcon({ tool }: { tool: PaintTool | "surface" | "liquid" | "scatter" | "reference" }) {
   return <svg className="map-tool-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d={PATHS[tool]} /></svg>;
 }

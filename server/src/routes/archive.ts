@@ -8,6 +8,7 @@ import {
 } from "../db/entityKinds";
 import { deleteVaultFolder, isVaultPath, vaultAbs } from "../services/filesystem";
 import { isPdfNoteDocument } from "../services/pdfNoteMarkdown";
+import { dropMapReferences } from "./maps";
 
 export const archiveRouter = Router();
 
@@ -446,6 +447,8 @@ archiveRouter.delete("/:type/:id", (req, res) => {
     return res.status(400).json({ error: "можно удалить навсегда только из архива" });
   }
 
+  const mapCells = req.params.type === "map"
+    ? (db.prepare("SELECT cells FROM maps WHERE id = ?").get(numericId) as { cells: string } | undefined)?.cells ?? null : null;
   // Grab the folder path before the row (and its nested children) are gone; the
   // recursive delete on disk happens last, after the DB is consistent.
   let folderPath: string | null = null;
@@ -486,6 +489,8 @@ archiveRouter.delete("/:type/:id", (req, res) => {
     return res.status(500).json({ error: "не удалось удалить — попробуйте ещё раз" });
   }
   deleteVaultFolder(folderPath);
+  // Файлы подложки (гриллинг 2026-10-16, П5): уходят, если на них больше не ссылается ни одна карта.
+  if (mapCells !== null) dropMapReferences(mapCells);
   for (const child of generated) {
     const abs = vaultAbs(child.file_path);
     if (isVaultPath(abs)) {

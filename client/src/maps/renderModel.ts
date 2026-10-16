@@ -23,7 +23,7 @@ import {
   legacyTrapId,
 } from "./core/ids";
 import type { MaterialRef } from "./core/refs";
-import type { LayerId, MapDocumentV5, MapLabelStyle, MapObject, SplineNode } from "./core/types";
+import type { LayerId, MapDocumentV5, MapLabelStyle, MapObject, ReferenceImage, SplineNode } from "./core/types";
 import { ARTWORK_SCATTER, mapAssetPackForId, resolveMapSymbol, type MapVisualAsset } from "./assets/registry";
 import { isPaletteIndexMaskPayload, TERRAIN_MASK_CHUNK_SIDE } from "@shared/maps/core/terrainMask";
 import { scatterInstances, SCATTER_LIMIT } from "./scatter";
@@ -190,7 +190,14 @@ export interface RenderScatterLayer extends RenderLayerBase {
   items: readonly RenderMapObject[];
 }
 
+/** Подложка для обрисовки (П1–П16): картинки как есть, только у Мастера. */
+export interface RenderReferenceLayer extends RenderLayerBase {
+  kind: "reference";
+  items: readonly ReferenceImage[];
+}
+
 export type MapRenderLayer =
+  | RenderReferenceLayer
   | RenderTerrainLayer
   | RenderPathLayer
   | RenderGameplayLayer
@@ -559,6 +566,8 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
         items.push(...instances.items);
       }
       layers.push({ ...baseOf(layer), kind: "scatter", items });
+    } else if (layer.kind === "reference") {
+      layers.push({ ...baseOf(layer), kind: "reference", items: layer.items });
     }
   }
 

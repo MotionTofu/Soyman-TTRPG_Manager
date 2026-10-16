@@ -11,8 +11,8 @@ type Edit = (operation: (before: MapDocumentV6) => MapDocumentV6) => void;
 
 
 const GROUPS: Record<Layer["kind"], string> = { terrain: "Поверхности", path: "Реки и дороги", scatter: "Россыпи",
-  gameplay: "Комнаты и токены", label: "Подписи", object: "Объекты" };
-const ICONS = { terrain: "brush", path: "road", scatter: "scatter", gameplay: "shape", label: "label", object: "asset" } as const;
+  gameplay: "Комнаты и токены", label: "Подписи", object: "Объекты", reference: "Подложка" };
+const ICONS = { terrain: "brush", path: "road", scatter: "scatter", gameplay: "shape", label: "label", object: "asset", reference: "reference" } as const;
 
 function count(layer: Layer): number | null {
   if (layer.kind === "terrain") return layer.representation === "cells" ? layer.cells.length : null;

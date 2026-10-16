@@ -28,6 +28,13 @@ export const mapWorkspaceApi = {
     write.post<ResolvedTokenSource>(
       `/maps/${mapId}/token-source`, { kind, id }, { headers }),
   presentations: (mapId: number, sources: TokenSourceRef[]) => write.post<TokenPresentation[]>(`/maps/${mapId}/token-presentations`, { sources }, { headers }),
+  /** Файлы подложки сохранённой карты (П5). */
+  references: (mapId: number) => readOnce<{ uid: string; url: string }[]>(`/maps/${mapId}/references`, { headers }),
+  uploadReference: (mapId: number, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return write.post<{ uid: string; url: string; width: number; height: number }>(`/maps/${mapId}/references`, form, { headers, timeoutMs: 120_000 });
+  },
 };
 
 export async function downloadStoredMapOriginal(id: number): Promise<void> {

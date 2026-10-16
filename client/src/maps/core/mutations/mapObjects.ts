@@ -31,9 +31,13 @@ export function moveMapObject(doc: MapDocumentV5, id: string, position: Vec2): M
   return mutationError("object.not-found", "id", "object not found");
 }
 
+/** Предел размера предмета (П15): не больше карты, но не меньше прежних 8 единиц. */
+export const maxObjectSize = (doc: Pick<MapDocumentV5, "world">) =>
+  Math.max(8, doc.world.bounds.maxX - doc.world.bounds.minX, doc.world.bounds.maxY - doc.world.bounds.minY);
+
 export function transformMapObject(doc: MapDocumentV5, id: string, rotation: number, size: number, flipX?: boolean, flipY?: boolean): MutationResult {
-  if (!Number.isFinite(rotation) || !Number.isFinite(size) || size < 0.25 || size > 8)
-    return mutationError("object.bad-transform", "transform", "rotation must be finite and size 0.25..8");
+  if (!Number.isFinite(rotation) || !Number.isFinite(size) || size < 0.25 || size > maxObjectSize(doc))
+    return mutationError("object.bad-transform", "transform", "rotation must be finite and size 0.25..map size");
   for (let i = 0; i < doc.layers.length; i++) {
     const layer = doc.layers[i];
     if (layer.kind !== "object") continue;

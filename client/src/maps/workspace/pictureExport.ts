@@ -16,6 +16,8 @@ export const picturePixels = (cells: number) => Math.max(8, Math.min(64, Math.fl
  * Эффекты печати и погода в картинку не попадают — они живут только в новой отрисовке. */
 export async function downloadMapPicture(map: MapFull, document: MapDocumentV6, displays: ReadonlyMap<string, TokenDisplay> | undefined,
   grid: Pick<RenderOptions, "showGrid" | "gridColor" | "gridOpacity" | "gridLineWidth" | "gridLineStyle">) {
+  // Подложка — рабочая разметка Мастера (П4): в картинку не попадает.
+  document = { ...document, layers: document.layers.filter(layer => layer.kind !== "reference") };
   await Promise.all([prepareMapImageAssets(document), prepareLabelFonts(document)]);
   // Рамка карты уходит в картинку вместе с полями.
   const frame = document.appearance?.frame ?? 0, inner = worldBounds(map.grid, map.width, map.height);

@@ -1,4 +1,4 @@
-import type { MapDocumentV6 } from "@shared/maps/core";
+import type { MapDocumentV6, ReferenceImage } from "@shared/maps/core";
 import { shapeBounds } from "../scatter";
 import { labelBox } from "../labelStyle";
 import type { SelectionRect } from "./multiSelection";
@@ -39,7 +39,14 @@ function entries(layer: Layer): Entry[] | null {
     ? { id: item.id, item, bounds: { x: item.position.x - item.size / 2, y: item.position.y - item.size / 2, w: item.size, h: item.size } }
     : { id: item.id, item, bounds: { x: NaN, y: 0, w: 0, h: 0 } }); // комната или дверь меняет стены вокруг: рамки нет
   if (layer.kind === "label") return layer.items.map(item => ({ id: item.id, item, bounds: labelBox(item) }));
+  if (layer.kind === "reference") return layer.items.map(item => ({ id: item.id, item, bounds: referenceBounds(item) }));
   return null;
+}
+/** Рамка картинки подложки на карте: видимая часть с поворотом. */
+export function referenceBounds(item: ReferenceImage): SelectionRect {
+  const c = item.crop ?? { x0: 0, y0: 0, x1: 1, y1: 1 }, vw = (c.x1 - c.x0) * item.width, vh = (c.y1 - c.y0) * item.width * item.pixels.h / item.pixels.w;
+  const angle = item.rotation * Math.PI / 180, w = Math.abs(vw * Math.cos(angle)) + Math.abs(vh * Math.sin(angle)), h = Math.abs(vw * Math.sin(angle)) + Math.abs(vh * Math.cos(angle));
+  return { x: item.position.x - w / 2, y: item.position.y - h / 2, w, h };
 }
 const rest = (value: object, skip: readonly string[]) => JSON.stringify(value, (key, inner) => skip.includes(key) ? undefined : inner);
 
