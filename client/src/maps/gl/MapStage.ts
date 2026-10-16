@@ -18,7 +18,7 @@ type Tile = { scale: number; tx: number; ty: number; content: MapStageContent; c
 export type MapArea = { x: number; y: number; w: number; h: number };
 
 // Пока масштаб меняется, новые плитки не рисуем: старые растягивает видеокарта.
-const SETTLE_MS = 120;
+const SETTLE_MS = 120, MASK_GAP_MS = 300;
 // Сколько времени кадра можно отдать на дорисовку плиток нового масштаба.
 const BUDGET_MS = 8;
 
@@ -45,6 +45,7 @@ export class MapStage {
   private water: MapWater | null = null;
   private recipesOf: unknown = null;
   private maskOf: readonly unknown[] = [];
+  private maskAt = -Infinity;
   private readonly tiles = new Map<string, Tile>();
   private readonly style = createStyleFilter();
   private readonly weatherPass = createWeatherFilter();
@@ -269,9 +270,12 @@ export class MapStage {
       // Вода лежит в мировых координатах: у гексов карта шире и выше числа клеток.
       const { minX, minY, maxX: ww, maxY: wh } = worldBounds(frame.content.grid, frame.content.width, frame.content.height), lo = { x: minX, y: minY };
       const fog = waterFog(frame.content, frame.content.model), sources = waterSources(frame.content.model, ww, wh, this.water.shoal, lo, fog);
-      if (sources.length !== this.maskOf.length || sources.some((source, i) => source !== this.maskOf[i])) {
+      // Маска воды — вся карта сразу (на крупной карте ~50–100 мс): под кистью она пересобирается не чаще раза в 300 мс,
+      // остальное догоняет следующий кадр анимации воды. Первая правка после паузы — сразу.
+      const now = performance.now();
+      if ((sources.length !== this.maskOf.length || sources.some((source, i) => source !== this.maskOf[i])) && now - this.maskAt >= MASK_GAP_MS) {
         drawWaterMask(this.maskCanvas, this.maskRaw, this.flowCanvas, this.recipeCanvas, frame.content.model, ww, wh, this.water.shoal, lo, fog);
-        this.waterPass.refresh(); this.maskOf = sources; this.recipesOf = null;
+        this.waterPass.refresh(); this.maskOf = sources; this.recipesOf = null; this.maskAt = now;
       }
       // Что стоит в воде — своя картинка: передвинутая лодка не пересобирает маску воды всей карты.
       const things = waterThingSources(frame.content.model, ww, wh, lo);

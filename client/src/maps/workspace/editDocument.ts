@@ -1,4 +1,4 @@
-import { canonicalizeMapDocumentV6, validateMapDocumentV6, type MapDocumentV6 } from "@shared/maps/core";
+import { canonicalizeMapDocumentV6, validateMapDocumentV6, type MapDocumentV6, type TerrainMaskChunk } from "@shared/maps/core";
 import type { MapDocumentV5, GameplayEntity } from "../core/types";
 import type { MutationResult } from "../core/mutations/types";
 
@@ -38,11 +38,27 @@ export function editGeometry(document: MapDocumentV6, operation: (view: MapDocum
     }
     return { ...layer, items };
   }) };
-  if (validateMapDocumentV6(next).length) throw new Error("Изменение нарушает целостность карты");
+  // Кисть на большой карте: проверка и нормализация шли по всем тысячам кусков маски на каждом шаге (на «Таленоре» —
+  // до 100 мс). Кусок, оставшийся тем же объектом, уже проверен и нормализован раньше: на проверку идут только новые,
+  // а совпадение id и координат с нетронутыми проверяется здесь. Палитра уменьшилась — проверяется всё.
+  const untouched = new Map(document.layers.map(layer => [layer.id, layer]));
+  const reused = new Map<string, Set<TerrainMaskChunk>>();
+  const checked: MapDocumentV6 = { ...next, layers: next.layers.map(layer => {
+    const original = untouched.get(layer.id);
+    if (original === layer || layer.kind !== "terrain" || layer.representation !== "mask" || original?.kind !== "terrain" ||
+      original.representation !== "mask" || layer.mask.materials.length < original.mask.materials.length) return layer;
+    const old = new Set(original.mask.chunks), same = new Set(layer.mask.chunks.filter(chunk => old.has(chunk)));
+    if (!same.size) return layer;
+    const ids = new Set<string>(), coords = new Set<string>();
+    for (const chunk of layer.mask.chunks) { ids.add(chunk.id); coords.add(`${chunk.cx},${chunk.cy}`); }
+    if (ids.size !== layer.mask.chunks.length || coords.size !== layer.mask.chunks.length) throw new Error("Изменение нарушает целостность карты");
+    reused.set(layer.id, same);
+    return { ...layer, mask: { ...layer.mask, chunks: layer.mask.chunks.filter(chunk => !same.has(chunk)) } };
+  }) };
+  if (validateMapDocumentV6(checked).length) throw new Error("Изменение нарушает целостность карты");
   // Core mutations keep untouched layers by identity. Canonicalize only changed
   // layers so painting does not regenerate a forest or copy every object.
-  const untouched = new Map(document.layers.map(layer => [layer.id, layer]));
-  const canonical = canonicalizeMapDocumentV6({ ...next, layers: next.layers.filter(layer => untouched.get(layer.id) !== layer) });
+  const canonical = canonicalizeMapDocumentV6({ ...checked, layers: checked.layers.filter(layer => untouched.get(layer.id) !== layer) });
   const changed = new Map(canonical.layers.map(layer => [layer.id, layer]));
   return { ...canonical, layers: next.layers.map(layer => {
     const normalized = changed.get(layer.id) ?? layer;
@@ -50,8 +66,12 @@ export function editGeometry(document: MapDocumentV6, operation: (view: MapDocum
     if (original === layer) return layer; // нетронутый слой остаётся тем же объектом: по этому сцена узнаёт, что его не перерисовывать
     if (normalized.kind !== "terrain" || normalized.representation !== "mask" || layer.kind !== "terrain" || layer.representation !== "mask" ||
       original?.kind !== "terrain" || original.representation !== "mask") return normalized;
-    // Validation/normalization still runs. Reuse already-canonical untouched
-    // chunks afterwards so a local brush edit does not invalidate every tile.
+    // Нетронутые куски — те же объекты, что и раньше: сцена не перерисовывает их плитки.
+    const same = reused.get(layer.id);
+    if (same) {
+      const fresh = new Map(normalized.mask.chunks.map(chunk => [chunk.id, chunk]));
+      return { ...normalized, mask: { ...normalized.mask, chunks: layer.mask.chunks.map(chunk => same.has(chunk) ? chunk : fresh.get(chunk.id)!) } };
+    }
     const oldChunks = new Map(original.mask.chunks.map(chunk => [chunk.id, chunk]));
     const rawChunks = new Map(layer.mask.chunks.map(chunk => [chunk.id, chunk]));
     return { ...normalized, mask: { ...normalized.mask, chunks: normalized.mask.chunks.map(chunk => {

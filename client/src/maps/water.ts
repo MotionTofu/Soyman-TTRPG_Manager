@@ -60,11 +60,17 @@ export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement,
   for (const layer of model.layers) {
     const mask = layer.kind === "terrain" && layer.visible ? layer.terrain.mask : undefined;
     if (!mask?.source) continue;
-    const step = mask.sampleSize * K;
+    const step = mask.sampleSize * K, codes = mask.source.codes;
+    // Код материала разбирается один раз на материал, при первой встрече, а не на каждый отсчёт: на большой карте отсчётов
+    // сотни тысяч, и разбор съедал больше половины сборки маски на каждом шаге кисти.
+    const looks: ({ depth: number; beach: number; row: number } | undefined)[] = [];
     for (const chunk of mask.source.chunks) for (let i = 0; i < chunk.values.length; i++) {
-      if (!chunk.values[i]) continue;
+      const value = chunk.values[i];
+      if (!value) continue;
       // Закрашенный отсчёт верхнего слоя перекрывает воду нижнего, даже если сам не вода.
-      const code = mask.source.codes[chunk.values[i] - 1], depth = waterLevel(code), beach = /^village-sand/.test(code ?? "") ? 255 : 0, row = depth ? rowOf(liquidKey(code)) : 0;
+      let look = looks[value - 1];
+      if (!look) { const code = codes[value - 1], level = waterLevel(code); look = looks[value - 1] = { depth: level, beach: /^village-sand/.test(code ?? "") ? 255 : 0, row: level ? rowOf(liquidKey(code)) : 0 }; }
+      const { depth, beach, row } = look;
       const x0 = Math.round((mask.origin.x - lo.x + (chunk.cx * 16 + i % 16) * mask.sampleSize) * K), y0 = Math.round((mask.origin.y - lo.y + (chunk.cy * 16 + Math.floor(i / 16)) * mask.sampleSize) * K);
       for (let y = Math.max(0, y0); y < Math.min(h, y0 + Math.max(1, Math.round(step))); y++) for (let x = Math.max(0, x0); x < Math.min(w, x0 + Math.max(1, Math.round(step))); x++) {
         const at = (y * w + x) * 4; data[at] = depth ? 255 : 0; data[at + 1] = depth * 51; kinds[at / 4] = row;
@@ -125,8 +131,9 @@ export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement,
       // Где дно накрашено, вода знает его сама; иначе судит по ближайшему берегу.
       if (far[from] + cost < far[i]) { far[i] = far[from] + cost; if (!floor[i]) px[i * 4 + 2] = px[from * 4 + 2]; }
     };
-    for (let y = 0, i = 0; y < h; y++) for (let x = 0; x < w; x++, i++) { near(i, x, y, -1, 0, 1); near(i, x, y, 0, -1, 1); near(i, x, y, -1, -1, 1.4); near(i, x, y, 1, -1, 1.4); }
-    for (let y = h - 1, i = w * h - 1; y >= 0; y--) for (let x = w - 1; x >= 0; x--, i--) { near(i, x, y, 1, 0, 1); near(i, x, y, 0, 1, 1); near(i, x, y, 1, 1, 1.4); near(i, x, y, -1, 1, 1.4); }
+    // Суша (расстояние 0) не меняется — её пропускаем сразу: на материке это большая часть карты.
+    for (let y = 0, i = 0; y < h; y++) for (let x = 0; x < w; x++, i++) if (far[i]) { near(i, x, y, -1, 0, 1); near(i, x, y, 0, -1, 1); near(i, x, y, -1, -1, 1.4); near(i, x, y, 1, -1, 1.4); }
+    for (let y = h - 1, i = w * h - 1; y >= 0; y--) for (let x = w - 1; x >= 0; x--, i--) if (far[i]) { near(i, x, y, 1, 0, 1); near(i, x, y, 0, 1, 1); near(i, x, y, 1, 1, 1.4); near(i, x, y, -1, 1, 1.4); }
     if (shoal > 0) for (let i = 0; i < far.length; i++) if (px[i * 4 + 1] > 51) px[i * 4 + 1] = Math.round(51 + (px[i * 4 + 1] - 51) * Math.min(1, far[i] / (shoal * K)));
     pen.putImageData(wet, 0, 0);
     // Номер жидкости заходит на клетку на сушу: размытый и рваный край шире закрашенного, и без этого у лавы была бы водяная кайма.

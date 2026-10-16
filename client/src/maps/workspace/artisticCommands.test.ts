@@ -20,6 +20,16 @@ function fixture() {
   return doc;
 }
 describe("artistic workspace", () => {
+  it("мазок кисти оставляет нетронутые куски маски теми же объектами и не ломает целостность", () => {
+    let doc = paintSurface(fixture(), "surface", { x: 1, y: 1 }, { x: 1, y: 1 }, 1, "forest");
+    doc = paintSurface(doc, "surface", { x: 14, y: 14 }, { x: 14, y: 14 }, 1, "forest");
+    const chunks = (d: typeof doc) => { const l = d.layers.find(x => x.id === "surface"); if (l?.kind !== "terrain" || l.representation !== "mask") throw Error(); return l.mask.chunks; };
+    const far = chunks(doc).find(c => c.cx * 4 > 10)!;
+    const next = paintSurface(doc, "surface", { x: 1.5, y: 1 }, { x: 2, y: 1 }, 1, "shallow_water");
+    expect(chunks(next).find(c => c.id === far.id)).toBe(far);
+    expect(chunks(next).length).toBe(chunks(doc).length);
+    expect(validateMapDocumentV6(next)).toEqual([]);
+  });
   it("paints continuous masks, erases transparently and clips at map boundaries", () => {
     const before = fixture(), raw = serializeMapDocumentV6(before);
     let next = paintSurface(before, "surface", { x: -2, y: 4 }, { x: 12, y: 4 }, 1, "shallow_water");
