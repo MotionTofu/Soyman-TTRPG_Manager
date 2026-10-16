@@ -9,7 +9,8 @@ import request from "supertest";
 import { db } from "../db/db";
 import { entityRecordsRouter } from "./entityRecords";
 import { collectOrphans, sweepOrphans } from "../services/orphans";
-import { campaignsOfEntity } from "../services/entityRecords";
+import { campaignsOfEntity, SIDE_ASPECTS } from "../services/entityRecords";
+import { FORCE_KEYS } from "../services/beingForce";
 import { formatRef, uidOf } from "../services/mentions";
 
 let app: express.Express;
@@ -311,5 +312,44 @@ describe("быстрая запись и «из ленты» (задача 07)",
     expect(ok.body).toMatchObject({ source: "feed", source_note_id: noteId });
     expect((await create({ owner_type: "community", owner_id: choir, text: "x", source: "feed", source_note_id: otherNote })).status).toBe(400);
     expect((await create({ owner_type: "community", owner_id: choir, text: "x", source: "quick" })).status).toBe(400);
+  });
+});
+
+// Дополнения слоя для тетради кампании v4 (спека .scratch/workbook-rework, задача 01).
+describe("графы стороны, персонажа и кампании, «сообщение», функция сведения", () => {
+  it("графы стороны — не двигатель силы", () => {
+    expect(SIDE_ASPECTS.filter((k) => (FORCE_KEYS as readonly string[]).includes(k))).toEqual([]);
+  });
+
+  it("новые графы принимаются у своего вида и отклоняются у чужого", async () => {
+    expect((await create({ owner_type: "community", owner_id: choir, aspect: "red_line", text: "Не выдаёт своих" })).status).toBe(201);
+    expect((await create({ owner_type: "character", owner_id: characterId, aspect: "cherishes", text: "Брат" })).status).toBe(201);
+    expect((await create({ owner_type: "campaign", owner_id: campaignId, aspect: "goal_conflict", text: "Казна или брат" })).status).toBe(201);
+    expect((await create({ owner_type: "location", owner_id: canal, aspect: "red_line", text: "x" })).status).toBe(400);
+    expect((await create({ owner_type: "character", owner_id: characterId, aspect: "group_ties", text: "x" })).status).toBe(400);
+    expect((await create({ owner_type: "campaign", owner_id: campaignId, aspect: "cherishes", text: "x" })).status).toBe(400);
+  });
+
+  it("«сообщение» и функция сохраняются, функция переходит к замене", async () => {
+    const res = await create({ owner_type: "community", owner_id: choir, text: "Хор платит страже", certainty: "reported", basis: "Орис", function: "anchor" });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ certainty: "reported", function: "anchor" });
+    const plain = await create({ owner_type: "community", owner_id: choir, text: "Без функции" });
+    expect(plain.body.function).toBe("");
+    const put = await request(app).put(`/api/records/${plain.body.id}`).send({ function: "current" });
+    expect(put.body.function).toBe("current");
+    const replaced = await request(app).post(`/api/records/${res.body.id}/replace`).send({ text: "Хор больше не платит" });
+    expect(replaced.body).toMatchObject({ function: "anchor", replaces_id: res.body.id });
+  });
+
+  it("функция вне списка — 400 по-русски; фильтр ?function=", async () => {
+    const bad = await create({ owner_type: "community", owner_id: choir, text: "x", function: "now" });
+    expect(bad.status).toBe(400);
+    expect(bad.body.error).toBe("Неизвестное значение: функция");
+    const list = await request(app).get(`/api/campaigns/${campaignId}/records?function=anchor`);
+    expect(list.status).toBe(200);
+    expect(list.body.records.length).toBeGreaterThan(0);
+    expect(list.body.records.every((r: { function: string }) => r.function === "anchor")).toBe(true);
+    expect((await request(app).get(`/api/campaigns/${campaignId}/records?function=now`)).status).toBe(400);
   });
 });

@@ -68,6 +68,7 @@ import {
   ContextSwitch,
   EngagedCampaigns,
 } from "../components/campaign/CampaignProfileParts";
+import { SIDE_PROFILE_ASPECTS } from "../entityRecords";
 import {
   campaignCrumbs,
   forceExtras,
@@ -719,7 +720,7 @@ export function BeingDetailPage() {
               ownerId={beingId}
               chains={records}
               title="Что изменилось"
-              aspects={["note"]}
+              aspects={SIDE_PROFILE_ASPECTS}
             />
             <BaseFold
               description={being.description}

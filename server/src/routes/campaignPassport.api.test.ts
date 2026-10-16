@@ -28,6 +28,14 @@ describe("паспорт кампании", () => {
     expect(got.body.passport).toEqual({ premise: "Город сокровищ", stakes: "Ренна ищет брата" });
   });
 
+  it("ключи листа 1 тетради v4 сохраняются и читаются", async () => {
+    const passport = { decisions_change: "Кто правит каналом", open_outcome: "Вернут ли канал городу", format: "кампания", horizon: "10–12 встреч" };
+    const res = await request(app).put(`/api/campaigns/${campaignId}/passport`).send({ passport: { premise: "Город сокровищ", stakes: "Ренна ищет брата", ...passport } });
+    expect(res.body.passport).toMatchObject(passport);
+    expect((await request(app).get(`/api/campaigns/${campaignId}`)).body.passport).toMatchObject(passport);
+    await request(app).put(`/api/campaigns/${campaignId}/passport`).send({ passport: { premise: "Город сокровищ", stakes: "Ренна ищет брата" } });
+  });
+
   it("«Препродакшен» переезжает: дописывается ниже, длинное не режется, повтор не дублирует", () => {
     const long = "нить ".repeat(1000).trim();
     db.prepare(

@@ -50,8 +50,10 @@ describe("паспорт и исходы приключения", () => {
 });
 
 describe("достоверность тайны", () => {
-  it("принимает известно · слух · спорно и снимается пустой строкой", async () => {
-    let res = await request(app).put(`/api/story/secrets/${secretId}`).send({ certainty: "rumor" });
+  it("принимает известно · слух · спорно · сообщение и снимается пустой строкой", async () => {
+    let res = await request(app).put(`/api/story/secrets/${secretId}`).send({ certainty: "reported" });
+    expect(res.body.certainty).toBe("reported");
+    res = await request(app).put(`/api/story/secrets/${secretId}`).send({ certainty: "rumor" });
     expect(res.body.certainty).toBe("rumor");
     res = await request(app).put(`/api/story/secrets/${secretId}`).send({ certainty: "" });
     expect(res.body.certainty).toBe("");

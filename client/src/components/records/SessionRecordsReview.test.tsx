@@ -31,7 +31,7 @@ afterEach(() => {
 function rec(over: Partial<EntityRecord>): EntityRecord {
   return {
     id: 1, campaign_id: 5, owner_type: "being", owner_id: 9, owner_name: "Мия", aspect: "note", text: "Текст",
-    status: "established", certainty: "known", known_to: "gm", known_note: "", basis: "", session_id: 3,
+    status: "established", certainty: "known", known_to: "gm", known_note: "", basis: "", function: "", session_id: 3,
     replaces_id: null, replaced_by: null, source: "manual", source_note_id: null, created_at: "", updated_at: "", ...over,
   };
 }

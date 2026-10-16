@@ -705,6 +705,13 @@
 .record-form .seg {
   flex-wrap: wrap;
 }
+.record-form__more > summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.record-form__more[open] > summary {
+  margin-bottom: var(--sp-3);
+}
 /* Профиль в контексте кампании (ADR-0006): переключатель над листом — те же
    чипы, что у фильтров «Населения» и «Мира кампании». */
 .context-switch {

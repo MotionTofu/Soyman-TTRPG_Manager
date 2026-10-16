@@ -8,14 +8,21 @@ import { CERTAINTY } from "./settingWorld";
 
 export { CERTAINTY };
 
+/**
+ * Графы стороны (лист 7 тетради кампании, спека workbook-rework) — только
+ * слой кампании: в двигатель силы основы не входят и необязательны.
+ */
+export const SIDE_ASPECTS = ["alternative", "red_line", "status_claim", "recognition", "reputation"] as const;
+
 /** Графы по виду владельца; тот же набор видов, что в CHECK таблицы (db.ts). */
 export const RECORD_ASPECTS: Readonly<Record<string, readonly string[]>> = {
-  being: [...FORCE_KEYS, "note"],
-  community: [...FORCE_KEYS, "note"],
+  being: [...FORCE_KEYS, ...SIDE_ASPECTS, "note"],
+  community: [...FORCE_KEYS, ...SIDE_ASPECTS, "note"],
   location: ["function", "affordances", "signs", "access", "cost_risk", "past_trace", "after", "unknown", "note"],
-  character: ["player_interest", "hooks", "if_goal_reached", "note"],
+  character: ["player_interest", "hooks", "if_goal_reached", "cherishes", "coordination", "note"],
+  // group_ties … goal_conflict — общие основания группы (лист 4).
   // unsorted — черновик без адреса: адрес выбирают при подтверждении.
-  campaign: ["note", "resources", "intentions", "unsorted"],
+  campaign: ["note", "resources", "intentions", "group_ties", "open_goals", "disputes", "needs_agreement", "goal_conflict", "unsorted"],
 };
 
 /** Виды сеттинга: запись о них задействует сущность в кампании. */
@@ -23,6 +30,13 @@ export const SETTING_OWNER_TYPES: ReadonlySet<string> = new Set(["being", "commu
 
 /** Статус — уверенность Мастера: установлено · предположение · черновик · отброшено. */
 export const RECORD_STATUSES = ["established", "assumption", "draft", "discarded"] as const;
+
+/**
+ * Функция сведения (лист 9, спека workbook-rework, Q7): нужно для текущего
+ * решения · кампанийная опора · архивная фактура. Пусто — запись не
+ * «сведение», живёт в хронике. Тот же список — в CHECK колонки (db.ts).
+ */
+export const RECORD_FUNCTIONS = ["", "current", "anchor", "archive"] as const;
 
 /** Кому известно в мире: мастер · группа героев · все · некоторые. */
 export const KNOWN_TO = ["gm", "table", "public", "some"] as const;

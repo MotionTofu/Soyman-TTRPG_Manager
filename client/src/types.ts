@@ -1360,7 +1360,7 @@ export interface StorySecret {
   title: string;
   content: string;
   /** Достоверность (словарь граф §1): известно · слух · спорно; пусто — не указана. */
-  certainty?: "" | "known" | "rumor" | "disputed";
+  certainty?: "" | "known" | "rumor" | "disputed" | "reported";
   position: number;
   state?: { revealed: number; note: string } | null;
 }

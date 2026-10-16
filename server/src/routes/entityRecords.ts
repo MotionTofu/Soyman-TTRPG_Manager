@@ -15,6 +15,7 @@ import {
   CERTAINTY,
   KNOWN_TO,
   RECORD_ASPECTS,
+  RECORD_FUNCTIONS,
   RECORD_STATUSES,
   SETTING_OWNER_TYPES,
   engagements,
@@ -35,6 +36,7 @@ interface RecordRow {
   known_to: string;
   known_note: string;
   basis: string;
+  function: string;
   session_id: number | null;
   replaces_id: number | null;
   source: string;
@@ -58,6 +60,7 @@ interface Fields {
   known_to?: string;
   known_note?: string;
   basis?: string;
+  function?: string;
   session_id?: number | null;
 }
 
@@ -138,6 +141,7 @@ function readFields(body: Record<string, unknown>, campaignId: number): Fields {
   if (body.known_to !== undefined) f.known_to = oneOf(body.known_to, KNOWN_TO, "кому известно");
   if (body.known_note !== undefined) f.known_note = plainText(body.known_note, "Кто именно знает");
   if (body.basis !== undefined) f.basis = plainText(body.basis, "Основание");
+  if (body.function !== undefined) f.function = oneOf(body.function, RECORD_FUNCTIONS, "функция");
   if (body.session_id !== undefined) {
     if (body.session_id === null) f.session_id = null;
     else {
@@ -175,9 +179,9 @@ function insertRecord(campaignId: number, ownerType: string, ownerId: number, f:
       db
         .prepare(
           `INSERT INTO entity_records
-             (campaign_id, owner_type, owner_id, aspect, text, status, certainty, known_to, known_note, basis, session_id, replaces_id,
-              source, source_note_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+             (campaign_id, owner_type, owner_id, aspect, text, status, certainty, known_to, known_note, basis, function, session_id,
+              replaces_id, source, source_note_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
           campaignId,
@@ -190,6 +194,7 @@ function insertRecord(campaignId: number, ownerType: string, ownerId: number, f:
           f.known_to ?? "gm",
           f.known_note ?? "",
           f.basis ?? "",
+          f.function ?? "",
           f.session_id ?? null,
           replacesId,
           origin.source,
@@ -301,7 +306,7 @@ entityRecordsRouter.get("/campaigns/:id/records", handle((req, res) => {
   if (!campaign) return res.status(404).json({ error: "Кампания не найдена" });
   const where = ["r.campaign_id = ?"];
   const params: unknown[] = [campaign.id];
-  const { owner_type, owner_id, session_id, status } = req.query;
+  const { owner_type, owner_id, session_id, status, function: fn } = req.query;
   if (owner_type !== undefined) {
     where.push("r.owner_type = ?");
     params.push(oneOf(owner_type, Object.keys(RECORD_ASPECTS), "вид владельца"));
@@ -317,6 +322,10 @@ entityRecordsRouter.get("/campaigns/:id/records", handle((req, res) => {
     if (!id) throw new BadRequest("Неверная встреча");
     where.push("r.session_id = ?");
     params.push(id);
+  }
+  if (fn !== undefined) {
+    where.push("r.function = ?");
+    params.push(oneOf(fn, RECORD_FUNCTIONS, "функция"));
   }
   if (status !== undefined) {
     where.push("r.status = ?");
@@ -415,7 +424,7 @@ entityRecordsRouter.put("/records/:id", handle((req, res) => {
   db.transaction(() => {
     db.prepare(
       `UPDATE entity_records SET owner_type = ?, owner_id = ?, aspect = ?, text = ?, status = ?, certainty = ?,
-         known_to = ?, known_note = ?, basis = ?, session_id = ?, updated_at = datetime('now')
+         known_to = ?, known_note = ?, basis = ?, function = ?, session_id = ?, updated_at = datetime('now')
        WHERE id = ?`
     ).run(
       ownerType,
@@ -427,6 +436,7 @@ entityRecordsRouter.put("/records/:id", handle((req, res) => {
       f.known_to ?? current.known_to,
       f.known_note ?? current.known_note,
       f.basis ?? current.basis,
+      f.function ?? current.function,
       f.session_id !== undefined ? f.session_id : current.session_id,
       current.id
     );
@@ -436,6 +446,7 @@ entityRecordsRouter.put("/records/:id", handle((req, res) => {
 }));
 
 // Замена: новая запись того же владельца и графы, прежняя не меняется.
+// Функция сведения переходит к замене, если её не прислали.
 // Заменяют последнюю в цепочке — иначе история разветвится.
 entityRecordsRouter.post("/records/:id/replace", handle((req, res) => {
   const id = positiveId(req.params.id);
@@ -446,6 +457,6 @@ entityRecordsRouter.post("/records/:id/replace", handle((req, res) => {
   if (!campaign) return res.status(404).json({ error: "Кампания не найдена" });
   const body = (req.body ?? {}) as Record<string, unknown>;
   const f = readFields(body, campaign.id);
-  const newId = insertRecord(campaign.id, prev.owner_type, prev.owner_id, { ...f, aspect: prev.aspect }, prev.id);
+  const newId = insertRecord(campaign.id, prev.owner_type, prev.owner_id, { ...f, aspect: prev.aspect, function: f.function ?? prev.function }, prev.id);
   res.status(201).json(recordById(newId));
 }));
