@@ -189,6 +189,7 @@ function QuickRecord({ campaignId, sessionId, settingId }: { campaignId: number;
         </button>
         <span className="muted">каждая строка уйдёт в черновики</span>
       </div>
+      <p className="muted">Если сил почти нет: где остановились · что потратили или получили · какое условие обещали выполнить · где в заметке вопрос.</p>
     </section>
   );
 }

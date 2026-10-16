@@ -9,6 +9,7 @@ import {
   FUNCTION_LABELS,
   KNOWN_TO_LABELS,
   RECORD_ASPECTS,
+  lastHeldSession,
   recordChains,
   type EntityRecord,
   type RecordCertainty,
@@ -17,7 +18,13 @@ import {
   type RecordOwnerType,
 } from "../../entityRecords";
 import { mentionTone } from "../../mentions";
-import type { CampaignDetail, Character, LiveSession, SessionSummary, SettingBeingDetail } from "../../types";
+import type { CampaignDetail, Character, LiveSession, SessionDetail, SessionSummary, SettingBeingDetail } from "../../types";
+import { SessionResults } from "../SessionResults";
+import { sessionLabel } from "../../sessionLabel";
+import { formatDateKeyRu } from "../../utils/date";
+import { formatInworldDate } from "../../inworldCalendar";
+import { useSettingCalendar } from "../../hooks/useSettingCalendar";
+import { type InstanceSummary } from "./model";
 import { CampaignParticipation } from "../CharacterDossier";
 import { CampaignWorldTab, type WorldEntity, type WorldType } from "../campaign/CampaignWorldTab";
 import { CampaignRecords } from "../campaign/CampaignProfileParts";
@@ -267,6 +274,87 @@ export function CampaignKnowledgeView({ campaignId, title }: { campaignId: numbe
         />
       )}
     </section>
+  );
+}
+
+/** Лист 22 «После встречи»: «Итоги» выбранной встречи — те же компоненты, что на вкладке сессии. */
+export function CampaignSessionReviewView({ campaignId }: { campaignId: number }) {
+  const campaign = useResource<CampaignDetail>(campaignPaths.detail(campaignId)).data;
+  const sessions = useResource<SessionSummary[]>(campaignPaths.sessions(campaignId)).data;
+  const [picked, setPicked] = useState<number | null>(null);
+  const sessionId = picked ?? (sessions ? (lastHeldSession(sessions)?.id ?? null) : null);
+  const session = useEntity<SessionDetail>("session", sessionId).data;
+  if (!campaign || !sessions) return <p className="muted">Открываем встречи…</p>;
+  const ordered = sessions.filter((s) => s.status !== "cancelled").sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
+  return (
+    <section className="wb-profile stack">
+      <label className="stack">
+        <span className="paper-label">Встреча</span>
+        <select value={sessionId ?? ""} onChange={(e) => setPicked(e.target.value ? Number(e.target.value) : null)}>
+          {sessionId == null && <option value="">— выберите встречу —</option>}
+          {ordered.map((s) => (
+            <option key={s.id} value={s.id}>
+              {sessionLabel(s)} · {formatDateKeyRu(s.date)}
+            </option>
+          ))}
+        </select>
+      </label>
+      {sessionId == null ? (
+        <p className="muted">Сыгранных встреч пока нет — разбор появится после первой.</p>
+      ) : session ? (
+        <SessionResults session={session} campaignId={campaignId} settingId={campaign.setting_id} />
+      ) : (
+        <p className="muted">Открываем встречу…</p>
+      )}
+    </section>
+  );
+}
+
+/** Лист 11: текущий момент мира — мировая дата последней сыгранной встречи (её конец, если указан). */
+export function WorldMomentView({ campaignId, title }: { campaignId: number; title: string }) {
+  const campaign = useResource<CampaignDetail>(campaignPaths.detail(campaignId)).data;
+  const sessions = useResource<SessionSummary[]>(campaignPaths.sessions(campaignId)).data;
+  const calendar = useSettingCalendar(campaign?.setting_id);
+  if (!campaign || !sessions) return <p className="muted">Открываем встречи…</p>;
+  const last = lastHeldSession(sessions);
+  const end = last?.inworld_year_end != null;
+  const [y, m, d] = !last ? [null, null, null] : end ? [last.inworld_year_end, last.inworld_month_end, last.inworld_day_end] : [last.inworld_year, last.inworld_month, last.inworld_day];
+  const date = y == null ? null : calendar ? formatInworldDate(y, m, d, calendar.months, calendar.era) : [d, m, y].filter((x) => x != null).join(".");
+  return (
+    <section className="wb-profile">
+      <h3 className="paper-group__head">{title}</h3>
+      {date && last ? (
+        <p>
+          <strong>{date}</strong>{" "}
+          <span className="muted">
+            — {end ? "конец" : "начало"} встречи <Link to={`/sessions/${last.id}`}>{sessionLabel(last)}</Link>
+          </span>
+        </p>
+      ) : (
+        <p className="muted">
+          Момент мира не указан.{" "}
+          {last ? (
+            <>
+              Мировая дата ставится у встречи — <Link to={`/sessions/${last.id}`}>{sessionLabel(last)} ›</Link>
+            </>
+          ) : (
+            "Сыгранных встреч пока нет."
+          )}
+        </p>
+      )}
+    </section>
+  );
+}
+
+/** «Подготовка» сессии → лист 14 тетради кампании, если у кампании есть тетрадь v4. */
+export function PrepSheetLink({ campaignId }: { campaignId: number }) {
+  const list = useResource<InstanceSummary[]>(`/workbooks/instances?project_type=campaign&project_id=${campaignId}&template=campaign-design`).data;
+  const book = list?.find((w) => w.template_version >= 4);
+  if (!book) return null;
+  return (
+    <Link className="paper-more" to={`/workbooks/${book.id}?sheet=prep`}>
+      Лист подготовки в тетради ›
+    </Link>
   );
 }
 

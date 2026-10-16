@@ -12,12 +12,10 @@ import { SettingWorldTab } from "../setting/SettingWorldTab";
 import {CampaignSecrets} from "../CampaignSecrets";
 import {MentionText} from "../mentions/MentionText";
 import { WorkbookContext } from "./model";
-import { CampaignEntitiesView, CampaignHeroesView, CampaignKnowledgeView, GroupGroundsView } from "./WorkbookCampaignViews";
+import { CampaignEntitiesView, CampaignHeroesView, CampaignKnowledgeView, CampaignSessionReviewView, GroupGroundsView, WorldMomentView } from "./WorkbookCampaignViews";
 import type { WorkbookField } from "@shared/workbooks";
 import "../../pages/setting-profile.css";
 
-
-const CAMPAIGN_VIEWS=new Set(["world_moment","session_review"]);
 
 /** The notebook opens the existing model editors; it never copies profile data into answers. */
 export function WorkbookProfile({field}:{field:WorkbookField}) {
@@ -31,8 +29,8 @@ export function WorkbookProfile({field}:{field:WorkbookField}) {
   if(field.entity==="heroes")return doc.project_type==="campaign"?withHint(<CampaignHeroesView campaignId={doc.project_id} title={field.label}/>):<p className="muted">Этот раздел — в тетради кампании.</p>;
   if(field.entity==="group_grounds")return doc.project_type==="campaign"?withHint(<GroupGroundsView campaignId={doc.project_id} title={field.label}/>):<p className="muted">Этот раздел — в тетради кампании.</p>;
   if(field.entity==="knowledge")return doc.project_type==="campaign"?withHint(<CampaignKnowledgeView campaignId={doc.project_id} title={field.label}/>):<p className="muted">Этот раздел — в тетради кампании.</p>;
-  // Виды листов тетради кампании v4: заглушка, пока задачи 04–07 не сделают каждый вид.
-  if(CAMPAIGN_VIEWS.has(field.entity!))return <section className="wb-profile"><h3>{field.label}</h3><p className="muted">Этот раздел покажет данные кампании.</p></section>;
+  if(field.entity==="world_moment")return doc.project_type==="campaign"?withHint(<WorldMomentView campaignId={doc.project_id} title={field.label}/>):<p className="muted">Этот раздел — в тетради кампании.</p>;
+  if(field.entity==="session_review")return doc.project_type==="campaign"?withHint(<CampaignSessionReviewView campaignId={doc.project_id}/>):<p className="muted">Этот раздел — в тетради кампании.</p>;
   if(field.entity==="passport")return <ProjectPassport type={doc.project_type} id={doc.project_id}/>;
   if(field.entity==="information")return <Information type={doc.project_type} id={doc.project_id}/>;
   if(field.entity==="participants")return doc.project_type==="adventure"?<Participants id={doc.project_id}/>:<p className="muted">Участия сил открываются из профиля приключения.</p>;
