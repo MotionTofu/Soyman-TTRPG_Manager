@@ -64,8 +64,10 @@ type Props = {
       text?: string;
       status?: RecordStatus;
       origin?: { source: "feed"; source_note_id: number };
+      /** Функция сведения по умолчанию: «+ сведение» на листе 9 тетради — «Т». */
+      fn?: RecordFunction;
     }
-  | { record: EntityRecord; replace?: boolean; ownerType?: undefined; ownerId?: undefined; aspect?: undefined; text?: undefined; status?: undefined; origin?: undefined }
+  | { record: EntityRecord; replace?: boolean; ownerType?: undefined; ownerId?: undefined; aspect?: undefined; text?: undefined; status?: undefined; origin?: undefined; fn?: undefined }
 );
 
 export function RecordFormModal(props: Props) {
@@ -83,7 +85,7 @@ export function RecordFormModal(props: Props) {
   const [knownTo, setKnownTo] = useState<RecordKnownTo>(record?.known_to ?? "gm");
   const [knownNote, setKnownNote] = useState(record?.known_note ?? "");
   const [basis, setBasis] = useState(record && !replace ? record.basis : "");
-  const [fn, setFn] = useState<RecordFunction>(record?.function ?? "");
+  const [fn, setFn] = useState<RecordFunction>(record?.function ?? props.fn ?? "");
   // undefined — Мастер встречу не трогал: берём умолчание, когда список придёт.
   const [sessionChoice, setSessionChoice] = useState<number | null | undefined>(record && !replace ? record.session_id : undefined);
   const [saving, setSaving] = useState(false);
@@ -179,7 +181,7 @@ export function RecordFormModal(props: Props) {
             placeholder={certainty === "reported" ? "Кто сообщил" : "Откуда известно / почему может измениться"}
           />
         </label>
-        <details className="record-form__more" open={!!record?.function || undefined}>
+        <details className="record-form__more" open={!!fn || undefined}>
           <summary>ещё</summary>
           <Seg label="Функция" value={fn} options={FUNCTIONS} labels={FUNCTION_LABELS} onChange={setFn} />
         </details>
