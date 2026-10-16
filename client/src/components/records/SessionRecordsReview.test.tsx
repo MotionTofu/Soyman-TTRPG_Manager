@@ -8,15 +8,21 @@ import type { EntityRecord } from "../../entityRecords";
 const fx = vi.hoisted(() => ({
   records: [] as unknown[],
   put: vi.fn(async () => ({})),
+  post: vi.fn(async () => ({ records: [] })),
   run: vi.fn(async (action: () => Promise<unknown>) => action()),
 }));
 vi.mock("../../data/hooks", () => ({
   useResource: (path: string | null) => ({ data: path?.includes("/records?") ? { records: fx.records } : path?.includes("/world") ? { setting_id: 1, entities: [] } : [] }),
   useAction: () => fx.run,
-  write: { put: fx.put, post: vi.fn() },
+  write: { put: fx.put, post: fx.post },
 }));
 vi.mock("../mentions/MentionText", () => ({ MentionText: ({ text }: { text: string }) => <span>{text}</span> }));
 vi.mock("../mentions/MentionPickerModal", () => ({ MentionPickerModal: () => null }));
+vi.mock("../mentions/MentionTextarea", () => ({
+  MentionTextarea: ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
+    <textarea aria-label="Быстрая запись" value={value} onChange={(e) => onChange(e.target.value)} />
+  ),
+}));
 afterEach(() => {
   cleanup();
   fx.put.mockClear();
@@ -64,5 +70,13 @@ describe("разбор встречи", () => {
     await vi.waitFor(() => expect(fx.put).toHaveBeenCalledWith("/records/2", { status: "established" }));
     fireEvent.click(screen.getByRole("button", { name: "Отбросить" }));
     await vi.waitFor(() => expect(fx.put).toHaveBeenCalledWith("/records/2", { status: "discarded" }));
+  });
+
+  it("быстрая запись шлёт текст на /records/quick с этой встречей", async () => {
+    fx.records = [];
+    mount();
+    fireEvent.change(screen.getByRole("textbox", { name: "Быстрая запись" }), { target: { value: "одна\nдве" } });
+    fireEvent.click(screen.getByRole("button", { name: "Записать быстро" }));
+    await vi.waitFor(() => expect(fx.post).toHaveBeenCalledWith("/campaigns/5/records/quick", { session_id: 3, text: "одна\nдве" }));
   });
 });

@@ -16,6 +16,7 @@ import { EntityRecordItem, RecordOwner } from "./EntityRecordItem";
 import { RecordFormModal } from "./RecordFormModal";
 import { MentionText } from "../mentions/MentionText";
 import { MentionPickerModal } from "../mentions/MentionPickerModal";
+import { MentionTextarea } from "../mentions/MentionTextarea";
 import type { CampaignWorld } from "../campaign/CampaignWorldTab";
 import type { Character } from "../../types";
 
@@ -151,6 +152,44 @@ function DraftRow({ record, settingId }: { record: EntityRecord; settingId: numb
   );
 }
 
+/** «Быстрая запись — если сил почти нет»: строка — черновик; упоминание в начале — на ком. */
+function QuickRecord({ campaignId, sessionId, settingId }: { campaignId: number; sessionId: number; settingId: number | null }) {
+  const run = useAction();
+  const [text, setText] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function send() {
+    setSaving(true);
+    const done = await run(labelled("Быстрая запись", () => write.post(`${campaignPaths.records(campaignId)}/quick`, { session_id: sessionId, text })), {
+      affects: [{ path: campaignPaths.records(campaignId) }, { path: campaignPaths.world(campaignId) }],
+      retry: false,
+    });
+    setSaving(false);
+    if (done !== undefined) setText("");
+  }
+
+  return (
+    <section className="campaign-records">
+      <h3 className="paper-group__head">Быстрая запись</h3>
+      <MentionTextarea
+        value={text}
+        onChange={setText}
+        rows={3}
+        autoGrow
+        toolbar="always"
+        placeholder="Строка — один черновик. Например: «@Орис — контакт» или «остановились в техкоридоре»"
+        defaultSettingId={settingId ?? undefined}
+      />
+      <div className="row">
+        <button type="button" disabled={!text.trim() || saving} onClick={() => void send()}>
+          Записать быстро
+        </button>
+        <span className="muted">каждая строка уйдёт в черновики</span>
+      </div>
+    </section>
+  );
+}
+
 export function SessionRecordsReview({ campaignId, sessionId, settingId }: { campaignId: number; sessionId: number; settingId: number | null }) {
   const records = useResource<{ records: EntityRecord[] }>(`${campaignPaths.records(campaignId)}?session_id=${sessionId}`).data?.records;
   const { held, drafts } = useMemo(() => {
@@ -186,6 +225,7 @@ export function SessionRecordsReview({ campaignId, sessionId, settingId }: { cam
           </ul>
         </section>
       )}
+      <QuickRecord campaignId={campaignId} sessionId={sessionId} settingId={settingId} />
     </div>
   );
 }

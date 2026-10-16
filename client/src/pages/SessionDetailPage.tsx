@@ -1113,7 +1113,7 @@ export function SessionDetailPage() {
                   applyUrl={`/cross-links/apply-all?ownerKind=session&ownerId=${sessionId}`}
                 />
               </div>
-              <SessionNotesChat sessionId={sessionId} settingId={campaign.setting_id} />
+              <SessionNotesChat sessionId={sessionId} settingId={campaign.setting_id} draftCampaignId={isPlayer ? undefined : campaign.id} />
             </div>
             {!isPlayer && <SessionOutcomesCard session={session} />}
           </div>

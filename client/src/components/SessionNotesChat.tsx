@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useAction, useAfterWrite, useResource, write } from "../data/hooks";
 import { sessionPaths } from "../data/sessions";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
@@ -6,6 +6,7 @@ import { useUndoDelete } from "../hooks/useUndoDelete";
 import { formatInworldDate } from "../inworldCalendar";
 import type { SessionNote } from "../types";
 import { NotesFeed, type FeedItem } from "./NotesFeed";
+import { RecordFormModal } from "./records/RecordFormModal";
 
 // Лента сессии чатом (гриллинг 2026-09-28). Заменила текст «Основных событий»:
 // Мастер пишет по ходу игры короткими сообщениями, Enter — и ушло, со своим
@@ -30,11 +31,15 @@ export function SessionNotesChat({
   sessionId,
   settingId,
   readOnly = false,
+  draftCampaignId,
 }: {
   sessionId: number;
   settingId?: number | null;
   readOnly?: boolean;
+  /** Есть — у сообщения «→ в черновик» записи этой кампании (только «Итоги»). */
+  draftCampaignId?: number;
 }) {
+  const [toDraft, setToDraft] = useState<{ id: number; text: string } | null>(null);
   const data = useResource<NotesPayload>(sessionPaths.notes(sessionId)).data;
   const calendar = useSettingCalendar(settingId);
   const run = useAction();
@@ -93,6 +98,7 @@ export function SessionNotesChat({
   }
 
   return (
+    <>
     <NotesFeed
       items={items}
       loaded={!!data}
@@ -104,6 +110,22 @@ export function SessionNotesChat({
       }
       onEdit={async (id, text) => (await run(() => write.put(`/sessions/notes/${id}`, { text }), { affects })) !== undefined}
       onDelete={remove}
+      onToDraft={draftCampaignId ? (id, text) => setToDraft({ id, text }) : undefined}
     />
+    {toDraft && draftCampaignId && (
+      // Без адреса: «на ком» выбирают в очереди черновиков, как у быстрой записи.
+      <RecordFormModal
+        campaignId={draftCampaignId}
+        settingId={settingId ?? null}
+        ownerType="campaign"
+        ownerId={draftCampaignId}
+        aspect="unsorted"
+        text={toDraft.text}
+        status="draft"
+        origin={{ source: "feed", source_note_id: toDraft.id }}
+        onClose={() => setToDraft(null)}
+      />
+    )}
+    </>
   );
 }

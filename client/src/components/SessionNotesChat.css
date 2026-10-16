@@ -74,6 +74,12 @@
   padding: var(--sp-1);
   line-height: 0;
 }
+/* «→ в черновик» (слой кампании, задача 07) — словами, не значком. */
+.session-chat__actions .session-chat__to-draft {
+  line-height: normal;
+  font-size: var(--fs-meta);
+  white-space: nowrap;
+}
 
 .session-chat__edit-actions {
   gap: var(--sp-2);

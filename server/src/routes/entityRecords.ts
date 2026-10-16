@@ -10,6 +10,7 @@ import { Router, type Request, type Response } from "express";
 import { db } from "../db/db";
 import { requireKind } from "../db/entityKinds";
 import { entityNames, refKey } from "../services/entityNames";
+import { idOfUid, scanMentions } from "../services/mentions";
 import {
   CERTAINTY,
   KNOWN_TO,
@@ -158,7 +159,14 @@ function engage(campaignId: number, ownerType: string, ownerId: number): void {
   ).run(campaignId, ownerType, ownerId);
 }
 
-function insertRecord(campaignId: number, ownerType: string, ownerId: number, f: Fields, replacesId: number | null): number {
+/** Откуда запись: ручная, быстрая, из ленты (с сообщением). */
+interface Origin {
+  source: "manual" | "quick" | "feed";
+  source_note_id: number | null;
+}
+const MANUAL: Origin = { source: "manual", source_note_id: null };
+
+function insertRecord(campaignId: number, ownerType: string, ownerId: number, f: Fields, replacesId: number | null, origin: Origin = MANUAL): number {
   const aspect = f.aspect ?? "note";
   if (!isAspectOf(ownerType, aspect)) throw new BadRequest(`Нет такой графы у этого вида: ${aspect}`);
   if (!f.text) throw new BadRequest("Пустая запись");
@@ -167,8 +175,9 @@ function insertRecord(campaignId: number, ownerType: string, ownerId: number, f:
       db
         .prepare(
           `INSERT INTO entity_records
-             (campaign_id, owner_type, owner_id, aspect, text, status, certainty, known_to, known_note, basis, session_id, replaces_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+             (campaign_id, owner_type, owner_id, aspect, text, status, certainty, known_to, known_note, basis, session_id, replaces_id,
+              source, source_note_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
           campaignId,
@@ -182,7 +191,9 @@ function insertRecord(campaignId: number, ownerType: string, ownerId: number, f:
           f.known_note ?? "",
           f.basis ?? "",
           f.session_id ?? null,
-          replacesId
+          replacesId,
+          origin.source,
+          origin.source_note_id
         ).lastInsertRowid
     );
     engage(campaignId, ownerType, ownerId);
@@ -315,13 +326,68 @@ entityRecordsRouter.get("/campaigns/:id/records", handle((req, res) => {
   res.json({ records: withOwnerNames(rows) });
 }));
 
+/**
+ * Откуда запись, если это не ручной ввод. С клиента приходит только «из
+ * ленты» — с сообщением ленты этой кампании; «быстрая» — свой маршрут ниже.
+ */
+function readOrigin(body: Record<string, unknown>, campaignId: number): Origin {
+  if (body.source === undefined || body.source === "manual") return MANUAL;
+  if (body.source !== "feed") throw new BadRequest("Неизвестное значение: источник");
+  const noteId = positiveId(body.source_note_id);
+  const ok =
+    noteId &&
+    db.prepare("SELECT 1 FROM session_notes n JOIN sessions s ON s.id = n.session_id WHERE n.id = ? AND s.campaign_id = ?").get(noteId, campaignId);
+  if (!ok) throw new BadRequest("Сообщение ленты не из этой кампании");
+  return { source: "feed", source_note_id: noteId };
+}
+
 entityRecordsRouter.post("/campaigns/:id/records", handle((req, res) => {
   const campaign = campaignById(req.params.id);
   if (!campaign) return res.status(404).json({ error: "Кампания не найдена" });
   const body = (req.body ?? {}) as Record<string, unknown>;
   const { ownerType, ownerId } = checkOwner(campaign, body.owner_type, body.owner_id);
-  const id = insertRecord(campaign.id, ownerType, ownerId, readFields(body, campaign.id), null);
+  const id = insertRecord(campaign.id, ownerType, ownerId, readFields(body, campaign.id), null, readOrigin(body, campaign.id));
   res.status(201).json(recordById(id));
+}));
+
+/**
+ * Владелец строки быстрой записи — её первое упоминание, если это сущность
+ * сеттинга кампании или её персонаж. Иначе — черновик без адреса.
+ */
+function quickOwner(campaign: Campaign, line: string): { ownerType: string; ownerId: number; aspect: string } {
+  const first = scanMentions(line)[0];
+  const id = !first ? null : first.kind === "ref" ? idOfUid(first.type, first.uid) : first.id;
+  if (first && id && (SETTING_OWNER_TYPES.has(first.type) || first.type === "character")) {
+    try {
+      return { ...checkOwner(campaign, first.type, id), aspect: "note" };
+    } catch (e) {
+      if (!(e instanceof BadRequest)) throw e;
+    }
+  }
+  return { ownerType: "campaign", ownerId: campaign.id, aspect: "unsorted" };
+}
+
+// Быстрая запись во «Итогах»: строка — черновик. Пустые строки пропускаются.
+entityRecordsRouter.post("/campaigns/:id/records/quick", handle((req, res) => {
+  const campaign = campaignById(req.params.id);
+  if (!campaign) return res.status(404).json({ error: "Кампания не найдена" });
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const { session_id } = readFields({ session_id: body.session_id ?? null }, campaign.id);
+  const lines = plainText(body.text, "Быстрая запись")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (!lines.length) throw new BadRequest("Пустая запись");
+  const ids = db.transaction(() =>
+    lines.map((text) => {
+      const owner = quickOwner(campaign, text);
+      return insertRecord(campaign.id, owner.ownerType, owner.ownerId, { text, aspect: owner.aspect, status: "draft", session_id }, null, {
+        source: "quick",
+        source_note_id: null,
+      });
+    })
+  )();
+  res.status(201).json({ records: ids.map((id) => recordById(id)) });
 }));
 
 // Правка полей. Сменить, о ком запись, можно только у черновика — так

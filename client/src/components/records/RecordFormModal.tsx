@@ -51,8 +51,18 @@ type Props = {
   settingId: number | null;
   onClose: () => void;
 } & (
-  | { record?: undefined; replace?: undefined; ownerType: RecordOwnerType; ownerId: number; aspect?: string }
-  | { record: EntityRecord; replace?: boolean; ownerType?: undefined; ownerId?: undefined; aspect?: undefined }
+  | {
+      record?: undefined;
+      replace?: undefined;
+      ownerType: RecordOwnerType;
+      ownerId: number;
+      aspect?: string;
+      /** «→ в черновик» из ленты: текст сообщения, статус черновика и откуда он. */
+      text?: string;
+      status?: RecordStatus;
+      origin?: { source: "feed"; source_note_id: number };
+    }
+  | { record: EntityRecord; replace?: boolean; ownerType?: undefined; ownerId?: undefined; aspect?: undefined; text?: undefined; status?: undefined; origin?: undefined }
 );
 
 export function RecordFormModal(props: Props) {
@@ -64,8 +74,8 @@ export function RecordFormModal(props: Props) {
   const run = useAction();
 
   const [aspect, setAspect] = useState(record?.aspect ?? props.aspect ?? "note");
-  const [text, setText] = useState(record?.text ?? "");
-  const [status, setStatus] = useState<RecordStatus>(record && !replace ? record.status : "established");
+  const [text, setText] = useState(record?.text ?? props.text ?? "");
+  const [status, setStatus] = useState<RecordStatus>(record && !replace ? record.status : (props.status ?? "established"));
   const [certainty, setCertainty] = useState<RecordCertainty>(record?.certainty ?? "known");
   const [knownTo, setKnownTo] = useState<RecordKnownTo>(record?.known_to ?? "gm");
   const [knownNote, setKnownNote] = useState(record?.known_note ?? "");
@@ -101,7 +111,7 @@ export function RecordFormModal(props: Props) {
           ? replace
             ? write.post(`/records/${record.id}/replace`, body)
             : write.put(`/records/${record.id}`, body)
-          : write.post(campaignPaths.records(campaignId), { ...body, owner_type: ownerType, owner_id: ownerId })
+          : write.post(campaignPaths.records(campaignId), { ...body, ...props.origin, owner_type: ownerType, owner_id: ownerId })
       ),
       { affects: recordAffects(campaignId, ownerType, ownerId), retry: false }
     );

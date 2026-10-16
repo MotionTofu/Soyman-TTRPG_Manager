@@ -10,6 +10,7 @@ import { db } from "../db/db";
 import { entityRecordsRouter } from "./entityRecords";
 import { collectOrphans, sweepOrphans } from "../services/orphans";
 import { campaignsOfEntity } from "../services/entityRecords";
+import { formatRef, uidOf } from "../services/mentions";
 
 let app: express.Express;
 let campaignId = 0;
@@ -272,5 +273,43 @@ describe("«Мир кампании»", () => {
       expect.objectContaining({ id: campaignId, name: "Мёртвый канал", records: expect.any(Number), last_session: expect.objectContaining({ id: sessionId }) }),
     ]);
     expect(campaignsOfEntity("being", stranger)).toEqual([]);
+  });
+});
+
+describe("быстрая запись и «из ленты» (задача 07)", () => {
+  const quick = (text: string, session: number | null = sessionId) =>
+    request(app).post(`/api/campaigns/${campaignId}/records/quick`).send({ session_id: session, text });
+  const ref = (type: string, id: number, label: string) => formatRef(type, uidOf(type, id)!, "", label);
+
+  it("строка — черновик; первое упоминание сущности сеттинга кампании — владелец, без упоминания — без адреса", async () => {
+    const res = await quick(`${ref("community", choir, "Хор")} помогает\n\n   \nостановились в техкоридоре\n${ref("character", characterId, "Ренна")} ранена`);
+    expect(res.status).toBe(201);
+    const rows = res.body.records as { owner_type: string; owner_id: number; aspect: string; status: string; source: string; session_id: number }[];
+    expect(rows).toHaveLength(3);
+    expect(rows.every((r) => r.status === "draft" && r.source === "quick" && r.session_id === sessionId)).toBe(true);
+    expect(rows[0]).toMatchObject({ owner_type: "community", owner_id: choir, aspect: "note" });
+    expect(rows[1]).toMatchObject({ owner_type: "campaign", owner_id: campaignId, aspect: "unsorted" });
+    expect(rows[2]).toMatchObject({ owner_type: "character", owner_id: characterId });
+  });
+
+  it("упоминание чужого сеттинга или чужого персонажа — черновик без адреса", async () => {
+    const res = await quick(`${ref("being", stranger, "Чужак")} видел нас\n${ref("character", otherCharacterId, "Чужая")} тут`);
+    expect(res.status).toBe(201);
+    for (const r of res.body.records) expect(r).toMatchObject({ owner_type: "campaign", aspect: "unsorted" });
+  });
+
+  it("пустой текст и встреча чужой кампании — 400", async () => {
+    expect((await quick("  \n \n")).status).toBe(400);
+    expect((await quick("строка", otherSessionId)).status).toBe(400);
+  });
+
+  it("«из ленты» — с сообщением ленты этой кампании", async () => {
+    const noteId = Number(db.prepare("INSERT INTO session_notes (session_id, text) VALUES (?, 'Хор помогает')").run(sessionId).lastInsertRowid);
+    const otherNote = Number(db.prepare("INSERT INTO session_notes (session_id, text) VALUES (?, 'чужое')").run(otherSessionId).lastInsertRowid);
+    const ok = await create({ owner_type: "community", owner_id: choir, text: "Хор помогает", status: "draft", source: "feed", source_note_id: noteId });
+    expect(ok.status).toBe(201);
+    expect(ok.body).toMatchObject({ source: "feed", source_note_id: noteId });
+    expect((await create({ owner_type: "community", owner_id: choir, text: "x", source: "feed", source_note_id: otherNote })).status).toBe(400);
+    expect((await create({ owner_type: "community", owner_id: choir, text: "x", source: "quick" })).status).toBe(400);
   });
 });
