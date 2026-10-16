@@ -959,7 +959,8 @@ playerRouter.put("/characters/:id/chapters/:chapterId", (req: AuthedRequest, res
   const character = requireOwnCharacter(req.user!.playerId!, req.params.id);
   if (!character) return res.status(404).json({ error: "not found" });
   const chapter = db
-    .prepare("SELECT id FROM character_chapters WHERE id = ? AND character_id = ?")
+    // Зацепки Мастера игроку не видны и не правятся — как в остальных ручках глав.
+    .prepare(`SELECT id FROM character_chapters WHERE id = ? AND character_id = ? AND ${PLAYER_CHAPTER_FILTER}`)
     .get(req.params.chapterId, character.id);
   if (!chapter) return res.status(404).json({ error: "not found" });
   const { title, content } = req.body as { title?: string; content?: string };

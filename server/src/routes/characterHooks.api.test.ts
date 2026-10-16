@@ -8,11 +8,14 @@ import request from "supertest";
 import { db } from "../db/db";
 import { apiRoleGate } from "../services/playerAccess";
 import { charactersRouter } from "./characters";
+import { playerRouter } from "./player";
+import { attachUser, signToken } from "../services/auth";
 
 let app: express.Express;
 let characterId = 0;
 let hookId = 0;
 let playerId = 0;
+let playerToken = "";
 
 beforeAll(() => {
   playerId = Number(db.prepare("INSERT INTO players (name) VALUES ('Аня')").run().lastInsertRowid);
@@ -32,6 +35,12 @@ beforeAll(() => {
   });
   app.use("/api", apiRoleGate as unknown as express.RequestHandler);
   app.use("/api/characters", charactersRouter);
+
+  const userId = Number(
+    db.prepare("INSERT INTO users (username, password_hash, role, player_id) VALUES ('hooks-player', 'test-only', 'player', ?)").run(playerId).lastInsertRowid
+  );
+  playerToken = signToken({ id: userId, username: "hooks-player", role: "player", playerId, isAdmin: false, tokenVersion: 0 });
+  app.use("/player", attachUser as unknown as express.RequestHandler, playerRouter);
 });
 
 const player = { "x-test-role": "player" };
@@ -62,5 +71,13 @@ describe("зацепки персонажа", () => {
       .set(player)
       .send({ section: "backstory", title: "Шрам" });
     expect(own.status).toBe(201);
+  });
+
+  it("правка главы через кабинет игрока не открывает и не меняет зацепку", async () => {
+    const res = await request(app).put(`/player/characters/${characterId}/chapters/${hookId}`).auth(playerToken, { type: "bearer" }).send({});
+    expect(res.status).toBe(404);
+    expect(JSON.stringify(res.body)).not.toContain("Ксанатара");
+    await request(app).put(`/player/characters/${characterId}/chapters/${hookId}`).auth(playerToken, { type: "bearer" }).send({ content: "стёрто" });
+    expect(db.prepare("SELECT content FROM character_chapters WHERE id = ?").get(hookId)).toEqual({ content: "" });
   });
 });
