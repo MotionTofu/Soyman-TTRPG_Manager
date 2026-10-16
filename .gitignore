@@ -109,3 +109,10 @@ Archive/
 
 # SRD 5.2.1 — источник сверки name_original (Р30), в репозиторий не кладём
 DevArchives/SRD_CC_v5.2.1.*
+
+# Черновики курса и аудиты — личные материалы владельца, в публичный репозиторий не идут (2026-10-17).
+/done/
+/campaign-course/
+/NRI_Audit_*/
+/LC_Audit/
+/MUSE_Audit/
