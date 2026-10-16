@@ -116,7 +116,7 @@ export function addSymbol(document: MapDocumentV6, layerId: string, id: string, 
   const base = document.assetPacks.some((pack) => pack.id === required.id) ? document
     : { ...document, assetPacks: [...document.assetPacks, required] };
   // Картинка вписывается в квадрат со стороной size с сохранением пропорций — сторона = длинный размер в клетках.
-  const size = objectPlacementSize(assetId) * cellWidth(document.grid.type);
+  const size = objectPlacementSize(assetId) * cellWidth(document.grid?.type ?? "square");
   return editGeometry(base, (view) => addMapObject(view, layerId, { id, visual: { type: "asset", assetId },
     transform: { position, rotation: 0, scale: { x: size, y: size } } }));
 }

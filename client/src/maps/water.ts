@@ -21,7 +21,7 @@ export interface MapWater { mode: 0 | 1 | 2 | 3; speed: number; size: number; sh
 const K = 4;
 /** Левый верхний угол карты. Маски воды строятся от него: у гексов карта начинается с −1. Шейдер работает в сдвинутых
  * координатах — сдвиг уходит в начало отсчёта экрана, сам шейдер о нём не знает. */
-const ZERO = { x: 0, y: 0 } as const;
+const ZERO: { readonly x: number; readonly y: number } = { x: 0, y: 0 };
 
 /** Туман у игрока: закрытые клетки пришли с сервера пустыми — это не берег. Без тумана или у Мастера — `null`. */
 export type WaterFog = { grid: MapGrid; width: number; height: number; revealed: ReadonlySet<string> } | null;

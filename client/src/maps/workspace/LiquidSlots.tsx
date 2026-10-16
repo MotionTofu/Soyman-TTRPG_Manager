@@ -16,7 +16,7 @@ function Range({ name, value, min, max, step, onChange, onSettle }: { name: stri
 }
 type Recipe = Omit<MapLiquidRecipe, "key" | "name" | "ref">;
 /** Ручки рецепта жидкости — и в слоте карты, и на экране набора. `live` — ползунок ещё тянут, шаг закроет `onSettle`. */
-export function LiquidRecipeFields({ recipe, edit, onSettle }: { recipe: Recipe; edit: (patch: Partial<Recipe>, live?: boolean) => void; onSettle: () => void }) {
+export function LiquidRecipeFields({ recipe, edit, onSettle }: { recipe: Omit<Recipe, "tones"> & { tones: readonly [string, string, string] }; edit: (patch: Partial<Recipe>, live?: boolean) => void; onSettle: () => void }) {
   return <>
     <fieldset><legend>Цвета</legend>{(["Глубина", "Середина", "Блик"] as const).map((name, i) => <label key={name}>{name}
       <input type="color" aria-label={`Цвет: ${name}`} value={recipe.tones[i]} onChange={event => edit({ tones: recipe.tones.map((tone, n) => n === i ? event.target.value : tone) as [string, string, string] }, true)} onBlur={onSettle} /></label>)}</fieldset>
