@@ -743,7 +743,7 @@ export function CampaignDetailPage() {
             </span>
           )
         )}
-        {campaign.role !== "player" && <CampaignNow oneshot={campaign.type === "oneshot"} sessions={sessions} onSchedule={() => setCreatingDate(toLocalDateKey(new Date()))} />}
+        {campaign.role !== "player" && <CampaignNow campaignId={campaign.id} oneshot={campaign.type === "oneshot"} sessions={sessions} onSchedule={() => setCreatingDate(toLocalDateKey(new Date()))} />}
         </>
       }
       // Бумага (спека campaign-paper, доски 41–42): под именем — метки типа
