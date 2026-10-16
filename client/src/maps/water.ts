@@ -519,11 +519,13 @@ vec4 shoreAt(vec2 world) {
 }
 // Атласная штриховка (М5): пять тонких линий вдоль кромки, к открытому морю реже. Размытая маска растёт от берега вглубь,
 // поэтому её уровни идут параллельно берегу: при размытии 0,4 клетки эти уровни лежат в 0,15–0,95 клетки от кромки.
-// Толщина — в точках экрана, линии рвутся шумом, как от руки.
-const float HATCH[5] = float[5](0.646, 0.773, 0.894, 0.964, 0.991);
+// Толщина — в точках экрана, линии рвутся шумом, как от руки. Без массивов и fwidth: Pixi на WebGL1 собирает шейдер
+// по GLSL ES 1.0, где их нет, — шаг маски на точку экрана считается по соседней точке.
+float hatchLine(float r, float level, float k) { return 1.0 - smoothstep(0.6, 1.4, abs(r - level) / k); }
 float hatchAt(vec2 w) {
-  float r = shoreMask(w).r, k = max(fwidth(r), 1e-4), line = 0.0;
-  for (int i = 0; i < 5; i++) line = max(line, 1.0 - smoothstep(0.6, 1.4, abs(r - HATCH[i]) / k));
+  float px = 1.0 / uScale, r = shoreMask(w).r;
+  float k = max(abs(shoreMask(w + vec2(px, 0.0)).r - r) + abs(shoreMask(w + vec2(0.0, px)).r - r), 1e-4);
+  float line = max(max(max(hatchLine(r, 0.646, k), hatchLine(r, 0.773, k)), max(hatchLine(r, 0.894, k), hatchLine(r, 0.964, k))), hatchLine(r, 0.991, k));
   return line * step(0.3, noise(w * 2.3));
 }
 vec4 atlasRim(vec4 c, vec2 w, float kind) {
