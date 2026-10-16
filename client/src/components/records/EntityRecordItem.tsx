@@ -3,7 +3,8 @@ import { Link } from "react-router-dom";
 import { useResource } from "../../data/hooks";
 import { campaignPaths } from "../../data/campaigns";
 import { sessionLabel } from "../../sessionLabel";
-import { CERTAINTY_LABELS, STATUS_LABELS, knownToLabel, type EntityRecord, type RecordChain } from "../../entityRecords";
+import { CERTAINTY_LABELS, STATUS_LABELS, knownToLabel, ownerLabel, ownerPath, type EntityRecord, type RecordChain } from "../../entityRecords";
+import { mentionTone } from "../../mentions";
 import { MentionText } from "../mentions/MentionText";
 import { RecordFormModal } from "./RecordFormModal";
 import type { SessionSummary } from "../../types";
@@ -29,13 +30,33 @@ function RecordMeta({ record, sessions }: { record: EntityRecord; sessions: Sess
   );
 }
 
+/** «на ком: Мия Тарн» — ссылкой на профиль в контексте кампании. */
+export function RecordOwner({ record }: { record: EntityRecord }) {
+  const path = ownerPath(record);
+  return (
+    <span>
+      на ком:{" "}
+      {path ? (
+        <Link className={`mention-link mention--${mentionTone(record.owner_type, record.owner_id)}`} to={path}>
+          {ownerLabel(record)}
+        </Link>
+      ) : (
+        ownerLabel(record)
+      )}
+    </span>
+  );
+}
+
 export function EntityRecordItem({
   chain,
   settingId,
   was,
+  showOwner,
 }: {
   chain: RecordChain;
   settingId: number | null;
+  /** «на ком» — в списках, где записи разных владельцев (разбор встречи). */
+  showOwner?: boolean;
   /** «Было → стало»: прежняя версия зачёркнутой строкой над текстом (профиль в кампании). */
   was?: boolean;
 }) {
@@ -57,6 +78,7 @@ export function EntityRecordItem({
       </div>
       <div className="entity-record__meta">
         <RecordMeta record={record} sessions={sessions} />
+        {showOwner && <RecordOwner record={record} />}
         <span className="entity-record__acts">
           <button type="button" onClick={() => setForm("edit")}>
             Править

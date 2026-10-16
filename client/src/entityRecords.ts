@@ -140,3 +140,36 @@ export function recordSummary(e: { records: number; rumors: number; drafts: numb
   if (e.drafts) parts.push(`${e.drafts} ${plural(e.drafts, "черновик", "черновика", "черновиков")}`);
   return parts.join(" · ") || "записей нет";
 }
+
+/** Откуда черновик — подпись в очереди разбора. Ручная запись подписи не несёт. */
+export const SOURCE_LABELS: Record<EntityRecord["source"], string> = {
+  manual: "",
+  quick: "быстрая запись",
+  feed: "из ленты",
+  player: "от игрока",
+};
+
+/** Черновик без адреса: адрес выбирают при подтверждении (графа кампании `unsorted`). */
+export function isUnaddressed(r: Pick<EntityRecord, "owner_type" | "aspect">): boolean {
+  return r.owner_type === "campaign" && r.aspect === "unsorted";
+}
+
+const OWNER_PATHS: Partial<Record<RecordOwnerType, string>> = {
+  being: "/beings",
+  community: "/communities",
+  location: "/locations",
+  character: "/characters",
+};
+
+/** Профиль владельца; сущность сеттинга — сразу в контексте кампании. */
+export function ownerPath(r: Pick<EntityRecord, "owner_type" | "owner_id" | "campaign_id">): string | null {
+  const base = OWNER_PATHS[r.owner_type];
+  if (!base) return null;
+  return r.owner_type === "character" ? `${base}/${r.owner_id}` : `${base}/${r.owner_id}?campaign=${r.campaign_id}`;
+}
+
+/** «Мия Тарн», «кампания · ресурсы группы». */
+export function ownerLabel(r: Pick<EntityRecord, "owner_type" | "owner_name" | "aspect">): string {
+  if (r.owner_type === "campaign") return `кампания · ${aspectLabel("campaign", r.aspect).toLowerCase()}`;
+  return r.owner_name ?? "—";
+}
