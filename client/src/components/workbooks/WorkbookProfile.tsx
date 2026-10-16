@@ -15,11 +15,15 @@ import { WorkbookContext } from "./model";
 import type { WorkbookField } from "@shared/workbooks";
 import "../../pages/setting-profile.css";
 
+const CAMPAIGN_VIEWS=new Set(["heroes","group_grounds","places","sides","knowledge","world_moment","session_review"]);
+
 /** The notebook opens the existing model editors; it never copies profile data into answers. */
 export function WorkbookProfile({field}:{field:WorkbookField}) {
   const context=useContext(WorkbookContext),doc=context?.document;
   const categories=useMemo(()=>[field.entity!],[field.entity]);
   if(!doc?.project_type||!doc.project_id)return <p className="muted">Свяжите тетрадь с проектом, чтобы открыть {field.label.toLowerCase()}.</p>;
+  // Виды листов тетради кампании v4: заглушка, пока задачи 04–07 не сделают каждый вид.
+  if(CAMPAIGN_VIEWS.has(field.entity!))return <section className="wb-profile"><h3>{field.label}</h3><p className="muted">Этот раздел покажет данные кампании.</p></section>;
   if(field.entity==="passport")return <ProjectPassport type={doc.project_type} id={doc.project_id}/>;
   if(field.entity==="information")return <Information type={doc.project_type} id={doc.project_id}/>;
   if(field.entity==="participants")return doc.project_type==="adventure"?<Participants id={doc.project_id}/>:<p className="muted">Участия сил открываются из профиля приключения.</p>;

@@ -32,7 +32,7 @@ describe("номер и часть листа",()=>{
   expect(bad({part:"ч".repeat(81)})).toThrow("Некорректный лист");
   expect(bad({part:" "})).toThrow("Некорректный лист");
  });
- it("практические шаблоны номеров и частей пока не задают",()=>{
-  for(const t of PRACTICAL_WORKBOOKS)expect(t.sheets.some(s=>s.number!==undefined||s.part!==undefined)).toBe(false);
+ it("номера и части задаёт только тетрадь кампании",()=>{
+  for(const t of PRACTICAL_WORKBOOKS)expect(t.sheets.some(s=>s.number!==undefined||s.part!==undefined)).toBe(t.key==="campaign-design");
  });
 });

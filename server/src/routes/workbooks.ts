@@ -145,6 +145,7 @@ workbooksRouter.post('/instances/:id/upgrade',(req:AuthedRequest,res)=>{
  if(!p.success)return res.status(400).json({error:'Некорректное сопоставление'});if(p.data.revision!==row.revision)return res.status(409).json({error:'Тетрадь изменилась в другом окне'});
  const old=definition(row.template_id)!,next=definition(p.data.template_id);if(!next||old.key!==next.key)return res.status(400).json({error:'Выберите другую версию этого шаблона'});
  const answers=JSON.parse(row.answers_json) as WorkbookAnswers,mapping=p.data.mapping??suggestWorkbookMapping(old,next,answers);
+ if(new Set(Object.values(mapping)).size!==Object.values(mapping).length)return res.status(400).json({error:'Два ответа сопоставлены с одной графой'});
  const fields=new Map<string,WorkbookField>(next.sheets.flatMap(s=>s.fields.map(f=>[`${s.key}/${f.key}`,f] as const)));
  // Перенос, а не копия: ответ переезжает в новую графу; без пары остаётся на месте «прежней графой» со своей подписью.
  const moved=new Set<string>(),labels={...(answers[FORMER_LABELS]??{})} as Record<string,unknown>;
