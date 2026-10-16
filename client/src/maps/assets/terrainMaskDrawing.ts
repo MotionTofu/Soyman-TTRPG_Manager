@@ -159,7 +159,7 @@ export function drawTerrainMaskTiles(ctx: CanvasRenderingContext2D, mask: Mask,
   const tileSize = 18 * density <= 256 ? 16 : 10 * density <= 256 ? 8 : 4;
   // Обрезка плитки — по целым точкам экрана: на дробной границе обе соседки сглаживают край, и сквозь шов светит бумага.
   // Граница считается одной формулой для обеих соседок, иначе округление разводит их на точку.
-  const k = ctx.getTransform().a || 1, snap = (value: number) => Math.round(value * k) / k;
+  const k = ctx.getTransform?.()?.a || 1, snap = (value: number) => Math.round(value * k) / k;
   const edgeX = (i: number, size: number) => snap(ox + (mask.origin.x + i * size * mask.sampleSize) * scale);
   const edgeY = (i: number, size: number) => snap(oy + (mask.origin.y + i * size * mask.sampleSize) * scale);
   const place = (image: CanvasImageSource, tile: { cx: number; cy: number; size: number }) => {
