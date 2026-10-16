@@ -39,6 +39,8 @@ export const campaignPaths = {
   settingEntities: (campaignId: number) => `/campaign-setting-entities/${campaignId}`,
   /** «Мир кампании»: задействованные сущности сеттинга (ADR-0006). */
   world: (campaignId: number) => `/campaigns/${campaignId}/world`,
+  /** Записи о сущностях в кампании; фильтры — query-строкой (`?owner_type=…`). */
+  records: (campaignId: number) => `/campaigns/${campaignId}/records`,
   playerSections: (campaignId: number) => `/campaign-player-sections?campaign_id=${campaignId}`,
   sectionArticles: (sectionId: number) => `/campaign-player-sections/${sectionId}/articles`,
   systems: () => "/systems",
