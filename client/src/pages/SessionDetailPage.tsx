@@ -4,9 +4,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { PAYMENT_TYPE_LABELS, PAYMENT_TYPE_OPTIONS } from "../paymentTypes";
 import { ObstacleDropZone } from "../components/ObstacleDropZone";
 import { SessionLiveControls } from "../components/SessionLiveControls";
-import { SessionRecordsReview } from "../components/records/SessionRecordsReview";
-import { SessionNotesChat } from "../components/SessionNotesChat";
-import { SessionMentionsButton } from "../components/SessionMentionsButton";
+import { SessionResults } from "../components/SessionResults";
+import { PrepSheetLink } from "../components/workbooks/WorkbookCampaignViews";
 import { EntityPage } from "../components/EntityPage";
 import { NavIcon } from "../components/NavIcons";
 import { SectionDropZone } from "../components/SectionDropZone";
@@ -41,7 +40,7 @@ import type {
 import "../session.css";
 import { sessionLabel } from "../sessionLabel";
 import { SessionOutcomeModal } from "../components/SessionOutcomeModal";
-import { SessionOutcomesCard, SessionPassportCard } from "../components/SessionPaperCards";
+import { SessionPassportCard } from "../components/SessionPaperCards";
 
 // Module-level so SectionDropZone (React.memo'd) sees a stable reference —
 // an inline array literal in the JSX below would be a new object every
@@ -973,6 +972,7 @@ export function SessionDetailPage() {
 
       {tab === "Подготовка" && (
         <div className="stack">
+          {campaignId != null && <PrepSheetLink campaignId={campaignId} />}
           {/* Задумка вечера переехала в паспорт на «Обзоре» (спека
               campaign-paper, Q42); боевая тема — по-прежнему здесь, её
               выбирают на подготовке к конкретному вечеру. */}
@@ -1099,28 +1099,7 @@ export function SessionDetailPage() {
             </div>
           )}
 
-          {/* Лента сессии (гриллинг 2026-09-28): те же сообщения, что Мастер
-              писал в правой панели по ходу игры, — дописать и поправить
-              можно и здесь. Игрокам не показывается. */}
-          {/* Лента слева, «Что изменилось» справа (спека campaign-paper,
-              Q45/Q50): оси заполняют после игры, глядя в ленту. */}
-          <div className="session-results">
-            <div className="card stack sp-notes">
-              <div className="row sp-notes__head">
-                <span className="sp-title">Лента сессии</span>
-                <SessionMentionsButton
-                  planUrl={`/cross-links/plan-all?ownerKind=session&ownerId=${sessionId}`}
-                  applyUrl={`/cross-links/apply-all?ownerKind=session&ownerId=${sessionId}`}
-                />
-              </div>
-              <SessionNotesChat sessionId={sessionId} settingId={campaign.setting_id} draftCampaignId={isPlayer ? undefined : campaign.id} />
-            </div>
-            {!isPlayer && <SessionOutcomesCard session={session} />}
-          </div>
-
-          {/* Разбор встречи (ADR-0006, слой кампании): записи этой встречи и
-              очередь черновиков. Оси «Что изменилось» выше остаются сводкой. */}
-          {!isPlayer && <SessionRecordsReview campaignId={campaign.id} sessionId={sessionId} settingId={campaign.setting_id} />}
+          <SessionResults session={session} campaignId={campaign.id} settingId={campaign.setting_id} isPlayer={isPlayer} />
 
           {held && report && (
             <div className="card sp-revealed">

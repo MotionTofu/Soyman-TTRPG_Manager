@@ -121,6 +121,11 @@ export const CAMPAIGN_PASSPORT_KEYS = [
   "background",
   "tension",
   "stakes",
+  // Лист 1 тетради кампании v4 (спека workbook-rework, Q9).
+  "decisions_change",
+  "open_outcome",
+  "format",
+  "horizon",
 ] as const;
 const CAMPAIGN_PASSPORT_MAX = 20000;
 export const parseCampaignPassport = (raw: unknown): Record<string, string> =>
@@ -140,5 +145,7 @@ export const OUTCOME_KEYS = ["goal", "cost", "relations", "threat", "world", "pc
 export const parseOutcomes = (raw: unknown): Record<string, string> => pick(parseJson(raw), OUTCOME_KEYS);
 export const serializeOutcomes = (raw: unknown): string => JSON.stringify(pick(raw, OUTCOME_KEYS));
 
-// Достоверность тайны (словарь §1): известно · слух · спорно. Пусто — не указана.
-export const CERTAINTY = ["known", "rumor", "disputed"] as const;
+// Достоверность тайны и записи (словарь §1): известно · слух · спорно ·
+// сообщение (от названного источника — он в «основании»; спека
+// workbook-rework, Q6). Пусто — не указана.
+export const CERTAINTY = ["known", "rumor", "disputed", "reported"] as const;

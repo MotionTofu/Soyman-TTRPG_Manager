@@ -640,6 +640,18 @@
 .campaign-world .paper-rows > li {
   align-items: baseline;
 }
+/* Лист тетради кампании: строка раскрывается карточкой под собой. */
+.campaign-world .paper-rows > li.campaign-world__open {
+  flex-wrap: wrap;
+}
+.campaign-world__card {
+  flex-basis: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  padding: var(--sp-4) 0 var(--sp-2);
+}
 /* Запись слоя кампании: текст, под ним метки — только отличия от обычного. */
 .entity-record {
   padding: var(--sp-3) 0;
@@ -704,6 +716,13 @@
 }
 .record-form .seg {
   flex-wrap: wrap;
+}
+.record-form__more > summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.record-form__more[open] > summary {
+  margin-bottom: var(--sp-3);
 }
 /* Профиль в контексте кампании (ADR-0006): переключатель над листом — те же
    чипы, что у фильтров «Населения» и «Мира кампании». */

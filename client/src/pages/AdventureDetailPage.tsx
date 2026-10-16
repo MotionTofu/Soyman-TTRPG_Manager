@@ -40,7 +40,7 @@ const TABS = ["Досье", "Главы и сцены", "Тайны и вехи"
 // `/story`, `/sessions` и `/canvas`; перечитываются из них только открытые.
 const STORY_AFFECTS: Affect[] = [{ path: "/story" }, { path: "/sessions" }, { path: "/canvas" }];
 
-const CERTAINTY_LABEL: Record<string, string> = { known: "известно", rumor: "слух", disputed: "спорно" };
+const CERTAINTY_LABEL: Record<string, string> = { known: "известно", reported: "сообщение", rumor: "слух", disputed: "спорно" };
 
 const SECRET_KINDS = [
   { key: "secret", label: "Тайна" },
@@ -829,6 +829,7 @@ function Secrets({ arc, campaignId }: { arc: StoryArcDetail; campaignId: number 
               >
                 <option value="">достоверность…</option>
                 <option value="known">известно</option>
+                <option value="reported">сообщение</option>
                 <option value="rumor">слух</option>
                 <option value="disputed">спорно</option>
               </select>

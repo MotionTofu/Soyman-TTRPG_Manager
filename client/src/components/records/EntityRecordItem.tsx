@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useResource } from "../../data/hooks";
 import { campaignPaths } from "../../data/campaigns";
@@ -52,6 +52,7 @@ export function EntityRecordItem({
   settingId,
   was,
   showOwner,
+  extra,
 }: {
   chain: RecordChain;
   settingId: number | null;
@@ -59,6 +60,8 @@ export function EntityRecordItem({
   showOwner?: boolean;
   /** «Было → стало»: прежняя версия зачёркнутой строкой над текстом (профиль в кампании). */
   was?: boolean;
+  /** Своя метка листа — например «показано игрокам» в знании кампании. */
+  extra?: ReactNode;
 }) {
   const { record, history } = chain;
   const sessions = useResource<SessionSummary[]>(campaignPaths.sessions(record.campaign_id)).data;
@@ -79,6 +82,7 @@ export function EntityRecordItem({
       <div className="entity-record__meta">
         <RecordMeta record={record} sessions={sessions} />
         {showOwner && <RecordOwner record={record} />}
+        {extra}
         <span className="entity-record__acts">
           <button type="button" onClick={() => setForm("edit")}>
             Править

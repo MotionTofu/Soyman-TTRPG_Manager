@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useAction, useResource, write } from "../../data/hooks";
 import { labelled } from "../../data/notices";
@@ -16,7 +16,7 @@ import type { SessionSummary } from "../../types";
 // сущности сеттинга, задействованные в кампании, — по видам, со сводкой
 // записей. Задействована не значит показана игрокам: это «Выдача».
 
-type WorldType = "being" | "community" | "location";
+export type WorldType = "being" | "community" | "location";
 
 export interface WorldEntity {
   entity_type: WorldType;
@@ -51,20 +51,29 @@ const SETTING_LISTS: Record<WorldType, (settingId: number) => string> = {
 
 type Filter = "rumor" | "draft" | null;
 
+/**
+ * `types` — только эти виды (листы тетради кампании: места · стороны);
+ * `expand` — строка раскрывается карточкой под собой, а не уводит на профиль.
+ */
 export function CampaignWorldTab({
   campaignId,
   settingId,
   sessions,
+  types = WORLD_TYPES,
+  expand,
 }: {
   campaignId: number;
   settingId: number | null;
   sessions: SessionSummary[];
+  types?: readonly WorldType[];
+  expand?: (e: WorldEntity) => ReactNode;
 }) {
   const state = useResource<CampaignWorld>(settingId ? campaignPaths.world(campaignId) : null);
   const [filter, setFilter] = useState<Filter>(null);
   const [picking, setPicking] = useState(false);
+  const [open, setOpen] = useState<string | null>(null);
   const run = useAction();
-  const entities = state.data?.entities;
+  const entities = useMemo(() => state.data?.entities.filter((e) => types.includes(e.entity_type)), [state.data, types]);
   const sessionById = useMemo(() => new Map(sessions.map((s) => [s.id, s])), [sessions]);
 
   if (!settingId)
@@ -124,7 +133,7 @@ export function CampaignWorldTab({
         <p className="muted">Ничего не подходит.</p>
       ) : (
         <div className="paper-groups">
-          {GROUPS.map((g) => {
+          {GROUPS.filter((g) => types.includes(g.type)).map((g) => {
             const list = shown.filter((e) => e.entity_type === g.type);
             if (!list.length) return null;
             return (
@@ -135,8 +144,9 @@ export function CampaignWorldTab({
                 <ul className="paper-rows">
                   {list.map((e) => {
                     const category = e.entity_type === "being" ? BEING_CATEGORY_LABELS[e.category ?? ""] : e.category;
+                    const key = `${e.entity_type}:${e.entity_id}`;
                     return (
-                      <li key={`${e.entity_type}:${e.entity_id}`}>
+                      <li key={key} className={expand && open === key ? "campaign-world__open" : undefined}>
                         <span className="paper-rows__main">
                           <Link
                             className={`mention-link mention--${mentionTone(e.entity_type, e.entity_id)}`}
@@ -150,8 +160,17 @@ export function CampaignWorldTab({
                           </span>
                           <br />
                           <span className="campaign-world__summary">{recordSummary(e)}</span>
+                          {expand && (
+                            <>
+                              {" · "}
+                              <button type="button" className="wb-link" aria-expanded={open === key} onClick={() => setOpen(open === key ? null : key)}>
+                                {open === key ? "Свернуть" : "Записи"}
+                              </button>
+                            </>
+                          )}
                         </span>
                         {lastSession(e)}
+                        {expand && open === key && <div className="campaign-world__card">{expand(e)}</div>}
                       </li>
                     );
                   })}
@@ -165,6 +184,7 @@ export function CampaignWorldTab({
       {picking && (
         <WorldPicker
           settingId={settingId}
+          types={types}
           engaged={entities}
           onPick={(type, id) => void engage(type, id)}
           onClose={() => setPicking(false)}
@@ -177,11 +197,13 @@ export function CampaignWorldTab({
 /** Пикер упоминаний, ограниченный сеттингом кампании и ещё не задействованным. */
 function WorldPicker({
   settingId,
+  types,
   engaged,
   onPick,
   onClose,
 }: {
   settingId: number;
+  types: readonly WorldType[];
   engaged: WorldEntity[];
   onPick: (type: string, id: number) => void;
   onClose: () => void;
@@ -201,7 +223,7 @@ function WorldPicker({
       initialQuery=""
       heading="Задействовать из сеттинга"
       direct
-      onlyTypes={WORLD_TYPES}
+      onlyTypes={[...types]}
       allow={(r) => allowed.has(`${r.type}:${r.id}`)}
       defaultSettingId={settingId}
       lockSetting

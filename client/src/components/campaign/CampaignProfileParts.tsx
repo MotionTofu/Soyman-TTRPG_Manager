@@ -129,7 +129,7 @@ export function CampaignRecords({
       </h3>
       {groups.map(([aspect, list]) => (
         <div key={aspect} className="campaign-records__group">
-          {aspects.length > 1 && <span className="paper-label">{aspectLabel(ownerType, aspect)}</span>}
+          {aspects.length > 1 && (groups.length > 1 || aspect !== "note") && <span className="paper-label">{aspectLabel(ownerType, aspect)}</span>}
           {list.map((c) => (
             <EntityRecordItem key={c.record.id} chain={c} settingId={settingId} was />
           ))}

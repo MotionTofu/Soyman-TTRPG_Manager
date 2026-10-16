@@ -309,7 +309,8 @@ campaignsRouter.post("/", (req, res) => {
       folder
     );
   const author=(req as AuthedRequest).user;
-  if(author?.role==="gm")ensureProjectWorkbook(db,author.id,"campaign",Number(created.lastInsertRowid));
+  // У ваншота тетрадь — его приключения (спека workbook-rework, Q19), тетрадь кампании не заводится.
+  if(author?.role==="gm"&&type!=="oneshot")ensureProjectWorkbook(db,author.id,"campaign",Number(created.lastInsertRowid));
   return created;})();
   res.status(201).json(db.prepare("SELECT * FROM campaigns WHERE id = ?").get(info.lastInsertRowid));
 });

@@ -46,6 +46,7 @@ function rec(over: Partial<EntityRecord>): EntityRecord {
     known_to: "gm",
     known_note: "",
     basis: "",
+    function: "",
     session_id: null,
     replaces_id: null,
     replaced_by: null,

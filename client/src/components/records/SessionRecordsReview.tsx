@@ -31,33 +31,36 @@ const CAMPAIGN_ASPECTS = RECORD_ASPECTS.campaign.filter((a) => a.key !== "unsort
 type Owner = { owner_type: RecordOwnerType; owner_id: number; aspect: string };
 
 /** «→ на ком»: кампания по графам, «Мир кампании», персонажи, другая сущность сеттинга. */
-function OwnerSelect({
-  record,
+export function OwnerSelect({
+  campaignId,
+  placeholder,
   settingId,
   onPick,
 }: {
-  record: EntityRecord;
+  campaignId: number;
+  /** Первая строка списка: «без адреса — выбрать…», «сменить…», «о ком…». */
+  placeholder: string;
   settingId: number | null;
   onPick: (owner: Owner) => void;
 }) {
-  const world = useResource<CampaignWorld>(settingId ? campaignPaths.world(record.campaign_id) : null).data?.entities;
-  const characters = useResource<Character[]>(campaignPaths.characters(record.campaign_id)).data ?? NO_CHARACTERS;
+  const world = useResource<CampaignWorld>(settingId ? campaignPaths.world(campaignId) : null).data?.entities;
+  const characters = useResource<Character[]>(campaignPaths.characters(campaignId)).data ?? NO_CHARACTERS;
   const [picking, setPicking] = useState(false);
 
   function choose(value: string) {
     if (value === "other") return setPicking(true);
     const [type, id, aspect] = value.split(":");
-    if (type === "campaign") onPick({ owner_type: "campaign", owner_id: record.campaign_id, aspect });
+    if (type === "campaign") onPick({ owner_type: "campaign", owner_id: campaignId, aspect });
     else onPick({ owner_type: type as RecordOwnerType, owner_id: Number(id), aspect: "note" });
   }
 
   return (
     <>
       <select aria-label="На ком" value="" onChange={(e) => e.target.value && choose(e.target.value)}>
-        <option value="">{isUnaddressed(record) ? "без адреса — выбрать…" : "сменить…"}</option>
+        <option value="">{placeholder}</option>
         <optgroup label="Кампания">
           {CAMPAIGN_ASPECTS.map((a) => (
-            <option key={a.key} value={`campaign:${record.campaign_id}:${a.key}`}>
+            <option key={a.key} value={`campaign:${campaignId}:${a.key}`}>
               кампания · {a.label.toLowerCase()}
             </option>
           ))}
@@ -124,7 +127,7 @@ function DraftRow({ record, settingId }: { record: EntityRecord; settingId: numb
         {record.basis && <span>· {record.basis}</span>}
         <span className="session-review__owner">
           → {unaddressed ? "на ком: не выбрано" : <RecordOwner record={record} />}{" "}
-          <OwnerSelect record={record} settingId={settingId} onPick={(o) => void update(o, "На ком запись", o)} />
+          <OwnerSelect campaignId={record.campaign_id} placeholder={unaddressed ? "без адреса — выбрать…" : "сменить…"} settingId={settingId} onPick={(o) => void update(o, "На ком запись", o)} />
         </span>
       </div>
       <div className="session-review__acts">
@@ -186,6 +189,7 @@ function QuickRecord({ campaignId, sessionId, settingId }: { campaignId: number;
         </button>
         <span className="muted">каждая строка уйдёт в черновики</span>
       </div>
+      <p className="muted">Если сил почти нет: где остановились · что потратили или получили · какое условие обещали выполнить · где в заметке вопрос.</p>
     </section>
   );
 }

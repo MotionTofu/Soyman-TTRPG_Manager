@@ -63,6 +63,7 @@ import { useConfirm, useAlert } from "../hooks/useConfirm";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import type {
   CampaignCalendarEvent,
+  StoryArc,
   CampaignAdventureTree,
   CampaignDetail,
   CampaignEntry,
@@ -856,20 +857,10 @@ export function CampaignDetailPage() {
       {tab === "Тетрадь" && (
         // Свободные записи кампании — в листах тетради (Q31), как у сеттинга.
         <section className="paper-groups" aria-label="Тетрадь кампании">
+          {campaign.type === "oneshot" ? <OneshotWorkbook campaignId={campaignId} campaignBooks={workbooks}/> : <>
           {!workbooks.length&&<ProjectWorkbooks type="campaign" id={campaignId} inline/>}
-          {workbooks.length === 1 ? <EmbeddedWorkbook id={workbooks[0].id}/> : <ul className="paper-rows">
-            {workbooks.map((w) => (
-              <li key={w.id}>
-                <Link className="paper-rows__main" to={`/workbooks/${w.id}`}>
-                  {w.title} →
-                </Link>
-                <span className="paper-rows__sub">
-                  {w.template_title}
-                  {w.progress ? ` · заполнено ${w.progress.filled} из ${w.progress.total}` : ""}
-                </span>
-              </li>
-            ))}
-          </ul>}
+          {workbooks.length === 1 ? <EmbeddedWorkbook id={workbooks[0].id}/> : <WorkbookRows books={workbooks}/>}
+          </>}
         </section>
       )}
 
@@ -2413,3 +2404,56 @@ const eventPath = (id: number) =>
   isSettingEvent(id) ? `/settings/calendar-events/${id - SETTING_EVENT_UID}` : `/campaigns/calendar-events/${id}`;
 const NO_WORKBOOKS: InstanceSummary[] = [];
 const NO_CHARACTERS: Character[] = [];
+
+/** Список тетрадей строками: название и заполненность. */
+function WorkbookRows({ books }: { books: InstanceSummary[] }) {
+  return (
+    <ul className="paper-rows">
+      {books.map((w) => (
+        <li key={w.id}>
+          <Link className="paper-rows__main" to={`/workbooks/${w.id}`}>
+            {w.title} →
+          </Link>
+          <span className="paper-rows__sub">
+            {w.template_title}
+            {w.progress ? ` · заполнено ${w.progress.filled} из ${w.progress.total}` : ""}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * «Тетрадь» ваншота (спека workbook-rework, Q19) — тетрадь его приключения:
+ * первое не служебное приключение кампании. Заведённая раньше тетрадь
+ * кампании остаётся строкой ниже и открывается.
+ */
+function OneshotWorkbook({ campaignId, campaignBooks }: { campaignId: number; campaignBooks: InstanceSummary[] }) {
+  // «Сцены вне приключения» — служебная корзина, не приключение ваншота.
+  const arcs = useResource<StoryArc[]>(campaignPaths.adventures(campaignId)).data;
+  const arc = arcs?.find((a) => !a.is_default);
+  const books = useResource<InstanceSummary[]>(arc ? `/workbooks/instances?project_type=adventure&project_id=${arc.id}` : null).data;
+  if (!arcs) return <p className="muted">Открываем приключение…</p>;
+  return (
+    <>
+      {!arc ? (
+        <EmptyState title="У ваншота пока нет приключения" hint="Тетрадь ваншота — тетрадь его приключения. Добавьте приключение на вкладке «Сюжет»." />
+      ) : !books ? (
+        <p className="muted">Открываем тетрадь…</p>
+      ) : books.length === 0 ? (
+        <ProjectWorkbooks type="adventure" id={arc.id} inline />
+      ) : books.length === 1 ? (
+        <EmbeddedWorkbook id={books[0].id} />
+      ) : (
+        <WorkbookRows books={books} />
+      )}
+      {campaignBooks.length > 0 && (
+        <section>
+          <h3 className="paper-group__head">Тетрадь кампании</h3>
+          <WorkbookRows books={campaignBooks} />
+        </section>
+      )}
+    </>
+  );
+}

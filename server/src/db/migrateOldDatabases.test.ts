@@ -122,6 +122,26 @@ describe("точечные шаги для старых баз", () => {
     db.close();
   }, 60_000);
 
+  it("функция записи (тетрадь кампании v4) добавляется к старым записям, не меняя их", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "soyman-old-records-"));
+    const initial = openDatabase(dir);
+    // База слоя кампании до колонки function.
+    initial.exec("ALTER TABLE entity_records DROP COLUMN function");
+    const campaignId = Number(initial.prepare("INSERT INTO campaigns (name) VALUES ('Мёртвый канал')").run().lastInsertRowid);
+    const add = initial.prepare("INSERT INTO entity_records (campaign_id, owner_type, owner_id, aspect, text, status, certainty, basis) VALUES (?, 'campaign', ?, ?, ?, ?, ?, ?)");
+    add.run(campaignId, campaignId, "note", "Канал закрыт", "established", "rumor", "Орис");
+    add.run(campaignId, campaignId, "unsorted", "Черновик", "draft", "known", "");
+    const rows = (db: Database.Database) => db.prepare("SELECT id, campaign_id, owner_type, owner_id, aspect, text, status, certainty, known_to, basis, created_at, updated_at FROM entity_records ORDER BY id").all();
+    const before = rows(initial);
+    initial.close();
+
+    const migrated = openDatabase(dir);
+    expect(rows(migrated)).toEqual(before);
+    expect(migrated.prepare("SELECT DISTINCT function FROM entity_records").all()).toEqual([{ function: "" }]);
+    expect(() => migrated.prepare("UPDATE entity_records SET function = 'now'").run()).toThrow();
+    migrated.close();
+  }, 60_000);
+
   it("старые привязки карт сохраняются, а сцены становятся допустимой целью", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "soyman-old-map-bindings-"));
     const initial = openDatabase(dir);

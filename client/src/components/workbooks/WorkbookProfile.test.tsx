@@ -11,6 +11,7 @@ vi.mock('../../mentions',()=>({syncMentionLinks:mocks.sync}));
 vi.mock('../PaperFieldsCard',()=>({PaperFieldsCard:({values,onSave}:{values:Record<string,string>;onSave:(value:Record<string,string>)=>Promise<void>})=><div>{values.promise}<button onClick={()=>void onSave({...values,promise:'Новое обещание'}).catch(()=>{})}>Править паспорт</button></div>}));
 vi.mock('../campaign/CampaignPassport',()=>({CampaignPassport:()=>null}));
 vi.mock('../adventure/AdventureDossier',()=>({AdventureHead:()=>null,AdventureParticipants:()=>null,PassportCard:()=>null}));
+vi.mock('./WorkbookCampaignViews',()=>({CampaignEntitiesView:({view}:{view:string})=><div>вид {view}</div>,CampaignHeroesView:()=>null,CampaignKnowledgeView:()=>null,CampaignSessionReviewView:()=>null,GroupGroundsView:()=>null,WorldMomentView:()=>null}));
 vi.mock('../setting/SettingWorldTab',()=>({SettingWorldTab:({settingId,categories}:{settingId:number;categories:string[]})=><div>{settingId}:{categories.join(',')}</div>}));
 beforeEach(()=>{vi.clearAllMocks();mocks.put.mockResolvedValue({});mocks.sync.mockResolvedValue({});mocks.read.mockResolvedValue({...mocks.data,passport:{promise:'Обещание',tone:'Новый тон',signature:['Черта']}});});
 afterEach(cleanup);
@@ -24,6 +25,10 @@ describe('общие данные в тетради',()=>{
  it('открывает нужный вид записей мира и объясняет отсутствие проекта',()=>{
   const ui=mount('norm');expect(screen.getByText('5:norm')).toBeTruthy();ui.unmount();
   mount('passport',null);expect(screen.getByText(/Свяжите тетрадь с проектом/)).toBeTruthy();
+ });
+ it('виды тетради кампании открываются только в тетради кампании',()=>{
+  const ui=mount('places','campaign');expect(screen.getByText('вид places')).toBeTruthy();ui.unmount();
+  mount('sides','setting');expect(screen.getByText('Этот раздел — в тетради кампании.')).toBeTruthy();
  });
  it('показывает конфликт общего поля вместо перезаписи чужой правки',async()=>{
   mocks.read.mockResolvedValue({...mocks.data,passport:{promise:'Из другого окна'}});

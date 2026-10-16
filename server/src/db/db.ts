@@ -7402,6 +7402,13 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     if (added) console.log(`[migrate] participations_from_current_situation_v1: ${added}`);
     setAppSettingFlag(database, "participations_from_current_situation_v1");
   }
+  // Функция сведения (спека workbook-rework, Q7): Т · О · А; пусто — запись
+  // не «сведение». Список — RECORD_FUNCTIONS (services/entityRecords).
+  if (!columnExists(database, "entity_records", "function")) {
+    database.exec(
+      "ALTER TABLE entity_records ADD COLUMN function TEXT NOT NULL DEFAULT '' CHECK (function IN ('','current','anchor','archive'))"
+    );
+  }
 
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.

@@ -132,9 +132,11 @@
   box-shadow: 0 12px 30px rgb(0 0 0 / 0.45);
 }
 .wb-contents ol { list-style: none; margin: 0; padding: 0; }
-.wb-contents button { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: var(--sp-4); width: 100%; padding: var(--sp-3) var(--sp-4); border: 0; background: transparent; color: inherit; text-align: left; }
+.wb-contents button { display: grid; grid-template-columns: minmax(32px, max-content) minmax(0, 1fr) auto; gap: var(--sp-4); width: 100%; padding: var(--sp-3) var(--sp-4); border: 0; background: transparent; color: inherit; text-align: left; }
 .wb-contents button[aria-current] { background: var(--paper-acid, #e2f25a); }
 .wb-contents small { color: #6b6253; }
+.wb-contents section + section { margin-top: var(--sp-4); }
+.wb-contents__part { padding: var(--sp-2) var(--sp-4); font-size: var(--fs-micro); letter-spacing: 0.06em; text-transform: uppercase; color: #6b6253; }
 
 .wb-footer { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-5); }
 .wb-footer > button { border: 0; background: transparent; color: inherit; font-size: var(--fs-body); }
@@ -361,6 +363,8 @@
   .wb-table tbody tr { padding: var(--sp-3) 0; }
   .wb-table td { padding: 0; }
   .wb-table td[data-label]::before { content: attr(data-label); display: block; font-size: var(--fs-meta); color: var(--paper-muted); }
+  /* Строка-вопрос с единственной графой ответа: подпись графы над ячейкой лишняя. */
+  .wb-table th[scope="row"] + td:last-child::before { content: none; }
   .wb-card__siblings { margin-left: 0; }
 }
 

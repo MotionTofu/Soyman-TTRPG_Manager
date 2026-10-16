@@ -27,6 +27,7 @@ import {
   ContextSwitch,
   EngagedCampaigns,
 } from "../components/campaign/CampaignProfileParts";
+import { SIDE_PROFILE_ASPECTS } from "../entityRecords";
 import { campaignCrumbs, forceExtras, useCampaignContext, useOwnerRecords } from "../components/campaign/campaignProfile";
 import { toAliasesList } from "../utils/aliasesList";
 import { mentionTone } from "../mentions";
@@ -424,7 +425,7 @@ export function CommunityDetailPage() {
                 ownerId={communityId}
                 chains={records}
                 title="Что изменилось"
-                aspects={["note"]}
+                aspects={SIDE_PROFILE_ASPECTS}
                 emptyKeys={FORCE_FIELDS.filter((f) => f.core && !community.force?.[f.key]?.trim()).map((f) => f.key)}
               />
               <BaseFold

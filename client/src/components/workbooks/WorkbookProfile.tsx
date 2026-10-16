@@ -1,4 +1,4 @@
-import { useContext, useMemo, useState } from "react";
+import { useContext, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useAction, useResource, write } from "../../data/hooks";
 import { readOnce } from "../../data/imperative";
@@ -12,14 +12,25 @@ import { SettingWorldTab } from "../setting/SettingWorldTab";
 import {CampaignSecrets} from "../CampaignSecrets";
 import {MentionText} from "../mentions/MentionText";
 import { WorkbookContext } from "./model";
+import { CampaignEntitiesView, CampaignHeroesView, CampaignKnowledgeView, CampaignSessionReviewView, GroupGroundsView, WorldMomentView } from "./WorkbookCampaignViews";
 import type { WorkbookField } from "@shared/workbooks";
 import "../../pages/setting-profile.css";
+
 
 /** The notebook opens the existing model editors; it never copies profile data into answers. */
 export function WorkbookProfile({field}:{field:WorkbookField}) {
   const context=useContext(WorkbookContext),doc=context?.document;
   const categories=useMemo(()=>[field.entity!],[field.entity]);
+  // У вида тетради кампании подсказка листа — над живыми данными (например, как отмечать интерес игрока).
+  const withHint=(view:ReactNode)=><>{field.hint&&<small className="wb-hint">{field.hint}</small>}{view}</>;
   if(!doc?.project_type||!doc.project_id)return <p className="muted">Свяжите тетрадь с проектом, чтобы открыть {field.label.toLowerCase()}.</p>;
+  // Виды тетради кампании v4 (спека workbook-rework): живые данные кампании, копии в ответах нет.
+  if(field.entity==="places"||field.entity==="sides")return doc.project_type==="campaign"?withHint(<CampaignEntitiesView campaignId={doc.project_id} view={field.entity} title={field.label}/>):<p className="muted">Этот раздел — в тетради кампании.</p>;
+  if(field.entity==="heroes")return doc.project_type==="campaign"?withHint(<CampaignHeroesView campaignId={doc.project_id} title={field.label}/>):<p className="muted">Этот раздел — в тетради кампании.</p>;
+  if(field.entity==="group_grounds")return doc.project_type==="campaign"?withHint(<GroupGroundsView campaignId={doc.project_id} title={field.label}/>):<p className="muted">Этот раздел — в тетради кампании.</p>;
+  if(field.entity==="knowledge")return doc.project_type==="campaign"?withHint(<CampaignKnowledgeView campaignId={doc.project_id} title={field.label}/>):<p className="muted">Этот раздел — в тетради кампании.</p>;
+  if(field.entity==="world_moment")return doc.project_type==="campaign"?withHint(<WorldMomentView campaignId={doc.project_id} title={field.label}/>):<p className="muted">Этот раздел — в тетради кампании.</p>;
+  if(field.entity==="session_review")return doc.project_type==="campaign"?withHint(<CampaignSessionReviewView campaignId={doc.project_id}/>):<p className="muted">Этот раздел — в тетради кампании.</p>;
   if(field.entity==="passport")return <ProjectPassport type={doc.project_type} id={doc.project_id}/>;
   if(field.entity==="information")return <Information type={doc.project_type} id={doc.project_id}/>;
   if(field.entity==="participants")return doc.project_type==="adventure"?<Participants id={doc.project_id}/>:<p className="muted">Участия сил открываются из профиля приключения.</p>;

@@ -6,6 +6,7 @@ import { sessionLabel } from "../../sessionLabel";
 import { formatDateKeyRu } from "../../utils/date";
 import {
   CERTAINTY_LABELS,
+  FUNCTION_LABELS,
   KNOWN_TO_LABELS,
   lastHeldSession,
   RECORD_ASPECTS,
@@ -13,6 +14,7 @@ import {
   recordAffects,
   type EntityRecord,
   type RecordCertainty,
+  type RecordFunction,
   type RecordKnownTo,
   type RecordOwnerType,
   type RecordStatus,
@@ -26,7 +28,8 @@ import type { SessionSummary } from "../../types";
 // «Заменить» — то же окно: новая запись, прежняя остаётся в «Истории замен».
 
 const STATUSES: RecordStatus[] = ["established", "assumption", "draft"];
-const CERTAINTIES: RecordCertainty[] = ["known", "rumor", "disputed"];
+const CERTAINTIES: RecordCertainty[] = ["known", "reported", "rumor", "disputed"];
+const FUNCTIONS: RecordFunction[] = ["", "current", "anchor", "archive"];
 const KNOWN_TO: RecordKnownTo[] = ["gm", "table", "public", "some"];
 const NO_SESSIONS: SessionSummary[] = [];
 
@@ -61,8 +64,10 @@ type Props = {
       text?: string;
       status?: RecordStatus;
       origin?: { source: "feed"; source_note_id: number };
+      /** Функция сведения по умолчанию: «+ сведение» на листе 9 тетради — «Т». */
+      fn?: RecordFunction;
     }
-  | { record: EntityRecord; replace?: boolean; ownerType?: undefined; ownerId?: undefined; aspect?: undefined; text?: undefined; status?: undefined; origin?: undefined }
+  | { record: EntityRecord; replace?: boolean; ownerType?: undefined; ownerId?: undefined; aspect?: undefined; text?: undefined; status?: undefined; origin?: undefined; fn?: undefined }
 );
 
 export function RecordFormModal(props: Props) {
@@ -80,6 +85,7 @@ export function RecordFormModal(props: Props) {
   const [knownTo, setKnownTo] = useState<RecordKnownTo>(record?.known_to ?? "gm");
   const [knownNote, setKnownNote] = useState(record?.known_note ?? "");
   const [basis, setBasis] = useState(record && !replace ? record.basis : "");
+  const [fn, setFn] = useState<RecordFunction>(record?.function ?? props.fn ?? "");
   // undefined — Мастер встречу не трогал: берём умолчание, когда список придёт.
   const [sessionChoice, setSessionChoice] = useState<number | null | undefined>(record && !replace ? record.session_id : undefined);
   const [saving, setSaving] = useState(false);
@@ -102,6 +108,7 @@ export function RecordFormModal(props: Props) {
       known_to: knownTo,
       known_note: knownTo === "some" ? knownNote.trim() : "",
       basis: basis.trim(),
+      function: fn,
       session_id: sessionId,
     };
     setSaving(true);
@@ -168,8 +175,16 @@ export function RecordFormModal(props: Props) {
         )}
         <label className="stack">
           <span className="paper-label">Основание</span>
-          <input value={basis} onChange={(e) => setBasis(e.target.value)} placeholder="Откуда известно / почему может измениться" />
+          <input
+            value={basis}
+            onChange={(e) => setBasis(e.target.value)}
+            placeholder={certainty === "reported" ? "Кто сообщил" : "Откуда известно / почему может измениться"}
+          />
         </label>
+        <details className="record-form__more" open={!!fn || undefined}>
+          <summary>ещё</summary>
+          <Seg label="Функция" value={fn} options={FUNCTIONS} labels={FUNCTION_LABELS} onChange={setFn} />
+        </details>
         <label className="stack">
           <span className="paper-label">Встреча</span>
           <select value={sessionId ?? ""} onChange={(e) => setSessionChoice(e.target.value ? Number(e.target.value) : null)}>

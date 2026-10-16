@@ -10,7 +10,9 @@ import type { SessionSummary } from "./types";
 
 export type RecordOwnerType = "being" | "community" | "location" | "character" | "campaign";
 export type RecordStatus = "established" | "assumption" | "draft" | "discarded";
-export type RecordCertainty = "known" | "rumor" | "disputed";
+export type RecordCertainty = "known" | "rumor" | "disputed" | "reported";
+/** Функция сведения (лист 9): пусто — запись не «сведение». */
+export type RecordFunction = "" | "current" | "anchor" | "archive";
 export type RecordKnownTo = "gm" | "table" | "public" | "some";
 
 export interface EntityRecord {
@@ -26,6 +28,7 @@ export interface EntityRecord {
   known_to: RecordKnownTo;
   known_note: string;
   basis: string;
+  function: RecordFunction;
   session_id: number | null;
   replaces_id: number | null;
   /** Id заменившей записи; есть — эта запись уже «было». */
@@ -37,7 +40,17 @@ export interface EntityRecord {
 }
 
 const NOTE = { key: "note", label: "Свободная запись" };
-const FORCE = [...FORCE_FIELDS.map(({ key, label }) => ({ key, label })), NOTE];
+/** Графы стороны (лист 7) — только слой кампании, не двигатель силы: необязательны. */
+export const SIDE_ASPECTS = [
+  { key: "alternative", label: "Без соглашения" },
+  { key: "red_line", label: "Красная линия" },
+  { key: "status_claim", label: "На какую роль претендует" },
+  { key: "recognition", label: "Признание" },
+  { key: "reputation", label: "Репутация" },
+] as const;
+/** «Что изменилось» на профиле стороны: свободная запись и графы стороны. */
+export const SIDE_PROFILE_ASPECTS: readonly string[] = ["note", ...SIDE_ASPECTS.map((a) => a.key)];
+const FORCE = [...FORCE_FIELDS.map(({ key, label }) => ({ key, label })), ...SIDE_ASPECTS, NOTE];
 
 /** Графы по виду владельца — в порядке словаря сервера. */
 export const RECORD_ASPECTS: Record<RecordOwnerType, readonly { key: string; label: string }[]> = {
@@ -58,12 +71,19 @@ export const RECORD_ASPECTS: Record<RecordOwnerType, readonly { key: string; lab
     { key: "player_interest", label: "Чем увлечён" },
     { key: "hooks", label: "Крючки" },
     { key: "if_goal_reached", label: "Если цель достигнута" },
+    { key: "cherishes", label: "Чем дорожит" },
+    { key: "coordination", label: "Координация" },
     NOTE,
   ],
   campaign: [
     NOTE,
     { key: "resources", label: "Ресурсы группы" },
     { key: "intentions", label: "Намерения группы" },
+    { key: "group_ties", label: "Что связывает наши дела" },
+    { key: "open_goals", label: "Какие цели открыто обсуждены" },
+    { key: "disputes", label: "О чём герои могут спорить" },
+    { key: "needs_agreement", label: "Что требует отдельного соглашения" },
+    { key: "goal_conflict", label: "Конфликт целей" },
     { key: "unsorted", label: "Без адреса" },
   ],
 };
@@ -81,7 +101,10 @@ export const STATUS_LABELS: Record<RecordStatus, string> = {
 };
 
 /** Достоверность — что это внутри мира. */
-export const CERTAINTY_LABELS: Record<RecordCertainty, string> = { known: "известно", rumor: "слух", disputed: "спорно" };
+export const CERTAINTY_LABELS: Record<RecordCertainty, string> = { known: "известно", rumor: "слух", disputed: "спорно", reported: "сообщение" };
+
+/** Т — нужно для текущего решения, О — кампанийная опора, А — архивная фактура. */
+export const FUNCTION_LABELS: Record<RecordFunction, string> = { "": "не сведение", current: "Т · для решения", anchor: "О · опора", archive: "А · фактура" };
 
 export const KNOWN_TO_LABELS: Record<RecordKnownTo, string> = { gm: "мастер", table: "группа", public: "все", some: "некоторые" };
 

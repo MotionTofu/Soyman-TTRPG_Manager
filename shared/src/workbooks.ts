@@ -12,12 +12,13 @@ export interface WorkbookField {key:string;label:string;type:WorkbookPrimitive|W
  /** Поле канонической модели (`force.want`) и тип сущности карточки — для привязанной тетради. */ bind?:string;entity?:string;
  /** Источник сводки (`sheet/field`) или соседняя таблица состояний. */ source?:string;
  /** Практические проверки не участвуют в заполненности. */ optional?:boolean}
-export interface WorkbookSheet {key:string;title:string;instructions?:string;fields:WorkbookField[]}
+/** `number` — номер листа как в курсе («6», «16–21»), `part` — часть тетради; без них листы нумеруются по порядку. */
+export interface WorkbookSheet {key:string;title:string;number?:string;part?:string;instructions?:string;fields:WorkbookField[]}
 export interface WorkbookTemplate {format:"soyman-workbook";schemaVersion:1;key:string;version:number;title:string;description?:string;source?:string;practical?:boolean;sheets:WorkbookSheet[]}
 export type WorkbookAnswers=Record<string,Record<string,unknown>>;
 const keyPattern=/^[a-z][a-z0-9_-]{0,79}$/;
 const dangerous=new Set(["__proto__","prototype","constructor"]);
-export const WORKBOOK_PROFILE_KINDS = ["passport","participants","information","world_truth","tradition","norm","tension","activity","capability","flow","claim","diegetic_doc","negative_space","notes"] as const;
+export const WORKBOOK_PROFILE_KINDS = ["passport","participants","information","world_truth","tradition","norm","tension","activity","capability","flow","claim","diegetic_doc","negative_space","notes","heroes","group_grounds","places","sides","knowledge","world_moment","session_review"] as const;
 function object(value:unknown):value is Record<string,unknown>{return !!value&&typeof value==="object"&&!Array.isArray(value);}
 function key(value:unknown){return typeof value==="string"&&keyPattern.test(value)&&!dangerous.has(value);}
 function text(value:unknown,max=500){return typeof value==="string"&&value.trim().length>0&&value.length<=max;}
@@ -43,7 +44,7 @@ export function validateWorkbookTemplate(value:unknown):asserts value is Workboo
    if(field.type==="group")fields(field.fields,depth+1);
   }
  };
- for(const sheet of value.sheets){if(!object(sheet)||!key(sheet.key)||sheets.has(String(sheet.key))||!text(sheet.title)||sheet.instructions!==undefined&&(typeof sheet.instructions!=="string"||sheet.instructions.length>200000))throw new Error("Некорректный лист");sheets.add(String(sheet.key));fields(sheet.fields,0);}
+ for(const sheet of value.sheets){if(!object(sheet)||!key(sheet.key)||sheets.has(String(sheet.key))||!text(sheet.title)||sheet.number!==undefined&&!text(sheet.number,20)||sheet.part!==undefined&&!text(sheet.part,80)||sheet.instructions!==undefined&&(typeof sheet.instructions!=="string"||sheet.instructions.length>200000))throw new Error("Некорректный лист");sheets.add(String(sheet.key));fields(sheet.fields,0);}
  if(JSON.stringify(value).length>2000000)throw new Error("Шаблон слишком большой");
 }
 export function validateWorkbookAnswers(template:WorkbookTemplate,answers:unknown):asserts answers is WorkbookAnswers {
@@ -65,6 +66,10 @@ const filledValue=(v:unknown)=>v!==undefined&&v!==null&&v!==""&&(!Array.isArray(
 export const workbookAnswerless=(field:WorkbookField)=>["heading","note","profile","summary"].includes(field.type);
 const answerless=workbookAnswerless;
 /** Прогресс листа — по чек-листу «Готовность», без него — по заполненным графам. */
+/** Номер листа на язычке: свой `number`; у листа без него среди нумерованных — пусто; в шаблоне без номеров — порядковый «01». */
+export function sheetNumber(template:Pick<WorkbookTemplate,"sheets">,index:number){const sheet=template.sheets[index];if(!sheet)return "";if(sheet.number)return sheet.number;return template.sheets.some(s=>s.number)?"":String(index+1).padStart(2,"0");}
+/** Листы подряд одной части — одна группа; без `part` — группа без названия. */
+export function sheetParts(template:WorkbookTemplate){const out:{part?:string;sheets:{sheet:WorkbookSheet;index:number}[]}[]=[];template.sheets.forEach((sheet,index)=>{const last=out[out.length-1];if(last&&last.part===sheet.part)last.sheets.push({sheet,index});else out.push({part:sheet.part,sheets:[{sheet,index}]});});return out;}
 export function sheetProgress(sheet:WorkbookSheet,values:Record<string,unknown>={}){
  const ready=sheet.fields.find(f=>f.readiness&&f.type==="checklist");
  if(ready){const v=values[ready.key];return {total:ready.options?.length??0,filled:Array.isArray(v)?v.length:0};}
@@ -99,9 +104,9 @@ export function convertAnswer(field:WorkbookField,value:unknown):unknown{
  if(field.type==="table"||field.type==="group")return Array.isArray(value)?value:undefined;
  return undefined;
 }
-/** Сопоставление ответов старой версии с новой: тот же ключ, иначе тот же лист по названию и графа по названию. */
+/** Сопоставление ответов старой версии с новой: тот же ключ, иначе тот же лист по названию и графа по названию. В одну графу — не больше одного ответа. */
 export function suggestWorkbookMapping(from:WorkbookTemplate,to:WorkbookTemplate,answers:WorkbookAnswers){
- const mapping:Record<string,string>={};
+ const mapping:Record<string,string>={},taken=new Set<string>();
  for(const sheet of from.sheets)for(const field of sheet.fields){
   const value=answers[sheet.key]?.[field.key];if(!filledValue(value))continue;
   const target=to.sheets.find(s=>s.key===sheet.key&&norm(s.title)===norm(sheet.title))??to.sheets.find(s=>norm(s.title)===norm(sheet.title));
@@ -109,7 +114,7 @@ export function suggestWorkbookMapping(from:WorkbookTemplate,to:WorkbookTemplate
   let match=target?.fields.find(f=>f.key===field.key&&norm(f.label)===norm(field.label)&&fits(f))??target?.fields.find(f=>norm(f.label)===norm(field.label)&&fits(f));
   let sheetKey=target?.key;
   if(!match){const all=to.sheets.flatMap(s=>s.fields.filter(f=>norm(f.label)===norm(field.label)&&fits(f)).map(f=>({s,f})));if(all.length===1){match=all[0].f;sheetKey=all[0].s.key;}}
-  if(match&&sheetKey)mapping[`${sheet.key}/${field.key}`]=`${sheetKey}/${match.key}`;
+  if(match&&sheetKey&&!taken.has(`${sheetKey}/${match.key}`)){taken.add(`${sheetKey}/${match.key}`);mapping[`${sheet.key}/${field.key}`]=`${sheetKey}/${match.key}`;}
  }
  return mapping;
 }
@@ -144,5 +149,5 @@ export function workbookMarkdown(template:WorkbookTemplate,title:string,answers:
  };
  const paths:Record<string,string>={setting:"settings",campaign:"campaigns",adventure:"adventures"};
  const source=project?.type&&project.id&&paths[project.type]?`Источник общих данных: [профиль проекта](/${paths[project.type]}/${project.id}).\n\n`:"";
- return `# ${title}\n\nШаблон: ${template.title}, версия ${template.version}\n\n${source}`+template.sheets.map(s=>`## ${s.title}\n\n${s.instructions??""}\n\n`+s.fields.map(f=>fieldMarkdown(s,f)).join("\n\n")+notesMarkdown(sheetNotes(answers,s.key))).join("\n\n")+(old.length?`\n\n## Сохранённые ответы прежних полей\n\n${old.join("\n")}`:"");
+ return `# ${title}\n\nШаблон: ${template.title}, версия ${template.version}\n\n${source}`+template.sheets.map(s=>`## ${s.number?`${s.number}. `:""}${s.title}\n\n${s.instructions??""}\n\n`+s.fields.map(f=>fieldMarkdown(s,f)).join("\n\n")+notesMarkdown(sheetNotes(answers,s.key))).join("\n\n")+(old.length?`\n\n## Сохранённые ответы прежних полей\n\n${old.join("\n")}`:"");
 }
