@@ -5,14 +5,15 @@ import {useConfirm} from "../../hooks/useConfirm";
 import {MentionText} from "../mentions/MentionText";
 import {WorkbookFieldInput} from "./WorkbookFieldInput";
 import {WorkbookScope,WorkbookContext,WorkbookRow,type WorkbookInstance} from "./model";
-import {formerAnswers,sheetNotes,sheetProgress,workbookAnswerless,WORKBOOK_NOTES,type WorkbookAnswers,type WorkbookField,type WorkbookNote,type WorkbookSheet} from "@shared/workbooks";
+import {formerAnswers,sheetNotes,sheetNumber,sheetParts,sheetProgress,workbookAnswerless,WORKBOOK_NOTES,type WorkbookAnswers,type WorkbookField,type WorkbookNote,type WorkbookSheet} from "@shared/workbooks";
 
 /** Заметка в связанной книге — тетрадь читает её по ссылке. */
 interface BookNote {id:string;sheet_key:string|null;book_id:number;book_title:string;quote:string;body:string;created_at:string}
 type Row=Record<string,unknown>&{_id:string};
 type Change=(sheet:string,field:string,value:unknown)=>void;
 
-const number=(i:number)=>String(i+1).padStart(2,"0");
+/** «6 · Место и доступ»; лист без номера — одно название. */
+const sheetLabel=(n:string,title:string)=>n?`${n} · ${title}`:title;
 const filled=(v:unknown)=>v!==undefined&&v!==null&&v!==""&&(!Array.isArray(v)||v.length>0);
 const writable=(f:WorkbookField)=>f.type==="text"||f.type==="line"||f.type==="page";
 /** Имя карточки — её первая строка или текст. */
@@ -45,17 +46,19 @@ function WorkbookBookView({doc,answers,change,sheetKey,onSheet,single,disabled,n
  const group=card&&sheet.fields.find(f=>f.key===card.field);
  const tabs=<nav className="wb-tabs" aria-label="Листы тетради">
   <button type="button" className="wb-tab" aria-label="Все листы" aria-expanded={contents} onClick={()=>setContents(!contents)}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
-  {template.sheets.map((s,i)=>{const p=sheetProgress(s,answers[s.key]),done=!template.practical&&p.total>0&&p.filled===p.total,active=i===index&&(!single||page==="form");return <button type="button" key={s.key} className={`wb-tab${active?" is-active":""}`} aria-current={active?"page":undefined} title={`${number(i)} · ${s.title}`} aria-label={`Лист ${number(i)}: ${s.title}${done?", готов":""}`} onClick={()=>go(s.key)}><span className="wb-tab__num">{number(i)}</span><span className="wb-tab__title">{s.title||number(i)}</span>{done&&<span aria-hidden="true"> ✓</span>}</button>;})}
+  {template.sheets.map((s,i)=>{const p=sheetProgress(s,answers[s.key]),done=!template.practical&&p.total>0&&p.filled===p.total,active=i===index&&(!single||page==="form"),n=sheetNumber(template,i);return <button type="button" key={s.key} className={`wb-tab${active?" is-active":""}`} aria-current={active?"page":undefined} title={sheetLabel(n,s.title)} aria-label={`Лист ${sheetLabel(n,s.title)}${done?", готов":""}`} onClick={()=>go(s.key)}><span className="wb-tab__num">{n}</span><span className="wb-tab__title">{s.title||n}</span>{done&&<span aria-hidden="true"> ✓</span>}</button>;})}
   {single&&<button type="button" className={`wb-tab wb-tab--notes${page==="notes"?" is-active":""}`} aria-pressed={page==="notes"} onClick={()=>setPage(page==="notes"?"form":"notes")}>Записи{notesHere?` · ${notesHere}`:""}</button>}
  </nav>;
  const progress=sheetProgress(sheet,answers[sheet.key]),ready=sheet.fields.some(f=>f.readiness);
- const prev=template.sheets[index-1],next=template.sheets[index+1];
+ const prev=template.sheets[index-1],next=template.sheets[index+1],here=sheetNumber(template,index);
+ const step=(i:number,s:WorkbookSheet)=>{const n=sheetNumber(template,i);return single?n||s.title:sheetLabel(n,s.title);};
+ const lastNumber=[...template.sheets].reverse().find(s=>s.number)?.number;
  const footer=<footer className="wb-footer">
-  {prev?<button type="button" onClick={()=>go(prev.key)}>← {number(index-1)}{single?"":` · ${prev.title}`}</button>:<span/>}
-  {template.practical?<span className="wb-footer__progress">{number(index)} / {template.sheets.length}</span>:<span className="wb-footer__progress"><span className={`wb-num ${progress.total&&progress.filled===progress.total?"wb-num--filled":progress.filled?"wb-num--current":"wb-num--empty"}`} aria-hidden="true"/>{ready?"Готовность":"Заполнено"} {progress.filled} из {progress.total}</span>}
-  {next?<button type="button" className="wb-next" onClick={()=>go(next.key)}>{number(index+1)}{single?"":` · ${next.title}`} →</button>:<span/>}
+  {prev?<button type="button" onClick={()=>go(prev.key)}>← {step(index-1,prev)}</button>:<span/>}
+  {template.practical?<span className="wb-footer__progress">{lastNumber?here&&`${here} / ${lastNumber}`:`${here} / ${template.sheets.length}`}</span>:<span className="wb-footer__progress"><span className={`wb-num ${progress.total&&progress.filled===progress.total?"wb-num--filled":progress.filled?"wb-num--current":"wb-num--empty"}`} aria-hidden="true"/>{ready?"Готовность":"Заполнено"} {progress.filled} из {progress.total}</span>}
+  {next?<button type="button" className="wb-next" onClick={()=>go(next.key)}>{step(index+1,next)} →</button>:<span/>}
  </footer>;
- const contentsList=contents&&<div className="wb-contents" role="dialog" aria-label="Все листы"><ol>{template.sheets.map((s,i)=>{const p=sheetProgress(s,answers[s.key]);return <li key={s.key}><button type="button" aria-current={i===index?"page":undefined} onClick={()=>go(s.key)}><b>{number(i)}</b><span>{s.title}</span><small>{p.filled} / {p.total}</small></button></li>;})}</ol></div>;
+ const contentsList=contents&&<div className="wb-contents" role="dialog" aria-label="Все листы">{sheetParts(template).map((g,j)=><section key={j} aria-label={g.part}>{g.part&&<div className="wb-contents__part">{g.part}</div>}<ol>{g.sheets.map(({sheet:s,index:i})=>{const p=sheetProgress(s,answers[s.key]);return <li key={s.key}><button type="button" aria-current={i===index?"page":undefined} onClick={()=>go(s.key)}><b>{sheetNumber(template,i)}</b><span>{s.title}</span><small>{p.filled} / {p.total}</small></button></li>;})}</ol></section>)}</div>;
  const form=<WorkbookScope.Provider value={`${doc.uid}/${sheet.key}`}><SheetForm sheet={sheet} index={index} template={template} answers={answers} change={change} disabled={disabled} onCard={(field,row)=>setCard({field,row})}/></WorkbookScope.Provider>;
  const notes=<SheetNotes sheet={sheet} sheets={template.sheets} answers={answers} change={change} bookNotes={bookList} disabled={disabled}/>;
  if(group&&group.type==="group")return <div className={`wb-book wb-book--card${single?" wb-book--single":""}`}>
@@ -80,7 +83,7 @@ function SheetForm({sheet,index,template,answers,change,disabled,onCard}:{sheet:
  // Ответ без своей графы показываем на листе, откуда он пришёл; лист исчез — на первом.
  const here=former.filter(f=>f.path.startsWith(`${sheet.key}/`)||f.label.startsWith(`${sheet.title} · `)||index===0&&!template.sheets.some(s=>f.path.startsWith(`${s.key}/`)||f.label.startsWith(`${s.title} · `)));
  return <>
-  <header className="wb-sheet-head"><div className="paper-label">Лист {number(index)}</div><h2>{sheet.title}</h2>{sheet.instructions&&<details className="wb-about"><summary>О листе</summary><MentionText text={sheet.instructions}/></details>}</header>
+  <header className="wb-sheet-head">{(sheetNumber(template,index)||sheet.part)&&<div className="paper-label">{[sheetNumber(template,index)&&`Лист ${sheetNumber(template,index)}`,sheet.part].filter(Boolean).join(" · ")}</div>}<h2>{sheet.title}</h2>{sheet.instructions&&<details className="wb-about"><summary>О листе</summary><MentionText text={sheet.instructions}/></details>}</header>
   <fieldset className="wb-fields" disabled={disabled}>{sheet.fields.map(field=>field.type==="group"
    ?<CardList key={field.key} field={field} rows={(Array.isArray(values[field.key])?values[field.key]:[]) as Row[]} disabled={disabled} onOpen={row=>onCard(field.key,row)} onAdd={()=>{const id=crypto.randomUUID(),rows=(Array.isArray(values[field.key])?values[field.key]:[]) as Row[];change(sheet.key,field.key,[...rows,{_id:id}]);onCard(field.key,id);}}/>
    :<WorkbookFieldInput key={field.key} field={field} value={values[field.key]} onChange={v=>change(sheet.key,field.key,v)}/>)}</fieldset>
@@ -138,7 +141,7 @@ function SheetNotes({sheet,sheets,answers,change,bookNotes,disabled}:{sheet:Work
  const add=()=>{const body=draft.trim();if(!body)return;const note:WorkbookNote={id:crypto.randomUUID(),body,at:new Date().toISOString()};change(WORKBOOK_NOTES,sheet.key,[...own,note]);setDraft("");};
  if(all)return <>
   <header className="wb-sheet-head"><div className="paper-label">Вся тетрадь</div><h2>Все записи</h2><button type="button" className="wb-link" onClick={()=>setAll(false)}>← К этому листу</button></header>
-  {sheets.map((s,i)=>{const list=[...bookNotes.filter(n=>n.sheet_key===s.key).map(n=>n.body||n.quote),...sheetNotes(answers,s.key).map(n=>n.body)];return list.length>0&&<section key={s.key} className="wb-notes-group"><div className="paper-label">{number(i)} · {s.title}</div>{list.map((text,j)=><p key={j} className="wb-note">{text}</p>)}</section>;})}
+  {sheets.map((s,i)=>{const list=[...bookNotes.filter(n=>n.sheet_key===s.key).map(n=>n.body||n.quote),...sheetNotes(answers,s.key).map(n=>n.body)];return list.length>0&&<section key={s.key} className="wb-notes-group"><div className="paper-label">{sheetLabel(sheetNumber({sheets},i),s.title)}</div>{list.map((text,j)=><p key={j} className="wb-note">{text}</p>)}</section>;})}
   {total===0&&<p className="muted">В тетради пока нет записей.</p>}
  </>;
  return <>

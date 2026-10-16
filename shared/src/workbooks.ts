@@ -12,7 +12,8 @@ export interface WorkbookField {key:string;label:string;type:WorkbookPrimitive|W
  /** Поле канонической модели (`force.want`) и тип сущности карточки — для привязанной тетради. */ bind?:string;entity?:string;
  /** Источник сводки (`sheet/field`) или соседняя таблица состояний. */ source?:string;
  /** Практические проверки не участвуют в заполненности. */ optional?:boolean}
-export interface WorkbookSheet {key:string;title:string;instructions?:string;fields:WorkbookField[]}
+/** `number` — номер листа как в курсе («6», «16–21»), `part` — часть тетради; без них листы нумеруются по порядку. */
+export interface WorkbookSheet {key:string;title:string;number?:string;part?:string;instructions?:string;fields:WorkbookField[]}
 export interface WorkbookTemplate {format:"soyman-workbook";schemaVersion:1;key:string;version:number;title:string;description?:string;source?:string;practical?:boolean;sheets:WorkbookSheet[]}
 export type WorkbookAnswers=Record<string,Record<string,unknown>>;
 const keyPattern=/^[a-z][a-z0-9_-]{0,79}$/;
@@ -43,7 +44,7 @@ export function validateWorkbookTemplate(value:unknown):asserts value is Workboo
    if(field.type==="group")fields(field.fields,depth+1);
   }
  };
- for(const sheet of value.sheets){if(!object(sheet)||!key(sheet.key)||sheets.has(String(sheet.key))||!text(sheet.title)||sheet.instructions!==undefined&&(typeof sheet.instructions!=="string"||sheet.instructions.length>200000))throw new Error("Некорректный лист");sheets.add(String(sheet.key));fields(sheet.fields,0);}
+ for(const sheet of value.sheets){if(!object(sheet)||!key(sheet.key)||sheets.has(String(sheet.key))||!text(sheet.title)||sheet.number!==undefined&&!text(sheet.number,20)||sheet.part!==undefined&&!text(sheet.part,80)||sheet.instructions!==undefined&&(typeof sheet.instructions!=="string"||sheet.instructions.length>200000))throw new Error("Некорректный лист");sheets.add(String(sheet.key));fields(sheet.fields,0);}
  if(JSON.stringify(value).length>2000000)throw new Error("Шаблон слишком большой");
 }
 export function validateWorkbookAnswers(template:WorkbookTemplate,answers:unknown):asserts answers is WorkbookAnswers {
@@ -65,6 +66,10 @@ const filledValue=(v:unknown)=>v!==undefined&&v!==null&&v!==""&&(!Array.isArray(
 export const workbookAnswerless=(field:WorkbookField)=>["heading","note","profile","summary"].includes(field.type);
 const answerless=workbookAnswerless;
 /** Прогресс листа — по чек-листу «Готовность», без него — по заполненным графам. */
+/** Номер листа на язычке: свой `number`; у листа без него среди нумерованных — пусто; в шаблоне без номеров — порядковый «01». */
+export function sheetNumber(template:Pick<WorkbookTemplate,"sheets">,index:number){const sheet=template.sheets[index];if(!sheet)return "";if(sheet.number)return sheet.number;return template.sheets.some(s=>s.number)?"":String(index+1).padStart(2,"0");}
+/** Листы подряд одной части — одна группа; без `part` — группа без названия. */
+export function sheetParts(template:WorkbookTemplate){const out:{part?:string;sheets:{sheet:WorkbookSheet;index:number}[]}[]=[];template.sheets.forEach((sheet,index)=>{const last=out[out.length-1];if(last&&last.part===sheet.part)last.sheets.push({sheet,index});else out.push({part:sheet.part,sheets:[{sheet,index}]});});return out;}
 export function sheetProgress(sheet:WorkbookSheet,values:Record<string,unknown>={}){
  const ready=sheet.fields.find(f=>f.readiness&&f.type==="checklist");
  if(ready){const v=values[ready.key];return {total:ready.options?.length??0,filled:Array.isArray(v)?v.length:0};}
@@ -144,5 +149,5 @@ export function workbookMarkdown(template:WorkbookTemplate,title:string,answers:
  };
  const paths:Record<string,string>={setting:"settings",campaign:"campaigns",adventure:"adventures"};
  const source=project?.type&&project.id&&paths[project.type]?`Источник общих данных: [профиль проекта](/${paths[project.type]}/${project.id}).\n\n`:"";
- return `# ${title}\n\nШаблон: ${template.title}, версия ${template.version}\n\n${source}`+template.sheets.map(s=>`## ${s.title}\n\n${s.instructions??""}\n\n`+s.fields.map(f=>fieldMarkdown(s,f)).join("\n\n")+notesMarkdown(sheetNotes(answers,s.key))).join("\n\n")+(old.length?`\n\n## Сохранённые ответы прежних полей\n\n${old.join("\n")}`:"");
+ return `# ${title}\n\nШаблон: ${template.title}, версия ${template.version}\n\n${source}`+template.sheets.map(s=>`## ${s.number?`${s.number}. `:""}${s.title}\n\n${s.instructions??""}\n\n`+s.fields.map(f=>fieldMarkdown(s,f)).join("\n\n")+notesMarkdown(sheetNotes(answers,s.key))).join("\n\n")+(old.length?`\n\n## Сохранённые ответы прежних полей\n\n${old.join("\n")}`:"");
 }
