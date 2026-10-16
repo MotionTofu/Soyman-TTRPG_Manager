@@ -59,7 +59,9 @@ is also recorded at the top of `REDESIGN_RULES.md`.
 контролов и списков. Печатные листы и OneShot имеют собственные правила.
 
 `client/scripts/check-type-scale.mjs` ищет сырые `font-size: Npx` в `.css` и
-`fontSize: N` в `.tsx`; он подключён к `npm run build` и `npm run lint`.
+`fontSize: N` в `.tsx`; он подключён к `npm run lint` и `npm run check:design`.
+Из `npm run build` проверки дизайн-системы вынесены 2026-10-17: около 830
+существующих нарушений роняли сборку релиза в CI.
 Печатная шпаргалка (`.cheatsheet-*`, `.dnd-cheatsheet-*`, `.combat-row*`,
 `.combat-field`, `.fill-box`) исключена из экранной шкалы. Сейчас проверка
 находит существующие нарушения в других частях клиента, поэтому прохождение

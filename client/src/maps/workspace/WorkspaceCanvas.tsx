@@ -167,7 +167,7 @@ export function WorkspaceCanvas({ gl, liquidDraft, onGlFail, effects, map, docum
     if (assetPreview) {
       const asset = resolveMapSymbol({ type: "asset", assetId: assetPreview.assetId });
       if (asset) {
-        const size = objectPlacementSize(assetPreview.assetId) * cellWidth(document.grid.type) * camera.scale;
+        const size = objectPlacementSize(assetPreview.assetId) * cellWidth(document.grid?.type ?? "square") * camera.scale;
         ctx.save();
         ctx.translate(X(assetPreview.position.x), Y(assetPreview.position.y));
         ctx.scale(size, size);

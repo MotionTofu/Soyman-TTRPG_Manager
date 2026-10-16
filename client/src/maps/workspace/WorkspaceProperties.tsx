@@ -33,7 +33,7 @@ export function WorkspaceProperties({ document, selection, commit, onClose, onDe
   const patchSign = (patch: Parameters<typeof setMapObjectSign>[2]) => edit((view) => setMapObjectSign(view, item.id, patch));
   const patchRoom = (patch: Partial<GameplayRoom>) => edit((view) => updateGameplayEntity(view, item.id, (entity) => entity.kind === "room" ? { ...entity, ...patch } : entity));
   const protectedLayer = !!layer?.locked || !layer?.visible;
-  const unit = cellWidth(document.grid.type);
+  const unit = cellWidth(document.grid?.type ?? "square");
   function edit(operation: Parameters<typeof editGeometry>[1]) {
     commit((before) => { requireEditableLayer(before, selection.layerId); return editGeometry(before, operation); });
   }
