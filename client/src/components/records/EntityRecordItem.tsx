@@ -29,7 +29,16 @@ function RecordMeta({ record, sessions }: { record: EntityRecord; sessions: Sess
   );
 }
 
-export function EntityRecordItem({ chain, settingId }: { chain: RecordChain; settingId: number | null }) {
+export function EntityRecordItem({
+  chain,
+  settingId,
+  was,
+}: {
+  chain: RecordChain;
+  settingId: number | null;
+  /** «Было → стало»: прежняя версия зачёркнутой строкой над текстом (профиль в кампании). */
+  was?: boolean;
+}) {
   const { record, history } = chain;
   const sessions = useResource<SessionSummary[]>(campaignPaths.sessions(record.campaign_id)).data;
   const [form, setForm] = useState<"edit" | "replace" | null>(null);
@@ -37,7 +46,13 @@ export function EntityRecordItem({ chain, settingId }: { chain: RecordChain; set
 
   return (
     <div className="entity-record">
+      {was && history[0] && (
+        <div className="entity-record__was">
+          <MentionText text={history[0].text} />
+        </div>
+      )}
       <div className="entity-record__text">
+        {was && history[0] && <span aria-hidden="true">→ </span>}
         <MentionText text={record.text} />
       </div>
       <div className="entity-record__meta">

@@ -5,7 +5,7 @@ import { labelled } from "../../data/notices";
 import { campaignPaths } from "../../data/campaigns";
 import { mentionTone } from "../../mentions";
 import { BEING_CATEGORY_LABELS } from "../../beingCategories";
-import { plural } from "../../sceneKinds";
+import { recordSummary } from "../../entityRecords";
 import { sessionLabel } from "../../sessionLabel";
 import { formatDateKeyRu } from "../../utils/date";
 import { EmptyState } from "../EmptyState";
@@ -50,15 +50,6 @@ const SETTING_LISTS: Record<WorldType, (settingId: number) => string> = {
 };
 
 type Filter = "rumor" | "draft" | null;
-
-/** «3 записи · слух · 1 черновик» — что с сущностью здесь, не открывая. */
-function summary(e: WorldEntity): string {
-  const parts: string[] = [];
-  if (e.records) parts.push(`${e.records} ${plural(e.records, "запись", "записи", "записей")}`);
-  if (e.rumors) parts.push(e.rumors === 1 ? "слух" : `слухов: ${e.rumors}`);
-  if (e.drafts) parts.push(`${e.drafts} ${plural(e.drafts, "черновик", "черновика", "черновиков")}`);
-  return parts.join(" · ") || "записей нет";
-}
 
 export function CampaignWorldTab({
   campaignId,
@@ -158,7 +149,7 @@ export function CampaignWorldTab({
                             {category ? ` · ${category.toLowerCase()}` : ""}
                           </span>
                           <br />
-                          <span className="campaign-world__summary">{summary(e)}</span>
+                          <span className="campaign-world__summary">{recordSummary(e)}</span>
                         </span>
                         {lastSession(e)}
                       </li>

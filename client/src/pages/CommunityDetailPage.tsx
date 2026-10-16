@@ -19,6 +19,15 @@ import { GraphNeighbourhoodLink } from "../components/GraphNeighbourhoodLink";
 import { EntityFieldsCard } from "../components/EntityFieldsCard";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { FactionCard } from "../components/FactionCard";
+import { FORCE_FIELDS } from "../beingForce";
+import {
+  BaseFold,
+  CampaignChronicle,
+  CampaignRecords,
+  ContextSwitch,
+  EngagedCampaigns,
+} from "../components/campaign/CampaignProfileParts";
+import { campaignCrumbs, forceExtras, useCampaignContext, useOwnerRecords } from "../components/campaign/campaignProfile";
 import { toAliasesList } from "../utils/aliasesList";
 import { mentionTone } from "../mentions";
 import { RELATION_TONE_LABELS } from "../relations";
@@ -73,6 +82,10 @@ export function CommunityDetailPage() {
   const communityState = useEntity<SettingCommunityDetail>("community", communityId);
   const community = communityState.data ?? null;
   const settingCrumbs = useSettingCrumbs(community?.setting_id);
+  // Контекст кампании (ADR-0006): основа или «как оно в этой кампании».
+  const ctx = useCampaignContext(community?.campaigns);
+  const inCampaign = ctx.campaign;
+  const records = useOwnerRecords(inCampaign?.id ?? null, "community", communityId);
   const locations =
     useResource<SettingLocation[]>(community ? settingPaths.inSetting("location", community.setting_id) : null).data ?? [];
   const { save } = useSaveEntity<SettingCommunityDetail>("community", communityId);
@@ -275,7 +288,7 @@ export function CommunityDetailPage() {
   return (
     <EntityPage
       paper
-      crumbs={[
+      crumbs={inCampaign ? campaignCrumbs(inCampaign, community.name) : [
         ...settingCrumbs,
         { label: "Население", to: populationTo },
         ...community.ancestors.map((a) => ({ label: a.name, to: `/communities/${a.id}` })),
@@ -308,18 +321,29 @@ export function CommunityDetailPage() {
         </>
       }
     >
+      <ContextSwitch engaged={community.campaigns} campaign={inCampaign} onSelect={ctx.select} />
       {tab === "Досье" && (
         <div className="dossier">
           <aside className="dossier__aside">
-            <label className="dossier__portrait" title={IMAGE_HINT}>
-              {community.avatar_image_url ? (
-                <img src={community.avatar_image_url} alt={`Знак: ${community.name}`} />
-              ) : (
-                <span className="dossier__portrait-empty">Знак сообщества</span>
-              )}
-              <span className="dossier__portrait-hint">{uploadingAvatar ? "Загрузка…" : "Сменить знак"}</span>
-              <input type="file" accept={IMAGE_ACCEPT} hidden onChange={(e) => avatarCrop.onSelect(e.target.files?.[0] ?? null)} />
-            </label>
+            {inCampaign ? (
+              <div className="dossier__portrait">
+                {community.avatar_image_url ? (
+                  <img src={community.avatar_image_url} alt={`Знак: ${community.name}`} />
+                ) : (
+                  <span className="dossier__portrait-empty">Знак сообщества</span>
+                )}
+              </div>
+            ) : (
+              <label className="dossier__portrait" title={IMAGE_HINT}>
+                {community.avatar_image_url ? (
+                  <img src={community.avatar_image_url} alt={`Знак: ${community.name}`} />
+                ) : (
+                  <span className="dossier__portrait-empty">Знак сообщества</span>
+                )}
+                <span className="dossier__portrait-hint">{uploadingAvatar ? "Загрузка…" : "Сменить знак"}</span>
+                <input type="file" accept={IMAGE_ACCEPT} hidden onChange={(e) => avatarCrop.onSelect(e.target.files?.[0] ?? null)} />
+              </label>
+            )}
             <dl className="paper-facts">
               {community.locations.length > 0 && (
                 <div>
@@ -363,12 +387,14 @@ export function CommunityDetailPage() {
                   )}
                 </dd>
               </div>
-              <div>
-                <dt className="paper-label">Теги</dt>
-                <dd>
-                  <TagChips tags={community.tags} onChange={saveTags} />
-                </dd>
-              </div>
+              {!inCampaign && (
+                <div>
+                  <dt className="paper-label">Теги</dt>
+                  <dd>
+                    <TagChips tags={community.tags} onChange={saveTags} />
+                  </dd>
+                </div>
+              )}
               {/* Кому открыто — выдача с профиля (спека campaign-paper, Q34). */}
               <PlayerVisibilityFact targetType="setting_community" targetId={communityId} />
             </dl>
@@ -380,6 +406,36 @@ export function CommunityDetailPage() {
             </div>
           </aside>
 
+          {inCampaign ? (
+            <div className="dossier__main">
+              {/* Основу отсюда не правят: значения основы, под ячейкой — записи кампании. */}
+              <FactionCard
+                force={community.force ?? {}}
+                secret={community.secret ?? ""}
+                members={community.members}
+                settingId={community.setting_id}
+                onAllMembers={() => selectTab("Связи")}
+                forceExtras={forceExtras(records, community.setting_id)}
+              />
+              <CampaignRecords
+                campaignId={inCampaign.id}
+                settingId={community.setting_id}
+                ownerType="community"
+                ownerId={communityId}
+                chains={records}
+                title="Что изменилось"
+                aspects={["note"]}
+                emptyKeys={FORCE_FIELDS.filter((f) => f.core && !community.force?.[f.key]?.trim()).map((f) => f.key)}
+              />
+              <BaseFold
+                description={community.description ?? ""}
+                chapters={CHAPTER_SECTIONS.filter(([section]) => section !== "current_situation").map(([section, title]) => ({
+                  title,
+                  items: chaptersOf(section),
+                }))}
+              />
+            </div>
+          ) : (
           <div className="dossier__main">
             <FactionCard
               force={community.force ?? {}}
@@ -389,6 +445,8 @@ export function CommunityDetailPage() {
               onSave={(patch) => save(patch)}
               onAllMembers={() => selectTab("Связи")}
             />
+
+            <EngagedCampaigns campaigns={community.campaigns} onOpen={ctx.select} title="Задействовано в кампаниях" />
 
             <EditableTextCard
               title="Описание"
@@ -444,6 +502,7 @@ export function CommunityDetailPage() {
               </div>
             </details>
           </div>
+          )}
         </div>
       )}
 
@@ -558,7 +617,11 @@ export function CommunityDetailPage() {
         </div>
       )}
 
-      {tab === "Хроника" && (
+      {tab === "Хроника" && inCampaign && (
+        <CampaignChronicle campaign={inCampaign} settingId={community.setting_id} chains={records} />
+      )}
+
+      {tab === "Хроника" && !inCampaign && (
         <section>
           <h2 className="paper-group__head">
             В мире <span className="paper-group__count">{community.important_dates.length}</span>

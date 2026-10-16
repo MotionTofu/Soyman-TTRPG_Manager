@@ -705,6 +705,56 @@
 .record-form .seg {
   flex-wrap: wrap;
 }
+/* Профиль в контексте кампании (ADR-0006): переключатель над листом — те же
+   чипы, что у фильтров «Населения» и «Мира кампании». */
+.context-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: center;
+  margin-bottom: var(--sp-6);
+}
+.engaged-campaigns__open,
+.campaign-records__unfilled > button {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.engaged-campaigns__open {
+  font-weight: 600;
+}
+.campaign-records {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.campaign-records > .paper-group__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+}
+.campaign-records__add {
+  margin-left: auto;
+}
+.campaign-records__group {
+  display: flex;
+  flex-direction: column;
+}
+/* Под ячейкой «За столом» — добавленное кампанией, маркером. */
+.campaign-cell .entity-record {
+  padding: var(--sp-2) 0 0;
+  border-bottom: 0;
+}
+.campaign-cell .entity-record__text {
+  background: color-mix(in srgb, var(--paper-acid) 45%, transparent);
+  padding: 0.1em 0.3em;
+  border-radius: 2px;
+}
 .population__filters {
   display: flex;
   gap: var(--sp-5);

@@ -61,6 +61,19 @@ import type {
   SettingLocation,
 } from "../types";
 import { PlayerVisibilityFact } from "../components/PlayerVisibilityFact";
+import {
+  BaseFold,
+  CampaignChronicle,
+  CampaignRecords,
+  ContextSwitch,
+  EngagedCampaigns,
+} from "../components/campaign/CampaignProfileParts";
+import {
+  campaignCrumbs,
+  forceExtras,
+  useCampaignContext,
+  useOwnerRecords,
+} from "../components/campaign/campaignProfile";
 
 // Профиль существа — пилот бумажного вида (разбор профилей 2026-10-01).
 // Вкладки (Q2): «Связи» собрала «Отношения» и «Места обитания», «Хроника» —
@@ -96,6 +109,10 @@ export function BeingDetailPage() {
   const being = beingState.data ?? null;
   const settingId = being?.setting_id ?? null;
   const settingCrumbs = useSettingCrumbs(settingId);
+  // Контекст кампании (ADR-0006): основа или «как она в этой кампании».
+  const ctx = useCampaignContext(being?.campaigns);
+  const inCampaign = ctx.campaign;
+  const records = useOwnerRecords(inCampaign?.id ?? null, "being", beingId);
   const [tab, selectTab] = useTabState(TABS, "Досье", TAB_ALIASES);
   const communities =
     useResource<SettingCommunity[]>(
@@ -133,7 +150,6 @@ export function BeingDetailPage() {
   const [dateDay, setDateDay] = useState("");
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [editingCard, setEditingCard] = useState(false);
-  const [newCampaignId, setNewCampaignId] = useState("");
 
   const calendar = useSettingCalendar(being?.setting_id);
   const avatarCrop = useImageCrop("square", handleAvatarChange);
@@ -349,23 +365,18 @@ export function BeingDetailPage() {
     if (done) setAddLocationId(null);
   }
 
-  // Участие (Q7): глава «Текущая ситуация» с кампанией. Завести — значит
-  // завести такую главу; поля участия пишутся на неё же.
-  async function addParticipation() {
-    const campaignId = Number(newCampaignId);
-    if (!campaignId) return;
-    const done = await run(
+  // «Ход в кампании» (бывшее участие, Q7): глава «Текущая ситуация» с
+  // кампанией. Нет главы — «Править» её заводит; поля пишутся на неё же.
+  async function addParticipation(campaignId: number) {
+    await run(
       () =>
-        write
-          .post(`/setting-beings/${beingId}/chapters`, {
-            section: "current_situation",
-            campaign_id: campaignId,
-            title: "",
-          })
-          .then(() => true),
+        write.post(`/setting-beings/${beingId}/chapters`, {
+          section: "current_situation",
+          campaign_id: campaignId,
+          title: "",
+        }),
       { affects: mine, retry: false },
     );
-    if (done) setNewCampaignId("");
   }
 
   // Важные даты попадают в календарь сеттинга и кампаний.
@@ -431,17 +442,13 @@ export function BeingDetailPage() {
     being.chapters.filter(
       (c) => c.section === section && matches(dossierQuery, c.title, c.content),
     );
-  // Участие — главы с кампанией; идущая сессия поднимает свою наверх (Q14).
-  const participations = being.chapters
-    .filter((c) => c.section === "current_situation" && c.campaign_id)
-    .sort(
-      (a, b) =>
-        Number(b.campaign_id === live?.campaign_id) -
-        Number(a.campaign_id === live?.campaign_id),
-    );
-  const freeCampaigns = campaigns.filter(
-    (c) => !participations.some((p) => p.campaign_id === c.id),
-  );
+  // «Ход в кампании» — глава «Текущая ситуация» этой кампании.
+  const campaignChapter = inCampaign
+    ? being.chapters.find(
+        (c) =>
+          c.section === "current_situation" && c.campaign_id === inCampaign.id,
+      )
+    : undefined;
   const scenes = being.scenes ?? [];
   const relationCount = relations
     ? relations.outgoing.length + relations.incoming.length
@@ -453,7 +460,7 @@ export function BeingDetailPage() {
   return (
     <EntityPage
       paper
-      crumbs={[
+      crumbs={inCampaign ? campaignCrumbs(inCampaign, being.name) : [
         ...settingCrumbs,
         {
           label: "Население",
@@ -522,6 +529,11 @@ export function BeingDetailPage() {
         </>
       }
     >
+      <ContextSwitch
+        engaged={being.campaigns}
+        campaign={inCampaign}
+        onSelect={ctx.select}
+      />
       {/* Соседи по списку населения — язычки на кромке листа, на всех
           вкладках (владелец, 2026-10-01). Если такое понадобится ещё
           одной карточке — это гнездо каркаса. */}
@@ -566,6 +578,18 @@ export function BeingDetailPage() {
         <div className="dossier">
           <aside className="dossier__aside">
             <div className="dossier__figure">
+              {inCampaign ? (
+                <div className="dossier__portrait">
+                  {being.avatar_image_url ? (
+                    <img
+                      src={being.avatar_image_url}
+                      alt={`Портрет: ${being.name}`}
+                    />
+                  ) : (
+                    <span className="dossier__portrait-empty">Портрет</span>
+                  )}
+                </div>
+              ) : (
               <label className="dossier__portrait" title={IMAGE_HINT}>
                 {being.avatar_image_url ? (
                   <img
@@ -587,6 +611,7 @@ export function BeingDetailPage() {
                   }
                 />
               </label>
+              )}
               {/* Статус — под портретом (владелец, 2026-10-01). */}
               <span className="badge tag being-category-badge">
                 {BEING_CATEGORY_LABELS[being.category]}
@@ -627,12 +652,14 @@ export function BeingDetailPage() {
                   </dd>
                 </div>
               )}
-              <div>
-                <dt className="paper-label">Теги</dt>
-                <dd>
-                  <TagChips tags={being.tags} onChange={saveTags} />
-                </dd>
-              </div>
+              {!inCampaign && (
+                <div>
+                  <dt className="paper-label">Теги</dt>
+                  <dd>
+                    <TagChips tags={being.tags} onChange={saveTags} />
+                  </dd>
+                </div>
+              )}
               {/* Кому открыто — выдача с профиля (спека campaign-paper, Q34). */}
               <PlayerVisibilityFact targetType="setting_being" targetId={beingId} />
             </dl>
@@ -648,6 +675,61 @@ export function BeingDetailPage() {
             </div>
           </aside>
 
+          {inCampaign ? (
+          <div className="dossier__main">
+            {/* Основу отсюда не правят: «За столом» — значения основы, под
+                ячейкой — записи кампании той же графы. */}
+            <CreatureCardLoader
+              type="being"
+              id={beingId}
+              variant="page"
+              embedded
+              hideProfileButton
+              forceExtras={forceExtras(records, being.setting_id)}
+            />
+            {campaignChapter ? (
+              <Participation
+                chapter={campaignChapter}
+                live={live?.campaign_id === inCampaign.id}
+                settingId={being.setting_id}
+                affects={mine}
+                title="Ход в кампании"
+              />
+            ) : (
+              <section className="participation">
+                <h3 className="paper-group__head">Ход в кампании</h3>
+                <span className="muted">
+                  Цель, план, что будет без вмешательства — пока не записаны.
+                </span>
+                <div className="participation__actions">
+                  <button
+                    type="button"
+                    className="comp-mini"
+                    onClick={() => void addParticipation(inCampaign.id)}
+                  >
+                    Править
+                  </button>
+                </div>
+              </section>
+            )}
+            <CampaignRecords
+              campaignId={inCampaign.id}
+              settingId={being.setting_id}
+              ownerType="being"
+              ownerId={beingId}
+              chains={records}
+              title="Что изменилось"
+              aspects={["note"]}
+            />
+            <BaseFold
+              description={being.description}
+              chapters={[
+                { title: "История", items: chaptersOf("history") },
+                { title: "Поведение", items: chaptersOf("behavior") },
+              ]}
+            />
+          </div>
+          ) : (
           <div className="dossier__main">
             {editingCard ? (
               <CreatureCardEditor
@@ -668,38 +750,10 @@ export function BeingDetailPage() {
               />
             )}
 
-            {participations.map((c) => (
-              <Participation
-                key={c.id}
-                chapter={c}
-                live={live?.campaign_id === c.campaign_id}
-                settingId={being.setting_id}
-                affects={mine}
-              />
-            ))}
-            {freeCampaigns.length > 0 && (
-              <div className="participation__actions">
-                <select
-                  value={newCampaignId}
-                  onChange={(e) => setNewCampaignId(e.target.value)}
-                  aria-label="Кампания для участия"
-                >
-                  <option value="">Участие в кампании…</option>
-                  {freeCampaigns.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={addParticipation}
-                  disabled={!newCampaignId}
-                >
-                  + Участие
-                </button>
-              </div>
-            )}
+            <EngagedCampaigns
+              campaigns={being.campaigns}
+              onOpen={ctx.select}
+            />
 
             <EditableTextCard
               title="Описание"
@@ -893,6 +947,7 @@ export function BeingDetailPage() {
               </div>
             </details>
           </div>
+          )}
         </div>
       )}
 
@@ -1008,7 +1063,15 @@ export function BeingDetailPage() {
         </div>
       )}
 
-      {tab === "Хроника" && (
+      {tab === "Хроника" && inCampaign && (
+        <CampaignChronicle
+          campaign={inCampaign}
+          settingId={being.setting_id}
+          chains={records}
+        />
+      )}
+
+      {tab === "Хроника" && !inCampaign && (
         <div className="chronicle">
           <section>
             <h2 className="paper-group__head">
@@ -1163,11 +1226,14 @@ function Participation({
   live,
   settingId,
   affects,
+  title,
 }: {
   chapter: BeingChapter;
   live: boolean;
   settingId: number;
   affects: Affect[];
+  /** В контексте кампании — «Ход в кампании», раскрыт всегда. */
+  title?: string;
 }) {
   const run = useAction();
   const [editing, setEditing] = useState(false);
@@ -1197,9 +1263,9 @@ function Participation({
   }
 
   return (
-    <details className="paper-fold participation" open={live || undefined}>
+    <details className="paper-fold participation" open={live || !!title || undefined}>
       <summary>
-        В кампании «{chapter.campaign_name}»
+        {title ?? `В кампании «${chapter.campaign_name}»`}
         {live && <span className="participation__live">идёт сессия</span>}
       </summary>
       <div className="paper-fold__body">

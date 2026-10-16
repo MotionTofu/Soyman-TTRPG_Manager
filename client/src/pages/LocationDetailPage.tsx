@@ -32,6 +32,15 @@ import { useConfirm } from "../hooks/useConfirm";
 import { BEING_CATEGORIES } from "../beingCategories";
 import { LocationImportantDatesTab } from "../components/LocationImportantDatesTab";
 import { LocationContent } from "../components/LocationContent";
+import { RECORD_ASPECTS } from "../entityRecords";
+import {
+  BaseFold,
+  CampaignChronicle,
+  CampaignRecords,
+  ContextSwitch,
+  EngagedCampaigns,
+} from "../components/campaign/CampaignProfileParts";
+import { campaignCrumbs, useCampaignContext, useOwnerRecords } from "../components/campaign/campaignProfile";
 import { LOCATION_ROLE_LABELS, locationRoleOf } from "../locationRoles";
 import { PlaceCard } from "../components/PlaceCard";
 import { EditableTextCard } from "../components/EditableTextCard";
@@ -91,6 +100,10 @@ export function LocationDetailPage() {
   const location = locationState.data ?? null;
   const settingId = location?.setting_id ?? null;
   const settingCrumbs = useSettingCrumbs(settingId);
+  // Контекст кампании (ADR-0006): основа или «как оно в этой кампании».
+  const ctx = useCampaignContext(location?.campaigns);
+  const inCampaign = ctx.campaign;
+  const records = useOwnerRecords(inCampaign?.id ?? null, "location", locationId);
   const communities = useResource<SettingCommunity[]>(settingId ? settingPaths.inSetting("community", settingId) : null).data ?? [];
   // Все локации сеттинга вместе с архивом: дерево, выбор родителя, архив детей.
   const allLocationsData = useResource<SettingLocation[]>(settingId ? locationPaths.allInSetting(settingId) : null).data;
@@ -779,7 +792,7 @@ export function LocationDetailPage() {
   return (
     <EntityPage
       paper
-      crumbs={[
+      crumbs={inCampaign ? campaignCrumbs(inCampaign, location.name) : [
         ...settingCrumbs,
         { label: "География", to: geographyTo },
         ...location.ancestors.map((a) => ({ label: a.name, to: `/locations/${a.id}` })),
@@ -827,6 +840,7 @@ export function LocationDetailPage() {
         </>
       }
     >
+      <ContextSwitch engaged={location.campaigns} campaign={inCampaign} onSelect={ctx.select} />
       {tab === "Досье" && (
         <div className="dossier">
           <aside className="dossier__aside">
@@ -840,6 +854,10 @@ export function LocationDetailPage() {
                 <img src={mapUrl} alt={`Карта: ${location.name}`} />
                 <span className="dossier__portrait-hint">Открыть карту</span>
               </button>
+            ) : inCampaign ? (
+              <div className="dossier__portrait dossier__map">
+                {imageUrl ? <img src={imageUrl} alt={location.name} /> : <span className="dossier__portrait-empty">Картинка места</span>}
+              </div>
             ) : (
               <label className="dossier__portrait dossier__map" title={IMAGE_HINT}>
                 {imageUrl ? (
@@ -898,9 +916,30 @@ export function LocationDetailPage() {
             </div>
           </aside>
 
+          {inCampaign ? (
+            <div className="dossier__main">
+              {/* Записи кампании по графам словаря места; основа — свёрткой. */}
+              <CampaignRecords
+                campaignId={inCampaign.id}
+                settingId={location.setting_id}
+                ownerType="location"
+                ownerId={locationId}
+                chains={records}
+                title="Сейчас в кампании"
+                aspects={RECORD_ASPECTS.location.map((a) => a.key)}
+                emptyKeys={RECORD_ASPECTS.location.map((a) => a.key).filter((k) => k !== "note")}
+              />
+              <BaseFold
+                description={location.description ?? ""}
+                chapters={[{ title: "Статьи", items: chapters }]}
+              />
+            </div>
+          ) : (
           <div className="dossier__main">
             {/* Шапка — та же карточка места, что справа в Географии (Q5). */}
             <PlaceCard locationId={locationId} variant="page" />
+
+            <EngagedCampaigns campaigns={location.campaigns} onOpen={ctx.select} title="Задействовано в кампаниях" />
 
             <EditableTextCard
               title="Описание"
@@ -973,6 +1012,7 @@ export function LocationDetailPage() {
               </div>
             </details>
           </div>
+          )}
         </div>
       )}
 
@@ -1438,7 +1478,11 @@ export function LocationDetailPage() {
         </div>
       )}
 
-      {tab === "Хроника" && (
+      {tab === "Хроника" && inCampaign && (
+        <CampaignChronicle campaign={inCampaign} settingId={location.setting_id} chains={records} />
+      )}
+
+      {tab === "Хроника" && !inCampaign && (
         <LocationImportantDatesTab
               locationId={locationId}
               locationName={location.name}

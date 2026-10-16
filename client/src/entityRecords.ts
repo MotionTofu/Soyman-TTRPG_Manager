@@ -1,5 +1,6 @@
 import { FORCE_FIELDS } from "./beingForce";
 import { campaignPaths } from "./data/campaigns";
+import { plural } from "./sceneKinds";
 import type { Affect } from "./data/entities";
 import type { SessionSummary } from "./types";
 
@@ -129,4 +130,13 @@ export function lastHeldSession(sessions: readonly SessionSummary[]): SessionSum
   for (const s of sessions)
     if (s.status === "held" && (!last || s.date > last.date || (s.date === last.date && s.id > last.id))) last = s;
   return last;
+}
+
+/** «3 записи · слух · 1 черновик» — что с сущностью в кампании, не открывая. */
+export function recordSummary(e: { records: number; rumors: number; drafts: number }): string {
+  const parts: string[] = [];
+  if (e.records) parts.push(`${e.records} ${plural(e.records, "запись", "записи", "записей")}`);
+  if (e.rumors) parts.push(e.rumors === 1 ? "слух" : `слухов: ${e.rumors}`);
+  if (e.drafts) parts.push(`${e.drafts} ${plural(e.drafts, "черновик", "черновика", "черновиков")}`);
+  return parts.join(" · ") || "записей нет";
 }
