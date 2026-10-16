@@ -2022,11 +2022,13 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
   for (const layer of model.layers) if (!showGrid || belowGrid(layer)) drawLayer(layer);
   if (part === "ground") { ctx.restore(); return; }
 
-  // Grid thickness and dash lengths are in screen pixels, independent of zoom.
-  if (showGrid) {
+  // Grid thickness and dash lengths are in screen pixels, independent of zoom. Мельче 8 точек на клетку сетка гаснет,
+  // мельче 4 не рисуется: это серая каша, и на крупной гексовой карте она одна съедала почти всё время плитки.
+  const gridFade = Math.max(0, Math.min(1, (scale - 4) / 4));
+  if (showGrid && gridFade > 0) {
     ctx.save();
     ctx.strokeStyle = o.gridColor ?? chrome.line;
-    ctx.globalAlpha = Math.max(0, Math.min(1, o.gridOpacity ?? 0.35));
+    ctx.globalAlpha = Math.max(0, Math.min(1, o.gridOpacity ?? 0.35)) * gridFade;
     ctx.lineWidth = Math.max(0.5, Math.min(4, o.gridLineWidth ?? 1));
     ctx.setLineDash(o.gridLineStyle === "dashed" ? [6, 4] : []);
     ctx.beginPath();
@@ -2040,13 +2042,21 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
         ctx.lineTo(Math.round(X(width)) + 0.5, Math.round(Y(y)) + 0.5);
       }
     } else {
-      for (let y = vy0; y <= vy1; y++)
+      // Каждое ребро — один раз: верх ряда одним зигзагом и правые рёбра; низ — только у нижнего ряда и у краёв,
+      // левое — у первого столбца. Остальные рёбра — чужой верх или чужая правая сторона.
+      const h = Math.sqrt(3) / 2, at = (x: number, y: number) => ({ cx: Math.sqrt(3) * (x + 0.5 * (y & 1)), cy: 1.5 * y });
+      for (let y = vy0; y <= vy1; y++) {
+        const first = at(vx0, y);
+        ctx.moveTo(X(first.cx - h), Y(first.cy - 0.5));
+        for (let x = vx0; x <= vx1; x++) { const { cx, cy } = at(x, y); ctx.lineTo(X(cx), Y(cy - 1)); ctx.lineTo(X(cx + h), Y(cy - 0.5)); }
         for (let x = vx0; x <= vx1; x++) {
-          const pts = cellCorners(grid, x, y);
-          ctx.moveTo(X(pts[0].px), Y(pts[0].py));
-          for (let i = 1; i < pts.length; i++) ctx.lineTo(X(pts[i].px), Y(pts[i].py));
-          ctx.closePath();
+          const { cx, cy } = at(x, y), bottom = y === vy1;
+          ctx.moveTo(X(cx + h), Y(cy - 0.5)); ctx.lineTo(X(cx + h), Y(cy + 0.5));
+          if (bottom || x === vx1) ctx.lineTo(X(cx), Y(cy + 1));
+          if (bottom || x === vx0) { ctx.moveTo(X(cx), Y(cy + 1)); ctx.lineTo(X(cx - h), Y(cy + 0.5)); }
+          if (x === vx0) ctx.lineTo(X(cx - h), Y(cy - 0.5));
         }
+      }
     }
     ctx.stroke();
     ctx.restore();
