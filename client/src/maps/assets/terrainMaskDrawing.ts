@@ -157,10 +157,16 @@ export function drawTerrainMaskTiles(ctx: CanvasRenderingContext2D, mask: Mask,
   // Smaller chunks at higher screen density avoid baking large offscreen areas
   // and let a local alpha edit reuse the rest of the source chunk's artwork.
   const tileSize = 18 * density <= 256 ? 16 : 10 * density <= 256 ? 8 : 4;
+  // Обрезка плитки — по целым точкам экрана: на дробной границе обе соседки сглаживают край, и сквозь шов светит бумага.
+  // Граница считается одной формулой для обеих соседок, иначе округление разводит их на точку.
+  const k = ctx.getTransform().a || 1, snap = (value: number) => Math.round(value * k) / k;
+  const edgeX = (i: number, size: number) => snap(ox + (mask.origin.x + i * size * mask.sampleSize) * scale);
+  const edgeY = (i: number, size: number) => snap(oy + (mask.origin.y + i * size * mask.sampleSize) * scale);
   const place = (image: CanvasImageSource, tile: { cx: number; cy: number; size: number }) => {
     const x = ox + (mask.origin.x + tile.cx * tile.size * mask.sampleSize) * scale;
     const y = oy + (mask.origin.y + tile.cy * tile.size * mask.sampleSize) * scale, sample = mask.sampleSize * scale;
-    ctx.save(); ctx.beginPath(); ctx.rect(x, y, tile.size * sample, tile.size * sample); ctx.clip();
+    const x0 = edgeX(tile.cx, tile.size), y0 = edgeY(tile.cy, tile.size);
+    ctx.save(); ctx.beginPath(); ctx.rect(x0, y0, edgeX(tile.cx + 1, tile.size) - x0, edgeY(tile.cy + 1, tile.size) - y0); ctx.clip();
     ctx.drawImage(image, x - sample, y - sample, (tile.size + 2) * sample, (tile.size + 2) * sample); ctx.restore();
   };
   ctx.save(); ctx.beginPath(); ctx.rect(ox + lo.x * scale, oy + lo.y * scale, (width - lo.x) * scale, (height - lo.y) * scale); ctx.clip();
