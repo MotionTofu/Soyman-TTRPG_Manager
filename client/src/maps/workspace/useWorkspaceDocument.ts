@@ -6,10 +6,14 @@ import { loadStoredWorkspaceDocument } from "../editor/loadDocument";
 import { useMapAutosave } from "../editor/hooks/useMapAutosave";
 import { useMapHistory } from "../editor/hooks/useMapHistory";
 import { mapKind, type MapFull } from "../mapTypes";
+import { subscribeMapImageAssets } from "../assets/registry";
 import { geometryView } from "./editDocument";
 import { mapWorkspaceApi } from "./mapApi";
 
 const clone = (document: MapDocumentV6 | null) => document ? structuredClone(document) : null;
+const INCOMPATIBLE = "Некоторые элементы этой карты пока нельзя редактировать здесь. Исходник доступен для скачивания.";
+const revisionError = (record: MapFull) => Number.isSafeInteger(record.revision) ? null
+  : "Сервер ещё не поддерживает безопасное сохранение. Обновите приложение перед редактированием.";
 
 /** One map's document: load, history, autosave and the guarded write path. */
 export function useWorkspaceDocument({ mapId, isGm, leaving, isEditing, onReset, onLoaded }: {
@@ -53,9 +57,7 @@ export function useWorkspaceDocument({ mapId, isGm, leaving, isEditing, onReset,
         return;
       }
       const compat = assessCurrentEditorCompatibility(geometryView(loaded.document));
-      const missingRevision = !Number.isSafeInteger(record.revision);
-      setCompatibilityError(!compat.compatible ? "Некоторые элементы этой карты пока нельзя редактировать здесь. Исходник доступен для скачивания."
-        : missingRevision ? "Сервер ещё не поддерживает безопасное сохранение. Обновите приложение перед редактированием." : null);
+      setCompatibilityError(!compat.compatible ? INCOMPATIBLE : revisionError(record));
       const full = { ...record, document_version: loaded.sourceFormat === "v6" ? 6 : record.document_version };
       setMap(full);
       // Обзорная карта, впервые открытая в этом редакторе, получает атласную воду (гриллинг 2026-10-16, А1);
@@ -70,6 +72,17 @@ export function useWorkspaceDocument({ mapId, isGm, leaving, isEditing, onReset,
     // Lifecycle belongs to map identity/role, not to hook return objects.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapId, isGm]);
+  // Свои наборы приходят отдельно от карты, и до них вещь своего набора кажется незнакомой — карта закрывалась
+  // для правки насовсем. Закрытая так карта перепроверяется, когда пополняется реестр картинок.
+  useEffect(() => {
+    if (compatibilityError !== INCOMPATIBLE || !map) return;
+    const recheck = () => {
+      const current = documentRef.current;
+      if (current && assessCurrentEditorCompatibility(geometryView(current)).compatible) setCompatibilityError(revisionError(map));
+    };
+    recheck();
+    return subscribeMapImageAssets(recheck);
+  }, [compatibilityError, map]);
 
   function showError(error: unknown) { setActionError(error instanceof Error ? error.message : "Не удалось выполнить действие"); }
   /** The single write path for discrete edits: one history step, errors shown. */
