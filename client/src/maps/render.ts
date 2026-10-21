@@ -1320,7 +1320,8 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     const baseWidth = path.width ?? 0.22;
     // Река с материалом: линия, залитая поверхностью воды (узор привязан к карте, как у кисти поверхности).
     const water = path.kind === "river" && path.style ? surfaceImage(path.liquid ? waterCode(riverDepth(path), path.liquid) : `village-${path.style.slice(path.style.indexOf(":") + 1)}`, false, pack) : null;
-    const riverFill = (water && ctx.canvas ? surfacePattern(ctx, water, scale, ox, oy, pack) : null) ?? RIVER_FILL;
+    // Простая река другой жидкостью — средним тоном её рецепта: иначе поле «Жидкость» у неё ничего не меняло.
+    const riverFill = (water && ctx.canvas ? surfacePattern(ctx, water, scale, ox, oy, pack) : null) ?? (path.liquid ? liquidRecipe(path.liquid, model.liquids).tones[1] : RIVER_FILL);
     const bank = water ? { color: chrome.ink, k: 1.1 } : { color: chrome.paper, k: 1.55 };
     // Река своего набора — полоса, как дорога; встроенная — заливка поверхностью воды.
     const strip = path.style && (path.kind !== "river" || ownPackOf(path.style)) ? stripImage(path.style) : null;
