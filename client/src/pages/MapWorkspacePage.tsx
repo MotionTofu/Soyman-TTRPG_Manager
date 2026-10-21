@@ -378,17 +378,28 @@ export function MapWorkspacePage() {
     });
     return true;
   });
-  // Наборы, отмеченные при создании карты, приходят с переходом и записываются один раз.
-  const location = useLocation(), chosenPacks = (location.state as { packs?: string[] } | null)?.packs, loaded = !!document;
+  // Наборы, отмеченные при создании карты, приходят с переходом и записываются один раз — без шага истории:
+  // это часть создания карты, «Отменить» их не снимает.
+  const location = useLocation(), created = location.state as { packs?: string[]; settingFailed?: boolean } | null, chosenPacks = created?.packs, loaded = !!document;
+  const settingFailed = !!created?.settingFailed, { setActionError } = doc;
   useEffect(() => {
-    if (!chosenPacks || !loaded) return;
-    if (!documentRef.current?.appearance?.packs) onPacks(chosenPacks);
+    if ((!chosenPacks && !settingFailed) || !loaded || !writable) return;
+    const current = documentRef.current;
+    if (chosenPacks && current && !current.appearance?.packs) {
+      setDocument({ ...current, appearance: { ...(current.appearance ?? { style: "paper-ink" as const }), packs: chosenPacks } }); autosave.schedule();
+    }
+    if (settingFailed) setActionError("Карта создана, но к сеттингу не привязалась. Выберите его ещё раз: «Карта ▾ → Сеттинг».");
     navigate(location.pathname, { replace: true, state: null });
-  }, [chosenPacks, loaded, documentRef, onPacks, navigate, location.pathname]);
+  }, [chosenPacks, settingFailed, loaded, documentRef, writable, setDocument, autosave, setActionError, navigate, location.pathname]);
   // Жанры сеттингов, к которым привязана карта: по ним библиотека каталога подбирает наборы.
-  const bindings = useResource<{ target_type: string; target_id: number }[]>(Number.isFinite(mapId) ? `/maps/${mapId}/bindings` : null, BINDING_OPTIONS).data;
+  const bindings = useResource<{ id: number; target_type: string; target_id: number }[]>(Number.isFinite(mapId) ? `/maps/${mapId}/bindings` : null, BINDING_OPTIONS).data;
   const boundSettings = useMemo(() => (bindings ?? []).filter((entry) => entry.target_type === "setting").map((entry) => entry.target_id), [bindings]);
-  const settingList = useResource<Setting[]>(boundSettings.length ? "/settings" : null).data;
+  const settingList = useResource<Setting[]>(boundSettings.length || writable ? "/settings" : null).data;
+  // Сеттинг карты один: прежняя привязка снимается, новая ставится.
+  const onSetting = useEvent((next: number | null) => void run(labelled("Сеттинг карты не сохранён", async () => {
+    for (const entry of (bindings ?? []).filter((item) => item.target_type === "setting")) await write.del(`/maps/${mapId}/bindings/${entry.id}`, BINDING_OPTIONS);
+    if (next) await write.post(`/maps/${mapId}/bindings`, { target_type: "setting", target_id: next }, BINDING_OPTIONS);
+  }), { affects: [{ path: `/maps/${mapId}/bindings` }] }));
   const genres = useMemo((): SettingGenre[] => (settingList ?? []).filter((entry) => boundSettings.includes(entry.id)).flatMap((entry) => entry.genres ?? []), [settingList, boundSettings]);
   const onLiveWater = useEvent(() => onWater(documentRef.current?.appearance?.style === "comic-punk" ? "comic" : "soft"));
   const onWaterTune = useEvent((patch: WaterTune) => commit((before) => ({ ...before, appearance: { ...(before.appearance ?? { style: "paper-ink" as const }), ...patch } })));
@@ -459,7 +470,8 @@ export function MapWorkspacePage() {
       canUndo={history.canUndo && !disabled && !leaving} canRedo={history.canRedo && !disabled && !leaving} onUndo={onUndo} onRedo={onRedo}
       grid={grid} onGrid={onGrid} style={document.appearance?.style ?? "paper-ink"} onStyle={onStyle} styleLocked={disabled || leaving} frame={document.appearance?.frame} onFrame={onFrame} water={document.appearance?.water} onWater={onWater} waterSpeed={document.appearance?.waterSpeed ?? 1} waterPixels={document.appearance?.waterPixels ?? 8} waterShoal={document.appearance?.waterShoal ?? 0} waves={document.appearance?.waves ?? "arcs"} waveDensity={document.appearance?.waveDensity ?? 0} onWaterTune={onWaterTune}
       generatorLocked={leaving || !!doc.compatibilityError || autosave.blocked || autosave.status.kind === "conflict"} saveLocked={saveBlocked}
-      onGenerator={onGenerator} onSave={onSave} onBackup={onBackup} onPicture={onPicture} gl={gl} onGl={onGl} effects={effects} onEffect={onEffect} onEffectsReset={onEffectsReset} classicLink={map.document_version !== 6 ? `/maps/${map.id}` : null} />
+      onGenerator={onGenerator} onSave={onSave} onBackup={onBackup} onPicture={onPicture} gl={gl} onGl={onGl} effects={effects} onEffect={onEffect} onEffectsReset={onEffectsReset} classicLink={map.document_version !== 6 ? `/maps/${map.id}` : null}
+      setting={boundSettings[0] ?? null} settings={settingList ?? []} settingLocked={!writable || map.document_version !== 6} onSetting={onSetting} />
 
     <div className="workspace-editor-body">
       {CATALOG_TOOLS.includes(tool) && <CatalogPanel tool={tool} local={!hasRooms} kind={mapKind(map.scale)} packs={packs} onPacks={onPacks} ownPacks={ownPacks} used={used} genres={genres} comicPunk={document.appearance?.style === "comic-punk"} symbol={settings.symbol} material={settings.material} scatterProfile={settings.scatterProfile} lineStyle={(tool === "wall" ? settings.wallStyle : tool === "river" ? settings.riverStyle : settings.roadStyle) ?? ""}

@@ -37,7 +37,7 @@ export const WorkspaceToolRail = memo(function WorkspaceToolRail({ kind, tool, l
 });
 
 export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, canUndo, canRedo, onUndo, onRedo, grid, onGrid,
-  style, onStyle, styleLocked, frame, onFrame, water, onWater, waterSpeed, waterPixels, waterShoal, waves, waveDensity, onWaterTune, generatorLocked, saveLocked, onGenerator, onSave, onBackup, onPicture, gl, onGl, effects, onEffect, onEffectsReset, classicLink }: {
+  style, onStyle, styleLocked, frame, onFrame, water, onWater, waterSpeed, waterPixels, waterShoal, waves, waveDensity, onWaterTune, generatorLocked, saveLocked, onGenerator, onSave, onBackup, onPicture, gl, onGl, effects, onEffect, onEffectsReset, classicLink, setting, settings, settingLocked, onSetting }: {
   mapName: string; status: string;
   canUndo: boolean; canRedo: boolean; onUndo: () => void; onRedo: () => void;
   grid: GridLook; onGrid: (patch: Partial<GridLook>) => void;
@@ -53,6 +53,8 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, 
   effects: MapEffects; onEffect: (name: MapEffect, next: EffectState) => void; onEffectsReset: () => void;
   /** Старый редактор — только для карт, ещё не переведённых в новый формат. */
   classicLink: string | null;
+  /** Сеттинг карты: по его жанрам каталог подбирает наборы. */
+  setting: number | null; settings: readonly { id: number; name: string }[]; settingLocked: boolean; onSetting: (id: number | null) => void;
 }) {
   return <header className="workspace-editor-header">
     <Link to="/maps" className="workspace-back">← Все карты</Link>
@@ -112,6 +114,13 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, 
           <label>Поля, клеток<input aria-label="Поля рамки в клетках" type="number" min={0} max={100} step={1} value={frame ?? ""} disabled={frame === undefined}
             onChange={(event) => onFrame(Math.max(0, Math.min(100, Number(event.target.value) || 0)))} /></label>
           <small>Камера не уходит дальше рамки, поля попадают в «Скачать картинку».</small>
+        </fieldset>
+        <fieldset disabled={settingLocked}><legend>Сеттинг</legend>
+          <label>Сеттинг карты<select aria-label="Сеттинг карты" value={setting ?? ""} onChange={(event) => onSetting(event.target.value ? Number(event.target.value) : null)}>
+            <option value="">Без сеттинга</option>
+            {settings.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+          </select></label>
+          <small>По жанрам сеттинга каталог подбирает близкие наборы.</small>
         </fieldset>
         <button type="button" data-close disabled={generatorLocked} onClick={onGenerator}>Быстрое подземелье…</button>
         <button type="button" data-close disabled={saveLocked} onClick={onSave}>Сохранить сейчас</button>

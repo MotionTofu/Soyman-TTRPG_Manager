@@ -262,12 +262,14 @@ export function MapsListPage() {
         height: h,
       });
       // Привязка к сеттингу — не повод терять созданную карту: её можно поставить позже.
-      if (settingId) await write.post(`/maps/${created.id}/bindings`, { target_type: "setting", target_id: settingId }, { headers: { [MAP_VERSION_HEADER]: "6" } }).catch(() => undefined);
+      // Сбой привязки редактор покажет и подскажет, где поставить сеттинг заново.
+      const settingFailed = !!settingId && !await write.post(`/maps/${created.id}/bindings`, { target_type: "setting", target_id: settingId }, { headers: { [MAP_VERSION_HEADER]: "6" } }).then(() => true, () => false);
       // Новая карта — только список: миниатюры остальных не задеты.
       afterWrite([{ kind: "map", card: true }]);
       setCreating(false);
       const packs = offered.filter((pack) => !offPacks.includes(pack.id)).map((pack) => pack.id);
-      navigate(`/maps/${created.id}/workspace`, { state: packs.length && packs.length < packsFor(kind).length ? { packs } : null });
+      const chosen = packs.length && packs.length < packsFor(kind).length ? { packs } : {};
+      navigate(`/maps/${created.id}/workspace`, { state: settingFailed || "packs" in chosen ? { ...chosen, ...(settingFailed ? { settingFailed } : {}) } : null });
     } catch (e) {
       setCreateError(translateMapError(e));
     }
