@@ -28,9 +28,9 @@ import type { MapLayerRole } from "@shared/maps/core/literals";
 import { layerRole } from "./core/mutations/layers";
 import { ARTWORK_SCATTER, mapAssetPackForId, resolveMapSymbol, type MapVisualAsset } from "./assets/registry";
 import { isPaletteIndexMaskPayload, TERRAIN_MASK_CHUNK_SIDE } from "@shared/maps/core/terrainMask";
-import { scatterInstances, SCATTER_LIMIT } from "./scatter";
+import { scatterInstances, scatterWaterReach, SCATTER_LIMIT } from "./scatter";
 import { cellCenter } from "./grid";
-import { crossingChoices, type CrossingChoice } from "./crossings";
+import { crossingChoices, waterAt, type CrossingChoice } from "./crossings";
 import type { GameplayToken } from "@shared/maps/core";
 import type { MapGrid } from "./mapTypes";
 import type {
@@ -386,6 +386,8 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
   const diag = (code: string, message: string) => diagnostics.push({ code, message });
 
   const layers: MapRenderLayer[] = [];
+  /** Слои россыпи, где не всё может лежать в воде: номер слоя → до какой воды пускают каждый экземпляр. */
+  const wettable = new Map<number, number[]>();
   let nonTerrainMaterials = 0;
 
   for (const layer of doc.layers) {
@@ -561,7 +563,7 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
       }
       layers.push({ ...baseOf(layer), kind: "object", items });
     } else if (layer.kind === "scatter") {
-      const items: RenderMapObject[] = [];
+      const items: RenderMapObject[] = [], reaches: number[] = [];
       for (const area of layer.areas) {
         const instances = scatterInstances(area);
         const required = area.profileRef.type === "builtin" ? ARTWORK_SCATTER.find(profile => profile.key === (area.profileRef.type === "builtin" ? area.profileRef.key : null))?.pack : null;
@@ -573,7 +575,10 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
           continue;
         }
         items.push(...instances.items);
+        const reach = scatterWaterReach(area.profileRef.type === "builtin" ? area.profileRef.key : null);
+        reaches.push(...instances.items.map(() => reach));
       }
+      if (reaches.some((reach) => reach < 2)) wettable.set(layers.length, reaches);
       layers.push({ ...baseOf(layer), kind: "scatter", items });
     } else if (layer.kind === "reference") {
       layers.push({ ...baseOf(layer), kind: "reference", items: layer.items });
@@ -585,11 +590,20 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
   }
 
   const liquids = (doc as { appearance?: { liquids?: readonly LiquidRecipe[] } }).appearance?.liquids;
-  return { model: {
+  const model: MapRenderModel = {
     layers, ...(liquids?.length ? { liquids } : {}),
     ...(doc.exploration === undefined ? {} : { exploration: {
       enabled: doc.exploration.enabled,
       revealedCells: new Set(doc.exploration.revealedCells.map((cell) => `${cell.x},${cell.y}`)),
     } }),
-  }, diagnostics };
+  };
+  // Россыпь не ложится в воду глубже, чем ей можно: воду видно только по всей карте, поэтому — после сборки слоёв.
+  if (wettable.size) {
+    const at = waterAt(model);
+    for (const [index, reaches] of wettable) {
+      const layer = layers[index] as RenderScatterLayer;
+      layers[index] = { ...layer, items: layer.items.filter((item, i) => at(item.object.transform.position.x, item.object.transform.position.y) <= reaches[i]) };
+    }
+  }
+  return { model, diagnostics };
 }

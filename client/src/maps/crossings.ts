@@ -50,8 +50,8 @@ export function paintedWaterAt(model: MapRenderModel) {
   painted.set(model, known);
   return known;
 }
-/** Вода в точке карты: закрашенная кистью и реки-линии. */
-function waterAt(model: MapRenderModel) {
+/** Вода в точке карты: закрашенная кистью и реки-линии. 0 — суша, 1 — мелко, 2 — глубоко. */
+export function waterAt(model: MapRenderModel) {
   let known = waters.get(model);
   if (known) return known;
   const brushed = paintedWaterAt(model);

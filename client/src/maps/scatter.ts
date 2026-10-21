@@ -8,6 +8,11 @@ export const SCATTER_PROFILES: readonly { key: string; name: string; assetId: st
   { key: "scatter/mountains", name: "Горы", assetId: "soyman-symbols:mountain", assetIds: ["soyman-symbols:mountain"], size: 1 },
   ...ARTWORK_SCATTER,
 ];
+/** Россыпь и вода: сухопутная на воду не ложится, прибрежная растёт и на мелководье, плавучая лежит где угодно.
+ * Число — до какой воды пускают: 0 — только суша, 1 — мелко, 2 — и глубоко (как у `waterDepth`). Свои наборы — сухопутные. */
+const SHORE = new Set(["scatter/village-reeds-v1", "scatter/village-cattails-v1", "scatter/world-reeds-v1"]);
+const AFLOAT = new Set(["scatter/village-lilies-v1", "scatter/village-leaves-v1"]);
+export const scatterWaterReach = (key: string | null) => key && AFLOAT.has(key) ? 2 : key && SHORE.has(key) ? 1 : 0;
 export function shapeBounds(shape: ShapeGeometry) {
   if (shape.type === "rect") return { x: shape.x, y: shape.y, w: shape.w, h: shape.h };
   if (shape.type === "ellipse") return { x: shape.center.x - shape.rx, y: shape.center.y - shape.ry, w: shape.rx * 2, h: shape.ry * 2 };

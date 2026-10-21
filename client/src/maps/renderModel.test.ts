@@ -456,3 +456,27 @@ describe("no mutation", () => {
     expect(doc).toEqual(docBefore);
   });
 });
+
+describe("россыпь и вода", () => {
+  it("лес в воду не ложится, камыш растёт и на мелководье, но не в глубине", () => {
+    const water = (depth: number) => ({ type: "builtin" as const, key: `terrain/village-water-${depth}` });
+    // Маска 0,25 клетки: левая половина карты — мель (2), правая — глубина (4), снизу суша.
+    const values = Array.from({ length: 256 }, (_, i) => (i >> 4) < 8 ? (i % 16 < 8 ? 1 : 2) : 0);
+    const area = (id: string, key: string) => ({ id, shape: { type: "rect" as const, x: 0, y: 0, w: 4, h: 4 }, profileRef: { type: "builtin" as const, key }, density: 3, seed: 5 });
+    const doc = { v: 5, world: { bounds: { minX: 0, minY: 0, maxX: 4, maxY: 4 } }, grid: { type: "square", cellSize: 1, columns: 4, rows: 4, origin: { x: 0, y: 0 } },
+      assetPacks: [{ id: "soyman-village", version: "1" }],
+      layers: [
+        { id: "m", kind: "terrain", name: "Вода", visible: true, locked: false, opacity: 1, defaultMaterial: { type: "builtin", key: "terrain/plain" }, representation: "mask",
+          mask: { origin: { x: 0, y: 0 }, sampleSize: 0.25, materials: [water(2), water(4)], chunks: [{ id: "c", cx: 0, cy: 0, payload: { encoding: "palette-index-v1", values } }] } },
+        { id: "forest", kind: "scatter", name: "Лес", visible: true, locked: false, opacity: 1, areas: [area("a", "scatter/forest")] },
+        { id: "reeds", kind: "scatter", name: "Камыш", visible: true, locked: false, opacity: 1, areas: [area("b", "scatter/village-reeds-v1")] },
+      ] } as unknown as MapDocumentV5;
+    const { model } = createV5RenderModel(doc);
+    const spots = (id: string) => (model.layers.find((layer) => layer.id === id) as Extract<MapRenderLayer, { kind: "scatter" }>).items.map((item) => item.object.transform.position);
+    const wet = (p: { y: number }) => p.y < 2, deep = (p: { x: number; y: number }) => p.y < 2 && p.x >= 2;
+    expect(spots("forest").length).toBeGreaterThan(0);
+    expect(spots("forest").some(wet)).toBe(false);
+    expect(spots("reeds").some(wet)).toBe(true);
+    expect(spots("reeds").some(deep)).toBe(false);
+  });
+});
