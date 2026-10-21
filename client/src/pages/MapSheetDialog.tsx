@@ -7,6 +7,8 @@ import { cutPiece, evenGuides, findPieces, guideCells, readingOrder, rectKey, sh
 
 const AFFECTS = [{ path: "/map-packs" }];
 const IMAGES = "image/png,image/jpeg,image/webp,image/avif,image/gif";
+/** Длинная сторона листа в памяти, точек: столько же, сколько у картинки набора. */
+const SHEET_SIDE = 4096;
 const cellsOf = (value: number) => Math.max(0.5, Math.min(16, Math.round(value * 2) / 2)) || 1;
 /** Во что превращаются куски листа: каждый — свой объект, либо все — картинки одной вещи. */
 const TARGETS = [["object", "Объекты — каждый кусок отдельно"], ["variants", "Варианты одного объекта"], ["scatter", "Картинки одной россыпи"]] as const;
@@ -20,7 +22,7 @@ export function MapSheetDialog({ pack, reference, sizeGrid, onClose }: {
   /** Объект на сетке рядом с меркой — тот же рисунок, что в окне объекта. */ sizeGrid: (src: string | null, w: number, h: number, reference: string) => ReactNode;
 }) {
   const run = useAction();
-  const [sheet, setSheet] = useState<{ url: string; pixels: Pixels } | null>(null);
+  const [sheet, setSheet] = useState<{ url: string; pixels: Pixels; shrunk: boolean } | null>(null);
   const [xs, setXs] = useState<number[]>([]), [ys, setYs] = useState<number[]>([]), [found, setFound] = useState<Rect[] | null>(null);
   const [tolerance, setTolerance] = useState(24), [cols, setCols] = useState(4), [rows, setRows] = useState(4);
   const [off, setOff] = useState<string[]>([]), [glued, setGlued] = useState<string[][]>([]), [picked, setPicked] = useState<string[]>([]);
@@ -55,10 +57,12 @@ export function MapSheetDialog({ pack, reference, sizeGrid, onClose }: {
     if (!title) setTitle(file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").slice(0, 60));
     const image = new Image(), url = URL.createObjectURL(file);
     image.onload = () => {
-      const canvas = document.createElement("canvas"); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
-      const pen = canvas.getContext("2d", { willReadFrequently: true })!; pen.drawImage(image, 0, 0);
+      // Длинная сторона — не больше SHEET_SIDE: лист 8000×8000 держал бы в памяти вкладки 256 МБ, а картинка набора всё равно до 4096.
+      const k = Math.min(1, SHEET_SIDE / Math.max(image.naturalWidth, image.naturalHeight));
+      const canvas = document.createElement("canvas"); canvas.width = Math.round(image.naturalWidth * k); canvas.height = Math.round(image.naturalHeight * k);
+      const pen = canvas.getContext("2d", { willReadFrequently: true })!; pen.drawImage(image, 0, 0, canvas.width, canvas.height);
       const data = pen.getImageData(0, 0, canvas.width, canvas.height);
-      setSheet({ url, pixels: { data: data.data, width: data.width, height: data.height } });
+      setSheet({ url, pixels: { data: data.data, width: data.width, height: data.height }, shrunk: k < 1 });
       setXs([]); setYs([]); setFound(null); setOff([]); setGlued([]); setPicked([]); setMeta({}); sent.current = { keys: new Set(), itemId: null };
     };
     image.src = url;
@@ -161,6 +165,7 @@ export function MapSheetDialog({ pack, reference, sizeGrid, onClose }: {
           <button type="button" disabled={picked.length < 2} onClick={glue}>Склеить отмеченные ({picked.length})</button>
           {glued.length > 0 && <button type="button" onClick={() => setGlued([])}>Расклеить всё</button>}
           <small className="muted">Щелчок по куску выключает его. Shift+щелчок отмечает куски для склейки — для предмета, который линия разрезала.</small>
+          {sheet.shrunk && <small className="muted">Лист крупнее {SHEET_SIDE} точек — ужат до {sheet.pixels.width}×{sheet.pixels.height}.</small>}
           <p role="status">Кусков: {kept.length}{pieces.length > kept.length ? `, выключено ${pieces.length - kept.length}` : ""}</p>
         </>}
       </div>
