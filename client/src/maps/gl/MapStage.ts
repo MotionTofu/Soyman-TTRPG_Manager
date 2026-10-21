@@ -38,9 +38,10 @@ export class MapStage {
   private readonly maskCanvas = document.createElement("canvas");
   private readonly maskRaw = document.createElement("canvas");
   private readonly flowCanvas = document.createElement("canvas");
-  private readonly recipeCanvas = Object.assign(document.createElement("canvas"), { width: 6, height: 8 });
+  private readonly blendCanvas = document.createElement("canvas");
+  private readonly recipeCanvas = Object.assign(document.createElement("canvas"), { width: 7, height: 8 });
   private readonly thingsCanvas = document.createElement("canvas");
-  private readonly waterPass = createWaterFilter(this.maskCanvas, this.flowCanvas, this.recipeCanvas, this.thingsCanvas);
+  private readonly waterPass = createWaterFilter(this.maskCanvas, this.flowCanvas, this.blendCanvas, this.recipeCanvas, this.thingsCanvas);
   private thingsOf: readonly unknown[] = [];
   private water: MapWater | null = null;
   private recipesOf: unknown = null;
@@ -274,7 +275,7 @@ export class MapStage {
       // остальное догоняет следующий кадр анимации воды. Первая правка после паузы — сразу.
       const now = performance.now();
       if ((sources.length !== this.maskOf.length || sources.some((source, i) => source !== this.maskOf[i])) && now - this.maskAt >= MASK_GAP_MS) {
-        drawWaterMask(this.maskCanvas, this.maskRaw, this.flowCanvas, this.recipeCanvas, frame.content.model, ww, wh, this.water.shoal, lo, fog);
+        drawWaterMask(this.maskCanvas, this.maskRaw, this.flowCanvas, this.blendCanvas, this.recipeCanvas, frame.content.model, ww, wh, this.water.shoal, lo, fog);
         this.waterPass.refresh(); this.maskOf = sources; this.recipesOf = null; this.maskAt = now;
       }
       // Что стоит в воде — своя картинка: передвинутая лодка не пересобирает маску воды всей карты.

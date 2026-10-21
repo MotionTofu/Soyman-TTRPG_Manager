@@ -23,20 +23,20 @@ void main() {
 
 
 /** Проход по слою земли: рисует воду там, где её показывает маска. */
-export function createWaterFilter(mask: HTMLCanvasElement, flow: HTMLCanvasElement, recipes: HTMLCanvasElement, things: HTMLCanvasElement) {
-  const texture = Texture.from(mask, true), stream = Texture.from(flow, true), recipe = Texture.from(recipes, true), around = Texture.from(things, true);
-  texture.source.scaleMode = stream.source.scaleMode = around.source.scaleMode = "linear"; recipe.source.scaleMode = "nearest";
+export function createWaterFilter(mask: HTMLCanvasElement, flow: HTMLCanvasElement, blend: HTMLCanvasElement, recipes: HTMLCanvasElement, things: HTMLCanvasElement) {
+  const texture = Texture.from(mask, true), stream = Texture.from(flow, true), seam = Texture.from(blend, true), recipe = Texture.from(recipes, true), around = Texture.from(things, true);
+  texture.source.scaleMode = stream.source.scaleMode = around.source.scaleMode = "linear"; recipe.source.scaleMode = seam.source.scaleMode = "nearest";
   const filter = new Filter({
     glProgram: GlProgram.from({ vertex: defaultFilterVert, fragment, name: "map-water" }),
     resources: { water: { uOrigin: { value: new Float32Array(2), type: "vec2<f32>" }, uScale: { value: 1, type: "f32" }, uTime: { value: 0, type: "f32" },
-      uMap: { value: new Float32Array(2), type: "vec2<f32>" }, uWater: { value: new Float32Array(3), type: "vec3<f32>" } }, uMask: texture.source, uFlow: stream.source, uRecipe: recipe.source, uThings: around.source },
+      uMap: { value: new Float32Array(2), type: "vec2<f32>" }, uWater: { value: new Float32Array(3), type: "vec3<f32>" } }, uMask: texture.source, uFlow: stream.source, uRecipe: recipe.source, uThings: around.source, uBlend: seam.source },
     resolution: 1, antialias: "off", padding: 0,
   });
   const uniforms = filter.resources.water.uniforms as { uOrigin: Float32Array; uScale: number; uTime: number; uMap: Float32Array; uWater: Float32Array };
   return {
     filter,
     /** Маску перерисовали — отдать её видеокарте. */
-    refresh() { texture.source.update(); stream.source.update(); recipe.source.update(); },
+    refresh() { texture.source.update(); stream.source.update(); seam.source.update(); recipe.source.update(); },
     /** Перерисовали «что стоит в воде». */
     refreshThings() { around.source.update(); },
     /** `lo` — левый верхний угол карты: шейдер считает от него, как и маски воды. */
@@ -45,6 +45,6 @@ export function createWaterFilter(mask: HTMLCanvasElement, flow: HTMLCanvasEleme
       uniforms.uMap[0] = width - lo.x; uniforms.uMap[1] = height - lo.y;
       uniforms.uWater[0] = water.mode; uniforms.uWater[1] = water.speed; uniforms.uWater[2] = water.size;
     },
-    destroy() { filter.destroy(); texture.destroy(true); stream.destroy(true); recipe.destroy(true); around.destroy(true); },
+    destroy() { filter.destroy(); texture.destroy(true); stream.destroy(true); seam.destroy(true); recipe.destroy(true); around.destroy(true); },
   };
 }

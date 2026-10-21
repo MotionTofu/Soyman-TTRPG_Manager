@@ -69,7 +69,8 @@ function liquidData(raw: Record<string, unknown>) {
     ? (raw.tones as string[]).map((tone) => tone.toLowerCase()) : WATER_TONES;
   return { tones, pace: between(raw.pace, 0, 2, 1), size: between(raw.size, 0.25, 4, 1), bed: between(raw.bed, 0, 1, 1), glow: between(raw.glow, 0, 1, 0),
     pattern: LIQUID_PATTERNS.includes(raw.pattern as string) ? raw.pattern : "ripple", rim: LIQUID_RIMS.includes(raw.rim as string) ? raw.rim : "foam",
-    solid: raw.solid === true, shore: between(raw.shore, 0, 1, 0.4), ragged: between(raw.ragged, 0, 1, 0.4) };
+    solid: raw.solid === true, shore: between(raw.shore, 0, 1, 0.4), ragged: between(raw.ragged, 0, 1, 0.4),
+    push: between(raw.push, 0, 1, 0.5), blend: between(raw.blend, 0, 1, 0.25) };
 }
 /** Данные вещи по её виду. Линия: каким инструментом тянется (дорога, река — «течёт», ограда — «преграждает путь») и ширина.
  * Переправа: какой настил заменяет. Россыпь: размер знака и густота по умолчанию. */

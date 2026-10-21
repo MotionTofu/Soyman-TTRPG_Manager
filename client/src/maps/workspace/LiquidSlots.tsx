@@ -11,8 +11,8 @@ export function Swatch({ recipe }: { recipe: Pick<LiquidRecipe, "key" | "fill" |
   return builtin(recipe.key) ? <img src={villageUrl(recipe.key === "water" ? "shallow" : recipe.key === "sea" ? "deep" : recipe.key)} alt="" style={{ background: recipe.fill }} />
     : <i aria-hidden="true" style={{ background: `linear-gradient(135deg, ${recipe.tones[2]} 0 18%, ${recipe.tones[1]} 18% 62%, ${recipe.tones[0]} 62%)` }} />;
 }
-function Range({ name, value, min, max, step, onChange, onSettle }: { name: string; value: number; min: number; max: number; step: number; onChange: (value: number) => void; onSettle: () => void }) {
-  return <label>{name}<input type="range" aria-label={name} min={min} max={max} step={step} value={value} onChange={event => onChange(Number(event.target.value))} onPointerUp={onSettle} onKeyUp={onSettle} onBlur={onSettle} /></label>;
+function Range({ name, title, value, min, max, step, onChange, onSettle }: { name: string; title?: string; value: number; min: number; max: number; step: number; onChange: (value: number) => void; onSettle: () => void }) {
+  return <label title={title}>{name}<input type="range" aria-label={name} min={min} max={max} step={step} value={value} onChange={event => onChange(Number(event.target.value))} onPointerUp={onSettle} onKeyUp={onSettle} onBlur={onSettle} /></label>;
 }
 type Recipe = Omit<MapLiquidRecipe, "key" | "name" | "ref">;
 /** Ручки рецепта жидкости — и в слоте карты, и на экране набора. `live` — ползунок ещё тянут, шаг закроет `onSettle`. */
@@ -27,6 +27,8 @@ export function LiquidRecipeFields({ recipe, edit, onSettle }: { recipe: Omit<Re
     <Range name="Дно видно" value={recipe.bed} min={0} max={1} step={0.05} onChange={bed => edit({ bed }, true)} onSettle={onSettle} />
     <Range name="Ширина берега" value={recipe.shore ?? 0.4} min={0} max={1} step={0.05} onChange={shore => edit({ shore }, true)} onSettle={onSettle} />
     <Range name="Рваность берега" value={recipe.ragged ?? 0.4} min={0} max={1} step={0.05} onChange={ragged => edit({ ragged }, true)} onSettle={onSettle} />
+    <Range name="Напор" title="Кто теснит соседку на стыке двух жидкостей: сильная сдвигает середину перехода на её сторону" value={recipe.push ?? 0.5} min={0} max={1} step={0.05} onChange={push => edit({ push }, true)} onSettle={onSettle} />
+    <Range name="Мягкость края" title="Ширина перехода к другой жидкости, до двух клеток; на стыке берётся бо́льшая из двух" value={recipe.blend ?? 0.25} min={0} max={1} step={0.05} onChange={blend => edit({ blend }, true)} onSettle={onSettle} />
     <Range name="Свечение" value={recipe.glow} min={0} max={1} step={0.05} onChange={glow => edit({ glow }, true)} onSettle={onSettle} />
     <label>Рисунок<select value={recipe.pattern} onChange={event => edit({ pattern: event.target.value as LiquidPattern })}>
       {Object.entries(LIQUID_PATTERNS).map(([key, name]) => <option key={key} value={key}>{name}</option>)}</select></label>

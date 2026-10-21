@@ -127,7 +127,7 @@ describe("наборы ассетов карт", () => {
     expect(made.status).toBe(201);
     const liquid = made.body.pack.items.find((item: { uid: string }) => item.uid === made.body.uid);
     expect(liquid).toMatchObject({ kind: "liquid", name: "Ртуть", tones: ["#202428", "#8a9199", "#ffffff"], pace: 2, size: 2, bed: 1, glow: 0,
-      pattern: "ripple", rim: "none", solid: true, shore: 0.4, ragged: 0.9, images: [] });
+      pattern: "ripple", rim: "none", solid: true, shore: 0.4, ragged: 0.9, push: 0.5, blend: 0.25, images: [] });
     const edited = (await api().put(`/api/map-packs/items/${liquid.id}`).auth(gm, auth).send({ glow: 0.5, name: "Ртуть живая" })).body;
     expect(edited.items[0]).toMatchObject({ name: "Ртуть живая", glow: 0.5, pace: 2, ragged: 0.9 });
     const file = (await api().get(`/api/map-packs/${pack.id}/export`).auth(gm, auth).buffer(true).parse((res, done) => {

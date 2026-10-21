@@ -136,6 +136,7 @@ export interface LiquidRecipe {
   key: string; name: string; /** Цвет плитки, пока нет картинки; у своих жидкостей — средний тон. */ fill?: string; tones: readonly [string, string, string];
   pace: number; size: number; pattern: LiquidPattern; bed: number; rim: LiquidRim; glow: number; solid: boolean;
   /** Берег: ширина перехода и рваность, 0…1. У своих рецептов без них — как у воды. */ shore?: number; ragged?: number;
+  /** Стык с другой жидкостью: «Напор» и «Мягкость края», 0…1. Без них — 0,5 и 0,25. */ push?: number; blend?: number;
 }
 /** Рисунок поверхности: рябь — родной рисунок вида воды, остальные ложатся поверх приглушённого. */
 export const LIQUID_PATTERNS = { ripple: "Рябь", cracks: "Трещины", bubbles: "Пузыри", mist: "Туман", smooth: "Гладь" } as const;
@@ -148,15 +149,15 @@ export type LiquidRim = keyof typeof LIQUID_RIMS;
  * Картинки (листы L1/L2) — для вида «Картинкой» и под шейдером; у лавы на мели остывшая корка (`lava-2`),
  * у льда на глубине тонкий тёмный лёд (`ice-2`). */
 export const LIQUIDS = [
-  { key: "water", name: "Вода", fill: "#2f9c8c", tones: ["#213e5c", "#2f9c8c", "#eefaf2"], pace: 1, size: 1, pattern: "ripple", bed: 1, rim: "foam", glow: 0, solid: false, shore: 0.4, ragged: 0.4 },
-  { key: "swamp", name: "Болото", fill: "#4a5226", tones: ["#212612", "#4d5724", "#9ead5c"], pace: 0.5, size: 1.2, pattern: "bubbles", bed: 0.4, rim: "foam", glow: 0, solid: false, shore: 0.8, ragged: 0.75 },
-  { key: "lava", name: "Лава", fill: "#c8421a", tones: ["#290d0a", "#b82e0a", "#ffe666"], pace: 0.35, size: 1.5, pattern: "ripple", bed: 0, rim: "scorch", glow: 0.8, solid: false, shore: 0.2, ragged: 0.8 },
-  { key: "ice", name: "Лёд", fill: "#cfe6ee", tones: ["#8cb8d1", "#cce6f0", "#ffffff"], pace: 0, size: 1, pattern: "cracks", bed: 0.3, rim: "none", glow: 0, solid: true, shore: 0.05, ragged: 0.1 },
-  { key: "acid", name: "Кислота", fill: "#a4c21f", tones: ["#33540d", "#99c71a", "#edff99"], pace: 1.2, size: 1, pattern: "bubbles", bed: 0.5, rim: "scorch", glow: 0.4, solid: false, shore: 0.4, ragged: 0.4 },
-  { key: "tar", name: "Смола", fill: "#1c1a1a", tones: ["#08080a", "#1f1a17", "#6b5c4d"], pace: 0.25, size: 1.8, pattern: "smooth", bed: 0, rim: "wet", glow: 0, solid: false, shore: 0.5, ragged: 0 },
-  { key: "chasm", name: "Пропасть с туманом", fill: "#232a36", tones: ["#05080f", "#1a2133", "#8c99ad"], pace: 0.5, size: 1.5, pattern: "mist", bed: 0, rim: "none", glow: 0, solid: false, shore: 0.3, ragged: 0.8 },
+  { key: "water", name: "Вода", fill: "#2f9c8c", tones: ["#213e5c", "#2f9c8c", "#eefaf2"], pace: 1, size: 1, pattern: "ripple", bed: 1, rim: "foam", glow: 0, solid: false, shore: 0.4, ragged: 0.4, push: 0.5, blend: 0.3 },
+  { key: "swamp", name: "Болото", fill: "#4a5226", tones: ["#212612", "#4d5724", "#9ead5c"], pace: 0.5, size: 1.2, pattern: "bubbles", bed: 0.4, rim: "foam", glow: 0, solid: false, shore: 0.8, ragged: 0.75, push: 0.4, blend: 0.7 },
+  { key: "lava", name: "Лава", fill: "#c8421a", tones: ["#290d0a", "#b82e0a", "#ffe666"], pace: 0.35, size: 1.5, pattern: "ripple", bed: 0, rim: "scorch", glow: 0.8, solid: false, shore: 0.2, ragged: 0.8, push: 0.7, blend: 0.35 },
+  { key: "ice", name: "Лёд", fill: "#cfe6ee", tones: ["#8cb8d1", "#cce6f0", "#ffffff"], pace: 0, size: 1, pattern: "cracks", bed: 0.3, rim: "none", glow: 0, solid: true, shore: 0.05, ragged: 0.1, push: 0.6, blend: 0.1 },
+  { key: "acid", name: "Кислота", fill: "#a4c21f", tones: ["#33540d", "#99c71a", "#edff99"], pace: 1.2, size: 1, pattern: "bubbles", bed: 0.5, rim: "scorch", glow: 0.4, solid: false, shore: 0.4, ragged: 0.4, push: 0.6, blend: 0.4 },
+  { key: "tar", name: "Смола", fill: "#1c1a1a", tones: ["#08080a", "#1f1a17", "#6b5c4d"], pace: 0.25, size: 1.8, pattern: "smooth", bed: 0, rim: "wet", glow: 0, solid: false, shore: 0.5, ragged: 0, push: 0.6, blend: 0.15 },
+  { key: "chasm", name: "Пропасть с туманом", fill: "#232a36", tones: ["#05080f", "#1a2133", "#8c99ad"], pace: 0.5, size: 1.5, pattern: "mist", bed: 0, rim: "none", glow: 0, solid: false, shore: 0.3, ragged: 0.8, push: 0.3, blend: 0.8 },
   // Море обзорной карты (М5): берег обведён линиями, как в атласе; картинкой — та же вода.
-  { key: "sea", name: "Море", fill: "#1d5a6c", tones: ["#1d3f55", "#3f7f99", "#d9efe9"], pace: 0.6, size: 1.6, pattern: "ripple", bed: 0.2, rim: "hatch", glow: 0, solid: false, shore: 0.4, ragged: 0.3 },
+  { key: "sea", name: "Море", fill: "#1d5a6c", tones: ["#1d3f55", "#3f7f99", "#d9efe9"], pace: 0.6, size: 1.6, pattern: "ripple", bed: 0.2, rim: "hatch", glow: 0, solid: false, shore: 0.4, ragged: 0.3, push: 0.5, blend: 0.6 },
 ] as const satisfies readonly LiquidRecipe[];
 export type LiquidKey = typeof LIQUIDS[number]["key"];
 /** Ключи своих жидкостей карты: рецепты лежат в `appearance.liquids`. */
