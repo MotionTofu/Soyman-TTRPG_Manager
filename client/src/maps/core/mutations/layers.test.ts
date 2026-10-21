@@ -155,6 +155,17 @@ describe("rename/visible/locked/opacity", () => {
     expect(!renameLayer(d, "missing", "X").ok).toBe(true);
   });
 
+  it("старый слой «Стены» после переименования остаётся слоем стен; обычный слой роли не получает", () => {
+    const created = createPathLayer(okDoc(), { id: "walls", name: "Стены" });
+    if (!(created.ok && created.changed)) throw new Error("no layer");
+    expect(created.document.layers.at(-1)?.role).toBeUndefined();
+    const renamed = renameLayer(created.document, "walls", "Частокол");
+    expect(renamed.ok && renamed.document.layers.at(-1)?.role).toBe("walls");
+    if (renamed.ok) expect(validateMapDocument(renamed.document)).toEqual([]);
+    const plain = renameLayer(okDoc(), "lyr-gameplay", "Стены");
+    expect(plain.ok && plain.document.layers.find((l) => l.id === "lyr-gameplay")?.role).toBeUndefined();
+  });
+
   it("visibility/lock toggles + no-op", () => {
     const d = okDoc();
     const v = setLayerVisible(d, "lyr-gameplay", false);

@@ -6,6 +6,7 @@
 
 import {
   MAP_DOOR_KINDS,
+  MAP_LAYER_ROLES,
   MAP_MARKER_KINDS,
   MAP_ROOM_TYPES,
   MAP_TRAP_KINDS,
@@ -222,6 +223,10 @@ function checkLayerBase(
   }
   if (!isFiniteNumber(layer.opacity) || (layer.opacity as number) < 0 || (layer.opacity as number) > 1) {
     out.push(issue("layer.bad-opacity", `${path}.opacity`, "opacity must be a finite number in [0,1]"));
+    ok = false;
+  }
+  if (layer.role !== undefined && !(MAP_LAYER_ROLES as readonly unknown[]).includes(layer.role)) {
+    out.push(issue("layer.bad-role", `${path}.role`, `role must be one of ${MAP_LAYER_ROLES.join(", ")}`));
     ok = false;
   }
   return ok;

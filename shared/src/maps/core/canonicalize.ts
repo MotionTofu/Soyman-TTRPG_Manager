@@ -134,6 +134,7 @@ function canonTerrainLayer(l: TerrainLayer): TerrainLayer {
     visible: l.visible,
     locked: l.locked,
     opacity: l.opacity,
+    ...(l.role ? { role: l.role } : {}),
     kind: l.kind,
     defaultMaterial: canonMaterialRef(l.defaultMaterial),
   } as const;
@@ -265,6 +266,7 @@ function canonLayer(l: MapLayer): MapLayer {
     visible: l.visible,
     locked: l.locked,
     opacity: l.opacity,
+    ...(l.role ? { role: l.role } : {}),
   };
   if (l.kind === "terrain") {
     return canonTerrainLayer(l);

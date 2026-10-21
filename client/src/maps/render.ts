@@ -12,7 +12,6 @@ import { ownDeck, ownLinePost, ownPackOf } from "./assets/ownPacks";
 import { getMapImageAsset, resourceImageAssetId } from "./assets/registry";
 import { labelBox, labelFamily } from "./labelStyle";
 import { drawWaterStill, waterFog, waterStillReady, type MapWater } from "./water";
-import { LIQUID_LAYER } from "./workspace/liquids";
 import { cutKey, cutRoad, drawCrossingDraft, paintedWaterAt, roadCrossings, type RoadCut } from "./crossings";
 // Рендер карты на canvas 2D. Цвета террейна — фиксированная спокойная
 // палитра (исключение как у Полотна §6 design_revision.md: бюджет акцента
@@ -1959,7 +1958,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     if (!layer.visible) return;
     if (part === "over" && (layer.kind === "terrain" || layer.kind === "reference" && groundLike(index)) || part === "ground" && !groundLike(index)) return;
     // Под живой водой — земля, а не картинка жидкости: шейдер сам решает, сколько дна видно (гриллинг 2026-10-15, В2).
-    if (part === "ground" && layer.kind === "terrain" && layer.name === LIQUID_LAYER && layer.terrain.mask) return;
+    if (part === "ground" && layer.kind === "terrain" && layer.role === "liquids" && layer.terrain.mask) return;
     ctx.save();
     ctx.globalAlpha *= layer.opacity;
     if (layer.kind === "reference") { if (!o.playerView) drawReference(layer); } // подложка — только Мастеру (П4)

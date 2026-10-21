@@ -2,15 +2,19 @@ import { isPaletteIndexMaskPayload, maskChunkCoords, TERRAIN_MASK_CHUNK_AREA, TE
 import { liquidKey, waterCode, waterLevel } from "../assets/village";
 import type { MapDocumentV5, MapLayer, TerrainMaskLayer } from "../core/types";
 import { changed, mutationError, noChange } from "../core/mutations/helpers";
+import { layerRole } from "../core/mutations/layers";
 import type { MutationResult } from "../core/mutations/types";
 
 /** Жидкости живут своим плавным слоем поверх поверхностей (решение владельца 2026-10-08): ластик открывает землю под водой.
- * Слой узнаётся по имени, как слой «Стены». */
+ * Слой узнаётся по роли (`role: "liquids"`), у старых карт — по имени. */
 export const LIQUID_LAYER = "Жидкости";
 /** Столько жидкостей помещается в маску воды; это и есть число слотов. */
 export const LIQUID_SLOTS = 7;
 export const isLiquidLayer = (layer: { kind: string; name: string; representation?: string }): layer is TerrainMaskLayer =>
-  layer.kind === "terrain" && layer.representation === "mask" && layer.name === LIQUID_LAYER;
+  layer.kind === "terrain" && layerRole(layer as MapLayer) === "liquids";
+/** Слой стен: ограды, частоколы, кладка. Дороги и реки в него не ложатся. */
+export const WALL_LAYER = "Стены";
+export const isWallLayer = (layer: { kind: string; name: string }) => layer.kind === "path" && layerRole(layer as MapLayer) === "walls";
 
 const code = (material: { type: string; key?: string }) => material.type === "builtin" ? material.key!.replace(/^terrain\//, "") : "";
 /** Занятые слоты — жидкости, которые сейчас накрашены на карте (стёртая целиком слот освобождает). */

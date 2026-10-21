@@ -9,6 +9,7 @@ import type { JsonObject } from "./json";
 import type {
   MapDoorKind,
   MapGridType,
+  MapLayerRole,
   MapMarkerKind,
   MapRoomType,
   MapScaleName,
@@ -102,6 +103,8 @@ export interface MapLayerBase {
   locked: boolean;
   /** 0..1 включительно. */
   opacity: number;
+  /** Служебная роль: редактор узнаёт слой по ней, а не по имени — переименование её не снимает. */
+  role?: MapLayerRole;
 }
 
 export type MapLayer =

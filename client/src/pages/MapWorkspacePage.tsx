@@ -54,7 +54,8 @@ import { DungeonGenerator } from "../maps/workspace/DungeonGenerator";
 import { defaultMapEffects, loadMapEffects, saveMapEffects, type EffectState, type MapEffect } from "../maps/gl/effects";
 import { replaceWithDungeon, type DungeonSettings } from "../maps/workspace/dungeonGeneration";
 import { LiquidSlots } from "../maps/workspace/LiquidSlots";
-import { LIQUID_LAYER, isLiquidLayer, moveLiquidsToLayer, replaceLiquid, usedLiquids } from "../maps/workspace/liquids";
+import type { MapLayerRole } from "@shared/maps/core/literals";
+import { LIQUID_LAYER, WALL_LAYER, isLiquidLayer, isWallLayer, moveLiquidsToLayer, replaceLiquid, usedLiquids } from "../maps/workspace/liquids";
 import "../maps/workspace/workspace-editor.css";
 
 const NO_LIQUIDS: readonly MapLiquidRecipe[] = [];
@@ -184,7 +185,7 @@ export function MapWorkspacePage() {
     const current = documentRef.current;
     if (!current || next === "select") return;
     const kind = toolLayerKind(next), matches = (entry: MapDocumentV6["layers"][number]) => entry.kind === kind &&
-      (next !== "wall" || entry.name === "Стены") &&
+      (entry.kind !== "path" || (next === "wall") === isWallLayer(entry)) &&
       (entry.kind !== "terrain" || next === "eraser" || (next === "liquid" ? isLiquidLayer(entry)
         : entry.representation === (next === "surface" ? "mask" : "cells") && !isLiquidLayer(entry)));
     if (next === "liquid") {
@@ -194,7 +195,7 @@ export function MapWorkspacePage() {
       commit((before) => editGeometry(before, (view) => {
         let base = view;
         if (!view.layers.some((entry) => entry.id === layerId)) {
-          const created = createTerrainMaskLayer(view, { id: layerId, name: LIQUID_LAYER });
+          const created = createTerrainMaskLayer(view, { id: layerId, name: LIQUID_LAYER, role: "liquids" });
           const placed = created.ok ? moveLayer(created.document, layerId, view.layers.findLastIndex((entry) => entry.kind === "terrain") + 1) : created;
           if (!placed.ok) return placed;
           base = placed.document;
@@ -212,15 +213,15 @@ export function MapWorkspacePage() {
     else if (next === "surface" || next === "road" || next === "river" || next === "scatter") {
       if (next === "surface" && current.grid?.type !== "square") { doc.setActionError("Плавные поверхности пока доступны для квадратной сетки"); return; }
       addLayer(next === "surface" ? "mask" : next === "scatter" ? "scatter" : "path");
-    } else if (next === "wall") addLayer("path", "Стены");
+    } else if (next === "wall") addLayer("path", WALL_LAYER, "walls");
     else if (next === "asset") addLayer("object");
     else if (next === "brush") addLayer("terrain");
     else setActiveLayer("");
   }
-  function addLayer(kind: NewLayerKind, name = NEW_LAYERS[kind]) {
+  function addLayer(kind: NewLayerKind, name = NEW_LAYERS[kind], role?: MapLayerRole) {
     finishGesture(); const layerId = crypto.randomUUID();
     commit((before) => editGeometry(before, (view) => {
-      const result = LAYER_CREATORS[kind](view, { id: layerId, name });
+      const result = LAYER_CREATORS[kind](view, { id: layerId, name, ...(role ? { role } : {}) });
       if (!result.ok || kind !== "mask") return result;
       // Новая поверхность ложится под слой жидкостей: земля поверх воды её бы закрыла.
       const lastTerrain = view.layers.findLastIndex((layer) => layer.kind === "terrain" && !isLiquidLayer(layer));

@@ -51,6 +51,9 @@ export type MapTerrainCode = (typeof MAP_TERRAIN_CODES)[number];
 export const MAP_ROOM_TYPES = ["empty", "barracks", "temple", "treasury", "prison", "lab"] as const;
 export type MapRoomType = (typeof MAP_ROOM_TYPES)[number];
 
+export const MAP_LAYER_ROLES = ["liquids", "walls"] as const;
+export type MapLayerRole = (typeof MAP_LAYER_ROLES)[number];
+
 export const MAP_DOOR_KINDS = ["arch", "door", "locked", "trapped", "secret", "portc"] as const;
 export type MapDoorKind = (typeof MAP_DOOR_KINDS)[number];
 

@@ -32,6 +32,13 @@ describe("V6 player projection", () => {
       expect(validateMapDocumentV6({ ...doc, layers: [...doc.layers.slice(0, -1), { ...layer, items: [{ ...image, ...bad }] }] }).length).toBeGreaterThan(0);
     expect(projectMapDocumentV6ForPlayer(doc, () => null).layers.some((entry) => entry.kind === "reference")).toBe(false);
   });
+  it("роль слоя переживает сохранение, неизвестная отклоняется", () => {
+    const base = upgradeMapDocumentV5(oldDocument());
+    const doc = { ...base, layers: base.layers.map((layer) => layer.kind === "path" ? { ...layer, role: "walls" as const } : layer) };
+    const read = parseMapDocumentV6(serializeMapDocumentV6(doc));
+    expect(read.ok && read.value.layers.find((layer) => layer.kind === "path")?.role).toBe("walls");
+    expect(validateMapDocumentV6({ ...doc, layers: doc.layers.map((layer) => ({ ...layer, role: "roads" })) } as unknown as MapDocumentV6).length).toBeGreaterThan(0);
+  });
   it("shows only public tokens in revealed cells, detached, with resolved names and no source data", () => {
     const place = (id: string, x: number, y: number, publicToken: boolean) => ({ ...createGameplayToken(id, ref, { x, y }),
       playerVisibility: publicToken ? "public" as const : "private" as const,

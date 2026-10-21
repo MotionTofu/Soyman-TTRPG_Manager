@@ -68,7 +68,7 @@ function withWallLines(document: MapDocumentV6, width: number, height: number): 
   const cells = terrain.cells.filter((cell) => !rock.has(`${cell.x},${cell.y}`));
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) if (!painted.has(`${x},${y}`)) cells.push({ x, y, material: stone });
   const layers = document.layers.flatMap((layer): MapDocumentV6["layers"] => layer === terrain ? [{ ...terrain, cells }]
-    : layer.id === "lyr-road" ? [layer, { id: "lyr-walls", name: "Стены", visible: true, locked: false, opacity: 1, kind: "path", paths: [] }] : [layer]);
+    : layer.id === "lyr-road" ? [layer, { id: "lyr-walls", name: "Стены", role: "walls", visible: true, locked: false, opacity: 1, kind: "path", paths: [] }] : [layer]);
   let next: MapDocumentV6 = { ...document, layers, assetPacks: [...document.assetPacks.filter((pack) => pack.id !== CRYPT_PACK.id), CRYPT_PACK] };
   floorOutlines(floor, width, height).forEach((points, index) => {
     next = editGeometry(next, (view) => createSplinePath(view, "lyr-walls", { id: `wall-${index + 1}`, kind: "wall", width: 0.36,

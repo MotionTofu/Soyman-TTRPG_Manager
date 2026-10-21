@@ -17,12 +17,22 @@ import type {
   TerrainCellLayer,
   TerrainMaskLayer,
 } from "../types";
+import type { MapLayerRole } from "@shared/maps/core/literals";
 import { collectIds, findLayer, withReplacedLayer } from "./helpers";
 import { changed, mutationError, noChange, type MutationResult } from "./types";
 
 export interface LayerSpec {
   id: string;
   name: string;
+  role?: MapLayerRole;
+}
+
+/** Служебная роль слоя. У карт, заведённых до пометки, — по прежнему имени: так слой и узнавался. */
+export function layerRole(layer: MapLayer): MapLayerRole | null {
+  if (layer.role) return layer.role;
+  if (layer.kind === "terrain" && layer.representation === "mask" && layer.name === "Жидкости") return "liquids";
+  if (layer.kind === "path" && layer.name === "Стены") return "walls";
+  return null;
 }
 
 function checkNewId(doc: MapDocumentV5, id: unknown): { ok: true } | { ok: false; error: MutationResult } {
@@ -55,8 +65,8 @@ function checkName(name: unknown): { ok: true; name: string } | { ok: false; err
   return { ok: true, name };
 }
 
-function baseOf(spec: LayerSpec): { id: LayerId; name: string; visible: boolean; locked: boolean; opacity: number } {
-  return { id: spec.id, name: spec.name, visible: true, locked: false, opacity: 1 };
+function baseOf(spec: LayerSpec): { id: LayerId; name: string; visible: boolean; locked: boolean; opacity: number; role?: MapLayerRole } {
+  return { id: spec.id, name: spec.name, visible: true, locked: false, opacity: 1, ...(spec.role ? { role: spec.role } : {}) };
 }
 
 /** Новый TerrainCellLayer: representation cells, default builtin terrain/plain (§50). */
@@ -186,7 +196,9 @@ export function renameLayer(doc: MapDocumentV5, layerId: string, name: string): 
   const nameCheck = checkName(name);
   if (!nameCheck.ok) return nameCheck.error;
   if (found.layer.name === nameCheck.name) return noChange(doc);
-  return changed(withReplacedLayer(doc, found.index, { ...found.layer, name: nameCheck.name }));
+  // Старый слой узнавался по имени: роль записывается, чтобы он остался собой и под новым именем.
+  const role = layerRole(found.layer);
+  return changed(withReplacedLayer(doc, found.index, { ...found.layer, name: nameCheck.name, ...(role ? { role } : {}) }));
 }
 
 /** Видимость слоя. То же значение → no-op. */

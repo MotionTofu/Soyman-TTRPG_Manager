@@ -23,7 +23,9 @@ import {
   legacyTrapId,
 } from "./core/ids";
 import type { MaterialRef } from "./core/refs";
-import type { LayerId, MapDocumentV5, MapLabelStyle, MapObject, ReferenceImage, SplineNode } from "./core/types";
+import type { LayerId, MapDocumentV5, MapLabelStyle, MapLayer, MapObject, ReferenceImage, SplineNode } from "./core/types";
+import type { MapLayerRole } from "@shared/maps/core/literals";
+import { layerRole } from "./core/mutations/layers";
 import { ARTWORK_SCATTER, mapAssetPackForId, resolveMapSymbol, type MapVisualAsset } from "./assets/registry";
 import { isPaletteIndexMaskPayload, TERRAIN_MASK_CHUNK_SIDE } from "@shared/maps/core/terrainMask";
 import { scatterInstances, SCATTER_LIMIT } from "./scatter";
@@ -116,6 +118,8 @@ export interface RenderTerrainView {
 export interface RenderLayerBase {
   id: LayerId;
   name: string;
+  /** Служебная роль; у старых карт — по имени слоя. */
+  role?: MapLayerRole;
   /** false → renderer полностью пропускает слой (§21). */
   visible: boolean;
   /** На rendering не влияет; сохраняется для editor consumers. */
@@ -354,10 +358,12 @@ function isCardinalOrientation(o: number): boolean {
   return o === 0 || o === 90 || o === 180 || o === 270;
 }
 
-function baseOf(layer: { id: string; name: string; visible: boolean; locked: boolean; opacity: number }): RenderLayerBase {
+function baseOf(layer: MapLayer): RenderLayerBase {
+  const role = layerRole(layer);
   return {
     id: layer.id,
     name: layer.name,
+    ...(role ? { role } : {}),
     visible: layer.visible,
     locked: layer.locked,
     opacity: layer.opacity,
