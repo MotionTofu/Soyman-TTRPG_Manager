@@ -5,6 +5,11 @@ import { NavIcon } from "../../components/NavIcons";
 import "./map-workspace.css";
 import { useMapWorkspace } from "./workspaceContext";
 
+const MAP_SEARCH_EVENT = "soyman:map-search";
+/** Открыть «Поиск и мешок» из редактора: панель принадлежит оболочке. */
+export const openMapSearch = () => window.dispatchEvent(new Event(MAP_SEARCH_EVENT));
+export const onMapSearchRequest = (open: () => void) => { window.addEventListener(MAP_SEARCH_EVENT, open); return () => window.removeEventListener(MAP_SEARCH_EVENT, open); };
+
 /** Инструменты принадлежат редактору, их место на экране — общей оболочке. */
 export function MapWorkspaceTools({ children }: { children: ReactNode }) {
   const workspace = useMapWorkspace();

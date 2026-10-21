@@ -18,6 +18,7 @@ import { WorkspaceProperties } from "../maps/workspace/WorkspaceProperties";
 import { ArtProperties } from "../maps/workspace/ArtProperties";
 import { CatalogPanel } from "../maps/workspace/CatalogPanel";
 import { LayersPanel } from "../maps/workspace/LayersPanel";
+import { openMapSearch } from "../maps/workspace/MapWorkspace";
 import { layerName, NEW_LAYERS, newLayerName, type NewLayerKind } from "../maps/workspace/layerNames";
 import { ToolSettings, type BrushSettings } from "../maps/workspace/ToolSettings";
 import { WorkspaceHeader, WorkspaceStatus, WorkspaceToolRail, type GridLook, type WaterTune } from "../maps/workspace/WorkspaceChrome";
@@ -154,6 +155,12 @@ export function MapWorkspacePage() {
       });
       else commit((before) => editGeometry(before, (view) => updateGameplayEntity(view, target.id, (entity) => entity.kind !== "room" ? entity
         : { ...entity, location: found.sourceRef.uid, name: !entity.name || /^Квартал \d+$/.test(entity.name) ? found.name.slice(0, 200) : entity.name })));
+      // Карта числится и за локацией: её карточка видит карту в привязках.
+      if (!(bindings ?? []).some((entry) => entry.target_type === "location" && entry.target_id === source.id)) {
+        await write.post(`/maps/${mapId}/bindings`, { target_type: "location", target_id: source.id }, BINDING_OPTIONS)
+          .catch(() => { throw new Error("Привязано на карте, но в привязки локации карта не записалась"); });
+        afterWrite([{ path: `/maps/${mapId}/bindings` }]);
+      }
     } catch (error) { showError(error); }
   }
   placementActions.current = { place: (source) => { finishGesture(); setEntityPreview(null); if (linking) { void linkLocation(linking, source); return; } void placement.begin(source); canvasRef.current?.focus(); },
@@ -499,7 +506,7 @@ export function MapWorkspacePage() {
           <button disabled={!placement.pending.source} onClick={() => placement.confirm()}>Поставить здесь</button><button onClick={placement.cancel}>Отмена</button>
         </div>}
         {linking && <div className="workspace-editor-placement" role="status">
-          <span>Откройте «Поиск и мешок» и нажмите ＋ у нужной локации</span><button onClick={() => setLinking(null)}>Отмена</button>
+          <span>Нажмите ＋ у нужной локации в «Поиске и мешке»</span><button onClick={() => setLinking(null)}>Отмена</button>
         </div>}
         {gestures.wallDraft && <div className="workspace-editor-placement" role="status">
           <span>Клик — точка · Enter — закончить · Esc — отменить</span>
@@ -525,7 +532,7 @@ export function MapWorkspacePage() {
           ? <ArtProperties document={document} selection={selection} packs={packs} pickedAt={gestures.pickedAt} selectedNodes={gestures.selectedNodes} onSelectedNodes={gestures.setSelectedNodes} commit={commit} onClose={() => setSelection(null)} onDelete={() => remove(selection)} />
           : selection && tool === "select" && !disabled
             ? <WorkspaceProperties document={document} selection={selection} commit={commit} screenScale={camera.cam.scale} onClose={() => setSelection(null)} onDelete={() => remove(selection)} display={selectedToken ?? undefined}
-              onLink={canPlace ? () => setLinking(selection) : undefined}
+              onLink={canPlace ? () => { setLinking(selection); openMapSearch(); } : undefined}
               onPreview={() => { if (selectedToken?.state === "active" && selectedToken.id) setEntityPreview({ type: selectedToken.sourceRef.kind, id: selectedToken.id }); }} />
             : <ToolSettings tool={tool} settings={settings} maskEraser={maskEraser} onTool={onSurfaceTool} label={toolLabel(mapKind(map.scale), tool === "brush" ? "surface" : tool)}
               selectedRoomCount={selectedRoomShapes(document, selections).length} roomActionsDisabled={disabled || leaving || active?.kind !== "terrain" || active.representation !== "cells" || active.locked || !active.visible || autosave.status.kind === "conflict"}

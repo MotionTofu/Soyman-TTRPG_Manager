@@ -30,7 +30,7 @@ import { requestPultGridReset } from "../pultGridReset";
 import { sessionLabel } from "../sessionLabel";
 import type { CampaignDetail, SessionDetail } from "../types";
 import { workspaceMode } from "./workspaceMode";
-import { MapWorkspaceRail } from "../maps/workspace/MapWorkspace";
+import { MapWorkspaceRail, onMapSearchRequest } from "../maps/workspace/MapWorkspace";
 import { MapWorkspaceContext, type MapPlacementController } from "../maps/workspace/workspaceContext";
 
 interface NavItem {
@@ -536,6 +536,7 @@ export function AppShell() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
   useEffect(() => { setNavOpen(false); setSearchOpen(false); }, [pathname]);
+  useEffect(() => isMapWorkspace ? onMapSearchRequest(() => setSearchOpen(true)) : undefined, [isMapWorkspace]);
   useEffect(() => {
     if (!isMapWorkspace || !searchOpen) return;
     const previous = document.activeElement as HTMLElement | null;
