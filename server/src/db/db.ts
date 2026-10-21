@@ -28,6 +28,7 @@ import {
 } from "./dndArtificerCompanions";
 import { migrateDndArtificerReanimator } from "./dndArtificerReanimator";
 import { migrateDndArtificerOracle } from "./dndArtificerOracle";
+import { applyDndFeatureNamesByPlace } from "./dndFeatureNamesByPlace";
 import {
   ensureNamedReplicaSchemes,
   migrateDndReplicaGenerics,
@@ -7408,6 +7409,13 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     database.exec(
       "ALTER TABLE entity_records ADD COLUMN function TEXT NOT NULL DEFAULT '' CHECK (function IN ('','current','anchor','archive'))"
     );
+  }
+  // Английские имена умений D&D 5.5 по SRD «по месту» (Р30, решение владельца
+  // 2026-10-21). Только пустые name_original — см. dndFeatureNamesByPlace.ts.
+  if (!appSettingFlag(database, "dnd_feature_names_by_place_v1")) {
+    const named = applyDndFeatureNamesByPlace(database);
+    if (named) console.log(`[migrate] dnd_feature_names_by_place_v1: ${named}`);
+    setAppSettingFlag(database, "dnd_feature_names_by_place_v1");
   }
 
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
