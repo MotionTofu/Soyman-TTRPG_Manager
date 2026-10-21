@@ -4,7 +4,8 @@ import { deleteLayer, moveLayer, renameLayer, setLayerLocked, setLayerOpacity, s
 import { editGeometry } from "./editDocument";
 import { MapToolIcon } from "./MapToolIcon";
 import { WorkspaceMenu } from "./WorkspaceMenu";
-import { layerName, NEW_LAYERS, type NewLayerKind } from "./layerNames";
+import { CITY_ROOMS_NAME, layerName, NEW_LAYERS, newLayerName, type NewLayerKind } from "./layerNames";
+import type { MapKind } from "../mapTypes";
 
 type Layer = MapDocumentV6["layers"][number];
 type Edit = (operation: (before: MapDocumentV6) => MapDocumentV6) => void;
@@ -31,20 +32,20 @@ type Confirm = (options: { message: string; confirmLabel: string; danger: boolea
 // Строка под memo: мазок кистью меняет один слой, остальные объекты слоёв
 // остаются теми же — их строки пропускают перерисовку (замер 2026-10-07:
 // панель слоёв была самой дорогой частью шага мазка).
-const LayerRow = memo(function LayerRow({ layer, group, active, renaming, disabled, canRaise, canLower, index, onActivate, onRenaming, commit, live, settle, confirm }: {
-  layer: Layer; group: boolean; active: boolean; renaming: boolean; disabled: boolean; canRaise: boolean; canLower: boolean;
+const LayerRow = memo(function LayerRow({ layer, map, group, active, renaming, disabled, canRaise, canLower, index, onActivate, onRenaming, commit, live, settle, confirm }: {
+  layer: Layer; map: MapKind; group: boolean; active: boolean; renaming: boolean; disabled: boolean; canRaise: boolean; canLower: boolean;
   /** Position in the document, bottom first. */
   index: number;
   onActivate: (id: string) => void; onRenaming: (id: string | null) => void; commit: Edit; live: Edit; settle: () => void; confirm: Confirm;
 }) {
-  const name = layerName(layer), n = count(layer);
+  const name = layerName(layer, map), n = count(layer);
   async function remove() {
     if (!await confirm({ message: `Удалить слой «${name}»${n ? ` и всё, что на нём (${n})` : ""}? Отменить можно через «Отменить».`, confirmLabel: "Удалить слой", danger: true })) return;
     commit(geometry((view) => deleteLayer(view, layer.id)));
     if (active) onActivate("");
   }
   return <div>
-    {group && <div className="workspace-layer-group">{GROUPS[layer.kind]}</div>}
+    {group && <div className="workspace-layer-group">{map === "city" && layer.kind === "gameplay" ? CITY_ROOMS_NAME : GROUPS[layer.kind]}</div>}
     <div className="workspace-layer" aria-current={active} data-hidden={!layer.visible || undefined}>
       <MapToolIcon tool={layer.kind === "terrain" && layer.representation === "mask" ? "surface" : ICONS[layer.kind]} />
       {renaming
@@ -72,8 +73,8 @@ const LayerRow = memo(function LayerRow({ layer, group, active, renaming, disabl
 });
 
 // memo: страница редактора рендерится на каждое движение мыши и камеры.
-export const LayersPanel = memo(function LayersPanel({ document, activeLayer, disabled, onActivate, commit, live, settle, onAdd, confirm }: {
-  document: MapDocumentV6; activeLayer: string; disabled: boolean;
+export const LayersPanel = memo(function LayersPanel({ document, map, activeLayer, disabled, onActivate, commit, live, settle, onAdd, confirm }: {
+  document: MapDocumentV6; map: MapKind; activeLayer: string; disabled: boolean;
   onActivate: (id: string) => void; commit: Edit;
   /** Continuous edits (opacity drag): one history step per gesture. */
   live: Edit; settle: () => void;
@@ -85,11 +86,11 @@ export const LayersPanel = memo(function LayersPanel({ document, activeLayer, di
     <div className="workspace-panel-heading">
       <h2 className="workspace-panel-title">Слои</h2>
       <WorkspaceMenu label="+" title="Добавить слой" className="workspace-layers-add">
-        {(Object.keys(NEW_LAYERS) as NewLayerKind[]).map((kind) => <button key={kind} type="button" data-close disabled={disabled} onClick={() => onAdd(kind)}>{NEW_LAYERS[kind]}</button>)}
+        {(Object.keys(NEW_LAYERS) as NewLayerKind[]).map((kind) => <button key={kind} type="button" data-close disabled={disabled} onClick={() => onAdd(kind)}>{newLayerName(kind, map)}</button>)}
       </WorkspaceMenu>
     </div>
     <div className="workspace-layer-list">
-      {document.layers.map((layer, index) => <LayerRow key={layer.id} layer={layer} index={index} group={document.layers[index + 1]?.kind !== layer.kind}
+      {document.layers.map((layer, index) => <LayerRow key={layer.id} layer={layer} map={map} index={index} group={document.layers[index + 1]?.kind !== layer.kind}
         active={activeLayer === layer.id} renaming={renaming === layer.id} disabled={disabled} canRaise={index < total - 1} canLower={index > 0}
         onActivate={onActivate} onRenaming={setRenaming} commit={commit} live={live} settle={settle} confirm={confirm} />).reverse()}
       {!total && <p>Слоёв нет. Добавьте первый кнопкой «+».</p>}

@@ -124,8 +124,8 @@ export const WorkspaceHeader = memo(function WorkspaceHeader({ mapName, status, 
   </header>;
 });
 
-export const WorkspaceStatus = memo(function WorkspaceStatus({ cellLore, layers, activeLayer, onLayer, cursorCell, showGrid, onShowGrid, snap, onSnap, renderWarning }: {
-  cellLore: string | null; layers: MapDocumentV6["layers"]; activeLayer: string; onLayer: (id: string) => void;
+export const WorkspaceStatus = memo(function WorkspaceStatus({ cellLore, map, layers, activeLayer, onLayer, cursorCell, showGrid, onShowGrid, snap, onSnap, renderWarning }: {
+  cellLore: string | null; map: MapKind; layers: MapDocumentV6["layers"]; activeLayer: string; onLayer: (id: string) => void;
   cursorCell: string | null; showGrid: boolean; onShowGrid: (value: boolean) => void; snap: boolean; onSnap: (value: boolean) => void;
   renderWarning: boolean;
 }) {
@@ -134,7 +134,7 @@ export const WorkspaceStatus = memo(function WorkspaceStatus({ cellLore, layers,
     <label className="workspace-status-layer">Слой:
       <select value={activeLayer} onChange={(event) => onLayer(event.target.value)}>
         {!layers.some((layer) => layer.id === activeLayer) && <option value="">не выбран</option>}
-        {[...layers].reverse().map((layer) => <option key={layer.id} value={layer.id}>{layerName(layer)}{layer.locked ? " · заблокирован" : ""}</option>)}
+        {[...layers].reverse().map((layer) => <option key={layer.id} value={layer.id}>{layerName(layer, map)}{layer.locked ? " · заблокирован" : ""}</option>)}
       </select></label>
     <span className="workspace-status-cell">{cursorCell ? `Клетка ${cursorCell}` : ""}</span>
     <label><input type="checkbox" checked={showGrid} onChange={event => onShowGrid(event.target.checked)} />Показывать сетку</label>

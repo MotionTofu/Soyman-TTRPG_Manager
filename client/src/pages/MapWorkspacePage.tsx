@@ -18,7 +18,7 @@ import { WorkspaceProperties } from "../maps/workspace/WorkspaceProperties";
 import { ArtProperties } from "../maps/workspace/ArtProperties";
 import { CatalogPanel } from "../maps/workspace/CatalogPanel";
 import { LayersPanel } from "../maps/workspace/LayersPanel";
-import { layerName, NEW_LAYERS, type NewLayerKind } from "../maps/workspace/layerNames";
+import { layerName, NEW_LAYERS, newLayerName, type NewLayerKind } from "../maps/workspace/layerNames";
 import { ToolSettings, type BrushSettings } from "../maps/workspace/ToolSettings";
 import { WorkspaceHeader, WorkspaceStatus, WorkspaceToolRail, type GridLook, type WaterTune } from "../maps/workspace/WorkspaceChrome";
 import { createWorkspaceRenderModel } from "../maps/workspace/renderV6";
@@ -218,7 +218,7 @@ export function MapWorkspacePage() {
     else if (next === "brush") addLayer("terrain");
     else setActiveLayer("");
   }
-  function addLayer(kind: NewLayerKind, name = NEW_LAYERS[kind], role?: MapLayerRole) {
+  function addLayer(kind: NewLayerKind, name = newLayerName(kind, mapKind(map?.scale ?? "locality")), role?: MapLayerRole) {
     finishGesture(); const layerId = crypto.randomUUID();
     commit((before) => editGeometry(before, (view) => {
       const result = LAYER_CREATORS[kind](view, { id: layerId, name, ...(role ? { role } : {}) });
@@ -474,7 +474,7 @@ export function MapWorkspacePage() {
           onPointerDown={(event) => { if (!refs.down(event) && !turning.down(event)) gestures.down(event); }}
           onPointerMove={(event) => { if (!refs.move(event) && !turning.move(event)) gestures.move(event); }}
           onPointerUp={(event) => { if (!refs.up() && !turning.up()) gestures.up(event); }} onPointerCancel={(event) => { if (!refs.up() && !turning.up()) gestures.cancel(event); }} />
-        <div className="workspace-editor-hint" aria-hidden="true"><strong>{toolLabel(mapKind(map.scale), tool)}{active ? ` · ${layerName(active)}` : ""}</strong>{tool === "select" && <span>{selections.length > 1 ? `Выбрано: ${selections.length} · ` : ""}Рамка · Shift — добавить</span>}{(tool === "asset" || tool === "label") && <span>{snap ? "Shift — свободно" : "Shift — к клетке"}</span>}<span>Пробел — сдвиг</span><span>Esc — отмена</span></div>
+        <div className="workspace-editor-hint" aria-hidden="true"><strong>{toolLabel(mapKind(map.scale), tool)}{active ? ` · ${layerName(active, mapKind(map.scale))}` : ""}</strong>{tool === "select" && <span>{selections.length > 1 ? `Выбрано: ${selections.length} · ` : ""}Рамка · Shift — добавить</span>}{(tool === "asset" || tool === "label") && <span>{snap ? "Shift — свободно" : "Shift — к клетке"}</span>}<span>Пробел — сдвиг</span><span>Esc — отмена</span></div>
         {tool === "liquid" && <LiquidSlots used={liquids} own={liquidDraft ?? document.appearance?.liquids ?? NO_LIQUIDS} material={liquidMaterial} live={!!document.appearance?.water} onLive={onLiveWater} onMaterial={onLiquid} onOwn={onOwnLiquids} onSettle={onSettleLiquid} onRelease={onReleaseLiquid}
           offered={offeredLiquids} packs={saveTargets} onSaveToPack={onSaveLiquid} />}
         <div className="workspace-editor-camera">
@@ -518,12 +518,12 @@ export function MapWorkspacePage() {
             : <ToolSettings tool={tool} settings={settings} maskEraser={maskEraser} onTool={onSurfaceTool} label={toolLabel(mapKind(map.scale), tool === "brush" ? "surface" : tool)}
               selectedRoomCount={selectedRoomShapes(document, selections).length} roomActionsDisabled={disabled || leaving || active?.kind !== "terrain" || active.representation !== "cells" || active.locked || !active.visible || autosave.status.kind === "conflict"}
               onPaintRooms={onPaintRooms} onClearRooms={onClearRooms} onChange={onToolChange} />}
-        <LayersPanel document={document} activeLayer={activeLayer} disabled={disabled || leaving} onActivate={onActivateLayer}
+        <LayersPanel document={document} map={mapKind(map.scale)} activeLayer={activeLayer} disabled={disabled || leaving} onActivate={onActivateLayer}
           commit={onCommit} live={onLiveEdit} settle={onSettleEdit} onAdd={onAddLayer} confirm={onConfirm} />
       </aside>
     </div>
 
-    <WorkspaceStatus cellLore={document.grid ? map.cell_lore || null : null} layers={document.layers} activeLayer={activeLayer} onLayer={onActivateLayer} cursorCell={gestures.cursorCell}
+    <WorkspaceStatus cellLore={document.grid ? map.cell_lore || null : null} map={mapKind(map.scale)} layers={document.layers} activeLayer={activeLayer} onLayer={onActivateLayer} cursorCell={gestures.cursorCell}
       showGrid={showGrid} onShowGrid={setShowGrid} snap={snap} onSnap={onSnap} renderWarning={renderWarning} />
 
     <DungeonGenerator key={map.id} open={generatorOpen} current={disabled ? undefined : document} seed={map.seed} disabled={leaving || !!doc.compatibilityError || autosave.blocked || autosave.status.kind === "conflict"}
