@@ -32,6 +32,8 @@ export function layerRole(layer: MapLayer): MapLayerRole | null {
   if (layer.role) return layer.role;
   if (layer.kind === "terrain" && layer.representation === "mask" && layer.name === "Жидкости") return "liquids";
   if (layer.kind === "path" && layer.name === "Стены") return "walls";
+  if (layer.kind === "path" && (layer.name === "Rivers" || layer.name === "Реки")) return "rivers";
+  if (layer.kind === "path" && (layer.name === "Roads" || layer.name === "Дороги")) return "roads";
   return null;
 }
 

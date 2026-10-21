@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { TERRAIN_MASK_ENCODING } from "@shared/maps/core/terrainMask";
 import type { MapDocumentV5 } from "../core/types";
-import { LIQUID_LAYER, liquidShades, moveLiquidsToLayer, replaceLiquid, usedLiquids } from "./liquids";
+import { LIQUID_LAYER, liquidShades, moveLiquidsToLayer, moveRiversOutOfRoads, pathLayerFits, replaceLiquid, usedLiquids } from "./liquids";
 
 const mat = (code: string) => ({ type: "builtin" as const, key: `terrain/${code}` });
 const chunk = (id: string, set: Record<number, number>) => ({ id, cx: 0, cy: 0, payload: { encoding: TERRAIN_MASK_ENCODING, values: Array.from({ length: 256 }, (_, i) => set[i] ?? 0) } });
@@ -53,4 +53,19 @@ it("глубина и блик подбираются по середине: т�
     expect(sum(deep)).toBeLessThan(sum(mid)); expect(sum(light)).toBeGreaterThan(sum(mid));
   }
   expect(liquidShades("#808080")).toEqual(["#3a3a3a", "#e3e3e3"]);
+});
+
+it("реки из слоя дорог переезжают в слой рек; инструмент встаёт в слой своей роли или в общий", () => {
+  const line = (id: string, kind: string) => ({ id, kind, properties: {} });
+  const path = (id: string, name: string, paths: object[], role?: string) => ({ id, name, kind: "path", visible: true, locked: false, opacity: 1, paths, ...(role ? { role } : {}) });
+  const doc = { layers: [path("lyr-river", "Rivers", [line("a", "river")]), path("lyr-road", "Roads", [line("b", "road"), line("c", "river")])] } as unknown as MapDocumentV5;
+  const moved = moveRiversOutOfRoads(doc, () => "new");
+  expect(moved.layers.map(layer => layer.kind === "path" ? layer.paths.map(entry => entry.id) : [])).toEqual([["a", "c"], ["b"]]);
+  expect(moveRiversOutOfRoads(moved, () => "x")).toBe(moved);
+  // Слоя рек нет — заводится под дорогами.
+  const bare = moveRiversOutOfRoads({ layers: [path("r", "Дороги", [line("c", "river")])] } as unknown as MapDocumentV5, () => "new");
+  expect(bare.layers.map(layer => [layer.id, layer.role])).toEqual([["new", "rivers"], ["r", undefined]]);
+  const roads = path("r", "Дороги", []), common = path("m", "Реки и дороги", []), walls = path("w", "Ограды", [], "walls");
+  expect([pathLayerFits("river", roads), pathLayerFits("river", common), pathLayerFits("road", roads), pathLayerFits("road", walls), pathLayerFits("wall", common)])
+    .toEqual([false, true, true, false, false]);
 });

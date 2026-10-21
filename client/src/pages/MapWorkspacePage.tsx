@@ -20,7 +20,7 @@ import { CatalogPanel } from "../maps/workspace/CatalogPanel";
 import { LayersPanel } from "../maps/workspace/LayersPanel";
 import { openMapSearch } from "../maps/workspace/MapWorkspace";
 import { useRuler } from "../maps/workspace/useRuler";
-import { layerName, NEW_LAYERS, newLayerName, type NewLayerKind } from "../maps/workspace/layerNames";
+import { layerName, newLayerName, type NewLayerKind } from "../maps/workspace/layerNames";
 import { ToolSettings, type BrushSettings } from "../maps/workspace/ToolSettings";
 import { WorkspaceHeader, WorkspaceStatus, WorkspaceToolRail, type GridLook, type WaterTune } from "../maps/workspace/WorkspaceChrome";
 import { createWorkspaceRenderModel } from "../maps/workspace/renderV6";
@@ -57,7 +57,8 @@ import { defaultMapEffects, loadMapEffects, saveMapEffects, type EffectState, ty
 import { replaceWithDungeon, type DungeonSettings } from "../maps/workspace/dungeonGeneration";
 import { LiquidSlots } from "../maps/workspace/LiquidSlots";
 import type { MapLayerRole } from "@shared/maps/core/literals";
-import { LIQUID_LAYER, WALL_LAYER, isLiquidLayer, isWallLayer, moveLiquidsToLayer, replaceLiquid, usedLiquids } from "../maps/workspace/liquids";
+import { LIQUID_LAYER, RIVER_LAYER, ROAD_LAYER, WALL_LAYER, isLiquidLayer, moveLiquidsToLayer, moveRiversOutOfRoads, pathLayerFits, pathLayerOwn,
+  replaceLiquid, usedLiquids, type PathTool } from "../maps/workspace/liquids";
 import "../maps/workspace/workspace-editor.css";
 
 const NO_LIQUIDS: readonly MapLiquidRecipe[] = [];
@@ -194,7 +195,7 @@ export function MapWorkspacePage() {
     const current = documentRef.current;
     if (!current || next === "select" || next === "ruler") return;
     const kind = toolLayerKind(next), matches = (entry: MapDocumentV6["layers"][number]) => entry.kind === kind &&
-      (entry.kind !== "path" || (next === "wall") === isWallLayer(entry)) &&
+      (entry.kind !== "path" || pathLayerFits(next as PathTool, entry)) &&
       (entry.kind !== "terrain" || next === "eraser" || (next === "liquid" ? isLiquidLayer(entry)
         : entry.representation === (next === "surface" ? "mask" : "cells") && !isLiquidLayer(entry)));
     if (next === "liquid") {
@@ -217,12 +218,17 @@ export function MapWorkspacePage() {
     const layer = current.layers.find((entry) => entry.id === activeLayer);
     if (layer && matches(layer)) return;
     const matching = [...current.layers].reverse().filter(matches);
-    const target = matching.find((entry) => entry.visible && !entry.locked) ?? matching[0];
+    // Слой своей роли важнее общего «Реки и дороги».
+    const open = (entry: MapDocumentV6["layers"][number]) => entry.visible && !entry.locked, own = (entry: MapDocumentV6["layers"][number]) =>
+      entry.kind !== "path" || pathLayerOwn(next as PathTool, entry);
+    const target = matching.find((entry) => open(entry) && own(entry)) ?? matching.find(own) ?? matching.find(open) ?? matching[0];
     if (target) setActiveLayer(target.id);
-    else if (next === "surface" || next === "road" || next === "river" || next === "scatter") {
+    else if (next === "surface" || next === "scatter") {
       if (next === "surface" && current.grid?.type !== "square") { doc.setActionError("Плавные поверхности пока доступны для квадратной сетки"); return; }
-      addLayer(next === "surface" ? "mask" : next === "scatter" ? "scatter" : "path");
-    } else if (next === "wall") addLayer("path", WALL_LAYER, "walls");
+      addLayer(next === "surface" ? "mask" : "scatter");
+    } else if (next === "river") addLayer("path", RIVER_LAYER, "rivers");
+    else if (next === "road") addLayer("path", ROAD_LAYER, "roads");
+    else if (next === "wall") addLayer("path", WALL_LAYER, "walls");
     else if (next === "asset") addLayer("object");
     else if (next === "brush") addLayer("terrain");
     else setActiveLayer("");
@@ -231,7 +237,12 @@ export function MapWorkspacePage() {
     finishGesture(); const layerId = crypto.randomUUID();
     commit((before) => editGeometry(before, (view) => {
       const result = LAYER_CREATORS[kind](view, { id: layerId, name, ...(role ? { role } : {}) });
-      if (!result.ok || kind !== "mask") return result;
+      if (!result.ok) return result;
+      if (kind !== "mask") {
+        // Новый слой рек ложится под дороги: мост и брод рисуются поверх реки.
+        const roads = view.layers.findIndex((layer) => pathLayerOwn("road", layer));
+        return role === "rivers" && roads >= 0 ? moveLayer(result.document, layerId, roads) : result;
+      }
       // Новая поверхность ложится под слой жидкостей: земля поверх воды её бы закрыла.
       const lastTerrain = view.layers.findLastIndex((layer) => layer.kind === "terrain" && !isLiquidLayer(layer));
       return moveLayer(result.document, layerId, lastTerrain + 1);
@@ -374,11 +385,12 @@ export function MapWorkspacePage() {
     setDocument({ ...document, appearance: { ...document.appearance!, liquids: [...fresh] } }); autosave.schedule();
   }, [document, packs, writable, setDocument, autosave]);
   // Размер вещей из наборов тоже подтягивается без шага истории (решение владельца 2026-10-21): при открытии и правке наборов.
+  // Так же, при открытии, реки из слоя дорог переезжают в слой рек (2026-10-22).
   const opened = !!document;
   useEffect(() => {
     const current = documentRef.current;
     if (!current || !writable) return;
-    const fresh = freshObjectSizes(current);
+    const fresh = moveRiversOutOfRoads(freshObjectSizes(current), () => crypto.randomUUID());
     if (fresh !== current) { setDocument(fresh); autosave.schedule(); }
   }, [opened, ownPacks, writable, documentRef, setDocument, autosave]);
   const offeredLiquids = useMemo(() => packLiquids(packs), [packs]);

@@ -14,6 +14,7 @@ import {
   createTerrainLayer,
   deleteLayer,
   findEntityLayer,
+  layerRole,
   moveLayer,
   renameLayer,
   setLayerLocked,
@@ -164,6 +165,13 @@ describe("rename/visible/locked/opacity", () => {
     if (renamed.ok) expect(validateMapDocument(renamed.document)).toEqual([]);
     const plain = renameLayer(okDoc(), "lyr-gameplay", "Стены");
     expect(plain.ok && plain.document.layers.find((l) => l.id === "lyr-gameplay")?.role).toBeUndefined();
+  });
+
+  it("заводские «Rivers» и «Roads» узнаются как реки и дороги и остаются ими после переименования", () => {
+    const renamed = renameLayer(okDoc(), "lyr-river", "Ручьи");
+    expect(renamed.ok && renamed.document.layers.find((l) => l.id === "lyr-river")?.role).toBe("rivers");
+    if (renamed.ok) expect(validateMapDocument(renamed.document)).toEqual([]);
+    expect(layerRole(okDoc().layers.find((l) => l.id === "lyr-road")!)).toBe("roads");
   });
 
   it("visibility/lock toggles + no-op", () => {

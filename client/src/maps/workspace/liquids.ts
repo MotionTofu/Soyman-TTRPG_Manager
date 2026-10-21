@@ -14,7 +14,33 @@ export const isLiquidLayer = (layer: { kind: string; name: string; representatio
   layer.kind === "terrain" && layerRole(layer as MapLayer) === "liquids";
 /** Слой стен: ограды, частоколы, кладка. Дороги и реки в него не ложатся. */
 export const WALL_LAYER = "Стены";
-export const isWallLayer = (layer: { kind: string; name: string }) => layer.kind === "path" && layerRole(layer as MapLayer) === "walls";
+/** Слои рек и дорог (решение владельца 2026-10-22): инструмент встаёт в слой своей роли, а слой линий без роли
+ * («Реки и дороги») принимает и то и другое. Стены — только в свой. */
+export const RIVER_LAYER = "Реки", ROAD_LAYER = "Дороги";
+export const PATH_ROLES = { road: "roads", river: "rivers", wall: "walls" } as const;
+export type PathTool = keyof typeof PATH_ROLES;
+export const pathLayerOwn = (tool: PathTool, layer: { kind: string; name: string }) => layer.kind === "path" && layerRole(layer as MapLayer) === PATH_ROLES[tool];
+export const pathLayerFits = (tool: PathTool, layer: { kind: string; name: string }) =>
+  pathLayerOwn(tool, layer) || (tool !== "wall" && layer.kind === "path" && layerRole(layer as MapLayer) === null);
+
+/** Реки, легшие в слой дорог (инструмент «Река» раньше вставал в верхний слой линий), переезжают в слой рек — без него
+ * слой рек заводится прямо под слоем дорог. Тот же документ, если перекладывать нечего. */
+export function moveRiversOutOfRoads<D extends { layers: readonly unknown[] }>(doc: D, newLayerId: () => string): D {
+  const from = (doc.layers as readonly MapLayer[]).flatMap((layer, index) => layer.kind === "path" && layerRole(layer) === "roads" && layer.paths.some((path) => path.kind === "river") ? [index] : []);
+  if (!from.length) return doc;
+  const layers = [...doc.layers] as MapLayer[];
+  let target = layers.findIndex((layer) => layer.kind === "path" && layerRole(layer) === "rivers");
+  if (target < 0) {
+    layers.splice(from[0], 0, { id: newLayerId(), name: RIVER_LAYER, role: "rivers", visible: true, locked: false, opacity: 1, kind: "path", paths: [] });
+    target = from[0];
+    for (let i = 0; i < from.length; i++) from[i]++;
+  }
+  const moved = from.flatMap((index) => { const layer = layers[index]; return layer.kind === "path" ? layer.paths.filter((path) => path.kind === "river") : []; });
+  for (const index of from) { const layer = layers[index]; if (layer.kind === "path") layers[index] = { ...layer, paths: layer.paths.filter((path) => path.kind !== "river") }; }
+  const rivers = layers[target];
+  if (rivers.kind === "path") layers[target] = { ...rivers, paths: [...rivers.paths, ...moved] };
+  return { ...doc, layers } as D;
+}
 
 const code = (material: { type: string; key?: string }) => material.type === "builtin" ? material.key!.replace(/^terrain\//, "") : "";
 /** Занятые слоты — жидкости, которые сейчас накрашены на карте (стёртая целиком слот освобождает). */
