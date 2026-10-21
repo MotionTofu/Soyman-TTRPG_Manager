@@ -2,6 +2,7 @@ import { pathNodesFromAnchors } from "./pathAnchors";
 import { useEffect, useMemo, useRef, useState, type DragEventHandler, type PointerEventHandler } from "react";
 import { shapeBounds } from "../scatter";
 import type { Vec2 } from "@shared/maps/core";
+import type { RulerLine } from "./useRuler";
 import type { MapDocumentV6, MapLiquidRecipe } from "@shared/maps/core";
 import type { MapFull } from "../mapTypes";
 import type { Camera } from "../editor/hooks/useMapCamera";
@@ -28,7 +29,7 @@ import { changedArea } from "./changedArea";
 import type { ReferenceImage } from "@shared/maps/core";
 import { fromLocal, referenceHandles, referenceSize } from "./referenceImages";
 
-export function WorkspaceCanvas({ gl, liquidDraft, onGlFail, effects, map, document, camera, canvasRef, wrapRef, reference, objectKnob, showGrid, gridColor, gridOpacity, gridLineWidth, gridLineStyle, selectedId, selectedNodes, selections, marquee, preview, assetPreview, displays, ghost, draftLine, wallDraft, onDoubleClick, cellBrush, brush, onPointerLeave, onDragOver, onDragLeave, onDrop, onPointerDown, onPointerMove, onPointerUp, onPointerCancel }: {
+export function WorkspaceCanvas({ gl, liquidDraft, onGlFail, effects, map, document, camera, canvasRef, wrapRef, reference, objectKnob, ruler, showGrid, gridColor, gridOpacity, gridLineWidth, gridLineStyle, selectedId, selectedNodes, selections, marquee, preview, assetPreview, displays, ghost, draftLine, wallDraft, onDoubleClick, cellBrush, brush, onPointerLeave, onDragOver, onDragLeave, onDrop, onPointerDown, onPointerMove, onPointerUp, onPointerCancel }: {
   map: MapFull; document: MapDocumentV6; camera: Camera;
   /** Отрисовка плитками через WebGL; при отказе WebGL холст просит вернуть обычную. */
   gl: boolean; onGlFail: () => void;
@@ -55,6 +56,8 @@ export function WorkspaceCanvas({ gl, liquidDraft, onGlFail, effects, map, docum
   reference?: { item: ReferenceImage; cropping: boolean; handles: boolean } | null;
   /** Кружок поворота выбранного предмета и верх предмета, к которому он привязан. */
   objectKnob?: { knob: Vec2; top: Vec2 } | null;
+  /** Замер «Линейки»: отрезок и подпись. */
+  ruler?: RulerLine | null;
 }) {
   const [revision, setRevision] = useState(0);
   const [meter] = useState(() => new WorkspacePerformanceMeter());
@@ -268,6 +271,17 @@ export function WorkspaceCanvas({ gl, liquidDraft, onGlFail, effects, map, docum
       ctx.beginPath(); ctx.arc(X(objectKnob.knob.x), Y(objectKnob.knob.y), 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.restore();
     }
+    if (ruler) {
+      const ax = X(ruler.from.x), ay = Y(ruler.from.y), bx = X(ruler.to.x), by = Y(ruler.to.y);
+      ctx.save(); ctx.strokeStyle = "#ff3e91"; ctx.fillStyle = "#ff3e91"; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); ctx.setLineDash([]);
+      for (const [x, y] of [[ax, ay], [bx, by]]) { ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill(); }
+      ctx.font = "600 13px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      const w = ctx.measureText(ruler.label).width + 12, mx = (ax + bx) / 2, my = (ay + by) / 2 - 14;
+      ctx.fillStyle = "#faf8ef"; ctx.fillRect(mx - w / 2, my - 10, w, 20); ctx.strokeRect(mx - w / 2, my - 10, w, 20);
+      ctx.fillStyle = "#282922"; ctx.fillText(ruler.label, mx, my);
+      ctx.restore();
+    }
     if (brush) {
       ctx.strokeStyle = "#ff3e91"; ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]); ctx.beginPath();
       ctx.arc(X(brush.x), Y(brush.y), brush.radius * camera.scale, 0, Math.PI * 2); ctx.stroke();
@@ -281,7 +295,7 @@ export function WorkspaceCanvas({ gl, liquidDraft, onGlFail, effects, map, docum
       ctx.beginPath(); ctx.setLineDash([5, 4]); ctx.strokeStyle = "#ff3e91"; ctx.fillStyle = "#ff3e9120"; ctx.lineWidth = 2;
       ctx.arc(camera.ox + ghost.x * camera.scale, camera.oy + ghost.y * camera.scale, camera.scale / 2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     }
-  }, [map.grid, document, camera, selectedId, selectedNodes, selections, marquee, preview, assetPreview, ghost, draftLine, wallDraft, cellBrush, brush, reference, objectKnob, revision, canvasRef, wrapRef]);
+  }, [map.grid, document, camera, selectedId, selectedNodes, selections, marquee, preview, assetPreview, ghost, draftLine, wallDraft, cellBrush, brush, reference, objectKnob, ruler, revision, canvasRef, wrapRef]);
   const unavailable = document.appearance?.style !== "blueprint" && cartographyStyleUnavailable(document.appearance?.style ?? "paper-ink") || rendered.model.layers.some(layer =>
     (layer.kind === "object" || layer.kind === "scatter") && layer.visible && layer.items.some(item => "failed" in item.asset && item.asset.failed));
   return <>{!gl && <canvas ref={baseRef} className="workspace-canvas-base" aria-hidden="true" />}

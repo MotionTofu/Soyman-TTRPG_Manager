@@ -19,6 +19,7 @@ import { ArtProperties } from "../maps/workspace/ArtProperties";
 import { CatalogPanel } from "../maps/workspace/CatalogPanel";
 import { LayersPanel } from "../maps/workspace/LayersPanel";
 import { openMapSearch } from "../maps/workspace/MapWorkspace";
+import { useRuler } from "../maps/workspace/useRuler";
 import { layerName, NEW_LAYERS, newLayerName, type NewLayerKind } from "../maps/workspace/layerNames";
 import { ToolSettings, type BrushSettings } from "../maps/workspace/ToolSettings";
 import { WorkspaceHeader, WorkspaceStatus, WorkspaceToolRail, type GridLook, type WaterTune } from "../maps/workspace/WorkspaceChrome";
@@ -141,6 +142,7 @@ export function MapWorkspacePage() {
   const referenceFrame = useMemo(() => refs.item && !refs.peek ? { item: refs.item, cropping: refs.cropping, handles: refs.movable } : null,
     [refs.item, refs.peek, refs.cropping, refs.movable]);
   const knob = useMemo(() => knobObject ? objectKnob(knobObject, camera.cam.scale) : null, [knobObject, camera.cam.scale]);
+  const ruler = useRuler({ active: tool === "ruler", camera, space, grid: map?.grid ?? "square", cellLore: map?.cell_lore ?? "", width: map?.width ?? 1, height: map?.height ?? 1 });
   const placementActions = useRef({ place: (_source: PlacementSource) => {}, preview: (_source: PlacementSource) => {} });
   async function linkLocation(target: WorkspaceSelection, source: PlacementSource) {
     setLinking(null);
@@ -190,7 +192,7 @@ export function MapWorkspacePage() {
     placement.cancel(); finishGesture(); setTool(next); doc.setActionError(null);
     if (next === "asset") setSelection(null);
     const current = documentRef.current;
-    if (!current || next === "select") return;
+    if (!current || next === "select" || next === "ruler") return;
     const kind = toolLayerKind(next), matches = (entry: MapDocumentV6["layers"][number]) => entry.kind === kind &&
       (entry.kind !== "path" || (next === "wall") === isWallLayer(entry)) &&
       (entry.kind !== "terrain" || next === "eraser" || (next === "liquid" ? isLiquidLayer(entry)
@@ -260,7 +262,7 @@ export function MapWorkspacePage() {
     down: (event) => {
       if ((event.target as HTMLElement)?.closest("input, textarea, select, [contenteditable=true], [role=dialog]")) return;
       if (event.code === "Space") { event.preventDefault(); space.current = true; }
-      if (event.key === "Escape") { placement.cancel(); setDragGhost(null); finishGesture(true); setSelection(null); refs.setSelected(null); }
+      if (event.key === "Escape") { placement.cancel(); setDragGhost(null); finishGesture(true); setSelection(null); refs.setSelected(null); ruler.clear(); }
       if (disabled || leaving || autosave.status.kind === "conflict") return;
       if (!placement.pending && refs.nudge(event)) return;
       if ((event.key === "Delete" || event.key === "Backspace") && refs.item && refs.movable) {
@@ -501,13 +503,13 @@ export function MapWorkspacePage() {
       <div className="workspace-editor-stage" ref={wrapRef}>
         <WorkspaceCanvas gl={gl} liquidDraft={liquidDraft} onGlFail={onGlFail} effects={effects} map={map} document={canvasDocument ?? document} camera={camera.cam}
           reference={referenceFrame}
-          objectKnob={knob} canvasRef={canvasRef} wrapRef={wrapRef} showGrid={showGrid} gridColor={gridColor} gridOpacity={gridOpacity} gridLineWidth={gridLineWidth} gridLineStyle={gridLineStyle} selectedId={selection?.id ?? null} selectedNodes={gestures.selectedNodes} preview={gestures.preview}
+          objectKnob={knob} ruler={ruler.line} canvasRef={canvasRef} wrapRef={wrapRef} showGrid={showGrid} gridColor={gridColor} gridOpacity={gridOpacity} gridLineWidth={gridLineWidth} gridLineStyle={gridLineStyle} selectedId={selection?.id ?? null} selectedNodes={gestures.selectedNodes} preview={gestures.preview}
           cellBrush={gestures.cellBrush} wallDraft={gestures.wallDraft} onDoubleClick={() => gestures.finishWall()} selections={selections} marquee={gestures.marquee} assetPreview={gestures.assetPreview} draftLine={gestures.draftLine} brush={gestures.brushCursor && (tool === "surface" || tool === "liquid" || tool === "scatter" || maskEraser) ? { ...gestures.brushCursor, radius: settings.radius } : null}
           onPointerLeave={gestures.leave} displays={displays} ghost={placement.pending?.position ?? dragGhost} onDragOver={dragOver} onDragLeave={() => setDragGhost(null)} onDrop={drop}
-          onPointerDown={(event) => { if (!refs.down(event) && !turning.down(event)) gestures.down(event); }}
-          onPointerMove={(event) => { if (!refs.move(event) && !turning.move(event)) gestures.move(event); }}
-          onPointerUp={(event) => { if (!refs.up() && !turning.up()) gestures.up(event); }} onPointerCancel={(event) => { if (!refs.up() && !turning.up()) gestures.cancel(event); }} />
-        <div className="workspace-editor-hint" aria-hidden="true"><strong>{toolLabel(mapKind(map.scale), tool)}{active ? ` · ${layerName(active, mapKind(map.scale))}` : ""}</strong>{tool === "select" && <span>{selections.length > 1 ? `Выбрано: ${selections.length} · ` : ""}Рамка · Shift — добавить</span>}{(tool === "asset" || tool === "label") && <span>{snap ? "Shift — свободно" : "Shift — к клетке"}</span>}<span>Пробел — сдвиг</span><span>Esc — отмена</span></div>
+          onPointerDown={(event) => { if (!ruler.down(event) && !refs.down(event) && !turning.down(event)) gestures.down(event); }}
+          onPointerMove={(event) => { if (!ruler.move(event) && !refs.move(event) && !turning.move(event)) gestures.move(event); }}
+          onPointerUp={(event) => { if (!ruler.up() && !refs.up() && !turning.up()) gestures.up(event); }} onPointerCancel={(event) => { if (!ruler.up() && !refs.up() && !turning.up()) gestures.cancel(event); }} />
+        <div className="workspace-editor-hint" aria-hidden="true"><strong>{toolLabel(mapKind(map.scale), tool)}{active ? ` · ${layerName(active, mapKind(map.scale))}` : ""}</strong>{tool === "select" && <span>{selections.length > 1 ? `Выбрано: ${selections.length} · ` : ""}Рамка · Shift — добавить</span>}{(tool === "asset" || tool === "label") && <span>{snap ? "Shift — свободно" : "Shift — к клетке"}</span>}{tool === "ruler" && <span>Тяните — замер</span>}<span>Пробел — сдвиг</span><span>Esc — отмена</span></div>
         {tool === "liquid" && <LiquidSlots used={liquids} own={liquidDraft ?? document.appearance?.liquids ?? NO_LIQUIDS} material={liquidMaterial} live={!!document.appearance?.water} onLive={onLiveWater} onMaterial={onLiquid} onOwn={onOwnLiquids} onSettle={onSettleLiquid} onRelease={onReleaseLiquid}
           offered={offeredLiquids} packs={saveTargets} onSaveToPack={onSaveLiquid} />}
         <div className="workspace-editor-camera">
