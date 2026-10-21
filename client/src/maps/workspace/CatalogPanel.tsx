@@ -13,7 +13,7 @@ import type { MapKind } from "../mapTypes";
 import type { WorkspaceTool } from "./editorCommands";
 
 /** Плитка — семейство. `variants` — что именно ставить: конкретный вариант или «случайный» (без картинки). */
-type Variant = { id: string; name: string; url: string | null };
+type Variant = { id: string; name: string; url: string | null; /** Свой выбор варианта, где мало одного кода: проём несёт ещё ширину и «потайной». */ choose?: () => void };
 type Tile = { id: string; name: string; /** Теги: поиск ищет и по ним. */ tags?: string; url: string | null; fill?: string; size?: string; chosen: boolean; choose: () => void; variants?: Variant[] };
 /** `pack` — набор из библиотеки (`MAP_PACKS`): каталог показывает разделы только подключённых к карте наборов. */
 type Category = { key: string; name: string; pack: string; tiles: Tile[] };
@@ -60,8 +60,11 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, pack
         }
         if (kind === "line") return { id: `own:${item.uid}`, name: item.name, tags: item.tags, url: ownImageSrc(ids[0]), size: `${item.width ?? 1} кл.`, chosen: ids.includes(lineStyle), choose: () => onLine(ids[0], item.width ?? 1),
           variants: ids.length > 1 ? ids.map((id, i) => ({ id, name: `Вариант ${i + 1}`, url: ownImageSrc(id) })) : undefined };
-        if (kind === "door") return { id: `own:${item.uid}`, name: item.name, tags: item.tags, url: ownImageSrc(ids[0]), size: `${item.span ?? 1} кл.${item.secret ? " · потайной" : ""}`, chosen: ids.includes(doorStyle),
-          choose: () => onDoor({ style: ids[0], span: item.span ?? 1, secret: item.secret === true }) };
+        if (kind === "door") {
+          const door = (style: string) => () => onDoor({ style, span: item.span ?? 1, secret: item.secret === true });
+          return { id: `own:${item.uid}`, name: item.name, tags: item.tags, url: ownImageSrc(ids[0]), size: `${item.span ?? 1} кл.${item.secret ? " · потайной" : ""}`, chosen: ids.includes(doorStyle),
+            choose: door(ids[0]), variants: ids.length > 1 ? ids.map((id, i) => ({ id, name: `Вариант ${i + 1}`, url: ownImageSrc(id), choose: door(id) })) : undefined };
+        }
         if (kind === "scatter") return { id: `own:${item.uid}`, name: item.name, tags: item.tags, url: ownImageSrc(ids[0]), chosen: scatterProfile === ownScatterKey(item), choose: () => onScatter(ownScatterKey(item), item.density) };
         const variants: Variant[] | undefined = ids.length > 1 ? [{ id: random, name: "Случайный", url: null }, ...ids.map((id, i) => ({ id, name: `Вариант ${i + 1}`, url: ownImageSrc(id) }))] : undefined;
         return { id: `own:${item.uid}`, name: item.name, tags: item.tags, url: ownImageSrc(ids[0]), size: `${item.w}×${item.h}`, variants,
@@ -157,7 +160,7 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, pack
   const foreign = needle ? library.filter((entry) => !packs.includes(entry.pack) && fit.some((pack) => pack.id === entry.pack))
     .flatMap((entry) => entry.tiles.filter(hit).map((tile) => ({ tile, pack: entry.pack }))) : [];
   const chosen = library.flatMap((entry) => entry.tiles).find((tile) => tile.chosen);
-  const current = line ? lineStyle : tool === "asset" ? symbol : material;
+  const current = line ? lineStyle : tool === "asset" ? symbol : tool === "door" ? doorStyle : material;
   const pick = line ? (id: string) => onLine(id, lineWidth(id)) : tool === "asset" ? onSymbol : onMaterial;
   // Вещи на карте из наборов, которых нет в её каталоге: отключён, не для этого вида карт или в архиве.
   const stray = used ? used.split("|").filter((id) => !packs.includes(id)) : [];
@@ -194,7 +197,7 @@ export const CatalogPanel = memo(function CatalogPanel({ tool, local, kind, pack
     </div>}
     {chosen?.variants && <div className="workspace-catalog-variants" role="group" aria-label={`${chosen.name}: вариант`}>
       <strong>{chosen.name}</strong>
-      {chosen.variants.map((variant) => <button key={variant.id} type="button" aria-pressed={current === variant.id} title={variant.name} aria-label={variant.name} onClick={() => pick(variant.id)}>
+      {chosen.variants.map((variant) => <button key={variant.id} type="button" aria-pressed={current === variant.id} title={variant.name} aria-label={variant.name} onClick={variant.choose ?? (() => pick(variant.id))}>
         {variant.url ? <img src={variant.url} alt="" /> : <span aria-hidden="true">?</span>}
       </button>)}
     </div>}

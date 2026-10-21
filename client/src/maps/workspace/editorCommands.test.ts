@@ -26,6 +26,9 @@ describe("workspace document operations", () => {
     doc = createDoor(doc, gameplay, "arch", { x: 3.3, y: 8.9 }, true, 0, { style: "soyman-resource-images:11111111-1111-4111-8111-111111111111", span: 1, secret: false });
     const doors = doc.layers.flatMap((layer) => layer.kind === "gameplay" ? layer.items : []).filter((item) => item.kind === "door");
     expect(doors.find((item) => item.id === "gate")).toMatchObject({ span: 2, secret: true, style: expect.stringContaining("soyman-resource-images:") });
+    // Чётная ширина — серединой на узел сетки: ворота в две клетки ложатся на клетки 5 и 6, а не на полклетки вбок.
+    expect(doors.find((item) => item.id === "gate")?.position).toEqual({ x: 6, y: 2 });
+    expect(doors.find((item) => item.id === "door")?.position).toEqual({ x: 4.5, y: 2 });
     expect(doors.find((item) => item.id === "arch")).not.toHaveProperty("span");
     doc = addLabel(doc, labels, "label", { x: 5, y: 5 }, "Тестовый зал");
     const saved = parseMapDocumentV6(serializeMapDocumentV6(doc));
