@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createGameplayToken, putGameplayToken, serializeMapDocumentV6, parseMapDocumentV6 } from "@shared/maps/core";
 import { loadStoredWorkspaceDocument } from "../editor/loadDocument";
-import { addLabel, addSymbol, createDoor, createQuarter, createRoom, moveSelection, paintSegment, removeSelection } from "./editorCommands";
+import { addLabel, addSymbol, createDoor, createQuarter, createRoom, freshObjectSizes, moveSelection, paintSegment, removeSelection } from "./editorCommands";
 import { editGeometry, geometryView } from "./editDocument";
 import { createGameplayLayer, deleteLayer } from "../core/mutations/layers";
 import { createWorkspaceRenderModel } from "./renderV6";
@@ -96,5 +96,25 @@ describe("workspace document operations", () => {
     doc = addSymbol({ ...doc, layers: [...doc.layers, objects] }, "objects", "tree", { x: 3, y: 4 }, "soyman-symbols:tree");
     expect(doc.assetPacks).toContainEqual({ id: "soyman-symbols", version: "1" });
     expect(parseMapDocumentV6(doc).ok).toBe(true);
+  });
+});
+
+describe("размер вещей набора на карте", () => {
+  it("копия помнит размер набора и подтягивается к новому; изменённая руками и чужая без пометки не трогаются", () => {
+    const objects = { id: "objects", name: "Объекты", kind: "object" as const, visible: true, locked: false, opacity: 1, items: [] };
+    let doc = addSymbol({ ...fixture(), layers: [...fixture().layers, objects] }, "objects", "hut", { x: 3, y: 4 }, "soyman-village:hut");
+    const hut = () => doc.layers.flatMap((layer) => layer.kind === "object" ? layer.items : []);
+    expect(hut()[0]).toMatchObject({ transform: { scale: { x: 5, y: 5 } }, properties: { packSize: 5 } });
+    expect(freshObjectSizes(doc)).toBe(doc);
+    const put = (items: object[]) => ({ ...doc, layers: doc.layers.map((layer) => layer.kind === "object" ? { ...layer, items } : layer) }) as typeof doc;
+    const at = (scale: number, extra: object = {}) => ({ ...hut()[0], transform: { ...hut()[0].transform, scale: { x: scale, y: scale } }, ...extra });
+    doc = put([
+      at(4, { id: "old", properties: { packSize: 4 } }),                    // поставлена по старой таблице — подтянется
+      at(3, { id: "hand", properties: { packSize: 4 } }),                   // изменена руками — нет
+      at(4, { id: "legacy", properties: undefined }),                       // «Деревня» без пометки — один раз подтянется
+      at(1.5, { id: "crypt", visual: { type: "asset", assetId: "soyman-crypt:coffin" }, properties: undefined }), // «Склеп» без пометки — нет
+    ]);
+    const sizes = Object.fromEntries(freshObjectSizes(doc).layers.flatMap((layer) => layer.kind === "object" ? layer.items : []).map((item) => [item.id, item.transform.scale.x]));
+    expect(sizes).toEqual({ old: 5, hand: 3, legacy: 5, crypt: 1.5 });
   });
 });

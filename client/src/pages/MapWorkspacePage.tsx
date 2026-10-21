@@ -23,7 +23,7 @@ import { layerName, NEW_LAYERS, newLayerName, type NewLayerKind } from "../maps/
 import { ToolSettings, type BrushSettings } from "../maps/workspace/ToolSettings";
 import { WorkspaceHeader, WorkspaceStatus, WorkspaceToolRail, type GridLook, type WaterTune } from "../maps/workspace/WorkspaceChrome";
 import { createWorkspaceRenderModel } from "../maps/workspace/renderV6";
-import { toolLayerKind, addLabel, quantize, removeSelection, type WorkspaceTool, type WorkspaceSelection } from "../maps/workspace/editorCommands";
+import { toolLayerKind, addLabel, freshObjectSizes, quantize, removeSelection, type WorkspaceTool, type WorkspaceSelection } from "../maps/workspace/editorCommands";
 import { downloadMapPicture } from "../maps/workspace/pictureExport";
 import { CATALOG_TOOLS, toolLabel } from "../maps/workspace/toolSets";
 import { updateGameplayEntity } from "../maps/core";
@@ -371,6 +371,14 @@ export function MapWorkspacePage() {
     if (fresh === own) return;
     setDocument({ ...document, appearance: { ...document.appearance!, liquids: [...fresh] } }); autosave.schedule();
   }, [document, packs, writable, setDocument, autosave]);
+  // Размер вещей из наборов тоже подтягивается без шага истории (решение владельца 2026-10-21): при открытии и правке наборов.
+  const opened = !!document;
+  useEffect(() => {
+    const current = documentRef.current;
+    if (!current || !writable) return;
+    const fresh = freshObjectSizes(current);
+    if (fresh !== current) { setDocument(fresh); autosave.schedule(); }
+  }, [opened, ownPacks, writable, documentRef, setDocument, autosave]);
   const offeredLiquids = useMemo(() => packLiquids(packs), [packs]);
   // Куда сохранить свою жидкость: свои наборы, подключённые к карте — первыми.
   const saveTargets = useMemo(() => ownPacks.filter((pack) => !pack.archived).sort((a, b) => Number(packs.includes(b.uid)) - Number(packs.includes(a.uid))), [ownPacks, packs]);

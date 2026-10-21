@@ -119,8 +119,39 @@ export function addSymbol(document: MapDocumentV6, layerId: string, id: string, 
     : { ...document, assetPacks: [...document.assetPacks, required] };
   // Картинка вписывается в квадрат со стороной size с сохранением пропорций — сторона = длинный размер в клетках.
   const size = objectPlacementSize(assetId) * cellWidth(document.grid?.type ?? "square");
+  // Копия помнит размер набора, с которым её поставили: так видно, меняли ли её руками (см. freshObjectSizes).
   return editGeometry(base, (view) => addMapObject(view, layerId, { id, visual: { type: "asset", assetId },
-    transform: { position, rotation: 0, scale: { x: size, y: size } } }));
+    transform: { position, rotation: 0, scale: { x: size, y: size } }, properties: { packSize: size } }));
+}
+
+/** Размер по таблице набора, клеток; у «Бумаги и туши» таблицы нет. Набор в архиве — тоже нет: копии не трогаются. */
+const tableSize = (assetId: string) => { const item = cryptObject(assetId) ?? villageObject(assetId) ?? worldObject(assetId); return item ? Math.max(...item.cells) : ownObjectSize(assetId); };
+/** Набор поменял размер вещи (решение владельца 2026-10-21) — поставленные копии подтягиваются, кроме изменённых руками:
+ * у копии `properties.packSize` — размер, с которым её поставили, и масштаб с ним совпадает. Копии без пометки подтягиваются
+ * один раз и только у «Деревни» (её размеры пересчитаны по таблице 2026-10-08) и своих наборов. */
+export function freshObjectSizes(document: MapDocumentV6): MapDocumentV6 {
+  const cell = cellWidth(document.grid?.type ?? "square");
+  let any = false;
+  const layers = document.layers.map((layer) => {
+    if (layer.kind !== "object") return layer;
+    let touched = false;
+    const items = layer.items.map((item) => {
+      // Растянутое неровно поставлено не каталогом: такую копию не трогаем.
+      if (item.visual.type !== "asset" || Math.abs(Math.abs(item.transform.scale.x) - Math.abs(item.transform.scale.y)) > 1e-6) return item;
+      const cells = tableSize(item.visual.assetId);
+      if (!cells) return item;
+      const want = cells * cell, had = item.properties?.packSize, now = Math.max(Math.abs(item.transform.scale.x), Math.abs(item.transform.scale.y));
+      if (typeof had === "number" ? Math.abs(now - had) > 1e-6 || Math.abs(had - want) < 1e-6
+        : !/^soyman-(village|resource-images):/.test(item.visual.assetId) || Math.abs(now - want) < 1e-6) return item;
+      touched = true;
+      const { x, y } = item.transform.scale;
+      return { ...item, transform: { ...item.transform, scale: { x: Math.sign(x || 1) * want, y: Math.sign(y || 1) * want } }, properties: { ...item.properties, packSize: want } };
+    });
+    if (!touched) return layer;
+    any = true;
+    return { ...layer, items };
+  });
+  return any ? { ...document, layers } : document;
 }
 export function moveSelection(document: MapDocumentV6, selection: WorkspaceSelection, delta: Vec2): MapDocumentV6 {
   const layer = requireEditableLayer(document, selection.layerId);
