@@ -156,6 +156,8 @@ export interface RenderPath {
   flow?: "back" | "still";
   /** Глубина реки 1–5; без поля — по виду реки: мелкая 2, глубокая 4. */
   depth?: number;
+  /** Жидкость реки — ключ слота (лава, болото, своя); без поля — вода. */
+  liquid?: string;
   /** Название вдоль линии (М9) и его середина в долях длины, 0–1. */
   name?: string;
   nameAt?: number;
@@ -451,6 +453,7 @@ export function createV5RenderModel(doc: MapDocumentV5): V5RenderModelResult {
             ...(p.properties?.crossings ? { crossings: crossingChoices(p.properties.crossings) } : {}),
             ...(p.properties?.flow === "back" || p.properties?.flow === "still" ? { flow: p.properties.flow } : {}),
             ...(typeof p.properties?.depth === "number" ? { depth: Math.max(1, Math.min(5, Math.round(p.properties.depth))) } : {}),
+            ...(p.kind === "river" && typeof p.properties?.liquid === "string" && p.properties.liquid !== "water" ? { liquid: p.properties.liquid } : {}),
             ...(Array.isArray(p.properties?.span) && p.properties.span.length === 2 && p.properties.span.every((value) => typeof value === "number")
               ? { span: p.properties.span as unknown as [number, number] } : {}),
             ...(typeof p.properties?.name === "string" && p.properties.name ? { name: p.properties.name,

@@ -36,7 +36,7 @@ export function waterSources(model: MapRenderModel, width: number, height: numbe
   for (const layer of model.layers) {
     if (!layer.visible) continue;
     if (layer.kind === "terrain" && layer.terrain.mask?.source) out.push(layer.terrain.mask.source);
-    if (layer.kind === "path") for (const path of layer.paths) if (path.kind === "river" && path.style && path.nodes) out.push(path.nodes, path.width, path.style, path.closed, path.flow, path.depth);
+    if (layer.kind === "path") for (const path of layer.paths) if (path.kind === "river" && path.style && path.nodes) out.push(path.nodes, path.width, path.style, path.closed, path.flow, path.depth, path.liquid);
   }
   return out;
 }
@@ -101,7 +101,6 @@ export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement,
     }
   }
   pen.putImageData(image, 0, 0);
-  rowsOf.set(recipes, rows); drawLiquidRecipes(recipes, model.liquids);
   pen.lineCap = pen.lineJoin = "round";
   const rivers = model.layers.flatMap(layer => layer.kind === "path" && layer.visible ? layer.paths : [])
     .flatMap(path => path.kind === "river" && path.style && path.nodes && path.nodes.length > 1
@@ -119,7 +118,16 @@ export function drawWaterMask(canvas: HTMLCanvasElement, raw: HTMLCanvasElement,
     pen.strokeStyle = `rgb(255,${riverDepth(path) * 51},0)`;
     stroke(samples, 0);
     any = true;
+    // Река не из воды: её точки получают номер своей жидкости — по кругам вдоль линии, как её и обводит перо.
+    if (!path.liquid) continue;
+    const row = rowOf(path.liquid);
+    for (const sample of samples) {
+      const r = sample.width / 2 * K + 1, cx = (sample.x - lo.x) * K, cy = (sample.y - lo.y) * K;
+      for (let y = Math.max(0, Math.floor(cy - r)); y < Math.min(h, Math.ceil(cy + r)); y++) for (let x = Math.max(0, Math.floor(cx - r)); x < Math.min(w, Math.ceil(cx + r)); x++)
+        if ((x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 <= r * r) kinds[y * w + x] = row;
+    }
   }
+  rowsOf.set(recipes, rows); drawLiquidRecipes(recipes, model.liquids);
   if (any) {
     // Расстояние до суши двумя проходами (шаг по прямой 1, по диагонали 1,4). Край карты сушей не считается: море уходит за него.
     // Вместе с расстоянием вода узнаёт, какой у неё ближайший берег.

@@ -5,7 +5,7 @@ import { drawTerrainMaskTiles } from "./assets/terrainMaskDrawing";
 import { maskSampleCode } from "./terrainMaskTiles";
 import { artworkImage, doorImage, paperPattern, patternSource, stripImage, surfaceImage, surfacePattern, texturedMask, wallPattern, type ArtPack } from "./assets/artwork";
 import { drawWallPolyline } from "./assets/wallArtwork";
-import { deckKey, fencePostId, liquidKey, liquidRecipe, villageId, waterLevel } from "./assets/village";
+import { deckKey, fencePostId, liquidKey, liquidRecipe, riverDepth, villageId, waterCode, waterLevel } from "./assets/village";
 import { ATLAS_BLOCK, atlasBlocks, type AtlasBlock, type AtlasLine, type AtlasWaterLook } from "./atlasWater";
 import { worldSignLabel } from "./assets/world";
 import { ownDeck, ownLinePost, ownPackOf } from "./assets/ownPacks";
@@ -1319,7 +1319,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
     if (path.atlas) { strokeAtlas(path, nodes); return; }
     const baseWidth = path.width ?? 0.22;
     // Река с материалом: линия, залитая поверхностью воды (узор привязан к карте, как у кисти поверхности).
-    const water = path.kind === "river" && path.style ? surfaceImage(`village-${path.style.slice(path.style.indexOf(":") + 1)}`, false, pack) : null;
+    const water = path.kind === "river" && path.style ? surfaceImage(path.liquid ? waterCode(riverDepth(path), path.liquid) : `village-${path.style.slice(path.style.indexOf(":") + 1)}`, false, pack) : null;
     const riverFill = (water && ctx.canvas ? surfacePattern(ctx, water, scale, ox, oy, pack) : null) ?? RIVER_FILL;
     const bank = water ? { color: chrome.ink, k: 1.1 } : { color: chrome.paper, k: 1.55 };
     // Река своего набора — полоса, как дорога; встроенная — заливка поверхностью воды.
@@ -1889,7 +1889,7 @@ export function renderMap(ctx: CanvasRenderingContext2D, canvasW: number, canvas
       ctx.save(); ctx.beginPath(); ctx.rect(edgeX(bx), edgeY(by), edgeX(bx + 1) - edgeX(bx), edgeY(by + 1) - edgeY(by)); ctx.clip(); draw(); ctx.restore();
     };
     const ink = Math.max(0.8, Math.min(2.2, scale * 0.03)), tones = (key: string) => atlasTones(liquidRecipe(key, model.liquids).tones, chrome.paper);
-    const riverKey = (path: RenderPath) => path.atlas === "river" || !path.style ? "water" : liquidKey(`village-${path.style.slice(path.style.indexOf(":") + 1)}`);
+    const riverKey = (path: RenderPath) => path.liquid ?? (path.atlas === "river" || !path.style ? "water" : liquidKey(`village-${path.style.slice(path.style.indexOf(":") + 1)}`));
     const riverPass = (path: RenderPath, color: string, extra: number) => {
       const shape = atlasRiver(path);
       ctx.strokeStyle = color;

@@ -34,6 +34,17 @@ it("освобождение слота: жидкость стирается и�
   expect(replaceLiquid(doc, "tar", null)).toMatchObject({ changed: false });
 });
 
+it("река своей жидкостью держит слот; освобождение слота переводит её в другую жидкость или в воду", () => {
+  const river = (liquid?: string) => ({ id: "r", kind: "river", properties: liquid ? { liquid } : {} });
+  const doc = { layers: [layer("wet", LIQUID_LAYER, ["village-water-3"], [chunk("a", { 0: 1 })]),
+    { id: "p", kind: "path", name: "Реки", paths: [river("own1")] }] } as unknown as MapDocumentV5;
+  expect(usedLiquids(doc.layers)).toEqual(["water", "own1"]);
+  const swapped = replaceLiquid(doc, "own1", "lava"), erased = replaceLiquid(doc, "own1", null);
+  if (!swapped.ok || !erased.ok) throw new Error("не применилось");
+  expect(usedLiquids(swapped.document.layers)).toEqual(["water", "lava"]);
+  expect(usedLiquids(erased.document.layers)).toEqual(["water"]);
+});
+
 it("глубина и блик подбираются по середине: темнее и светлее того же оттенка", () => {
   const sum = (hex: string) => [1, 3, 5].reduce((total, at) => total + parseInt(hex.slice(at, at + 2), 16), 0);
   for (const mid of ["#15937f", "#c8402a", "#808080", "#f0e68c", "#101030"]) {

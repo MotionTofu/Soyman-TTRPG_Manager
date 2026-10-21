@@ -20,10 +20,13 @@ const code = (material: { type: string; key?: string }) => material.type === "bu
 /** Занятые слоты — жидкости, которые сейчас накрашены на карте (стёртая целиком слот освобождает). */
 export function usedLiquids(layers: readonly { kind: string; name: string }[]): string[] {
   const layer = (layers as readonly MapLayer[]).find(isLiquidLayer);
-  if (!layer) return [];
+  // Река своей жидкостью держит слот, как и накрашенное.
+  const rivers = (layers as readonly MapLayer[]).flatMap((entry) => entry.kind === "path" ? entry.paths : [])
+    .flatMap((path) => path.kind === "river" && typeof path.properties?.liquid === "string" && path.properties.liquid !== "water" ? [path.properties.liquid] : []);
+  if (!layer) return [...new Set(rivers)];
   const live = new Set<number>();
   for (const chunk of layer.mask.chunks) if (isPaletteIndexMaskPayload(chunk.payload, layer.mask.materials.length)) for (const value of chunk.payload.values) if (value) live.add(value);
-  return [...new Set(layer.mask.materials.map(code).filter((item, i) => live.has(i + 1) && waterLevel(item) > 0).map(liquidKey))];
+  return [...new Set([...layer.mask.materials.map(code).filter((item, i) => live.has(i + 1) && waterLevel(item) > 0).map(liquidKey), ...rivers])];
 }
 
 /** Вода, накрашенная кистью поверхности до появления слоя жидкостей, переезжает в него. Землю, накрашенную поверх
@@ -80,10 +83,19 @@ export function moveLiquidsToLayer(doc: MapDocumentV5, layerId: string, newChunk
   return changed({ ...doc, layers });
 }
 
-/** Освободить слот: всё, что накрашено жидкостью `from`, стирается (`to === null`) или становится жидкостью `to` той же глубины. */
+/** Освободить слот: всё, что накрашено жидкостью `from`, стирается (`to === null`) или становится жидкостью `to` той же глубины.
+ * Реки этой жидкости становятся водой или жидкостью `to`. */
 export function replaceLiquid(doc: MapDocumentV5, from: string, to: string | null): MutationResult {
+  let rivers = false;
+  const swapped = doc.layers.map(layer => layer.kind !== "path" ? layer : { ...layer, paths: layer.paths.map(path => {
+    if (path.kind !== "river" || path.properties?.liquid !== from) return path;
+    rivers = true;
+    const { liquid: _old, ...rest } = path.properties;
+    return { ...path, properties: to === null || to === "water" ? rest : { ...rest, liquid: to } };
+  }) });
+  if (rivers) doc = { ...doc, layers: swapped };
   const target = doc.layers.find(isLiquidLayer);
-  if (!target) return noChange(doc);
+  if (!target) return rivers ? changed(doc) : noChange(doc);
   const materials = [...target.mask.materials];
   const swap = target.mask.materials.map((material, i) => {
     const old = code(material);
@@ -92,7 +104,7 @@ export function replaceLiquid(doc: MapDocumentV5, from: string, to: string | nul
     const next = `terrain/${waterCode(waterLevel(old), to)}`;
     return materials.findIndex(entry => entry.type === "builtin" && entry.key === next) + 1 || materials.push({ type: "builtin", key: next });
   });
-  if (swap.every((index, i) => index === i + 1)) return noChange(doc);
+  if (swap.every((index, i) => index === i + 1)) return rivers ? changed(doc) : noChange(doc);
   const chunks = target.mask.chunks.flatMap(chunk => {
     if (!isPaletteIndexMaskPayload(chunk.payload, target.mask.materials.length)) return [chunk];
     const values = chunk.payload.values.map(value => value ? swap[value - 1] : 0);

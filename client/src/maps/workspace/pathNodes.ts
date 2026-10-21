@@ -20,7 +20,7 @@ export function setCrossing(doc: MapDocumentV6, selection: WorkspaceSelection, a
 }
 
 /** Свойство реки. Течение: `null` — по линии, от первой точки к последней. Глубина: `null` — по виду реки. */
-export function setRiverProperty(doc: MapDocumentV6, selection: WorkspaceSelection, key: "flow" | "depth" | "name" | "nameAt", value: string | number | null) {
+export function setRiverProperty(doc: MapDocumentV6, selection: WorkspaceSelection, key: "flow" | "depth" | "name" | "nameAt" | "liquid", value: string | number | null) {
   requireEditableLayer(doc, selection.layerId, "path");
   const path = selectedPath(doc, selection);
   if (!path) return doc;

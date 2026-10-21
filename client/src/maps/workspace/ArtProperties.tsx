@@ -3,7 +3,8 @@ import { insertPathNodes, setPathNodeWidth, pathNodeIntervals, setPathClosed, se
 import { CROSSING_KINDS, choiceFits, crossingChoices, roadCrossings, type CrossingKind } from "../crossings";
 import { coordLabel } from "../grid";
 import { ownCrossings } from "../assets/ownPacks";
-import { riverDepth } from "../assets/village";
+import { LIQUIDS, riverDepth } from "../assets/village";
+import { LIQUID_SLOTS, usedLiquids } from "./liquids";
 import { createWorkspaceRenderModel } from "./renderV6";
 import { pathNodesFromAnchors } from "./pathAnchors";
 import type { MapDocumentV6, Vec2 } from "@shared/maps/core";
@@ -48,6 +49,15 @@ export function ArtProperties({ document, selection, packs = [], pickedAt, selec
         onChange={e => commit(doc => setRiverProperty(doc, selection, "flow", e.target.value || null))}>
         <option value="">От первой точки к последней</option><option value="back">От последней точки к первой</option><option value="still">Стоячая вода</option>
       </select></label>}
+      {path.kind === "river" && (() => {
+        // Жидкость реки занимает слот, как накрашенная: занятые слоты — все, новую взять нельзя.
+        const current = typeof path.properties?.liquid === "string" ? path.properties.liquid : "water", used = usedLiquids(document.layers);
+        const full = used.filter(key => key !== "water").length >= LIQUID_SLOTS;
+        const choices = [...LIQUIDS.map(item => [item.key, item.name] as const), ...(document.appearance?.liquids ?? []).map(item => [item.key, item.name] as const)];
+        return <label>Жидкость<select aria-label="Жидкость реки" value={current} disabled={locked} onChange={e => commit(doc => setRiverProperty(doc, selection, "liquid", e.target.value === "water" ? null : e.target.value))}>
+          {choices.map(([key, name]) => <option key={key} value={key} disabled={full && key !== "water" && !used.includes(key)}>{name}</option>)}
+        </select></label>;
+      })()}
       {path.kind === "river" && path.styleRef.type === "asset" && <label>Глубина · {depth} из 5<input aria-label="Глубина реки" type="range" min={1} max={5} step={1} value={depth} disabled={locked}
         onChange={e => commit(doc => setRiverProperty(doc, selection, "depth", Number(e.target.value)))} /></label>}
       {!wall && <label>Название<input aria-label="Название линии" maxLength={200} value={typeof path.properties?.name === "string" ? path.properties.name : ""} disabled={locked}
