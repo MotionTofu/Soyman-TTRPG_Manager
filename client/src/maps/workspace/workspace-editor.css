@@ -113,6 +113,8 @@
 .workspace-liquid-editor fieldset label { font-weight: 400; }
 .workspace-liquid-editor input[type="color"] { width: 56px; height: 28px; padding: 0; }
 .workspace-liquid-editor .workspace-liquid-check { display: flex; align-items: center; gap: var(--sp-2); }
+.workspace-liquid-editor fieldset.workspace-liquid-layers { display: grid; gap: 2px; }
+.workspace-liquid-layer { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: var(--sp-2); min-height: 24px; }
 .workspace-liquid-editor small { color: var(--muted); }
 .workspace-liquid-warning { display: grid; gap: var(--sp-2); margin: 0; padding: var(--sp-2); border: 2px solid #171717; background: var(--accent); font-size: var(--fs-meta); }
 .workspace-liquid-slots > label { display: grid; align-content: center; gap: 2px; padding-left: var(--sp-2); border-left: 2px solid #171717; font-size: var(--fs-meta); font-weight: 600; white-space: nowrap; }

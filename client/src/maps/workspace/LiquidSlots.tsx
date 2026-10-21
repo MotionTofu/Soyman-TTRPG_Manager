@@ -1,7 +1,7 @@
-import { memo, useState } from "react";
+import { memo, useRef, useState } from "react";
 import type { MapLiquidRecipe } from "@shared/maps/core";
-import { LIQUIDS, LIQUID_PATTERNS, LIQUID_RIMS, OWN_LIQUID_KEYS, WATER_DEPTHS, liquidKey, liquidRecipe, villageUrl, waterCode, waterLevel,
-  type LiquidPattern, type LiquidRecipe, type LiquidRim } from "../assets/village";
+import { LIQUIDS, LIQUID_LAYERS, LIQUID_RIMS, OWN_LIQUID_KEYS, WATER_DEPTHS, liquidKey, liquidLayers, liquidRecipe, villageUrl, waterCode, waterLevel,
+  type LiquidLayer, type LiquidLayers, type LiquidRecipe, type LiquidRim } from "../assets/village";
 import { liquidPackOf, packLiquidRecipe, type OwnPack, type OwnPackItem } from "../assets/ownPacks";
 import { LIQUID_SLOTS, liquidShades } from "./liquids";
 import "./workspace-editor.css";
@@ -15,6 +15,26 @@ function Range({ name, title, value, min, max, step, onChange, onSettle }: { nam
   return <label title={title}>{name}<input type="range" aria-label={name} min={min} max={max} step={step} value={value} onChange={event => onChange(Number(event.target.value))} onPointerUp={onSettle} onKeyUp={onSettle} onBlur={onSettle} /></label>;
 }
 type Recipe = Omit<MapLiquidRecipe, "key" | "name" | "ref">;
+/** Рисунок слоями (гриллинг 2026-10-21): галочка включает слой, ползунок — его сила. Включённый снова слой получает силу,
+ * которая была у него в этом окне, а впервые — 0,5. Правка слоями убирает прежний одиночный рисунок. */
+function LayerFields({ recipe, edit, onSettle }: { recipe: Pick<Recipe, "layers" | "pattern">; edit: (patch: Partial<Recipe>, live?: boolean) => void; onSettle: () => void }) {
+  const layers = liquidLayers(recipe), last = useRef<LiquidLayers>({});
+  const set = (next: LiquidLayers, live?: boolean) => edit({ layers: next, pattern: undefined }, live);
+  return <fieldset className="workspace-liquid-layers"><legend>Рисунок</legend>
+    {(Object.entries(LIQUID_LAYERS) as [LiquidLayer, string][]).map(([key, name]) => {
+      const value = layers[key];
+      return <div key={key} className="workspace-liquid-layer">
+        <label className="workspace-liquid-check"><input type="checkbox" checked={value !== undefined} onChange={event => {
+          if (event.target.checked) set({ ...layers, [key]: last.current[key] ?? 0.5 });
+          else { last.current[key] = value; const { [key]: _off, ...rest } = layers; set(rest); }
+        }} />{name}</label>
+        {value !== undefined && <input type="range" aria-label={`Сила слоя «${name}»`} min={0} max={1} step={0.05} value={value}
+          onChange={event => set({ ...layers, [key]: Number(event.target.value) }, true)} onPointerUp={onSettle} onKeyUp={onSettle} onBlur={onSettle} />}
+      </div>;
+    })}
+    {!Object.keys(layers).length && <small>Все слои выключены — гладь: только тон по глубине.</small>}
+  </fieldset>;
+}
 /** Ручки рецепта жидкости — и в слоте карты, и на экране набора. `live` — ползунок ещё тянут, шаг закроет `onSettle`. */
 export function LiquidRecipeFields({ recipe, edit, onSettle }: { recipe: Omit<Recipe, "tones"> & { tones: readonly [string, string, string] }; edit: (patch: Partial<Recipe>, live?: boolean) => void; onSettle: () => void }) {
   return <>
@@ -30,8 +50,7 @@ export function LiquidRecipeFields({ recipe, edit, onSettle }: { recipe: Omit<Re
     <Range name="Напор" title="Кто теснит соседку на стыке двух жидкостей: сильная сдвигает середину перехода на её сторону" value={recipe.push ?? 0.5} min={0} max={1} step={0.05} onChange={push => edit({ push }, true)} onSettle={onSettle} />
     <Range name="Мягкость края" title="Ширина перехода к другой жидкости, до двух клеток; на стыке берётся бо́льшая из двух" value={recipe.blend ?? 0.25} min={0} max={1} step={0.05} onChange={blend => edit({ blend }, true)} onSettle={onSettle} />
     <Range name="Свечение" value={recipe.glow} min={0} max={1} step={0.05} onChange={glow => edit({ glow }, true)} onSettle={onSettle} />
-    <label>Рисунок<select value={recipe.pattern} onChange={event => edit({ pattern: event.target.value as LiquidPattern })}>
-      {Object.entries(LIQUID_PATTERNS).map(([key, name]) => <option key={key} value={key}>{name}</option>)}</select></label>
+    <LayerFields recipe={recipe} edit={edit} onSettle={onSettle} />
     <label>Кромка<select value={recipe.rim} onChange={event => edit({ rim: event.target.value as LiquidRim })}>
       {Object.entries(LIQUID_RIMS).map(([key, name]) => <option key={key} value={key}>{name}</option>)}</select></label>
     <label className="workspace-liquid-check"><input type="checkbox" checked={recipe.solid} onChange={event => edit({ solid: event.target.checked })} />Твёрдая: по ней ходят, мост не нужен</label>

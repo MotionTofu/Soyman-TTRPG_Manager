@@ -35,13 +35,19 @@ export type MapWaterLook = typeof MAP_WATER_LOOKS[number];
 /** Рецепт жидкости, заведённый Мастером на этой карте. Материал в слое — `village-<key>-<глубина>`; правка рецепта
  * перекрашивает всё, что им накрашено. Готовые рецепты (вода, лава…) живут в клиенте и здесь не хранятся. */
 export const MAP_LIQUID_PATTERNS = ["ripple", "cracks", "bubbles", "mist", "smooth"] as const;
+/** Слои рисунка жидкости снизу вверх (гриллинг 2026-10-21): рябь — родной рисунок вида воды, дальше трещины, корка,
+ * отлив, пятна, пузыри, туман. Включённый слой — ключ с силой 0…1. */
+export const MAP_LIQUID_LAYERS = ["ripple", "cracks", "crust", "sheen", "scum", "bubbles", "mist"] as const;
+export type MapLiquidLayers = Partial<Record<typeof MAP_LIQUID_LAYERS[number], number>>;
 export const MAP_LIQUID_RIMS = ["foam", "none", "scorch", "wet", "hatch"] as const;
 export interface MapLiquidRecipe {
   /** own1…own7 */ key: string; name: string;
   /** Глубина, середина, блик: #rrggbb. */ tones: [string, string, string];
   /** Подвижность 0…2, крупность рисунка 0,25…4, видимость дна 0…1, свечение 0…1. */
   pace: number; size: number; bed: number; glow: number;
-  pattern: typeof MAP_LIQUID_PATTERNS[number]; rim: typeof MAP_LIQUID_RIMS[number];
+  /** Рисунок одним выбором — у рецептов до слоёв; при `layers` не читается. */ pattern?: typeof MAP_LIQUID_PATTERNS[number];
+  /** Рисунок слоями; без поля — по `pattern`. */ layers?: MapLiquidLayers;
+  rim: typeof MAP_LIQUID_RIMS[number];
   /** По жидкости ходят: переправа не нужна. */ solid: boolean;
   /** Берег (гриллинг 2026-10-15, В6): ширина перехода 0…1 и рваность 0…1. Нет — как у воды. */ shore?: number; ragged?: number;
   /** Стык с другой жидкостью (Q1 2026-10-21): «Напор» 0…1 — сильная сдвигает середину перехода на соседку; «Мягкость края»
@@ -57,7 +63,9 @@ function liquidIssue(value: unknown, taken: Set<unknown>): string | null {
   if (typeof value.name !== "string" || !value.name.trim() || value.name.length > 40) return "name must be 1..40 characters";
   if (!Array.isArray(value.tones) || value.tones.length !== 3 || value.tones.some(tone => typeof tone !== "string" || !/^#[0-9a-f]{6}$/i.test(tone))) return "tones must be three #rrggbb";
   for (const [key, min, max] of LIQUID_RANGES) { const n = value[key]; if (typeof n !== "number" || !Number.isFinite(n) || n < min || n > max) return `${key} must be ${min}..${max}`; }
-  if (!(MAP_LIQUID_PATTERNS as readonly unknown[]).includes(value.pattern)) return "unknown pattern";
+  if (value.pattern !== undefined && !(MAP_LIQUID_PATTERNS as readonly unknown[]).includes(value.pattern)) return "unknown pattern";
+  if (value.layers !== undefined && (!record(value.layers) || Object.entries(value.layers).some(([key, n]) => !(MAP_LIQUID_LAYERS as readonly string[]).includes(key)
+    || typeof n !== "number" || !Number.isFinite(n) || n < 0 || n > 1))) return "layers must be known layers 0..1";
   if (!(MAP_LIQUID_RIMS as readonly unknown[]).includes(value.rim)) return "unknown rim";
   if (value.ref !== undefined && (typeof value.ref !== "string" || !/^[0-9a-z-]{1,64}$/i.test(value.ref))) return "ref must be a pack item code";
   for (const key of ["shore", "ragged", "push", "blend"] as const) { const n = value[key]; if (n !== undefined && (typeof n !== "number" || !Number.isFinite(n) || n < 0 || n > 1)) return `${key} must be 0..1`; }
@@ -194,7 +202,10 @@ const canonAppearance = (doc: MapDocumentV6) => doc.appearance
     ...(doc.appearance.waveDensity !== undefined ? { waveDensity: doc.appearance.waveDensity } : {}),
     ...(doc.appearance.packs ? { packs: [...doc.appearance.packs] } : {}),
     ...(doc.appearance.liquids?.length ? { liquids: [...doc.appearance.liquids].sort((a, b) => a.key < b.key ? -1 : 1).map(item => ({ key: item.key, name: item.name,
-      tones: [...item.tones] as [string, string, string], pace: item.pace, size: item.size, bed: item.bed, glow: item.glow, pattern: item.pattern, rim: item.rim, solid: item.solid,
+      tones: [...item.tones] as [string, string, string], pace: item.pace, size: item.size, bed: item.bed, glow: item.glow,
+      ...(item.pattern !== undefined ? { pattern: item.pattern } : {}),
+      ...(item.layers ? { layers: Object.fromEntries(MAP_LIQUID_LAYERS.flatMap(key => item.layers![key] !== undefined ? [[key, item.layers![key]]] : [])) } : {}),
+      rim: item.rim, solid: item.solid,
       ...(item.shore !== undefined ? { shore: item.shore } : {}), ...(item.ragged !== undefined ? { ragged: item.ragged } : {}),
       ...(item.push !== undefined ? { push: item.push } : {}), ...(item.blend !== undefined ? { blend: item.blend } : {}), ...(item.ref !== undefined ? { ref: item.ref } : {}) })) } : {}) } } : {};
 export function canonicalizeMapDocumentV6(doc: MapDocumentV6): MapDocumentV6 {

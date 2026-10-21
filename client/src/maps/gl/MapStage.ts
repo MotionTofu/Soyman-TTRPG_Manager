@@ -39,7 +39,7 @@ export class MapStage {
   private readonly maskRaw = document.createElement("canvas");
   private readonly flowCanvas = document.createElement("canvas");
   private readonly blendCanvas = document.createElement("canvas");
-  private readonly recipeCanvas = Object.assign(document.createElement("canvas"), { width: 7, height: 8 });
+  private readonly recipeCanvas = Object.assign(document.createElement("canvas"), { width: 10, height: 8 });
   private readonly thingsCanvas = document.createElement("canvas");
   private readonly waterPass = createWaterFilter(this.maskCanvas, this.flowCanvas, this.blendCanvas, this.recipeCanvas, this.thingsCanvas);
   private thingsOf: readonly unknown[] = [];

@@ -62,13 +62,17 @@ const DECKS = ["bridge-wood", "bridge-stone", "ford"];
 const between = (value: unknown, min: number, max: number, fallback: number) => typeof value === "number" && Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
 /** Рецепт жидкости (гриллинг 2026-10-15, В12–В16) — те же ручки, что у своей жидкости карты; картинок у неё нет.
  * Списки рисунков и кромок — как в общем формате карты (`shared/src/maps/core/v6.ts`). */
-const LIQUID_PATTERNS = ["ripple", "cracks", "bubbles", "mist", "smooth"], LIQUID_RIMS = ["foam", "none", "scorch", "wet", "hatch"];
+const LIQUID_PATTERNS = ["ripple", "cracks", "bubbles", "mist", "smooth"], LIQUID_LAYERS = ["ripple", "cracks", "crust", "sheen", "scum", "bubbles", "mist"], LIQUID_RIMS = ["foam", "none", "scorch", "wet", "hatch"];
 const WATER_TONES = ["#213e5c", "#2f9c8c", "#eefaf2"];
 function liquidData(raw: Record<string, unknown>) {
   const tones = Array.isArray(raw.tones) && raw.tones.length === 3 && raw.tones.every((tone) => typeof tone === "string" && /^#[0-9a-f]{6}$/i.test(tone))
     ? (raw.tones as string[]).map((tone) => tone.toLowerCase()) : WATER_TONES;
   return { tones, pace: between(raw.pace, 0, 2, 1), size: between(raw.size, 0.25, 4, 1), bed: between(raw.bed, 0, 1, 1), glow: between(raw.glow, 0, 1, 0),
-    pattern: LIQUID_PATTERNS.includes(raw.pattern as string) ? raw.pattern : "ripple", rim: LIQUID_RIMS.includes(raw.rim as string) ? raw.rim : "foam",
+    // Рисунок слоями (2026-10-21) вытесняет прежний одиночный: правка со слоями убирает `pattern`.
+    ...(raw.layers && typeof raw.layers === "object" && !Array.isArray(raw.layers)
+      ? { layers: Object.fromEntries(LIQUID_LAYERS.flatMap((key) => typeof (raw.layers as Record<string, unknown>)[key] === "number" ? [[key, between((raw.layers as Record<string, unknown>)[key], 0, 1, 0)]] : [])) }
+      : { pattern: LIQUID_PATTERNS.includes(raw.pattern as string) ? raw.pattern : "ripple" }),
+    rim: LIQUID_RIMS.includes(raw.rim as string) ? raw.rim : "foam",
     solid: raw.solid === true, shore: between(raw.shore, 0, 1, 0.4), ragged: between(raw.ragged, 0, 1, 0.4),
     push: between(raw.push, 0, 1, 0.5), blend: between(raw.blend, 0, 1, 0.25) };
 }

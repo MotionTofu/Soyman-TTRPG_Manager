@@ -130,6 +130,10 @@ describe("наборы ассетов карт", () => {
       pattern: "ripple", rim: "none", solid: true, shore: 0.4, ragged: 0.9, push: 0.5, blend: 0.25, images: [] });
     const edited = (await api().put(`/api/map-packs/items/${liquid.id}`).auth(gm, auth).send({ glow: 0.5, name: "Ртуть живая" })).body;
     expect(edited.items[0]).toMatchObject({ name: "Ртуть живая", glow: 0.5, pace: 2, ragged: 0.9 });
+    // Рисунок слоями вытесняет одиночный; сила — в пределах, чужие слои отбрасываются.
+    const layered = (await api().put(`/api/map-packs/items/${liquid.id}`).auth(gm, auth).send({ layers: { sheen: 3, scum: 0.4, lava: 1 } })).body;
+    expect(layered.items[0]).toMatchObject({ layers: { sheen: 1, scum: 0.4 } });
+    expect(layered.items[0]).not.toHaveProperty("pattern");
     const file = (await api().get(`/api/map-packs/${pack.id}/export`).auth(gm, auth).buffer(true).parse((res, done) => {
       const chunks: Buffer[] = []; res.on("data", (chunk: Buffer) => chunks.push(chunk)); res.on("end", () => done(null, Buffer.concat(chunks)));
     })).body as Buffer;

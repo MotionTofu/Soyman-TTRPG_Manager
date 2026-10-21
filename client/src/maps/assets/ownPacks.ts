@@ -18,7 +18,7 @@ export interface OwnPackItem { id: number; uid: string; kind: string; name: stri
   /** Россыпь: размер знака и густота по умолчанию. */ size?: number; density?: number;
   /** Проём: ширина в клетках и «потайной». */ span?: number; secret?: boolean;
   /** Жидкость — рецепт без картинок, те же ручки, что у своей жидкости карты (`size` — крупность рисунка). */
-  tones?: [string, string, string]; pace?: number; bed?: number; glow?: number; pattern?: MapLiquidRecipe["pattern"]; rim?: MapLiquidRecipe["rim"];
+  tones?: [string, string, string]; pace?: number; bed?: number; glow?: number; pattern?: MapLiquidRecipe["pattern"]; layers?: MapLiquidRecipe["layers"]; rim?: MapLiquidRecipe["rim"];
   solid?: boolean; shore?: number; ragged?: number; push?: number; blend?: number; images: OwnPackImage[] }
 export interface OwnPack { id: number; uid: string; name: string; kinds: MapKind[]; genres: SettingGenre[]; native_style: string; archived: boolean; updated_at: string; items: OwnPackItem[] }
 
@@ -101,7 +101,7 @@ export function registerOwnPacks(packs: readonly OwnPack[]): void {
 /** Рецепт жидкости набора в слот карты `key`: ссылка на вещь и снимок её значений (В12). Имя на карте — до 40 знаков. */
 export const packLiquidRecipe = (item: OwnPackItem, key: string): MapLiquidRecipe => ({ key, name: item.name.slice(0, 40), ref: item.uid,
   tones: [...(item.tones ?? ["#213e5c", "#2f9c8c", "#eefaf2"])] as [string, string, string], pace: item.pace ?? 1, size: item.size ?? 1, bed: item.bed ?? 1,
-  glow: item.glow ?? 0, pattern: item.pattern ?? "ripple", rim: item.rim ?? "foam", solid: !!item.solid, shore: item.shore ?? 0.4, ragged: item.ragged ?? 0.4,
+  glow: item.glow ?? 0, ...(item.layers ? { layers: { ...item.layers } } : { pattern: item.pattern ?? "ripple" }), rim: item.rim ?? "foam", solid: !!item.solid, shore: item.shore ?? 0.4, ragged: item.ragged ?? 0.4,
   push: item.push ?? 0.5, blend: item.blend ?? 0.25 });
 /** Жидкости наборов из списка — для меню слота; набор в архиве и убранные жидкости не предлагаются. */
 export const packLiquids = (packIds: readonly string[]) => current.filter((pack) => !pack.archived && packIds.includes(pack.uid))

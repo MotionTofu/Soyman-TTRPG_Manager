@@ -1,7 +1,7 @@
 import { flattenSplineWithWidths } from "./core/spline";
 import type { MapRenderModel } from "./renderModel";
 import type { MapObject } from "./core/types";
-import { LIQUID_PATTERNS, LIQUID_RIMS, liquidKey, liquidRecipe, type LiquidRecipe, riverDepth, waterLevel } from "./assets/village";
+import { LIQUID_LAYERS, LIQUID_RIMS, liquidKey, liquidLayers, liquidRecipe, type LiquidRecipe, riverDepth, waterLevel } from "./assets/village";
 import { cryptSide } from "./assets/crypt";
 import { drawCachedMapImage, drawCachedMapSymbol } from "./assets/draw";
 import { cutRoad, roadCrossings } from "./crossings";
@@ -31,7 +31,7 @@ export const waterFog = (o: { playerView?: boolean; grid: MapGrid; width: number
 /** Из чего собрана маска воды. Пока список тот же, маску не пересобирают: перетаскивание фишки или подписи воду не меняет,
  * а пересборка — это вся карта заново и отправка картинки видеокарте на каждый шаг руки. */
 export function waterSources(model: MapRenderModel, width: number, height: number, shoal = 0, lo = ZERO, fog: WaterFog = null): readonly unknown[] {
-  // Рецептов здесь нет: от них зависит только таблица 7×8, её обновляет `drawLiquidRecipes`.
+  // Рецептов здесь нет: от них зависит только таблица 10×8, её обновляет `drawLiquidRecipes`.
   const out: unknown[] = [width, height, shoal, lo.x, lo.y, fog?.revealed];
   for (const layer of model.layers) {
     if (!layer.visible) continue;
@@ -281,19 +281,20 @@ export function drawLiquidRecipes(recipes: HTMLCanvasElement, liquids?: readonly
   drawRecipes(recipes, (rowsOf.get(recipes) ?? ["water"]).map(key => liquidRecipe(key, liquids)));
 }
 const tone = (hex: string) => [1, 3, 5].map(at => parseInt(hex.slice(at, at + 2), 16));
-/** Рецепты жидкостей картинкой 7×8: строка — номер жидкости в маске, столбцы читает `recipe()` шейдера.
+/** Рецепты жидкостей картинкой 10×8: строка — номер жидкости в маске, столбцы читает `recipe()` шейдера.
  * Картинка, а не массив чисел: так рецепт одинаково доходит и до сцены WebGL, и до обычного холста. */
 function drawRecipes(recipes: HTMLCanvasElement, rows: readonly LiquidRecipe[]) {
-  recipes.width = 7; recipes.height = 8;
+  recipes.width = 10; recipes.height = 8;
   const pen = recipes.getContext("2d");
   if (!pen) return;
-  const image = pen.createImageData(7, 8);
-  const patterns = Object.keys(LIQUID_PATTERNS), rims = Object.keys(LIQUID_RIMS);
+  const image = pen.createImageData(10, 8);
+  const rims = Object.keys(LIQUID_RIMS), order = Object.keys(LIQUID_LAYERS) as (keyof typeof LIQUID_LAYERS)[];
   rows.forEach((item, row) => {
+    const layers = liquidLayers(item), strength = order.map(key => (layers[key] ?? 0) * 255);
     const cells = [...item.tones.map(tone), [item.pace / 2 * 255, item.size / 4 * 255, item.bed * 255],
-      [patterns.indexOf(item.pattern) / 8 * 255, rims.indexOf(item.rim) / 8 * 255, item.glow * 255], [(item.shore ?? 0.4) * 255, (item.ragged ?? 0.4) * 255, 0],
-      [(item.push ?? 0.5) * 255, (item.blend ?? 0.25) * 255, 0]];
-    cells.forEach((cell, column) => image.data.set([...cell.map(Math.round), 255], (row * 7 + column) * 4));
+      [0, rims.indexOf(item.rim) / 8 * 255, item.glow * 255], [(item.shore ?? 0.4) * 255, (item.ragged ?? 0.4) * 255, 0],
+      [(item.push ?? 0.5) * 255, (item.blend ?? 0.25) * 255, 0], strength.slice(0, 3), strength.slice(3, 6), [strength[6], 0, 0]];
+    cells.forEach((cell, column) => image.data.set([...cell.map(Math.round), 255], (row * 10 + column) * 4));
   });
   pen.putImageData(image, 0, 0);
 }
@@ -319,9 +320,12 @@ vec3 gUnder = vec3(0.0);
 float gClear = 0.0, gTop = 0.0;
 float gGround = 0.0;
 vec3 gGlow = vec3(0.0);
-// Рецепт жидкости — строка картинки: три тона, потом (подвижность/2, крупность/4, дно), (рисунок/8, кромка/8, свечение)
-// (ширина берега, рваность берега) и (напор, мягкость края).
-vec3 recipe(float kind, float column) { return texture(uRecipe, vec2((column + 0.5) / 7.0, (kind + 0.5) / 8.0)).rgb; }
+// Глубина точки, 0…1, как её посчитал вид: по ней тонируется жидкость, у которой рябь приглушена.
+float gDepth = 0.0;
+// Рецепт жидкости — строка картинки: три тона, потом (подвижность/2, крупность/4, дно), (—, кромка/8, свечение),
+// (ширина берега, рваность берега), (напор, мягкость края) и сила слоёв рисунка: (рябь, трещины, корка),
+// (отлив, пятна, пузыри), (туман).
+vec3 recipe(float kind, float column) { return texture(uRecipe, vec2((column + 0.5) / 10.0, (kind + 0.5) / 8.0)).rgb; }
 uniform vec3 uWater;
 
 float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
@@ -387,6 +391,7 @@ vec4 comic(vec2 w, vec2 s, float t) {
   float a = smoothstep(0.38, 0.44, edge);
   if (a <= 0.0) return vec4(0.0);
   float tick = floor(t * 5.0), d = depthAt(w);
+  gDepth = d;
   float deep = smoothstep(0.25, 0.8, d);
   vec3 col = mix(vec3(0.19, 0.62, 0.56), vec3(0.11, 0.36, 0.44), deep);
   col *= 1.0 - 0.13 * step(0.6, noise(s * 0.8 + vec2(tick * 0.07, 3.0)));
@@ -444,6 +449,7 @@ vec4 pixel(vec2 w, vec2 s, float t, bool isSea) {
   float tick = floor(t * 6.0);
   // Ступени тонов на границе глубин ломаются шахматным смешением.
   float depth = depthAt(c) + (mod(p.x + p.y, 2.0) - 0.5) * 0.07;
+  gDepth = depth;
   vec3 col = isSea ? sea(ps, tick, depth) : pond((ps + 0.5) / P, tick / 6.0, depth);
   if (under(c, isSea ? vec3(0.78, 0.92, 0.95) : vec3(0.75, 0.92, 0.86))) gClear = clarity(depth) * 0.85;
   // Пена у берега: сплошная кромка в один пиксель и рваная полоса за ней — у пляжа широкая, у травы узкая.
@@ -461,6 +467,7 @@ vec4 soft(vec2 w, vec2 s, float t) {
   float a = smoothstep(0.4 - 0.1 * gShore, 0.46 + 0.1 * gShore, mk.r);
   if (a <= 0.0) return vec4(0.0);
   float depth = depthAt(w);
+  gDepth = depth;
   vec3 col = mix(vec3(0.56, 0.84, 0.8), vec3(0.2, 0.47, 0.7), smoothstep(0.08, 0.85, depth));
   vec2 sway = 0.05 * vec2(noise(w * 1.7 + t * 0.5) - 0.5, noise(w * 1.7 + 9.0 - t * 0.5) - 0.5);
   // Своё дно и нарисованное песчаное сменяют друг друга по доле накрашенного (gGround), а не скачком: иначе граница шла
@@ -484,30 +491,59 @@ vec4 soft(vec2 w, vec2 s, float t) {
   return vec4(col, a);
 }
 
-// Другие жидкости — та же вода, перекрашенная по яркости в свою шкалу: тёмное, среднее, светлое. Рисунок вида
-// (пиксели, дуги, блики) остаётся, поэтому лава в пиксельной карте пиксельная, а блики на ней — раскалённые трещины.
-// Рисунок поверхности pattern: 0 — рябь (родной рисунок вида), 1 — трещины, 2 — пузыри, 3 — туман, 4 — гладь.
-// Всё, кроме ряби, приглушает родной рисунок и кладёт своё поверх; p — точка рисунка, t — время жидкости.
+// Другие жидкости — та же вода, перекрашенная по яркости в свою шкалу: тёмное, среднее, светлое. Поверх — слои рисунка
+// снизу вверх (гриллинг 2026-10-21): рябь, трещины, корка, отлив, пятна, пузыри, туман, у каждого своя сила.
+// Рябь — родной рисунок вида (блики, дуги, штрихи): чем она слабее, тем ближе яркость к тону по глубине.
+// Тон слоя постоянный: пятна — глубина, отлив — середина к блику, остальное — блик; «Свечение» раскаляет швы корки
+// и трещины. В пиксельных видах точка рисунка уже огрублена до «пикселя». p — точка рисунка, t — время жидкости.
 vec3 liquid(vec3 c, float kind, vec2 p, float t) {
   if (kind < 0.5) return c;
   vec3 lo = recipe(kind, 0.0), mid = recipe(kind, 1.0), hi = recipe(kind, 2.0);
-  float pattern = floor(recipe(kind, 4.0).r * 8.0 + 0.5);
+  vec3 a = recipe(kind, 7.0), b = recipe(kind, 8.0);
+  float mist = recipe(kind, 9.0).r, glow = recipe(kind, 4.0).b;
   float x = clamp((dot(c, vec3(0.3, 0.59, 0.11)) - 0.25) / 0.7, 0.0, 1.0);
-  x = mix(x, 0.4, pattern < 0.5 ? 0.0 : pattern < 1.5 ? 0.6 : pattern < 2.5 ? 0.4 : pattern < 3.5 ? 0.55 : 0.8);
+  x = mix(mix(0.7, 0.22, smoothstep(0.08, 0.85, gDepth)), x, a.r);
   vec3 col = x < 0.5 ? mix(lo, mid, x * 2.0) : mix(mid, hi, x * 2.0 - 1.0);
-  if (pattern > 0.5 && pattern < 1.5) {
-    // Трещины: крупная сетка и мелкая паутина поверх неё.
-    float big = 1.0 - smoothstep(0.0, 0.045, cellEdge(p * 0.55, 0.0)), fine = 1.0 - smoothstep(0.0, 0.03, cellEdge(p * 1.7 + 9.0, 0.0));
-    col = mix(col, hi, max(big * 0.85, fine * 0.35));
-  } else if (pattern > 1.5 && pattern < 2.5) {
+  vec3 hot = mix(hi, min(hi * 1.6 + 0.15, vec3(1.0)), glow);
+  if (a.g > 0.0) {
+    // Трещины: крупная сетка и мелкая паутина поверх неё; от свечения шире.
+    float wide = 1.0 + glow;
+    float big = 1.0 - smoothstep(0.0, 0.045 * wide, cellEdge(p * 0.55, 0.0)), fine = 1.0 - smoothstep(0.0, 0.03 * wide, cellEdge(p * 1.7 + 9.0, 0.0));
+    col = mix(col, hot, max(big * 0.85, fine * 0.35) * a.g);
+  }
+  if (a.b > 0.0) {
+    // Корка: тёмные плиты медленно дрейфуют и меняют очертания, между ними светлые швы.
+    // Шов неровный: местами тоньше и тусклее, у края плиты — отсвет.
+    vec2 q = p * 0.6 + vec2(t * 0.025, t * 0.015);
+    float e = cellEdge(q, t * 0.12), n = noise(q * 2.3 + 4.0);
+    col = mix(col, mix(lo, mid, 0.35 * n), smoothstep(0.03, 0.14, e) * (0.8 + 0.2 * noise(q * 5.0)) * 0.9 * a.b);
+    col = mix(col, mix(mid, hot, 0.5), (1.0 - smoothstep(0.0, 0.16, e)) * 0.4 * a.b);
+    col = mix(col, hot, (1.0 - smoothstep(0.0, 0.035 * (1.0 + glow) * (0.5 + n), e)) * (0.55 + 0.45 * n) * a.b);
+  }
+  if (b.r > 0.0) {
+    // Отлив: широкие медленные светлые разводы, как блеск на масле.
+    vec2 q = p * 0.22 + vec2(noise(p * 0.3 + t * 0.05), noise(p * 0.3 + 3.0 - t * 0.04)) * 1.5;
+    float m = noise(q + vec2(t * 0.03, 0.0));
+    col = mix(col, mix(mid, hi, 0.7), smoothstep(0.5, 0.62, m) * (1.0 - smoothstep(0.66, 0.8, m)) * 0.75 * b.r);
+  }
+  if (b.g > 0.0) {
+    // Пятна: ряска или накипь тёмным тоном, почти стоят на месте.
+    vec2 q = p * 0.5 + vec2(t * 0.01, 0.0);
+    float m = noise(q) * 0.65 + noise(q * 2.7 + 7.0) * 0.35;
+    // Тёмное пятно с чуть светлой кромкой — иначе на тёмной жидкости его не видно.
+    col = mix(col, mix(mid, hi, 0.3), smoothstep(0.49, 0.52, m) * (1.0 - smoothstep(0.52, 0.55, m)) * 0.5 * b.g);
+    col = mix(col, lo * 0.75, smoothstep(0.53, 0.57, m) * (0.85 + 0.15 * noise(p * 6.0)) * b.g);
+  }
+  if (b.b > 0.0) {
     // Пузыри: в части клеток сетки кольцо растёт и гаснет, каждое в своём темпе.
     vec2 g = floor(p * 1.6), f = fract(p * 1.6) - 0.5 - (hash2(g) - 0.5) * 0.5;
     float h = hash(g), life = fract(t * (0.25 + 0.3 * h) + h * 7.0);
-    col = mix(col, hi, step(0.6, h) * (1.0 - smoothstep(0.0, 0.06, abs(length(f) - 0.1 - 0.22 * life))) * (1.0 - life));
-  } else if (pattern > 2.5 && pattern < 3.5) {
+    col = mix(col, hi, step(0.6, h) * (1.0 - smoothstep(0.0, 0.06, abs(length(f) - 0.1 - 0.22 * life))) * (1.0 - life) * b.b);
+  }
+  if (mist > 0.0) {
     // Туман: медленные светлые клочья.
     float m = noise(p * 0.35 + vec2(t * 0.06, 0.0)) * 0.6 + noise(p * 0.9 - vec2(0.0, t * 0.04)) * 0.4;
-    col = mix(col, hi, smoothstep(0.45, 0.85, m) * 0.7);
+    col = mix(col, hi, smoothstep(0.45, 0.85, m) * 0.7 * mist);
   }
   return col;
 }

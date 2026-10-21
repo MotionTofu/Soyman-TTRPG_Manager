@@ -130,17 +130,28 @@ export const WATER_DEPTHS = [1, 2, 3, 4, 5] as const;
 /** Рецепт жидкости — всё, чем одна жидкость отличается от другой (решение владельца 2026-10-08). Шейдер рисует любую
  * как воду выбранного вида, а рецепт её перекрашивает и перенастраивает.
  * `tones` — глубина, середина, блик; у воды они не применяются: у каждого вида воды своя палитра.
- * `pace` — подвижность (0 — застыла, 1 — вода); `size` — крупность рисунка; `bed` — насколько видно дно на мели;
+ * `pace` — подвижность (0 — застыла, 1 — вода); `size` — крупность рисунка; `layers` — рисунок слоями; `bed` — насколько видно дно на мели;
  * `glow` — свечение: подсвечивает берег; `solid` — по ней ходят, переправа не нужна. */
 export interface LiquidRecipe {
   key: string; name: string; /** Цвет плитки, пока нет картинки; у своих жидкостей — средний тон. */ fill?: string; tones: readonly [string, string, string];
-  pace: number; size: number; pattern: LiquidPattern; bed: number; rim: LiquidRim; glow: number; solid: boolean;
+  pace: number; size: number; bed: number; rim: LiquidRim; glow: number; solid: boolean;
+  /** Рисунок слоями: ключ — включённый слой, значение — сила 0…1. Без поля — по прежнему одиночному `pattern`. */
+  layers?: LiquidLayers; pattern?: LiquidPattern;
   /** Берег: ширина перехода и рваность, 0…1. У своих рецептов без них — как у воды. */ shore?: number; ragged?: number;
   /** Стык с другой жидкостью: «Напор» и «Мягкость края», 0…1. Без них — 0,5 и 0,25. */ push?: number; blend?: number;
 }
-/** Рисунок поверхности: рябь — родной рисунок вида воды, остальные ложатся поверх приглушённого. */
-export const LIQUID_PATTERNS = { ripple: "Рябь", cracks: "Трещины", bubbles: "Пузыри", mist: "Туман", smooth: "Гладь" } as const;
-export type LiquidPattern = keyof typeof LIQUID_PATTERNS;
+/** Прежний рисунок одним выбором — у рецептов, заведённых до слоёв. */
+export type LiquidPattern = "ripple" | "cracks" | "bubbles" | "mist" | "smooth";
+/** Слои рисунка снизу вверх (гриллинг 2026-10-21): рябь — родной рисунок вида воды (блики, дуги, штрихи), на нуле
+ * остаётся только тон по глубине; остальные ложатся поверх. */
+export const LIQUID_LAYERS = { ripple: "Рябь", cracks: "Трещины", crust: "Корка", sheen: "Отлив", scum: "Пятна", bubbles: "Пузыри", mist: "Туман" } as const;
+export type LiquidLayer = keyof typeof LIQUID_LAYERS;
+export type LiquidLayers = Partial<Record<LiquidLayer, number>>;
+/** Прежний рисунок слоями — так, как он выглядел (Q8): одиночный рисунок гасил рябь не до нуля. */
+const PATTERN_LAYERS: Record<LiquidPattern, LiquidLayers> = { ripple: { ripple: 1 }, cracks: { cracks: 1, ripple: 0.4 }, bubbles: { bubbles: 1, ripple: 0.6 },
+  mist: { mist: 1, ripple: 0.45 }, smooth: { ripple: 0.2 } };
+/** Слои рецепта: свои или переведённые из прежнего рисунка. */
+export const liquidLayers = (recipe: Pick<LiquidRecipe, "layers" | "pattern">): LiquidLayers => recipe.layers ?? PATTERN_LAYERS[recipe.pattern ?? "ripple"] ?? PATTERN_LAYERS.ripple;
 /** Кромка: пена и мокрая полоса, только мокрая полоса, обугленный край, линии вдоль берега, как в атласе (М5), или ничего. */
 export const LIQUID_RIMS = { foam: "Пена и мокрый берег", none: "Ничего", scorch: "Обугленный край", wet: "Мокрый берег", hatch: "Атласная штриховка" } as const;
 export type LiquidRim = keyof typeof LIQUID_RIMS;
@@ -149,15 +160,15 @@ export type LiquidRim = keyof typeof LIQUID_RIMS;
  * Картинки (листы L1/L2) — для вида «Картинкой» и под шейдером; у лавы на мели остывшая корка (`lava-2`),
  * у льда на глубине тонкий тёмный лёд (`ice-2`). */
 export const LIQUIDS = [
-  { key: "water", name: "Вода", fill: "#2f9c8c", tones: ["#213e5c", "#2f9c8c", "#eefaf2"], pace: 1, size: 1, pattern: "ripple", bed: 1, rim: "foam", glow: 0, solid: false, shore: 0.4, ragged: 0.4, push: 0.5, blend: 0.3 },
-  { key: "swamp", name: "Болото", fill: "#4a5226", tones: ["#212612", "#4d5724", "#9ead5c"], pace: 0.5, size: 1.2, pattern: "bubbles", bed: 0.4, rim: "foam", glow: 0, solid: false, shore: 0.8, ragged: 0.75, push: 0.4, blend: 0.7 },
-  { key: "lava", name: "Лава", fill: "#c8421a", tones: ["#290d0a", "#b82e0a", "#ffe666"], pace: 0.35, size: 1.5, pattern: "ripple", bed: 0, rim: "scorch", glow: 0.8, solid: false, shore: 0.2, ragged: 0.8, push: 0.7, blend: 0.35 },
-  { key: "ice", name: "Лёд", fill: "#cfe6ee", tones: ["#8cb8d1", "#cce6f0", "#ffffff"], pace: 0, size: 1, pattern: "cracks", bed: 0.3, rim: "none", glow: 0, solid: true, shore: 0.05, ragged: 0.1, push: 0.6, blend: 0.1 },
-  { key: "acid", name: "Кислота", fill: "#a4c21f", tones: ["#33540d", "#99c71a", "#edff99"], pace: 1.2, size: 1, pattern: "bubbles", bed: 0.5, rim: "scorch", glow: 0.4, solid: false, shore: 0.4, ragged: 0.4, push: 0.6, blend: 0.4 },
-  { key: "tar", name: "Смола", fill: "#1c1a1a", tones: ["#08080a", "#1f1a17", "#6b5c4d"], pace: 0.25, size: 1.8, pattern: "smooth", bed: 0, rim: "wet", glow: 0, solid: false, shore: 0.5, ragged: 0, push: 0.6, blend: 0.15 },
-  { key: "chasm", name: "Пропасть с туманом", fill: "#232a36", tones: ["#05080f", "#1a2133", "#8c99ad"], pace: 0.5, size: 1.5, pattern: "mist", bed: 0, rim: "none", glow: 0, solid: false, shore: 0.3, ragged: 0.8, push: 0.3, blend: 0.8 },
+  { key: "water", name: "Вода", fill: "#2f9c8c", tones: ["#213e5c", "#2f9c8c", "#eefaf2"], pace: 1, size: 1, bed: 1, rim: "foam", glow: 0, solid: false, shore: 0.4, ragged: 0.4, push: 0.5, blend: 0.3, layers: { ripple: 1 } },
+  { key: "swamp", name: "Болото", fill: "#4a5226", tones: ["#212612", "#4d5724", "#9ead5c"], pace: 0.5, size: 1.2, bed: 0.4, rim: "foam", glow: 0, solid: false, shore: 0.8, ragged: 0.75, push: 0.4, blend: 0.7, layers: { scum: 0.7, bubbles: 0.5, ripple: 0.15 } },
+  { key: "lava", name: "Лава", fill: "#c8421a", tones: ["#290d0a", "#b82e0a", "#ffe666"], pace: 0.35, size: 1.5, bed: 0, rim: "scorch", glow: 0.8, solid: false, shore: 0.2, ragged: 0.8, push: 0.7, blend: 0.35, layers: { crust: 1, bubbles: 0.2 } },
+  { key: "ice", name: "Лёд", fill: "#cfe6ee", tones: ["#8cb8d1", "#cce6f0", "#ffffff"], pace: 0, size: 1, bed: 0.3, rim: "none", glow: 0, solid: true, shore: 0.05, ragged: 0.1, push: 0.6, blend: 0.1, layers: { cracks: 1 } },
+  { key: "acid", name: "Кислота", fill: "#a4c21f", tones: ["#33540d", "#99c71a", "#edff99"], pace: 1.2, size: 1, bed: 0.5, rim: "scorch", glow: 0.4, solid: false, shore: 0.4, ragged: 0.4, push: 0.6, blend: 0.4, layers: { bubbles: 0.8, mist: 0.35, sheen: 0.3 } },
+  { key: "tar", name: "Смола", fill: "#1c1a1a", tones: ["#08080a", "#1f1a17", "#6b5c4d"], pace: 0.25, size: 1.8, bed: 0, rim: "wet", glow: 0, solid: false, shore: 0.5, ragged: 0, push: 0.6, blend: 0.15, layers: { sheen: 0.8, bubbles: 0.15 } },
+  { key: "chasm", name: "Пропасть с туманом", fill: "#232a36", tones: ["#05080f", "#1a2133", "#8c99ad"], pace: 0.5, size: 1.5, bed: 0, rim: "none", glow: 0, solid: false, shore: 0.3, ragged: 0.8, push: 0.3, blend: 0.8, layers: { mist: 1 } },
   // Море обзорной карты (М5): берег обведён линиями, как в атласе; картинкой — та же вода.
-  { key: "sea", name: "Море", fill: "#1d5a6c", tones: ["#1d3f55", "#3f7f99", "#d9efe9"], pace: 0.6, size: 1.6, pattern: "ripple", bed: 0.2, rim: "hatch", glow: 0, solid: false, shore: 0.4, ragged: 0.3, push: 0.5, blend: 0.6 },
+  { key: "sea", name: "Море", fill: "#1d5a6c", tones: ["#1d3f55", "#3f7f99", "#d9efe9"], pace: 0.6, size: 1.6, bed: 0.2, rim: "hatch", glow: 0, solid: false, shore: 0.4, ragged: 0.3, push: 0.5, blend: 0.6, layers: { ripple: 1 } },
 ] as const satisfies readonly LiquidRecipe[];
 export type LiquidKey = typeof LIQUIDS[number]["key"];
 /** Ключи своих жидкостей карты: рецепты лежат в `appearance.liquids`. */

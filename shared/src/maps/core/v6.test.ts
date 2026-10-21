@@ -64,13 +64,17 @@ describe("V6 boundary and tokens", () => {
     }
     expect(parseMapDocumentV6({ ...upgradeMapDocumentV5(oldDocument()), appearance: { style: "unknown" } }).ok).toBe(false);
     // Свои жидкости карты: рецепт проходит целиком, битый — отклоняется.
-    const liquid = { key: "own1", name: "Ртуть", tones: ["#202428", "#8a9199", "#ffffff"], pace: 0.3, size: 2, bed: 0, glow: 0.2, pattern: "smooth", rim: "none", solid: false, shore: 0.3, ragged: 0.9, push: 0.8, blend: 0.6, ref: "0b7c1d9e-1111-4222-8333-944455556666" };
+    const liquid = { key: "own1", name: "Ртуть", tones: ["#202428", "#8a9199", "#ffffff"], pace: 0.3, size: 2, bed: 0, glow: 0.2, layers: { ripple: 0.2, sheen: 0.7 }, rim: "none", solid: false, shore: 0.3, ragged: 0.9, push: 0.8, blend: 0.6, ref: "0b7c1d9e-1111-4222-8333-944455556666" };
     const wet = { ...upgradeMapDocumentV5(oldDocument()), appearance: { style: "paper-ink", liquids: [liquid] } };
     const read = parseMapDocumentV6(serializeMapDocumentV6(wet as MapDocumentV6));
     expect(read.ok && read.value.appearance?.liquids).toEqual([liquid]);
-    for (const bad of [{ key: "lava" }, { pace: 9 }, { tones: ["red", "#000000", "#ffffff"] }, { pattern: "waves" }, { ref: "../x" }, { push: 2 }])
+    for (const bad of [{ key: "lava" }, { pace: 9 }, { tones: ["red", "#000000", "#ffffff"] }, { pattern: "waves" }, { ref: "../x" }, { push: 2 }, { layers: { lava: 1 } }, { layers: { mist: 2 } }])
       expect(parseMapDocumentV6({ ...wet, appearance: { style: "paper-ink", liquids: [{ ...liquid, ...bad }] } }).ok).toBe(false);
     expect(parseMapDocumentV6({ ...wet, appearance: { style: "paper-ink", liquids: [liquid, liquid] } }).ok).toBe(false);
+    // Рецепт до слоёв — с одиночным рисунком — читается как был.
+    const { layers: _layers, ...older } = liquid;
+    const old = parseMapDocumentV6({ ...wet, appearance: { style: "paper-ink", liquids: [{ ...older, pattern: "cracks" }] } });
+    expect(old.ok && old.value.appearance?.liquids?.[0]).toMatchObject({ pattern: "cracks" });
     // Подключённые наборы карты: непустой список уникальных идентификаторов.
     const packed = parseMapDocumentV6({ ...wet, appearance: { style: "paper-ink", packs: ["village", "ink"] } });
     expect(packed.ok && packed.value.appearance?.packs).toEqual(["village", "ink"]);
