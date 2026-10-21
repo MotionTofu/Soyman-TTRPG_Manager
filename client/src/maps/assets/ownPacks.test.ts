@@ -79,6 +79,11 @@ describe("свои наборы ассетов", () => {
     expect(made.items.length).toBeGreaterThan(10);
     expect(new Set(made.items.map((entry) => entry.asset.id))).toEqual(new Set([ownImageId(image(8)), ownImageId(image(9))]));
     expect(usedPacks({ layers: [{ kind: "scatter", areas: [area] }, { kind: "scatter", areas: [{ ...area, profileRef: { type: "builtin", key: "scatter/forest" } }] }] } as unknown as MapDocumentV6).sort()).toEqual([own.uid, "ink"].sort());
+    // Набор в архиве: россыпь не пропадает, а рисуется подписанными заглушками.
+    registerOwnPacks([{ ...own, archived: true }]);
+    const shelved = scatterInstances({ ...area });
+    expect(shelved.error).toBeUndefined();
+    expect(shelved.items[0].asset).toMatchObject({ missing: "«Порт» в архиве" });
   });
   it("набор в архиве уходит из библиотеки, его размеры забываются — на карте заглушка", () => {
     const archived = pack({ archived: true });

@@ -80,6 +80,9 @@ export function registerOwnPacks(packs: readonly OwnPack[]): void {
     }
     if (pack.archived) markMapImageMissing(image.uid, `«${pack.name}» в архиве`);
   }
+  // Россыпь набора из архива рисуется заглушками, как и его вещи: иначе она пропадала с карты молча.
+  for (const pack of packs) if (pack.archived) for (const item of pack.items) if (item.kind === "scatter" && item.images.length)
+    scatters.set(ownScatterKey(item), { assetIds: item.images.map(ownImageId), size: item.size ?? 1 });
   for (const pack of packs) if (!pack.archived) for (const item of pack.items) {
     registerMapImageResources(item.images.map((image) => ({ uid: image.uid, name: item.name, file_url: image.file_url, tags: item.tags })));
     const live = liveImages(item), post = sideImage(item, "post");
