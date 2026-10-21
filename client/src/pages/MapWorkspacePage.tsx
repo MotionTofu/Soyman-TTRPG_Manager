@@ -345,7 +345,13 @@ export function MapWorkspacePage() {
     if (patch.lineStyle !== undefined) setGridLineStyle(patch.lineStyle);
     if (patch.color !== undefined) setGridColor(patch.color);
   });
-  const onStyle = useEvent((style: MapDrawingStyle) => commit((before) => ({ ...before, appearance: { ...before.appearance, style } })));
+  // Вода идёт за оформлением (решение владельца 2026-10-21): комикс — комикс-вода, скетч и чертёж — атласная.
+  // Меняется только вода, какую оформление ставит само; выбранную руками (и «картинкой») смена оформления не трогает.
+  const onStyle = useEvent((style: MapDrawingStyle) => commit((before) => {
+    const water = before.appearance?.water, auto = (from: MapDrawingStyle | undefined) => from === "comic-punk" ? ["comic"] : ["atlas", "soft"];
+    const follows = water !== undefined && auto(before.appearance?.style).includes(water);
+    return { ...before, appearance: { ...before.appearance, style, ...(follows ? { water: auto(style)[0] as MapWaterLook } : {}) } };
+  }));
   const onWater = useEvent((water: MapWaterLook | undefined) => commit((before) => { const { water: _old, ...rest } = before.appearance ?? { style: "paper-ink" as const }; return { ...before, appearance: water === undefined ? rest : { ...rest, water } }; }));
   const storedPacks = document?.appearance?.packs, scale = map?.scale;
   // Свои наборы Мастера: их картинки заводятся в реестр до того, как каталог и карта спросят о них.
