@@ -139,7 +139,12 @@ export function cutRoad(samples: readonly Sample[], crossings: readonly Crossing
     if (edge[0] - start > 1e-3) road.push(slice(samples, length, start, edge[0]));
     start = Math.max(start, edge[1]);
   }
-  return { key: cutKey(crossings), road, decks: spans.map(span => ({ kind: span.kind, art: span.art, samples: slice(samples, length, span.from, Math.min(total, span.to)) })) };
+  return { key: cutKey(crossings), road, decks: spans.map(span => ({ kind: span.kind, art: span.art, samples: evenDeck(slice(samples, length, span.from, Math.min(total, span.to))) })) };
+}
+/** Настил одной ширины: дорога, что кончается в воде, сходит на нет языком, а мост — нет. */
+function evenDeck(samples: Sample[]): Sample[] {
+  const width = Math.max(...samples.map(sample => sample.width));
+  return samples.map(sample => ({ ...sample, width }));
 }
 export const cutKey = (crossings: readonly Crossing[]) => crossings.map(crossing => `${crossing.from.toFixed(3)}:${crossing.to.toFixed(3)}:${crossing.kind}:${crossing.art ?? ""}`).join("|");
 

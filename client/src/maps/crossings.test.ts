@@ -45,4 +45,11 @@ describe("переправы", () => {
     expect(cut.road.map(piece => [piece[0].x, piece.at(-1)!.x].map(x => Math.round(x * 10) / 10))).toEqual([[0, 11.5], [16.5, 20]]);
     expect(cut.road[0].map(p => p.x)).toContain(10);
   });
+
+  it("дорога кончается в воде: конец сходит на нет, а настил остаётся во всю ширину", () => {
+    const road = line("road", "soyman-village:road-dirt", 2, [[0, 5], [14, 5]]);
+    const tapered = [{ x: 0, y: 5, width: 2 }, { x: 12, y: 5, width: 2 }, { x: 13, y: 5, width: 1 }, { x: 14, y: 5, width: 0.2 }];
+    const deck = cutRoad(tapered, roadCrossings(model(deep, road), road)).decks[0];
+    expect(deck.samples.map(p => p.width)).toEqual(deck.samples.map(() => 2));
+  });
 });
