@@ -78,7 +78,13 @@ Canvas/backup/
 *.err
 canvas_diff.txt
 diff_screenshot.txt
-.scratch/
+**/.scratch/*
+# План редактора карт и его гриллинги — в истории (решение 2026-10-21);
+# картинки, логи и сборки рядом с ними — нет.
+!.scratch/map-workspace-rebuild/
+.scratch/map-workspace-rebuild/**
+!.scratch/map-workspace-rebuild/**/
+!.scratch/map-workspace-rebuild/**/*.md
 
 # Разовые python-скрипты под импорт книг и разбор базы: пути захардкожены под
 # локальные папки владельца, к проекту отношения не имеют — то же правило, что
