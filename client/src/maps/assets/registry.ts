@@ -108,8 +108,12 @@ export function subscribeMapImageAssets(listener: () => void): () => void {
   return () => { listeners.delete(listener); };
 }
 
+let announcing = false;
+/** Подписчики узнают о правке реестра один раз за такт и не посреди отрисовки: наборы заводятся в реестр прямо из useMemo страницы. */
 function announceImageChange(): void {
-  for (const listener of listeners) listener();
+  if (announcing) return;
+  announcing = true;
+  queueMicrotask(() => { announcing = false; for (const listener of listeners) listener(); });
 }
 
 /** Register metadata, then decode only referenced or selected images. */
