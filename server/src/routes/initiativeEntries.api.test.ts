@@ -152,3 +152,36 @@ describe("«Новый бой» гасит числа, не трогая бой�
     expect(res.body.cleared).toBe(0);
   });
 });
+
+describe("состояние гнезда боевого режима", () => {
+  it("новая строка — с пустым состоянием, PUT пишет объект целиком и не трогает другие поля", async () => {
+    const id = await addEntry({ initiative: 12 });
+    const created = await request(app).put(`/api/initiative-entries/${id}`).send({ name: "Гоблин" });
+    expect(JSON.parse(created.body.state)).toEqual({});
+
+    const state = { reactionSpent: true, recharge: { Дыхание: { ready: false, min: 5 } } };
+    const saved = await request(app).put(`/api/initiative-entries/${id}`).send({ state });
+    expect(JSON.parse(saved.body.state)).toEqual(state);
+    expect(saved.body.initiative).toBe(12);
+
+    // Правка хитов состояние не сбрасывает.
+    const hp = await request(app).put(`/api/initiative-entries/${id}`).send({ current_hp: 3 });
+    expect(JSON.parse(hp.body.state)).toEqual(state);
+  });
+
+  it("не объект — 400", async () => {
+    const id = await addEntry();
+    const res = await request(app).put(`/api/initiative-entries/${id}`).send({ state: [1, 2] });
+    expect(res.status).toBe(400);
+  });
+
+  it("двойник встаёт сразу со снимком листа", async () => {
+    const id = await addEntry({ entity_type: "character", entity_id: 1, state: { double: { ac: 15 } } });
+    const row = await request(app).put(`/api/initiative-entries/${id}`).send({});
+    expect(JSON.parse(row.body.state)).toEqual({ double: { ac: 15 } });
+    const bad = await request(app)
+      .post("/api/initiative-entries")
+      .send({ session_id: sessionId, name: "Двойник", state: "x" });
+    expect(bad.status).toBe(400);
+  });
+});

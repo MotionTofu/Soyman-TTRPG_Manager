@@ -1,38 +1,24 @@
-import { ensureEntries, getCachedEntry } from "./dnd/entryCache";
-import { liveEffectEntryIds, withLiveEffects } from "./dnd/dndFeatures";
-import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { dataKeys } from "../data/entities";
-import { useAction, useEntity, useResource, write } from "../data/hooks";
-import { readResource } from "../data/imperative";
-import { labelled } from "../data/notices";
-import { useSoundEngineOptional } from "../sound/engine";
+import { useEffect, useState, type DragEvent, type ReactNode } from "react";
+import { useResource, write } from "../data/hooks";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
 import { useUnloadTarget } from "../unloadTargets";
 import { NavIcon } from "./NavIcons";
 import { Modal } from "./Modal";
-import { parseDndStatblock } from "./EntityPreviewModal";
-import { abilityModifier, formatModifier } from "./dnd/AbilityScores";
+import { formatModifier } from "./dnd/AbilityScores";
 import { rollDiceFormula } from "./dnd/diceRoll";
 import { findDndSystemId, loadDndMechanicsGroup } from "./dnd/dndCompendium";
 import { fetchCreatureCard } from "./CreatureCard";
-import { loadUseEpithets, INITIATIVE_EPITHETS } from "../initiativeTrackerPrefs";
 import { sessionPaths } from "../data/sessions";
-import { deriveSheet, creatureInitiativeModifier } from "@shared/dnd/derive";
 import { useConfirm } from "../hooks/useConfirm";
+import { isDead, patchRow, useCombat } from "../combat/useCombat";
+import { COMBAT_TYPES, pickName, resolveStatblockInfo } from "../combat/addToCombat";
+import { requestNestFocus, setCombatModeOpen, useCombatModeOpen } from "../combat/combatModeStore";
 import type {
   InitiativeKind,
-  DndCharacterData,
-  DndCreatureData,
-  DndCreatureHitPoints,
   InitiativeEntry,
   Playlist,
   SearchResult,
-  SessionDetail,
-  Statblock,
 } from "../types";
-
-const ACCEPT_TYPES = ["being", "character", "compendium_entry"];
 
 // Строки, которые ходят в инициативе, но никем не являются.
 //
@@ -69,50 +55,8 @@ function parseConditions(raw: string): string[] {
   }
 }
 
-// Порядок хода: инициатива, при равенстве — ловкость, затем имя и id.
-//
-// Finite sentinel, not -Infinity: subtracting two -Infinity values (both
-// entries with no initiative set yet) produces NaN, and Array.sort treats a
-// NaN comparator result as "equal", silently skipping the dex/name
-// tie-breakers below and leaving entries in insertion order.
-const NO_INITIATIVE = -1_000_000;
-function byInitiative(a: InitiativeEntry, b: InitiativeEntry): number {
-  const initDiff = (b.initiative ?? NO_INITIATIVE) - (a.initiative ?? NO_INITIATIVE);
-  if (initDiff !== 0) return initDiff;
-  const dexDiff = b.dex_modifier - a.dex_modifier;
-  if (dexDiff !== 0) return dexDiff;
-  const nameDiff = a.name.localeCompare(b.name, "ru");
-  if (nameDiff !== 0) return nameDiff;
-  return a.id - b.id;
-}
-
-function isDead(entry: InitiativeEntry): boolean {
-  return entry.dead === true || entry.dead === 1;
-}
-
-function rollCreatureHp(hp: DndCreatureHitPoints): number | null {
-  if (hp.diceCount && hp.dieSize) {
-    const bonus = hp.bonus ?? 0;
-    const formula = `${hp.diceCount}к${hp.dieSize}${bonus >= 0 ? "+" : ""}${bonus}`;
-    return rollDiceFormula(formula);
-  }
-  if (hp.formula) return rollDiceFormula(hp.formula);
-  return null;
-}
-
 interface Props {
   sessionId: number;
-}
-
-const NO_ENTRIES: InitiativeEntry[] = [];
-
-/** Очередь хода сессии — тот же путь, что задевает сигнал `initiative-updated`. */
-function initiativePath(sessionId: number): string {
-  return `/initiative-entries?session_id=${sessionId}`;
-}
-
-function patchRow(id: number, fields: Partial<InitiativeEntry>) {
-  return (rows: InitiativeEntry[]) => rows.map((e) => (e.id === id ? { ...e, ...fields } : e));
 }
 
 // title — заголовок снаружи: в правой панели это кнопка, сворачивающая модуль.
@@ -134,41 +78,9 @@ export function InitiativeTracker({ sessionId, title }: Props & { title?: ReactN
   const [conditionPickerFor, setConditionPickerFor] = useState<number | null>(null);
   const [conditionOptions, setConditionOptions] = useState<{ id: number; name: string }[]>([]);
   const [roleMap, setRoleMap] = useState<Map<number, { roles: string[]; tactics: string[] }>>(new Map());
-  const sound = useSoundEngineOptional();
 
-  const client = useQueryClient();
-  const run = useAction();
-  const entriesPath = initiativePath(sessionId);
-  // Очередь и сессия — под ключами слоя. Игрок назвал свою инициативу —
-  // сигнал `initiative-updated` задевает этот путь (data/syncAffects.ts), и
-  // оба экземпляра трекера (колонка пульта и панель поиска) видят одно и то же.
-  const entries = useResource<InitiativeEntry[]>(entriesPath).data ?? NO_ENTRIES;
-  const session = useEntity<SessionDetail>("session", sessionId).data ?? null;
-
-  /**
-   * Правка очереди: строки меняются на экране сразу, при отказе возвращаются
-   * прежние и появляется плашка. Без `patch` — ждать ответа (создание: id
-   * строки знает только сервер).
-   */
-  async function change(
-    label: string,
-    send: () => Promise<unknown>,
-    options?: { patch?: (rows: InitiativeEntry[]) => InitiativeEntry[]; retry?: boolean }
-  ): Promise<boolean> {
-    const key = dataKeys.resource(entriesPath);
-    let previous: InitiativeEntry[] | undefined;
-    if (options?.patch) {
-      await client.cancelQueries({ queryKey: key });
-      previous = client.getQueryData<InitiativeEntry[]>(key);
-      if (previous) client.setQueryData(key, options.patch(previous));
-    }
-    const done = await run(labelled(label, () => send().then(() => true)), {
-      affects: [{ path: entriesPath }],
-      retry: options?.retry,
-    });
-    if (!done && previous) client.setQueryData(key, previous);
-    return done === true;
-  }
+  const { entries, session, sorted, aliveSorted, change, setTheme, startCombat, stopCombat, step } = useCombat(sessionId);
+  const modeOpen = useCombatModeOpen(sessionId, !!session?.combat_active);
 
   useEffect(() => {
     findDndSystemId().then((systemId) => {
@@ -213,72 +125,10 @@ export function InitiativeTracker({ sessionId, title }: Props & { title?: ReactN
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries]);
 
-  // Resolves everything a dropped/re-rolled entity needs from its dnd
-  // statblock in one fetch — the initiative modifier (roll, tie-break and the
-  // number shown next to the row) and hit points (creatures roll from
-  // hit-dice fields via diceRoll.ts; characters already carry a flat max-HP
-  // number, nothing to roll).
-  //
-  // Модификатор инициативы, а НЕ голая Ловкость. У существа 5.5 инициатива
-  // объявлена своим числом («Инициатива +5 (15)»), и оно не обязано совпадать
-  // с модификатором Ловкости: `initiativeBonus` в статблоке для этого и
-  // заведён, но до сих пор не читался ни здесь, ни где-либо ещё — трекер
-  // бросал по Ловкости и молча игнорировал заполненное поле. У персонажа
-  // число берётся из общего правила листа (`deriveSheet`), а не считается
-  // здесь заново.
-  async function resolveStatblockInfo(
-    type: string,
-    id: number
-  ): Promise<{ initiativeModifier: number; maxHp: number | null; currentHp: number | null }> {
-    const empty = { initiativeModifier: 0, maxHp: null, currentHp: null };
-    if (type !== "being" && type !== "character" && type !== "compendium_entry") return empty;
-    try {
-      const rows = await readResource<Statblock[]>(`/statblocks?owner_type=${type}&owner_id=${id}`);
-      const dnd = rows.find((s) => s.format === "dnd_character" || s.format === "dnd_creature");
-      if (!dnd) return empty;
-      const parsed = parseDndStatblock(dnd);
-      if (dnd.format === "dnd_creature") {
-        const creature = parsed as DndCreatureData;
-        const initiativeModifier = creatureInitiativeModifier(creature);
-        const max = rollCreatureHp(creature.hitPoints);
-        return { initiativeModifier, maxHp: max, currentHp: max };
-      }
-      const character = parsed as DndCharacterData;
-      // Эффекты умений лист хранит ссылкой (`entryId`), поэтому записи
-      // догружаются здесь — иначе «Бдительный» был бы в листе, а в очереди
-      // боя нет.
-      await ensureEntries(liveEffectEntryIds(character));
-      const initiativeModifier = deriveSheet(withLiveEffects(character, getCachedEntry)).initiative.value;
-      const max = Number(character.hitPointMax) || null;
-      return { initiativeModifier, maxHp: max, currentHp: max };
-    } catch {
-      return empty;
-    }
-  }
-
-  function pickName(baseName: string): string {
-    const sameBase = entries.filter(
-      (e) => e.name === baseName || e.name.endsWith(` ${baseName}`)
-    );
-    if (sameBase.length === 0) return baseName;
-    if (!loadUseEpithets()) return `${baseName} (${sameBase.length + 1})`;
-    const usedEpithets = new Set(
-      sameBase
-        .map((e) => (e.name === baseName ? null : e.name.slice(0, -(baseName.length + 1))))
-        .filter((e): e is string => e !== null)
-    );
-    const available = INITIATIVE_EPITHETS.filter((ep) => !usedEpithets.has(ep));
-    if (available.length === 0) return `${baseName} (${sameBase.length + 1})`;
-    const epithet = available[Math.floor(Math.random() * available.length)];
-    return `${epithet} ${baseName}`;
-  }
-
   async function addToInitiative(result: SearchResult) {
-    if (!ACCEPT_TYPES.includes(result.type)) return;
-    const [info, name] = await Promise.all([
-      resolveStatblockInfo(result.type, result.id),
-      Promise.resolve(pickName(result.title)),
-    ]);
+    if (!COMBAT_TYPES.includes(result.type)) return;
+    const info = await resolveStatblockInfo(result.type, result.id);
+    const name = pickName(result.title, entries.map((e) => e.name));
     const body = {
       session_id: sessionId,
       entity_type: result.type,
@@ -286,7 +136,7 @@ export function InitiativeTracker({ sessionId, title }: Props & { title?: ReactN
       name,
       // Колонка называется `dex_modifier` исторически, а держит теперь
       // итоговый модификатор инициативы. Переименование колонки — миграция
-      // ради имени; смысл записан здесь и в resolveStatblockInfo выше.
+      // ради имени; смысл записан здесь и в resolveStatblockInfo (combat/addToCombat.ts).
       dex_modifier: info.initiativeModifier,
       max_hp: info.maxHp,
       current_hp: info.currentHp,
@@ -297,7 +147,7 @@ export function InitiativeTracker({ sessionId, title }: Props & { title?: ReactN
   // Мешок выгружает бойцов сюда же, без перетаскивания (unloadTargets.tsx).
   useUnloadTarget({
     label: "Инициатива",
-    accepts: (item) => ACCEPT_TYPES.includes(item.type),
+    accepts: (item) => COMBAT_TYPES.includes(item.type),
     drop: addToInitiative,
   });
 
@@ -336,10 +186,7 @@ export function InitiativeTracker({ sessionId, title }: Props & { title?: ReactN
       }))
     )
       return;
-    if (session?.combat_active) {
-      if (!(await setCombat(false, null))) return;
-      sound?.exitCombat();
-    }
+    if (session?.combat_active) await stopCombat();
     await change("Очередь хода не очистилась", () => write.del(`/initiative-entries?session_id=${sessionId}`), {
       patch: () => [],
     });
@@ -438,18 +285,7 @@ export function InitiativeTracker({ sessionId, title }: Props & { title?: ReactN
 
   /** Выбор темы: на экране сразу, при отказе возвращается прежняя. */
   async function pickTheme(id: number | null) {
-    const key = dataKeys.entity("session", sessionId);
-    await client.cancelQueries({ queryKey: key });
-    const previous = client.getQueryData<SessionDetail>(key);
-    if (previous) client.setQueryData<SessionDetail>(key, { ...previous, battle_playlist_id: id });
-    const done = await run(
-      labelled("Боевая тема", () =>
-        write.put(`/sessions/${sessionId}`, { battle_playlist_id: id }).then(() => true)
-      ),
-      { affects: [{ kind: "session", id: sessionId, card: true }] }
-    );
-    if (!done && previous) client.setQueryData(key, previous);
-    else if (done) setThemeOpen(false);
+    if (await setTheme(id)) setThemeOpen(false);
   }
 
   /**
@@ -564,88 +400,6 @@ export function InitiativeTracker({ sessionId, title }: Props & { title?: ReactN
     });
   }
 
-  const sorted = useMemo(() => {
-    const alive = entries.filter((e) => !isDead(e)).sort(byInitiative);
-    const dead = entries.filter((e) => isDead(e)).sort(byInitiative);
-    return [...alive, ...dead];
-  }, [entries]);
-
-  const aliveSorted = useMemo(() => sorted.filter((e) => !isDead(e)), [sorted]);
-
-  // Порядок хода с мёртвыми НА СВОИХ МЕСТАХ. `sorted` сдвигает их в конец —
-  // по нему нельзя понять, кто ходит после погибшего, а именно это и нужно,
-  // когда бойца убили в его же ход.
-  const turnOrder = useMemo(() => [...entries].sort(byInitiative), [entries]);
-
-  /** Бой и чей ход: кнопки откликаются сразу, отказ возвращает прежнее. */
-  async function setCombat(active: boolean, turnEntryId: number | null, round?: number): Promise<boolean> {
-    const key = dataKeys.entity("session", sessionId);
-    await client.cancelQueries({ queryKey: key });
-    const previous = client.getQueryData<SessionDetail>(key);
-    if (previous) {
-      client.setQueryData<SessionDetail>(key, {
-        ...previous,
-        // Как пишет сервер: без раунда — первый, вне боя — ноль.
-        combat_active: active ? 1 : 0,
-        combat_turn_entry_id: turnEntryId,
-        combat_round: active ? Math.max(1, Math.floor(round ?? 1)) : 0,
-      });
-    }
-    const done = await run(
-      labelled(active ? "Ход в бою" : "Бой не завершился", () =>
-        write.put(`/sessions/${sessionId}/combat`, { active, turn_entry_id: turnEntryId, round }).then(() => true)
-      ),
-      { affects: [{ kind: "session", id: sessionId, card: true }] }
-    );
-    if (!done && previous) client.setQueryData(key, previous);
-    return done === true;
-  }
-
-  async function startCombat() {
-    if (aliveSorted.length === 0) return;
-    if (!(await setCombat(true, aliveSorted[0].id, 1))) return;
-    // Переключение идёт через движок пульта, а не напрямую в плеер: он
-    // запоминает, что играло до боя, и показывает в пульте, что Бэкграунд
-    // сменил трекер инициативы, а не Мастер.
-    // Тема сессии главнее темы набора: сессионную выбирают под конкретный
-    // вечер, а набор заготовлен на всю кампанию.
-    const theme = session?.battle_playlist_id ?? sound?.state.data?.battle?.id ?? null;
-    if (theme) sound?.enterCombat(theme);
-  }
-
-  function stopCombat() {
-    setCombat(false, null);
-    // Бой кончился — возвращаем то, что играло до него.
-    sound?.exitCombat();
-  }
-
-  // Шаг по очереди хода. Считаем от места текущего в ПОЛНОМ порядке, а не
-  // среди живых: убитый в свой же ход из списка живых выпадает, и поиск по
-  // нему давал −1 — «Следующий» отдавал второго в очереди, а не того, кто
-  // идёт за погибшим.
-  function step(delta: 1 | -1) {
-    if (aliveSorted.length === 0) return;
-    const current = session?.combat_turn_entry_id ?? null;
-    const from = current == null ? -1 : turnOrder.findIndex((e) => e.id === current);
-    // Строку удалили целиком — места в порядке не осталось, начинаем с края.
-    if (from === -1) {
-      setCombat(true, (delta === 1 ? aliveSorted[0] : aliveSorted[aliveSorted.length - 1]).id);
-      return;
-    }
-    const n = turnOrder.length;
-    const round = session?.combat_round || 1;
-    for (let k = 1; k <= n; k++) {
-      const raw = from + delta * k;
-      const candidate = turnOrder[((raw % n) + n) % n];
-      if (isDead(candidate)) continue;
-      // Раунд считается по переходу через край очереди, а не по числу шагов:
-      // мёртвые пропускаются, и «сколько ходов прошло» с раундом не совпадает.
-      const wrapped = raw < 0 || raw >= n;
-      setCombat(true, candidate.id, wrapped ? Math.max(1, round + delta) : round);
-      return;
-    }
-  }
-
   return (
     <div
       className={`drop-zone stack${dragOver ? " drag-over" : ""}`}
@@ -720,6 +474,15 @@ export function InitiativeTracker({ sessionId, title }: Props & { title?: ReactN
           title="Следующий"
         >
           <NavIcon name="arrowRight" />
+        </button>
+        {/* Режим можно открыть и без боя — посмотреть и расставить (Q2). */}
+        <button
+          type="button"
+          className={`comp-mini${modeOpen ? " is-active" : ""}`}
+          title={modeOpen ? "Вернуть пульт" : "Ленту гнёзд вместо пульта"}
+          onClick={() => setCombatModeOpen(sessionId, !modeOpen)}
+        >
+          {modeOpen ? "Пульт" : "Боевой режим"}
         </button>
         {/* Номер раунда — только пока бой идёт, и только числом: за столом его
             читают, а не правят. */}
@@ -885,7 +648,18 @@ export function InitiativeTracker({ sessionId, title }: Props & { title?: ReactN
                       <span className="initiative-mark--npc" />
                     ))}
                 </span>
-                <span style={{ fontWeight: 600, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>
+                <span
+                  style={{
+                    fontWeight: 600,
+                    minWidth: 0,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    flex: 1,
+                    cursor: modeOpen ? "pointer" : undefined,
+                  }}
+                  title={modeOpen ? "Показать гнездо на ленте" : undefined}
+                  onClick={modeOpen ? () => requestNestFocus(entry.id) : undefined}
+                >
                   {entry.name}
                   {(() => {
                     const info = roleMap.get(entry.id);

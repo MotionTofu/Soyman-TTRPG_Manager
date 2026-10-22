@@ -1710,6 +1710,8 @@ export interface InitiativeEntry {
   // creature — боец; lair, environment, custom — строки без хитов.
   kind: InitiativeKind;
   created_at: string;
+  // Состояние гнезда боевого режима, JSON-строкой — см. combat/nestState.ts.
+  state: string;
 }
 
 export type InitiativeKind = "creature" | "lair" | "environment" | "custom";

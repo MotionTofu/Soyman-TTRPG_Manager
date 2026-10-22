@@ -7424,6 +7424,11 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     migrateDndCreatureFields(database, dbDir);
     setAppSettingFlag(database, "dnd_creature_fields_v1");
   }
+  // Состояние гнезда боевого режима (шаг 2, Q13): реакция, запасы, легендарное,
+  // перезарядка — JSON в строке инициативы.
+  if (!columnExists(database, "initiative_entries", "state")) {
+    database.exec("ALTER TABLE initiative_entries ADD COLUMN state TEXT NOT NULL DEFAULT '{}'");
+  }
 
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.

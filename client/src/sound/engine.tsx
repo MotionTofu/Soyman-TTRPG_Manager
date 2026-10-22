@@ -555,15 +555,18 @@ export function SoundEngineProvider({ children }: { children: ReactNode }) {
         time: background.currentTime,
         name: data?.set?.name ?? null,
       };
+      // Уже в бою (сменили тему посреди боя) — возврат остаётся прежним:
+      // иначе после боя вернулась бы старая боевая тема.
+      const earlier = autoSwitch;
       void playPlaylistById(battlePlaylistId).then((toName) =>
         setAutoSwitch({
-          from: before.name ?? "прежнее",
+          from: earlier?.from ?? before.name ?? "прежнее",
           to: toName,
-          previous: before,
+          previous: earlier?.previous ?? before,
         })
       );
     },
-    [background.tracks, background.index, background.currentTime, data, playPlaylistById]
+    [autoSwitch, background.tracks, background.index, background.currentTime, data, playPlaylistById]
   );
 
   /**

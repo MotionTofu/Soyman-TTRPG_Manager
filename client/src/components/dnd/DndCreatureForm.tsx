@@ -1699,6 +1699,7 @@ export function DndCreatureView({
   avatarUrl,
   onAvatarUpload,
   avatarUploading,
+  foldSections,
 }: {
   value: DndCreatureData;
   // Правка идёт ПО МЕСТУ, по секциям: форма-простыня (DndCreatureEdit)
@@ -1711,6 +1712,9 @@ export function DndCreatureView({
   avatarUrl?: string | null;
   onAvatarUpload?: (file: File) => void;
   avatarUploading?: boolean;
+  // Гнездо боевого режима (Q9): у не ходящего разделы свёрнуты до шапки и
+  // раскрываются щелчком по вкладке; повторный щелчок сворачивает.
+  foldSections?: boolean;
 }) {
   const prefs = useDndPrefs();
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -1748,6 +1752,10 @@ export function DndCreatureView({
   // как-то надо. «Раскрытые» секции держатся только на время сеанса правки.
   const [revealed, setRevealed] = useState<SbcSectionId[]>([]);
   const [seg, setSeg] = useState<string | null>(null);
+  // Ход перешёл — раскрытое щелчком у прошлого ходящего сворачивается.
+  useEffect(() => {
+    if (foldSections) setSeg(null);
+  }, [foldSections]);
 
   const [damageTypes, setDamageTypes] = useState<DndMechanicsOption[]>([]);
   const [conditions, setConditions] = useState<DndMechanicsOption[]>([]);
@@ -1848,7 +1856,12 @@ export function DndCreatureView({
   const segments = segmentList.filter((g) => visible.some((s) => g.sections.includes(s.id)));
   const activeSeg =
     segments.find((g) => g.id === seg) ?? segments.find((g) => g.id === "actions") ?? segments[0] ?? null;
-  const shown = narrow && activeSeg ? visible.filter((s) => activeSeg.sections.includes(s.id)) : visible;
+  const folded = !!foldSections && seg === null;
+  const shown = folded
+    ? []
+    : narrow && activeSeg
+      ? visible.filter((s) => activeSeg.sections.includes(s.id))
+      : visible;
 
   // Портрет статблока — свой, отдельный от аватара сущности (§1.13, дуотон
   // на него не идёт). Широко он стоит крупным кадром в остатке левой
@@ -2499,14 +2512,14 @@ export function DndCreatureView({
             </div>
 
             <div className="sbc__scroll">
-              {narrow && segments.length > 1 && (
+              {narrow && (segments.length > 1 || (foldSections && segments.length > 0)) && (
                 <div className="sbc__segs">
                   {segments.map((g) => (
                     <button
                       key={g.id}
                       type="button"
-                      className={`sbc__seg${activeSeg?.id === g.id ? " is-on" : ""}`}
-                      onClick={() => setSeg(g.id)}
+                      className={`sbc__seg${!folded && activeSeg?.id === g.id ? " is-on" : ""}`}
+                      onClick={() => setSeg(foldSections && !folded && activeSeg?.id === g.id ? null : g.id)}
                     >
                       {g.label}
                     </button>

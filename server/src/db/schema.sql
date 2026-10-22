@@ -1694,7 +1694,10 @@ CREATE TABLE IF NOT EXISTS initiative_entries (
   -- умирать, поэтому и колонка своя: пустой entity_type уже занят другим
   -- смыслом — «существо, вбитое руками», а это обычный боец.
   kind TEXT NOT NULL DEFAULT 'creature',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  -- Состояние гнезда боевого режима (JSON): реакция, запасы, легендарное,
+  -- перезарядка, заметка логова. Хиты и состояния — своими колонками выше.
+  state TEXT NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS idx_initiative_entries_session ON initiative_entries(session_id);
 

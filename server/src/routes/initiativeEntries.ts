@@ -18,7 +18,7 @@ initiativeEntriesRouter.get("/", (req, res) => {
 const KINDS = ["creature", "lair", "environment", "custom"];
 
 initiativeEntriesRouter.post("/", (req, res) => {
-  const { session_id, entity_type, entity_id, name, dex_modifier, max_hp, current_hp, kind, initiative } =
+  const { session_id, entity_type, entity_id, name, dex_modifier, max_hp, current_hp, kind, initiative, state } =
     req.body as {
       session_id?: number;
       entity_type?: string;
@@ -29,13 +29,17 @@ initiativeEntriesRouter.post("/", (req, res) => {
       current_hp?: number | null;
       kind?: string;
       initiative?: number | null;
+      // Двойник персонажа (Q43) встаёт сразу со снимком листа в состоянии.
+      state?: Record<string, unknown>;
     };
   if (!session_id || !name) return res.status(400).json({ error: "session_id and name are required" });
+  if (state !== undefined && (state === null || typeof state !== "object" || Array.isArray(state)))
+    return res.status(400).json({ error: "state должен быть объектом" });
   const info = db
     .prepare(
       `INSERT INTO initiative_entries
-         (session_id, entity_type, entity_id, name, dex_modifier, max_hp, current_hp, kind, initiative)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (session_id, entity_type, entity_id, name, dex_modifier, max_hp, current_hp, kind, initiative, state)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       session_id,
@@ -46,13 +50,14 @@ initiativeEntriesRouter.post("/", (req, res) => {
       max_hp ?? null,
       current_hp ?? null,
       kind && KINDS.includes(kind) ? kind : "creature",
-      initiative ?? null
+      initiative ?? null,
+      JSON.stringify(state ?? {})
     );
   res.status(201).json(db.prepare("SELECT * FROM initiative_entries WHERE id = ?").get(info.lastInsertRowid));
 });
 
 initiativeEntriesRouter.put("/:id", (req, res) => {
-  const { initiative, name, max_hp, current_hp, temp_hp, dead, conditions } = req.body as {
+  const { initiative, name, max_hp, current_hp, temp_hp, dead, conditions, state } = req.body as {
     initiative?: number | null;
     name?: string;
     max_hp?: number | null;
@@ -60,7 +65,12 @@ initiativeEntriesRouter.put("/:id", (req, res) => {
     temp_hp?: number | null;
     dead?: boolean;
     conditions?: string[];
+    // Состояние гнезда боевого режима целиком (см. schema.sql): клиент шлёт
+    // объект после своей правки, сервер его не разбирает.
+    state?: Record<string, unknown>;
   };
+  if (state !== undefined && (state === null || typeof state !== "object" || Array.isArray(state)))
+    return res.status(400).json({ error: "state должен быть объектом" });
   // initiative через CASE, а не COALESCE: стирание числа шлёт null, и
   // COALESCE молча оставлял бы прежнее — Мастер стирает, а число возвращается.
   db.prepare(
@@ -71,7 +81,8 @@ initiativeEntriesRouter.put("/:id", (req, res) => {
        current_hp = CASE WHEN ? THEN ? ELSE current_hp END,
        temp_hp = CASE WHEN ? THEN ? ELSE temp_hp END,
        dead = CASE WHEN ? THEN ? ELSE dead END,
-       conditions = CASE WHEN ? THEN ? ELSE conditions END
+       conditions = CASE WHEN ? THEN ? ELSE conditions END,
+       state = CASE WHEN ? THEN ? ELSE state END
      WHERE id = ?`
   ).run(
     initiative !== undefined ? 1 : 0,
@@ -87,6 +98,8 @@ initiativeEntriesRouter.put("/:id", (req, res) => {
     dead ? 1 : 0,
     conditions !== undefined ? 1 : 0,
     conditions ? JSON.stringify(conditions) : null,
+    state !== undefined ? 1 : 0,
+    state !== undefined ? JSON.stringify(state) : null,
     req.params.id
   );
   // Мастер поправил вслух названное число — возвращаем его на лист игрока.

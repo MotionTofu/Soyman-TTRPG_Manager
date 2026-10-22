@@ -7,6 +7,8 @@ import type { SoundCommand } from "./bus";
 const mocks = vi.hoisted(() => ({
   handler: null as ((command: SoundCommand) => void) | null,
   gain: vi.fn(),
+  playPlaylist: vi.fn(),
+  player: { tracks: [] as { id: number; name: string; src: string }[], index: -1, currentTime: 0 },
   console: {
     set: null,
     tracks: [],
@@ -21,14 +23,18 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../audioPlayer", () => ({ useAudioPlayer: () => ({
-  current: null, tracks: [], index: -1, isPlaying: false,
-  currentTime: 0, duration: 0, repeatMode: "off", shuffleMode: false,
-  setBackgroundGain: mocks.gain,
+  current: null, isPlaying: false, ...mocks.player,
+  duration: 0, repeatMode: "off", shuffleMode: false,
+  setBackgroundGain: mocks.gain, playPlaylist: mocks.playPlaylist,
 }) }));
 vi.mock("../data/hooks", () => ({ useResource: (path: string) => ({
   data: path === "/app-settings" ? { fade_duration_ms: 0 } : mocks.console,
 }) }));
-vi.mock("../data/imperative", () => ({ readResource: () => Promise.resolve(mocks.console) }));
+vi.mock("../data/imperative", () => ({ readResource: (path: string) => Promise.resolve(
+  path.startsWith("/playlists/")
+    ? { name: `Тема ${path.slice(11)}`, items: [{ resource_id: 90, name: "Бой", src: "/battle.mp3" }] }
+    : mocks.console,
+) }));
 vi.mock("./bus", () => ({
   onCommand: (handler: (command: SoundCommand) => void) => {
     mocks.handler = handler;
@@ -48,6 +54,8 @@ beforeEach(() => {
   localStorage.clear();
   paused = new WeakMap();
   mocks.gain.mockClear();
+  mocks.playPlaylist.mockClear();
+  mocks.player = { tracks: [], index: -1, currentTime: 0 };
   vi.spyOn(HTMLMediaElement.prototype, "paused", "get").mockImplementation(function (this: HTMLMediaElement) {
     return paused.get(this) ?? true;
   });
@@ -78,6 +86,23 @@ describe("sound engine volume", () => {
 
     expect(ambient?.paused).toBe(true);
     expect(ambient?.volume).toBe(0);
+    unmount();
+  });
+});
+
+describe("sound engine combat", () => {
+  it("keeps the pre-fight music when the theme changes mid-fight", async () => {
+    const before = [{ id: 1, name: "Таверна", src: "/tavern.mp3" }];
+    mocks.player = { tracks: before, index: 0, currentTime: 42 };
+    const { result, rerender, unmount } = renderHook(() => useSoundEngine(), { wrapper });
+    await act(async () => result.current.enterCombat(18));
+    // Теперь играет боевая тема — её и запомнил бы повторный вход без защиты.
+    mocks.player = { tracks: [{ id: 90, name: "Бой", src: "/battle.mp3" }], index: 0, currentTime: 5 };
+    rerender();
+    await act(async () => result.current.enterCombat(19));
+    expect(result.current.state.autoSwitch?.to).toBe("Тема 19");
+    act(() => result.current.exitCombat());
+    expect(mocks.playPlaylist).toHaveBeenLastCalledWith(before, 0, null, 42);
     unmount();
   });
 });

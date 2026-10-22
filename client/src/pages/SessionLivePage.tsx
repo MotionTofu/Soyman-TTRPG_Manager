@@ -18,6 +18,8 @@ import "../cockpit.css";
 import { loadPultFinishAction } from "../pultPrefs";
 import { SessionOutcomeModal } from "../components/SessionOutcomeModal";
 import { useEntity, useResource, useSaveEntity } from "../data/hooks";
+import { CombatMode } from "../combat/CombatMode";
+import { useCombatModeOpen } from "../combat/combatModeStore";
 import { sessionPaths } from "../data/sessions";
 
 // Пустые списки — постоянными ссылками: панели мемоизированы, и новый `[]` на
@@ -35,6 +37,7 @@ export function SessionLivePage() {
   // раньше тянулся через полстраницы к панелям, больше не нужен.
   const sessionState = useEntity<SessionDetail>("session", sessionId);
   const session = sessionState.data ?? null;
+  const combatMode = useCombatModeOpen(sessionId, !!session?.combat_active);
   const campaignState = useEntity<CampaignDetail>("campaign", session?.campaign_id);
   const campaign = campaignState.data ?? null;
   const characters =
@@ -112,31 +115,39 @@ export function SessionLivePage() {
         <SessionLiveControls session={session} onFinished={onFinished} />
       </div>
 
-      <SceneSwitcher sessionId={sessionId} />
+      {/* Боевой режим (Q1) занимает основную область пульта: сцены, показ и
+          сетку панелей. Полоса времени и управление сессией остаются. */}
+      {combatMode ? (
+        <CombatMode sessionId={sessionId} />
+      ) : (
+        <>
+          <SceneSwitcher sessionId={sessionId} />
 
-      <PresentationPanel sessionId={sessionId} campaignId={campaign.id} />
+          <PresentationPanel sessionId={sessionId} campaignId={campaign.id} />
 
-      {/* Блоки контента — на сетке GridStack (таскаются за шапку, раскладка
-          запоминается): задумка/события + 8 панелей. Время, сцены и показ
-          выше — вне сетки, статично. */}
-      <PultGrid
-        panelProps={panelProps}
-        ideaCard={
-          <EditableTextCard
-            key={`idea-${session.id}`}
-            title="Задумка на сессию"
-            draftKey={`session-idea-${sessionId}`}
-            value={session.idea_notes}
-            onSave={(value) => saveText({ idea_notes: value })}
-            entityType="session"
-            entityId={sessionId}
-            serverSyncsMentions
-            collapsible
-            defaultOpen
-            summaryClassName="pult-drag-handle"
+          {/* Блоки контента — на сетке GridStack (таскаются за шапку, раскладка
+              запоминается): задумка/события + 8 панелей. Время, сцены и показ
+              выше — вне сетки, статично. */}
+          <PultGrid
+            panelProps={panelProps}
+            ideaCard={
+              <EditableTextCard
+                key={`idea-${session.id}`}
+                title="Задумка на сессию"
+                draftKey={`session-idea-${sessionId}`}
+                value={session.idea_notes}
+                onSave={(value) => saveText({ idea_notes: value })}
+                entityType="session"
+                entityId={sessionId}
+                serverSyncsMentions
+                collapsible
+                defaultOpen
+                summaryClassName="pult-drag-handle"
+              />
+            }
           />
-        }
-      />
+        </>
+      )}
       {outcomeOpen && <SessionOutcomeModal sessionId={sessionId} onClose={() => setOutcomeOpen(false)} />}
     </div>
   );
