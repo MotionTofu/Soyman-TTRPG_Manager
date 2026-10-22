@@ -1,5 +1,6 @@
 import type { InitiativeEntry } from "../types";
 import { rollDiceFormula } from "../components/dnd/diceRoll";
+import type { NestEffect } from "./effects";
 
 /**
  * Состояние гнезда боевого режима — JSON в `initiative_entries.state` (Q13).
@@ -31,6 +32,12 @@ export interface NestState {
   concentrationCheck?: number;
   /** Двойник персонажа (Q43): снимок листа при добавлении, лист не трогает. */
   double?: { ac: number | null };
+  /** Эффекты НА этом бойце (шаг 3, effects.ts). */
+  effects?: NestEffect[];
+  /** Эффекты, по которым ждёт плашка «Повтор» (Q60). */
+  repeatDue?: string[];
+  /** Свои счётчики гнезда (Q59); запомненные в статблоке ведёт MonsterPools. */
+  counters?: { name: string; max: number; used: number }[];
 }
 
 export function parseNestState(entry: Pick<InitiativeEntry, "state">): NestState {

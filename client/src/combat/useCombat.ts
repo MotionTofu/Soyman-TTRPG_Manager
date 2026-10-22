@@ -6,7 +6,19 @@ import { labelled } from "../data/notices";
 import { useSoundEngineOptional } from "../sound/engine";
 import type { InitiativeEntry, SessionDetail } from "../types";
 import { parseNestState, startOfTurn, type NestState } from "./nestState";
-import { setCombatModeOpen } from "./combatModeStore";
+import { setCombatModeOpen, setEndedEffects } from "./combatModeStore";
+import { endedLines } from "./effects";
+import {
+  composeSheetEdits,
+  planApply,
+  planBreakConcentration,
+  planEndCombat,
+  planRemove,
+  planTurn,
+  type ApplyInput,
+  type EffectPlan,
+} from "./effectOps";
+import { patchCharacterSheet } from "./sheetWrite";
 
 const NO_ENTRIES: InitiativeEntry[] = [];
 
@@ -164,11 +176,59 @@ export function useCombat(sessionId: number) {
     return true;
   }
 
-  /** Ход перешёл к строке: автоматика начала её хода (Q26). */
-  function beginTurn(entry: InitiativeEntry) {
-    const { state, changed } = startOfTurn(parseNestState(entry));
-    if (changed) void updateState(entry, `Начало хода ${entry.name}`, state);
+  /**
+   * Правки эффектов (effectOps.ts): строки очереди — одной правкой, сразу на
+   * экране; листы персонажей — патчами следом.
+   */
+  async function commitPlan(label: string, plan: EffectPlan): Promise<boolean> {
+    const ids = new Set([...plan.states.keys(), ...plan.fields.keys()]);
+    let done = true;
+    if (ids.size) {
+      done = await change(
+        label,
+        async () => {
+          for (const id of ids) {
+            const fields = plan.fields.get(id);
+            const body: Record<string, unknown> = { ...fields };
+            if (typeof fields?.conditions === "string") body.conditions = JSON.parse(fields.conditions);
+            const state = plan.states.get(id);
+            if (state) body.state = state;
+            await write.put(`/initiative-entries/${id}`, body);
+          }
+        },
+        {
+          patch: (rows) =>
+            rows.map((e) => {
+              if (!ids.has(e.id)) return e;
+              const state = plan.states.get(e.id);
+              return { ...e, ...plan.fields.get(e.id), ...(state ? { state: JSON.stringify(state) } : {}) };
+            }),
+        }
+      );
+    }
+    for (const [characterId, edits] of plan.sheets) void patchCharacterSheet(characterId, label, composeSheetEdits(edits));
+    return done;
   }
+
+  /**
+   * Ход перешёл к строке (Q26, Q53, Q57, Q60): конец хода уходящего, отсчёт
+   * эффектов, плашки повтора, затем автоматика начала её хода.
+   */
+  function beginTurn(entry: InitiativeEntry, fromId: number | null) {
+    const { plan, expired } = planTurn(entries, fromId, entry.id);
+    const { state, changed } = startOfTurn(plan.states.get(entry.id) ?? parseNestState(entry));
+    if (changed) plan.states.set(entry.id, state);
+    setEndedEffects(sessionId, endedLines(expired, (id) => entries.find((e) => e.id === id)?.name ?? "?"));
+    void commitPlan(`Начало хода ${entry.name}`, plan);
+  }
+
+  const effects = {
+    apply: (input: ApplyInput) => commitPlan(`Эффект «${input.name}»`, planApply(entries, input)),
+    remove: (entry: InitiativeEntry, effectId: string, label: string) =>
+      commitPlan(label, planRemove(entries, entry.id, effectId)),
+    breakConcentration: (caster: InitiativeEntry) =>
+      commitPlan(`Концентрация ${caster.name}`, planBreakConcentration(entries, caster)),
+  };
 
   // Кто может ходить: с числом. Если чисел нет ни у кого (трекер без бросков
   // — так им пользовались до режима), ходят все живые по порядку, как раньше.
@@ -182,7 +242,7 @@ export function useCombat(sessionId: number) {
     if (!first) return;
     if (!(await setCombat(true, first.id, 1))) return;
     setCombatModeOpen(sessionId, true);
-    beginTurn(first);
+    beginTurn(first, null);
     // Переключение идёт через движок пульта, а не напрямую в плеер: он
     // запоминает, что играло до боя, и показывает в пульте, что Бэкграунд
     // сменил трекер инициативы, а не Мастер.
@@ -192,8 +252,11 @@ export function useCombat(sessionId: number) {
     if (theme) sound?.enterCombat(theme);
   }
 
+  /** «Конец боя» (Q58): эффекты боя и счётчики гнёзд уходят, долгие остаются на листе. */
   async function stopCombat() {
     if (!(await setCombat(false, null))) return;
+    setEndedEffects(sessionId, []);
+    void commitPlan("Конец боя: эффекты", planEndCombat(entries));
     setCombatModeOpen(sessionId, false);
     // Бой кончился — возвращаем то, что играло до него.
     sound?.exitCombat();
@@ -212,7 +275,7 @@ export function useCombat(sessionId: number) {
     if (from === -1) {
       const edge = delta === 1 ? turnTakers[0] : turnTakers[turnTakers.length - 1];
       void setCombat(true, edge.id);
-      if (delta === 1) beginTurn(edge);
+      if (delta === 1) beginTurn(edge, null);
       return;
     }
     const n = turnOrder.length;
@@ -227,7 +290,7 @@ export function useCombat(sessionId: number) {
       void setCombat(true, candidate.id, wrapped ? Math.max(1, round + delta) : round);
       // Назад — исправление ошибки Мастера, а не новый ход: ничего не
       // возвращается и не бросается.
-      if (delta === 1) beginTurn(candidate);
+      if (delta === 1) beginTurn(candidate, current);
       return;
     }
   }
@@ -250,5 +313,6 @@ export function useCombat(sessionId: number) {
     startCombat,
     stopCombat,
     step,
+    effects,
   };
 }

@@ -15,7 +15,10 @@ import {
 import { useNestCreature } from "./useNestCreature";
 import { rollCreatureHp } from "./addToCombat";
 import { CharacterPools, MonsterPools } from "./CombatPools";
+import { NestCounters } from "./NestCounters";
 import { useCharacterSheet, type CharacterSheetNest } from "./useCharacterSheet";
+import { ABILITY_SHORT, dueOnDamage, durationLabel, type NestEffect } from "./effects";
+import type { useCombat } from "./useCombat";
 
 const UNCONSCIOUS = "Бессознательный";
 /** Что умеет гнездо — действия режима над строкой (CombatMode.tsx). */
@@ -23,6 +26,11 @@ export interface NestActions {
   update: (entry: InitiativeEntry, label: string, fields: Partial<InitiativeEntry>) => Promise<boolean>;
   updateState: (entry: InitiativeEntry, label: string, state: NestState) => Promise<boolean>;
   setInitiative: (entry: InitiativeEntry, value: number | null) => void;
+  /** Эффекты шага 3 — сквозь все гнёзда и листы (effectOps.ts). */
+  effects: ReturnType<typeof useCombat>["effects"];
+  openEffect: (entry: InitiativeEntry) => void;
+  /** Все строки боя: на ком держится концентрация этого гнезда. */
+  entries: InitiativeEntry[];
 }
 
 /** Ярлык над гнездом: номер в очереди и инициатива (Q44: пустая — «?» и бросок). */
@@ -160,6 +168,21 @@ function HpView({
   );
 }
 
+/**
+ * Урон не до нуля: испытание концентрации (Q26) и плашки повтора «при уроне»
+ * (Q60) — одной записью состояния. null — менять нечего.
+ */
+function afterDamage(state: NestState, damage: number, concentrating: boolean): NestState | null {
+  const due = dueOnDamage(state.effects ?? [], state.repeatDue ?? []);
+  const repeatChanged = due.length !== (state.repeatDue?.length ?? 0);
+  if (!concentrating && !repeatChanged) return null;
+  return {
+    ...state,
+    ...(concentrating ? { concentrationCheck: concentrationDc(damage) } : {}),
+    ...(repeatChanged ? { repeatDue: due } : {}),
+  };
+}
+
 /** Хиты чудовища и персонажа без листа — в строке инициативы, как в трекере. */
 function RowHitPoints({
   entry,
@@ -204,23 +227,20 @@ function RowHitPoints({
     const left = Math.max(0, cur! - (value - fromTemp));
     const fields: Partial<InitiativeEntry> = { temp_hp: temp - fromTemp, current_hp: left };
     const conditions = parseConditions(entry.conditions);
-    let nextState: NestState | null = null;
     if (left === 0) {
-      // 0 хитов (Q26): концентрация снимается; чудовище — в корешок,
-      // персонаж — «Бессознательный».
-      if (state.concentration || state.concentrationCheck) {
-        nextState = { ...state, concentration: undefined, concentrationCheck: undefined };
-      }
+      // 0 хитов (Q26, Q54): концентрация срывается вместе с её эффектами;
+      // чудовище — в корешок, персонаж — «Бессознательный».
+      if (state.concentration || state.concentrationCheck) void actions.effects.breakConcentration(entry);
       if (isCharacter) {
         if (!conditions.includes(UNCONSCIOUS)) fields.conditions = JSON.stringify([...conditions, UNCONSCIOUS]);
       } else {
         fields.dead = true;
       }
-    } else if (state.concentration) {
-      nextState = { ...state, concentrationCheck: concentrationDc(value) };
+    } else {
+      const next = afterDamage(state, value, !!state.concentration);
+      if (next) void actions.updateState(entry, `Урон ${entry.name}: концентрация, повтор`, next);
     }
     void actions.update(entry, `Урон ${entry.name}`, fields);
-    if (nextState) void actions.updateState(entry, `Концентрация ${entry.name}`, nextState);
   }
 
   function heal(value: number) {
@@ -272,13 +292,18 @@ function SheetHitPoints({
     const left = Math.max(0, cur - (value - fromTemp));
     const fields: Partial<DndCharacterData> = { hitPointsTemp: String(temp - fromTemp), hitPointsCurrent: String(left) };
     if (left === 0) {
-      // 0 хитов (Q26): концентрация снимается, «Бессознательный» на лист.
-      if (data.concentration) fields.concentration = "";
-      if (!data.conditions.includes(UNCONSCIOUS)) fields.conditions = [...data.conditions, UNCONSCIOUS];
-      if (state.concentrationCheck != null)
+      // 0 хитов (Q26, Q54): концентрация срывается вместе с её эффектами,
+      // «Бессознательный» на лист.
+      if (data.concentration) {
+        fields.concentration = "";
+        void actions.effects.breakConcentration(entry);
+      } else if (state.concentrationCheck != null) {
         void actions.updateState(entry, `Концентрация ${entry.name}`, { ...state, concentrationCheck: undefined });
-    } else if (data.concentration) {
-      void actions.updateState(entry, `Концентрация ${entry.name}`, { ...state, concentrationCheck: concentrationDc(value) });
+      }
+      if (!data.conditions.includes(UNCONSCIOUS)) fields.conditions = [...data.conditions, UNCONSCIOUS];
+    } else {
+      const next = afterDamage(state, value, !!data.concentration);
+      if (next) void actions.updateState(entry, `Урон ${entry.name}: концентрация, повтор`, next);
     }
     sheet.patch(`Урон ${entry.name}`, fields);
     mirror(left, temp - fromTemp);
@@ -305,25 +330,49 @@ function SheetHitPoints({
   return <HpView cur={cur} max={maxHp} temp={temp} onDamage={damage} onHeal={heal} onTemp={addTemp} />;
 }
 
+/** Состояния и эффекты на бойце (Q53, Q56): состояние от эффекта помечено им и уходит вместе с ним. */
 function Conditions({
   conditions,
   onChange,
   options,
+  effects,
+  onRemoveEffect,
+  onAddEffect,
 }: {
   conditions: string[];
   onChange: (next: string[]) => void;
   options: string[];
+  effects: NestEffect[];
+  onRemoveEffect: (e: NestEffect) => void;
+  onAddEffect: () => void;
 }) {
   const free = options.filter((o) => !conditions.includes(o));
+  const fromEffect = (c: string) => effects.find((e) => e.conditions?.includes(c));
   return (
     <div className="cm-sect">
-      <div className="cm-sect__t">Состояния</div>
+      <div className="cm-sect__t">Состояния и эффекты</div>
       <div className="cm-chips">
-        {conditions.map((c) => (
-          <span key={c} className="cm-cond">
-            <i style={{ background: colorForCondition(c) }} />
-            {c}
-            <button type="button" aria-label={`Снять «${c}»`} onClick={() => onChange(conditions.filter((x) => x !== c))}>
+        {conditions.map((c) => {
+          const src = fromEffect(c);
+          return (
+            <span key={c} className="cm-cond" title={src ? `Уйдёт вместе с «${src.name}»` : undefined}>
+              <i style={{ background: colorForCondition(c) }} />
+              {c}
+              {src && <small>← {src.name}</small>}
+              <button type="button" aria-label={`Снять «${c}»`} onClick={() => onChange(conditions.filter((x) => x !== c))}>
+                ✕
+              </button>
+            </span>
+          );
+        })}
+        {effects.map((e) => (
+          <span
+            key={e.id}
+            className="cm-cond cm-cond--eff"
+            title={e.repeat ? `Повтор: ${ABILITY_SHORT[e.repeat.ability]} СЛ ${e.repeat.dc ?? "?"}` : e.conc ? `Концентрация: ${e.casterName}` : undefined}
+          >
+            {e.name} <small>{e.casterName} · {durationLabel(e)}</small>
+            <button type="button" aria-label={`Снять «${e.name}»`} onClick={() => onRemoveEffect(e)}>
               ✕
             </button>
           </span>
@@ -345,8 +394,46 @@ function Conditions({
             ))}
           </select>
         )}
+        <button type="button" className="cm-addbtn" onClick={onAddEffect}>
+          + эффект
+        </button>
       </div>
     </div>
+  );
+}
+
+/** Плашка «Повтор» (Q60): «Прошёл» снимает эффект с цели, «Провалил» — только плашку. */
+function RepeatPlaques({ entry, state, actions }: { entry: InitiativeEntry; state: NestState; actions: NestActions }) {
+  const due = (state.effects ?? []).filter((e) => e.repeat && state.repeatDue?.includes(e.id));
+  return (
+    <>
+      {due.map((e) => (
+        <div key={e.id} className="cm-notice">
+          <span>
+            Повтор: <b>{e.name}</b> ({e.casterName}) — {ABILITY_SHORT[e.repeat!.ability]} СЛ {e.repeat!.dc ?? "?"}
+          </span>
+          <button
+            type="button"
+            className="cm-btn cm-btn--sm"
+            onClick={() => actions.effects.remove(entry, e.id, `${entry.name}: «${e.name}» прошёл`)}
+          >
+            Прошёл
+          </button>
+          <button
+            type="button"
+            className="cm-btn cm-btn--sm"
+            onClick={() =>
+              actions.updateState(entry, `Повтор ${entry.name}`, {
+                ...state,
+                repeatDue: (state.repeatDue ?? []).filter((id) => id !== e.id),
+              })
+            }
+          >
+            Провалил
+          </button>
+        </div>
+      ))}
+    </>
   );
 }
 
@@ -414,18 +501,22 @@ export function FighterNest({
   const sheet = useCharacterSheet(entry);
   const state = parseNestState(entry);
   const active = flag === "now";
-  const ac = state.double ? state.double.ac : sheet ? sheet.ac : (creature?.armorClass.value ?? null);
+  const effects = state.effects ?? [];
+  // КЗ персонажа с листом уже несёт «Наложено на меня»; чудовищу и двойнику
+  // прибавка эффектов — здесь, с разбором «15 + 2 Щит веры» (Q56).
+  const baseAc = state.double ? state.double.ac : sheet ? sheet.ac : (creature?.armorClass.value ?? null);
+  const acBonus = sheet ? [] : effects.filter((e) => e.ac);
+  const ac = baseAc == null ? null : baseAc + acBonus.reduce((n, e) => n + e.ac!, 0);
+  const acWhy = acBonus.length ? `${baseAc} ${acBonus.map((e) => `+ ${e.ac} ${e.name}`).join(" ")}` : "";
   const defenses = creature ? defensesText(creature) : "";
   const concentrating = sheet ? sheet.data.concentration : state.concentration;
-
-  function breakConcentration() {
-    void actions.updateState(entry, `Концентрация ${entry.name}`, {
-      ...state,
-      concentration: undefined,
-      concentrationCheck: undefined,
-    });
-    if (sheet) sheet.patch(`Концентрация ${entry.name}`, { concentration: "" });
-  }
+  const concTargets = concentrating
+    ? actions.entries
+        .filter((r) => (parseNestState(r).effects ?? []).some((e) => e.conc && e.casterId === entry.id && e.name === concentrating))
+        .map((r) => r.name)
+    : [];
+  const breakConcentration = () => void actions.effects.breakConcentration(entry);
+  const removeEffect = (e: NestEffect) => void actions.effects.remove(entry, e.id, `${entry.name}: снят «${e.name}»`);
 
   return (
     <section
@@ -451,6 +542,11 @@ export function FighterNest({
                 subtitle(entry, creature)
               )}
             </div>
+            {acWhy && (
+              <div className="cm-acwhy">
+                <b>КЗ {ac}</b> = {acWhy}
+              </div>
+            )}
           </div>
           <button
             type="button"
@@ -464,7 +560,7 @@ export function FighterNest({
             <i />
             <span>Реакция</span>
           </button>
-          <div className="cm-ac" title="Класс защиты">
+          <div className={`cm-ac${acWhy ? " is-up" : ""}`} title={acWhy ? `Класс защиты: ${acWhy}` : "Класс защиты"}>
             <span className="cm-ac__n">{ac ?? "—"}</span>
             <span className="cm-ac__l">КЗ</span>
           </div>
@@ -505,28 +601,32 @@ export function FighterNest({
           </div>
         )}
 
+        <RepeatPlaques entry={entry} state={state} actions={actions} />
+
         {concentrating && state.concentrationCheck == null && (
           <div className="cm-conc">
             Концентрируется: <b>{concentrating}</b>
-            <button type="button" className="cm-x" aria-label="Снять концентрацию" onClick={breakConcentration}>
+            {concTargets.length > 0 && <> — {concTargets.join(", ")}</>}
+            <button type="button" className="cm-x" aria-label="Сорвать концентрацию" title="Сорвалась: снять со всех целей" onClick={breakConcentration}>
               ✕
             </button>
           </div>
         )}
 
-        {sheet ? (
-          <Conditions
-            conditions={sheet.data.conditions}
-            onChange={(next) => sheet.patch(`Состояния ${entry.name}`, { conditions: next })}
-            options={conditionOptions}
-          />
-        ) : (
-          <Conditions
-            conditions={parseConditions(entry.conditions)}
-            onChange={(next) => void actions.update(entry, `Состояния ${entry.name}`, { conditions: JSON.stringify(next) })}
-            options={conditionOptions}
-          />
-        )}
+        <Conditions
+          conditions={sheet ? sheet.data.conditions : parseConditions(entry.conditions)}
+          onChange={(next) =>
+            sheet
+              ? sheet.patch(`Состояния ${entry.name}`, { conditions: next })
+              : void actions.update(entry, `Состояния ${entry.name}`, { conditions: JSON.stringify(next) })
+          }
+          options={conditionOptions}
+          effects={effects}
+          onRemoveEffect={removeEffect}
+          onAddEffect={() => actions.openEffect(entry)}
+        />
+
+        <NestCounters entry={entry} state={state} actions={actions} creature={sheet ? null : creature} />
 
         {sheet && (
           <>

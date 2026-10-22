@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import type { EndedLine } from "./effects";
 
 /**
  * Открыт ли боевой режим пульта (Q2) и какое гнездо показать.
@@ -30,6 +31,23 @@ export function setCombatModeOpen(sessionId: number, value: boolean): void {
 export function useCombatModeOpen(sessionId: number, combatActive: boolean): boolean {
   useSyncExternalStore(subscribe, () => version);
   return open.get(sessionId) ?? combatActive;
+}
+
+/**
+ * «Закончилось: …» в полосе раунда (Q57) — что кончилось на последней смене
+ * хода. Вид, а не данные: в лог боя оно уйдёт на шаге 4.
+ */
+const ended = new Map<number, EndedLine[]>();
+
+export function setEndedEffects(sessionId: number, lines: EndedLine[]): void {
+  ended.set(sessionId, lines);
+  emit();
+}
+
+const NO_LINES: EndedLine[] = [];
+export function useEndedEffects(sessionId: number): EndedLine[] {
+  useSyncExternalStore(subscribe, () => version);
+  return ended.get(sessionId) ?? NO_LINES;
 }
 
 /** «Щелчок по строке показывает гнездо на ленте» — трекер просит, лента слушает. */

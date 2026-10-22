@@ -11,6 +11,7 @@ import { fetchCreatureCard } from "./CreatureCard";
 import { sessionPaths } from "../data/sessions";
 import { useConfirm } from "../hooks/useConfirm";
 import { isDead, patchRow, useCombat } from "../combat/useCombat";
+import { endCombatSummary } from "../combat/effectOps";
 import { COMBAT_TYPES, pickName, resolveStatblockInfo } from "../combat/addToCombat";
 import { requestNestFocus, setCombatModeOpen, useCombatModeOpen } from "../combat/combatModeStore";
 import type {
@@ -190,6 +191,21 @@ export function InitiativeTracker({ sessionId, title }: Props & { title?: ReactN
     await change("Очередь хода не очистилась", () => write.del(`/initiative-entries?session_id=${sessionId}`), {
       patch: () => [],
     });
+  }
+
+  /** «Завершить» (Q58) — как «Конец боя» в режиме: есть эффекты — сначала показать, что уйдёт и что останется. */
+  async function endCombat() {
+    const { gone, kept } = endCombatSummary(entries);
+    if (gone.length || kept.length) {
+      const lines = [
+        gone.length ? `Снимутся эффекты боя: ${gone.join(", ")}.` : "",
+        kept.length ? `Останутся на листе до долгого отдыха: ${kept.join("; ")}.` : "",
+        "Счётчики гнёзд уходят вместе с боем; запомненные в статблоке остаются там.",
+      ];
+      const message = lines.filter(Boolean).join("\n\n");
+      if (!(await confirm({ title: "Конец боя", message, confirmLabel: "Закончить бой" }))) return;
+    }
+    await stopCombat();
   }
 
   /**
@@ -458,7 +474,7 @@ export function InitiativeTracker({ sessionId, title }: Props & { title?: ReactN
           <NavIcon name="arrowRight" className="nav-icon icon-flip-x" />
         </button>
         {session?.combat_active ? (
-          <button type="button" onClick={stopCombat}>
+          <button type="button" onClick={endCombat}>
             Завершить
           </button>
         ) : (

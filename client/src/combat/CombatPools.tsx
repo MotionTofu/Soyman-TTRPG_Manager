@@ -31,7 +31,7 @@ function Pips({ max, used, onChange, label }: { max: number; used: number; onCha
   );
 }
 
-function PoolRow({
+export function PoolRow({
   label,
   note,
   max,

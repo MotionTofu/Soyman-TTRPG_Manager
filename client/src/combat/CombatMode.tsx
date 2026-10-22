@@ -16,7 +16,9 @@ import { CombatPlayer } from "./CombatPlayer";
 import { AddToCombatPanel, NestMenu } from "./CombatAddPanel";
 import { nestFlag } from "./nestState";
 import { isDead, patchRow, useCombat } from "./useCombat";
-import { onNestFocus, setCombatModeOpen } from "./combatModeStore";
+import { onNestFocus, setCombatModeOpen, setEndedEffects, useEndedEffects } from "./combatModeStore";
+import { EffectWindow } from "./EffectWindow";
+import { endCombatSummary } from "./effectOps";
 import "./combat.css";
 
 const ZOOM_KEY = "combat-mode-zoom";
@@ -58,13 +60,19 @@ export function CombatMode({ sessionId }: { sessionId: number }) {
   const active = !!session?.combat_active;
 
   const [conditionOptions, setConditionOptions] = useState<string[]>([]);
+  const [systemId, setSystemId] = useState<number | null>(null);
   // ПКМ: по пустому месту ленты — «Добавить в бой» (Q37), по гнезду — его меню (Q42).
   const [popup, setPopup] = useState<{ x: number; y: number; nestId: number | null } | null>(null);
   const popupEntry = popup?.nestId != null ? (combat.entries.find((e) => e.id === popup.nestId) ?? null) : null;
+  // «+ эффект» в гнезде (Q51) — окно с этим гнездом целью.
+  const [effectFor, setEffectFor] = useState<number | null>(null);
+  const [endAsk, setEndAsk] = useState<{ gone: string[]; kept: string[] } | null>(null);
+  const ended = useEndedEffects(sessionId);
   useEffect(() => {
-    findDndSystemId().then((systemId) => {
-      if (!systemId) return;
-      loadDndMechanicsGroup(systemId, "Состояния").then((list) => setConditionOptions(list.map((c) => c.name)));
+    findDndSystemId().then((id) => {
+      if (!id) return;
+      setSystemId(id);
+      loadDndMechanicsGroup(id, "Состояния").then((list) => setConditionOptions(list.map((c) => c.name)));
     });
   }, []);
 
@@ -88,7 +96,17 @@ export function CombatMode({ sessionId }: { sessionId: number }) {
       void combat.change("Инициатива", () => write.put(`/initiative-entries/${entry.id}`, { initiative }), {
         patch: patchRow(entry.id, { initiative }),
       }),
+    effects: combat.effects,
+    openEffect: (entry) => setEffectFor(entry.id),
+    entries: combat.entries,
   };
+
+  /** «Конец боя» (Q58): есть эффекты — сначала показать, что уйдёт и что останется. */
+  function askEnd() {
+    const summary = endCombatSummary(combat.entries);
+    if (summary.gone.length || summary.kept.length) setEndAsk(summary);
+    else void combat.stopCombat();
+  }
 
   async function rollForNpcs() {
     const rolls = new Map<number, number>();
@@ -162,6 +180,17 @@ export function CombatMode({ sessionId }: { sessionId: number }) {
             Старт
           </button>
         )}
+        {active && ended.length > 0 && (
+          <span className="cm-ended" role="status">
+            <span className="cm-ui">Закончилось</span>
+            <span>
+              {ended.map((l) => `${l.name} (${l.casterName}) — ${l.targets.join(", ")}`).join("; ")}
+            </span>
+            <button type="button" className="cm-x" aria-label="Убрать строку" onClick={() => setEndedEffects(sessionId, [])}>
+              ✕
+            </button>
+          </span>
+        )}
         <span className="cm-roundbar__gap" />
         {npcsWithout.length > 0 && (
           <button type="button" className="cm-btn cm-btn--wait" onClick={rollForNpcs} title="к20 + модификатор всем НПС без числа; персонажей не трогает">
@@ -169,7 +198,7 @@ export function CombatMode({ sessionId }: { sessionId: number }) {
           </button>
         )}
         {active && (
-          <button type="button" className="cm-btn" onClick={() => void combat.stopCombat()}>
+          <button type="button" className="cm-btn" onClick={askEnd}>
             Конец боя
           </button>
         )}
@@ -213,6 +242,51 @@ export function CombatMode({ sessionId }: { sessionId: number }) {
       </Ribbon>
       {popup && popup.nestId == null && (
         <AddToCombatPanel combat={combat} sessionId={sessionId} x={popup.x} y={popup.y} onClose={() => setPopup(null)} />
+      )}
+      {effectFor != null && (
+        <EffectWindow combat={combat} originId={effectFor} systemId={systemId} onClose={() => setEffectFor(null)} />
+      )}
+      {endAsk && (
+        <div className="cm-layer cm-layer--dim" onPointerDown={(e) => e.target === e.currentTarget && setEndAsk(null)}>
+          <section className="cm-fx cm-fx--small" role="dialog" aria-label="Конец боя">
+            <div className="cm-fx__h">
+              <span className="cm-ui">Конец боя</span>
+              <span />
+              <button type="button" className="cm-x" aria-label="Закрыть" onClick={() => setEndAsk(null)}>
+                ✕
+              </button>
+            </div>
+            <div className="cm-fx__b">
+              {endAsk.gone.length > 0 && (
+                <div>
+                  <b className="cm-ui">Снимутся</b> эффекты боя: {endAsk.gone.join(", ")}.
+                </div>
+              )}
+              {endAsk.kept.length > 0 && (
+                <div>
+                  <b className="cm-ui">Останутся на листе</b> до долгого отдыха: {endAsk.kept.join("; ")}.
+                </div>
+              )}
+              <div className="muted">Счётчики гнёзд уходят вместе с боем; запомненные в статблоке остаются там.</div>
+            </div>
+            <div className="cm-fx__foot">
+              <button type="button" className="cm-btn" onClick={() => setEndAsk(null)}>
+                Отмена
+              </button>
+              <button
+                type="button"
+                className="cm-btn cm-btn--primary"
+                autoFocus
+                onClick={() => {
+                  setEndAsk(null);
+                  void combat.stopCombat();
+                }}
+              >
+                Закончить бой
+              </button>
+            </div>
+          </section>
+        </div>
       )}
       {popup && popupEntry && (
         <NestMenu

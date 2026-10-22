@@ -22,6 +22,8 @@ export interface CharacterSheetNest {
   data: DndCharacterData;
   ac: number;
   passivePerception: number;
+  /** СЛ спасброска от заклинаний — повтор эффекта, наложенного персонажем (Q60). */
+  spellDc: number | null;
   /** Как на листе: сохранённый максимум плюс временная поправка. */
   maxHp: number;
   cur: number;
@@ -159,6 +161,7 @@ export function useCharacterSheet(entry: InitiativeEntry): CharacterSheetNest | 
       data,
       ac: sheet.armorClass.value,
       passivePerception: sheet.passivePerception.value,
+      spellDc: sheet.spellcasting?.saveDc.value ?? null,
       maxHp: (Number(data.hitPointMax) || 0) + (Number(data.hitPointMaxTemp) || 0),
       cur: Number(data.hitPointsCurrent) || 0,
       temp: Number(data.hitPointsTemp) || 0,
