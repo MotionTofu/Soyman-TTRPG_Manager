@@ -9,6 +9,7 @@ export * from "./dnd/effects";
 export * from "./dnd/creature";
 export * from "./dnd/creatureConvert";
 export * from "./dnd/creatureMeta";
+export * from "./dnd/inflicts";
 export * from "./dnd/equipment";
 export * from "./dnd/armorClass";
 export * from "./dnd/derive";

@@ -388,7 +388,9 @@ export function normalizeDndCreature(raw: unknown): DndCreatureData {
 function migrateLegacyAction(raw: unknown, extraCost?: number): DndCreatureAction {
   const f = (raw && typeof raw === "object" ? raw : {}) as Partial<DndCreatureAction> & { name?: string; description?: string };
   if (f.category) return f as DndCreatureAction;
-  const base: DndCreatureAction = { name: f.name ?? "", category: "other", description: f.description ?? "" };
+  // Остальные поля — как были: у старого действия без категории могут быть
+  // запас (`uses`) и «накладывает» (`inflicts`) из разовых миграций.
+  const base: DndCreatureAction = { ...f, name: f.name ?? "", category: "other", description: f.description ?? "" };
   return extraCost !== undefined ? ({ ...base, cost: extraCost } as DndLegendaryActionEntry) : base;
 }
 

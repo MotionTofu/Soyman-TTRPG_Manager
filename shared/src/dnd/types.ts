@@ -10,7 +10,7 @@
  * ничего не заметили.
  */
 
-import type { DndCheck, DndEffect, DndCost } from "./effects";
+import type { DndCheck, DndCombatDuration, DndEffect, DndCost, DndMechanicsRef, DndRepeatSaveAt } from "./effects";
 
 export interface DndAbilityScores {
   str: number;
@@ -688,6 +688,16 @@ export interface DndCreatureAction {
   // отдыха». В имени действия скобки с запасом больше не пишутся — их рисует
   // просмотр, а боевой режим ведёт по этому полю счётчик.
   uses?: DndActionUses;
+  // Что действие накладывает на цель — для окошка эффекта боевого режима
+  // (шаг 3, Q63–Q64). Размечено миграцией по тексту и правится в форме.
+  inflicts?: DndActionInflicts;
+}
+
+export interface DndActionInflicts {
+  conditions: DndMechanicsRef[];
+  duration?: DndCombatDuration | null;
+  // Когда цель повторяет спасбросок действия (`saveAbility`/`saveDC`).
+  repeat?: DndRepeatSaveAt[] | null;
 }
 
 /**

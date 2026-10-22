@@ -37,7 +37,30 @@ export interface DndCheck {
   // dragon breath on Constitution). Key ("wis"), not a Russian name — it
   // indexes abilities, like maxAbility below. Empty = spellDc, как было.
   dcAbility?: DndAbilityKey;
+  /**
+   * Save-only: когда цель повторяет этот спасбросок — в конце своего хода, в
+   * начале, когда получает урон («Удержание личности», «Подчинение личности»;
+   * у «Жуткого смеха Таши» — и в конце хода, и при уроне). Боевой режим по
+   * нему ставит плашку «Прошёл / Не прошёл» (шаг 3, Q60–Q61).
+   */
+  repeat?: DndRepeatSaveAt[];
 }
+
+/** Когда цель повторяет спасбросок против наложенного (шаг 3, Q60). */
+export type DndRepeatSaveAt = "turn_end" | "turn_start" | "on_damage";
+
+/**
+ * Сколько держится наложенное в бою (Q25, Q53): раунды — до начала хода
+ * наложившего («до начала его следующего хода» — 1 раунд); `target_turn_end` —
+ * до конца следующего хода цели; `caster_turn_end` — до конца следующего хода
+ * наложившего («до конца следующего хода мефита»); `combat` — до конца боя или
+ * пока не снимут.
+ */
+export type DndCombatDuration =
+  | { rounds: number }
+  | { until: "target_turn_end" }
+  | { until: "caster_turn_end" }
+  | { until: "combat" };
 
 export type DndEffectType =
   | "damage"

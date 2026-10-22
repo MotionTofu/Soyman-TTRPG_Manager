@@ -30,6 +30,7 @@ import { migrateDndArtificerReanimator } from "./dndArtificerReanimator";
 import { migrateDndArtificerOracle } from "./dndArtificerOracle";
 import { applyDndFeatureNamesByPlace } from "./dndFeatureNamesByPlace";
 import { migrateDndCreatureFields } from "./dndCreatureFields";
+import { migrateDndInflicts } from "./dndInflicts";
 import {
   ensureNamedReplicaSchemes,
   migrateDndReplicaGenerics,
@@ -7428,6 +7429,12 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
   // перезарядка — JSON в строке инициативы.
   if (!columnExists(database, "initiative_entries", "state")) {
     database.exec("ALTER TABLE initiative_entries ADD COLUMN state TEXT NOT NULL DEFAULT '{}'");
+  }
+  // «Что накладывает» (боевой режим, шаг 3): повтор спасброска заклинаний,
+  // состояния, длительность и повтор действий чудовищ — из текста в поля.
+  if (!appSettingFlag(database, "dnd_inflicts_v1")) {
+    migrateDndInflicts(database, dbDir);
+    setAppSettingFlag(database, "dnd_inflicts_v1");
   }
 
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
