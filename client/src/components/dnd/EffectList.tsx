@@ -38,6 +38,7 @@ import {
   type DndProficiencyShare,
   type DndArmorCondition,
   type DndWeaponFilter,
+  type DndRepeatSaveAt,
 } from "./effects";
 import { loadDndMechanicsGroup, type DndMechanicsOption } from "./dndCompendium";
 import { ABILITY_LABELS } from "./AbilityScores";
@@ -436,6 +437,40 @@ function EffectFields({
   }
 }
 
+// Повтор спасброска (боевой режим, Q60/Q61): по нему в гнезде цели всплывает
+// плашка «Повтор: …». Сочетания — те, что встречаются в книге; порядок
+// значений — как у миграции dnd_inflicts_v1.
+const REPEAT_OPTIONS: { value: DndRepeatSaveAt[]; label: string }[] = [
+  { value: ["turn_end"], label: "в конце хода цели" },
+  { value: ["turn_start"], label: "в начале хода цели" },
+  { value: ["on_damage"], label: "при уроне" },
+  { value: ["turn_end", "on_damage"], label: "в конце хода и при уроне" },
+  { value: ["turn_start", "on_damage"], label: "в начале хода и при уроне" },
+];
+
+export function RepeatSelect({
+  value,
+  onChange,
+}: {
+  value: DndRepeatSaveAt[] | null | undefined;
+  onChange: (v: DndRepeatSaveAt[] | undefined) => void;
+}) {
+  return (
+    <select
+      value={value?.join(",") ?? ""}
+      onChange={(e) => onChange(REPEAT_OPTIONS.find((o) => o.value.join(",") === e.target.value)?.value)}
+      title="Когда цель повторяет спасбросок, чтобы сбросить эффект"
+    >
+      <option value="">Повтор: нет</option>
+      {REPEAT_OPTIONS.map((o) => (
+        <option key={o.label} value={o.value.join(",")}>
+          Повтор: {o.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function CheckRow({
   check,
   onChange,
@@ -490,6 +525,7 @@ function CheckRow({
           value={check.dcOverride ?? ""}
           onChange={(e) => onChange({ dcOverride: e.target.value === "" ? null : Number(e.target.value) })}
         />
+        {check.type === "save" && <RepeatSelect value={check.repeat} onChange={(repeat) => onChange({ repeat })} />}
       </span>
       <button type="button" onClick={onRemove} title="Убрать бросок">
         −

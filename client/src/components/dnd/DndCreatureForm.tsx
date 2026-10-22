@@ -4,6 +4,7 @@ import type {
   DndAbilityKey,
   DndAbilityScores,
   DndActionCategory,
+  DndActionInflicts,
   DndActionUses,
   DndAttackRollType,
   DndCreatureAction,
@@ -44,6 +45,7 @@ import { useDndPrefs } from "../../hooks/useDndPrefs";
 import { useFrameDrag } from "./portraitFrame";
 import type { DndAbilityPrimary } from "../../dndPrefs";
 import { effectsLabel, type DndCheck, type DndEffect } from "./effects";
+import { RepeatSelect } from "./EffectList";
 import { FeatureListEdit } from "./FeatureList";
 import { MentionTextarea } from "../mentions/MentionTextarea";
 import { MentionText } from "../mentions/MentionText";
@@ -748,6 +750,91 @@ function UsesEdit({ value, onChange }: { value?: DndActionUses; onChange: (v: Dn
   );
 }
 
+// «Накладывает» (боевой режим, Q62–Q64): что действие вешает на цель — по
+// нему окно «+ эффект» в гнезде предлагает действие ходящего существа.
+// Длительность в раундах: 1 минута = 10, 10 минут = 100.
+type DurationKind = "" | "rounds" | "target_turn_end" | "caster_turn_end" | "combat";
+
+const DURATION_LABELS: Record<Exclude<DurationKind, "">, string> = {
+  rounds: "раундов",
+  target_turn_end: "до конца хода цели",
+  caster_turn_end: "до конца след. хода существа",
+  combat: "до конца боя",
+};
+
+function InflictsEdit({
+  value,
+  conditions,
+  onChange,
+}: {
+  value: DndActionInflicts;
+  conditions: DndMechanicsOption[];
+  onChange: (v: DndActionInflicts | undefined) => void;
+}) {
+  const d = value.duration;
+  const kind: DurationKind = !d ? "" : "rounds" in d ? "rounds" : d.until;
+  const free = conditions.filter((c) => !value.conditions.some((v) => v.id === c.id));
+  return (
+    <div className="row" style={{ flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+      Накладывает
+      {value.conditions.map((c) => (
+        <span key={c.id} className="litm-tag">
+          {c.name}
+          <button
+            type="button"
+            title="Убрать состояние"
+            onClick={() => onChange({ ...value, conditions: value.conditions.filter((v) => v.id !== c.id) })}
+          >
+            −
+          </button>
+        </span>
+      ))}
+      <select
+        value=""
+        onChange={(e) => {
+          const c = conditions.find((o) => o.id === Number(e.target.value));
+          if (c) onChange({ ...value, conditions: [...value.conditions, { id: c.id, name: c.name }] });
+        }}
+      >
+        <option value="">+ состояние</option>
+        {free.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+      {kind === "rounds" && d && "rounds" in d && (
+        <input
+          type="number"
+          min={1}
+          style={{ width: 50 }}
+          title="1 минута = 10 раундов"
+          value={d.rounds}
+          onChange={(e) => onChange({ ...value, duration: { rounds: Math.max(1, Number(e.target.value) || 1) } })}
+        />
+      )}
+      <select
+        value={kind}
+        onChange={(e) => {
+          const k = e.target.value as DurationKind;
+          onChange({ ...value, duration: k === "" ? null : k === "rounds" ? { rounds: 10 } : { until: k } });
+        }}
+      >
+        <option value="">Длительность: не сказано</option>
+        {Object.entries(DURATION_LABELS).map(([k, l]) => (
+          <option key={k} value={k}>
+            {l}
+          </option>
+        ))}
+      </select>
+      <RepeatSelect value={value.repeat} onChange={(repeat) => onChange({ ...value, repeat: repeat ?? null })} />
+      <button type="button" className="comp-mini" title="Убрать «Накладывает»" onClick={() => onChange(undefined)}>
+        <NavIcon name="close" />
+      </button>
+    </div>
+  );
+}
+
 function formatUses(u: DndActionUses): string {
   if (u.kind === "recharge") return u.min >= 6 ? "перезарядка 6" : `перезарядка ${u.min}–6`;
   if (u.kind === "rest") return u.rest === "short" ? "после короткого или долгого отдыха" : "после долгого отдыха";
@@ -776,6 +863,12 @@ export function ActionListEdit<T extends DndCreatureAction>({
   proficiencyBonus: number | null;
 }) {
   const [confirmDialog, confirm] = useConfirm();
+  const [conditions, setConditions] = useState<DndMechanicsOption[]>([]);
+  useEffect(() => {
+    findDndSystemId().then((sid) => {
+      if (sid) loadDndMechanicsGroup(sid, "Состояния").then(setConditions);
+    });
+  }, []);
   function update(i: number, patch: Partial<DndCreatureAction> & { cost?: number; oncePerTurn?: boolean }) {
     onChange(values.map((a, idx) => (idx === i ? ({ ...a, ...patch } as T) : a)));
   }
@@ -899,6 +992,19 @@ export function ActionListEdit<T extends DndCreatureAction>({
               />
               Не чаще раза до своего хода
             </label>
+          )}
+          {a.inflicts ? (
+            <InflictsEdit value={a.inflicts} conditions={conditions} onChange={(inflicts) => update(i, { inflicts })} />
+          ) : (
+            !a.isMultiattack && !/^мультиатака/i.test(a.name.trim()) && (
+              <button
+                type="button"
+                style={{ alignSelf: "flex-start" }}
+                onClick={() => update(i, { inflicts: { conditions: [], duration: null, repeat: null } })}
+              >
+                + накладывает
+              </button>
+            )
           )}
           <MentionTextarea value={a.description} onChange={(v) => update(i, { description: v })} rows={2} placeholder="Описание" />
         </div>

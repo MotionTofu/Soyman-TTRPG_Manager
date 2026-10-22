@@ -652,6 +652,7 @@ export type {
   DndCreatureSense,
   DndActionCategory,
   DndCreatureAction,
+  DndActionInflicts,
   DndActionUses,
   DndLegendaryActionEntry,
   DndCreatureLegendary,
