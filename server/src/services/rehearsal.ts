@@ -25,6 +25,12 @@ function scopes(sessionId: number, campaignId: number): { scope: Scope; params: 
     s("session_show_state", "session_id = ?", sessionId),
     s("session_attendance", "session_id = ?", sessionId),
     s("initiative_entries", "session_id = ?", sessionId),
+    // Лог боя (шаг 4, Q70): бои, начатые вечером, их время и строки — по сессии.
+    // Перенесённый сюда бой своей строкой не откатывается: у него меняются
+    // только отрезок и строки этой сессии.
+    s("battles", "session_id = ?", sessionId),
+    s("battle_spans", "session_id = ?", sessionId),
+    s("battle_log", "session_id = ?", sessionId),
     s("generic_links", "from_type = 'session' AND from_id = ?", sessionId),
     // Спутники связей сессии: удаление связи уносит их каскадом.
     s("link_cast", "link_id IN (SELECT id FROM generic_links WHERE from_type = 'session' AND from_id = ?)", sessionId),
@@ -47,6 +53,7 @@ const SESSION_FIELDS = [
   "combat_active",
   "combat_turn_entry_id",
   "combat_round",
+  "combat_battle_id",
 ] as const;
 
 interface Snapshot {

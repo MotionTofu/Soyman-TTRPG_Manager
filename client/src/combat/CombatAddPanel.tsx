@@ -341,6 +341,9 @@ export function NestMenu({
   onClose: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
+  // Союзник (Q79): его урон — урон партии в «Боях вечера».
+  const state = parseNestState(entry);
+  const ally = !!state.ally;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -354,7 +357,7 @@ export function NestMenu({
 
   const left = Math.max(8, Math.min(x, window.innerWidth - 248));
   const top = Math.max(8, Math.min(y, window.innerHeight - 160));
-  // ponytail: запись в лог боя — шаг 4 (лог ещё не заведён).
+  // Убранный пишется в лог строкой без отмены (вернуть отменой нельзя — Q42).
   function remove() {
     onClose();
     void combat.change(`«${entry.name}» не убран из боя`, () => write.del(`/initiative-entries/${entry.id}`), {
@@ -380,6 +383,19 @@ export function NestMenu({
               >
                 Ещё такой же
               </button>
+            )}
+            {entry.kind === "creature" && entry.entity_type !== "character" && (
+              <label role="menuitemcheckbox" aria-checked={ally} className="cm-menu__it cm-menu__check">
+                <input
+                  type="checkbox"
+                  checked={ally}
+                  onChange={() => {
+                    onClose();
+                    void combat.updateState(entry, `${entry.name}: сторона`, { ...state, ally: !ally || undefined });
+                  }}
+                />
+                На стороне партии
+              </label>
             )}
             <button type="button" role="menuitem" className="cm-menu__it" onClick={() => setConfirming(true)}>
               Убрать из боя…

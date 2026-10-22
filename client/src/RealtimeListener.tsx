@@ -36,6 +36,10 @@ export function RealtimeListener() {
     socket.on("initiative-updated", (payload: unknown) => {
       window.dispatchEvent(new CustomEvent("initiative-updated", { detail: payload }));
     });
+    // Игрок поправил лист персонажа в идущем бою — строка в логе боя (шаг 4, Q69).
+    socket.on("battle-log-updated", (payload: unknown) => {
+      window.dispatchEvent(new CustomEvent("battle-log-updated", { detail: payload }));
+    });
     // Данные кампании изменились (выдача Мастера, запись игрока в дневник):
     // открытый экран перечитывает задетое сам — data/syncAffects.ts.
     socket.on("campaign-data-changed", (payload: unknown) => {

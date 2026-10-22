@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { battleInfo, carryBattle, closeBattle, closeBattleSilently, openBattle, pullPendingBattle, sessionBattles } from "../services/battles";
 import { db } from "../db/db";
 import { SESSION_NUMBER_SQL } from "../services/sessionNumber";
 import { syncSessionMentions } from "./sessionNotes";
@@ -139,6 +140,8 @@ sessionsRouter.post("/", (req, res) => {
        SELECT j.scene_id FROM session_scenes j WHERE j.session_id = p.session_id
      )`
   ).run(info.lastInsertRowid, campaign_id, info.lastInsertRowid);
+  // Бой, перенесённый «в следующую сессию», которой не было (Q24), встаёт сюда.
+  pullPendingBattle(Number(info.lastInsertRowid), campaign_id);
 
   res
     .status(201)
@@ -215,6 +218,8 @@ sessionsRouter.put("/:id", (req, res) => {
   if (date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return res.status(400).json({ error: "date must be YYYY-MM-DD" });
   }
+  // Проведённая задним числом посреди боя (Q74) — бой закрывается молча.
+  if (status === "held") closeBattleSilently(Number(req.params.id));
 
   db.prepare(
     `UPDATE sessions SET
@@ -270,6 +275,11 @@ sessionsRouter.put("/:id/combat", (req, res) => {
     turn_entry_id: number | null;
     round?: number;
   };
+  const sessionId = Number(req.params.id);
+  // Бой (шаг 4) живёт от «Старт» до «Конец боя»: заводится и закрывается здесь,
+  // чем бы его ни включили — режимом или трекером.
+  if (active) openBattle(sessionId, turn_entry_id ?? null, Math.max(1, Math.floor(round ?? 1)));
+  else closeBattle(sessionId);
   db.prepare(
     "UPDATE sessions SET combat_active = ?, combat_turn_entry_id = ?, combat_round = ? WHERE id = ?"
   ).run(
@@ -279,6 +289,23 @@ sessionsRouter.put("/:id/combat", (req, res) => {
     req.params.id
   );
   res.json(db.prepare("SELECT * FROM sessions WHERE id = ?").get(req.params.id));
+});
+
+// Идущий бой сессии для пульта (шаг 4): имя, таймер, куда переносить.
+sessionsRouter.get("/:id/battle", (req, res) => {
+  res.json(battleInfo(Number(req.params.id)));
+});
+
+// «Бои вечера» (Q21): строка на бой, итоги по сторонам, время по сессиям.
+sessionsRouter.get("/:id/battles", (req, res) => {
+  res.json(sessionBattles(Number(req.params.id)));
+});
+
+// «Продолжить в следующей сессии» (Q24).
+sessionsRouter.post("/:id/combat/carry", (req, res) => {
+  const result = carryBattle(Number(req.params.id));
+  if (!result) return res.status(400).json({ error: "боя нет" });
+  res.json(result);
 });
 
 // Перед удалением сессии из архива (спека campaign-paper, Q39): сколько за неё

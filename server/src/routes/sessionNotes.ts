@@ -4,6 +4,7 @@ import { SESSION_NUMBER_SQL } from "../services/sessionNumber";
 import { idOfUid, scanMentions } from "../services/mentions";
 import { graphCache } from "./links";
 import { restoreSnapshot, takeSnapshot } from "../services/rehearsal";
+import { closeBattleSilently, startSpanIfIdle } from "../services/battles";
 
 // Лента сессии и статус «идёт» (гриллинг 2026-09-28).
 //
@@ -107,6 +108,8 @@ function endSession(sessionId: number): void {
     graphCache.clear();
     return;
   }
+  // Бой без ответа «Бой не закончен» (другую сессию начали поверх) — закрыть молча (Q74).
+  closeBattleSilently(sessionId);
   db.prepare("UPDATE sessions SET live_mode = NULL, rehearsal_snapshot = NULL, status = 'held' WHERE id = ?").run(sessionId);
 }
 
@@ -137,6 +140,8 @@ sessionNotesRouter.post("/:id/live", (req, res) => {
     for (const o of other) endSession(o.id);
     const snapshot = mode === "rehearsal" ? takeSnapshot(sessionId, session.campaign_id) : null;
     db.prepare("UPDATE sessions SET live_mode = ?, rehearsal_snapshot = ? WHERE id = ?").run(mode, snapshot, sessionId);
+    // Перенесённый бой: время этой сессии пошло с её начала (Q82).
+    startSpanIfIdle(sessionId);
   })();
   res.json(db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId));
 });

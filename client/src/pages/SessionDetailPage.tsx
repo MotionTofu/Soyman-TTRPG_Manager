@@ -38,6 +38,8 @@ import type {
   SessionSummary,
 } from "../types";
 import "../session.css";
+import { SessionBattles } from "../components/SessionBattles";
+import { sessionBattlesPath, type BattleSummary } from "../combat/battleLog";
 import { sessionLabel } from "../sessionLabel";
 import { SessionOutcomeModal } from "../components/SessionOutcomeModal";
 import { SessionPassportCard } from "../components/SessionPaperCards";
@@ -82,6 +84,8 @@ function numberText(value: number | null): string {
   return value != null ? String(value) : "";
 }
 
+const NO_FIGHTS: BattleSummary[] = [];
+
 export function SessionDetailPage() {
   const { id } = useParams();
   const sessionId = Number(id);
@@ -106,6 +110,8 @@ export function SessionDetailPage() {
   const secretsPath = campaignId != null ? sessionPaths.campaignSecrets(campaignId) : null;
   const secretData = useResource<CampaignGrouped<StorySecret>>(secretsPath).data ?? NO_SECRETS;
   const report = useResource<SessionReport>(sessionPaths.summary(sessionId)).data ?? null;
+  // «Бои вечера» (шаг 4): плитка «Боёв» у проведённой, карточка — в «Итогах».
+  const fights = useResource<BattleSummary[]>(sessionBattlesPath(sessionId)).data ?? NO_FIGHTS;
 
   // Поля статуса, оплаты и ставки задевают деньги кампании, остальные — только
   // сессию и список сессий кампании (data/sessions.ts).
@@ -1096,8 +1102,17 @@ export function SessionDetailPage() {
                 <span className="sp-stat__value">{report.revealed.length}</span>
                 <span className="sp-stat__note">из {secretsTotal} по кампании</span>
               </div>
+              <div className="sp-stat">
+                <span className="sp-label">Боёв</span>
+                <span className="sp-stat__value">{fights.length}</span>
+                {fights.some((b) => b.carried_to != null || b.carry_pending) && (
+                  <span className="sp-stat__note">один продолжится</span>
+                )}
+              </div>
             </div>
           )}
+
+          <SessionBattles sessionId={session.id} isPlayer={isPlayer} />
 
           <SessionResults session={session} campaignId={campaign.id} settingId={campaign.setting_id} isPlayer={isPlayer} />
 

@@ -20,6 +20,7 @@ import { affectsForWindowEvent } from "./syncAffects";
 const DATA_EVENTS = [
   "character-updated",
   "initiative-updated",
+  "battle-log-updated",
   "hunter-mark",
   "campaign-data-changed",
   "system-data-changed",

@@ -209,6 +209,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   combat_active INTEGER NOT NULL DEFAULT 0,
   combat_turn_entry_id INTEGER REFERENCES initiative_entries(id) ON DELETE SET NULL,
   combat_round INTEGER NOT NULL DEFAULT 0,
+  -- Идущий бой сессии (боевой режим, шаг 4): его лог и время.
+  combat_battle_id INTEGER REFERENCES battles(id) ON DELETE SET NULL,
   battle_playlist_id INTEGER REFERENCES playlists(id) ON DELETE SET NULL,
   cheatsheet_data TEXT,
   -- Идёт ли сессия (гриллинг 2026-09-28, Q38): NULL — нет, 'live' — Мастер
@@ -1700,6 +1702,54 @@ CREATE TABLE IF NOT EXISTS initiative_entries (
   state TEXT NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS idx_initiative_entries_session ON initiative_entries(session_id);
+
+-- Бои (боевой режим, шаг 4, Q21–Q24): от «Старт» до «Конец боя». Бой
+-- принадлежит сессии, где начался; незаконченный переезжает в следующую
+-- (carry_campaign_id — ждёт сессию, которой ещё нет).
+CREATE TABLE IF NOT EXISTS battles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  carry_campaign_id INTEGER REFERENCES campaigns(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_battles_session ON battles(session_id);
+
+-- Время боя по сессиям (Q82): таймер — сумма seconds и идущий отрезок с
+-- started_at. ended — бой кончился в этой сессии. Всё изменчивое у боя —
+-- здесь и в логе, по сессии: тестовый прогон откатывает их своей сессией.
+CREATE TABLE IF NOT EXISTS battle_spans (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  battle_id INTEGER NOT NULL REFERENCES battles(id) ON DELETE CASCADE,
+  session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  seconds INTEGER NOT NULL DEFAULT 0,
+  started_at TEXT,
+  ended INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_battle_spans_battle ON battle_spans(battle_id);
+CREATE INDEX IF NOT EXISTS idx_battle_spans_session ON battle_spans(session_id);
+
+-- Лог боя (Q15–Q16, Q67–Q80): строка — одно действие. changes — разница по
+-- полям (shared/battleLog.ts), по ней отмена и итоги. kind: turn — смена
+-- хода, event — действие с пульта, sheet — правка листа не с пульта (Q69,
+-- без отмены), note — бойца добавили. author — у sheet: кто правил (Q78).
+CREATE TABLE IF NOT EXISTS battle_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  battle_id INTEGER NOT NULL REFERENCES battles(id) ON DELETE CASCADE,
+  session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  round INTEGER NOT NULL DEFAULT 0,
+  kind TEXT NOT NULL DEFAULT 'event' CHECK (kind IN ('turn','event','sheet','note')),
+  text TEXT NOT NULL,
+  sub TEXT NOT NULL DEFAULT '',
+  changes TEXT NOT NULL DEFAULT '[]',
+  author TEXT NOT NULL DEFAULT '',
+  undone INTEGER NOT NULL DEFAULT 0,
+  blocked TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_battle_log_battle ON battle_log(battle_id, id);
+CREATE INDEX IF NOT EXISTS idx_battle_log_session ON battle_log(session_id);
 
 -- "Also present in this setting" tags for the global Ресурсы library —
 -- separate from a resource's/playlist's single "home" scope, which stays

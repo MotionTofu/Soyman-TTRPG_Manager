@@ -7436,6 +7436,52 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     migrateDndInflicts(database, dbDir);
     setAppSettingFlag(database, "dnd_inflicts_v1");
   }
+  // Лог боя (боевой режим, шаг 4): бои, их время по сессиям, строки лога и
+  // идущий бой сессии. Таблицы — как в schema.sql.
+  if (!tableExists(database, "battles")) {
+    database.exec(`CREATE TABLE battles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+      session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      carry_campaign_id INTEGER REFERENCES campaigns(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+    database.exec("CREATE INDEX idx_battles_session ON battles(session_id)");
+  }
+  if (!tableExists(database, "battle_spans")) {
+    database.exec(`CREATE TABLE battle_spans (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      battle_id INTEGER NOT NULL REFERENCES battles(id) ON DELETE CASCADE,
+      session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      seconds INTEGER NOT NULL DEFAULT 0,
+      started_at TEXT,
+      ended INTEGER NOT NULL DEFAULT 0
+    )`);
+    database.exec("CREATE INDEX idx_battle_spans_battle ON battle_spans(battle_id)");
+    database.exec("CREATE INDEX idx_battle_spans_session ON battle_spans(session_id)");
+  }
+  if (!tableExists(database, "battle_log")) {
+    database.exec(`CREATE TABLE battle_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      battle_id INTEGER NOT NULL REFERENCES battles(id) ON DELETE CASCADE,
+      session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      round INTEGER NOT NULL DEFAULT 0,
+      kind TEXT NOT NULL DEFAULT 'event' CHECK (kind IN ('turn','event','sheet','note')),
+      text TEXT NOT NULL,
+      sub TEXT NOT NULL DEFAULT '',
+      changes TEXT NOT NULL DEFAULT '[]',
+      author TEXT NOT NULL DEFAULT '',
+      undone INTEGER NOT NULL DEFAULT 0,
+      blocked TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+    database.exec("CREATE INDEX idx_battle_log_battle ON battle_log(battle_id, id)");
+    database.exec("CREATE INDEX idx_battle_log_session ON battle_log(session_id)");
+  }
+  if (!columnExists(database, "sessions", "combat_battle_id")) {
+    database.exec("ALTER TABLE sessions ADD COLUMN combat_battle_id INTEGER REFERENCES battles(id) ON DELETE SET NULL");
+  }
 
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.

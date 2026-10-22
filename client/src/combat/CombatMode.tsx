@@ -18,6 +18,7 @@ import { nestFlag } from "./nestState";
 import { isDead, patchRow, useCombat } from "./useCombat";
 import { onNestFocus, setCombatModeOpen, setEndedEffects, useEndedEffects } from "./combatModeStore";
 import { EffectWindow } from "./EffectWindow";
+import { BattleClock, BattleLogPanel } from "./BattleLogPanel";
 import { endCombatSummary } from "./effectOps";
 import "./combat.css";
 
@@ -101,10 +102,13 @@ export function CombatMode({ sessionId }: { sessionId: number }) {
     entries: combat.entries,
   };
 
-  /** «Конец боя» (Q58): есть эффекты — сначала показать, что уйдёт и что останется. */
+  /**
+   * «Конец боя» (Q58, Q75): не отменяется — спросить, если в бою что-то было;
+   * есть эффекты — показать, что уйдёт и что останется.
+   */
   function askEnd() {
     const summary = endCombatSummary(combat.entries);
-    if (summary.gone.length || summary.kept.length) setEndAsk(summary);
+    if (summary.gone.length || summary.kept.length || (combat.battle?.log_count ?? 0) > 0) setEndAsk(summary);
     else void combat.stopCombat();
   }
 
@@ -153,6 +157,10 @@ export function CombatMode({ sessionId }: { sessionId: number }) {
               <span className="cm-ui">Раунд</span>
               <b>{session?.combat_round || 1}</b>
             </div>
+            {combat.battle && <BattleClock battle={combat.battle} />}
+            {combat.battle?.carried_from != null && (
+              <span className="cm-cont">Продолжение · из сессии {combat.battle.carried_from}</span>
+            )}
             <button type="button" className="cm-btn" onClick={() => combat.step(-1)} title="Shift+пробел">
               Назад
             </button>
@@ -207,6 +215,8 @@ export function CombatMode({ sessionId }: { sessionId: number }) {
         </button>
       </div>
 
+      {active && <BattleLogPanel combat={combat} />}
+
       <CombatPlayer themeId={session?.battle_playlist_id ?? null} onTheme={(id) => void combat.setTheme(id)} />
 
       <Ribbon currentId={currentId} onContext={(x, y, nestId) => setPopup({ x, y, nestId })}>
@@ -257,6 +267,11 @@ export function CombatMode({ sessionId }: { sessionId: number }) {
               </button>
             </div>
             <div className="cm-fx__b">
+              {combat.battle && (
+                <div>
+                  <b>«{combat.battle.name}»</b> · раунд {session?.combat_round || 1} · событий в логе: {combat.battle.log_count}.
+                </div>
+              )}
               {endAsk.gone.length > 0 && (
                 <div>
                   <b className="cm-ui">Снимутся</b> эффекты боя: {endAsk.gone.join(", ")}.
@@ -268,6 +283,7 @@ export function CombatMode({ sessionId }: { sessionId: number }) {
                 </div>
               )}
               <div className="muted">Счётчики гнёзд уходят вместе с боем; запомненные в статблоке остаются там.</div>
+              <div className="muted">Конец боя не отменяется: лог закроется, бой встанет в «Бои вечера».</div>
             </div>
             <div className="cm-fx__foot">
               <button type="button" className="cm-btn" onClick={() => setEndAsk(null)}>

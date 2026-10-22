@@ -11,6 +11,8 @@ import { removeOrArchive } from "../services/vaultDedup";
 import { buildPortableExport, PortableExportError } from "../services/portableExport";
 import { ensureCharacterFolder } from "./characters";
 import { mergeContentPatch } from "../db/statblockContent";
+import { logSheetEdit, sheetEditAuthor } from "../services/battles";
+import type { AuthedRequest } from "../services/auth";
 
 export const statblocksRouter = Router();
 const ALLOWED_IMAGE_MIMES = /^image\/(jpeg|png|gif|webp|avif)$/;
@@ -281,7 +283,7 @@ statblocksRouter.post("/", (req, res) => {
 const JSON_FORMATS = new Set(["litm_character", "litm_challenge", "dnd_character", "dnd_creature", "zip_character", "zip_creature"]);
 
 statblocksRouter.put("/:id", (req, res) => {
-  const { kind, content, note, theme, density, contentPatch, baseUpdatedAt } = req.body as {
+  const { kind, content, note, theme, density, contentPatch, baseUpdatedAt, combat } = req.body as {
     kind?: string;
     content?: string;
     note?: string;
@@ -289,6 +291,8 @@ statblocksRouter.put("/:id", (req, res) => {
     density?: string;
     contentPatch?: Record<string, unknown>;
     baseUpdatedAt?: string | null;
+    /** Правка с пульта боя — её строку в лог пишет сам пульт (шаг 4). */
+    combat?: boolean;
   };
   // Раньше UPDATE по несуществующему id молча ничего не менял, а ответом
   // уходил 200 с пустым телом — клиент считал, что сохранил. Статблок, снесённый
@@ -355,6 +359,9 @@ statblocksRouter.put("/:id", (req, res) => {
   }
   if (updated.owner_type === "character") {
     broadcastCharacterUpdate(updated.owner_id, "sheet");
+    // Персонаж в идущем бою, правка не с пульта — строка в лог боя (Q69).
+    if (updated.format === "dnd_character" && !combat)
+      logSheetEdit(updated.owner_id, existing.content, nextContent ?? existing.content, sheetEditAuthor((req as AuthedRequest).user));
     syncCharacterName(updated.owner_type, updated.owner_id, updated.format, nextContent);
     // Брошенная инициатива на листе — зеркалом в очередь боя Мастера.
     if (updated.format === "dnd_character") mirrorSheetRollToQueue(updated.owner_id);

@@ -15,6 +15,7 @@ import { computeSpellSlots, isRoundUpCaster } from "../components/dnd/dndSlots";
 import type { ClassProgression } from "../components/dnd/progression";
 import type { DndCharacterData, InitiativeEntry, Statblock } from "../types";
 import { parseNestState } from "./nestState";
+import { recordChanges, sheetChanges } from "./battleLog";
 
 const NO_STATBLOCKS: Statblock[] = [];
 
@@ -133,6 +134,8 @@ export function useCharacterSheet(entry: InitiativeEntry): CharacterSheetNest | 
 
     const key = dataKeys.resource(listPath);
     const id = sb.id;
+    const sessionId = entry.session_id;
+    const name = entry.name;
     async function patch(label: string, fields: Partial<DndCharacterData>) {
       // На экране сразу: в кэше списка — склеенный лист.
       const previous = client.getQueryData<Statblock[]>(key);
@@ -149,8 +152,10 @@ export function useCharacterSheet(entry: InitiativeEntry): CharacterSheetNest | 
         })
       );
       try {
-        await write.put(`/statblocks/${id}`, { contentPatch: fields });
+        // combat: строку лога пишет пульт, сервер её не дублирует (Q69).
+        await write.put(`/statblocks/${id}`, { contentPatch: fields, combat: true });
         afterWriteAnywhere(statblockAffects("character", characterId!).filter((a) => !("path" in a) || a.path !== listPath));
+        recordChanges(sessionId, label, sheetChanges(characterId!, name, data!, fields));
       } catch (error) {
         if (previous) client.setQueryData(key, previous);
         showSaveError(`${label} — ${error instanceof Error ? error.message : String(error)}`, () => patch(label, fields));
@@ -172,5 +177,5 @@ export function useCharacterSheet(entry: InitiativeEntry): CharacterSheetNest | 
     };
     // cacheTick — пересчёт, когда догрузились таблицы классов.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sb, data, cacheTick, listPath, client]);
+  }, [sb, data, cacheTick, listPath, client, entry.session_id, entry.name]);
 }

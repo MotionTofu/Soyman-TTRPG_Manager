@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { dataKeys } from "../data/entities";
 import { useAction, useEntity, useResource, write } from "../data/hooks";
@@ -19,8 +19,26 @@ import {
   type EffectPlan,
 } from "./effectOps";
 import { patchCharacterSheet } from "./sheetWrite";
+import { resolveStatblockInfo } from "./addToCombat";
+import {
+  battleLogPath,
+  battlePath,
+  lastLiveTurn,
+  recordChanges,
+  recordNote,
+  rowChanges,
+  sessionChanges,
+  setBattleContext,
+  sheetChanges,
+  undoLine,
+  type BattleInfo,
+  type BattleLogLine,
+} from "./battleLog";
 
 const NO_ENTRIES: InitiativeEntry[] = [];
+const NO_LINES: BattleLogLine[] = [];
+/** Строки, снимок которых уже пишется: трекер и режим держат useCombat вдвоём. */
+const snapshotting = new Set<number>();
 
 /** Очередь хода сессии — тот же путь, что задевает сигнал `initiative-updated`. */
 export function initiativePath(sessionId: number): string {
@@ -72,6 +90,14 @@ export function useCombat(sessionId: number) {
   // оба экземпляра видят одно и то же.
   const entries = useResource<InitiativeEntry[]>(entriesPath).data ?? NO_ENTRIES;
   const session = useEntity<SessionDetail>("session", sessionId).data ?? null;
+  // Идущий бой и его лог (шаг 4). Действия пульта пишутся в лог, пока он есть.
+  const battleId = session?.combat_active ? (session.combat_battle_id ?? null) : null;
+  const battle = useResource<BattleInfo | null>(battleId ? battlePath(sessionId) : null).data ?? null;
+  const log = useResource<BattleLogLine[]>(battleId ? battleLogPath(battleId) : null).data ?? NO_LINES;
+  const round = session?.combat_round || 1;
+  useEffect(() => {
+    setBattleContext(sessionId, battleId ? { battleId, round } : null);
+  }, [sessionId, battleId, round]);
 
   /**
    * Правка очереди: строки меняются на экране сразу, при отказе возвращаются
@@ -81,20 +107,34 @@ export function useCombat(sessionId: number) {
   async function change(
     label: string,
     send: () => Promise<unknown>,
-    options?: { patch?: (rows: InitiativeEntry[]) => InitiativeEntry[]; retry?: boolean }
+    options?: {
+      patch?: (rows: InitiativeEntry[]) => InitiativeEntry[];
+      retry?: boolean;
+      /** Строка лога без разницы — бойца поставили в бой (Q15). */
+      note?: string;
+    }
   ): Promise<boolean> {
     const key = dataKeys.resource(entriesPath);
     let previous: InitiativeEntry[] | undefined;
+    let changes: ReturnType<typeof rowChanges> = [];
     if (options?.patch) {
       await client.cancelQueries({ queryKey: key });
       previous = client.getQueryData<InitiativeEntry[]>(key);
-      if (previous) client.setQueryData(key, options.patch(previous));
+      if (previous) {
+        const next = options.patch(previous);
+        changes = rowChanges(previous, next);
+        client.setQueryData(key, next);
+      }
     }
     const done = await run(labelled(label, () => send().then(() => true)), {
       affects: [{ path: entriesPath }],
       retry: options?.retry,
     });
     if (!done && previous) client.setQueryData(key, previous);
+    if (done === true) {
+      recordChanges(sessionId, label, changes);
+      if (options?.note) recordNote(sessionId, options.note);
+    }
     return done === true;
   }
 
@@ -117,6 +157,30 @@ export function useCombat(sessionId: number) {
     });
   }
 
+  // Тестовый прогон (Q70): листы игроков не пишутся — персонаж в гнезде
+  // становится снимком листа, как двойник. Откат прогона уберёт и снимок.
+  const rehearsal = session?.live_mode === "rehearsal";
+  useEffect(() => {
+    if (!rehearsal) return;
+    for (const e of entries) {
+      if (e.entity_type !== "character" || e.entity_id == null || parseNestState(e).double || snapshotting.has(e.id)) continue;
+      snapshotting.add(e.id);
+      void resolveStatblockInfo("character", e.entity_id).then((info) => {
+        const state = { ...parseNestState(e), double: { ac: info.ac, rehearsal: true } };
+        const fields = {
+          max_hp: info.maxHp,
+          current_hp: info.sheetHp?.current ?? info.maxHp,
+          temp_hp: info.sheetHp?.temp ?? 0,
+        };
+        return change(`${e.name}: снимок листа для прогона`, () => write.put(`/initiative-entries/${e.id}`, { ...fields, state }), {
+          patch: patchRow(e.id, { ...fields, state: JSON.stringify(state) }),
+        });
+      });
+    }
+    // change меняется каждый рендер; снимок зависит только от строк и режима.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rehearsal, entries]);
+
   const sorted = useMemo(() => {
     const alive = entries.filter((e) => !isDead(e)).sort(byInitiative);
     const dead = entries.filter((e) => isDead(e)).sort(byInitiative);
@@ -135,6 +199,7 @@ export function useCombat(sessionId: number) {
     const key = dataKeys.entity("session", sessionId);
     await client.cancelQueries({ queryKey: key });
     const previous = client.getQueryData<SessionDetail>(key);
+    const nextRound = active ? Math.max(1, Math.floor(round ?? 1)) : 0;
     if (previous) {
       client.setQueryData<SessionDetail>(key, {
         ...previous,
@@ -151,6 +216,18 @@ export function useCombat(sessionId: number) {
       { affects: [{ kind: "session", id: sessionId, card: true }] }
     );
     if (!done && previous) client.setQueryData(key, previous);
+    // Смена хода в идущем бою — строка «Раунд 3 · ход Брин» (Q71); её начало
+    // хода (beginTurn) склеится с ней в одну строку.
+    if (done === true && active && previous?.combat_active)
+      recordChanges(
+        sessionId,
+        "Ход",
+        sessionChanges(
+          { round: previous.combat_round || 1, turn: previous.combat_turn_entry_id },
+          { round: nextRound, turn: turnEntryId },
+          entries.find((e) => e.id === turnEntryId)?.name ?? "?"
+        )
+      );
     return done === true;
   }
 
@@ -206,7 +283,12 @@ export function useCombat(sessionId: number) {
         }
       );
     }
-    for (const [characterId, edits] of plan.sheets) void patchCharacterSheet(characterId, label, composeSheetEdits(edits));
+    for (const [characterId, edits] of plan.sheets) {
+      const name = entries.find((e) => e.entity_type === "character" && e.entity_id === characterId)?.name ?? "?";
+      void patchCharacterSheet(characterId, label, composeSheetEdits(edits), (before, patch) =>
+        recordChanges(sessionId, label, sheetChanges(characterId, name, before, patch))
+      );
+    }
     return done;
   }
 
@@ -266,7 +348,19 @@ export function useCombat(sessionId: number) {
   // среди ходящих: убитый в свой же ход из списка живых выпадает, и поиск по
   // нему давал −1 — «Следующий» отдавал второго в очереди, а не того, кто
   // идёт за погибшим.
+  /** Отменить строку лога (Q67); null — отменено, иначе причина. */
+  const undo = (line: BattleLogLine) => undoLine(sessionId, line);
+
   function step(delta: 1 | -1) {
+    // «Назад» — отмена последнего хода целиком (Q68): ход, раунд и всё, что
+    // сделало его начало. Хода в логе нет (бой до шага 4) — как раньше.
+    if (delta === -1) {
+      const turn = lastLiveTurn(log);
+      if (turn && !turn.blocked && turn.changes.length) {
+        void undo(turn);
+        return;
+      }
+    }
     if (turnTakers.length === 0) return;
     const allowed = new Set(turnTakers.map((e) => e.id));
     const current = session?.combat_turn_entry_id ?? null;
@@ -314,5 +408,8 @@ export function useCombat(sessionId: number) {
     stopCombat,
     step,
     effects,
+    battle,
+    log,
+    undo,
   };
 }

@@ -10,6 +10,7 @@ export function affectsForWindowEvent(type: string, detail: unknown): Affect[] |
   const d = (detail ?? {}) as {
     characterId?: number;
     sessionId?: number;
+    battleId?: number;
     scope?: string;
     campaignId?: number;
     systemId?: number;
@@ -37,6 +38,8 @@ export function affectsForWindowEvent(type: string, detail: unknown): Affect[] |
     }
     case "initiative-updated":
       return [{ path: d.sessionId != null ? `/initiative-entries?session_id=${d.sessionId}` : "/initiative-entries" }];
+    case "battle-log-updated":
+      return [{ path: `/battles/${d.battleId}` }, { path: `/sessions/${d.sessionId}/battle` }];
     case "hunter-mark":
       // Метка охотника кладёт напоминалку кампании и отмечает цель в очереди.
       return [{ path: "/campaigns" }, { path: "/players" }, { path: "/initiative-entries" }];

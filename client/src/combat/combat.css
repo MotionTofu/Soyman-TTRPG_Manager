@@ -537,3 +537,37 @@
 .cm-fx__name { font-family: var(--font-ui); font-weight: 600; font-size: 18px; text-transform: uppercase; }
 .cm-fx__warn { padding: 6px 8px; background: #fbe3ee; border: 1px solid var(--cm-mag); font-size: 14px; }
 .cm-fx__foot { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--cm-ink); }
+
+/* Шаг 4: таймер боя, перенос, лог боя под полосой раунда */
+.cm-clock { font-family: var(--font-ui); font-size: 15px; letter-spacing: 0.04em; color: var(--cm-muted); }
+.cm-cont {
+  display: inline-flex; align-items: center; min-height: 28px; padding: 0 8px;
+  border: 1px solid var(--cm-ink); background: var(--cm-acid);
+  font-family: var(--font-ui); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;
+}
+.cm-log { border-bottom: 1px solid var(--cm-ink); background: var(--cm-card); }
+.cm-log__strip { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 6px 16px; font-size: 15px; }
+.cm-log__last { flex: 1 1 260px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm-log__list { max-height: 40vh; overflow: auto; border-top: 1px solid var(--cm-ink); }
+.cm-log__row {
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px;
+  min-height: 32px; padding: 3px 16px; border-top: 1px dotted #a29f97; font-size: 15px;
+}
+.cm-log__row--turn {
+  background: var(--cm-paper-2); border-top: 1px solid var(--cm-ink);
+  font-family: var(--font-ui); font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.cm-log__row--sheet, .cm-log__row--note { color: #42413f; }
+.cm-log__row.is-undone .cm-log__t { text-decoration: line-through; color: #7a7872; }
+.cm-log__sub {
+  display: block; font-family: var(--font-body, inherit); text-transform: none; letter-spacing: 0;
+  font-size: 13px; color: var(--cm-muted);
+}
+.cm-log__time { color: var(--cm-muted); }
+.cm-log__who {
+  margin-right: 6px; padding: 1px 5px; border: 1px solid #8c8a84;
+  font-family: var(--font-ui); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+}
+.cm-log__stamp { font-family: var(--font-ui); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #7a7872; }
+.cm-log__blocked { font-size: 13px; color: #a0124f; }
+.cm-menu__check { display: flex; align-items: center; gap: 8px; cursor: pointer; }

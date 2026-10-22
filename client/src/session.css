@@ -1361,3 +1361,24 @@ details.sp-card--loot .entry-title {
 .scene-audio {
   max-width: 44rem;
 }
+
+/* «Бои вечера» (боевой режим, шаг 4, Q21) */
+.sp-battle { border-top: var(--card-border-width) solid var(--line); }
+.sp-battle:first-of-type { border-top: none; }
+.sp-battle__row {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2) var(--sp-3);
+  width: 100%; padding: var(--sp-3) 0; border: 0; background: transparent; text-align: left; color: inherit;
+}
+.sp-battle__row:not(:disabled) { cursor: pointer; }
+.sp-battle__row:disabled { opacity: 1; }
+.sp-battle__name { font-family: var(--font-ui, inherit); font-weight: 600; text-transform: uppercase; }
+.sp-battle__tag {
+  padding: 1px 6px; border: var(--card-border-width) solid var(--line);
+  font-family: var(--font-mono); font-size: var(--fs-small, 13px);
+}
+.sp-battle__tag.is-carry { background: var(--accent, #f3ff3a); color: var(--ink, #1c1c1c); }
+.sp-battle__meta { flex-basis: 100%; }
+.sp-battle-log { list-style: none; margin: 0 0 var(--sp-3); padding: 0; max-height: 320px; overflow: auto; }
+.sp-battle-log__row { padding: 2px 0; border-top: 1px dotted var(--line); }
+.sp-battle-log__row.is-turn { font-weight: 600; }
+.sp-battle-log__row.is-undone { text-decoration: line-through; color: var(--muted, #7a7872); }

@@ -32,6 +32,8 @@ export interface StatblockInfo {
   currentHp: number | null;
   /** КЗ персонажа по листу — для снимка двойника (Q43); у существ null. */
   ac: number | null;
+  /** Хиты на листе сейчас — для снимка тестового прогона (Q70); у существ null. */
+  sheetHp?: { current: number; temp: number };
 }
 
 // Всё, что нужно новому бойцу из его D&D-статблока, — одним чтением.
@@ -61,7 +63,13 @@ export async function resolveStatblockInfo(type: string, id: number): Promise<St
     await ensureEntries(liveEffectEntryIds(character));
     const sheet = deriveSheet(withLiveEffects(character, getCachedEntry));
     const max = Number(character.hitPointMax) || null;
-    return { initiativeModifier: sheet.initiative.value, maxHp: max, currentHp: max, ac: sheet.armorClass.value };
+    return {
+      initiativeModifier: sheet.initiative.value,
+      maxHp: max,
+      currentHp: max,
+      ac: sheet.armorClass.value,
+      sheetHp: { current: Number(character.hitPointsCurrent) || 0, temp: Number(character.hitPointsTemp) || 0 },
+    };
   } catch {
     return empty;
   }
@@ -123,6 +131,7 @@ export async function addFighters(combat: Combat, sessionId: number, src: Source
     };
     const ok = await combat.change(`«${name}» не встал в бой`, () => write.post("/initiative-entries", body), {
       retry: false,
+      note: `«${name}» встал в бой`,
     });
     if (!ok) break;
     last = name;
@@ -156,7 +165,7 @@ export function addSameAgain(combat: Combat, sessionId: number, entry: Initiativ
         max_hp: entry.max_hp,
         current_hp: entry.max_hp,
       }),
-    { retry: false }
+    { retry: false, note: `«${name}» встал в бой` }
   );
 }
 

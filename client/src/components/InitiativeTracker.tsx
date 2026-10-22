@@ -80,7 +80,7 @@ export function InitiativeTracker({ sessionId, title }: Props & { title?: ReactN
   const [conditionOptions, setConditionOptions] = useState<{ id: number; name: string }[]>([]);
   const [roleMap, setRoleMap] = useState<Map<number, { roles: string[]; tactics: string[] }>>(new Map());
 
-  const { entries, session, sorted, aliveSorted, change, setTheme, startCombat, stopCombat, step } = useCombat(sessionId);
+  const { entries, session, sorted, aliveSorted, change, setTheme, startCombat, stopCombat, step, battle } = useCombat(sessionId);
   const modeOpen = useCombatModeOpen(sessionId, !!session?.combat_active);
 
   useEffect(() => {
@@ -142,7 +142,10 @@ export function InitiativeTracker({ sessionId, title }: Props & { title?: ReactN
       max_hp: info.maxHp,
       current_hp: info.currentHp,
     };
-    await change(`«${name}» не добавлен в очередь хода`, () => write.post("/initiative-entries", body), { retry: false });
+    await change(`«${name}» не добавлен в очередь хода`, () => write.post("/initiative-entries", body), {
+      retry: false,
+      note: `«${name}» встал в бой`,
+    });
   }
 
   // Мешок выгружает бойцов сюда же, без перетаскивания (unloadTargets.tsx).
@@ -193,14 +196,16 @@ export function InitiativeTracker({ sessionId, title }: Props & { title?: ReactN
     });
   }
 
-  /** «Завершить» (Q58) — как «Конец боя» в режиме: есть эффекты — сначала показать, что уйдёт и что останется. */
+  /** «Завершить» (Q58, Q75) — как «Конец боя» в режиме: не отменяется, поэтому спрашивает, если в бою что-то было. */
   async function endCombat() {
     const { gone, kept } = endCombatSummary(entries);
-    if (gone.length || kept.length) {
+    if (gone.length || kept.length || (battle?.log_count ?? 0) > 0) {
       const lines = [
+        battle ? `«${battle.name}» · раунд ${session?.combat_round || 1} · событий в логе: ${battle.log_count}.` : "",
         gone.length ? `Снимутся эффекты боя: ${gone.join(", ")}.` : "",
         kept.length ? `Останутся на листе до долгого отдыха: ${kept.join("; ")}.` : "",
         "Счётчики гнёзд уходят вместе с боем; запомненные в статблоке остаются там.",
+        "Конец боя не отменяется: лог закроется, бой встанет в «Бои вечера».",
       ];
       const message = lines.filter(Boolean).join("\n\n");
       if (!(await confirm({ title: "Конец боя", message, confirmLabel: "Закончить бой" }))) return;

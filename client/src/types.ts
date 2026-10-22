@@ -770,6 +770,8 @@ export interface SessionDetail extends SessionSummary {
   combat_turn_entry_id: number | null;
   /** Номер раунда идущего боя; 0 — боя нет. */
   combat_round: number;
+  /** Идущий бой сессии (шаг 4): лог и время — `/sessions/:id/battle`. */
+  combat_battle_id?: number | null;
   battle_playlist_id: number | null;
   folder_path: string | null;
   campaign_payment_type: PaymentType;

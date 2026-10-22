@@ -14,7 +14,9 @@ import type { DndCharacterData, Statblock } from "../types";
 export async function patchCharacterSheet(
   characterId: number,
   label: string,
-  fields: (data: DndCharacterData) => Partial<DndCharacterData> | null
+  fields: (data: DndCharacterData) => Partial<DndCharacterData> | null,
+  /** Записано — разница в лог боя (шаг 4). */
+  onPatch?: (before: DndCharacterData, patch: Partial<DndCharacterData>) => void
 ): Promise<void> {
   try {
     const path = statblockListPath("character", characterId);
@@ -27,13 +29,16 @@ export async function patchCharacterSheet(
     } catch {
       /* битый лист — считаем от пустого, как нормализатор */
     }
-    const patch = fields(normalizeDndCharacter(raw));
+    const before = normalizeDndCharacter(raw);
+    const patch = fields(before);
     if (!patch) return;
-    await write.put(`/statblocks/${sb.id}`, { contentPatch: patch });
+    // combat: строку лога пишет пульт, сервер её не дублирует (Q69).
+    await write.put(`/statblocks/${sb.id}`, { contentPatch: patch, combat: true });
     afterWriteAnywhere(statblockAffects("character", characterId));
+    onPatch?.(before, patch);
   } catch (error) {
     showSaveError(`${label} — ${error instanceof Error ? error.message : String(error)}`, () =>
-      patchCharacterSheet(characterId, label, fields)
+      patchCharacterSheet(characterId, label, fields, onPatch)
     );
   }
 }

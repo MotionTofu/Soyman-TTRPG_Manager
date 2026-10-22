@@ -20,6 +20,7 @@ import { broadcastCharacterUpdate, broadcastToGm } from "../services/realtime";
 import { ensurePlayerFolder } from "../services/folderRepair";
 import { entityNames, refKey } from "../services/entityNames";
 import { mergeContentPatch } from "../db/statblockContent";
+import { logSheetEdit, sheetEditAuthor } from "../services/battles";
 import { normalizeDndCharacter, deriveSheet } from "@soyman/shared";
 import { matchSystemId, parsePortableImport, portableHttpError, type PortableImportData } from "../services/portableImport";
 import { setCharacterRoll, mirrorSheetRollToQueue } from "../services/initiativeSync";
@@ -1033,6 +1034,8 @@ playerRouter.put("/statblocks/:id", (req: AuthedRequest, res) => {
   db.prepare(
     "UPDATE statblocks SET content = COALESCE(?, content), theme = COALESCE(?, theme), density = COALESCE(?, density), updated_at = strftime('%Y-%m-%d %H:%M:%f', 'now') WHERE id = ?"
   ).run(nextContent, theme ?? null, density ?? null, req.params.id);
+  // Персонаж в идущем бою — правка в лог боя (Q69).
+  logSheetEdit(statblock.owner_id, stored?.content ?? null, nextContent ?? stored?.content ?? null, sheetEditAuthor(req.user));
   broadcastCharacterUpdate(statblock.owner_id, "sheet");
   // Брошенная инициатива на листе — зеркалом в очередь боя Мастера. Здесь, а
   // не только в узкой ручке `/initiative`: лист игрок сохраняет и обычным

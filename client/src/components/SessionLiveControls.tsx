@@ -4,6 +4,11 @@ import { useConfirm } from "../hooks/useConfirm";
 import type { LiveSession, SessionDetail, SessionLiveMode } from "../types";
 import "./SessionNotesChat.css";
 import { showSaveError } from "../data/notices";
+import { useState } from "react";
+import { Modal } from "./Modal";
+import { useCombat } from "../combat/useCombat";
+import { setCombatModeOpen } from "../combat/combatModeStore";
+import { useSoundEngineOptional } from "../sound/engine";
 
 // «Начать» / «Завершить» (гриллинг 2026-09-28, Q38, Q45, Q46). Идёт одна
 // сессия на всё приложение: по ней правая панель знает, куда писать ленту.
@@ -19,6 +24,10 @@ export function SessionLiveControls({
 }) {
   const run = useAction();
   const [dialog, confirm] = useConfirm();
+  const combat = useCombat(session.id);
+  const sound = useSoundEngineOptional();
+  // «Завершить» посреди боя (Q24, Q74): закончить бой или продолжить его в следующей сессии.
+  const [battleAsk, setBattleAsk] = useState(false);
   const affects = [...sessionMoneyAffects(session.id, session.campaign_id), { path: sessionPaths.live() }];
 
   async function start(mode: SessionLiveMode) {
@@ -49,6 +58,31 @@ export function SessionLiveControls({
   }
 
   async function finish() {
+    if (session.live_mode !== "rehearsal" && session.combat_active) {
+      setBattleAsk(true);
+      return;
+    }
+    await finishSession();
+  }
+
+  async function endBattleThenFinish() {
+    setBattleAsk(false);
+    await combat.stopCombat();
+    await finishSession();
+  }
+
+  async function carryThenFinish() {
+    setBattleAsk(false);
+    const carried = await run(() => write.post(`/sessions/${session.id}/combat/carry`, {}), {
+      affects: [{ kind: "session" }, { path: "/initiative-entries" }],
+    });
+    if (carried === undefined) return;
+    setCombatModeOpen(session.id, false);
+    sound?.exitCombat();
+    await finishSession();
+  }
+
+  async function finishSession() {
     const rehearsal = session.live_mode === "rehearsal";
     const done = await run(() => write.post(`/sessions/${session.id}/live`, { mode: null }), {
       affects: rehearsal ? [] : affects,
@@ -63,6 +97,33 @@ export function SessionLiveControls({
   return (
     <div className="row session-live-controls">
       {dialog}
+      {battleAsk && (
+        <Modal onClose={() => setBattleAsk(false)}>
+          <div className="stack">
+            <h3 style={{ margin: 0 }}>Бой не закончен</h3>
+            <p style={{ margin: 0 }}>
+              Идёт {combat.battle ? <b>«{combat.battle.name}»</b> : "бой"}: раунд {session.combat_round || 1}, в строю{" "}
+              {combat.aliveSorted.filter((e) => e.kind === "creature").length}.
+            </p>
+            <p style={{ margin: 0 }}>
+              {combat.battle?.carry_target
+                ? `Продолжить — бойцы со всеми хитами, эффектами и счётчиками переедут в сессию ${combat.battle.carry_target.number} (${new Date(`${combat.battle.carry_target.date}T00:00:00`).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}); её пульт откроется в боевом режиме.`
+                : "Следующей сессии кампании ещё нет — бой встанет в первую, которую заведёте, и её пульт откроется в боевом режиме."}
+            </p>
+            <div className="row" style={{ justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+              <button type="button" onClick={() => setBattleAsk(false)}>
+                Отмена
+              </button>
+              <button type="button" onClick={() => void endBattleThenFinish()}>
+                Завершить бой
+              </button>
+              <button type="button" className="primary" autoFocus onClick={() => void carryThenFinish()}>
+                {combat.battle?.carry_target ? `Продолжить в сессии ${combat.battle.carry_target.number}` : "Продолжить в следующей"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {session.live_mode === "rehearsal" ? (
         <>
           <span className="session-live-controls__badge">Прогон</span>

@@ -21,3 +21,4 @@ export * from "./maps/core/index";
 export * from "./practicalWorkbooks";
 export * from "./workbookActivity";
 export * from "./textTables";
+export * from "./battleLog";

@@ -532,7 +532,7 @@ export function FighterNest({
             <div className="cm-name">{entry.name}</div>
             <div className="cm-sub">
               {state.double ? (
-                "двойник · копия листа"
+                state.double.rehearsal ? "снимок листа · прогон" : "двойник · копия листа"
               ) : sheet ? (
                 <>
                   персонаж · ПВ {sheet.passivePerception} ·{" "}
