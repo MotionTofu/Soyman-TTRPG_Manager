@@ -1108,6 +1108,7 @@ CREATE TABLE IF NOT EXISTS session_show_state (
   map_id INTEGER REFERENCES maps(id) ON DELETE SET NULL,
   visible_layer_ids TEXT NOT NULL DEFAULT '[]',
   shown INTEGER NOT NULL DEFAULT 0,
+  display TEXT NOT NULL DEFAULT '{}',
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

@@ -241,6 +241,23 @@ describe("presentation API", () => {
     expect(back.body.visible_layer_ids).toEqual([layerA]);
   });
 
+  it("show-state: отображение — поворот держится, масштаб и сдвиг только своего кадра", async () => {
+    const url = `/api/sessions/${sessionId}/show-state`;
+    expect((await request(app).put(url).send({ display: { rotation: 45 } })).status).toBe(400);
+    expect((await request(app).put(url).send({ display: { zoom: "2" } })).status).toBe(400);
+    const set = await request(app)
+      .put(url)
+      .send({ mode: "scene", scene_id: sceneId, display: { rotation: 90, fit: "cover", zoom: 99, pan_x: 0.3, screen_w: 1080, screen_h: 1920 } });
+    expect(set.body.display).toEqual({ rotation: 90, fit: "cover", zoom: 8, pan_x: 0.3, pan_y: 0, screen_w: 1080, screen_h: 1920 });
+    // Тот же кадр: тогл показа подстройку не трогает.
+    expect((await request(app).put(url).send({ shown: 0 })).body.display.zoom).toBe(8);
+    // Другой кадр — подстройка сброшена, поворот и размер экрана на месте.
+    const cover = await request(app).put(url).send({ mode: "cover", scene_id: null });
+    expect(cover.body.display).toMatchObject({ rotation: 90, fit: "cover", zoom: 1, pan_x: 0, screen_w: 1080 });
+    // Правка масштаба нового кадра не наследует сдвиг прошлого.
+    expect((await request(app).put(url).send({ display: { zoom: 2 } })).body.display).toMatchObject({ zoom: 2, pan_x: 0 });
+  });
+
   it("новый слой — по размеру картинки (contain-fit), явная геометрия главнее", async () => {
     // Тестовый PNG 1×1: квадрат в кадре 16:9 → w=56.25, h=100, по центру.
     const fitted = await request(app)

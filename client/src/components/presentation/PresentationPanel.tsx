@@ -9,8 +9,9 @@ import { sessionPaths } from "../../data/sessions";
 import { LazyDetails } from "../LazyDetails";
 import { PresentationStage } from "./PresentationStage";
 import { PlayerMapStage } from "./PlayerMapStage";
-import { getScreens, loadLastScreenId, openOnScreen, type ScreenChoice } from "./screens";
-import type { CampaignCover, ScenePresentation, SessionStage, ShowState, StorySceneDetail } from "../../types";
+import { ScreenPreview } from "./ScreenPreview";
+import { getScreens, loadLastScreenId, loadScreenMemory, openOnScreen, type ScreenChoice } from "./screens";
+import type { CampaignCover, ScenePresentation, SessionStage, ShowDisplay, ShowState, StorySceneDetail } from "../../types";
 
 interface SceneMapList { scene_id: number; maps: { id: number; name: string }[] }
 
@@ -80,7 +81,7 @@ export function PresentationPanel({
   const coverHas = hasContent(cover);
   const screenHas = show?.mode === "map" ? !!show.map_id : hasContent(screenPres);
 
-  async function putShow(patch: Partial<ShowState>) {
+  async function putShow(patch: Omit<Partial<ShowState>, "display"> & { display?: Partial<ShowDisplay> }) {
     try {
       const updated = await write.put<ShowState>(`/sessions/${sessionId}/show-state`, patch);
       client.setQueryData(dataKeys.resource(showPath), updated);
@@ -95,17 +96,25 @@ export function PresentationPanel({
   // Окно показа — сразу на выбранный монитор. Основная кнопка открывает
   // в один клик (запомненный экран, иначе не-основной, иначе основной),
   // ▾ — смена монитора.
+  // На новом мониторе — его поворот и вписывание из памяти (Q2), размер —
+  // догадкой по монитору, пока окно не сообщит свой.
   const [screens, setScreens] = useState<ScreenChoice[] | null>(null);
   async function openWindow(screen?: ScreenChoice) {
+    let target: ScreenChoice | null;
     if (screen) {
-      openOnScreen(`/sessions/${sessionId}/live/show`, `show-${sessionId}`, screen);
+      target = screen;
       setScreens(null);
-      return;
+    } else {
+      const list = await getScreens();
+      const last = loadLastScreenId();
+      target = list.find((s) => s.id === last) ?? list.find((s) => !s.primary) ?? list[0] ?? null;
     }
-    const list = await getScreens();
-    const last = loadLastScreenId();
-    const target = list.find((s) => s.id === last) ?? list.find((s) => !s.primary) ?? list[0] ?? null;
     openOnScreen(`/sessions/${sessionId}/live/show`, `show-${sessionId}`, target);
+    if (!target) return;
+    const mem = loadScreenMemory(target.id);
+    void putShow({
+      display: { rotation: mem?.rotation ?? 0, fit: mem?.fit ?? "contain", screen_w: target.width, screen_h: target.height },
+    });
   }
 
   const showing = !!show?.shown && !!screenHas;
@@ -215,41 +224,46 @@ export function PresentationPanel({
       )}
       <div className="row" style={{ gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div style={{ flex: "1 1 220px", minWidth: 200, maxWidth: 360 }}>
-          {show?.mode === "map" && show.map_id != null && showing ? (
-            <div style={{ aspectRatio: "16 / 9", width: "100%", overflow: "hidden" }}>
+          <ScreenPreview
+            show={show}
+            adjustable={showing && show?.mode !== "map"}
+            fill={show?.mode === "map" && showing}
+            onDisplay={(display) => putShow({ display })}
+          >
+            {show?.mode === "map" && show.map_id != null && showing ? (
               <PlayerMapStage mapId={show.map_id} />
-            </div>
-          ) : screenPres && showing ? (
-            <PresentationStage
-              backgroundUrl={screenPres.background_url}
-              layers={screenPres.layers}
-              visibleIds={show?.visible_layer_ids ?? []}
-              fadeMs={screenPres.fade_ms}
-              transition={screenPres.transition}
-              transitionMs={screenPres.transition_ms}
-              title={screenPres.title}
-              titleSecs={screenPres.title_secs}
-              playKey={`${show?.mode}:${show?.scene_id ?? "cover"}`}
-              waitingLabel="Показ не запущен"
-              skipTitleSignal={skipSignal}
-              onTitleVisibility={(v) => {
-                titleVisibleRef.current = v;
-              }}
-            />
-          ) : (
-            <PresentationStage
-              backgroundUrl={null}
-              layers={[]}
-              visibleIds={[]}
-              fadeMs={0}
-              transition="cut"
-              transitionMs={0}
-              title=""
-              titleSecs={0}
-              playKey="blank"
-              waitingLabel={show && !show.shown ? "Показ остановлен" : "Показ не запущен"}
-            />
-          )}
+            ) : screenPres && showing ? (
+              <PresentationStage
+                backgroundUrl={screenPres.background_url}
+                layers={screenPres.layers}
+                visibleIds={show?.visible_layer_ids ?? []}
+                fadeMs={screenPres.fade_ms}
+                transition={screenPres.transition}
+                transitionMs={screenPres.transition_ms}
+                title={screenPres.title}
+                titleSecs={screenPres.title_secs}
+                playKey={`${show?.mode}:${show?.scene_id ?? "cover"}`}
+                waitingLabel="Показ не запущен"
+                skipTitleSignal={skipSignal}
+                onTitleVisibility={(v) => {
+                  titleVisibleRef.current = v;
+                }}
+              />
+            ) : (
+              <PresentationStage
+                backgroundUrl={null}
+                layers={[]}
+                visibleIds={[]}
+                fadeMs={0}
+                transition="cut"
+                transitionMs={0}
+                title=""
+                titleSecs={0}
+                playKey="blank"
+                waitingLabel={show && !show.shown ? "Показ остановлен" : "Показ не запущен"}
+              />
+            )}
+          </ScreenPreview>
         </div>
         <div className="stack" style={{ flex: "2 1 240px", minWidth: 220, gap: 8 }}>
           <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>

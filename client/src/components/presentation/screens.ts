@@ -1,3 +1,5 @@
+import type { ShowDisplay } from "../../types";
+
 // Выбор монитора для окна показа и открытие окна сразу на нём.
 //
 // window.getScreenDetails (Chromium — десктопное Electron-приложение и
@@ -34,7 +36,9 @@ export async function getScreens(): Promise<ScreenChoice[]> {
     const list = details?.screens ?? [];
     if (list.length > 0) {
       return list.map((s, i) => ({
-        id: `screen-${i}`,
+        // По имени, а не по номеру: номера переезжают при переподключении,
+        // а к id привязана память поворота монитора.
+        id: s.label ? `screen-${s.label}` : `screen-${i}`,
         label: s.label || (s.primary ? "Основной экран" : `Экран ${i + 1}`),
         left: s.availLeft,
         top: s.availTop,
@@ -89,3 +93,48 @@ export function openOnScreen(url: string, target: string, screen: ScreenChoice |
   }
   return win;
 }
+
+// Память монитора (гриллинг 2026-10-23, Q2): поворот и вписывание помнятся за
+// монитором на этом компьютере, во всех сессиях; размер — чтобы превью знало
+// форму экрана, пока окно показа не открыто.
+export interface ScreenMemory {
+  rotation: 0 | 90 | 180 | 270;
+  fit: "contain" | "cover";
+  w: number;
+  h: number;
+}
+
+const MEMORY_PREFIX = "presentation-display:";
+
+export function loadScreenMemory(screenId: string | null): Partial<ScreenMemory> | null {
+  try {
+    const raw = localStorage.getItem(MEMORY_PREFIX + (screenId ?? "default"));
+    return raw ? (JSON.parse(raw) as Partial<ScreenMemory>) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveScreenMemory(screenId: string | null, patch: Partial<ScreenMemory>): void {
+  try {
+    const next = { ...loadScreenMemory(screenId), ...patch };
+    localStorage.setItem(MEMORY_PREFIX + (screenId ?? "default"), JSON.stringify(next));
+  } catch {}
+}
+
+// Камера экрана игроков (ScreenView): настройка show-state с умолчаниями.
+export interface ScreenCamera {
+  rotation: 0 | 90 | 180 | 270;
+  fit: "contain" | "cover";
+  zoom: number;
+  pan_x: number;
+  pan_y: number;
+}
+
+export const cameraOf = (d: ShowDisplay | null | undefined): ScreenCamera => ({
+  rotation: d?.rotation ?? 0,
+  fit: d?.fit ?? "contain",
+  zoom: d?.zoom ?? 1,
+  pan_x: d?.pan_x ?? 0,
+  pan_y: d?.pan_y ?? 0,
+});

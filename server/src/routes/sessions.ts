@@ -642,13 +642,47 @@ sessionsRouter.get("/:id/summary", (req, res) => {
 // экран держит последний кадр (решение Q19).
 
 const SHOW_MODES = ["black", "scene", "cover", "map"] as const;
+const ROTATIONS = [0, 90, 180, 270];
+
+// Отображение на экране игроков (гриллинг 2026-10-23): поворот и вписывание —
+// настройка монитора, держатся через все кадры; масштаб и сдвиг — подстройка
+// одного кадра, поэтому помнят свой кадр (`frame`) и на другом читаются
+// сброшенными. Размер экрана сообщает само окно показа. rotation/fit = null —
+// «в этой сессии не задавали», пульт подставляет память монитора.
+const showFrame = (s: { mode: string; scene_id: number | null; map_id: number | null }) =>
+  `${s.mode}:${s.scene_id ?? ""}:${s.map_id ?? ""}`;
+
+function storedDisplay(raw: string | undefined): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(raw ?? "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function readDisplay(raw: string | undefined, frame: string) {
+  const d = storedDisplay(raw);
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const own = d.frame === frame;
+  return {
+    rotation: ROTATIONS.includes(d.rotation as number) ? (d.rotation as number) : null,
+    fit: d.fit === "contain" || d.fit === "cover" ? d.fit : null,
+    zoom: (own && num(d.zoom)) || 1,
+    pan_x: (own && num(d.pan_x)) || 0,
+    pan_y: (own && num(d.pan_y)) || 0,
+    screen_w: num(d.screen_w),
+    screen_h: num(d.screen_h),
+  };
+}
 
 function readShowState(sessionId: number) {
   const row = db.prepare("SELECT * FROM session_show_state WHERE session_id = ?").get(sessionId) as
-    | { session_id: number; mode: string; scene_id: number | null; map_id: number | null; visible_layer_ids: string; shown: number; updated_at: string }
+    | { session_id: number; mode: string; scene_id: number | null; map_id: number | null; visible_layer_ids: string; shown: number; display: string; updated_at: string }
     | undefined;
   if (!row) {
-    return { session_id: sessionId, mode: "black", scene_id: null, map_id: null, visible_layer_ids: [] as number[], shown: 0 };
+    const blank = { session_id: sessionId, mode: "black", scene_id: null, map_id: null, visible_layer_ids: [] as number[], shown: 0 };
+    return { ...blank, display: readDisplay(undefined, showFrame(blank)) };
   }
   let ids: number[] = [];
   try {
@@ -657,7 +691,7 @@ function readShowState(sessionId: number) {
   } catch {
     ids = [];
   }
-  return { ...row, visible_layer_ids: ids };
+  return { ...row, visible_layer_ids: ids, display: readDisplay(row.display, showFrame(row)) };
 }
 
 sessionsRouter.get("/:id/show-state", (req, res) => {
@@ -679,6 +713,7 @@ sessionsRouter.put("/:id/show-state", (req, res) => {
     map_id?: number | null;
     visible_layer_ids?: unknown;
     shown?: number | boolean;
+    display?: unknown;
   };
 
   const current = readShowState(session.id);
@@ -738,13 +773,48 @@ sessionsRouter.put("/:id/show-state", (req, res) => {
     shown = current.shown;
   }
 
+  const raw = (db.prepare("SELECT display FROM session_show_state WHERE session_id = ?").get(session.id) as
+    | { display: string }
+    | undefined)?.display;
+  const display = storedDisplay(raw);
+  if (body.display !== undefined) {
+    const patch = body.display;
+    if (!patch || typeof patch !== "object" || Array.isArray(patch)) return res.status(400).json({ error: "display must be an object" });
+    const p = patch as Record<string, unknown>;
+    if ("rotation" in p) {
+      if (!ROTATIONS.includes(p.rotation as number)) return res.status(400).json({ error: "rotation must be 0|90|180|270" });
+      display.rotation = p.rotation;
+    }
+    if ("fit" in p) {
+      if (p.fit !== "contain" && p.fit !== "cover") return res.status(400).json({ error: "fit must be contain|cover" });
+      display.fit = p.fit;
+    }
+    const ranges = { zoom: [0.25, 8], pan_x: [-2, 2], pan_y: [-2, 2], screen_w: [1, 20000], screen_h: [1, 20000] } as const;
+    const frame = showFrame({ mode, scene_id: sceneId, map_id: mapId });
+    const camera = "zoom" in p || "pan_x" in p || "pan_y" in p;
+    // Подстройка чужого кадра не наследуется: правка масштаба нового кадра
+    // начинается с нулевого сдвига, а не с прошлогоднего.
+    if (camera && display.frame !== frame) {
+      delete display.zoom;
+      delete display.pan_x;
+      delete display.pan_y;
+    }
+    for (const [key, [lo, hi]] of Object.entries(ranges)) {
+      if (!(key in p)) continue;
+      const v = p[key];
+      if (typeof v !== "number" || !Number.isFinite(v)) return res.status(400).json({ error: `${key} must be a number` });
+      display[key] = Math.min(hi, Math.max(lo, v));
+    }
+    if (camera) display.frame = frame;
+  }
+
   db.prepare(
-    `INSERT INTO session_show_state (session_id, mode, scene_id, map_id, visible_layer_ids, shown, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+    `INSERT INTO session_show_state (session_id, mode, scene_id, map_id, visible_layer_ids, shown, display, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
      ON CONFLICT(session_id) DO UPDATE SET
        mode = excluded.mode, scene_id = excluded.scene_id, map_id = excluded.map_id,
        visible_layer_ids = excluded.visible_layer_ids, shown = excluded.shown,
-       updated_at = datetime('now')`
-  ).run(session.id, mode, sceneId, mapId, JSON.stringify(ids), shown);
+       display = excluded.display, updated_at = datetime('now')`
+  ).run(session.id, mode, sceneId, mapId, JSON.stringify(ids), shown, JSON.stringify(display));
   res.json(readShowState(session.id));
 });

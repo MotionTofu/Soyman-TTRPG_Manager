@@ -7482,6 +7482,11 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
   if (!columnExists(database, "sessions", "combat_battle_id")) {
     database.exec("ALTER TABLE sessions ADD COLUMN combat_battle_id INTEGER REFERENCES battles(id) ON DELETE SET NULL");
   }
+  // Отображение на экране игроков: поворот, вписывание, масштаб и сдвиг кадра,
+  // размер окна показа (routes/sessions.ts, readShowState).
+  if (!columnExists(database, "session_show_state", "display")) {
+    database.exec("ALTER TABLE session_show_state ADD COLUMN display TEXT NOT NULL DEFAULT '{}'");
+  }
 
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.

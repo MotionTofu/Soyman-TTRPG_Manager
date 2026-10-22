@@ -2645,4 +2645,18 @@ export interface ShowState {
   map_id: number | null;
   visible_layer_ids: number[];
   shown: number;
+  display: ShowDisplay;
+}
+
+/** Отображение на экране игроков: камера над кадром. rotation/fit = null —
+ * в этой сессии не задавали (пульт подставит память монитора). Масштаб и
+ * сдвиг — только текущего кадра; сдвиг — в долях экрана. */
+export interface ShowDisplay {
+  rotation: 0 | 90 | 180 | 270 | null;
+  fit: "contain" | "cover" | null;
+  zoom: number;
+  pan_x: number;
+  pan_y: number;
+  screen_w: number | null;
+  screen_h: number | null;
 }

@@ -153,3 +153,25 @@ button.pres-title {
   font-size: var(--fs-meta);
   cursor: pointer;
 }
+
+/* Превью экрана игроков на пульте (ScreenPreview): метка низа кадра в
+   осях кадра — поворачивается вместе с ним — и крупные кнопки поворота. */
+.pres-frame-bottom {
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  transform: translateX(-50%);
+  padding: 1px var(--sp-3);
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.pres-turn {
+  min-width: 40px;
+  font-size: var(--fs-h3);
+  line-height: 1;
+}

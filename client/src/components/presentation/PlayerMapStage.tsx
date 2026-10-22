@@ -58,7 +58,9 @@ export function PlayerMapStage({ mapId }: { mapId: number }) {
     const canvas = canvasRef.current;
     if (!canvas || !map || !model) return;
     const draw = () => {
-      const rect = canvas.getBoundingClientRect();
+      // Размер раскладки, а не getBoundingClientRect: экран игроков бывает
+      // повёрнут (ScreenView), и описанный прямоугольник там поперёк.
+      const rect = { width: canvas.clientWidth, height: canvas.clientHeight };
       if (rect.width <= 0 || rect.height <= 0) return;
       const dpr = window.devicePixelRatio || 1;
       canvas.width = Math.max(1, Math.round(rect.width * dpr));
