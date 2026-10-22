@@ -56,6 +56,7 @@ export function MonsterSection({ systemId, section }: Props) {
   const [filterSize, setFilterSize] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [showFavOnly, setShowFavOnly] = useState(false);
+  const [showReviewOnly, setShowReviewOnly] = useState(false);
   // Чипсы ролей (мультивыбор) и пределы УВР.
   const [filterRoles, setFilterRoles] = useState<string[]>([]);
   // Логика мультивыбора: or — любой из тегов, and — все сразу, not — ни одного.
@@ -127,7 +128,7 @@ export function MonsterSection({ systemId, section }: Props) {
 
   const monsterFiltersActive =
     filterCreatureType !== "" || filterCR !== "" || filterSize !== "" || searchQuery !== "" || showFavOnly ||
-    filterRoles.length > 0 || filterDprMin !== "" || filterDprMax !== "";
+    showReviewOnly || filterRoles.length > 0 || filterDprMin !== "" || filterDprMax !== "";
 
   // Сортировку не трогает: её выбирают осознанно и надолго, а фильтры с
   // поиском — на один заход.
@@ -137,6 +138,7 @@ export function MonsterSection({ systemId, section }: Props) {
     setFilterSize("");
     setSearchQuery("");
     setShowFavOnly(false);
+    setShowReviewOnly(false);
     setFilterRoles([]);
     setFilterDprMin("");
     setFilterDprMax("");
@@ -216,6 +218,7 @@ export function MonsterSection({ systemId, section }: Props) {
     const q = searchQuery.trim().toLowerCase();
     return topLevel.filter((e) => {
       if (showFavOnly && !e.favourite) return false;
+      if (showReviewOnly && !e.statblock_review) return false;
       if (filterCreatureType !== "") {
         const type = e.data?.creature_type as MechanicsOption | undefined;
         const byId = type?.id === Number(filterCreatureType);
@@ -242,7 +245,8 @@ export function MonsterSection({ systemId, section }: Props) {
       if (q && !searchableText(e).includes(q)) return false;
       return true;
     });
-  }, [topLevel, searchQuery, filterCreatureType, creatureTypeFilterName, filterCR, filterSize, showFavOnly, filterRoles, filterLogic, filterDprMin, filterDprMax]);
+  }, [topLevel, searchQuery, filterCreatureType, creatureTypeFilterName, filterCR, filterSize, showFavOnly, showReviewOnly, filterRoles, filterLogic, filterDprMin, filterDprMax]);
+  const reviewCount = useMemo(() => topLevel.filter((e) => e.statblock_review).length, [topLevel]);
 
   // Плитки не редактируются в линии (правка на странице профиля) — после
   // создания сразу ведём в профиль, иначе в сетке остаётся сирота «Без названия».
@@ -357,6 +361,17 @@ export function MonsterSection({ systemId, section }: Props) {
         >
           <NavIcon name="star" filled={showFavOnly} /> {showFavOnly ? "Только избранное" : "Избранное"}
         </button>
+        {/* Только пока есть что разбирать: разобрали последнее — кнопка ушла. */}
+        {(reviewCount > 0 || showReviewOnly) && (
+          <button
+            type="button"
+            className={showReviewOnly ? "active-sort" : ""}
+            onClick={() => setShowReviewOnly((v) => !v)}
+            title="Статблоки, которые не перевелись из текста книги в поля: трекеры боевого режима по ним не считают"
+          >
+            Требует разбора ({reviewCount})
+          </button>
+        )}
       </div>
       <div className="row" style={{ gap: 4, flexWrap: "wrap", alignItems: "center" }}>
         <span className="muted">Роли:</span>

@@ -5,6 +5,7 @@ import {
   readDndCreatureSummary,
 } from "./monsterSummary";
 import { CREATURE_SIZES, matchSize } from "../import/creatureMeta";
+import { normalizeDndCreature } from "@soyman/shared";
 
 /**
  * «Привести справочник в порядок» — разовая уборка после импорта книги.
@@ -176,9 +177,13 @@ function postFieldsFromStatblock(
   const out: Record<string, string> = {};
   const size = typeof sb.size === "string" && sb.size ? sb.size : matchSize(String(sb.sizeTypeAlignment ?? "").split(/\s+/)[0] ?? "");
   if (CREATURE_SIZES.includes(size as (typeof CREATURE_SIZES)[number])) out.size = size;
-  const ac = typeof sb.armorClass === "string" ? sb.armorClass : "";
+  // КЗ и хиты — и строкой книги, и в полях (перевод бестиария, боевой режим).
+  const c = normalizeDndCreature(sb);
+  const ac = c.armorClass.value !== null ? `${c.armorClass.value}${c.armorClass.note ? ` (${c.armorClass.note})` : ""}` : c.armorClass.note;
   if (!isBlank(ac)) out.ac = ac;
-  const hp = typeof sb.hitPoints === "string" ? sb.hitPoints : "";
+  const { diceCount, dieSize, bonus, formula } = c.hitPoints;
+  const dice = diceCount && dieSize ? `${diceCount}к${dieSize}${bonus ? (bonus > 0 ? `+${bonus}` : `${bonus}`) : ""}` : "";
+  const hp = formula || (dice ? `${Math.floor(diceCount! * (dieSize! / 2 + 0.5)) + (bonus ?? 0)} (${dice})` : "");
   if (!isBlank(hp)) out.hp = hp;
   return out;
 }

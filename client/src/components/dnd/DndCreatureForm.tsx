@@ -1,9 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
 import type {
   CompendiumEntry,
   DndAbilityKey,
   DndAbilityScores,
   DndActionCategory,
+  DndActionUses,
   DndAttackRollType,
   DndCreatureAction,
   DndCreatureData,
@@ -27,11 +28,8 @@ import {
   ALL_SKILLS,
   SKILLS_BY_ABILITY,
   abilityModifier,
-  emptyAbilities,
-  emptySavingThrowProfs,
   formatModifier,
 } from "./AbilityScores";
-import { resolveSkillOriginal, skillByOriginal } from "./skillCatalog";
 import {
   loadDndEquipmentEntries,
   loadDndMechanicsGroup,
@@ -55,35 +53,13 @@ import { averageDiceFormula, rollDiceFormula } from "./diceRoll";
 import { PipTrack } from "../litm/PipTrack";
 import { readEntity } from "../../data/imperative";
 import { NavIcon } from "../NavIcons";
-import { CHALLENGE_RATINGS, CREATURE_SIZES as COMPENDIUM_CREATURE_SIZES, normaliseCr } from "../../compendium";
+import { CHALLENGE_RATINGS, CREATURE_SIZES as COMPENDIUM_CREATURE_SIZES } from "../../compendium";
 import { formatDistance, type DndDistanceUnit } from "../../dndPrefs";
 
 export const CREATURE_SIZES = COMPENDIUM_CREATURE_SIZES;
 export const DIE_SIZES = [4, 6, 8, 10, 12] as const;
 /** @deprecated — используйте CHALLENGE_RATINGS из compendium.ts (единый источник, C2) */
 export const CR_VALUES: readonly string[] = CHALLENGE_RATINGS;
-
-function crToNumber(cr: string): number {
-  const c = normaliseCr(cr);
-  if (c === "1/8") return 0.125;
-  if (c === "1/4") return 0.25;
-  if (c === "1/2") return 0.5;
-  const n = Number(c);
-  return Number.isFinite(n) ? n : 0;
-}
-
-// Standard 5e challenge-rating -> proficiency-bonus table.
-export function computeProficiencyBonusForCR(cr: string): number {
-  const n = crToNumber(cr);
-  if (n <= 4) return 2;
-  if (n <= 8) return 3;
-  if (n <= 12) return 4;
-  if (n <= 16) return 5;
-  if (n <= 20) return 6;
-  if (n <= 24) return 7;
-  if (n <= 28) return 8;
-  return 9;
-}
 
 const SKILL_ABILITY: Record<string, DndAbilityKey> = Object.fromEntries(
   Object.entries(SKILLS_BY_ABILITY).flatMap(([ability, skills]) => skills.map((s) => [s, ability as DndAbilityKey]))
@@ -92,324 +68,19 @@ const SKILL_ABILITY: Record<string, DndAbilityKey> = Object.fromEntries(
 // Переехало в общий пакет: им пользуется «пустой лист» персонажа, а тот нужен
 // и серверу.
 export { emptySpeed } from "@shared/dnd/creature";
-// Реэкспорт не вводит имя в область видимости самого модуля.
-import { emptySpeed } from "@shared/dnd/creature";
 
-export function emptyHitPoints(): DndCreatureHitPoints {
-  return { diceCount: null, dieSize: null, bonus: null, formula: "" };
-}
-
-export function emptyArmorClass(): DndCreatureArmorClass {
-  return { value: null, note: "" };
-}
-
-export function emptySpellcasting(): DndCreatureSpellcasting {
-  return { enabled: false, ability: "", slots: [], spells: [] };
-}
-
-export function emptyLegendary(): DndCreatureLegendary {
-  return {
-    resistanceEnabled: false,
-    resistanceCount: null,
-    actionsEnabled: false,
-    actionPoints: null,
-    actions: [],
-    lairEnabled: false,
-    lairActions: [],
-  };
-}
-
-export function emptyCreature(): DndCreatureData {
-  return {
-    name: "",
-    size: "Средний",
-    creatureType: "",
-    alignment: "",
-    armorClass: emptyArmorClass(),
-    hitPoints: emptyHitPoints(),
-    speed: emptySpeed(),
-    initiativeBonus: null,
-    challenge: { rating: "", proficiencyBonus: null },
-    abilities: emptyAbilities(),
-    savingThrowProfs: emptySavingThrowProfs(),
-    skillProfs: {},
-    damageVulnerabilities: [],
-    damageResistances: [],
-    damageImmunities: [],
-    conditionImmunities: [],
-    saveAdvantageConditions: [],
-    saveAdvantageMagic: false,
-    defenseNotes: "",
-    sensesList: [],
-    perceptionNote: "",
-    passivePerception: null,
-    languages: "",
-    spellcasting: emptySpellcasting(),
-    traits: [],
-    actions: [],
-    bonusActions: [],
-    reactions: [],
-    legendary: emptyLegendary(),
-    habitat: "",
-    treasure: "",
-    equipment: [],
-    loot: { items: [], currency: [] },
-    notes: "",
-  };
-}
-
-function toLegacyList(current: unknown, legacyRaw: unknown): string[] {
-  if (Array.isArray(current) && current.length > 0) return current as string[];
-  const list = typeof legacyRaw === "string" && legacyRaw.trim() ? legacyRaw.split(/[,;]+/).map((s) => s.trim()).filter(Boolean) : [];
-  if (list.length > 0) return list;
-  return Array.isArray(current) ? (current as string[]) : [];
-}
-
-const SPEED_KEYWORDS: { re: RegExp; key: "walk" | "fly" | "swim" | "climb" | "burrow" }[] = [
-  { re: /пол[её]т|летит|fly/i, key: "fly" },
-  { re: /плавани|плывёт|swim/i, key: "swim" },
-  { re: /лазани|climb/i, key: "climb" },
-  { re: /копани|рыть|burrow/i, key: "burrow" },
-  { re: /ходьб|walk/i, key: "walk" },
-];
-
-function parseLegacySpeed(text: string): DndCreatureSpeed {
-  const speed = emptySpeed();
-  const parts = text.split(",").map((p) => p.trim()).filter(Boolean);
-  const leftovers: string[] = [];
-  parts.forEach((part, i) => {
-    const numMatch = /(\d+)/.exec(part);
-    const value = numMatch ? Number(numMatch[1]) : null;
-    const matched = SPEED_KEYWORDS.find((k) => k.re.test(part));
-    if (matched && value !== null) {
-      speed[matched.key] = value;
-      if (/паря|hover/i.test(part)) speed.hover = true;
-    } else if (value !== null && i === 0 && speed.walk === null) {
-      // A bare leading number with no keyword is almost always walking speed
-      // (legacy "30 фт., полёт 60 фт." style entries).
-      speed.walk = value;
-    } else {
-      leftovers.push(part);
-    }
-  });
-  speed.note = leftovers.join(", ");
-  return speed;
-}
-
-const AC_RE = /^(\d+)\s*\(?([^)]*)\)?/;
-const HIT_DICE_RE = /(\d+)\s*[кdD](\d+)\s*([+-]\s*\d+)?/;
-
-// Bridges old saved creature statblocks (free-text АС/ХП/скорость/размер-
-// тип-мировоззрение/КО/чувства/урон-состояния) into the new structured
-// shape, so existing data keeps displaying instead of going blank — mirrors
-// normalizeDndCharacter's approach in this same directory.
-export function normalizeDndCreature(raw: unknown): DndCreatureData {
-  const base = emptyCreature();
-  if (!raw || typeof raw !== "object") return base;
-  const r = raw as Record<string, unknown>;
-  const merged: DndCreatureData = { ...base, ...(r as Partial<DndCreatureData>) };
-
-  if (typeof r.armorClass === "string") {
-    const m = AC_RE.exec(r.armorClass.trim());
-    merged.armorClass = m ? { value: Number(m[1]) || null, note: (m[2] || "").trim() } : { value: null, note: r.armorClass };
-  } else {
-    merged.armorClass = { ...base.armorClass, ...((r.armorClass as object) ?? {}) };
-  }
-
-  if (typeof r.hitPoints === "string") {
-    const m = HIT_DICE_RE.exec(r.hitPoints);
-    merged.hitPoints = m
-      ? {
-          diceCount: Number(m[1]) || null,
-          dieSize: Number(m[2]) || null,
-          bonus: m[3] ? Number(m[3].replace(/\s/g, "")) : null,
-          formula: r.hitPoints,
-        }
-      : { diceCount: null, dieSize: null, bonus: null, formula: r.hitPoints };
-  } else {
-    merged.hitPoints = { ...base.hitPoints, ...((r.hitPoints as object) ?? {}) };
-  }
-
-  if (typeof r.speed === "string") {
-    merged.speed = r.speed ? parseLegacySpeed(r.speed) : base.speed;
-  } else {
-    merged.speed = { ...base.speed, ...((r.speed as object) ?? {}) };
-  }
-
-  // r.size/creatureType/alignment being absent (rather than merged.size,
-  // which is already non-empty from emptyCreature()'s "Средний" default) is
-  // what actually distinguishes "never set" from "explicitly set" here.
-  if (!r.size && !r.creatureType && !r.alignment && typeof r.sizeTypeAlignment === "string" && r.sizeTypeAlignment) {
-    const parts = r.sizeTypeAlignment.split(",").map((p) => p.trim());
-    const knownSize = CREATURE_SIZES.find((s) => parts[0]?.toLowerCase().startsWith(s.toLowerCase()));
-    merged.size = knownSize ?? "Средний";
-    merged.creatureType = knownSize ? parts[0].slice(knownSize.length).trim() : parts[0] ?? "";
-    merged.alignment = parts.slice(1).join(", ");
-  }
-  if (!merged.size) merged.size = "Средний";
-
-  if ((!merged.challenge || !merged.challenge.rating) && typeof r.challengeRating === "string" && r.challengeRating) {
-    merged.challenge = { rating: r.challengeRating, proficiencyBonus: computeProficiencyBonusForCR(r.challengeRating) };
-  } else {
-    merged.challenge = { ...base.challenge, ...((r.challenge as object) ?? {}) };
-  }
-
-  if ((!Array.isArray(merged.sensesList) || merged.sensesList.length === 0) && typeof r.senses === "string" && r.senses) {
-    merged.sensesList = r.senses
-      .split(",")
-      .map((p) => p.trim())
-      .filter(Boolean)
-      .map((part) => {
-        const m = /^(.*?)(\d+)\s*фт\.?$/.exec(part);
-        return m ? { name: m[1].trim(), distance: m[2] } : { name: part, distance: "" };
-      });
-  } else {
-    merged.sensesList = Array.isArray(merged.sensesList) ? merged.sensesList : [];
-  }
-
-  merged.damageVulnerabilities = toLegacyList(merged.damageVulnerabilities, r.damageVulnerabilities);
-  merged.damageResistances = toLegacyList(merged.damageResistances, r.damageResistances);
-  merged.damageImmunities = toLegacyList(merged.damageImmunities, r.damageImmunities);
-  merged.conditionImmunities = toLegacyList(merged.conditionImmunities, r.conditionImmunities);
-  merged.saveAdvantageConditions = Array.isArray(merged.saveAdvantageConditions) ? merged.saveAdvantageConditions : [];
-
-  merged.savingThrowProfs = { ...emptySavingThrowProfs(), ...((r.savingThrowProfs as object) ?? {}) };
-  // Ключ у существа остаётся именем навыка (в отличие от листа персонажа, где
-  // он стал английским `original`), но само имя могло смениться: «Магия» →
-  // «Арканная магия», «Анализ» → «Анализ/расследование» (гриллинг 2026-09-04).
-  // Сводим через каталог, иначе отметка остаётся в данных и пропадает с глаз.
-  const rawCreatureSkills =
-    typeof r.skillProfs === "object" && r.skillProfs ? (r.skillProfs as Record<string, boolean>) : {};
-  merged.skillProfs = {};
-  for (const [rawName, on] of Object.entries(rawCreatureSkills)) {
-    const original = resolveSkillOriginal(rawName);
-    const name = original ? skillByOriginal(original)?.name ?? rawName : rawName;
-    merged.skillProfs[name] = merged.skillProfs[name] || !!on;
-  }
-
-  // Импортированные записи бестиария несут владения списками полных русских
-  // названий (`savingThrowProficiencies: ["Ловкость", "Мудрость"]`,
-  // `skillProficiencies`), а структурных `savingThrowProfs`/`skillProfs` у них
-  // нет. Без этого разбора у всего импортированного бестиария не залита ни
-  // одна кость характеристики и пуста строка навыков, хотя данные лежат
-  // рядом. Своё значение всегда сильнее: разбор идёт, только если структурного
-  // владения ещё нет.
-  const legacySaveProfs = Array.isArray(r.savingThrowProficiencies) ? r.savingThrowProficiencies : null;
-  if (legacySaveProfs && !Object.values(merged.savingThrowProfs).some(Boolean)) {
-    for (const raw of legacySaveProfs) {
-      if (typeof raw !== "string") continue;
-      const key = ABILITY_NAME_TO_KEY[raw.trim()];
-      if (key) merged.savingThrowProfs[key] = true;
-    }
-  }
-  const legacySkillProfs = Array.isArray(r.skillProficiencies) ? r.skillProficiencies : null;
-  if (legacySkillProfs && Object.keys(merged.skillProfs).length === 0) {
-    // Навыки в импорте написаны в своём регистре («Внимание/Восприятие»
-    // против «Внимание/восприятие» в справочнике), поэтому сверяем без него.
-    // Через каталог: он знает не только регистр, но и другие написания —
-    // «Восприятие», «Аркана», «Обращение с животными» и прочие переводы.
-    for (const raw of legacySkillProfs) {
-      if (typeof raw !== "string") continue;
-      const original = resolveSkillOriginal(raw);
-      const skill = original ? skillByOriginal(original)?.name : undefined;
-      if (skill) merged.skillProfs[skill] = true;
-    }
-  }
-
-  // Текстовые «старые данные» дописываются в примечание, ТОЛЬКО пока владение
-  // не разобрано структурно: иначе те же спасброски печатались бы дважды —
-  // залитой костью и строкой под ней.
-  let defenseNotes = typeof merged.defenseNotes === "string" ? merged.defenseNotes : "";
-  if (
-    typeof r.skills === "string" && r.skills &&
-    Object.keys(merged.skillProfs).length === 0 &&
-    !defenseNotes.includes(r.skills)
-  ) {
-    defenseNotes = [defenseNotes, `Навыки (старые данные): ${r.skills}`].filter(Boolean).join("\n");
-  }
-  if (
-    typeof r.savingThrows === "string" && r.savingThrows &&
-    !Object.values(merged.savingThrowProfs).some(Boolean) &&
-    !defenseNotes.includes(r.savingThrows)
-  ) {
-    defenseNotes = [defenseNotes, `Спасброски (старые данные): ${r.savingThrows}`].filter(Boolean).join("\n");
-  }
-  // Те же две строки могли быть дописаны прежней нормализацией и УЖЕ лежать
-  // в сохранённом примечании. Раз владение теперь разобрано структурно, они
-  // повторяют залитую кость и строку навыков — снимаем их при чтении (в базе
-  // ничего не переписывается, пока Мастер сам не сохранит запись).
-  if (Object.values(merged.savingThrowProfs).some(Boolean) || Object.keys(merged.skillProfs).length > 0) {
-    defenseNotes = defenseNotes
-      .split(/\r?\n/)
-      .filter((line) => !/^(Навыки|Спасброски) \(старые данные\):/.test(line.trim()))
-      .join("\n")
-      .trim();
-  }
-  merged.defenseNotes = defenseNotes;
-
-  merged.spellcasting =
-    merged.spellcasting && typeof merged.spellcasting === "object" && "enabled" in merged.spellcasting
-      ? { ...base.spellcasting, ...(merged.spellcasting as object) }
-      : base.spellcasting;
-
-  merged.traits = Array.isArray(merged.traits) ? merged.traits : [];
-  merged.actions = migrateLegacyActions(merged.actions);
-  merged.bonusActions = migrateLegacyActions(merged.bonusActions);
-  merged.reactions = migrateLegacyActions(merged.reactions);
-
-  // Old saved creatures kept legendary actions as a flat DndFeature[] with
-  // no point economy at all — migrate into the new `legendary.actions`
-  // (cost defaults to 1, the most common 5e value) and flip actionsEnabled
-  // on so the migrated rows are actually visible; everything else in
-  // `legendary` (resistances/lair) simply defaults to disabled/empty.
-  const legacyLegendaryActions = Array.isArray(r.legendaryActions) ? r.legendaryActions : null;
-  if (legacyLegendaryActions && legacyLegendaryActions.length > 0 && (!merged.legendary || !Array.isArray(merged.legendary.actions) || merged.legendary.actions.length === 0)) {
-    merged.legendary = {
-      ...emptyLegendary(),
-      actionsEnabled: true,
-      actions: legacyLegendaryActions.map((f: unknown) => migrateLegacyAction(f, 1) as DndLegendaryActionEntry),
-    };
-  } else {
-    const legacy = (merged.legendary as Partial<DndCreatureLegendary>) ?? {};
-    merged.legendary = {
-      ...emptyLegendary(),
-      ...legacy,
-      actions: Array.isArray(legacy.actions) ? legacy.actions : [],
-      lairActions: migrateLegacyActions(legacy.lairActions),
-    };
-  }
-
-  merged.equipment = Array.isArray(merged.equipment) ? merged.equipment : [];
-  const legacyLoot = merged.loot as Partial<DndCreatureLoot> | undefined;
-  merged.loot = {
-    items: Array.isArray(legacyLoot?.items) ? legacyLoot!.items : [],
-    currency: Array.isArray(legacyLoot?.currency) ? legacyLoot!.currency : [],
-  };
-  // Точка фокуса портрета (этап 9): та же нормализация, что у персонажа —
-  // доли с зажимом в [0, 1], мусор превращается в отсутствие.
-  const focus = merged.portraitFocus as { x?: unknown; y?: unknown } | undefined;
-  merged.portraitFocus =
-    focus && typeof focus.x === "number" && typeof focus.y === "number"
-      ? { x: Math.min(1, Math.max(0, focus.x)), y: Math.min(1, Math.max(0, focus.y)) }
-      : undefined;
-
-  return merged;
-}
-
-// A legacy row is a plain {name, description} — anything already carrying
-// `category` is assumed already-migrated and passed through untouched, so
-// this is safe to re-run on already-current data too.
-function migrateLegacyAction(raw: unknown, extraCost?: number): DndCreatureAction {
-  const f = (raw && typeof raw === "object" ? raw : {}) as Partial<DndCreatureAction> & { name?: string; description?: string };
-  if (f.category) return f as DndCreatureAction;
-  const base: DndCreatureAction = { name: f.name ?? "", category: "other", description: f.description ?? "" };
-  return extraCost !== undefined ? ({ ...base, cost: extraCost } as DndLegendaryActionEntry) : base;
-}
-
-function migrateLegacyActions(list: unknown): DndCreatureAction[] {
-  if (!Array.isArray(list)) return [];
-  return list.map((f) => migrateLegacyAction(f));
-}
+// Нормализатор и пустые значения существа переехали в общий пакет: разовый
+// перевод бестиария идёт миграцией на сервере, а не только при чтении в клиенте.
+export {
+  computeProficiencyBonusForCR,
+  emptyArmorClass,
+  emptyCreature,
+  emptyHitPoints,
+  emptyLegendary,
+  emptySpellcasting,
+  normalizeDndCreature,
+} from "@shared/dnd/creature";
+import { computeProficiencyBonusForCR } from "@shared/dnd/creature";
 
 export function computePassivePerception(value: DndCreatureData): number {
   const prof = value.challenge.proficiencyBonus ?? 0;
@@ -882,6 +553,9 @@ export function SpellcastingEditor({
   proficiencyBonus: number;
 }) {
   const maxCircle = value.slots.length > 0 ? Math.max(...value.slots.map((s) => s.level)) : 0;
+  // У чудовища из книги ячеек нет, а заклинания разных кругов есть — их
+  // круги показываются, иначе «Огненный шар» 3 круга пропал бы из правки.
+  const shownCircles = Math.max(maxCircle, ...value.spells.map((s) => s.level));
 
   function setMaxCircle(n: number) {
     if (n === 0) {
@@ -916,6 +590,24 @@ export function SpellcastingEditor({
               </select>
             </label>
             <label className="row" style={{ gap: 6 }}>
+              СЛ
+              <input
+                type="number"
+                style={{ width: 56 }}
+                value={value.saveDC ?? ""}
+                onChange={(e) => onChange({ ...value, saveDC: e.target.value === "" ? null : Number(e.target.value) })}
+              />
+            </label>
+            <label className="row" style={{ gap: 6 }}>
+              Атака +
+              <input
+                type="number"
+                style={{ width: 56 }}
+                value={value.attackBonus ?? ""}
+                onChange={(e) => onChange({ ...value, attackBonus: e.target.value === "" ? null : Number(e.target.value) })}
+              />
+            </label>
+            <label className="row" style={{ gap: 6 }}>
               Кругов заклинаний
               <select value={maxCircle} onChange={(e) => setMaxCircle(Number(e.target.value))}>
                 {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
@@ -926,6 +618,12 @@ export function SpellcastingEditor({
               </select>
             </label>
           </div>
+          <textarea
+            rows={2}
+            placeholder="Вступление, как в книге: «…сотворяет одно из описанных ниже заклинаний, не нуждаясь в материальных компонентах…»"
+            value={value.note ?? ""}
+            onChange={(e) => onChange({ ...value, note: e.target.value })}
+          />
           <div className="stack" style={{ gap: 6 }}>
             <CreatureSpellLevelSection
               level={0}
@@ -936,7 +634,7 @@ export function SpellcastingEditor({
               proficiencyBonus={proficiencyBonus}
               abilities={abilities}
             />
-            {Array.from({ length: maxCircle }, (_, i) => i + 1).map((l) => (
+            {Array.from({ length: shownCircles }, (_, i) => i + 1).map((l) => (
               <CreatureSpellLevelSection
                 key={l}
                 level={l}
@@ -981,6 +679,81 @@ function emptyAction(): DndCreatureAction {
   return { name: "", category: "other", description: "" };
 }
 
+// Запас действия (Q47): имя хранится чистым, «(перезарядка 5–6)» — полем.
+// Число «в логове» правится только там, где оно уже есть: в книге оно у
+// считаных драконов, и пустое поле у каждой строки было бы шумом.
+function UsesEdit({ value, onChange }: { value?: DndActionUses; onChange: (v: DndActionUses | undefined) => void }) {
+  return (
+    <span className="row" style={{ gap: 4 }}>
+      <select
+        value={value?.kind ?? ""}
+        title="Запас"
+        onChange={(e) => {
+          const k = e.target.value;
+          onChange(
+            k === "day"
+              ? { kind: "day", count: 1 }
+              : k === "recharge"
+                ? { kind: "recharge", min: 5 }
+                : k === "rest"
+                  ? { kind: "rest", rest: "long" }
+                  : undefined
+          );
+        }}
+      >
+        <option value="">Без запаса</option>
+        <option value="day">N в день</option>
+        <option value="recharge">Перезарядка</option>
+        <option value="rest">После отдыха</option>
+      </select>
+      {value?.kind === "day" && (
+        <>
+          <input
+            type="number"
+            min={1}
+            style={{ width: 44 }}
+            value={value.count}
+            onChange={(e) => onChange({ ...value, count: Number(e.target.value) || 1 })}
+          />
+          {value.lairCount != null && (
+            <label className="row" style={{ gap: 4 }}>
+              в логове
+              <input
+                type="number"
+                min={1}
+                style={{ width: 44 }}
+                value={value.lairCount}
+                onChange={(e) => onChange({ ...value, lairCount: e.target.value === "" ? null : Number(e.target.value) })}
+              />
+            </label>
+          )}
+        </>
+      )}
+      {value?.kind === "recharge" && (
+        <select value={value.min} onChange={(e) => onChange({ kind: "recharge", min: Number(e.target.value) })}>
+          {[2, 3, 4, 5, 6].map((n) => (
+            <option key={n} value={n}>
+              {n === 6 ? "6" : `${n}–6`}
+            </option>
+          ))}
+        </select>
+      )}
+      {value?.kind === "rest" && (
+        <select value={value.rest} onChange={(e) => onChange({ kind: "rest", rest: e.target.value as "short" | "long" })}>
+          <option value="short">короткого или долгого</option>
+          <option value="long">долгого</option>
+        </select>
+      )}
+    </span>
+  );
+}
+
+function formatUses(u: DndActionUses): string {
+  if (u.kind === "recharge") return u.min >= 6 ? "перезарядка 6" : `перезарядка ${u.min}–6`;
+  if (u.kind === "rest") return u.rest === "short" ? "после короткого или долгого отдыха" : "после долгого отдыха";
+  return `${u.count}/день${u.lairCount ? `, в логове ${u.lairCount}` : ""}`;
+}
+
 // Shared editor for actions/bonusActions/reactions and (with costEditable)
 // legendary actions/lair actions — a new type from `DndFeature` on purpose,
 // since `DndFeature` is also used by the character sheet's own feature
@@ -1003,7 +776,7 @@ export function ActionListEdit<T extends DndCreatureAction>({
   proficiencyBonus: number | null;
 }) {
   const [confirmDialog, confirm] = useConfirm();
-  function update(i: number, patch: Partial<DndCreatureAction> & { cost?: number }) {
+  function update(i: number, patch: Partial<DndCreatureAction> & { cost?: number; oncePerTurn?: boolean }) {
     onChange(values.map((a, idx) => (idx === i ? ({ ...a, ...patch } as T) : a)));
   }
   async function remove(i: number) {
@@ -1045,6 +818,7 @@ export function ActionListEdit<T extends DndCreatureAction>({
                 </option>
               ))}
             </select>
+            <UsesEdit value={a.uses} onChange={(uses) => update(i, { uses })} />
             {costEditable && (
               <label className="row" style={{ gap: 4 }}>
                 Стоимость
@@ -1116,6 +890,16 @@ export function ActionListEdit<T extends DndCreatureAction>({
               )}
             </div>
           )}
+          {costEditable && (
+            <label className="row" style={{ gap: 4 }}>
+              <input
+                type="checkbox"
+                checked={!!(a as unknown as DndLegendaryActionEntry).oncePerTurn}
+                onChange={(e) => update(i, { oncePerTurn: e.target.checked || undefined })}
+              />
+              Не чаще раза до своего хода
+            </label>
+          )}
           <MentionTextarea value={a.description} onChange={(v) => update(i, { description: v })} rows={2} placeholder="Описание" />
         </div>
       ))}
@@ -1185,7 +969,7 @@ export function LegendaryEditor({
           checked={value.resistanceEnabled}
           onChange={(e) => onChange({ ...value, resistanceEnabled: e.target.checked })}
         />
-        Легендарные сопротивления
+        Легендарная устойчивость
       </label>
       {value.resistanceEnabled && (
         <label className="row" style={{ gap: 4 }}>
@@ -1195,6 +979,13 @@ export function LegendaryEditor({
             style={{ width: 50 }}
             value={value.resistanceCount ?? ""}
             onChange={(e) => onChange({ ...value, resistanceCount: e.target.value === "" ? null : Number(e.target.value) })}
+          />
+          в логове
+          <input
+            type="number"
+            style={{ width: 50 }}
+            value={value.resistanceLairCount ?? ""}
+            onChange={(e) => onChange({ ...value, resistanceLairCount: e.target.value === "" ? null : Number(e.target.value) })}
           />
         </label>
       )}
@@ -1216,6 +1007,13 @@ export function LegendaryEditor({
               style={{ width: 50 }}
               value={value.actionPoints ?? ""}
               onChange={(e) => onChange({ ...value, actionPoints: e.target.value === "" ? null : Number(e.target.value) })}
+            />
+            в логове
+            <input
+              type="number"
+              style={{ width: 50 }}
+              value={value.actionPointsLair ?? ""}
+              onChange={(e) => onChange({ ...value, actionPointsLair: e.target.value === "" ? null : Number(e.target.value) })}
             />
           </label>
           <ActionListEdit
@@ -1639,10 +1437,27 @@ function SbcRow({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function SbcEntry({ name, mech, description }: { name?: string; mech?: string; description: string }) {
+function SbcEntry({
+  name,
+  mech,
+  description,
+  uses,
+}: {
+  name?: string;
+  mech?: string;
+  description: string;
+  uses?: DndActionUses;
+}) {
   return (
     <div className="sbc__entry">
-      {name && <span className="sbc__ename">{name}.</span>}
+      {name && <span className="sbc__ename">{name}{uses ? "" : "."}</span>}
+      {uses && (
+        <>
+          {" "}
+          <span className="sbc__uses">{formatUses(uses)}</span>
+          <span className="sbc__ename">.</span>
+        </>
+      )}
       {mech && <span className="sbc__mech"> {mech}.</span>}{" "}
       <MentionText text={description} />
     </div>
@@ -1717,11 +1532,83 @@ function SbcSpellLevel({ level, slots, spells }: { level: number; slots: number;
   );
 }
 
+// Заклинания чудовища без ячеек — одно действие «Заклинания», как в книге
+// 5.5 (Q45): за столом важна частота, а не круг. Заклинатель с ячейками
+// остаётся по кругам.
+function isBookSpellcasting(sc: DndCreatureSpellcasting): boolean {
+  return sc.enabled && sc.slots.every((s) => !s.slots) && sc.spells.every((s) => s.frequency !== "slots");
+}
+
+// Окно предпросмотра само импортирует этот файл (DndCreatureView) — лениво,
+// чтобы не завязывать цикл импортов на загрузке модуля.
+const EntityPreviewModal = lazy(() => import("../EntityPreviewModal").then((m) => ({ default: m.EntityPreviewModal })));
+
+function SbcBookSpells({ value }: { value: DndCreatureSpellcasting }) {
+  const [preview, setPreview] = useState<number | null>(null);
+  const ability = ABILITY_LABELS.find((a) => a.key === value.ability)?.label;
+  const head = [
+    ability,
+    value.saveDC != null ? `СЛ ${value.saveDC}` : "",
+    value.attackBonus != null ? `атака ${formatModifier(value.attackBonus)}` : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
+  const groups = [
+    { label: "Неограниченно", spells: value.spells.filter((s) => s.frequency === "atwill") },
+    ...Array.from(new Set(value.spells.filter((s) => s.frequency === "perday").map((s) => s.perDayCount ?? 1)))
+      .sort((a, b) => b - a)
+      .map((n) => ({
+        label: `${n}/день каждое`,
+        spells: value.spells.filter((s) => s.frequency === "perday" && (s.perDayCount ?? 1) === n),
+      })),
+  ].filter((g) => g.spells.length > 0);
+  return (
+    <div className="sbc__entry">
+      <span className="sbc__ename">Заклинания.</span>
+      {head && <span className="sbc__mech"> {head}.</span>}
+      {value.note && <div className="sbc__spell-note">{value.note}</div>}
+      {groups.map((g) => (
+        <div key={g.label} className="sbc__spell-group">
+          <span className="sbc__lab sbc__lab--auto">{g.label}:</span>{" "}
+          {g.spells.map((s, i) => (
+            <span key={i}>
+              {i > 0 && ", "}
+              {s.entryId ? (
+                <button
+                  type="button"
+                  className="sbc__spell-link"
+                  onClick={() => setPreview(s.entryId!)}
+                >
+                  {s.name}
+                </button>
+              ) : (
+                s.name
+              )}
+              {s.description && <span className="muted"> ({s.description})</span>}
+            </span>
+          ))}
+        </div>
+      ))}
+      {preview !== null && (
+        <Suspense fallback={null}>
+          <EntityPreviewModal type="compendium_entry" id={preview} onClose={() => setPreview(null)} />
+        </Suspense>
+      )}
+    </div>
+  );
+}
+
 function SbcActionList({ values }: { values: DndCreatureAction[] }) {
   return (
     <>
       {values.map((a, i) => (
-        <SbcEntry key={i} name={a.name || undefined} mech={formatAction(a) || undefined} description={a.description} />
+        <SbcEntry
+          key={i}
+          name={a.name || undefined}
+          mech={formatAction(a) || undefined}
+          description={a.description}
+          uses={a.uses}
+        />
       ))}
     </>
   );
@@ -1883,7 +1770,10 @@ export function DndCreatureView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!!onQuickUpdate]);
 
-  const patch = (p: Partial<DndCreatureData>) => onQuickUpdate?.(p);
+  // Пометка «Требует разбора» (перевод бестиария, шаг 1) снимается первой же
+  // правкой: Мастер открыл статблок и поправил — значит, разобрал.
+  const patch = (p: Partial<DndCreatureData>) =>
+    onQuickUpdate?.(value.review?.length && !("portraitFocus" in p) ? { ...p, review: undefined } : p);
   // Кадрирование портрета перетаскиванием (этап 9): там, где карточка
   // правится (есть onQuickUpdate). Черновик в полёте, коммит по отпусканию.
   const frame = useFrameDrag(!!onQuickUpdate, value.portraitFocus, (f) => patch({ portraitFocus: f }));
@@ -1904,7 +1794,7 @@ export function DndCreatureView({
 
   const pb = value.challenge.proficiencyBonus ?? 0;
   const metaParts = [
-    [value.size, value.creatureType].filter(Boolean).join(" "),
+    [value.size, value.creatureType, value.creatureTags ? `(${value.creatureTags})` : ""].filter(Boolean).join(" "),
     value.alignment,
   ].filter(Boolean);
   const crText = value.challenge.rating
@@ -1940,9 +1830,22 @@ export function DndCreatureView({
       spells: value.spellcasting.spells.filter((s) => s.level === level),
     }));
 
-  const visible = SBC_SECTIONS.filter((s) => sectionHasContent(value, s.id) || revealed.includes(s.id));
-  const absent = SBC_SECTIONS.filter((s) => !sectionHasContent(value, s.id) && !revealed.includes(s.id));
-  const segments = SBC_SEGMENTS.filter((g) => visible.some((s) => g.sections.includes(s.id)));
+  const bookSpells = isBookSpellcasting(value.spellcasting);
+  const sectionOrder = bookSpells
+    ? SBC_SECTIONS.filter((s) => s.id !== "spells").flatMap((s) =>
+        s.id === "actions" ? [s, SBC_SECTIONS.find((x) => x.id === "spells")!] : [s]
+      )
+    : SBC_SECTIONS;
+  const segmentList = bookSpells
+    ? SBC_SEGMENTS.map((g) =>
+        g.id === "actions"
+          ? { ...g, sections: ["actions", "spells", "bonus", "reactions"] as SbcSectionId[] }
+          : { ...g, sections: g.sections.filter((x) => x !== "spells") }
+      )
+    : SBC_SEGMENTS;
+  const visible = sectionOrder.filter((s) => sectionHasContent(value, s.id) || revealed.includes(s.id));
+  const absent = sectionOrder.filter((s) => !sectionHasContent(value, s.id) && !revealed.includes(s.id));
+  const segments = segmentList.filter((g) => visible.some((s) => g.sections.includes(s.id)));
   const activeSeg =
     segments.find((g) => g.id === seg) ?? segments.find((g) => g.id === "actions") ?? segments[0] ?? null;
   const shown = narrow && activeSeg ? visible.filter((s) => activeSeg.sections.includes(s.id)) : visible;
@@ -2017,12 +1920,18 @@ export function DndCreatureView({
         ) : (
           <div className="sbc__body">
             {value.legendary.resistanceEnabled && (
-              <SbcRow label="Сопротивления">{value.legendary.resistanceCount ?? "—"} / день</SbcRow>
+              <SbcRow label="Устойчивость">
+                {value.legendary.resistanceCount ?? "—"}/день
+                {value.legendary.resistanceLairCount ? `, в логове ${value.legendary.resistanceLairCount}` : ""}
+              </SbcRow>
             )}
             {value.legendary.actionsEnabled && (
               <>
                 {value.legendary.actionPoints !== null && (
-                  <SbcRow label="Очки действий">{value.legendary.actionPoints} за раунд</SbcRow>
+                  <SbcRow label="Очки действий">
+                    {value.legendary.actionPoints} за раунд
+                    {value.legendary.actionPointsLair ? `, в логове ${value.legendary.actionPointsLair}` : ""}
+                  </SbcRow>
                 )}
                 {value.legendary.actions.map((a, i) => (
                   <SbcEntry
@@ -2030,6 +1939,7 @@ export function DndCreatureView({
                     name={a.name || undefined}
                     mech={`(${a.cost})${formatAction(a) ? ` ${formatAction(a)}` : ""}`}
                     description={a.description}
+                    uses={a.uses}
                   />
                 ))}
               </>
@@ -2167,7 +2077,7 @@ export function DndCreatureView({
         ) : (
           <div className="sbc__body">
             {value.traits.map((f, i) => (
-              <SbcEntry key={i} name={f.name || undefined} description={f.description} />
+              <SbcEntry key={i} name={f.name || undefined} description={f.description} uses={f.uses} />
             ))}
           </div>
         );
@@ -2208,6 +2118,10 @@ export function DndCreatureView({
               abilities={value.abilities}
               proficiencyBonus={pb}
             />
+          </div>
+        ) : bookSpells ? (
+          <div className="sbc__body">
+            <SbcBookSpells value={value.spellcasting} />
           </div>
         ) : (
           <div className="sbc__body">
@@ -2293,6 +2207,18 @@ export function DndCreatureView({
           )}
         </div>
 
+        {!collapsed && !!value.review?.length && (
+          <div className="sbc__review">
+            <b>Требует разбора.</b> Перевод из текста книги в поля не удался, статблок остался как был — трекеры боевого
+            режима по нему не считают. Поправьте указанное; пометка снимется с первой правкой.
+            <ul>
+              {value.review.map((r, i) => (
+                <li key={i}>{r}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {!collapsed && (
           <div className={`sbc__cols${narrow ? " is-narrow" : ""}${editing === "side" ? " is-editing-side" : ""}`}>
             {/* Левая колонка — то, чем существо бросает. Не уезжает из виду. */}
@@ -2326,6 +2252,13 @@ export function DndCreatureView({
                         </option>
                       ))}
                     </select>
+
+                    <span className="sbc__form-lab">Уточнение типа</span>
+                    <input
+                      placeholder="в скобках после типа: Демон, Металлический"
+                      value={value.creatureTags ?? ""}
+                      onChange={(e) => patch({ creatureTags: e.target.value })}
+                    />
 
                     <span className="sbc__form-lab">Размер</span>
                     <select value={value.size} onChange={(e) => patch({ size: e.target.value })}>

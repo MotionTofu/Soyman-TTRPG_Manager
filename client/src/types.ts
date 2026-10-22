@@ -42,6 +42,8 @@ export interface CompendiumEntry {
   created_at: string;
   /** Сколько карточек статблока у записи: бестиарий помечает значком те, у которых хотя бы одна. */
   statblock_count?: number;
+  /** Статблок не перевёлся из текста книги в поля — фильтр «Требует разбора» бестиария. */
+  statblock_review?: boolean;
   /** Собственный портрет записи (вкладка «Изображения») — плитка раздела, карточка существа, окна предпросмотра. */
   avatar_image_url?: string | null;
   /** Звезда бестиария — своя у каждого мастера. Приходит только со списком раздела. */
@@ -650,6 +652,7 @@ export type {
   DndCreatureSense,
   DndActionCategory,
   DndCreatureAction,
+  DndActionUses,
   DndLegendaryActionEntry,
   DndCreatureLegendary,
   DndCreatureEquipmentItem,

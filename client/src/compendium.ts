@@ -236,36 +236,10 @@ export const MAGIC_ITEM_TYPES = [
 
 export const ARMOR_TYPES = ["Лёгкий", "Средний", "Тяжёлый"] as const;
 
-export const CREATURE_SIZES = [
-  "Крошечный",
-  "Маленький",
-  "Средний",
-  "Большой",
-  "Огромный",
-  "Громадный",
-] as const;
-
-export const CHALLENGE_RATINGS = [
-  "0", "1/8", "1/4", "1/2",
-  "1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
-  "11", "12", "13", "14", "15", "16", "17", "18", "19", "20",
-  "21", "22", "23", "24", "25", "26", "27", "28", "29", "30",
-] as const;
-
-/**
- * Класс опасности к каноническому виду. Старые снапшоты и легаси-импорты
- * пишут дробь десятичной («0.5» вместо «1/2»), а фильтр раздела и группы
- * «По КО» сверяются с каноническим списком CHALLENGE_RATINGS — сравнивать
- * надо нормализованное значение, а не исходную строку. Заодно срезается
- * хвост «(100 опыта)», который проскакивал из книги.
- */
-export function normaliseCr(raw: unknown): string {
-  let s = String(raw ?? "").trim().replace(/\s*\([^)]*\)\s*$/, "").trim();
-  if (s === "0.5") return "1/2";
-  if (s === "0.25") return "1/4";
-  if (s === "0.125") return "1/8";
-  return s;
-}
+// Размеры, рейтинги опасности и их нормализация живут в общем пакете вместе с
+// нормализатором существа.
+export { CHALLENGE_RATINGS, CREATURE_SIZES, normaliseCr } from "@shared/dnd/creature";
+import { CHALLENGE_RATINGS, CREATURE_SIZES } from "@shared/dnd/creature";
 
 export const MAGIC_ITEM_RARITIES = [
   "Обычный",

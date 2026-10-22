@@ -1573,3 +1573,49 @@ summary.sb-section {
 .dnd-feat-pending button {
   min-height: 36px;
 }
+
+/* Запас действия плашкой после имени (боевой режим, Q47): имя хранится
+   чистым, «перезарядка 5–6» — полем, и плашка видна издали. */
+.sbc__uses {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  border: 1px solid var(--ink);
+  padding: 0 var(--sp-2);
+  white-space: nowrap;
+}
+
+/* Заклинания чудовища — одно действие, как в книге 5.5 (Q45). */
+.sbc__spell-note {
+  color: var(--ink-2);
+  margin: var(--sp-1) 0;
+}
+.sbc__spell-group {
+  margin-top: var(--sp-1);
+}
+.sbc__spell-link {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.sbc__spell-link:hover {
+  text-decoration-color: var(--ink);
+}
+
+/* «Требует разбора» — перевод бестиария в поля не дался. */
+.sbc__review {
+  border-top: 2px solid var(--ink);
+  padding: var(--sp-4) var(--sp-5);
+  font-size: var(--fs-meta);
+  line-height: 1.42;
+  background: var(--paper-2, transparent);
+}
+.sbc__review ul {
+  margin: var(--sp-2) 0 0;
+  padding-left: 1.2em;
+}

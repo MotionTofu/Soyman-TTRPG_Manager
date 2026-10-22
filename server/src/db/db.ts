@@ -29,6 +29,7 @@ import {
 import { migrateDndArtificerReanimator } from "./dndArtificerReanimator";
 import { migrateDndArtificerOracle } from "./dndArtificerOracle";
 import { applyDndFeatureNamesByPlace } from "./dndFeatureNamesByPlace";
+import { migrateDndCreatureFields } from "./dndCreatureFields";
 import {
   ensureNamedReplicaSchemes,
   migrateDndReplicaGenerics,
@@ -7416,6 +7417,12 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     const named = applyDndFeatureNamesByPlace(database);
     if (named) console.log(`[migrate] dnd_feature_names_by_place_v1: ${named}`);
     setAppSettingFlag(database, "dnd_feature_names_by_place_v1");
+  }
+  // Статблоки существ из текста книги — в поля (боевой режим, шаг 1): запасы,
+  // легендарное, заклинания ссылками. Неразобранные — с причинами в `review`.
+  if (!appSettingFlag(database, "dnd_creature_fields_v1")) {
+    migrateDndCreatureFields(database, dbDir);
+    setAppSettingFlag(database, "dnd_creature_fields_v1");
   }
 
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.

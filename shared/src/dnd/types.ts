@@ -57,6 +57,8 @@ export interface DndFeature {
   // вкладку «Действия» наравне с заклинаниями (Второе дыхание, Наложение рук).
   castingTiming?: DndActionTiming;
   castingTimingOther?: string;
+  // Только у черт существа: «Перевоплощение (1/день)» — см. DndCreatureAction.uses.
+  uses?: DndActionUses;
   checks?: DndCheck[];
   effects?: DndEffect[];
   cost?: DndCost;
@@ -626,6 +628,9 @@ export type DndAttackRollType = "attack" | "save";
 export interface DndCreatureSpell {
   name: string;
   level: number; // 0 = заговор
+  // Запись справочника, по которой узнали заклинание при переводе бестиария
+  // (или при добавлении из справочника): по ней открывается карточка.
+  entryId?: number;
   frequency: DndCreatureSpellFrequency;
   perDayCount: number | null;
   description: string;
@@ -644,6 +649,16 @@ export interface DndCreatureSpellcasting {
   ability: DndAbilityKey | "";
   slots: DndCreatureSpellSlotLevel[];
   spells: DndCreatureSpell[];
+  // У чудовищ 5.5 СЛ и бонус атаки заклинанием написаны в статблоке готовыми
+  // числами, а не выводятся из характеристики.
+  saveDC?: number | null;
+  attackBonus?: number | null;
+  // Вступление записи: «не требуются Материальные компоненты», «только в
+  // форме юань-ти» и т. п. — то, что не легло в поля выше.
+  note?: string;
+  // Откуда заклинания пришли в статблок 5.5: действием «Заклинания» или чертой
+  // «Врождённое колдовство». Просмотр ставит их в соответствующий раздел.
+  timing?: "action" | "trait";
 }
 
 export interface DndCreatureSense {
@@ -669,10 +684,27 @@ export interface DndCreatureAction {
   // Set when this row was added via "Добавить из заклинаний" — the source
   // spell's name, so it isn't offered for re-adding.
   sourceSpellName?: string;
+  // Сколько раз действие доступно: «3 в день», «перезарядка 5–6», «после
+  // отдыха». В имени действия скобки с запасом больше не пишутся — их рисует
+  // просмотр, а боевой режим ведёт по этому полю счётчик.
+  uses?: DndActionUses;
 }
+
+/**
+ * Запас действия существа.
+ * - `day` — «N в день»; `lairCount` — «или M в день в логове».
+ * - `recharge` — «перезарядка X–6»: готово снова, если на к6 выпало `min` или больше.
+ * - `rest` — восстанавливается коротким (а значит и долгим) или только долгим отдыхом.
+ */
+export type DndActionUses =
+  | { kind: "day"; count: number; lairCount?: number | null }
+  | { kind: "recharge"; min: number }
+  | { kind: "rest"; rest: "short" | "long" };
 
 export interface DndLegendaryActionEntry extends DndCreatureAction {
   cost: number;
+  // «Не может совершить это действие снова до начала своего следующего хода».
+  oncePerTurn?: boolean;
 }
 
 export interface DndCreatureLegendary {
@@ -683,6 +715,9 @@ export interface DndCreatureLegendary {
   actions: DndLegendaryActionEntry[];
   lairEnabled: boolean;
   lairActions: DndCreatureAction[];
+  // «3 в день или 4 в день в логове», «Использования: 3 (4 в логове)».
+  resistanceLairCount?: number | null;
+  actionPointsLair?: number | null;
 }
 
 export interface DndCreatureEquipmentItem {
@@ -711,6 +746,9 @@ export interface DndCreatureData {
   name: string;
   size: string;
   creatureType: string;
+  // Уточнение типа в скобках, как в книге: «Гуманоид (Демон)», «Дракон
+  // (Металлический)». Тип остаётся словарным — по нему фильтр бестиария.
+  creatureTags?: string;
   alignment: string;
   armorClass: DndCreatureArmorClass;
   hitPoints: DndCreatureHitPoints;
@@ -745,4 +783,8 @@ export interface DndCreatureData {
   // Точка фокуса портрета — как у персонажа (этап 9): кадрирование узкой
   // зоны перетаскиванием. Живёт в статблоке, а не в записи существа.
   portraitFocus?: { x: number; y: number };
+  // Причины, по которым перевод статблока из текста в поля не дался без
+  // угадывания (Q17/Q19). Пусто или нет — статблок разобран. Снимается, когда
+  // Мастер правит запись руками.
+  review?: string[];
 }

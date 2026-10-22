@@ -38,6 +38,17 @@ interface ActionLike {
   isMultiattack?: unknown;
   damage?: unknown;
   description?: unknown;
+  /** Запас в полях (перевод бестиария, боевой режим): маркера в имени больше нет. */
+  uses?: { kind?: unknown; count?: unknown };
+}
+
+/** Запас из поля — тем же маркером, что стоял в имени до перевода. */
+function usesMarker(a: ActionLike): string {
+  const u = a.uses;
+  if (!u || typeof u !== "object") return "";
+  if (u.kind === "recharge" || u.kind === "rest") return " (перезарядка)";
+  if (u.kind === "day" && u.count === 1) return " (1/день)";
+  return "";
 }
 
 // Кубы в русских и английских записях: «2к6+3», «1d8», «3к10 - 1».
@@ -186,7 +197,7 @@ export function rowAverage(a: ActionLike): {
 } {
   const src = damageText(a);
   const text = typeof src === "string" ? src : "";
-  const { base, limited } = splitLimitedUse(textOf(a.name), text);
+  const { base, limited } = splitLimitedUse(textOf(a.name) + usesMarker(a), text);
   const b = averageDamageText(base);
   const l = averageDamageText(limited);
   const baseAvg = Math.floor(b.avg);
@@ -389,6 +400,10 @@ export function extractArmorHp(content: string): StatblockArmorHp {
   return { ac, hp };
 }
 
+function bestOneShot(list: AttackInfo[]): number {
+  return list.length ? Math.max(...list.map((a) => a.avg)) : 0;
+}
+
 export function estimateCreatureDpr(content: string): CreatureDpr {
   let sb: Record<string, unknown>;
   try {
@@ -416,6 +431,13 @@ export function estimateCreatureDpr(content: string): CreatureDpr {
   }
 
   let approx = false;
+  // Разовое действие своей строкой (дыхание с перезарядкой) — тем же
+  // правилом, что хвост склеенной строки: треть урона поверх основного
+  // действия. После перевода бестиария в поля склеек нет, и без этого
+  // дыхание драконов выпадало бы из оценки вовсе.
+  // Бонусные разовые считаются ниже, своим ходом.
+  const mainNames = new Set(asActionList(sb.actions).map((a) => textOf(a.name)));
+  const oneShots = attacks.filter((a) => mainNames.has(a.name) && a.base === 0 && a.limited && a.avg > 0);
   let main: number | null = 0;
   if (multis.length) {
     // Мультиатака без единой строки атаки (кривой импорт — см. Арканалот):
@@ -434,12 +456,24 @@ export function estimateCreatureDpr(content: string): CreatureDpr {
       }
       main = bestTotal;
       if (!bestExact) approx = true;
+      const multiText = multis.map((x) => textOf(x.description)).join(" ");
+      const extraShot = bestOneShot(oneShots.filter((a) => !mentionsAttack(multiText, a.name)));
+      if (extraShot) {
+        main += extraShot;
+        approx = true;
+      }
     }
   } else if (attacks.length) {
-    const best = attacks.reduce((a, b) => (b.avg > a.avg ? b : a));
+    const regular = attacks.filter((a) => !oneShots.includes(a));
+    const best = (regular.length ? regular : attacks).reduce((a, b) => (b.avg > a.avg ? b : a));
     main = best.avg;
     if (!best.parsed && best.avg === 0) approx = true;
     if (best.limited || best.approx) approx = true;
+    const extraShot = regular.length ? bestOneShot(oneShots) : 0;
+    if (extraShot) {
+      main += extraShot;
+      approx = true;
+    }
   }
 
   // Лучшая бонус-атака — каждый раунд сверх основного действия.

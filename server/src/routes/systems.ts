@@ -298,6 +298,7 @@ systemsRouter.get("/:id/entries", (req: AuthedRequest, res) => {
         statblock_ac: combat?.ac ?? null,
         statblock_hp: combat?.hp ?? null,
         statblock_count: counts.get(id) ?? 0,
+        statblock_review: combat?.review ?? false,
         favourite: favourites.has(id),
       };
     })
@@ -384,8 +385,8 @@ function combatRoleMap(rows: EntryRow[]): Map<number, string[]> {
  */
 function creatureCombatMap(
   entryIds: number[]
-): Map<number, { dpr: number | null; approx: boolean; ac: string | null; hp: string | null }> {
-  const map = new Map<number, { dpr: number | null; approx: boolean; ac: string | null; hp: string | null }>();
+): Map<number, { dpr: number | null; approx: boolean; ac: string | null; hp: string | null; review: boolean }> {
+  const map = new Map<number, { dpr: number | null; approx: boolean; ac: string | null; hp: string | null; review: boolean }>();
   if (entryIds.length === 0) return map;
   const placeholders = entryIds.map(() => "?").join(",");
   const rows = db
@@ -403,9 +404,11 @@ function creatureCombatMap(
     try {
       const dpr = estimateCreatureDpr(r.content);
       const { ac, hp } = extractArmorHp(r.content);
-      map.set(r.owner_id, { dpr: dpr.dpr, approx: dpr.approx, ac, hp });
+      // «Требует разбора»: перевод из текста книги в поля не дался (боевой режим, шаг 1).
+      const review = Array.isArray((JSON.parse(r.content) as { review?: unknown }).review);
+      map.set(r.owner_id, { dpr: dpr.dpr, approx: dpr.approx, ac, hp, review });
     } catch {
-      map.set(r.owner_id, { dpr: null, approx: false, ac: null, hp: null });
+      map.set(r.owner_id, { dpr: null, approx: false, ac: null, hp: null, review: false });
     }
   }
   return map;

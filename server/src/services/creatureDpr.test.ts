@@ -220,6 +220,17 @@ describe("legacy prose statblocks", () => {
     // 3 × 27 + floor(77/3) = 106, приблизительно
     expect(r).toEqual({ dpr: 106, approx: true });
   });
+  it("counts a standalone recharge row once on top of multiattack, like a merged tail", () => {
+    const r = estimateCreatureDpr(
+      sb([
+        legacy("Мультиатака", "Дракон совершает три атаки Раздиранием."),
+        legacy("Раздирание", "Бросок атаки: +15. Попадание: 17 (2к8 + 8) урона плюс 10 (3к6) урона."),
+        { ...legacy("Ядовитое дыхание", "Испытание Выносливости: СЛ 22. Провал: 77 (22к6) урона."), uses: { kind: "recharge", min: 5 } },
+      ])
+    );
+    // то же, что у склеенной строки выше: 3 × 27 + floor(77/3) = 106
+    expect(r).toEqual({ dpr: 106, approx: true });
+  });
   it("does not read Зомби использует as и использует", () => {
     const r = estimateCreatureDpr(
       sb([
