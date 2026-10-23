@@ -237,16 +237,9 @@ export function HomeCalendarPage() {
                   await setStatus(event, "held");
                 },
               },
-              // Отменить существующую игру было нечем: статус cancelled в схеме
-              // есть и подписан «Отменена», но выставить его можно было только
-              // при создании — оставалось удалить сессию в архив, стерев то,
-              // что в феврале трижды срывались.
-              {
-                label: "Отменена",
-                onClick: async () => {
-                  await setStatus(event, "cancelled");
-                },
-              },
+              // «Отменена» здесь была, чтобы помнить срывы, но такая сессия
+              // пропадала отовсюду живой записью. Отмена теперь одна — в архив,
+              // и срывы помнит «Архив» (гриллинг «Сессий» 2026-10-23, Q7).
             ],
           },
       ...(event.campaignRole === "gm" ? [{
@@ -254,7 +247,7 @@ export function HomeCalendarPage() {
         onClick: () => setFinanceSessionId(event.id),
       }] : []),
       {
-        label: "Удалить (в архив)",
+        label: "Не состоялась — в архив",
         danger: true,
         onClick: async () => {
           await run(labelled("Сессия не удалена", () => write.del(`/sessions/${event.id}`)), {
@@ -532,7 +525,7 @@ export function HomeCalendarPage() {
                 onDayClick={(date) => openCreateModal(date)}
                 // Клетка календаря показывает только число, поэтому меню
                 // само называет игру, к которой относятся его пункты: иначе
-                // «Удалить (в архив)» в дне с игрой — действие вслепую.
+                // «Не состоялась — в архив» в дне с игрой — действие вслепую.
                 onEventContextMenu={(event, x, y) =>
                   setMenu({ x, y, title: event.campaignName ?? "Сессия", items: eventMenuItems(event) })
                 }

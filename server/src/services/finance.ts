@@ -173,8 +173,8 @@ export interface CampaignDebt {
  * Ростер, а не посещаемость: выбывший (`status = 'left'`) долг за собой
  * уносит, и Мастеру он нужен на виду не меньше, чем долг действующего.
  */
-export function debtsForCampaign(campaignId: number): CampaignDebt[] {
-  const roster = db
+function rosterOf(campaignId: number): { id: number; name: string }[] {
+  return db
     .prepare(
       `SELECT p.id, p.name FROM campaign_roster r
          JOIN players p ON p.id = r.player_id
@@ -182,9 +182,11 @@ export function debtsForCampaign(campaignId: number): CampaignDebt[] {
         ORDER BY p.name`
     )
     .all(campaignId) as { id: number; name: string }[];
+}
 
+export function debtsForCampaign(campaignId: number): CampaignDebt[] {
   const out: CampaignDebt[] = [];
-  for (const p of roster) {
+  for (const p of rosterOf(campaignId)) {
     const mine = unpaidSessionsForPlayer(p.id).filter((u) => u.campaign_id === campaignId);
     if (mine.length === 0) continue;
     const owed = mine.reduce((sum, u) => sum + (u.expected - u.paid - u.forgiven), 0);
@@ -197,6 +199,21 @@ export function debtsForCampaign(campaignId: number): CampaignDebt[] {
     });
   }
   return out;
+}
+
+/**
+ * Сколько игроков не доплатили за каждую сессию кампании — хвост «не оплатили N»
+ * на строке вкладки «Сессии» (гриллинг 2026-10-23, Q8). Тем же счётом, что и
+ * `debtsForCampaign`, чтобы строки сходились с «должны N игроков».
+ */
+export function unpaidCountBySession(campaignId: number): Map<number, number> {
+  const counts = new Map<number, number>();
+  for (const p of rosterOf(campaignId)) {
+    for (const u of unpaidSessionsForPlayer(p.id)) {
+      if (u.campaign_id === campaignId) counts.set(u.session_id, (counts.get(u.session_id) ?? 0) + 1);
+    }
+  }
+  return counts;
 }
 
 /** Прежняя сумма одной сессии — чтобы «Оплатил» можно было отменить. */

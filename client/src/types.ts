@@ -735,6 +735,11 @@ export interface SessionSummary {
   inworld_month_end: number | null;
   inworld_day_end: number | null;
   start_time: string | null;
+  /** Хвосты строки на вкладке «Сессии»: только список кампании их отдаёт. */
+  attended_count?: number;
+  attendance_total?: number;
+  /** Игроков ростера, не доплативших за сессию, — тем же счётом, что долги. */
+  unpaid_count?: number;
 }
 
 export interface AttendanceRow {

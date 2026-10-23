@@ -32,7 +32,9 @@ export function CampaignNow({
     [sessions, today]
   );
   const held = sessions.filter((s) => s.status === "held").length;
-  const planned = sessions.filter((s) => s.status === "planned").length;
+  // Прошедшая неразобранная — не «впереди»: её показывает «Ждут разбора» на
+  // вкладке «Сессии» (гриллинг 2026-10-23, Q18). Сегодняшняя ещё впереди.
+  const planned = sessions.filter((s) => s.status === "planned" && s.date >= today).length;
   const drafts = useResource<{ records: EntityRecord[] }>(`${campaignPaths.records(campaign.id)}?status=draft`).data?.records;
   const unsorted = useMemo(() => unsortedDrafts(drafts ?? [], sessions), [drafts, sessions]);
   const status = campaign.status as CampaignStatus;

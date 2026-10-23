@@ -746,7 +746,7 @@ export function CampaignDetailPage() {
       },
       ...paymentItems,
       {
-        label: "Удалить (в архив)",
+        label: "Не состоялась — в архив",
         danger: true,
         onClick: () =>
           void run(labelled("Сессия в архив", () => write.del(`/sessions/${event.id}`)), {
@@ -1504,7 +1504,6 @@ export function CampaignDetailPage() {
               <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as SessionStatus)}>
                 <option value="planned">Запланировано</option>
                 <option value="held">Состоялась</option>
-                <option value="cancelled">Отмена</option>
               </select>
             </label>
             <label>

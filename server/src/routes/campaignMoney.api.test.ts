@@ -76,4 +76,26 @@ describe("деньги кампании", () => {
     expect((await debts())[0].owed).toBe(900);
     expect((await request(app).post(`/api/campaigns/${paid}/debts/${debtor}/restore`).send({ before: "x" })).status).toBe(400);
   });
+
+  it("список сессий: неоплатившие тем же счётом, что долги, и посещаемость «пришло из всех»", async () => {
+    const paid = Number(db.prepare("INSERT INTO campaigns (name, payment_type, session_rate, rate_split) VALUES ('Хвосты', 'paid', 600, 'per_person')").run().lastInsertRowid);
+    const [vera, gleb, dina] = ["Вера-хвост", "Глеб-хвост", "Дина-хвост"].map((n) => Number(db.prepare("INSERT INTO players (name) VALUES (?)").run(n).lastInsertRowid));
+    for (const p of [vera, gleb, dina]) db.prepare("INSERT INTO campaign_roster (campaign_id, player_id) VALUES (?, ?)").run(paid, p);
+    const s = db.prepare("INSERT INTO sessions (campaign_id, date, status) VALUES (?, ?, ?)");
+    const held = Number(s.run(paid, "2026-10-01", "held").lastInsertRowid);
+    const planned = Number(s.run(paid, "2026-12-01", "planned").lastInsertRowid);
+    const att = db.prepare("INSERT INTO session_attendance (session_id, player_id, attended, amount_paid, amount_forgiven) VALUES (?, ?, ?, ?, ?)");
+    att.run(held, vera, 1, 600, 0); // оплатила
+    att.run(held, gleb, 1, 0, 600); // прощён — не должник
+    att.run(held, dina, 1, 100, 0); // недоплатила
+
+    const rows = (await request(app).get(`/api/campaigns/${paid}/sessions`)).body as { id: number; unpaid_count: number; attended_count: number; attendance_total: number }[];
+    const row = (id: number) => rows.find((r) => r.id === id)!;
+    expect(row(held)).toMatchObject({ unpaid_count: 1, attended_count: 3, attendance_total: 3 });
+    expect(row(planned)).toMatchObject({ unpaid_count: 0, attended_count: 0, attendance_total: 0 });
+
+    db.prepare("UPDATE session_attendance SET attended = 0, amount_paid = 0 WHERE session_id = ? AND player_id = ?").run(held, dina);
+    const after = (await request(app).get(`/api/campaigns/${paid}/sessions`)).body as typeof rows;
+    expect(after.find((r) => r.id === held)).toMatchObject({ unpaid_count: 0, attended_count: 2, attendance_total: 3 });
+  });
 });

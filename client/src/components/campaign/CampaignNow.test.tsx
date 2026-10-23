@@ -3,6 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { CampaignNow } from "./CampaignNow";
+import { toLocalDateKey } from "../../utils/date";
 import type { SessionSummary } from "../../types";
 
 const fx = vi.hoisted(() => ({ drafts: [] as { id: number; session_id: number | null }[] }));
@@ -14,15 +15,29 @@ const sessions = [
   { id: 11, date: "2026-09-20", status: "held", title: "Ранняя" },
 ] as SessionSummary[];
 
-function mount() {
+function mount(list = sessions) {
   render(
     <MemoryRouter>
-      <CampaignNow campaign={{ id: 5, type: "campaign", status: "active", setting_id: null }} sessions={sessions} onSchedule={vi.fn()} onEdit={vi.fn()} />
+      <CampaignNow campaign={{ id: 5, type: "campaign", status: "active", setting_id: null }} sessions={list} onSchedule={vi.fn()} onEdit={vi.fn()} />
     </MemoryRouter>
   );
 }
 
 const drafts = (n: number, session: number) => Array.from({ length: n }, (_, i) => ({ id: i + 1, session_id: session }));
+
+describe("счёт «впереди»", () => {
+  it("прошедшая неразобранная не впереди, сегодняшняя — впереди", () => {
+    fx.drafts = [];
+    const today = toLocalDateKey();
+    mount([
+      ...sessions,
+      { id: 20, date: "2020-01-01", status: "planned", title: "Не разобрана" },
+      { id: 21, date: today, status: "planned", title: "Сегодня" },
+      { id: 22, date: "2999-01-01", status: "planned", title: "Потом" },
+    ] as SessionSummary[]);
+    expect(screen.getByText(/сыграно 2 · впереди 2/)).toBeTruthy();
+  });
+});
 
 describe("«Не разобрано» на «Обзоре»", () => {
   it.each([

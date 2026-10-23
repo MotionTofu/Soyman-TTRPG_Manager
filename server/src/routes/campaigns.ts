@@ -7,7 +7,7 @@ import { db } from "../db/db";
 import {ensureProjectWorkbook,placeProjectWorkbooks} from "../services/projectWorkbooks";
 import type {AuthedRequest} from "../services/auth";
 import { SESSION_NUMBER_SQL } from "../services/sessionNumber";
-import { debtsForCampaign, restoreCampaignPayments, settleCampaignDebt, type PaidBefore } from "../services/finance";
+import { debtsForCampaign, restoreCampaignPayments, settleCampaignDebt, unpaidCountBySession, type PaidBefore } from "../services/finance";
 import { campaignNow, defaultStatus, timePatch } from "../services/eventTime";
 import { campaignFolder, toFileUrl, VAULT_ROOT, vaultAbs, vaultRel, writeReplacingOldFile } from "../services/filesystem";
 import {
@@ -611,15 +611,20 @@ campaignsRouter.get("/:id/sessions", (req, res) => {
       `SELECT s.*,
               ${SESSION_NUMBER_SQL} as session_number,
               -- Лента сессии одним текстом: хроника кампании и фильтр списка.
-              (SELECT group_concat(text, char(10)) FROM (SELECT text FROM session_notes n WHERE n.session_id = s.id ORDER BY n.created_at, n.id)) as notes_text
+              (SELECT group_concat(text, char(10)) FROM (SELECT text FROM session_notes n WHERE n.session_id = s.id ORDER BY n.created_at, n.id)) as notes_text,
+              -- Хвосты строки на вкладке «Сессии»: «3 из 4» при неявке.
+              (SELECT COUNT(*) FROM session_attendance a WHERE a.session_id = s.id AND a.attended = 1) as attended_count,
+              (SELECT COUNT(*) FROM session_attendance a WHERE a.session_id = s.id) as attendance_total
        FROM sessions s
        WHERE s.campaign_id = ? AND s.archived_at IS NULL
        ORDER BY s.date`
     )
     .all(req.params.id) as Record<string, unknown>[];
+  const unpaid = unpaidCountBySession(Number(req.params.id));
   const withPaymentType = rows.map((r) => ({
     ...r,
     effective_payment_type: (r.payment_override as string) || campaign?.payment_type || "free",
+    unpaid_count: unpaid.get(r.id as number) ?? 0,
   }));
   res.json(withPaymentType);
 });
