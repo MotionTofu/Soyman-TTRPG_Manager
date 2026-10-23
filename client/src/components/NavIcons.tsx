@@ -93,7 +93,10 @@ export type NavIconName =
   | "loot"
   | "twoWay"
   | "lock"
-  | "unlock";
+  | "unlock"
+  | "window"
+  | "logout"
+  | "chat";
 
 const SHARED_PROPS: SVGProps<SVGSVGElement> = {
   viewBox: "0 0 24 24",
@@ -708,6 +711,15 @@ const PATHS: Record<NavIconName, ReactNode> = {
   ),
   // Двусторонний выход; односторонний — arrowRight.
   twoWay: <path d="M4.5 8.5h14M15 5l3.5 3.5L15 12M19.5 15.5h-14M9 12l-3.5 3.5L9 19" />,
+  // Значки узкого меню: у этих пунктов раньше была только подпись.
+  window: (
+    <>
+      <rect x="3.5" y="7.5" width="12" height="11" rx="1.5" />
+      <path d="M8.5 7.5V5h12v11h-5" />
+    </>
+  ),
+  logout: <path d="M10 4.5H5.5v15H10M14 8l4 4-4 4M18 12H9" />,
+  chat: <path d="M4.5 5.5h15v10h-8l-4.5 3.5v-3.5h-2.5v-10ZM8 9.5h8M8 12.5h5" />,
 };
 
 export function NavIcon({

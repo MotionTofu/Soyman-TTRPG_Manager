@@ -5,6 +5,8 @@ import type { SideModuleId } from "./SideModules";
 export interface SideLayout {
   collapsed: SideModuleId[];
   heights: Partial<Record<SideModuleId, number>>;
+  /** Узкая панель — значки вместо модулей (гриллинг 2026-10-23, Q12). */
+  narrow?: boolean;
 }
 
 const KEY = "rpgManagerSidePanel";
@@ -15,6 +17,7 @@ export function loadSideLayout(): SideLayout {
     return {
       collapsed: Array.isArray(raw?.collapsed) ? raw.collapsed : [],
       heights: raw?.heights && typeof raw.heights === "object" ? raw.heights : {},
+      narrow: raw?.narrow === true,
     };
   } catch {
     return { collapsed: [], heights: {} };

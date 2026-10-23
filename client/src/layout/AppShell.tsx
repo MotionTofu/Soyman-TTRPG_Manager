@@ -20,7 +20,8 @@ import { openSecondWindow, openExternalLink } from "../electronApi";
 import { UnloadTargetsProvider } from "../unloadTargets";
 import { UndoDeleteProvider } from "../hooks/useUndoDelete";
 import { RehearsalStrip } from "../components/SessionLiveControls";
-import { brandLogo } from "../brandLogo";
+import { brandLogo, brandMascot } from "../brandLogo";
+import { useRailTip } from "./RailTip";
 import { ExternalLinkConfirmModal, BOOSTY_URL } from "../components/ExternalLinkConfirmModal";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { useWorkbookCrumbs } from "./useWorkbookCrumbs";
@@ -323,6 +324,7 @@ function NewWindowButton() {
       onClick={() => openSecondWindow()}
       title="Открыть эту же страницу вторым окном. Перенести сущность между окнами можно через «Мешок»."
     >
+      <NavIcon name="window" />
       Новое окно
     </button>
   );
@@ -343,6 +345,7 @@ function LogoutButton({ username }: { username?: string }) {
           window.location.reload();
         }}
       >
+        <NavIcon name="logout" />
         {username ? `Выйти (${username})` : "Выйти"}
       </button>
     </>
@@ -638,6 +641,18 @@ export function AppShell() {
     try { return localStorage.getItem("playerHidden") === "1"; } catch { return false; }
   });
   const [panelsHidden, setPanelsHidden] = useState(false);
+  // Узкое меню — только значки, подпись язычком (гриллинг 2026-10-23, Q13–Q15).
+  // По умолчанию развёрнуто: новичку нужны подписи. Удобство одного места.
+  const [navNarrow, setNavNarrow] = useState(() => {
+    try { return localStorage.getItem("navNarrow") === "1"; } catch { return false; }
+  });
+  function toggleNavNarrow() {
+    setNavNarrow((v) => {
+      try { localStorage.setItem("navNarrow", v ? "0" : "1"); } catch { /* приватный режим */ }
+      return !v;
+    });
+  }
+  const navTip = useRailTip(navNarrow, "right");
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -743,9 +758,10 @@ export function AppShell() {
           </div>
         </nav>
       ) : (
-        <nav id="app-nav" className={`app-nav${navOpen ? " open" : ""}`}>
+        <nav id="app-nav" className={`app-nav${navOpen ? " open" : ""}${navNarrow ? " is-narrow" : ""}`} {...navTip.handlers}>
           <ParticleField count={2} className="header-particles" />
           <img src={brandLogo} alt="SoyMan — TTRPG Manager" className="brand-logo" />
+          <img src={brandMascot} alt="SoyMan" className="brand-mascot" />
           {navItems.map((item) => {
             const key = item.to?.replace(/^\//, "") ?? "";
             const cnt = navCounts[key];
@@ -760,7 +776,8 @@ export function AppShell() {
                 <span
                   key={item.to}
                   className="nav-empty"
-                  title={emptyLabel}
+                  title={navNarrow ? undefined : emptyLabel}
+                  data-tip={`${item.label} — ${emptyLabel}`}
                   aria-disabled="true"
                 >
                   <NavIcon name={item.icon} />
@@ -816,7 +833,18 @@ export function AppShell() {
             {!isPlayer && <BackupButton />}
             <NewWindowButton />
             <LogoutButton username={user?.username} />
+            <button
+              type="button"
+              className="nav-bottom-button nav-narrow-toggle"
+              onClick={toggleNavNarrow}
+              aria-pressed={navNarrow}
+              data-tip="Развернуть меню"
+            >
+              <NavIcon name="chevron" />
+              Свернуть меню
+            </button>
           </div>
+          {navTip.node}
         </nav>
       )}
       <main className={`app-content${userLoading ? "" : isPlayer ? "" : " has-player"}`}>

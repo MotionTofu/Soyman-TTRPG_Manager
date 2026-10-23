@@ -19,6 +19,8 @@ import { EntityPreviewModal } from "../components/EntityPreviewModal";
 import { SessionNotesChat } from "../components/SessionNotesChat";
 import { sessionPaths } from "../data/sessions";
 import { SideModules, type SideModule, type SideModuleId } from "./SideModules";
+import { SideRail } from "./SideRail";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import { loadSideLayout, saveSideLayout, type SideLayout } from "./sideLayout";
 
 // Most types deep-link via DETAIL_ROUTES/:id; compendium entries instead
@@ -75,6 +77,20 @@ export function SearchPanel({ horizontal, workspace = false, onNavigate }: Props
   const [layout, setLayout] = useState<SideLayout>(loadSideLayout);
   // Идущая сессия — одна на приложение; пока она есть, в панели её лента.
   const live = useResource<LiveSession | null>(isPlayer || horizontal ? null : sessionPaths.live()).data ?? null;
+  // Узкий вид — везде, кроме Пульта: там панели свои и не меняются (Q12′).
+  // На телефоне панель — шторка, там узкий вид не нужен.
+  const desktop = useMediaQuery("(min-width: 861px)");
+  const narrow = !!layout.narrow && desktop && !liveMatch && !horizontal && !workspace;
+  const [railOpen, setRailOpen] = useState<SideModuleId | null>(null);
+
+  function setNarrow(value: boolean) {
+    setRailOpen(null);
+    setLayout((prev) => {
+      const next = { ...prev, narrow: value };
+      saveSideLayout(next);
+      return next;
+    });
+  }
 
   function toggleModule(id: SideModuleId) {
     setLayout((prev) => {
@@ -86,7 +102,7 @@ export function SearchPanel({ horizontal, workspace = false, onNavigate }: Props
   }
   // Заголовок модуля — он же переключатель: щелчок по названию сворачивает.
   function titleOf(id: SideModuleId, text: string) {
-    if (horizontal || workspace) return <strong>{text}</strong>;
+    if (horizontal || workspace || narrow) return <strong>{text}</strong>;
     return (
       <button type="button" className="side-module-title" title="Свернуть" aria-expanded onClick={() => toggleModule(id)}>
         {text}
@@ -105,6 +121,7 @@ export function SearchPanel({ horizontal, workspace = false, onNavigate }: Props
         // Не перехватывать "/" внутри набора механик/описаний — только когда фокус на body
         if (ae && ae !== document.body) return;
         e.preventDefault();
+        if (narrow) return setRailOpen("search");
         if (!workspace) setLayout((prev) => {
           if (!prev.collapsed.includes("search")) return prev;
           const next = { ...prev, collapsed: prev.collapsed.filter((c) => c !== "search") };
@@ -116,7 +133,7 @@ export function SearchPanel({ horizontal, workspace = false, onNavigate }: Props
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [workspace]);
+  }, [workspace, narrow]);
 
   function pinCurrentPage() {
     const path = location.pathname + location.search;
@@ -383,5 +400,29 @@ export function SearchPanel({ horizontal, workspace = false, onNavigate }: Props
     { id: "pins", title: "Закреплённые страницы", node: pinsBody },
   ];
 
-  return <SideModules modules={modules} layout={layout} setLayout={setLayout} flexId={live ? "chat" : null} />;
+  if (narrow) {
+    return (
+      <SideRail
+        modules={modules}
+        open={railOpen}
+        setOpen={setRailOpen}
+        live={live}
+        pins={pins}
+        canPin={pins.length < MAX_PINS}
+        onPin={pinCurrentPage}
+        onUnpin={unpin}
+        onExpand={() => setNarrow(false)}
+      />
+    );
+  }
+
+  return (
+    <SideModules
+      modules={modules}
+      layout={layout}
+      setLayout={setLayout}
+      flexId={live ? "chat" : null}
+      onNarrow={liveMatch ? undefined : () => setNarrow(true)}
+    />
+  );
 }

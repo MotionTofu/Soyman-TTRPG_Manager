@@ -1,5 +1,6 @@
 import { Fragment, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import "./SideModules.css";
+import { NavIcon } from "../components/NavIcons";
 import { saveSideLayout, type SideLayout } from "./sideLayout";
 
 // Модули правой панели (гриллинг 2026-09-28, Q41, Q48): поиск, трекер или
@@ -28,11 +29,14 @@ export function SideModules({
   layout,
   setLayout,
   flexId,
+  onNarrow,
 }: {
   modules: SideModule[];
   layout: SideLayout;
   setLayout: (update: (prev: SideLayout) => SideLayout) => void;
   flexId: SideModuleId | null;
+  /** Свернуть панель до значков; на Пульте не передаётся. */
+  onNarrow?: () => void;
 }) {
   const refs = useRef(new Map<SideModuleId, HTMLDivElement>());
   const expanded = modules.filter((m) => !layout.collapsed.includes(m.id));
@@ -82,6 +86,11 @@ export function SideModules({
 
   return (
     <div className="search-panel side-modules">
+      {onNarrow && (
+        <button type="button" className="side-modules__narrow" onClick={onNarrow} title="Свернуть панель до значков" aria-label="Свернуть панель">
+          <NavIcon name="chevron" />
+        </button>
+      )}
       {expanded.map((m, i) => {
         const h = layout.heights[m.id];
         const style =
