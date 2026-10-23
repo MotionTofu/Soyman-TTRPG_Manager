@@ -48,7 +48,7 @@ beforeAll(async () => {
   insertId = id("INSERT INTO story_scenes (setting_id, arc_id, name, library_scene_id) VALUES (?, ?, '', ?)", settingId, arcId, blank);
 
   // Состав: персонаж, место, награда-артефакт, совпавшая
-  // с лутом, и проверка. Копия кампании без своих связей берёт состав исходной.
+  // с лутом. Копия кампании без своих связей берёт состав исходной.
   const rich = id("INSERT INTO story_scenes (setting_id, arc_id, name) VALUES (?, ?, 'Ворота')", settingId, arcId);
   const link = db.prepare("INSERT INTO generic_links (from_type, from_id, to_type, to_id, section) VALUES ('scene', ?, ?, ?, ?)");
   link.run(rich, "being", 1, "scene_plot_characters");
@@ -56,7 +56,6 @@ beforeAll(async () => {
   const sword = id("INSERT INTO artifacts (setting_id, name) VALUES (?, 'Меч')", settingId);
   link.run(rich, "artifact", sword, "scene_loot");
   db.prepare("INSERT INTO story_scene_rewards (scene_id, what, artifact_id) VALUES (?, 'Меч', ?), (?, 'Кошель', NULL)").run(rich, sword, rich);
-  db.prepare("INSERT INTO story_scene_checks (scene_id, what) VALUES (?, 'Замок')").run(rich);
   copyId = id("INSERT INTO story_scenes (setting_id, arc_id, campaign_id, source_scene_id, name) VALUES (?, ?, ?, ?, 'Ворота')", settingId, arcId, campaignId, rich);
 
   // Отметка правленой сцены: копия без своей отметки берёт отметку исходной,
@@ -106,7 +105,7 @@ describe("GET /story/campaign-tree — сессии сцены", () => {
   it("отдаёт состав сцены, копия берёт его у исходной", async () => {
     const res = await request(app).get(`/api/story/campaign-tree?campaign_id=${campaignId}`);
     const scenes = res.body.flatMap((a: { scenes: { id: number }[] }) => a.scenes);
-    const want = { characters: ["being:1"], locations: ["location:2"], obstacles: [], loot: [expect.stringMatching(/^artifact:/), expect.stringMatching(/^reward:/)], checks: 1 };
+    const want = { characters: ["being:1"], locations: ["location:2"], obstacles: [], loot: [expect.stringMatching(/^artifact:/), expect.stringMatching(/^reward:/)] };
     const copy = scenes.find((s: { id: number }) => s.id === copyId);
     expect(copy.makeup).toEqual(want);
   });

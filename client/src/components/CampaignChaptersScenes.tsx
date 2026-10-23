@@ -197,23 +197,21 @@ function useClueNodes(adv: CampaignAdventureTree, campaignId: number) {
 
 const allScenes = (adv: CampaignAdventureTree) => [...adv.scenes, ...adv.chapters.flatMap((c) => c.scenes)];
 /**
- * Состав (гриллинг 2026-10-23): персонажи, места, препятствия, проверки,
- * сокровища. В шапке приключения — значок и слово, с нулями: это и легенда.
- * В строке сцены — значок и число в своих столбцах справа, как в концепте;
- * слово — в подсказке, угадывать сокращения не нужно.
+ * Состав (гриллинг 2026-10-23): NPC, локации, препятствия, сокровища.
+ * В шапке приключения — значок и слово, с нулями. В строке сцены — значок
+ * и число в своих столбцах справа, как в концепте; над столбцами — подписи.
  */
-const MAKEUP_WORDS: [keyof SceneMakeup, NavIconName, [string, string, string]][] = [
-  ["characters", "players", ["персонаж", "персонажа", "персонажей"]],
-  ["locations", "pin", ["место", "места", "мест"]],
-  ["obstacles", "swords", ["препятствие", "препятствия", "препятствий"]],
-  ["checks", "die", ["проверка", "проверки", "проверок"]],
-  ["loot", "bag", ["сокровище", "сокровища", "сокровищ"]],
+const MAKEUP_WORDS: [keyof SceneMakeup, NavIconName, string, [string, string, string]][] = [
+  ["characters", "players", "NPC", ["NPC", "NPC", "NPC"]],
+  ["locations", "pin", "Локации", ["локация", "локации", "локаций"]],
+  ["obstacles", "skull", "Препятствия", ["препятствие", "препятствия", "препятствий"]],
+  ["loot", "bag", "Сокровища", ["сокровище", "сокровища", "сокровищ"]],
 ];
-const makeupCount = (m: SceneMakeup, k: keyof SceneMakeup) => (k === "checks" ? m.checks : m[k].length);
+const makeupCount = (m: SceneMakeup, k: keyof SceneMakeup) => m[k].length;
 
 function Makeup({ m, words }: { m: SceneMakeup; words?: boolean }) {
   // Нули показываются везде (решение владельца), только бледнее.
-  const cells = MAKEUP_WORDS.map(([k, icon, forms]) => {
+  const cells = MAKEUP_WORDS.map(([k, icon, , forms]) => {
     const n = makeupCount(m, k);
     const label = `${n} ${plural(n, ...forms)}`;
     return (
@@ -225,16 +223,28 @@ function Makeup({ m, words }: { m: SceneMakeup; words?: boolean }) {
   });
   return <span className={`campaign-makeup${words ? " campaign-makeup--words" : ""}`}>{cells}</span>;
 }
-/** Состав приключения: каждая сущность один раз, проверки — суммой. */
+/** Подписи над столбцами состава — строкой той же сетки, что у сцен. */
+function MakeupHeads() {
+  return (
+    <div className="campaign-scene__summary campaign-scene__heads" aria-hidden="true">
+      <span />
+      <span />
+      <span className="campaign-makeup">
+        {MAKEUP_WORDS.map(([k, , head]) => (
+          <span key={k} className="campaign-makeup__cell">{head}</span>
+        ))}
+      </span>
+      <span className="campaign-scene__clues" />
+      <span className="campaign-scene__session" />
+      <span className="campaign-scene__more" />
+    </div>
+  );
+}
+
+/** Состав приключения: каждая сущность один раз. */
 function adventureMakeup(scenes: CampaignTreeScene[]): SceneMakeup {
-  const uniq = (k: "characters" | "locations" | "obstacles" | "loot") => [...new Set(scenes.flatMap((s) => s.makeup[k]))];
-  return {
-    characters: uniq("characters"),
-    locations: uniq("locations"),
-    obstacles: uniq("obstacles"),
-    loot: uniq("loot"),
-    checks: scenes.reduce((n, s) => n + s.makeup.checks, 0),
-  };
+  const uniq = (k: keyof SceneMakeup) => [...new Set(scenes.flatMap((s) => s.makeup[k]))];
+  return { characters: uniq("characters"), locations: uniq("locations"), obstacles: uniq("obstacles"), loot: uniq("loot") };
 }
 
 const holesLabel = (n: number) => `⚠ ${n} ${plural(n, "узел", "узла", "узлов")} без трёх улик`;
@@ -564,6 +574,7 @@ const SceneList = memo(function SceneList({
   return (
     <div className="campaign-scene-list">
       {title && <span className="campaign-scene-list__title muted">{title}</span>}
+      {scenes.length > 0 && <MakeupHeads />}
       {scenes.map((s) => (
         <SceneRow
           key={s.id}
@@ -652,10 +663,10 @@ const SceneRow = memo(function SceneRow({
           {s.campaign_only && <span className="campaign-scene__note">только в кампании</span>}
         </span>
         <Makeup m={s.makeup} />
+        {clueChip ?? <span className="campaign-scene__clues is-none" />}
         <span className="campaign-scene__session">
           {lastPlayed ? `Сессия №${lastPlayed.number}` : planned ? <span className="muted">в сессии №{planned.number}</span> : null}
         </span>
-        {clueChip ?? <span className="campaign-scene__clues is-none" />}
         <button
           type="button"
           className="campaign-scene__more"

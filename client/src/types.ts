@@ -1351,13 +1351,12 @@ export interface SceneSession {
   number: number;
   played: boolean;
 }
-/** Состав сцены: ключи сущностей «тип:id» по блокам страницы сцены и число проверок. */
+/** Состав сцены: ключи сущностей «тип:id» по блокам страницы сцены. */
 export interface SceneMakeup {
   characters: string[];
   locations: string[];
   obstacles: string[];
   loot: string[];
-  checks: number;
 }
 
 export type CampaignTreeScene = StoryScene & { sessions: SceneSession[]; makeup: SceneMakeup };

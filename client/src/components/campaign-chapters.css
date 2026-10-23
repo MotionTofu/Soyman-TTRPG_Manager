@@ -67,7 +67,8 @@
   position: relative;
   border-bottom: var(--card-border-width) solid var(--line);
 }
-.campaign-chapters .campaign-scene > .campaign-scene__summary {
+.campaign-chapters .campaign-scene > .campaign-scene__summary,
+.campaign-chapters .campaign-scene-list > .campaign-scene__heads {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
   align-items: center;
@@ -111,8 +112,19 @@
   display: inline-flex;
   align-items: center;
   gap: var(--sp-2);
-  width: 3rem;
+  width: 6rem;
   white-space: nowrap;
+}
+/* Подписи столбцов: та же сетка, что у строк сцен, без щелчка и подчёркивания. */
+.campaign-chapters .campaign-scene-list > .campaign-scene__heads {
+  min-height: 0;
+  padding-top: var(--sp-2);
+  padding-bottom: 0;
+  cursor: default;
+  font-size: var(--fs-micro);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--paper-muted, var(--muted));
 }
 .campaign-makeup__cell .nav-icon {
   width: 15px;
@@ -188,6 +200,7 @@
 }
 .campaign-scene__session {
   width: 6.5rem;
+  text-align: right;
   font-size: var(--fs-meta);
   white-space: nowrap;
 }
@@ -205,6 +218,7 @@
   font-weight: 600;
 }
 .campaign-scene__more {
+  width: 2rem;
   padding: 0 var(--sp-3);
   background: transparent;
   border: none;
@@ -383,6 +397,7 @@
     column-gap: var(--sp-4);
   }
   .campaign-scene__session,
+  .campaign-chapters .campaign-scene-list > .campaign-scene__heads,
   .campaign-scene__summary > .campaign-makeup,
   .campaign-scene__clues:not(.is-bad) {
     display: none;

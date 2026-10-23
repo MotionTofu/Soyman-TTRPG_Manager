@@ -1116,9 +1116,9 @@ function sceneSessions(campaignId: number) {
 // Состав сцены для «Сюжета» (гриллинг 2026-10-23): кто, где, что мешает и что
 // найти — по блокам страницы сцены. Ключи сущностей, а не числа: шапка
 // приключения считает каждую сущность один раз.
-type SceneMakeup = { characters: string[]; locations: string[]; obstacles: string[]; loot: string[]; checks: number };
-const emptyMakeup = (): SceneMakeup => ({ characters: [], locations: [], obstacles: [], loot: [], checks: 0 });
-const MAKEUP_SECTIONS: Record<string, Exclude<keyof SceneMakeup, "checks">> = {
+type SceneMakeup = { characters: string[]; locations: string[]; obstacles: string[]; loot: string[] };
+const emptyMakeup = (): SceneMakeup => ({ characters: [], locations: [], obstacles: [], loot: [] });
+const MAKEUP_SECTIONS: Record<string, keyof SceneMakeup> = {
   scene_plot_characters: "characters",
   scene_location: "locations",
   scene_obstacles: "obstacles",
@@ -1146,10 +1146,6 @@ function sceneMakeup(settingId: number) {
     const loot = of(r.scene_id).loot;
     if (!loot.includes(k)) loot.push(k);
   }
-  const checks = db
-    .prepare(`SELECT scene_id, COUNT(*) AS n FROM story_scene_checks WHERE scene_id IN (${scenes}) GROUP BY scene_id`)
-    .all({ s: settingId }) as { scene_id: number; n: number }[];
-  for (const c of checks) of(c.scene_id).checks = c.n;
   return by;
 }
 
