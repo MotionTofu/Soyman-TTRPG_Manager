@@ -13,6 +13,7 @@ let campaignId = 0;
 let sceneId = 0;
 let heldId = 0;
 let nextId = 0;
+let insertId = 0;
 
 beforeAll(async () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "story-campaign-tree-test-"));
@@ -35,6 +36,9 @@ beforeAll(async () => {
   campaignId = id("INSERT INTO campaigns (name, setting_id) VALUES ('C', ?)", settingId);
   db.prepare("INSERT INTO campaign_adventures (campaign_id, arc_id) VALUES (?, ?)").run(campaignId, arcId);
   sceneId = id("INSERT INTO story_scenes (setting_id, arc_id, name) VALUES (?, ?, 'Сады')", settingId, arcId);
+  // Вставка заготовки: своё имя пустое, читается с заготовки.
+  const blank = id("INSERT INTO story_scenes (setting_id, name) VALUES (?, 'Заготовка')", settingId);
+  insertId = id("INSERT INTO story_scenes (setting_id, arc_id, name, library_scene_id) VALUES (?, ?, '', ?)", settingId, arcId, blank);
 
   heldId = id("INSERT INTO sessions (campaign_id, date, status) VALUES (?, '2026-10-01', 'held')", campaignId);
   nextId = id("INSERT INTO sessions (campaign_id, date, status) VALUES (?, '2026-10-30', 'planned')", campaignId);
@@ -56,5 +60,11 @@ describe("GET /story/campaign-tree — сессии сцены", () => {
       { id: heldId, date: "2026-10-01", number: 1, played: true },
       { id: nextId, date: "2026-10-30", number: 2, played: false },
     ]);
+  });
+
+  it("вставка заготовки показывает имя заготовки", async () => {
+    const res = await request(app).get(`/api/story/campaign-tree?campaign_id=${campaignId}`);
+    const scene = res.body.flatMap((a: { scenes: { id: number }[] }) => a.scenes).find((s: { id: number }) => s.id === insertId);
+    expect(scene.name).toBe("Заготовка");
   });
 });

@@ -250,6 +250,11 @@
 .campaign-adv__logline {
   font-size: var(--fs-body);
   color: var(--paper-ink, var(--ink));
+  /* Логлайн — первая строка описания, а книжные пишут её абзацем. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 .campaign-adv__facts {
   display: flex;

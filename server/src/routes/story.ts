@@ -1067,7 +1067,8 @@ storyRouter.get("/campaign-tree", (req, res) => {
       const src = s.source_scene_id != null ? sessionsOf.get(s.source_scene_id as number) ?? [] : [];
       const merged = new Map([...src, ...own].map((x) => [`${x.id}:${x.played}`, x]));
       const sessions = [...merged.values()].sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
-      return { ...s, sessions };
+      // Нетронутая вставка заготовки своего имени не хранит — как на холсте.
+      return { ...withLibraryContent(s as unknown as SceneRow), sessions };
     });
   const tree = adventures.map((adv) => {
     const advId = adv.id as number;

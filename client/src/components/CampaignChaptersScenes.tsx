@@ -170,9 +170,15 @@ function plannedSession(s: CampaignTreeScene) {
 
 const isPending = (s: StoryScene) => (s.state?.status ?? "pending") === "pending";
 
-/** Дыры правила трёх — только у не начатых сцен: у сыгранной улики уже ничего не решают. */
+/**
+ * Сцена ещё впереди: не отмечена и ни разу не запускалась. Запуск без отметки —
+ * партия до сцены дошла, как и «посещён» в «Выводах».
+ */
+const isAhead = (s: CampaignTreeScene) => isPending(s) && !s.sessions.some((x) => x.played);
+
+/** Дыры правила трёх — только у сцен впереди: у пройденной улики уже ничего не решают. */
 function countHoles(list: CampaignTreeScene[], nodeBy: Map<number, ArcClueNode>) {
-  return list.filter((s) => isPending(s) && isHole(nodeBy.get(s.id))).length;
+  return list.filter((s) => isAhead(s) && isHole(nodeBy.get(s.id))).length;
 }
 
 const allScenes = (adv: CampaignAdventureTree) => [...adv.scenes, ...adv.chapters.flatMap((c) => c.scenes)];
@@ -332,7 +338,11 @@ function AdventureSection({
       <header className="res-group__band campaign-adv__head">
         <div className="campaign-adv__title">
           <span className="res-group__title">{adv.name}</span>
-          {logline && <span className="campaign-adv__logline">{logline}</span>}
+          {logline && (
+            <span className="campaign-adv__logline">
+              <MentionText text={logline} />
+            </span>
+          )}
           <span className="campaign-adv__facts">
             {facts.join(" · ")}
             {adv.is_override && <span className="campaign-scene__note">правка кампании</span>}
@@ -536,11 +546,11 @@ const SceneRow = memo(function SceneRow({
   const lastPlayed = played[played.length - 1] ?? null;
   const planned = lastPlayed ? null : plannedSession(s);
 
-  // Улики: красным — только у не начатой сцены, которой не хватает до трёх.
+  // Улики: красным — только у сцены впереди (isAhead), которой не хватает до трёх.
   const need = node ? clueNeed(node.role, node.clue_in, node.passage_in) : null;
   let clueChip: ReactNode = null;
   if (node && need !== "start" && need !== "proactive") {
-    const bad = need === "missing" && status === "pending";
+    const bad = need === "missing" && isAhead(s);
     clueChip = (
       <span
         className={`campaign-scene__clues${bad ? " is-bad" : ""}`}
@@ -626,7 +636,7 @@ const SceneRow = memo(function SceneRow({
         {node && clues && <SceneClues node={node} clues={clues} />}
         {s.sessions.length > 0 && (
           <span className="campaign-scene__sessions">
-            {s.sessions.map((x) => `${x.played ? "Сыграна" : "Запланирована"} в №${x.number}`).join(" · ")}
+            {s.sessions.map((x) => `${x.played ? "Запускалась" : "Запланирована"} в №${x.number}`).join(" · ")}
           </span>
         )}
         <div className="row campaign-scene__actions">
