@@ -10,7 +10,7 @@ import { MentionText } from "./mentions/MentionText";
 import { EmptyState } from "./EmptyState";
 import { SCENE_STATUSES, clueNeed, nodeLabel, plural, sceneWord } from "../sceneKinds";
 import type { ArcClueNode, ArcClues, CampaignAdventureTree, CampaignReveals, CampaignTreeScene, SceneMakeup, SceneStatus, StoryScene } from "../types";
-import { NavIcon } from "./NavIcons";
+import { NavIcon, type NavIconName } from "./NavIcons";
 import { ContextMenu } from "./ContextMenu";
 import { arcCluesPath } from "../data/canvas";
 import "./campaign-chapters.css";
@@ -198,25 +198,32 @@ function useClueNodes(adv: CampaignAdventureTree, campaignId: number) {
 const allScenes = (adv: CampaignAdventureTree) => [...adv.scenes, ...adv.chapters.flatMap((c) => c.scenes)];
 /**
  * Состав (гриллинг 2026-10-23): персонажи, места, препятствия, проверки,
- * сокровища. В шапке приключения — словами и с нулями, в строке сцены —
- * сокращённо и только ненулевые.
+ * сокровища. В шапке приключения — значок и слово, с нулями: это и легенда.
+ * В строке сцены — значок и число в своих столбцах справа, как в концепте;
+ * слово — в подсказке, угадывать сокращения не нужно.
  */
-const MAKEUP_WORDS: [keyof SceneMakeup, [string, string, string], string | null][] = [
-  ["characters", ["персонаж", "персонажа", "персонажей"], "перс."],
-  ["locations", ["место", "места", "мест"], null],
-  ["obstacles", ["препятствие", "препятствия", "препятствий"], "преп."],
-  ["checks", ["проверка", "проверки", "проверок"], "пров."],
-  ["loot", ["сокровище", "сокровища", "сокровищ"], "сокр."],
+const MAKEUP_WORDS: [keyof SceneMakeup, NavIconName, [string, string, string]][] = [
+  ["characters", "players", ["персонаж", "персонажа", "персонажей"]],
+  ["locations", "pin", ["место", "места", "мест"]],
+  ["obstacles", "swords", ["препятствие", "препятствия", "препятствий"]],
+  ["checks", "die", ["проверка", "проверки", "проверок"]],
+  ["loot", "bag", ["сокровище", "сокровища", "сокровищ"]],
 ];
 const makeupCount = (m: SceneMakeup, k: keyof SceneMakeup) => (k === "checks" ? m.checks : m[k].length);
-function makeupLabel(m: SceneMakeup, short: boolean) {
-  return MAKEUP_WORDS.map(([k, forms, abbr]) => {
+
+function Makeup({ m, words }: { m: SceneMakeup; words?: boolean }) {
+  // Нули показываются везде (решение владельца), только бледнее.
+  const cells = MAKEUP_WORDS.map(([k, icon, forms]) => {
     const n = makeupCount(m, k);
-    if (short && n === 0) return null;
-    return `${n} ${short && abbr ? abbr : plural(n, ...forms)}`;
-  })
-    .filter(Boolean)
-    .join(" · ");
+    const label = `${n} ${plural(n, ...forms)}`;
+    return (
+      <span key={k} className={`campaign-makeup__cell${n === 0 ? " is-zero" : ""}`} title={label}>
+        <NavIcon name={icon} />
+        {words ? label : n}
+      </span>
+    );
+  });
+  return <span className={`campaign-makeup${words ? " campaign-makeup--words" : ""}`}>{cells}</span>;
 }
 /** Состав приключения: каждая сущность один раз, проверки — суммой. */
 function adventureMakeup(scenes: CampaignTreeScene[]): SceneMakeup {
@@ -394,7 +401,7 @@ function AdventureSection({
             {facts.join(" · ")}
             {adv.is_override && <span className="campaign-scene__note">правка кампании</span>}
           </span>
-          <span className="campaign-adv__facts">{makeupLabel(adventureMakeup(all), false)}</span>
+          <Makeup m={adventureMakeup(all)} words />
           {unmarked && settingId != null && (
             <button
               type="button"
@@ -599,7 +606,6 @@ const SceneRow = memo(function SceneRow({
   const status = s.state?.status ?? "pending";
   const kind = s.node_type || s.node_role !== "normal" ? nodeLabel(s) : null;
   const navigate = useNavigate();
-  const makeup = makeupLabel(s.makeup, true);
   const played = s.sessions.filter((x) => x.played);
   const lastPlayed = played[played.length - 1] ?? null;
   const planned = lastPlayed ? null : plannedSession(s);
@@ -639,15 +645,13 @@ const SceneRow = memo(function SceneRow({
             onStatus(s, status === "done" ? "pending" : "done");
           }}
         />
-        <span className="campaign-scene__main">
-          <span className="campaign-scene__name">
-            {s.name}
-            {kind && <span className="campaign-scene__kind"> · {kind}</span>}
-            {s.is_override && <span className="campaign-scene__note">правка</span>}
-            {s.campaign_only && <span className="campaign-scene__note">только в кампании</span>}
-          </span>
-          {makeup && <span className="campaign-scene__makeup">{makeup}</span>}
+        <span className="campaign-scene__name">
+          {s.name}
+          {kind && <span className="campaign-scene__kind"> · {kind}</span>}
+          {s.is_override && <span className="campaign-scene__note">правка</span>}
+          {s.campaign_only && <span className="campaign-scene__note">только в кампании</span>}
         </span>
+        <Makeup m={s.makeup} />
         <span className="campaign-scene__session">
           {lastPlayed ? `Сессия №${lastPlayed.number}` : planned ? <span className="muted">в сессии №{planned.number}</span> : null}
         </span>
@@ -692,7 +696,9 @@ const SceneRow = memo(function SceneRow({
             <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Сводки нет — откройте сцену, чтобы добавить.</span>
           )}
           {/* На телефоне состав уезжает из строки сюда, над кнопками (Q7). */}
-          {makeup && <span className="campaign-scene__makeup-inline">{makeup}</span>}
+          <span className="campaign-scene__makeup-inline">
+            <Makeup m={s.makeup} words />
+          </span>
           <div className="campaign-scene__actions">
             <button type="button" onClick={() => navigate(`/scenes/${s.id}?campaign=${campaignId}`)}>Открыть сцену</button>
             {canvasUrl && (

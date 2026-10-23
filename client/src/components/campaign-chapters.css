@@ -69,7 +69,7 @@
 }
 .campaign-chapters .campaign-scene > .campaign-scene__summary {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
   align-items: center;
   gap: var(--sp-5);
   min-height: 58px;
@@ -99,17 +99,36 @@
   color: var(--paper-muted, var(--muted));
   text-transform: lowercase;
 }
-.campaign-scene__main {
+/* Состав: значок и число. В строке — столбцы постоянной ширины, чтобы
+   числа соседних сцен стояли друг под другом. */
+.campaign-makeup {
   display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  min-width: 0;
-}
-/* Состав сцены — второй строкой под названием, как в концепте. */
-.campaign-scene__makeup,
-.campaign-scene__makeup-inline {
+  align-items: center;
   font-size: var(--fs-meta);
   color: var(--paper-muted, var(--muted));
+}
+.campaign-makeup__cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 3rem;
+  white-space: nowrap;
+}
+.campaign-makeup__cell .nav-icon {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+.campaign-makeup__cell.is-zero {
+  opacity: 0.45;
+}
+.campaign-makeup--words {
+  flex-wrap: wrap;
+  column-gap: var(--sp-5);
+  row-gap: var(--sp-1);
+}
+.campaign-makeup--words .campaign-makeup__cell {
+  width: auto;
 }
 .campaign-scene__makeup-inline {
   display: none;
@@ -168,10 +187,13 @@
   font-weight: 400;
 }
 .campaign-scene__session {
+  width: 6.5rem;
   font-size: var(--fs-meta);
   white-space: nowrap;
 }
 .campaign-scene__clues {
+  min-width: 5rem;
+  text-align: right;
   font-size: var(--fs-meta);
   color: var(--paper-muted, var(--muted));
   white-space: nowrap;
@@ -361,7 +383,7 @@
     column-gap: var(--sp-4);
   }
   .campaign-scene__session,
-  .campaign-scene__makeup,
+  .campaign-scene__summary > .campaign-makeup,
   .campaign-scene__clues:not(.is-bad) {
     display: none;
   }
