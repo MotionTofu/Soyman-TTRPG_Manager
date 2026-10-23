@@ -181,6 +181,21 @@ function countHoles(list: CampaignTreeScene[], nodeBy: Map<number, ArcClueNode>)
   return list.filter((s) => isAhead(s) && isHole(nodeBy.get(s.id))).length;
 }
 
+/**
+ * Граф улик приключения для «Сюжета». Приключение, где улик нет вовсе, ещё не
+ * размечено по узлам — его узлы не дыры, а «ещё не начато»: счётчиков нет,
+ * в шапке серая подсказка (решение владельца 2026-10-23).
+ */
+function useClueNodes(adv: CampaignAdventureTree, campaignId: number) {
+  const clues = useResource<ArcClues>(adv.is_default ? null : arcCluesPath(adv.id, campaignId)).data;
+  const unmarked = !!clues && clues.nodes.every((n) => n.clue_in === 0 && n.clue_out === 0);
+  const nodeBy = useMemo(
+    () => new Map(unmarked ? [] : (clues?.nodes ?? []).map((n) => [n.shown_id, n])),
+    [clues, unmarked]
+  );
+  return { clues: unmarked ? undefined : clues, nodeBy, unmarked };
+}
+
 const allScenes = (adv: CampaignAdventureTree) => [...adv.scenes, ...adv.chapters.flatMap((c) => c.scenes)];
 const holesLabel = (n: number) => `⚠ ${n} ${plural(n, "узел", "узла", "узлов")} без трёх улик`;
 const ADV_ROLE: Record<string, string> = { start: "старт", finale: "финал", proactive: "приходит само" };
@@ -260,8 +275,7 @@ function AdventureCard({
   current: boolean;
   onPick?: (adventureId: number) => void;
 }) {
-  const clues = useResource<ArcClues>(adv.is_default ? null : arcCluesPath(adv.id, campaignId)).data;
-  const nodeBy = useMemo(() => new Map((clues?.nodes ?? []).map((n) => [n.shown_id, n])), [clues]);
+  const { nodeBy, unmarked } = useClueNodes(adv, campaignId);
   const all = allScenes(adv);
   const { done } = countByStatus(all);
   const holes = countHoles(all, nodeBy);
@@ -279,6 +293,7 @@ function AdventureCard({
       <span className="campaign-adv-card__facts">
         {all.length > 0 ? `сыграно ${done} из ${all.length}` : "сцен нет"}
         {holes > 0 && <span className="campaign-adv__holes-note"> · {holesLabel(holes)}</span>}
+        {unmarked && " · улик ещё нет"}
       </span>
     </button>
   );
@@ -306,8 +321,7 @@ function AdventureSection({
   onStatus: (sceneId: number, status: string) => void;
 }) {
   const navigate = useNavigate();
-  const clues = useResource<ArcClues>(adv.is_default ? null : arcCluesPath(adv.id, campaignId)).data;
-  const nodeBy = useMemo(() => new Map((clues?.nodes ?? []).map((n) => [n.shown_id, n])), [clues]);
+  const { clues, nodeBy, unmarked } = useClueNodes(adv, campaignId);
   const holesIn = (list: CampaignTreeScene[]) => countHoles(list, nodeBy);
 
   const [openCh, setOpenCh] = useState(() => new Set(adv.chapters.filter((c) => c.scenes.some(isPending)).map((c) => c.id)));
@@ -347,6 +361,15 @@ function AdventureSection({
             {facts.join(" · ")}
             {adv.is_override && <span className="campaign-scene__note">правка кампании</span>}
           </span>
+          {unmarked && settingId != null && (
+            <button
+              type="button"
+              className="campaign-adv__unmarked"
+              onClick={() => navigate(`/canvas?setting=${settingId}&arc=${adv.id}&campaign=${campaignId}`)}
+            >
+              Улик ещё нет — разметить на холсте
+            </button>
+          )}
         </div>
         <div className="campaign-adv__actions">
           {holes > 0 && (
