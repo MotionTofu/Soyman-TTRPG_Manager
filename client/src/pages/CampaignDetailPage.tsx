@@ -1,7 +1,7 @@
 import type { InstanceSummary } from "../components/workbooks/model";
 import {ProjectWorkbooks} from "../components/workbooks/ProjectWorkbooks";
 import {EmbeddedWorkbook} from "./WorkbookPage";
-import { Fragment, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { entityQuery, useAction, useEntity, useResource, write } from "../data/hooks";
 import { afterWriteAnywhere } from "../data/imperative";
@@ -97,6 +97,8 @@ import { CampaignVesselsTab } from "../components/CampaignVesselsTab";
 import { CampaignPassport } from "../components/campaign/CampaignPassport";
 import { CampaignDossierFiles } from "../components/campaign/CampaignDossierFiles";
 import { CampaignNow } from "../components/campaign/CampaignNow";
+import type { NavIconName } from "../components/NavIcons";
+import { CampaignDebtors, NextSessionPrep } from "../components/campaign/CampaignPrep";
 import { OldNotesFold } from "../components/campaign/OldNotesFold";
 import { ExtraPayments } from "../components/campaign/ExtraPayments";
 import { CampaignWorldTab, type CampaignWorld } from "../components/campaign/CampaignWorldTab";
@@ -122,6 +124,34 @@ const GM_TABS = [
 ] as const;
 
 const CAMPAIGN_MORE_TABS = ["Оплата", "Представление", "Транспорт", "Итоги"] as const;
+
+// Язычки: короче подпись и знак (гриллинг 2026-10-23, Q25–Q26). Ключ вкладки
+// прежний — на него завязаны ?tab=, закрепы и старые ссылки.
+const TAB_SHORT: Record<string, string> = {
+  "Персонажи игроков": "Партия",
+  "Мир кампании": "Мир",
+  "Хроника мира": "Хроника",
+  "Клёвые цитаты": "Цитаты",
+  "Трекер задач": "Задачи",
+};
+const TAB_ICON: Record<string, NavIconName> = {
+  "Обзор": "eye",
+  "Персонажи игроков": "players",
+  "Сюжет": "book",
+  "Сессии": "calendar",
+  "Мир кампании": "globe",
+  "Хроника мира": "clock",
+  "Тетрадь": "document",
+  "Выдача": "card",
+  "Оплата": "loot",
+  "Представление": "fullscreen",
+  "Транспорт": "helm",
+  "Итоги": "flag",
+  "Заметки": "document",
+  "Клёвые цитаты": "chat",
+  "Трекер задач": "check",
+  "Исследование Мира": "globe",
+};
 
 // Разделы «Сюжета» и старые имена вкладок, которые теперь ведут в них.
 const STORY_SECTIONS = [
@@ -255,6 +285,8 @@ export function CampaignDetailPage() {
   const cyclesRef = useRef<HTMLDivElement>(null);
 
   const [creatingDate, setCreatingDate] = useState<string | null>(null);
+  // «Редактировать» в шапке «Обзора»: счётчик щелчков для OverviewTab.
+  const [editMainTick, setEditMainTick] = useState(0);
   const [creatingSession, setCreatingSession] = useState(false);
   const [newStatus, setNewStatus] = useState<SessionStatus>("planned");
   const [newPaymentOverride, setNewPaymentOverride] = useState<"" | PaymentType>("");
@@ -733,31 +765,31 @@ export function CampaignDetailPage() {
       crumbs={[{ label: "Кампании", to: "/campaigns" }, { label: campaign.name }]}
       entityType="campaign"
       title={campaign.name}
-      badges={
-        <>
-        {campaign.role === "player" ? (
-          <span className="badge role-player-badge zine-rotate">Я игрок</span>
-        ) : (
-          !loadHideFinance() && (
-            <span className="badge tag">
-              <span className="campaign-earned">{campaign.finance.earned}</span> {campaign.currency}
-            </span>
-          )
-        )}
-        {campaign.role !== "player" && <CampaignNow campaignId={campaign.id} oneshot={campaign.type === "oneshot"} sessions={sessions} onSchedule={() => setCreatingDate(toLocalDateKey(new Date()))} />}
-        </>
-      }
-      // Бумага (спека campaign-paper, доски 41–42): под именем — метки типа
-      // и системы; статус — в фактах «Обзора».
+      badges={campaign.role === "player" && <span className="badge role-player-badge zine-rotate">Я игрок</span>}
+      // Бумага (спека campaign-paper, доски 41–42). Под именем Мастера — одна
+      // строка фактов и два действия (гриллинг 2026-10-23, Q2–Q3): заработок
+      // ушёл во вкладку «Оплата», тип — плашкой только у ваншота.
       paper
       meta={
-        <span className="paper-ident-tags">
-          <span className="badge tag">{CAMPAIGN_TYPE_OPTIONS.find((o) => o.value === campaign.type)?.label ?? campaign.type}</span>
-          {campaign.system_name && <span className="badge tag">{campaign.system_name}</span>}
-        </span>
+        campaign.role === "player" ? (
+          <span className="paper-ident-tags">
+            <span className="badge tag">{CAMPAIGN_TYPE_OPTIONS.find((o) => o.value === campaign.type)?.label ?? campaign.type}</span>
+            {campaign.system_name && <span className="badge tag">{campaign.system_name}</span>}
+          </span>
+        ) : (
+          <CampaignNow
+            campaign={campaign}
+            sessions={sessions}
+            onSchedule={() => setCreatingDate(toLocalDateKey(new Date()))}
+            onEdit={() => setEditMainTick((n) => n + 1)}
+          />
+        )
       }
       actions={[{ label: "Архивировать", danger: true, onClick: archiveCampaign }]}
-      tabs={tabs.filter(id => !CAMPAIGN_MORE_TABS.some(t => t === id)).map(id => ({ id, label: tabCounts[id] ? `${id} · ${tabCounts[id]}` : id }))}
+      tabs={tabs.filter(id => !CAMPAIGN_MORE_TABS.some(t => t === id)).map(id => {
+        const label = TAB_SHORT[id] ?? id;
+        return { id, icon: TAB_ICON[id], label: tabCounts[id] ? `${label} · ${tabCounts[id]}` : label };
+      })}
       hiddenTabs={CAMPAIGN_MORE_TABS.filter(id => tabs.some(t => t === id))}
       tab={tab}
       onTab={(t) => selectTab(t as (typeof tabs)[number])}
@@ -868,6 +900,7 @@ export function CampaignDetailPage() {
            <>
              <OverviewTab
                key={tab}
+               editTick={editMainTick}
                section={tab === "Оплата" ? "payment" : "overview"}
                campaign={campaign}
                systems={systems}
@@ -2040,12 +2073,15 @@ function PlayerOverviewTab({
 // в «Сейчас», «Изображения» — в щелчок по обложке, «Пост-продакшен» — в «Итоги».
 function OverviewTab({
   section,
+  editTick,
   campaign,
   systems,
   settingsList,
   sessions,
 }: {
   section: "overview" | "payment";
+  /** Щелчок «Редактировать» в шапке: каждый новый номер открывает правку основного. */
+  editTick: number;
   campaign: CampaignDetail;
   systems: System[];
   settingsList: Setting[];
@@ -2087,6 +2123,14 @@ function OverviewTab({
     setForm(formFrom(campaign));
     setEditing(which);
   }
+  // Номер щелчка, уже отработанный: вкладка пересоздаётся (key), и прежний
+  // щелчок не должен снова открыть форму.
+  const handledTick = useRef(editTick);
+  useEffect(() => {
+    if (editTick === handledTick.current) return;
+    handledTick.current = editTick;
+    start("main");
+  });
   async function submit() {
     const patch =
       editing === "main"
@@ -2108,10 +2152,9 @@ function OverviewTab({
     if (await save(patch)) setEditing(null);
   }
 
-  const system = systems.find((s) => s.id === campaign.system_id);
-  const setting = settingsList.find((s) => s.id === campaign.setting_id);
-  const held = sessions.filter((s) => s.status === "held").length;
-  const planned = sessions.filter((s) => s.status === "planned").length;
+  const today = toLocalDateKey();
+  const nextSession = sessions.filter((s) => s.status === "planned" && s.date >= today).sort((a, b) => a.date.localeCompare(b.date))[0];
+  const lastSession = sessions.filter((s) => s.status === "held").sort((a, b) => b.date.localeCompare(a.date))[0];
 
   const rawThumbUrl = campaign.thumbnail_image_url ?? campaign.background_image_url ?? null;
   const thumbUrl = rawThumbUrl && isSafeImageUrl(rawThumbUrl) ? rawThumbUrl : null;
@@ -2264,50 +2307,23 @@ function OverviewTab({
         </button>
         <input ref={thumbInput} hidden type="file" accept={IMAGE_ACCEPT} onChange={(e) => thumbCrop.onSelect(e.target.files?.[0] ?? null)} />
         {thumbCrop.modal}
-        <dl className="paper-facts">
-          <div>
-            <dt className="paper-label">Тип</dt>
-            <dd>{CAMPAIGN_TYPE_OPTIONS.find((o) => o.value === campaign.type)?.label ?? campaign.type}</dd>
-          </div>
-          <div>
-            <dt className="paper-label">Система</dt>
-            <dd>{system ? <Link to={`/systems/${system.id}`}>{system.name}</Link> : "—"}</dd>
-          </div>
-          <div>
-            <dt className="paper-label">Сеттинг</dt>
-            <dd>{setting ? <Link to={`/settings/${setting.id}`}>{setting.name} ›</Link> : "—"}</dd>
-          </div>
-          <div>
-            <dt className="paper-label">Статус</dt>
-            <dd>{CAMPAIGN_STATUS_LABELS[campaign.status as keyof typeof CAMPAIGN_STATUS_LABELS] ?? campaign.status}</dd>
-          </div>
-          <div>
-            <dt className="paper-label">{oneshot ? "Прогонов" : "Сессий"}</dt>
-            <dd>
-              {held} сыграно{planned > 0 ? ` · ${planned} впереди` : ""}
-            </dd>
-          </div>
-          {allGroups.length > 0 && (
-            <div>
-              <dt className="paper-label">Группы</dt>
-              <dd className="campaign-overview__groups">
-                {allGroups.map((g) => {
-                  const isIn = campaignGroupIds.includes(g.id);
-                  return (
-                    <label key={g.id} className={`campaign-group-chip${isIn ? " is-in" : ""}`}>
-                      <input type="checkbox" checked={isIn} onChange={() => void toggleGroup(g.id, isIn)} />
-                      {g.name}
-                    </label>
-                  );
-                })}
-              </dd>
+        <NextSessionPrep next={nextSession} last={lastSession} oneshot={oneshot} />
+        {!hideFinance && <CampaignDebtors campaignId={campaignId} currency={campaign.currency} />}
+        {allGroups.length > 0 && (
+          <section className="campaign-overview__groups-block" aria-label="Группы">
+            <h3 className="paper-label">Группы</h3>
+            <div className="campaign-overview__groups">
+              {allGroups.map((g) => {
+                const isIn = campaignGroupIds.includes(g.id);
+                return (
+                  <label key={g.id} className={`campaign-group-chip${isIn ? " is-in" : ""}`}>
+                    <input type="checkbox" checked={isIn} onChange={() => void toggleGroup(g.id, isIn)} />
+                    {g.name}
+                  </label>
+                );
+              })}
             </div>
-          )}
-        </dl>
-        {editing !== "main" && (
-          <button type="button" className="paper-more" onClick={() => start("main")}>
-            Править основное ›
-          </button>
+          </section>
         )}
       </aside>
 
@@ -2318,16 +2334,13 @@ function OverviewTab({
 
         <OldNotesFold campaignId={campaignId} settingId={campaign.setting_id} />
 
-        <details className="paper-fold">
-          <summary>Связать имена</summary>
-          <div className="paper-fold__body">
-            <CrossLinksWizard
-              ownerKind="campaign"
-              ownerId={campaignId}
-              help="Ищет имена сущностей сеттинга и записей компендиума в текстах кампании — и делает их кликабельными. Шаг за шагом, по одному типу цели. Ничего не пишет, пока вы не подтвердите."
-            />
-          </div>
-        </details>
+        {/* Автолинковка — сразу своим свёрнутым блоком: уровень «Связать
+            имена» над ним был лишней обёрткой (гриллинг 2026-10-23, Q6). */}
+        <CrossLinksWizard
+          ownerKind="campaign"
+          ownerId={campaignId}
+          help="Ищет имена сущностей сеттинга и записей компендиума в текстах кампании — и делает их кликабельными. Шаг за шагом, по одному типу цели. Ничего не пишет, пока вы не подтвердите."
+        />
       </div>
     </div>
   );

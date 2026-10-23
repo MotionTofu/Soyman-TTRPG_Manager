@@ -3,6 +3,7 @@ import { Breadcrumbs, type Crumb } from "./Breadcrumbs";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { EntityTypeChip } from "./EntityTypeChip";
 import { ListSkeleton, LoadErrorCard } from "./Loadable";
+import { NavIcon, type NavIconName } from "./NavIcons";
 
 // Каркас карточки сущности.
 //
@@ -74,6 +75,8 @@ import { ListSkeleton, LoadErrorCard } from "./Loadable";
 export interface EntityPageTab {
   id: string;
   label?: string;
+  /** Знак перед подписью язычка (профиль кампании, 2026-10-23). */
+  icon?: NavIconName;
 }
 
 export interface EntityPageProps {
@@ -267,6 +270,7 @@ export function EntityPage({
               className={tab === t.id ? "active" : ""}
               onClick={() => onTab?.(t.id)}
             >
+              {t.icon && <NavIcon name={t.icon} />}
               {t.label ?? t.id}
             </button>
           ))}

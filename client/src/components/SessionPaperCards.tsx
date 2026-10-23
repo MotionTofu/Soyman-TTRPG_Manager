@@ -1,25 +1,10 @@
 import { useAction, write } from "../data/hooks";
 import type { SessionDetail } from "../types";
 import { PaperFieldsCard } from "./PaperFieldsCard";
+import { SESSION_OUTCOME_FIELDS, SESSION_PASSPORT_FIELDS } from "./sessionPaperFields";
 
 // Сессия на бумаге (спека campaign-paper, Q42/Q45; доски 46–47): паспорт
 // вечера по листу 11 тетради кампании и «Что изменилось» по осям outcomes.
-
-const PASSPORT_FIELDS = [
-  { key: "idea_notes", label: "Обещание вечера", hint: "Что этот вечер даст игрокам — бывшая «Задумка»" },
-  { key: "questions", label: "Активные вопросы", hint: "Что решается сегодня" },
-  { key: "player_intent", label: "Чего хотят игроки", hint: "Желания игроков на этот вечер" },
-  { key: "exit_state", label: "Состояние на выходе", hint: "Каким мир может стать к концу вечера" },
-] as const;
-
-const OUTCOME_FIELDS = [
-  { key: "goal", label: "Цель" },
-  { key: "cost", label: "Цена" },
-  { key: "relations", label: "Отношения" },
-  { key: "threat", label: "Угроза" },
-  { key: "world", label: "Мир" },
-  { key: "pcs", label: "Персонажи" },
-] as const;
 
 function useSessionWrite(sessionId: number) {
   const run = useAction();
@@ -36,7 +21,7 @@ export function SessionPassportCard({ session, settingId }: { session: SessionDe
   return (
     <PaperFieldsCard
       label="Паспорт вечера"
-      fields={PASSPORT_FIELDS}
+      fields={SESSION_PASSPORT_FIELDS}
       values={values}
       rows
       mentionSettingId={settingId}
@@ -55,7 +40,7 @@ export function SessionOutcomesCard({ session }: { session: SessionDetail }) {
   return (
     <PaperFieldsCard
       label="Что изменилось"
-      fields={OUTCOME_FIELDS}
+      fields={SESSION_OUTCOME_FIELDS}
       values={session.outcomes ?? {}}
       rows
       empty="Заполняется после игры: цель, цена, отношения, угроза, мир, персонажи."

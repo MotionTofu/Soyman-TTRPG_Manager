@@ -17,7 +17,7 @@ const sessions = [
 function mount() {
   render(
     <MemoryRouter>
-      <CampaignNow campaignId={5} oneshot={false} sessions={sessions} onSchedule={vi.fn()} />
+      <CampaignNow campaign={{ id: 5, type: "campaign", status: "active", setting_id: null }} sessions={sessions} onSchedule={vi.fn()} onEdit={vi.fn()} />
     </MemoryRouter>
   );
 }

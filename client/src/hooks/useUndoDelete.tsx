@@ -30,7 +30,7 @@ interface UndoDeleteApi {
    * Заворачивать такой путь в `deleteWithUndo` пришлось бы пустым `deleteFn`,
    * то есть враньём в имени.
    */
-  offerUndo: (opts: { entityName: string; restoreFn: () => Promise<void>; ms?: number }) => void;
+  offerUndo: (opts: { entityName: string; restoreFn: () => Promise<void>; ms?: number; message?: string }) => void;
   dismiss: () => void;
 }
 
@@ -57,7 +57,8 @@ export function UndoDeleteProvider({ children }: { children: ReactNode }) {
   const offerUndo = useCallback<UndoDeleteApi["offerUndo"]>(
     (opts) => {
       dismiss();
-      const msg = `«${opts.entityName}» удалено`;
+      // Своя подпись — для отмены не удаления («Боря: долг закрыт»).
+      const msg = opts.message ?? `«${opts.entityName}» удалено`;
       setToast({ msg, onUndo: opts.restoreFn });
       timerRef.current = window.setTimeout(() => setToast((t) => (t?.msg === msg ? null : t)), opts.ms ?? 8000);
     },

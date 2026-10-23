@@ -52,4 +52,28 @@ describe("деньги кампании", () => {
     db.prepare("DELETE FROM sessions WHERE id = ?").run(cancelled);
     expect(campaignEarnings(campaignId).earned).toBe(3200);
   });
+
+  it("«Оплатил» закрывает весь долг игрока полной ставкой, «Отменить» возвращает прежнее", async () => {
+    const debtor = Number(db.prepare("INSERT INTO players (name) VALUES ('Боря-должник')").run().lastInsertRowid);
+    const paid = Number(db.prepare("INSERT INTO campaigns (name, payment_type, session_rate, rate_split) VALUES ('Долги', 'paid', 600, 'per_person')").run().lastInsertRowid);
+    db.prepare("INSERT INTO campaign_roster (campaign_id, player_id) VALUES (?, ?)").run(paid, debtor);
+    const s = db.prepare("INSERT INTO sessions (campaign_id, date, status) VALUES (?, ?, 'held')");
+    const a = Number(s.run(paid, "2026-09-01").lastInsertRowid);
+    const b = Number(s.run(paid, "2026-09-08").lastInsertRowid);
+    db.prepare("INSERT INTO session_attendance (session_id, player_id, attended, amount_paid, amount_forgiven) VALUES (?, ?, 1, ?, ?)").run(a, debtor, 200, 0);
+    db.prepare("INSERT INTO session_attendance (session_id, player_id, attended, amount_paid, amount_forgiven) VALUES (?, ?, 1, ?, ?)").run(b, debtor, 0, 100);
+    const debts = async () => (await request(app).get(`/api/campaigns/${paid}/debts`)).body as { owed: number }[];
+    expect((await debts())[0].owed).toBe(900);
+
+    const settled = await request(app).post(`/api/campaigns/${paid}/debts/${debtor}/settle`);
+    expect(settled.status).toBe(200);
+    expect(await debts()).toEqual([]);
+    const amount = db.prepare("SELECT amount_paid FROM session_attendance WHERE session_id = ? AND player_id = ?");
+    expect((amount.get(b, debtor) as { amount_paid: number }).amount_paid).toBe(500);
+
+    const restored = await request(app).post(`/api/campaigns/${paid}/debts/${debtor}/restore`).send(settled.body);
+    expect(restored.status).toBe(200);
+    expect((await debts())[0].owed).toBe(900);
+    expect((await request(app).post(`/api/campaigns/${paid}/debts/${debtor}/restore`).send({ before: "x" })).status).toBe(400);
+  });
 });

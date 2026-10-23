@@ -153,6 +153,8 @@ export function CrossLinksWizard({
     <details className="card res-group">
       {confirmDialog}
       <summary className="res-group__band">
+        {/* «@» — тот же знак, которым ставят упоминание руками. */}
+        <span className="crosslinks-at" aria-hidden="true">@</span>
         <span className="res-group__title">Автолинковка упоминаний</span> <span className="badge tag" style={{ marginLeft: 8, fontSize: "var(--fs-micro)" }}>beta</span>
       </summary>
       <div className="res-group__body" style={{ padding: 12 }}>

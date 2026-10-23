@@ -7,7 +7,7 @@ import { db } from "../db/db";
 import {ensureProjectWorkbook,placeProjectWorkbooks} from "../services/projectWorkbooks";
 import type {AuthedRequest} from "../services/auth";
 import { SESSION_NUMBER_SQL } from "../services/sessionNumber";
-import { debtsForCampaign } from "../services/finance";
+import { debtsForCampaign, restoreCampaignPayments, settleCampaignDebt, type PaidBefore } from "../services/finance";
 import { campaignNow, defaultStatus, timePatch } from "../services/eventTime";
 import { campaignFolder, toFileUrl, VAULT_ROOT, vaultAbs, vaultRel, writeReplacingOldFile } from "../services/filesystem";
 import {
@@ -547,6 +547,27 @@ campaignsRouter.get("/:id/debts", (req, res) => {
   const campaignId = Number(req.params.id);
   if (!Number.isFinite(campaignId)) return res.status(400).json({ error: "bad id" });
   res.json(debtsForCampaign(campaignId));
+});
+
+// «Оплатил»: весь долг игрока по кампании закрыт полной ставкой. В ответе —
+// прежние суммы: с ними клиент делает «Отменить».
+campaignsRouter.post("/:id/debts/:playerId/settle", (req, res) => {
+  const campaignId = Number(req.params.id);
+  const playerId = Number(req.params.playerId);
+  if (!Number.isFinite(campaignId) || !Number.isFinite(playerId)) return res.status(400).json({ error: "bad id" });
+  res.json({ before: settleCampaignDebt(campaignId, playerId) });
+});
+
+campaignsRouter.post("/:id/debts/:playerId/restore", (req, res) => {
+  const campaignId = Number(req.params.id);
+  const playerId = Number(req.params.playerId);
+  const rows = (req.body as { before?: unknown })?.before;
+  const valid =
+    Array.isArray(rows) &&
+    rows.every((r) => r && Number.isFinite((r as PaidBefore).session_id) && Number.isFinite((r as PaidBefore).amount_paid));
+  if (!Number.isFinite(campaignId) || !Number.isFinite(playerId) || !valid) return res.status(400).json({ error: "bad request" });
+  restoreCampaignPayments(campaignId, playerId, rows as PaidBefore[]);
+  res.json({ ok: true });
 });
 
 // Путевые заметки игроков кампании — мастерский read-only вид (решение

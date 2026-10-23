@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { MentionText } from "./mentions/MentionText";
 import { MentionTextarea } from "./mentions/MentionTextarea";
+import { plural } from "../sceneKinds";
 
 // Карточка «подпись — значение» на бумаге: досье приключения (доска 36) и
 // «В кампании» досье персонажа (доска 37).
@@ -36,7 +37,7 @@ export function PaperFieldsCard({
   showGrid?: boolean;
   /**
    * Паспорт кампании (доска 41): поля строками «подпись — значение», с
-   * упоминаниями и абзацами; незаполненные — одной строкой «Не заполнено».
+   * упоминаниями и абзацами; незаполненные — счётом «Пусто N полей».
    */
   rows?: boolean;
   /** Упоминания в полях: «@» в правке открывает выбор, просмотр — ссылками. */
@@ -138,17 +139,25 @@ export function PaperFieldsCard({
             </dl>
           )}
           {filled.length < fields.length && (
-            <div className="creature-card__empty">
-              {filled.length === 0
-                ? empty
-                : `Не заполнено: ${fields
-                    .filter((f) => !values[f.key]?.trim())
-                    .map((f) => f.label.toLowerCase())
-                    .join(", ")}.`}{" "}
-              <button type="button" className="creature-card__more" onClick={start}>
-                Заполнить
+            filled.length === 0 ? (
+              <div className="creature-card__empty">
+                {empty}{" "}
+                <button type="button" className="creature-card__more" onClick={start}>
+                  Заполнить
+                </button>
+              </div>
+            ) : (
+              // Счёт, а не перечень (гриллинг 2026-10-23, Q5): дюжина названий
+              // пустых полей мелким шрифтом — шум; сами названия — в подсказке.
+              <button
+                type="button"
+                className="creature-card__more paper-fields-missing"
+                onClick={start}
+                title={fields.filter((f) => !values[f.key]?.trim()).map((f) => f.label).join(", ")}
+              >
+                Пусто {fields.length - filled.length} {plural(fields.length - filled.length, "поле", "поля", "полей")} — заполнить ›
               </button>
-            </div>
+            )
           )}
         </>
       ) : !showGrid ? null : filled.length > 0 ? (

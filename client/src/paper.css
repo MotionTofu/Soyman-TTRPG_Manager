@@ -2000,22 +2000,173 @@
 }
 
 /* Ближайшая сессия справа от названия кампании. */
+/* Шапка кампании (гриллинг 2026-10-23, Q2): строка фактов слева, два
+   действия справа; переносится целиком, а не по словам. */
 .campaign-now {
-  margin-left: auto;
-  font-size: var(--fs-meta);
-  text-align: right;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  color: var(--paper-ink);
 }
-.campaign-now > div {
+.campaign-now__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4) var(--sp-7);
+}
+.campaign-now__facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-ui);
+  font-size: var(--fs-data);
+}
+.campaign-now__facts > li + li::before {
+  content: "·";
+  margin: 0 var(--sp-4);
+  color: var(--paper-muted);
+}
+.campaign-now__status::before {
+  content: "";
+  display: inline-block;
+  width: 0.7em;
+  height: 0.7em;
+  margin-right: var(--sp-2);
+  border-radius: 50%;
+  background: #8a8378;
+  vertical-align: 0.05em;
+}
+.campaign-now__status[data-status="active"]::before { background: #3a8a3f; }
+.campaign-now__status[data-status="paused"]::before { background: #c08a1e; }
+.campaign-now__actions {
+  display: flex;
+  gap: var(--sp-3);
+}
+:is(.campaign-now__go, .campaign-now__edit) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-6);
+  border: var(--card-border-width) solid var(--paper-ink);
+  font-family: var(--font-ui);
+  font-size: var(--fs-data);
+  font-weight: 600;
+  color: var(--paper-ink);
+  text-decoration: none;
+  cursor: pointer;
+}
+.campaign-now__go {
+  background: var(--paper-acid);
+  box-shadow: 2px 2px 0 var(--paper-ink);
+}
+.campaign-now__edit {
+  background: var(--paper-wash);
+}
+:is(.campaign-now__go, .campaign-now__edit):hover {
+  text-decoration: none;
+  filter: brightness(1.05);
+}
+.campaign-now__drafts {
+  margin: 0;
+  font-size: var(--fs-meta);
+}
+
+/* Левая колонка «Обзора»: к ближайшей сессии, должники, группы (Q4). */
+:is(.campaign-prep, .campaign-debtors, .campaign-overview__groups-block) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+:is(.campaign-prep, .campaign-debtors, .campaign-overview__groups-block) > h3 {
+  margin: 0;
+}
+.campaign-prep__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  color: var(--paper-ink);
+  text-decoration: none;
+}
+.campaign-prep__list:hover {
+  text-decoration: none;
+}
+.campaign-prep__item {
+  display: flex;
+  gap: var(--sp-3);
+  color: var(--paper-muted);
+}
+.campaign-prep__item.is-done {
+  color: var(--paper-ink);
+}
+.campaign-prep__mark {
+  width: 1em;
+  text-align: center;
+}
+.campaign-prep__last {
+  margin: var(--sp-2) 0 0;
   display: flex;
   flex-direction: column;
   gap: var(--sp-1);
-  min-width: 0;
 }
-.campaign-now .paper-more {
-  align-self: flex-end;
+.campaign-debtors ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin: 0;
   padding: 0;
-  border: 0;
-  background: none;
+  list-style: none;
+}
+.campaign-debtors li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0 var(--sp-3);
+  align-items: center;
+}
+.campaign-debtors__sum {
+  grid-column: 1;
+  font-size: var(--fs-meta);
+  color: var(--paper-alarm);
+}
+.campaign-debtors__paid {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+  border: var(--card-border-width) solid var(--paper-rule);
+  background: var(--paper-wash);
+  color: var(--paper-ink);
+  font-size: var(--fs-meta);
+  cursor: pointer;
+}
+.campaign-debtors__paid .nav-icon {
+  width: 14px;
+  height: 14px;
+}
+.paper-fields-missing {
+  align-self: flex-start;
+}
+/* Знак на язычке — перед подписью, в цвет текста. */
+.entity-page--paper > .tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.entity-page--paper > .tabs button .nav-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+.crosslinks-at {
+  margin-right: var(--sp-3);
+  font-weight: 700;
+  color: var(--accent);
 }
 .campaign-overview__images {
   margin: 0;

@@ -198,3 +198,37 @@ export function debtsForCampaign(campaignId: number): CampaignDebt[] {
   }
   return out;
 }
+
+/** Прежняя сумма одной сессии — чтобы «Оплатил» можно было отменить. */
+export interface PaidBefore {
+  session_id: number;
+  amount_paid: number;
+}
+
+/**
+ * «Оплатил» на «Обзоре» кампании (гриллинг 2026-10-23, Q22): весь долг игрока
+ * по кампании закрывается полной ставкой — каждой его неоплаченной сессии
+ * ставится внесённое = ожидаемое минус прощённое. Частичная оплата остаётся
+ * делом итогов сессии. Долг берётся тем же `unpaidSessionsForPlayer`, что и
+ * показывает его, — закрывается ровно то, что было видно.
+ */
+export function settleCampaignDebt(campaignId: number, playerId: number): PaidBefore[] {
+  const unpaid = unpaidSessionsForPlayer(playerId).filter((u) => u.campaign_id === campaignId);
+  const update = db.prepare("UPDATE session_attendance SET amount_paid = ? WHERE session_id = ? AND player_id = ?");
+  db.transaction(() => {
+    for (const u of unpaid) update.run(u.expected - u.forgiven, u.session_id, playerId);
+  })();
+  return unpaid.map((u) => ({ session_id: u.session_id, amount_paid: u.paid }));
+}
+
+/** Откат «Оплатил»: прежние суммы, только у сессий этой кампании. */
+export function restoreCampaignPayments(campaignId: number, playerId: number, rows: PaidBefore[]): void {
+  const update = db.prepare(
+    `UPDATE session_attendance SET amount_paid = ?
+      WHERE session_id = ? AND player_id = ?
+        AND session_id IN (SELECT id FROM sessions WHERE campaign_id = ?)`
+  );
+  db.transaction(() => {
+    for (const r of rows) update.run(r.amount_paid, r.session_id, playerId, campaignId);
+  })();
+}
