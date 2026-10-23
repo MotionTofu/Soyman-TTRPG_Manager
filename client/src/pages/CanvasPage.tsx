@@ -5828,13 +5828,13 @@ export function CanvasPage() {
       <div className="row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "space-between", fontFamily: "var(--font-ui)", fontSize: "var(--fs-meta)", letterSpacing: "0.08em", textTransform: "uppercase" as const }}>
         {freeId ? (
           <>
-            <Link to="/canvas" style={{ color: "var(--muted)" }}>Все полотна</Link>
+            <Link to="/canvas" style={{ color: "var(--muted)" }}>Все холсты</Link>
             <span style={{ color: "var(--muted)" }}>›</span>
             <span style={{ color: "var(--ink)" }}>{board?.free?.name || `Доска ${freeId}`}</span>
           </>
         ) : campaignMapId ? (
           <>
-            <Link to="/canvas" style={{ color: "var(--muted)" }}>Все полотна</Link>
+            <Link to="/canvas" style={{ color: "var(--muted)" }}>Все холсты</Link>
             <span style={{ color: "var(--muted)" }}>›</span>
             <span style={{ color: "var(--muted)" }}>{board?.campaign_map?.name || `Кампания ${campaignMapId}`}</span>
             <span style={{ color: "var(--muted)" }}>›</span>
@@ -5843,8 +5843,8 @@ export function CanvasPage() {
         ) : settingId ? (
           <>
             {/* Сеттинг — метка, а не ссылка: своего экрана у него в Полотне
-                нет, есть список и схема. Наверх ведёт «Все полотна». */}
-            <Link to="/canvas" style={{ color: "var(--muted)" }}>Все полотна</Link>
+                нет, есть список и схема. Наверх ведёт «Все холсты». */}
+            <Link to="/canvas" style={{ color: "var(--muted)" }}>Все холсты</Link>
             <span style={{ color: "var(--muted)" }}>›</span>
             {/* Кампания входа занимает ступень сеттинга, а не встаёт рядом с
                 ним (Q26): холст один и тот же, а отвечает он на вопрос «чьими
@@ -5943,11 +5943,11 @@ export function CanvasPage() {
         {(arcId > 0 || freeId > 0 || settingMapId > 0 || campaignMapId > 0) && board && (
           <>
             <div style={{ position: "relative" }}>
-              <button onClick={() => setCanvasMenuOpen((v) => !v)}>Полотно ▾</button>
+              <button onClick={() => setCanvasMenuOpen((v) => !v)}>Холст ▾</button>
               {canvasMenuOpen && (
                 <div className="context-menu" style={{ position: "absolute", top: "100%", left: 0, zIndex: 10 }}>
-                  <button onClick={() => { setCanvasMenuOpen(false); setShowCanvasWizard(true); }}>Мастер создания полотна</button>
-                  <button onClick={() => { setCanvasMenuOpen(false); handleQuickCanvas(); }}>Быстрое полотно</button>
+                  <button onClick={() => { setCanvasMenuOpen(false); setShowCanvasWizard(true); }}>Мастер создания холста</button>
+                  <button onClick={() => { setCanvasMenuOpen(false); handleQuickCanvas(); }}>Быстрый холст</button>
                   <button onClick={() => { setCanvasMenuOpen(false); setShowOpenWizard(true); }}>Открыть</button>
                   {/* Пункта нет, когда гасить нечего: блок, которому нечего
                       показать, не показывается. */}
@@ -5993,7 +5993,7 @@ export function CanvasPage() {
               </button>
             )}
             {/* Режим репетиции (блок G3) — второй режим холста, а не пункт
-                меню: в меню «Полотно ▾» лежит создание и открытие полотен, а
+                меню: в меню «Холст ▾» лежит создание и открытие холстов, а
                 «Пройти» про то, что уже открыто, и там его не найдут.
 
                 Одна кнопка в двух состояниях, а не две рядом: множественность
@@ -6231,7 +6231,7 @@ export function CanvasPage() {
                     onOpen={() => setSearchParams({ free_id: String(b.scope_id) })}
                   />
                 ))}
-                {index && ownerlessBoards.length === 0 && <p className="muted">Ничьих досок нет — «+ Доска» заведёт пустое полотно без сеттинга (сохраняется само).</p>}
+                {index && ownerlessBoards.length === 0 && <p className="muted">Ничьих досок нет — «+ Доска» заведёт пустой холст без сеттинга (сохраняется само).</p>}
               </div>
             </>
           )}
@@ -6340,7 +6340,7 @@ function CanvasWizard({ settings, arcs, onClose, onCreated }: { settings: Settin
   return (
     <div className="modal-overlay" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 20 }} onClick={onClose}>
       <div className="card" style={{ padding: 16, minWidth: 360, maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
-        <h3>Мастер создания полотна — шаг {step}/3</h3>
+        <h3>Мастер создания холста — шаг {step}/3</h3>
         {step === 1 && (
           <div className="stack">
             <label className="row"><input type="radio" checked={entityKind === "free"} onChange={() => setEntityKind("free")} /> Фриформ доска (общие)</label>

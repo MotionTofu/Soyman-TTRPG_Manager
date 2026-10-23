@@ -251,7 +251,7 @@ export function AdventureDetailPage() {
             </dl>
             <div className="dossier__search">
               <Link className="paper-more" to={`/canvas?setting=${arc.setting_id}&arc=${arc.id}`}>
-                Схема на полотне ›
+                Схема на холсте ›
               </Link>
             </div>
           </aside>

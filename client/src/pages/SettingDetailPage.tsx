@@ -1685,7 +1685,7 @@ function SettingExportModal({
             disabled={busy}
             onChange={(e) => setIncludeAdventures(e.target.checked)}
           />
-          Приключения (сценарии, сцены, проверки, полотна)
+          Приключения (сценарии, сцены, проверки, холсты)
         </label>
         {busy && <ExportProgress label="Идёт экспорт…" />}
         {error && !busy && <ExportProgress error={error} />}

@@ -241,7 +241,7 @@ export function SceneDetailPage() {
                 className="paper-more"
                 to={`/canvas?setting=${scene.setting_id}&arc=${scene.arc_id ?? ""}&focus=scene:${scene.id}`}
               >
-                На полотне ›
+                На холсте ›
               </Link>
               <GraphNeighbourhoodLink type="scene" id={scene.id} />
             </div>
@@ -338,7 +338,7 @@ export function SceneDetailPage() {
                         {c.difficulty && <span className="detail-value-mono" style={{ marginLeft: 6 }}>{c.difficulty}</span>}
                         {/* Исходы, а не пара «успех/провал»: последствий у проверки
                             столько, сколько назвала система, и правятся они на
-                            «Полотне». Здесь список только показывается — иначе
+                            холсте. Здесь список только показывается — иначе
                             страница сцены и холст разошлись бы текстами. */}
                         {c.outcomes.map((o) => (
                           <div key={o.id} style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
@@ -359,7 +359,7 @@ export function SceneDetailPage() {
                   ))}
                   {scene.checks.length === 0 && (
                     <div className="card" style={{ borderStyle: "dashed" }}>
-                      <p className="muted" style={{ maxWidth: "62ch" }}>Проверок нет — добавьте «что проверяем» и сложность. Исходы с последствиями правятся на Полотне.</p>
+                      <p className="muted" style={{ maxWidth: "62ch" }}>Проверок нет — добавьте «что проверяем» и сложность. Исходы с последствиями правятся на холсте.</p>
                     </div>
                   )}
                   <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
@@ -391,7 +391,7 @@ export function SceneDetailPage() {
                       Добавить
                     </button>
                   </div>
-                  <span className="muted" style={{ fontSize: "var(--fs-meta)", maxWidth: "62ch" }}>Два поля «При успехе/при провале» создадут исходы «Успех/Провал» — остальные (3–4) добавляются на Полотне.</span>
+                  <span className="muted" style={{ fontSize: "var(--fs-meta)", maxWidth: "62ch" }}>Два поля «При успехе/при провале» создадут исходы «Успех/Провал» — остальные (3–4) добавляются на холсте.</span>
                 </div>
               </details>
 
@@ -603,7 +603,7 @@ function SceneAudioCard({ sceneId }: { sceneId: number }) {
           ))}
         </select>
       </label>
-      <p className="muted" style={{ fontSize: "var(--fs-meta)", maxWidth: "62ch" }}>На полотне — тёмно-зелёный ○· вход «Аудио», боевой — бардовый ○· «Бой». Перетащи аудионабор/плейлист на сцену.</p>
+      <p className="muted" style={{ fontSize: "var(--fs-meta)", maxWidth: "62ch" }}>На холсте — тёмно-зелёный ○· вход «Аудио», боевой — бардовый ○· «Бой». Перетащи аудионабор/плейлист на сцену.</p>
     </div>
   );
 }
