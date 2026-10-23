@@ -1100,6 +1100,7 @@ export function CampaignDetailPage() {
                         sessions={filtered}
                         today={toLocalDateKey()}
                         isGm={campaign.role !== "player"}
+                        showMoney={campaign.role !== "player" && !loadHideFinance()}
                         inworldLabel={(x) =>
                           (calendar && formatInworldDate(x.inworld_year, x.inworld_month, x.inworld_day, calendar.months, calendar.era)) || ""
                         }

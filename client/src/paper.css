@@ -2265,6 +2265,16 @@
   display: inline;
   white-space: nowrap;
 }
+.session-row__meta {
+  color: var(--paper-muted);
+  font-size: var(--fs-meta);
+}
+.session-row__meta > span + span::before {
+  content: " · ";
+}
+.session-row__debt {
+  color: var(--paper-alarm);
+}
 .session-row__link::after {
   content: "";
   position: absolute;

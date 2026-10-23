@@ -1,4 +1,5 @@
 import { parseDateKey } from "../../utils/date";
+import { SESSION_OUTCOME_FIELDS, SESSION_PASSPORT_FIELDS } from "../sessionPaperFields";
 import type { SessionSummary } from "../../types";
 
 // Раскладка вкладки «Сессии» по группам (гриллинг 2026-10-23, Q5/Q11/Q15).
@@ -34,4 +35,33 @@ export function groupSessions(sessions: SessionSummary[], today: string, isGm: b
     planned: byDate.filter((s) => s.status === "planned" && s.date >= today),
     months,
   };
+}
+
+/**
+ * Хвосты сыгранной (Q8): посещаемость 0 из N — разбора не было, а не неявка
+ * (решение владельца после шага 1); «3 из 4» — только при частичной неявке.
+ */
+export function heldTails(s: SessionSummary): { unreviewed: boolean; attendance: string | null; unpaid: number } {
+  const came = s.attended_count ?? 0;
+  const all = s.attendance_total ?? 0;
+  return {
+    unreviewed: all > 0 && came === 0,
+    attendance: came > 0 && came < all ? `${came} из ${all}` : null,
+    unpaid: s.unpaid_count ?? 0,
+  };
+}
+
+/** Подготовка ближайшей (Q9): заполненные поля паспорта вечера из всех. */
+export function passportDone(values: Record<string, string | undefined>): { done: number; total: number } {
+  return { done: SESSION_PASSPORT_FIELDS.filter((f) => values[f.key]?.trim()).length, total: SESSION_PASSPORT_FIELDS.length };
+}
+
+/** «Что изменилось» заполнено хоть по одной оси. */
+export function hasOutcome(outcomes: Record<string, string | undefined> | undefined): boolean {
+  return SESSION_OUTCOME_FIELDS.some((f) => outcomes?.[f.key]?.trim());
+}
+
+export function daysUntilLabel(date: string, today: string): string {
+  const days = Math.round((parseDateKey(date).getTime() - parseDateKey(today).getTime()) / 86400000);
+  return days === 0 ? "сегодня" : days === 1 ? "завтра" : `через ${days} дн.`;
 }
