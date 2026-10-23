@@ -1059,6 +1059,7 @@ storyRouter.get("/campaign-tree", (req, res) => {
      ORDER BY position, id`
   );
   const sessionsOf = sceneSessions(campaignId);
+  const makeupOf = sceneMakeup(settingId);
   // Запуск и план пишутся на ту строку, что была на экране, — копию или
   // оригинал, смотря когда её сделали; поэтому сцена собирает оба.
   const withSessions = (list: Record<string, unknown>[] | undefined) =>
@@ -1068,7 +1069,13 @@ storyRouter.get("/campaign-tree", (req, res) => {
       const merged = new Map([...src, ...own].map((x) => [`${x.id}:${x.played}`, x]));
       const sessions = [...merged.values()].sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
       // Нетронутая вставка заготовки своего имени не хранит — как на холсте.
-      return { ...withLibraryContent(s as unknown as SceneRow), sessions };
+      // Состав: свои связи сцены, а у копии или вставки без своих — исходной.
+      const makeup =
+        makeupOf.get(s.id as number) ??
+        makeupOf.get(s.source_scene_id as number) ??
+        makeupOf.get(s.library_scene_id as number) ??
+        emptyMakeup();
+      return { ...withLibraryContent(s as unknown as SceneRow), sessions, makeup };
     });
   const tree = adventures.map((adv) => {
     const advId = adv.id as number;
@@ -1108,6 +1115,46 @@ function sceneSessions(campaignId: number) {
     if (!by.has(r.scene_id)) by.set(r.scene_id, []);
     by.get(r.scene_id)!.push({ id: r.id, date: r.date, number: r.number, played: r.played === 1 });
   }
+  return by;
+}
+
+// Состав сцены для «Сюжета» (гриллинг 2026-10-23): кто, где, что мешает и что
+// найти — по блокам страницы сцены. Ключи сущностей, а не числа: шапка
+// приключения считает каждую сущность один раз.
+type SceneMakeup = { characters: string[]; locations: string[]; obstacles: string[]; loot: string[]; checks: number };
+const emptyMakeup = (): SceneMakeup => ({ characters: [], locations: [], obstacles: [], loot: [], checks: 0 });
+const MAKEUP_SECTIONS: Record<string, Exclude<keyof SceneMakeup, "checks">> = {
+  scene_plot_characters: "characters",
+  scene_location: "locations",
+  scene_obstacles: "obstacles",
+  scene_loot: "loot",
+};
+
+function sceneMakeup(settingId: number) {
+  const by = new Map<number, SceneMakeup>();
+  const of = (id: number) => by.get(id) ?? by.set(id, emptyMakeup()).get(id)!;
+  const scenes = "SELECT id FROM story_scenes WHERE setting_id = @s";
+  const links = db
+    .prepare(
+      `SELECT from_id, section, to_type || ':' || to_id AS k FROM generic_links
+        WHERE from_type = 'scene' AND section IN (${Object.keys(MAKEUP_SECTIONS).map((x) => `'${x}'`).join(",")})
+          AND from_id IN (${scenes})`
+    )
+    .all({ s: settingId }) as { from_id: number; section: string; k: string }[];
+  for (const l of links) of(l.from_id)[MAKEUP_SECTIONS[l.section]].push(l.k);
+  const rewards = db
+    .prepare(`SELECT scene_id, id, artifact_id FROM story_scene_rewards WHERE scene_id IN (${scenes})`)
+    .all({ s: settingId }) as { scene_id: number; id: number; artifact_id: number | null }[];
+  for (const r of rewards) {
+    // Награда-артефакт и тот же артефакт в «Потенциальном луте» — одно сокровище.
+    const k = r.artifact_id != null ? `artifact:${r.artifact_id}` : `reward:${r.id}`;
+    const loot = of(r.scene_id).loot;
+    if (!loot.includes(k)) loot.push(k);
+  }
+  const checks = db
+    .prepare(`SELECT scene_id, COUNT(*) AS n FROM story_scene_checks WHERE scene_id IN (${scenes}) GROUP BY scene_id`)
+    .all({ s: settingId }) as { scene_id: number; n: number }[];
+  for (const c of checks) of(c.scene_id).checks = c.n;
   return by;
 }
 

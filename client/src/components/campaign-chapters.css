@@ -99,6 +99,21 @@
   color: var(--paper-muted, var(--muted));
   text-transform: lowercase;
 }
+.campaign-scene__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+/* Состав сцены — второй строкой под названием, как в концепте. */
+.campaign-scene__makeup,
+.campaign-scene__makeup-inline {
+  font-size: var(--fs-meta);
+  color: var(--paper-muted, var(--muted));
+}
+.campaign-scene__makeup-inline {
+  display: none;
+}
 .campaign-scene__name {
   min-width: 0;
   font: 700 var(--fs-body)/1.35 Georgia, "Times New Roman", serif;
@@ -346,6 +361,7 @@
     column-gap: var(--sp-4);
   }
   .campaign-scene__session,
+  .campaign-scene__makeup,
   .campaign-scene__clues:not(.is-bad) {
     display: none;
   }
@@ -354,6 +370,9 @@
   }
   .campaign-scene__lead {
     flex-direction: column;
+  }
+  .campaign-scene__makeup-inline {
+    display: block;
   }
   .campaign-scene__actions {
     flex-direction: row;
