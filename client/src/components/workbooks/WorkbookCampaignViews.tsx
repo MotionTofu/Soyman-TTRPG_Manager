@@ -40,7 +40,7 @@ import { OwnerSelect } from "../records/SessionRecordsReview";
 
 const PLACES: readonly WorldType[] = ["location"];
 const SIDES: readonly WorldType[] = ["being", "community"];
-const PROFILE_PATHS: Record<WorldType, string> = { being: "/beings", community: "/communities", location: "/locations" };
+const PROFILE_PATHS: Record<WorldType, string> = { being: "/beings", community: "/communities", location: "/locations", artifact: "/artifacts" };
 const NO_SESSIONS: SessionSummary[] = [];
 
 /** Лист 6 «Место и доступ», лист 7 «Сторона и отношения»: список + раскрытая карточка сущности. */

@@ -1,0 +1,65 @@
+/* Мир кампании: папка каркаса — в paper.css, подложки как у дел «Партии». */
+.campaign-world--catalog { container:campaign-world / inline-size; gap:var(--sp-7); }
+.campaign-world__head { display:flex; align-items:flex-start; justify-content:space-between; gap:var(--sp-6); padding-bottom:var(--sp-6); border-bottom:2px solid var(--paper-ink); }
+.campaign-world__head h2 { margin:0; font:400 var(--fs-h1)/1.1 "Rubik Dirt",var(--font-ui); text-transform:none; letter-spacing:0; }
+.campaign-world__head p { margin:var(--sp-4) 0 0; max-width:60ch; font-size:var(--fs-body); line-height:1.5; color:var(--paper-ink-soft); }
+.campaign-world__head .campaign-world__add { flex-shrink:0; margin:0; padding:var(--sp-4) var(--sp-5); font:600 var(--fs-data)/1.3 var(--font-ui); text-transform:none; letter-spacing:0; color:var(--paper-base); border-radius:3px; }
+.campaign-world__layout { display:grid; grid-template-columns:200px minmax(0,1fr); gap:var(--sp-6); align-items:start; }
+/* обводка мимо шкалы намеренно — 16 px отведены под края растровой подложки block-panel; это срез border-image, не толщина контура. */
+.campaign-world__kinds { display:flex; flex-direction:column; gap:var(--sp-1); border:16px solid transparent; border-image:var(--skin-dossier-block) 40 fill / 16px round; padding:var(--sp-2) 0; }
+.campaign-world__kinds button { display:flex; align-items:center; gap:var(--sp-3); width:100%; padding:var(--sp-4) var(--sp-3); background:none; color:var(--paper-ink); border:0; border-radius:3px; font:400 var(--fs-data)/1.3 var(--font-body); text-transform:none; letter-spacing:0; text-align:left; }
+.campaign-world__kinds button > :last-child { margin-left:auto; font-variant-numeric:tabular-nums; }
+.campaign-world__kinds button.is-active { background:var(--paper-acid); font-weight:700; }
+.campaign-world__kinds button:disabled { opacity:1; color:var(--paper-muted); cursor:default; }
+.campaign-world__kinds hr { width:100%; margin:var(--sp-4) 0; border:0; border-top:1px solid var(--paper-rule); }
+.campaign-world__results { min-width:0; }
+.campaign-world__search { display:flex; align-items:center; gap:var(--sp-3); padding:var(--sp-3) var(--sp-4); border:1px solid var(--paper-rule); border-radius:3px; background:var(--paper-wash); }
+.campaign-world__search input { min-width:0; width:100%; padding:0; border:0; background:none; color:var(--paper-ink); font:400 var(--fs-body)/1.5 var(--font-body); }
+.campaign-world__count { margin:var(--sp-4) 0; font:400 var(--fs-meta)/1.3 var(--font-ui); text-transform:uppercase; letter-spacing:.08em; color:var(--paper-muted); }
+.campaign-world__rows { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:var(--sp-4); }
+/* обводка мимо шкалы намеренно — тот же 16 px срез подложки block-panel, что у колонки видов. */
+.world-row { position:relative; display:grid; grid-template-columns:80px minmax(0,1fr) 210px 32px; gap:var(--sp-5); align-items:start; border:16px solid transparent; border-image:var(--skin-dossier-block) 40 fill / 16px round; padding:var(--sp-2) var(--sp-3); }
+.world-row__portrait { width:80px; height:80px; display:flex; align-items:center; justify-content:center; background:var(--paper-wash); border:1px solid var(--paper-rule); border-radius:2px; color:var(--paper-muted); }
+.world-row__portrait img { width:100%; height:100%; object-fit:cover; }
+.world-row__portrait .type-glyph { width:32px; height:32px; }
+.world-row__body { min-width:0; }
+.world-row__heading { display:flex; flex-wrap:wrap; gap:var(--sp-2) var(--sp-4); align-items:center; }
+.world-row__name { font:700 var(--fs-h3)/1.25 var(--font-body); color:var(--paper-ink); text-decoration:none; overflow-wrap:anywhere; }
+.world-row__name:hover { text-decoration:underline; }
+.world-row__category { margin:var(--sp-1) 0 0; font-size:var(--fs-data); line-height:1.3; color:var(--paper-muted); }
+.world-row__text { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; margin:var(--sp-3) 0 0; font-size:var(--fs-body); line-height:1.5; white-space:pre-line; overflow-wrap:anywhere; }
+.world-row__text--basis { color:var(--paper-muted); }
+.world-row__source { font-style:italic; }
+.world-row__changes { min-width:0; padding-left:var(--sp-5); border-left:1px solid var(--paper-rule); align-self:stretch; font-size:var(--fs-data); line-height:1.4; }
+.world-row__label { font:600 var(--fs-meta)/1.3 var(--font-ui); }
+.world-row__changes ul { margin:var(--sp-2) 0 0; padding-left:var(--sp-4); }
+.world-row__extra { color:var(--paper-muted); }
+.world-row__session { display:block; margin-top:var(--sp-3); font-size:var(--fs-meta); line-height:1.4; color:var(--paper-muted); text-decoration:none; }
+.world-row__session:hover { text-decoration:underline; }
+.world-row__empty { margin:0; color:var(--paper-muted); }
+.world-text-action { padding:0; border:0; background:none; color:inherit; font:inherit; text-transform:none; letter-spacing:0; text-decoration:underline; text-underline-offset:3px; }
+.world-row .world-row__more { width:32px; height:32px; padding:0; border:1px solid var(--paper-rule); border-radius:3px; background:var(--paper-wash); color:var(--paper-ink); font:600 var(--fs-h3)/1 var(--font-body); }
+.world-row .world-state { padding:var(--sp-1) var(--sp-3); border:1px solid currentColor; border-radius:3px; font:600 var(--fs-meta)/1.3 var(--font-ui); text-transform:none; letter-spacing:0; white-space:nowrap; box-shadow:none; }
+.world-state--red { color:var(--paper-alarm); background:color-mix(in srgb,var(--paper-alarm) 13%,var(--paper-base)); }
+.world-state--green { color:var(--paper-ink); background:color-mix(in srgb,var(--pay-free) 25%,var(--paper-base)); }
+.world-state--yellow { color:var(--paper-ink); background:color-mix(in srgb,var(--pay-paid) 35%,var(--paper-base)); }
+.campaign-world__empty { margin:0; padding:var(--sp-8) var(--sp-4); text-align:center; font-size:var(--fs-body); color:var(--paper-muted); }
+@container campaign-world (max-width:1000px) {
+  .campaign-world__head { flex-wrap:wrap; }
+  .campaign-world__layout { grid-template-columns:180px minmax(0,1fr); }
+  .world-row { grid-template-columns:64px minmax(0,1fr) 32px; gap:var(--sp-4); }
+  .world-row__portrait { width:64px; height:64px; }
+  .world-row__changes { grid-column:2 / -1; border:0; padding:0; }
+  .world-row__more { grid-column:3; grid-row:1; }
+}
+@container campaign-world (max-width:560px) {
+  .campaign-world__layout { display:flex; flex-direction:column; gap:var(--sp-4); }
+  .campaign-world__kinds { flex-direction:row; overflow-x:auto; width:100%; border:0; padding:0 0 var(--sp-2); gap:var(--sp-2); }
+  .campaign-world__kinds button { flex-shrink:0; width:auto; padding:var(--sp-3) var(--sp-4); border-bottom:1px solid var(--paper-rule); gap:var(--sp-2); white-space:nowrap; }
+  .campaign-world__kinds .type-glyph,.campaign-world__kinds .nav-icon,.campaign-world__kinds hr { display:none; }
+  .campaign-world__results { width:100%; }
+  .world-row { grid-template-columns:48px minmax(0,1fr) 28px; padding:var(--sp-2) 0; gap:var(--sp-3); }
+  .world-row__portrait { width:48px; height:48px; }
+  .world-row .world-row__more { width:28px; }
+  .world-row__category { font-size:var(--fs-meta); }
+}

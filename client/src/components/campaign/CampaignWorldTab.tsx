@@ -8,45 +8,27 @@ import { BEING_CATEGORY_LABELS } from "../../beingCategories";
 import { recordSummary } from "../../entityRecords";
 import { sessionLabel } from "../../sessionLabel";
 import { formatDateKeyRu } from "../../utils/date";
+import { WORLD_GROUPS as GROUPS, WORLD_TYPES, useSetCampaignEntityState, type CampaignWorld, type WorldEntity, type WorldType } from "../../campaignWorld";
+import { CampaignWorldRow } from "./CampaignWorldRow";
+import { RecordFormModal } from "../records/RecordFormModal";
+import { TypeGlyph } from "../TypeGlyph";
+import { NavIcon } from "../NavIcons";
+import "./campaign-world.css";
 import { EmptyState } from "../EmptyState";
 import { MentionPickerModal } from "../mentions/MentionPickerModal";
 import type { SessionSummary } from "../../types";
+
+export type { CampaignWorld, WorldEntity, WorldType } from "../../campaignWorld";
 
 // «Мир кампании» (ADR-0006, спека .scratch/campaign-layer, задача 03):
 // сущности сеттинга, задействованные в кампании, — по видам, со сводкой
 // записей. Задействована не значит показана игрокам: это «Выдача».
 
-export type WorldType = "being" | "community" | "location";
-
-export interface WorldEntity {
-  entity_type: WorldType;
-  entity_id: number;
-  name: string;
-  /** Существо — ключ категории, место — вывеска, сообщество — нет. */
-  category: string | null;
-  manual: boolean;
-  records: number;
-  drafts: number;
-  rumors: number;
-  last_session: { id: number; title: string | null; date: string } | null;
-}
-
-export interface CampaignWorld {
-  setting_id: number | null;
-  entities: WorldEntity[];
-}
-
-const GROUPS: { type: WorldType; label: string; kind: string; path: string }[] = [
-  { type: "being", label: "Существа", kind: "существо", path: "/beings" },
-  { type: "community", label: "Сообщества", kind: "сообщество", path: "/communities" },
-  { type: "location", label: "Места", kind: "место", path: "/locations" },
-];
-const WORLD_TYPES = GROUPS.map((g) => g.type);
-
 const SETTING_LISTS: Record<WorldType, (settingId: number) => string> = {
   being: (id) => `/setting-beings?setting_id=${id}`,
   community: (id) => `/setting-communities?setting_id=${id}`,
   location: (id) => `/setting-locations?setting_id=${id}`,
+  artifact: (id) => `/artifacts?setting_id=${id}`,
 };
 
 type Filter = "rumor" | "draft" | null;
@@ -72,6 +54,10 @@ export function CampaignWorldTab({
   const [filter, setFilter] = useState<Filter>(null);
   const [picking, setPicking] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
+  const [kind, setKind] = useState<WorldType | "all">("all");
+  const [query, setQuery] = useState("");
+  const [adding, setAdding] = useState<WorldEntity | null>(null);
+  const setEntityState = useSetCampaignEntityState(campaignId);
   const run = useAction();
   const entities = useMemo(() => state.data?.entities.filter((e) => types.includes(e.entity_type)), [state.data, types]);
   const sessionById = useMemo(() => new Map(sessions.map((s) => [s.id, s])), [sessions]);
@@ -99,6 +85,12 @@ export function CampaignWorldTab({
     });
   }
 
+  async function removeEntity(entity: WorldEntity) {
+    await run(labelled("Убрать из кампании", () => write.del(`${campaignPaths.world(campaignId)}/${entity.entity_type}/${entity.entity_id}`)), {
+      affects: [{ path: campaignPaths.world(campaignId) }, { kind: entity.entity_type, id: entity.entity_id }],
+    });
+  }
+
   function lastSession(e: WorldEntity) {
     if (!e.last_session) return null;
     const s = sessionById.get(e.last_session.id);
@@ -106,6 +98,41 @@ export function CampaignWorldTab({
       <Link className="paper-rows__sub" to={`/sessions/${e.last_session.id}`}>
         {s ? sessionLabel(s) : e.last_session.title || formatDateKeyRu(e.last_session.date)}
       </Link>
+    );
+  }
+
+  if (!expand) {
+    const search = query.trim().toLocaleLowerCase("ru");
+    const visible = entities
+      .filter((e) => (kind === "all" || e.entity_type === kind) && (!search || `${e.name} ${e.summary.text}`.toLocaleLowerCase("ru").includes(search)))
+      .sort((a, b) => b.changed_at.localeCompare(a.changed_at) || a.name.localeCompare(b.name, "ru"));
+    const settingLink = <Link to={`/settings/${settingId}`}>как в сеттинге ›</Link>;
+    return (
+      <section className="campaign-world campaign-world--catalog" aria-label="Мир кампании">
+        <header className="campaign-world__head">
+          <div>
+            <h2>Мир кампании</h2>
+            <p>Только то, что кампания задействовала или изменила. Остальное — {settingLink}</p>
+          </div>
+          <button type="button" className="campaign-world__add" onClick={() => setPicking(true)}>+ Добавить из сеттинга</button>
+        </header>
+        <div className="campaign-world__layout">
+          <nav className="campaign-world__kinds" aria-label="Виды мира кампании">
+            <button type="button" className={kind === "all" ? "is-active" : ""} aria-pressed={kind === "all"} onClick={() => setKind("all")}><NavIcon name="library" /><span>Все</span><span>{entities.length}</span></button>
+            {GROUPS.filter((g) => types.includes(g.type)).map((g) => <button type="button" key={g.type} className={kind === g.type ? "is-active" : ""} aria-pressed={kind === g.type} onClick={() => setKind(g.type)}><TypeGlyph type={g.type} /><span>{g.label}</span><span>{entities.filter((e) => e.entity_type === g.type).length}</span></button>)}
+            <hr />
+            <button type="button" disabled><NavIcon name="chat" /><span>Слухи</span><span>{state.data!.rumors}</span></button>
+            <button type="button" disabled><NavIcon name="document" /><span>Черновики</span><span>{state.data!.drafts}</span></button>
+          </nav>
+          <div className="campaign-world__results">
+            <label className="campaign-world__search"><NavIcon name="search" /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Поиск в мире кампании" placeholder="Поиск по названию или тексту…" /></label>
+            <p className="campaign-world__count">{visible.length} в кампании</p>
+            {visible.length ? <ul className="campaign-world__rows">{visible.map((e) => <CampaignWorldRow key={`${e.entity_type}:${e.entity_id}`} entity={e} campaignId={campaignId} session={e.last_session ? sessionById.get(e.last_session.id) : undefined} onState={(entity, value) => void setEntityState(entity, value)} onRecord={setAdding} onRemove={(entity) => void removeEntity(entity)} />)}</ul> : <p className="campaign-world__empty">{entities.length ? "Ничего не подходит." : <>Только то, что кампания задействовала или изменила. Остальное — {settingLink}</>}</p>}
+          </div>
+        </div>
+        {picking && <WorldPicker settingId={settingId} types={kind === "all" ? types : [kind]} engaged={entities} onPick={(type, id) => void engage(type, id)} onClose={() => setPicking(false)} />}
+        {adding && <RecordFormModal campaignId={campaignId} settingId={settingId} ownerType={adding.entity_type} ownerId={adding.entity_id} onClose={() => setAdding(null)} />}
+      </section>
     );
   }
 
@@ -120,7 +147,7 @@ export function CampaignWorldTab({
           Есть черновики · {draftCount}
         </button>
         <button type="button" className="campaign-world__add" onClick={() => setPicking(true)}>
-          + Задействовать из сеттинга
+          + Добавить из сеттинга
         </button>
       </div>
 
@@ -146,7 +173,7 @@ export function CampaignWorldTab({
                     const category = e.entity_type === "being" ? BEING_CATEGORY_LABELS[e.category ?? ""] : e.category;
                     const key = `${e.entity_type}:${e.entity_id}`;
                     return (
-                      <li key={key} className={expand && open === key ? "campaign-world__open" : undefined}>
+                      <li key={key} className={open === key ? "campaign-world__open" : undefined}>
                         <span className="paper-rows__main">
                           <Link
                             className={`mention-link mention--${mentionTone(e.entity_type, e.entity_id)}`}
@@ -160,17 +187,13 @@ export function CampaignWorldTab({
                           </span>
                           <br />
                           <span className="campaign-world__summary">{recordSummary(e)}</span>
-                          {expand && (
-                            <>
-                              {" · "}
-                              <button type="button" className="wb-link" aria-expanded={open === key} onClick={() => setOpen(open === key ? null : key)}>
-                                {open === key ? "Свернуть" : "Записи"}
-                              </button>
-                            </>
-                          )}
+                          {" · "}
+                          <button type="button" className="wb-link" aria-expanded={open === key} onClick={() => setOpen(open === key ? null : key)}>
+                            {open === key ? "Свернуть" : "Записи"}
+                          </button>
                         </span>
                         {lastSession(e)}
-                        {expand && open === key && <div className="campaign-world__card">{expand(e)}</div>}
+                        {open === key && <div className="campaign-world__card">{expand(e)}</div>}
                       </li>
                     );
                   })}
@@ -211,17 +234,18 @@ function WorldPicker({
   const beings = useResource<{ id: number }[]>(SETTING_LISTS.being(settingId)).data;
   const communities = useResource<{ id: number }[]>(SETTING_LISTS.community(settingId)).data;
   const locations = useResource<{ id: number }[]>(SETTING_LISTS.location(settingId)).data;
+  const artifacts = useResource<{ id: number }[]>(SETTING_LISTS.artifact(settingId)).data;
   const allowed = useMemo(() => {
     const taken = new Set(engaged.map((e) => `${e.entity_type}:${e.entity_id}`));
     const keys = new Set<string>();
-    for (const [type, list] of [["being", beings], ["community", communities], ["location", locations]] as const)
+    for (const [type, list] of [["being", beings], ["community", communities], ["location", locations], ["artifact", artifacts]] as const)
       for (const x of list ?? []) if (!taken.has(`${type}:${x.id}`)) keys.add(`${type}:${x.id}`);
     return keys;
-  }, [engaged, beings, communities, locations]);
+  }, [engaged, beings, communities, locations, artifacts]);
   return (
     <MentionPickerModal
       initialQuery=""
-      heading="Задействовать из сеттинга"
+      heading="Добавить из сеттинга"
       direct
       onlyTypes={[...types]}
       allow={(r) => allowed.has(`${r.type}:${r.id}`)}
