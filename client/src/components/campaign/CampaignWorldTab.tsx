@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAction, useResource, write } from "../../data/hooks";
 import { labelled } from "../../data/notices";
 import { campaignPaths } from "../../data/campaigns";
@@ -10,6 +10,7 @@ import { sessionLabel } from "../../sessionLabel";
 import { formatDateKeyRu } from "../../utils/date";
 import { WORLD_GROUPS as GROUPS, WORLD_TYPES, useSetCampaignEntityState, type CampaignWorld, type WorldEntity, type WorldType } from "../../campaignWorld";
 import { CampaignWorldRow } from "./CampaignWorldRow";
+import { CampaignWorldRecords } from "./CampaignWorldRecords";
 import { RecordFormModal } from "../records/RecordFormModal";
 import { TypeGlyph } from "../TypeGlyph";
 import { NavIcon } from "../NavIcons";
@@ -54,7 +55,9 @@ export function CampaignWorldTab({
   const [filter, setFilter] = useState<Filter>(null);
   const [picking, setPicking] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
-  const [kind, setKind] = useState<WorldType | "all">("all");
+  const [kind, setKind] = useState<WorldType | "all" | "rumor" | "draft">("all");
+  const [creating, setCreating] = useState(false);
+  const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [adding, setAdding] = useState<WorldEntity | null>(null);
   const setEntityState = useSetCampaignEntityState(campaignId);
@@ -77,12 +80,16 @@ export function CampaignWorldTab({
   const shown = entities.filter((e) => (filter === "rumor" ? e.rumors > 0 : filter === "draft" ? e.drafts > 0 : true));
   const toggle = (f: Exclude<Filter, null>) => setFilter((cur) => (cur === f ? null : f));
 
-  async function engage(type: string, id: number) {
+  async function engage(type: string, id: number, created = false) {
     setPicking(false);
-    await run(labelled("Задействовать", () => write.post(campaignPaths.world(campaignId), { entity_type: type, entity_id: id })), {
+    const result = await run(labelled("Задействовать", () => write.post(campaignPaths.world(campaignId), { entity_type: type, entity_id: id })), {
       affects: [{ path: campaignPaths.world(campaignId) }, { kind: type as WorldType, id }],
       retry: false,
     });
+    if (result && created) {
+      setCreating(false);
+      navigate(`${GROUPS.find((g) => g.type === type)!.path}/${id}?campaign=${campaignId}`);
+    }
   }
 
   async function removeEntity(entity: WorldEntity) {
@@ -114,23 +121,29 @@ export function CampaignWorldTab({
             <h2>Мир кампании</h2>
             <p>Только то, что кампания задействовала или изменила. Остальное — {settingLink}</p>
           </div>
-          <button type="button" className="campaign-world__add" onClick={() => setPicking(true)}>+ Добавить из сеттинга</button>
+          <div className="campaign-world__actions">
+            <button type="button" className="campaign-world__add" onClick={() => setPicking(true)}>+ Добавить из сеттинга</button>
+            <button type="button" className="campaign-world__new" onClick={() => setCreating(true)}>Новая в сеттинге<span>появится и в сеттинге</span></button>
+          </div>
         </header>
         <div className="campaign-world__layout">
           <nav className="campaign-world__kinds" aria-label="Виды мира кампании">
             <button type="button" className={kind === "all" ? "is-active" : ""} aria-pressed={kind === "all"} onClick={() => setKind("all")}><NavIcon name="library" /><span>Все</span><span>{entities.length}</span></button>
             {GROUPS.filter((g) => types.includes(g.type)).map((g) => <button type="button" key={g.type} className={kind === g.type ? "is-active" : ""} aria-pressed={kind === g.type} onClick={() => setKind(g.type)}><TypeGlyph type={g.type} /><span>{g.label}</span><span>{entities.filter((e) => e.entity_type === g.type).length}</span></button>)}
             <hr />
-            <button type="button" disabled><NavIcon name="chat" /><span>Слухи</span><span>{state.data!.rumors}</span></button>
-            <button type="button" disabled><NavIcon name="document" /><span>Черновики</span><span>{state.data!.drafts}</span></button>
+            <button type="button" className={kind === "rumor" ? "is-active" : ""} aria-pressed={kind === "rumor"} onClick={() => setKind("rumor")}><NavIcon name="chat" /><span>Слухи</span><span>{state.data!.rumors}</span></button>
+            <button type="button" className={kind === "draft" ? "is-active" : ""} aria-pressed={kind === "draft"} onClick={() => setKind("draft")}><NavIcon name="document" /><span>Черновики</span><span>{state.data!.drafts}</span></button>
           </nav>
           <div className="campaign-world__results">
             <label className="campaign-world__search"><NavIcon name="search" /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Поиск в мире кампании" placeholder="Поиск по названию или тексту…" /></label>
+            {kind === "rumor" || kind === "draft" ? <CampaignWorldRecords campaignId={campaignId} mode={kind} sessions={sessions} query={query} /> : <>
             <p className="campaign-world__count">{visible.length} в кампании</p>
             {visible.length ? <ul className="campaign-world__rows">{visible.map((e) => <CampaignWorldRow key={`${e.entity_type}:${e.entity_id}`} entity={e} campaignId={campaignId} session={e.last_session ? sessionById.get(e.last_session.id) : undefined} onState={(entity, value) => void setEntityState(entity, value)} onRecord={setAdding} onRemove={(entity) => void removeEntity(entity)} />)}</ul> : <p className="campaign-world__empty">{entities.length ? "Ничего не подходит." : <>Только то, что кампания задействовала или изменила. Остальное — {settingLink}</>}</p>}
+            </>}
           </div>
         </div>
-        {picking && <WorldPicker settingId={settingId} types={kind === "all" ? types : [kind]} engaged={entities} onPick={(type, id) => void engage(type, id)} onClose={() => setPicking(false)} />}
+        {creating && <MentionPickerModal initialQuery="" initialCreate initialCreateType={kind === "all" || kind === "rumor" || kind === "draft" ? undefined : kind} defaultSettingId={settingId} lockSetting direct onlyTypes={types} onPick={(r) => void engage(r.type, r.id, true)} onClose={() => setCreating(false)} />}
+        {picking && <WorldPicker settingId={settingId} types={kind === "all" || kind === "rumor" || kind === "draft" ? types : [kind]} engaged={entities} onPick={(type, id) => void engage(type, id)} onClose={() => setPicking(false)} />}
         {adding && <RecordFormModal campaignId={campaignId} settingId={settingId} ownerType={adding.entity_type} ownerId={adding.entity_id} onClose={() => setAdding(null)} />}
       </section>
     );

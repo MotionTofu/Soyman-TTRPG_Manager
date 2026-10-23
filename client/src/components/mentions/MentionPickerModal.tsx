@@ -57,6 +57,8 @@ export function MentionPickerModal({
   onlyTypes,
   allow,
   lockSetting = false,
+  initialCreate = false,
+  initialCreateType,
 }: {
   initialQuery: string;
   defaultSettingId?: number;
@@ -71,6 +73,10 @@ export function MentionPickerModal({
   allow?: (result: PickResult) => boolean;
   /** Новая сущность — только в `defaultSettingId`. */
   lockSetting?: boolean;
+  /** Открыть сразу создание, например из «Новая в сеттинге». */
+  initialCreate?: boolean;
+  /** Предвыбранный вид; остальные разрешённые виды остаются доступны. */
+  initialCreateType?: (typeof CREATE_TYPES)[number]["key"];
   onClose: () => void;
 }) {
   const [query, setQuery] = useState(initialQuery);
@@ -94,10 +100,10 @@ export function MentionPickerModal({
   const [selected, setSelected] = useState<PickResult | null>(null);
   const [label, setLabel] = useState("");
 
-  const [creating, setCreating] = useState(false);
-  const [createSettingId, setCreateSettingId] = useState<number | "">("");
-  const [createType, setCreateType] = useState<(typeof CREATE_TYPES)[number]["key"]>("location");
-  const [createName, setCreateName] = useState("");
+  const [creating, setCreating] = useState(initialCreate && !isPlayer);
+  const [createSettingId, setCreateSettingId] = useState<number | "">(initialCreate ? defaultSettingId ?? "" : "");
+  const [createType, setCreateType] = useState<(typeof CREATE_TYPES)[number]["key"]>(initialCreateType && createTypes.some((t) => t.key === initialCreateType) ? initialCreateType : createTypes[0]?.key ?? "location");
+  const [createName, setCreateName] = useState(initialCreate ? initialQuery : "");
   const [createBusy, setCreateBusy] = useState(false);
   const run = useAction();
 
@@ -397,7 +403,7 @@ export function MentionPickerModal({
               >
                 {createBusy ? "Создаю…" : "Создать"}
               </button>
-              <button type="button" onClick={() => setCreating(false)}>
+              <button type="button" onClick={() => initialCreate ? onClose() : setCreating(false)}>
                 Отмена
               </button>
             </div>
