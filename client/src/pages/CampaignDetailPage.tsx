@@ -59,7 +59,7 @@ import { useImageCrop } from "../hooks/useImageCrop";
 import { loadHideFinance } from "../financePrivacy";
 import { isSafeImageUrl } from "../utils/safeUrl";
 import { useAuthenticatedFileUrl } from "../utils/fileUrl";
-import { useConfirm, useAlert } from "../hooks/useConfirm";
+import { useConfirm, useAlert, usePrompt } from "../hooks/useConfirm";
 import { useUndoDelete } from "../hooks/useUndoDelete";
 import type {
   CampaignCalendarEvent,
@@ -95,10 +95,12 @@ import { sessionLabel } from "../sessionLabel";
 import { CampaignRevealList } from "../components/RevealList";
 import { CampaignVesselsTab } from "../components/CampaignVesselsTab";
 import { CampaignPassport } from "../components/campaign/CampaignPassport";
-import { CampaignDossierFiles } from "../components/campaign/CampaignDossierFiles";
+import { plural } from "../sceneKinds";
+import { CampaignDossierFiles, useCharacterSheets } from "../components/campaign/CampaignDossierFiles";
+import { statusOf, useSetCharacterStatus } from "../characterStatus";
 import { CampaignNow } from "../components/campaign/CampaignNow";
 import { NavIcon, type NavIconName } from "../components/NavIcons";
-import { CampaignDebtors, NextSessionPrep } from "../components/campaign/CampaignPrep";
+import { CampaignDebtors, NextSessionPrep, useSettleDebt } from "../components/campaign/CampaignPrep";
 import { OldNotesFold } from "../components/campaign/OldNotesFold";
 import { ExtraPayments } from "../components/campaign/ExtraPayments";
 import { CampaignWorldTab, type CampaignWorld } from "../components/campaign/CampaignWorldTab";
@@ -922,25 +924,23 @@ export function CampaignDetailPage() {
         <div className="campaign-players-workspace">
         <EntityTabWorkspace
           sections={[
-            { id: "roster", label: "Состав", count: campaign.roster.length },
-            { id: "reminders", label: "Напоминания" },
-            { id: "journals", label: "Путевые заметки" },
+            { id: "roster", label: "Состав", count: campaign.roster.length, icon: "players" },
+            { id: "reminders", label: "Напоминания", icon: "document" },
+            { id: "journals", label: "Путевые заметки", icon: "book" },
           ]}
           selection={playersSel}
           onSelect={setPlayersSel}
           workspaceKey={campaignId}
         >
           {playersSel.section === "roster" && (
-          <section className="stack">
-            <CharacterRequestsBlock campaignId={campaignId} />
             <PlayersAndCharactersTab
               campaignId={campaignId}
               roster={campaign.roster}
               allPlayers={allPlayers}
               debts={debts}
               currency={campaign.currency}
+              sessions={sessions}
             />
-          </section>
           )}
           {playersSel.section === "reminders" && (
           <section className="stack">
@@ -1559,29 +1559,44 @@ function PlayersAndCharactersTab({
   allPlayers,
   debts,
   currency,
+  sessions,
 }: {
   campaignId: number;
   roster: RosterPlayer[];
   allPlayers: Player[];
   debts: CampaignDebt[];
   currency: string;
+  sessions: SessionSummary[];
 }) {
   const hideFinance = loadHideFinance();
   const run = useAction();
   // Персонажи кампании — тот же ключ, что у пульта.
   const characters = useResource<Character[]>(campaignPaths.characters(campaignId)).data ?? NO_CHARACTERS;
+  const sheets = useCharacterSheets(characters);
+  const settle = useSettleDebt(campaignId);
+  const setStatus = useSetCharacterStatus();
   const [addingFor, setAddingFor] = useState<number | null>(null);
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   const [peekCharId, setPeekCharId] = useState<number | null>(null);
+  const [addMenu, setAddMenu] = useState<{ x: number; y: number } | null>(null);
   const [pcConfirmDialog, pcConfirm] = useConfirm();
   const [pcAlertDialog, showPcAlert] = useAlert();
+  const [pcPromptDialog, pcPrompt] = usePrompt();
 
-  async function addToRoster(playerId: string, e: React.ChangeEvent<HTMLSelectElement>) {
-    if (!playerId) return;
-    e.target.value = "";
+  async function addToRoster(playerId: number) {
     await run(labelled("Игрок в состав", () => write.post(`/campaigns/${campaignId}/roster/${playerId}`)), {
       affects: rosterAffects(campaignId),
     });
+  }
+  // «Новый игрок…» (Q9): завести и сразу в состав, не уходя в «Игроков».
+  async function createPlayer() {
+    const name = (await pcPrompt({ message: "Имя нового игрока", confirmLabel: "Добавить" }))?.trim();
+    if (!name) return;
+    const created = await run(labelled("Новый игрок", () => write.post<Player>("/players", { name, notes: "" })), {
+      affects: [{ kind: "player" }],
+      retry: false,
+    });
+    if (created) await addToRoster(created.id);
   }
   async function removeFromRoster(playerId: number) {
     const ok = await pcConfirm({ message: `Убрать игрока из состава кампании? Персонажи сохранятся.`, confirmLabel: "Убрать", danger: true });
@@ -1599,8 +1614,9 @@ function PlayersAndCharactersTab({
     );
   }
 
-  async function archiveCharacter(characterId: number, name: string) {
-    const ok = await pcConfirm({ message: `Отправить «${name}» в архив? Вернуть можно из архива.`, confirmLabel: "В архив", danger: true });
+  // Архив — для мусора, созданного по ошибке; погибший — статус, а не архив (Q21).
+  async function deleteCharacter(characterId: number, name: string) {
+    const ok = await pcConfirm({ message: `Удалить «${name}»? Персонаж уйдёт в Архив, оттуда его можно вернуть.`, confirmLabel: "Удалить", danger: true });
     if (!ok) return;
     await run(labelled("Персонаж в архив", () => write.del(`/characters/${characterId}`)), {
       affects: [{ kind: "character" }, { path: "/archive" }],
@@ -1628,30 +1644,63 @@ function PlayersAndCharactersTab({
 
   const available = allPlayers.filter((p) => !roster.some((r) => r.id === p.id));
 
+  // Сводка над делами (Q10, Q25): плашка без данных не рисуется.
+  const inRoster = roster.filter((p) => p.roster_status !== "left");
+  const active = characters.filter((c) => statusOf(c) === "active" && inRoster.some((p) => p.id === c.player_id));
+  const levels = active.map((c) => sheets.get(c.id)).flatMap((i) => (i?.kind === "dnd" && i.level ? [i.level] : []));
+  const avgLevel = levels.length ? Math.round(levels.reduce((a, b) => a + b, 0) / levels.length) : null;
+  const today = toLocalDateKey();
+  const next = sessions.filter((s) => s.status === "planned" && s.date >= today).sort((a, b) => a.date.localeCompare(b.date))[0];
+  const summary = [
+    inRoster.length > 0 && `${inRoster.length} ${plural(inRoster.length, "игрок", "игрока", "игроков")}`,
+    active.length > 0 && `${active.length} ${plural(active.length, "активный персонаж", "активных персонажа", "активных персонажей")}`,
+    avgLevel != null && `Средний уровень ${avgLevel}`,
+    next && `Следующая игра ${formatDateKeyRu(next.date)}`,
+  ].filter(Boolean) as string[];
+
   return (
     <div className="campaign-dossier">
       <header className="campaign-dossier__header">
         <div>
-          <p className="campaign-dossier__meta">Состав кампании</p>
           <h3>Личные дела</h3>
+          <p className="campaign-dossier__meta">Игроки и их персонажи</p>
+          {summary.length > 0 && (
+            <ul className="campaign-dossier__summary">
+              {summary.map((t) => <li key={t}>{t}</li>)}
+            </ul>
+          )}
         </div>
-        <div className="campaign-dossier__add">
-          <span className="campaign-dossier__meta">{roster.length} в составе · {characters.filter((c) => roster.some((p) => p.id === c.player_id)).length} персонажей</span>
-          <select value="" aria-label="Добавить игрока в состав" onChange={(e) => void addToRoster(e.target.value, e)} disabled={available.length === 0}>
-            <option value="">{available.length === 0 ? "Все игроки уже в составе" : "+ Добавить игрока…"}</option>
-            {available.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-        </div>
+        <button type="button" className="campaign-dossier__add" aria-haspopup="menu" aria-expanded={!!addMenu}
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            setAddMenu(addMenu ? null : { x: r.left, y: r.bottom });
+          }}>
+          <NavIcon name="plus" />
+          Добавить игрока ▾
+        </button>
+        {addMenu && (
+          <ContextMenu
+            x={addMenu.x}
+            y={addMenu.y}
+            title="В состав"
+            items={[
+              ...available.map((p) => ({ label: p.name, onClick: () => void addToRoster(p.id) })),
+              { label: "Новый игрок…", dividerBefore: available.length > 0, onClick: () => void createPlayer() },
+            ]}
+            onClose={() => setAddMenu(null)}
+          />
+        )}
       </header>
+      <CharacterRequestsBlock campaignId={campaignId} />
       {roster.length === 0 ? (
         <EmptyState
           title="Команда ещё не собрана"
-          hint="Добавьте первого игрока — его персонажи появятся здесь же, на карточке."
-          action={available.length > 0 ? <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Выберите игрока выше ↑</span> : <Link to="/players">Создать игрока →</Link>}
+          hint="Добавьте первого игрока — его персонажи появятся здесь же, в его деле."
+          action={<span className="muted" style={{ fontSize: "var(--fs-meta)" }}>«Добавить игрока» выше ↑</span>}
         />
       ) : (
         <CampaignDossierFiles
-          roster={roster} characters={characters} debts={debts} currency={currency} hideFinance={hideFinance}
+          roster={roster} characters={characters} sheets={sheets} debts={debts} currency={currency} hideFinance={hideFinance}
           addingFor={addingFor} drafts={drafts}
           onDraft={(playerId, name) => setDrafts((d) => ({ ...d, [playerId]: name }))}
           onStartAdding={setAddingFor}
@@ -1661,15 +1710,17 @@ function PlayersAndCharactersTab({
           }}
           onAddCharacter={(playerId) => void addCharacter(playerId)}
           onPeek={setPeekCharId}
-          onArchive={(id, name) => void archiveCharacter(id, name)}
+          onStatus={(c, status) => void setStatus(c, status)}
+          onDelete={(id, name) => void deleteCharacter(id, name)}
+          onSettle={(d) => void settle(d)}
           onToggleLeft={(id, status) => void toggleLeft(id, status)}
           onRemovePlayer={(id) => void removeFromRoster(id)}
         />
       )}
-      {roster.length > 0 && <p className="campaign-dossier__legend">«—» — нет данных в листе персонажа.</p>}
       {characters.length > 0 && <CampaignSquadDates characters={characters} />}
       {pcConfirmDialog}
       {pcAlertDialog}
+      {pcPromptDialog}
       {peekCharId != null && <CharacterPeekModal characterId={peekCharId} onClose={() => setPeekCharId(null)} />}
     </div>
   );

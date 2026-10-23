@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { SceneSwitcher } from "../components/SceneSwitcher";
@@ -21,6 +21,7 @@ import { useEntity, useResource, useSaveEntity } from "../data/hooks";
 import { CombatMode } from "../combat/CombatMode";
 import { useCombatModeOpen } from "../combat/combatModeStore";
 import { sessionPaths } from "../data/sessions";
+import { isAtTable } from "../characterStatus";
 
 // Пустые списки — постоянными ссылками: панели мемоизированы, и новый `[]` на
 // каждой отрисовке перерисовывал бы их зря.
@@ -40,9 +41,11 @@ export function SessionLivePage() {
   const combatMode = useCombatModeOpen(sessionId, !!session?.combat_active);
   const campaignState = useEntity<CampaignDetail>("campaign", session?.campaign_id);
   const campaign = campaignState.data ?? null;
-  const characters =
+  const allCharacters =
     useResource<Character[]>(session ? sessionPaths.campaignCharacters(session.campaign_id) : null).data ??
     NO_CHARACTERS;
+  // Партия стола — без запасных, погибших и ушедших (гриллинг «Партия», Q26).
+  const characters = useMemo(() => allCharacters.filter(isAtTable), [allCharacters]);
   // Объединение зависит и от отметок приключений, и от того, какая сцена идёт
   // (пометка «в сцене»): запуск задевает сессию, и оно перечитывается само.
   const union = useResource<SessionUnionRow[]>(sessionPaths.castUnion(sessionId)).data ?? NO_UNION;

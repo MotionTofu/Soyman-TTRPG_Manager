@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 
 export interface ContextMenuItem {
   label: string;
   onClick?: () => void;
   danger?: boolean;
+  /** Черта над пунктом — отделяет группу действий. */
+  dividerBefore?: boolean;
   /** Groups related actions under one expandable row instead of listing them
    *  flat (keeps a menu at or under the ~4-choice guideline — see design
    *  critique P2 on the calendar event menu). A parent item with children
@@ -95,17 +97,19 @@ export function ContextMenu({ x, y, title, ariaLabel, items, onClose }: Props) {
             )}
           </div>
         ) : (
-          <button
-            role={ariaLabel ? "menuitem" : undefined}
-            key={i}
-            className={item.danger ? "danger" : ""}
-            onClick={() => {
-              item.onClick?.();
-              onClose();
-            }}
-          >
-            {item.label}
-          </button>
+          <Fragment key={i}>
+            {item.dividerBefore && <hr className="context-menu-divider" />}
+            <button
+              role={ariaLabel ? "menuitem" : undefined}
+              className={item.danger ? "danger" : ""}
+              onClick={() => {
+                item.onClick?.();
+                onClose();
+              }}
+            >
+              {item.label}
+            </button>
+          </Fragment>
         )
       )}
     </div>

@@ -1,9 +1,11 @@
+import { useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { useEntity, useResource } from "../data/hooks";
 import { sessionPaths } from "../data/sessions";
 import { SESSION_PANEL_CONTENT, SESSION_PANEL_TITLES, type SessionPanelKey } from "./sessionLivePanels";
 import "../session.css";
 import type { CampaignDetail, Character, SessionDetail, SessionUnionRow } from "../types";
+import { isAtTable } from "../characterStatus";
 
 const NO_CHARACTERS: Character[] = [];
 
@@ -21,9 +23,11 @@ export function SessionPanelPopoutPage() {
   // же ключи, что у пульта.
   const session = useEntity<SessionDetail>("session", sessionId).data ?? null;
   const campaign = useEntity<CampaignDetail>("campaign", session?.campaign_id).data ?? null;
-  const characters =
+  const allCharacters =
     useResource<Character[]>(session ? sessionPaths.campaignCharacters(session.campaign_id) : null).data ??
     NO_CHARACTERS;
+  // Партия стола — без запасных, погибших и ушедших (гриллинг «Партия», Q26).
+  const characters = useMemo(() => allCharacters.filter(isAtTable), [allCharacters]);
   const union = useResource<SessionUnionRow[]>(sessionPaths.castUnion(sessionId)).data;
 
   if (!session || !campaign || !panelKey || !(panelKey in SESSION_PANEL_CONTENT)) return null;

@@ -120,12 +120,21 @@ campaignsRouter.get("/:id", (req, res) => {
   if (!row) return res.status(404).json({ error: "not found" });
   const roster = db
     .prepare(
-      `SELECT p.*, cr.status as roster_status FROM campaign_roster cr
+      // Последняя сыгранная встреча игрока в этой кампании — строка дела
+      // «Последняя игра · дата · присутствовал» (гриллинг «Партия», Q12).
+      `SELECT p.*, cr.status as roster_status, last.date as last_session_date, last.attended as last_session_attended
+       FROM campaign_roster cr
        JOIN players p ON p.id = cr.player_id
+       LEFT JOIN (
+         SELECT sa.player_id, s.date, sa.attended,
+                ROW_NUMBER() OVER (PARTITION BY sa.player_id ORDER BY s.date DESC, s.id DESC) AS rn
+         FROM session_attendance sa JOIN sessions s ON s.id = sa.session_id
+         WHERE s.campaign_id = ? AND s.status = 'held' AND s.archived_at IS NULL
+       ) last ON last.player_id = p.id AND last.rn = 1
        WHERE cr.campaign_id = ? AND p.archived_at IS NULL
        ORDER BY p.name`
     )
-    .all(req.params.id) as { thumbnail_image_path: string | null }[];
+    .all(req.params.id, req.params.id) as { thumbnail_image_path: string | null }[];
   const finance = campaignEarnings(Number(req.params.id));
   res.json({
     ...withFolderState(withBgUrl(row)),

@@ -7,6 +7,7 @@ import type { Campaign, Character, CompendiumEntry, InitiativeEntry, SettingBein
 import { addFighters, addSameAgain, type Source } from "./addToCombat";
 import { parseNestState } from "./nestState";
 import type { useCombat } from "./useCombat";
+import { isLiving } from "../characterStatus";
 
 type Combat = ReturnType<typeof useCombat>;
 
@@ -127,8 +128,9 @@ export function AddToCombatPanel({
       }),
     [bestiary]
   );
+  // Вручную добавляется и запасной; погибший и ушедший — нет (Q26).
   const pcRows: Row[] = (characters ?? [])
-    .filter((c) => !c.archived_at)
+    .filter((c) => !c.archived_at && isLiving(c))
     .map((c) => {
       const fighting = inFight.has(c.id);
       return {

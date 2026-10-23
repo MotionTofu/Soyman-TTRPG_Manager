@@ -360,6 +360,9 @@ export type RosterStatus = "active" | "left";
 
 export interface RosterPlayer extends Player {
   roster_status: RosterStatus;
+  /** Последняя сыгранная встреча игрока в кампании; нет — ещё не играли. */
+  last_session_date?: string | null;
+  last_session_attended?: number | null;
 }
 
 export interface CampaignDetail extends Campaign {
@@ -395,6 +398,8 @@ export interface CharacterChapter {
   created_at: string;
 }
 
+export type CharacterStatus = "active" | "reserve" | "temporary" | "dead" | "gone";
+
 export interface Character {
   id: number;
   player_id: number;
@@ -412,6 +417,8 @@ export interface Character {
   requested_campaign_name?: string | null;
   character_name: string;
   short_name: string | null;
+  /** Статус в истории кампании (гриллинг «Партия», Q19). */
+  status?: CharacterStatus;
   backstory: string;
   statblock: string;
   current_situation: string;

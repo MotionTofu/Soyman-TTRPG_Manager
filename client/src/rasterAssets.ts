@@ -43,7 +43,7 @@ export type RasterCategory = "conditions" | "schools" | "coins" | "inventory" | 
 /** Что реально лежит в раздаче. Ключ — имя файла без расширения. */
 export const RASTER_ASSETS: Record<RasterCategory, readonly string[]> = {
   "ui/plot-restyle/v1": ["stamp-done", "stamp-skipped", "kind-window"],
-  "ui/campaign-dossier/v1": ["card-paper", "portrait-frame", "view-label", "folder-sheet", "block-panel"],
+  "ui/campaign-dossier/v1": ["card-paper", "portrait-frame", "view-label", "folder-sheet", "block-panel", "paperclip"],
   "ui/fantasy-punk/decorative/profile": ["tape", "seal"],
   // Local map artwork; provenance and crop/encoding manifest in maps/assets/cartography-pack.json.
   // «Подземелье · Склеп» (комикс-панк): provenance и хэши — maps/assets/crypt-pack.json.

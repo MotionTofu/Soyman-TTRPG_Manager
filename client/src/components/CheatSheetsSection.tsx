@@ -16,6 +16,7 @@ import { liveEffectEntryIds, withLiveEffects } from "./dnd/dndFeatures";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { MentionText } from "./mentions/MentionText";
 import type { Character, DndCharacterData, SettingBeing, Statblock, StorySecret } from "../types";
+import { isAtTable } from "../characterStatus";
 
 type SheetFormat = "a4" | "a5";
 type SheetKind = "session" | "combat" | "characters";
@@ -144,7 +145,7 @@ interface CharacterCardData {
 }
 
 async function loadCharacterCards(campaignId: number): Promise<CharacterCardData[]> {
-  const characters = await readResource<Character[]>(sessionPaths.campaignCharacters(campaignId));
+  const characters = (await readResource<Character[]>(sessionPaths.campaignCharacters(campaignId))).filter(isAtTable);
   const cards = await Promise.all(
     characters.map(async (c) => {
       try {

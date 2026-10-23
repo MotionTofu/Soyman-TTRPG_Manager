@@ -17,6 +17,7 @@
 // - независимый скролл: навигация sticky со своим overflow, на мобильном
 //   панели складываются в одну колонку.
 import { useState, type ReactNode } from "react";
+import { NavIcon, type NavIconName } from "./NavIcons";
 
 export interface WorkspaceNavItem {
   id: string;
@@ -29,6 +30,8 @@ export interface WorkspaceSection {
   label: string;
   /** Счётчик справа от названия (количество объектов). */
   count?: number;
+  /** Знак перед названием. */
+  icon?: NavIconName;
   /** Элементы категории. Нет — одиночный пункт (как «Основное»). */
   items?: WorkspaceNavItem[];
 }
@@ -108,6 +111,7 @@ export function EntityTabWorkspace({
                       {isOpen ? "▾" : "▸"}
                     </span>
                   )}
+                  {s.icon && <NavIcon name={s.icon} />}
                   <span className="etw-nav-label">{s.label}</span>
                   {s.count != null && s.count > 0 && (
                     <span className="etw-nav-count" aria-label={`Всего: ${s.count}`}>

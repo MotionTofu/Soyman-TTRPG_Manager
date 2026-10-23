@@ -7365,6 +7365,12 @@ details.card[open] summary {
   color: var(--muted);
   max-width: 260px;
 }
+.context-menu-divider {
+  margin: var(--sp-2) 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+:is(.paper-scope, .entity-page--paper) .context-menu-divider { border-top-color: var(--paper-rule); }
 .context-menu button {
   background: transparent;
   border: none;

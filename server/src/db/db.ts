@@ -7488,6 +7488,13 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     database.exec("ALTER TABLE session_show_state ADD COLUMN display TEXT NOT NULL DEFAULT '{}'");
   }
 
+  // Статус персонажа в истории кампании (гриллинг «Партия» 2026-10-23, Q2,
+  // Q19): активный / запасной / временный / погиб / ушёл. Погибший не уходит в
+  // архив — персонаж остаётся историей; все живые на момент перевода активны.
+  if (!columnExists(database, "characters", "status")) {
+    database.exec("ALTER TABLE characters ADD COLUMN status TEXT NOT NULL DEFAULT 'active'");
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);

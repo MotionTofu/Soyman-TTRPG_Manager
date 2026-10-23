@@ -110,6 +110,8 @@ export function apiRoleGate(req: AuthedRequest, res: Response, next: NextFunctio
     // No archiving/deleting your character out from under the campaign —
     // that stays a GM action.
     if (m === "DELETE" && p === `/characters/${match[1]}`) return forbid();
+    // Статус в истории («погиб», «ушёл») ставит Мастер (гриллинг «Партия», Q28).
+    if (p === `/characters/${match[1]}/status`) return forbid();
     return next();
   }
 

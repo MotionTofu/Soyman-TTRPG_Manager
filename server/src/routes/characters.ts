@@ -391,6 +391,22 @@ charactersRouter.put("/:id", (req, res) => {
   res.json(db.prepare("SELECT * FROM characters WHERE id = ?").get(req.params.id));
 });
 
+// Статус в истории кампании (гриллинг «Партия», Q19–Q21). Отдельным маршрутом:
+// игрок свой лист правит, а «погиб» и «ушёл» — решения Мастера (Q28), гейт
+// ролей этот путь игроку закрывает. Ответ несёт прежний статус — для «Отменить».
+export const CHARACTER_STATUSES = ["active", "reserve", "temporary", "dead", "gone"] as const;
+
+charactersRouter.put("/:id/status", (req, res) => {
+  const { status } = req.body as { status?: string };
+  if (!CHARACTER_STATUSES.includes(status as (typeof CHARACTER_STATUSES)[number]))
+    return res.status(400).json({ error: `status: ${CHARACTER_STATUSES.join(" | ")}` });
+  const row = db.prepare("SELECT status FROM characters WHERE id = ?").get(req.params.id) as { status: string } | undefined;
+  if (!row) return res.status(404).json({ error: "not found" });
+  db.prepare("UPDATE characters SET status = ? WHERE id = ?").run(status, req.params.id);
+  broadcastCharacterUpdate(Number(req.params.id));
+  res.json({ status, previous: row.status });
+});
+
 charactersRouter.post("/:id/avatar", upload.single("file"), async (req, res) => {
   const character = db
     .prepare("SELECT id, avatar_image_path FROM characters WHERE id = ?")

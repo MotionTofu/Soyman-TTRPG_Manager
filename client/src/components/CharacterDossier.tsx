@@ -14,6 +14,7 @@ import { RelationsTab } from "./RelationsTab";
 import { GraphNeighbourhoodLink } from "./GraphNeighbourhoodLink";
 import { ConfirmModal } from "./ConfirmModal";
 import { Modal } from "./Modal";
+import { CharacterStatusChip } from "./CharacterStatusChip";
 
 /**
  * Досье персонажа на листе (гриллинг «персонаж = лист» 2026-09-27, Q4/Q5,
@@ -68,6 +69,7 @@ export function CharacterDossier({ character }: { character: Character }) {
   const hooks = chapters.filter((c) => c.section === "hooks");
   return (
     <div className="character-dossier-extra paper-scope paper-sheet">
+      {character.campaign_id != null && <CharacterStatusChip character={character} editable={isGm} />}
       {isGm && character.campaign_id != null && (
         <CampaignParticipation
           characterId={character.id}

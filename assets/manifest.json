@@ -4365,6 +4365,16 @@
       "baselineSha256": "78d39335d32963abdf20cf22013083e4e13e77294303c74b23dce2ac09631448"
     },
     {
+      "id": "ui/campaign-dossier/v1/paperclip.webp",
+      "title": "paperclip",
+      "category": "ui/campaign-dossier",
+      "source": "assets/library/ui/campaign-dossier/v1/paperclip.webp",
+      "outputs": [
+        "client/public/ui/campaign-dossier/v1/paperclip.webp"
+      ],
+      "baselineSha256": "e7add2a484a64477c06bd540731d3a2aa185368de5e16502d58f2c90040e60b3"
+    },
+    {
       "id": "ui/campaign-dossier/v1/portrait-frame.webp",
       "title": "portrait-frame",
       "category": "ui/campaign-dossier",

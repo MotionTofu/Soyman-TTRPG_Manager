@@ -54,18 +54,15 @@ export function NextSessionPrep({ next, last, oneshot }: { next: SessionSummary 
 }
 
 /**
- * «Должники»: только когда долги есть. «Оплатил» закрывает весь долг игрока
- * полной ставкой — без окна подтверждения, но с «Отменить» в тосте: окно на
- * каждый расчёт — лишний щелчок, а промах исправляется тем же тостом.
+ * «Оплатил»: весь долг игрока полной ставкой — без окна подтверждения, но с
+ * «Отменить» в тосте: окно на каждый расчёт — лишний щелчок, а промах
+ * исправляется тем же тостом. Им же гасят долг из дела на вкладке «Партия».
  */
-export function CampaignDebtors({ campaignId, currency }: { campaignId: number; currency: string }) {
-  const debts = useResource<CampaignDebt[]>(campaignPaths.debts(campaignId)).data;
+export function useSettleDebt(campaignId: number) {
   const run = useAction();
   const touched = useAfterWrite();
   const { offerUndo } = useUndoDelete();
-  if (!debts?.length) return null;
-
-  async function settle(d: CampaignDebt) {
+  return async function settle(d: CampaignDebt) {
     const path = `/campaigns/${campaignId}/debts/${d.player_id}`;
     // Сессии, чьи суммы поменялись, известны только из ответа.
     const affects = (before: { session_id: number }[]): Affect[] => [
@@ -86,7 +83,14 @@ export function CampaignDebtors({ campaignId, currency }: { campaignId: number; 
         touched(affects(res.before));
       },
     });
-  }
+  };
+}
+
+/** «Должники»: только когда долги есть. */
+export function CampaignDebtors({ campaignId, currency }: { campaignId: number; currency: string }) {
+  const debts = useResource<CampaignDebt[]>(campaignPaths.debts(campaignId)).data;
+  const settle = useSettleDebt(campaignId);
+  if (!debts?.length) return null;
 
   return (
     <section className="campaign-debtors" aria-label="Должники">
