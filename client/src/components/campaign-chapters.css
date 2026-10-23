@@ -277,3 +277,76 @@
 .campaign-adv__holes-note {
   color: var(--danger-bg);
 }
+
+/* «Все приключения» (Q15): карточки без сцен. */
+.campaign-adv-cards {
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-4) 0;
+}
+.campaign-adv-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-5);
+  width: 100%;
+  padding: var(--sp-5) var(--sp-2);
+  background: transparent;
+  border: none;
+  border-bottom: var(--card-border-width) solid var(--line);
+  text-align: left;
+  cursor: pointer;
+  color: var(--paper-ink, var(--ink));
+}
+.campaign-adv-card:hover .campaign-adv-card__name {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.campaign-adv-card.is-dim {
+  color: var(--paper-muted, var(--muted));
+}
+.campaign-adv-card__name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-3);
+  font: 700 var(--fs-h3)/1.3 Georgia, "Times New Roman", serif;
+}
+.campaign-adv-card__current,
+.campaign-adv-card__role {
+  font: 400 var(--fs-meta)/1 var(--font-body);
+  padding: var(--sp-0) var(--sp-3);
+  border: var(--card-border-width) solid currentColor;
+}
+.campaign-adv-card__current {
+  background: var(--paper-ink, var(--ink));
+  color: var(--paper, #fff);
+  border-color: var(--paper-ink, var(--ink));
+}
+.campaign-adv-card__facts {
+  font-size: var(--fs-meta);
+  color: var(--paper-muted, var(--muted));
+}
+.campaign-scene__kind-inline {
+  display: none;
+  font-size: var(--fs-meta);
+}
+
+/* Телефон (Q19): в строке кружок, название и только красный счётчик улик. */
+@container (max-width: 520px) {
+  .campaign-chapters .campaign-scene > .campaign-scene__summary {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    column-gap: var(--sp-4);
+  }
+  .campaign-scene__summary > :is(.campaign-scene__kind, .campaign-scene__session),
+  .campaign-scene__clues:not(.is-bad) {
+    display: none;
+  }
+  .campaign-scene__more {
+    grid-column: 4;
+  }
+  .campaign-scene__kind-inline {
+    display: block;
+  }
+}

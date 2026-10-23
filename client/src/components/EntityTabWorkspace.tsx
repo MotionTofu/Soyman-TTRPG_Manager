@@ -57,6 +57,7 @@ export function EntityTabWorkspace({
   navFooter,
   workspaceKey,
   sectionOverview = false,
+  phoneSelect = false,
 }: {
   sections: WorkspaceSection[];
   selection: WorkspaceSelection;
@@ -69,6 +70,8 @@ export function EntityTabWorkspace({
   workspaceKey?: string | number;
   /** Заглавие категории открывает её сводку, включая уже выбранную категорию. */
   sectionOverview?: boolean;
+  /** На телефоне навигация — один выпадающий список над рабочей областью. */
+  phoneSelect?: boolean;
 }) {
   // Раскрытые категории. По умолчанию раскрыта та, где лежит выбор, —
   // остальное свернуто, чтобы панель оставалась компактной при десятках
@@ -98,8 +101,38 @@ export function EntityTabWorkspace({
   }
 
   return (
-    <div className="entity-tab-workspace" key={workspaceKey}>
+    <div className={`entity-tab-workspace${phoneSelect ? " entity-tab-workspace--phone-select" : ""}`} key={workspaceKey}>
       <nav className="entity-tab-workspace__nav card" aria-label="Навигация внутри таба">
+        {phoneSelect && (
+          <select
+            className="etw-nav-select"
+            aria-label="Раздел"
+            value={selection.item != null ? `${selection.section}/${selection.item}` : selection.section}
+            onChange={(e) => {
+              const [section, item] = e.target.value.split("/");
+              pick(section, item);
+            }}
+          >
+            {sections.map((s) =>
+              s.items ? (
+                <optgroup key={s.id} label={s.label}>
+                  <option value={s.id} hidden>
+                    {s.label}
+                  </option>
+                  {s.items.map((item) => (
+                    <option key={item.id} value={`${s.id}/${item.id}`}>
+                      {item.current ? `● ${item.label}` : item.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              )
+            )}
+          </select>
+        )}
         <div className="etw-nav-list">
           {sections.map((s, i) => {
             const groupTitle = s.group && s.group !== sections[i - 1]?.group ? s.group : null;

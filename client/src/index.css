@@ -7002,6 +7002,21 @@ details.card[open] summary {
     flex-direction: column;
   }
 }
+.etw-nav-select {
+  display: none;
+  width: 100%;
+}
+@media (max-width: 700px) {
+  .entity-tab-workspace--phone-select .etw-nav-select {
+    display: block;
+  }
+  .entity-tab-workspace--phone-select :is(.etw-nav-list, .etw-nav-footer) {
+    display: none;
+  }
+  .entity-tab-workspace--phone-select .entity-tab-workspace__nav {
+    padding: var(--sp-2);
+  }
+}
 @media (max-width: 900px) {
   .entity-tab-workspace {
     flex-direction: column;

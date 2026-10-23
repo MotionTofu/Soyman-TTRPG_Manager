@@ -9,7 +9,7 @@ import { labelled } from "../data/notices";
 import { MentionText } from "./mentions/MentionText";
 import { EmptyState } from "./EmptyState";
 import { SCENE_STATUSES, clueNeed, nodeLabel, plural, sceneWord } from "../sceneKinds";
-import type { ArcClueNode, ArcClues, CampaignAdventureTree, CampaignTreeScene, SceneStatus, StoryScene } from "../types";
+import type { ArcClueNode, ArcClues, CampaignAdventureTree, CampaignReveals, CampaignTreeScene, SceneStatus, StoryScene } from "../types";
 import { NavIcon } from "./NavIcons";
 import { ContextMenu } from "./ContextMenu";
 import { arcCluesPath } from "../data/canvas";
@@ -48,6 +48,7 @@ export function CampaignChaptersScenes({
   adventureId,
   chapterId,
   onStats,
+  onPickAdventure,
 }: {
   campaignId: number;
   settingId: number | null;
@@ -56,6 +57,8 @@ export function CampaignChaptersScenes({
   adventureId?: number | null;
   chapterId?: number | null;
   onStats?: (s: ChaptersNavStats) => void;
+  /** Щелчок по карточке в «Все приключения». */
+  onPickAdventure?: (adventureId: number) => void;
 }) {
   const path = campaignPaths.tree(campaignId);
   const tree = useResource<CampaignAdventureTree[]>(path).data ?? EMPTY;
@@ -138,7 +141,8 @@ export function CampaignChaptersScenes({
       {adventureId != null && visibleTree.length === 0 && (
         <p className="muted">Приключение не найдено — возможно, его открепили.</p>
       )}
-      {visibleTree.map((adv) => (
+      {adventureId == null && <AdventuresOverview tree={tree} campaignId={campaignId} onPick={onPickAdventure} />}
+      {adventureId != null && visibleTree.map((adv) => (
         <AdventureSection
           key={adv.id}
           adv={adv}
@@ -166,6 +170,114 @@ function plannedSession(s: CampaignTreeScene) {
 
 const isPending = (s: StoryScene) => (s.state?.status ?? "pending") === "pending";
 
+/** Дыры правила трёх — только у не начатых сцен: у сыгранной улики уже ничего не решают. */
+function countHoles(list: CampaignTreeScene[], nodeBy: Map<number, ArcClueNode>) {
+  return list.filter((s) => isPending(s) && isHole(nodeBy.get(s.id))).length;
+}
+
+const allScenes = (adv: CampaignAdventureTree) => [...adv.scenes, ...adv.chapters.flatMap((c) => c.scenes)];
+const holesLabel = (n: number) => `⚠ ${n} ${plural(n, "узел", "узла", "узлов")} без трёх улик`;
+const ADV_ROLE: Record<string, string> = { start: "старт", finale: "финал", proactive: "приходит само" };
+
+/**
+ * «Все приключения» (гриллинг «Сюжета» 2026-10-23, Q15): обзор кампании без
+ * сцен — карточки приключений с ролью на карте кампании, прогрессом и дырами.
+ */
+function AdventuresOverview({
+  tree,
+  campaignId,
+  onPick,
+}: {
+  tree: CampaignAdventureTree[];
+  campaignId: number;
+  onPick?: (adventureId: number) => void;
+}) {
+  const navigate = useNavigate();
+  const reveals = useResource<CampaignReveals>(`/story/campaigns/${campaignId}/reveals`).data;
+  const roleOf = new Map((reveals?.adventures ?? []).map((a) => [a.id, a.node_role]));
+  const current = currentAdventureId(tree);
+  const shown = tree.filter((a) => !a.is_default || allScenes(a).length > 0);
+  const scenes = shown.flatMap(allScenes);
+  const { done } = countByStatus(scenes);
+  const planned = scenes.filter((s) => isPending(s) && plannedSession(s)).length;
+  const advCount = shown.filter((a) => !a.is_default).length;
+  const facts = [
+    `${advCount} ${plural(advCount, "приключение", "приключения", "приключений")}`,
+    `${scenes.length} ${sceneWord(scenes.length)}`,
+    `${done} сыграно`,
+    planned > 0 && `${planned} в сессиях`,
+  ].filter(Boolean);
+
+  return (
+    <section className="card res-group campaign-chapters__adventure">
+      <header className="res-group__band campaign-adv__head">
+        <div className="campaign-adv__title">
+          <span className="res-group__title">Все приключения</span>
+          <span className="campaign-adv__facts">{facts.join(" · ")}</span>
+        </div>
+        <div className="campaign-adv__actions">
+          <button
+            type="button"
+            className="primary campaign-adv__canvas"
+            onClick={() => navigate(`/canvas?campaign=${campaignId}&view=map`)}
+          >
+            <NavIcon name="canvas" /> Карта кампании
+          </button>
+        </div>
+      </header>
+      <div className="campaign-adv-cards">
+        {shown.map((adv) => (
+          <AdventureCard
+            key={adv.id}
+            adv={adv}
+            campaignId={campaignId}
+            role={roleOf.get(adv.id)}
+            current={adv.id === current}
+            onPick={onPick}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function AdventureCard({
+  adv,
+  campaignId,
+  role,
+  current,
+  onPick,
+}: {
+  adv: CampaignAdventureTree;
+  campaignId: number;
+  role: string | undefined;
+  current: boolean;
+  onPick?: (adventureId: number) => void;
+}) {
+  const clues = useResource<ArcClues>(adv.is_default ? null : arcCluesPath(adv.id, campaignId)).data;
+  const nodeBy = useMemo(() => new Map((clues?.nodes ?? []).map((n) => [n.shown_id, n])), [clues]);
+  const all = allScenes(adv);
+  const { done } = countByStatus(all);
+  const holes = countHoles(all, nodeBy);
+  return (
+    <button
+      type="button"
+      className={`campaign-adv-card${adv.is_default ? " is-dim" : ""}`}
+      onClick={() => onPick?.(adv.id)}
+    >
+      <span className="campaign-adv-card__name">
+        {adv.name}
+        {current && <span className="campaign-adv-card__current">сейчас</span>}
+        {role && ADV_ROLE[role] && <span className="campaign-adv-card__role">{ADV_ROLE[role]}</span>}
+      </span>
+      <span className="campaign-adv-card__facts">
+        {all.length > 0 ? `сыграно ${done} из ${all.length}` : "сцен нет"}
+        {holes > 0 && <span className="campaign-adv__holes-note"> · {holesLabel(holes)}</span>}
+      </span>
+    </button>
+  );
+}
+
 /**
  * Приключение во вкладке «Сюжет» (гриллинг 2026-10-23, Q11/Q13): шапка с
  * фактами словами, дырами правила трёх и входом на холст; главы открыты, пока
@@ -190,7 +302,7 @@ function AdventureSection({
   const navigate = useNavigate();
   const clues = useResource<ArcClues>(adv.is_default ? null : arcCluesPath(adv.id, campaignId)).data;
   const nodeBy = useMemo(() => new Map((clues?.nodes ?? []).map((n) => [n.shown_id, n])), [clues]);
-  const holesIn = (list: CampaignTreeScene[]) => list.filter((s) => isPending(s) && isHole(nodeBy.get(s.id))).length;
+  const holesIn = (list: CampaignTreeScene[]) => countHoles(list, nodeBy);
 
   const [openCh, setOpenCh] = useState(() => new Set(adv.chapters.filter((c) => c.scenes.some(isPending)).map((c) => c.id)));
   const toggleCh = (id: number, open: boolean) =>
@@ -202,7 +314,7 @@ function AdventureSection({
       return next;
     });
 
-  const all = [...adv.scenes, ...adv.chapters.flatMap((c) => c.scenes)];
+  const all = allScenes(adv);
   const { done, skipped } = countByStatus(all);
   const planned = all.filter((s) => isPending(s) && plannedSession(s)).length;
   const holes = holesIn(all);
@@ -214,7 +326,6 @@ function AdventureSection({
   ].filter(Boolean);
   const advChapters = chapterId == null ? adv.chapters : adv.chapters.filter((c) => c.id === chapterId);
   const logline = adv.description?.split("\n")[0].trim();
-  const holesLabel = (n: number) => `⚠ ${n} ${plural(n, "узел", "узла", "узлов")} без трёх улик`;
 
   return (
     <section className="card res-group campaign-chapters__adventure">
@@ -472,7 +583,7 @@ const SceneRow = memo(function SceneRow({
         <span className="campaign-scene__session">
           {lastPlayed ? `Сессия №${lastPlayed.number}` : planned ? <span className="muted">в сессии №{planned.number}</span> : null}
         </span>
-        {clueChip ?? <span />}
+        {clueChip ?? <span className="campaign-scene__clues is-none" />}
         <button
           type="button"
           className="campaign-scene__more"
@@ -510,6 +621,8 @@ const SceneRow = memo(function SceneRow({
         ) : (
           <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Сводки нет — откройте сцену, чтобы добавить.</span>
         )}
+        {/* На телефоне «тип · роль» и сессия уезжают из строки сюда (Q19). */}
+        {kind && <span className="campaign-scene__kind-inline">{kind}</span>}
         {node && clues && <SceneClues node={node} clues={clues} />}
         {s.sessions.length > 0 && (
           <span className="campaign-scene__sessions">

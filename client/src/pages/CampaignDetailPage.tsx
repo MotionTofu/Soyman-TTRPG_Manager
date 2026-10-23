@@ -874,6 +874,7 @@ export function CampaignDetailPage() {
             },
             { id: "reveals", group: "Материалы", label: "Выводы" },
           ]}
+          phoneSelect
           selection={storySel}
           onSelect={(sel) => {
             storyPicked.current = true;
@@ -888,6 +889,10 @@ export function CampaignDetailPage() {
               adventureId={storySel.item != null && storySel.item !== "all" ? Number(storySel.item) : null}
               chapterId={null}
               onStats={(st) => setChapStats((prev) => (JSON.stringify(prev) === JSON.stringify(st) ? prev : st))}
+              onPickAdventure={(id) => {
+                storyPicked.current = true;
+                setStorySel({ section: "chapters", item: String(id) });
+              }}
             />
           )}
           {storySel.section === "milestones" && (
