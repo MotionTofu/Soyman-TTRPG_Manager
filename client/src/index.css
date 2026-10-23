@@ -4828,6 +4828,8 @@ th, td {
 .month-calendar .dot.rescheduled { background: var(--status-rescheduled); color: var(--status-rescheduled-fg); }
 .month-calendar .dot.pay-paid { box-shadow: inset 0 0 0 1px #f2d43d; }
 .month-calendar .dot.pay-negotiable { box-shadow: inset 0 0 0 1px #b8860b; }
+/* Ждёт разбора: игра прошла, а итога нет — красной тушью по контуру. */
+.month-calendar .dot.overdue { background: transparent; color: var(--paper-alarm, #a3241b); box-shadow: inset 0 0 0 1px currentColor; }
 /* Player-role games (кампании, где текущий пользователь — игрок, не мастер)
    swap each status's own bg/fg pair — same status palette, inverted, so a
    day's role reads at a glance without a separate legend. */
@@ -4871,16 +4873,20 @@ th, td {
 .month-calendar .day.has-important.has-event .num::after {
   background: var(--paper);
 }
+/* Колонки по месту, а не по ширине окна: при открытой боковой панели область
+   контента узкая и при широком окне — тогда правая колонка уходит под список. */
 .chronicle-split {
-  display: grid;
-  grid-template-columns: 1fr 380px;
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--sp-7);
-  align-items: start;
+  align-items: flex-start;
 }
 .chronicle-left {
+  flex: 999 1 420px;
   min-width: 0;
 }
 .chronicle-right {
+  flex: 1 1 380px;
   min-width: 0;
   position: sticky;
   top: 12px;

@@ -51,6 +51,7 @@ import { MentionTextarea } from "../components/mentions/MentionTextarea";
 import { syncMentionLinks } from "../mentions";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { useTabState } from "../hooks/useTabState";
+import { useIsMobile } from "../hooks/useIsMobile";
 import { dateFromElapsed, formatInworldDate, formatEventDate } from "../inworldCalendar";
 import { InworldCalendar, type InworldDatedItem } from "../components/InworldCalendar";
 import { EntityPage } from "../components/EntityPage";
@@ -342,6 +343,8 @@ export function CampaignDetailPage() {
   const [calendarMenu, setCalendarMenu] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(
     null
   );
+  // Телефон (Q16): список первым, календарь под ним — свёрнутым.
+  const isMobile = useIsMobile();
   const [eventModal, setEventModal] = useState<{
     id?: number;
     year: number;
@@ -427,10 +430,13 @@ export function CampaignDetailPage() {
   if (campaignState.error && !campaign) return <div className="stack" style={{ padding: 24 }}><p className="muted">{campaignState.error}</p><button onClick={campaignState.reload}>Повторить</button></div>;
   if (!campaign) return <p className="muted">Загрузка…</p>;
 
+  const todayKey = toLocalDateKey();
   const events: CalendarEvent[] = sessions.map((s) => ({
     id: s.id,
     date: s.date,
     status: s.status,
+    // Q14: прошедшая, но не закрытая игра в календаре видна как «ждёт разбора».
+    overdue: s.status === "planned" && s.date < todayKey,
     paymentType: s.effective_payment_type,
     campaignRole: campaign.role,
     label: sessionLabel(s),
@@ -735,6 +741,10 @@ export function CampaignDetailPage() {
       }));
 
     return [
+      // Q14: разбор — первым у всего, что уже наступило.
+      ...(event.date <= toLocalDateKey()
+        ? [{ label: "Разбор игры", onClick: () => setOutcomeSessionId(event.id) }]
+        : []),
       {
         label: "Статус: Запланировано",
         onClick: () =>
@@ -1116,13 +1126,12 @@ export function CampaignDetailPage() {
           </div>
           <div className="chronicle-right stack" style={{ gap: "var(--sp-6)" }}>
             {(() => {
-              const todayKey = toLocalDateKey(new Date());
               const sorted = [...sessions].sort((a, b) => a.date.localeCompare(b.date));
               const nextPlanned = sorted.find((s) => s.status === "planned" && s.date >= todayKey) || sorted.find((s) => s.status === "planned") || null;
               const diffDays = nextPlanned ? Math.round((parseDateKey(nextPlanned.date).getTime() - parseDateKey(todayKey).getTime()) / 86400000) : null;
               const diffLabel = diffDays == null ? null : diffDays === 0 ? "сегодня" : diffDays === 1 ? "завтра" : diffDays > 0 ? `через ${diffDays} дн.` : `${Math.abs(diffDays)} дн. назад`;
               return (
-                <details className="card res-group" open>
+                <details className="card res-group" open={!isMobile}>
                   <summary className="res-group__band">
                     <span className="res-group__title">Календарь игр</span>
                     <span className="res-group__count" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>
@@ -1150,27 +1159,21 @@ export function CampaignDetailPage() {
                 </details>
               );
             })()}
-            {campaign.role !== "player" && !loadHideFinance() && (
-              <details className="card res-group" open>
-                <summary className="res-group__band">
-                  <span className="res-group__title">Финансы</span>
-                  <span className="res-group__count">
-                    <span style={{ fontFamily: "var(--font-mono)" }}>{campaign.finance.earned}</span> {campaign.currency} · {PAYMENT_TYPE_LABELS[campaign.payment_type].toLowerCase()}
+            {/* Q10: финансы одной строкой — сколько получено и кто должен, подробности на «Оплате». */}
+            {campaign.role !== "player" && !loadHideFinance() && campaign.payment_type !== "free" && (
+              <p className="card session-finance">
+                <span>
+                  Получено <span style={{ fontFamily: "var(--font-mono)" }}>{campaign.finance.earned}</span> {campaign.currency}
+                </span>
+                {debts.length > 0 && (
+                  <span className="session-row__debt">
+                    должны {debts.length} {plural(debts.length, "игрок", "игрока", "игроков")}
                   </span>
-                </summary>
-                <div className="res-group__body" style={{ padding: 12, gap: 8, display: "flex", flexDirection: "column" }}>
-                  <div>
-                    Проведено сессий: <span style={{ fontFamily: "var(--font-mono)" }}>{campaign.finance.heldSessions}</span>
-                  </div>
-                  <div>Оплата: {PAYMENT_TYPE_LABELS[campaign.payment_type]}</div>
-                  {campaign.payment_type === "paid" && (
-                    <div>
-                      Ставка: {campaign.session_rate} {campaign.currency} ({PAYMENT_FREQUENCY_LABELS[campaign.payment_frequency].toLowerCase()},{" "}
-                      {RATE_SPLIT_LABELS[campaign.rate_split].toLowerCase()})
-                    </div>
-                  )}
-                </div>
-              </details>
+                )}
+                <button type="button" className="session-finance__link" onClick={() => selectTab("Оплата")}>
+                  Оплата →
+                </button>
+              </p>
             )}
           </div>
         </div>

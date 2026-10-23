@@ -2316,6 +2316,20 @@
   color: var(--paper-ink);
   background: var(--paper-wash);
 }
+/* Телефон: «Разобрать» второй строкой под текстом, иначе он сжимает название
+   и игровую дату до двух слов в строку. */
+@media (max-width: 700px) {
+  .session-row {
+    flex-wrap: wrap;
+  }
+  .session-rows .session-row .paper-rows__main {
+    flex: 1 1 50%;
+  }
+  .session-row__action {
+    order: 1;
+    margin-left: calc(2.6em + var(--sp-5));
+  }
+}
 .session-group__add {
   margin-left: auto;
   padding: 0 var(--sp-3);
@@ -2324,6 +2338,19 @@
   text-transform: none;
   letter-spacing: 0;
   font-weight: 400;
+}
+.session-finance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2) var(--sp-4);
+  margin: 0;
+  padding: var(--sp-4) var(--sp-5);
+}
+.session-finance__link {
+  margin-left: auto;
+  padding: 0 var(--sp-3);
+  font-size: var(--fs-meta);
 }
 .session-month__head {
   margin: var(--sp-3) 0 0;

@@ -9,6 +9,7 @@ export interface CalendarEvent {
   campaignRole?: CampaignRole;
   label: string;
   startTime?: string | null; // "HH:MM", shown as a prefix on the day cell
+  overdue?: boolean; // planned, but the date has passed — waits for the post-game review
 }
 
 interface Props {
@@ -150,8 +151,8 @@ export function MonthCalendar({ events, onDayClick, onEventClick, onEventContext
                   key={e.id}
                   role="button"
                   tabIndex={0}
-                  aria-label={`${e.label}${e.startTime ? ` ${e.startTime}` : ""}, ${e.status}`}
-                  className={`dot ${e.status}${e.paymentType === "paid" ? " pay-paid" : ""}${e.paymentType === "negotiable" ? " pay-negotiable" : ""}${e.campaignRole === "player" ? " role-player" : ""}`}
+                  aria-label={`${e.label}${e.startTime ? ` ${e.startTime}` : ""}, ${e.overdue ? "ждёт разбора" : e.status}`}
+                  className={`dot ${e.status}${e.overdue ? " overdue" : ""}${e.paymentType === "paid" ? " pay-paid" : ""}${e.paymentType === "negotiable" ? " pay-negotiable" : ""}${e.campaignRole === "player" ? " role-player" : ""}`}
                   title={e.label}
                   onClick={(ev) => {
                     ev.stopPropagation();
