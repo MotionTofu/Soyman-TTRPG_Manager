@@ -67,6 +67,38 @@
   --on-surface-muted: #b9b19d;
 }
 
+/* Папка профиля кампании (фактуры, 2026-10-23; пилот — остальные профили
+   переедут, когда владелец посмотрит). Лист собирается по девяти частям:
+   рваный подпалённый край повторяется, а не тянется, — профиль бывает и в
+   полэкрана, и в три. Тени нет: прямоугольная тень под рваным краем врёт,
+   а filter сломал бы fixed-меню внутри листа. */
+.entity-page--paper[data-entity-type="campaign"] > .paper-sheet {
+  background: none;
+  border: 40px solid transparent;
+  border-image: var(--skin-dossier-folder) 90 fill / 40px round;
+  border-radius: 0;
+  padding: var(--sp-4) var(--sp-6);
+  box-shadow: none;
+}
+/* Блоки досье — на светлой подложке, как в концепте. */
+.entity-page--paper[data-entity-type="campaign"] :is(.campaign-overview > .dossier__aside, .campaign-passport) {
+  border: 16px solid transparent;
+  border-image: var(--skin-dossier-block) 40 fill / 16px round;
+  padding: var(--sp-2) var(--sp-4);
+  box-shadow: 0 2px 8px rgb(31 26 20 / 0.16);
+}
+/* Карточка полей паспорта — своя бумага; на подложке она лишняя плашка. */
+.entity-page--paper[data-entity-type="campaign"] .campaign-passport .creature-card {
+  background: none;
+}
+/* Язычки светлее (владелец: «как в концепте, чуть светлее нынешних»). */
+.entity-page--paper[data-entity-type="campaign"] > .tabs button {
+  --paper-tab: #e3d8bd;
+}
+[data-theme-mode="dark"] .entity-page--paper[data-entity-type="campaign"] > .tabs button {
+  --paper-tab: #cdc2a5;
+}
+
 /* Один вид меню для папочного профиля и любых отдельных бумажных карточек.
    paper-wash — прозрачная заливка полей, для всплывающего листка не годится. */
 :is(.paper-scope, .entity-page--paper) :is(.context-menu, .wb-menu__list) {

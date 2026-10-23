@@ -40,6 +40,9 @@
   --skin-dossier-card: url("/ui/campaign-dossier/v1/card-paper.webp");
   --skin-dossier-frame: url("/ui/campaign-dossier/v1/portrait-frame.webp");
   --skin-dossier-view: url("/ui/campaign-dossier/v1/view-label.webp");
+  /* Папка профиля и подложка блока — по девяти частям (2026-10-23). */
+  --skin-dossier-folder: url("/ui/campaign-dossier/v1/folder-sheet.webp");
+  --skin-dossier-block: url("/ui/campaign-dossier/v1/block-panel.webp");
   /* Repeating grain tile (640px, 38KB): clean center crop of paper-bg,
    * no halftone, no spots, no vignette — verified to repeat invisibly.
    * Defects (halftone, spots) stay OUT of the tile; they arrive later as

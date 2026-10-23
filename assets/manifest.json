@@ -4084,6 +4084,96 @@
       "baselineSha256": "2198708c83d44ae130234361ca9360c59aa6eb941a454d375fd0848995413e8a"
     },
     {
+      "id": "promo/soyman-intro/v3/far_h.png",
+      "title": "SoyMan intro: far_h",
+      "category": "branding",
+      "source": "assets/library/promo/soyman-intro/v3/far_h.png",
+      "outputs": [
+        "client/public/promo/soyman-intro/v3/far_h.png"
+      ],
+      "baselineSha256": "59e765e3f382aa61a3fbd6932cfd156d7145fb0789305c57713a89935289ab48"
+    },
+    {
+      "id": "promo/soyman-intro/v3/far_v.png",
+      "title": "SoyMan intro: far_v",
+      "category": "branding",
+      "source": "assets/library/promo/soyman-intro/v3/far_v.png",
+      "outputs": [
+        "client/public/promo/soyman-intro/v3/far_v.png"
+      ],
+      "baselineSha256": "9308b482fe0bdf336da07b3fe665dda769e8ca564eb1c54aacee80ad24f68250"
+    },
+    {
+      "id": "promo/soyman-intro/v3/knight_body.png",
+      "title": "SoyMan intro: knight_body",
+      "category": "branding",
+      "source": "assets/library/promo/soyman-intro/v3/knight_body.png",
+      "outputs": [
+        "client/public/promo/soyman-intro/v3/knight_body.png"
+      ],
+      "baselineSha256": "2b46ef9174fd80f5c58732a115de8e17c159d261143aeba14f81c5e64d94768b"
+    },
+    {
+      "id": "promo/soyman-intro/v3/knight_cape.png",
+      "title": "SoyMan intro: knight_cape",
+      "category": "branding",
+      "source": "assets/library/promo/soyman-intro/v3/knight_cape.png",
+      "outputs": [
+        "client/public/promo/soyman-intro/v3/knight_cape.png"
+      ],
+      "baselineSha256": "c55f69f0c15d9f5ae815a21e3306aae73052d199672cb542b24058214d910a33"
+    },
+    {
+      "id": "promo/soyman-intro/v3/mid_h.png",
+      "title": "SoyMan intro: mid_h",
+      "category": "branding",
+      "source": "assets/library/promo/soyman-intro/v3/mid_h.png",
+      "outputs": [
+        "client/public/promo/soyman-intro/v3/mid_h.png"
+      ],
+      "baselineSha256": "e9f9cf52a4d3f6b5c0776da591b14a59909bbc6e8e77805e4974109c06798cc3"
+    },
+    {
+      "id": "promo/soyman-intro/v3/mid_v.png",
+      "title": "SoyMan intro: mid_v",
+      "category": "branding",
+      "source": "assets/library/promo/soyman-intro/v3/mid_v.png",
+      "outputs": [
+        "client/public/promo/soyman-intro/v3/mid_v.png"
+      ],
+      "baselineSha256": "8069df3e98038430b190c98fea6413f6e2f458ec6d310e02e3e7185856d9f74d"
+    },
+    {
+      "id": "promo/soyman-intro/v3/near_h.png",
+      "title": "SoyMan intro: near_h",
+      "category": "branding",
+      "source": "assets/library/promo/soyman-intro/v3/near_h.png",
+      "outputs": [
+        "client/public/promo/soyman-intro/v3/near_h.png"
+      ],
+      "baselineSha256": "6c69da456d08995cea7d94c15803ea40700bb31bdfbb898c558a502886e4ff46"
+    },
+    {
+      "id": "promo/soyman-intro/v3/near_v.png",
+      "title": "SoyMan intro: near_v",
+      "category": "branding",
+      "source": "assets/library/promo/soyman-intro/v3/near_v.png",
+      "outputs": [
+        "client/public/promo/soyman-intro/v3/near_v.png"
+      ],
+      "baselineSha256": "542079db3f3101eee03c9a9c21a186b3a821ebf6ceb0294ed581741b2104df3d"
+    },
+    {
+      "id": "promo/soyman-intro/v3/wreath.png",
+      "title": "SoyMan intro: wreath",
+      "category": "branding",
+      "source": "assets/library/promo/soyman-intro/v3/wreath.png",
+      "outputs": [
+        "client/public/promo/soyman-intro/v3/wreath.png"
+      ],
+      "baselineSha256": "a6c82e47fe5408df3f14060c983436ac8ae70253b254da1612f2da6baa38772b"
+    },
+    {
       "id": "schools/abjuration.webp",
       "title": "abjuration",
       "category": "schools",
@@ -4245,6 +4335,16 @@
       "baselineSha256": "b8225b1f0d8c26c3d335c22705d9b7c5547c335af0fab51fdbab3f247083f4ff"
     },
     {
+      "id": "ui/campaign-dossier/v1/block-panel.webp",
+      "title": "block-panel",
+      "category": "ui/campaign-dossier",
+      "source": "assets/library/ui/campaign-dossier/v1/block-panel.webp",
+      "outputs": [
+        "client/public/ui/campaign-dossier/v1/block-panel.webp"
+      ],
+      "baselineSha256": "e88a8231fc198a646da32dcc997d844e3a70836fe0a3bffac81847e63d3366ac"
+    },
+    {
       "id": "ui/campaign-dossier/v1/card-paper.webp",
       "title": "card-paper",
       "category": "ui/campaign-dossier",
@@ -4253,6 +4353,16 @@
         "client/public/ui/campaign-dossier/v1/card-paper.webp"
       ],
       "baselineSha256": "99316c6db0cd9a7e9a64c4b456feb7023ac34db7abf10f26b05fa3136f9395a7"
+    },
+    {
+      "id": "ui/campaign-dossier/v1/folder-sheet.webp",
+      "title": "folder-sheet",
+      "category": "ui/campaign-dossier",
+      "source": "assets/library/ui/campaign-dossier/v1/folder-sheet.webp",
+      "outputs": [
+        "client/public/ui/campaign-dossier/v1/folder-sheet.webp"
+      ],
+      "baselineSha256": "78d39335d32963abdf20cf22013083e4e13e77294303c74b23dce2ac09631448"
     },
     {
       "id": "ui/campaign-dossier/v1/portrait-frame.webp",
@@ -7253,96 +7363,6 @@
         "client/public/world/woods.webp"
       ],
       "baselineSha256": "dd6e62b1b266ea365345e8f9b0cee8e957ed2f88aef8a53e26198f864239dcc0"
-    },
-    {
-      "id": "promo/soyman-intro/v3/far_h.png",
-      "title": "SoyMan intro: far_h",
-      "category": "branding",
-      "source": "assets/library/promo/soyman-intro/v3/far_h.png",
-      "outputs": [
-        "client/public/promo/soyman-intro/v3/far_h.png"
-      ],
-      "baselineSha256": "59e765e3f382aa61a3fbd6932cfd156d7145fb0789305c57713a89935289ab48"
-    },
-    {
-      "id": "promo/soyman-intro/v3/mid_h.png",
-      "title": "SoyMan intro: mid_h",
-      "category": "branding",
-      "source": "assets/library/promo/soyman-intro/v3/mid_h.png",
-      "outputs": [
-        "client/public/promo/soyman-intro/v3/mid_h.png"
-      ],
-      "baselineSha256": "e9f9cf52a4d3f6b5c0776da591b14a59909bbc6e8e77805e4974109c06798cc3"
-    },
-    {
-      "id": "promo/soyman-intro/v3/near_h.png",
-      "title": "SoyMan intro: near_h",
-      "category": "branding",
-      "source": "assets/library/promo/soyman-intro/v3/near_h.png",
-      "outputs": [
-        "client/public/promo/soyman-intro/v3/near_h.png"
-      ],
-      "baselineSha256": "6c69da456d08995cea7d94c15803ea40700bb31bdfbb898c558a502886e4ff46"
-    },
-    {
-      "id": "promo/soyman-intro/v3/far_v.png",
-      "title": "SoyMan intro: far_v",
-      "category": "branding",
-      "source": "assets/library/promo/soyman-intro/v3/far_v.png",
-      "outputs": [
-        "client/public/promo/soyman-intro/v3/far_v.png"
-      ],
-      "baselineSha256": "9308b482fe0bdf336da07b3fe665dda769e8ca564eb1c54aacee80ad24f68250"
-    },
-    {
-      "id": "promo/soyman-intro/v3/mid_v.png",
-      "title": "SoyMan intro: mid_v",
-      "category": "branding",
-      "source": "assets/library/promo/soyman-intro/v3/mid_v.png",
-      "outputs": [
-        "client/public/promo/soyman-intro/v3/mid_v.png"
-      ],
-      "baselineSha256": "8069df3e98038430b190c98fea6413f6e2f458ec6d310e02e3e7185856d9f74d"
-    },
-    {
-      "id": "promo/soyman-intro/v3/near_v.png",
-      "title": "SoyMan intro: near_v",
-      "category": "branding",
-      "source": "assets/library/promo/soyman-intro/v3/near_v.png",
-      "outputs": [
-        "client/public/promo/soyman-intro/v3/near_v.png"
-      ],
-      "baselineSha256": "542079db3f3101eee03c9a9c21a186b3a821ebf6ceb0294ed581741b2104df3d"
-    },
-    {
-      "id": "promo/soyman-intro/v3/knight_body.png",
-      "title": "SoyMan intro: knight_body",
-      "category": "branding",
-      "source": "assets/library/promo/soyman-intro/v3/knight_body.png",
-      "outputs": [
-        "client/public/promo/soyman-intro/v3/knight_body.png"
-      ],
-      "baselineSha256": "2b46ef9174fd80f5c58732a115de8e17c159d261143aeba14f81c5e64d94768b"
-    },
-    {
-      "id": "promo/soyman-intro/v3/knight_cape.png",
-      "title": "SoyMan intro: knight_cape",
-      "category": "branding",
-      "source": "assets/library/promo/soyman-intro/v3/knight_cape.png",
-      "outputs": [
-        "client/public/promo/soyman-intro/v3/knight_cape.png"
-      ],
-      "baselineSha256": "c55f69f0c15d9f5ae815a21e3306aae73052d199672cb542b24058214d910a33"
-    },
-    {
-      "id": "promo/soyman-intro/v3/wreath.png",
-      "title": "SoyMan intro: wreath",
-      "category": "branding",
-      "source": "assets/library/promo/soyman-intro/v3/wreath.png",
-      "outputs": [
-        "client/public/promo/soyman-intro/v3/wreath.png"
-      ],
-      "baselineSha256": "a6c82e47fe5408df3f14060c983436ac8ae70253b254da1612f2da6baa38772b"
     }
   ]
 }
