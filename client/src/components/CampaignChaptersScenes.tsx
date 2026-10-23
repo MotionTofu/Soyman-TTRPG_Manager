@@ -1,4 +1,5 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAction, useResource, write } from "../data/hooks";
@@ -10,6 +11,7 @@ import { EmptyState } from "./EmptyState";
 import { SCENE_STATUSES, clueNeed, nodeLabel, plural, sceneWord } from "../sceneKinds";
 import type { ArcClueNode, ArcClues, CampaignAdventureTree, CampaignTreeScene, SceneStatus, StoryScene } from "../types";
 import { NavIcon } from "./NavIcons";
+import { ContextMenu } from "./ContextMenu";
 import { arcCluesPath } from "../data/canvas";
 import { rasterAsset } from "../rasterAssets";
 import "./campaign-chapters.css";
@@ -260,8 +262,11 @@ function AdventureSection({
           <SceneList
             scenes={adv.scenes}
             campaignId={campaignId}
+            settingId={settingId}
             onStatus={onStatus}
             title={adv.chapters.length > 0 ? "Без главы" : null}
+            clues={clues}
+            nodeBy={nodeBy}
           />
         )}
         {advChapters.map((c) => {
@@ -283,7 +288,15 @@ function AdventureSection({
                 {c.is_override && <span className="campaign-scene__note">правка кампании</span>}
               </summary>
               <div className="res-group__body campaign-chapters__scenes">
-                <SceneList scenes={c.scenes} campaignId={campaignId} onStatus={onStatus} title={null} />
+                <SceneList
+                  scenes={c.scenes}
+                  campaignId={campaignId}
+                  settingId={settingId}
+                  onStatus={onStatus}
+                  title={null}
+                  clues={clues}
+                  nodeBy={nodeBy}
+                />
               </div>
             </details>
           );
@@ -332,13 +345,19 @@ function currentAdventureId(tree: CampaignAdventureTree[]): number | null {
 const SceneList = memo(function SceneList({
   scenes,
   campaignId,
+  settingId,
   onStatus,
   title,
+  clues,
+  nodeBy,
 }: {
-  scenes: StoryScene[];
+  scenes: CampaignTreeScene[];
   campaignId: number;
+  settingId: number | null;
   onStatus: (sceneId: number, status: string) => void;
   title: string | null;
+  clues: ArcClues | undefined;
+  nodeBy: Map<number, ArcClueNode>;
 }) {
   // Смена статуса сцены правит одну строку: перечитывать всё дерево
   // приключений (у книжной кампании это сотни строк) из-за неё нельзя.
@@ -361,46 +380,128 @@ const SceneList = memo(function SceneList({
     <div className="campaign-scene-list">
       {title && <span className="campaign-scene-list__title muted">{title}</span>}
       {scenes.map((s) => (
-        <SceneRow key={s.id} scene={s} campaignId={campaignId} onStatus={setStatus} />
+        <SceneRow
+          key={s.id}
+          scene={s}
+          campaignId={campaignId}
+          settingId={settingId}
+          onStatus={setStatus}
+          node={nodeBy.get(s.id)}
+          clues={clues}
+        />
       ))}
       {scenes.length === 0 && <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Сцен пока нет.</span>}
     </div>
   );
 });
 
+const STATUS_LABEL: Record<string, string> = Object.fromEntries(SCENE_STATUSES.map((st) => [st.key, st.label]));
+
+/**
+ * Строка сцены (гриллинг «Сюжета» 2026-10-23, Q8/Q9/Q10): кружок статуса
+ * (щелчок — пройдена ↔ не начата, «пропущена» — в «⋯»), «тип · роль»,
+ * сессия, счётчик улик по правилу трёх. Раскрытие — что ведёт сюда и отсюда.
+ */
 const SceneRow = memo(function SceneRow({
   scene: s,
   campaignId,
+  settingId,
   onStatus,
+  node,
+  clues,
 }: {
-  scene: StoryScene;
+  scene: CampaignTreeScene;
   campaignId: number;
+  settingId: number | null;
   onStatus: (scene: StoryScene, status: string) => void;
+  node: ArcClueNode | undefined;
+  clues: ArcClues | undefined;
 }) {
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const status = s.state?.status ?? "pending";
-  const stamp = status === "pending" ? null : rasterAsset("ui/plot-restyle/v1", `stamp-${status}`);
-  const kind = nodeLabel(s);
+  const kind = s.node_type || s.node_role !== "normal" ? nodeLabel(s) : null;
   const kindFrame = rasterAsset("ui/plot-restyle/v1", "kind-window");
+  const played = s.sessions.filter((x) => x.played);
+  const lastPlayed = played[played.length - 1] ?? null;
+  const planned = lastPlayed ? null : plannedSession(s);
+
+  // Улики: красным — только у не начатой сцены, которой не хватает до трёх.
+  const need = node ? clueNeed(node.role, node.clue_in, node.passage_in) : null;
+  let clueChip: ReactNode = null;
+  if (node && need !== "start" && need !== "proactive") {
+    const bad = need === "missing" && status === "pending";
+    clueChip = (
+      <span
+        className={`campaign-scene__clues${bad ? " is-bad" : ""}`}
+        title={need === "passage" ? "За проходом — улики не обязательны" : need === "bonus" ? "Тупик — улики бонусные" : "Улик ведёт сюда"}
+      >
+        {need === "passage" ? "за проходом" : bad ? `улик ${node.clue_in}/3` : `улик ${node.clue_in}`}
+      </span>
+    );
+  }
+
+  const stop = (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  const canvasUrl =
+    settingId != null ? `/canvas?setting=${settingId}&arc=${s.arc_id ?? ""}&campaign=${campaignId}&focus=scene:${s.id}` : null;
+
   return (
-    <details className="campaign-scene">
+    <details className={`campaign-scene is-${status}`}>
       <summary className="campaign-scene__summary">
+        <button
+          type="button"
+          className="campaign-scene__mark"
+          aria-label={status === "done" ? `Снять отметку «пройдена» со сцены «${s.name}»` : `Отметить сцену «${s.name}» пройденной`}
+          title={STATUS_LABEL[status]}
+          onClick={(e) => {
+            stop(e);
+            onStatus(s, status === "done" ? "pending" : "done");
+          }}
+        />
         <span
-          className={`campaign-scene__kind${kind.length > 10 ? " campaign-scene__kind--long" : ""}`}
-          style={{ backgroundImage: kindFrame ? `url("${kindFrame}")` : undefined }}
+          className={`campaign-scene__kind${kind && kind.length > 10 ? " campaign-scene__kind--long" : ""}${kind ? "" : " is-empty"}`}
+          style={{ backgroundImage: kind && kindFrame ? `url("${kindFrame}")` : undefined }}
         >{kind}</span>
-        <span className="campaign-scene__name">{s.name}</span>
-        {(status !== "pending" || s.is_override || s.campaign_only) && (
-          <span className="campaign-scene__tags">
-            {s.is_override && <span className="campaign-scene__note">правка</span>}
-            {s.campaign_only && <span className="campaign-scene__note">только в кампании</span>}
-            {stamp ? (
-              <img className="campaign-scene__stamp" src={stamp} alt={status === "done" ? "ПРОЙДЕНО" : "ПРОПУЩЕНО"} width={104} height={32} />
-            ) : status !== "pending" ? (
-              <span className="campaign-scene__note">{SCENE_STATUSES.find((st) => st.key === status)?.label}</span>
-            ) : null}
-          </span>
-        )}
+        <span className="campaign-scene__name">
+          {s.name}
+          {s.is_override && <span className="campaign-scene__note">правка</span>}
+          {s.campaign_only && <span className="campaign-scene__note">только в кампании</span>}
+        </span>
+        <span className="campaign-scene__session">
+          {lastPlayed ? `Сессия №${lastPlayed.number}` : planned ? <span className="muted">в сессии №{planned.number}</span> : null}
+        </span>
+        {clueChip ?? <span />}
+        <button
+          type="button"
+          className="campaign-scene__more"
+          aria-label={`Статус сцены «${s.name}»`}
+          aria-haspopup="menu"
+          onClick={(e) => {
+            stop(e);
+            const r = e.currentTarget.getBoundingClientRect();
+            setMenu({ x: r.right, y: r.bottom });
+          }}
+        >
+          ⋯
+        </button>
       </summary>
+      {/* Порталом: содержимое свёрнутого <details>, кроме summary, не рисуется. */}
+      {menu && createPortal(
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          title={s.name}
+          ariaLabel={`Статус сцены «${s.name}»`}
+          items={SCENE_STATUSES.filter((st) => st.key !== status).map((st) => ({
+            label: st.label,
+            onClick: () => onStatus(s, st.key),
+          }))}
+          onClose={() => setMenu(null)}
+        />,
+        document.body
+      )}
       <div className="campaign-scene__expanded">
         {s.summary ? (
           <div className="reading-text" style={{ whiteSpace: "pre-wrap" }}>
@@ -409,17 +510,60 @@ const SceneRow = memo(function SceneRow({
         ) : (
           <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Сводки нет — откройте сцену, чтобы добавить.</span>
         )}
+        {node && clues && <SceneClues node={node} clues={clues} />}
+        {s.sessions.length > 0 && (
+          <span className="campaign-scene__sessions">
+            {s.sessions.map((x) => `${x.played ? "Сыграна" : "Запланирована"} в №${x.number}`).join(" · ")}
+          </span>
+        )}
         <div className="row campaign-scene__actions">
-          <select aria-label={`Статус сцены «${s.name}»`} value={status} onChange={(e) => onStatus(s, e.target.value)}>
-            {SCENE_STATUSES.map((st) => (
-              <option key={st.key} value={st.key}>
-                {st.label}
-              </option>
-            ))}
-          </select>
           <Link to={`/scenes/${s.id}?campaign=${campaignId}`}>Открыть сцену →</Link>
+          {canvasUrl && <Link to={canvasUrl}>На холсте →</Link>}
         </div>
       </div>
     </details>
   );
 });
+
+/** «Ведут сюда» и «Ведёт отсюда» узла (Q10) — те же улики, что в карточке узла. */
+function SceneClues({ node, clues }: { node: ArcClueNode; clues: ArcClues }) {
+  const nameOf = (id: number | null) => clues.nodes.find((n) => n.id === id)?.name ?? "лоток";
+  const incoming = clues.clues.filter((c) => c.target_type === "scene" && c.target_id === node.id && !c.proposed);
+  const outgoing = clues.clues.filter((c) => c.node_id === node.id && !c.proposed);
+  return (
+    <div className="campaign-scene__clue-lists">
+      {node.role === "proactive" && node.trigger && (
+        <p className="campaign-scene__trigger">
+          <strong>Приходит сам:</strong> {node.trigger}
+        </p>
+      )}
+      <div>
+        <span className="campaign-field-label">Ведут сюда</span>
+        {incoming.length === 0 ? (
+          <span className="muted"> — ни одной улики</span>
+        ) : (
+          <ul className="campaign-scene__clue-list">
+            {incoming.map((c) => (
+              <li key={c.id} className={c.found ? "is-found" : undefined}>
+                {c.text} · <span className="muted">{nameOf(c.node_id)}</span>
+                {c.found && <span className="campaign-scene__found"> · найдена</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      {outgoing.length > 0 && (
+        <div className="muted">
+          <span className="campaign-field-label">Ведёт отсюда</span>
+          <ul className="campaign-scene__clue-list">
+            {outgoing.map((c) => (
+              <li key={c.id}>
+                {c.text} → {c.target_title ?? "никуда"}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}

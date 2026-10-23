@@ -54,9 +54,7 @@
   padding: var(--sp-4) 0 0;
 }
 .campaign-scene-list {
-  border-left: var(--card-border-width) solid var(--line);
-  padding-left: var(--sp-5);
-  margin-left: var(--sp-2);
+  padding-left: var(--sp-2);
 }
 .campaign-scene-list__title {
   display: block;
@@ -69,19 +67,9 @@
   position: relative;
   border-bottom: var(--card-border-width) solid var(--line);
 }
-.campaign-scene::before {
-  content: "";
-  position: absolute;
-  left: calc(-1 * var(--sp-6));
-  top: var(--sp-7);
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--paper-ink, var(--ink));
-}
 .campaign-chapters .campaign-scene > .campaign-scene__summary {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto 6.5rem minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: var(--sp-5);
   min-height: 58px;
@@ -128,26 +116,109 @@
   font: 700 var(--fs-body)/1.35 Georgia, "Times New Roman", serif;
   overflow-wrap: anywhere;
 }
-.campaign-scene__tags {
+/* Кружок статуса (Q9): пусто — не начата, залит — пройдена, перечёркнут — пропущена. */
+.campaign-scene__mark {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--paper-ink, var(--ink));
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+}
+.campaign-scene.is-done .campaign-scene__mark {
+  background: var(--paper-ink, var(--ink));
+}
+.campaign-scene.is-done .campaign-scene__mark::after {
+  content: "✓";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--paper, #fff);
+  font-size: 13px;
+  font-weight: 700;
+}
+.campaign-scene.is-skipped .campaign-scene__mark {
+  border-style: dashed;
+  border-color: var(--paper-muted, var(--muted));
+}
+.campaign-scene.is-skipped .campaign-scene__mark::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: 50%;
+  border-top: 2px solid var(--paper-muted, var(--muted));
+  transform: rotate(-45deg);
+}
+/* Сыгранное и пропущенное — тише будущего. */
+.campaign-scene:is(.is-done, .is-skipped) .campaign-scene__name {
+  color: var(--paper-muted, var(--muted));
+  font-weight: 600;
+}
+.campaign-scene__kind.is-empty {
+  min-height: 0;
+}
+.campaign-scene__name .campaign-scene__note {
+  margin-left: var(--sp-3);
+  font-family: var(--font-body);
+  font-weight: 400;
+}
+.campaign-scene__session {
+  font-size: var(--fs-meta);
+  white-space: nowrap;
+}
+.campaign-scene__clues {
+  font-size: var(--fs-meta);
+  color: var(--paper-muted, var(--muted));
+  white-space: nowrap;
+}
+.campaign-scene__clues.is-bad {
+  color: var(--danger-text, #fff);
+  background: var(--danger-bg);
+  padding: var(--sp-0) var(--sp-3);
+  font-weight: 600;
+}
+.campaign-scene__more {
+  padding: 0 var(--sp-3);
+  background: transparent;
+  border: none;
+  font-size: var(--fs-h3);
+  line-height: 1;
+  cursor: pointer;
+  color: var(--paper-ink, var(--ink));
+}
+.campaign-scene__clue-lists {
   display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--sp-4);
-  max-width: 15rem;
+  flex-direction: column;
+  gap: var(--sp-3);
+  font-size: var(--fs-meta);
+}
+.campaign-scene__clue-list {
+  margin: var(--sp-1) 0 0;
+  padding-left: var(--sp-6);
+}
+.campaign-scene__clue-list li.is-found {
+  text-decoration: line-through;
+  text-decoration-color: var(--paper-muted, var(--muted));
+}
+.campaign-scene__found {
+  font-style: italic;
+}
+.campaign-scene__trigger {
+  margin: 0;
+}
+.campaign-scene__sessions {
+  font-size: var(--fs-meta);
+  color: var(--paper-muted, var(--muted));
 }
 .campaign-scene__note {
   font-size: var(--fs-meta);
   color: var(--paper-muted, var(--muted));
   border-bottom: var(--card-border-width) dotted currentColor;
-}
-.campaign-scene__stamp {
-  flex: 0 0 auto;
-  width: 104px;
-  height: 32px;
-  max-width: 100%;
-  object-fit: contain;
-  transform: rotate(-5deg);
 }
 .campaign-scene__expanded {
   display: flex;
@@ -159,33 +230,8 @@
   gap: var(--sp-4);
   flex-wrap: wrap;
 }
-.campaign-scene__actions select {
-  min-width: 0;
-  max-width: 100%;
-}
-.campaign-scene__actions :is(select, a) {
+.campaign-scene__actions a {
   font-size: var(--fs-meta);
-}
-@container (max-width: 640px) {
-  .campaign-scene__tags { max-width: 104px; }
-}
-@container (max-width: 390px) {
-  .campaign-chapters .campaign-scene > .campaign-scene__summary {
-    grid-template-columns: auto minmax(0, 1fr);
-    column-gap: var(--sp-4);
-    row-gap: var(--sp-2);
-  }
-  .campaign-scene__tags {
-    grid-column: 1 / -1;
-    max-width: 100%;
-  }
-  .campaign-scene__kind--long {
-    grid-column: 1 / -1;
-    justify-self: start;
-  }
-  .campaign-scene__kind--long + .campaign-scene__name {
-    grid-column: 1 / -1;
-  }
 }
 
 /* Шапка приключения «Сюжета» (гриллинг 2026-10-23, Q13): слева название,
