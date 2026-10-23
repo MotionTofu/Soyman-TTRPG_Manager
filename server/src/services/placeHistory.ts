@@ -1,6 +1,7 @@
 import { db } from "../db/db";
 import { withLibraryContent } from "../story/library";
 import { SESSION_NUMBER_SQL } from "./sessionNumber";
+import { sceneStateOf } from "./sceneState";
 
 // «Что здесь было» карточки места (решения 2026-09-11, §2, п. 8).
 //
@@ -164,7 +165,6 @@ export function placeHistory(
         AND to_type = 'location' AND to_id IN (${inPlaces})
       ORDER BY id LIMIT 1`
   );
-  const stateOf = db.prepare("SELECT status FROM campaign_scene_state WHERE campaign_id = ? AND scene_id = ?");
   // Сверяем и копию, и исходник: запуск мог случиться до того, как кампания
   // завела свою копию сцены.
   const lastLaunch = db.prepare(
@@ -176,7 +176,7 @@ export function placeHistory(
   const ahead: AheadScene[] = [];
   for (const c of campaigns) {
     for (const s of campaignScenes(c.id, loc.setting_id)) {
-      const status = (stateOf.get(c.id, s.id) as { status: string } | undefined)?.status;
+      const status = sceneStateOf(c.id, s.id)?.status;
       if (status === "done" || status === "skipped") continue;
       const hit = placeOfScene.get(s.library_scene_id ?? s.id, ...ids) as { to_id: number } | undefined;
       if (!hit) continue;

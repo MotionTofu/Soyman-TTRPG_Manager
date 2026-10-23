@@ -1286,6 +1286,8 @@ canvasRouter.get("/board", (req, res) => {
     // когда тронута хоть одна, иначе «не дошли». Считается по
     // `campaign_scene_state` — тем самым отметкам, что Мастер уже ставит.
     // Сцены глав засчитываются приключению: глава — его часть, а не сосед.
+    // Отметка стоит на показанной строке: у правленой в кампании сцены это её
+    // копия, а без своей отметки копия наследует отметку исходной.
     const progressRows = db
       .prepare(
         `SELECT IFNULL(sc.parent_id, sc.id) AS root,
@@ -1294,11 +1296,17 @@ canvasRouter.get("/board", (req, res) => {
                 SUM(CASE WHEN st.status IS NOT NULL THEN 1 ELSE 0 END) AS touched
            FROM story_scenes s
            JOIN story_arcs sc ON sc.id = s.arc_id
-           LEFT JOIN campaign_scene_state st ON st.scene_id = s.id AND st.campaign_id = ?
+           LEFT JOIN campaign_scene_state st ON st.campaign_id = @c AND st.scene_id = (
+             SELECT x.scene_id FROM campaign_scene_state x
+               LEFT JOIN story_scenes cp ON cp.id = x.scene_id
+              WHERE x.campaign_id = @c
+                AND (x.scene_id = s.id OR (cp.source_scene_id = s.id AND cp.campaign_id = @c))
+              ORDER BY x.scene_id = s.id
+              LIMIT 1)
           WHERE s.archived_at IS NULL AND s.campaign_id IS NULL AND sc.archived_at IS NULL
           GROUP BY root`
       )
-      .all(campaignId) as { root: number; total: number; done: number; touched: number }[];
+      .all({ c: campaignId }) as { root: number; total: number; done: number; touched: number }[];
     const progressByArc = new Map(progressRows.map((r) => [r.root, r] as const));
 
     const shownIds = new Set(allArcs.map((a) => a.id));

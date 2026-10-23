@@ -38,6 +38,7 @@ import {
 } from "../story/presentation";
 import { SCENE_SOUND_SECTION, sceneSoundSet } from "../story/stage";
 import { SESSION_NUMBER_SQL } from "../services/sessionNumber";
+import { DONE_SCENES_SQL, sceneStateOf } from "../services/sceneState";
 import { adventureClueGraph, adventureCluesIn, campaignReveals, mapAdventures, nodeCounts, originalArcId, rootArcId, type ClueRow } from "../story/clues";
 import { cluePrompt, parseLabel, parseProposals } from "../story/cluePrompt";
 import {
@@ -497,15 +498,12 @@ storyRouter.get("/arcs/:id", (req, res) => {
          ORDER BY position, id`
       )
       .all(campaignId, ...arcIds) as SceneRow[];
-    const getState = db.prepare(
-      "SELECT status, note FROM campaign_scene_state WHERE campaign_id = ? AND scene_id = ?"
-    );
     scenes = [...originals.map((s) => overrides.get(s.id) ?? s), ...own]
       .map((s) => ({
         ...s,
         is_override: s.campaign_id === campaignId && s.source_scene_id != null,
         campaign_only: s.campaign_id === campaignId && s.source_scene_id == null,
-        state: getState.get(campaignId, s.id) ?? null,
+        state: sceneStateOf(campaignId, s.id),
       }))
       .sort((a, b) => a.position - b.position || a.id - b.id);
   }
@@ -1024,15 +1022,12 @@ function campaignScenesByArc(arcIds: number[], settingId: number, campaignId: nu
        ORDER BY position, id`
     )
     .all(campaignId, ...arcIds) as SceneRow[];
-  const getState = db.prepare(
-    "SELECT status, note FROM campaign_scene_state WHERE campaign_id = ? AND scene_id = ?"
-  );
   const all = [...originals.map((s) => overrides.get(s.id) ?? s), ...own]
     .map((s) => ({
       ...s,
       is_override: s.campaign_id === campaignId && s.source_scene_id != null,
       campaign_only: s.campaign_id === campaignId && s.source_scene_id == null,
-      state: getState.get(campaignId, s.id) ?? null,
+      state: sceneStateOf(campaignId, s.id),
     }))
     .sort((a, b) => a.position - b.position || a.id - b.id);
   for (const scene of all) {
@@ -1471,14 +1466,13 @@ storyRouter.get("/scenes", (req, res) => {
     )
     .all(...(arc_id ? [campaignId, Number(setting_id), Number(arc_id)] : [campaignId, Number(setting_id)])) as SceneRow[];
 
-  const getState = db.prepare("SELECT status, note FROM campaign_scene_state WHERE campaign_id = ? AND scene_id = ?");
   const resolved = [...originals.map((s) => overrides.get(s.id) ?? s), ...own].map((s) => ({
     ...withLibraryContent(s),
     is_override: s.campaign_id === campaignId && s.source_scene_id != null,
     campaign_only: s.campaign_id === campaignId && s.source_scene_id == null,
     // Progress is always keyed by the scene the campaign actually shows, so
     // an override and its original never both carry a status.
-    state: getState.get(campaignId, s.id) ?? null,
+    state: sceneStateOf(campaignId, s.id),
   }));
   resolved.sort((a, b) => a.position - b.position || a.id - b.id);
   res.json(resolved);
@@ -1513,9 +1507,7 @@ storyRouter.get("/scenes/:id", (req, res) => {
     campaign_only: shown.campaign_id != null && shown.source_scene_id == null,
     state:
       campaignId != null
-        ? db
-            .prepare("SELECT status, note FROM campaign_scene_state WHERE campaign_id = ? AND scene_id = ?")
-            .get(campaignId, shown.id) ?? null
+        ? sceneStateOf(campaignId, shown.id)
         : null,
     // Проверки, награды и переходы у нетронутой вставки тоже читаются с
     // заготовки: своих у неё нет до первой правки.
@@ -3796,11 +3788,11 @@ storyRouter.get("/arcs/:id/clues", (req, res) => {
       ? (
           db
             .prepare(
-              `SELECT scene_id FROM campaign_scene_state WHERE campaign_id = ? AND status = 'done'
+              `${DONE_SCENES_SQL}
                UNION
-               SELECT j.scene_id FROM session_scenes j JOIN sessions se ON se.id = j.session_id WHERE se.campaign_id = ?`
+               SELECT j.scene_id FROM session_scenes j JOIN sessions se ON se.id = j.session_id WHERE se.campaign_id = @c`
             )
-            .all(campaignId, campaignId) as { scene_id: number }[]
+            .all({ c: campaignId }) as { scene_id: number }[]
         ).map((r) => r.scene_id)
       : []
   );

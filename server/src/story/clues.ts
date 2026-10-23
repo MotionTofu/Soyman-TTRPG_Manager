@@ -11,6 +11,7 @@
 // заготовки.
 
 import { db } from "../db/db";
+import { DONE_SCENES_SQL } from "../services/sceneState";
 import { withLibraryContent } from "./library";
 
 export interface ClueRow {
@@ -301,11 +302,11 @@ export function campaignReveals(campaignId: number) {
   const visited = new Set(
     (db
       .prepare(
-        `SELECT scene_id FROM campaign_scene_state WHERE campaign_id = ? AND status = 'done'
+        `${DONE_SCENES_SQL}
          UNION
-         SELECT j.scene_id FROM session_scenes j JOIN sessions se ON se.id = j.session_id WHERE se.campaign_id = ?`
+         SELECT j.scene_id FROM session_scenes j JOIN sessions se ON se.id = j.session_id WHERE se.campaign_id = @c`
       )
-      .all(campaignId, campaignId) as { scene_id: number }[]).map((r) => r.scene_id)
+      .all({ c: campaignId }) as { scene_id: number }[]).map((r) => r.scene_id)
   );
   const started = new Set<number>();
   const clues: {

@@ -15,11 +15,16 @@ let heldId = 0;
 let nextId = 0;
 let insertId = 0;
 let copyId = 0;
+let inheritId = 0;
+let ownPendingId = 0;
+let advInherit = 0;
+let advOnCopy = 0;
 
 beforeAll(async () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "story-campaign-tree-test-"));
   process.env.DB_DIR = tmpDir;
   const { storyRouter } = await import("./story");
+  const { canvasRouter } = await import("./canvas");
   const { db } = await import("../db/db");
 
   app = express();
@@ -29,6 +34,7 @@ beforeAll(async () => {
     next();
   });
   app.use("/api/story", storyRouter);
+  app.use("/api/canvas", canvasRouter);
 
   const id = (sql: string, ...args: unknown[]) =>
     Number((db.prepare(sql).run(...args) as { lastInsertRowid: unknown }).lastInsertRowid);
@@ -52,6 +58,28 @@ beforeAll(async () => {
   db.prepare("INSERT INTO story_scene_rewards (scene_id, what, artifact_id) VALUES (?, 'Меч', ?), (?, 'Кошель', NULL)").run(rich, sword, rich);
   db.prepare("INSERT INTO story_scene_checks (scene_id, what) VALUES (?, 'Замок')").run(rich);
   copyId = id("INSERT INTO story_scenes (setting_id, arc_id, campaign_id, source_scene_id, name) VALUES (?, ?, ?, ?, 'Ворота')", settingId, arcId, campaignId, rich);
+
+  // Отметка правленой сцены: копия без своей отметки берёт отметку исходной,
+  // своя — важнее. Отдельные приключения — чтобы проверить и прогресс на холсте.
+  const state = db.prepare("INSERT INTO campaign_scene_state (campaign_id, scene_id, status) VALUES (?, ?, ?)");
+  const copyOf = (src: number, arc: number) =>
+    id("INSERT INTO story_scenes (setting_id, arc_id, campaign_id, source_scene_id, name) VALUES (?, ?, ?, ?, 'Копия')", settingId, arc, campaignId, src);
+  const adventure = (name: string) => {
+    const a = id("INSERT INTO story_arcs (setting_id, name) VALUES (?, ?)", settingId, name);
+    db.prepare("INSERT INTO campaign_adventures (campaign_id, arc_id) VALUES (?, ?)").run(campaignId, a);
+    return a;
+  };
+  advInherit = adventure("Наследует");
+  const p = id("INSERT INTO story_scenes (setting_id, arc_id, name) VALUES (?, ?, 'P')", settingId, advInherit);
+  state.run(campaignId, p, "done");
+  inheritId = copyOf(p, advInherit);
+  advOnCopy = adventure("На копии");
+  const q = id("INSERT INTO story_scenes (setting_id, arc_id, name) VALUES (?, ?, 'Q')", settingId, advOnCopy);
+  state.run(campaignId, copyOf(q, advOnCopy), "done");
+  const r = id("INSERT INTO story_scenes (setting_id, arc_id, name) VALUES (?, ?, 'R')", settingId, arcId);
+  state.run(campaignId, r, "done");
+  ownPendingId = copyOf(r, arcId);
+  state.run(campaignId, ownPendingId, "pending");
 
   heldId = id("INSERT INTO sessions (campaign_id, date, status) VALUES (?, '2026-10-01', 'held')", campaignId);
   nextId = id("INSERT INTO sessions (campaign_id, date, status) VALUES (?, '2026-10-30', 'planned')", campaignId);
@@ -81,6 +109,23 @@ describe("GET /story/campaign-tree — сессии сцены", () => {
     const want = { characters: ["being:1"], locations: ["location:2"], obstacles: [], loot: [expect.stringMatching(/^artifact:/), expect.stringMatching(/^reward:/)], checks: 1 };
     const copy = scenes.find((s: { id: number }) => s.id === copyId);
     expect(copy.makeup).toEqual(want);
+  });
+
+  it("правленая сцена хранит отметку исходной, своя отметка важнее", async () => {
+    const res = await request(app).get(`/api/story/campaign-tree?campaign_id=${campaignId}`);
+    const scenes = res.body.flatMap((a: { scenes: { id: number }[] }) => a.scenes);
+    const statusOf = (sid: number) => scenes.find((s: { id: number }) => s.id === sid)?.state?.status;
+    expect(statusOf(inheritId)).toBe("done");
+    expect(statusOf(ownPendingId)).toBe("pending");
+  });
+
+  it("прогресс приключения на холсте видит отметку и исходной, и копии", async () => {
+    const res = await request(app).get(`/api/canvas/board?campaign_id=${campaignId}`);
+    expect(res.status).toBe(200);
+    const progress = (a: number) =>
+      res.body.nodes.find((n: { key: string }) => n.key === `adventure:${a}`)?.adventure?.progress;
+    expect(progress(advInherit)).toBe("done");
+    expect(progress(advOnCopy)).toBe("done");
   });
 
   it("вставка заготовки показывает имя заготовки", async () => {
