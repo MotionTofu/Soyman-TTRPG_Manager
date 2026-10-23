@@ -21,7 +21,7 @@ import { sessionPaths } from "../data/sessions";
 import { SideModules, type SideModule, type SideModuleId } from "./SideModules";
 import { SideRail } from "./SideRail";
 import { useMediaQuery } from "../hooks/useMediaQuery";
-import { loadSideLayout, saveSideLayout, type SideLayout } from "./sideLayout";
+import { loadSideLayout, saveSideLayout, SIDE_NARROW_EVENT, type SideLayout } from "./sideLayout";
 
 // Most types deep-link via DETAIL_ROUTES/:id; compendium entries instead
 // live inside a System's tab and need system_id+section_id to open at.
@@ -134,6 +134,22 @@ export function SearchPanel({ horizontal, workspace = false, onNavigate }: Props
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [workspace, narrow]);
+
+  // ] и F4 из оболочки сворачивают панель до значков, а не прячут её.
+  useEffect(() => {
+    if (horizontal) return;
+    const onNarrow = (e: Event) => {
+      const want = (e as CustomEvent<boolean | undefined>).detail;
+      setRailOpen(null);
+      setLayout((prev) => {
+        const next = { ...prev, narrow: want ?? !prev.narrow };
+        saveSideLayout(next);
+        return next;
+      });
+    };
+    window.addEventListener(SIDE_NARROW_EVENT, onNarrow);
+    return () => window.removeEventListener(SIDE_NARROW_EVENT, onNarrow);
+  }, [horizontal]);
 
   function pinCurrentPage() {
     const path = location.pathname + location.search;

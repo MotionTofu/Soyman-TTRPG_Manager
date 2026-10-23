@@ -11,6 +11,9 @@ export interface SideLayout {
 
 const KEY = "rpgManagerSidePanel";
 
+/** Хоткей оболочки → правая панель: detail true/false — свернуть/развернуть, без detail — переключить. */
+export const SIDE_NARROW_EVENT = "side-panel-narrow";
+
 export function loadSideLayout(): SideLayout {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? "null") as Partial<SideLayout> | null;

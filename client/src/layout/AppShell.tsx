@@ -22,6 +22,7 @@ import { UndoDeleteProvider } from "../hooks/useUndoDelete";
 import { RehearsalStrip } from "../components/SessionLiveControls";
 import { brandLogo, brandMascot } from "../brandLogo";
 import { useRailTip } from "./RailTip";
+import { loadSideLayout, SIDE_NARROW_EVENT } from "./sideLayout";
 import { ExternalLinkConfirmModal, BOOSTY_URL } from "../components/ExternalLinkConfirmModal";
 import { Breadcrumbs } from "../components/Breadcrumbs";
 import { useWorkbookCrumbs } from "./useWorkbookCrumbs";
@@ -607,36 +608,6 @@ export function AppShell() {
     return () => window.removeEventListener("keydown", onKey);
   }, [navOpen, searchOpen]);
 
-  // Глобальные хоткеи пульта — независимы от раскладки (code + key), не спорят с существующими
-  // [ / Х — левая докстанция, ] / Ъ — правый поиск, Ctrl+\ — оба. Игнор когда в поле ввода.
-  useEffect(() => {
-    if (isMapWorkspace) return;
-    const onKey = (e: KeyboardEvent) => {
-      const tag = (document.activeElement as HTMLElement | null)?.tagName;
-      const ae = document.activeElement as HTMLElement | null;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || ae?.isContentEditable) return;
-      const k = e.key.toLowerCase();
-      const isLeft = e.code === "BracketLeft" || k === "[" || k === "х";
-      const isRight = e.code === "BracketRight" || k === "]" || k === "ъ";
-      const isSlash = e.code === "Backslash" || k === "\\" || k === "|" || e.code === "IntlBackslash";
-      // Не мешаем системным Ctrl+K, Ctrl+S, Ctrl+Z и т.д. — для скобок требуем без Ctrl/Meta/Alt
-      if (isLeft && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        e.preventDefault();
-        document.body.classList.toggle("live-hide-dock");
-      } else if (isRight && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        e.preventDefault();
-        document.body.classList.toggle("live-hide-search");
-      } else if (isSlash && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        const hide = !(document.body.classList.contains("live-hide-search") && document.body.classList.contains("live-hide-dock"));
-        document.body.classList.toggle("live-hide-search", hide);
-        document.body.classList.toggle("live-hide-dock", hide);
-      }
-    };
-    window.addEventListener("keydown", onKey, { capture: true });
-    return () => window.removeEventListener("keydown", onKey, { capture: true } as any);
-  }, [isMapWorkspace]);
-
   const [playerHidden, setPlayerHidden] = useState(() => {
     try { return localStorage.getItem("playerHidden") === "1"; } catch { return false; }
   });
@@ -654,15 +625,58 @@ export function AppShell() {
   }
   const navTip = useRailTip(navNarrow, "right");
 
+  // Глобальные хоткеи — независимы от раскладки (code + key).
+  // [ / Х — левая панель, ] / Ъ — правая, Ctrl+\ и F4 — обе. Панели сворачиваются
+  // до значков; у Пульта и карт узкого вида нет (Q12′) — там они прячутся целиком.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "F4" || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
-      e.preventDefault();
-      if (!e.repeat) setPanelsHidden((hidden) => !hidden);
+    const narrowable = !isLivePult && !isMapWorkspace;
+    const setLeft = (value: boolean) => {
+      try { localStorage.setItem("navNarrow", value ? "1" : "0"); } catch { /* приватный режим */ }
+      setNavNarrow(value);
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+    // Обе разом: если хоть одна развёрнута — свернуть обе, иначе развернуть.
+    // Правая хранит флаг сама (sideLayout), её состояние читаем оттуда.
+    const toggleBoth = () => {
+      const narrow = !(navNarrow && loadSideLayout().narrow);
+      setLeft(narrow);
+      window.dispatchEvent(new CustomEvent(SIDE_NARROW_EVENT, { detail: narrow }));
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "F4" && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        e.preventDefault();
+        if (e.repeat) return;
+        if (narrowable) toggleBoth();
+        else setPanelsHidden((hidden) => !hidden);
+        return;
+      }
+      if (isMapWorkspace) return;
+      const tag = (document.activeElement as HTMLElement | null)?.tagName;
+      const ae = document.activeElement as HTMLElement | null;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || ae?.isContentEditable) return;
+      const k = e.key.toLowerCase();
+      const isLeft = e.code === "BracketLeft" || k === "[" || k === "х";
+      const isRight = e.code === "BracketRight" || k === "]" || k === "ъ";
+      const isSlash = e.code === "Backslash" || k === "\\" || k === "|" || e.code === "IntlBackslash";
+      // Не мешаем системным Ctrl+K, Ctrl+S, Ctrl+Z и т.д. — для скобок требуем без Ctrl/Meta/Alt
+      if (isLeft && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        if (isLivePult) document.body.classList.toggle("live-hide-dock");
+        else setLeft(!navNarrow);
+      } else if (isRight && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        if (isLivePult) document.body.classList.toggle("live-hide-search");
+        else window.dispatchEvent(new CustomEvent(SIDE_NARROW_EVENT));
+      } else if (isSlash && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        if (!isLivePult) return toggleBoth();
+        const hide = !(document.body.classList.contains("live-hide-search") && document.body.classList.contains("live-hide-dock"));
+        document.body.classList.toggle("live-hide-search", hide);
+        document.body.classList.toggle("live-hide-dock", hide);
+      }
+    };
+    window.addEventListener("keydown", onKey, { capture: true });
+    return () => window.removeEventListener("keydown", onKey, { capture: true } as any);
+  }, [isMapWorkspace, isLivePult, navNarrow]);
 
   // Alt+F1 — на главную, Alt+F2 — показать/скрыть нижний плеер, Alt+F3 — свернуть/развернуть все <details>
   useEffect(() => {
@@ -715,7 +729,7 @@ export function AppShell() {
         страницей, уходил вместе с ней. */}
     <UndoDeleteProvider>
     <MapWorkspaceContext.Provider value={isMapWorkspace ? { rail: mapRail, placement: mapPlacement, setPlacement: setMapPlacement } : null}>
-    <div className={`app-shell${isLivePult ? " app-shell-live" : ""}${isMapWorkspace ? " app-shell-maps" : ""}${panelsHidden ? " app-shell-panels-hidden" : ""}`} data-workspace={mode}>
+    <div className={`app-shell${isLivePult ? " app-shell-live" : ""}${isMapWorkspace ? " app-shell-maps" : ""}${panelsHidden && (isLivePult || isMapWorkspace) ? " app-shell-panels-hidden" : ""}`} data-workspace={mode}>
       <div className="mobile-topbar">
         <button className="mobile-topbar-button" onClick={() => setNavOpen(true)} aria-label="Меню" aria-expanded={navOpen} aria-controls="app-nav">
           <NavIcon name="menu" />
