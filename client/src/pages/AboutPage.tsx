@@ -25,9 +25,9 @@ const HOTKEYS: { combo: string; where: string; does: string }[] = [
   { combo: "Shift + R", where: "любое место", does: "режим повтора (выкл → плейлист → трек)" },
   { combo: "Shift + X", where: "любое место", does: "перемешать порядок треков" },
   { combo: "Shift + ?", where: "любое место (кроме полей ввода)", does: "показать / скрыть подсказку горячих клавиш плеера" },
-  { combo: "Ctrl + Z", where: "Узлы", does: "отменить последнее действие" },
-  { combo: "Ctrl + Y", where: "Узлы", does: "повторить отменённое действие" },
-  { combo: "Ctrl + K", where: "Узлы", does: "быстрый поиск ноды" },
+  { combo: "Ctrl + Z", where: "Холст", does: "отменить последнее действие" },
+  { combo: "Ctrl + Y", where: "Холст", does: "повторить отменённое действие" },
+  { combo: "Ctrl + K", where: "Холст", does: "быстрый поиск ноды" },
   { combo: "1–9", where: "Пульт звука (отдельное окно)", does: "проиграть стингер-звук (набор: цифры 1–9 или буквы QWE / ASD / ZXC)" },
   { combo: "[ / Х", where: "любое место (кроме полей ввода)", does: "скрыть/показать левую докстанцию превью" },
   { combo: "] / Ъ", where: "любое место (кроме полей ввода)", does: "скрыть/показать правый поиск" },
@@ -163,7 +163,7 @@ export function AboutPage() {
           </details>
 
           <details className="about-sub">
-            <summary>Узлы</summary>
+            <summary>Холст</summary>
             <div className="about-sub__body">
               <p className="muted">
                 Узловой редактор для визуального построения приключений. Приключение

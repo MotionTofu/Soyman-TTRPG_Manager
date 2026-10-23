@@ -5921,7 +5921,7 @@ export function CanvasPage() {
             ) : null}
           </>
         ) : (
-          <SectionHeading section="canvas" compact>Узлы</SectionHeading>
+          <SectionHeading section="canvas" compact>Холст</SectionHeading>
         )}
         {/* «Открыть доску…», а не «Открыть холст…» (блок D5): слово «холст»
             из подписей кнопок ушло вовсе — мастер открывает именно свободные
