@@ -69,7 +69,7 @@
 }
 .campaign-chapters .campaign-scene > .campaign-scene__summary {
   display: grid;
-  grid-template-columns: auto 6.5rem minmax(0, 1fr) auto auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: var(--sp-5);
   min-height: 58px;
@@ -91,25 +91,13 @@
   outline: var(--card-border-width-strong) solid currentColor;
   outline-offset: var(--sp-2);
 }
+/* «тип · роль» (Q8) — тихо после названия, без рамки и своей колонки. */
 .campaign-scene__kind {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 64px;
-  min-height: 30px;
-  max-width: 9rem;
-  padding: var(--sp-1) var(--sp-4);
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 100% 130%;
-  font: 600 var(--fs-h2)/1.1 "Caveat", cursive;
-  color: var(--paper-ink, var(--ink));
-  text-align: center;
-  overflow-wrap: anywhere;
+  font-family: var(--font-body);
+  font-size: var(--fs-meta);
+  font-weight: 400;
+  color: var(--paper-muted, var(--muted));
   text-transform: lowercase;
-}
-.campaign-scene__kind--long {
-  font-size: var(--fs-body);
 }
 .campaign-scene__name {
   min-width: 0;
@@ -158,9 +146,6 @@
 .campaign-scene:is(.is-done, .is-skipped) .campaign-scene__name {
   color: var(--paper-muted, var(--muted));
   font-weight: 600;
-}
-.campaign-scene__kind.is-empty {
-  min-height: 0;
 }
 .campaign-scene__name .campaign-scene__note {
   margin-left: var(--sp-3);
@@ -226,12 +211,21 @@
   gap: var(--sp-5);
   padding: 0 var(--sp-4) var(--sp-6);
 }
-.campaign-scene__actions {
-  gap: var(--sp-4);
-  flex-wrap: wrap;
+.campaign-scene__lead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-6);
 }
-.campaign-scene__actions a {
-  font-size: var(--fs-meta);
+.campaign-scene__lead > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.campaign-scene__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sp-3);
+  flex: none;
 }
 
 /* Шапка приключения «Сюжета» (гриллинг 2026-10-23, Q13): слева название,
@@ -344,10 +338,6 @@
   font-size: var(--fs-meta);
   color: var(--paper-muted, var(--muted));
 }
-.campaign-scene__kind-inline {
-  display: none;
-  font-size: var(--fs-meta);
-}
 
 /* Телефон (Q19): в строке кружок, название и только красный счётчик улик. */
 @container (max-width: 520px) {
@@ -355,14 +345,18 @@
     grid-template-columns: auto minmax(0, 1fr) auto auto;
     column-gap: var(--sp-4);
   }
-  .campaign-scene__summary > :is(.campaign-scene__kind, .campaign-scene__session),
+  .campaign-scene__session,
   .campaign-scene__clues:not(.is-bad) {
     display: none;
   }
   .campaign-scene__more {
     grid-column: 4;
   }
-  .campaign-scene__kind-inline {
-    display: block;
+  .campaign-scene__lead {
+    flex-direction: column;
+  }
+  .campaign-scene__actions {
+    flex-direction: row;
+    flex-wrap: wrap;
   }
 }

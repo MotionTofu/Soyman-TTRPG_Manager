@@ -13,7 +13,6 @@ import type { ArcClueNode, ArcClues, CampaignAdventureTree, CampaignReveals, Cam
 import { NavIcon } from "./NavIcons";
 import { ContextMenu } from "./ContextMenu";
 import { arcCluesPath } from "../data/canvas";
-import { rasterAsset } from "../rasterAssets";
 import "./campaign-chapters.css";
 import { CampaignAdventureOverview } from "./CampaignAdventuresCard";
 
@@ -564,7 +563,7 @@ const SceneRow = memo(function SceneRow({
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const status = s.state?.status ?? "pending";
   const kind = s.node_type || s.node_role !== "normal" ? nodeLabel(s) : null;
-  const kindFrame = rasterAsset("ui/plot-restyle/v1", "kind-window");
+  const navigate = useNavigate();
   const played = s.sessions.filter((x) => x.played);
   const lastPlayed = played[played.length - 1] ?? null;
   const planned = lastPlayed ? null : plannedSession(s);
@@ -604,12 +603,9 @@ const SceneRow = memo(function SceneRow({
             onStatus(s, status === "done" ? "pending" : "done");
           }}
         />
-        <span
-          className={`campaign-scene__kind${kind && kind.length > 10 ? " campaign-scene__kind--long" : ""}${kind ? "" : " is-empty"}`}
-          style={{ backgroundImage: kind && kindFrame ? `url("${kindFrame}")` : undefined }}
-        >{kind}</span>
         <span className="campaign-scene__name">
           {s.name}
+          {kind && <span className="campaign-scene__kind"> · {kind}</span>}
           {s.is_override && <span className="campaign-scene__note">правка</span>}
           {s.campaign_only && <span className="campaign-scene__note">только в кампании</span>}
         </span>
@@ -647,25 +643,30 @@ const SceneRow = memo(function SceneRow({
         document.body
       )}
       <div className="campaign-scene__expanded">
-        {s.summary ? (
-          <div className="reading-text" style={{ whiteSpace: "pre-wrap" }}>
-            <MentionText text={s.summary} />
+        {/* Переходы — кнопками справа от сводки: текст и так ограничен по ширине. */}
+        <div className="campaign-scene__lead">
+          {s.summary ? (
+            <div className="reading-text" style={{ whiteSpace: "pre-wrap" }}>
+              <MentionText text={s.summary} />
+            </div>
+          ) : (
+            <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Сводки нет — откройте сцену, чтобы добавить.</span>
+          )}
+          <div className="campaign-scene__actions">
+            <button type="button" onClick={() => navigate(`/scenes/${s.id}?campaign=${campaignId}`)}>Открыть сцену</button>
+            {canvasUrl && (
+              <button type="button" onClick={() => navigate(canvasUrl)}>
+                <NavIcon name="canvas" /> На холсте
+              </button>
+            )}
           </div>
-        ) : (
-          <span className="muted" style={{ fontSize: "var(--fs-meta)" }}>Сводки нет — откройте сцену, чтобы добавить.</span>
-        )}
-        {/* На телефоне «тип · роль» и сессия уезжают из строки сюда (Q19). */}
-        {kind && <span className="campaign-scene__kind-inline">{kind}</span>}
+        </div>
         {node && clues && <SceneClues node={node} clues={clues} />}
         {s.sessions.length > 0 && (
           <span className="campaign-scene__sessions">
             {s.sessions.map((x) => `${x.played ? "Запускалась" : "Запланирована"} в №${x.number}`).join(" · ")}
           </span>
         )}
-        <div className="row campaign-scene__actions">
-          <Link to={`/scenes/${s.id}?campaign=${campaignId}`}>Открыть сцену →</Link>
-          {canvasUrl && <Link to={canvasUrl}>На холсте →</Link>}
-        </div>
       </div>
     </details>
   );
