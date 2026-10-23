@@ -37,6 +37,7 @@ import {
   validatePresentationPatch,
 } from "../story/presentation";
 import { SCENE_SOUND_SECTION, sceneSoundSet } from "../story/stage";
+import { SESSION_NUMBER_SQL } from "../services/sessionNumber";
 import { adventureClueGraph, adventureCluesIn, campaignReveals, mapAdventures, nodeCounts, originalArcId, rootArcId, type ClueRow } from "../story/clues";
 import { cluePrompt, parseLabel, parseProposals } from "../story/cluePrompt";
 import {
@@ -1057,6 +1058,17 @@ storyRouter.get("/campaign-tree", (req, res) => {
      WHERE parent_id = ? AND archived_at IS NULL AND campaign_id IS NULL
      ORDER BY position, id`
   );
+  const sessionsOf = sceneSessions(campaignId);
+  // Запуск и план пишутся на ту строку, что была на экране, — копию или
+  // оригинал, смотря когда её сделали; поэтому сцена собирает оба.
+  const withSessions = (list: Record<string, unknown>[] | undefined) =>
+    (list ?? []).map((s) => {
+      const own = sessionsOf.get(s.id as number) ?? [];
+      const src = s.source_scene_id != null ? sessionsOf.get(s.source_scene_id as number) ?? [] : [];
+      const merged = new Map([...src, ...own].map((x) => [`${x.id}:${x.played}`, x]));
+      const sessions = [...merged.values()].sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
+      return { ...s, sessions };
+    });
   const tree = adventures.map((adv) => {
     const advId = adv.id as number;
     const chapters = chaptersOf.all(advId) as Record<string, unknown>[];
@@ -1064,15 +1076,39 @@ storyRouter.get("/campaign-tree", (req, res) => {
     const scenes = campaignScenesByArc(arcIds, settingId, campaignId);
     return {
       ...adv,
-      scenes: scenes.get(advId) ?? [],
+      scenes: withSessions(scenes.get(advId)),
       chapters: chapters.map((c) => ({
         ...applyArcOverride(c, overrides.get(c.id as number)),
-        scenes: scenes.get(c.id as number) ?? [],
+        scenes: withSessions(scenes.get(c.id as number)),
       })),
     };
   });
   res.json(tree);
 });
+
+// Сессии сцены для «Сюжета» (гриллинг вкладки 2026-10-23, Q5/Q17): где её
+// запускали (played) и в какую ещё не сыгранную сессию она положена.
+// Отдельного статуса «запланирована» нет — он выводится отсюда.
+function sceneSessions(campaignId: number) {
+  const rows = db
+    .prepare(
+      `SELECT x.scene_id, s.id, s.date, s.status, ${SESSION_NUMBER_SQL} AS number, 1 AS played
+         FROM session_scenes x JOIN sessions s ON s.id = x.session_id
+        WHERE s.campaign_id = @c AND s.archived_at IS NULL
+       UNION
+       SELECT p.scene_id, s.id, s.date, s.status, ${SESSION_NUMBER_SQL} AS number, 0 AS played
+         FROM session_planned_scenes p JOIN sessions s ON s.id = p.session_id
+        WHERE s.campaign_id = @c AND s.archived_at IS NULL AND s.status = 'planned'
+          AND NOT EXISTS (SELECT 1 FROM session_scenes j WHERE j.session_id = p.session_id AND j.scene_id = p.scene_id)`
+    )
+    .all({ c: campaignId }) as { scene_id: number; id: number; date: string; status: string; number: number; played: number }[];
+  const by = new Map<number, { id: number; date: string; number: number; played: boolean }[]>();
+  for (const r of rows) {
+    if (!by.has(r.scene_id)) by.set(r.scene_id, []);
+    by.get(r.scene_id)!.push({ id: r.id, date: r.date, number: r.number, played: r.played === 1 });
+  }
+  return by;
+}
 
 // Разделы «Вехи» и «Тайны и зацепки»: те же приключения, но с их вехами и
 // тайнами, плюс собственные записи кампании, не привязанные ни к одному

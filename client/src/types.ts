@@ -1336,9 +1336,17 @@ export interface StoryArc {
 
 /** Приключение кампании вместе с его главами и сценами (раздел «Главы и сцены»). */
 export interface CampaignAdventureTree extends StoryArc {
-  scenes: StoryScene[];
-  chapters: (StoryArc & { scenes: StoryScene[] })[];
+  scenes: CampaignTreeScene[];
+  chapters: (StoryArc & { scenes: CampaignTreeScene[] })[];
 }
+/** Сессия сцены в «Сюжете»: где запускали (played) или куда положена. По дате. */
+export interface SceneSession {
+  id: number;
+  date: string;
+  number: number;
+  played: boolean;
+}
+export type CampaignTreeScene = StoryScene & { sessions: SceneSession[] };
 
 /**
  * Вехи или тайны кампании, разложенные по её приключениям. `own` — записи

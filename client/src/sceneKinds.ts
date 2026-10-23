@@ -29,6 +29,20 @@ export function nodeLabel(s: { node_type?: string | null; node_role?: string | n
   return parts.length ? parts.join(" · ") : "Узел";
 }
 
+/**
+ * Правило трёх улик на входе узла (гриллинг 2026-09-28, Q11, Q31) — одно для
+ * холста, карточки узла и «Сюжета». Старт и проактивный входящих не требуют,
+ * узел за проходом — тоже, улики в тупик бонусные.
+ */
+export type ClueNeed = "start" | "proactive" | "bonus" | "ok" | "passage" | "missing";
+export function clueNeed(role: NodeRole | string, clueIn: number, passageIn: boolean): ClueNeed {
+  if (role === "start") return "start";
+  if (role === "proactive") return "proactive";
+  if (role === "dead_end") return "bonus";
+  if (clueIn >= 3) return "ok";
+  return passageIn ? "passage" : "missing";
+}
+
 export const SCENE_KINDS: { key: SceneKind; label: string }[] = [
   { key: "scene", label: "Сцена" },
   { key: "encounter", label: "Столкновение" },

@@ -11,6 +11,7 @@ import { readResource } from "../data/imperative";
 import { CLUE_DRAG_MIME, clueAffects } from "../data/canvas";
 import { MentionPickerModal } from "./mentions/MentionPickerModal";
 import { openPreviewDockCard } from "../previewDockStore";
+import { clueNeed } from "../sceneKinds";
 import type { ArcClue, ArcClues, StoryClue } from "../types";
 
 // ─── Окно новой связи ─────────────────────────────────────────────────────
@@ -357,11 +358,9 @@ export function NodeCluesCard({
   const accepted = incoming.filter((c) => !c.proposed).length;
 
   // Тот же счёт, что у чипов на узле холста (Q11, Q31).
-  let need: string | null = null;
-  if (me.role === "start") need = "старт";
-  else if (me.role === "proactive") need = "приходит сам";
-  else if (me.role === "dead_end") need = "бонусные";
-  else if (accepted < 3 && me.passage_in) need = "за проходом";
+  const need = { start: "старт", proactive: "приходит сам", bonus: "бонусные", passage: "за проходом", ok: null, missing: null }[
+    clueNeed(me.role, accepted, me.passage_in)
+  ];
   const missing = need == null ? Math.max(0, 3 - accepted) : 0;
 
   const opts = { affects: clueAffects() };

@@ -78,7 +78,7 @@ export function CampaignChaptersScenes({
   const applyStatus = useCallback((sceneId: number, status: string) => {
     // Приключения и главы, которых правка не касается, сохраняют ссылку —
     // иначе смена статуса одной сцены перерисовывала бы всё дерево.
-    const patchList = (list: StoryScene[]) => {
+    const patchList = <T extends StoryScene>(list: T[]): T[] => {
       const i = list.findIndex((s) => s.id === sceneId);
       if (i === -1) return list;
       const next = list.slice();

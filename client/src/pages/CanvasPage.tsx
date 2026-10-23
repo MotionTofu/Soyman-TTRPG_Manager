@@ -42,7 +42,7 @@ import {
   ProposeCluesDialog,
 } from "../components/CanvasClues";
 import { AdventureWizard } from "../components/AdventureWizard";
-import { NODE_ROLES, NODE_ROLE_LABELS, NODE_TYPES as NODE_TYPE_OPTIONS, NODE_TYPE_LABELS, nodeLabel, plural } from "../sceneKinds";
+import { NODE_ROLES, NODE_ROLE_LABELS, NODE_TYPES as NODE_TYPE_OPTIONS, NODE_TYPE_LABELS, clueNeed, nodeLabel, plural } from "../sceneKinds";
 import { formatByPrecision } from "../inworldCalendar";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { EmptyState } from "../components/EmptyState";
@@ -238,13 +238,14 @@ function ClueCounters({
   itself?: string;
 }) {
   const role = data.nodeRole;
+  const need = clueNeed(role, data.clueIn, data.passageIn);
   let inChip: ReactNode;
-  if (role === "start") inChip = <span className="canvas-node__chip">старт</span>;
-  else if (role === "proactive") inChip = <span className="canvas-node__chip">приходит {itself}</span>;
-  else if (role === "dead_end")
+  if (need === "start") inChip = <span className="canvas-node__chip">старт</span>;
+  else if (need === "proactive") inChip = <span className="canvas-node__chip">приходит {itself}</span>;
+  else if (need === "bonus")
     inChip = <span className="canvas-node__chip is-hint">вход {data.clueIn} · бонус</span>;
-  else if (data.clueIn >= 3) inChip = <span className="canvas-node__chip">вход {data.clueIn}</span>;
-  else if (data.passageIn) inChip = <span className="canvas-node__chip" title={`Улик сюда: ${data.clueIn}`}>за проходом</span>;
+  else if (need === "ok") inChip = <span className="canvas-node__chip">вход {data.clueIn}</span>;
+  else if (need === "passage") inChip = <span className="canvas-node__chip" title={`Улик сюда: ${data.clueIn}`}>за проходом</span>;
   else inChip = <span className="canvas-node__chip is-bad" title="В узел ведёт меньше трёх улик">вход {data.clueIn} / 3</span>;
   const needsOut = role !== "dead_end" && role !== "finale";
   return (
