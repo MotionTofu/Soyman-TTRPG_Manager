@@ -2246,6 +2246,86 @@
 .session-rows .row-icon {
   flex-shrink: 0;
 }
+/* Строка целиком ведёт в сессию (Q4): ссылка растянута на всю строку, кнопки
+   поверх неё. Слева — колонка даты (Q13): опора глазу при пробеге. */
+.session-row {
+  position: relative;
+}
+.session-row:hover {
+  background: var(--paper-wash);
+}
+.session-row__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--sp-3);
+}
+/* Лента — одной строкой с многоточием: абзац упоминаний иначе блочный. */
+.session-rows__line .rt-md-paragraph {
+  display: inline;
+  white-space: nowrap;
+}
+.session-row__link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.session-row__date {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 0 0 2.6em;
+  line-height: 1;
+}
+.session-row__day {
+  font-family: var(--font-ui);
+  font-size: var(--fs-h3);
+  font-weight: 600;
+  color: var(--paper-ink);
+}
+.session-row__month {
+  color: var(--paper-muted);
+  font-size: var(--fs-micro);
+}
+.session-row__action,
+.session-row__menu {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+}
+.session-row__menu {
+  padding: 0 var(--sp-3);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--paper-muted);
+  font-size: var(--fs-h3);
+  line-height: 1;
+}
+.session-row__menu:hover {
+  color: var(--paper-ink);
+  background: var(--paper-wash);
+}
+.session-group__add {
+  margin-left: auto;
+  padding: 0 var(--sp-3);
+  font-size: var(--fs-meta);
+  white-space: nowrap;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+.session-month__head {
+  margin: var(--sp-3) 0 0;
+  padding: 0 var(--sp-2);
+  color: var(--paper-muted);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+}
+.session-group--overdue .paper-group__head {
+  color: var(--paper-alarm);
+}
 .session-calendar__next-date {
   color: var(--paper-ink);
 }

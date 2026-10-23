@@ -17,7 +17,9 @@ import { chroniclePaths } from "../data/settingPage";
 import { sessionMoneyAffects } from "../data/sessions";
 import { vesselPaths, type VesselSummary } from "../data/campaignVessels";
 import { labelled } from "../data/notices";
-import { toLocalDateKey, formatDateKeyRu, parseDateKey } from "../utils/date";
+import { toLocalDateKey, formatDateKeyRu, parseDateKey, addDays } from "../utils/date";
+import { CampaignSessionList } from "../components/campaign/CampaignSessionList";
+import { SessionOutcomeModal } from "../components/SessionOutcomeModal";
 import { copySessionPrep } from "../sessionCopy";
 import { Modal } from "../components/Modal";
 import { MonthCalendar, type CalendarEvent } from "../components/MonthCalendar";
@@ -31,7 +33,6 @@ import { CampaignMilestones, type MilestonesNavStats } from "../components/Campa
 import { CampaignChaptersScenes, type ChaptersNavStats } from "../components/CampaignChaptersScenes";
 import { CrossLinksWizard } from "../components/CrossLinksWizard";
 import { EmptyState } from "../components/EmptyState";
-import { RowDeleteButton } from "../components/RowIconButtons";
 import { RemindersWidget } from "../components/RemindersWidget";
 import { CharacterRequestsBlock } from "../components/CharacterRequestsBlock";
 import { IMAGE_ACCEPT } from "../imageUpload";
@@ -47,7 +48,6 @@ import {
   RATE_SPLIT_LABELS,
 } from "../paymentTypes";
 import { MentionTextarea } from "../components/mentions/MentionTextarea";
-import { MentionText } from "../components/mentions/MentionText";
 import { syncMentionLinks } from "../mentions";
 import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { useTabState } from "../hooks/useTabState";
@@ -307,6 +307,9 @@ export function CampaignDetailPage() {
   const [repeatInterval, setRepeatInterval] = useState<"none" | "7" | "14">("none");
   const [repeatCount, setRepeatCount] = useState("4");
   const [newCopyFromSessionId, setNewCopyFromSessionId] = useState("");
+  const [newStartTime, setNewStartTime] = useState("");
+  const [outcomeSessionId, setOutcomeSessionId] = useState<number | null>(null);
+  const [movingSession, setMovingSession] = useState<{ id: number; date: string; start_time: string } | null>(null);
 
   const systems = useResource<System[]>(campaignPaths.systems()).data ?? NO_SYSTEMS;
   const settingsList = useResource<Setting[]>(campaignPaths.settings()).data ?? NO_SETTINGS;
@@ -663,6 +666,7 @@ export function CampaignDetailPage() {
               status: newStatus,
               payment_override: newPaymentOverride || null,
               stake_override: newStake ? Number(newStake) : undefined,
+              start_time: newStartTime || null,
             })
           ),
           // Без «Повторить»: ответ мог потеряться после записи, повтор задвоил бы сессию.
@@ -678,6 +682,7 @@ export function CampaignDetailPage() {
         }
       }
       setCreatingDate(null);
+      setNewStartTime("");
       setNewStatus("planned");
       setNewPaymentOverride("");
       setNewStake("");
@@ -757,11 +762,55 @@ export function CampaignDetailPage() {
   }
 
   async function archiveSession(sessionId: number) {
-    const ok = await confirm({ message: "Отправить сессию в архив?", confirmLabel: "Архивировать", danger: true });
+    const ok = await confirm({
+      title: "Игра не состоялась?",
+      message: "Сессия уйдёт в архив — вернуть её можно со страницы «Архив».",
+      confirmLabel: "Не состоялась",
+      danger: true,
+    });
     if (!ok) return;
     await run(labelled("Сессия в архив", () => write.del(`/sessions/${sessionId}`)), {
       affects: [...sessionMoneyAffects(sessionId, campaignId), { path: "/archive" }],
     });
+  }
+
+  function openCreate(date: string, startTime = "") {
+    setNewStartTime(startTime);
+    setCreatingDate(date);
+  }
+
+  // «+ Запланировать» (Q12): обычно играют в один день недели — через неделю
+  // после последней игры в то же время. Ушедшая в прошлое дата шагает
+  // неделями до сегодняшней, день недели сохраняется.
+  function scheduleNext() {
+    const today = toLocalDateKey();
+    const last = [...sessions].filter((s) => s.status !== "cancelled").sort((a, b) => a.date.localeCompare(b.date)).pop();
+    if (!last) return openCreate(today);
+    let date = addDays(last.date, 7);
+    while (date < today) date = addDays(date, 7);
+    openCreate(date, last.start_time ?? "");
+  }
+
+  function openSessionMenu(e: React.MouseEvent<HTMLElement>, s: SessionSummary) {
+    const at = e.currentTarget.getBoundingClientRect();
+    setCalendarMenu({
+      x: at.left,
+      y: at.bottom,
+      items: [
+        { label: "Разбор игры", onClick: () => setOutcomeSessionId(s.id) },
+        { label: "Изменить дату", onClick: () => setMovingSession({ id: s.id, date: s.date, start_time: s.start_time ?? "" }) },
+        { label: "Не состоялась — в архив", danger: true, dividerBefore: true, onClick: () => void archiveSession(s.id) },
+      ],
+    });
+  }
+
+  async function saveMovedSession() {
+    if (!movingSession) return;
+    const { id, date, start_time } = movingSession;
+    const ok = await run(labelled("Дата сессии", () => write.put(`/sessions/${id}`, { date, start_time: start_time || null })), {
+      affects: sessionMoneyAffects(id, campaignId),
+    });
+    if (ok !== undefined) setMovingSession(null);
   }
 
   const tabCounts: Partial<Record<(typeof tabs)[number], number>> = {
@@ -793,7 +842,7 @@ export function CampaignDetailPage() {
           <CampaignNow
             campaign={campaign}
             sessions={sessions}
-            onSchedule={() => setCreatingDate(toLocalDateKey(new Date()))}
+            onSchedule={scheduleNext}
             onEdit={() => setEditMainTick((n) => n + 1)}
           />
         )
@@ -1034,7 +1083,7 @@ export function CampaignDetailPage() {
                         title="Сессий пока нет"
                         hint="Запланируйте первую игру — здесь появится лента сыгранных сессий."
                         action={
-                          <button className="primary" onClick={() => setCreatingDate(toLocalDateKey(new Date()))}>
+                          <button className="primary" onClick={scheduleNext}>
                             + Запланировать сессию
                           </button>
                         }
@@ -1047,50 +1096,17 @@ export function CampaignDetailPage() {
                         </button>
                       </p>
                     ) : (
-                      // Строками по группам (спека campaign-paper, Q23): впереди —
-                      // от ближайшей, сыгранные — от последней. Отменённых нет.
-                      ([
-                        ["Запланированы", filtered.filter((x) => x.status === "planned").sort((x, y) => x.date.localeCompare(y.date))],
-                        ["Сыграны", filtered.filter((x) => x.status === "held").sort((x, y) => y.date.localeCompare(x.date))],
-                      ] as const).map(([title, list]) =>
-                        list.length === 0 ? null : (
-                          <section key={title} className="paper-list-group">
-                            <h3 className="paper-group__head">
-                              {title} <span className="paper-group__count">· {list.length}</span>
-                            </h3>
-                            <ul className="paper-rows session-rows">
-                              {list.map((x) => {
-                                const inworld = calendar
-                                  ? formatInworldDate(x.inworld_year, x.inworld_month, x.inworld_day, calendar.months, calendar.era)
-                                  : "";
-                                const first = x.notes_text?.split("\n").find((l) => l.trim())?.trim() ?? "";
-                                return (
-                                  <li key={x.id}>
-                                    <span className="paper-rows__main">
-                                      <Link to={`/sessions/${x.id}`}>
-                                        {formatDateKeyRu(x.date)} — {sessionLabel(x)}
-                                      </Link>
-                                      {first ? (
-                                        <span className="session-rows__line">
-                                          <MentionText text={first} />
-                                        </span>
-                                      ) : (
-                                        x.status === "held" && (
-                                          <span className="session-rows__line muted">
-                                            лента пуста · <Link to={`/sessions/${x.id}`}>дописать</Link>
-                                          </span>
-                                        )
-                                      )}
-                                    </span>
-                                    {inworld && <span className="paper-rows__sub">{inworld}</span>}
-                                    <RowDeleteButton onClick={() => archiveSession(x.id)} label="Архивировать сессию" />
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          </section>
-                        )
-                      )
+                      <CampaignSessionList
+                        sessions={filtered}
+                        today={toLocalDateKey()}
+                        isGm={campaign.role !== "player"}
+                        inworldLabel={(x) =>
+                          (calendar && formatInworldDate(x.inworld_year, x.inworld_month, x.inworld_day, calendar.months, calendar.era)) || ""
+                        }
+                        onSchedule={scheduleNext}
+                        onMenu={openSessionMenu}
+                        onOutcome={(x) => setOutcomeSessionId(x.id)}
+                      />
                     )}
                   </div>
                 </details>
@@ -1123,7 +1139,7 @@ export function CampaignDetailPage() {
                   <div className="res-group__body" style={{ padding: 12 }}>
                     <MonthCalendar
                       events={events}
-                      onDayClick={(date) => setCreatingDate(date)}
+                      onDayClick={(date) => openCreate(date)}
                       onEventClick={(e) => navigate(`/sessions/${e.id}`)}
                       onEventContextMenu={(event, x, y) => setMenu({ x, y, event })}
                     />
@@ -1495,10 +1511,50 @@ export function CampaignDetailPage() {
 
       {confirmDialog}
       {alertDialog}
+      {outcomeSessionId != null && <SessionOutcomeModal sessionId={outcomeSessionId} onClose={() => setOutcomeSessionId(null)} />}
+      {movingSession && (
+        <Modal onClose={() => setMovingSession(null)}>
+          <h2>Изменить дату</h2>
+          <div className="stack">
+            <div className="row" style={{ gap: 8 }}>
+              <label style={{ flex: 1 }}>
+                Дата
+                <input
+                  type="date"
+                  value={movingSession.date}
+                  onChange={(e) => e.target.value && setMovingSession({ ...movingSession, date: e.target.value })}
+                />
+              </label>
+              <label style={{ flex: 1 }}>
+                Начало
+                <input
+                  type="time"
+                  value={movingSession.start_time}
+                  onChange={(e) => setMovingSession({ ...movingSession, start_time: e.target.value })}
+                />
+              </label>
+            </div>
+            <div className="row" style={{ justifyContent: "flex-end" }}>
+              <button onClick={() => setMovingSession(null)}>Отмена</button>
+              <button className="primary" onClick={() => void saveMovedSession()}>Сохранить</button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {creatingDate && (
         <Modal onClose={() => setCreatingDate(null)}>
           <h2>Сессия — {formatDateKeyRu(creatingDate)}</h2>
           <div className="stack">
+            <div className="row" style={{ gap: 8 }}>
+              <label style={{ flex: 1 }}>
+                Дата
+                <input type="date" value={creatingDate} onChange={(e) => e.target.value && setCreatingDate(e.target.value)} />
+              </label>
+              <label style={{ flex: 1 }}>
+                Начало
+                <input type="time" value={newStartTime} onChange={(e) => setNewStartTime(e.target.value)} />
+              </label>
+            </div>
             <label>
               Статус
               <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as SessionStatus)}>
