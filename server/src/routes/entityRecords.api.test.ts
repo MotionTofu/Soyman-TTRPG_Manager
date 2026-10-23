@@ -225,7 +225,7 @@ describe("«Мир кампании»", () => {
     await create({ owner_type: "location", owner_id: lock, text: "Мимо", status: "discarded" });
 
     const body = await world();
-    expect(body.entities.find((e: { entity_id: number; entity_type: string }) => e.entity_type === "location" && e.entity_id === lock)).toEqual({
+    expect(body.entities.find((e: { entity_id: number; entity_type: string }) => e.entity_type === "location" && e.entity_id === lock)).toMatchObject({
       entity_type: "location",
       entity_id: lock,
       name: "Шлюз",
@@ -237,9 +237,9 @@ describe("«Мир кампании»", () => {
       rumors: 1,
       last_session: expect.objectContaining({ id: sessionId, date: "2026-10-01" }),
     });
-    // Существа, затем сообщества, затем места.
-    const types = body.entities.map((e: { entity_type: string }) => e.entity_type);
-    expect(types).toEqual([...types].sort((a: string, b: string) => ["being", "community", "location"].indexOf(a) - ["being", "community", "location"].indexOf(b)));
+    // Сортировка общая для всех видов: последнее изменение сверху.
+    const changes = body.entities.map((e: { changed_at: string }) => e.changed_at);
+    expect(changes).toEqual([...changes].sort().reverse());
   });
 
   it("задействовать руками можно только сущность сеттинга кампании", async () => {

@@ -2,6 +2,7 @@
 // Графы — словари по видам, а не колонки: каталог объектов сеттинга ещё не
 // устоялся, и новая графа не должна требовать миграции. Сервер принимает
 // только ключи словаря вида. Подписи граф — у клиента, как у FORCE_KEYS.
+import { ARTIFACT_RECORD_ASPECTS, CAMPAIGN_ENTITY_STATES } from "@soyman/shared";
 import { db } from "../db/db";
 import { FORCE_KEYS } from "./beingForce";
 import { CERTAINTY } from "./settingWorld";
@@ -16,9 +17,10 @@ export const SIDE_ASPECTS = ["alternative", "red_line", "status_claim", "recogni
 
 /** Графы по виду владельца; тот же набор видов, что в CHECK таблицы (db.ts). */
 export const RECORD_ASPECTS: Readonly<Record<string, readonly string[]>> = {
-  being: [...FORCE_KEYS, ...SIDE_ASPECTS, "note"],
-  community: [...FORCE_KEYS, ...SIDE_ASPECTS, "note"],
-  location: ["function", "affordances", "signs", "access", "cost_risk", "past_trace", "after", "unknown", "note"],
+  being: [...FORCE_KEYS, ...SIDE_ASPECTS, "note", "state"],
+  community: [...FORCE_KEYS, ...SIDE_ASPECTS, "note", "state"],
+  location: ["function", "affordances", "signs", "access", "cost_risk", "past_trace", "after", "unknown", "note", "state"],
+  artifact: ARTIFACT_RECORD_ASPECTS.map((a) => a.key),
   character: ["player_interest", "hooks", "if_goal_reached", "cherishes", "coordination", "note"],
   // group_ties … goal_conflict — общие основания группы (лист 4).
   // unsorted — черновик без адреса: адрес выбирают при подтверждении.
@@ -26,7 +28,7 @@ export const RECORD_ASPECTS: Readonly<Record<string, readonly string[]>> = {
 };
 
 /** Виды сеттинга: запись о них задействует сущность в кампании. */
-export const SETTING_OWNER_TYPES: ReadonlySet<string> = new Set(["being", "community", "location"]);
+export const SETTING_OWNER_TYPES: ReadonlySet<string> = new Set(Object.keys(CAMPAIGN_ENTITY_STATES));
 
 /** Статус — уверенность Мастера: установлено · предположение · черновик · отброшено. */
 export const RECORD_STATUSES = ["established", "assumption", "draft", "discarded"] as const;

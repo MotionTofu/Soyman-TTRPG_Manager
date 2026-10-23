@@ -1,3 +1,5 @@
+import { ARTIFACT_RECORD_ASPECTS, CAMPAIGN_STATE_ASPECT, isCampaignEntityKind } from "@shared/campaignWorld";
+export { CAMPAIGN_ENTITY_STATES, campaignEntityState, campaignEntityStateLabel, campaignEntityStateTone } from "@shared/campaignWorld";
 import { FORCE_FIELDS } from "./beingForce";
 import { campaignPaths } from "./data/campaigns";
 import { plural } from "./sceneKinds";
@@ -8,7 +10,7 @@ import type { SessionSummary } from "./types";
 // задача 04). Ключи граф и значений — те же, что у сервера
 // (server/src/services/entityRecords.ts); подписи — здесь, как у FORCE_FIELDS.
 
-export type RecordOwnerType = "being" | "community" | "location" | "character" | "campaign";
+export type RecordOwnerType = "being" | "community" | "location" | "artifact" | "character" | "campaign";
 export type RecordStatus = "established" | "assumption" | "draft" | "discarded";
 export type RecordCertainty = "known" | "rumor" | "disputed" | "reported";
 /** Функция сведения (лист 9): пусто — запись не «сведение». */
@@ -50,7 +52,7 @@ export const SIDE_ASPECTS = [
 ] as const;
 /** «Что изменилось» на профиле стороны: свободная запись и графы стороны. */
 export const SIDE_PROFILE_ASPECTS: readonly string[] = ["note", ...SIDE_ASPECTS.map((a) => a.key)];
-const FORCE = [...FORCE_FIELDS.map(({ key, label }) => ({ key, label })), ...SIDE_ASPECTS, NOTE];
+const FORCE = [...FORCE_FIELDS.map(({ key, label }) => ({ key, label })), ...SIDE_ASPECTS, NOTE, CAMPAIGN_STATE_ASPECT];
 
 /** Графы по виду владельца — в порядке словаря сервера. */
 export const RECORD_ASPECTS: Record<RecordOwnerType, readonly { key: string; label: string }[]> = {
@@ -66,7 +68,9 @@ export const RECORD_ASPECTS: Record<RecordOwnerType, readonly { key: string; lab
     { key: "after", label: "После вмешательства" },
     { key: "unknown", label: "Честно неизвестно" },
     NOTE,
+    CAMPAIGN_STATE_ASPECT,
   ],
+  artifact: ARTIFACT_RECORD_ASPECTS,
   character: [
     { key: "player_interest", label: "Чем увлечён" },
     { key: "hooks", label: "Крючки" },
@@ -143,7 +147,7 @@ export function recordChains(records: readonly EntityRecord[]): RecordChain[] {
  */
 export function recordAffects(campaignId: number, ownerType: RecordOwnerType, ownerId: number): Affect[] {
   const affects: Affect[] = [{ path: campaignPaths.records(campaignId) }, { path: campaignPaths.world(campaignId) }];
-  if (ownerType === "being" || ownerType === "community" || ownerType === "location") affects.push({ kind: ownerType, id: ownerId });
+  if (isCampaignEntityKind(ownerType)) affects.push({ kind: ownerType, id: ownerId });
   return affects;
 }
 
@@ -182,6 +186,7 @@ const OWNER_PATHS: Partial<Record<RecordOwnerType, string>> = {
   community: "/communities",
   location: "/locations",
   character: "/characters",
+  artifact: "/artifacts",
 };
 
 /** Профиль владельца; сущность сеттинга — сразу в контексте кампании. */

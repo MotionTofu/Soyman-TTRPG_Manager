@@ -257,7 +257,7 @@ const RAW_KINDS: EntityKindBase[] = [
     // Артефакт владеет важными датами (routes/artifacts.ts:440) и картинками
     // галереи (routes/gallery.ts:44) — ни того, ни другого не было ни в одной
     // карте уборки.
-    owns: ["gallery_images", "important_dates"], detailPrefix: "/artifacts",
+    owns: ["gallery_images", "important_dates", "entity_records"], detailPrefix: "/artifacts",
   }),
   K({
     kind: "resource", table: "resources", nameCol: "name", belongsTo: "app",

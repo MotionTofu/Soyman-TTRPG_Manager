@@ -7501,6 +7501,42 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
 
   migrateBookLibrary(database);
   compactIfBloated(database);
+
+  // Мир кампании: артефакт становится владельцем записей. CHECK в SQLite
+  // меняется только пересборкой. SQL старой таблицы сохраняет все колонки,
+  // ограничения и FK, в том числе добавленные предыдущими шагами.
+  const recordsSql = (database.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'entity_records'")
+    .get() as { sql: string }).sql;
+  if (!recordsSql.includes("'artifact'")) {
+    const objects = database.prepare(
+      "SELECT sql FROM sqlite_master WHERE tbl_name = 'entity_records' AND type IN ('index','trigger') AND sql IS NOT NULL"
+    ).all() as { sql: string }[];
+    const columns = (database.prepare("PRAGMA table_info(entity_records)").all() as { name: string }[])
+      .map((c) => `"${c.name.replace(/"/g, '""')}"`).join(", ");
+    const sequence = (database.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'entity_records'").get() as { seq: number } | undefined)?.seq ?? 0;
+    const foreignKeys = database.pragma("foreign_keys", { simple: true });
+    // Вне транзакции: иначе PRAGMA молча не отключит каскады self-FK.
+    database.pragma("foreign_keys = OFF");
+    try {
+      database.transaction(() => {
+        const expandedSql = recordsSql
+          .replace(/^CREATE TABLE\s+(?:"entity_records"|entity_records)\s*\(/i, "CREATE TABLE entity_records_with_artifact (")
+          .replace(/(owner_type\s+IN\s*\()/i, "$1'artifact',");
+        database.exec(expandedSql);
+        database.exec(`INSERT INTO entity_records_with_artifact (${columns}) SELECT ${columns} FROM entity_records`);
+        database.exec("DROP TABLE entity_records");
+        database.exec("ALTER TABLE entity_records_with_artifact RENAME TO entity_records");
+        for (const { sql } of objects) database.exec(sql);
+        // Не переиспользуем id уже удалённых записей после пересборки.
+        database.prepare("UPDATE sqlite_sequence SET seq = MAX(seq, ?) WHERE name = 'entity_records'").run(sequence);
+        if (database.prepare("PRAGMA foreign_key_check(entity_records)").all().length) {
+          throw new Error("Нарушены внешние ключи записей после добавления артефакта");
+        }
+      })();
+    } finally {
+      database.pragma(`foreign_keys = ${foreignKeys ? "ON" : "OFF"}`);
+    }
+  }
 }
 
 /**

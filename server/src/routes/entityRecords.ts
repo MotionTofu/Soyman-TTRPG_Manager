@@ -7,6 +7,8 @@
 //
 // Только Мастер: роутер стоит за общим гейтом /api (index.ts).
 import { Router, type Request, type Response } from "express";
+import { campaignEntityState, campaignEntityStateLabel, isCampaignEntityKind, isCampaignEntityState } from "@soyman/shared";
+import { campaignParticipationData, campaignRecordCounts, campaignStateSession, campaignWorldDetails } from "../services/campaignWorld";
 import { db } from "../db/db";
 import { requireKind } from "../db/entityKinds";
 import { entityNames, refKey } from "../services/entityNames";
@@ -96,7 +98,7 @@ function recordById(id: number) {
  * ей самой, `campaign` — это она и есть.
  */
 function checkOwner(campaign: Campaign, ownerType: unknown, ownerIdRaw: unknown): { ownerType: string; ownerId: number } {
-  if (typeof ownerType !== "string" || !RECORD_ASPECTS[ownerType]) throw new BadRequest("Запись бывает о существе, сообществе, месте, персонаже или кампании");
+  if (typeof ownerType !== "string" || !RECORD_ASPECTS[ownerType]) throw new BadRequest("Запись бывает о существе, сообществе, месте, артефакте, персонаже или кампании");
   const ownerId = positiveId(ownerIdRaw);
   if (!ownerId) throw new BadRequest("Не указано, о ком запись");
   if (ownerType === "campaign") {
@@ -226,7 +228,7 @@ const CATEGORY_COLUMN: Record<string, string | undefined> = { being: "category",
 
 /** Имя и категория задействованных сущностей; архивные и исчезнувшие — мимо. */
 function worldEntities(refs: { type: string; id: number }[]) {
-  const out = new Map<string, { name: string; category: string | null }>();
+  const out = new Map<string, { name: string; category: string | null; image: string | null; description: string }>();
   for (const type of SETTING_OWNER_TYPES) {
     const ids = refs.filter((r) => r.type === type).map((r) => r.id);
     if (!ids.length) continue;
@@ -234,11 +236,13 @@ function worldEntities(refs: { type: string; id: number }[]) {
     const cat = CATEGORY_COLUMN[type];
     const rows = db
       .prepare(
-        `SELECT id, ${nameCol} AS name, ${cat ? cat : "NULL"} AS category FROM ${table}
+        `SELECT id, ${nameCol} AS name, ${cat ? cat : "NULL"} AS category,
+           COALESCE(NULLIF(avatar_image_path, ''), ${type === "artifact" ? "NULL" : "NULLIF(thumbnail_image_path, '')"}) AS image,
+           COALESCE(description, '') AS description FROM ${table}
          WHERE archived_at IS NULL AND id IN (${ids.map(() => "?").join(",")})`
       )
-      .all(...ids) as { id: number; name: string; category: string | null }[];
-    for (const r of rows) out.set(refKey(type, r.id), { name: r.name, category: r.category || null });
+      .all(...ids) as { id: number; name: string; category: string | null; image: string | null; description: string }[];
+    for (const r of rows) out.set(refKey(type, r.id), { name: r.name, category: r.category || null, image: r.image, description: r.description });
   }
   return out;
 }
@@ -249,16 +253,18 @@ entityRecordsRouter.get("/campaigns/:id/world", handle((req, res) => {
   if (!campaign) return res.status(404).json({ error: "Кампания не найдена" });
   const list = engagements("p.context_id = ?", campaign.id);
   const entities = worldEntities(list.map((e) => ({ type: e.entity_type, id: e.entity_id })));
-  const typeOrder = [...SETTING_OWNER_TYPES];
+  const details = campaignWorldDetails(campaign.id);
   const items = list
     .flatMap((e) => {
       const entity = entities.get(refKey(e.entity_type, e.entity_id));
       if (!entity) return [];
       const { campaign_id: _c, ...rest } = e;
-      return [{ ...rest, ...entity }];
+      const { description, ...visible } = entity;
+      const detail = details.get(refKey(e.entity_type, e.entity_id))!;
+      return [{ ...rest, ...visible, ...detail, summary: detail.summary ?? { text: description, from_setting: true } }];
     })
-    .sort((a, b) => typeOrder.indexOf(a.entity_type) - typeOrder.indexOf(b.entity_type) || a.name.localeCompare(b.name, "ru"));
-  res.json({ setting_id: campaign.setting_id, entities: items });
+    .sort((a, b) => b.changed_at.localeCompare(a.changed_at) || a.name.localeCompare(b.name, "ru"));
+  res.json({ setting_id: campaign.setting_id, entities: items, ...campaignRecordCounts(campaign.id) });
 }));
 
 // Задействовать руками («+ Задействовать из сеттинга»).
@@ -267,7 +273,7 @@ entityRecordsRouter.post("/campaigns/:id/world", handle((req, res) => {
   if (!campaign) return res.status(404).json({ error: "Кампания не найдена" });
   const body = (req.body ?? {}) as Record<string, unknown>;
   if (typeof body.entity_type !== "string" || !SETTING_OWNER_TYPES.has(body.entity_type))
-    throw new BadRequest("Задействовать можно существо, сообщество или место сеттинга");
+    throw new BadRequest("Задействовать можно существо, сообщество, место или артефакт сеттинга");
   const { ownerType, ownerId } = checkOwner(campaign, body.entity_type, body.entity_id);
   db.prepare(
     `INSERT INTO participations (context_type, context_id, entity_type, entity_id, manual)
@@ -275,6 +281,58 @@ entityRecordsRouter.post("/campaigns/:id/world", handle((req, res) => {
      ON CONFLICT (context_type, context_id, entity_type, entity_id) DO NOTHING`
   ).run(campaign.id, ownerType, ownerId);
   res.status(201).json({ ok: true });
+}));
+
+// Состояние — поле ссылки плюс служебная запись; обе операции атомарны.
+entityRecordsRouter.put("/campaigns/:id/world/:type/:entityId/state", handle((req, res) => {
+  const campaign = campaignById(req.params.id);
+  if (!campaign) return res.status(404).json({ error: "Кампания не найдена" });
+  const kind = req.params.type;
+  if (!isCampaignEntityKind(kind)) throw new BadRequest("Неверный вид сущности");
+  const { ownerId } = checkOwner(campaign, kind, req.params.entityId);
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const state = body.state;
+  if (!isCampaignEntityState(kind, state)) throw new BadRequest("Неизвестное состояние для этого вида");
+  const requestedSession = readFields({ session_id: body.session_id }, campaign.id).session_id;
+  const undoId = body.undo_record_id === undefined ? null : positiveId(body.undo_record_id);
+  if (body.undo_record_id !== undefined && !undoId) throw new BadRequest("Неверная запись отмены");
+  const result = db.transaction(() => {
+    const link = db.prepare(
+      "SELECT data FROM participations WHERE context_type = 'campaign' AND context_id = ? AND entity_type = ? AND entity_id = ?"
+    ).get(campaign.id, kind, ownerId) as { data: string } | undefined;
+    const data = campaignParticipationData(link?.data);
+    const previous = campaignEntityState(kind, data.state);
+    const text = `${campaignEntityStateLabel(kind, previous)} → ${campaignEntityStateLabel(kind, state)}`;
+    let recordId: number | null = null;
+    if (undoId) {
+      const record = db.prepare(
+        `SELECT r.* FROM entity_records r
+         WHERE r.id = ? AND r.campaign_id = ? AND r.owner_type = ? AND r.owner_id = ? AND r.aspect = 'state'
+           AND r.status = 'established'
+           AND NOT EXISTS (SELECT 1 FROM entity_records n WHERE n.replaces_id = r.id)
+           AND NOT EXISTS (SELECT 1 FROM entity_records n WHERE n.campaign_id = r.campaign_id
+             AND n.owner_type = r.owner_type AND n.owner_id = r.owner_id AND n.aspect = 'state' AND n.id > r.id)`
+      ).get(undoId, campaign.id, kind, ownerId) as { text: string } | undefined;
+      const expected = `${campaignEntityStateLabel(kind, state)} → ${campaignEntityStateLabel(kind, previous)}`;
+      if (!link || !record || record.text !== expected) return null;
+      db.prepare("DELETE FROM entity_records WHERE id = ?").run(undoId);
+      recordId = undoId;
+    } else if (state !== previous) {
+      recordId = insertRecord(campaign.id, kind, ownerId, {
+        aspect: "state", text, status: "established", session_id: requestedSession ?? campaignStateSession(campaign.id),
+      }, null);
+    }
+    // Не прогоняем через словари хода событий/персонажа: это другой вид ссылки.
+    db.prepare(
+      `INSERT INTO participations (context_type, context_id, entity_type, entity_id, manual, data)
+       VALUES ('campaign', ?, ?, ?, 0, ?)
+       ON CONFLICT (context_type, context_id, entity_type, entity_id)
+       DO UPDATE SET data = excluded.data, updated_at = datetime('now')`
+    ).run(campaign.id, kind, ownerId, JSON.stringify({ ...data, state }));
+    return { state, previous, record_id: recordId };
+  })();
+  if (!result) return res.status(409).json({ error: "Эту смену состояния уже нельзя отменить" });
+  res.json(result);
 }));
 
 // Убрать из «Мира кампании». Пока о сущности есть записи, ссылку держат
@@ -306,7 +364,7 @@ entityRecordsRouter.get("/campaigns/:id/records", handle((req, res) => {
   if (!campaign) return res.status(404).json({ error: "Кампания не найдена" });
   const where = ["r.campaign_id = ?"];
   const params: unknown[] = [campaign.id];
-  const { owner_type, owner_id, session_id, status, function: fn } = req.query;
+  const { owner_type, owner_id, session_id, status, certainty, function: fn } = req.query;
   if (owner_type !== undefined) {
     where.push("r.owner_type = ?");
     params.push(oneOf(owner_type, Object.keys(RECORD_ASPECTS), "вид владельца"));
@@ -322,6 +380,10 @@ entityRecordsRouter.get("/campaigns/:id/records", handle((req, res) => {
     if (!id) throw new BadRequest("Неверная встреча");
     where.push("r.session_id = ?");
     params.push(id);
+  }
+  if (certainty !== undefined) {
+    where.push("r.certainty = ?");
+    params.push(oneOf(certainty, CERTAINTY, "достоверность"));
   }
   if (fn !== undefined) {
     where.push("r.function = ?");

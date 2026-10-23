@@ -197,3 +197,57 @@ describe("точечные шаги для старых баз", () => {
     db.close();
   }, 60_000);
 });
+
+
+describe("артефакт в записях старой базы", () => {
+  it("сохраняет строки, id, индексы, последовательность и FK; повторное открытие ничего не меняет", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "soyman-old-artifact-records-"));
+    const initial = openDatabase(dir);
+    const sql = (initial.prepare("SELECT sql FROM sqlite_master WHERE name = 'entity_records'").get() as { sql: string }).sql;
+    initial.exec("DROP TABLE entity_records");
+    // Точная схема слоя кампании до artifact, со всеми накопленными полями.
+    initial.exec(sql.replace("'artifact',", ""));
+    initial.exec("CREATE INDEX idx_entity_records_owner ON entity_records(campaign_id, owner_type, owner_id)");
+    initial.exec("CREATE INDEX idx_entity_records_session ON entity_records(session_id)");
+    initial.exec("CREATE INDEX idx_entity_records_replaces ON entity_records(replaces_id)");
+    initial.exec("CREATE INDEX idx_records_test_status ON entity_records(status)");
+    const campaign = Number(initial.prepare("INSERT INTO campaigns (name) VALUES ('Старая кампания')").run().lastInsertRowid);
+    const session = Number(initial.prepare("INSERT INTO sessions (campaign_id, date) VALUES (?, '2026-10-01')").run(campaign).lastInsertRowid);
+    initial.prepare(`INSERT INTO entity_records
+      (id, campaign_id, owner_type, owner_id, aspect, text, status, certainty, known_to, known_note, basis, session_id, function, created_at, updated_at)
+      VALUES (15, ?, 'campaign', ?, 'note', 'Было', 'assumption', 'rumor', 'some', 'Лиара', 'Письмо', ?, 'anchor', '2026-10-01', '2026-10-02')`)
+      .run(campaign, campaign, session);
+    initial.prepare(`INSERT INTO entity_records (id, campaign_id, owner_type, owner_id, text, replaces_id)
+      VALUES (25, ?, 'campaign', ?, 'Стало', 15)`).run(campaign, campaign);
+    initial.prepare("INSERT INTO entity_records (id, owner_type, owner_id, text) VALUES (90, 'campaign', ?, 'Удалено')").run(campaign);
+    initial.prepare("DELETE FROM entity_records WHERE id = 90").run();
+    const rows = (d: Database.Database) => d.prepare("SELECT * FROM entity_records ORDER BY id").all();
+    const objects = (d: Database.Database) => d.prepare("SELECT type, name, sql FROM sqlite_master WHERE tbl_name = 'entity_records' ORDER BY type, name").all();
+    const before = rows(initial);
+    const foreignKeys = initial.prepare("PRAGMA foreign_key_list(entity_records)").all();
+    const beforeIndexes = (initial.prepare("PRAGMA index_list(entity_records)").all() as { name: string }[]).map((i) => i.name).sort();
+    initial.close();
+
+    let migrated = openDatabase(dir);
+    expect(rows(migrated)).toEqual(before);
+    expect(migrated.prepare("PRAGMA foreign_key_list(entity_records)").all()).toEqual(foreignKeys);
+    expect(migrated.pragma("foreign_keys", { simple: true })).toBe(1);
+    expect(migrated.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
+    expect((migrated.prepare("PRAGMA index_list(entity_records)").all() as { name: string }[]).map((i) => i.name).sort()).toEqual(beforeIndexes);
+    const afterObjects = objects(migrated);
+    expect(migrated.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'entity_records'").get()).toEqual({ seq: 90 });
+    migrated.close();
+
+    migrated = openDatabase(dir);
+    expect(rows(migrated)).toEqual(before);
+    expect(objects(migrated)).toEqual(afterObjects);
+    const id = Number(migrated.prepare("INSERT INTO entity_records (owner_type, owner_id, text) VALUES ('artifact', 1, 'Камень')").run().lastInsertRowid);
+    expect(id).toBeGreaterThan(90);
+    expect(() => migrated.prepare("INSERT INTO entity_records (owner_type, owner_id, text) VALUES ('invented', 1, 'x')").run()).toThrow();
+    migrated.prepare("DELETE FROM entity_records WHERE id = 15").run();
+    expect(migrated.prepare("SELECT replaces_id FROM entity_records WHERE id = 25").get()).toEqual({ replaces_id: null });
+    migrated.prepare("DELETE FROM campaigns WHERE id = ?").run(campaign);
+    expect(migrated.prepare("SELECT 1 FROM entity_records WHERE id = 25").get()).toBeUndefined();
+    migrated.close();
+  }, 60_000);
+});
