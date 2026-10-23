@@ -26,7 +26,7 @@ export function NextSessionPrep({ next, last, oneshot }: { next: SessionSummary 
     <section className="campaign-prep" aria-label="К ближайшей сессии">
       {next && (
         <>
-          <h3 className="paper-label">{oneshot ? "К прогону" : `К сессии №${next.session_number ?? ""}`}</h3>
+          <h3 className="paper-label"><NavIcon name="flag" />{oneshot ? "К прогону" : `К сессии №${next.session_number ?? ""}`}</h3>
           <Link className="campaign-prep__list" to={`/sessions/${next.id}`}>
             {SESSION_PASSPORT_FIELDS.map((f) => {
               const done = !!values[f.key]?.trim();
@@ -43,7 +43,7 @@ export function NextSessionPrep({ next, last, oneshot }: { next: SessionSummary 
       )}
       {last && (
         <p className="campaign-prep__last">
-          <span className="paper-label">Итог: {sessionLabel(last)}</span>{" "}
+          <span className="paper-label"><NavIcon name="book" />Итог: {sessionLabel(last)}</span>{" "}
           {summary ? <Link to={`/sessions/${last.id}`}>{summary}</Link> : (
             <Link to={`/sessions/${last.id}`} className="muted">«Что изменилось» не заполнено ›</Link>
           )}
@@ -90,7 +90,7 @@ export function CampaignDebtors({ campaignId, currency }: { campaignId: number; 
 
   return (
     <section className="campaign-debtors" aria-label="Должники">
-      <h3 className="paper-label">Должники</h3>
+      <h3 className="paper-label"><NavIcon name="loot" />Должники</h3>
       <ul>
         {debts.map((d) => (
           <li key={d.player_id}>

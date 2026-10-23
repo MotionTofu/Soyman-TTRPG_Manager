@@ -35,6 +35,7 @@ function OwnPassport({ campaign }: { campaign: CampaignDetail }) {
     <section className="campaign-passport">
       <PaperFieldsCard
         label="Паспорт кампании"
+        icon="card"
         fields={CAMPAIGN_PASSPORT_FIELDS}
         values={passport}
         rows

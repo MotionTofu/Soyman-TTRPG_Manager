@@ -42,15 +42,17 @@ export function CampaignNow({
         <ul className="campaign-now__facts">
           {oneshot && <li><span className="badge tag">Ваншот</span></li>}
           <li className="campaign-now__status" data-status={status}>{CAMPAIGN_STATUS_LABELS[status] ?? status}</li>
-          {campaign.system_name && <li>{campaign.system_name}</li>}
+          {campaign.system_name && <li><NavIcon name="die" />{campaign.system_name}</li>}
           {campaign.setting_id != null && (
-            <li><Link to={`/settings/${campaign.setting_id}`}>{campaign.setting_name || "Сеттинг"}</Link></li>
+            <li><NavIcon name="globe" /><Link to={`/settings/${campaign.setting_id}`}>{campaign.setting_name || "Сеттинг"}</Link></li>
           )}
           <li>
+            <NavIcon name="archive" />
             сыграно {held} · впереди {planned}
           </li>
           {next && (
             <li>
+              <NavIcon name="calendar" />
               {oneshot ? "следующий" : "следующая"}: {formatDateKeyRu(next.date)} — {sessionLabel(next)}
             </li>
           )}

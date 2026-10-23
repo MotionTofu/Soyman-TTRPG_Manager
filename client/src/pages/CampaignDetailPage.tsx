@@ -97,7 +97,7 @@ import { CampaignVesselsTab } from "../components/CampaignVesselsTab";
 import { CampaignPassport } from "../components/campaign/CampaignPassport";
 import { CampaignDossierFiles } from "../components/campaign/CampaignDossierFiles";
 import { CampaignNow } from "../components/campaign/CampaignNow";
-import type { NavIconName } from "../components/NavIcons";
+import { NavIcon, type NavIconName } from "../components/NavIcons";
 import { CampaignDebtors, NextSessionPrep } from "../components/campaign/CampaignPrep";
 import { OldNotesFold } from "../components/campaign/OldNotesFold";
 import { ExtraPayments } from "../components/campaign/ExtraPayments";
@@ -2311,7 +2311,7 @@ function OverviewTab({
         {!hideFinance && <CampaignDebtors campaignId={campaignId} currency={campaign.currency} />}
         {allGroups.length > 0 && (
           <section className="campaign-overview__groups-block" aria-label="Группы">
-            <h3 className="paper-label">Группы</h3>
+            <h3 className="paper-label"><NavIcon name="players" />Группы</h3>
             <div className="campaign-overview__groups">
               {allGroups.map((g) => {
                 const isIn = campaignGroupIds.includes(g.id);
