@@ -6940,6 +6940,36 @@ details.card[open] summary {
   padding: var(--sp-2) var(--sp-4);
   font-size: var(--fs-meta);
 }
+.etw-nav-group {
+  display: block;
+  margin: var(--sp-5) var(--sp-4) var(--sp-1);
+  font-size: var(--fs-meta);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.etw-nav-item.is-dim:not(.is-selected) {
+  color: var(--muted);
+}
+.etw-nav-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent, currentColor);
+  flex-shrink: 0;
+}
+.etw-nav-item-count {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.etw-nav-item.is-selected .etw-nav-item-count {
+  color: inherit;
+}
+.etw-nav-item.is-selected .etw-nav-dot {
+  background: var(--paper);
+}
 .etw-nav-footer {
   margin-top: var(--sp-4);
   padding-top: var(--sp-4);

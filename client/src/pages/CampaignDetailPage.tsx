@@ -275,6 +275,17 @@ export function CampaignDetailPage() {
     selectTab("Сюжет");
   }
   const [chapStats, setChapStats] = useState<ChaptersNavStats | null>(null);
+  // Пока Мастер сам ничего не выбрал, «Сюжет» открывается на текущем
+  // приключении, а без него — на всех (Q7). Один раз: дальше выбор его.
+  const storyPicked = useRef(false);
+  useEffect(() => {
+    // Пустой список — дерево ещё не пришло (до загрузки оно EMPTY).
+    if (!chapStats?.adventures.length || storyPicked.current) return;
+    storyPicked.current = true;
+    if (storySel.section !== "chapters" || storySel.item != null) return;
+    const current = chapStats.adventures.find((a) => a.current);
+    setStorySel({ section: "chapters", item: current ? String(current.id) : "all" });
+  }, [chapStats, storySel]);
   const [mileStats, setMileStats] = useState<MilestonesNavStats | null>(null);
   const [secStats, setSecStats] = useState<SecretsNavStats | null>(null);
   const { deleteWithUndo } = useUndoDelete();
@@ -831,12 +842,19 @@ export function CampaignDetailPage() {
           sections={[
             {
               id: "chapters",
-              label: "Главы и сцены",
+              label: "Приключения",
               count: (chapStats?.adventures ?? []).reduce((n, a) => n + a.scenes, 0),
-              items: (chapStats?.adventures ?? []).map((a) => ({ id: String(a.id), label: `${a.name} · ${a.scenes}` })),
+              // Корзина «вне приключений» — последней, бледной и только непустая (Q6).
+              items: [
+                { id: "all", label: "Все приключения" },
+                ...(chapStats?.adventures ?? [])
+                  .filter((a) => !a.is_default || a.scenes > 0)
+                  .map((a) => ({ id: String(a.id), label: a.name, count: a.scenes, current: a.current, dim: a.is_default })),
+              ],
             },
             {
               id: "milestones",
+              group: "Материалы",
               label: "Вехи",
               count: (mileStats?.own.total ?? 0) + (mileStats?.groups ?? []).reduce((n, g) => n + g.total, 0),
               items: [
@@ -846,6 +864,7 @@ export function CampaignDetailPage() {
             },
             {
               id: "secrets",
+              group: "Материалы",
               label: "Тайны и зацепки",
               count: (secStats?.own.total ?? 0) + (secStats?.groups ?? []).reduce((n, g) => n + g.total, 0),
               items: [
@@ -853,17 +872,20 @@ export function CampaignDetailPage() {
                 ...(secStats?.groups ?? []).map((g) => ({ id: String(g.id), label: `${g.name} · ${g.done}/${g.total}` })),
               ],
             },
-            { id: "reveals", label: "Выводы" },
+            { id: "reveals", group: "Материалы", label: "Выводы" },
           ]}
           selection={storySel}
-          onSelect={setStorySel}
+          onSelect={(sel) => {
+            storyPicked.current = true;
+            setStorySel(sel);
+          }}
           workspaceKey={campaignId}
         >
           {storySel.section === "chapters" && (
             <CampaignChaptersScenes
               campaignId={campaignId}
               settingId={campaign.setting_id}
-              adventureId={storySel.item != null ? Number(storySel.item) : null}
+              adventureId={storySel.item != null && storySel.item !== "all" ? Number(storySel.item) : null}
               chapterId={null}
               onStats={(st) => setChapStats((prev) => (JSON.stringify(prev) === JSON.stringify(st) ? prev : st))}
             />

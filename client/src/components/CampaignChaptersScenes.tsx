@@ -24,6 +24,10 @@ export interface ChaptersNavStats {
   adventures: {
     id: number;
     name: string;
+    /** Служебная корзина «Сцены вне приключений». */
+    is_default: boolean;
+    /** Текущее приключение (Q7): см. currentAdventureId. */
+    current: boolean;
     chapters: { id: number; name: string; scenes: number }[];
     scenes: number;
     done: number;
@@ -56,6 +60,7 @@ export function CampaignChaptersScenes({
   // Счётчики для левой навигации Master–Detail.
   useEffect(() => {
     if (!onStats) return;
+    const current = currentAdventureId(tree);
     onStats({
       adventures: tree.map((adv) => {
         const all = [...adv.scenes, ...adv.chapters.flatMap((c) => c.scenes)];
@@ -63,6 +68,8 @@ export function CampaignChaptersScenes({
         return {
           id: adv.id,
           name: adv.name,
+          is_default: !!adv.is_default,
+          current: adv.id === current,
           chapters: adv.chapters.map((c) => ({ id: c.id, name: c.name, scenes: c.scenes.length })),
           scenes: all.length,
           done,
@@ -198,6 +205,27 @@ function countByStatus(scenes: StoryScene[]) {
     else pending++;
   }
   return { done, skipped, pending };
+}
+
+/**
+ * Текущее приключение кампании (гриллинг «Сюжета» 2026-10-23, Q7): где лежит
+ * сцена ближайшей ещё не сыгранной сессии, иначе — сцена последней сыгранной.
+ * Прошедшие даты плана не в счёт: несыгранное само переезжает в новую сессию,
+ * а в старой остаётся след.
+ */
+function currentAdventureId(tree: CampaignAdventureTree[]): number | null {
+  const today = new Date().toLocaleDateString("sv");
+  let next: { date: string; adv: number } | null = null;
+  let last: { date: string; adv: number } | null = null;
+  for (const adv of tree) {
+    for (const s of [...adv.scenes, ...adv.chapters.flatMap((c) => c.scenes)]) {
+      for (const x of s.sessions) {
+        if (!x.played && x.date >= today && (!next || x.date < next.date)) next = { date: x.date, adv: adv.id };
+        if (x.played && (!last || x.date > last.date)) last = { date: x.date, adv: adv.id };
+      }
+    }
+  }
+  return (next ?? last)?.adv ?? null;
 }
 
 const SceneList = memo(function SceneList({

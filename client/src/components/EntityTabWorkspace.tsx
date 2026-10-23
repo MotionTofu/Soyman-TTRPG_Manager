@@ -23,6 +23,12 @@ export interface WorkspaceNavItem {
   id: string;
   label: string;
   hint?: string;
+  /** Число справа, как у категории. */
+  count?: number;
+  /** Точка «мы здесь» — текущее приключение кампании и т. п. */
+  current?: boolean;
+  /** Служебный пункт — бледнее остальных. */
+  dim?: boolean;
 }
 
 export interface WorkspaceSection {
@@ -34,6 +40,8 @@ export interface WorkspaceSection {
   icon?: NavIconName;
   /** Элементы категории. Нет — одиночный пункт (как «Основное»). */
   items?: WorkspaceNavItem[];
+  /** Подзаголовок над категорией; повторяется у соседних — пишется один раз. */
+  group?: string;
 }
 
 export interface WorkspaceSelection {
@@ -93,11 +101,13 @@ export function EntityTabWorkspace({
     <div className="entity-tab-workspace" key={workspaceKey}>
       <nav className="entity-tab-workspace__nav card" aria-label="Навигация внутри таба">
         <div className="etw-nav-list">
-          {sections.map((s) => {
+          {sections.map((s, i) => {
+            const groupTitle = s.group && s.group !== sections[i - 1]?.group ? s.group : null;
             const isActiveSection = selection.section === s.id && (!s.items || (sectionOverview && !selection.item));
             const isOpen = s.items ? expanded.has(s.id) : false;
             return (
               <div key={s.id} className="etw-nav-section">
+                {groupTitle && <span className="etw-nav-group">{groupTitle}</span>}
                 <button
                   type="button"
                   className={`etw-nav-header${isActiveSection ? " is-selected" : ""}`}
@@ -128,12 +138,14 @@ export function EntityTabWorkspace({
                         <button
                           key={item.id}
                           type="button"
-                          className={`etw-nav-item${selected ? " is-selected" : ""}`}
+                          className={`etw-nav-item${selected ? " is-selected" : ""}${item.dim ? " is-dim" : ""}`}
                           onClick={() => pick(s.id, item.id)}
                           title={item.hint ?? item.label}
                           aria-current={selected ? "true" : undefined}
                         >
                           <span className="etw-nav-item-label">{item.label}</span>
+                          {item.current && <span className="etw-nav-dot" aria-label="текущее" />}
+                          {item.count != null && <span className="etw-nav-item-count">{item.count}</span>}
                         </button>
                       );
                     })}
