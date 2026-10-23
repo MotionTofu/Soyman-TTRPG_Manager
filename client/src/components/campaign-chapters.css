@@ -187,3 +187,47 @@
     grid-column: 1 / -1;
   }
 }
+
+/* Шапка приключения «Сюжета» (гриллинг 2026-10-23, Q13): слева название,
+   логлайн и факты словами, справа дыры правила трёх и вход на холст. */
+.campaign-chapters__adventure > header.campaign-adv__head {
+  align-items: flex-end;
+  gap: var(--sp-5);
+}
+.campaign-adv__title {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  flex: 1 1 24rem;
+  min-width: 0;
+}
+.campaign-adv__logline {
+  font-size: var(--fs-body);
+  color: var(--paper-ink, var(--ink));
+}
+.campaign-adv__facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+.campaign-adv__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.campaign-adv__canvas {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.campaign-adv__holes {
+  color: var(--danger-bg);
+  border-color: currentColor;
+}
+.campaign-adv__holes-note {
+  color: var(--danger-bg);
+}

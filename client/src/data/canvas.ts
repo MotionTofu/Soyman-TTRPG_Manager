@@ -45,6 +45,11 @@ export function clueAffects(): Affect[] {
   return [...canvasStoryAffects(), { path: "/story/arcs" }, { path: "/story/campaigns" }];
 }
 
+/** Путь графа улик приключения — общий ключ кэша для холста, карточки и «Сюжета». */
+export function arcCluesPath(arcId: number, campaignId: number | null) {
+  return `/story/arcs/${arcId}/clues${campaignId ? `?campaign_id=${campaignId}` : ""}`;
+}
+
 /** MIME перетаскивания улики из лотка на узел холста. */
 export const CLUE_DRAG_MIME = "application/x-soyman-clue";
 

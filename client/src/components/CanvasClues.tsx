@@ -8,7 +8,7 @@ import { useState, type DragEvent, type FormEvent, type ReactNode } from "react"
 import { Modal } from "./Modal";
 import { useAction, useResource, write } from "../data/hooks";
 import { readResource } from "../data/imperative";
-import { CLUE_DRAG_MIME, clueAffects } from "../data/canvas";
+import { CLUE_DRAG_MIME, arcCluesPath, clueAffects } from "../data/canvas";
 import { MentionPickerModal } from "./mentions/MentionPickerModal";
 import { openPreviewDockCard } from "../previewDockStore";
 import { clueNeed } from "../sceneKinds";
@@ -326,10 +326,6 @@ export function ClueTray({ clues }: { clues: { id: number; text: string; how: st
 
 // ─── Карточка узла: улики ─────────────────────────────────────────────────
 
-/** Путь графа улик приключения — общий ключ кэша для холста и карточки. */
-function arcCluesPath(arcId: number, campaignId: number | null) {
-  return `/story/arcs/${arcId}/clues${campaignId ? `?campaign_id=${campaignId}` : ""}`;
-}
 
 /**
  * «Ведут сюда» и «Улики здесь» (макет Node-Panel, Q17/Q18/Q20).

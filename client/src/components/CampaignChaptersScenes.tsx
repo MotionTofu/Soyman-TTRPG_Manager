@@ -1,5 +1,5 @@
-import { memo, useCallback, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAction, useResource, write } from "../data/hooks";
 import { dataKeys } from "../data/entities";
@@ -7,8 +7,10 @@ import { campaignPaths, sceneStatusAffects } from "../data/campaigns";
 import { labelled } from "../data/notices";
 import { MentionText } from "./mentions/MentionText";
 import { EmptyState } from "./EmptyState";
-import { SCENE_STATUSES, chapterWord, nodeLabel, sceneWord } from "../sceneKinds";
-import type { CampaignAdventureTree, SceneStatus, StoryScene } from "../types";
+import { SCENE_STATUSES, clueNeed, nodeLabel, plural, sceneWord } from "../sceneKinds";
+import type { ArcClueNode, ArcClues, CampaignAdventureTree, CampaignTreeScene, SceneStatus, StoryScene } from "../types";
+import { NavIcon } from "./NavIcons";
+import { arcCluesPath } from "../data/canvas";
 import { rasterAsset } from "../rasterAssets";
 import "./campaign-chapters.css";
 import { CampaignAdventureOverview } from "./CampaignAdventuresCard";
@@ -134,66 +136,165 @@ export function CampaignChaptersScenes({
       {adventureId != null && visibleTree.length === 0 && (
         <p className="muted">Приключение не найдено — возможно, его открепили.</p>
       )}
-      {visibleTree.map((adv) => {
-        const total =
-          adv.scenes.length + adv.chapters.reduce((n, c) => n + c.scenes.length, 0);
-        const { done, skipped, pending } = countByStatus([
-          ...adv.scenes,
-          ...adv.chapters.flatMap((c) => c.scenes),
-        ]);
-        const advChapters = chapterId == null ? adv.chapters : adv.chapters.filter((c) => c.id === chapterId);
-        return (
-          <section key={adv.id} className="card res-group campaign-chapters__adventure">
-            <header className="res-group__band">
-              <span className="res-group__title">{adv.name}</span>
-              <span className="res-group__count">
-                {adv.chapters.length ? `${adv.chapters.length} ${chapterWord(adv.chapters.length)} · ` : ""}{total} {sceneWord(total)}
-                {total > 0 && ` · ✓${done} · ○${pending} · ✕${skipped}`}
-              </span>
-              {adv.is_override && <span className="campaign-scene__note">правка кампании</span>}
-            </header>
-            <div className="res-group__body campaign-chapters__body">
-              {adventureId === adv.id && !adv.is_default && <CampaignAdventureOverview campaignId={campaignId} adventureId={adv.id} />}
-              {/* Сцены, лежащие прямо на приключении: у книжного импорта их
-                  почти не бывает, у самодельного — наоборот, все. */}
-              {adv.scenes.length > 0 && chapterId == null && (
-                <SceneList
-                  scenes={adv.scenes}
-                  campaignId={campaignId}
-                  onStatus={applyStatus}
-                  title={adv.chapters.length > 0 ? "Без главы" : null}
-                />
-              )}
-              {advChapters.map((c) => {
-                const chDone = c.scenes.filter((s) => s.state?.status === "done").length;
-                const chSkipped = c.scenes.filter((s) => s.state?.status === "skipped").length;
-                const chPending = c.scenes.length - chDone - chSkipped;
-                return (
-                  <details key={c.id} className="card res-group campaign-chapters__chapter" open>
-                    <summary className="res-group__band">
-                      <span className="res-group__title">{c.name}</span>
-                      <span className="res-group__count">
-                        {c.scenes.length} {sceneWord(c.scenes.length)}
-                        {c.scenes.length > 0 && ` · ✓${chDone} ○${chPending} ✕${chSkipped}`}
-                      </span>
-                      {c.is_override && <span className="campaign-scene__note">правка кампании</span>}
-                    </summary>
-                    <div className="res-group__body campaign-chapters__scenes">
-                      <SceneList scenes={c.scenes} campaignId={campaignId} onStatus={applyStatus} title={null} />
-                    </div>
-                  </details>
-                );
-                })}
-              {total === 0 && (
-                <div className="card" style={{ borderStyle: "dashed" }}>
-                  <p className="muted" style={{ maxWidth: "62ch" }}>Сцен пока нет — добавьте первую в сеттинге или создайте «только в кампании».</p>
-                </div>
-              )}
-            </div>
-          </section>
-        );
-      })}
+      {visibleTree.map((adv) => (
+        <AdventureSection
+          key={adv.id}
+          adv={adv}
+          campaignId={campaignId}
+          settingId={settingId}
+          selected={adventureId === adv.id}
+          chapterId={chapterId ?? null}
+          onStatus={applyStatus}
+        />
+      ))}
     </div>
+  );
+}
+
+/** Узел недостижим: меньше трёх улик и ничто его не освобождает (холст, Q11/Q31). */
+function isHole(n: ArcClueNode | undefined) {
+  return !!n && clueNeed(n.role, n.clue_in, n.passage_in) === "missing";
+}
+
+/** Ближайшая ещё не сыгранная сессия, куда положена сцена (сегодня и позже). */
+function plannedSession(s: CampaignTreeScene) {
+  const today = new Date().toLocaleDateString("sv");
+  return s.sessions.find((x) => !x.played && x.date >= today) ?? null;
+}
+
+const isPending = (s: StoryScene) => (s.state?.status ?? "pending") === "pending";
+
+/**
+ * Приключение во вкладке «Сюжет» (гриллинг 2026-10-23, Q11/Q13): шапка с
+ * фактами словами, дырами правила трёх и входом на холст; главы открыты, пока
+ * в них есть не начатые сцены. Дыры считаются только у не начатых сцен —
+ * у сыгранной улики уже ничего не решают.
+ */
+function AdventureSection({
+  adv,
+  campaignId,
+  settingId,
+  selected,
+  chapterId,
+  onStatus,
+}: {
+  adv: CampaignAdventureTree;
+  campaignId: number;
+  settingId: number | null;
+  selected: boolean;
+  chapterId: number | null;
+  onStatus: (sceneId: number, status: string) => void;
+}) {
+  const navigate = useNavigate();
+  const clues = useResource<ArcClues>(adv.is_default ? null : arcCluesPath(adv.id, campaignId)).data;
+  const nodeBy = useMemo(() => new Map((clues?.nodes ?? []).map((n) => [n.shown_id, n])), [clues]);
+  const holesIn = (list: CampaignTreeScene[]) => list.filter((s) => isPending(s) && isHole(nodeBy.get(s.id))).length;
+
+  const [openCh, setOpenCh] = useState(() => new Set(adv.chapters.filter((c) => c.scenes.some(isPending)).map((c) => c.id)));
+  const toggleCh = (id: number, open: boolean) =>
+    setOpenCh((prev) => {
+      if (prev.has(id) === open) return prev;
+      const next = new Set(prev);
+      if (open) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+
+  const all = [...adv.scenes, ...adv.chapters.flatMap((c) => c.scenes)];
+  const { done, skipped } = countByStatus(all);
+  const planned = all.filter((s) => isPending(s) && plannedSession(s)).length;
+  const holes = holesIn(all);
+  const facts = [
+    `${all.length} ${sceneWord(all.length)}`,
+    `${done} сыграно`,
+    planned > 0 && `${planned} в сессиях`,
+    skipped > 0 && `${skipped} ${plural(skipped, "пропущена", "пропущены", "пропущено")}`,
+  ].filter(Boolean);
+  const advChapters = chapterId == null ? adv.chapters : adv.chapters.filter((c) => c.id === chapterId);
+  const logline = adv.description?.split("\n")[0].trim();
+  const holesLabel = (n: number) => `⚠ ${n} ${plural(n, "узел", "узла", "узлов")} без трёх улик`;
+
+  return (
+    <section className="card res-group campaign-chapters__adventure">
+      <header className="res-group__band campaign-adv__head">
+        <div className="campaign-adv__title">
+          <span className="res-group__title">{adv.name}</span>
+          {logline && <span className="campaign-adv__logline">{logline}</span>}
+          <span className="campaign-adv__facts">
+            {facts.join(" · ")}
+            {adv.is_override && <span className="campaign-scene__note">правка кампании</span>}
+          </span>
+        </div>
+        <div className="campaign-adv__actions">
+          {holes > 0 && (
+            <button
+              type="button"
+              className="campaign-adv__holes"
+              title="Раскрыть главы с такими узлами"
+              onClick={() => setOpenCh(new Set(adv.chapters.filter((c) => holesIn(c.scenes) > 0).map((c) => c.id)))}
+            >
+              {holesLabel(holes)}
+            </button>
+          )}
+          {!adv.is_default && settingId != null && (
+            <>
+              <button
+                type="button"
+                className="primary campaign-adv__canvas"
+                onClick={() => navigate(`/canvas?setting=${settingId}&arc=${adv.id}&campaign=${campaignId}`)}
+              >
+                <NavIcon name="canvas" /> Холст
+              </button>
+              <button type="button" onClick={() => navigate(`/adventures/${adv.id}?campaign=${campaignId}`)}>
+                Редактировать
+              </button>
+            </>
+          )}
+        </div>
+      </header>
+      <div className="res-group__body campaign-chapters__body">
+        {selected && !adv.is_default && <CampaignAdventureOverview campaignId={campaignId} adventureId={adv.id} />}
+        {/* Сцены, лежащие прямо на приключении: у книжного импорта их
+            почти не бывает, у самодельного — наоборот, все. */}
+        {adv.scenes.length > 0 && chapterId == null && (
+          <SceneList
+            scenes={adv.scenes}
+            campaignId={campaignId}
+            onStatus={onStatus}
+            title={adv.chapters.length > 0 ? "Без главы" : null}
+          />
+        )}
+        {advChapters.map((c) => {
+          const chDone = c.scenes.filter((s) => s.state?.status === "done").length;
+          const chHoles = holesIn(c.scenes);
+          return (
+            <details
+              key={c.id}
+              className="card res-group campaign-chapters__chapter"
+              open={openCh.has(c.id)}
+              onToggle={(e) => toggleCh(c.id, e.currentTarget.open)}
+            >
+              <summary className="res-group__band">
+                <span className="res-group__title">{c.name}</span>
+                <span className="res-group__count">
+                  {c.scenes.length > 0 ? `сыграно ${chDone} из ${c.scenes.length}` : "сцен нет"}
+                  {chHoles > 0 && <span className="campaign-adv__holes-note"> · {holesLabel(chHoles)}</span>}
+                </span>
+                {c.is_override && <span className="campaign-scene__note">правка кампании</span>}
+              </summary>
+              <div className="res-group__body campaign-chapters__scenes">
+                <SceneList scenes={c.scenes} campaignId={campaignId} onStatus={onStatus} title={null} />
+              </div>
+            </details>
+          );
+        })}
+        {all.length === 0 && (
+          <div className="card" style={{ borderStyle: "dashed" }}>
+            <p className="muted" style={{ maxWidth: "62ch" }}>Сцен пока нет — добавьте первую в сеттинге или создайте «только в кампании».</p>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
