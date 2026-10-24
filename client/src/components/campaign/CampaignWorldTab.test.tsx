@@ -17,19 +17,20 @@ vi.mock("../../api/client", async (original) => {
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 const sessions = [{ id: 10, date: "2026-10-17", session_number: 21, title: null, status: "held" }] as SessionSummary[];
 function entity(over: Partial<WorldEntity> = {}): WorldEntity {
-  return { entity_type: "being", entity_id: 1, name: "Валлен Стерн", category: "key_figure", manual: false,
+  return { entity_type: "being", entity_id: 1, name: "Валлен Стерн", category: "key_figure", manual: false, can_remove: false,
     records: 1, rumors: 0, drafts: 0, state: "dead", image: null,
     summary: { text: "Оставил письмо капитану Стражи.", from_setting: false },
     aspects: [{ key: "state", text: "жив → погиб" }, { key: "knows", text: null }, { key: "note", text: null }, { key: "want", text: null }, { key: "fear", text: null }],
     changed_at: "2026-10-17 10:00:00", last_session: { id: 10, title: null, date: "2026-10-17" }, ...over };
 }
-function mount(expand?: (e: WorldEntity) => React.ReactNode, types?: readonly WorldType[]) {
+function mount(expand?: (e: WorldEntity) => React.ReactNode, types?: readonly WorldType[], historyOnly = false) {
   const world: CampaignWorld = { setting_id: 8, rumors: 4, drafts: 3, entities: [
-    entity({ entity_type: "location", entity_id: 2, name: "Старая башня", category: "башня", state: "intact", records: 0, aspects: [], summary: { text: "Дозорный пост у дороги.", from_setting: true }, changed_at: "2026-10-01 10:00:00", last_session: null }),
+    entity({ entity_type: "location", entity_id: 2, name: "Старая башня", category: "башня", state: "intact", records: 0, can_remove: true, aspects: [], summary: { text: "Дозорный пост у дороги.", from_setting: true }, changed_at: "2026-10-01 10:00:00", last_session: null }),
     entity(),
-    entity({ entity_type: "artifact", entity_id: 3, name: "Камень Голорра", state: "with_party", category: null, changed_at: "2026-10-18 10:00:00" }),
+    entity({ entity_type: "artifact", entity_id: 3, name: "Камень Голорра", state: "with_party", category: null, summary: { text: "Камень говорит с [[being@12345678|wdh|Лиарой]].", from_setting: false }, changed_at: "2026-10-18 10:00:00" }),
     entity({ entity_id: 4, name: "Черновик о стражнике", state: "alive", records: 0, drafts: 1, aspects: [] }),
   ] };
+  if (historyOnly) world.entities.find((e) => e.entity_id === 4)!.drafts = 0;
   transport.get.mockImplementation(async (path: string) => path === "/campaigns/7/world" ? structuredClone(world) : path === "/campaigns/7/sessions" ? sessions : []);
   transport.put.mockImplementation(async (_path: string, body: { state: WorldEntity["state"]; undo_record_id?: number }) => {
     const e = world.entities.find((e) => e.entity_id === 1)!;
@@ -56,6 +57,16 @@ describe("вкладка мира кампании", () => {
     fireEvent.change(screen.getByRole("searchbox", { name: "Поиск в мире кампании" }), { target: { value: "дозорный" } });
     expect(document.querySelectorAll(".world-row")).toHaveLength(1);
     expect(screen.getByRole("link", { name: "Старая башня" }).getAttribute("href")).toBe("/locations/2?campaign=7");
+  });
+
+  it("показывает подписи упоминаний в сводке, поиск не ищет служебные uid", async () => {
+    mount();
+    await screen.findByText("Камень говорит с Лиарой.");
+    const search = screen.getByRole("searchbox", { name: "Поиск в мире кампании" });
+    fireEvent.change(search, { target: { value: "Лиарой" } });
+    expect(document.querySelectorAll(".world-row")).toHaveLength(1);
+    fireEvent.change(search, { target: { value: "12345678" } });
+    expect(screen.getByText("Ничего не подходит.")).toBeDefined();
   });
 
   it("показывает переход состояния, три графы и ещё N; у основы нет плашки", async () => {
@@ -93,6 +104,13 @@ describe("вкладка мира кампании", () => {
     expect(screen.getByRole("menuitem", { name: "Убрать из кампании" })).toBeDefined();
     fireEvent.keyDown(document, { key: "Escape" });
     fireEvent.click(screen.getByRole("button", { name: "Действия: Черновик о стражнике" }));
+    expect(screen.queryByRole("menuitem", { name: "Убрать из кампании" })).toBeNull();
+  });
+
+  it("скрывает удаление, если API сохраняет историю, даже при нуле действующих записей", async () => {
+    mount(undefined, undefined, true);
+    const guard = (await screen.findByRole("link", { name: "Черновик о стражнике" })).closest("li")!;
+    fireEvent.click(within(guard).getByRole("button", { name: "Действия: Черновик о стражнике" }));
     expect(screen.queryByRole("menuitem", { name: "Убрать из кампании" })).toBeNull();
   });
 

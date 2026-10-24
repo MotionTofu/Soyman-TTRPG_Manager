@@ -138,12 +138,45 @@ describe("сводка мира и достоверность", () => {
     await request(app).post(`${url()}/world`).send({ entity_type: "artifact", entity_id: artifact });
     let body = await world();
     expect(body.entities).toEqual(expect.arrayContaining([
-      expect.objectContaining({ entity_type: "location", state: "intact", image: "manor.png", summary: { text: "Старый особняк", from_setting: true }, aspects: [], changed_at: expect.any(String) }),
-      expect.objectContaining({ entity_type: "artifact", state: "as_setting", image: "stone.png", summary: { text: "Говорящий камень", from_setting: true } }),
+      expect.objectContaining({ entity_type: "location", state: "intact", image: "/files/manor.png", summary: { text: "Старый особняк", from_setting: true }, aspects: [], changed_at: expect.any(String) }),
+      expect.objectContaining({ entity_type: "artifact", state: "as_setting", image: "/files/stone.png", summary: { text: "Говорящий камень", from_setting: true } }),
     ]));
     db.prepare("UPDATE setting_locations SET avatar_image_path = 'avatar.png' WHERE id = ?").run(location);
     body = await world();
-    expect(body.entities.find((e: { entity_type: string }) => e.entity_type === "location").image).toBe("avatar.png");
+    expect(body.entities.find((e: { entity_type: string }) => e.entity_type === "location").image).toBe("/files/avatar.png");
+  });
+
+  it("путь портрета становится URL с кодированием сегментов, без картинки — null", async () => {
+    db.prepare("UPDATE setting_beings SET avatar_image_path = ? WHERE id = ?").run("Портреты/Валлен #1.png", being);
+    await request(app).post(`${url()}/world`).send({ entity_type: "being", entity_id: being });
+    await request(app).post(`${url()}/world`).send({ entity_type: "community", entity_id: community });
+    const body = await world();
+    expect(body.entities.find((e: { entity_type: string }) => e.entity_type === "being").image).toBe("/files/%D0%9F%D0%BE%D1%80%D1%82%D1%80%D0%B5%D1%82%D1%8B/%D0%92%D0%B0%D0%BB%D0%BB%D0%B5%D0%BD%20%231.png");
+    expect(body.entities.find((e: { entity_type: string }) => e.entity_type === "community").image).toBeNull();
+  });
+
+  it("право убрать совпадает с DELETE при оставшейся истории замен", async () => {
+    await request(app).post(`${url()}/world`).send({ entity_type: "location", entity_id: location });
+    const old = (await record({ owner_type: "artifact", owner_id: artifact, text: "Старая запись" })).body;
+    const next = (await request(app).post(`/api/records/${old.id}/replace`).send({ text: "Отброшенная замена", status: "discarded" })).body;
+    expect(next.status).toBe("discarded");
+    const body = await world();
+    expect(body.entities.find((e: { entity_type: string }) => e.entity_type === "artifact")).toMatchObject({ records: 0, drafts: 0, can_remove: false });
+    expect(body.entities.find((e: { entity_type: string }) => e.entity_type === "location").can_remove).toBe(true);
+    expect((await request(app).delete(`${url()}/world/artifact/${artifact}`)).status).toBe(409);
+    expect((await request(app).delete(`${url()}/world/location/${location}`)).status).toBe(200);
+  });
+
+  it("новый черновик меняет порядок, но сводка остаётся основой; отброшенное не меняет дату", async () => {
+    const draft = (await record({ owner_type: "location", owner_id: location, text: "Черновик", status: "draft" })).body;
+    await request(app).post(`${url()}/world`).send({ entity_type: "community", entity_id: community });
+    db.prepare("UPDATE participations SET created_at = '2026-10-01 00:00:00' WHERE context_type='campaign' AND context_id=?").run(campaign);
+    db.prepare("UPDATE entity_records SET updated_at='2026-10-03 00:00:00' WHERE id=?").run(draft.id);
+    const discarded = (await record({ owner_type: "community", owner_id: community, text: "Отброшено", status: "discarded" })).body;
+    db.prepare("UPDATE entity_records SET updated_at='2026-10-04 00:00:00' WHERE id=?").run(discarded.id);
+    const body = await world();
+    expect(body.entities[0]).toMatchObject({ entity_type: "location", changed_at: "2026-10-03 00:00:00", can_remove: false, summary: { text: "Старый особняк", from_setting: true } });
+    expect(body.entities[1]).toMatchObject({ entity_type: "community", changed_at: "2026-10-01 00:00:00", can_remove: true });
   });
 
   it("последняя действующая запись и графы, сортировка по изменению; счёт — записями, включая без адреса", async () => {
@@ -152,15 +185,16 @@ describe("сводка мира и достоверность", () => {
     const revealed = (await record({ owner_type: "artifact", owner_id: artifact, aspect: "revealed", text: "Говорит", certainty: "rumor" })).body;
     const rumor = (await record({ owner_type: "artifact", owner_id: artifact, aspect: "note", text: "Знает путь", certainty: "rumor" })).body;
     await record({ owner_type: "artifact", owner_id: artifact, text: "Не показывать", status: "discarded", certainty: "rumor" });
-    await record({ owner_type: "artifact", owner_id: artifact, text: "Черновик", status: "draft", certainty: "rumor" });
+    const draft = (await record({ owner_type: "artifact", owner_id: artifact, text: "Черновик", status: "draft", certainty: "rumor" })).body;
     await record({ owner_type: "campaign", owner_id: campaign, aspect: "unsorted", text: "Без адреса", status: "draft" });
     await request(app).post(`${url()}/world`).send({ entity_type: "location", entity_id: location });
     db.prepare("UPDATE participations SET created_at = '2026-10-01 00:00:00' WHERE context_id = ? AND context_type = 'campaign'").run(campaign);
     db.prepare("UPDATE entity_records SET updated_at = '2026-10-02 00:00:00' WHERE id IN (?, ?)").run(replacement.id, revealed.id);
     db.prepare("UPDATE entity_records SET updated_at = '2026-10-03 00:00:00' WHERE id = ?").run(rumor.id);
+    db.prepare("UPDATE entity_records SET updated_at = '2026-10-04 00:00:00' WHERE id = ?").run(draft.id);
     const body = await world();
     expect(body).toMatchObject({ rumors: 3, drafts: 2 });
-    expect(body.entities[0]).toMatchObject({ entity_type: "artifact", records: 3, rumors: 3, drafts: 1, changed_at: "2026-10-03 00:00:00", summary: { text: "Знает путь", from_setting: false } });
+    expect(body.entities[0]).toMatchObject({ entity_type: "artifact", records: 3, rumors: 3, drafts: 1, changed_at: "2026-10-04 00:00:00", summary: { text: "Знает путь", from_setting: false } });
     expect(body.entities[0].aspects.map((a: { key: string }) => a.key).sort()).toEqual(["holder", "note", "revealed"]);
     const filtered = await request(app).get(`${url()}/records?certainty=rumor&status=established`);
     expect(filtered.status).toBe(200);

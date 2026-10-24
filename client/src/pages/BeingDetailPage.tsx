@@ -1,4 +1,4 @@
-import { CampaignEntityStateBadge } from "../components/campaign/CampaignEntityStateBadge";
+import { useCampaignEntityStateMenu } from "../components/campaign/useCampaignEntityStateMenu";
 import { BEING_CATEGORY_LABELS } from "../beingCategories";
 import { useSettingCrumbs } from "../layout/useSettingCrumbs";
 import { useEffect, useMemo, useState, type DragEvent } from "react";
@@ -112,6 +112,7 @@ export function BeingDetailPage() {
   // Контекст кампании (ADR-0006): основа или «как она в этой кампании».
   const ctx = useCampaignContext(being?.campaigns);
   const inCampaign = ctx.campaign;
+  const campaignState = useCampaignEntityStateMenu(inCampaign?.id ?? null, "being", beingId);
   const records = useOwnerRecords(inCampaign?.id ?? null, "being", beingId);
   const [tab, selectTab] = useTabState(TABS, "Досье", TAB_ALIASES);
   const communities =
@@ -465,10 +466,11 @@ export function BeingDetailPage() {
         { label: being.name },
       ]}
       entityType="being"
+      onIdentContextMenu={campaignState.onContextMenu}
       title={being.name}
       badges={
         <>
-          {inCampaign && <CampaignEntityStateBadge campaignId={inCampaign.id} entityType="being" entityId={beingId} />}
+          {campaignState.badge}
           {(being.aliases ?? [])[0] && (
             <span className="badge">«{being.aliases[0]}»</span>
           )}
@@ -505,6 +507,7 @@ export function BeingDetailPage() {
       onTab={(t) => selectTab(t as (typeof TABS)[number])}
       overlays={
         <>
+          {campaignState.menu}
           {confirmDialog}
           {avatarCrop.modal}
         </>

@@ -13,6 +13,7 @@ export interface WorldEntity {
   name: string;
   category: string | null;
   manual: boolean;
+  can_remove: boolean;
   records: number;
   drafts: number;
   rumors: number;

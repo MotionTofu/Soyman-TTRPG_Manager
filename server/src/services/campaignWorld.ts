@@ -14,6 +14,7 @@ export function campaignParticipationData(raw: unknown): Record<string, unknown>
 }
 
 export interface WorldRecordDetails {
+  can_remove: boolean;
   state: CampaignEntityState;
   summary: { text: string; from_setting: boolean } | null;
   /** Подписи граф живут в словаре клиента; текст нужен только для state. */
@@ -31,24 +32,32 @@ export function campaignWorldDetails(campaignId: number): Map<string, WorldRecor
     if (!isCampaignEntityKind(link.entity_type)) continue;
     details.set(refKey(link.entity_type, link.entity_id), {
       state: campaignEntityState(link.entity_type, campaignParticipationData(link.data).state),
+      can_remove: true,
       summary: null,
       aspects: [],
       changed_at: link.created_at,
     });
   }
   const rows = db.prepare(
-    `SELECT r.owner_type, r.owner_id, r.aspect, r.text, r.updated_at
+    `SELECT r.owner_type, r.owner_id, r.aspect, r.text, r.updated_at, r.status,
+       EXISTS (SELECT 1 FROM entity_records n WHERE n.replaces_id = r.id) AS replaced
        FROM entity_records r
-       WHERE r.campaign_id = ? AND r.status NOT IN ('draft','discarded')
-         AND NOT EXISTS (SELECT 1 FROM entity_records n WHERE n.replaces_id = r.id)
+       WHERE r.campaign_id = ? AND r.status <> 'discarded'
        ORDER BY r.updated_at DESC, r.id DESC`
-  ).all(campaignId) as { owner_type: string; owner_id: number; aspect: string; text: string; updated_at: string }[];
+  ).all(campaignId) as { owner_type: string; owner_id: number; aspect: string; text: string; updated_at: string; status: string; replaced: number }[];
+  const changed = new Set<string>();
   for (const row of rows) {
     const detail = details.get(refKey(row.owner_type, row.owner_id));
     if (!detail) continue;
+    // Удаление запрещено и при оставшейся истории замен: тот же критерий,
+    // что у DELETE /world. Черновик влияет на дату, но не на текст сводки.
+    detail.can_remove = false;
+    if (row.replaced) continue;
+    const key = refKey(row.owner_type, row.owner_id);
+    if (!changed.has(key)) { detail.changed_at = row.updated_at; changed.add(key); }
+    if (row.status === "draft") continue;
     if (!detail.summary) {
       detail.summary = { text: row.text, from_setting: false };
-      detail.changed_at = row.updated_at;
     }
     // Последний текст служебной графы; несколько записей одной графы не дублируют её.
     if (!detail.aspects.some((a) => a.key === row.aspect)) {

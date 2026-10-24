@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type MouseEventHandler, type ReactNode } from "react";
 import { Breadcrumbs, type Crumb } from "./Breadcrumbs";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { EntityTypeChip } from "./EntityTypeChip";
@@ -91,6 +91,8 @@ export interface EntityPageProps {
   avatar?: ReactNode;
   /** Значки рядом с именем: вид локации, «Архивировано», ссылка в граф. */
   badges?: ReactNode;
+  /** Контекстное меню имени и метаданных (например, состояние в кампании). */
+  onIdentContextMenu?: MouseEventHandler<HTMLDivElement>;
   /** Строка под именем: дата события, подпись, счётчик. */
   meta?: ReactNode;
   /** Единственное действие, видимое в шапке. Разрушительное сюда не кладут. */
@@ -140,6 +142,7 @@ export function EntityPage({
   title,
   avatar,
   badges,
+  onIdentContextMenu,
   meta,
   primaryAction,
   actions,
@@ -163,6 +166,23 @@ export function EntityPage({
   // в шапке место постоянное, и меню должно появляться там же каждый раз.
   const moreRef = useRef<HTMLButtonElement>(null);
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
+  const tabsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const nav = tabsRef.current;
+    if (!nav) return;
+    function revealTab() {
+      const selected = nav!.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+      if (!selected) return;
+      const n = nav!.getBoundingClientRect(), t = selected.getBoundingClientRect();
+      if (t.left < n.left) nav!.scrollLeft -= n.left - t.left;
+      else if (t.right > n.right) nav!.scrollLeft += t.right - n.right;
+    }
+    revealTab();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(revealTab) : null;
+    observer?.observe(nav);
+    for (const button of nav.querySelectorAll("button")) observer?.observe(button);
+    return () => observer?.disconnect();
+  }, [tab]);
   const moreTabsRef = useRef<HTMLButtonElement>(null);
   const [tabsMenuAt, setTabsMenuAt] = useState<{ x: number; y: number } | null>(
     null,
@@ -184,7 +204,7 @@ export function EntityPage({
   }
 
   const ident = (
-    <div className="entity-page__ident">
+    <div className="entity-page__ident" onContextMenu={onIdentContextMenu}>
       <div className="entity-page__title-row">
         {!paper && <EntityTypeChip type={entityType} />}
         {loading && !title ? (
@@ -261,7 +281,7 @@ export function EntityPage({
       )}
 
       {tabs && tabs.length > 0 && (
-        <div className="tabs" role="tablist">
+        <div ref={tabsRef} className="tabs" role="tablist">
           {shownTabs.map((t) => (
             <button
               key={t.id}

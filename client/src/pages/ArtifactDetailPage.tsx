@@ -48,7 +48,7 @@ import { DETAIL_ROUTES } from "../entityTypes";
 import { PlayerVisibilityFact } from "../components/PlayerVisibilityFact";
 import { BaseFold, CampaignChronicle, CampaignRecords, ContextSwitch, EngagedCampaigns } from "../components/campaign/CampaignProfileParts";
 import { campaignCrumbs, useCampaignContext, useOwnerRecords } from "../components/campaign/campaignProfile";
-import { CampaignEntityStateBadge } from "../components/campaign/CampaignEntityStateBadge";
+import { useCampaignEntityStateMenu } from "../components/campaign/useCampaignEntityStateMenu";
 import { RECORD_ASPECTS } from "../entityRecords";
 
 // Общий каркас профилей (разбор 2026-10-02, предмет Q1): «Отношения» и
@@ -72,6 +72,7 @@ export function ArtifactDetailPage() {
   const settingId = artifact?.setting_id ?? null;
   const ctx = useCampaignContext(artifact?.campaigns);
   const inCampaign = ctx.campaign;
+  const campaignState = useCampaignEntityStateMenu(inCampaign?.id ?? null, "artifact", artifactId);
   const records = useOwnerRecords(inCampaign?.id ?? null, "artifact", artifactId);
   const settingCrumbs = useSettingCrumbs(settingId);
   const { save } = useSaveEntity<Artifact>("artifact", artifactId);
@@ -243,8 +244,9 @@ export function ArtifactDetailPage() {
       paper
       crumbs={inCampaign ? campaignCrumbs(inCampaign, artifact.name) : [...settingCrumbs, { label: "Сокровищница", to: treasuryTo }, { label: artifact.name }]}
       entityType="artifact"
+      onIdentContextMenu={campaignState.onContextMenu}
       title={artifact.name}
-      badges={inCampaign && <CampaignEntityStateBadge campaignId={inCampaign.id} entityType="artifact" entityId={artifactId} />}
+      badges={campaignState.badge}
       // Под именем — род, тип, редкость метками, на месте мазка (Q3).
       meta={
         <span className="paper-ident-tags">
@@ -277,6 +279,7 @@ export function ArtifactDetailPage() {
       onTab={(t) => selectTab(t as (typeof TABS)[number])}
       overlays={
         <>
+          {campaignState.menu}
           {confirmDialog}
           {avatarCrop.modal}
         </>

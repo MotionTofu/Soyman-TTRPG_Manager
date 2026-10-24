@@ -99,3 +99,15 @@
 .world-records__group > header > a { margin-left:auto; color:var(--paper-ink); }
 
 .world-state--default { color:var(--paper-ink); background:var(--paper-wash); }
+
+/* В узком листе тетради текст занимает всю строку под портретом. */
+@container campaign-world (max-width:300px) {
+  .campaign-world--compact .world-row__body { grid-column:1 / -1; grid-row:2; }
+  .campaign-world--compact .world-row__changes,
+  .campaign-world--compact .world-row__records { grid-column:1 / -1; }
+}
+
+/* Телефон: лист мира без запаса под язычки соседей, как в кадре 7 макета. */
+@media (max-width:700px) {
+  .entity-page--paper > .paper-sheet:has(> .campaign-world--catalog) { margin-inline:calc(-1 * var(--sp-6)); }
+}

@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CAMPAIGN_ENTITY_STATES } from "@shared/campaignWorld";
 import { CampaignEntityStateBadge } from "./CampaignEntityStateBadge";
+import { useCampaignEntityStateMenu } from "./useCampaignEntityStateMenu";
 import { CampaignWorldTab } from "./CampaignWorldTab";
 import { ArtifactDetailPage } from "../../pages/ArtifactDetailPage";
 import { UndoDeleteProvider } from "../../hooks/useUndoDelete";
@@ -26,13 +27,18 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.clearAllMocks(); vi.unstubAllGlobals(); setCachedUser(null); });
 const sessions = [{ id: 10, date: "2026-10-23", session_number: 1, title: null, status: "held" as const }];
 function entity(kind: WorldType): WorldEntity {
-  return { entity_type: kind, entity_id: 50, name: "Камень", category: null, manual: true, records: 0, rumors: 0, drafts: 0,
+  return { entity_type: kind, entity_id: 50, name: "Камень", category: null, manual: true, can_remove: true, records: 0, rumors: 0, drafts: 0,
     state: CAMPAIGN_ENTITY_STATES[kind][0].key, image: null, summary: { text: "Основа", from_setting: true }, aspects: [],
     changed_at: "2026-10-23 12:00:00", last_session: null };
 }
 function wrap(children: ReactNode, initial = "/") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[initial]}><UndoDeleteProvider>{children}</UndoDeleteProvider></MemoryRouter></QueryClientProvider>);
+}
+
+function StateHeader({ kind }: { kind: WorldType }) {
+  const state = useCampaignEntityStateMenu(7, kind, 50);
+  return <div data-testid="state-header" onContextMenu={state.onContextMenu}>{state.badge}{state.menu}</div>;
 }
 
 describe("состояние в шапке профиля", () => {
@@ -44,9 +50,13 @@ describe("состояние в шапке профиля", () => {
       const previous = e.state; e.state = body.state;
       return { state: e.state, previous, record_id: 77 };
     });
-    wrap(<><CampaignEntityStateBadge campaignId={7} entityType={kind} entityId={50} /><CampaignWorldTab campaignId={7} settingId={8} sessions={[]} /></>);
+    wrap(<><StateHeader kind={kind} /><CampaignWorldTab campaignId={7} settingId={8} sessions={[]} /></>);
     const label = (index: number) => `Состояние Камень: ${choices[index].label}. Изменить`;
-    fireEvent.click(await screen.findByRole("button", { name: label(0) }));
+    await screen.findByRole("heading", { name: "Мир кампании" });
+    await waitFor(() => expect(transport.get).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: label(0) })).toBeNull();
+    fireEvent.contextMenu(screen.getByTestId("state-header"), { clientX: 20, clientY: 20 });
+    await screen.findByRole("menuitem", { name: `✓ ${choices[0].label}` });
     fireEvent.click(screen.getByRole("menuitem", { name: choices[1].label }));
     await waitFor(() => expect(screen.getAllByRole("button", { name: label(1) })).toHaveLength(2));
     // Теперь меняем из строки мира, шапка остаётся смонтированной.

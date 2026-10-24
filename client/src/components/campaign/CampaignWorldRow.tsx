@@ -2,6 +2,7 @@ import { useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { CAMPAIGN_ENTITY_STATES, campaignEntityStateLabel, campaignEntityStateTone, type CampaignEntityState } from "@shared/campaignWorld";
 import { WORLD_GROUPS, type WorldEntity } from "../../campaignWorld";
+import { stripMentions } from "../../mentions";
 import { BEING_CATEGORY_LABELS } from "../../beingCategories";
 import { aspectLabel } from "../../entityRecords";
 import { sessionLabel } from "../../sessionLabel";
@@ -40,7 +41,7 @@ export function CampaignWorldRow({ entity: e, campaignId, session, onState, onRe
     { label: "Состояние в кампании", children: stateItems },
     { label: "Открыть основу в сеттинге", dividerBefore: true, onClick: () => navigate(`${group.path}/${e.entity_id}?campaign=base`) },
     { label: "+ Запись", onClick: () => onRecord(e) },
-    ...(e.records === 0 && e.drafts === 0 ? [{ label: "Убрать из кампании", onClick: () => onRemove(e), danger: true }] : []),
+    ...(e.can_remove ? [{ label: "Убрать из кампании", onClick: () => onRemove(e), danger: true }] : []),
   ];
   function openMenu(event: MouseEvent<HTMLElement>, state: boolean) {
     event.preventDefault();
@@ -65,7 +66,7 @@ export function CampaignWorldRow({ entity: e, campaignId, session, onState, onRe
         </div>
         <p className="world-row__category">{group.kind}{category ? ` · ${category.toLowerCase()}` : ""}</p>
         <p className={`world-row__text${e.summary.from_setting ? " world-row__text--basis" : ""}`}>
-          {e.summary.from_setting && <span className="world-row__source">из сеттинга · </span>}{e.summary.text}
+          {e.summary.from_setting && <span className="world-row__source">из сеттинга · </span>}{stripMentions(e.summary.text)}
         </p>
         {onExpand && <button type="button" className="world-text-action world-row__expand" aria-expanded={expanded} onClick={onExpand}>{expanded ? "Свернуть" : "Записи"}</button>}
       </div>

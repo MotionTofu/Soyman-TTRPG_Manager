@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAction, useResource, write } from "../../data/hooks";
+import { stripMentions } from "../../mentions";
 import { labelled } from "../../data/notices";
 import { campaignPaths } from "../../data/campaigns";
 import { WORLD_GROUPS as GROUPS, WORLD_TYPES, useSetCampaignEntityState, type CampaignWorld, type WorldEntity, type WorldType } from "../../campaignWorld";
@@ -90,7 +91,7 @@ export function CampaignWorldTab({
 
   const search = query.trim().toLocaleLowerCase("ru");
   const visible = entities
-    .filter((e) => (kind === "all" || e.entity_type === kind) && (!search || `${e.name} ${e.summary.text}`.toLocaleLowerCase("ru").includes(search)))
+    .filter((e) => (kind === "all" || e.entity_type === kind) && (!search || stripMentions(`${e.name} ${e.summary.text}`).toLocaleLowerCase("ru").includes(search)))
     .sort((a, b) => b.changed_at.localeCompare(a.changed_at) || a.name.localeCompare(b.name, "ru"));
   const settingLink = <Link to={`/settings/${settingId}`}>как в сеттинге ›</Link>;
   return (

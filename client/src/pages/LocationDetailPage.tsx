@@ -1,4 +1,4 @@
-import { CampaignEntityStateBadge } from "../components/campaign/CampaignEntityStateBadge";
+import { useCampaignEntityStateMenu } from "../components/campaign/useCampaignEntityStateMenu";
 import { useSettingCrumbs } from "../layout/useSettingCrumbs";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -104,6 +104,7 @@ export function LocationDetailPage() {
   // Контекст кампании (ADR-0006): основа или «как оно в этой кампании».
   const ctx = useCampaignContext(location?.campaigns);
   const inCampaign = ctx.campaign;
+  const campaignState = useCampaignEntityStateMenu(inCampaign?.id ?? null, "location", locationId);
   const records = useOwnerRecords(inCampaign?.id ?? null, "location", locationId);
   const communities = useResource<SettingCommunity[]>(settingId ? settingPaths.inSetting("community", settingId) : null).data ?? [];
   // Все локации сеттинга вместе с архивом: дерево, выбор родителя, архив детей.
@@ -800,8 +801,9 @@ export function LocationDetailPage() {
         { label: location.name },
       ]}
       entityType="location"
+      onIdentContextMenu={campaignState.onContextMenu}
       title={location.name}
-      badges={inCampaign && <CampaignEntityStateBadge campaignId={inCampaign.id} entityType="location" entityId={locationId} />}
+      badges={campaignState.badge}
       // Под именем — тип и путь, на месте мазка (владелец, 2026-10-02).
       meta={
         <span className="paper-ident-tags">
@@ -837,6 +839,7 @@ export function LocationDetailPage() {
       fill={tab === "Карта"}
       overlays={
         <>
+          {campaignState.menu}
           {confirmDialog}
           {thumbnailCrop.modal}
         </>

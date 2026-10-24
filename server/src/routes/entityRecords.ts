@@ -10,6 +10,7 @@ import { Router, type Request, type Response } from "express";
 import { campaignEntityState, campaignEntityStateLabel, isCampaignEntityKind, isCampaignEntityState } from "@soyman/shared";
 import { campaignParticipationData, campaignRecordCounts, campaignStateSession, campaignWorldDetails } from "../services/campaignWorld";
 import { db } from "../db/db";
+import { toFileUrl } from "../services/filesystem";
 import { requireKind } from "../db/entityKinds";
 import { entityNames, refKey } from "../services/entityNames";
 import { idOfUid, scanMentions } from "../services/mentions";
@@ -242,7 +243,7 @@ function worldEntities(refs: { type: string; id: number }[]) {
          WHERE archived_at IS NULL AND id IN (${ids.map(() => "?").join(",")})`
       )
       .all(...ids) as { id: number; name: string; category: string | null; image: string | null; description: string }[];
-    for (const r of rows) out.set(refKey(type, r.id), { name: r.name, category: r.category || null, image: r.image, description: r.description });
+    for (const r of rows) out.set(refKey(type, r.id), { name: r.name, category: r.category || null, image: r.image ? toFileUrl(r.image) : null, description: r.description });
   }
   return out;
 }

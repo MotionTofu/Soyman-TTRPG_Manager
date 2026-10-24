@@ -1,4 +1,4 @@
-import { CampaignEntityStateBadge } from "../components/campaign/CampaignEntityStateBadge";
+import { useCampaignEntityStateMenu } from "../components/campaign/useCampaignEntityStateMenu";
 import { useSettingCrumbs } from "../layout/useSettingCrumbs";
 import { useState, type DragEvent } from "react";
 import { EntityParticipates } from "../components/EntityParticipates";
@@ -87,6 +87,7 @@ export function CommunityDetailPage() {
   // Контекст кампании (ADR-0006): основа или «как оно в этой кампании».
   const ctx = useCampaignContext(community?.campaigns);
   const inCampaign = ctx.campaign;
+  const campaignState = useCampaignEntityStateMenu(inCampaign?.id ?? null, "community", communityId);
   const records = useOwnerRecords(inCampaign?.id ?? null, "community", communityId);
   const locations =
     useResource<SettingLocation[]>(community ? settingPaths.inSetting("location", community.setting_id) : null).data ?? [];
@@ -297,8 +298,9 @@ export function CommunityDetailPage() {
         { label: community.name },
       ]}
       entityType="community"
+      onIdentContextMenu={campaignState.onContextMenu}
       title={community.name}
-      badges={inCampaign && <CampaignEntityStateBadge campaignId={inCampaign.id} entityType="community" entityId={communityId} />}
+      badges={campaignState.badge}
       // Под именем — другие названия, на месте мазка (макет, доска 27).
       meta={aliases.length > 0 ? aliases.join(" · ") : undefined}
       actions={[
@@ -319,6 +321,7 @@ export function CommunityDetailPage() {
       onTab={(t) => selectTab(t as (typeof TABS)[number])}
       overlays={
         <>
+          {campaignState.menu}
           {confirmDialog}
           {avatarCrop.modal}
         </>
