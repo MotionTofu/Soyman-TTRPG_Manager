@@ -233,7 +233,25 @@ export interface ImportantDate {
   created_at: string;
 }
 
+export interface ChronicleSession {
+  id: number;
+  campaign_id: number;
+  event_id: number;
+  link_id: number;
+  title: string | null;
+  date: string;
+  status: string;
+  session_number: number;
+}
+
 export interface CampaignCalendarEvent extends EventTimeFields {
+  full_description?: string;
+  consequences?: string;
+  visible_to_players?: number;
+  player_text?: string;
+  setting_id?: number | null;
+  campaign_name?: string;
+  sessions?: ChronicleSession[];
   /** Хроника кампании (спека campaign-paper, Q28): своё или событие сеттинга живым. */
   source?: "campaign" | "setting";
   /** Событие сеттинга, скрытое у этой кампании. */
@@ -293,6 +311,8 @@ export interface SettingCycleGroup {
 
 /** Именованная точка внутри оборота: «полнолуние» на 14-м дне. */
 export interface SettingCyclePoint {
+  /** Ключ клиентской палитры; null — прежнее чередование. */
+  color?: string | null;
   id: number;
   cycle_id: number;
   name: string;
@@ -304,6 +324,7 @@ export interface SettingCyclePoint {
 }
 
 export interface SettingCalendarEvent extends EventTimeFields {
+  sessions?: ChronicleSession[];
   id: number;
   setting_id: number;
   title: string;
@@ -1850,6 +1871,8 @@ export interface VisibleArticle {
 }
 
 export interface VisibleChronicleEvent {
+  source?: "setting" | "campaign";
+  player_text?: string;
   id: number;
   title: string;
   description: string;
@@ -1935,6 +1958,7 @@ export interface SettingPlayerCommunity {
 }
 
 export interface SettingPlayerChronicleEvent {
+  source?: "setting" | "campaign";
   id: number;
   title: string;
   description?: string;

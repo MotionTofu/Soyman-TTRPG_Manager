@@ -7501,6 +7501,32 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
     database.exec("ALTER TABLE characters ADD COLUMN status TEXT NOT NULL DEFAULT 'active'");
   }
 
+  // Хроника кампании: добавляем в конец, чтобы база пропущенных релизов
+  // прошла прежние шаги прежде новых колонок.
+  if (!columnExists(database, "campaign_calendar_events", "visible_to_players") ||
+      !columnExists(database, "campaign_calendar_events", "player_text") ||
+      !columnExists(database, "setting_cycle_points", "color")) {
+    const snapshot = path.join(dbDir, `app-before-campaign-chronicle-${randomUUID()}.db`);
+    database.prepare("VACUUM INTO ?").run(snapshot);
+    console.log(`[migrate] campaign_chronicle_v1. Снимок: ${snapshot}`);
+  }
+  if (!columnExists(database, "campaign_calendar_events", "visible_to_players"))
+    database.exec("ALTER TABLE campaign_calendar_events ADD COLUMN visible_to_players INTEGER NOT NULL DEFAULT 0");
+  if (!columnExists(database, "campaign_calendar_events", "player_text"))
+    database.exec("ALTER TABLE campaign_calendar_events ADD COLUMN player_text TEXT NOT NULL DEFAULT ''");
+  if (!columnExists(database, "setting_cycle_points", "color"))
+    database.exec("ALTER TABLE setting_cycle_points ADD COLUMN color TEXT");
+  // generic_links без FK: каскадное удаление кампании/сеттинга тоже должно
+  // убрать связи их событий. Архив сессии сохраняет связи для восстановления.
+  for (const [table, kind] of [["campaign_calendar_events", "campaign_event"],
+    ["setting_calendar_events", "setting_event"], ["sessions", "session"]] as const) {
+    database.exec(`CREATE TRIGGER IF NOT EXISTS chronicle_cleanup_${kind} AFTER DELETE ON ${table}
+      BEGIN DELETE FROM generic_links WHERE (from_type = '${kind}' AND from_id = OLD.id)
+        OR (to_type = '${kind}' AND to_id = OLD.id);
+        DELETE FROM entity_relations WHERE (from_type = '${kind}' AND from_id = OLD.id)
+        OR (to_type = '${kind}' AND to_id = OLD.id); END`);
+  }
+
   // Все индексы schema.sql — ещё раз, после всех ADD COLUMN и перестроек (см.
   // execSchema). Неудача здесь — настоящая ошибка схемы, её не глотаем.
   for (const sql of schemaIndexes) database.exec(sql);

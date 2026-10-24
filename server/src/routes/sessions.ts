@@ -3,6 +3,7 @@ import { assertPlayerDisplayOwner, publishSessionDisplay } from "../services/pla
 import { CutsceneRequestError } from "../services/cutsceneErrors";
 import { collectCutsceneMedia } from "../services/cutsceneMedia";
 import { battleInfo, carryBattle, closeBattle, closeBattleSilently, openBattle, pullPendingBattle, sessionBattles } from "../services/battles";
+import { sessionEvents } from "../services/chronicle";
 import { db } from "../db/db";
 import { SESSION_NUMBER_SQL } from "../services/sessionNumber";
 import { syncSessionMentions } from "./sessionNotes";
@@ -340,6 +341,12 @@ sessionsRouter.post("/:id/paid-to-extra", (req, res) => {
     db.prepare("UPDATE session_attendance SET amount_paid = 0 WHERE session_id = ?").run(session.id);
   })();
   res.json({ moved: rows.reduce((n, r) => n + r.amount_paid, 0) });
+});
+
+sessionsRouter.get("/:id/calendar-events", (req, res) => {
+  const events = sessionEvents(Number(req.params.id));
+  if (!events) return res.status(404).json({ error: "not found" });
+  res.json(events);
 });
 
 sessionsRouter.delete("/:id", (req, res) => {

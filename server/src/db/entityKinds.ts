@@ -179,7 +179,7 @@ const GRAPH_NODES = new Set([
 
 const RELATION_CREATABLE = new Set([
   "being", "character", "community", "compendium_entry", "location", "artifact",
-  "setting", "campaign", "setting_event", "resource", "mastering", "scene",
+  "setting", "campaign", "setting_event", "campaign_event", "resource", "mastering", "scene",
   "adventure", "player",
 ]);
 
@@ -336,7 +336,7 @@ const RAW_KINDS: EntityKindBase[] = [
     kind: "campaign_event", table: "campaign_calendar_events", nameCol: "title", belongsTo: "campaign",
     hasArchivedAt: false, archivable: false, archiveKey: "id",
     mentionable: false, transferable: false, searchable: false,
-    linkEndpoint: true, relationEndpoint: true, owns: [], detailPrefix: null,
+    linkEndpoint: true, relationEndpoint: true, owns: [], detailPrefix: "/campaign-events",
   }),
   K({
     kind: "campaign_entry", table: "campaign_entries", nameCol: "title", belongsTo: "campaign",

@@ -6,6 +6,7 @@ import os from "os";
 import { db } from "../db/db";
 import {ensureProjectWorkbook,placeProjectWorkbooks} from "../services/projectWorkbooks";
 import type {AuthedRequest} from "../services/auth";
+import { eventSessions, withEventSessions } from "../services/chronicle";
 import { SESSION_NUMBER_SQL } from "../services/sessionNumber";
 import { debtsForCampaign, restoreCampaignPayments, settleCampaignDebt, unpaidCountBySession, type PaidBefore } from "../services/finance";
 import { campaignNow, defaultStatus, timePatch } from "../services/eventTime";
@@ -650,7 +651,8 @@ campaignsRouter.get("/:id/calendar-events", (req, res) => {
         ORDER BY e.important DESC, e.inworld_year, e.inworld_month, e.inworld_day`
     )
     .all(req.params.id);
-  res.json([...own, ...fromSetting]);
+  res.json([...withEventSessions(own as { id: number }[], "campaign_event", Number(req.params.id)),
+    ...withEventSessions(fromSetting as { id: number }[], "setting_event", Number(req.params.id))]);
 });
 
 // Скрыть событие сеттинга у кампании и вернуть его (Q28). Удалить его отсюда
@@ -670,7 +672,41 @@ campaignsRouter.put("/:id/hidden-events/:eventId", (req, res) => {
   res.json({ hidden });
 });
 
+campaignsRouter.get("/calendar-events/:eventId", (req, res) => {
+  const event = db.prepare(`SELECT e.*, c.name AS campaign_name, c.setting_id, st.name AS setting_name
+    FROM campaign_calendar_events e JOIN campaigns c ON c.id = e.campaign_id
+    LEFT JOIN settings st ON st.id = c.setting_id WHERE e.id = ?`)
+    .get(req.params.eventId) as { id: number; campaign_id: number } | undefined;
+  if (!event) return res.status(404).json({ error: "not found" });
+  res.json({ ...event, sessions: eventSessions("campaign_event", event.id, event.campaign_id) });
+});
+
+function campaignEventProfileError(body: Record<string, unknown>): string | null {
+  if (body.visible_to_players !== undefined && typeof body.visible_to_players !== "boolean")
+    return "visible_to_players must be boolean";
+  for (const key of ["full_description", "consequences", "player_text"] as const) {
+    if (body[key] !== undefined && (typeof body[key] !== "string" || (body[key] as string).length > 5000))
+      return `${key} must be text up to 5000 characters`;
+  }
+  return null;
+}
+
+function saveCampaignEventProfile(id: number, body: Record<string, unknown>) {
+  const sets: string[] = [];
+  const values: (string | number)[] = [];
+  for (const key of ["full_description", "consequences", "player_text"] as const) {
+    if (body[key] !== undefined) { sets.push(`${key} = ?`); values.push(body[key] as string); }
+  }
+  if (body.visible_to_players !== undefined) {
+    sets.push("visible_to_players = ?"); values.push(body.visible_to_players ? 1 : 0);
+  }
+  if (sets.length) db.prepare(`UPDATE campaign_calendar_events SET ${sets.join(", ")} WHERE id = ?`).run(...values, id);
+}
+
 campaignsRouter.post("/:id/calendar-events", (req, res) => {
+  if (!db.prepare("SELECT 1 FROM campaigns WHERE id = ?").get(req.params.id)) return res.status(404).json({ error: "not found" });
+  const profileError = campaignEventProfileError(req.body);
+  if (profileError) return res.status(400).json({ error: profileError });
   const { title, description, inworld_year, inworld_month, inworld_day, important } =
     req.body as {
       title: string;
@@ -713,12 +749,16 @@ campaignsRouter.post("/:id/calendar-events", (req, res) => {
       important ? 1 : 0,
       status
     );
-  res
-    .status(201)
-    .json(db.prepare("SELECT * FROM campaign_calendar_events WHERE id = ?").get(info.lastInsertRowid));
+  const id = Number(info.lastInsertRowid);
+  saveCampaignEventProfile(id, req.body);
+  const time = timePatch(req.body);
+  if (time.sets.length) db.prepare(`UPDATE campaign_calendar_events SET ${time.sets.join(", ")} WHERE id = ?`).run(...time.values, id);
+  res.status(201).json(db.prepare("SELECT * FROM campaign_calendar_events WHERE id = ?").get(id));
 });
 
 campaignsRouter.put("/calendar-events/:eventId", (req, res) => {
+  const profileError = campaignEventProfileError(req.body);
+  if (profileError) return res.status(400).json({ error: profileError });
   const { title, description, inworld_year, inworld_month, inworld_day, important } =
     req.body as {
       title?: string;
@@ -765,6 +805,7 @@ campaignsRouter.put("/calendar-events/:eventId", (req, res) => {
     important === undefined ? null : important ? 1 : 0,
     req.params.eventId
   );
+  saveCampaignEventProfile(Number(req.params.eventId), req.body);
   const time = timePatch(req.body as Record<string, unknown>);
   if (time.sets.length > 0) {
     db.prepare(`UPDATE campaign_calendar_events SET ${time.sets.join(", ")} WHERE id = ?`).run(

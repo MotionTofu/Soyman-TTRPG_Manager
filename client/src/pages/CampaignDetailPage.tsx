@@ -1207,7 +1207,7 @@ export function CampaignDetailPage() {
                           )}
                           <SettingChronicleEventRow
                             ev={ev}
-                            href={world ? `/events/${ev.id - SETTING_EVENT_UID}` : null}
+                            href={world ? `/events/${ev.id - SETTING_EVENT_UID}` : `/campaign-events/${ev.id}`}
                             tag={world ? <span className="chronicle-source">мир</span> : null}
                             expanded={expandedEvents.has(ev.id)}
                             calendar={calendar}

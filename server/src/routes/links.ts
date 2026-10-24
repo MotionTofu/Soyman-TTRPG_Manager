@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { sessionEventLinkError } from "../services/chronicle";
 import { db } from "../db/db";
 import { ENTITY_KINDS } from "../db/entityKinds";
 import { SESSION_NUMBER_SQL } from "../services/sessionNumber";
@@ -642,6 +643,8 @@ linksRouter.get("/", (req, res) => {
 });
 
 linksRouter.post("/", (req, res) => {
+  const error = sessionEventLinkError(req.body);
+  if (error) return res.status(400).json({ error });
   const { from_type, from_id, to_type, to_id, section, origin } = req.body as {
     from_type: string;
     from_id: number;

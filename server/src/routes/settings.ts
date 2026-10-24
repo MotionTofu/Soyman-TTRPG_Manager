@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { eventSessions, withEventSessions, validCyclePointColor } from "../services/chronicle";
 import multer from "multer";
 import fs from "fs";
 import path from "path";
@@ -439,7 +440,7 @@ settingsRouter.get("/:id/calendar-events", (req, res) => {
        ORDER BY important DESC, inworld_year, inworld_month, inworld_day`
     )
     .all(req.params.id);
-  res.json(rows);
+  res.json(withEventSessions(rows as { id: number }[], "setting_event"));
 });
 
 // Одиночное событие — для его профиля. Участники и локации своей таблицы не
@@ -454,7 +455,7 @@ settingsRouter.get("/calendar-events/:eventId", (req, res) => {
     )
     .get(req.params.eventId) as Record<string, unknown> | undefined;
   if (!event) return res.status(404).json({ error: "not found" });
-  res.json(event);
+  res.json({ ...event, sessions: eventSessions("setting_event", Number(req.params.eventId)) });
 });
 
 // When a setting-calendar event's description @-mentions a being/location/
@@ -805,7 +806,8 @@ function cycleDayError(day: unknown, period: number, optional: boolean): string 
 }
 
 settingsRouter.post("/cycles/:cycleId/points", (req, res) => {
-  const { name, day_offset, day_end = null } = req.body as { name?: string; day_offset?: number; day_end?: number | null };
+  const { name, day_offset, day_end = null, color = null } = req.body as { name?: string; day_offset?: number; day_end?: number | null; color?: unknown };
+  if (!validCyclePointColor(color)) return res.status(400).json({ error: "unknown cycle point color" });
   if (!name?.trim() || day_offset == null) {
     return res.status(400).json({ error: "нужны название и день внутри оборота" });
   }
@@ -816,17 +818,19 @@ settingsRouter.post("/cycles/:cycleId/points", (req, res) => {
   const error = cycleDayError(day_offset, cycle.period_days, false) ?? cycleDayError(day_end, cycle.period_days, true);
   if (error) return res.status(400).json({ error });
   const info = db
-    .prepare("INSERT INTO setting_cycle_points (cycle_id, name, day_offset, day_end) VALUES (?, ?, ?, ?)")
-    .run(req.params.cycleId, name.trim(), Number(day_offset), day_end === null ? null : Number(day_end));
+    .prepare("INSERT INTO setting_cycle_points (cycle_id, name, day_offset, day_end, color) VALUES (?, ?, ?, ?, ?)")
+    .run(req.params.cycleId, name.trim(), Number(day_offset), day_end === null ? null : Number(day_end), color);
   res.status(201).json(db.prepare("SELECT * FROM setting_cycle_points WHERE id = ?").get(info.lastInsertRowid));
 });
 
 settingsRouter.put("/cycle-points/:pointId", (req, res) => {
   const point = db
     .prepare("SELECT p.*, c.period_days FROM setting_cycle_points p JOIN setting_cycles c ON c.id = p.cycle_id WHERE p.id = ?")
-    .get(req.params.pointId) as { name: string; day_offset: number; day_end: number | null; period_days: number } | undefined;
+    .get(req.params.pointId) as { name: string; day_offset: number; day_end: number | null; color: string | null; period_days: number } | undefined;
   if (!point) return res.status(404).json({ error: "not found" });
-  const body = req.body as { name?: string; day_offset?: number; day_end?: number | null };
+  const body = req.body as { name?: string; day_offset?: number; day_end?: number | null; color?: unknown };
+  const color = body.color === undefined ? point.color : body.color;
+  if (!validCyclePointColor(color)) return res.status(400).json({ error: "unknown cycle point color" });
   const next = {
     name: body.name !== undefined ? String(body.name).trim() : point.name,
     day_offset: body.day_offset !== undefined ? body.day_offset : point.day_offset,
@@ -835,10 +839,11 @@ settingsRouter.put("/cycle-points/:pointId", (req, res) => {
   if (!next.name) return res.status(400).json({ error: "нужно название" });
   const error = cycleDayError(next.day_offset, point.period_days, false) ?? cycleDayError(next.day_end, point.period_days, true);
   if (error) return res.status(400).json({ error });
-  db.prepare("UPDATE setting_cycle_points SET name = ?, day_offset = ?, day_end = ? WHERE id = ?").run(
+  db.prepare("UPDATE setting_cycle_points SET name = ?, day_offset = ?, day_end = ?, color = ? WHERE id = ?").run(
     next.name,
     Number(next.day_offset),
     next.day_end === null ? null : Number(next.day_end),
+    color,
     req.params.pointId
   );
   res.json(db.prepare("SELECT * FROM setting_cycle_points WHERE id = ?").get(req.params.pointId));

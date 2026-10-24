@@ -1252,6 +1252,8 @@ CREATE TABLE IF NOT EXISTS campaign_calendar_events (
   -- Краткое описание для строки хроники; развёрнутый текст и последствия
   -- живут в профиле события (участники и локации — в общем графе связей).
   description TEXT DEFAULT '',
+  visible_to_players INTEGER NOT NULL DEFAULT 0,
+  player_text TEXT NOT NULL DEFAULT '',
   full_description TEXT DEFAULT '',
   consequences TEXT DEFAULT '',
   inworld_year INTEGER NOT NULL,
@@ -1417,6 +1419,7 @@ CREATE TABLE IF NOT EXISTS setting_cycle_points (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   cycle_id INTEGER NOT NULL REFERENCES setting_cycles(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
+  color TEXT,
   -- Смещение в днях от начала оборота, 0 — сам день отсчёта.
   day_offset INTEGER NOT NULL,
   position INTEGER NOT NULL DEFAULT 0
@@ -2374,3 +2377,20 @@ CREATE TABLE IF NOT EXISTS cutscene_preview_state (
 CREATE TRIGGER IF NOT EXISTS cutscene_run_snapshot_immutable
 BEFORE UPDATE OF cutscene_id, mode, launch_context, version, return_state, audio_scope, created_at ON cutscene_runs
 BEGIN SELECT RAISE(ABORT, 'Cutscene run snapshot is immutable'); END;
+
+-- Связи удаляемого события/сессии — в том числе при каскаде владельца.
+CREATE TRIGGER IF NOT EXISTS chronicle_cleanup_campaign_event AFTER DELETE ON campaign_calendar_events
+BEGIN
+  DELETE FROM generic_links WHERE (from_type = 'campaign_event' AND from_id = OLD.id) OR (to_type = 'campaign_event' AND to_id = OLD.id);
+  DELETE FROM entity_relations WHERE (from_type = 'campaign_event' AND from_id = OLD.id) OR (to_type = 'campaign_event' AND to_id = OLD.id);
+END;
+CREATE TRIGGER IF NOT EXISTS chronicle_cleanup_setting_event AFTER DELETE ON setting_calendar_events
+BEGIN
+  DELETE FROM generic_links WHERE (from_type = 'setting_event' AND from_id = OLD.id) OR (to_type = 'setting_event' AND to_id = OLD.id);
+  DELETE FROM entity_relations WHERE (from_type = 'setting_event' AND from_id = OLD.id) OR (to_type = 'setting_event' AND to_id = OLD.id);
+END;
+CREATE TRIGGER IF NOT EXISTS chronicle_cleanup_session AFTER DELETE ON sessions
+BEGIN
+  DELETE FROM generic_links WHERE (from_type = 'session' AND from_id = OLD.id) OR (to_type = 'session' AND to_id = OLD.id);
+  DELETE FROM entity_relations WHERE (from_type = 'session' AND from_id = OLD.id) OR (to_type = 'session' AND to_id = OLD.id);
+END;

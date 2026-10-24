@@ -34,6 +34,7 @@ export const ENTITY_ENDPOINTS = {
   // У события своей коллекции нет — оно живёт внутри сеттинга, но одиночный
   // маршрут у него такой же, и связи с ним разрешаются в название.
   setting_event: "/settings/calendar-events",
+  campaign_event: "/campaigns/calendar-events",
   // Карта. Её привязки (`/maps/:id/bindings`) — подресурс: автосохранение клеток
   // задевает карту как `card`, чтобы мазок не перечитывал привязки.
   map: "/maps",
@@ -122,7 +123,7 @@ const RESOURCE_DEPENDENCIES: readonly { prefix: string | RegExp; kinds: readonly
   { prefix: "/setting-locations/inhabitant-counts", kinds: ["being", "community"] },
   {
     prefix: "/canvas/board",
-    kinds: ["scene", "adventure", "being", "location", "artifact", "community", "setting_event", "character", "setting", "campaign"],
+    kinds: ["scene", "adventure", "being", "location", "artifact", "community", "setting_event", "campaign_event", "character", "setting", "campaign"],
   },
   { prefix: "/canvas/index", kinds: ["scene", "adventure", "setting", "campaign"] },
   // Дерево сцен, план вечера и предпросмотр на пульте показывают статусы и тексты

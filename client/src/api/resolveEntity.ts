@@ -73,7 +73,7 @@ export async function resolveEntityMapLabels(
 
 /** Подпись сущности по её карточке — для тех, кто карточку уже прочитал. */
 export function entityLabel(type: string, id: number, entity: Record<string, unknown>): string {
-  if (type === "mastering" || type === "setting_event") return String(entity.title ?? id);
+  if (type === "mastering" || type === "setting_event" || type === "campaign_event") return String(entity.title ?? id);
   if (type === "session") return `${entity.campaign_name ?? "Сессия"} — ${entity.date ?? id}`;
   if (type === "character") return String(entity.character_name ?? id);
   return String(entity.name ?? id);

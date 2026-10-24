@@ -10,6 +10,13 @@ import { formatEventDate } from "../inworldCalendar";
 import type { SettingCalendarEvent } from "../types";
 import { useConfirm } from "../hooks/useConfirm";
 import { PlayerVisibilityFact } from "../components/PlayerVisibilityFact";
+import { sessionLabel } from "../sessionLabel";
+
+type ProfileEvent = Omit<SettingCalendarEvent, "setting_id"> & {
+  setting_id: number | null;
+  campaign_id?: number;
+  campaign_name?: string;
+};
 
 // Профиль события хроники. Строка хроники показывает только дату и краткое
 // описание — всё остальное (развёрнутый текст, последствия, участники) живёт
@@ -17,24 +24,30 @@ import { PlayerVisibilityFact } from "../components/PlayerVisibilityFact";
 // наполнить; дата — меткой под именем, на месте мазка.
 export function EventDetailPage() {
   const [confirmDialog, confirm] = useConfirm();
-  const { id } = useParams();
-  const eventId = Number(id);
+  const { id, campaignEventId } = useParams();
+  const campaign = campaignEventId !== undefined;
+  const kind = campaign ? "campaign_event" : "setting_event";
+  const eventId = Number(campaignEventId ?? id);
   const navigate = useNavigate();
 
-  const eventState = useEntity<SettingCalendarEvent>("setting_event", eventId);
+  const eventState = useEntity<ProfileEvent>(kind, eventId);
   const event = eventState.data ?? null;
   const calendar = useSettingCalendar(event?.setting_id);
   // Событие живёт внутри хроники сеттинга: его строка там и отметка в календаре.
-  const eventAffects: Affect[] = event ? [{ path: `/settings/${event.setting_id}` }, { path: "/calendar" }] : [];
-  const { save: saveEntity } = useSaveEntity<SettingCalendarEvent>("setting_event", eventId, { affects: eventAffects });
+  const eventAffects: Affect[] = event ? [
+    { path: campaign ? `/campaigns/${event.campaign_id}` : `/settings/${event.setting_id}` },
+    { path: "/calendar" }, { path: "/player" }, { path: "/visibility-grants" },
+  ] : [];
+  const { save: saveEntity } = useSaveEntity<ProfileEvent>(kind, eventId, { affects: eventAffects });
   const run = useAction();
 
   const chronicleUrl = event
-    ? `/settings/${event.setting_id}?tab=${encodeURIComponent("Хроника")}`
-    : "/settings";
+    ? campaign ? `/campaigns/${event.campaign_id}?tab=${encodeURIComponent("Хроника мира")}`
+      : `/settings/${event.setting_id}?tab=${encodeURIComponent("Хроника")}`
+    : campaign ? "/campaigns" : "/settings";
 
   // Карточки полей держат правку открытой, пока сохранение не удалось.
-  async function save(values: Partial<SettingCalendarEvent>) {
+  async function save(values: Partial<ProfileEvent>) {
     if (!(await saveEntity(values))) throw new Error("Не сохранилось");
   }
 
@@ -42,7 +55,7 @@ export function EventDetailPage() {
     if (!event) return;
     if (!(await confirm({ message: "Удалить событие из хроники?", confirmLabel: "Удалить", danger: true })))
       return;
-    const done = await run(() => write.del(`/settings/calendar-events/${eventId}`).then(() => true), { affects: eventAffects });
+    const done = await run(() => write.del(`${campaign ? "/campaigns" : "/settings"}/calendar-events/${eventId}`).then(() => true), { affects: eventAffects });
     if (done) navigate(chronicleUrl);
   }
 
@@ -50,7 +63,12 @@ export function EventDetailPage() {
 
   // Пока событие не пришло, крошки знают только первую ступень — дальше
   // дорога зависит от сеттинга, который приедет вместе с самим событием.
-  const crumbs = event
+  const crumbs = campaign ? [
+    { label: "Кампании", to: "/campaigns" },
+    { label: event?.campaign_name ?? "Кампания", to: event ? `/campaigns/${event.campaign_id}` : "/campaigns" },
+    { label: "Хроника мира", to: chronicleUrl },
+    { label: event?.title ?? "Событие" },
+  ] : event
     ? [
         { label: "Сеттинги", to: "/settings" },
         { label: event.setting_name ?? "Сеттинг", to: `/settings/${event.setting_id}` },
@@ -63,7 +81,7 @@ export function EventDetailPage() {
     <EntityPage
       paper
       crumbs={crumbs}
-      entityType="setting_event"
+      entityType={kind}
       title={event?.title ?? ""}
       meta={
         event && (
@@ -90,7 +108,7 @@ export function EventDetailPage() {
             <button
               type="button"
               aria-pressed={!!event.important}
-              onClick={() => void saveEntity({ important: !event.important } as unknown as Partial<SettingCalendarEvent>)}
+              onClick={() => void saveEntity({ important: !event.important } as unknown as Partial<ProfileEvent>)}
             >
               {event.important ? "★" : "☆"} важное
             </button>
@@ -98,7 +116,7 @@ export function EventDetailPage() {
               <input
                 type="checkbox"
                 checked={!!event.visible_to_players}
-                onChange={() => void saveEntity({ visible_to_players: !event.visible_to_players } as unknown as Partial<SettingCalendarEvent>)}
+                onChange={() => void saveEntity({ visible_to_players: !event.visible_to_players } as unknown as Partial<ProfileEvent>)}
               />
               видно игрокам
             </label>
@@ -107,47 +125,67 @@ export function EventDetailPage() {
             </Link>
           </div>
           {/* Кому открыто по кампаниям (спека campaign-paper, Q34). */}
-          <dl className="paper-facts">
+          {!campaign && <dl className="paper-facts">
             <PlayerVisibilityFact targetType="setting_calendar_event" targetId={eventId} />
-          </dl>
+          </dl>}
 
           <EditableTextCard
-            key={`description-${event.id}`}
+            key={`${kind}-description-${event.id}`}
             title="Кратко"
             help="Эта строка показывается в хронике мира."
             value={event.description}
             onSave={(v) => save({ description: v })}
             rows={3}
             emptyLabel="одна строка для хроники"
-            entityType="setting_event"
+            entityType={kind}
             entityId={eventId}
-            defaultSettingId={event.setting_id}
+            defaultSettingId={event.setting_id ?? undefined}
           />
           <EditableTextCard
-            key={`full-${event.id}`}
+            key={`${kind}-full-${event.id}`}
             title="Подробно"
             value={event.full_description}
             onSave={(v) => save({ full_description: v })}
             rows={8}
             emptyLabel="полное описание"
-            entityType="setting_event"
+            entityType={kind}
             entityId={eventId}
-            defaultSettingId={event.setting_id}
+            defaultSettingId={event.setting_id ?? undefined}
           />
           <EditableTextCard
-            key={`consequences-${event.id}`}
+            key={`${kind}-consequences-${event.id}`}
             title="Последствия"
             help="Что в мире изменилось после события."
             value={event.consequences}
             onSave={(v) => save({ consequences: v })}
             rows={6}
             emptyLabel="что изменилось после"
-            entityType="setting_event"
+            entityType={kind}
             entityId={eventId}
-            defaultSettingId={event.setting_id}
+            defaultSettingId={event.setting_id ?? undefined}
           />
 
-          <LinkDropZone entityType="setting_event" entityId={eventId} title="Участники и места" />
+          <LinkDropZone entityType={kind} entityId={eventId} title="Участники и места" />
+
+          <section className="card">
+            <h3>Сессии</h3>
+            {event.sessions?.length ? <ul>
+              {event.sessions.map((session) => <li key={session.link_id}>
+                <Link to={`/sessions/${session.id}`}>{sessionLabel(session)}</Link>
+              </li>)}
+            </ul> : <p className="muted">Пока не связаны.</p>}
+          </section>
+          <EditableTextCard
+            key={`${kind}-player-${event.id}`}
+            title="Текст для игроков"
+            value={event.player_text}
+            onSave={(value) => save({ player_text: value })}
+            rows={6}
+            emptyLabel="Если не задан, игроки увидят краткое описание."
+            entityType={kind}
+            entityId={eventId}
+            defaultSettingId={event.setting_id ?? undefined}
+          />
 
           {/* Название и дата правятся редко — свёрнуто, как справка у
               остальных профилей. */}

@@ -260,6 +260,7 @@ function App() {
               <Route path="/artifacts/:id" element={<ArtifactDetailPage />} />
               <Route path="/communities/:id" element={<CommunityDetailPage />} />
               <Route path="/events/:id" element={<EventDetailPage />} />
+              <Route path="/campaign-events/:campaignEventId" element={<EventDetailPage />} />
               <Route path="/compendium/:id" element={<CompendiumEntryRedirectPage />} />
               <Route path="/canvas" element={<CanvasPage />} />
               <Route path="/graph" element={<Navigate to="/graph/world" replace />} />

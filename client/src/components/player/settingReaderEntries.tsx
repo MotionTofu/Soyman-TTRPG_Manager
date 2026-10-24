@@ -34,9 +34,10 @@ export function buildSettingReaderGroups(
   const beingArticles = flagged?.beingArticles ?? [];
   // Одно событие бывает открыто и выдачей, и галочкой — показывается раз.
   const granted = setting?.chronicleEvents ?? [];
-  const grantedIds = new Set(granted.map((e) => e.id));
+  const eventKey = (e: { id: number; source?: string }) => `${e.source ?? "setting"}:${e.id}`;
+  const grantedIds = new Set(granted.map(eventKey));
   // Сначала новое, как в хронике Мастера: выдача приходит без порядка.
-  const events = [...granted, ...(flagged?.chronicleEvents ?? []).filter((e) => !grantedIds.has(e.id))].sort(
+  const events = [...granted, ...(flagged?.chronicleEvents ?? []).filter((e) => !grantedIds.has(eventKey(e)))].sort(
     (a, b) => b.inworld_year - a.inworld_year || b.inworld_month - a.inworld_month || b.inworld_day - a.inworld_day
   );
   const groups: SettingReaderGroups[] = [];
@@ -130,15 +131,15 @@ export function buildSettingReaderGroups(
       key: "setting-history",
       label: "История",
       entries: events.map((e) => ({
-        key: `setting-event-${e.id}`,
+        key: `${e.source === "campaign" ? "campaign-event" : "setting-event"}-${e.id}`,
         section: "История",
         title: e.title,
         body: (
           <div className="stack" style={{ gap: 10 }}>
             <span className="muted">{formatDate(e.inworld_year, e.inworld_month, e.inworld_day)}</span>
-            {e.description && (
+            {(e.player_text || e.description) && (
               <div className="muted" style={{ whiteSpace: "pre-wrap" }}>
-                <MentionText text={e.description} />
+                <MentionText text={e.player_text || e.description || ""} />
               </div>
             )}
           </div>

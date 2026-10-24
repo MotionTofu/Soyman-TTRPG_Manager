@@ -251,3 +251,33 @@ describe("артефакт в записях старой базы", () => {
     migrated.close();
   }, 60_000);
 });
+
+describe("миграция хроники кампании", () => {
+  it("старые события и точки целы, новые поля имеют безопасные умолчания, повтор не меняет строки", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "soyman-old-chronicle-"));
+    let database = openDatabase(dir);
+    database.exec("ALTER TABLE campaign_calendar_events DROP COLUMN visible_to_players");
+    database.exec("ALTER TABLE campaign_calendar_events DROP COLUMN player_text");
+    database.exec("ALTER TABLE setting_cycle_points DROP COLUMN color");
+    const setting = Number(database.prepare("INSERT INTO settings (name) VALUES ('Старый мир')").run().lastInsertRowid);
+    const campaign = Number(database.prepare("INSERT INTO campaigns (name, setting_id) VALUES ('Старая хроника', ?)").run(setting).lastInsertRowid);
+    database.prepare("INSERT INTO campaign_calendar_events (campaign_id, title, description, full_description, consequences, inworld_year, inworld_month, inworld_day) VALUES (?, 'Старое событие', 'Кратко', 'Подробно', 'Последствия', 1496, 6, 7)").run(campaign);
+    const cycle = Number(database.prepare("INSERT INTO setting_cycles (setting_id, name, period_days, anchor_year, anchor_month, anchor_day) VALUES (?, 'Луна', 28, 1496, 1, 1)").run(setting).lastInsertRowid);
+    database.prepare("INSERT INTO setting_cycle_points (cycle_id, name, day_offset, day_end) VALUES (?, 'Полная', 14, 16)").run(cycle);
+    const beforeEvent = database.prepare("SELECT id, title, description, full_description, consequences, inworld_year, inworld_month, inworld_day FROM campaign_calendar_events").all();
+    const beforePoint = database.prepare("SELECT id, name, day_offset, day_end, position FROM setting_cycle_points").all();
+    database.close();
+    database = openDatabase(dir);
+    expect(database.prepare("SELECT id, title, description, full_description, consequences, inworld_year, inworld_month, inworld_day FROM campaign_calendar_events").all()).toEqual(beforeEvent);
+    expect(database.prepare("SELECT id, name, day_offset, day_end, position FROM setting_cycle_points").all()).toEqual(beforePoint);
+    expect(database.prepare("SELECT visible_to_players, player_text FROM campaign_calendar_events").get()).toEqual({ visible_to_players: 0, player_text: "" });
+    expect(database.prepare("SELECT color FROM setting_cycle_points").get()).toEqual({ color: null });
+    const rows = database.prepare("SELECT * FROM campaign_calendar_events").all();
+    const snapshots = fs.readdirSync(dir).filter((file) => file.startsWith("app-before-campaign-chronicle-"));
+    database.close();
+    database = openDatabase(dir);
+    expect(database.prepare("SELECT * FROM campaign_calendar_events").all()).toEqual(rows);
+    expect(fs.readdirSync(dir).filter((file) => file.startsWith("app-before-campaign-chronicle-"))).toEqual(snapshots);
+    database.close();
+  }, 60_000);
+});

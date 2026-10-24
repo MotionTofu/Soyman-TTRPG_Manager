@@ -45,6 +45,7 @@ export const ENTITY_TYPE_SINGULAR: Record<string, string> = {
   session: "Сессия",
   compendium_entry: "Запись компендиума",
   setting_event: "Событие",
+  campaign_event: "Событие кампании",
 };
 
 // Only types with a real "/type/:id" detail page — others (resource, mastering)
@@ -63,4 +64,5 @@ export const DETAIL_ROUTES: Record<string, string> = {
   community: "/communities",
   compendium_entry: "/compendium",
   setting_event: "/events",
+  campaign_event: "/campaign-events",
 };

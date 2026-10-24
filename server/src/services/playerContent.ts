@@ -137,7 +137,12 @@ export interface FlaggedSettingContent {
 }
 
 export function getFlaggedSettingContent(settingId: number | null, campaignId?: number): FlaggedSettingContent {
-  if (!settingId) return { locationArticles: [], beingArticles: [], chronicleEvents: [] };
+  const campaignEvents = campaignId == null ? [] : db.prepare(`SELECT id, title,
+      CASE WHEN player_text <> '' THEN player_text ELSE description END AS description,
+      inworld_year, inworld_month, inworld_day, 'campaign' AS source
+    FROM campaign_calendar_events WHERE campaign_id = ? AND visible_to_players = 1
+    ORDER BY inworld_year DESC, inworld_month DESC, inworld_day DESC`).all(campaignId) as Record<string, unknown>[];
+  if (!settingId) return { locationArticles: [], beingArticles: [], chronicleEvents: campaignEvents };
   const locationArticles = db
     .prepare(
       `SELECT lc.id, lc.title, lc.content, lc.created_at, sl.name as location_name
@@ -156,7 +161,8 @@ export function getFlaggedSettingContent(settingId: number | null, campaignId?: 
     .all(settingId) as Record<string, unknown>[];
   const chronicleEvents = db
     .prepare(
-      `SELECT id, title, description, inworld_year, inworld_month, inworld_day
+      `SELECT id, title, CASE WHEN player_text <> '' THEN player_text ELSE description END AS description,
+              inworld_year, inworld_month, inworld_day, 'setting' AS source
        FROM setting_calendar_events
        WHERE setting_id = ? AND visible_to_players = 1
          -- Скрытое кампанией (спека campaign-paper, Q28) её игроки не видят.
@@ -164,7 +170,7 @@ export function getFlaggedSettingContent(settingId: number | null, campaignId?: 
        ORDER BY inworld_year DESC, inworld_month DESC, inworld_day DESC`
     )
     .all(settingId, campaignId ?? -1) as Record<string, unknown>[];
-  return { locationArticles, beingArticles, chronicleEvents };
+  return { locationArticles, beingArticles, chronicleEvents: [...chronicleEvents, ...campaignEvents] };
 }
 
 // «От мастера» для игрока: разделы и статьи кампании по грантам. Раздел
