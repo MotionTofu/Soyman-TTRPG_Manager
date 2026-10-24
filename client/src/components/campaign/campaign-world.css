@@ -1,5 +1,13 @@
 /* Мир кампании: папка каркаса — в paper.css, подложки как у дел «Партии». */
 .campaign-world--catalog { container:campaign-world / inline-size; gap:var(--sp-7); }
+.campaign-world--compact { container:campaign-world / inline-size; }
+.campaign-world--compact .campaign-world__layout { display:block; }
+.campaign-world--compact .world-row { grid-template-columns:56px minmax(0,1fr) 160px 28px; gap:var(--sp-3); }
+.campaign-world--compact .world-row__portrait { width:56px; height:56px; }
+.campaign-world--compact .world-row__text { font-size:var(--fs-data); }
+.world-row__expand { margin-top:var(--sp-3); }
+.world-row__records { grid-column:2 / -1; }
+.campaign-world__head .campaign-world__mobile-add { display:none; }
 .campaign-world__head { display:flex; align-items:flex-start; justify-content:space-between; gap:var(--sp-6); padding-bottom:var(--sp-6); border-bottom:2px solid var(--paper-ink); }
 .campaign-world__head h2 { margin:0; font:400 var(--fs-h1)/1.1 "Rubik Dirt",var(--font-ui); text-transform:none; letter-spacing:0; }
 .campaign-world__head p { margin:var(--sp-4) 0 0; max-width:60ch; font-size:var(--fs-body); line-height:1.5; color:var(--paper-ink-soft); }
@@ -51,8 +59,13 @@
   .world-row__portrait { width:64px; height:64px; }
   .world-row__changes { grid-column:2 / -1; border:0; padding:0; }
   .world-row__more { grid-column:3; grid-row:1; }
+  .campaign-world--compact .world-row { grid-template-columns:56px minmax(0,1fr) 28px; }
 }
 @container campaign-world (max-width:560px) {
+  .campaign-world__head { flex-wrap:nowrap; gap:var(--sp-3); }
+  .campaign-world__head > div:first-child { min-width:0; }
+  .campaign-world__head .campaign-world__actions { display:none; }
+  .campaign-world__head .campaign-world__mobile-add { display:block; width:44px; height:44px; flex-shrink:0; padding:0; border:1px solid var(--paper-ink); border-radius:3px; background:var(--paper-ink); color:var(--paper-base); font:400 var(--fs-h2)/1 var(--font-body); }
   .campaign-world__layout { display:flex; flex-direction:column; gap:var(--sp-4); }
   .campaign-world__kinds { flex-direction:row; overflow-x:auto; width:100%; border:0; padding:0 0 var(--sp-2); gap:var(--sp-2); }
   .campaign-world__kinds button { flex-shrink:0; width:auto; padding:var(--sp-3) var(--sp-4); border-bottom:1px solid var(--paper-rule); gap:var(--sp-2); white-space:nowrap; }
@@ -62,6 +75,8 @@
   .world-row__portrait { width:48px; height:48px; }
   .world-row .world-row__more { width:28px; }
   .world-row__category { font-size:var(--fs-meta); }
+  .campaign-world--compact .world-row { grid-template-columns:48px minmax(0,1fr) 28px; }
+  .campaign-world--compact .world-row__portrait { width:48px; height:48px; }
 }
 
 .campaign-world__actions { max-width:100%; display:flex; flex-wrap:wrap; justify-content:flex-end; gap:var(--sp-3); flex-shrink:0; }

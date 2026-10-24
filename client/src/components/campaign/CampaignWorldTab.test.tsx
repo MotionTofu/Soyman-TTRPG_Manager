@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CampaignWorldTab } from "./CampaignWorldTab";
 import { UndoDeleteProvider } from "../../hooks/useUndoDelete";
-import type { CampaignWorld, WorldEntity } from "../../campaignWorld";
+import type { CampaignWorld, WorldEntity, WorldType } from "../../campaignWorld";
 import type { SessionSummary } from "../../types";
 
 const transport = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn(), del: vi.fn() }));
@@ -23,7 +23,7 @@ function entity(over: Partial<WorldEntity> = {}): WorldEntity {
     aspects: [{ key: "state", text: "жив → погиб" }, { key: "knows", text: null }, { key: "note", text: null }, { key: "want", text: null }, { key: "fear", text: null }],
     changed_at: "2026-10-17 10:00:00", last_session: { id: 10, title: null, date: "2026-10-17" }, ...over };
 }
-function mount(expand?: (e: WorldEntity) => React.ReactNode) {
+function mount(expand?: (e: WorldEntity) => React.ReactNode, types?: readonly WorldType[]) {
   const world: CampaignWorld = { setting_id: 8, rumors: 4, drafts: 3, entities: [
     entity({ entity_type: "location", entity_id: 2, name: "Старая башня", category: "башня", state: "intact", records: 0, aspects: [], summary: { text: "Дозорный пост у дороги.", from_setting: true }, changed_at: "2026-10-01 10:00:00", last_session: null }),
     entity(),
@@ -39,7 +39,7 @@ function mount(expand?: (e: WorldEntity) => React.ReactNode) {
   });
   transport.del.mockResolvedValue({ ok: true });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
-  render(<QueryClientProvider client={client}><MemoryRouter><UndoDeleteProvider><CampaignWorldTab campaignId={7} settingId={8} sessions={sessions} expand={expand} /></UndoDeleteProvider></MemoryRouter></QueryClientProvider>);
+  render(<QueryClientProvider client={client}><MemoryRouter><UndoDeleteProvider><CampaignWorldTab campaignId={7} settingId={8} sessions={sessions} expand={expand} types={types} /></UndoDeleteProvider></MemoryRouter></QueryClientProvider>);
   return { client };
 }
 
@@ -97,13 +97,49 @@ describe("вкладка мира кампании", () => {
   });
 
   it("сохраняет раскрытие записей тетради через types и expand", async () => {
-    mount((e) => <div>Записи: {e.name}</div>);
-    await screen.findByRole("link", { name: "Валлен Стерн" });
+    const expand = vi.fn((e: WorldEntity) => <div>Записи: {e.name}</div>);
+    mount(expand, ["location"]);
+    await screen.findByRole("link", { name: "Старая башня" });
     expect(screen.queryByRole("heading", { name: "Мир кампании" })).toBeNull();
+    expect(screen.queryByRole("navigation", { name: "Виды мира кампании" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Добавить в мир|Добавить из сеттинга/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Валлен Стерн" })).toBeNull();
+    expect(document.querySelectorAll(".world-row")).toHaveLength(1);
+    expect(expand).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Поиск в мире кампании" }), { target: { value: "дозорный" } });
     const row = screen.getByRole("link", { name: "Старая башня" }).closest("li")!;
     fireEvent.click(within(row).getByRole("button", { name: "Записи" }));
+    expect(within(row).getByRole("button", { name: "Свернуть" }).getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByText("Записи: Старая башня")).toBeDefined();
     fireEvent.click(within(row).getByRole("button", { name: "Свернуть" }));
     expect(screen.queryByText("Записи: Старая башня")).toBeNull();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Поиск в мире кампании" }), { target: { value: "валлен" } });
+    expect(screen.getByText("Ничего не подходит.")).toBeDefined();
+  });
+
+  it("компактные стороны показывают новые строки и раскрывают только одну карточку", async () => {
+    mount((e) => <div>Записи: {e.name}</div>, ["being", "community"]);
+    const vallen = (await screen.findByRole("link", { name: "Валлен Стерн" })).closest("li")!;
+    expect(screen.queryByRole("link", { name: "Старая башня" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Камень Голорра" })).toBeNull();
+    expect(within(vallen).getByRole("button", { name: /Состояние Валлен/ })).toBeDefined();
+    fireEvent.click(within(vallen).getByRole("button", { name: "Записи" }));
+    const guard = screen.getByRole("link", { name: "Черновик о стражнике" }).closest("li")!;
+    fireEvent.click(within(guard).getByRole("button", { name: "Записи" }));
+    expect(screen.queryByText("Записи: Валлен Стерн")).toBeNull();
+    expect(screen.getByText("Записи: Черновик о стражнике")).toBeDefined();
+  });
+
+  it("мобильная + закрывается Escape и возвращает фокус", async () => {
+    mount();
+    const add = await screen.findByRole("button", { name: "Добавить в мир кампании" });
+    fireEvent.click(add);
+    expect(screen.getByRole("menu", { name: "Добавить в мир кампании" })).toBeDefined();
+    expect(screen.getByRole("menuitem", { name: "Из сеттинга" })).toBeDefined();
+    expect(screen.getByRole("menuitem", { name: "Новая" })).toBeDefined();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(add);
+    expect(add.getAttribute("aria-expanded")).toBe("false");
   });
 });

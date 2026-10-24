@@ -1,4 +1,4 @@
-import { useRef, useState, type MouseEvent } from "react";
+import { useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { CAMPAIGN_ENTITY_STATES, campaignEntityStateLabel, campaignEntityStateTone, type CampaignEntityState } from "@shared/campaignWorld";
 import { WORLD_GROUPS, type WorldEntity } from "../../campaignWorld";
@@ -18,10 +18,13 @@ interface Props {
   onState: (entity: WorldEntity, state: CampaignEntityState) => void;
   onRecord: (entity: WorldEntity) => void;
   onRemove: (entity: WorldEntity) => void;
+  expanded?: boolean;
+  onExpand?: () => void;
+  records?: ReactNode;
 }
 
 /** Строка мира кампании; самостоятельна для компактного вида тетради. */
-export function CampaignWorldRow({ entity: e, campaignId, session, onState, onRecord, onRemove }: Props) {
+export function CampaignWorldRow({ entity: e, campaignId, session, onState, onRecord, onRemove, expanded, onExpand, records }: Props) {
   const navigate = useNavigate();
   const [menu, setMenu] = useState<{ x: number; y: number; state: boolean } | null>(null);
   const [failedImage, setFailedImage] = useState<string | null>(null);
@@ -64,6 +67,7 @@ export function CampaignWorldRow({ entity: e, campaignId, session, onState, onRe
         <p className={`world-row__text${e.summary.from_setting ? " world-row__text--basis" : ""}`}>
           {e.summary.from_setting && <span className="world-row__source">из сеттинга · </span>}{e.summary.text}
         </p>
+        {onExpand && <button type="button" className="world-text-action world-row__expand" aria-expanded={expanded} onClick={onExpand}>{expanded ? "Свернуть" : "Записи"}</button>}
       </div>
       <div className="world-row__changes">
         {e.aspects.length ? <>
@@ -74,6 +78,7 @@ export function CampaignWorldRow({ entity: e, campaignId, session, onState, onRe
         {e.last_session && <Link className="world-row__session" to={`/sessions/${e.last_session.id}`}>{sessionLabel(session ?? e.last_session)} · {formatDateKeyRu(e.last_session.date)}</Link>}
       </div>
       <button type="button" className="world-row__more" aria-label={`Действия: ${e.name}`} aria-haspopup="menu" aria-expanded={!!menu && !menu.state} onClick={(event) => openMenu(event, false)}>⋯</button>
+      {expanded && <div className="campaign-world__card world-row__records" onContextMenu={(event) => event.stopPropagation()}>{records}</div>}
       {menu && <ContextMenu x={menu.x} y={menu.y} title={menu.state ? `Состояние: ${e.name}` : e.name} ariaLabel={menu.state ? `Состояние: ${e.name}` : `Действия: ${e.name}`} items={menu.state ? stateItems : actions} onClose={closeMenu} />}
     </li>
   );

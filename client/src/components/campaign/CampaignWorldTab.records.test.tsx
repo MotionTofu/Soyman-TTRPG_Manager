@@ -48,6 +48,21 @@ function mount() {
 }
 
 describe("записи и создание в мире кампании", () => {
+  it.each(["Из сеттинга", "Новая"])("мобильная + открывает действие «%s» с видом из язычка", async (action) => {
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: /Артефакты\s*0/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Добавить в мир кампании" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: action }));
+    expect(screen.queryByRole("menu")).toBeNull();
+    await screen.findByRole("heading", { name: action === "Новая" ? "Новая сущность" : "Добавить из сеттинга" });
+    if (action === "Новая") {
+      expect((screen.getByRole("combobox", { name: "Тип" }) as HTMLSelectElement).value).toBe("artifact");
+      const setting = screen.getByRole("combobox", { name: "Сеттинг" }) as HTMLSelectElement;
+      await waitFor(() => expect(setting.value).toBe("8"));
+      expect(setting.disabled).toBe(true);
+    }
+  });
+
   it("счёт слухов равен строкам, включая персонажа и кампанию; исключены черновые, отброшенные и заменённые", async () => {
     mount();
     fireEvent.click(await screen.findByRole("button", { name: /Слухи\s*5/ }));
