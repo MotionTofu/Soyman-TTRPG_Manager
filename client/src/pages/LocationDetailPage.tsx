@@ -1,3 +1,4 @@
+import { CampaignEntityStateBadge } from "../components/campaign/CampaignEntityStateBadge";
 import { useSettingCrumbs } from "../layout/useSettingCrumbs";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -800,6 +801,7 @@ export function LocationDetailPage() {
       ]}
       entityType="location"
       title={location.name}
+      badges={inCampaign && <CampaignEntityStateBadge campaignId={inCampaign.id} entityType="location" entityId={locationId} />}
       // Под именем — тип и путь, на месте мазка (владелец, 2026-10-02).
       meta={
         <span className="paper-ident-tags">

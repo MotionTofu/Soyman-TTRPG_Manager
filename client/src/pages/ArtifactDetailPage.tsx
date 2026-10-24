@@ -46,6 +46,10 @@ import { useSettingCalendar } from "../hooks/useSettingCalendar";
 import { toAliasesList } from "../utils/aliasesList";
 import { DETAIL_ROUTES } from "../entityTypes";
 import { PlayerVisibilityFact } from "../components/PlayerVisibilityFact";
+import { BaseFold, CampaignChronicle, CampaignRecords, ContextSwitch, EngagedCampaigns } from "../components/campaign/CampaignProfileParts";
+import { campaignCrumbs, useCampaignContext, useOwnerRecords } from "../components/campaign/campaignProfile";
+import { CampaignEntityStateBadge } from "../components/campaign/CampaignEntityStateBadge";
+import { RECORD_ASPECTS } from "../entityRecords";
 
 // Общий каркас профилей (разбор 2026-10-02, предмет Q1): «Отношения» и
 // владелец с местом — во «Связях», важные даты — в «Хронике», «Карточка
@@ -66,6 +70,9 @@ export function ArtifactDetailPage() {
   const artifactState = useEntity<Artifact>("artifact", artifactId);
   const artifact = artifactState.data ?? null;
   const settingId = artifact?.setting_id ?? null;
+  const ctx = useCampaignContext(artifact?.campaigns);
+  const inCampaign = ctx.campaign;
+  const records = useOwnerRecords(inCampaign?.id ?? null, "artifact", artifactId);
   const settingCrumbs = useSettingCrumbs(settingId);
   const { save } = useSaveEntity<Artifact>("artifact", artifactId);
   const run = useAction();
@@ -234,9 +241,10 @@ export function ArtifactDetailPage() {
   return (
     <EntityPage
       paper
-      crumbs={[...settingCrumbs, { label: "Сокровищница", to: treasuryTo }, { label: artifact.name }]}
+      crumbs={inCampaign ? campaignCrumbs(inCampaign, artifact.name) : [...settingCrumbs, { label: "Сокровищница", to: treasuryTo }, { label: artifact.name }]}
       entityType="artifact"
       title={artifact.name}
+      badges={inCampaign && <CampaignEntityStateBadge campaignId={inCampaign.id} entityType="artifact" entityId={artifactId} />}
       // Под именем — род, тип, редкость метками, на месте мазка (Q3).
       meta={
         <span className="paper-ident-tags">
@@ -246,7 +254,7 @@ export function ArtifactDetailPage() {
                 {t}
               </span>
             ))
-          ) : (
+          ) : inCampaign ? null : (
             <button type="button" className="badge tag setting-genres__add" onClick={openReference}>
               + род предмета
             </button>
@@ -274,9 +282,15 @@ export function ArtifactDetailPage() {
         </>
       }
     >
+      <ContextSwitch engaged={artifact.campaigns} campaign={inCampaign} onSelect={ctx.select} />
       {tab === "Досье" && (
         <div className="dossier">
           <aside className="dossier__aside">
+            {inCampaign ? (
+              <div className="dossier__portrait">
+                {artifact.avatar_image_url ? <img src={artifact.avatar_image_url} alt={artifact.name} /> : <span className="dossier__portrait-empty">Картинка предмета</span>}
+              </div>
+            ) : (
             <label className="dossier__portrait" title={IMAGE_HINT}>
               {artifact.avatar_image_url ? (
                 <img src={artifact.avatar_image_url} alt={artifact.name} />
@@ -286,6 +300,7 @@ export function ArtifactDetailPage() {
               <span className="dossier__portrait-hint">{uploadingAvatar ? "Загрузка…" : "Сменить картинку"}</span>
               <input type="file" accept={IMAGE_ACCEPT} hidden onChange={(e) => avatarCrop.onSelect(e.target.files?.[0] ?? null)} />
             </label>
+            )}
             <dl className="paper-facts">
               {ownerName && (
                 <div>
@@ -330,7 +345,7 @@ export function ArtifactDetailPage() {
               <div>
                 <dt className="paper-label">Теги</dt>
                 <dd>
-                  <TagChips tags={artifact.tags ?? []} onChange={saveTags} />
+                  <TagChips tags={artifact.tags ?? []} onChange={inCampaign ? undefined : saveTags} />
                 </dd>
               </div>
               {/* Кому открыто — выдача с профиля (спека campaign-paper, Q34). */}
@@ -344,6 +359,24 @@ export function ArtifactDetailPage() {
             </div>
           </aside>
 
+          {inCampaign ? (
+            <div className="dossier__main">
+              <CampaignRecords
+                campaignId={inCampaign.id}
+                settingId={artifact.setting_id}
+                ownerType="artifact"
+                ownerId={artifactId}
+                chains={records}
+                title="Сейчас в кампании"
+                aspects={RECORD_ASPECTS.artifact.map((a) => a.key)}
+                emptyKeys={RECORD_ASPECTS.artifact.map((a) => a.key).filter((k) => k !== "note")}
+              />
+              <BaseFold description={artifact.description ?? ""} chapters={[
+                ...([["Свойства", artifact.power], ["История", artifact.history], ["Заметки", artifact.notes], ["Секрет", artifact.secret]] as const).map(([title, content]) => ({ title, items: content.trim() ? [{ id: artifactId, title: "", content }] : [] })),
+                { title: "Статьи", items: artifact.chapters },
+              ]} />
+            </div>
+          ) : (
           <div className="dossier__main">
             <ArtifactHead
               power={artifact.power}
@@ -361,6 +394,8 @@ export function ArtifactDetailPage() {
                 return ok;
               }}
             />
+
+            <EngagedCampaigns campaigns={artifact.campaigns} onOpen={ctx.select} />
 
             {textCard("description", "Описание", 3, "описание")}
             {textCard("history", "История", 4, "история предмета")}
@@ -452,6 +487,7 @@ export function ArtifactDetailPage() {
               </div>
             </details>
           </div>
+          )}
         </div>
       )}
 
@@ -532,7 +568,9 @@ export function ArtifactDetailPage() {
         </div>
       )}
 
-      {tab === "Хроника" && (
+      {tab === "Хроника" && inCampaign && <CampaignChronicle campaign={inCampaign} settingId={artifact.setting_id} chains={records} />}
+
+      {tab === "Хроника" && !inCampaign && (
         <section>
           <h2 className="paper-group__head">
             В мире <span className="paper-group__count">{importantDates.length}</span>

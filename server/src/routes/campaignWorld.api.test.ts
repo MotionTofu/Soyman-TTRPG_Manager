@@ -3,11 +3,13 @@ import express from "express";
 import request from "supertest";
 import { db } from "../db/db";
 import { entityRecordsRouter } from "./entityRecords";
+import { artifactsRouter } from "./artifacts";
 import { collectOrphans, sweepOrphans } from "../services/orphans";
 
 const app = express();
 app.use(express.json());
 app.use("/api", entityRecordsRouter);
+app.use("/api/artifacts", artifactsRouter);
 let setting: number, campaign: number, otherCampaign: number, artifact: number, being: number, location: number, community: number;
 const insert = (sql: string, ...params: unknown[]) => Number(db.prepare(sql).run(...params).lastInsertRowid);
 const url = () => `/api/campaigns/${campaign}`;
@@ -164,5 +166,29 @@ describe("сводка мира и достоверность", () => {
     expect(filtered.status).toBe(200);
     expect(filtered.body.records.every((r: { certainty: string; status: string }) => r.certainty === "rumor" && r.status === "established")).toBe(true);
     expect((await request(app).get(`${url()}/records?certainty=invented`)).status).toBe(400);
+  });
+});
+
+
+describe("контекст кампании в профиле артефакта", () => {
+  it("возвращает задействованные кампании со сводкой и последней встречей, исключает архивные", async () => {
+    const sid = session("2026-10-20");
+    await record({ owner_type: "artifact", owner_id: artifact, aspect: "holder", text: "У героев", session_id: sid });
+    await request(app).post(`/api/campaigns/${otherCampaign}/world`).send({ entity_type: "artifact", entity_id: artifact });
+    let response = await request(app).get(`/api/artifacts/${artifact}`);
+    expect(response.status).toBe(200);
+    expect(response.body.campaigns).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: campaign, records: 1, drafts: 0, last_session: { id: sid, title: null, date: "2026-10-20" } }),
+      expect.objectContaining({ id: otherCampaign, records: 0, last_session: null }),
+    ]));
+    db.prepare("UPDATE campaigns SET archived_at = datetime('now') WHERE id = ?").run(otherCampaign);
+    response = await request(app).get(`/api/artifacts/${artifact}`);
+    expect(response.body.campaigns.map((c: { id: number }) => c.id)).toEqual([campaign]);
+    expect(response.body.description).toBe("Говорящий камень");
+  });
+
+  it("без задействования возвращает пустой список; неизвестный предмет — 404", async () => {
+    expect((await request(app).get(`/api/artifacts/${artifact}`)).body.campaigns).toEqual([]);
+    expect((await request(app).get("/api/artifacts/99999999")).status).toBe(404);
   });
 });

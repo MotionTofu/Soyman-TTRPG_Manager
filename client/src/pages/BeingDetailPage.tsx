@@ -1,3 +1,4 @@
+import { CampaignEntityStateBadge } from "../components/campaign/CampaignEntityStateBadge";
 import { BEING_CATEGORY_LABELS } from "../beingCategories";
 import { useSettingCrumbs } from "../layout/useSettingCrumbs";
 import { useEffect, useMemo, useState, type DragEvent } from "react";
@@ -467,6 +468,7 @@ export function BeingDetailPage() {
       title={being.name}
       badges={
         <>
+          {inCampaign && <CampaignEntityStateBadge campaignId={inCampaign.id} entityType="being" entityId={beingId} />}
           {(being.aliases ?? [])[0] && (
             <span className="badge">«{being.aliases[0]}»</span>
           )}

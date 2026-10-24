@@ -5,6 +5,7 @@ import { db } from "../db/db";
 import { artifactFolder, sanitizeName, toFileUrl, writeReplacingOldFile } from "../services/filesystem";
 import { renameEntityFolder } from "../services/vaultPaths";
 import { storeDeduped } from "../services/vaultDedup";
+import { campaignsOfEntity } from "../services/entityRecords";
 
 export const artifactsRouter = Router();
 const ALLOWED_IMAGE_MIMES = /^image\/(jpeg|png|gif|webp|avif)$/;
@@ -124,7 +125,7 @@ artifactsRouter.get("/:id", (req, res) => {
   const importantDates = db
     .prepare("SELECT * FROM important_dates WHERE owner_type = 'artifact' AND owner_id = ? ORDER BY created_at")
     .all(req.params.id);
-  res.json({ ...withRefs(row), chapters, important_dates: importantDates, compendium_links: getCompendiumLinks(req.params.id) });
+  res.json({ ...withRefs(row), chapters, important_dates: importantDates, compendium_links: getCompendiumLinks(req.params.id), campaigns: campaignsOfEntity("artifact", Number(req.params.id)) });
 });
 
 artifactsRouter.post("/:id/compendium-links", (req, res) => {

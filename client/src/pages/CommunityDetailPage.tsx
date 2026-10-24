@@ -1,3 +1,4 @@
+import { CampaignEntityStateBadge } from "../components/campaign/CampaignEntityStateBadge";
 import { useSettingCrumbs } from "../layout/useSettingCrumbs";
 import { useState, type DragEvent } from "react";
 import { EntityParticipates } from "../components/EntityParticipates";
@@ -297,6 +298,7 @@ export function CommunityDetailPage() {
       ]}
       entityType="community"
       title={community.name}
+      badges={inCampaign && <CampaignEntityStateBadge campaignId={inCampaign.id} entityType="community" entityId={communityId} />}
       // Под именем — другие названия, на месте мазка (макет, доска 27).
       meta={aliases.length > 0 ? aliases.join(" · ") : undefined}
       actions={[

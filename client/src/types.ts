@@ -1528,6 +1528,8 @@ export interface StorySceneDetail extends StoryScene {
 }
 
 export interface Artifact {
+  /** Где предмет задействован: контекст профиля кампании. */
+  campaigns?: EngagedCampaign[];
   id: number;
   setting_id: number;
   name: string;
