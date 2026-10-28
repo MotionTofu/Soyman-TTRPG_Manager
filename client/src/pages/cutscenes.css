@@ -9,7 +9,7 @@
 .cutscene-tile h2 { margin: 0; font-size: var(--fs-h3); overflow-wrap: anywhere; }
 .cutscene-tile__description { margin: 0; font-size: var(--fs-body); line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .cutscene-tile time, .cutscene-tile__copy > span { font-size: var(--fs-meta); }
-.cutscene-tile__actions { display: flex; justify-content: end; padding: var(--sp-4) var(--sp-6); border-block-start: 1px solid var(--line); }
+.cutscene-tile__actions { display: flex; flex-wrap: wrap; justify-content: end; gap: var(--sp-3); padding: var(--sp-4) var(--sp-6); border-block-start: 1px solid var(--line); }
 .cutscene-cover { position: relative; aspect-ratio: 16/9; overflow: hidden; min-inline-size: 0; }
 .cutscene-cover > .pres-stage { block-size: 100%; }
 .cutscene-cover__placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-4); block-size: 100%; min-block-size: 6rem; color: var(--muted); background: var(--paper-2); font-size: var(--fs-meta); }
