@@ -10,6 +10,17 @@ import { CutsceneMediaPicker } from "./CutsceneMediaPicker";
 import { AudioTransitionFields, WorkshopNumber, WorkshopSeconds } from "./WorkshopFields";
 import { WorkshopWaveform } from "./WorkshopWaveform";
 
+const seconds = (ms: number) => `${(ms / 1000).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} с`;
+/** One line for the collapsed «Переход и повтор»: what will be heard without opening it. */
+function transitionSummary(value: CutsceneAudioCommand): string {
+  const change = value.transition.mode === "crossfade" ? `перекрёстная смена ${seconds(value.transition.fadeOutMs)} / ${seconds(value.transition.fadeInMs)}`
+    : `последовательная смена ${seconds(value.transition.fadeOutMs)} / ${seconds(value.transition.fadeInMs)}`;
+  const loop = value.loop.transition;
+  const repeat = !value.loop.enabled ? "без повтора" : loop.mode === "cut" ? "повтор без плавности"
+    : loop.mode === "crossfade" ? `повтор с перекрытием ${seconds(loop.durationMs)}` : "повтор с затуханием";
+  return `${change}, ${repeat}`;
+}
+
 export function WorkshopAudio({ id, stepId, value, onChange, readOnly = false }: {
   id: number; stepId: string; value: CutsceneAudioCommand; onChange: (value: CutsceneAudioCommand) => void; readOnly?: boolean;
 }) {
@@ -34,14 +45,16 @@ export function WorkshopAudio({ id, stepId, value, onChange, readOnly = false }:
     <fieldset disabled={readOnly} className="cs-audio-bounds"><WorkshopNumber path={[...path, "startSeconds"]} label="Начало фрагмента, с" value={range?.start ?? value.startSeconds} onChange={number => onChange({ ...value, startSeconds: number ?? 0 })} />
       <WorkshopNumber path={[...path, "endSeconds"]} label="Конец фрагмента, с" nullable value={range?.end ?? value.endSeconds} onChange={endSeconds => onChange({ ...value, endSeconds })} />
       <WorkshopNumber path={[...path, "volume"]} label="Громкость, %" value={value.volume * 100} max={100} onChange={number => onChange({ ...value, volume: (number ?? 0) / 100 })} />
-      <div className="cs-fragment-length"><span>Длина фрагмента</span><strong>{length === null ? "Определяется" : formatDuration(length)}</strong></div></fieldset>
+      <div className="cs-fragment-length"><span>Длина фрагмента</span><strong>{length === null ? "Определяется" : formatDuration(length)}</strong></div>
+      <label className="cs-checkbox"><input data-draft-path={JSON.stringify([...path, "loop", "enabled"])} type="checkbox" checked={value.loop.enabled} onChange={event => onChange({ ...value, loop: { ...value.loop, enabled: event.target.checked } })} />Повторять фрагмент</label></fieldset>
     {rangeInvalid && <p className="cs-number-error" role="alert">Правка не применена. Конец должен быть больше начала и не выходить за длительность файла.</p>}
-    <div className="cs-audition"><button className="primary" disabled={busy || blocked || !!state.foreign} onClick={() => void controller.play("audition")}>{state.mode === "audition" && state.phase === "playing" ? "Пауза прослушивания" : state.mode === "audition" && state.phase === "paused" ? "Продолжить прослушивание" : "Прослушать фрагмент"}</button>
-      <button disabled={state.mode !== "audition"} onClick={() => void controller.stop()}>Стоп прослушивания</button>
+    <div className="cs-audition" title="При перетаскивании границы звук приостанавливается и после отпускания играет с нового начала."><button className="primary" disabled={busy || blocked || !!state.foreign} onClick={() => void controller.play("audition")}>{state.mode === "audition" && state.phase === "playing" ? "Пауза прослушивания" : state.mode === "audition" && state.phase === "paused" ? "Продолжить прослушивание" : "Прослушать фрагмент"}</button>
+      {state.mode === "audition" && <button onClick={() => void controller.stop()}>Стоп прослушивания</button>}
       <label className="cs-checkbox"><input type="checkbox" checked={state.auditionLoop} onChange={event => controller.setAuditionLoop(event.target.checked)} />Зациклить прослушивание</label>
-    </div><p className="cs-source">При перетаскивании звук приостанавливается. Отпускание границы возобновит уже игравшее прослушивание с нового начала.</p>
+    </div>
+    <details className="cs-audio-advanced"><summary>Переход и повтор <span className="muted">— {transitionSummary(value)}</span></summary>
     <fieldset disabled={readOnly} className="cs-audio-settings"><section className="stack"><h3>Переход на этот трек</h3><AudioTransitionFields path={[...path, "transition"]} value={value.transition} onChange={transition => onChange({ ...value, transition })} /><p className="cs-source">Переход между треками проверяется в общем превью.</p></section>
-      <section className="stack"><h3>Повтор в катсцене</h3><label className="cs-checkbox"><input data-draft-path={JSON.stringify([...path, "loop", "enabled"])} type="checkbox" checked={value.loop.enabled} onChange={event => onChange({ ...value, loop: { ...value.loop, enabled: event.target.checked } })} />Повторять фрагмент</label>
+      <section className="stack"><h3>Повтор в катсцене</h3>
         <label>Способ повтора<select data-draft-path={JSON.stringify([...path, "loop", "transition"])} value={loop.mode} onChange={event => {
           const mode = event.target.value;
           patchLoop(mode === "cut" ? { mode: "cut" } : mode === "sequential" ? { mode: "sequential", fadeOutMs: CUTSCENE_DEFAULTS.audioFadeOutMs, fadeInMs: CUTSCENE_DEFAULTS.audioFadeInMs } : { mode: "crossfade", durationMs: CUTSCENE_DEFAULTS.loopCrossfadeMs });
@@ -51,6 +64,7 @@ export function WorkshopAudio({ id, stepId, value, onChange, readOnly = false }:
         {!value.loop.enabled && <WorkshopSeconds path={[...path, "endFadeOutMs"]} label="Затухание перед естественным окончанием" ms={value.endFadeOutMs} onChange={endFadeOutMs => onChange({ ...value, endFadeOutMs })} />}
       </section></fieldset>
     <p className="cs-source">Пустой конец — до конца файла. Окончание звука не переключает шаг. Слишком длинная склейка сокращается до половины фрагмента; остальные нарастания и затухания — до его длины.</p>
+    </details>
     {picker && <CutsceneMediaPicker id={id} kind="audio" title="Музыка шага" onPick={items => onChange({ ...value, audio: { kind: "audio", id: items[0].ref.id } })} onClose={() => setPicker(false)} />}
   </div>;
 }

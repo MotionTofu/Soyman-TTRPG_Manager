@@ -46,6 +46,9 @@
 .cs-media-row { display: flex; gap: var(--sp-4); align-items: center; padding: var(--sp-3); border-block-end: 1px solid var(--line); }
 .cs-media-row img { inline-size: 5rem; aspect-ratio: 16/9; object-fit: contain; }
 .cs-media-row span { overflow-wrap: anywhere; min-inline-size: 0; }
+.cs-media-row .cs-listen { inline-size: 2rem; block-size: 2rem; padding: 0; border-radius: 50%; flex-shrink: 0; }
+.cs-media-row .cs-listen[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); }
+.cs-media-row .cs-media-duration { margin-inline-start: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
 @media (max-width: 1000px) {
   .cs-workspace { grid-template-columns: 10rem minmax(0,1fr); gap: var(--sp-5); }
   .cs-metadata { grid-template-columns: minmax(0,1fr); }

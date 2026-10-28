@@ -92,7 +92,11 @@
 .cs-audio-file > div { display: grid; gap: var(--sp-2); overflow-wrap: anywhere; }
 .cs-audio-file .muted { font-size: var(--fs-meta); }
 .cs-audio-bounds, .cs-audio-settings { display: grid; gap: var(--sp-5); padding: 0; margin: 0; border: 0; min-inline-size: 0; }
-.cs-audio-bounds { grid-template-columns: repeat(4,minmax(0,1fr)); align-items: start; }
+.cs-audio-bounds { grid-template-columns: repeat(auto-fit,minmax(9rem,1fr)); align-items: end; }
+.cs-audio-advanced { padding: var(--sp-4) var(--sp-5); background: var(--paper-2); border: 1px solid var(--line); border-radius: var(--radius-card, 4px); }
+.cs-audio-advanced > summary { cursor: pointer; }
+.cs-audio-advanced > summary .muted { font-size: var(--fs-meta); }
+.cs-audio-advanced[open] > summary { margin-block-end: var(--sp-5); }
 .cs-audio-settings { grid-template-columns: repeat(2,minmax(0,1fr)); }
 .cs-audio-settings > section { min-inline-size: 0; padding: var(--sp-5); background: var(--paper-2); border: 1px solid var(--line); border-radius: var(--radius-card, 4px); }
 .cs-fragment-length { display: grid; gap: var(--sp-3); font-size: var(--fs-meta); }
