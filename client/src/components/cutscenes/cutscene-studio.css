@@ -23,9 +23,24 @@
 .cs-channel-layout { min-inline-size: 0; }
 .cs-channel-layout--audio { display: grid; grid-template-columns: minmax(0,2fr) minmax(15rem,1fr); gap: var(--sp-5); align-items: start; }
 .cs-channel-layout--audio > .cs-preview-stage { position: sticky; inset-block-start: var(--sp-5); }
-.cs-channel-command { display: inline-flex; justify-self: start; padding: var(--sp-1); gap: var(--sp-1); background: var(--paper-2); border-radius: var(--radius-card, 4px); }
-.cs-channel-command button { border: 0; background: transparent; }
+.cs-channel-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-5); }
+.cs-channel-head .cs-source { margin: 0; }
+.cs-channel-command { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.cs-channel-command button { border: 0; border-radius: 0; background: transparent; padding: var(--sp-3) var(--sp-6); }
+.cs-channel-command button + button { border-inline-start: 1px solid var(--line); }
 .cs-channel-command [aria-pressed="true"] { background: var(--accent); color: var(--accent-text); }
+.cs-channel-marks { display: inline-flex; gap: var(--sp-2); }
+.cs-channel-marks i { position: relative; display: inline-grid; place-items: center; inline-size: 1.25rem; block-size: 1.25rem; border-radius: 3px; }
+.cs-channel-marks svg { inline-size: .9rem; block-size: .9rem; fill: none; stroke: currentColor; stroke-width: 1.6; }
+.cs-channel-marks .is-replace { background: var(--accent); color: var(--accent-text); }
+.cs-channel-marks .is-keep { border: 1px solid var(--muted); color: var(--muted); }
+.cs-channel-marks .is-clear { border: 1px dashed var(--muted); color: var(--muted); opacity: .65; }
+.cs-channel-marks .is-clear::after { content: ""; position: absolute; inset-inline: 2px; inset-block-start: 50%; border-block-start: 1.5px solid var(--danger-bg); transform: rotate(-35deg); }
+.cs-title-field { flex: 1; min-inline-size: 0; max-inline-size: 48rem; }
+.cs-title-field input { inline-size: 100%; font-family: var(--font-body); font-weight: 600; font-size: var(--fs-h2); background: transparent; border-color: transparent; }
+.cs-title-field input:hover { border-color: var(--line); }
+.cs-title-field input:focus { border-color: var(--accent); background: var(--paper-2); }
+.cutscene-workshop-page .page-head :is(h1, h2) { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .cs-source { line-height: 1.5; }
 .cs-source button { font-size: inherit; padding: var(--sp-1) var(--sp-3); margin-inline-start: var(--sp-3); }
 .cs-composition { display: grid; grid-template-columns: minmax(0,1fr) minmax(15rem,20rem); gap: var(--sp-5); align-items: start; }
@@ -38,10 +53,15 @@
 .cs-layer > button:first-child { inline-size: 100%; flex-basis: 100%; }
 .cs-visual-replay { justify-self: start; }
 .cs-preview-stage { display: grid; gap: var(--sp-3); }
-.cs-preview-controls { display: grid; gap: var(--sp-4); padding: var(--sp-5); background: var(--paper-2); border: 1px solid var(--line); border-radius: var(--radius-card, 4px); }
+.cs-preview-controls { display: grid; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); background: var(--paper-2); border: 1px solid var(--line); border-radius: var(--radius-card, 4px); }
 .cs-preview-controls:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.cs-preview-controls > .cs-toolbar > strong { margin-inline-end: auto; }
-.cs-preview-output > label { min-inline-size: 10rem; }
+.cs-preview-strip { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); }
+.cs-preview-position { min-inline-size: 6.5rem; text-align: center; font-variant-numeric: tabular-nums; }
+.cs-preview-status { font-size: var(--fs-meta); color: var(--muted); font-weight: 400; }
+.cs-preview-screen { margin-inline-start: auto; }
+.cs-preview-screen > div { min-inline-size: 18rem; }
+.cs-preview-screen label { display: grid; gap: var(--sp-2); font-size: var(--fs-meta); }
+.cs-preview-screen .muted { font-size: var(--fs-meta); }
 .cs-text-workspace { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: var(--sp-5); }
 .cs-text-source { min-inline-size: 0; }
 .cs-text-source > label { margin-block-end: var(--sp-3); }

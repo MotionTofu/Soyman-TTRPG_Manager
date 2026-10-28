@@ -38,7 +38,7 @@ describe('мастерская шагов',()=>{
   });
   it('форматированный текст и заметки попадают в единый автосейв',async()=>{
     const first=original(),row={...first,document:{...first.document,steps:[createCutsceneStep('one')]}};render(<CutsceneWorkshopEditor original={row} />);
-    fireEvent.click(screen.getByRole('button',{name:'Текст и заметки'}));fireEvent.click(screen.getByRole('button',{name:'Заменить'}));
+    fireEvent.click(screen.getByRole('button',{name:'Текст и заметки'}));fireEvent.click(screen.getByRole('button',{name:'Своё'}));
     fireEvent.change(screen.getByRole('textbox',{name:'Редактирование · Только ведущему'}),{target:{value:'**Ночь**'}});fireEvent.change(screen.getByRole('textbox',{name:'Заметки к шагу · Только ведущему'}),{target:{value:'Пауза'}});
     await act(()=>vi.advanceTimersByTimeAsync(500));expect(vi.mocked(cutscenes.saveDraft).mock.calls[0][2].steps[0]).toMatchObject({text:{action:'replace',text:'**Ночь**'},notes:'Пауза'});
   });
@@ -48,5 +48,16 @@ describe('мастерская шагов',()=>{
     fireEvent.change(screen.getByRole('textbox',{name:'Имя шага'}),{target:{value:'Пролог'}});
     expect(screen.getByRole('button',{name:'Открыть шаг 1'}).textContent).toContain('1 · Пролог');
     await act(()=>vi.advanceTimersByTimeAsync(500));expect(vi.mocked(cutscenes.saveDraft).mock.calls[0][2].steps[0].name).toBe('Пролог');
+  });
+  it('смена действия, стирающая подготовленный текст, спрашивает подтверждение (КС9)',async()=>{
+    const first=original(),row={...first,document:{...first.document,steps:[{...createCutsceneStep('one'),text:{action:'replace' as const,text:'Ночь'}}]}};render(<CutsceneWorkshopEditor original={row} />);
+    fireEvent.click(screen.getByRole('button',{name:'Текст и заметки'}));fireEvent.click(screen.getByRole('button',{name:'Убрать'}));
+    expect(screen.getByText('Текст ведущего этого шага будет стёрт.')).toBeTruthy();fireEvent.click(screen.getByRole('button',{name:'Отмена'}));
+    await act(()=>vi.advanceTimersByTimeAsync(500));expect(cutscenes.saveDraft).not.toHaveBeenCalled();
+    expect(screen.getByRole('button',{name:'Своё'}).getAttribute('aria-pressed')).toBe('true');
+  });
+  it('значки каналов называют состояние каждого канала шага',()=>{
+    const first=original(),row={...first,document:{...first.document,steps:[{...createCutsceneStep('one'),text:{action:'clear' as const}}]}};render(<CutsceneWorkshopEditor original={row} />);
+    expect(screen.getByRole('img',{name:'Кадр: как на прошлом шаге, Звук: как на прошлом шаге, Текст: убрано'})).toBeTruthy();
   });
 });

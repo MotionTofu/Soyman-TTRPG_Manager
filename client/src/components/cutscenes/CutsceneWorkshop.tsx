@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type FocusEvent } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type FocusEvent, type ReactNode } from "react";
 import type { CutsceneOriginal, CutsceneStep, CutsceneComposition } from "@shared/cutscenes/types";
 import { createCutsceneStep, createCutsceneVisualTransition, createCutsceneAudioCommand, CUTSCENE_DEFAULTS } from "@shared/cutscenes/defaults";
 import { cutsceneStepLabel, cutsceneStepNameFromFile, cutsceneStepTitle as stepTitle, resolveCutsceneStep } from "@shared/cutscenes/resolve";
@@ -22,8 +22,19 @@ import { TeleprompterView } from "./CutsceneTeleprompter";
 import "./cutscene-workshop.css";
 
 type Channel = "image" | "audio" | "text";
-const actions = { keep: "Продолжить", replace: "Заменить", clear: "Убрать" } as const;
-const marks = { keep: "←", replace: "+", clear: "—" };
+const actions = { keep: "Как на прошлом шаге", replace: "Своё", clear: "Убрать" } as const;
+const channelNames = { image: "Кадр", audio: "Звук", text: "Текст" } as const;
+const channelStates = { keep: "как на прошлом шаге", replace: "своё на этом шаге", clear: "убрано" } as const;
+const icons: Record<Channel, ReactNode> = {
+  image: <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1" /><path d="M2 12l4-4 3 3 2-2 3 3" /></svg>,
+  audio: <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 12V3l7-1.5V10" /><circle cx="4.5" cy="12" r="1.8" /><circle cx="11.5" cy="10.5" r="1.8" /></svg>,
+  text: <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3.5h12M2 7h12M2 10.5h8" /></svg>,
+};
+/** Filled: own on this step; outline: continues; crossed: removed. */
+function ChannelMarks({ step }: { step: CutsceneStep }) {
+  const label = (["image", "audio", "text"] as const).map(key => `${channelNames[key]}: ${channelStates[step[key].action]}`).join(", ");
+  return <span className="cs-channel-marks" role="img" aria-label={label} title={label}>{(["image", "audio", "text"] as const).map(key => <i key={key} className={`is-${step[key].action}`}>{icons[key]}</i>)}</span>;
+}
 export function CutsceneWorkshopEditor({ original }: { original: CutsceneOriginal }) {
   const [manager] = useState(() => workshopAutosave(original)), state = useSyncExternalStore(manager.subscribe, manager.snapshot), document = state.draft;
   const { controller: preview, state: playback } = useWorkshopPreview();
@@ -49,8 +60,23 @@ export function CutsceneWorkshopEditor({ original }: { original: CutsceneOrigina
   function patchStep(id: string, update: (current: CutsceneStep) => CutsceneStep) { manager.edit(current => ({ ...current, steps: current.steps.map(row => row.id === id ? update(row) : row) })); }
   const patch = (fields: Partial<CutsceneStep>) => { if (step) patchStep(step.id, current => ({ ...current, ...fields })); };
   function structural(update: Parameters<typeof manager.edit>[0], select?: string) { void preview.stop(); manager.edit(update); if (select) setSelected(select); }
-  function setAction(channel: Channel, action: "keep" | "replace" | "clear") {
+  /** What a channel change would erase, or null when nothing prepared is lost (КС9). */
+  function loss(channel: Channel): string | null {
+    const current = step?.[channel];
+    if (!current || current.action !== "replace") return null;
+    if (current.action === "replace" && "composition" in current) {
+      const { background, layers, title } = current.composition;
+      const parts = [background && "фон", layers.length && `слоёв: ${layers.length}`, title.trim() && `титр «${title.trim()}»`].filter(Boolean);
+      return parts.length ? `Композиция шага (${parts.join(", ")}) будет стёрта.` : null;
+    }
+    if ("text" in current) return current.text.trim() ? "Текст ведущего этого шага будет стёрт." : null;
+    return "Музыкальная команда этого шага — трек и фрагмент — будет стёрта.";
+  }
+  async function setAction(channel: Channel, action: "keep" | "replace" | "clear") {
     if (!step || action === step[channel].action) return;
+    const lost = loss(channel);
+    if (lost && !await confirm({ title: action === "clear" ? `Убрать: ${channelNames[channel].toLowerCase()}?` : "Взять как на прошлом шаге?", message: lost,
+      confirmLabel: action === "clear" ? "Стереть и убрать" : "Стереть и продолжить прежнее", danger: true })) return;
     if (channel !== "audio" || action !== "replace") {
       const prefix = JSON.stringify(["steps", step.id, channel]).slice(0, -1);
       for (const key of rawFields.current.keys()) if (key.startsWith(prefix)) rawFields.current.delete(key);
@@ -66,7 +92,8 @@ export function CutsceneWorkshopEditor({ original }: { original: CutsceneOrigina
   }
   function source(channel: Channel) {
     const sourceId = resolved?.[channel].sourceStepId, i = document.steps.findIndex(row => row.id === sourceId);
-    return i < 0 ? channel === "image" ? "Чёрный экран" : channel === "audio" ? "Без собственного трека" : "Без текста" : `Источник: шаг ${i + 1}${sourceId === step?.id ? " (этот)" : ""}`;
+    if (i < 0) return channel === "image" ? "Сейчас: чёрный экран" : channel === "audio" ? "Сейчас: без собственного трека" : "Сейчас: без текста";
+    return sourceId === step?.id ? "Своё на этом шаге" : `Сейчас: с шага «${stepTitle(document.steps[i], i)}»`;
   }
   async function remove() {
     if (!step) return;
@@ -80,20 +107,21 @@ export function CutsceneWorkshopEditor({ original }: { original: CutsceneOrigina
       paused: playback.mode !== "general" || playback.phase !== "playing" || playback.textPaused, locallyPaused: playback.textPaused, wordsPerMinute: textTempo }}
     notes="" fontSize={font} controlsEnabled onFontSize={setFont} onWordsPerMinute={setTextTempo} onTextPaused={value => preview.textPause(value)} />;
   return <WorkshopValidityContext.Provider value={{ read: key => rawFields.current.get(key), invalid: prefix => [...invalid].some(key => key.startsWith(prefix.slice(0, -1))), report: (key, raw, bad) => { if (bad) rawFields.current.set(key, raw); else rawFields.current.delete(key); reportValidity(key, bad); } }}><div className="cs-workshop" onFocusCapture={focus} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) manager.setFocus(null); }}>
-    {confirmDialog}<header className="cs-workshop-header"><div className="cs-autosave"><span role="status">{state.status === "error" ? "Ошибка сохранения" : state.status === "saved" ? "Сохранено" : "Сохраняется…"}</span>
+    {confirmDialog}<header className="cs-workshop-header"><WorkshopFieldGroup path={["name"]} className="cs-title-field"><input aria-label="Название катсцены" required value={document.name} onChange={event => manager.edit(current => ({ ...current, name: event.target.value }))} /></WorkshopFieldGroup><div className="cs-autosave"><span role="status">{state.status === "error" ? "Ошибка сохранения" : state.status === "saved" ? "Сохранено" : "Сохраняется…"}</span>
       {state.status === "error" && <button onClick={() => void manager.flush()}>Повторить сохранение</button>}</div><div className="cs-toolbar">
       <button onClick={() => setSettings(true)}>Настройки</button>{!original.archivedAt && <CutsceneLaunchActions id={original.id} beforeSelect={() => preview.stop()} />}
       <details className="cs-more"><summary aria-label="Другие действия катсцены">⋯</summary><div><CutsceneArchiveAction id={original.id} name={document.name} archived={!!original.archivedAt} /></div></details></div></header>
     {state.status !== "saved" && <p className="cs-source">Предпросмотр использует черновик; настоящий показ — последнюю сохранённую версию.</p>}
     <div className="cs-workspace"><aside className="cs-steps" aria-label="Шаги катсцены"><div className="cs-toolbar"><h2>Шаги · {document.steps.length}</h2><button onClick={() => { const next = createCutsceneStep(workshopId()); structural(current => ({ ...current, steps: [...current.steps, next] }), next.id); }}>Добавить шаг</button><button onClick={() => setPicker("steps")}>Шаги из изображений</button></div>
       <ol>{document.steps.map((row, i) => { const result = resolveCutsceneStep(document, row.id); return <li key={row.id} draggable onDragStart={() => setDrag(row.id)} onDragEnd={() => setDrag(null)} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); if (drag) structural(current => moveWorkshopStep(current, drag, row.id)); setDrag(null); }}>
-        <button className={`cs-step${step?.id === row.id ? " is-selected" : ""}`} aria-pressed={step?.id === row.id} aria-label={`Открыть шаг ${i + 1}`} onClick={() => { setSelected(row.id); }}><CutsceneDraftFrame id={original.id} composition={result?.image.composition ?? null} /><strong>{stepTitle(row, i)}</strong><span>Кадр {marks[row.image.action]} · Звук {marks[row.audio.action]} · Текст {marks[row.text.action]}</span></button>
+        <button className={`cs-step${step?.id === row.id ? " is-selected" : ""}`} aria-pressed={step?.id === row.id} aria-label={`Открыть шаг ${i + 1}`} onClick={() => { setSelected(row.id); }}><CutsceneDraftFrame id={original.id} composition={result?.image.composition ?? null} /><strong>{stepTitle(row, i)}</strong><ChannelMarks step={row} /></button>
         <div className="cs-step-move"><button aria-label={`Шаг ${i + 1} выше`} disabled={i === 0} onClick={() => structural(current => moveWorkshopStep(current, row.id, document.steps[i - 1].id))}>↑</button><button aria-label={`Шаг ${i + 1} ниже`} disabled={i === document.steps.length - 1} onClick={() => structural(current => moveWorkshopStep(current, row.id, document.steps[i + 1].id))}>↓</button></div></li>; })}</ol>
       {!document.steps.length && <p className="muted">Пустой черновик сохранён. Добавьте первый шаг.</p>}</aside>
       {step && resolved ? <section className="cs-step-editor" aria-label={`Редактор шага ${index + 1}`}><div className="cs-toolbar cs-step-heading"><h2>Шаг {index + 1} из {document.steps.length}</h2><WorkshopFieldGroup path={["steps", step.id, "name"]} className="cs-step-name"><input aria-label="Имя шага" value={step.name ?? ""} placeholder={`Имя шага — сейчас «${cutsceneStepLabel({ ...step, name: "" }, index)}»`} onChange={event => patch({ name: event.target.value })} /></WorkshopFieldGroup><details className="cs-more"><summary>Действия шага</summary><div><button onClick={() => { const copy = duplicateWorkshopStep(step); structural(current => { const rows = [...current.steps]; rows.splice(rows.findIndex(row => row.id === step.id) + 1, 0, copy); return { ...current, steps: rows }; }, copy.id); }}>Дублировать шаг</button><button className="danger" onClick={() => void remove()}>Убрать шаг</button></div></details></div>
         <div className="cs-tabs" role="group" aria-label="Каналы шага">{([["image", "Изображение"], ["text", "Текст и заметки"], ["audio", "Звук"]] as const).map(([key, label]) => <button key={key} aria-pressed={tab === key} onClick={() => setTab(key)}>{label}</button>)}</div>
-        <WorkshopPreviewControls blocked={blocked} onStep={direction => { const next = document.steps[index + direction]; if (next) setSelected(next.id); }} />
-        <div className={`cs-channel-layout${tab === "audio" ? " cs-channel-layout--audio" : ""}`}><WorkshopFieldGroup path={["steps", step.id, tab]} className="cs-channel"><div className="cs-channel-command" role="group" aria-label={`Действие: ${tab === "image" ? "изображение" : tab === "audio" ? "звук" : "текст"}`}>{Object.entries(actions).map(([key, label]) => <button key={key} aria-pressed={step[tab].action === key} onClick={() => setAction(tab, key as keyof typeof actions)}>{label}</button>)}</div><p className="cs-source">{source(tab)}{resolved[tab].sourceStepId && resolved[tab].sourceStepId !== step.id && <button onClick={() => setSelected(resolved[tab].sourceStepId)}>Открыть источник</button>}</p>
+        <div className="cs-channel-head"><div className="cs-channel-command" role="group" aria-label={`Действие: ${tab === "image" ? "изображение" : tab === "audio" ? "звук" : "текст"}`}>{Object.entries(actions).map(([key, label]) => <button key={key} aria-pressed={step[tab].action === key} onClick={() => void setAction(tab, key as keyof typeof actions)}>{label}</button>)}</div><p className="cs-source">{source(tab)}{resolved[tab].sourceStepId && resolved[tab].sourceStepId !== step.id && <button onClick={() => setSelected(resolved[tab].sourceStepId)}>Открыть источник</button>}</p></div>
+        <WorkshopPreviewControls blocked={blocked} position={`Шаг ${index + 1} из ${document.steps.length}`} canStep={direction => !!document.steps[index + direction]} onStep={direction => { const next = document.steps[index + direction]; if (next) setSelected(next.id); }} />
+        <div className={`cs-channel-layout${tab === "audio" ? " cs-channel-layout--audio" : ""}`}><WorkshopFieldGroup path={["steps", step.id, tab]} className="cs-channel">
           {tab === "image" && <>{step.image.action === "replace" ? <WorkshopComposition key={step.id} id={original.id} stepId={step.id} value={step.image.composition}
             playback={playingImage ? playback.visualPlayback : undefined} previewKey={playingImage ? `visual:${playback.playKey}` : undefined} transition={resolved.image.transition}
             extra={<VisualTransitionFields path={["steps", step.id, "image", "transition"]} value={step.image.transition} onChange={transition => patchStep(step.id, current => current.image.action === "replace" ? { ...current, image: { ...current.image, transition } } : current)} />}
@@ -111,7 +139,7 @@ export function CutsceneWorkshopEditor({ original }: { original: CutsceneOrigina
         <WorkshopFieldGroup path={["steps", step.id, "notes"]} className="cs-workshop-notes"><label htmlFor={`notes-${step.id}`}>Заметки к шагу · Только ведущему</label><MentionTextarea key={`notes-${step.id}`} id={`notes-${step.id}`} rows={2} value={step.notes} onChange={notes => patch({ notes })} /></WorkshopFieldGroup>
       </section> : <section className="cs-step-editor"><h2>Мастерская шагов</h2><p>Добавьте шаг вручную или выберите несколько изображений.</p></section>}
     </div>
-    {settings && <Modal className="cs-settings-dialog" ariaLabel="Настройки катсцены" onClose={() => setSettings(false)}><header className="cs-toolbar"><h2>Настройки катсцены</h2><button onClick={() => setSettings(false)}>Закрыть</button></header><div className="cs-fields cs-metadata"><WorkshopFieldGroup path={["name"]}><label>Название<input required value={document.name} onChange={event => manager.edit(current => ({ ...current, name: event.target.value }))} /></label></WorkshopFieldGroup><WorkshopFieldGroup path={["description"]}><label>Описание<textarea rows={2} value={document.description} onChange={event => manager.edit(current => ({ ...current, description: event.target.value }))} /></label></WorkshopFieldGroup></div><WorkshopFieldGroup path={["settings"]}><WorkshopSettings expanded value={document.settings} onChange={value => manager.edit(current => ({ ...current, settings: value }))} /></WorkshopFieldGroup><p className="cs-source">Предпросмотр всегда приостанавливает весь звук. Стоп возвращает пульт и прежний кадр.</p></Modal>}
+    {settings && <Modal className="cs-settings-dialog" ariaLabel="Настройки катсцены" onClose={() => setSettings(false)}><header className="cs-toolbar"><h2>Настройки катсцены</h2><button onClick={() => setSettings(false)}>Закрыть</button></header><div className="cs-fields cs-metadata"><WorkshopFieldGroup path={["description"]}><label>Описание<textarea rows={2} value={document.description} onChange={event => manager.edit(current => ({ ...current, description: event.target.value }))} /></label></WorkshopFieldGroup></div><WorkshopFieldGroup path={["settings"]}><WorkshopSettings expanded value={document.settings} onChange={value => manager.edit(current => ({ ...current, settings: value }))} /></WorkshopFieldGroup><p className="cs-source">Предпросмотр всегда приостанавливает весь звук. Стоп возвращает пульт и прежний кадр.</p></Modal>}
     {picker && <CutsceneMediaPicker id={original.id} kind={picker === "steps" ? "image" : "audio"} multiple={picker === "steps"} title={picker === "steps" ? "Шаги из изображений" : "Музыка шага"} onClose={() => setPicker(null)} onPick={items => {
       if (picker === "steps") { const steps = items.map(item => imageWorkshopStep(item.ref as CutsceneComposition["background"], cutsceneStepNameFromFile(item.name))); structural(current => ({ ...current, steps: [...current.steps, ...steps] }), steps[0]?.id); }
       else if (step) patch({ audio: { action: "replace", command: createCutsceneAudioCommand(workshopId(), { kind: "audio", id: items[0].ref.id }) } });

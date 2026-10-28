@@ -22,6 +22,7 @@ export function CutsceneMediaPicker({ id, kind, multiple = false, title, onPick,
     : tab === "gallery" ? (gallery.data ?? []).map(row => ({ key: `g${row.id}`, name: row.caption || `Изображение ${row.position + 1}`, url: row.image_url, source: { kind: "gallery", id: row.id } }))
     : (own.data ?? []).filter(row => row.ref.kind === kind && row.state === "ready").map(row => ({ key: row.ref.id, name: row.name, media: row }));
   const query = tab === "resources" ? resources : tab === "gallery" ? gallery : own;
+  const visible = rows.filter(row => row.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
   async function selected() {
     if (busy) return; setBusy(true); setError(null);
     const result: WorkshopMedia[] = [];
@@ -51,11 +52,12 @@ export function CutsceneMediaPicker({ id, kind, multiple = false, title, onPick,
     {tab === "gallery" && <div className="cs-toolbar"><span>{owner?.title ?? "Выберите запись с галереей"}</span><button disabled={busy} onClick={() => setOwnerPicker(true)}>Выбрать запись</button></div>}
     <label>Поиск материала<input value={search} onChange={event => setSearch(event.target.value)} /></label>
     {query.error && <LoadErrorCard message={query.error} onRetry={query.reload} />}
-    {query.loading ? <p>Загрузка…</p> : <div className="cs-media-list">{rows.filter(row => row.name.toLocaleLowerCase().includes(search.toLocaleLowerCase())).map(row =>
+    {query.loading ? <p>Загрузка…</p> : <div className="cs-media-list">{visible.map(row =>
       <label key={row.key} className="cs-media-row"><input type={multiple ? "checkbox" : "radio"} name="cutscene-media" disabled={busy} checked={selection.includes(row.key)}
         onChange={event => setSelection(old => multiple ? event.target.checked ? [...old,row.key] : old.filter(key => key !== row.key) : [row.key])} />
         {row.url && <img src={row.url} alt="" loading="lazy" />}<span>{row.name}</span></label>)}
-      {!rows.length && <p className="muted">Нет доступных локальных файлов.</p>}</div>}
+      {!rows.length && <p className="muted">Нет доступных локальных файлов.</p>}
+      {!!rows.length && !visible.length && <p className="muted">Ничего не найдено по «{search}». <button type="button" onClick={() => setSearch("")}>Сбросить поиск</button></p>}</div>}
     {(error || busy) && <p role={error ? "alert" : "status"}>{error ?? "Подготовка материалов…"}</p>}
     <div className="cs-toolbar"><button disabled={busy} onClick={onClose}>Закрыть</button><button className="primary" disabled={busy || !selection.length} onClick={() => void selected()}>Добавить{multiple ? ` (${selection.length})` : ""}</button></div>
   </div>{ownerPicker && <MentionPickerModal initialQuery="" heading="Запись с галереей" direct onlyTypes={["character","being","location","community","artifact","compendium_entry"]}
