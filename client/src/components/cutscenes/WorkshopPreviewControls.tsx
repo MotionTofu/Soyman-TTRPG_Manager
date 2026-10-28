@@ -11,11 +11,20 @@ export function WorkshopPreviewControls({ blocked = false, onStep }: { blocked?:
     const selected = list.find(screen => screen.id === loadLastScreenId()) ?? list.find(screen => !screen.primary) ?? list[0];
     setScreenId(selected?.id ?? "");
   }
-  return <section className="cs-preview-controls" aria-label="Предпросмотр катсцены" tabIndex={0} onKeyDown={event => {
-    if ((event.target as HTMLElement).matches('input,textarea,select,button,[contenteditable]') || event.repeat) return;
-    if (event.code === "Space") { event.preventDefault(); if (!busy && !blocked) void controller.play("general"); }
-    else if (event.code === "ArrowLeft" || event.code === "ArrowRight") { event.preventDefault(); if (!busy) onStep(event.code === "ArrowRight" ? 1 : -1); }
-  }}>
+  return <section className="cs-preview-controls" aria-label="Предпросмотр катсцены" tabIndex={0}
+    // A pressed button may disable itself while preparing and drop focus to the page; the area keeps it.
+    onClickCapture={event => { if ((event.target as HTMLElement).closest("button")) event.currentTarget.focus({ preventScroll: true }); }}
+    onKeyDown={event => {
+      const target = event.target as HTMLElement;
+      if (target.matches("input,textarea,select,[contenteditable]") || !["Space", "ArrowLeft", "ArrowRight"].includes(event.code)) return;
+      // The player bar listens for Space on window; inside this area the keys belong to the preview.
+      event.stopPropagation();
+      if (event.code === "Space" && target.matches("button")) return;
+      event.preventDefault();
+      if (event.repeat) return;
+      if (event.code === "Space") { if (!busy && !blocked) void controller.play("general"); }
+      else if (!busy) onStep(event.code === "ArrowRight" ? 1 : -1);
+    }}>
     <div className="cs-toolbar"><strong role="status">{state.phase === "idle" ? "Предпросмотр" : state.phase === "preparing" ? "Подготовка…"
       : state.phase === "returning" ? "Возврат исходного состояния…" : state.phase === "paused" ? "На паузе" : state.mode === "audition" ? "Прослушивание фрагмента" : "Играет"}</strong>
       <button className="primary" disabled={busy || blocked || !!state.foreign} onClick={() => void controller.play("general")}>{state.mode === "general" && state.phase === "playing" ? "Пауза" : state.mode === "general" && state.phase === "paused" ? "Продолжить" : "Воспроизвести всё"}</button>
