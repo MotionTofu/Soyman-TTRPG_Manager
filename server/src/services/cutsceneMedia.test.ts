@@ -6,7 +6,7 @@ import sharp from "sharp";
 import { createCutsceneDocument } from "@soyman/shared";
 import { db } from "../db/db";
 import { createCutscene, readCutscene, saveCutscene } from "./cutscenes";
-import { accessCutsceneMedia, checkCutsceneMedia, collectCutsceneMedia, documentMediaRefs,
+import { accessCutsceneMedia, checkCutsceneMedia, collectCutsceneMedia, cutsceneMediaSource, documentMediaRefs,
   importCutsceneMedia, listCutsceneMedia, recoverCutsceneMediaUploads, releaseCutsceneMedia, retainCutsceneMedia } from "./cutsceneMedia";
 import { duplicateCutscene } from "./cutsceneDuplicate";
 import { ensureSubfolder, VAULT_ROOT, vaultAbs } from "./filesystem";
@@ -147,6 +147,15 @@ describe("независимые версии и срок жизни медиа"
     const result = await checkCutsceneMedia(original.document);
     expect(result.readiness.ready).toBe(false);
     if (!result.readiness.ready) expect(result.readiness.issues.some(issue => issue.stepId === "first" && issue.path.includes("image"))).toBe(true);
+  });
+});
+
+describe("имя материала из Ресурсов", () => {
+  it("не удваивает расширение, если оно уже есть в названии", () => {
+    const add = (name: string) => Number(db.prepare("INSERT INTO resources (name, category, file_path) VALUES (?, 'audio', 'audio/theme.mp3')").run(name).lastInsertRowid);
+    expect(cutsceneMediaSource("audio", { kind: "resource", id: add("Тема.mp3") }).name).toBe("Тема.mp3");
+    expect(cutsceneMediaSource("audio", { kind: "resource", id: add("Тема.MP3") }).name).toBe("Тема.MP3");
+    expect(cutsceneMediaSource("audio", { kind: "resource", id: add("Тема") }).name).toBe("Тема.mp3");
   });
 });
 

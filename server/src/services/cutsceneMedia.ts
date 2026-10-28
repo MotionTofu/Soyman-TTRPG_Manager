@@ -208,8 +208,9 @@ export function cutsceneMediaSource(kind: CutsceneMediaKind, raw: unknown): { fi
       { name: string; category: string; file_path: string | null } | undefined;
     if (!row?.file_path || row.category !== kind) throw new CutsceneRequestError(404, "Локальный материал не найден");
     // Local external files already registered in Resources are legitimate sources by ID.
-    const file = vaultAbs(row.file_path);
-    return { file, name: `${row.name}${path.extname(file)}` };
+    const file = vaultAbs(row.file_path), ext = path.extname(file);
+    // The name carries the extension for the audio check; Resources often already have it.
+    return { file, name: row.name.toLowerCase().endsWith(ext.toLowerCase()) ? row.name : `${row.name}${ext}` };
   }
   throw new CutsceneRequestError(400, "Неподдерживаемый источник материала");
 }
