@@ -8,9 +8,17 @@ function installPlayerDisplay({ BrowserWindow, ipcMain, origin, icon, preload, g
       return parsed.origin === origin && (/^\/player-display\/?$/.test(parsed.pathname) || /^\/sessions\/\d+\/live\/show\/?$/.test(parsed.pathname));
     } catch { return false; }
   };
+  // The players' page answers cutscene preparation only for the windowId in its URL; the GM is told String(win.id).
+  const withWindowId = (url, win) => {
+    const parsed = new URL(url);
+    parsed.searchParams.set("windowId", String(win.id));
+    return parsed.href;
+  };
   function register(win) {
     win.webContents.on("did-finish-load", () => {
-      if (!isDisplayRoute(win.webContents.getURL())) return;
+      const url = win.webContents.getURL();
+      if (!isDisplayRoute(url)) return;
+      if (new URL(url).searchParams.get("windowId") !== String(win.id)) { win.loadURL(withWindowId(url, win)); return; }
       if (!managed || managed.isDestroyed()) managed = win;
       win.webContents.executeJavaScript("document.documentElement.requestFullscreen()", true).catch(() => {});
     });
@@ -29,7 +37,7 @@ function installPlayerDisplay({ BrowserWindow, ipcMain, origin, icon, preload, g
         managed = win;
         created = win;
         register(win);
-        loading = win.loadURL(`${origin}/player-display`);
+        loading = win.loadURL(withWindowId(`${origin}/player-display`, win));
       } else if (bounds) {
         const fullscreen = managed.isFullScreen();
         if (fullscreen) managed.setFullScreen(false);
