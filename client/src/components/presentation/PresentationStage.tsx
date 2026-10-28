@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PresentationLayer } from "../../types";
+import type { CutsceneVisualPlayback } from "@shared/cutscenes/previewApi";
 import { isSafeImageUrl } from "../../utils/safeUrl";
 import "./presentation.css";
 
@@ -55,6 +56,7 @@ export interface StageEdit {
 }
 
 export interface PresentationStageProps {
+  playback?: CutsceneVisualPlayback;
   backgroundUrl: string | null;
   layers: PresentationLayer[];
   /** Слои с кнопками, видимые прямо сейчас. Слои без кнопки видны всегда. */
@@ -126,6 +128,7 @@ export function PresentationStage({
   edit,
   skipTitleSignal,
   onTitleVisibility,
+  playback,
 }: PresentationStageProps) {
   const visible = useMemo(
     () => (visibleIds instanceof Set ? visibleIds : new Set(visibleIds)),
@@ -139,31 +142,34 @@ export function PresentationStage({
   const [titleOn, setTitleOn] = useState(false);
   const [flash, setFlash] = useState(false);
   const titleOnRef = useRef(false);
+  const skippedTitle = useRef<string | number | null>(null);
   function setTitleVisible(on: boolean) {
     titleOnRef.current = on;
     setTitleOn(on);
     onTitleVisibility?.(on);
   }
   useEffect(() => {
-    if (edit) {
+    if (edit && !playback) {
       setFlash(false);
       setTitleVisible(false);
       return;
     }
     const timers: ReturnType<typeof setTimeout>[] = [];
-    if (transition === "cut") {
+    const elapsed = playback ? playback.elapsedMs + (playback.startedAt === null ? 0 : Math.max(0, Date.now() - playback.startedAt)) : 0;
+    const paused = !!playback && playback.startedAt === null;
+    if (transition === "cut" || elapsed >= transitionMs) {
       setFlash(false);
     } else {
       setFlash(true);
-      timers.push(setTimeout(() => setFlash(false), Math.max(0, transitionMs)));
+      if (!paused) timers.push(setTimeout(() => setFlash(false), Math.max(0, transitionMs - elapsed)));
     }
-    if (title && titleSecs > 0) {
+    if (title && titleSecs * 1000 > elapsed && skippedTitle.current !== playKey) {
       setTitleVisible(true);
-      timers.push(
+      if (!paused) timers.push(
         setTimeout(() => {
           setTitleVisible(false);
           onTitleDone?.();
-        }, titleSecs * 1000)
+        }, titleSecs * 1000 - elapsed)
       );
     } else {
       setTitleVisible(false);
@@ -172,10 +178,11 @@ export function PresentationStage({
       for (const t of timers) clearTimeout(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playKey, !!edit]);
+  }, [playKey, !!edit, playback]);
 
   function skipTitle() {
     if (!titleOnRef.current) return;
+    skippedTitle.current = playKey;
     setTitleVisible(false);
     onTitleDone?.();
   }
@@ -356,7 +363,7 @@ export function PresentationStage({
         {flash && transition !== "cut" ? (
           <div
             className={`pres-flash${transition === "black" ? " is-through" : ""}`}
-            style={{ animationDuration: `${Math.max(0, transitionMs)}ms` }}
+            style={{ animationDuration: `${Math.max(0, transitionMs)}ms`, animationDelay: playback ? `-${playback.elapsedMs + (playback.startedAt === null ? 0 : Math.max(0, Date.now() - playback.startedAt))}ms` : undefined, animationPlayState: playback?.startedAt === null ? "paused" : "running" }}
           />
         ) : null}
         {titleOn && title ? (

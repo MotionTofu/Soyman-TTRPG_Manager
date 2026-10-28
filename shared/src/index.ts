@@ -23,3 +23,6 @@ export * from "./workbookActivity";
 export * from "./textTables";
 export * from "./battleLog";
 export * from "./campaignWorld";
+export * from "./presentation";
+export * from "./playerDisplay";
+export * from "./cutscenes/index";

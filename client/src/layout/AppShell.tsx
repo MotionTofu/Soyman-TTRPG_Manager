@@ -1,3 +1,4 @@
+import { CutscenePlayer } from "../components/cutscenes/CutscenePlayer";
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { getAuthToken, setAuthToken } from "../api/client";
@@ -25,6 +26,7 @@ import { useRailTip } from "./RailTip";
 import { loadSideLayout, SIDE_NARROW_EVENT } from "./sideLayout";
 import { ExternalLinkConfirmModal, BOOSTY_URL } from "../components/ExternalLinkConfirmModal";
 import { Breadcrumbs } from "../components/Breadcrumbs";
+import { useCutsceneCrumbs } from "./useCutsceneCrumbs";
 import { useWorkbookCrumbs } from "./useWorkbookCrumbs";
 import { NavigationHistoryProvider } from "./NavigationHistory";
 import { useConfirm } from "../hooks/useConfirm";
@@ -372,6 +374,7 @@ const CRUMB_LABEL: Record<string, string> = {
   cabinet: "Кабинет",
   sheets: "Персонажи",
   mastering: "Библиотека",
+  cutscenes: "Катсцены",
   resources: "Другие материалы",
   gallery:"Галерея",
   "audio-library":"Аудиотека",
@@ -492,6 +495,7 @@ export function AppShell() {
   // nav they're not using mid-session.
   const { pathname, search } = useLocation();
   const workbookCrumbs = useWorkbookCrumbs(pathname);
+  const cutsceneCrumbs = useCutsceneCrumbs(pathname, gm);
   const mode = workspaceMode(pathname, user?.role);
   const isLivePult = mode === "session";
   const isMapWorkspace = mode === "maps";
@@ -721,6 +725,7 @@ export function AppShell() {
     // каналы играли бы в двух окнах сразу (см. sound/engine.tsx).
     <NavigationHistoryProvider>
     <SoundEngineProvider>
+    <CutscenePlayer />
     {/* Провайдер обнимает и страницу, и панель поиска с мешком: зоны приёма
         живут на странице, а кнопка «Выгрузить» — в мешке. */}
     <UnloadTargetsProvider>
@@ -875,7 +880,7 @@ export function AppShell() {
           // (`.shell-crumbs`), иначе крошек две (F-50, решение 2026-09-18).
           <div className="shell-crumbs" style={{ marginBottom: pathname === "/" ? 8 : 16, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
             <div className="shell-crumbs__trail">
-              <Breadcrumbs items={workbookCrumbs ?? buildCrumbs(pathname, !!isPlayer, liveCrumbs)} />
+              <Breadcrumbs items={cutsceneCrumbs ?? workbookCrumbs ?? buildCrumbs(pathname, !!isPlayer, liveCrumbs)} />
             </div>
             {!isPlayer && activeStorageName && !isLivePult && (
               <span className="muted shell-crumbs__storage" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)", border: "1px solid var(--line)", padding: "2px 6px", background: "var(--paper-2)" }} title="Активное хранилище">

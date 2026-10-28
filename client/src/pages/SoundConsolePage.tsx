@@ -1,4 +1,6 @@
+import { cutsceneKeyboardOwns } from "../cutscenes/keyboard";
 import { useEffect, useRef, useState } from "react";
+import { useAudioOwnership } from "../sound/audioOwnership";
 import { useAction, useResource, write } from "../data/hooks";
 import { labelled } from "../data/notices";
 import { SOUND_SET_AFFECTS } from "../sound/soundAffects";
@@ -64,6 +66,7 @@ const NO_MISSING: MissingFile[] = [];
 
 export function SoundConsolePage() {
   const remote = useSoundRemote();
+  const ownership = useAudioOwnership();
   const { state } = remote;
 
   // Играющая строка подкручивается в видимую часть списка: длинный плейлист
@@ -96,6 +99,7 @@ export function SoundConsolePage() {
     if (!state) return;
     const codes = state.keys === "letters" ? LETTER_CODES : DIGIT_CODES;
     const onKey = (e: KeyboardEvent) => {
+      if (cutsceneKeyboardOwns(e)) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.code === "Space") {
         e.preventDefault();
@@ -166,7 +170,7 @@ export function SoundConsolePage() {
       <div className="sc-head">
         <div style={{ display: "flex", flexDirection: "column", gap: 2, flex: "0 0 auto" }}>
           <div className="sc-title">Пульт звука</div>
-          <div className="sc-sub">4 канала · звук идёт из главного окна</div>
+          <div className="sc-sub" role="status">{ownership ? ownership.scope === "all" ? "Катсцена управляет всеми каналами" : "Катсцена управляет музыкой · остальные каналы доступны" : "4 канала · звук идёт из главного окна"}</div>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10, flex: "1 1 auto", minWidth: 0, flexWrap: "wrap" }}>

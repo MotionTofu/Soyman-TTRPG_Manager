@@ -23,6 +23,8 @@ const HomeCalendarPage = lazy(() => import("./pages/HomeCalendarPage").then((m) 
 const PlayerHomePage = lazy(() => import("./pages/PlayerHomePage").then((m) => ({ default: m.PlayerHomePage })));
 const CampaignVesselPage = lazy(() => import("./pages/CampaignVesselPage").then((m) => ({ default: m.CampaignVesselPage })));
 const CampaignsListPage = lazy(() => import("./pages/CampaignsListPage").then((m) => ({ default: m.CampaignsListPage })));
+const CutscenesPage = lazy(() => import("./pages/CutscenesPage").then(m => ({ default: m.CutscenesPage })));
+const CutsceneWorkshopPage = lazy(() => import("./pages/CutsceneWorkshopPage").then(m => ({ default: m.CutsceneWorkshopPage })));
 const LibraryPage = lazy(() => import("./pages/LibraryPage").then((m) => ({ default: m.LibraryPage })));
 const NowPlayingPage = lazy(() => import("./pages/NowPlayingPage").then((m) => ({ default: m.NowPlayingPage })));
 const CampaignDetailPage = lazy(() => import("./pages/CampaignDetailPage").then((m) => ({ default: m.CampaignDetailPage })));
@@ -201,6 +203,7 @@ function App() {
             {/* Окно показа игрокам — второй монитор: только кадр 16:9 на
                 чёрном, без chrome оболочки (см. PresentationShowPage). */}
             <Route path="/sessions/:id/live/show" element={<PresentationShowPage />} />
+            <Route path="/player-display" element={<PresentationShowPage />} />
             {/* Предпросмотр черновика из редактора: та же сцена на чёрном,
                 но данные едут из окна редактора, а не из show-state. */}
             <Route path="/presentation-preview" element={<PresentationPreviewPage />} />
@@ -241,6 +244,8 @@ function App() {
               <Route path="/resources/:id/markdown-file" element={<MarkdownResourcePage />} />
               <Route path="/resources/link/:uid" element={<ResourceLinkPage />} />
               <Route path="/mastering" element={<MasteringPage />} />
+              <Route path="/mastering/cutscenes" element={<CutscenesPage />} />
+              <Route path="/mastering/cutscenes/:id" element={<CutsceneWorkshopPage />} />
               <Route path="/mastering/:id" element={<MasteringArticleRedirect />} />
               <Route path="/workbooks" element={<WorkbooksPage />} />
               <Route path="/workbooks/:id" element={<WorkbookPage />} />

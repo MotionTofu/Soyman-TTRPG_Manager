@@ -1,4 +1,7 @@
 import { Router } from "express";
+import { assertPlayerDisplayOwner, publishSessionDisplay } from "../services/playerDisplay";
+import { CutsceneRequestError } from "../services/cutsceneErrors";
+import { collectCutsceneMedia } from "../services/cutsceneMedia";
 import { battleInfo, carryBattle, closeBattle, closeBattleSilently, openBattle, pullPendingBattle, sessionBattles } from "../services/battles";
 import { db } from "../db/db";
 import { SESSION_NUMBER_SQL } from "../services/sessionNumber";
@@ -716,6 +719,8 @@ sessionsRouter.put("/:id/show-state", (req, res) => {
     display?: unknown;
   };
 
+  try { assertPlayerDisplayOwner(); }
+  catch (error) { if (error instanceof CutsceneRequestError) return res.status(error.status).json({ error: error.message }); throw error; }
   const current = readShowState(session.id);
   const mode = body.mode !== undefined ? body.mode : current.mode;
   if (!SHOW_MODES.includes(mode as (typeof SHOW_MODES)[number])) {
@@ -808,6 +813,7 @@ sessionsRouter.put("/:id/show-state", (req, res) => {
     if (camera) display.frame = frame;
   }
 
+  db.transaction(() => {
   db.prepare(
     `INSERT INTO session_show_state (session_id, mode, scene_id, map_id, visible_layer_ids, shown, display, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
@@ -816,5 +822,8 @@ sessionsRouter.put("/:id/show-state", (req, res) => {
        visible_layer_ids = excluded.visible_layer_ids, shown = excluded.shown,
        display = excluded.display, updated_at = datetime('now')`
   ).run(session.id, mode, sceneId, mapId, JSON.stringify(ids), shown, JSON.stringify(display));
+  publishSessionDisplay(session.id);
+  })();
+  collectCutsceneMedia();
   res.json(readShowState(session.id));
 });

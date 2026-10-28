@@ -49,6 +49,7 @@ export function LibraryPage() {
   return (
     <PageFrame title="Обзор">
       <Link to="/mastering" className="button">Книжная библиотека →</Link>
+      <Link to="/mastering/cutscenes" className="button">Катсцены →</Link>
 
       {upcoming.length > 0 && (
         <div className="stack" style={{ gap: 4 }}>

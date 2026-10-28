@@ -99,7 +99,7 @@ export function BookLibraryPage(){
  const sectionFormViews=shelves.filter(shelf=>shelf.department_id===draftDepartment).map(shelfView);
  const filtersActive=!!query.trim()||!!format||!!system||notesOnly;
  const shelfProps=(items:LibraryBook[])=>({books:items,search:filtersActive,covers,bookmarked,dragging:dragged,dragOver:false,onDrag:setDragged,onDrop:(shelfId:number|null)=>{if(dragged)void moveBook(dragged,shelfId);},onOpen:(id:number,ids:number[])=>openBook(id,ids),onNotes:(id:number,ids:number[])=>openBook(id,ids,true),onBookSettings:(id:number)=>{const book=[...books,...recent,...pins].find(book=>book.id===id);if(book)showPlacement(book);}});
- return <PageFrame section="mastering" title="Библиотека" className={`mastering-page mastering-library${selectedId?" is-reading":""}`}>
+ return <PageFrame section="mastering" title="Библиотека" actions={<Link to="/mastering/cutscenes" className="button">Катсцены</Link>} className={`mastering-page mastering-library${selectedId?" is-reading":""}`}>
  {confirmDialog}<SectionBackground/>
  {!selectedId&&<>
  <div className="tabs library-departments" aria-label="Подразделы библиотеки"><button className={department==="room"?"active":""} onClick={()=>changeDepartment("room")}>Читальный зал</button>{departments.map(item=><button key={item.id} className={department===String(item.id)?"active":""} onClick={()=>changeDepartment(String(item.id))}>{item.name}</button>)}<button className={department==="none"?"active":""} onClick={()=>changeDepartment("none")}>Без подраздела</button><button aria-label="Создать подраздел" onClick={()=>setOrganization({kind:"department",id:null,name:"",department:null,position:departments.length})}>+</button></div>

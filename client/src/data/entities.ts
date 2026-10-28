@@ -153,7 +153,15 @@ function dependsOn(path: string, prefix: string | RegExp): boolean {
 export function matchesAffect(queryKey: QueryKey, affect: Affect): boolean {
   const [scope, a, b] = queryKey as readonly unknown[];
   if ("path" in affect) {
-    return scope === "resource" && typeof a === "string" && pathHasPrefix(a, affect.path);
+    const boundCampaignId = /^\/campaigns\/(\d+)\/cutscenes$/.exec(affect.path)?.[1];
+    return scope === "resource" && typeof a === "string" && (pathHasPrefix(a, affect.path) ||
+      // Collection/plan summaries carry original names and must refresh after a cutscene edit.
+      (pathHasPrefix(affect.path, "/archive") && /^\/cutscenes(\/|\?|$)/.test(a)) ||
+      (pathHasPrefix(affect.path, "/cutscenes") && a === "/archive") ||
+      (pathHasPrefix(affect.path, "/cutscenes") && /^\/(campaigns|sessions)\/\d+\/cutscenes(\/|\?|$)/.test(a)) ||
+      // Membership changes affect only this campaign-filtered catalogue, not other plans or originals.
+      (boundCampaignId !== undefined && a.startsWith("/cutscenes?") &&
+        new URLSearchParams(a.slice(a.indexOf("?") + 1)).get("campaignId") === boundCampaignId));
   }
   if (
     scope === "resource" &&

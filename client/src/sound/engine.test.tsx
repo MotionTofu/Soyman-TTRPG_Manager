@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   handler: null as ((command: SoundCommand) => void) | null,
   gain: vi.fn(),
   playPlaylist: vi.fn(),
+  restoreSnapshot: vi.fn(async (_snapshot: unknown, _resolve: unknown) => {}),
   player: { tracks: [] as { id: number; name: string; src: string }[], index: -1, currentTime: 0 },
   console: {
     set: null,
@@ -25,7 +26,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../audioPlayer", () => ({ useAudioPlayer: () => ({
   current: null, isPlaying: false, ...mocks.player,
   duration: 0, repeatMode: "off", shuffleMode: false,
-  setBackgroundGain: mocks.gain, playPlaylist: mocks.playPlaylist,
+  setBackgroundGain: mocks.gain, playPlaylist: mocks.playPlaylist, restoreSnapshot: mocks.restoreSnapshot,
+  captureSnapshot: () => ({ kind: "queue", queue: mocks.player.tracks.map(t => ({ source: { kind: "resource", resourceId: t.id }, name: t.name })),
+    index: mocks.player.index >= 0 ? mocks.player.index : null, positionSeconds: mocks.player.currentTime,
+    state: mocks.player.index >= 0 ? "paused" : "stopped", volume: 1, repeat: "off", shuffle: false, activePlaylistId: null }),
 }) }));
 vi.mock("../data/hooks", () => ({ useResource: (path: string) => ({
   data: path === "/app-settings" ? { fade_duration_ms: 0 } : mocks.console,
@@ -101,8 +105,11 @@ describe("sound engine combat", () => {
     rerender();
     await act(async () => result.current.enterCombat(19));
     expect(result.current.state.autoSwitch?.to).toBe("Тема 19");
-    act(() => result.current.exitCombat());
-    expect(mocks.playPlaylist).toHaveBeenLastCalledWith(before, 0, null, 42);
+    await act(async () => result.current.exitCombat());
+    expect(mocks.restoreSnapshot.mock.calls.at(-1)?.[0]).toMatchObject({
+      queue: [{ source: { kind: "resource", resourceId: 1 }, name: "Таверна" }],
+      index: 0, positionSeconds: 42, state: "paused",
+    });
     unmount();
   });
 });

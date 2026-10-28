@@ -1,0 +1,50 @@
+.cs-workshop { min-inline-size: 0; }
+.cs-workshop label, .cs-media-picker > label { display: grid; gap: var(--sp-3); font-size: var(--fs-meta); }
+.cs-workshop p, .cs-media-picker p { margin: 0; }
+.cs-workshop h2, .cs-workshop h3 { margin: 0; }
+.cs-workshop h2 { font-size: var(--fs-h2); }
+.cs-workshop h3 { font-size: var(--fs-h3); }
+.cs-workshop button { white-space: normal; }
+.cs-workshop .cs-checkbox { display: flex; align-items: center; gap: var(--sp-3); }
+.cs-workshop input[type="checkbox"], .cs-media-row input { inline-size: auto; }
+.cs-fields { display: grid; grid-template-columns: repeat(auto-fit,minmax(10rem,1fr)); gap: var(--sp-5); align-items: start; }
+.cs-fields > * { min-inline-size: 0; }
+.cs-metadata { grid-template-columns: minmax(12rem,1fr) minmax(16rem,2fr); }
+.cs-metadata textarea { resize: vertical; font-size: var(--fs-body); }
+.cs-toolbar, .cs-tabs, .cs-autosave { display: flex; flex-wrap: wrap; gap: var(--sp-3); align-items: center; }
+.cs-autosave { justify-content: space-between; font-size: var(--fs-meta); }
+.cs-autosave > [role="status"] { font-weight: 700; }
+.cs-settings { border-block: 1px solid var(--line); padding-block: var(--sp-5); }
+.cs-settings summary { cursor: pointer; font-family: var(--font-display); font-size: var(--fs-h3); }
+.cs-settings > div { margin-block-start: var(--sp-6); }
+.cs-workspace { display: grid; grid-template-columns: 12rem minmax(0,1fr); gap: var(--sp-7); align-items: start; }
+.cs-steps { min-inline-size: 0; position: sticky; inset-block-start: var(--sp-5); max-block-size: calc(100dvh - 6rem); overflow: auto; padding-inline-end: var(--sp-3); }
+.cs-steps > ol { list-style: none; margin: var(--sp-5) 0 0; padding: 0; display: grid; gap: var(--sp-5); }
+.cs-steps li { min-inline-size: 0; }
+.cs-step { display: grid; grid-template-columns: minmax(0,1fr); min-inline-size: 0; inline-size: 100%; gap: var(--sp-3); padding: var(--sp-3); text-align: start; overflow-wrap: anywhere; }
+.cs-step > span { font-size: var(--fs-meta); font-weight: 400; line-height: 1.4; }
+.cs-step.is-selected, .cs-tabs [aria-pressed="true"], .cs-layer.is-selected { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cs-step-move { display: flex; justify-content: end; gap: var(--sp-2); }
+.cs-step-move button { padding: var(--sp-2) var(--sp-4); }
+.cs-step-heading h2 { margin-inline-end: auto; }
+.cs-step-editor { min-inline-size: 0; }
+.cs-source { font-size: var(--fs-meta); color: var(--muted); }
+.cs-draft-frame { position: relative; aspect-ratio: 16/9; overflow: hidden; min-inline-size: 0; inline-size: 100%; }
+.cs-draft-frame > .pres-stage { block-size: 100%; }
+.cs-draft-frame[data-image-error="true"]::after, .cs-frame-error { position: absolute; inset-inline: 0; inset-block-end: 0; padding: var(--sp-3); background: var(--paper); color: var(--danger); font-size: var(--fs-meta); }
+.cs-draft-frame[data-image-error="true"]::after { content: "Изображение недоступно"; }
+.cs-layers { display: grid; gap: var(--sp-3); }
+.cs-layer { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); padding: var(--sp-3); border-block-end: 1px solid var(--line); }
+.cs-layer > button:first-child { flex: 1; min-inline-size: 8rem; text-align: start; overflow-wrap: anywhere; }
+.cs-text-preview { border-block-start: 1px solid var(--line); padding-block-start: var(--sp-6); }
+.cs-media-picker { min-inline-size: 0; }
+.cs-media-picker h2 { margin: 0; }
+.cs-media-picker input[type="file"] { inline-size: 100%; font-size: var(--fs-meta); }
+.cs-media-list { display: grid; gap: var(--sp-3); max-block-size: 40dvh; overflow: auto; }
+.cs-media-row { display: flex; gap: var(--sp-4); align-items: center; padding: var(--sp-3); border-block-end: 1px solid var(--line); }
+.cs-media-row img { inline-size: 5rem; aspect-ratio: 16/9; object-fit: contain; }
+.cs-media-row span { overflow-wrap: anywhere; min-inline-size: 0; }
+@media (max-width: 1000px) {
+  .cs-workspace { grid-template-columns: 10rem minmax(0,1fr); gap: var(--sp-5); }
+  .cs-metadata { grid-template-columns: minmax(0,1fr); }
+}

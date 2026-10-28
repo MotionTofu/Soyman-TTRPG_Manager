@@ -64,6 +64,16 @@ process.env.PORT = String(PORT);
 // внутри electron/, потому что это тот же исходник, что и для сборщика;
 // build/icon.png добавлен в "files" всех трёх конфигов, чтобы попасть в пакет.
 const APP_ICON = path.join(__dirname, "..", "build", "icon.png");
+const { installPlayerDisplay } = require("./playerDisplay");
+const playerDisplay = installPlayerDisplay({ BrowserWindow, ipcMain, origin: `http://127.0.0.1:${PORT}`,
+  icon: APP_ICON, preload: path.join(__dirname, "preload.js"),
+  getDisplays: () => {
+    const { screen } = require("electron");
+    const primaryId = screen.getPrimaryDisplay().id;
+    return screen.getAllDisplays().map(d => ({ id: d.label ? `screen-${d.label}` : `screen-${d.id}`,
+      label: d.label || (d.id === primaryId ? "Основной экран" : `Экран ${d.id}`),
+      left: d.workArea.x, top: d.workArea.y, width: d.workArea.width, height: d.workArea.height, primary: d.id === primaryId }));
+  } });
 
 // The "full" flavor bundles a `seed` resources folder (see seedIfNeeded()
 // below); the "empty" flavor doesn't. Reuse that same signal to tell the
@@ -374,6 +384,10 @@ ipcMain.on("open-telegram", async () => {
 // приложения, общие данные. Открывается со смещением, чтобы не легло ровно
 // поверх исходного.
 function spawnWindow(route = "/", parent = null) {
+  if (playerDisplay.isDisplayRoute(`http://127.0.0.1:${PORT}${route}`)) {
+    playerDisplay.open(null);
+    return playerDisplay.getWindow();
+  }
   const offset = parent && !parent.isDestroyed() ? parent.getPosition() : null;
   const win = new BrowserWindow({
     width: 1400,
@@ -393,17 +407,8 @@ function spawnWindow(route = "/", parent = null) {
   // Клиент на react-router с обычными путями, а сервер отдаёт index.html на
   // любой не-API маршрут — значит окно можно открыть сразу на нужной странице.
   win.loadURL(`http://127.0.0.1:${PORT}${route.startsWith("/") ? route : "/" + route}`);
-  // Окно показа игрокам (пульт открывает его window.open на выбранном
-  // мониторе) — сразу на весь экран. Fullscreen API требует жеста в самом
-  // окне, и страница сама развернуться не может; executeJavaScript с
-  // userGesture снимает это ограничение. Esc и кнопка «На весь экран»
-  // работают как прежде.
-  win.webContents.on("did-create-window", (child, { url }) => {
-    if (!/^\/sessions\/\d+\/live\/show\/?$/.test(new URL(url).pathname)) return;
-    child.webContents.once("did-finish-load", () => {
-      child.webContents.executeJavaScript("document.documentElement.requestFullscreen()", true).catch(() => {});
-    });
-  });
+  playerDisplay.register(win);
+  win.webContents.on("did-create-window", child => playerDisplay.register(child));
   if (!isPackaged) {
     win.webContents.openDevTools({ mode: "detach" });
   }

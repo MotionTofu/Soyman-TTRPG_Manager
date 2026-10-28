@@ -1,4 +1,6 @@
 import type { DndCheck, DndCost, DndEffect } from "./components/dnd/effects";
+import type { PresentationData, ShowDisplay } from "@shared/presentation";
+export type { PresentationData, PresentationLayer, ShowDisplay } from "@shared/presentation";
 
 export interface System {
   id: number;
@@ -2631,33 +2633,6 @@ export interface ScenePreview {
   exits: { scene: StageScene; label: string }[];
 }
 
-/** Слой представления сцены — GET /story/scenes/:id/presentation. */
-export interface PresentationLayer {
-  id: number;
-  name: string;
-  image_path: string;
-  image_url: string;
-  has_button: number;
-  visible_on_enter: number;
-  position: number;
-  x_pct: number;
-  y_pct: number;
-  w_pct: number;
-  h_pct: number;
-}
-
-/** Представление сцены или заглавное кампании (фон + слои + вход). */
-export interface PresentationData {
-  background_path: string | null;
-  background_url: string | null;
-  transition: string;
-  transition_ms: number;
-  title: string;
-  title_secs: number;
-  fade_ms: number;
-  layers: PresentationLayer[];
-}
-
 export interface ScenePresentation extends PresentationData {
   scene_id: number;
   content_scene_id: number;
@@ -2676,17 +2651,4 @@ export interface ShowState {
   visible_layer_ids: number[];
   shown: number;
   display: ShowDisplay;
-}
-
-/** Отображение на экране игроков: камера над кадром. rotation/fit = null —
- * в этой сессии не задавали (пульт подставит память монитора). Масштаб и
- * сдвиг — только текущего кадра; сдвиг — в долях экрана. */
-export interface ShowDisplay {
-  rotation: 0 | 90 | 180 | 270 | null;
-  fit: "contain" | "cover" | null;
-  zoom: number;
-  pan_x: number;
-  pan_y: number;
-  screen_w: number | null;
-  screen_h: number | null;
 }

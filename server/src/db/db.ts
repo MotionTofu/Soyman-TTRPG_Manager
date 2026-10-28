@@ -1,4 +1,9 @@
 import Database from "better-sqlite3";
+import { migrateCutscenes } from "./cutscenes";
+import { migrateCutsceneMedia } from "./cutsceneMedia";
+import { migratePlayerDisplay } from "./playerDisplay";
+import { migrateCutsceneRuns } from "./cutsceneRuns";
+import { migrateCutscenePreviews } from "./cutscenePreviews";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "crypto";
 import fs from "fs";
@@ -7537,6 +7542,21 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
       database.pragma(`foreign_keys = ${foreignKeys ? "ON" : "OFF"}`);
     }
   }
+
+  // Катсцены: общие оригиналы и независимые ссылки подборок/планов (тикет 02).
+  migrateCutscenes(database);
+
+  // Независимые версии файлов катсцен и удержания оригиналами/снимками (тикет 03).
+  migrateCutsceneMedia(database);
+
+
+  // Единый экран игроков без обязательной сессии (катсцены, тикет 04).
+  migratePlayerDisplay(database);
+
+  // Persistent run snapshots and runtime usage (cutscenes 07), always the last migration.
+  migrateCutsceneRuns(database);
+  // Editable temporary previews must not mutate or appear in the run history.
+  migrateCutscenePreviews(database);
 }
 
 /**

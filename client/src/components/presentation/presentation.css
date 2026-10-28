@@ -7,6 +7,7 @@
 }
 
 .pres-frame {
+  container-type: inline-size;
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
@@ -115,7 +116,8 @@
   padding: 0 6%;
   text-align: center;
   font-family: var(--font-display);
-  font-size: var(--fs-hero);
+  font-size: var(--pres-title-size, var(--fs-hero));
+  overflow-wrap: anywhere;
   line-height: 1.1;
   color: #fff;
   text-shadow: 0 2px 18px rgba(0, 0, 0, 0.85), 0 0 3px rgba(0, 0, 0, 0.9);
@@ -174,4 +176,8 @@ button.pres-title {
   min-width: 40px;
   font-size: var(--fs-h3);
   line-height: 1;
+}
+
+@supports (font-size: 1cqw) {
+  .pres-frame > .pres-title { --pres-title-size: 4.5cqw; }
 }

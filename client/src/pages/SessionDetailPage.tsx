@@ -12,6 +12,7 @@ import { SectionDropZone } from "../components/SectionDropZone";
 import { ResourcesSection } from "../components/ResourcesSection";
 import { CheatSheetsSection } from "../components/CheatSheetsSection";
 import { Modal } from "../components/Modal";
+import { CutsceneBindings } from "../components/cutscenes/CutsceneBindings";
 import { SessionSceneTree } from "../components/SessionSceneTree";
 import { LazyDetails } from "../components/LazyDetails";
 import { MentionText } from "../components/mentions/MentionText";
@@ -999,6 +1000,7 @@ export function SessionDetailPage() {
             </label>
           </div>
 
+          {!isPlayer && <div className="card stack"><CutsceneBindings context={{ kind: "session", sessionId, campaignId }} /></div>}
           {!isPlayer && <SessionSceneTree sessionId={sessionId} />}
 
           <div className="sp-prep-row">

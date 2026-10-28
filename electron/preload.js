@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Открыть ещё одно окно приложения на указанном маршруте. Все окна работают
   // с одним сервером и одной базой — см. spawnWindow в electron/main.js.
   openWindow: (route) => ipcRenderer.send("open-window", route),
+  openPlayerDisplay: (screen) => ipcRenderer.invoke("player-display-open", screen),
+  playerDisplayScreens: () => ipcRenderer.invoke("player-display-screens"),
+  closePlayerDisplay: (windowId) => ipcRenderer.invoke("player-display-close", windowId),
   // Открыть внешний URL в браузере пользователя по умолчанию
   // (shell.openExternal) — сам рендерер открывать его не должен, иначе ссылка
   // уйдёт в новое окно Electron, а не в браузер. См. ipcMain "open-external".

@@ -6,6 +6,7 @@ import os from "os";
 import AdmZip from "adm-zip";
 import { compactIfBloated, databaseFill, db, openDatabase, switchToDatabase } from "../db/db";
 import { initVaultAt, setVaultRoot, VAULT_ROOT } from "../services/filesystem";
+import { recoverCutsceneMediaUploads } from "../services/cutsceneMedia";
 import {
   addStorage,
   getActiveStorage,
@@ -130,6 +131,7 @@ storagesRouter.post("/:id/activate", (req, res) => {
   try {
     inStorageVault(target.vaultRoot, () => switchToDatabase(target.dbDir));
     setVaultRoot(target.vaultRoot);
+    recoverCutsceneMediaUploads();
     setActiveStorageId(target.id);
     res.json({ ok: true, active: target });
   } catch (err) {

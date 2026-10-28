@@ -14,13 +14,15 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import sharp from "sharp";
+import { PRESENTATION_TRANSITIONS, type PresentationData, type PresentationLayer } from "@soyman/shared";
 import { db } from "../db/db";
 import { ensureSubfolder, toFileUrl, vaultAbs } from "../services/filesystem";
 import { resizeImageBuffer } from "../services/imageResize";
 import { storeDeduped } from "../services/vaultDedup";
 import { contentSceneId, withLibraryContent } from "./library";
 
-export const PRESENTATION_TRANSITIONS = ["cut", "fade", "black"] as const;
+export { PRESENTATION_TRANSITIONS };
+export type { PresentationData, PresentationLayer } from "@soyman/shared";
 
 const ALLOWED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp", "image/avif"]);
 const ALLOWED_IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
@@ -96,31 +98,6 @@ export function containFitGeometry(iw: number, ih: number): { x_pct: number; y_p
   const w_pct = (wUnits / 16) * 100;
   const h_pct = (hUnits / 9) * 100;
   return { x_pct: (100 - w_pct) / 2, y_pct: (100 - h_pct) / 2, w_pct, h_pct };
-}
-
-export interface PresentationLayer {
-  id: number;
-  name: string;
-  image_path: string;
-  image_url: string;
-  has_button: number;
-  visible_on_enter: number;
-  position: number;
-  x_pct: number;
-  y_pct: number;
-  w_pct: number;
-  h_pct: number;
-}
-
-export interface PresentationData {
-  background_path: string | null;
-  background_url: string | null;
-  transition: string;
-  transition_ms: number;
-  title: string;
-  title_secs: number;
-  fade_ms: number;
-  layers: PresentationLayer[];
 }
 
 function layersOf(table: string, idCol: string, id: number): PresentationLayer[] {

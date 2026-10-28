@@ -1,0 +1,71 @@
+.modal-backdrop:has(> .cutscene-player) {
+  padding: 0;
+  z-index: 12000;
+}
+body:has(.cutscene-player) { overflow: hidden; }
+.modal.cutscene-player {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  inline-size: 100%;
+  max-inline-size: none;
+  block-size: 100dvh;
+  max-block-size: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  background: var(--paper);
+  color: var(--ink);
+}
+.cutscene-player__header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-5);
+  padding: var(--sp-5) var(--sp-6);
+  border-block-end: 1px solid var(--line);
+}
+.cutscene-player__title { flex: 1; min-inline-size: 0; }
+.cutscene-player__title > span { font-size: var(--fs-meta); color: var(--muted); }
+.cutscene-player__title h1 { margin: 0; font-size: var(--fs-h2); overflow-wrap: anywhere; }
+.cutscene-player__step { font-size: var(--fs-body); white-space: nowrap; }
+.cutscene-player__actions, .cutscene-player__navigation { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+.cutscene-player__body { display: grid; grid-template-columns: minmax(0, 1fr) 16rem; flex: 1; min-block-size: 0; }
+.cutscene-player__reader { min-block-size: 0; min-inline-size: 0; overflow: hidden; }
+.cutscene-player__side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  padding: var(--sp-5);
+  border-inline-start: 1px solid var(--line);
+  overflow: auto;
+  background: var(--paper-2);
+  font-size: var(--fs-data);
+}
+.cutscene-player__preview { margin: 0; }
+.cutscene-player__preview figcaption { margin-block-end: var(--sp-3); font-size: var(--fs-meta); color: var(--muted); }
+.cutscene-player__preview-stage { aspect-ratio: var(--cutscene-preview-ratio, 16/9); background: var(--stage-black, #000); overflow: hidden; }
+.cutscene-player__preview-stage > div { inline-size: 100%; block-size: 100%; }
+.cutscene-player__select { display: grid; gap: var(--sp-3); }
+.cutscene-player__select select { inline-size: 100%; }
+.cutscene-player__help { font-size: var(--fs-meta); color: var(--muted); }
+.cutscene-player__error { color: var(--danger-bg); }
+.modal-backdrop:has(> .cutscene-player__pause) { z-index: 12001; }
+.modal.cutscene-player__pause {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  inline-size: min(100%, 28rem);
+  padding: var(--sp-7);
+  background: var(--paper);
+  border: 1px solid var(--line);
+}
+.cutscene-player__pause h2 { margin: 0; font-size: var(--fs-h2); }
+.cutscene-player__pause p { margin: 0; font-size: var(--fs-body); }
+/* Keep the primary reading region large on a laptop; notes already have their own scroll. */
+.cutscene-player .cutscene-teleprompter__columns { grid-template-columns: minmax(0, 1fr) 13rem; }
+@media (max-width: 860px) {
+  .cutscene-player__body { grid-template-columns: minmax(0, 1fr) 12rem; }
+  .cutscene-player .cutscene-teleprompter__columns { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, .4fr); }
+}

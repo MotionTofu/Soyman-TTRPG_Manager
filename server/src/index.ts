@@ -90,6 +90,12 @@ import { adventureImportRouter } from "./routes/adventureImport";
 import { systemImportRouter } from "./routes/systemImport";
 import { healthRouter } from "./routes/health";
 import { mapsRouter } from "./routes/maps";
+import { cutscenesRouter } from "./routes/cutscenes";
+import { cutsceneRunsRouter } from "./routes/cutsceneRuns";
+import { cutscenePreviewsRouter } from "./routes/cutscenePreviews";
+import { playerDisplayRouter } from "./routes/playerDisplay";
+import { recoverCutscenePurges } from "./services/cutsceneDeletion";
+import { recoverCutsceneMediaUploads } from "./services/cutsceneMedia";
 import { sweepOrphans } from "./services/orphans";
 import { backfillCompendiumSummaries } from "./services/monsterSummary";
 import { attachUser, requireAuth, bootstrapGmAccount, verifyToken, type AuthedRequest } from "./services/auth";
@@ -100,6 +106,8 @@ import { signPath, verifySignedUrl } from "./services/signedUrl";
 import { apiRoleGate } from "./services/playerAccess";
 
 initVault();
+recoverCutscenePurges();
+recoverCutsceneMediaUploads();
 bootstrapGmAccount();
 
 // One-off reconciliation at boot: clear any polymorphic statblock/gallery/date
@@ -445,6 +453,10 @@ app.use("/api/albums", albumsRouter);
 app.use("/api/campaign-groups", campaignGroupsRouter);
 app.use("/api/player-groups", playerGroupsRouter);
 app.use("/api/players", playersRouter);
+app.use("/api", cutscenesRouter);
+app.use("/api/cutscene-runs", cutsceneRunsRouter);
+app.use("/api/cutscene-previews", cutscenePreviewsRouter);
+app.use("/api/presentation", playerDisplayRouter);
 app.use("/api/campaigns", campaignsRouter);
 // Раньше sessionsRouter: иначе GET /live уходит в его /:id.
 app.use("/api/sessions", sessionNotesRouter);

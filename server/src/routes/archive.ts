@@ -9,8 +9,13 @@ import {
 import { deleteVaultFolder, isVaultPath, vaultAbs } from "../services/filesystem";
 import { isPdfNoteDocument } from "../services/pdfNoteMarkdown";
 import { dropMapReferences } from "./maps";
+import { readCutsceneUsage } from "../services/cutsceneUsage";
+import { deleteArchivedCutscene } from "../services/cutsceneDeletion";
+import { CutsceneRequestError } from "../services/cutsceneErrors";
+import { requireAuth, type AuthedRequest } from "../services/auth";
 
 export const archiveRouter = Router();
+archiveRouter.use("/cutscene", requireAuth("gm"));
 
 // Types whose folder on disk is entity-exclusive and should be removed on
 // permanent delete. Excludes `mastering` (no folder) and `resource` (a single
@@ -38,6 +43,10 @@ interface ArchiveItem {
 
 archiveRouter.get("/", (_req, res) => {
   const items: ArchiveItem[] = [];
+
+  const cutscenes = db.prepare("SELECT id, name, description, archived_at FROM cutscenes WHERE archived_at IS NOT NULL").all() as
+    { id: number; name: string; description: string; archived_at: string }[];
+  if (( _req as AuthedRequest).user?.role === "gm") items.push(...cutscenes.map(row => ({ type: "cutscene", id: row.id, title: row.name, subtitle: row.description || undefined, archived_at: row.archived_at })));
 
   const campaigns = db
     .prepare(
@@ -387,6 +396,11 @@ function campaignPurgeImpact(campaignId: string | number): PurgeImpact {
 archiveRouter.get("/:type/:id/impact", (req, res) => {
   if (!ARCHIVE_TABLES[req.params.type]) return res.status(400).json({ error: "unknown type" });
   const t = req.params.type;
+  if (t === "cutscene") {
+    if ((req as AuthedRequest).user?.role !== "gm") return res.status(403).json({ error: "Только для Мастера" });
+    try { return res.json({ ...EMPTY_IMPACT, cutsceneUsage: readCutsceneUsage(Number(req.params.id)) }); }
+    catch (error) { if (error instanceof CutsceneRequestError) return res.status(error.status).json({ error: error.message }); throw error; }
+  }
   if (t === "system") return res.json(systemPurgeImpact(req.params.id));
   if (t === "setting") return res.json(settingPurgeImpact(req.params.id));
   if (t === "campaign") return res.json(campaignPurgeImpact(req.params.id));
@@ -445,6 +459,14 @@ archiveRouter.delete("/:type/:id", (req, res) => {
   if (!row) return res.status(404).json({ error: "not found" });
   if (row.archived_at == null) {
     return res.status(400).json({ error: "можно удалить навсегда только из архива" });
+  }
+
+  if (req.params.type === "cutscene") {
+    try { deleteArchivedCutscene(numericId); return res.json({ ok: true }); }
+    catch (error) {
+      if (error instanceof CutsceneRequestError) return res.status(error.status).json({ error: error.message, issues: error.issues });
+      throw error;
+    }
   }
 
   const mapCells = req.params.type === "map"

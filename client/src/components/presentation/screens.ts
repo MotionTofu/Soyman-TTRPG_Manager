@@ -31,6 +31,8 @@ const LAST_KEY = "presentation-screen-id";
 
 export async function getScreens(): Promise<ScreenChoice[]> {
   try {
+    const native = await window.electronAPI?.playerDisplayScreens?.();
+    if (native?.length) return native;
     const w = window as unknown as { getScreenDetails?: () => Promise<{ screens: ScreenDetailsScreen[] }> };
     const details = await w.getScreenDetails?.();
     const list = details?.screens ?? [];
@@ -71,6 +73,10 @@ export function loadLastScreenId(): string | null {
   }
 }
 
+export function saveLastScreenId(id: string): void {
+  try { localStorage.setItem(LAST_KEY, id); } catch { /* unavailable storage */ }
+}
+
 export function openOnScreen(url: string, target: string, screen: ScreenChoice | null): Window | null {
   if (!screen || screen.id === "primary-fallback") {
     return window.open(url, target, "width=960,height=600");
@@ -86,11 +92,7 @@ export function openOnScreen(url: string, target: string, screen: ScreenChoice |
     "status=no",
   ].join(",");
   const win = window.open(url, target, features);
-  if (win) {
-    try {
-      localStorage.setItem(LAST_KEY, screen.id);
-    } catch {}
-  }
+  if (win) saveLastScreenId(screen.id);
   return win;
 }
 

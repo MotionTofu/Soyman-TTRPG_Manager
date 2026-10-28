@@ -9,9 +9,13 @@ import { EmptyState } from "../components/EmptyState";
 import { ListPage } from "../components/ListPage";
 import { Modal } from "../components/Modal";
 import type { ArchiveItem, ArchivedFile } from "../types";
+import { Link } from "react-router-dom";
+import type { CutsceneUsage } from "@shared/cutscenes/usage";
+import { CutsceneUsageList } from "../components/cutscenes/CutsceneUsageList";
 import { MAP_VERSION_HEADER } from "@shared/maps/core";
 
 const RESTORE_ENDPOINTS: Record<string, string> = {
+  cutscene: "/cutscenes",
   campaign: "/campaigns",
   system: "/systems",
   setting: "/settings",
@@ -36,6 +40,7 @@ const RESTORE_ENDPOINTS: Record<string, string> = {
 // английскую строку — `canvas_board`. Запасной вариант — сам идентификатор:
 // новый тип лучше показать сырым, чем не показать вовсе.
 const TYPE_LABELS: Record<string, string> = {
+  cutscene: "катсцена",
   campaign: "кампания",
   system: "система",
   setting: "сеттинг",
@@ -67,6 +72,7 @@ const TYPE_LABELS: Record<string, string> = {
 // Кампании перечисляются поимённо: сводное «5 кампаний» не даёт понять, что
 // среди них та, которую ведут в эту субботу.
 interface PurgeImpact {
+  cutsceneUsage?: CutsceneUsage;
   detachedCampaigns: string[];
   compendiumLinks: number;
   baseMonsters: number;
@@ -375,6 +381,7 @@ export function ArchivePage() {
   }
 
   function openPurge(item: ArchiveItem) {
+    setErrorMsg(null);
     setPurgeTarget({ item, impact: null });
     setPurgePaid(0);
     if (item.type === "session") {
@@ -385,12 +392,12 @@ export function ArchivePage() {
     setPurgeImpactLoading(true);
     readOnce<PurgeImpact>(`/archive/${item.type}/${item.id}/impact`)
       .then((imp) => setPurgeTarget((prev) => (prev && prev.item === item ? { item, impact: imp } : prev)))
-      .catch(() => setPurgeTarget({ item, impact: null }))
+      .catch(() => setPurgeTarget(prev => prev?.item === item ? { item, impact: null } : prev))
       .finally(() => setPurgeImpactLoading(false));
   }
 
   async function confirmPurge(moveMoney = false) {
-    if (!purgeTarget) return;
+    if (!purgeTarget || (purgeTarget.item.type === "cutscene" && !purgeTarget.impact?.cutsceneUsage?.canDelete)) return;
     setBusy(true);
     try {
       // Деньги сессии — в «Сверх сессий» кампании, только по выбору Мастера.
@@ -490,9 +497,11 @@ export function ArchivePage() {
       const targets = filtered.length > 0 ? filtered : items;
       if (targets.length === 0) { setClearOpen(null); return; }
       setBusy(true);
-      await Promise.allSettled(targets.map((it) => write.del(`/archive/${it.type}/${it.id}`)));
+      const results = await Promise.allSettled(targets.map((it) => write.del(`/archive/${it.type}/${it.id}`)));
+      const failures = results.flatMap((result, i) => result.status === "rejected" ? [`«${targets[i].title}»: ${String(result.reason)}`] : []);
       setBusy(false);
-      showToast(`Очищено ${targets.length} записей`);
+      if (failures.length) setErrorMsg(`Не удалено ${failures.length}: ${failures.join("; ")}`);
+      showToast(`Очищено ${targets.length - failures.length} записей`);
       focusFirstRow();
       void refreshMentionIndex();
       setClearOpen(null);
@@ -813,11 +822,13 @@ export function ArchivePage() {
                     {ln}
                   </p>
                 ))}
-                {impactLines(purgeTarget.impact).length === 0 && (
+                {!purgeTarget.impact.cutsceneUsage && impactLines(purgeTarget.impact).length === 0 && (
                   <p className="muted" style={{ margin: 0 }}>Дополнительных разрывов не найдено.</p>
                 )}
               </div>
             ) : null}
+            {purgeTarget.impact?.cutsceneUsage && <CutsceneUsageList usage={purgeTarget.impact.cutsceneUsage} />}
+            {purgeTarget.item.type === "cutscene" && !purgeImpactLoading && !purgeTarget.impact && <p role="alert">Не удалось проверить использование. Закройте окно и повторите попытку.</p>}
             {purgePaid > 0 ? (
               <>
                 <p>
@@ -836,7 +847,7 @@ export function ArchivePage() {
             ) : (
               <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
                 <button onClick={() => setPurgeTarget(null)}>Отмена</button>
-                <button className="danger" onClick={() => void confirmPurge()} disabled={busy || purgeImpactLoading}>
+                <button className="danger" onClick={() => void confirmPurge()} disabled={busy || purgeImpactLoading || (purgeTarget.item.type === "cutscene" && !purgeTarget.impact?.cutsceneUsage?.canDelete)}>
                   Да, удалить навсегда
                 </button>
               </div>
@@ -904,6 +915,7 @@ export function ArchivePage() {
               </div>
             </div>
             <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
+              {previewItem.type === "cutscene" && <Link className="button" to={`/mastering/cutscenes/${previewItem.id}`}>Открыть катсцену</Link>}
               <button onClick={() => setPreviewItem(null)}>Закрыть</button>
               <button className="primary" onClick={() => { const it = previewItem; setPreviewItem(null); void restore(it); }}>
                 Восстановить

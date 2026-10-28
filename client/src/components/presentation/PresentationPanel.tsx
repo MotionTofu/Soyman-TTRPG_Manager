@@ -6,11 +6,14 @@ import { errorText, useEntity, useResource, write } from "../../data/hooks";
 import { readResource } from "../../data/imperative";
 import { showSaveError } from "../../data/notices";
 import { sessionPaths } from "../../data/sessions";
+import { CutsceneBindings } from "../cutscenes/CutsceneBindings";
 import { LazyDetails } from "../LazyDetails";
 import { PresentationStage } from "./PresentationStage";
 import { PlayerMapStage } from "./PlayerMapStage";
 import { ScreenPreview } from "./ScreenPreview";
-import { getScreens, loadLastScreenId, loadScreenMemory, openOnScreen, type ScreenChoice } from "./screens";
+import { getScreens, loadLastScreenId, loadScreenMemory, type ScreenChoice } from "./screens";
+import { openPlayerDisplayWindow } from "./playerDisplayWindow";
+import { playerDisplayChanged, readPlayerDisplay, selectSessionDisplay } from "./playerDisplay";
 import type { CampaignCover, ScenePresentation, SessionStage, ShowDisplay, ShowState, StorySceneDetail } from "../../types";
 
 interface SceneMapList { scene_id: number; maps: { id: number; name: string }[] }
@@ -88,6 +91,7 @@ export function PresentationPanel({
       // В этом окне экран уже в кэше — перечитывать незачем; окну показа и
       // другим окнам пульта уходит адресный сигнал.
       notifyDataChanged([{ path: showPath }]);
+      playerDisplayChanged();
     } catch (e) {
       showSaveError(`Экран игрокам не переключился: ${errorText(e)}`);
     }
@@ -109,7 +113,13 @@ export function PresentationPanel({
       const last = loadLastScreenId();
       target = list.find((s) => s.id === last) ?? list.find((s) => !s.primary) ?? list[0] ?? null;
     }
-    openOnScreen(`/sessions/${sessionId}/live/show`, `show-${sessionId}`, target);
+    const opened = await openPlayerDisplayWindow(target);
+    if (!opened.ok) { showSaveError(opened.reason); return; }
+    try {
+      const state = await readPlayerDisplay();
+      if (state.owner) return; // Reuse a runtime-owned screen without replacing its frame.
+      await selectSessionDisplay(sessionId);
+    } catch (error) { showSaveError(errorText(error)); return; }
     if (!target) return;
     const mem = loadScreenMemory(target.id);
     void putShow({
@@ -178,7 +188,7 @@ export function PresentationPanel({
 
   // Нет контента вообще = нет блока (решение Q18). Хук-правила: ранний
   // return — после всех хуков выше.
-  if (show && !currentHas && !coverHas && currentMaps.length === 0 && !screenHas) return null;
+  // The shared panel also launches cutscenes, including when this session has no scene/cover images.
 
   const buttonLayers = (screenPres?.layers ?? [])
     .filter((l) => l.has_button === 1)
@@ -369,6 +379,7 @@ export function PresentationPanel({
           )}
         </div>
       </div>
+      <CutsceneBindings context={{ kind: "session", sessionId, campaignId }} mode="launch" />
     </LazyDetails>
   );
 }

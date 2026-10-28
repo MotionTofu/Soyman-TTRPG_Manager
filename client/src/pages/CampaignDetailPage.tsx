@@ -90,6 +90,7 @@ import { Timeline } from "../components/Timeline";
 import { SettingChronicleEventRow } from "../components/SettingChronicleEventRow";
 import { SettingCyclePanel } from "../components/setting/SettingCyclePanel";
 import { SettingCycles } from "../components/SettingCycles";
+import { CutsceneBindings } from "../components/cutscenes/CutsceneBindings";
 import { PresentationEditor } from "../components/presentation/PresentationEditor";
 import { EntityTabWorkspace } from "../components/EntityTabWorkspace";
 import { sessionLabel } from "../sessionLabel";
@@ -1054,6 +1055,7 @@ export function CampaignDetailPage() {
         <section className="stack">
           <p className="muted">Заглавное представление показывается на втором экране до первого представления сцены и по кнопке из пульта.</p>
           <PresentationEditor owner={{ kind: "campaign", campaignId, campaignName: campaign.name }} />
+          {campaign.role !== "player" && <CutsceneBindings context={{ kind: "campaign", campaignId }} />}
         </section>
       )}
       {tab === "Итоги" && <ResultsTab campaign={campaign} />}

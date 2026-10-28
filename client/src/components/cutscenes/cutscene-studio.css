@@ -1,0 +1,142 @@
+/* Shared studio layout; every colour follows the currently selected application theme. */
+.cs-workshop, .cs-settings-dialog, .cs-readiness, .cutscene-player, .cutscenes-catalog { font-family: var(--font-body); }
+:is(.cs-workshop, .cs-settings-dialog, .cs-readiness, .cutscene-player, .cutscenes-catalog) :is(h1,h2,h3) { font-family: var(--font-body); text-transform: none; letter-spacing: normal; }
+.cutscene-workshop-page > .page-head h1 { font-family: var(--font-body); font-size: var(--fs-h2); text-transform: none; }
+.cs-workshop { display: grid; gap: var(--sp-5); }
+.cs-workshop-header { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-5); padding-block: var(--sp-4); border-block: 1px solid var(--line); }
+.cs-autosave { color: var(--muted); }
+.cs-workspace { grid-template-columns: 11rem minmax(0,1fr); gap: var(--sp-6); }
+.cs-steps { padding: var(--sp-4); border: 1px solid var(--line); background: var(--paper-2); border-radius: var(--radius-card, 4px); }
+.cs-steps > .cs-toolbar { display: grid; }
+.cs-steps h2 { font-size: var(--fs-body); }
+.cs-step { background: var(--paper); border-radius: var(--radius-card, 4px); }
+.cs-step.is-selected { background: var(--paper-2); }
+.cs-step > strong { font-size: var(--fs-body); }
+.cs-step-move { padding-block-start: var(--sp-2); }
+.cs-step-editor { display: grid; gap: var(--sp-5); }
+.cs-step-heading { justify-content: space-between; }
+.cs-step-heading h2 { font-size: var(--fs-h3); }
+.cs-tabs { gap: 0; border-block-end: 1px solid var(--line); }
+.cs-tabs button { padding: var(--sp-4) var(--sp-6); border: 0; background: none; }
+.cs-tabs [aria-pressed="true"] { outline: 0; box-shadow: inset 0 -2px var(--accent); color: var(--accent); }
+.cs-channel { display: grid; gap: var(--sp-5); min-inline-size: 0; }
+.cs-channel-layout { min-inline-size: 0; }
+.cs-channel-layout--audio { display: grid; grid-template-columns: minmax(0,2fr) minmax(15rem,1fr); gap: var(--sp-5); align-items: start; }
+.cs-channel-layout--audio > .cs-preview-stage { position: sticky; inset-block-start: var(--sp-5); }
+.cs-channel-command { display: inline-flex; justify-self: start; padding: var(--sp-1); gap: var(--sp-1); background: var(--paper-2); border-radius: var(--radius-card, 4px); }
+.cs-channel-command button { border: 0; background: transparent; }
+.cs-channel-command [aria-pressed="true"] { background: var(--accent); color: var(--accent-text); }
+.cs-source { line-height: 1.5; }
+.cs-source button { font-size: inherit; padding: var(--sp-1) var(--sp-3); margin-inline-start: var(--sp-3); }
+.cs-composition { display: grid; grid-template-columns: minmax(0,1fr) minmax(15rem,20rem); gap: var(--sp-5); align-items: start; }
+.cs-composition__canvas { min-inline-size: 0; position: sticky; inset-block-start: var(--sp-5); display: grid; gap: var(--sp-3); }
+.cs-composition__canvas > .cs-draft-frame, .cs-preview-stage > .cs-draft-frame { inline-size: min(100%,calc(52dvh * 16 / 9)); justify-self: center; }
+.cs-composition__canvas > p { font-size: var(--fs-meta); line-height: 1.5; }
+.cs-composition__properties { display: grid; gap: var(--sp-5); padding: var(--sp-5); min-inline-size: 0; background: var(--paper-2); border: 1px solid var(--line); border-radius: var(--radius-card, 4px); }
+.cs-composition__properties .cs-fields { grid-template-columns: minmax(0,1fr); }
+.cs-layer { border: 1px solid var(--line); background: var(--paper); border-radius: var(--radius-card, 4px); }
+.cs-layer > button:first-child { inline-size: 100%; flex-basis: 100%; }
+.cs-visual-replay { justify-self: start; }
+.cs-preview-stage { display: grid; gap: var(--sp-3); }
+.cs-preview-controls { display: grid; gap: var(--sp-4); padding: var(--sp-5); background: var(--paper-2); border: 1px solid var(--line); border-radius: var(--radius-card, 4px); }
+.cs-preview-controls:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cs-preview-controls > .cs-toolbar > strong { margin-inline-end: auto; }
+.cs-preview-output > label { min-inline-size: 10rem; }
+.cs-text-workspace { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: var(--sp-5); }
+.cs-text-source { min-inline-size: 0; }
+.cs-text-source > label { margin-block-end: var(--sp-3); }
+.cs-text-source textarea { min-block-size: 19rem; resize: vertical; font-size: var(--fs-body); line-height: 1.6; }
+.cs-workshop-reader, .cs-inline-reader { border: 1px solid var(--line); border-radius: var(--radius-card, 4px); overflow: hidden; }
+.cs-workshop-reader { block-size: 26rem; }
+.cs-inline-reader > summary { cursor: pointer; padding: var(--sp-4); background: var(--paper-2); }
+.cs-inline-reader > .cutscene-teleprompter { block-size: 22rem; }
+.cs-workshop-notes { display: grid; gap: var(--sp-3); padding-block-start: var(--sp-5); border-block-start: 1px solid var(--line); }
+.cs-workshop-notes textarea { resize: vertical; font-size: var(--fs-body); }
+.cs-more { position: relative; flex-shrink: 0; }
+.cs-more > summary { list-style: none; cursor: pointer; padding: var(--sp-3) var(--sp-5); border: 1px solid var(--line); background: var(--paper-2); border-radius: var(--radius-card, 4px); font-size: var(--fs-body); }
+.cs-more > summary::-webkit-details-marker { display: none; }
+.cs-more[open] { z-index: 15; }
+.cs-more > div { position: absolute; inset-inline-end: 0; inset-block-start: calc(100% + var(--sp-2)); min-inline-size: 13rem; display: grid; gap: var(--sp-2); padding: var(--sp-3); background: var(--paper-2); border: 1px solid var(--line); border-radius: var(--radius-card, 4px); box-shadow: 0 8px 24px color-mix(in srgb,var(--ink) 15%,transparent); }
+.cs-more > div > button { text-align: start; white-space: nowrap; inline-size: 100%; }
+.cs-number-error { color: var(--danger-bg); font-size: var(--fs-meta); line-height: 1.5; }
+.cs-workshop [aria-invalid="true"] { border-color: var(--danger-bg); }
+.cs-settings-dialog { display: grid; gap: var(--sp-6); inline-size: min(52rem,94vw); }
+.cs-settings-dialog > header { justify-content: space-between; }
+.cs-settings-dialog h2 { font-size: var(--fs-h2); margin: 0; }
+.cs-settings-dialog label { display: grid; gap: var(--sp-3); font-size: var(--fs-meta); }
+.cs-settings-dialog .cs-settings { border-block: 0; }
+.cs-settings-dialog .cs-settings > summary { display: none; }
+.cs-settings-dialog input, .cs-settings-dialog select, .cs-settings-dialog textarea { inline-size: 100%; }
+.cs-audio-panel { display: grid; gap: var(--sp-5); }
+.cs-audio-file { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-5); }
+.cs-audio-file > div { display: grid; gap: var(--sp-2); overflow-wrap: anywhere; }
+.cs-audio-file .muted { font-size: var(--fs-meta); }
+.cs-audio-bounds, .cs-audio-settings { display: grid; gap: var(--sp-5); padding: 0; margin: 0; border: 0; min-inline-size: 0; }
+.cs-audio-bounds { grid-template-columns: repeat(4,minmax(0,1fr)); align-items: start; }
+.cs-audio-settings { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.cs-audio-settings > section { min-inline-size: 0; padding: var(--sp-5); background: var(--paper-2); border: 1px solid var(--line); border-radius: var(--radius-card, 4px); }
+.cs-fragment-length { display: grid; gap: var(--sp-3); font-size: var(--fs-meta); }
+.cs-fragment-length strong { font-size: var(--fs-body); padding-block: var(--sp-3); }
+.cs-audition { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-4); }
+.cs-waveform { display: grid; gap: var(--sp-4); padding: var(--sp-5); border: 1px solid var(--line); border-radius: var(--radius-card, 4px); background: var(--paper-2); }
+.cs-waveform-toolbar { justify-content: space-between; }
+.cs-waveform-plot { position: relative; touch-action: none; margin-inline: var(--sp-4); margin-block-end: var(--sp-6); }
+.cs-waveform-plot svg { display: block; inline-size: 100%; block-size: 9rem; overflow: visible; }
+.cs-waveform-plot svg rect { fill: var(--muted); }
+.cs-waveform-plot svg rect.is-selected { fill: var(--accent); }
+.cs-waveform-plot svg .cs-waveform-selection { fill: var(--accent); opacity: .12; }
+.cs-waveform-plot svg text { fill: var(--muted); font-family: var(--font-mono); font-size: var(--fs-meta); }
+.cs-waveform-playhead { stroke: var(--ink); stroke-width: 2; }
+.cs-waveform-handle { position: absolute; inset-inline-start: var(--waveform-handle); inset-block-start: 26px; block-size: 108px; inline-size: 18px; padding: 0; transform: translateX(-50%); cursor: ew-resize; background: var(--accent); border: 1px solid var(--paper); border-radius: var(--radius-card, 4px); touch-action: none; }
+.cs-waveform-handle[hidden] { display: none; }
+.cs-waveform-handle > span { position: absolute; inset-block-start: calc(100% + var(--sp-2)); inset-inline-start: 50%; transform: translateX(-50%); color: var(--ink); background: var(--paper-2); padding: var(--sp-1) var(--sp-2); font-family: var(--font-mono); font-size: var(--fs-meta); white-space: nowrap; }
+.cs-waveform-pan { grid-template-columns: auto minmax(0,1fr); align-items: center; }
+.cs-waveform-loading { padding: var(--sp-6); border: 1px solid var(--line); font-size: var(--fs-body); }
+.cutscenes-catalog .res-toolbar { align-items: end; gap: var(--sp-4); }
+.cutscenes-catalog .res-toolbar__search, .cutscenes-catalog .cutscenes-filters select { min-block-size: 2.5rem; }
+.cutscenes-catalog .cutscenes-grid { grid-template-columns: repeat(4,minmax(0,1fr)); gap: var(--sp-6); }
+.cutscenes-catalog .cutscene-tile { overflow: visible; border-radius: var(--radius-card, 4px); background: var(--paper-2); }
+.cutscene-tile__open > .cutscene-cover { border-start-start-radius: var(--radius-card, 4px); border-start-end-radius: var(--radius-card, 4px); }
+.cutscenes-catalog .cutscene-tile__copy { padding: var(--sp-5); }
+.cutscenes-catalog .cutscene-tile h2 { font-size: var(--fs-body); font-weight: 700; line-height: 1.4; }
+.cutscenes-catalog .cutscene-tile__description { -webkit-line-clamp: 2; }
+.cutscenes-catalog .cutscene-tile__actions { justify-content: space-between; align-items: center; gap: var(--sp-3); padding: var(--sp-4) var(--sp-5); }
+.cutscene-tile__actions > button { flex: 1; }
+.modal-backdrop:has(> .cs-readiness) { background: color-mix(in srgb,var(--paper) 78%,transparent); }
+.modal.cs-readiness { display: block; padding: 0; inline-size: min(68rem,94vw); max-block-size: 90dvh; background: var(--paper); border-radius: var(--radius-card, 4px); }
+.cs-readiness > header { position: sticky; inset-block-start: 0; z-index: 2; padding: var(--sp-6); background: var(--paper); border-block-end: 1px solid var(--line); }
+.cs-readiness > header p { margin: 0; }
+.cs-readiness > header .reading-text { margin-block-start: var(--sp-3); }
+.cs-readiness > :not(header):not(footer) { margin: var(--sp-6); }
+.cs-readiness > footer { position: sticky; inset-block-end: 0; z-index: 2; padding: var(--sp-5) var(--sp-6); background: var(--paper); border-block-start: 1px solid var(--line); }
+.cs-readiness h2 { font-size: var(--fs-body); }
+.cs-readiness__columns { gap: var(--sp-7); }
+.cs-readiness__columns > section { font-size: var(--fs-body); }
+.cs-readiness__settings { font-size: var(--fs-meta); line-height: 1.5; }
+.cutscene-teleprompter__columns--reading-only, .cutscene-player .cutscene-teleprompter__columns--reading-only { grid-template-columns: minmax(0,1fr); grid-template-rows: minmax(0,1fr); }
+.cutscene-teleprompter__heading h2 { font-family: var(--font-body); font-size: var(--fs-meta); text-transform: none; letter-spacing: normal; }
+.cutscene-player__body { grid-template-columns: minmax(0,1fr) 20rem; }
+.cutscene-player__title h1 { font-size: var(--fs-h3); }
+.cutscene-player__notes h2 { font-size: var(--fs-body); margin-block: 0 var(--sp-2); }
+.cutscene-player__notes > .muted { font-size: var(--fs-meta); }
+.cutscene-player__notes > .reading-text { max-block-size: 28dvh; overflow: auto; overflow-wrap: anywhere; font-size: var(--fs-body); margin-block-start: var(--sp-4); }
+.cutscene-player__navigation { position: sticky; inset-block-end: 0; padding-block: var(--sp-3); background: var(--paper-2); }
+@media (max-width: 1300px) {
+  .cs-composition { grid-template-columns: minmax(0,1fr); }
+  .cs-composition__canvas { position: static; }
+  .cs-composition__properties { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .cutscenes-catalog .cutscenes-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
+}
+@media (max-width: 1000px) {
+  .cs-channel-layout--audio { grid-template-columns: minmax(0,1fr); }
+  .cs-channel-layout--audio > .cs-preview-stage { position: static; }
+  .cs-workspace { grid-template-columns: 9rem minmax(0,1fr); gap: var(--sp-4); }
+  .cs-text-workspace, .cs-audio-settings { grid-template-columns: minmax(0,1fr); }
+  .cs-audio-bounds { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .cutscenes-catalog .cutscenes-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .cutscene-player__body { grid-template-columns: minmax(0,1fr) 17rem; }
+}
+@media (max-width: 700px) {
+  .cutscenes-catalog .cutscenes-grid, .cs-composition__properties { grid-template-columns: minmax(0,1fr); }
+  .cs-workshop-header { flex-wrap: wrap; }
+}

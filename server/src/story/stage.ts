@@ -6,6 +6,8 @@
 // и в маршруте это превратилось бы в стену.
 
 import { db } from "../db/db";
+import { publishSessionDisplay } from "../services/playerDisplay";
+import { collectCutsceneMedia } from "../services/cutsceneMedia";
 import { CAST_ROLE_BY_SECTION, CAST_SECTIONS, linkTargetName, qtyByLink, setLinkQty } from "./cast";
 import { contentSceneId, withLibraryContent } from "./library";
 
@@ -324,11 +326,13 @@ export function launchScene(sessionId: number, sceneId: number): LaunchResult {
            mode = 'scene', scene_id = excluded.scene_id, map_id = NULL,
            visible_layer_ids = excluded.visible_layer_ids, updated_at = datetime('now')`
       ).run(sessionId, sceneId, JSON.stringify(presVisibleIds), sessionId);
+      publishSessionDisplay(sessionId);
     }
     return { added, removed: gone.changes };
   });
 
   const { added, removed } = run();
+  collectCutsceneMedia();
   const sound = sceneSoundSet(sceneId);
   return {
     scene,

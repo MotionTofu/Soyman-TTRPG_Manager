@@ -84,7 +84,7 @@ export function sessionMoneyAffects(sessionId: number, campaignId: number): Affe
  * подменяет состав панелей, то есть связи сессии, — все секции разом.
  */
 export function launchAffects(sessionId: number): Affect[] {
-  return [{ kind: "session", id: sessionId }, { path: linksPrefix("session", sessionId) }];
+  return [{ kind: "session", id: sessionId }, { path: linksPrefix("session", sessionId) }, { path: "/presentation" }];
 }
 
 /** Добавили или убрали связь в секции сущности: перечитываются все её секции. */

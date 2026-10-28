@@ -119,9 +119,11 @@ export function archiveFile(filePath: string, ownerType: string, ownerId: number
 // Large uploads arrive on disk. Hash them incrementally so a PDF never has to
 // occupy a second full copy in server memory. `sourcePath` is a temporary file
 // inside the vault and is removed by the caller in all outcomes.
-export async function storeDedupedFile(sourcePath: string, targetPath: string): Promise<string> {
+export async function storeDedupedFile(sourcePath: string, targetPath: string, assertContext: () => void = () => {}): Promise<string> {
+  assertContext();
   const hashBuilder = crypto.createHash("sha256");
   for await (const chunk of fs.createReadStream(assertVaultPath(sourcePath))) hashBuilder.update(chunk);
+  assertContext();
   const hash = hashBuilder.digest("hex");
   const relTarget = vaultRel(targetPath);
   const absTarget = assertVaultPath(targetPath);
@@ -135,6 +137,7 @@ export async function storeDedupedFile(sourcePath: string, targetPath: string): 
       try { fs.linkSync(existingAbs!, staged); linked = true; } catch { /* copy below */ }
     }
     if (!linked) await fs.promises.copyFile(sourcePath, staged);
+    assertContext();
     fs.renameSync(staged, absTarget);
     db.transaction(() => {
       db.prepare("DELETE FROM vault_files WHERE path = ?").run(relTarget);

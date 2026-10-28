@@ -1,3 +1,4 @@
+import { cutsceneKeyboardOwns } from "./cutscenes/keyboard";
 import {
   createContext,
   useContext,
@@ -11,12 +12,19 @@ import { Link } from "react-router-dom";
 import { getAuthToken } from "./api/client";
 import { useResource } from "./data/hooks";
 import { NavIcon } from "./components/NavIcons";
+import type { CutsceneAudioSource, CutsceneBackgroundQueueSnapshot, CutsceneTransportState } from "@shared/cutscenes/types";
+import { audioAuthority, useAudioOwnership, type AudioOwner } from "./sound/audioOwnership";
+import { freshAudioSources, type AudioSourceResolver } from "./sound/audioSources";
+import { fadeAndPause, positionAfterMetadata } from "./sound/audioTransport";
+import { previewSourceNeedsRefresh } from "./sound/previewSource";
+import { ordinaryBackgroundIntent } from "./sound/backgroundHandoff";
 
 
 export interface AudioTrack {
   id: number;
   name: string;
   src: string;
+  source?: CutsceneAudioSource;
 }
 
 export type RepeatMode = "off" | "track" | "playlist";
@@ -60,6 +68,9 @@ interface AudioPlayerContextValue {
   setBackgroundGain: (gain: number) => void;
   setRepeatMode: (mode: RepeatMode) => void;
   setShuffleMode: (on: boolean) => void;
+  captureSnapshot: () => CutsceneBackgroundQueueSnapshot;
+  suspendForCutscene: (owner: AudioOwner, fadeOutMs?: number) => Promise<void>;
+  restoreSnapshot: (snapshot: CutsceneBackgroundQueueSnapshot, resolve: AudioSourceResolver, owner?: AudioOwner) => Promise<void>;
 }
 
 const AudioPlayerContext = createContext<AudioPlayerContextValue | null>(null);
@@ -116,6 +127,9 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   const [activeSlot, setActiveSlot] = useState<"a" | "b">("a");
   const activeSlotRef = useRef(activeSlot);
   activeSlotRef.current = activeSlot;
+  const transportRef = useRef<CutsceneTransportState>("stopped");
+  const operationRef = useRef(0);
+  const pendingPosition = useRef<(() => void) | null>(null);
   const unlockedRef = useRef(false);
   const unlockPendingRef = useRef(false);
 
@@ -141,7 +155,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const [state, setState] = useState<PlayerState>({
+  const [state, setStateValue] = useState<PlayerState>({
     tracks: [],
     index: -1,
     isPlaying: false,
@@ -149,6 +163,10 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   });
   const stateRef = useRef(state);
   stateRef.current = state;
+  const setState = (next: PlayerState | ((previous: PlayerState) => PlayerState)) => {
+    const updated = typeof next === "function" ? next(stateRef.current) : next;
+    stateRef.current = updated; setStateValue(updated);
+  };
 
   const [progress, setProgress] = useState({ currentTime: 0, duration: 0 });
   const [volume, setVolumeState] = useState(loadStoredVolume);
@@ -156,6 +174,16 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   volumeRef.current = volume;
   const [repeatMode, setRepeatModeState] = useState<RepeatMode>(loadStoredRepeatMode);
   const [shuffleMode, setShuffleModeState] = useState<boolean>(loadStoredShuffleMode);
+  const repeatRef = useRef(repeatMode); repeatRef.current = repeatMode;
+  const shuffleRef = useRef(shuffleMode); shuffleRef.current = shuffleMode;
+
+  useEffect(() => audioAuthority.subscribe(() => {
+    if (audioAuthority.getSnapshot()) {
+      operationRef.current++;
+      pendingPosition.current?.(); pendingPosition.current = null;
+      clearFadeTimer();
+    }
+  }), []);
 
   // Множитель фоновой громкости от sound engine (дакинг, тишина).
   // Реальная громкость audio-элемента = volume * bgGain.
@@ -192,7 +220,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   // Синхронизация громкости с audio-элементами при изменении volume.
   // Реальная громкость = volume * bgGain (множитель от sound engine).
   useEffect(() => {
-    applyVolume(volume, bgGainRef.current);
+    if (audioAuthority.allows("background")) applyVolume(volume, bgGainRef.current);
   }, [volume]);
 
   function getActive(): HTMLAudioElement | null {
@@ -217,29 +245,27 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   // ровно туда, где его застал бой. Секунда назначается после loadedmetadata,
   // иначе браузер отбросит её на ещё не загруженном треке.
   function hardSwitch(newIndex: number, startAt = 0) {
+    if (!audioAuthority.allows("background")) return;
+    if (!ensureQueueSource(newIndex, () => hardSwitch(newIndex, startAt))) return;
     unlockAudioElements();
     clearFadeTimer();
     const active = getActive();
     const track = stateRef.current.tracks[newIndex];
     if (!active || !track) return;
+    ordinaryBackgroundIntent();
     const inactive = getInactive();
     if (inactive && inactive.src !== SILENT_WAV) inactive.pause();
     active.src = track.src;
     active.currentTime = 0;
-    active.volume = volume * bgGainRef.current;
+    active.volume = volumeRef.current * bgGainRef.current;
+    transportRef.current = "playing";
+    const operation = operationRef.current;
     if (startAt > 0) {
-      const seekOnce = () => {
-        active.removeEventListener("loadedmetadata", seekOnce);
-        try {
-          active.currentTime = startAt;
-        } catch {
-          /* трек короче запомненной позиции — начнём сначала */
-        }
-      };
-      active.addEventListener("loadedmetadata", seekOnce);
+      pendingPosition.current = positionAfterMetadata(active, startAt);
     }
     void active.play().catch(() => {
-      if (active === getActive() && active.getAttribute("src") === track.src) {
+      if (operation === operationRef.current && active === getActive() && active.getAttribute("src") === track.src) {
+        transportRef.current = "paused";
         setState((s) => ({ ...s, isPlaying: false }));
       }
     });
@@ -254,6 +280,8 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   // audio transition, the UI shouldn't lag behind the user's click waiting
   // for it.
   function crossfadeSwitch(newIndex: number) {
+    if (!audioAuthority.allows("background")) return;
+    if (!ensureQueueSource(newIndex, () => crossfadeSwitch(newIndex))) return;
     unlockAudioElements();
     const outgoing = getActive();
     const incoming = getInactive();
@@ -267,11 +295,14 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     clearFadeTimer();
     const previousIndex = stateRef.current.index;
     const previousSlot = activeSlotRef.current;
+    const operation = operationRef.current;
+    ordinaryBackgroundIntent();
+    transportRef.current = "playing";
     incoming.src = track.src;
     incoming.currentTime = 0;
     incoming.volume = 0;
     void incoming.play().catch(() => {
-      if (incoming !== getActive() || incoming.getAttribute("src") !== track.src) return;
+      if (operation !== operationRef.current || incoming !== getActive() || incoming.getAttribute("src") !== track.src) return;
       clearFadeTimer();
       incoming.pause();
       activeSlotRef.current = previousSlot;
@@ -306,7 +337,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     playlistId: number | null = null,
     startTime = 0
   ) {
-    if (tracks.length === 0) return;
+    if (!audioAuthority.allows("background") || tracks.length === 0) return;
     clearFadeTimer();
     // hardSwitch reads stateRef synchronously — setState alone wouldn't be
     // visible to it until the next render, so seed the ref directly too.
@@ -325,11 +356,14 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   }
 
   function toggle() {
+    if (!audioAuthority.allows("background")) return;
     unlockAudioElements();
     const active = getActive();
     setState((s) => {
       if (s.index < 0) return s;
+      ordinaryBackgroundIntent();
       const nowPlaying = !s.isPlaying;
+      transportRef.current = nowPlaying ? "playing" : "paused";
       if (active) {
         if (nowPlaying) active.play().catch(() => {});
         else active.pause();
@@ -360,8 +394,10 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   }
 
   function next() {
+    if (!audioAuthority.allows("background")) return;
     const nextIndex = computeAdvance(1);
     if (nextIndex == null) {
+      transportRef.current = "stopped";
       setState((s) => ({ ...s, isPlaying: false }));
       return;
     }
@@ -369,13 +405,17 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   }
 
   function prev() {
+    if (!audioAuthority.allows("background")) return;
     const nextIndex = computeAdvance(-1);
     if (nextIndex == null) return;
     crossfadeSwitch(nextIndex);
   }
 
   function stop() {
-    clearFadeTimer();
+    if (!audioAuthority.allows("background")) return;
+    ordinaryBackgroundIntent();
+    cancelTransport();
+    transportRef.current = "stopped";
     audioARef.current?.pause();
     audioBRef.current?.pause();
     setState({ tracks: [], index: -1, isPlaying: false, activePlaylistId: null });
@@ -386,7 +426,10 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   // выключен. Отличие от stop() ровно в этом: тот уносит и очередь, и его
   // жмёт набор без музыки, которому нечего показывать.
   function halt() {
-    clearFadeTimer();
+    if (!audioAuthority.allows("background")) return;
+    ordinaryBackgroundIntent();
+    cancelTransport();
+    transportRef.current = "stopped";
     audioARef.current?.pause();
     audioBRef.current?.pause();
     setState((s) => ({ ...s, index: -1, isPlaying: false }));
@@ -394,6 +437,8 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   }
 
   function seek(time: number) {
+    if (!audioAuthority.allows("background")) return;
+    pendingPosition.current?.(); pendingPosition.current = null;
     const active = getActive();
     if (!active) return;
     active.currentTime = time;
@@ -401,6 +446,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   }
 
   function setVolume(v: number) {
+    if (!audioAuthority.allows("background") || !Number.isFinite(v)) return;
     const clamped = Math.min(1, Math.max(0, v));
     volumeRef.current = clamped;
     setVolumeState(clamped);
@@ -409,17 +455,22 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   }
 
   function setBackgroundGain(g: number) {
+    if (!audioAuthority.allows("background") || !Number.isFinite(g)) return;
     const clamped = Math.min(1, Math.max(0, g));
     bgGainRef.current = clamped;
     applyVolume(volumeRef.current, clamped);
   }
 
   function setRepeatMode(mode: RepeatMode) {
+    if (!audioAuthority.allows("background")) return;
+    repeatRef.current = mode;
     setRepeatModeState(mode);
     localStorage.setItem(REPEAT_STORAGE_KEY, mode);
   }
 
   function setShuffleMode(on: boolean) {
+    if (!audioAuthority.allows("background")) return;
+    shuffleRef.current = on;
     setShuffleModeState(on);
     localStorage.setItem(SHUFFLE_STORAGE_KEY, on ? "1" : "0");
   }
@@ -428,6 +479,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
   // swap) rather than going through next() — everything else, including
   // wrap-to-start for "repeat playlist", flows through next()'s crossfade.
   function handleEnded(e: SyntheticEvent<HTMLAudioElement>) {
+    if (!audioAuthority.allows("background")) return;
     if (e.currentTarget !== getActive()) return; // stray event from the just-faded-out element
     if (repeatMode === "track") {
       const active = getActive();
@@ -455,12 +507,86 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     setProgress((p) => ({ ...p, duration: dur }));
   }
 
+  function cancelTransport() {
+    operationRef.current++;
+    pendingPosition.current?.(); pendingPosition.current = null;
+    clearFadeTimer();
+  }
+  function ensureQueueSource(index: number, again: () => void): boolean {
+    operationRef.current++;
+    pendingPosition.current?.(); pendingPosition.current = null;
+    const track = stateRef.current.tracks[index];
+    if (!track) return false;
+    if (!previewSourceNeedsRefresh(track.src)) return true;
+    const operation = operationRef.current;
+    void freshAudioSources()(track.source ?? { kind: "resource", resourceId: track.id }).then(src => {
+      if (operation !== operationRef.current || !audioAuthority.allows("background")) return;
+      const tracks = stateRef.current.tracks.map((item, i) => i === index ? { ...item, src } : item);
+      const updated = { ...stateRef.current, tracks }; stateRef.current = updated; setState(updated); again();
+    }).catch(() => {
+      if (operation === operationRef.current) setState(s => ({ ...s, isPlaying: false }));
+    });
+    return false;
+  }
+  function captureSnapshot(): CutsceneBackgroundQueueSnapshot {
+    const state = stateRef.current, active = getActive();
+    return { kind: "queue", queue: state.tracks.map(track => ({ name: track.name,
+      source: track.source?.kind === "cutscene" ? { kind: "cutscene", audio: { kind: "audio", id: track.source.audio.id } } : { kind: "resource", resourceId: track.source?.kind === "resource" ? track.source.resourceId : track.id } })),
+      index: state.index >= 0 ? state.index : null,
+      positionSeconds: state.index < 0 ? 0 : Math.max(0, active?.currentTime || 0),
+      state: state.index < 0 || transportRef.current === "stopped" ? "stopped" : state.isPlaying && active && !active.paused ? "playing" : "paused",
+      volume: volumeRef.current, repeat: repeatRef.current, shuffle: shuffleRef.current, activePlaylistId: state.activePlaylistId };
+  }
+  async function suspendForCutscene(owner: AudioOwner, fadeOutMs = 0): Promise<void> {
+    audioAuthority.assert(owner);
+    cancelTransport();
+    const operation = operationRef.current;
+    await fadeAndPause([audioARef.current, audioBRef.current], fadeOutMs,
+      () => operation === operationRef.current && audioAuthority.getSnapshot()?.owner.runId === owner.runId &&
+        audioAuthority.getSnapshot()?.owner.controllerId === owner.controllerId);
+    audioAuthority.assert(owner);
+    const updated = { ...stateRef.current, isPlaying: false }; stateRef.current = updated; setState(updated);
+    if (updated.index >= 0) transportRef.current = "paused";
+  }
+  async function restoreSnapshot(snapshot: CutsceneBackgroundQueueSnapshot, resolve: AudioSourceResolver, owner?: AudioOwner): Promise<void> {
+    if (owner) audioAuthority.assert(owner); else if (!audioAuthority.allows("background")) return;
+    const epoch = audioAuthority.epoch("background"), operation = ++operationRef.current;
+    const tracks = await Promise.all(snapshot.queue.map(async item => ({ id: item.source.kind === "resource" ? item.source.resourceId : 0,
+      name: item.name, source: structuredClone(item.source), src: await resolve(item.source) })));
+    const valid = () => operation === operationRef.current && epoch === audioAuthority.epoch("background");
+    if (!valid()) throw new Error("Восстановление очереди отменено");
+    if (owner) audioAuthority.assert(owner); else if (!audioAuthority.allows("background")) return;
+    const apply = () => {
+      clearFadeTimer(); pendingPosition.current?.(); pendingPosition.current = null;
+      audioARef.current?.pause(); audioBRef.current?.pause();
+      setVolume(snapshot.volume); setRepeatMode(snapshot.repeat); setShuffleMode(snapshot.shuffle);
+      const index = snapshot.index !== null && tracks[snapshot.index] ? snapshot.index : -1;
+      const updated = { tracks, index, isPlaying: snapshot.state === "playing" && index >= 0, activePlaylistId: snapshot.activePlaylistId };
+      stateRef.current = updated; setState(updated); transportRef.current = snapshot.state;
+      setProgress({ currentTime: snapshot.positionSeconds, duration: 0 });
+      const active = getActive();
+      if (index >= 0 && active) {
+        active.src = tracks[index].src;
+        active.volume = volumeRef.current * bgGainRef.current;
+        pendingPosition.current = positionAfterMetadata(active, snapshot.positionSeconds);
+        if (updated.isPlaying) return active.play();
+      } else {
+        audioARef.current?.removeAttribute("src"); audioBRef.current?.removeAttribute("src");
+      }
+    };
+    try { await (owner ? audioAuthority.withOwner(owner, apply) : apply()); }
+    catch (error) { if (valid()) { const updated = { ...stateRef.current, isPlaying: false }; stateRef.current = updated; setState(updated); } throw error; }
+    if (!valid()) throw new Error("Восстановление очереди отменено");
+  }
+  useEffect(() => { const a = audioARef.current, b = audioBRef.current; return () => { cancelTransport(); a?.pause(); b?.pause(); }; }, []);
+
   const current = state.index >= 0 ? (state.tracks[state.index] ?? null) : null;
 
   // Global keyboard shortcuts for the player bar. Only when no input/textarea
   // is focused, no modal is open, and no contentEditable element is active.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (cutsceneKeyboardOwns(e)) return;
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       if ((e.target as HTMLElement)?.isContentEditable) return;
@@ -511,11 +637,15 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
         setBackgroundGain,
         setRepeatMode,
         setShuffleMode,
+        captureSnapshot,
+        suspendForCutscene,
+        restoreSnapshot,
       }}
     >
       {children}
       {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
       <audio
+        data-audio-channel="background" data-audio-slot="a"
         ref={audioARef}
         onEnded={handleEnded}
         onTimeUpdate={handleTimeUpdate}
@@ -523,6 +653,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
       />
       {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
       <audio
+        data-audio-channel="background" data-audio-slot="b"
         ref={audioBRef}
         onEnded={handleEnded}
         onTimeUpdate={handleTimeUpdate}
@@ -567,6 +698,7 @@ export function AudioPlayerBar({
     setShuffleMode,
   } = useAudioPlayer();
 
+  const ownership = useAudioOwnership();
   const [showRemaining, setShowRemaining] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
 
@@ -596,7 +728,7 @@ export function AudioPlayerBar({
     return (
       <div className="audio-player-bar">
         <span className="audio-player-now">
-          {empty ?? (
+          {ownership ? <span role="status">Музыкой управляет катсцена</span> : empty ?? (
             <span className="audio-player-empty" role="status">
               <span className="muted">Ничего не играет</span>
               <span className="audio-player-empty-hint">· Нажмите «Включить набор» или выберите в пульте</span>
@@ -653,7 +785,7 @@ export function AudioPlayerBar({
 
       <span className="audio-player-now">
         <span className="audio-player-now-line">
-          <span className="audio-player-track">{current.name}</span>
+          <span className="audio-player-track">{ownership ? "Катсцена · прежняя музыка приостановлена" : current.name}</span>
           <span className="audio-player-counter">{index + 1}/{count}</span>
           <span
             className="audio-player-time"

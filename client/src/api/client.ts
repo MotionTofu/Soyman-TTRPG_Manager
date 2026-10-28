@@ -169,6 +169,8 @@ async function request<T>(path: string, options?: RequestOptions): Promise<T> {
   // Любая удачная правка — повод остальным окнам приложения обновиться: они
   // работают с той же базой, но своей копией уже загруженных данных.
   if (method !== "GET" && broadcast) announceUnaddressedWrite();
+  // A successful bodyless DELETE is complete; parsing JSON would report a failure after the server committed.
+  if (res.status === 204) return (responseType === "text" ? "" : undefined) as T;
   return responseType === "text" ? await res.text() as T : withFileTokens(await res.json());
 }
 

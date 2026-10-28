@@ -2254,3 +2254,106 @@ END;
 CREATE TRIGGER IF NOT EXISTS pdf_sources_delete_entry AFTER DELETE ON compendium_entries BEGIN
   DELETE FROM pdf_entity_sources WHERE target_kind IN ('item', 'magic_item') AND target_id = OLD.id;
 END;
+
+
+-- Общие оригиналы катсцен и независимые подборки/планы (тикет 02).
+CREATE TABLE IF NOT EXISTS cutscenes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  uid TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+  description TEXT NOT NULL DEFAULT '',
+  document TEXT NOT NULL,
+  saved_version TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  archived_at TEXT
+);
+CREATE TABLE IF NOT EXISTS campaign_cutscenes (
+  campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  cutscene_id INTEGER NOT NULL REFERENCES cutscenes(id) ON DELETE RESTRICT,
+  PRIMARY KEY (campaign_id, cutscene_id)
+);
+CREATE TABLE IF NOT EXISTS session_cutscenes (
+  session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  cutscene_id INTEGER NOT NULL REFERENCES cutscenes(id) ON DELETE RESTRICT,
+  position INTEGER NOT NULL CHECK (position >= 0),
+  PRIMARY KEY (session_id, cutscene_id),
+  UNIQUE (session_id, position)
+);
+CREATE INDEX IF NOT EXISTS idx_campaign_cutscenes_original ON campaign_cutscenes(cutscene_id);
+CREATE INDEX IF NOT EXISTS idx_session_cutscenes_original ON session_cutscenes(cutscene_id);
+CREATE INDEX IF NOT EXISTS idx_cutscenes_updated ON cutscenes(updated_at);
+CREATE INDEX IF NOT EXISTS idx_cutscenes_archived ON cutscenes(archived_at);
+
+-- Независимые файлы катсцен и учёт использования (тикет 03).
+CREATE TABLE IF NOT EXISTS cutscene_media (
+  id TEXT PRIMARY KEY,
+  cutscene_id INTEGER NOT NULL REFERENCES cutscenes(id) ON DELETE RESTRICT,
+  kind TEXT NOT NULL CHECK (kind IN ('image', 'audio')),
+  file_path TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  mime TEXT NOT NULL,
+  duration_seconds REAL,
+  state TEXT NOT NULL CHECK (state IN ('pending', 'ready')),
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_cutscene_media_original ON cutscene_media(cutscene_id);
+CREATE TABLE IF NOT EXISTS cutscene_media_holds (
+  holder_kind TEXT NOT NULL CHECK (holder_kind IN ('original', 'staging', 'snapshot', 'frame', 'music')),
+  holder_key TEXT NOT NULL,
+  media_id TEXT NOT NULL REFERENCES cutscene_media(id) ON DELETE RESTRICT,
+  PRIMARY KEY (holder_kind, holder_key, media_id)
+);
+CREATE INDEX IF NOT EXISTS idx_cutscene_media_holds_file ON cutscene_media_holds(media_id);
+
+-- Unified player display, including shows launched without a session.
+CREATE TABLE IF NOT EXISTS player_display_state (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  snapshot TEXT,
+  owner TEXT,
+  transition TEXT,
+  revision INTEGER NOT NULL DEFAULT 0
+);
+
+-- Persistent cutscene runs and retained audio (07).
+
+CREATE TABLE IF NOT EXISTS cutscene_runs (
+  run_id TEXT PRIMARY KEY,
+  -- Provenance survives final deletion of an unused original; only active uses have an FK.
+  cutscene_id INTEGER NOT NULL,
+  mode TEXT NOT NULL CHECK (mode IN ('live', 'rehearsal')),
+  launch_context TEXT NOT NULL,
+  version TEXT NOT NULL,
+  return_state TEXT NOT NULL,
+  audio_scope TEXT NOT NULL CHECK (audio_scope IN ('music', 'all')),
+  controller_id TEXT NOT NULL,
+  checkpoint TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  ended_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cutscene_runs_active ON cutscene_runs ((1)) WHERE ended_at IS NULL;
+CREATE TABLE IF NOT EXISTS cutscene_run_uses (
+  run_id TEXT NOT NULL REFERENCES cutscene_runs(run_id) ON DELETE CASCADE,
+  cutscene_id INTEGER NOT NULL REFERENCES cutscenes(id) ON DELETE RESTRICT,
+  PRIMARY KEY (run_id, cutscene_id)
+);
+CREATE TABLE IF NOT EXISTS cutscene_music_state (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  run_id TEXT,
+  audio TEXT,
+  revision INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS cutscene_music_uses (
+  cutscene_id INTEGER PRIMARY KEY REFERENCES cutscenes(id) ON DELETE RESTRICT
+);
+CREATE TABLE IF NOT EXISTS cutscene_preview_state (
+  id INTEGER PRIMARY KEY CHECK(id = 1),
+  cutscene_id INTEGER NOT NULL REFERENCES cutscenes(id) ON DELETE RESTRICT,
+  state TEXT NOT NULL
+);
+
+CREATE TRIGGER IF NOT EXISTS cutscene_run_snapshot_immutable
+BEFORE UPDATE OF cutscene_id, mode, launch_context, version, return_state, audio_scope, created_at ON cutscene_runs
+BEGIN SELECT RAISE(ABORT, 'Cutscene run snapshot is immutable'); END;

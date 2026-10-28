@@ -1,3 +1,4 @@
+import { installCutsceneKeyboard } from './cutscenes/keyboard'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
@@ -19,10 +20,15 @@ import { applyCanvasPaletteVars } from './canvasPalette'
 import { applyImageTreatment } from './imagePrefs'
 import { migrateThumbnailStyles } from './thumbnailStyles'
 import { AudioPlayerProvider } from './audioPlayer'
+import { isPlayerDisplayRoute } from './components/presentation/playerDisplayWindow'
+import { installAuxiliaryAudioGuard } from './sound/auxiliaryAudio'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClient } from './data/queryClient'
 import { installNativeDialogFocusFix } from './electronApi'
 import { applyCursorSet, loadCursorSet } from './cursorSets'
+
+// Register before any page installs capture shortcuts; inactive until the GM player claims it.
+installCutsceneKeyboard()
 
 // Apply the saved theme before the first render so there's no flash of the
 // default theme — a single CSS-variable write beats waiting for an effect.
@@ -39,14 +45,16 @@ applyCursorSet(loadCursorSet())
 // Внутри Electron: вернуть окну фокус после нативного диалога. В браузере
 // ничего не делает.
 installNativeDialogFocusFix()
+installAuxiliaryAudioGuard()
+
+// Player displays never mount an audio engine, including on reload.
+const application = isPlayerDisplayRoute(window.location.pathname) ? <App /> : <AudioPlayerProvider><App /></AudioPlayerProvider>
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {/* Слой данных (docs/adr/0001): кэш, отмена устаревших запросов, обновление задетого. */}
     <QueryClientProvider client={queryClient}>
-      <AudioPlayerProvider>
-        <App />
-      </AudioPlayerProvider>
+      {application}
     </QueryClientProvider>
   </StrictMode>,
 )

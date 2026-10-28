@@ -16,6 +16,9 @@ export interface ElectronAPI {
   restoreFocus: () => void;
   /** Открыть ещё одно окно приложения на указанном маршруте. */
   openWindow: (route: string) => void;
+  openPlayerDisplay?: (screen: import("./components/presentation/screens").ScreenChoice | null) => Promise<import("@shared/playerDisplay").PlayerDisplayOpenResult>;
+  closePlayerDisplay?: (windowId: string) => Promise<boolean>;
+  playerDisplayScreens?: () => Promise<import("./components/presentation/screens").ScreenChoice[]>;
   /** Открыть внешний URL в браузере пользователя по умолчанию (shell.openExternal). */
   openExternal: (url: string) => void;
   /** Открыть Telegram автора: сначала установленный клиент (tg://), фолбэк — браузер. */
