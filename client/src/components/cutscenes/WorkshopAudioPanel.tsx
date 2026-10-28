@@ -4,6 +4,7 @@ import { CUTSCENE_DEFAULTS } from "@shared/cutscenes/defaults";
 import { useResource } from "../../data/hooks";
 import { workshopMediaPath, type WorkshopMedia } from "../../data/cutsceneMedia";
 import { useWorkshopPreview } from "../../cutscenes/useWorkshopPreview";
+import { formatDuration } from "../../sound/duration";
 import { WorkshopValidityContext } from "../../cutscenes/workshopValidity";
 import { CutsceneMediaPicker } from "./CutsceneMediaPicker";
 import { AudioTransitionFields, WorkshopNumber, WorkshopSeconds } from "./WorkshopFields";
@@ -27,13 +28,13 @@ export function WorkshopAudio({ id, stepId, value, onChange, readOnly = false }:
   const patchLoop = (transition: CutsceneLoopTransition) => onChange({ ...value, loop: { ...value.loop, transition } });
   const length = end !== null ? Math.max(0, (range?.end ?? end) - (range?.start ?? value.startSeconds)) : null;
   return <div className="cs-audio-panel">
-    <div className="cs-audio-file"><div><strong>{info?.name ?? "Музыкальный фрагмент"}</strong><span className="muted">{duration === null ? "Длительность определяется" : `${duration.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} с`}{readOnly ? " · Продолжается из другого шага" : ""}</span></div>
+    <div className="cs-audio-file"><div><strong>{info?.name ?? "Музыкальный фрагмент"}</strong><span className="muted">{duration === null ? "Длительность определяется" : formatDuration(duration)}{readOnly ? " · Продолжается из другого шага" : ""}</span></div>
       {!readOnly && <button onClick={() => setPicker(true)}>Заменить трек</button>}</div>
     <WorkshopWaveform id={id} value={value} readOnly={readOnly} onDuration={setDuration} onDraft={setRange} onChange={next => onChange({ ...value, startSeconds: next.start, endSeconds: next.end })} />
     <fieldset disabled={readOnly} className="cs-audio-bounds"><WorkshopNumber path={[...path, "startSeconds"]} label="Начало фрагмента, с" value={range?.start ?? value.startSeconds} onChange={number => onChange({ ...value, startSeconds: number ?? 0 })} />
       <WorkshopNumber path={[...path, "endSeconds"]} label="Конец фрагмента, с" nullable value={range?.end ?? value.endSeconds} onChange={endSeconds => onChange({ ...value, endSeconds })} />
       <WorkshopNumber path={[...path, "volume"]} label="Громкость, %" value={value.volume * 100} max={100} onChange={number => onChange({ ...value, volume: (number ?? 0) / 100 })} />
-      <div className="cs-fragment-length"><span>Длина фрагмента</span><strong>{length === null ? "Определяется" : `${length.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} с`}</strong></div></fieldset>
+      <div className="cs-fragment-length"><span>Длина фрагмента</span><strong>{length === null ? "Определяется" : formatDuration(length)}</strong></div></fieldset>
     {rangeInvalid && <p className="cs-number-error" role="alert">Правка не применена. Конец должен быть больше начала и не выходить за длительность файла.</p>}
     <div className="cs-audition"><button className="primary" disabled={busy || blocked || !!state.foreign} onClick={() => void controller.play("audition")}>{state.mode === "audition" && state.phase === "playing" ? "Пауза прослушивания" : state.mode === "audition" && state.phase === "paused" ? "Продолжить прослушивание" : "Прослушать фрагмент"}</button>
       <button disabled={state.mode !== "audition"} onClick={() => void controller.stop()}>Стоп прослушивания</button>
