@@ -33,10 +33,9 @@ describe("читаемый текст и отдельные заметки", () 
   });
   it("ручные настройки вызывают только текстовые команды", () => {
     const p = props(); render(<TeleprompterView {...p} />);
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'Размер текста' }), { target: { value: '40' } });
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'Темп чтения' }), { target: { value: '160' } });
+    fireEvent.click(screen.getByRole('button', { name: 'A+' })); fireEvent.click(screen.getByRole('button', { name: 'Медленнее' }));
     fireEvent.click(screen.getByRole('button', { name: 'Пауза текста' }));
-    expect(p.onFontSize).toHaveBeenCalledWith(40); expect(p.onWordsPerMinute).toHaveBeenCalledWith(160); expect(p.onTextPaused).toHaveBeenCalledWith(true);
+    expect(p.onFontSize).toHaveBeenCalledWith(34); expect(p.onWordsPerMinute).toHaveBeenCalledWith(110); expect(p.onTextPaused).toHaveBeenCalledWith(true);
   });
   it("не превращает HTML текста в исполняемую разметку", () => {
     const p = props(), f = render(<TeleprompterView {...p} narration={{ ...p.narration, text: '<script>alert(1)</script>' }} />);

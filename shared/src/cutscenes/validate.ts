@@ -60,6 +60,7 @@ function number(min: number, max = Infinity, inclusiveMin = true, integer = fals
 const bool: Check = (value, path, issues) => {
   if (typeof value !== "boolean") issues.push(issue("structure.boolean", path, "Ожидалось логическое значение."));
 };
+const optional = (check: Check): Check => (value, path, issues) => { if (value !== undefined) check(value, path, issues); };
 const nullable = (check: Check): Check => (value, path, issues) => { if (value !== null) check(value, path, issues); };
 const list = (check: Check): Check => (value, path, issues) => {
   if (!Array.isArray(value)) { issues.push(issue("structure.array", path, "Ожидался массив.")); return; }
@@ -100,7 +101,7 @@ const audioCommand = object({
 } satisfies Record<keyof CutsceneAudioCommand, Check>);
 const keep = object({ action: oneOf(["keep"]) });
 const step = object({
-  id: text(true), notes: text(),
+  id: text(true), name: optional(text()), notes: text(),
   image: variant("action", {
     keep, clear: object({ action: oneOf(["clear"]), transition: visualTransition }),
     replace: object({ action: oneOf(["replace"]), composition, transition: visualTransition }),

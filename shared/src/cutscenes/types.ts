@@ -73,6 +73,8 @@ export type CutsceneTextAction =
 
 export interface CutsceneStep {
   readonly id: string;
+  /** Optional short label for the GM; older documents have none. */
+  readonly name?: string;
   readonly image: CutsceneImageAction;
   readonly audio: CutsceneAudioAction;
   readonly text: CutsceneTextAction;

@@ -7,14 +7,15 @@ import type { CutscenePlaybackState } from "../../cutscenes/ports";
 import { CutscenePlayerView } from "./CutscenePlayer";
 vi.mock("./CutsceneTeleprompter", () => ({ CutsceneTeleprompter: () => <div>Текст и отдельные заметки</div> }));
 vi.mock("./CutscenePreview", () => ({ CutscenePreview: () => <div>Превью</div> }));
+vi.mock("./CutsceneDraftFrame", () => ({ CutsceneDraftFrame: () => <div /> }));
 beforeEach(() => vi.spyOn(document, "hasFocus").mockReturnValue(true));
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 function fixture() {
-  const document = { ...createCutsceneDocument("Показ 10"), steps: [createCutsceneStep("one"), createCutsceneStep("two")] };
+  const document = { ...createCutsceneDocument("Показ 10"), steps: [createCutsceneStep("one"), { ...createCutsceneStep("two"), name: "Берез" }] };
   const controller = { next: vi.fn(async () => true), previous: vi.fn(async () => true), goTo: vi.fn(async () => true),
     pause: vi.fn(async () => true), resume: vi.fn(async () => true), setTextPaused: vi.fn(async () => true),
     complete: vi.fn(async () => true), interrupt: vi.fn(async () => true), retry: vi.fn(async () => true) };
-  const state = { phase: "playing", busy: false, run: { endedAt: null, snapshot: { runId: "run-10", mode: "live", version: { document } } },
+  const state = { phase: "playing", busy: false, run: { endedAt: null, snapshot: { runId: "run-10", mode: "live", version: { cutsceneId: 10, document } } },
     step: { stepId: "one", stepIndex: 0 }, narration: { text: "Текст", locallyPaused: false }, notes: "", error: null } as unknown as CutscenePlaybackState;
   return { controller, state, props: { controller: controller as unknown as CutscenePlaybackController, state } };
 }
@@ -32,7 +33,7 @@ describe("полноэкранный пульт ведущего", () => {
   it("на общей паузе Space/Left и прямой выбор заблокированы", () => {
     const f = fixture(); render(<CutscenePlayerView {...f.props} state={{ ...f.state, phase: "paused", step: { ...f.state.step!, stepIndex: 1 } }} />);
     press("Space"); press("ArrowLeft"); expect(f.controller.next).not.toHaveBeenCalled(); expect(f.controller.previous).not.toHaveBeenCalled();
-    expect(screen.getByRole("combobox").hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Шаг 1" }).hasAttribute("disabled")).toBe(true);
   });
   it("последний шаг удерживается до отдельной команды завершения", () => {
     const f = fixture(); render(<CutscenePlayerView {...f.props} state={{ ...f.state, step: { ...f.state.step!, stepIndex: 1, stepId: "two" } }} />);
@@ -42,7 +43,7 @@ describe("полноэкранный пульт ведущего", () => {
   it("во время подготовки навигация заблокирована, P может поставить общую паузу", () => {
     const f = fixture(); render(<CutscenePlayerView {...f.props} state={{ ...f.state, phase: "preparing", busy: true }} />);
     press("Space"); press("KeyP", "з"); expect(f.controller.next).not.toHaveBeenCalled(); expect(f.controller.pause).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: "Прервать и вернуться" }).hasAttribute("disabled")).toBe(false);
+    expect(screen.queryByRole("button", { name: "Прервать и вернуться" })).toBeNull();
   });
   it("P и T вызывают независимые команды по физическому коду", () => {
     const f = fixture(), view = render(<CutscenePlayerView {...f.props} />);
@@ -56,10 +57,17 @@ describe("полноэкранный пульт ведущего", () => {
     expect(f.controller.pause).toHaveBeenCalledTimes(1); const menu = screen.getByRole("dialog", { name: "Меню паузы" });
     expect(menu.textContent).toContain("Продолжить"); expect(menu.textContent).toContain("Завершить"); expect(menu.textContent).toContain("Прервать и вернуться");
   });
-  it("выбор шага и прерывание используют тот же координатор", () => {
+  it("выбор шага по подписи и прерывание из меню используют тот же координатор", () => {
     const f = fixture(); render(<CutscenePlayerView {...f.props} />);
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "two" } }); expect(f.controller.goTo).toHaveBeenCalledWith("two");
-    fireEvent.click(screen.getByRole("button", { name: "Прервать и вернуться" })); expect(f.controller.interrupt).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Прервать и вернуться" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "2 · Берез" })); expect(f.controller.goTo).toHaveBeenCalledWith("two");
+    press("Escape"); fireEvent.click(screen.getByRole("button", { name: "Прервать и вернуться" })); expect(f.controller.interrupt).toHaveBeenCalledTimes(1);
+  });
+  it("кнопка «Далее» называет следующий шаг, на последнем — подсказывает «Завершить»", () => {
+    const f = fixture(), view = render(<CutscenePlayerView {...f.props} />);
+    expect(screen.getByRole("button", { name: /Далее.*2 · Берез/ })).toBeTruthy();
+    view.rerender(<CutscenePlayerView {...f.props} state={{ ...f.state, step: { ...f.state.step!, stepIndex: 1, stepId: "two" } }} />);
+    expect(screen.getByRole("button", { name: /Последний шаг/ }).hasAttribute("disabled")).toBe(true);
   });
   it("blur не вызывает общую или локальную паузу", () => {
     const f = fixture(); render(<CutscenePlayerView {...f.props} />); fireEvent(window, new Event("blur"));

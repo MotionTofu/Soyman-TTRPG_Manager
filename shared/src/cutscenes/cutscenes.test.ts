@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   captureCutsceneVersion, checkCutsceneReadiness, collectCutsceneMediaUses,
   createCutsceneAudioCommand, createCutsceneDocument, createCutsceneSettings,
-  createCutsceneStep, createCutsceneVisualTransition, CUTSCENE_DEFAULTS,
+  createCutsceneStep, createCutsceneVisualTransition, CUTSCENE_DEFAULTS, cutsceneStepLabel, cutsceneStepNameFromFile,
   cutsceneOwnedAudioChannels, parseCutsceneDocument, projectCutscenePlayerFrame,
   resolveCutsceneStep, validateCutsceneDocument,
   type CutsceneComposition, type CutsceneDocument, type CutsceneMediaCheck,
@@ -267,5 +267,29 @@ describe("saving a document versus preparing a run", () => {
       audio: { action: "clear", fadeOutMs: 0 }, text: { action: "clear" } })]);
     expect(parseCutsceneDocument(clearOnly).ok).toBe(true);
     expect(checkCutsceneReadiness(clearOnly).ready).toBe(false);
+  });
+});
+
+describe("step names and labels", () => {
+  const composition = (title: string): CutsceneComposition => ({ background: image, layers: [], title, title_secs: 3, fade_ms: 0 });
+  it("labels a step by name, then own caption, then own text, then number", () => {
+    const base = createCutsceneStep("s");
+    expect(cutsceneStepLabel({ ...base, name: "  Берез " }, 0)).toBe("Берез");
+    const captioned: CutsceneStep = { ...base, image: { action: "replace", composition: composition("Ночь у костра"), transition: createCutsceneVisualTransition() } };
+    expect(cutsceneStepLabel(captioned, 1)).toBe("Ночь у костра");
+    expect(cutsceneStepLabel({ ...base, text: { action: "replace", text: "**Дорога** вьётся между берёз, колея давно пуста" } }, 2)).toBe("Дорога вьётся между берёз, колея…");
+    expect(cutsceneStepLabel({ ...base, text: { action: "replace", text: "Тишина." } }, 2)).toBe("Тишина.");
+    expect(cutsceneStepLabel(base, 4)).toBe("Шаг 5");
+  });
+  it("keeps documents without names valid and rejects a non-string name", () => {
+    const document = createCutsceneDocument("Имена");
+    const named = { ...document, steps: [{ ...createCutsceneStep("a"), name: "Пролог" }, createCutsceneStep("b")] };
+    expect(validateCutsceneDocument(named)).toEqual([]);
+    expect(validateCutsceneDocument({ ...document, steps: [{ ...createCutsceneStep("a"), name: 5 }] }).map(issue => issue.path)).toEqual(["steps.0.name"]);
+  });
+  it("starts a step name from an image file name", () => {
+    expect(cutsceneStepNameFromFile("04_Witch_hut.png")).toBe("Witch hut");
+    expect(cutsceneStepNameFromFile("Ravenloft.jpeg")).toBe("Ravenloft");
+    expect(cutsceneStepNameFromFile("07 - Туманы.webp")).toBe("Туманы");
   });
 });

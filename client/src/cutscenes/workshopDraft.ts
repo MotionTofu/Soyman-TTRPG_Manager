@@ -61,6 +61,6 @@ export function moveWorkshopStep(document: CutsceneDocument, id: string, targetI
   if (from < 0 || to < 0 || from === to) return document;
   steps.splice(to, 0, ...steps.splice(from, 1)); return { ...document, steps };
 }
-export function imageWorkshopStep(image: CutsceneComposition["background"]): CutsceneStep {
-  return { ...createCutsceneStep(workshopId()), image: { action: "replace", composition: { ...emptyComposition(), background: image }, transition: createCutsceneVisualTransition() } };
+export function imageWorkshopStep(image: CutsceneComposition["background"], name = ""): CutsceneStep {
+  return { ...createCutsceneStep(workshopId()), ...(name ? { name } : {}), image: { action: "replace", composition: { ...emptyComposition(), background: image }, transition: createCutsceneVisualTransition() } };
 }

@@ -32,21 +32,16 @@
   color: var(--muted);
   font-size: var(--fs-meta);
 }
-.cutscene-teleprompter__number {
-  display: grid;
-  gap: var(--sp-1);
-  font-size: var(--fs-meta);
-}
-.cutscene-teleprompter__number-field {
+.cutscene-teleprompter__stepper {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--sp-2);
-  color: var(--muted);
 }
-.cutscene-teleprompter__number input {
-  inline-size: 5.5em;
+.cutscene-teleprompter__stepper output {
+  min-inline-size: 5.5em;
+  text-align: center;
   font-size: var(--fs-data);
-  color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }
 .cutscene-teleprompter__columns {
   display: grid;

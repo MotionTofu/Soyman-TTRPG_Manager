@@ -10,21 +10,16 @@ import "../../rich-text.css";
 import "./cutscene-teleprompter.css";
 
 const cursors = new WeakMap<object, TeleprompterCursor>();
-function NumberControl({ label, unit, value, disabled = false, onChange }: {
-  label: string; unit: string; value: number; disabled?: boolean; onChange: (value: number) => void;
+/** At the table: two buttons and the current value, no typing. */
+function Stepper({ label, value, unit, step, min, max, less, more, disabled = false, onChange }: {
+  label: string; value: number; unit: string; step: number; min: number; max: number; less: string; more: string; disabled?: boolean; onChange: (value: number) => void;
 }) {
-  const [draft, setDraft] = useState<string | null>(null);
-  return <label className="cutscene-teleprompter__number">
-    <span>{label}</span>
-    <span className="cutscene-teleprompter__number-field">
-      <input type="number" min="1" step="any" inputMode="decimal" value={draft ?? value} disabled={disabled}
-        onChange={event => {
-          const text = event.currentTarget.value; setDraft(text);
-          const next = Number(text); if (text.trim() && Number.isFinite(next) && next > 0) onChange(next);
-        }} onBlur={() => setDraft(null)} />
-      <span aria-hidden="true">{unit}</span>
-    </span>
-  </label>;
+  const set = (next: number) => onChange(Math.min(max, Math.max(min, Math.round(next / step) * step)));
+  return <div className="cutscene-teleprompter__stepper" role="group" aria-label={label}>
+    <button type="button" disabled={disabled || value <= min} onClick={() => set(value - step)}>{less}</button>
+    <output aria-live="polite">{value} {unit}</output>
+    <button type="button" disabled={disabled || value >= max} onClick={() => set(value + step)}>{more}</button>
+  </div>;
 }
 
 export interface TeleprompterViewProps {
@@ -57,9 +52,9 @@ export function TeleprompterView({ identity, narration, notes, fontSize, control
         <span className="cutscene-teleprompter__status" role="status">{label}</span>
       </div>
       <div className="cutscene-teleprompter__controls">
-        <NumberControl label="Размер текста" unit="px" value={fontSize} onChange={onFontSize} />
-        <NumberControl label="Темп чтения" unit="слов/мин" value={narration.wordsPerMinute}
-          disabled={!controlsEnabled} onChange={onWordsPerMinute} />
+        <Stepper label="Размер текста" unit="px" value={fontSize} step={2} min={12} max={96} less="A−" more="A+" onChange={onFontSize} />
+        <Stepper label="Темп чтения" unit="слов/мин" value={narration.wordsPerMinute} step={10} min={20} max={400}
+          less="Медленнее" more="Быстрее" disabled={!controlsEnabled} onChange={onWordsPerMinute} />
         <button type="button" className="btn btn-secondary" disabled={!controlsEnabled || !hasText}
           aria-pressed={narration.locallyPaused} onClick={() => onTextPaused(!narration.locallyPaused)}>
           {narration.locallyPaused ? "Продолжить текст" : "Пауза текста"}

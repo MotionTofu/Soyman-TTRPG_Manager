@@ -1,5 +1,5 @@
 import { createCutsceneVisualTransition, CUTSCENE_DEFAULTS } from "./defaults";
-import type { CutsceneDocument, CutsceneResolvedStep } from "./types";
+import type { CutsceneDocument, CutsceneResolvedStep, CutsceneStep } from "./types";
 
 /** Pure fold of a validated document; IDs survive reordering and inherited commands. */
 export function resolveCutsceneStep(document: CutsceneDocument, stepId: string): CutsceneResolvedStep | null {
@@ -29,4 +29,20 @@ export function resolveCutsceneStep(document: CutsceneDocument, stepId: string):
     }
   }
   return { stepId, stepIndex, image, audio, text, notes: document.steps[stepIndex].notes };
+}
+
+/** GM-facing label: own name, then the step's own caption, then the first words of its own text, then its number. */
+export function cutsceneStepLabel(step: CutsceneStep, index: number): string {
+  const name = step.name?.trim();
+  if (name) return name;
+  const caption = step.image.action === "replace" ? step.image.composition.title.trim() : "";
+  if (caption) return caption;
+  const words = step.text.action === "replace" ? step.text.text.replace(/[*_#>`~[\]()]/g, " ").trim().split(/\s+/).filter(Boolean) : [];
+  if (words.length) return words.length > 5 ? `${words.slice(0, 5).join(" ")}…` : words.join(" ");
+  return `Шаг ${index + 1}`;
+}
+
+/** File name of a picked image as a starting step name: "04_Witch_hut.png" → "Witch hut". */
+export function cutsceneStepNameFromFile(fileName: string): string {
+  return fileName.replace(/\.[^.]+$/, "").replace(/^\d+[\s_.-]+/, "").replace(/_+/g, " ").trim();
 }

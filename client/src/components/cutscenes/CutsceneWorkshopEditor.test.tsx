@@ -6,7 +6,7 @@ import type { CutsceneOriginal } from "@shared/cutscenes/types";
 vi.mock('../../data/cutscenes',()=>({cutscenes:{saveDraft:vi.fn()}}));
 vi.mock('../../data/notices',()=>({showSaveError:vi.fn(()=>1),dismissNotice:vi.fn()}));
 vi.mock('./CutsceneDraftFrame',()=>({CutsceneDraftFrame:()=> <div>Кадр</div>}));
-vi.mock('./CutsceneMediaPicker',()=>({CutsceneMediaPicker:({onPick,onClose,title}:{onPick:(items:unknown[])=>void;onClose:()=>void;title:string})=><div role="dialog" aria-label={title}><button onClick={()=>{onPick([{ref:{kind:'image',id:'a'}},{ref:{kind:'image',id:'b'}}]);onClose();}}>Выбрать два файла</button></div>}));
+vi.mock('./CutsceneMediaPicker',()=>({CutsceneMediaPicker:({onPick,onClose,title}:{onPick:(items:unknown[])=>void;onClose:()=>void;title:string})=><div role="dialog" aria-label={title}><button onClick={()=>{onPick([{ref:{kind:'image',id:'a'},name:'01_Road_to_Berez.png'},{ref:{kind:'image',id:'b'},name:'Ravenloft.jpg'}]);onClose();}}>Выбрать два файла</button></div>}));
 vi.mock('../mentions/MentionTextarea',()=>({MentionTextarea:({id,value,onChange}:{id:string;value:string;onChange:(v:string)=>void})=><textarea id={id} value={value} onChange={event=>onChange(event.target.value)} />}));
 vi.mock('./WorkshopComposition',()=>({WorkshopComposition:()=> <div>Композиция</div>}));
 vi.mock('./WorkshopAudio',()=>({WorkshopAudio:()=> <div>Музыкальная команда</div>,WorkshopAudioSummary:()=> <p>Наследованный звук</p>}));
@@ -28,7 +28,8 @@ describe('мастерская шагов',()=>{
   });
   it('массовые картинки создают два шага',async()=>{
     render(<CutsceneWorkshopEditor original={original()} />);fireEvent.click(screen.getByRole('button',{name:'Шаги из изображений'}));fireEvent.click(screen.getByRole('button',{name:'Выбрать два файла'}));
-    await act(()=>vi.advanceTimersByTimeAsync(500));const steps=vi.mocked(cutscenes.saveDraft).mock.calls[0][2].steps;expect(steps).toHaveLength(2);expect(steps.map(step=>step.image.action==='replace'&&step.image.composition.background?.id)).toEqual(['a','b']);
+    await act(()=>vi.advanceTimersByTimeAsync(500));const steps=vi.mocked(cutscenes.saveDraft).mock.calls[0][2].steps;expect(steps).toHaveLength(2);expect(steps.map(step=>step.image.action==='replace'&&step.image.composition.background?.id)).toEqual(['a','b']);expect(steps.map(step=>step.name)).toEqual(['Road to Berez','Ravenloft']);
+    expect(screen.getByRole('button',{name:'Открыть шаг 1'}).textContent).toContain('1 · Road to Berez');
   });
   it('после перестановки пересчитывает наследование текста',()=>{
     const first=original(),row={...first,document:{...first.document,steps:[{...createCutsceneStep('first'),text:{action:'replace' as const,text:'Начало истории'}},createCutsceneStep('second')]}};
@@ -40,5 +41,12 @@ describe('мастерская шагов',()=>{
     fireEvent.click(screen.getByRole('button',{name:'Текст и заметки'}));fireEvent.click(screen.getByRole('button',{name:'Заменить'}));
     fireEvent.change(screen.getByRole('textbox',{name:'Редактирование · Только ведущему'}),{target:{value:'**Ночь**'}});fireEvent.change(screen.getByRole('textbox',{name:'Заметки к шагу · Только ведущему'}),{target:{value:'Пауза'}});
     await act(()=>vi.advanceTimersByTimeAsync(500));expect(vi.mocked(cutscenes.saveDraft).mock.calls[0][2].steps[0]).toMatchObject({text:{action:'replace',text:'**Ночь**'},notes:'Пауза'});
+  });
+  it('имя шага попадает в автосейв и в список шагов',async()=>{
+    const first=original(),row={...first,document:{...first.document,steps:[createCutsceneStep('one')]}};render(<CutsceneWorkshopEditor original={row} />);
+    expect((screen.getByRole('textbox',{name:'Имя шага'}) as HTMLInputElement).placeholder).toContain('«Шаг 1»');
+    fireEvent.change(screen.getByRole('textbox',{name:'Имя шага'}),{target:{value:'Пролог'}});
+    expect(screen.getByRole('button',{name:'Открыть шаг 1'}).textContent).toContain('1 · Пролог');
+    await act(()=>vi.advanceTimersByTimeAsync(500));expect(vi.mocked(cutscenes.saveDraft).mock.calls[0][2].steps[0].name).toBe('Пролог');
   });
 });
