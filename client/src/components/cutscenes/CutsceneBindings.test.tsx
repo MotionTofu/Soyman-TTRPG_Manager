@@ -35,4 +35,13 @@ describe('подборка и план',()=>{
   it('телефон оставляет ссылки на чтение без редактирования и управления',()=>{mock.mobile=true;renderPlan();expect(screen.getByRole('link',{name:'1. Катсцена 1'})).toBeTruthy();expect(screen.queryByRole('button')).toBeNull();});
   it('player-account не читает закрытый план',()=>{mock.role='player';renderPlan();expect(useResource).not.toHaveBeenCalled();});
   it('ошибка чтения оставляет сохранённые строки и обычный повтор',()=>{mock.error='offline';renderPlan();expect(screen.getByRole('link',{name:'1. Катсцена 1'})).toBeTruthy();fireEvent.click(screen.getByRole('button',{name:'Повторить'}));expect(mock.reload).toHaveBeenCalled();});
+  it('пустой план в пульте показывает подборку кампании и запускает её в контексте сессии',()=>{
+    const collection=mock.rows;vi.mocked(useResource).mockImplementation(((path:string|null)=>({data:path==='/campaigns/3/cutscenes'?collection:path===null?undefined:[],loading:false,error:null,reload:mock.reload})) as typeof useResource);
+    renderPlan({mode:'launch'});expect(screen.getByText('Из подборки кампании')).toBeTruthy();expect(screen.getByText('В плане этой сессии катсцен нет.')).toBeTruthy();
+    expect(screen.getByRole('button',{name:'Показать 2'}).getAttribute('data-context')).toBe(JSON.stringify(context));
+  });
+  it('пустой план при подготовке сессии не подставляет подборку',()=>{
+    vi.mocked(useResource).mockImplementation(((path:string|null)=>({data:path==='/campaigns/3/cutscenes'?mock.rows:path===null?undefined:[],loading:false,error:null,reload:mock.reload})) as typeof useResource);
+    renderPlan();expect(screen.queryByText('Из подборки кампании')).toBeNull();
+  });
 });

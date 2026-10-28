@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CutsceneStep } from "@shared/cutscenes/types";
-import { cutsceneStepLabel, resolveCutsceneStep } from "@shared/cutscenes/resolve";
+import { cutsceneStepTitle as stepTitle, resolveCutsceneStep } from "@shared/cutscenes/resolve";
 import type { CutscenePlaybackController } from "../../cutscenes/controller";
 import type { CutscenePlaybackState } from "../../cutscenes/ports";
 import { useCutscenePlayback } from "../../cutscenes/useCutscenePlayback";
@@ -17,12 +16,6 @@ import { CutscenePreview } from "./CutscenePreview";
 import { CutsceneDraftFrame } from "./CutsceneDraftFrame";
 import { MentionText } from "../mentions/MentionText";
 import "./cutscene-player.css";
-
-/** "Шаг 3" or "3 · Берез": the number stays visible next to a name. */
-function stepTitle(step: CutsceneStep, index: number): string {
-  const label = cutsceneStepLabel(step, index);
-  return label === `Шаг ${index + 1}` ? label : `${index + 1} · ${label}`;
-}
 
 /** The full-window GM controls. Playback belongs to the existing host, including during focus changes. */
 export function CutscenePlayerView({ controller, state }: { controller: CutscenePlaybackController; state: CutscenePlaybackState }) {

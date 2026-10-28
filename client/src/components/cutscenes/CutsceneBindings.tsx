@@ -17,6 +17,9 @@ function Bindings({context,mode='edit'}:{context:CutsceneBindingContext;mode?:'e
   const mobile=useIsMobile(),run=useCutsceneAction(),list=useResource<CutsceneSummary[]>(cutsceneBindingsPath(context));
   const [picker,setPicker]=useState(false),[busy,setBusy]=useState(false),[drag,setDrag]=useState<number|null>(null);
   const rows=list.data??[],session=context.kind==='session',editable=mode==='edit'&&!mobile;
+  // An empty session plan at the table falls back to the campaign collection; the data stay independent.
+  const collection=useResource<CutsceneSummary[]>(mode==='launch'&&session&&list.data&&!list.data.length&&context.campaignId?cutsceneBindingsPath({kind:'campaign',campaignId:context.campaignId}):null);
+  const fallback=collection.data??[];
   const title=session?'План катсцен':'Катсцены кампании';
   async function action(label:string,apply:()=>Promise<unknown>){setBusy(true);try{return await run(label,async()=>{await apply();return true;})===true;}finally{setBusy(false);}}
   const move=(id:number,target:number)=>action('Переставить катсцену',()=>cutsceneBindings.move(context,id,target));
@@ -37,7 +40,10 @@ function Bindings({context,mode='edit'}:{context:CutsceneBindingContext;mode?:'e
         {editable&&<button type="button" disabled={busy} aria-label={`Убрать катсцену «${item.name}» ${session?'из плана':'из подборки'}`} onClick={()=>void action('Убрать ссылку на катсцену',()=>cutsceneBindings.remove(context,item.id))}>{session?'Убрать из плана':'Убрать из подборки'}</button>}
       </div>
     </li>)}</ol>}
-    {!list.loading&&!list.error&&!rows.length&&<p className="muted">{session?'План пока пуст. Можно запускать любую катсцену из общей мастерской.':'Подборка пока пуста.'}</p>}
+    {!list.loading&&!list.error&&!rows.length&&<p className="muted">{mode==='launch'&&fallback.length?'В плане этой сессии катсцен нет.':session?'План пока пуст. Можно запускать любую катсцену из общей мастерской.':'Подборка пока пуста.'}</p>}
+    {!rows.length&&!!fallback.length&&<><h4 className="cs-bindings__group">Из подборки кампании</h4><ol className="cs-bindings__list">{fallback.map(item=><li key={item.id}>
+      <CutsceneCover id={item.id} savedVersion={item.savedVersion}/><div className="cs-bindings__copy"><Link to={cutsceneRoute(item.id)}><strong>{item.name}</strong></Link>{item.description&&<p>{item.description}</p>}</div>
+      <div className="cs-bindings__actions">{!mobile&&<CutsceneLaunchActions id={item.id} name={item.name} context={context}/>}</div></li>)}</ol></>}
     {busy&&<p role="status">Сохраняется…</p>}
     {picker&&!mobile&&<CutscenePicker context={context} mode={mode==='launch'?'launch':'add'} existingIds={rows.map(row=>row.id)} onClose={()=>setPicker(false)}
       onAdd={id=>action('Добавить ссылку на катсцену',()=>cutsceneBindings.add(context,id))}/>}

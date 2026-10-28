@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type FocusEvent } from "react";
 import type { CutsceneOriginal, CutsceneStep, CutsceneComposition } from "@shared/cutscenes/types";
 import { createCutsceneStep, createCutsceneVisualTransition, createCutsceneAudioCommand, CUTSCENE_DEFAULTS } from "@shared/cutscenes/defaults";
-import { cutsceneStepLabel, cutsceneStepNameFromFile, resolveCutsceneStep } from "@shared/cutscenes/resolve";
+import { cutsceneStepLabel, cutsceneStepNameFromFile, cutsceneStepTitle as stepTitle, resolveCutsceneStep } from "@shared/cutscenes/resolve";
 import { duplicateWorkshopStep, emptyComposition, imageWorkshopStep, moveWorkshopStep, workshopId, type DraftPath } from "../../cutscenes/workshopDraft";
 import { workshopAutosave } from "../../cutscenes/workshopAutosave";
 import { useWorkshopPreview } from "../../cutscenes/useWorkshopPreview";
@@ -23,8 +23,6 @@ import "./cutscene-workshop.css";
 
 type Channel = "image" | "audio" | "text";
 const actions = { keep: "Продолжить", replace: "Заменить", clear: "Убрать" } as const;
-/** "3 · Берез" for a labelled step, plain "Шаг 3" when nothing names it. */
-const stepTitle = (step: CutsceneStep, index: number) => { const label = cutsceneStepLabel(step, index); return label === `Шаг ${index + 1}` ? label : `${index + 1} · ${label}`; };
 const marks = { keep: "←", replace: "+", clear: "—" };
 export function CutsceneWorkshopEditor({ original }: { original: CutsceneOriginal }) {
   const [manager] = useState(() => workshopAutosave(original)), state = useSyncExternalStore(manager.subscribe, manager.snapshot), document = state.draft;

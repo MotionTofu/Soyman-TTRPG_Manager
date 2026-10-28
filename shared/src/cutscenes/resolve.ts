@@ -42,6 +42,12 @@ export function cutsceneStepLabel(step: CutsceneStep, index: number): string {
   return `Шаг ${index + 1}`;
 }
 
+/** "3 · Берез" for a labelled step, plain "Шаг 3" when nothing names it. */
+export function cutsceneStepTitle(step: CutsceneStep, index: number): string {
+  const label = cutsceneStepLabel(step, index);
+  return label === `Шаг ${index + 1}` ? label : `${index + 1} · ${label}`;
+}
+
 /** File name of a picked image as a starting step name: "04_Witch_hut.png" → "Witch hut". */
 export function cutsceneStepNameFromFile(fileName: string): string {
   return fileName.replace(/\.[^.]+$/, "").replace(/^\d+[\s_.-]+/, "").replace(/_+/g, " ").trim();

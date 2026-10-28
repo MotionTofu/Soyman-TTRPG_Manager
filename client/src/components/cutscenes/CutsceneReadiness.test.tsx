@@ -35,7 +35,7 @@ describe("готовность последней сохранённой вер�
   });
   it("пустой документ и отсутствующий материал запрещают начало и называют шаг", () => {
     const f=fixture(); render(<CutsceneReadiness {...f.props} state={{...f.state,issues:[{code:"media.missing",path:"steps.0.image",stepId:"first",message:"Материал не готов"}]}} />);
-    expect(screen.getByText("Шаг 1: Материал не готов")).toBeTruthy(); expect(screen.getByRole("button",{name:"Начать"}).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByText("1 · Читайте после начала: Материал не готов")).toBeTruthy(); expect(screen.getByRole("button",{name:"Начать"}).hasAttribute("disabled")).toBe(true);
     fireEvent.click(screen.getByRole("button",{name:"Проверить снова"})); expect(f.controller.select).toHaveBeenCalledWith(13);
   });
   it("отказ окна остаётся в готовности и позволяет повторную проверку", () => {

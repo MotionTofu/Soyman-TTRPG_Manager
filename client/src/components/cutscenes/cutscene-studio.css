@@ -103,7 +103,7 @@
 .cutscenes-catalog .cutscene-tile__actions { justify-content: space-between; align-items: center; gap: var(--sp-3); padding: var(--sp-4) var(--sp-5); }
 .cutscene-tile__actions > button { flex: 1; }
 .modal-backdrop:has(> .cs-readiness) { background: color-mix(in srgb,var(--paper) 78%,transparent); }
-.modal.cs-readiness { display: block; padding: 0; inline-size: min(68rem,94vw); max-block-size: 90dvh; background: var(--paper); border-radius: var(--radius-card, 4px); }
+.modal.cs-readiness { display: block; padding: 0; inline-size: min(44rem,94vw); max-block-size: 90dvh; background: var(--paper); border-radius: var(--radius-card, 4px); }
 .cs-readiness > header { position: sticky; inset-block-start: 0; z-index: 2; padding: var(--sp-6); background: var(--paper); border-block-end: 1px solid var(--line); }
 .cs-readiness > header p { margin: 0; }
 .cs-readiness > header .reading-text { margin-block-start: var(--sp-3); }
