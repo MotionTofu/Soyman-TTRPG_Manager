@@ -111,4 +111,17 @@ describe("audio playback", () => {
     expect(incoming.paused).toBe(true);
     unmount();
   });
+
+  it("leaves Space on a focused button to the button", async () => {
+    const { result, unmount } = renderHook(() => useAudioPlayer(), { wrapper });
+    act(() => result.current.playPlaylist(tracks));
+    await act(async () => { await Promise.resolve(); });
+    const button = document.body.appendChild(document.createElement("button"));
+    act(() => { button.dispatchEvent(new KeyboardEvent("keydown", { code: "Space", bubbles: true })); });
+    expect(result.current.isPlaying).toBe(true);
+    act(() => { document.body.dispatchEvent(new KeyboardEvent("keydown", { code: "Space", bubbles: true })); });
+    expect(result.current.isPlaying).toBe(false);
+    button.remove();
+    unmount();
+  });
 });

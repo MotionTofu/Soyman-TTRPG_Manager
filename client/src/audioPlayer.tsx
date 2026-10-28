@@ -592,7 +592,11 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
       if ((e.target as HTMLElement)?.isContentEditable) return;
       if (document.querySelector(".modal-backdrop")) return;
       const shift = e.shiftKey;
-      if (e.code === "Space" && !shift) { e.preventDefault(); toggle(); return; }
+      if (e.code === "Space" && !shift) {
+        // Space on a focused button presses that button, as everywhere else.
+        if ((e.target as HTMLElement)?.closest?.("button,summary,[role=button]")) return;
+        e.preventDefault(); toggle(); return;
+      }
       if (shift) {
         if (e.code === "KeyS") { e.preventDefault(); stop(); return; }
         if (e.code === "KeyM") { e.preventDefault(); setVolume(volume > 0 ? 0 : 1); return; }
