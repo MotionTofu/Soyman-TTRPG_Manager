@@ -6,7 +6,11 @@ import { write } from "./hooks";
 import { afterWriteAnywhere, readOnce } from "./imperative";
 import { mergeWorkshopDraft } from "../cutscenes/workshopDraft";
 
-export interface CutsceneSummary extends Omit<CutsceneOriginal, "document"> { readonly name: string; readonly description: string }
+export interface CutsceneSummary extends Omit<CutsceneOriginal, "document"> {
+  readonly name: string; readonly description: string;
+  /** Catalogue facts; older servers may omit them. */
+  readonly stepCount?: number; readonly campaigns?: readonly string[];
+}
 export interface CutsceneCatalogFilter {
   search: string; campaignId: number | null; archive: "active" | "archived" | "all"; sort: "name" | "updated"; order: "asc" | "desc";
 }

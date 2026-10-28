@@ -27,7 +27,7 @@ function Workshop() {
       {mobile ? <><div className="cutscene-details">
         <CutsceneCover id={original.id} savedVersion={original.savedVersion} />
         <div className="reading-text"><p>{original.document.description || "Без описания."}</p><p className="muted">Редактирование, предпросмотр и показ доступны на компьютере.</p></div>
-      </div><CutsceneReading document={original.document} /></>
+      </div><CutsceneReading id={original.id} document={original.document} /></>
         : <CutsceneWorkshopEditor key={original.id} original={original} />}
     </>}
   </PageFrame>;

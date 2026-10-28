@@ -40,7 +40,8 @@
 .cs-title-field input { inline-size: 100%; font-family: var(--font-body); font-weight: 600; font-size: var(--fs-h2); background: transparent; border-color: transparent; }
 .cs-title-field input:hover { border-color: var(--line); }
 .cs-title-field input:focus { border-color: var(--accent); background: var(--paper-2); }
-.cutscene-workshop-page .page-head :is(h1, h2) { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* The editor header carries the editable name; the phone has no editor and keeps the page heading. */
+@media (min-width: 701px) { .cutscene-workshop-page .page-head :is(h1, h2) { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } }
 .cs-source { line-height: 1.5; }
 .cs-source button { font-size: inherit; padding: var(--sp-1) var(--sp-3); margin-inline-start: var(--sp-3); }
 .cs-composition { display: grid; grid-template-columns: minmax(0,1fr) minmax(15rem,20rem); gap: var(--sp-5); align-items: start; }

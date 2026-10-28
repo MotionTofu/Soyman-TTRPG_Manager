@@ -13,8 +13,16 @@ import { CutsceneCover } from "../components/cutscenes/CutsceneCover";
 import { CutsceneArchiveAction } from "../components/cutscenes/CutsceneArchiveAction";
 import { CutsceneLaunchActions } from "../components/cutscenes/CutsceneLaunchActions";
 import { CreateCutsceneModal } from "../components/cutscenes/CreateCutsceneModal";
+import { plural } from "../sceneKinds";
 import "./cutscenes.css";
 import "../components/cutscenes/cutscene-studio.css";
+
+/** «5 шагов · Берез, Вотердип» — length and where it is collected, instead of a label every card shares. */
+function cutsceneFacts(item: CutsceneSummary): string {
+  const steps = item.stepCount === undefined ? null : `${item.stepCount} ${plural(item.stepCount, "шаг", "шага", "шагов")}`;
+  const where = item.campaigns === undefined ? null : item.campaigns.length ? item.campaigns.join(", ") : "ни в одной подборке";
+  return [steps, where].filter(Boolean).join(" · ");
+}
 
 function Catalog() {
   const [params, setParams] = useSearchParams(), filter = parseCutsceneCatalogFilter(params);
@@ -38,7 +46,7 @@ function Catalog() {
   }
   const rows = list.data ?? [];
   return <div className="cutscenes-catalog"><ListPage headingSection="mastering" title="Катсцены" groups={[]} allLabel={null} activeGroup={null} onGroupChange={() => {}}
-    actions={<Link to="/mastering" className="button">Библиотека</Link>} createLabel="Новая катсцена" onCreate={mobile ? undefined : () => setCreating(true)}
+    createLabel="Новая катсцена" onCreate={mobile ? undefined : () => setCreating(true)}
     search={filter.search} onSearch={search => update({ search })} searchLabel="Поиск катсцен" searchPlaceholder="Название или описание…"
     filteredCount={rows.length} totalCount={total.data?.length ?? rows.length} onResetSearch={reset}
     showReset={!!filter.search || !!filter.campaignId || filter.archive !== "active" || filter.sort !== "updated" || filter.order !== "desc"}
@@ -64,7 +72,7 @@ function Catalog() {
         <Link className="cutscene-tile__open" to={cutsceneRoute(item.id)} state={catalogState}>
           <CutsceneCover id={item.id} savedVersion={item.savedVersion} />
           <div className="cutscene-tile__copy"><h2>{item.name}</h2>{item.description && <p className="cutscene-tile__description">{item.description}</p>}
-            <span className="muted">Общий оригинал{item.archivedAt ? " · В архиве" : ""}</span>
+            <span className="muted">{cutsceneFacts(item)}{item.archivedAt ? " · В архиве" : ""}</span>
             <time className="muted" dateTime={item.updatedAt}>Изменено {new Date(item.updatedAt).toLocaleDateString("ru-RU")}</time>
           </div>
         </Link>

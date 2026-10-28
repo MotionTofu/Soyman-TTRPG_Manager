@@ -71,14 +71,20 @@ export function saveCutscene(id: number, document: CutsceneDocument): CutsceneOr
   })();
 }
 
-function summary(row: CutsceneRow) {
+function summary(row: CutsceneRow & { step_count: number | null; campaign_names: string | null }) {
+  const collator = new Intl.Collator("ru", { sensitivity: "base", numeric: true });
   return {
     id: row.id, name: row.name, description: row.description, savedVersion: row.saved_version,
     createdAt: row.created_at, updatedAt: row.updated_at, archivedAt: row.archived_at,
+    // At-a-glance facts for the catalogue card: how long, and where it is collected.
+    stepCount: row.step_count ?? 0,
+    campaigns: row.campaign_names ? row.campaign_names.split("\u001f").sort(collator.compare) : [],
   };
 }
 
-const summaryColumns = "c.id, c.name, c.description, c.saved_version, c.created_at, c.updated_at, c.archived_at";
+const summaryColumns = `c.id, c.name, c.description, c.saved_version, c.created_at, c.updated_at, c.archived_at,
+  json_array_length(c.document, '$.steps') AS step_count,
+  (SELECT group_concat(k.name, char(31)) FROM campaign_cutscenes cc JOIN campaigns k ON k.id = cc.campaign_id WHERE cc.cutscene_id = c.id) AS campaign_names`;
 
 export function listCutscenes(query: Record<string, unknown>) {
   const archive = query.archive ?? "active";
@@ -100,7 +106,7 @@ export function listCutscenes(query: Record<string, unknown>) {
     params.push(campaignId);
   }
   const rows = db.prepare(`SELECT ${summaryColumns} FROM cutscenes c
-    ${clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""}`).all(...params) as CutsceneRow[];
+    ${clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""}`).all(...params) as Parameters<typeof summary>[0][];
   // SQLite's lower()/NOCASE only fold ASCII; catalogue search must also work in Russian.
   const search = String(query.search ?? "").trim().toLocaleLowerCase("ru");
   const filtered = search ? rows.filter(row =>
@@ -126,10 +132,10 @@ export function readCutsceneBindings(context: CutsceneContext, id: number) {
   requireCutsceneContext(context, id);
   if (context === "campaign") {
     return (db.prepare(`SELECT ${summaryColumns} FROM cutscenes c JOIN campaign_cutscenes b ON b.cutscene_id = c.id
-      WHERE b.campaign_id = ? ORDER BY c.name, c.id`).all(id) as CutsceneRow[]).map(summary);
+      WHERE b.campaign_id = ? ORDER BY c.name, c.id`).all(id) as Parameters<typeof summary>[0][]).map(summary);
   }
   return (db.prepare(`SELECT ${summaryColumns} FROM cutscenes c JOIN session_cutscenes b ON b.cutscene_id = c.id
-    WHERE b.session_id = ? ORDER BY b.position`).all(id) as CutsceneRow[]).map(summary);
+    WHERE b.session_id = ? ORDER BY b.position`).all(id) as Parameters<typeof summary>[0][]).map(summary);
 }
 
 export function replaceCutsceneBindings(context: CutsceneContext, id: number, raw: unknown) {

@@ -129,6 +129,14 @@ describe("общий оригинал катсцены", () => {
 });
 
 describe("независимые подборки и план сессии", () => {
+  it("сводка каталога называет число шагов и кампании подборок", async () => {
+    const document = { ...createCutsceneDocument("Сводка"), steps: [createCutsceneStep("one"), createCutsceneStep("two")] };
+    const row = await create(document);
+    await put(`/api/campaigns/${campaigns[1]}/cutscenes`, { cutsceneIds: [row.id] });
+    await put(`/api/campaigns/${campaigns[0]}/cutscenes`, { cutsceneIds: [row.id] });
+    const summary = (await get("/api/cutscenes?search=Сводка")).body.find((item: { id: number }) => item.id === row.id);
+    expect(summary).toMatchObject({ stepCount: 2, campaigns: ["Cutscene API A", "Cutscene API B"] });
+  });
   it("два контекста видят правки одного оригинала; план не меняет подборки", async () => {
     const first = await create();
     const second = await create(createCutsceneDocument("Второй"));

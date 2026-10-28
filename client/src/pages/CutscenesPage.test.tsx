@@ -15,7 +15,7 @@ vi.mock("../data/hooks", async importOriginal => {
     const original = mocks.original!;
     return { loading: false, error: path?.startsWith("/cutscenes?") ? mocks.error : null, reload: mocks.reload,
       data: path === "/campaigns" ? [] : path?.startsWith("/cutscenes?") ? [{ id: original.id, name: original.document.name,
-        description: original.document.description, savedVersion: original.savedVersion, createdAt: original.createdAt, updatedAt: original.updatedAt, archivedAt: null }]
+        description: original.document.description, savedVersion: original.savedVersion, createdAt: original.createdAt, updatedAt: original.updatedAt, archivedAt: null, stepCount: 5, campaigns: ["Берез", "Вотердип"] }]
         : path?.startsWith("/cutscenes/") ? original : undefined };
   }) };
 });
@@ -54,6 +54,11 @@ describe("каталог катсцен", () => {
     fireEvent.change(screen.getByRole("combobox", { name: "Сортировка" }), { target: { value: "updated:asc" } });
     expect(screen.getByTestId("location").textContent).toContain("order=asc");
     expect(vi.mocked(useResource).mock.calls.some(([path]) => path?.startsWith("/cutscenes?") && path.includes("sort=updated") && path.includes("search="))).toBe(true);
+  });
+  it("карточка называет число шагов и кампании подборок, шапка — без «Библиотеки»", () => {
+    renderPage("/mastering/cutscenes");
+    expect(screen.getByText("5 шагов · Берез, Вотердип")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Библиотека" })).toBeNull();
   });
   it("player-role не монтирует каталог и не читает закрытые документы", () => {
     mocks.role = "player"; renderPage(); expect(screen.getByText("Только для Мастера")).toBeTruthy(); expect(useResource).not.toHaveBeenCalled();
