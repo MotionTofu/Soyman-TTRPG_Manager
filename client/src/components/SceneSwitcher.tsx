@@ -10,13 +10,18 @@ import { NavIcon } from "./NavIcons";
 import { setWidgetFloatMode, useWidgetFloatMode } from "../widgetFloatStore";
 import type {
   LaunchResult,
-  PlannedScene,
   SceneSearchRow,
   ScenePreview,
   SessionStage,
   StageScene,
 } from "../types";
 
+// Рестайл «Д» (макет Roll-Pult, Q12, 2026-10-29): сверху ряд карточек вечера
+// — сыгранная бледная с ✓, идущая в рамке с кислотной полосой и временем в
+// сцене, дальше предстоящие и «+ Сцена» (экстренный поиск). Под рядом на всю
+// ширину — панель сцены: «Дальше», «Назад», вход, зачитка, состав. Ниже —
+// прежнее устройство, оно сохранилось внутри панели.
+//
 // Переключатель сцен — главный орган пульта, поэтому он наверху и без
 // прокрутки. За столом у Мастера заняты голова и руки: то, ради чего он сюда
 // смотрит, не должно требовать ни поиска, ни переключения вкладки.
@@ -60,6 +65,15 @@ export function SceneSwitcher({ sessionId }: { sessionId: number }) {
   const detached = mode !== "grid";
   const sound = useSoundEngineOptional();
   const afterWrite = useAfterWrite();
+  const [searching, setSearching] = useState(false);
+  // Время в идущей сцене — минутами, тика раз в 20 секунд хватает.
+  const [now, setNow] = useState(() => Date.now());
+  const hasCurrent = stageState.data?.current != null;
+  useEffect(() => {
+    if (!hasCurrent) return;
+    const id = setInterval(() => setNow(Date.now()), 20_000);
+    return () => clearInterval(id);
+  }, [hasCurrent]);
 
   // Без сообщения сбой оставлял переключатель невидимым — главный орган пульта
   // молча исчезал с экрана, и понять, что случилось, было не по чему.
@@ -154,64 +168,115 @@ export function SceneSwitcher({ sessionId }: { sessionId: number }) {
       arc_name: null,
     });
 
+  // Ряд вечера: заготовка по порядку; идущая сцена не из заготовки (пришли
+  // переходом или поиском) встаёт в конец, чтобы «где мы» было видно всегда.
+  const current = stage.current;
+  const row: StageScene[] = [...stage.planned];
+  if (current && !row.some((s) => s.id === current.id)) row.push(current);
+  const playedIds = new Set(stage.planned.filter((s) => s.played).map((s) => s.id));
+  const lastLaunch = current ? [...stage.journal].reverse().find((j) => j.scene_id === current.id) : undefined;
+  const inScene = lastLaunch?.launched_at
+    ? Math.max(0, Math.floor((now - new Date(`${lastLaunch.launched_at.replace(" ", "T")}Z`).getTime()) / 60_000))
+    : null;
+
   // Тело одно на оба места: в сетке и в окне живёт тот же JSX, поэтому
   // предпросмотр, выбор и запуск ведут себя одинаково.
   const body = (
-      <div className="card sw">
-      <div className="sw-left">
-        {/* Звук сюда же, наверх колонки: раньше строка жила в ярусе «Сейчас»,
-            которого больше нет (где мы — написано справа). */}
-        <SceneSound />
-
-        {/* Пока ничего не запущено, ярус «Дальше» не рисуется вовсе: «переходы
-            не размечены» было бы неправдой — уходить пока не откуда. Вместо
-            него — приглашение выбрать первую из списка ниже. */}
-        {!stage.current && (
-          <span className="muted">Сцена не запущена — выберите первую из списка ниже.</span>
-        )}
-        {stage.current && (
-          <ExitList
-            exits={stage.exits}
-            currentArcId={stage.current.arc_id}
-            pickedId={picked?.id ?? null}
-            onPick={setPicked}
-          />
-        )}
-
-        <BackList
-          prev={prevScene}
-          pickedId={picked?.id ?? null}
-          onPick={setPicked}
-        />
-
-        <PlannedList
-          planned={stage.planned}
-          currentId={stage.current?.id ?? null}
-          prevId={prevScene?.id ?? null}
-          sessionId={sessionId}
-          pickedId={picked?.id ?? null}
-          onPick={setPicked}
-          onChanged={onPlannedChanged}
-        />
+    <div className="sw">
+      <div className="sw-row">
+        {row.map((s, i) => {
+          const isNow = s.id === current?.id;
+          const done = !isNow && playedIds.has(s.id);
+          return (
+            <button
+              key={s.id}
+              type="button"
+              className={`sw-tile${isNow ? " is-now" : ""}${done ? " is-done" : ""}${picked?.id === s.id ? " is-picked" : ""}`}
+              onClick={() => setPicked(isNow ? null : s)}
+            >
+              {isNow && <span className="sw-tile__tag">Сейчас</span>}
+              <small>
+                Сцена {i + 1}
+                {done && " · ✓"}
+                {isNow && inScene != null && ` · ${Math.floor(inScene / 60)}:${String(inScene % 60).padStart(2, "0")}`}
+              </small>
+              <b>{s.name}</b>
+            </button>
+          );
+        })}
+        <button type="button" className={`sw-tile is-add${searching ? " is-picked" : ""}`} onClick={() => setSearching((v) => !v)}>
+          {searching ? "Закрыть поиск" : "+ Сцена"}
+        </button>
       </div>
 
-      <div className="sw-right">
+      {row.length === 0 && !searching && (
+        <span className="muted">
+          Сцены на игру не отмечены — их набирают в <Link to={`/sessions/${sessionId}`}>подготовке сессии</Link>.
+        </span>
+      )}
+      {searching && (
+        <SceneSearch
+          sessionId={sessionId}
+          onAdded={(scene) => {
+            setSearching(false);
+            onPlannedChanged();
+            setPicked(scene);
+          }}
+        />
+      )}
+
+      <div className="sw-stage">
+        {!detached && (
+          <div className="sw-popout-actions">
+            <button
+              type="button"
+              className="sw-popout"
+              title="Убрать сцены плашкой в док-станцию"
+              aria-label="Убрать сцены плашкой в док-станцию"
+              onClick={() => setWidgetFloatMode("scenes", "dock")}
+            >
+              <NavIcon name="dockLeft" />
+            </button>
+            <button
+              type="button"
+              className="sw-popout"
+              title="Открыть сцены в отдельном окне"
+              aria-label="Открыть сцены в отдельном окне"
+              onClick={() => setWidgetFloatMode("scenes", "float")}
+            >
+              <NavIcon name="fullscreen" />
+            </button>
+          </div>
+        )}
         <div className="sw-preview-head">
-          <div style={{ minWidth: 0, flex: 1 }}>
+          <div className="sw-preview-head__title">
             <span className="sw-label">{isPreview ? "Предпросмотр" : "Идёт сейчас"}</span>
             <div className="sw-preview-name">{preview?.scene.name ?? "—"}</div>
           </div>
           {isPreview && picked && (
-            <button className="primary sw-launch" disabled={busy} onClick={() => launch(picked)}>
+            <button className="d-btn d-btn--sm sw-launch" disabled={busy} onClick={() => launch(picked)}>
               Запустить сцену
             </button>
           )}
-          {picked && <button onClick={() => setPicked(null)}>Отмена</button>}
+          {picked && (
+            <button className="d-btn d-btn--sm" onClick={() => setPicked(null)}>
+              Отмена
+            </button>
+          )}
         </div>
 
-        {preview ? <PreviewBody preview={preview} /> : <span className="muted">Сцена не выбрана.</span>}
+        <SceneSound />
+        {!current && <span className="muted">Сцена не запущена — выберите первую в ряду выше.</span>}
+        <div className="sw-ways">
+          {current && (
+            <ExitList exits={stage.exits} currentArcId={current.arc_id} pickedId={picked?.id ?? null} onPick={setPicked} />
+          )}
+          <BackList prev={prevScene} pickedId={picked?.id ?? null} onPick={setPicked} />
         </div>
+
+        {preview ? <PreviewBody preview={preview} /> : null}
       </div>
+    </div>
   );
 
   // Вне сетки — ничего: блок целиком живёт в окне или в док-станции,
@@ -239,26 +304,6 @@ export function SceneSwitcher({ sessionId }: { sessionId: number }) {
     // не видит — он схлопнул бы колонки поздно, а название сцены к тому
     // моменту уже рассыпалось бы по букве в строку.
     <div className="sw-wrap">
-      <div className="sw-popout-actions">
-        <button
-          type="button"
-          className="sw-popout"
-          title="Убрать сцены плашкой в док-станцию"
-          aria-label="Убрать сцены плашкой в док-станцию"
-          onClick={() => setWidgetFloatMode("scenes", "dock")}
-        >
-          <NavIcon name="dockLeft" />
-        </button>
-        <button
-          type="button"
-          className="sw-popout"
-          title="Открыть сцены в отдельном окне"
-          aria-label="Открыть сцены в отдельном окне"
-          onClick={() => setWidgetFloatMode("scenes", "float")}
-        >
-          <NavIcon name="fullscreen" />
-        </button>
-      </div>
       {body}
     </div>
   );
@@ -438,34 +483,17 @@ function BackList({
 }
 
 /**
- * «На игру» — то, что собрано в подготовке. Плюс экстренный поиск на случай,
- * когда партия ушла туда, куда её не готовили.
+ * «+ Сцена» — экстренный поиск, когда партия ушла туда, куда её не готовили.
+ * Добавляет сцену в вечер и показывает предпросмотр, но не запускает.
  */
-function PlannedList({
-  planned,
-  currentId,
-  prevId,
-  sessionId,
-  pickedId,
-  onPick,
-  onChanged,
-}: {
-  planned: PlannedScene[];
-  currentId: number | null;
-  prevId: number | null;
-  sessionId: number;
-  pickedId: number | null;
-  onPick: (scene: StageScene) => void;
-  onChanged: () => void;
-}) {
-  const [searching, setSearching] = useState(false);
+function SceneSearch({ sessionId, onAdded }: { sessionId: number; onAdded: (scene: StageScene) => void }) {
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<SceneSearchRow[]>([]);
 
   // Поиск по мере набора — свежим запросом через слой: сцены пульта меняются
   // по ходу вечера, и найденное должно быть сегодняшним.
   useEffect(() => {
-    if (!searching || query.trim().length < 2) {
+    if (query.trim().length < 2) {
       setFound([]);
       return;
     }
@@ -479,87 +507,33 @@ function PlannedList({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [searching, query, sessionId]);
+  }, [query, sessionId]);
 
-  async function addAndPick(row: SceneSearchRow) {
+  async function add(row: SceneSearchRow) {
     try {
       await write.post(`/sessions/${sessionId}/planned`, { scene_ids: [row.id], on: true });
     } catch (e) {
       showSaveError(`Сцена не добавилась в вечер: ${errorText(e)}`);
       return;
     }
-    setSearching(false);
-    setQuery("");
-    onChanged();
-    onPick({ id: row.id, name: row.name, kind: null, arc_id: null, arc_name: row.arc_name || null });
+    onAdded({ id: row.id, name: row.name, kind: null, arc_id: null, arc_name: row.arc_name || null });
   }
 
-  // Предыдущая сцена живёт в ярусе «Назад» выше — здесь весь план без неё:
-  // и предстоящее, и сыгранное (в него возвращаются, партия ходит кругами).
-  const todo = planned.filter((s) => s.id !== prevId);
-
   return (
-    <div className="stack sw-tier sw-tier--grow" style={{ gap: 6 }}>
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
-        <span className="sw-label">На игру</span>
-        <button className="comp-mini" onClick={() => setSearching((v) => !v)}>
-          {searching ? "Закрыть" : "Найти сцену"}
-        </button>
-      </div>
-
-      {searching && (
-        <div className="stack" style={{ gap: 4 }}>
-          <input
-            autoFocus
-            placeholder="Название сцены"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          {found.map((row) => (
-            <button key={row.id} className="sw-exit" onClick={() => addAndPick(row)}>
-              <span className="sw-exit-name">{row.name}</span>
-              {(row.arc_name || row.chapter_name) && (
-                <span className="sw-exit-label">
-                  {[row.arc_name, row.chapter_name].filter(Boolean).join(" · ")}
-                </span>
-              )}
-              {row.in_library === 1 && <span className="sw-exit-arc">заготовка</span>}
-            </button>
-          ))}
-          {query.trim().length >= 2 && found.length === 0 && (
-            <span className="muted">Ничего не нашлось.</span>
-          )}
-        </div>
-      )}
-
-      {/* Приглашение, а не пустой экран: сессия без заготовки — это пульт,
-          которому нечего показать в момент, когда игра уже началась. */}
-      {todo.length === 0 && !searching && (
-        <span className="muted">
-          Сцены на игру не отмечены — их набирают в{" "}
-          <Link to={`/sessions/${sessionId}`}>подготовке сессии</Link>.
-        </span>
-      )}
-
+    <div className="sw-search">
+      <input autoFocus placeholder="Название сцены" value={query} onChange={(e) => setQuery(e.target.value)} />
       <div className="sw-exits">
-        {todo.map((scene) => (
-          <button
-            key={scene.id}
-            className={`sw-exit is-plan sw-planned${pickedId === scene.id ? " is-picked" : ""}${
-              scene.played && scene.id !== currentId ? " is-played" : ""
-            }`}
-            onClick={() => onPick(scene)}
-          >
-            <span className="sw-exit-name">{scene.name}</span>
-            {scene.arc_name && <span className="sw-exit-label">{scene.arc_name}</span>}
-            {/* «Сыграна» не убирает сцену из списка: в неё возвращаются — и
-                чаще, чем кажется, когда партия ходит кругами. */}
-            {scene.played && scene.id !== currentId && (
-              <span className="sw-exit-arc">сыграна</span>
+        {found.map((row) => (
+          <button key={row.id} className="sw-exit" onClick={() => void add(row)}>
+            <span className="sw-exit-name">{row.name}</span>
+            {(row.arc_name || row.chapter_name) && (
+              <span className="sw-exit-label">{[row.arc_name, row.chapter_name].filter(Boolean).join(" · ")}</span>
             )}
+            {row.in_library === 1 && <span className="sw-exit-arc">заготовка</span>}
           </button>
         ))}
       </div>
+      {query.trim().length >= 2 && found.length === 0 && <span className="muted">Ничего не нашлось.</span>}
     </div>
   );
 }

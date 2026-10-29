@@ -2536,7 +2536,8 @@ export interface SessionStage {
   current: StageScene | null;
   exits: { scene: StageScene; label: string }[];
   sound: { id: number; name: string } | null;
-  journal: { id: number; scene_id: number; name: string }[];
+  /** launched_at — UTC «YYYY-MM-DD HH:MM:SS», время в сцене на Пульте. */
+  journal: { id: number; scene_id: number; name: string; launched_at?: string }[];
 }
 
 // ------------------------------------------- дерево приключений и глав

@@ -200,16 +200,17 @@ export function currentScene(sessionId: number): StageScene | null {
 }
 
 /** Лента вечера: что запускали и в каком порядке. Дубли — это возвраты. */
-export function sceneJournal(sessionId: number): { id: number; scene_id: number; name: string }[] {
+// launched_at — время в сцене на карточке Пульта (рестайл «Д», Q12).
+export function sceneJournal(sessionId: number): { id: number; scene_id: number; name: string; launched_at: string }[] {
   return db
     .prepare(
-      `SELECT j.id, j.scene_id, COALESCE(lib.name, s.name) AS name
+      `SELECT j.id, j.scene_id, COALESCE(lib.name, s.name) AS name, j.launched_at
        FROM session_scenes j
        JOIN story_scenes s ON s.id = j.scene_id
        LEFT JOIN story_scenes lib ON lib.id = s.library_scene_id
        WHERE j.session_id = ? ORDER BY j.id`
     )
-    .all(sessionId) as { id: number; scene_id: number; name: string }[];
+    .all(sessionId) as { id: number; scene_id: number; name: string; launched_at: string }[];
 }
 
 /** Набор пульта звука, привязанный к сцене. */
