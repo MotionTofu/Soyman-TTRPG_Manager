@@ -11,6 +11,18 @@ import { notifyDataChanged } from "../dataSync";
 import { MentionTextarea } from "./mentions/MentionTextarea";
 import { LitmThemeBookBody, LitmTreasureBody, LitmMagicWayBody, LitmThemeKitBody } from "./litm/LitmCompendiumBodies";
 import { MentionText } from "./mentions/MentionText";
+import { OtherscapePowerSetBody } from "./otherscape/OtherscapePowerSetBody";
+import { OtherscapeChallengeBody } from "./otherscape/OtherscapeChallengeBody";
+import { OtherscapeEquipmentBody } from "./otherscape/OtherscapeEquipmentBody";
+import { OtherscapeArchetypeBody } from "./otherscape/OtherscapeArchetypeBody";
+import { isOtherscapeArchetypeSection, parseArchetypePresentation } from "./otherscape/archetypePresentation";
+import { OtherscapeCrewBody } from "./otherscape/OtherscapeCrewBody";
+import { isOtherscapeCrewSection, parseCrewPresentation } from "./otherscape/crewPresentation";
+import { OtherscapeDevelopmentBody } from "./otherscape/OtherscapeDevelopmentBody";
+import { isOtherscapeDevelopmentSection, parseDevelopmentPresentation } from "./otherscape/developmentPresentation";
+import { isOtherscapeEquipmentSection, parseEquipmentPresentation } from "./otherscape/equipmentPresentation";
+import { isOtherscapeChallengesSection, parseChallengePresentation } from "./otherscape/challengePresentation";
+import { isOtherscapePowerSetsSection, parsePowerSetPresentation } from "./otherscape/powerSetPresentation";
 import { PdfEntitySources } from "./PdfEntitySources";
 import { syncMentionLinks } from "../mentions";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
@@ -1275,6 +1287,12 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     onDropEntry: reorderWithinGroup,
     sortForDisplay,
     systemCode,
+    otherscapePowerSets: isOtherscapePowerSetsSection(systemCode, section.name),
+    otherscapeChallenges: isOtherscapeChallengesSection(systemCode, section.name),
+    otherscapeEquipment: isOtherscapeEquipmentSection(systemCode, section.name),
+    otherscapeDevelopment: isOtherscapeDevelopmentSection(systemCode, section.name),
+    otherscapeCrew: isOtherscapeCrewSection(systemCode, section.name),
+    otherscapeArchetype: isOtherscapeArchetypeSection(systemCode, section.name),
     onToggleFavourite: toggleFavourite,
     selectedIds,
     onToggleSelect: toggleSelect,
@@ -1936,6 +1954,12 @@ interface NodeProps {
   sortForDisplay: (list: CompendiumEntry[]) => CompendiumEntry[];
   parentGroupName?: string;
   systemCode?: string | null;
+  otherscapePowerSets?: boolean;
+  otherscapeChallenges?: boolean;
+  otherscapeEquipment?: boolean;
+  otherscapeDevelopment?: boolean;
+  otherscapeCrew?: boolean;
+  otherscapeArchetype?: boolean;
   onToggleFavourite?: (entry: CompendiumEntry, favourite: boolean) => void;
   selectedIds?: Set<number>;
   onToggleSelect?: (id: number) => void;
@@ -2005,6 +2029,28 @@ function EntryNode(props: NodeProps) {
   const systemCode = props.systemCode;
   const isOpen = expanded.has(entry.id);
   const isEditing = editing?.id === entry.id;
+  const otherscapePowerSet = useMemo(() => props.otherscapePowerSets && entry.kind === "mechanic_item"
+    ? parsePowerSetPresentation(entry.description, entry.name_original) : null,
+  [props.otherscapePowerSets, entry.kind, entry.description, entry.name_original]);
+  const otherscapeChallenge = useMemo(() => props.otherscapeChallenges && entry.kind === "mechanic_item"
+    ? parseChallengePresentation(entry.description, entry.name_original) : null,
+  [props.otherscapeChallenges, entry.kind, entry.description, entry.name_original]);
+  const otherscapeEquipment = useMemo(() => props.otherscapeEquipment && entry.kind === "mechanic_item"
+    ? parseEquipmentPresentation(entry.description, entry.name_original) : null,
+  [props.otherscapeEquipment, entry.kind, entry.description, entry.name_original]);
+  const otherscapeDevelopment = useMemo(() => props.otherscapeDevelopment && entry.kind === "mechanic_item"
+    ? parseDevelopmentPresentation(entry.description, entry.name_original) : null,
+  [props.otherscapeDevelopment, entry.kind, entry.description, entry.name_original]);
+  const otherscapeCrew = useMemo(() => props.otherscapeCrew && entry.kind === "mechanic_item"
+    ? parseCrewPresentation(entry.description, entry.name_original) : null,
+  [props.otherscapeCrew, entry.kind, entry.description, entry.name_original]);
+  const otherscapeArchetype = useMemo(() => props.otherscapeArchetype && entry.kind === "mechanic_item"
+    ? parseArchetypePresentation(entry.description, entry.name_original) : null,
+  [props.otherscapeArchetype, entry.kind, entry.description, entry.name_original]);
+  const otherscapeDossier = !!(otherscapePowerSet || otherscapeChallenge || otherscapeEquipment || otherscapeDevelopment || otherscapeCrew || otherscapeArchetype);
+  const otherscapeDossierLabel = otherscapePowerSet ? `${otherscapePowerSet.category} Power Set`
+    : otherscapeChallenge ? otherscapeChallenge.isPowerSet ? "Mythos Power Set" : "Challenge"
+    : otherscapeEquipment?.label ?? otherscapeDevelopment?.label ?? otherscapeCrew?.label ?? otherscapeArchetype?.label;
   const isSpecies = entry.kind === "species";
   const isSubclass = entry.kind === "subclass";
   const isClassOption = entry.kind === "class_option";
@@ -2144,7 +2190,7 @@ function EntryNode(props: NodeProps) {
   const canToggle = hasBody || isEditing;
 
   return (
-    <div className={`comp-node${isMechanicGroup ? " comp-node--group" : ""}`} id={`comp-entry-${entry.id}`} role="listitem">
+    <div className={`comp-node${isMechanicGroup ? " comp-node--group" : ""}${otherscapeDossier ? ` otherscape-dossier${otherscapePowerSet ? " otherscape-power-set" : otherscapeChallenge ? " otherscape-challenge" : otherscapeEquipment ? " otherscape-equipment" : otherscapeDevelopment ? " otherscape-development" : otherscapeCrew ? " otherscape-crew" : " otherscape-archetype"}${isOpen && !isEditing ? " otherscape-dossier--open" : ""}` : ""}`} id={`comp-entry-${entry.id}`} role="listitem">
       <div
         role="button"
         tabIndex={canToggle ? 0 : -1}
@@ -2158,7 +2204,10 @@ function EntryNode(props: NodeProps) {
         <span className={`comp-toggle${canToggle ? "" : " comp-toggle-disabled"}`} aria-hidden="true">
           <NavIcon name="chevron" className={`chevron-icon${isOpen || isEditing ? " is-open" : ""}`} />
         </span>
-        <span className="comp-name">{entry.name || <em className="muted">Без названия</em>}</span>
+        <span className="comp-name">{otherscapeDossier && isOpen && !isEditing
+          ? <>Otherscape / {otherscapeDossierLabel}</>
+          : <>{entry.name || <em className="muted">Без названия</em>}{otherscapeDossier && <span className="oc-row-original"> [{entry.name_original}]</span>}</>}</span>
+        {(otherscapePowerSet || otherscapeChallenge) && !isOpen && !isEditing && <span className="oc-row-difficulty">{otherscapePowerSet ? `+${otherscapePowerSet.bonus} к сложности` : otherscapeChallenge?.isPowerSet ? `+${otherscapeChallenge.difficulty} к сложности` : `Сложность ${otherscapeChallenge?.difficulty}`}</span>}
         {props.bulkSelect && props.selectedIds && (entry.kind === "mechanic_item" || entry.kind === "mechanic_group") && (() => {
           const isGroup = entry.kind === "mechanic_group";
           let checked = props.selectedIds!.has(entry.id);
@@ -3337,11 +3386,11 @@ function EntryNode(props: NodeProps) {
             </div>
           )}
           {(entry.kind === "item" || entry.kind === "magic_item") && <PdfEntitySources kind={entry.kind} id={entry.id} />}
-          {entry.description && (
+          {entry.description && (otherscapePowerSet ? <OtherscapePowerSetBody name={entry.name} originalName={entry.name_original} powerSet={otherscapePowerSet} /> : otherscapeChallenge ? <OtherscapeChallengeBody name={entry.name} originalName={entry.name_original} challenge={otherscapeChallenge} /> : otherscapeEquipment ? <OtherscapeEquipmentBody name={entry.name} originalName={entry.name_original} equipment={otherscapeEquipment} /> : otherscapeDevelopment ? <OtherscapeDevelopmentBody name={entry.name} originalName={entry.name_original} development={otherscapeDevelopment} /> : otherscapeCrew ? <OtherscapeCrewBody name={entry.name} originalName={entry.name_original} crew={otherscapeCrew} /> : otherscapeArchetype ? <OtherscapeArchetypeBody name={entry.name} originalName={entry.name_original} archetype={otherscapeArchetype} /> : (
             <div style={{ whiteSpace: "pre-wrap" }}>
               <MentionText text={entry.description} />
             </div>
-          )}
+          ))}
           {(classProgression.columns.length > 0 || classProgressionTable) && (
             <details className="card">
               <summary className="muted chevron-summary">

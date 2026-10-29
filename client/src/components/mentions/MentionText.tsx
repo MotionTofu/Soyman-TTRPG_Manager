@@ -10,6 +10,7 @@ import { findTextTables, tableCellStyle } from "./tableDocument";
 
 type LinkedResource = { uid: string; id: number; name: string; type: string; category: string | null; file_url: string | null };
 const RESOURCE_URL_RE = /^soyman:resource\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+const RESOURCE_PAGE_URL_RE = /^soyman:resource\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})#page=([1-9]\d*)$/i;
 const RESOURCE_URL_SCAN = /soyman:resource\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi;
 const IMAGE_FILE_RE = /\.(?:png|jpe?g|gif|webp|avif)(?:\?|$)/i;
 
@@ -17,9 +18,10 @@ function isImageResource(resource: LinkedResource): boolean {
   return resource.category === "image" || !!resource.file_url && IMAGE_FILE_RE.test(resource.file_url);
 }
 
-function resourceTarget(resource: LinkedResource): string | null {
+function resourceTarget(resource: LinkedResource, page?: number): string | null {
   if (!resource.file_url) return null;
-  if (resource.category === "pdf") return `/resources/${resource.id}/read`;
+  if (page !== undefined && (resource.category !== "pdf" || !Number.isSafeInteger(page))) return null;
+  if (resource.category === "pdf") return `/resources/${resource.id}/read${page === undefined ? "" : `?page=${page}`}`;
   if (resource.type === "markdown") return `/resources/${resource.id}/markdown-file`;
   return `/resources/link/${resource.uid}`;
 }
@@ -298,10 +300,12 @@ function renderMarkdown(text: string, mentionsAsBold: boolean, resources: Map<st
       case "escape": return <span key={key}>{token.text}</span>;
       case "br": return <br key={key} />;
       case "link": {
-        const resourceUid = RESOURCE_URL_RE.exec(token.href)?.[1]?.toLowerCase();
+        const resourceLink = RESOURCE_URL_RE.exec(token.href) ?? RESOURCE_PAGE_URL_RE.exec(token.href);
+        const resourceUid = resourceLink?.[1]?.toLowerCase();
+        const page = resourceLink?.[2] === undefined ? undefined : Number(resourceLink[2]);
         if (resourceUid) {
           const target = resources.get(resourceUid);
-          const href = target && resourceTarget(target);
+          const href = target && resourceTarget(target, page);
           return href ? <a key={key} className="ext-link" href={href}>{inline(token.tokens ?? [], key)}</a>
             : <span key={key} className="rt-md-missing-resource" title="Ресурс недоступен">{inline(token.tokens ?? [], key)} (Ресурс недоступен)</span>;
         }
