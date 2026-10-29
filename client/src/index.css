@@ -9783,6 +9783,107 @@ body.printing-cheatsheet #root {
   padding: var(--sp-1) var(--sp-3);
   display: inline-block;
 }
+/* Обзор системы — макет «Д» Roll-OS-Overview: название крупно на листе,
+   справки машинописью, описание с правкой без рамки карточки, тамбнейл
+   справа в кромке; состав справочника — сетка крупных чисел. */
+.sys-hero2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: var(--sp-8);
+}
+.sys-hero2__text { min-width: 0; }
+.sys-hero2__title {
+  margin: var(--sp-4) 0 var(--sp-5);
+  font-size: var(--fs-hero);
+  line-height: 0.92;
+  overflow-wrap: anywhere;
+}
+.sys-hero2__facts {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  margin: 0 0 var(--sp-6);
+  border-top: 1px solid var(--line);
+}
+.sys-hero2__facts dt {
+  padding-top: var(--sp-4);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.sys-hero2__facts dd {
+  margin: 0;
+  padding: var(--sp-4) 0;
+  border-bottom: 1px solid var(--line);
+}
+.sys-hero2__facts dt { border-bottom: 1px solid var(--line); }
+.sys-hero2__desc > .card {
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+.sys-hero2__desc > .card > h3 { display: none; }
+.sys-hero2__desc .reading-text { font-size: var(--fs-body); color: var(--ink-2); }
+/* Кнопки карточки описания («Руководство Мастера», «Редактировать») — как .d-btn. */
+.sys-hero2__desc > .card > .row button {
+  height: 40px;
+  padding: 0 var(--sp-6);
+  border: var(--edge-width) solid var(--edge);
+  border-radius: 0;
+  background: var(--sheet);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--fs-label);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.sys-hero2__desc > .card > .row button:hover { background: var(--tab); }
+.sys-hero2__thumb { min-width: 0; }
+.sys-hero2__thumb .entity-image-slots { height: 100%; }
+.sys-counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+}
+.sys-counts button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-5) var(--sp-5);
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.sys-counts button:hover { background: var(--tab); }
+.sys-counts b {
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-h2);
+  font-weight: 500;
+  line-height: 1;
+}
+.sys-counts span {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+@media (max-width: 900px) {
+  .sys-hero2 { grid-template-columns: minmax(0, 1fr); }
+  .sys-hero2__thumb { order: -1; }
+  .sys-hero2__title { font-size: var(--fs-h1); }
+}
 .sys-tabs button {
   border-radius: 0;
   font-family: var(--font-ui);

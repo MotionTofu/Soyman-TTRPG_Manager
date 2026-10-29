@@ -13,13 +13,18 @@ import { downloadJson } from "../downloadJson";
 import { ExportProgress } from "../components/ExportProgress";
 import { useImageCrop } from "../hooks/useImageCrop";
 import type { Campaign, System, SystemGroup, SystemSection } from "../types";
-import { NavIcon } from "../components/NavIcons";
 import { TidyCompendiumDialog } from "../components/TidyCompendiumDialog";
 import { EntityPage } from "../components/EntityPage";
 import { SectionBackground } from "../components/SectionBackground";
 import { EntityImageSlot } from "../components/EntityImageSlot";
 import { useAlert, useConfirm } from "../hooks/useConfirm";
 import { readOnce } from "../data/imperative";
+
+function entriesLabel(n: number): string {
+  const tail = n % 100;
+  const word = tail >= 11 && tail <= 14 ? "записей" : n % 10 === 1 ? "запись" : n % 10 >= 2 && n % 10 <= 4 ? "записи" : "записей";
+  return `${n} ${word}`;
+}
 
 export function SystemDetailPage() {
   const { id } = useParams();
@@ -222,22 +227,20 @@ export function SystemDetailPage() {
         <div className="stack">
           {confirmDialog}
           {alertDialog}
-          <section className="sys-hero">
-            <div className="sys-hero-body">
-              <div className="sys-hero-thumb">
-                <div className="entity-image-slots">
-                  <EntityImageSlot
-                    title="Тамбнейл системы"
-                    hint="Карточка в списке систем. Рекомендуем 900×562 (16×10), до 15 MB, JPG/PNG/GIF/WebP/AVIF."
-                    url={system.thumbnail_image_url}
-                    uploading={uploadingThumbnail}
-                    onSelect={thumbnailCrop.onSelect}
-                    onDelete={system.thumbnail_image_url ? deleteThumbnail : undefined}
-                  />
-                </div>
-                {thumbnailCrop.modal}
-              </div>
-              <div className="sys-hero-main stack">
+          {/* Обзор — макет «Д» Roll-OS-Overview: название на листе (над
+              ярлыками его на этой вкладке нет), справки, описание с правкой,
+              тамбнейл справа; ниже состав справочника крупными числами. */}
+          <section className="sys-hero2">
+            <div className="sys-hero2__text">
+              <div className="d-mono">Система{system.code ? ` · ${system.code}` : ""}</div>
+              <h1 className="sys-hero2__title">{system.name}</h1>
+              <dl className="sys-hero2__facts">
+                <dt>Кампании</dt>
+                <dd>{campaigns.length || "пока нет"}</dd>
+                <dt>Разделы</dt>
+                <dd>{sections.length || "пока нет"}</dd>
+              </dl>
+              <div className="sys-hero2__desc">
                 <EditableTextCard
                   key={`desc-${system.id}`}
                   title="Описание системы"
@@ -259,50 +262,68 @@ export function SystemDetailPage() {
                   ]}
                   onSaveFields={(v) => saveName(v.name, v.code)}
                 />
-                <div className="sys-hero-meta">
-                  <span className="sys-hero-meta-label">Состав справочника</span>
-                  {sections.length === 0 ? (
-                    <span className="muted">Разделов пока нет.</span>
-                  ) : (
-                    <div className="row" style={{ flexWrap: "wrap", gap: 4 }}>
-                      {sections.map((s) => (
-                        <button
-                          key={s.id}
-                          type="button"
-                          className="sys-hero-count"
-                          title={`Перейти в раздел «${s.name}»`}
-                          onClick={() => selectTab(String(s.id))}
-                        >
-                          {s.name}: {sectionCounts[s.id] ?? "…"}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className="sys-hero-meta">
-                  <span className="sys-hero-meta-label">Группы</span>
-                  {allGroups.length > 0 ? (
-                    <div className="row" style={{ flexWrap: "wrap", gap: 4 }}>
-                      {allGroups.map((g) => {
-                        const isIn = systemGroupIds.has(g.id);
-                        return (
-                          <label key={g.id} className={`campaign-group-chip${isIn ? " selected" : ""}`}>
-                            <input
-                              type="checkbox"
-                              checked={isIn}
-                              onChange={() => void toggleGroup(g.id, isIn)}
-                            />
-                            {g.name}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="muted">Групп пока нет — создайте на странице систем.</div>
-                  )}
-                </div>
               </div>
             </div>
+            <div className="sys-hero2__thumb">
+              <div className="entity-image-slots">
+                <EntityImageSlot
+                  title="Тамбнейл системы"
+                  hint="Карточка в списке систем. Рекомендуем 900×562 (16×10), до 15 MB, JPG/PNG/GIF/WebP/AVIF."
+                  url={system.thumbnail_image_url}
+                  uploading={uploadingThumbnail}
+                  onSelect={thumbnailCrop.onSelect}
+                  onDelete={system.thumbnail_image_url ? deleteThumbnail : undefined}
+                />
+              </div>
+              {thumbnailCrop.modal}
+            </div>
+          </section>
+          <section>
+            <div className="d-plate-row">
+              <h2 className="d-plate">Состав справочника</h2>
+              <span className="d-note">{entriesLabel(Object.values(sectionCounts).reduce((sum, n) => sum + n, 0))}</span>
+            </div>
+            {sections.length === 0 ? (
+              <span className="muted">Разделов пока нет.</span>
+            ) : (
+              <div className="sys-counts">
+                {sections.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    title={`Перейти в раздел «${s.name}»`}
+                    onClick={() => selectTab(String(s.id))}
+                  >
+                    <b>{sectionCounts[s.id] ?? "…"}</b>
+                    <span>{s.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+          <section>
+            <div className="d-plate-row">
+              <h2 className="d-plate">Группы</h2>
+            </div>
+            {allGroups.length > 0 ? (
+              <div className="row" style={{ flexWrap: "wrap", gap: 4 }}>
+                {allGroups.map((g) => {
+                  const isIn = systemGroupIds.has(g.id);
+                  return (
+                    <label key={g.id} className={`campaign-group-chip${isIn ? " selected" : ""}`}>
+                      <input
+                        type="checkbox"
+                        checked={isIn}
+                        onChange={() => void toggleGroup(g.id, isIn)}
+                      />
+                      {g.name}
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="muted">Групп пока нет — создайте на странице систем.</div>
+            )}
           </section>
             {/* Визард ссылок для системы скрыт до тех пор, пока в нём не появится
                 нужда: у систем нет прозы, которую стоило бы прочёсывать, и кнопка
@@ -313,9 +334,12 @@ export function SystemDetailPage() {
                ownerId={systemId}
                help="Ищет имена сущностей сеттинга и записей компендиума в текстах системы — и делает их кликабельными. Шаг за шагом, по одному типу цели. Ничего не пишет, пока вы не подтвердите."
              /> */}
+          {campaigns.length > 0 && (
             <section>
-             <div className="sys-card-head">Кампании с этой системой ({campaigns.length})</div>
-            <div className="sys-campaigns-body">
+              <div className="d-plate-row">
+                <h2 className="d-plate">Кампании с этой системой</h2>
+                <span className="d-note">{campaigns.length}</span>
+              </div>
               <div className="grid-cards">
                 {campaigns.map((c) => (
                   <Link key={c.id} to={`/campaigns/${c.id}`} className="card">
@@ -323,10 +347,9 @@ export function SystemDetailPage() {
                     <div className="sys-card-meta">{c.setting_name ?? "Сеттинг не указан"}</div>
                   </Link>
                 ))}
-                {campaigns.length === 0 && <p className="muted">Пока нет кампаний с этой системой.</p>}
               </div>
-            </div>
-          </section>
+            </section>
+          )}
         </div>
       )}
 

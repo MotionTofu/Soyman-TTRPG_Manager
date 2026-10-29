@@ -315,7 +315,9 @@ export function EntityPage({
         <div className="entity-page__head">
           {avatar && <div className="entity-page__avatar">{avatar}</div>}
 
-          {!paper && ident}
+          {/* Вид «лист»: на первой вкладке название стоит на самом листе
+              (герой обзора), над ярлыками его нет — макет «Д». */}
+          {!paper && !(sheet && tab === shownTabs[0]?.id) && ident}
 
           {(primaryAction || (more && !moreInTabs)) && (
             <div className="entity-page__actions">
