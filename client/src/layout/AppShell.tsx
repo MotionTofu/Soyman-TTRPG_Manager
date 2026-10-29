@@ -30,7 +30,6 @@ import { useCutsceneCrumbs } from "./useCutsceneCrumbs";
 import { useWorkbookCrumbs } from "./useWorkbookCrumbs";
 import { NavigationHistoryProvider } from "./NavigationHistory";
 import { useConfirm } from "../hooks/useConfirm";
-import { requestPultGridReset } from "../pultGridReset";
 import { sessionLabel } from "../sessionLabel";
 import type { CampaignDetail, SessionDetail } from "../types";
 import { workspaceMode } from "./workspaceMode";
@@ -887,19 +886,7 @@ export function AppShell() {
                 {activeStorageName}
               </span>
             )}
-            {/* Сброс раскладки блоков пульта: живёт тут, а не над сеткой, —
-                рука тянется к шапке, а не вглубь. Сетка слушает событие
-                (см. pultGridReset) и только пока смонтирована. */}
-            {!isPlayer && isLivePult && (
-              <button
-                type="button"
-                className="comp-mini"
-                onClick={() => requestPultGridReset()}
-                title="Вернуть блоки как было"
-              >
-                Сбросить раскладку
-              </button>
-            )}
+            {/* «Сбросить раскладку» пульта — в «⋯» его верхней строки (Q11). */}
           </div>
         )}
         <Outlet />

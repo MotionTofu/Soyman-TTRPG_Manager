@@ -7566,6 +7566,18 @@ function migrateDatabase(database: Database.Database, dbDir: string): void {
   if (!columnExists(database, "canvas_threads", "label")) {
     database.exec("ALTER TABLE canvas_threads ADD COLUMN label TEXT NOT NULL DEFAULT ''");
   }
+
+  // Начало игры — таймер «За столом» на Пульте (рестайл «Д», Q9 2026-10-29).
+  // Идущей сейчас сессии время берётся из первого запуска сцены.
+  if (!columnExists(database, "sessions", "live_started_at")) {
+    database.exec("ALTER TABLE sessions ADD COLUMN live_started_at TEXT");
+    database.exec(
+      `UPDATE sessions SET live_started_at = COALESCE(
+         (SELECT MIN(j.launched_at) FROM session_scenes j WHERE j.session_id = sessions.id),
+         datetime('now'))
+       WHERE live_mode IS NOT NULL`
+    );
+  }
 }
 
 /**

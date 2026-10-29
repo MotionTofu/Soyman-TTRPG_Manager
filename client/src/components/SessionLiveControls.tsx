@@ -97,8 +97,9 @@ export function SessionLiveControls({
   // Проведённую или отменённую не начинают: кнопка на странице такой сессии
   // была бы лишним органом управления.
   if (!session.live_mode && session.status !== "planned") return pult ? <>{pult}</> : null;
-  // В шапке сессии кнопки «Д»: малые и одна главная; на Пульте — прежние.
-  const sm = pult ? "d-btn d-btn--sm" : undefined;
+  // Кнопки «Д»: малые; главная (кислота) — только «Начать» в шапке сессии.
+  // На Пульте «идёт» говорят часы, значок там лишний.
+  const sm = "d-btn d-btn--sm";
 
   return (
     <div className="row session-live-controls">
@@ -132,7 +133,7 @@ export function SessionLiveControls({
       )}
       {session.live_mode === "rehearsal" ? (
         <>
-          <span className="session-live-controls__badge">Прогон</span>
+          {pult && <span className="session-live-controls__badge">Прогон</span>}
           <button type="button" className={sm} onClick={() => void finish()}>
             Закончить прогон
           </button>
@@ -140,7 +141,7 @@ export function SessionLiveControls({
         </>
       ) : session.live_mode ? (
         <>
-          <span className="session-live-controls__badge">Идёт</span>
+          {pult && <span className="session-live-controls__badge">Идёт</span>}
           <button type="button" className={sm} onClick={() => void finish()}>
             Завершить
           </button>
@@ -163,11 +164,12 @@ export function SessionLiveControls({
         </>
       ) : (
         <>
-          <button type="button" className="primary" onClick={() => void start("live")}>
+          <button type="button" className={sm} onClick={() => void start("live")}>
             Начать
           </button>
           <button
             type="button"
+            className={sm}
             title="Всё как в игре, но игроки ничего не видят, а после «Закончить прогон» вечер возвращается как был"
             onClick={() => void start("rehearsal")}
           >

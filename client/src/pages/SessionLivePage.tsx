@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { EditableTextCard } from "../components/EditableTextCard";
 import { SceneSwitcher } from "../components/SceneSwitcher";
@@ -19,7 +19,9 @@ import { loadPultFinishAction } from "../pultPrefs";
 import { SessionOutcomeModal } from "../components/SessionOutcomeModal";
 import { useEntity, useResource, useSaveEntity } from "../data/hooks";
 import { CombatMode } from "../combat/CombatMode";
-import { useCombatModeOpen } from "../combat/combatModeStore";
+import { setCombatModeOpen, useCombatModeOpen } from "../combat/combatModeStore";
+import { ContextMenu } from "../components/ContextMenu";
+import { requestPultGridReset } from "../pultGridReset";
 import { sessionPaths } from "../data/sessions";
 import { isAtTable } from "../characterStatus";
 
@@ -28,10 +30,57 @@ import { isAtTable } from "../characterStatus";
 const NO_CHARACTERS: Character[] = [];
 const NO_UNION: SessionUnionRow[] = [];
 
+/** «YYYY-MM-DD HH:MM:SS» в UTC (SQLite datetime('now')) → Date. */
+function fromSqlUtc(s: string): Date {
+  return new Date(`${s.replace(" ", "T")}Z`);
+}
+
+/**
+ * Таймер «За столом» (рестайл «Д», Q9): сколько идёт игра и с какого часа.
+ * Без паузы — перерыв за столом тоже время вечера. Минутной точности хватает,
+ * поэтому тик раз в 20 секунд.
+ */
+function PultTimer({ session }: { session: SessionDetail }) {
+  const [now, setNow] = useState(() => Date.now());
+  const running = !!session.live_mode && !!session.live_started_at;
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => setNow(Date.now()), 20_000);
+    return () => clearInterval(id);
+  }, [running]);
+  if (!running) {
+    return (
+      <div className="pult-clock__cell">
+        <small className="pult-clock__label">За столом</small>
+        <b className="pult-clock__time">—</b>
+      </div>
+    );
+  }
+  const started = fromSqlUtc(session.live_started_at!);
+  const mins = Math.max(0, Math.floor((now - started.getTime()) / 60_000));
+  const since = started.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  return (
+    <>
+      <div className="pult-clock__cell">
+        <small className="pult-clock__label">За столом</small>
+        <b className="pult-clock__time">
+          {Math.floor(mins / 60)}:{String(mins % 60).padStart(2, "0")}
+        </b>
+      </div>
+      <span className="pult-clock__live">
+        <i aria-hidden="true" />
+        {session.live_mode === "rehearsal" ? "ПРОГОН" : "ИДЁТ"} С {since}
+      </span>
+    </>
+  );
+}
+
 export function SessionLivePage() {
   const { id } = useParams();
   const sessionId = Number(id);
   const [outcomeOpen, setOutcomeOpen] = useState(false);
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
+  const moreRef = useRef<HTMLButtonElement>(null);
 
   // Всё — из кэша слоя данных (docs/adr/0001). Запуск сцены, правка в другом
   // окне и заявка игрока обновляют задетое сами: счётчик запусков, который
@@ -113,9 +162,46 @@ export function SessionLivePage() {
           некогда. Задумка — под ним. Лента сессии живёт в правой панели,
           пока сессия идёт: писать в неё можно с любой страницы. Боевая
           тема — кнопкой в трекере инициативы, рядом со своим событием. */}
-      <div className="row session-live-top">
-        <SessionTimeStrip session={session} settingId={campaign.setting_id} campaignId={campaign.id} />
-        <SessionLiveControls session={session} onFinished={onFinished} />
+      {/* Часы (макет Roll-Pult, Q9–Q11): за столом и в мире одной плашкой,
+          справа «Бой», «Завершить» и «⋯» с редким. */}
+      <div className="pult-top">
+        <div className="pult-clock">
+          <PultTimer session={session} />
+          <span className="pult-clock__sp" aria-hidden="true" />
+          <SessionTimeStrip session={session} settingId={campaign.setting_id} campaignId={campaign.id} />
+        </div>
+        <div className="pult-top__acts">
+          <button
+            type="button"
+            className={`d-btn d-btn--sm${combatMode ? " is-on" : ""}`}
+            aria-pressed={combatMode}
+            onClick={() => setCombatModeOpen(sessionId, !combatMode)}
+          >
+            Бой
+          </button>
+          <SessionLiveControls session={session} onFinished={onFinished} />
+          <button
+            ref={moreRef}
+            type="button"
+            className="d-btn d-btn--sm"
+            aria-label="Ещё действия"
+            aria-haspopup="menu"
+            onClick={() => {
+              const r = moreRef.current?.getBoundingClientRect();
+              if (r) setMenuAt({ x: r.right, y: r.bottom });
+            }}
+          >
+            …
+          </button>
+        </div>
+        {menuAt && (
+          <ContextMenu
+            x={menuAt.x}
+            y={menuAt.y}
+            items={[{ label: "Сбросить раскладку панелей", onClick: () => requestPultGridReset() }]}
+            onClose={() => setMenuAt(null)}
+          />
+        )}
       </div>
 
       {/* Боевой режим (Q1) занимает основную область пульта: сцены, показ и

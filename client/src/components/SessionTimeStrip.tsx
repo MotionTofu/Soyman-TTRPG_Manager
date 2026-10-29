@@ -18,7 +18,8 @@ import type {
 // засечки надо разглядывать. Сама ось живёт в профиле сеттинга и кампании —
 // там на неё как раз смотрят.
 
-const NEAR_COUNT = 3;
+// Одно, самое близкое: строка под датой в часах Пульта (рестайл «Д», Q10).
+const NEAR_COUNT = 1;
 const NO_SETTING_EVENTS: SettingCalendarEvent[] = [];
 const NO_CAMPAIGN_EVENTS: CampaignCalendarEvent[] = [];
 
@@ -154,43 +155,36 @@ export function SessionTimeStrip({ session, settingId, campaignId }: Props) {
   if (!now) {
     if (!suggested) return null;
     return (
-      <div className="card row ts ts-empty">
-        <span className="muted">Внутримировая дата сессии не указана.</span>
-        <button onClick={applySuggested}>
+      <div className="ts">
+        <small className="pult-clock__label">В мире</small>
+        <button className="d-btn d-btn--sm" onClick={applySuggested}>
           Поставить {formatInworldDate(suggested.year, suggested.month, suggested.day, months, era)}
         </button>
       </div>
     );
   }
 
+  // Часть часов Пульта: дата, ближайшее событие строкой под ней, «+1 день».
   return (
-    <div className="card row ts">
-      <div className="ts-today">
-        <span className="sw-label">Сегодня в мире</span>
+    <>
+      <div className="ts">
+        <small className="pult-clock__label">В мире</small>
         <span className="ts-date">{formatInworldDate(now.year, now.month, now.day, months, era)}</span>
-      </div>
-
-      <div className="ts-near">
-        {near.length === 0 && <span className="muted">Впереди ничего не отмечено.</span>}
         {near.map((e, i) => (
-          <span key={i} className={`ts-event${e.important ? " is-important" : ""}`}>
-            <span className="ts-in">{distanceWords(e.distance)}</span>
-            <span className="ts-title">{e.title}</span>
-          </span>
+          <small key={i} className={`ts-event${e.important ? " is-important" : ""}`}>
+            {distanceWords(e.distance)} · {e.title}
+          </small>
         ))}
       </div>
-
-      <div className="ts-actions">
-        <button onClick={advanceDay} title="Сдвинуть конец промежутка сессии">
-          Прошёл день
+      <button className="d-btn d-btn--sm" onClick={advanceDay} title="Сдвинуть конец промежутка сессии на день">
+        +1 день
+      </button>
+      {undo && (
+        <button className="d-btn d-btn--sm" onClick={undoAdvance} title="Отменить сдвиг">
+          Отменить
         </button>
-        {undo && (
-          <button className="comp-mini" onClick={undoAdvance} title="Отменить сдвиг">
-            Отменить
-          </button>
-        )}
-      </div>
-    </div>
+      )}
+    </>
   );
 }
 

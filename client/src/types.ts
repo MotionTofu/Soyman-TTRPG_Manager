@@ -729,6 +729,8 @@ export interface SessionSummary {
   notes_text?: string | null;
   /** Идёт ли сессия: 'live' — «Начать», 'rehearsal' — тестовый прогон. */
   live_mode?: SessionLiveMode | null;
+  /** Когда нажали «Начать» (UTC, «YYYY-MM-DD HH:MM:SS») — таймер Пульта. */
+  live_started_at?: string | null;
   idea_notes?: string;
   inworld_year: number | null;
   inworld_month: number | null;

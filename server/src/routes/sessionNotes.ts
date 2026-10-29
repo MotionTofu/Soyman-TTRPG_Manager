@@ -139,7 +139,11 @@ sessionNotesRouter.post("/:id/live", (req, res) => {
     // Чужую Мастер подтвердил завершить: настоящая станет проведённой, прогон откатится.
     for (const o of other) endSession(o.id);
     const snapshot = mode === "rehearsal" ? takeSnapshot(sessionId, session.campaign_id) : null;
-    db.prepare("UPDATE sessions SET live_mode = ?, rehearsal_snapshot = ? WHERE id = ?").run(mode, snapshot, sessionId);
+    db.prepare("UPDATE sessions SET live_mode = ?, rehearsal_snapshot = ?, live_started_at = datetime('now') WHERE id = ?").run(
+      mode,
+      snapshot,
+      sessionId
+    );
     // Перенесённый бой: время этой сессии пошло с её начала (Q82).
     startSpanIfIdle(sessionId);
   })();

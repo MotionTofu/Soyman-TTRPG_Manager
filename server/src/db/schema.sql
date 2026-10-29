@@ -219,6 +219,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   -- Снимок вечера на старте тестового прогона (services/rehearsal.ts): им
   -- «Закончить прогон» возвращает всё как было. NULL — прогона нет.
   rehearsal_snapshot TEXT,
+  -- Когда нажали «Начать» (UTC): таймер «За столом» на Пульте.
+  live_started_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   archived_at TEXT
 );

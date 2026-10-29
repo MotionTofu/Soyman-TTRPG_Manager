@@ -401,78 +401,85 @@
   }
 }
 
-/* ------------------------------------------------------ полоса времени */
+/* ------------------------------------------------- часы и кнопки Пульта */
 
-.ts {
-  gap: 0;
-  flex-wrap: wrap;
-  align-items: stretch;
-  padding: 0;
-  overflow: hidden;
-}
-
-/* Дата отделена от событий вертикальной чертой, а не отступом: это два разных
-   вопроса — «какое сегодня» и «что надвигается», — и черта отвечает на них
-   раздельно, не тратя ширину. */
-.ts-today {
+/* Макет Roll-Pult (Q9–Q11): плашка на листе с линией — за столом и в мире
+   через черту, справа «Бой», «Завершить», «⋯». Кислоты на Пульте нет. */
+.pult-top {
   display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  padding: var(--sp-4) var(--sp-5);
-  border-right: var(--card-border-width) solid var(--line);
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: var(--sp-5);
+}
+.pult-clock {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-6);
+  padding: var(--sp-4) var(--sp-6);
+  border: var(--card-border-width) solid var(--line);
+  background: var(--sheet);
+}
+.pult-clock__label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.pult-clock__time {
+  font-family: var(--font-ui);
+  font-size: var(--fs-h2);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.pult-clock__live {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--ink);
+}
+.pult-clock__live i {
+  width: 8px;
+  height: 8px;
+  background: var(--mark);
+}
+.pult-clock__sp {
+  align-self: stretch;
+  width: 1px;
+  background: var(--line);
 }
 .ts-date {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--fs-h3);
-  font-weight: 500;
   white-space: nowrap;
 }
-
-.ts-near {
-  display: flex;
-  gap: var(--sp-7);
-  flex-wrap: wrap;
-  flex: 1 1 auto;
-  align-items: center;
-  padding: var(--sp-4) var(--sp-5);
-  font-size: var(--fs-meta);
-}
 .ts-event {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--muted);
+}
+.ts-event.is-important {
+  color: var(--mark);
+}
+.pult-top__acts {
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  gap: var(--sp-4);
+  margin-left: auto;
+}
+.pult-top__acts .session-live-controls {
   gap: var(--sp-4);
 }
-/* Расстояние моноширинным и крупнее названия: за столом спрашивают «сколько
-   осталось», а не «как называется». */
-.ts-in {
-  font-family: var(--font-mono);
-  font-size: var(--fs-h3);
-  font-weight: 500;
+.pult-top__acts .d-btn.is-on {
+  background: var(--surface);
+  color: var(--on-surface);
 }
-.ts-title {
-  font-family: var(--font-ui);
-  font-size: var(--fs-micro);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
-.ts-event.is-important .ts-in {
-  color: var(--accent);
-}
-.ts-event.is-important .ts-title {
-  font-weight: 700;
-}
-
-.ts-actions {
-  display: flex;
-  align-items: center;
-  padding: var(--sp-4) var(--sp-5);
-}
-.ts-empty {
-  padding: var(--sp-4) var(--sp-5);
-  gap: var(--sp-5);
-  align-items: center;
-}
-
 
 /* -------------------------------------------------------- количество */
 
