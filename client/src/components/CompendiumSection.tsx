@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { dataKeys, type Affect } from "../data/entities";
 import { errorText, useAction, useResource, write } from "../data/hooks";
@@ -23,6 +23,9 @@ import { isOtherscapeDevelopmentSection, parseDevelopmentPresentation } from "./
 import { isOtherscapeEquipmentSection, parseEquipmentPresentation } from "./otherscape/equipmentPresentation";
 import { isOtherscapeChallengesSection, parseChallengePresentation } from "./otherscape/challengePresentation";
 import { isOtherscapePowerSetsSection, parsePowerSetPresentation } from "./otherscape/powerSetPresentation";
+import { isOtherscapeThemesSection } from "./otherscape/themebookPresentation";
+import { OtherscapeThemesView } from "./otherscape/OtherscapeThemesView";
+import { OtherscapeChallengesView } from "./otherscape/OtherscapeChallengesView";
 import { PdfEntitySources } from "./PdfEntitySources";
 import { syncMentionLinks } from "../mentions";
 import { SEARCH_DRAG_MIME } from "./LinkDropZone";
@@ -634,6 +637,15 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     if (shown) showAlert(ids.length === 1 ? "Показано игрокам." : `Показано игрокам: ${ids.length} записей.`);
   }
   const systemCode = useResource<{ code: string | null }>(systemPaths.detail(systemId)).data?.code ?? null;
+  // Каталоги Otherscape (макеты «Д»): «Темы персонажа» и «Испытания» по
+  // умолчанию — список слева, карточка справа; выбранное — в адресе (?entry=).
+  const osThemes = isOtherscapeThemesSection(systemCode, section.name);
+  const osChallenges = isOtherscapeChallengesSection(systemCode, section.name);
+  const [, setSearchParams] = useSearchParams();
+  const selectEntry = (id: number) => setSearchParams((params) => {
+    params.set("entry", String(id));
+    return params;
+  }, { replace: true });
 
   const isSpellSection = section.kind === "spell";
   const isMagicItemSection = section.kind === "magic_item";
@@ -1684,10 +1696,10 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
             {isMagicItemSection && sortButton("rarity", "Редкость")}
             {isEquipmentSection && sortButton("type", "Категория")}
           </span>
-          {(isEquipmentSection || isSpellSection || isClassSection || isSpeciesSection || isBackgroundSection || isFeatSection || isMagicItemSection) && (
+          {(isEquipmentSection || isSpellSection || isClassSection || isSpeciesSection || isBackgroundSection || isFeatSection || isMagicItemSection || osThemes || osChallenges) && (
             <span className="d-seg" role="group" aria-label="Вид">
               <button type="button" className={viewMode === "grid" ? "active" : ""} aria-pressed={viewMode === "grid"} onClick={() => setViewMode("grid")}>
-                {isSpellSection ? "Таблица" : "Плитки"}
+                {isSpellSection ? "Таблица" : osThemes || osChallenges ? "Каталог" : "Плитки"}
               </button>
               <button type="button" className={viewMode === "list" ? "active" : ""} aria-pressed={viewMode === "list"} onClick={() => setViewMode("list")}>
                 Список
@@ -1698,7 +1710,11 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
       </div>
 
       <div className="comp-list">
-        {isSpellSection && viewMode === "grid" ? (
+        {osThemes && viewMode === "grid" ? (
+          <OtherscapeThemesView entries={entries} query={searchQuery} selectedId={focusEntryId} onSelect={selectEntry} />
+        ) : osChallenges && viewMode === "grid" ? (
+          <OtherscapeChallengesView entries={entries} query={searchQuery} selectedId={focusEntryId} onSelect={selectEntry} />
+        ) : isSpellSection && viewMode === "grid" ? (
           <SpellTable
             entries={filteredTopLevel}
             classIds={topClassIds}

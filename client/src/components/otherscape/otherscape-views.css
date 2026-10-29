@@ -1,0 +1,130 @@
+/* Каталоги Otherscape «Темы персонажа» и «Испытания» — макеты «Д»
+   Roll-OS-Themes / Roll-OS-Challenges. Цвета — только токены темы. */
+
+/* Темы: три колонки типов силы, ниже главный блок книги. */
+.os-themes__cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--sp-5);
+}
+.os-col { border: 1px solid var(--line); background: var(--sheet); }
+.os-col header { padding: var(--sp-5) var(--sp-5) var(--sp-4); border-bottom: 1px solid var(--line); }
+.os-col header .d-plate { margin: 0 0 var(--sp-3); }
+.os-col header p { margin: 0; font-size: var(--fs-label); line-height: 1.35; color: var(--muted); }
+.os-col > button {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  width: 100%;
+  padding: var(--sp-4) var(--sp-5);
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+  color: var(--ink);
+  font-size: var(--fs-data);
+  text-align: left;
+  cursor: pointer;
+}
+.os-col header + button { border-top: 0; }
+.os-col > button:hover { background: var(--tab); }
+.os-col > button.active { background: var(--tab); box-shadow: inset 3px 0 0 var(--ink); font-weight: 600; }
+.os-col > button span,
+.os-book__parts a span,
+.os-cat__count {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  font-weight: 400;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.os-col__empty { margin: 0; padding: var(--sp-4) var(--sp-5); font-size: var(--fs-label); color: var(--muted); }
+
+.os-book {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: var(--sp-7);
+  margin-top: var(--sp-6);
+}
+.os-book h3 {
+  margin: var(--sp-3) 0 var(--sp-1);
+  font-family: var(--font-ui);
+  font-size: var(--fs-h2);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.os-book p { margin: var(--sp-4) 0; font-size: var(--fs-data); line-height: 1.5; color: var(--ink-2); }
+.os-book__q {
+  margin: var(--sp-5) 0;
+  padding: var(--sp-2) 0 var(--sp-2) var(--sp-5);
+  border-left: 4px solid var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--fs-lead);
+  line-height: 1.25;
+}
+.os-book__q small {
+  display: block;
+  margin-top: var(--sp-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--muted);
+}
+.os-book__src { font-family: var(--font-mono); font-size: var(--fs-micro); letter-spacing: 0.06em; color: var(--muted); }
+.os-book__parts { display: flex; flex-direction: column; }
+.os-book__parts a {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--sp-4) 0;
+  border-top: 1px solid var(--line);
+  color: var(--ink);
+  font-size: var(--fs-data);
+  text-decoration: none;
+}
+.os-book__parts a:hover { text-decoration: underline; }
+.os-book__parts .d-btn { margin-top: var(--sp-5); }
+
+/* Испытания: дерево категорий слева, досье справа. */
+.os-challenges {
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr);
+  gap: var(--sp-7);
+  align-items: start;
+}
+.os-cat__group,
+.os-cat__item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.os-cat__group {
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-4) 0;
+  border-top: 1px solid var(--line);
+  color: var(--ink-2);
+  font-size: var(--fs-label);
+}
+.os-cat__group.is-open { color: var(--ink); font-weight: 600; }
+.os-cat__count { margin-left: 0; }
+.os-cat__item {
+  padding: var(--sp-3) 0 var(--sp-3) var(--sp-6);
+  color: var(--ink-2);
+  font-size: var(--fs-label);
+}
+.os-cat__item:hover { color: var(--ink); }
+.os-cat__item.active { background: var(--tab); box-shadow: inset 3px 0 0 var(--ink); color: var(--ink); font-weight: 600; }
+.os-challenge { min-width: 0; }
+.os-challenge__acts { display: flex; gap: var(--sp-3); }
+.os-challenge .otherscape-dossier { margin: 0; padding: 0; max-width: none; background: none; }
+.os-challenge__title { margin: 0 0 var(--sp-4); font-family: var(--font-ui); font-size: var(--fs-h2); font-weight: 500; }
+
+@media (max-width: 900px) {
+  .os-book { grid-template-columns: minmax(0, 1fr); }
+  .os-challenges { grid-template-columns: minmax(0, 1fr); }
+}

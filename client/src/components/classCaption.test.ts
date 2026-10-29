@@ -1,6 +1,5 @@
-// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { classCaption } from "./ClassTileGrid";
+import { classCaption } from "./classCaption";
 import type { CompendiumEntry } from "../types";
 
 const cls = (data: Record<string, unknown>) => ({ data } as unknown as CompendiumEntry);
