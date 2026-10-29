@@ -8453,11 +8453,180 @@ button.mention-link:focus-visible {
   color: var(--paper);
 }
 
+/* Граф связей по макету Roll-Graph (рестайл «Д» 2026-10-29): строка охвата и
+   поиска сверху, справа колонка фильтров, в рамке — инструменты вида и
+   карточка выбранного узла. */
+.rg--fill,
+.rg-body--fill {
+  flex: 1;
+  min-height: 0;
+}
+.rg-head { gap: var(--sp-3); }
+.rg-bar .d-select { width: auto; }
+.rg-search {
+  position: relative;
+  flex: 0 1 260px;
+  min-width: 180px;
+}
+.rg-bar__end {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  margin-left: auto;
+}
+.rg-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 250px;
+  gap: var(--sp-5);
+}
+.rg-frame {
+  position: relative;
+  display: flex;
+  min-height: 420px;
+}
+.rg-body--fill .rg-frame { min-height: 420px; }
+.rg-tools {
+  position: absolute;
+  top: var(--sp-4);
+  left: var(--sp-4);
+  right: 280px;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+.rg-zoom {
+  position: absolute;
+  right: var(--sp-4);
+  bottom: var(--sp-4);
+  z-index: 5;
+  display: flex;
+  gap: var(--sp-2);
+}
+.rg-rings {
+  position: absolute;
+  left: var(--sp-4);
+  bottom: var(--sp-4);
+  z-index: 5;
+  padding: var(--sp-1) var(--sp-3);
+  background: var(--sheet);
+  pointer-events: none;
+}
+.rg-card {
+  position: absolute;
+  top: var(--sp-4);
+  right: var(--sp-4);
+  z-index: 6;
+  width: 250px;
+  border: var(--edge-width) solid var(--edge);
+  background: var(--sheet);
+}
+.rg-card__band {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: 28px;
+  padding: 0 var(--sp-2) 0 var(--sp-4);
+  background: var(--surface);
+  color: var(--on-surface);
+  font-family: var(--font-ui);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.rg-card__band .type-glyph { width: 14px; height: 14px; }
+.rg-card__close {
+  margin-left: auto;
+  padding: 0 var(--sp-2);
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: var(--fs-data);
+  cursor: pointer;
+}
+.rg-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
+}
+.rg-card__body b {
+  font-family: var(--font-display);
+  font-size: var(--fs-lead);
+  font-weight: 500;
+  line-height: 1.1;
+}
+.rg-card__acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+.rg-legend {
+  align-self: start;
+  padding: var(--sp-5) var(--sp-6);
+  border: 1px solid var(--line);
+  background: var(--sheet);
+}
+.rg-legend .d-plate-row { margin: var(--sp-6) 0 var(--sp-3); }
+.rg-legend .d-plate-row:first-child { margin-top: 0; }
+.rg-legend__all {
+  padding: 0 var(--sp-2);
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.rg-legend__all:hover { color: var(--ink); }
+.rg-legend__row {
+  display: grid;
+  grid-template-columns: 16px 34px minmax(0, 1fr) auto;
+  gap: var(--sp-4);
+  align-items: center;
+  width: 100%;
+  padding: var(--sp-3) 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+  color: var(--ink);
+  font-size: var(--fs-label);
+  text-align: left;
+  cursor: pointer;
+}
+.rg-legend__row--type { grid-template-columns: 16px 16px minmax(0, 1fr) auto; }
+.rg-legend__row[aria-pressed="false"] { color: var(--muted); }
+.rg-check {
+  width: 13px;
+  height: 13px;
+  border: var(--edge-width) solid var(--edge);
+}
+.rg-legend__row[aria-pressed="true"] .rg-check { background: var(--ink); }
+.rg-legend__glyph { display: inline-flex; }
+.rg-legend__glyph .type-glyph { width: 16px; height: 16px; }
+.rg-legend__dot { width: 10px; height: 10px; }
+.rg-legend__n {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-label);
+  color: var(--muted);
+}
+.relation-graph-focus-panel .d-btn.active {
+  background: var(--surface);
+  color: var(--on-surface);
+}
+@media (max-width: 900px) {
+  .rg-body { grid-template-columns: minmax(0, 1fr); }
+  .rg-tools { right: var(--sp-4); }
+}
+
 .relation-graph-wrap {
   position: relative;
   width: 100%;
-  border: var(--card-border-width, 1px) solid var(--line);
-  background: var(--paper-2);
+  border: 1px solid var(--line);
+  background: var(--sheet);
   overflow: hidden;
   touch-action: none;
   user-select: none;
@@ -8676,7 +8845,7 @@ button.mention-link:focus-visible {
   gap: var(--sp-5);
   padding: var(--sp-2) var(--sp-4);
   border: var(--card-border-width, 1px) solid var(--line);
-  background: var(--paper-2);
+  background: var(--sheet);
 }
 .relation-graph-legend {
   display: flex;

@@ -27,7 +27,6 @@ import {
   TYPE_COLORS,
   TYPE_LABELS,
   TYPE_ROUTES,
-  TYPE_SHAPES,
   canvasSizeFor,
   simulateGraph,
   GRAPH_VIEW_HIDDEN_TYPES,
@@ -48,6 +47,9 @@ import {
 } from "../graphTypes";
 import { glyphName, onGlyphLoad, typeTint } from "../typeGlyphs";
 import { TypeGlyph } from "./TypeGlyph";
+import { pickTextOn } from "../themes";
+import { plural } from "../sceneKinds";
+import { ENTITY_TYPE_SINGULAR } from "../entityTypes";
 import { concentricLayout, type ConcentricLayout } from "../concentricGraph";
 import {
   drawGraph,
@@ -124,6 +126,10 @@ interface Props {
   layered?: boolean;
   /** Узел из «Показать в графе»: раскрыть его приключение и выделить. */
   focusKey?: string | null;
+  /** Последние строки колонки «Типы сущностей» — фильтры страницы («Точки»). */
+  typesExtra?: React.ReactNode;
+  /** Граф забирает остаток окна (страница «Связи»), а не высоту `height`. */
+  fill?: boolean;
 }
 
 const SIZE_MODE_STORE_PREFIX = "rpgManagerGraphSizeMode:";
@@ -759,7 +765,7 @@ function GraphCanvas({
 
 // ─── Outer component — React state for toolbar/legend ────────────
 
-export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layoutKey, scopeBar, edgeKinds, activeKinds: activeKindsProp, onActiveKindsChange, defaultHiddenTypes = GRAPH_VIEW_HIDDEN_TYPES.world, view = "world", layered: layeredMode = false, focusKey = null }: Props) {
+export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layoutKey, scopeBar, edgeKinds, activeKinds: activeKindsProp, onActiveKindsChange, defaultHiddenTypes = GRAPH_VIEW_HIDDEN_TYPES.world, view = "world", layered: layeredMode = false, focusKey = null, typesExtra, fill = false }: Props) {
   const navigate = useNavigate();
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -801,8 +807,6 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(() => new Set(defaultHiddenTypes));
   const [highlightIdx, setHighlightIdx] = useState(-1);
   const [isolatedOpen, setIsolatedOpen] = useState(false);
-  const [edgeKindsOpen, setEdgeKindsOpen] = useState(false);
-  const [entityTypesOpen, setEntityTypesOpen] = useState(false);
 
   const graphWrapRef = useRef<HTMLDivElement>(null);
 
@@ -1079,14 +1083,25 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   if (!data) return <p className="muted">Загрузка…</p>;
   if (!pipeline) return <p className="muted">Загрузка…</p>;
 
-  const _graphStats = `${visibleNodesList.length} узлов · ${visibleEdgesList.length} связей${isolated.length > 0 ? ` · ${isolated.length} без связей` : ""}`;
+  const graphStats = `${visibleNodesList.length} ${plural(visibleNodesList.length, "узел", "узла", "узлов")} · ${visibleEdgesList.length} ${plural(visibleEdgesList.length, "связь", "связи", "связей")}`;
 
+  const typeOrder = ["character", "being", "artifact", "location", "community", "compendium_entry", "mastering", "scene", "adventure", "session", "campaign", "setting"];
+  const typesInData = new Map<string, number>();
+  for (const n of data.nodes) typesInData.set(n.type, (typesInData.get(n.type) ?? 0) + 1);
+  const orderedTypes = typeOrder.filter((t) => typesInData.has(t));
+  for (const t of typesInData.keys()) if (!orderedTypes.includes(t)) orderedTypes.push(t);
+
+  // Строка над графом — что показываем (Q5, Q13 рестайла 2026-10-29): охват,
+  // поиск, счётчик и раскладка. Типы — в колонке справа.
   const toolbar = (
-    <div className="graph-toolbar">
-      <div className="graph-toolbar-row">
-        <div className="row" style={{ position: "relative" }}>
+    <div className="stack rg-head">
+      <div className="d-bar rg-bar">
+        {scopeBar}
+        <div className="d-field rg-search">
+          <NavIcon name="search" />
           <input
             placeholder={pathFrom && !pathTo ? "…и до кого прокладывать путь" : "Найти сущность…"}
+            aria-label="Найти сущность"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
@@ -1121,80 +1136,42 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
             </div>
           )}
         </div>
-      </div>
-      {scopeBar && (<><span className="graph-toolbar-sep" /><div className="graph-toolbar-row">{scopeBar}</div></>)}
-      {isolated.length > 0 && (
-        <>
-          <span className="graph-toolbar-sep" />
-          <div className="graph-toolbar-row">
-            <button type="button" className="graph-tb-btn"
-              onClick={() => setIsolatedOpen(true)}
-              title="Сущности без связей в текущем срезе">
+        <span className="d-end rg-bar__end">
+          <span className="d-mono">{graphStats}</span>
+          {isolated.length > 0 && (
+            <button type="button" className="d-btn d-btn--sm" onClick={() => setIsolatedOpen(true)} title="Сущности без связей в текущем срезе">
               Без связей ({isolated.length})
             </button>
-          </div>
-        </>
-      )}
+          )}
+          {view === "world" && !layeredMode && (
+            <span className="d-seg" role="group" aria-label="Раскладка графа миров">
+              <button type="button" className={worldLayoutMode === "free" ? "active" : ""} aria-pressed={worldLayoutMode === "free"} onClick={() => changeWorldLayoutMode("free")}>Свободная</button>
+              <button type="button" className={worldLayoutMode === "concentric" ? "active" : ""} aria-pressed={worldLayoutMode === "concentric"} onClick={() => changeWorldLayoutMode("concentric")}>Кольца по видам</button>
+            </span>
+          )}
+        </span>
+      </div>
       {(selected.size > 0 || hiddenKeys.size > 0) && (
         <div className="row relation-graph-focus-panel">
           {selected.size > 0 && (
             <>
               <strong>Выделено: {selected.size}</strong>
-              <button type="button" onClick={() => setResizeTarget({ title: `Выделено: ${selected.size}`, keys: [...selected] })}>Изменить размер</button>
-              <button type="button" onClick={hideSelected} title="Убрать с холста — сами сущности не меняются">Скрыть с холста</button>
-              <button type="button" onClick={() => setSelected(new Set())}>Снять выделение</button>
+              <button type="button" className="d-btn d-btn--sm" onClick={() => setResizeTarget({ title: `Выделено: ${selected.size}`, keys: [...selected] })}>Изменить размер</button>
+              <button type="button" className="d-btn d-btn--sm" onClick={hideSelected} title="Убрать с холста — сами сущности не меняются">Скрыть с холста</button>
+              <button type="button" className="d-btn d-btn--sm" onClick={() => setSelected(new Set())}>Снять выделение</button>
             </>
           )}
           {hiddenKeys.size > 0 && (
-            <button type="button" onClick={() => setHiddenKeys(new Set())}>Вернуть скрытые ({hiddenKeys.size})</button>
+            <button type="button" className="d-btn d-btn--sm" onClick={() => setHiddenKeys(new Set())}>Вернуть скрытые ({hiddenKeys.size})</button>
           )}
         </div>
       )}
-      {focusedKey && (
-        <div className="row relation-graph-focus-panel">
-          <span className={`entity-type-chip ${nodesByKey.get(focusedKey)?.type ?? ""}`}>
-            {TYPE_LABELS[nodesByKey.get(focusedKey)?.type ?? ""] ?? ""}
-          </span>
-          <strong>{nodesByKey.get(focusedKey)?.title ?? "?"}</strong>
-          {TYPE_ROUTES[nodesByKey.get(focusedKey)?.type ?? ""] && (
-            <Link to={`${TYPE_ROUTES[nodesByKey.get(focusedKey)?.type ?? ""]}/${nodesByKey.get(focusedKey)?.id}`}>Открыть страницу →</Link>
-          )}
-          {(!isolation || isolation.key !== focusedKey) ? (
-            <button type="button" onClick={() => setIsolation({ key: focusedKey, depth: 1 })} title="Изолировать узел и связи">+ шаг</button>
-          ) : (
-            <>
-              {isolation.depth > 1 && (
-                <button type="button" onClick={() => setIsolation((prev) => prev && { ...prev, depth: prev.depth - 1 })}>− шаг</button>
-              )}
-              <button type="button" disabled={(pipeline?.grouped ? buildIsolation(pipeline.grouped.nodes, pipeline.grouped.edges, focusedKey, isolation.depth) : null)?.nextStepCount === 0}
-                onClick={() => setIsolation((prev) => prev && { ...prev, depth: prev.depth + 1 })}
-                title="Показать связи следующего порядка">+ шаг</button>
-            </>
-          )}
-          <button type="button" onClick={() => { setPathFrom(focusedKey); setPathTo(null); setQuery(""); }} title="Проложить цепочку">Путь отсюда…</button>
-          <button type="button" onClick={() => setFocusedKey(null)}>Снять фокус</button>
-        </div>
-      )}
-      {isolationView && (
-        <div className="row relation-graph-focus-panel">
-          <button type="button" onClick={leaveIsolation}>← Вернуться ко всему графу</button>
-          <strong>{nodesByKey.get(isolation!.key)?.title ?? "?"}</strong>
-          <span className="muted">шагов: {isolation!.depth}, узлов вокруг: {isolationView.nodes.length - 1}</span>
-          <button type="button" disabled={isolationView.nextStepCount === 0}
-            onClick={() => setIsolation((prev) => prev && { ...prev, depth: prev.depth + 1 })}
-            title={isolationView.nextStepCount === 0 ? "Дальше связей нет" : "Показать связи следующего порядка"}>
-            Добавить шаг {isolationView.nextStepCount > 0 && `(+${isolationView.nextStepCount})`}
-          </button>
-          {isolation!.depth > 1 && (
-            <button type="button" onClick={() => setIsolation((prev) => prev && { ...prev, depth: prev.depth - 1 })}>Убрать шаг</button>
-          )}
-        </div>
-      )}
+      {/* Путь — про два узла, поэтому строкой над графом, а не в карточке (Q6). */}
       {pathFrom && (
         <div className="row relation-graph-focus-panel">
           <strong>Путь:</strong>
           <span>{nodesByKey.get(pathFrom)?.title ?? "?"}</span>
-          {!pathTo && <span className="muted">выберите вторую сущность в поиске слева</span>}
+          {!pathTo && <span className="muted">выберите вторую сущность в поиске выше</span>}
           {pathTo && !path && <span className="muted">связи между ними в этом срезе нет</span>}
           {path && (
             <span className="relation-graph-path-chain">
@@ -1203,19 +1180,122 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
               ))}
             </span>
           )}
-          <button type="button" onClick={() => { setPathFrom(null); setPathTo(null); }}>Сбросить путь</button>
+          <button type="button" className="d-btn d-btn--sm" onClick={() => { setPathFrom(null); setPathTo(null); }}>Сбросить путь</button>
         </div>
       )}
     </div>
   );
 
-  const graphBody = data.nodes.length === 0 ? (
+  // Колонка фильтров (Q5): галочки на виду вместо двух выпадашек.
+  const legend = (
+    <aside className="rg-legend" aria-label="Фильтры графа">
+      <div className="d-plate-row">
+        <h2 className="d-plate">Типы связей</h2>
+        <span className="d-end">
+          <button type="button" className="rg-legend__all" onClick={() => setActiveKinds(new Set(visibleEdgeKinds.map((k) => k.key)))}>Все</button>
+          <button type="button" className="rg-legend__all" onClick={() => setActiveKinds(new Set())}>Нет</button>
+        </span>
+      </div>
+      {visibleEdgeKinds.map((k) => {
+        const on = effectiveActiveKinds.has(k.key);
+        return (
+          <button key={k.key} type="button" className="rg-legend__row" aria-pressed={on}
+            onClick={() => {
+              const next = new Set(effectiveActiveKinds);
+              if (next.has(k.key)) next.delete(k.key); else next.add(k.key);
+              setActiveKinds(next);
+            }}>
+            <span className="rg-check" aria-hidden="true" />
+            <svg width="34" height="8" aria-hidden="true">
+              <line x1="0" y1="4" x2="34" y2="4" stroke="currentColor" strokeWidth={Math.max(1.5, k.width)} strokeDasharray={k.dash || "none"} />
+            </svg>
+            <span>{k.label}</span>
+            <span className="rg-legend__n">{edgeKindCounts.get(k.key) ?? 0}</span>
+          </button>
+        );
+      })}
+      <div className="d-plate-row">
+        <h2 className="d-plate">Типы сущностей</h2>
+        <span className="d-end">
+          <button type="button" className="rg-legend__all" onClick={() => setHiddenTypes(new Set())}>Все</button>
+          <button type="button" className="rg-legend__all" onClick={() => setHiddenTypes(new Set(typesInData.keys()))}>Нет</button>
+        </span>
+      </div>
+      {orderedTypes.map((type) => {
+        const on = !hiddenTypes.has(type);
+        const t = typeTint(type);
+        return (
+          <button key={type} type="button" className="rg-legend__row rg-legend__row--type" aria-pressed={on}
+            onClick={() => setHiddenTypes((prev) => { const next = new Set(prev); if (next.has(type)) next.delete(type); else next.add(type); return next; })}>
+            <span className="rg-check" aria-hidden="true" />
+            <span className="rg-legend__glyph" style={{ color: t.kind === "color" ? t.color : "var(--ink)" }}>
+              {glyphName(type) ? <TypeGlyph type={type} /> : <span className="rg-legend__dot" style={{ background: TYPE_COLORS[type] ?? "var(--muted)" }} />}
+            </span>
+            <span>{TYPE_LABELS[type] ?? type}</span>
+            <span className="rg-legend__n">{typesInData.get(type) ?? 0}</span>
+          </button>
+        );
+      })}
+      {typesExtra}
+    </aside>
+  );
+
+  // Карточка выбранного узла (Q6). В изоляции она держится за центр изоляции,
+  // даже когда выбор сняли, — иначе из «только соседей» не выйти.
+  const cardKey = focusedKey ?? isolation?.key ?? null;
+  const cardNode = cardKey ? nodesByKey.get(cardKey) : undefined;
+  const cardIsolated = !!isolation && isolation.key === cardKey;
+  const cardLinks = cardKey ? data.edges.filter((e) => e.from === cardKey || e.to === cardKey).length : 0;
+  const cardTint = cardNode ? typeTint(cardNode.type) : null;
+  const cardRoute = cardNode ? TYPE_ROUTES[cardNode.type] : undefined;
+  const card = cardNode && cardKey && (
+    <section className="rg-card" aria-label={`Выбрано: ${cardNode.title}`}>
+      <div
+        className="rg-card__band"
+        style={cardTint?.kind === "color" ? { background: cardTint.color, color: pickTextOn(cardTint.color) } : undefined}
+      >
+        <TypeGlyph type={cardNode.type} />
+        <span>{ENTITY_TYPE_SINGULAR[cardNode.type] ?? TYPE_LABELS[cardNode.type] ?? cardNode.type} · {cardLinks} {plural(cardLinks, "связь", "связи", "связей")}</span>
+        <button type="button" className="rg-card__close" aria-label="Снять выбор"
+          onClick={() => { if (cardIsolated) leaveIsolation(); setFocusedKey(null); }}>×</button>
+      </div>
+      <div className="rg-card__body">
+        <b>{cardNode.title}</b>
+        {cardIsolated && isolationView && (
+          <span className="d-mono">шагов {isolation!.depth} · вокруг {isolationView.nodes.length - 1}</span>
+        )}
+        <div className="rg-card__acts">
+          {cardRoute && <Link className="d-btn d-btn--sm" to={`${cardRoute}/${cardNode.id}`}>Профиль</Link>}
+          {cardIsolated ? (
+            <>
+              <button type="button" className="d-btn d-btn--sm" disabled={isolation!.depth <= 1}
+                onClick={() => setIsolation((prev) => prev && { ...prev, depth: prev.depth - 1 })}>Шаг −</button>
+              <button type="button" className="d-btn d-btn--sm" disabled={isolationView?.nextStepCount === 0}
+                title={isolationView?.nextStepCount === 0 ? "Дальше связей нет" : "Показать связи следующего порядка"}
+                onClick={() => setIsolation((prev) => prev && { ...prev, depth: prev.depth + 1 })}>
+                Шаг +{isolationView && isolationView.nextStepCount > 0 ? ` (${isolationView.nextStepCount})` : ""}
+              </button>
+              <button type="button" className="d-btn d-btn--sm" onClick={leaveIsolation}>Весь граф</button>
+            </>
+          ) : (
+            <>
+              <button type="button" className="d-btn d-btn--sm" onClick={() => setIsolation({ key: cardKey, depth: 1 })} title="Показать только узел и его соседей">Только соседи</button>
+              {isolation && <button type="button" className="d-btn d-btn--sm" onClick={leaveIsolation}>Весь граф</button>}
+            </>
+          )}
+          <button type="button" className="d-btn d-btn--sm" onClick={() => { setPathFrom(cardKey); setPathTo(null); setQuery(""); }} title="Проложить цепочку">Путь отсюда…</button>
+        </div>
+      </div>
+    </section>
+  );
+
+  const graphFrame = data.nodes.length === 0 ? (
     <EmptyState title="Схема ещё не проявилась"
       hint={emptyMessage ?? "Добавьте связи между существами, фракциями и местами — граф проявится сам."}
-      action={<Link to="/settings" className="primary" style={{ display: "inline-block", padding: "6px 12px", textDecoration: "none" }}>К сеттингам</Link>}
+      action={<Link to="/settings" className="d-btn">К сеттингам</Link>}
     />
   ) : (
-    <div ref={graphWrapRef} style={{ flex: 1, minHeight: fullscreen ? 0 : height, display: "flex", position: "relative" }}>
+    <div ref={graphWrapRef} className="rg-frame" style={{ minHeight: fullscreen || fill ? 0 : height }}>
       <GraphCanvas
         key={ringsMode ? "concentric" : "standard"}
         width={canvasSize.width}
@@ -1248,156 +1328,42 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
         clipTitles={view === "world"}
         focusRequest={focusRequest}
       />
-      {/* Stats — top right, below fullscreen button */}
-      <span style={{ position: "absolute", top: 36, right: 8, zIndex: 5, fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--muted)", pointerEvents: "none" }}>
-        {_graphStats}
-      </span>
-      {/* Canvas overlay controls */}
-      <div style={{ position: "absolute", top: 8, left: 8, right: 130, display: "flex", flexWrap: "wrap", gap: 8, zIndex: 5 }}>
-        {view === "world" && !layeredMode && (
-          <select className="graph-tb-btn" aria-label="Раскладка графа миров"
-            value={worldLayoutMode} onChange={e => changeWorldLayoutMode(e.target.value as WorldLayoutMode)}>
-            <option value="free">Свободная раскладка</option>
-            <option value="concentric">Кольца по видам</option>
-          </select>
-        )}
-        <div style={{ position: "relative" }}>
-          <button type="button" className={`graph-tb-btn${edgeKindsOpen ? " active" : ""}`}
-            onClick={() => { setEdgeKindsOpen((v) => !v); setEntityTypesOpen(false); }}>
-            Типы связей
-          </button>
-          {edgeKindsOpen && (
-            <div className="graph-float-panel" style={{ position: "absolute", top: "100%", left: 0, marginTop: 6, zIndex: 20, background: "var(--paper)", border: "1px solid var(--line)", padding: "8px 10px", display: "flex", flexDirection: "column", gap: 6, minWidth: 220, maxWidth: 260 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontFamily: "var(--font-ui)", fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--muted)" }}>Типы связей</span>
-                <button type="button" className="graph-tb-btn" style={{ fontSize: "9px", padding: "1px 5px" }}
-                  onClick={() => setEdgeKindsOpen(false)}>×</button>
-              </div>
-              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                <button type="button" className="graph-tb-btn" style={{ fontSize: "9px", padding: "2px 6px" }}
-                  onClick={() => {
-                    const next = new Set(visibleEdgeKinds.map((k) => k.key));
-                    setActiveKinds(next);
-                  }}>Все</button>
-                <button type="button" className="graph-tb-btn" style={{ fontSize: "9px", padding: "2px 6px" }}
-                  onClick={() => setActiveKinds(new Set())}>Нет</button>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                {visibleEdgeKinds.map((k) => {
-                  const on = effectiveActiveKinds.has(k.key);
-                  const count = edgeKindCounts.get(k.key) ?? 0;
-                  const dash = k.dash;
-                  return (
-                    <button key={k.key} type="button"
-                      className={`graph-tb-btn${on ? " active" : ""}`}
-                      style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "10px", padding: "3px 6px", opacity: on ? 1 : 0.45, textAlign: "left" }}
-                      onClick={() => {
-                        const next = new Set(effectiveActiveKinds);
-                        if (next.has(k.key)) next.delete(k.key); else next.add(k.key);
-                        setActiveKinds(next);
-                      }}>
-                      <svg width="20" height="2" style={{ flexShrink: 0 }}>
-                        <line x1="0" y1="1" x2="20" y2="1" stroke="var(--ink)" strokeWidth={k.width}
-                          strokeDasharray={dash || "none"} />
-                      </svg>
-                      <span style={{ flex: 1 }}>{k.label}</span>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: "9px", opacity: 0.6 }}>{count}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-        <div style={{ position: "relative" }}>
-          <button type="button" className={`graph-tb-btn${entityTypesOpen ? " active" : ""}`}
-            onClick={() => { setEntityTypesOpen((v) => !v); setEdgeKindsOpen(false); }}>
-            Типы сущностей
-          </button>
-          {entityTypesOpen && (() => {
-            const typesInData = new Map<string, number>();
-            for (const n of data?.nodes ?? []) {
-              typesInData.set(n.type, (typesInData.get(n.type) ?? 0) + 1);
-            }
-            const ORDER = ["character", "being", "artifact", "location", "community", "compendium_entry", "mastering", "scene", "adventure", "session", "campaign", "setting"];
-            const ordered = ORDER.filter((t) => typesInData.has(t));
-            for (const t of typesInData.keys()) if (!ordered.includes(t)) ordered.push(t);
-            return (
-            <div className="graph-float-panel" style={{ position: "absolute", top: "100%", left: 0, marginTop: 6, zIndex: 20, background: "var(--paper)", border: "1px solid var(--line)", padding: "8px 10px", display: "flex", flexDirection: "column", gap: 6, minWidth: 220, maxWidth: 260 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <span style={{ fontFamily: "var(--font-ui)", fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--muted)" }}>Типы сущностей</span>
-                  <button type="button" className="graph-tb-btn" style={{ fontSize: "9px", padding: "1px 5px" }}
-                    onClick={() => setEntityTypesOpen(false)}>×</button>
-                </div>
-                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                  <button type="button" className="graph-tb-btn" style={{ fontSize: "9px", padding: "2px 6px" }}
-                    onClick={() => setHiddenTypes(new Set())}>Все</button>
-                  <button type="button" className="graph-tb-btn" style={{ fontSize: "9px", padding: "2px 6px" }}
-                    onClick={() => setHiddenTypes(new Set(typesInData.keys()))}>Нет</button>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                  {ordered.map((type) => {
-                    const hidden = hiddenTypes.has(type);
-                    const count = typesInData.get(type) ?? 0;
-                    const shape = TYPE_SHAPES[type] ?? "rect";
-                    const fill = TYPE_COLORS[type] ?? "#888";
-                    return (
-                      <button key={type} type="button"
-                        className={`graph-tb-btn`}
-                        style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "10px", padding: "3px 6px", opacity: hidden ? 0.4 : 1, textAlign: "left" }}
-                        onClick={() => setHiddenTypes((prev) => { const next = new Set(prev); if (next.has(type)) next.delete(type); else next.add(type); return next; })}>
-                        {(() => {
-                          if (glyphName(type)) {
-                            const t = typeTint(type);
-                            return <span style={{ display: "inline-flex", color: t.kind === "color" ? t.color : "var(--ink)" }}><TypeGlyph type={type} /></span>;
-                          }
-                          if (shape === "diamond") return <span style={{ display: "inline-block", width: 7, height: 7, background: fill, flexShrink: 0, border: "1px solid var(--line)", transform: "rotate(45deg)" }} />;
-                          if (shape === "triangle") return <span style={{ display: "inline-block", width: 0, height: 0, flexShrink: 0, borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderBottom: `7px solid ${fill}` }} />;
-                          if (shape === "triangleInverted") return <span style={{ display: "inline-block", width: 0, height: 0, flexShrink: 0, borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderTop: `7px solid ${fill}` }} />;
-                          if (shape === "triangleRight") return <span style={{ display: "inline-block", width: 0, height: 0, flexShrink: 0, borderTop: "4px solid transparent", borderBottom: "4px solid transparent", borderLeft: `7px solid ${fill}` }} />;
-                          if (shape === "star") return <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 10, height: 10, flexShrink: 0, color: fill, fontSize: "10px", lineHeight: 1 }}>★</span>;
-                          return <span style={{ display: "inline-block", width: 7, height: 7, background: fill, flexShrink: 0, border: "1px solid var(--line)" }} />;
-                        })()}
-                        <span style={{ flex: 1 }}>{TYPE_LABELS[type] ?? type}</span>
-                        <span style={{ fontFamily: "var(--font-mono)", fontSize: "9px", opacity: 0.6 }}>{count}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })()}
-        </div>
-        <button type="button" className="graph-tb-btn" onClick={toggleSizeMode}
+      {/* В рамке — как показываем (решение 2026-09-30, Q5 рестайла). */}
+      <div className="rg-tools">
+        <button type="button" className="d-btn d-btn--sm" onClick={toggleSizeMode}
           title="Размер узлов: по типу (сюжет крупнее мира) или по числу связей">
           Размер: {sizeMode === "type" ? "тип" : "связи"}
         </button>
         {groupedFoldedCount > 0 && (
-          <button type="button" className="graph-tb-btn" onClick={() => setExpandedGroups((prev) => new Set([...prev, ...(grouped?.folded.keys() ?? [])]))} title="Развернуть все свёрнутые группы">
+          <button type="button" className="d-btn d-btn--sm" onClick={() => setExpandedGroups((prev) => new Set([...prev, ...(grouped?.folded.keys() ?? [])]))} title="Развернуть все свёрнутые группы">
             Развернуть всё ({groupedFoldedCount})
           </button>
         )}
-        <button type="button" className="graph-tb-btn" onClick={saveLayout} title="Сохранить раскладку: закрепить всё, что сейчас на экране">Закрепить</button>
-        <button type="button" className="graph-tb-btn" onClick={resetLayout} title="Сбросить ручную раскладку">Сбросить</button>
+        <button type="button" className="d-btn d-btn--sm" onClick={saveLayout} title="Сохранить раскладку: закрепить всё, что сейчас на экране">Закрепить</button>
+        <button type="button" className="d-btn d-btn--sm" onClick={resetLayout} title="Сбросить ручную раскладку">Сбросить</button>
       </div>
+      {card}
       {concentric && concentric.rings.length > 0 && (
-        <div style={{ position: "absolute", bottom: 8, left: 8, right: 90, zIndex: 5, pointerEvents: "none", fontSize: "11px", color: "var(--muted)" }}>
-          <span style={{ background: "var(--paper)", padding: "3px 6px" }}>
-            От центра: {[...new Set(concentric.rings.map(r => r.type))].map(type => TYPE_LABELS[type] ?? type).join(" → ")}
-          </span>
-        </div>
+        <span className="rg-rings d-mono">
+          От центра: {[...new Set(concentric.rings.map(r => r.type))].map(type => TYPE_LABELS[type] ?? type).join(" → ")}
+        </span>
       )}
-      {/* Масштаб — в углу холста, как на картах. */}
-      <div style={{ position: "absolute", bottom: 8, right: 8, display: "flex", gap: 4, zIndex: 5 }}>
-        {view === "world" && <button type="button" className="graph-tb-btn" onClick={() => dispatchCommand("resetView")} title="Показать весь граф">Обзор</button>}
-        <button type="button" className="graph-tb-btn" onClick={() => dispatchCommand("zoomBy", { factor: 1 / 1.3 })} title="Отдалить"><NavIcon name="minus" /></button>
-        <button type="button" className="graph-tb-btn" onClick={() => dispatchCommand("zoomBy", { factor: 1.3 })} title="Приблизить"><NavIcon name="plus" /></button>
+      {/* Масштаб — в углу холста, как на картах; рядом «Весь экран» (Q13). */}
+      <div className="rg-zoom">
+        {view === "world" && <button type="button" className="d-btn d-btn--sm" onClick={() => dispatchCommand("resetView")} title="Показать весь граф">Обзор</button>}
+        <button type="button" className="d-btn d-btn--sm" onClick={() => dispatchCommand("zoomBy", { factor: 1 / 1.3 })} title="Отдалить"><NavIcon name="minus" /></button>
+        <button type="button" className="d-btn d-btn--sm" onClick={() => dispatchCommand("zoomBy", { factor: 1.3 })} title="Приблизить"><NavIcon name="plus" /></button>
+        <button type="button" className="d-btn d-btn--sm" onClick={() => setFullscreen((v) => !v)} title={fullscreen ? "Закрыть (Esc)" : "На весь экран"}>
+          {fullscreen ? "Свернуть" : <><NavIcon name="fullscreen" /> Весь экран</>}
+        </button>
       </div>
-      <button type="button" className="graph-tb-btn"
-        style={{ position: "absolute", top: 8, right: 8, zIndex: 5 }}
-        onClick={() => setFullscreen((v) => !v)} title={fullscreen ? "Закрыть (Esc)" : "На весь экран"}>
-        {fullscreen ? "Свернуть" : <><NavIcon name="fullscreen" /> Весь экран</>}
-      </button>
+    </div>
+  );
+
+  const graphBody = (
+    <div className={`rg-body${fill || fullscreen ? " rg-body--fill" : ""}`}>
+      {graphFrame}
+      {legend}
     </div>
   );
 
@@ -1472,10 +1438,10 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   if (fullscreen) {
     return createPortal(
       <div className="relation-graph-fullscreen">
-        <div className="relation-graph-fullscreen-bar" style={{ display: "flex", flexDirection: "column", gap: 8, padding: "8px 12px", background: "var(--surface)", color: "var(--on-surface)", borderBottom: "1px solid var(--line)" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-            <span style={{ fontFamily: "var(--font-ui)", fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase" }}>Граф связей — весь экран</span>
-            <button type="button" className="graph-tb-btn" onClick={() => setFullscreen(false)} style={{ background: "var(--paper)", color: "var(--ink)" }}>× Закрыть (Esc)</button>
+        <div className="relation-graph-fullscreen-bar">
+          <div className="d-plate-row">
+            <span className="d-plate">Граф связей — весь экран</span>
+            <span className="d-end"><button type="button" className="d-btn d-btn--sm" onClick={() => setFullscreen(false)}>× Закрыть (Esc)</button></span>
           </div>
           {toolbar}
         </div>
@@ -1487,7 +1453,7 @@ export function RelationGraph({ data, height = GRAPH_HEIGHT, emptyMessage, layou
   }
 
   return (
-    <div className="stack" style={{ position: "relative" }}>
+    <div className={`stack rg${fill ? " rg--fill" : ""}`}>
       {toolbar}
       {graphBody}
       {overlays}

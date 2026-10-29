@@ -39,6 +39,9 @@ function mount(layered = false, graphData = data) {
   const canvas = result.container.querySelector("canvas")!;
   return { ...result, wrap: canvas.parentElement!, canvas };
 }
+function setMode(view: ReturnType<typeof render>, mode: "free" | "concentric") {
+  fireEvent.click(view.getByRole("button", { name: mode === "free" ? "Свободная" : "Кольца по видам" }));
+}
 function flushFrame() {
   act(() => {
     const pending = [...frames.values()]; frames.clear();
@@ -178,10 +181,9 @@ describe("перетаскивание в графе связей", () => {
     localStorage.setItem(key, JSON.stringify(free));
     localStorage.setItem(key + ":concentric", JSON.stringify(ring));
     const view = mount();
-    const mode = view.getByRole("combobox", { name: "Раскладка графа миров" });
     expect((mocks.draw.mock.lastCall![0] as DrawInput).positions.get("being:1")).toMatchObject(free["being:1"]);
     mocks.simulate.mockClear();
-    fireEvent.change(mode, { target: { value: "concentric" } });
+    setMode(view, "concentric");
     expect(mocks.simulate).not.toHaveBeenCalled();
     expect((mocks.draw.mock.lastCall![0] as DrawInput).concentric?.rings).toHaveLength(1);
     expect((mocks.draw.mock.lastCall![0] as DrawInput).positions.get("being:1")).toMatchObject(ring["being:1"]);
@@ -189,9 +191,9 @@ describe("перетаскивание в графе связей", () => {
     fireEvent.click(view.getByRole("button", { name: /^Сбросить$/ }));
     expect(localStorage.getItem(key + ":concentric")).toBeNull();
     expect(JSON.parse(localStorage.getItem(key)!)).toEqual(free);
-    fireEvent.change(mode, { target: { value: "free" } });
+    setMode(view, "free");
     expect((mocks.draw.mock.lastCall![0] as DrawInput).positions.get("being:1")).toMatchObject(free["being:1"]);
-    fireEvent.change(mode, { target: { value: "concentric" } });
+    setMode(view, "concentric");
     view.unmount(); mocks.simulate.mockClear(); mount();
     expect(mocks.simulate).not.toHaveBeenCalled();
     expect((mocks.draw.mock.lastCall![0] as DrawInput).concentric?.rings).toHaveLength(1);
@@ -199,8 +201,7 @@ describe("перетаскивание в графе связей", () => {
 
   it("сохраняет перенос на кольцах и возвращает его после переключения режима", () => {
     const view = mount();
-    const mode = view.getByRole("combobox", { name: "Раскладка графа миров" });
-    fireEvent.change(mode, { target: { value: "concentric" } });
+    setMode(view, "concentric");
     const wrap = view.container.querySelector("canvas")!.parentElement!;
     const before = mocks.draw.mock.lastCall![0] as DrawInput;
     const pos = before.positions.get("being:1")!, s = before.zoom * before.fitScale;
@@ -209,8 +210,8 @@ describe("перетаскивание в графе связей", () => {
     const stored = JSON.parse(localStorage.getItem(key + ":concentric")!)["being:1"];
     expect(stored.x).toBeCloseTo(pos.x + 40 / s); expect(stored.y).toBeCloseTo(pos.y + 20 / s);
     expect(localStorage.getItem(key)).toBeNull();
-    fireEvent.change(mode, { target: { value: "free" } });
-    fireEvent.change(mode, { target: { value: "concentric" } });
+    setMode(view, "free");
+    setMode(view, "concentric");
     expect((mocks.draw.mock.lastCall![0] as DrawInput).positions.get("being:1")).toMatchObject(stored);
   });
 
@@ -221,7 +222,6 @@ describe("перетаскивание в графе связей", () => {
       nodes: [...data.nodes, { key: "location:1", type: "location", id: 1, title: "Убежище" }],
       edges: [...data.edges, { from: "being:2", to: "location:1", kind: "habitat", tone: null, section: null }],
     });
-    fireEvent.click(view.getByRole("button", { name: "Типы сущностей" }));
     fireEvent.click(view.getByRole("button", { name: /Локации/ }));
     const before = mocks.draw.mock.lastCall![0] as DrawInput;
     expect(before.visibleNodes).toHaveLength(2);
@@ -230,7 +230,7 @@ describe("перетаскивание в графе связей", () => {
     const wrap = view.container.querySelector("canvas")!.parentElement!;
     fireEvent.doubleClick(wrap, { clientX: pos.x * s + before.panX, clientY: pos.y * s + before.panY });
     const isolated = mocks.draw.mock.lastCall![0] as DrawInput;
-    expect(view.getByRole("button", { name: /Вернуться ко всему графу/ })).toBeTruthy();
+    expect(view.getByRole("button", { name: "Весь граф" })).toBeTruthy();
     expect(isolated.focusedKey).toBe("being:1");
     expect(isolated.concentric).not.toBeNull();
     expect(mocks.simulate).not.toHaveBeenCalled();
@@ -260,7 +260,7 @@ describe("перетаскивание в графе связей", () => {
   it("оставляет граф приключений в ярусах при сохранённом выборе колец для миров", () => {
     localStorage.setItem("rpgManagerGraphLayoutMode:world", "concentric");
     const view = mount(true);
-    expect(view.queryByRole("combobox", { name: "Раскладка графа миров" })).toBeNull();
+    expect(view.queryByRole("group", { name: "Раскладка графа миров" })).toBeNull();
     const input = mocks.draw.mock.lastCall![0] as DrawInput;
     expect(input.concentric).toBeNull(); expect(input.bands).not.toBeNull();
   });
@@ -270,7 +270,7 @@ describe("перетаскивание в графе связей", () => {
     const free = mocks.draw.mock.lastCall![0] as DrawInput;
     const scale = autoNodeScales(data.nodes, data.edges, "links").get("being:1")! * 2;
     expect(free.nodeScales.get("being:1")).toBe(scale);
-    fireEvent.change(view.getByRole("combobox", { name: "Раскладка графа миров" }), { target: { value: "concentric" } });
+    setMode(view, "concentric");
     const rings = mocks.draw.mock.lastCall![0] as DrawInput;
     expect(rings.nodeScales.get("being:1")).toBe(scale);
     expect(rings.zoom * rings.fitScale).toBeCloseTo(1.2);

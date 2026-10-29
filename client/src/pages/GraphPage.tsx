@@ -79,7 +79,7 @@ export function GraphPage() {
   const viewTitle = view === "adventures" ? "Связи приключений" : "Связи миров";
 
   return (
-    <div className="stack" style={{ position: "relative" }}>
+    <div className="stack page-fill" style={{ position: "relative" }}>
       <SectionBackground />
       <SectionHeading section="graph">{viewTitle}</SectionHeading>
       {scopeError && (
@@ -104,7 +104,7 @@ export function GraphPage() {
             <button
               key={d}
               type="button"
-              className={depth === d ? "active-sort" : ""}
+              className={`d-btn d-btn--sm${depth === d ? " active" : ""}`}
               onClick={() =>
                 setSearchParams((prev) => {
                   const next = new URLSearchParams(prev);
@@ -119,6 +119,7 @@ export function GraphPage() {
           ))}
           <button
             type="button"
+            className="d-btn d-btn--sm"
             onClick={() =>
               setSearchParams((prev) => {
                 const next = new URLSearchParams(prev);
@@ -144,9 +145,20 @@ export function GraphPage() {
         activeKinds={activeKinds}
         onActiveKindsChange={setActiveKinds}
         edgeKinds={GRAPH_VIEW_EDGE_KINDS[view]}
+        fill
+        typesExtra={view === "world" && (
+          <button type="button" className="rg-legend__row" aria-pressed={showSpots} onClick={() => setShowSpots((v) => !v)} title="Показывать точки (комнаты) как узлы">
+            <span className="rg-check" aria-hidden="true" />
+            <span />
+            <span>Точки</span>
+            <span />
+          </button>
+        )}
         scopeBar={
           <>
             <select
+              className="d-select"
+              aria-label="Сеттинг"
               value={settingId}
               onChange={(e) => {
                 setSettingId(e.target.value ? Number(e.target.value) : "");
@@ -161,6 +173,8 @@ export function GraphPage() {
               ))}
             </select>
             <select
+              className="d-select"
+              aria-label="Кампания"
               value={campaignId}
               onChange={(e) => setCampaignId(e.target.value ? Number(e.target.value) : "")}
             >
@@ -171,16 +185,6 @@ export function GraphPage() {
                 </option>
               ))}
             </select>
-            {view === "world" && (
-              <label className="row" style={{ gap: 6, alignItems: "center" }} title="Показывать точки (комнаты) как узлы">
-                <input
-                  type="checkbox"
-                  checked={showSpots}
-                  onChange={(e) => setShowSpots(e.target.checked)}
-                />
-                Точки
-              </label>
-            )}
           </>
         }
       />

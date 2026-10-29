@@ -398,7 +398,7 @@ export function drawGrid(
   fitScale: number,
 ) {
   // Background covers the full CSS area
-  ctx.fillStyle = resolveColor("--paper-2", resolveColor("--paper", "#f8f8f8"));
+  ctx.fillStyle = resolveColor("--sheet", resolveColor("--paper-2", "#f8f8f8"));
   ctx.fillRect(0, 0, cssWidth, cssHeight);
 
   const scale = zoom * fitScale;
