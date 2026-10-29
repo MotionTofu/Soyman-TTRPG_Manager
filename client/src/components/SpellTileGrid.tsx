@@ -148,10 +148,11 @@ function SpellGroup({
     });
   }, [key]);
   return (
-    <details className="comp-category" open={forceOpen || open} onToggle={(e) => { if (forceOpen) return; remember((e.currentTarget as HTMLDetailsElement).open); }}>
+    <details className="comp-category monster-group" open={forceOpen || open} onToggle={(e) => { if (forceOpen) return; remember((e.currentTarget as HTMLDetailsElement).open); }}>
       <summary className="comp-level-label chevron-summary">
         <NavIcon name="chevron" className="chevron-icon" />
-        {label} <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)", fontWeight: 400 }}>· {list.length}</span>
+        <span className="d-plate">{label}</span>
+        <span className="d-note">{list.length}</span>
       </summary>
       <div className="monster-grid">
         {list.map((e) => (

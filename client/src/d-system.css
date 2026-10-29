@@ -181,6 +181,15 @@
   background: var(--sheet);
 }
 
+/* Строка органов фильтра: переносится, растягивает поле поиска. */
+.d-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.d-bar__grow { flex: 1 1 220px; min-width: 180px; }
+
 /* Органы фильтра (§6.6, макеты Roll-Bestiary/Spells/Classes): поле поиска,
    выпадающий список и сегменты с кромкой, чипы с линией, малиновая метка. */
 .d-field {

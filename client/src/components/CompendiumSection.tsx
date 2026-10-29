@@ -1499,101 +1499,39 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
     );
   }
 
+  const sortButton = (mode: SortMode, label: string) => (
+    <button
+      type="button"
+      className={sortMode === mode ? "active" : ""}
+      aria-pressed={sortMode === mode}
+      onClick={() => changeSortMode(mode)}
+      title={sortMode === mode ? `${label}: повтор меняет порядок` : label}
+    >
+      {label}{sortMode === mode && mode !== "alpha" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+    </button>
+  );
+
   return (
-    <div className="card stack">
+    <div className="stack comp-section">
       {loadError && (
         <LoadErrorCard message={<>Не удалось загрузить записи раздела: {loadError}</>} onRetry={() => void entriesState.reload()} />
       )}
       {section.kind === "mechanics" && <div className="card-header--inverted"><span className="card-header--inverted-label">Общее</span><span className="card-header--inverted-count">{topLevel.length}</span></div>}
-      <div className="row sort-toggle" style={{ gap: 4, justifyContent: "space-between", flexWrap: "wrap" }}>
-        <span className="row" style={{ gap: 4, alignItems: "center" }}>
-          <span className="muted">Сортировка:</span>
-          <button
-            className={sortMode === "alpha" ? "active-sort" : ""}
-            onClick={() => changeSortMode("alpha")}
-            title={sortMode === "alpha" ? (sortDir === "asc" ? "А-Я (повтор — Я-А)" : "Я-А (повтор — А-Я)") : "А-Я"}
-          >
-            {sortMode === "alpha" ? (sortDir === "asc" ? "А-Я ↑" : "Я-А ↓") : "А-Я"}
-          </button>
-          <button
-            className={sortMode === "manual" ? "active-sort" : ""}
-            onClick={() => changeSortMode("manual")}
-          >
-            Вручную
-          </button>
-          {isSpellSection && (
-            <>
-              <button
-                className={sortMode === "level" ? "active-sort" : ""}
-                onClick={() => changeSortMode("level")}
-              >
-                По уровню{sortMode === "level" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-              </button>
-              <button
-                className={sortMode === "school" ? "active-sort" : ""}
-                onClick={() => changeSortMode("school")}
-              >
-                По школе{sortMode === "school" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-              </button>
-            </>
-          )}
-          {isMagicItemSection && (
-            <>
-              <button
-                className={sortMode === "type" ? "active-sort" : ""}
-                onClick={() => changeSortMode("type")}
-              >
-                По типу{sortMode === "type" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-              </button>
-              <button
-                className={sortMode === "rarity" ? "active-sort" : ""}
-                onClick={() => changeSortMode("rarity")}
-              >
-                По редкости{sortMode === "rarity" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-              </button>
-            </>
-          )}
-          {isEquipmentSection && (
-            <button
-              className={sortMode === "type" ? "active-sort" : ""}
-              onClick={() => changeSortMode("type")}
-            >
-              По категории{sortMode === "type" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-            </button>
-          )}
-        </span>
-        {(isEquipmentSection || isSpellSection || isClassSection || isSpeciesSection || isBackgroundSection || isFeatSection || isMagicItemSection) && (
-          <span className="row" style={{ gap: 6, alignItems: "center" }}>
-            <button
-              type="button"
-              className={viewMode === "grid" ? "active-sort" : ""}
-              onClick={() => setViewMode("grid")}
-              title="Плитками"
-            >
-              ▦ Плитки
-            </button>
-            <button
-              type="button"
-              className={viewMode === "list" ? "active-sort" : ""}
-              onClick={() => setViewMode("list")}
-              title="Списком"
-            >
-              ☰ Список
-            </button>
-          </span>
-        )}
-      </div>
-      <div className="res-toolbar" style={{ marginTop: 8 }}>
-        <input
-          className="res-toolbar__search"
-          type="text"
-          placeholder="Поиск по названию…"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          style={{ maxWidth: 260 }}
-        />
+      {/* Макет «Д» Roll-Spells/Classes: поиск и списки раздела одной строкой,
+          под ней итог с сегментами сортировки и вида. */}
+      <div className="d-bar">
+        <label className="d-field d-bar__grow">
+          <NavIcon name="search" />
+          <input
+            type="search"
+            aria-label="Поиск по названию"
+            placeholder={isSpellSection ? "Найти заклинание…" : isClassSection ? "Найти класс или подкласс…" : "Поиск по названию…"}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </label>
         {isEquipmentSection && (
-          <select value={filterEquipmentCategory} onChange={(e) => setFilterEquipmentCategory(e.target.value)} style={{ maxWidth: 220 }}>
+          <select className="d-select" aria-label="Категория" value={filterEquipmentCategory} onChange={(e) => setFilterEquipmentCategory(e.target.value)}>
             <option value="">Все категории</option>
             {EQUIPMENT_CATEGORIES.map((c) => (
               <option key={c} value={c}>
@@ -1603,7 +1541,7 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
           </select>
         )}
         {isEquipmentSection && (
-          <select value={filterEquipmentSource} onChange={(e) => setFilterEquipmentSource(e.target.value)} style={{ maxWidth: 220 }}>
+          <select className="d-select" aria-label="Источник" value={filterEquipmentSource} onChange={(e) => setFilterEquipmentSource(e.target.value)}>
             <option value="">Все источники</option>
             {EQUIPMENT_SOURCES.map((s) => (
               <option key={s} value={s}>
@@ -1612,130 +1550,145 @@ export function CompendiumSection({ systemId, section, focusEntryId }: Props) {
             ))}
           </select>
         )}
-        {isEquipmentSection && filterEquipmentCategory && (
-          <button type="button" onClick={() => setFilterEquipmentCategory("")} style={{ fontSize: "var(--fs-meta)", padding: "2px 8px", height: 26 }} title="Сбросить категорию">
-            Сбросить
-          </button>
-        )}
-        <span className="muted" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-micro)" }}>
-          {isEquipmentSection ? `${filteredTopLevel.length} / ${topLevel.length}` : ""}
-        </span>
-        {searchQuery !== "" && (
-          <button type="button" className="comp-mini" title="Очистить поиск" onClick={() => setSearchQuery("")}>
-            <NavIcon name="close" />
-          </button>
-        )}
-      </div>
-      {isMagicItemSection && (
-        <div className="row" style={{ flexWrap: "wrap" }}>
-          <select value={filterItemType} onChange={(e) => setFilterItemType(e.target.value)}>
-            <option value="">Все типы</option>
-            {MAGIC_ITEM_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-          <select value={filterRarity} onChange={(e) => setFilterRarity(e.target.value)}>
-            <option value="">Все редкости</option>
-            {MAGIC_ITEM_RARITIES.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
-          <select value={filterSource} onChange={(e) => setFilterSource(e.target.value)}>
-            <option value="">Все источники</option>
-            {MAGIC_ITEM_SOURCES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-          <select value={filterItemClass} onChange={(e) => setFilterItemClass(e.target.value)}>
-            <option value="">Все классы</option>
-            {classHierarchy.classes.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </select>
-          <select value={filterAttunement} onChange={(e) => setFilterAttunement(e.target.value)}>
-            <option value="">Настройка: неважно</option>
-            <option value="yes">Требует настройки</option>
-            <option value="no">Без настройки</option>
-          </select>
-        </div>
-      )}
-      {isSpellSection && (
-        <div className="row" style={{ flexWrap: "wrap" }}>
-          <select value={filterLevel} onChange={(e) => setFilterLevel(e.target.value)}>
-            <option value="">Все уровни</option>
-            {Array.from({ length: 10 }, (_, lvl) => (
-              <option key={lvl} value={lvl}>
-                {spellLevelLabel(lvl)}
-              </option>
-            ))}
-          </select>
-          <select value={filterSchool} onChange={(e) => setFilterSchool(e.target.value)}>
-            <option value="">Все школы</option>
-            {mechanicsOptions.schools.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filterClass}
-            onChange={(e) => {
-              setFilterClass(e.target.value);
-              setFilterSubclass("");
-            }}
-          >
-            <option value="">Все классы</option>
-            {classHierarchy.classes.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </select>
-          {filterClass !== "" && (classHierarchy.subclassesByClass[Number(filterClass)]?.length ?? 0) > 0 && (
-            <select value={filterSubclass} onChange={(e) => setFilterSubclass(e.target.value)}>
-              <option value="">Любой подкласс</option>
-              {classHierarchy.subclassesByClass[Number(filterClass)].map((o) => (
+        {isMagicItemSection && (
+          <>
+            <select className="d-select" aria-label="Тип предмета" value={filterItemType} onChange={(e) => setFilterItemType(e.target.value)}>
+              <option value="">Все типы</option>
+              {MAGIC_ITEM_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+            <select className="d-select" aria-label="Редкость" value={filterRarity} onChange={(e) => setFilterRarity(e.target.value)}>
+              <option value="">Все редкости</option>
+              {MAGIC_ITEM_RARITIES.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+            <select className="d-select" aria-label="Источник" value={filterSource} onChange={(e) => setFilterSource(e.target.value)}>
+              <option value="">Все источники</option>
+              {MAGIC_ITEM_SOURCES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+            <select className="d-select" aria-label="Класс" value={filterItemClass} onChange={(e) => setFilterItemClass(e.target.value)}>
+              <option value="">Все классы</option>
+              {classHierarchy.classes.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.name}
                 </option>
               ))}
             </select>
+            <select className="d-select" aria-label="Настройка" value={filterAttunement} onChange={(e) => setFilterAttunement(e.target.value)}>
+              <option value="">Настройка: неважно</option>
+              <option value="yes">Требует настройки</option>
+              <option value="no">Без настройки</option>
+            </select>
+          </>
+        )}
+        {isSpellSection && (
+          <>
+            <select className="d-select" aria-label="Круг" value={filterLevel} onChange={(e) => setFilterLevel(e.target.value)}>
+              <option value="">Все круги</option>
+              {Array.from({ length: 10 }, (_, lvl) => (
+                <option key={lvl} value={lvl}>
+                  {spellLevelLabel(lvl)}
+                </option>
+              ))}
+            </select>
+            <select className="d-select" aria-label="Школа" value={filterSchool} onChange={(e) => setFilterSchool(e.target.value)}>
+              <option value="">Все школы</option>
+              {mechanicsOptions.schools.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+            </select>
+            <select
+              className="d-select"
+              aria-label="Класс"
+              value={filterClass}
+              onChange={(e) => {
+                setFilterClass(e.target.value);
+                setFilterSubclass("");
+              }}
+            >
+              <option value="">Все классы</option>
+              {classHierarchy.classes.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+            </select>
+            {filterClass !== "" && (classHierarchy.subclassesByClass[Number(filterClass)]?.length ?? 0) > 0 && (
+              <select className="d-select" aria-label="Подкласс" value={filterSubclass} onChange={(e) => setFilterSubclass(e.target.value)}>
+                <option value="">Любой подкласс</option>
+                {classHierarchy.subclassesByClass[Number(filterClass)].map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <select className="d-select" aria-label="Ритуал" value={filterRitual} onChange={(e) => setFilterRitual(e.target.value)}>
+              <option value="">Ритуал: неважно</option>
+              <option value="yes">Только ритуалы</option>
+              <option value="no">Без ритуалов</option>
+            </select>
+          </>
+        )}
+        {isVehicleSection && (
+          <>
+            <select className="d-select" aria-label="Категория" value={filterVehicleCategory} onChange={(e) => setFilterVehicleCategory(e.target.value)}>
+              <option value="">Все категории</option>
+              {VEHICLE_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <select className="d-select" aria-label="Размер" value={filterSize} onChange={(e) => setFilterSize(e.target.value)}>
+              <option value="">Все размеры</option>
+              {CREATURE_SIZES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
+      </div>
+      <div className="d-bar">
+        <span className="d-mono">{filteredTopLevel.length} / {topLevel.length}</span>
+        <span className="d-end d-bar">
+          <span className="d-seg" role="group" aria-label="Сортировка">
+            {sortButton("alpha", sortMode === "alpha" && sortDir === "desc" ? "Я–А" : "А–Я")}
+            <button type="button" className={sortMode === "manual" ? "active" : ""} aria-pressed={sortMode === "manual"} onClick={() => changeSortMode("manual")}>
+              Вручную
+            </button>
+            {isSpellSection && sortButton("level", "Круг")}
+            {isSpellSection && sortButton("school", "Школа")}
+            {isMagicItemSection && sortButton("type", "Тип")}
+            {isMagicItemSection && sortButton("rarity", "Редкость")}
+            {isEquipmentSection && sortButton("type", "Категория")}
+          </span>
+          {(isEquipmentSection || isSpellSection || isClassSection || isSpeciesSection || isBackgroundSection || isFeatSection || isMagicItemSection) && (
+            <span className="d-seg" role="group" aria-label="Вид">
+              <button type="button" className={viewMode === "grid" ? "active" : ""} aria-pressed={viewMode === "grid"} onClick={() => setViewMode("grid")}>
+                Плитки
+              </button>
+              <button type="button" className={viewMode === "list" ? "active" : ""} aria-pressed={viewMode === "list"} onClick={() => setViewMode("list")}>
+                Список
+              </button>
+            </span>
           )}
-          <select value={filterRitual} onChange={(e) => setFilterRitual(e.target.value)}>
-            <option value="">Ритуал: неважно</option>
-            <option value="yes">Только ритуалы</option>
-            <option value="no">Без ритуалов</option>
-          </select>
-        </div>
-      )}
-      {isVehicleSection && (
-        <div className="row" style={{ flexWrap: "wrap" }}>
-          <select value={filterVehicleCategory} onChange={(e) => setFilterVehicleCategory(e.target.value)}>
-            <option value="">Все категории</option>
-            {VEHICLE_CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-          <select value={filterSize} onChange={(e) => setFilterSize(e.target.value)}>
-            <option value="">Все размеры</option>
-            {CREATURE_SIZES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
+        </span>
+      </div>
 
       <div className="comp-list">
         {isSpellSection && viewMode === "grid" ? (
